@@ -69,6 +69,16 @@ async def main():
             # quick add
             await hr.locator('[data-ph-tab="today"]').click(); await hr.wait_for_timeout(200)
             await hr.locator('.ph-fab').click(); await hr.wait_for_timeout(400)
+            DRAG = """async ([dy, steps]) => { const box = document.querySelector('.ph-sheet'); const top = box.getBoundingClientRect().top + 10;
+              const fire = (type, y) => { const t = new Touch({ identifier: 2, target: box, clientX: 195, clientY: y });
+                box.querySelector('.ph-grab').dispatchEvent(new TouchEvent(type, { touches: type === 'touchend' ? [] : [t], changedTouches: [t], bubbles: true, cancelable: true })); };
+              fire('touchstart', top); for (let i = 1; i <= steps; i++) { fire('touchmove', top + dy * i / steps); await new Promise(r => setTimeout(r, 30)); }
+              fire('touchend', top + dy); await new Promise(r => setTimeout(r, 500)); }"""
+            await E(DRAG, [30, 6])
+            check(await hr.locator('.ph-sheet').count() == 1, 'a small pull on the sheet springs back')
+            await E(DRAG, [260, 10])
+            check(await hr.locator('.ph-sheet').count() == 0, 'pulling the sheet down by its top cancels it')
+            await hr.locator('.ph-fab').click(); await hr.wait_for_timeout(400)
             await hr.locator('#qa-title').fill('Phone made task'); await shot(hr, '5-quickadd')
             await hr.locator('#qa-go').click(); await hr.wait_for_timeout(400)
             check(await E("db.tasks.some(t=>t.title==='Phone made task' && t.due===todayStr() && t.assignees.includes('u-lina'))"), 'quick add creates a task due today, assigned to me')

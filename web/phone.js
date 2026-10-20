@@ -331,10 +331,50 @@ const Phone = (() => {
     const root = $('#overlay-root');
     root.innerHTML = `<div class="ph-scrim"><div class="ph-sheet" role="dialog"><i class="ph-grab"></i>${html}</div></div>`;
     const scrim = root.firstElementChild;
-    const close = () => { if (root.firstElementChild === scrim) root.innerHTML = ''; };
+    const box = scrim.firstElementChild;
+    let closing = false;
+    // slides down, then goes away
+    const close = () => {
+      if (closing || root.firstElementChild !== scrim) return;
+      closing = true;
+      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+      box.style.transition = ''; box.style.transform = '';
+      scrim.classList.remove('in');
+      setTimeout(() => { if (root.firstElementChild === scrim) root.innerHTML = ''; }, 260);
+    };
     scrim.addEventListener('click', (e) => { if (e.target === scrim || e.target.closest('[data-sheet-close]')) close(); });
     requestAnimationFrame(() => scrim.classList.add('in'));
+    dragToClose(scrim, box, close);
     onWire && onWire(scrim, close);
+  }
+  // Pull the sheet down by its top (the little line or the title) to cancel
+  function dragToClose(scrim, box, close) {
+    let d = null;
+    box.addEventListener('touchstart', (e) => {
+      const t = e.touches[0];
+      const top = box.getBoundingClientRect().top;
+      if (e.touches.length !== 1 || e.target.closest('button, input, select, textarea, label') || t.clientY - top > 64) { d = null; return; }
+      d = { y0: t.clientY, t0: Date.now(), dy: 0, h: box.offsetHeight };
+    }, { passive: true });
+    box.addEventListener('touchmove', (e) => {
+      if (!d) return;
+      d.dy = Math.max(0, e.touches[0].clientY - d.y0);
+      e.preventDefault();
+      box.style.transition = 'none';
+      box.style.transform = `translateY(${d.dy}px)`;
+      scrim.style.background = `rgba(0,0,0,${0.55 * (1 - Math.min(1, d.dy / d.h))})`;
+    }, { passive: false });
+    const end = () => {
+      if (!d) return;
+      const fast = d.dy > 40 && d.dy / Math.max(1, Date.now() - d.t0) > 0.6;
+      const go = d.dy > Math.min(140, d.h * 0.3) || fast;
+      d = null;
+      scrim.style.background = '';
+      if (go) { box.style.transition = 'transform .22s ease-in'; box.style.transform = 'translateY(100%)'; scrim.classList.remove('in'); setTimeout(close, 200); }
+      else { box.style.transition = 'transform .22s cubic-bezier(.2,.8,.2,1)'; box.style.transform = ''; }
+    };
+    box.addEventListener('touchend', end);
+    box.addEventListener('touchcancel', end);
   }
 
   function quickAdd() {

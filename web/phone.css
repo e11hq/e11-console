@@ -166,6 +166,7 @@ body.phone #ph-tabs[hidden] { display: none; }
 .ph-sheet { padding: 8px 20px calc(env(safe-area-inset-bottom) + 20px); border-radius: 24px 24px 0 0; background: #18181d; border-top: 1px solid #2c2c33; display: flex; flex-direction: column; gap: 14px; transform: translateY(100%); transition: transform .25s cubic-bezier(.2,.8,.2,1); max-height: 92vh; overflow-y: auto; }
 :root[data-theme="light"] .ph-sheet { background: #fff; border-top-color: #e4e4ea; }
 .ph-scrim.in .ph-sheet { transform: none; }
+.ph-sheet { touch-action: pan-y; }
 .ph-grab { width: 40px; height: 5px; border-radius: 3px; background: var(--border-strong); align-self: center; }
 .ph-sh-head { display: flex; align-items: center; }
 .ph-sh-head h2 { flex: 1; margin: 0; font-size: 20px; font-weight: 800; }
