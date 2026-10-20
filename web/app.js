@@ -1814,13 +1814,21 @@ function composer(t, cid) {
   </div>`;
 }
 
+// Compact time for phones: 5m, 2h, then Oct 19 (with the year if it's not this year)
+function shortWhen(iso) {
+  const d = new Date(iso), mins = Math.round((Date.now() - d) / 60000);
+  if (mins < 1) return 'now';
+  if (mins < 60) return mins + 'm';
+  if (mins < 24 * 60) return Math.round(mins / 60) + 'h';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(d.getFullYear() === new Date().getFullYear() ? {} : { year: 'numeric' }) });
+}
 function commentHTML(t, c, isReply) {
   const editing = ui.editingComment === c.id;
   const reacts = Object.entries(c.reactions || {}).filter(([, n]) => n);
   return `<div class="cm ${isReply ? 'cm-reply' : ''}" data-comment="${c.id}">
     <span class="cm-av-wrap" data-user-card="${esc(c.authorId)}">${avatarHTML(c.authorId, 28, 'cm-av')}</span>
     <div class="cm-body">
-      <div class="cm-meta"><b data-user-card="${esc(c.authorId)}">${esc(c.authorId === currentUserId ? 'You' : userName(c.authorId))}</b><span title="${fmtDateTime(c.at)}">${fmtShort(c.at)}</span>${c.editedAt ? '<span class="cm-edited">(edited)</span>' : ''}
+      <div class="cm-meta"><b data-user-card="${esc(c.authorId)}">${esc(c.authorId === currentUserId ? 'You' : userName(c.authorId))}</b><span class="cm-when" title="${fmtDateTime(c.at)}">${typeof Phone !== 'undefined' && Phone.on ? shortWhen(c.at) : fmtShort(c.at)}</span>${c.editedAt ? '<span class="cm-edited">(edited)</span>' : ''}
         <span class="cm-tools">
           <button class="icon-btn sm" data-action="react-menu" data-id="${c.id}" title="React">${icon('smile')}</button>
           ${isReply || ui.thread === c.id ? '' : `<button class="icon-btn sm" data-action="reply" data-id="${c.id}" title="Reply">${icon('reply')}</button>`}
