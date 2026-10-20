@@ -525,7 +525,7 @@ const Phone = (() => {
     switch (el.dataset.ph) {
       case 'quick-add': quickAdd(); break;
       case 'search': go('psearch'); setTimeout(() => { const q = $('#ph-q'); if (q) q.focus(); }, 50); break;
-      case 'ibf': st.ibf = el.dataset.k; renderContent(); break;
+      case 'ibf': st.ibf = el.dataset.k; render(); break;
       case 'open-review': ui.reviewId = id; go('review'); break;
       case 'approve': {
         const f = findReview(id);

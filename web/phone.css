@@ -393,3 +393,28 @@ body.phone #detail .tm-main { padding-top: calc(var(--ph-th) + 14px) !important;
 body.phone #detail .tm-activity { background: transparent; padding-top: var(--ph-th); }
 body.phone #detail .tm-composer { background: var(--g-bg-strong); -webkit-backdrop-filter: var(--g-blur); backdrop-filter: var(--g-blur); border-top: 1px solid var(--g-edge); box-shadow: var(--g-shine); border-radius: 26px 26px 0 0; }
 body.phone #detail .props { background: var(--ph-card); border: 1px solid var(--ph-line); border-radius: 20px; padding: 6px 14px; }
+
+/* ---- Amendments after the first iPhone test ---- */
+/* The + floats above the tab bar, so the tabs keep their full width */
+body.phone #ph-tabs, body.phone.ph-fab-on:not(.ph-docked) #ph-tabs { right: 16px; }
+body.phone .ph-fab { right: 18px; bottom: calc(var(--ph-tab-gap) + 64px + 14px + var(--ph-shift, 0px)); width: 60px; height: 60px; border-radius: 30px; }
+body.phone #toast-root { bottom: calc(var(--ph-tabs-h) + 14px + var(--ph-shift, 0px)) !important; }
+body.phone.ph-fab-on #toast-root { right: 90px; }
+
+/* Frosted strip behind the iPhone status bar (time, battery) so scrolled content never runs under it */
+body.phone::after { content: ''; position: fixed; left: 0; right: 0; top: 0; height: var(--ph-top); z-index: 45; pointer-events: none;
+  background: color-mix(in srgb, var(--ph-bg) 45%, transparent); -webkit-backdrop-filter: blur(22px) saturate(170%); backdrop-filter: blur(22px) saturate(170%); }
+
+/* Pop-ups (What's new, confirmations): start below the status bar and scroll when they're tall */
+body.phone .scrim { padding: calc(var(--ph-top) + 16px) 12px calc(env(safe-area-inset-bottom) + 16px) !important; align-items: flex-start; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+body.phone .dialog { margin: auto 0 !important; max-width: 100% !important; width: 100% !important; border-radius: 26px; background: var(--g-bg-strong); -webkit-backdrop-filter: blur(30px) saturate(190%); backdrop-filter: blur(30px) saturate(190%); border: 1px solid var(--g-edge); box-shadow: var(--g-shine), var(--g-drop); }
+
+/* Shared pages under the frosted header: leave room so their headings are never hidden */
+body.phone #content > .ph-bar.ph-sticky + * { margin-top: 8px; padding-top: 8px !important; }
+/* Tall pop-ups: title and buttons stay put, only the middle scrolls */
+body.phone .scrim { overflow: hidden; align-items: center; }
+body.phone .dialog { margin: 0 !important; display: flex; flex-direction: column; max-height: 100%; }
+body.phone .dialog > * { flex: none; }
+body.phone .dialog > p, body.phone .dialog > .wn-notes, body.phone .dialog > .dlg-body { flex: 0 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+body.phone .dialog { background: rgba(28, 28, 36, .9); }
+:root[data-theme="light"] body.phone .dialog { background: rgba(255, 255, 255, .92); }
