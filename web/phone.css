@@ -257,3 +257,139 @@ body.task-open .ph-scrim.docked { bottom: var(--ph-shift, 0px); }
 .ph-dock-hint b { color: #b3a8ff; font-weight: 600; }
 :root[data-theme="light"] .ph-dock-hint b { color: var(--accent-strong); }
 body.ph-docked .ph-fab { display: none; }
+
+/* =====================================================================
+   Glass look (iOS-style): floating frosted bars, buttons and sheets over
+   softly lit content. Cards and text fields stay mostly solid so text reads well.
+   ===================================================================== */
+body.phone {
+  --ph-bg: #0b0b10;
+  --ph-card: rgba(24, 24, 30, .86);
+  --ph-line: rgba(255, 255, 255, .09);
+  --ph-raise: rgba(255, 255, 255, .07);
+  --g-bg: rgba(40, 40, 50, .42);
+  --g-bg-strong: rgba(36, 36, 46, .62);
+  --g-edge: rgba(255, 255, 255, .18);
+  --g-shine: inset 0 1px 0 rgba(255, 255, 255, .28), inset 0 -1px 0 rgba(255, 255, 255, .05);
+  --g-drop: 0 14px 34px rgba(0, 0, 0, .5);
+  --g-blur: blur(24px) saturate(180%);
+  --g-on: rgba(255, 255, 255, .16);
+  --ph-tab-gap: max(calc(env(safe-area-inset-bottom) - 8px), 14px);
+  --ph-tabs-h: calc(64px + var(--ph-tab-gap));
+  --ph-th: calc(var(--ph-top) + 110px);
+}
+:root[data-theme="light"] body.phone {
+  --ph-bg: #eef0f5;
+  --ph-card: #ffffff;
+  --ph-line: rgba(20, 20, 40, .08);
+  --ph-raise: rgba(255, 255, 255, .7);
+  --g-bg: rgba(255, 255, 255, .5);
+  --g-bg-strong: rgba(255, 255, 255, .72);
+  --g-edge: rgba(255, 255, 255, .95);
+  --g-shine: inset 0 1px 0 #ffffff;
+  --g-drop: 0 14px 34px rgba(30, 30, 60, .16);
+  --g-on: rgba(106, 86, 230, .14);
+}
+
+/* soft light behind everything, so the glass has something to show through */
+body.phone::before { content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background: radial-gradient(340px 340px at 8% 6%, rgba(106, 86, 230, .30), transparent 70%),
+              radial-gradient(320px 320px at 105% 62%, rgba(61, 180, 220, .17), transparent 70%), var(--ph-bg); }
+:root[data-theme="light"] body.phone::before {
+  background: radial-gradient(340px 340px at 8% 6%, rgba(123, 104, 238, .20), transparent 70%),
+              radial-gradient(320px 320px at 105% 62%, rgba(79, 209, 197, .20), transparent 70%), var(--ph-bg); }
+body.phone #app { position: relative; z-index: 1; }
+body.phone #content { background: transparent; }
+
+/* the glass itself */
+body.phone #ph-tabs, body.phone .ph-fab, body.phone .ph-round, body.phone .ph-pill, body.phone .ph-bar .ph-back,
+body.phone .menu, body.phone .toast, body.phone #notif-root .notif-card, body.phone .ph-rv-acts .ph-btn.amber {
+  background: var(--g-bg); -webkit-backdrop-filter: var(--g-blur); backdrop-filter: var(--g-blur);
+  border: 1px solid var(--g-edge); box-shadow: var(--g-shine), var(--g-drop);
+}
+
+/* Floating tab bar: a rounded glass pill above the bottom edge, with the + beside it */
+body.phone #ph-tabs { left: 16px; right: 16px; bottom: calc(var(--ph-tab-gap) + var(--ph-shift, 0px)); height: 64px; padding: 6px; border-radius: 32px; border-top: 1px solid var(--g-edge); transition: right .2s; }
+body.phone.ph-fab-on:not(.ph-docked) #ph-tabs { right: 92px; }
+.ph-tab { justify-content: center; gap: 2px; padding-top: 0; border-radius: 26px; color: var(--text-2); font-size: 10.5px; }
+.ph-tab .ic { width: 22px; height: 22px; }
+.ph-tab.on { background: var(--g-on); color: #fff; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22); }
+:root[data-theme="light"] .ph-tab.on { color: var(--accent-strong); box-shadow: none; }
+.ph-badge { top: 3px; margin-left: 4px; }
+body.phone .ph-fab { right: 16px; bottom: calc(var(--ph-tab-gap) + var(--ph-shift, 0px)); width: 64px; height: 64px; border-radius: 32px;
+  background: rgba(106, 86, 230, .62); border-color: rgba(255, 255, 255, .28); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .4), 0 14px 34px rgba(106, 86, 230, .45); }
+:root[data-theme="light"] body.phone .ph-fab { background: rgba(106, 86, 230, .82); border-color: rgba(255, 255, 255, .7); }
+
+/* Round buttons and pills */
+.ph-round { border-radius: 23px; width: 46px; height: 46px; }
+.ph-round.sm { width: 40px; height: 40px; }
+.ph-pill { border-radius: 18px; color: var(--text); }
+body.phone .ph-bar .ph-back { width: 42px; height: 42px; border-radius: 21px; margin-right: 6px; }
+body.phone .ph-bar .ph-back .ic { width: 20px; height: 20px; }
+.ph-head h1 { font-size: 32px; }
+
+/* Frosted top bars that content slides under */
+.ph-sticky { background: color-mix(in srgb, var(--ph-bg) 45%, transparent); -webkit-backdrop-filter: blur(22px) saturate(170%); backdrop-filter: blur(22px) saturate(170%); border-bottom: 1px solid var(--ph-line); }
+
+/* Cards and tiles: solid enough to read, softly rounded */
+.pc { border-radius: 20px; }
+:root[data-theme="light"] .pc { border-color: transparent; box-shadow: 0 4px 16px rgba(30, 30, 60, .07); }
+:root[data-theme="light"] .pc.late { border-color: rgba(229, 72, 77, .45); }
+.ph-stats > div { border-radius: 18px; background: rgba(255, 255, 255, .06); border-color: rgba(255, 255, 255, .12); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12); }
+:root[data-theme="light"] .ph-stats > div { background: rgba(255, 255, 255, .7); border-color: #fff; box-shadow: 0 4px 14px rgba(30, 30, 60, .06); }
+.ph-rows { border-radius: 20px; }
+:root[data-theme="light"] .ph-rows { border-color: transparent; box-shadow: 0 4px 16px rgba(30, 30, 60, .07); }
+.ph-search { border-radius: 24px; background: var(--g-bg); border: 1px solid var(--g-edge); box-shadow: var(--g-shine); -webkit-backdrop-filter: var(--g-blur); backdrop-filter: var(--g-blur); }
+
+/* Segmented switches: a glass track with a brighter bubble */
+.ph-seg { border-radius: 22px; background: var(--g-bg); border: 1px solid var(--g-edge); box-shadow: var(--g-shine); -webkit-backdrop-filter: var(--g-blur); backdrop-filter: var(--g-blur); }
+.ph-seg button { border-radius: 18px; }
+.ph-seg button.on { background: rgba(255, 255, 255, .2); color: #fff; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3); }
+:root[data-theme="light"] .ph-seg button.on { background: #fff; color: var(--text); box-shadow: 0 1px 4px rgba(30, 30, 60, .14); }
+.ph-chips button { border-color: var(--g-edge); background: var(--g-bg); -webkit-backdrop-filter: var(--g-blur); backdrop-filter: var(--g-blur); }
+
+/* Inbox rows sit on a rounded card */
+.ph-ibl { margin: 0 12px; border-radius: 20px; overflow: hidden; background: var(--ph-card); border: 1px solid var(--ph-line); }
+.ph-ib:last-child { border-bottom: 0; }
+
+/* Sheets: a floating frosted panel */
+.ph-sheet { margin: 0 8px calc(8px + max(env(safe-area-inset-bottom) - 26px, 0px)); padding: 8px 18px 22px; border-radius: 34px;
+  background: var(--g-bg-strong); -webkit-backdrop-filter: blur(30px) saturate(190%); backdrop-filter: blur(30px) saturate(190%);
+  border: 1px solid var(--g-edge); box-shadow: var(--g-shine), 0 -10px 40px rgba(0, 0, 0, .45); transform: translateY(110%); }
+:root[data-theme="light"] .ph-sheet { background: var(--g-bg-strong); border-color: var(--g-edge); box-shadow: var(--g-shine), 0 -10px 40px rgba(30, 30, 60, .18); }
+.ph-scrim.in { background: rgba(0, 0, 0, .3); }
+.ph-grab { background: rgba(255, 255, 255, .35); }
+:root[data-theme="light"] .ph-grab { background: rgba(20, 20, 40, .2); }
+.ph-field input, .ph-sheet textarea { border-radius: 16px; background: rgba(10, 10, 14, .5); border-color: rgba(255, 255, 255, .14); }
+:root[data-theme="light"] .ph-field input, :root[data-theme="light"] .ph-sheet textarea { background: rgba(255, 255, 255, .8); border-color: rgba(20, 20, 40, .1); }
+.ph-form { border-radius: 18px; background: rgba(10, 10, 14, .42); border-color: rgba(255, 255, 255, .12); }
+:root[data-theme="light"] .ph-form { background: rgba(255, 255, 255, .7); border-color: rgba(20, 20, 40, .08); }
+.ph-form > label { border-top-color: rgba(255, 255, 255, .08); }
+.ph-btn { border-radius: 27px; height: 54px; }
+.ph-btn.primary { background: rgba(106, 86, 230, .78); border: 1px solid rgba(255, 255, 255, .28); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .4), 0 10px 26px rgba(106, 86, 230, .4); }
+.ph-btn.green { background: rgba(47, 174, 116, .85); border: 1px solid rgba(255, 255, 255, .28); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 10px 26px rgba(47, 174, 116, .35); }
+
+/* The tucked-away draft: a small glass card above the tab bar */
+.ph-scrim.docked { bottom: calc(var(--ph-tabs-h) + 8px + var(--ph-shift, 0px)); }
+.ph-scrim.docked .ph-sheet { margin: 0 16px; border-radius: 22px; border: 1px solid var(--g-edge); box-shadow: var(--g-shine), var(--g-drop); max-height: 60px; }
+
+/* Review buttons float on their own, no bar behind them */
+.ph-rv-acts { background: none; border: 0; -webkit-backdrop-filter: none; backdrop-filter: none; bottom: calc(var(--ph-tabs-h) + 8px + var(--ph-shift, 0px)); padding: 0 16px; }
+.ph-rv { padding-bottom: 150px; }
+
+/* Menus and messages */
+body.phone .menu { border-radius: 26px; padding: 8px; background: var(--g-bg-strong); }
+body.phone .menu .mi { border-radius: 16px; }
+body.phone .toast { border-radius: 22px; padding: 11px 16px; background: var(--g-bg-strong); }
+body.phone #notif-root .notif-card { border-radius: 24px; background: var(--g-bg-strong); }
+
+/* Task page: frosted header floating over the content */
+body.phone #detail .tm { background: radial-gradient(300px 300px at 100% 0, rgba(91, 140, 255, .2), transparent 70%), var(--ph-bg); }
+body.phone .ph-task-head { position: absolute; top: 0; left: 0; right: 0; z-index: 6; padding-bottom: 10px;
+  background: color-mix(in srgb, var(--ph-bg) 45%, transparent); -webkit-backdrop-filter: blur(22px) saturate(170%); backdrop-filter: blur(22px) saturate(170%); border-bottom: 1px solid var(--ph-line); }
+body.phone .ph-task-head .ph-bar { padding-bottom: 6px; }
+body.phone #detail .tm-body { padding-top: 0; }
+body.phone #detail .tm-main { padding-top: calc(var(--ph-th) + 14px) !important; }
+body.phone #detail .tm-activity { background: transparent; padding-top: var(--ph-th); }
+body.phone #detail .tm-composer { background: var(--g-bg-strong); -webkit-backdrop-filter: var(--g-blur); backdrop-filter: var(--g-blur); border-top: 1px solid var(--g-edge); box-shadow: var(--g-shine); border-radius: 26px 26px 0 0; }
+body.phone #detail .props { background: var(--ph-card); border: 1px solid var(--ph-line); border-radius: 20px; padding: 6px 14px; }

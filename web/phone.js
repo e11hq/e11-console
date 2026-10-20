@@ -292,11 +292,13 @@ const Phone = (() => {
       : v === 'reviews' ? reviews() : v === 'review' ? review() : v === 'projects' ? projects() : v === 'project' ? project()
       : v === 'psearch' ? search() : meScreen();
     if (ui.view === 'review') wireSlides(c);
+    document.body.classList.toggle('ph-fab-on', !!c.querySelector('.ph-fab'));
     return true;
   }
   // Pages shared with the desktop (profile, team, Client Assets…) get a phone header with a back button
   function decorate(c) {
     if (!st.on || OWN.has(ui.view)) return;
+    document.body.classList.remove('ph-fab-on');
     let title = TITLES[ui.view] || 'E11 Console', back = 'data-ph-tab="me"';
     if (ui.view === 'client') {
       const cl = clientById(ui.clientId);
