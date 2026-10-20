@@ -459,3 +459,17 @@ body.phone :is(#ph-tabs, .ph-fab, .ph-round, .ph-pill, .ph-bar .ph-back, .menu, 
 /* and nothing that holds text is scaled while it settles */
 body.phone #detail .tm { will-change: auto; }
 body.phone.task-open #toast-root { right: 12px; }
+
+/* No live blur anywhere near the top of the screen: on iPhone it made nearby headings render soft.
+   The top bar and its buttons keep the glass look (tint, bright edge, shadow) without the blur. */
+body.phone :is(.ph-round, .ph-pill, .ph-bar .ph-back, .ph-sticky, .ph-task-head, .ph-seg, .ph-chips button, .ph-search)::before { display: none; }
+body.phone :is(.ph-round, .ph-pill, .ph-bar .ph-back, .ph-seg, .ph-chips button, .ph-search) { background: rgba(48, 48, 60, .72); }
+:root[data-theme="light"] body.phone :is(.ph-round, .ph-pill, .ph-bar .ph-back, .ph-seg, .ph-chips button, .ph-search) { background: rgba(255, 255, 255, .86); }
+body.phone :is(.ph-sticky, .ph-task-head) { background: color-mix(in srgb, var(--ph-bg) 94%, transparent); }
+body.phone .ph-chips button.on { background: var(--text); }
+body.phone::after { display: none !important; }
+/* the page itself is never scaled or faded once it has arrived */
+body.phone #detail .tm { animation-fill-mode: none; }
+body.phone #notif-root .notif-card::before { display: none; }
+body.phone #notif-root .notif-card { background: rgba(38, 38, 48, .96); }
+:root[data-theme="light"] body.phone #notif-root .notif-card { background: rgba(255, 255, 255, .97); }
