@@ -2228,9 +2228,11 @@ function renderDetail() {
         ${(() => {
           const open = !!ui.descOpen[t.id];
           const view = t.notesHtml ? sanitizeHTML(t.notesHtml, true) : t.notes ? linkify(esc(t.notes)).replace(/\n/g, '<br>') : '';
-          const body = open && can('editDesc')
+          const ro = !can('editDesc');
+          if (ro && !view) return '';
+          const body = open && !ro
             ? `<div class="composer desc"><div class="rt-editor d-notes" contenteditable="true" id="d-notes" data-placeholder="Add a description, links or notes… Type @ to mention someone">${t.notesHtml ? sanitizeHTML(t.notesHtml) : esc(t.notes).replace(/\n/g, '<br>')}</div><div class="cb-foot">${fmtToolbar()}<span class="spacer"></span>${clipPasteBtn('desc')}</div></div>`
-            : `<div class="desc-view ${open ? 'full' : ''} ${view ? '' : 'blank'}" data-action="desc-open">${view || `<span class="ph">${can('editDesc') ? 'Add description… Type @ to mention someone' : 'No description'}</span>`}</div>`;
+            : `<div class="desc-view ${open ? 'full' : ''} ${view ? '' : 'blank'} ${ro ? 'ro' : ''}" ${ro ? '' : 'data-action="desc-open"'}>${view || `<span class="ph">${can('editDesc') ? 'Add description… Type @ to mention someone' : 'No description'}</span>`}</div>`;
           return `<div class="d-section desc-sec ${open ? 'open' : ''} ${view ? '' : 'is-empty'}">${body}
             <div class="desc-toggle-wrap"><button class="desc-toggle" data-action="desc-toggle">${icon(open ? 'chev-up' : 'chev')}${open ? 'Collapse' : 'Expand'}</button></div></div>`;
         })()}

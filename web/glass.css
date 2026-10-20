@@ -1,0 +1,214 @@
+/* Midnight Glass — desktop look for the dark theme.
+   Only applies on desktop/Mac app in dark mode (light mode and the phone layout keep their own styles).
+   Source for web/glass.css: run `python3 scripts/build_glass.py scripts/glass.src.css web/glass.css`. "G" = dark theme outside the phone layout. */
+:root[data-theme="dark"]:not(.phone) {
+  --bg: #12121a; --sidebar: #15151f; --panel: #191923; --raised: #20202c;
+  --hover: rgba(255,255,255,.06); --active: rgba(255,255,255,.11);
+  --border: rgba(255,255,255,.075); --border-strong: rgba(255,255,255,.14);
+  --text: #f1f1f6; --text-2: rgba(241,241,246,.66); --text-3: rgba(241,241,246,.42);
+  --accent: #7b68ee; --accent-strong: #6a56e6; --accent-soft: rgba(123,104,238,.18);
+  --g-panel: rgba(18,18,26,.66); --g-glass: rgba(28,28,40,.58); --g-float: rgba(30,30,44,.82);
+  --g-edge: rgba(255,255,255,.12); --g-edge-soft: rgba(255,255,255,.08);
+  --g-shine: inset 0 1px 0 rgba(255,255,255,.12);
+  --g-blur: blur(28px) saturate(170%);
+  --g-drop: 0 24px 60px rgba(0,0,0,.45);
+  --shadow: 0 30px 80px rgba(0,0,0,.55), 0 2px 10px rgba(0,0,0,.35);
+  --line: rgba(255,255,255,.07);
+}
+:root[data-theme="dark"]:not(.phone) body {
+  background:
+    radial-gradient(900px 640px at 8% -6%, rgba(106,86,230,.36), transparent 70%),
+    radial-gradient(800px 600px at 100% 106%, rgba(52,170,220,.22), transparent 70%),
+    radial-gradient(500px 400px at 60% 40%, rgba(106,86,230,.06), transparent 70%),
+    #07070b;
+  background-attachment: fixed;
+}
+:root[data-theme="dark"]:not(.phone) ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); background-clip: padding-box; }
+:root[data-theme="dark"]:not(.phone) ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.2); background-clip: padding-box; }
+
+/* ---------- Frame: floating sidebar + main panel ---------- */
+:root[data-theme="dark"]:not(.phone) #app { background: transparent; padding: 14px; gap: 14px; grid-template-columns: 236px minmax(0, 1fr); }
+:root[data-theme="dark"]:not(.phone) #app.sb-collapsed { grid-template-columns: 64px minmax(0, 1fr); }
+:root[data-theme="dark"]:not(.phone) #sidebar {
+  border: 1px solid var(--g-edge); border-radius: 22px;
+  background: var(--g-glass); -webkit-backdrop-filter: var(--g-blur); backdrop-filter: var(--g-blur);
+  box-shadow: var(--g-shine), var(--g-drop);
+  padding: 16px 12px 12px; overflow: hidden;
+}
+:root[data-theme="dark"]:not(.phone) #app.sb-collapsed #sidebar { padding-left: 8px; padding-right: 8px; }
+:root[data-theme="dark"]:not(.phone) #main {
+  border: 1px solid var(--g-edge-soft); border-radius: 22px;
+  background: var(--g-panel); box-shadow: var(--g-shine), 0 18px 50px rgba(0,0,0,.3);
+}
+:root[data-theme="dark"]:not(.phone) .sidebar-foot { border-top: 1px solid var(--g-edge-soft); }
+
+/* Sidebar items */
+:root[data-theme="dark"]:not(.phone) .nav-item { border-radius: 11px; padding: 8px 10px; color: rgba(241,241,246,.78); transition: background .12s, color .12s; }
+:root[data-theme="dark"]:not(.phone) .nav-item:hover { background: rgba(255,255,255,.06); color: #fff; }
+:root[data-theme="dark"]:not(.phone) .nav-item.active { background: rgba(255,255,255,.12); color: #fff; box-shadow: inset 0 1px 0 rgba(255,255,255,.16); }
+:root[data-theme="dark"]:not(.phone) .nav-item.active .name { font-weight: 600; }
+:root[data-theme="dark"]:not(.phone) .nav-heading { letter-spacing: .1em; font-weight: 700; color: rgba(241,241,246,.45); }
+:root[data-theme="dark"]:not(.phone) .nav-item .count.ib { box-shadow: 0 4px 12px rgba(229,72,77,.35); }
+:root[data-theme="dark"]:not(.phone) .data-link:hover { background: rgba(255,255,255,.06); }
+:root[data-theme="dark"]:not(.phone) .icon-btn { border-radius: 9px; }
+:root[data-theme="dark"]:not(.phone) .icon-btn:hover { background: rgba(255,255,255,.08); }
+:root[data-theme="dark"]:not(.phone) .sb-head .create-btn, :root[data-theme="dark"]:not(.phone) .create-btn {
+  background: rgba(106,86,230,.78); border: 1px solid rgba(255,255,255,.26);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 8px 22px rgba(106,86,230,.4);
+}
+:root[data-theme="dark"]:not(.phone) .create-btn:hover { background: rgba(123,104,238,.92); }
+:root[data-theme="dark"]:not(.phone) .ca-nav { background: linear-gradient(135deg, rgba(106,86,230,.5), rgba(52,170,220,.3)) !important; border: 1px solid rgba(255,255,255,.18) !important; border-radius: 14px !important; box-shadow: var(--g-shine); }
+:root[data-theme="dark"]:not(.phone) .ca-nav:hover { background: linear-gradient(135deg, rgba(123,104,238,.62), rgba(52,170,220,.4)) !important; }
+:root[data-theme="dark"]:not(.phone) .ca-nav.active { box-shadow: var(--g-shine), 0 0 0 3px rgba(106,86,230,.25); }
+:root[data-theme="dark"]:not(.phone) .me-chip { border-radius: 14px; }
+:root[data-theme="dark"]:not(.phone) .me-chip:hover { background: rgba(255,255,255,.06); }
+
+/* ---------- Top bar ---------- */
+:root[data-theme="dark"]:not(.phone) #topbar { height: 64px; padding: 0 22px 0 26px; border-bottom: 1px solid var(--g-edge-soft); }
+:root[data-theme="dark"]:not(.phone) .page-title { font-size: 20px; font-weight: 750; letter-spacing: -.015em; }
+:root[data-theme="dark"]:not(.phone) .page-icon { border-radius: 10px; box-shadow: inset 0 1px 0 rgba(255,255,255,.25); }
+:root[data-theme="dark"]:not(.phone) .tab { border-radius: 16px; padding: 6px 13px; font-weight: 600; color: rgba(241,241,246,.6); }
+:root[data-theme="dark"]:not(.phone) .tab:hover { background: rgba(255,255,255,.07); }
+:root[data-theme="dark"]:not(.phone) .tab.active { background: rgba(255,255,255,.14); color: #fff; box-shadow: inset 0 1px 0 rgba(255,255,255,.14); }
+:root[data-theme="dark"]:not(.phone) .tab.active::after { display: none !important; }
+:root[data-theme="dark"]:not(.phone) .tab, :root[data-theme="dark"]:not(.phone) .tab.active { border-bottom: 0 !important; }
+:root[data-theme="dark"]:not(.phone) .search {
+  height: 38px; border-radius: 19px; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.12);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
+}
+:root[data-theme="dark"]:not(.phone) .search:focus-within { border-color: rgba(160,145,255,.7); box-shadow: 0 0 0 3px rgba(106,86,230,.22); }
+:root[data-theme="dark"]:not(.phone) .search kbd { background: rgba(255,255,255,.1); border-color: transparent; border-radius: 5px; }
+
+/* ---------- Buttons & fields ---------- */
+:root[data-theme="dark"]:not(.phone) .btn { border-radius: 11px; background: rgba(255,255,255,.07); border-color: rgba(255,255,255,.13); }
+:root[data-theme="dark"]:not(.phone) .btn:hover { background: rgba(255,255,255,.12); }
+:root[data-theme="dark"]:not(.phone) .btn.primary {
+  background: rgba(106,86,230,.8); border-color: rgba(255,255,255,.26); border-radius: 19px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.32), 0 8px 22px rgba(106,86,230,.36);
+}
+:root[data-theme="dark"]:not(.phone) .btn.primary:hover { background: rgba(123,104,238,.95); }
+:root[data-theme="dark"]:not(.phone) .btn.ghost { background: none; border-color: transparent; }
+:root[data-theme="dark"]:not(.phone) .btn.ghost:hover { background: rgba(255,255,255,.08); }
+:root[data-theme="dark"]:not(.phone) .btn.danger { border-radius: 19px; box-shadow: 0 8px 22px rgba(229,72,77,.3); }
+:root[data-theme="dark"]:not(.phone) .field { background: rgba(255,255,255,.05); border-color: rgba(255,255,255,.13); border-radius: 10px; }
+:root[data-theme="dark"]:not(.phone) .field:focus { border-color: rgba(160,145,255,.75); box-shadow: 0 0 0 3px rgba(106,86,230,.2); }
+:root[data-theme="dark"]:not(.phone) .pv .field { background: transparent; border-color: transparent; box-shadow: none; }
+:root[data-theme="dark"]:not(.phone) .pv .field:hover { background: rgba(255,255,255,.06); }
+:root[data-theme="dark"]:not(.phone) .pv .field:focus { background: rgba(255,255,255,.06); border-color: rgba(160,145,255,.6); }
+:root[data-theme="dark"]:not(.phone) .auth-card .field { background: rgba(0,0,0,.35); }
+:root[data-theme="dark"]:not(.phone) .quick-add { background: rgba(255,255,255,.05); border-color: rgba(255,255,255,.1); border-radius: 14px; box-shadow: var(--g-shine); }
+
+/* ---------- List view: rows become soft glass cards ---------- */
+:root[data-theme="dark"]:not(.phone) .list-head { background: rgba(18,18,26,.78); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); border-bottom-color: var(--g-edge-soft); }
+:root[data-theme="dark"]:not(.phone) .list-head > div { border-left-color: transparent; letter-spacing: .02em; }
+:root[data-theme="dark"]:not(.phone) .section-body { display: flex; flex-direction: column; gap: 6px; padding-top: 4px; }
+:root[data-theme="dark"]:not(.phone) .row.task-row {
+  border: 1px solid rgba(255,255,255,.065); border-radius: 13px; min-height: 44px;
+  background: rgba(255,255,255,.035);
+  transition: background .12s, border-color .12s, box-shadow .12s;
+}
+:root[data-theme="dark"]:not(.phone) .row.task-row:hover { background: rgba(255,255,255,.065); border-color: rgba(255,255,255,.12); }
+:root[data-theme="dark"]:not(.phone) .row.task-row.is-selected { background: rgba(106,86,230,.16); border-color: rgba(160,145,255,.55); box-shadow: 0 10px 30px rgba(106,86,230,.2); }
+:root[data-theme="dark"]:not(.phone) .row.task-row.is-urgent { background: rgba(229,72,77,.06); border-color: rgba(229,72,77,.42); box-shadow: none; }
+:root[data-theme="dark"]:not(.phone) .row.task-row.is-urgent:hover { background: rgba(229,72,77,.1); }
+:root[data-theme="dark"]:not(.phone) .task-row .title { font-weight: 550; }
+:root[data-theme="dark"]:not(.phone) .task-row.is-done .title { font-weight: 400; }
+:root[data-theme="dark"]:not(.phone) .add-row { border-radius: 12px; }
+:root[data-theme="dark"]:not(.phone) .add-row:hover { background: rgba(255,255,255,.03); }
+:root[data-theme="dark"]:not(.phone) .section-head .sname:hover { background: none; }
+:root[data-theme="dark"]:not(.phone) .section-head.drop-target { border-radius: 12px; }
+:root[data-theme="dark"]:not(.phone) .add-section { border-radius: 12px; }
+:root[data-theme="dark"]:not(.phone) .add-section input { background: rgba(255,255,255,.05); border-radius: 10px; }
+
+/* My Tasks / My Day rows */
+:root[data-theme="dark"]:not(.phone) .mw-row { border-radius: 13px; }
+
+/* ---------- Board ---------- */
+:root[data-theme="dark"]:not(.phone) .col { background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.08); border-top: 1px solid rgba(255,255,255,.08); border-radius: 18px; box-shadow: var(--g-shine); position: relative; }
+:root[data-theme="dark"]:not(.phone) .col::before { content: ''; position: absolute; left: 18px; right: 18px; top: -1px; height: 2px; border-radius: 2px; background: var(--col, #87909e); opacity: .9; }
+:root[data-theme="dark"]:not(.phone) .col.drop-target { background: rgba(106,86,230,.1); border-color: rgba(160,145,255,.5); }
+:root[data-theme="dark"]:not(.phone) .card { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.09); border-radius: 14px; box-shadow: var(--g-shine), 0 6px 18px rgba(0,0,0,.22); }
+:root[data-theme="dark"]:not(.phone) .card:hover { border-color: rgba(255,255,255,.18); transform: translateY(-1px); }
+:root[data-theme="dark"]:not(.phone) .card.is-selected { border-color: rgba(160,145,255,.65); box-shadow: 0 10px 30px rgba(106,86,230,.25); }
+:root[data-theme="dark"]:not(.phone) .col-add, :root[data-theme="dark"]:not(.phone) .add-col { border-radius: 12px; }
+:root[data-theme="dark"]:not(.phone) .col-add-input textarea { border-radius: 14px; background: rgba(255,255,255,.06); }
+
+/* ---------- Home ---------- */
+:root[data-theme="dark"]:not(.phone) .home-greet { font-weight: 800; letter-spacing: -.025em; font-size: 34px; }
+:root[data-theme="dark"]:not(.phone) .stat, :root[data-theme="dark"]:not(.phone) .widget {
+  background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.09); border-radius: 20px;
+  box-shadow: var(--g-shine);
+}
+:root[data-theme="dark"]:not(.phone) .stat { padding: 16px 18px; }
+:root[data-theme="dark"]:not(.phone) .stat .n { font-size: 30px; font-weight: 800; letter-spacing: -.02em; }
+:root[data-theme="dark"]:not(.phone) .widget h3 { font-weight: 750; }
+:root[data-theme="dark"]:not(.phone) .mini-row { border-radius: 10px; border-bottom-color: rgba(255,255,255,.05); }
+:root[data-theme="dark"]:not(.phone) .proj-card { border-radius: 14px; }
+:root[data-theme="dark"]:not(.phone) .proj-card:hover { background: rgba(255,255,255,.06); }
+:root[data-theme="dark"]:not(.phone) .proj-card .page-icon { border-radius: 12px; }
+
+/* ---------- Inbox ---------- */
+:root[data-theme="dark"]:not(.phone) .ib-row:hover, :root[data-theme="dark"]:not(.phone) .ib-row.unread:hover { background: rgba(255,255,255,.05); }
+
+/* ---------- Client Assets ---------- */
+:root[data-theme="dark"]:not(.phone) .ca-card { background: rgba(255,255,255,.05); border-color: rgba(255,255,255,.1); border-radius: 20px; box-shadow: var(--g-shine); }
+:root[data-theme="dark"]:not(.phone) .ca-card:hover { border-color: rgba(160,145,255,.55); box-shadow: var(--g-shine), 0 18px 40px rgba(0,0,0,.4); }
+:root[data-theme="dark"]:not(.phone) .ca-logo { border-radius: 14px; }
+:root[data-theme="dark"]:not(.phone) .ca-searchbar { border-radius: 25px !important; background: rgba(255,255,255,.07) !important; border-color: rgba(255,255,255,.14) !important; box-shadow: inset 0 1px 0 rgba(255,255,255,.1); }
+:root[data-theme="dark"]:not(.phone) .tile { border-radius: 16px; background: rgba(255,255,255,.045); border-color: rgba(255,255,255,.09); }
+:root[data-theme="dark"]:not(.phone) .tile:hover { border-color: rgba(255,255,255,.2); }
+
+/* ---------- Task page (modal and side panel) ---------- */
+:root[data-theme="dark"]:not(.phone) .tm-backdrop { background: rgba(4,4,10,.5); -webkit-backdrop-filter: blur(8px) saturate(120%); backdrop-filter: blur(8px) saturate(120%); }
+:root[data-theme="dark"]:not(.phone) .tm {
+  background: rgba(20,20,30,.86); -webkit-backdrop-filter: blur(34px) saturate(180%); backdrop-filter: blur(34px) saturate(180%);
+  border: 1px solid rgba(255,255,255,.14); border-radius: 24px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 40px 100px rgba(0,0,0,.6);
+}
+:root[data-theme="dark"]:not(.phone) #detail.side .tm { inset: 14px 14px 14px auto; border-radius: 22px; border-width: 1px; box-shadow: inset 0 1px 0 rgba(255,255,255,.16), -20px 0 60px rgba(0,0,0,.5); }
+:root[data-theme="dark"]:not(.phone) .tm-top { border-bottom-color: var(--g-edge-soft); height: 54px; }
+:root[data-theme="dark"]:not(.phone) a.crumb:hover { background: rgba(255,255,255,.07); }
+:root[data-theme="dark"]:not(.phone) .tm-activity { background: rgba(0,0,0,.16); border-left-color: var(--g-edge-soft); }
+:root[data-theme="dark"]:not(.phone) .d-title { font-weight: 800; letter-spacing: -.02em; }
+:root[data-theme="dark"]:not(.phone) .thread, :root[data-theme="dark"]:not(.phone) .cm-card { border-radius: 16px; }
+:root[data-theme="dark"]:not(.phone) .thread { background: rgba(255,255,255,.045); border-color: rgba(255,255,255,.08); }
+:root[data-theme="dark"]:not(.phone) .tm-composer .composer, :root[data-theme="dark"]:not(.phone) .composer {
+  background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.14); border-radius: 20px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.1);
+}
+:root[data-theme="dark"]:not(.phone) .composer:focus-within { border-color: rgba(160,145,255,.65); box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 0 0 3px rgba(106,86,230,.18); }
+:root[data-theme="dark"]:not(.phone) .composer > .cb-replying { border-radius: 19px 19px 0 0; }
+:root[data-theme="dark"]:not(.phone) .composer .btn.primary { border-radius: 17px; }
+:root[data-theme="dark"]:not(.phone) .composer.desc { background: rgba(255,255,255,.035); border-radius: 16px; }
+:root[data-theme="dark"]:not(.phone) .desc-view:not(.full)::after { background: linear-gradient(to bottom, transparent, rgba(20,20,30,.95)); }
+:root[data-theme="dark"]:not(.phone) .ap { border-radius: 16px; overflow: hidden; }
+
+/* ---------- Floating layers: menus, dialogs, toasts ---------- */
+:root[data-theme="dark"]:not(.phone) .menu, :root[data-theme="dark"]:not(.phone) .disp-menu > .disp-title, :root[data-theme="dark"]:not(.phone) .disp-menu > .disp-opts {
+  background: var(--g-float); -webkit-backdrop-filter: var(--g-blur); backdrop-filter: var(--g-blur);
+  border: 1px solid rgba(255,255,255,.14); border-radius: 16px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 24px 60px rgba(0,0,0,.55);
+}
+:root[data-theme="dark"]:not(.phone) .menu .mi, :root[data-theme="dark"]:not(.phone) .menu-item, :root[data-theme="dark"]:not(.phone) .mi { border-radius: 9px; }
+:root[data-theme="dark"]:not(.phone) .scrim { background: rgba(4,4,10,.5); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+:root[data-theme="dark"]:not(.phone) .dialog {
+  background: rgba(26,26,38,.88); -webkit-backdrop-filter: var(--g-blur); backdrop-filter: var(--g-blur);
+  border: 1px solid rgba(255,255,255,.14); border-radius: 22px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 40px 100px rgba(0,0,0,.6);
+}
+:root[data-theme="dark"]:not(.phone) .toast, :root[data-theme="dark"]:not(.phone) .notif-card {
+  background: var(--g-float); -webkit-backdrop-filter: var(--g-blur); backdrop-filter: var(--g-blur);
+  border: 1px solid rgba(255,255,255,.14); border-radius: 16px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 24px 60px rgba(0,0,0,.5);
+}
+:root[data-theme="dark"]:not(.phone) .fv-box { background: rgba(20,20,30,.9); -webkit-backdrop-filter: var(--g-blur); backdrop-filter: var(--g-blur); border-color: rgba(255,255,255,.14); border-radius: 22px; }
+:root[data-theme="dark"]:not(.phone) .fv { -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); background: rgba(4,4,10,.6); }
+
+/* Chips get a touch more polish */
+:root[data-theme="dark"]:not(.phone) .tag, :root[data-theme="dark"]:not(.phone) .prio { border-radius: 8px; }
+:root[data-theme="dark"]:not(.phone) .status-pill { border-radius: 8px; box-shadow: inset 0 1px 0 rgba(255,255,255,.22); }
+
+/* Respect reduced transparency (macOS accessibility setting) */
+@media (prefers-reduced-transparency: reduce) {
+  :root[data-theme="dark"]:not(.phone) #sidebar, :root[data-theme="dark"]:not(.phone) .tm, :root[data-theme="dark"]:not(.phone) .menu, :root[data-theme="dark"]:not(.phone) .dialog, :root[data-theme="dark"]:not(.phone) .toast, :root[data-theme="dark"]:not(.phone) .notif-card { -webkit-backdrop-filter: none; backdrop-filter: none; background: #1a1a24; }
+}

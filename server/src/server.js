@@ -291,7 +291,7 @@ export function createServer(cfg) {
     if (html) {
       // app.js?v=1.2.0 — every version gets fresh files, older ones can be cached for a day
       const v = encodeURIComponent(version);
-      return res.end(fs.readFileSync(full, 'utf8').replace(/(src|href)="(app\.js|styles\.css|phone\.js|phone\.css)"/g, `$1="$2?v=${v}"`));
+      return res.end(fs.readFileSync(full, 'utf8').replace(/(src|href)="(app\.js|styles\.css|glass\.css|phone\.js|phone\.css)"/g, `$1="$2?v=${v}"`));
     }
     fs.createReadStream(full).pipe(res);
   }
