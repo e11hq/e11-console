@@ -242,3 +242,15 @@ body.phone .tm-composer .hint { display: none; }
 body.phone #notif-root { top: calc(var(--ph-top) + 8px) !important; left: 10px !important; right: 10px !important; }
 body.phone #notif-root .notif-card { width: auto !important; max-width: none !important; }
 body.phone .scrim, body.phone .fv, body.phone .lightbox { bottom: var(--ph-shift, 0px) !important; }
+
+/* A sheet tucked away as a small bar above the tab bar (draft kept) */
+.ph-dock-hint { display: none; }
+.ph-scrim.docked { background: transparent !important; pointer-events: none; bottom: calc(var(--ph-tabs-h) + var(--ph-shift, 0px)); z-index: 60; }
+body.task-open .ph-scrim.docked { bottom: var(--ph-shift, 0px); }
+.ph-scrim.docked .ph-sheet { pointer-events: auto; transform: none; max-height: 58px; overflow: hidden; padding: 8px 18px 0; gap: 6px; margin: 0 8px; border-radius: 16px 16px 0 0; border: 1px solid var(--border-strong); border-bottom: 0; box-shadow: 0 -10px 30px rgba(0,0,0,.45); cursor: pointer; transition: max-height .25s cubic-bezier(.2,.8,.2,1); }
+.ph-scrim.docked .ph-sheet > :not(.ph-grab):not(.ph-dock-hint) { display: none; }
+.ph-scrim.docked .ph-dock-hint { display: block; font-size: 14px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-bottom: 12px; }
+.ph-dock-hint span { color: var(--text); font-weight: 600; }
+.ph-dock-hint b { color: #b3a8ff; font-weight: 600; }
+:root[data-theme="light"] .ph-dock-hint b { color: var(--accent-strong); }
+body.ph-docked .ph-fab { display: none; }

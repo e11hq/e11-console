@@ -326,55 +326,99 @@ const Phone = (() => {
     }, { passive: true });
   }
 
-  /* ---------- Sheets ---------- */
-  function sheet(html, onWire) {
-    const root = $('#overlay-root');
-    root.innerHTML = `<div class="ph-scrim"><div class="ph-sheet" role="dialog"><i class="ph-grab"></i>${html}</div></div>`;
+  /* ---------- Sheets ----------
+     A sheet slides up from the bottom. Pulled down by its top:
+     - nothing typed yet → it closes
+     - something typed   → it tucks into a small bar above the tab bar; the rest of the app stays usable.
+       Tap or pull the bar up to carry on; pull the tucked bar down again to throw it away. */
+  const sheetRoot = () => {
+    let r = document.getElementById('ph-sheet-root');
+    if (!r) { r = document.createElement('div'); r.id = 'ph-sheet-root'; document.body.appendChild(r); }
+    return r;
+  };
+  const docked = () => $('#ph-sheet-root .ph-scrim.docked');
+  function sheet(html, onWire, o = {}) {
+    const root = sheetRoot();
+    const old = root.firstElementChild;
+    if (old && old.dataset.kind === o.kind && old._expand) { old._expand(); return; } // carry on with the tucked one
+    root.innerHTML = `<div class="ph-scrim" data-kind="${o.kind || ''}"><div class="ph-sheet" role="dialog"><i class="ph-grab"></i>${html}<div class="ph-dock-hint">${esc(o.dockLabel || 'Draft')} · <b>Tap to continue</b></div></div></div>`;
     const scrim = root.firstElementChild;
     const box = scrim.firstElementChild;
     let closing = false;
-    // slides down, then goes away
-    const close = () => {
+    const setDockClass = () => document.body.classList.toggle('ph-docked', !!docked());
+    const close = (discarded) => {
       if (closing || root.firstElementChild !== scrim) return;
       closing = true;
       if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
       box.style.transition = ''; box.style.transform = '';
-      scrim.classList.remove('in');
+      scrim.classList.remove('in', 'docked');
+      setDockClass();
       setTimeout(() => { if (root.firstElementChild === scrim) root.innerHTML = ''; }, 260);
+      if (discarded === true) toast(o.discardedMsg || 'Draft discarded');
     };
-    scrim.addEventListener('click', (e) => { if (e.target === scrim || e.target.closest('[data-sheet-close]')) close(); });
+    const dock = () => {
+      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+      box.style.transition = ''; box.style.transform = '';
+      const t = box.querySelector('input:not([type]), input[type="text"], textarea');
+      const hint = box.querySelector('.ph-dock-hint');
+      hint.innerHTML = `${esc(o.dockLabel || 'Draft')}${t && t.value.trim() ? ` · <span>${esc(t.value.trim())}</span>` : ''} · <b>Tap to continue</b>`;
+      scrim.classList.add('docked');
+      setDockClass();
+    };
+    const expand = () => { box.style.transition = ''; box.style.transform = ''; scrim.classList.remove('docked'); scrim.classList.add('in'); setDockClass(); };
+    scrim._expand = expand;
+    const dirty = () => [...box.querySelectorAll('input:not([type]), input[type="text"], input[type="search"], textarea')].some((x) => x.value.trim());
+    scrim.addEventListener('click', (e) => {
+      if (scrim.classList.contains('docked')) { if (!e.target.closest('[data-sheet-close]')) { expand(); return; } }
+      if (e.target.closest('[data-sheet-close]')) return close();
+      if (e.target === scrim) { if (dirty()) dock(); else close(); }
+    });
     requestAnimationFrame(() => scrim.classList.add('in'));
-    dragToClose(scrim, box, close);
+    dragSheet(scrim, box, { close, dock, expand, dirty });
     onWire && onWire(scrim, close);
   }
-  // Pull the sheet down by its top (the little line or the title) to cancel
-  function dragToClose(scrim, box, close) {
+  function dragSheet(scrim, box, f) {
     let d = null;
     box.addEventListener('touchstart', (e) => {
       const t = e.touches[0];
+      const isDocked = scrim.classList.contains('docked');
       const top = box.getBoundingClientRect().top;
-      if (e.touches.length !== 1 || e.target.closest('button, input, select, textarea, label') || t.clientY - top > 64) { d = null; return; }
-      d = { y0: t.clientY, t0: Date.now(), dy: 0, h: box.offsetHeight };
+      if (e.touches.length !== 1 || (!isDocked && (e.target.closest('button, input, select, textarea, label') || t.clientY - top > 64))) { d = null; return; }
+      d = { y0: t.clientY, t0: Date.now(), dy: 0, h: box.offsetHeight, docked: isDocked, moved: false };
     }, { passive: true });
     box.addEventListener('touchmove', (e) => {
       if (!d) return;
-      d.dy = Math.max(0, e.touches[0].clientY - d.y0);
+      const raw = e.touches[0].clientY - d.y0;
+      if (Math.abs(raw) > 6) d.moved = true;
       e.preventDefault();
       box.style.transition = 'none';
+      if (d.docked) { d.dy = raw; box.style.transform = `translateY(${raw > 0 ? raw : raw / 3}px)`; return; }
+      d.dy = Math.max(0, raw);
       box.style.transform = `translateY(${d.dy}px)`;
       scrim.style.background = `rgba(0,0,0,${0.55 * (1 - Math.min(1, d.dy / d.h))})`;
     }, { passive: false });
     const end = () => {
       if (!d) return;
-      const fast = d.dy > 40 && d.dy / Math.max(1, Date.now() - d.t0) > 0.6;
-      const go = d.dy > Math.min(140, d.h * 0.3) || fast;
-      d = null;
+      const cur = d; d = null;
       scrim.style.background = '';
-      if (go) { box.style.transition = 'transform .22s ease-in'; box.style.transform = 'translateY(100%)'; scrim.classList.remove('in'); setTimeout(close, 200); }
-      else { box.style.transition = 'transform .22s cubic-bezier(.2,.8,.2,1)'; box.style.transform = ''; }
+      const fast = Math.abs(cur.dy) > 30 && Math.abs(cur.dy) / Math.max(1, Date.now() - cur.t0) > 0.5;
+      const spring = () => { box.style.transition = 'transform .22s cubic-bezier(.2,.8,.2,1)'; box.style.transform = ''; };
+      if (cur.docked) {
+        if (cur.dy > 40 || (fast && cur.dy > 0)) { box.style.transition = 'transform .2s ease-in'; box.style.transform = 'translateY(140%)'; setTimeout(() => f.close(true), 180); }
+        else if (cur.dy < -20 || (fast && cur.dy < 0)) f.expand();
+        else spring(); // a tap is handled by the click
+        if (cur.moved) scrim._skipClick = true;
+        return;
+      }
+      if (cur.dy > Math.min(140, cur.h * 0.3) || fast) {
+        if (f.dirty()) f.dock();
+        else { box.style.transition = 'transform .22s ease-in'; box.style.transform = 'translateY(100%)'; scrim.classList.remove('in'); setTimeout(f.close, 200); }
+      } else spring();
     };
     box.addEventListener('touchend', end);
     box.addEventListener('touchcancel', end);
+    // a drag on the tucked bar shouldn't also count as a tap
+    scrim.addEventListener('click', (e) => { if (scrim._skipClick) { scrim._skipClick = false; e.stopImmediatePropagation(); } }, true);
   }
 
   function quickAdd() {
@@ -412,7 +456,7 @@ const Phone = (() => {
       };
       $('#qa-go', scrim).addEventListener('click', go);
       ti.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); go(); } });
-    });
+    }, { kind: 'new-task', dockLabel: 'New task', discardedMsg: 'New task discarded' });
   }
 
   function amendSheet(id) {
@@ -432,7 +476,7 @@ const Phone = (() => {
         toast(`Sent back to ${firstName(f.r.by)} with your notes`);
         nextReview();
       });
-    });
+    }, { kind: 'amend-' + id, dockLabel: 'Amendments for ' + firstName(f.r.by), discardedMsg: 'Amendment notes discarded' });
   }
   function nextReview() {
     const left = activeReviews();
@@ -611,7 +655,7 @@ const Push = (() => {
   const standalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true || window.__phSwipeAlways;
   // What "back" means right now: the button that would be tapped, and the layer that slides away
   function target() {
-    if ($('#overlay-root').firstElementChild || $('.menu')) return null; // a sheet or menu is open
+    if ($('#overlay-root').firstElementChild || $('.menu') || $('#ph-sheet-root .ph-scrim:not(.docked)')) return null; // a sheet or menu is open
     if (ui.taskId) {
       const pane = $('#detail');
       if (ui.thread && pane.dataset.tab === 'comments') return { btn: $('.th-back', pane), layer: $('.tm-activity', pane) };
