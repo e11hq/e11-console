@@ -516,3 +516,6 @@ body.phone .cm-meta > .cm-when::before { content: '· '; }
 body.phone .cm-meta > .cm-edited { flex: none; white-space: nowrap; }
 body.phone .cm-tools { flex: none; gap: 2px; }
 body.phone .cm-tools .icon-btn { width: 32px; height: 32px; }
+
+/* Phones have no hover: iPhone keeps a "hover" on whatever was tapped, so no hover underlines */
+body.phone :is(.cm-meta b[data-user-card], [data-user-card], .rr-title, .crumb-link, .ca-loc, a):hover { text-decoration: none !important; }
