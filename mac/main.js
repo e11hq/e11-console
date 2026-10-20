@@ -128,7 +128,9 @@ var commands = {
 // Answer the page by calling window.__e11NativeReply(id, result) inside it
 function reply(id, res) {
   var js = 'window.__e11NativeReply && window.__e11NativeReply(' + JSON.stringify(id) + ',' + JSON.stringify(res) + ')';
-  try { gWebView.evaluateJavaScriptCompletionHandler($(js), null); } catch (e) { /* page gone */ }
+  // Called through performSelector so WebKit gets a real "no completion handler" (nil).
+  // Passing a JavaScript value as the completion handler makes macOS abort the app.
+  try { gWebView.performSelectorWithObjectWithObject('evaluateJavaScript:completionHandler:', $(js), $()); } catch (e) { /* page gone */ }
 }
 function handleMessage(raw) {
   var msg;
@@ -276,7 +278,6 @@ function buildWindow() {
   gWebView.autoresizingMask = 2 | 16;
   gUIDelegate = $.E11ClientUIDelegate.alloc.init;
   gWebView.UIDelegate = gUIDelegate;
-  try { gWebView.customUserAgent = ObjC.unwrap($.WKWebView.alloc.init.valueForKey('userAgent')) + ' E11ConsoleMac/1'; } catch (e) { /* default agent */ }
   try { gWebView.setValueForKey($.NSNumber.numberWithBool(false), 'drawsBackground'); } catch (e) { /* optional */ }
   try { gWebView.inspectable = true; } catch (e) { /* macOS 13.3+ */ }
   gWindow.contentView.addSubview(gWebView);
