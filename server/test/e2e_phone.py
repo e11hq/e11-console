@@ -117,6 +117,22 @@ async def main():
             check(await E(f"task('{tid}').comments.some(c=>c.text.includes('Make the date bigger'))"), 'Areej sees the amendment comment live')
             check(not e2, f'no errors for Carine {e2[:2]}')
             await E("()=>{closeMenus(); closeDetail()}")
+            # swipe from the left edge goes back
+            SWIPE = """async ([x1, steps]) => { window.__phSwipeAlways = true;
+              const fire = (type, x) => { const t = new Touch({ identifier: 1, target: document.body, clientX: x, clientY: 400 });
+                document.body.dispatchEvent(new TouchEvent(type, { touches: type === 'touchend' ? [] : [t], changedTouches: [t], bubbles: true, cancelable: true })); };
+              fire('touchstart', 8); for (let i = 1; i <= steps; i++) { fire('touchmove', 8 + (x1 - 8) * i / steps); await new Promise(r => setTimeout(r, 16)); }
+              fire('touchend', x1); await new Promise(r => setTimeout(r, 400)); }"""
+            await hr.locator('.pc[data-task]').first.click(); await hr.wait_for_timeout(400)
+            await E(SWIPE, [45, 6])
+            check(await E("ui.taskId") is not None, 'a short swipe springs back and keeps the task open')
+            await E(SWIPE, [300, 12])
+            check(await E("ui.taskId") is None, 'swiping from the left edge closes the task')
+            await hr.locator('.pc.pj').first.click() if await hr.locator('.pc.pj').count() else None
+            await E("()=>go('project', db.projects[0].id)"); await hr.wait_for_timeout(200)
+            await E(SWIPE, [300, 12])
+            check(await E("ui.view") == 'projects', 'swiping back from a project returns to Projects')
+            check(await E("document.getElementById('content').style.transform") == '', 'page is back in place after the swipe')
             # notifications switch on Me, and opening a task from a tapped notification
             await hr.locator('#ph-tabs [data-ph-tab="me"]').click(); await hr.wait_for_timeout(600)
             check(await hr.locator('#ph-push').count() == 1, 'Me shows the phone notifications switch')

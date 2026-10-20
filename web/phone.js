@@ -562,3 +562,67 @@ const Push = (() => {
 
   return { row, refresh };
 })();
+
+/* Swipe from the left edge to go back, like a native iPhone app (only in the Home Screen app —
+   in Safari the browser's own edge swipe would fight it) */
+(() => {
+  const EDGE = 28, DONE = 0.33;
+  let g = null;
+  const standalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true || window.__phSwipeAlways;
+  // What "back" means right now: the button that would be tapped, and the layer that slides away
+  function target() {
+    if ($('#overlay-root').firstElementChild || $('.menu')) return null; // a sheet or menu is open
+    if (ui.taskId) {
+      const pane = $('#detail');
+      if (ui.thread && pane.dataset.tab === 'comments') return { btn: $('.th-back', pane), layer: $('.tm-activity', pane) };
+      return { btn: $('.ph-task-head .ph-back', pane), layer: $('.tm', pane) };
+    }
+    const btn = $('#content .ph-back');
+    return btn ? { btn, layer: $('#content') } : null;
+  }
+  const set = (el, x, anim) => {
+    el.style.transition = anim ? 'transform .22s cubic-bezier(.2,.8,.2,1)' : 'none';
+    el.style.transform = x ? `translateX(${x}px)` : '';
+    el.style.boxShadow = x ? '-12px 0 30px rgba(0,0,0,.35)' : '';
+  };
+  document.addEventListener('touchstart', (e) => {
+    g = null;
+    if (!Phone.on || !standalone() || e.touches.length !== 1) return;
+    const t = e.touches[0];
+    if (t.clientX > EDGE) return;
+    const tg = target();
+    if (!tg || !tg.btn || !tg.layer) return;
+    g = { x0: t.clientX, y0: t.clientY, t0: Date.now(), dx: 0, on: false, ...tg };
+  }, { passive: true });
+  document.addEventListener('touchmove', (e) => {
+    if (!g) return;
+    const t = e.touches[0];
+    const dx = t.clientX - g.x0, dy = t.clientY - g.y0;
+    if (!g.on) {
+      if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) { g = null; return; } // scrolling, not swiping
+      if (dx < 10) return;
+      g.on = true;
+      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    }
+    e.preventDefault();
+    g.dx = Math.max(0, dx);
+    set(g.layer, g.dx, false);
+  }, { passive: false });
+  const end = () => {
+    if (!g || !g.on) { g = null; return; }
+    const w = window.innerWidth;
+    const fast = g.dx > 50 && g.dx / Math.max(1, Date.now() - g.t0) > 0.5;
+    const cur = g;
+    g = null;
+    if (cur.dx > w * DONE || fast) {
+      set(cur.layer, w, true);
+      setTimeout(() => {
+        cur.btn.click();
+        // the same layer may stay on screen (e.g. thread → comments): put it back without animating
+        set(cur.layer, 0, false);
+      }, 200);
+    } else set(cur.layer, 0, true);
+  };
+  document.addEventListener('touchend', end);
+  document.addEventListener('touchcancel', end);
+})();
