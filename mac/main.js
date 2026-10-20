@@ -146,7 +146,15 @@ function handleMessage(raw) {
 }
 
 /* ---------------- Objective-C classes ---------------- */
-ObjC.registerSubclass({
+// Some macOS versions can't look up a protocol by name (e.g. WKUIDelegate) until WebKit has used it,
+// which stops the app with "protocol does not exist". The protocol list is only a declaration —
+// WebKit checks which methods exist — so if it fails, register the class without it.
+function registerClass(def) {
+  try { ObjC.registerSubclass(def); return; } catch (e) { /* try without protocols */ }
+  var copy = { name: def.name, superclass: def.superclass, methods: def.methods };
+  ObjC.registerSubclass(copy);
+}
+registerClass({
   name: 'E11ClientBridge',
   superclass: 'NSObject',
   protocols: ['WKScriptMessageHandler'],
@@ -159,7 +167,7 @@ ObjC.registerSubclass({
 });
 
 // Links that open a new window (target=_blank) go to the default browser
-ObjC.registerSubclass({
+registerClass({
   name: 'E11ClientUIDelegate',
   superclass: 'NSObject',
   protocols: ['WKUIDelegate'],
@@ -174,7 +182,7 @@ ObjC.registerSubclass({
   },
 });
 
-ObjC.registerSubclass({
+registerClass({
   name: 'E11ClientWindowDelegate',
   superclass: 'NSObject',
   protocols: ['NSWindowDelegate'],
@@ -187,7 +195,7 @@ ObjC.registerSubclass({
 });
 
 // Menu actions that need the web view
-ObjC.registerSubclass({
+registerClass({
   name: 'E11ClientMenuTarget',
   superclass: 'NSObject',
   methods: {
