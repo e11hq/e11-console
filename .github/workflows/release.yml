@@ -1,11 +1,12 @@
-# Every change on main → tested → published as the "staging" release (test.e11hq.com installs it).
-# A tag like v1.2.0 → tested → published as a real release (console.e11hq.com installs it at 2 AM,
-# or straight away when an Admin clicks "Update now").
+# Every change on main is tested, then:
+#  • published as the "staging" release → test.e11hq.com installs it within minutes
+#  • if VERSION was raised and release-notes/<VERSION>.md exists → also published as a real
+#    release v<VERSION> → console.e11hq.com installs it at 2 AM (or when an Admin clicks Update now)
 name: Release
 on:
   push:
     branches: [main]
-    tags: ['v*']
+  workflow_dispatch:
 permissions:
   contents: write
 concurrency:
@@ -23,30 +24,24 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Version and notes
+      - name: Work out versions
         id: v
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            VERSION="${GITHUB_REF_NAME#v}"
-            if [ -f "release-notes/$VERSION.md" ]; then cp "release-notes/$VERSION.md" notes.md
-            else git tag -l --format='%(contents)' "$GITHUB_REF_NAME" > notes.md; fi
-            echo "kind=stable" >> "$GITHUB_OUTPUT"
-          else
-            VERSION="$(cat VERSION)-test.${GITHUB_RUN_NUMBER}"
-            LAST=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)
-            { echo "## Changes on the test copy"; git log --no-merges --format='- %s' ${LAST:+$LAST..}HEAD | head -40; } > notes.md
-            echo "kind=staging" >> "$GITHUB_OUTPUT"
-          fi
+          VERSION="$(cat VERSION)"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-      - name: Build bundle
-        run: scripts/bundle.sh "${{ steps.v.outputs.version }}" notes.md
-      - name: Publish stable release
-        if: steps.v.outputs.kind == 'stable'
-        run: gh release create "$GITHUB_REF_NAME" dist/*.tar.gz --title "E11 Console ${{ steps.v.outputs.version }}" --notes-file notes.md --verify-tag
-      - name: Publish test release
-        if: steps.v.outputs.kind == 'staging'
+          if [ -f "release-notes/$VERSION.md" ] && ! gh release view "v$VERSION" >/dev/null 2>&1; then echo "stable=yes" >> "$GITHUB_OUTPUT"; else echo "stable=no" >> "$GITHUB_OUTPUT"; fi
+          LAST=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)
+          { echo "## Changes on the test copy"; git log --no-merges --format='- %s' ${LAST:+$LAST..}HEAD | head -40; } > staging-notes.md
+      - name: Publish real release
+        if: steps.v.outputs.stable == 'yes'
         run: |
+          scripts/bundle.sh "${{ steps.v.outputs.version }}" "release-notes/${{ steps.v.outputs.version }}.md"
+          gh release create "v${{ steps.v.outputs.version }}" dist/e11-console-${{ steps.v.outputs.version }}.tar.gz \
+            --target "$GITHUB_SHA" --title "E11 Console ${{ steps.v.outputs.version }}" --notes-file "release-notes/${{ steps.v.outputs.version }}.md"
+      - name: Publish test release
+        run: |
+          TV="${{ steps.v.outputs.version }}-test.${GITHUB_RUN_NUMBER}"
+          scripts/bundle.sh "$TV" staging-notes.md
           gh release delete staging --yes --cleanup-tag || true
-          git push origin :refs/tags/staging || true
-          gh release create staging dist/*.tar.gz --prerelease --target "$GITHUB_SHA" \
-            --title "Test copy ${{ steps.v.outputs.version }}" --notes-file notes.md
+          gh release create staging "dist/e11-console-$TV.tar.gz" --prerelease --target "$GITHUB_SHA" \
+            --title "Test copy $TV" --notes-file staging-notes.md
