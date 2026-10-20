@@ -5,7 +5,7 @@
 const Phone = (() => {
   const mq = window.matchMedia('(max-width: 760px)');
   const OWN = new Set(['home', 'today', 'mytasks', 'inbox', 'reviews', 'review', 'me', 'projects', 'project', 'psearch']);
-  const TITLES = { profile: 'My profile', team: 'Team members', updates: 'App updates', clients: 'Client Assets', client: 'Client Assets' };
+  const TITLES = { trash: 'Trash', profile: 'My profile', team: 'Team members', updates: 'App updates', clients: 'Client Assets', client: 'Client Assets' };
   const st = { on: false, ibf: 'unread', q: '' };
 
   const isOn = () => st.on;
@@ -273,6 +273,7 @@ const Phone = (() => {
         ${isCD() ? row('data-ph-tab="projects"', 'folder', 'Projects') : ''}
         ${row('data-nav="clients"', 'assets', 'Client Assets', 'Logos, guidelines and fonts')}
         ${row('data-nav="team"', 'users', 'Team members')}
+        ${isManager() ? row('data-nav="trash"', 'trash', 'Trash', trashList().length ? `${trashList().length} item${trashList().length === 1 ? '' : 's'} · restore within ${TRASH_DAYS} days` : `Deleted items wait here ${TRASH_DAYS} days`) : ''}
         ${admin && Host.isServer ? row('data-nav="updates"', 'download', 'App updates') : ''}
         ${admin && isTestCopy() ? row('data-ph="sample"', 'users', 'Fill with sample data', 'Test copy only: people, tasks, comments') : ''}
       </div>

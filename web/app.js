@@ -848,6 +848,7 @@ function normalize(d) {
   d.users.forEach((u) => { u.prefs = u.prefs || {}; if (u.active == null) u.active = true; });
   const firstAdmin = (d.users.find((u) => u.role === 'admin') || d.users[0]).id;
   d.notifications = Array.isArray(d.notifications) ? d.notifications : [];
+  d.trash = Array.isArray(d.trash) ? d.trash : [];
   // Statuses for tasks that are not in a project
   d.statuses = Array.isArray(d.statuses) && d.statuses.length ? d.statuses : [
     { id: 'st-todo', name: 'To do', color: '#87909e' }, { id: 'st-progress', name: 'In progress', color: '#a875ff' },
@@ -1096,7 +1097,7 @@ function mergeSets(base, mine, theirs) {
 }
 
 const Sync = (() => {
-  const KINDS = ['users', 'projects', 'tasks', 'clients', 'notifications', 'statuses', 'meta'];
+  const KINDS = ['users', 'projects', 'tasks', 'clients', 'notifications', 'statuses', 'trash', 'meta'];
   const clientId = 'c-' + uid() + uid();
   const synced = {};               // kind -> Map(id -> JSON the server has)
   KINDS.forEach((k) => { synced[k] = new Map(); });
@@ -1350,6 +1351,7 @@ function renderSidebar() {
   updateAppBadge();
   $$('.nav-item[data-nav]').forEach((a) => a.classList.toggle('active', !ui.search && (ui.view === a.dataset.nav || (a.dataset.nav === 'clients' && ui.view === 'client'))));
   { const cc = $('#clients-count'); if (cc) cc.textContent = (db.clients || []).length ? String(db.clients.length) : ''; }
+  { const tn = $('#nav-trash'); if (tn) { tn.style.display = isManager() ? '' : 'none'; $('#trash-count').textContent = trashList().length ? String(trashList().length) : ''; } }
   const mt = myTop().filter((t) => myOpen(t) && t.due && dayDiff(t.due) <= 0).length;
   $('#mytasks-count').textContent = mt ? String(mt) : '';
   const td = db.tasks.filter((t) => onMyList(t) && myOpen(t) && t.due && dayDiff(t.due) === 0).length;
@@ -1383,6 +1385,7 @@ function renderTitle() {
   if (ui.view === 'reviews') { el.innerHTML = `<div class="page-icon" style="background:#3b1f2c;color:#ff8fc0">${icon('shield')}</div><div class="page-title">Review Requests</div>${cdActing() ? '<span class="cd-badge">Acting CD</span>' : ''}`; return; }
   if (ui.view === 'team') { el.innerHTML = `<div class="page-icon" style="background:#173b33;color:#7fe0d7">${icon('users')}</div><div class="page-title">Team members</div>`; return; }
   if (ui.view === 'profile') { el.innerHTML = `<div class="page-icon" style="background:#3a2a1a;color:#ffc675">${icon('user')}</div><div class="page-title">My profile</div>`; return; }
+  if (ui.view === 'trash') { el.innerHTML = `<div class="page-icon" style="background:#3b1f22;color:#ff8a8a">${icon('trash')}</div><div class="page-title">Trash</div>`; return; }
   if (ui.view === 'updates') { el.innerHTML = `<div class="page-icon ca-icon">${icon('download')}</div><div class="page-title">App updates</div>`; return; }
   if (ui.view === 'clients' || ui.view === 'client') {
     const c = ui.view === 'client' ? clientById(ui.clientId) : null;
@@ -1426,6 +1429,7 @@ function renderContent() {
   else if (ui.view === 'reviews') { c.innerHTML = viewReviews(); hydrateThumbs(c); }
   else if (ui.view === 'profile') c.innerHTML = viewProfile();
   else if (ui.view === 'updates') c.innerHTML = viewUpdates();
+  else if (ui.view === 'trash') c.innerHTML = viewTrash();
   else if (ui.view === 'clients') c.innerHTML = viewClients();
   else if (ui.view === 'client') {
     const cl = clientById(ui.clientId);
@@ -2600,6 +2604,7 @@ function usedPaths() {
     fileRefsIn(t.notesHtml).forEach((p) => s.add(p));
   });
   Object.values(ui.commentFiles).forEach((l) => (l || []).forEach(add));
+  trashList().forEach((it) => trashFiles(it).forEach(add));
   (db.clients || []).forEach((c) => { if (c.logo) s.add(c.logo); c.folders.forEach((f) => f.files.forEach(add)); });
   return [...s];
 }
@@ -2707,13 +2712,13 @@ function dialog({ title, body = '', input = null, okText = 'OK', cancelText = 'C
   });
 }
 
-function toast(msg, action) {
+function toast(msg, action, ms) {
   const root = $('#toast-root');
   const el = document.createElement('div');
   el.className = 'toast';
   el.innerHTML = `<span>${esc(msg)}</span>${action ? `<button>${esc(action.label)}</button>` : ''}`;
   root.appendChild(el);
-  let timer = setTimeout(() => el.remove(), action ? 6000 : 3000);
+  let timer = setTimeout(() => el.remove(), ms || (action ? 6000 : 3000));
   if (action) el.querySelector('button').addEventListener('click', () => { clearTimeout(timer); el.remove(); action.run(); });
 }
 
@@ -2810,14 +2815,13 @@ function deleteTaskFlow(id) {
   if (t.parentId && task(t.parentId)) logActivity(task(t.parentId), `deleted subtask ${struck(t.title || 'Untitled task')}`);
   const removed = removeTasks(ids);
   if (ui.taskId && ids.includes(ui.taskId)) ui.taskId = t.parentId || null;
+  // the people on it hear about it, so a mistake is spotted early
+  if (!t.parentId) notifyWatchers(t, 'trash', `moved <b>${esc(t.title || 'Untitled task')}</b> to the Trash —`);
+  const it = toTrash('task', { tasks: removed }, { key: 'tasks:' + t.id, projectId: t.projectId, projectName: (proj(t.projectId) || {}).name || '' });
   commit();
-  const paths = filesOfTasks(removed);
-  const nFiles = removed.reduce((n, x) => n + x.attachments.length + x.comments.reduce((m, c) => m + (c.attachments || []).length, 0), 0);
-  // Files go to the Trash once the Undo window has passed
-  const timer = setTimeout(() => { safeTrash(paths); }, 6500);
-  toast(`Deleted “${t.title || 'Untitled task'}”${ids.length > 1 ? ` and ${ids.length - 1} subtask${ids.length > 2 ? 's' : ''}` : ''}${nFiles ? ` · ${nFiles} file${nFiles === 1 ? '' : 's'} moved to Trash` : ''}`, {
-    label: 'Undo', run: () => { clearTimeout(timer); db.tasks.push(...removed); commit(); },
-  });
+  toast(`Moved “${t.title || 'Untitled task'}”${ids.length > 1 ? ` and ${ids.length - 1} subtask${ids.length > 2 ? 's' : ''}` : ''} to the Trash`, {
+    label: 'Undo', run: () => { db.trash = trashList().filter((x) => x.id !== it.id); removed.forEach((x) => { if (!task(x.id)) db.tasks.push(x); }); commit(); },
+  }, 10000);
 }
 
 const AUTO_DELETE_DAYS = 30;
@@ -2825,21 +2829,247 @@ function daysUntilAutoDelete(t) {
   if (!t.done || !t.completedAt) return null;
   return Math.max(0, AUTO_DELETE_DAYS - Math.floor((Date.now() - new Date(t.completedAt).getTime()) / 86400000));
 }
-// Remove tasks completed more than 30 days ago (with their subtasks and files)
+// Tasks finished more than 30 days ago move to the Trash (with their subtasks and files) for 30 more days
 function purgeOldCompleted() {
+  if (Host.isServer && !isManager()) { purgeTrash(); return; } // Admins and Account Managers look after this
   const cutoff = Date.now() - AUTO_DELETE_DAYS * 86400000;
-  const old = db.tasks.filter((t) => t.done && t.completedAt && new Date(t.completedAt).getTime() < cutoff);
-  if (!old.length) return;
-  const ids = new Set();
-  old.forEach((t) => { ids.add(t.id); descendants(t.id).forEach((d) => ids.add(d.id)); });
-  const removed = removeTasks([...ids]);
-  if (ui.taskId && ids.has(ui.taskId)) ui.taskId = null;
-  safeTrash(filesOfTasks(removed));
-  persist(0);
-  render();
-  const top = removed.filter((t) => !t.parentId || !ids.has(t.parentId)).length;
-  toast(`Cleaned up ${top} task${top === 1 ? '' : 's'} completed more than ${AUTO_DELETE_DAYS} days ago`);
+  const old = db.tasks.filter((t) => t.done && t.completedAt && new Date(t.completedAt).getTime() < cutoff && !(t.parentId && task(t.parentId) && task(t.parentId).done));
+  if (old.length) {
+    old.forEach((t) => {
+      const ids = [t.id, ...descendants(t.id).map((d) => d.id)];
+      if (!task(t.id)) return;
+      const removed = removeTasks(ids);
+      if (ui.taskId && ids.includes(ui.taskId)) ui.taskId = null;
+      const it = toTrash('task', { tasks: removed }, { key: 'tasks:' + t.id, projectId: t.projectId, projectName: (proj(t.projectId) || {}).name || '', auto: true });
+      it.deletedBy = null;
+    });
+    persist(0);
+    render();
+  }
+  purgeTrash();
 }
+/* ================= Trash =================
+   Deleted tasks, projects, comments, attachments and Client Assets files wait here for 30 days
+   (finished tasks first wait 30 days after completion, so 60 in all). Admins and Account Managers
+   see the Trash and can restore; only Admins delete forever. Files stay in place until then. */
+const TRASH_DAYS = 30;
+const isManager = (u = me()) => !!u && (u.role === 'admin' || u.role === 'am');
+const trashList = () => (db && db.trash) || [];
+const trashDaysLeft = (it) => Math.max(0, TRASH_DAYS - Math.floor((Date.now() - new Date(it.deletedAt).getTime()) / 86400000));
+function toTrash(type, data, extra = {}) {
+  db.trash = db.trash || [];
+  const item = { id: 'tr-' + uid(), type, deletedAt: nowISO(), deletedBy: currentUserId, ...extra, data };
+  db.trash.push(item);
+  return item;
+}
+const dropTrash = (id) => { db.trash = trashList().filter((x) => x.id !== id); };
+// Every file a Trash item still holds (kept on disk until it's deleted for good)
+function trashFiles(it) {
+  const d = it.data || {};
+  const fromTasks = (list) => (list || []).flatMap((t) => (t.attachments || []).concat(...(t.comments || []).map((c) => c.attachments || [])));
+  if (it.type === 'task') return fromTasks(d.tasks);
+  if (it.type === 'project') return fromTasks(d.tasks);
+  if (it.type === 'comment') return (d.comments || []).flatMap((c) => c.attachments || []);
+  if (it.type === 'attachment') return d.att ? [d.att] : [];
+  if (it.type === 'cafile') return d.file ? [d.file] : [];
+  return [];
+}
+function trashPaths(it) {
+  const paths = [];
+  trashFiles(it).forEach((a) => { if (!a.linked) paths.push(a.path, '.thumbs/' + a.id); });
+  if (it.type === 'task' || it.type === 'project') (it.data.tasks || []).forEach((t) => paths.push('attachments/' + t.id));
+  return paths;
+}
+// Delete for good: the item and its files
+function eraseTrash(ids) {
+  const set = new Set(ids);
+  const gone = trashList().filter((x) => set.has(x.id));
+  db.trash = trashList().filter((x) => !set.has(x.id));
+  const paths = gone.flatMap(trashPaths);
+  persist(0);
+  if (paths.length) setTimeout(() => safeTrash(paths), 300);
+  return gone.length;
+}
+// After 30 days in the Trash things go for good (run by Admins and Account Managers)
+function purgeTrash() {
+  if (!isManager()) return;
+  const old = trashList().filter((x) => trashDaysLeft(x) <= 0).map((x) => x.id);
+  if (old.length) eraseTrash(old);
+}
+// Where something lived, in words
+function trashWhere(it) {
+  const d = it.data || {};
+  if (it.type === 'task') { const p = proj(it.projectId) || (d.tasks && d.tasks[0] && proj(d.tasks[0].projectId)); return p ? p.name : it.projectName || 'My Tasks'; }
+  if (it.type === 'project') return `${(d.tasks || []).filter((t) => !t.parentId).length} tasks`;
+  if (it.type === 'comment' || it.type === 'attachment') { const t = task(d.taskId); return t ? t.title || 'Untitled task' : it.taskTitle || 'a deleted task'; }
+  if (it.type === 'cafile') { const c = clientById(d.clientId); const f = c && c.folders.find((x) => x.id === d.folderId); return c ? `${c.name}${f ? ' › ' + f.name : ''}` : it.where || 'Client Assets'; }
+  return '';
+}
+const TRASH_TYPE = { task: 'Task', project: 'Project', comment: 'Comment', attachment: 'File', cafile: 'Client file' };
+const TRASH_ICON = { task: 'check-circle', project: 'folder', comment: 'chat', attachment: 'clip', cafile: 'assets' };
+
+/* ---- Putting things back ---- */
+function restoreTrash(id) {
+  const it = trashList().find((x) => x.id === id);
+  if (!it || !isManager()) return;
+  const d = it.data || {};
+  let msg = '', open = null;
+  if (it.type === 'task' || it.type === 'project') {
+    if (it.type === 'project') {
+      if (!proj(d.project.id)) db.projects.push(d.project);
+    }
+    const tasks = (d.tasks || []).filter((t) => !task(t.id));
+    const ids = new Set(tasks.map((t) => t.id));
+    tasks.forEach((t) => {
+      const p = proj(t.projectId);
+      if (t.projectId && !p) { t.projectId = null; t.sectionId = db.statuses[0].id; }
+      else if (p && !p.sections.some((s) => s.id === t.sectionId)) t.sectionId = p.sections[0].id;
+      else if (!t.projectId && !db.statuses.some((s) => s.id === t.sectionId)) t.sectionId = db.statuses[0].id;
+      if (t.parentId && !ids.has(t.parentId) && !task(t.parentId)) t.parentId = null;
+      db.tasks.push(t);
+    });
+    const root = tasks.find((t) => !t.parentId || !ids.has(t.parentId)) || tasks[0];
+    if (it.type === 'task' && root) {
+      logActivity(root, 'restored this task from the Trash');
+      notifyWatchers(root, 'restore', 'restored from the Trash');
+      open = root.id;
+      msg = `Restored “${root.title || 'Untitled task'}”${it.projectId && !proj(it.projectId) ? ' to My Tasks — its project is in the Trash' : ''}`;
+    } else msg = `Restored the project “${d.project.name}” with ${tasks.filter((t) => !t.parentId).length} tasks`;
+  } else if (it.type === 'comment' || it.type === 'attachment') {
+    const t = task(d.taskId);
+    if (!t) { toast('Restore its task first — it’s in the Trash too'); return; }
+    if (it.type === 'comment') {
+      (d.comments || []).forEach((c) => { if (!t.comments.some((x) => x.id === c.id)) t.comments.push(c); });
+      t.comments.sort((a, b) => a.at.localeCompare(b.at));
+      logActivity(t, 'restored a comment from the Trash');
+    } else {
+      if (!t.attachments.some((x) => x.id === d.att.id)) t.attachments.push(d.att);
+      logActivity(t, `restored attachment <b>${esc(d.att.name)}</b>`);
+    }
+    t.updatedAt = nowISO();
+    msg = `Restored to “${t.title || 'Untitled task'}”`; open = t.id;
+  } else if (it.type === 'cafile') {
+    const c = clientById(d.clientId); const f = c && c.folders.find((x) => x.id === d.folderId);
+    if (!f) { toast('Its client folder no longer exists'); return; }
+    if (!f.files.some((x) => x.id === d.file.id)) f.files.push(d.file);
+    msg = `Restored “${d.file.name}” to ${c.name} › ${f.name}`;
+  }
+  dropTrash(id);
+  commit({ delay: 0 });
+  toast(msg, open ? { label: 'Open', run: () => openTask(open) } : null);
+}
+async function eraseTrashFlow(id) {
+  if (!(me() && me().role === 'admin')) return denied();
+  const it = trashList().find((x) => x.id === id);
+  if (!it) return;
+  const ok = await dialog({ title: `Delete “${trashTitle(it)}” forever?`, body: 'It can’t be restored after this, and its files are removed too.', okText: 'Delete forever', danger: true });
+  if (ok) { eraseTrash([id]); render(); toast('Deleted forever'); }
+}
+async function emptyTrashFlow() {
+  if (!(me() && me().role === 'admin')) return denied();
+  const n = trashList().length;
+  if (!n) return;
+  const ok = await dialog({ title: 'Empty the Trash?', body: `All ${n} item${n === 1 ? '' : 's'} and their files are deleted for good. This can’t be undone.`, okText: 'Empty Trash', danger: true });
+  if (ok) { eraseTrash(trashList().map((x) => x.id)); render(); toast('The Trash is empty'); }
+}
+function trashTitle(it) {
+  const d = it.data || {};
+  if (it.type === 'task') return (d.tasks && (d.tasks.find((t) => !t.parentId || !d.tasks.some((x) => x.id === t.parentId)) || d.tasks[0]) || {}).title || 'Untitled task';
+  if (it.type === 'project') return d.project ? d.project.name : 'Project';
+  if (it.type === 'comment') { const c = (d.comments || [])[0]; return c ? trunc(c.text || notifPlainHTML(c.html), 80) || 'Comment' : 'Comment'; }
+  if (it.type === 'attachment') return d.att ? d.att.name : 'File';
+  if (it.type === 'cafile') return d.file ? d.file.name : 'File';
+  return 'Item';
+}
+
+/* ---- The Trash page ---- */
+function trashSearch(q, list) {
+  const terms = sWords(q);
+  if (!terms.length) return { items: list.slice().sort((a, b) => b.deletedAt.localeCompare(a.deletedAt)), fixed: [], terms: [] };
+  const docs = list.map((it) => {
+    const d = it.data || {};
+    const files = trashFiles(it);
+    const fields = [
+      { w: 10, text: trashTitle(it) }, { w: 5, text: trashWhere(it) }, { w: 4, text: TRASH_TYPE[it.type] + ' ' + (it.type === 'attachment' || it.type === 'cafile' ? 'file' : '') },
+      { w: 4, text: files.map((a) => `${a.name} ${fileExt(a.name)} ${fileKind(a)}`).join(' ') },
+      { w: 3, text: it.deletedBy ? fullName(userById(it.deletedBy)) : 'automatic cleanup' },
+      { w: 2, text: (d.tasks || []).map((t) => `${t.title} ${(t.tags || []).join(' ')} ${t.notes || ''} ${(t.comments || []).map((c) => c.text).join(' ')}`).join(' ') },
+      { w: 2, text: (d.comments || []).map((c) => c.text || notifPlainHTML(c.html)).join(' ') },
+      { w: 3, text: d.project ? d.project.name : '' },
+    ];
+    const words = new Map();
+    fields.forEach((f) => sWords(f.text).forEach((w) => { if (!words.has(w) || words.get(w) < f.w) words.set(w, f.w); }));
+    return { it, words };
+  });
+  const vocab = new Set(); docs.forEach((x) => x.words.forEach((_, w) => vocab.add(w)));
+  const fixed = [];
+  const per = terms.map((term) => { const m = termMatches(term, vocab); if (m.fuzzy && !m.words.has(term)) fixed.push({ from: term, to: m.fuzzy }); return { term, words: m.words }; });
+  const scored = [];
+  docs.forEach(({ it, words }) => {
+    let score = 0;
+    for (const pt of per) { let best = 0; pt.words.forEach((q, w) => { const v = words.get(w); if (v && v * q > best) best = v * q; }); if (!best) return; score += best; }
+    scored.push({ it, score });
+  });
+  scored.sort((a, b) => b.score - a.score || b.it.deletedAt.localeCompare(a.it.deletedAt));
+  return { items: scored.map((x) => x.it), fixed, terms: per };
+}
+const TRASH_FILTERS = [['all', 'All'], ['task', 'Tasks'], ['project', 'Projects'], ['file', 'Files'], ['comment', 'Comments'], ['mine', 'Deleted by me']];
+function trashFiltered() {
+  const f = ui.trashFilter || 'all';
+  return trashList().filter((it) => f === 'all' || (f === 'file' ? it.type === 'attachment' || it.type === 'cafile' : f === 'mine' ? it.deletedBy === currentUserId : it.type === f));
+}
+function trashRow(it, r) {
+  const left = trashDaysLeft(it);
+  const files = trashFiles(it);
+  const who = it.auto ? 'Cleaned up automatically (finished 30+ days ago)' : `Deleted by ${it.deletedBy === currentUserId ? 'you' : esc(fullName(userById(it.deletedBy)))}`;
+  const chips = files.slice(0, 4).map((a) => `<button class="tr-file" data-action="tr-preview" data-id="${it.id}" data-file="${a.id}" title="Preview ${esc(a.name)}">${isImage(a) && Host.isNative ? `<img src="${fileUrl(a)}" alt="" loading="lazy">` : `<i>${esc((fileExt(a.name) || 'file').slice(0, 4))}</i>`}<span>${r && r.terms.length ? sMark(a.name, r) : esc(a.name)}</span></button>`).join('');
+  return `<div class="tr-row">
+    <span class="tr-ic">${icon(TRASH_ICON[it.type] || 'trash')}</span>
+    <div class="tr-main">
+      <div class="tr-title">${r && r.terms.length ? sMark(trashTitle(it), r) : esc(trashTitle(it))}</div>
+      <div class="tr-sub"><span class="tr-type">${TRASH_TYPE[it.type] || ''}</span>${esc(trashWhere(it))} · ${who} · ${esc(timeAgo(it.deletedAt))}</div>
+      ${chips ? `<div class="tr-files">${chips}${files.length > 4 ? `<span class="tr-more">+${files.length - 4} more</span>` : ''}</div>` : ''}
+    </div>
+    <span class="tr-left ${left <= 3 ? 'soon' : ''}" title="Deleted for good after ${TRASH_DAYS} days">${left} day${left === 1 ? '' : 's'} left</span>
+    <div class="tr-acts">
+      <button class="btn primary sm" data-action="tr-restore" data-id="${it.id}">${icon('reply')}Restore</button>
+      ${me().role === 'admin' ? `<button class="icon-btn sm" data-action="tr-forever" data-id="${it.id}" title="Delete forever">${icon('trash')}</button>` : ''}
+    </div>
+  </div>`;
+}
+function trashListHTML() {
+  const r = trashSearch(ui.trashQ || '', trashFiltered());
+  if (!r.items.length) return ui.trashQ ? `<div class="empty"><div class="big">Nothing in the Trash matches “${esc(ui.trashQ)}”</div>Try a task or file name, a project, a file type like “pdf”, or who deleted it.</div>`
+    : `<div class="empty"><div class="big">The Trash is empty</div>Deleted tasks, projects, comments and files wait here for ${TRASH_DAYS} days.</div>`;
+  const groups = [];
+  r.items.forEach((it) => {
+    const days = -dayDiff(ymd(new Date(it.deletedAt)));
+    const name = ui.trashQ ? 'Results' : days <= 0 ? 'Today' : days < 7 ? 'This week' : 'Earlier';
+    let g = groups.find((x) => x.name === name); if (!g) { g = { name, rows: [] }; groups.push(g); }
+    g.rows.push(it);
+  });
+  return searchFixedNote(r) + groups.map((g) => `<div class="tr-group">${g.name}<span>${g.rows.length}</span></div><div class="tr-card">${g.rows.map((it) => trashRow(it, r)).join('')}</div>`).join('');
+}
+function viewTrash() {
+  if (!isManager()) return '<div class="empty"><div class="big">The Trash is for Admins and Account Managers</div>Ask one of them if something needs to come back.</div>';
+  const f = ui.trashFilter || 'all';
+  const n = trashList().length;
+  return `<div class="trash">
+    <div class="tr-head">
+      <div class="tr-intro">Deleted items stay here for ${TRASH_DAYS} days, then they and their files are removed for good. Finished tasks arrive here ${AUTO_DELETE_DAYS} days after they’re completed.</div>
+      ${me().role === 'admin' && n ? `<button class="btn ghost danger sm" data-action="tr-empty">${icon('trash')}Empty Trash</button>` : ''}
+    </div>
+    <div class="ca-searchbar tr-search">${icon('search')}<input id="tr-q" value="${esc(ui.trashQ || '')}" placeholder="Search the Trash — names, files, “pdf”, people…" autocomplete="off" spellcheck="false" aria-autocomplete="none" data-form-type="other"></div>
+    <div class="tr-chips">${TRASH_FILTERS.map(([k, l]) => `<button class="${f === k ? 'on' : ''}" data-action="tr-filter" data-k="${k}">${l}</button>`).join('')}</div>
+    <div id="tr-list">${trashListHTML()}</div>
+  </div>`;
+}
+document.addEventListener('input', (e) => {
+  if (e.target.id !== 'tr-q') return;
+  ui.trashQ = e.target.value;
+  const l = $('#tr-list'); if (l) { l.innerHTML = trashListHTML(); }
+});
+
 
 function projectMenu(anchor, id) {
   const p = proj(id);
@@ -2864,10 +3094,11 @@ async function renameProject(id) {
 async function deleteProjectFlow(id) {
   const p = proj(id);
   const n = db.tasks.filter((t) => t.projectId === id).length;
-  const ok = await dialog({ title: `Delete “${p.name}”?`, body: `This permanently deletes the project and its ${n} task${n === 1 ? '' : 's'}. Daily backups are kept in the data folder.`, okText: 'Delete project', danger: true });
+  const ok = await dialog({ title: `Delete “${p.name}”?`, body: `The project and its ${n} task${n === 1 ? '' : 's'} move to the Trash. An Admin or Account Manager can restore them within ${TRASH_DAYS} days.`, okText: 'Move to Trash', danger: true });
   if (!ok) return;
   db.projects = db.projects.filter((x) => x.id !== id);
-  removeTasks(db.tasks.filter((t) => t.projectId === id).map((t) => t.id));
+  const removed = removeTasks(db.tasks.filter((t) => t.projectId === id).map((t) => t.id));
+  toTrash('project', { project: p, tasks: removed }, { key: 'projects:' + p.id });
   if (ui.taskId && !task(ui.taskId)) ui.taskId = null;
   persist(0);
   go('home');
@@ -3197,17 +3428,21 @@ async function deleteComment(cid) {
   const group = t.comments.filter((x) => x.id === cid || x.parentId === cid);
   const files = group.flatMap((x) => x.attachments || []).filter((a) => !a.linked);
   const replies = group.length - 1;
-  if (files.length || replies) {
+  if (files.length || replies || !isManager()) {
     const parts = [];
     if (replies) parts.push(`its ${replies} repl${replies === 1 ? 'y' : 'ies'}`);
-    if (files.length) parts.push(`${files.length} attached file${files.length === 1 ? '' : 's'} (moved to the Trash)`);
-    const ok = await dialog({ title: 'Delete comment?', body: `This also deletes ${parts.join(' and ')}.`, okText: 'Delete', danger: true });
+    if (files.length) parts.push(`${files.length} attached file${files.length === 1 ? '' : 's'}`);
+    const back = isManager() ? `You can restore it from the Trash within ${TRASH_DAYS} days.` : `An Account Manager can bring it back within ${TRASH_DAYS} days if needed.`;
+    const ok = await dialog({ title: 'Delete comment?', body: `${parts.length ? `This also removes ${parts.join(' and ')}. ` : ''}${back}`, okText: 'Delete', danger: true });
     if (!ok) return;
   }
   const ids = new Set(group.map((x) => x.id));
   t.comments = t.comments.filter((x) => !ids.has(x.id));
+  const it = toTrash('comment', { taskId: t.id, comments: group }, { key: 'tasks:' + t.id, taskTitle: t.title });
   commit();
-  safeTrash(group.flatMap((x) => (x.attachments || []).flatMap((a) => [a.path, '.thumbs/' + a.id]).concat(fileRefsIn(x.html))));
+  toast(isManager() ? 'Comment moved to the Trash' : 'Comment deleted — ask an Account Manager if you need it back', {
+    label: 'Undo', run: () => { db.trash = trashList().filter((x) => x.id !== it.id); group.forEach((c) => { if (!t.comments.some((x) => x.id === c.id)) t.comments.push(c); }); t.comments.sort((a, b) => a.at.localeCompare(b.at)); commit(); },
+  }, 10000);
 }
 
 function navTask(n) {
@@ -3346,13 +3581,16 @@ document.addEventListener('click', async (e) => {
         e.stopPropagation();
         const t = task(ui.taskId);
         const a = t.attachments.find((x) => x.id === id);
-        const ok = await dialog({ title: 'Remove attachment?', body: `“${a.name}” will be moved to the Trash.`, okText: 'Remove', danger: true });
+        const ok = await dialog({ title: `Remove “${a.name}”?`, body: isManager() ? `It moves to the Trash, where it can be restored within ${TRASH_DAYS} days.` : `An Account Manager can bring it back within ${TRASH_DAYS} days if needed.`, okText: 'Remove', danger: true });
         if (!ok) return;
         t.attachments = t.attachments.filter((x) => x.id !== id);
         logActivity(t, `removed attachment ${struck(a.name)}`);
         t.updatedAt = nowISO();
+        const it = toTrash('attachment', { taskId: t.id, att: a }, { key: 'tasks:' + t.id, taskTitle: t.title });
         commit();
-        safeTrash([a.path, '.thumbs/' + a.id]);
+        toast(isManager() ? `“${a.name}” moved to the Trash` : `Removed “${a.name}” — ask an Account Manager if you need it back`, {
+          label: 'Undo', run: () => { db.trash = trashList().filter((x) => x.id !== it.id); if (!t.attachments.some((x) => x.id === a.id)) t.attachments.push(a); commit(); },
+        }, 10000);
         return;
       }
       case 'add-comment': addComment(actEl.dataset.reply || null); return;
@@ -3494,6 +3732,11 @@ document.addEventListener('click', async (e) => {
       case 'ca-download': e.stopPropagation(); { const a = clientFileById(id); if (a) downloadClientFiles([a], a.name.replace(/\.[^.]+$/, '')); } return;
       case 'ca-download-all': { const { c, f } = curFolder(); if (f) downloadClientFiles(f.files, `${c.name} - ${f.name}`); } return;
       case 'close-thread': closeThread(); return;
+      case 'tr-filter': ui.trashFilter = actEl.dataset.k; renderContent(); return;
+      case 'tr-restore': restoreTrash(id); return;
+      case 'tr-forever': eraseTrashFlow(id); return;
+      case 'tr-empty': emptyTrashFlow(); return;
+      case 'tr-preview': { const it = trashList().find((x) => x.id === id); const a = it && trashFiles(it).find((x) => x.id === actEl.dataset.file); if (a) previewFile(a); return; }
       case 'mention-user': e.stopPropagation(); mentionInComposer(id); return;
       case 'cancel-edit': ui.editingComment = null; renderDetail(); return;
       case 'save-edit': saveEdit(id); return;
@@ -4207,11 +4450,12 @@ async function removeClientFile(id) {
   const { f } = curFolder();
   const a = f && f.files.find((x) => x.id === id);
   if (!a || !canAssets()) return;
-  const ok = await dialog({ title: `Delete “${a.name}”?`, body: 'It will be moved to the Trash. Copies already pasted into tasks stay.', okText: 'Delete', danger: true });
+  const ok = await dialog({ title: `Delete “${a.name}”?`, body: `It moves to the Trash, where it can be restored within ${TRASH_DAYS} days. Copies already pasted into tasks stay.`, okText: 'Delete', danger: true });
   if (!ok) return;
+  const { c } = curFolder();
   f.files = f.files.filter((x) => x.id !== id);
+  toTrash('cafile', { clientId: c.id, folderId: f.id, file: a }, { key: 'clients:' + c.id, where: `${c.name} › ${f.name}` });
   persist(0); render();
-  safeTrash([a.path, '.thumbs/' + a.id]);
 }
 function downloadClientFiles(list, folderName) {
   if (!list.length) return;
@@ -4749,7 +4993,7 @@ async function cdToggleFlow(id) {
 
 /* ================= Inbox ================= */
 const myNotifs = () => (db && currentUserId ? db.notifications.filter((n) => n.to === currentUserId) : []);
-const NOTIF_ICON = { review: 'upload', 'review-ok': 'check', 'review-amend': 'edit', 'review-wd': 'x', part: 'check-circle', allparts: 'check-circle', assigned: 'user', unassigned: 'user', comment: 'chat', mention: 'chat', status: 'check-circle', cd: 'shield', done: 'check', due: 'cal', priority: 'flag', attach: 'clip' };
+const NOTIF_ICON = { trash: 'trash', restore: 'reply', review: 'upload', 'review-ok': 'check', 'review-amend': 'edit', 'review-wd': 'x', part: 'check-circle', allparts: 'check-circle', assigned: 'user', unassigned: 'user', comment: 'chat', mention: 'chat', status: 'check-circle', cd: 'shield', done: 'check', due: 'cal', priority: 'flag', attach: 'clip' };
 function notifPlain(n) { const d = document.createElement('div'); d.innerHTML = n.text; return d.textContent; }
 const IB_FILTERS = { all: 'All updates', comments: 'Comments & mentions', assigned: 'Assigned to me', status: 'Status & CD review', dates: 'Dates & priority' };
 const ibMatch = (n, f) => f === 'all' || !f ? true : f === 'comments' ? ['comment', 'mention'].includes(n.kind) : f === 'assigned' ? ['assigned', 'unassigned'].includes(n.kind) : f === 'status' ? ['status', 'cd', 'done', 'review', 'review-ok', 'review-amend', 'review-wd'].includes(n.kind) : ['due', 'priority'].includes(n.kind);
@@ -4850,7 +5094,12 @@ function openNotif(id) {
   myNotifs().forEach((x) => { if (x.taskId === n.taskId) x.read = true; });
   persist(); renderSidebar(); renderContent();
   const t = task(n.taskId);
-  if (!t) { toast('That task has been deleted'); return; }
+  if (!t) {
+    const inTrash = trashList().find((x) => (x.type === 'task' || x.type === 'project') && (x.key === 'tasks:' + n.taskId || ((x.data || {}).tasks || []).some((t) => t.id === n.taskId)));
+    if (inTrash && isManager()) { ui.trashQ = trashTitle(inTrash); ui.trashFilter = 'all'; closeDetail(); go('trash'); toast('That task is in the Trash — restore it from here'); }
+    else toast(isManager() ? 'That task has been deleted' : 'That task is in the Trash — ask an Account Manager if it should come back');
+    return;
+  }
   if ((n.kind === 'review' || n.kind === 'review-wd') && isCD()) { ui.rrTab = 'active'; closeDetail(); go('reviews'); return; }
   let c = null;
   if (n.kind === 'review-amend' && n.commentId) c = t.comments.find((x) => x.id === n.commentId) || null;

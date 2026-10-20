@@ -522,3 +522,15 @@ body.phone :is(.cm-meta b[data-user-card], [data-user-card], .rr-title, .crumb-l
 .ph-why { margin: -4px 6px 2px 50px; font-size: 12.5px; color: var(--text-3); }
 .ph-why .sr-why { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 body.phone .sr-fixed { margin: 0 0 4px; border-radius: 14px; }
+
+/* Trash on phones */
+body.phone .trash { padding: 6px 14px 30px; }
+body.phone .tr-head { flex-direction: column; gap: 10px; }
+body.phone .tr-chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+body.phone .tr-chips button { flex: none; height: 34px; border-radius: 17px; }
+body.phone .tr-card { border-radius: 18px; background: var(--ph-card); }
+body.phone .tr-row { flex-wrap: wrap; }
+body.phone .tr-main { flex-basis: calc(100% - 44px); }
+body.phone .tr-left { order: 4; margin: 2px 0 0 44px; }
+body.phone .tr-acts { order: 5; margin-left: auto; }
+body.phone .tr-acts .btn { height: 36px; border-radius: 18px; padding: 0 14px; }

@@ -2080,3 +2080,35 @@ button.pv-empty:hover { background: var(--hover); color: var(--text-2); }
 .sr-why b { color: var(--text-2); font-weight: 600; }
 .sr-why mark, .sr-proj mark, .task-row .title mark, .ph-why mark, .pc-title mark { background: rgba(249, 190, 51, .28); color: inherit; border-radius: 3px; padding: 0 1px; }
 .ca-loose { color: var(--amber); font-weight: 500; }
+
+/* ---- Trash ---- */
+.tr-nav { margin-top: 4px; }
+.trash { max-width: 980px; margin: 0 auto; padding: 18px 28px 80px; }
+.tr-head { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 14px; }
+.tr-intro { flex: 1; color: var(--text-2); font-size: 13px; line-height: 1.5; }
+.tr-search { margin-bottom: 10px; }
+.tr-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.tr-chips button { height: 30px; padding: 0 12px; border-radius: 15px; border: 1px solid var(--border-strong); background: none; color: var(--text-2); font: inherit; font-size: 12.5px; font-weight: 600; }
+.tr-chips button.on { background: var(--text); color: var(--bg); border-color: var(--text); }
+.tr-group { display: flex; align-items: center; gap: 8px; margin: 16px 2px 6px; font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--text-3); }
+.tr-group span { font-weight: 600; letter-spacing: 0; }
+.tr-card { border: 1px solid var(--border); border-radius: 12px; background: var(--panel); overflow: hidden; }
+.tr-row { display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; border-top: 1px solid var(--border); }
+.tr-row:first-child { border-top: 0; }
+.tr-ic { width: 32px; height: 32px; border-radius: 9px; background: var(--raised); color: var(--text-2); display: grid; place-items: center; flex: none; }
+.tr-ic .ic { width: 16px; height: 16px; }
+.tr-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.tr-title { font-weight: 600; font-size: 14px; overflow-wrap: anywhere; }
+.tr-sub { color: var(--text-3); font-size: 12px; }
+.tr-type { display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 5px; background: var(--raised); color: var(--text-2); font-weight: 600; font-size: 11px; }
+.tr-files { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.tr-file { display: inline-flex; align-items: center; gap: 6px; max-width: 220px; height: 30px; padding: 0 10px 0 4px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text-2); font: inherit; font-size: 12px; }
+.tr-file:hover { border-color: rgba(123,104,238,.6); color: var(--text); }
+.tr-file img { width: 22px; height: 22px; border-radius: 5px; object-fit: cover; }
+.tr-file i { width: 22px; height: 22px; border-radius: 5px; background: var(--raised); display: grid; place-items: center; font-style: normal; font-size: 8.5px; font-weight: 800; text-transform: uppercase; }
+.tr-file span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tr-more { align-self: center; font-size: 12px; color: var(--text-3); }
+.tr-left { flex: none; font-size: 11.5px; font-weight: 600; color: var(--text-3); background: var(--raised); padding: 3px 8px; border-radius: 10px; margin-top: 4px; white-space: nowrap; }
+.tr-left.soon { color: #ff9494; background: var(--red-soft); }
+.tr-acts { display: flex; align-items: center; gap: 4px; flex: none; }
+.tr-acts .btn .ic { width: 14px; height: 14px; }

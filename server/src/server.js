@@ -193,7 +193,8 @@ export function createServer(cfg) {
       const body = await readBody(req);
       const changes = Array.isArray(body.changes) ? body.changes : [];
       const fresh = new Set(changes.filter((ch) => ch && ch.kind === 'notifications' && !ch.del && !store.get('notifications', String(ch.id))).map((ch) => String(ch.id)));
-      const { rev, results } = store.apply(changes, u.id, (ch, current) => access.canWrite(u, ch, current));
+      const restoring = new Set(changes.filter((ch) => ch && !ch.del && ch.kind !== 'trash').map((ch) => `${ch.kind}:${ch.id}`));
+      const { rev, results } = store.apply(changes, u.id, (ch, current) => access.canWrite(u, ch, current, { restoring }));
       broadcast(rev, results, body.client, u.id);
       // new notifications also go to the person's phone
       results.filter((r) => r.kind === 'notifications' && fresh.has(String(r.id)) && !r.refused && !r.deleted && r.data && r.data.to && r.data.to !== u.id)

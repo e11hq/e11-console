@@ -51,6 +51,7 @@ export function createAccess(store) {
       case 'projects': return !isFreelancer(u) || projectSet(u).has(data.id);
       case 'tasks': return taskVisible(u, data);
       case 'clients': return !isFreelancer(u) || clientSet(u).has(data.id);
+      case 'trash': return u.role === 'admin' || u.role === 'am';   // the Trash is for Admins and Account Managers
       default: return true;
     }
   }
@@ -62,7 +63,8 @@ export function createAccess(store) {
     return out;
   }
 
-  function canWrite(u, ch, current) {
+  // ctx.restoring: the items this same save puts back (so a Trash entry may be cleared as it's restored)
+  function canWrite(u, ch, current, ctx = {}) {
     const admin = u.role === 'admin';
     const manager = admin || u.role === 'am';
     const next = ch.del ? null : ch.data;
@@ -86,6 +88,14 @@ export function createAccess(store) {
       case 'tasks':
         if (isFreelancer(u)) return (!current || taskVisible(u, current)) && (ch.del || taskVisible(u, next));
         return true;
+      case 'trash': {
+        // anyone's deletions land here; only Admins and Account Managers look after it
+        if (!ch.del) return !current ? manager || (!!next && next.deletedBy === u.id) : manager;
+        if (!current || admin) return true;                          // only Admins delete forever
+        if (!manager) return false;
+        const old = Date.now() - Date.parse(current.deletedAt || 0) > 30 * 86400000;
+        return old || (!!current.key && !!(ctx.restoring && ctx.restoring.has(current.key)));
+      }
       case 'notifications':
         if (ch.del) return !current || current.to === u.id;
         if (!current) return true;
