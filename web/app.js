@@ -4996,6 +4996,7 @@ function meMenu(anchor) {
     ...(Host.isServer && me() && me().role === 'admin' ? [{ label: 'App updates', icon: 'download', run: () => go('updates') }] : []),
     ...(Host.isServer ? [{ label: 'What’s new', icon: 'info', run: () => whatsNewDialog(false) }] : []),
     ...(Host.isServer && !Host.isMacApp ? [{ label: 'Get the Mac app', icon: 'download', run: macAppDialog }] : []),
+    ...(isTestCopy() && me() && me().role === 'admin' ? [{ label: 'Fill with sample data', icon: 'users', run: fillSampleData }] : []),
     '-',
     { label: 'Sign out', icon: 'logout', run: signOut },
   ]);
@@ -5108,6 +5109,16 @@ function enterApp() {
   render();
   purgeOldCompleted();
   setTimeout(deliverPending, 900);
+}
+// The test copy (test.e11hq.com) can be filled with sample people, tasks and comments
+const isTestCopy = () => Host.isServer && /-test\./.test(String(Sync.version || ''));
+async function fillSampleData() {
+  const ok = await dialog({ title: 'Fill the test copy with sample data?', body: 'Adds E11 people, projects, tasks, comments with replies and Inbox updates, dated around today. Only on the test copy — the live app is never touched. You can run it again any time.', okText: 'Add sample data' });
+  if (!ok) return;
+  try {
+    const r = await api('POST', '/api/sample', {});
+    toast(`Added ${r.tasks} tasks and ${r.people} people — they appear in a moment`);
+  } catch (e) { toast('Could not add sample data: ' + e.message); }
 }
 function signOut() {
   flushEdit();

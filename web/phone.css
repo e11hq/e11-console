@@ -497,3 +497,9 @@ body.phone #content > .ph-page { min-height: calc(100% - var(--ph-head-h, 0px));
 #ph-fabslot { display: none; }
 body.phone #ph-fabslot { display: block; }
 body.phone.task-open #ph-fabslot { display: none; }
+
+/* Comment buttons (react, reply, more) always visible on phones — there's no hover */
+body.phone .cm-tools { opacity: 1 !important; gap: 4px; }
+body.phone .cm-tools .icon-btn { width: 34px; height: 34px; border-radius: 17px; color: var(--text-2); background: rgba(255, 255, 255, .05); }
+:root[data-theme="light"] body.phone .cm-tools .icon-btn { background: rgba(20, 20, 40, .05); }
+body.phone .cm-tools .icon-btn .ic { width: 17px; height: 17px; }

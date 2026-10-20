@@ -274,6 +274,7 @@ const Phone = (() => {
         ${row('data-nav="clients"', 'assets', 'Client Assets', 'Logos, guidelines and fonts')}
         ${row('data-nav="team"', 'users', 'Team members')}
         ${admin && Host.isServer ? row('data-nav="updates"', 'download', 'App updates') : ''}
+        ${admin && isTestCopy() ? row('data-ph="sample"', 'users', 'Fill with sample data', 'Test copy only: people, tasks, comments') : ''}
       </div>
       <div class="ph-rows">
         ${typeof Push !== 'undefined' ? Push.row() : ''}
@@ -577,6 +578,7 @@ const Phone = (() => {
       case 'preview': { const t = task(el.dataset.tid); const a = t && findAttachment(t, id); if (a) previewFile(a); break; }
       case 'open-project': go('project', id); break;
       case 'task-more': taskMore(); break;
+      case 'sample': fillSampleData(); break;
       case 'sign-out': dialog({ title: 'Sign out?', body: 'You’ll need the code from your email to sign in again.', okText: 'Sign out' }).then((ok) => { if (ok) signOut(); }); break;
       default: break;
     }

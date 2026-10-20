@@ -10,6 +10,7 @@ import { createAccess } from './access.js';
 import { createFiles, mimeOf, httpError } from './files.js';
 import { createCfSync } from './cfsync.js';
 import { createWebPush, notifMessage } from './webpush.js';
+import { sampleData } from './sample.js';
 
 const BODY_LIMIT = 12 * 1024 * 1024; // 2 MB upload pieces arrive as ~2.7 MB of base64
 
@@ -174,6 +175,16 @@ export function createServer(cfg) {
     if (p === '/api/push/test' && req.method === 'POST') {
       const r = await webPush.sendTo(u.id, { title: 'E11 Console', body: 'Notifications are on. This is how they’ll look on this phone.', tag: 'test' });
       return json(res, 200, { ok: true, ...r });
+    }
+
+    // Test copy only: fill it with sample people, projects, tasks, comments and replies for trying things out
+    if (p === '/api/sample' && req.method === 'POST') {
+      if (u.role !== 'admin') return json(res, 403, { ok: false, error: 'Admins only' });
+      if (!/-test\.|-dev$/.test(version)) return json(res, 403, { ok: false, error: 'Sample data is only for the test copy' });
+      const data = sampleData(store, u.id);
+      const { rev, results } = store.importAll(data, u.id);
+      broadcast(rev, results, null, u.id);
+      return json(res, 200, { ok: true, rev, tasks: data.tasks.length, people: data.users.length });
     }
 
     if (p === '/api/snapshot' && req.method === 'GET') return json(res, 200, { ok: true, version, ...visibleSnapshot(u) });
