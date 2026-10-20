@@ -107,6 +107,23 @@ export function createServer(cfg) {
 
     if (p === '/api/health') return json(res, 200, { ok: true, version, rev: store.rev() });
 
+    // Mac app installer (no sign-in: these files hold no data — Cloudflare lets /install through)
+    if (p === '/install' || p === '/install/main.js' || p === '/install/AppIcon.png') {
+      const macDir = cfg.macDir || (webDir ? path.join(webDir, '..', 'mac') : null);
+      const file = p === '/install' ? 'install.sh' : p.slice('/install/'.length);
+      const full = macDir && path.join(macDir, file);
+      if (!full || !fs.existsSync(full)) return json(res, 404, { ok: false, error: 'Installer not available' });
+      if (file === 'install.sh') {
+        const host = String(req.headers['x-forwarded-host'] || req.headers.host || 'console.e11hq.com').replace(/[^\w.:-]/g, '');
+        const scheme = /^(localhost|127\.)/.test(host) ? 'http' : 'https';
+        const body = fs.readFileSync(full, 'utf8').replace('__SERVER__', `${scheme}://${host}`);
+        res.writeHead(200, { 'Content-Type': 'text/x-shellscript; charset=utf-8', 'Cache-Control': 'no-cache' });
+        return res.end(body);
+      }
+      res.writeHead(200, { 'Content-Type': mimeOf(full), 'Cache-Control': 'no-cache' });
+      return fs.createReadStream(full).pipe(res);
+    }
+
     const u = await who(req, res);
     if (!u) return;
 

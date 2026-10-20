@@ -134,7 +134,8 @@ const Host = (() => {
     }
   }
   // Opened from the office server (console.e11hq.com) instead of the Mac app
-  const server = !native && /^https?:$/.test(location.protocol) && !window.__E11_LOCAL_PREVIEW;
+  // (the E11 Console Mac app also opens the server, and adds native extras through the same bridge)
+  const server = /^https?:$/.test(location.protocol) && !window.__E11_LOCAL_PREVIEW;
   function call(cmd, args = {}) {
     if (server) return ServerHost.call(cmd, args);
     if (!native) return fallback(cmd, args);
@@ -154,11 +155,59 @@ const Host = (() => {
     });
   }
   // isNative = files can be shown (true in the Mac app and on the server); isServer = connected to the server
-  return { call, isNative: !!native || server, isServer: server };
+  return { call, isNative: !!native || server, isServer: server, isMacApp: server && !!native };
+})();
+
+// Talking to the E11 Console Mac app around the page (file picker, Downloads, Dock badge…)
+const NativeMac = (() => {
+  const handler = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.e11;
+  let seq = 0;
+  const waiting = new Map();
+  window.__e11NativeReply = (id, res) => {
+    const w = waiting.get(id);
+    if (!w) return;
+    waiting.delete(id);
+    if (res && res.ok === false) w.reject(new Error(res.error || 'Something went wrong')); else w.resolve(res || {});
+  };
+  function call(cmd, args = {}) {
+    if (!handler) return Promise.reject(new Error('Not in the Mac app'));
+    return new Promise((resolve, reject) => {
+      const id = 'n' + (++seq);
+      waiting.set(id, { resolve, reject });
+      handler.postMessage(JSON.stringify({ id, cmd, args }));
+    });
+  }
+  return { call };
 })();
 
 const FINDER_LABEL = Host.isServer ? 'Download' : 'Show in Finder';
 
+
+/* ================= Mac app installer ================= */
+function macAppDialog() {
+  const cmd = `curl -fsSL ${location.origin}/install | bash`;
+  const root = $('#overlay-root');
+  root.innerHTML = `<div class="scrim"><div class="dialog mac-dlg">
+    <div class="wn-kick">${icon('download')}E11 Console for Mac</div>
+    <h2>Install the Mac app</h2>
+    <p>Your own E11 Console app with a Dock icon, notifications and the Mac file picker. It always shows the latest version, so you only install it once.</p>
+    <ol class="mac-steps">
+      <li>Open <b>Terminal</b> (press <kbd>⌘</kbd> <kbd>Space</kbd>, type <b>Terminal</b>, press <kbd>Return</kbd>).</li>
+      <li>Copy this line, paste it into Terminal and press <kbd>Return</kbd>:
+        <div class="mac-cmd"><code>${esc(cmd)}</code><button class="btn sm" data-copy-cmd>${icon('copy')}Copy</button></div></li>
+      <li>After about 20 seconds E11 Console opens — sign in with your work email. It’s now in your Applications folder; drag it to the Dock to keep it there.</li>
+    </ol>
+    <div class="actions"><button class="btn primary" data-r="1">Done</button></div>
+  </div></div>`;
+  const close = () => { root.innerHTML = ''; };
+  $('[data-r="1"]', root).addEventListener('click', close);
+  $('[data-copy-cmd]', root).addEventListener('click', (e) => {
+    try { navigator.clipboard.writeText(cmd).then(() => toast('Copied — paste it into Terminal')); }
+    catch (err) { const ta = document.createElement('textarea'); ta.value = cmd; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); toast('Copied — paste it into Terminal'); }
+    e.currentTarget.innerHTML = `${icon('check')}Copied`;
+  });
+  $('.scrim', root).addEventListener('click', (e) => { if (e.target.classList.contains('scrim')) close(); });
+}
 
 /* ================= Updates (server) ================= */
 // Simple formatting for release notes: "## Heading", "- bullet", **bold**
@@ -289,7 +338,10 @@ function paintCfStatus(s) {
 }
 // Requests to the server. Cloudflare signs people in before the page even loads.
 async function api(method, url, body) {
-  const res = await fetch(url, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined, credentials: 'same-origin', cache: 'no-store' });
+  const res = await fetch(url, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined, credentials: 'same-origin', cache: 'no-store', redirect: 'manual' });
+  if (res.type === 'opaqueredirect' || (res.status >= 300 && res.status < 400)) {
+    const err = new Error('Your sign-in has expired — sign in again to continue'); err.auth = true; err.expired = true; throw err;
+  }
   let data = null;
   try { data = await res.json(); } catch (e) { /* not JSON */ }
   if (res.status === 401 || res.status === 403) {
@@ -321,11 +373,30 @@ const ServerHost = (() => {
       inp.click();
     });
   }
+  // A file to upload: a browser File, or a file picked in the Mac app (read through the app)
+  const readPiece = (file, off, len) => (file.macToken
+    ? NativeMac.call('readLocalChunk', { token: file.macToken, offset: off, length: len, last: off + len >= file.size }).then((r) => r.b64)
+    : b64(file.slice(off, off + len)));
+  async function pickMacFiles(opts) {
+    const r = await NativeMac.call('pickLocalFiles', opts);
+    return (r.files || []).map((f) => ({ name: f.name, size: f.size, macToken: f.token }));
+  }
+  // Save something from the server on this Mac: into Downloads (shown in Finder) or opened directly
+  async function saveOnMac(url, name, open) {
+    const res = await fetch(url, { credentials: 'same-origin' });
+    if (!res.ok) throw new Error(`Download failed (${res.status})`);
+    const blob = await res.blob();
+    const tok = uid();
+    for (let off = 0; off < Math.max(blob.size, 1); off += CHUNK_SIZE) {
+      const piece = await b64(blob.slice(off, off + CHUNK_SIZE));
+      await NativeMac.call('saveFile', { token: tok, name, b64: piece, open, done: off + CHUNK_SIZE >= blob.size });
+    }
+  }
   // Upload one file in 2 MB pieces; onProgress(0..1)
   async function uploadFile(file, target, onProgress) {
     let path = null, last = null;
     for (let off = 0; off < Math.max(file.size, 1); off += CHUNK_SIZE) {
-      const piece = await b64(file.slice(off, off + CHUNK_SIZE));
+      const piece = await readPiece(file, off, CHUNK_SIZE);
       last = await api('POST', '/api/host/writeChunk', { ...target, name: file.name, path, b64: piece });
       path = last.path;
       if (onProgress) onProgress(Math.min(1, (off + CHUNK_SIZE) / Math.max(file.size, 1)));
@@ -363,8 +434,13 @@ const ServerHost = (() => {
     document.body.appendChild(a); a.click(); a.remove();
   }
   async function call(cmd, args = {}) {
+    if (Host.isMacApp) {
+      const mac = await macCall(cmd, args);
+      if (mac !== undefined) return mac;
+    }
     switch (cmd) {
       case 'load': case 'save': case 'sweepOrphans': case 'setAppearance': case 'revealData': return { ok: true };
+      case 'badge': try { if (navigator.setAppBadge) { if (args.n) navigator.setAppBadge(args.n); else navigator.clearAppBadge(); } } catch (e) { /* not installed */ } return { ok: true };
       case 'pickAttachments': {
         const files = await pickFiles({ multiple: true });
         return { ok: true, files: await uploadMany(files, args.dest ? { dest: args.dest } : { taskId: args.taskId }) };
@@ -390,6 +466,31 @@ const ServerHost = (() => {
         return { ok: true };
       }
       default: return api('POST', '/api/host/' + cmd, args);
+    }
+  }
+  // Inside the Mac app: use the Mac's own file picker, Downloads folder, notifications and Dock badge
+  async function macCall(cmd, args) {
+    const fileHrefName = (p) => String(p).split('/').pop();
+    switch (cmd) {
+      case 'pickAttachments': {
+        const files = await pickMacFiles({ multiple: true, prompt: args.dest ? 'Upload' : 'Attach' });
+        return { ok: true, files: await uploadMany(files, args.dest ? { dest: args.dest } : { taskId: args.taskId }) };
+      }
+      case 'pickImage': {
+        const files = await pickMacFiles({ multiple: false, images: true, prompt: args.kind === 'logo' ? 'Use logo' : 'Use photo' });
+        if (!files.length) return { ok: true, path: null };
+        const up = await uploadFile(files[0], { taskId: '_uploads' });
+        return api('POST', '/api/host/processImage', { path: up.path, kind: args.kind || 'avatar', userId: args.userId });
+      }
+      case 'openPath': case 'quickLook': await saveOnMac(fileHref(args.path), fileHrefName(args.path), true); return { ok: true };
+      case 'revealPath': await saveOnMac(fileHref(args.path), fileHrefName(args.path), false); toast(`Saved to Downloads`); return { ok: true };
+      case 'exportFiles': {
+        const r = await api('POST', '/api/host/exportFiles', args);
+        if (r.count) await saveOnMac(r.url, (r.dir || 'E11 files') + '.zip', false);
+        return { ...r, dir: 'Downloads › ' + (r.dir || 'E11 files') + '.zip' };
+      }
+      case 'openURL': case 'notify': case 'badge': case 'setAppearance': return NativeMac.call(cmd, args);
+      default: return undefined;
     }
   }
   return { call, uploadMany, pickFiles, download };
@@ -1171,6 +1272,7 @@ const Sync = (() => {
   }
   function signedOut(e) {
     if (es) es.close();
+    if (e.expired) { location.reload(); return; }
     document.body.innerHTML = `<div class="fatal" style="margin:20vh auto;max-width:420px;text-align:center"><h2>${esc(e.status === 403 ? 'No access' : 'Signed out')}</h2><p>${esc(e.message)}</p><button class="btn primary" onclick="location.reload()">Sign in again</button></div>`;
   }
   return { start, push, savePrefs, get online() { return online; }, get version() { return version; }, clientId };
@@ -1236,7 +1338,16 @@ function openTasksCount() {
   return topTasks().filter((t) => !t.done).length;
 }
 
+let lastBadge = -1;
+function updateAppBadge() {
+  if (!Host.isServer || !currentUserId) return;
+  const n = myNotifs().filter((x) => !x.read).length;
+  if (n === lastBadge) return;
+  lastBadge = n;
+  Host.call('badge', { n }).catch(() => {});
+}
 function renderSidebar() {
+  updateAppBadge();
   $$('.nav-item[data-nav]').forEach((a) => a.classList.toggle('active', !ui.search && (ui.view === a.dataset.nav || (a.dataset.nav === 'clients' && ui.view === 'client'))));
   { const cc = $('#clients-count'); if (cc) cc.textContent = (db.clients || []).length ? String(db.clients.length) : ''; }
   const mt = myTop().filter((t) => myOpen(t) && t.due && dayDiff(t.due) <= 0).length;
@@ -4813,7 +4924,7 @@ function viewProfile() {
     <div class="pf-card">
       <h3>${icon('bell')}Notifications</h3>
       <div class="pf-opt"><div><b>Sound</b><span>Play a sound with new notifications</span></div><button class="switch ${sound ? 'on' : ''}" data-action="toggle-sound"><i></i></button></div>
-      ${Host.isServer && 'Notification' in window ? `<div class="pf-opt"><div><b>Desktop notifications</b><span>${Notification.permission === 'granted' ? 'On — you’ll see alerts even when this window is in the background' : Notification.permission === 'denied' ? 'Blocked in your browser settings for this site' : 'Show alerts when this window is in the background'}</span></div>${Notification.permission === 'default' ? '<button class="btn sm primary" data-action="allow-notifs">Turn on</button>' : ''}</div>` : ''}
+      ${Host.isServer && !Host.isMacApp && 'Notification' in window ? `<div class="pf-opt"><div><b>Desktop notifications</b><span>${Notification.permission === 'granted' ? 'On — you’ll see alerts even when this window is in the background' : Notification.permission === 'denied' ? 'Blocked in your browser settings for this site' : 'Show alerts when this window is in the background'}</span></div>${Notification.permission === 'default' ? '<button class="btn sm primary" data-action="allow-notifs">Turn on</button>' : ''}</div>` : ''}
       <div class="pf-opt"><div><b>Test</b><span>See and hear what a notification looks like</span></div><button class="btn sm" data-action="test-notif">Send test</button></div>
       <h4 class="pf-sub">Notify me about</h4>
       ${notifToggles(u, false)}
@@ -4876,6 +4987,7 @@ function meMenu(anchor) {
     { label: 'Team members', icon: 'users', run: () => go('team') },
     ...(Host.isServer && me() && me().role === 'admin' ? [{ label: 'App updates', icon: 'download', run: () => go('updates') }] : []),
     ...(Host.isServer ? [{ label: 'What’s new', icon: 'info', run: () => whatsNewDialog(false) }] : []),
+    ...(Host.isServer && !Host.isMacApp ? [{ label: 'Get the Mac app', icon: 'download', run: macAppDialog }] : []),
     '-',
     { label: 'Sign out', icon: 'logout', run: signOut },
   ]);

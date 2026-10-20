@@ -2044,3 +2044,11 @@ button.pv-empty:hover { background: var(--hover); color: var(--text-2); }
 .imp-card { margin-top: 16px; }
 .imp-card .upd-note b { color: var(--text-2); }
 .imp-card .btn { margin-top: 12px; }
+.mac-dlg { width: 560px; }
+.mac-dlg h2 { margin: 6px 0 6px; }
+.mac-steps { margin: 14px 0 6px; padding-left: 20px; display: grid; gap: 12px; font-size: 13.5px; line-height: 1.5; color: var(--text-2); }
+.mac-steps b { color: var(--text); }
+.mac-steps kbd { padding: 1px 6px; border-radius: 5px; border: 1px solid var(--border-strong); background: var(--raised); font: 12px -apple-system, sans-serif; }
+.mac-cmd { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding: 8px 8px 8px 12px; border-radius: 9px; background: #0b0b0e; border: 1px solid var(--border-strong); }
+.mac-cmd code { flex: 1; font: 12.5px ui-monospace, Menlo, monospace; color: #c9f7e5; overflow-x: auto; white-space: nowrap; }
+:root[data-theme="light"] .mac-cmd { background: #16161b; }
