@@ -21,20 +21,34 @@ const Phone = (() => {
 
   // iPhone Home Screen apps can report a page shorter than the screen, which leaves a gap under
   // everything pinned to the bottom. Measure the real height and pin to the true bottom edge.
+  // Where does "the bottom" (bottom: 0) really land? A tiny probe pinned there tells us, so the
+  // correction is always based on what the phone is doing right now, not on a number it reported once.
+  let probe = null, lastKey = '';
   function measure() {
     const root = document.documentElement;
+    if (!probe && document.body) { probe = document.createElement('i'); probe.style.cssText = 'position:fixed;left:0;bottom:0;width:0;height:0;pointer-events:none;visibility:hidden'; document.body.appendChild(probe); }
     const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
-    let h = window.innerHeight;
+    const bottom = probe ? probe.getBoundingClientRect().top : window.innerHeight; // where bottom:0 sits now
+    let h = Math.max(bottom, window.innerHeight);
     if (standalone) {
       const full = window.innerHeight > window.innerWidth ? Math.max(screen.height, screen.width) : Math.min(screen.height, screen.width);
       if (full > h && full - h < 140) h = full; // not when the keyboard is open (that shrinks it a lot more)
     }
+    const shift = Math.min(0, Math.round(bottom - h));
+    const key = h + '/' + shift;
+    if (key === lastKey) return;
+    lastKey = key;
     root.style.setProperty('--app-h', h + 'px');
-    root.style.setProperty('--ph-shift', (window.innerHeight - h) + 'px');
+    root.style.setProperty('--ph-shift', shift + 'px');
   }
   measure();
   window.addEventListener('resize', measure);
   window.addEventListener('orientationchange', () => setTimeout(measure, 300));
+  window.addEventListener('pageshow', () => { measure(); setTimeout(measure, 300); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { measure(); setTimeout(measure, 300); setTimeout(measure, 1000); } });
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', measure);
+  // the phone can settle on its real size a moment after opening without telling the page: keep checking
+  setInterval(() => { if (st.on && !document.hidden) measure(); }, 1000);
 
   const tabOf = (v) => (v === 'home' ? 'today' : v === 'review' ? 'reviews' : v === 'project' ? 'projects' : v);
   const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
@@ -293,12 +307,13 @@ const Phone = (() => {
       : v === 'psearch' ? search() : meScreen();
     if (ui.view === 'review') wireSlides(c);
     document.body.classList.toggle('ph-fab-on', !!c.querySelector('.ph-fab'));
+    document.body.classList.toggle('ph-strip', !c.querySelector('.ph-bar'));
     return true;
   }
   // Pages shared with the desktop (profile, team, Client Assets…) get a phone header with a back button
   function decorate(c) {
     if (!st.on || OWN.has(ui.view)) return;
-    document.body.classList.remove('ph-fab-on');
+    document.body.classList.remove('ph-fab-on', 'ph-strip');
     let title = TITLES[ui.view] || 'E11 Console', back = 'data-ph-tab="me"';
     if (ui.view === 'client') {
       const cl = clientById(ui.clientId);
@@ -712,6 +727,60 @@ const Push = (() => {
         set(cur.layer, 0, false);
       }, 200);
     } else set(cur.layer, 0, true);
+  };
+  document.addEventListener('touchend', end);
+  document.addEventListener('touchcancel', end);
+})();
+
+/* Swipe left / right on a page to move between its tabs: To Do ↔ Done, Details ↔ Comments,
+   Unread ↔ All ↔ Mentions. (A swipe that starts at the very left edge is "back" instead.) */
+(() => {
+  let g = null;
+  const SKIP = 'input, textarea, select, [contenteditable="true"], .ph-slides, .ph-chips, .tile-grid, .menu, .ph-sheet, .ap-video, video, .board';
+  function tabsHere() {
+    if ($('#overlay-root').firstElementChild || $('#ph-sheet-root .ph-scrim:not(.docked)') || $('.menu')) return null;
+    if (ui.taskId) {
+      if (ui.thread) return null;
+      const btns = $$('#detail .ph-task-head .ph-seg button');
+      return btns.length > 1 ? { btns, area: () => $('#detail .tm-body') } : null;
+    }
+    const btns = $$('#content .ph-seg button').length ? $$('#content .ph-seg button') : $$('#content .ph-chips button');
+    return btns.length > 1 ? { btns, area: () => $('#content > .ph-page') } : null;
+  }
+  document.addEventListener('touchstart', (e) => {
+    g = null;
+    if (!Phone.on || e.touches.length !== 1) return;
+    const t = e.touches[0];
+    if (t.clientX <= 28 || e.target.closest(SKIP)) return;
+    const tabs = tabsHere();
+    if (!tabs) return;
+    g = { x0: t.clientX, y0: t.clientY, dx: 0, on: false, tabs, el: tabs.area() };
+  }, { passive: true });
+  document.addEventListener('touchmove', (e) => {
+    if (!g) return;
+    const t = e.touches[0];
+    const dx = t.clientX - g.x0, dy = t.clientY - g.y0;
+    if (!g.on) {
+      if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) { g = null; return; } // scrolling
+      if (Math.abs(dx) < 14 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+      g.on = true;
+    }
+    e.preventDefault();
+    g.dx = dx;
+    if (g.el) { g.el.style.transition = 'none'; g.el.style.transform = `translateX(${dx * 0.25}px)`; g.el.style.opacity = String(1 - Math.min(0.35, Math.abs(dx) / 900)); }
+  }, { passive: false });
+  const end = () => {
+    if (!g || !g.on) { g = null; return; }
+    const cur = g; g = null;
+    const reset = (el) => { if (!el) return; el.style.transition = 'transform .2s ease, opacity .2s ease'; el.style.transform = ''; el.style.opacity = ''; };
+    const btns = cur.tabs.btns;
+    const i = btns.findIndex((b) => b.classList.contains('on'));
+    const j = cur.dx < -60 ? i + 1 : cur.dx > 60 ? i - 1 : i;
+    if (j === i || j < 0 || j >= btns.length) { reset(cur.el); return; }
+    btns[j].click();
+    const el = cur.tabs.area();
+    if (el) { el.classList.remove('ph-in-l', 'ph-in-r'); void el.offsetWidth; el.classList.add(cur.dx < 0 ? 'ph-in-r' : 'ph-in-l'); el.style.transform = ''; el.style.opacity = ''; }
+    if (el !== cur.el) reset(cur.el);
   };
   document.addEventListener('touchend', end);
   document.addEventListener('touchcancel', end);

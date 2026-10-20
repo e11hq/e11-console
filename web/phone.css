@@ -418,3 +418,24 @@ body.phone .dialog > * { flex: none; }
 body.phone .dialog > p, body.phone .dialog > .wn-notes, body.phone .dialog > .dlg-body { flex: 0 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 body.phone .dialog { background: rgba(28, 28, 36, .9); }
 :root[data-theme="light"] body.phone .dialog { background: rgba(255, 255, 255, .92); }
+
+/* Status bar strip: plain fade (no blur — overlapping blurs made headings look blurry on iPhone),
+   and only on the main tab pages; pages with their own frosted header don't need it */
+body.phone::after { display: none; -webkit-backdrop-filter: none; backdrop-filter: none;
+  background: linear-gradient(var(--ph-bg) 55%, color-mix(in srgb, var(--ph-bg) 0%, transparent)); height: calc(var(--ph-top) + 6px); }
+body.phone.ph-strip:not(.task-open)::after { display: block; }
+
+/* Roomier comment box */
+body.phone #detail .tm-composer { padding: 10px 12px calc(env(safe-area-inset-bottom) + 12px); }
+body.phone #detail .tm-composer .composer { border-radius: 20px; }
+body.phone #detail .tm-composer .rt-editor { min-height: 56px; padding: 14px 16px 8px; line-height: 1.45; }
+body.phone #detail .tm-composer .cb-foot { padding: 6px 10px 8px; gap: 6px; }
+body.phone #detail .tm-composer .btn.primary { height: 36px; padding: 0 16px; border-radius: 18px; font-size: 14px; }
+
+/* Tabs slide in from the side you swiped */
+@keyframes ph-in-r { from { transform: translateX(36px); opacity: .3; } to { transform: none; opacity: 1; } }
+@keyframes ph-in-l { from { transform: translateX(-36px); opacity: .3; } to { transform: none; opacity: 1; } }
+.ph-in-r { animation: ph-in-r .22s cubic-bezier(.2, .8, .2, 1); }
+.ph-in-l { animation: ph-in-l .22s cubic-bezier(.2, .8, .2, 1); }
+/* Hover hints (keyboard shortcuts) are for computers */
+body.phone .tip, body.phone #ucard { display: none !important; }

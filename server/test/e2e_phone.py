@@ -144,6 +144,27 @@ async def main():
             check(await E(f"task('{tid}').comments.some(c=>c.text.includes('Make the date bigger'))"), 'Areej sees the amendment comment live')
             check(not e2, f'no errors for Carine {e2[:2]}')
             await E("()=>{closeMenus(); closeDetail()}")
+            # swipe sideways to switch tabs
+            HSWIPE = """async ([x0, x1]) => { const el = document.elementFromPoint(200, 500) || document.body;
+              const fire = (type, x) => { const t = new Touch({ identifier: 3, target: el, clientX: x, clientY: 500 });
+                el.dispatchEvent(new TouchEvent(type, { touches: type === 'touchend' ? [] : [t], changedTouches: [t], bubbles: true, cancelable: true })); };
+              fire('touchstart', x0); for (let i = 1; i <= 8; i++) { fire('touchmove', x0 + (x1 - x0) * i / 8); await new Promise(r => setTimeout(r, 16)); }
+              fire('touchend', x1); await new Promise(r => setTimeout(r, 350)); }"""
+            await hr.locator('#ph-tabs [data-ph-tab="mytasks"]').click(); await hr.wait_for_timeout(200)
+            await E(HSWIPE, [300, 120])
+            check(await E("ui.myTasksTab") == 'done', 'swiping left on My Tasks shows Done')
+            await E(HSWIPE, [120, 300])
+            check(await E("ui.myTasksTab") == 'todo', 'swiping right goes back to To Do')
+            await hr.locator('#ph-tabs [data-ph-tab="inbox"]').click(); await hr.wait_for_timeout(200)
+            await E(HSWIPE, [300, 120])
+            check(await hr.locator('.ph-chips button.on').get_attribute('data-k') == 'all', 'swiping on Inbox moves Unread → All')
+            await hr.locator('#ph-tabs [data-ph-tab="mytasks"]').click(); await hr.wait_for_timeout(200)
+            await hr.locator('.pc[data-task]').first.click(); await hr.wait_for_timeout(400)
+            await E(HSWIPE, [300, 120])
+            check(await E("document.getElementById('detail').dataset.tab") == 'comments', 'swiping left on a task shows Comments')
+            await E(HSWIPE, [120, 300])
+            check(await E("document.getElementById('detail').dataset.tab") == 'details', 'swiping right shows Details again')
+            await E("()=>{closeDetail()}")
             # swipe from the left edge goes back
             SWIPE = """async ([x1, steps]) => { window.__phSwipeAlways = true;
               const fire = (type, x) => { const t = new Touch({ identifier: 1, target: document.body, clientX: x, clientY: 400 });

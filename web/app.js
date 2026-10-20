@@ -5265,7 +5265,7 @@ const Splash = (() => {
   function greeting() {
     const h = new Date().getHours();
     const part = h < 5 ? 'Working late' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
-    return `${part} · ${new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}`;
+    return `${part} · ${new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: window.innerWidth <= 760 ? 'short' : 'long' })}`;
   }
   function particles() {
     const cv = document.getElementById('splash-fx');
