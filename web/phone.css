@@ -166,7 +166,10 @@ body.phone #ph-tabs[hidden] { display: none; }
 .ph-sheet { padding: 8px 20px calc(env(safe-area-inset-bottom) + 20px); border-radius: 24px 24px 0 0; background: #18181d; border-top: 1px solid #2c2c33; display: flex; flex-direction: column; gap: 14px; transform: translateY(100%); transition: transform .25s cubic-bezier(.2,.8,.2,1); max-height: 92vh; overflow-y: auto; }
 :root[data-theme="light"] .ph-sheet { background: #fff; border-top-color: #e4e4ea; }
 .ph-scrim.in .ph-sheet { transform: none; }
-.ph-sheet { touch-action: pan-y; }
+.ph-handle { display: flex; justify-content: center; margin: -8px -20px -6px; padding: 8px 0 12px; touch-action: none; }
+.ph-sh-head { touch-action: none; }
+.ph-field i { font-style: normal; color: var(--text-3); }
+.ph-ver { text-align: center; font-size: 12px; color: var(--text-3); padding: 4px 0 20px; }
 .ph-grab { width: 40px; height: 5px; border-radius: 3px; background: var(--border-strong); align-self: center; }
 .ph-sh-head { display: flex; align-items: center; }
 .ph-sh-head h2 { flex: 1; margin: 0; font-size: 20px; font-weight: 800; }
@@ -247,8 +250,8 @@ body.phone .scrim, body.phone .fv, body.phone .lightbox { bottom: var(--ph-shift
 .ph-dock-hint { display: none; }
 .ph-scrim.docked { background: transparent !important; pointer-events: none; bottom: calc(var(--ph-tabs-h) + var(--ph-shift, 0px)); z-index: 60; }
 body.task-open .ph-scrim.docked { bottom: var(--ph-shift, 0px); }
-.ph-scrim.docked .ph-sheet { pointer-events: auto; transform: none; max-height: 58px; overflow: hidden; padding: 8px 18px 0; gap: 6px; margin: 0 8px; border-radius: 16px 16px 0 0; border: 1px solid var(--border-strong); border-bottom: 0; box-shadow: 0 -10px 30px rgba(0,0,0,.45); cursor: pointer; transition: max-height .25s cubic-bezier(.2,.8,.2,1); }
-.ph-scrim.docked .ph-sheet > :not(.ph-grab):not(.ph-dock-hint) { display: none; }
+.ph-scrim.docked .ph-sheet { touch-action: none; pointer-events: auto; transform: none; max-height: 58px; overflow: hidden; padding: 8px 18px 0; gap: 6px; margin: 0 8px; border-radius: 16px 16px 0 0; border: 1px solid var(--border-strong); border-bottom: 0; box-shadow: 0 -10px 30px rgba(0,0,0,.45); cursor: pointer; transition: max-height .25s cubic-bezier(.2,.8,.2,1); }
+.ph-scrim.docked .ph-sheet > :not(.ph-handle):not(.ph-dock-hint) { display: none; }
 .ph-scrim.docked .ph-dock-hint { display: block; font-size: 14px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-bottom: 12px; }
 .ph-dock-hint span { color: var(--text); font-weight: 600; }
 .ph-dock-hint b { color: #b3a8ff; font-weight: 600; }

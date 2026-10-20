@@ -263,6 +263,7 @@ const Phone = (() => {
         ${Host.isServer ? '<button class="ph-row" data-action="whats-new">' + icon('info') + '<span>What’s new</span>' + icon('chev-right') + '</button>' : ''}
       </div>
       <div class="ph-rows"><button class="ph-row danger" data-ph="sign-out">${icon('logout')}<span>Sign out</span></button></div>
+      ${Host.isServer && Sync.version ? `<div class="ph-ver">E11 Console ${esc(Sync.version)}</div>` : ''}
     </div>`;
   }
 
@@ -341,7 +342,7 @@ const Phone = (() => {
     const root = sheetRoot();
     const old = root.firstElementChild;
     if (old && old.dataset.kind === o.kind && old._expand) { old._expand(); return; } // carry on with the tucked one
-    root.innerHTML = `<div class="ph-scrim" data-kind="${o.kind || ''}"><div class="ph-sheet" role="dialog"><i class="ph-grab"></i>${html}<div class="ph-dock-hint">${esc(o.dockLabel || 'Draft')} · <b>Tap to continue</b></div></div></div>`;
+    root.innerHTML = `<div class="ph-scrim" data-kind="${o.kind || ''}"><div class="ph-sheet" role="dialog"><div class="ph-handle"><i class="ph-grab"></i></div>${html}<div class="ph-dock-hint">${esc(o.dockLabel || 'Draft')} · <b>Tap to continue</b></div></div></div>`;
     const scrim = root.firstElementChild;
     const box = scrim.firstElementChild;
     let closing = false;
@@ -383,7 +384,8 @@ const Phone = (() => {
       const t = e.touches[0];
       const isDocked = scrim.classList.contains('docked');
       const top = box.getBoundingClientRect().top;
-      if (e.touches.length !== 1 || (!isDocked && (e.target.closest('button, input, select, textarea, label') || t.clientY - top > 64))) { d = null; return; }
+      const onHandle = e.target.closest('.ph-handle, .ph-sh-head') && !e.target.closest('button');
+      if (e.touches.length !== 1 || (!isDocked && !onHandle && (e.target.closest('button, input, select, textarea, label') || t.clientY - top > 64))) { d = null; return; }
       d = { y0: t.clientY, t0: Date.now(), dy: 0, h: box.offsetHeight, docked: isDocked, moved: false };
     }, { passive: true });
     box.addEventListener('touchmove', (e) => {
@@ -429,7 +431,8 @@ const Phone = (() => {
     const projOpts = `<option value="">No project (My Tasks)</option>` + db.projects.slice().sort(byOrder).map((p) => `<option value="${p.id}" ${p.id === inProject ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
     const userOpts = `<option value="${currentUserId}">Me</option>` + people.filter((u) => u.id !== currentUserId).map((u) => `<option value="${u.id}">${esc(fullName(u))}</option>`).join('') + '<option value="">Nobody yet</option>';
     sheet(`<div class="ph-sh-head"><h2>New task</h2><button class="ph-link" data-sheet-close>Cancel</button></div>
-      <label class="ph-field"><span>Task name</span><input id="qa-title" placeholder="What needs doing?" autocomplete="off" enterkeyhint="done"></label>
+      <label class="ph-field"><span>Task name</span><input id="qa-title" placeholder="What needs doing?" autocomplete="off" enterkeyhint="next"></label>
+      <label class="ph-field"><span>Description <i>(optional)</i></span><textarea id="qa-desc" rows="3" placeholder="Details, links or notes for the team"></textarea></label>
       <div class="ph-form">
         <label><span>Project</span><select id="qa-proj">${projOpts}</select></label>
         ${can('assign') ? `<label><span>Assign to</span><select id="qa-who">${userOpts}</select></label>` : ''}
@@ -444,7 +447,8 @@ const Phone = (() => {
         const title = ti.value.trim();
         if (!title) { ti.focus(); toast('Give the task a name'); return; }
         const who = $('#qa-who', scrim) ? $('#qa-who', scrim).value : currentUserId;
-        const t = createTask({ title, projectId: pj.value || null, due: $('#qa-due', scrim).value || null });
+        const desc = $('#qa-desc', scrim).value.trim();
+        const t = createTask({ title, projectId: pj.value || null, due: $('#qa-due', scrim).value || null, notes: desc, ...(desc ? { notesHtml: linkify(esc(desc)).replace(/\n/g, '<br>') } : {}) });
         if (cd) t.needsCD = !!(cd.checked && t.projectId);
         if (who) {
           t.assignees = [who];
@@ -455,7 +459,7 @@ const Phone = (() => {
         toast(`Created “${title}”`, { label: 'Open', run: () => openTask(t.id) });
       };
       $('#qa-go', scrim).addEventListener('click', go);
-      ti.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); go(); } });
+      ti.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); $('#qa-desc', scrim).focus(); } });
     }, { kind: 'new-task', dockLabel: 'New task', discardedMsg: 'New task discarded' });
   }
 
