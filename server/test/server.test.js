@@ -251,3 +251,18 @@ test('Cloudflare token check: valid token accepted, wrong app / expired / forged
   const prodAuth = createAuth({ team: 'e11hq', aud: 'AUD123', fetchImpl });
   await assert.rejects(prodAuth.identify({ headers: { 'x-dev-email': 'arsal@e11-digital.com' }, url: '/' }), /Not signed in/);
 });
+
+test('import replaces the first-sign-in Admin account with the same person from the Mac', async () => {
+  const d2 = fs.mkdtempSync(path.join(os.tmpdir(), 'e11i-'));
+  const a2 = createServer({ dataDir: d2, dev: true, adminEmail: 'haris@e11-digital.com' });
+  const port = await a2.listen(0, '127.0.0.1');
+  const h = { 'X-Dev-Email': 'haris@e11-digital.com', 'Content-Type': 'application/json' };
+  const me1 = await (await fetch(`http://127.0.0.1:${port}/api/me`, { headers: h })).json();
+  assert.equal(me1.user.role, 'admin');
+  const r = await fetch(`http://127.0.0.1:${port}/api/import`, { method: 'POST', headers: h, body: JSON.stringify({ data: { users: [{ id: 'u-haris-mac', email: 'Haris@e11-digital.com', role: 'admin', name: 'Muhammad Haris Sharif', active: true }], tasks: [] } }) });
+  assert.equal(r.status, 200);
+  const me2 = await (await fetch(`http://127.0.0.1:${port}/api/me`, { headers: h })).json();
+  assert.equal(me2.user.id, 'u-haris-mac');
+  assert.equal(a2.store.list('users').length, 1);
+  await a2.close(); fs.rmSync(d2, { recursive: true, force: true });
+});

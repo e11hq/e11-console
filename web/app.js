@@ -207,7 +207,27 @@ function maybeShowWhatsNew() {
 // Admin page: version, available update, update now, roll back
 function viewUpdates() {
   setTimeout(loadUpdates, 0);
-  return `<div class="upd"><div class="upd-card" id="upd-body"><div class="ph">Checking…</div></div></div>`;
+  return `<div class="upd"><div class="upd-card" id="upd-body"><div class="ph">Checking…</div></div>
+    <div class="upd-card imp-card">
+      <h3>${icon('upload')}Move data from the Mac app</h3>
+      <p class="upd-note">Choose <b>e11-data.json</b> from the “E11 Console Data” folder on the Mac. Tasks, projects, comments, people, notifications and client assets are added to the server. Copy the folders <b>attachments</b>, <b>Clients</b> and <b>.thumbs</b> into the NAS folder <b>E11Console/live/files</b> as well, so the files open. A copy of the database is made first.</p>
+      <button class="btn" data-action="import-mac">${icon('upload')}Choose e11-data.json…</button>
+    </div></div>`;
+}
+async function importFromMac() {
+  const files = await ServerHost.pickFiles({ multiple: false, accept: '.json,application/json' });
+  if (!files.length) return;
+  let data;
+  try { data = JSON.parse(await files[0].text()); } catch (e) { toast('That file isn’t an E11 Console data file'); return; }
+  if (!data || !Array.isArray(data.tasks) || !Array.isArray(data.users)) { toast('That file isn’t an E11 Console data file'); return; }
+  const ok = await dialog({ title: 'Import from the Mac app?', body: `${data.tasks.length} tasks, ${(data.projects || []).length} projects, ${data.users.length} people and ${(data.clients || []).length} clients will be added to the server. Items that already exist are replaced by the Mac’s version.`, okText: 'Import' });
+  if (!ok) return;
+  if (data.meta) { delete data.meta.prefs; }
+  try {
+    const r = await api('POST', '/api/import', { data });
+    toast(`Imported ${r.count} items`);
+    setTimeout(() => location.reload(), 1200);
+  } catch (e) { toast('Import failed: ' + e.message); }
 }
 async function loadUpdates(action) {
   const el = document.getElementById('upd-body');
@@ -3147,6 +3167,7 @@ document.addEventListener('click', async (e) => {
         persist(0); return;
       }
       case 'reload-app': reloadApp(); return;
+      case 'import-mac': importFromMac(); return;
       case 'whats-new': whatsNewDialog(false); return;
       case 'upd': {
         const a = actEl.dataset.a;

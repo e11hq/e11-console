@@ -1,0 +1,44 @@
+# E11 Console on the office NAS — paste into Container Station → Applications → Create,
+# then replace the four PASTE_… values. Never share this file once the values are filled in.
+#
+#   app         → console.e11hq.com   (the live copy everyone uses; updates at 2 AM)
+#   test        → test.e11hq.com      (test copy with its own data; updates with every change)
+#   cloudflared → connects both to Cloudflare (replaces the old "e11-tunnel" application)
+
+services:
+  app:
+    image: ghcr.io/e11hq/e11-console:latest
+    restart: unless-stopped
+    environment:
+      - CF_TEAM=e11hq
+      - CF_AUD=PASTE_LIVE_AUD_TAG
+      - GITHUB_TOKEN=PASTE_GITHUB_TOKEN
+      - UPDATE_CHANNEL=stable
+      - UPDATE_HOUR=2
+      - TZ=Asia/Dubai
+      - ADMIN_EMAIL=haris@e11-digital.com
+    volumes:
+      - /share/E11Console/live:/data
+
+  test:
+    image: ghcr.io/e11hq/e11-console:latest
+    restart: unless-stopped
+    environment:
+      - CF_TEAM=e11hq
+      - CF_AUD=PASTE_TEST_AUD_TAG
+      - GITHUB_TOKEN=PASTE_GITHUB_TOKEN
+      - UPDATE_CHANNEL=staging
+      - TZ=Asia/Dubai
+      - ADMIN_EMAIL=haris@e11-digital.com
+    volumes:
+      - /share/E11Console/test:/data
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=PASTE_TUNNEL_TOKEN
+    depends_on:
+      - app
+      - test

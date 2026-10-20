@@ -2041,3 +2041,6 @@ button.pv-empty:hover { background: var(--hover); color: var(--text-2); }
 .upd-hist small { color: var(--text-3); }
 .btn.danger { color: var(--red); }
 :root[data-theme="light"] .upd-chip { color: #9a6a00; }
+.imp-card { margin-top: 16px; }
+.imp-card .upd-note b { color: var(--text-2); }
+.imp-card .btn { margin-top: 12px; }

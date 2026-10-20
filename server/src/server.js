@@ -30,9 +30,9 @@ export function createServer(cfg) {
     res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Content-Length': Buffer.byteLength(s) });
     res.end(s);
   };
-  const readBody = (req) => new Promise((resolve, reject) => {
+  const readBody = (req, limit = BODY_LIMIT) => new Promise((resolve, reject) => {
     let size = 0; const parts = [];
-    req.on('data', (c) => { size += c.length; if (size > BODY_LIMIT) { reject(httpError(413, 'Too large')); req.destroy(); } else parts.push(c); });
+    req.on('data', (c) => { size += c.length; if (size > limit) { reject(httpError(413, 'Too large')); req.destroy(); } else parts.push(c); });
     req.on('end', () => { try { resolve(parts.length ? JSON.parse(Buffer.concat(parts).toString('utf8')) : {}); } catch { reject(httpError(400, 'Bad JSON')); } });
     req.on('error', reject);
   });
@@ -199,9 +199,13 @@ export function createServer(cfg) {
     // One-time move from the Mac app: an Admin uploads the whole data file
     if (p === '/api/import' && req.method === 'POST') {
       if (u.role !== 'admin') return json(res, 403, { ok: false, error: 'Only an Admin can import data' });
-      const body = await readBody(req);
+      const body = await readBody(req, 90 * 1024 * 1024);
       if (!body || !body.data) return json(res, 400, { ok: false, error: 'No data' });
       store.backup(path.join(dataDir, 'backups', `before-import-${Date.now()}.sqlite`));
+      // The Admin account made on first sign-in is replaced by the same person's account from the Mac
+      const incoming = new Map((body.data.users || []).map((x) => [String(x.email || '').toLowerCase(), String(x.id)]));
+      const dupes = store.list('users').filter((x) => incoming.has(String(x.email || '').toLowerCase()) && incoming.get(String(x.email || '').toLowerCase()) !== x.id);
+      if (dupes.length) store.apply(dupes.map((x) => ({ kind: 'users', id: x.id, del: true })), u.id);
       const { rev, results } = store.importAll(body.data, u.id);
       broadcast(rev, results, null, u.id);
       cfSync.schedule();
