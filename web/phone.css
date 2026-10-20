@@ -486,3 +486,14 @@ body.phone #content > .ph-page { min-height: calc(100% - var(--ph-head-h, 0px));
 body.phone #update-banner { top: auto !important; left: 12px !important; right: 12px !important; transform: none !important; bottom: calc(var(--ph-tabs-h) + 12px + var(--ph-shift, 0px)) !important; width: auto !important; max-width: none !important; flex-wrap: wrap; border-radius: 22px; }
 body.phone #update-banner:not(.on) { display: none !important; }
 body.phone.task-open #update-banner { bottom: calc(env(safe-area-inset-bottom) + 90px + var(--ph-shift, 0px)) !important; }
+
+/* Fixed page header (iOS 26 leaves a real fixed top bar sharp), same colour as the page: no seam */
+body.phone #ph-top { position: fixed; top: 0; left: 0; right: 0; z-index: 20; background: var(--ph-bg); }
+body.phone #ph-top > .ph-bar { border-bottom: 0; }
+body.phone.task-open #ph-top { display: none; }
+body.phone #main, body.phone #content { background: var(--ph-bg); }
+body.phone::before { display: none; }
+body.phone #content > .ph-page { min-height: calc(100% - var(--ph-head-h, 0px)); }
+#ph-fabslot { display: none; }
+body.phone #ph-fabslot { display: block; }
+body.phone.task-open #ph-fabslot { display: none; }

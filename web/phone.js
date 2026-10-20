@@ -73,6 +73,7 @@ const Phone = (() => {
       + tab('me', 'user', 'Me');
     bar.hidden = !!ui.taskId;
     document.body.classList.toggle('task-open', !!ui.taskId);
+    const top = document.getElementById('ph-top'); if (top) top.hidden = !!ui.taskId || !top.firstElementChild;
   }
 
   /* ---------- Pieces ---------- */
@@ -310,7 +311,7 @@ const Phone = (() => {
       : v === 'psearch' ? search() : meScreen();
     if (ui.view === 'review') wireSlides(c);
     pinHead(c);
-    document.body.classList.toggle('ph-fab-on', !!c.querySelector('.ph-fab'));
+    document.body.classList.toggle('ph-fab-on', !!document.querySelector('#ph-fabslot .ph-fab'));
     document.body.classList.toggle('ph-strip', !c.querySelector('.ph-bar'));
     return true;
   }
@@ -333,15 +334,20 @@ const Phone = (() => {
   // above the scrolling content (like the task page header, which stays sharp).
   function pinHead(c) {
     let top = document.getElementById('ph-top');
-    if (!top) { top = document.createElement('div'); top.id = 'ph-top'; c.parentNode.insertBefore(top, c); }
+    if (!top) { top = document.createElement('div'); top.id = 'ph-top'; document.body.appendChild(top); }
     top.innerHTML = '';
     const h = c.querySelector(':scope > .ph-bar, :scope > .ph-page > .ph-bar, :scope > .ph-page > .ph-head, :scope > .ph-page > .ph-me-card');
     if (h) top.appendChild(h);
-    top.hidden = !h;
+    top.hidden = !h || !!ui.taskId;
+    let slot = document.getElementById('ph-fabslot');
+    if (!slot) { slot = document.createElement('div'); slot.id = 'ph-fabslot'; document.body.appendChild(slot); }
+    slot.innerHTML = '';
+    const fabEl = c.querySelector('.ph-fab');
+    if (fabEl) slot.appendChild(fabEl);
     const set = () => document.documentElement.style.setProperty('--ph-head-h', (h ? top.offsetHeight : 0) + 'px');
     set(); requestAnimationFrame(set);
   }
-  function unpin() { const top = document.getElementById('ph-top'); if (top) { top.innerHTML = ''; top.hidden = true; } document.documentElement.style.setProperty('--ph-head-h', '0px'); }
+  function unpin() { const top = document.getElementById('ph-top'); if (top) { top.innerHTML = ''; top.hidden = true; } const sl = document.getElementById('ph-fabslot'); if (sl) sl.innerHTML = ''; document.documentElement.style.setProperty('--ph-head-h', '0px'); }
   // The task page header on the phone: back, title and the Details / Comments switch
   function taskHead(t, tab, n) {
     if (!st.on) return '';
