@@ -1646,7 +1646,9 @@ button.pv-empty:hover { background: var(--hover); color: var(--text-2); }
 .tip span { overflow: visible; }
 
 /* ===== v25: CD review workflow ===== */
-.tt-row { grid-template-columns: minmax(190px, 1.3fr) minmax(190px, 1.3fr) 140px 150px 190px 44px; }
+.tt-row { grid-template-columns: minmax(170px, 1.3fr) minmax(120px, 1.3fr) 150px 160px minmax(170px, 200px) 40px; padding-right: 18px; }
+.tt-row > div:last-child { display: flex; justify-content: center; }
+.tt-email { min-width: 0; }
 .tt-cd { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .tt-cd small { color: var(--text-3); font-size: 12px; white-space: nowrap; }
 .tt-cd .tg + small { color: var(--text-2); }
