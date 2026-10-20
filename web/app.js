@@ -1,0 +1,5148 @@
+/* E11 Console — task manager (single user, local data) */
+'use strict';
+
+/* ================= Utilities ================= */
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => Array.from(el.querySelectorAll(s));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const nowISO = () => new Date().toISOString();
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const byOrder = (a, b) => (a.order || 0) - (b.order || 0);
+
+const ICONS = {
+  plus: '<path d="M8 3v10M3 8h10"/>',
+  home: '<path d="M2.5 7.2 8 2.8l5.5 4.4V13a.5.5 0 0 1-.5.5H9.6V9.8H6.4v3.7H3a.5.5 0 0 1-.5-.5z"/>',
+  'check-circle': '<circle cx="8" cy="8" r="5.8"/><path d="m5.6 8.1 1.7 1.7 3.2-3.4"/>',
+  check: '<path d="m3.5 8.4 3 3 6-6.6"/>',
+  search: '<circle cx="7" cy="7" r="4.3"/><path d="m10.3 10.3 3.2 3.2"/>',
+  list: '<path d="M5.5 4h8M5.5 8h8M5.5 12h8"/><circle cx="2.6" cy="4" r=".7"/><circle cx="2.6" cy="8" r=".7"/><circle cx="2.6" cy="12" r=".7"/>',
+  board: '<rect x="2" y="2.5" width="3.4" height="11" rx="1"/><rect x="6.3" y="2.5" width="3.4" height="7" rx="1"/><rect x="10.6" y="2.5" width="3.4" height="9" rx="1"/>',
+  trash: '<path d="M2.8 4.3h10.4M6.3 4.3V2.8h3.4v1.5M4.2 4.3l.6 8.6c0 .4.4.8.8.8h4.8c.4 0 .8-.4.8-.8l.6-8.6"/>',
+  x: '<path d="m4 4 8 8M12 4l-8 8"/>',
+  clip: '<path d="M10.5 5.5 6.1 9.9a1.3 1.3 0 0 0 1.8 1.8l4.6-4.6a2.6 2.6 0 0 0-3.7-3.7L4.2 8a3.9 3.9 0 0 0 5.5 5.5L13 10.2"/>',
+  chat: '<path d="M2.7 3.2h10.6v7.3H7.1L4.3 13v-2.5H2.7z"/>',
+  sub: '<path d="M4 2.5v6.2c0 .9.7 1.6 1.6 1.6H12M9.6 7.9l2.4 2.4-2.4 2.4"/>',
+  chev: '<path d="m4.5 6.2 3.5 3.6 3.5-3.6"/>',
+  'chev-up': '<path d="m4.5 9.8 3.5-3.6 3.5 3.6"/>',
+  'chev-right': '<path d="m6.2 4.5 3.6 3.5-3.6 3.5"/>',
+  more: '<circle cx="3.5" cy="8" r="1.1" fill="currentColor" stroke="none"/><circle cx="8" cy="8" r="1.1" fill="currentColor" stroke="none"/><circle cx="12.5" cy="8" r="1.1" fill="currentColor" stroke="none"/>',
+  grip: '<circle cx="6" cy="4" r=".9" fill="currentColor" stroke="none"/><circle cx="10" cy="4" r=".9" fill="currentColor" stroke="none"/><circle cx="6" cy="8" r=".9" fill="currentColor" stroke="none"/><circle cx="10" cy="8" r=".9" fill="currentColor" stroke="none"/><circle cx="6" cy="12" r=".9" fill="currentColor" stroke="none"/><circle cx="10" cy="12" r=".9" fill="currentColor" stroke="none"/>',
+  cal: '<rect x="2.5" y="3.3" width="11" height="10.2" rx="1.5"/><path d="M2.5 6.6h11M5.5 2v2.4M10.5 2v2.4"/>',
+  folder: '<path d="M2.2 4.2c0-.6.4-1 1-1h3l1.4 1.5h5.2c.6 0 1 .4 1 1v6.6c0 .6-.4 1-1 1H3.2c-.6 0-1-.4-1-1z"/>',
+  edit: '<path d="M10.4 3.2 12.8 5.6 6 12.4l-3 .6.6-3z"/>',
+  open: '<path d="M9.5 2.7h3.8v3.8M13.3 2.7 7.6 8.4M11.6 9.3v3.2c0 .5-.4.8-.8.8H3.5a.8.8 0 0 1-.8-.8V5.2c0-.4.3-.8.8-.8h3.2"/>',
+  arrow: '<path d="M3 8h9.5M8.8 4.3 12.5 8l-3.7 3.7"/>',
+  flag: '<path d="M3.5 13.5V2.8M3.5 3h8l-1.7 2.8 1.7 2.8h-8"/>',
+  tag: '<path d="M2.7 2.7h5l5.6 5.6-5 5-5.6-5.6z"/><circle cx="5.3" cy="5.3" r=".9"/>',
+  sun: '<circle cx="8" cy="8" r="2.8"/><path d="M8 1.6v1.6M8 12.8v1.6M1.6 8h1.6M12.8 8h1.6M3.5 3.5l1.1 1.1M11.4 11.4l1.1 1.1M3.5 12.5l1.1-1.1M11.4 4.6l1.1-1.1"/>',
+  'chev-left': '<path d="m9.8 4.5-3.6 3.5 3.6 3.5"/>',
+  reply: '<path d="M6.5 4 3 7.5 6.5 11M3.3 7.5h6.2a3.5 3.5 0 0 1 3.5 3.5v1"/>',
+  smile: '<circle cx="8" cy="8" r="5.8"/><path d="M5.6 9.4c.6.9 1.4 1.3 2.4 1.3s1.8-.4 2.4-1.3"/><circle cx="6" cy="6.6" r=".5" fill="currentColor"/><circle cx="10" cy="6.6" r=".5" fill="currentColor"/>',
+  checklist: '<path d="m2.5 4.2 1.1 1.1 2-2.2M2.5 9.7l1.1 1.1 2-2.2M7.8 4.4h5.7M7.8 9.9h5.7"/>',
+  activity: '<path d="M1.8 8h2.6l1.8-4.6 3.2 9.2 1.8-4.6h3"/>',
+  play: '<path d="M5 3.5v9l7-4.5z"/>',
+  sidebar: '<rect x="2" y="2.8" width="12" height="10.4" rx="2"/><path d="M6.2 2.8v10.4"/>',
+  moon: '<path d="M13.2 9.6A5.6 5.6 0 0 1 6.4 2.8a5.6 5.6 0 1 0 6.8 6.8z"/>',
+  layout: '<rect x="2" y="2.8" width="12" height="10.4" rx="2"/><path d="M9.8 2.8v10.4"/>',
+  modal: '<rect x="1.8" y="2.6" width="12.4" height="10.8" rx="2"/><rect x="4.6" y="5" width="6.8" height="6" rx="1"/>',
+  panel: '<rect x="1.8" y="2.6" width="12.4" height="10.8" rx="2"/><path d="M9 2.6v10.8"/><path d="M10.6 5.2h2M10.6 7.2h2"/>',
+  info: '<circle cx="8" cy="8" r="5.8"/><path d="M8 7.2v3.6M8 5.1v.1"/>',
+  inbox: '<path d="M2.3 9.2 4 3.4c.1-.4.5-.7.9-.7h6.2c.4 0 .8.3.9.7l1.7 5.8v3.3c0 .4-.4.8-.8.8H3.1a.8.8 0 0 1-.8-.8z"/><path d="M2.3 9.2h3.2l.9 1.6h3.2l.9-1.6h3.2"/>',
+  users: '<circle cx="6" cy="5.6" r="2.3"/><path d="M1.9 13c.4-2.2 2-3.4 4.1-3.4s3.7 1.2 4.1 3.4"/><path d="M10.4 3.5a2.2 2.2 0 0 1 0 4.3M12 9.8c1.2.4 1.9 1.5 2.1 3.2"/>',
+  user: '<circle cx="8" cy="5.6" r="2.6"/><path d="M3 13.4c.5-2.6 2.5-4 5-4s4.5 1.4 5 4"/>',
+  logout: '<path d="M6.4 13.3H3.5a.8.8 0 0 1-.8-.8v-9c0-.4.4-.8.8-.8h2.9M10.4 11l3-3-3-3M13.3 8H6.2"/>',
+  bell: '<path d="M4 11.2V7.4a4 4 0 0 1 8 0v3.8l1.2 1.2H2.8zM6.6 13.4a1.5 1.5 0 0 0 2.8 0"/>',
+  lock: '<rect x="3.2" y="7.2" width="9.6" height="6.4" rx="1.4"/><path d="M5.4 7.2V5.3a2.6 2.6 0 0 1 5.2 0v1.9"/>',
+  camera: '<path d="M2.3 5.4c0-.5.4-.9.9-.9h1.9l1-1.5h3.8l1 1.5h1.9c.5 0 .9.4.9.9v6.7c0 .5-.4.9-.9.9H3.2a.9.9 0 0 1-.9-.9z"/><circle cx="8" cy="8.6" r="2.3"/>',
+  details: '<path d="M2.4 4.2h7.2M2.4 8h5.2M2.4 11.8h7.2"/><path d="M12.6 7.2v5"/><circle cx="12.6" cy="4.4" r=".75" fill="currentColor" stroke="none"/>',
+  comment: '<path d="M3.2 2.9h9.6c.6 0 1 .4 1 1v6.6c0 .6-.4 1-1 1H7.4l-3 2.4v-2.4H3.2c-.6 0-1-.4-1-1V3.9c0-.6.4-1 1-1z"/><path d="M5.2 6h5.6M5.2 8.4h3.8"/>',
+  upload: '<path d="M8 10.5V2.8M4.9 5.8 8 2.7l3.1 3.1M2.8 10.2v2.2c0 .5.4.9.9.9h8.6c.5 0 .9-.4.9-.9v-2.2"/>',
+  download: '<path d="M8 2.7v7.7M4.9 7.4 8 10.5l3.1-3.1M2.8 10.2v2.2c0 .5.4.9.9.9h8.6c.5 0 .9-.4.9-.9v-2.2"/>',
+  clock: '<circle cx="8" cy="8" r="5.8"/><path d="M8 4.8V8l2.2 1.5"/>',
+  copy: '<rect x="5.4" y="5.4" width="8" height="8.2" rx="1.5"/><path d="M10.6 5.4V3.8c0-.6-.4-1-1-1H3.8c-.6 0-1 .4-1 1v5.8c0 .6.4 1 1 1h1.6"/>',
+  pin: '<path d="M8 14.2s4.6-4.2 4.6-7.8a4.6 4.6 0 0 0-9.2 0c0 3.6 4.6 7.8 4.6 7.8z"/><circle cx="8" cy="6.4" r="1.7"/>',
+  mail: '<rect x="2.2" y="3.4" width="11.6" height="9.2" rx="1.5"/><path d="m2.6 4.3 5.4 4.3 5.4-4.3"/>',
+  assets: '<rect x="2.4" y="2.4" width="4.8" height="4.8" rx="1.2"/><rect x="8.8" y="2.4" width="4.8" height="4.8" rx="1.2"/><rect x="2.4" y="8.8" width="4.8" height="4.8" rx="1.2"/><path d="M11.2 8.6v5M8.7 11.1h5"/>',
+  shield: '<path d="M8 1.9 13 3.8v3.8c0 3-2.1 5.4-5 6.5-2.9-1.1-5-3.5-5-6.5V3.8z"/><path d="m5.8 8 1.5 1.5 2.9-3"/>',
+};
+function icon(name, cls = '') {
+  return `<span class="ic ${cls}"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] || ''}</svg></span>`;
+}
+function hydrateIcons(root = document) {
+  $$('[data-icon]', root).forEach((el) => { el.outerHTML = icon(el.dataset.icon); });
+}
+
+/* Dates (stored as local YYYY-MM-DD) */
+const pad2 = (n) => String(n).padStart(2, '0');
+const ymd = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const parseYmd = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+const todayStr = () => ymd(new Date());
+const addDays = (s, n) => { const d = parseYmd(s); d.setDate(d.getDate() + n); return ymd(d); };
+const dayDiff = (s) => Math.round((parseYmd(s) - parseYmd(todayStr())) / 86400000);
+function fmtDue(s) {
+  if (!s) return '';
+  const d = dayDiff(s);
+  if (d === 0) return 'Today';
+  if (d === 1) return 'Tomorrow';
+  if (d === -1) return 'Yesterday';
+  const dt = parseYmd(s);
+  if (d > 1 && d < 7) return dt.toLocaleDateString('en-US', { weekday: 'long' });
+  const o = { month: 'short', day: 'numeric' };
+  if (dt.getFullYear() !== new Date().getFullYear()) o.year = 'numeric';
+  return dt.toLocaleDateString('en-US', o);
+}
+function dueClass(t) {
+  if (!t.due || t.done) return '';
+  const d = dayDiff(t.due);
+  return d < 0 ? 'overdue' : d === 0 ? 'today' : d <= 2 ? 'soon' : '';
+}
+function timeAgo(iso) {
+  const s = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (s < 60) return 'just now';
+  if (s < 3600) return Math.floor(s / 60) + 'm ago';
+  if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+  if (s < 86400 * 7) return Math.floor(s / 86400) + 'd ago';
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+const fmtDateTime = (iso) => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+function fmtSize(b) {
+  if (b == null) return '';
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b / 1024).toFixed(0) + ' KB';
+  return (b / 1048576).toFixed(1) + ' MB';
+}
+
+/* ================= Host bridge ================= */
+const Host = (() => {
+  const native = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.e11;
+  let seq = 0;
+  const pending = new Map();
+  window.__e11Reply = (id, res) => {
+    const p = pending.get(id);
+    if (!p) return;
+    pending.delete(id);
+    if (res && res.ok === false) p.reject(new Error(res.error || 'Something went wrong'));
+    else p.resolve(res || {});
+  };
+  function fallback(cmd, args) {
+    // Browser preview only (no file access)
+    switch (cmd) {
+      case 'load': return Promise.resolve({ ok: true, data: localStorage.getItem('e11-data'), dataDir: 'Browser preview storage' });
+      case 'save': localStorage.setItem('e11-data', args.data); return Promise.resolve({ ok: true });
+      case 'pickAttachments': toast('Attachments work in the Mac app'); return Promise.resolve({ ok: true, files: [] });
+      default: return Promise.resolve({ ok: true });
+    }
+  }
+  // Opened from the office server (console.e11hq.com) instead of the Mac app
+  const server = !native && /^https?:$/.test(location.protocol) && !window.__E11_LOCAL_PREVIEW;
+  function call(cmd, args = {}) {
+    if (server) return ServerHost.call(cmd, args);
+    if (!native) return fallback(cmd, args);
+    return new Promise((resolve, reject) => {
+      const id = ++seq;
+      // File pickers wait for the user; everything else should answer quickly
+      const timer = cmd === 'pickAttachments' || cmd === 'pickImage' ? null : setTimeout(() => {
+        if (pending.has(id)) { pending.delete(id); reject(new Error('The app did not respond (' + cmd + ')')); }
+      }, 20000);
+      const settle = (fn, v) => { clearTimeout(timer); if (pending.has(id)) { pending.delete(id); fn(v); } };
+      pending.set(id, true);
+      native.postMessage(JSON.stringify({ id, cmd, args }));
+      fetch(new URL('/__reply/' + id, location.href).href, { cache: 'no-store' })
+        .then((r) => r.json())
+        .then((res) => (res && res.ok === false ? settle(reject, new Error(res.error || 'Something went wrong')) : settle(resolve, res || {})))
+        .catch((e) => settle(reject, new Error('The app did not respond (' + cmd + '): ' + e.message)));
+    });
+  }
+  // isNative = files can be shown (true in the Mac app and on the server); isServer = connected to the server
+  return { call, isNative: !!native || server, isServer: server };
+})();
+
+const FINDER_LABEL = Host.isServer ? 'Download' : 'Show in Finder';
+
+/* ================= Server connection (console.e11hq.com) ================= */
+// Requests to the server. Cloudflare signs people in before the page even loads.
+async function api(method, url, body) {
+  const res = await fetch(url, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined, credentials: 'same-origin', cache: 'no-store' });
+  let data = null;
+  try { data = await res.json(); } catch (e) { /* not JSON */ }
+  if (res.status === 401 || res.status === 403) {
+    const err = new Error((data && data.error) || 'Please sign in again'); err.auth = true; err.status = res.status; throw err;
+  }
+  if (!res.ok || (data && data.ok === false)) throw new Error((data && data.error) || `Server error (${res.status})`);
+  return data || {};
+}
+const ServerHost = (() => {
+  const CHUNK_SIZE = 2 * 1024 * 1024;
+  const b64 = (blob) => new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(String(fr.result).split(',')[1] || '');
+    fr.onerror = () => reject(fr.error || new Error('Could not read the file'));
+    fr.readAsDataURL(blob);
+  });
+  // Ask the browser for files (resolves with [] when the picker is cancelled)
+  function pickFiles({ multiple = true, accept = '' } = {}) {
+    return new Promise((resolve) => {
+      const inp = document.createElement('input');
+      inp.type = 'file'; inp.multiple = multiple; if (accept) inp.accept = accept;
+      inp.style.cssText = 'position:fixed;left:-9999px;top:0';
+      let done = false;
+      const finish = (list) => { if (done) return; done = true; inp.remove(); resolve(list); };
+      inp.addEventListener('change', () => finish([...(inp.files || [])]));
+      inp.addEventListener('cancel', () => finish([]));
+      window.addEventListener('focus', () => setTimeout(() => finish([...(inp.files || [])]), 800), { once: true });
+      document.body.appendChild(inp);
+      inp.click();
+    });
+  }
+  // Upload one file in 2 MB pieces; onProgress(0..1)
+  async function uploadFile(file, target, onProgress) {
+    let path = null, last = null;
+    for (let off = 0; off < Math.max(file.size, 1); off += CHUNK_SIZE) {
+      const piece = await b64(file.slice(off, off + CHUNK_SIZE));
+      last = await api('POST', '/api/host/writeChunk', { ...target, name: file.name, path, b64: piece });
+      path = last.path;
+      if (onProgress) onProgress(Math.min(1, (off + CHUNK_SIZE) / Math.max(file.size, 1)));
+    }
+    return { id: uid(), name: last.name || file.name, path, size: last.size != null ? last.size : file.size, addedAt: nowISO() };
+  }
+  // Small progress card while files upload
+  function uploadToast(files) {
+    let root = document.getElementById('upload-root');
+    if (!root) { root = document.createElement('div'); root.id = 'upload-root'; document.body.appendChild(root); }
+    const el = document.createElement('div');
+    el.className = 'up-card';
+    el.innerHTML = files.map((f, i) => `<div class="up-row" data-i="${i}"><span class="up-name">${esc(f.name)}</span><span class="up-bar"><i></i></span><small>0%</small></div>`).join('');
+    root.appendChild(el);
+    return {
+      set(i, p, msg) { const r = el.querySelector(`[data-i="${i}"]`); if (!r) return; r.querySelector('i').style.width = Math.round(p * 100) + '%'; r.querySelector('small').textContent = msg || Math.round(p * 100) + '%'; },
+      done() { setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 300); }, 700); },
+    };
+  }
+  async function uploadMany(files, target) {
+    if (!files.length) return [];
+    const ui1 = uploadToast(files);
+    const out = [];
+    for (let i = 0; i < files.length; i++) {
+      try { out.push(await uploadFile(files[i], target, (p) => ui1.set(i, p))); ui1.set(i, 1, 'Done'); }
+      catch (e) { ui1.set(i, 0, 'Failed'); toast(`Could not upload ${files[i].name}: ${e.message}`); }
+    }
+    ui1.done();
+    return out;
+  }
+  const fileHref = (p) => '/__file/' + String(p).split('/').map(encodeURIComponent).join('/');
+  function download(url, name) {
+    const a = document.createElement('a');
+    a.href = url; if (name) a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+  async function call(cmd, args = {}) {
+    switch (cmd) {
+      case 'load': case 'save': case 'sweepOrphans': case 'setAppearance': case 'revealData': return { ok: true };
+      case 'pickAttachments': {
+        const files = await pickFiles({ multiple: true });
+        return { ok: true, files: await uploadMany(files, args.dest ? { dest: args.dest } : { taskId: args.taskId }) };
+      }
+      case 'pickImage': {
+        const files = await pickFiles({ multiple: false, accept: args.kind === 'logo' ? 'image/*,.svg' : 'image/*' });
+        if (!files.length) return { ok: true, path: null };
+        const up = await uploadFile(files[0], { taskId: '_uploads' });
+        return api('POST', '/api/host/processImage', { path: up.path, kind: args.kind || 'avatar', userId: args.userId });
+      }
+      case 'openPath': case 'quickLook': window.open(fileHref(args.path), '_blank', 'noopener'); return { ok: true };
+      case 'revealPath': download(fileHref(args.path), String(args.path).split('/').pop()); return { ok: true };
+      case 'openURL': window.open(args.url, '_blank', 'noopener'); return { ok: true };
+      case 'exportFiles': { const r = await api('POST', '/api/host/exportFiles', args); if (r.count) download(r.url); return { ...r, dir: (r.dir || 'E11 files') + '.zip' }; }
+      case 'notify': {
+        try {
+          if ('Notification' in window && Notification.permission === 'granted' && args.banner !== false) {
+            const n = new Notification(args.title || 'E11 Console', { body: args.body || '', icon: '/icon-192.png', tag: 'e11-' + Date.now() });
+            n.onclick = () => { window.focus(); n.close(); };
+          }
+        } catch (e) { /* not available */ }
+        if (args.sound) chime();
+        return { ok: true };
+      }
+      default: return api('POST', '/api/host/' + cmd, args);
+    }
+  }
+  return { call, uploadMany, pickFiles, download };
+})();
+
+/* ================= Data ================= */
+const COLORS = ['#5b8cff', '#3ddc97', '#ffb547', '#ff6b6b', '#c27cff', '#4fd1c5', '#ff8fc7', '#f2f26d', '#9aa0ab'];
+const TAG_COLORS = [
+  ['rgba(91,140,255,.16)', '#8fb0ff'], ['rgba(61,220,151,.16)', '#6fe6b3'], ['rgba(255,181,71,.16)', '#ffc675'],
+  ['rgba(255,107,107,.16)', '#ff9494'], ['rgba(194,124,255,.16)', '#d4a6ff'], ['rgba(79,209,197,.16)', '#7fe0d7'],
+  ['rgba(255,143,199,.16)', '#ffb0d6'], ['rgba(154,160,171,.18)', '#c3c7cf'],
+];
+// Priority: 'urgent' (unlimited), numbers 1–10 (one task per number per day), or 'none'
+function normPrio(p) {
+  if (p === 'urgent' || p === 'high') return 'urgent';
+  const n = Number(p);
+  return Number.isInteger(n) && n >= 1 && n <= 10 ? n : 'none';
+}
+const prioRank = (p) => { p = normPrio(p); return p === 'urgent' ? 0 : p === 'none' ? 99 : p; };
+const PRIO_RANK = new Proxy({}, { get: (_, k) => prioRank(k) });
+const prioLabel = (p) => { p = normPrio(p); return p === 'urgent' ? 'Urgent' : p === 'none' ? 'No priority' : `Priority ${p}`; };
+// Priorities are per person: t.prio = { userId: value } ('_' = nobody assigned yet).
+// Everyone sees their own priority; people not on the task see the highest one set.
+function prioOf(t, who = currentUserId) {
+  const pr = t.prio || {};
+  if (who && pr[who] != null) return normPrio(pr[who]);
+  if (who && (t.assignees || []).includes(who)) return 'none';
+  const vals = Object.values(pr).map(normPrio);
+  return vals.length ? vals.sort((a, b) => prioRank(a) - prioRank(b))[0] : 'none';
+}
+const prioOwnerName = (key) => (key === '_' ? '' : fullName(userById(key)));
+const isUrgent = (t) => prioOf(t) === 'urgent';
+const dayKey = (t) => t.due || 'none';
+// each number once per person per day
+function prioTakenBy(n, day, key, exceptId) {
+  return db.tasks.find((x) => !x.done && !partDone(x, key) && x.id !== exceptId && dayKey(x) === day && normPrio((x.prio || {})[key]) === n) || null;
+}
+// After a task's day changes (or it is reopened), make sure its number is still free that day
+function checkPrioConflict(t) {
+  if (t.done) return;
+  Object.entries(t.prio || {}).forEach(([key, v]) => {
+    const p = normPrio(v);
+    if (typeof p !== 'number') return;
+    const other = prioTakenBy(p, dayKey(t), key, t.id);
+    if (!other) return;
+    delete t.prio[key];
+    const who = prioOwnerName(key);
+    logActivity(t, `cleared ${who ? `<b>${esc(who)}</b>’s` : 'the'} <b>priority</b> ${chg(prioLabel(p), prioLabel('none'))} (already used by another task that day)`);
+    toast(`${who ? who + '’s ' : ''}Priority ${p} is already used by “${other.title || 'Untitled task'}” ${t.due ? 'on ' + fmtDue(t.due) : 'with no due date'} — cleared`);
+  });
+}
+// Sort helpers: urgent first, then 1–10, then no priority
+const byPrio = (a, b) => prioRank(prioOf(a)) - prioRank(prioOf(b));
+const urgentFirst = (a, b) => (isUrgent(b) ? 1 : 0) - (isUrgent(a) ? 1 : 0);
+
+let db = null;
+let dataDir = '';
+const ui = {
+  view: 'home', projectId: null, taskId: null,
+  search: '', prevView: null,
+  showDone: {}, collapsed: {}, mytasksCollapsed: {},
+  commentDraft: {}, commentFiles: {}, descOpen: {},
+  day: null, navIds: [], openThreads: {}, replyTo: null, editingComment: null, activityFilter: 'comments', thread: null, fileClip: null, previewAtt: null, clientId: null, folderId: null,
+};
+
+const proj = (id) => db.projects.find((p) => p.id === id);
+const task = (id) => db.tasks.find((t) => t.id === id);
+const subtasksOf = (id) => db.tasks.filter((t) => t.parentId === id).sort(byOrder);
+const topTasks = () => db.tasks.filter((t) => !t.parentId);
+
+/* ================= Team: users, roles, permissions ================= */
+const ROLES = { admin: 'Admin', am: 'Account Manager', production: 'Production', social: 'Social' };
+const SEED_ADMIN_ID = 'u-haris';
+let currentUserId = null;
+const userById = (id) => (db && db.users.find((u) => u.id === id)) || null;
+const me = () => userById(currentUserId);
+const fullName = (u) => (u ? (u.name || u.email.split('@')[0]) : 'Former member');
+const userName = (id) => (id && id === currentUserId ? 'You' : fullName(userById(id)));
+const activeUsers = () => db.users.filter((u) => u.active !== false).sort((a, b) => fullName(a).localeCompare(fullName(b)));
+// Production / Social cannot do these; Account Managers can do everything except manage users
+const LIMITED = new Set(['editProject', 'editPriority', 'assign', 'removeTag', 'editDesc', 'deleteTask', 'deleteChecklist', 'editTitle', 'createTask', 'deleteProject']);
+function can(perm) {
+  const u = me();
+  if (!u) return false;
+  if (perm === 'manageUsers') return u.role === 'admin';
+  if (u.role === 'admin' || u.role === 'am') return true;
+  return !LIMITED.has(perm);
+}
+function denied() { toast('Your role doesn’t allow this — ask an Admin or Account Manager'); }
+const isMine = (t) => (t.assignees || []).includes(currentUserId);
+// Each assignee can finish their own part of a shared task: t.partsDone = { userId: isoTime }
+const partDone = (t, u = currentUserId) => !!(t.partsDone || {})[u];
+const myOpen = (t) => !t.done && !partDone(t);
+const myDoneAt = (t) => (t.done ? t.completedAt : (t.partsDone || {})[currentUserId] || null);
+// A task you created but haven't given to anyone yet stays on your own lists until it has an assignee
+const needsOwner = (t) => !t.parentId && !t.done && !(t.assignees || []).length && t.createdBy === currentUserId;
+const onMyList = (t) => isMine(t) || needsOwner(t);
+const myTop = () => topTasks().filter(onMyList);
+const AV_COLORS = ['#7b68ee', '#4c9aff', '#3ddc97', '#f9be33', '#ff8a4c', '#e5484d', '#ff8fc7', '#4fd1c5', '#a875ff'];
+function avColor(id) { let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return AV_COLORS[h % AV_COLORS.length]; }
+function avatarHTML(id, size = 24, cls = '') {
+  const u = userById(id);
+  const name = fullName(u);
+  const st = `width:${size}px;height:${size}px;font-size:${Math.round(size * 0.4)}px`;
+  if (u && u.avatar && Host.isNative) return `<span class="av ${cls}" style="${st}" title="${esc(name)}"><img src="${fileUrl({ path: u.avatar })}" alt=""></span>`;
+  return `<span class="av ${cls}" style="${st};background:${avColor(id || 'x')}" title="${esc(name)}">${esc(initials(name))}</span>`;
+}
+function avatarStack(ids, size = 20, max = 3, t = null) {
+  if (!ids || !ids.length) return '';
+  const shown = ids.slice(0, max).map((id) => (t && partDone(t, id) ? `<span class="av-done">${avatarHTML(id, size)}<i>${icon('check')}</i></span>` : avatarHTML(id, size))).join('');
+  return `<span class="av-stack">${shown}${ids.length > max ? `<span class="av more" style="width:${size}px;height:${size}px">+${ids.length - max}</span>` : ''}</span>`;
+}
+// People who follow a task: its assignees and whoever created it (a subtask also notifies its parent's people)
+function watchersOf(t) {
+  const set = new Set((t.assignees || []).concat(t.createdBy ? [t.createdBy] : []));
+  if (t.parentId) { const p = task(t.parentId); if (p) watchersOf(p).forEach((x) => set.add(x)); }
+  return [...set];
+}
+
+/* ---- Password hashing (SHA-256, salted, stretched) ---- */
+function sha256(str) {
+  const K = [0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2];
+  const bytes = new TextEncoder().encode(str);
+  const l = bytes.length;
+  const n = ((l + 9 + 63) >> 6) << 6;
+  const m = new Uint8Array(n); m.set(bytes); m[l] = 0x80;
+  const dv = new DataView(m.buffer);
+  dv.setUint32(n - 4, (l * 8) >>> 0); dv.setUint32(n - 8, Math.floor(l / 0x20000000));
+  const H = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
+  const W = new Uint32Array(64);
+  const r = (x, k) => (x >>> k) | (x << (32 - k));
+  for (let o = 0; o < n; o += 64) {
+    for (let i = 0; i < 16; i++) W[i] = dv.getUint32(o + i * 4);
+    for (let i = 16; i < 64; i++) {
+      const s0 = r(W[i - 15], 7) ^ r(W[i - 15], 18) ^ (W[i - 15] >>> 3);
+      const s1 = r(W[i - 2], 17) ^ r(W[i - 2], 19) ^ (W[i - 2] >>> 10);
+      W[i] = (W[i - 16] + s0 + W[i - 7] + s1) >>> 0;
+    }
+    let [a, b, c, d, e, f, g, h] = H;
+    for (let i = 0; i < 64; i++) {
+      const t1 = (h + (r(e, 6) ^ r(e, 11) ^ r(e, 25)) + ((e & f) ^ (~e & g)) + K[i] + W[i]) >>> 0;
+      const t2 = ((r(a, 2) ^ r(a, 13) ^ r(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) >>> 0;
+      h = g; g = f; f = e; e = (d + t1) >>> 0; d = c; c = b; b = a; a = (t1 + t2) >>> 0;
+    }
+    H[0] = (H[0] + a) >>> 0; H[1] = (H[1] + b) >>> 0; H[2] = (H[2] + c) >>> 0; H[3] = (H[3] + d) >>> 0;
+    H[4] = (H[4] + e) >>> 0; H[5] = (H[5] + f) >>> 0; H[6] = (H[6] + g) >>> 0; H[7] = (H[7] + h) >>> 0;
+  }
+  return H.map((x) => x.toString(16).padStart(8, '0')).join('');
+}
+function hashPw(pw, salt) { let h = salt + ':' + pw; for (let i = 0; i < 1500; i++) h = sha256(salt + h); return h; }
+function setPassword(u, pw) { u.salt = uid() + uid(); u.hash = hashPw(pw, u.salt); }
+const checkPassword = (u, pw) => !!u && !!u.salt && hashPw(pw, u.salt) === u.hash;
+const validEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s).trim());
+
+/* ---- CD Status & completion rules ---- */
+const CD = { review: { label: 'Internal Review', color: '#f9be33' }, approved: { label: 'Approved', color: '#3ddc97' } };
+const statusList = (t) => { const p = proj(t.projectId); return p ? p.sections : db.statuses; };
+const isToDoName = (n) => /^to ?-?do$/i.test(String(n).trim());
+const isDoneName = (n) => /^(done|complete|completed)$/i.test(String(n).trim());
+// CD Status is always shown on main tasks, but can only be set once the task has left "To Do"
+const showsCD = (t) => !t.parentId;
+const cdLocked = (t) => !t.done && !!sectionOf(t) && isToDoName(sectionOf(t).name);
+const CD_LOCK_MSG = 'CD Status can be set once the task moves out of To Do';
+// Main tasks can be completed only when the status is Done and CD Status is Approved
+const canComplete = (t) => !!t.parentId || (!!sectionOf(t) && isDoneName(sectionOf(t).name) && cdOK(t));
+function completeBlockedMsg(t) {
+  const s = sectionOf(t);
+  const needDone = !(s && isDoneName(s.name)), needCD = !cdOK(t);
+  return 'To mark complete, ' + [needDone ? 'set the status to Done' : '', needCD ? 'the Creative Director needs to approve the files' : ''].filter(Boolean).join(' and ');
+}
+
+function tagColor(name) {
+  let h = 0;
+  for (const c of name.toLowerCase()) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return TAG_COLORS[h % TAG_COLORS.length];
+}
+const tagChip = (name) => { const [bg, fg] = tagColor(name); return `<span class="tag" style="background:${bg};color:${fg}">${esc(name)}</span>`; };
+const prioPill = (p) => (p && p !== 'none' ? `<span class="prio ${p}">${p[0].toUpperCase() + p.slice(1)}</span>` : '');
+const initials = (name) => name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?';
+
+const STATUS_COLORS = ['#87909e', '#4c9aff', '#a875ff', '#f9be33', '#e5484d', '#3ddc97', '#ff8fc7', '#4fd1c5'];
+function defaultSectionColor(name, i) {
+  const n = String(name).toLowerCase();
+  if (/done|complete|closed|finish|delivered/.test(n)) return '#3ddc97';
+  if (/progress|doing|working|active/.test(n)) return '#a875ff';
+  if (/review|qa|approv|check/.test(n)) return '#f9be33';
+  if (/block|stuck|hold|wait/.test(n)) return '#e5484d';
+  if (/to ?do|backlog|open|new|idea/.test(n)) return '#87909e';
+  return STATUS_COLORS[i % STATUS_COLORS.length];
+}
+function textOn(hex) {
+  const h = String(hex).replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.62 ? '#1a1a1d' : '#ffffff';
+}
+const sectionOf = (t) => {
+  const p = proj(t.projectId);
+  if (p) return p.sections.find((s) => s.id === t.sectionId) || null;
+  const list = db.statuses || [];
+  return list.find((s) => s.id === t.sectionId) || list[0] || null;
+};
+function statusInfo(t) {
+  if (t.done) return { name: 'Complete', color: '#3ddc97' };
+  const s = sectionOf(t);
+  return s ? { name: s.name, color: s.color } : { name: 'Open', color: '#87909e' };
+}
+function statusPill(t, extra = '') {
+  const s = statusInfo(t);
+  return `<span class="status-pill" style="background:${s.color};color:${textOn(s.color)}" ${extra}>${esc(s.name)}</span>`;
+}
+// Round status icon that fills up as the task moves through its statuses (ClickUp-style)
+function statusIconSVG(color, kind, frac) {
+  if (kind === 'done') return `<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="${color}"/><path d="m4.9 8.2 2.1 2.1 4-4.3" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  if (kind === 'todo') return `<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2" fill="none" stroke="${color}" stroke-width="1.7" stroke-dasharray="2.4 1.9"/></svg>`;
+  const a = Math.min(.999, Math.max(.08, frac)) * Math.PI * 2, r = 3.6;
+  const x = 8 + r * Math.sin(a), y = 8 - r * Math.cos(a);
+  return `<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2" fill="none" stroke="${color}" stroke-width="1.7"/><path d="M8 8 L8 ${8 - r} A${r} ${r} 0 ${a > Math.PI ? 1 : 0} 1 ${x.toFixed(2)} ${y.toFixed(2)} Z" fill="${color}"/></svg>`;
+}
+function statusIcon(t, size = 16) {
+  const st = sectionOf(t);
+  const info = statusInfo(t);
+  let kind = 'mid', frac = .5;
+  if (t.done || (st && isDoneName(st.name))) kind = 'done';
+  else if (!st || isToDoName(st.name)) kind = 'todo';
+  else { const list = statusList(t); const i = list.indexOf(st); frac = list.length > 1 ? i / (list.length - 1) : .5; }
+  return `<span class="st-ic" style="width:${size}px;height:${size}px" title="${esc(info.name)}">${statusIconSVG(t.done ? '#3ddc97' : info.color, kind, frac)}</span>`;
+}
+function sectionPill(s) {
+  return `<span class="status-pill" style="background:${s.color};color:${textOn(s.color)}">${esc(s.name)}</span>`;
+}
+// "changed X: old → new" with the old value struck out
+const trunc = (v, n = 140) => { v = String(v == null ? '' : v).replace(/\s+/g, ' ').trim(); return v.length > n ? v.slice(0, n - 1) + '…' : v; };
+const fmtDay = (s) => { if (!s) return ''; const d = parseYmd(s); const o = { month: 'short', day: 'numeric' }; if (d.getFullYear() !== new Date().getFullYear()) o.year = 'numeric'; return d.toLocaleDateString('en-US', o); };
+function chg(oldV, newV, long) {
+  const o = trunc(oldV, long ? 220 : 80), n = trunc(newV, long ? 220 : 80);
+  const empty = '<i class="chg-empty">empty</i>';
+  return `<span class="chg${long ? ' long' : ''}"><span class="chg-old">${o ? esc(o) : empty}</span><span class="chg-arrow">→</span><span class="chg-new">${n ? esc(n) : empty}</span></span>`;
+}
+function logChange(t, label, oldV, newV, long) {
+  if (String(oldV || '') === String(newV || '')) return;
+  logActivity(t, `changed ${label} ${chg(oldV, newV, long)}`);
+}
+const struck = (v) => `<span class="chg-old">${esc(trunc(v, 80))}</span>`;
+
+// Typed fields (title, description, subtask names, checklist items) are logged once,
+// when you finish editing — not on every keystroke.
+let editSnap = null;
+function editKeyOf(el) {
+  if (!el || !el.closest || !el.closest('#detail')) return null;
+  if (el.id === 'd-title') return { kind: 'title', id: ui.taskId };
+  if (el.id === 'd-notes') return { kind: 'notes', id: ui.taskId };
+  if (el.classList && el.classList.contains('sub-title')) return { kind: 'sub', id: el.dataset.subId };
+  if (el.classList && el.classList.contains('cl-text')) return { kind: 'cl', id: el.dataset.clId };
+  return null;
+}
+function snapValue(k) {
+  const t = task(ui.taskId);
+  if (!t) return null;
+  if (k.kind === 'title') return t.title;
+  if (k.kind === 'notes') return t.notes;
+  if (k.kind === 'sub') { const x = task(k.id); return x ? x.title : null; }
+  if (k.kind === 'cl') { const c = (t.checklist || []).find((x) => x.id === k.id); return c ? c.text : null; }
+  return null;
+}
+function flushEdit() {
+  if (!editSnap) return;
+  const snap = editSnap; editSnap = null;
+  const t = task(snap.taskId);
+  if (!t) return;
+  const now = snapValue({ ...snap.key });
+  if (now == null || now === snap.before) return;
+  if (snap.key.kind === 'title') logChange(t, 'the <b>title</b>', snap.before, now);
+  else if (snap.key.kind === 'notes') {
+    logActivity(t, 'changed the <b>description</b>');
+    const before = mentionsIn(snap.beforeHtml);
+    mentionsIn(t.notesHtml).forEach((u) => { if (!before.has(u)) pushNotif(u, t, 'mention', 'mentioned you in the description of', { snippet: trunc(t.notes, 160) }); });
+  }
+  else if (snap.key.kind === 'sub') logChange(t, 'a <b>subtask</b>', snap.before, now);
+  else if (snap.key.kind === 'cl') logChange(t, 'a <b>checklist item</b>', snap.before, now);
+  persist();
+  if (ui.taskId === t.id) refreshActivity();
+}
+// Re-draw only the activity feed (keeps the cursor where it is while editing)
+function refreshActivity() {
+  const t = task(ui.taskId);
+  const feed = $('#detail .tm-feed');
+  if (!t || !feed) return;
+  const atEnd = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 30;
+  feed.innerHTML = activityHTML(t);
+  if (atEnd) feed.scrollTop = feed.scrollHeight;
+}
+document.addEventListener('focusin', (e) => {
+  const k = editKeyOf(e.target);
+  if (!k) return;
+  if (editSnap && editSnap.el !== e.target) flushEdit();
+  if (!editSnap) { const tt = task(ui.taskId); editSnap = { key: k, el: e.target, taskId: ui.taskId, before: snapValue(k), beforeHtml: tt ? tt.notesHtml || '' : '' }; }
+});
+document.addEventListener('focusout', (e) => { if (editSnap && editSnap.el === e.target) flushEdit(); });
+
+function logActivity(t, text) {
+  t.activity = t.activity || [];
+  t.activity.push({ id: uid(), at: nowISO(), text, actor: currentUserId });
+  if (t.activity.length > 300) t.activity.splice(0, t.activity.length - 300);
+}
+
+/* ================= Notifications ================= */
+// Notification types each person can switch off in their profile (all on by default)
+const NOTIF_TYPES = [
+  { k: 'assign', kinds: ['assigned', 'unassigned'], l: 'Assigned or removed', d: 'Someone adds you to a task or takes you off it' },
+  { k: 'mention', kinds: ['mention'], l: '@Mentions', d: 'Someone tags you in a comment or a description' },
+  { k: 'comment', kinds: ['comment'], l: 'Comments & replies', d: 'New comments on your tasks and replies in your threads' },
+  { k: 'status', kinds: ['status', 'done'], l: 'Status & completion', d: 'A task moves to another status or is marked complete' },
+  { k: 'cd', kinds: ['cd'], l: 'CD Status changes', d: 'The CD Status of a task is set or cleared' },
+  { k: 'due', kinds: ['due'], l: 'Due dates', d: 'A due date is added, moved or removed' },
+  { k: 'priority', kinds: ['priority'], l: 'Priority', d: 'Your priority on a task is changed' },
+  { k: 'attach', kinds: ['attach'], l: 'Files added', d: 'Someone attaches files to a task' },
+  { k: 'part', kinds: ['part', 'allparts'], l: 'Parts done', d: 'Someone finishes or reopens their part of a shared task' },
+  { k: 'result', kinds: ['review-ok', 'review-amend'], l: 'CD review results', d: 'The CD approves your files or asks for amendments' },
+  { k: 'review', kinds: ['review'], l: 'New review requests', d: 'Someone submits files for your review', cd: true },
+  { k: 'review-wd', kinds: ['review-wd'], l: 'Withdrawn submissions', d: 'Someone withdraws files they sent for review', cd: true },
+];
+const notifTypeOf = (kind) => NOTIF_TYPES.find((x) => x.kinds.includes(kind));
+const notifOn = (u, kind) => { const g = notifTypeOf(kind); return !g || !((u.prefs || {}).notifOff || {})[g.k]; };
+// One notification per person; never to the person who made the change
+function pushNotif(to, t, kind, text, extra = {}) {
+  if (!to || !currentUserId || to === currentUserId || !t) return;
+  const u = userById(to);
+  if (!u || u.active === false) return;
+  if (!notifOn(u, kind)) return;
+  db.notifications.push({ id: uid(), to, from: currentUserId, taskId: t.id, kind, text, snippet: extra.snippet || '', commentId: extra.commentId || null, at: nowISO(), read: false });
+  if (db.notifications.length > 5000) db.notifications.splice(0, db.notifications.length - 5000);
+}
+function notifyWatchers(t, kind, text, extra = {}) {
+  const skip = new Set(extra.skip || []);
+  watchersOf(t).forEach((u) => { if (!skip.has(u)) pushNotif(u, t, kind, text, extra); });
+}
+const mentionsIn = (html) => { const out = new Set(); String(html || '').replace(/data-user="([^"]+)"/g, (_, id) => { out.add(id); return ''; }); return out; };
+
+function normalize(d) {
+  d = d && typeof d === 'object' ? d : {};
+  d.version = 1;
+  d.meta = d.meta || { createdAt: nowISO() };
+  d.projects = Array.isArray(d.projects) ? d.projects : [];
+  d.clients = Array.isArray(d.clients) ? d.clients : [];
+  d.clients.forEach((c) => { c.folders = Array.isArray(c.folders) ? c.folders : []; c.folders.forEach((f) => { f.files = Array.isArray(f.files) ? f.files : []; }); });
+  d.tasks = Array.isArray(d.tasks) ? d.tasks : [];
+  d.meta.migrations = d.meta.migrations || {};
+  // Team members — the first admin is created on a fresh install / upgrade
+  d.users = Array.isArray(d.users) ? d.users : [];
+  if (!d.users.length) {
+    const u = { id: SEED_ADMIN_ID, email: 'haris@e11-digital.com', name: 'Haris', role: 'admin', avatar: null, setup: false, active: true, createdAt: nowISO(), prefs: {} };
+    setPassword(u, '123456');
+    d.users.push(u);
+  }
+  d.users.forEach((u) => { u.prefs = u.prefs || {}; if (u.active == null) u.active = true; });
+  const firstAdmin = (d.users.find((u) => u.role === 'admin') || d.users[0]).id;
+  d.notifications = Array.isArray(d.notifications) ? d.notifications : [];
+  // Statuses for tasks that are not in a project
+  d.statuses = Array.isArray(d.statuses) && d.statuses.length ? d.statuses : [
+    { id: 'st-todo', name: 'To do', color: '#87909e' }, { id: 'st-progress', name: 'In progress', color: '#a875ff' },
+    { id: 'st-review', name: 'Review', color: '#f9be33' }, { id: 'st-ctr', name: 'CTR', color: '#ff8a4c' }, { id: 'st-done', name: 'Done', color: '#3ddc97' },
+  ];
+  d.projects.forEach((p, i) => {
+    p.sections = Array.isArray(p.sections) && p.sections.length ? p.sections : [{ id: uid(), name: 'To do' }];
+    p.sections.forEach((s, j) => { if (!s.color) s.color = defaultSectionColor(s.name, j); });
+    p.color = p.color || COLORS[i % COLORS.length];
+    p.view = p.view || 'list';
+    if (p.order == null) p.order = i + 1;
+    // add the CTR status (once) just before Done
+    if (!d.meta.migrations.ctr && !p.sections.some((s) => /^ctr$/i.test(s.name.trim()))) {
+      const di = p.sections.findIndex((s) => isDoneName(s.name));
+      p.sections.splice(di >= 0 ? di : p.sections.length, 0, { id: uid(), name: 'CTR', color: '#ff8a4c' });
+    }
+  });
+  d.meta.migrations.ctr = true;
+  d.tasks.forEach((t) => {
+    t.tags = t.tags || []; t.comments = t.comments || []; t.attachments = t.attachments || [];
+    t.comments.forEach((c) => { c.attachments = c.attachments || []; c.text = c.text || ''; c.parentId = c.parentId || null; c.reactions = c.reactions || {}; });
+    t.activity = t.activity || []; t.checklist = t.checklist || []; t.start = t.start || null;
+    t.priority = t.priority === 'medium' || t.priority === 'low' ? 'none' : normPrio(t.priority); t.notes = t.notes || ''; t.title = t.title || '';
+    t.cdStatus = t.cdStatus === 'review' || t.cdStatus === 'approved' ? t.cdStatus : '';
+    t.reviews = Array.isArray(t.reviews) ? t.reviews : [];
+    if (t.needsCD == null) { t.needsCD = !t.parentId && !t.done && !!t.projectId && t.cdStatus !== 'approved'; if (t.needsCD && t.cdStatus === 'review' && !t.reviews.length) t.cdStatus = ''; }
+    // tasks from before team accounts belong to the first admin
+    if (!t.createdBy) t.createdBy = firstAdmin;
+    if (!Array.isArray(t.assignees)) t.assignees = [firstAdmin];
+    if (!t.prio || typeof t.prio !== 'object') {
+      t.prio = {};
+      const old = normPrio(t.priority);
+      if (old !== 'none') (t.assignees.length ? t.assignees : ['_']).forEach((a) => { t.prio[a] = old; });
+    }
+    delete t.priority;
+    t.comments.forEach((c) => { if (!c.authorId) c.authorId = firstAdmin; });
+    t.activity.forEach((a) => { if (!a.actor) a.actor = firstAdmin; });
+    if (!t.projectId && !t.parentId && !d.statuses.some((s) => s.id === t.sectionId)) t.sectionId = d.statuses[0].id;
+  });
+  return d;
+}
+
+function createProject(name, color) {
+  const p = {
+    id: uid(), name, color, view: 'list', createdAt: nowISO(),
+    order: db.projects.length ? Math.max(...db.projects.map((x) => x.order || 0)) + 1 : 1,
+    sections: [{ id: uid(), name: 'To do', color: '#87909e' }, { id: uid(), name: 'In progress', color: '#a875ff' }, { id: uid(), name: 'Review', color: '#f9be33' }, { id: uid(), name: 'CTR', color: '#ff8a4c' }, { id: uid(), name: 'Done', color: '#3ddc97' }],
+  };
+  db.projects.push(p);
+  return p;
+}
+
+function createTask(fields = {}) {
+  const t = {
+    id: uid(), projectId: null, sectionId: null, parentId: null,
+    title: '', notes: '', done: false, completedAt: null, due: null, prio: {},
+    tags: [], attachments: [], comments: [], checklist: [], activity: [], start: null, createdAt: nowISO(), updatedAt: nowISO(),
+    cdStatus: '', assignees: [], createdBy: currentUserId || SEED_ADMIN_ID, reviews: [], needsCD: !fields.parentId && !!fields.projectId,
+    ...fields,
+  };
+  if (!fields.silent) t.activity.push({ id: uid(), at: t.createdAt, text: 'created this task', actor: t.createdBy });
+  delete t.silent;
+  if (fields.priority != null) { const v = normPrio(fields.priority); if (v !== 'none') (t.assignees.length ? t.assignees : ['_']).forEach((a) => { t.prio[a] = v; }); }
+  delete t.priority;
+  if (t.parentId) {
+    const parent = task(t.parentId);
+    if (parent) { t.projectId = parent.projectId; t.sectionId = parent.sectionId; }
+  } else if (t.projectId && !t.sectionId) {
+    const p = proj(t.projectId);
+    t.sectionId = p && p.sections[0] ? p.sections[0].id : null;
+  } else if (!t.projectId && !t.sectionId) {
+    t.sectionId = db.statuses[0].id;
+  }
+  const sibs = db.tasks.filter((x) => (t.parentId ? x.parentId === t.parentId : (!x.parentId && x.projectId === t.projectId && x.sectionId === t.sectionId)));
+  t.order = fields.order != null ? fields.order : (sibs.length ? Math.max(...sibs.map((x) => x.order || 0)) + 1 : 1);
+  db.tasks.push(t);
+  return t;
+}
+
+function descendants(id) {
+  const out = [];
+  const walk = (pid) => db.tasks.filter((t) => t.parentId === pid).forEach((t) => { out.push(t); walk(t.id); });
+  walk(id);
+  return out;
+}
+
+function removeTasks(ids) {
+  const set = new Set(ids);
+  const removed = db.tasks.filter((t) => set.has(t.id));
+  db.tasks = db.tasks.filter((t) => !set.has(t.id));
+  return removed;
+}
+
+function setDone(t, done) {
+  if (!!t.done !== !!done) {
+    logActivity(t, done ? 'completed this task' : 'reopened this task');
+    notifyWatchers(t, 'done', done ? 'completed' : 'reopened');
+  }
+  t.done = done;
+  t.completedAt = done ? nowISO() : null;
+  t.updatedAt = nowISO();
+  if (!done && db.tasks.includes(t)) checkPrioConflict(t);
+}
+
+function moveTask(id, sectionId, targetId, after) {
+  const t = task(id);
+  if (!t) return;
+  if (t.sectionId !== sectionId) {
+    const list = statusList(t);
+    const from = list.find((x) => x.id === t.sectionId);
+    const to = list.find((x) => x.id === sectionId);
+    if (to) { logChange(t, 'the <b>status</b>', from ? from.name : '', to.name); notifyWatchers(t, 'status', `changed the status to <b>${esc(to.name)}</b>`); }
+  }
+  t.sectionId = sectionId;
+  descendants(t.id).forEach((d) => { d.sectionId = sectionId; });
+  const sibs = db.tasks.filter((x) => !x.parentId && x.projectId === t.projectId && x.sectionId === sectionId && x.id !== id).sort(byOrder);
+  let idx = sibs.length;
+  if (targetId) {
+    const i = sibs.findIndex((x) => x.id === targetId);
+    if (i >= 0) idx = i + (after ? 1 : 0);
+  }
+  sibs.splice(idx, 0, t);
+  sibs.forEach((x, i) => { x.order = i + 1; });
+  t.updatedAt = nowISO();
+}
+
+function setTaskProject(t, projectId) {
+  const p = projectId ? proj(projectId) : null;
+  const oldP = proj(t.projectId);
+  logChange(t, 'the <b>project</b>', oldP ? oldP.name : 'My Tasks', p ? p.name : 'My Tasks');
+  t.projectId = p ? p.id : null;
+  t.sectionId = p && p.sections[0] ? p.sections[0].id : db.statuses[0].id;
+  const sibs = db.tasks.filter((x) => !x.parentId && x.projectId === t.projectId && x.sectionId === t.sectionId && x.id !== t.id);
+  t.order = sibs.length ? Math.max(...sibs.map((x) => x.order || 0)) + 1 : 1;
+  descendants(t.id).forEach((d) => { d.projectId = t.projectId; d.sectionId = t.sectionId; });
+  t.updatedAt = nowISO();
+}
+
+function seed() {
+  const A = [SEED_ADMIN_ID];
+  const p = createProject('Getting Started', '#5b8cff');
+  const [todo, doing, , done] = p.sections;
+  const today = todayStr();
+  const t1 = createTask({ projectId: p.id, sectionId: todo.id, title: 'Welcome to E11 Console', priority: 1, due: today, tags: ['tour'], assignees: A,
+    notes: 'Click any task to open its details here. You can add a description, due date, priority, tags, subtasks, files and comments.\n\nEverything is saved automatically to the "E11 Console Data" folder on your Desktop.' });
+  t1.checklist = [{ id: uid(), text: 'Try the new task page', done: false }, { id: uid(), text: 'Reply to a comment', done: false }];
+  t1.comments.push({ id: 'c-welcome', text: 'Comments are threaded — click Reply to start a thread. Type @ to mention a teammate.', at: nowISO(), attachments: [], parentId: null, reactions: {}, authorId: SEED_ADMIN_ID });
+  createTask({ parentId: t1.id, title: 'Open a task to see its details' });
+  createTask({ parentId: t1.id, title: 'Tick a circle to complete a task' });
+  createTask({ projectId: p.id, sectionId: todo.id, title: 'Switch to Board view and drag a card between columns', due: addDays(today, 1), tags: ['tour'], assignees: A });
+  createTask({ projectId: p.id, sectionId: todo.id, title: 'Create your first project from the sidebar', priority: 'urgent', due: addDays(today, 2), assignees: A });
+  createTask({ projectId: p.id, sectionId: doing.id, title: 'Press ⌘K to search all tasks', tags: ['tip'], assignees: A });
+  const d = createTask({ projectId: p.id, sectionId: done.id, title: 'Install E11 Console', assignees: A });
+  setDone(d, true);
+  createTask({ title: 'Plan this week', due: today, priority: 'urgent', assignees: A });
+}
+
+
+/* ================= Live sync with the server ================= */
+// The app keeps the whole data set in memory as before. When something changes we send only the
+// items that changed (with the version we last saw, so the server can merge), and the server
+// pushes everyone else's changes to us live.
+
+const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+const hasId = (v) => isObj(v) && (typeof v.id === 'string' || typeof v.id === 'number');
+const isIdArray = (a) => Array.isArray(a) && a.every(hasId);
+const isPrimArray = (a) => Array.isArray(a) && a.every((x) => x === null || typeof x !== 'object');
+
+function deepEqual(a, b) {
+  if (a === b) return true;
+  if (typeof a !== typeof b || a === null || b === null || typeof a !== 'object') return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (Array.isArray(a)) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) if (!deepEqual(a[i], b[i])) return false;
+    return true;
+  }
+  const ka = Object.keys(a), kb = Object.keys(b);
+  if (ka.length !== kb.length) return false;
+  for (const k of ka) if (!Object.prototype.hasOwnProperty.call(b, k) || !deepEqual(a[k], b[k])) return false;
+  return true;
+}
+
+function merge3(base, mine, theirs) {
+  if (deepEqual(mine, base)) return theirs;     // I didn't touch it: keep the server's
+  if (deepEqual(theirs, base)) return mine;     // nobody else touched it: take mine
+  if (deepEqual(mine, theirs)) return mine;     // we both made the same change
+  if (isObj(mine) && isObj(theirs)) return mergeObjects(isObj(base) ? base : {}, mine, theirs);
+  const arrays = [base, mine, theirs].filter((x) => x !== undefined);
+  if (Array.isArray(mine) && Array.isArray(theirs)) {
+    if (arrays.every(isIdArray)) return mergeIdArrays(Array.isArray(base) ? base : [], mine, theirs);
+    if (arrays.every(isPrimArray)) return mergeSets(Array.isArray(base) ? base : [], mine, theirs);
+  }
+  return mine;                                   // true conflict on a single value: latest save wins
+}
+
+function mergeObjects(base, mine, theirs) {
+  const out = {};
+  const keys = new Set([...Object.keys(theirs), ...Object.keys(mine), ...Object.keys(base)]);
+  for (const k of keys) {
+    const inMine = Object.prototype.hasOwnProperty.call(mine, k);
+    const inTheirs = Object.prototype.hasOwnProperty.call(theirs, k);
+    const inBase = Object.prototype.hasOwnProperty.call(base, k);
+    if (!inMine && inBase && deepEqual(base[k], theirs[k])) continue;        // I deleted it, they didn't change it
+    if (!inTheirs && inBase && deepEqual(base[k], mine[k])) continue;        // they deleted it, I didn't change it
+    const v = merge3(base[k], mine[k], theirs[k]);
+    if (v !== undefined) out[k] = v;
+  }
+  return out;
+}
+
+// Lists of things with ids (comments, activity, attachments, checklist, sections, folders…)
+function mergeIdArrays(base, mine, theirs) {
+  const byId = (a) => new Map(a.map((x) => [String(x.id), x]));
+  const b = byId(base), m = byId(mine), t = byId(theirs);
+  const out = [];
+  // Use my order if I reordered things, otherwise the server's order
+  const common = (a) => a.map((x) => String(x.id)).filter((id) => b.has(id));
+  const reordered = !deepEqual(common(mine), common(base).filter((id) => m.has(id)));
+  const order = reordered ? [...mine, ...theirs.filter((x) => !m.has(String(x.id)))] : [...theirs, ...mine.filter((x) => !t.has(String(x.id)))];
+  const seen = new Set();
+  for (const item of order) {
+    const id = String(item.id);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const inB = b.has(id), inM = m.has(id), inT = t.has(id);
+    if (inB && !inM) continue;                  // I removed it
+    if (inB && !inT) continue;                  // someone else removed it
+    if (inM && inT) out.push(merge3(b.get(id), m.get(id), t.get(id)));
+    else if (inM) out.push(m.get(id));          // I added it
+    else out.push(t.get(id));                   // someone else added it
+  }
+  return out;
+}
+
+// Lists of plain values (tags, assignees): apply my additions and removals to the server's list
+function mergeSets(base, mine, theirs) {
+  const key = (x) => JSON.stringify(x);
+  const bk = new Set(base.map(key)), mk = new Set(mine.map(key));
+  const removed = new Set(base.filter((x) => !mk.has(key(x))).map(key));
+  const added = mine.filter((x) => !bk.has(key(x)));
+  const out = theirs.filter((x) => !removed.has(key(x)));
+  const have = new Set(out.map(key));
+  added.forEach((x) => { if (!have.has(key(x))) { out.push(x); have.add(key(x)); } });
+  return out;
+}
+
+const Sync = (() => {
+  const KINDS = ['users', 'projects', 'tasks', 'clients', 'notifications', 'statuses', 'meta'];
+  const clientId = 'c-' + uid() + uid();
+  const synced = {};               // kind -> Map(id -> JSON the server has)
+  KINDS.forEach((k) => { synced[k] = new Map(); });
+  let rev = 0, es = null, pushing = false, again = false, online = true, retryTimer = null, version = null;
+  const prefKey = (id) => 'e11-prefs-' + id;
+  const loadPrefs = (id) => { try { return JSON.parse(localStorage.getItem(prefKey(id)) || '{}') || {}; } catch (e) { return {}; } };
+  const savePrefs = () => { try { if (currentUserId) localStorage.setItem(prefKey(currentUserId), JSON.stringify(db.meta.prefs || {})); } catch (e) { /* private mode */ } };
+  // Settings that belong to this device/person, not shared with the team
+  const sharedMeta = (m) => { const o = { ...(m || {}) }; delete o.prefs; delete o.updatedAt; return o; };
+  const items = (kind) => (kind === 'meta' ? [['main', sharedMeta(db.meta)]] : (db[kind] || []).map((x) => [String(x.id), x]));
+  const remember = (kind, id, data) => { if (data == null) synced[kind].delete(id); else synced[kind].set(id, JSON.stringify(data)); };
+  function localOf(kind, id) {
+    if (kind === 'meta') return sharedMeta(db.meta);
+    return (db[kind] || []).find((x) => String(x.id) === id) || null;
+  }
+  // Put the server's version of an item into the app's data (keeping object identity)
+  function setLocal(kind, id, data) {
+    if (kind === 'meta') { const prefs = db.meta.prefs; db.meta = { ...(data || {}), prefs }; return; }
+    const list = db[kind] || (db[kind] = []);
+    const i = list.findIndex((x) => String(x.id) === id);
+    if (data == null) { if (i >= 0) list.splice(i, 1); return; }
+    if (i < 0) { list.push(data); return; }
+    const obj = list[i];
+    Object.keys(obj).forEach((k) => { delete obj[k]; });
+    Object.assign(obj, data);
+  }
+
+  async function start() {
+    const me = await api('GET', '/api/me');
+    const snap = await api('GET', '/api/snapshot');
+    rev = snap.rev; version = snap.version || me.version;
+    const data = snap.data;
+    KINDS.forEach((k) => { if (k === 'meta') remember('meta', 'main', sharedMeta(data.meta)); else (data[k] || []).forEach((x) => remember(k, String(x.id), x)); });
+    data.meta = { ...(data.meta || {}), prefs: loadPrefs(me.user.id) };
+    db = normalize(JSON.parse(JSON.stringify(data)));
+    connect();
+    window.addEventListener('online', () => { push(); reconnect(0); });
+    return me.user;
+  }
+
+  function changes() {
+    const out = [];
+    KINDS.forEach((kind) => {
+      const seen = new Set();
+      items(kind).forEach(([id, x]) => {
+        seen.add(id);
+        const now = JSON.stringify(x), was = synced[kind].get(id);
+        if (now !== was) out.push({ kind, id, base: was ? JSON.parse(was) : undefined, data: JSON.parse(now) });
+      });
+      synced[kind].forEach((_, id) => { if (!seen.has(id)) out.push({ kind, id, del: true }); });
+    });
+    return out;
+  }
+
+  async function push() {
+    savePrefs();
+    if (pushing) { again = true; return; }
+    const list = changes();
+    if (!list.length) { setSaveState(online ? 'saved' : 'offline'); return; }
+    pushing = true;
+    setSaveState('saving');
+    try {
+      const r = await api('POST', '/api/push', { client: clientId, changes: list });
+      rev = Math.max(rev, r.rev || 0);
+      const sent = new Map(list.map((c) => [c.kind + ':' + c.id, c]));
+      let touched = false, refused = 0;
+      (r.results || []).forEach((res) => {
+        const key = res.kind + ':' + res.id, mine = sent.get(key);
+        if (res.refused && res.kind !== 'meta') refused++;
+        if (res.deleted) { remember(res.kind, res.id, null); if (localOf(res.kind, res.id) && (res.refused || res.hidden || !(mine && mine.del))) { setLocal(res.kind, res.id, null); touched = true; } return; }
+        remember(res.kind, res.id, res.data);
+        // Keep anything typed while this save was on its way, on top of the server's merged version
+        const local = localOf(res.kind, res.id);
+        const next = res.refused || !mine || mine.del ? res.data : merge3(mine.data, local ? JSON.parse(JSON.stringify(local)) : null, res.data);
+        if (!deepEqual(local && JSON.parse(JSON.stringify(local)), next)) { setLocal(res.kind, res.id, next); touched = true; }
+      });
+      setOnline(true);
+      if (refused) toast('Some changes weren’t saved — your role doesn’t allow them');
+      if (touched) refresh();
+      setSaveState('saved');
+    } catch (e) {
+      if (e.auth) return signedOut(e);
+      setOnline(false);
+      clearTimeout(retryTimer);
+      retryTimer = setTimeout(push, 5000);
+    } finally {
+      pushing = false;
+      if (again) { again = false; push(); }
+    }
+  }
+
+  // Someone else changed something
+  function applyRemote(list) {
+    let touched = false, notif = false;
+    list.forEach((ch) => {
+      const kind = ch.kind, id = String(ch.id);
+      if (!synced[kind]) return;
+      const was = synced[kind].get(id);
+      const local = localOf(kind, id);
+      const localJSON = local ? JSON.stringify(local) : null;
+      const remote = ch.deleted ? null : ch.data;
+      remember(kind, id, remote);
+      if (remote == null) { if (local) { setLocal(kind, id, null); touched = true; } return; }
+      // If I have unsaved edits to the same item, merge them on top
+      const next = local && was && localJSON !== was ? merge3(JSON.parse(was), JSON.parse(localJSON), remote) : remote;
+      if (localJSON !== JSON.stringify(next)) { setLocal(kind, id, next); touched = true; if (kind === 'notifications') notif = true; }
+    });
+    if (touched) refresh();
+    if (notif) deliverPending();
+    if (changes().length) persist(400);
+  }
+
+  // Redraw without disturbing whoever is typing: the open task waits until they click away
+  let detailDirty = false;
+  function refresh() {
+    if (!currentUserId || !db) return;
+    const a = document.activeElement;
+    const typing = a && $('#detail') && $('#detail').contains(a) && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName));
+    const editingList = a && !$('#detail').contains(a) && (a.isContentEditable || /^(INPUT|TEXTAREA)$/.test(a.tagName));
+    if (editingList) { renderSidebar(); detailDirty = true; return; }
+    render({ keepDetail: typing });
+    detailDirty = typing;
+  }
+  document.addEventListener('focusout', () => setTimeout(() => {
+    if (!detailDirty || !db || !currentUserId) return;
+    const a = document.activeElement;
+    if (a && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))) return;
+    detailDirty = false;
+    render({ keepDetail: false });
+  }, 50));
+
+  function connect() {
+    if (es) es.close();
+    es = new EventSource(`/api/events?since=${rev}&client=${encodeURIComponent(clientId)}`);
+    es.addEventListener('hello', (e) => { setOnline(true); const m = JSON.parse(e.data); checkVersion(m.version); if (changes().length) push(); });
+    es.addEventListener('changes', (e) => {
+      const m = JSON.parse(e.data);
+      if (m.rev > rev) rev = m.rev;
+      if (m.client === clientId) return;          // my own save, already applied
+      applyRemote(m.changes || []);
+    });
+    es.addEventListener('version', (e) => checkVersion(JSON.parse(e.data).version));
+    es.onerror = () => { setOnline(false); reconnect(3000); };
+  }
+  function reconnect(ms) { if (es) { es.close(); es = null; } clearTimeout(retryTimer); retryTimer = setTimeout(() => { connect(); }, ms); }
+  function setOnline(v) {
+    if (online === v) return;
+    online = v;
+    setSaveState(v ? (changes().length ? 'saving' : 'saved') : 'offline');
+  }
+  function checkVersion(v) {
+    if (!v) return;
+    if (!version) { version = v; return; }
+    if (v !== version && typeof showUpdateBanner === 'function') showUpdateBanner(v);
+  }
+  function signedOut(e) {
+    if (es) es.close();
+    document.body.innerHTML = `<div class="fatal" style="margin:20vh auto;max-width:420px;text-align:center"><h2>${esc(e.status === 403 ? 'No access' : 'Signed out')}</h2><p>${esc(e.message)}</p><button class="btn primary" onclick="location.reload()">Sign in again</button></div>`;
+  }
+  return { start, push, savePrefs, get online() { return online; }, get version() { return version; }, clientId };
+})();
+
+/* ================= Persistence ================= */
+let saveTimer = null, saving = false, saveAgain = false, readOnly = false;
+
+function setSaveState(state, detail) {
+  const dot = $('#save-dot'), label = $('#save-label');
+  if (!dot) return;
+  dot.className = 'save-dot ' + (state === 'saved' ? 'ok' : state === 'saving' ? 'busy' : state === 'error' || state === 'offline' ? 'err' : '');
+  if (Host.isServer) {
+    label.textContent = state === 'saving' ? 'Syncing…' : state === 'offline' ? 'Offline — changes will sync' : state === 'error' ? 'Not synced — ' + (detail || 'error') : `Synced · ${location.host}`;
+    label.parentElement.title = state === 'offline' ? 'Can’t reach the office server. Your changes are kept and sent when the connection is back.' : 'Everything is saved on the office server';
+    return;
+  }
+  label.textContent = state === 'saving' ? 'Saving…' : state === 'error' ? 'Not saved — ' + (detail || 'error') : (Host.isNative ? 'Saved · E11 Console Data' : 'Preview mode (browser)');
+  label.parentElement.title = dataDir ? 'Data folder: ' + dataDir + '\nClick to show in Finder' : '';
+}
+
+function persist(delay = 250) {
+  if (readOnly) return;
+  clearTimeout(saveTimer);
+  setSaveState('saving');
+  saveTimer = setTimeout(doSave, delay);
+}
+async function doSave() {
+  if (Host.isServer) { saveTimer = null; return Sync.push(); }
+  if (saving) { saveAgain = true; return; }
+  saving = true;
+  try {
+    db.meta.updatedAt = nowISO();
+    await Host.call('save', { data: JSON.stringify(db, null, 1) });
+    setSaveState('saved');
+  } catch (e) {
+    setSaveState('error', e.message);
+    toast('Could not save: ' + e.message);
+  }
+  saving = false;
+  if (saveAgain) { saveAgain = false; doSave(); }
+}
+window.addEventListener('beforeunload', () => { if (saveTimer) { clearTimeout(saveTimer); doSave(); } });
+// In the browser, a file dropped outside a drop area must not open in place of the app
+['dragover', 'drop'].forEach((ev) => window.addEventListener(ev, (e) => { if (e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files') && !e.defaultPrevented) e.preventDefault(); }));
+
+/* commit: save + re-render. opts.keepDetail avoids re-rendering the detail pane while typing in it */
+function commit(opts = {}) {
+  persist(opts.delay);
+  render(opts);
+}
+
+/* ================= Rendering ================= */
+function render(opts = {}) {
+  renderSidebar();
+  renderTitle();
+  renderContent();
+  if (!opts.keepDetail) renderDetail();
+  else refreshDetailMeta();
+}
+
+function openTasksCount() {
+  return topTasks().filter((t) => !t.done).length;
+}
+
+function renderSidebar() {
+  $$('.nav-item[data-nav]').forEach((a) => a.classList.toggle('active', !ui.search && (ui.view === a.dataset.nav || (a.dataset.nav === 'clients' && ui.view === 'client'))));
+  { const cc = $('#clients-count'); if (cc) cc.textContent = (db.clients || []).length ? String(db.clients.length) : ''; }
+  const mt = myTop().filter((t) => myOpen(t) && t.due && dayDiff(t.due) <= 0).length;
+  $('#mytasks-count').textContent = mt ? String(mt) : '';
+  const td = db.tasks.filter((t) => onMyList(t) && myOpen(t) && t.due && dayDiff(t.due) === 0).length;
+  $('#today-count').textContent = td ? String(td) : '';
+  const unread = myNotifs().filter((n) => !n.read).length;
+  const ib = $('#inbox-count');
+  if (ib) { ib.textContent = unread ? String(unread > 99 ? '99+' : unread) : ''; ib.classList.toggle('hot', !!unread); }
+  const rn = $('#nav-reviews');
+  if (rn) { rn.style.display = isCD() ? '' : 'none'; const k = isCD() ? activeReviews().length : 0; const rc = $('#reviews-count'); rc.textContent = k ? String(k) : ''; rc.classList.toggle('hot', !!k); }
+  renderMeChip();
+  $('.create-btn').style.display = can('createTask') ? '' : 'none';
+  const list = db.projects.slice().sort(byOrder);
+  $('#project-list').innerHTML = list.length ? list.map((p) => {
+    const open = db.tasks.filter((t) => t.projectId === p.id && !t.parentId && !t.done).length;
+    const active = !ui.search && ui.view === 'project' && ui.projectId === p.id;
+    return `<a class="nav-item ${active ? 'active' : ''}" data-project="${p.id}" title="${esc(p.name)}">
+      <span class="dot" style="background:${p.color}"></span><span class="name">${esc(p.name)}</span>
+      <span class="count p">${open || ''}</span>
+      <button class="icon-btn sm more" data-action="project-menu" data-id="${p.id}" title="Project options">${icon('more')}</button>
+    </a>`;
+  }).join('') : `<div class="nav-item ph" data-action="new-project" style="font-size:12.5px">${icon('plus')} Add your first project</div>`;
+}
+
+function renderTitle() {
+  const el = $('#title-area');
+  if (ui.search) { el.innerHTML = `<div class="page-title">Search</div>`; return; }
+  if (ui.view === 'home') { el.innerHTML = `<div class="page-title">Home</div>`; return; }
+  if (ui.view === 'inbox') { el.innerHTML = `<div class="page-icon" style="background:#2b2650;color:#c9c0ff">${icon('inbox')}</div><div class="page-title">Inbox</div>`; return; }
+  if (ui.view === 'reviews') { el.innerHTML = `<div class="page-icon" style="background:#3b1f2c;color:#ff8fc0">${icon('shield')}</div><div class="page-title">Review Requests</div>${cdActing() ? '<span class="cd-badge">Acting CD</span>' : ''}`; return; }
+  if (ui.view === 'team') { el.innerHTML = `<div class="page-icon" style="background:#173b33;color:#7fe0d7">${icon('users')}</div><div class="page-title">Team members</div>`; return; }
+  if (ui.view === 'profile') { el.innerHTML = `<div class="page-icon" style="background:#3a2a1a;color:#ffc675">${icon('user')}</div><div class="page-title">My profile</div>`; return; }
+  if (ui.view === 'clients' || ui.view === 'client') {
+    const c = ui.view === 'client' ? clientById(ui.clientId) : null;
+    if (ui.view === 'client' && !c) { ui.view = 'clients'; return renderTitle(); }
+    const f = c && c.folders.find((x) => x.id === ui.folderId);
+    el.innerHTML = `<div class="page-icon ca-icon">${icon('assets')}</div>${c
+      ? `<a class="page-title crumb-link" data-nav="clients">Client Assets</a><span class="crumb-sep">/</span>${f ? `<a class="page-title crumb-link" data-action="open-client" data-id="${c.id}">${esc(c.name)}</a><span class="crumb-sep">/</span><div class="page-title">${esc(f.name)}</div>` : `<div class="page-title">${esc(c.name)}</div>`}`
+      : '<div class="page-title">Client Assets</div>'}`;
+    return;
+  }
+  if (ui.view === 'today') {
+    el.innerHTML = `<div class="page-icon" style="background:#3b2f14;color:#f9be33">${icon('sun')}</div><div class="page-title">My Day</div>`;
+    return;
+  }
+  if (ui.view === 'mytasks') {
+    el.innerHTML = `<div class="page-icon" style="background:#2a3b66;color:#c9d7ff">${icon('check-circle')}</div><div class="page-title">My Tasks</div>`;
+    return;
+  }
+  const p = proj(ui.projectId);
+  if (!p) { ui.view = 'home'; return renderTitle(); }
+  el.innerHTML = `<div class="page-icon" style="background:${p.color}">${esc(initials(p.name))}</div>
+    <div class="page-title" data-action="rename-project" data-id="${p.id}" title="Double-click to rename">${esc(p.name)}</div>
+    <button class="icon-btn" data-action="project-menu" data-id="${p.id}" title="Project options">${icon('chev')}</button>
+    ${clientOfProject(p) ? `<button class="proj-client" data-action="open-client" data-id="${p.clientId}" title="Open ${esc(clientOfProject(p).name)} brand assets">${clientLogoHTML(clientOfProject(p), 20)}<span>${esc(clientOfProject(p).name)} assets</span>${icon('chev-right')}</button>` : ''}
+    <div class="tabs">
+      <button class="tab ${p.view === 'list' ? 'active' : ''}" data-action="set-view" data-v="list">${icon('list')}List</button>
+      <button class="tab ${p.view === 'board' ? 'active' : ''}" data-action="set-view" data-v="board">${icon('board')}Board</button>
+    </div>`;
+}
+
+function renderContent() {
+  const c = $('#content');
+  const scroll = { top: c.scrollTop, left: (c.querySelector('.board') || {}).scrollLeft || 0 };
+  if (ui.search) c.innerHTML = viewSearch();
+  else if (ui.view === 'home') c.innerHTML = viewHome();
+  else if (ui.view === 'mytasks') c.innerHTML = viewMyTasks();
+  else if (ui.view === 'today') c.innerHTML = viewMyDay();
+  else if (ui.view === 'inbox') c.innerHTML = viewInbox();
+  else if (ui.view === 'team') c.innerHTML = viewTeam();
+  else if (ui.view === 'reviews') { c.innerHTML = viewReviews(); hydrateThumbs(c); }
+  else if (ui.view === 'profile') c.innerHTML = viewProfile();
+  else if (ui.view === 'clients') c.innerHTML = viewClients();
+  else if (ui.view === 'client') {
+    const cl = clientById(ui.clientId);
+    const f = cl && cl.folders.find((x) => x.id === ui.folderId);
+    if (!cl) { ui.view = 'clients'; c.innerHTML = viewClients(); }
+    else c.innerHTML = f ? viewClientFolder(cl, f) : viewClient(cl);
+    hydrateThumbs(c);
+  }
+  else {
+    const p = proj(ui.projectId);
+    c.innerHTML = p.view === 'board' ? viewBoard(p) : viewList(p);
+  }
+  c.scrollTop = scroll.top;
+  const b = c.querySelector('.board');
+  if (b) b.scrollLeft = scroll.left;
+}
+
+/* ---------- Pieces ---------- */
+const checkbox = (t) => (t.done || canComplete(t)
+  ? `<button class="check ${t.done ? 'done' : ''}" data-action="toggle" data-id="${t.id}" title="${t.done ? 'Mark incomplete' : 'Mark complete'}">${icon('check')}</button>`
+  : '');
+
+function taskMetaIcons(t) {
+  const subs = subtasksOf(t.id);
+  let h = '';
+  if (subs.length) h += `<span class="meta" title="Subtasks">${subs.filter((s) => s.done).length}/${subs.length}${icon('sub')}</span>`;
+  if (t.comments.length) h += `<span class="meta" title="Comments">${t.comments.length}${icon('chat')}</span>`;
+  const nFiles = t.attachments.length + t.comments.reduce((n, c) => n + (c.attachments || []).length, 0);
+  if (nFiles) h += `<span class="meta" title="Files">${nFiles}${icon('clip')}</span>`;
+  return h;
+}
+
+function projChip(t) {
+  const p = proj(t.projectId);
+  return p ? `<span class="proj-chip"><i style="background:${p.color}"></i>${esc(p.name)}</span>` : `<span class="proj-chip ph">My Tasks</span>`;
+}
+
+function highlight(text) {
+  const s = esc(text);
+  if (!ui.search) return s;
+  const q = ui.search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return q ? s.replace(new RegExp('(' + esc(q) + ')', 'ig'), '<mark>$1</mark>') : s;
+}
+
+function taskRow(t, o = {}) {
+  const parent = o.showParent && t.parentId ? task(t.parentId) : null;
+  const st = statusInfo(t);
+  const nameCell = `<div class="cell name"><span class="grip">${o.drag ? icon('grip') : ''}</span>${statusIcon(t)}${parent ? `<span class="parent-ref">${esc(parent.title || 'Untitled')} ›</span>` : ''}<span class="title">${t.title ? highlight(t.title) : '<span class="ph">Untitled task</span>'}</span>${taskMetaIcons(t)}${t.cdStatus && !t.done ? cdChip(t) : ''}<span class="row-actions">${checkbox(t)}${can('deleteTask') ? `<button class="icon-btn sm row-del" data-action="delete-task" data-id="${t.id}" title="Delete task">${icon('trash')}</button>` : ''}</span>${avatarStack(t.assignees, 20, 3, t)}</div>`;
+  const due = `<div class="cell"><span class="due ${dueClass(t)}">${fmtDue(t.due)}</span></div>`;
+  const prio = `<div class="cell">${prioFlag(prioOf(t), true)}</div>`;
+  const cells = o.showProject
+    ? nameCell + `<div class="cell">${statusPill(t)}</div><div class="cell">${projChip(t)}</div>` + due + prio
+    : nameCell + due + prio + `<div class="cell tags-cell">${t.tags.map(tagChip).join('')}</div>`;
+  return `<div class="row task-row ${t.done ? 'is-done' : ''} ${isUrgent(t) && !t.done ? 'is-urgent' : ''} ${ui.taskId === t.id ? 'is-selected' : ''}" data-task="${t.id}" ${o.drag ? 'draggable="true"' : ''}>${cells}</div>`;
+}
+
+function listHead(showProject) {
+  return showProject
+    ? `<div class="list-head"><div>Name</div><div>Status</div><div>Project</div><div>Due date</div><div>Priority</div></div>`
+    : `<div class="list-head"><div>Name</div><div>Due date</div><div>Priority</div><div>Tags</div></div>`;
+}
+
+function prioFlag(p, compact) {
+  p = normPrio(p);
+  if (p === 'urgent') return `<span class="prio-flag urgent">${icon('flag')}<span>Urgent</span></span>`;
+  if (typeof p === 'number') return `<span class="prio-flag num"><span class="prio-num">${p}</span>${compact ? '' : `<span>Priority ${p}</span>`}</span>`;
+  return compact ? '' : `<span class="prio-flag none">${icon('flag')}<span>No priority</span></span>`;
+}
+
+/* ---------- List view ---------- */
+function viewList(p) {
+  const showDone = !!ui.showDone[p.id];
+  const sections = p.sections.map((s) => {
+    const all = db.tasks.filter((t) => t.projectId === p.id && t.sectionId === s.id && !t.parentId).sort((a, b) => urgentFirst(a, b) || byOrder(a, b));
+    const tasks = showDone ? all : all.filter((t) => !t.done);
+    const collapsed = ui.collapsed[s.id];
+    return `<div class="section ${collapsed ? 'collapsed' : ''}" data-section="${s.id}">
+      <div class="section-head" data-drop-section="${s.id}">
+        <button class="icon-btn sm chev" data-action="collapse" data-id="${s.id}">${icon('chev')}</button>
+        <span class="sname" data-action="rename-section" data-id="${s.id}" title="Double-click to rename">${sectionPill(s)}</span>
+        <span class="scount">${all.filter((t) => !t.done).length || ''}</span>
+        <button class="icon-btn sm more" data-action="section-menu" data-id="${s.id}">${icon('more')}</button>
+      </div>
+      <div class="section-body">
+        ${tasks.map((t) => taskRow(t, { drag: true })).join('')}
+        ${can('createTask') ? `<div class="add-row" data-action="add-task-inline" data-section="${s.id}">${icon('plus')}<span>Add task…</span></div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+  const total = db.tasks.filter((t) => t.projectId === p.id && !t.parentId);
+  const doneN = total.filter((t) => t.done).length;
+  return `<div class="list-wrap">
+    <div class="list-toolbar">
+      ${can('createTask') ? `<button class="btn primary" data-action="add-task-top">${icon('plus')}Add task</button>` : ''}
+      <div class="spacer"></div>
+      <button class="btn ghost" data-action="toggle-show-done">${icon('check-circle')}${showDone ? 'Hide' : 'Show'} completed${doneN ? ` (${doneN})` : ''}</button>
+    </div>
+    ${listHead(false)}
+    ${sections}
+    <div class="add-section" data-action="add-section">${icon('plus')}<span>Add status</span></div>
+  </div>`;
+}
+
+/* ---------- Board view ---------- */
+function card(t) {
+  const subs = subtasksOf(t.id);
+ return `<div class="card ${t.done ? 'is-done' : ''} ${isUrgent(t) && !t.done ? 'is-urgent' : ''} ${ui.taskId === t.id ? 'is-selected' : ''}" data-task="${t.id}" draggable="true">
+    <div class="card-top">${checkbox(t)}<div class="title">${t.title ? esc(t.title) : '<span class="ph">Untitled task</span>'}</div></div>
+    ${t.tags.length ? `<div class="card-tags">${t.tags.map(tagChip).join('')}</div>` : ''}
+    ${t.due || subs.length || t.comments.length || t.attachments.length || prioOf(t) !== 'none' || (t.assignees || []).length || t.cdStatus ? `<div class="card-foot">${t.due ? `<span class="due ${dueClass(t)}">${icon('cal')}${fmtDue(t.due)}</span>` : ''}${prioFlag(prioOf(t), true)}${t.cdStatus && !t.done ? cdChip(t) : ''}<span class="spacer"></span>${taskMetaIcons(t)}${avatarStack(t.assignees, 20, 3, t)}</div>` : ''}
+  </div>`;
+}
+
+function viewBoard(p) {
+  const showDone = !!ui.showDone[p.id];
+  const cols = p.sections.map((s) => {
+ const all = db.tasks.filter((t) => t.projectId === p.id && t.sectionId === s.id && !t.parentId).sort((a, b) => urgentFirst(a, b) || byOrder(a, b));
+    const tasks = showDone ? all : all.filter((t) => !t.done);
+    return `<div class="col" data-col="${s.id}" style="--col:${s.color}">
+      <div class="col-head">
+        <span class="sname" data-action="rename-section" data-id="${s.id}" title="Double-click to rename">${sectionPill(s)}</span>
+        <span class="scount">${all.filter((t) => !t.done).length || ''}</span>
+        <span class="spacer"></span>
+        ${can('createTask') ? `<button class="icon-btn sm" data-action="add-card" data-section="${s.id}" title="Add task">${icon('plus')}</button>` : ''}
+        <button class="icon-btn sm" data-action="section-menu" data-id="${s.id}">${icon('more')}</button>
+      </div>
+      <div class="col-body">${tasks.map(card).join('')}</div>
+      ${can('createTask') ? `<div class="col-add" data-action="add-card" data-section="${s.id}">${icon('plus')}Add task</div>` : ''}
+    </div>`;
+  }).join('');
+  return `<div class="board">${cols}<div class="add-col" data-action="add-section">${icon('plus')}<span>Add status</span></div>
+    <div style="flex:none;display:flex;align-items:flex-start;padding-top:6px"><button class="btn ghost" data-action="toggle-show-done">${showDone ? 'Hide' : 'Show'} completed</button></div></div>`;
+}
+
+/* ---------- My Tasks ---------- */
+const byDayThenPrio = (a, b) => (a.due || '9999').localeCompare(b.due || '9999') || byPrio(a, b) || a.createdAt.localeCompare(b.createdAt);
+function myTaskGroups() {
+  if (ui.myTasksTab === 'done') {
+    const cutoff = Date.now() - AUTO_DELETE_DAYS * 86400000;
+    return [{ id: 'done', name: 'Recently completed', color: '#3ddc97', empty: 'No completed tasks in the last 30 days',
+      tasks: myTop().filter((t) => myDoneAt(t) && new Date(myDoneAt(t)).getTime() > cutoff).sort((a, b) => myDoneAt(b).localeCompare(myDoneAt(a))) }];
+  }
+  const open = myTop().filter(myOpen);
+  return [
+    { id: 'overdue', name: 'Overdue', color: '#e5484d', tasks: open.filter((t) => t.due && dayDiff(t.due) < 0).sort(byDayThenPrio) },
+    { id: 'today', name: 'Today', color: '#4c9aff', empty: 'Nothing due today 🎉', tasks: open.filter((t) => t.due && dayDiff(t.due) === 0).sort(byDayThenPrio) },
+    { id: 'upcoming', name: 'Upcoming', color: '#a875ff', tasks: open.filter((t) => t.due && dayDiff(t.due) > 0).sort(byDayThenPrio) },
+    { id: 'nodate', name: 'No due date', color: '#87909e', tasks: open.filter((t) => !t.due).sort((a, b) => byPrio(a, b) || a.createdAt.localeCompare(b.createdAt)) },
+  ];
+}
+
+function mwDue(t) {
+  if (!t.due) return '';
+  const d = dayDiff(t.due);
+  if (!t.done && d < 0) return d === -1 ? 'Yesterday' : `${-d} days ago`;
+  return fmtDue(t.due);
+}
+function mwRow(t) {
+  const p = proj(t.projectId);
+  const loc = [p ? p.name : 'My Tasks', statusInfo(t).name].join(' / ');
+  return `<div class="mw-row task-row ${t.done ? 'is-done' : ''} ${isUrgent(t) && !t.done ? 'is-urgent' : ''} ${ui.taskId === t.id ? 'is-selected' : ''}" data-task="${t.id}">
+    ${statusIcon(t)}
+    <span class="title">${t.title ? highlight(t.title) : '<span class="ph">Untitled task</span>'}</span>${needsOwner(t) ? '<span class="na-chip" title="Assign someone to this task">No assignee</span>' : ''}
+    <span class="mw-loc">• ${p ? `<i style="background:${p.color}"></i>` : ''}${esc(loc)}</span>
+    ${t.cdStatus && !t.done ? cdChip(t) : ''}
+    <span class="spacer"></span>
+    <span class="row-actions">${checkbox(t)}${can('deleteTask') ? `<button class="icon-btn sm row-del" data-action="delete-task" data-id="${t.id}" title="Delete task">${icon('trash')}</button>` : ''}</span>
+    ${prioFlag(prioOf(t), true)}
+    ${avatarStack(t.assignees, 20, 3, t)}
+    <span class="mw-due due ${myOpen(t) ? dueClass(t) : ''}">${myDoneAt(t) ? (t.done ? '' : 'My part · ') + esc(fmtDay(ymd(new Date(myDoneAt(t))))) : esc(mwDue(t))}</span>
+  </div>`;
+}
+function viewMyTasks() {
+  const tab = ui.myTasksTab === 'done' ? 'done' : 'todo';
+  const open = myTop().filter(myOpen);
+  const cutoff = Date.now() - AUTO_DELETE_DAYS * 86400000;
+  const doneList = myTop().filter((t) => myDoneAt(t) && new Date(myDoneAt(t)).getTime() > cutoff).sort((a, b) => myDoneAt(b).localeCompare(myDoneAt(a)));
+  const groups = tab === 'done'
+    ? [{ id: 'mw-done', name: 'Recently completed', tasks: doneList, empty: 'Tasks you complete in the last 30 days show here.' }]
+    : [
+      { id: 'mw-today', name: 'Today', tasks: open.filter((t) => t.due && dayDiff(t.due) === 0).sort(byDayThenPrio), empty: 'Tasks and reminders assigned to you will show here.' },
+      { id: 'mw-overdue', name: 'Overdue', tasks: open.filter((t) => t.due && dayDiff(t.due) < 0).sort(byDayThenPrio) },
+      { id: 'mw-next', name: 'Next', tasks: open.filter((t) => t.due && dayDiff(t.due) > 0).sort(byDayThenPrio) },
+      { id: 'mw-none', name: 'Unscheduled', tasks: open.filter((t) => !t.due).sort((a, b) => byPrio(a, b) || a.createdAt.localeCompare(b.createdAt)) },
+    ];
+  const body = groups.map((g) => {
+    const collapsed = ui.mytasksCollapsed[g.id] != null ? ui.mytasksCollapsed[g.id] : (g.id === 'mw-next' || g.id === 'mw-none') && g.tasks.length > 12;
+    return `<div class="mw-group ${collapsed ? 'collapsed' : ''}">
+      <button class="mw-ghead" data-action="mw-group" data-id="${g.id}"><span class="mw-caret">${icon('chev')}</span>${g.name}<span class="mw-n">${g.tasks.length}</span></button>
+      <div class="mw-gbody">${g.tasks.map(mwRow).join('') || (g.empty ? `<div class="mw-empty">${g.empty}</div>` : '')}</div>
+    </div>`;
+  }).join('');
+  return `<div class="mywork">
+    <div class="mw-card">
+      <div class="mw-title">My Work</div>
+      <div class="mw-tabs">
+        <button class="mw-tab ${tab === 'todo' ? 'on' : ''}" data-action="mt-tab" data-tab="todo">To Do</button>
+        <button class="mw-tab ${tab === 'done' ? 'on' : ''}" data-action="mt-tab" data-tab="done">Done</button>
+      </div>
+      ${tab === 'todo' && can('createTask') ? `<div class="quick-add mw-add">${icon('plus')}<input id="quick-add" placeholder="Add a task… (due today)" autocomplete="off"><span class="hint">Enter</span></div>` : ''}
+      ${body}
+    </div>
+  </div>`;
+}
+
+/* ---------- My Day ---------- */
+function viewMyDay() {
+  const today = todayStr();
+  const day = ui.day || today;
+  const isToday = day === today;
+  const dt = parseYmd(day);
+  // week strip (Mon–Sun) around the selected day
+  const wd = (dt.getDay() + 6) % 7;
+  const start = addDays(day, -wd);
+  const strip = Array.from({ length: 7 }, (_, i) => {
+    const d = addDays(start, i);
+    const n = db.tasks.filter((t) => onMyList(t) && myOpen(t) && t.due === d).length;
+    const dd = parseYmd(d);
+    return `<button class="ds-day ${d === day ? 'on' : ''} ${d === today ? 'today' : ''}" data-action="pick-day" data-day="${d}">
+      <span class="ds-wd">${dd.toLocaleDateString('en-US', { weekday: 'short' })}</span>
+      <span class="ds-n">${dd.getDate()}</span>
+      <span class="ds-dots">${n ? `<i></i>${n > 1 ? '<i></i>' : ''}${n > 2 ? '<i></i>' : ''}` : ''}</span>
+    </button>`;
+  }).join('');
+
+  const open = db.tasks.filter((t) => onMyList(t) && myOpen(t));
+  const overdue = isToday ? open.filter((t) => t.due && t.due < today) : [];
+  const dueDay = open.filter((t) => t.due === day);
+  const inProgress = open.filter((t) => t.start && t.start <= day && t.due && t.due > day);
+  const doneDay = db.tasks.filter((t) => isMine(t) && myDoneAt(t) && ymd(new Date(myDoneAt(t))) === day);
+  const sortP = (a, b) => byPrio(a, b) || (a.due || '').localeCompare(b.due || '') || a.createdAt.localeCompare(b.createdAt);
+  [overdue, dueDay, inProgress].forEach((g) => g.sort(sortP));
+  const planned = dueDay.length + overdue.length + doneDay.length;
+  const pct = planned ? Math.round((doneDay.length / planned) * 100) : 0;
+
+  const group = (id, name, color, tasks, emptyText) => {
+    if (!tasks.length && !emptyText) return '';
+    const collapsed = ui.mytasksCollapsed['md-' + id];
+    return `<div class="section ${collapsed ? 'collapsed' : ''}">
+      <div class="section-head">
+        <button class="icon-btn sm chev" data-action="collapse-mt" data-id="md-${id}">${icon('chev')}</button>
+        <span class="status-pill" style="background:${color};color:${textOn(color)}">${name}</span><span class="scount">${tasks.length || ''}</span>
+      </div>
+      <div class="section-body">${tasks.map((t) => taskRow(t, { showProject: true, showParent: true })).join('') || `<div class="add-row" style="cursor:default">${emptyText}</div>`}</div>
+    </div>`;
+  };
+
+  const title = isToday ? 'Today' : dayDiff(day) === 1 ? 'Tomorrow' : dayDiff(day) === -1 ? 'Yesterday' : dt.toLocaleDateString('en-US', { weekday: 'long' });
+  return `<div class="list-wrap with-proj myday">
+    <div class="md-head">
+      <div>
+        <div class="md-title">${title}</div>
+        <div class="md-sub">${dt.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</div>
+      </div>
+      <div class="md-nav">
+        <button class="icon-btn" data-action="shift-day" data-n="-1" title="Previous day">${icon('chev-left')}</button>
+        <button class="btn ghost" data-action="pick-day" data-day="${today}" ${isToday ? 'disabled' : ''}>Today</button>
+        <button class="icon-btn" data-action="shift-day" data-n="1" title="Next day">${icon('chev-right')}</button>
+      </div>
+    </div>
+    <div class="day-strip">
+      <button class="icon-btn" data-action="shift-day" data-n="-7" title="Previous week">${icon('chev-left')}</button>
+      ${strip}
+      <button class="icon-btn" data-action="shift-day" data-n="7" title="Next week">${icon('chev-right')}</button>
+    </div>
+    <div class="md-progress">
+      <div class="md-ring" style="--p:${pct}"><span>${pct}%</span></div>
+      <div class="md-stats">
+        <div><b>${doneDay.length}</b> of <b>${planned}</b> planned tasks done${isToday ? ' today' : ''}</div>
+        <div class="md-bar"><i style="width:${pct}%"></i></div>
+      </div>
+      <div class="md-chips">
+        ${isToday ? `<span class="md-chip red">${overdue.length} overdue</span>` : ''}
+        <span class="md-chip">${dueDay.length} due</span>
+        <span class="md-chip green">${doneDay.length} completed</span>
+      </div>
+    </div>
+    ${can('createTask') ? `<div class="quick-add">${icon('plus')}<input id="quick-add" data-day="${day}" placeholder="Add a task for ${isToday ? 'today' : esc(dt.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }))}…" autocomplete="off"><span class="hint">Enter to add</span></div>` : ''}
+    ${listHead(true)}
+    ${group('overdue', 'Overdue', '#e5484d', overdue)}
+    ${group('due', isToday ? 'Due today' : 'Due this day', '#4c9aff', dueDay, isToday ? 'Nothing else due today 🎉' : 'Nothing due this day')}
+    ${group('ongoing', 'In progress (started, due later)', '#a875ff', inProgress)}
+    ${group('done', 'Completed', '#3ddc97', doneDay)}
+  </div>`;
+}
+
+/* ---------- Home ---------- */
+function viewHome() {
+  const h = new Date().getHours();
+  const greet = h < 5 ? 'Good evening' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+  const open = myTop().filter(myOpen);
+  const overdue = open.filter((t) => t.due && dayDiff(t.due) < 0).length;
+  const dueToday = open.filter((t) => t.due && dayDiff(t.due) === 0).length;
+  const week = open.filter((t) => t.due && dayDiff(t.due) > 0 && dayDiff(t.due) <= 7).length;
+  const weekAgo = Date.now() - 7 * 86400000;
+  const doneWeek = db.tasks.filter((t) => isMine(t) && myDoneAt(t) && new Date(myDoneAt(t)).getTime() > weekAgo).length;
+
+  const prio = open.slice().sort((a, b) => {
+    const ad = a.due ? dayDiff(a.due) : 9999, bd = b.due ? dayDiff(b.due) : 9999;
+    return ad - bd || prioRank(prioOf(a)) - prioRank(prioOf(b));
+  }).slice(0, 8);
+
+  const projects = db.projects.slice().sort(byOrder).map((p) => {
+    const ts = db.tasks.filter((t) => t.projectId === p.id && !t.parentId);
+    const d = ts.filter((t) => t.done).length;
+    const pct = ts.length ? Math.round((d / ts.length) * 100) : 0;
+    return `<div class="proj-card" data-project="${p.id}">
+      <div class="page-icon" style="background:${p.color}">${esc(initials(p.name))}</div>
+      <div style="flex:1;min-width:0"><div class="pc-name">${esc(p.name)}</div>
+        <div class="pc-meta">${ts.length - d} open · ${pct}% done</div>
+        <div class="bar"><i style="width:${pct}%;background:${p.color}"></i></div></div>
+    </div>`;
+  }).join('');
+
+  return `<div class="home">
+    <div class="home-date">${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</div>
+    <div class="home-greet">${greet}, ${esc(fullName(me()).split(' ')[0])}</div>
+    <div class="stats">
+      <div class="stat green" data-nav="mytasks"><div class="n">${dueToday}</div><div class="l">Due today</div></div>
+      <div class="stat ${overdue ? 'red' : ''}" data-nav="mytasks"><div class="n">${overdue}</div><div class="l">Overdue</div></div>
+      <div class="stat amber" data-nav="mytasks"><div class="n">${week}</div><div class="l">Due in the next 7 days</div></div>
+      <div class="stat"><div class="n">${doneWeek}</div><div class="l">Completed this week</div></div>
+    </div>
+    <div class="home-grid">
+      <div class="widget">
+        <h3>My priorities<span class="spacer"></span><button class="btn ghost" data-nav="mytasks">View all ${icon('arrow')}</button></h3>
+        ${prio.length ? prio.map((t) => `<div class="mini-row" data-task="${t.id}">${statusIcon(t)}<span class="title">${t.title ? esc(t.title) : '<span class="ph">Untitled task</span>'}</span>${prioFlag(prioOf(t), true)}<span class="due ${dueClass(t)}">${fmtDue(t.due)}</span></div>`).join('')
+          : `<div class="empty"><div class="big">You're all caught up</div>Tasks assigned to you will show up here.</div>`}
+      </div>
+      <div class="widget">
+        <h3>Projects<span class="spacer"></span></h3>
+        <div class="proj-cards">${projects}
+          <div class="proj-card new" data-action="new-project"><div class="page-icon">${icon('plus')}</div><div class="pc-name" style="color:var(--text-2)">New project</div></div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ---------- Search ---------- */
+function viewSearch() {
+  const q = ui.search.trim().toLowerCase();
+  const hits = db.tasks.filter((t) => {
+    if (t.title.toLowerCase().includes(q) || t.notes.toLowerCase().includes(q)) return true;
+    if (t.tags.some((g) => g.toLowerCase().includes(q))) return true;
+    return t.comments.some((c) => c.text.toLowerCase().includes(q));
+  }).sort((a, b) => (a.done - b.done) || b.updatedAt.localeCompare(a.updatedAt));
+  return `<div class="list-wrap with-proj">
+    <div class="search-results-head">${hits.length} result${hits.length === 1 ? '' : 's'} for “${esc(ui.search.trim())}”</div>
+    ${hits.length ? listHead(true) + hits.map((t) => taskRow(t, { showProject: true })).join('') : '<div class="empty"><div class="big">No matching tasks</div>Try a different word, or search by tag.</div>'}
+  </div>`;
+}
+
+/* ================= Task page (detail) ================= */
+const REACTIONS = ['👍', '✅', '🎉', '❤️', '👀', '🙏'];
+const draftKey = (t, cid) => (cid ? t.id + ':' + cid : t.id);
+
+function fmtShort(iso) {
+  const d = new Date(iso);
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(sameYear ? {} : { year: 'numeric' }) }) + ' at ' +
+    d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).toLowerCase();
+}
+
+// The one composer at the bottom of the comments panel. It posts a comment, or a reply when
+// a thread is open or "Reply" was clicked on a comment.
+function composer(t, cid) {
+  const key = draftKey(t, cid);
+  const files = ui.commentFiles[key] || [];
+  const target = cid && t.comments.find((c) => c.id === cid);
+  const inThread = !!cid && ui.thread === cid;
+  const banner = target && !inThread
+    ? `<div class="cb-replying">${icon('reply')}<span>Replying to <b>${esc(target.authorId === currentUserId ? 'your comment' : firstName(target.authorId))}</b>${target.text ? ` <i>“${esc(trunc(target.text, 70))}”</i>` : ''}</span><button class="icon-btn xs" data-action="cancel-reply" title="Cancel reply (Esc)">${icon('x')}</button></div>` : '';
+  const ph = inThread ? 'Reply to this thread… Type @ to mention someone' : cid ? 'Write a reply… Type @ to mention someone' : 'Write a comment… Type @ to mention someone';
+  return `<div class="composer ${cid ? 'reply' : ''}">
+    ${banner}
+    <div class="rt-editor" contenteditable="true" id="d-comment" data-draft-key="${key}" ${cid ? `data-reply-to="${cid}"` : ''} data-placeholder="${ph}">${ui.commentDraft[key] || ''}</div>
+    ${files.length ? `<div class="cb-files">${files.map((a) => `<span class="cb-chip ${a.linked ? 'linked' : ''}">${isImage(a) && Host.isNative ? `<img src="${fileUrl(a)}" alt="">` : icon('clip')}<span>${esc(a.name)}</span><button data-action="unstage-file" data-key="${key}" data-id="${a.id}" title="Remove">${icon('x')}</button></span>`).join('')}</div>` : ''}
+    <div class="cb-foot">
+      <button class="icon-btn sm" data-action="attach-comment" ${cid ? `data-reply="${cid}"` : ''} title="Attach files">${icon('clip')}</button>
+      ${fmtToolbar()}
+      <span class="spacer"></span>${clipPasteBtn('comment')}<span class="hint">⌘ Enter</span>
+      <button class="btn primary sm" data-action="add-comment" ${cid ? `data-reply="${cid}"` : ''} title="⌘ Enter">${cid ? 'Reply' : 'Comment'}</button>
+    </div>
+  </div>`;
+}
+
+function commentHTML(t, c, isReply) {
+  const editing = ui.editingComment === c.id;
+  const reacts = Object.entries(c.reactions || {}).filter(([, n]) => n);
+  return `<div class="cm ${isReply ? 'cm-reply' : ''}" data-comment="${c.id}">
+    <span class="cm-av-wrap" data-user-card="${esc(c.authorId)}">${avatarHTML(c.authorId, 28, 'cm-av')}</span>
+    <div class="cm-body">
+      <div class="cm-meta"><b data-user-card="${esc(c.authorId)}">${esc(c.authorId === currentUserId ? 'You' : userName(c.authorId))}</b><span title="${fmtDateTime(c.at)}">${fmtShort(c.at)}</span>${c.editedAt ? '<span class="cm-edited">(edited)</span>' : ''}
+        <span class="cm-tools">
+          <button class="icon-btn sm" data-action="react-menu" data-id="${c.id}" title="React">${icon('smile')}</button>
+          ${isReply || ui.thread === c.id ? '' : `<button class="icon-btn sm" data-action="reply" data-id="${c.id}" title="Reply">${icon('reply')}</button>`}
+          ${c.authorId === currentUserId || (me() && me().role === 'admin') ? `<button class="icon-btn sm" data-action="comment-menu" data-id="${c.id}" title="More">${icon('more')}</button>` : ''}
+        </span>
+      </div>
+      ${editing
+        ? `<div class="composer edit"><div class="rt-editor" contenteditable="true" id="edit-comment" data-placeholder="Edit comment…">${c.html ? sanitizeHTML(c.html) : esc(c.text).replace(/\n/g, '<br>')}</div><div class="cb-foot">${fmtToolbar()}<span class="spacer"></span><button class="btn ghost sm" data-action="cancel-edit">Cancel</button><button class="btn primary sm" data-action="save-edit" data-id="${c.id}">Save</button></div></div>`
+        : (c.html ? `<div class="cm-text rich">${sanitizeHTML(c.html, true)}</div>` : c.text ? `<div class="cm-text">${linkify(esc(c.text))}</div>` : '')}
+      ${(c.attachments || []).length ? `<div class="c-files">${c.attachments.map((a) => attPreview(a, 'comment')).join('')}</div>` : ''}
+      ${reacts.length ? `<div class="cm-reacts">${reacts.map(([e, n]) => `<button class="react on" data-action="react" data-id="${c.id}" data-emoji="${e}">${e}<span>${n}</span></button>`).join('')}</div>` : ''}
+    </div>
+  </div>`;
+}
+
+const FMT_BUTTONS = [
+  ['bold', '<b>B</b>', 'Bold (⌘B)'], ['italic', '<i>I</i>', 'Italic (⌘I)'], ['underline', '<u>U</u>', 'Underline (⌘U)'],
+  ['strikeThrough', '<s>S</s>', 'Strikethrough'], ['code', '&lt;/&gt;', 'Code'], ['insertUnorderedList', '•', 'Bulleted list'],
+  ['insertOrderedList', '1.', 'Numbered list'], ['quote', '❝', 'Quote'], ['link', '🔗', 'Link'],
+];
+function fmtToolbar() {
+  return `<span class="rt-tools">${FMT_BUTTONS.map(([f, label, tip]) => `<button class="rt-btn" data-action="fmt" data-fmt="${f}" title="${tip}" tabindex="-1">${label}</button>`).join('')}</span>`;
+}
+// Keep the editor selection when clicking toolbar buttons
+document.addEventListener('mousedown', (e) => { if (e.target.closest('.rt-btn')) e.preventDefault(); });
+async function applyFormat(fmt, btn) {
+  const comp = btn.closest('.composer');
+  const ed = comp && comp.querySelector('.rt-editor');
+  if (!ed) return;
+  if (document.activeElement !== ed) { ed.focus(); placeCaretAtEnd(ed); }
+  const sel = window.getSelection();
+  if (fmt === 'link') {
+    const range = sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
+    const res = await dialog({ title: 'Add link', input: { label: 'Web address', placeholder: 'https://…' }, okText: 'Add link' });
+    if (!res || !res.value) return;
+    let url = res.value.trim();
+    if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+    ed.focus();
+    if (range) { sel.removeAllRanges(); sel.addRange(range); }
+    if (sel.isCollapsed) document.execCommand('insertHTML', false, `<a href="${esc(url)}">${esc(url)}</a>`);
+    else document.execCommand('createLink', false, url);
+  } else if (fmt === 'code') {
+    const txt = sel.toString();
+    document.execCommand('insertHTML', false, `<code>${esc(txt || 'code')}</code>&nbsp;`);
+  } else if (fmt === 'quote') {
+    document.execCommand('formatBlock', false, 'blockquote');
+  } else {
+    document.execCommand(fmt, false, null);
+  }
+  ed.dispatchEvent(new Event('input', { bubbles: true }));
+}
+function placeCaretAtEnd(el) {
+  const r = document.createRange(); r.selectNodeContents(el); r.collapse(false);
+  const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+}
+// Allow only simple formatting tags; display mode turns links into safe in-app links
+const RT_TAGS = { B: 'b', STRONG: 'b', I: 'i', EM: 'i', U: 'u', S: 's', STRIKE: 's', DEL: 's', CODE: 'code', PRE: 'pre', UL: 'ul', OL: 'ol', LI: 'li', BLOCKQUOTE: 'blockquote', BR: 'br', DIV: 'div', P: 'div', A: 'a' };
+function sanitizeHTML(html, display) {
+  const tpl = document.createElement('template');
+  tpl.innerHTML = String(html || '');
+  const walk = (node, inLink) => {
+    let out = '';
+    node.childNodes.forEach((n) => {
+      if (n.nodeType === 3) { out += display && !inLink ? linkify(esc(n.nodeValue)) : esc(n.nodeValue); return; }
+      if (n.nodeType !== 1) return;
+      if (n.tagName === 'SPAN' && n.classList.contains('mention') && n.dataset.user) {
+        const id = n.dataset.user;
+        const label = '@' + (userById(id) ? fullName(userById(id)) : n.textContent.replace(/^@/, ''));
+        out += display ? `<span class="mention ${id === currentUserId ? 'me' : ''}" data-user="${esc(id)}">${esc(label)}</span>`
+          : `<span class="mention" data-user="${esc(id)}" contenteditable="false">${esc(label)}</span>`;
+        return;
+      }
+      if (n.tagName === 'SPAN' && n.classList.contains('fileref') && n.dataset.fpath) {
+        out += fileRefHTML({ path: n.dataset.fpath, name: n.dataset.fname || n.dataset.fpath.split('/').pop(), size: +n.dataset.fsize || 0, thumb: n.dataset.fthumb || null }, display);
+        return;
+      }
+      const tag = RT_TAGS[n.tagName];
+      if (!tag) { out += walk(n, inLink); return; }
+      if (tag === 'br') { out += '<br>'; return; }
+      if (tag === 'a') {
+        const href = n.getAttribute('href') || '';
+        if (!/^https?:\/\//i.test(href)) { out += walk(n, inLink); return; }
+        out += display ? `<a href="#" data-action="open-url" data-url="${esc(href)}">${walk(n, true)}</a>` : `<a href="${esc(href)}">${walk(n, true)}</a>`;
+        return;
+      }
+      out += `<${tag}>${walk(n, inLink)}</${tag}>`;
+    });
+    return out;
+  };
+  return walk(tpl.content, false);
+}
+const editorEmpty = (ed) => !ed.textContent.trim() && !ed.querySelector('img, li');
+
+function linkify(html) {
+  return html.replace(/(https?:\/\/[^\s<]+)/g, '<a href="#" data-action="open-url" data-url="$1">$1</a>');
+}
+
+const repliesOf = (t, cid) => t.comments.filter((r) => r.parentId === cid).sort((a, b) => a.at.localeCompare(b.at));
+// Main feed: each first comment with a "N replies" link that opens the thread page
+function threadHTML(t, c) {
+  const replies = repliesOf(t, c.id);
+  const people = [...new Set(replies.map((r) => r.authorId).reverse())].slice(0, 3);
+  return `<div class="thread ${ui.replyTo === c.id ? 'is-target' : ''}" data-thread="${c.id}">
+    ${commentHTML(t, c, false)}
+    ${replies.length ? `<button class="thread-open" data-action="open-thread" data-id="${c.id}" title="Open this thread">
+      <span class="to-avs">${people.map((u) => avatarHTML(u, 20)).join('')}</span>
+      <b>${replies.length} ${replies.length === 1 ? 'reply' : 'replies'}</b><span class="to-last">Last reply ${timeAgo(replies[replies.length - 1].at)}</span>${icon('chev-right')}</button>` : ''}
+  </div>`;
+}
+// Thread page: the first comment, then every reply in order
+function threadPageHTML(t, c) {
+  const replies = repliesOf(t, c.id);
+  return `<div class="thread-root">${commentHTML(t, c, false)}</div>
+    <div class="thread-sep"><span>${replies.length ? `${replies.length} ${replies.length === 1 ? 'reply' : 'replies'}` : 'No replies yet'}</span></div>
+    ${replies.map((r) => commentHTML(t, r, true)).join('')}`;
+}
+
+function activityHTML(t) {
+  const items = [];
+  if (ui.activityFilter !== 'comments') (t.activity || []).forEach((a) => items.push({ at: a.at, html: `<div class="act-line"><span class="act-dot"></span><span><b>${esc(userName(a.actor))}</b> ${/^changed the <b>description<\/b>/.test(a.text) ? 'changed the description' : a.actor === currentUserId ? a.text.replace(/\btheir part\b/, 'your part') : a.text}</span><span class="act-time">${fmtShort(a.at)}</span></div>` }));
+  t.comments.filter((c) => !c.parentId).forEach((c) => items.push({ at: c.at, html: threadHTML(t, c) }));
+  items.sort((a, b) => a.at.localeCompare(b.at));
+  return items.map((i) => i.html).join('') || '<div class="empty" style="padding:30px 10px">No comments yet</div>';
+}
+
+function renderDetail() {
+  const pane = $('#detail');
+  const t = ui.taskId ? task(ui.taskId) : null;
+  if (!t) {
+    ui.taskId = null;
+    pane.classList.remove('open', 'anim', 'side');
+    pane.setAttribute('aria-hidden', 'true');
+    pane.innerHTML = '';
+    delete pane.dataset.shown;
+    return;
+  }
+  // keep scroll positions when re-rendering the same task
+  const prev = pane.dataset.shown === t.id ? { main: ($('.tm-main', pane) || {}).scrollTop || 0, feed: ($('.tm-feed', pane) || {}).scrollTop, focus: document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.draftKey : null } : null;
+
+  const parent = t.parentId ? task(t.parentId) : null;
+  const p = proj(t.projectId);
+  const sec = sectionOf(t);
+  const subs = subtasksOf(t.id);
+  const subsDone = subs.filter((x) => x.done).length;
+  const cl = t.checklist || [];
+  const clDone = cl.filter((x) => x.done).length;
+  const navIdx = ui.navIds.indexOf(t.id);
+  const projectOptions = ['<option value="">No project (My Tasks)</option>']
+    .concat(db.projects.slice().sort(byOrder).map((x) => `<option value="${x.id}" ${x.id === t.projectId ? 'selected' : ''}>${esc(x.name)}</option>`)).join('');
+  const nComments = t.comments.length;
+  const nTop = t.comments.filter((c) => !c.parentId).length;
+  if (ui.thread && !t.comments.some((c) => c.id === ui.thread && !c.parentId)) ui.thread = null;
+  const thread = ui.thread ? t.comments.find((c) => c.id === ui.thread) : null;
+  const mode = ui.detailMode === 'side' || ui.detailMode === 'full' ? ui.detailMode : 'modal';
+  const side = mode === 'side';
+  const sideTab = ui.sideTab === 'comments' ? 'comments' : 'details';
+
+  const keepMedia = {};
+  if (pane.dataset.shown === t.id) $$('[data-media-key]', pane).forEach((m) => { keepMedia[m.dataset.mediaKey] = m; });
+  const fresh = !pane.classList.contains('open');
+  pane.dataset.shown = t.id;
+  pane.innerHTML = `
+  <div class="tm-backdrop" data-action="close-detail"></div>
+  <div class="tm" role="dialog">
+    <div class="tm-top">
+      <div class="tm-crumbs">
+        ${p ? `<a class="crumb" data-action="go-project" data-id="${p.id}"><i style="background:${p.color}"></i>${esc(p.name)}</a>${sec ? `<span class="crumb-sep">/</span><span class="crumb plain">${esc(sec.name)}</span>` : ''}` : `<span class="crumb plain">${icon('check-circle')}My Tasks</span>`}
+        ${clientOfProject(p) ? `<button class="tm-client" data-action="open-client" data-id="${p.clientId}" title="Logos, guidelines and fonts for ${esc(clientOfProject(p).name)}">${clientLogoHTML(clientOfProject(p), 16)}<span>${esc(clientOfProject(p).name)} assets</span></button>` : ''}
+        ${parent ? `<span class="crumb-sep">/</span><a class="crumb" data-action="open-task" data-id="${parent.id}">${icon('sub')}${esc(parent.title || 'Untitled task')}</a>` : ''}
+      </div>
+      <div class="tm-actions">
+        <button class="icon-btn" data-action="nav-task" data-n="-1" ${navIdx > 0 ? '' : 'disabled'} title="Previous task">${icon('chev-left')}</button>
+        <button class="icon-btn" data-action="nav-task" data-n="1" ${navIdx >= 0 && navIdx < ui.navIds.length - 1 ? '' : 'disabled'} title="Next task">${icon('chev-right')}</button>
+        <span class="tm-divider"></span>
+        <button class="icon-btn" data-action="attach" title="Attach files">${icon('clip')}</button>
+        ${can('deleteTask') ? `<button class="icon-btn" data-action="delete-task" data-id="${t.id}" title="Delete task">${icon('trash')}</button>` : ''}
+        <div class="disp-wrap">
+          <button class="icon-btn" data-action="disp-toggle" title="Switch layout">${icon(side ? 'panel' : mode === 'full' ? 'layout' : 'modal')}</button>
+          <div class="disp-menu lay-menu">
+            ${[['modal', 'Modal'], ['full', 'Full screen'], ['side', 'Sidebar']].map(([m, l]) => `<button class="lay-opt ${mode === m ? 'on' : ''}" data-action="detail-mode" data-mode="${m}"><span class="lay-pic lp-${m}"><i class="dots"><b></b><b></b><b></b></i><i class="win"></i></span><span>${l}</span></button>`).join('')}
+          </div>
+        </div>
+        <button class="icon-btn" data-action="close-detail" title="Close window (Esc)">${icon('x')}</button>
+      </div>
+    </div>
+    <div class="tm-body">
+      <div class="tm-main">
+        <div class="tm-type"><span class="type-pill">${icon(parent ? 'sub' : 'check-circle')}${parent ? 'Subtask' : 'Task'}</span>${t.done ? `<span class="tm-id">Completed ${timeAgo(t.completedAt)} · auto-deletes in ${daysUntilAutoDelete(t)} day${daysUntilAutoDelete(t) === 1 ? '' : 's'}</span>` : ''}${creatorChip(t)}</div>
+        <textarea class="d-title" id="d-title" rows="1" placeholder="Task name" spellcheck="true" ${can('editTitle') ? '' : 'readonly'}>${esc(t.title)}</textarea>
+
+        <div class="props">
+          <div class="prop prop-status"><label>${icon('check-circle')}Status</label><div class="pv">
+            <span class="st-split" style="--sc:${statusInfo(t).color};--sf:${textOn(statusInfo(t).color)}"><button class="st-main" data-action="status-menu">${esc(statusInfo(t).name)}</button><button class="st-next" data-action="status-next" title="Move to next status">${icon('chev-right')}</button></span>
+            ${cdArea(t)}
+            ${t.done || canComplete(t) ? `<button class="done-btn ${t.done ? 'on' : ''}" data-action="toggle" data-id="${t.id}" title="${t.done ? 'Reopen' : 'Mark complete'}">${icon('check')}</button>` : ''}
+          </div></div>
+          <div class="prop prop-asg"><label>${icon('user')}Assignees</label><div class="pv">${(t.assignees || []).length
+            ? `<div class="asg-stack ${can('assign') ? '' : 'ro'}">${t.assignees.map((id) => `<span class="asg-av ${partDone(t, id) ? 'pdone' : ''}" ${can('assign') ? 'data-action="assign-menu"' : ''} title="${esc(fullName(userById(id)))}${partDone(t, id) ? ' — part done' : ''}">${avatarHTML(id, 28)}${partDone(t, id) ? `<i class="pd-tick">${icon('check')}</i>` : ''}${can('assign') ? `<button class="asg-x" data-action="unassign" data-id="${id}" title="Remove ${esc(fullName(userById(id)))}">${icon('x')}</button>` : ''}</span>`).join('')}</div>`
+            : (can('assign') ? `<button class="pv-empty" data-action="assign-menu">Empty</button>` : '<span class="pv-empty">Empty</span>')}${can('assign') && (t.assignees || []).length ? `<button class="asg-add" data-action="assign-menu" title="Assign people">${icon('plus')}</button>` : ''}</div></div>
+          ${partsRow(t)}
+          ${cdReviewRow(t)}
+          <div class="prop prop-dates"><label>${icon('cal')}Dates</label><div class="pv">
+            <span class="date-chip ${t.start ? 'set' : 'is-empty'}">${icon('cal')}<span class="date-lbl">${t.start ? esc(fmtDay(t.start)) : 'Start'}</span><input type="date" class="date-in" id="d-start" value="${t.start || ''}" title="Start date"></span>${t.start ? `<button class="icon-btn xs" data-action="clear-start" title="Remove start date">${icon('x')}</button>` : ''}
+            <span class="date-arrow">${icon('arrow')}</span>
+            <span class="date-chip ${t.due ? 'set' : 'is-empty'} ${dueClass(t)}">${icon('cal')}<span class="date-lbl">${t.due ? esc(mwDue(t)) : 'Due'}</span><input type="date" class="date-in" id="d-due" value="${t.due || ''}" title="Due date${t.due ? ': ' + esc(fmtDay(t.due)) : ''}"></span>${t.due ? `<button class="icon-btn xs" data-action="clear-due" title="Remove due date">${icon('x')}</button>` : `<button class="btn ghost xs" data-action="due-today">Today</button>`}
+          </div></div>
+          <div class="prop prop-prio"><label>${icon('flag')}Priority</label><div class="pv">${(t.assignees || []).length > 1 || ((t.assignees || []).length === 1 && t.assignees[0] !== currentUserId)
+            ? `<div class="prio-people">${t.assignees.map((id) => `<div class="pp-row ${id === currentUserId ? 'mine' : ''}">${avatarHTML(id, 20)}<span class="pp-name">${esc(id === currentUserId ? 'You' : fullName(userById(id)).split(' ')[0])}</span><button class="pv-btn" data-action="prio-menu" data-key="${id}" ${can('editPriority') ? '' : 'disabled'}>${prioOf(t, id) === 'none' ? '<span class="pv-empty">Empty</span>' : prioFlag(prioOf(t, id), true)}</button></div>`).join('')}</div>`
+            : (() => { const key = (t.assignees || [])[0] || '_'; const v = key === '_' ? normPrio((t.prio || {})._) : prioOf(t, key); return `<button class="pv-btn" data-action="prio-menu" data-key="${key}" ${can('editPriority') ? '' : 'disabled'}>${v === 'none' ? '<span class="pv-empty">Empty</span>' : prioFlag(v, true)}</button>`; })()}</div></div>
+          ${parent ? '' : `<div class="prop"><label>${icon('folder')}Project</label><div class="pv"><select class="field" id="d-project" ${can('editProject') ? '' : 'disabled'}>${projectOptions}</select></div></div>`}
+          <div class="prop"><label>${icon('tag')}Tags</label><div class="pv"><div class="tag-editor" id="d-tags">${t.tags.map((g, i) => { const [bg, fg] = tagColor(g); return `<span class="tag" style="background:${bg};color:${fg}">${esc(g)}${can('removeTag') ? `<button data-action="remove-tag" data-i="${i}">${icon('x')}</button>` : ''}</span>`; }).join('')}<input id="d-tag-input" placeholder="${t.tags.length ? 'Add' : 'Empty'}" list="tag-suggest" autocomplete="off"></div>
+            <datalist id="tag-suggest">${allTags().filter((g) => !t.tags.includes(g)).map((g) => `<option value="${esc(g)}">`).join('')}</datalist></div></div>
+        </div>
+
+        ${(() => {
+          const open = !!ui.descOpen[t.id];
+          const view = t.notesHtml ? sanitizeHTML(t.notesHtml, true) : t.notes ? linkify(esc(t.notes)).replace(/\n/g, '<br>') : '';
+          const body = open && can('editDesc')
+            ? `<div class="composer desc"><div class="rt-editor d-notes" contenteditable="true" id="d-notes" data-placeholder="Add a description, links or notes… Type @ to mention someone">${t.notesHtml ? sanitizeHTML(t.notesHtml) : esc(t.notes).replace(/\n/g, '<br>')}</div><div class="cb-foot">${fmtToolbar()}<span class="spacer"></span>${clipPasteBtn('desc')}</div></div>`
+            : `<div class="desc-view ${open ? 'full' : ''} ${view ? '' : 'blank'}" data-action="desc-open">${view || `<span class="ph">${can('editDesc') ? 'Add description… Type @ to mention someone' : 'No description'}</span>`}</div>`;
+          return `<div class="d-section desc-sec ${open ? 'open' : ''} ${view ? '' : 'is-empty'}">${body}
+            <div class="desc-toggle-wrap"><button class="desc-toggle" data-action="desc-toggle">${icon(open ? 'chev-up' : 'chev')}${open ? 'Collapse' : 'Expand'}</button></div></div>`;
+        })()}
+
+        <div class="d-section">
+          <h4>${icon('sub')}Subtasks <span class="n">${subs.length ? `${subsDone}/${subs.length}` : ''}</span>${subs.length ? `<span class="mini-bar"><i style="width:${Math.round(subsDone / subs.length * 100)}%"></i></span>` : ''}</h4>
+          <div id="d-subs">
+            ${subs.map((x) => `<div class="sub-row ${x.done ? 'is-done' : ''}" data-sub="${x.id}">${checkbox(x)}
+              <input class="sub-title" value="${esc(x.title)}" placeholder="Subtask name" data-sub-id="${x.id}" ${can('editTitle') ? '' : 'readonly'}>
+              ${avatarStack(x.assignees, 18)}
+              ${statusPill(x)}
+              ${x.due ? `<span class="due ${dueClass(x)}">${fmtDue(x.due)}</span>` : ''}
+              <span class="sub-actions"><button class="icon-btn sm" data-action="open-task" data-id="${x.id}" title="Open subtask">${icon('open')}</button>${can('deleteTask') ? `<button class="icon-btn sm" data-action="delete-sub" data-id="${x.id}" title="Delete subtask">${icon('trash')}</button>` : ''}</span>
+            </div>`).join('')}
+          </div>
+          ${can('createTask') ? `<div class="sub-add">${icon('plus')}<input id="d-sub-add" placeholder="Add subtask"></div>` : ''}
+        </div>
+
+        <div class="d-section">
+          <h4>${icon('checklist')}Checklist <span class="n">${cl.length ? `${clDone}/${cl.length}` : ''}</span>${cl.length ? `<span class="mini-bar"><i style="width:${Math.round(clDone / cl.length * 100)}%"></i></span>` : ''}</h4>
+          ${cl.map((c) => `<div class="cl-row ${c.done ? 'is-done' : ''}">
+            <button class="cl-box ${c.done ? 'on' : ''}" data-action="cl-toggle" data-id="${c.id}">${icon('check')}</button>
+            <input class="cl-text" value="${esc(c.text)}" data-cl-id="${c.id}" placeholder="Checklist item">
+            ${can('deleteChecklist') ? `<button class="icon-btn sm cl-del" data-action="cl-delete" data-id="${c.id}" title="Delete item">${icon('x')}</button>` : ''}
+          </div>`).join('')}
+          <div class="sub-add">${icon('plus')}<input id="d-cl-add" placeholder="Add checklist item"></div>
+        </div>
+
+        <div class="d-section">
+          <h4>${icon('clip')}Attachments <span class="n">${t.attachments.length || ''}</span><span class="spacer"></span><button class="btn ghost sm" data-action="attach">${icon('plus')}Add files</button></h4>
+          ${t.attachments.length ? `<div class="tile-grid">${t.attachments.map((a) => attTile(a)).join('')}</div>` : '<div class="ph" style="font-size:12.5px">No files yet. Files you attach are copied into your data folder.</div>'}
+        </div>
+
+        <div class="d-foot" id="d-foot">${detailFoot(t)}</div>
+      </div>
+
+      <aside class="tm-activity">
+        ${thread ? `<div class="tm-act-head thread-head">
+          <button class="icon-btn th-back" data-action="close-thread" title="Back to all comments (Esc)">${icon('chev-left')}</button>
+          <span class="tm-act-title">Thread<small>${repliesOf(t, thread.id).length} ${repliesOf(t, thread.id).length === 1 ? 'reply' : 'replies'} · started by ${esc(thread.authorId === currentUserId ? 'you' : userName(thread.authorId))}</small></span>
+        </div>` : `<div class="tm-act-head">
+          <span class="tm-act-title">Comments<small>Created ${esc(fmtDay(ymd(new Date(t.createdAt))))}</small></span>
+          <div class="seg">
+            <button class="${ui.activityFilter !== 'all' ? 'on' : ''}" data-action="act-filter" data-f="comments">Comments${nTop ? ` ${nTop}` : ''}</button>
+            <button class="${ui.activityFilter === 'all' ? 'on' : ''}" data-action="act-filter" data-f="all">All</button>
+          </div>
+        </div>`}
+        <div class="tm-feed ${thread ? 'in-thread' : ''}">${thread ? threadPageHTML(t, thread) : activityHTML(t)}</div>
+        <div class="tm-composer">${composer(t, thread ? thread.id : (ui.replyTo && t.comments.some((c) => c.id === ui.replyTo) ? ui.replyTo : null))}</div>
+      </aside>
+      ${side ? `<nav class="tm-rail">
+        <button class="rail-btn ${sideTab === 'details' ? 'on' : ''}" data-action="side-tab" data-tab="details" title="Task">${icon('details')}</button>
+        <button class="rail-btn ${sideTab === 'comments' ? 'on' : ''}" data-action="side-tab" data-tab="comments" title="Comments">${icon('comment')}${nComments ? `<i>${nComments}</i>` : ''}</button>
+      </nav>` : ''}
+    </div>
+  </div>`;
+  pane.classList.add('open');
+  pane.classList.toggle('anim', fresh);
+  pane.classList.toggle('side', side);
+  pane.classList.toggle('full', mode === 'full');
+  pane.dataset.tab = sideTab;
+  pane.setAttribute('aria-hidden', 'false');
+  $$('[data-media-key]', pane).forEach((m) => { const old = keepMedia[m.dataset.mediaKey]; if (old) m.replaceWith(old); });
+  hydratePreviews(pane);
+  autosize($('#d-title'));
+  // short descriptions don't need the Expand button
+  const dv = $('.desc-view:not(.full)', pane);
+  if (dv && dv.scrollHeight <= dv.clientHeight + 4) dv.closest('.desc-sec').classList.add('fits');
+
+  $$('.composer textarea', pane).forEach(autosize);
+  const feed = $('.tm-feed', pane);
+  if (prev) {
+    $('.tm-main', pane).scrollTop = prev.main;
+    if (feed && prev.feed != null) feed.scrollTop = prev.feed;
+    if (prev.focus) { const el = $(`[data-draft-key="${prev.focus}"]`, pane); if (el) { el.focus(); placeCaretAtEnd(el); } }
+  } else if (feed && ui.focusComment) { const fc = ui.focusComment; ui.focusComment = null; focusCommentInFeed(fc); }
+  else if (feed) stickFeedToBottom(feed);
+  if (ui.focusDesc) { ui.focusDesc = false; setTimeout(() => { const d = $('#detail .desc-sec'); if (d) d.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 120); }
+  hydrateThumbs(pane);
+}
+
+// Keep the activity feed scrolled to the newest item while images/videos finish loading,
+// until the user scrolls up themselves.
+function stickFeedToBottom(feed) {
+  let stick = true;
+  const toEnd = () => { if (stick) feed.scrollTop = feed.scrollHeight; };
+  toEnd();
+  const stop = () => { stick = false; };
+  feed.addEventListener('wheel', stop, { once: true, passive: true });
+  feed.addEventListener('mousedown', stop, { once: true });
+  $$('img, video, iframe', feed).forEach((m) => {
+    m.addEventListener('load', toEnd, { once: true });
+    m.addEventListener('loadedmetadata', toEnd, { once: true });
+  });
+  [60, 250, 600, 1200, 2500].forEach((ms) => setTimeout(toEnd, ms));
+}
+
+// "Created by" at the top of the task: hover for their card, click to @mention them in a comment
+function creatorChip(t) {
+  const u = t.createdBy && userById(t.createdBy);
+  if (!u) return '';
+  const mine = u.id === currentUserId;
+  return `<span class="tm-creator">Created by
+    <button class="cr-chip" ${mine ? '' : 'data-action="mention-user" title="Mention them in a comment"'} data-id="${esc(u.id)}" data-user-card="${esc(u.id)}" ${mine ? 'disabled' : ''}>${avatarHTML(u.id, 20)}<b>${esc(mine ? 'You' : fullName(u))}</b>${mine ? '' : `<i class="cr-at">@</i>`}</button>
+    <span class="cr-when">${esc(timeAgo(t.createdAt))}</span></span>`;
+}
+function mentionInComposer(uidToTag) {
+  const u = userById(uidToTag);
+  if (!u) return;
+  if (ui.detailMode === 'side' && ui.sideTab !== 'comments') { ui.sideTab = 'comments'; renderDetail(); }
+  const ed = $('#d-comment');
+  if (!ed) return;
+  ed.focus();
+  const sel = window.getSelection();
+  if (!sel.rangeCount || !ed.contains(sel.anchorNode)) placeCaretAtEnd(ed);
+  const before = ed.textContent && !/\s$/.test(ed.textContent) ? '&nbsp;' : '';
+  document.execCommand('insertHTML', false, `${before}<span class="mention" data-user="${esc(u.id)}" contenteditable="false">@${esc(fullName(u))}</span>&nbsp;`);
+  ed.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+/* ---- People card on hover: @mentions, comment authors, task creator ---- */
+const TEAM_LABEL = { admin: 'Admin', am: 'Account Manager', production: 'Production Team', social: 'Social Team' };
+function designationOf(u) {
+  if (!u) return '';
+  if (u.id === cdUserId()) return cdActing() ? `Acting Creative Director · ${TEAM_LABEL[u.role] || ''}` : 'Creative Director';
+  return TEAM_LABEL[u.role] || '';
+}
+let cardTimer = null, cardHideTimer = null, cardFor = null;
+function userCardHTML(u) {
+  return `<div class="ucard-top">${avatarHTML(u.id, 56)}<div class="ucard-id"><b>${esc(fullName(u))}${u.id === currentUserId ? ' <small>(you)</small>' : ''}</b><span class="ucard-role ${u.id === cdUserId() ? 'cd' : 'r-' + u.role}">${esc(designationOf(u))}</span></div></div>
+    <div class="ucard-rows">
+      <div>${icon('pin')}<span>${u.office ? esc(u.office) : '<i>Office not set</i>'}</span></div>
+      <div>${icon('mail')}<span>${esc(u.email)}</span></div>
+      ${u.active === false ? `<div class="ucard-off">${icon('lock')}<span>No longer on the team</span></div>` : ''}
+    </div>`;
+}
+function showUserCard(anchor, id) {
+  const u = userById(id);
+  if (!u) return;
+  let card = $('#ucard');
+  if (!card) { card = document.createElement('div'); card.id = 'ucard'; card.className = 'ucard'; document.body.appendChild(card); card.addEventListener('mouseenter', () => clearTimeout(cardHideTimer)); card.addEventListener('mouseleave', hideUserCard); }
+  card.innerHTML = userCardHTML(u);
+  cardFor = anchor;
+  const r = anchor.getBoundingClientRect();
+  card.style.visibility = 'hidden'; card.classList.add('on');
+  const w = card.offsetWidth, h = card.offsetHeight;
+  let left = Math.min(Math.max(8, r.left + r.width / 2 - w / 2), window.innerWidth - w - 8);
+  let top = r.bottom + 8;
+  if (top + h > window.innerHeight - 8) top = r.top - h - 8;
+  card.style.left = left + 'px'; card.style.top = Math.max(8, top) + 'px';
+  card.style.visibility = '';
+}
+function hideUserCard() {
+  clearTimeout(cardTimer);
+  cardHideTimer = setTimeout(() => { const c = $('#ucard'); if (c) c.classList.remove('on'); cardFor = null; }, 120);
+}
+document.addEventListener('mouseover', (e) => {
+  const el = e.target.closest && e.target.closest('.mention[data-user], [data-user-card]');
+  if (!el) return;
+  if (el === cardFor) { clearTimeout(cardHideTimer); return; }
+  clearTimeout(cardTimer); clearTimeout(cardHideTimer);
+  cardTimer = setTimeout(() => showUserCard(el, el.dataset.userCard || el.dataset.user), 280);
+});
+document.addEventListener('mouseout', (e) => {
+  const el = e.target.closest && e.target.closest('.mention[data-user], [data-user-card]');
+  if (!el || (e.relatedTarget && el.contains(e.relatedTarget))) return;
+  hideUserCard();
+});
+document.addEventListener('mousedown', (e) => { if (!(e.target.closest && e.target.closest('#ucard'))) { clearTimeout(cardTimer); const c = $('#ucard'); if (c) c.classList.remove('on'); cardFor = null; } }, true);
+
+function detailFoot(t) {
+  return `Created ${fmtDateTime(t.createdAt)}${t.createdBy ? ` by ${esc(userName(t.createdBy))}` : ''}<br>Last updated ${timeAgo(t.updatedAt)}${t.completedAt ? `<br>Completed ${fmtDateTime(t.completedAt)}` : ''}`;
+}
+function refreshDetailMeta() {
+  const t = ui.taskId && task(ui.taskId);
+  const f = $('#d-foot');
+  if (t && f) f.innerHTML = detailFoot(t);
+}
+
+const IMG_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'heic', 'bmp', 'tif', 'tiff', 'svg'];
+const fileExt = (name) => (String(name).split('.').pop() || '').toLowerCase();
+const isImage = (a) => IMG_EXT.includes(fileExt(a.name));
+const fileUrl = (a) => '/__file/' + String(a.path).split('/').map(encodeURIComponent).join('/');
+function fileIcon(a) {
+  return isImage(a) && Host.isNative
+    ? `<div class="ficon thumb"><img src="${fileUrl(a)}" alt="" loading="lazy"></div>`
+    : `<div class="ficon">${esc((fileExt(a.name) || 'file').slice(0, 4))}</div>`;
+}
+const VID_EXT = ['mp4', 'mov', 'm4v', 'webm'];
+const AUD_EXT = ['mp3', 'm4a', 'aac', 'wav', 'aif', 'aiff'];
+const TXT_EXT = ['txt', 'md', 'csv', 'log', 'json', 'xml'];
+function fileKind(a) {
+  const e = fileExt(a.name);
+  if (IMG_EXT.includes(e)) return 'image';
+  if (VID_EXT.includes(e)) return 'video';
+  if (AUD_EXT.includes(e)) return 'audio';
+  if (e === 'pdf') return 'pdf';
+  if (TXT_EXT.includes(e)) return 'text';
+  return 'other';
+}
+const OFFICE_LABEL = { ppt: 'PowerPoint', pptx: 'PowerPoint', key: 'Keynote', doc: 'Word', docx: 'Word', pages: 'Pages', xls: 'Excel', xlsx: 'Excel', numbers: 'Numbers', zip: 'Archive' };
+// Thumbnail made by macOS Quick Look (cached in the data folder); placeholder until it exists
+function thumbImg(a, mode) {
+  if (a.thumb) return `<img class="qthumb" src="${'/__file/' + a.thumb.split('/').map(encodeURIComponent).join('/')}" alt="">`;
+  const e = fileExt(a.name);
+  return `<div class="thumb-ph" data-thumb-for="${a.id}" data-mode="${mode}"><span class="ext">${esc((e || 'file').slice(0, 5))}</span><small>${esc(OFFICE_LABEL[e] || 'File')}</small></div>`;
+}
+function attTile(a) {
+  const kind = fileKind(a);
+  const inner = kind === 'image' && Host.isNative ? `<img src="${fileUrl(a)}" alt="" loading="lazy">` : (Host.isNative ? thumbImg(a, 'tile') : `<div class="thumb-ph"><span class="ext">${esc(fileExt(a.name) || 'file')}</span></div>`);
+  return `<div class="tile" data-action="tile-open" data-id="${a.id}" title="${esc(a.name)}">
+    <div class="tile-img">${inner}${kind === 'video' ? `<span class="tile-play">${icon('play')}</span>` : ''}</div>
+    <div class="tile-meta"><span>${esc(a.name)}</span><small>${fmtSize(a.size)}</small></div>
+    <div class="tile-actions">
+      <button class="icon-btn sm" data-action="copy-att" data-id="${a.id}" title="Copy — paste into a comment or description">${icon('copy')}</button>
+      <button class="icon-btn sm" data-action="quicklook" data-id="${a.id}" title="Preview">${icon('search')}</button>
+      <button class="icon-btn sm" data-action="reveal-att" data-id="${a.id}" title="${FINDER_LABEL}">${icon(Host.isServer ? 'download' : 'folder')}</button>
+      <button class="icon-btn sm" data-action="remove-att" data-id="${a.id}" title="Remove">${icon('trash')}</button>
+    </div>
+  </div>`;
+}
+let thumbQueue = Promise.resolve();
+function hydrateThumbs(root) {
+  if (!Host.isNative) return;
+  $$('[data-thumb-for]', root).forEach((ph) => {
+    const id = ph.dataset.thumbFor;
+    const tid = ph.dataset.thumbTask || ui.taskId;
+    ph.removeAttribute('data-thumb-for');
+    ph.dataset.waiting = id;
+    thumbQueue = thumbQueue.then(async () => {
+      const t = task(tid);
+      const a = ph.dataset.thumbClient ? clientFileById(id) : t && findAttachment(t, id);
+      if (!a) return;
+      if (!a.thumb) {
+        try { const r = await Host.call('thumb', { id: a.id, path: a.path }); if (r.thumb) { a.thumb = r.thumb; persist(800); } } catch (e) { return; }
+      }
+      if (a.thumb) $$(`[data-waiting="${id}"]`).forEach((el) => { el.outerHTML = thumbImg(a); });
+      else $$(`[data-waiting="${id}"]`).forEach((el) => el.classList.add('no-thumb'));
+    });
+  });
+}
+
+// Rich, full-width preview with a file bar underneath
+function attPreview(a, scope) {
+  if (!Host.isNative) return attRow(a, scope);
+  const url = fileUrl(a);
+  const key = `${scope}-${a.id}`;
+  const kind = fileKind(a);
+  let media = '';
+  if (kind === 'image') media = `<div class="ap-img" data-action="lightbox" data-src="${url}" data-name="${esc(a.name)}"><img src="${url}" alt="" loading="lazy"></div>`;
+  else if (kind === 'video') media = `<video class="ap-video" data-media-key="${key}" src="${url}" controls preload="metadata" playsinline></video>`;
+  else if (kind === 'audio') media = `<div class="ap-audio"><audio data-media-key="${key}" src="${url}" controls preload="metadata"></audio></div>`;
+  else if (kind === 'pdf') media = `<iframe class="ap-pdf" src="${url}" title="${esc(a.name)}"></iframe>`;
+  else if (kind === 'text') media = `<pre class="ap-text" data-text-src="${url}">Loading preview…</pre>`;
+  else media = `<div class="ap-doc" data-action="quicklook" data-id="${a.id}" title="Click to preview">${thumbImg(a, 'wide')}<span class="ap-doc-hint">${icon('search')}Preview</span></div>`;
+  return `<div class="ap ${media ? '' : 'ap-plain'}">
+    ${media}
+    <div class="ap-bar">
+      ${fileIcon(a)}
+      <div class="fname"><div>${esc(a.name)}</div><small>${fmtSize(a.size)}${a.addedAt ? ' · ' + timeAgo(a.addedAt) : ''}</small></div>
+      <button class="icon-btn sm" data-action="copy-att" data-id="${a.id}" title="Copy — paste into a comment or description">${icon('copy')}</button>
+      <button class="icon-btn sm" data-action="quicklook" data-id="${a.id}" title="Preview">${icon('search')}</button>
+      <button class="icon-btn sm" data-action="open-att" data-id="${a.id}" title="Open in default app">${icon('open')}</button>
+      <button class="icon-btn sm" data-action="reveal-att" data-id="${a.id}" title="${FINDER_LABEL}">${icon(Host.isServer ? 'download' : 'folder')}</button>
+      ${scope === 'task' ? `<button class="icon-btn sm" data-action="remove-att" data-id="${a.id}" title="Remove">${icon('trash')}</button>` : ''}
+    </div>
+  </div>`;
+}
+function hydratePreviews(root) {
+  $$('[data-text-src]', root).forEach((el) => {
+    fetch(el.dataset.textSrc).then((r) => r.text()).then((t) => {
+      el.textContent = t.length > 6000 ? t.slice(0, 6000) + '\n…' : (t || '(empty file)');
+    }).catch(() => { el.textContent = 'Preview not available'; });
+    el.removeAttribute('data-text-src');
+  });
+}
+// Full-screen preview of an attachment inside the app
+async function previewFile(a) {
+  if (!a) return;
+  ui.previewAtt = a;
+  const url = fileUrl(a);
+  const kind = fileKind(a);
+  let body = '';
+  if (kind === 'image') body = `<img class="fv-img" src="${url}" alt="">`;
+  else if (kind === 'video') body = `<video class="fv-video" src="${url}" controls autoplay playsinline></video>`;
+  else if (kind === 'audio') body = `<div class="fv-audio">${icon('play')}<audio src="${url}" controls autoplay></audio></div>`;
+  else if (kind === 'pdf') body = `<iframe class="fv-pdf" src="${url}"></iframe>`;
+  else if (kind === 'text') body = `<pre class="fv-text" data-text-src="${url}">Loading…</pre>`;
+  else body = `<div class="fv-doc">${thumbImg(a, 'wide')}<p>This preview shows the first page. Click <b>Open in app</b> to see the whole file.</p></div>`;
+  $('#overlay-root').innerHTML = `<div class="fv" data-action="close-preview">
+    <div class="fv-box">
+      <div class="fv-head">
+        ${fileIcon(a)}
+        <div class="fname"><div>${esc(a.name)}</div><small>${fmtSize(a.size)}</small></div>
+        <button class="btn ghost sm" data-action="copy-att" data-id="${a.id}" title="Paste it into any comment or description">${icon('copy')}Copy</button>
+        <button class="btn ghost sm" data-action="open-att" data-id="${a.id}">${icon('open')}Open in app</button>
+        <button class="icon-btn" data-action="reveal-att" data-id="${a.id}" title="${FINDER_LABEL}">${icon(Host.isServer ? 'download' : 'folder')}</button>
+        <button class="icon-btn" data-action="close-preview" title="Close (Esc)">${icon('x')}</button>
+      </div>
+      <div class="fv-body">${body}</div>
+    </div>
+  </div>`;
+  const root = $('#overlay-root');
+  hydratePreviews(root);
+  hydrateThumbs(root);
+}
+
+function lightbox(src, name) {
+  const root = $('#overlay-root');
+  root.innerHTML = `<div class="lightbox" data-action="close-lightbox"><img src="${src}" alt=""><div class="lb-name">${esc(name)}</div></div>`;
+}
+
+function attRow(a, scope) {
+  return `<div class="att" data-action="open-att" data-id="${a.id}" data-scope="${scope}" title="Open">
+    ${fileIcon(a)}
+    <div class="fname"><div>${esc(a.name)}</div><small>${fmtSize(a.size)}${a.addedAt ? ' · added ' + timeAgo(a.addedAt) : ''}</small></div>
+    <button class="icon-btn sm" data-action="copy-att" data-id="${a.id}" title="Copy — paste into a comment or description">${icon('copy')}</button>
+    <button class="icon-btn sm" data-action="reveal-att" data-id="${a.id}" data-scope="${scope}" title="${FINDER_LABEL}">${icon(Host.isServer ? 'download' : 'folder')}</button>
+    ${scope === 'task' ? `<button class="icon-btn sm" data-action="remove-att" data-id="${a.id}" title="Remove">${icon('trash')}</button>` : ''}
+  </div>`;
+}
+function findAttachment(t, id) {
+  let a = null;
+  if (t) {
+    a = t.attachments.find((x) => x.id === id);
+    if (a) return a;
+    for (const c of t.comments) { a = (c.attachments || []).find((x) => x.id === id); if (a) return a; }
+    for (const k of Object.keys(ui.commentFiles)) { if (k === t.id || k.startsWith(t.id + ':')) { a = (ui.commentFiles[k] || []).find((x) => x.id === id); if (a) return a; } }
+  }
+  return (ui.previewAtt && ui.previewAtt.id === id ? ui.previewAtt : null) || clientFileById(id);
+}
+
+/* ---- Copy a file once, paste it into any comment or description (no re-upload) ---- */
+const unesc = (s) => String(s).replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+const fileRefsIn = (html) => { const out = []; String(html || '').replace(/data-fpath="([^"]*)"/g, (_, p) => { out.push(unesc(p)); return ''; }); return out; };
+const attCore = (a) => ({ name: a.name, path: a.path, size: a.size || 0, ...(a.thumb ? { thumb: a.thumb } : {}) });
+function copyAttachment(a) {
+  if (!a) return;
+  const token = `📎 ${a.name}`;
+  ui.fileClip = { att: attCore(a), token };
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = token; ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+  } catch (e) { /* the in-app Paste button still works */ }
+  toast(`Copied “${a.name}” — paste it into any comment or description (⌘V)`);
+  if (ui.taskId) renderDetail();
+}
+// Inline file chip used inside descriptions and edited comments
+function fileRefHTML(a, display) {
+  const attrs = `data-fpath="${esc(a.path)}" data-fname="${esc(a.name)}" data-fsize="${+a.size || 0}"${a.thumb ? ` data-fthumb="${esc(a.thumb)}"` : ''}`;
+  if (!display) return `<span class="fileref" contenteditable="false" ${attrs}>📎 ${esc(a.name)}</span>`;
+  const img = isImage(a) && Host.isNative ? `<img src="${fileUrl(a)}" alt="">` : `<i class="fr-ext">${esc((fileExt(a.name) || 'file').slice(0, 4))}</i>`;
+  return `<span class="fileref show" data-action="fileref-open" ${attrs} title="Preview ${esc(a.name)}">${img}<span class="fr-name">${esc(a.name)}</span>${a.size ? `<small>${fmtSize(a.size)}</small>` : ''}</span>`;
+}
+function fileRefAtt(el) {
+  const path = el.dataset.fpath;
+  let h = 0; for (const ch of path) h = (h * 31 + ch.charCodeAt(0)) | 0;
+  return { id: 'ref' + Math.abs(h).toString(36), path, name: el.dataset.fname || path.split('/').pop(), size: +el.dataset.fsize || 0, ...(el.dataset.fthumb ? { thumb: el.dataset.fthumb } : {}) };
+}
+function pasteFileInto(ed) {
+  const a = ui.fileClip && ui.fileClip.att;
+  if (!a || !ed) return;
+  const t = task(ui.taskId);
+  if (ed.dataset.draftKey && t) {
+    const key = ed.dataset.draftKey;
+    ui.commentDraft[key] = editorEmpty(ed) ? '' : ed.innerHTML;
+    const list = ui.commentFiles[key] || [];
+    if (list.some((x) => x.path === a.path)) { toast('That file is already added'); return; }
+    ui.commentFiles[key] = list.concat({ ...a, id: uid(), linked: true, addedAt: nowISO() });
+    renderDetail();
+    setTimeout(() => { const b = $(`[data-draft-key="${key}"]`); if (b) { b.focus(); placeCaretAtEnd(b); } }, 0);
+    return;
+  }
+  ed.focus();
+  const sel = window.getSelection();
+  if (!sel.rangeCount || !ed.contains(sel.anchorNode)) placeCaretAtEnd(ed);
+  document.execCommand('insertHTML', false, fileRefHTML(a) + '&nbsp;');
+  ed.dispatchEvent(new Event('input', { bubbles: true }));
+}
+function clipPasteBtn(target) {
+  const c = ui.fileClip;
+  return c ? `<button class="clip-paste" data-action="paste-clip" data-target="${target}" title="Add the file you copied — no upload needed">${icon('clip')}<span>Paste “${esc(c.att.name)}”</span></button>` : '';
+}
+// Every file path still referenced anywhere (attachments, comments, descriptions, unsent comments)
+function usedPaths() {
+  const s = new Set();
+  const add = (a) => { if (a && a.path) { s.add(a.path); if (a.thumb) s.add(a.thumb); } };
+  db.tasks.forEach((t) => {
+    t.attachments.forEach(add);
+    t.comments.forEach((c) => { (c.attachments || []).forEach(add); fileRefsIn(c.html).forEach((p) => s.add(p)); });
+    fileRefsIn(t.notesHtml).forEach((p) => s.add(p));
+  });
+  Object.values(ui.commentFiles).forEach((l) => (l || []).forEach(add));
+  (db.clients || []).forEach((c) => { if (c.logo) s.add(c.logo); c.folders.forEach((f) => f.files.forEach(add)); });
+  return [...s];
+}
+// Move files to the Trash only when nothing else still uses them (copied files are shared)
+function safeTrash(paths) {
+  const used = usedPaths();
+  const ok = (paths || []).filter((p) => p && !used.some((u) => u === p || u.startsWith(p.replace(/\/$/, '') + '/') || (p.startsWith('.thumbs/') && u.startsWith(p))));
+  if (ok.length) Host.call('trashMany', { paths: ok }).catch(() => {});
+  return ok;
+}
+
+function allTags() {
+  const s = new Set();
+  db.tasks.forEach((t) => t.tags.forEach((g) => s.add(g)));
+  return Array.from(s).sort((a, b) => a.localeCompare(b));
+}
+
+function autosize(el) {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 2 + 'px';
+}
+
+function openTask(id, focusTitle) {
+  flushEdit();
+  const pendingThread = ui.pendingThread; ui.pendingThread = null;
+  if (ui.taskId !== id) { ui.replyTo = null; ui.thread = null; ui.editingComment = null; ui.descOpen = {}; ui.activityFilter = 'comments'; }
+  if (pendingThread) ui.thread = pendingThread;
+  const ids = $$('#content [data-task]').map((el) => el.dataset.task).filter((x, i, a) => a.indexOf(x) === i);
+  if (ids.includes(id)) ui.navIds = ids;
+  ui.taskId = id;
+  renderDetail();
+  $$('.task-row, .card').forEach((el) => el.classList.toggle('is-selected', el.dataset.task === id));
+  if (focusTitle) setTimeout(() => { const el = $('#d-title'); if (el) { el.focus(); el.select(); } }, 30);
+}
+function closeDetail() {
+  flushEdit();
+  ui.taskId = null; ui.replyTo = null; ui.thread = null; ui.editingComment = null;
+  renderDetail();
+  $$('.is-selected').forEach((el) => el.classList.remove('is-selected'));
+}
+
+/* ================= Overlays ================= */
+function closeMenus() { $$('.menu').forEach((m) => m.remove()); }
+
+function showMenu(anchor, items) {
+  closeMenus();
+  const m = document.createElement('div');
+  m.className = 'menu';
+  m.innerHTML = items.map((it, i) => {
+    if (it === '-') return '<div class="sep"></div>';
+    if (it.html) return it.html;
+    return `<div class="mi ${it.danger ? 'danger' : ''}" data-mi="${i}">${it.icon ? icon(it.icon) : ''}${esc(it.label)}</div>`;
+  }).join('');
+  document.body.appendChild(m);
+  const r = anchor.getBoundingClientRect();
+  const mw = m.offsetWidth, mh = m.offsetHeight;
+  let x = r.left, y = r.bottom + 4;
+  if (x + mw > innerWidth - 8) x = innerWidth - mw - 8;
+  if (y + mh > innerHeight - 8) y = r.top - mh - 4;
+  m.style.left = Math.max(8, x) + 'px';
+  m.style.top = Math.max(8, y) + 'px';
+  m.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const mi = e.target.closest('[data-mi]');
+    if (mi) { const list = m._items || items; closeMenus(); list[+mi.dataset.mi].run(); return; }
+    const sw = e.target.closest('[data-swatch]');
+    if (sw && m._onSwatch) { closeMenus(); m._onSwatch(sw.dataset.swatch); }
+  });
+  return m;
+}
+
+function dialog({ title, body = '', input = null, okText = 'OK', cancelText = 'Cancel', danger = false, colors = null }) {
+  return new Promise((resolve) => {
+    const root = $('#overlay-root');
+    let color = colors ? colors.value : null;
+    root.innerHTML = `<div class="scrim"><div class="dialog" role="dialog">
+      <h2>${esc(title)}</h2>
+      ${body ? `<p>${esc(body)}</p>` : ''}
+      ${input ? `<label class="dlg-label">${esc(input.label || '')}</label><input class="field" id="dlg-input" value="${esc(input.value || '')}" placeholder="${esc(input.placeholder || '')}" autocomplete="off">` : ''}
+      ${colors ? `<label class="dlg-label">Color</label><div class="swatches" style="display:flex;gap:8px">${COLORS.map((c) => `<button class="swatch ${c === color ? 'on' : ''}" data-c="${c}" style="background:${c}"></button>`).join('')}</div>` : ''}
+      <div class="actions">${cancelText ? `<button class="btn" data-r="0">${esc(cancelText)}</button>` : ''}<button class="btn ${danger ? 'danger' : 'primary'}" data-r="1">${esc(okText)}</button></div>
+    </div></div>`;
+    const scrim = $('.scrim', root);
+    const inp = $('#dlg-input', root);
+    const done = (ok) => {
+      root.innerHTML = '';
+      document.removeEventListener('keydown', onKey, true);
+      if (!ok) return resolve(null);
+      resolve(input || colors ? { value: inp ? inp.value.trim() : null, color } : true);
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(false); }
+      if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); e.stopPropagation(); if (!inp || inp.value.trim()) done(true); }
+    };
+    document.addEventListener('keydown', onKey, true);
+    scrim.addEventListener('mousedown', (e) => { if (e.target === scrim) done(false); });
+    scrim.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-r]');
+      if (b) { if (b.dataset.r === '1' && inp && !inp.value.trim()) { inp.focus(); return; } done(b.dataset.r === '1'); }
+      const sw = e.target.closest('[data-c]');
+      if (sw) { color = sw.dataset.c; $$('.swatch', scrim).forEach((s) => s.classList.toggle('on', s === sw)); }
+    });
+    setTimeout(() => (inp ? (inp.focus(), inp.select()) : $('[data-r="1"]', root).focus()), 20);
+  });
+}
+
+function toast(msg, action) {
+  const root = $('#toast-root');
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.innerHTML = `<span>${esc(msg)}</span>${action ? `<button>${esc(action.label)}</button>` : ''}`;
+  root.appendChild(el);
+  let timer = setTimeout(() => el.remove(), action ? 6000 : 3000);
+  if (action) el.querySelector('button').addEventListener('click', () => { clearTimeout(timer); el.remove(); action.run(); });
+}
+
+/* ================= Inline inputs ================= */
+function inlineInput(el, { placeholder = '', value = '', multiline = false, keepOpen = false, onSubmit, onDone, cls = '' }) {
+  const original = el.innerHTML;
+  el.classList.add('editing');
+  el.innerHTML = multiline ? `<textarea class="${cls}" placeholder="${esc(placeholder)}">${esc(value)}</textarea>` : `${el.classList.contains('add-row') ? icon('plus') : ''}<input class="${cls}" placeholder="${esc(placeholder)}" value="${esc(value)}" autocomplete="off">`;
+  const inp = el.querySelector('input, textarea');
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    el.classList.remove('editing');
+    el.innerHTML = original;
+    if (onDone) onDone();
+  };
+  inp.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Escape') { e.preventDefault(); inp.value = ''; finish(); }
+    else if (e.key === 'Enter' && !e.isComposing && !e.shiftKey) {
+      e.preventDefault();
+      const v = inp.value.trim();
+      if (!v) { finish(); return; }
+      onSubmit(v);
+      if (keepOpen) { inp.value = ''; } else finish();
+    }
+  });
+  inp.addEventListener('blur', () => {
+    setTimeout(() => {
+      if (finished) return;
+      const v = inp.value.trim();
+      if (v && !keepOpen) onSubmit(v);
+      else if (v && keepOpen) onSubmit(v);
+      finish();
+    }, 120);
+  });
+  inp.addEventListener('click', (e) => e.stopPropagation());
+  inp.focus();
+  if (value) inp.select();
+  return inp;
+}
+
+/* ================= Actions ================= */
+function go(view, projectId = null) {
+  if (view === 'clients') { ui.caQ = ''; ui.caScope = null; }
+  ui.view = view;
+  ui.projectId = projectId;
+  if (ui.search) { ui.search = ''; $('#search').value = ''; }
+  $('#content').scrollTop = 0;
+  render();
+}
+
+async function newProjectFlow() {
+  const used = new Set(db.projects.map((p) => p.color));
+  const res = await dialog({
+    title: 'New project', input: { label: 'Project name', placeholder: 'e.g. Website redesign' },
+    colors: { value: COLORS.find((c) => !used.has(c)) || COLORS[0] }, okText: 'Create project',
+  });
+  if (!res) return;
+  const p = createProject(res.value, res.color);
+  persist(0);
+  go('project', p.id);
+}
+
+function newTaskInContext() {
+  let t;
+  if (ui.view === 'project' && !ui.search) {
+    const p = proj(ui.projectId);
+    t = createTask({ projectId: p.id, sectionId: p.sections[0].id });
+  } else {
+    t = createTask({ due: ui.view === 'mytasks' ? todayStr() : null });
+  }
+  commit();
+  openTask(t.id, true);
+}
+
+// Files that belong to these tasks (task attachments, comment attachments, folders, thumbnails)
+function filesOfTasks(list) {
+  const paths = [];
+  list.forEach((t) => {
+    const atts = t.attachments.concat(...t.comments.map((c) => c.attachments || []));
+    atts.forEach((a) => { paths.push(a.path); paths.push('.thumbs/' + a.id); });
+    paths.push('attachments/' + t.id);
+  });
+  return paths;
+}
+
+function deleteTaskFlow(id) {
+  const t = task(id);
+  if (!t) return;
+  const ids = [t.id, ...descendants(t.id).map((d) => d.id)];
+  if (t.parentId && task(t.parentId)) logActivity(task(t.parentId), `deleted subtask ${struck(t.title || 'Untitled task')}`);
+  const removed = removeTasks(ids);
+  if (ui.taskId && ids.includes(ui.taskId)) ui.taskId = t.parentId || null;
+  commit();
+  const paths = filesOfTasks(removed);
+  const nFiles = removed.reduce((n, x) => n + x.attachments.length + x.comments.reduce((m, c) => m + (c.attachments || []).length, 0), 0);
+  // Files go to the Trash once the Undo window has passed
+  const timer = setTimeout(() => { safeTrash(paths); }, 6500);
+  toast(`Deleted “${t.title || 'Untitled task'}”${ids.length > 1 ? ` and ${ids.length - 1} subtask${ids.length > 2 ? 's' : ''}` : ''}${nFiles ? ` · ${nFiles} file${nFiles === 1 ? '' : 's'} moved to Trash` : ''}`, {
+    label: 'Undo', run: () => { clearTimeout(timer); db.tasks.push(...removed); commit(); },
+  });
+}
+
+const AUTO_DELETE_DAYS = 30;
+function daysUntilAutoDelete(t) {
+  if (!t.done || !t.completedAt) return null;
+  return Math.max(0, AUTO_DELETE_DAYS - Math.floor((Date.now() - new Date(t.completedAt).getTime()) / 86400000));
+}
+// Remove tasks completed more than 30 days ago (with their subtasks and files)
+function purgeOldCompleted() {
+  const cutoff = Date.now() - AUTO_DELETE_DAYS * 86400000;
+  const old = db.tasks.filter((t) => t.done && t.completedAt && new Date(t.completedAt).getTime() < cutoff);
+  if (!old.length) return;
+  const ids = new Set();
+  old.forEach((t) => { ids.add(t.id); descendants(t.id).forEach((d) => ids.add(d.id)); });
+  const removed = removeTasks([...ids]);
+  if (ui.taskId && ids.has(ui.taskId)) ui.taskId = null;
+  safeTrash(filesOfTasks(removed));
+  persist(0);
+  render();
+  const top = removed.filter((t) => !t.parentId || !ids.has(t.parentId)).length;
+  toast(`Cleaned up ${top} task${top === 1 ? '' : 's'} completed more than ${AUTO_DELETE_DAYS} days ago`);
+}
+
+function projectMenu(anchor, id) {
+  const p = proj(id);
+  const m = showMenu(anchor, [
+    { label: 'Rename project', icon: 'edit', run: () => renameProject(id) },
+    { html: `<div class="swatches">${COLORS.map((c) => `<button class="swatch ${c === p.color ? 'on' : ''}" data-swatch="${c}" style="background:${c}"></button>`).join('')}</div>` },
+    '-',
+    { label: 'Add section', icon: 'plus', run: () => { go('project', id); setTimeout(() => { const a = $('[data-action="add-section"]'); if (a) a.click(); }, 30); } },
+    ...(can('editProject') ? [{ label: clientOfProject(p) ? `Client: ${clientOfProject(p).name}` : 'Link to a client…', icon: 'assets', run: () => setTimeout(() => projectClientMenu(anchor, p), 0) }] : []),
+    '-',
+    ...(can('deleteProject') ? [{ label: 'Delete project', icon: 'trash', danger: true, run: () => deleteProjectFlow(id) }] : []),
+  ]);
+  m._onSwatch = (c) => { p.color = c; commit(); };
+}
+
+async function renameProject(id) {
+  const p = proj(id);
+  const res = await dialog({ title: 'Rename project', input: { label: 'Project name', value: p.name }, okText: 'Save' });
+  if (res && res.value) { p.name = res.value; commit(); }
+}
+
+async function deleteProjectFlow(id) {
+  const p = proj(id);
+  const n = db.tasks.filter((t) => t.projectId === id).length;
+  const ok = await dialog({ title: `Delete “${p.name}”?`, body: `This permanently deletes the project and its ${n} task${n === 1 ? '' : 's'}. Daily backups are kept in the data folder.`, okText: 'Delete project', danger: true });
+  if (!ok) return;
+  db.projects = db.projects.filter((x) => x.id !== id);
+  removeTasks(db.tasks.filter((t) => t.projectId === id).map((t) => t.id));
+  if (ui.taskId && !task(ui.taskId)) ui.taskId = null;
+  persist(0);
+  go('home');
+}
+
+function sectionMenu(anchor, sid) {
+  const p = proj(ui.projectId);
+  const s = p.sections.find((x) => x.id === sid);
+  const i = p.sections.indexOf(s);
+  const m = showMenu(anchor, [
+    { label: 'Rename status', icon: 'edit', run: () => renameSectionInline(sid) },
+    { html: `<div class="swatches">${STATUS_COLORS.map((c) => `<button class="swatch ${c === s.color ? 'on' : ''}" data-swatch="${c}" style="background:${c}"></button>`).join('')}</div>` },
+    ...(i > 0 ? [{ label: 'Move left / up', icon: 'chev', run: () => { p.sections.splice(i, 1); p.sections.splice(i - 1, 0, s); commit(); } }] : []),
+    ...(i < p.sections.length - 1 ? [{ label: 'Move right / down', icon: 'chev', run: () => { p.sections.splice(i, 1); p.sections.splice(i + 1, 0, s); commit(); } }] : []),
+    '-',
+    { label: 'Delete status', icon: 'trash', danger: true, run: () => deleteSectionFlow(sid) },
+  ]);
+  m._onSwatch = (c) => { s.color = c; commit(); };
+}
+
+function renameSectionInline(sid) {
+  const p = proj(ui.projectId);
+  const s = p.sections.find((x) => x.id === sid);
+  const el = $(`[data-action="rename-section"][data-id="${sid}"]`);
+  if (!el) return;
+  const inp = document.createElement('input');
+  inp.className = 'field';
+  inp.style.cssText = 'width:220px;padding:2px 6px;font-weight:650';
+  inp.value = s.name;
+  el.replaceWith(inp);
+  inp.focus(); inp.select();
+  let done = false;
+  const finish = (save) => {
+    if (done) return; done = true;
+    if (save && inp.value.trim()) s.name = inp.value.trim();
+    commit();
+  };
+  inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') finish(true); if (e.key === 'Escape') finish(false); });
+  inp.addEventListener('blur', () => finish(true));
+}
+
+async function deleteSectionFlow(sid) {
+  const p = proj(ui.projectId);
+  if (p.sections.length === 1) { toast('A project needs at least one section'); return; }
+  const s = p.sections.find((x) => x.id === sid);
+  const tasks = db.tasks.filter((t) => t.projectId === p.id && t.sectionId === sid);
+  const target = p.sections.find((x) => x.id !== sid);
+  if (tasks.length) {
+    const ok = await dialog({ title: `Delete section “${s.name}”?`, body: `Its ${tasks.length} task${tasks.length === 1 ? '' : 's'} will move to “${target.name}”.`, okText: 'Delete section', danger: true });
+    if (!ok) return;
+  }
+  tasks.forEach((t) => { t.sectionId = target.id; });
+  p.sections = p.sections.filter((x) => x.id !== sid);
+  commit();
+}
+
+async function attachFiles(target = 'task', replyTo = null) {
+  const t = task(ui.taskId);
+  if (!t) return;
+  try {
+    const res = await Host.call('pickAttachments', { taskId: t.id });
+    const files = (res.files || []).map((f) => ({ ...f, addedAt: nowISO() }));
+    if (!files.length) return;
+    if (target === 'comment') {
+      const key = draftKey(t, replyTo);
+      ui.commentFiles[key] = (ui.commentFiles[key] || []).concat(files);
+      renderDetail();
+      setTimeout(() => { const b = $(`[data-draft-key="${key}"]`); if (b) { b.focus(); placeCaretAtEnd(b); } }, 0);
+      return;
+    }
+    files.forEach((f) => t.attachments.push(f));
+    logActivity(t, `attached ${files.length === 1 ? `<b>${esc(files[0].name)}</b>` : files.length + ' files'}`);
+    notifyWatchers(t, 'attach', `attached ${files.length === 1 ? `<b>${esc(files[0].name)}</b>` : files.length + ' files'}`);
+    t.updatedAt = nowISO();
+    commit();
+    toast(`Attached ${files.length} file${files.length === 1 ? '' : 's'}`);
+  } catch (e) { toast('Could not attach: ' + e.message); }
+}
+
+function statusMenu(anchor) {
+  const t = task(ui.taskId);
+  const items = [];
+  statusList(t).forEach((st) => items.push({ html: `<div class="mi ${!t.done && t.sectionId === st.id ? 'cur' : ''}" data-mi="${items.length}"><span class="sw" style="background:${st.color}"></span>${esc(st.name)}</div>`, run: () => { changeStatus(t, st.id); } }));
+  items.push('-');
+  if (t.done || canComplete(t)) items.push({ html: `<div class="mi ${t.done ? 'cur' : ''}" data-mi="${items.length}"><span class="sw" style="background:#3ddc97"></span>${t.done ? 'Complete' : 'Mark complete'}</div>`, run: () => { setDone(t, !t.done); commit(); } });
+  else items.push({ html: `<div class="mi-note">${icon('lock')}${esc(completeBlockedMsg(t))}</div>` });
+  // showMenu needs index-aligned items: rebuild html with real indices
+  showMenu(anchor, items.map((it, i) => (it === '-' ? it : { ...it, html: it.html.replace(/data-mi="\d+"/, `data-mi="${i}"`) })));
+}
+
+/* ---- CD Status ---- */
+function cdButton(t, inProps) {
+  const c = CD[t.cdStatus];
+  const locked = cdLocked(t);
+  return `<button class="cd-btn ${c ? '' : 'empty'} ${inProps ? 'in-props' : ''} ${locked ? 'locked' : ''}" data-action="cd-menu" ${c ? `style="background:${c.color};color:${textOn(c.color)}"` : ''} title="${locked ? CD_LOCK_MSG : 'CD Status'}">${locked ? icon('lock') : ''}${inProps ? '' : '<span class="cd-k">CD</span>'}${c ? esc(c.label) : 'Set CD status'}${icon('chev')}</button>`;
+}
+const cdChip = (t) => { const c = CD[t.cdStatus]; return c ? `<span class="cd-chip" style="--c:${c.color}" title="CD Status: ${esc(c.label)}">${t.cdStatus === 'approved' ? icon('check') : ''}CD ${t.cdStatus === 'approved' ? 'Approved' : 'Review'}</span>` : ''; };
+function setCD(t, v) {
+  if ((t.cdStatus || '') === v) return;
+  logChange(t, 'the <b>CD Status</b>', CD[t.cdStatus] ? CD[t.cdStatus].label : '', CD[v] ? CD[v].label : '');
+  notifyWatchers(t, 'cd', v ? `set CD Status to <b>${esc(CD[v].label)}</b>` : 'cleared the CD Status');
+  t.cdStatus = v; t.updatedAt = nowISO();
+  if (t.done && !canComplete(t)) setDone(t, false);
+  commit();
+}
+function cdMenu(anchor) {
+  const t = task(ui.taskId);
+  if (cdLocked(t)) { toast(CD_LOCK_MSG); return; }
+  const items = Object.entries(CD).map(([k, c]) => ({ html: `<div class="mi ${t.cdStatus === k ? 'cur' : ''}"><span class="sw" style="background:${c.color}"></span>${esc(c.label)}</div>`, run: () => setCD(t, k) }));
+  if (t.cdStatus) items.push('-', { html: `<div class="mi">${icon('x')}Clear</div>`, run: () => setCD(t, '') });
+  showMenu(anchor, items.map((it, i) => (it === '-' ? it : { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) })));
+}
+
+/* ---- Assignees ---- */
+function setAssignee(t, userId, on) {
+  if (!can('assign')) return denied();
+  const has = (t.assignees || []).includes(userId);
+  if (on === has) return;
+  if (on) {
+    t.assignees = (t.assignees || []).concat(userId);
+    t.prio = t.prio || {};
+    if (t.prio._ != null) {
+      const v = normPrio(t.prio._);
+      delete t.prio._;
+      if (!(typeof v === 'number' && prioTakenBy(v, dayKey(t), userId, t.id))) t.prio[userId] = v;
+    }
+    logActivity(t, `assigned <b>${esc(fullName(userById(userId)))}</b>`);
+    pushNotif(userId, t, 'assigned', 'assigned you to');
+  } else {
+    t.assignees = t.assignees.filter((x) => x !== userId);
+    if (t.prio) delete t.prio[userId];
+    if (t.partsDone) delete t.partsDone[userId];
+    (t.reviews || []).forEach((r) => { if (r.by === userId && r.state === 'pending') r.state = 'withdrawn'; });
+    logActivity(t, `unassigned ${struck(fullName(userById(userId)))}`);
+    pushNotif(userId, t, 'unassigned', 'removed you from');
+  }
+  syncCD(t);
+  t.updatedAt = nowISO();
+  commit();
+}
+// Floating people picker: search, current assignees (× to remove) and everyone else
+function assignMenu(anchor) {
+  if (!can('assign')) return denied();
+  closeMenus();
+  const t = task(ui.taskId);
+  const pop = document.createElement('div');
+  pop.className = 'menu asg-pop';
+  pop.innerHTML = `<div class="ap-search">${icon('search')}<input placeholder="Search or enter email…" autocomplete="off" spellcheck="false"></div><div class="ap-list"></div>`;
+  document.body.appendChild(pop);
+  const r = (anchor.closest('.pv') || anchor).getBoundingClientRect();
+  const place = () => {
+    const h = pop.offsetHeight, w = pop.offsetWidth;
+    let x = r.left - 8, y = r.bottom + 6;
+    if (x + w > innerWidth - 10) x = innerWidth - w - 10;
+    if (y + h > innerHeight - 10) y = Math.max(10, r.top - h - 6);
+    pop.style.left = Math.max(10, x) + 'px'; pop.style.top = y + 'px';
+  };
+  const input = $('input', pop), list = $('.ap-list', pop);
+  let hl = 0, rows = [];
+  const draw = () => {
+    const tt = task(ui.taskId) || t;
+    const q = input.value.trim().toLowerCase();
+    const match = (u) => !q || fullName(u).toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
+    const assigned = (tt.assignees || []).map(userById).filter(Boolean).filter(match);
+    const people = activeUsers().filter((u) => !(tt.assignees || []).includes(u.id) && match(u));
+    rows = assigned.map((u) => ({ u, on: true })).concat(people.map((u) => ({ u, on: false })));
+    if (hl >= rows.length) hl = Math.max(0, rows.length - 1);
+    const item = (x, i) => `<div class="ap-item ${x.on ? 'on' : ''} ${i === hl ? 'hl' : ''}" data-ap="${x.u.id}" data-i="${i}">
+      <span class="ap-av">${avatarHTML(x.u.id, 30)}${x.on ? `<button class="ap-x" data-ap-x="${x.u.id}" title="Remove assignee">${icon('x')}</button>` : ''}</span>
+      <span class="ap-name">${x.u.id === currentUserId ? 'Me' : esc(fullName(x.u))}${x.u.name ? '' : ''}</span>
+      <small>${esc(ROLES[x.u.role] || '')}</small></div>`;
+    let i = 0;
+    list.innerHTML = (assigned.length ? `<div class="ap-label">Assignees</div>${assigned.map(() => item(rows[i], i++)).join('')}` : '')
+      + (people.length ? `<div class="ap-label">People</div>${people.map(() => item(rows[i], i++)).join('')}` : '')
+      + (!rows.length ? `<div class="ap-none">No one matches “${esc(input.value.trim())}”${validEmail(input.value) && can('manageUsers') ? '<br><small>Add new people from Team members first</small>' : ''}</div>` : '');
+    place();
+  };
+  const toggle = (uid, on) => { setAssignee(task(ui.taskId), uid, on); draw(); input.focus(); };
+  pop.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const x = e.target.closest('[data-ap-x]');
+    if (x) { toggle(x.dataset.apX, false); return; }
+    const it = e.target.closest('[data-ap]');
+    if (it) { const on = it.classList.contains('on'); toggle(it.dataset.ap, !on); }
+  });
+  input.addEventListener('input', () => { hl = 0; draw(); });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); e.stopPropagation(); if (rows.length) { hl = (hl + (e.key === 'ArrowDown' ? 1 : -1) + rows.length) % rows.length; draw(); } }
+    else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); const x = rows[hl]; if (x) toggle(x.u.id, !x.on); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeMenus(); }
+    else e.stopPropagation();
+  });
+  draw();
+  setTimeout(() => input.focus(), 0);
+}
+
+/* ---- "My part done" for shared tasks ---- */
+function setMyPart(t, done) {
+  if (!isMine(t)) return;
+  if (iReview(t)) { toast('Your part is marked done when the Creative Director approves your files'); return; }
+  t.partsDone = t.partsDone || {};
+  if (done) {
+    t.partsDone[currentUserId] = nowISO();
+    const all = (t.assignees || []).length > 0 && t.assignees.every((u) => partDone(t, u));
+    logActivity(t, all ? 'finished their part — <b>all parts are done</b>, ready for review' : 'finished their part');
+    notifyWatchers(t, 'part', 'finished their part of', { skip: all ? [t.createdBy] : [] });
+    if (all) {
+      const to = new Set([t.createdBy].filter(Boolean));
+      to.forEach((u) => pushNotif(u, t, 'allparts', 'marked the last part done — all parts are done, ready for review:'));
+    }
+    toast(`Your part is done — “${t.title || 'Untitled task'}” moved to your Done list`, { label: 'Undo', run: () => setMyPart(t, false) });
+  } else {
+    delete t.partsDone[currentUserId];
+    logActivity(t, 'reopened their part');
+    checkPrioConflict(t);
+  }
+  t.updatedAt = nowISO();
+  commit();
+}
+function reopenPart(t, u) {
+  if (!(me() && (me().role === 'admin' || me().role === 'am'))) return denied();
+  if (!partDone(t, u)) return;
+  delete t.partsDone[u];
+  if (needsCD(t)) { const r = lastReview(t, u); if (r && r.state === 'approved') r.state = 'reopened'; syncCD(t); }
+  logActivity(t, `reopened <b>${esc(fullName(userById(u)))}</b>’s part`);
+  pushNotif(u, t, 'part', 'reopened your part of');
+  checkPrioConflict(t);
+  t.updatedAt = nowISO();
+  commit();
+}
+function partsRow(t) {
+  const ids = t.assignees || [];
+  if (t.parentId || t.done || !ids.length) return '';
+  const n = ids.filter((u) => partDone(t, u)).length;
+  const canReopen = me() && (me().role === 'admin' || me().role === 'am');
+  const chips = ids.map((u) => {
+    const d = partDone(t, u);
+    const nm = u === currentUserId ? 'You' : fullName(userById(u)).split(' ')[0];
+    const pend = !d && needsCD(t) && reviewState(t, u) === 'pending';
+    return `<span class="part-chip ${d ? 'done' : ''} ${pend ? 'pend' : ''}" ${d && canReopen && u !== currentUserId ? `data-action="reopen-part" data-id="${u}" title="Reopen ${esc(fullName(userById(u)))}’s part"` : `title="${esc(fullName(userById(u)))}: ${d ? (needsCD(t) && u !== cdUserId() ? 'approved by the CD ' : 'part done ') + esc(timeAgo(t.partsDone[u])) : pend ? 'files with the CD for review' : 'working on it'}"`}>${avatarHTML(u, 20)}<span>${esc(nm)}</span>${d ? icon('check') : pend ? icon('clock') : ''}</span>`;
+  }).join('');
+  const mine = myPartControl(t);
+  return `<div class="prop prop-parts"><label>${icon('check-circle')}Parts</label><div class="pv"><span class="parts-n ${n === ids.length ? 'all' : ''}">${n}/${ids.length} done</span>${chips}${mine}</div></div>`;
+}
+
+/* ---- Field changes that notify the task's people ---- */
+function setDue(t, v) {
+  const o = t.due;
+  t.due = v || null;
+  if (o === t.due) return;
+  logChange(t, 'the <b>due date</b>', fmtDay(o), fmtDay(t.due));
+  notifyWatchers(t, 'due', t.due ? `changed the due date to <b>${esc(fmtDay(t.due))}</b>` : 'removed the due date');
+  checkPrioConflict(t);
+  t.updatedAt = nowISO();
+}
+
+function setPrio(t, key, k) {
+  t.prio = t.prio || {};
+  const cur = normPrio(t.prio[key]);
+  if (cur === k) return;
+  const who = prioOwnerName(key);
+  logChange(t, who ? `<b>${esc(who)}</b>’s <b>priority</b>` : 'the <b>priority</b>', prioLabel(cur), prioLabel(k));
+  if (k === 'none') delete t.prio[key]; else t.prio[key] = k;
+  if (who) {
+    pushNotif(key, t, 'priority', `set your priority to <b>${esc(prioLabel(k))}</b> on`);
+    notifyWatchers(t, 'priority', `changed <b>${esc(who)}</b>’s priority to <b>${esc(prioLabel(k))}</b> on`, { skip: [key] });
+  } else notifyWatchers(t, 'priority', `changed the priority to <b>${esc(prioLabel(k))}</b> on`);
+  t.updatedAt = nowISO();
+  commit();
+}
+function prioMenu(anchor, key) {
+  if (!can('editPriority')) return denied();
+  const t = task(ui.taskId);
+  key = key || ((t.assignees || [])[0] || '_');
+  const cur = normPrio((t.prio || {})[key]);
+  const who = prioOwnerName(key);
+  const set = (k) => setPrio(t, key, k);
+  const items = [{ run: () => set('urgent') }];
+  const nums = [];
+  for (let n = 1; n <= 10; n++) {
+    const by = prioTakenBy(n, dayKey(t), key, t.id);
+    if (by) nums.push(`<button class="pn taken" disabled title="Used by “${esc(by.title || 'Untitled task')}”">${n}</button>`);
+    else { items.push({ run: () => set(n) }); nums.push(`<button class="pn ${cur === n ? 'cur' : ''}" data-mi="${items.length - 1}">${n}</button>`); }
+  }
+  items.push({ run: () => set('none') });
+  const noneIdx = items.length - 1;
+  const html = `<div class="prio-menu">
+    ${who ? `<div class="pm-who">${avatarHTML(key, 18)}<span>${esc(key === currentUserId ? 'Your' : who + '’s')} priority</span></div>` : ''}
+    <div class="mi ${cur === 'urgent' ? 'cur' : ''}" data-mi="0"><span class="prio-flag urgent">${icon('flag')}<span>Urgent</span></span><small>always on top</small></div>
+    <div class="pm-label">Priority for ${t.due ? esc(fmtDue(t.due)) : 'tasks with no due date'} <small>· each number once per ${who ? 'person ' : ''}per day</small></div>
+    <div class="pm-grid">${nums.join('')}</div>
+    <div class="sep"></div>
+    <div class="mi ${cur === 'none' ? 'cur' : ''}" data-mi="${noneIdx}"><span class="prio-flag none">${icon('flag')}<span>No priority</span></span></div>
+  </div>`;
+  const m = showMenu(anchor, [{ html }]);
+  m._items = items; // data-mi indices above refer to this list
+}
+
+function reactMenu(anchor, cid) {
+  const m = showMenu(anchor, [{ html: `<div class="react-pick">${REACTIONS.map((e) => `<button data-swatch="${e}">${e}</button>`).join('')}</div>` }]);
+  m._onSwatch = (emoji) => toggleReaction(cid, emoji);
+}
+function toggleReaction(cid, emoji) {
+  const t = task(ui.taskId);
+  const c = t.comments.find((x) => x.id === cid);
+  if (!c) return;
+  c.reactions = c.reactions || {};
+  c.reactions[emoji] = c.reactions[emoji] ? 0 : 1;
+  if (!c.reactions[emoji]) delete c.reactions[emoji];
+  commit();
+}
+
+function commentMenu(anchor, cid) {
+  const t = task(ui.taskId);
+  const c = t.comments.find((x) => x.id === cid);
+  if (!c) return;
+  showMenu(anchor, [
+    { label: 'Edit comment', icon: 'edit', run: () => { ui.editingComment = cid; renderDetail(); setTimeout(() => { const el = $('#edit-comment'); if (el) { el.focus(); placeCaretAtEnd(el); } }, 0); } },
+    { label: 'Copy text', icon: 'open', run: () => { try { navigator.clipboard.writeText(c.text); toast('Copied'); } catch (e) { toast('Could not copy'); } } },
+    '-',
+    { label: 'Delete comment', icon: 'trash', danger: true, run: () => deleteComment(cid) },
+  ]);
+}
+
+async function deleteComment(cid) {
+  const t = task(ui.taskId);
+  const group = t.comments.filter((x) => x.id === cid || x.parentId === cid);
+  const files = group.flatMap((x) => x.attachments || []).filter((a) => !a.linked);
+  const replies = group.length - 1;
+  if (files.length || replies) {
+    const parts = [];
+    if (replies) parts.push(`its ${replies} repl${replies === 1 ? 'y' : 'ies'}`);
+    if (files.length) parts.push(`${files.length} attached file${files.length === 1 ? '' : 's'} (moved to the Trash)`);
+    const ok = await dialog({ title: 'Delete comment?', body: `This also deletes ${parts.join(' and ')}.`, okText: 'Delete', danger: true });
+    if (!ok) return;
+  }
+  const ids = new Set(group.map((x) => x.id));
+  t.comments = t.comments.filter((x) => !ids.has(x.id));
+  commit();
+  safeTrash(group.flatMap((x) => (x.attachments || []).flatMap((a) => [a.path, '.thumbs/' + a.id]).concat(fileRefsIn(x.html))));
+}
+
+function navTask(n) {
+  flushEdit();
+  const i = ui.navIds.indexOf(ui.taskId);
+  const next = ui.navIds[i + n];
+  if (next && task(next)) { ui.replyTo = null; ui.thread = null; ui.editingComment = null; ui.activityFilter = 'comments'; ui.taskId = next; renderDetail(); $$('.task-row, .card').forEach((el) => el.classList.toggle('is-selected', el.dataset.task === next)); }
+}
+
+/* ================= Event wiring ================= */
+document.addEventListener('click', async (e) => {
+  if (!db || !currentUserId) return;
+  if (!e.target.closest('.menu')) closeMenus();
+  if (!e.target.closest('.disp-wrap')) $$('.disp-wrap.open').forEach((w) => w.classList.remove('open'));
+
+  const actEl = e.target.closest('[data-action]');
+  const act = actEl && actEl.dataset.action;
+  if (act) {
+    const id = actEl.dataset.id;
+    switch (act) {
+      case 'new-task': e.preventDefault(); if (!can('createTask')) return denied(); newTaskInContext(); return;
+      case 'new-project': e.preventDefault(); newProjectFlow(); return;
+      case 'reveal-data': Host.call('revealData').catch((err) => toast(err.message)); return;
+      case 'project-menu': e.preventDefault(); e.stopPropagation(); projectMenu(actEl, id); return;
+      case 'section-menu': e.stopPropagation(); sectionMenu(actEl, id); return;
+      case 'set-view': { const p = proj(ui.projectId); p.view = actEl.dataset.v; commit(); return; }
+      case 'toggle': {
+        e.stopPropagation();
+        const t = task(id);
+        if (!t.done && !canComplete(t)) { toast(completeBlockedMsg(t)); return; }
+        setDone(t, !t.done);
+        commit({ delay: 0 });
+        const btn = $(`.check[data-id="${id}"]`);
+        if (btn && t.done) btn.classList.add('pop');
+        if (t.done && !t.parentId) toast(`Completed “${t.title || 'Untitled task'}”`, { label: 'Undo', run: () => { setDone(t, false); commit(); } });
+        return;
+      }
+      case 'collapse': ui.collapsed[id] = !ui.collapsed[id]; renderContent(); return;
+      case 'collapse-mt': ui.mytasksCollapsed[id] = !ui.mytasksCollapsed[id]; renderContent(); return;
+      case 'toggle-show-done': ui.showDone[ui.projectId] = !ui.showDone[ui.projectId]; renderContent(); return;
+      case 'mt-tab': ui.myTasksTab = actEl.dataset.tab; renderContent(); return;
+      case 'add-task-inline': {
+        if (actEl.classList.contains('editing')) return;
+        const sid = actEl.dataset.section;
+        inlineInput(actEl, {
+          placeholder: 'Write a task name, then press Enter', keepOpen: true,
+          onSubmit: (v) => { createTask({ projectId: ui.projectId, sectionId: sid, title: v }); persist(); renderSidebar(); rerenderKeepingAdd(sid); },
+        });
+        return;
+      }
+      case 'add-task-top': {
+        const p = proj(ui.projectId);
+        ui.collapsed[p.sections[0].id] = false;
+        renderContent();
+        const a = $(`.add-row[data-section="${p.sections[0].id}"]`);
+        if (a) { a.scrollIntoView({ block: 'nearest' }); a.click(); }
+        return;
+      }
+      case 'add-card': {
+        const sid = actEl.dataset.section;
+        const col = $(`.col[data-col="${sid}"]`);
+        const slot = $('.col-add', col);
+        if (!slot || slot.classList.contains('editing')) return;
+        const wrap = document.createElement('div');
+        wrap.className = 'col-add-input';
+        slot.replaceWith(wrap);
+        const ta = document.createElement('textarea');
+        ta.placeholder = 'Write a task name, then press Enter';
+        wrap.appendChild(ta);
+        ta.focus();
+        let closed = false;
+        const close = () => { if (closed) return; closed = true; renderContent(); };
+        ta.addEventListener('keydown', (ev) => {
+          ev.stopPropagation();
+          if (ev.key === 'Escape') { ta.value = ''; close(); }
+          if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing) {
+            ev.preventDefault();
+            const v = ta.value.trim();
+            if (!v) { close(); return; }
+            createTask({ projectId: ui.projectId, sectionId: sid, title: v });
+            persist(); renderSidebar();
+            closed = true; renderContent();
+            const again = $(`.col[data-col="${sid}"] [data-action="add-card"].col-add`);
+            if (again) again.click();
+            const body = $(`.col[data-col="${sid}"] .col-body`);
+            if (body) body.scrollTop = body.scrollHeight;
+          }
+        });
+        ta.addEventListener('blur', () => setTimeout(() => {
+          if (closed) return;
+          const v = ta.value.trim();
+          if (v) { createTask({ projectId: ui.projectId, sectionId: sid, title: v }); persist(); renderSidebar(); }
+          close();
+        }, 120));
+        return;
+      }
+      case 'add-section': {
+        if (actEl.classList.contains('editing')) return;
+        const p = proj(ui.projectId);
+        inlineInput(actEl, {
+          placeholder: 'Status name (e.g. Review)', cls: '',
+          onSubmit: (v) => { p.sections.push({ id: uid(), name: v, color: defaultSectionColor(v, p.sections.length) }); persist(); },
+          onDone: () => renderContent(),
+        });
+        return;
+      }
+      case 'close-detail': closeDetail(); return;
+      case 'open-task': openTask(id); return;
+      case 'delete-task': if (!can('deleteTask')) return denied(); deleteTaskFlow(id); return;
+      case 'delete-sub': if (!can('deleteTask')) return denied(); deleteTaskFlow(id); return;
+      case 'clear-due': case 'due-today': case 'due-tomorrow': {
+        const t = task(ui.taskId);
+        setDue(t, act === 'clear-due' ? null : act === 'due-today' ? todayStr() : addDays(todayStr(), 1));
+        commit(); return;
+      }
+      case 'remove-tag': { if (!can('removeTag')) return denied(); const t = task(ui.taskId); logActivity(t, `removed tag ${struck(t.tags[+actEl.dataset.i])}`); t.tags.splice(+actEl.dataset.i, 1); t.updatedAt = nowISO(); commit(); setTimeout(() => { const i = $('#d-tag-input'); if (i) i.focus(); }, 0); return; }
+      case 'attach': attachFiles('task'); return;
+      case 'attach-comment': attachFiles('comment', actEl.dataset.reply || null); return;
+      case 'unstage-file': {
+        e.stopPropagation();
+        const key = actEl.dataset.key || ui.taskId;
+        const list = ui.commentFiles[key] || [];
+        const a = list.find((x) => x.id === id);
+        ui.commentFiles[key] = list.filter((x) => x.id !== id);
+        if (a) safeTrash([a.path]);
+        renderDetail();
+        return;
+      }
+      case 'open-att': case 'reveal-att': {
+        e.stopPropagation();
+        const a = findAttachment(task(ui.taskId), id);
+        if (a) Host.call(act === 'open-att' ? 'openPath' : 'revealPath', { path: a.path }).catch((err) => toast('Could not open: ' + err.message));
+        return;
+      }
+      case 'remove-att': {
+        e.stopPropagation();
+        const t = task(ui.taskId);
+        const a = t.attachments.find((x) => x.id === id);
+        const ok = await dialog({ title: 'Remove attachment?', body: `“${a.name}” will be moved to the Trash.`, okText: 'Remove', danger: true });
+        if (!ok) return;
+        t.attachments = t.attachments.filter((x) => x.id !== id);
+        logActivity(t, `removed attachment ${struck(a.name)}`);
+        t.updatedAt = nowISO();
+        commit();
+        safeTrash([a.path, '.thumbs/' + a.id]);
+        return;
+      }
+      case 'add-comment': addComment(actEl.dataset.reply || null); return;
+      case 'copy-att': { e.stopPropagation(); const a = findAttachment(task(actEl.dataset.taskId || ui.taskId), id); if (a) copyAttachment(a); return; }
+      case 'paste-clip': {
+        e.preventDefault(); e.stopPropagation();
+        const ed = actEl.dataset.target === 'desc' ? $('#d-notes') : actEl.closest('.composer') && actEl.closest('.composer').querySelector('.rt-editor');
+        pasteFileInto(ed); return;
+      }
+      case 'fileref-open': { e.stopPropagation(); e.preventDefault(); previewFile(fileRefAtt(actEl)); return; }
+      case 'quicklook': previewFile(findAttachment(task(ui.taskId), id)); return;
+      case 'close-preview': if (e.target === actEl || actEl.tagName === 'BUTTON') $('#overlay-root').innerHTML = ''; return;
+      case 'lightbox': lightbox(actEl.dataset.src, actEl.dataset.name); return;
+      case 'tile-open': {
+        const a = findAttachment(task(ui.taskId), id);
+        if (!a) return;
+        previewFile(a);
+        return;
+      }
+      case 'fmt': e.preventDefault(); applyFormat(actEl.dataset.fmt, actEl); return;
+      case 'toggle-theme': setTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'); return;
+      case 'disp-toggle': actEl.closest('.disp-wrap').classList.toggle('open'); return;
+      case 'detail-mode': ui.detailMode = actEl.dataset.mode; savePref('detailMode', ui.detailMode); renderDetail(); return;
+      case 'side-tab': ui.sideTab = actEl.dataset.tab; renderDetail(); if (ui.sideTab === 'comments') { const f = $('.tm-feed'); if (f) stickFeedToBottom(f); } return;
+      case 'toggle-sidebar': setSidebarCollapsed(!document.getElementById('app').classList.contains('sb-collapsed')); return;
+      case 'close-lightbox': $('#overlay-root').innerHTML = ''; return;
+      case 'pick-day': ui.day = actEl.dataset.day; renderContent(); return;
+      case 'shift-day': ui.day = addDays(ui.day || todayStr(), +actEl.dataset.n); renderContent(); return;
+      case 'go-project': closeDetail(); go('project', id); return;
+      case 'nav-task': navTask(+actEl.dataset.n); return;
+      case 'status-menu': e.stopPropagation(); statusMenu(actEl); return;
+      case 'status-next': {
+        const t = task(ui.taskId); const list = statusList(t);
+        const i = list.findIndex((x) => x.id === t.sectionId);
+        if (t.done) return;
+        if (i >= list.length - 1) { toast('Already at the last status'); return; }
+        changeStatus(t, list[Math.max(0, i) + 1].id); return;
+      }
+      case 'ib-filter': e.stopPropagation(); inboxFilterMenu(actEl); return;
+      case 'notif-clear': e.stopPropagation(); clearTaskNotifs(id, actEl.dataset.read !== '1'); return;
+      case 'mw-group': ui.mytasksCollapsed[id] = !ui.mytasksCollapsed[id]; renderContent(); return;
+      case 'desc-open': {
+        if (e.target.closest('a')) return;
+        const t = task(ui.taskId);
+        if (!ui.descOpen[t.id]) { ui.descOpen[t.id] = true; renderDetail(); }
+        if (can('editDesc')) setTimeout(() => { const ed = $('#d-notes'); if (ed) { ed.focus(); placeCaretAtEnd(ed); } }, 0);
+        return;
+      }
+      case 'desc-toggle': {
+        const t = task(ui.taskId);
+        flushEdit();
+        ui.descOpen[t.id] = !ui.descOpen[t.id];
+        renderDetail();
+        if (ui.descOpen[t.id] && can('editDesc')) setTimeout(() => { const ed = $('#d-notes'); if (ed) { ed.focus(); placeCaretAtEnd(ed); } }, 0);
+        else { const sec = $('.desc-sec'); if (sec) sec.scrollIntoView({ block: 'nearest' }); }
+        return;
+      }
+      case 'my-part': { const t = task(ui.taskId); setMyPart(t, actEl.dataset.v === '1'); return; }
+      case 'reopen-part': { e.stopPropagation(); const t = task(ui.taskId); const u = id; showMenu(actEl, [{ label: `Reopen ${fullName(userById(u)).split(' ')[0]}’s part`, icon: 'reply', run: () => reopenPart(t, u) }]); return; }
+      case 'focus-search': { const sr = $('#search'); sr.focus(); sr.select(); return; }
+      case 'cd-menu': e.stopPropagation(); toast('CD Status is set automatically when files are submitted and reviewed'); return;
+      case 'submit-review': e.stopPropagation(); submitDialog(task(ui.taskId)); return;
+      case 'withdraw-review': e.stopPropagation(); withdrawReview(task(ui.taskId)); return;
+      case 'needs-cd': e.stopPropagation(); setNeedsCD(task(ui.taskId), actEl.checked); if (!(me() && (me().role === 'admin' || me().role === 'am'))) renderDetail(); return;
+      case 'cd-toggle': e.stopPropagation(); cdToggleFlow(id); return;
+      case 'rr-tab': ui.rrTab = actEl.dataset.tab; renderContent(); return;
+      case 'rr-open': e.preventDefault(); openTask(id); return;
+      case 'rr-decide': e.stopPropagation(); decisionDialog(id); return;
+      case 'rr-download': e.stopPropagation(); downloadReviewFiles(id); return;
+      case 'rr-file': { const rt = task(actEl.dataset.taskId); const a = rt && findAttachment(rt, id); if (a) previewFile(a); return; }
+      case 'assign-menu': e.stopPropagation(); assignMenu(actEl); return;
+      case 'unassign': e.stopPropagation(); setAssignee(task(ui.taskId), id, false); return;
+      case 'open-notif': openNotif(id); return;
+      case 'notif-read': e.stopPropagation(); { const n = db.notifications.find((x) => x.id === id); if (n) { n.read = !n.read; persist(); renderSidebar(); renderContent(); } } return;
+      case 'mark-all-read': myNotifs().forEach((n) => { n.read = true; }); persist(); renderSidebar(); renderContent(); return;
+      case 'inbox-tab': ui.inboxTab = actEl.dataset.tab; renderContent(); return;
+      case 'me-menu': e.stopPropagation(); meMenu(actEl); return;
+      case 'add-member': addMemberFlow(); return;
+      case 'member-menu': e.stopPropagation(); memberMenu(actEl, id); return;
+      case 'change-photo': changePhoto(); return;
+      case 'remove-photo': { const u = me(); if (u.avatar) Host.call('trashPath', { path: u.avatar }).catch(() => {}); u.avatar = null; persist(); render(); return; }
+      case 'save-profile': saveProfile(); return;
+      case 'change-password': changePasswordFlow(); return;
+      case 'toggle-sound': { const u = me(); u.prefs.sound = u.prefs.sound === false; persist(); renderContent(); return; }
+      case 'toggle-notif-type': {
+        const u = me(); u.prefs = u.prefs || {}; u.prefs.notifOff = u.prefs.notifOff || {};
+        const k = actEl.dataset.k;
+        if (u.prefs.notifOff[k]) delete u.prefs.notifOff[k]; else u.prefs.notifOff[k] = true;
+        actEl.classList.toggle('on', !u.prefs.notifOff[k]); actEl.title = u.prefs.notifOff[k] ? 'Off' : 'On';
+        persist(0); return;
+      }
+      case 'allow-notifs': try { Notification.requestPermission().then(() => renderContent()); } catch (err) { /* unsupported */ } return;
+      case 'test-notif': alertUser({ title: 'E11 Console', body: 'This is how new notifications will look and sound.', taskId: null }, true); return;
+      case 'prio-menu': e.stopPropagation(); prioMenu(actEl, actEl.dataset.key); return;
+      case 'clear-start': { const t = task(ui.taskId); logChange(t, 'the <b>start date</b>', fmtDay(t.start), ''); t.start = null; t.updatedAt = nowISO(); commit(); return; }
+      case 'cl-toggle': { const t = task(ui.taskId); const c = t.checklist.find((x) => x.id === id); if (c) { c.done = !c.done; logActivity(t, `${c.done ? 'checked' : 'unchecked'} <b>${esc(c.text)}</b>`); t.updatedAt = nowISO(); commit(); } return; }
+      case 'cl-delete': { if (!can('deleteChecklist')) return denied(); const t = task(ui.taskId); const c = t.checklist.find((x) => x.id === id); if (c) logActivity(t, `removed checklist item ${struck(c.text)}`); t.checklist = t.checklist.filter((x) => x.id !== id); t.updatedAt = nowISO(); commit(); return; }
+      case 'act-filter': ui.activityFilter = actEl.dataset.f; renderDetail(); { const f = $('.tm-feed'); if (f) f.scrollTop = f.scrollHeight; } return;
+      case 'react-menu': e.stopPropagation(); reactMenu(actEl, id); return;
+      case 'react': toggleReaction(id, actEl.dataset.emoji); return;
+      case 'comment-menu': e.stopPropagation(); commentMenu(actEl, id); return;
+      case 'reply': {
+        const t = task(ui.taskId);
+        if (ui.thread !== id) {
+          // carry over anything already typed in the comment box
+          const mk = draftKey(t, null), rk = draftKey(t, id);
+          if (ui.commentDraft[mk] && !ui.commentDraft[rk]) { ui.commentDraft[rk] = ui.commentDraft[mk]; delete ui.commentDraft[mk]; }
+          if ((ui.commentFiles[mk] || []).length && !(ui.commentFiles[rk] || []).length) { ui.commentFiles[rk] = ui.commentFiles[mk]; delete ui.commentFiles[mk]; }
+          ui.replyTo = id;
+          if (ui.detailMode === 'side') ui.sideTab = 'comments';
+          renderDetail();
+        }
+        setTimeout(() => { const el = $('#d-comment'); if (el) { el.focus(); placeCaretAtEnd(el); } }, 0);
+        return;
+      }
+      case 'cancel-reply': ui.replyTo = null; renderDetail(); setTimeout(() => { const el = $('#d-comment'); if (el) el.focus(); }, 0); return;
+      case 'open-thread': openThread(id); return;
+      case 'open-client': e.stopPropagation(); openClient(id); return;
+      case 'add-client': addClientDialog(); return;
+      case 'client-menu': e.stopPropagation(); { const c = clientById(id); if (c) clientMenu(actEl, c); } return;
+      case 'open-cfolder': ui.folderId = id; $('#content').scrollTop = 0; render(); return;
+      case 'cfolder-menu': e.stopPropagation(); { const c = clientById(ui.clientId); const f = c && c.folders.find((x) => x.id === id); if (f) folderMenu(actEl, c, f); } return;
+      case 'add-cfolder': { const c = clientById(ui.clientId); if (c) addFolderFlow(c); } return;
+      case 'ca-upload': pickIntoFolder(); return;
+      case 'open-cfolder-of': e.stopPropagation(); openClient(actEl.dataset.client, id); return;
+      case 'ca-q-clear': { const i = $('#ca-q'); if (i) { i.value = ''; runCaSearch(i); i.focus(); } } return;
+      case 'ca-remove': e.stopPropagation(); removeClientFile(id); return;
+      case 'ca-download': e.stopPropagation(); { const a = clientFileById(id); if (a) downloadClientFiles([a], a.name.replace(/\.[^.]+$/, '')); } return;
+      case 'ca-download-all': { const { c, f } = curFolder(); if (f) downloadClientFiles(f.files, `${c.name} - ${f.name}`); } return;
+      case 'close-thread': closeThread(); return;
+      case 'mention-user': e.stopPropagation(); mentionInComposer(id); return;
+      case 'cancel-edit': ui.editingComment = null; renderDetail(); return;
+      case 'save-edit': saveEdit(id); return;
+      case 'open-url': e.preventDefault(); Host.call('openURL', { url: actEl.dataset.url }).catch(() => { try { window.open(actEl.dataset.url); } catch (_) { /* ignore */ } }); return;
+      case 'delete-comment': deleteComment(id); return;
+      default: break;
+    }
+    if (act === 'rename-project' || act === 'rename-section') { /* handled on dblclick */ }
+  }
+
+  const nav = e.target.closest('[data-nav]');
+  if (nav) { go(nav.dataset.nav); return; }
+  const pr = e.target.closest('[data-project]');
+  if (pr && !e.target.closest('[data-action]')) { go('project', pr.dataset.project); return; }
+
+  const tr = e.target.closest('[data-task]');
+  if (tr && !e.target.closest('button, input, textarea')) { openTask(tr.dataset.task); return; }
+
+  // Click on empty content closes the detail pane
+  if (ui.taskId && e.target.closest('#content') && !e.target.closest('[data-task], .add-row, .col-add-input, .add-section, .add-col')) closeDetail();
+});
+
+document.addEventListener('dblclick', (e) => {
+  const el = e.target.closest('[data-action="rename-project"], [data-action="rename-section"]');
+  if (!el) return;
+  if (el.dataset.action === 'rename-project') renameProject(el.dataset.id);
+  else renameSectionInline(el.dataset.id);
+});
+
+function rerenderKeepingAdd(sid) {
+  renderContent();
+  const a = $(`.add-row[data-section="${sid}"]`);
+  if (a) { a.click(); a.scrollIntoView({ block: 'nearest' }); }
+}
+
+function openThread(cid) {
+  const t = task(ui.taskId);
+  if (!t || !t.comments.some((c) => c.id === cid)) return;
+  const f = $('#detail .tm-feed');
+  ui.mainFeedScroll = f && !ui.thread ? f.scrollTop : ui.mainFeedScroll;
+  ui.thread = cid; ui.replyTo = null;
+  if (ui.detailMode === 'side') ui.sideTab = 'comments';
+  renderDetail();
+  const feed = $('#detail .tm-feed');
+  if (feed) stickFeedToBottom(feed);
+}
+function closeThread() {
+  const back = ui.thread;
+  ui.thread = null;
+  renderDetail();
+  const feed = $('#detail .tm-feed');
+  // back on the main page: always land on the latest comment
+  if (feed) stickFeedToBottom(feed);
+}
+
+function addComment(replyTo) {
+  const t = task(ui.taskId);
+  if (!t) return;
+  const key = draftKey(t, replyTo);
+  const box = $(`[data-draft-key="${key}"]`);
+  const empty = !box || editorEmpty(box);
+  const text = empty ? '' : box.innerText.trim();
+  const html = empty ? '' : sanitizeHTML(box.innerHTML);
+  const files = ui.commentFiles[key] || [];
+  if (!text && !files.length) return;
+  const cid = uid();
+  t.comments.push({ id: cid, text, html, at: nowISO(), attachments: files, parentId: replyTo || null, reactions: {}, authorId: currentUserId });
+  const mentioned = mentionsIn(html);
+  mentioned.forEach((u) => pushNotif(u, t, 'mention', `mentioned you in a ${replyTo ? 'reply' : 'comment'} on`, { snippet: trunc(text, 160), commentId: cid }));
+  // thread participants also hear about replies
+  const skip = [...mentioned];
+  if (replyTo) {
+    const people = new Set(t.comments.filter((c) => c.id === replyTo || c.parentId === replyTo).map((c) => c.authorId));
+    people.forEach((u) => { if (!mentioned.has(u) && !watchersOf(t).includes(u)) pushNotif(u, t, 'comment', 'replied in a thread on', { snippet: trunc(text, 160), commentId: cid }); });
+  }
+  notifyWatchers(t, 'comment', replyTo ? 'replied to a comment on' : 'commented on', { snippet: trunc(text || `${files.length} file${files.length === 1 ? '' : 's'}`, 160), skip, commentId: cid });
+  delete ui.commentFiles[key];
+  delete ui.commentDraft[key];
+  const fromMain = replyTo && ui.thread !== replyTo;
+  if (fromMain) ui.replyTo = null;
+  t.updatedAt = nowISO();
+  commit();
+  setTimeout(() => {
+    const b = $('#d-comment'); if (b) b.focus();
+    const f = $('.tm-feed');
+    if (!f) return;
+    if (!fromMain) { f.scrollTop = f.scrollHeight; return; }
+    // reply sent from the main page: show its thread with the new count
+    const el = $(`#detail [data-thread="${replyTo}"]`);
+    if (el) { el.scrollIntoView({ block: 'nearest' }); const o = el.querySelector('.thread-open'); if (o) { o.classList.add('flash'); setTimeout(() => o.classList.remove('flash'), 1800); } }
+  }, 0);
+}
+
+function saveEdit(cid) {
+  const t = task(ui.taskId);
+  const c = t.comments.find((x) => x.id === cid);
+  const el = $('#edit-comment');
+  if (!c || !el) return;
+  const v = editorEmpty(el) ? '' : el.innerText.trim();
+  if (!v && !(c.attachments || []).length) return;
+  const html = v ? sanitizeHTML(el.innerHTML) : '';
+  if (v !== c.text || html !== (c.html || '')) {
+    const before = mentionsIn(c.html);
+    mentionsIn(html).forEach((u) => { if (!before.has(u)) pushNotif(u, t, 'mention', 'mentioned you in a comment on', { snippet: trunc(v, 160), commentId: c.id }); });
+    c.text = v; c.html = html; c.editedAt = nowISO();
+  }
+  ui.editingComment = null;
+  commit();
+}
+
+/* Detail pane inputs (no full re-render while typing) */
+document.addEventListener('input', (e) => {
+  if (!db || !currentUserId) return;
+  const t = ui.taskId && task(ui.taskId);
+  const el = e.target;
+  if (el.id === 'search') {
+    const v = el.value;
+    if (v.trim() && !ui.search) ui.prevView = { view: ui.view, projectId: ui.projectId };
+    ui.search = v.trim() ? v : '';
+    if (!ui.search && ui.prevView) { ui.view = ui.prevView.view; ui.projectId = ui.prevView.projectId; }
+    renderSidebar(); renderTitle(); renderContent();
+    return;
+  }
+  if (!t) return;
+  if (el.id === 'd-title') { t.title = el.value.replace(/\n/g, ' '); t.updatedAt = nowISO(); autosize(el); commit({ keepDetail: true, delay: 400 }); }
+  else if (el.id === 'd-notes') {
+    if (editorEmpty(el) && !el.querySelector('blockquote')) el.innerHTML = '';
+    t.notes = el.innerText.trim(); t.notesHtml = t.notes ? sanitizeHTML(el.innerHTML) : '';
+    t.updatedAt = nowISO(); commit({ keepDetail: true, delay: 500 });
+  }
+  else if (el.classList.contains('sub-title')) {
+    const s = task(el.dataset.subId);
+    if (s) { s.title = el.value; s.updatedAt = nowISO(); commit({ keepDetail: true, delay: 400 }); }
+  } else if (el.dataset && el.dataset.draftKey) {
+    if (editorEmpty(el) && !el.querySelector('blockquote')) el.innerHTML = '';
+    ui.commentDraft[el.dataset.draftKey] = el.innerHTML;
+  }
+  else if (el.id === 'edit-comment') autosize(el);
+  else if (el.classList.contains('cl-text')) {
+    const c = (t.checklist || []).find((x) => x.id === el.dataset.clId);
+    if (c) { c.text = el.value; t.updatedAt = nowISO(); commit({ keepDetail: true, delay: 400 }); }
+  }
+});
+
+document.addEventListener('change', (e) => {
+  if (!db || !currentUserId) return;
+  const t = ui.taskId && task(ui.taskId);
+  if (!t) return;
+  const el = e.target;
+  if (el.id === 'd-due') { setDue(t, el.value || null); commit(); }
+  else if (el.id === 'd-start') { const o = t.start; t.start = el.value || null; logChange(t, 'the <b>start date</b>', fmtDay(o), fmtDay(t.start)); t.updatedAt = nowISO(); commit(); }
+  else if (el.id === 'd-project') { if (!can('editProject')) { denied(); renderDetail(); return; } setTaskProject(t, el.value || null); commit(); }
+  else if (el.id === 'd-section') { moveTask(t.id, el.value, null, false); commit(); }
+});
+
+document.addEventListener('keydown', (e) => {
+  if (!db || !currentUserId) return;
+  const el = e.target;
+  const mod = e.metaKey || e.ctrlKey;
+
+  if (el.id === 'd-title' && e.key === 'Enter') { e.preventDefault(); el.blur(); return; }
+  if (el.id === 'd-tag-input') {
+    if ((e.key === 'Enter' || e.key === ',') && el.value.trim()) {
+      e.preventDefault();
+      const t = task(ui.taskId);
+      const v = el.value.trim().replace(/,$/, '');
+      if (!t.tags.some((g) => g.toLowerCase() === v.toLowerCase())) { t.tags.push(v); logActivity(t, `added tag <b>${esc(v)}</b>`); }
+      t.updatedAt = nowISO();
+      commit();
+      setTimeout(() => { const i = $('#d-tag-input'); if (i) i.focus(); }, 0);
+      return;
+    }
+    if (e.key === 'Backspace' && !el.value) {
+      const t = task(ui.taskId);
+      if (t.tags.length && can('removeTag')) { logActivity(t, `removed tag ${struck(t.tags[t.tags.length - 1])}`); t.tags.pop(); commit(); setTimeout(() => { const i = $('#d-tag-input'); if (i) i.focus(); }, 0); }
+      return;
+    }
+  }
+  if (el.id === 'd-sub-add' && e.key === 'Enter' && el.value.trim() && !e.isComposing) {
+    e.preventDefault();
+    if (!can('createTask')) return denied();
+    createTask({ parentId: ui.taskId, title: el.value.trim() });
+    logActivity(task(ui.taskId), `added subtask <b>${esc(el.value.trim())}</b>`);
+    commit();
+    setTimeout(() => { const i = $('#d-sub-add'); if (i) i.focus(); }, 0);
+    return;
+  }
+  if (el.classList && el.classList.contains('sub-title') && e.key === 'Enter') { e.preventDefault(); const n = $('#d-sub-add'); if (n) n.focus(); return; }
+  if (el.classList && el.classList.contains('rt-editor') && mod && !e.shiftKey && ['b', 'i', 'u'].includes(e.key.toLowerCase())) {
+    e.preventDefault();
+    document.execCommand({ b: 'bold', i: 'italic', u: 'underline' }[e.key.toLowerCase()], false, null);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    return;
+  }
+  if (el.dataset && el.dataset.draftKey && e.key === 'Enter' && mod) { e.preventDefault(); addComment(el.dataset.replyTo || null); return; }
+  if (el.id === 'edit-comment') {
+    if (e.key === 'Enter' && mod) { e.preventDefault(); saveEdit(ui.editingComment); return; }
+    if (e.key === 'Escape') { e.preventDefault(); ui.editingComment = null; renderDetail(); return; }
+  }
+  if (el.dataset && el.dataset.replyTo && e.key === 'Escape' && ui.replyTo && ui.thread !== el.dataset.replyTo) { e.preventDefault(); ui.replyTo = null; renderDetail(); setTimeout(() => { const b = $('#d-comment'); if (b) b.focus(); }, 0); return; }
+  if (el.id === 'd-cl-add' && e.key === 'Enter' && el.value.trim() && !e.isComposing) {
+    e.preventDefault();
+    const t = task(ui.taskId);
+    t.checklist.push({ id: uid(), text: el.value.trim(), done: false });
+    logActivity(t, `added checklist item <b>${esc(el.value.trim())}</b>`);
+    t.updatedAt = nowISO();
+    commit();
+    setTimeout(() => { const i = $('#d-cl-add'); if (i) i.focus(); }, 0);
+    return;
+  }
+  if (el.classList && el.classList.contains('cl-text') && e.key === 'Enter') { e.preventDefault(); const n = $('#d-cl-add'); if (n) n.focus(); return; }
+  if (el.id === 'quick-add' && e.key === 'Enter' && el.value.trim() && !e.isComposing) {
+    e.preventDefault();
+    if (!can('createTask')) return denied();
+    createTask({ title: el.value.trim(), due: el.dataset.day || todayStr() });
+    el.value = '';
+    commit();
+    setTimeout(() => { const i = $('#quick-add'); if (i) i.focus(); }, 0);
+    return;
+  }
+
+  if (mod && e.key.toLowerCase() === 'f' && $('#ca-q')) { e.preventDefault(); $('#ca-q').focus(); $('#ca-q').select(); return; }
+  if (mod && e.key.toLowerCase() === 'k') { e.preventDefault(); const s = $('#search'); s.focus(); s.select(); return; }
+  if (mod && e.key.toLowerCase() === 'n') { e.preventDefault(); if (e.shiftKey) newProjectFlow(); else if (can('createTask')) newTaskInContext(); else denied(); return; }
+  if (e.key === 'Escape') {
+    if ($('.lightbox') || $('.fv')) { $('#overlay-root').innerHTML = ''; return; }
+    if ($('.menu')) { closeMenus(); return; }
+    if (el.id === 'search') { el.value = ''; el.dispatchEvent(new Event('input', { bubbles: true })); el.blur(); return; }
+    if (ui.taskId && ui.thread) { if (el.blur) el.blur(); closeThread(); return; }
+    if (ui.taskId) { if (el.blur) el.blur(); closeDetail(); return; }
+  }
+});
+
+document.addEventListener('paste', (e) => {
+  const ed = e.target.closest && e.target.closest('.rt-editor');
+  if (!ed) return;
+  e.preventDefault();
+  const txt = (e.clipboardData || window.clipboardData).getData('text/plain');
+  if (ui.fileClip && txt && txt.trim() === ui.fileClip.token) { pasteFileInto(ed); return; }
+  const html = textWithMentions(txt);
+  if (html) { document.execCommand('insertHTML', false, html); ed.dispatchEvent(new Event('input', { bubbles: true })); }
+  else document.execCommand('insertText', false, txt);
+});
+// "@Full Name" (or @emailname) in pasted text → mention chip, when that person is on the team.
+// Returns null when nothing matched so a normal paste is used.
+function textWithMentions(txt) {
+  if (!db || !txt || txt.indexOf('@') < 0) return null;
+  const names = [];
+  activeUsers().forEach((u) => {
+    names.push({ u, k: fullName(u) });
+    names.push({ u, k: u.email.split('@')[0] });
+    if (u.id === currentUserId) names.push({ u, k: 'Me' });
+  });
+  names.sort((a, b) => b.k.length - a.k.length);
+  let out = '', i = 0, found = false;
+  while (i < txt.length) {
+    const ch = txt[i];
+    if (ch === '@' && (i === 0 || /[\s(\[,;:]/.test(txt[i - 1]))) {
+      const rest = txt.slice(i + 1).toLowerCase();
+      const hit = names.find((x) => rest.startsWith(x.k.toLowerCase()) && !/[\w@]/.test(rest.charAt(x.k.length)));
+      if (hit) {
+        out += `<span class="mention" data-user="${esc(hit.u.id)}" contenteditable="false">@${esc(fullName(hit.u))}</span>`;
+        i += 1 + hit.k.length; found = true;
+        continue;
+      }
+    }
+    out += ch === '\n' ? '<br>' : esc(ch);
+    i++;
+  }
+  return found ? out : null;
+}
+
+/* ================= Drag and drop ================= */
+let dragId = null;
+function clearDropMarks() { $$('.drop-before, .drop-after, .drop-target').forEach((x) => x.classList.remove('drop-before', 'drop-after', 'drop-target')); }
+
+document.addEventListener('dragstart', (e) => {
+  const el = e.target.closest && e.target.closest('[data-task][draggable="true"]');
+  if (!el) return;
+  dragId = el.dataset.task;
+  e.dataTransfer.effectAllowed = 'move';
+  try { e.dataTransfer.setData('text/plain', dragId); } catch (_) { /* ignore */ }
+  setTimeout(() => el.classList.add('dragging'), 0);
+});
+document.addEventListener('dragend', () => { dragId = null; clearDropMarks(); $$('.dragging').forEach((x) => x.classList.remove('dragging')); });
+
+function dropInfo(e) {
+  const target = e.target.closest('[data-task][draggable="true"]');
+  if (target && target.dataset.task !== dragId) {
+    const r = target.getBoundingClientRect();
+    const after = e.clientY > r.top + r.height / 2;
+    const secEl = target.closest('.section[data-section]');
+    const sid = secEl ? secEl.dataset.section : target.closest('.col[data-col]').dataset.col;
+    return { el: target, sectionId: sid, targetId: target.dataset.task, after };
+  }
+  const sec = e.target.closest('.section[data-section], .col[data-col]');
+  if (sec) return { el: sec.matches('[data-col]') ? sec : ($('.section-head', sec) || sec), sectionId: sec.dataset.section || sec.dataset.col, targetId: null, zone: true };
+  return null;
+}
+document.addEventListener('dragover', (e) => {
+  if (!dragId) return;
+  const info = dropInfo(e);
+  if (!info) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  clearDropMarks();
+  if (info.targetId) info.el.classList.add(info.after ? 'drop-after' : 'drop-before');
+  else info.el.classList.add('drop-target');
+});
+document.addEventListener('drop', (e) => {
+  if (!dragId) return;
+  const info = dropInfo(e);
+  clearDropMarks();
+  if (!info) return;
+  e.preventDefault();
+  const dt = task(dragId);
+  dragId = null;
+  if (dt && dt.sectionId !== info.sectionId) changeStatus(dt, info.sectionId, info.targetId, info.after);
+  else if (dt) { moveTask(dt.id, info.sectionId, info.targetId, info.after); commit(); }
+});
+
+/* ================= Client Assets ================= */
+// db.clients = [{ id, name, logo, dir: 'Clients/<name>', folders: [{ id, name, dir, files: [att] }] }]
+// Admins and Account Managers add clients, folders and files; only Admins delete a client.
+const DEFAULT_FOLDERS = ['Logos', 'Brand Guidelines', 'Fonts', 'Files'];
+const FONT_EXT = ['otf', 'ttf', 'woff', 'woff2'];
+const isFont = (a) => FONT_EXT.includes(fileExt(a.name));
+const canAssets = () => { const u = me(); return !!u && (u.role === 'admin' || u.role === 'am'); };
+const isAdmin = () => !!me() && me().role === 'admin';
+const clientById = (id) => (db.clients || []).find((c) => c.id === id) || null;
+const clientsSorted = () => (db.clients || []).slice().sort((a, b) => a.name.localeCompare(b.name));
+const clientFileCount = (c) => c.folders.reduce((n, f) => n + f.files.length, 0);
+// "Ford", "ford ", "FORD." and "Ford" with different spacing are the same client
+const clientKey = (n) => String(n || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/&/g, 'and').replace(/[^a-z0-9؀-ۿ]+/g, '');
+const dupClient = (name, exceptId) => { const k = clientKey(name); return k ? (db.clients || []).find((c) => c.id !== exceptId && clientKey(c.name) === k) || null : null; };
+const dupMsg = (c) => `There is already a client named “${c.name}”.`;
+const diskSafe = (s) => String(s).replace(/[\/:\\]/g, '-').replace(/^\.+/, '').replace(/\s+/g, ' ').trim().slice(0, 80) || 'Untitled';
+function freeDir(base, name, taken) {
+  const n = diskSafe(name);
+  let d = `${base}/${n}`, i = 2;
+  while (taken.some((x) => x.toLowerCase() === d.toLowerCase())) d = `${base}/${n} (${i++})`;
+  return d;
+}
+function newFolder(c, name) {
+  const f = { id: 'cf-' + uid(), name: name.trim(), dir: freeDir(c.dir, name, c.folders.map((x) => x.dir)), files: [], createdAt: nowISO(), createdBy: currentUserId };
+  c.folders.push(f);
+  Host.call('makeDir', { path: f.dir }).catch(() => {});
+  return f;
+}
+function createClient(name, logo) {
+  const c = { id: 'cl-' + uid(), name: name.trim().replace(/\s+/g, ' '), logo: logo || null, dir: '', folders: [], createdAt: nowISO(), createdBy: currentUserId };
+  c.dir = freeDir('Clients', c.name, (db.clients || []).map((x) => x.dir));
+  DEFAULT_FOLDERS.forEach((n) => newFolder(c, n));
+  db.clients.push(c);
+  return c;
+}
+function clientFileById(id) {
+  for (const c of db.clients || []) for (const f of c.folders) { const a = f.files.find((x) => x.id === id); if (a) return a; }
+  return null;
+}
+const clientOfProject = (p) => (p && p.clientId ? clientById(p.clientId) : null);
+function openClient(id, folderId = null) {
+  if (!clientById(id)) { toast('That client has been removed'); return; }
+  ui.caQ = ''; ui.caScope = null;
+  if (ui.taskId) closeDetail();
+  ui.clientId = id; ui.folderId = folderId;
+  go('client');
+}
+function clientLogoHTML(c, size) {
+  return c.logo
+    ? `<span class="cl-logo" style="--s:${size}px"><img src="${'/__file/' + c.logo.split('/').map(encodeURIComponent).join('/')}" alt=""></span>`
+    : `<span class="cl-logo mono" style="--s:${size}px;--c:${avColor(c.id)}">${esc(initials(c.name))}</span>`;
+}
+
+/* ---- Pages ---- */
+function viewClients() {
+  const list = clientsSorted();
+  const cards = list.map((c) => `<div class="ca-card" data-action="open-client" data-id="${c.id}" data-q="${esc(c.name.toLowerCase())}" title="Open ${esc(c.name)}">
+      <div class="ca-logo">${clientLogoHTML(c, 120)}</div>
+      <div class="ca-name">${esc(c.name)}</div>
+      <div class="ca-meta">${c.folders.length} folder${c.folders.length === 1 ? '' : 's'} · ${clientFileCount(c)} file${clientFileCount(c) === 1 ? '' : 's'}</div>
+    </div>`).join('');
+  const grid = `<div class="ca-grid">
+      ${canAssets() ? `<div class="ca-card add" data-action="add-client"><div class="ca-logo"><span class="ca-plus">${icon('plus')}</span></div><div class="ca-name">Add client</div><div class="ca-meta">Name and logo</div></div>` : ''}
+      ${cards}
+    </div>
+    ${list.length ? '' : `<div class="empty"><div class="big">No clients yet</div>${canAssets() ? 'Add your first client to start collecting their brand assets.' : 'An Admin or Account Manager will add clients here.'}</div>`}`;
+  return `<div class="ca-page">
+    <div class="ca-intro">
+      <div><h2>Brand guidelines, logos and fonts for every client</h2><p>Open a client to find what you need, then use <b>${icon('copy')}Copy</b> on any file to paste it straight into a task — no downloading or re-uploading.</p></div>
+    </div>
+    ${caSearchBar(null)}
+    <div id="ca-body" data-scope="">${ui.caQ && !ui.caScope ? caResultsHTML(ui.caQ, null) : grid}</div>
+    <template id="ca-default">${grid}</template>
+  </div>`;
+}
+
+function viewClient(c) {
+  const projects = db.projects.filter((p) => p.clientId === c.id);
+  const head = `<div class="cl-head">
+      <div class="cl-head-logo">${clientLogoHTML(c, 88)}</div>
+      <div class="cl-head-txt"><h2>${esc(c.name)}</h2>
+        <div class="cl-head-meta">${c.folders.length} folder${c.folders.length === 1 ? '' : 's'} · ${clientFileCount(c)} file${clientFileCount(c) === 1 ? '' : 's'}${projects.length ? ` · Projects: ${projects.map((p) => `<a class="cl-proj" data-action="go-project" data-id="${p.id}"><i style="background:${p.color}"></i>${esc(p.name)}</a>`).join('')}` : ''}</div>
+      </div>
+      ${canAssets() ? `<button class="btn" data-action="client-menu" data-id="${c.id}">${icon('more')}Client options</button>` : ''}
+    </div>`;
+  const folders = c.folders.map((f) => {
+    const imgs = f.files.filter((a) => isImage(a)).slice(0, 3);
+    return `<div class="cf-card" data-action="open-cfolder" data-id="${f.id}" title="Open ${esc(f.name)}">
+      <div class="cf-ic">${icon('folder')}</div>
+      <div class="cf-name">${esc(f.name)}</div>
+      <div class="cf-meta">${f.files.length ? `${f.files.length} file${f.files.length === 1 ? '' : 's'}` : 'Empty'}</div>
+      ${imgs.length && Host.isNative ? `<div class="cf-peek">${imgs.map((a) => `<img src="${fileUrl(a)}" alt="" loading="lazy">`).join('')}</div>` : ''}
+      ${canAssets() ? `<button class="icon-btn sm cf-more" data-action="cfolder-menu" data-id="${f.id}" title="Folder options">${icon('more')}</button>` : ''}
+    </div>`;
+  }).join('');
+  const grid = `<div class="cf-grid">${folders}
+      ${canAssets() ? `<div class="cf-card add" data-action="add-cfolder"><div class="cf-ic">${icon('plus')}</div><div class="cf-name">New folder</div><div class="cf-meta">Admins & Account Managers</div></div>` : ''}
+    </div>`;
+  const q = ui.caScope === c.id ? ui.caQ : '';
+  return `<div class="ca-page">${head}
+    ${caSearchBar(c)}
+    <div id="ca-body" data-scope="${c.id}">${q ? caResultsHTML(q, c) : grid}</div>
+    <template id="ca-default">${grid}</template></div>`;
+}
+
+function caTile(f, a, loc = null) {
+  const kind = fileKind(a);
+  let inner;
+  if (isFont(a)) inner = `<div class="font-sample" style="font-family:'caf-${a.id}'"><b>Aa</b><span>The quick brown fox · ابجد ١٢٣</span></div>`;
+  else if (kind === 'image' && Host.isNative) inner = `<img src="${fileUrl(a)}" alt="" loading="lazy">`;
+  else if (Host.isNative) inner = thumbImg(a, 'tile').replace('data-thumb-for="', 'data-thumb-client="1" data-thumb-for="');
+  else inner = `<div class="thumb-ph"><span class="ext">${esc(fileExt(a.name) || 'file')}</span></div>`;
+  return `<div class="tile ca-tile" data-action="tile-open" data-id="${a.id}" title="${esc(a.name)}">
+    <div class="tile-img ${isFont(a) ? 'is-font' : ''}">${inner}${kind === 'video' ? `<span class="tile-play">${icon('play')}</span>` : ''}</div>
+    <div class="tile-meta"><span>${loc ? caMark(a.name, loc.q) : esc(a.name)}</span>${loc ? `<a class="ca-loc" data-action="open-cfolder-of" data-client="${loc.c.id}" data-id="${f.id}" title="Open this folder">${clientLogoHTML(loc.c, 14)}${esc(loc.c.name)} › ${esc(f.name)}</a>` : ''}<small>${fmtSize(a.size)}${a.addedBy ? ` · ${esc(firstName(a.addedBy))}` : ''}</small></div>
+    <button class="ca-copy" data-action="copy-att" data-id="${a.id}" title="Copy — paste into any task comment or description">${icon('copy')}Copy</button>
+    <div class="tile-actions">
+      <button class="icon-btn sm" data-action="quicklook" data-id="${a.id}" title="Preview">${icon('search')}</button>
+      <button class="icon-btn sm" data-action="ca-download" data-id="${a.id}" title="Download to your Downloads folder">${icon('download')}</button>
+      <button class="icon-btn sm" data-action="reveal-att" data-id="${a.id}" title="${FINDER_LABEL}">${icon(Host.isServer ? 'download' : 'folder')}</button>
+      ${canAssets() && !loc ? `<button class="icon-btn sm" data-action="ca-remove" data-id="${a.id}" title="Delete">${icon('trash')}</button>` : ''}
+    </div>
+  </div>`;
+}
+
+
+/* ---- Client Assets search: clients, folders and files (by name, type or client) ---- */
+const caNorm = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '');
+const caTerms = (q) => caNorm(q).split(/[\s,]+/).map((t) => t.replace(/^\./, '')).filter(Boolean);
+// Highlight the searched words inside a name
+function caMark(name, q) {
+  const terms = caTerms(q);
+  const src = String(name), low = caNorm(src);
+  const hit = new Array(src.length).fill(false);
+  terms.forEach((t) => { let i = low.indexOf(t); while (i >= 0) { for (let k = i; k < i + t.length && k < src.length; k++) hit[k] = true; i = low.indexOf(t, i + 1); } });
+  let out = '', on = false;
+  for (let i = 0; i < src.length; i++) {
+    if (hit[i] && !on) { out += '<mark>'; on = true; } else if (!hit[i] && on) { out += '</mark>'; on = false; }
+    out += esc(src[i]);
+  }
+  return out + (on ? '</mark>' : '');
+}
+function caSearch(q, scope) {
+  const terms = caTerms(q);
+  if (!terms.length) return { clients: [], folders: [], files: [] };
+  const all = (hay) => { const h = caNorm(hay); return terms.every((t) => h.includes(t)); };
+  const some = (hay) => { const h = caNorm(hay); return terms.some((t) => h.includes(t)); };
+  const list = scope ? [scope] : clientsSorted();
+  const clients = scope ? [] : list.filter((c) => all(c.name));
+  const folders = [], files = [];
+  list.forEach((c) => c.folders.forEach((f) => {
+    if (all(`${c.name} ${f.name}`) && some(f.name)) folders.push({ c, f });
+    f.files.forEach((a) => {
+      const kindWords = `${fileExt(a.name)} ${isFont(a) ? 'font' : fileKind(a)}`;
+      if (all(`${c.name} ${f.name} ${a.name} ${kindWords}`) && some(`${a.name} ${kindWords}`)) files.push({ c, f, a });
+    });
+  }));
+  files.sort((x, y) => x.a.name.localeCompare(y.a.name));
+  return { clients, folders, files };
+}
+function caSearchBar(c) {
+  const q = (c ? ui.caScope === c.id : !ui.caScope) ? ui.caQ || '' : '';
+  return `<div class="ca-searchbar">
+    ${icon('search')}
+    <input id="ca-q" value="${esc(q)}" placeholder="${c ? `Search ${esc(c.name)}’s folders and files…` : 'Search all client assets — clients, folders, files (e.g. “ford logo png”)'}" autocomplete="off" spellcheck="false">
+    <button class="icon-btn sm ca-q-x" data-action="ca-q-clear" title="Clear (Esc)" ${q ? '' : 'hidden'}>${icon('x')}</button>
+    <span class="ca-q-scope">${c ? `In ${esc(c.name)}` : 'All clients'}</span>
+  </div>`;
+}
+function caResultsHTML(q, scope) {
+  const r = caSearch(q, scope);
+  const n = r.clients.length + r.folders.length + r.files.length;
+  if (!n) return `<div class="ca-noresults">${icon('search')}<b>Nothing matches “${esc(q.trim())}”</b><span>Try a client name, a folder like “fonts”, or a file type like “pdf” or “otf”.</span></div>`;
+  const shown = r.files.slice(0, 120);
+  const fonts = shown.filter((x) => isFont(x.a));
+  return `<div class="ca-results">
+    ${fonts.length ? `<style>${fonts.map((x) => `@font-face{font-family:'caf-${x.a.id}';src:url("${fileUrl(x.a)}");}`).join('')}</style>` : ''}
+    <div class="ca-rcount">${n} result${n === 1 ? '' : 's'} for “${esc(q.trim())}”${scope ? ` in ${esc(scope.name)}` : ''}</div>
+    ${r.clients.length ? `<h4 class="ca-rh">Clients <span>${r.clients.length}</span></h4><div class="ca-rlist">${r.clients.map((c) => `<button class="ca-rrow" data-action="open-client" data-id="${c.id}">${clientLogoHTML(c, 34)}<span><b>${caMark(c.name, q)}</b><small>${c.folders.length} folders · ${clientFileCount(c)} files</small></span>${icon('chev-right')}</button>`).join('')}</div>` : ''}
+    ${r.folders.length ? `<h4 class="ca-rh">Folders <span>${r.folders.length}</span></h4><div class="ca-rlist">${r.folders.map(({ c, f }) => `<button class="ca-rrow" data-action="open-cfolder-of" data-client="${c.id}" data-id="${f.id}"><span class="cf-ic sm">${icon('folder')}</span><span><b>${caMark(f.name, q)}</b><small>${esc(c.name)} · ${f.files.length} file${f.files.length === 1 ? '' : 's'}</small></span>${icon('chev-right')}</button>`).join('')}</div>` : ''}
+    ${r.files.length ? `<h4 class="ca-rh">Files <span>${r.files.length}</span></h4><div class="tile-grid ca-files">${shown.map(({ c, f, a }) => caTile(f, a, { c, q })).join('')}</div>${r.files.length > shown.length ? `<div class="ca-rmore">Showing the first ${shown.length} files — add another word to narrow it down.</div>` : ''}` : ''}
+  </div>`;
+}
+let caSearchTimer = null;
+function runCaSearch(input) {
+  const body = $('#ca-body');
+  if (!body) return;
+  const scope = body.dataset.scope ? clientById(body.dataset.scope) : null;
+  ui.caQ = input.value; ui.caScope = scope ? scope.id : null;
+  const q = input.value.trim();
+  const x = $('.ca-q-x'); if (x) x.hidden = !q;
+  body.innerHTML = q ? caResultsHTML(q, scope) : (($('#ca-default') || {}).innerHTML || '');
+  hydrateThumbs(body);
+}
+document.addEventListener('input', (e) => {
+  if (e.target.id !== 'ca-q') return;
+  clearTimeout(caSearchTimer);
+  caSearchTimer = setTimeout(() => runCaSearch(e.target), 120);
+});
+document.addEventListener('keydown', (e) => {
+  if (e.target.id !== 'ca-q') return;
+  if (e.key === 'Escape' && e.target.value) { e.preventDefault(); e.stopPropagation(); e.target.value = ''; runCaSearch(e.target); }
+  else if (e.key === 'Enter') { clearTimeout(caSearchTimer); runCaSearch(e.target); const first = $('#ca-body .ca-rrow, #ca-body .ca-tile'); if (first) { e.preventDefault(); first.click(); } }
+}, true);
+
+function viewClientFolder(c, f) {
+  const fonts = f.files.filter(isFont);
+  return `<div class="ca-page ca-folder" data-folder="${f.id}">
+    ${fonts.length ? `<style>${fonts.map((a) => `@font-face{font-family:'caf-${a.id}';src:url("${fileUrl(a)}");}`).join('')}</style>` : ''}
+    <div class="cfo-head">
+      <button class="icon-btn" data-action="open-client" data-id="${c.id}" title="Back to ${esc(c.name)}">${icon('chev-left')}</button>
+      ${clientLogoHTML(c, 40)}
+      <div class="cfo-title"><h2>${esc(f.name)}</h2><small>${esc(c.name)} · ${f.files.length} file${f.files.length === 1 ? '' : 's'}</small></div>
+      <span class="spacer"></span>
+      ${f.files.length ? `<button class="btn ghost" data-action="ca-download-all">${icon('download')}Download all</button>` : ''}
+      ${canAssets() ? `<button class="btn primary" data-action="ca-upload">${icon('upload')}Upload files</button>` : ''}
+    </div>
+    <div class="ca-uploads" id="ca-uploads"></div>
+    ${f.files.length ? `<div class="tile-grid ca-files">${f.files.slice().sort((a, b) => a.name.localeCompare(b.name)).map((a) => caTile(f, a)).join('')}</div>`
+      : `<div class="ca-empty ${canAssets() ? 'drop' : ''}">${icon(canAssets() ? 'upload' : 'folder')}<b>${canAssets() ? 'Drag files here or click Upload files' : 'Nothing in this folder yet'}</b><span>${canAssets() ? 'Logos, guideline PDFs, fonts, templates — any file type.' : 'An Admin or Account Manager can add files.'}</span></div>`}
+    ${canAssets() ? `<div class="ca-dropscrim">${icon('upload')}<b>Drop to upload to ${esc(f.name)}</b></div>` : ''}
+  </div>`;
+}
+
+/* ---- Actions ---- */
+function addClientDialog() {
+  if (!canAssets()) return denied();
+  let logo = null;
+  const root = $('#overlay-root');
+  root.innerHTML = `<div class="scrim"><form class="dialog form-dlg ac-dlg" autocomplete="off">
+    <h2>Add client</h2>
+    <div class="ac-row">
+      <button type="button" class="ac-logo" id="ac-logo" title="Choose a logo">${icon('camera')}<span>Add logo</span></button>
+      <div class="ac-fields"><label class="dlg-label">Client name</label><input class="field" name="name" placeholder="e.g. Ford" maxlength="80">
+      <div class="dlg-hint">New clients start with ${DEFAULT_FOLDERS.join(', ')} folders.</div></div>
+    </div>
+    <div class="dlg-err"></div>
+    <div class="actions"><button type="button" class="btn" data-r="0">Cancel</button><button type="submit" class="btn primary">Add client</button></div>
+  </form></div>`;
+  const form = $('form', root), err = $('.dlg-err', root), inp = form.elements.name, ok = $('[type="submit"]', root);
+  const check = () => { const d = dupClient(inp.value); err.textContent = d ? dupMsg(d) : ''; ok.disabled = !!d || !inp.value.trim(); inp.classList.toggle('bad', !!d); };
+  const close = () => { root.innerHTML = ''; document.removeEventListener('keydown', onKey, true); };
+  const cancel = () => { if (logo) safeTrash([logo]); close(); };
+  const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancel(); } else e.stopPropagation(); };
+  document.addEventListener('keydown', onKey, true);
+  $('[data-r="0"]', root).addEventListener('click', cancel);
+  inp.addEventListener('input', check);
+  $('#ac-logo', root).addEventListener('click', async () => {
+    if (!Host.isNative) { toast('Logos can be added in the Mac app'); return; }
+    try {
+      const r = await Host.call('pickImage', { kind: 'logo', userId: 'client' });
+      if (!r.path) return;
+      if (logo) safeTrash([logo]);
+      logo = r.path;
+      $('#ac-logo', root).innerHTML = `<img src="${'/__file/' + logo.split('/').map(encodeURIComponent).join('/')}" alt=""><span class="ac-change">Change</span>`;
+      $('#ac-logo', root).classList.add('has');
+    } catch (e) { toast('Could not use that logo: ' + e.message); }
+  });
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = inp.value.trim();
+    if (!name) { err.textContent = 'Enter the client’s name'; return; }
+    const d = dupClient(name);
+    if (d) { err.textContent = dupMsg(d); inp.classList.add('bad'); return; }
+    const c = createClient(name, logo);
+    logo = null;
+    close();
+    persist(0);
+    openClient(c.id);
+    toast(`Added ${c.name}`);
+  });
+  check(); ok.disabled = true;
+  setTimeout(() => inp.focus(), 20);
+}
+
+async function renameClient(c) {
+  const v = await formDialog({ title: 'Rename client', fields: [{ key: 'name', label: 'Client name', value: c.name }], okText: 'Save',
+    validate: (x) => (!x.name ? 'Enter the client’s name' : dupClient(x.name, c.id) ? dupMsg(dupClient(x.name, c.id)) : null) });
+  if (!v) return;
+  c.name = v.name.replace(/\s+/g, ' '); persist(0); render();
+}
+async function changeClientLogo(c) {
+  if (!Host.isNative) { toast('Logos can be added in the Mac app'); return; }
+  try {
+    const r = await Host.call('pickImage', { kind: 'logo', userId: 'client' });
+    if (!r.path) return;
+    const old = c.logo; c.logo = r.path; persist(0); render();
+    if (old) safeTrash([old]);
+  } catch (e) { toast('Could not use that logo: ' + e.message); }
+}
+async function deleteClient(c) {
+  if (!isAdmin()) { toast('Only an Admin can delete a client'); return; }
+  const n = clientFileCount(c);
+  const ok = await dialog({ title: `Delete ${c.name}?`, body: `This removes the client and its ${c.folders.length} folders${n ? ` and ${n} file${n === 1 ? '' : 's'} (moved to the Trash)` : ''}. Files already pasted into tasks stay in those tasks.`, okText: 'Delete client', danger: true });
+  if (!ok) return;
+  const paths = [c.logo, ...c.folders.flatMap((f) => f.files.flatMap((a) => [a.path, '.thumbs/' + a.id])), ...c.folders.map((f) => f.dir), c.dir].filter(Boolean);
+  db.clients = db.clients.filter((x) => x.id !== c.id);
+  db.projects.forEach((p) => { if (p.clientId === c.id) delete p.clientId; });
+  persist(0);
+  go('clients');
+  safeTrash(paths);
+  toast(`Deleted ${c.name}`);
+}
+function clientMenu(anchor, c) {
+  showMenu(anchor, [
+    { label: 'Rename client', icon: 'edit', run: () => renameClient(c) },
+    { label: c.logo ? 'Change logo' : 'Add logo', icon: 'camera', run: () => changeClientLogo(c) },
+    ...(Host.isServer ? [] : [{ label: 'Show in Finder', icon: 'folder', run: () => Host.call('makeDir', { path: c.dir }).then(() => Host.call('revealPath', { path: c.dir })).catch((e) => toast(e.message)) }]),
+    ...(isAdmin() ? ['-', { label: 'Delete client', icon: 'trash', danger: true, run: () => deleteClient(c) }] : []),
+  ]);
+}
+const folderDup = (c, name, exceptId) => c.folders.find((f) => f.id !== exceptId && f.name.trim().toLowerCase() === name.trim().toLowerCase());
+async function addFolderFlow(c) {
+  if (!canAssets()) return denied();
+  const v = await formDialog({ title: `New folder in ${c.name}`, fields: [{ key: 'name', label: 'Folder name', placeholder: 'e.g. Social templates' }], okText: 'Create folder',
+    validate: (x) => (!x.name ? 'Enter a folder name' : folderDup(c, x.name) ? `There is already a folder named “${folderDup(c, x.name).name}”.` : null) });
+  if (!v) return;
+  newFolder(c, v.name); persist(0); render();
+}
+function folderMenu(anchor, c, f) {
+  showMenu(anchor, [
+    { label: 'Rename folder', icon: 'edit', run: async () => {
+      const v = await formDialog({ title: 'Rename folder', fields: [{ key: 'name', label: 'Folder name', value: f.name }], okText: 'Save',
+        validate: (x) => (!x.name ? 'Enter a folder name' : folderDup(c, x.name, f.id) ? `There is already a folder named “${folderDup(c, x.name, f.id).name}”.` : null) });
+      if (v) { f.name = v.name; persist(0); render(); }
+    } },
+    { label: 'Move left', icon: 'chev-left', run: () => { const i = c.folders.indexOf(f); if (i > 0) { c.folders.splice(i, 1); c.folders.splice(i - 1, 0, f); persist(0); render(); } } },
+    { label: 'Move right', icon: 'chev-right', run: () => { const i = c.folders.indexOf(f); if (i < c.folders.length - 1) { c.folders.splice(i, 1); c.folders.splice(i + 1, 0, f); persist(0); render(); } } },
+    '-',
+    { label: 'Delete folder', icon: 'trash', danger: true, run: async () => {
+      const ok = await dialog({ title: `Delete “${f.name}”?`, body: f.files.length ? `Its ${f.files.length} file${f.files.length === 1 ? '' : 's'} will be moved to the Trash. Copies already pasted into tasks stay.` : 'This folder is empty.', okText: 'Delete folder', danger: true });
+      if (!ok) return;
+      c.folders = c.folders.filter((x) => x.id !== f.id);
+      persist(0); render();
+      safeTrash([...f.files.flatMap((a) => [a.path, '.thumbs/' + a.id]), f.dir]);
+    } },
+  ]);
+}
+function curFolder() { const c = clientById(ui.clientId); return c ? { c, f: c.folders.find((x) => x.id === ui.folderId) || null } : { c: null, f: null }; }
+async function pickIntoFolder() {
+  const { c, f } = curFolder();
+  if (!f || !canAssets()) return;
+  try {
+    const r = await Host.call('pickAttachments', { dest: f.dir });
+    const files = (r.files || []).map((x) => ({ ...x, addedAt: nowISO(), addedBy: currentUserId }));
+    if (!files.length) return;
+    f.files.push(...files); persist(0); render();
+    toast(`Added ${files.length} file${files.length === 1 ? '' : 's'} to ${c.name} › ${f.name}`);
+  } catch (e) { toast('Could not add files: ' + e.message); }
+}
+// Drag-and-drop upload in 2 MB pieces with a progress row per file
+async function uploadIntoFolder(fileList) {
+  const { c, f } = curFolder();
+  if (!f || !canAssets()) return;
+  const box = $('#ca-uploads');
+  const rows = [...fileList].map((file) => {
+    const el = document.createElement('div'); el.className = 'sr-item';
+    el.innerHTML = `<span class="ficon">${esc((fileExt(file.name) || 'file').slice(0, 4))}</span><div class="sr-meta"><div class="sr-name">${esc(file.name)}</div><div class="sr-bar"><i style="width:0%"></i></div><small>Waiting…</small></div>`;
+    if (box) box.appendChild(el);
+    return { file, el };
+  });
+  let added = 0;
+  for (const { file, el } of rows) {
+    const bar = $('.sr-bar i', el), note = $('small', el);
+    try {
+      let path = null, last = null;
+      for (let off = 0; off < Math.max(file.size, 1); off += CHUNK) {
+        const b64 = await readChunkB64(file.slice(off, off + CHUNK));
+        last = await Host.call('writeChunk', { dest: f.dir, name: file.name, path, b64 });
+        path = last.path;
+        const p = Math.min(1, (off + CHUNK) / Math.max(file.size, 1));
+        bar.style.width = Math.round(p * 100) + '%'; note.textContent = `Uploading… ${Math.round(p * 100)}%`;
+      }
+      f.files.push({ id: uid(), name: last.name || file.name, path, size: last.size != null ? last.size : file.size, addedAt: nowISO(), addedBy: currentUserId });
+      added++; el.classList.add('ok'); note.textContent = 'Uploaded';
+      persist(300);
+    } catch (e) { el.classList.add('err'); note.textContent = 'Upload failed — ' + e.message; }
+  }
+  if (added && ui.view === 'client' && ui.folderId === f.id) { render(); toast(`Added ${added} file${added === 1 ? '' : 's'} to ${c.name} › ${f.name}`); }
+}
+async function removeClientFile(id) {
+  const { f } = curFolder();
+  const a = f && f.files.find((x) => x.id === id);
+  if (!a || !canAssets()) return;
+  const ok = await dialog({ title: `Delete “${a.name}”?`, body: 'It will be moved to the Trash. Copies already pasted into tasks stay.', okText: 'Delete', danger: true });
+  if (!ok) return;
+  f.files = f.files.filter((x) => x.id !== id);
+  persist(0); render();
+  safeTrash([a.path, '.thumbs/' + a.id]);
+}
+function downloadClientFiles(list, folderName) {
+  if (!list.length) return;
+  Host.call('exportFiles', { folder: folderName, paths: list.map((a) => a.path) })
+    .then((r) => toast(`Saved ${r.count} file${r.count === 1 ? '' : 's'} to Downloads › ${r.dir.split('/').pop()}`))
+    .catch((e) => toast('Could not download: ' + e.message));
+}
+function projectClientMenu(anchor, p) {
+  const list = clientsSorted();
+  showMenu(anchor, [
+    { html: `<div class="mi-note">${icon('folder')}Link ${esc(p.name)} to a client</div>` },
+    ...list.map((c) => ({ html: `<div class="mi ${p.clientId === c.id ? 'cur' : ''}">${clientLogoHTML(c, 18)}${esc(c.name)}</div>`, run: () => { p.clientId = c.id; persist(0); render(); toast(`${p.name} linked to ${c.name}`); } })),
+    ...(p.clientId ? ['-', { label: 'No client', icon: 'x', run: () => { delete p.clientId; persist(0); render(); } }] : []),
+    ...(!list.length ? [{ html: '<div class="mi-note">No clients yet — add one in Client Assets</div>' }] : []),
+  ].map((it, i) => (it && it.html && it.run ? { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) } : it)));
+}
+// Drag files from Finder onto a folder page
+document.addEventListener('dragover', (e) => {
+  const pg = e.target.closest && e.target.closest('.ca-folder');
+  if (!pg || dragId || !canAssets() || !e.dataTransfer || ![...(e.dataTransfer.types || [])].includes('Files')) return;
+  e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; pg.classList.add('dropping');
+});
+document.addEventListener('dragleave', (e) => { const pg = $('.ca-folder.dropping'); if (pg && (!e.relatedTarget || !pg.contains(e.relatedTarget))) pg.classList.remove('dropping'); });
+document.addEventListener('drop', (e) => {
+  const pg = e.target.closest && e.target.closest('.ca-folder');
+  if (!pg || dragId || !canAssets()) return;
+  e.preventDefault(); pg.classList.remove('dropping');
+  if (e.dataTransfer.files && e.dataTransfer.files.length) uploadIntoFolder(e.dataTransfer.files);
+});
+
+
+
+/* ================= CD Review workflow ================= */
+// One Creative Director at a time (db.meta.cdUserId). An Admin can set a temporary Acting CD;
+// the permanent CD is remembered in db.meta.cdHomeId while someone is acting.
+const cdUserId = () => { const id = db && db.meta.cdUserId; const u = id && userById(id); return u && u.active !== false ? id : null; };
+const isCD = (id = currentUserId) => !!id && id === cdUserId();
+const cdActing = () => !!(db && db.meta.cdActing && cdUserId());
+const cdTitle = () => (cdActing() ? 'Acting CD' : 'Creative Director');
+const firstName = (id) => fullName(userById(id)).split(' ')[0];
+// "Needs CD review" is set per task by Account Managers / Admins
+const needsCD = (t) => !!t && !t.parentId && !!t.needsCD;
+// The CD's own part never goes through approval
+const reviewersOf = (t) => (t.assignees || []).filter((u) => u !== cdUserId());
+const epochOf = (t) => t.reviewEpoch || 0;
+function lastReview(t, u) {
+  const list = (t.reviews || []).filter((r) => r.by === u && (r.epoch || 0) === epochOf(t) && r.state !== 'withdrawn');
+  return list[list.length - 1] || null;
+}
+// none | pending | approved | amend | reopened
+const reviewState = (t, u = currentUserId) => { const r = lastReview(t, u); return r ? r.state : 'none'; };
+const reviewPending = (t) => needsCD(t) && reviewersOf(t).some((u) => reviewState(t, u) === 'pending');
+const statusLocked = (t) => reviewPending(t);
+const LOCK_MSG = 'The status is locked while files are with the CD for review';
+const iReview = (t) => needsCD(t) && isMine(t) && !isCD();
+// Files can be submitted once the task has left To Do
+const canSubmitNow = (t) => !t.done && !cdLocked(t);
+const soloReview = (t) => (t.assignees || []).length === 1 && reviewersOf(t).length === 1;
+const cdOK = (t) => !needsCD(t) || t.cdStatus === 'approved' || reviewersOf(t).length === 0;
+const secNamed = (t, re) => statusList(t).find((s) => re.test(String(s.name).trim()));
+const SEC_PROGRESS = /^in ?-?progress$/i, SEC_REVIEW = /^(internal )?review$/i, SEC_CTR = /^ctr$/i;
+function allReviews() {
+  const out = [];
+  db.tasks.forEach((t) => (t.reviews || []).forEach((r) => out.push({ t, r })));
+  return out;
+}
+function findReview(id) { for (const t of db.tasks) { const r = (t.reviews || []).find((x) => x.id === id); if (r) return { t, r }; } return null; }
+const activeReviews = () => allReviews().filter(({ t, r }) => r.state === 'pending' && needsCD(t) && (r.epoch || 0) === epochOf(t) && !t.done).sort((a, b) => a.r.at.localeCompare(b.r.at));
+const REVIEWED_DAYS = 15;
+const reviewedRecent = () => allReviews().filter(({ r }) => (r.state === 'approved' || r.state === 'amend') && r.decidedAt && (Date.now() - new Date(r.decidedAt)) < REVIEWED_DAYS * 864e5).sort((a, b) => b.r.decidedAt.localeCompare(a.r.decidedAt));
+
+// Work out the task's CD Status from everyone's latest submission
+function syncCD(t) {
+  if (!needsCD(t)) return;
+  const rv = reviewersOf(t);
+  if (!rv.length) return;
+  const st = rv.map((u) => reviewState(t, u));
+  const prev = t.cdStatus || '';
+  t.cdStatus = st.includes('pending') ? 'review' : st.every((s) => s === 'approved') ? 'approved' : '';
+  if (prev === t.cdStatus) return;
+  if (prev && t.cdStatus) logChange(t, 'the <b>CD Status</b>', CD[prev].label, CD[t.cdStatus].label);
+  else if (t.cdStatus) logActivity(t, `CD Status is now <b>${esc(CD[t.cdStatus].label)}</b>`);
+  else logActivity(t, `CD Status cleared ${struck(CD[prev].label)}`);
+}
+function moveToSection(t, re) {
+  const s = secNamed(t, re);
+  if (s && t.sectionId !== s.id) moveTask(t.id, s.id, null, false);
+}
+
+function submitReview(t, files) {
+  if (!iReview(t) || !files.length) return;
+  t.reviews = t.reviews || [];
+  const round = (t.reviews || []).filter((r) => r.by === currentUserId && r.state !== 'withdrawn').length + 1;
+  const r = { id: uid(), by: currentUserId, at: nowISO(), files: files.map((f) => f.id), state: 'pending', epoch: epochOf(t), round };
+  t.reviews.push(r);
+  files.forEach((f) => t.attachments.push({ ...f, addedAt: nowISO(), reviewId: r.id }));
+  logActivity(t, `submitted ${files.length === 1 ? `<b>${esc(files[0].name)}</b>` : `<b>${files.length} files</b>`} for CD review${round > 1 ? ` (round ${round})` : ''}`);
+  const cd = cdUserId();
+  if (cd) pushNotif(cd, t, 'review', `submitted ${files.length === 1 ? '1 file' : files.length + ' files'} for your review on`);
+  moveToSection(t, SEC_REVIEW);
+  syncCD(t);
+  t.updatedAt = nowISO();
+  commit();
+  toast(cd ? `Sent to ${fullName(userById(cd))} for review` : 'Submitted — no Creative Director is set yet, an Admin needs to choose one');
+}
+
+async function withdrawReview(t) {
+  const r = lastReview(t, currentUserId);
+  if (!r || r.state !== 'pending') return;
+  const ok = await dialog({ title: 'Withdraw your submission?', body: 'The files you submitted will be removed so you can upload the right ones.', okText: 'Withdraw', danger: true });
+  if (!ok) return;
+  r.state = 'withdrawn';
+  const gone = t.attachments.filter((a) => a.reviewId === r.id);
+  t.attachments = t.attachments.filter((a) => a.reviewId !== r.id);
+  if (gone.length) safeTrash(gone.flatMap((a) => [a.path, '.thumbs/' + a.id]));
+  logActivity(t, 'withdrew their submission for CD review');
+  const cd = cdUserId();
+  if (cd) pushNotif(cd, t, 'review-wd', 'withdrew their submission for');
+  if (!reviewPending(t)) moveToSection(t, SEC_PROGRESS);
+  syncCD(t);
+  t.updatedAt = nowISO();
+  commit();
+}
+
+function decideReview(t, r, decision, noteHtml) {
+  if (!isCD() || r.state !== 'pending') return;
+  r.decidedAt = nowISO(); r.decidedBy = currentUserId;
+  const who = fullName(userById(r.by));
+  if (decision === 'approve') {
+    r.state = 'approved';
+    t.partsDone = t.partsDone || {};
+    t.partsDone[r.by] = nowISO();
+    logActivity(t, `approved <b>${esc(who)}</b>’s files`);
+    pushNotif(r.by, t, 'review-ok', 'approved your files for');
+    postApprovedFiles(t, r);
+    const rv = reviewersOf(t);
+    const allOK = rv.every((u) => reviewState(t, u) === 'approved');
+    syncCD(t);
+    if (allOK) {
+      moveToSection(t, SEC_CTR);
+      if (t.createdBy && t.createdBy !== r.by) pushNotif(t.createdBy, t, 'review-ok', 'approved all files — it moved to CTR:');
+    } else if (!reviewPending(t)) moveToSection(t, SEC_PROGRESS);
+  } else {
+    r.state = 'amend';
+    r.noteHtml = noteHtml;
+    if (t.partsDone) delete t.partsDone[r.by];
+    const c = { id: uid(), text: 'Amendments required: ' + notifPlainHTML(noteHtml), html: `<b>Amendments required</b> for <span class="mention" data-user="${esc(r.by)}" contenteditable="false">@${esc(who)}</span><br>${noteHtml}`, at: nowISO(), attachments: [], parentId: null, reactions: {}, authorId: currentUserId };
+    t.comments.push(c);
+    logActivity(t, `asked <b>${esc(who)}</b> for amendments`);
+    pushNotif(r.by, t, 'review-amend', 'requested amendments on your submission for', { snippet: notifPlainHTML(noteHtml).slice(0, 160), commentId: c.id });
+    if (t.createdBy && t.createdBy !== r.by) pushNotif(t.createdBy, t, 'review-amend', `requested amendments from <b>${esc(who)}</b> on`, { commentId: c.id });
+    if (!reviewPending(t)) moveToSection(t, SEC_PROGRESS);
+    syncCD(t);
+  }
+  t.updatedAt = nowISO();
+  commit();
+}
+// After approval, the submitter "posts" the approved files in the comments for the task creator
+function postApprovedFiles(t, r) {
+  const files = (r.files || []).map((id) => t.attachments.find((a) => a.id === id)).filter(Boolean);
+  if (!files.length) return;
+  const cr = t.createdBy && userById(t.createdBy) ? t.createdBy : null;
+  const hello = cr ? `Hello <span class="mention" data-user="${esc(cr)}" contenteditable="false">@${esc(fullName(userById(cr)))}</span>, ` : 'Hello, ';
+  const text = `${cr ? 'Hello @' + fullName(userById(cr)) + ', ' : 'Hello, '}here are the final files (Approved) by the CD, ready to be sent to client for review.`;
+  const c = { id: uid(), text, html: `${hello}here are the final files (<b>Approved</b>) by the CD, ready to be sent to client for review.`, at: nowISO(),
+    attachments: files.map((a) => ({ ...a, id: uid(), linked: true })), parentId: null, reactions: {}, authorId: r.by, auto: true };
+  t.comments.push(c);
+  if (cr && cr !== r.by && userById(cr).active !== false) {
+    db.notifications.push({ id: uid(), to: cr, from: r.by, taskId: t.id, kind: 'mention', text: 'mentioned you in a comment on', snippet: text, commentId: c.id, at: nowISO(), read: false });
+  }
+}
+function notifPlainHTML(html) { const d = document.createElement('div'); d.innerHTML = String(html || '').replace(/<(br|\/p|\/li|\/div)>/gi, ' $&'); return d.textContent.replace(/\s+/g, ' ').trim(); }
+
+// A small dialog with several choices; resolves with the chosen value (null = cancelled)
+function choiceDialog({ title, body = '', choices }) {
+  return new Promise((resolve) => {
+    const root = $('#overlay-root');
+    root.innerHTML = `<div class="scrim"><div class="dialog choice-dlg" role="dialog">
+      <h2>${esc(title)}</h2>${body ? `<p>${esc(body)}</p>` : ''}
+      <div class="actions">${choices.map((c, i) => `<button class="btn ${c.primary ? 'primary' : c.danger ? 'danger' : ''}" data-i="${i}">${esc(c.label)}</button>`).join('')}</div>
+    </div></div>`;
+    const done = (v) => { root.innerHTML = ''; document.removeEventListener('keydown', onKey, true); resolve(v); };
+    const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(null); } };
+    document.addEventListener('keydown', onKey, true);
+    const scrim = $('.scrim', root);
+    scrim.addEventListener('mousedown', (e) => { if (e.target === scrim) done(null); });
+    $$('[data-i]', root).forEach((b) => b.addEventListener('click', () => done(choices[+b.dataset.i].value == null ? null : choices[+b.dataset.i].value)));
+    setTimeout(() => { const p = $('.btn.primary', root); if (p) p.focus(); }, 20);
+  });
+}
+
+// Every status change from the interface goes through here (status menu, ▶ next, drag and drop)
+async function changeStatus(t, sectionId, targetId = null, after = false) {
+  if (!t) return false;
+  if (t.sectionId !== sectionId && statusLocked(t)) { toast(LOCK_MSG); return false; }
+  const list = statusList(t);
+  const from = list.findIndex((x) => x.id === t.sectionId), to = list.findIndex((x) => x.id === sectionId);
+  const fromS = list[from], toS = list[to];
+  const backFromClient = !t.parentId && fromS && toS && to < from && (SEC_CTR.test(fromS.name.trim()) || isDoneName(fromS.name)) && !(SEC_CTR.test(toS.name.trim()) || isDoneName(toS.name));
+  if (backFromClient) {
+    const allowed = (me() && (me().role === 'admin' || me().role === 'am')) || t.createdBy === currentUserId;
+    if (!allowed) { toast('Only an Account Manager or the person who created this task can send it back'); return false; }
+    const ans = await choiceDialog({
+      title: 'Does this need CD review again?',
+      body: 'The task is going back for changes. Choose whether the updated work goes to the Creative Director before it returns to the client.',
+      choices: [{ label: 'Cancel', value: null }, { label: 'No, skip CD review', value: 'no' }, { label: 'Yes, needs CD review', value: 'yes', primary: true }],
+    });
+    if (!ans) return false;
+    t.partsDone = {};
+    if (ans === 'yes') {
+      t.needsCD = true; t.reviewEpoch = epochOf(t) + 1;
+      if (t.cdStatus) logChange(t, 'the <b>CD Status</b>', CD[t.cdStatus] ? CD[t.cdStatus].label : '', '');
+      t.cdStatus = '';
+      logActivity(t, 'sent it back for changes — <b>needs CD review again</b>');
+    } else {
+      t.needsCD = false;
+      logActivity(t, 'sent it back for changes — <b>no CD review needed</b>');
+    }
+  }
+  if (t.done) setDone(t, false);
+  moveTask(t.id, sectionId, targetId, after);
+  commit();
+  return true;
+}
+
+function setNeedsCD(t, on) {
+  if (!(me() && (me().role === 'admin' || me().role === 'am'))) return denied();
+  if (reviewPending(t)) { toast('Files are waiting for CD review — this can be changed after the CD decides'); return; }
+  if (!!t.needsCD === !!on) return;
+  t.needsCD = !!on;
+  logActivity(t, on ? 'turned on <b>CD review</b> for this task' : 'turned off <b>CD review</b> for this task');
+  if (on) syncCD(t);
+  t.updatedAt = nowISO();
+  commit();
+}
+
+/* ---- Task page pieces ---- */
+const SUBMIT_TIP = 'Move the task to In Progress to submit files for review';
+function submitBtn(t) {
+  const ready = canSubmitNow(t);
+  return `<button class="submit-btn ${ready ? '' : 'off'}" ${ready ? 'data-action="submit-review"' : ''} title="${ready ? 'Upload your files and send them to the Creative Director' : SUBMIT_TIP}">${icon('upload')}Submit Files for Review</button>`;
+}
+function pendingPill(t, withdraw = true) {
+  return `<span class="ir-pill" title="Waiting for the Creative Director">${icon('clock')}Internal Review</span>${withdraw ? `<button class="icon-btn xs ir-x" data-action="withdraw-review" title="Withdraw your submission">${icon('x')}</button>` : ''}`;
+}
+// Status row: the CD Status chip, or the submit button for a one-person task
+function cdArea(t) {
+  if (!showsCD(t)) return '';
+  if (!needsCD(t)) return t.cdStatus ? cdChipBig(t) : '';
+  if (soloReview(t) && iReview(t)) {
+    const st = reviewState(t);
+    if (st === 'pending') return cdChipBig(t) + `<button class="icon-btn xs ir-x" data-action="withdraw-review" title="Withdraw your submission">${icon('x')}</button>`;
+    if (st !== 'approved') return submitBtn(t);
+  }
+  return cdChipBig(t);
+}
+function cdChipBig(t) {
+  const c = CD[t.cdStatus];
+  const tip = c ? `CD Status: ${c.label} — set automatically by the review` : 'CD Status is set automatically when files are submitted and reviewed';
+  return `<span class="cd-btn ro ${c ? '' : 'empty'}" ${c ? `style="background:${c.color};color:${textOn(c.color)}"` : ''} title="${tip}"><span class="cd-k">CD</span>${c ? esc(c.label) : 'Not submitted'}</span>`;
+}
+// Parts row: what the current person can do with their own part
+function myPartControl(t) {
+  if (!isMine(t)) return '';
+  if (!iReview(t)) {
+    return partDone(t) ? `<button class="part-btn on" data-action="my-part" data-v="0" title="Undo — move it back to your To Do">${icon('check')}My part is done<small>Undo</small></button>`
+      : `<button class="part-btn" data-action="my-part" data-v="1">${icon('check')}Mark my part done</button>`;
+  }
+  const st = reviewState(t);
+  if (st === 'approved') return `<span class="part-btn on static" title="Approved by the Creative Director">${icon('check')}Approved</span>`;
+  if (soloReview(t)) return '';
+  if (st === 'pending') return pendingPill(t);
+  return submitBtn(t);
+}
+function cdReviewRow(t) {
+  if (t.parentId || t.done) return '';
+  const canSet = me() && (me().role === 'admin' || me().role === 'am');
+  const cd = cdUserId();
+  const who = cd ? `${esc(fullName(userById(cd)))}${cdActing() ? ' (Acting CD)' : ''}` : 'No Creative Director set';
+  return `<div class="prop prop-cdreq"><label>${icon('shield')}CD review</label><div class="pv">
+    <label class="tg ${canSet ? '' : 'ro'}" title="${canSet ? 'Files must be approved by the Creative Director before this task can go to the client' : 'Set by Account Managers'}"><input type="checkbox" data-action="needs-cd" ${t.needsCD ? 'checked' : ''} ${canSet ? '' : 'disabled'}><i></i><span>Needs CD review</span></label>
+    ${t.needsCD ? `<span class="cdr-who">${icon('user')}${who}</span>` : ''}
+  </div></div>`;
+}
+
+/* ---- Submit files pop-up ---- */
+const CHUNK = 2 * 1024 * 1024;
+function readChunkB64(blob) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(String(fr.result).split(',')[1] || '');
+    fr.onerror = () => reject(fr.error || new Error('Could not read the file'));
+    fr.readAsDataURL(blob);
+  });
+}
+function submitDialog(t) {
+  if (!iReview(t)) return;
+  if (!canSubmitNow(t)) { toast(SUBMIT_TIP); return; }
+  const items = [];
+  let closed = false;
+  const root = $('#overlay-root');
+  const cd = cdUserId();
+  root.innerHTML = `<div class="scrim"><div class="dialog sr-dlg" role="dialog">
+    <h2>Submit files for review</h2>
+    <p>${cd ? `Your files go to <b>${esc(fullName(userById(cd)))}</b> (${cdTitle()}) for approval.` : 'No Creative Director is set yet — an Admin needs to choose one on the Team page.'}</p>
+    <div class="sr-drop" id="sr-drop">${icon('upload')}<b>Drag and drop files here</b><span>or</span><button class="btn" id="sr-pick">Select files from your computer</button></div>
+    <div class="sr-list" id="sr-list"></div>
+    <div class="actions"><button class="btn" id="sr-cancel">Cancel</button><button class="btn primary" id="sr-submit" disabled>Submit</button></div>
+  </div></div>`;
+  const list = $('#sr-list', root), submit = $('#sr-submit', root), drop = $('#sr-drop', root);
+  const paint = () => {
+    list.innerHTML = items.map((it, i) => `<div class="sr-item ${it.error ? 'err' : it.done ? 'ok' : ''}">
+      <span class="ficon">${esc((fileExt(it.name) || 'file').slice(0, 4))}</span>
+      <div class="sr-meta"><div class="sr-name">${esc(it.name)}</div>
+        <div class="sr-bar"><i style="width:${Math.round((it.p || 0) * 100)}%"></i></div>
+        <small>${it.error ? esc(it.error) : it.done ? `Uploaded · ${fmtSize(it.size)}` : `Uploading… ${Math.round((it.p || 0) * 100)}%`}</small></div>
+      <button class="icon-btn sm" data-sr-x="${i}" title="Remove">${icon('x')}</button>
+    </div>`).join('');
+    const ok = items.length && items.every((x) => x.done && !x.error);
+    submit.disabled = !ok;
+    submit.textContent = items.length && !ok && items.some((x) => !x.done) ? 'Uploading…' : 'Submit';
+  };
+  const discard = (it) => { if (it.att) Host.call('trashMany', { paths: [it.att.path] }).catch(() => {}); };
+  const close = (keep) => {
+    closed = true;
+    if (!keep) items.forEach(discard);
+    root.innerHTML = '';
+    document.removeEventListener('keydown', onKey, true);
+  };
+  const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(false); } };
+  document.addEventListener('keydown', onKey, true);
+  // Files chosen in the macOS picker are copied by the app; show their progress the same way
+  $('#sr-pick', root).addEventListener('click', async () => {
+    try {
+      const res = await Host.call('pickAttachments', { taskId: t.id });
+      (res.files || []).forEach((f) => {
+        const it = { name: f.name, size: f.size, p: 0, done: false, att: f };
+        items.push(it);
+        const t0 = performance.now();
+        const step = () => { if (closed) return; it.p = Math.min(1, (performance.now() - t0) / 450); if (it.p >= 1) it.done = true; paint(); if (!it.done) requestAnimationFrame(step); };
+        requestAnimationFrame(step);
+      });
+      paint();
+    } catch (e) { toast('Could not add files: ' + e.message); }
+  });
+  const upload = async (file) => {
+    const it = { name: file.name, size: file.size, p: 0, done: false };
+    items.push(it); paint();
+    try {
+      let path = null, last = null;
+      for (let off = 0; off < Math.max(file.size, 1); off += CHUNK) {
+        if (closed || it.removed) { if (path) Host.call('trashMany', { paths: [path] }).catch(() => {}); return; }
+        const b64 = await readChunkB64(file.slice(off, off + CHUNK));
+        last = await Host.call('writeChunk', { taskId: t.id, name: file.name, path, b64 });
+        path = last.path;
+        it.p = Math.min(1, (off + CHUNK) / Math.max(file.size, 1));
+        paint();
+      }
+      it.att = { id: uid(), name: last.name || file.name, path, size: last.size != null ? last.size : file.size };
+      it.name = it.att.name;
+      it.done = true; it.p = 1;
+      if (it.removed) discard(it);
+    } catch (e) { it.error = 'Upload failed — ' + e.message; it.done = true; }
+    if (!closed) paint();
+  };
+  const scrim = $('.scrim', root);
+  ['dragenter', 'dragover'].forEach((ev) => scrim.addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); drop.classList.add('over'); }));
+  scrim.addEventListener('dragleave', (e) => { if (!scrim.contains(e.relatedTarget)) drop.classList.remove('over'); });
+  scrim.addEventListener('drop', (e) => {
+    e.preventDefault(); e.stopPropagation(); drop.classList.remove('over');
+    [...(e.dataTransfer.files || [])].forEach(upload);
+  });
+  list.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-sr-x]');
+    if (!b) return;
+    const it = items[+b.dataset.srX];
+    it.removed = true;
+    if (it.done) discard(it);
+    items.splice(+b.dataset.srX, 1);
+    paint();
+  });
+  $('#sr-cancel', root).addEventListener('click', () => close(false));
+  submit.addEventListener('click', () => {
+    if (submit.disabled) return;
+    const files = items.map((x) => x.att);
+    close(true);
+    submitReview(t, files);
+  });
+}
+
+/* ---- Review Requests page (Creative Director only) ---- */
+function rrTile(t, a) {
+  const kind = fileKind(a);
+  let inner;
+  if (kind === 'image' && Host.isNative) inner = `<img src="${fileUrl(a)}" alt="" loading="lazy">`;
+  else if (Host.isNative) inner = thumbImg(a, 'tile').replace('data-thumb-for="', `data-thumb-task="${t.id}" data-thumb-for="`);
+  else inner = `<div class="thumb-ph"><span class="ext">${esc(fileExt(a.name) || 'file')}</span></div>`;
+  return `<div class="tile rr-tile" data-action="rr-file" data-task-id="${t.id}" data-id="${a.id}" title="${esc(a.name)} — click to preview">
+    <div class="tile-img">${inner}${kind === 'video' ? `<span class="tile-play">${icon('play')}</span>` : ''}</div>
+    <div class="tile-meta"><span>${esc(a.name)}</span><small>${fmtSize(a.size)}</small></div>
+  </div>`;
+}
+function reviewCard(t, r, reviewed) {
+  const p = proj(t.projectId);
+  const files = (r.files || []).map((id) => t.attachments.find((a) => a.id === id)).filter(Boolean);
+  const desc = t.notesHtml ? notifPlainHTML(t.notesHtml) : t.notes;
+  const decision = reviewed ? (r.state === 'approved'
+    ? `<span class="rr-dec ok">${icon('check')}Approved</span>`
+    : `<span class="rr-dec amend">${icon('edit')}Amendments</span>`) : '';
+  return `<div class="rr-card ${reviewed ? 'done' : ''}">
+    <div class="rr-head">
+      <div class="rr-info">
+        <div class="rr-top"><a class="rr-title" data-action="rr-open" data-id="${t.id}">${esc(t.title || 'Untitled task')}</a>${p ? `<span class="rr-proj"><i style="background:${p.color}"></i>${esc(p.name)}</span>` : ''}</div>
+        ${desc ? `<a class="rr-desc" data-action="rr-open" data-id="${t.id}">${esc(desc)}</a>` : '<div class="rr-desc ph">No description</div>'}
+        <div class="rr-by">${avatarHTML(r.by, 20)}<span><b>${esc(fullName(userById(r.by)))}</b> submitted ${files.length} file${files.length === 1 ? '' : 's'} · ${esc(timeAgo(r.at))}${r.round > 1 ? ` · Round ${r.round}` : ''}</span></div>
+      </div>
+      <div class="rr-acts">
+        ${files.length ? `<button class="icon-btn" data-action="rr-download" data-id="${r.id}" title="Download all files">${icon('download')}</button>` : ''}
+        ${reviewed ? decision : `<button class="btn primary" data-action="rr-decide" data-id="${r.id}">Review decision</button>`}
+      </div>
+    </div>
+    ${files.length ? `<div class="rr-files">${files.map((a) => rrTile(t, a)).join('')}</div>` : ''}
+    ${reviewed && r.state === 'amend' && r.noteHtml ? `<div class="rr-note"><b>Changes requested</b>${sanitizeHTML(r.noteHtml, true)}</div>` : ''}
+    ${reviewed ? `<div class="rr-when">${r.state === 'approved' ? 'Approved' : 'Sent back'} ${esc(timeAgo(r.decidedAt))}${r.decidedBy && r.decidedBy !== currentUserId ? ' by ' + esc(fullName(userById(r.decidedBy))) : ''} · leaves this list after ${REVIEWED_DAYS} days</div>` : ''}
+  </div>`;
+}
+function viewReviews() {
+  if (!isCD()) return `<div class="empty rr-empty"><div class="big">Only the Creative Director can see review requests</div>An Admin sets the Creative Director on the Team page.</div>`;
+  const tab = ui.rrTab === 'reviewed' ? 'reviewed' : 'active';
+  const act = activeReviews(), done = reviewedRecent();
+  const rows = tab === 'active' ? act : done;
+  return `<div class="rr">
+    <div class="ib-tabs rr-tabs">
+      <button class="ib-tab ${tab === 'active' ? 'on' : ''}" data-action="rr-tab" data-tab="active">${icon('inbox')}<span><b>Active</b><small>${act.length ? act.length + ' waiting' : 'Nothing waiting'}</small></span></button>
+      <button class="ib-tab ${tab === 'reviewed' ? 'on' : ''}" data-action="rr-tab" data-tab="reviewed">${icon('check')}<span><b>Reviewed</b><small>Last ${REVIEWED_DAYS} days</small></span></button>
+    </div>
+    <div class="rr-list">${rows.length ? rows.map(({ t, r }) => reviewCard(t, r, tab === 'reviewed')).join('')
+      : `<div class="empty rr-empty"><div class="big">${tab === 'active' ? 'All caught up' : 'Nothing reviewed yet'}</div>${tab === 'active' ? 'New submissions appear here, and you get a notification.' : `Decisions from the last ${REVIEWED_DAYS} days appear here.`}</div>`}</div>
+  </div>`;
+}
+function decisionDialog(id) {
+  const f = findReview(id);
+  if (!f || !isCD()) return;
+  const { t, r } = f;
+  const root = $('#overlay-root');
+  root.innerHTML = `<div class="scrim"><div class="dialog rd-dlg" role="dialog">
+    <h2>Review decision</h2>
+    <p><b>${esc(t.title || 'Untitled task')}</b> · ${esc(fullName(userById(r.by)))}${r.round > 1 ? ` · Round ${r.round}` : ''}</p>
+    <div class="rd-choices">
+      <button class="rd-btn ok" data-d="approve">${icon('check')}<b>Approve</b><small>The files are ready to go to the client</small></button>
+      <button class="rd-btn amend" data-d="amend">${icon('edit')}<b>Amendments</b><small>Send it back with the changes needed</small></button>
+    </div>
+    <div class="rd-amend" hidden>
+      <label class="dlg-label">Describe the changes required</label>
+      <div class="composer rd-comp"><div class="rt-editor" contenteditable="true" id="rd-note" data-placeholder="e.g. 0:10 remove the text, use the new end frame…"></div><div class="cb-foot">${fmtToolbar()}</div></div>
+      <div class="actions"><button class="btn" data-d="back">Back</button><button class="btn primary" data-d="send">Submit</button></div>
+    </div>
+  </div></div>`;
+  const scrim = $('.scrim', root);
+  const close = () => { root.innerHTML = ''; document.removeEventListener('keydown', onKey, true); };
+  const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); } };
+  document.addEventListener('keydown', onKey, true);
+  scrim.addEventListener('mousedown', (e) => { if (e.target === scrim) close(); });
+  scrim.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-d]');
+    if (!b) return;
+    const d = b.dataset.d;
+    if (d === 'approve') { close(); decideReview(t, r, 'approve'); toast(`Approved — ${firstName(r.by)} has been notified`); }
+    else if (d === 'amend') { $('.rd-choices', root).hidden = true; $('.rd-amend', root).hidden = false; setTimeout(() => $('#rd-note', root).focus(), 20); }
+    else if (d === 'back') { $('.rd-choices', root).hidden = false; $('.rd-amend', root).hidden = true; }
+    else if (d === 'send') {
+      const ed = $('#rd-note', root);
+      if (editorEmpty(ed)) { ed.focus(); toast('Describe the changes required'); return; }
+      const html = sanitizeHTML(ed.innerHTML);
+      close();
+      decideReview(t, r, 'amend', html);
+      toast(`Sent back to ${firstName(r.by)} with your notes`);
+    }
+  });
+}
+async function downloadReviewFiles(id) {
+  const f = findReview(id);
+  if (!f) return;
+  const files = (f.r.files || []).map((x) => f.t.attachments.find((a) => a.id === x)).filter(Boolean);
+  try {
+    await Host.call('exportFiles', { paths: files.map((a) => a.path), folder: `${f.t.title || 'Task'} — ${fullName(userById(f.r.by))}${f.r.round > 1 ? ' — Round ' + f.r.round : ''}` });
+    toast(`Saved ${files.length} file${files.length === 1 ? '' : 's'} to your Downloads folder`);
+  } catch (e) { toast('Could not download: ' + e.message); }
+}
+
+/* ---- Team page: Creative Director switch ---- */
+function cdCell(u, admin) {
+  const on = isCD(u.id);
+  const home = !on && db.meta.cdHomeId === u.id && cdActing();
+  const badge = on ? `<span class="cd-badge">${cdActing() ? 'Acting CD' : 'Creative Director'}</span>` : home ? '<span class="cd-badge away">CD · away</span>' : '';
+  if (!admin || u.active === false) return `<div class="tt-cd">${badge}</div>`;
+  return `<div class="tt-cd"><label class="tg" title="${on ? 'Turn off' : 'Make ' + esc(fullName(u)) + ' the Creative Director'}"><input type="checkbox" data-action="cd-toggle" data-id="${u.id}" ${on ? 'checked' : ''}><i></i></label><small>${on ? (cdActing() ? 'Acting CD' : 'Creative Director') : home ? 'CD · away' : 'Make Creative Director'}</small></div>`;
+}
+async function cdToggleFlow(id) {
+  if (!can('manageUsers')) { denied(); renderContent(); return; }
+  const u = userById(id);
+  const cur = cdUserId();
+  let acting = false;
+  if (cur === id) {
+    const ok = await dialog({ title: `Remove ${fullName(u)} as ${cdTitle()}?`, body: db.meta.cdHomeId && cdActing() ? `${fullName(userById(db.meta.cdHomeId))} will be Creative Director again.` : 'Review requests will wait until someone else is made Creative Director.', okText: 'Remove', danger: true });
+    if (!ok) { renderContent(); return; }
+    if (cdActing() && db.meta.cdHomeId && userById(db.meta.cdHomeId)) { db.meta.cdUserId = db.meta.cdHomeId; db.meta.cdHomeId = null; db.meta.cdActing = false; toast(`${fullName(userById(db.meta.cdUserId))} is Creative Director again`); }
+    else { db.meta.cdUserId = null; db.meta.cdActing = false; db.meta.cdHomeId = null; toast('There is no Creative Director now'); }
+    persist(0); render(); return;
+  }
+  if (cur) {
+    const curName = fullName(userById(cur));
+    const returning = db.meta.cdHomeId === id;
+    const choices = [{ label: 'Cancel', value: null }];
+    if (!returning) choices.push({ label: `Acting CD while ${firstName(cur)} is away`, value: 'acting' });
+    choices.push({ label: returning ? `Make ${firstName(id)} CD again` : `Make ${firstName(id)} Creative Director`, value: 'cd', primary: true });
+    const ans = await choiceDialog({
+      title: 'Are you sure?',
+      body: `${curName} is the ${cdTitle()}. Only one person can be CD at a time — ${curName} will be switched off and all pending review requests move to ${fullName(u)}.`,
+      choices,
+    });
+    if (!ans) { renderContent(); return; }
+    acting = ans === 'acting';
+    if (acting) db.meta.cdHomeId = cdActing() ? db.meta.cdHomeId : cur;
+    else db.meta.cdHomeId = null;
+  } else {
+    const ok = await dialog({ title: 'Are you sure?', body: `Make ${fullName(u)} the Creative Director? They will review every file submitted for CD review.`, okText: 'Make Creative Director' });
+    if (!ok) { renderContent(); return; }
+  }
+  db.meta.cdUserId = id;
+  db.meta.cdActing = acting;
+  persist(0); render();
+  toast(`${fullName(u)} is now ${acting ? 'Acting CD' : 'the Creative Director'}`);
+}
+
+/* ================= Inbox ================= */
+const myNotifs = () => (db && currentUserId ? db.notifications.filter((n) => n.to === currentUserId) : []);
+const NOTIF_ICON = { review: 'upload', 'review-ok': 'check', 'review-amend': 'edit', 'review-wd': 'x', part: 'check-circle', allparts: 'check-circle', assigned: 'user', unassigned: 'user', comment: 'chat', mention: 'chat', status: 'check-circle', cd: 'shield', done: 'check', due: 'cal', priority: 'flag', attach: 'clip' };
+function notifPlain(n) { const d = document.createElement('div'); d.innerHTML = n.text; return d.textContent; }
+const IB_FILTERS = { all: 'All updates', comments: 'Comments & mentions', assigned: 'Assigned to me', status: 'Status & CD review', dates: 'Dates & priority' };
+const ibMatch = (n, f) => f === 'all' || !f ? true : f === 'comments' ? ['comment', 'mention'].includes(n.kind) : f === 'assigned' ? ['assigned', 'unassigned'].includes(n.kind) : f === 'status' ? ['status', 'cd', 'done', 'review', 'review-ok', 'review-amend', 'review-wd'].includes(n.kind) : ['due', 'priority'].includes(n.kind);
+function ibTime(iso) {
+  const d = new Date(iso);
+  if (dayDiff(ymd(d)) === 0) return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(d.getFullYear() === new Date().getFullYear() ? {} : { year: 'numeric' }) });
+}
+function ibGroup(iso) {
+  const d = new Date(iso), diff = dayDiff(ymd(d)), now = new Date();
+  if (diff === 0) return 'Today';
+  if (diff >= -7) return 'Last 7 days';
+  if (d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()) return 'Earlier this month';
+  return d.toLocaleDateString('en-US', { month: 'long', ...(d.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' }) });
+}
+// The message part of an Inbox row, with coloured status / CD / priority chips like the task page
+function notifMsg(n, t) {
+  const who = `<b>${esc(fullName(userById(n.from)))}</b>`;
+  const val = ((n.text.match(/<b>([^<]*)<\/b>(?![^]*<b>)/) || [])[1] || '').replace(/&amp;/g, '&');
+  if (n.kind === 'status' && val) {
+    const st = t ? statusList(t).find((x) => x.name === val) : null;
+    const c = st ? st.color : '#87909e';
+    return `${who} changed Status to: <span class="ib-chip" style="background:${c};color:${textOn(c)}">${esc(val)}</span>`;
+  }
+  if (n.kind === 'cd' && val) {
+    const c = val === 'Approved' ? CD.approved.color : CD.review.color;
+    return `${who} set CD Status to: <span class="ib-chip" style="background:${c};color:${textOn(c)}">${esc(val)}</span>`;
+  }
+  if (n.kind === 'review-amend' && n.snippet) return `${who} <span class="ib-dim">requested amendments:</span> ${esc(n.snippet)}`;
+  if (n.kind === 'review-ok' && /your files/.test(n.text)) return `${who} approved your files <span class="ib-chip" style="background:${CD.approved.color};color:${textOn(CD.approved.color)}">APPROVED</span>`;
+  if ((n.kind === 'comment' || n.kind === 'mention') && n.snippet) {
+    const snip = esc(n.snippet).replace(/@([A-Z][\w.'-]*(?: [A-Z][\w.'-]*){0,2})/g, '<span class="mention">@$1</span>');
+    return `${who} <span class="ib-dim">${n.kind === 'mention' ? 'mentioned you:' : n.text.includes('repl') ? 'replied:' : 'commented:'}</span> ${snip}`;
+  }
+  return `${who} ${n.text.replace(/ (on|to|from|of|for)$/, '').replace(/ —[^<]*:$|:$/, '')}${n.kind === 'assigned' ? ' this task' : n.kind === 'unassigned' ? ' this task' : ''}`;
+}
+function viewInbox() {
+  const tab = ['all', 'cleared'].includes(ui.inboxTab) ? ui.inboxTab : 'primary';
+  const f = ui.inboxFilter || 'all';
+  const mine = myNotifs().filter((n) => ibMatch(n, f));
+  const unreadN = myNotifs().filter((n) => !n.read).length;
+  const list = tab === 'primary' ? mine.filter((n) => !n.read) : tab === 'cleared' ? mine.filter((n) => n.read) : mine;
+  // one row per task: latest update + how many updates
+  const byTask = new Map();
+  list.slice().sort((a, b) => b.at.localeCompare(a.at)).forEach((n) => {
+    const k = n.taskId || n.id;
+    if (!byTask.has(k)) byTask.set(k, { latest: n, items: [] });
+    byTask.get(k).items.push(n);
+  });
+  const groups = [];
+  [...byTask.values()].slice(0, 300).forEach((g) => {
+    const name = ibGroup(g.latest.at);
+    let grp = groups.find((x) => x.name === name);
+    if (!grp) { grp = { name, rows: [] }; groups.push(grp); }
+    grp.rows.push(g);
+  });
+  const row = ({ latest: n, items }) => {
+    const t = task(n.taskId);
+    const unread = items.some((x) => !x.read);
+    const isRev = (x) => /^review/.test(x.kind);
+    const target = items.find((x) => isRev(x) && !x.read) || items.find((x) => x.kind === 'mention' && !x.read) || items.find((x) => x.kind === 'mention') || n;
+    const shown = isRev(target) ? target : n;
+    const lead = ['comment', 'mention', 'review-amend', 'review-ok', 'review'].includes(shown.kind) ? avatarHTML(shown.from, 22) : `<span class="ib-kic">${icon(NOTIF_ICON[shown.kind] || 'bell')}</span>`;
+    return `<div class="ib-row ${unread ? 'unread' : ''}" data-action="open-notif" data-id="${target.id}">
+      <span class="ib-title">${t ? statusIcon(t) : `<span class="st-ic">${statusIconSVG('#87909e', 'todo', 0)}</span>`}<span class="ib-tname">${t ? esc(t.title || 'Untitled task') : '<i>Deleted task</i>'}</span></span>
+      <span class="ib-lead">${lead}</span>
+      <span class="ib-msg">${notifMsg(shown, t)}</span>
+      <span class="ib-count">${items.length > 1 ? `<i>${items.length}</i>` : ''}</span>
+      <span class="ib-time" title="${fmtDateTime(n.at)}">${ibTime(n.at)}</span>
+      <button class="ib-clear" data-action="notif-clear" data-id="${esc(n.taskId)}" data-read="${unread ? '0' : '1'}">${unread ? `${icon('check')}Clear` : 'Mark unread'}</button>
+    </div>`;
+  };
+  return `<div class="inbox">
+    <div class="ib-tabs">
+      <button class="ib-tab ${tab === 'primary' ? 'on' : ''}" data-action="inbox-tab" data-tab="primary">${icon('inbox')}<span><b>Primary</b>${unreadN ? `<small>${unreadN} unread</small>` : ''}</span></button>
+      <button class="ib-tab ${tab === 'all' ? 'on' : ''}" data-action="inbox-tab" data-tab="all">${icon('activity')}<span><b>All</b></span></button>
+      <button class="ib-tab ${tab === 'cleared' ? 'on' : ''}" data-action="inbox-tab" data-tab="cleared">${icon('check')}<span><b>Cleared</b></span></button>
+    </div>
+    <div class="ib-tools">
+      <button class="pill-btn ${f !== 'all' ? 'on' : ''}" data-action="ib-filter">${icon('list')}${f === 'all' ? 'Filter' : esc(IB_FILTERS[f])}</button>
+      <span class="spacer"></span>
+      ${unreadN ? `<button class="pill-btn" data-action="mark-all-read">${icon('check')}Clear all</button>` : ''}
+    </div>
+    ${groups.map((g) => `<div class="ib-group">${g.name}</div><div class="ib-card">${g.rows.map(row).join('')}</div>`).join('')
+      || `<div class="empty ib-empty"><div class="big">${tab === 'primary' ? 'Inbox zero 🎉' : 'Nothing here yet'}</div>${tab === 'primary' ? 'You’re all caught up. New updates on your tasks and @mentions land here.' : 'Updates on tasks you’re assigned to or created will appear here.'}</div>`}
+  </div>`;
+}
+function inboxFilterMenu(anchor) {
+  showMenu(anchor, Object.entries(IB_FILTERS).map(([k, l]) => ({ html: `<div class="mi ${(ui.inboxFilter || 'all') === k ? 'cur' : ''}">${esc(l)}</div>`, run: () => { ui.inboxFilter = k; renderContent(); } })).map((it, i) => ({ ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) })));
+}
+function clearTaskNotifs(taskId, read) {
+  myNotifs().forEach((n) => { if (n.taskId === taskId) n.read = read; });
+  persist(); renderSidebar(); renderContent();
+}
+function openNotif(id) {
+  const n = db.notifications.find((x) => x.id === id);
+  if (!n) return;
+  myNotifs().forEach((x) => { if (x.taskId === n.taskId) x.read = true; });
+  persist(); renderSidebar(); renderContent();
+  const t = task(n.taskId);
+  if (!t) { toast('That task has been deleted'); return; }
+  if ((n.kind === 'review' || n.kind === 'review-wd') && isCD()) { ui.rrTab = 'active'; closeDetail(); go('reviews'); return; }
+  let c = null;
+  if (n.kind === 'review-amend' && n.commentId) c = t.comments.find((x) => x.id === n.commentId) || null;
+  if (n.kind === 'comment' || n.kind === 'mention') {
+    // older notifications have no comment id: find the author's comment closest in time
+    c = (n.commentId && t.comments.find((x) => x.id === n.commentId))
+      || t.comments.filter((x) => x.authorId === n.from).sort((a, b) => Math.abs(new Date(a.at) - new Date(n.at)) - Math.abs(new Date(b.at) - new Date(n.at)))[0] || null;
+  }
+  if (c) {
+    ui.sideTab = 'comments';
+    ui.activityFilter = 'comments';
+    ui.pendingThread = c.parentId || null;
+    ui.replyTo = null;
+    ui.focusComment = c.id;
+  } else if (n.kind === 'mention') {
+    ui.sideTab = 'details';
+    ui.descOpen[t.id] = true;
+    ui.focusDesc = true;
+  }
+  openTask(n.taskId);
+}
+// Smoothly bring a comment into view and flash it
+function focusCommentInFeed(cid) {
+  const el = $(`#detail [data-comment="${cid}"]`);
+  const feed = $('#detail .tm-feed');
+  if (!el || !feed) return;
+  const go = () => {
+    const top = el.getBoundingClientRect().top - feed.getBoundingClientRect().top + feed.scrollTop - feed.clientHeight / 2 + el.offsetHeight / 2;
+    feed.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+  };
+  setTimeout(go, 120);
+  setTimeout(go, 600);
+  el.classList.add('flash');
+  setTimeout(() => el.classList.remove('flash'), 2600);
+}
+
+/* ---- Alerts: in-app card + chime when the app is in front, macOS banner + sound when it isn't ---- */
+let audioCtx = null;
+function chime() {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const t0 = audioCtx.currentTime;
+    [[880, 0], [1318.5, 0.11]].forEach(([f, d]) => {
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.type = 'sine'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t0 + d);
+      g.gain.exponentialRampToValueAtTime(0.18, t0 + d + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + d + 0.55);
+      o.connect(g).connect(audioCtx.destination);
+      o.start(t0 + d); o.stop(t0 + d + 0.6);
+    });
+  } catch (e) { /* no audio */ }
+}
+function alertUser({ title, body, taskId, from }, force) {
+  const u = me();
+  const sound = !u || u.prefs.sound !== false;
+  const front = document.hasFocus();
+  if (front || force) {
+    let root = $('#notif-root');
+    if (!root) { root = document.createElement('div'); root.id = 'notif-root'; document.body.appendChild(root); }
+    const el = document.createElement('div');
+    el.className = 'notif-card';
+    el.innerHTML = `${from ? avatarHTML(from, 32) : `<span class="nc-ic">${icon('bell')}</span>`}<div><b>${esc(title)}</b><span>${esc(body)}</span></div><button class="icon-btn sm">${icon('x')}</button>`;
+    root.appendChild(el);
+    const close = () => { el.classList.add('out'); setTimeout(() => el.remove(), 250); };
+    const timer = setTimeout(close, 6000);
+    el.addEventListener('click', (e) => { clearTimeout(timer); close(); if (!e.target.closest('button') && taskId && task(taskId)) openTask(taskId); });
+    if (sound) chime();
+  }
+  if (!front || force) Host.call('notify', { title, body, sound: sound && !front ? 'Glass' : null }).catch(() => {});
+}
+// Show alerts for notifications this person hasn't been alerted about yet
+function deliverPending() {
+  const u = me();
+  if (!u) return;
+  const since = u.lastAlertAt || '';
+  const fresh = myNotifs().filter((n) => !n.read && n.at > since).sort((a, b) => a.at.localeCompare(b.at));
+  u.lastAlertAt = nowISO();
+  if (!fresh.length) return;
+  persist();
+  if (fresh.length === 1) {
+    const n = fresh[0], t = task(n.taskId);
+    alertUser({ title: fullName(userById(n.from)), body: `${notifPlain(n)} ${t ? '“' + (t.title || 'Untitled task') + '”' : ''}${n.snippet ? ' — ' + n.snippet : ''}`, taskId: n.taskId, from: n.from });
+  } else {
+    alertUser({ title: 'E11 Console', body: `You have ${fresh.length} new notifications in your Inbox` });
+  }
+}
+
+/* ================= Team members (admin) ================= */
+function viewTeam() {
+  const admin = can('manageUsers');
+  const users = db.users.slice().sort((a, b) => (a.active === false) - (b.active === false) || fullName(a).localeCompare(fullName(b)));
+  return `<div class="team">
+    <div class="team-head">
+      <div><div class="team-title">${users.filter((u) => u.active !== false).length} members</div><div class="team-sub">${admin ? 'Only Admins can add people. New members sign in with the email and temporary password you give them, then set their own password.' : 'Only Admins can add or change team members.'}</div></div>
+      <span class="spacer"></span>
+      ${admin ? `<button class="btn primary" data-action="add-member">${icon('plus')}Add member</button>` : ''}
+    </div>
+    <div class="team-table">
+      <div class="tt-row tt-head"><div>Name</div><div>Email</div><div>Role</div><div>Status</div><div>Creative Director</div><div></div></div>
+      ${users.map((u) => `<div class="tt-row ${u.active === false ? 'inactive' : ''}">
+        <div class="tt-name">${avatarHTML(u.id, 30)}<span>${esc(fullName(u))}${u.id === currentUserId ? ' <small>(you)</small>' : ''}</span></div>
+        <div class="tt-email">${esc(u.email)}</div>
+        <div><span class="role-pill r-${u.role}">${esc(ROLES[u.role] || u.role)}</span></div>
+        <div>${u.active === false ? '<span class="st-txt off">Removed</span>' : u.setup ? `<span class="st-txt on">Active</span>` : '<span class="st-txt pend">Hasn’t signed in yet</span>'}</div>
+        ${cdCell(u, admin)}
+        <div>${admin && u.id !== currentUserId ? `<button class="icon-btn sm" data-action="member-menu" data-id="${u.id}" title="Manage">${icon('more')}</button>` : ''}</div>
+      </div>`).join('')}
+    </div>
+    <div class="role-guide">
+      <div><span class="role-pill r-admin">Admin</span> Full access, and the only role that can add or manage team members.</div>
+      <div><span class="role-pill r-am">Account Manager</span> Can do everything except add or manage team members.</div>
+      <div><span class="role-pill r-production">Production</span> <span class="role-pill r-social">Social</span> Can update status, submit files for CD review, change dates, add tags, checklist items, files and comments. Can’t create or delete tasks/subtasks, change title, description, project or priority, assign people, remove tags or delete checklist items.</div>
+    </div>
+  </div>`;
+}
+
+// Small form dialog: fields = [{ key, label, type, value, options, readonly, placeholder }]
+function formDialog({ title, intro = '', fields, okText = 'Save', validate }) {
+  return new Promise((resolve) => {
+    const root = $('#overlay-root');
+    root.innerHTML = `<div class="scrim"><form class="dialog form-dlg" autocomplete="off">
+      <h2>${esc(title)}</h2>${intro ? `<p>${esc(intro)}</p>` : ''}
+      ${fields.map((f) => `<label class="dlg-label">${esc(f.label)}</label>${f.type === 'select'
+        ? `<select class="field" name="${f.key}">${f.options.map(([v, l]) => `<option value="${esc(v)}" ${v === f.value ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`
+        : `<input class="field" name="${f.key}" type="${f.type || 'text'}" value="${esc(f.value || '')}" placeholder="${esc(f.placeholder || '')}" ${f.readonly ? 'readonly' : ''}>`}${f.hint ? `<div class="dlg-hint">${esc(f.hint)}</div>` : ''}`).join('')}
+      <div class="dlg-err"></div>
+      <div class="actions"><button type="button" class="btn" data-r="0">Cancel</button><button type="submit" class="btn primary">${esc(okText)}</button></div>
+    </form></div>`;
+    const form = $('form', root), err = $('.dlg-err', root);
+    const close = (v) => { root.innerHTML = ''; document.removeEventListener('keydown', onKey, true); resolve(v); };
+    const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(null); } else e.stopPropagation(); };
+    document.addEventListener('keydown', onKey, true);
+    $('[data-r="0"]', root).addEventListener('click', () => close(null));
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const v = {}; fields.forEach((f) => { v[f.key] = (form.elements[f.key].value || '').trim(); });
+      const problem = validate ? validate(v) : null;
+      if (problem) { err.textContent = problem; return; }
+      close(v);
+    });
+    setTimeout(() => { const first = $('input:not([readonly]), select', form); if (first) first.focus(); }, 20);
+  });
+}
+
+async function addMemberFlow() {
+  if (!can('manageUsers')) return denied();
+  const v = await formDialog({
+    title: 'Add team member', okText: 'Add member',
+    intro: Host.isServer ? `They sign in at ${location.host} with this email — a one-time code is emailed to them. No password needed.` : 'They’ll sign in with this email and temporary password, then choose their own password.',
+    fields: [
+      { key: 'name', label: 'Full name (optional — they can set it themselves)', placeholder: 'e.g. Sara Khan' },
+      { key: 'email', label: 'Email', type: 'email', placeholder: 'name@e11-digital.com' },
+      ...(Host.isServer ? [] : [{ key: 'pw', label: 'Temporary password', type: 'text', value: tempPassword(), hint: 'Share this with them privately. At least 6 characters.' }]),
+      { key: 'role', label: 'Role', type: 'select', value: 'production', options: Object.entries(ROLES) },
+    ],
+    validate: (v) => {
+      if (!validEmail(v.email)) return 'Enter a valid email address';
+      if (db.users.some((u) => u.email.toLowerCase() === v.email.toLowerCase() && u.active !== false)) return 'Someone with this email is already on the team';
+      if (!Host.isServer && v.pw.length < 6) return 'The temporary password needs at least 6 characters';
+      return null;
+    },
+  });
+  if (!v) return;
+  let u = db.users.find((x) => x.email.toLowerCase() === v.email.toLowerCase());
+  if (u) { u.active = true; u.setup = false; u.role = v.role; if (v.name) u.name = v.name; }
+  else { u = { id: 'u-' + uid(), email: v.email.toLowerCase(), name: v.name, role: v.role, avatar: null, setup: false, active: true, createdAt: nowISO(), createdBy: currentUserId, prefs: {} }; db.users.push(u); }
+  if (!Host.isServer) setPassword(u, v.pw);
+  persist(0); renderContent();
+  toast(`Added ${v.email} as ${ROLES[v.role]}`);
+}
+function tempPassword() { const c = 'abcdefghjkmnpqrstuvwxyz23456789'; let s = ''; for (let i = 0; i < 10; i++) s += c[Math.floor(Math.random() * c.length)]; return s; }
+
+function memberMenu(anchor, id) {
+  const u = userById(id);
+  if (!u) return;
+  const items = [{ html: '<div class="menu-label">Change role</div>' }];
+  Object.entries(ROLES).forEach(([k, l]) => items.push({ html: `<div class="mi ${u.role === k ? 'cur' : ''}"><span class="role-pill r-${k}">${esc(l)}</span></div>`, run: () => {
+    if (u.role === 'admin' && k !== 'admin' && db.users.filter((x) => x.role === 'admin' && x.active !== false).length < 2) return toast('There must be at least one Admin');
+    u.role = k; persist(); renderContent(); toast(`${fullName(u)} is now ${l}`);
+  } }));
+  items.push('-');
+  if (u.active === false) items.push({ label: 'Restore access', icon: 'user', run: () => { u.active = true; persist(); renderContent(); } });
+  else {
+    if (!Host.isServer) items.push({ label: 'Reset password…', icon: 'lock', run: () => resetPasswordFlow(u) });
+    items.push({ label: 'Remove from team', icon: 'trash', danger: true, run: () => removeMemberFlow(u) });
+  }
+  showMenu(anchor, items.map((it, i) => (it === '-' || it.label ? it : { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) })));
+}
+async function resetPasswordFlow(u) {
+  const v = await formDialog({ title: `Reset password for ${fullName(u)}`, okText: 'Reset password', intro: 'They’ll sign in with this temporary password and be asked to choose a new one.',
+    fields: [{ key: 'pw', label: 'Temporary password', value: tempPassword() }], validate: (x) => (x.pw.length < 6 ? 'At least 6 characters' : null) });
+  if (!v) return;
+  setPassword(u, v.pw); u.setup = false; persist(0); renderContent();
+  toast('Password reset — share the temporary password with them privately');
+}
+async function removeMemberFlow(u) {
+  if (u.role === 'admin' && db.users.filter((x) => x.role === 'admin' && x.active !== false).length < 2) return toast('There must be at least one Admin');
+  const n = db.tasks.filter((t) => (t.assignees || []).includes(u.id)).length;
+  const ok = await dialog({ title: `Remove ${fullName(u)}?`, body: `They won’t be able to sign in${n ? ` and will be unassigned from ${n} task${n === 1 ? '' : 's'}` : ''}. Their comments stay. You can restore access later.`, okText: 'Remove', danger: true });
+  if (!ok) return;
+  u.active = false;
+  db.tasks.forEach((t) => { if ((t.assignees || []).includes(u.id)) { t.assignees = t.assignees.filter((x) => x !== u.id); if (t.prio) delete t.prio[u.id]; logActivity(t, `unassigned ${struck(fullName(u))}`); } });
+  persist(0); render();
+}
+
+/* ================= My profile ================= */
+function viewProfile() {
+  const u = me();
+  const sound = u.prefs.sound !== false;
+  return `<div class="profile">
+    <div class="pf-card">
+      <div class="pf-photo">${avatarHTML(u.id, 96, 'pf-av')}<div class="pf-photo-btns"><button class="btn sm" data-action="change-photo">${icon('camera')}${u.avatar ? 'Change photo' : 'Add photo'}</button>${u.avatar ? `<button class="btn ghost sm" data-action="remove-photo">Remove</button>` : ''}</div></div>
+      <label class="dlg-label">Full name</label><input class="field" id="pf-name" value="${esc(u.name || '')}" placeholder="Your full name">
+      <label class="dlg-label">Email</label><div class="field ro">${icon('lock')}${esc(u.email)}</div>
+      <label class="dlg-label">Office</label><input class="field" id="pf-office" value="${esc(u.office || '')}" maxlength="80" placeholder="e.g. Dubai — Business Bay office">
+      <label class="dlg-label">Role</label><div class="pf-role"><span class="role-pill r-${u.role}">${esc(ROLES[u.role])}</span>${u.id === cdUserId() ? `<span class="role-pill r-cd">${esc(cdTitle())}</span>` : ''}<small>People see this and your office when they hover your name.</small></div>
+      <div class="pf-actions"><button class="btn primary" data-action="save-profile">Save changes</button>${Host.isServer ? '' : `<button class="btn" data-action="change-password">${icon('lock')}Change password</button>`}</div>
+    </div>
+    <div class="pf-card">
+      <h3>${icon('bell')}Notifications</h3>
+      <div class="pf-opt"><div><b>Sound</b><span>Play a sound with new notifications</span></div><button class="switch ${sound ? 'on' : ''}" data-action="toggle-sound"><i></i></button></div>
+      ${Host.isServer && 'Notification' in window ? `<div class="pf-opt"><div><b>Desktop notifications</b><span>${Notification.permission === 'granted' ? 'On — you’ll see alerts even when this window is in the background' : Notification.permission === 'denied' ? 'Blocked in your browser settings for this site' : 'Show alerts when this window is in the background'}</span></div>${Notification.permission === 'default' ? '<button class="btn sm primary" data-action="allow-notifs">Turn on</button>' : ''}</div>` : ''}
+      <div class="pf-opt"><div><b>Test</b><span>See and hear what a notification looks like</span></div><button class="btn sm" data-action="test-notif">Send test</button></div>
+      <h4 class="pf-sub">Notify me about</h4>
+      ${notifToggles(u, false)}
+      ${u.id === cdUserId() ? `<h4 class="pf-sub">As ${esc(cdTitle())}</h4>${notifToggles(u, true)}` : ''}
+      <p class="pf-note">You’re notified about tasks you’re assigned to or created: comments, status and CD Status changes, due dates, priority, files, completion, and when someone @mentions you. Remove yourself from a task to stop getting its updates.</p>
+    </div>
+  </div>`;
+}
+function notifToggles(u, cdOnly) {
+  const off = (u.prefs || {}).notifOff || {};
+  return NOTIF_TYPES.filter((x) => !!x.cd === cdOnly).map((x) => `<div class="pf-opt nt-opt"><div><b>${esc(x.l)}</b><span>${esc(x.d)}</span></div><button class="switch ${off[x.k] ? '' : 'on'}" data-action="toggle-notif-type" data-k="${x.k}" title="${off[x.k] ? 'Off' : 'On'}"><i></i></button></div>`).join('');
+}
+async function pickAvatar() {
+  if (!Host.isNative) { toast('Photos can be added in the Mac app'); return null; }
+  try { const r = await Host.call('pickImage', { userId: currentUserId }); return r.path || null; }
+  catch (e) { toast('Could not use that photo: ' + e.message); return null; }
+}
+async function changePhoto() {
+  const path = await pickAvatar();
+  if (!path) return;
+  const u = me();
+  if (u.avatar) Host.call('trashPath', { path: u.avatar }).catch(() => {});
+  u.avatar = path; persist(0); render();
+}
+function saveProfile() {
+  const u = me();
+  const name = ($('#pf-name').value || '').trim();
+  if (!name) { toast('Please enter your name'); return; }
+  u.name = name;
+  u.office = (($('#pf-office') || {}).value || '').trim();
+  persist(0); render(); toast('Profile saved');
+}
+async function changePasswordFlow() {
+  const u = me();
+  const v = await formDialog({ title: 'Change password', okText: 'Change password', fields: [
+    { key: 'cur', label: 'Current password', type: 'password' },
+    { key: 'pw', label: 'New password', type: 'password', hint: 'At least 8 characters' },
+    { key: 'pw2', label: 'Confirm new password', type: 'password' },
+  ], validate: (x) => (!checkPassword(u, x.cur) ? 'Current password is incorrect' : pwProblem(x.pw, x.pw2, x.cur)) });
+  if (!v) return;
+  setPassword(u, v.pw); persist(0); toast('Password changed');
+}
+function pwProblem(pw, pw2, old) {
+  if (pw.length < 8) return 'Use at least 8 characters for your new password';
+  if (pw !== pw2) return 'The two passwords don’t match';
+  if (old && pw === old) return 'Choose a password different from the temporary one';
+  return null;
+}
+
+/* ---- Sidebar: signed-in person ---- */
+function renderMeChip() {
+  const el = $('#me-chip');
+  const u = me();
+  if (!el || !u) return;
+  el.innerHTML = `${avatarHTML(u.id, 28)}<span class="me-txt"><b>${esc(fullName(u))}</b><small>${esc(ROLES[u.role])}</small></span>${icon('chev')}`;
+}
+function meMenu(anchor) {
+  showMenu(anchor, [
+    { label: 'My profile', icon: 'user', run: () => go('profile') },
+    { label: 'Team members', icon: 'users', run: () => go('team') },
+    '-',
+    { label: 'Sign out', icon: 'logout', run: signOut },
+  ]);
+}
+
+/* ================= Sign in & first-time setup ================= */
+function authShell(inner) {
+  const root = $('#auth');
+  root.innerHTML = `<div class="auth-bg"><div class="sp-orb sp-orb1"></div><div class="sp-orb sp-orb2"></div></div><div class="auth-card">${inner}</div><div class="auth-foot">© ${new Date().getFullYear()} E11 Agency</div>`;
+  root.classList.add('on');
+  document.getElementById('app').classList.add('locked');
+  return root;
+}
+function showLogin(prefillEmail = '') {
+  const root = authShell(`
+    <img class="auth-logo" src="logo-wordmark.png" alt="E11 Console">
+    <h1>Sign in</h1>
+    <p class="auth-sub">Use the email and password your admin gave you.</p>
+    <form id="login-form" autocomplete="on">
+      <label class="dlg-label">Email</label>
+      <input class="field" name="email" type="email" value="${esc(prefillEmail)}" placeholder="name@e11-digital.com" autocomplete="username">
+      <label class="dlg-label">Password</label>
+      <div class="pw-wrap"><input class="field" name="pw" type="password" placeholder="Password" autocomplete="current-password"><button type="button" class="pw-eye" tabindex="-1">Show</button></div>
+      <div class="dlg-err"></div>
+      <button class="btn primary auth-go" type="submit">Sign in</button>
+    </form>
+    <p class="auth-help">No account? Ask an Admin to add you — there’s no sign-up.</p>`);
+  wirePwEyes(root);
+  const form = $('#login-form');
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const email = form.elements.email.value.trim().toLowerCase(), pw = form.elements.pw.value;
+    const u = db.users.find((x) => x.email.toLowerCase() === email && x.active !== false);
+    if (!u || !checkPassword(u, pw)) {
+      $('.dlg-err', root).textContent = 'That email and password don’t match. Try again.';
+      $('.auth-card').classList.remove('shake'); void $('.auth-card').offsetWidth; $('.auth-card').classList.add('shake');
+      return;
+    }
+    currentUserId = u.id;
+    u.lastLoginAt = nowISO();
+    if (!u.setup) { showWelcome(pw); return; }
+    savePref('session', u.id);
+    enterApp();
+  });
+  setTimeout(() => form.elements[prefillEmail ? 'pw' : 'email'].focus(), 50);
+}
+function wirePwEyes(root) {
+  $$('.pw-eye', root).forEach((b) => b.addEventListener('click', () => { const i = b.previousElementSibling; i.type = i.type === 'password' ? 'text' : 'password'; b.textContent = i.type === 'password' ? 'Show' : 'Hide'; }));
+}
+function showWelcome(tempPw) {
+  const u = me();
+  let photo = u.avatar;
+  const root = authShell(`
+    <div class="wl-confetti">${Array.from({ length: 18 }, (_, i) => `<i style="--i:${i}"></i>`).join('')}</div>
+    <div class="wl-badge">${icon('users')}</div>
+    <h1 class="wl-title">Welcome to the team</h1>
+    <p class="auth-sub">Let’s set up your account. This only takes a minute.</p>
+    <form id="welcome-form" autocomplete="off">
+      <div class="wl-photo"><button type="button" class="wl-av" id="wl-av" title="Add a profile photo">${avatarHTML(u.id, 84)}<span class="wl-cam">${icon('camera')}</span></button><span class="wl-photo-txt">Add a profile photo<small>Optional · click the circle</small></span></div>
+      <label class="dlg-label">Full name</label>
+      <input class="field" name="name" value="${esc(u.name || '')}" placeholder="Your full name">
+      <label class="dlg-label">Email</label>
+      <div class="field ro">${icon('lock')}${esc(u.email)}</div>
+      ${Host.isServer ? '' : `<label class="dlg-label">New password</label>
+      <div class="pw-wrap"><input class="field" name="pw" type="password" placeholder="At least 8 characters" autocomplete="new-password"><button type="button" class="pw-eye" tabindex="-1">Show</button></div>
+      <label class="dlg-label">Confirm new password</label>
+      <div class="pw-wrap"><input class="field" name="pw2" type="password" placeholder="Type it again" autocomplete="new-password"><button type="button" class="pw-eye" tabindex="-1">Show</button></div>`}
+      <div class="dlg-err"></div>
+      <button class="btn primary auth-go" type="submit">Get started</button>
+      <button class="btn ghost auth-back" type="button" id="wl-back">Use a different account</button>
+    </form>`);
+  root.querySelector('.auth-card').classList.add('welcome');
+  wirePwEyes(root);
+  $('#wl-av').addEventListener('click', async () => {
+    const path = await pickAvatar();
+    if (!path) return;
+    if (photo && photo !== u.avatar) Host.call('trashPath', { path: photo }).catch(() => {});
+    photo = path;
+    const keep = u.avatar; u.avatar = photo;
+    $('#wl-av').innerHTML = `${avatarHTML(u.id, 84)}<span class="wl-cam">${icon('camera')}</span>`;
+    u.avatar = keep;
+  });
+  $('#wl-back').addEventListener('click', () => { if (Host.isServer) { location.href = '/cdn-cgi/access/logout'; return; } currentUserId = null; showLogin(); });
+  const form = $('#welcome-form');
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = form.elements.name.value.trim();
+    if (!name) { $('.dlg-err', root).textContent = 'Please enter your full name'; return; }
+    const problem = Host.isServer ? null : pwProblem(form.elements.pw.value, form.elements.pw2.value, tempPw);
+    if (problem) { $('.dlg-err', root).textContent = problem; return; }
+    u.name = name;
+    if (photo && photo !== u.avatar) { if (u.avatar) Host.call('trashPath', { path: u.avatar }).catch(() => {}); u.avatar = photo; }
+    if (!Host.isServer) setPassword(u, form.elements.pw.value);
+    u.setup = true;
+    u.setupAt = nowISO();
+    savePref('session', u.id);
+    persist(0);
+    enterApp();
+    setTimeout(() => toast(`Welcome aboard, ${name.split(' ')[0]}! 🎉`), 400);
+  });
+  setTimeout(() => form.elements.name.focus(), 50);
+}
+function enterApp() {
+  const root = $('#auth');
+  root.classList.add('leaving');
+  document.getElementById('app').classList.remove('locked');
+  setTimeout(() => { root.classList.remove('on', 'leaving'); root.innerHTML = ''; }, 450);
+  ui.view = 'home'; ui.taskId = null; ui.search = '';
+  initSidebar();
+  render();
+  purgeOldCompleted();
+  setTimeout(deliverPending, 900);
+}
+function signOut() {
+  flushEdit();
+  if (Host.isServer) { Sync.push(); setTimeout(() => { location.href = '/cdn-cgi/access/logout'; }, 300); return; }
+  const email = me() ? me().email : '';
+  savePref('session', null);
+  currentUserId = null;
+  const nr = $('#notif-root'); if (nr) nr.innerHTML = '';
+  ui.taskId = null;
+  renderDetail();
+  $('#content').innerHTML = '';
+  persist(0);
+  showLogin(email);
+}
+
+/* ================= @mentions in comments and the description ================= */
+const Mention = { el: null, editor: null, items: [], idx: 0, range: null };
+function mentionQuery() {
+  const sel = window.getSelection();
+  if (!sel.rangeCount || !sel.isCollapsed) return null;
+  const r = sel.getRangeAt(0);
+  const node = r.startContainer;
+  if (node.nodeType !== 3) return null;
+  const before = node.nodeValue.slice(0, r.startOffset);
+  const m = before.match(/(?:^|[\s (])@([^\s@]{0,30})$/);
+  if (!m) return null;
+  return { node, end: r.startOffset, start: r.startOffset - m[1].length - 1, q: m[1].toLowerCase() };
+}
+function closeMention() { if (Mention.el) Mention.el.remove(); Mention.el = null; Mention.editor = null; }
+function updateMention(editor) {
+  const q = mentionQuery();
+  if (!q) return closeMention();
+  const list = activeUsers().filter((u) => fullName(u).toLowerCase().includes(q.q) || u.email.toLowerCase().includes(q.q)).slice(0, 8);
+  if (!list.length) return closeMention();
+  Mention.editor = editor; Mention.items = list; Mention.q = q;
+  if (Mention.idx >= list.length) Mention.idx = 0;
+  if (!Mention.el) { Mention.el = document.createElement('div'); Mention.el.className = 'menu mention-pop'; document.body.appendChild(Mention.el); Mention.idx = 0; }
+  Mention.el.innerHTML = `<div class="menu-label">Mention someone</div>` + list.map((u, i) => `<div class="mi asg-mi ${i === Mention.idx ? 'hl' : ''}" data-mention="${u.id}">${avatarHTML(u.id, 22)}<span class="asg-n">${esc(fullName(u))}<small>${esc(u.email)}</small></span></div>`).join('');
+  const rr = document.createRange(); rr.setStart(q.node, q.start); rr.setEnd(q.node, q.end);
+  const rect = rr.getBoundingClientRect();
+  const h = Mention.el.offsetHeight, w = Mention.el.offsetWidth;
+  let y = rect.bottom + 6; if (y + h > innerHeight - 8) y = rect.top - h - 6;
+  Mention.el.style.left = Math.max(8, Math.min(rect.left, innerWidth - w - 8)) + 'px';
+  Mention.el.style.top = Math.max(8, y) + 'px';
+}
+function pickMention(userId) {
+  const q = Mention.q, ed = Mention.editor;
+  const u = userById(userId);
+  closeMention();
+  if (!q || !ed || !u) return;
+  ed.focus();
+  const r = document.createRange(); r.setStart(q.node, q.start); r.setEnd(q.node, q.end);
+  const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+  document.execCommand('insertHTML', false, `<span class="mention" data-user="${esc(u.id)}" contenteditable="false">@${esc(fullName(u))}</span>&nbsp;`);
+  ed.dispatchEvent(new Event('input', { bubbles: true }));
+}
+document.addEventListener('input', (e) => { const ed = e.target.closest && e.target.closest('.rt-editor'); if (ed && currentUserId) updateMention(ed); else closeMention(); });
+document.addEventListener('keydown', (e) => {
+  if (!Mention.el) return;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); e.stopPropagation(); Mention.idx = (Mention.idx + (e.key === 'ArrowDown' ? 1 : -1) + Mention.items.length) % Mention.items.length; updateMention(Mention.editor); }
+  else if ((e.key === 'Enter' || e.key === 'Tab') && !e.metaKey && !e.ctrlKey) { e.preventDefault(); e.stopPropagation(); pickMention(Mention.items[Mention.idx].id); }
+  else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeMention(); }
+}, true);
+document.addEventListener('mousedown', (e) => {
+  const it = e.target.closest && e.target.closest('[data-mention]');
+  if (it) { e.preventDefault(); pickMention(it.dataset.mention); return; }
+  if (Mention.el && !e.target.closest('.mention-pop')) closeMention();
+}, true);
+document.addEventListener('focusout', (e) => { if (Mention.editor && e.target === Mention.editor) setTimeout(() => { if (document.activeElement !== Mention.editor) closeMention(); }, 150); });
+
+/* ================= Tooltips (replace the slow native ones) ================= */
+const Tip = { el: null, target: null, timer: null };
+function tipHide() { clearTimeout(Tip.timer); Tip.target = null; if (Tip.el) Tip.el.classList.remove('on'); }
+function tipShow(t) {
+  const raw = t.dataset.tip || '';
+  if (!raw || !document.body.contains(t)) return;
+  const m = raw.match(/^(.*?)\s*\((⌘[^)]{1,8}|⇧[^)]{1,8}|Esc|Enter|⌘ Enter)\)$/);
+  const text = m ? m[1] : raw, key = m ? m[2] : '';
+  if (!Tip.el) { Tip.el = document.createElement('div'); Tip.el.className = 'tip'; document.body.appendChild(Tip.el); }
+  Tip.el.innerHTML = `<span>${esc(text)}</span>${key ? `<kbd>${esc(key)}</kbd>` : ''}`;
+  const r = t.getBoundingClientRect();
+  const el = Tip.el;
+  el.className = 'tip';
+  const left = r.right > innerWidth - 140 || t.closest('.tm-rail');
+  el.style.left = '0px'; el.style.top = '0px';
+  const w = el.offsetWidth, h = el.offsetHeight;
+  let x, y;
+  if (left) { x = r.left - w - 10; y = r.top + r.height / 2 - h / 2; el.classList.add('left'); }
+  else { x = r.left + r.width / 2 - w / 2; y = r.bottom + 8; el.classList.add('below'); if (y + h > innerHeight - 6) { y = r.top - h - 8; el.classList.replace('below', 'above'); } }
+  el.style.left = Math.max(6, Math.min(x, innerWidth - w - 6)) + 'px';
+  el.style.top = Math.max(6, y) + 'px';
+  el.style.setProperty('--ax', (r.left + r.width / 2 - Math.max(6, Math.min(x, innerWidth - w - 6))) + 'px');
+  requestAnimationFrame(() => el.classList.add('on'));
+}
+document.addEventListener('mouseover', (e) => {
+  const t = e.target.closest && e.target.closest('[title], [data-tip]');
+  if (!t || t === Tip.target) return;
+  if (t.hasAttribute('title')) { const v = t.getAttribute('title'); t.removeAttribute('title'); if (!v) return; t.dataset.tip = v; }
+  tipHide();
+  Tip.target = t;
+  Tip.timer = setTimeout(() => { if (Tip.target === t) tipShow(t); }, 380);
+});
+document.addEventListener('mouseout', (e) => { if (Tip.target && (!e.relatedTarget || !Tip.target.contains(e.relatedTarget))) tipHide(); });
+document.addEventListener('mousedown', tipHide, true);
+document.addEventListener('scroll', tipHide, true);
+document.addEventListener('keydown', tipHide, true);
+
+/* ================= Boot ================= */
+// ---------- Startup screen ----------
+const SPLASH_MS = 3200;
+const PHRASES = [
+  'Small steps every day add up to *big* results.',
+  'Focus on progress, not *perfection*.',
+  'Today is a great day to get things *done*.',
+  'Great work starts with a *clear* plan.',
+  'Do the hard thing first. The rest gets *easier*.',
+  'One task at a time. One win at a time.',
+  'Make today count — your future self will *thank* you.',
+  'Clarity creates *momentum*.',
+  'Big goals, small next steps.',
+  'Ideas are easy. *Execution* is everything.',
+  'Done is better than *perfect*.',
+  'Plan the work, then work the *plan*.',
+  'Every finished task is a promise *kept*.',
+  'Consistency beats intensity.',
+  'Your best work is *ahead* of you.',
+  'Start where you are. Use what you have. Do what you *can*.',
+  'Good teams make hard things look *simple*.',
+  'Turn “someday” into *today*.',
+  'Energy flows where *focus* goes.',
+  'Ship it, learn, make it *better*.',
+  'Discipline is choosing what you want *most*.',
+  'A clear list is a clear *mind*.',
+  'Build something you are *proud* of.',
+  'Momentum is built one check mark at a time.',
+  'Be the reason the project moves *forward*.',
+  'Creativity loves *deadlines*.',
+  'Win the morning, win the *day*.',
+  'Less busy. More *productive*.',
+  'The secret of getting ahead is getting *started*.',
+  'Make it simple. Make it great. Make it *happen*.',
+];
+const Splash = (() => {
+  const el = document.getElementById('splash');
+  let start = performance.now(), gone = false, raf = 0, skipResolve = null;
+  const skipped = new Promise((r) => { skipResolve = r; });
+  function pickPhrase() {
+    let last = -1;
+    try { last = +(localStorage.getItem('e11-last-phrase') ?? -1); } catch (e) { /* ignore */ }
+    let i = Math.floor(Math.random() * PHRASES.length);
+    if (i === last) i = (i + 1) % PHRASES.length;
+    try { localStorage.setItem('e11-last-phrase', String(i)); } catch (e) { /* ignore */ }
+    return PHRASES[i];
+  }
+  function greeting() {
+    const h = new Date().getHours();
+    const part = h < 5 ? 'Working late' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+    return `${part} · ${new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}`;
+  }
+  function particles() {
+    const cv = document.getElementById('splash-fx');
+    const ctx = cv.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    let W = 0, H = 0, mouse = { x: -9999, y: -9999 };
+    const resize = () => { W = cv.clientWidth; H = cv.clientHeight; cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); };
+    resize();
+    window.addEventListener('resize', resize);
+    el.addEventListener('mousemove', (e) => {
+      mouse = { x: e.clientX, y: e.clientY };
+      const lg = el.querySelector('.sp-logo');
+      if (lg) lg.style.transform = `translate(${(e.clientX / W - .5) * 14}px, ${(e.clientY / H - .5) * 10}px)`;
+    });
+    el.addEventListener('mouseleave', () => { mouse = { x: -9999, y: -9999 }; });
+    const N = Math.min(110, Math.round((W * H) / 11000));
+    const cx = W / 2, cy = H / 2 - 30;
+    // particles burst out from the logo, then drift
+    const ps = Array.from({ length: N }, () => {
+      const a = Math.random() * Math.PI * 2, sp = 3 + Math.random() * 15;
+      return { x: cx, y: cy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, r: Math.random() * 1.6 + .5, hue: Math.random() < .7 ? '170,155,255' : '79,209,197' };
+    });
+    const tick = () => {
+      ctx.clearRect(0, 0, W, H);
+      for (const p of ps) {
+        const dx = p.x - mouse.x, dy = p.y - mouse.y, d2 = dx * dx + dy * dy;
+        if (d2 < 140 * 140) { const d = Math.sqrt(d2) || 1, f = (140 - d) / 140 * .9; p.vx += dx / d * f; p.vy += dy / d * f; }
+        p.vx *= .96; p.vy *= .96;
+        const v = Math.hypot(p.vx, p.vy); if (v < .25) { p.vx += (Math.random() - .5) * .2; p.vy += (Math.random() - .5) * .2; }
+        p.vx += (Math.random() - .5) * .06; p.vy += (Math.random() - .5) * .06;
+        p.x += p.vx; p.y += p.vy;
+        if (p.x < 0) p.x += W; if (p.x > W) p.x -= W; if (p.y < 0) p.y += H; if (p.y > H) p.y -= H;
+      }
+      for (let i = 0; i < ps.length; i++) {
+        const a = ps[i];
+        for (let j = i + 1; j < ps.length; j++) {
+          const b = ps[j], dx = a.x - b.x, dy = a.y - b.y, d2 = dx * dx + dy * dy;
+          if (d2 < 110 * 110) { ctx.strokeStyle = `rgba(150,140,255,${(1 - Math.sqrt(d2) / 110) * .22})`; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
+        }
+        const mx = a.x - mouse.x, my = a.y - mouse.y, md = Math.sqrt(mx * mx + my * my);
+        if (md < 180) { ctx.strokeStyle = `rgba(79,209,197,${(1 - md / 180) * .45})`; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(mouse.x, mouse.y); ctx.stroke(); }
+        ctx.fillStyle = `rgba(${a.hue},.85)`; ctx.beginPath(); ctx.arc(a.x, a.y, a.r, 0, Math.PI * 2); ctx.fill();
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    tick();
+  }
+  function init() {
+    if (!el) return;
+    document.getElementById('sp-greet').textContent = greeting();
+    const words = pickPhrase().split(' ');
+    document.getElementById('sp-phrase').innerHTML = words.map((w, i) => {
+      const hl = /^\*.*\*[.,!]?$/.test(w) || /^\*/.test(w);
+      const txt = esc(w.replace(/\*/g, ''));
+      return `<span class="w${hl ? ' hl' : ''}" style="animation-delay:${1.25 + i * .07}s">${txt}</span>`;
+    }).join(' ');
+    const bar = el.querySelector('.sp-bar i');
+    const step = () => { if (gone) return; bar.style.width = Math.min(100, (performance.now() - start) / SPLASH_MS * 100) + '%'; requestAnimationFrame(step); };
+    step();
+    try { particles(); } catch (e) { /* canvas unavailable */ }
+    const skip = () => skipResolve();
+    el.addEventListener('click', skip);
+    window.addEventListener('keydown', function k() { if (!gone) skip(); window.removeEventListener('keydown', k); });
+  }
+  // Wait for the minimum display time (or a skip), then fade into the app
+  async function finish() {
+    if (!el || gone) return;
+    const left = Math.max(0, SPLASH_MS - (performance.now() - start));
+    await Promise.race([new Promise((r) => setTimeout(r, left)), skipped]);
+    gone = true;
+    el.classList.add('out');
+    document.getElementById('app').classList.add('enter');
+    setTimeout(() => { cancelAnimationFrame(raf); el.remove(); document.getElementById('app').classList.remove('enter'); }, 650);
+  }
+  init();
+  return { finish };
+})();
+
+async function boot() {
+  hydrateIcons();
+  try { await bootInner(); } finally { Splash.finish(); }
+}
+async function bootInner() {
+  if (Host.isServer) return bootServer();
+  let res;
+  try {
+    res = await Host.call('load');
+  } catch (err) {
+    return fatal('E11 Console could not open its data folder.', err.message);
+  }
+  dataDir = res.dataDir || '';
+  if (res.data) {
+    try { db = normalize(JSON.parse(res.data)); }
+    catch (err) {
+      readOnly = true;
+      return fatal('Your data file could not be read.', 'Nothing has been changed. Check the “backups” folder inside “E11 Console Data” on your Desktop — copy the newest backup over e11-data.json, then reopen the app.');
+    }
+  } else {
+    db = normalize({});
+    seed();
+    persist(0);
+  }
+  setSaveState('saved');
+  applyThemePref();
+  // Signed in before on this Mac? Go straight in; otherwise show the sign-in screen
+  const sess = db.meta.prefs && db.meta.prefs.session;
+  const su = sess && userById(sess);
+  if (su && su.active !== false && su.setup) { currentUserId = su.id; enterApp(); }
+  else showLogin();
+  setInterval(() => { if (currentUserId) { deliverPending(); renderSidebar(); } }, 30000);
+  // Tidy attachment folders left behind (e.g. app quit right after deleting a task)
+  if (Host.isNative) {
+    const attIds = db.tasks.flatMap((t) => t.attachments.concat(...t.comments.map((c) => c.attachments || [])).map((a) => a.id))
+      .concat((db.clients || []).flatMap((c) => c.folders.flatMap((f) => f.files.map((a) => a.id))));
+    setTimeout(() => Host.call('sweepOrphans', { taskIds: db.tasks.map((t) => t.id).concat('_avatars'), attIds }).catch(() => {}), 4000);
+  }
+  // Refresh relative dates when the day changes; daily clean-up
+  let day = todayStr();
+  setInterval(() => { if (todayStr() !== day) { day = todayStr(); if (currentUserId) { purgeOldCompleted(); render({ keepDetail: true }); } } }, 60000);
+}
+
+// On the server: sign-in is done by Cloudflare, data comes from the office server
+async function bootServer() {
+  let me;
+  try { me = await Sync.start(); }
+  catch (err) {
+    if (err.auth) { document.body.innerHTML = `<div class="fatal" style="margin:20vh auto;max-width:440px;text-align:center"><h2>No access yet</h2><p>${esc(err.message)}</p></div>`; return; }
+    return fatal('Can’t reach the office server.', err.message + ' — check your internet connection and reload.');
+  }
+  setSaveState('saved');
+  applyThemePref();
+  currentUserId = me.id;
+  const u = me && userById(me.id);
+  if (u && !u.setup) showWelcome(null); else enterApp();
+  if (u) { u.lastLoginAt = nowISO(); persist(2000); }
+  setInterval(() => { if (currentUserId) { deliverPending(); renderSidebar(); } }, 30000);
+  let day = todayStr();
+  setInterval(() => { if (todayStr() !== day) { day = todayStr(); if (currentUserId) { purgeOldCompleted(); render({ keepDetail: true }); } } }, 60000);
+}
+
+// Preferences live in the data file (E11 Console Data), so they survive restarts and reinstalls.
+// On the server they are kept per person on this device instead of being shared with the team.
+function savePref(key, value) {
+  if (!db) return;
+  db.meta.prefs = db.meta.prefs || {};
+  if (db.meta.prefs[key] === value) return;
+  db.meta.prefs[key] = value;
+  if (Host.isServer) { Sync.savePrefs(); return; }
+  persist();
+}
+function setTheme(mode) {
+  document.documentElement.dataset.theme = mode;
+  const b = $('.theme-toggle');
+  if (b) { b.innerHTML = icon(mode === 'light' ? 'moon' : 'sun'); b.title = mode === 'light' ? 'Switch to dark mode' : 'Switch to light mode'; }
+  savePref('theme', mode);
+  Host.call('setAppearance', { mode }).catch(() => {});
+}
+function setSidebarCollapsed(on) {
+  document.getElementById('app').classList.toggle('sb-collapsed', on);
+  const b = $('.sb-toggle');
+  if (b) b.title = on ? 'Expand sidebar' : 'Collapse sidebar';
+  savePref('sidebarCollapsed', on);
+}
+function applyThemePref() {
+  const prefs = (db.meta.prefs = db.meta.prefs || {});
+  setTheme(prefs.theme === 'light' ? 'light' : 'dark');
+}
+function initSidebar() {
+  const y = $('#copy-year');
+  if (y) y.textContent = String(new Date().getFullYear());
+  const prefs = (db.meta.prefs = db.meta.prefs || {});
+  // one-time move of older settings kept in browser storage
+  try {
+    if (prefs.theme == null && localStorage.getItem('e11-theme')) prefs.theme = localStorage.getItem('e11-theme');
+    if (prefs.sidebarCollapsed == null && localStorage.getItem('e11-sidebar-collapsed')) prefs.sidebarCollapsed = localStorage.getItem('e11-sidebar-collapsed') === '1';
+    if (prefs.detailMode == null && localStorage.getItem('e11-detail-mode')) prefs.detailMode = localStorage.getItem('e11-detail-mode');
+  } catch (e) { /* ignore */ }
+  const on = !!prefs.sidebarCollapsed;
+  setSidebarCollapsed(on);
+  setTheme(prefs.theme === 'light' ? 'light' : 'dark');
+  ui.detailMode = ['side', 'full'].includes(prefs.detailMode) ? prefs.detailMode : 'modal';
+}
+
+function fatal(title, detail) {
+  $('#content').innerHTML = `<div class="fatal"><h2>${esc(title)}</h2><p>${esc(detail || '')}</p>${Host.isServer ? '<button class="btn" onclick="location.reload()">Try again</button>' : `<button class="btn" onclick="Host.call('revealData')">Show data folder</button>`}</div>`;
+  setSaveState('error', 'data unavailable');
+}
+
+boot();

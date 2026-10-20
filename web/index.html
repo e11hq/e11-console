@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>E11 Console</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="theme-color" content="#0b0b0d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="E11 Console">
+</head>
+<body>
+<div id="splash" aria-hidden="true">
+  <canvas id="splash-fx"></canvas>
+  <div class="sp-orb sp-orb1"></div><div class="sp-orb sp-orb2"></div>
+  <div class="sp-center">
+    <div class="sp-ring"></div>
+    <div class="sp-logo">
+      <img src="logo-wordmark.png" alt="">
+      <div class="sp-shine"></div>
+    </div>
+    <div class="sp-greet" id="sp-greet"></div>
+    <div class="sp-phrase" id="sp-phrase"></div>
+  </div>
+  <div class="sp-bottom">
+    <div class="sp-bar"><i></i></div>
+    <div class="sp-hint">Click or press any key to skip</div>
+  </div>
+</div>
+<div id="app">
+  <aside id="sidebar">
+    <div class="brand">
+      <img src="logo-wordmark.png" alt="E11 Console">
+      <div class="brand-btns">
+        <button class="icon-btn theme-toggle" data-action="toggle-theme" title="Switch to light mode"><span class="ic" data-icon="sun"></span></button>
+        <button class="icon-btn sb-toggle" data-action="toggle-sidebar" title="Collapse sidebar"><span class="ic" data-icon="sidebar"></span></button>
+      </div>
+    </div>
+    <div class="sb-head">
+      <span class="sb-title">Home</span>
+      <span class="sb-head-btns">
+        <button class="icon-btn" data-action="focus-search" title="Search (⌘K)"><span class="ic" data-icon="search"></span></button>
+        <button class="create-btn" data-action="new-task" title="New task (⌘N)"><span class="ic" data-icon="plus"></span></button>
+      </span>
+    </div>
+    <nav class="nav">
+      <a class="nav-item" data-nav="home"><span class="ic" data-icon="home"></span>Home</a>
+      <a class="nav-item" data-nav="inbox"><span class="ic" data-icon="inbox"></span>Inbox<span class="count ib" id="inbox-count"></span></a>
+      <a class="nav-item" data-nav="reviews" id="nav-reviews" style="display:none"><span class="ic" data-icon="shield"></span>Review Requests<span class="count ib" id="reviews-count"></span></a>
+      <a class="nav-item" data-nav="today"><span class="ic" data-icon="sun"></span>My Day<span class="count" id="today-count"></span></a>
+      <a class="nav-item" data-nav="mytasks"><span class="ic" data-icon="check-circle"></span>My Tasks<span class="count" id="mytasks-count"></span></a>
+    </nav>
+    <div class="nav-heading"><span>Projects</span><button class="icon-btn sm" data-action="new-project" title="New project"><span class="ic" data-icon="plus"></span></button></div>
+    <div id="project-list" class="nav"></div>
+    <div class="ca-nav-wrap">
+      <a class="nav-item ca-nav" data-nav="clients" title="Client Assets — logos, brand guidelines and fonts"><span class="ca-nav-ic"><span class="ic" data-icon="assets"></span></span><span class="ca-nav-txt">Client Assets<small>Logos · Guidelines · Fonts</small></span><span class="count" id="clients-count"></span></a>
+    </div>
+    <div class="sidebar-foot">
+      <button class="me-chip" id="me-chip" data-action="me-menu" title="Profile, team and sign out"></button>
+      <button class="data-link" data-action="reveal-data" title="Show the data folder in Finder">
+        <span class="save-dot" id="save-dot"></span>
+        <span id="save-label">Loading…</span>
+      </button>
+      <div class="agency">© <span id="copy-year"></span> E11 Agency</div>
+    </div>
+  </aside>
+
+  <main id="main">
+    <header id="topbar">
+      <div id="title-area"></div>
+      <div class="topbar-right">
+        <div class="search">
+          <span class="ic" data-icon="search"></span>
+          <input id="search" type="text" placeholder="Search tasks" autocomplete="off" spellcheck="false">
+          <kbd>⌘K</kbd>
+        </div>
+      </div>
+    </header>
+    <section id="content"></section>
+    <aside id="detail" aria-hidden="true"></aside>
+  </main>
+</div>
+
+<div id="auth"></div>
+<div id="overlay-root"></div>
+<div id="toast-root"></div>
+
+<script src="app.js"></script>
+<script>if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});</script>
+</body>
+</html>
