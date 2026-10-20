@@ -1,0 +1,49 @@
+# Every change on main → tested → published as the "staging" release (test.e11hq.com installs it).
+# A tag like v1.2.0 → tested → published as a real release (console.e11hq.com installs it at 2 AM,
+# or straight away when an Admin clicks "Update now").
+name: Release
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+  publish:
+    needs: test
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Version and notes
+        id: v
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+            if [ -f "release-notes/$VERSION.md" ]; then cp "release-notes/$VERSION.md" notes.md
+            else git tag -l --format='%(contents)' "$GITHUB_REF_NAME" > notes.md; fi
+            echo "kind=stable" >> "$GITHUB_OUTPUT"
+          else
+            VERSION="$(cat VERSION)-test.${GITHUB_RUN_NUMBER}"
+            LAST=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)
+            { echo "## Changes on the test copy"; git log --no-merges --format='- %s' ${LAST:+$LAST..}HEAD | head -40; } > notes.md
+            echo "kind=staging" >> "$GITHUB_OUTPUT"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Build bundle
+        run: scripts/bundle.sh "${{ steps.v.outputs.version }}" notes.md
+      - name: Publish stable release
+        if: steps.v.outputs.kind == 'stable'
+        run: gh release create "$GITHUB_REF_NAME" dist/*.tar.gz --title "E11 Console ${{ steps.v.outputs.version }}" --notes-file notes.md --verify-tag
+      - name: Publish test release
+        if: steps.v.outputs.kind == 'staging'
+        run: |
+          gh release delete staging --yes --cleanup-tag || true
+          git push origin :refs/tags/staging || true
+          gh release create staging dist/*.tar.gz --prerelease --target "$GITHUB_SHA" \
+            --title "Test copy ${{ steps.v.outputs.version }}" --notes-file notes.md

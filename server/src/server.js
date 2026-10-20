@@ -112,6 +112,23 @@ export function createServer(cfg) {
 
     if (p === '/api/me') return json(res, 200, { ok: true, user: access.shape(u, 'users', u), version, rev: store.rev() });
 
+    // App updates (the launcher runs inside the same container): Admins see status and can update or roll back
+    if (p === '/api/updates') {
+      if (u.role !== 'admin') return json(res, 403, { ok: false, error: 'Admins only' });
+      if (!cfg.launcherUrl) return json(res, 200, { ok: true, managed: false, running: version });
+      const action = req.method === 'POST' ? (await readBody(req)).action : null;
+      const route = action === 'check' ? '/check' : action === 'update' ? '/update' : action === 'rollback' ? '/rollback' : '/status';
+      const r = await fetch(cfg.launcherUrl + route, { method: action ? 'POST' : 'GET' }).then((x) => x.json()).catch((e) => ({ ok: false, error: 'Updater not reachable: ' + e.message }));
+      return json(res, 200, { managed: true, ...r });
+    }
+    // "What's new" for everyone after an update
+    if (p === '/api/whatsnew') {
+      if (!cfg.launcherUrl) return json(res, 200, { ok: true, version, notes: '' });
+      const r = await fetch(cfg.launcherUrl + '/status').then((x) => x.json()).catch(() => null);
+      const n = r && r.currentNotes;
+      return json(res, 200, { ok: true, version, name: n ? n.name : version, notes: n ? n.notes : '', publishedAt: n ? n.publishedAt : null });
+    }
+
     // Cloudflare access for freelancers: status, and "sync now" for Admins
     if (p === '/api/cloudflare') {
       if (u.role !== 'admin') return json(res, 403, { ok: false, error: 'Admins only' });
@@ -209,8 +226,13 @@ export function createServer(cfg) {
     if (!fs.existsSync(full) || fs.statSync(full).isDirectory()) full = path.join(webDir, 'index.html');
     const type = mimeOf(full);
     const html = type.startsWith('text/html');
-    res.writeHead(200, { 'Content-Type': type, 'Cache-Control': html || /sw\.js$/.test(full) ? 'no-cache' : 'public, max-age=300', 'X-Content-Type-Options': 'nosniff' });
+    res.writeHead(200, { 'Content-Type': type, 'Cache-Control': html || /sw\.js$/.test(full) ? 'no-cache' : 'public, max-age=86400', 'X-Content-Type-Options': 'nosniff' });
     if (req.method === 'HEAD') return res.end();
+    if (html) {
+      // app.js?v=1.2.0 — every version gets fresh files, older ones can be cached for a day
+      const v = encodeURIComponent(version);
+      return res.end(fs.readFileSync(full, 'utf8').replace(/(src|href)="(app\.js|styles\.css)"/g, `$1="$2?v=${v}"`));
+    }
     fs.createReadStream(full).pipe(res);
   }
 

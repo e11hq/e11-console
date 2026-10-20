@@ -159,6 +159,103 @@ const Host = (() => {
 
 const FINDER_LABEL = Host.isServer ? 'Download' : 'Show in Finder';
 
+
+/* ================= Updates (server) ================= */
+// Simple formatting for release notes: "## Heading", "- bullet", **bold**
+function notesHTML(md) {
+  const lines = String(md || '').split(/\r?\n/);
+  let out = '', inList = false;
+  const inline = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`(.+?)`/g, '<code>$1</code>');
+  lines.forEach((l) => {
+    const li = /^\s*[-*]\s+(.*)/.exec(l), h = /^#{1,3}\s+(.*)/.exec(l);
+    if (li) { if (!inList) { out += '<ul>'; inList = true; } out += `<li>${inline(li[1])}</li>`; return; }
+    if (inList) { out += '</ul>'; inList = false; }
+    if (h) out += `<h4>${inline(h[1])}</h4>`;
+    else if (l.trim()) out += `<p>${inline(l)}</p>`;
+  });
+  if (inList) out += '</ul>';
+  return out || '<p>Improvements and fixes.</p>';
+}
+// A newer version is running on the server: offer a reload (nothing is lost, changes are saved first)
+function showUpdateBanner(v) {
+  let el = document.getElementById('update-banner');
+  if (!el) { el = document.createElement('div'); el.id = 'update-banner'; document.body.appendChild(el); }
+  el.innerHTML = `${icon('download')}<span><b>A new version of E11 Console is ready</b> (${esc(v)})</span><button class="btn ghost sm" data-action="whats-new">What’s new</button><button class="btn primary sm" data-action="reload-app">Reload</button>`;
+  el.classList.add('on');
+}
+async function reloadApp() {
+  try { await Sync.push(); } catch (e) { /* offline: changes stay in this window until reload */ }
+  location.reload();
+}
+async function whatsNewDialog(auto) {
+  let r;
+  try { r = await api('GET', '/api/whatsnew'); } catch (e) { if (!auto) toast(e.message); return; }
+  if (auto && !r.notes) return;
+  const root = $('#overlay-root');
+  root.innerHTML = `<div class="scrim"><div class="dialog wn-dlg"><div class="wn-kick">${icon('download')}What’s new</div><h2>${esc(r.name || r.version)}</h2>${r.publishedAt ? `<div class="wn-date">${esc(fmtDateTime(r.publishedAt))}</div>` : ''}<div class="wn-notes">${notesHTML(r.notes)}</div><div class="actions"><button class="btn primary" data-r="1">Got it</button></div></div></div>`;
+  const close = () => { root.innerHTML = ''; };
+  $('[data-r="1"]', root).addEventListener('click', close);
+  $('.scrim', root).addEventListener('click', (e) => { if (e.target.classList.contains('scrim')) close(); });
+}
+// After a reload into a new version, show its notes once
+function maybeShowWhatsNew() {
+  if (!Host.isServer || !Sync.version) return;
+  let seen = null;
+  try { seen = localStorage.getItem('e11-seen-version'); localStorage.setItem('e11-seen-version', Sync.version); } catch (e) { return; }
+  if (seen && seen !== Sync.version) setTimeout(() => whatsNewDialog(true), 1200);
+}
+// Admin page: version, available update, update now, roll back
+function viewUpdates() {
+  setTimeout(loadUpdates, 0);
+  return `<div class="upd"><div class="upd-card" id="upd-body"><div class="ph">Checking…</div></div></div>`;
+}
+async function loadUpdates(action) {
+  const el = document.getElementById('upd-body');
+  if (!el) return;
+  if (action) el.classList.add('busy');
+  let s;
+  try { s = await api(action ? 'POST' : 'GET', '/api/updates', action ? { action } : undefined); }
+  catch (e) { el.innerHTML = `<div class="ph">${esc(e.message)}</div>`; return; }
+  const st = s.status || s;
+  el.classList.remove('busy');
+  if (action === 'update' || action === 'rollback') {
+    if (!s.ok) toast(s.error || 'Something went wrong');
+    else if (s.started) {
+      // The server restarts on the new version; keep asking until it's back, then show the result
+      el.classList.add('busy');
+      el.innerHTML = `<h3>${icon('download')}${action === 'rollback' ? 'Going back to the previous version…' : 'Updating E11 Console…'}</h3><p class="upd-note">This takes about 10 seconds. The app reconnects by itself.</p>`;
+      const t0 = Date.now();
+      const poll = async () => {
+        if (!document.getElementById('upd-body')) return;
+        let st2 = null;
+        try { st2 = await api('GET', '/api/updates'); } catch (e) { /* restarting */ }
+        if (st2 && !st2.busy && st2.lastResult && st2.lastResult.action === action && Date.parse(st2.lastResult.at) >= t0 - 1000) {
+          toast(st2.lastResult.ok ? (action === 'rollback' ? `Went back to ${st2.lastResult.version}` : st2.lastResult.upToDate ? 'Already up to date' : `Updated to ${st2.lastResult.version}`) : st2.lastResult.error || 'Something went wrong');
+          return loadUpdates();
+        }
+        if (Date.now() - t0 < 120000) setTimeout(poll, 2000); else loadUpdates();
+      };
+      setTimeout(poll, 2500);
+      return;
+    }
+  }
+  if (!st.managed && s.managed === false) { el.innerHTML = `<h3>${icon('download')}App updates</h3><p class="upd-note">This copy (${esc(s.running)}) isn’t managed by the updater.</p>`; return; }
+  const hour = st.updateHour == null ? null : `${String(st.updateHour).padStart(2, '0')}:00`;
+  el.innerHTML = `
+    <h3>${icon('download')}App updates</h3>
+    <div class="upd-row"><span>Running</span><b>${esc(st.running || st.current || '—')}</b>${st.channel === 'staging' ? '<span class="upd-chip">Test copy</span>' : ''}</div>
+    <div class="upd-row"><span>Last checked</span><b>${st.lastCheck ? esc(timeAgo(st.lastCheck)) : 'Never'}</b><button class="btn ghost xs" data-action="upd" data-a="check">Check now</button></div>
+    ${st.lastError ? `<div class="upd-err">${icon('info')}${esc(st.lastError)}</div>` : ''}
+    ${st.available ? `<div class="upd-new">
+        <div class="upd-new-head"><div><div class="upd-kick">Update available</div><b>${esc(st.available.name || st.available.version)}</b></div>
+        <button class="btn primary" data-action="upd" data-a="update" ${st.busy ? 'disabled' : ''}>${icon('download')}Update now</button></div>
+        <div class="wn-notes">${notesHTML(st.available.notes)}</div>
+        <div class="upd-note">${hour ? `Installs automatically tonight at ${hour} if you don’t update now. ` : ''}A copy of the database is made first, and it takes about 10 seconds. Open apps show a “Reload” button.</div>
+      </div>` : `<div class="upd-ok">${icon('check')}You’re up to date</div>`}
+    ${st.previous ? `<div class="upd-row"><span>Previous version</span><b>${esc(st.previous)}</b><button class="btn ghost xs danger" data-action="upd" data-a="rollback" ${st.busy ? 'disabled' : ''}>Roll back</button></div>` : ''}
+    ${(st.history || []).length ? `<h4 class="pf-sub">History</h4>${st.history.map((h) => `<div class="upd-hist"><b>${esc(h.version)}</b><span>${esc(h.reason)}</span><small>${esc(fmtDateTime(h.at))}</small></div>`).join('')}` : ''}`;
+}
+
 /* ================= Server connection (console.e11hq.com) ================= */
 // Team page: is Cloudflare letting the freelancers on the Team page in?
 function paintCfStatus(s) {
@@ -1153,6 +1250,7 @@ function renderTitle() {
   if (ui.view === 'reviews') { el.innerHTML = `<div class="page-icon" style="background:#3b1f2c;color:#ff8fc0">${icon('shield')}</div><div class="page-title">Review Requests</div>${cdActing() ? '<span class="cd-badge">Acting CD</span>' : ''}`; return; }
   if (ui.view === 'team') { el.innerHTML = `<div class="page-icon" style="background:#173b33;color:#7fe0d7">${icon('users')}</div><div class="page-title">Team members</div>`; return; }
   if (ui.view === 'profile') { el.innerHTML = `<div class="page-icon" style="background:#3a2a1a;color:#ffc675">${icon('user')}</div><div class="page-title">My profile</div>`; return; }
+  if (ui.view === 'updates') { el.innerHTML = `<div class="page-icon ca-icon">${icon('download')}</div><div class="page-title">App updates</div>`; return; }
   if (ui.view === 'clients' || ui.view === 'client') {
     const c = ui.view === 'client' ? clientById(ui.clientId) : null;
     if (ui.view === 'client' && !c) { ui.view = 'clients'; return renderTitle(); }
@@ -1193,6 +1291,7 @@ function renderContent() {
   else if (ui.view === 'team') { c.innerHTML = viewTeam(); if (Host.isServer && can('manageUsers')) api('GET', '/api/cloudflare').then(paintCfStatus).catch(() => {}); }
   else if (ui.view === 'reviews') { c.innerHTML = viewReviews(); hydrateThumbs(c); }
   else if (ui.view === 'profile') c.innerHTML = viewProfile();
+  else if (ui.view === 'updates') c.innerHTML = viewUpdates();
   else if (ui.view === 'clients') c.innerHTML = viewClients();
   else if (ui.view === 'client') {
     const cl = clientById(ui.clientId);
@@ -3047,6 +3146,14 @@ document.addEventListener('click', async (e) => {
         actEl.classList.toggle('on', !u.prefs.notifOff[k]); actEl.title = u.prefs.notifOff[k] ? 'Off' : 'On';
         persist(0); return;
       }
+      case 'reload-app': reloadApp(); return;
+      case 'whats-new': whatsNewDialog(false); return;
+      case 'upd': {
+        const a = actEl.dataset.a;
+        if (a === 'rollback') { const ok = await dialog({ title: 'Go back to the previous version?', body: 'Everyone’s app will show a Reload button. Your data is kept — a copy of the database is made first.', okText: 'Roll back', danger: true }); if (!ok) return; }
+        if (a === 'update') { const ok = await dialog({ title: 'Update E11 Console now?', body: 'It takes about 10 seconds. People see “Reconnecting…” briefly, then a Reload button. A copy of the database is made first.', okText: 'Update now' }); if (!ok) return; }
+        loadUpdates(a); return;
+      }
       case 'allow-notifs': try { Notification.requestPermission().then(() => renderContent()); } catch (err) { /* unsupported */ } return;
       case 'test-notif': alertUser({ title: 'E11 Console', body: 'This is how new notifications will look and sound.', taskId: null }, true); return;
       case 'prio-menu': e.stopPropagation(); prioMenu(actEl, actEl.dataset.key); return;
@@ -4746,6 +4853,8 @@ function meMenu(anchor) {
   showMenu(anchor, [
     { label: 'My profile', icon: 'user', run: () => go('profile') },
     { label: 'Team members', icon: 'users', run: () => go('team') },
+    ...(Host.isServer && me() && me().role === 'admin' ? [{ label: 'App updates', icon: 'download', run: () => go('updates') }] : []),
+    ...(Host.isServer ? [{ label: 'What’s new', icon: 'info', run: () => whatsNewDialog(false) }] : []),
     '-',
     { label: 'Sign out', icon: 'logout', run: signOut },
   ]);
@@ -5149,7 +5258,7 @@ async function bootServer() {
   applyThemePref();
   currentUserId = me.id;
   const u = me && userById(me.id);
-  if (u && !u.setup) showWelcome(null); else enterApp();
+  if (u && !u.setup) showWelcome(null); else { enterApp(); maybeShowWhatsNew(); }
   if (u) { u.lastLoginAt = nowISO(); persist(2000); }
   setInterval(() => { if (currentUserId) { deliverPending(); renderSidebar(); } }, 30000);
   let day = todayStr();
