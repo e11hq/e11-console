@@ -19,6 +19,7 @@ var SERVER = (function () {
 })();
 
 var gWindow = null, gWebView = null, gBridge = null, gWinDelegate = null, gUIDelegate = null, gMenu = null, gMenuTarget = null;
+ObjC.bindFunction('objc_msgSend', ['void', ['id', 'SEL', 'id', 'id']]);
 var gPicked = {};   // token -> local file path chosen in the file picker
 var gSaving = {};   // token -> path being written in Downloads
 
@@ -128,9 +129,10 @@ var commands = {
 // Answer the page by calling window.__e11NativeReply(id, result) inside it
 function reply(id, res) {
   var js = 'window.__e11NativeReply && window.__e11NativeReply(' + JSON.stringify(id) + ',' + JSON.stringify(res) + ')';
-  // Called through performSelector so WebKit gets a real "no completion handler" (nil).
-  // Passing a JavaScript value as the completion handler makes macOS abort the app.
-  try { gWebView.performSelectorWithObjectWithObject('evaluateJavaScript:completionHandler:', $(js), $()); } catch (e) { /* page gone */ }
+  // Sent through objc_msgSend with an exact signature, so WebKit gets a real nil completion
+  // handler and nothing is returned. (A JavaScript completion handler, or performSelector, makes
+  // the macOS scripting bridge crash — tested on a Mac on 2026-10-20.)
+  try { $.objc_msgSend(gWebView, 'evaluateJavaScript:completionHandler:', $(js), $()); } catch (e) { /* page gone */ }
 }
 function handleMessage(raw) {
   var msg;
@@ -272,7 +274,6 @@ function buildWindow() {
   config.websiteDataStore = $.WKWebsiteDataStore.defaultDataStore; // stay signed in between launches
   gBridge = $.E11ClientBridge.alloc.init;
   config.userContentController.addScriptMessageHandlerName(gBridge, 'e11');
-  try { config.preferences.setValueForKey($.NSNumber.numberWithBool(true), 'developerExtrasEnabled'); } catch (e) { /* optional */ }
 
   gWebView = $.WKWebView.alloc.initWithFrameConfiguration(gWindow.contentView.bounds, config);
   gWebView.autoresizingMask = 2 | 16;
