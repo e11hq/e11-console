@@ -1474,7 +1474,7 @@ function highlight(text) {
 function taskRow(t, o = {}) {
   const parent = o.showParent && t.parentId ? task(t.parentId) : null;
   const st = statusInfo(t);
-  const nameCell = `<div class="cell name"><span class="grip">${o.drag ? icon('grip') : ''}</span>${statusIcon(t)}${parent ? `<span class="parent-ref">${esc(parent.title || 'Untitled')} ›</span>` : ''}<span class="title">${t.title ? highlight(t.title) : '<span class="ph">Untitled task</span>'}</span>${taskMetaIcons(t)}${t.cdStatus && !t.done ? cdChip(t) : ''}<span class="row-actions">${checkbox(t)}${can('deleteTask') ? `<button class="icon-btn sm row-del" data-action="delete-task" data-id="${t.id}" title="Delete task">${icon('trash')}</button>` : ''}</span>${avatarStack(t.assignees, 20, 3, t)}</div>`;
+  const nameCell = `<div class="cell name"><span class="grip">${o.drag ? icon('grip') : ''}</span>${statusIcon(t)}${parent ? `<span class="parent-ref">${esc(parent.title || 'Untitled')} ›</span>` : ''}<span class="title">${t.title ? (o.mark ? sMark(t.title, o.mark) : highlight(t.title)) : '<span class="ph">Untitled task</span>'}</span>${taskMetaIcons(t)}${t.cdStatus && !t.done ? cdChip(t) : ''}<span class="row-actions">${checkbox(t)}${can('deleteTask') ? `<button class="icon-btn sm row-del" data-action="delete-task" data-id="${t.id}" title="Delete task">${icon('trash')}</button>` : ''}</span>${avatarStack(t.assignees, 20, 3, t)}</div>`;
   const due = `<div class="cell"><span class="due ${dueClass(t)}">${fmtDue(t.due)}</span></div>`;
   const prio = `<div class="cell">${prioFlag(prioOf(t), true)}</div>`;
   const cells = o.showProject
@@ -1767,16 +1767,169 @@ function viewHome() {
 }
 
 /* ---------- Search ---------- */
+/* ================= Smart search (tasks and Client Assets) =================
+   Every word must match somewhere. Each word may match a whole word, the start of a word, part of a
+   word, or — if nothing closer exists — a word that is one or two letters off (typos like "frod",
+   "offorad"). Task fields count differently: a hit in the title beats one in a comment. */
+const sNorm = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[’'`]/g, '');
+const sWords = (s) => sNorm(s).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+// Edit distance with swapped letters counted as one (frod → ford). Gives up beyond `max`.
+function editDist(a, b, max) {
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  const prev2 = new Array(b.length + 1), prev = new Array(b.length + 1), cur = new Array(b.length + 1);
+  for (let j = 0; j <= b.length; j++) prev[j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    cur[0] = i; let best = cur[0];
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      let v = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) v = Math.min(v, prev2[j - 2] + 1);
+      cur[j] = v; if (v < best) best = v;
+    }
+    if (best > max) return max + 1;
+    for (let j = 0; j <= b.length; j++) { prev2[j] = prev[j]; prev[j] = cur[j]; }
+  }
+  return prev[b.length];
+}
+const typoLimit = (w) => (w.length >= 8 ? 2 : w.length >= 4 ? 1 : 0);
+// For one search word: which words in the vocabulary it matches, and how well (1 = exact)
+function termMatches(term, vocab) {
+  const out = new Map();
+  let close = false;
+  vocab.forEach((w) => {
+    if (w === term) { out.set(w, 1); close = true; } else if (w.startsWith(term)) { out.set(w, 0.85); close = true; } else if (term.length >= 3 && w.includes(term)) { out.set(w, 0.55); close = true; }
+  });
+  let fuzzy = null;
+  if (!close && typoLimit(term)) {
+    let bestD = 99;
+    vocab.forEach((w) => {
+      const lim = typoLimit(term);
+      // compare with the whole word and with its start (so "offro" still reaches "offroad")
+      const d = Math.min(editDist(term, w, lim), w.length > term.length ? editDist(term, w.slice(0, term.length), lim) : 99);
+      if (d <= lim) { out.set(w, d === 1 ? 0.45 : 0.3); if (d < bestD || (d === bestD && fuzzy && w.length < fuzzy.length)) { bestD = d; fuzzy = w; } }
+    });
+  }
+  return { words: out, fuzzy };
+}
+
+// Handy words that describe a task rather than appear in it
+const TS_FLAGS = {
+  overdue: (t) => myOpenAny(t) && t.due && dayDiff(t.due) < 0,
+  today: (t) => !t.done && t.due && dayDiff(t.due) === 0,
+  tomorrow: (t) => !t.done && t.due && dayDiff(t.due) === 1,
+  urgent: (t) => isUrgent(t),
+  done: (t) => t.done, completed: (t) => t.done,
+  open: (t) => !t.done,
+  mine: (t) => isMine(t), me: (t) => isMine(t),
+  unassigned: (t) => !(t.assignees || []).length,
+  review: (t) => t.cdStatus === 'review', approved: (t) => t.cdStatus === 'approved',
+};
+const myOpenAny = (t) => !t.done;
+
+// What can be searched in a task, and how much each part counts
+function taskFields(t) {
+  const p = proj(t.projectId);
+  const cl = p ? clientOfProject(p) : null;
+  const sec = sectionOf(t);
+  const people = (ids) => (ids || []).map((id) => fullName(userById(id))).join(' ');
+  const f = [
+    { k: 'title', w: 10, text: t.title },
+    { k: 'project', w: 6, text: p ? p.name : 'My Tasks' },
+    { k: 'client', w: 5, text: cl ? cl.name : '' },
+    { k: 'tag', w: 5, text: (t.tags || []).join(' ') },
+    { k: 'people', w: 4, text: people(t.assignees) },
+    { k: 'status', w: 3, text: sec ? sec.name : '' },
+    { k: 'creator', w: 2, text: people([t.createdBy]) },
+    { k: 'desc', w: 2.5, text: t.notesHtml ? notifPlainHTML(t.notesHtml) : t.notes },
+    { k: 'check', w: 1.5, text: (t.checklist || []).map((c) => c.text).join(' · ') },
+    { k: 'sub', w: 2, text: subtasksOf(t.id).map((s) => s.title).join(' · ') },
+  ];
+  (t.comments || []).forEach((c) => f.push({ k: 'comment', w: 1.2, text: c.text || notifPlainHTML(c.html), who: c.authorId, cid: c.id, reply: !!c.parentId }));
+  if (t.parentId) { const par = task(t.parentId); if (par) f.push({ k: 'parent', w: 3, text: par.title }); }
+  return f;
+}
+
+function taskSearch(query, { limit = 200 } = {}) {
+  const terms = sWords(query);
+  if (!terms.length) return { tasks: [], projects: [], fixed: [] };
+  const docs = db.tasks.map((t) => {
+    const fields = taskFields(t);
+    const words = new Map(); // word -> best weight
+    fields.forEach((fl, i) => sWords(fl.text).forEach((w) => { if (!words.has(w) || words.get(w).w < fl.w) words.set(w, { w: fl.w, i }); }));
+    Object.keys(TS_FLAGS).forEach((k) => { if (TS_FLAGS[k](t)) words.set('#' + k, { w: 4, i: -1 }); });
+    return { t, fields, words };
+  });
+  const vocab = new Set();
+  docs.forEach((d) => d.words.forEach((_, w) => { if (w[0] !== '#') vocab.add(w); }));
+  const fixed = [];
+  const per = terms.map((term) => {
+    const m = termMatches(term, vocab);
+    if (m.fuzzy && !m.words.has(term)) fixed.push({ from: term, to: m.fuzzy });
+    return { term, words: m.words, flag: TS_FLAGS[term] ? '#' + term : null };
+  });
+  const tasks = [];
+  docs.forEach((d) => {
+    let score = 0; const hits = [];
+    for (const pt of per) {
+      let best = 0, bestWord = null, bestField = -1;
+      if (pt.flag && d.words.has(pt.flag)) { best = 4; bestWord = pt.term; }
+      pt.words.forEach((q, w) => { const e = d.words.get(w); if (e && e.w * q > best) { best = e.w * q; bestWord = w; bestField = e.i; } });
+      if (!best) return; // every word has to match somewhere
+      score += best; hits.push({ word: bestWord, field: bestField });
+    }
+    if (!d.t.done) score += 1.5;
+    if (d.t.parentId) score -= 1;
+    tasks.push({ t: d.t, score, hits, fields: d.fields });
+  });
+  tasks.sort((a, b) => b.score - a.score || (a.t.done - b.t.done) || b.t.updatedAt.localeCompare(a.t.updatedAt));
+  // projects whose name (or client) matches every word
+  const projects = db.projects.filter((p) => {
+    const ws = new Set(sWords(`${p.name} ${(clientOfProject(p) || {}).name || ''}`));
+    return per.every((pt) => [...pt.words.keys()].some((w) => ws.has(w)));
+  });
+  return { tasks: tasks.slice(0, limit), total: tasks.length, projects, fixed, terms: per };
+}
+// Highlight the words that matched (including typo-corrected ones)
+function sMark(text, r) {
+  const src = String(text || '');
+  const want = new Set();
+  (r.terms || []).forEach((pt) => pt.words.forEach((_, w) => want.add(w)));
+  return src.split(/([\p{L}\p{N}]+)/u).map((part) => {
+    const n = sNorm(part);
+    return n && [...want].some((w) => n === w || (w.length >= 3 && n.startsWith(w)) || w.startsWith(n) && n.length >= 3) ? `<mark>${esc(part)}</mark>` : esc(part);
+  }).join('');
+}
+// One line saying where a result matched, when it wasn't the title
+const FIELD_LABEL = { project: 'Project', client: 'Client', tag: 'Tag', people: 'Assigned to', status: 'Status', creator: 'Created by', desc: 'Description', check: 'Checklist', sub: 'Subtask', parent: 'Part of' };
+function searchWhy(hit, r) {
+  const fi = hit.hits.map((h) => h.field).filter((i) => i > 0)
+    .sort((a, b) => hit.fields[b].w - hit.fields[a].w)[0];
+  if (fi == null) return '';
+  const fl = hit.fields[fi];
+  const words = hit.hits.filter((h) => h.field === fi).map((h) => h.word);
+  let text = String(fl.text || '').replace(/\s+/g, ' ');
+  // a window of text around the first matching word
+  const low = sNorm(text); const at = Math.max(0, low.indexOf(words[0] || ''));
+  if (text.length > 90) { const s = Math.max(0, at - 30); text = (s ? '…' : '') + text.slice(s, s + 90) + (s + 90 < text.length ? '…' : ''); }
+  const label = fl.k === 'comment' ? `${fl.reply ? 'Reply' : 'Comment'} by ${esc(fl.who === currentUserId ? 'you' : firstName(fl.who))}` : FIELD_LABEL[fl.k] || '';
+  return `<span class="sr-why"><b>${label}:</b> ${sMark(text, r)}</span>`;
+}
+function searchFixedNote(r) {
+  return r.fixed.length ? `<div class="sr-fixed">${icon('search')}Showing results for ${r.fixed.map((f) => `<b>${esc(f.to)}</b>`).join(', ')} <span>(you typed ${r.fixed.map((f) => `“${esc(f.from)}”`).join(', ')})</span></div>` : '';
+}
+
 function viewSearch() {
-  const q = ui.search.trim().toLowerCase();
-  const hits = db.tasks.filter((t) => {
-    if (t.title.toLowerCase().includes(q) || t.notes.toLowerCase().includes(q)) return true;
-    if (t.tags.some((g) => g.toLowerCase().includes(q))) return true;
-    return t.comments.some((c) => c.text.toLowerCase().includes(q));
-  }).sort((a, b) => (a.done - b.done) || b.updatedAt.localeCompare(a.updatedAt));
+  const r = taskSearch(ui.search);
+  const projects = r.projects.length ? `<div class="sr-projects">${r.projects.map((p) => `<button class="sr-proj" data-action="go-project" data-id="${p.id}"><span class="page-icon sm" style="background:${p.color}">${esc(initials(p.name))}</span><span><b>${sMark(p.name, r)}</b><small>${db.tasks.filter((t) => t.projectId === p.id && !t.parentId && !t.done).length} open tasks${clientOfProject(p) ? ' · ' + esc(clientOfProject(p).name) : ''}</small></span>${icon('chev-right')}</button>`).join('')}</div>` : '';
+  const rows = r.tasks.map((h) => {
+    const why = searchWhy(h, r);
+    return `<div class="sr-hit">${taskRow(h.t, { showProject: true, showParent: true, mark: r })}${why ? `<div class="sr-why-row">${why}</div>` : ''}</div>`;
+  }).join('');
   return `<div class="list-wrap with-proj">
-    <div class="search-results-head">${hits.length} result${hits.length === 1 ? '' : 's'} for “${esc(ui.search.trim())}”</div>
-    ${hits.length ? listHead(true) + hits.map((t) => taskRow(t, { showProject: true })).join('') : '<div class="empty"><div class="big">No matching tasks</div>Try a different word, or search by tag.</div>'}
+    <div class="search-results-head">${r.total || 0} task${r.total === 1 ? '' : 's'}${r.projects.length ? ` and ${r.projects.length} project${r.projects.length === 1 ? '' : 's'}` : ''} for “${esc(ui.search.trim())}”</div>
+    ${searchFixedNote(r)}
+    ${projects}
+    ${r.tasks.length ? listHead(true) + rows : (r.projects.length ? '' : '<div class="empty"><div class="big">No matching tasks</div>Try a project or client name, a person, a tag — or words like “overdue”, “urgent” or “mine”.</div>')}
   </div>`;
 }
 
@@ -3804,11 +3957,18 @@ function caMark(name, q) {
   }
   return out + (on ? '</mark>' : '');
 }
-function caSearch(q, scope) {
+function caSearch(q, scope, loose) {
   const terms = caTerms(q);
   if (!terms.length) return { clients: [], folders: [], files: [] };
-  const all = (hay) => { const h = caNorm(hay); return terms.every((t) => h.includes(t)); };
-  const some = (hay) => { const h = caNorm(hay); return terms.some((t) => h.includes(t)); };
+  // exact pieces first; if nothing matches, allow small typos ("frod" → ford, "gudelines" → guidelines)
+  const near = (t, hay) => {
+    if (hay.includes(t)) return true;
+    if (!loose || !typoLimit(t)) return false;
+    const lim = typoLimit(t);
+    return sWords(hay).some((w) => editDist(t, w, lim) <= lim || (w.length > t.length && editDist(t, w.slice(0, t.length), lim) <= lim));
+  };
+  const all = (hay) => { const h = caNorm(hay); return terms.every((t) => near(t, h)); };
+  const some = (hay) => { const h = caNorm(hay); return terms.some((t) => near(t, h)); };
   const list = scope ? [scope] : clientsSorted();
   const clients = scope ? [] : list.filter((c) => all(c.name));
   const folders = [], files = [];
@@ -3820,6 +3980,7 @@ function caSearch(q, scope) {
     });
   }));
   files.sort((x, y) => x.a.name.localeCompare(y.a.name));
+  if (!loose && !clients.length && !folders.length && !files.length) return { ...caSearch(q, scope, true), loose: true };
   return { clients, folders, files };
 }
 function caSearchBar(c) {
@@ -3839,7 +4000,7 @@ function caResultsHTML(q, scope) {
   const fonts = shown.filter((x) => isFont(x.a));
   return `<div class="ca-results">
     ${fonts.length ? `<style>${fonts.map((x) => `@font-face{font-family:'caf-${x.a.id}';src:url("${fileUrl(x.a)}");}`).join('')}</style>` : ''}
-    <div class="ca-rcount">${n} result${n === 1 ? '' : 's'} for “${esc(q.trim())}”${scope ? ` in ${esc(scope.name)}` : ''}</div>
+    <div class="ca-rcount">${n} result${n === 1 ? '' : 's'} for “${esc(q.trim())}”${scope ? ` in ${esc(scope.name)}` : ''}${r.loose ? ' <span class="ca-loose">— close matches (check the spelling)</span>' : ''}</div>
     ${r.clients.length ? `<h4 class="ca-rh">Clients <span>${r.clients.length}</span></h4><div class="ca-rlist">${r.clients.map((c) => `<button class="ca-rrow" data-action="open-client" data-id="${c.id}">${clientLogoHTML(c, 34)}<span><b>${caMark(c.name, q)}</b><small>${c.folders.length} folders · ${clientFileCount(c)} files</small></span>${icon('chev-right')}</button>`).join('')}</div>` : ''}
     ${r.folders.length ? `<h4 class="ca-rh">Folders <span>${r.folders.length}</span></h4><div class="ca-rlist">${r.folders.map(({ c, f }) => `<button class="ca-rrow" data-action="open-cfolder-of" data-client="${c.id}" data-id="${f.id}"><span class="cf-ic sm">${icon('folder')}</span><span><b>${caMark(f.name, q)}</b><small>${esc(c.name)} · ${f.files.length} file${f.files.length === 1 ? '' : 's'}</small></span>${icon('chev-right')}</button>`).join('')}</div>` : ''}
     ${r.files.length ? `<h4 class="ca-rh">Files <span>${r.files.length}</span></h4><div class="tile-grid ca-files">${shown.map(({ c, f, a }) => caTile(f, a, { c, q })).join('')}</div>${r.files.length > shown.length ? `<div class="ca-rmore">Showing the first ${shown.length} files — add another word to narrow it down.</div>` : ''}` : ''}

@@ -2060,3 +2060,23 @@ button.pv-empty:hover { background: var(--hover); color: var(--text-2); }
 .mw-row.is-urgent { box-shadow: none; }
 /* Collapsed sidebar: "Add your first project" becomes just the + */
 #app.sb-collapsed .nav-item.ph { font-size: 0 !important; justify-content: center; padding: 0; }
+
+/* ---- Smart search results ---- */
+.sr-fixed { display: flex; align-items: center; gap: 8px; margin: 6px 0 10px; padding: 9px 12px; border-radius: 10px; background: var(--accent-soft); color: var(--text-2); font-size: 13px; }
+.sr-fixed .ic { width: 15px; height: 15px; color: #a99bff; }
+.sr-fixed b { color: var(--text); }
+.sr-fixed span { color: var(--text-3); }
+.sr-projects { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; margin: 8px 0 14px; }
+.sr-proj { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border); background: var(--panel); color: var(--text); text-align: left; font: inherit; }
+.sr-proj:hover { border-color: rgba(123,104,238,.6); }
+.sr-proj > span:nth-child(2) { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.sr-proj small { color: var(--text-3); font-size: 12px; }
+.sr-proj .page-icon.sm { width: 28px; height: 28px; font-size: 11px; border-radius: 8px; }
+.sr-proj > .ic { color: var(--text-3); }
+.sr-hit { border-bottom: 1px solid var(--border); }
+.sr-hit .task-row { border-bottom: 0; }
+.sr-why-row { padding: 0 12px 9px 46px; margin-top: -4px; }
+.sr-why { font-size: 12.5px; color: var(--text-3); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sr-why b { color: var(--text-2); font-weight: 600; }
+.sr-why mark, .sr-proj mark, .task-row .title mark, .ph-why mark, .pc-title mark { background: rgba(249, 190, 51, .28); color: inherit; border-radius: 3px; padding: 0 1px; }
+.ca-loose { color: var(--amber); font-weight: 500; }

@@ -92,7 +92,7 @@ const Phone = (() => {
       : typeof normPrio(pr) === 'number' ? `<span class="ph-tag">${normPrio(pr)}</span>` : '';
     return `<div class="pc ${late ? 'late' : ''} ${t.done ? 'done' : ''}" data-task="${t.id}">
       <span class="pc-ic">${statusIcon(t, 22)}</span>
-      <span class="pc-body"><span class="pc-title">${t.title ? esc(t.title) : '<i>Untitled task</i>'}</span>
+      <span class="pc-body"><span class="pc-title">${t.title ? (o.mark ? sMark(t.title, o.mark) : esc(t.title)) : '<i>Untitled task</i>'}</span>
         <span class="pc-meta">${bits.join('<em>·</em>')}</span>
         ${t.cdStatus && !t.done ? `<span class="pc-cd">${cdChip(t)}</span>` : ''}</span>
       <span class="pc-side">${badge}${avatarStack(t.assignees, 22, 2, t)}</span>
@@ -294,13 +294,15 @@ const Phone = (() => {
     </div>`;
   }
   function results() {
-    const q = st.q.trim().toLowerCase();
-    if (!q) return '<div class="ph-empty">Type a task name, project or tag</div>';
-    const hits = db.tasks.filter((t) => {
-      const p = proj(t.projectId);
-      return (t.title || '').toLowerCase().includes(q) || (p && p.name.toLowerCase().includes(q)) || t.tags.some((g) => g.toLowerCase().includes(q));
-    }).sort((a, b) => (a.done ? 1 : 0) - (b.done ? 1 : 0) || b.updatedAt.localeCompare(a.updatedAt)).slice(0, 60);
-    return hits.map((t) => card(t)).join('') || '<div class="ph-empty">No tasks found</div>';
+    const q = st.q.trim();
+    if (!q) return '<div class="ph-empty">Search titles, projects, clients, people, tags, descriptions and comments. Try “overdue”, “urgent” or “mine” too.</div>';
+    const r = taskSearch(q, { limit: 80 });
+    const projects = r.projects.map((p) => `<div class="pc pj" data-ph="open-project" data-id="${p.id}"><span class="ph-pj-ic" style="background:${p.color}">${esc(initials(p.name))}</span>
+      <span class="pc-body"><span class="pc-title">${sMark(p.name, r)}</span><span class="pc-meta">Project · ${plural(db.tasks.filter((t) => t.projectId === p.id && !t.parentId && !t.done).length, 'open task')}</span></span>${icon('chev-right')}</div>`).join('');
+    const tasks = r.tasks.map((h) => { const why = searchWhy(h, r); return card(h.t, { mark: r }) + (why ? `<div class="ph-why">${why}</div>` : ''); }).join('');
+    return (r.fixed.length ? searchFixedNote(r) : '')
+      + (projects ? `<div class="ph-gh">Projects<span>${r.projects.length}</span></div>${projects}` : '')
+      + (tasks ? `<div class="ph-gh">Tasks<span>${r.total}</span></div>${tasks}` : (projects ? '' : '<div class="ph-empty">No tasks found. Try a project, client or person’s name.</div>'));
   }
 
   /* ---------- Hooks called from app.js ---------- */
