@@ -43,6 +43,17 @@ async def main():
             tools = pg.locator('#detail .cm-tools').first
             check(await tools.evaluate("e=>getComputedStyle(e).opacity") == '1', 'comment buttons show without tapping')
             await pg.screenshot(path=os.path.join(SHOTS, 's2-comments.png'))
+            await pg.evaluate("()=>closeDetail()"); await pg.wait_for_timeout(200)
+            # Inbox → a mention → back: the list must start below the header, not behind it
+            await pg.locator('#ph-tabs [data-ph-tab="inbox"]').click(); await pg.wait_for_timeout(300)
+            await pg.locator('.ph-ib').first.click(); await pg.wait_for_timeout(900)
+            check(await pg.evaluate("!!ui.taskId"), 'tapping an Inbox mention opens the task')
+            flashes = await pg.evaluate("document.querySelectorAll('#detail .flash').length")
+            await pg.screenshot(path=os.path.join(SHOTS, 's3-flash.png'))
+            await pg.locator('#detail .ph-task-head .ph-back').click(); await pg.wait_for_timeout(400)
+            head = await pg.locator('#ph-top').bounding_box(); first = await pg.locator('.ph-ib').first.bounding_box()
+            check(first['y'] >= head['y'] + head['height'] - 1, f'after going back the Inbox list starts below the header ({first["y"]:.0f} vs {head["y"] + head["height"]:.0f})')
+            await pg.screenshot(path=os.path.join(SHOTS, 's4-inbox-back.png'))
             check(not errs, f'no errors {errs[:2]}')
             await b.close()
         # the live app refuses

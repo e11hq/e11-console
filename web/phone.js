@@ -73,7 +73,7 @@ const Phone = (() => {
       + tab('me', 'user', 'Me');
     bar.hidden = !!ui.taskId;
     document.body.classList.toggle('task-open', !!ui.taskId);
-    const top = document.getElementById('ph-top'); if (top) top.hidden = !!ui.taskId || !top.firstElementChild;
+    const top = document.getElementById('ph-top'); if (top) { top.hidden = !top.firstElementChild; if (!ui.taskId && top.firstElementChild) document.documentElement.style.setProperty('--ph-head-h', top.offsetHeight + 'px'); }
   }
 
   /* ---------- Pieces ---------- */
@@ -339,14 +339,15 @@ const Phone = (() => {
     top.innerHTML = '';
     const h = c.querySelector(':scope > .ph-bar, :scope > .ph-page > .ph-bar, :scope > .ph-page > .ph-head, :scope > .ph-page > .ph-me-card');
     if (h) top.appendChild(h);
-    top.hidden = !h || !!ui.taskId;
+    top.hidden = !h; // while a task is open it's only made invisible (CSS), so it can still be measured
     let slot = document.getElementById('ph-fabslot');
     if (!slot) { slot = document.createElement('div'); slot.id = 'ph-fabslot'; document.body.appendChild(slot); }
     slot.innerHTML = '';
     const fabEl = c.querySelector('.ph-fab');
     if (fabEl) slot.appendChild(fabEl);
-    const set = () => document.documentElement.style.setProperty('--ph-head-h', (h ? top.offsetHeight : 0) + 'px');
+    const set = () => document.documentElement.style.setProperty('--ph-head-h', (top.firstElementChild ? top.offsetHeight : 0) + 'px');
     set(); requestAnimationFrame(set);
+    if (!top._ro && window.ResizeObserver) { top._ro = new ResizeObserver(set); top._ro.observe(top); }
   }
   function unpin() { const top = document.getElementById('ph-top'); if (top) { top.innerHTML = ''; top.hidden = true; } const sl = document.getElementById('ph-fabslot'); if (sl) sl.innerHTML = ''; document.documentElement.style.setProperty('--ph-head-h', '0px'); }
   // The task page header on the phone: back, title and the Details / Comments switch

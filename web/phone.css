@@ -490,7 +490,7 @@ body.phone.task-open #update-banner { bottom: calc(env(safe-area-inset-bottom) +
 /* Fixed page header (iOS 26 leaves a real fixed top bar sharp), same colour as the page: no seam */
 body.phone #ph-top { position: fixed; top: 0; left: 0; right: 0; z-index: 20; background: var(--ph-bg); }
 body.phone #ph-top > .ph-bar { border-bottom: 0; }
-body.phone.task-open #ph-top { display: none; }
+body.phone.task-open #ph-top { visibility: hidden; }
 body.phone #main, body.phone #content { background: var(--ph-bg); }
 body.phone::before { display: none; }
 body.phone #content > .ph-page { min-height: calc(100% - var(--ph-head-h, 0px)); }
@@ -503,3 +503,7 @@ body.phone .cm-tools { opacity: 1 !important; gap: 4px; }
 body.phone .cm-tools .icon-btn { width: 34px; height: 34px; border-radius: 17px; color: var(--text-2); background: rgba(255, 255, 255, .05); }
 :root[data-theme="light"] body.phone .cm-tools .icon-btn { background: rgba(20, 20, 40, .05); }
 body.phone .cm-tools .icon-btn .ic { width: 17px; height: 17px; }
+
+/* Highlight of the comment you came to from the Inbox: one glowing outline, the card keeps its colour */
+@keyframes phFlash { 0%, 40% { box-shadow: 0 0 0 2px rgba(160, 145, 255, .85), 0 0 24px rgba(123, 104, 238, .35); } 100% { box-shadow: 0 0 0 2px transparent; } }
+body.phone .cm.flash { animation: phFlash 2.4s ease; }

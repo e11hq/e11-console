@@ -35,7 +35,8 @@ export function sampleData(store, me) {
   const others = out.users.map((u) => u.id);
   const pick = (i) => others[i % others.length];
   const mention = (id, name) => `<span class="mention" data-user="${id}" contenteditable="false">@${name}</span>`;
-  const meName = (store.get('users', me) || {}).name || 'you';
+  const meUser = store.get('users', me) || {};
+  const meName = meUser.name || String(meUser.email || 'you').split('@')[0];
   let n = 0;
   out.tasks.filter((t) => !t.parentId && !t.done).slice(0, 6).forEach((t, i) => {
     let top = (t.comments || []).find((c) => !c.parentId);
