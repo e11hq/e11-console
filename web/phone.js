@@ -15,6 +15,7 @@ const Phone = (() => {
     st.on = v;
     document.body.classList.toggle('phone', v);
     document.documentElement.classList.toggle('phone', v);
+    if (!v && typeof unpin === 'function') unpin();
     if (typeof db !== 'undefined' && db && currentUserId) render();
   }
   mq.addEventListener ? mq.addEventListener('change', check) : mq.addListener(check);
@@ -308,6 +309,7 @@ const Phone = (() => {
       : v === 'reviews' ? reviews() : v === 'review' ? review() : v === 'projects' ? projects() : v === 'project' ? project()
       : v === 'psearch' ? search() : meScreen();
     if (ui.view === 'review') wireSlides(c);
+    pinHead(c);
     document.body.classList.toggle('ph-fab-on', !!c.querySelector('.ph-fab'));
     document.body.classList.toggle('ph-strip', !c.querySelector('.ph-bar'));
     return true;
@@ -325,8 +327,21 @@ const Phone = (() => {
     }
     if (ui.search) { title = 'Search'; back = 'data-ph-tab="today"'; }
     c.insertAdjacentHTML('afterbegin', backHead(title, back));
-    c.firstElementChild.classList.add('ph-sticky');
+    pinHead(c);
   }
+  // iOS 26 softens the top edge of anything that scrolls, so page headers live in a fixed layer
+  // above the scrolling content (like the task page header, which stays sharp).
+  function pinHead(c) {
+    let top = document.getElementById('ph-top');
+    if (!top) { top = document.createElement('div'); top.id = 'ph-top'; c.parentNode.insertBefore(top, c); }
+    top.innerHTML = '';
+    const h = c.querySelector(':scope > .ph-bar, :scope > .ph-page > .ph-bar, :scope > .ph-page > .ph-head, :scope > .ph-page > .ph-me-card');
+    if (h) top.appendChild(h);
+    top.hidden = !h;
+    const set = () => document.documentElement.style.setProperty('--ph-head-h', (h ? top.offsetHeight : 0) + 'px');
+    set(); requestAnimationFrame(set);
+  }
+  function unpin() { const top = document.getElementById('ph-top'); if (top) { top.innerHTML = ''; top.hidden = true; } document.documentElement.style.setProperty('--ph-head-h', '0px'); }
   // The task page header on the phone: back, title and the Details / Comments switch
   function taskHead(t, tab, n) {
     if (!st.on) return '';
@@ -684,7 +699,7 @@ const Push = (() => {
       if (ui.thread && pane.dataset.tab === 'comments') return { btn: $('.th-back', pane), layer: $('.tm-activity', pane) };
       return { btn: $('.ph-task-head .ph-back', pane), layer: $('.tm', pane) };
     }
-    const btn = $('#content .ph-back');
+    const btn = $('#ph-top .ph-back') || $('#content .ph-back');
     return btn ? { btn, layer: $('#content') } : null;
   }
   const set = (el, x, anim) => {

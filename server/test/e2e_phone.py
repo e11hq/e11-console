@@ -50,7 +50,7 @@ async def main():
             await hr.wait_for_timeout(800)
             # My Tasks
             await hr.locator('[data-ph-tab="mytasks"]').click(); await hr.wait_for_timeout(300)
-            check(await hr.locator('.ph-head h1').inner_text() == 'My Tasks' and await hr.locator('.pc').count() > 0, 'My Tasks shows task cards')
+            check(await hr.locator('#ph-top .ph-head h1').inner_text() == 'My Tasks' and await hr.locator('.pc').count() > 0, 'My Tasks shows task cards')
             await shot(hr, '2-mytasks')
             # open a task
             await hr.locator(f'.pc[data-task="{tid}"]').click(); await hr.wait_for_timeout(500)
@@ -104,9 +104,9 @@ async def main():
             await hr.locator('#ph-tabs [data-ph-tab="me"]').click(); await hr.wait_for_timeout(200)
             await shot(hr, '6-me')
             await hr.locator('.ph-row[data-nav="profile"]').click(); await hr.wait_for_timeout(300)
-            check(await hr.locator('#content > .ph-bar b').inner_text() == 'My profile', 'profile page has a phone back header')
+            check(await hr.locator('#ph-top .ph-bar b').inner_text() == 'My profile', 'profile page has a phone back header')
             await shot(hr, '7-profile')
-            await hr.locator('#content > .ph-bar .ph-back').click(); await hr.wait_for_timeout(200)
+            await hr.locator('#ph-top .ph-bar .ph-back').click(); await hr.wait_for_timeout(200)
             check(await E("ui.view") == 'me', 'back returns to Me')
             # search
             await hr.locator('[data-ph-tab="today"]').click(); await hr.locator('[data-ph="search"]').click(); await hr.wait_for_timeout(200)
