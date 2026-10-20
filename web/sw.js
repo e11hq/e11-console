@@ -12,3 +12,31 @@ self.addEventListener('fetch', (e) => {
     '<button onclick="location.reload()" style="margin-top:18px;padding:9px 18px;border-radius:8px;border:0;background:#6a56e6;color:#fff;font-size:14px">Try again</button></div>',
     { headers: { 'Content-Type': 'text/html; charset=utf-8' } })));
 });
+
+// Phone notifications (Web Push). The server sends { title, body, taskId, nid, tag, badge }.
+self.addEventListener('push', (e) => {
+  let m = {};
+  try { m = e.data ? e.data.json() : {}; } catch (err) { m = { body: e.data ? e.data.text() : '' }; }
+  const show = self.registration.showNotification(m.title || 'E11 Console', {
+    body: m.body || 'You have a new update',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    tag: m.tag || undefined,
+    renotify: !!m.tag,
+    data: { taskId: m.taskId || null, nid: m.nid || null },
+  });
+  const badge = typeof m.badge === 'number' && self.navigator.setAppBadge ? self.navigator.setAppBadge(m.badge).catch(() => {}) : null;
+  e.waitUntil(Promise.all([show, badge]));
+});
+
+// Tapping a notification opens the app on that task
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const d = e.notification.data || {};
+  const qs = d.taskId ? `/?task=${encodeURIComponent(d.taskId)}${d.nid ? '&n=' + encodeURIComponent(d.nid) : ''}` : '/';
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+    const c = list.find((x) => new URL(x.url).origin === self.location.origin);
+    if (c) { c.postMessage({ type: 'open-task', taskId: d.taskId, nid: d.nid }); return c.focus(); }
+    return self.clients.openWindow(qs);
+  }));
+});

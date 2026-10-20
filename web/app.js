@@ -1360,6 +1360,7 @@ function renderSidebar() {
   const rn = $('#nav-reviews');
   if (rn) { rn.style.display = isCD() ? '' : 'none'; const k = isCD() ? activeReviews().length : 0; const rc = $('#reviews-count'); rc.textContent = k ? String(k) : ''; rc.classList.toggle('hot', !!k); }
   renderMeChip();
+  if (typeof Phone !== 'undefined') Phone.chrome();
   $('.create-btn').style.display = can('createTask') ? '' : 'none';
   const list = db.projects.slice().sort(byOrder);
   $('#project-list').innerHTML = list.length ? list.map((p) => {
@@ -1375,6 +1376,7 @@ function renderSidebar() {
 
 function renderTitle() {
   const el = $('#title-area');
+  if (typeof Phone !== 'undefined' && Phone.on) { el.innerHTML = ''; return; }
   if (ui.search) { el.innerHTML = `<div class="page-title">Search</div>`; return; }
   if (ui.view === 'home') { el.innerHTML = `<div class="page-title">Home</div>`; return; }
   if (ui.view === 'inbox') { el.innerHTML = `<div class="page-icon" style="background:#2b2650;color:#c9c0ff">${icon('inbox')}</div><div class="page-title">Inbox</div>`; return; }
@@ -1414,6 +1416,7 @@ function renderTitle() {
 function renderContent() {
   const c = $('#content');
   const scroll = { top: c.scrollTop, left: (c.querySelector('.board') || {}).scrollLeft || 0 };
+  if (typeof Phone !== 'undefined' && Phone.renderContent(c)) { c.scrollTop = scroll.top; return; }
   if (ui.search) c.innerHTML = viewSearch();
   else if (ui.view === 'home') c.innerHTML = viewHome();
   else if (ui.view === 'mytasks') c.innerHTML = viewMyTasks();
@@ -1435,6 +1438,7 @@ function renderContent() {
     const p = proj(ui.projectId);
     c.innerHTML = p.view === 'board' ? viewBoard(p) : viewList(p);
   }
+  if (typeof Phone !== 'undefined') Phone.decorate(c);
   c.scrollTop = scroll.top;
   const b = c.querySelector('.board');
   if (b) b.scrollLeft = scroll.left;
@@ -1947,6 +1951,7 @@ function renderDetail() {
   const t = ui.taskId ? task(ui.taskId) : null;
   if (!t) {
     ui.taskId = null;
+    if (typeof Phone !== 'undefined') Phone.chrome();
     pane.classList.remove('open', 'anim', 'side');
     pane.setAttribute('aria-hidden', 'true');
     pane.innerHTML = '';
@@ -1970,7 +1975,9 @@ function renderDetail() {
   const nTop = t.comments.filter((c) => !c.parentId).length;
   if (ui.thread && !t.comments.some((c) => c.id === ui.thread && !c.parentId)) ui.thread = null;
   const thread = ui.thread ? t.comments.find((c) => c.id === ui.thread) : null;
-  const mode = ui.detailMode === 'side' || ui.detailMode === 'full' ? ui.detailMode : 'modal';
+  const phone = (typeof Phone !== 'undefined' && Phone.on);
+  if (phone) Phone.chrome();
+  const mode = phone ? 'side' : ui.detailMode === 'side' || ui.detailMode === 'full' ? ui.detailMode : 'modal';
   const side = mode === 'side';
   const sideTab = ui.sideTab === 'comments' ? 'comments' : 'details';
 
@@ -1981,6 +1988,7 @@ function renderDetail() {
   pane.innerHTML = `
   <div class="tm-backdrop" data-action="close-detail"></div>
   <div class="tm" role="dialog">
+    ${phone ? Phone.taskHead(t, sideTab, nComments) : ''}
     <div class="tm-top">
       <div class="tm-crumbs">
         ${p ? `<a class="crumb" data-action="go-project" data-id="${p.id}"><i style="background:${p.color}"></i>${esc(p.name)}</a>${sec ? `<span class="crumb-sep">/</span><span class="crumb plain">${esc(sec.name)}</span>` : ''}` : `<span class="crumb plain">${icon('check-circle')}My Tasks</span>`}
@@ -2146,7 +2154,7 @@ function creatorChip(t) {
 function mentionInComposer(uidToTag) {
   const u = userById(uidToTag);
   if (!u) return;
-  if (ui.detailMode === 'side' && ui.sideTab !== 'comments') { ui.sideTab = 'comments'; renderDetail(); }
+  if ((ui.detailMode === 'side' || (typeof Phone !== 'undefined' && Phone.on)) && ui.sideTab !== 'comments') { ui.sideTab = 'comments'; renderDetail(); }
   const ed = $('#d-comment');
   if (!ed) return;
   ed.focus();
@@ -3304,7 +3312,7 @@ document.addEventListener('click', async (e) => {
           if (ui.commentDraft[mk] && !ui.commentDraft[rk]) { ui.commentDraft[rk] = ui.commentDraft[mk]; delete ui.commentDraft[mk]; }
           if ((ui.commentFiles[mk] || []).length && !(ui.commentFiles[rk] || []).length) { ui.commentFiles[rk] = ui.commentFiles[mk]; delete ui.commentFiles[mk]; }
           ui.replyTo = id;
-          if (ui.detailMode === 'side') ui.sideTab = 'comments';
+          if (ui.detailMode === 'side' || (typeof Phone !== 'undefined' && Phone.on)) ui.sideTab = 'comments';
           renderDetail();
         }
         setTimeout(() => { const el = $('#d-comment'); if (el) { el.focus(); placeCaretAtEnd(el); } }, 0);
@@ -3366,7 +3374,7 @@ function openThread(cid) {
   const f = $('#detail .tm-feed');
   ui.mainFeedScroll = f && !ui.thread ? f.scrollTop : ui.mainFeedScroll;
   ui.thread = cid; ui.replyTo = null;
-  if (ui.detailMode === 'side') ui.sideTab = 'comments';
+  if (ui.detailMode === 'side' || (typeof Phone !== 'undefined' && Phone.on)) ui.sideTab = 'comments';
   renderDetail();
   const feed = $('#detail .tm-feed');
   if (feed) stickFeedToBottom(feed);

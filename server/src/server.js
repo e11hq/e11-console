@@ -9,6 +9,7 @@ import { createAuth } from './auth.js';
 import { createAccess } from './access.js';
 import { createFiles, mimeOf, httpError } from './files.js';
 import { createCfSync } from './cfsync.js';
+import { createWebPush, notifMessage } from './webpush.js';
 
 const BODY_LIMIT = 12 * 1024 * 1024; // 2 MB upload pieces arrive as ~2.7 MB of base64
 
@@ -22,6 +23,7 @@ export function createServer(cfg) {
   const webDir = cfg.webDir || null;
   const streams = new Set(); // open live-update connections
   const uploads = new Map(); // file path -> who is uploading it (pieces can only be added by them)
+  const webPush = createWebPush({ store, fetchImpl: cfg.pushFetch || fetch, subject: cfg.pushSubject || 'mailto:admin@e11hq.com' });
   const cfSync = cfg.cfSync || createCfSync({ accountId: cfg.cfAccountId, token: cfg.cfApiToken, groupId: cfg.cfGroupId, listUsers: () => store.list('users'), fetchImpl: cfg.cfFetch || fetch });
 
   /* ---------- helpers ---------- */
@@ -153,13 +155,38 @@ export function createServer(cfg) {
       return json(res, 200, { ok: true, ...cfSync.status() });
     }
 
+    // Phone notifications: the server's public key, and turning them on / off for this device
+    if (p === '/api/push/key') return json(res, 200, { ok: true, key: webPush.publicKey() });
+    if (p === '/api/push/subscribe' && req.method === 'POST') {
+      const body = await readBody(req);
+      const n = webPush.subscribe(u.id, body.subscription, req.headers['user-agent']);
+      return json(res, 200, { ok: true, devices: n });
+    }
+    if (p === '/api/push/unsubscribe' && req.method === 'POST') {
+      const body = await readBody(req);
+      webPush.unsubscribe(u.id, String(body.endpoint || ''));
+      return json(res, 200, { ok: true });
+    }
+    if (p === '/api/push/status' && req.method === 'POST') {
+      const body = await readBody(req);
+      return json(res, 200, { ok: true, on: webPush.has(u.id, String(body.endpoint || '')), devices: webPush.devices(u.id) });
+    }
+    if (p === '/api/push/test' && req.method === 'POST') {
+      const r = await webPush.sendTo(u.id, { title: 'E11 Console', body: 'Notifications are on. This is how they’ll look on this phone.', tag: 'test' });
+      return json(res, 200, { ok: true, ...r });
+    }
+
     if (p === '/api/snapshot' && req.method === 'GET') return json(res, 200, { ok: true, version, ...visibleSnapshot(u) });
 
     if (p === '/api/push' && req.method === 'POST') {
       const body = await readBody(req);
       const changes = Array.isArray(body.changes) ? body.changes : [];
+      const fresh = new Set(changes.filter((ch) => ch && ch.kind === 'notifications' && !ch.del && !store.get('notifications', String(ch.id))).map((ch) => String(ch.id)));
       const { rev, results } = store.apply(changes, u.id, (ch, current) => access.canWrite(u, ch, current));
       broadcast(rev, results, body.client, u.id);
+      // new notifications also go to the person's phone
+      results.filter((r) => r.kind === 'notifications' && fresh.has(String(r.id)) && !r.refused && !r.deleted && r.data && r.data.to && r.data.to !== u.id)
+        .forEach((r) => webPush.sendTo(r.data.to, notifMessage(store, r.data)).catch(() => {}));
       if (results.some((r) => r.kind === 'users' && !r.refused && !r.unchanged)) cfSync.schedule();
       return json(res, 200, { ok: true, rev, results: results.map((r) => ({ ...forUser(u, r), refused: !!r.refused })) });
     }
@@ -252,7 +279,7 @@ export function createServer(cfg) {
     if (html) {
       // app.js?v=1.2.0 — every version gets fresh files, older ones can be cached for a day
       const v = encodeURIComponent(version);
-      return res.end(fs.readFileSync(full, 'utf8').replace(/(src|href)="(app\.js|styles\.css)"/g, `$1="$2?v=${v}"`));
+      return res.end(fs.readFileSync(full, 'utf8').replace(/(src|href)="(app\.js|styles\.css|phone\.js|phone\.css)"/g, `$1="$2?v=${v}"`));
     }
     fs.createReadStream(full).pipe(res);
   }
@@ -268,7 +295,7 @@ export function createServer(cfg) {
   server.keepAliveTimeout = 65000;
 
   return {
-    server, store, files, cfSync,
+    server, store, files, cfSync, webPush,
     listen: (port, host) => new Promise((ok) => server.listen(port, host, () => ok(server.address().port))),
     close: () => new Promise((ok) => { for (const s of streams) try { s.res.end(); } catch { /* ignore */ } server.close(() => { store.close(); ok(); }); }),
     broadcastVersion: (v) => { for (const s of streams) send(s, 'version', { version: v }); },
