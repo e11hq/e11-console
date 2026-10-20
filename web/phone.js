@@ -26,11 +26,13 @@ const Phone = (() => {
   let probe = null, lastKey = '';
   function measure() {
     const root = document.documentElement;
-    if (!probe && document.body) { probe = document.createElement('i'); probe.style.cssText = 'position:fixed;left:0;bottom:0;width:0;height:0;pointer-events:none;visibility:hidden'; document.body.appendChild(probe); }
+    if (!probe && document.body) { probe = document.createElement('i'); probe.style.cssText = 'position:fixed;left:0;bottom:0;width:0;height:0;padding-top:env(safe-area-inset-top);box-sizing:content-box;pointer-events:none;visibility:hidden'; document.body.appendChild(probe); }
     const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
-    const bottom = probe ? probe.getBoundingClientRect().top : window.innerHeight; // where bottom:0 sits now
+    const bottom = probe ? probe.getBoundingClientRect().bottom : window.innerHeight; // where bottom:0 sits now
     let h = Math.max(bottom, window.innerHeight);
-    if (standalone) {
+    // only an app that draws under the status bar (no space reserved at the top) can come up short
+    const underBar = probe && parseFloat(getComputedStyle(probe).paddingTop) > 0;
+    if (standalone && underBar) {
       const full = window.innerHeight > window.innerWidth ? Math.max(screen.height, screen.width) : Math.min(screen.height, screen.width);
       if (full > h && full - h < 140) h = full; // not when the keyboard is open (that shrinks it a lot more)
     }
