@@ -439,3 +439,23 @@ body.phone #detail .tm-composer .btn.primary { height: 36px; padding: 0 16px; bo
 .ph-in-l { animation: ph-in-l .22s cubic-bezier(.2, .8, .2, 1); }
 /* Hover hints (keyboard shortcuts) are for computers */
 body.phone .tip, body.phone #ucard { display: none !important; }
+
+/* iPhone (WebKit) draws text that sits inside an element with backdrop-filter at low resolution,
+   so labels and headings in frosted bars looked blurry. The frost now lives on a layer *behind*
+   the content (::before) and the text is drawn normally on top. */
+body.phone :is(#ph-tabs, .ph-fab, .ph-round, .ph-pill, .ph-bar .ph-back, .menu, .toast, #notif-root .notif-card,
+  .ph-rv-acts .ph-btn.amber, .ph-sticky, .ph-task-head, .ph-seg, .ph-chips button, .ph-search, .ph-sheet,
+  #detail .tm-composer, .dialog) {
+  -webkit-backdrop-filter: none !important; backdrop-filter: none !important; isolation: isolate;
+}
+body.phone :is(.ph-round, .ph-pill, .ph-bar .ph-back, .ph-rv-acts .ph-btn.amber, .ph-seg, .ph-chips button, .ph-search,
+  .ph-sheet, #detail .tm-composer, .dialog, .toast, #notif-root .notif-card) { position: relative; }
+body.phone :is(#ph-tabs, .ph-fab, .ph-round, .ph-pill, .ph-bar .ph-back, .menu, .toast, #notif-root .notif-card,
+  .ph-rv-acts .ph-btn.amber, .ph-sticky, .ph-task-head, .ph-seg, .ph-chips button, .ph-search, .ph-sheet,
+  #detail .tm-composer, .dialog)::before {
+  content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none;
+  -webkit-backdrop-filter: blur(24px) saturate(180%); backdrop-filter: blur(24px) saturate(180%);
+}
+/* and nothing that holds text is scaled while it settles */
+body.phone #detail .tm { will-change: auto; }
+body.phone.task-open #toast-root { right: 12px; }
