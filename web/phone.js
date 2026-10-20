@@ -270,7 +270,7 @@ const Phone = (() => {
   function search() {
     return `<div class="ph-page">
       ${backHead('Search', 'data-ph-tab="today"')}
-      <div class="ph-search">${icon('search')}<input id="ph-q" type="search" placeholder="Search tasks" value="${esc(st.q)}" autocomplete="off"></div>
+      <div class="ph-search">${icon('search')}<input id="ph-q" type="search" name="e11-search" aria-autocomplete="none" data-form-type="other" placeholder="Search tasks" value="${esc(st.q)}" autocomplete="off"></div>
       <div class="ph-list" id="ph-results">${results()}</div>
     </div>`;
   }
@@ -431,8 +431,8 @@ const Phone = (() => {
     const projOpts = `<option value="">No project (My Tasks)</option>` + db.projects.slice().sort(byOrder).map((p) => `<option value="${p.id}" ${p.id === inProject ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
     const userOpts = `<option value="${currentUserId}">Me</option>` + people.filter((u) => u.id !== currentUserId).map((u) => `<option value="${u.id}">${esc(fullName(u))}</option>`).join('') + '<option value="">Nobody yet</option>';
     sheet(`<div class="ph-sh-head"><h2>New task</h2><button class="ph-link" data-sheet-close>Cancel</button></div>
-      <label class="ph-field"><span>Task name</span><input id="qa-title" placeholder="What needs doing?" autocomplete="off" enterkeyhint="next"></label>
-      <label class="ph-field"><span>Description <i>(optional)</i></span><textarea id="qa-desc" rows="3" placeholder="Details, links or notes for the team"></textarea></label>
+      <label class="ph-field"><span>Title</span><input id="qa-title" name="e11-task-title" type="text" placeholder="What needs doing?" autocomplete="off" aria-autocomplete="none" data-1p-ignore data-lpignore="true" data-form-type="other" enterkeyhint="next"></label>
+      <label class="ph-field"><span>Description <i>(optional)</i></span><textarea id="qa-desc" name="e11-task-notes" autocomplete="off" aria-autocomplete="none" data-form-type="other" rows="3" placeholder="Details, links or notes for the team"></textarea></label>
       <div class="ph-form">
         <label><span>Project</span><select id="qa-proj">${projOpts}</select></label>
         ${can('assign') ? `<label><span>Assign to</span><select id="qa-who">${userOpts}</select></label>` : ''}
@@ -468,7 +468,7 @@ const Phone = (() => {
     if (!f || !isCD()) return;
     sheet(`<div class="ph-sh-head"><h2>Request amendments</h2><button class="ph-link" data-sheet-close>Cancel</button></div>
       <p class="ph-sh-p">Tell ${esc(firstName(f.r.by))} what to change. It's posted as a comment on the task.</p>
-      <textarea id="am-note" rows="5" placeholder="e.g. Use the new logo lockup and make the date bigger"></textarea>
+      <textarea id="am-note" name="e11-amend-notes" autocomplete="off" aria-autocomplete="none" data-form-type="other" rows="5" placeholder="e.g. Use the new logo lockup and make the date bigger"></textarea>
       <button class="ph-btn amber wide" id="am-go">Send back</button>`, (scrim, close) => {
       const ta = $('#am-note', scrim);
       setTimeout(() => ta.focus(), 250);
