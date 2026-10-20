@@ -14,9 +14,27 @@ const Phone = (() => {
     if (v === st.on) return;
     st.on = v;
     document.body.classList.toggle('phone', v);
+    document.documentElement.classList.toggle('phone', v);
     if (typeof db !== 'undefined' && db && currentUserId) render();
   }
   mq.addEventListener ? mq.addEventListener('change', check) : mq.addListener(check);
+
+  // iPhone Home Screen apps can report a page shorter than the screen, which leaves a gap under
+  // everything pinned to the bottom. Measure the real height and pin to the true bottom edge.
+  function measure() {
+    const root = document.documentElement;
+    const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+    let h = window.innerHeight;
+    if (standalone) {
+      const full = window.innerHeight > window.innerWidth ? Math.max(screen.height, screen.width) : Math.min(screen.height, screen.width);
+      if (full > h && full - h < 140) h = full; // not when the keyboard is open (that shrinks it a lot more)
+    }
+    root.style.setProperty('--app-h', h + 'px');
+    root.style.setProperty('--ph-shift', (window.innerHeight - h) + 'px');
+  }
+  measure();
+  window.addEventListener('resize', measure);
+  window.addEventListener('orientationchange', () => setTimeout(measure, 300));
 
   const tabOf = (v) => (v === 'home' ? 'today' : v === 'review' ? 'reviews' : v === 'project' ? 'projects' : v);
   const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
