@@ -1156,9 +1156,9 @@ const Sync = (() => {
     savePrefs();
     if (pushing) { again = true; return; }
     const list = changes();
-    if (!list.length) { setSaveState(online ? 'saved' : 'offline'); return; }
+    if (!list.length) { if (online) setSaveState('saved'); else paintOffline(); return; }
     pushing = true;
-    setSaveState('saving');
+    if (online) setSaveState('saving'); else paintOffline();
     try {
       const r = await api('POST', '/api/push', { client: clientId, changes: list });
       rev = Math.max(rev, r.rev || 0);
@@ -1180,7 +1180,7 @@ const Sync = (() => {
       setSaveState('saved');
     } catch (e) {
       if (e.auth) return signedOut(e);
-      setOnline(false);
+      setOnline(false); paintOffline();
       clearTimeout(retryTimer);
       retryTimer = setTimeout(push, 5000);
     } finally {
@@ -1229,9 +1229,12 @@ const Sync = (() => {
     render({ keepDetail: false });
   }, 50));
 
+  let lastHeard = Date.now(), downSince = 0;
   function connect() {
     if (es) es.close();
+    lastHeard = Date.now();
     es = new EventSource(`/api/events?since=${rev}&client=${encodeURIComponent(clientId)}`);
+    ['hello', 'changes', 'version', 'resync', 'ping'].forEach((ev) => es.addEventListener(ev, () => { lastHeard = Date.now(); }));
     es.addEventListener('hello', (e) => { setOnline(true); const m = JSON.parse(e.data); checkVersion(m.version); if (changes().length) push(); });
     es.addEventListener('changes', (e) => {
       const m = JSON.parse(e.data);
@@ -1261,10 +1264,28 @@ const Sync = (() => {
     } catch (e) { reconnect(3000); }
   }
   function reconnect(ms) { if (es) { es.close(); es = null; } clearTimeout(retryTimer); retryTimer = setTimeout(() => { connect(); }, ms); }
+  // Coming back to the app (window restored, Mac woke up, internet back): reconnect straight away
+  function wake() {
+    if (!currentUserId || document.hidden) return;
+    if (!online || !es || es.readyState === 2 || Date.now() - lastHeard > 70000) reconnect(0);
+    else if (changes().length) push();
+  }
+  document.addEventListener('visibilitychange', wake);
+  window.addEventListener('focus', wake);
+  window.addEventListener('online', wake);
+  window.addEventListener('pageshow', wake);
+  // Heartbeat: the server says hello every 25 s; if it goes quiet (e.g. after sleep), reconnect
+  setInterval(() => { if (es && !document.hidden && Date.now() - lastHeard > 70000) reconnect(0); if (!online && !document.hidden) paintOffline(); }, 5000);
+  function paintOffline() {
+    // only call it "Offline" after a real wait while someone is looking; before that it's "Reconnecting…"
+    setSaveState(downSince && Date.now() - downSince > 15000 ? 'offline' : 'reconnecting');
+  }
   function setOnline(v) {
     if (online === v) return;
     online = v;
-    setSaveState(v ? (changes().length ? 'saving' : 'saved') : 'offline');
+    downSince = v ? 0 : Date.now();
+    if (v) setSaveState(changes().length ? 'saving' : 'saved');
+    else if (!document.hidden) paintOffline();
   }
   function checkVersion(v) {
     if (!v) return;
@@ -1287,7 +1308,7 @@ function setSaveState(state, detail) {
   if (!dot) return;
   dot.className = 'save-dot ' + (state === 'saved' ? 'ok' : state === 'saving' ? 'busy' : state === 'error' || state === 'offline' ? 'err' : '');
   if (Host.isServer) {
-    label.textContent = state === 'saving' ? 'Syncing…' : state === 'offline' ? 'Offline — changes will sync' : state === 'error' ? 'Not synced — ' + (detail || 'error') : `Synced · ${location.host}`;
+    label.textContent = state === 'saving' ? 'Syncing…' : state === 'reconnecting' ? 'Reconnecting…' : state === 'offline' ? 'Offline — changes will sync' : state === 'error' ? 'Not synced — ' + (detail || 'error') : `Synced · ${location.host}`;
     label.parentElement.title = state === 'offline' ? 'Can’t reach the office server. Your changes are kept and sent when the connection is back.' : 'Everything is saved on the office server';
     return;
   }

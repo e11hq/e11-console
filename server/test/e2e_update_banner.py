@@ -29,7 +29,7 @@ async def main():
         check(await pg.evaluate("[...document.scripts].some(s=>/app\\.js\\?v=1\\.0\\.0/.test(s.src))"), 'app files requested with ?v=1.0.0')
         srv.terminate(); srv.wait()
         await pg.wait_for_timeout(1500)
-        check('Offline' in await pg.locator('#save-label').inner_text(), 'shows Offline while the server restarts')
+        check('Reconnecting' in await pg.locator('#save-label').inner_text(), 'shows Reconnecting while the server restarts')
         srv = start('1.1.0', data)
         await pg.wait_for_timeout(5000)
         check(await pg.locator('#update-banner.on').count() == 1, 'Reload banner appears after the update')

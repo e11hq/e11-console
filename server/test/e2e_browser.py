@@ -91,7 +91,7 @@ async def main():
         # offline then back online: change is kept and sent
         await haris.context.set_offline(True)
         await E2("(id)=>{task(id).tags.push('offline-tag'); commit()}", tid); await haris.wait_for_timeout(1500)
-        check('Offline' in await haris.locator('#save-label').inner_text(), 'shows Offline when the server is unreachable')
+        check(await haris.locator('#save-label').inner_text() in ('Reconnecting…',) or 'Offline' in await haris.locator('#save-label').inner_text(), 'shows Reconnecting when the server is unreachable')
         await haris.context.set_offline(False); await haris.wait_for_timeout(7000)
         check(await E1("(id)=>task(id).tags.includes('offline-tag')", tid), 'offline change synced after reconnecting')
         await areej.screenshot(path=os.path.join(SHOTS, 'e2e_areej.png'))

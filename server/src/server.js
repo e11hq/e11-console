@@ -216,7 +216,7 @@ export function createServer(cfg) {
         const missed = store.since(since);
         if (missed.length) send(s, 'changes', { rev: store.rev(), client: null, changes: missed.map((r) => forUser(u, r)).filter((r) => !(r.hidden && r.kind === 'notifications')) });
       }
-      const ping = setInterval(() => { try { res.write(': ping\n\n'); } catch { /* closed */ } }, 25000);
+      const ping = setInterval(() => { try { res.write('event: ping\ndata: {}\n\n'); } catch { /* closed */ } }, 25000);
       req.on('close', () => { clearInterval(ping); streams.delete(s); });
       return;
     }

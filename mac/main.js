@@ -296,7 +296,10 @@ function buildWindow() {
   $.NSApp.activateIgnoringOtherApps(true);
 }
 
+var gActivity = null;
 function run() {
+  // Stay connected while minimized or in the background: no App Nap (the Mac can still sleep)
+  try { gActivity = $.NSProcessInfo.processInfo.beginActivityWithOptionsReason(0x00EFFFFF /* user-initiated, idle sleep allowed */, $('Keeps E11 Console live and notifications arriving')); } catch (e) { /* older macOS */ }
   try { buildMenu(); buildWindow(); }
   catch (e) {
     var app = Application.currentApplication();
