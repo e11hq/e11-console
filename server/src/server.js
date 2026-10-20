@@ -8,6 +8,7 @@ import { openStore } from './store.js';
 import { createAuth } from './auth.js';
 import { createAccess } from './access.js';
 import { createFiles, mimeOf, httpError } from './files.js';
+import { createCfSync } from './cfsync.js';
 
 const BODY_LIMIT = 12 * 1024 * 1024; // 2 MB upload pieces arrive as ~2.7 MB of base64
 
@@ -20,6 +21,8 @@ export function createServer(cfg) {
   const version = cfg.version || '0.0.0-dev';
   const webDir = cfg.webDir || null;
   const streams = new Set(); // open live-update connections
+  const uploads = new Map(); // file path -> who is uploading it (pieces can only be added by them)
+  const cfSync = cfg.cfSync || createCfSync({ accountId: cfg.cfAccountId, token: cfg.cfApiToken, groupId: cfg.cfGroupId, listUsers: () => store.list('users'), fetchImpl: cfg.cfFetch || fetch });
 
   /* ---------- helpers ---------- */
   const json = (res, status, body) => {
@@ -84,6 +87,12 @@ export function createServer(cfg) {
     if (!changed.length) return;
     for (const s of streams) {
       const u = store.get('users', s.userId) || s.user;
+      // A freelancer's access changed (their projects, or which client a project belongs to): reload their data
+      if (u.role === 'freelancer' && changed.some((r) => (r.kind === 'users' && r.id === u.id) || r.kind === 'projects')) {
+        const was = s.lastAccess, now = JSON.stringify([u.projectIds || [], store.list('projects').map((p) => [p.id, p.clientId || null])]);
+        s.lastAccess = now;
+        if (was !== undefined && was !== now) { send(s, 'resync', { rev }); continue; }
+      }
       const list = changed.map((r) => forUser(u, r)).filter((r) => !(r.hidden && r.kind === 'notifications'));
       if (!list.length) continue;
       send(s, 'changes', { rev, client: fromClient || null, by: byUser || null, changes: list });
@@ -103,6 +112,13 @@ export function createServer(cfg) {
 
     if (p === '/api/me') return json(res, 200, { ok: true, user: access.shape(u, 'users', u), version, rev: store.rev() });
 
+    // Cloudflare access for freelancers: status, and "sync now" for Admins
+    if (p === '/api/cloudflare') {
+      if (u.role !== 'admin') return json(res, 403, { ok: false, error: 'Admins only' });
+      if (req.method === 'POST') await cfSync.syncNow();
+      return json(res, 200, { ok: true, ...cfSync.status() });
+    }
+
     if (p === '/api/snapshot' && req.method === 'GET') return json(res, 200, { ok: true, version, ...visibleSnapshot(u) });
 
     if (p === '/api/push' && req.method === 'POST') {
@@ -110,6 +126,7 @@ export function createServer(cfg) {
       const changes = Array.isArray(body.changes) ? body.changes : [];
       const { rev, results } = store.apply(changes, u.id, (ch, current) => access.canWrite(u, ch, current));
       broadcast(rev, results, body.client, u.id);
+      if (results.some((r) => r.kind === 'users' && !r.refused && !r.unchanged)) cfSync.schedule();
       return json(res, 200, { ok: true, rev, results: results.map((r) => ({ ...forUser(u, r), refused: !!r.refused })) });
     }
 
@@ -118,6 +135,7 @@ export function createServer(cfg) {
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
       res.write('retry: 3000\n\n');
       const s = { res, userId: u.id, user: u, client: url.searchParams.get('client') || null };
+      if (u.role === 'freelancer') s.lastAccess = JSON.stringify([u.projectIds || [], store.list('projects').map((p) => [p.id, p.clientId || null])]);
       streams.add(s);
       send(s, 'hello', { version, rev: store.rev() });
       const since = Number(url.searchParams.get('since'));
@@ -135,11 +153,27 @@ export function createServer(cfg) {
       const fn = files.commands[cmd];
       if (!fn) return json(res, 404, { ok: false, error: 'Unknown command ' + cmd });
       const body = await readBody(req);
-      if (['makeDir', 'trashMany', 'trashPath'].includes(cmd) && u.role === 'freelancer') {
-        const paths = cmd === 'makeDir' ? [body.path] : (body.paths || [body.path]);
-        if (paths.some((x) => String(x || '').startsWith('Clients/'))) return json(res, 403, { ok: false, error: 'Not allowed' });
+      const manager = ['admin', 'am'].includes(u.role);
+      const deny = (msg) => json(res, 403, { ok: false, error: msg || 'Not allowed' });
+      if (cmd === 'writeChunk') {
+        if (body.dest && !manager) return deny('Only Admins and Account Managers can upload client assets');
+        if (!body.dest && u.role === 'freelancer' && body.taskId !== '_uploads') { const t = store.get('tasks', String(body.taskId || '')); if (!t || !access.canSee(u, 'tasks', t)) return deny(); }
+        // later pieces may only be added to a file this person started uploading
+        if (body.path) { const up = uploads.get(body.path); if (!up || up.userId !== u.id) return deny('Upload not found — please try again'); }
+        const out = await fn(body, u);
+        uploads.set(out.path, { userId: u.id, at: Date.now() });
+        if (uploads.size > 500) for (const [k, v] of uploads) if (Date.now() - v.at > 6 * 3600_000) uploads.delete(k);
+        return json(res, 200, out);
       }
-      if (cmd === 'writeChunk' && body.dest && !['admin', 'am'].includes(u.role)) return json(res, 403, { ok: false, error: 'Only Admins and Account Managers can upload client assets' });
+      if (cmd === 'makeDir' && !manager) return deny();
+      if (cmd === 'trashMany' || cmd === 'trashPath') {
+        const paths = body.paths || [body.path];
+        if (paths.some((x) => String(x || '').startsWith('Clients/')) && !manager) return deny();
+        if (paths.some((x) => !access.canReadFile(u, String(x || '')))) return deny();
+      }
+      if (['thumb', 'processImage'].includes(cmd) && !access.canReadFile(u, String(body.path || '')) && !(cmd === 'processImage' && uploads.get(body.path) && uploads.get(body.path).userId === u.id)) return deny();
+      if (cmd === 'processImage' && body.kind === 'logo' && !manager) return deny();
+      if (cmd === 'exportFiles') body.paths = (body.paths || []).filter((x) => access.canReadFile(u, String(x || '')));
       return json(res, 200, await fn(body, u));
     }
 
@@ -153,10 +187,15 @@ export function createServer(cfg) {
       store.backup(path.join(dataDir, 'backups', `before-import-${Date.now()}.sqlite`));
       const { rev, results } = store.importAll(body.data, u.id);
       broadcast(rev, results, null, u.id);
+      cfSync.schedule();
       return json(res, 200, { ok: true, rev, count: results.length });
     }
 
-    if (p.startsWith('/__file/') && (req.method === 'GET' || req.method === 'HEAD')) return files.serve(req, res, p.slice('/__file/'.length));
+    if (p.startsWith('/__file/') && (req.method === 'GET' || req.method === 'HEAD')) {
+      const rel = p.slice('/__file/'.length);
+      if (!access.canReadFile(u, rel)) return json(res, 403, { ok: false, error: 'Not allowed' });
+      return files.serve(req, res, rel);
+    }
 
     if (p.startsWith('/api/')) return json(res, 404, { ok: false, error: 'Not found' });
     return serveWeb(req, res, p);
@@ -186,7 +225,7 @@ export function createServer(cfg) {
   server.keepAliveTimeout = 65000;
 
   return {
-    server, store, files,
+    server, store, files, cfSync,
     listen: (port, host) => new Promise((ok) => server.listen(port, host, () => ok(server.address().port))),
     close: () => new Promise((ok) => { for (const s of streams) try { s.res.end(); } catch { /* ignore */ } server.close(() => { store.close(); ok(); }); }),
     broadcastVersion: (v) => { for (const s of streams) send(s, 'version', { version: v }); },

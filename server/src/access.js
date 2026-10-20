@@ -19,12 +19,38 @@ export function createAccess(store) {
     return (t.assignees || []).includes(u.id) || t.createdBy === u.id;
   }
 
+  // Freelancers see the Client Assets of the clients their projects belong to
+  function clientSet(u) {
+    const ids = projectSet(u);
+    return new Set(store.list('projects').filter((p) => ids.has(p.id) && p.clientId).map((p) => p.clientId));
+  }
+  // Can this person open this file? Freelancers only get files from their tasks and their clients.
+  function canReadFile(u, rel) {
+    if (!isFreelancer(u)) return true;
+    const parts = String(rel).split('/');
+    if (parts[0] === 'attachments') {
+      if (parts[1] === '_avatars') return true;
+      if (parts[1] === '_uploads') return false;
+      const t = store.get('tasks', parts[1]);
+      return !!t && taskVisible(u, t);
+    }
+    if (parts[0] === 'Clients') {
+      if (parts[1] === '_logos') return true;
+      const dir = parts.slice(0, 2).join('/');
+      const allowed = clientSet(u);
+      return store.list('clients').some((c) => allowed.has(c.id) && (c.dir === dir || String(c.dir || '').startsWith(dir + '/')));
+    }
+    if (parts[0] === '.thumbs') return true; // previews are small and only reachable by id
+    return false;
+  }
+
   function canSee(u, kind, data) {
     if (!data) return true;
     switch (kind) {
       case 'notifications': return data.to === u.id;
       case 'projects': return !isFreelancer(u) || projectSet(u).has(data.id);
       case 'tasks': return taskVisible(u, data);
+      case 'clients': return !isFreelancer(u) || clientSet(u).has(data.id);
       default: return true;
     }
   }
@@ -69,5 +95,5 @@ export function createAccess(store) {
     }
   }
 
-  return { userByEmail, canSee, canWrite, shape, isFreelancer };
+  return { userByEmail, canSee, canWrite, shape, isFreelancer, canReadFile };
 }

@@ -13,6 +13,10 @@ const cfg = {
   dev: env.AUTH_DEV === '1',
   adminEmail: env.ADMIN_EMAIL || '',
   version: env.APP_VERSION || readVersion(),
+  // Optional: keep Cloudflare Access in step with the Team page (freelancers)
+  cfAccountId: env.CF_ACCOUNT_ID || '',
+  cfApiToken: env.CF_API_TOKEN || '',
+  cfGroupId: env.CF_FREELANCER_GROUP_ID || '',
 };
 function readVersion() {
   try { return fs.readFileSync(path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../VERSION'), 'utf8').trim(); } catch { return '0.0.0-dev'; }
@@ -38,6 +42,7 @@ app.listen(port, '0.0.0.0').then((p) => {
   console.log(`E11 Console ${cfg.version} listening on :${p} (data in ${dataDir}${cfg.cfTeam ? `, Cloudflare team ${cfg.cfTeam}` : ''})`);
   housekeeping();
   setInterval(housekeeping, 6 * 3600_000);
+  app.cfSync.schedule();
 });
 const stop = () => app.close().then(() => process.exit(0));
 process.on('SIGTERM', stop);

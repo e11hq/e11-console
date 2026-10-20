@@ -160,6 +160,16 @@ const Host = (() => {
 const FINDER_LABEL = Host.isServer ? 'Download' : 'Show in Finder';
 
 /* ================= Server connection (console.e11hq.com) ================= */
+// Team page: is Cloudflare letting the freelancers on the Team page in?
+function paintCfStatus(s) {
+  const el = document.getElementById('cf-status');
+  if (!el || !s) return;
+  if (!s.configured) { el.innerHTML = `${icon('info')}<span>Freelancers with personal emails must be added in Cloudflare by hand (automatic access isn’t switched on yet).</span>`; return; }
+  el.className = 'cf-status ' + (s.ok === false ? 'bad' : 'good');
+  el.innerHTML = s.ok === false
+    ? `${icon('info')}<span>Couldn’t update Cloudflare access: ${esc(s.error || 'unknown error')}</span><button class="btn ghost xs" data-action="cf-sync-now">Try again</button>`
+    : `${icon('shield')}<span>Freelancer sign-in access is kept up to date automatically${s.at ? ` · last updated ${esc(timeAgo(s.at))}` : ''} (${(s.emails || []).length} personal email${(s.emails || []).length === 1 ? '' : 's'})</span>`;
+}
 // Requests to the server. Cloudflare signs people in before the page even loads.
 async function api(method, url, body) {
   const res = await fetch(url, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined, credentials: 'same-origin', cache: 'no-store' });
@@ -334,7 +344,7 @@ const subtasksOf = (id) => db.tasks.filter((t) => t.parentId === id).sort(byOrde
 const topTasks = () => db.tasks.filter((t) => !t.parentId);
 
 /* ================= Team: users, roles, permissions ================= */
-const ROLES = { admin: 'Admin', am: 'Account Manager', production: 'Production', social: 'Social' };
+const ROLES = { admin: 'Admin', am: 'Account Manager', production: 'Production', social: 'Social', freelancer: 'Freelancer' };
 const SEED_ADMIN_ID = 'u-haris';
 let currentUserId = null;
 const userById = (id) => (db && db.users.find((u) => u.id === id)) || null;
@@ -1011,7 +1021,25 @@ const Sync = (() => {
       applyRemote(m.changes || []);
     });
     es.addEventListener('version', (e) => checkVersion(JSON.parse(e.data).version));
+    es.addEventListener('resync', () => resync());
     es.onerror = () => { setOnline(false); reconnect(3000); };
+  }
+  // What this person may see has changed (e.g. a freelancer was given another project): reload everything
+  async function resync() {
+    try {
+      await push();
+      const snap = await api('GET', '/api/snapshot');
+      rev = snap.rev;
+      KINDS.forEach((k) => { synced[k].clear(); });
+      const data = snap.data;
+      KINDS.forEach((k) => { if (k === 'meta') remember('meta', 'main', sharedMeta(data.meta)); else (data[k] || []).forEach((x) => remember(k, String(x.id), x)); });
+      const prefs = db.meta.prefs;
+      const next = normalize(JSON.parse(JSON.stringify({ ...data, meta: { ...(data.meta || {}), prefs } })));
+      Object.keys(next).forEach((k) => { db[k] = next[k]; });
+      if (ui.projectId && !proj(ui.projectId)) { ui.view = 'home'; ui.projectId = null; }
+      if (ui.taskId && !task(ui.taskId)) ui.taskId = null;
+      refresh();
+    } catch (e) { reconnect(3000); }
   }
   function reconnect(ms) { if (es) { es.close(); es = null; } clearTimeout(retryTimer); retryTimer = setTimeout(() => { connect(); }, ms); }
   function setOnline(v) {
@@ -1162,7 +1190,7 @@ function renderContent() {
   else if (ui.view === 'mytasks') c.innerHTML = viewMyTasks();
   else if (ui.view === 'today') c.innerHTML = viewMyDay();
   else if (ui.view === 'inbox') c.innerHTML = viewInbox();
-  else if (ui.view === 'team') c.innerHTML = viewTeam();
+  else if (ui.view === 'team') { c.innerHTML = viewTeam(); if (Host.isServer && can('manageUsers')) api('GET', '/api/cloudflare').then(paintCfStatus).catch(() => {}); }
   else if (ui.view === 'reviews') { c.innerHTML = viewReviews(); hydrateThumbs(c); }
   else if (ui.view === 'profile') c.innerHTML = viewProfile();
   else if (ui.view === 'clients') c.innerHTML = viewClients();
@@ -1900,7 +1928,7 @@ function mentionInComposer(uidToTag) {
 }
 
 /* ---- People card on hover: @mentions, comment authors, task creator ---- */
-const TEAM_LABEL = { admin: 'Admin', am: 'Account Manager', production: 'Production Team', social: 'Social Team' };
+const TEAM_LABEL = { admin: 'Admin', am: 'Account Manager', production: 'Production Team', social: 'Social Team', freelancer: 'Freelancer' };
 function designationOf(u) {
   if (!u) return '';
   if (u.id === cdUserId()) return cdActing() ? `Acting Creative Director · ${TEAM_LABEL[u.role] || ''}` : 'Creative Director';
@@ -2341,6 +2369,7 @@ function go(view, projectId = null) {
 }
 
 async function newProjectFlow() {
+  if (me() && me().role === 'freelancer') return denied();
   const used = new Set(db.projects.map((p) => p.color));
   const res = await dialog({
     title: 'New project', input: { label: 'Project name', placeholder: 'e.g. Website redesign' },
@@ -3004,6 +3033,8 @@ document.addEventListener('click', async (e) => {
       case 'me-menu': e.stopPropagation(); meMenu(actEl); return;
       case 'add-member': addMemberFlow(); return;
       case 'member-menu': e.stopPropagation(); memberMenu(actEl, id); return;
+      case 'member-projects': e.stopPropagation(); { const u = userById(id); if (u) projectAccessDialog(u); } return;
+      case 'cf-sync-now': api('POST', '/api/cloudflare').then(paintCfStatus).catch((err) => toast(err.message)); return;
       case 'change-photo': changePhoto(); return;
       case 'remove-photo': { const u = me(); if (u.avatar) Host.call('trashPath', { path: u.avatar }).catch(() => {}); u.avatar = null; persist(); render(); return; }
       case 'save-profile': saveProfile(); return;
@@ -4498,7 +4529,7 @@ function viewTeam() {
   const users = db.users.slice().sort((a, b) => (a.active === false) - (b.active === false) || fullName(a).localeCompare(fullName(b)));
   return `<div class="team">
     <div class="team-head">
-      <div><div class="team-title">${users.filter((u) => u.active !== false).length} members</div><div class="team-sub">${admin ? 'Only Admins can add people. New members sign in with the email and temporary password you give them, then set their own password.' : 'Only Admins can add or change team members.'}</div></div>
+      <div><div class="team-title">${users.filter((u) => u.active !== false).length} members</div><div class="team-sub">${admin ? (Host.isServer ? `Only Admins can add people. New members sign in at ${esc(location.host)} with their email — no password needed.` : 'Only Admins can add people. New members sign in with the email and temporary password you give them, then set their own password.') : 'Only Admins can add or change team members.'}</div>${admin && Host.isServer ? '<div class="cf-status" id="cf-status"></div>' : ''}</div>
       <span class="spacer"></span>
       ${admin ? `<button class="btn primary" data-action="add-member">${icon('plus')}Add member</button>` : ''}
     </div>
@@ -4507,7 +4538,7 @@ function viewTeam() {
       ${users.map((u) => `<div class="tt-row ${u.active === false ? 'inactive' : ''}">
         <div class="tt-name">${avatarHTML(u.id, 30)}<span>${esc(fullName(u))}${u.id === currentUserId ? ' <small>(you)</small>' : ''}</span></div>
         <div class="tt-email">${esc(u.email)}</div>
-        <div><span class="role-pill r-${u.role}">${esc(ROLES[u.role] || u.role)}</span></div>
+        <div><span class="role-pill r-${u.role}">${esc(ROLES[u.role] || u.role)}</span>${u.role === 'freelancer' ? `<button class="tt-proj" ${admin ? `data-action="member-projects" data-id="${u.id}"` : ''} title="Projects they can see">${(u.projectIds || []).length} project${(u.projectIds || []).length === 1 ? '' : 's'}</button>` : ''}</div>
         <div>${u.active === false ? '<span class="st-txt off">Removed</span>' : u.setup ? `<span class="st-txt on">Active</span>` : '<span class="st-txt pend">Hasn’t signed in yet</span>'}</div>
         ${cdCell(u, admin)}
         <div>${admin && u.id !== currentUserId ? `<button class="icon-btn sm" data-action="member-menu" data-id="${u.id}" title="Manage">${icon('more')}</button>` : ''}</div>
@@ -4516,6 +4547,7 @@ function viewTeam() {
     <div class="role-guide">
       <div><span class="role-pill r-admin">Admin</span> Full access, and the only role that can add or manage team members.</div>
       <div><span class="role-pill r-am">Account Manager</span> Can do everything except add or manage team members.</div>
+      <div><span class="role-pill r-freelancer">Freelancer</span> Same as Production, but only sees the projects an Admin chooses for them, plus those projects’ Client Assets. Can sign in with a personal email (Gmail, Outlook…).</div>
       <div><span class="role-pill r-production">Production</span> <span class="role-pill r-social">Social</span> Can update status, submit files for CD review, change dates, add tags, checklist items, files and comments. Can’t create or delete tasks/subtasks, change title, description, project or priority, assign people, remove tags or delete checklist items.</div>
     </div>
   </div>`;
@@ -4574,8 +4606,33 @@ async function addMemberFlow() {
   if (!Host.isServer) setPassword(u, v.pw);
   persist(0); renderContent();
   toast(`Added ${v.email} as ${ROLES[v.role]}`);
+  if (v.role === 'freelancer') projectAccessDialog(u);
 }
 function tempPassword() { const c = 'abcdefghjkmnpqrstuvwxyz23456789'; let s = ''; for (let i = 0; i < 10; i++) s += c[Math.floor(Math.random() * c.length)]; return s; }
+
+// Freelancers only see the projects ticked here (and the Client Assets of those projects' clients)
+function projectAccessDialog(u) {
+  if (!can('manageUsers')) return denied();
+  const chosen = new Set(Array.isArray(u.projectIds) ? u.projectIds : []);
+  const root = $('#overlay-root');
+  const list = db.projects.slice().sort(byOrder);
+  root.innerHTML = `<div class="scrim"><form class="dialog form-dlg pa-dlg">
+    <h2>Projects ${esc(fullName(u))} can see</h2>
+    <p>Freelancers only see these projects, their tasks and files, and the Client Assets of those projects’ clients. Everything else stays hidden.</p>
+    <div class="pa-list">${list.length ? list.map((p) => `<label class="pa-row"><input type="checkbox" value="${p.id}" ${chosen.has(p.id) ? 'checked' : ''}><i style="background:${p.color}"></i><span>${esc(p.name)}</span>${clientOfProject(p) ? `<small>${esc(clientOfProject(p).name)}</small>` : ''}</label>`).join('') : '<div class="ph">No projects yet</div>'}</div>
+    <div class="actions"><button type="button" class="btn" data-r="0">Cancel</button><button type="submit" class="btn primary">Save</button></div>
+  </form></div>`;
+  const close = () => { root.innerHTML = ''; document.removeEventListener('keydown', onKey, true); };
+  const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); } };
+  document.addEventListener('keydown', onKey, true);
+  $('[data-r="0"]', root).addEventListener('click', close);
+  $('form', root).addEventListener('submit', (e) => {
+    e.preventDefault();
+    u.projectIds = $$('.pa-list input:checked', root).map((x) => x.value);
+    close(); persist(0); renderContent();
+    toast(`${fullName(u)} can see ${u.projectIds.length} project${u.projectIds.length === 1 ? '' : 's'}`);
+  });
+}
 
 function memberMenu(anchor, id) {
   const u = userById(id);
@@ -4584,8 +4641,10 @@ function memberMenu(anchor, id) {
   Object.entries(ROLES).forEach(([k, l]) => items.push({ html: `<div class="mi ${u.role === k ? 'cur' : ''}"><span class="role-pill r-${k}">${esc(l)}</span></div>`, run: () => {
     if (u.role === 'admin' && k !== 'admin' && db.users.filter((x) => x.role === 'admin' && x.active !== false).length < 2) return toast('There must be at least one Admin');
     u.role = k; persist(); renderContent(); toast(`${fullName(u)} is now ${l}`);
+    if (k === 'freelancer') setTimeout(() => projectAccessDialog(u), 0);
   } }));
   items.push('-');
+  if (u.role === 'freelancer') items.push({ label: 'Projects they can see…', icon: 'folder', run: () => projectAccessDialog(u) });
   if (u.active === false) items.push({ label: 'Restore access', icon: 'user', run: () => { u.active = true; persist(); renderContent(); } });
   else {
     if (!Host.isServer) items.push({ label: 'Reset password…', icon: 'lock', run: () => resetPasswordFlow(u) });
