@@ -1,0 +1,211 @@
+/* Studio — the desktop look (Mac app and desktop browsers), in dark and light.
+   Source for web/studio.css: run `python3 scripts/build_theme.py scripts/studio.src.css web/studio.css`.
+   Scope letters: "G" both themes, "D" dark only, "L" light only — always outside the phone layout. */
+
+/* ---------- Tokens ---------- */
+:root[data-theme="dark"]:not(.phone) {
+  --app: #0c0d0f; --bg: #0c0d0f; --sidebar: #0f1013; --panel: #121317; --raised: #15161a; --hover: #15161a; --active: #1a1c21;
+  --border: #1d1f24; --border-strong: #2c2f37; --line: #16171b; --edge: #262931;
+  --text: #e9eaee; --text-2: #b4b7c0; --text-3: #7d808a;
+  --accent: #7c6cff; --accent-strong: #6c5cf0; --accent-soft: #16152a; --accent-line: #3a3570; --accent-ink: #b9b0ff; --btn: #5b4bd6;
+  --mention-bg: #1d1a3a; --mention-fg: #c9c0ff;
+  --sel-bar: #7c6cff; --card: #121317; --card-edge: #22242a; --kbd: #8b8e98;
+  --shadow: 0 20px 60px rgba(0,0,0,.55), 0 2px 8px rgba(0,0,0,.35);
+  --menu-shadow: 0 14px 40px rgba(0,0,0,.55);
+}
+:root[data-theme="light"]:not(.phone) {
+  --app: #ffffff; --bg: #ffffff; --sidebar: #f7f7f8; --panel: #fafafb; --raised: #f3f3f5; --hover: #f1f1f3; --active: #ebebef;
+  --border: #e6e6ea; --border-strong: #d4d4da; --line: #efeff2; --edge: #dcdce2;
+  --text: #17181b; --text-2: #4e5159; --text-3: #6e717a;
+  --accent: #5b4bd6; --accent-strong: #4c3cc7; --accent-soft: #f0eeff; --accent-line: #cfc8ff; --accent-ink: #4c3cc7; --btn: #5b4bd6;
+  --mention-bg: #ebe7ff; --mention-fg: #4c3cc7;
+  --sel-bar: #5b4bd6; --card: #ffffff; --card-edge: #e3e3e8; --kbd: #6e717a;
+  --shadow: 0 20px 60px rgba(20,20,40,.16), 0 2px 8px rgba(20,20,40,.08);
+  --menu-shadow: 0 12px 32px rgba(20,20,40,.14);
+}
+:root:not(.phone) { --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace; --radius: 7px; }
+:root:not(.phone) body { background: var(--app); font-size: 13.5px; }
+:root[data-theme="dark"]:not(.phone) ::-webkit-scrollbar-thumb { background: #2a2c33; background-clip: padding-box; }
+:root[data-theme="light"]:not(.phone) ::-webkit-scrollbar-thumb { background: #d4d4da; background-clip: padding-box; }
+
+/* ---------- Frame ---------- */
+:root:not(.phone) #app { grid-template-columns: 232px minmax(0, 1fr); background: var(--app); }
+:root:not(.phone) #app.sb-collapsed { grid-template-columns: 56px minmax(0, 1fr); }
+:root:not(.phone) #sidebar { background: var(--sidebar); border-right: 1px solid var(--border); padding: 12px 10px 10px; }
+:root:not(.phone) #main { background: var(--bg); }
+:root:not(.phone) .sidebar-foot { border-top: 1px solid var(--border); }
+:root:not(.phone) .brand { padding: 2px 8px 8px; }
+:root:not(.phone) .brand img { height: 30px; }
+:root:not(.phone) .sb-head { padding: 2px 4px 10px 8px; }
+:root:not(.phone) .sb-title { font-size: 15px; font-weight: 600; letter-spacing: 0; }
+:root:not(.phone) .create-btn { width: 30px; height: 28px; border-radius: 7px; background: var(--btn); border: 1px solid var(--accent-strong); color: #fff; box-shadow: none; }
+:root:not(.phone) .create-btn:hover { background: var(--accent-strong); }
+:root:not(.phone) .nav { gap: 1px; }
+:root:not(.phone) .nav-item { height: 30px; padding: 0 8px; gap: 9px; border-radius: 7px; font-size: 13.5px; color: var(--text-2); }
+:root:not(.phone) .nav-item > .ic { width: 15px; height: 15px; color: var(--text-3); }
+:root:not(.phone) .nav-item:hover { background: var(--hover); color: var(--text); }
+:root:not(.phone) .nav-item.active { background: var(--active); color: var(--text); font-weight: 500; box-shadow: inset 0 0 0 1px var(--edge); }
+:root:not(.phone) .nav-item.active > .ic { color: var(--text); }
+:root:not(.phone) .nav-item .dot { width: 8px; height: 8px; border-radius: 2px; }
+:root:not(.phone) .nav-item .count { font-family: var(--mono); font-size: 11px; color: var(--text-3); }
+:root:not(.phone) .nav-item .count.ib { font-family: var(--mono); font-size: 11px; font-weight: 500; background: none; color: #ff8a8a; min-width: 0; padding: 0; box-shadow: none; }
+:root[data-theme="light"]:not(.phone) .nav-item .count.ib { color: #d93a40; }
+:root:not(.phone) .nav-heading { padding: 16px 8px 6px; font-size: 11px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--text-3); }
+:root:not(.phone) .ca-nav { background: var(--raised) !important; border: 1px solid var(--edge) !important; border-radius: 8px !important; box-shadow: none !important; color: var(--text) !important; }
+:root:not(.phone) .ca-nav:hover { background: var(--active) !important; }
+:root:not(.phone) .ca-nav.active { border-color: var(--accent-line) !important; background: var(--accent-soft) !important; }
+:root:not(.phone) .ca-nav-ic { background: none !important; color: var(--accent) !important; box-shadow: none !important; }
+:root:not(.phone) .data-link { border-radius: 7px; font-size: 11.5px; }
+:root:not(.phone) .data-link:hover { background: var(--hover); }
+:root:not(.phone) .me-chip { border-radius: 8px; }
+:root:not(.phone) .me-chip:hover { background: var(--hover); }
+
+/* ---------- Top bar ---------- */
+:root:not(.phone) #topbar { height: 48px; padding: 0 16px 0 18px; border-bottom: 1px solid var(--border); gap: 12px; }
+:root:not(.phone) .page-title { font-size: 14.5px; font-weight: 600; letter-spacing: 0; }
+:root:not(.phone) .page-icon { width: 22px; height: 22px; border-radius: 6px; font-size: 10px; }
+:root:not(.phone) .tabs { gap: 2px; padding: 2px; border-radius: 7px; background: var(--raised); border: 1px solid var(--border); margin-left: 4px; }
+:root:not(.phone) .tab { height: 26px; padding: 0 10px; border-radius: 5px; font-size: 12.5px; font-weight: 500; color: var(--text-3); border-bottom: 0 !important; }
+:root:not(.phone) .tab:hover { background: transparent; color: var(--text); }
+:root:not(.phone) .tab.active { background: var(--active); color: var(--text); box-shadow: inset 0 0 0 1px var(--edge); }
+:root:not(.phone) .tab.active::after { display: none !important; }
+:root:not(.phone) .tab .ic { width: 14px; height: 14px; }
+:root:not(.phone) .search { height: 30px; width: 240px; border-radius: 7px; background: var(--raised); border: 1px solid var(--border); padding: 0 8px; }
+:root:not(.phone) .search:focus-within { width: 300px; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+:root:not(.phone) .search kbd, :root:not(.phone) kbd { font-family: var(--mono); font-size: 10.5px; color: var(--kbd); border: 1px solid var(--border-strong); border-radius: 5px; padding: 0 5px; background: none; }
+
+/* ---------- Buttons & fields ---------- */
+:root:not(.phone) .btn { height: 30px; padding: 0 11px; border-radius: 7px; background: var(--raised); border: 1px solid var(--border-strong); color: var(--text); font-size: 12.5px; box-shadow: none; }
+:root:not(.phone) .btn.sm { height: 26px; padding: 0 9px; }
+:root:not(.phone) .btn.xs { height: 22px; padding: 0 7px; }
+:root:not(.phone) .btn:hover { background: var(--active); }
+:root:not(.phone) .btn.primary { background: var(--btn); border-color: var(--accent-strong); color: #fff; font-weight: 600; border-radius: 7px; }
+:root:not(.phone) .btn.primary:hover { background: var(--accent-strong); }
+:root:not(.phone) .btn.ghost { background: none; border-color: transparent; color: var(--text-2); }
+:root:not(.phone) .btn.ghost:hover { background: var(--hover); color: var(--text); }
+:root:not(.phone) .btn.danger { border-radius: 7px; }
+:root:not(.phone) .icon-btn { border-radius: 6px; }
+:root:not(.phone) .icon-btn:hover { background: var(--hover); }
+:root:not(.phone) .field { background: var(--raised); border: 1px solid var(--border-strong); border-radius: 7px; }
+:root:not(.phone) .field:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+:root:not(.phone) .pv .field { background: transparent; border-color: transparent; box-shadow: none; }
+:root:not(.phone) .pv .field:hover { background: var(--hover); }
+:root:not(.phone) .pv .field:focus { background: var(--raised); border-color: var(--accent); }
+:root:not(.phone) .seg { background: var(--raised); border-color: var(--border); border-radius: 7px; }
+:root:not(.phone) .quick-add { height: 38px; border-radius: 7px; background: var(--raised); border: 1px solid var(--border); }
+:root:not(.phone) .quick-add:focus-within { border-color: var(--accent); }
+
+/* ---------- Lists: dense rows on hairlines ---------- */
+:root:not(.phone) .list-wrap { padding: 4px 18px 80px; }
+:root:not(.phone) .list-head { height: 32px; font-size: 11px; color: var(--text-3); background: var(--bg); border-bottom: 1px solid var(--border); }
+:root:not(.phone) .list-head > div { border-left-color: transparent; }
+:root:not(.phone) .section { margin-top: 14px; }
+:root:not(.phone) .section-head { height: 30px; font-size: 12.5px; font-weight: 600; }
+:root:not(.phone) .section-head .scount { font-family: var(--mono); font-size: 11px; }
+:root:not(.phone) .section-head .sname:hover { background: none; }
+:root:not(.phone) .row { min-height: 36px; border-bottom: 1px solid var(--line); }
+:root:not(.phone) .task-row:hover { background: var(--hover); }
+:root:not(.phone) .task-row.is-selected { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--sel-bar); }
+:root:not(.phone) .task-row.is-urgent { background: transparent; box-shadow: none; }
+:root:not(.phone) .task-row.is-urgent:hover { background: var(--hover); }
+:root:not(.phone) .task-row.is-urgent.is-selected { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--sel-bar); }
+:root:not(.phone) .task-row .title { font-weight: 450; }
+:root:not(.phone) .add-row { height: 34px; color: var(--text-3); font-size: 12.5px; }
+:root:not(.phone) .add-section { border-radius: 7px; font-size: 12.5px; }
+:root:not(.phone) .status-pill { border-radius: 5px; font-size: 11px; padding: 2px 7px; letter-spacing: .02em; }
+:root:not(.phone) .tag, :root:not(.phone) .prio { border-radius: 5px; }
+:root:not(.phone) .due { font-size: 12px; }
+:root:not(.phone) .mw-row { border-radius: 0; }
+:root:not(.phone) .mt-tab { font-size: 13px; font-weight: 600; }
+:root:not(.phone) .mt-tab span { font-family: var(--mono); font-weight: 500; border-radius: 5px; background: var(--raised); }
+:root:not(.phone) .mt-tab.on span { background: var(--accent-soft); color: var(--accent-ink); }
+
+/* ---------- Board ---------- */
+:root:not(.phone) .board { gap: 14px; padding: 16px 18px 24px; }
+:root:not(.phone) .col { width: 272px; background: transparent; border: 0; border-top: 0; border-radius: 0; box-shadow: none; position: relative; }
+:root:not(.phone) .col::before { display: none; }
+:root:not(.phone) .col-head { height: 32px; padding: 0 4px; margin-bottom: 8px; border-bottom: 2px solid var(--col, #87909e); font-size: 12.5px; }
+:root:not(.phone) .col-head .scount { font-family: var(--mono); font-size: 11px; }
+:root:not(.phone) .col-body { padding: 0; gap: 8px; }
+:root:not(.phone) .col.drop-target { background: var(--accent-soft); border-radius: 8px; }
+:root:not(.phone) .card { background: var(--card); border: 1px solid var(--card-edge); border-radius: 8px; padding: 10px 11px; box-shadow: none; }
+:root[data-theme="light"]:not(.phone) .card { box-shadow: 0 1px 2px rgba(20,20,40,.05); }
+:root:not(.phone) .card:hover { border-color: var(--border-strong); transform: none; }
+:root:not(.phone) .card.is-selected { border-color: var(--accent-line); background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--sel-bar); }
+:root:not(.phone) .col-add { margin: 8px 0 0; height: 30px; padding: 0 10px; border: 1px dashed var(--border-strong); border-radius: 8px; font-size: 12px; }
+:root:not(.phone) .col-add-input { margin: 8px 0 0; }
+:root:not(.phone) .col-add-input textarea { border-radius: 8px; background: var(--card); }
+:root:not(.phone) .add-col { width: 200px; border-radius: 8px; border-color: var(--border-strong); }
+
+/* ---------- Home ---------- */
+:root:not(.phone) .home { padding: 26px 28px 80px; }
+:root:not(.phone) .home-date { font-size: 12.5px; color: var(--text-3); }
+:root:not(.phone) .home-greet { font-size: 22px; font-weight: 600; letter-spacing: -.01em; margin-bottom: 20px; }
+:root:not(.phone) .stats { gap: 12px; }
+:root:not(.phone) .stat { background: var(--panel); border: 1px solid var(--border); border-radius: 9px; padding: 14px 16px; }
+:root:not(.phone) .stat .n { font-family: var(--mono); font-size: 24px; font-weight: 500; }
+:root:not(.phone) .widget { background: var(--panel); border: 1px solid var(--border); border-radius: 9px; padding: 14px 14px 8px; }
+:root:not(.phone) .widget h3 { font-size: 13.5px; font-weight: 600; }
+:root:not(.phone) .mini-row { border-radius: 0; border-bottom: 1px solid var(--line); padding: 7px 4px; }
+:root:not(.phone) .mini-row:hover { background: var(--hover); }
+:root:not(.phone) .proj-card { border-radius: 8px; }
+:root:not(.phone) .proj-card .page-icon { width: 30px; height: 30px; border-radius: 7px; font-size: 11px; }
+:root:not(.phone) .proj-card .bar { height: 3px; }
+
+/* ---------- Inbox ---------- */
+:root:not(.phone) .ib-tab { padding: 12px 16px; }
+:root:not(.phone) .ib-row { height: 42px; }
+:root:not(.phone) .ib-row:hover { background: var(--hover); }
+
+/* ---------- Client Assets ---------- */
+:root:not(.phone) .ca-card { background: var(--card); border: 1px solid var(--card-edge); border-radius: 9px; padding: 10px 10px 12px; box-shadow: none; }
+:root:not(.phone) .ca-card:hover { border-color: var(--border-strong); transform: none; box-shadow: none; }
+:root:not(.phone) .ca-logo { border-radius: 6px; }
+:root:not(.phone) .ca-searchbar { border-radius: 8px !important; background: var(--raised) !important; border: 1px solid var(--border-strong) !important; box-shadow: none !important; }
+:root:not(.phone) .tile { border-radius: 8px; background: var(--card); border-color: var(--card-edge); }
+
+/* ---------- Task page ---------- */
+:root:not(.phone) .tm-backdrop { background: rgba(4,5,6,.62); }
+:root[data-theme="light"]:not(.phone) .tm-backdrop { background: rgba(20,20,30,.32); }
+:root:not(.phone) .tm { background: var(--bg); border: 1px solid var(--border-strong); border-radius: 12px; box-shadow: var(--shadow); }
+:root:not(.phone) #detail.side .tm { border-radius: 0; border-width: 0 0 0 1px; }
+:root:not(.phone) .tm-top { height: 46px; border-bottom: 1px solid var(--border); }
+:root:not(.phone) .crumb { border-radius: 5px; }
+:root:not(.phone) .tm-activity { background: var(--sidebar); border-left: 1px solid var(--border); }
+:root:not(.phone) .d-title { font-weight: 600; letter-spacing: -.012em; }
+:root:not(.phone) .prop { border-bottom-color: var(--line); }
+:root:not(.phone) .thread { background: transparent; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 10px 2px; margin: 0; }
+:root:not(.phone) .composer { background: var(--raised); border: 1px solid var(--edge); border-radius: 9px; box-shadow: none; }
+:root:not(.phone) .tm-composer .composer { background: var(--raised); border-color: var(--edge); border-radius: 9px; }
+:root:not(.phone) .composer:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+:root:not(.phone) .composer > .cb-replying { border-radius: 8px 8px 0 0; background: var(--accent-soft); }
+:root:not(.phone) .composer .btn.primary { border-radius: 6px; height: 26px; }
+:root:not(.phone) .composer.desc { background: transparent; border-color: var(--border); border-radius: 8px; }
+:root:not(.phone) .desc-view:not(.full)::after { background: linear-gradient(to bottom, transparent, var(--bg)); }
+:root:not(.phone) .ap { border-radius: 8px; }
+:root:not(.phone) .mention { background: var(--mention-bg); color: var(--mention-fg); }
+
+/* ---------- Floating layers ---------- */
+:root:not(.phone) .menu, :root:not(.phone) .disp-menu > .disp-title, :root:not(.phone) .disp-menu > .disp-opts { background: var(--raised); border: 1px solid var(--border-strong); border-radius: 9px; box-shadow: var(--menu-shadow); padding: 4px; }
+:root[data-theme="light"]:not(.phone) .menu, :root[data-theme="light"]:not(.phone) .disp-menu > .disp-title, :root[data-theme="light"]:not(.phone) .disp-menu > .disp-opts { background: #fff; }
+:root:not(.phone) .menu .mi { border-radius: 5px; padding: 6px 9px; }
+:root:not(.phone) .menu .mi:hover, :root:not(.phone) .menu .mi.hl { background: var(--active); color: var(--text); }
+:root:not(.phone) .scrim { background: rgba(4,5,6,.55); }
+:root[data-theme="light"]:not(.phone) .scrim { background: rgba(20,20,30,.3); }
+:root:not(.phone) .dialog { background: var(--bg); border: 1px solid var(--border-strong); border-radius: 12px; box-shadow: var(--shadow); }
+:root:not(.phone) .toast { background: var(--raised); border: 1px solid var(--border-strong); border-radius: 9px; box-shadow: var(--menu-shadow); }
+:root[data-theme="light"]:not(.phone) .toast { background: #fff; }
+:root:not(.phone) .notif-card { background: var(--raised); border: 1px solid var(--border-strong); border-radius: 9px; box-shadow: var(--menu-shadow); }
+:root[data-theme="light"]:not(.phone) .notif-card { background: #fff; }
+:root:not(.phone) .fv-box { background: var(--bg); border-color: var(--border-strong); border-radius: 12px; }
+:root:not(.phone) .pf-card { background: var(--panel); border-color: var(--border); border-radius: 9px; }
+
+/* Client Assets entry: quiet tile with an accent icon */
+:root:not(.phone) .ca-nav .ca-nav-ic .ic, :root:not(.phone) .ca-nav .ca-nav-ic svg { color: var(--accent) !important; stroke: var(--accent); }
+:root:not(.phone) .ca-nav-txt { font-weight: 600; font-size: 13px; }
+:root:not(.phone) .ca-nav .ca-nav-txt small, :root:not(.phone) .ca-nav.active .ca-nav-txt small, :root:not(.phone) .ca-nav.active .count { color: var(--text-3); }
+:root:not(.phone) #app.sb-collapsed .ca-nav { background: none !important; border-color: transparent !important; }
+:root:not(.phone) #app.sb-collapsed .ca-nav.active { background: var(--accent-soft) !important; }
+
+/* Tag colours are tuned for dark; deepen them on white so they stay readable */
+:root[data-theme="light"]:not(.phone) .tag { filter: brightness(.62) saturate(1.7); }

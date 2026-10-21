@@ -2120,3 +2120,20 @@ button.pv-empty:hover { background: var(--hover); color: var(--text-2); }
 .tm-composer .composer.reply .rt-editor { min-height: 50px; }
 /* "Replying to" strip sits inside the rounded box instead of spilling past it */
 .composer > .cb-replying { margin: 0; border-radius: 13px 13px 0 0; border-bottom: 1px solid var(--border); }
+
+/* Mac app icon (owner only, in My profile) */
+.ai-row { display: flex; align-items: center; gap: 16px; margin: 4px 0 2px; }
+.ai-dock { flex: none; width: 88px; height: 88px; border-radius: 18px; display: grid; place-items: center; background: linear-gradient(180deg, #2a2c33, #1a1b20); border: 1px solid var(--border-strong); }
+.ai-dock img { width: 68px; height: 68px; object-fit: contain; }
+.ai-txt { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ai-txt span { color: var(--text-3); font-size: 12.5px; line-height: 1.5; }
+.ai-dlg { width: 480px; }
+.ai-dlg p { color: var(--text-2); margin: 0 0 12px; }
+.ai-prev { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 8px; }
+.ai-dockbar { display: flex; align-items: center; justify-content: center; gap: 10px; height: 96px; border-radius: 18px; padding: 0 12px; }
+.ai-dockbar.dark { background: linear-gradient(180deg, #3a3b42, #26272c); }
+.ai-dockbar.light { background: linear-gradient(180deg, #f1f1f4, #dcdce2); }
+.ai-dockbar img { width: 72px; height: 72px; object-fit: contain; }
+.ai-other { width: 44px; height: 44px; border-radius: 11px; background: rgba(127,127,140,.35); }
+.ai-warn { color: var(--amber) !important; font-size: 12.5px; }
+.ai-round { border-top: 1px solid var(--border); margin-top: 6px; }

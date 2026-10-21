@@ -53,6 +53,7 @@ const ICONS = {
   logout: '<path d="M6.4 13.3H3.5a.8.8 0 0 1-.8-.8v-9c0-.4.4-.8.8-.8h2.9M10.4 11l3-3-3-3M13.3 8H6.2"/>',
   bell: '<path d="M4 11.2V7.4a4 4 0 0 1 8 0v3.8l1.2 1.2H2.8zM6.6 13.4a1.5 1.5 0 0 0 2.8 0"/>',
   lock: '<rect x="3.2" y="7.2" width="9.6" height="6.4" rx="1.4"/><path d="M5.4 7.2V5.3a2.6 2.6 0 0 1 5.2 0v1.9"/>',
+  image: '<rect x="2.3" y="2.8" width="11.4" height="10.4" rx="1.6"/><circle cx="5.9" cy="6.3" r="1.2"/><path d="m13.7 10.6-3.4-3.3-6.7 5.9"/>',
   camera: '<path d="M2.3 5.4c0-.5.4-.9.9-.9h1.9l1-1.5h3.8l1 1.5h1.9c.5 0 .9.4.9.9v6.7c0 .5-.4.9-.9.9H3.2a.9.9 0 0 1-.9-.9z"/><circle cx="8" cy="8.6" r="2.3"/>',
   details: '<path d="M2.4 4.2h7.2M2.4 8h5.2M2.4 11.8h7.2"/><path d="M12.6 7.2v5"/><circle cx="12.6" cy="4.4" r=".75" fill="currentColor" stroke="none"/>',
   comment: '<path d="M3.2 2.9h9.6c.6 0 1 .4 1 1v6.6c0 .6-.4 1-1 1H7.4l-3 2.4v-2.4H3.2c-.6 0-1-.4-1-1V3.9c0-.6.4-1 1-1z"/><path d="M5.2 6h5.6M5.2 8.4h3.8"/>',
@@ -178,6 +179,44 @@ const NativeMac = (() => {
     });
   }
   return { call };
+})();
+
+
+/* ================= Mac app Dock icon (chosen by the owner on the server) ================= */
+const AppIcon = (() => {
+  let info = null, applied = null, busy = null, owner = false;
+  const KEY = 'e11-appicon-custom';
+  const lsGet = () => { try { return localStorage.getItem(KEY); } catch (e) { return null; } };
+  const lsSet = (v) => { try { if (v) localStorage.setItem(KEY, v); else localStorage.removeItem(KEY); } catch (e) { /* storage off */ } };
+  const toB64 = (blob) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(blob); });
+  // Make this Mac's Dock icon match the server (old Mac apps without setIcon simply ignore it)
+  async function sync(next) {
+    if (next) info = next;
+    if (!Host.isMacApp || !info || applied === info.v || busy === info.v) return;
+    const v = info.v;
+    busy = v;
+    try {
+      if (info.custom) {
+        const r = await fetch('/api/app-icon?v=' + encodeURIComponent(v), { cache: 'no-store', credentials: 'same-origin' });
+        if (!r.ok) return;
+        await NativeMac.call('setIcon', { b64: await toB64(await r.blob()) });
+        lsSet(v);
+      } else if (lsGet()) {
+        await NativeMac.call('setIcon', { reset: true });
+        lsSet(null);
+      }
+      applied = v;
+    } catch (e) { /* older Mac app or offline: try again next time */ }
+    if (busy === v) busy = null;
+    if (info && info.v !== v) sync(); // a newer icon arrived while this one was being applied
+  }
+  return {
+    sync, toB64,
+    setOwner: (v) => { owner = !!v; },
+    isOwner: () => owner,
+    info: () => info || { v: 'default', custom: false },
+    url: () => '/api/app-icon?v=' + encodeURIComponent((info && info.v) || 'default'),
+  };
 })();
 
 const FINDER_LABEL = Host.isServer ? 'Download' : 'Show in Finder';
@@ -1127,6 +1166,7 @@ const Sync = (() => {
 
   async function start() {
     const me = await api('GET', '/api/me');
+    AppIcon.setOwner(me.owner); if (me.appIcon) AppIcon.sync(me.appIcon);
     const snap = await api('GET', '/api/snapshot');
     rev = snap.rev; version = snap.version || me.version;
     const data = snap.data;
@@ -1234,8 +1274,9 @@ const Sync = (() => {
     if (es) es.close();
     lastHeard = Date.now();
     es = new EventSource(`/api/events?since=${rev}&client=${encodeURIComponent(clientId)}`);
-    ['hello', 'changes', 'version', 'resync', 'ping'].forEach((ev) => es.addEventListener(ev, () => { lastHeard = Date.now(); }));
-    es.addEventListener('hello', (e) => { setOnline(true); const m = JSON.parse(e.data); checkVersion(m.version); if (changes().length) push(); });
+    ['hello', 'changes', 'version', 'resync', 'ping', 'appicon'].forEach((ev) => es.addEventListener(ev, () => { lastHeard = Date.now(); }));
+    es.addEventListener('hello', (e) => { setOnline(true); const m = JSON.parse(e.data); checkVersion(m.version); if (m.appIcon) AppIcon.sync(m.appIcon); if (changes().length) push(); });
+    es.addEventListener('appicon', (e) => { AppIcon.sync(JSON.parse(e.data)); if (ui.view === 'profile') renderContent(); });
     es.addEventListener('changes', (e) => {
       const m = JSON.parse(e.data);
       if (m.rev > rev) rev = m.rev;
@@ -3696,6 +3737,8 @@ document.addEventListener('click', async (e) => {
       case 'member-projects': e.stopPropagation(); { const u = userById(id); if (u) projectAccessDialog(u); } return;
       case 'cf-sync-now': api('POST', '/api/cloudflare').then(paintCfStatus).catch((err) => toast(err.message)); return;
       case 'change-photo': changePhoto(); return;
+      case 'appicon-upload': appIconUploadFlow(); return;
+      case 'appicon-reset': appIconResetFlow(); return;
       case 'remove-photo': { const u = me(); if (u.avatar) Host.call('trashPath', { path: u.avatar }).catch(() => {}); u.avatar = null; persist(); render(); return; }
       case 'save-profile': saveProfile(); return;
       case 'change-password': changePasswordFlow(); return;
@@ -5370,6 +5413,7 @@ function viewProfile() {
       <label class="dlg-label">Role</label><div class="pf-role"><span class="role-pill r-${u.role}">${esc(ROLES[u.role])}</span>${u.id === cdUserId() ? `<span class="role-pill r-cd">${esc(cdTitle())}</span>` : ''}<small>People see this and your office when they hover your name.</small></div>
       <div class="pf-actions"><button class="btn primary" data-action="save-profile">Save changes</button>${Host.isServer ? '' : `<button class="btn" data-action="change-password">${icon('lock')}Change password</button>`}</div>
     </div>
+    ${Host.isServer && AppIcon.isOwner() ? appIconCard() : ''}
     <div class="pf-card">
       <h3>${icon('bell')}Notifications</h3>
       <div class="pf-opt"><div><b>Sound</b><span>Play a sound with new notifications</span></div><button class="switch ${sound ? 'on' : ''}" data-action="toggle-sound"><i></i></button></div>
@@ -5381,6 +5425,101 @@ function viewProfile() {
       <p class="pf-note">You’re notified about tasks you’re assigned to or created: comments, status and CD Status changes, due dates, priority, files, completion, and when someone @mentions you. Remove yourself from a task to stop getting its updates.</p>
     </div>
   </div>`;
+}
+function appIconCard() {
+  const i = AppIcon.info();
+  return `<div class="pf-card ai-card">
+      <h3>${icon('image')}Mac app icon</h3>
+      <div class="ai-row">
+        <div class="ai-dock" aria-hidden="true"><img src="${AppIcon.url()}" alt=""></div>
+        <div class="ai-txt"><b>${i.custom ? 'Custom icon' : 'Default icon'}</b><span>${i.custom && i.at ? `Changed ${esc(timeAgo(i.at))}` : 'The icon that comes with the Mac app'}. It shows in everyone’s Dock and changes on every Mac as soon as you upload a new one.</span></div>
+      </div>
+      <div class="pf-actions"><button class="btn primary" data-action="appicon-upload">${icon('upload')}Upload new icon</button>${i.custom ? '<button class="btn" data-action="appicon-reset">Reset to default</button>' : ''}</div>
+      <p class="pf-note">Square PNG or JPG, 512 × 512 or larger. Only you can see this. Macs need the Mac app installed once after this update — then every change arrives by itself.</p>
+    </div>`;
+}
+// Pick an image (Mac app: native picker; browser: file input) and return it as a Blob
+async function pickIconImage() {
+  if (Host.isMacApp) {
+    const r = await NativeMac.call('pickLocalFiles', { multiple: false, images: true, prompt: 'Use as icon', message: 'Choose a square image for the Mac app icon' });
+    const f = (r.files || [])[0];
+    if (!f) return null;
+    if (f.size > 15 * 1024 * 1024) { toast('That image is too large (15 MB at most)'); return null; }
+    const c = await NativeMac.call('readLocalChunk', { token: f.token, offset: 0, length: f.size, last: true });
+    const bin = atob(c.b64 || ''); const arr = new Uint8Array(bin.length);
+    for (let k = 0; k < bin.length; k++) arr[k] = bin.charCodeAt(k);
+    return new Blob([arr]);
+  }
+  const files = await ServerHost.pickFiles({ multiple: false, accept: 'image/png,image/jpeg,image/webp' });
+  return files[0] || null;
+}
+function loadImage(blob) {
+  return new Promise((res, rej) => { const url = URL.createObjectURL(blob); const im = new Image(); im.onload = () => res(im); im.onerror = () => { URL.revokeObjectURL(url); rej(new Error('That file isn’t an image this app can read')); }; im.src = url; });
+}
+// 1024 × 1024 PNG. rounded = the Mac shape: 824 px rounded square with a soft shadow, centred.
+function renderIcon(im, rounded) {
+  const S = 1024, c = document.createElement('canvas'); c.width = c.height = S;
+  const g = c.getContext('2d');
+  const side = Math.min(im.naturalWidth, im.naturalHeight), sx = (im.naturalWidth - side) / 2, sy = (im.naturalHeight - side) / 2;
+  g.imageSmoothingQuality = 'high';
+  if (!rounded) { g.drawImage(im, sx, sy, side, side, 0, 0, S, S); return c; }
+  const box = 824, o = (S - box) / 2, r = 185;
+  const path = () => { g.beginPath(); g.moveTo(o + r, o); g.arcTo(o + box, o, o + box, o + box, r); g.arcTo(o + box, o + box, o, o + box, r); g.arcTo(o, o + box, o, o, r); g.arcTo(o, o, o + box, o, r); g.closePath(); };
+  g.save(); g.shadowColor = 'rgba(0,0,0,.28)'; g.shadowBlur = 28; g.shadowOffsetY = 12; path(); g.fillStyle = '#000'; g.fill(); g.restore();
+  g.save(); path(); g.clip(); g.drawImage(im, sx, sy, side, side, o, o, box, box); g.restore();
+  return c;
+}
+async function appIconUploadFlow() {
+  let blob;
+  try { blob = await pickIconImage(); } catch (e) { toast(e.message); return; }
+  if (!blob) return;
+  let im;
+  try { im = await loadImage(blob); } catch (e) { toast(e.message); return; }
+  const side = Math.min(im.naturalWidth, im.naturalHeight);
+  if (side < 256) { toast(`That image is ${im.naturalWidth} × ${im.naturalHeight} — use at least 512 × 512`); return; }
+  const squareNote = im.naturalWidth !== im.naturalHeight ? '<p class="ai-warn">This image isn’t square, so the middle of it will be used.</p>' : '';
+  let rounded = true;
+  const root = $('#overlay-root');
+  const draw = () => {
+    const url = renderIcon(im, rounded).toDataURL('image/png');
+    $$('.ai-prev img', root).forEach((x) => { x.src = url; });
+    const sw = $('.ai-round .switch', root); if (sw) sw.classList.toggle('on', rounded);
+  };
+  root.innerHTML = `<div class="scrim"><div class="dialog ai-dlg" role="dialog" aria-label="New Mac app icon">
+    <h2>New Mac app icon</h2>
+    <p>This is how it will look in the Dock on every Mac.</p>
+    <div class="ai-prev">
+      <div class="ai-dockbar dark"><span class="ai-other"></span><img alt="New icon, dark Dock"><span class="ai-other"></span></div>
+      <div class="ai-dockbar light"><span class="ai-other"></span><img alt="New icon, light Dock"><span class="ai-other"></span></div>
+    </div>
+    ${squareNote}
+    <div class="pf-opt ai-round"><div><b>Mac-style rounded corners</b><span>Turn off if your image already has the Mac shape and its own padding</span></div><button class="switch on" data-r="round" aria-label="Rounded corners"><i></i></button></div>
+    <div class="actions"><button class="btn" data-r="0">Cancel</button><button class="btn primary" data-r="1">Use this icon for everyone</button></div>
+  </div></div>`;
+  draw();
+  const done = () => { root.innerHTML = ''; document.removeEventListener('keydown', onKey, true); };
+  const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(); } };
+  document.addEventListener('keydown', onKey, true);
+  $('.scrim', root).addEventListener('click', async (e) => {
+    if (e.target.classList.contains('scrim')) return done();
+    const b = e.target.closest('[data-r]'); if (!b) return;
+    if (b.dataset.r === 'round') { rounded = !rounded; draw(); return; }
+    if (b.dataset.r === '0') return done();
+    b.disabled = true; b.textContent = 'Uploading…';
+    try {
+      const out = await new Promise((res) => renderIcon(im, rounded).toBlob(res, 'image/png'));
+      const r = await api('POST', '/api/app-icon', { png: await AppIcon.toB64(out) });
+      done();
+      AppIcon.sync(r);
+      toast('New icon set — every open Mac app updates now');
+      renderContent();
+    } catch (err) { b.disabled = false; b.textContent = 'Use this icon for everyone'; toast('Couldn’t change the icon: ' + err.message); }
+  });
+}
+async function appIconResetFlow() {
+  const ok = await dialog({ title: 'Go back to the default icon?', body: 'Every Mac app goes back to the icon it was installed with.', okText: 'Reset icon' });
+  if (!ok) return;
+  try { const r = await api('POST', '/api/app-icon/reset', {}); AppIcon.sync(r); toast('Back to the default icon'); renderContent(); } catch (e) { toast('Couldn’t reset the icon: ' + e.message); }
 }
 function notifToggles(u, cdOnly) {
   const off = (u.prefs || {}).notifOff || {};

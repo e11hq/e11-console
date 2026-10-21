@@ -119,9 +119,28 @@ var commands = {
     var light = a.mode === 'light';
     if (gWindow) {
       gWindow.appearance = $.NSAppearance.appearanceNamed(light ? 'NSAppearanceNameAqua' : 'NSAppearanceNameDarkAqua');
-      gWindow.backgroundColor = light ? $.NSColor.colorWithSRGBRedGreenBlueAlpha(0.965, 0.965, 0.973, 1) : $.NSColor.colorWithSRGBRedGreenBlueAlpha(0.043, 0.043, 0.047, 1);
+      gWindow.backgroundColor = light ? $.NSColor.colorWithSRGBRedGreenBlueAlpha(1, 1, 1, 1) : $.NSColor.colorWithSRGBRedGreenBlueAlpha(0.047, 0.051, 0.059, 1);
     }
     return { ok: true };
+  },
+  // Dock icon chosen on the server: shown right away, and written onto the app so it also shows
+  // when the app is closed (Dock, Finder, Launchpad). reset = back to the icon it was installed with.
+  setIcon: function (a) {
+    var appPath = ObjC.unwrap($.NSBundle.mainBundle.bundlePath);
+    var ws = $.NSWorkspace.sharedWorkspace, img = null;
+    if (a.reset) {
+      try { ws.setIconForFileOptions($(), appPath, 0); } catch (e) { /* not writable */ }
+      img = $.NSImage.alloc.initWithContentsOfFile(appPath + '/Contents/Resources/applet.icns');
+    } else {
+      var data = $.NSData.alloc.initWithBase64EncodedStringOptions($(String(a.b64 || '')), 0);
+      if (!data || data.isNil()) return { ok: false, error: 'Bad icon data' };
+      img = $.NSImage.alloc.initWithData(data);
+      if (!img || img.isNil()) return { ok: false, error: 'Bad icon image' };
+    }
+    if (img && !img.isNil()) $.NSApp.applicationIconImage = img;
+    var saved = false;
+    if (!a.reset) { try { saved = !!ws.setIconForFileOptions(img, appPath, 0); } catch (e) { saved = false; } }
+    return { ok: true, saved: saved };
   },
   appInfo: function () { return { ok: true, server: SERVER, version: ObjC.unwrap(info.objectForKey('CFBundleShortVersionString')) }; },
 };
@@ -271,7 +290,7 @@ function buildWindow() {
   gWindow.title = APP_NAME;
   gWindow.titlebarAppearsTransparent = true;
   gWindow.appearance = $.NSAppearance.appearanceNamed('NSAppearanceNameDarkAqua');
-  gWindow.backgroundColor = $.NSColor.colorWithSRGBRedGreenBlueAlpha(0.043, 0.043, 0.047, 1);
+  gWindow.backgroundColor = $.NSColor.colorWithSRGBRedGreenBlueAlpha(0.047, 0.051, 0.059, 1);
   gWindow.minSize = $.NSMakeSize(960, 620);
   gWindow.center;
   gWindow.setFrameAutosaveName('E11ConsoleClientWindow');

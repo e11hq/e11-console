@@ -11,6 +11,7 @@ import { createFiles, mimeOf, httpError } from './files.js';
 import { createCfSync } from './cfsync.js';
 import { createWebPush, notifMessage } from './webpush.js';
 import { sampleData } from './sample.js';
+import { createAppIcon } from './appicon.js';
 
 const BODY_LIMIT = 12 * 1024 * 1024; // 2 MB upload pieces arrive as ~2.7 MB of base64
 
@@ -25,6 +26,10 @@ export function createServer(cfg) {
   const streams = new Set(); // open live-update connections
   const uploads = new Map(); // file path -> who is uploading it (pieces can only be added by them)
   const webPush = createWebPush({ store, fetchImpl: cfg.pushFetch || fetch, subject: cfg.pushSubject || 'mailto:admin@e11hq.com' });
+  const macDir = cfg.macDir || (webDir ? path.join(webDir, '..', 'mac') : null);
+  const appIcon = createAppIcon({ store, defaultFile: macDir && path.join(macDir, 'AppIcon.png') });
+  // The owner (ADMIN_EMAIL) controls things that change every Mac, like the Dock icon. No owner set: any Admin.
+  const isOwner = (u) => (cfg.adminEmail ? String(u.email || '').toLowerCase() === cfg.adminEmail.toLowerCase() : u.role === 'admin');
   const cfSync = cfg.cfSync || createCfSync({ accountId: cfg.cfAccountId, token: cfg.cfApiToken, groupId: cfg.cfGroupId, listUsers: () => store.list('users'), fetchImpl: cfg.cfFetch || fetch });
 
   /* ---------- helpers ---------- */
@@ -111,8 +116,12 @@ export function createServer(cfg) {
     if (p === '/api/health') return json(res, 200, { ok: true, version, rev: store.rev() });
 
     // Mac app installer (no sign-in: these files hold no data — Cloudflare lets /install through)
+    // New installs get the icon the owner chose
+    if (p === '/install/AppIcon.png' && appIcon.info().custom) {
+      res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-cache' });
+      return res.end(appIcon.png());
+    }
     if (p === '/install' || p === '/install/main.js' || p === '/install/AppIcon.png') {
-      const macDir = cfg.macDir || (webDir ? path.join(webDir, '..', 'mac') : null);
       const file = p === '/install' ? 'install.sh' : p.slice('/install/'.length);
       const full = macDir && path.join(macDir, file);
       if (!full || !fs.existsSync(full)) return json(res, 404, { ok: false, error: 'Installer not available' });
@@ -130,7 +139,23 @@ export function createServer(cfg) {
     const u = await who(req, res);
     if (!u) return;
 
-    if (p === '/api/me') return json(res, 200, { ok: true, user: access.shape(u, 'users', u), version, rev: store.rev() });
+    if (p === '/api/me') return json(res, 200, { ok: true, user: access.shape(u, 'users', u), owner: isOwner(u), appIcon: appIcon.info(), version, rev: store.rev() });
+
+    // Mac app Dock icon: everyone reads it; only the owner changes it (every open Mac app swaps it live)
+    if (p === '/api/app-icon' && req.method === 'GET') {
+      const buf = appIcon.png();
+      if (!buf) return json(res, 404, { ok: false, error: 'No icon' });
+      res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-cache', 'Content-Length': buf.length });
+      return res.end(buf);
+    }
+    if (p === '/api/app-icon/info') return json(res, 200, { ok: true, ...appIcon.info(), canEdit: isOwner(u) });
+    if ((p === '/api/app-icon' || p === '/api/app-icon/reset') && req.method === 'POST') {
+      if (!isOwner(u)) return json(res, 403, { ok: false, error: 'Only the owner can change the app icon' });
+      let info;
+      try { info = p.endsWith('/reset') ? appIcon.reset(u.id) : appIcon.set((await readBody(req)).png, u.id); } catch (e) { return json(res, e.status || 400, { ok: false, error: e.message }); }
+      for (const s of streams) send(s, 'appicon', info);
+      return json(res, 200, { ok: true, ...info });
+    }
 
     // App updates (the launcher runs inside the same container): Admins see status and can update or roll back
     if (p === '/api/updates') {
@@ -210,7 +235,7 @@ export function createServer(cfg) {
       const s = { res, userId: u.id, user: u, client: url.searchParams.get('client') || null };
       if (u.role === 'freelancer') s.lastAccess = JSON.stringify([u.projectIds || [], store.list('projects').map((p) => [p.id, p.clientId || null])]);
       streams.add(s);
-      send(s, 'hello', { version, rev: store.rev() });
+      send(s, 'hello', { version, rev: store.rev(), appIcon: appIcon.info() });
       const since = Number(url.searchParams.get('since'));
       if (Number.isFinite(since) && since > 0 && since < store.rev()) {
         const missed = store.since(since);
@@ -291,7 +316,7 @@ export function createServer(cfg) {
     if (html) {
       // app.js?v=1.2.0 — every version gets fresh files, older ones can be cached for a day
       const v = encodeURIComponent(version);
-      return res.end(fs.readFileSync(full, 'utf8').replace(/(src|href)="(app\.js|styles\.css|glass\.css|phone\.js|phone\.css)"/g, `$1="$2?v=${v}"`));
+      return res.end(fs.readFileSync(full, 'utf8').replace(/(src|href)="(app\.js|styles\.css|studio\.css|phone\.js|phone\.css)"/g, `$1="$2?v=${v}"`));
     }
     fs.createReadStream(full).pipe(res);
   }
