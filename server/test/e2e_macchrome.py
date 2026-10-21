@@ -1,11 +1,12 @@
 """Mac app 4+: page runs under the title bar. Sidebar / theme / back / forward buttons sit in the top row
 next to the window buttons; empty parts of that row drag the window; back / forward walk page history.
 Older Mac apps and browsers keep the normal layout."""
-import asyncio, os, tempfile, time, subprocess, urllib.request
+import asyncio, os, re, tempfile, time, subprocess, urllib.request
 from playwright.async_api import async_playwright
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 PORT = 18191; BASE = f'http://127.0.0.1:{PORT}'
 fails = []
+SHELL = int(re.search(r'var SHELL_VERSION = (\d+);', open(os.path.join(ROOT, 'mac/main.js')).read()).group(1))
 def check(c, m):
     print(('PASS ' if c else 'FAIL ') + m)
     if not c: fails.append(m)
@@ -35,7 +36,7 @@ async def main():
             await pg.goto('/'); await pg.wait_for_timeout(600); await pg.mouse.click(600, 400); await pg.wait_for_timeout(2500)
             return ctx, pg, errs
         shots = tempfile.gettempdir()
-        ctx, pg, errs = await open_app(bridge(4))
+        ctx, pg, errs = await open_app(bridge(SHELL))
         check(await pg.evaluate("document.documentElement.classList.contains('mac-chrome')"), 'Mac app 4 gets the full-height layout')
         bar = await pg.locator('#mac-bar').bounding_box()
         check(bar and bar['y'] == 0 and bar['x'] == 84 and bar['height'] == 48, f'controls sit in the top row next to the window buttons {bar}')
@@ -87,6 +88,11 @@ async def main():
         await pg.click('[data-nav="mytasks"]'); await pg.wait_for_timeout(200)
         await pg.evaluate("(() => { ui.detailMode = 'full'; openTask(db.tasks.find(x => !x.deletedAt).id); })()")
         await pg.wait_for_timeout(600)
+        await pg.evaluate("(() => { ui.detailMode = 'modal'; renderDetail(); })()"); await pg.wait_for_timeout(400)
+        box = await pg.locator('#detail .tm').bounding_box(); bar = await pg.locator('#mac-bar').bounding_box()
+        check(box['y'] >= bar['y'] + bar['height'] + 4, f'task pop-up opens below the title-bar row {box}')
+        await pg.screenshot(path=os.path.join(shots, 'macchrome_modal.png'))
+        await pg.evaluate("(() => { ui.detailMode = 'full'; renderDetail(); })()"); await pg.wait_for_timeout(400)
         check('full' in await pg.evaluate("document.getElementById('detail').className"), 'task opened full screen')
         top = await pg.locator('#detail .tm-top').bounding_box()
         check(top and top['y'] == 0, f'full-screen task top row is in the title bar {top}')

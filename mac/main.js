@@ -12,7 +12,7 @@ ObjC.import('WebKit');
 var APP_NAME = 'E11 Console';
 // Version of this Mac app's native part. Raise it when a change here needs everyone to reinstall:
 // the web app then shows a required-update banner in older Mac apps (their appInfo has no shell, i.e. 1).
-var SHELL_VERSION = 4;
+var SHELL_VERSION = 5;
 var fm = $.NSFileManager.defaultManager;
 var HOME = ObjC.unwrap($.NSHomeDirectory());
 var info = $.NSBundle.mainBundle.infoDictionary;
@@ -123,6 +123,7 @@ var commands = {
     if (gWindow) {
       gWindow.appearance = $.NSAppearance.appearanceNamed(light ? 'NSAppearanceNameAqua' : 'NSAppearanceNameDarkAqua');
       gWindow.backgroundColor = light ? $.NSColor.colorWithSRGBRedGreenBlueAlpha(1, 1, 1, 1) : $.NSColor.colorWithSRGBRedGreenBlueAlpha(0.047, 0.051, 0.059, 1);
+      placeLights(); // changing the appearance redraws the title bar
     }
     return { ok: true };
   },
@@ -306,13 +307,17 @@ function placeLights() {
     if (!gWindow || (gWindow.styleMask & (1 << 14))) return; // full screen: macOS handles the buttons
     var close = gWindow.standardWindowButton(0), mini = gWindow.standardWindowButton(1), zoom = gWindow.standardWindowButton(2);
     if (!close || close.isNil()) return;
-    var container = close.superview.superview;
+    // Same as Electron's trafficLightPosition: the title-bar container becomes as tall as our top row,
+    // and the buttons are centred in it, so they line up with the page's buttons and titles.
+    var container = close.superview.superview, bar = close.superview;
     var bh = close.frame.size.height;
-    var y = (BAR_H - bh) / 2;
     var cf = container.frame;
-    container.setFrame($.NSMakeRect(cf.origin.x, gWindow.frame.size.height - (bh + y), cf.size.width, bh + y));
+    container.setFrame($.NSMakeRect(cf.origin.x, gWindow.frame.size.height - BAR_H, cf.size.width, BAR_H));
+    bar.setFrame($.NSMakeRect(0, 0, cf.size.width, BAR_H));
     var gap = mini.frame.origin.x - close.frame.origin.x;
-    [close, mini, zoom].forEach(function (b, i) { b.setFrameOrigin($.NSMakePoint(LIGHTS_X + i * gap, b.frame.origin.y)); });
+    if (!(gap > 10 && gap < 40)) gap = 20;
+    var y = Math.round((BAR_H - bh) / 2);
+    [close, mini, zoom].forEach(function (b, i) { b.setFrameOrigin($.NSMakePoint(LIGHTS_X + i * gap, y)); });
   } catch (e) { /* keep macOS's own placement */ }
 }
 function pageJS(js) { try { $.objc_msgSend(gWebView, 'evaluateJavaScript:completionHandler:', $(js), $()); } catch (e) { /* page gone */ } }

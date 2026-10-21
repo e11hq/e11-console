@@ -2197,3 +2197,6 @@ html.mac-chrome.mac-fs #detail.full .tm-top { padding-left: 146px; }
 html.mac-chrome #detail.full .tm-tt { display: inline-flex; }
 html.mac-chrome #detail.full .crumb.tm-tt { font-weight: 600; color: var(--text); max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; }
 body.mac-upd #mac-bar { top: 56px; }
+/* task pop-up and side panel stay clear of the title-bar row */
+html.mac-chrome #detail:not(.full):not(.side) .tm { top: 60px; }
+html.mac-chrome #detail.side .tm { max-width: calc(100% - 230px); }
