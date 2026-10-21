@@ -2145,3 +2145,12 @@ button.pv-empty:hover { background: var(--hover); color: var(--text-2); }
 .ai-round { border-top: 1px solid var(--border); margin-top: 6px; }
 
 .tm-creator .cr-first { display: none; }
+
+/* Sidebar logo: E11 tile + CONSOLE wordmark (white in dark mode, black in light); collapsed shows the tile only */
+.brand-logo { display: flex; align-items: center; gap: 9px; min-width: 0; flex: 1; }
+#sidebar .brand img.brand-tile { width: 30px; height: 30px; flex: none; filter: none !important; }
+#sidebar .brand img.brand-word { height: 12px; width: auto; flex: none; filter: none !important; }
+#sidebar .brand img.on-light, :root[data-theme="light"] #sidebar .brand img.on-dark { display: none; }
+:root[data-theme="light"] #sidebar .brand img.on-light { display: block; }
+#app.sb-collapsed #sidebar .brand img.brand-word { display: none !important; }
+#app.sb-collapsed #sidebar .brand img.brand-tile { width: 36px; height: 36px; }
