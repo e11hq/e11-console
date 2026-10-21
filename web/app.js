@@ -6014,7 +6014,7 @@ function setTheme(mode) {
   const sb = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
   if (sb) sb.content = mode === 'light' ? 'default' : 'black';
   const tc = document.querySelector('meta[name="theme-color"]');
-  if (tc) tc.content = mode === 'light' ? '#eef0f5' : '#0b0b10';
+  if (tc) tc.content = mode === 'light' ? '#f7f7f8' : '#0c0d0f';
   const b = $('.theme-toggle');
   if (b) { b.innerHTML = icon(mode === 'light' ? 'moon' : 'sun'); b.title = mode === 'light' ? 'Switch to dark mode' : 'Switch to light mode'; }
   savePref('theme', mode);

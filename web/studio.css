@@ -2,8 +2,8 @@
    Source for web/studio.css: run `python3 scripts/build_theme.py scripts/studio.src.css web/studio.css`.
    Scope letters: "G" both themes, "D" dark only, "L" light only — always outside the phone layout. */
 
-/* ---------- Tokens ---------- */
-:root[data-theme="dark"]:not(.phone) {
+/* ---------- Tokens (desktop and phone) ---------- */
+:root[data-theme="dark"] {
   --app: #0c0d0f; --bg: #0c0d0f; --sidebar: #0f1013; --panel: #121317; --raised: #15161a; --hover: #15161a; --active: #1a1c21;
   --border: #1d1f24; --border-strong: #2c2f37; --line: #16171b; --edge: #262931;
   --text: #e9eaee; --text-2: #b4b7c0; --text-3: #7d808a;
@@ -13,7 +13,7 @@
   --shadow: 0 20px 60px rgba(0,0,0,.55), 0 2px 8px rgba(0,0,0,.35);
   --menu-shadow: 0 14px 40px rgba(0,0,0,.55);
 }
-:root[data-theme="light"]:not(.phone) {
+:root[data-theme="light"] {
   --app: #ffffff; --bg: #ffffff; --sidebar: #f7f7f8; --panel: #fafafb; --raised: #f3f3f5; --hover: #f1f1f3; --active: #ebebef;
   --border: #e6e6ea; --border-strong: #d4d4da; --line: #efeff2; --edge: #dcdce2;
   --text: #17181b; --text-2: #4e5159; --text-3: #6e717a;
@@ -23,7 +23,7 @@
   --shadow: 0 20px 60px rgba(20,20,40,.16), 0 2px 8px rgba(20,20,40,.08);
   --menu-shadow: 0 12px 32px rgba(20,20,40,.14);
 }
-:root:not(.phone) { --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace; --radius: 7px; }
+:root { --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace; --radius: 7px; }
 :root:not(.phone) body { background: var(--app); font-size: 13.5px; }
 :root[data-theme="dark"]:not(.phone) ::-webkit-scrollbar-thumb { background: #2a2c33; background-clip: padding-box; }
 :root[data-theme="light"]:not(.phone) ::-webkit-scrollbar-thumb { background: #d4d4da; background-clip: padding-box; }
@@ -209,3 +209,8 @@
 
 /* Tag colours are tuned for dark; deepen them on white so they stay readable */
 :root[data-theme="light"]:not(.phone) .tag { filter: brightness(.62) saturate(1.7); }
+
+/* Light: coloured numbers deep enough to read on white */
+:root[data-theme="light"]:not(.phone) .stat.green .n { color: #148a57; }
+:root[data-theme="light"]:not(.phone) .stat.red .n { color: #c62f35; }
+:root[data-theme="light"]:not(.phone) .stat.amber .n { color: #9a6700; }

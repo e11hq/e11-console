@@ -553,3 +553,118 @@ body.phone .fv-head [data-action="reveal-att"] { flex: 0 0 52px; }
 body.phone .tm-creator { white-space: nowrap; min-width: 0; }
 body.phone .tm-creator .cr-word, body.phone .tm-creator .cr-full { display: none; }
 body.phone .tm-creator .cr-first { display: inline; }
+
+/* =====================================================================
+   Studio on the phone (replaces the glass look): flat surfaces, hairline
+   borders, solid bars, no blur anywhere. Same layout and gestures as before.
+   ===================================================================== */
+body.phone {
+  --ph-bg: #0c0d0f; --ph-card: #121317; --ph-line: #1d1f24; --ph-raise: #15161a; --ph-edge: #262931; --ph-bar: #0f1013;
+  --ph-tabs-h: calc(58px + env(safe-area-inset-bottom));
+  --ph-tab-gap: 0px;
+}
+:root[data-theme="light"] body.phone {
+  --ph-bg: #f7f7f8; --ph-card: #ffffff; --ph-line: #e6e6ea; --ph-raise: #efeff2; --ph-edge: #dcdce2; --ph-bar: #ffffff;
+}
+/* no frosted glass anywhere */
+body.phone :is(#ph-tabs, .ph-fab, .ph-round, .ph-pill, .ph-bar .ph-back, .menu, .toast, #notif-root .notif-card,
+  .ph-rv-acts .ph-btn.amber, .ph-sticky, .ph-task-head, .ph-seg, .ph-chips button, .ph-search, .ph-sheet,
+  #detail .tm-composer, .dialog, #update-banner)::before { display: none !important; }
+body.phone :is(#ph-tabs, .ph-fab, .ph-round, .ph-pill, .ph-bar .ph-back, .menu, .toast, #notif-root .notif-card, .ph-sticky,
+  .ph-task-head, .ph-seg, .ph-chips button, .ph-search, .ph-sheet, #detail .tm-composer, .dialog, .ph-rv-acts) {
+  -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+}
+body.phone::before, body.phone::after { display: none !important; }
+
+/* Tab bar: a solid bar on the bottom edge, hairline on top */
+body.phone #ph-tabs, body.phone.ph-fab-on:not(.ph-docked) #ph-tabs {
+  left: 0; right: 0; bottom: var(--ph-shift, 0px); height: var(--ph-tabs-h); padding: 4px 6px env(safe-area-inset-bottom);
+  border: 0; border-top: 1px solid var(--ph-line); border-radius: 0; background: var(--ph-bar); box-shadow: none;
+}
+.ph-tab { border-radius: 0; gap: 3px; padding-top: 6px; justify-content: flex-start; color: var(--text-3); font-size: 10.5px; font-weight: 500; }
+.ph-tab .ic { width: 22px; height: 22px; }
+.ph-tab.on, :root[data-theme="light"] .ph-tab.on { background: none; box-shadow: none; color: var(--text); }
+.ph-tab.on::before { content: ''; position: absolute; top: -5px; left: 30%; right: 30%; height: 2px; border-radius: 0 0 2px 2px; background: var(--accent); }
+.ph-badge { top: 2px; border-radius: 6px; font-family: var(--mono); font-weight: 500; }
+
+/* The + : a solid square-ish button above the tab bar */
+body.phone .ph-fab, :root[data-theme="light"] body.phone .ph-fab {
+  right: 16px; bottom: calc(var(--ph-tabs-h) + 14px + var(--ph-shift, 0px)); width: 54px; height: 54px; border-radius: 16px;
+  background: var(--btn); border: 1px solid var(--accent-strong); box-shadow: 0 8px 22px rgba(0, 0, 0, .35);
+}
+:root[data-theme="light"] body.phone .ph-fab { box-shadow: 0 8px 20px rgba(91, 75, 214, .3); }
+
+/* Headers and round buttons */
+body.phone :is(.ph-round, .ph-pill, .ph-bar .ph-back), :root[data-theme="light"] body.phone :is(.ph-round, .ph-pill, .ph-bar .ph-back) {
+  background: var(--ph-raise); border: 1px solid var(--ph-line); box-shadow: none; color: var(--text);
+}
+.ph-round { width: 40px; height: 40px; border-radius: 10px; }
+.ph-round.sm { width: 36px; height: 36px; border-radius: 9px; }
+.ph-pill { height: 34px; border-radius: 9px; }
+body.phone .ph-bar .ph-back { width: 38px; height: 38px; border-radius: 10px; }
+.ph-head h1 { font-size: 26px; font-weight: 650; letter-spacing: -.01em; }
+body.phone :is(.ph-sticky, .ph-task-head) { background: var(--ph-bg); border-bottom: 1px solid var(--ph-line); }
+body.phone #ph-top { background: var(--ph-bg); }
+body.phone #ph-top > .ph-bar { border-bottom: 1px solid var(--ph-line); }
+
+/* Segments and chips */
+body.phone .ph-seg, :root[data-theme="light"] body.phone .ph-seg { border-radius: 9px; padding: 3px; background: var(--ph-raise); border: 1px solid var(--ph-line); box-shadow: none; }
+.ph-seg button { border-radius: 7px; font-weight: 500; }
+.ph-seg button.on, :root[data-theme="light"] .ph-seg button.on { background: var(--active); color: var(--text); box-shadow: inset 0 0 0 1px var(--ph-edge); }
+:root[data-theme="light"] .ph-seg button.on { background: #fff; }
+.ph-seg i { font-family: var(--mono); font-style: normal; }
+body.phone .ph-chips button, :root[data-theme="light"] body.phone .ph-chips button { border-radius: 8px; background: var(--ph-raise); border: 1px solid var(--ph-line); box-shadow: none; color: var(--text-2); }
+body.phone .ph-chips button.on, :root[data-theme="light"] body.phone .ph-chips button.on { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent-ink); }
+
+/* Cards, lists, stats */
+.pc, :root[data-theme="light"] .pc { border-radius: 10px; background: var(--ph-card); border: 1px solid var(--ph-line); box-shadow: none; }
+.pc.late, :root[data-theme="light"] .pc.late { border-color: rgba(229, 72, 77, .45); }
+.ph-stats > div, :root[data-theme="light"] .ph-stats > div { border-radius: 10px; background: var(--ph-card); border: 1px solid var(--ph-line); box-shadow: none; }
+.ph-stats b, .ph-stats strong { font-family: var(--mono); font-weight: 500; }
+.ph-rows, :root[data-theme="light"] .ph-rows { border-radius: 10px; background: var(--ph-card); border: 1px solid var(--ph-line); box-shadow: none; }
+.ph-ibl { margin: 0 12px; border-radius: 10px; background: var(--ph-card); border: 1px solid var(--ph-line); }
+body.phone .ph-search, :root[data-theme="light"] body.phone .ph-search { border-radius: 10px; background: var(--ph-raise); border: 1px solid var(--ph-line); box-shadow: none; }
+.ph-client { border-radius: 10px; }
+.ph-media { border-radius: 12px; }
+.ph-rv-desc { border-radius: 10px; border: 1px solid var(--ph-line); }
+body.phone #detail .props { border-radius: 10px; background: var(--ph-card); border: 1px solid var(--ph-line); }
+body.phone .tr-card { border-radius: 10px; }
+
+/* Sheets, menus, pop-ups and messages: solid panels */
+.ph-sheet, :root[data-theme="light"] .ph-sheet { border-radius: 16px; background: var(--ph-card); border: 1px solid var(--ph-edge); box-shadow: 0 -10px 40px rgba(0, 0, 0, .4); }
+:root[data-theme="light"] .ph-sheet { box-shadow: 0 -10px 40px rgba(20, 20, 40, .14); }
+.ph-scrim.in { background: rgba(0, 0, 0, .45); }
+:root[data-theme="light"] .ph-scrim.in { background: rgba(20, 20, 30, .25); }
+.ph-scrim.docked .ph-sheet { border-radius: 12px; box-shadow: 0 10px 28px rgba(0, 0, 0, .35); }
+.ph-field input, .ph-sheet textarea, :root[data-theme="light"] .ph-field input, :root[data-theme="light"] .ph-sheet textarea { border-radius: 9px; background: var(--ph-raise); border: 1px solid var(--ph-line); }
+.ph-form, :root[data-theme="light"] .ph-form { border-radius: 10px; background: var(--ph-raise); border: 1px solid var(--ph-line); }
+.ph-form > label { border-top-color: var(--ph-line); }
+.ph-btn { height: 50px; border-radius: 10px; }
+.ph-btn.primary { background: var(--btn); border: 1px solid var(--accent-strong); box-shadow: none; }
+.ph-btn.green { background: #22a56a; border: 1px solid #2fbf7d; box-shadow: none; }
+body.phone .ph-rv-acts .ph-btn.amber { background: var(--ph-raise); border: 1px solid var(--ph-edge); box-shadow: none; }
+body.phone .menu, :root[data-theme="light"] body.phone .menu { border-radius: 14px; padding: 6px; background: var(--ph-card); border: 1px solid var(--ph-edge); box-shadow: 0 -8px 40px rgba(0, 0, 0, .45); }
+:root[data-theme="light"] body.phone .menu { box-shadow: 0 -8px 40px rgba(20, 20, 40, .16); }
+body.phone .menu .mi { border-radius: 9px; }
+body.phone .toast, body.phone #notif-root .notif-card, :root[data-theme="light"] body.phone #notif-root .notif-card { border-radius: 12px; background: var(--ph-card); border: 1px solid var(--ph-edge); box-shadow: 0 10px 30px rgba(0, 0, 0, .35); }
+body.phone .dialog, :root[data-theme="light"] body.phone .dialog { border-radius: 14px; background: var(--ph-card); border: 1px solid var(--ph-edge); box-shadow: 0 20px 60px rgba(0, 0, 0, .5); }
+body.phone #update-banner { border-radius: 12px; }
+
+/* Task page */
+body.phone #detail .tm { background: var(--ph-bg); }
+body.phone #detail .tm-composer { background: var(--ph-bar); border-top: 1px solid var(--ph-line); box-shadow: none; border-radius: 0; }
+body.phone #detail .tm-composer .composer { border-radius: 12px; background: var(--ph-raise); border-color: var(--ph-edge); }
+body.phone #detail .tm-composer .composer > .cb-replying { border-radius: 11px 11px 0 0; }
+body.phone #detail .tm-composer .btn.primary { border-radius: 9px; }
+body.phone .cm-tools .icon-btn { border-radius: 9px; }
+body.phone .ph-seg.in-task { border-radius: 10px; }
+/* Light mode: badges and tags readable on white */
+:root[data-theme="light"] .ph-tag { color: var(--accent-ink); background: var(--accent-soft); }
+:root[data-theme="light"] .ph-tag.urgent { color: #c62f35; background: rgba(229, 72, 77, .1); }
+:root[data-theme="light"] .ph-tag.amber { color: #8a5a00; background: rgba(249, 190, 51, .2); }
+:root[data-theme="light"] body.phone .tag { filter: brightness(.62) saturate(1.7); }
+.ph-tag { border-radius: 5px; font-family: var(--mono); font-weight: 500; }
+.ph-tag.urgent, .ph-tag.amber { font-family: inherit; font-weight: 700; }
+:root[data-theme="light"] .ph-stats b.g { color: #148a57; }
+:root[data-theme="light"] .ph-stats b.r { color: #c62f35; }
+:root[data-theme="light"] .ph-stats b.a { color: #9a6700; }
