@@ -49,8 +49,11 @@ async def main():
         check(pl['RunCommandAsShell'] is False and pl['shellExitAction'] == 1, 'runs inside a shell and the window closes when it finishes cleanly')
         syn = subprocess.run(['bash', '-n', '-c', cmd], capture_output=True, text=True)
         check(syn.returncode == 0, f'the command is valid shell {syn.stderr}')
-        inner = re.search(r"/bin/sh -c '(.*?)'", cmd).group(1)
-        check(subprocess.run(['sh', '-n', '-c', inner]).returncode == 0 and 'tell application "Terminal" to if (count of windows) is 0 then quit' in subprocess.run(['sh', '-c', inner.replace('sleep 1; osascript -e', 'printf %s')], capture_output=True, text=True).stdout, 'Terminal quits afterwards only if it has no other windows')
+        fake = tempfile.mkdtemp(); open(os.path.join(fake, 'osascript'), 'w').write('#!/bin/sh\nfor a in "$@"; do printf "[%s]" "$a"; done\n'); os.chmod(os.path.join(fake, 'osascript'), 0o755)
+        inner = re.search(r'(/bin/sh -c ".*?") >/dev/null', cmd).group(1).replace('sleep 2; ', '')
+        ran = subprocess.run(['bash', '-c', inner], capture_output=True, text=True, env={**os.environ, 'PATH': fake + ':' + os.environ['PATH']}).stdout
+        check('[close (every window whose name contains "E11 Console update")]' in ran and '[if (count of windows) is 0 then quit]' in ran, f'afterwards it closes the update window by its title, then quits Terminal if nothing else is open: {ran}')
+        check("\\033]0;E11 Console update" in cmd, 'the update window is titled so it can be found')
         check('Terminal is updating' in await pg.locator('#mac-update').inner_text(), 'banner says the update is under way')
         check(not errs, f'no page errors {errs}')
         await ctx.close()
