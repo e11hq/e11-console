@@ -294,8 +294,9 @@ function maybeShowWhatsNew() {
 }
 // Admin page: version, available update, update now, roll back
 function viewUpdates() {
-  setTimeout(loadUpdates, 0);
-  return `<div class="upd"><div class="upd-card" id="upd-body"><div class="ph">Checking…</div></div>
+  // Ask for a fresh check every time the page opens (the server itself only checks once an hour)
+  setTimeout(() => loadUpdates('check'), 0);
+  return `<div class="upd"><div class="upd-card" id="upd-body"><div class="ph">Checking for updates…</div></div>
     <div class="upd-card imp-card">
       <h3>${icon('upload')}Move data from the Mac app</h3>
       <p class="upd-note">Choose <b>e11-data.json</b> from the “E11 Console Data” folder on the Mac. Tasks, projects, comments, people, notifications and client assets are added to the server. Copy the folders <b>attachments</b>, <b>Clients</b> and <b>.thumbs</b> into the NAS folder <b>E11Console/live/files</b> as well, so the files open. A copy of the database is made first.</p>
