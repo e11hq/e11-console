@@ -548,3 +548,8 @@ body.phone .fv-head .fname small { display: block; white-space: nowrap; font-siz
 body.phone .fv-head [data-action="close-preview"] { order: 2; flex: none; width: 40px; height: 40px; border-radius: 20px; background: rgba(255,255,255,.08); }
 body.phone .fv-head .btn, body.phone .fv-head [data-action="reveal-att"] { order: 3; flex: 1 1 30%; height: 40px; justify-content: center; border-radius: 20px; background: rgba(255,255,255,.07); white-space: nowrap; }
 body.phone .fv-head [data-action="reveal-att"] { flex: 0 0 52px; }
+
+/* "Created by" on phone: first name and short date, no word "Created", one line */
+body.phone .tm-creator { white-space: nowrap; min-width: 0; }
+body.phone .tm-creator .cr-word, body.phone .tm-creator .cr-full { display: none; }
+body.phone .tm-creator .cr-first { display: inline; }

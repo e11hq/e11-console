@@ -2137,3 +2137,5 @@ button.pv-empty:hover { background: var(--hover); color: var(--text-2); }
 .ai-other { width: 44px; height: 44px; border-radius: 11px; background: rgba(127,127,140,.35); }
 .ai-warn { color: var(--amber) !important; font-size: 12.5px; }
 .ai-round { border-top: 1px solid var(--border); margin-top: 6px; }
+
+.tm-creator .cr-first { display: none; }

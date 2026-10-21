@@ -2376,9 +2376,10 @@ function creatorChip(t) {
   const u = t.createdBy && userById(t.createdBy);
   if (!u) return '';
   const mine = u.id === currentUserId;
-  return `<span class="tm-creator">Created by
-    <button class="cr-chip" ${mine ? '' : 'data-action="mention-user" title="Mention them in a comment"'} data-id="${esc(u.id)}" data-user-card="${esc(u.id)}" ${mine ? 'disabled' : ''}>${avatarHTML(u.id, 20)}<b>${esc(mine ? 'You' : fullName(u))}</b>${mine ? '' : `<i class="cr-at">@</i>`}</button>
-    <span class="cr-when">${esc(timeAgo(t.createdAt))}</span></span>`;
+  // Phone: "by Carine · Oct 13" so it fits beside the Task chip
+  return `<span class="tm-creator"><span class="cr-word">Created </span>by
+    <button class="cr-chip" ${mine ? '' : 'data-action="mention-user" title="Mention them in a comment"'} data-id="${esc(u.id)}" data-user-card="${esc(u.id)}" ${mine ? 'disabled' : ''}>${avatarHTML(u.id, 20)}<b>${mine ? 'You' : `<span class="cr-full">${esc(fullName(u))}</span><span class="cr-first">${esc(firstName(u.id))}</span>`}</b>${mine ? '' : `<i class="cr-at">@</i>`}</button>
+    <span class="cr-when"><span class="cr-full">${esc(timeAgo(t.createdAt))}</span><span class="cr-first">${esc(shortWhen(t.createdAt))}</span></span></span>`;
 }
 function mentionInComposer(uidToTag) {
   const u = userById(uidToTag);
