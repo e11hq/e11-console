@@ -955,48 +955,54 @@ button[disabled], .pn.taken { cursor: not-allowed; }
 .chg.long .chg-new { font-weight: 500; }
 .act-line > span:nth-child(2) { line-height: 1.5; }
 
-/* ---------- Startup screen ---------- */
+/* ---------- Startup screen: a checklist that ticks off what the app is loading ---------- */
 #splash {
-  position: fixed; inset: 0; z-index: 10000; background: #060608; color: #fff;
+  --sp-bg: #0c0d0f; --sp-card: #0f1013; --sp-line: #1d1f24; --sp-row: #16171b; --sp-text: #e9eaee; --sp-dim: #8b8e98; --sp-hint: #7d808a;
+  --sp-track: #1d1f24; --sp-accent: #7c6cff; --sp-now: #16152a; --sp-now-ink: #c9c0ff; --sp-spin: #2c2f37;
+  position: fixed; inset: 0; z-index: 10000; background: var(--sp-bg); color: var(--sp-text);
   display: flex; align-items: center; justify-content: center; overflow: hidden; cursor: pointer;
-  transition: opacity .6s ease, transform .6s ease, filter .6s ease;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Helvetica Neue", Arial, sans-serif;
+  transition: opacity .45s ease, transform .45s ease;
 }
-#splash.out { opacity: 0; transform: scale(1.06); filter: blur(6px); pointer-events: none; }
-#splash-fx { position: absolute; inset: 0; width: 100%; height: 100%; }
+#splash.light {
+  --sp-bg: #ffffff; --sp-card: #f7f7f8; --sp-line: #e6e6ea; --sp-row: #efeff2; --sp-text: #17181b; --sp-dim: #6e717a; --sp-hint: #6e717a;
+  --sp-track: #e6e6ea; --sp-accent: #5b4bd6; --sp-now: #f0eeff; --sp-now-ink: #4c3cc7; --sp-spin: #d4d4da;
+}
+#splash.out { opacity: 0; transform: scale(1.02); pointer-events: none; }
+.sp-center { width: 100%; max-width: 440px; padding: 0 20px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; pointer-events: none; }
+.sp-logo { height: 52px; width: auto; display: block; -webkit-user-drag: none; opacity: 0; transform: translateY(6px); animation: spUp .5s ease .05s forwards; }
+#splash.light .sp-logo { filter: invert(1); }
+.sp-greet { margin: 18px 0 0; font-size: 26px; font-weight: 600; letter-spacing: -.015em; text-align: center; opacity: 0; animation: spUp .5s ease .15s forwards; }
+.sp-date { margin: 6px 0 0; font-size: 13.5px; color: var(--sp-dim); opacity: 0; animation: spUp .5s ease .22s forwards; }
+.sp-card { width: 100%; margin-top: 30px; border: 1px solid var(--sp-line); border-radius: 10px; background: var(--sp-card); overflow: hidden; opacity: 0; animation: spUp .5s ease .3s forwards; }
+.sp-head { display: flex; align-items: center; height: 38px; padding: 0 16px; border-bottom: 1px solid var(--sp-line); font-size: 12px; color: var(--sp-dim); }
+.sp-head span:first-child { flex: 1; }
+.sp-n, .sp-val { font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace; }
+.sp-row { display: flex; align-items: center; gap: 12px; height: 46px; padding: 0 16px; border-top: 1px solid var(--sp-row); font-size: 14px; transition: background .25s, box-shadow .25s; }
+.sp-row:first-child { border-top: 0; }
+.sp-val { font-size: 12px; color: var(--sp-dim); white-space: nowrap; }
+.sp-lbl { flex: 1; transition: color .25s; }
+.sp-box { position: relative; width: 18px; height: 18px; flex: none; border-radius: 9px; border: 2px solid var(--sp-spin); border-top-color: var(--sp-accent); box-sizing: border-box; animation: spSpin .8s linear infinite; }
+.sp-box svg { position: absolute; inset: 2px; width: 10px; height: 10px; opacity: 0; }
+.sp-row.done .sp-box { animation: spTick .35s cubic-bezier(.2,.9,.3,1.3); border: 0; background: #3ddc97; }
+.sp-row.done .sp-box svg { opacity: 1; inset: 4px; }
+.sp-row.done .sp-lbl { color: var(--sp-dim); text-decoration: line-through; text-decoration-color: var(--sp-spin); }
+.sp-row.now { background: var(--sp-now); box-shadow: inset 2px 0 0 var(--sp-accent); }
+.sp-row.now .sp-lbl { color: var(--sp-text); text-decoration: none; }
+.sp-row.now .sp-val { color: var(--sp-now-ink); }
+.sp-row.now .sp-box { box-shadow: 0 0 0 4px rgba(61, 220, 151, .18); }
+.sp-bar { width: 100%; height: 3px; margin-top: 22px; border-radius: 2px; background: var(--sp-track); overflow: hidden; opacity: 0; animation: spUp .5s ease .35s forwards; }
+.sp-bar i { display: block; height: 100%; width: 0; background: var(--sp-accent); transition: width .35s ease; }
+.sp-hint { position: absolute; left: 0; right: 0; bottom: calc(22px + env(safe-area-inset-bottom)); text-align: center; font-size: 11.5px; color: var(--sp-hint); pointer-events: none; opacity: 0; animation: spUp .5s ease .8s forwards; }
+@keyframes spSpin { to { transform: rotate(360deg); } }
+@keyframes spTick { from { transform: scale(.5); } to { transform: scale(1); } }
+@keyframes spUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+/* sign-in page background (uses the soft lights) */
 .sp-orb { position: absolute; border-radius: 50%; filter: blur(70px); opacity: 0; animation: spOrbIn 1.6s ease forwards, spDrift 9s ease-in-out infinite alternate; pointer-events: none; }
 .sp-orb1 { width: 520px; height: 520px; background: radial-gradient(circle, rgba(123,104,238,.55), transparent 65%); left: 50%; top: 50%; margin: -360px 0 0 -460px; }
 .sp-orb2 { width: 440px; height: 440px; background: radial-gradient(circle, rgba(79,209,197,.32), transparent 65%); left: 50%; top: 50%; margin: -60px 0 0 -10px; animation-delay: .2s, 0s; animation-direction: normal, alternate-reverse; }
 @keyframes spOrbIn { to { opacity: 1; } }
 @keyframes spDrift { from { transform: translate(-30px, -20px) scale(1); } to { transform: translate(40px, 30px) scale(1.12); } }
-
-.sp-center { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; pointer-events: none; padding: 0 24px; }
-.sp-ring {
-  position: absolute; top: 50px; left: 50%; width: 300px; height: 300px; margin: -150px 0 0 -150px; border-radius: 50%;
-  border: 1px solid rgba(255,255,255,.14); opacity: 0; transform: scale(.4);
-  animation: spRing 1.4s cubic-bezier(.2,.8,.2,1) .15s forwards;
-}
-@keyframes spRing { 0% { opacity: 0; transform: scale(.4); } 40% { opacity: 1; } 100% { opacity: 0; transform: scale(1.5); } }
-.sp-logo { position: relative; width: 170px; height: 112px; transition: transform .25s ease-out; }
-.sp-logo img { width: 100%; height: 100%; display: block; opacity: 0; transform: scale(.82); filter: blur(14px);
-  animation: spLogo 1.1s cubic-bezier(.2,.9,.25,1.15) .2s forwards; -webkit-user-drag: none; }
-@keyframes spLogo { to { opacity: 1; transform: scale(1); filter: blur(0); } }
-.sp-shine {
-  position: absolute; inset: 0;
-  -webkit-mask: url(logo-wordmark.png) center / 100% 100% no-repeat; mask: url(logo-wordmark.png) center / 100% 100% no-repeat;
-  background: linear-gradient(105deg, transparent 35%, rgba(170,155,255,.95) 48%, #fff 50%, rgba(79,209,197,.9) 53%, transparent 65%);
-  background-size: 300% 100%; background-position: 120% 0; animation: spShine 1.3s ease-in-out 1s forwards;
-}
-@keyframes spShine { to { background-position: -40% 0; } }
-.sp-greet { margin-top: 34px; font-size: 12px; letter-spacing: .32em; text-transform: uppercase; color: rgba(255,255,255,.5); opacity: 0; animation: spUp .7s ease 1.05s forwards; }
-.sp-phrase { text-shadow: 0 2px 18px #060608, 0 0 4px #060608; margin-top: 12px; font-size: 22px; font-weight: 500; line-height: 1.35; max-width: 560px; letter-spacing: -.01em; min-height: 30px; }
-.sp-phrase .w { display: inline-block; opacity: 0; transform: translateY(10px); filter: blur(6px); animation: spWord .55s cubic-bezier(.2,.8,.2,1) forwards; }
-.sp-phrase .w.hl { text-shadow: none; background: linear-gradient(90deg, #a99cff, #4fd1c5); -webkit-background-clip: text; background-clip: text; color: transparent; }
-@keyframes spWord { to { opacity: 1; transform: none; filter: none; } }
-@keyframes spUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-.sp-bottom { position: absolute; left: 0; right: 0; bottom: 34px; display: flex; flex-direction: column; align-items: center; gap: 12px; pointer-events: none; }
-.sp-bar { width: 140px; height: 2px; border-radius: 2px; background: rgba(255,255,255,.1); overflow: hidden; }
-.sp-bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #7b68ee, #4fd1c5); }
-.sp-hint { font-size: 11px; color: rgba(255,255,255,.32); opacity: 0; animation: spUp .6s ease 1.4s forwards; }
 #app.enter { animation: appEnter .7s cubic-bezier(.2,.8,.2,1); }
 @keyframes appEnter { from { opacity: 0; transform: scale(.985); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) {

@@ -18,21 +18,17 @@
 </head>
 <body>
 <div id="splash" aria-hidden="true">
-  <canvas id="splash-fx"></canvas>
-  <div class="sp-orb sp-orb1"></div><div class="sp-orb sp-orb2"></div>
   <div class="sp-center">
-    <div class="sp-ring"></div>
-    <div class="sp-logo">
-      <img src="logo-wordmark.png" alt="">
-      <div class="sp-shine"></div>
-    </div>
-    <div class="sp-greet" id="sp-greet"></div>
-    <div class="sp-phrase" id="sp-phrase"></div>
-  </div>
-  <div class="sp-bottom">
+    <img class="sp-logo" src="logo-wordmark.png" alt="">
+    <h1 class="sp-greet" id="sp-greet">Good morning</h1>
+    <p class="sp-date" id="sp-date"></p>
+    <section class="sp-card">
+      <div class="sp-head"><span>Getting your day ready</span><span class="sp-n" id="sp-n">0/4</span></div>
+      <div id="sp-rows"></div>
+    </section>
     <div class="sp-bar"><i></i></div>
-    <div class="sp-hint">Click or press any key to skip</div>
   </div>
+  <div class="sp-hint" id="sp-hint">Click or press any key to skip</div>
 </div>
 <div id="app">
   <aside id="sidebar">

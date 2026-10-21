@@ -5809,131 +5809,81 @@ document.addEventListener('keydown', tipHide, true);
 
 /* ================= Boot ================= */
 // ---------- Startup screen ----------
-const SPLASH_MS = 3200;
-const PHRASES = [
-  'Small steps every day add up to *big* results.',
-  'Focus on progress, not *perfection*.',
-  'Today is a great day to get things *done*.',
-  'Great work starts with a *clear* plan.',
-  'Do the hard thing first. The rest gets *easier*.',
-  'One task at a time. One win at a time.',
-  'Make today count — your future self will *thank* you.',
-  'Clarity creates *momentum*.',
-  'Big goals, small next steps.',
-  'Ideas are easy. *Execution* is everything.',
-  'Done is better than *perfect*.',
-  'Plan the work, then work the *plan*.',
-  'Every finished task is a promise *kept*.',
-  'Consistency beats intensity.',
-  'Your best work is *ahead* of you.',
-  'Start where you are. Use what you have. Do what you *can*.',
-  'Good teams make hard things look *simple*.',
-  'Turn “someday” into *today*.',
-  'Energy flows where *focus* goes.',
-  'Ship it, learn, make it *better*.',
-  'Discipline is choosing what you want *most*.',
-  'A clear list is a clear *mind*.',
-  'Build something you are *proud* of.',
-  'Momentum is built one check mark at a time.',
-  'Be the reason the project moves *forward*.',
-  'Creativity loves *deadlines*.',
-  'Win the morning, win the *day*.',
-  'Less busy. More *productive*.',
-  'The secret of getting ahead is getting *started*.',
-  'Make it simple. Make it great. Make it *happen*.',
-];
+// Startup screen: shows a checklist of what the app is loading, ticked off with real numbers.
+// The look (light/dark) and the first name come from this device's last session, so it's right from the first frame.
+const SPLASH_MIN = 1800;
 const Splash = (() => {
   const el = document.getElementById('splash');
-  let start = performance.now(), gone = false, raf = 0, skipResolve = null;
+  let start = performance.now(), gone = false, skipResolve = null;
   const skipped = new Promise((r) => { skipResolve = r; });
-  function pickPhrase() {
-    let last = -1;
-    try { last = +(localStorage.getItem('e11-last-phrase') ?? -1); } catch (e) { /* ignore */ }
-    let i = Math.floor(Math.random() * PHRASES.length);
-    if (i === last) i = (i + 1) % PHRASES.length;
-    try { localStorage.setItem('e11-last-phrase', String(i)); } catch (e) { /* ignore */ }
-    return PHRASES[i];
-  }
-  function greeting() {
+  const TICK = '<svg viewBox="0 0 16 16" fill="none" stroke="#0c0d0f" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3.5 8.5 3 3 6-7"/></svg>';
+  const remembered = () => { try { return JSON.parse(localStorage.getItem('e11-splash') || '{}') || {}; } catch (e) { return {}; } };
+  function greeting(name) {
     const h = new Date().getHours();
     const part = h < 5 ? 'Working late' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
-    return `${part} · ${new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: window.innerWidth <= 760 ? 'short' : 'long' })}`;
+    return name ? `${part}, ${name}` : part;
   }
-  function particles() {
-    const cv = document.getElementById('splash-fx');
-    const ctx = cv.getContext('2d');
-    const dpr = window.devicePixelRatio || 1;
-    let W = 0, H = 0, mouse = { x: -9999, y: -9999 };
-    const resize = () => { W = cv.clientWidth; H = cv.clientHeight; cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); };
-    resize();
-    window.addEventListener('resize', resize);
-    el.addEventListener('mousemove', (e) => {
-      mouse = { x: e.clientX, y: e.clientY };
-      const lg = el.querySelector('.sp-logo');
-      if (lg) lg.style.transform = `translate(${(e.clientX / W - .5) * 14}px, ${(e.clientY / H - .5) * 10}px)`;
-    });
-    el.addEventListener('mouseleave', () => { mouse = { x: -9999, y: -9999 }; });
-    const N = Math.min(110, Math.round((W * H) / 11000));
-    const cx = W / 2, cy = H / 2 - 30;
-    // particles burst out from the logo, then drift
-    const ps = Array.from({ length: N }, () => {
-      const a = Math.random() * Math.PI * 2, sp = 3 + Math.random() * 15;
-      return { x: cx, y: cy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, r: Math.random() * 1.6 + .5, hue: Math.random() < .7 ? '170,155,255' : '79,209,197' };
-    });
-    const tick = () => {
-      ctx.clearRect(0, 0, W, H);
-      for (const p of ps) {
-        const dx = p.x - mouse.x, dy = p.y - mouse.y, d2 = dx * dx + dy * dy;
-        if (d2 < 140 * 140) { const d = Math.sqrt(d2) || 1, f = (140 - d) / 140 * .9; p.vx += dx / d * f; p.vy += dy / d * f; }
-        p.vx *= .96; p.vy *= .96;
-        const v = Math.hypot(p.vx, p.vy); if (v < .25) { p.vx += (Math.random() - .5) * .2; p.vy += (Math.random() - .5) * .2; }
-        p.vx += (Math.random() - .5) * .06; p.vy += (Math.random() - .5) * .06;
-        p.x += p.vx; p.y += p.vy;
-        if (p.x < 0) p.x += W; if (p.x > W) p.x -= W; if (p.y < 0) p.y += H; if (p.y > H) p.y -= H;
-      }
-      for (let i = 0; i < ps.length; i++) {
-        const a = ps[i];
-        for (let j = i + 1; j < ps.length; j++) {
-          const b = ps[j], dx = a.x - b.x, dy = a.y - b.y, d2 = dx * dx + dy * dy;
-          if (d2 < 110 * 110) { ctx.strokeStyle = `rgba(150,140,255,${(1 - Math.sqrt(d2) / 110) * .22})`; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
-        }
-        const mx = a.x - mouse.x, my = a.y - mouse.y, md = Math.sqrt(mx * mx + my * my);
-        if (md < 180) { ctx.strokeStyle = `rgba(79,209,197,${(1 - md / 180) * .45})`; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(mouse.x, mouse.y); ctx.stroke(); }
-        ctx.fillStyle = `rgba(${a.hue},.85)`; ctx.beginPath(); ctx.arc(a.x, a.y, a.r, 0, Math.PI * 2); ctx.fill();
-      }
-      raf = requestAnimationFrame(tick);
-    };
-    tick();
-  }
+  let rows = [];
   function init() {
     if (!el) return;
-    document.getElementById('sp-greet').textContent = greeting();
-    const words = pickPhrase().split(' ');
-    document.getElementById('sp-phrase').innerHTML = words.map((w, i) => {
-      const hl = /^\*.*\*[.,!]?$/.test(w) || /^\*/.test(w);
-      const txt = esc(w.replace(/\*/g, ''));
-      return `<span class="w${hl ? ' hl' : ''}" style="animation-delay:${1.25 + i * .07}s">${txt}</span>`;
-    }).join(' ');
-    const bar = el.querySelector('.sp-bar i');
-    const step = () => { if (gone) return; bar.style.width = Math.min(100, (performance.now() - start) / SPLASH_MS * 100) + '%'; requestAnimationFrame(step); };
-    step();
-    try { particles(); } catch (e) { /* canvas unavailable */ }
+    const mem = remembered();
+    el.classList.toggle('light', mem.theme === 'light');
+    document.getElementById('sp-greet').textContent = greeting(mem.name);
+    document.getElementById('sp-date').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: window.innerWidth <= 760 ? 'short' : 'long', day: 'numeric' });
+    document.getElementById('sp-hint').textContent = window.innerWidth <= 760 ? 'Tap to skip' : 'Click or press any key to skip';
+    const labels = ['Projects', 'Your tasks', 'Inbox', mem.cd ? 'Review requests' : 'Client Assets'];
+    document.getElementById('sp-rows').innerHTML = labels.map((l) => `<div class="sp-row"><span class="sp-box">${TICK}</span><span class="sp-lbl">${l}</span><span class="sp-val">…</span></div>`).join('');
+    rows = $$('.sp-row', el);
     const skip = () => skipResolve();
     el.addEventListener('click', skip);
     window.addEventListener('keydown', function k() { if (!gone) skip(); window.removeEventListener('keydown', k); });
   }
-  // Wait for the minimum display time (or a skip), then fade into the app
+  // Remember the look and name for the next startup on this device
+  function remember(extra) { try { localStorage.setItem('e11-splash', JSON.stringify({ ...remembered(), ...extra })); } catch (e) { /* storage off */ } }
+  function values() {
+    if (!db || !currentUserId) return null;
+    const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+    const open = db.tasks.filter((t) => onMyList(t) && myOpen(t)).length;
+    const today = db.tasks.filter((t) => onMyList(t) && myOpen(t) && t.due && dayDiff(t.due) === 0).length;
+    const unread = myNotifs().filter((n) => !n.read).length;
+    const cd = isCD();
+    const fourth = cd ? (activeReviews().length ? `${activeReviews().length} waiting` : 'none waiting') : plural((db.clients || []).length, 'client', 'clients');
+    return {
+      cd,
+      list: [`${(db.projects || []).filter((p) => !p.archived).length} synced`, `${open} open · ${today} today`, unread ? `${unread > 99 ? '99+' : unread} new` : 'all read', fourth],
+      label4: cd ? 'Review requests' : 'Client Assets',
+    };
+  }
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  // Data is in: tick the rows one by one, then fade into the app
   async function finish() {
     if (!el || gone) return;
-    const left = Math.max(0, SPLASH_MS - (performance.now() - start));
-    await Promise.race([new Promise((r) => setTimeout(r, left)), skipped]);
+    const v = values();
+    const bar = el.querySelector('.sp-bar i'), n = document.getElementById('sp-n');
+    if (v) {
+      const u = me();
+      remember({ name: u ? firstName(u.id) : '', cd: v.cd });
+      document.getElementById('sp-greet').textContent = greeting(u ? firstName(u.id) : '');
+      rows[3].querySelector('.sp-lbl').textContent = v.label4;
+      const fast = await Promise.race([wait(0).then(() => false), skipped.then(() => true)]);
+      for (let i = 0; i < rows.length && !fast; i++) {
+        const r = await Promise.race([wait(i ? 300 : 120).then(() => false), skipped.then(() => true)]);
+        if (r) break;
+        rows.forEach((x) => x.classList.remove('now'));
+        rows[i].classList.add('done', 'now');
+        rows[i].querySelector('.sp-val').textContent = v.list[i];
+        n.textContent = `${i + 1}/${rows.length}`;
+        bar.style.width = ((i + 1) / rows.length * 100) + '%';
+      }
+      await Promise.race([wait(Math.max(420, SPLASH_MIN - (performance.now() - start))), skipped]);
+    }
     gone = true;
     el.classList.add('out');
     document.getElementById('app').classList.add('enter');
-    setTimeout(() => { cancelAnimationFrame(raf); el.remove(); document.getElementById('app').classList.remove('enter'); }, 650);
+    setTimeout(() => { el.remove(); document.getElementById('app').classList.remove('enter'); }, 500);
   }
   init();
-  return { finish };
+  return { finish, remember };
 })();
 
 async function boot() {
@@ -6018,6 +5968,7 @@ function setTheme(mode) {
   const b = $('.theme-toggle');
   if (b) { b.innerHTML = icon(mode === 'light' ? 'moon' : 'sun'); b.title = mode === 'light' ? 'Switch to dark mode' : 'Switch to light mode'; }
   savePref('theme', mode);
+  Splash.remember({ theme: mode });
   Host.call('setAppearance', { mode }).catch(() => {});
 }
 function setSidebarCollapsed(on) {

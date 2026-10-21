@@ -19,7 +19,6 @@ body.phone #app { display: block; height: var(--app-h, 100%); }
 body.phone #main { display: block; height: 100%; width: 100%; position: relative; }
 body.phone #content { position: absolute; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 0 calc(var(--ph-tabs-h) + 24px); background: var(--ph-bg); overscroll-behavior-y: contain; }
 body.phone input, body.phone textarea, body.phone select, body.phone [contenteditable="true"] { font-size: 16px !important; }
-body.phone .sp-hint { display: none; }
 
 /* ---------- Tab bar ---------- */
 #ph-tabs { display: none; }
