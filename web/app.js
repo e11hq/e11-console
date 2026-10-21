@@ -3739,6 +3739,7 @@ document.addEventListener('click', async (e) => {
       case 'member-projects': e.stopPropagation(); { const u = userById(id); if (u) projectAccessDialog(u); } return;
       case 'cf-sync-now': api('POST', '/api/cloudflare').then(paintCfStatus).catch((err) => toast(err.message)); return;
       case 'change-photo': changePhoto(); return;
+      case 'team-tab': ui.teamTab = actEl.dataset.tab; renderContent(); return;
       case 'appicon-upload': appIconUploadFlow(); return;
       case 'appicon-reset': appIconResetFlow(); return;
       case 'remove-photo': { const u = me(); if (u.avatar) Host.call('trashPath', { path: u.avatar }).catch(() => {}); u.avatar = null; persist(); render(); return; }
@@ -5259,14 +5260,21 @@ function deliverPending() {
 /* ================= Team members (admin) ================= */
 function viewTeam() {
   const admin = can('manageUsers');
-  const users = db.users.slice().sort((a, b) => (a.active === false) - (b.active === false) || fullName(a).localeCompare(fullName(b)));
+  const all = db.users.slice().sort((a, b) => fullName(a).localeCompare(fullName(b)));
+  const current = all.filter((u) => u.active !== false), past = all.filter((u) => u.active === false);
+  const tab = ui.teamTab === 'past' ? 'past' : 'active';
+  const users = tab === 'past' ? past : current;
   return `<div class="team">
     <div class="team-head">
-      <div><div class="team-title">${users.filter((u) => u.active !== false).length} members</div><div class="team-sub">${admin ? (Host.isServer ? `Only Admins can add people. New members sign in at ${esc(location.host)} with their email — no password needed.` : 'Only Admins can add people. New members sign in with the email and temporary password you give them, then set their own password.') : 'Only Admins can add or change team members.'}</div>${admin && Host.isServer ? '<div class="cf-status" id="cf-status"></div>' : ''}</div>
+      <div><div class="team-title">${current.length} member${current.length === 1 ? '' : 's'}</div><div class="team-sub">${admin ? (Host.isServer ? `Only Admins can add people. New members sign in at ${esc(location.host)} with their email — no password needed.` : 'Only Admins can add people. New members sign in with the email and temporary password you give them, then set their own password.') : 'Only Admins can add or change team members.'}</div>${admin && Host.isServer ? '<div class="cf-status" id="cf-status"></div>' : ''}</div>
       <span class="spacer"></span>
       ${admin ? `<button class="btn primary" data-action="add-member">${icon('plus')}Add member</button>` : ''}
     </div>
-    <div class="team-table">
+    <div class="mt-tabs team-tabs" role="tablist">
+      <button class="mt-tab ${tab === 'active' ? 'on' : ''}" role="tab" aria-selected="${tab === 'active'}" data-action="team-tab" data-tab="active">Active members <span>${current.length}</span></button>
+      <button class="mt-tab ${tab === 'past' ? 'on' : ''}" role="tab" aria-selected="${tab === 'past'}" data-action="team-tab" data-tab="past">Past members <span>${past.length}</span></button>
+    </div>
+    ${tab === 'past' && !past.length ? '<div class="empty"><div class="big">No past members</div>People you remove from the team show here, and you can restore their access.</div>' : `<div class="team-table">
       <div class="tt-row tt-head"><div>Name</div><div>Email</div><div>Role</div><div>Status</div><div>Creative Director</div><div></div></div>
       ${users.map((u) => `<div class="tt-row ${u.active === false ? 'inactive' : ''}">
         <div class="tt-name">${avatarHTML(u.id, 30)}<span>${esc(fullName(u))}${u.id === currentUserId ? ' <small>(you)</small>' : ''}</span></div>
@@ -5276,7 +5284,7 @@ function viewTeam() {
         ${cdCell(u, admin)}
         <div>${admin && u.id !== currentUserId ? `<button class="icon-btn sm" data-action="member-menu" data-id="${u.id}" title="Manage">${icon('more')}</button>` : ''}</div>
       </div>`).join('')}
-    </div>
+    </div>`}
     <div class="role-guide">
       <div><span class="role-pill r-admin">Admin</span> Full access, and the only role that can add or manage team members.</div>
       <div><span class="role-pill r-am">Account Manager</span> Can do everything except add or manage team members.</div>

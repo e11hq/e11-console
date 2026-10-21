@@ -2154,3 +2154,6 @@ button.pv-empty:hover { background: var(--hover); color: var(--text-2); }
 :root[data-theme="light"] #sidebar .brand img.on-light { display: block; }
 #app.sb-collapsed #sidebar .brand img.brand-word { display: none !important; }
 #app.sb-collapsed #sidebar .brand img.brand-tile { width: 36px; height: 36px; }
+
+/* Team page: Active / Past members */
+.team-tabs { margin: 4px 0 12px; }
