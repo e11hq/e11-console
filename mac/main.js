@@ -10,6 +10,9 @@ ObjC.import('Cocoa');
 ObjC.import('WebKit');
 
 var APP_NAME = 'E11 Console';
+// Version of this Mac app's native part. Raise it when a change here needs everyone to reinstall:
+// the web app then shows a required-update banner in older Mac apps (their appInfo has no shell, i.e. 1).
+var SHELL_VERSION = 3;
 var fm = $.NSFileManager.defaultManager;
 var HOME = ObjC.unwrap($.NSHomeDirectory());
 var info = $.NSBundle.mainBundle.infoDictionary;
@@ -142,7 +145,7 @@ var commands = {
     if (!a.reset) { try { saved = !!ws.setIconForFileOptions(img, appPath, 0); } catch (e) { saved = false; } }
     return { ok: true, saved: saved };
   },
-  appInfo: function () { return { ok: true, server: SERVER, version: ObjC.unwrap(info.objectForKey('CFBundleShortVersionString')) }; },
+  appInfo: function () { return { ok: true, server: SERVER, shell: SHELL_VERSION, version: ObjC.unwrap(info.objectForKey('CFBundleShortVersionString')) }; },
 };
 
 // Answer the page by calling window.__e11NativeReply(id, result) inside it

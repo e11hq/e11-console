@@ -28,6 +28,8 @@ export function createServer(cfg) {
   const webPush = createWebPush({ store, fetchImpl: cfg.pushFetch || fetch, subject: cfg.pushSubject || 'mailto:admin@e11hq.com' });
   const macDir = cfg.macDir || (webDir ? path.join(webDir, '..', 'mac') : null);
   const appIcon = createAppIcon({ store, defaultFile: macDir && path.join(macDir, 'AppIcon.png') });
+  // The newest Mac app (native part) the installer hands out; older Mac apps are asked to update
+  const macShell = (() => { try { const m = fs.readFileSync(path.join(macDir, 'main.js'), 'utf8').match(/var SHELL_VERSION = (\d+);/); return m ? Number(m[1]) : 1; } catch { return 1; } })();
   // The owner (ADMIN_EMAIL) controls things that change every Mac, like the Dock icon. No owner set: any Admin.
   const isOwner = (u) => (cfg.adminEmail ? String(u.email || '').toLowerCase() === cfg.adminEmail.toLowerCase() : u.role === 'admin');
   const cfSync = cfg.cfSync || createCfSync({ accountId: cfg.cfAccountId, token: cfg.cfApiToken, groupId: cfg.cfGroupId, listUsers: () => store.list('users'), fetchImpl: cfg.cfFetch || fetch });
@@ -139,7 +141,7 @@ export function createServer(cfg) {
     const u = await who(req, res);
     if (!u) return;
 
-    if (p === '/api/me') return json(res, 200, { ok: true, user: access.shape(u, 'users', u), owner: isOwner(u), appIcon: appIcon.info(), version, rev: store.rev() });
+    if (p === '/api/me') return json(res, 200, { ok: true, user: access.shape(u, 'users', u), owner: isOwner(u), appIcon: appIcon.info(), macShell, version, rev: store.rev() });
 
     // Mac app Dock icon: everyone reads it; only the owner changes it (every open Mac app swaps it live)
     if (p === '/api/app-icon' && req.method === 'GET') {

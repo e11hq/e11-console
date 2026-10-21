@@ -219,6 +219,70 @@ const AppIcon = (() => {
   };
 })();
 
+
+/* ================= Required Mac app update ================= */
+// When the installer has a newer Mac app (its native part), older Mac apps show a banner that can't be
+// dismissed. "Update now" opens Terminal with the usual install line; the app closes, is replaced and
+// reopens, and Terminal's window closes when it finished cleanly. Works in every installed Mac app:
+// it only uses "save a file and open it" (a .terminal file holding the command), which they all have.
+const MacUpdate = (() => {
+  let need = false;
+  async function check(required) {
+    if (!Host.isMacApp || !required) return;
+    let shell = 1;
+    try { const r = await NativeMac.call('appInfo'); shell = Number(r.shell) || 1; } catch (e) { return; }
+    need = shell < required;
+    paint();
+  }
+  const xml = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  function terminalFile() {
+    // after a clean install: close this window, and quit Terminal if nothing else is open in it
+    const quitTerminal = `nohup /bin/sh -c 'sleep 1; osascript -e "tell application \\"Terminal\\" to if (count of windows) is 0 then quit"' >/dev/null 2>&1 &`;
+    const cmd = `clear; echo "Updating E11 Console… this takes about 10 seconds."; curl -fsSL ${location.origin}/install | bash && { ${quitTerminal} exit 0; }`;
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CommandString</key><string>${xml(cmd)}</string>
+  <key>RunCommandAsShell</key><false/>
+  <key>shellExitAction</key><integer>1</integer>
+  <key>name</key><string>E11 Console update</string>
+  <key>type</key><string>Window Settings</string>
+  <key>ProfileCurrentVersion</key><real>2.07</real>
+</dict>
+</plist>`;
+  }
+  async function run() {
+    const el = document.getElementById('mac-update');
+    if (el) el.classList.add('busy');
+    const btn = el && el.querySelector('button');
+    if (btn) { btn.disabled = true; btn.textContent = 'Updating…'; }
+    try {
+      const b64 = btoa(unescape(encodeURIComponent(terminalFile())));
+      await NativeMac.call('saveFile', { token: 'upd-' + Date.now(), name: 'Update E11 Console.terminal', b64, open: true, done: true });
+      if (el) el.querySelector('.mu-txt span').textContent = 'Terminal is updating the app — it will close and reopen by itself in a few seconds.';
+      setTimeout(() => { if (btn) { btn.disabled = false; btn.textContent = 'Try again'; } }, 30000);
+    } catch (e) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Try again'; }
+      toast('Couldn’t start the update: ' + e.message);
+    }
+  }
+  function paint() {
+    let el = document.getElementById('mac-update');
+    if (!need) { if (el) el.remove(); document.body.classList.remove('mac-upd'); return; }
+    if (el) return;
+    el = document.createElement('div');
+    el.id = 'mac-update';
+    el.setAttribute('role', 'alert');
+    el.innerHTML = `<span class="mu-ic">${icon('shield')}</span>
+      <div class="mu-txt"><b>Important update for the Mac app</b><span>A required update keeps E11 Console secure and working properly. It takes about 10 seconds — the app closes and reopens by itself.</span></div>
+      <button class="btn primary" data-action="mac-update">${icon('download')}Update now</button>`;
+    document.body.appendChild(el);
+    document.body.classList.add('mac-upd');
+  }
+  return { check, run };
+})();
+
 const FINDER_LABEL = Host.isServer ? 'Download' : 'Show in Finder';
 
 
@@ -1168,6 +1232,7 @@ const Sync = (() => {
   async function start() {
     const me = await api('GET', '/api/me');
     AppIcon.setOwner(me.owner); if (me.appIcon) AppIcon.sync(me.appIcon);
+    MacUpdate.check(me.macShell);
     const snap = await api('GET', '/api/snapshot');
     rev = snap.rev; version = snap.version || me.version;
     const data = snap.data;
@@ -3741,6 +3806,7 @@ document.addEventListener('click', async (e) => {
       case 'change-photo': changePhoto(); return;
       case 'team-tab': ui.teamTab = actEl.dataset.tab; renderContent(); return;
       case 'appicon-upload': appIconUploadFlow(); return;
+      case 'mac-update': MacUpdate.run(); return;
       case 'appicon-reset': appIconResetFlow(); return;
       case 'remove-photo': { const u = me(); if (u.avatar) Host.call('trashPath', { path: u.avatar }).catch(() => {}); u.avatar = null; persist(); render(); return; }
       case 'save-profile': saveProfile(); return;
