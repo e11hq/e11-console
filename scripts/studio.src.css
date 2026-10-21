@@ -214,3 +214,6 @@ L .tag { filter: brightness(.62) saturate(1.7); }
 L .stat.green .n { color: #148a57; }
 L .stat.red .n { color: #c62f35; }
 L .stat.amber .n { color: #9a6700; }
+
+/* Task in the side panel: wider, flat (no shadow) */
+G #detail.side .tm { width: 720px; max-width: calc(100% - 40px); box-shadow: none; }

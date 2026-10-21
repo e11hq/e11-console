@@ -220,6 +220,80 @@ const AppIcon = (() => {
 })();
 
 
+/* ================= Mac app title bar (Mac app 4 and newer) ================= */
+// The window's page runs to the very top: the close / minimise / full-screen buttons sit in our own
+// 48px top row, next to the sidebar, theme and back / forward buttons. Empty parts of that row drag the
+// window (double-click zooms, like any Mac title bar). Older Mac apps keep the normal title bar.
+const MacChrome = (() => {
+  let on = false;
+  async function init() {
+    if (!Host.isMacApp || on) return;
+    let shell = 1;
+    try { shell = Number((await NativeMac.call('appInfo')).shell) || 1; } catch (e) { return; }
+    if (shell < 4) return;
+    on = true;
+    document.documentElement.classList.add('mac-chrome');
+    const bar = document.createElement('div');
+    bar.id = 'mac-bar';
+    bar.innerHTML = `<button class="icon-btn sb-toggle" data-action="toggle-sidebar" title="Collapse sidebar">${icon('sidebar')}</button>`
+      + `<button class="icon-btn theme-toggle" data-action="toggle-theme" title="Switch to light mode">${icon('sun')}</button>`
+      + `<button class="icon-btn" id="nav-back" data-action="nav-back" title="Back (⌘[)" disabled>${icon('chev-left')}</button>`
+      + `<button class="icon-btn" id="nav-fwd" data-action="nav-forward" title="Forward (⌘])" disabled>${icon('chev-right')}</button>`;
+    document.body.appendChild(bar);
+    const light = document.documentElement.dataset.theme === 'light';
+    const tb = bar.querySelector('.theme-toggle');
+    tb.innerHTML = icon(light ? 'moon' : 'sun'); tb.title = light ? 'Switch to dark mode' : 'Switch to light mode';
+    if ($('#app') && $('#app').classList.contains('sb-collapsed')) bar.querySelector('.sb-toggle').title = 'Expand sidebar';
+    PageHistory.paint();
+    const ACTIVE = 'button, a, input, textarea, select, label, [contenteditable="true"], [data-action], [data-nav], [data-id], .tabs, .search, .tm-crumbs > *, #overlay-root *, .tm-backdrop';
+    const inBar = (e) => e.clientY <= 48 && !(e.target.closest && e.target.closest(ACTIVE));
+    document.addEventListener('mousedown', (e) => {
+      if (e.button !== 0 || e.detail > 1 || !inBar(e)) return;
+      e.preventDefault();
+      NativeMac.call('dragWindow').catch(() => {});
+    }, true);
+    document.addEventListener('dblclick', (e) => { if (inBar(e)) NativeMac.call('zoomWindow').catch(() => {}); }, true);
+  }
+  return { init, on: () => on };
+})();
+
+/* ================= Page history (back / forward) ================= */
+const PageHistory = (() => {
+  const stack = []; let idx = -1, moving = false;
+  const snap = () => ({ view: ui.view, projectId: ui.projectId || null, clientId: ui.view === 'client' ? ui.clientId : null, folderId: ui.view === 'client' ? (ui.folderId || null) : null });
+  const same = (a, b) => a && b && a.view === b.view && a.projectId === b.projectId && a.clientId === b.clientId && a.folderId === b.folderId;
+  function mark() {
+    if (moving || !ui.view) return;
+    const s = snap();
+    if (same(stack[idx], s)) return;
+    stack.splice(idx + 1);
+    stack.push(s);
+    if (stack.length > 100) stack.shift();
+    idx = stack.length - 1;
+    paint();
+  }
+  function move(d) {
+    mark();
+    const j = idx + d;
+    if (j < 0 || j >= stack.length) return;
+    idx = j;
+    const s = stack[idx];
+    moving = true;
+    if (ui.taskId && typeof closeDetail === 'function') closeDetail();
+    if (s.view === 'client') { ui.clientId = s.clientId; ui.folderId = s.folderId; }
+    go(s.view, s.projectId);
+    moving = false;
+    paint();
+  }
+  function paint() {
+    const b = document.getElementById('nav-back'), f = document.getElementById('nav-fwd');
+    if (b) b.disabled = idx <= 0;
+    if (f) f.disabled = idx >= stack.length - 1;
+  }
+  return { mark, back: () => move(-1), forward: () => move(1), paint };
+})();
+
+
 /* ================= Required Mac app update ================= */
 // When the installer has a newer Mac app (its native part), older Mac apps show a banner that can't be
 // dismissed. "Update now" opens Terminal with the usual install line; the app closes, is replaced and
@@ -488,6 +562,20 @@ const ServerHost = (() => {
   const readPiece = (file, off, len) => (file.macToken
     ? NativeMac.call('readLocalChunk', { token: file.macToken, offset: off, length: len, last: off + len >= file.size }).then((r) => r.b64)
     : b64(file.slice(off, off + len)));
+  // A picked logo (browser File, or a file picked in the Mac app) → its square version; the original if that fails
+  async function logoFile(f) {
+    try {
+      let blob = f;
+      if (f.macToken) {
+        const b64 = await readPiece(f, 0, f.size);
+        const bin = atob(b64); const arr = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+        const ext = String(f.name).split('.').pop().toLowerCase();
+        blob = new Blob([arr], { type: ext === 'svg' ? 'image/svg+xml' : 'image/' + (ext === 'jpg' ? 'jpeg' : ext) });
+      }
+      return await squareLogo(blob);
+    } catch (e) { return f; }
+  }
   async function pickMacFiles(opts) {
     const r = await NativeMac.call('pickLocalFiles', opts);
     return (r.files || []).map((f) => ({ name: f.name, size: f.size, macToken: f.token }));
@@ -559,7 +647,7 @@ const ServerHost = (() => {
       case 'pickImage': {
         const files = await pickFiles({ multiple: false, accept: args.kind === 'logo' ? 'image/*,.svg' : 'image/*' });
         if (!files.length) return { ok: true, path: null };
-        const up = await uploadFile(files[0], { taskId: '_uploads' });
+        const up = await uploadFile(args.kind === 'logo' ? await logoFile(files[0]) : files[0], { taskId: '_uploads' });
         return api('POST', '/api/host/processImage', { path: up.path, kind: args.kind || 'avatar', userId: args.userId });
       }
       case 'openPath': case 'quickLook': window.open(fileHref(args.path), '_blank', 'noopener'); return { ok: true };
@@ -590,7 +678,7 @@ const ServerHost = (() => {
       case 'pickImage': {
         const files = await pickMacFiles({ multiple: false, images: true, prompt: args.kind === 'logo' ? 'Use logo' : 'Use photo' });
         if (!files.length) return { ok: true, path: null };
-        const up = await uploadFile(files[0], { taskId: '_uploads' });
+        const up = await uploadFile(args.kind === 'logo' ? await logoFile(files[0]) : files[0], { taskId: '_uploads' });
         return api('POST', '/api/host/processImage', { path: up.path, kind: args.kind || 'avatar', userId: args.userId });
       }
       case 'openPath': case 'quickLook': await saveOnMac(fileHref(args.path), fileHrefName(args.path), true); return { ok: true };
@@ -1240,6 +1328,7 @@ const Sync = (() => {
     const me = await api('GET', '/api/me');
     AppIcon.setOwner(me.owner); if (me.appIcon) AppIcon.sync(me.appIcon);
     MacUpdate.check(me.macShell);
+    MacChrome.init();
     const snap = await api('GET', '/api/snapshot');
     rev = snap.rev; version = snap.version || me.version;
     const data = snap.data;
@@ -1565,7 +1654,7 @@ function renderContent() {
   else if (ui.view === 'profile') c.innerHTML = viewProfile();
   else if (ui.view === 'updates') c.innerHTML = viewUpdates();
   else if (ui.view === 'trash') c.innerHTML = viewTrash();
-  else if (ui.view === 'clients') c.innerHTML = viewClients();
+  else if (ui.view === 'clients') { c.innerHTML = viewClients(); migrateClientLogos(); }
   else if (ui.view === 'client') {
     const cl = clientById(ui.clientId);
     const f = cl && cl.folders.find((x) => x.id === ui.folderId);
@@ -2096,7 +2185,7 @@ function composer(t, cid) {
   return `<div class="composer ${cid ? 'reply' : ''}">
     ${banner}
     <div class="rt-editor" contenteditable="true" id="d-comment" data-draft-key="${key}" ${cid ? `data-reply-to="${cid}"` : ''} data-placeholder="${ph}">${ui.commentDraft[key] || ''}</div>
-    ${files.length ? `<div class="cb-files">${files.map((a) => `<span class="cb-chip ${a.linked ? 'linked' : ''}">${isImage(a) && Host.isNative ? `<img src="${fileUrl(a)}" alt="">` : icon('clip')}<span>${esc(a.name)}</span><button data-action="unstage-file" data-key="${key}" data-id="${a.id}" title="Remove">${icon('x')}</button></span>`).join('')}</div>` : ''}
+    ${files.length ? `<div class="cb-files">${files.map((a) => `<span class="cb-chip ${a.linked ? 'linked' : ''}">${isImage(a) && Host.isNative ? `<img src="${imgUrl(a, 160)}" alt="">` : icon('clip')}<span>${esc(a.name)}</span><button data-action="unstage-file" data-key="${key}" data-id="${a.id}" title="Remove">${icon('x')}</button></span>`).join('')}</div>` : ''}
     <div class="cb-foot">
       <button class="icon-btn sm" data-action="attach-comment" ${cid ? `data-reply="${cid}"` : ''} title="Attach files">${icon('clip')}</button>
       ${fmtToolbar()}
@@ -2294,6 +2383,7 @@ function renderDetail() {
         ${p ? `<a class="crumb" data-action="go-project" data-id="${p.id}"><i style="background:${p.color}"></i>${esc(p.name)}</a>${sec ? `<span class="crumb-sep">/</span><span class="crumb plain">${esc(sec.name)}</span>` : ''}` : `<span class="crumb plain">${icon('check-circle')}My Tasks</span>`}
         ${clientOfProject(p) ? `<button class="tm-client" data-action="open-client" data-id="${p.clientId}" title="Logos, guidelines and fonts for ${esc(clientOfProject(p).name)}">${clientLogoHTML(clientOfProject(p), 16)}<span>${esc(clientOfProject(p).name)} assets</span></button>` : ''}
         ${parent ? `<span class="crumb-sep">/</span><a class="crumb" data-action="open-task" data-id="${parent.id}">${icon('sub')}${esc(parent.title || 'Untitled task')}</a>` : ''}
+        <span class="crumb-sep tm-tt">/</span><span class="crumb plain tm-tt">${esc(t.title || 'Untitled task')}</span>
       </div>
       <div class="tm-actions">
         <button class="icon-btn" data-action="nav-task" data-n="-1" ${navIdx > 0 ? '' : 'disabled'} title="Previous task">${icon('chev-left')}</button>
@@ -2531,9 +2621,11 @@ const IMG_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'heic', 'bmp', 'tif', 'tif
 const fileExt = (name) => (String(name).split('.').pop() || '').toLowerCase();
 const isImage = (a) => IMG_EXT.includes(fileExt(a.name));
 const fileUrl = (a) => '/__file/' + String(a.path).split('/').map(encodeURIComponent).join('/');
+// A smaller copy of an image for lists, tiles and previews (made once by the server); full size stays for the viewer and downloads
+const imgUrl = (a, w) => fileUrl(a) + (Host.isServer && !/\.svg$/i.test(String(a.path)) ? '?w=' + w : '');
 function fileIcon(a) {
   return isImage(a) && Host.isNative
-    ? `<div class="ficon thumb"><img src="${fileUrl(a)}" alt="" loading="lazy"></div>`
+    ? `<div class="ficon thumb"><img src="${imgUrl(a, 160)}" alt="" loading="lazy"></div>`
     : `<div class="ficon">${esc((fileExt(a.name) || 'file').slice(0, 4))}</div>`;
 }
 const VID_EXT = ['mp4', 'mov', 'm4v', 'webm'];
@@ -2548,6 +2640,7 @@ function fileKind(a) {
   if (TXT_EXT.includes(e)) return 'text';
   return 'other';
 }
+const OFFICE_EXT = ['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'odt', 'odp', 'ods', 'rtf'];
 const OFFICE_LABEL = { ppt: 'PowerPoint', pptx: 'PowerPoint', key: 'Keynote', doc: 'Word', docx: 'Word', pages: 'Pages', xls: 'Excel', xlsx: 'Excel', numbers: 'Numbers', zip: 'Archive' };
 // Thumbnail made by macOS Quick Look (cached in the data folder); placeholder until it exists
 function thumbImg(a, mode) {
@@ -2557,7 +2650,7 @@ function thumbImg(a, mode) {
 }
 function attTile(a) {
   const kind = fileKind(a);
-  const inner = kind === 'image' && Host.isNative ? `<img src="${fileUrl(a)}" alt="" loading="lazy">` : (Host.isNative ? thumbImg(a, 'tile') : `<div class="thumb-ph"><span class="ext">${esc(fileExt(a.name) || 'file')}</span></div>`);
+  const inner = kind === 'image' && Host.isNative ? `<img src="${imgUrl(a, 640)}" alt="" loading="lazy">` : (Host.isNative ? thumbImg(a, 'tile') : `<div class="thumb-ph"><span class="ext">${esc(fileExt(a.name) || 'file')}</span></div>`);
   return `<div class="tile" data-action="tile-open" data-id="${a.id}" title="${esc(a.name)}">
     <div class="tile-img">${inner}${kind === 'video' ? `<span class="tile-play">${icon('play')}</span>` : ''}</div>
     <div class="tile-meta"><span>${esc(a.name)}</span><small>${fmtSize(a.size)}</small></div>
@@ -2597,7 +2690,7 @@ function attPreview(a, scope) {
   const key = `${scope}-${a.id}`;
   const kind = fileKind(a);
   let media = '';
-  if (kind === 'image') media = `<div class="ap-img" data-action="lightbox" data-src="${url}" data-name="${esc(a.name)}"><img src="${url}" alt="" loading="lazy"></div>`;
+  if (kind === 'image') media = `<div class="ap-img" data-action="lightbox" data-src="${url}" data-name="${esc(a.name)}"><img src="${imgUrl(a, 1280)}" alt="" loading="lazy"></div>`;
   else if (kind === 'video') media = `<video class="ap-video" data-media-key="${key}" src="${url}" controls preload="metadata" playsinline></video>`;
   else if (kind === 'audio') media = `<div class="ap-audio"><audio data-media-key="${key}" src="${url}" controls preload="metadata"></audio></div>`;
   else if (kind === 'pdf') media = `<iframe class="ap-pdf" src="${url}" title="${esc(a.name)}"></iframe>`;
@@ -2636,6 +2729,7 @@ async function previewFile(a) {
   else if (kind === 'audio') body = `<div class="fv-audio">${icon('play')}<audio src="${url}" controls autoplay></audio></div>`;
   else if (kind === 'pdf') body = `<iframe class="fv-pdf" src="${url}"></iframe>`;
   else if (kind === 'text') body = `<pre class="fv-text" data-text-src="${url}">Loading…</pre>`;
+  else if (OFFICE_EXT.includes(fileExt(a.name)) && Host.isServer) body = `<div class="fv-doc" id="fv-office">${thumbImg(a, 'wide')}<p class="fv-wait"><span class="spin"></span>Preparing the full preview…</p></div>`;
   else body = `<div class="fv-doc">${thumbImg(a, 'wide')}<p>This preview shows the first page. Click <b>Open in app</b> to see the whole file.</p></div>`;
   $('#overlay-root').innerHTML = `<div class="fv" data-action="close-preview">
     <div class="fv-box">
@@ -2653,6 +2747,15 @@ async function previewFile(a) {
   const root = $('#overlay-root');
   hydratePreviews(root);
   hydrateThumbs(root);
+  // Word / PowerPoint / Excel: the server turns it into a PDF (once) and the whole document shows here
+  if (document.getElementById('fv-office')) {
+    Host.call('docPreview', { id: a.id, path: a.path }).then((r) => {
+      const el = document.getElementById('fv-office');
+      if (!el || ui.previewAtt !== a) return;
+      if (r && r.pdf) el.outerHTML = `<iframe class="fv-pdf" src="${'/__file/' + r.pdf.split('/').map(encodeURIComponent).join('/')}" title="${esc(a.name)}"></iframe>`;
+      else { const w = el.querySelector('.fv-wait'); if (w) w.innerHTML = r && r.unavailable ? 'Full previews of Office files arrive with the next server update. This shows the first page.' : 'This file couldn’t be previewed — use <b>Open in app</b> or download it.'; }
+    }).catch(() => { const w = document.querySelector('#fv-office .fv-wait'); if (w) w.textContent = 'This file couldn’t be previewed right now.'; });
+  }
 }
 
 function lightbox(src, name) {
@@ -2700,7 +2803,7 @@ function copyAttachment(a) {
 function fileRefHTML(a, display) {
   const attrs = `data-fpath="${esc(a.path)}" data-fname="${esc(a.name)}" data-fsize="${+a.size || 0}"${a.thumb ? ` data-fthumb="${esc(a.thumb)}"` : ''}`;
   if (!display) return `<span class="fileref" contenteditable="false" ${attrs}>📎 ${esc(a.name)}</span>`;
-  const img = isImage(a) && Host.isNative ? `<img src="${fileUrl(a)}" alt="">` : `<i class="fr-ext">${esc((fileExt(a.name) || 'file').slice(0, 4))}</i>`;
+  const img = isImage(a) && Host.isNative ? `<img src="${imgUrl(a, 160)}" alt="">` : `<i class="fr-ext">${esc((fileExt(a.name) || 'file').slice(0, 4))}</i>`;
   return `<span class="fileref show" data-action="fileref-open" ${attrs} title="Preview ${esc(a.name)}">${img}<span class="fr-name">${esc(a.name)}</span>${a.size ? `<small>${fmtSize(a.size)}</small>` : ''}</span>`;
 }
 function fileRefAtt(el) {
@@ -2769,7 +2872,9 @@ function autosize(el) {
 function openTask(id, focusTitle) {
   flushEdit();
   const pendingThread = ui.pendingThread; ui.pendingThread = null;
-  if (ui.taskId !== id) { ui.replyTo = null; ui.thread = null; ui.editingComment = null; ui.descOpen = {}; ui.activityFilter = 'comments'; }
+  // A task always opens on its Details tab, unless something asked for a tab on purpose (e.g. an Inbox mention → Comments)
+  if (ui.taskId !== id) { ui.replyTo = null; ui.thread = null; ui.editingComment = null; ui.descOpen = {}; ui.activityFilter = 'comments'; ui.sideTab = ui.forceTab || 'details'; }
+  ui.forceTab = null;
   if (pendingThread) ui.thread = pendingThread;
   const ids = $$('#content [data-task]').map((el) => el.dataset.task).filter((x, i, a) => a.indexOf(x) === i);
   if (ids.includes(id)) ui.navIds = ids;
@@ -2902,12 +3007,14 @@ function inlineInput(el, { placeholder = '', value = '', multiline = false, keep
 
 /* ================= Actions ================= */
 function go(view, projectId = null) {
+  PageHistory.mark();
   if (view === 'clients') { ui.caQ = ''; ui.caScope = null; }
   ui.view = view;
   ui.projectId = projectId;
   if (ui.search) { ui.search = ''; $('#search').value = ''; }
   $('#content').scrollTop = 0;
   render();
+  PageHistory.mark();
 }
 
 async function newProjectFlow() {
@@ -3160,7 +3267,7 @@ function trashRow(it, r) {
   const left = trashDaysLeft(it);
   const files = trashFiles(it);
   const who = it.auto ? 'Cleaned up automatically (finished 30+ days ago)' : `Deleted by ${it.deletedBy === currentUserId ? 'you' : esc(fullName(userById(it.deletedBy)))}`;
-  const chips = files.slice(0, 4).map((a) => `<button class="tr-file" data-action="tr-preview" data-id="${it.id}" data-file="${a.id}" title="Preview ${esc(a.name)}">${isImage(a) && Host.isNative ? `<img src="${fileUrl(a)}" alt="" loading="lazy">` : `<i>${esc((fileExt(a.name) || 'file').slice(0, 4))}</i>`}<span>${r && r.terms.length ? sMark(a.name, r) : esc(a.name)}</span></button>`).join('');
+  const chips = files.slice(0, 4).map((a) => `<button class="tr-file" data-action="tr-preview" data-id="${it.id}" data-file="${a.id}" title="Preview ${esc(a.name)}">${isImage(a) && Host.isNative ? `<img src="${imgUrl(a, 160)}" alt="" loading="lazy">` : `<i>${esc((fileExt(a.name) || 'file').slice(0, 4))}</i>`}<span>${r && r.terms.length ? sMark(a.name, r) : esc(a.name)}</span></button>`).join('');
   return `<div class="tr-row">
     <span class="tr-ic">${icon(TRASH_ICON[it.type] || 'trash')}</span>
     <div class="tr-main">
@@ -3753,6 +3860,8 @@ document.addEventListener('click', async (e) => {
       case 'disp-toggle': actEl.closest('.disp-wrap').classList.toggle('open'); return;
       case 'detail-mode': ui.detailMode = actEl.dataset.mode; savePref('detailMode', ui.detailMode); renderDetail(); return;
       case 'side-tab': ui.sideTab = actEl.dataset.tab; renderDetail(); if (ui.sideTab === 'comments') { const f = $('.tm-feed'); if (f) stickFeedToBottom(f); } return;
+      case 'nav-back': PageHistory.back(); return;
+      case 'nav-forward': PageHistory.forward(); return;
       case 'toggle-sidebar': setSidebarCollapsed(!document.getElementById('app').classList.contains('sb-collapsed')); return;
       case 'close-lightbox': $('#overlay-root').innerHTML = ''; return;
       case 'pick-day': ui.day = actEl.dataset.day; renderContent(); return;
@@ -3864,7 +3973,7 @@ document.addEventListener('click', async (e) => {
       case 'open-client': e.stopPropagation(); openClient(id); return;
       case 'add-client': addClientDialog(); return;
       case 'client-menu': e.stopPropagation(); { const c = clientById(id); if (c) clientMenu(actEl, c); } return;
-      case 'open-cfolder': ui.folderId = id; $('#content').scrollTop = 0; render(); return;
+      case 'open-cfolder': PageHistory.mark(); ui.folderId = id; $('#content').scrollTop = 0; render(); PageHistory.mark(); return;
       case 'cfolder-menu': e.stopPropagation(); { const c = clientById(ui.clientId); const f = c && c.folders.find((x) => x.id === id); if (f) folderMenu(actEl, c, f); } return;
       case 'add-cfolder': { const c = clientById(ui.clientId); if (c) addFolderFlow(c); } return;
       case 'ca-upload': pickIntoFolder(); return;
@@ -4038,6 +4147,9 @@ document.addEventListener('keydown', (e) => {
   if (!db || !currentUserId) return;
   const el = e.target;
   const mod = e.metaKey || e.ctrlKey;
+  if (mod && !e.shiftKey && !e.altKey && (e.key === '[' || e.key === ']') && !/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) && !el.isContentEditable) {
+    e.preventDefault(); if (e.key === '[') PageHistory.back(); else PageHistory.forward(); return;
+  }
 
   if (el.id === 'd-title' && e.key === 'Enter') { e.preventDefault(); el.blur(); return; }
   if (el.id === 'd-tag-input') {
@@ -4249,7 +4361,7 @@ function openClient(id, folderId = null) {
 }
 function clientLogoHTML(c, size) {
   return c.logo
-    ? `<span class="cl-logo" style="--s:${size}px"><img src="${'/__file/' + c.logo.split('/').map(encodeURIComponent).join('/')}" alt=""></span>`
+    ? `<span class="cl-logo ${isSquareLogo(c.logo) ? 'sq' : ''}" style="--s:${size}px"><img src="${'/__file/' + c.logo.split('/').map(encodeURIComponent).join('/')}" alt=""></span>`
     : `<span class="cl-logo mono" style="--s:${size}px;--c:${avColor(c.id)}">${esc(initials(c.name))}</span>`;
 }
 
@@ -4291,7 +4403,7 @@ function viewClient(c) {
       <div class="cf-ic">${icon('folder')}</div>
       <div class="cf-name">${esc(f.name)}</div>
       <div class="cf-meta">${f.files.length ? `${f.files.length} file${f.files.length === 1 ? '' : 's'}` : 'Empty'}</div>
-      ${imgs.length && Host.isNative ? `<div class="cf-peek">${imgs.map((a) => `<img src="${fileUrl(a)}" alt="" loading="lazy">`).join('')}</div>` : ''}
+      ${imgs.length && Host.isNative ? `<div class="cf-peek">${imgs.map((a) => `<img src="${imgUrl(a, 160)}" alt="" loading="lazy">`).join('')}</div>` : ''}
       ${canAssets() ? `<button class="icon-btn sm cf-more" data-action="cfolder-menu" data-id="${f.id}" title="Folder options">${icon('more')}</button>` : ''}
     </div>`;
   }).join('');
@@ -4309,7 +4421,7 @@ function caTile(f, a, loc = null) {
   const kind = fileKind(a);
   let inner;
   if (isFont(a)) inner = `<div class="font-sample" style="font-family:'caf-${a.id}'"><b>Aa</b><span>The quick brown fox · ابجد ١٢٣</span></div>`;
-  else if (kind === 'image' && Host.isNative) inner = `<img src="${fileUrl(a)}" alt="" loading="lazy">`;
+  else if (kind === 'image' && Host.isNative) inner = `<img src="${imgUrl(a, 640)}" alt="" loading="lazy">`;
   else if (Host.isNative) inner = thumbImg(a, 'tile').replace('data-thumb-for="', 'data-thumb-client="1" data-thumb-for="');
   else inner = `<div class="thumb-ph"><span class="ext">${esc(fileExt(a.name) || 'file')}</span></div>`;
   return `<div class="tile ca-tile" data-action="tile-open" data-id="${a.id}" title="${esc(a.name)}">
@@ -4458,7 +4570,7 @@ function addClientDialog() {
   $('#ac-logo', root).addEventListener('click', async () => {
     if (!Host.isNative) { toast('Logos can be added in the Mac app'); return; }
     try {
-      const r = await Host.call('pickImage', { kind: 'logo', userId: 'client' });
+      const r = await Host.call('pickImage', { kind: 'logo', userId: 'client-sq' });
       if (!r.path) return;
       if (logo) safeTrash([logo]);
       logo = r.path;
@@ -4492,7 +4604,7 @@ async function renameClient(c) {
 async function changeClientLogo(c) {
   if (!Host.isNative) { toast('Logos can be added in the Mac app'); return; }
   try {
-    const r = await Host.call('pickImage', { kind: 'logo', userId: 'client' });
+    const r = await Host.call('pickImage', { kind: 'logo', userId: 'client-sq' });
     if (!r.path) return;
     const old = c.logo; c.logo = r.path; persist(0); render();
     if (old) safeTrash([old]);
@@ -4992,7 +5104,7 @@ function submitDialog(t) {
 function rrTile(t, a) {
   const kind = fileKind(a);
   let inner;
-  if (kind === 'image' && Host.isNative) inner = `<img src="${fileUrl(a)}" alt="" loading="lazy">`;
+  if (kind === 'image' && Host.isNative) inner = `<img src="${imgUrl(a, 640)}" alt="" loading="lazy">`;
   else if (Host.isNative) inner = thumbImg(a, 'tile').replace('data-thumb-for="', `data-thumb-task="${t.id}" data-thumb-for="`);
   else inner = `<div class="thumb-ph"><span class="ext">${esc(fileExt(a.name) || 'file')}</span></div>`;
   return `<div class="tile rr-tile" data-action="rr-file" data-task-id="${t.id}" data-id="${a.id}" title="${esc(a.name)} — click to preview">
@@ -5251,7 +5363,7 @@ function openNotif(id) {
       || t.comments.filter((x) => x.authorId === n.from).sort((a, b) => Math.abs(new Date(a.at) - new Date(n.at)) - Math.abs(new Date(b.at) - new Date(n.at)))[0] || null;
   }
   if (c) {
-    ui.sideTab = 'comments';
+    ui.sideTab = ui.forceTab = 'comments';
     ui.activityFilter = 'comments';
     ui.pendingThread = c.parentId || null;
     ui.replyTo = null;
@@ -5535,6 +5647,62 @@ async function pickIconImage() {
   }
   const files = await ServerHost.pickFiles({ multiple: false, accept: 'image/png,image/jpeg,image/webp' });
   return files[0] || null;
+}
+// Client logos are stored as a square: transparent logos sit on a dark background if they're light and on
+// a light one if they're dark; logos with their own background get a square of their edge colour. The same
+// square is used everywhere (client cards, folders, menus), so it always shows edge to edge.
+const isSquareLogo = (p) => /(^|\/)client-sq-[^/]*$/.test(String(p || ''));
+async function squareLogo(blob) {
+  const im = await loadImage(blob);
+  const W = im.naturalWidth || im.width, H = im.naturalHeight || im.height;
+  if (!W || !H) throw new Error('That image is empty');
+  const k = Math.min(1, 256 / Math.max(W, H));
+  const a = document.createElement('canvas'); a.width = Math.max(1, Math.round(W * k)); a.height = Math.max(1, Math.round(H * k));
+  const g = a.getContext('2d', { willReadFrequently: true }); g.drawImage(im, 0, 0, a.width, a.height);
+  const d = g.getImageData(0, 0, a.width, a.height).data;
+  let clear = 0, lum = 0, weight = 0; const px = d.length / 4;
+  for (let i = 0; i < d.length; i += 4) {
+    const al = d[i + 3];
+    if (al < 200) clear++;
+    if (al > 40) { lum += (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255 * al; weight += al; }
+  }
+  let bg, pad;
+  if (clear / px > 0.04) {
+    const L = weight ? lum / weight : 0;
+    bg = L > 0.6 ? '#121317' : '#f5f4f0'; pad = 0.16;
+  } else {
+    let r = 0, gg = 0, b = 0, n = 0;
+    const edge = (x, y) => { const i = (y * a.width + x) * 4; r += d[i]; gg += d[i + 1]; b += d[i + 2]; n++; };
+    for (let x = 0; x < a.width; x++) { edge(x, 0); edge(x, a.height - 1); }
+    for (let y = 0; y < a.height; y++) { edge(0, y); edge(a.width - 1, y); }
+    bg = `rgb(${Math.round(r / n)},${Math.round(gg / n)},${Math.round(b / n)})`; pad = 0.06;
+  }
+  const S = 800, c = document.createElement('canvas'); c.width = c.height = S;
+  const cg = c.getContext('2d'); cg.fillStyle = bg; cg.fillRect(0, 0, S, S);
+  const box = S * (1 - pad * 2), sc = Math.min(box / W, box / H), w = W * sc, h = H * sc;
+  cg.imageSmoothingQuality = 'high'; cg.drawImage(im, (S - w) / 2, (S - h) / 2, w, h);
+  const out = await new Promise((res) => c.toBlob(res, 'image/png'));
+  return new File([out], 'logo.png', { type: 'image/png' });
+}
+// One-time: older client logos become squares too (done by an Admin / Account Manager opening Client Assets)
+let logoMigration = null;
+function migrateClientLogos() {
+  if (logoMigration || !Host.isServer || !canAssets()) return;
+  const todo = (db.clients || []).filter((c) => c.logo && !isSquareLogo(c.logo) && !/\.svg$/i.test(c.logo));
+  if (!todo.length) return;
+  logoMigration = (async () => {
+    for (const c of todo) {
+      try {
+        const blob = await fetch(fileUrl({ path: c.logo }), { credentials: 'same-origin' }).then((r) => (r.ok ? r.blob() : null));
+        if (!blob) continue;
+        const sq = await squareLogo(blob);
+        const up = await ServerHost.uploadMany([sq], { taskId: '_uploads' });
+        const r = await api('POST', '/api/host/processImage', { path: up[0].path, kind: 'logo', userId: 'client-sq' });
+        if (r.path && clientById(c.id)) { const old = c.logo; c.logo = r.path; safeTrash([old]); }
+      } catch (e) { /* leave it as it is */ }
+    }
+    persist(0); render();
+  })();
 }
 function loadImage(blob) {
   return new Promise((res, rej) => { const url = URL.createObjectURL(blob); const im = new Image(); im.onload = () => res(im); im.onerror = () => { URL.revokeObjectURL(url); rej(new Error('That file isn’t an image this app can read')); }; im.src = url; });
@@ -6048,16 +6216,14 @@ function setTheme(mode) {
   if (sb) sb.content = mode === 'light' ? 'default' : 'black';
   const tc = document.querySelector('meta[name="theme-color"]');
   if (tc) tc.content = mode === 'light' ? '#f7f7f8' : '#0c0d0f';
-  const b = $('.theme-toggle');
-  if (b) { b.innerHTML = icon(mode === 'light' ? 'moon' : 'sun'); b.title = mode === 'light' ? 'Switch to dark mode' : 'Switch to light mode'; }
+  document.querySelectorAll('.theme-toggle').forEach((b) => { b.innerHTML = icon(mode === 'light' ? 'moon' : 'sun'); b.title = mode === 'light' ? 'Switch to dark mode' : 'Switch to light mode'; });
   savePref('theme', mode);
   Splash.remember({ theme: mode });
   Host.call('setAppearance', { mode }).catch(() => {});
 }
 function setSidebarCollapsed(on) {
   document.getElementById('app').classList.toggle('sb-collapsed', on);
-  const b = $('.sb-toggle');
-  if (b) b.title = on ? 'Expand sidebar' : 'Collapse sidebar';
+  document.querySelectorAll('.sb-toggle').forEach((b) => { b.title = on ? 'Expand sidebar' : 'Collapse sidebar'; });
   savePref('sidebarCollapsed', on);
 }
 function applyThemePref() {

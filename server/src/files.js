@@ -19,6 +19,11 @@ export const MIME = {
 export const mimeOf = (p) => MIME[String(p).split('.').pop().toLowerCase()] || 'application/octet-stream';
 const safeName = (n) => String(n || 'file').replace(/[\/\\:\0]/g, '-').replace(/^\.+/, '_').slice(0, 200) || 'file';
 const run = (cmd, args, timeout = 20000) => new Promise((resolve) => execFile(cmd, args, { timeout }, (err) => resolve(!err)));
+export const OFFICE = ['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'odt', 'odp', 'ods', 'rtf'];
+export const IMAGES = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tif', 'tiff', 'heic'];
+let officeChecked = null;
+const hasOffice = () => (officeChecked = officeChecked || new Promise((ok) => execFile('soffice', ['--version'], { timeout: 20000 }, (err) => ok(!err))));
+let officeQueue = Promise.resolve(); // one conversion at a time (LibreOffice is heavy on the NAS)
 
 export function createFiles(root) {
   const FILES = path.join(root, 'files');
@@ -87,7 +92,34 @@ export function createFiles(root) {
       return { ok: true, trashed: n };
     },
     trashPath(a) { return commands.trashMany({ paths: [a.path] }); },
-    // Preview image: photos and logos are resized, videos get a frame, PDFs their first page
+    // Word / PowerPoint / Excel → PDF with LibreOffice, made once and kept in .thumbs/<id>/preview.pdf.
+    // Returns { pdf: null, unavailable: true } when LibreOffice isn't installed (older server image).
+    async docPreview(a) {
+      const src = resolve(a.path);
+      if (!fs.existsSync(src)) return { ok: true, pdf: null };
+      const ext = src.split('.').pop().toLowerCase();
+      if (!OFFICE.includes(ext)) return { ok: true, pdf: null };
+      const id = safeName(a.id || crypto.createHash('sha1').update(a.path).digest('hex').slice(0, 12));
+      const dir = resolve('.thumbs/' + id);
+      const out = path.join(dir, 'preview.pdf');
+      if (fs.existsSync(out)) return { ok: true, pdf: rel(out) };
+      if (!(await hasOffice())) return { ok: true, pdf: null, unavailable: true };
+      fs.mkdirSync(dir, { recursive: true });
+      const job = officeQueue.then(async () => {
+        if (fs.existsSync(out)) return;
+        const tmp = fs.mkdtempSync(path.join(dir, 'lo-'));
+        const copy = path.join(tmp, 'doc.' + ext);
+        fs.copyFileSync(src, copy);
+        await run('soffice', ['-env:UserInstallation=file:///tmp/e11-libreoffice', '--headless', '--norestore', '--convert-to', 'pdf', '--outdir', tmp, copy], 120000);
+        const made = path.join(tmp, 'doc.pdf');
+        if (fs.existsSync(made)) fs.renameSync(made, out);
+        fs.rmSync(tmp, { recursive: true, force: true });
+      });
+      officeQueue = job.catch(() => {});
+      await job.catch(() => {});
+      return { ok: true, pdf: fs.existsSync(out) ? rel(out) : null };
+    },
+    // Preview image: photos and logos are resized, videos get a frame, PDFs and Office files their first page
     async thumb(a) {
       const src = resolve(a.path);
       if (!fs.existsSync(src)) return { ok: true, thumb: null };
@@ -100,6 +132,9 @@ export function createFiles(root) {
       let ok = false;
       if (ext === 'pdf') {
         ok = await run('pdftoppm', ['-png', '-singlefile', '-f', '1', '-l', '1', '-scale-to', '640', src, path.join(dir, 'thumb')]);
+      } else if (OFFICE.includes(ext)) {
+        const r = await commands.docPreview(a);
+        if (r.pdf) ok = await run('pdftoppm', ['-png', '-singlefile', '-f', '1', '-l', '1', '-scale-to', '640', resolve(r.pdf), path.join(dir, 'thumb')]);
       } else if (['mp4', 'mov', 'm4v', 'webm', 'avi', 'mkv'].includes(ext)) {
         ok = await run('ffmpeg', ['-y', '-v', 'error', '-ss', '1', '-i', src, '-frames:v', '1', '-vf', 'scale=640:-2', out]);
         if (!ok) ok = await run('ffmpeg', ['-y', '-v', 'error', '-i', src, '-frames:v', '1', '-vf', 'scale=640:-2', out]);
@@ -177,6 +212,33 @@ export function createFiles(root) {
     fs.createReadStream(full).pipe(res);
   }
 
+  // A smaller copy of an image (made once with ffmpeg, kept in .thumbs/_sized) so lists and tiles load fast.
+  // Photos become JPEG; PNG/GIF/WebP keep transparency as PNG. Anything that fails falls back to the original.
+  const SIZES = [160, 320, 640, 1280];
+  const sizing = new Map();
+  async function serveSized(req, res, relPath, want) {
+    let full, st;
+    try { full = resolve(relPath); st = fs.statSync(full); } catch { return serve(req, res, relPath); }
+    const ext = full.split('.').pop().toLowerCase();
+    const w = SIZES.find((x) => x >= Number(want)) || 1280;
+    if (!IMAGES.includes(ext) || st.size < 60000) return serve(req, res, relPath);
+    const key = crypto.createHash('sha1').update(relPath + '|' + st.size + '|' + st.mtimeMs).digest('hex').slice(0, 20);
+    const outExt = ['png', 'gif', 'webp'].includes(ext) ? 'png' : 'jpg';
+    const out = path.join(resolve('.thumbs/_sized'), `${key}-${w}.${outExt}`);
+    if (!fs.existsSync(out)) {
+      if (!sizing.has(out)) {
+        fs.mkdirSync(path.dirname(out), { recursive: true });
+        const tmp = out + '.tmp.' + outExt;
+        sizing.set(out, run('ffmpeg', ['-y', '-v', 'error', '-i', full, '-frames:v', '1', '-vf', `scale='min(${w},iw)':-2`, ...(outExt === 'jpg' ? ['-q:v', '4'] : []), tmp])
+          .then((ok) => { if (ok && fs.existsSync(tmp) && fs.statSync(tmp).size < st.size) fs.renameSync(tmp, out); else fs.rmSync(tmp, { force: true }); })
+          .finally(() => sizing.delete(out)));
+      }
+      await sizing.get(out);
+    }
+    if (!fs.existsSync(out)) return serve(req, res, relPath);
+    return serve(req, res, rel(out));
+  }
+
   // Simple uncompressed zip (design files are already compressed), streamed piece by piece so
   // large videos never have to fit in memory. Uses "data descriptors" so sizes come after the data.
   async function serveZip(res, token) {
@@ -216,7 +278,7 @@ export function createFiles(root) {
     res.end(Buffer.concat([cd, endRec]));
   }
 
-  return { commands, serve, serveZip, resolve, purgeTrash, root: FILES };
+  return { commands, serve, serveSized, serveZip, resolve, purgeTrash, root: FILES };
 }
 
 export function httpError(status, message) { const e = new Error(message); e.status = status; return e; }

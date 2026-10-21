@@ -271,7 +271,7 @@ export function createServer(cfg) {
         if (paths.some((x) => String(x || '').startsWith('Clients/')) && !manager) return deny();
         if (paths.some((x) => !access.canReadFile(u, String(x || '')))) return deny();
       }
-      if (['thumb', 'processImage'].includes(cmd) && !access.canReadFile(u, String(body.path || '')) && !(cmd === 'processImage' && uploads.get(body.path) && uploads.get(body.path).userId === u.id)) return deny();
+      if (['thumb', 'processImage', 'docPreview'].includes(cmd) && !access.canReadFile(u, String(body.path || '')) && !(cmd === 'processImage' && uploads.get(body.path) && uploads.get(body.path).userId === u.id)) return deny();
       if (cmd === 'processImage' && body.kind === 'logo' && !manager) return deny();
       if (cmd === 'exportFiles') body.paths = (body.paths || []).filter((x) => access.canReadFile(u, String(x || '')));
       return json(res, 200, await fn(body, u));
@@ -298,6 +298,7 @@ export function createServer(cfg) {
     if (p.startsWith('/__file/') && (req.method === 'GET' || req.method === 'HEAD')) {
       const rel = p.slice('/__file/'.length);
       if (!access.canReadFile(u, rel)) return json(res, 403, { ok: false, error: 'Not allowed' });
+      if (url.searchParams.get('w')) return files.serveSized(req, res, rel, url.searchParams.get('w'));
       return files.serve(req, res, rel);
     }
 

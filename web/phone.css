@@ -670,3 +670,6 @@ body.phone .ph-seg.in-task { border-radius: 10px; }
 
 /* Phone: no double-tap zoom */
 html.phone, html.phone body { touch-action: manipulation; }
+
+/* Phone: no "Download all" in CD review requests and Client Assets */
+body.phone [data-action="ca-download-all"], body.phone [data-action="rr-download"] { display: none !important; }

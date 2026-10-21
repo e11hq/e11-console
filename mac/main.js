@@ -12,7 +12,7 @@ ObjC.import('WebKit');
 var APP_NAME = 'E11 Console';
 // Version of this Mac app's native part. Raise it when a change here needs everyone to reinstall:
 // the web app then shows a required-update banner in older Mac apps (their appInfo has no shell, i.e. 1).
-var SHELL_VERSION = 3;
+var SHELL_VERSION = 4;
 var fm = $.NSFileManager.defaultManager;
 var HOME = ObjC.unwrap($.NSHomeDirectory());
 var info = $.NSBundle.mainBundle.infoDictionary;
@@ -145,6 +145,13 @@ var commands = {
     if (!a.reset) { try { saved = !!ws.setIconForFileOptions(img, appPath, 0); } catch (e) { saved = false; } }
     return { ok: true, saved: saved };
   },
+  // Title bar is part of the page now: the page asks to drag or zoom the window from its empty top strip
+  dragWindow: function () {
+    var ev = $.NSApp.currentEvent;
+    if (gWindow && ev && !ev.isNil()) gWindow.performWindowDragWithEvent(ev);
+    return { ok: true };
+  },
+  zoomWindow: function () { if (gWindow) gWindow.performZoom(null); return { ok: true }; },
   appInfo: function () { return { ok: true, server: SERVER, shell: SHELL_VERSION, version: ObjC.unwrap(info.objectForKey('CFBundleShortVersionString')) }; },
 };
 
@@ -213,6 +220,11 @@ registerClass({
       types: ['void', ['id']],
       implementation: function () { $.NSApp.performSelectorWithObjectAfterDelay('terminate:', null, 0.6); },
     },
+    'windowDidResize:': { types: ['void', ['id']], implementation: function () { placeLights(); } },
+    'windowDidEndLiveResize:': { types: ['void', ['id']], implementation: function () { placeLights(); } },
+    'windowDidBecomeKey:': { types: ['void', ['id']], implementation: function () { placeLights(); } },
+    'windowDidEnterFullScreen:': { types: ['void', ['id']], implementation: function () { pageJS("document.documentElement.classList.add('mac-fs')"); } },
+    'windowDidExitFullScreen:': { types: ['void', ['id']], implementation: function () { placeLights(); pageJS("document.documentElement.classList.remove('mac-fs')"); } },
   },
 });
 
@@ -286,11 +298,32 @@ function buildMenu() {
 }
 
 /* ---------------- Window ---------------- */
+// The page draws its own 48px top strip; the close / minimise / full-screen buttons sit centred in it
+// (same approach as Electron's trafficLightPosition: grow the title-bar container, move the buttons).
+var LIGHTS_X = 20, BAR_H = 48;
+function placeLights() {
+  try {
+    if (!gWindow || (gWindow.styleMask & (1 << 14))) return; // full screen: macOS handles the buttons
+    var close = gWindow.standardWindowButton(0), mini = gWindow.standardWindowButton(1), zoom = gWindow.standardWindowButton(2);
+    if (!close || close.isNil()) return;
+    var container = close.superview.superview;
+    var bh = close.frame.size.height;
+    var y = (BAR_H - bh) / 2;
+    var cf = container.frame;
+    container.setFrame($.NSMakeRect(cf.origin.x, gWindow.frame.size.height - (bh + y), cf.size.width, bh + y));
+    var gap = mini.frame.origin.x - close.frame.origin.x;
+    [close, mini, zoom].forEach(function (b, i) { b.setFrameOrigin($.NSMakePoint(LIGHTS_X + i * gap, b.frame.origin.y)); });
+  } catch (e) { /* keep macOS's own placement */ }
+}
+function pageJS(js) { try { $.objc_msgSend(gWebView, 'evaluateJavaScript:completionHandler:', $(js), $()); } catch (e) { /* page gone */ } }
+
 function buildWindow() {
-  var style = 1 | 2 | 4 | 8;
+  // full-size content (1 << 15): the page runs to the top edge; the title text is hidden (it stays in the Dock and Window menu)
+  var style = 1 | 2 | 4 | 8 | (1 << 15);
   gWindow = $.NSWindow.alloc.initWithContentRectStyleMaskBackingDefer($.NSMakeRect(0, 0, 1320, 840), style, 2, false);
   gWindow.releasedWhenClosed = false;
   gWindow.title = APP_NAME;
+  gWindow.titleVisibility = 1;
   gWindow.titlebarAppearsTransparent = true;
   gWindow.appearance = $.NSAppearance.appearanceNamed('NSAppearanceNameDarkAqua');
   gWindow.backgroundColor = $.NSColor.colorWithSRGBRedGreenBlueAlpha(0.047, 0.051, 0.059, 1);
@@ -315,6 +348,7 @@ function buildWindow() {
   gWebView.loadRequest($.NSURLRequest.requestWithURL($.NSURL.URLWithString(SERVER + '/')));
 
   gWindow.makeKeyAndOrderFront(null);
+  placeLights();
   $.NSApp.activateIgnoringOtherApps(true);
 }
 

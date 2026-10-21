@@ -214,3 +214,6 @@
 :root[data-theme="light"]:not(.phone) .stat.green .n { color: #148a57; }
 :root[data-theme="light"]:not(.phone) .stat.red .n { color: #c62f35; }
 :root[data-theme="light"]:not(.phone) .stat.amber .n { color: #9a6700; }
+
+/* Task in the side panel: wider, flat (no shadow) */
+:root:not(.phone) #detail.side .tm { width: 720px; max-width: calc(100% - 40px); box-shadow: none; }
