@@ -236,12 +236,15 @@ const MacUpdate = (() => {
   }
   const xml = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   function terminalFile() {
-    // After a clean install: close this window (found by its title), then quit Terminal if nothing else is
-    // open in it. Runs in the background a moment after the shell has exited, so Terminal never asks
-    // "terminate running processes?". A failed install leaves the window open with the error.
+    // After a clean install the shell exits and Terminal closes this window by itself (shellExitAction 1).
+    // A helper started completely apart from the window (its own session, via perl's setsid, so the shell
+    // has no job to wait for and Terminal sees nothing running in the window) closes the window by its
+    // title if it's still there, then quits Terminal when no windows are left. A failed install keeps
+    // the window open with the error.
     const TITLE = 'E11 Console update';
     const closer = `sleep 2; osascript -e 'tell application "Terminal"' -e 'close (every window whose name contains "${TITLE}")' -e 'if (count of windows) is 0 then quit' -e 'end tell'`;
-    const cmd = `printf '\\033]0;${TITLE}\\007'; clear; echo "Updating E11 Console… this takes about 10 seconds."; curl -fsSL ${location.origin}/install | bash && { nohup /bin/sh -c ${JSON.stringify(closer)} >/dev/null 2>&1 & exit 0; }`;
+    const detached = `(perl -MPOSIX -e 'setsid(); exec @ARGV' /bin/sh -c ${JSON.stringify(closer)} </dev/null >/dev/null 2>&1 &)`;
+    const cmd = `printf '\\033]0;${TITLE}\\007'; clear; echo "Updating E11 Console… this takes about 10 seconds."; curl -fsSL ${location.origin}/install | bash && { ${detached}; exit 0; }`;
     return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
