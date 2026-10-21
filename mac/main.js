@@ -12,7 +12,7 @@ ObjC.import('WebKit');
 var APP_NAME = 'E11 Console';
 // Version of this Mac app's native part. Raise it when a change here needs everyone to reinstall:
 // the web app then shows a required-update banner in older Mac apps (their appInfo has no shell, i.e. 1).
-var SHELL_VERSION = 5;
+var SHELL_VERSION = 6;
 var fm = $.NSFileManager.defaultManager;
 var HOME = ObjC.unwrap($.NSHomeDirectory());
 var info = $.NSBundle.mainBundle.infoDictionary;
@@ -196,6 +196,31 @@ registerClass({
   },
 });
 
+// Shared task links (e11console://task/<id>) open here: macOS hands the link to the app as a GURL Apple event
+registerClass({
+  name: 'E11ClientURLHandler',
+  superclass: 'NSObject',
+  methods: {
+    'handleURL:withReply:': {
+      types: ['void', ['id', 'id']],
+      implementation: function (ev) {
+        try { openLink(ObjC.unwrap(ev.paramDescriptorForKeyword(0x2d2d2d2d).stringValue)); } catch (e) { /* ignore */ }
+      },
+    },
+  },
+});
+var gPendingTask = null, gURLHandler = null;
+function openLink(url) {
+  var m = /(?:task\/|[?&]task=)([A-Za-z0-9_-]{1,80})/.exec(String(url || ''));
+  if (!m) { reopen(); return; }
+  var id = m[1];
+  if (!gWebView) { gPendingTask = id; return; }
+  pageJS("window.__e11OpenTask ? window.__e11OpenTask('" + id + "') : (location.href = '/?task=" + id + "')");
+  if (gWindow) { if (gWindow.isMiniaturized) gWindow.deminiaturize(null); gWindow.makeKeyAndOrderFront(null); }
+  $.NSApp.activateIgnoringOtherApps(true);
+}
+function openLocation(url) { openLink(url); } // applet handler, in case macOS delivers the link this way
+
 // Links that open a new window (target=_blank) go to the default browser
 registerClass({
   name: 'E11ClientUIDelegate',
@@ -350,7 +375,8 @@ function buildWindow() {
   try { gWebView.setValueForKey($.NSNumber.numberWithBool(false), 'drawsBackground'); } catch (e) { /* optional */ }
   try { gWebView.inspectable = true; } catch (e) { /* macOS 13.3+ */ }
   gWindow.contentView.addSubview(gWebView);
-  gWebView.loadRequest($.NSURLRequest.requestWithURL($.NSURL.URLWithString(SERVER + '/')));
+  gWebView.loadRequest($.NSURLRequest.requestWithURL($.NSURL.URLWithString(SERVER + (gPendingTask ? '/?task=' + gPendingTask : '/'))));
+  gPendingTask = null;
 
   gWindow.makeKeyAndOrderFront(null);
   placeLights();
@@ -361,6 +387,10 @@ var gActivity = null;
 function run() {
   // Stay connected while minimized or in the background: no App Nap (the Mac can still sleep)
   try { gActivity = $.NSProcessInfo.processInfo.beginActivityWithOptionsReason(0x00EFFFFF /* user-initiated, idle sleep allowed */, $('Keeps E11 Console live and notifications arriving')); } catch (e) { /* older macOS */ }
+  try {
+    gURLHandler = $.E11ClientURLHandler.alloc.init;
+    $.NSAppleEventManager.sharedAppleEventManager.setEventHandlerAndSelectorForEventClassAndEventID(gURLHandler, 'handleURL:withReply:', 0x4755524C, 0x4755524C); // 'GURL'
+  } catch (e) { /* links then open the browser copy */ }
   try { buildMenu(); buildWindow(); }
   catch (e) {
     var app = Application.currentApplication();

@@ -30,6 +30,7 @@ const ICONS = {
   cal: '<rect x="2.5" y="3.3" width="11" height="10.2" rx="1.5"/><path d="M2.5 6.6h11M5.5 2v2.4M10.5 2v2.4"/>',
   folder: '<path d="M2.2 4.2c0-.6.4-1 1-1h3l1.4 1.5h5.2c.6 0 1 .4 1 1v6.6c0 .6-.4 1-1 1H3.2c-.6 0-1-.4-1-1z"/>',
   edit: '<path d="M10.4 3.2 12.8 5.6 6 12.4l-3 .6.6-3z"/>',
+  link: '<path d="M6.9 9.1a2.6 2.6 0 0 0 3.7 0l2.2-2.2a2.6 2.6 0 0 0-3.7-3.7l-.9.9"/><path d="M9.1 6.9a2.6 2.6 0 0 0-3.7 0L3.2 9.1a2.6 2.6 0 0 0 3.7 3.7l.9-.9"/>',
   open: '<path d="M9.5 2.7h3.8v3.8M13.3 2.7 7.6 8.4M11.6 9.3v3.2c0 .5-.4.8-.8.8H3.5a.8.8 0 0 1-.8-.8V5.2c0-.4.3-.8.8-.8h3.2"/>',
   arrow: '<path d="M3 8h9.5M8.8 4.3 12.5 8l-3.7 3.7"/>',
   flag: '<path d="M3.5 13.5V2.8M3.5 3h8l-1.7 2.8 1.7 2.8h-8"/>',
@@ -230,6 +231,10 @@ const MacChrome = (() => {
     if (!Host.isMacApp || on) return;
     let shell = 1;
     try { shell = Number((await NativeMac.call('appInfo')).shell) || 1; } catch (e) { return; }
+    if (shell >= 6) {
+      const mark = (n) => { const u = typeof me === 'function' && typeof db !== 'undefined' && db && currentUserId ? me() : null; if (!u) { if (n < 60) setTimeout(() => mark(n + 1), 1000); return; } if (!u.macApp) { u.macApp = true; persist(0); } };
+      mark(0);
+    }
     if (shell < 4) return;
     on = true;
     document.documentElement.classList.add('mac-chrome');
@@ -256,6 +261,71 @@ const MacChrome = (() => {
   }
   return { init, on: () => on };
 })();
+
+/* ================= Task links (Share button) ================= */
+// The link is <server>/?task=<id>. Opened in a browser by someone who uses the Mac app, it is handed
+// to the app (e11console://task/<id>); if the app doesn't answer, the task simply opens in the browser.
+const TaskLink = (() => {
+  const url = (id) => location.origin + '/?task=' + encodeURIComponent(id);
+  const scheme = () => window.__forceScheme || (/^test\./.test(location.hostname) ? 'e11console-test' : /(^|\.)e11hq\.com$/.test(location.hostname) ? 'e11console' : null);
+  async function copy(id) {
+    const link = url(id);
+    let ok = false;
+    try { await navigator.clipboard.writeText(link); ok = true; } catch (e) {
+      const ta = document.createElement('textarea'); ta.value = link; ta.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(ta); ta.select();
+      try { ok = document.execCommand('copy'); } catch (e2) { ok = false; }
+      ta.remove();
+    }
+    toast(ok ? 'Link copied — it opens in the E11 Console app, or the browser' : 'Could not copy the link');
+  }
+  function show(id) {
+    ui.sideTab = 'details';
+    if (task(id)) openTask(id); else toast('That task is not available');
+  }
+  // Called once data has loaded, for a link opened in this page
+  function open(id) {
+    const sch = scheme(), u = me && me();
+    const tryApp = sch && !Host.isMacApp && !(typeof Phone !== 'undefined' && Phone.on) && u && u.macApp && /Macintosh/.test(navigator.userAgent);
+    if (!tryApp) return show(id);
+    let left = false;
+    const away = () => { left = true; };
+    window.addEventListener('blur', away);
+    document.addEventListener('visibilitychange', away);
+    const card = document.createElement('div');
+    card.id = 'open-app';
+    card.innerHTML = `<div class="oa-card"><div class="oa-t">Opening in the E11 Console app…<small>If your browser asks, choose Open or Allow.</small></div><button class="btn" data-oa="here">Show it here instead</button></div>`;
+    document.body.appendChild(card);
+    const done = (here) => {
+      window.removeEventListener('blur', away); document.removeEventListener('visibilitychange', away);
+      if (here) { card.remove(); show(id); }
+    };
+    card.addEventListener('click', (e) => { if (e.target.closest('[data-oa="here"]')) done(true); });
+    window.__triedScheme = sch + '://task/' + encodeURIComponent(id);
+    if (window.__fakeLeave) away(); else location.href = window.__triedScheme;
+    // Safari asks before handing a link to an app, so give people time to answer; leaving the page
+    // (the app came forward) means it worked. No answer after 8 s: show the task here.
+    const t0 = Date.now();
+    const tick = setInterval(() => {
+      if (!document.body.contains(card)) return clearInterval(tick);
+      if (left && Date.now() - t0 > 600) {
+        clearInterval(tick); done(false);
+        card.querySelector('.oa-t').innerHTML = 'Opened in the E11 Console app.<small>You can close this tab.</small>';
+      } else if (Date.now() - t0 > 8000) { clearInterval(tick); done(true); }
+    }, 300);
+  }
+  // Same-server task links inside the app open the task directly
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest && e.target.closest('a[href]');
+    if (!a || e.metaKey || e.ctrlKey || e.shiftKey) return;
+    let u; try { u = new URL(a.getAttribute('href'), location.href); } catch (err) { return; }
+    if (u.origin !== location.origin || !u.searchParams.get('task')) return;
+    e.preventDefault(); e.stopPropagation();
+    show(u.searchParams.get('task'));
+  }, true);
+  return { copy, open, show };
+})();
+// The Mac app hands shared links to the page
+window.__e11OpenTask = (id) => { if (typeof db !== 'undefined' && db && currentUserId) TaskLink.show(id); else location.href = '/?task=' + encodeURIComponent(id); };
 
 /* ================= Page history (back / forward) ================= */
 const PageHistory = (() => {
@@ -2389,6 +2459,7 @@ function renderDetail() {
         <button class="icon-btn" data-action="nav-task" data-n="-1" ${navIdx > 0 ? '' : 'disabled'} title="Previous task">${icon('chev-left')}</button>
         <button class="icon-btn" data-action="nav-task" data-n="1" ${navIdx >= 0 && navIdx < ui.navIds.length - 1 ? '' : 'disabled'} title="Next task">${icon('chev-right')}</button>
         <span class="tm-divider"></span>
+        ${phone ? '' : `<button class="icon-btn" data-action="share-task" data-id="${t.id}" title="Copy link to this task">${icon('link')}</button>`}
         <button class="icon-btn" data-action="attach" title="Attach files">${icon('clip')}</button>
         ${can('deleteTask') ? `<button class="icon-btn" data-action="delete-task" data-id="${t.id}" title="Delete task">${icon('trash')}</button>` : ''}
         <div class="disp-wrap">
@@ -3860,6 +3931,7 @@ document.addEventListener('click', async (e) => {
       case 'disp-toggle': actEl.closest('.disp-wrap').classList.toggle('open'); return;
       case 'detail-mode': ui.detailMode = actEl.dataset.mode; savePref('detailMode', ui.detailMode); renderDetail(); return;
       case 'side-tab': ui.sideTab = actEl.dataset.tab; renderDetail(); if (ui.sideTab === 'comments') { const f = $('.tm-feed'); if (f) stickFeedToBottom(f); } return;
+      case 'share-task': TaskLink.copy(id); return;
       case 'nav-back': PageHistory.back(); return;
       case 'nav-forward': PageHistory.forward(); return;
       case 'toggle-sidebar': setSidebarCollapsed(!document.getElementById('app').classList.contains('sb-collapsed')); return;

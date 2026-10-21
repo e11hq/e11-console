@@ -2206,3 +2206,9 @@ html.mac-chrome #app.sb-collapsed #sidebar { position: relative; border-right-co
   background: linear-gradient(to bottom, var(--bg) 0 47px, var(--border) 47px 48px, var(--sidebar) 48px) !important; }
 html.mac-chrome #app.sb-collapsed #sidebar::after { content: ''; position: absolute; top: 48px; bottom: 0; right: -1px; width: 1px; background: var(--border); pointer-events: none; }
 html.mac-chrome #app.sb-collapsed #topbar { margin-left: -1px; }
+/* shared task link opened in the browser, handing over to the Mac app */
+#open-app { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; background: var(--bg); }
+#open-app .oa-card { display: grid; gap: 16px; justify-items: center; text-align: center; padding: 28px 32px; border: 1px solid var(--border); border-radius: 12px; background: var(--raised, var(--bg)); }
+#open-app .oa-t { font-size: 15px; font-weight: 600; color: var(--text); }
+#open-app .oa-t small { display: block; margin-top: 6px; font-size: 12.5px; font-weight: 400; color: var(--text-3); }
+body.phone [data-action="share-task"] { display: none !important; }

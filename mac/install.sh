@@ -44,6 +44,9 @@ plutil -replace CFBundleVersion -string "2" "$PL"
 plutil -replace LSApplicationCategoryType -string "public.app-category.productivity" "$PL"
 plutil -replace NSHumanReadableCopyright -string "E11 Agency" "$PL"
 plutil -replace E11ServerURL -string "$SERVER" "$PL"
+# Shared task links: e11console://task/<id> (test copy: e11console-test://) open in this app
+SCHEME="e11console"; [ "$SERVER" != "https://console.e11hq.com" ] && SCHEME="e11console-test"
+plutil -replace CFBundleURLTypes -json "[{\"CFBundleURLName\":\"$BUNDLE_ID.link\",\"CFBundleURLSchemes\":[\"$SCHEME\"]}]" "$PL"
 plutil -replace OSAAppletShowStartupScreen -bool NO "$PL" >/dev/null 2>&1
 
 bold "3/4  Signing it for this Mac…"

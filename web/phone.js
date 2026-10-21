@@ -697,6 +697,7 @@ const Push = (() => {
     const go = () => {
       ui.sideTab = 'details';
       if (nid && db.notifications.some((n) => n.id === nid)) { openNotif(nid); return; }
+      if (taskId && !nid) return TaskLink.open(taskId); // a shared link: may hand over to the Mac app
       if (taskId && task(taskId)) openTask(taskId);
     };
     if (typeof db !== 'undefined' && db && currentUserId) return go();
