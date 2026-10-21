@@ -2187,7 +2187,7 @@ html.mac-chrome #mac-bar .icon-btn { width: 28px; height: 28px; color: var(--tex
 html.mac-chrome #mac-bar .icon-btn:hover:not(:disabled) { color: var(--text); background: var(--hover); }
 html.mac-chrome #mac-bar .icon-btn:disabled { opacity: .35; cursor: default; background: none; }
 html.mac-chrome #sidebar .brand-btns { display: none; }
-html.mac-chrome #sidebar { padding-top: 54px !important; }
+html.mac-chrome #sidebar { padding-top: 66px !important; } /* logo sits well clear of the title-bar row */
 html.mac-chrome #topbar { height: 48px; }
 html.mac-chrome #app.sb-collapsed #topbar { padding-left: 170px !important; }
 html.mac-chrome.mac-fs #app.sb-collapsed #topbar { padding-left: 90px !important; }
@@ -2200,3 +2200,9 @@ body.mac-upd #mac-bar { top: 56px; }
 /* task pop-up and side panel stay clear of the title-bar row */
 html.mac-chrome #detail:not(.full):not(.side) .tm { top: 60px; }
 html.mac-chrome #detail.side .tm { max-width: calc(100% - 230px); }
+/* collapsed sidebar: the title-bar row runs the full width in the page colour, one line under it;
+   the sidebar's colour and right edge start below that line */
+html.mac-chrome #app.sb-collapsed #sidebar { position: relative; border-right-color: transparent !important;
+  background: linear-gradient(to bottom, var(--bg) 0 47px, var(--border) 47px 48px, var(--sidebar) 48px) !important; }
+html.mac-chrome #app.sb-collapsed #sidebar::after { content: ''; position: absolute; top: 48px; bottom: 0; right: -1px; width: 1px; background: var(--border); pointer-events: none; }
+html.mac-chrome #app.sb-collapsed #topbar { margin-left: -1px; }
