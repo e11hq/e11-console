@@ -667,3 +667,6 @@ body.phone .ph-seg.in-task { border-radius: 10px; }
 :root[data-theme="light"] .ph-stats b.g { color: #148a57; }
 :root[data-theme="light"] .ph-stats b.r { color: #c62f35; }
 :root[data-theme="light"] .ph-stats b.a { color: #9a6700; }
+
+/* Phone: no double-tap zoom */
+html.phone, html.phone body { touch-action: manipulation; }

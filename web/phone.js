@@ -15,10 +15,23 @@ const Phone = (() => {
     st.on = v;
     document.body.classList.toggle('phone', v);
     document.documentElement.classList.toggle('phone', v);
+    noZoom(v);
     if (!v && typeof unpin === 'function') unpin();
     if (typeof db !== 'undefined' && db && currentUserId) render();
   }
   mq.addEventListener ? mq.addEventListener('change', check) : mq.addListener(check);
+
+  // No pinch or double-tap zoom in the phone layout: it should feel like an app, not a web page.
+  // iPhone Safari ignores user-scalable=no on its own, so the pinch gesture itself is stopped too.
+  const VP_APP = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover';
+  const VP_WEB = 'width=device-width, initial-scale=1, viewport-fit=cover';
+  function noZoom(on) {
+    const m = document.querySelector('meta[name="viewport"]');
+    if (m) m.setAttribute('content', on ? VP_APP : VP_WEB);
+  }
+  const stopPinch = (e) => { if (st.on) e.preventDefault(); };
+  ['gesturestart', 'gesturechange', 'gestureend'].forEach((ev) => document.addEventListener(ev, stopPinch, { passive: false }));
+  document.addEventListener('touchmove', (e) => { if (st.on && e.touches && e.touches.length > 1) e.preventDefault(); }, { passive: false });
 
   // iPhone Home Screen apps can report a page shorter than the screen, which leaves a gap under
   // everything pinned to the bottom. Measure the real height and pin to the true bottom edge.
