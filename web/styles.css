@@ -2159,7 +2159,7 @@ button.pv-empty:hover { background: var(--hover); color: var(--text-2); }
 .team-tabs { margin: 4px 0 12px; }
 
 /* Required Mac app update: a bar along the top that can't be dismissed */
-#mac-update { position: fixed; top: 0; left: 0; right: 0; z-index: 9000; display: flex; align-items: center; gap: 14px; padding: 10px 16px 10px 18px;
+#mac-update { position: fixed; top: 0; left: 0; right: 0; z-index: 55; display: flex; align-items: center; gap: 14px; padding: 10px 16px 10px 18px;
   background: #1d180c; border-bottom: 1px solid #4a3c1a; color: #f3e6c4; box-shadow: 0 8px 24px rgba(0,0,0,.35); }
 :root[data-theme="light"] #mac-update { background: #fff7e0; border-bottom-color: #f0d68a; color: #4a3a0e; box-shadow: 0 6px 18px rgba(20,20,40,.08); }
 #mac-update .mu-ic { width: 32px; height: 32px; flex: none; border-radius: 8px; display: grid; place-items: center; background: rgba(249,190,51,.18); color: #f9be33; }
