@@ -56,7 +56,10 @@ async def main():
         await ctx.close()
         # up-to-date Mac app and plain browser: no banner
         ctx, pg, errs = await open_app(bridge(SHELL))
-        check(await pg.locator('#mac-update').count() == 0, f'up-to-date Mac app (shell {SHELL}) shows nothing'); await ctx.close()
+        check(await pg.locator('#mac-update').count() == 0, f'up-to-date Mac app (shell {SHELL}) shows nothing')
+        await pg.click('#me-chip'); await pg.wait_for_timeout(300)
+        await pg.locator('.menu .mi', has_text='Update Mac app').click(); await pg.wait_for_timeout(500)
+        check(len(await pg.evaluate('window.__saved')) == 1, 'profile menu → Update Mac app runs the update any time'); await ctx.close()
         ctx, pg, errs = await open_app(None)
         check(await pg.locator('#mac-update').count() == 0, 'a normal browser shows nothing'); await ctx.close()
         await b.close()

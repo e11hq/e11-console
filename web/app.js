@@ -261,6 +261,7 @@ const MacUpdate = (() => {
       const b64 = btoa(unescape(encodeURIComponent(terminalFile())));
       await NativeMac.call('saveFile', { token: 'upd-' + Date.now(), name: 'Update E11 Console.terminal', b64, open: true, done: true });
       if (el) el.querySelector('.mu-txt span').textContent = 'Terminal is updating the app — it will close and reopen by itself in a few seconds.';
+      else toast('Terminal is updating the app — it will close and reopen by itself in a few seconds', null, 8000);
       setTimeout(() => { if (btn) { btn.disabled = false; btn.textContent = 'Try again'; } }, 30000);
     } catch (e) {
       if (btn) { btn.disabled = false; btn.textContent = 'Try again'; }
@@ -5652,6 +5653,7 @@ function meMenu(anchor) {
     ...(Host.isServer && me() && me().role === 'admin' ? [{ label: 'App updates', icon: 'download', run: () => go('updates') }] : []),
     ...(Host.isServer ? [{ label: 'What’s new', icon: 'info', run: () => whatsNewDialog(false) }] : []),
     ...(Host.isServer && !Host.isMacApp ? [{ label: 'Get the Mac app', icon: 'download', run: macAppDialog }] : []),
+    ...(Host.isMacApp ? [{ label: 'Update Mac app', icon: 'download', run: () => MacUpdate.run() }] : []),
     ...(isTestCopy() && me() && me().role === 'admin' ? [{ label: 'Fill with sample data', icon: 'users', run: fillSampleData }] : []),
     '-',
     { label: 'Sign out', icon: 'logout', run: signOut },
