@@ -1,11 +1,12 @@
 // Sample data for the test copy: E11 people, projects, tasks, comments with replies and Inbox
 // updates, moved so they happen around today. The person who asks becomes "Haris" in the story.
 import fs from 'node:fs';
+import path from 'node:path';
 
 const REF_DAY = Date.UTC(2026, 9, 20); // the day the sample story was written
 const DAY = 86400000;
 
-export function sampleData(store, me) {
+export function sampleData(store, me, filesRoot = null) {
   const raw = fs.readFileSync(new URL('./sample-data.json', import.meta.url), 'utf8');
   const d = JSON.parse(raw.split('"u-haris"').join(JSON.stringify(me)));
   const now = new Date();
@@ -53,6 +54,97 @@ export function sampleData(store, me) {
     out.notifications.push({ id: `smp-n${i}`, to: me, from: b, taskId: t.id, kind: 'mention', text: 'mentioned you in a reply on', snippet: `@${meName} can you check the copy before it goes to the client?`, commentId: `smp-r${i}b`, at: at(6 - i / 2), read: false });
     n++;
   });
+
+  // ---------- Finance sample: statuses on tasks, extra finished jobs, Finance people and expense records ----------
+  const STATUSES = ['Quote to be sent', 'LPO Pending', 'Invoiced', 'Retainer', 'To be invoiced'];
+  const UPDATES = ['WIP', 'Brief to come', 'Amendments', 'Shoot', 'Edit Video', 'Ready to Post', 'On hold', 'Awaiting client assets', 'Storyboard', 'Mockup'];
+  const iso = (daysAgo, h = 10) => new Date(Date.now() - daysAgo * DAY + (h - 12) * 3600000).toISOString();
+  const dayStr = (daysAgo) => iso(daysAgo).slice(0, 10);
+  let seed = 7;
+  const rnd = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+  const prodIds = out.users.filter((u) => ['production', 'social'].includes(u.role)).map((u) => u.id);
+  out.tasks.filter((t) => !t.parentId).forEach((t, i) => {
+    if (i % 5 !== 4) { t.finance = STATUSES[i % STATUSES.length]; t.financeAt = iso(Math.floor(rnd() * 150)); }
+    t.update = UPDATES[i % UPDATES.length];
+    if (prodIds.length && i % 3 === 0) t.guardian = prodIds[i % prodIds.length];
+  });
+  // finished jobs from the last six months, so the Finance graphs have something to show
+  const projects = (out.projects || []).map((p) => p.id);
+  const jobs = ['Social Reel', 'Print Ad', 'EDM', 'Launch Video', 'Story Pack', 'Photo Shoot', 'Key Visual', 'Brochure', 'Event Recap', 'Teaser 15s'];
+  for (let i = 0; i < 36 && projects.length; i++) {
+    const p = (out.projects || [])[i % projects.length];
+    const proj = projects[i % projects.length];
+    const sec = (p.sections || []).find((x) => /done|complete|ctr/i.test(x.name)) || (p.sections || [])[0];
+    const daysAgo = Math.floor(rnd() * 170);
+    const st = rnd() < 0.45 ? 'Invoiced' : STATUSES[Math.floor(rnd() * STATUSES.length)];
+    out.tasks.push({
+      id: `smp-fin-t${i}`, title: `${p.name} | ${jobs[i % jobs.length]} ${['A', 'B', 'C', 'D'][i % 4]}`, projectId: proj, sectionId: sec ? sec.id : null, parentId: null,
+      assignees: prodIds.length ? [prodIds[i % prodIds.length]] : [], createdBy: me, createdAt: iso(daysAgo + 14), updatedAt: iso(Math.min(daysAgo, 20)),
+      due: dayStr(daysAgo + 2), done: true, completedAt: iso(Math.floor(rnd() * 20) + 1), notes: '', notesHtml: '', tags: [], comments: [], attachments: [], activity: [], checklist: [],
+      finance: st, financeAt: iso(daysAgo), update: 'Ready to Post', order: 1000 + i,
+    });
+  }
+  // two Finance-only people
+  [['u-smp-fin-a', 'Rania Haddad', 'rania.finance@e11-digital.com', 'finance_admin', 'Finance Manager'], ['u-smp-fin-v', 'Omar Saleh', 'omar.accounts@e11-digital.com', 'finance_viewer', 'Accountant']]
+    .forEach(([id, name, email, role, designation]) => { if (!have.has(email)) out.users.push({ id, name, email, role, designation, active: true, setup: true, avatar: null, prefs: {}, createdAt: iso(200), office: 'Dubai — Business Bay office' }); });
+  // expense records: subscriptions, staff reimbursements, extra expenses
+  const monthKey = (d) => d.toISOString().slice(0, 7);
+  const sixAgo = new Date(); sixAgo.setUTCDate(1); sixAgo.setUTCMonth(sixAgo.getUTCMonth() - 5);
+  out.finance = [
+    ['Adobe Creative Cloud (team)', 1250, 3], ['Figma Professional', 540, 8], ['Google Workspace', 1100, 1], ['Frame.io', 220, 15], ['Envato Elements', 120, 20], ['Office internet', 650, 25],
+  ].map(([name, amount, day], i) => ({ id: `smp-fin-s${i}`, type: 'sub', name, amount, day, startMonth: monthKey(sixAgo), endedAt: null, invoices: {}, createdAt: iso(185), createdBy: 'u-smp-fin-a' }));
+  out.finance.push({ id: 'smp-fin-p0', type: 'person', name: 'Omar (driver)', createdAt: iso(160), createdBy: 'u-smp-fin-a' },
+    { id: 'smp-fin-p1', type: 'person', name: 'Studio Lights Rental LLC', createdAt: iso(120), createdBy: 'u-smp-fin-a' });
+  const reasons = [['Taxi to client shoot', 85], ['Props for Ford shoot', 340], ['Team lunch — ALAIN launch', 420], ['Parking at Expo City', 60], ['Printing samples', 180], ['Fuel — location scout', 150]];
+  for (let i = 0; i < 26; i++) {
+    const [, amt] = reasons[i % reasons.length];
+    const who = i % 5 === 0 ? { personId: 'smp-fin-p0', personName: 'Omar (driver)' } : { userId: prodIds[i % Math.max(1, prodIds.length)] || me };
+    out.finance.push({ id: `smp-fin-r${i}`, type: 'reimb', ...who, amount: amt + Math.round(rnd() * 60), date: dayStr(Math.floor(rnd() * 175)), invoice: null, note: reasons[i % reasons.length][0], createdAt: iso(1), createdBy: 'u-smp-fin-a' });
+  }
+  const big = [['Camera lens — Sony 24-70mm', 8900], ['Studio rental (2 days)', 4200], ['Drone pilot', 2500], ['Stock music licence', 950], ['Print run — brochures', 3600], ['Laptop for new hire', 6200], ['Event booth build', 12500], ['Lighting kit', 3100]];
+  for (let i = 0; i < 18; i++) {
+    const [name, amt] = big[i % big.length];
+    out.finance.push({ id: `smp-fin-e${i}`, type: 'expense', name, amount: Math.round(amt * (0.85 + rnd() * 0.3)), date: dayStr(Math.floor(rnd() * 175)), invoice: null, createdAt: iso(1), createdBy: 'u-smp-fin-a' });
+  }
+
+  // ---------- Sample files: real small files copied into the data folder ----------
+  if (filesRoot) {
+    const SRC = new URL('./sample-files/', import.meta.url);
+    const size = (n) => fs.statSync(new URL(n, SRC)).size;
+    const put = (name, rel) => {
+      const dest = path.join(filesRoot, ...rel.split('/'));
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      if (!fs.existsSync(dest)) fs.copyFileSync(new URL(name, SRC), dest);
+      return { name, path: rel, size: size(name) };
+    };
+    const SETS = [
+      ['ford-key-visual.jpg', 'creative-brief.pdf', 'copy-deck.docx'],
+      ['alain-tower-render.jpg', 'client-presentation.pptx'],
+      ['teaser-rough-cut.mp4', 'story-frame-1.png'],
+      ['korea360-recap-cover.jpg', 'media-plan.xlsx'],
+      ['creative-brief.pdf', 'story-frame-1.png', 'ford-key-visual.jpg'],
+      ['client-presentation.pptx', 'teaser-rough-cut.mp4'],
+    ];
+    const by = out.users.length ? out.users.map((u) => u.id) : [me];
+    out.tasks.filter((t) => !t.parentId && !String(t.id).startsWith('smp-fin-')).slice(0, 10).forEach((t, i) => {
+      t.attachments = SETS[i % SETS.length].map((name, k) => ({ id: `smp-a-${t.id}-${k}`, ...put(name, `attachments/${t.id}/${name}`), addedAt: iso(3 + k), addedBy: by[(i + k) % by.length] }));
+      const c = (t.comments || []).find((x) => !x.parentId);
+      if (c && i % 2 === 0) {
+        const name = ['story-frame-1.png', 'alain-tower-render.jpg', 'korea360-recap-cover.jpg'][i % 3];
+        c.attachments = [{ id: `smp-ca-${c.id}`, ...put(name, `attachments/${t.id}/${name}`), addedAt: c.at }];
+      }
+    });
+    // invoices on expense records
+    const inv = (name, folder, m, id) => ({ id, ...put(name, `Finance/${folder}/${m}/${name}`), addedAt: iso(1), addedBy: 'u-smp-fin-a' });
+    out.finance.forEach((r, i) => {
+      if (r.type === 'sub' && i < 4) {
+        const ms = [0, 1, 2].map((k) => { const d = new Date(); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - k); return d.toISOString().slice(0, 7); });
+        r.invoices = Object.fromEntries(ms.map((m) => [m, inv('invoice-subscription.pdf', 'Subscriptions', m, `smp-inv-${r.id}-${m}`)]));
+      }
+      if (r.type === 'reimb' && i % 2 === 0) r.invoice = inv('receipt-reimbursement.pdf', 'Reimbursements', r.date.slice(0, 7), `smp-inv-${r.id}`);
+      if (r.type === 'expense' && i % 2 === 1) r.invoice = inv('invoice-expense.pdf', 'Expenses', r.date.slice(0, 7), `smp-inv-${r.id}`);
+    });
+  }
 
   // Creative Director for the review flow, unless one is already set
   const meta = store.get('meta', 'main') || {};

@@ -208,7 +208,7 @@ export function createServer(cfg) {
     if (p === '/api/sample' && req.method === 'POST') {
       if (!access.isAdm(u)) return json(res, 403, { ok: false, error: 'Admins only' });
       if (!/-test\.|-dev$/.test(version)) return json(res, 403, { ok: false, error: 'Sample data is only for the test copy' });
-      const data = sampleData(store, u.id);
+      const data = sampleData(store, u.id, path.join(dataDir, 'files'));
       const { rev, results } = store.importAll(data, u.id);
       broadcast(rev, results, null, u.id);
       return json(res, 200, { ok: true, rev, tasks: data.tasks.length, people: data.users.length });

@@ -21,6 +21,15 @@ async def main():
         try: urllib.request.urlopen(BASE + '/api/health'); break
         except Exception: time.sleep(0.1)
     urllib.request.urlopen(urllib.request.Request(BASE + '/api/sample', method='POST', data=b'{}', headers={'X-Dev-Email': ADMIN, 'Content-Type': 'application/json'}))
+    # this test builds its own Finance numbers: clear the sample's Finance statuses, finished jobs and records
+    snap = json.loads(urllib.request.urlopen(urllib.request.Request(BASE + '/api/snapshot', headers={'X-Dev-Email': ADMIN})).read())['data']
+    push(ADMIN, [{'kind': 'users', 'id': 'u-tmpfa', 'data': {'id': 'u-tmpfa', 'email': 'tmpfa@e11-digital.com', 'role': 'finance_admin', 'active': True, 'setup': True}}])
+    push('tmpfa@e11-digital.com', [{'kind': 'finance', 'id': r['id'], 'del': True} for r in snap['finance']])
+    clean = []
+    for t in snap['tasks']:
+        if t['id'].startswith('smp-fin-'): clean.append({'kind': 'tasks', 'id': t['id'], 'del': True})
+        elif t.get('finance'): n = dict(t); n['finance'] = None; n['financeAt'] = None; clean.append({'kind': 'tasks', 'id': t['id'], 'base': t, 'data': n})
+    push(ADMIN, clean)
     snap = json.loads(urllib.request.urlopen(urllib.request.Request(BASE + '/api/snapshot', headers={'X-Dev-Email': ADMIN})).read())['data']
     now = time.strftime('%Y-%m')
     users = [{'id': 'u-fa', 'email': FA, 'name': 'Fatima Finance', 'role': 'finance_admin', 'active': True, 'setup': True},

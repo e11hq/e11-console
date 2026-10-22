@@ -29,7 +29,7 @@ async def main():
         labels = await E("[...document.querySelectorAll('#detail .fl-row .fl-l')].map(e=>e.textContent.trim())")
         check(labels == ['Task Update', 'Finance', 'Guardian'], f'Fields under the description for an Admin: {labels}')
         await pg.screenshot(path=os.path.join(tempfile.gettempdir(), 'fields_empty.png'))
-        await E("db.tasks.slice(0,3).forEach(t=>t.update='Shoot')")
+        await E("db.tasks.forEach(t=>{ t.update=null; }); db.tasks.slice(0,3).forEach(t=>t.update='Shoot')")
         await pg.click('#detail [data-action="field-pick"][data-k="update"]'); await pg.wait_for_timeout(300)
         opts = await E("[...document.querySelectorAll('.fl-menu .mi:not(.fl-clear)')].map(e=>e.textContent.trim())")
         check(opts[0] == 'Shoot' and len(opts) == 26, f'Task Update options, most used first: {opts[:3]}… ({len(opts)})')
