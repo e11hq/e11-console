@@ -11,7 +11,15 @@ jobs:
         with:
           node-version: 22
       - name: Tools used for previews
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg poppler-utils python3-pil
+        # GitHub's Ubuntu package mirror sometimes hangs: give up after a few minutes and retry once
+        timeout-minutes: 8
+        run: |
+          APT="-o Acquire::Retries=3 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20"
+          for i in 1 2; do
+            timeout 180 sudo apt-get $APT update && timeout 180 sudo apt-get $APT install -y --no-install-recommends ffmpeg poppler-utils python3-pil && exit 0
+            echo "apt attempt $i failed, retrying"; sleep 5
+          done
+          exit 1
       - name: Server tests
         working-directory: server
         run: npm test
