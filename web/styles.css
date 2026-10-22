@@ -2252,3 +2252,28 @@ body.phone [data-action="share-task"] { display: none !important; }
 .wf-menu .mi { display: flex; align-items: center; gap: 8px; }
 .wf-menu .wf-ck { margin-left: auto; color: var(--accent); display: inline-flex; }
 .wf-menu .wf-ck .ic { width: 14px; height: 14px; }
+
+/* ---------- Task fields (Task Update, Finance, Guardian) ---------- */
+.fl-sec { margin-top: 6px; }
+.fl-head { display: inline-flex; align-items: center; gap: 8px; border: 0; background: none; color: var(--text); font: inherit; font-size: 15px; font-weight: 600; padding: 4px 0 8px; cursor: pointer; }
+.fl-head .ic { width: 12px; height: 12px; color: var(--text-3); transition: transform .15s; }
+.fl-sec.closed .fl-head .ic { transform: rotate(-90deg); }
+.fl-rows { margin-left: 20px; }
+.fl-row { display: grid; grid-template-columns: minmax(150px, 42%) 1fr; align-items: center; min-height: 40px; border-top: 1px solid var(--border); }
+.fl-row:last-of-type { border-bottom: 1px solid var(--border); }
+.fl-l { display: inline-flex; align-items: center; gap: 10px; color: var(--text); font-size: 13.5px; }
+.fl-l .ic { width: 15px; height: 15px; color: var(--text-3); }
+.fl-v { min-width: 0; display: flex; align-items: center; }
+.fl-btn { border: 0; background: none; padding: 3px 4px; margin-left: -4px; border-radius: 6px; font: inherit; color: var(--text); cursor: pointer; display: inline-flex; align-items: center; min-height: 28px; max-width: 100%; }
+.fl-btn:hover { background: var(--hover); }
+.fl-empty { color: var(--text-3); padding: 0 4px; }
+.fl-pill { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; border-radius: 6px; font-size: 13px; font-weight: 500; white-space: nowrap;
+  color: var(--c); background: color-mix(in srgb, var(--c) 18%, transparent); }
+:root[data-theme="light"] .fl-pill { color: color-mix(in srgb, var(--c) 70%, #000); background: color-mix(in srgb, var(--c) 20%, #fff); }
+.fl-pill .ic { width: 11px; height: 11px; opacity: .8; }
+.fl-person { display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; }
+.fl-more { display: inline-flex; align-items: center; gap: 8px; border: 0; background: none; color: var(--text-3); font: inherit; font-size: 12.5px; padding: 10px 0 2px; cursor: pointer; }
+.fl-more .ic { width: 12px; height: 12px; }
+.fl-more:hover { color: var(--text); }
+.fl-menu .mi .fl-pill { height: 22px; }
+.fl-menu .fl-clear { color: var(--text-2); }

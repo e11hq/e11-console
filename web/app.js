@@ -30,6 +30,8 @@ const ICONS = {
   cal: '<rect x="2.5" y="3.3" width="11" height="10.2" rx="1.5"/><path d="M2.5 6.6h11M5.5 2v2.4M10.5 2v2.4"/>',
   folder: '<path d="M2.2 4.2c0-.6.4-1 1-1h3l1.4 1.5h5.2c.6 0 1 .4 1 1v6.6c0 .6-.4 1-1 1H3.2c-.6 0-1-.4-1-1z"/>',
   edit: '<path d="M10.4 3.2 12.8 5.6 6 12.4l-3 .6.6-3z"/>',
+  select: '<rect x="2" y="3.5" width="12" height="9" rx="2"/><path d="M8.5 3.5v9"/><path d="m10.3 7.3 1.2 1.2 1.2-1.2"/>',
+  coin: '<circle cx="8" cy="8" r="5.6"/><path d="M9.9 6.1c-.3-.6-1-1-1.9-1-1.1 0-1.9.6-1.9 1.4 0 1.9 3.9 1 3.9 2.9 0 .8-.8 1.5-2 1.5-.9 0-1.7-.4-2-1.1M8 4v1.1M8 10.9V12"/>',
   link: '<path d="M6.9 9.1a2.6 2.6 0 0 0 3.7 0l2.2-2.2a2.6 2.6 0 0 0-3.7-3.7l-.9.9"/><path d="M9.1 6.9a2.6 2.6 0 0 0-3.7 0L3.2 9.1a2.6 2.6 0 0 0 3.7 3.7l.9-.9"/>',
   open: '<path d="M9.5 2.7h3.8v3.8M13.3 2.7 7.6 8.4M11.6 9.3v3.2c0 .5-.4.8-.8.8H3.5a.8.8 0 0 1-.8-.8V5.2c0-.4.3-.8.8-.8h3.2"/>',
   arrow: '<path d="M3 8h9.5M8.8 4.3 12.5 8l-3.7 3.7"/>',
@@ -937,6 +939,85 @@ const myDoneAt = (t) => (t.done ? t.completedAt : (t.partsDone || {})[currentUse
 const needsOwner = (t) => !t.parentId && !t.done && !(t.assignees || []).length && t.createdBy === currentUserId;
 const onMyList = (t) => isMine(t) || needsOwner(t);
 const myTop = () => topTasks().filter(onMyList);
+/* ---------- Task fields (under the description) ----------
+   Task Update: what's happening now — everyone sees it, changes are logged and sent to everyone on the task.
+   Finance: Account Managers and Admins only. Guardian: one person from Production / Social / Freelancers. */
+const TASK_UPDATES = ['WIP', 'Brief to come', 'Amendments', 'Minor Amendments', 'Shoot', 'Edit Video', 'Adaptations', 'On hold', 'Oversee', 'Followup', 'Meeting', 'Reel Cover', 'Ready to Post', 'Ongoing', 'Redesign', 'Awaiting client assets', 'Storyboard', 'Open files', 'Brainstorm', 'Briefing', 'Out of scope', 'Dispatch', 'Copy Writing', 'Edit images', 'HTML', 'Mockup'];
+const FIELD_COLORS = ['#f9be33', '#4c9aff', '#ff6b70', '#3ddc97', '#a875ff', '#ff8a4c', '#4fd1c5', '#ff8fc7', '#9aa4b2', '#7b68ee'];
+const UPDATE_COLOR = (v) => FIELD_COLORS[Math.max(0, TASK_UPDATES.indexOf(v)) % FIELD_COLORS.length];
+const FINANCE = { 'Quote to be sent': '#9aa4b2', 'LPO Pending': '#f9be33', 'Invoiced': '#3ddc97', 'Retainer': '#a875ff', 'To be invoiced': '#ff8a4c' };
+// Most used first (ties keep the agreed order)
+function updatesByUse() {
+  const n = {};
+  db.tasks.forEach((t) => { if (t.update) n[t.update] = (n[t.update] || 0) + 1; });
+  return TASK_UPDATES.slice().sort((a, b) => (n[b] || 0) - (n[a] || 0) || TASK_UPDATES.indexOf(a) - TASK_UPDATES.indexOf(b));
+}
+const fieldPill = (v, color) => `<span class="fl-pill" style="--c:${color}">${esc(v)}${icon('chev')}</span>`;
+function fieldsHTML(t) {
+  const mgr = isManager();
+  const canGuard = can('assign');
+  const rows = [
+    { k: 'update', ic: 'select', l: 'Task Update', v: t.update, html: t.update ? fieldPill(t.update, UPDATE_COLOR(t.update)) : '', edit: true },
+    ...(mgr ? [{ k: 'finance', ic: 'coin', l: 'Finance', v: t.finance, html: t.finance ? fieldPill(t.finance, FINANCE[t.finance] || '#9aa4b2') : '', edit: true }] : []),
+    { k: 'guardian', ic: 'user', l: 'Guardian', v: t.guardian && userById(t.guardian) ? t.guardian : null,
+      html: t.guardian && userById(t.guardian) ? `<span class="fl-person">${avatarHTML(t.guardian, 20)}${esc(fullName(userById(t.guardian)))}</span>` : '', edit: canGuard },
+  ];
+  const empty = rows.filter((r) => !r.v).length;
+  const hide = !!ui.fieldsHideEmpty;
+  const open = ui.fieldsOpen !== false;
+  return `<div class="d-section fl-sec ${open ? '' : 'closed'}">
+    <button class="fl-head" data-action="fields-toggle">${icon('chev')}<span>Fields</span></button>
+    ${open ? `<div class="fl-rows">${rows.filter((r) => !(hide && !r.v)).map((r) => `<div class="fl-row">
+        <span class="fl-l">${icon(r.ic)}${esc(r.l)}</span>
+        <span class="fl-v">${r.edit ? `<button class="fl-btn" data-action="field-pick" data-k="${r.k}">${r.html || '<span class="fl-empty">–</span>'}</button>` : (r.html || '<span class="fl-empty">–</span>')}</span>
+      </div>`).join('')}
+      ${empty ? `<button class="fl-more" data-action="fields-empty">${icon(hide ? 'chev' : 'chev-up')}${hide ? 'Show' : 'Hide'} ${empty} empty field${empty === 1 ? '' : 's'}</button>` : ''}
+    </div>` : ''}
+  </div>`;
+}
+function fieldMenu(anchor, k) {
+  const t = task(ui.taskId);
+  if (!t) return;
+  const set = (v) => setField(t, k, v);
+  const cur = t[k] || null;
+  let items = [];
+  const ck = (on) => (on ? `<span class="wf-ck">${icon('check')}</span>` : '');
+  if (k === 'update') items = updatesByUse().map((v) => ({ html: `<div class="mi">${fieldPill(v, UPDATE_COLOR(v)).replace(icon('chev'), '')}${ck(cur === v)}</div>`, run: () => set(v) }));
+  else if (k === 'finance') {
+    if (!isManager()) return denied();
+    items = Object.entries(FINANCE).map(([v, c]) => ({ html: `<div class="mi">${fieldPill(v, c).replace(icon('chev'), '')}${ck(cur === v)}</div>`, run: () => set(v) }));
+  } else if (k === 'guardian') {
+    if (!can('assign')) return denied();
+    [['production', 'Production'], ['social', 'Social'], ['freelancer', 'Freelancers']].forEach(([r, label]) => {
+      const us = activeUsers().filter((u) => u.role === r);
+      if (!us.length) return;
+      items.push({ html: `<div class="wf-mh">${esc(label)}</div>` });
+      us.forEach((u) => items.push({ html: `<div class="mi wf-person">${avatarHTML(u.id, 20)}<span>${esc(fullName(u))}</span>${ck(cur === u.id)}</div>`, run: () => set(u.id) }));
+    });
+  }
+  if (cur) items.push({ html: '<div class="sep"></div>' }, { html: `<div class="mi fl-clear">${icon('x')}Clear</div>`, run: () => set(null) });
+  const m = showMenu(anchor, items.map((it, i) => (it.run ? { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) } : it)));
+  m.classList.add('wf-menu', 'fl-menu');
+}
+function setField(t, k, v) {
+  const old = t[k] || null;
+  if (old === v) return;
+  if (k === 'finance' && !isManager()) return denied();
+  t[k] = v || null;
+  const name = (id) => (id && userById(id) ? fullName(userById(id)) : '');
+  if (k === 'update') {
+    logChange(t, 'the <b>Task Update</b>', old, v);
+    const to = new Set(watchersOf(t)); if (t.guardian) to.add(t.guardian);
+    to.forEach((u) => pushNotif(u, t, 'update', v ? `set the Task Update to <b>${esc(v)}</b> on` : 'cleared the Task Update on'));
+  } else if (k === 'finance') logChange(t, 'the <b>Finance</b> status', old, v);
+  else if (k === 'guardian') {
+    logChange(t, 'the <b>Guardian</b>', name(old), name(v));
+    if (v) pushNotif(v, t, 'assigned', 'made you the Guardian of');
+  }
+  t.updatedAt = nowISO();
+  commit();
+}
+
 /* ---------- Whose tasks the personal pages show ----------
    Everyone else: tasks assigned to them (as before).
    Account Managers and Admins: tasks they created. My Tasks has filters — Created date, People
@@ -1242,6 +1323,7 @@ const NOTIF_TYPES = [
   { k: 'mention', kinds: ['mention'], l: '@Mentions', d: 'Someone tags you in a comment or a description' },
   { k: 'comment', kinds: ['comment'], l: 'Comments & replies', d: 'New comments on your tasks and replies in your threads' },
   { k: 'status', kinds: ['status', 'done'], l: 'Status & completion', d: 'A task moves to another status or is marked complete' },
+  { k: 'update', kinds: ['update'], l: 'Task Update changes', d: 'The Task Update of a task you’re on changes' },
   { k: 'cd', kinds: ['cd'], l: 'CD Status changes', d: 'The CD Status of a task is set or cleared' },
   { k: 'due', kinds: ['due'], l: 'Due dates', d: 'A due date is added, moved or removed' },
   { k: 'priority', kinds: ['priority'], l: 'Priority', d: 'Your priority on a task is changed' },
@@ -2692,6 +2774,8 @@ function renderDetail() {
             <div class="desc-toggle-wrap"><button class="desc-toggle" data-action="desc-toggle">${icon(open ? 'chev-up' : 'chev')}${open ? 'Collapse' : 'Expand'}</button></div></div>`;
         })()}
 
+        ${fieldsHTML(t)}
+
         <div class="d-section">
           <h4>${icon('sub')}Subtasks <span class="n">${subs.length ? `${subsDone}/${subs.length}` : ''}</span>${subs.length ? `<span class="mini-bar"><i style="width:${Math.round(subsDone / subs.length * 100)}%"></i></span>` : ''}</h4>
           <div id="d-subs">
@@ -4128,6 +4212,9 @@ document.addEventListener('click', async (e) => {
       case 'wf-clear-am': Work.f().ams = Work.f().ams.filter((x) => x !== id); renderContent(); renderSidebar(); return;
       case 'wf-reset': ui.workF = null; renderContent(); renderSidebar(); return;
       case 'home-view-all': if (Work.lead()) ui.workF = null; ui.myTasksTab = 'todo'; go('mytasks'); return;
+      case 'field-pick': e.stopPropagation(); fieldMenu(actEl, actEl.dataset.k); return;
+      case 'fields-toggle': ui.fieldsOpen = ui.fieldsOpen === false; renderDetail(); return;
+      case 'fields-empty': ui.fieldsHideEmpty = !ui.fieldsHideEmpty; renderDetail(); return;
       case 'nav-back': PageHistory.back(); return;
       case 'nav-forward': PageHistory.forward(); return;
       case 'toggle-sidebar': setSidebarCollapsed(!document.getElementById('app').classList.contains('sb-collapsed')); return;

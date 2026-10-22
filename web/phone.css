@@ -693,3 +693,7 @@ body.phone .wf-btn { height: 34px; font-size: 14px; border-radius: 10px; }
 body.phone .wf-chip { height: 32px; font-size: 13.5px; }
 body.phone .wf-chip button { width: 24px; height: 24px; }
 body.phone .wf-menu .mi { min-height: 46px; }
+body.phone .fl-rows { margin-left: 0; }
+body.phone .fl-row { min-height: 48px; grid-template-columns: 46% 1fr; }
+body.phone .fl-l { font-size: 15px; }
+body.phone .fl-pill { height: 30px; font-size: 14.5px; }
