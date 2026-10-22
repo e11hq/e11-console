@@ -11,15 +11,20 @@ jobs:
         with:
           node-version: 22
       - name: Tools used for previews
-        # GitHub's Ubuntu package mirror sometimes hangs: give up after a few minutes and retry once
-        timeout-minutes: 8
+        # GitHub's Ubuntu package mirror is sometimes slow or down: try it briefly, and if it fails
+        # fetch ffmpeg another way (npm) so a mirror problem never blocks a release
+        timeout-minutes: 6
+        continue-on-error: true
         run: |
-          APT="-o Acquire::Retries=3 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20"
-          for i in 1 2; do
-            timeout 180 sudo apt-get $APT update && timeout 180 sudo apt-get $APT install -y --no-install-recommends ffmpeg poppler-utils python3-pil && exit 0
-            echo "apt attempt $i failed, retrying"; sleep 5
-          done
-          exit 1
+          APT="-o Acquire::Retries=2 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15"
+          timeout 120 sudo apt-get $APT update && timeout 150 sudo apt-get $APT install -y --no-install-recommends ffmpeg poppler-utils python3-pil
+      - name: ffmpeg fallback
+        timeout-minutes: 4
+        run: |
+          if command -v ffmpeg >/dev/null; then ffmpeg -version | head -1; exit 0; fi
+          npm install -g ffmpeg-static@5.2.0
+          sudo ln -sf "$(npm root -g)/ffmpeg-static/ffmpeg" /usr/local/bin/ffmpeg
+          ffmpeg -version | head -1
       - name: Server tests
         working-directory: server
         run: npm test
