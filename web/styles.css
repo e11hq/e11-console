@@ -2325,3 +2325,22 @@ body.phone [data-action="share-task"] { display: none !important; }
 /* My profile: every card full width, one under another (like Appearance) */
 :root:not(.phone) .profile { grid-template-columns: minmax(0, 1fr); }
 :root:not(.phone) .profile > .pf-card { grid-column: 1 / -1; }
+
+/* Sidebar header: search and New task sit on the logo row (no page title under the logo) */
+#sidebar .sb-head { display: none; }
+.brand-acts { display: flex; align-items: center; gap: 4px; flex: none; }
+#sidebar .brand img.brand-word { height: 10px; }
+#sidebar .brand-logo { gap: 8px; }
+#app.sb-collapsed .brand-acts { flex-direction: column; gap: 6px; }
+/* In the browser the logo row also holds the theme and collapse buttons: keep everything compact so nothing overlaps */
+html:not(.mac-chrome) #app:not(.sb-collapsed) #sidebar .brand { gap: 4px; padding-right: 0; }
+html:not(.mac-chrome) #app:not(.sb-collapsed) #sidebar .brand .icon-btn { width: 26px; height: 26px; padding: 0; display: inline-grid; place-items: center; }
+html:not(.mac-chrome) #app:not(.sb-collapsed) #sidebar .brand .create-btn { width: 28px; height: 26px; }
+html:not(.mac-chrome) #app:not(.sb-collapsed) #sidebar .brand-acts, html:not(.mac-chrome) #app:not(.sb-collapsed) #sidebar .brand-btns { gap: 1px; }
+html:not(.mac-chrome) #app:not(.sb-collapsed) #sidebar .brand img.brand-tile { width: 28px; height: 28px; }
+html:not(.mac-chrome) #app:not(.sb-collapsed) #sidebar .brand img.brand-word { height: 9px; }
+html:not(.mac-chrome) #app:not(.sb-collapsed) #sidebar .brand-logo { gap: 7px; }
+html:not(.mac-chrome) #app:not(.sb-collapsed) #sidebar .brand { padding-left: 2px; }
+html:not(.mac-chrome) #app:not(.sb-collapsed) #sidebar .brand img.brand-word { height: 8.5px; }
+html:not(.mac-chrome) #app:not(.sb-collapsed) #sidebar .brand-logo { gap: 6px; }
+html:not(.mac-chrome) #app:not(.sb-collapsed) #sidebar .brand { margin-right: -7px; }

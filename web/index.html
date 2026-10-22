@@ -36,18 +36,16 @@
   <aside id="sidebar">
     <div class="brand">
       <span class="brand-logo"><img class="brand-tile" src="logo-tile.png" alt="E11 Console"><img class="brand-word on-dark" src="logo-console-dark.png" alt=""><img class="brand-word on-light" src="logo-console-light.png" alt=""></span>
+      <span class="brand-acts">
+        <button class="icon-btn" data-action="focus-search" title="Search (⌘K)"><span class="ic" data-icon="search"></span></button>
+        <button class="create-btn" data-action="new-task" title="New task (⌘N)"><span class="ic" data-icon="plus"></span></button>
+      </span>
       <div class="brand-btns">
         <button class="icon-btn theme-toggle" data-action="toggle-theme" title="Switch to light mode"><span class="ic" data-icon="sun"></span></button>
         <button class="icon-btn sb-toggle" data-action="toggle-sidebar" title="Collapse sidebar"><span class="ic" data-icon="sidebar"></span></button>
       </div>
     </div>
-    <div class="sb-head">
-      <span class="sb-title">Home</span>
-      <span class="sb-head-btns">
-        <button class="icon-btn" data-action="focus-search" title="Search (⌘K)"><span class="ic" data-icon="search"></span></button>
-        <button class="create-btn" data-action="new-task" title="New task (⌘N)"><span class="ic" data-icon="plus"></span></button>
-      </span>
-    </div>
+    <div class="sb-head" aria-hidden="true"></div>
     <nav class="nav">
       <a class="nav-item" data-nav="home"><span class="ic" data-icon="home"></span>Home</a>
       <a class="nav-item" data-nav="inbox"><span class="ic" data-icon="inbox"></span>Inbox<span class="count ib" id="inbox-count"></span></a>

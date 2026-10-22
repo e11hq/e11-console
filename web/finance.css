@@ -5,7 +5,7 @@
 :root[data-theme="light"] .r-finance_viewer { color: #1a7d74; }
 
 /* Finance people: their own sidebar (Dashboard / Projects / Expenses), no task search or task tools */
-body.fin-mode #sidebar .sb-head, body.fin-mode #sidebar > .nav:not(.fin-nav), body.fin-mode #sidebar .nav-heading,
+body.fin-mode #sidebar .sb-head, body.fin-mode #sidebar .brand-acts, body.fin-mode #sidebar > .nav:not(.fin-nav), body.fin-mode #sidebar .nav-heading,
 body.fin-mode #project-list, body.fin-mode .ca-nav-wrap, body.fin-mode #topbar .search, body.fin-mode .data-link { display: none !important; }
 .fin-nav { margin: 6px 0 auto; }
 .fin-nav .nav-item .ic, .fin-admin-nav .ic { width: 15px; height: 15px; }
