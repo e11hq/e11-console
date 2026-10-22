@@ -193,7 +193,7 @@ async def main():
             check(await pg2.evaluate("ui.taskId") == tid and await pg2.evaluate("location.search") == '', 'opening the app from a notification link lands on the task')
             await pg2.close()
             # light theme sanity
-            await hr.locator('#ph-tabs [data-ph-tab="me"]').click(); await hr.locator('.ph-row[data-action="toggle-theme"]').click(); await hr.wait_for_timeout(200)
+            await hr.locator('#ph-tabs [data-ph-tab="me"]').click(); await hr.locator('.ph-theme [data-mode="light"]').click(); await hr.wait_for_timeout(200)
             await hr.locator('#ph-tabs [data-ph-tab="today"]').click(); await hr.wait_for_timeout(200)
             await shot(hr, '13-light')
             await b.close()
