@@ -575,6 +575,7 @@ const Phone = (() => {
       closeMenus();
       const v = tab.dataset.phTab;
       if (v === 'reviews') ui.rrTab = 'active';
+      if (v === 'mytasks') { ui.workF = null; ui.myTasksTab = 'todo'; }
       go(v);
       return;
     }

@@ -4388,7 +4388,11 @@ document.addEventListener('click', async (e) => {
   }
 
   const nav = e.target.closest('[data-nav]');
-  if (nav) { go(nav.dataset.nav); return; }
+  if (nav) {
+    // My Tasks from the sidebar always starts fresh: no filters, To do tab
+    if (nav.dataset.nav === 'mytasks' && nav.closest('#sidebar')) { ui.workF = null; ui.myTasksTab = 'todo'; }
+    go(nav.dataset.nav); return;
+  }
   const pr = e.target.closest('[data-project]');
   if (pr && !e.target.closest('[data-action]')) { go('project', pr.dataset.project); return; }
 
