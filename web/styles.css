@@ -2344,3 +2344,6 @@ html:not(.mac-chrome) #app:not(.sb-collapsed) #sidebar .brand { padding-left: 2p
 html:not(.mac-chrome) #app:not(.sb-collapsed) #sidebar .brand img.brand-word { height: 8.5px; }
 html:not(.mac-chrome) #app:not(.sb-collapsed) #sidebar .brand-logo { gap: 6px; }
 html:not(.mac-chrome) #app:not(.sb-collapsed) #sidebar .brand { margin-right: -7px; }
+
+/* Review Requests: the submission opened from the Inbox flashes briefly */
+.rr-card.flash, .pc.rv.flash { animation: cmFlash 2.4s ease; }

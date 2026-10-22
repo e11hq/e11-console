@@ -5518,7 +5518,7 @@ function reviewCard(t, r, reviewed) {
   const decision = reviewed ? (r.state === 'approved'
     ? `<span class="rr-dec ok">${icon('check')}Approved</span>`
     : `<span class="rr-dec amend">${icon('edit')}Amendments</span>`) : '';
-  return `<div class="rr-card ${reviewed ? 'done' : ''}">
+  return `<div class="rr-card ${reviewed ? 'done' : ''}" data-review="${r.id}">
     <div class="rr-head">
       <div class="rr-info">
         <div class="rr-top"><a class="rr-title" data-action="rr-open" data-id="${t.id}">${esc(t.title || 'Untitled task')}</a>${p ? `<span class="rr-proj"><i style="background:${p.color}"></i>${esc(p.name)}</span>` : ''}</div>
@@ -5754,7 +5754,15 @@ function openNotif(id) {
     else toast(isManager() ? 'That task has been deleted' : 'That task is in the Trash — ask an Account Manager if it should come back');
     return;
   }
-  if ((n.kind === 'review' || n.kind === 'review-wd') && isCD()) { ui.rrTab = 'active'; closeDetail(); go('reviews'); return; }
+  if ((n.kind === 'review' || n.kind === 'review-wd') && isCD()) {
+    // the submission this update is about: scroll to it on Review Requests and highlight it briefly
+    const rs = (t.reviews || []).filter((r) => r.by === n.from && r.state !== 'withdrawn');
+    const r = rs.filter((x) => x.at <= n.at).pop() || rs[rs.length - 1] || null;
+    ui.rrTab = r && r.state !== 'pending' && reviewedRecent().some((x) => x.r.id === r.id) ? 'reviewed' : 'active';
+    closeDetail(); go('reviews');
+    if (r) flashReview(r.id);
+    return;
+  }
   let c = null;
   if (n.kind === 'review-amend' && n.commentId) c = t.comments.find((x) => x.id === n.commentId) || null;
   if (n.kind === 'comment' || n.kind === 'mention') {
@@ -5776,6 +5784,16 @@ function openNotif(id) {
   openTask(n.taskId);
 }
 // Smoothly bring a comment into view and flash it
+function flashReview(rid) {
+  const run = (k) => {
+    const el = $(`#content [data-review="${rid}"]`);
+    if (!el) { if (k < 5) setTimeout(() => run(k + 1), 120); return; }
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
+    setTimeout(() => el.classList.remove('flash'), 2600);
+  };
+  setTimeout(() => run(0), 80);
+}
 function focusCommentInFeed(cid) {
   const el = $(`#detail [data-comment="${cid}"]`);
   const feed = $('#detail .tm-feed');

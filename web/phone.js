@@ -211,7 +211,7 @@ const Phone = (() => {
       <div class="ph-list">${list.map(({ t, r }) => {
         const p = proj(t.projectId);
         const n = (r.files || []).length;
-        return `<div class="pc rv" data-ph="open-review" data-id="${r.id}">
+        return `<div class="pc rv" data-ph="open-review" data-id="${r.id}" data-review="${r.id}">
           ${avatarHTML(r.by, 40)}
           <span class="pc-body"><span class="pc-title">${esc(t.title || 'Untitled task')}</span>
             <span class="pc-meta">${p ? `<i class="ph-dot" style="background:${p.color}"></i>${esc(p.name)}<em>·</em>` : ''}${esc(firstName(r.by))} sent ${plural(n, 'file')} · ${esc(timeAgo(r.at))}</span></span>
