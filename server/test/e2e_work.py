@@ -85,7 +85,8 @@ async def main():
         ctx, pg, errs = await login(amEmail); E = pg.evaluate
         await E("go('home')"); await pg.wait_for_timeout(300)
         rows = await E("[...document.querySelectorAll('.hm-lead .hm-row')].map(r=>r.dataset.task)")
-        check('wA1' in rows and 'wH1' not in rows, 'AM home lists their created tasks')
+        mineOnly = await E("[...document.querySelectorAll('.hm-lead .hm-row')].every(r=>task(r.dataset.task).createdBy===currentUserId)")
+        check(rows and mineOnly and 'wH1' not in rows, 'AM home lists only their created tasks')
         projs = await E("[...document.querySelectorAll('.hm-proj[data-project]')].map(c=>c.dataset.project)")
         want = await E("[...new Set(db.tasks.filter(t=>!t.parentId&&t.createdBy===currentUserId).map(t=>t.projectId))].filter(id=>proj(id))")
         check(set(projs) == set(want), f'AM home shows only projects with their tasks {projs} vs {want}')
