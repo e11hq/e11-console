@@ -678,3 +678,12 @@ body.phone [data-action="ca-download-all"], body.phone [data-action="rr-download
 body.phone .menu.asg-pop { overflow: hidden; display: flex; flex-direction: column; }
 body.phone .asg-pop .ap-search { flex: none; }
 body.phone .asg-pop .ap-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; touch-action: pan-y; transform: translateZ(0); }
+/* priority pop-up fills the phone's menu width, with bigger number buttons */
+body.phone .prio-menu { width: auto; }
+body.phone .prio-menu .pm-grid { gap: 8px; padding: 2px 10px 10px; }
+body.phone .prio-menu .pn { height: 44px; font-size: 16px; border-radius: 10px; }
+/* dark backdrop behind phone pop-up menus */
+#ph-menu-scrim { position: fixed; inset: 0; z-index: 299; background: rgba(0, 0, 0, .55); animation: ph-fade .15s ease; }
+:root[data-theme="light"] #ph-menu-scrim { background: rgba(10, 10, 20, .35); }
+@keyframes ph-fade { from { opacity: 0; } }
+body.phone .menu { overscroll-behavior: contain; }

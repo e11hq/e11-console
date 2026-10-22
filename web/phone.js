@@ -785,11 +785,22 @@ const Push = (() => {
     if (ui.taskId) {
       if (ui.thread) return null;
       const btns = $$('#detail .ph-task-head .ph-seg button');
-      return btns.length > 1 ? { btns, area: () => $('#detail .tm-body') } : null;
+      return btns.length > 1 ? { btns, area: () => [$('#detail .tm-body')].filter(Boolean) } : null;
     }
     const btns = $$('#content .ph-seg button').length ? $$('#content .ph-seg button') : $$('#content .ph-chips button');
-    return btns.length > 1 ? { btns, area: () => $('#content > .ph-page') } : null;
+    return btns.length > 1 ? { btns, area: () => below($$('#content .ph-seg button, #content .ph-chips button')[0], $('#content > .ph-page')) } : null;
   }
+  // What moves with the swipe: only the content under the tabs (the tabs and the heading stay put)
+  function below(btn, root) {
+    if (!root) return [];
+    if (!btn || !root.contains(btn)) return [root];
+    let h = btn;
+    while (h.parentElement && h.parentElement !== root) h = h.parentElement;
+    const out = [];
+    for (let n = h.nextElementSibling; n; n = n.nextElementSibling) out.push(n);
+    return out.length ? out : [root];
+  }
+  const each = (els, fn) => (Array.isArray(els) ? els : els ? [els] : []).forEach(fn);
   document.addEventListener('touchstart', (e) => {
     g = null;
     if (!Phone.on || e.touches.length !== 1) return;
@@ -810,21 +821,51 @@ const Push = (() => {
     }
     e.preventDefault();
     g.dx = dx;
-    if (g.el) { g.el.style.transition = 'none'; g.el.style.transform = `translateX(${dx * 0.25}px)`; g.el.style.opacity = String(1 - Math.min(0.35, Math.abs(dx) / 900)); }
+    each(g.el, (el) => { el.style.transition = 'none'; el.style.transform = `translateX(${dx * 0.25}px)`; el.style.opacity = String(1 - Math.min(0.35, Math.abs(dx) / 900)); });
   }, { passive: false });
   const end = () => {
     if (!g || !g.on) { g = null; return; }
     const cur = g; g = null;
-    const reset = (el) => { if (!el) return; el.style.transition = 'transform .2s ease, opacity .2s ease'; el.style.transform = ''; el.style.opacity = ''; };
+    const reset = (els) => each(els, (el) => { el.style.transition = 'transform .2s ease, opacity .2s ease'; el.style.transform = ''; el.style.opacity = ''; });
     const btns = cur.tabs.btns;
     const i = btns.findIndex((b) => b.classList.contains('on'));
     const j = cur.dx < -60 ? i + 1 : cur.dx > 60 ? i - 1 : i;
     if (j === i || j < 0 || j >= btns.length) { reset(cur.el); return; }
     btns[j].click();
-    const el = cur.tabs.area();
-    if (el) { el.classList.remove('ph-in-l', 'ph-in-r'); void el.offsetWidth; el.classList.add(cur.dx < 0 ? 'ph-in-r' : 'ph-in-l'); el.style.transform = ''; el.style.opacity = ''; }
-    if (el !== cur.el) reset(cur.el);
+    const now = cur.tabs.area();
+    each(now, (el) => { el.classList.remove('ph-in-l', 'ph-in-r'); void el.offsetWidth; el.classList.add(cur.dx < 0 ? 'ph-in-r' : 'ph-in-l'); el.style.transform = ''; el.style.opacity = ''; });
+    reset((cur.el || []).filter((el) => !now.includes(el)));
   };
   document.addEventListener('touchend', end);
   document.addEventListener('touchcancel', end);
+})();
+
+
+/* Phone pop-up menus (reactions, ••• menus, priority, people…): darken everything behind and stop the
+   page scrolling underneath. Tapping the dark area closes the menu. (The @mention list while typing is left alone.) */
+(() => {
+  let scrim = null;
+  const open = () => !!document.querySelector('body > .menu:not(.mention-pop)');
+  const sync = () => {
+    const on = Phone.on && open();
+    document.body.classList.toggle('ph-menu-open', on);
+    if (on && !scrim) {
+      scrim = document.createElement('div');
+      scrim.id = 'ph-menu-scrim';
+      const shut = (e) => { e.preventDefault(); e.stopPropagation(); closeMenus(); sync(); };
+      scrim.addEventListener('touchstart', shut, { passive: false });
+      scrim.addEventListener('click', shut);
+      document.body.appendChild(scrim);
+    } else if (!on && scrim) { scrim.remove(); scrim = null; }
+  };
+  new MutationObserver(sync).observe(document.body, { childList: true });
+  document.addEventListener('touchmove', (e) => {
+    if (!document.body.classList.contains('ph-menu-open')) return;
+    const inMenu = e.target.closest && e.target.closest('.menu');
+    if (!inMenu) { e.preventDefault(); return; }
+    // inside the menu: allow scrolling only where there is something to scroll
+    let el = e.target;
+    while (el && el !== inMenu.parentElement) { if (el.scrollHeight > el.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(el).overflowY)) return; el = el.parentElement; }
+    e.preventDefault();
+  }, { passive: false });
 })();
