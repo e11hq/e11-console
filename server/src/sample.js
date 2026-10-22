@@ -5,6 +5,7 @@ import path from 'node:path';
 
 const REF_DAY = Date.UTC(2026, 9, 20); // the day the sample story was written
 const DAY = 86400000;
+const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 export function sampleData(store, me, filesRoot = null) {
   const raw = fs.readFileSync(new URL('./sample-data.json', import.meta.url), 'utf8');
@@ -81,7 +82,7 @@ export function sampleData(store, me, filesRoot = null) {
     out.tasks.push({
       id: `smp-fin-t${i}`, title: `${p.name} | ${jobs[i % jobs.length]} ${['A', 'B', 'C', 'D'][i % 4]}`, projectId: proj, sectionId: sec ? sec.id : null, parentId: null,
       assignees: prodIds.length ? [prodIds[i % prodIds.length]] : [], createdBy: me, createdAt: iso(daysAgo + 14), updatedAt: iso(Math.min(daysAgo, 20)),
-      due: dayStr(daysAgo + 2), done: true, completedAt: iso(Math.floor(rnd() * 20) + 1), notes: '', notesHtml: '', tags: [], comments: [], attachments: [], activity: [], checklist: [],
+      ...((doneAgo) => ({ due: dayStr(i % 7 === 3 ? doneAgo + 2 : doneAgo - (i % 3)), completedAt: iso(doneAgo) }))(Math.floor(rnd() * 20) + 1), done: true, notes: '', notesHtml: '', tags: [], comments: [], attachments: [], activity: [], checklist: [],
       finance: st, financeAt: iso(daysAgo), financeBy: AMS[i % AMS.length], update: 'Ready to Post', order: 1000 + i,
     });
   }
@@ -146,6 +147,32 @@ export function sampleData(store, me, filesRoot = null) {
       if (r.type === 'expense' && i % 2 === 1) r.invoice = inv('invoice-expense.pdf', 'Expenses', r.date.slice(0, 7), `smp-inv-${r.id}`);
     });
   }
+
+  // ---------- Home page sample: checklists, start dates and CD review history ----------
+  const cdId = (store.get('meta', 'main') || {}).cdUserId || 'u-karim';
+  const CL = [['Read the brief', 'Pull references', 'First draft'], ['Export 9:16 and 1:1', 'Add EN / AR subtitles'], ['Shot list sign-off', 'Back up the cards to the NAS', 'Send selects to the AM']];
+  const NOTES = ['End card logo comes in too early, hold it one second longer.', 'Raise the headline, it is fighting with the visual.', 'The Arabic caption is too long, cut it to one line.'];
+  const ago = (d) => new Date(Date.now() - d * DAY).toISOString();
+  let amendN = 0;
+  out.tasks.filter((t) => !t.parentId && !t.done).forEach((t, i) => {
+    if (i % 2 === 0 && !(t.checklist || []).length) t.checklist = CL[i % CL.length].map((text, j) => ({ id: `smp-cl${i}-${j}`, text, done: j === 0 && i % 4 === 0 }));
+    if (t.due && !t.start && i % 3 === 1) t.start = new Date(Date.parse(t.due + 'T00:00:00Z') - 2 * DAY).toISOString().slice(0, 10);
+    const by = (t.assignees || []).find((u) => u !== cdId);
+    if (by && t.projectId && i % 3 === 0 && amendN < 4) {
+      t.needsCD = true;
+      t.reviews = [{ id: `smp-rv${i}`, by, at: ago(2), files: [], state: 'amend', epoch: t.reviewEpoch || 0, round: 1, decidedAt: ago(1), decidedBy: cdId, noteHtml: esc(NOTES[amendN % NOTES.length]) }];
+      amendN++;
+    }
+  });
+  out.tasks.filter((t) => !t.parentId && t.done && (t.assignees || []).length).forEach((t, i) => {
+    const by = t.assignees.find((u) => u !== cdId);
+    if (!by) return;
+    const when = t.completedAt || ago(3);
+    const before = new Date(Date.parse(when) - DAY).toISOString();
+    const rv = i % 4 === 3 ? [{ id: `smp-rd${i}a`, by, at: before, files: [], state: 'amend', epoch: 0, round: 1, decidedAt: before, decidedBy: cdId, noteHtml: esc(NOTES[i % NOTES.length]) }] : [];
+    rv.push({ id: `smp-rd${i}`, by, at: when, files: [], state: 'approved', epoch: 0, round: rv.length + 1, decidedAt: when, decidedBy: cdId });
+    t.reviews = rv;
+  });
 
   // Creative Director for the review flow, unless one is already set
   const meta = store.get('meta', 'main') || {};

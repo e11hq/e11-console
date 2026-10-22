@@ -2284,60 +2284,8 @@ function viewMyDay() {
 }
 
 /* ---------- Home ---------- */
-function viewHome() {
-  const h = new Date().getHours();
-  const greet = h < 5 ? 'Good evening' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
-  const lead = Work.lead();
-  const open = Work.home().filter(Work.homeOpen);
-  const overdue = open.filter((t) => t.due && dayDiff(t.due) < 0).length;
-  const dueToday = open.filter((t) => t.due && dayDiff(t.due) === 0).length;
-  const week = open.filter((t) => t.due && dayDiff(t.due) > 0 && dayDiff(t.due) <= 7).length;
-  const weekAgo = Date.now() - 7 * 86400000;
-  const doneWeek = (lead ? Work.home() : db.tasks.filter(isMine)).filter((t) => Work.homeDoneAt(t) && new Date(Work.homeDoneAt(t)).getTime() > weekAgo).length;
-
-  const prio = open.slice().sort((a, b) => {
-    const ad = a.due ? dayDiff(a.due) : 9999, bd = b.due ? dayDiff(b.due) : 9999;
-    return ad - bd || prioRank(prioOf(a)) - prioRank(prioOf(b));
-  }).slice(0, 8);
-
-  // An Account Manager sees the projects their created tasks are in; Admins and everyone else see all
-  const mineP = me() && me().role === 'am' ? new Set(db.tasks.filter((t) => t.createdBy === currentUserId).map((t) => t.projectId)) : null;
-  const projects = db.projects.slice().sort(byOrder).filter((p) => !mineP || mineP.has(p.id)).map((p) => {
-    const ts = db.tasks.filter((t) => t.projectId === p.id && !t.parentId);
-    const d = ts.filter((t) => t.done).length;
-    const pct = ts.length ? Math.round((d / ts.length) * 100) : 0;
-    return `<div class="proj-card" data-project="${p.id}">
-      <div class="page-icon" style="background:${p.color}">${esc(initials(p.name))}</div>
-      <div style="flex:1;min-width:0"><div class="pc-name">${esc(p.name)}</div>
-        <div class="pc-meta">${ts.length - d} open · ${pct}% done</div>
-        <div class="bar"><i style="width:${pct}%;background:${p.color}"></i></div></div>
-    </div>`;
-  }).join('');
-
-  return `<div class="home">
-    <div class="home-date">${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</div>
-    <div class="home-greet">${greet}, ${esc(fullName(me()).split(' ')[0])}</div>
-    <div class="stats">
-      <div class="stat green" data-nav="mytasks"><div class="n">${dueToday}</div><div class="l">Due today</div></div>
-      <div class="stat ${overdue ? 'red' : ''}" data-nav="mytasks"><div class="n">${overdue}</div><div class="l">Overdue</div></div>
-      <div class="stat amber" data-nav="mytasks"><div class="n">${week}</div><div class="l">Due in the next 7 days</div></div>
-      <div class="stat"><div class="n">${doneWeek}</div><div class="l">Completed this week</div></div>
-    </div>
-    <div class="home-grid">
-      <div class="widget">
-        <h3>${lead ? 'Your created tasks' : 'My priorities'}<span class="spacer"></span><button class="btn ghost" data-action="home-view-all">View all ${icon('arrow')}</button></h3>
-        ${prio.length ? prio.map((t) => `<div class="mini-row" data-task="${t.id}">${statusIcon(t)}<span class="title">${t.title ? esc(t.title) : '<span class="ph">Untitled task</span>'}</span>${prioFlag(prioOf(t), true)}<span class="due ${dueClass(t)}">${fmtDue(t.due)}</span></div>`).join('')
-          : `<div class="empty"><div class="big">You're all caught up</div>${lead ? 'Tasks you create will show up here.' : 'Tasks assigned to you will show up here.'}</div>`}
-      </div>
-      <div class="widget">
-        <h3>Projects<span class="spacer"></span></h3>
-        <div class="proj-cards">${projects}
-          <div class="proj-card new" data-action="new-project"><div class="page-icon">${icon('plus')}</div><div class="pc-name" style="color:var(--text-2)">New project</div></div>
-        </div>
-      </div>
-    </div>
-  </div>`;
-}
+// Home page: see home.js
+function viewHome() { return Home.view(); }
 
 /* ---------- Search ---------- */
 /* ================= Smart search (tasks and Client Assets) =================
