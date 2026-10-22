@@ -3315,7 +3315,9 @@ function go(view, projectId = null) {
   ui.projectId = projectId;
   if (ui.search) { ui.search = ''; $('#search').value = ''; }
   $('#content').scrollTop = 0;
-  render();
+  // An open task stays as it is while you move between pages (no flicker, previews don't reload)
+  const keep = !!ui.taskId && !!task(ui.taskId) && $('#detail').dataset.shown === ui.taskId && !(typeof Phone !== 'undefined' && Phone.on);
+  render({ keepDetail: keep });
   PageHistory.mark();
 }
 
@@ -4171,7 +4173,7 @@ document.addEventListener('click', async (e) => {
       case 'theme-mode': Theme.setMode(actEl.dataset.mode); renderContent(); return;
       case 'disp-toggle': actEl.closest('.disp-wrap').classList.toggle('open'); return;
       case 'detail-mode': ui.detailMode = actEl.dataset.mode; savePref('detailMode', ui.detailMode); renderDetail(); return;
-      case 'side-tab': { const tb = actEl.dataset.tab; if (tb === 'activity') { ui.sideTab = 'comments'; ui.activityFilter = 'all'; } else { ui.sideTab = tb; if (tb === 'comments') ui.activityFilter = 'comments'; } } renderDetail(); if (ui.sideTab === 'comments') { const f = $('.tm-feed'); if (f) stickFeedToBottom(f); } return;
+      case 'side-tab': { const tb = actEl.dataset.tab; ui.thread = null; ui.replyTo = null; if (tb === 'activity') { ui.sideTab = 'comments'; ui.activityFilter = 'all'; } else { ui.sideTab = tb; if (tb === 'comments') ui.activityFilter = 'comments'; } } renderDetail(); if (ui.sideTab === 'comments') { const f = $('.tm-feed'); if (f) stickFeedToBottom(f); } return;
       case 'share-task': TaskLink.copy(id); return;
       case 'wf-created': e.stopPropagation(); workMenu(actEl, 'created'); return;
       case 'wf-people': e.stopPropagation(); workMenu(actEl, 'people'); return;
@@ -4276,7 +4278,7 @@ document.addEventListener('click', async (e) => {
       case 'clear-start': { const t = task(ui.taskId); logChange(t, 'the <b>start date</b>', fmtDay(t.start), ''); t.start = null; t.updatedAt = nowISO(); commit(); return; }
       case 'cl-toggle': { const t = task(ui.taskId); const c = t.checklist.find((x) => x.id === id); if (c) { c.done = !c.done; logActivity(t, `${c.done ? 'checked' : 'unchecked'} <b>${esc(c.text)}</b>`); t.updatedAt = nowISO(); commit(); } return; }
       case 'cl-delete': { if (!can('deleteChecklist')) return denied(); const t = task(ui.taskId); const c = t.checklist.find((x) => x.id === id); if (c) logActivity(t, `removed checklist item ${struck(c.text)}`); t.checklist = t.checklist.filter((x) => x.id !== id); t.updatedAt = nowISO(); commit(); return; }
-      case 'act-filter': ui.activityFilter = actEl.dataset.f; renderDetail(); { const f = $('.tm-feed'); if (f) f.scrollTop = f.scrollHeight; } return;
+      case 'act-filter': ui.activityFilter = actEl.dataset.f; ui.thread = null; ui.replyTo = null; renderDetail(); { const f = $('.tm-feed'); if (f) f.scrollTop = f.scrollHeight; } return;
       case 'react-menu': e.stopPropagation(); reactMenu(actEl, id); return;
       case 'react': toggleReaction(id, actEl.dataset.emoji); return;
       case 'comment-menu': e.stopPropagation(); commentMenu(actEl, id); return;
