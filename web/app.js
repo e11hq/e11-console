@@ -3080,6 +3080,8 @@ function inlineInput(el, { placeholder = '', value = '', multiline = false, keep
 function go(view, projectId = null) {
   PageHistory.mark();
   if (view === 'clients') { ui.caQ = ''; ui.caScope = null; }
+  // The Inbox always opens on its unread tab (Primary on computers, Unread on phones)
+  if (view === 'inbox') { ui.inboxTab = 'primary'; if (typeof Phone !== 'undefined' && Phone.resetInbox) Phone.resetInbox(); }
   ui.view = view;
   ui.projectId = projectId;
   if (ui.search) { ui.search = ''; $('#search').value = ''; }
