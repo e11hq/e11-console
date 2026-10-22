@@ -9,7 +9,15 @@ const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 
 export function sampleData(store, me, filesRoot = null) {
   const raw = fs.readFileSync(new URL('./sample-data.json', import.meta.url), 'utf8');
-  const d = JSON.parse(raw.split('"u-haris"').join(JSON.stringify(me)));
+  // Sample people already on the team (same email, e.g. from an earlier fill) keep their existing id,
+  // so their comments, tasks and reviews point at a real person instead of a "Former member"
+  const byEmail = new Map(store.list('users').map((u) => [String(u.email || '').toLowerCase(), u.id]));
+  let text = raw.split('"u-haris"').join(JSON.stringify(me));
+  JSON.parse(raw).users.forEach((u) => {
+    const id = byEmail.get(String(u.email || '').toLowerCase());
+    if (id && id !== u.id && u.id !== 'u-haris') text = text.split(JSON.stringify(u.id)).join(JSON.stringify(id));
+  });
+  const d = JSON.parse(text);
   const now = new Date();
   const shift = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) - REF_DAY;
   const move = (v) => {
@@ -26,6 +34,8 @@ export function sampleData(store, me, filesRoot = null) {
 
   // people: skip anyone already on the team (same email), and the asker
   const have = new Set(store.list('users').map((u) => String(u.email || '').toLowerCase()));
+  // everyone in the sample story (new or already on the team), for comments, Finance and reviews below
+  const cast = out.users.filter((u) => u.id !== me && u.name);
   out.users = out.users.filter((u) => u.id !== me && u.name && !have.has(String(u.email || '').toLowerCase()))
     .map((u) => ({ ...u, setup: true, office: u.office || 'Dubai — Business Bay office' }));
   const known = new Set([me, ...store.list('users').map((u) => u.id), ...out.users.map((u) => u.id)]);
@@ -34,7 +44,7 @@ export function sampleData(store, me, filesRoot = null) {
   out.tasks.forEach((t) => { t.attachments = []; (t.comments || []).forEach((c) => { c.attachments = []; }); (t.reviews || []).length = 0; });
 
   // a few threads with replies, some mentioning you
-  const others = out.users.map((u) => u.id);
+  const others = cast.map((u) => u.id);
   const pick = (i) => others[i % others.length];
   const mention = (id, name) => `<span class="mention" data-user="${id}" contenteditable="false">@${name}</span>`;
   const meUser = store.get('users', me) || {};
@@ -63,8 +73,8 @@ export function sampleData(store, me, filesRoot = null) {
   const dayStr = (daysAgo) => iso(daysAgo).slice(0, 10);
   let seed = 7;
   const rnd = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
-  const prodIds = out.users.filter((u) => ['production', 'social'].includes(u.role)).map((u) => u.id);
-  const AMS = out.users.filter((u) => u.role === 'am').map((u) => u.id).concat(me).slice(0, 5);
+  const prodIds = cast.filter((u) => ['production', 'social'].includes(u.role)).map((u) => u.id);
+  const AMS = cast.filter((u) => u.role === 'am').map((u) => u.id).concat(me).slice(0, 5);
   out.tasks.filter((t) => !t.parentId).forEach((t, i) => {
     if (i % 5 !== 4) { t.finance = STATUSES[i % STATUSES.length]; t.financeAt = iso(Math.floor(rnd() * 150)); t.financeBy = AMS[i % AMS.length]; }
     t.update = UPDATES[i % UPDATES.length];
@@ -127,7 +137,7 @@ export function sampleData(store, me, filesRoot = null) {
       ['creative-brief.pdf', 'story-frame-1.png', 'ford-key-visual.jpg'],
       ['client-presentation.pptx', 'teaser-rough-cut.mp4'],
     ];
-    const by = out.users.length ? out.users.map((u) => u.id) : [me];
+    const by = cast.length ? cast.map((u) => u.id) : [me];
     out.tasks.filter((t) => !t.parentId && !String(t.id).startsWith('smp-fin-')).slice(0, 10).forEach((t, i) => {
       t.attachments = SETS[i % SETS.length].map((name, k) => ({ id: `smp-a-${t.id}-${k}`, ...put(name, `attachments/${t.id}/${name}`), addedAt: iso(3 + k), addedBy: by[(i + k) % by.length] }));
       const c = (t.comments || []).find((x) => !x.parentId);
