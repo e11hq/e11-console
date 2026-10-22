@@ -9,6 +9,8 @@ def check(c, m):
     print(('PASS ' if c else 'FAIL ') + m)
     if not c: fails.append(m)
 DUBAI = datetime.timezone(datetime.timedelta(hours=4))
+async def E_ws(pg):
+    return await pg.evaluate("[...document.querySelectorAll('.profile > .pf-card')].map(c=>Math.round(c.getBoundingClientRect().width))")
 async def main():
     env = {**os.environ, 'DATA_DIR': tempfile.mkdtemp(), 'AUTH_DEV': '1', 'ADMIN_EMAIL': ADMIN, 'PORT': str(PORT), 'WEB_DIR': os.path.join(ROOT, 'web'), 'APP_VERSION': '1.2.7-test.1'}
     srv = subprocess.Popen(['node', os.path.join(ROOT, 'server/src/index.js')], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -31,6 +33,8 @@ async def main():
         await pg.evaluate("go('profile')"); await pg.wait_for_timeout(300)
         txt = await pg.locator('.pf-appearance').inner_text()
         check('Auto' in txt and 'sunrise and sunset' in txt and await pg.locator('.pf-appearance .tp-card').count() == 3, 'My profile → Appearance with Light / Dark / Auto previews')
+        widths = await E_ws(pg)
+        check(len(set(widths)) == 1, f'every profile card is the same full width {widths}')
         await pg.click('.pf-appearance [data-mode="light"]'); await pg.wait_for_timeout(300)
         check(await pg.evaluate("document.documentElement.dataset.theme") == 'light' and await pg.evaluate("Theme.mode()") == 'light', 'choosing Light keeps it light after sunset')
         await pg.screenshot(path=os.path.join(tempfile.gettempdir(), 'theme_profile.png'))

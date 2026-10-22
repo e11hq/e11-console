@@ -2322,3 +2322,6 @@ body.phone [data-action="share-task"] { display: none !important; }
 .tp-main .tp-l3 { left: 20px; top: 34px; width: 26px; }
 .tp-main .tp-l4 { left: 50px; top: 34px; width: 26px; }
 .tp-main .tp-sq { right: 8px; top: 9px; width: 7px; height: 7px; border-radius: 2px; }
+/* My profile: every card full width, one under another (like Appearance) */
+:root:not(.phone) .profile { grid-template-columns: minmax(0, 1fr); }
+:root:not(.phone) .profile > .pf-card { grid-column: 1 / -1; }
