@@ -3859,7 +3859,13 @@ function assignMenu(anchor) {
       + (!rows.length ? `<div class="ap-none">No one matches “${esc(input.value.trim())}”${validEmail(input.value) && can('manageUsers') ? '<br><small>Add new people from Team members first</small>' : ''}</div>` : '');
     place();
   };
-  const toggle = (uid, on) => { setAssignee(task(ui.taskId), uid, on); draw(); input.focus(); };
+  // After picking someone, keep typing where you were — but on the phone only if the keyboard was
+  // already up (otherwise every pick would pop the keyboard open)
+  const toggle = (uid, on) => {
+    const typing = document.activeElement === input;
+    setAssignee(task(ui.taskId), uid, on); draw();
+    if (typing || !(typeof Phone !== 'undefined' && Phone.on)) input.focus();
+  };
   pop.addEventListener('click', (e) => {
     e.stopPropagation();
     const x = e.target.closest('[data-ap-x]');
