@@ -1013,7 +1013,7 @@ function setField(t, k, v) {
   if (old === v) return;
   if (k === 'finance' && !isManager()) return denied();
   t[k] = v || null;
-  if (k === 'finance') t.financeAt = nowISO();
+  if (k === 'finance') { t.financeAt = nowISO(); t.financeBy = currentUserId; }
   const name = (id) => (id && userById(id) ? fullName(userById(id)) : '');
   if (k === 'update') {
     logChange(t, 'the <b>Task Update</b>', old, v);

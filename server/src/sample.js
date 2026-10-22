@@ -63,8 +63,9 @@ export function sampleData(store, me, filesRoot = null) {
   let seed = 7;
   const rnd = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
   const prodIds = out.users.filter((u) => ['production', 'social'].includes(u.role)).map((u) => u.id);
+  const AMS = out.users.filter((u) => u.role === 'am').map((u) => u.id).concat(me).slice(0, 5);
   out.tasks.filter((t) => !t.parentId).forEach((t, i) => {
-    if (i % 5 !== 4) { t.finance = STATUSES[i % STATUSES.length]; t.financeAt = iso(Math.floor(rnd() * 150)); }
+    if (i % 5 !== 4) { t.finance = STATUSES[i % STATUSES.length]; t.financeAt = iso(Math.floor(rnd() * 150)); t.financeBy = AMS[i % AMS.length]; }
     t.update = UPDATES[i % UPDATES.length];
     if (prodIds.length && i % 3 === 0) t.guardian = prodIds[i % prodIds.length];
   });
@@ -81,7 +82,7 @@ export function sampleData(store, me, filesRoot = null) {
       id: `smp-fin-t${i}`, title: `${p.name} | ${jobs[i % jobs.length]} ${['A', 'B', 'C', 'D'][i % 4]}`, projectId: proj, sectionId: sec ? sec.id : null, parentId: null,
       assignees: prodIds.length ? [prodIds[i % prodIds.length]] : [], createdBy: me, createdAt: iso(daysAgo + 14), updatedAt: iso(Math.min(daysAgo, 20)),
       due: dayStr(daysAgo + 2), done: true, completedAt: iso(Math.floor(rnd() * 20) + 1), notes: '', notesHtml: '', tags: [], comments: [], attachments: [], activity: [], checklist: [],
-      finance: st, financeAt: iso(daysAgo), update: 'Ready to Post', order: 1000 + i,
+      finance: st, financeAt: iso(daysAgo), financeBy: AMS[i % AMS.length], update: 'Ready to Post', order: 1000 + i,
     });
   }
   // two Finance-only people

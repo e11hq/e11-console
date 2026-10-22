@@ -13,7 +13,7 @@ export function createAccess(store) {
   // Finance people (Finance Admin / Finance Viewer) only use the Finance pages: they see projects and a
   // slim copy of each task (name, project, status, dates, Finance status) — no comments, files or people's work.
   const isFinance = (u) => !!u && (u.role === 'finance_admin' || u.role === 'finance_viewer');
-  const TASK_FOR_FINANCE = ['id', 'title', 'projectId', 'sectionId', 'parentId', 'done', 'completedAt', 'due', 'createdAt', 'updatedAt', 'finance', 'financeAt', 'order'];
+  const TASK_FOR_FINANCE = ['id', 'title', 'projectId', 'sectionId', 'parentId', 'done', 'completedAt', 'due', 'createdAt', 'updatedAt', 'finance', 'financeAt', 'financeBy', 'order'];
   // Admin rights: the Admin role, or another role given Admin rights on top. Finance access: Finance-only
   // people, or anyone given Finance Admin / Finance Viewer on top of their role (u.fin).
   const isAdm = (u) => !!u && (u.role === 'admin' || u.admin === true);

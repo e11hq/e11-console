@@ -122,38 +122,99 @@ const Fin = (() => {
   }
   const renderAll = () => { renderTitle(); renderSidebar(); renderContent(); };
 
+  /* ---------- Small chart helpers ---------- */
+  // Smooth line through points (0–100 box, stretched by the SVG)
+  const smooth = (pts) => pts.reduce((d, [x, y], i) => { if (!i) return `M${x},${y}`; const [px, py] = pts[i - 1]; const mx = (px + x) / 2; return `${d} C${mx},${py} ${mx},${y} ${x},${y}`; }, '');
+  const pctChange = (now, prev) => (prev ? Math.round(((now - prev) / prev) * 100) : now ? 100 : 0);
+  const trend = (now, prev, goodUp = true) => {
+    const p = pctChange(now, prev);
+    if (!p) return `<span class="ft-trend flat">— 0%</span>`;
+    const up = p > 0;
+    return `<span class="ft-trend ${up === goodUp ? 'good' : 'bad'}">${up ? '↑' : '↓'} ${Math.abs(p)}%</span>`;
+  };
+  const ago = (iso) => { const d = (Date.now() - new Date(iso)) / 36e5; return d < 1 ? 'just now' : d < 24 ? `${Math.floor(d)}h ago` : d < 48 ? 'Yesterday' : fmtDay(ymd(new Date(iso))); };
+  const statusIcon = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 2.5h7l3 3v8H3z"/><path d="M5.5 8h5M5.5 10.5h3"/></svg>`;
+
   function dash() {
     const h = new Date().getHours();
     const greet = h < 5 ? 'Good evening' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
     const ts = finTasks();
     const count = (s) => ts.filter((t) => t.finance === s).length;
-    const months = lastMonths(6);
+    const inMonth = (s, m) => ts.filter((t) => t.finance === s && String(finAt(t)).slice(0, 7) === m).length;
+    const cur = thisMonth(), prev = addMonths(cur, -1);
+    const months = lastMonths(st.span === 12 ? 12 : 6);
     const g = st.graph;
-    const vals = months.map((m) => ts.filter((t) => t.finance === g && String(finAt(t)).slice(0, 7) === m).length);
-    const max = Math.max(1, ...vals);
-    const inv = (m) => ts.filter((t) => t.finance === 'Invoiced' && String(finAt(t)).slice(0, 7) === m).length;
-    const now = inv(thisMonth()), prev = inv(addMonths(thisMonth(), -1));
-    const pct = prev ? Math.round(((now - prev) / prev) * 100) : now ? 100 : 0;
-    const up = now >= prev;
-    return `<div class="home fin-home">
-      <div class="home-date">${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</div>
-      <div class="home-greet">${greet}, ${esc(fullName(me()).split(' ')[0])}</div>
-      <div class="fin-stats">${STATUSES.map((s) => `<button class="fin-stat" data-fin-status="${esc(s)}" style="--c:${FINANCE[s]}"><span class="n">${count(s)}</span><span class="l">${esc(s)}</span></button>`).join('')}</div>
-      <div class="fin-grid">
-        <div class="widget fin-graph">
-          <h3>Monthly Graph<span class="spacer"></span></h3>
-          <div class="fin-tabs">${STATUSES.map((s) => `<button class="${g === s ? 'on' : ''}" data-fin-graph="${esc(s)}" style="--c:${FINANCE[s]}">${esc(s)}</button>`).join('')}</div>
-          <div class="fin-bars" style="--c:${FINANCE[g]}">${months.map((m, i) => `<div class="fin-bar" title="${esc(monthName(m, true))}: ${vals[i]} task${vals[i] === 1 ? '' : 's'}"><span class="v">${vals[i]}</span><i style="height:${Math.round((vals[i] / max) * 100)}%"></i><span class="m">${monthName(m)}</span></div>`).join('')}</div>
-          <div class="fin-note">Tasks marked “${esc(g)}” in each of the last 6 months</div>
+    const vals = months.map((m) => inMonth(g, m));
+    const max = Math.max(1, ...vals) * 1.25;
+    const X = (i) => 4 + (i * 92) / (months.length - 1), Y = (v) => 92 - (v / max) * 82;
+    const pts = vals.map((v, i) => [X(i), Y(v)]);
+    const line = smooth(pts), area = `${line} L${X(months.length - 1)},100 L${X(0)},100 Z`;
+    const total = ts.filter((t) => t.finance).length || 1;
+    const waiting = count('LPO Pending') + count('To be invoiced');
+    // invoiced by client (project's client, else the project) in the chosen period
+    const since = months[0];
+    const byClient = {};
+    ts.filter((t) => t.finance === 'Invoiced' && String(finAt(t)).slice(0, 7) >= since).forEach((t) => {
+      const p = proj(t.projectId); const c = p && p.clientId && clientById(p.clientId);
+      const k = c ? c.name : p ? p.name : 'No project';
+      byClient[k] = byClient[k] || { n: 0, color: p ? p.color : '#9aa4b2' }; byClient[k].n++;
+    });
+    const clients = Object.entries(byClient).sort((a, b) => b[1].n - a[1].n).slice(0, 5);
+    const cmax = Math.max(1, ...clients.map(([, v]) => v.n));
+    const invNow = inMonth('Invoiced', cur), invPrev = inMonth('Invoiced', prev);
+    const invBy = [...new Set(ts.filter((t) => t.finance === 'Invoiced' && String(finAt(t)).slice(0, 7) === cur && t.financeBy && userById(t.financeBy)).map((t) => t.financeBy))];
+    const recent = ts.filter((t) => t.finance && t.financeAt).sort((a, b) => b.financeAt.localeCompare(a.financeAt)).slice(0, 6);
+    const mname = (m) => monthName(m, true).split(' ')[0];
+    return `<div class="fa">
+      <header class="fa-head">
+        <div><h1>${greet}, ${esc(fullName(me()).split(' ')[0])}</h1><p>${esc(new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }))} · where every job stands, from quote to invoice.</p></div>
+        <div class="fa-seg">${[[6, 'Last 6 months'], [12, 'Last 12 months']].map(([n, l]) => `<button class="${(st.span || 6) === n ? 'on' : ''}" data-fin-span="${n}">${l}</button>`).join('')}</div>
+      </header>
+      <div class="fa-stats">${STATUSES.map((s) => `<button class="fa-stat ${g === s ? 'on' : ''}" data-fin-graph="${esc(s)}" style="--c:${FINANCE[s]}" title="Show “${esc(s)}” on the graph">
+          <span class="fa-sl"><span class="fa-ic">${statusIcon}</span>${esc(s)}</span>
+          <span class="fa-n">${count(s)}</span>
+          <span class="fa-sf">${trend(inMonth(s, cur), inMonth(s, prev), s === 'Invoiced' || s === 'Retainer')}<span>vs ${esc(mname(prev))}</span></span>
+        </button>`).join('')}</div>
+      <div class="fa-grid">
+        <div class="fa-main">
+          <section class="fa-card">
+            <div class="fa-ch"><h2>Monthly graph</h2><div class="fa-tabs">${STATUSES.map((s) => `<button class="${g === s ? 'on' : ''}" data-fin-graph="${esc(s)}" style="--c:${FINANCE[s]}">${esc(s)}</button>`).join('')}</div></div>
+            <div class="fa-big"><b>${vals.reduce((a, b) => a + b, 0)}</b><span>tasks marked “${esc(g)}” in the last ${months.length} months</span></div>
+            <div class="fa-plot" style="--c:${FINANCE[g]}">
+              <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="fag" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${FINANCE[g]}" stop-opacity=".32"/><stop offset="1" stop-color="${FINANCE[g]}" stop-opacity="0"/></linearGradient></defs>
+                <path d="M0 33H100M0 66H100" stroke="var(--border)" stroke-width="1" vector-effect="non-scaling-stroke"/><path d="${area}" fill="url(#fag)"/><path d="${line}" fill="none" stroke="${FINANCE[g]}" stroke-width="2.5" vector-effect="non-scaling-stroke"/></svg>
+              ${pts.map(([x, y], i) => `<span class="fa-pt" style="left:${x}%;top:${y}%"><i></i><em>${esc(monthName(months[i], true))} · ${vals[i]} task${vals[i] === 1 ? '' : 's'}</em></span>`).join('')}
+            </div>
+            <div class="fa-months" style="grid-template-columns:repeat(${months.length},1fr)">${months.map((m) => `<span>${monthName(m)}</span>`).join('')}</div>
+          </section>
+          <div class="fa-two">
+            <section class="fa-card">
+              <div class="fa-ch"><h2>Status mix</h2><span class="fa-chip" style="--c:${FINANCE.Invoiced}">${Math.round((count('Invoiced') / total) * 100)}% invoiced</span></div>
+              <div class="fa-mix">${STATUSES.map((s) => `<i style="width:${(count(s) / total) * 100}%;background:${FINANCE[s]}" title="${esc(s)}: ${count(s)}"></i>`).join('')}</div>
+              <div class="fa-leg">${STATUSES.map((s) => `<span><i style="background:${FINANCE[s]}"></i>${esc(s)}<b>${Math.round((count(s) / total) * 100)}%</b></span>`).join('')}</div>
+              <div class="fa-note"><b>${waiting} task${waiting === 1 ? '' : 's'}</b> waiting to be invoiced (LPO Pending + To be invoiced).</div>
+            </section>
+            <section class="fa-card">
+              <div class="fa-ch"><h2>Invoiced by client</h2><span class="fa-muted">${months.length} months</span></div>
+              <div class="fa-bars">${clients.map(([name, v]) => `<div><span><span><i style="background:${v.color}"></i>${esc(name)}</span><b>${v.n}</b></span><span class="fa-track"><i style="width:${(v.n / cmax) * 100}%;background:${v.color}"></i></span></div>`).join('') || '<div class="fin-empty">Nothing invoiced in this period yet.</div>'}</div>
+            </section>
+          </div>
         </div>
-        <div class="widget fin-over">
-          <h3>Overview</h3>
-          <div class="fo-n">${count('Invoiced')}</div>
-          <div class="fo-l">invoiced tasks in total</div>
-          <div class="fo-month"><b>${now}</b> invoiced in ${esc(monthName(thisMonth(), true).split(' ')[0])}</div>
-          <div class="fo-chg ${up ? 'up' : 'down'}">${icon(up ? 'chev-up' : 'chev')}<b>${Math.abs(pct)}%</b> vs ${esc(monthName(addMonths(thisMonth(), -1), true).split(' ')[0])} (${prev})</div>
-        </div>
-      </div></div>`;
+        <aside class="fa-side">
+          <section class="fa-card fa-hero">
+            <div class="fa-ch"><h2>Invoiced in ${esc(mname(cur))}</h2><span class="fa-muted">so far</span></div>
+            <div class="fa-hero-n">${invNow}</div>
+            <div class="fa-center">${(() => { const p = pctChange(invNow, invPrev); return `<span class="fa-chip ${p >= 0 ? 'good' : 'bad'}">${p >= 0 ? '↑' : '↓'} ${Math.abs(p)}% vs ${esc(mname(prev))} (${invPrev})</span>`; })()}</div>
+            ${invBy.length ? `<div class="fa-avs">${invBy.slice(0, 5).map((u) => avatarHTML(u, 34)).join('')}</div><p class="fa-cap">${invBy.length === 1 ? esc(fullName(userById(invBy[0]))) + ' invoiced this month' : 'Account Managers who invoiced this month'}</p>` : '<p class="fa-cap">No invoices yet this month</p>'}
+            <div class="fa-btns"><button class="btn" data-fin-go="fin-projects">Open Projects</button><button class="btn primary" data-fin-go="fin-expenses">Expenses</button></div>
+          </section>
+          <section class="fa-card">
+            <div class="fa-ch"><h2>Recent changes</h2><button class="fa-link" data-fin-go="fin-projects">View all</button></div>
+            <div class="fa-recent">${recent.map((t) => `<div class="fa-rrow" style="--c:${FINANCE[t.finance]}"><span class="fa-ric">${icon('check')}</span><span class="fa-rt"><b>${esc(t.title || 'Untitled task')}</b><small>${t.financeBy && userById(t.financeBy) ? esc(fullName(userById(t.financeBy))) + ' · ' : ''}${esc(ago(t.financeAt))}</small></span><span class="fa-rs">${esc(t.finance)}</span></div>`).join('') || '<div class="fin-empty">No Finance statuses yet.</div>'}</div>
+          </section>
+        </aside>
+      </div>
+    </div>`;
   }
 
   function projects() {
@@ -198,50 +259,101 @@ const Fin = (() => {
       <span class="fx-inv">${x.invoice ? `<button class="btn ghost xs" data-fin-inv="${esc(x.id)}">${icon('clip')}Invoice</button>` : '<span class="fl-empty">–</span>'}</span>
       ${admin ? `<span class="fx-x">${admin(x)}</span>` : ''}
     </div>`;
-  function cashflow(months) {
-    const tx = transactions();
-    const tot = months.map((m) => tx.filter((x) => x.date.slice(0, 7) === m).reduce((a, x) => a + x.amount, 0));
-    // the line is drawn in a 0–100 box that stretches to fit; dots, hover areas and labels are HTML on top
-    const max = Math.max(1, ...tot) * 1.15, n = months.length;
-    const X = (i) => 4 + (i * 92) / (n - 1), Y = (v) => 92 - (v / max) * 82;
-    const line = tot.map((v, i) => `${i ? 'L' : 'M'}${X(i).toFixed(2)},${Y(v).toFixed(2)}`).join(' ');
-    const area = `${line} L${X(n - 1).toFixed(2)},100 L${X(0).toFixed(2)},100 Z`;
-    const step = 92 / (n - 1);
-    return `<div class="fin-cash">
-        <div class="fc-plot">
-          <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="fc-svg">
-            <defs><linearGradient id="fcg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--accent)" stop-opacity=".4"/><stop offset="1" stop-color="var(--accent)" stop-opacity="0"/></linearGradient></defs>
-            <path d="${area}" fill="url(#fcg)"/><path d="${line}" fill="none" stroke="var(--accent)" stroke-width="2" vector-effect="non-scaling-stroke"/>
-          </svg>
-          ${tot.map((v, i) => `<div class="fc-hit" style="left:${Math.max(0, X(i) - step / 2)}%;width:${step}%">
-              <i class="fc-guide" style="left:${((X(i) - Math.max(0, X(i) - step / 2)) / step) * 100}%;top:${Y(v)}%"></i>
-              <i class="fc-dot" style="left:${((X(i) - Math.max(0, X(i) - step / 2)) / step) * 100}%;top:${Y(v)}%"></i>
-              <div class="fc-tip ${i === 0 ? 'l' : i === n - 1 ? 'r' : ''}" style="left:${((X(i) - Math.max(0, X(i) - step / 2)) / step) * 100}%;top:${Y(v)}%"><b>${esc(monthName(months[i], true))}</b>${esc(aed(v))}</div>
-            </div>`).join('')}
-        </div>
-        <div class="fc-months">${months.map((m, i) => `<span style="left:${X(i)}%">${monthName(m)}</span>`).join('')}</div>
-      </div>`;
-  }
   function expenses() {
-    const m = thisMonth();
-    const tx = transactions().filter((x) => x.date.slice(0, 7) === m);
-    const sum = (k) => tx.filter((x) => !k || x.kind === k).reduce((a, x) => a + x.amount, 0);
-    const total = sum();
-    const parts = [['expense', 'Big expenses'], ['sub', 'Payments'], ['reimb', 'Reimbursements']];
-    return `
-      <div class="fin-grid">
-        <div class="widget fe-over">
-          <h3>${esc(monthName(m, true))} spending</h3>
-          <div class="fo-n">${aed(total)}</div>
-          <div class="fe-stack">${parts.map(([k]) => `<i style="width:${total ? (sum(k) / total) * 100 : 0}%;background:${KIND_C[k]}"></i>`).join('')}</div>
-          <div class="fe-parts">${parts.map(([k, l]) => `<div class="fe-part"><span class="dot" style="background:${KIND_C[k]}"></span><span class="l">${l}<small>${tx.filter((x) => x.kind === k).length} this month</small></span><b>${aed(sum(k))}</b><span class="pc">${total ? Math.round((sum(k) / total) * 100) : 0}%</span><button class="btn ghost xs" data-fin-all="${k}">View all</button></div>`).join('')}</div>
+    const m = st.exMonth === 'prev' ? addMonths(thisMonth(), -1) : thisMonth();
+    const pm = addMonths(m, -1);
+    const all = transactions();
+    const of = (mm, k) => all.filter((x) => x.date.slice(0, 7) === mm && (!k || x.kind === k));
+    const sum = (mm, k) => of(mm, k).reduce((a, x) => a + x.amount, 0);
+    const total = sum(m), prevTotal = sum(pm);
+    const mname = (mm) => monthName(mm, true).split(' ')[0];
+    const people = new Set(of(m, 'reimb').map((x) => x.name)).size;
+    const cards = [
+      ['Spent this month', total, sum(pm), `vs ${mname(pm)}`, 'var(--accent)'],
+      ['Payments', sum(m, 'sub'), sum(pm, 'sub'), `${of(m, 'sub').length} subscription${of(m, 'sub').length === 1 ? '' : 's'}`, KIND_C.sub],
+      ['Reimbursements', sum(m, 'reimb'), sum(pm, 'reimb'), `${people} ${people === 1 ? 'person' : 'people'}`, KIND_C.reimb],
+      ['Big expenses', sum(m, 'expense'), sum(pm, 'expense'), `${of(m, 'expense').length} purchase${of(m, 'expense').length === 1 ? '' : 's'}`, KIND_C.expense],
+    ];
+    // Cash flow overview: one S-curve per kind, ending at its total
+    const parts = [['sub', 'Payments'], ['reimb', 'Reimbursements'], ['expense', 'Big expenses']];
+    // a round scale: 6 steps of 1 / 2 / 2.5 / 5 × 10ⁿ
+    const raw = Math.max(1000, ...parts.map(([k]) => sum(m, k))) * 1.1 / 6;
+    const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const step = [1, 2, 2.5, 5, 10].map((f) => f * mag).find((v) => v >= raw);
+    const top = step * 6;
+    const nice = (v) => (v >= 1000 ? +(v / 1000).toFixed(1) + 'k' : Math.round(v));
+    const curves = parts.map(([k, l], i) => { const x0 = 2 + i * 27, x1 = x0 + 20, v = sum(m, k), y = 92 - (v / top) * 84; return { k, l, v, x1, y, d: `M${x0},92 C${(x0 + x1) / 2},92 ${(x0 + x1) / 2},${y} ${x1},${y}` }; });
+    // half donut
+    let a0 = Math.PI;
+    const arcs = parts.slice().sort((a, b) => sum(m, b[0]) - sum(m, a[0])).map(([k, l]) => {
+      const v = sum(m, k); const sweep = total ? Math.PI * (v / total) : 0; const a1 = a0 + sweep;
+      const R = 130, r = 72, cx = 150, cy = 150, gap = sweep > 0.05 ? 0.012 : 0;
+      const p = (ang, rad) => `${(cx + rad * Math.cos(ang)).toFixed(1)},${(cy + rad * Math.sin(ang)).toFixed(1)}`;
+      const d = sweep ? `M${p(a0, R)} A${R},${R} 0 0 1 ${p(a1 - gap, R)} L${p(a1 - gap, r)} A${r},${r} 0 0 0 ${p(a0, r)} Z` : '';
+      a0 = a1;
+      return { k, l, v, d, pct: total ? Math.round((v / total) * 100) : 0 };
+    });
+    const biggest = of(m).slice().sort((a, b) => b.amount - a.amount)[0];
+    const live = recs('sub').filter((x) => !x.endedAt);
+    const monthly = live.reduce((a, x) => a + (Number(x.amount) || 0), 0);
+    const today = todayStr();
+    const upcoming = [];
+    live.forEach((x) => { for (let k = 0; k < 2; k++) { const mm = addMonths(thisMonth(), k); const d = `${mm}-${pad2(Math.min(Number(x.day) || 1, daysIn(mm)))}`; if (d >= today && d <= addDays(today, 30)) upcoming.push({ x, d }); } });
+    upcoming.sort((a, b) => a.d.localeCompare(b.d));
+    const ini = (n) => String(n).replace(/[^A-Za-z0-9 ]/g, '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?';
+    const subColor = (i) => ['#e5484d', '#a875ff', '#4c9aff', '#4fd1c5', '#3ddc97', '#f9be33', '#ff8a4c', '#ff8fc7'][i % 8];
+    const barMax = Math.max(total, prevTotal) * 1.25 || 1;
+    const p = pctChange(total, prevTotal);
+    return `<div class="fa">
+      <header class="fa-head">
+        <div><h1>Expenses</h1><p>Everything E11 paid out in ${esc(monthName(m, true))} — subscriptions, staff reimbursements and big purchases.</p></div>
+        <div class="fa-seg">${[['cur', 'This month'], ['prev', 'Last month']].map(([k, l]) => `<button class="${(st.exMonth || 'cur') === k ? 'on' : ''}" data-fin-exm="${k}">${l}</button>`).join('')}</div>
+      </header>
+      <div class="fa-stats four">${cards.map(([l, v, pv, note, c], i) => `<div class="fa-stat static" style="--c:${c}"><span class="fa-sl"><span class="fa-ic">${icon('coin')}</span>${esc(l)}</span><span class="fa-n money">${aed(v)}</span><span class="fa-sf">${trend(v, pv, false)}<span>${esc(note)}</span></span></div>`).join('')}</div>
+      <div class="fa-grid">
+        <div class="fa-main">
+          <section class="fa-card">
+            <div class="fa-ch"><h2>Cash flow overview</h2><div class="fa-legend">${parts.map(([k, l]) => `<span><i style="background:${KIND_C[k]}"></i>${l}</span>`).join('')}</div></div>
+            <div class="fa-flow">
+              <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs>${parts.map(([k]) => `<linearGradient id="fl-${k}" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${KIND_C[k]}" stop-opacity="0"/><stop offset=".65" stop-color="${KIND_C[k]}"/></linearGradient>`).join('')}</defs>
+                ${curves.map((c) => `<path d="${c.d}" fill="none" stroke="url(#fl-${c.k})" stroke-width="2.5" vector-effect="non-scaling-stroke"/>`).join('')}</svg>
+              ${curves.map((c) => `<span class="fa-end" style="left:${c.x1}%;top:${c.y}%;--c:${KIND_C[c.k]}"><i></i><span><small>${c.l}</small><b>${aed(c.v)}</b></span></span>`).join('')}
+            </div>
+            <div class="fa-ruler"></div>
+            <div class="fa-scale">${Array.from({ length: 7 }, (_, i) => `<span>${i ? nice(step * i) : 'AED 0'}</span>`).join('')}</div>
+          </section>
+          <div class="fa-two">
+            <section class="fa-card">
+              <div class="fa-ch"><h2>Compared with ${esc(mname(pm))}</h2><span class="fa-chip ${p > 0 ? 'bad' : 'good'}">${p > 0 ? '+' : ''}${p}%</span></div>
+              <div class="fa-kv"><span>Spent</span><b>${aed(total)}</b></div>
+              <div class="fa-slider"><i class="fill" style="width:${(total / barMax) * 100}%"></i><i class="knob" style="left:${(total / barMax) * 100}%"></i><i class="mark" style="left:${(prevTotal / barMax) * 100}%" title="${esc(mname(pm))}"></i></div>
+              <div class="fa-kv sm"><span>AED 0</span><span class="acc">${esc(mname(pm))}: ${aed(prevTotal)}</span></div>
+              ${biggest ? `<div class="fa-note"><div class="fa-kv"><span>Biggest item</span><b>${aed(biggest.amount)}</b></div><p>${esc(biggest.name)} · ${esc(KIND_L[biggest.kind])}, paid ${esc(fmtDay(biggest.date))}.</p></div>` : ''}
+            </section>
+            <section class="fa-card">
+              <div class="fa-ch"><h2>All expenses</h2><span class="fa-muted">${esc(mname(m))}</span></div>
+              <div class="fa-donut"><svg viewBox="0 0 300 160" aria-hidden="true">${arcs.map((a) => (a.d ? `<path d="${a.d}" fill="${KIND_C[a.k]}"><title>${a.l}: ${a.pct}%</title></path>` : '')).join('') || '<path d="M20,150 A130,130 0 0 1 280,150 L222,150 A72,72 0 0 0 78,150 Z" fill="var(--hover)"/>'}</svg><div><small>Total</small><b>${aed(total)}</b></div></div>
+              <div class="fa-leg col">${arcs.map((a) => `<span><i style="background:${KIND_C[a.k]}"></i>${a.l}<b>${a.pct}%</b><button class="fa-link" data-fin-all="${a.k}">View all</button></span>`).join('')}</div>
+            </section>
+          </div>
         </div>
-        <div class="widget fe-cash"><h3>Cash flow<span class="spacer"></span><small class="fin-note">Money spent, last 6 months</small></h3>${cashflow(lastMonths(6))}</div>
+        <aside class="fa-side">
+          <section class="fa-card">
+            <div class="fa-ch"><h2>Subscriptions</h2>${isFinAdmin() ? `<button class="fa-link box" data-fin-go="fin-subs">+ Add</button>` : ''}</div>
+            <div class="fa-subcard"><span class="fa-pill">Every month</span><b>${aed(monthly)}</b><div class="fa-subs">${live.slice(0, 7).map((x, i) => `<span style="background:${subColor(i)}" title="${esc(x.name)}">${esc(ini(x.name))}</span>`).join('')}</div><small>${live.length} subscription${live.length === 1 ? '' : 's'} · recorded on their billing day</small></div>
+          </section>
+          <section class="fa-card">
+            <div class="fa-ch"><h2>Coming up</h2><span class="fa-muted">next 30 days</span></div>
+            <div class="fa-up">${upcoming.slice(0, 5).map(({ x, d }) => `<div><span class="av" style="background:${subColor(live.indexOf(x))}">${esc(ini(x.name))}</span><span class="t"><b>${esc(x.name)}</b><small>${esc(fmtDay(d))}</small></span><b class="m">${aed(x.amount)}</b></div>`).join('') || '<div class="fin-empty">Nothing due in the next 30 days.</div>'}</div>
+            <p class="fa-cap">Recorded automatically on each billing day</p>
+          </section>
+        </aside>
       </div>
-      <div class="widget fe-recent">
-        <h3>Recent transactions<span class="spacer"></span><button class="btn ghost" data-fin-all="all">View all ${icon('arrow')}</button></h3>
-        ${transactions().slice(0, 5).map((x) => txRow(x)).join('') || '<div class="fin-empty">No transactions yet.</div>'}
-      </div>`;
+      <section class="fa-card">
+        <div class="fa-ch"><h2>Recent transactions</h2><button class="fa-link" data-fin-all="all">View all ${icon('arrow')}</button></div>
+        ${all.slice(0, 5).map((x) => txRow(x)).join('') || '<div class="fin-empty">No transactions yet.</div>'}
+      </section>
+    </div>`;
   }
   function list() {
     const L = st.list;
@@ -422,13 +534,15 @@ const Fin = (() => {
   /* ---------- Clicks ---------- */
   document.addEventListener('click', (e) => {
     if (!owns(ui.view) && !e.target.closest('[data-fin-go]')) return;
-    const el = e.target.closest('[data-fin-go],[data-fin-status],[data-fin-graph],[data-fin-proj],[data-fin-toggle],[data-fin-set],[data-fin-all],[data-fin-back],[data-fin-type],[data-fin-page],[data-fin-inv],[data-fin-new],[data-fin-del],[data-fin-subinv],[data-fin-subadd],[data-fin-rinv]');
+    const el = e.target.closest('[data-fin-go],[data-fin-span],[data-fin-exm],[data-fin-status],[data-fin-graph],[data-fin-proj],[data-fin-toggle],[data-fin-set],[data-fin-all],[data-fin-back],[data-fin-type],[data-fin-page],[data-fin-inv],[data-fin-new],[data-fin-del],[data-fin-subinv],[data-fin-subadd],[data-fin-rinv]');
     if (!el) return;
     e.stopPropagation();
     const d = el.dataset;
     if (d.finGo) return go(d.finGo);
     if (d.finStatus) { st.proj = d.finStatus; return go('fin-projects'); }
     if (d.finGraph) { st.graph = d.finGraph; return renderContent(); }
+    if (d.finSpan) { st.span = Number(d.finSpan); return renderContent(); }
+    if (d.finExm) { st.exMonth = d.finExm; return renderContent(); }
     if (d.finProj) { st.proj = d.finProj; return renderContent(); }
     if (d.finToggle) { st.open[d.finToggle] = !st.open[d.finToggle]; return renderContent(); }
     if (d.finSet) return statusMenu(el, d.finSet);
