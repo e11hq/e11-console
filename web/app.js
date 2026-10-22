@@ -937,6 +937,97 @@ const myDoneAt = (t) => (t.done ? t.completedAt : (t.partsDone || {})[currentUse
 const needsOwner = (t) => !t.parentId && !t.done && !(t.assignees || []).length && t.createdBy === currentUserId;
 const onMyList = (t) => isMine(t) || needsOwner(t);
 const myTop = () => topTasks().filter(onMyList);
+/* ---------- Whose tasks the personal pages show ----------
+   Everyone else: tasks assigned to them (as before).
+   Account Managers and Admins: tasks they created. My Tasks has filters — Created date, People
+   (assignees), "Assigned to me" (back to the personal list) and, for Admins only, Account managers
+   (tasks those AMs created). My Day: an AM's created tasks; an Admin's "E11 Day" shows tasks created
+   by every Account Manager and Admin. */
+
+const Work = (() => {
+  const f = () => (ui.workF = ui.workF || { created: null, people: [], ams: [], assigned: false });
+  const lead = () => isManager();
+  const personal = () => !lead() || f().assigned;
+  const openOf = (t) => (personal() ? myOpen(t) : !t.done);
+  const doneAtOf = (t) => (personal() ? myDoneAt(t) : t.done ? t.completedAt || null : null);
+  const createdBy = (ids) => { const set = new Set(ids); return topTasks().filter((t) => set.has(t.createdBy)); };
+  const creators = () => (isAdmin() && f().ams.length ? f().ams : [currentUserId]);
+  function inCreated(t, k) {
+    if (!k) return true;
+    const c = new Date(t.createdAt), now = new Date();
+    if (k === 'today') return ymd(c) === todayStr();
+    if (k === 'month') return c.getFullYear() === now.getFullYear() && c.getMonth() === now.getMonth();
+    const wd = (now.getDay() + 6) % 7; // weeks start on Monday
+    return ymd(c) >= addDays(todayStr(), -wd);
+  }
+  // My Tasks list (both tabs), with the filters applied
+  function list() {
+    const F = f();
+    let l = personal() ? myTop() : createdBy(creators());
+    if (F.created) l = l.filter((t) => inCreated(t, F.created));
+    if (F.people.length) l = l.filter((t) => (t.assignees || []).some((u) => F.people.includes(u)));
+    return l;
+  }
+  // Home: an AM / Admin's own created tasks (no filters); everyone else: their tasks
+  const home = () => (lead() ? createdBy([currentUserId]) : myTop());
+  const homeOpen = (t) => (lead() ? !t.done : myOpen(t));
+  const homeDoneAt = (t) => (lead() ? (t.done ? t.completedAt || null : null) : myDoneAt(t));
+  // My Day pool
+  function day() {
+    const u = me();
+    if (!lead()) return { tasks: db.tasks.filter(onMyList), open: myOpen, doneAt: myDoneAt, doneTasks: db.tasks.filter(isMine) };
+    const who = isAdmin() ? db.users.filter((x) => x.role === 'am' || x.role === 'admin').map((x) => x.id) : [u.id];
+    const ts = createdBy(who);
+    const dAt = (t) => (t.done ? t.completedAt || null : null);
+    return { tasks: ts, open: (t) => !t.done, doneAt: dAt, doneTasks: ts };
+  }
+  const dayTitle = () => (isAdmin() ? 'E11 Day' : 'My Day');
+  const active = () => { const F = f(); return !!(F.created || F.people.length || F.ams.length || F.assigned); };
+  return { f, lead, personal, openOf, doneAtOf, list, home, homeOpen, homeDoneAt, day, dayTitle, inCreated, active };
+})();
+const CREATED_L = { today: 'Today', week: 'This week', month: 'This month' };
+// Filter bar for My Tasks (Account Managers and Admins)
+function workFilterBar() {
+  if (!Work.lead()) return '';
+  const F = Work.f();
+  const chip = (label, act, id = '') => `<span class="wf-chip">${label}<button data-action="${act}" ${id ? `data-id="${esc(id)}"` : ''} title="Remove filter">${icon('x')}</button></span>`;
+  const chips = [
+    F.assigned ? chip('Assigned to me', 'wf-clear-assigned') : '',
+    F.created ? chip(`Created: ${CREATED_L[F.created]}`, 'wf-clear-created') : '',
+    ...F.ams.map((id) => chip(`${avatarHTML(id, 16)}${esc(fullName(userById(id)))}’s tasks`, 'wf-clear-am', id)),
+    ...F.people.map((id) => chip(`${avatarHTML(id, 16)}${esc(fullName(userById(id)))}`, 'wf-clear-person', id)),
+  ].join('');
+  return `<div class="wf-bar">
+    <button class="wf-btn ${F.created ? 'on' : ''}" data-action="wf-created">${icon('cal')}Created date${icon('chev')}</button>
+    <button class="wf-btn ${F.people.length ? 'on' : ''}" data-action="wf-people">${icon('users')}People${icon('chev')}</button>
+    ${isAdmin() ? `<button class="wf-btn ${F.ams.length ? 'on' : ''}" data-action="wf-ams">${icon('user')}Account managers${icon('chev')}</button>` : ''}
+    <button class="wf-btn ${F.assigned ? 'on' : ''}" data-action="wf-assigned">${icon('check-circle')}Assigned to me</button>
+    ${chips ? `<div class="wf-chips">${chips}${Work.active() ? '<button class="wf-reset" data-action="wf-reset">Clear all</button>' : ''}</div>` : ''}
+  </div>`;
+}
+function workMenu(anchor, kind) {
+  const F = Work.f();
+  const redraw = () => { renderContent(); renderSidebar(); };
+  const check = (on) => (on ? `<span class="wf-ck">${icon('check')}</span>` : '');
+  let items = [];
+  if (kind === 'created') {
+    items = Object.entries(CREATED_L).map(([k, l]) => ({ html: `<div class="mi ${F.created === k ? 'cur' : ''}">${esc(l)}${check(F.created === k)}</div>`, run: () => { F.created = F.created === k ? null : k; redraw(); } }));
+  } else {
+    const roles = kind === 'ams' ? [['am', 'Account Managers']] : [['production', 'Production'], ['social', 'Social'], ['freelancer', 'Freelancers']];
+    const key = kind === 'ams' ? 'ams' : 'people';
+    roles.forEach(([r, label]) => {
+      const us = activeUsers().filter((u) => u.role === r && u.id !== currentUserId);
+      if (!us.length) return;
+      items.push({ html: `<div class="wf-mh">${esc(label)}</div>` });
+      us.forEach((u) => items.push({ html: `<div class="mi wf-person">${avatarHTML(u.id, 20)}<span>${esc(fullName(u))}</span>${check(F[key].includes(u.id))}</div>`,
+        run: () => { F[key] = F[key].includes(u.id) ? F[key].filter((x) => x !== u.id) : F[key].concat(u.id); redraw(); } }));
+    });
+    if (!items.length) items.push({ html: `<div class="wf-mh">Nobody here yet</div>` });
+  }
+  const m = showMenu(anchor, items.map((it, i) => (it.run ? { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) } : it)));
+  m.classList.add('wf-menu');
+}
+
 const AV_COLORS = ['#7b68ee', '#4c9aff', '#3ddc97', '#f9be33', '#ff8a4c', '#e5484d', '#ff8fc7', '#4fd1c5', '#a875ff'];
 function avColor(id) { let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return AV_COLORS[h % AV_COLORS.length]; }
 function avatarHTML(id, size = 24, cls = '') {
@@ -1725,10 +1816,12 @@ function renderSidebar() {
   $$('.nav-item[data-nav]').forEach((a) => a.classList.toggle('active', !ui.search && (ui.view === a.dataset.nav || (a.dataset.nav === 'clients' && ui.view === 'client'))));
   { const cc = $('#clients-count'); if (cc) cc.textContent = (db.clients || []).length ? String(db.clients.length) : ''; }
   { const tn = $('#nav-trash'); if (tn) { tn.style.display = isManager() ? '' : 'none'; $('#trash-count').textContent = trashList().length ? String(trashList().length) : ''; } }
-  const mt = myTop().filter((t) => myOpen(t) && t.due && dayDiff(t.due) <= 0).length;
+  const mt = Work.home().filter((t) => Work.homeOpen(t) && t.due && dayDiff(t.due) <= 0).length;
   $('#mytasks-count').textContent = mt ? String(mt) : '';
-  const td = db.tasks.filter((t) => onMyList(t) && myOpen(t) && t.due && dayDiff(t.due) === 0).length;
+  const D = Work.day();
+  const td = D.tasks.filter((t) => D.open(t) && t.due && dayDiff(t.due) === 0).length;
   $('#today-count').textContent = td ? String(td) : '';
+  { const dn = $('.nav-item[data-nav="today"]'); if (dn && dn.lastChild && dn.childNodes[1]) dn.childNodes[1].nodeValue = Work.dayTitle(); }
   const unread = myNotifs().filter((n) => !n.read).length;
   const ib = $('#inbox-count');
   if (ib) { ib.textContent = unread ? String(unread > 99 ? '99+' : unread) : ''; ib.classList.toggle('hot', !!unread); }
@@ -1770,7 +1863,7 @@ function renderTitle() {
     return;
   }
   if (ui.view === 'today') {
-    el.innerHTML = `<div class="page-icon" style="background:#3b2f14;color:#f9be33">${icon('sun')}</div><div class="page-title">My Day</div>`;
+    el.innerHTML = `<div class="page-icon" style="background:#3b2f14;color:#f9be33">${icon('sun')}</div><div class="page-title">${Work.dayTitle()}</div>`;
     return;
   }
   if (ui.view === 'mytasks') {
@@ -1978,13 +2071,14 @@ function mwRow(t) {
 }
 function viewMyTasks() {
   const tab = ui.myTasksTab === 'done' ? 'done' : 'todo';
-  const open = myTop().filter(myOpen);
+  const L = Work.list(), isOpen = Work.openOf, doneAt = Work.doneAtOf;
+  const open = L.filter(isOpen);
   const cutoff = Date.now() - AUTO_DELETE_DAYS * 86400000;
-  const doneList = myTop().filter((t) => myDoneAt(t) && new Date(myDoneAt(t)).getTime() > cutoff).sort((a, b) => myDoneAt(b).localeCompare(myDoneAt(a)));
+  const doneList = L.filter((t) => doneAt(t) && new Date(doneAt(t)).getTime() > cutoff).sort((a, b) => doneAt(b).localeCompare(doneAt(a)));
   const groups = tab === 'done'
     ? [{ id: 'mw-done', name: 'Recently completed', tasks: doneList, empty: 'Tasks you complete in the last 30 days show here.' }]
     : [
-      { id: 'mw-today', name: 'Today', tasks: open.filter((t) => t.due && dayDiff(t.due) === 0).sort(byDayThenPrio), empty: 'Tasks and reminders assigned to you will show here.' },
+      { id: 'mw-today', name: 'Today', tasks: open.filter((t) => t.due && dayDiff(t.due) === 0).sort(byDayThenPrio), empty: Work.active() ? 'No tasks match these filters.' : Work.personal() ? 'Tasks and reminders assigned to you will show here.' : 'Tasks you create will show here.' },
       { id: 'mw-overdue', name: 'Overdue', tasks: open.filter((t) => t.due && dayDiff(t.due) < 0).sort(byDayThenPrio) },
       { id: 'mw-next', name: 'Next', tasks: open.filter((t) => t.due && dayDiff(t.due) > 0).sort(byDayThenPrio) },
       { id: 'mw-none', name: 'Unscheduled', tasks: open.filter((t) => !t.due).sort((a, b) => byPrio(a, b) || a.createdAt.localeCompare(b.createdAt)) },
@@ -2003,6 +2097,7 @@ function viewMyTasks() {
         <button class="mw-tab ${tab === 'todo' ? 'on' : ''}" data-action="mt-tab" data-tab="todo">To Do</button>
         <button class="mw-tab ${tab === 'done' ? 'on' : ''}" data-action="mt-tab" data-tab="done">Done</button>
       </div>
+      ${workFilterBar()}
       ${tab === 'todo' && can('createTask') ? `<div class="quick-add mw-add">${icon('plus')}<input id="quick-add" placeholder="Add a task… (due today)" autocomplete="off"><span class="hint">Enter</span></div>` : ''}
       ${body}
     </div>
@@ -2018,9 +2113,10 @@ function viewMyDay() {
   // week strip (Mon–Sun) around the selected day
   const wd = (dt.getDay() + 6) % 7;
   const start = addDays(day, -wd);
+  const D = Work.day();
   const strip = Array.from({ length: 7 }, (_, i) => {
     const d = addDays(start, i);
-    const n = db.tasks.filter((t) => onMyList(t) && myOpen(t) && t.due === d).length;
+    const n = D.tasks.filter((t) => D.open(t) && t.due === d).length;
     const dd = parseYmd(d);
     return `<button class="ds-day ${d === day ? 'on' : ''} ${d === today ? 'today' : ''}" data-action="pick-day" data-day="${d}">
       <span class="ds-wd">${dd.toLocaleDateString('en-US', { weekday: 'short' })}</span>
@@ -2029,11 +2125,11 @@ function viewMyDay() {
     </button>`;
   }).join('');
 
-  const open = db.tasks.filter((t) => onMyList(t) && myOpen(t));
+  const open = D.tasks.filter(D.open);
   const overdue = isToday ? open.filter((t) => t.due && t.due < today) : [];
   const dueDay = open.filter((t) => t.due === day);
   const inProgress = open.filter((t) => t.start && t.start <= day && t.due && t.due > day);
-  const doneDay = db.tasks.filter((t) => isMine(t) && myDoneAt(t) && ymd(new Date(myDoneAt(t))) === day);
+  const doneDay = D.doneTasks.filter((t) => D.doneAt(t) && ymd(new Date(D.doneAt(t))) === day);
   const sortP = (a, b) => byPrio(a, b) || (a.due || '').localeCompare(b.due || '') || a.createdAt.localeCompare(b.createdAt);
   [overdue, dueDay, inProgress].forEach((g) => g.sort(sortP));
   const planned = dueDay.length + overdue.length + doneDay.length;
@@ -2094,19 +2190,22 @@ function viewMyDay() {
 function viewHome() {
   const h = new Date().getHours();
   const greet = h < 5 ? 'Good evening' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
-  const open = myTop().filter(myOpen);
+  const lead = Work.lead();
+  const open = Work.home().filter(Work.homeOpen);
   const overdue = open.filter((t) => t.due && dayDiff(t.due) < 0).length;
   const dueToday = open.filter((t) => t.due && dayDiff(t.due) === 0).length;
   const week = open.filter((t) => t.due && dayDiff(t.due) > 0 && dayDiff(t.due) <= 7).length;
   const weekAgo = Date.now() - 7 * 86400000;
-  const doneWeek = db.tasks.filter((t) => isMine(t) && myDoneAt(t) && new Date(myDoneAt(t)).getTime() > weekAgo).length;
+  const doneWeek = (lead ? Work.home() : db.tasks.filter(isMine)).filter((t) => Work.homeDoneAt(t) && new Date(Work.homeDoneAt(t)).getTime() > weekAgo).length;
 
   const prio = open.slice().sort((a, b) => {
     const ad = a.due ? dayDiff(a.due) : 9999, bd = b.due ? dayDiff(b.due) : 9999;
     return ad - bd || prioRank(prioOf(a)) - prioRank(prioOf(b));
   }).slice(0, 8);
 
-  const projects = db.projects.slice().sort(byOrder).map((p) => {
+  // An Account Manager sees the projects their created tasks are in; Admins and everyone else see all
+  const mineP = me() && me().role === 'am' ? new Set(db.tasks.filter((t) => t.createdBy === currentUserId).map((t) => t.projectId)) : null;
+  const projects = db.projects.slice().sort(byOrder).filter((p) => !mineP || mineP.has(p.id)).map((p) => {
     const ts = db.tasks.filter((t) => t.projectId === p.id && !t.parentId);
     const d = ts.filter((t) => t.done).length;
     const pct = ts.length ? Math.round((d / ts.length) * 100) : 0;
@@ -2129,9 +2228,9 @@ function viewHome() {
     </div>
     <div class="home-grid">
       <div class="widget">
-        <h3>My priorities<span class="spacer"></span><button class="btn ghost" data-nav="mytasks">View all ${icon('arrow')}</button></h3>
+        <h3>${lead ? 'Your created tasks' : 'My priorities'}<span class="spacer"></span><button class="btn ghost" data-action="home-view-all">View all ${icon('arrow')}</button></h3>
         ${prio.length ? prio.map((t) => `<div class="mini-row" data-task="${t.id}">${statusIcon(t)}<span class="title">${t.title ? esc(t.title) : '<span class="ph">Untitled task</span>'}</span>${prioFlag(prioOf(t), true)}<span class="due ${dueClass(t)}">${fmtDue(t.due)}</span></div>`).join('')
-          : `<div class="empty"><div class="big">You're all caught up</div>Tasks assigned to you will show up here.</div>`}
+          : `<div class="empty"><div class="big">You're all caught up</div>${lead ? 'Tasks you create will show up here.' : 'Tasks assigned to you will show up here.'}</div>`}
       </div>
       <div class="widget">
         <h3>Projects<span class="spacer"></span></h3>
@@ -4019,6 +4118,16 @@ document.addEventListener('click', async (e) => {
       case 'detail-mode': ui.detailMode = actEl.dataset.mode; savePref('detailMode', ui.detailMode); renderDetail(); return;
       case 'side-tab': { const tb = actEl.dataset.tab; if (tb === 'activity') { ui.sideTab = 'comments'; ui.activityFilter = 'all'; } else { ui.sideTab = tb; if (tb === 'comments') ui.activityFilter = 'comments'; } } renderDetail(); if (ui.sideTab === 'comments') { const f = $('.tm-feed'); if (f) stickFeedToBottom(f); } return;
       case 'share-task': TaskLink.copy(id); return;
+      case 'wf-created': e.stopPropagation(); workMenu(actEl, 'created'); return;
+      case 'wf-people': e.stopPropagation(); workMenu(actEl, 'people'); return;
+      case 'wf-ams': e.stopPropagation(); workMenu(actEl, 'ams'); return;
+      case 'wf-assigned': Work.f().assigned = !Work.f().assigned; renderContent(); renderSidebar(); return;
+      case 'wf-clear-assigned': Work.f().assigned = false; renderContent(); renderSidebar(); return;
+      case 'wf-clear-created': Work.f().created = null; renderContent(); return;
+      case 'wf-clear-person': Work.f().people = Work.f().people.filter((x) => x !== id); renderContent(); return;
+      case 'wf-clear-am': Work.f().ams = Work.f().ams.filter((x) => x !== id); renderContent(); renderSidebar(); return;
+      case 'wf-reset': ui.workF = null; renderContent(); renderSidebar(); return;
+      case 'home-view-all': if (Work.lead()) ui.workF = null; ui.myTasksTab = 'todo'; go('mytasks'); return;
       case 'nav-back': PageHistory.back(); return;
       case 'nav-forward': PageHistory.forward(); return;
       case 'toggle-sidebar': setSidebarCollapsed(!document.getElementById('app').classList.contains('sb-collapsed')); return;
@@ -6259,8 +6368,9 @@ const Splash = (() => {
   function values() {
     if (!db || !currentUserId) return null;
     const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
-    const open = db.tasks.filter((t) => onMyList(t) && myOpen(t)).length;
-    const today = db.tasks.filter((t) => onMyList(t) && myOpen(t) && t.due && dayDiff(t.due) === 0).length;
+    const D = Work.day();
+    const open = D.tasks.filter(D.open).length;
+    const today = D.tasks.filter((t) => D.open(t) && t.due && dayDiff(t.due) === 0).length;
     const unread = myNotifs().filter((n) => !n.read).length;
     const cd = isCD();
     const fourth = cd ? (activeReviews().length ? `${activeReviews().length} waiting` : 'none waiting') : plural((db.clients || []).length, 'client', 'clients');

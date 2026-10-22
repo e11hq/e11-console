@@ -79,7 +79,7 @@ const Phone = (() => {
     const rv = cd ? activeReviews().length : 0;
     const cur = tabOf(ui.view);
     const tab = (v, ic, label, badge) => `<button class="ph-tab ${cur === v ? 'on' : ''}" data-ph-tab="${v}">${icon(ic)}${badge ? `<i class="ph-badge">${badge > 99 ? '99+' : badge}</i>` : ''}<span>${label}</span></button>`;
-    bar.innerHTML = tab('today', 'sun', 'My Day')
+    bar.innerHTML = tab('today', 'sun', Work.dayTitle())
       + tab('mytasks', 'check-circle', 'My Tasks')
       + tab('inbox', 'inbox', 'Inbox', unread)
       + (cd ? tab('reviews', 'shield', 'Reviews', rv) : tab('projects', 'folder', 'Projects'))
@@ -123,16 +123,17 @@ const Phone = (() => {
   /* ---------- Screens ---------- */
   function myDay() {
     const today = todayStr();
-    const open = db.tasks.filter((t) => onMyList(t) && myOpen(t));
+    const D = Work.day();
+    const open = D.tasks.filter(D.open);
     const sortP = (a, b) => byPrio(a, b) || (a.due || '').localeCompare(b.due || '') || a.createdAt.localeCompare(b.createdAt);
     const overdue = open.filter((t) => t.due && t.due < today).sort(sortP);
     const due = open.filter((t) => t.due === today).sort(sortP);
     const going = open.filter((t) => t.start && t.start <= today && t.due && t.due > today).sort(sortP);
-    const done = db.tasks.filter((t) => isMine(t) && myDoneAt(t) && ymd(new Date(myDoneAt(t))) === today);
+    const done = D.doneTasks.filter((t) => D.doneAt(t) && ymd(new Date(D.doneAt(t))) === today);
     const review = open.filter((t) => t.cdStatus === 'review').length;
     const d = new Date();
     return `<div class="ph-page">
-      ${head('My Day', esc(d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })),
+      ${head(Work.dayTitle(), esc(d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })),
         `<button class="ph-round" data-ph="search" aria-label="Search">${icon('search')}</button><button class="ph-me" data-ph-tab="me" aria-label="Me">${avatarHTML(currentUserId, 40)}</button>`)}
       <div class="ph-stats">
         <div><b class="g">${due.length}</b><span>Due today</span></div>
@@ -151,11 +152,12 @@ const Phone = (() => {
 
   function myTasks() {
     const tab = ui.myTasksTab === 'done' ? 'done' : 'todo';
-    const open = myTop().filter(myOpen);
+    const L = Work.list(), doneAt = Work.doneAtOf;
+    const open = L.filter(Work.openOf);
     let body;
     if (tab === 'done') {
       const cutoff = Date.now() - AUTO_DELETE_DAYS * 86400000;
-      const list = myTop().filter((t) => myDoneAt(t) && new Date(myDoneAt(t)).getTime() > cutoff).sort((a, b) => myDoneAt(b).localeCompare(myDoneAt(a)));
+      const list = L.filter((t) => doneAt(t) && new Date(doneAt(t)).getTime() > cutoff).sort((a, b) => doneAt(b).localeCompare(doneAt(a)));
       body = group('Last 30 days', list, { empty: 'Tasks you complete show here.', status: false });
     } else {
       body = group('Overdue', open.filter((t) => t.due && dayDiff(t.due) < 0).sort(byDayThenPrio))
@@ -166,6 +168,7 @@ const Phone = (() => {
     return `<div class="ph-page">
       ${head('My Tasks', plural(open.length, 'open task'))}
       <div class="ph-seg"><button class="${tab === 'todo' ? 'on' : ''}" data-action="mt-tab" data-tab="todo">To Do</button><button class="${tab === 'done' ? 'on' : ''}" data-action="mt-tab" data-tab="done">Done</button></div>
+      ${workFilterBar()}
       <div class="ph-list">${body}</div>
       ${fab()}
     </div>`;
@@ -779,7 +782,7 @@ const Push = (() => {
    Unread ↔ All ↔ Mentions. (A swipe that starts at the very left edge is "back" instead.) */
 (() => {
   let g = null;
-  const SKIP = 'input, textarea, select, [contenteditable="true"], .ph-slides, .ph-chips, .tile-grid, .menu, .ph-sheet, .ap-video, video, .board';
+  const SKIP = 'input, textarea, select, [contenteditable="true"], .ph-slides, .ph-chips, .wf-bar, .tile-grid, .menu, .ph-sheet, .ap-video, video, .board';
   function tabsHere() {
     if ($('#overlay-root').firstElementChild || $('#ph-sheet-root .ph-scrim:not(.docked)') || $('.menu')) return null;
     if (ui.taskId) {
@@ -797,7 +800,7 @@ const Push = (() => {
     let h = btn;
     while (h.parentElement && h.parentElement !== root) h = h.parentElement;
     const out = [];
-    for (let n = h.nextElementSibling; n; n = n.nextElementSibling) out.push(n);
+    for (let n = h.nextElementSibling; n; n = n.nextElementSibling) if (!n.classList.contains('wf-bar')) out.push(n);
     return out.length ? out : [root];
   }
   const each = (els, fn) => (Array.isArray(els) ? els : els ? [els] : []).forEach(fn);

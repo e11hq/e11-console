@@ -687,3 +687,9 @@ body.phone .prio-menu .pn { height: 44px; font-size: 16px; border-radius: 10px; 
 :root[data-theme="light"] #ph-menu-scrim { background: rgba(10, 10, 20, .35); }
 @keyframes ph-fade { from { opacity: 0; } }
 body.phone .menu { overscroll-behavior: contain; }
+/* My Tasks filters on the phone: one row that scrolls sideways, chips under it */
+body.phone .wf-bar { margin: 10px 16px 4px; gap: 8px; }
+body.phone .wf-btn { height: 34px; font-size: 14px; border-radius: 10px; }
+body.phone .wf-chip { height: 32px; font-size: 13.5px; }
+body.phone .wf-chip button { width: 24px; height: 24px; }
+body.phone .wf-menu .mi { min-height: 46px; }

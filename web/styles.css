@@ -2231,3 +2231,24 @@ body.phone [data-action="share-task"] { display: none !important; }
 .dp-day.today { color: var(--accent); font-weight: 600; }
 .dp-day.sel { background: var(--accent); color: #fff; font-weight: 600; }
 .dp-day.sel:hover { background: var(--accent-strong, var(--accent)); }
+
+/* ---------- My Tasks filters (Account Managers and Admins) ---------- */
+.wf-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 2px 0 12px; }
+.wf-btn { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 7px; border: 1px solid var(--border); background: var(--raised, transparent); color: var(--text-2); font: inherit; font-size: 12.5px; font-weight: 500; cursor: pointer; }
+.wf-btn .ic { width: 13px; height: 13px; }
+.wf-btn .ic:last-child:not(:first-child) { width: 11px; height: 11px; opacity: .7; }
+.wf-btn:hover { color: var(--text); border-color: var(--border-strong, var(--border)); }
+.wf-btn.on { color: var(--text); border-color: var(--accent-line, var(--accent)); background: var(--accent-soft); }
+.wf-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; width: 100%; }
+.wf-chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 4px 0 9px; border-radius: 999px; background: var(--accent-soft); color: var(--text); font-size: 12px; font-weight: 500; }
+.wf-chip .av { flex: none; }
+.wf-chip button { width: 18px; height: 18px; border-radius: 50%; border: 0; background: none; color: var(--text-2); display: grid; place-items: center; cursor: pointer; padding: 0; }
+.wf-chip button .ic { width: 11px; height: 11px; }
+.wf-chip button:hover { background: rgba(255,255,255,.12); color: var(--text); }
+.wf-reset { border: 0; background: none; color: var(--text-3); font: inherit; font-size: 12px; cursor: pointer; padding: 0 6px; }
+.wf-reset:hover { color: var(--text); }
+.wf-menu { min-width: 220px; max-height: 60vh; overflow-y: auto; }
+.wf-menu .wf-mh { padding: 8px 10px 4px; font-size: 11px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: .04em; }
+.wf-menu .mi { display: flex; align-items: center; gap: 8px; }
+.wf-menu .wf-ck { margin-left: auto; color: var(--accent); display: inline-flex; }
+.wf-menu .wf-ck .ic { width: 14px; height: 14px; }
