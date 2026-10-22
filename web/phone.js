@@ -861,7 +861,18 @@ const Push = (() => {
       document.body.appendChild(scrim);
     } else if (!on && scrim) { scrim.remove(); scrim = null; }
   };
-  new MutationObserver(sync).observe(document.body, { childList: true });
+  // iPhone only registers a newly shown scrolling area after it next lays the page out, so the first swipe
+  // in a fresh menu did nothing. Show each new menu's scrolling parts as not scrollable for a moment,
+  // then switch scrolling on: that change makes iPhone register them straight away.
+  const wake = (m) => {
+    const els = [m, ...m.querySelectorAll('.ap-list')];
+    els.forEach((el) => { el.style.overflowY = 'hidden'; });
+    setTimeout(() => requestAnimationFrame(() => els.forEach((el) => { el.style.overflowY = ''; })), 60);
+  };
+  new MutationObserver((recs) => {
+    recs.forEach((r) => r.addedNodes.forEach((n) => { if (Phone.on && n.nodeType === 1 && n.classList.contains('menu')) wake(n); }));
+    sync();
+  }).observe(document.body, { childList: true });
   document.addEventListener('touchmove', (e) => {
     if (!document.body.classList.contains('ph-menu-open')) return;
     const inMenu = e.target.closest && e.target.closest('.menu');

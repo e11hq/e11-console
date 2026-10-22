@@ -3875,10 +3875,9 @@ function assignMenu(anchor) {
     else e.stopPropagation();
   });
   draw();
-  setTimeout(() => input.focus(), 0);
-  // iPhone sometimes doesn't treat a list filled right after it appeared as scrollable until the next
-  // layout: nudge it once so it scrolls at the first swipe
-  if (typeof Phone !== 'undefined' && Phone.on) requestAnimationFrame(() => { list.scrollTop = 1; list.scrollTop = 0; });
+  // On the phone, don't focus the search box by itself: iPhone gives it focus without a keyboard,
+  // and the list then ignores the first swipe. Tapping the box still brings up the keyboard.
+  if (!(typeof Phone !== 'undefined' && Phone.on)) setTimeout(() => input.focus(), 0);
 }
 
 /* ---- "My part done" for shared tasks ---- */
