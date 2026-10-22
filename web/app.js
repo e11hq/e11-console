@@ -3194,7 +3194,7 @@ function openTask(id, focusTitle) {
   flushEdit();
   const pendingThread = ui.pendingThread; ui.pendingThread = null;
   // A task always opens on its Details tab, unless something asked for a tab on purpose (e.g. an Inbox mention → Comments)
-  if (ui.taskId !== id) { ui.replyTo = null; ui.thread = null; ui.editingComment = null; ui.descOpen = {}; ui.activityFilter = 'comments'; ui.sideTab = ui.forceTab || 'details'; }
+  if (ui.taskId !== id) { if (ui.taskId && Draft.settle(ui.taskId)) renderContent(); ui.replyTo = null; ui.thread = null; ui.editingComment = null; ui.descOpen = {}; ui.activityFilter = 'comments'; ui.sideTab = ui.forceTab || 'details'; }
   ui.forceTab = null;
   if (pendingThread) ui.thread = pendingThread;
   const ids = $$('#content [data-task]').map((el) => el.dataset.task).filter((x, i, a) => a.indexOf(x) === i);
@@ -3206,8 +3206,10 @@ function openTask(id, focusTitle) {
 }
 function closeDetail() {
   flushEdit();
+  const dropped = Draft.settle(ui.taskId);
   ui.taskId = null; ui.replyTo = null; ui.thread = null; ui.editingComment = null;
   renderDetail();
+  if (dropped) renderContent();
   $$('.is-selected').forEach((el) => el.classList.remove('is-selected'));
 }
 
@@ -3364,9 +3366,41 @@ function newTaskInContext() {
   } else {
     t = createTask({ due: ui.view === 'mytasks' ? todayStr() : null });
   }
+  Draft.start(t);
   commit();
   openTask(t.id, true);
 }
+
+/* ---- New tasks left empty ----
+   "New task" opens a blank task straight away. If it is closed without anything filled in, it is removed
+   instead of being kept as an untitled, unassigned task. As soon as anything is added it is kept. */
+const Draft = (() => {
+  const snaps = {};
+  const sig = (t) => JSON.stringify([t.title || '', t.notes || '', t.notesHtml || '', t.due, t.start, t.prio, t.tags, (t.attachments || []).length,
+    (t.comments || []).length, t.checklist, t.assignees, t.projectId, t.sectionId, t.update || null, t.finance || null, t.guardian || null,
+    !!t.needsCD, !!t.done, t.partsDone || null, db.tasks.some((x) => x.parentId === t.id)]);
+  const looksEmpty = (t) => !t.title && !t.notes && !(t.assignees || []).length && !(t.comments || []).length && !(t.attachments || []).length
+    && !(t.checklist || []).length && !t.done && !db.tasks.some((x) => x.parentId === t.id);
+  function start(t) { t.blankDraft = true; snaps[t.id] = sig(t); }
+  // Called when the task is closed or another one is opened
+  function settle(id) {
+    if (!id || !snaps[id]) return;
+    const t = task(id);
+    const same = t && sig(t) === snaps[id];
+    delete snaps[id];
+    if (!t) return;
+    if (same) { removeTasks([id]); persist(0); return true; }
+    delete t.blankDraft; persist();
+    return false;
+  }
+  // Left over from a closed window or reload: my own blank tasks that never got anything
+  function sweep() {
+    const gone = db.tasks.filter((t) => t.blankDraft && t.createdBy === currentUserId && !snaps[t.id] && looksEmpty(t)).map((t) => t.id);
+    db.tasks.forEach((t) => { if (t.blankDraft && t.createdBy === currentUserId && !snaps[t.id] && !gone.includes(t.id)) delete t.blankDraft; });
+    if (gone.length) { removeTasks(gone); persist(0); }
+  }
+  return { start, settle, sweep, open: (id) => !!snaps[id] };
+})();
 
 // Files that belong to these tasks (task attachments, comment attachments, folders, thumbnails)
 function filesOfTasks(list) {
@@ -4029,7 +4063,7 @@ function navTask(n) {
   flushEdit();
   const i = ui.navIds.indexOf(ui.taskId);
   const next = ui.navIds[i + n];
-  if (next && task(next)) { ui.replyTo = null; ui.thread = null; ui.editingComment = null; ui.activityFilter = 'comments'; ui.taskId = next; renderDetail(); $$('.task-row, .card').forEach((el) => el.classList.toggle('is-selected', el.dataset.task === next)); }
+  if (next && task(next)) { if (Draft.settle(ui.taskId)) renderContent(); ui.replyTo = null; ui.thread = null; ui.editingComment = null; ui.activityFilter = 'comments'; ui.taskId = next; renderDetail(); $$('.task-row, .card').forEach((el) => el.classList.toggle('is-selected', el.dataset.task === next)); }
 }
 
 /* ================= Event wiring ================= */
@@ -6335,6 +6369,7 @@ function enterApp() {
   initSidebar();
   render();
   purgeOldCompleted();
+  Draft.sweep();
   setTimeout(deliverPending, 900);
 }
 // The test copy (test.e11hq.com) can be filled with sample people, tasks and comments
