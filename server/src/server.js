@@ -31,7 +31,7 @@ export function createServer(cfg) {
   // The newest Mac app (native part) the installer hands out; older Mac apps are asked to update
   const macShell = (() => { try { const m = fs.readFileSync(path.join(macDir, 'main.js'), 'utf8').match(/var SHELL_VERSION = (\d+);/); return m ? Number(m[1]) : 1; } catch { return 1; } })();
   // The owner (ADMIN_EMAIL) controls things that change every Mac, like the Dock icon. No owner set: any Admin.
-  const isOwner = (u) => (cfg.adminEmail ? String(u.email || '').toLowerCase() === cfg.adminEmail.toLowerCase() : u.role === 'admin');
+  const isOwner = (u) => (cfg.adminEmail ? String(u.email || '').toLowerCase() === cfg.adminEmail.toLowerCase() : access.isAdm(u));
   const cfSync = cfg.cfSync || createCfSync({ accountId: cfg.cfAccountId, token: cfg.cfApiToken, groupId: cfg.cfGroupId, listUsers: () => store.list('users'), fetchImpl: cfg.cfFetch || fetch });
 
   /* ---------- helpers ---------- */
@@ -161,7 +161,7 @@ export function createServer(cfg) {
 
     // App updates (the launcher runs inside the same container): Admins see status and can update or roll back
     if (p === '/api/updates') {
-      if (u.role !== 'admin') return json(res, 403, { ok: false, error: 'Admins only' });
+      if (!access.isAdm(u)) return json(res, 403, { ok: false, error: 'Admins only' });
       if (!cfg.launcherUrl) return json(res, 200, { ok: true, managed: false, running: version });
       const action = req.method === 'POST' ? (await readBody(req)).action : null;
       const route = action === 'check' ? '/check' : action === 'update' ? '/update' : action === 'rollback' ? '/rollback' : '/status';
@@ -178,7 +178,7 @@ export function createServer(cfg) {
 
     // Cloudflare access for freelancers: status, and "sync now" for Admins
     if (p === '/api/cloudflare') {
-      if (u.role !== 'admin') return json(res, 403, { ok: false, error: 'Admins only' });
+      if (!access.isAdm(u)) return json(res, 403, { ok: false, error: 'Admins only' });
       if (req.method === 'POST') await cfSync.syncNow();
       return json(res, 200, { ok: true, ...cfSync.status() });
     }
@@ -206,7 +206,7 @@ export function createServer(cfg) {
 
     // Test copy only: fill it with sample people, projects, tasks, comments and replies for trying things out
     if (p === '/api/sample' && req.method === 'POST') {
-      if (u.role !== 'admin') return json(res, 403, { ok: false, error: 'Admins only' });
+      if (!access.isAdm(u)) return json(res, 403, { ok: false, error: 'Admins only' });
       if (!/-test\.|-dev$/.test(version)) return json(res, 403, { ok: false, error: 'Sample data is only for the test copy' });
       const data = sampleData(store, u.id);
       const { rev, results } = store.importAll(data, u.id);
@@ -253,10 +253,10 @@ export function createServer(cfg) {
       const fn = files.commands[cmd];
       if (!fn) return json(res, 404, { ok: false, error: 'Unknown command ' + cmd });
       const body = await readBody(req);
-      const manager = ['admin', 'am'].includes(u.role);
+      const manager = access.isAdm(u) || u.role === 'am';
       const deny = (msg) => json(res, 403, { ok: false, error: msg || 'Not allowed' });
       if (cmd === 'writeChunk') {
-        if (body.dest && String(body.dest).startsWith('Finance/')) { if (u.role !== 'finance_admin') return deny('Only a Finance Admin can add invoices'); }
+        if (body.dest && String(body.dest).startsWith('Finance/')) { if (access.finLevel(u) !== 'admin') return deny('Only a Finance Admin can add invoices'); }
         else if (body.dest && !manager) return deny('Only Admins and Account Managers can upload client assets');
         if (!body.dest && access.isFinance(u) && body.taskId !== '_uploads') return deny();
         if (!body.dest && u.role === 'freelancer' && body.taskId !== '_uploads') { const t = store.get('tasks', String(body.taskId || '')); if (!t || !access.canSee(u, 'tasks', t)) return deny(); }
@@ -284,7 +284,7 @@ export function createServer(cfg) {
 
     // One-time move from the Mac app: an Admin uploads the whole data file
     if (p === '/api/import' && req.method === 'POST') {
-      if (u.role !== 'admin') return json(res, 403, { ok: false, error: 'Only an Admin can import data' });
+      if (!access.isAdm(u)) return json(res, 403, { ok: false, error: 'Only an Admin can import data' });
       const body = await readBody(req, 90 * 1024 * 1024);
       if (!body || !body.data) return json(res, 400, { ok: false, error: 'No data' });
       store.backup(path.join(dataDir, 'backups', `before-import-${Date.now()}.sqlite`));

@@ -912,10 +912,15 @@ const subtasksOf = (id) => db.tasks.filter((t) => t.parentId === id).sort(byOrde
 const topTasks = () => db.tasks.filter((t) => !t.parentId);
 
 /* ================= Team: users, roles, permissions ================= */
-const ROLES = { admin: 'Admin', am: 'Account Manager', production: 'Production', social: 'Social', freelancer: 'Freelancer', finance_admin: 'Finance Admin', finance_viewer: 'Finance Viewer' };
-// Finance people only use the Finance pages (Dashboard / Projects / Expenses)
+const ROLES = { admin: 'Admin', am: 'Account Manager', production: 'Production', social: 'Social', freelancer: 'Freelancer', finance_admin: 'Finance only · Admin', finance_viewer: 'Finance only · Viewer' };
+// Admin rights: the Admin role, or any other role given Admin rights on top (u.admin)
+const isAdm = (u) => !!u && (u.role === 'admin' || u.admin === true);
+// "Finance only" people (roles finance_admin / finance_viewer) only use the Finance pages.
+// Anyone else can also be given Finance access on top of their role: u.fin = 'admin' | 'viewer'.
 const isFinUser = (u = me()) => !!u && (u.role === 'finance_admin' || u.role === 'finance_viewer');
-const isFinAdmin = (u = me()) => !!u && u.role === 'finance_admin';
+const finLevel = (u = me()) => (!u ? null : u.role === 'finance_admin' ? 'admin' : u.role === 'finance_viewer' ? 'viewer' : u.fin === 'admin' || u.fin === 'viewer' ? u.fin : null);
+const isFinAdmin = (u = me()) => finLevel(u) === 'admin';
+const FIN_ACCESS = { '': 'No Finance access', admin: 'Finance Admin', viewer: 'Finance Viewer' };
 const SEED_ADMIN_ID = 'u-haris';
 let currentUserId = null;
 const userById = (id) => (db && db.users.find((u) => u.id === id)) || null;
@@ -929,8 +934,8 @@ function can(perm) {
   const u = me();
   if (!u) return false;
   if (isFinUser(u)) return false;
-  if (perm === 'manageUsers') return u.role === 'admin';
-  if (u.role === 'admin' || u.role === 'am') return true;
+  if (perm === 'manageUsers') return isAdm(u);
+  if (isAdm(u) || u.role === 'am') return true;
   return !LIMITED.has(perm);
 }
 function denied() { toast('Your role doesn’t allow this — ask an Admin or Account Manager'); }
@@ -988,7 +993,7 @@ function fieldMenu(anchor, k) {
   const ck = (on) => (on ? `<span class="wf-ck">${icon('check')}</span>` : '');
   if (k === 'update') items = updatesByUse().map((v) => ({ html: `<div class="mi">${fieldPill(v, UPDATE_COLOR(v)).replace(icon('chev'), '')}${ck(cur === v)}</div>`, run: () => set(v) }));
   else if (k === 'finance') {
-    if (!(isManager() || isFinAdmin())) return denied();
+    if (!isManager()) return denied();
     items = Object.entries(FINANCE).map(([v, c]) => ({ html: `<div class="mi">${fieldPill(v, c).replace(icon('chev'), '')}${ck(cur === v)}</div>`, run: () => set(v) }));
   } else if (k === 'guardian') {
     if (!can('assign')) return denied();
@@ -1006,7 +1011,7 @@ function fieldMenu(anchor, k) {
 function setField(t, k, v) {
   const old = t[k] || null;
   if (old === v) return;
-  if (k === 'finance' && !(isManager() || isFinAdmin())) return denied();
+  if (k === 'finance' && !isManager()) return denied();
   t[k] = v || null;
   if (k === 'finance') t.financeAt = nowISO();
   const name = (id) => (id && userById(id) ? fullName(userById(id)) : '');
@@ -1062,7 +1067,7 @@ const Work = (() => {
   function day() {
     const u = me();
     if (!lead()) return { tasks: db.tasks.filter(onMyList), open: myOpen, doneAt: myDoneAt, doneTasks: db.tasks.filter(isMine) };
-    const who = isAdmin() ? db.users.filter((x) => x.role === 'am' || x.role === 'admin').map((x) => x.id) : [u.id];
+    const who = isAdmin() ? db.users.filter((x) => x.role === 'am' || isAdm(x)).map((x) => x.id) : [u.id];
     const ts = createdBy(who);
     const dAt = (t) => (t.done ? t.completedAt || null : null);
     return { tasks: ts, open: (t) => !t.done, doneAt: dAt, doneTasks: ts };
@@ -2553,7 +2558,7 @@ function commentHTML(t, c, isReply) {
         <span class="cm-tools">
           <button class="icon-btn sm" data-action="react-menu" data-id="${c.id}" title="React">${icon('smile')}</button>
           ${isReply || ui.thread === c.id ? '' : `<button class="icon-btn sm" data-action="reply" data-id="${c.id}" title="Reply">${icon('reply')}</button>`}
-          ${c.authorId === currentUserId || (me() && me().role === 'admin') ? `<button class="icon-btn sm" data-action="comment-menu" data-id="${c.id}" title="More">${icon('more')}</button>` : ''}
+          ${c.authorId === currentUserId || isAdm(me()) ? `<button class="icon-btn sm" data-action="comment-menu" data-id="${c.id}" title="More">${icon('more')}</button>` : ''}
         </span>
       </div>
       ${editing
@@ -3448,7 +3453,7 @@ function purgeOldCompleted() {
    (finished tasks first wait 30 days after completion, so 60 in all). Admins and Account Managers
    see the Trash and can restore; only Admins delete forever. Files stay in place until then. */
 const TRASH_DAYS = 30;
-const isManager = (u = me()) => !!u && (u.role === 'admin' || u.role === 'am');
+const isManager = (u = me()) => !!u && (isAdm(u) || u.role === 'am');
 const trashList = () => (db && db.trash) || [];
 const trashDaysLeft = (it) => Math.max(0, TRASH_DAYS - Math.floor((Date.now() - new Date(it.deletedAt).getTime()) / 86400000));
 function toTrash(type, data, extra = {}) {
@@ -3554,14 +3559,14 @@ function restoreTrash(id) {
   toast(msg, open ? { label: 'Open', run: () => openTask(open) } : null);
 }
 async function eraseTrashFlow(id) {
-  if (!(me() && me().role === 'admin')) return denied();
+  if (!isAdm(me())) return denied();
   const it = trashList().find((x) => x.id === id);
   if (!it) return;
   const ok = await dialog({ title: `Delete “${trashTitle(it)}” forever?`, body: 'It can’t be restored after this, and its files are removed too.', okText: 'Delete forever', danger: true });
   if (ok) { eraseTrash([id]); render(); toast('Deleted forever'); }
 }
 async function emptyTrashFlow() {
-  if (!(me() && me().role === 'admin')) return denied();
+  if (!isAdm(me())) return denied();
   const n = trashList().length;
   if (!n) return;
   const ok = await dialog({ title: 'Empty the Trash?', body: `All ${n} item${n === 1 ? '' : 's'} and their files are deleted for good. This can’t be undone.`, okText: 'Empty Trash', danger: true });
@@ -3628,7 +3633,7 @@ function trashRow(it, r) {
     <span class="tr-left ${left <= 3 ? 'soon' : ''}" title="Deleted for good after ${TRASH_DAYS} days">${left} day${left === 1 ? '' : 's'} left</span>
     <div class="tr-acts">
       <button class="btn primary sm" data-action="tr-restore" data-id="${it.id}">${icon('reply')}Restore</button>
-      ${me().role === 'admin' ? `<button class="icon-btn sm" data-action="tr-forever" data-id="${it.id}" title="Delete forever">${icon('trash')}</button>` : ''}
+      ${isAdm(me()) ? `<button class="icon-btn sm" data-action="tr-forever" data-id="${it.id}" title="Delete forever">${icon('trash')}</button>` : ''}
     </div>
   </div>`;
 }
@@ -3652,7 +3657,7 @@ function viewTrash() {
   return `<div class="trash">
     <div class="tr-head">
       <div class="tr-intro">Deleted items stay here for ${TRASH_DAYS} days, then they and their files are removed for good. Finished tasks arrive here ${AUTO_DELETE_DAYS} days after they’re completed.</div>
-      ${me().role === 'admin' && n ? `<button class="btn ghost danger sm" data-action="tr-empty">${icon('trash')}Empty Trash</button>` : ''}
+      ${isAdm(me()) && n ? `<button class="btn ghost danger sm" data-action="tr-empty">${icon('trash')}Empty Trash</button>` : ''}
     </div>
     <div class="ca-searchbar tr-search">${icon('search')}<input id="tr-q" value="${esc(ui.trashQ || '')}" placeholder="Search the Trash — names, files, “pdf”, people…" autocomplete="off" spellcheck="false" aria-autocomplete="none" data-form-type="other"></div>
     <div class="tr-chips">${TRASH_FILTERS.map(([k, l]) => `<button class="${f === k ? 'on' : ''}" data-action="tr-filter" data-k="${k}">${l}</button>`).join('')}</div>
@@ -3922,7 +3927,7 @@ function setMyPart(t, done) {
   commit();
 }
 function reopenPart(t, u) {
-  if (!(me() && (me().role === 'admin' || me().role === 'am'))) return denied();
+  if (!(me() && (isAdm(me()) || me().role === 'am'))) return denied();
   if (!partDone(t, u)) return;
   delete t.partsDone[u];
   if (needsCD(t)) { const r = lastReview(t, u); if (r && r.state === 'approved') r.state = 'reopened'; syncCD(t); }
@@ -3936,7 +3941,7 @@ function partsRow(t) {
   const ids = t.assignees || [];
   if (t.parentId || t.done || !ids.length) return '';
   const n = ids.filter((u) => partDone(t, u)).length;
-  const canReopen = me() && (me().role === 'admin' || me().role === 'am');
+  const canReopen = me() && (isAdm(me()) || me().role === 'am');
   const chips = ids.map((u) => {
     const d = partDone(t, u);
     const nm = u === currentUserId ? 'You' : fullName(userById(u)).split(' ')[0];
@@ -4273,7 +4278,7 @@ document.addEventListener('click', async (e) => {
       case 'cd-menu': e.stopPropagation(); toast('CD Status is set automatically when files are submitted and reviewed'); return;
       case 'submit-review': e.stopPropagation(); submitDialog(task(ui.taskId)); return;
       case 'withdraw-review': e.stopPropagation(); withdrawReview(task(ui.taskId)); return;
-      case 'needs-cd': e.stopPropagation(); setNeedsCD(task(ui.taskId), actEl.checked); if (!(me() && (me().role === 'admin' || me().role === 'am'))) renderDetail(); return;
+      case 'needs-cd': e.stopPropagation(); setNeedsCD(task(ui.taskId), actEl.checked); if (!(me() && (isAdm(me()) || me().role === 'am'))) renderDetail(); return;
       case 'cd-toggle': e.stopPropagation(); cdToggleFlow(id); return;
       case 'rr-tab': ui.rrTab = actEl.dataset.tab; renderContent(); return;
       case 'rr-open': e.preventDefault(); openTask(id); return;
@@ -4690,8 +4695,8 @@ document.addEventListener('drop', (e) => {
 const DEFAULT_FOLDERS = ['Logos', 'Brand Guidelines', 'Fonts', 'Files'];
 const FONT_EXT = ['otf', 'ttf', 'woff', 'woff2'];
 const isFont = (a) => FONT_EXT.includes(fileExt(a.name));
-const canAssets = () => { const u = me(); return !!u && (u.role === 'admin' || u.role === 'am'); };
-const isAdmin = () => !!me() && me().role === 'admin';
+const canAssets = () => { const u = me(); return !!u && (isAdm(u) || u.role === 'am'); };
+const isAdmin = () => !!isAdm(me());
 const clientById = (id) => (db.clients || []).find((c) => c.id === id) || null;
 const clientsSorted = () => (db.clients || []).slice().sort((a, b) => a.name.localeCompare(b.name));
 const clientFileCount = (c) => c.folders.reduce((n, f) => n + f.files.length, 0);
@@ -5288,7 +5293,7 @@ async function changeStatus(t, sectionId, targetId = null, after = false) {
   const fromS = list[from], toS = list[to];
   const backFromClient = !t.parentId && fromS && toS && to < from && (SEC_CTR.test(fromS.name.trim()) || isDoneName(fromS.name)) && !(SEC_CTR.test(toS.name.trim()) || isDoneName(toS.name));
   if (backFromClient) {
-    const allowed = (me() && (me().role === 'admin' || me().role === 'am')) || t.createdBy === currentUserId;
+    const allowed = (me() && (isAdm(me()) || me().role === 'am')) || t.createdBy === currentUserId;
     if (!allowed) { toast('Only an Account Manager or the person who created this task can send it back'); return false; }
     const ans = await choiceDialog({
       title: 'Does this need CD review again?',
@@ -5314,7 +5319,7 @@ async function changeStatus(t, sectionId, targetId = null, after = false) {
 }
 
 function setNeedsCD(t, on) {
-  if (!(me() && (me().role === 'admin' || me().role === 'am'))) return denied();
+  if (!(me() && (isAdm(me()) || me().role === 'am'))) return denied();
   if (reviewPending(t)) { toast('Files are waiting for CD review — this can be changed after the CD decides'); return; }
   if (!!t.needsCD === !!on) return;
   t.needsCD = !!on;
@@ -5364,7 +5369,7 @@ function myPartControl(t) {
 }
 function cdReviewRow(t) {
   if (t.parentId || t.done) return '';
-  const canSet = me() && (me().role === 'admin' || me().role === 'am');
+  const canSet = me() && (isAdm(me()) || me().role === 'am');
   const cd = cdUserId();
   const who = cd ? `${esc(fullName(userById(cd)))}${cdActing() ? ' (Acting CD)' : ''}` : 'No Creative Director set';
   return `<div class="prop prop-cdreq"><label>${icon('shield')}CD review</label><div class="pv">
@@ -5843,7 +5848,7 @@ function viewTeam() {
       ${users.map((u) => `<div class="tt-row ${u.active === false ? 'inactive' : ''}">
         <div class="tt-name">${avatarHTML(u.id, 30)}<span>${esc(fullName(u))}${u.id === currentUserId ? ' <small>(you)</small>' : ''}</span></div>
         <div class="tt-email">${esc(u.email)}</div>
-        <div><span class="role-pill r-${u.role}">${esc(ROLES[u.role] || u.role)}</span>${u.role === 'freelancer' ? `<button class="tt-proj" ${admin ? `data-action="member-projects" data-id="${u.id}"` : ''} title="Projects they can see">${(u.projectIds || []).length} project${(u.projectIds || []).length === 1 ? '' : 's'}</button>` : ''}</div>
+        <div><span class="role-pill r-${u.role}">${esc(ROLES[u.role] || u.role)}</span>${u.admin && u.role !== 'admin' ? '<span class="role-pill r-admin xtra">+ Admin</span>' : ''}${u.fin && !isFinUser(u) ? `<span class="role-pill r-finance_${u.fin} xtra">+ ${esc(FIN_ACCESS[u.fin])}</span>` : ''}${u.role === 'freelancer' ? `<button class="tt-proj" ${admin ? `data-action="member-projects" data-id="${u.id}"` : ''} title="Projects they can see">${(u.projectIds || []).length} project${(u.projectIds || []).length === 1 ? '' : 's'}</button>` : ''}</div>
         <div>${u.active === false ? '<span class="st-txt off">Removed</span>' : u.setup ? `<span class="st-txt on">Active</span>` : '<span class="st-txt pend">Hasn’t signed in yet</span>'}</div>
         ${cdCell(u, admin)}
         <div>${admin && u.id !== currentUserId ? `<button class="icon-btn sm" data-action="member-menu" data-id="${u.id}" title="Manage">${icon('more')}</button>` : ''}</div>
@@ -5854,6 +5859,8 @@ function viewTeam() {
       <div><span class="role-pill r-am">Account Manager</span> Can do everything except add or manage team members.</div>
       <div><span class="role-pill r-freelancer">Freelancer</span> Same as Production, but only sees the projects an Admin chooses for them, plus those projects’ Client Assets. Can sign in with a personal email (Gmail, Outlook…).</div>
       <div><span class="role-pill r-production">Production</span> <span class="role-pill r-social">Social</span> Can update status, submit files for CD review, change dates, add tags, checklist items, files and comments. Can’t create or delete tasks/subtasks, change title, description, project or priority, assign people, remove tags or delete checklist items.</div>
+      <div><span class="role-pill r-finance_admin">Finance only</span> Only sees the Finance pages (Dashboard, Projects, Expenses) — no tasks app. As Admin they add subscriptions, reimbursements and expenses; as Viewer they only look.</div>
+      <div><span class="role-pill r-admin">+ Admin</span> <span class="role-pill r-finance_admin">+ Finance Admin / Viewer</span> Extras anyone can have on top of their role (••• menu): full Admin rights, or the Finance pages. A task’s Finance status is set by Account Managers and Admins.</div>
     </div>
   </div>`;
 }
@@ -5896,6 +5903,8 @@ async function addMemberFlow() {
       { key: 'email', label: 'Email', type: 'email', placeholder: 'name@e11-digital.com' },
       ...(Host.isServer ? [] : [{ key: 'pw', label: 'Temporary password', type: 'text', value: tempPassword(), hint: 'Share this with them privately. At least 6 characters.' }]),
       { key: 'role', label: 'Role', type: 'select', value: 'production', options: Object.entries(ROLES) },
+      { key: 'admin', label: 'Admin rights on top of their role', type: 'select', value: '', options: [['', 'No'], ['yes', 'Yes — they can also do everything an Admin can']], hint: 'Not needed for the Admin role or Finance-only people.' },
+      { key: 'fin', label: 'Finance access', type: 'select', value: '', options: Object.entries(FIN_ACCESS), hint: 'Finance Admin adds subscriptions, reimbursements and expenses; Finance Viewer only looks. Finance-only people already have it.' },
     ],
     validate: (v) => {
       if (!validEmail(v.email)) return 'Enter a valid email address';
@@ -5908,6 +5917,9 @@ async function addMemberFlow() {
   let u = db.users.find((x) => x.email.toLowerCase() === v.email.toLowerCase());
   if (u) { u.active = true; u.setup = false; u.role = v.role; if (v.name) u.name = v.name; }
   else { u = { id: 'u-' + uid(), email: v.email.toLowerCase(), name: v.name, role: v.role, avatar: null, setup: false, active: true, createdAt: nowISO(), createdBy: currentUserId, prefs: {} }; db.users.push(u); }
+  const finOnly = v.role === 'finance_admin' || v.role === 'finance_viewer';
+  u.admin = v.admin === 'yes' && v.role !== 'admin' && !finOnly ? true : undefined;
+  u.fin = v.fin && !finOnly ? v.fin : undefined;
   if (!Host.isServer) setPassword(u, v.pw);
   persist(0); renderContent();
   toast(`Added ${v.email} as ${ROLES[v.role]}`);
@@ -5944,9 +5956,18 @@ function memberMenu(anchor, id) {
   if (!u) return;
   const items = [{ html: '<div class="menu-label">Change role</div>' }];
   Object.entries(ROLES).forEach(([k, l]) => items.push({ html: `<div class="mi ${u.role === k ? 'cur' : ''}"><span class="role-pill r-${k}">${esc(l)}</span></div>`, run: () => {
-    if (u.role === 'admin' && k !== 'admin' && db.users.filter((x) => x.role === 'admin' && x.active !== false).length < 2) return toast('There must be at least one Admin');
+    if (isAdm(u) && k !== 'admin' && !u.admin && db.users.filter((x) => isAdm(x) && x.active !== false).length < 2) return toast('There must be at least one Admin');
     u.role = k; persist(); renderContent(); toast(`${fullName(u)} is now ${l}`);
     if (k === 'freelancer') setTimeout(() => projectAccessDialog(u), 0);
+  } }));
+  items.push('-');
+  const finOnly = isFinUser(u);
+  if (u.role !== 'admin' && !finOnly) items.push({ html: `<div class="mi">${icon('shield')}Admin rights${u.admin ? `<span class="wf-ck">${icon('check')}</span>` : ''}</div>`, run: () => {
+    if (u.admin && db.users.filter((x) => isAdm(x) && x.active !== false).length < 2) return toast('There must be at least one Admin');
+    u.admin = u.admin ? undefined : true; persist(); renderContent(); toast(u.admin ? `${fullName(u)} now also has Admin rights` : `${fullName(u)} no longer has Admin rights`);
+  } });
+  if (!finOnly) Object.entries(FIN_ACCESS).forEach(([k, l]) => items.push({ html: `<div class="mi">${icon('coin')}${esc(l)}${(u.fin || '') === k ? `<span class="wf-ck">${icon('check')}</span>` : ''}</div>`, run: () => {
+    u.fin = k || undefined; persist(); renderContent(); toast(k ? `${fullName(u)} now has ${l} access` : `${fullName(u)} no longer has Finance access`);
   } }));
   items.push('-');
   if (u.role === 'freelancer') items.push({ label: 'Projects they can see…', icon: 'folder', run: () => projectAccessDialog(u) });
@@ -5965,7 +5986,7 @@ async function resetPasswordFlow(u) {
   toast('Password reset — share the temporary password with them privately');
 }
 async function removeMemberFlow(u) {
-  if (u.role === 'admin' && db.users.filter((x) => x.role === 'admin' && x.active !== false).length < 2) return toast('There must be at least one Admin');
+  if (isAdm(u) && db.users.filter((x) => isAdm(x) && x.active !== false).length < 2) return toast('There must be at least one Admin');
   const n = db.tasks.filter((t) => (t.assignees || []).includes(u.id)).length;
   const ok = await dialog({ title: `Remove ${fullName(u)}?`, body: `They won’t be able to sign in${n ? ` and will be unassigned from ${n} task${n === 1 ? '' : 's'}` : ''}. Their comments stay. You can restore access later.`, okText: 'Remove', danger: true });
   if (!ok) return;
@@ -5984,7 +6005,7 @@ function viewProfile() {
       <label class="dlg-label">Full name</label><input class="field" id="pf-name" value="${esc(u.name || '')}" placeholder="Your full name">
       <label class="dlg-label">Email</label><div class="field ro">${icon('lock')}${esc(u.email)}</div>
       <label class="dlg-label">Office</label><input class="field" id="pf-office" value="${esc(u.office || '')}" maxlength="80" placeholder="e.g. Dubai — Business Bay office">
-      <label class="dlg-label">Role</label><div class="pf-role"><span class="role-pill r-${u.role}">${esc(ROLES[u.role])}</span>${u.id === cdUserId() ? `<span class="role-pill r-cd">${esc(cdTitle())}</span>` : ''}<small>People see this and your office when they hover your name.</small></div>
+      <label class="dlg-label">Role</label><div class="pf-role"><span class="role-pill r-${u.role}">${esc(ROLES[u.role])}</span>${u.admin && u.role !== 'admin' ? '<span class="role-pill r-admin">+ Admin</span>' : ''}${u.fin && !isFinUser(u) ? `<span class="role-pill r-finance_${u.fin}">+ ${esc(FIN_ACCESS[u.fin])}</span>` : ''}${u.id === cdUserId() ? `<span class="role-pill r-cd">${esc(cdTitle())}</span>` : ''}<small>People see this and your office when they hover your name.</small></div>
       <div class="pf-actions"><button class="btn primary" data-action="save-profile">Save changes</button>${Host.isServer ? '' : `<button class="btn" data-action="change-password">${icon('lock')}Change password</button>`}</div>
     </div>
     ${Host.isServer && AppIcon.isOwner() ? appIconCard() : ''}
@@ -6204,11 +6225,12 @@ function meMenu(anchor) {
   showMenu(anchor, [
     { label: 'My profile', icon: 'user', run: () => go('profile') },
     { label: 'Team members', icon: 'users', run: () => go('team') },
-    ...(Host.isServer && me() && me().role === 'admin' ? [{ label: 'App updates', icon: 'download', run: () => go('updates') }] : []),
+    ...(Host.isServer && isAdm(me()) ? [{ label: 'App updates', icon: 'download', run: () => go('updates') }] : []),
     ...(Host.isServer ? [{ label: 'What’s new', icon: 'info', run: () => whatsNewDialog(false) }] : []),
     ...(Host.isServer && !Host.isMacApp ? [{ label: 'Get the Mac app', icon: 'download', run: macAppDialog }] : []),
     ...(Host.isMacApp ? [{ label: 'Update Mac app', icon: 'download', run: () => MacUpdate.run() }] : []),
-    ...(isTestCopy() && me() && me().role === 'admin' ? [{ label: 'Fill with sample data', icon: 'users', run: fillSampleData }] : []),
+    ...(isTestCopy() && isAdm(me()) ? [{ label: 'Fill with sample data', icon: 'users', run: fillSampleData }] : []),
+    ...Fin.addItems(),
     '-',
     { label: 'Sign out', icon: 'logout', run: signOut },
   ]);

@@ -18,6 +18,10 @@ before(async () => {
       { id: 'u-am', email: 'areej@e11-digital.com', role: 'am', active: true },
       { id: 'u-fa', email: 'fin@e11-digital.com', role: 'finance_admin', active: true },
       { id: 'u-fv', email: 'view@e11-digital.com', role: 'finance_viewer', active: true },
+      { id: 'u-prod', email: 'ali@e11-digital.com', role: 'production', active: true },
+      { id: 'u-amf', email: 'lana@e11-digital.com', role: 'am', fin: 'viewer', active: true },
+      { id: 'u-prodf', email: 'moon@e11-digital.com', role: 'production', fin: 'admin', active: true },
+      { id: 'u-socadm', email: 'aish@e11-digital.com', role: 'social', admin: true, active: true },
     ],
     projects: [{ id: 'p1', name: 'Ford' }],
     tasks: [{ id: 't1', projectId: 'p1', title: 'EDM', finance: 'LPO Pending', notesHtml: 'secret brief', comments: [{ id: 'c1', text: 'hi' }], attachments: [], assignees: ['u-am'] }],
@@ -34,6 +38,7 @@ const call = async (who, p, body) => {
   return { status: res.status, body: await res.json().catch(() => null) };
 };
 const FA = 'fin@e11-digital.com', FV = 'view@e11-digital.com', AM = 'areej@e11-digital.com', ADMIN = 'arsal@e11-digital.com';
+const PROD = 'ali@e11-digital.com', AMF = 'lana@e11-digital.com', PRODF = 'moon@e11-digital.com', SOCADM = 'aish@e11-digital.com';
 
 test('finance people get slim tasks (no comments, description or people) and the finance records', async () => {
   const r = await call(FV, '/api/snapshot');
@@ -57,16 +62,39 @@ test('only a Finance Admin adds or removes finance records', async () => {
   assert.equal((await add(AM, 'f5')).body.results[0].refused, true);
 });
 
-test('a Finance Admin can change only the Finance status of a task', async () => {
+test('only Account Managers and Admins change a task’s Finance status', async () => {
   const snap = (await call(FA, '/api/snapshot')).body.data.tasks[0];
-  const mine = { ...snap, finance: 'Invoiced', financeAt: '2026-10-22T10:00:00.000Z', title: 'hacked', comments: [] };
-  const r = await call(FA, '/api/push', { changes: [{ kind: 'tasks', id: 't1', base: snap, data: mine }] });
-  assert.equal(r.body.results[0].refused, false);
-  const t = app.store.get('tasks', 't1');
-  assert.equal(t.finance, 'Invoiced'); assert.equal(t.title, 'EDM'); assert.equal(t.comments.length, 1); assert.equal(t.notesHtml, 'secret brief');
-  const v = await call(FV, '/api/push', { changes: [{ kind: 'tasks', id: 't1', base: snap, data: { ...snap, finance: 'Retainer' } }] });
-  assert.equal(v.body.results[0].refused, true);
+  const r = await call(FA, '/api/push', { changes: [{ kind: 'tasks', id: 't1', base: snap, data: { ...snap, finance: 'Invoiced' } }] });
+  assert.equal(r.body.results[0].refused, true);
+  const full = app.store.get('tasks', 't1');
+  const p = await call(PROD, '/api/push', { changes: [{ kind: 'tasks', id: 't1', base: full, data: { ...full, finance: 'Retainer' } }] });
+  assert.equal(p.body.results[0].refused, true);
+  const ok = await call(PROD, '/api/push', { changes: [{ kind: 'tasks', id: 't1', base: full, data: { ...full, title: 'EDM v2' } }] });
+  assert.equal(ok.body.results[0].refused, false, 'other edits still work');
+  const cur = app.store.get('tasks', 't1');
+  const a = await call(AM, '/api/push', { changes: [{ kind: 'tasks', id: 't1', base: cur, data: { ...cur, finance: 'Invoiced' } }] });
+  assert.equal(a.body.results[0].refused, false);
   assert.equal(app.store.get('tasks', 't1').finance, 'Invoiced');
+});
+
+test('Finance access on top of another role; Admin rights on top of another role', async () => {
+  // an Account Manager with Finance Viewer access sees the records but can't add them
+  assert.equal((await call(AMF, '/api/snapshot')).body.data.finance.length >= 1, true);
+  const add = await call(AMF, '/api/push', { changes: [{ kind: 'finance', id: 'fz', data: { id: 'fz', type: 'expense', name: 'Z', amount: 1, date: '2026-10-03' } }] });
+  assert.equal(add.body.results[0].refused, true);
+  // a Production person with Finance Admin access can add records and still uses the task app
+  const add2 = await call(PRODF, '/api/push', { changes: [{ kind: 'finance', id: 'fy', data: { id: 'fy', type: 'expense', name: 'Y', amount: 1, date: '2026-10-03' } }] });
+  assert.equal(add2.body.results[0].refused, false);
+  assert.ok((await call(PRODF, '/api/snapshot')).body.data.tasks[0].comments, 'full tasks, not the Finance-only copy');
+  // Admin rights on top: a Social person with admin: true can open the Admin-only routes
+  assert.equal((await call(SOCADM, '/api/cloudflare')).status, 200);
+  assert.equal((await call(PROD, '/api/cloudflare')).status, 403);
+});
+
+test('nobody gives themselves Admin rights or Finance access', async () => {
+  const me = app.store.get('users', 'u-prod');
+  const r = await call(PROD, '/api/push', { changes: [{ kind: 'users', id: 'u-prod', base: me, data: { ...me, admin: true, fin: 'admin' } }] });
+  assert.equal(r.body.results[0].refused, true);
 });
 
 test('finance people cannot create tasks or projects', async () => {

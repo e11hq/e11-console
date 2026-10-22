@@ -1,6 +1,8 @@
 /* ================= Finance =================
    Finance Admin / Finance Viewer have their own app: Dashboard, Projects and Expenses.
-   Admins can look at the same pages (Finance in their sidebar). Desktop only: on a phone-size screen
+   Anyone else with Finance access (u.fin) and every Admin can look at the same pages (Finance in their
+  sidebar); Finance Admins also get the add pages. A task's Finance status is only changed by Account
+  Managers and Admins. Desktop only: on a phone-size screen
   Finance people see a note to use a computer. Only a Finance Admin changes things:
    a task's Finance status, monthly subscriptions, staff reimbursements and extra expenses.
    Records live in db.finance (server kind "finance"), one item each:
@@ -14,7 +16,7 @@ const Fin = (() => {
   const ADMIN_ONLY = ['fin-subs', 'fin-reimb', 'fin-extra'];
   const STATUSES = Object.keys(FINANCE);
   const st = { proj: 'all', graph: 'Invoiced', list: { type: 'all', month: '', page: 0 }, open: {} };
-  const canLook = () => isFinUser() || isAdmin();
+  const canLook = () => !!finLevel() || isAdmin();
   const owns = (v) => VIEWS.includes(v);
   const recs = (type) => (db.finance || []).filter((x) => x.type === type);
   const aed = (n) => 'AED ' + (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -74,7 +76,7 @@ const Fin = (() => {
         .map(([v, ic, l]) => `<a class="nav-item" data-nav="${v}">${icon(ic)}${l}</a>`).join('');
       const head = $('#sidebar .sb-head');
       head.parentNode.insertBefore(nav, head);
-    } else if (isAdmin()) {
+    } else if (canLook()) {
       const a = document.createElement('a');
       a.className = 'nav-item fin-admin-nav';
       a.dataset.nav = 'fin-dash';
@@ -88,13 +90,15 @@ const Fin = (() => {
     $$('.fin-nav .nav-item').forEach((a) => a.classList.toggle('active', ui.view === a.dataset.nav || (a.dataset.nav === 'fin-expenses' && ui.view === 'fin-list')));
     const an = $('.fin-admin-nav'); if (an) an.classList.toggle('active', owns(ui.view));
   }
+  // The Finance Admin's pages, in the name menu (Finance-only people, and anyone given Finance Admin access)
+  const addItems = () => (isFinAdmin() ? ['-',
+    { label: 'Add subscriptions', icon: 'cal', run: () => go('fin-subs') },
+    { label: 'Add Staff Reimbursements', icon: 'users', run: () => go('fin-reimb') },
+    { label: 'Add Extra Expense', icon: 'coin', run: () => go('fin-extra') }] : []);
   function meMenu(anchor) {
     showMenu(anchor, [
       { label: 'My profile', icon: 'user', run: () => go('profile') },
-      ...(isFinAdmin() ? ['-',
-        { label: 'Add subscriptions', icon: 'cal', run: () => go('fin-subs') },
-        { label: 'Add Staff Reimbursements', icon: 'users', run: () => go('fin-reimb') },
-        { label: 'Add Extra Expense', icon: 'coin', run: () => go('fin-extra') }] : []),
+      ...addItems(),
       ...(Host.isServer ? ['-', { label: 'What’s new', icon: 'info', run: () => whatsNewDialog(false) }] : []),
       ...(Host.isMacApp ? [{ label: 'Update Mac app', icon: 'download', run: () => MacUpdate.run() }] : []),
       '-',
@@ -155,7 +159,7 @@ const Fin = (() => {
   function projects() {
     const f = st.proj;
     const ts = finTasks().filter((t) => (f === 'all' ? true : f === 'none' ? !t.finance : t.finance === f));
-    const can = isFinAdmin() || isManager();
+    const can = isManager(); // only Account Managers and Admins change a task's Finance status
     const groups = db.projects.slice().sort(byOrder).map((p) => ({ p, list: ts.filter((t) => t.projectId === p.id) })).filter((g) => g.list.length);
     const none = ts.filter((t) => !t.projectId || !proj(t.projectId));
     if (none.length) groups.push({ p: { id: '_none', name: 'No project', color: '#666' }, list: none });
@@ -178,7 +182,7 @@ const Fin = (() => {
   }
   function statusMenu(anchor, id) {
     const t = task(id);
-    if (!t || !(isFinAdmin() || isManager())) return;
+    if (!t || !isManager()) return;
     const items = STATUSES.map((s) => ({ html: `<div class="mi">${fieldPill(s, FINANCE[s]).replace(icon('chev'), '')}${t.finance === s ? `<span class="wf-ck">${icon('check')}</span>` : ''}</div>`, run: () => { setField(t, 'finance', s); renderContent(); } }));
     if (t.finance) items.push({ html: '<div class="sep"></div>' }, { html: `<div class="mi fl-clear">${icon('x')}Clear</div>`, run: () => { setField(t, 'finance', null); renderContent(); } });
     const m = showMenu(anchor, items.map((it, i) => (it.run ? { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) } : it)));
@@ -443,5 +447,5 @@ const Fin = (() => {
     if (e.target.matches && e.target.matches('[data-fin-month]')) { st.list.month = e.target.value; st.list.page = 0; renderContent(); }
   });
 
-  return { owns, init, paintNav, meMenu, title, render, transactions, subPayments, aed, st };
+  return { owns, init, paintNav, meMenu, addItems, canLook, title, render, transactions, subPayments, aed, st };
 })();

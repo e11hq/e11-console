@@ -280,7 +280,7 @@ const Phone = (() => {
 
   function meScreen() {
     const u = me();
-    const admin = u.role === 'admin';
+    const admin = isAdm(u);
     const row = (attrs, ic, label, sub = '') => `<button class="ph-row" ${attrs}>${icon(ic)}<span>${label}${sub ? `<small>${sub}</small>` : ''}</span>${icon('chev-right')}</button>`;
     const light = document.documentElement.dataset.theme === 'light';
     return `<div class="ph-page">
@@ -488,7 +488,7 @@ const Phone = (() => {
   function quickAdd() {
     if (!can('createTask')) return denied();
     const inProject = ui.view === 'project' && proj(ui.projectId) ? ui.projectId : '';
-    const mgr = me().role === 'admin' || me().role === 'am';
+    const mgr = isAdm(me()) || me().role === 'am';
     const people = activeUsers();
     const projOpts = `<option value="">No project (My Tasks)</option>` + db.projects.slice().sort(byOrder).map((p) => `<option value="${p.id}" ${p.id === inProject ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
     const userOpts = `<option value="${currentUserId}">Me</option>` + people.filter((u) => u.id !== currentUserId).map((u) => `<option value="${u.id}">${esc(fullName(u))}</option>`).join('') + '<option value="">Nobody yet</option>';

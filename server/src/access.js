@@ -4,7 +4,7 @@ import { deepEqual } from './merge.js';
 
 const SECRET_USER_FIELDS = ['hash', 'salt'];
 // Fields only an Admin may change on a person's account
-const PROTECTED_USER_FIELDS = ['role', 'active', 'email', 'projectIds'];
+const PROTECTED_USER_FIELDS = ['role', 'active', 'email', 'projectIds', 'admin', 'fin'];
 
 export function createAccess(store) {
   const users = () => store.list('users');
@@ -14,7 +14,10 @@ export function createAccess(store) {
   // slim copy of each task (name, project, status, dates, Finance status) — no comments, files or people's work.
   const isFinance = (u) => !!u && (u.role === 'finance_admin' || u.role === 'finance_viewer');
   const TASK_FOR_FINANCE = ['id', 'title', 'projectId', 'sectionId', 'parentId', 'done', 'completedAt', 'due', 'createdAt', 'updatedAt', 'finance', 'financeAt', 'order'];
-  const FIN_TASK_FIELDS = ['finance', 'financeAt', 'updatedAt'];
+  // Admin rights: the Admin role, or another role given Admin rights on top. Finance access: Finance-only
+  // people, or anyone given Finance Admin / Finance Viewer on top of their role (u.fin).
+  const isAdm = (u) => !!u && (u.role === 'admin' || u.admin === true);
+  const finLevel = (u) => (!u ? null : u.role === 'finance_admin' ? 'admin' : u.role === 'finance_viewer' ? 'viewer' : u.fin === 'admin' || u.fin === 'viewer' ? u.fin : null);
   const projectSet = (u) => new Set(Array.isArray(u.projectIds) ? u.projectIds : []);
 
   function taskVisible(u, t) {
@@ -33,7 +36,7 @@ export function createAccess(store) {
   function canReadFile(u, rel) {
     const parts = String(rel).split('/');
     // Invoices and other finance records: Finance people and Admins only
-    if (parts[0] === 'Finance') return isFinance(u) || u.role === 'admin';
+    if (parts[0] === 'Finance') return !!finLevel(u) || isAdm(u);
     if (isFinance(u)) return (parts[0] === 'attachments' && parts[1] === '_avatars') || (parts[0] === 'Clients' && parts[1] === '_logos') || parts[0] === '.thumbs';
     if (!isFreelancer(u)) return true;
     if (parts[0] === 'attachments') {
@@ -59,8 +62,8 @@ export function createAccess(store) {
       case 'projects': return !isFreelancer(u) || projectSet(u).has(data.id);
       case 'tasks': return taskVisible(u, data);
       case 'clients': return !isFreelancer(u) || clientSet(u).has(data.id);
-      case 'trash': return u.role === 'admin' || u.role === 'am';   // the Trash is for Admins and Account Managers
-      case 'finance': return isFinance(u) || u.role === 'admin';    // expense records
+      case 'trash': return isAdm(u) || u.role === 'am';   // the Trash is for Admins and Account Managers
+      case 'finance': return !!finLevel(u) || isAdm(u);    // expense records
       default: return true;
     }
   }
@@ -80,22 +83,14 @@ export function createAccess(store) {
 
   // ctx.restoring: the items this same save puts back (so a Trash entry may be cleared as it's restored)
   function canWrite(u, ch, current, ctx = {}) {
-    const admin = u.role === 'admin';
+    const admin = isAdm(u);
     const manager = admin || u.role === 'am';
     const next = ch.del ? null : ch.data;
-    if (ch.kind === 'finance') return u.role === 'finance_admin';
+    if (ch.kind === 'finance') return finLevel(u) === 'admin';
     if (isFinance(u)) {
       if (ch.kind === 'users') return !ch.del && String(ch.id) === u.id && !!current && PROTECTED_USER_FIELDS.every((k) => deepEqual(next[k], current[k]));
       if (ch.kind === 'notifications') return !ch.del ? !!current && current.to === u.id : !current || current.to === u.id;
-      if (ch.kind !== 'tasks' || ch.del || !current || u.role !== 'finance_admin') return false;
-      // A Finance Admin may only change a task's Finance status: everything else stays as the server has it
-      const merged = { ...current };
-      FIN_TASK_FIELDS.forEach((k) => { if (next[k] !== undefined) merged[k] = next[k]; });
-      const known = new Set((current.activity || []).map((a) => a.id));
-      const added = (next.activity || []).filter((a) => a && !known.has(a.id) && a.actor === u.id);
-      if (added.length) merged.activity = (current.activity || []).concat(added).slice(-300);
-      ch.data = merged; delete ch.base;
-      return true;
+      return false; // tasks (including their Finance status) are changed by Account Managers and Admins
     }
     switch (ch.kind) {
       case 'users':
@@ -114,9 +109,13 @@ export function createAccess(store) {
       case 'projects':
         if (isFreelancer(u)) return !ch.del && !!current && projectSet(u).has(current.id) && next.id === current.id;
         return true;
-      case 'tasks':
+      case 'tasks': {
+        // a task's Finance status is set by Account Managers and Admins only
+        const was = ch.base !== undefined ? ch.base : current;
+        if (!manager && next && !deepEqual(next.finance ?? null, (was && was.finance) ?? null)) return false;
         if (isFreelancer(u)) return (!current || taskVisible(u, current)) && (ch.del || taskVisible(u, next));
         return true;
+      }
       case 'trash': {
         // anyone's deletions land here; only Admins and Account Managers look after it
         if (!ch.del) return !current ? manager || (!!next && next.deletedBy === u.id) : manager;
@@ -134,5 +133,5 @@ export function createAccess(store) {
     }
   }
 
-  return { userByEmail, canSee, canWrite, shape, isFreelancer, isFinance, canReadFile };
+  return { userByEmail, canSee, canWrite, shape, isFreelancer, isFinance, isAdm, finLevel, canReadFile };
 }

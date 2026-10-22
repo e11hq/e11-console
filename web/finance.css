@@ -139,3 +139,8 @@ body.fin-mode #project-list, body.fin-mode .ca-nav-wrap, body.fin-mode #topbar .
   #fin-phone h2 { margin: 4px 0 0; font-size: 20px; }
   #fin-phone p { margin: 0; color: var(--text-2); font-size: 14.5px; line-height: 1.5; }
 }
+.role-pill.xtra { margin-left: 4px; font-weight: 600; }
+.menu .mi .wf-ck { margin-left: auto; color: var(--accent); display: inline-flex; padding-left: 12px; }
+.menu .mi .wf-ck .ic { width: 14px; height: 14px; }
+.tt-row:not(.tt-head) > div:nth-child(3) { display: flex; flex-wrap: wrap; gap: 4px; }
+.tt-row .role-pill.xtra { margin-left: 0; }
