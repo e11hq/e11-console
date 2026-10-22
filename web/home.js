@@ -80,10 +80,20 @@ const Home = (() => {
     const since = inReview.length ? inReview.map((t) => (t.reviews || []).filter((r) => r.state === 'pending').map((r) => r.at).sort()[0]).sort()[0] : null;
 
     // created tasks list
-    const wkEnd = addDays(today, 7);
-    const inRange = (t) => (st.range === 'today' ? t.due && t.due <= today : st.range === 'week' ? t.due && t.due <= wkEnd : true);
-    const rows = open.filter(inRange).sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999') || byPrio(a, b)).slice(0, 6);
-    const rangeTabs = [['today', 'Today'], ['week', 'This week'], ['all', 'All open']].map(([k, l]) => `<button type="button" class="hm-tab ${st.range === k ? 'on' : ''}" data-hm="range" data-v="${k}">${l}</button>`).join('');
+    // Overdue = past its due date; Today = due today; This week = due from today to Sunday; All open = everything open
+    const wd0 = (new Date().getDay() + 6) % 7; // 0 = Monday
+    const wkEnd = addDays(today, 6 - wd0);
+    const RANGES = {
+      late: (t) => !!t.due && t.due < today,
+      today: (t) => t.due === today,
+      week: (t) => !!t.due && t.due >= today && t.due <= wkEnd,
+      all: () => true,
+    };
+    if (!RANGES[st.range]) st.range = 'week';
+    const ranged = open.filter(RANGES[st.range]).sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999') || byPrio(a, b));
+    const rows = ranged.slice(0, 6);
+    const rangeTabs = [['late', 'Overdue'], ['today', 'Today'], ['week', 'This week'], ['all', 'All open']].map(([k, l]) => { const n = open.filter(RANGES[k]).length; return `<button type="button" class="hm-tab ${st.range === k ? 'on' : ''} ${k === 'late' && n ? 'red' : ''}" data-hm="range" data-v="${k}">${l}<i>${n}</i></button>`; }).join('');
+    const emptyMsg = { late: 'Nothing overdue — nice.', today: 'Nothing due today.', week: 'Nothing else due this week.', all: admin ? 'Tasks your team creates will show up here.' : 'Tasks you create will show up here.' }[st.range];
 
     // this month chart
     const now = new Date(), y = now.getFullYear(), m = now.getMonth();
@@ -162,7 +172,7 @@ const Home = (() => {
                 <span class="hm-counts"><span title="Comments">${svg(IC.chat, 1.4)}${nComments(t)}</span><span title="Files">${svg(IC.clip, 1.4)}${nFiles(t)}</span></span>
                 <span class="hm-who">${(t.assignees || []).length ? avatarStack(t.assignees, 26, 3, t) : '<span class="hm-mute">Unassigned</span>'}</span>
                 <span class="hm-st">${statusPill(t)}</span>
-              </div>`).join('') : `<div class="hm-empty">${st.range === 'all' ? (admin ? 'Tasks your team creates will show up here.' : 'Tasks you create will show up here.') : 'Nothing due ' + (st.range === 'today' ? 'today' : 'this week') + (admin ? ' on the team’s tasks.' : ' on the tasks you created.')}</div>`}
+              </div>`).join('') + (ranged.length > rows.length ? `<button type="button" class="hm-more-btn" data-action="home-view-all">+${ranged.length - rows.length} more · See all</button>` : '') : `<div class="hm-empty">${emptyMsg}</div>`}
           </section>
           <section class="hm-card">
             <div class="hm-kpis">

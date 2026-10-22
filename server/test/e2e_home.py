@@ -35,6 +35,12 @@ async def main():
             n = await pg.locator('.hm-lead .hm-row').count()
             want = await E("Math.min(6, topTasks().filter(t=>{const u=userById(t.createdBy); return !t.done && !!u && (u.role==='am'||isAdm(u));}).length)")
             check(n == want, f'All open lists the open tasks you created ({n} of {want})')
+            for k, js in [('late', 't.due && t.due < todayStr()'), ('today', 't.due === todayStr()')]:
+                await pg.click(f'.hm-tab[data-v="{k}"]'); await pg.wait_for_timeout(200)
+                ids = await E("[...document.querySelectorAll('.hm-lead .hm-row')].map(r=>r.dataset.task)")
+                ok = await E(f"[...document.querySelectorAll('.hm-lead .hm-row')].every(r=>{{const t=task(r.dataset.task); return {js};}})")
+                cnt = await E(f"document.querySelector('.hm-tab[data-v=\"{k}\"] i').textContent")
+                check(ok and len(ids) == min(6, int(cnt)), f'{k} tab lists only its tasks ({len(ids)} / {cnt})')
             await pg.click('.hm-tab[data-v="created"]'); await pg.wait_for_timeout(200)
             check('tasks created' in await pg.locator('.hm-big').inner_text(), 'chart switches to Tasks created')
             bars = await pg.locator('.hm-bar').count()
