@@ -186,7 +186,7 @@ const Phone = (() => {
       const n = items[0];
       const t = task(n.taskId);
       const unread = items.some((x) => !x.read);
-      const target = items.find((x) => /^review/.test(x.kind) && !x.read) || items.find((x) => x.kind === 'mention') || n;
+      const target = items.find((x) => /^review/.test(x.kind) && !x.read) || items.find((x) => x.kind === 'mention' && !x.read) || n;
       return `<div class="ph-ib ${unread ? 'unread' : ''}" data-action="open-notif" data-id="${target.id}">
         ${avatarHTML(target.from, 40)}
         <span class="ph-ib-b"><span class="ph-ib-m">${notifMsg(target, t)}</span>

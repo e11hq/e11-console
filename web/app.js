@@ -5707,7 +5707,8 @@ function viewInbox() {
     const t = task(n.taskId);
     const unread = items.some((x) => !x.read);
     const isRev = (x) => /^review/.test(x.kind);
-    const target = items.find((x) => isRev(x) && !x.read) || items.find((x) => x.kind === 'mention' && !x.read) || items.find((x) => x.kind === 'mention') || n;
+    // opens what needs you first (an unread review or @mention); otherwise the update the row shows
+    const target = items.find((x) => isRev(x) && !x.read) || items.find((x) => x.kind === 'mention' && !x.read) || n;
     const shown = isRev(target) ? target : n;
     const lead = ['comment', 'mention', 'review-amend', 'review-ok', 'review'].includes(shown.kind) ? avatarHTML(shown.from, 22) : `<span class="ib-kic">${icon(NOTIF_ICON[shown.kind] || 'bell')}</span>`;
     return `<div class="ib-row ${unread ? 'unread' : ''}" data-action="open-notif" data-id="${target.id}">
