@@ -166,6 +166,13 @@ async def main():
         check(await E(f"task('{tid}').finance") == 'Invoiced', 'Admin changes a task’s Finance status on the Finance Projects page')
         await pg.click('#title-area [data-fin-go="fin-expenses"]'); await pg.wait_for_timeout(300)
         check(await pg.locator('[data-fin-new]').count() == 0, 'Admin only looks at expenses (no adding)')
+        # an Admin gives themselves Finance Admin access from their own row
+        await E("go('team')"); await pg.wait_for_timeout(300)
+        await pg.click(f'[data-action="member-menu"][data-id="{await E("currentUserId")}"]'); await pg.wait_for_timeout(200)
+        await pg.locator('.menu .mi', has_text='Finance Admin').click(); await pg.wait_for_timeout(300)
+        await pg.click('#me-chip'); await pg.wait_for_timeout(200)
+        check(await pg.locator('.menu .mi', has_text='Add subscriptions').count() == 1, 'an Admin can give themselves Finance Admin access')
+        await E("closeMenus()")
         # Team page: Admin rights and Finance access on top of a role
         prod = await E("db.users.find(u=>u.role==='production').id")
         await E("go('team')"); await pg.wait_for_timeout(300)

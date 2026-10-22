@@ -5851,7 +5851,7 @@ function viewTeam() {
         <div><span class="role-pill r-${u.role}">${esc(ROLES[u.role] || u.role)}</span>${u.admin && u.role !== 'admin' ? '<span class="role-pill r-admin xtra">+ Admin</span>' : ''}${u.fin && !isFinUser(u) ? `<span class="role-pill r-finance_${u.fin} xtra">+ ${esc(FIN_ACCESS[u.fin])}</span>` : ''}${u.role === 'freelancer' ? `<button class="tt-proj" ${admin ? `data-action="member-projects" data-id="${u.id}"` : ''} title="Projects they can see">${(u.projectIds || []).length} project${(u.projectIds || []).length === 1 ? '' : 's'}</button>` : ''}</div>
         <div>${u.active === false ? '<span class="st-txt off">Removed</span>' : u.setup ? `<span class="st-txt on">Active</span>` : '<span class="st-txt pend">Hasn’t signed in yet</span>'}</div>
         ${cdCell(u, admin)}
-        <div>${admin && u.id !== currentUserId ? `<button class="icon-btn sm" data-action="member-menu" data-id="${u.id}" title="Manage">${icon('more')}</button>` : ''}</div>
+        <div>${admin ? `<button class="icon-btn sm" data-action="member-menu" data-id="${u.id}" title="Manage">${icon('more')}</button>` : ''}</div>
       </div>`).join('')}
     </div>`}
     <div class="role-guide">
@@ -5954,6 +5954,15 @@ function projectAccessDialog(u) {
 function memberMenu(anchor, id) {
   const u = userById(id);
   if (!u) return;
+  // Your own row: only the extras (Finance access) — you can't change your own role or remove yourself
+  if (u.id === currentUserId) {
+    const own = [{ html: '<div class="menu-label">Your Finance access</div>' }];
+    Object.entries(FIN_ACCESS).forEach(([k, l]) => own.push({ html: `<div class="mi">${icon('coin')}${esc(l)}${(u.fin || '') === k ? `<span class="wf-ck">${icon('check')}</span>` : ''}</div>`, run: () => {
+      u.fin = k || undefined; persist(); renderContent(); Fin.init(); renderSidebar(); toast(k ? `You now have ${l} access` : 'You no longer have Finance access');
+    } }));
+    showMenu(anchor, own.map((it, i) => (it.run ? { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) } : it)));
+    return;
+  }
   const items = [{ html: '<div class="menu-label">Change role</div>' }];
   Object.entries(ROLES).forEach(([k, l]) => items.push({ html: `<div class="mi ${u.role === k ? 'cur' : ''}"><span class="role-pill r-${k}">${esc(l)}</span></div>`, run: () => {
     if (isAdm(u) && k !== 'admin' && !u.admin && db.users.filter((x) => isAdm(x) && x.active !== false).length < 2) return toast('There must be at least one Admin');
