@@ -59,8 +59,13 @@ async def main():
             # schedule day pick
             await pg.locator('.hm-day').first.click(); await pg.wait_for_timeout(200)
             check(await pg.locator('.hm-day.on').count() == 1 and await E("Home.st.day") is not None, 'picking a day in Schedule works')
-            await pg.click('.hm-stat >> nth=0'); await pg.wait_for_timeout(300)
-            check(await E("ui.view") == 'mytasks', 'stat card opens My Tasks')
+            for i, (kind, tab, chip) in enumerate([('today', 'todo', 'Due: Today'), ('finished', 'done', 'Finished in the last 7 days'), ('cd', 'todo', 'Waiting for CD review')]):
+                await E("go('home')"); await pg.wait_for_timeout(300)
+                n = int(await pg.locator(f'.hm-stat >> nth={i}').locator('b').inner_text())
+                await pg.click(f'.hm-stat >> nth={i}'); await pg.wait_for_timeout(300)
+                got = await E("Work.list().filter(t=>ui.myTasksTab==='done' ? !!Work.doneAtOf(t) : Work.openOf(t)).length")
+                chips = await pg.locator('.wf-chips').inner_text()
+                check(await E("ui.view") == 'mytasks' and await E("ui.myTasksTab") == tab and chip in chips and 'All Account Managers' in chips and got == n, f'{kind} card opens My Tasks with the same {n} tasks ({got})')
             check(not errs, f'no page errors {errs}')
             await ctx.close()
 

@@ -152,15 +152,15 @@ const Home = (() => {
     // team on time this month
     const team = [...new Set(doneM.flatMap((t) => t.assignees || []))].filter((u) => userById(u));
 
-    const statCard = (cls, ic, l, n, note, noteCls, nav = 'mytasks') => `<button type="button" class="hm-stat" data-hm="all" data-nav-x="${nav}"><span class="hm-ic ${cls}">${svg(ic, 1.5)}</span><span><span class="hm-sl">${l}</span><span class="hm-sn"><b>${n}</b><span class="${noteCls}">${note}</span></span></span></button>`;
+    const statCard = (cls, ic, l, n, note, noteCls, kind) => `<button type="button" class="hm-stat" data-hm="stat" data-v="${kind}"><span class="hm-ic ${cls}">${svg(ic, 1.5)}</span><span><span class="hm-sl">${l}</span><span class="hm-sn"><b>${n}</b><span class="${noteCls}">${note}</span></span></span></button>`;
 
     return `<div class="hm hm-lead">
       <header class="hm-head"><div><div class="hm-date">${dateLine()}</div><h1>${greeting()}, ${esc(first(me()))}</h1></div>
         <div class="hm-btns"><button type="button" class="hm-btn" data-nav="today">${esc(Work.dayTitle())}</button><button type="button" class="hm-btn primary" data-action="new-task">+ New task</button></div></header>
       <section class="hm-stats">
-        ${statCard('blue', IC.clock, admin ? 'Team tasks due today' : 'Your tasks due today', due0.length, overdue.length ? `${overdue.length} overdue` : 'none overdue', overdue.length ? 'warn' : 'ok')}
-        ${statCard('green', IC.check, 'Finished by your team', doneWeek, doneWeek - donePrev >= 0 ? `↑ ${doneWeek - donePrev} vs last week` : `↓ ${donePrev - doneWeek} vs last week`, doneWeek >= donePrev ? 'ok' : 'warn')}
-        ${statCard('orange', IC.shield, 'Waiting for CD review', inReview.length, since ? `oldest ${timeAgo(since)}` : 'nothing waiting', 'orange')}
+        ${statCard('blue', IC.clock, admin ? 'Team tasks due today' : 'Your tasks due today', due0.length, overdue.length ? `${overdue.length} overdue` : 'none overdue', overdue.length ? 'warn' : 'ok', 'today')}
+        ${statCard('green', IC.check, 'Finished by your team', doneWeek, doneWeek - donePrev >= 0 ? `↑ ${doneWeek - donePrev} vs last week` : `↓ ${donePrev - doneWeek} vs last week`, doneWeek >= donePrev ? 'ok' : 'warn', 'finished')}
+        ${statCard('orange', IC.shield, 'Waiting for CD review', inReview.length, since ? `oldest ${timeAgo(since)}` : 'nothing waiting', 'orange', 'cd')}
       </section>
       <div class="hm-grid">
         <div class="hm-col">
@@ -361,6 +361,17 @@ const Home = (() => {
     else if (k === 'lane') st.lane = v;
     else if (k === 'next') st.next++;
     else if (k === 'all') { ui.workF = null; ui.myTasksTab = 'todo'; return go('mytasks'); }
+    else if (k === 'stat') {
+      // the three cards open My Tasks with the matching filter (an Admin: across the whole team)
+      ui.workF = null;
+      const F = Work.f();
+      if (isAdmin()) F.team = true;
+      if (v === 'today') F.due = 'today';
+      if (v === 'finished') F.finished = true;
+      if (v === 'cd') F.cd = true;
+      ui.myTasksTab = v === 'finished' ? 'done' : 'todo';
+      return go('mytasks');
+    }
     else if (k === 'see-all') {
       // My Tasks with the same list as the Home card: the team's tasks for an Admin, and the same due filter
       ui.workF = null; ui.myTasksTab = 'todo';

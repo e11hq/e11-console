@@ -1036,7 +1036,7 @@ function setField(t, k, v) {
    by every Account Manager and Admin. */
 
 const Work = (() => {
-  const f = () => (ui.workF = ui.workF || { created: null, due: null, people: [], ams: [], team: false, assigned: false });
+  const f = () => (ui.workF = ui.workF || { created: null, due: null, finished: false, cd: false, people: [], ams: [], team: false, assigned: false });
   const lead = () => isManager();
   const personal = () => !lead() || f().assigned;
   const openOf = (t) => (personal() ? myOpen(t) : !t.done);
@@ -1060,6 +1060,8 @@ const Work = (() => {
     if (F.created) l = l.filter((t) => inCreated(t, F.created));
     if (F.people.length) l = l.filter((t) => (t.assignees || []).some((u) => F.people.includes(u)));
     if (F.due) l = l.filter((t) => dueIn(t, F.due));
+    if (F.finished) { const wk = Date.now() - 7 * 86400000; l = l.filter((t) => { const d = doneAtOf(t); return !!d && new Date(d).getTime() > wk; }); }
+    if (F.cd) l = l.filter((t) => reviewPending(t));
     return l;
   }
   // Home: an AM / Admin's own created tasks (no filters); everyone else: their tasks
@@ -1076,7 +1078,7 @@ const Work = (() => {
     return { tasks: ts, open: (t) => !t.done, doneAt: dAt, doneTasks: ts };
   }
   const dayTitle = () => (isAdmin() ? 'E11 Day' : 'My Day');
-  const active = () => { const F = f(); return !!(F.created || F.due || F.people.length || F.ams.length || F.team || F.assigned); };
+  const active = () => { const F = f(); return !!(F.created || F.due || F.finished || F.cd || F.people.length || F.ams.length || F.team || F.assigned); };
   return { f, lead, personal, openOf, doneAtOf, list, home, homeOpen, homeDoneAt, day, dayTitle, inCreated, active };
 })();
 const CREATED_L = { today: 'Today', week: 'This week', month: 'This month' };
@@ -1098,6 +1100,8 @@ function workFilterBar() {
     F.assigned ? chip('Assigned to me', 'wf-clear-assigned') : '',
     F.created ? chip(`Created: ${CREATED_L[F.created]}`, 'wf-clear-created') : '',
     F.due ? chip(`Due: ${DUE_L[F.due]}`, 'wf-clear-due') : '',
+    F.finished ? chip('Finished in the last 7 days', 'wf-clear-finished') : '',
+    F.cd ? chip('Waiting for CD review', 'wf-clear-cd') : '',
     F.team ? chip('All Account Managers & Admins', 'wf-clear-team') : '',
     ...F.ams.map((id) => chip(`${avatarHTML(id, 16)}${esc(fullName(userById(id)))}’s tasks`, 'wf-clear-am', id)),
     ...F.people.map((id) => chip(`${avatarHTML(id, 16)}${esc(fullName(userById(id)))}`, 'wf-clear-person', id)),
@@ -4201,6 +4205,8 @@ document.addEventListener('click', async (e) => {
       case 'wf-clear-created': Work.f().created = null; renderContent(); return;
       case 'wf-due': e.stopPropagation(); workMenu(actEl, 'due'); return;
       case 'wf-clear-due': Work.f().due = null; renderContent(); return;
+      case 'wf-clear-finished': Work.f().finished = false; renderContent(); return;
+      case 'wf-clear-cd': Work.f().cd = false; renderContent(); return;
       case 'wf-clear-team': Work.f().team = false; renderContent(); renderSidebar(); return;
       case 'wf-clear-person': Work.f().people = Work.f().people.filter((x) => x !== id); renderContent(); return;
       case 'wf-clear-am': Work.f().ams = Work.f().ams.filter((x) => x !== id); renderContent(); renderSidebar(); return;
