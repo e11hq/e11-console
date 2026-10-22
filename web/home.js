@@ -165,14 +165,14 @@ const Home = (() => {
       <div class="hm-grid">
         <div class="hm-col">
           <section class="hm-card">
-            <div class="hm-h"><div class="hm-hl"><h2>${admin ? 'Team’s created tasks' : 'Your created tasks'}</h2><span class="hm-seg">${rangeTabs}</span></div><a class="hm-a" data-action="home-view-all">See all</a></div>
+            <div class="hm-h"><div class="hm-hl"><h2>${admin ? 'Team’s created tasks' : 'Your created tasks'}</h2><span class="hm-seg">${rangeTabs}</span></div><a class="hm-a" data-hm="see-all">See all</a></div>
             ${rows.length ? rows.map((t) => `<div class="hm-row" data-task="${t.id}">
                 <i class="hm-pc" style="background:${pColor(t)}"></i>
                 <span class="hm-main"><span class="hm-t">${title(t)}</span><span class="hm-sub">${esc(pName(t))}${admin && t.createdBy !== currentUserId && userById(t.createdBy) ? ` · by ${esc(fullName(userById(t.createdBy)))}` : ''}${t.due ? ` · due <span class="due ${dueClass(t)}">${esc(fmtDue(t.due))}</span>` : ''}</span></span>
                 <span class="hm-counts"><span title="Comments">${svg(IC.chat, 1.4)}${nComments(t)}</span><span title="Files">${svg(IC.clip, 1.4)}${nFiles(t)}</span></span>
                 <span class="hm-who">${(t.assignees || []).length ? avatarStack(t.assignees, 26, 3, t) : '<span class="hm-mute">Unassigned</span>'}</span>
                 <span class="hm-st">${statusPill(t)}</span>
-              </div>`).join('') + (ranged.length > rows.length ? `<button type="button" class="hm-more-btn" data-action="home-view-all">+${ranged.length - rows.length} more · See all</button>` : '') : `<div class="hm-empty">${emptyMsg}</div>`}
+              </div>`).join('') + (ranged.length > rows.length ? `<button type="button" class="hm-more-btn" data-hm="see-all">+${ranged.length - rows.length} more · See all</button>` : '') : `<div class="hm-empty">${emptyMsg}</div>`}
           </section>
           <section class="hm-card">
             <div class="hm-kpis">
@@ -361,6 +361,14 @@ const Home = (() => {
     else if (k === 'lane') st.lane = v;
     else if (k === 'next') st.next++;
     else if (k === 'all') { ui.workF = null; ui.myTasksTab = 'todo'; return go('mytasks'); }
+    else if (k === 'see-all') {
+      // My Tasks with the same list as the Home card: the team's tasks for an Admin, and the same due filter
+      ui.workF = null; ui.myTasksTab = 'todo';
+      const F = Work.f();
+      if (isAdmin()) F.team = true;
+      F.due = st.range === 'all' ? null : st.range;
+      return go('mytasks');
+    }
     else if (k === 'open') return openTask(v);
     else if (k === 'submit') { const t = task(v); if (t) submitDialog(t); return; }
     else if (k === 'part') { const t = task(v); if (t) setMyPart(t, true); return; }

@@ -1036,13 +1036,15 @@ function setField(t, k, v) {
    by every Account Manager and Admin. */
 
 const Work = (() => {
-  const f = () => (ui.workF = ui.workF || { created: null, people: [], ams: [], assigned: false });
+  const f = () => (ui.workF = ui.workF || { created: null, due: null, people: [], ams: [], team: false, assigned: false });
   const lead = () => isManager();
   const personal = () => !lead() || f().assigned;
   const openOf = (t) => (personal() ? myOpen(t) : !t.done);
   const doneAtOf = (t) => (personal() ? myDoneAt(t) : t.done ? t.completedAt || null : null);
   const createdBy = (ids) => { const set = new Set(ids); return topTasks().filter((t) => set.has(t.createdBy)); };
-  const creators = () => (isAdmin() && f().ams.length ? f().ams : [currentUserId]);
+  // Everyone whose created tasks an Admin can look at (same people as E11 Day)
+  const teamIds = () => db.users.filter((x) => x.role === 'am' || isAdm(x)).map((x) => x.id);
+  const creators = () => (isAdmin() && f().team ? teamIds() : isAdmin() && f().ams.length ? f().ams : [currentUserId]);
   function inCreated(t, k) {
     if (!k) return true;
     const c = new Date(t.createdAt), now = new Date();
@@ -1057,6 +1059,7 @@ const Work = (() => {
     let l = personal() ? myTop() : createdBy(creators());
     if (F.created) l = l.filter((t) => inCreated(t, F.created));
     if (F.people.length) l = l.filter((t) => (t.assignees || []).some((u) => F.people.includes(u)));
+    if (F.due) l = l.filter((t) => dueIn(t, F.due));
     return l;
   }
   // Home: an AM / Admin's own created tasks (no filters); everyone else: their tasks
@@ -1073,10 +1076,19 @@ const Work = (() => {
     return { tasks: ts, open: (t) => !t.done, doneAt: dAt, doneTasks: ts };
   }
   const dayTitle = () => (isAdmin() ? 'E11 Day' : 'My Day');
-  const active = () => { const F = f(); return !!(F.created || F.people.length || F.ams.length || F.assigned); };
+  const active = () => { const F = f(); return !!(F.created || F.due || F.people.length || F.ams.length || F.team || F.assigned); };
   return { f, lead, personal, openOf, doneAtOf, list, home, homeOpen, homeDoneAt, day, dayTitle, inCreated, active };
 })();
 const CREATED_L = { today: 'Today', week: 'This week', month: 'This month' };
+// Due date filter (same groups as the Home page): late = past due, today, week = today to Sunday
+const DUE_L = { late: 'Overdue', today: 'Today', week: 'This week' };
+function dueIn(t, k) {
+  const today = todayStr();
+  if (k === 'late') return !!t.due && t.due < today;
+  if (k === 'today') return t.due === today;
+  if (k === 'week') return !!t.due && t.due >= today && t.due <= addDays(today, 6 - ((new Date().getDay() + 6) % 7));
+  return true;
+}
 // Filter bar for My Tasks (Account Managers and Admins)
 function workFilterBar() {
   if (!Work.lead()) return '';
@@ -1085,13 +1097,16 @@ function workFilterBar() {
   const chips = [
     F.assigned ? chip('Assigned to me', 'wf-clear-assigned') : '',
     F.created ? chip(`Created: ${CREATED_L[F.created]}`, 'wf-clear-created') : '',
+    F.due ? chip(`Due: ${DUE_L[F.due]}`, 'wf-clear-due') : '',
+    F.team ? chip('All Account Managers & Admins', 'wf-clear-team') : '',
     ...F.ams.map((id) => chip(`${avatarHTML(id, 16)}${esc(fullName(userById(id)))}’s tasks`, 'wf-clear-am', id)),
     ...F.people.map((id) => chip(`${avatarHTML(id, 16)}${esc(fullName(userById(id)))}`, 'wf-clear-person', id)),
   ].join('');
   return `<div class="wf-bar">
     <button class="wf-btn ${F.created ? 'on' : ''}" data-action="wf-created">${icon('cal')}Created date${icon('chev')}</button>
+    <button class="wf-btn ${F.due ? 'on' : ''}" data-action="wf-due">${icon('flag')}Due date${icon('chev')}</button>
     <button class="wf-btn ${F.people.length ? 'on' : ''}" data-action="wf-people">${icon('users')}People${icon('chev')}</button>
-    ${isAdmin() ? `<button class="wf-btn ${F.ams.length ? 'on' : ''}" data-action="wf-ams">${icon('user')}Account managers${icon('chev')}</button>` : ''}
+    ${isAdmin() ? `<button class="wf-btn ${F.ams.length || F.team ? 'on' : ''}" data-action="wf-ams">${icon('user')}Account managers${icon('chev')}</button>` : ''}
     <button class="wf-btn ${F.assigned ? 'on' : ''}" data-action="wf-assigned">${icon('check-circle')}Assigned to me</button>
     ${chips ? `<div class="wf-chips">${chips}${Work.active() ? '<button class="wf-reset" data-action="wf-reset">Clear all</button>' : ''}</div>` : ''}
   </div>`;
@@ -1101,17 +1116,20 @@ function workMenu(anchor, kind) {
   const redraw = () => { renderContent(); renderSidebar(); };
   const check = (on) => (on ? `<span class="wf-ck">${icon('check')}</span>` : '');
   let items = [];
-  if (kind === 'created') {
+  if (kind === 'due') {
+    items = Object.entries(DUE_L).map(([k, l]) => ({ html: `<div class="mi ${F.due === k ? 'cur' : ''}">${esc(l)}${check(F.due === k)}</div>`, run: () => { F.due = F.due === k ? null : k; redraw(); } }));
+  } else if (kind === 'created') {
     items = Object.entries(CREATED_L).map(([k, l]) => ({ html: `<div class="mi ${F.created === k ? 'cur' : ''}">${esc(l)}${check(F.created === k)}</div>`, run: () => { F.created = F.created === k ? null : k; redraw(); } }));
   } else {
     const roles = kind === 'ams' ? [['am', 'Account Managers']] : [['production', 'Production'], ['social', 'Social'], ['freelancer', 'Freelancers']];
     const key = kind === 'ams' ? 'ams' : 'people';
+    if (kind === 'ams') items.push({ html: `<div class="mi wf-person"><span>All Account Managers &amp; Admins</span>${check(F.team)}</div>`, run: () => { F.team = !F.team; if (F.team) F.ams = []; redraw(); } });
     roles.forEach(([r, label]) => {
       const us = activeUsers().filter((u) => u.role === r && u.id !== currentUserId);
       if (!us.length) return;
       items.push({ html: `<div class="wf-mh">${esc(label)}</div>` });
       us.forEach((u) => items.push({ html: `<div class="mi wf-person">${avatarHTML(u.id, 20)}<span>${esc(fullName(u))}</span>${check(F[key].includes(u.id))}</div>`,
-        run: () => { F[key] = F[key].includes(u.id) ? F[key].filter((x) => x !== u.id) : F[key].concat(u.id); redraw(); } }));
+        run: () => { F[key] = F[key].includes(u.id) ? F[key].filter((x) => x !== u.id) : F[key].concat(u.id); if (key === 'ams') F.team = false; redraw(); } }));
     });
     if (!items.length) items.push({ html: `<div class="wf-mh">Nobody here yet</div>` });
   }
@@ -4181,6 +4199,9 @@ document.addEventListener('click', async (e) => {
       case 'wf-assigned': Work.f().assigned = !Work.f().assigned; renderContent(); renderSidebar(); return;
       case 'wf-clear-assigned': Work.f().assigned = false; renderContent(); renderSidebar(); return;
       case 'wf-clear-created': Work.f().created = null; renderContent(); return;
+      case 'wf-due': e.stopPropagation(); workMenu(actEl, 'due'); return;
+      case 'wf-clear-due': Work.f().due = null; renderContent(); return;
+      case 'wf-clear-team': Work.f().team = false; renderContent(); renderSidebar(); return;
       case 'wf-clear-person': Work.f().people = Work.f().people.filter((x) => x !== id); renderContent(); return;
       case 'wf-clear-am': Work.f().ams = Work.f().ams.filter((x) => x !== id); renderContent(); renderSidebar(); return;
       case 'wf-reset': ui.workF = null; renderContent(); renderSidebar(); return;
