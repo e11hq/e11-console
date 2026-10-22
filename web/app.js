@@ -2285,7 +2285,7 @@ function viewMyDay() {
 
 /* ---------- Home ---------- */
 // Home page: see home.js
-function viewHome() { return Home.view(); }
+function viewHome() { return typeof Home !== 'undefined' ? Home.view() : ''; }
 
 /* ---------- Search ---------- */
 /* ================= Smart search (tasks and Client Assets) =================

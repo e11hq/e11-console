@@ -65,7 +65,10 @@ const Home = (() => {
 
   /* ================= A · Account Manager / Admin ================= */
   function viewLead() {
-    const mine = topTasks().filter((t) => t.createdBy === currentUserId);
+    // An Admin sees every Account Manager's and Admin's created tasks (same as E11 Day); an AM sees their own
+    const admin = isAdmin();
+    const who = new Set(admin ? db.users.filter((x) => x.role === 'am' || isAdm(x)).map((x) => x.id) : [currentUserId]);
+    const mine = topTasks().filter((t) => who.has(t.createdBy));
     const open = mine.filter((t) => !t.done);
     const today = todayStr();
     const due0 = open.filter((t) => t.due === today);
@@ -113,7 +116,7 @@ const Home = (() => {
     // activity on tasks I created, by other people
     const acts = mine.flatMap((t) => (t.activity || []).filter((a) => a.actor && a.actor !== currentUserId).map((a) => ({ from: a.actor, html: a.text, taskId: t.id, at: a.at })))
       .concat(mine.flatMap((t) => (t.comments || []).filter((c) => c.authorId !== currentUserId).map((c) => ({ from: c.authorId, html: 'commented on', quote: c.text, taskId: t.id, at: c.at }))))
-      .sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 4);
+      .sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 7);
 
     // schedule
     const days = week(), sel = pickedDay(days);
@@ -124,6 +127,18 @@ const Home = (() => {
     const items = open.flatMap((t) => (t.checklist || []).map((c) => ({ t, c }))).sort((a, b) => Number(a.c.done) - Number(b.c.done)).slice(0, 5);
     const itemsDone = items.filter((x) => x.c.done).length;
 
+    // projects: an AM sees the projects their tasks are in, an Admin sees them all
+    const pSet = admin ? null : new Set(mine.map((t) => t.projectId));
+    const projects = db.projects.slice().sort(byOrder).filter((p) => !pSet || pSet.has(p.id)).map((p) => {
+      const ts = topTasks().filter((t) => t.projectId === p.id);
+      const d = ts.filter((t) => t.done).length;
+      return { p, open: ts.length - d, pc: pct(d, ts.length) };
+    });
+    const projCard = `<section class="hm-card">
+        <div class="hm-h"><h2>${admin ? 'Projects' : 'My projects'}</h2><span class="hm-mute">${projects.length}</span></div>
+        ${projects.length ? `<div class="hm-projs">${projects.map(({ p, open: o, pc }) => `<div class="hm-proj" data-project="${p.id}"><span class="hm-pi" style="background:${p.color}">${esc(initials(p.name))}</span><span class="hm-main"><b>${esc(p.name)}</b><span class="hm-sub">${o} open · ${pc}% done</span><span class="hm-pbar"><i style="width:${pc}%;background:${p.color}"></i></span></span></div>`).join('')}</div>` : '<div class="hm-empty">Projects with your tasks show up here.</div>'}
+      </section>`;
+
     // team on time this month
     const team = [...new Set(doneM.flatMap((t) => t.assignees || []))].filter((u) => userById(u));
 
@@ -133,21 +148,21 @@ const Home = (() => {
       <header class="hm-head"><div><div class="hm-date">${dateLine()}</div><h1>${greeting()}, ${esc(first(me()))}</h1></div>
         <div class="hm-btns"><button type="button" class="hm-btn" data-nav="today">${esc(Work.dayTitle())}</button><button type="button" class="hm-btn primary" data-action="new-task">+ New task</button></div></header>
       <section class="hm-stats">
-        ${statCard('blue', IC.clock, 'Your tasks due today', due0.length, overdue.length ? `${overdue.length} overdue` : 'none overdue', overdue.length ? 'warn' : 'ok')}
+        ${statCard('blue', IC.clock, admin ? 'Team tasks due today' : 'Your tasks due today', due0.length, overdue.length ? `${overdue.length} overdue` : 'none overdue', overdue.length ? 'warn' : 'ok')}
         ${statCard('green', IC.check, 'Finished by your team', doneWeek, doneWeek - donePrev >= 0 ? `↑ ${doneWeek - donePrev} vs last week` : `↓ ${donePrev - doneWeek} vs last week`, doneWeek >= donePrev ? 'ok' : 'warn')}
         ${statCard('orange', IC.shield, 'Waiting for CD review', inReview.length, since ? `oldest ${timeAgo(since)}` : 'nothing waiting', 'orange')}
       </section>
       <div class="hm-grid">
         <div class="hm-col">
           <section class="hm-card">
-            <div class="hm-h"><div class="hm-hl"><h2>Your created tasks</h2><span class="hm-seg">${rangeTabs}</span></div><a class="hm-a" data-action="home-view-all">See all</a></div>
+            <div class="hm-h"><div class="hm-hl"><h2>${admin ? 'Team’s created tasks' : 'Your created tasks'}</h2><span class="hm-seg">${rangeTabs}</span></div><a class="hm-a" data-action="home-view-all">See all</a></div>
             ${rows.length ? rows.map((t) => `<div class="hm-row" data-task="${t.id}">
                 <i class="hm-pc" style="background:${pColor(t)}"></i>
-                <span class="hm-main"><span class="hm-t">${title(t)}</span><span class="hm-sub">${esc(pName(t))}${t.due ? ` · due <span class="due ${dueClass(t)}">${esc(fmtDue(t.due))}</span>` : ''}</span></span>
+                <span class="hm-main"><span class="hm-t">${title(t)}</span><span class="hm-sub">${esc(pName(t))}${admin && t.createdBy !== currentUserId && userById(t.createdBy) ? ` · by ${esc(fullName(userById(t.createdBy)))}` : ''}${t.due ? ` · due <span class="due ${dueClass(t)}">${esc(fmtDue(t.due))}</span>` : ''}</span></span>
                 <span class="hm-counts"><span title="Comments">${svg(IC.chat, 1.4)}${nComments(t)}</span><span title="Files">${svg(IC.clip, 1.4)}${nFiles(t)}</span></span>
                 <span class="hm-who">${(t.assignees || []).length ? avatarStack(t.assignees, 26, 3, t) : '<span class="hm-mute">Unassigned</span>'}</span>
                 <span class="hm-st">${statusPill(t)}</span>
-              </div>`).join('') : `<div class="hm-empty">${st.range === 'all' ? 'Tasks you create will show up here.' : 'Nothing due ' + (st.range === 'today' ? 'today' : 'this week') + ' on the tasks you created.'}</div>`}
+              </div>`).join('') : `<div class="hm-empty">${st.range === 'all' ? (admin ? 'Tasks your team creates will show up here.' : 'Tasks you create will show up here.') : 'Nothing due ' + (st.range === 'today' ? 'today' : 'this week') + (admin ? ' on the team’s tasks.' : ' on the tasks you created.')}</div>`}
           </section>
           <section class="hm-card">
             <div class="hm-kpis">
@@ -166,7 +181,7 @@ const Home = (() => {
               <div class="hm-ticks">${ticks}</div>
             </div>
           </section>
-          ${actCard(acts, 'When your team works on the tasks you created, it shows up here.', 'grow')}
+          ${actCard(acts, admin ? 'When people work on the team’s tasks, it shows up here.' : 'When your team works on the tasks you created, it shows up here.', 'grow')}
         </div>
         <aside class="hm-col">
           <section class="hm-card">
@@ -174,15 +189,16 @@ const Home = (() => {
             ${dayStrip(days, sel, lateOn)}
             <div class="hm-agenda">${agenda.length ? agenda.slice(0, 5).map((t) => `<div class="hm-ag ${t.done ? 'done' : ''}" data-task="${t.id}"><i style="background:${pColor(t)}"></i><span class="hm-main"><b>${title(t)}</b><span class="hm-sub">${t.done ? 'Done' : statusInfo(t).name}${t.update ? ' · ' + esc(t.update) : ''}</span></span>${avatarStack(t.assignees || [], 22, 2, t)}</div>`).join('') : '<div class="hm-empty">Nothing due this day</div>'}${agenda.length > 5 ? `<div class="hm-mute">+${agenda.length - 5} more due this day</div>` : ''}</div>
           </section>
+          ${projCard}
           <section class="hm-card">
             <div class="hm-h"><h2>Checklist</h2><span class="hm-mute">${items.length ? `${itemsDone} of ${items.length} done` : ''}</span></div>
-            ${items.length ? items.map(({ t, c }) => `<div class="hm-cl"><button type="button" class="hm-chk ${c.done ? 'on' : ''}" data-hm="cl" data-task-id="${t.id}" data-v="${c.id}" aria-label="Done">${tick}</button><span class="hm-main" data-task="${t.id}"><b class="${c.done ? 'struck' : ''}">${esc(c.text)}</b><span class="hm-sub">${title(t)}</span></span></div>`).join('') : '<div class="hm-empty">Checklist items on the tasks you created show up here.</div>'}
+            ${items.length ? items.map(({ t, c }) => `<div class="hm-cl"><button type="button" class="hm-chk ${c.done ? 'on' : ''}" data-hm="cl" data-task-id="${t.id}" data-v="${c.id}" aria-label="Done">${tick}</button><span class="hm-main" data-task="${t.id}"><b class="${c.done ? 'struck' : ''}">${esc(c.text)}</b><span class="hm-sub">${title(t)}</span></span></div>`).join('') : `<div class="hm-empty">Checklist items on ${admin ? 'the team’s tasks' : 'the tasks you created'} show up here.</div>`}
           </section>
           <section class="hm-hero">
             <h2>Team on time</h2>
             <div class="hm-hn"><b>${doneM.length ? onT + '%' : '–'}</b><span>${doneM.length && doneL.length ? `${onT - onTL >= 0 ? '+' : ''}${onT - onTL}% vs<br>${new Date(ly, lm, 1).toLocaleDateString('en-US', { month: 'long' })}` : 'this month'}</span></div>
             ${team.length ? `<div class="hm-avs">${avatarStack(team, 32, 5)}</div>` : ''}
-            <p>Tasks you created that were finished by their due date this month</p>
+            <p>${admin ? 'Team tasks' : 'Tasks you created'} that were finished by their due date this month</p>
           </section>
         </aside>
       </div>

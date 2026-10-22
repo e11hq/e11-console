@@ -126,6 +126,15 @@
 .hm-chk svg { width: 11px; height: 11px; }
 .hm-chk.on { background: var(--green); border-color: var(--green); color: #0c0d0f; }
 
+/* projects (A) */
+.hm-projs { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; max-height: 300px; overflow-y: auto; }
+.hm-proj { display: flex; gap: 12px; align-items: center; padding: 8px; border-radius: 10px; cursor: pointer; }
+.hm-proj:hover { background: var(--hover); }
+.hm-pi { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; font-size: 12px; font-weight: 700; color: #fff; flex: none; }
+.hm-proj b { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hm-pbar { display: block; height: 4px; border-radius: 3px; background: var(--hover); margin-top: 5px; overflow: hidden; }
+.hm-pbar i { display: block; height: 100%; border-radius: 3px; }
+
 /* purple cards */
 .hm-hero { padding: 20px 22px; border-radius: 16px; background: var(--accent-strong); color: #fff; position: relative; overflow: hidden; }
 .hm-hero::after { content: ''; position: absolute; right: -60px; bottom: -70px; width: 200px; height: 200px; border-radius: 50%; border: 18px solid rgba(255, 255, 255, .16); box-shadow: inset 0 0 0 40px transparent, 0 0 0 22px rgba(255, 255, 255, .08); pointer-events: none; }

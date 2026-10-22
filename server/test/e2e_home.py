@@ -33,7 +33,7 @@ async def main():
             check(await pg.locator('.hm-stat').count() == 3, 'three stat cards')
             await pg.click('.hm-tab[data-v="all"]'); await pg.wait_for_timeout(200)
             n = await pg.locator('.hm-lead .hm-row').count()
-            want = await E("Math.min(6, topTasks().filter(t=>t.createdBy===currentUserId && !t.done).length)")
+            want = await E("Math.min(6, topTasks().filter(t=>{const u=userById(t.createdBy); return !t.done && !!u && (u.role==='am'||isAdm(u));}).length)")
             check(n == want, f'All open lists the open tasks you created ({n} of {want})')
             await pg.click('.hm-tab[data-v="created"]'); await pg.wait_for_timeout(200)
             check('tasks created' in await pg.locator('.hm-big').inner_text(), 'chart switches to Tasks created')
