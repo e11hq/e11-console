@@ -10,6 +10,11 @@ export function createAccess(store) {
   const users = () => store.list('users');
   const userByEmail = (email) => users().find((u) => u.active !== false && String(u.email || '').toLowerCase() === String(email || '').toLowerCase()) || null;
   const isFreelancer = (u) => u && u.role === 'freelancer';
+  // Finance people (Finance Admin / Finance Viewer) only use the Finance pages: they see projects and a
+  // slim copy of each task (name, project, status, dates, Finance status) — no comments, files or people's work.
+  const isFinance = (u) => !!u && (u.role === 'finance_admin' || u.role === 'finance_viewer');
+  const TASK_FOR_FINANCE = ['id', 'title', 'projectId', 'sectionId', 'parentId', 'done', 'completedAt', 'due', 'createdAt', 'updatedAt', 'finance', 'financeAt', 'order'];
+  const FIN_TASK_FIELDS = ['finance', 'financeAt', 'updatedAt'];
   const projectSet = (u) => new Set(Array.isArray(u.projectIds) ? u.projectIds : []);
 
   function taskVisible(u, t) {
@@ -26,8 +31,11 @@ export function createAccess(store) {
   }
   // Can this person open this file? Freelancers only get files from their tasks and their clients.
   function canReadFile(u, rel) {
-    if (!isFreelancer(u)) return true;
     const parts = String(rel).split('/');
+    // Invoices and other finance records: Finance people and Admins only
+    if (parts[0] === 'Finance') return isFinance(u) || u.role === 'admin';
+    if (isFinance(u)) return (parts[0] === 'attachments' && parts[1] === '_avatars') || (parts[0] === 'Clients' && parts[1] === '_logos') || parts[0] === '.thumbs';
+    if (!isFreelancer(u)) return true;
     if (parts[0] === 'attachments') {
       if (parts[1] === '_avatars') return true;
       if (parts[1] === '_uploads') return false;
@@ -52,11 +60,18 @@ export function createAccess(store) {
       case 'tasks': return taskVisible(u, data);
       case 'clients': return !isFreelancer(u) || clientSet(u).has(data.id);
       case 'trash': return u.role === 'admin' || u.role === 'am';   // the Trash is for Admins and Account Managers
+      case 'finance': return isFinance(u) || u.role === 'admin';    // expense records
       default: return true;
     }
   }
 
   function shape(u, kind, data) {
+    if (kind === 'tasks' && data && isFinance(u)) {
+      const out = {};
+      TASK_FOR_FINANCE.forEach((k) => { if (data[k] !== undefined) out[k] = data[k]; });
+      return out;
+    }
+    if (kind === 'clients' && data && isFinance(u)) return { id: data.id, name: data.name, logo: data.logo || null };
     if (kind !== 'users' || !data) return data;
     const out = { ...data };
     SECRET_USER_FIELDS.forEach((k) => delete out[k]);
@@ -68,6 +83,20 @@ export function createAccess(store) {
     const admin = u.role === 'admin';
     const manager = admin || u.role === 'am';
     const next = ch.del ? null : ch.data;
+    if (ch.kind === 'finance') return u.role === 'finance_admin';
+    if (isFinance(u)) {
+      if (ch.kind === 'users') return !ch.del && String(ch.id) === u.id && !!current && PROTECTED_USER_FIELDS.every((k) => deepEqual(next[k], current[k]));
+      if (ch.kind === 'notifications') return !ch.del ? !!current && current.to === u.id : !current || current.to === u.id;
+      if (ch.kind !== 'tasks' || ch.del || !current || u.role !== 'finance_admin') return false;
+      // A Finance Admin may only change a task's Finance status: everything else stays as the server has it
+      const merged = { ...current };
+      FIN_TASK_FIELDS.forEach((k) => { if (next[k] !== undefined) merged[k] = next[k]; });
+      const known = new Set((current.activity || []).map((a) => a.id));
+      const added = (next.activity || []).filter((a) => a && !known.has(a.id) && a.actor === u.id);
+      if (added.length) merged.activity = (current.activity || []).concat(added).slice(-300);
+      ch.data = merged; delete ch.base;
+      return true;
+    }
     switch (ch.kind) {
       case 'users':
         if (ch.del) return false;                                   // people are deactivated, never deleted
@@ -105,5 +134,5 @@ export function createAccess(store) {
     }
   }
 
-  return { userByEmail, canSee, canWrite, shape, isFreelancer, canReadFile };
+  return { userByEmail, canSee, canWrite, shape, isFreelancer, isFinance, canReadFile };
 }

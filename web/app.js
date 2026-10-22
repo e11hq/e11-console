@@ -912,7 +912,10 @@ const subtasksOf = (id) => db.tasks.filter((t) => t.parentId === id).sort(byOrde
 const topTasks = () => db.tasks.filter((t) => !t.parentId);
 
 /* ================= Team: users, roles, permissions ================= */
-const ROLES = { admin: 'Admin', am: 'Account Manager', production: 'Production', social: 'Social', freelancer: 'Freelancer' };
+const ROLES = { admin: 'Admin', am: 'Account Manager', production: 'Production', social: 'Social', freelancer: 'Freelancer', finance_admin: 'Finance Admin', finance_viewer: 'Finance Viewer' };
+// Finance people only use the Finance pages (Dashboard / Projects / Expenses)
+const isFinUser = (u = me()) => !!u && (u.role === 'finance_admin' || u.role === 'finance_viewer');
+const isFinAdmin = (u = me()) => !!u && u.role === 'finance_admin';
 const SEED_ADMIN_ID = 'u-haris';
 let currentUserId = null;
 const userById = (id) => (db && db.users.find((u) => u.id === id)) || null;
@@ -925,6 +928,7 @@ const LIMITED = new Set(['editProject', 'editPriority', 'assign', 'removeTag', '
 function can(perm) {
   const u = me();
   if (!u) return false;
+  if (isFinUser(u)) return false;
   if (perm === 'manageUsers') return u.role === 'admin';
   if (u.role === 'admin' || u.role === 'am') return true;
   return !LIMITED.has(perm);
@@ -984,7 +988,7 @@ function fieldMenu(anchor, k) {
   const ck = (on) => (on ? `<span class="wf-ck">${icon('check')}</span>` : '');
   if (k === 'update') items = updatesByUse().map((v) => ({ html: `<div class="mi">${fieldPill(v, UPDATE_COLOR(v)).replace(icon('chev'), '')}${ck(cur === v)}</div>`, run: () => set(v) }));
   else if (k === 'finance') {
-    if (!isManager()) return denied();
+    if (!(isManager() || isFinAdmin())) return denied();
     items = Object.entries(FINANCE).map(([v, c]) => ({ html: `<div class="mi">${fieldPill(v, c).replace(icon('chev'), '')}${ck(cur === v)}</div>`, run: () => set(v) }));
   } else if (k === 'guardian') {
     if (!can('assign')) return denied();
@@ -1002,8 +1006,9 @@ function fieldMenu(anchor, k) {
 function setField(t, k, v) {
   const old = t[k] || null;
   if (old === v) return;
-  if (k === 'finance' && !isManager()) return denied();
+  if (k === 'finance' && !(isManager() || isFinAdmin())) return denied();
   t[k] = v || null;
+  if (k === 'finance') t.financeAt = nowISO();
   const name = (id) => (id && userById(id) ? fullName(userById(id)) : '');
   if (k === 'update') {
     logChange(t, 'the <b>Task Update</b>', old, v);
@@ -1370,6 +1375,7 @@ function normalize(d) {
   const firstAdmin = (d.users.find((u) => u.role === 'admin') || d.users[0]).id;
   d.notifications = Array.isArray(d.notifications) ? d.notifications : [];
   d.trash = Array.isArray(d.trash) ? d.trash : [];
+  d.finance = Array.isArray(d.finance) ? d.finance : [];
   // Statuses for tasks that are not in a project
   d.statuses = Array.isArray(d.statuses) && d.statuses.length ? d.statuses : [
     { id: 'st-todo', name: 'To do', color: '#87909e' }, { id: 'st-progress', name: 'In progress', color: '#a875ff' },
@@ -1618,7 +1624,7 @@ function mergeSets(base, mine, theirs) {
 }
 
 const Sync = (() => {
-  const KINDS = ['users', 'projects', 'tasks', 'clients', 'notifications', 'statuses', 'trash', 'meta'];
+  const KINDS = ['users', 'projects', 'tasks', 'clients', 'notifications', 'statuses', 'trash', 'meta', 'finance'];
   const clientId = 'c-' + uid() + uid();
   const synced = {};               // kind -> Map(id -> JSON the server has)
   KINDS.forEach((k) => { synced[k] = new Map(); });
@@ -1657,6 +1663,7 @@ const Sync = (() => {
     KINDS.forEach((k) => { if (k === 'meta') remember('meta', 'main', sharedMeta(data.meta)); else (data[k] || []).forEach((x) => remember(k, String(x.id), x)); });
     data.meta = { ...(data.meta || {}), prefs: loadPrefs(me.user.id) };
     db = normalize(JSON.parse(JSON.stringify(data)));
+    if (me.user && (me.user.role === 'finance_admin' || me.user.role === 'finance_viewer')) db.tasks.forEach((t) => remember('tasks', String(t.id), t));
     connect();
     window.addEventListener('online', () => { push(); reconnect(0); });
     return me.user;
@@ -1896,6 +1903,7 @@ function updateAppBadge() {
 function renderSidebar() {
   updateAppBadge();
   $$('.nav-item[data-nav]').forEach((a) => a.classList.toggle('active', !ui.search && (ui.view === a.dataset.nav || (a.dataset.nav === 'clients' && ui.view === 'client'))));
+  Fin.paintNav();
   { const cc = $('#clients-count'); if (cc) cc.textContent = (db.clients || []).length ? String(db.clients.length) : ''; }
   { const tn = $('#nav-trash'); if (tn) { tn.style.display = isManager() ? '' : 'none'; $('#trash-count').textContent = trashList().length ? String(trashList().length) : ''; } }
   const mt = Work.home().filter((t) => Work.homeOpen(t) && t.due && dayDiff(t.due) <= 0).length;
@@ -1927,6 +1935,7 @@ function renderSidebar() {
 function renderTitle() {
   const el = $('#title-area');
   if (typeof Phone !== 'undefined' && Phone.on) { el.innerHTML = ''; return; }
+  if (Fin.owns(ui.view)) { el.innerHTML = Fin.title(); return; }
   if (ui.search) { el.innerHTML = `<div class="page-title">Search</div>`; return; }
   if (ui.view === 'home') { el.innerHTML = `<div class="page-title">Home</div>`; return; }
   if (ui.view === 'inbox') { el.innerHTML = `<div class="page-icon" style="background:#2b2650;color:#c9c0ff">${icon('inbox')}</div><div class="page-title">Inbox</div>`; return; }
@@ -1968,6 +1977,7 @@ function renderContent() {
   const c = $('#content');
   const scroll = { top: c.scrollTop, left: (c.querySelector('.board') || {}).scrollLeft || 0 };
   if (typeof Phone !== 'undefined' && Phone.renderContent(c)) { c.scrollTop = scroll.top; return; }
+  if (Fin.owns(ui.view)) { Fin.render(c); c.scrollTop = scroll.top; return; }
   if (ui.search) c.innerHTML = viewSearch();
   else if (ui.view === 'home') c.innerHTML = viewHome();
   else if (ui.view === 'mytasks') c.innerHTML = viewMyTasks();
@@ -3343,6 +3353,7 @@ function inlineInput(el, { placeholder = '', value = '', multiline = false, keep
 
 /* ================= Actions ================= */
 function go(view, projectId = null) {
+  if (isFinUser() && !Fin.owns(view) && view !== 'profile') view = 'fin-dash';
   PageHistory.mark();
   if (view === 'clients') { ui.caQ = ''; ui.caScope = null; }
   // The Inbox always opens on its unread tab (Primary on computers, Unread on phones)
@@ -3414,6 +3425,7 @@ function daysUntilAutoDelete(t) {
 }
 // Tasks finished more than 30 days ago move to the Trash (with their subtasks and files) for 30 more days
 function purgeOldCompleted() {
+  if (isFinUser()) return;
   if (Host.isServer && !isManager()) { purgeTrash(); return; } // Admins and Account Managers look after this
   const cutoff = Date.now() - AUTO_DELETE_DAYS * 86400000;
   const old = db.tasks.filter((t) => t.done && t.completedAt && new Date(t.completedAt).getTime() < cutoff && !(t.parentId && task(t.parentId) && task(t.parentId).done));
@@ -5793,6 +5805,7 @@ function alertUser({ title, body, taskId, from }, force) {
 }
 // Show alerts for notifications this person hasn't been alerted about yet
 function deliverPending() {
+  if (isFinUser()) return;
   const u = me();
   if (!u) return;
   const since = u.lastAlertAt || '';
@@ -6187,6 +6200,7 @@ function renderMeChip() {
   el.innerHTML = `${avatarHTML(u.id, 28)}<span class="me-txt"><b>${esc(fullName(u))}</b><small>${esc(ROLES[u.role])}</small></span>${icon('chev')}`;
 }
 function meMenu(anchor) {
+  if (isFinUser()) return Fin.meMenu(anchor);
   showMenu(anchor, [
     { label: 'My profile', icon: 'user', run: () => go('profile') },
     { label: 'Team members', icon: 'users', run: () => go('team') },
@@ -6302,7 +6316,9 @@ function enterApp() {
   root.classList.add('leaving');
   document.getElementById('app').classList.remove('locked');
   setTimeout(() => { root.classList.remove('on', 'leaving'); root.innerHTML = ''; }, 450);
-  ui.view = 'home'; ui.taskId = null; ui.search = '';
+  ui.view = isFinUser() ? 'fin-dash' : 'home'; ui.taskId = null; ui.search = '';
+  if (typeof Phone !== 'undefined' && Phone.check) Phone.check();
+  Fin.init();
   initSidebar();
   render();
   purgeOldCompleted();

@@ -1,0 +1,166 @@
+"""Finance people: own layout (Dashboard / Projects / Expenses), dashboard counts + monthly graph + overview,
+Finance Admin sets task Finance status and adds subscriptions / reimbursements / extra expenses (with invoice),
+Expenses page + all-transactions list with month filter and 50 per page. Viewer only looks; Admin can look."""
+import asyncio, os, subprocess, tempfile, time, urllib.request, json
+from playwright.async_api import async_playwright
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PORT = 18202; BASE = f'http://127.0.0.1:{PORT}'; ADMIN = 'haris@e11-digital.com'
+FA = 'fina@e11-digital.com'; FV = 'finv@e11-digital.com'
+SHOTS = tempfile.gettempdir()
+fails = []
+def check(c, m):
+    print(('PASS ' if c else 'FAIL ') + m)
+    if not c: fails.append(m)
+def push(who, changes):
+    req = urllib.request.Request(BASE + '/api/push', method='POST', data=json.dumps({'changes': changes}).encode(), headers={'X-Dev-Email': who, 'Content-Type': 'application/json'})
+    return json.loads(urllib.request.urlopen(req).read())
+async def main():
+    env = {**os.environ, 'DATA_DIR': tempfile.mkdtemp(), 'AUTH_DEV': '1', 'ADMIN_EMAIL': ADMIN, 'PORT': str(PORT), 'WEB_DIR': os.path.join(ROOT, 'web'), 'APP_VERSION': '1.2.7-test.1'}
+    srv = subprocess.Popen(['node', os.path.join(ROOT, 'server/src/index.js')], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    for _ in range(50):
+        try: urllib.request.urlopen(BASE + '/api/health'); break
+        except Exception: time.sleep(0.1)
+    urllib.request.urlopen(urllib.request.Request(BASE + '/api/sample', method='POST', data=b'{}', headers={'X-Dev-Email': ADMIN, 'Content-Type': 'application/json'}))
+    snap = json.loads(urllib.request.urlopen(urllib.request.Request(BASE + '/api/snapshot', headers={'X-Dev-Email': ADMIN})).read())['data']
+    now = time.strftime('%Y-%m')
+    users = [{'id': 'u-fa', 'email': FA, 'name': 'Fatima Finance', 'role': 'finance_admin', 'active': True, 'setup': True},
+             {'id': 'u-fv', 'email': FV, 'name': 'Victor Viewer', 'role': 'finance_viewer', 'active': True, 'setup': True}]
+    tasks = [t for t in snap['tasks'] if not t.get('parentId')][:6]
+    ch = [{'kind': 'users', 'id': u['id'], 'data': u} for u in users]
+    statuses = ['Invoiced', 'Invoiced', 'LPO Pending', 'Retainer', 'To be invoiced', 'Quote to be sent']
+    for t, s in zip(tasks, statuses):
+        n = dict(t); n['finance'] = s; n['financeAt'] = time.strftime('%Y-%m-%dT10:00:00.000Z')
+        ch.append({'kind': 'tasks', 'id': t['id'], 'base': t, 'data': n})
+    # one invoiced last month
+    t7 = [t for t in snap['tasks'] if not t.get('parentId')][6]
+    lm = time.strftime('%Y-%m', time.localtime(time.time() - 32 * 86400))
+    n = dict(t7); n['finance'] = 'Invoiced'; n['financeAt'] = lm + '-10T10:00:00.000Z'
+    ch.append({'kind': 'tasks', 'id': t7['id'], 'base': t7, 'data': n})
+    push(ADMIN, ch)
+    async with async_playwright() as pw:
+        b = await pw.chromium.launch(executable_path='/opt/pw-browsers/chromium-1194/chrome-linux/chrome')
+        async def login(email, vp=(1300, 860)):
+            ctx = await b.new_context(viewport={'width': vp[0], 'height': vp[1]}, base_url=BASE)
+            await ctx.add_cookies([{'name': 'e11_dev_email', 'value': email, 'url': BASE}])
+            pg = await ctx.new_page(); errs = []; pg.on('pageerror', lambda e: errs.append(str(e) + ' @ ' + str(getattr(e, 'stack', ''))[:400]))
+            await pg.goto('/'); await pg.wait_for_timeout(600); await pg.mouse.click(5, 5); await pg.wait_for_timeout(3500)
+            return ctx, pg, errs
+        # ---------------- Finance Admin
+        ctx, pg, errs = await login(FA); E = pg.evaluate
+        check(await E("ui.view") == 'fin-dash' and await E("document.body.classList.contains('fin-mode')"), 'Finance Admin opens on the Finance Dashboard')
+        nav = await E("[...document.querySelectorAll('#sidebar .nav-item')].filter(a=>a.offsetParent).map(a=>a.textContent.trim())")
+        check(nav == ['Dashboard', 'Projects', 'Expenses'], f'their sidebar: {nav}')
+        check(not await pg.locator('#topbar .search').is_visible(), 'no task search')
+        stats = await E("[...document.querySelectorAll('.fin-stat')].map(s=>[s.querySelector('.l').textContent, +s.querySelector('.n').textContent])")
+        check(dict(stats) == {'Quote to be sent': 1, 'LPO Pending': 1, 'Invoiced': 3, 'Retainer': 1, 'To be invoiced': 1}, f'5 status counts {stats}')
+        bars = await E("[...document.querySelectorAll('.fin-bar .v')].map(e=>+e.textContent)")
+        check(len(bars) == 6 and bars[-1] == 2 and bars[-2] == 1, f'Monthly Graph (Invoiced) last 6 months {bars}')
+        await pg.click('[data-fin-graph="Retainer"]'); await pg.wait_for_timeout(200)
+        check(await E("[...document.querySelectorAll('.fin-bar .v')].map(e=>+e.textContent).pop()") == 1, 'graph tabs switch status')
+        ov = await E("[document.querySelector('.fo-n').textContent, document.querySelector('.fo-chg').className, document.querySelector('.fo-chg').textContent]")
+        check(ov[0] == '3' and 'up' in ov[1] and '100%' in ov[2], f'Overview: 3 invoiced, up 100% vs last month {ov}')
+        await pg.screenshot(path=os.path.join(SHOTS, 'fin_dash.png'), full_page=True)
+        # Projects: set a status
+        await pg.click('.fin-stat[data-fin-status="LPO Pending"]'); await pg.wait_for_timeout(300)
+        check(await E("ui.view") == 'fin-projects' and await pg.locator('.fp-row').count() == 1, 'clicking a count opens Projects filtered to it')
+        await pg.click('[data-fin-proj="all"]'); await pg.wait_for_timeout(200)
+        tid = await E("document.querySelector('[data-fin-set]').dataset.finSet")
+        await pg.click(f'[data-fin-set="{tid}"]'); await pg.wait_for_timeout(200)
+        await pg.locator('.fl-menu .mi .fl-pill').get_by_text('Invoiced', exact=True).click(); await pg.wait_for_timeout(1500)
+        await pg.screenshot(path=os.path.join(SHOTS, 'fin_projects.png'))
+        srv_task = json.loads(urllib.request.urlopen(urllib.request.Request(BASE + '/api/snapshot', headers={'X-Dev-Email': ADMIN})).read())['data']['tasks']
+        st = [t for t in srv_task if t['id'] == tid][0]
+        check(st['finance'] == 'Invoiced' and st.get('comments') is not None and st.get('title'), 'Finance Admin changed the status on the server; the rest of the task is untouched')
+        # Add pages via the Me menu
+        await pg.click('#me-chip'); await pg.wait_for_timeout(200)
+        items = await E("[...document.querySelectorAll('.menu .mi')].map(e=>e.textContent.trim())")
+        check(all(x in items for x in ['Add subscriptions', 'Add Staff Reimbursements', 'Add Extra Expense']) and 'Team members' not in items, f'Me menu {items}')
+        await pg.locator('.menu .mi', has_text='Add subscriptions').click(); await pg.wait_for_timeout(300)
+        await pg.click('[data-fin-new="sub"]'); await pg.wait_for_timeout(200)
+        await pg.fill('.fin-form [name="name"]', 'Adobe CC'); await pg.fill('.fin-form [name="amount"]', '1200.5'); await pg.select_option('.fin-form [name="day"]', '1')
+        async with pg.expect_file_chooser() as fc:
+            await pg.click('.fin-form [data-pick]')
+        f = await fc.value
+        inv = os.path.join(SHOTS, 'invoice.pdf'); open(inv, 'wb').write(b'%PDF-1.4 test')
+        await f.set_files(inv); await pg.wait_for_timeout(1500)
+        check('invoice.pdf' in await pg.locator('.fin-inv-name').inner_text(), 'invoice attached in the form')
+        await pg.click('.fin-form button[type="submit"]'); await pg.wait_for_timeout(500)
+        sub = await E("db.finance.find(x=>x.type==='sub')")
+        check(sub and sub['amount'] == 1200.5 and sub['invoices'].get(now, {}).get('path', '').startswith('Finance/'), f'subscription saved with this month’s invoice')
+        check(await E(f"Fin.transactions().filter(x=>x.kind==='sub').length") == 1, 'recorded as this month’s payment (billing day already passed)')
+        await pg.screenshot(path=os.path.join(SHOTS, 'fin_subs.png'))
+        # reimbursement with an extra person
+        await E("go('fin-reimb')"); await pg.wait_for_timeout(200)
+        await pg.click('[data-fin-new="reimb"]'); await pg.wait_for_timeout(200)
+        await pg.fill('.fin-form [name="newPerson"]', 'Omar Driver'); await pg.click('.fin-form [data-addp]'); await pg.wait_for_timeout(200)
+        check(await E("document.querySelector('.fin-form [name=who]').selectedOptions[0].textContent") == 'Omar Driver', 'an extra person can be added to the list')
+        await pg.fill('.fin-form [name="amount"]', '250')
+        await pg.click('.fin-form .fin-date'); await pg.wait_for_timeout(200)
+        check(await pg.locator('.dp-pop').count() == 1, 'payment date opens the calendar')
+        await pg.locator('.dp-day:not(.out)', has_text='1').first.click(); await pg.wait_for_timeout(200)
+        await pg.screenshot(path=os.path.join(SHOTS, 'fin_reimb_form.png'))
+        await pg.click('.fin-form button[type="submit"]'); await pg.wait_for_timeout(400)
+        r = await E("db.finance.find(x=>x.type==='reimb')")
+        check(r and r['amount'] == 250 and r['date'] == now + '-01' and r.get('personId'), f'reimbursement saved {r and r["date"]}')
+        # extra expenses (many, for paging)
+        await E("go('fin-extra')"); await pg.wait_for_timeout(200)
+        await pg.click('[data-fin-new="expense"]'); await pg.wait_for_timeout(200)
+        await pg.fill('.fin-form [name="name"]', 'Studio lights'); await pg.fill('.fin-form [name="amount"]', '')
+        await pg.click('.fin-form button[type="submit"]'); await pg.wait_for_timeout(200)
+        check('AED' in await pg.locator('.fin-form .dlg-err').inner_text(), 'amount must be a number')
+        await pg.fill('.fin-form [name="amount"]', '3000'); await pg.click('.fin-form button[type="submit"]'); await pg.wait_for_timeout(300)
+        await E(f"""(()=>{{ for(let i=0;i<60;i++) db.finance.push({{id:'x'+i,type:'expense',name:'Item '+i,amount:10,date:'{lm}-0'+(1+i%9),createdAt:nowISO()}}); persist(0); }})()""")
+        await pg.wait_for_timeout(1200)
+        await E("go('fin-expenses')"); await pg.wait_for_timeout(300)
+        total = await E("document.querySelector('.fe-over .fo-n').textContent")
+        check(total == 'AED 4,450.50', f'this month’s spending: {total}')
+        check(await pg.locator('.fe-recent .fx-row').count() == 5, 'recent 5 transactions')
+        check(await pg.locator('.fc-hit').count() == 6, 'cash flow: 6 months with hover areas')
+        await pg.locator('.fc-hit').nth(5).hover(); await pg.wait_for_timeout(200)
+        tip = await pg.locator('.fc-hit').nth(5).locator('.fc-tip').inner_text()
+        check('AED 4,450.50' in tip, f'hover shows the month and total: {tip!r}')
+        await pg.screenshot(path=os.path.join(SHOTS, 'fin_expenses.png'), full_page=True)
+        await pg.click('.fe-recent [data-fin-all="all"]'); await pg.wait_for_timeout(300)
+        check(await pg.locator('.fin-list .fx-row').count() == 50 and 'Page 1 of 2' in await pg.locator('.fin-pages').inner_text(), 'View all: 50 per page')
+        await pg.select_option('[data-fin-month]', lm); await pg.wait_for_timeout(200)
+        check(await pg.locator('.fin-list .fx-row').count() == 50 and '60 transactions' in await pg.locator('.fl-sum').inner_text(), 'month filter')
+        await pg.click('[data-fin-page="1"]'); await pg.wait_for_timeout(200)
+        check(await pg.locator('.fin-list .fx-row').count() == 10, 'page 2')
+        await pg.screenshot(path=os.path.join(SHOTS, 'fin_list.png'))
+        check(not errs, f'no page errors {errs}')
+        await pg.wait_for_timeout(1000)
+        await ctx.close()
+        # ---------------- Viewer
+        ctx, pg, errs = await login(FV); E = pg.evaluate
+        check(await E("db.finance.length") > 60, 'Viewer sees the records')
+        await E("go('fin-projects')"); await pg.wait_for_timeout(200)
+        check(await pg.locator('[data-fin-set]').count() == 0, 'Viewer cannot change Finance status')
+        await pg.click('#me-chip'); await pg.wait_for_timeout(200)
+        check(await pg.locator('.menu .mi', has_text='Add subscriptions').count() == 0, 'no Add pages for a Viewer')
+        await pg.keyboard.press('Escape'); await E("closeMenus(); go('fin-subs')"); await pg.wait_for_timeout(200)
+        check(await E("ui.view") == 'fin-dash', 'Viewer is sent back from Add pages')
+        await E("go('home')"); await pg.wait_for_timeout(200)
+        check(await E("ui.view") == 'fin-dash', 'Finance people can’t open the task app')
+        check(await E("db.tasks.every(t => !t.comments.length && !t.notesHtml)"), 'tasks arrive without comments or descriptions')
+        check(not errs, f'no page errors {errs}')
+        await ctx.close()
+        # ---------------- phone-size screen for finance
+        ctx, pg, errs = await login(FA, (390, 844)); E = pg.evaluate
+        check(not await E("document.body.classList.contains('phone')"), 'finance people don’t get the phone task tabs')
+        check(await pg.locator('#fin-phone').is_visible() and not await pg.locator('#app').is_visible(), 'on a phone they see a note to use a computer')
+        await pg.screenshot(path=os.path.join(SHOTS, 'fin_phone.png'), full_page=True)
+        await ctx.close()
+        # ---------------- Admin
+        ctx, pg, errs = await login(ADMIN); E = pg.evaluate
+        check(await pg.locator('.fin-admin-nav').count() == 1, 'Admin has Finance in the sidebar')
+        await pg.click('.fin-admin-nav'); await pg.wait_for_timeout(300)
+        check(await E("ui.view") == 'fin-dash' and await pg.locator('#title-area [data-fin-go]').count() == 3, 'Admin sees the Finance pages with tabs')
+        await pg.click('#title-area [data-fin-go="fin-expenses"]'); await pg.wait_for_timeout(300)
+        check(await pg.locator('[data-fin-new]').count() == 0, 'Admin only looks (no adding)')
+        await pg.screenshot(path=os.path.join(SHOTS, 'fin_admin.png'))
+        check(not errs, f'no page errors {errs}')
+        await ctx.close()
+        await b.close()
+    srv.terminate()
+    print('FAILS', len(fails), fails)
+asyncio.run(main())

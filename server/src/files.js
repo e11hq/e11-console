@@ -42,7 +42,7 @@ export function createFiles(root) {
   function uploadDir(a) {
     if (a && a.dest) {
       const d = String(a.dest);
-      if (!d.startsWith('Clients/')) throw httpError(400, 'Invalid folder');
+      if (!d.startsWith('Clients/') && !d.startsWith('Finance/')) throw httpError(400, 'Invalid folder');
       return resolve(d);
     }
     return resolve('attachments/' + safeName((a && a.taskId) || 'misc'));

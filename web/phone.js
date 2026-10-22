@@ -10,7 +10,8 @@ const Phone = (() => {
 
   const isOn = () => st.on;
   function check() {
-    const v = mq.matches && !(typeof Host !== 'undefined' && Host.isMacApp);
+    // Finance people use the Finance pages, which are built for every screen size (no phone tabs)
+    const v = mq.matches && !(typeof Host !== 'undefined' && Host.isMacApp) && !(typeof db !== 'undefined' && db && currentUserId && typeof isFinUser === 'function' && isFinUser());
     if (v === st.on) return;
     st.on = v;
     document.body.classList.toggle('phone', v);
