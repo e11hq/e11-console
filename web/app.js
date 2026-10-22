@@ -3609,6 +3609,9 @@ function assignMenu(anchor) {
   });
   draw();
   setTimeout(() => input.focus(), 0);
+  // iPhone sometimes doesn't treat a list filled right after it appeared as scrollable until the next
+  // layout: nudge it once so it scrolls at the first swipe
+  if (typeof Phone !== 'undefined' && Phone.on) requestAnimationFrame(() => { list.scrollTop = 1; list.scrollTop = 0; });
 }
 
 /* ---- "My part done" for shared tasks ---- */

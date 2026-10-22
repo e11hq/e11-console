@@ -673,3 +673,8 @@ html.phone, html.phone body { touch-action: manipulation; }
 
 /* Phone: no "Download all" in CD review requests and Client Assets */
 body.phone [data-action="ca-download-all"], body.phone [data-action="rr-download"] { display: none !important; }
+/* Assignee picker: one scrolling area (the list). The popup itself no longer scrolls, so iPhone
+   doesn't have two nested scrollers to choose from (the list stayed frozen until the keyboard opened) */
+body.phone .menu.asg-pop { overflow: hidden; display: flex; flex-direction: column; }
+body.phone .asg-pop .ap-search { flex: none; }
+body.phone .asg-pop .ap-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; touch-action: pan-y; transform: translateZ(0); }
