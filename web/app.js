@@ -262,6 +262,85 @@ const MacChrome = (() => {
   return { init, on: () => on };
 })();
 
+/* ================= Date picker (computers) ================= */
+// The task's Start / Due chips keep a hidden <input type="date"> (the phone uses the iPhone's own wheel);
+// on a computer, clicking one opens this calendar instead, and picking a day sets the input and fires
+// its usual "change", so everything else stays the same.
+const DatePicker = (() => {
+  let pop = null, input = null, view = null, onDoc = null, onKey = null;
+  const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  function close() {
+    if (!pop) return;
+    pop.remove(); pop = null; input = null;
+    document.removeEventListener('mousedown', onDoc, true); document.removeEventListener('keydown', onKey, true);
+  }
+  function days() {
+    // six rows, ending with the week that holds the month's last day
+    const last = new Date(view.y, view.m + 1, 0);
+    const end = new Date(last); end.setDate(last.getDate() + (6 - last.getDay()));
+    const start = new Date(end); start.setDate(end.getDate() - 41);
+    const out = [];
+    for (let i = 0; i < 42; i++) { const d = new Date(start); d.setDate(start.getDate() + i); out.push(d); }
+    return out;
+  }
+  function draw() {
+    const today = todayStr(), sel = input.value || '';
+    pop.innerHTML = `<div class="dp-head"><b>${MONTHS[view.m]} ${view.y}</b><span class="spacer"></span>
+        <button class="dp-today" data-dp="today">Today</button>
+        <button class="dp-nav" data-dp="prev" title="Previous month">${icon('chev-up')}</button>
+        <button class="dp-nav" data-dp="next" title="Next month">${icon('chev')}</button></div>
+      <div class="dp-grid">${['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((d) => `<span class="dp-wd">${d}</span>`).join('')}
+      ${days().map((d) => { const k = ymd(d); const cls = [k < today ? 'past' : '', d.getMonth() !== view.m ? 'out' : '', k === today ? 'today' : '', k === sel ? 'sel' : ''].join(' '); return `<button class="dp-day ${cls}" data-day="${k}">${d.getDate()}</button>`; }).join('')}</div>`;
+  }
+  function pick(v) {
+    const el = input; close();
+    if (!el) return;
+    el.value = v;
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  function open(el) {
+    close();
+    input = el;
+    const base = el.value ? parseYmd(el.value) : new Date();
+    view = { y: base.getFullYear(), m: base.getMonth() };
+    pop = document.createElement('div');
+    pop.className = 'dp-pop';
+    draw();
+    document.body.appendChild(pop);
+    const r = (el.closest('.date-chip') || el).getBoundingClientRect();
+    const w = pop.offsetWidth, h = pop.offsetHeight;
+    let x = r.left, y = r.bottom + 6;
+    if (x + w > innerWidth - 10) x = innerWidth - w - 10;
+    if (y + h > innerHeight - 10) y = Math.max(10, r.top - h - 6);
+    pop.style.left = Math.max(10, x) + 'px'; pop.style.top = y + 'px';
+    pop.addEventListener('mousedown', (e) => e.preventDefault());
+    pop.addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      e.stopPropagation();
+      if (b.dataset.day) return pick(b.dataset.day);
+      if (b.dataset.dp === 'today') return pick(todayStr());
+      view.m += b.dataset.dp === 'next' ? 1 : -1;
+      if (view.m < 0) { view.m = 11; view.y--; } if (view.m > 11) { view.m = 0; view.y++; }
+      draw();
+    });
+    pop.addEventListener('wheel', (e) => { e.preventDefault(); if (Math.abs(e.deltaY) < 4) return; view.m += e.deltaY > 0 ? 1 : -1; if (view.m < 0) { view.m = 11; view.y--; } if (view.m > 11) { view.m = 0; view.y++; } draw(); }, { passive: false });
+    onDoc = (e) => { if (pop && !pop.contains(e.target)) close(); };
+    onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); close(); } };
+    setTimeout(() => { document.addEventListener('mousedown', onDoc, true); document.addEventListener('keydown', onKey, true); }, 0);
+  }
+  const desktop = () => !(typeof Phone !== 'undefined' && Phone.on);
+  const grab = (e) => {
+    const el = e.target.closest && e.target.closest('input.date-in');
+    if (!el || !desktop()) return;
+    e.preventDefault(); e.stopPropagation();
+    if (e.type === 'click') { if (pop && input === el) close(); else open(el); }
+  };
+  document.addEventListener('mousedown', grab, true);
+  document.addEventListener('click', grab, true);
+  document.addEventListener('keydown', (e) => { const el = e.target.closest && e.target.closest('input.date-in'); if (el && desktop() && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); open(el); } }, true);
+  return { open, close };
+})();
+
 /* ================= Task links (Share button) ================= */
 // The link is <server>/?task=<id>. Opened in a browser by someone who uses the Mac app, it is handed
 // to the app (e11console://task/<id>); if the app doesn't answer, the task simply opens in the browser.
@@ -2438,7 +2517,9 @@ function renderDetail() {
   if (phone) Phone.chrome();
   const mode = phone ? 'side' : ui.detailMode === 'side' || ui.detailMode === 'full' ? ui.detailMode : 'modal';
   const side = mode === 'side';
+  const railTabs = side && !phone;
   const sideTab = ui.sideTab === 'comments' ? 'comments' : 'details';
+  // Sidebar view on a computer: Comments and Activity are separate icons in the side rail (no Comments | All switch)
 
   const keepMedia = {};
   if (pane.dataset.shown === t.id) $$('[data-media-key]', pane).forEach((m) => { keepMedia[m.dataset.mediaKey] = m; });
@@ -2549,18 +2630,19 @@ function renderDetail() {
           <button class="icon-btn th-back" data-action="close-thread" title="Back to all comments (Esc)">${icon('chev-left')}</button>
           <span class="tm-act-title">Thread<small>${repliesOf(t, thread.id).length} ${repliesOf(t, thread.id).length === 1 ? 'reply' : 'replies'} · started by ${esc(thread.authorId === currentUserId ? 'you' : userName(thread.authorId))}</small></span>
         </div>` : `<div class="tm-act-head">
-          <span class="tm-act-title">Comments<small>Created ${esc(fmtDay(ymd(new Date(t.createdAt))))}</small></span>
-          <div class="seg">
+          <span class="tm-act-title">${railTabs && ui.activityFilter === 'all' ? 'Activity' : 'Comments'}<small>Created ${esc(fmtDay(ymd(new Date(t.createdAt))))}</small></span>
+          ${railTabs ? '' : `<div class="seg">
             <button class="${ui.activityFilter !== 'all' ? 'on' : ''}" data-action="act-filter" data-f="comments">Comments${nTop ? ` ${nTop}` : ''}</button>
             <button class="${ui.activityFilter === 'all' ? 'on' : ''}" data-action="act-filter" data-f="all">All</button>
-          </div>
+          </div>`}
         </div>`}
         <div class="tm-feed ${thread ? 'in-thread' : ''}">${thread ? threadPageHTML(t, thread) : activityHTML(t)}</div>
         <div class="tm-composer">${composer(t, thread ? thread.id : (ui.replyTo && t.comments.some((c) => c.id === ui.replyTo) ? ui.replyTo : null))}</div>
       </aside>
       ${side ? `<nav class="tm-rail">
         <button class="rail-btn ${sideTab === 'details' ? 'on' : ''}" data-action="side-tab" data-tab="details" title="Task">${icon('details')}</button>
-        <button class="rail-btn ${sideTab === 'comments' ? 'on' : ''}" data-action="side-tab" data-tab="comments" title="Comments">${icon('comment')}${nComments ? `<i>${nComments}</i>` : ''}</button>
+        <button class="rail-btn ${sideTab === 'comments' && !(railTabs && ui.activityFilter === 'all') ? 'on' : ''}" data-action="side-tab" data-tab="comments" title="Comments">${icon('comment')}${nComments ? `<i>${nComments}</i>` : ''}</button>
+        ${railTabs ? `<button class="rail-btn ${sideTab === 'comments' && ui.activityFilter === 'all' ? 'on' : ''}" data-action="side-tab" data-tab="activity" title="Activity">${icon('activity')}</button>` : ''}
       </nav>` : ''}
     </div>
   </div>`;
@@ -3935,7 +4017,7 @@ document.addEventListener('click', async (e) => {
       case 'toggle-theme': setTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'); return;
       case 'disp-toggle': actEl.closest('.disp-wrap').classList.toggle('open'); return;
       case 'detail-mode': ui.detailMode = actEl.dataset.mode; savePref('detailMode', ui.detailMode); renderDetail(); return;
-      case 'side-tab': ui.sideTab = actEl.dataset.tab; renderDetail(); if (ui.sideTab === 'comments') { const f = $('.tm-feed'); if (f) stickFeedToBottom(f); } return;
+      case 'side-tab': { const tb = actEl.dataset.tab; if (tb === 'activity') { ui.sideTab = 'comments'; ui.activityFilter = 'all'; } else { ui.sideTab = tb; if (tb === 'comments') ui.activityFilter = 'comments'; } } renderDetail(); if (ui.sideTab === 'comments') { const f = $('.tm-feed'); if (f) stickFeedToBottom(f); } return;
       case 'share-task': TaskLink.copy(id); return;
       case 'nav-back': PageHistory.back(); return;
       case 'nav-forward': PageHistory.forward(); return;
