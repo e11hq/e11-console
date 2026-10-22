@@ -136,6 +136,25 @@ export function sampleData(store, me, filesRoot = null) {
         c.attachments = [{ id: `smp-ca-${c.id}`, ...put(name, `attachments/${t.id}/${name}`), addedAt: c.at }];
       }
     });
+    // files waiting for the Creative Director (Reviews page): a pending submission on three open tasks
+    const cdNow = (store.get('meta', 'main') || {}).cdUserId || 'u-karim';
+    const REV = [['ford-key-visual.jpg', 'story-frame-1.png'], ['teaser-rough-cut.mp4'], ['alain-tower-render.jpg', 'creative-brief.pdf']];
+    out.tasks.filter((t) => !t.parentId && !t.done && t.projectId && (t.assignees || []).some((u) => u !== cdNow)).slice(1, 4).forEach((t, i) => {
+      const by = t.assignees.find((u) => u !== cdNow);
+      const id = `smp-rp${i}`;
+      const at = iso(0, 7 + i);
+      const files = REV[i].map((name, k) => ({ id: `smp-ra-${t.id}-${k}`, ...put(name, `attachments/${t.id}/review/${name}`), addedAt: at, addedBy: by, reviewId: id }));
+      t.needsCD = true;
+      t.reviews = [{ id, by, at, files: files.map((f) => f.id), state: 'pending', epoch: t.reviewEpoch || 0, round: 1 }];
+      t.attachments = (t.attachments || []).concat(files);
+      t.cdStatus = 'review';
+      const p = (out.projects || []).find((x) => x.id === t.projectId);
+      const sec = p && (p.sections || []).find((x) => /^(internal )?review$/i.test(String(x.name).trim()));
+      if (sec) t.sectionId = sec.id;
+      out.notifications.push({ id: `smp-nr${i}`, to: cdNow, from: by, taskId: t.id, kind: 'review', text: `submitted ${files.length === 1 ? '1 file' : files.length + ' files'} for your review on`, snippet: '', commentId: null, at, read: false });
+      t.pendingSample = true;
+    });
+
     // invoices on expense records
     const inv = (name, folder, m, id) => ({ id, ...put(name, `Finance/${folder}/${m}/${name}`), addedAt: iso(1), addedBy: 'u-smp-fin-a' });
     out.finance.forEach((r, i) => {
@@ -158,12 +177,13 @@ export function sampleData(store, me, filesRoot = null) {
     if (i % 2 === 0 && !(t.checklist || []).length) t.checklist = CL[i % CL.length].map((text, j) => ({ id: `smp-cl${i}-${j}`, text, done: j === 0 && i % 4 === 0 }));
     if (t.due && !t.start && i % 3 === 1) t.start = new Date(Date.parse(t.due + 'T00:00:00Z') - 2 * DAY).toISOString().slice(0, 10);
     const by = (t.assignees || []).find((u) => u !== cdId);
-    if (by && t.projectId && i % 3 === 0 && amendN < 4) {
+    if (by && t.projectId && i % 3 === 0 && amendN < 4 && !t.pendingSample) {
       t.needsCD = true;
       t.reviews = [{ id: `smp-rv${i}`, by, at: ago(2), files: [], state: 'amend', epoch: t.reviewEpoch || 0, round: 1, decidedAt: ago(1), decidedBy: cdId, noteHtml: esc(NOTES[amendN % NOTES.length]) }];
       amendN++;
     }
   });
+  out.tasks.forEach((t) => { delete t.pendingSample; });
   out.tasks.filter((t) => !t.parentId && t.done && (t.assignees || []).length).forEach((t, i) => {
     const by = t.assignees.find((u) => u !== cdId);
     if (!by) return;
