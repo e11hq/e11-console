@@ -268,13 +268,13 @@ export function createServer(cfg) {
         return json(res, 200, out);
       }
       if (cmd === 'makeDir' && !manager) return deny();
-      if (access.isFinance(u) && !['writeChunk', 'thumb', 'processImage', 'docPreview', 'exportFiles'].includes(cmd)) return deny();
+      if (access.isFinance(u) && !['writeChunk', 'thumb', 'processImage', 'docPreview', 'pdfPages', 'exportFiles'].includes(cmd)) return deny();
       if (cmd === 'trashMany' || cmd === 'trashPath') {
         const paths = body.paths || [body.path];
         if (paths.some((x) => String(x || '').startsWith('Clients/')) && !manager) return deny();
         if (paths.some((x) => !access.canReadFile(u, String(x || '')))) return deny();
       }
-      if (['thumb', 'processImage', 'docPreview'].includes(cmd) && !access.canReadFile(u, String(body.path || '')) && !(cmd === 'processImage' && uploads.get(body.path) && uploads.get(body.path).userId === u.id)) return deny();
+      if (['thumb', 'processImage', 'docPreview', 'pdfPages'].includes(cmd) && !access.canReadFile(u, String(body.path || '')) && !(cmd === 'processImage' && uploads.get(body.path) && uploads.get(body.path).userId === u.id)) return deny();
       if (cmd === 'processImage' && body.kind === 'logo' && !manager) return deny();
       if (cmd === 'exportFiles') body.paths = (body.paths || []).filter((x) => access.canReadFile(u, String(x || '')));
       return json(res, 200, await fn(body, u));

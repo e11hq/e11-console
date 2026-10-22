@@ -226,7 +226,8 @@ const Phone = (() => {
     let m;
     if (k === 'image') m = `<img src="${imgUrl(a, 1280)}" alt="" loading="lazy">`;
     else if (k === 'video') m = `<video src="${url}" controls playsinline preload="metadata"></video>`;
-    else m = `${a.thumb ? `<img src="${'/__file/' + a.thumb.split('/').map(encodeURIComponent).join('/')}" alt="">` : `<span class="ph-ext">${esc((fileExt(a.name) || 'file').slice(0, 5))}</span>`}`;
+    else m = a.thumb ? `<img src="${'/__file/' + a.thumb.split('/').map(encodeURIComponent).join('/')}" alt="">`
+      : `<span class="ph-ext" ${Host.isNative ? `data-thumb-for="${a.id}" data-thumb-task="${t.id}" data-mode="slide"` : ''}>${esc((fileExt(a.name) || 'file').slice(0, 5))}</span>`;
     return `<div class="ph-slide"><div class="ph-media" ${k === 'video' ? '' : `data-ph="preview" data-tid="${t.id}" data-id="${a.id}"`}>${m}</div><div class="ph-fname">${esc(a.name)}<small>${fmtSize(a.size)}</small></div></div>`;
   }
   function review() {
@@ -330,7 +331,7 @@ const Phone = (() => {
     c.innerHTML = v === 'home' || v === 'today' ? myDay() : v === 'mytasks' ? myTasks() : v === 'inbox' ? inbox()
       : v === 'reviews' ? reviews() : v === 'review' ? review() : v === 'projects' ? projects() : v === 'project' ? project()
       : v === 'psearch' ? search() : meScreen();
-    if (ui.view === 'review') wireSlides(c);
+    if (ui.view === 'review') { wireSlides(c); hydrateThumbs(c); }
     pinHead(c);
     document.body.classList.toggle('ph-fab-on', !!document.querySelector('#ph-fabslot .ph-fab'));
     document.body.classList.toggle('ph-strip', !c.querySelector('.ph-bar'));

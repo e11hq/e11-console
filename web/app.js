@@ -3045,7 +3045,10 @@ async function previewFile(a) {
   const url = fileUrl(a);
   const kind = fileKind(a);
   let body = '';
-  if (kind === 'image') body = `<img class="fv-img" src="${url}" alt="">`;
+  // Phones show a PDF at its printed size (cut off on the right), so there the pages come as images that fit the screen
+  const phonePages = Host.isServer && typeof Phone !== 'undefined' && Phone.on && (kind === 'pdf' || OFFICE_EXT.includes(fileExt(a.name)));
+  if (phonePages) body = `<div class="fv-pages" id="fv-pages"><p class="fv-wait"><span class="spin"></span>Loading the pages…</p></div>`;
+  else if (kind === 'image') body = `<img class="fv-img" src="${url}" alt="">`;
   else if (kind === 'video') body = `<video class="fv-video" src="${url}" controls autoplay playsinline></video>`;
   else if (kind === 'audio') body = `<div class="fv-audio">${icon('play')}<audio src="${url}" controls autoplay></audio></div>`;
   else if (kind === 'pdf') body = `<iframe class="fv-pdf" src="${url}"></iframe>`;
@@ -3068,6 +3071,17 @@ async function previewFile(a) {
   const root = $('#overlay-root');
   hydratePreviews(root);
   hydrateThumbs(root);
+  if (phonePages) {
+    const fb = root.querySelector('.fv-body'); if (fb) fb.classList.add('pages');
+    Host.call('pdfPages', { id: a.id, path: a.path }).then((r) => {
+      const el = document.getElementById('fv-pages');
+      if (!el || ui.previewAtt !== a) return;
+      const pages = (r && r.pages) || [];
+      if (!pages.length) { el.innerHTML = `<p class="fv-wait">${r && r.unavailable ? 'Full previews of Office files arrive with the next server update.' : 'This file couldn’t be previewed — use <b>Open in app</b> or download it.'}</p>`; return; }
+      el.innerHTML = pages.map((pth, i) => `<img class="fv-page" src="${'/__file/' + pth.split('/').map(encodeURIComponent).join('/')}" alt="Page ${i + 1}" loading="${i < 2 ? 'eager' : 'lazy'}">`).join('')
+        + (r.total > pages.length ? `<p class="fv-wait">Showing the first ${pages.length} of ${r.total} pages — use <b>Open in app</b> for the rest.</p>` : '');
+    }).catch(() => { const el = document.getElementById('fv-pages'); if (el) el.innerHTML = '<p class="fv-wait">This file couldn’t be previewed right now.</p>'; });
+  }
   // Word / PowerPoint / Excel: the server turns it into a PDF (once) and the whole document shows here
   if (document.getElementById('fv-office')) {
     Host.call('docPreview', { id: a.id, path: a.path }).then((r) => {

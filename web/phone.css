@@ -706,3 +706,9 @@ body.phone .ph-theme .theme-seg button { height: 34px; font-size: 14px; }
 body.phone .ph-theme .pt-top { display: flex; align-items: center; gap: 14px; }
 body.phone .ph-theme .pt-top .ic { width: 20px; height: 20px; color: var(--text-2); }
 body.phone .ph-theme .pt-top span { display: flex; flex-direction: column; }
+
+/* PDF / Office viewer on the phone: pages as images that fit the screen width, scroll down through them */
+body.phone .fv-body.pages { display: block; overflow-y: auto; -webkit-overflow-scrolling: touch; background: #2a2a2e; }
+.fv-pages { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 10px 0 40px; }
+.fv-page { display: block; width: calc(100% - 16px); height: auto; background: #fff; border-radius: 4px; box-shadow: 0 1px 6px rgba(0,0,0,.35); }
+.fv-pages .fv-wait { color: #c9c9d1; padding: 30px 16px; text-align: center; }

@@ -119,6 +119,31 @@ export function createFiles(root) {
       await job.catch(() => {});
       return { ok: true, pdf: fs.existsSync(out) ? rel(out) : null };
     },
+    // Phone viewer: every page of a PDF (or an Office file's PDF) as an image that fits the screen width.
+    // Phones show PDFs at their printed size and can't fit them, so pages are drawn once and kept in
+    // .thumbs/<id>/pages/. Up to MAX_PAGES pages; returns { pages: [paths], total }.
+    async pdfPages(a) {
+      const MAX_PAGES = 40;
+      const src0 = resolve(a.path);
+      if (!fs.existsSync(src0)) return { ok: true, pages: [], total: 0 };
+      const ext = src0.split('.').pop().toLowerCase();
+      let src = src0;
+      if (OFFICE.includes(ext)) { const r = await commands.docPreview(a); if (!r.pdf) return { ok: true, pages: [], total: 0, unavailable: !!r.unavailable }; src = resolve(r.pdf); }
+      else if (ext !== 'pdf') return { ok: true, pages: [], total: 0 };
+      const id = safeName(a.id || crypto.createHash('sha1').update(a.path).digest('hex').slice(0, 12));
+      const dir = resolve('.thumbs/' + id + '/pages');
+      const list = () => (fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => /^p-\d+\.png$/.test(f)).sort((x, y) => parseInt(x.slice(2), 10) - parseInt(y.slice(2), 10)).map((f) => rel(path.join(dir, f))) : []);
+      const done = path.join(dir, 'done.json');
+      if (fs.existsSync(done)) { let total = 0; try { total = JSON.parse(fs.readFileSync(done, 'utf8')).total || 0; } catch { /* ignore */ } return { ok: true, pages: list(), total }; }
+      fs.mkdirSync(dir, { recursive: true });
+      const total = await new Promise((ok) => execFile('pdfinfo', [src], { timeout: 20000 }, (err, out) => ok(err ? 0 : parseInt((String(out).match(/^Pages:\s+(\d+)/m) || [])[1] || '0', 10))));
+      const last = Math.max(1, Math.min(total || 1, MAX_PAGES));
+      const okRun = await run('pdftoppm', ['-png', '-r', '110', '-scale-to-x', '1240', '-scale-to-y', '-1', '-f', '1', '-l', String(last), src, path.join(dir, 'p')], 120000);
+      if (!okRun) { fs.rmSync(dir, { recursive: true, force: true }); return { ok: true, pages: [], total: 0 }; }
+      // pdftoppm pads page numbers (p-01.png); keep its names, sorted by number
+      fs.writeFileSync(done, JSON.stringify({ total: total || last }));
+      return { ok: true, pages: list(), total: total || last };
+    },
     // Preview image: photos and logos are resized, videos get a frame, PDFs and Office files their first page
     async thumb(a) {
       const src = resolve(a.path);
