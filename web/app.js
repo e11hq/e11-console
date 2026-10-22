@@ -4219,7 +4219,8 @@ document.addEventListener('click', async (e) => {
         return;
       }
       case 'fmt': e.preventDefault(); applyFormat(actEl.dataset.fmt, actEl); return;
-      case 'toggle-theme': setTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'); return;
+      case 'toggle-theme': Theme.setMode(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'); if (ui.view === 'profile' || (typeof Phone !== 'undefined' && Phone.on && ui.view === 'me')) renderContent(); return;
+      case 'theme-mode': Theme.setMode(actEl.dataset.mode); renderContent(); return;
       case 'disp-toggle': actEl.closest('.disp-wrap').classList.toggle('open'); return;
       case 'detail-mode': ui.detailMode = actEl.dataset.mode; savePref('detailMode', ui.detailMode); renderDetail(); return;
       case 'side-tab': { const tb = actEl.dataset.tab; if (tb === 'activity') { ui.sideTab = 'comments'; ui.activityFilter = 'all'; } else { ui.sideTab = tb; if (tb === 'comments') ui.activityFilter = 'comments'; } } renderDetail(); if (ui.sideTab === 'comments') { const f = $('.tm-feed'); if (f) stickFeedToBottom(f); } return;
@@ -6018,6 +6019,10 @@ function viewProfile() {
       <div class="pf-actions"><button class="btn primary" data-action="save-profile">Save changes</button>${Host.isServer ? '' : `<button class="btn" data-action="change-password">${icon('lock')}Change password</button>`}</div>
     </div>
     ${Host.isServer && AppIcon.isOwner() ? appIconCard() : ''}
+    <div class="pf-card pf-appearance">
+      <div class="pa-txt"><h3>Appearance</h3><p>Choose light or dark mode, or switch automatically with sunrise and sunset in Dubai${Theme.mode() === 'auto' ? ` — today ${esc(Theme.times())}` : ''}.</p></div>
+      ${Theme.cards()}
+    </div>
     <div class="pf-card">
       <h3>${icon('bell')}Notifications</h3>
       <div class="pf-opt"><div><b>Sound</b><span>Play a sound with new notifications</span></div><button class="switch ${sound ? 'on' : ''}" data-action="toggle-sound"><i></i></button></div>
@@ -6491,7 +6496,7 @@ const Splash = (() => {
   function init() {
     if (!el) return;
     const mem = remembered();
-    el.classList.toggle('light', mem.theme === 'light');
+    el.classList.toggle('light', (mem.themeMode === 'light' || mem.themeMode === 'dark' ? mem.themeMode : sunTheme()) === 'light');
     document.getElementById('sp-greet').textContent = greeting(mem.name);
     document.getElementById('sp-date').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: window.innerWidth <= 760 ? 'short' : 'long', day: 'numeric' });
     document.getElementById('sp-hint').textContent = window.innerWidth <= 760 ? 'Tap to skip' : 'Click or press any key to skip';
@@ -6640,10 +6645,41 @@ function setSidebarCollapsed(on) {
   document.querySelectorAll('.sb-toggle').forEach((b) => { b.title = on ? 'Expand sidebar' : 'Collapse sidebar'; });
   savePref('sidebarCollapsed', on);
 }
-function applyThemePref() {
-  const prefs = (db.meta.prefs = db.meta.prefs || {});
-  setTheme(prefs.theme === 'light' ? 'light' : 'dark');
+/* ---------- Light / dark: Automatic (default) follows sunrise and sunset in Dubai; anyone can pick
+   Light or Dark instead (My profile → Appearance, the phone's Me tab, or the sun/moon button). ---------- */
+// Sunrise / sunset at the E11 office in Dubai (the standard "sunrise equation", accurate to a minute or two).
+// A plain function so the startup screen can use it before everything else has loaded.
+function sunTimesDubai(d) {
+  const LAT = 25.2048, LNG = 55.2708, rad = Math.PI / 180;
+  const J0 = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), 12) / 86400000 + 2440587.5;
+  const Js = Math.round(J0 - 2451545.0 + 0.0008) - LNG / 360;
+  const M = (357.5291 + 0.98560028 * Js) % 360;
+  const C = 1.9148 * Math.sin(M * rad) + 0.02 * Math.sin(2 * M * rad) + 0.0003 * Math.sin(3 * M * rad);
+  const L = (M + C + 180 + 102.9372) % 360;
+  const Jt = 2451545.0 + Js + 0.0053 * Math.sin(M * rad) - 0.0069 * Math.sin(2 * L * rad);
+  const dec = Math.asin(Math.sin(L * rad) * Math.sin(23.4397 * rad));
+  const w = Math.acos((Math.sin(-0.833 * rad) - Math.sin(LAT * rad) * Math.sin(dec)) / (Math.cos(LAT * rad) * Math.cos(dec))) / rad;
+  const at = (j) => new Date((j - 2440587.5) * 86400000);
+  return { rise: at(Jt - w / 360), set: at(Jt + w / 360) };
 }
+function sunTheme(now = new Date()) { const t = sunTimesDubai(now); return now >= t.rise && now < t.set ? 'light' : 'dark'; }
+const Theme = (() => {
+  const sun = sunTimesDubai;
+  const autoTheme = (now = new Date()) => { const t = sun(now); return now >= t.rise && now < t.set ? 'light' : 'dark'; };
+  const mode = () => { const m = ((db && db.meta.prefs) || {}).themeMode; return m === 'light' || m === 'dark' ? m : 'auto'; };
+  const apply = () => setTheme(mode() === 'auto' ? autoTheme() : mode());
+  function setMode(m) { const v = m === 'light' || m === 'dark' ? m : 'auto'; savePref('themeMode', v); Splash.remember({ themeMode: v }); apply(); }
+  setInterval(() => { if (db && currentUserId && mode() === 'auto') apply(); }, 60000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && db && currentUserId && mode() === 'auto') apply(); });
+  const times = () => { const t = sun(new Date()); const f = (d) => d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }); return `light from ${f(t.rise)}, dark from ${f(t.set)}`; };
+  const LABELS = { auto: 'Automatic', light: 'Light', dark: 'Dark' };
+  const picker = (cls = '') => `<div class="seg theme-seg ${cls}">${Object.entries(LABELS).map(([k, l]) => `<button class="${mode() === k ? 'on' : ''}" data-action="theme-mode" data-mode="${k}">${l}</button>`).join('')}</div>`;
+  // Desktop: three little window previews to pick from
+  const mini = (t) => `<span class="tp-win tp-${t}"><span class="tp-side"><i class="a"></i><i></i><i></i></span><span class="tp-main"><i class="tp-l1"></i><i class="tp-l2"></i><i class="tp-pill"></i><i class="tp-dot"></i><i class="tp-l3"></i><i class="tp-l4"></i><i class="tp-sq"></i></span></span>`;
+  const cards = () => `<div class="tp-cards">${[['light', 'Light'], ['dark', 'Dark'], ['auto', 'Auto']].map(([k, l]) => `<button class="tp-card ${mode() === k ? 'on' : ''}" data-action="theme-mode" data-mode="${k}" title="${k === 'auto' ? 'Light from sunrise, dark from sunset (Dubai)' : l + ' all the time'}"><span class="tp-frame">${k === 'auto' ? `<span class="tp-split">${mini('light')}${mini('dark')}</span>` : mini(k)}</span><span class="tp-l">${l}</span></button>`).join('')}</div>`;
+  return { apply, setMode, mode, autoTheme, sun, times, picker, cards };
+})();
+function applyThemePref() { Theme.apply(); }
 function initSidebar() {
   const y = $('#copy-year');
   if (y) y.textContent = String(new Date().getFullYear());
@@ -6656,7 +6692,7 @@ function initSidebar() {
   } catch (e) { /* ignore */ }
   const on = !!prefs.sidebarCollapsed;
   setSidebarCollapsed(on);
-  setTheme(prefs.theme === 'light' ? 'light' : 'dark');
+  Theme.apply();
   ui.detailMode = ['side', 'full'].includes(prefs.detailMode) ? prefs.detailMode : 'modal';
 }
 

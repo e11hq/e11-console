@@ -78,10 +78,10 @@ const Fin = (() => {
       head.parentNode.insertBefore(nav, head);
     } else if (canLook()) {
       const a = document.createElement('a');
-      a.className = 'nav-item fin-admin-nav';
+      a.className = 'nav-item ca-nav fin-admin-nav';
       a.dataset.nav = 'fin-dash';
       a.title = 'Finance — task Finance status and expense records';
-      a.innerHTML = `${icon('coin')}Finance`;
+      a.innerHTML = `<span class="ca-nav-ic">${icon('coin')}</span><span class="ca-nav-txt">Finance<small>Dashboard · Projects · Expenses</small></span>`;
       const tr = $('#nav-trash');
       tr.parentNode.insertBefore(a, tr);
     }

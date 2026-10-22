@@ -296,7 +296,7 @@ const Phone = (() => {
       </div>
       <div class="ph-rows">
         ${typeof Push !== 'undefined' ? Push.row() : ''}
-        <button class="ph-row" data-action="toggle-theme">${icon(light ? 'moon' : 'sun')}<span>${light ? 'Dark mode' : 'Light mode'}</span></button>
+        <div class="ph-row ph-theme"><div class="pt-top">${icon(light ? 'sun' : 'moon')}<span>Appearance<small>${Theme.mode() === 'auto' ? 'Follows sunrise and sunset' : 'Always ' + Theme.mode()}</small></span></div>${Theme.picker('ph-seg-sm')}</div>
         ${Host.isServer ? '<button class="ph-row" data-action="whats-new">' + icon('info') + '<span>What’s new</span>' + icon('chev-right') + '</button>' : ''}
       </div>
       <div class="ph-rows"><button class="ph-row danger" data-ph="sign-out">${icon('logout')}<span>Sign out</span></button></div>

@@ -144,3 +144,7 @@ body.fin-mode #project-list, body.fin-mode .ca-nav-wrap, body.fin-mode #topbar .
 .menu .mi .wf-ck .ic { width: 14px; height: 14px; }
 .tt-row:not(.tt-head) > div:nth-child(3) { display: flex; flex-wrap: wrap; gap: 4px; }
 .tt-row .role-pill.xtra { margin-left: 0; }
+/* Finance link: a card like Client Assets, with the same gap above and below it */
+.ca-nav-wrap .fin-admin-nav { margin-top: 6px; }
+.ca-nav-wrap .fin-admin-nav + .tr-nav { margin-top: 6px; }
+.fin-admin-nav .ca-nav-ic .ic { width: 17px; height: 17px; }
