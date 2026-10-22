@@ -1752,7 +1752,7 @@ function taskMetaIcons(t) {
   let h = '';
   if (subs.length) h += `<span class="meta" title="Subtasks">${subs.filter((s) => s.done).length}/${subs.length}${icon('sub')}</span>`;
   if (t.comments.length) h += `<span class="meta" title="Comments">${t.comments.length}${icon('chat')}</span>`;
-  const nFiles = t.attachments.length + t.comments.reduce((n, c) => n + (c.attachments || []).length, 0);
+  const nFiles = shownAtts(t).length + t.comments.reduce((n, c) => n + (c.attachments || []).length, 0);
   if (nFiles) h += `<span class="meta" title="Files">${nFiles}${icon('clip')}</span>`;
   return h;
 }
@@ -1834,7 +1834,7 @@ function card(t) {
  return `<div class="card ${t.done ? 'is-done' : ''} ${isUrgent(t) && !t.done ? 'is-urgent' : ''} ${ui.taskId === t.id ? 'is-selected' : ''}" data-task="${t.id}" draggable="true">
     <div class="card-top">${checkbox(t)}<div class="title">${t.title ? esc(t.title) : '<span class="ph">Untitled task</span>'}</div></div>
     ${t.tags.length ? `<div class="card-tags">${t.tags.map(tagChip).join('')}</div>` : ''}
-    ${t.due || subs.length || t.comments.length || t.attachments.length || prioOf(t) !== 'none' || (t.assignees || []).length || t.cdStatus ? `<div class="card-foot">${t.due ? `<span class="due ${dueClass(t)}">${icon('cal')}${fmtDue(t.due)}</span>` : ''}${prioFlag(prioOf(t), true)}${t.cdStatus && !t.done ? cdChip(t) : ''}<span class="spacer"></span>${taskMetaIcons(t)}${avatarStack(t.assignees, 20, 3, t)}</div>` : ''}
+    ${t.due || subs.length || t.comments.length || shownAtts(t).length || prioOf(t) !== 'none' || (t.assignees || []).length || t.cdStatus ? `<div class="card-foot">${t.due ? `<span class="due ${dueClass(t)}">${icon('cal')}${fmtDue(t.due)}</span>` : ''}${prioFlag(prioOf(t), true)}${t.cdStatus && !t.done ? cdChip(t) : ''}<span class="spacer"></span>${taskMetaIcons(t)}${avatarStack(t.assignees, 20, 3, t)}</div>` : ''}
   </div>`;
 }
 
@@ -2537,8 +2537,8 @@ function renderDetail() {
         </div>
 
         <div class="d-section">
-          <h4>${icon('clip')}Attachments <span class="n">${t.attachments.length || ''}</span><span class="spacer"></span><button class="btn ghost sm" data-action="attach">${icon('plus')}Add files</button></h4>
-          ${t.attachments.length ? `<div class="tile-grid">${t.attachments.map((a) => attTile(a)).join('')}</div>` : '<div class="ph" style="font-size:12.5px">No files yet. Files you attach are copied into your data folder.</div>'}
+          <h4>${icon('clip')}Attachments <span class="n">${shownAtts(t).length || ''}</span><span class="spacer"></span><button class="btn ghost sm" data-action="attach">${icon('plus')}Add files</button></h4>
+          ${shownAtts(t).length ? `<div class="tile-grid">${shownAtts(t).map((a) => attTile(a)).join('')}</div>` : '<div class="ph" style="font-size:12.5px">No files yet. Files you attach are copied into your data folder.</div>'}
         </div>
 
         <div class="d-foot" id="d-foot">${detailFoot(t)}</div>
@@ -4945,6 +4945,12 @@ function decideReview(t, r, decision, noteHtml) {
   commit();
 }
 // After approval, the submitter "posts" the approved files in the comments for the task creator
+// Files sent for CD review stay out of the task's Attachments until the CD approves them
+// (they're still in the review request, and the submitter's review panel)
+function shownAtts(t) {
+  const ok = new Set((t.reviews || []).filter((r) => r.state === 'approved').map((r) => r.id));
+  return (t.attachments || []).filter((a) => !a.reviewId || ok.has(a.reviewId));
+}
 function postApprovedFiles(t, r) {
   const files = (r.files || []).map((id) => t.attachments.find((a) => a.id === id)).filter(Boolean);
   if (!files.length) return;
