@@ -500,13 +500,23 @@ const Fin = (() => {
     ];
     // Cash flow overview: one S-curve per kind, ending at its total
     const parts = [['sub', 'Payments'], ['reimb', 'Reimbursements'], ['expense', 'Big expenses']];
-    // a round scale: 6 steps of 1 / 2 / 2.5 / 5 × 10ⁿ
+    // a round scale: 6 steps of 1 / 1.5 / 2 / 2.5 / 3 / 4 / 5 / 7.5 × 10ⁿ
     const raw = Math.max(1000, ...parts.map(([k]) => sum(m, k))) * 1.1 / 6;
     const mag = Math.pow(10, Math.floor(Math.log10(raw)));
-    const step = [1, 2, 2.5, 5, 10].map((f) => f * mag).find((v) => v >= raw);
+    const step = [1, 1.5, 2, 2.5, 3, 4, 5, 7.5, 10].map((f) => f * mag).find((v) => v >= raw);
     const top = step * 6;
     const nice = (v) => (v >= 1000 ? +(v / 1000).toFixed(1) + 'k' : Math.round(v));
-    const curves = parts.map(([k, l], i) => { const x0 = 2 + i * 27, x1 = x0 + 20, v = sum(m, k), y = 92 - (v / top) * 84; return { k, l, v, x1, y, d: `M${x0},92 C${(x0 + x1) / 2},92 ${(x0 + x1) / 2},${y} ${x1},${y}` }; });
+    // each curve ends right above its amount on the scale below (smallest first, each one starting where the last ended)
+    let from = 0;
+    // heights step up by size (smallest lowest) so the three curves never sit on each other; the scale gives the amount
+    const LIFT = [24, 50, 78];
+    const curves = parts.map(([k, l]) => ({ k, l, v: sum(m, k) })).sort((a, b) => a.v - b.v).map((c, i) => {
+      const x1 = Math.max(0.5, (c.v / top) * 100), x0 = Math.min(from, Math.max(0, x1 - 4)), y = 92 - (c.v ? LIFT[i] : 0);
+      from = x1;
+      return { ...c, x1, y, d: `M${x0},92 C${(x0 + x1) / 2},92 ${(x0 + x1) / 2},${y} ${x1},${y}` };
+    });
+    // labels: flip to the left near the right edge; drop below the dot when the next label would sit on top of it
+    curves.forEach((c, i) => { const n = curves[i + 1]; c.cls = c.x1 > 86 ? 'flip below' : n && n.x1 - c.x1 < 22 && Math.abs(n.y - c.y) < 22 ? 'below' : ''; });
     // half donut
     let a0 = Math.PI;
     const arcs = parts.slice().sort((a, b) => sum(m, b[0]) - sum(m, a[0])).map(([k, l]) => {
@@ -542,10 +552,10 @@ const Fin = (() => {
             <div class="fa-flow">
               <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs>${parts.map(([k]) => `<linearGradient id="fl-${k}" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${KIND_C[k]}" stop-opacity="0"/><stop offset=".65" stop-color="${KIND_C[k]}"/></linearGradient>`).join('')}</defs>
                 ${curves.map((c) => `<path d="${c.d}" fill="none" stroke="url(#fl-${c.k})" stroke-width="2.5" vector-effect="non-scaling-stroke"/>`).join('')}</svg>
-              ${curves.map((c) => `<span class="fa-end" style="left:${c.x1}%;top:${c.y}%;--c:${KIND_C[c.k]}"><i></i><span><small>${c.l}</small><b>${aed(c.v)}</b></span></span>`).join('')}
+              ${curves.map((c) => `<span class="fa-end ${c.cls}" style="left:${c.x1}%;top:${c.y}%;--c:${KIND_C[c.k]}"><i></i><span><small>${c.l}</small><b>${aed(c.v)}</b></span></span>`).join('')}
             </div>
             <div class="fa-ruler"></div>
-            <div class="fa-scale">${Array.from({ length: 7 }, (_, i) => `<span>${i ? nice(step * i) : 'AED 0'}</span>`).join('')}</div>
+            <div class="fa-scale">${Array.from({ length: 7 }, (_, i) => `<span style="left:${(i / 6) * 100}%">${i ? nice(step * i) : 'AED 0'}</span>`).join('')}</div>
           </section>
           <div class="fa-two">
             <section class="fa-card">
