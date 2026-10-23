@@ -998,3 +998,40 @@ const Push = (() => {
   document.addEventListener('click', (e) => { if (Date.now() < swallow) { e.preventDefault(); e.stopPropagation(); } }, true);
   document.addEventListener('contextmenu', (e) => { if (Phone.on && e.target.closest && e.target.closest('.cm[data-comment]')) e.preventDefault(); });
 })();
+
+/* Phone comment box: open while typing, or while it holds a draft, files or a reply; the handle tucks it away */
+(() => {
+  let raf = 0;
+  const sync = () => {
+    raf = 0;
+    if (!Phone.on) return;
+    document.querySelectorAll('#detail .tm-composer').forEach((c) => {
+      const ed = c.querySelector('.rt-editor');
+      const has = ed && (ed.textContent.trim() || ed.querySelector('img, .mention'));
+      const busy = c.contains(document.activeElement) || has || c.querySelector('.cb-files, .cb-replying');
+      c.classList.toggle('ph-open', !!busy && !c.classList.contains('ph-min'));
+    });
+  };
+  const soon = () => { if (!raf) raf = requestAnimationFrame(sync); };
+  document.addEventListener('focusin', (e) => { const c = e.target.closest && e.target.closest('#detail .tm-composer'); if (c) c.classList.remove('ph-min'); soon(); });
+  document.addEventListener('focusout', () => setTimeout(soon, 150));
+  document.addEventListener('input', (e) => { if (e.target.closest && e.target.closest('#detail .tm-composer')) soon(); });
+  new MutationObserver(soon).observe(document.documentElement, { childList: true, subtree: true });
+  // the handle: tap it or pull it down to tuck the box away (the draft is kept)
+  let y0 = null, box = null;
+  document.addEventListener('touchstart', (e) => {
+    const c = e.target.closest && e.target.closest('#detail .tm-composer.ph-open');
+    if (!c || e.touches[0].clientY - c.getBoundingClientRect().top > 26) return;
+    y0 = e.touches[0].clientY; box = c;
+  }, { passive: true });
+  document.addEventListener('touchend', (e) => {
+    if (box === null) return;
+    const dy = (e.changedTouches[0] || {}).clientY - y0, c = box; box = null;
+    if (dy > 24 || Math.abs(dy) < 6) {
+      c.classList.add('ph-min');
+      const ed = c.querySelector('.rt-editor'); if (ed) ed.blur();
+      if (document.activeElement && c.contains(document.activeElement)) document.activeElement.blur();
+      sync();
+    }
+  }, { passive: true });
+})();

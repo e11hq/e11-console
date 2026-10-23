@@ -80,6 +80,23 @@ async def main():
         check(box and abs(box['y'] + box['height'] - 844) < 2, f'the assignee list is a bottom sheet {box}')
         check(await E("document.activeElement.tagName") != 'INPUT', 'the keyboard does not open by itself')
         await pg.screenshot(path=os.path.join(OUT, 'asg-sheet.png'), clip={'x': 0, 'y': 150, 'width': 390, 'height': 120})
+        # the comment box: slim bar, opens while writing, sends, tucks away by its handle
+        await E("closeMenus(); ui.sideTab='comments'; renderDetail()"); await pg.wait_for_timeout(500)
+        c = pg.locator('#detail .tm-composer')
+        check('ph-open' not in (await c.get_attribute('class')), 'comment box starts as a slim bar')
+        h0 = (await c.bounding_box())['height']
+        await pg.locator('#d-comment').tap(); await pg.wait_for_timeout(300)
+        check('ph-open' in (await c.get_attribute('class')), 'tapping it opens the box')
+        await E("document.execCommand('insertText', false, 'Sent from the phone sheet')"); await pg.wait_for_timeout(200)
+        h1 = (await c.bounding_box())['height']
+        check(h1 > h0 + 40, f'open box is taller with the formatting row ({h0:.0f} → {h1:.0f})')
+        await pg.screenshot(path=os.path.join(OUT, 'composer.png'))
+        await pg.locator('#detail .tm-composer [data-action="add-comment"]').tap(); await pg.wait_for_timeout(600)
+        check(await E("task(ui.taskId).comments.some(c=>c.text==='Sent from the phone sheet')"), 'the round send button posts the comment')
+        await pg.locator('#d-comment').tap(); await pg.wait_for_timeout(300)
+        bb = await c.bounding_box()
+        await touch('touchStart', 195, bb['y'] + 12); await touch('touchMove', 195, bb['y'] + 60); await touch('touchEnd', 195, bb['y'] + 60); await pg.wait_for_timeout(400)
+        check('ph-open' not in (await c.get_attribute('class')), 'pulling the handle down tucks the box away')
         check(not errs, f'no page errors {errs}')
         await b.close()
     srv.terminate()
