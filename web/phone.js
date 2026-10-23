@@ -886,3 +886,115 @@ const Push = (() => {
     e.preventDefault();
   }, { passive: false });
 })();
+
+/* Phone pop-ups as bottom sheets: drag down by the handle (or from the top of a scrolled-up list) to close,
+   and keep the sheet above the keyboard when a search box in it is being typed in. */
+(() => {
+  const root = document.documentElement;
+  const fit = () => {
+    const v = window.visualViewport;
+    if (!v) return;
+    root.style.setProperty('--ph-kb', Math.max(0, Math.round(window.innerHeight - v.height - v.offsetTop)) + 'px');
+    root.style.setProperty('--ph-vh', Math.round(v.height) + 'px');
+  };
+  if (window.visualViewport) { visualViewport.addEventListener('resize', fit); visualViewport.addEventListener('scroll', fit); }
+  fit();
+  let drag = null;
+  const scroller = (el, menu) => { while (el && el !== menu.parentElement) { if (el.scrollHeight > el.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(el).overflowY)) return el; el = el.parentElement; } return null; };
+  document.addEventListener('touchstart', (e) => {
+    if (!Phone.on || e.touches.length !== 1) return;
+    const m = e.target.closest && e.target.closest('body > .menu:not(.mention-pop)');
+    if (!m) return;
+    const y = e.touches[0].clientY, top = m.getBoundingClientRect().top;
+    const sc = scroller(e.target, m);
+    // from the handle area always; elsewhere only when the list under the finger is scrolled to the top
+    if (y - top > 40 && sc && sc.scrollTop > 0) return;
+    drag = { m, y0: y, t0: Date.now(), dy: 0, handle: y - top <= 40, sc, live: false };
+  }, { passive: true });
+  document.addEventListener('touchmove', (e) => {
+    if (!drag) return;
+    const dy = e.touches[0].clientY - drag.y0;
+    if (!drag.live) {
+      if (dy < 6) { if (dy < -6) drag = null; return; }   // moving up: let the list scroll
+      if (!drag.handle && drag.sc && drag.sc.scrollTop > 0) { drag = null; return; }
+      drag.live = true; drag.m.classList.add('ph-dragging');
+      const inp = drag.m.querySelector('input:focus'); if (inp) inp.blur();
+    }
+    e.preventDefault();
+    drag.dy = Math.max(0, dy);
+    drag.m.style.transform = `translateY(${drag.dy}px)`;
+    const s = document.getElementById('ph-menu-scrim'); if (s) s.style.opacity = String(Math.max(0, 1 - drag.dy / 400));
+  }, { passive: false });
+  const end = () => {
+    if (!drag) return;
+    const d = drag; drag = null;
+    if (!d.live) return;
+    const fast = d.dy / Math.max(1, Date.now() - d.t0) > 0.55;
+    d.m.classList.remove('ph-dragging'); d.m.classList.add('ph-snap');
+    const s = document.getElementById('ph-menu-scrim');
+    if (d.dy > 90 || (fast && d.dy > 30)) {
+      d.m.style.transform = 'translateY(105%)'; if (s) s.style.opacity = '0';
+      setTimeout(() => { if (d.m.isConnected) closeMenus(); }, 200);
+    } else {
+      d.m.style.transform = ''; if (s) s.style.opacity = '';
+      setTimeout(() => d.m.classList.remove('ph-snap'), 230);
+    }
+  };
+  document.addEventListener('touchend', end, { passive: true });
+  document.addEventListener('touchcancel', end, { passive: true });
+})();
+
+/* Phone: touch and hold a comment for one sheet with reactions, Reply, Edit comment, Copy text and
+   Delete comment (instead of the small buttons on each comment). A short buzz confirms the hold:
+   phones that support vibration vibrate; on iPhone (iOS 18 and later) a hidden switch gives a haptic tap. */
+(() => {
+  const HOLD = 450;
+  let timer = null, el = null, x0 = 0, y0 = 0, swallow = 0;
+  const buzz = () => {
+    try { if (navigator.vibrate && navigator.vibrate(12)) return; } catch (e) { /* no vibration */ }
+    try {
+      const l = document.createElement('label');
+      l.style.cssText = 'position:fixed;left:-200px;top:0;opacity:0;pointer-events:none';
+      l.innerHTML = '<input type="checkbox" switch>';
+      document.body.appendChild(l); l.click();
+      setTimeout(() => l.remove(), 400);
+    } catch (e) { /* no haptics */ }
+  };
+  const cancel = () => { clearTimeout(timer); timer = null; if (el) el.classList.remove('ph-pressing'); el = null; };
+  function sheet(id) {
+    const t = task(ui.taskId);
+    const c = t && (t.comments || []).find((x) => x.id === id);
+    if (!c) return;
+    const mine = c.authorId === currentUserId || isAdm(me());
+    const isReply = !!c.parentId;
+    const on = c.reactions || {};
+    const items = [{ html: `<div class="react-pick">${REACTIONS.map((e) => `<button data-swatch="${e}" class="${on[e] ? 'on' : ''}" aria-label="React ${e}">${e}</button>`).join('')}</div>` }];
+    if (!isReply && ui.thread !== id) items.push({ label: 'Reply', icon: 'reply', run: () => { const b = document.querySelector(`.cm[data-comment="${id}"] [data-action="reply"]`); if (b) b.click(); } });
+    if (mine) items.push({ label: 'Edit comment', icon: 'edit', run: () => { ui.editingComment = id; renderDetail(); setTimeout(() => { const e2 = document.getElementById('edit-comment'); if (e2) { e2.focus(); placeCaretAtEnd(e2); } }, 0); } });
+    items.push({ label: 'Copy text', icon: 'copy', run: () => { try { navigator.clipboard.writeText(c.text || ''); toast('Copied'); } catch (e) { toast('Could not copy'); } } });
+    if (mine) items.push('-', { label: 'Delete comment', icon: 'trash', danger: true, run: () => deleteComment(id) });
+    const m = showMenu(document.body, items);
+    m.classList.add('cm-sheet');
+    m._onSwatch = (emoji) => toggleReaction(id, emoji);
+  }
+  document.addEventListener('touchstart', (e) => {
+    if (!Phone.on || e.touches.length !== 1) return;
+    const cm = e.target.closest && e.target.closest('.cm[data-comment]');
+    if (!cm || e.target.closest('a, button, [contenteditable="true"], .c-files, .composer')) return;
+    cancel();
+    el = cm; x0 = e.touches[0].clientX; y0 = e.touches[0].clientY;
+    cm.classList.add('ph-pressing');
+    timer = setTimeout(() => {
+      const id = cm.dataset.comment;
+      cancel(); buzz();
+      cm.classList.add('ph-held'); setTimeout(() => cm.classList.remove('ph-held'), 450);
+      swallow = Date.now() + 700;   // the finger lifting after the hold shouldn't tap the sheet
+      sheet(id);
+    }, HOLD);
+  }, { passive: true });
+  document.addEventListener('touchmove', (e) => { if (timer && Math.hypot(e.touches[0].clientX - x0, e.touches[0].clientY - y0) > 10) cancel(); }, { passive: true });
+  document.addEventListener('touchend', (e) => { if (Date.now() < swallow) { e.preventDefault(); swallow = 0; } cancel(); }, { passive: false });
+  document.addEventListener('touchcancel', cancel, { passive: true });
+  document.addEventListener('click', (e) => { if (Date.now() < swallow) { e.preventDefault(); e.stopPropagation(); } }, true);
+  document.addEventListener('contextmenu', (e) => { if (Phone.on && e.target.closest && e.target.closest('.cm[data-comment]')) e.preventDefault(); });
+})();
