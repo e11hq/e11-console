@@ -46,6 +46,7 @@ const ICONS = {
   play: '<path d="M5 3.5v9l7-4.5z"/>',
   sidebar: '<rect x="2" y="2.8" width="12" height="10.4" rx="2"/><path d="M6.2 2.8v10.4"/>',
   moon: '<path d="M13.2 9.6A5.6 5.6 0 0 1 6.4 2.8a5.6 5.6 0 1 0 6.8 6.8z"/>',
+  'theme-auto': '<circle cx="8" cy="8" r="5.6"/><path d="M8 2.4a5.6 5.6 0 0 1 0 11.2z" fill="currentColor"/>',
   layout: '<rect x="2" y="2.8" width="12" height="10.4" rx="2"/><path d="M9.8 2.8v10.4"/>',
   modal: '<rect x="1.8" y="2.6" width="12.4" height="10.8" rx="2"/><rect x="4.6" y="5" width="6.8" height="6" rx="1"/>',
   panel: '<rect x="1.8" y="2.6" width="12.4" height="10.8" rx="2"/><path d="M9 2.6v10.8"/><path d="M10.6 5.2h2M10.6 7.2h2"/>',
@@ -247,9 +248,7 @@ const MacChrome = (() => {
       + `<button class="icon-btn" id="nav-back" data-action="nav-back" title="Back (⌘[)" disabled>${icon('chev-left')}</button>`
       + `<button class="icon-btn" id="nav-fwd" data-action="nav-forward" title="Forward (⌘])" disabled>${icon('chev-right')}</button>`;
     document.body.appendChild(bar);
-    const light = document.documentElement.dataset.theme === 'light';
-    const tb = bar.querySelector('.theme-toggle');
-    tb.innerHTML = icon(light ? 'moon' : 'sun'); tb.title = light ? 'Switch to dark mode' : 'Switch to light mode';
+    paintThemeButtons();
     if ($('#app') && $('#app').classList.contains('sb-collapsed')) bar.querySelector('.sb-toggle').title = 'Expand sidebar';
     PageHistory.paint();
     const ACTIVE = 'button, a, input, textarea, select, label, [contenteditable="true"], [data-action], [data-nav], [data-id], .tabs, .search, .tm-crumbs > *, #overlay-root *, .tm-backdrop';
@@ -6772,10 +6771,18 @@ function setTheme(mode) {
   if (sb) sb.content = mode === 'light' ? 'default' : 'black';
   const tc = document.querySelector('meta[name="theme-color"]');
   if (tc) tc.content = mode === 'light' ? '#f7f7f8' : '#0c0d0f';
-  document.querySelectorAll('.theme-toggle').forEach((b) => { b.innerHTML = icon(mode === 'light' ? 'moon' : 'sun'); b.title = mode === 'light' ? 'Switch to dark mode' : 'Switch to light mode'; });
+  paintThemeButtons();
   savePref('theme', mode);
   Splash.remember({ theme: mode });
   Host.call('setAppearance', { mode }).catch(() => {});
+}
+// The sun/moon button shows the current appearance: sun = light, moon = dark, half circle = Automatic
+function paintThemeButtons() {
+  const light = document.documentElement.dataset.theme === 'light';
+  const pm = ((typeof db !== 'undefined' && db && db.meta && db.meta.prefs) || {}).themeMode;
+  const auto = pm !== 'light' && pm !== 'dark';
+  const title = `${auto ? `Automatic — ${light ? 'light' : 'dark'} now` : light ? 'Light mode' : 'Dark mode'}. Click for ${light ? 'dark' : 'light'} mode`;
+  document.querySelectorAll('.theme-toggle').forEach((b) => { b.innerHTML = icon(auto ? 'theme-auto' : light ? 'sun' : 'moon'); b.title = title; b.setAttribute('aria-label', title); });
 }
 function setSidebarCollapsed(on) {
   document.getElementById('app').classList.toggle('sb-collapsed', on);

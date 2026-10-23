@@ -28,6 +28,8 @@ async def main():
             return ctx, pg, errs
         ctx, pg, errs = await at(10)
         check(await pg.evaluate("Theme.mode()") == 'auto' and await pg.evaluate("document.documentElement.dataset.theme") == 'light', 'Automatic by default: light at 10 am')
+        ic = lambda: pg.evaluate("(()=>{const b=document.querySelector('.brand-btns .theme-toggle, #mac-bar .theme-toggle');const t=document.createElement('div');const h=b.innerHTML;return ['theme-auto','sun','moon'].find(k=>{t.innerHTML=icon(k);return t.innerHTML===h})||h.slice(0,120)})()")
+        check(await ic() == 'theme-auto', 'Automatic: the sidebar button shows the half-circle Auto icon')
         await pg.clock.fast_forward('09:00:00'); await pg.wait_for_timeout(500)
         check(await pg.evaluate("document.documentElement.dataset.theme") == 'dark', 'turns dark after sunset (7 pm) by itself')
         await pg.evaluate("go('profile')"); await pg.wait_for_timeout(300)
@@ -43,6 +45,9 @@ async def main():
         check(await pg.evaluate("document.documentElement.dataset.theme") == 'dark', 'back to Automatic: dark again')
         await pg.click('.brand-btns .theme-toggle, #mac-bar .theme-toggle'); await pg.wait_for_timeout(300)
         check(await pg.evaluate("Theme.mode()") == 'light', 'the sun/moon button picks a fixed theme')
+        check(await ic() == 'sun' and await pg.evaluate("document.documentElement.dataset.theme") == 'light', 'light mode: the button shows a sun')
+        await pg.click('.brand-btns .theme-toggle, #mac-bar .theme-toggle'); await pg.wait_for_timeout(300)
+        check(await ic() == 'moon' and await pg.evaluate("document.documentElement.dataset.theme") == 'dark', 'dark mode: the button shows a moon')
         # Finance card
         fin = await pg.locator('.fin-admin-nav').bounding_box(); ca = await pg.locator('.ca-nav-wrap .ca-nav[data-nav="clients"]').bounding_box(); tr = await pg.locator('#nav-trash').bounding_box()
         g1 = round(fin['y'] - (ca['y'] + ca['height'])); g2 = round(tr['y'] - (fin['y'] + fin['height']))
