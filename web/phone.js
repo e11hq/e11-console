@@ -899,45 +899,57 @@ const Push = (() => {
   };
   if (window.visualViewport) { visualViewport.addEventListener('resize', fit); visualViewport.addEventListener('scroll', fit); }
   fit();
+  // Same feel as the review / New task sheets: the sheet follows the finger from its first movement
+  // (taking over before iPhone starts scrolling or bouncing the list), and springs or slides on release.
   let drag = null;
   const scroller = (el, menu) => { while (el && el !== menu.parentElement) { if (el.scrollHeight > el.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(el).overflowY)) return el; el = el.parentElement; } return null; };
+  const scrimEl = () => document.getElementById('ph-menu-scrim');
   document.addEventListener('touchstart', (e) => {
+    drag = null;
     if (!Phone.on || e.touches.length !== 1) return;
     const m = e.target.closest && e.target.closest('body > .menu:not(.mention-pop)');
     if (!m) return;
     const y = e.touches[0].clientY, top = m.getBoundingClientRect().top;
+    const handle = y - top <= 44 && !e.target.closest('input, textarea, [contenteditable="true"]');
     const sc = scroller(e.target, m);
-    // from the handle area always; elsewhere only when the list under the finger is scrolled to the top
-    if (y - top > 40 && sc && sc.scrollTop > 0) return;
-    drag = { m, y0: y, t0: Date.now(), dy: 0, handle: y - top <= 40, sc, live: false };
+    if (!handle && sc && sc.scrollTop > 0) return;          // a scrolled list scrolls; it never drags the sheet
+    if (!handle && e.target.closest('input, textarea, [contenteditable="true"], .react-pick')) return;
+    drag = { m, y0: y, t0: Date.now(), dy: 0, h: m.offsetHeight, handle, decided: handle, live: handle };
   }, { passive: true });
   document.addEventListener('touchmove', (e) => {
     if (!drag) return;
-    const dy = e.touches[0].clientY - drag.y0;
-    if (!drag.live) {
-      if (dy < 6) { if (dy < -6) drag = null; return; }   // moving up: let the list scroll
-      if (!drag.handle && drag.sc && drag.sc.scrollTop > 0) { drag = null; return; }
-      drag.live = true; drag.m.classList.add('ph-dragging');
+    const raw = e.touches[0].clientY - drag.y0;
+    if (!drag.decided) {                                     // from the middle: a clear move down drags, up scrolls, a tap stays a tap
+      if (Math.abs(raw) < 8) return;
+      drag.decided = true;
+      if (raw < 0) { drag = null; return; }
+      drag.live = true; drag.y0 += 8;
+    }
+    if (!drag.live) return;
+    e.preventDefault();
+    if (!drag.started) {
+      drag.started = true;
+      drag.m.style.animation = 'none'; drag.m.style.transition = 'none';
+      const s = scrimEl(); if (s) s.style.transition = 'none';
       const inp = drag.m.querySelector('input:focus'); if (inp) inp.blur();
     }
-    e.preventDefault();
-    drag.dy = Math.max(0, dy);
-    drag.m.style.transform = `translateY(${drag.dy}px)`;
-    const s = document.getElementById('ph-menu-scrim'); if (s) s.style.opacity = String(Math.max(0, 1 - drag.dy / 400));
+    drag.dy = Math.max(0, e.touches[0].clientY - drag.y0);
+    drag.m.style.transform = `translate3d(0, ${drag.dy}px, 0)`;
+    const s = scrimEl(); if (s) s.style.opacity = String(1 - Math.min(1, drag.dy / drag.h));
   }, { passive: false });
   const end = () => {
     if (!drag) return;
     const d = drag; drag = null;
-    if (!d.live) return;
-    const fast = d.dy / Math.max(1, Date.now() - d.t0) > 0.55;
-    d.m.classList.remove('ph-dragging'); d.m.classList.add('ph-snap');
-    const s = document.getElementById('ph-menu-scrim');
-    if (d.dy > 90 || (fast && d.dy > 30)) {
-      d.m.style.transform = 'translateY(105%)'; if (s) s.style.opacity = '0';
+    if (!d.started) return;                                  // a tap on the handle does nothing special
+    const s = scrimEl();
+    const fast = d.dy > 30 && d.dy / Math.max(1, Date.now() - d.t0) > 0.5;
+    if (d.dy > Math.min(140, d.h * 0.3) || fast) {
+      d.m.style.transition = 'transform .22s ease-in'; d.m.style.transform = 'translate3d(0, 100%, 0)';
+      if (s) { s.style.transition = 'opacity .22s ease-in'; s.style.opacity = '0'; }
       setTimeout(() => { if (d.m.isConnected) closeMenus(); }, 200);
     } else {
-      d.m.style.transform = ''; if (s) s.style.opacity = '';
-      setTimeout(() => d.m.classList.remove('ph-snap'), 230);
+      d.m.style.transition = 'transform .22s cubic-bezier(.2,.8,.2,1)'; d.m.style.transform = '';
+      if (s) { s.style.transition = 'opacity .22s ease'; s.style.opacity = ''; }
     }
   };
   document.addEventListener('touchend', end, { passive: true });

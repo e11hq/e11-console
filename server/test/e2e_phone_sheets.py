@@ -73,6 +73,16 @@ async def main():
         box2 = await pg.locator('.menu').bounding_box()
         check(await pg.locator('.menu').count() == 1 and abs(box2['y'] - box['y']) < 2, 'a short drag springs back')
         await pg.screenshot(path=os.path.join(OUT, 'prio-sheet.png'))
+        # drag from the middle of the sheet (not the handle) also closes it
+        box = await pg.locator('.menu').bounding_box(); my = box['y'] + box['height'] / 2
+        await touch('touchStart', 300, my)
+        for k in range(1, 10): await touch('touchMove', 300, my + k * 20); await pg.wait_for_timeout(16)
+        await touch('touchEnd', 300, my + 180); await pg.wait_for_timeout(450)
+        check(await pg.locator('.menu').count() == 0, 'dragging from the middle of a sheet closes it too')
+        # a plain tap on an item still picks it
+        await pg.locator('[data-action="prio-menu"]').first.tap(); await pg.wait_for_timeout(500)
+        await pg.locator('.prio-menu .mi').first.tap(); await pg.wait_for_timeout(500)
+        check(await pg.locator('.menu').count() == 0 and 'urgent' in json.dumps(await E("task(ui.taskId).prio || {}")), 'a tap on an item still picks it')
         await E("closeMenus()")
         # assignee list: search on top, list scrolls, sheet sits on the bottom
         await pg.locator('.asg-add').first.tap(); await pg.wait_for_timeout(600)

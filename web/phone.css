@@ -720,15 +720,13 @@ html.phone body.phone .menu:not(.mention-pop) {
   bottom: calc(var(--ph-shift, 0px) + var(--ph-kb, 0px)) !important;
   max-height: min(82vh, calc(var(--ph-vh, 100vh) - 48px)); border-radius: 22px 22px 0 0 !important;
   padding: 28px 10px calc(env(safe-area-inset-bottom) + 12px) !important; border-bottom: 0 !important;
-  animation: phSheetUp .28s cubic-bezier(.2, .85, .25, 1); will-change: transform;
+  animation: phSheetUp .28s cubic-bezier(.2, .85, .25, 1); overscroll-behavior: none;
 }
 html.phone body.phone .menu:not(.mention-pop):not(#ph-no-handle)::before { content: '' !important; display: block !important; position: absolute !important; inset: auto !important; top: 10px !important; left: 50% !important; width: 40px !important; height: 5px !important; margin-left: -20px !important; border-radius: 3px !important; background: rgba(255, 255, 255, .3) !important; z-index: 2 !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
 html.phone[data-theme="light"] body.phone .menu:not(.mention-pop):not(#ph-no-handle)::before { background: rgba(0, 0, 0, .2) !important; }
-html.phone body.phone .menu.ph-dragging { animation: none; transition: none; }
-html.phone body.phone .menu.ph-snap { transition: transform .22s cubic-bezier(.2, .85, .25, 1); }
 @keyframes phSheetUp { from { transform: translateY(100%); } to { transform: none; } }
-#ph-menu-scrim { transition: opacity .22s ease; }
 /* the assignee list: search on top, people scroll underneath */
+html.phone body.phone .menu.asg-pop .ap-list { overscroll-behavior: none; }
 html.phone body.phone .menu.asg-pop { width: auto; max-height: min(78vh, calc(var(--ph-vh, 100vh) - 48px)); }
 /* reactions across the top of a sheet */
 html.phone body.phone .menu .react-pick { justify-content: space-between; gap: 6px; padding: 2px 4px 10px; margin-bottom: 4px; border-bottom: 1px solid var(--ph-edge, var(--border)); }
