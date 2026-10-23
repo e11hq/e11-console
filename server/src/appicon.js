@@ -1,15 +1,24 @@
 // The Mac app's Dock icon, chosen by the owner (ADMIN_EMAIL) and fetched by every Mac app.
 // Stored in the database as a PNG; "default" means the icon that ships with the installer.
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const MAX = 4 * 1024 * 1024;
 
 export function createAppIcon({ store, defaultFile }) {
   const read = () => { try { return JSON.parse(store.kv.get('appicon') || 'null'); } catch { return null; } };
+  // The default icon's fingerprint: when the icon that ships with the app changes, Mac apps installed
+  // earlier switch to it too (they apply it like a custom one)
+  let defHash;
+  const def = () => {
+    if (defHash === undefined) { try { defHash = crypto.createHash('sha1').update(fs.readFileSync(defaultFile)).digest('hex').slice(0, 10); } catch { defHash = null; } }
+    return defHash;
+  };
   function info() {
     const x = read();
-    return { v: x ? String(x.v) : 'default', custom: !!(x && x.png), at: (x && x.at) || null, by: (x && x.by) || null };
+    const custom = !!(x && x.png);
+    return { v: custom ? String(x.v) : 'default-' + (def() || '0'), custom, def: custom ? null : def(), at: (x && x.at) || null, by: (x && x.by) || null };
   }
   function png() {
     const x = read();

@@ -205,6 +205,14 @@ const AppIcon = (() => {
         if (!r.ok) return;
         await NativeMac.call('setIcon', { b64: await toB64(await r.blob()) });
         lsSet(v);
+      } else if (info.def) {
+        // the default icon (it can change with an update): apply it unless this Mac already has it
+        if (lsGet() !== 'def-' + info.def) {
+          const r = await fetch('/api/app-icon?v=' + encodeURIComponent(v), { cache: 'no-store', credentials: 'same-origin' });
+          if (!r.ok) return;
+          await NativeMac.call('setIcon', { b64: await toB64(await r.blob()) });
+          lsSet('def-' + info.def);
+        }
       } else if (lsGet()) {
         await NativeMac.call('setIcon', { reset: true });
         lsSet(null);

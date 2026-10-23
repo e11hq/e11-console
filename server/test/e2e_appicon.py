@@ -43,7 +43,10 @@ async def main():
             await pg.goto('/'); await pg.wait_for_timeout(600); await pg.mouse.click(1390, 890); await pg.wait_for_timeout(1500)
             return pg, errs
         mac, mac_errs = await open_as(AM, mac=True)
-        check(await mac.evaluate("window.__icons.length") == 0, 'Mac app with the default icon does nothing')
+        first = await mac.evaluate("window.__icons")
+        check(len(first) == 1 and first[0].startswith('b64:'), f'a Mac app installed earlier takes on the current default icon once: {first}')
+        await mac.reload(); await mac.wait_for_timeout(2500)
+        check(await mac.evaluate("window.__icons.length") == 0, 'after that, the default icon is not applied again')
         owner, owner_errs = await open_as(OWNER)
         await owner.evaluate("go('profile')"); await owner.wait_for_timeout(500)
         check(await owner.locator('.ai-card').count() == 1, 'owner sees the Mac app icon card in My profile')
@@ -64,7 +67,7 @@ async def main():
         info = await owner.evaluate("AppIcon.info()")
         check(info['custom'] is True, 'server now has a custom icon')
         icons = await mac.evaluate("window.__icons")
-        check(len(icons) == 1 and icons[0].startswith('b64:') and int(icons[0][4:]) > 1000, f'open Mac app swapped its Dock icon live: {icons}')
+        check(len(icons) == 1 and icons[-1].startswith('b64:') and int(icons[-1][4:]) > 1000, f'open Mac app swapped its Dock icon live: {icons}')
         check(await owner.locator('.ai-card [data-action="appicon-reset"]').count() == 1, 'Reset button shows once an icon is set')
         # a Mac app opened later picks it up on start
         mac2, _ = await open_as('yousef@e11-digital.com', mac=True)
@@ -72,7 +75,7 @@ async def main():
         await owner.click('[data-action="appicon-reset"]'); await owner.wait_for_timeout(300)
         await owner.click('.dialog [data-r="1"]'); await owner.wait_for_timeout(2000)
         icons = await mac.evaluate("window.__icons")
-        check(icons[-1] == 'reset', f'reset reaches the open Mac app: {icons}')
+        check(len(icons) == 2 and icons[-1].startswith('b64:'), f'reset puts the default icon back on the open Mac app: {icons}')
         # a non-owner cannot change it through the server
         r = await mac.evaluate("fetch('/api/app-icon',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({png:'x'})}).then(r=>r.status)")
         check(r == 403, 'server refuses anyone else')
