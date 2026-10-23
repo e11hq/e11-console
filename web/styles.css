@@ -776,6 +776,8 @@ a.crumb:hover { background: var(--hover); color: var(--text); }
 button, a, select, [data-action], [data-task], [data-nav], [data-project], .nav-item, .tab, .card, .tile, .task-row, .mini-row,
 .seg button, .menu .mi, .swatch, .ds-day, .check, .cl-box, .stat, .proj-card, .react, label[for] { cursor: pointer; }
 input, textarea, [contenteditable="true"], .rt-editor { cursor: text; }
+input[type="checkbox"], input[type="radio"], input[type="range"], input[type="color"], input[type="file"], input[type="button"], input[type="submit"], label:has(> input[type="checkbox"]), label:has(> input[type="radio"]) { cursor: pointer; }
+input:disabled { cursor: default; }
 button[disabled], .pn.taken { cursor: not-allowed; }
 
 /* task rows: status square on the left, complete + delete on the right, urgent highlight */
