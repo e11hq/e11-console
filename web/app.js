@@ -6067,10 +6067,10 @@ function viewProfile() {
       <div class="pf-actions"><button class="btn primary" data-action="save-profile">Save changes</button>${Host.isServer ? '' : `<button class="btn" data-action="change-password">${icon('lock')}Change password</button>`}</div>
     </div>
     ${Host.isServer && AppIcon.isOwner() ? appIconCard() : ''}
-    <div class="pf-card pf-appearance">
+    ${typeof Phone !== 'undefined' && Phone.on ? '' : `<div class="pf-card pf-appearance">
       <div class="pa-txt"><h3>Appearance</h3><p>Choose light or dark mode, or switch automatically with sunrise and sunset in Dubai${Theme.mode() === 'auto' ? ` — today ${esc(Theme.times())}` : ''}.</p></div>
       ${Theme.cards()}
-    </div>
+    </div>`}
     <div class="pf-card">
       <h3>${icon('bell')}Notifications</h3>
       <div class="pf-opt"><div><b>Sound</b><span>Play a sound with new notifications</span></div><button class="switch ${sound ? 'on' : ''}" data-action="toggle-sound"><i></i></button></div>
