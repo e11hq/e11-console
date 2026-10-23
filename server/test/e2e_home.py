@@ -55,6 +55,11 @@ async def main():
             await pg.click('#sidebar .nav-item[data-nav="mytasks"]'); await pg.wait_for_timeout(300)
             check(not await E("Work.active()") and await E("ui.myTasksTab") == 'todo' and await pg.locator('.wf-chips').count() == 0, 'My Tasks from the sidebar clears all filters and opens To do')
             await E("go('home')"); await pg.wait_for_timeout(300)
+            m = pg.locator('.hm-act:has-text("mentioned you")')
+            if await m.count():
+                await m.first.click(); await pg.wait_for_timeout(500)
+                check(await E("!!ui.taskId") and await E("ui.sideTab") == 'comments' and await E("!!document.querySelector('#detail .cm.flash')"), 'a mention in Recent activity opens the task on that comment, highlighted')
+                await E("closeDetail()"); await pg.wait_for_timeout(200)
             await pg.click('.hm-tab[data-v="created"]'); await pg.wait_for_timeout(200)
             check('tasks created' in await pg.locator('.hm-big').inner_text(), 'chart switches to Tasks created')
             bars = await pg.locator('.hm-bar').count()

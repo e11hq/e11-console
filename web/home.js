@@ -52,7 +52,7 @@ const Home = (() => {
   // ---- activity ----
   function actRow(a) {
     const t = task(a.taskId);
-    return `<div class="hm-act" ${t ? `data-task="${t.id}"` : ''}>${avatarHTML(a.from, 32)}
+    return `<div class="hm-act" ${t ? `data-hm="act" data-v="${t.id}" ${a.nid ? `data-nid="${a.nid}"` : ''} ${a.cid ? `data-cid="${a.cid}"` : ''}` : ''}>${avatarHTML(a.from, 32)}
       <span class="hm-act-txt"><b>${esc(fullName(userById(a.from)))}</b> <span class="hm-mute">${a.html}</span> ${t ? `<span class="hm-link">${title(t)}</span>` : ''}
         ${a.quote ? `<span class="hm-quote">“${esc(a.quote)}”</span>` : ''}
         ${a.file ? `<span class="hm-file">${svg('M4 1.8h5l3 3v9.4H4z', 1.4)}<span><b>${esc(a.file.name)}</b><small>${fmtSize(a.file.size)}</small></span></span>` : ''}</span>
@@ -125,7 +125,7 @@ const Home = (() => {
 
     // activity on tasks I created, by other people
     const acts = mine.flatMap((t) => (t.activity || []).filter((a) => a.actor && a.actor !== currentUserId).map((a) => ({ from: a.actor, html: a.text, taskId: t.id, at: a.at })))
-      .concat(mine.flatMap((t) => (t.comments || []).filter((c) => c.authorId !== currentUserId).map((c) => ({ from: c.authorId, html: 'commented on', quote: c.text, taskId: t.id, at: c.at }))))
+      .concat(mine.flatMap((t) => (t.comments || []).filter((c) => c.authorId !== currentUserId).map((c) => ({ from: c.authorId, html: mentionsIn(c.html).has(currentUserId) ? 'mentioned you on' : 'commented on', quote: c.text, taskId: t.id, at: c.at, cid: c.id }))))
       .sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 7);
 
     // schedule
@@ -278,7 +278,7 @@ const Home = (() => {
 
     // Recent activity: my Inbox
     const acts = (db.notifications || []).filter((n) => n.to === currentUserId && n.from).sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 4)
-      .map((n) => ({ from: n.from, html: esc(n.text), quote: n.snippet, taskId: n.taskId, at: n.at }));
+      .map((n) => ({ from: n.from, html: esc(n.text), quote: n.snippet, taskId: n.taskId, at: n.at, nid: n.id }));
 
     // CD reviews this month
     const now = new Date();
@@ -353,7 +353,8 @@ const Home = (() => {
     if (ui.view !== 'home') return;
     const el = e.target.closest('[data-hm]');
     if (!el) return;
-    e.stopPropagation();
+    // home.js loads before app.js: stop the app's own click handler (it would close the task just opened)
+    e.stopImmediatePropagation();
     const k = el.dataset.hm, v = el.dataset.v;
     if (k === 'range') st.range = v;
     else if (k === 'metric') st.metric = v;
@@ -381,6 +382,14 @@ const Home = (() => {
       return go('mytasks');
     }
     else if (k === 'open') return openTask(v);
+    else if (k === 'act') {
+      // the same as the Inbox: a mention or comment opens the task on that comment (highlighted), a review opens Review Requests
+      if (el.dataset.nid && db.notifications.some((n) => n.id === el.dataset.nid)) return openNotif(el.dataset.nid);
+      const t = task(v); if (!t) return;
+      const c = el.dataset.cid && (t.comments || []).find((x) => x.id === el.dataset.cid);
+      if (c) { ui.sideTab = ui.forceTab = 'comments'; ui.activityFilter = 'comments'; ui.pendingThread = c.parentId || null; ui.replyTo = null; ui.focusComment = c.id; }
+      return openTask(t.id);
+    }
     else if (k === 'submit') { const t = task(v); if (t) submitDialog(t); return; }
     else if (k === 'part') { const t = task(v); if (t) setMyPart(t, true); return; }
     else if (k === 'cl') {
