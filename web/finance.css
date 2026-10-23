@@ -185,7 +185,9 @@ body.fin-mode #project-list, body.fin-mode .ca-nav-wrap, body.fin-mode #topbar .
 .ft-trend.good { color: #3ddc97; } .ft-trend.bad { color: #ff7a80; } .ft-trend.flat { color: var(--text-3); }
 :root[data-theme="light"] .ft-trend.good { color: #13804f; } :root[data-theme="light"] .ft-trend.bad { color: #c62f35; }
 
-.fa-grid { display: grid; grid-template-columns: minmax(0, 2.1fr) minmax(300px, 1fr); gap: 16px; align-items: start; }
+.fa-grid { display: grid; grid-template-columns: minmax(0, 2.1fr) minmax(300px, 1fr); gap: 16px; align-items: stretch; }
+/* both columns end on the same line: the last card in each one takes up the spare height */
+.fa-main > :last-child, .fa-side > :last-child { flex: 1 0 auto; }
 .fa-main, .fa-side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .fa-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .fa-big { display: flex; align-items: baseline; gap: 10px; margin: 4px 0 10px; }
