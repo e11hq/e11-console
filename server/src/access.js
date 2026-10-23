@@ -107,6 +107,9 @@ export function createAccess(store) {
         // you may edit your own profile, but not your role, email, access or projects
         return PROTECTED_USER_FIELDS.every((k) => deepEqual(next[k], ch.base ? ch.base[k] : current[k]) || deepEqual(next[k], current[k]));
       case 'meta':
+        // only Admins send a general announcement
+        if (!admin && next && !deepEqual(next.announcement ?? null, (ch.base !== undefined ? (ch.base || {}).announcement : current && current.announcement) ?? null)) return false;
+        return manager;
       case 'statuses':
         return manager;
       case 'clients':

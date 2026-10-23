@@ -426,7 +426,7 @@ const Claims = (() => {
     return (u.prefs || {}).claimNag !== todayStr();
   }
   function tick() {
-    if (!db || !currentUserId || !reminderDue() || $('#overlay-root').children.length || $('.ec-remind')) return;
+    if (!db || !currentUserId || !reminderDue() || $('#overlay-root').children.length || $('.ec-remind') || $('.an-pop')) return;
     const u = me(), m = todayStr().slice(0, 7), left = 27 - new Date().getDate();
     u.prefs = u.prefs || {}; u.prefs.claimNag = todayStr(); persist(0);
     if (!document.hasFocus()) Host.call('notify', { title: 'Expense claims', body: `Your ${monthName(m, true)} claim is due by the 27th`, sound: 'Glass' }).catch(() => {});

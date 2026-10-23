@@ -1768,7 +1768,7 @@ const Sync = (() => {
       const next = local && was && localJSON !== was ? merge3(JSON.parse(was), JSON.parse(localJSON), remote) : remote;
       if (localJSON !== JSON.stringify(next)) { setLocal(kind, id, next); touched = true; if (kind === 'notifications') notif = true; }
     });
-    if (touched) refresh();
+    if (touched) { refresh(); setTimeout(() => Announce.check(), 300); }
     if (notif) deliverPending();
     if (changes().length) persist(400);
   }
@@ -3423,6 +3423,72 @@ const Draft = (() => {
   return { start, settle, sweep, open: (id) => !!snaps[id] };
 })();
 
+/* ---- General announcement ----
+   An Admin writes a title and description on My profile. Everyone else (Finance-only people too, computer
+   and phone) sees it once as a pop-up the next time they use the app, until they close it. A new one
+   replaces the last. Kept in db.meta.announcement = { id, title, body, by, at }; who has closed it is
+   remembered on each person (u.prefs.annSeen = its id). */
+const Announce = (() => {
+  const MEGAPHONE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1zM15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg>';
+  const current = () => (db && db.meta && db.meta.announcement && db.meta.announcement.id ? db.meta.announcement : null);
+  const FOOT = 'If you have any questions, please contact Muhammad Arsal.';
+  function check() {
+    const a = current(), u = me();
+    if (!a || !u || a.by === u.id || (u.prefs || {}).annSeen === a.id) return;
+    if ($('.an-pop') || $('#overlay-root').children.length || $('.ec-remind')) return;
+    const el = document.createElement('div');
+    el.className = 'an-pop';
+    const from = userById(a.by);
+    el.innerHTML = `<section class="an-box" role="dialog" aria-labelledby="an-t">
+      <button class="an-x" data-an="close" aria-label="Close">${icon('x')}</button>
+      <div class="an-top"><span class="an-ic">${MEGAPHONE}</span><div>
+        <small>ANNOUNCEMENT</small><h2 id="an-t">${esc(a.title)}</h2>
+        ${a.body ? `<p class="an-body">${esc(a.body)}</p>` : ''}
+        <p class="an-foot">${FOOT}</p>
+        <div class="an-from">${from ? avatarHTML(from.id, 22) : ''}From ${esc(from ? fullName(from).split(' ')[0] : 'E11')} · ${esc(fmtDateTime(a.at))}</div>
+      </div></div>
+      <button class="btn an-close" data-an="close">Close</button>
+    </section>`;
+    document.body.appendChild(el);
+    el.addEventListener('click', (e) => {
+      if (!e.target.closest('[data-an="close"]')) return;
+      el.remove();
+      const me1 = me(); me1.prefs = me1.prefs || {}; me1.prefs.annSeen = a.id; persist(0);
+    });
+  }
+  // The Admin's card on My profile
+  function card() {
+    if (!isAdm(me()) || !Host.isServer) return '';
+    const a = current();
+    return `<div class="pf-card pf-ann">
+      <div class="pf-ann-h"><span class="an-ic sm">${MEGAPHONE}</span><div><h3>Announcement</h3><p>Admins only · everyone sees it once as a pop-up, the next time they use the app · a new one replaces the last</p></div></div>
+      <div class="pf-ann-grid">
+        <div>
+          <label class="dlg-label" for="an-title">Title</label><input class="field" id="an-title" maxlength="120" placeholder="e.g. Office closed on Monday">
+          <label class="dlg-label" for="an-body">Description</label><textarea class="field" id="an-body" rows="5" maxlength="1500" placeholder="What everyone needs to know"></textarea>
+          <div class="pf-ann-act"><button class="btn primary" data-action="ann-send">Send to everyone</button><span>${a ? `Last sent: “${esc(a.title)}” · ${esc(fmtDateTime(a.at))}` : 'Everyone sees it once, on computers and phones'}</span></div>
+        </div>
+        <div><span class="dlg-label">Preview</span><div class="an-prev"><div class="an-box mini"><div class="an-top"><span class="an-ic">${MEGAPHONE}</span><div><small>ANNOUNCEMENT</small><h2 id="an-pt">Your title</h2><p class="an-body" id="an-pb">Your description</p><p class="an-foot">${FOOT}</p></div></div><span class="an-close fake">Close</span></div></div></div>
+      </div>
+    </div>`;
+  }
+  async function send() {
+    if (!isAdm(me())) return;
+    const t = ($('#an-title') || {}).value || '', b = ($('#an-body') || {}).value || '';
+    if (!t.trim()) { toast('Give the announcement a title'); $('#an-title').focus(); return; }
+    const ok = await dialog({ title: 'Send this announcement?', body: `Everyone on the team sees “${t.trim()}” as a pop-up once. It can’t be changed after it’s sent.`, okText: 'Send' });
+    if (!ok) return;
+    db.meta.announcement = { id: uid(), title: t.trim(), body: b.trim(), by: currentUserId, at: nowISO() };
+    persist(0); renderContent();
+    toast('Sent — everyone sees it the next time they use the app');
+  }
+  document.addEventListener('input', (e) => {
+    if (e.target.id === 'an-title') { const x = $('#an-pt'); if (x) x.textContent = e.target.value || 'Your title'; }
+    if (e.target.id === 'an-body') { const x = $('#an-pb'); if (x) x.textContent = e.target.value || 'Your description'; }
+  });
+  return { check, card, send };
+})();
+
 // Files that belong to these tasks (task attachments, comment attachments, folders, thumbnails)
 function filesOfTasks(list) {
   const paths = [];
@@ -4267,6 +4333,7 @@ document.addEventListener('click', async (e) => {
       case 'wf-clear-am': Work.f().ams = Work.f().ams.filter((x) => x !== id); renderContent(); renderSidebar(); return;
       case 'wf-reset': ui.workF = null; renderContent(); renderSidebar(); return;
       case 'go-claims': go('claims'); return;
+      case 'ann-send': Announce.send(); return;
       case 'home-view-all': if (Work.lead()) ui.workF = null; ui.myTasksTab = 'todo'; go('mytasks'); return;
       case 'field-pick': e.stopPropagation(); fieldMenu(actEl, actEl.dataset.k); return;
       case 'fields-toggle': ui.fieldsOpen = ui.fieldsOpen === false; renderDetail(); return;
@@ -6083,6 +6150,7 @@ function viewProfile() {
       <div class="pa-txt"><h3>Appearance</h3><p>Choose light or dark mode, or switch automatically with sunrise and sunset in Dubai${Theme.mode() === 'auto' ? ` — today ${esc(Theme.times())}` : ''}.</p></div>
       ${Theme.cards()}
     </div>`}
+    ${Announce.card()}
     ${Host.isServer && !isFinUser() && !(typeof Phone !== 'undefined' && Phone.on) ? `<div class="pf-card pf-claims">
       <div><h3>${icon('coin')}My reimbursements</h3><p>Fill in your monthly expense claim, attach receipts and sign it. Finance is told when you submit, and you can follow it here until it’s paid.</p></div>
       <button class="btn" data-action="go-claims">Open My reimbursements</button>
@@ -6424,7 +6492,7 @@ function enterApp() {
   render();
   purgeOldCompleted();
   Draft.sweep();
-  setTimeout(() => Claims.tick(), 2500);
+  setTimeout(() => { Announce.check(); Claims.tick(); }, 2500);
   setTimeout(deliverPending, 900);
 }
 // The test copy (test.e11hq.com) can be filled with sample people, tasks and comments
@@ -6654,7 +6722,7 @@ async function bootInner() {
   const su = sess && userById(sess);
   if (su && su.active !== false && su.setup) { currentUserId = su.id; enterApp(); }
   else showLogin();
-  setInterval(() => { if (currentUserId) { deliverPending(); renderSidebar(); Claims.tick(); } }, 30000);
+  setInterval(() => { if (currentUserId) { deliverPending(); renderSidebar(); Announce.check(); Claims.tick(); } }, 30000);
   // Tidy attachment folders left behind (e.g. app quit right after deleting a task)
   if (Host.isNative) {
     const attIds = db.tasks.flatMap((t) => t.attachments.concat(...t.comments.map((c) => c.attachments || [])).map((a) => a.id))
@@ -6680,7 +6748,7 @@ async function bootServer() {
   const u = me && userById(me.id);
   if (u && !u.setup) showWelcome(null); else { enterApp(); maybeShowWhatsNew(); }
   if (u) { u.lastLoginAt = nowISO(); persist(2000); }
-  setInterval(() => { if (currentUserId) { deliverPending(); renderSidebar(); Claims.tick(); } }, 30000);
+  setInterval(() => { if (currentUserId) { deliverPending(); renderSidebar(); Announce.check(); Claims.tick(); } }, 30000);
   let day = todayStr();
   setInterval(() => { if (todayStr() !== day) { day = todayStr(); if (currentUserId) { purgeOldCompleted(); render({ keepDetail: true }); } } }, 60000);
 }

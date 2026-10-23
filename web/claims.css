@@ -130,3 +130,44 @@
 /* Inbox rows about expense claims */
 .ib-coin { color: var(--green); }
 .ib-coin .ic, .ib-coin svg { width: 16px; height: 16px; }
+
+/* ================= General announcement (Announce in app.js) ================= */
+.an-pop { position: fixed; inset: 0; z-index: 310; background: rgba(12, 12, 18, .5); display: flex; align-items: center; justify-content: center; padding: 20px; animation: clFade .18s ease; }
+.an-box { position: relative; width: min(560px, 100%); box-sizing: border-box; background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 20px; box-shadow: 0 30px 80px rgba(0, 0, 0, .4); padding: 30px 32px 24px; display: flex; flex-direction: column; gap: 20px; max-height: calc(100vh - 40px); overflow-y: auto; }
+.an-x { position: absolute; top: 14px; right: 14px; width: 34px; height: 34px; border: 0; border-radius: 9px; background: transparent; color: var(--text-3); display: grid; place-items: center; cursor: pointer; }
+.an-x:hover { background: var(--hover); color: var(--text); }
+.an-x .ic, .an-x svg { width: 16px; height: 16px; }
+.an-top { display: flex; gap: 18px; align-items: flex-start; padding-right: 22px; }
+.an-ic { width: 56px; height: 56px; border-radius: 14px; background: rgba(255, 138, 76, .16); color: #e0712a; display: grid; place-items: center; flex: none; }
+.an-ic svg { width: 28px; height: 28px; }
+.an-ic.sm { width: 38px; height: 38px; border-radius: 11px; }
+.an-ic.sm svg { width: 20px; height: 20px; }
+.an-top small { font-size: 12px; letter-spacing: .12em; font-weight: 700; color: #e0712a; }
+:root[data-theme="light"] .an-top small { color: #c35a16; }
+.an-top h2 { margin: 6px 0 0; font-size: 23px; font-weight: 700; letter-spacing: -.01em; line-height: 1.25; overflow-wrap: anywhere; }
+.an-body { margin: 10px 0 0; font-size: 15px; line-height: 1.6; color: var(--text-2); white-space: pre-line; overflow-wrap: anywhere; }
+.an-foot { margin: 12px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--text-3); }
+.an-from { display: flex; align-items: center; gap: 8px; margin-top: 14px; font-size: 12.5px; color: var(--text-3); }
+:root .an-close, :root:not(.phone) .an-close { height: 46px; justify-content: center; font-size: 14px; font-weight: 600; border-radius: 11px; background: var(--text); color: var(--bg); border: 0; }
+body.phone .an-box { padding: 24px 20px 20px; }
+body.phone .an-top { gap: 14px; }
+body.phone .an-ic { width: 46px; height: 46px; }
+body.phone .an-top h2 { font-size: 20px; }
+/* Admin card on My profile */
+.pf-ann-h { display: flex; align-items: center; gap: 12px; }
+.pf-ann-h h3 { margin: 0; }
+.pf-ann-h p { margin: 2px 0 0; color: var(--text-3); font-size: 12.5px; }
+.pf-ann-grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 22px; align-items: start; margin-top: 6px; }
+.pf-ann-grid textarea { resize: vertical; line-height: 1.5; }
+.pf-ann-act { display: flex; align-items: center; gap: 12px; margin-top: 14px; font-size: 12.5px; color: var(--text-3); }
+.an-prev { border-radius: 14px; background: #2b2c33; padding: 20px 16px; }
+.an-box.mini { width: 100%; padding: 18px 18px 14px; gap: 12px; border-radius: 14px; box-shadow: 0 10px 30px rgba(0, 0, 0, .35); }
+.an-box.mini .an-top { gap: 12px; padding-right: 0; }
+.an-box.mini .an-ic { width: 38px; height: 38px; border-radius: 11px; } .an-box.mini .an-ic svg { width: 20px; height: 20px; }
+.an-box.mini small { font-size: 10px; }
+.an-box.mini h2 { font-size: 15px; margin-top: 3px; }
+.an-box.mini .an-body { font-size: 12px; margin-top: 6px; }
+.an-box.mini .an-foot { font-size: 10.5px; margin-top: 8px; }
+.an-close.fake { display: grid; place-items: center; height: 30px; border-radius: 8px; background: var(--text); color: var(--bg); font-size: 12px; font-weight: 600; }
+@media (max-width: 900px) { .pf-ann-grid { grid-template-columns: minmax(0, 1fr); } }
+:root .an-prev .an-close.fake { height: 30px; font-size: 12px; border-radius: 8px; }
