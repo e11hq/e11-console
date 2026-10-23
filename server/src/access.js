@@ -35,6 +35,8 @@ export function createAccess(store) {
   // Can this person open this file? Freelancers only get files from their tasks and their clients.
   function canReadFile(u, rel) {
     const parts = String(rel).split('/');
+    // Expense claims (receipts, signatures, claim PDFs): the person who claims, and Finance
+    if (parts[0] === 'Claims') return parts[1] === u.id || !!finLevel(u);
     // Invoices and other finance records: Finance people and Admins only
     if (parts[0] === 'Finance') return !!finLevel(u) || isAdm(u);
     if (isFinance(u)) return (parts[0] === 'attachments' && parts[1] === '_avatars') || (parts[0] === 'Clients' && parts[1] === '_logos') || parts[0] === '.thumbs';
@@ -63,7 +65,9 @@ export function createAccess(store) {
       case 'tasks': return taskVisible(u, data);
       case 'clients': return !isFreelancer(u) || clientSet(u).has(data.id);
       case 'trash': return isAdm(u) || u.role === 'am';   // the Trash is for Admins and Account Managers
-      case 'finance': return !!finLevel(u) || isAdm(u);    // expense records
+      case 'finance': return !!finLevel(u) || isAdm(u) || (data.type === 'reimb' && data.userId === u.id);    // expense records (people see their own reimbursements)
+      // expense claims: your own, and Finance sees everything except drafts and "submitted offline"
+      case 'claims': return data.userId === u.id || (!!finLevel(u) && !['draft', 'offline'].includes(data.state));
       default: return true;
     }
   }
@@ -87,7 +91,10 @@ export function createAccess(store) {
     const manager = admin || u.role === 'am';
     const next = ch.del ? null : ch.data;
     if (ch.kind === 'finance') return finLevel(u) === 'admin';
+    if (ch.kind === 'claims') return canWriteClaim(u, ch, current);
     if (isFinance(u)) {
+      // Finance tells people their claim is approved or paid
+      if (ch.kind === 'notifications' && !ch.del && !current && next && next.from === u.id && /^claim/.test(String(next.kind || ''))) return true;
       if (ch.kind === 'users') return !ch.del && String(ch.id) === u.id && !!current && PROTECTED_USER_FIELDS.every((k) => deepEqual(next[k], current[k]));
       if (ch.kind === 'notifications') return !ch.del ? !!current && current.to === u.id : !current || current.to === u.id;
       return false; // tasks (including their Finance status) are changed by Account Managers and Admins
@@ -133,5 +140,26 @@ export function createAccess(store) {
     }
   }
 
-  return { userByEmail, canSee, canWrite, shape, isFreelancer, isFinance, isAdm, finLevel, canReadFile };
+  // A month's claims close on the 28th (Dubai time): after that it can't be submitted or changed by the person
+  const monthClosed = (m, now = new Date()) => { const today = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Dubai' }); return today >= `${m}-28`; };
+  const CLAIM_CONTENT = ['userId', 'month', 'groups', 'total', 'signature', 'submittedAt', 'createdAt'];
+  const CLAIM_FINANCE = ['approvedAt', 'approvedBy', 'paidOn', 'paidBy', 'reimbId'];
+  function canWriteClaim(u, ch, current) {
+    const next = ch.del ? null : ch.data;
+    const own = (current ? current.userId : next && next.userId) === u.id;
+    if (own) {
+      if (ch.del) return !!current && current.state === 'draft';
+      if (!next || next.userId !== u.id || !/^\d{4}-\d{2}$/.test(String(next.month || ''))) return false;
+      if (!['draft', 'submitted', 'none', 'offline'].includes(next.state)) return !!current && current.state === next.state && CLAIM_CONTENT.every((k) => deepEqual(next[k], current[k])) && CLAIM_FINANCE.every((k) => deepEqual(next[k], current[k]));
+      if (current && ['approved', 'paid'].includes(current.state)) return false;      // locked once HR approved
+      if (monthClosed(next.month) && !(current && deepEqual(next, current))) return false;
+      return CLAIM_FINANCE.every((k) => deepEqual(next[k] ?? null, current ? current[k] ?? null : null));
+    }
+    // Finance Admins mark claims HR approved / paid; nothing else changes
+    if (finLevel(u) !== 'admin' || ch.del || !current || !next) return false;
+    if (!['submitted', 'approved', 'paid'].includes(next.state) || ['draft', 'offline', 'none'].includes(current.state)) return false;
+    return CLAIM_CONTENT.every((k) => deepEqual(next[k], current[k]));
+  }
+
+  return { userByEmail, canSee, canWrite, shape, isFreelancer, isFinance, isAdm, finLevel, canReadFile, monthClosed };
 }

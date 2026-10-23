@@ -257,6 +257,7 @@ export function createServer(cfg) {
       const deny = (msg) => json(res, 403, { ok: false, error: msg || 'Not allowed' });
       if (cmd === 'writeChunk') {
         if (body.dest && String(body.dest).startsWith('Finance/')) { if (access.finLevel(u) !== 'admin') return deny('Only a Finance Admin can add invoices'); }
+        else if (body.dest && String(body.dest).startsWith('Claims/')) { if (String(body.dest).split('/')[1] !== u.id) return deny('You can only add files to your own claims'); }
         else if (body.dest && !manager) return deny('Only Admins and Account Managers can upload client assets');
         if (!body.dest && access.isFinance(u) && body.taskId !== '_uploads') return deny();
         if (!body.dest && u.role === 'freelancer' && body.taskId !== '_uploads') { const t = store.get('tasks', String(body.taskId || '')); if (!t || !access.canSee(u, 'tasks', t)) return deny(); }
@@ -268,12 +269,14 @@ export function createServer(cfg) {
         return json(res, 200, out);
       }
       if (cmd === 'makeDir' && !manager) return deny();
-      if (access.isFinance(u) && !['writeChunk', 'thumb', 'processImage', 'docPreview', 'pdfPages', 'exportFiles'].includes(cmd)) return deny();
+      if (access.isFinance(u) && !['writeChunk', 'thumb', 'processImage', 'docPreview', 'pdfPages', 'exportFiles', 'claimPdf'].includes(cmd)) return deny();
+      if (cmd === 'claimPdf' && !(String(body.userId || '') === u.id || access.finLevel(u))) return deny();
       if (cmd === 'trashMany' || cmd === 'trashPath') {
         const paths = body.paths || [body.path];
         if (paths.some((x) => String(x || '').startsWith('Clients/')) && !manager) return deny();
         if (paths.some((x) => !access.canReadFile(u, String(x || '')))) return deny();
       }
+      if (cmd === 'claimPdf' && (body.receipts || []).some((x) => !access.canReadFile(u, String(x || '')) || !String(x || '').startsWith('Claims/'))) return deny();
       if (['thumb', 'processImage', 'docPreview', 'pdfPages'].includes(cmd) && !access.canReadFile(u, String(body.path || '')) && !(cmd === 'processImage' && uploads.get(body.path) && uploads.get(body.path).userId === u.id)) return deny();
       if (cmd === 'processImage' && body.kind === 'logo' && !manager) return deny();
       if (cmd === 'exportFiles') body.paths = (body.paths || []).filter((x) => access.canReadFile(u, String(x || '')));
@@ -322,7 +325,7 @@ export function createServer(cfg) {
     if (html) {
       // app.js?v=1.2.0 — every version gets fresh files, older ones can be cached for a day
       const v = encodeURIComponent(version);
-      return res.end(fs.readFileSync(full, 'utf8').replace(/(src|href)="(app\.js|styles\.css|studio\.css|phone\.js|phone\.css|finance\.js|finance\.css|home\.js|home\.css)"/g, `$1="$2?v=${v}"`));
+      return res.end(fs.readFileSync(full, 'utf8').replace(/(src|href)="(app\.js|styles\.css|studio\.css|phone\.js|phone\.css|finance\.js|finance\.css|home\.js|home\.css|claims\.js|claims\.css)"/g, `$1="$2?v=${v}"`));
     }
     fs.createReadStream(full).pipe(res);
   }

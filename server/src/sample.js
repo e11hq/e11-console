@@ -165,6 +165,35 @@ export function sampleData(store, me, filesRoot = null) {
       t.pendingSample = true;
     });
 
+    // ---------- Expense claims (My reimbursements / Finance → Staff reimbursements) ----------
+    {
+      const today = new Date();
+      const ymdL = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const cm = today.getDate() >= 28 ? ymdL(new Date(today.getFullYear(), today.getMonth() + 1, 1)) : ymdL(today);
+      const pm = ymdL(new Date(Number(cm.slice(0, 4)), Number(cm.slice(5)) - 2, 1));
+      const day = (m, d) => `${m}-${String(d).padStart(2, '0')}`;
+      const rc = (uid, m, name) => ({ id: `smp-cr-${uid}-${m}-${name}`, ...put(name, `Claims/${uid}/${m}/${name}`), addedAt: iso(2) });
+      const prod = cast.filter((u) => ['production', 'social'].includes(u.role)).map((u) => u.id);
+      const G = (date, title, items) => ({ id: `g-${title}-${date}`.replace(/\W+/g, '-'), date, title, items: items.map(([desc, amount, receipt], k) => ({ id: `i-${title}-${k}`.replace(/\W+/g, '-'), desc, amount, receipt: receipt || null })) });
+      const total = (gs) => Math.round(gs.reduce((a, g) => a + g.items.reduce((b, i) => b + (Number(i.amount) || 0), 0), 0) * 100) / 100;
+      const mk = (uid, m, state, groups, extra = {}) => ({ id: `cl-${uid}-${m}`, userId: uid, month: m, state, groups, total: total(groups), signature: null, submittedAt: state === 'none' ? null : iso(2), createdAt: iso(4), updatedAt: iso(1), ...extra });
+      out.claims = [];
+      if (prod[0]) out.claims.push(mk(prod[0], cm, 'submitted', [
+        G(day(cm, 6), 'Address Shoot', [['Salik', 24], ['Petrol', 180, rc(prod[0], cm, 'receipt-reimbursement.pdf')], ['Parking', 45]]),
+        G(day(cm, 14), 'Ford Bronco location scout', [['Taxi', 68.5]]),
+      ]));
+      if (prod[1]) out.claims.push(mk(prod[1], cm, 'approved', [G(day(cm, 9), 'KOREA 360 event setup', [['Taxi', 55], ['Props', 120, rc(prod[1], cm, 'invoice-expense.pdf')]])], { approvedAt: iso(1), approvedBy: 'u-smp-fin-a' }));
+      if (prod[2]) out.claims.push(mk(prod[2], cm, 'none', []));
+      if (prod[3]) {
+        const c = mk(prod[3], pm, 'paid', [G(day(pm, 12), 'Client meeting — ALAIN', [['Parking', 30], ['Coffee for client', 42]]), G(day(pm, 20), 'Hatta shoot', [['Petrol', 150], ['Salik', 16]])], { approvedAt: iso(20), approvedBy: 'u-smp-fin-a', paidOn: day(pm, 27), paidBy: 'u-smp-fin-a', reimbId: `smp-fin-rc-${prod[3]}` });
+        out.claims.push(c);
+        (out.finance = out.finance || []).push({ id: c.reimbId, type: 'reimb', userId: prod[3], claimId: c.id, amount: c.total, date: c.paidOn, invoice: null, createdAt: iso(20), createdBy: 'u-smp-fin-a' });
+      }
+      if (prod[4]) out.claims.push(mk(prod[4], cm, 'submitted', [G(day(cm, 18), 'Studio supplies', [['Gaffer tape', 38], ['Batteries', 64]])]));
+      // Finance hears about the submitted ones
+      out.claims.filter((c) => c.state === 'submitted').forEach((c, k) => ['u-smp-fin-a', 'u-smp-fin-v'].forEach((to) => out.notifications.push({ id: `smp-ncl-${k}-${to}`, to, from: c.userId, taskId: null, claimId: c.id, month: c.month, kind: 'claim', text: 'submitted their expense claim', snippet: 'AED ' + c.total.toFixed(2), commentId: null, at: c.submittedAt, read: false })));
+    }
+
     // invoices on expense records
     const inv = (name, folder, m, id) => ({ id, ...put(name, `Finance/${folder}/${m}/${name}`), addedAt: iso(1), addedBy: 'u-smp-fin-a' });
     out.finance.forEach((r, i) => {
@@ -207,6 +236,7 @@ export function sampleData(store, me, filesRoot = null) {
   // Creative Director for the review flow, unless one is already set
   const meta = store.get('meta', 'main') || {};
   out.meta = { ...meta, cdUserId: meta.cdUserId || (known.has('u-karim') ? 'u-karim' : null) };
-  out.notifications = out.notifications.filter((x) => x.to === me || known.has(x.to));
+  const ids = new Set(out.users.map((u) => u.id));
+  out.notifications = out.notifications.filter((x) => x.to === me || known.has(x.to) || ids.has(x.to));
   return out;
 }

@@ -190,7 +190,7 @@ const Phone = (() => {
       return `<div class="ph-ib ${unread ? 'unread' : ''}" data-action="open-notif" data-id="${target.id}">
         ${avatarHTML(target.from, 40)}
         <span class="ph-ib-b"><span class="ph-ib-m">${notifMsg(target, t)}</span>
-          <span class="ph-ib-t">${t ? esc(t.title || 'Untitled task') : '<i>Deleted task</i>'}</span>
+          <span class="ph-ib-t">${t ? esc(t.title || 'Untitled task') : /^claim/.test(n.kind) ? 'Expense claims' : '<i>Deleted task</i>'}</span>
           <span class="ph-ib-w">${esc(timeAgo(n.at))}${items.length > 1 ? ` · ${items.length} updates` : ''}</span></span>
         ${unread ? '<i class="ph-ib-dot"></i>' : ''}
       </div>`;

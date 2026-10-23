@@ -792,8 +792,12 @@ const ServerHost = (() => {
       case 'load': case 'save': case 'sweepOrphans': case 'setAppearance': case 'revealData': return { ok: true };
       case 'badge': try { if (navigator.setAppBadge) { if (args.n) navigator.setAppBadge(args.n); else navigator.clearAppBadge(); } } catch (e) { /* not installed */ } return { ok: true };
       case 'pickAttachments': {
-        const files = await pickFiles({ multiple: true });
+        const files = await pickFiles({ multiple: !args.single, accept: args.accept || '' });
         return { ok: true, files: await uploadMany(files, args.dest ? { dest: args.dest } : { taskId: args.taskId }) };
+      }
+      case 'uploadBlob': {
+        const f = new File([args.blob], args.name || 'file', { type: args.blob.type || 'application/octet-stream' });
+        return { ok: true, file: await uploadFile(f, { dest: args.dest }) };
       }
       case 'pickImage': {
         const files = await pickFiles({ multiple: false, accept: args.kind === 'logo' ? 'image/*,.svg' : 'image/*' });
@@ -823,7 +827,7 @@ const ServerHost = (() => {
     const fileHrefName = (p) => String(p).split('/').pop();
     switch (cmd) {
       case 'pickAttachments': {
-        const files = await pickMacFiles({ multiple: true, prompt: args.dest ? 'Upload' : 'Attach' });
+        const files = await pickMacFiles({ multiple: !args.single, prompt: args.dest ? 'Upload' : 'Attach' });
         return { ok: true, files: await uploadMany(files, args.dest ? { dest: args.dest } : { taskId: args.taskId }) };
       }
       case 'pickImage': {
@@ -1403,6 +1407,7 @@ function normalize(d) {
   d.notifications = Array.isArray(d.notifications) ? d.notifications : [];
   d.trash = Array.isArray(d.trash) ? d.trash : [];
   d.finance = Array.isArray(d.finance) ? d.finance : [];
+  d.claims = Array.isArray(d.claims) ? d.claims : [];
   // Statuses for tasks that are not in a project
   d.statuses = Array.isArray(d.statuses) && d.statuses.length ? d.statuses : [
     { id: 'st-todo', name: 'To do', color: '#87909e' }, { id: 'st-progress', name: 'In progress', color: '#a875ff' },
@@ -1651,7 +1656,7 @@ function mergeSets(base, mine, theirs) {
 }
 
 const Sync = (() => {
-  const KINDS = ['users', 'projects', 'tasks', 'clients', 'notifications', 'statuses', 'trash', 'meta', 'finance'];
+  const KINDS = ['users', 'projects', 'tasks', 'clients', 'notifications', 'statuses', 'trash', 'meta', 'finance', 'claims'];
   const clientId = 'c-' + uid() + uid();
   const synced = {};               // kind -> Map(id -> JSON the server has)
   KINDS.forEach((k) => { synced[k] = new Map(); });
@@ -1963,6 +1968,7 @@ function renderTitle() {
   const el = $('#title-area');
   if (typeof Phone !== 'undefined' && Phone.on) { el.innerHTML = ''; return; }
   if (Fin.owns(ui.view)) { el.innerHTML = Fin.title(); return; }
+  if (Claims.owns(ui.view)) { el.innerHTML = Claims.title(); return; }
   if (ui.search) { el.innerHTML = `<div class="page-title">Search</div>`; return; }
   if (ui.view === 'home') { el.innerHTML = `<div class="page-title">Home</div>`; return; }
   if (ui.view === 'inbox') { el.innerHTML = `<div class="page-icon" style="background:#2b2650;color:#c9c0ff">${icon('inbox')}</div><div class="page-title">Inbox</div>`; return; }
@@ -2005,6 +2011,7 @@ function renderContent() {
   const scroll = { top: c.scrollTop, left: (c.querySelector('.board') || {}).scrollLeft || 0 };
   if (typeof Phone !== 'undefined' && Phone.renderContent(c)) { c.scrollTop = scroll.top; return; }
   if (Fin.owns(ui.view)) { Fin.render(c); c.scrollTop = scroll.top; return; }
+  if (Claims.owns(ui.view)) { Claims.render(c); return; }
   if (ui.search) c.innerHTML = viewSearch();
   else if (ui.view === 'home') c.innerHTML = viewHome();
   else if (ui.view === 'mytasks') c.innerHTML = viewMyTasks();
@@ -3344,7 +3351,7 @@ function inlineInput(el, { placeholder = '', value = '', multiline = false, keep
 
 /* ================= Actions ================= */
 function go(view, projectId = null) {
-  if (isFinUser() && !Fin.owns(view) && view !== 'profile') view = 'fin-dash';
+  if (isFinUser() && !Fin.owns(view) && view !== 'profile' && view !== 'claim') view = 'fin-dash';
   PageHistory.mark();
   if (view === 'clients') { ui.caQ = ''; ui.caScope = null; }
   // The Inbox always opens on its unread tab (Primary on computers, Unread on phones)
@@ -4259,6 +4266,7 @@ document.addEventListener('click', async (e) => {
       case 'wf-clear-person': Work.f().people = Work.f().people.filter((x) => x !== id); renderContent(); return;
       case 'wf-clear-am': Work.f().ams = Work.f().ams.filter((x) => x !== id); renderContent(); renderSidebar(); return;
       case 'wf-reset': ui.workF = null; renderContent(); renderSidebar(); return;
+      case 'go-claims': go('claims'); return;
       case 'home-view-all': if (Work.lead()) ui.workF = null; ui.myTasksTab = 'todo'; go('mytasks'); return;
       case 'field-pick': e.stopPropagation(); fieldMenu(actEl, actEl.dataset.k); return;
       case 'fields-toggle': ui.fieldsOpen = ui.fieldsOpen === false; renderDetail(); return;
@@ -5660,7 +5668,7 @@ async function cdToggleFlow(id) {
 
 /* ================= Inbox ================= */
 const myNotifs = () => (db && currentUserId ? db.notifications.filter((n) => n.to === currentUserId) : []);
-const NOTIF_ICON = { trash: 'trash', restore: 'reply', review: 'upload', 'review-ok': 'check', 'review-amend': 'edit', 'review-wd': 'x', part: 'check-circle', allparts: 'check-circle', assigned: 'user', unassigned: 'user', comment: 'chat', mention: 'chat', status: 'check-circle', cd: 'shield', done: 'check', due: 'cal', priority: 'flag', attach: 'clip' };
+const NOTIF_ICON = { claim: 'coin', 'claim-ok': 'check', 'claim-paid': 'coin', trash: 'trash', restore: 'reply', review: 'upload', 'review-ok': 'check', 'review-amend': 'edit', 'review-wd': 'x', part: 'check-circle', allparts: 'check-circle', assigned: 'user', unassigned: 'user', comment: 'chat', mention: 'chat', status: 'check-circle', cd: 'shield', done: 'check', due: 'cal', priority: 'flag', attach: 'clip' };
 function notifPlain(n) { const d = document.createElement('div'); d.innerHTML = n.text; return d.textContent; }
 const IB_FILTERS = { all: 'All updates', comments: 'Comments & mentions', assigned: 'Assigned to me', status: 'Status & CD review', dates: 'Dates & priority' };
 const ibMatch = (n, f) => f === 'all' || !f ? true : f === 'comments' ? ['comment', 'mention'].includes(n.kind) : f === 'assigned' ? ['assigned', 'unassigned'].includes(n.kind) : f === 'status' ? ['status', 'cd', 'done', 'review', 'review-ok', 'review-amend', 'review-wd'].includes(n.kind) : ['due', 'priority'].includes(n.kind);
@@ -5726,7 +5734,7 @@ function viewInbox() {
     const shown = isRev(target) ? target : n;
     const lead = ['comment', 'mention', 'review-amend', 'review-ok', 'review'].includes(shown.kind) ? avatarHTML(shown.from, 22) : `<span class="ib-kic">${icon(NOTIF_ICON[shown.kind] || 'bell')}</span>`;
     return `<div class="ib-row ${unread ? 'unread' : ''}" data-action="open-notif" data-id="${target.id}">
-      <span class="ib-title">${t ? statusIcon(t) : `<span class="st-ic">${statusIconSVG('#87909e', 'todo', 0)}</span>`}<span class="ib-tname">${t ? esc(t.title || 'Untitled task') : '<i>Deleted task</i>'}</span></span>
+      <span class="ib-title">${t ? statusIcon(t) : `<span class="st-ic">${statusIconSVG('#87909e', 'todo', 0)}</span>`}<span class="ib-tname">${t ? esc(t.title || 'Untitled task') : /^claim/.test(n.kind) ? 'Expense claims' : '<i>Deleted task</i>'}</span></span>
       <span class="ib-lead">${lead}</span>
       <span class="ib-msg">${notifMsg(shown, t)}</span>
       <span class="ib-count">${items.length > 1 ? `<i>${items.length}</i>` : ''}</span>
@@ -5759,6 +5767,7 @@ function clearTaskNotifs(taskId, read) {
 function openNotif(id) {
   const n = db.notifications.find((x) => x.id === id);
   if (!n) return;
+  if (/^claim/.test(n.kind)) { myNotifs().forEach((x) => { if (x.claimId && x.claimId === n.claimId) x.read = true; }); persist(); renderSidebar(); return Claims.openNotif(n); }
   myNotifs().forEach((x) => { if (x.taskId === n.taskId) x.read = true; });
   persist(); renderSidebar(); renderContent();
   const t = task(n.taskId);
@@ -5839,7 +5848,7 @@ function chime() {
     });
   } catch (e) { /* no audio */ }
 }
-function alertUser({ title, body, taskId, from }, force) {
+function alertUser({ title, body, taskId, from, open }, force) {
   const u = me();
   const sound = !u || u.prefs.sound !== false;
   const front = document.hasFocus();
@@ -5852,24 +5861,26 @@ function alertUser({ title, body, taskId, from }, force) {
     root.appendChild(el);
     const close = () => { el.classList.add('out'); setTimeout(() => el.remove(), 250); };
     const timer = setTimeout(close, 6000);
-    el.addEventListener('click', (e) => { clearTimeout(timer); close(); if (!e.target.closest('button') && taskId && task(taskId)) openTask(taskId); });
+    el.addEventListener('click', (e) => { clearTimeout(timer); close(); if (e.target.closest('button')) return; if (open) open(); else if (taskId && task(taskId)) openTask(taskId); });
     if (sound) chime();
   }
   if (!front || force) Host.call('notify', { title, body, sound: sound && !front ? 'Glass' : null }).catch(() => {});
 }
 // Show alerts for notifications this person hasn't been alerted about yet
 function deliverPending() {
-  if (isFinUser()) return;
   const u = me();
   if (!u) return;
   const since = u.lastAlertAt || '';
-  const fresh = myNotifs().filter((n) => !n.read && n.at > since).sort((a, b) => a.at.localeCompare(b.at));
+  // Finance-only people only hear about expense claims
+  const fresh = myNotifs().filter((n) => !n.read && n.at > since && (!isFinUser() || /^claim/.test(n.kind))).sort((a, b) => a.at.localeCompare(b.at));
   u.lastAlertAt = nowISO();
   if (!fresh.length) return;
   persist();
   if (fresh.length === 1) {
     const n = fresh[0], t = task(n.taskId);
-    alertUser({ title: fullName(userById(n.from)), body: `${notifPlain(n)} ${t ? '“' + (t.title || 'Untitled task') + '”' : ''}${n.snippet ? ' — ' + n.snippet : ''}`, taskId: n.taskId, from: n.from });
+    alertUser({ title: fullName(userById(n.from)), body: `${notifPlain(n)} ${t ? '“' + (t.title || 'Untitled task') + '”' : ''}${n.snippet ? ' — ' + n.snippet : ''}`, taskId: n.taskId, from: n.from, open: /^claim/.test(n.kind) ? () => { n.read = true; persist(); Claims.openNotif(n); } : null });
+  } else if (isFinUser()) {
+    alertUser({ title: 'E11 Console', body: `${fresh.length} new expense claims`, open: () => go('fin-reimb') });
   } else {
     alertUser({ title: 'E11 Console', body: `You have ${fresh.length} new notifications in your Inbox` });
   }
@@ -6071,6 +6082,10 @@ function viewProfile() {
       <div class="pa-txt"><h3>Appearance</h3><p>Choose light or dark mode, or switch automatically with sunrise and sunset in Dubai${Theme.mode() === 'auto' ? ` — today ${esc(Theme.times())}` : ''}.</p></div>
       ${Theme.cards()}
     </div>`}
+    ${Host.isServer && !isFinUser() && !(typeof Phone !== 'undefined' && Phone.on) ? `<div class="pf-card pf-claims">
+      <div><h3>${icon('coin')}My reimbursements</h3><p>Fill in your monthly expense claim, attach receipts and sign it. Finance is told when you submit, and you can follow it here until it’s paid.</p></div>
+      <button class="btn" data-action="go-claims">Open My reimbursements</button>
+    </div>` : ''}
     <div class="pf-card">
       <h3>${icon('bell')}Notifications</h3>
       <div class="pf-opt"><div><b>Sound</b><span>Play a sound with new notifications</span></div><button class="switch ${sound ? 'on' : ''}" data-action="toggle-sound"><i></i></button></div>
@@ -6286,6 +6301,7 @@ function meMenu(anchor) {
   if (isFinUser()) return Fin.meMenu(anchor);
   showMenu(anchor, [
     { label: 'My profile', icon: 'user', run: () => go('profile') },
+    ...(Host.isServer ? [{ label: 'My reimbursements', icon: 'coin', run: () => go('claims') }] : []),
     { label: 'Team members', icon: 'users', run: () => go('team') },
     ...(Host.isServer && isAdm(me()) ? [{ label: 'App updates', icon: 'download', run: () => go('updates') }] : []),
     ...(Host.isServer ? [{ label: 'What’s new', icon: 'info', run: () => whatsNewDialog(false) }] : []),
@@ -6407,6 +6423,7 @@ function enterApp() {
   render();
   purgeOldCompleted();
   Draft.sweep();
+  setTimeout(() => Claims.tick(), 2500);
   setTimeout(deliverPending, 900);
 }
 // The test copy (test.e11hq.com) can be filled with sample people, tasks and comments
@@ -6636,7 +6653,7 @@ async function bootInner() {
   const su = sess && userById(sess);
   if (su && su.active !== false && su.setup) { currentUserId = su.id; enterApp(); }
   else showLogin();
-  setInterval(() => { if (currentUserId) { deliverPending(); renderSidebar(); } }, 30000);
+  setInterval(() => { if (currentUserId) { deliverPending(); renderSidebar(); Claims.tick(); } }, 30000);
   // Tidy attachment folders left behind (e.g. app quit right after deleting a task)
   if (Host.isNative) {
     const attIds = db.tasks.flatMap((t) => t.attachments.concat(...t.comments.map((c) => c.attachments || [])).map((a) => a.id))
@@ -6662,7 +6679,7 @@ async function bootServer() {
   const u = me && userById(me.id);
   if (u && !u.setup) showWelcome(null); else { enterApp(); maybeShowWhatsNew(); }
   if (u) { u.lastLoginAt = nowISO(); persist(2000); }
-  setInterval(() => { if (currentUserId) { deliverPending(); renderSidebar(); } }, 30000);
+  setInterval(() => { if (currentUserId) { deliverPending(); renderSidebar(); Claims.tick(); } }, 30000);
   let day = todayStr();
   setInterval(() => { if (todayStr() !== day) { day = todayStr(); if (currentUserId) { purgeOldCompleted(); render({ keepDetail: true }); } } }, 60000);
 }

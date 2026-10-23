@@ -13,7 +13,7 @@
    Amounts are AED. Subscriptions are recorded automatically on their billing day each month. */
 const Fin = (() => {
   const VIEWS = ['fin-dash', 'fin-projects', 'fin-expenses', 'fin-list', 'fin-subs', 'fin-reimb', 'fin-extra'];
-  const ADMIN_ONLY = ['fin-subs', 'fin-reimb', 'fin-extra'];
+  const ADMIN_ONLY = ['fin-subs', 'fin-extra'];   // Staff reimbursements: Viewers see the claims too (read only)
   const STATUSES = Object.keys(FINANCE);
   const st = { proj: 'all', graph: 'Invoiced', list: { type: 'all', month: '', page: 0 }, open: {} };
   const canLook = () => !!finLevel() || isAdmin();
@@ -72,7 +72,7 @@ const Fin = (() => {
     if (fin) {
       const nav = document.createElement('nav');
       nav.className = 'nav fin-nav';
-      nav.innerHTML = [['fin-dash', 'home', 'Dashboard'], ['fin-projects', 'folder', 'Projects'], ['fin-expenses', 'coin', 'Expenses']]
+      nav.innerHTML = [['fin-dash', 'home', 'Dashboard'], ['fin-projects', 'folder', 'Projects'], ['fin-expenses', 'coin', 'Expenses'], ['fin-reimb', 'users', 'Reimbursements']]
         .map(([v, ic, l]) => `<a class="nav-item" data-nav="${v}">${icon(ic)}${l}</a>`).join('');
       const head = $('#sidebar .sb-head');
       head.parentNode.insertBefore(nav, head);
@@ -88,13 +88,18 @@ const Fin = (() => {
   }
   function paintNav() {
     $$('.fin-nav .nav-item').forEach((a) => a.classList.toggle('active', ui.view === a.dataset.nav || (a.dataset.nav === 'fin-expenses' && ui.view === 'fin-list')));
+    // new expense claims: a count on Reimbursements; opening the page clears it
+    const fresh = myNotifs().filter((n) => n.kind === 'claim' && !n.read);
+    if (ui.view === 'fin-reimb' && fresh.length) { fresh.forEach((n) => { n.read = true; }); persist(); }
+    const rn = $('.fin-nav .nav-item[data-nav="fin-reimb"]');
+    if (rn) { let c = rn.querySelector('.count'); if (!c) { c = document.createElement('span'); c.className = 'count'; rn.appendChild(c); } const k = ui.view === 'fin-reimb' ? 0 : fresh.length; c.textContent = k ? String(k) : ''; c.classList.toggle('hot', !!k); }
     const an = $('.fin-admin-nav'); if (an) an.classList.toggle('active', owns(ui.view));
   }
   // The Finance Admin's pages, in the name menu (Finance-only people, and anyone given Finance Admin access)
   const addItems = () => (isFinAdmin() ? ['-',
     { label: 'Add subscriptions', icon: 'cal', run: () => go('fin-subs') },
     { label: 'Add Staff Reimbursements', icon: 'users', run: () => go('fin-reimb') },
-    { label: 'Add Extra Expense', icon: 'coin', run: () => go('fin-extra') }] : []);
+    { label: 'Add Extra Expense', icon: 'coin', run: () => go('fin-extra') }] : finLevel() && !isFinUser() ? ['-', { label: 'Staff reimbursements', icon: 'users', run: () => go('fin-reimb') }] : []);
   function meMenu(anchor) {
     showMenu(anchor, [
       { label: 'My profile', icon: 'user', run: () => go('profile') },
@@ -119,6 +124,7 @@ const Fin = (() => {
     if (!canLook() || (ADMIN_ONLY.includes(ui.view) && !isFinAdmin())) { ui.view = isFinUser() ? 'fin-dash' : 'home'; renderAll(); return; }
     const v = ui.view;
     c.innerHTML = `<div class="fin">${v === 'fin-dash' ? dash() : v === 'fin-projects' ? projects() : v === 'fin-expenses' ? expenses() : v === 'fin-list' ? list() : v === 'fin-subs' ? subsPage() : v === 'fin-reimb' ? reimbPage() : extraPage()}</div>`;
+    if (v === 'fin-reimb') Claims.afterFinanceRender();
   }
   const renderAll = () => { renderTitle(); renderSidebar(); renderContent(); };
 
@@ -401,18 +407,19 @@ const Fin = (() => {
     const m = thisMonth();
     const list = recs(type).filter((r) => String(r.date || '').slice(0, 7) === m).sort((a, b) => b.date.localeCompare(a.date));
     const total = list.reduce((a, r) => a + (Number(r.amount) || 0), 0);
+    const admin = isFinAdmin();
     return `<div class="widget fin-add">
-      <h3>${label} — ${esc(monthName(m, true))}<span class="spacer"></span><button class="btn primary" data-fin-new="${type}">${icon('plus')}${btn}</button></h3>
+      <h3>${type === 'reimb' ? 'Paid' : label} — ${esc(monthName(m, true))}<span class="spacer"></span>${admin ? `<button class="btn ${type === 'reimb' ? '' : 'primary'}" data-fin-new="${type}">${icon('plus')}${type === 'reimb' ? 'Add one by hand (PDF)' : btn}</button>` : ''}</h3>
       <p class="fin-note">${list.length ? `${list.length} this month · <b>${aed(total)}</b>. ` : ''}Earlier months are under Expenses → View all.</p>
       ${list.map((r) => `<div class="fa-row">
           <span class="fa-name"><b>${esc(type === 'reimb' ? personName(r) : r.name)}</b><small>Paid ${esc(fmtDay(r.date))}</small></span>
           <span class="fx-amt">${aed(r.amount)}</span>
-          <span class="fa-inv">${r.invoice ? `<button class="btn ghost xs" data-fin-rinv="${r.id}">${icon('clip')}Invoice</button>` : '<span class="fl-empty">No invoice</span>'}</span>
-          <button class="icon-btn sm" data-fin-del="${r.id}" title="Remove">${icon('trash')}</button>
+          <span class="fa-inv">${r.claimId ? `<button class="btn ghost xs" data-cl="open" data-id="${esc(r.claimId)}">${icon('open')}Claim</button>` : r.invoice ? `<button class="btn ghost xs" data-fin-rinv="${r.id}">${icon('clip')}Invoice</button>` : '<span class="fl-empty">No invoice</span>'}</span>
+          ${admin && !r.claimId ? `<button class="icon-btn sm" data-fin-del="${r.id}" title="Remove">${icon('trash')}</button>` : '<span class="fa-sp"></span>'}
         </div>`).join('') || '<div class="fin-empty">Nothing added this month.</div>'}
     </div>`;
   }
-  const reimbPage = () => monthRecords('reimb', 'Staff reimbursements', 'Add reimbursement');
+  const reimbPage = () => Claims.financeSection() + monthRecords('reimb', 'Staff reimbursements', 'Add reimbursement');
   const extraPage = () => monthRecords('expense', 'Extra expenses', 'Add expense');
 
   /* ---------- Add form (pop-up) ---------- */

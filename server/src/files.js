@@ -25,6 +25,46 @@ let officeChecked = null;
 const hasOffice = () => (officeChecked = officeChecked || new Promise((ok) => execFile('soffice', ['--version'], { timeout: 20000 }, (err) => ok(!err))));
 let officeQueue = Promise.resolve(); // one conversion at a time (LibreOffice is heavy on the NAS)
 
+// A small PDF made of JPEG images, one per A4 page. full: the image fills the page (the claim sheet);
+// otherwise it is fitted inside a margin (a receipt photo).
+function jpegSize(buf) {
+  let i = 2;
+  while (i < buf.length) {
+    if (buf[i] !== 0xff) { i++; continue; }
+    const m = buf[i + 1];
+    if (m >= 0xc0 && m <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(m)) return { h: buf.readUInt16BE(i + 5), w: buf.readUInt16BE(i + 7) };
+    i += 2 + buf.readUInt16BE(i + 2);
+  }
+  return { w: 1, h: 1 };
+}
+export function jpegPdf(images, full) {
+  const W = 595.28, H = 841.89, M = full ? 0 : 28;
+  const chunks = []; const offsets = []; let len = 0;
+  const put = (b) => { const buf = Buffer.isBuffer(b) ? b : Buffer.from(b, 'binary'); chunks.push(buf); len += buf.length; };
+  const obj = (n, body) => { offsets[n] = len; put(`${n} 0 obj\n`); body(); put('\nendobj\n'); };
+  put('%PDF-1.4\n%\xe2\xe3\xcf\xd3\n');
+  const list = images.length ? images : [];
+  const pageIds = list.map((_, k) => 3 + k * 3);
+  obj(1, () => put('<< /Type /Catalog /Pages 2 0 R >>'));
+  obj(2, () => put(`<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${list.length} >>`));
+  list.forEach((img, k) => {
+    const pid = 3 + k * 3, cid = pid + 1, iid = pid + 2;
+    const { w, h } = jpegSize(img);
+    const s = Math.min((W - 2 * M) / w, (H - 2 * M) / h);
+    const dw = full ? W : w * s, dh = full ? H : h * s, x = (W - dw) / 2, y = (H - dh) / 2;
+    const content = `q ${dw.toFixed(2)} 0 0 ${dh.toFixed(2)} ${x.toFixed(2)} ${y.toFixed(2)} cm /Im0 Do Q`;
+    obj(pid, () => put(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /XObject << /Im0 ${iid} 0 R >> >> /Contents ${cid} 0 R >>`));
+    obj(cid, () => put(`<< /Length ${content.length} >>\nstream\n${content}\nendstream`));
+    obj(iid, () => { put(`<< /Type /XObject /Subtype /Image /Width ${w} /Height ${h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${img.length} >>\nstream\n`); put(img); put('\nendstream'); });
+  });
+  const n = 3 + list.length * 3;
+  const xref = len;
+  put(`xref\n0 ${n}\n0000000000 65535 f \n`);
+  for (let k = 1; k < n; k++) put(`${String(offsets[k]).padStart(10, '0')} 00000 n \n`);
+  put(`trailer\n<< /Size ${n} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+  return Buffer.concat(chunks);
+}
+
 export function createFiles(root) {
   const FILES = path.join(root, 'files');
   const TRASH = path.join(root, 'trash');
@@ -42,7 +82,7 @@ export function createFiles(root) {
   function uploadDir(a) {
     if (a && a.dest) {
       const d = String(a.dest);
-      if (!d.startsWith('Clients/') && !d.startsWith('Finance/')) throw httpError(400, 'Invalid folder');
+      if (!d.startsWith('Clients/') && !d.startsWith('Finance/') && !d.startsWith('Claims/')) throw httpError(400, 'Invalid folder');
       return resolve(d);
     }
     return resolve('attachments/' + safeName((a && a.taskId) || 'misc'));
@@ -143,6 +183,42 @@ export function createFiles(root) {
       // pdftoppm pads page numbers (p-01.png); keep its names, sorted by number
       fs.writeFileSync(done, JSON.stringify({ total: total || last }));
       return { ok: true, pages: list(), total: total || last };
+    },
+    // Expense claim PDF: the claim sheet (drawn by the app as A4 page images) followed by the receipts.
+    // Image receipts become their own pages; PDF receipts are added as they are (poppler's pdfunite).
+    async claimPdf(a) {
+      const month = String(a.month || '');
+      if (!/^\d{4}-\d{2}$/.test(month)) throw httpError(400, 'Invalid month');
+      const dir = resolve(`Claims/${safeName(String(a.userId || 'x'))}/${month}`);
+      fs.mkdirSync(dir, { recursive: true });
+      const tmp = fs.mkdtempSync(path.join(dir, '.pdf-'));
+      try {
+        const parts = [];
+        const sheet = path.join(tmp, 'sheet.pdf');
+        fs.writeFileSync(sheet, jpegPdf((a.pages || []).map((b) => Buffer.from(String(b), 'base64')), true));
+        parts.push(sheet);
+        let i = 0;
+        for (const r of a.receipts || []) {
+          const src = resolve(String(r));
+          if (!fs.existsSync(src)) continue;
+          const ext = src.split('.').pop().toLowerCase();
+          if (ext === 'pdf') { parts.push(src); continue; }
+          if (!IMAGES.includes(ext)) continue;
+          const jpg = path.join(tmp, `r${i++}.jpg`);
+          const ok = await run('ffmpeg', ['-y', '-v', 'error', '-i', src, '-frames:v', '1', '-vf', "scale='min(1600,iw)':-2", '-q:v', '3', jpg]);
+          if (!ok || !fs.existsSync(jpg)) continue;
+          const one = path.join(tmp, `r${i}.pdf`);
+          fs.writeFileSync(one, jpegPdf([fs.readFileSync(jpg)], false));
+          parts.push(one);
+        }
+        const name = safeName(String(a.name || 'Expense claim.pdf')).replace(/\.pdf$/i, '') + '.pdf';
+        const out = path.join(dir, name);
+        let ok = parts.length === 1;
+        if (ok) fs.copyFileSync(sheet, out);
+        else ok = await run('pdfunite', [...parts, out], 60000);
+        if (!ok || !fs.existsSync(out)) fs.copyFileSync(sheet, out);   // receipts couldn't be joined: the sheet alone
+        return { ok: true, path: rel(out), name, size: fs.statSync(out).size };
+      } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
     },
     // Preview image: photos and logos are resized, videos get a frame, PDFs and Office files their first page
     async thumb(a) {

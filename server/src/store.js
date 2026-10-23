@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { merge3, deepEqual } from './merge.js';
 
-export const KINDS = ['users', 'projects', 'tasks', 'clients', 'notifications', 'statuses', 'trash', 'meta', 'finance'];
+export const KINDS = ['users', 'projects', 'tasks', 'clients', 'notifications', 'statuses', 'trash', 'meta', 'finance', 'claims'];
 
 export function openStore(file) {
   if (file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true });
