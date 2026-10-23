@@ -809,6 +809,7 @@ const ServerHost = (() => {
       case 'revealPath': download(fileHref(args.path), String(args.path).split('/').pop()); return { ok: true };
       case 'openURL': window.open(args.url, '_blank', 'noopener'); return { ok: true };
       case 'exportFiles': { const r = await api('POST', '/api/host/exportFiles', args); if (r.count) download(r.url); return { ...r, dir: (r.dir || 'E11 files') + '.zip' }; }
+      case 'expenseReport': { const r = await api('POST', '/api/host/expenseReport', args); download(r.url || fileHref(r.path), r.name); return r; }
       case 'notify': {
         try {
           if ('Notification' in window && Notification.permission === 'granted' && args.banner !== false) {
@@ -843,6 +844,7 @@ const ServerHost = (() => {
         if (r.count) await saveOnMac(r.url, (r.dir || 'E11 files') + '.zip', false);
         return { ...r, dir: 'Downloads › ' + (r.dir || 'E11 files') + '.zip' };
       }
+      case 'expenseReport': { const r = await api('POST', '/api/host/expenseReport', args); await saveOnMac(r.url || fileHref(r.path), r.name, false); return r; }
       case 'openURL': case 'notify': case 'badge': case 'setAppearance': return NativeMac.call(cmd, args);
       default: return undefined;
     }

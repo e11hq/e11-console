@@ -288,3 +288,28 @@ body.fin-mode #project-list, body.fin-mode .ca-nav-wrap, body.fin-mode #topbar .
 @media (max-width: 860px) { .fa-two { grid-template-columns: 1fr; } }
 .fa-end.flip { flex-direction: row-reverse; transform: translate(calc(-100% + 6px), -7px); text-align: right; }
 .fa-end.flip span { align-items: flex-end; }
+
+/* Expenses → Download report */
+.fr-wrap { position: relative; display: flex; align-items: center; gap: 8px; }
+.fr-btn { height: 32px; }
+.fr-btn svg { width: 15px; height: 15px; }
+.fr-pop { position: absolute; right: 0; top: calc(100% + 8px); z-index: 30; width: 340px; box-sizing: border-box; padding: 16px; display: flex; flex-direction: column; gap: 12px;
+  background: var(--sidebar); border: 1px solid var(--border-strong); border-radius: 14px; box-shadow: var(--shadow); text-align: left; }
+.fr-h b { display: block; font-size: 14.5px; font-weight: 650; color: var(--text); }
+.fr-h span { display: block; margin-top: 3px; font-size: 12px; line-height: 1.45; color: var(--text-3); }
+.fr-mh { display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 600; color: var(--text-2); }
+.fr-mh small { font-weight: 400; color: var(--text-3); font-size: 12px; }
+.fr-y { display: flex; align-items: center; gap: 4px; }
+.fr-y b { min-width: 40px; text-align: center; font-size: 13px; color: var(--text); }
+.fr-y button:disabled { opacity: .35; cursor: default; }
+.fr-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: -4px; }
+.fr-m { height: 32px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font: inherit; font-size: 12.5px; font-weight: 500; cursor: pointer; }
+.fr-m:hover:not(:disabled) { border-color: var(--border-strong); background: var(--hover); }
+.fr-m.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.fr-m:disabled { color: var(--text-3); opacity: .5; cursor: default; }
+.fr-sel { font-size: 12px; color: var(--text-2); margin-top: -4px; }
+.fr-ck { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; color: var(--text); cursor: pointer; }
+.fr-ck input { margin: 2px 0 0; accent-color: var(--accent); flex: none; }
+.fr-ck small { display: block; margin-top: 3px; font-size: 11.5px; line-height: 1.45; color: var(--text-3); }
+.fr-go { justify-content: center; height: 38px; }
+.fr-go svg { width: 15px; height: 15px; }

@@ -220,6 +220,31 @@ export function createFiles(root) {
         return { ok: true, path: rel(out), name, size: fs.statSync(out).size };
       } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
     },
+    // Expenses report (Finance → Expenses → Download report): the report pages drawn by the app as
+    // A4 JPEGs become one PDF in Finance/_reports/. With files, a .zip is offered instead: the PDF plus
+    // each invoice / receipt under Attachments/<YYYY-MM>/<name the report refers to>.
+    expenseReport(a) {
+      const dir = resolve('Finance/_reports');
+      fs.mkdirSync(dir, { recursive: true });
+      for (const f of fs.readdirSync(dir)) { const full = path.join(dir, f); try { if (Date.now() - fs.statSync(full).mtimeMs > 86400_000) fs.rmSync(full, { recursive: true, force: true }); } catch { /* gone */ } }
+      const base = safeName(String(a.name || 'E11 expenses report')).replace(/\.pdf$/i, '');
+      const sub = fs.mkdtempSync(path.join(dir, 'r-'));
+      const out = path.join(sub, base + '.pdf');
+      fs.writeFileSync(out, jpegPdf((a.pages || []).map((b) => Buffer.from(String(b), 'base64')), true));
+      const res = { ok: true, path: rel(out), name: base + '.pdf', size: fs.statSync(out).size };
+      if (!a.zip) return res;
+      const entries = [{ full: out, name: base + '.pdf' }];
+      for (const f of a.files || []) {
+        let full; try { full = resolve(String(f.path || '')); } catch { continue; }
+        if (!fs.existsSync(full) || !fs.statSync(full).isFile()) continue;
+        const as = String(f.as || path.basename(full)).split('/').map((x) => safeName(x)).filter(Boolean).slice(-2).join('/');
+        entries.push({ full, name: 'Attachments/' + as });
+      }
+      const token = crypto.randomBytes(12).toString('hex');
+      zips.set(token, { name: base + '.zip', entries, at: Date.now() });
+      for (const [k, v] of zips) if (Date.now() - v.at > 3600_000) zips.delete(k);
+      return { ...res, zip: true, url: `/api/zip/${token}`, name: base + '.zip', count: entries.length };
+    },
     // Preview image: photos and logos are resized, videos get a frame, PDFs and Office files their first page
     async thumb(a) {
       const src = resolve(a.path);
@@ -350,8 +375,8 @@ export function createFiles(root) {
     const central = [];
     let offset = 0;
     const used = new Set();
-    for (const full of z.paths) {
-      const base = path.basename(full);
+    for (const { full, name: want } of z.entries || z.paths.map((f) => ({ full: f, name: path.basename(f) }))) {
+      const base = want;
       let name = base, i = 2;
       while (used.has(name)) { const d = base.lastIndexOf('.'); name = d > 0 ? `${base.slice(0, d)} (${i})${base.slice(d)}` : `${base} (${i})`; i++; }
       used.add(name);

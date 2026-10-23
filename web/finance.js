@@ -52,6 +52,224 @@ const Fin = (() => {
   const KIND_L = { expense: 'Big expense', sub: 'Payment', reimb: 'Reimbursement' };
   const KIND_C = { expense: '#ff8a4c', sub: '#4c9aff', reimb: '#a875ff' };
 
+  /* ---------- Download report (Expenses page: Admins, Finance Admins, Finance Viewers) ----------
+     A PDF of the chosen months (1–12): subscriptions, staff reimbursements and extra expenses, no tasks.
+     The pages are drawn here on A4 canvases and joined on the server. With "Include invoices and
+     receipts" the download is a .zip: the PDF plus Attachments/<YYYY-MM>/<SUB|REI|EXT>-nn_<name>.<ext>,
+     the names the report lists. A reimbursement from an expense claim gets its claim PDF (sheet + receipts). */
+  const rep = { open: false, year: 0, sel: [], files: true, busy: false };
+  const MS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const loadImg = (src) => new Promise((ok) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ok(null); i.src = src; });
+  const slug = (s) => String(s || '').normalize('NFKD').replace(/[^\w\s-]/g, '').trim().replace(/[\s_]+/g, '-').replace(/-+/g, '-').slice(0, 32).replace(/-$/, '') || 'file';
+  const extOf = (p) => { const e = String(p || '').split('/').pop().split('.'); return e.length > 1 ? e.pop().toLowerCase() : 'pdf'; };
+  const money = (n) => (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  function repToggle() {
+    rep.open = !rep.open;
+    if (rep.open) { const m = st.exMonth === 'prev' ? addMonths(thisMonth(), -1) : thisMonth(); rep.sel = [m]; rep.year = Number(m.slice(0, 4)); }
+    renderContent();
+  }
+  function repPop() {
+    if (!rep.open) return '';
+    const now = thisMonth(), sel = rep.sel.slice().sort();
+    const grid = MS.map((l, i) => {
+      const k = `${rep.year}-${pad2(i + 1)}`, on = sel.includes(k), off = k > now || (!on && sel.length >= 12);
+      return `<button class="fr-m ${on ? 'on' : ''}" data-fin-repm="${k}" aria-pressed="${on}" ${off ? 'disabled' : ''} title="${esc(monthName(k, true))}">${l}</button>`;
+    }).join('');
+    const label = sel.length === 1 ? monthName(sel[0], true) : `${sel.length} months · ${monthName(sel[0], true)} – ${monthName(sel[sel.length - 1], true)}`;
+    return `<div class="fr-pop" role="dialog" aria-label="Download expenses report">
+      <div class="fr-h"><b>Expenses report (PDF)</b><span>Subscriptions, staff reimbursements and extra expenses. No tasks or projects.</span></div>
+      <div class="fr-mh"><span>Months <small>· up to 12</small></span><span class="fr-y"><button class="icon-btn sm" data-fin-repy="-1" aria-label="Previous year">${icon('chev-left')}</button><b>${rep.year}</b><button class="icon-btn sm" data-fin-repy="1" aria-label="Next year" ${rep.year >= Number(now.slice(0, 4)) ? 'disabled' : ''}>${icon('chev-right')}</button></span></div>
+      <div class="fr-grid">${grid}</div>
+      <div class="fr-sel">${esc(label)}</div>
+      <label class="fr-ck"><input type="checkbox" data-fin-repf ${rep.files ? 'checked' : ''}><span>Include invoices and receipts<small>Downloads a .zip: the report PDF + an Attachments folder, one folder per month. Unticked: just the PDF.</small></span></label>
+      <button class="btn primary fr-go" data-fin-repgo ${rep.busy || !sel.length ? 'disabled' : ''}>${rep.busy ? 'Preparing…' : rep.files ? `${icon('download')}Download .zip` : `${icon('download')}Download PDF`}</button>
+    </div>`;
+  }
+  function repPick(k) {
+    const on = rep.sel.includes(k);
+    if (on) { if (rep.sel.length > 1) rep.sel = rep.sel.filter((x) => x !== k); }
+    else if (rep.sel.length < 12 && k <= thisMonth()) rep.sel = rep.sel.concat(k);
+    renderContent();
+  }
+  // Each month's three lists, oldest first, with the file name the report refers to
+  function repModel(months) {
+    const all = transactions();
+    return months.map((m) => {
+      const of = (k) => all.filter((x) => x.date.slice(0, 7) === m && x.kind === k).sort((a, b) => a.date.localeCompare(b.date));
+      const tag = (list, P) => list.map((x, i) => {
+        const nn = `${P}-${pad2(i + 1)}`;
+        let file = null, note = '';
+        if (x.invoice && x.invoice.path) file = { path: x.invoice.path, as: `${m}/${nn}_${slug(x.name)}.${extOf(x.invoice.path)}` };
+        else if (x.kind === 'reimb' && x.ref.claimId) {
+          const c = typeof Claims !== 'undefined' && Claims.byId(x.ref.claimId);
+          if (c) file = { claim: c, as: `${m}/${nn}_${slug(x.name)}.pdf` }; else note = 'Expense claim';
+        }
+        return { ...x, file, note, fname: file ? file.as.split('/')[1] : '' };
+      });
+      const subs = tag(of('sub'), 'SUB'), reimbs = tag(of('reimb'), 'REI'), extras = tag(of('expense'), 'EXT');
+      const sum = (l) => l.reduce((a, x) => a + x.amount, 0);
+      const missing = [...subs, ...reimbs, ...extras].filter((x) => !x.file && !x.note);
+      return { m, subs, reimbs, extras, s: sum(subs), r: sum(reimbs), e: sum(extras), t: sum(subs) + sum(reimbs) + sum(extras), missing };
+    });
+  }
+  async function repPages(model, withFiles) {
+    const W = 1240, H = 1754, S = W / 794, P = 52 * S, CW = W - 2 * P, bottom = H - 62 * S;
+    const F = '-apple-system, "SF Pro Text", "Segoe UI", Inter, Helvetica, Arial, sans-serif', MONO = '"SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace';
+    const logo = await loadImg('logo-tile.png');
+    const multi = model.length > 1;
+    const first = model[0].m, last = model[model.length - 1].m;
+    const period = multi ? `${monthName(first, true)} – ${monthName(last, true)}` : monthName(first, true);
+    const pages = [];
+    let ctx = null, y = 0;
+    const font = (w, px, mono) => { ctx.font = `${w} ${Math.round(px * S)}px ${mono ? MONO : F}`; };
+    const text = (s, x, yy, al = 'left') => { ctx.textAlign = al; ctx.fillText(String(s), x, yy); };
+    const fit = (s, max) => { s = String(s == null ? '' : s); let t = s; while (t.length > 1 && ctx.measureText(t).width > max) t = t.slice(0, -2); return t === s ? s : t + '…'; };
+    const rrect = (x, yy, w, h, r) => { ctx.beginPath(); ctx.moveTo(x + r, yy); ctx.arcTo(x + w, yy, x + w, yy + h, r); ctx.arcTo(x + w, yy + h, x, yy + h, r); ctx.arcTo(x, yy + h, x, yy, r); ctx.arcTo(x, yy, x + w, yy, r); ctx.closePath(); };
+    function newPage() {
+      const c = document.createElement('canvas'); c.width = W; c.height = H;
+      ctx = c.getContext('2d'); ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H); ctx.textBaseline = 'alphabetic';
+      pages.push(c);
+      if (pages.length === 1) {
+        if (logo) { ctx.save(); rrect(P, P - 6 * S, 48 * S, 48 * S, 11 * S); ctx.clip(); ctx.drawImage(logo, P, P - 6 * S, 48 * S, 48 * S); ctx.restore(); }
+        font(700, 10.5); ctx.fillStyle = '#6e717a'; text('E11 AGENCY · FINANCE', P + 60 * S, P + 10 * S);
+        font(700, 22); ctx.fillStyle = '#17181b'; text(multi ? 'Expenses report' : 'Monthly expenses report', P + 60 * S, P + 36 * S);
+        font(700, 17); text(period, W - P, P + 14 * S, 'right');
+        const d = new Date();
+        font(400, 10.5); ctx.fillStyle = '#6e717a';
+        text(`${multi ? model.length + ' months · ' : ''}Generated ${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}, ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} · by ${fullName(me())}`, W - P, P + 34 * S, 'right');
+        ctx.fillStyle = '#17181b'; ctx.fillRect(P, P + 58 * S, CW, 2 * S);
+        y = P + 78 * S;
+      } else {
+        font(600, 10); ctx.fillStyle = '#6e717a'; text(`E11 · Expenses report · ${period}`, P, P);
+        ctx.fillStyle = '#e3e3e8'; ctx.fillRect(P, P + 10 * S, CW, 1);
+        y = P + 30 * S;
+      }
+    }
+    function cards(list) {   // [[label, value, note, dark]]
+      const fr = list.map((c) => (c[3] ? 1.3 : 1)), tot = fr.reduce((a, b) => a + b, 0), gap = 10 * S, h = 66 * S;
+      let x = P;
+      list.forEach(([l, v, note, dark], i) => {
+        const w = (CW - gap * (list.length - 1)) * (fr[i] / tot);
+        rrect(x, y, w, h, 10 * S);
+        if (dark) { ctx.fillStyle = '#17181b'; ctx.fill(); } else { ctx.strokeStyle = '#e3e3e8'; ctx.lineWidth = 1.5; ctx.stroke(); }
+        font(700, 9.5); ctx.fillStyle = dark ? '#b5b6be' : '#6e717a'; text(fit(l.toUpperCase(), w - 24 * S), x + 13 * S, y + 19 * S);
+        font(600, dark ? 17 : 14, true); ctx.fillStyle = dark ? '#ffffff' : '#17181b'; text(fit(v, w - 24 * S), x + 13 * S, y + 41 * S);
+        font(400, 10); ctx.fillStyle = dark ? '#c9c9d1' : '#6e717a'; text(fit(note, w - 24 * S), x + 13 * S, y + 57 * S);
+        x += w + gap;
+      });
+      y += h + 12 * S;
+    }
+    function split(s, r, e) {
+      const t = s + r + e; if (!t) return;
+      let x = P; const h = 8 * S;
+      ctx.save(); rrect(P, y, CW, h, 4 * S); ctx.clip();
+      [[s, KIND_C.sub], [r, KIND_C.reimb], [e, KIND_C.expense]].forEach(([v, c]) => { const w = (v / t) * CW; ctx.fillStyle = c; ctx.fillRect(x, y, w, h); x += w; });
+      ctx.restore(); y += h + 18 * S;
+    }
+    function table(title, cols, rows, foot) {   // cols: [{ l, w (share of the width), r: right-aligned, mono }]
+      const RH = 23 * S, HH = 23 * S;
+      if (y + 20 * S + HH + RH * Math.min(Math.max(rows.length, 1), 3) > bottom) newPage();
+      font(700, 10.5); ctx.fillStyle = '#6e717a'; text(title, P, y + 9 * S); y += 17 * S;
+      const xs = []; let x = P; cols.forEach((c) => { xs.push(x); x += c.w * CW; });
+      const cellX = (i) => (cols[i].r ? xs[i] + cols[i].w * CW - 10 * S : xs[i] + 10 * S);
+      const head = () => { ctx.fillStyle = '#17181b'; ctx.fillRect(P, y, CW, HH); font(600, 9); ctx.fillStyle = '#ffffff'; cols.forEach((c, i) => text(c.l.toUpperCase(), cellX(i), y + 15 * S, c.r ? 'right' : 'left')); y += HH; };
+      const row = (cells, isFoot) => {
+        if (y + RH > bottom) { newPage(); head(); }
+        if (isFoot) { ctx.fillStyle = '#f4f4f7'; ctx.fillRect(P, y, CW, RH); ctx.fillStyle = '#d9d9df'; ctx.fillRect(P, y, CW, 1.5); } else { ctx.fillStyle = '#ececf0'; ctx.fillRect(P, y, CW, 1); }
+        cols.forEach((c, i) => {
+          const v = cells[i], o = v && typeof v === 'object' ? v : { t: v == null ? '' : v };
+          const mono = c.mono || o.mono;
+          font(isFoot || o.b ? 700 : mono ? 500 : 400, o.sm ? 9.5 : mono && !c.r ? 10 : 11, mono);
+          ctx.fillStyle = o.c || '#17181b';
+          text(fit(o.t, c.w * CW - 20 * S), cellX(i), y + 15.5 * S, c.r ? 'right' : 'left');
+        });
+        y += RH;
+      };
+      head();
+      if (!rows.length) row([{ t: 'None', c: '#8a8d96' }]);
+      rows.forEach((r) => row(r));
+      if (foot) row(foot, true);
+      y += 16 * S;
+    }
+    const fileCell = (x) => (x.file ? (withFiles ? { t: x.fname, mono: true, c: '#4e5159' } : { t: 'Attached', c: '#4e5159' }) : x.note ? { t: x.note, c: '#6e717a' } : { t: 'Missing', c: '#c2410c', b: true });
+    const day = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    const pct = (v, t) => (t ? Math.round((v / t) * 100) : 0);
+    const plural = (n, one, many) => `${n} ${n === 1 ? one : many || one + 's'}`;
+    function monthTables(mo, label) {
+      const c3 = [{ l: 'Name', w: 0.33 }, { l: 'Paid on', w: 0.11 }, { l: withFiles ? 'Invoice file' : 'Invoice', w: 0.40 }, { l: 'AED', w: 0.16, r: true, mono: true }];
+      table(`${label}SUBSCRIPTIONS`, c3.map((c, i) => (i === 1 ? { ...c, l: 'Billed on' } : c)), mo.subs.map((x) => [x.name, day(x.date), fileCell(x), money(x.amount)]), ['Subscriptions total', '', '', money(mo.s)]);
+      table(`${label}STAFF REIMBURSEMENTS`, c3.map((c, i) => (i === 0 ? { ...c, l: 'Person' } : i === 2 ? { ...c, l: withFiles ? 'Receipt file' : 'Receipts' } : c)), mo.reimbs.map((x) => [x.name, day(x.date), fileCell(x), money(x.amount)]), ['Reimbursements total', '', '', money(mo.r)]);
+      table(`${label}EXTRA EXPENSES`, c3, mo.extras.map((x) => [x.name, day(x.date), fileCell(x), money(x.amount)]), ['Extra expenses total', '', '', money(mo.e)]);
+    }
+    newPage();
+    const S3 = model.reduce((a, x) => a + x.s, 0), R3 = model.reduce((a, x) => a + x.r, 0), E3 = model.reduce((a, x) => a + x.e, 0), T = S3 + R3 + E3;
+    const nS = model.reduce((a, x) => a + x.subs.length, 0), nE = model.reduce((a, x) => a + x.extras.length, 0);
+    const people = new Set(model.flatMap((x) => x.reimbs.map((r) => r.name))).size, nR = model.reduce((a, x) => a + x.reimbs.length, 0);
+    let note;
+    if (multi) note = `Avg AED ${money(T / model.length)} a month`;
+    else {
+      const pm = addMonths(first, -1), prev = transactions().filter((x) => x.date.slice(0, 7) === pm).reduce((a, x) => a + x.amount, 0);
+      const p = pctChange(T, prev);
+      note = `${p > 0 ? '↑' : p < 0 ? '↓' : '—'} ${Math.abs(p)}% vs ${monthName(pm, true).split(' ')[0]}`;
+    }
+    cards([['Total paid out', 'AED ' + money(T), note, true], ['Subscriptions', money(S3), `${plural(nS, 'payment')} · ${pct(S3, T)}%`], ['Reimbursements', money(R3), `${multi ? plural(nR, 'payment') : plural(people, 'person', 'people')} · ${pct(R3, T)}%`], ['Extra expenses', money(E3), `${plural(nE, 'purchase')} · ${pct(E3, T)}%`]]);
+    split(S3, R3, E3);
+    if (!multi) monthTables(model[0], '');
+    else {
+      const missing = model.flatMap((mo) => mo.missing.map((x) => ({ ...x, mo: mo.m })));
+      table('MONTH BY MONTH', [{ l: 'Month', w: 0.2 }, { l: 'Subscriptions', w: 0.16, r: true, mono: true }, { l: 'Reimbursements', w: 0.17, r: true, mono: true }, { l: 'Extra', w: 0.15, r: true, mono: true }, { l: 'Total AED', w: 0.16, r: true, mono: true }, { l: 'Missing files', w: 0.16 }],
+        model.map((mo) => [monthName(mo.m, true), money(mo.s), money(mo.r), money(mo.e), { t: money(mo.t), b: true }, mo.missing.length ? { t: `${mo.missing.length} missing`, c: '#c2410c' } : { t: 'All attached', c: '#15803d' }]),
+        [plural(model.length, 'month'), money(S3), money(R3), money(E3), money(T), String(missing.length)]);
+      if (missing.length) table('MISSING INVOICES AND RECEIPTS', [{ l: 'Month', w: 0.18 }, { l: 'Name', w: 0.44 }, { l: 'Type', w: 0.22 }, { l: 'AED', w: 0.16, r: true, mono: true }],
+        missing.map((x) => [monthName(x.mo, true), x.name, { sub: 'Subscription', reimb: 'Reimbursement', expense: 'Extra expense' }[x.kind], money(x.amount)]));
+      model.forEach((mo) => {
+        if (y + 160 * S > bottom) newPage();
+        ctx.fillStyle = '#efecff'; ctx.fillRect(P, y, CW, 34 * S); ctx.fillStyle = '#5b4bd6'; ctx.fillRect(P, y, 3 * S, 34 * S);
+        font(700, 14); ctx.fillStyle = '#17181b'; text(monthName(mo.m, true), P + 14 * S, y + 22 * S);
+        font(600, 12, true); ctx.fillStyle = '#3b2fa0'; text('AED ' + money(mo.t), W - P - 12 * S, y + 22 * S, 'right');
+        y += 50 * S;
+        monthTables(mo, '');
+      });
+    }
+    // footers, now that the page count is known
+    pages.forEach((c, i) => {
+      ctx = c.getContext('2d');
+      ctx.fillStyle = '#ececf0'; ctx.fillRect(P, H - 46 * S, CW, 1);
+      font(400, 9.5); ctx.fillStyle = '#8a8d96';
+      text(withFiles ? 'Files named in this report are in the .zip, under Attachments/<YYYY-MM>/. They are not included in this PDF.' : 'Generated by E11 Console', P, H - 30 * S);
+      text(`E11 Console · Page ${i + 1} of ${pages.length}`, W - P, H - 30 * S, 'right');
+    });
+    return pages.map((c) => c.toDataURL('image/jpeg', 0.86).split(',')[1]);
+  }
+  async function repDownload() {
+    const months = rep.sel.slice().sort();
+    if (rep.busy || !months.length) return;
+    rep.busy = true; renderContent();
+    toast('Preparing the report…');
+    try {
+      const model = repModel(months);
+      const files = [];
+      if (rep.files) {
+        for (const mo of model) for (const x of [...mo.subs, ...mo.reimbs, ...mo.extras]) {
+          if (!x.file) continue;
+          if (!x.file.claim) { files.push({ path: x.file.path, as: x.file.as }); continue; }
+          try {   // the claim PDF (sheet + receipts), made the same way as on the claim itself
+            const c = x.file.claim;
+            const { pages, receipts } = await Claims.sheetPages(c);
+            const r = await Host.call('claimPdf', { userId: c.userId, month: c.month, name: `Expense claim — ${fullName(userById(c.userId))} — ${monthName(c.month, true)}.pdf`.replace(/[\\/:*?"<>|]/g, '-'), pages, receipts });
+            files.push({ path: r.path, as: x.file.as });
+          } catch (e) { /* that claim is left out of the zip */ }
+        }
+      }
+      const pages = await repPages(model, rep.files);
+      const per = months.length === 1 ? monthName(months[0], true) : `${monthName(months[0], true)} to ${monthName(months[months.length - 1], true)}`;
+      const r = await Host.call('expenseReport', { name: `E11 expenses — ${per}`, pages, zip: rep.files, files });
+      rep.open = false;
+      toast(Host.isMacApp ? `${r.name} saved to Downloads` : `Downloading ${r.name}`);
+    } catch (e) { toast('Could not make the report: ' + e.message); }
+    rep.busy = false; renderContent();
+  }
+
   /* ---------- Tasks ---------- */
   const finTasks = () => db.tasks.filter((t) => !t.parentId);
   const finAt = (t) => t.financeAt || t.updatedAt || t.createdAt;
@@ -313,7 +531,8 @@ const Fin = (() => {
     return `<div class="fa">
       <header class="fa-head">
         <div><h1>Expenses</h1><p>Everything E11 paid out in ${esc(monthName(m, true))} — subscriptions, staff reimbursements and big purchases.</p></div>
-        <div class="fa-seg">${[['cur', 'This month'], ['prev', 'Last month']].map(([k, l]) => `<button class="${(st.exMonth || 'cur') === k ? 'on' : ''}" data-fin-exm="${k}">${l}</button>`).join('')}</div>
+        <div class="fr-wrap"><div class="fa-seg">${[['cur', 'This month'], ['prev', 'Last month']].map(([k, l]) => `<button class="${(st.exMonth || 'cur') === k ? 'on' : ''}" data-fin-exm="${k}">${l}</button>`).join('')}</div>
+          <button class="btn primary fr-btn" data-fin-rep aria-expanded="${rep.open}">${icon('download')}Download report</button>${repPop()}</div>
       </header>
       <div class="fa-stats four">${cards.map(([l, v, pv, note, c], i) => `<div class="fa-stat static" style="--c:${c}"><span class="fa-sl"><span class="fa-ic">${icon('coin')}</span>${esc(l)}</span><span class="fa-n money">${aed(v)}</span><span class="fa-sf">${trend(v, pv, false)}<span>${esc(note)}</span></span></div>`).join('')}</div>
       <div class="fa-grid">
@@ -541,10 +760,16 @@ const Fin = (() => {
   /* ---------- Clicks ---------- */
   document.addEventListener('click', (e) => {
     if (!owns(ui.view) && !e.target.closest('[data-fin-go]')) return;
-    const el = e.target.closest('[data-fin-go],[data-fin-span],[data-fin-exm],[data-fin-status],[data-fin-graph],[data-fin-proj],[data-fin-toggle],[data-fin-set],[data-fin-all],[data-fin-back],[data-fin-type],[data-fin-page],[data-fin-inv],[data-fin-new],[data-fin-del],[data-fin-subinv],[data-fin-subadd],[data-fin-rinv]');
+    if (rep.open && !e.target.closest('.fr-pop,[data-fin-rep]')) { rep.open = false; const pop = $('.fr-pop'); if (pop) pop.remove(); const b = $('[data-fin-rep]'); if (b) b.setAttribute('aria-expanded', 'false'); }
+    if (e.target.closest('[data-fin-repf]')) return;   // the checkbox: handled on change
+    const el = e.target.closest('[data-fin-rep],[data-fin-repm],[data-fin-repy],[data-fin-repgo],[data-fin-go],[data-fin-span],[data-fin-exm],[data-fin-status],[data-fin-graph],[data-fin-proj],[data-fin-toggle],[data-fin-set],[data-fin-all],[data-fin-back],[data-fin-type],[data-fin-page],[data-fin-inv],[data-fin-new],[data-fin-del],[data-fin-subinv],[data-fin-subadd],[data-fin-rinv]');
     if (!el) return;
     e.stopPropagation();
     const d = el.dataset;
+    if (el.hasAttribute('data-fin-rep')) return repToggle();
+    if (d.finRepm) return repPick(d.finRepm);
+    if (d.finRepy) { rep.year += Number(d.finRepy); return renderContent(); }
+    if (el.hasAttribute('data-fin-repgo')) return repDownload();
     if (d.finGo) return go(d.finGo);
     if (d.finStatus) { st.proj = d.finStatus; return go('fin-projects'); }
     if (d.finGraph) { st.graph = d.finGraph; return renderContent(); }
@@ -565,6 +790,7 @@ const Fin = (() => {
     if (d.finRinv) { const r = (db.finance || []).find((x) => x.id === d.finRinv); return openFile(r && r.invoice); }
   }, true);
   document.addEventListener('change', (e) => {
+    if (e.target.matches && e.target.matches('[data-fin-repf]')) { rep.files = e.target.checked; renderContent(); return; }
     if (e.target.matches && e.target.matches('[data-fin-month]')) { st.list.month = e.target.value; st.list.page = 0; renderContent(); }
   });
 

@@ -116,3 +116,28 @@ test('claim PDF: the sheet pages plus the receipts, for the person or Finance on
   assert.equal((await call(PROD, '/api/host/claimPdf', body)).status, 403);
   assert.equal((await call(AM, '/api/host/claimPdf', { ...body, receipts: ['attachments/x/secret.pdf'] })).status, 403);
 });
+
+test('expenses report: PDF for Admin and Finance; with files a .zip with Attachments/<month>/ folders', async () => {
+  const jpg = path.join(dir, 'r.jpg');
+  execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=white:s=124x175', '-frames:v', '1', jpg]);
+  const b64 = fs.readFileSync(jpg).toString('base64');
+  fs.mkdirSync(path.join(dir, 'files', 'Finance', 'Subscriptions', OPEN), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'files', 'Finance', 'Subscriptions', OPEN, 'inv.pdf'), '%PDF-1.4 test');
+  const pdfOnly = await call(FV, '/api/host/expenseReport', { name: 'E11 expenses — test', pages: [b64, b64] });
+  assert.equal(pdfOnly.status, 200);
+  assert.ok(!pdfOnly.body.zip && pdfOnly.body.path.startsWith('Finance/_reports/'));
+  assert.equal(fs.readFileSync(path.join(dir, 'files', pdfOnly.body.path)).subarray(0, 5).toString(), '%PDF-');
+  const files = [{ path: `Finance/Subscriptions/${OPEN}/inv.pdf`, as: `${OPEN}/SUB-01_Google.pdf` }, { path: `Claims/u-am/${OPEN}/receipt.pdf`, as: `${OPEN}/REI-01_Areej.pdf` }];
+  const z = await call(FA, '/api/host/expenseReport', { name: 'E11 expenses — test', pages: [b64], zip: true, files });
+  assert.equal(z.status, 200);
+  assert.equal(z.body.count, 3);
+  const zr = await fetch(base + z.body.url, { headers: { 'X-Dev-Email': FA } });
+  const buf = Buffer.from(await zr.arrayBuffer());
+  const utf = buf.toString('utf8');
+  assert.ok(utf.includes(`Attachments/${OPEN}/SUB-01_Google.pdf`) && utf.includes(`Attachments/${OPEN}/REI-01_Areej.pdf`) && utf.includes('E11 expenses — test.pdf'), 'zip entries in folders');
+  // Admins (no Finance access) can make the PDF, but not with claim receipts; others can't at all
+  assert.equal((await call(ADMIN, '/api/host/expenseReport', { name: 'x', pages: [b64] })).status, 200);
+  assert.equal((await call(ADMIN, '/api/host/expenseReport', { name: 'x', pages: [b64], zip: true, files })).status, 403);
+  assert.equal((await call(AM, '/api/host/expenseReport', { name: 'x', pages: [b64] })).status, 403);
+  assert.equal((await call(FA, '/api/host/expenseReport', { name: 'x', pages: [b64], zip: true, files: [{ path: 'attachments/t/x.pdf', as: 'a.pdf' }] })).status, 403);
+});

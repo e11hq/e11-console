@@ -252,7 +252,7 @@ export function createServer(cfg) {
       const cmd = p.slice('/api/host/'.length);
       const fn = files.commands[cmd];
       if (!fn) return json(res, 404, { ok: false, error: 'Unknown command ' + cmd });
-      const body = await readBody(req);
+      const body = await readBody(req, cmd === 'expenseReport' ? 96 * 1024 * 1024 : BODY_LIMIT);   // up to a year of report pages
       const manager = access.isAdm(u) || u.role === 'am';
       const deny = (msg) => json(res, 403, { ok: false, error: msg || 'Not allowed' });
       if (cmd === 'writeChunk') {
@@ -269,7 +269,9 @@ export function createServer(cfg) {
         return json(res, 200, out);
       }
       if (cmd === 'makeDir' && !manager) return deny();
-      if (access.isFinance(u) && !['writeChunk', 'thumb', 'processImage', 'docPreview', 'pdfPages', 'exportFiles', 'claimPdf'].includes(cmd)) return deny();
+      if (access.isFinance(u) && !['writeChunk', 'thumb', 'processImage', 'docPreview', 'pdfPages', 'exportFiles', 'claimPdf', 'expenseReport'].includes(cmd)) return deny();
+      if (cmd === 'expenseReport' && !(access.finLevel(u) || access.isAdm(u))) return deny('Only Admins and Finance can download the expenses report');
+      if (cmd === 'expenseReport' && (body.files || []).some((x) => { const fp = String((x && x.path) || ''); return !(fp.startsWith('Finance/') || fp.startsWith('Claims/')) || !access.canReadFile(u, fp); })) return deny();
       if (cmd === 'claimPdf' && !(String(body.userId || '') === u.id || access.finLevel(u))) return deny();
       if (cmd === 'trashMany' || cmd === 'trashPath') {
         const paths = body.paths || [body.path];
