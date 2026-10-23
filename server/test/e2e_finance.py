@@ -58,7 +58,7 @@ async def main():
         ctx, pg, errs = await login(FA); E = pg.evaluate
         check(await E("ui.view") == 'fin-dash' and await E("document.body.classList.contains('fin-mode')"), 'Finance Admin opens on the Finance Dashboard')
         nav = await E("[...document.querySelectorAll('#sidebar .nav-item')].filter(a=>a.offsetParent).map(a=>a.textContent.trim())")
-        check(nav == ['Dashboard', 'Projects', 'Expenses'], f'their sidebar: {nav}')
+        check([x.rstrip('0123456789') for x in nav] == ['Dashboard', 'Projects', 'Expenses', 'Reimbursements'], f'their sidebar: {nav}')
         check(not await pg.locator('#topbar .search').is_visible(), 'no task search')
         stats = await E("[...document.querySelectorAll('.fa-stat')].map(s=>[s.querySelector('.fa-sl').textContent.trim(), +s.querySelector('.fa-n').textContent])")
         check(dict(stats) == {'Quote to be sent': 1, 'LPO Pending': 1, 'Invoiced': 3, 'Retainer': 1, 'To be invoiced': 1}, f'5 status counts {stats}')

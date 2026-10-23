@@ -81,6 +81,7 @@ async def main():
         check(title['x'] >= 84 + 4 * 30, f'page title stays clear of the controls {title}')
         await pg.screenshot(path=os.path.join(shots, 'macchrome_collapsed.png'))
         await pg.click('#mac-bar .sb-toggle'); await pg.wait_for_timeout(200)
+        await pg.evaluate("Theme.setMode('dark')"); await pg.wait_for_timeout(200)   # Auto is light during the day
         await pg.click('#mac-bar .theme-toggle'); await pg.wait_for_timeout(300)
         check(await pg.evaluate("document.documentElement.dataset.theme") == 'light', 'theme button switches to light')
         await pg.screenshot(path=os.path.join(shots, 'macchrome_light.png'))

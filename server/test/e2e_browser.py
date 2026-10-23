@@ -70,6 +70,7 @@ async def main():
         await haris.keyboard.press('Meta+Enter'); await haris.wait_for_timeout(1500)
         check(await E1("(id)=>task(id).comments.some(c=>c.text==='Half-typed reply')", tid), "Haris's comment reaches Areej")
         # preferences stay per person/device
+        await E1("Theme.setMode('dark')"); await E2("Theme.setMode('dark')"); await haris.wait_for_timeout(300)   # Auto follows the time of day
         await E2("setTheme('light')"); await haris.wait_for_timeout(800)
         check(await E1("document.documentElement.dataset.theme") == 'dark', "Haris's light mode doesn't change Areej's theme")
         # permissions: Haris (Production) can't create a client
