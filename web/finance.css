@@ -313,3 +313,17 @@ body.fin-mode #project-list, body.fin-mode .ca-nav-wrap, body.fin-mode #topbar .
 .fr-ck small { display: block; margin-top: 3px; font-size: 11.5px; line-height: 1.45; color: var(--text-3); }
 .fr-go { justify-content: center; height: 38px; }
 .fr-go svg { width: 15px; height: 15px; }
+
+/* Missing subscription invoices: earlier months on Subscriptions, + Invoice on Expenses lists, the reminder */
+.fa-miss { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 5px; font-size: 11.5px; color: #e8833a; }
+.fa-miss button { display: inline-flex; align-items: center; gap: 2px; height: 20px; padding: 0 7px 0 4px; border-radius: 6px; border: 1px dashed rgba(232, 131, 58, .55); background: transparent; color: #e8833a; font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; }
+.fa-miss button:hover { background: rgba(232, 131, 58, .12); }
+.fa-miss button svg { width: 11px; height: 11px; }
+.fx-miss { color: #e8833a !important; border: 1px dashed rgba(232, 131, 58, .5) !important; }
+.fi-list { display: flex; flex-direction: column; border-radius: 12px; background: var(--bg); padding: 4px 14px; max-height: 240px; overflow: auto; }
+.fi-list div { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 14px; align-items: center; padding: 9px 0; border-top: 1px solid var(--border); font-size: 13.5px; }
+.fi-list div:first-child { border-top: 0; }
+.fi-list b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fi-list span { color: var(--text-3); font-size: 12.5px; }
+.fi-list em { font-style: normal; font-variant-numeric: tabular-nums; font-weight: 600; }
+.fin-remind .ec-rbtns { grid-template-columns: 1fr; }

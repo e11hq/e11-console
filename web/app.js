@@ -6494,7 +6494,7 @@ function enterApp() {
   render();
   purgeOldCompleted();
   Draft.sweep();
-  setTimeout(() => { Announce.check(); Claims.tick(); }, 2500);
+  setTimeout(() => { Announce.check(); Claims.tick(); Fin.invoiceTick(); }, 2500);
   setTimeout(deliverPending, 900);
 }
 // The test copy (test.e11hq.com) can be filled with sample people, tasks and comments
@@ -6724,7 +6724,7 @@ async function bootInner() {
   const su = sess && userById(sess);
   if (su && su.active !== false && su.setup) { currentUserId = su.id; enterApp(); }
   else showLogin();
-  setInterval(() => { if (currentUserId) { deliverPending(); renderSidebar(); Announce.check(); Claims.tick(); } }, 30000);
+  setInterval(() => { if (currentUserId) { deliverPending(); renderSidebar(); Announce.check(); Claims.tick(); Fin.invoiceTick(); } }, 30000);
   // Tidy attachment folders left behind (e.g. app quit right after deleting a task)
   if (Host.isNative) {
     const attIds = db.tasks.flatMap((t) => t.attachments.concat(...t.comments.map((c) => c.attachments || [])).map((a) => a.id))
@@ -6750,7 +6750,7 @@ async function bootServer() {
   const u = me && userById(me.id);
   if (u && !u.setup) showWelcome(null); else { enterApp(); maybeShowWhatsNew(); }
   if (u) { u.lastLoginAt = nowISO(); persist(2000); }
-  setInterval(() => { if (currentUserId) { deliverPending(); renderSidebar(); Announce.check(); Claims.tick(); } }, 30000);
+  setInterval(() => { if (currentUserId) { deliverPending(); renderSidebar(); Announce.check(); Claims.tick(); Fin.invoiceTick(); } }, 30000);
   let day = todayStr();
   setInterval(() => { if (todayStr() !== day) { day = todayStr(); if (currentUserId) { purgeOldCompleted(); render({ keepDetail: true }); } } }, 60000);
 }

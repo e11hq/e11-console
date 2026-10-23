@@ -480,7 +480,7 @@ const Fin = (() => {
       <span class="fx-name">${esc(x.name)}</span>
       <span class="fx-kind" style="--c:${KIND_C[x.kind]}">${KIND_L[x.kind]}</span>
       <span class="fx-amt">${aed(x.amount)}</span>
-      <span class="fx-inv">${x.invoice ? `<button class="btn ghost xs" data-fin-inv="${esc(x.id)}">${icon('clip')}Invoice</button>` : '<span class="fl-empty">–</span>'}</span>
+      <span class="fx-inv">${x.invoice ? `<button class="btn ghost xs" data-fin-inv="${esc(x.id)}">${icon('clip')}Invoice</button>` : isFinAdmin() && !(x.kind === 'reimb' && x.ref.claimId) ? `<button class="btn ghost xs fx-miss" data-fin-txadd="${esc(x.id)}" title="No invoice yet — add it">${icon('plus')}Invoice</button>` : x.kind === 'reimb' && x.ref.claimId ? '<span class="fl-empty">Claim</span>' : '<span class="fl-empty">Missing</span>'}</span>
       ${admin ? `<span class="fx-x">${admin(x)}</span>` : ''}
     </div>`;
   function expenses() {
@@ -613,14 +613,16 @@ const Fin = (() => {
       <h3>Monthly subscriptions<span class="spacer"></span><button class="btn primary" data-fin-new="sub">${icon('plus')}Add subscription</button></h3>
       <p class="fin-note">Each subscription is recorded as an expense on its billing day every month. ${live.length ? `Together: <b>${aed(monthly)}</b> a month.` : ''}</p>
       ${live.map((s) => `<div class="fa-row">
-          <span class="fa-name"><b>${esc(s.name)}</b><small>Every month on the ${ordinal(Number(s.day) || 1)} · next ${esc(fmtDay(nextDate(s)))}</small></span>
+          <span class="fa-name"><b>${esc(s.name)}</b><small>Every month on the ${ordinal(Number(s.day) || 1)} · next ${esc(fmtDay(nextDate(s)))}</small>${missLine(s)}</span>
           <span class="fx-amt">${aed(s.amount)}</span>
-          <span class="fa-inv">${(s.invoices || {})[m] ? `<button class="btn ghost xs" data-fin-subinv="${s.id}">${icon('clip')}${esc(monthName(m))} invoice</button>` : `<button class="btn ghost xs" data-fin-subadd="${s.id}">${icon('plus')}${esc(monthName(m))} invoice</button>`}</span>
+          <span class="fa-inv">${(s.invoices || {})[m] ? `<button class="btn ghost xs" data-fin-subinv="${s.id}">${icon('clip')}${esc(monthName(m, true).split(' ')[0])} invoice</button>` : `<button class="btn ghost xs" data-fin-subadd="${s.id}">${icon('plus')}Add ${esc(monthName(m, true).split(' ')[0])} invoice</button>`}</span>
           <button class="icon-btn sm" data-fin-del="${s.id}" title="Remove subscription (past months stay in the records)">${icon('trash')}</button>
         </div>`).join('') || '<div class="fin-empty">No subscriptions yet.</div>'}
-      ${ended.length ? `<div class="fa-ended"><div class="fa-eh">Ended</div>${ended.map((s) => `<div class="fa-row ended"><span class="fa-name"><b>${esc(s.name)}</b><small>Ended ${esc(fmtDay(ymd(new Date(s.endedAt))))}</small></span><span class="fx-amt">${aed(s.amount)}</span></div>`).join('')}</div>` : ''}
+      ${ended.length ? `<div class="fa-ended"><div class="fa-eh">Ended</div>${ended.map((s) => `<div class="fa-row ended"><span class="fa-name"><b>${esc(s.name)}</b><small>Ended ${esc(fmtDay(ymd(new Date(s.endedAt))))}</small>${missLine(s)}</span><span class="fx-amt">${aed(s.amount)}</span></div>`).join('')}</div>` : ''}
     </div>`;
   }
+  // earlier months still without an invoice (this month has its own button)
+  const missLine = (s) => { const ms = subMissing(s).filter((m) => m !== thisMonth()); return ms.length ? `<span class="fa-miss">Missing invoices:${ms.map((m) => `<button data-fin-subadd="${s.id}" data-m="${m}" title="Add the ${esc(monthName(m, true))} invoice">${icon('plus')}${esc(monthName(m))}${m.slice(0, 4) !== thisMonth().slice(0, 4) ? ' ' + m.slice(2, 4) : ''}</button>`).join('')}</span>` : ''; };
   const ordinal = (n) => n + (n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th');
   function monthRecords(type, label, btn) {
     const m = thisMonth();
@@ -642,8 +644,8 @@ const Fin = (() => {
   const extraPage = () => monthRecords('expense', 'Extra expenses', 'Add expense');
 
   /* ---------- Add form (pop-up) ---------- */
-  async function pickInvoice(folder) {
-    const r = await Host.call('pickAttachments', { dest: 'Finance/' + folder + '/' + thisMonth() });
+  async function pickInvoice(folder, month) {
+    const r = await Host.call('pickAttachments', { dest: 'Finance/' + folder + '/' + (month || thisMonth()) });
     const f = (r.files || [])[0];
     return f ? { ...f, addedAt: nowISO(), addedBy: currentUserId } : null;
   }
@@ -745,24 +747,41 @@ const Fin = (() => {
     }
     persist(0); renderContent();
   }
-  async function subInvoice(id) {
+  async function subInvoice(id, month) {
     const s = recs('sub').find((x) => x.id === id);
     if (!s || !isFinAdmin()) return;
+    const m = month || thisMonth();
     try {
-      const f = await pickInvoice('Subscriptions');
+      const f = await pickInvoice('Subscriptions', m);
       if (!f) return;
-      s.invoices = { ...(s.invoices || {}), [thisMonth()]: f };
+      s.invoices = { ...(s.invoices || {}), [m]: f };
       persist(0); renderContent();
+      toast(`${monthName(m, true)} invoice added to ${s.name}`);
     } catch (e) { toast('Could not attach the invoice: ' + e.message); }
   }
   const openFile = (f) => { if (f) previewFile(f); };
+  // A Finance Admin adds a missing invoice afterwards, for any month (Expenses lists, report gaps)
+  async function txInvoice(id) {
+    const x = transactions().find((y) => y.id === id);
+    if (!x || !isFinAdmin() || x.invoice || (x.kind === 'reimb' && x.ref.claimId)) return;
+    if (x.kind === 'sub') return subInvoice(x.ref.id, x.month);
+    try {
+      const f = await pickInvoice(x.kind === 'reimb' ? 'Reimbursements' : 'Expenses', x.date.slice(0, 7));
+      if (!f) return;
+      x.ref.invoice = f;
+      persist(0); renderContent();
+      toast(`Invoice added to ${x.name}`);
+    } catch (e) { toast('Could not attach the invoice: ' + e.message); }
+  }
+  // Paid months (up to the last 12) of a subscription that still have no invoice, oldest first
+  const subMissing = (s) => subPayments(s).filter((p) => !p.invoice && p.month >= addMonths(thisMonth(), -11)).map((p) => p.month);
 
   /* ---------- Clicks ---------- */
   document.addEventListener('click', (e) => {
     if (!owns(ui.view) && !e.target.closest('[data-fin-go]')) return;
     if (rep.open && !e.target.closest('.fr-pop,[data-fin-rep]')) { rep.open = false; const pop = $('.fr-pop'); if (pop) pop.remove(); const b = $('[data-fin-rep]'); if (b) b.setAttribute('aria-expanded', 'false'); }
     if (e.target.closest('[data-fin-repf]')) return;   // the checkbox: handled on change
-    const el = e.target.closest('[data-fin-rep],[data-fin-repm],[data-fin-repy],[data-fin-repgo],[data-fin-go],[data-fin-span],[data-fin-exm],[data-fin-status],[data-fin-graph],[data-fin-proj],[data-fin-toggle],[data-fin-set],[data-fin-all],[data-fin-back],[data-fin-type],[data-fin-page],[data-fin-inv],[data-fin-new],[data-fin-del],[data-fin-subinv],[data-fin-subadd],[data-fin-rinv]');
+    const el = e.target.closest('[data-fin-rep],[data-fin-repm],[data-fin-repy],[data-fin-repgo],[data-fin-go],[data-fin-span],[data-fin-exm],[data-fin-status],[data-fin-graph],[data-fin-proj],[data-fin-toggle],[data-fin-set],[data-fin-all],[data-fin-back],[data-fin-type],[data-fin-page],[data-fin-inv],[data-fin-new],[data-fin-del],[data-fin-subinv],[data-fin-subadd],[data-fin-rinv],[data-fin-txadd]');
     if (!el) return;
     e.stopPropagation();
     const d = el.dataset;
@@ -785,7 +804,8 @@ const Fin = (() => {
     if (d.finInv) { const x = transactions().find((y) => y.id === d.finInv); return openFile(x && x.invoice); }
     if (d.finNew) return add(d.finNew);
     if (d.finDel) return remove(d.finDel);
-    if (d.finSubadd) return subInvoice(d.finSubadd);
+    if (d.finSubadd) return subInvoice(d.finSubadd, d.m);
+    if (d.finTxadd) return txInvoice(d.finTxadd);
     if (d.finSubinv) { const s = recs('sub').find((x) => x.id === d.finSubinv); return openFile(s && (s.invoices || {})[thisMonth()]); }
     if (d.finRinv) { const r = (db.finance || []).find((x) => x.id === d.finRinv); return openFile(r && r.invoice); }
   }, true);
@@ -794,5 +814,38 @@ const Fin = (() => {
     if (e.target.matches && e.target.matches('[data-fin-month]')) { st.list.month = e.target.value; st.list.page = 0; renderContent(); }
   });
 
-  return { owns, init, paintNav, meMenu, addItems, canLook, title, render, transactions, subPayments, aed, st };
+  /* ---------- Subscription invoice reminder ----------
+     Finance Admins: from the 25th to the end of the month, once a day from 11:30 AM, a pop-up lists this
+     month's subscriptions (already billed) that have no invoice yet. */
+  function invoiceTick() {
+    if (!db || !currentUserId || !isFinAdmin() || !Host.isServer || (typeof Phone !== 'undefined' && Phone.on)) return;
+    if ($('#overlay-root').children.length || $('.ec-remind') || $('.an-pop')) return;
+    try { if (navigator.webdriver && localStorage.getItem('e11-inv-remind') !== '1') return; } catch (e) { /* storage blocked */ }
+    const now = new Date();
+    if (now.getDate() < 25 || now.getHours() * 60 + now.getMinutes() < 11 * 60 + 30) return;
+    const u = me(); u.prefs = u.prefs || {};
+    if (u.prefs.invNag === todayStr()) return;
+    const m = thisMonth();
+    const miss = recs('sub').map((s) => subPayments(s).find((p) => p.month === m && !p.invoice)).filter(Boolean);
+    if (!miss.length) return;
+    u.prefs.invNag = todayStr(); persist(0);
+    if (!document.hasFocus()) Host.call('notify', { title: 'Subscription invoices', body: `${miss.length} subscription${miss.length === 1 ? ' has' : 's have'} no ${monthName(m, true)} invoice`, sound: 'Glass' }).catch(() => {});
+    const el = document.createElement('div');
+    el.className = 'ec-remind fin-remind';
+    el.innerHTML = `<div class="ec-rbox" role="dialog" aria-labelledby="fi-rt">
+      <div class="ec-rtop"><img src="logo-tile.png" alt="E11"><div><small>SUBSCRIPTION INVOICES · ${esc(monthName(m, true).toUpperCase())}</small><h2 id="fi-rt">${miss.length === 1 ? '1 subscription has' : miss.length + ' subscriptions have'} no ${esc(monthName(m, true).split(' ')[0])} invoice</h2>
+        <p>Attach them before the month ends, so the expenses report is complete.</p></div></div>
+      <div class="fi-list">${miss.map((p) => `<div><b>${esc(p.name)}</b><span>Billed ${esc(fmtDay(p.date))}</span><em>${aed(p.amount)}</em></div>`).join('')}</div>
+      <div class="ec-rbtns"><button class="btn primary" data-r="go">Attach invoices</button></div>
+      <button class="ec-rlater" data-r="later">Remind me tomorrow</button>
+    </div>`;
+    document.body.appendChild(el);
+    el.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-r]'); if (!b) return;
+      el.remove();
+      if (b.dataset.r === 'go') go('fin-subs');
+    });
+  }
+
+  return { owns, init, paintNav, invoiceTick, meMenu, addItems, canLook, title, render, transactions, subPayments, aed, st };
 })();
