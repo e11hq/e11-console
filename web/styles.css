@@ -2352,3 +2352,13 @@ html:not(.mac-chrome) #app:not(.sb-collapsed) #sidebar .brand { margin-right: -7
 /* Tooltip shortcut key (e.g. Esc): soft outline on the tooltip's dark background, in both themes */
 :root:not(.phone) .tip kbd { border: 1px solid rgba(255, 255, 255, .16); color: rgba(255, 255, 255, .55); background: rgba(255, 255, 255, .04); }
 :root[data-theme="dark"]:not(.phone) .tip kbd { border-color: rgba(255, 255, 255, .12); color: var(--text-3); }
+
+/* Task description: editing looks the same as reading (computer and phone). No box, border or extra padding;
+   the text stays in the same place, at the same size. The formatting buttons show underneath while editing. */
+:root .desc-sec .composer.desc, :root .desc-sec .composer.desc:focus-within, :root:not(.phone) .desc-sec .composer.desc, :root:not(.phone) .desc-sec .composer.desc:focus-within { border-color: transparent; background: none; box-shadow: none; border-radius: 0; }
+:root .desc-sec .composer.desc .d-notes, :root .desc-sec .composer.desc .d-notes:hover, :root .desc-sec .composer.desc .d-notes:focus { border: 0; border-radius: 0; padding: 4px 2px; font-size: 15.5px; line-height: 1.65; min-height: 120px; background: none; }
+:root .desc-sec .composer.desc .rt-editor blockquote { border-left: 3px solid var(--border-strong); margin: 6px 0; padding-left: 10px; color: var(--text-2); }
+:root .desc-sec .composer.desc .rt-editor ul, :root .desc-sec .composer.desc .rt-editor ol { padding-left: 22px; margin: 4px 0; }
+:root .desc-sec .composer.desc .cb-foot { padding-left: 0; margin-top: 4px; border-top: 1px solid var(--border); padding-top: 6px; }
+/* phone: text boxes stay at 16px so iPhone doesn't zoom in while typing, so the description reads at 16px too */
+:root.phone .desc-view, :root.phone .desc-sec .composer.desc .d-notes { font-size: 16px; }
