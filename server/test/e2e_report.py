@@ -80,6 +80,14 @@ async def main():
         async with pg.expect_file_chooser() as fc: await add.click()
         await (await fc.value).set_files(inv); await pg.wait_for_timeout(1500)
         check(bool(await E(f"(db.finance.find(x=>x.id==='{tid}')||{{}}).invoice")), 'invoice added to an extra expense afterwards')
+        # Extra expenses page: this month's items without an invoice get Add invoice
+        await E("const r=db.finance.find(x=>x.type==='expense'&&x.date.slice(0,7)===todayStr().slice(0,7)); if(r){r.invoice=null; persist(0)}"); await E("go('fin-extra')"); await pg.wait_for_timeout(400)
+        add = pg.locator('.fin-add [data-fin-txadd]').first
+        check(await add.count() == 1 and 'Add invoice' in await add.inner_text(), 'Extra expenses page offers Add invoice')
+        rid = await add.get_attribute('data-fin-txadd')
+        async with pg.expect_file_chooser() as fc: await add.click()
+        await (await fc.value).set_files(inv); await pg.wait_for_timeout(1500)
+        check(bool(await E(f"(db.finance.find(x=>x.id==='{rid}')||{{}}).invoice")) and await pg.locator(f'[data-fin-rinv="{rid}"]').count() == 1, 'the invoice is added and shows as Invoice')
         # --- reminder: from the 25th, 11:30, Finance Admins, this month's subscriptions without an invoice
         await E("localStorage.setItem('e11-inv-remind','1'); me().prefs=me().prefs||{}; me().prefs.invNag=''")
         await E("(()=>{const R=Date; const t=new R(todayStr().slice(0,8)+'26T12:00:00').getTime(); window.Date=class extends R{constructor(...a){super(...(a.length?a:[t]))} static now(){return t}}; })()")

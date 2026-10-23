@@ -635,7 +635,7 @@ const Fin = (() => {
       ${list.map((r) => `<div class="fa-row">
           <span class="fa-name"><b>${esc(type === 'reimb' ? personName(r) : r.name)}</b><small>Paid ${esc(fmtDay(r.date))}</small></span>
           <span class="fx-amt">${aed(r.amount)}</span>
-          <span class="fa-inv">${r.claimId ? `<button class="btn ghost xs" data-cl="open" data-id="${esc(r.claimId)}">${icon('open')}Claim</button>` : r.invoice ? `<button class="btn ghost xs" data-fin-rinv="${r.id}">${icon('clip')}Invoice</button>` : '<span class="fl-empty">No invoice</span>'}</span>
+          <span class="fa-inv">${r.claimId ? `<button class="btn ghost xs" data-cl="open" data-id="${esc(r.claimId)}">${icon('open')}Claim</button>` : r.invoice ? `<button class="btn ghost xs" data-fin-rinv="${r.id}">${icon('clip')}Invoice</button>` : admin ? `<button class="btn ghost xs fx-miss" data-fin-txadd="${esc(r.id)}" title="No invoice yet — add it">${icon('plus')}Add invoice</button>` : '<span class="fl-empty">No invoice</span>'}</span>
           ${admin && !r.claimId ? `<button class="icon-btn sm" data-fin-del="${r.id}" title="Remove">${icon('trash')}</button>` : '<span class="fa-sp"></span>'}
         </div>`).join('') || '<div class="fin-empty">Nothing added this month.</div>'}
     </div>`;
