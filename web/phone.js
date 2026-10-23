@@ -903,7 +903,9 @@ const Push = (() => {
   const fit = () => {
     const v = window.visualViewport;
     if (!v) return;
-    root.style.setProperty('--ph-kb', Math.max(0, Math.round(window.innerHeight - v.height - v.offsetTop)) + 'px');
+    const kb = Math.max(0, Math.round(window.innerHeight - v.height - v.offsetTop));
+    root.style.setProperty('--ph-kb', kb + 'px');
+    root.classList.toggle('ph-kb-open', kb > 120 || v.height < window.innerHeight * 0.72);
     root.style.setProperty('--ph-vh', Math.round(v.height) + 'px');
   };
   if (window.visualViewport) { visualViewport.addEventListener('resize', fit); visualViewport.addEventListener('scroll', fit); }

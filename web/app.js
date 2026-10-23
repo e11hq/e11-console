@@ -40,6 +40,7 @@ const ICONS = {
   sun: '<circle cx="8" cy="8" r="2.8"/><path d="M8 1.6v1.6M8 12.8v1.6M1.6 8h1.6M12.8 8h1.6M3.5 3.5l1.1 1.1M11.4 11.4l1.1 1.1M3.5 12.5l1.1-1.1M11.4 4.6l1.1-1.1"/>',
   'chev-left': '<path d="m9.8 4.5-3.6 3.5 3.6 3.5"/>',
   reply: '<path d="M6.5 4 3 7.5 6.5 11M3.3 7.5h6.2a3.5 3.5 0 0 1 3.5 3.5v1"/>',
+  send: '<path d="M3.4 8 2.6 3.2 13.6 8 2.6 12.8 3.4 8zm0 0h4.8"/>',
   smile: '<circle cx="8" cy="8" r="5.8"/><path d="M5.6 9.4c.6.9 1.4 1.3 2.4 1.3s1.8-.4 2.4-1.3"/><circle cx="6" cy="6.6" r=".5" fill="currentColor"/><circle cx="10" cy="6.6" r=".5" fill="currentColor"/>',
   checklist: '<path d="m2.5 4.2 1.1 1.1 2-2.2M2.5 9.7l1.1 1.1 2-2.2M7.8 4.4h5.7M7.8 9.9h5.7"/>',
   activity: '<path d="M1.8 8h2.6l1.8-4.6 3.2 9.2 1.8-4.6h3"/>',
@@ -2506,6 +2507,7 @@ function fmtShort(iso) {
 // The one composer at the bottom of the comments panel. It posts a comment, or a reply when
 // a thread is open or "Reply" was clicked on a comment.
 function composer(t, cid) {
+  const onPhone = typeof Phone !== 'undefined' && Phone.on;
   const key = draftKey(t, cid);
   const files = ui.commentFiles[key] || [];
   const target = cid && t.comments.find((c) => c.id === cid);
@@ -2518,10 +2520,10 @@ function composer(t, cid) {
     <div class="rt-editor" contenteditable="true" id="d-comment" data-draft-key="${key}" ${cid ? `data-reply-to="${cid}"` : ''} data-placeholder="${ph}">${ui.commentDraft[key] || ''}</div>
     ${files.length ? `<div class="cb-files">${files.map((a) => `<span class="cb-chip ${a.linked ? 'linked' : ''}">${isImage(a) && Host.isNative ? `<img src="${imgUrl(a, 160)}" alt="">` : icon('clip')}<span>${esc(a.name)}</span><button data-action="unstage-file" data-key="${key}" data-id="${a.id}" title="Remove">${icon('x')}</button></span>`).join('')}</div>` : ''}
     <div class="cb-foot">
-      <button class="icon-btn sm" data-action="attach-comment" ${cid ? `data-reply="${cid}"` : ''} title="Attach files">${icon('clip')}</button>
+      <button class="icon-btn sm" data-action="attach-comment" ${cid ? `data-reply="${cid}"` : ''} title="Attach files" aria-label="Attach files">${icon(onPhone ? 'plus' : 'clip')}</button>
       ${fmtToolbar()}
       <span class="spacer"></span>${clipPasteBtn('comment')}<span class="hint">⌘ Enter</span>
-      <button class="btn primary sm" data-action="add-comment" ${cid ? `data-reply="${cid}"` : ''} title="⌘ Enter">${cid ? 'Reply' : 'Comment'}</button>
+      <button class="btn primary sm" data-action="add-comment" ${cid ? `data-reply="${cid}"` : ''} title="⌘ Enter" aria-label="${cid ? 'Reply' : 'Comment'}">${onPhone ? icon('send') : cid ? 'Reply' : 'Comment'}</button>
     </div>
   </div>`;
 }
