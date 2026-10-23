@@ -191,7 +191,11 @@ export function sampleData(store, me, filesRoot = null) {
       }
       if (prod[4]) out.claims.push(mk(prod[4], cm, 'submitted', [G(day(cm, 18), 'Studio supplies', [['Gaffer tape', 38], ['Batteries', 64]])]));
       // Finance hears about the submitted ones
-      out.claims.filter((c) => c.state === 'submitted').forEach((c, k) => ['u-smp-fin-a', 'u-smp-fin-v'].forEach((to) => out.notifications.push({ id: `smp-ncl-${k}-${to}`, to, from: c.userId, taskId: null, claimId: c.id, month: c.month, kind: 'claim', text: 'submitted their expense claim', snippet: 'AED ' + c.total.toFixed(2), commentId: null, at: c.submittedAt, read: false })));
+      // …and so does everyone on the team with Finance access (e.g. an Admin who is also a Finance Admin)
+      const hasFin = (u) => u && u.active !== false && (['finance_admin', 'finance_viewer'].includes(u.role) || u.fin === 'admin' || u.fin === 'viewer');
+      const finTo = new Set(['u-smp-fin-a', 'u-smp-fin-v', ...store.list('users').filter(hasFin).map((u) => u.id)]);
+      const monthL = (m) => new Date(Number(m.slice(0, 4)), Number(m.slice(5)) - 1, 1).toLocaleDateString('en-US', { month: 'long' });
+      out.claims.filter((c) => c.state === 'submitted').forEach((c, k) => finTo.forEach((to) => { if (to !== c.userId) out.notifications.push({ id: `smp-ncl-${k}-${to}`, to, from: c.userId, taskId: null, claimId: c.id, month: c.month, kind: 'claim', text: `submitted their ${monthL(c.month)} expense claim`, snippet: 'AED ' + c.total.toFixed(2), commentId: null, at: c.submittedAt, read: false }); }));
     }
 
     // invoices on expense records

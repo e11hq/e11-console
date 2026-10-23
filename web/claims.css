@@ -126,3 +126,7 @@
 .ec-rbtns .btn.primary { grid-column: 1 / -1; }
 .ec-rlater { align-self: center; border: 0; background: none; color: var(--text-3); font: inherit; font-size: 12.5px; cursor: pointer; padding: 2px 6px; }
 .ec-rlater:hover { color: var(--text); text-decoration: underline; }
+
+/* Inbox rows about expense claims */
+.ib-coin { color: var(--green); }
+.ib-coin .ic, .ib-coin svg { width: 16px; height: 16px; }

@@ -5697,6 +5697,7 @@ function notifMsg(n, t) {
     const c = val === 'Approved' ? CD.approved.color : CD.review.color;
     return `${who} set CD Status to: <span class="ib-chip" style="background:${c};color:${textOn(c)}">${esc(val)}</span>`;
   }
+  if (/^claim/.test(n.kind)) return `${who} ${n.text}${n.snippet ? ` <span class="ib-dim">· ${esc(n.snippet)}</span>` : ''}`;
   if (n.kind === 'review-amend' && n.snippet) return `${who} <span class="ib-dim">requested amendments:</span> ${esc(n.snippet)}`;
   if (n.kind === 'review-ok' && /your files/.test(n.text)) return `${who} approved your files <span class="ib-chip" style="background:${CD.approved.color};color:${textOn(CD.approved.color)}">APPROVED</span>`;
   if ((n.kind === 'comment' || n.kind === 'mention') && n.snippet) {
@@ -5732,9 +5733,9 @@ function viewInbox() {
     // opens what needs you first (an unread review or @mention); otherwise the update the row shows
     const target = items.find((x) => isRev(x) && !x.read) || items.find((x) => x.kind === 'mention' && !x.read) || n;
     const shown = isRev(target) ? target : n;
-    const lead = ['comment', 'mention', 'review-amend', 'review-ok', 'review'].includes(shown.kind) ? avatarHTML(shown.from, 22) : `<span class="ib-kic">${icon(NOTIF_ICON[shown.kind] || 'bell')}</span>`;
+    const lead = ['comment', 'mention', 'review-amend', 'review-ok', 'review', 'claim', 'claim-ok', 'claim-paid'].includes(shown.kind) ? avatarHTML(shown.from, 22) : `<span class="ib-kic">${icon(NOTIF_ICON[shown.kind] || 'bell')}</span>`;
     return `<div class="ib-row ${unread ? 'unread' : ''}" data-action="open-notif" data-id="${target.id}">
-      <span class="ib-title">${t ? statusIcon(t) : `<span class="st-ic">${statusIconSVG('#87909e', 'todo', 0)}</span>`}<span class="ib-tname">${t ? esc(t.title || 'Untitled task') : /^claim/.test(n.kind) ? 'Expense claims' : '<i>Deleted task</i>'}</span></span>
+      <span class="ib-title">${t ? statusIcon(t) : /^claim/.test(n.kind) ? `<span class="st-ic ib-coin">${icon('coin')}</span>` : `<span class="st-ic">${statusIconSVG('#87909e', 'todo', 0)}</span>`}<span class="ib-tname">${t ? esc(t.title || 'Untitled task') : /^claim/.test(n.kind) ? 'Expense claims' : '<i>Deleted task</i>'}</span></span>
       <span class="ib-lead">${lead}</span>
       <span class="ib-msg">${notifMsg(shown, t)}</span>
       <span class="ib-count">${items.length > 1 ? `<i>${items.length}</i>` : ''}</span>
