@@ -22,6 +22,8 @@
 
 .hm-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr); gap: 16px; align-items: stretch; }
 .hm-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+/* both columns end on the same line: the last card in each one takes up the spare height */
+.hm-grid > .hm-col > :last-child { flex: 1 0 auto; }
 .hm-card { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 18px 20px; min-width: 0; }
 .hm-card.grow { flex: 1; }
 .hm-h { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 6px; }
@@ -146,6 +148,16 @@
 .hm-hn { display: flex; align-items: center; gap: 14px; margin-top: 8px; position: relative; }
 .hm-hn b { font-family: var(--mono); font-size: 40px; font-weight: 600; }
 .hm-hn span { font-size: 13px; line-height: 1.35; opacity: .9; }
+/* Recently finished: only as many rows as the spare height allows (the list adds no height of its own) */
+.hm-hero { display: flex; flex-direction: column; }
+.hm-hlist { position: relative; z-index: 1; flex: 1 1 auto; contain: size; overflow: hidden; margin-top: 14px; display: flex; flex-direction: column; gap: 6px; -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 26px), transparent); mask-image: linear-gradient(180deg, #000 calc(100% - 26px), transparent); }
+.hm-hrow { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; background: rgba(255, 255, 255, .1); font-size: 12.5px; cursor: pointer; flex: none; }
+.hm-hrow:hover { background: rgba(255, 255, 255, .16); }
+.hm-hrow i { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: rgba(61, 220, 151, .9); color: #0b2b1d; }
+.hm-hrow i.late { background: rgba(249, 190, 51, .95); color: #3b2a05; }
+.hm-hrow i svg { width: 13px; height: 13px; }
+.hm-hrow span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hm-hrow em { font-style: normal; font-size: 11.5px; opacity: .75; }
 .hm-hero p { margin: 10px 0 0; font-size: 12.5px; opacity: .85; position: relative; }
 .hm-avs { margin-top: 12px; position: relative; }
 .hm-avs .av { box-shadow: 0 0 0 2px var(--accent-strong); }

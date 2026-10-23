@@ -278,7 +278,7 @@ const Home = (() => {
 
     // Recent activity: my Inbox
     const acts = (db.notifications || []).filter((n) => n.to === currentUserId && n.from).sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 4)
-      .map((n) => ({ from: n.from, html: esc(n.text), quote: n.snippet, taskId: n.taskId, at: n.at, nid: n.id }));
+      .map((n) => ({ from: n.from, html: esc(n.text).replace(/&lt;(\/?)b&gt;/g, '<$1b>'), quote: n.snippet, taskId: n.taskId, at: n.at, nid: n.id }));
 
     // CD reviews this month
     const now = new Date();
@@ -338,6 +338,7 @@ const Home = (() => {
           <section class="hm-hero">
             <h2>On-time streak</h2>
             <div class="hm-hn"><b>${streak}</b><span>task${streak === 1 ? '' : 's'} in a row finished by their due date</span></div>
+            ${finished.length ? `<div class="hm-hlist" aria-label="Recently finished">${finished.slice(0, 12).map((t) => { const ok = onTime(t, myDoneAt(t)); return `<div class="hm-hrow" data-task="${t.id}"><i class="${ok ? 'ok' : 'late'}" title="${ok ? 'On time' : 'Late'}">${icon(ok ? 'check' : 'clock')}</i><span>${esc(t.title || 'Untitled task')}</span><em>${esc(fmtDay(ymdOf(myDoneAt(t))))}</em></div>`; }).join('')}</div>` : ''}
           </section>
         </aside>
       </div>
