@@ -420,9 +420,10 @@ const Phone = (() => {
       setTimeout(() => { if (root.firstElementChild === scrim) root.innerHTML = ''; }, 260);
       if (discarded === true) toast(o.discardedMsg || 'Draft discarded');
     };
-    const dock = () => {
+    const dock = (instant) => {
       if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
-      box.style.transition = ''; box.style.transform = '';
+      // instant: the sheet has already slid down to where the bar sits, so swap without animating
+      box.style.transition = instant ? 'none' : ''; box.style.transform = '';
       const t = box.querySelector('input:not([type]), input[type="text"], textarea');
       const hint = box.querySelector('.ph-dock-hint');
       hint.innerHTML = `${esc(o.dockLabel || 'Draft')}${t && t.value.trim() ? ` · <span>${esc(t.value.trim())}</span>` : ''} · <b>Tap to continue</b>`;
@@ -476,7 +477,15 @@ const Phone = (() => {
         return;
       }
       if (cur.dy > Math.min(140, cur.h * 0.3) || fast) {
-        if (f.dirty()) f.dock();
+        if (f.dirty()) {
+          // slide on down until only the top strip shows, then become the tucked bar in that same spot
+          // where the tucked bar will sit: measure it without showing it (class on and off in the same frame)
+          const now = box.getBoundingClientRect().top - cur.dy;
+          scrim.classList.add('docked'); const barTop = box.getBoundingClientRect().top - cur.dy; scrim.classList.remove('docked');
+          box.style.transition = 'transform .22s cubic-bezier(.2,.8,.2,1)';
+          box.style.transform = `translateY(${Math.max(0, barTop - now)}px)`;
+          setTimeout(() => { f.dock(true); requestAnimationFrame(() => requestAnimationFrame(() => { box.style.transition = ''; })); }, 220);
+        }
         else { box.style.transition = 'transform .22s ease-in'; box.style.transform = 'translateY(100%)'; scrim.classList.remove('in'); setTimeout(f.close, 200); }
       } else spring();
     };
