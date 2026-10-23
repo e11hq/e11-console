@@ -206,7 +206,7 @@ body.fin-mode #project-list, body.fin-mode .ca-nav-wrap, body.fin-mode #topbar .
 .fa-mix { display: flex; gap: 3px; height: 12px; margin: 10px 0 16px; border-radius: 6px; overflow: hidden; }
 .fa-mix i { display: block; height: 100%; border-radius: 3px; min-width: 2px; }
 .fa-leg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; font-size: 12.5px; }
-.fa-leg.col { grid-template-columns: 1fr; margin-top: 8px; }
+.fa-leg.fa-leg-col { grid-template-columns: 1fr; margin-top: 8px; }
 .fa-leg span { display: flex; align-items: center; gap: 8px; color: var(--text-2); min-width: 0; }
 .fa-leg span i { width: 9px; height: 9px; border-radius: 3px; flex: none; }
 .fa-leg span b { margin-left: auto; font-family: var(--mono); color: var(--text); }

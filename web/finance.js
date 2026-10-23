@@ -568,7 +568,7 @@ const Fin = (() => {
             <section class="fa-card">
               <div class="fa-ch"><h2>All expenses</h2><span class="fa-muted">${esc(mname(m))}</span></div>
               <div class="fa-donut"><svg viewBox="0 0 300 160" aria-hidden="true">${arcs.map((a) => (a.d ? `<path d="${a.d}" fill="${KIND_C[a.k]}"><title>${a.l}: ${a.pct}%</title></path>` : '')).join('') || '<path d="M20,150 A130,130 0 0 1 280,150 L222,150 A72,72 0 0 0 78,150 Z" fill="var(--hover)"/>'}</svg><div><small>Total</small><b>${aed(total)}</b></div></div>
-              <div class="fa-leg col">${arcs.map((a) => `<span><i style="background:${KIND_C[a.k]}"></i>${a.l}<b>${a.pct}%</b><button class="fa-link" data-fin-all="${a.k}">View all</button></span>`).join('')}</div>
+              <div class="fa-leg fa-leg-col">${arcs.map((a) => `<span><i style="background:${KIND_C[a.k]}"></i>${a.l}<b>${a.pct}%</b><button class="fa-link" data-fin-all="${a.k}">View all</button></span>`).join('')}</div>
             </section>
           </div>
         </div>
