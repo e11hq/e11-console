@@ -1122,12 +1122,12 @@ function workFilterBar() {
     ...F.ams.map((id) => chip(`${avatarHTML(id, 16)}${esc(fullName(userById(id)))}’s tasks`, 'wf-clear-am', id)),
     ...F.people.map((id) => chip(`${avatarHTML(id, 16)}${esc(fullName(userById(id)))}`, 'wf-clear-person', id)),
   ].join('');
-  return `<div class="wf-bar">
+  return `<div class="wf-bar"><div class="wf-btns">
     <button class="wf-btn ${F.created ? 'on' : ''}" data-action="wf-created">${icon('cal')}Created date${icon('chev')}</button>
     <button class="wf-btn ${F.due ? 'on' : ''}" data-action="wf-due">${icon('flag')}Due date${icon('chev')}</button>
     <button class="wf-btn ${F.people.length ? 'on' : ''}" data-action="wf-people">${icon('users')}People${icon('chev')}</button>
     ${isAdmin() ? `<button class="wf-btn ${F.ams.length || F.team ? 'on' : ''}" data-action="wf-ams">${icon('user')}Account managers${icon('chev')}</button>` : ''}
-    <button class="wf-btn ${F.assigned ? 'on' : ''}" data-action="wf-assigned">${icon('check-circle')}Assigned to me</button>
+    <button class="wf-btn ${F.assigned ? 'on' : ''}" data-action="wf-assigned">${icon('check-circle')}Assigned to me</button></div>
     ${chips ? `<div class="wf-chips">${chips}${Work.active() ? '<button class="wf-reset" data-action="wf-reset">Clear all</button>' : ''}</div>` : ''}
   </div>`;
 }

@@ -897,7 +897,7 @@ const Push = (() => {
    Unread ↔ All ↔ Mentions. (A swipe that starts at the very left edge is "back" instead.) */
 (() => {
   let g = null;
-  const SKIP = 'input, textarea, select, [contenteditable="true"], .ph-slides, .ph-chips, .wf-bar, .tile-grid, .menu, .ph-sheet, .ap-video, video, .board';
+  const SKIP = 'input, textarea, select, [contenteditable="true"], .ph-slides, .ph-chips, .wf-bar, .tr-chips, .fin-chips, .fin-tabs, .fa-tabs, .tile-grid, .menu, .ph-sheet, .ap-video, video, .board';
   function tabsHere() {
     if ($('#overlay-root').firstElementChild || $('#ph-sheet-root .ph-scrim:not(.docked)') || $('.menu')) return null;
     if (ui.taskId) {

@@ -795,3 +795,15 @@ html.phone body.phone #update-banner .ub-text b { font-size: 16px; }
 html.phone body.phone #update-banner .ub-text span { font-size: 14px; }
 html.phone body.phone #update-banner .ub-acts { gap: 10px; }
 html.phone body.phone #update-banner .ub-acts .btn { flex: 1; height: 46px; justify-content: center; font-size: 15.5px; font-weight: 600; border-radius: 12px; }
+
+/* Filters on small screens: one line each, swipe sideways for more (edge to edge, no scrollbar) */
+@media (max-width: 760px) {
+  .wf-bar { flex-direction: column; align-items: stretch; flex-wrap: nowrap; }
+  .wf-btns, .wf-chips, .tr-chips, .fin-chips, .fin-tabs, .fa-tabs {
+    display: flex; flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .wf-btns::-webkit-scrollbar, .wf-chips::-webkit-scrollbar, .tr-chips::-webkit-scrollbar, .fin-chips::-webkit-scrollbar, .fin-tabs::-webkit-scrollbar, .fa-tabs::-webkit-scrollbar { display: none; }
+  .wf-btns > *, .wf-chips > *, .tr-chips > *, .fin-chips > *, .fin-tabs > *, .fa-tabs > * { flex: none; white-space: nowrap; }
+  .wf-btns { gap: 8px; }
+}
+/* the phone layout's filter rows run to the screen edges so they can be swiped past */
+body.phone .wf-btns, body.phone .wf-chips { width: auto; margin: 0 -16px; padding: 0 16px; scroll-padding: 0 16px; }

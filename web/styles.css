@@ -2245,6 +2245,7 @@ body.phone [data-action="share-task"] { display: none !important; }
 
 /* ---------- My Tasks filters (Account Managers and Admins) ---------- */
 .wf-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 2px 0 12px; }
+.wf-btns { display: contents; }
 .wf-btn { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 7px; border: 1px solid var(--border); background: var(--raised, transparent); color: var(--text-2); font: inherit; font-size: 12.5px; font-weight: 500; cursor: pointer; }
 .wf-btn .ic { width: 13px; height: 13px; }
 .wf-btn .ic:last-child:not(:first-child) { width: 11px; height: 11px; opacity: .7; }
