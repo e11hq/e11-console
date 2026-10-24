@@ -24,6 +24,9 @@ async def main():
         await E("closeDetail()")
         # greetings
         check(await E("[Occasions.greeting('2026-12-02'), Occasions.greeting('2026-12-15'), Occasions.greeting('2027-12-09'), Occasions.greeting('2026-12-16')]") == ['Eshi Biladi', 'Eshi Biladi', 'Eshi Biladi', None], 'National Day greeting: Eshi Biladi from 2 to 15 Dec, every year')
+        check(await E("Occasions.alone('Eshi Biladi') && !Occasions.alone('Eid Mubarak')") is True, 'Eshi Biladi is said without the name')
+        h = await E("(() => { const g = Occasions.greeting; Occasions.greeting = () => 'Eshi Biladi'; ui.view = 'home'; renderContent(); const t = document.querySelector('.hm-head h1') && document.querySelector('.hm-head h1').textContent; Occasions.greeting = g; ui.view = 'calendar'; renderContent(); return t; })()")
+        check(h == 'Eshi Biladi', f'Home says just Eshi Biladi ({h})')
         check(await E("Occasions.greeting('2027-02-20')") == 'Ramadan Kareem', 'Ramadan greeting all month')
         check(await E("Occasions.greeting('2027-03-11')") == 'Eid Mubarak', 'Eid greeting')
         check(await E("Occasions.greeting('2026-12-25')") == 'Merry Christmas', 'Christmas greeting')

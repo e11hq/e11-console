@@ -6813,7 +6813,7 @@ const Splash = (() => {
   function greeting(name) {
     const h = new Date().getHours();
     const part = Occasions.greeting(todayStr()) || (h < 5 ? 'Working late' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening');
-    return name ? `${part}, ${name}` : part;
+    return name && !Occasions.alone(part) ? `${part}, ${name}` : part;
   }
   let rows = [];
   function init() {

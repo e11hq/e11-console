@@ -7,6 +7,8 @@ const Home = (() => {
   const DAY = 86400000;
   const WD = ['Mo', 'Tu', 'We', 'Th', 'Fr'];
   const first = (u) => fullName(u).split(' ')[0];
+  // "Good morning, Haris"; National Day's "Eshi Biladi" is said on its own
+  const hello = (name) => { const g = greeting(); return typeof Occasions !== 'undefined' && Occasions.alone(g) ? esc(g) : `${esc(g)}, ${esc(name)}`; };
   const greeting = () => { const o = typeof Occasions !== 'undefined' && Occasions.greeting(todayStr()); if (o) return o; const h = new Date().getHours(); return h < 5 ? 'Good evening' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; };
   const dateLine = () => new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
   const ymdOf = (iso) => (iso ? ymd(new Date(iso)) : null);
@@ -155,7 +157,7 @@ const Home = (() => {
     const statCard = (cls, ic, l, n, note, noteCls, kind) => `<button type="button" class="hm-stat" data-hm="stat" data-v="${kind}"><span class="hm-ic ${cls}">${svg(ic, 1.5)}</span><span><span class="hm-sl">${l}</span><span class="hm-sn"><b>${n}</b><span class="${noteCls}">${note}</span></span></span></button>`;
 
     return `<div class="hm hm-lead">
-      <header class="hm-head"><div><div class="hm-date">${dateLine()}</div><h1>${greeting()}, ${esc(first(me()))}</h1></div>
+      <header class="hm-head"><div><div class="hm-date">${dateLine()}</div><h1>${hello(first(me()))}</h1></div>
         <div class="hm-btns"><button type="button" class="hm-btn" data-nav="today">${esc(Work.dayTitle())}</button><button type="button" class="hm-btn primary" data-action="new-task">+ New task</button></div></header>
       <section class="hm-stats">
         ${statCard('blue', IC.clock, admin ? 'Team tasks due today' : 'Your tasks due today', due0.length, overdue.length ? `${overdue.length} overdue` : 'none overdue', overdue.length ? 'warn' : 'ok', 'today')}
@@ -310,7 +312,7 @@ const Home = (() => {
 
     const roleL = { production: 'Production', social: 'Social', freelancer: 'Freelancer' }[u.role] || ROLES[u.role] || '';
     return `<div class="hm hm-member">
-      <header class="hm-head"><div><div class="hm-date">${dateLine()}${roleL ? ' · ' + esc(roleL) : ''}</div><h1>${greeting()}, ${esc(first(u))}</h1></div>
+      <header class="hm-head"><div><div class="hm-date">${dateLine()}${roleL ? ' · ' + esc(roleL) : ''}</div><h1>${hello(first(u))}</h1></div>
         <div class="hm-btns"><button type="button" class="hm-btn" data-nav="today">My Day</button>${can('createTask') ? '<button type="button" class="hm-btn primary" data-action="new-task">+ New task</button>' : ''}</div></header>
       <div class="hm-grid">
         <div class="hm-col">

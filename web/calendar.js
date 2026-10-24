@@ -141,13 +141,16 @@ const Occasions = (() => {
       || between(plus(day, -45), day).find((x) => x.greet && x.greetUntil && x.date <= day && x.greetUntil >= day);   // a greeting that lasts past the day (National Day)
     return o ? o.greet : null;
   }
+  // greetings said on their own, without ", Haris"
+  const ALONE = ['Eshi Biladi'];
+  const alone = (g) => ALONE.includes(g);
   // occasions a post on this day is likely for: on the day, or up to 3 days before it
   const suggest = (day) => (day ? between(day, plus(day, 3)) : []);
   const fmt = (o) => {
     const f = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }); };
     return o.end && o.end !== o.date ? `${f(o.date)} – ${f(o.end)}` : f(o.date);
   };
-  return { between, on, byId, greeting, suggest, fmt, plus };
+  return { between, on, byId, greeting, alone, suggest, fmt, plus };
 })();
 
 const Cal = (() => {
