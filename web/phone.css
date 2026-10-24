@@ -782,3 +782,7 @@ html.phone body.phone #detail .tm { box-shadow: none !important; }
 /* Behind everything (what shows past the page's edges on the iPhone): the same colour as the page */
 html.phone { background: #0e0e11; }
 html.phone[data-theme="light"] { background: #f4f4f7; }
+
+/* Home Screen app: the page runs up under the time and battery, and iOS 26 blurs a band below them.
+   Push every header down past that band so titles stay sharp (Safari in the browser doesn't blur: no extra space). */
+html.ph-underbar body.phone { --ph-top: calc(env(safe-area-inset-top) + 24px); } /* set by the phone layout once it has measured */
