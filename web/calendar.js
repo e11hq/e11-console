@@ -293,7 +293,7 @@ const Cal = (() => {
         }).join('') : '<div class="cal-muted">No occasions in the next weeks</div>'}
         ${mgr && Host.isServer ? `<div class="cal-check" id="cal-check">Expected dates are checked against the UAE holiday calendar twice a day.<button class="btn ghost xs" data-cal="check">Check now</button></div>` : ''}
       </section>
-      <section class="cal-box"><h3>${st().mode === 'week' ? 'This week' : 'This month'}</h3>
+      <section class="cal-box" id="cal-stats"><h3>${st().mode === 'week' ? 'This week' : 'This month'}</h3>
         ${counts.map(([k, n]) => `<div class="cal-stat"><span class="cal-sdot" style="background:${STATUS[k][1]}"></span><span>${STATUS[k][0]}</span><b>${n}</b></div>`).join('')}
       </section>
     </aside>`;
@@ -428,14 +428,36 @@ const Cal = (() => {
     const f = st();
     const ck = (on) => (on ? `<span class="wf-ck">${icon('check')}</span>` : '');
     const list = kind === 'project' ? 'projects' : 'channels';
-    // tick and untick several; the menu stays open until you click elsewhere
-    const reopen = () => { render($('#content')); setTimeout(() => { const a = document.querySelector(`[data-cal="f-${kind}"]`); if (a) filterMenu(a, kind); }, 0); };
-    const toggle = (v) => { f[list] = f[list].includes(v) ? f[list].filter((x) => x !== v) : f[list].concat(v); reopen(); };
-    const all = () => { f[list] = []; render($('#content')); };
-    const items = kind === 'project'
-      ? [{ html: `<div class="mi">All clients${ck(!f.projects.length)}</div>`, run: all }, ...db.projects.slice().sort(byOrder).map((p) => ({ html: `<div class="mi"><span class="dot" style="background:${p.color}"></span>${esc(p.name)}${ck(f.projects.includes(p.id))}</div>`, run: () => toggle(p.id) }))]
-      : [{ html: `<div class="mi">All channels${ck(!f.channels.length)}</div>`, run: all }, ...CHANNELS.map(([k, name]) => ({ html: `<div class="mi"><span class="cal-ch" style="--c:${CH[k].color}">${CH[k].short}</span>${esc(name)}${ck(f.channels.includes(k))}</div>`, run: () => toggle(k) }))];
-    showMenu(anchor, items.map((it, i) => ({ ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) }))).classList.add('wf-menu');
+    // tick and untick several: the menu stays open and only the ticks, the button and the calendar update
+    // (no full redraw, so nothing flashes through the menu)
+    const opts = kind === 'project'
+      ? db.projects.slice().sort(byOrder).map((p) => [p.id, `<span class="dot" style="background:${p.color}"></span>${esc(p.name)}`])
+      : CHANNELS.map(([k, name]) => [k, `<span class="cal-ch" style="--c:${CH[k].color}">${CH[k].short}</span>${esc(name)}`]);
+    const html = `<div class="mi" data-tog="">${kind === 'project' ? 'All clients' : 'All channels'}${ck(!f[list].length)}</div>`
+      + opts.map(([v, label]) => `<div class="mi" data-tog="${esc(v)}">${label}${ck(f[list].includes(v))}</div>`).join('');
+    const m = showMenu(anchor, [{ html }]);
+    m.classList.add('wf-menu');
+    const paint = () => $$('[data-tog]', m).forEach((el) => {
+      const on = el.dataset.tog ? f[list].includes(el.dataset.tog) : !f[list].length;
+      const c = el.querySelector('.wf-ck');
+      if (on && !c) el.insertAdjacentHTML('beforeend', ck(true)); else if (!on && c) c.remove();
+    });
+    m.addEventListener('click', (e) => {
+      const el = e.target.closest('[data-tog]'); if (!el) return;
+      const v = el.dataset.tog;
+      f[list] = !v ? [] : f[list].includes(v) ? f[list].filter((x) => x !== v) : f[list].concat(v);
+      paint(); refresh();
+    });
+  }
+  // redraw the calendar, the filter buttons and the counts, leaving the occasions list (and any open menu) alone
+  function refresh() {
+    const r = range();
+    const main = $('.cal-main'), bar = $('.cal-bar'), stats = $('#cal-stats');
+    if (!main || !bar) return render($('#content'));
+    main.innerHTML = st().mode === 'week' ? week(r) : month(r);
+    const tools = document.createElement('div'); tools.innerHTML = toolbar(r);
+    $$('.cal-filter', bar).forEach((b, i) => { const n = $$('.cal-filter', tools)[i]; if (n) { b.className = n.className; b.innerHTML = n.innerHTML; } });
+    if (stats) { const d = document.createElement('div'); d.innerHTML = side(r); const ns = d.querySelector('#cal-stats'); if (ns) stats.innerHTML = ns.innerHTML; }
   }
 
   /* ---------- the three task fields ---------- */
