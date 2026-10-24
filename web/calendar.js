@@ -46,15 +46,70 @@ const Occasions = (() => {
     ['fathersday', 'Father’s Day', (y) => nth(y, 6, 0, 3), 'Happy Father’s Day'],
     ['blackfriday', 'Black Friday', (y) => plus(nth(y, 11, 4, 4), 1), null],
   ];
+  /* After the table runs out, the dates are worked out:
+     - Islamic dates from the Umm al-Qura calendar built into every browser (the UAE confirms by moon sighting,
+       so they stay "Expected" and can be corrected in the app)
+     - Chinese New Year from the browser's Chinese calendar (can be a day off: also "Expected")
+     - Easter by the usual church calculation; DSF from its usual pattern (first Friday from 3 Dec, about 5 weeks)
+     - Diwali from a short list of published dates (it follows the Hindu calendar, which browsers don't have) */
+  const DIWALI = { 2029: '2029-11-05', 2030: '2030-10-26', 2031: '2031-11-14', 2032: '2032-11-02', 2033: '2033-10-22', 2034: '2034-11-10', 2035: '2035-10-30' };
+  const scans = {};
+  // every day of a Gregorian year in another calendar: 'month-day' → [dates]
+  function scan(cal, y) {
+    const k = cal + y;
+    if (scans[k]) return scans[k];
+    const out = {};
+    try {
+      const f = new Intl.DateTimeFormat('en-u-ca-' + cal, { day: 'numeric', month: 'numeric', timeZone: 'UTC' });
+      for (let t = Date.UTC(y, 0, 1); t < Date.UTC(y + 1, 0, 1); t += 864e5) {
+        const p = Object.fromEntries(f.formatToParts(new Date(t)).map((x) => [x.type, x.value]));
+        const key = `${parseInt(p.month, 10)}-${parseInt(p.day, 10)}`;
+        (out[key] = out[key] || []).push(new Date(t).toISOString().slice(0, 10));
+      }
+    } catch (e) { /* this browser lacks that calendar */ }
+    return (scans[k] = out);
+  }
+  const hijri = (y, m, d) => scan('islamic-umalqura', y)[`${m}-${d}`] || [];
+  function easter(y) {
+    const a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3);
+    const h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+    const month = Math.floor((h + l - 7 * m + 114) / 31), day = ((h + l - 7 * m + 114) % 31) + 1;
+    return `${y}-${p2(month)}-${p2(day)}`;
+  }
+  // [start, end] pairs for a year (a moon-based one can happen twice in one year, e.g. Ramadan 2030)
+  function computed(k, y) {
+    const ends = (start) => { // Ramadan ends the day before 1 Shawwal
+      for (let i = 28; i <= 31; i++) { const d = plus(start, i), yy = Number(d.slice(0, 4)); if ((hijri(yy, 10, 1)).includes(d)) return plus(d, -1); }
+      return plus(start, 29);
+    };
+    switch (k) {
+      case 'ramadan': return hijri(y, 9, 1).map((d) => [d, ends(d)]);
+      case 'eidfitr': return hijri(y, 10, 1).map((d) => [d, null]);
+      case 'arafat': return hijri(y, 12, 9).map((d) => [d, null]);
+      case 'eidadha': return hijri(y, 12, 10).map((d) => [d, null]);
+      case 'hijri': return hijri(y, 1, 1).map((d) => [d, null]);
+      case 'mawlid': return hijri(y, 3, 12).map((d) => [d, null]);
+      case 'cny': return (scan('chinese', y)['1-1'] || []).filter((d) => d.slice(5, 7) <= '02').slice(0, 1).map((d) => [d, null]);
+      case 'easter': return [[easter(y), null]];
+      case 'diwali': return DIWALI[y] ? [[DIWALI[y], null]] : [];
+      case 'dsf': { const d = new Date(y, 11, 3); d.setDate(3 + ((5 - d.getDay() + 7) % 7)); const s0 = ymd0(d); return [[s0, plus(s0, 37)]]; }
+      default: return [];
+    }
+  }
   const meta = () => (typeof db !== 'undefined' && db && db.meta) || {};
   function builtIn(y) {
     const out = [];
     FIXED.forEach(([k, name, md, end, greet]) => out.push({ id: `${k}-${y}`, key: k, name, date: `${y}-${md}`, end: end ? `${y}-${end}` : null, greet, est: false }));
     TABLE.forEach(([k, name, greet, est, extra, by]) => {
-      const v = by[y]; if (!v) return;
-      const date = Array.isArray(v) ? v[0] : v;
-      const end = Array.isArray(v) ? v[1] : extra ? plus(date, extra) : null;
-      out.push({ id: `${k}-${y}`, key: k, name, date, end, greet, est });
+      const v = by[y];
+      if (v) {
+        const date = Array.isArray(v) ? v[0] : v;
+        const end = Array.isArray(v) ? v[1] : extra ? plus(date, extra) : null;
+        out.push({ id: `${k}-${y}`, key: k, name, date, end, greet, est });
+        return;
+      }
+      if (Number(Object.keys(by).sort().pop()) > y) return;   // years before the table: not needed
+      computed(k, y).forEach(([date, end], i) => out.push({ id: `${k}-${y}${i ? 'b' : ''}`, key: k, name, date, end: end || (extra ? plus(date, extra) : null), greet, est: k !== 'easter' }));
     });
     RULES.forEach(([k, name, fn, greet]) => out.push({ id: `${k}-${y}`, key: k, name, date: fn(y), end: null, greet, est: false }));
     return out;
@@ -74,7 +129,8 @@ const Occasions = (() => {
     if (!id) return null;
     const custom = (meta().occasions || []).find((o) => o.id === id);
     if (custom) return { ...custom, custom: true };
-    const y = Number(String(id).slice(-4));
+    const m = /(\d{4})b?$/.exec(String(id));
+    const y = m ? Number(m[1]) : 0;
     if (!y) return null;
     return between(`${y - 1}-01-01`, `${y + 1}-12-31`).find((o) => o.id === id) || null;
   };
