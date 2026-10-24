@@ -73,6 +73,12 @@ export function createHolidaySync({ store, webDir, url = DEFAULT_HOLIDAYS_URL, f
         .map((e) => e.date).sort();
       hits.forEach((d) => { if (!found.some((f) => f.key === key && Math.abs(diff(f.date, d)) <= 10)) found.push({ key, date: d }); });
     }
+    // listed but not final yet (e.g. "Eid al-Fitr (tentative)"): shown on the calendar page so people know they were read
+    const tentative = [];
+    for (const [key, re, not] of KEYS) {
+      events.filter((e) => re.test(e.summary) && !(not && not.test(e.summary)) && /tentative|expected|estimated/i.test(e.summary) && e.date >= today && e.date <= to)
+        .forEach((e) => { if (!tentative.some((t) => t.key === key && Math.abs(diff(t.date, e.date)) <= 10)) tentative.push({ key, date: e.date, summary: e.summary }); });
+    }
     const meta = { ...(store.get('meta', 'main') || {}) };
     const fixes = { ...(meta.occDates || {}) };
     const O = occasions({ ...meta, occDates: {} });   // the app's own estimates, before any correction
@@ -98,7 +104,8 @@ export function createHolidaySync({ store, webDir, url = DEFAULT_HOLIDAYS_URL, f
       onChange(rev, results, changed.filter((c) => !c.same));
     }
     const names = { ramadan: 'Ramadan', eidfitr: 'Eid al-Fitr', arafat: 'Arafat Day', eidadha: 'Eid al-Adha', hijri: 'Islamic New Year', mawlid: 'Prophet’s Birthday' };
-    const s = { at, ok: true, error: null, found: found.length, foundList: found.map((f) => ({ name: names[f.key], date: f.date })).sort((a, b) => a.date.localeCompare(b.date)), events: events.length, lastChange: changed.filter((c) => !c.same).length ? at : status().lastChange || null, changed: changed.filter((c) => !c.same).length ? changed.filter((c) => !c.same) : status().changed || [] };
+    const s = { at, ok: true, error: null, found: found.length, foundList: found.map((f) => ({ name: names[f.key], date: f.date })).sort((a, b) => a.date.localeCompare(b.date)), events: events.length,
+      tentativeList: tentative.map((f) => ({ name: names[f.key], date: f.date })).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 6), lastChange: changed.filter((c) => !c.same).length ? at : status().lastChange || null, changed: changed.filter((c) => !c.same).length ? changed.filter((c) => !c.same) : status().changed || [] };
     saveStatus(s);
     return s;
   }

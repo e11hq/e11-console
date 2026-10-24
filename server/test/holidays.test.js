@@ -52,6 +52,7 @@ test('confirmed dates replace the estimates; tentative ones and dates set by han
   assert.equal(fix['arafat-2027'], undefined, 'tentative dates are not confirmations');
   assert.deepEqual(fix['hijri-2027'], { date: '2027-06-07', end: null }, 'a date set by hand is never overwritten');
   assert.deepEqual(r.body.changed.map((c) => c.id).sort(), ['eidfitr-2027', 'ramadan-2027']);
+  assert.deepEqual(r.body.tentativeList, [{ name: 'Arafat Day', date: '2027-05-15' }], 'tentative dates are listed so people can see they were read');
 });
 
 test('checking again with the same calendar changes nothing', async () => {
