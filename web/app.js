@@ -6405,8 +6405,30 @@ function migrateClientLogos() {
 function loadImage(blob) {
   return new Promise((res, rej) => { const url = URL.createObjectURL(blob); const im = new Image(); im.onload = () => res(im); im.onerror = () => { URL.revokeObjectURL(url); rej(new Error('That file isn’t an image this app can read')); }; im.src = url; });
 }
-// 1024 × 1024 PNG. rounded = the Mac shape: 824 px rounded square with a soft shadow, centred.
-function renderIcon(im, rounded) {
+// The glass edge macOS 26 draws on updated apps, painted into the picture: a bright rim (strongest top-left and
+// bottom-right), a soft inner glow along the edge, a sheen across the top and a little depth along the bottom.
+function paintGlass(g, path, o, box) {
+  g.save(); path(); g.clip();
+  const sheen = g.createLinearGradient(0, o, 0, o + box * .4);
+  sheen.addColorStop(0, 'rgba(255,255,255,.23)'); sheen.addColorStop(.55, 'rgba(255,255,255,.035)'); sheen.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = sheen;
+  g.beginPath(); g.moveTo(o, o); g.lineTo(o + box, o); g.lineTo(o + box, o + box * .401);
+  g.bezierCurveTo(o + box * .801, o + box * .316, o + box * .243, o + box * .291, o, o + box * .364); g.closePath(); g.fill();
+  const glow = g.createRadialGradient(o + box / 2, o + box * 1.05, 0, o + box / 2, o + box * 1.05, box * .75);
+  glow.addColorStop(0, 'rgba(255,255,255,.14)'); glow.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = glow; g.fillRect(o, o, box, box);
+  const deep = g.createLinearGradient(0, o, 0, o + box);
+  deep.addColorStop(0, 'rgba(0,0,0,0)'); deep.addColorStop(.7, 'rgba(0,0,0,0)'); deep.addColorStop(1, 'rgba(0,0,0,.22)');
+  g.fillStyle = deep; g.fillRect(o, o, box, box);
+  // soft inner light along the edge (layered strokes, so it works without canvas blur)
+  [[34, .035], [24, .05], [14, .07], [7, .08]].forEach(([w, a]) => { g.lineWidth = w; g.strokeStyle = `rgba(255,255,255,${a})`; path(); g.stroke(); });
+  g.restore();
+  const rim = g.createLinearGradient(o, o, o + box, o + box);
+  [[0, .95], [.28, .35], [.55, .08], [.8, .25], [1, .7]].forEach(([at, a]) => rim.addColorStop(at, `rgba(255,255,255,${a})`));
+  g.save(); g.lineWidth = 5; g.strokeStyle = rim; path(); g.stroke(); g.restore();
+}
+// 1024 × 1024 PNG. rounded = the Mac shape: 824 px rounded square with a soft shadow, centred; glass = the glass edge on top.
+function renderIcon(im, rounded, glass) {
   const S = 1024, c = document.createElement('canvas'); c.width = c.height = S;
   const g = c.getContext('2d');
   const side = Math.min(im.naturalWidth, im.naturalHeight), sx = (im.naturalWidth - side) / 2, sy = (im.naturalHeight - side) / 2;
@@ -6416,6 +6438,7 @@ function renderIcon(im, rounded) {
   const path = () => { g.beginPath(); g.moveTo(o + r, o); g.arcTo(o + box, o, o + box, o + box, r); g.arcTo(o + box, o + box, o, o + box, r); g.arcTo(o, o + box, o, o, r); g.arcTo(o, o, o + box, o, r); g.closePath(); };
   g.save(); g.shadowColor = 'rgba(0,0,0,.28)'; g.shadowBlur = 28; g.shadowOffsetY = 12; path(); g.fillStyle = '#000'; g.fill(); g.restore();
   g.save(); path(); g.clip(); g.drawImage(im, sx, sy, side, side, o, o, box, box); g.restore();
+  if (glass) paintGlass(g, path, o, box);
   return c;
 }
 async function appIconUploadFlow() {
@@ -6427,12 +6450,13 @@ async function appIconUploadFlow() {
   const side = Math.min(im.naturalWidth, im.naturalHeight);
   if (side < 256) { toast(`That image is ${im.naturalWidth} × ${im.naturalHeight} — use at least 512 × 512`); return; }
   const squareNote = im.naturalWidth !== im.naturalHeight ? '<p class="ai-warn">This image isn’t square, so the middle of it will be used.</p>' : '';
-  let rounded = true;
+  let rounded = true, glass = true;
   const root = $('#overlay-root');
   const draw = () => {
-    const url = renderIcon(im, rounded).toDataURL('image/png');
+    const url = renderIcon(im, rounded, rounded && glass).toDataURL('image/png');
     $$('.ai-prev img', root).forEach((x) => { x.src = url; });
     const sw = $('.ai-round .switch', root); if (sw) sw.classList.toggle('on', rounded);
+    const gw = $('.ai-glass', root); if (gw) { gw.hidden = !rounded; $('.switch', gw).classList.toggle('on', glass); }
   };
   root.innerHTML = `<div class="scrim"><div class="dialog ai-dlg" role="dialog" aria-label="New Mac app icon">
     <h2>New Mac app icon</h2>
@@ -6443,6 +6467,7 @@ async function appIconUploadFlow() {
     </div>
     ${squareNote}
     <div class="pf-opt ai-round"><div><b>Mac-style rounded corners</b><span>Turn off if your image already has the Mac shape and its own padding</span></div><button class="switch on" data-r="round" aria-label="Rounded corners"><i></i></button></div>
+    <div class="pf-opt ai-glass"><div><b>Glass edge</b><span>The bright rim and sheen of updated Mac apps, painted into the icon</span></div><button class="switch on" data-r="glass" aria-label="Glass edge"><i></i></button></div>
     <div class="actions"><button class="btn" data-r="0">Cancel</button><button class="btn primary" data-r="1">Use this icon for everyone</button></div>
   </div></div>`;
   draw();
@@ -6453,10 +6478,11 @@ async function appIconUploadFlow() {
     if (e.target.classList.contains('scrim')) return done();
     const b = e.target.closest('[data-r]'); if (!b) return;
     if (b.dataset.r === 'round') { rounded = !rounded; draw(); return; }
+    if (b.dataset.r === 'glass') { glass = !glass; draw(); return; }
     if (b.dataset.r === '0') return done();
     b.disabled = true; b.textContent = 'Uploading…';
     try {
-      const out = await new Promise((res) => renderIcon(im, rounded).toBlob(res, 'image/png'));
+      const out = await new Promise((res) => renderIcon(im, rounded, rounded && glass).toBlob(res, 'image/png'));
       const r = await api('POST', '/api/app-icon', { png: await AppIcon.toB64(out) });
       done();
       AppIcon.sync(r);
