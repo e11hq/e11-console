@@ -373,7 +373,8 @@ export function createServer(cfg) {
     if (html) {
       // app.js?v=1.2.0 — every version gets fresh files, older ones can be cached for a day
       const v = encodeURIComponent(version);
-      return res.end(fs.readFileSync(full, 'utf8').replace(/(src|href)="(app\.js|styles\.css|studio\.css|phone\.js|phone\.css|finance\.js|finance\.css|home\.js|home\.css|claims\.js|claims\.css)"/g, `$1="$2?v=${v}"`));
+      // every local script and stylesheet (a new file can't be missed), so an update reaches everyone at once
+      return res.end(fs.readFileSync(full, 'utf8').replace(/(src|href)="([\w-]+\.(?:js|css))"/g, `$1="$2?v=${v}"`));
     }
     fs.createReadStream(full).pipe(res);
   }

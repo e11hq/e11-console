@@ -305,7 +305,7 @@ const Cal = (() => {
     const el = document.getElementById('cal-check');
     if (!el || !s) return;
     const txt = !s.at ? 'Expected dates are checked against the UAE holiday calendar twice a day.'
-      : s.ok ? `Holiday calendar checked ${timeAgo(s.at)}: ${(s.foundList || []).length ? 'confirmed ' + s.foundList.map((f) => `${f.name} ${fmtDay(f.date)}`).join(', ') : 'nothing confirmed yet'}${(s.tentativeList || []).length ? ` · listed as tentative: ${s.tentativeList.map((f) => `${f.name} ${fmtDay(f.date)}`).join(', ')} (these confirm closer to the day)` : (s.foundList || []).length ? '' : ` · no Islamic occasions in it (${s.events || 0} holidays read)`}${s.lastChange ? ` · last change ${timeAgo(s.lastChange)}` : ''}.`
+      : s.ok ? `Holiday calendar checked ${timeAgo(s.at)}: ${(s.foundList || []).length ? 'confirmed ' + s.foundList.map((f) => `${f.name} ${fmtDay(f.date)}`).join(', ') : 'nothing confirmed yet'}${(s.tentativeList || []).length ? ` · listed as tentative: ${s.tentativeList.map((f) => `${f.name} ${fmtDay(f.date)}`).join(', ')} (these confirm closer to the day)` : (s.foundList || []).length ? '' : ` · no Islamic occasions in it (${s.events || 0} holidays read${(s.sample || []).length ? `; it lists: ${s.sample.join(', ')}` : ''})`}${s.lastChange ? ` · last change ${timeAgo(s.lastChange)}` : ''}.`
         : `Couldn’t read the holiday calendar ${timeAgo(s.at)} (${s.error}). The expected dates stay as they are.`;
     el.innerHTML = `${esc(txt)}<button class="btn ghost xs" data-cal="check">Check now</button>`;
   }

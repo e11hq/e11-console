@@ -105,7 +105,9 @@ export function createHolidaySync({ store, webDir, url = DEFAULT_HOLIDAYS_URL, f
     }
     const names = { ramadan: 'Ramadan', eidfitr: 'Eid al-Fitr', arafat: 'Arafat Day', eidadha: 'Eid al-Adha', hijri: 'Islamic New Year', mawlid: 'Prophet’s Birthday' };
     const s = { at, ok: true, error: null, found: found.length, foundList: found.map((f) => ({ name: names[f.key], date: f.date })).sort((a, b) => a.date.localeCompare(b.date)), events: events.length,
-      tentativeList: tentative.map((f) => ({ name: names[f.key], date: f.date })).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 6), lastChange: changed.filter((c) => !c.same).length ? at : status().lastChange || null, changed: changed.filter((c) => !c.same).length ? changed.filter((c) => !c.same) : status().changed || [] };
+      tentativeList: tentative.map((f) => ({ name: names[f.key], date: f.date })).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 6),
+      // nothing recognised: a few names it does list (from today on), to see how the calendar words them
+      sample: found.length || tentative.length ? [] : [...new Set(events.filter((e) => e.date >= today && e.date <= to).sort((a, b) => a.date.localeCompare(b.date)).map((e) => e.summary))].slice(0, 14), lastChange: changed.filter((c) => !c.same).length ? at : status().lastChange || null, changed: changed.filter((c) => !c.same).length ? changed.filter((c) => !c.same) : status().changed || [] };
     saveStatus(s);
     return s;
   }
