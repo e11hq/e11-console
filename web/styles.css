@@ -674,6 +674,17 @@ a.crumb:hover { background: var(--hover); color: var(--text); }
 .ap-plain { margin: 4px 0; }
 .ap-img { background: #0e0e10; display: flex; justify-content: center; cursor: zoom-in; }
 .ap-img img { display: block; max-width: 100%; max-height: 420px; object-fit: contain; }
+/* Picture / video previews keep their exact size while loading, with a soft shimmer until they arrive */
+:root { --ap-max: 420px; --shim-a: #17181c; --shim-b: #23242b; }
+:root[data-theme="light"] { --shim-a: #e9e9ef; --shim-b: #f6f6f9; }
+.ap-vid { background: #000; display: flex; justify-content: center; }
+.ap-frame { position: relative; width: min(100%, var(--nw, 100%), calc(var(--ap-max) * var(--ar, 1.6))); aspect-ratio: var(--ar, 1.6); max-height: var(--ap-max); }
+.ap-frame.nodim { width: 100%; }
+.ap-frame > img, .ap-frame > video { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; object-fit: contain; opacity: 0; transition: opacity .3s ease; }
+.ap-frame.loaded > img, .ap-frame > video { opacity: 1; } /* videos always show (some phones never preload them) */
+.ap-frame:not(.loaded) { background: linear-gradient(100deg, var(--shim-a) 20%, var(--shim-b) 50%, var(--shim-a) 80%); background-size: 220% 100%; animation: apShimmer 1.4s ease-in-out infinite; }
+@keyframes apShimmer { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+@media (prefers-reduced-motion: reduce) { .ap-frame:not(.loaded) { animation: none; } }
 .ap-video { display: block; width: 100%; max-height: 460px; background: #000; }
 .ap-audio { padding: 12px 10px 4px; }
 .ap-audio audio { width: 100%; height: 36px; }

@@ -807,3 +807,6 @@ html.phone body.phone #update-banner .ub-acts .btn { flex: 1; height: 46px; just
 }
 /* the phone layout's filter rows run to the screen edges so they can be swiped past */
 body.phone .wf-btns, body.phone .wf-chips { width: auto; margin: 0 -16px; padding: 0 16px; scroll-padding: 0 16px; }
+
+/* Picture / video previews in comments and attachments: no taller than 240px on the phone */
+body.phone { --ap-max: 240px; }

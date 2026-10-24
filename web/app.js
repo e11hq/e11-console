@@ -753,7 +753,25 @@ const ServerHost = (() => {
     }
   }
   // Upload one file in 2 MB pieces; onProgress(0..1)
+  // Width and height of a picture or video before it uploads, so previews can hold their exact space while loading
+  async function mediaDims(file) {
+    if (!(file instanceof Blob)) return null;
+    const type = file.type || '', name = (file.name || '').toLowerCase();
+    const isImg = /^image\//.test(type) || /\.(png|jpe?g|gif|webp|heic|bmp|avif)$/.test(name);
+    const isVid = /^video\//.test(type) || /\.(mp4|mov|m4v|webm)$/.test(name);
+    if (!isImg && !isVid) return null;
+    const url = URL.createObjectURL(file);
+    try {
+      return await new Promise((resolve) => {
+        const done = (w, h) => resolve(w > 0 && h > 0 ? { w: Math.round(w), h: Math.round(h) } : null);
+        setTimeout(() => resolve(null), 4000);
+        if (isImg) { const im = new Image(); im.onload = () => done(im.naturalWidth, im.naturalHeight); im.onerror = () => resolve(null); im.src = url; }
+        else { const v = document.createElement('video'); v.preload = 'metadata'; v.muted = true; v.onloadedmetadata = () => done(v.videoWidth, v.videoHeight); v.onerror = () => resolve(null); v.src = url; }
+      });
+    } finally { setTimeout(() => URL.revokeObjectURL(url), 5000); }
+  }
   async function uploadFile(file, target, onProgress) {
+    const dims = await mediaDims(file).catch(() => null);
     let path = null, last = null;
     for (let off = 0; off < Math.max(file.size, 1); off += CHUNK_SIZE) {
       const piece = await readPiece(file, off, CHUNK_SIZE);
@@ -761,7 +779,7 @@ const ServerHost = (() => {
       path = last.path;
       if (onProgress) onProgress(Math.min(1, (off + CHUNK_SIZE) / Math.max(file.size, 1)));
     }
-    return { id: uid(), name: last.name || file.name, path, size: last.size != null ? last.size : file.size, addedAt: nowISO() };
+    return { id: uid(), name: last.name || file.name, path, size: last.size != null ? last.size : file.size, addedAt: nowISO(), ...(dims || {}) };
   }
   // Small progress card while files upload
   function uploadToast(files) {
@@ -3024,6 +3042,33 @@ function hydrateThumbs(root) {
   });
 }
 
+// Pictures and videos hold their exact space while they load (a soft shimmer fills it), so nothing below jumps.
+// The size is saved when a file is uploaded; older files learn theirs the first time they load (kept on this device).
+const MediaDims = (() => {
+  const KEY = 'e11-media-dims';
+  let cache = null;
+  const seen = new Set(); // already loaded once this session: redraws show it straight away (no shimmer flicker)
+  const load = () => { if (!cache) { try { cache = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { cache = {}; } } return cache; };
+  function of(a) { if (a && a.w > 0 && a.h > 0) return [a.w, a.h]; const d = a && load()[a.id]; return Array.isArray(d) ? d : null; }
+  function remember(id, w, h) {
+    const c = load(); c[id] = [w, h];
+    const ids = Object.keys(c); if (ids.length > 3000) ids.slice(0, ids.length - 3000).forEach((k) => delete c[k]);
+    try { localStorage.setItem(KEY, JSON.stringify(c)); } catch (e) { /* storage off */ }
+  }
+  const style = (d) => (d ? `--ar:${(d[0] / d[1]).toFixed(4)};--nw:${d[0]}px` : '');
+  function frame(a, inner) { const d = of(a); return `<div class="ap-frame${d ? '' : ' nodim'}${seen.has(a.id) ? ' loaded' : ''}" style="${style(d)}" data-dim-id="${esc(a.id)}">${inner}</div>`; }
+  // the moment a picture or video knows its size: show it, and remember the size if it wasn't known
+  function settle(el, w, h, failed) {
+    const f = el.parentElement;
+    if (!f || !f.classList.contains('ap-frame')) return;
+    f.classList.add('loaded'); if (failed) f.classList.add('failed'); else seen.add(f.dataset.dimId);
+    if (!failed && w > 0 && h > 0 && f.classList.contains('nodim')) { remember(f.dataset.dimId, w, h); f.classList.remove('nodim'); f.setAttribute('style', style([w, h])); }
+  }
+  document.addEventListener('load', (e) => { if (e.target.tagName === 'IMG') settle(e.target, e.target.naturalWidth, e.target.naturalHeight); }, true);
+  document.addEventListener('loadedmetadata', (e) => { if (e.target.tagName === 'VIDEO') settle(e.target, e.target.videoWidth, e.target.videoHeight); }, true);
+  document.addEventListener('error', (e) => { if (e.target.tagName === 'IMG' || e.target.tagName === 'VIDEO') settle(e.target, 0, 0, true); }, true);
+  return { of, frame, remember };
+})();
 // Rich, full-width preview with a file bar underneath
 function attPreview(a, scope) {
   if (!Host.isNative) return attRow(a, scope);
@@ -3031,8 +3076,8 @@ function attPreview(a, scope) {
   const key = `${scope}-${a.id}`;
   const kind = fileKind(a);
   let media = '';
-  if (kind === 'image') media = `<div class="ap-img" data-action="lightbox" data-src="${url}" data-name="${esc(a.name)}"><img src="${imgUrl(a, 1280)}" alt="" loading="lazy"></div>`;
-  else if (kind === 'video') media = `<video class="ap-video" data-media-key="${key}" src="${url}" controls preload="metadata" playsinline></video>`;
+  if (kind === 'image') media = `<div class="ap-img" data-action="lightbox" data-src="${url}" data-name="${esc(a.name)}">${MediaDims.frame(a, `<img src="${imgUrl(a, 1280)}" alt="" loading="lazy">`)}</div>`;
+  else if (kind === 'video') media = `<div class="ap-vid">${MediaDims.frame(a, `<video class="ap-video" data-media-key="${key}" src="${url}" controls preload="metadata" playsinline></video>`)}</div>`;
   else if (kind === 'audio') media = `<div class="ap-audio"><audio data-media-key="${key}" src="${url}" controls preload="metadata"></audio></div>`;
   else if (kind === 'pdf') media = `<iframe class="ap-pdf" src="${url}" title="${esc(a.name)}"></iframe>`;
   else if (kind === 'text') media = `<pre class="ap-text" data-text-src="${url}">Loading preview…</pre>`;
