@@ -295,7 +295,7 @@ const Cal = (() => {
             <div class="cal-occ-acts"><button class="btn ghost xs" data-cal="plan" data-id="${esc(o.id)}">Plan</button>${mgr ? `<button class="icon-btn xs" data-cal="occ-edit" data-id="${esc(o.id)}" title="Change the date">${icon('edit')}</button>` : ''}</div>
           </div>`;
         }).join('') : '<div class="cal-muted">No occasions in the next weeks</div>'}
-        ${mgr && Host.isServer ? `<div class="cal-check" id="cal-check">Expected dates are checked against the UAE holiday calendar twice a day.<button class="btn ghost xs" data-cal="check">Check now</button></div>` : ''}
+        ${mgr && Host.isServer ? `<div class="cal-check" id="cal-check">${checkHTML(lastCheck())}</div>` : ''}
       </section>
       <section class="cal-box" id="cal-stats"><h3>${st().mode === 'week' ? 'This week' : 'This month'}</h3>
         ${counts.map(([k, n]) => `<div class="cal-stat"><span class="cal-sdot" style="background:${STATUS[k][1]}"></span><span>${STATUS[k][0]}</span><b>${n}</b></div>`).join('')}
@@ -308,13 +308,23 @@ const Cal = (() => {
     c.innerHTML = `<div class="cal-page">${toolbar(r)}<div class="cal-body"><div class="cal-main">${st().mode === 'week' ? week(r) : month(r)}</div>${side(r)}</div></div>`;
     if (isManager() && Host.isServer) api('GET', '/api/holidays').then(paintCheck).catch(() => {});
   }
+  // the last status is remembered, so the line shows the same text straight away instead of a stand-in that then changes
+  let checkMem = null;
+  const lastCheck = () => { if (!checkMem) { try { checkMem = JSON.parse(localStorage.getItem('e11-holcheck') || 'null'); } catch (e) {} } return checkMem; };
   function paintCheck(s) {
+    if (!s || (!s.at && lastCheck() && lastCheck().at)) return;   // an empty answer never replaces a real status
+    checkMem = s; try { localStorage.setItem('e11-holcheck', JSON.stringify(s)); } catch (e) {}
     const el = document.getElementById('cal-check');
-    if (!el || !s) return;
+    if (!el) return;
+    const html = checkHTML(s);
+    if (el.innerHTML !== html) el.innerHTML = html;
+  }
+  function checkHTML(s) {
+    s = s || {};
     const txt = !s.at ? 'Expected dates are checked against the UAE holiday calendar twice a day.'
       : s.ok ? `Holiday calendar checked ${timeAgo(s.at)}: ${(s.foundList || []).length ? 'confirmed ' + s.foundList.map((f) => `${f.name} ${fmtDay(f.date)}`).join(', ') : 'nothing confirmed yet'}${(s.tentativeList || []).length ? ` · listed as tentative: ${s.tentativeList.map((f) => `${f.name} ${fmtDay(f.date)}`).join(', ')} (these confirm closer to the day)` : (s.foundList || []).length ? '' : ` · no Islamic occasions in it (${s.events || 0} holidays read${(s.sample || []).length ? `; it lists: ${s.sample.join(', ')}` : ''})`}${s.lastChange ? ` · last change ${timeAgo(s.lastChange)}` : ''}.`
         : `Couldn’t read the holiday calendar ${timeAgo(s.at)} (${s.error}). The expected dates stay as they are.`;
-    el.innerHTML = `${esc(txt)}<button class="btn ghost xs" data-cal="check">Check now</button>`;
+    return `${esc(txt)}<button class="btn ghost xs" data-cal="check">Check now</button>`;
   }
   async function checkNow(btn) {
     if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
