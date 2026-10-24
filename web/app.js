@@ -340,14 +340,15 @@ const DatePicker = (() => {
   }
   const desktop = () => !(typeof Phone !== 'undefined' && Phone.on);
   const grab = (e) => {
-    const el = e.target.closest && e.target.closest('input.date-in');
+    // every date field on a computer, including plain ones, so the Mac's own date box never shows
+    const el = e.target.closest && e.target.closest('input.date-in, input[type="date"]');
     if (!el || !desktop()) return;
     e.preventDefault(); e.stopPropagation();
     if (e.type === 'click') { if (pop && input === el) close(); else open(el); }
   };
   document.addEventListener('mousedown', grab, true);
   document.addEventListener('click', grab, true);
-  document.addEventListener('keydown', (e) => { const el = e.target.closest && e.target.closest('input.date-in'); if (el && desktop() && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); open(el); } }, true);
+  document.addEventListener('keydown', (e) => { const el = e.target.closest && e.target.closest('input.date-in, input[type="date"]'); if (el && desktop() && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); open(el); } }, true);
   return { open, close };
 })();
 

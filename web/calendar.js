@@ -402,6 +402,13 @@ const Cal = (() => {
     });
   }
   // Admins and Account Managers: add an occasion, or correct a date (moon-based ones are estimates)
+  // a date chip like the task's Start / Due: opens the app's calendar on a computer, the iPhone wheel on the phone
+  const dateField = (id, v, empty, clearable) => `<span class="date-chip cal-date ${v ? 'set' : 'is-empty'}" data-empty="${esc(empty)}">${icon('cal')}<span class="date-lbl">${v ? esc(fmtDay(v)) : esc(empty)}</span><input type="date" class="date-in" id="${id}" value="${v || ''}">${clearable ? `<button type="button" class="cal-date-x" data-clear="${id}" title="Remove"${v ? '' : ' hidden'}>${icon('x')}</button>` : ''}</span>`;
+  function wireDates(root) {
+    const paint = (inp) => { const chip = inp.closest('.date-chip'); chip.classList.toggle('set', !!inp.value); chip.classList.toggle('is-empty', !inp.value); $('.date-lbl', chip).textContent = inp.value ? fmtDay(inp.value) : chip.dataset.empty; const x = $('.cal-date-x', chip); if (x) x.hidden = !inp.value; };
+    $$('.cal-date .date-in', root).forEach((inp) => inp.addEventListener('change', () => paint(inp)));
+    $$('.cal-date-x', root).forEach((x) => x.addEventListener('click', (e) => { e.stopPropagation(); const inp = $('#' + x.dataset.clear, root); inp.value = ''; paint(inp); }));
+  }
   function occDialog(o) {
     if (!isManager()) return denied();
     const root = $('#overlay-root');
@@ -409,12 +416,13 @@ const Cal = (() => {
     root.innerHTML = `<div class="scrim"><div class="dialog cal-plan" role="dialog" aria-label="${isNew ? 'Add an occasion' : 'Change the date'}">
       <h2>${isNew ? 'Add an occasion' : esc(o.name)}</h2>
       ${isNew ? '<label class="cal-field"><span>Name</span><input id="occ-name" maxlength="60" placeholder="e.g. Ford anniversary"></label>' : `<p class="cal-muted">${o.est ? 'This date is an estimate. ' : ''}Change it here once it’s confirmed — everyone sees the new date.</p>`}
-      <div class="cal-dates"><label class="cal-field"><span>Date</span><input type="date" id="occ-date" value="${o ? o.date : ''}"></label>
-      <label class="cal-field"><span>Until (optional)</span><input type="date" id="occ-end" value="${o && o.end ? o.end : ''}"></label></div>
+      <div class="cal-dates"><div class="cal-field"><span>Date</span>${dateField('occ-date', o ? o.date : '', 'Pick a date')}</div>
+      <div class="cal-field"><span>Until (optional)</span>${dateField('occ-end', o && o.end ? o.end : '', 'Same day', true)}</div></div>
       ${isNew || o.custom ? `<label class="cal-field"><span>Greeting on the startup screen (optional)</span><input id="occ-greet" maxlength="40" placeholder="e.g. Happy anniversary" value="${o && o.greet ? esc(o.greet) : ''}"></label>` : ''}
       <div class="actions">${o && o.custom ? '<button class="btn ghost danger" data-r="del">Delete</button><span class="spacer"></span>' : ''}<button class="btn" data-r="0">Cancel</button><button class="btn primary" data-r="1">Save</button></div>
     </div></div>`;
     const close = () => { root.innerHTML = ''; };
+    wireDates(root);
     $('.scrim', root).addEventListener('click', (e) => {
       if (e.target.classList.contains('scrim')) return close();
       const b = e.target.closest('button'); if (!b) return;
