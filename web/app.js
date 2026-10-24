@@ -6642,7 +6642,10 @@ const Splash = (() => {
   function init() {
     if (!el) return;
     const mem = remembered();
-    el.classList.toggle('light', (mem.themeMode === 'light' || mem.themeMode === 'dark' ? mem.themeMode : sunTheme()) === 'light');
+    const light = (mem.themeMode === 'light' || mem.themeMode === 'dark' ? mem.themeMode : sunTheme()) === 'light';
+    el.classList.toggle('light', light);
+    // the page behind the startup screen matches it, so no dark edges show around it on the iPhone
+    document.documentElement.style.backgroundColor = light ? '#ffffff' : '#0c0d0f';
     document.getElementById('sp-greet').textContent = greeting(mem.name);
     document.getElementById('sp-date').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: window.innerWidth <= 760 ? 'short' : 'long', day: 'numeric' });
     document.getElementById('sp-hint').textContent = window.innerWidth <= 760 ? 'Tap to skip' : 'Click or press any key to skip';
@@ -6696,7 +6699,7 @@ const Splash = (() => {
     gone = true;
     el.classList.add('out');
     document.getElementById('app').classList.add('enter');
-    setTimeout(() => { el.remove(); document.getElementById('app').classList.remove('enter'); }, 500);
+    setTimeout(() => { el.remove(); document.documentElement.style.backgroundColor = ''; document.getElementById('app').classList.remove('enter'); }, 500);
   }
   init();
   return { finish, remember };

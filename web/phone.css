@@ -778,3 +778,7 @@ html.phone.ph-typing body.phone #detail .tm-composer { padding-bottom: 6px !impo
 
 /* No shadow on the task pane's edge when swiping back */
 html.phone body.phone #detail .tm { box-shadow: none !important; }
+
+/* Behind everything (what shows past the page's edges on the iPhone): the same colour as the page */
+html.phone { background: #0e0e11; }
+html.phone[data-theme="light"] { background: #f4f4f7; }
