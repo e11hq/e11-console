@@ -79,6 +79,13 @@ async def main():
         await pg.locator('.cal-plan [data-r="1"]').click(); await pg.wait_for_timeout(400)
         check(await E(f"Occasions.on('{d2}').some(o=>o.name==='Ford anniversary')"), 'a new occasion is saved for everyone')
         check(await E(f"Occasions.greeting('{d2}')") == 'Happy anniversary', 'with its greeting')
+        # a date confirmed by the holiday calendar shows as Confirmed, and Admins / AMs are told
+        await E("db.meta.occDates = { ...(db.meta.occDates||{}), 'eidfitr-2027': { date: '2027-03-11', end: '2027-03-13', auto: true } }")
+        o = await E("Occasions.byId('eidfitr-2027')")
+        check(o['confirmed'] is True and o['date'] == '2027-03-11' and o['estDate'] == '2027-03-10', f'confirmed date replaces the estimate {o}')
+        await E("Cal.confirmed([{ name: 'Eid al-Fitr', date: '2027-03-11', was: '2027-03-10' }])"); await pg.wait_for_timeout(300)
+        check('Occasion date confirmed' in (await pg.locator('#notif-root').inner_text()), 'open apps of Admins / AMs show the change')
+        check(await pg.locator('#cal-check').count() == 1, 'Admins / AMs see when the holiday calendar was checked')
         await pg.screenshot(path=os.path.join(OUT, 'calendar.png'))
         check(not errs, f'no page errors {errs}')
         await b.close()

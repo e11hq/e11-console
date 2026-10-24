@@ -18,6 +18,7 @@ const cfg = {
   cfApiToken: env.CF_API_TOKEN || '',
   cfGroupId: env.CF_FREELANCER_GROUP_ID || '',
   launcherUrl: env.LAUNCHER_URL || '',
+  holidaysUrl: env.HOLIDAYS_ICS_URL || '',
 };
 function readVersion() {
   try { return fs.readFileSync(path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../VERSION'), 'utf8').trim(); } catch { return '0.0.0-dev'; }

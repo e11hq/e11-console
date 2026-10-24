@@ -120,7 +120,8 @@ const Occasions = (() => {
     const y0 = Number(from.slice(0, 4)) - 1, y1 = Number(to.slice(0, 4));
     let all = [];
     for (let y = y0; y <= y1; y++) all = all.concat(builtIn(y));
-    all = all.map((o) => (fix[o.id] ? { ...o, date: fix[o.id].date || o.date, end: fix[o.id].end === undefined ? o.end : fix[o.id].end, est: false, fixed: true } : o));
+    // a corrected date: confirmed from the holiday calendar (auto) or set by hand; estDate keeps the old estimate
+    all = all.map((o) => (fix[o.id] ? { ...o, date: fix[o.id].date || o.date, end: fix[o.id].end === undefined ? o.end : fix[o.id].end, est: false, fixed: true, confirmed: !!fix[o.id].auto, estDate: o.date } : o));
     all = all.concat((meta().occasions || []).map((o) => ({ ...o, custom: true, est: false })));
     return all.filter((o) => (o.end || o.date) >= from && o.date <= to).sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name));
   }
@@ -276,14 +277,18 @@ const Cal = (() => {
         ${soon.length ? soon.map((o) => {
           const linked = all.filter((t) => t.occasion === o.id);
           const ok = linked.filter((t) => ['approved', 'posted'].includes(statusOf(t))).length;
+          // the date moved (confirmed): posts still going live on the old estimate
+          const stale = o.estDate && o.estDate !== o.date ? linked.filter((t) => t.golive === o.estDate).length : 0;
           const d = parseYmd(o.date);
           return `<div class="cal-occ-row">
             <div class="cal-occ-date"><small>${MONTHS[d.getMonth()].slice(0, 3).toUpperCase()}</small><b>${d.getDate()}</b></div>
-            <div class="cal-occ-txt"><b>${esc(o.name)}</b><span>${o.est ? 'Expected · ' : ''}${esc(Occasions.fmt(o))}</span>
+            <div class="cal-occ-txt"><b>${esc(o.name)}</b><span>${o.est ? 'Expected · ' : o.confirmed ? '<i class="cal-conf">Confirmed</i> · ' : ''}${esc(Occasions.fmt(o))}</span>
+              ${stale ? `<span class="warn">${stale} post${stale === 1 ? '' : 's'} still on the old date</span>` : ''}
               <span class="${linked.length ? (ok === linked.length ? 'ok' : 'warn') : 'none'}">${linked.length ? `${linked.length} planned · ${ok} approved` : 'Nothing planned yet'}</span></div>
             <div class="cal-occ-acts"><button class="btn ghost xs" data-cal="plan" data-id="${esc(o.id)}">Plan</button>${mgr ? `<button class="icon-btn xs" data-cal="occ-edit" data-id="${esc(o.id)}" title="Change the date">${icon('edit')}</button>` : ''}</div>
           </div>`;
         }).join('') : '<div class="cal-muted">No occasions in the next weeks</div>'}
+        ${mgr && Host.isServer ? `<div class="cal-check" id="cal-check">Expected dates are checked against the UAE holiday calendar twice a day.<button class="btn ghost xs" data-cal="check">Check now</button></div>` : ''}
       </section>
       <section class="cal-box"><h3>${st().mode === 'week' ? 'This week' : 'This month'}</h3>
         ${counts.map(([k, n]) => `<div class="cal-stat"><span class="cal-sdot" style="background:${STATUS[k][1]}"></span><span>${STATUS[k][0]}</span><b>${n}</b></div>`).join('')}
@@ -294,6 +299,23 @@ const Cal = (() => {
     const r = range();
     if (phone()) { c.innerHTML = agenda(); return; }
     c.innerHTML = `<div class="cal-page">${toolbar(r)}<div class="cal-body"><div class="cal-main">${st().mode === 'week' ? week(r) : month(r)}</div>${side(r)}</div></div>`;
+    if (isManager() && Host.isServer) api('GET', '/api/holidays').then(paintCheck).catch(() => {});
+  }
+  function paintCheck(s) {
+    const el = document.getElementById('cal-check');
+    if (!el || !s) return;
+    const txt = !s.at ? 'Expected dates are checked against the UAE holiday calendar twice a day.'
+      : s.ok ? `Holiday calendar checked ${timeAgo(s.at)}${s.lastChange ? ` · last change ${timeAgo(s.lastChange)}` : ''}.`
+        : `Couldn’t read the holiday calendar ${timeAgo(s.at)} (${s.error}). The expected dates stay as they are.`;
+    el.innerHTML = `${esc(txt)}<button class="btn ghost xs" data-cal="check">Check now</button>`;
+  }
+  async function checkNow(btn) {
+    if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
+    try {
+      const s = await api('POST', '/api/holidays', {});
+      paintCheck(s);
+      toast(s.ok ? (s.changed && s.changed.length && s.lastChange === s.at ? `Updated: ${s.changed.map((c) => c.name).join(', ')}` : 'Checked — no date changes') : 'Couldn’t read the holiday calendar');
+    } catch (e) { toast(e.message); if (btn) { btn.disabled = false; btn.textContent = 'Check now'; } }
   }
   // Phone: the next 6 weeks as a list by day, and the occasions in them
   function agenda() {
@@ -482,9 +504,16 @@ const Cal = (() => {
       case 'f-channel': e.stopPropagation(); return filterMenu(el, 'channel');
       case 'plan': { const o = Occasions.byId(el.dataset.id); if (o) planDialog(o); return; }
       case 'occ-add': return occDialog(null);
+      case 'check': return checkNow(el);
       case 'occ-edit': { const o = Occasions.byId(el.dataset.id); if (o) occDialog(o); return; }
     }
   });
 
-  return { owns, canSee, render, title, fieldRows, fieldMenu, setGolive, setOccasion, CHANNELS, statusOf, dayOf, isPost };
+  // the server confirmed new dates: tell Admins / AMs who have the app open
+  function confirmed(changed) {
+    const f = (d) => fmtDay(d);
+    alertUser({ title: 'Occasion date confirmed', body: changed.map((c) => `${c.name}: ${f(c.date)} (was ${f(c.was)})`).join(' · '), stay: 12000 }, true);
+    if (owns(ui.view)) render($('#content'));
+  }
+  return { confirmed, owns, canSee, render, title, fieldRows, fieldMenu, setGolive, setOccasion, CHANNELS, statusOf, dayOf, isPost };
 })();

@@ -11,6 +11,7 @@ import { createFiles, mimeOf, httpError } from './files.js';
 import { createCfSync } from './cfsync.js';
 import { createWebPush, notifMessage } from './webpush.js';
 import { createDigest } from './digest.js';
+import { createHolidaySync, DEFAULT_HOLIDAYS_URL } from './holidays.js';
 import { sampleData } from './sample.js';
 import { createAppIcon } from './appicon.js';
 
@@ -29,6 +30,20 @@ export function createServer(cfg) {
   const webPush = createWebPush({ store, fetchImpl: cfg.pushFetch || fetch, subject: cfg.pushSubject || 'mailto:admin@e11hq.com' });
   const digest = createDigest({ store, webPush, now: cfg.now || (() => Date.now()) });
   if (cfg.digest !== false) digest.start();
+  // Confirmed dates for Ramadan, the Eids… from a public UAE holiday calendar (off on a dev server unless a URL is given)
+  const holidays = createHolidaySync({
+    store, webDir: cfg.webDir, url: cfg.holidaysUrl || DEFAULT_HOLIDAYS_URL, fetchImpl: cfg.holidaysFetch || fetch, now: cfg.now || (() => Date.now()),
+    onChange: (rev, results, changed) => {
+      broadcast(rev, results, null, null);
+      if (!changed.length) return;
+      const f = (d) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+      const body = changed.map((c) => `${c.name}: ${f(c.date)} (was ${f(c.was)})`).join(' · ');
+      const managers = store.list('users').filter((x) => x.active !== false && (access.isAdm(x) || x.role === 'am'));
+      for (const m of managers) webPush.sendTo(m.id, { title: 'Occasion date confirmed', body, tag: 'occasion' }).catch(() => {});
+      for (const st of streams) { const su = store.get('users', st.userId) || st.user; if (su && (access.isAdm(su) || su.role === 'am')) send(st, 'occasion', { changed }); }
+    },
+  });
+  if (cfg.holidays !== false && (!cfg.dev || cfg.holidaysUrl)) holidays.start();
   const macDir = cfg.macDir || (webDir ? path.join(webDir, '..', 'mac') : null);
   const appIcon = createAppIcon({ store, defaultFile: macDir && path.join(macDir, 'AppIcon.png') });
   // The newest Mac app (native part) the installer hands out; older Mac apps are asked to update
@@ -196,6 +211,12 @@ export function createServer(cfg) {
     // Phone notifications: the server's public key, and turning them on / off for this device
     // Morning summary: today's, for this person's open app (shown once per device); a test send to yourself
     if (p === '/api/digest') return json(res, 200, { ok: true, ...digest.forUser(u) });
+    // Occasion dates: when the holiday calendar was last read (Admins and Account Managers can check now)
+    if (p === '/api/holidays') {
+      if (!(access.isAdm(u) || u.role === 'am')) return json(res, 403, { ok: false, error: 'Admins and Account Managers only' });
+      const s = req.method === 'POST' ? await holidays.check() : holidays.status();
+      return json(res, 200, { ok: true, ...s });
+    }
     if (p === '/api/digest/test' && req.method === 'POST') {
       const m = digest.preview(u);
       const r = await webPush.sendTo(u.id, { ...m, tag: 'digest-test' }, { ttl: 600 }).catch(() => ({ sent: 0 }));
@@ -370,8 +391,8 @@ export function createServer(cfg) {
   return {
     server, store, files, cfSync, webPush,
     listen: (port, host) => new Promise((ok) => server.listen(port, host, () => ok(server.address().port))),
-    digest,
-    close: () => new Promise((ok) => { digest.stop(); for (const s of streams) try { s.res.end(); } catch { /* ignore */ } server.close(() => { store.close(); ok(); }); }),
+    digest, holidays,
+    close: () => new Promise((ok) => { digest.stop(); holidays.stop(); for (const s of streams) try { s.res.end(); } catch { /* ignore */ } server.close(() => { store.close(); ok(); }); }),
     broadcastVersion: (v) => { for (const s of streams) send(s, 'version', { version: v }); },
   };
 }

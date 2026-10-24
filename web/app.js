@@ -1892,6 +1892,7 @@ const Sync = (() => {
       applyRemote(m.changes || []);
     });
     es.addEventListener('version', (e) => checkVersion(JSON.parse(e.data).version));
+    es.addEventListener('occasion', (e) => { try { Cal.confirmed(JSON.parse(e.data).changed || []); } catch (err) { /* ignore */ } });
     es.addEventListener('resync', () => resync());
     es.onerror = () => { setOnline(false); reconnect(3000); };
   }

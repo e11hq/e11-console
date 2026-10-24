@@ -118,3 +118,7 @@
 .cal-ag-occ small { font-weight: 500; opacity: .8; }
 .cal-agenda .cal-card { padding: 10px 12px; }
 .cal-agenda .cal-card-t { font-size: 14px; }
+
+.cal-conf { font-style: normal; color: var(--green); font-weight: 700; }
+.cal-check { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11.5px; color: var(--text-3); border-top: 1px solid var(--border); padding-top: 10px; }
+.cal-check .btn { margin-left: auto; }
