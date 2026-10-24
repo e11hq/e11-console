@@ -808,7 +808,19 @@ const Push = (() => {
     if (c.dim) c.dim.remove();
     if (c.fg) c.fg.remove();
   }
+  // iOS stops sending a touch's events to the page once the element under the finger is removed (going back
+  // redraws the page), so listen on that element too; each event is handled once
+  let held = null;
+  const hold = (el) => { release(); held = el; if (el) { el.addEventListener('touchmove', onMove, { passive: false }); el.addEventListener('touchend', end); el.addEventListener('touchcancel', end); } };
+  const release = () => { if (held) { held.removeEventListener('touchmove', onMove); held.removeEventListener('touchend', end); held.removeEventListener('touchcancel', end); held = null; } };
+  // leftovers from a swipe that never got its end (shouldn't happen, but never leave the page stuck)
+  const sweep = () => {
+    document.querySelectorAll('.ph-swipe-fg, .ph-swipe-dim').forEach((n) => n.remove());
+    [$('#app'), $('#content'), $('#ph-top')].forEach((el) => { if (el) { el.style.transition = ''; el.style.transform = ''; el.style.clipPath = ''; el.style.filter = ''; } });
+    const top = $('#ph-top'); if (top) top.style.visibility = '';
+  };
   document.addEventListener('touchstart', (e) => {
+    if (!g && document.querySelector('.ph-swipe-fg, .ph-swipe-dim')) sweep();
     g = null;
     if (!Phone.on || !standalone() || e.touches.length !== 1) return;
     const t = e.touches[0];
@@ -816,9 +828,11 @@ const Push = (() => {
     const tg = target();
     if (!tg || !tg.btn || !tg.layer) return;
     g = { x0: t.clientX, y0: t.clientY, t0: Date.now(), dx: 0, on: false, under: [], ...tg };
+    hold(e.target);
   }, { passive: true });
-  document.addEventListener('touchmove', (e) => {
-    if (!g) return;
+  function onMove(e) {
+    if (!g || e.__phSwipe) return;
+    e.__phSwipe = true;
     const t = e.touches[0];
     const dx = t.clientX - g.x0, dy = t.clientY - g.y0;
     if (!g.on) {
@@ -831,8 +845,14 @@ const Push = (() => {
     e.preventDefault();
     g.dx = Math.max(0, dx);
     track(g, g.dx);
-  }, { passive: false });
-  const end = () => {
+    clearTimeout(g.idle); const me = g;
+    g.idle = setTimeout(() => { if (g === me) end(); }, 4000); // no word from the finger for a while: settle
+  }
+  document.addEventListener('touchmove', onMove, { passive: false });
+  function end(e) {
+    if (e) { if (e.__phSwipe) return; e.__phSwipe = true; }
+    release();
+    if (g) clearTimeout(g.idle);
     if (!g || !g.on) { g = null; return; }
     const c = g; g = null;
     const w = c.w;
@@ -867,7 +887,7 @@ const Push = (() => {
         cleanup(c);
       }, 220);
     }
-  };
+  }
   document.addEventListener('touchend', end);
   document.addEventListener('touchcancel', end);
 })();

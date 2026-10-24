@@ -167,8 +167,10 @@ async def main():
             await E("()=>{closeDetail()}")
             # swipe from the left edge goes back
             SWIPE = """async ([x1, steps]) => { window.__phSwipeAlways = true;
-              const fire = (type, x) => { const t = new Touch({ identifier: 1, target: document.body, clientX: x, clientY: 400 });
-                document.body.dispatchEvent(new TouchEvent(type, { touches: type === 'touchend' ? [] : [t], changedTouches: [t], bubbles: true, cancelable: true })); };
+              // like iOS: every event goes to the element first touched, even after going back removes it from the page
+              let el0 = null;
+              const fire = (type, x) => { if (type === 'touchstart') el0 = document.elementFromPoint(x, 400) || document.body; const t = new Touch({ identifier: 1, target: el0, clientX: x, clientY: 400 });
+                el0.dispatchEvent(new TouchEvent(type, { touches: type === 'touchend' ? [] : [t], changedTouches: [t], bubbles: true, cancelable: true })); };
               fire('touchstart', 8); for (let i = 1; i <= steps; i++) { fire('touchmove', 8 + (x1 - 8) * i / steps); await new Promise(r => setTimeout(r, 16)); }
               fire('touchend', x1); await new Promise(r => setTimeout(r, 400)); }"""
             await hr.locator('.pc[data-task]').first.click(); await hr.wait_for_timeout(400)
@@ -181,6 +183,7 @@ async def main():
             await E(SWIPE, [300, 12])
             check(await E("ui.view") == 'projects', 'swiping back from a project returns to Projects')
             check(await E("document.getElementById('content').style.transform") == '', 'page is back in place after the swipe')
+            check(await E("!document.querySelector('.ph-swipe-fg, .ph-swipe-dim') && document.getElementById('app').style.transform === ''"), 'nothing left over from the swipe')
             # notifications switch on Me, and opening a task from a tapped notification
             await hr.locator('#ph-tabs [data-ph-tab="me"]').click(); await hr.wait_for_timeout(600)
             check(await hr.locator('#ph-push').count() == 1, 'Me shows the phone notifications switch')

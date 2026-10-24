@@ -775,3 +775,6 @@ html.phone body.phone #detail .tm-composer .composer > *, html.phone body.phone 
 html.phone body.phone #detail .tm-composer { overflow: hidden; }
 /* keyboard up: no home-bar space under the formatting row */
 html.phone.ph-typing body.phone #detail .tm-composer { padding-bottom: 6px !important; }
+
+/* No shadow on the task pane's edge when swiping back */
+html.phone body.phone #detail .tm { box-shadow: none !important; }
