@@ -727,26 +727,87 @@ const Push = (() => {
 })();
 
 /* Swipe from the left edge to go back, like a native iPhone app (only in the Home Screen app —
-   in Safari the browser's own edge swipe would fight it) */
+   in Safari the browser's own edge swipe would fight it). The page you're going back to is already there
+   underneath, a little to the left and dimmed, and slides in more slowly than your finger (parallax).
+   - an open task: the list behind it is live, so it simply moves with the swipe
+   - a page: a still copy of this page slides away while the real previous page is drawn underneath
+     straight away (so what comes into view is exactly where you land); letting go early puts it all back
+   - a comment thread: the thread slides away to the comments */
 (() => {
-  const EDGE = 28, DONE = 0.33;
+  const EDGE = 28, DONE = 0.33, PAR = 0.3, DIM = 0.22;
   let g = null;
   const standalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true || window.__phSwipeAlways;
-  // What "back" means right now: the button that would be tapped, and the layer that slides away
   function target() {
     if ($('#overlay-root').firstElementChild || $('.menu') || $('#ph-sheet-root .ph-scrim:not(.docked)')) return null; // a sheet or menu is open
     if (ui.taskId) {
       const pane = $('#detail');
-      if (ui.thread && pane.dataset.tab === 'comments') return { btn: $('.th-back', pane), layer: $('.tm-activity', pane) };
-      return { btn: $('.ph-task-head .ph-back', pane), layer: $('.tm', pane) };
+      if (ui.thread && pane.dataset.tab === 'comments') return { kind: 'thread', btn: $('.th-back', pane), layer: $('.tm-activity', pane) };
+      return { kind: 'task', btn: $('.ph-task-head .ph-back', pane), layer: $('.tm', pane) };
     }
     const btn = $('#ph-top .ph-back') || $('#content .ph-back');
-    return btn ? { btn, layer: $('#content') } : null;
+    return btn ? { kind: 'page', btn, layer: $('#content') } : null;
   }
-  const set = (el, x, anim) => {
+  const move = (el, x, anim) => {
+    if (!el) return;
     el.style.transition = anim ? 'transform .22s cubic-bezier(.2,.8,.2,1)' : 'none';
-    el.style.transform = x ? `translateX(${x}px)` : '';
+    el.style.transform = x ? `translate3d(${x}px,0,0)` : '';
   };
+  const fade = (el, o, anim) => { if (!el) return; el.style.transition = anim ? 'opacity .22s cubic-bezier(.2,.8,.2,1)' : 'none'; el.style.opacity = String(o); };
+  const dimLayer = (parent, before, z) => {
+    const d = document.createElement('div');
+    d.className = 'ph-swipe-dim';
+    d.style.cssText = `position:${parent === document.body ? 'fixed' : 'absolute'};left:0;right:0;top:0;bottom:0;background:#000;opacity:${DIM};pointer-events:none;${z != null ? 'z-index:' + z + ';' : ''}`;
+    parent.insertBefore(d, before || null);
+    return d;
+  };
+  // set up what sits underneath, the first time the finger really moves
+  function begin(c) {
+    const w = window.innerWidth;
+    c.w = w;
+    if (c.kind === 'task') {
+      // the task pane lives inside #main, so move the list itself (not its parents); the page header sits
+      // above the pane in the stacking order, so it is cut off where the pane starts and dimmed with a filter
+      c.under = [$('#content')].filter(Boolean);
+      const top = $('#ph-top'); if (top) { top.style.visibility = 'visible'; c.top = top; }
+      c.dim = dimLayer($('#detail'), c.layer);
+    } else if (c.kind === 'page') {
+      // a still copy of this page (and its header) on top, then the real previous page drawn underneath
+      const app = $('#app'), top = $('#ph-top'), content = $('#content');
+      const scroll = content ? content.scrollTop : 0;
+      const fg = document.createElement('div');
+      fg.className = 'ph-swipe-fg';
+      fg.style.cssText = 'position:fixed;left:0;right:0;top:0;height:var(--app-h,100%);z-index:22;pointer-events:none;background:var(--ph-bg)';
+      fg.appendChild(app.cloneNode(true));
+      if (top && !top.hidden) fg.appendChild(top.cloneNode(true));
+      document.body.appendChild(fg);                       // after the originals, so their ids still find the real ones
+      const cc = fg.querySelector('#content'); if (cc) cc.scrollTop = scroll;
+      c.fg = fg; c.layer = fg;
+      c.saved = { ui: { ...ui }, scroll };
+      c.btn.click();                                       // draw the page we're going back to, underneath
+      c.under = [$('#app'), $('#ph-top')].filter(Boolean);
+      c.dim = dimLayer(document.body, fg, 21);          // above the real header (z 20), below the copy
+    } else c.under = [];
+    c.under.forEach((el) => move(el, -w * PAR, false));
+    if (c.top) track(c, 0);
+  }
+  function track(c, dx) {
+    move(c.layer, dx, false);
+    const p = Math.min(1, dx / c.w);
+    c.under.forEach((el) => move(el, -c.w * PAR * (1 - p), false));
+    fade(c.dim, DIM * (1 - p), false);
+    if (c.top) {
+      const tx = -c.w * PAR * (1 - p);
+      move(c.top, tx, false);
+      c.top.style.clipPath = `inset(0 ${Math.max(0, c.w - (dx - tx))}px 0 0)`;
+      c.top.style.filter = `brightness(${1 - DIM * (1 - p)})`;
+    }
+  }
+  function cleanup(c) {
+    [...c.under, c.top].forEach((el) => { if (el) { el.style.transition = 'none'; el.style.transform = ''; } });
+    const top = $('#ph-top'); if (top) { top.style.visibility = ''; top.style.clipPath = ''; top.style.filter = ''; }
+    if (c.dim) c.dim.remove();
+    if (c.fg) c.fg.remove();
+  }
   document.addEventListener('touchstart', (e) => {
     g = null;
     if (!Phone.on || !standalone() || e.touches.length !== 1) return;
@@ -754,7 +815,7 @@ const Push = (() => {
     if (t.clientX > EDGE) return;
     const tg = target();
     if (!tg || !tg.btn || !tg.layer) return;
-    g = { x0: t.clientX, y0: t.clientY, t0: Date.now(), dx: 0, on: false, ...tg };
+    g = { x0: t.clientX, y0: t.clientY, t0: Date.now(), dx: 0, on: false, under: [], ...tg };
   }, { passive: true });
   document.addEventListener('touchmove', (e) => {
     if (!g) return;
@@ -765,25 +826,47 @@ const Push = (() => {
       if (dx < 10) return;
       g.on = true;
       if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+      begin(g);
     }
     e.preventDefault();
     g.dx = Math.max(0, dx);
-    set(g.layer, g.dx, false);
+    track(g, g.dx);
   }, { passive: false });
   const end = () => {
     if (!g || !g.on) { g = null; return; }
-    const w = window.innerWidth;
-    const fast = g.dx > 50 && g.dx / Math.max(1, Date.now() - g.t0) > 0.5;
-    const cur = g;
-    g = null;
-    if (cur.dx > w * DONE || fast) {
-      set(cur.layer, w, true);
+    const c = g; g = null;
+    const w = c.w;
+    const fast = c.dx > 50 && c.dx / Math.max(1, Date.now() - c.t0) > 0.5;
+    const glide = (to) => { // the header has no transform-only path, so walk it along with the release
+      if (!c.top) return;
+      const from = c.dx, t0 = performance.now();
+      const step = (now) => { const k = Math.min(1, (now - t0) / 220), e = 1 - Math.pow(1 - k, 3);
+        if (c.top.style.visibility !== 'visible') return;
+        const dx = from + (to - from) * e, p = dx / w, tx = -w * PAR * (1 - p);
+        c.top.style.transition = 'none'; c.top.style.transform = `translate3d(${tx}px,0,0)`;
+        c.top.style.clipPath = `inset(0 ${Math.max(0, w - (dx - tx))}px 0 0)`; c.top.style.filter = `brightness(${1 - DIM * (1 - p)})`;
+        if (k < 1) requestAnimationFrame(step); };
+      requestAnimationFrame(step);
+    };
+    if (c.dx > w * DONE || fast) {
+      glide(w);
+      move(c.layer, w, true); c.under.forEach((el) => move(el, 0, true)); fade(c.dim, 0, true);
       setTimeout(() => {
-        cur.btn.click();
-        // the same layer may stay on screen (e.g. thread → comments): put it back without animating
-        set(cur.layer, 0, false);
-      }, 200);
-    } else set(cur.layer, 0, true);
+        if (c.kind !== 'page') { c.btn.click(); move(c.layer, 0, false); } // (a page already went back underneath)
+        cleanup(c);
+      }, 220);
+    } else {
+      glide(0);
+      move(c.layer, 0, true); c.under.forEach((el) => move(el, -w * PAR, true)); fade(c.dim, DIM, true);
+      setTimeout(() => {
+        if (c.kind === 'page' && c.saved) {
+          // let go early: put the page we were on back (still hidden under its copy), then lift the copy
+          Object.assign(ui, c.saved.ui); render();
+          const content = $('#content'); if (content) content.scrollTop = c.saved.scroll;
+        }
+        cleanup(c);
+      }, 220);
+    }
   };
   document.addEventListener('touchend', end);
   document.addEventListener('touchcancel', end);
