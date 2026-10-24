@@ -3,7 +3,7 @@ import asyncio, os, subprocess, tempfile, time, urllib.request, json
 from playwright.async_api import async_playwright
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 PORT = 18272; BASE = f'http://127.0.0.1:{PORT}'; ADMIN = 'haris@e11-digital.com'
-OUT = tempfile.mkdtemp(); fails = []
+OUT = os.environ.get('SHOTS') or tempfile.mkdtemp(); fails = []
 def check(c, m):
     print(('PASS ' if c else 'FAIL ') + m)
     if not c: fails.append(m)
@@ -50,10 +50,14 @@ async def main():
         # filters: by client and by channel
         await pg.locator('[data-cal="f-project"]').click(); await pg.wait_for_timeout(300)
         check(await pg.locator('.menu .mi').count() >= 3, 'the client filter opens')
+        pos = lambda: E("[document.querySelector('[data-cal=\"f-project\"]').getBoundingClientRect().left, document.querySelector('[data-cal=\"f-channel\"]').getBoundingClientRect().left, document.querySelector('.menu').getBoundingClientRect().left]")
+        p0 = await pos()
         await pg.locator('.menu .mi', has_text='ALAIN').first.click(); await pg.wait_for_timeout(300)
         check('ALAIN' in await pg.locator('[data-cal="f-project"]').inner_text(), 'filtering by a client')
         check(await pg.locator('.menu').count() == 1, 'the menu stays open to pick more')
         await pg.locator('.menu .mi', has_text='KOREA').first.click(); await pg.wait_for_timeout(300)
+        await pg.screenshot(path=os.path.join(OUT, 'cal-filter.png'), clip={'x': 700, 'y': 40, 'width': 740, 'height': 380})
+        check(await pos() == p0, 'the buttons and the menu stay in place while ticking')
         check('2 clients' in await pg.locator('[data-cal="f-project"]').inner_text() and len(await E("ui.cal.projects")) == 2, 'several clients at once')
         await pg.mouse.click(700, 20); await pg.wait_for_timeout(200)
         await pg.locator('[data-cal="f-channel"]').click(); await pg.wait_for_timeout(300)

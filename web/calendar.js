@@ -210,7 +210,7 @@ const Cal = (() => {
   function toolbar(r) {
     const f = st();
     const ps = f.projects.map(proj).filter(Boolean), cs = f.channels.filter((k) => CH[k]);
-    const pLabel = !ps.length ? 'All clients' : ps.length === 1 ? `<span class="dot" style="background:${ps[0].color}"></span>${esc(ps[0].name)}` : `${ps.map((p) => `<span class="dot" style="background:${p.color}"></span>`).join('')}${ps.length} clients`;
+    const pLabel = !ps.length ? 'All clients' : ps.length === 1 ? `<span class="dot" style="background:${ps[0].color}"></span>${esc(ps[0].name)}` : `${ps.slice(0, 3).map((p) => `<span class="dot" style="background:${p.color}"></span>`).join('')}${ps.length} clients`;
     const cLabel = !cs.length ? 'All channels' : cs.length <= 2 ? cs.map((k) => esc(CH[k].name)).join(', ') : `${cs.length} channels`;
     return `<div class="cal-bar">
       <div class="cal-nav">
@@ -220,8 +220,8 @@ const Cal = (() => {
         <button class="btn ghost sm" data-cal="today">Today</button>
       </div>
       <div class="cal-tools">
-        <button class="btn ghost sm cal-filter ${ps.length ? 'on' : ''}" data-cal="f-project">${pLabel}${icon('chev')}</button>
-        <button class="btn ghost sm cal-filter ${cs.length ? 'on' : ''}" data-cal="f-channel">${cLabel}${icon('chev')}</button>
+        <button class="btn ghost sm cal-filter ${ps.length ? 'on' : ''}" data-cal="f-project"><span class="cal-fl">${pLabel}</span>${icon('chev')}</button>
+        <button class="btn ghost sm cal-filter ${cs.length ? 'on' : ''}" data-cal="f-channel"><span class="cal-fl">${cLabel}</span>${icon('chev')}</button>
         <div class="cal-seg"><button class="${f.mode === 'month' ? 'on' : ''}" data-cal="mode" data-v="month">Month</button><button class="${f.mode === 'week' ? 'on' : ''}" data-cal="mode" data-v="week">Week</button></div>
         <button class="btn primary sm" data-cal="new">${icon('plus')}New post</button>
       </div>

@@ -4,6 +4,9 @@
 .cal-nav { display: flex; align-items: center; gap: 4px; }
 .cal-label { font-size: 16px; font-weight: 700; padding: 0 6px; min-width: 150px; text-align: center; font-variant-numeric: tabular-nums; }
 .cal-tools { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-wrap: wrap; }
+.cal-filter { width: 168px; justify-content: space-between; }
+.cal-fl { display: block; text-align: left; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.cal-fl .dot { margin-right: 4px; vertical-align: 0; }
 .cal-filter .ic:last-child { width: 11px; height: 11px; opacity: .7; }
 .cal-filter.on { border-color: var(--accent-line, var(--accent)); background: var(--accent-soft); color: var(--text); }
 .cal-filter .dot, .cal-chip .dot, .cal-wk-l .dot, .cal-opt .dot, .mi .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: inline-block; }
