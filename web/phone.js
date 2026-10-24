@@ -746,7 +746,6 @@ const Push = (() => {
   const set = (el, x, anim) => {
     el.style.transition = anim ? 'transform .22s cubic-bezier(.2,.8,.2,1)' : 'none';
     el.style.transform = x ? `translateX(${x}px)` : '';
-    el.style.boxShadow = x ? '-12px 0 30px rgba(0,0,0,.35)' : '';
   };
   document.addEventListener('touchstart', (e) => {
     g = null;
