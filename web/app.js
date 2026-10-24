@@ -2020,6 +2020,7 @@ function updateAppBadge() {
 }
 function renderSidebar() {
   updateAppBadge();
+  if (typeof Season !== 'undefined') { const u = currentUserId && db && me(); Season.sync(u ? !!(u.prefs || {}).seasonOff : undefined); }
   $$('.nav-item[data-nav]').forEach((a) => a.classList.toggle('active', !ui.search && (ui.view === a.dataset.nav || (a.dataset.nav === 'clients' && ui.view === 'client'))));
   Fin.paintNav();
   { const cc = $('#clients-count'); if (cc) cc.textContent = (db.clients || []).length ? String(db.clients.length) : ''; }
@@ -4524,6 +4525,7 @@ document.addEventListener('click', async (e) => {
       case 'remove-photo': { const u = me(); if (u.avatar) Host.call('trashPath', { path: u.avatar }).catch(() => {}); u.avatar = null; persist(); render(); return; }
       case 'save-profile': saveProfile(); return;
       case 'change-password': changePasswordFlow(); return;
+      case 'toggle-season': { const u = me(); u.prefs = u.prefs || {}; u.prefs.seasonOff = !u.prefs.seasonOff; persist(); renderSidebar(); renderContent(); toast(u.prefs.seasonOff ? 'Seasonal decorations off' : 'Seasonal decorations on'); return; }
       case 'toggle-digest': { const u = me(); u.prefs = u.prefs || {}; u.prefs.digestOff = !u.prefs.digestOff; persist(); renderContent(); toast(u.prefs.digestOff ? 'Morning summary off' : 'Morning summary on — 10:30 am, Monday to Friday'); return; }
       case 'digest-test': Digest.test(); return;
       case 'toggle-sound': { const u = me(); u.prefs.sound = u.prefs.sound === false; persist(); renderContent(); return; }
@@ -6320,6 +6322,7 @@ function viewProfile() {
       <div class="pf-opt"><div><b>Sound</b><span>Play a sound with new notifications</span></div><button class="switch ${sound ? 'on' : ''}" data-action="toggle-sound"><i></i></button></div>
       ${Host.isServer && !Host.isMacApp && 'Notification' in window ? `<div class="pf-opt"><div><b>Desktop notifications</b><span>${Notification.permission === 'granted' ? 'On — you’ll see alerts even when this window is in the background' : Notification.permission === 'denied' ? 'Blocked in your browser settings for this site' : 'Show alerts when this window is in the background'}</span></div>${Notification.permission === 'default' ? '<button class="btn sm primary" data-action="allow-notifs">Turn on</button>' : ''}</div>` : ''}
       <div class="pf-opt"><div><b>Test</b><span>See and hear what a notification looks like</span></div><button class="btn sm" data-action="test-notif">Send test</button></div>
+      <div class="pf-opt"><div><b>Seasonal decorations</b><span>Santa hat and snow from 16 to 31 December, on the Mac app and website.</span></div><div class="pf-opt-btns"><button class="switch ${(u.prefs || {}).seasonOff ? '' : 'on'}" data-action="toggle-season" aria-label="Seasonal decorations"><i></i></button></div></div>
       ${Host.isServer && (u.role === 'production' || u.role === 'social' || isAdm(u)) ? `<div class="pf-opt"><div><b>Morning summary</b><span>${u.role === 'production' || u.role === 'social' ? 'At 10:30 am, Monday to Friday: how your day looks. Switch it off for holidays or leave.' : 'Production and Social get a summary of their day at 10:30 am, Monday to Friday. Send yourself one to see it.'}</span></div><div class="pf-opt-btns"><button class="btn sm" data-action="digest-test">Send test</button>${u.role === 'production' || u.role === 'social' ? `<button class="switch ${(u.prefs || {}).digestOff ? '' : 'on'}" data-action="toggle-digest" aria-label="Morning summary"><i></i></button>` : ''}</div></div>` : ''}
       <h4 class="pf-sub">Notify me about</h4>
       ${notifToggles(u, false)}
