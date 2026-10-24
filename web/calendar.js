@@ -305,7 +305,7 @@ const Cal = (() => {
     const el = document.getElementById('cal-check');
     if (!el || !s) return;
     const txt = !s.at ? 'Expected dates are checked against the UAE holiday calendar twice a day.'
-      : s.ok ? `Holiday calendar checked ${timeAgo(s.at)}${s.lastChange ? ` · last change ${timeAgo(s.lastChange)}` : ''}.`
+      : s.ok ? `Holiday calendar checked ${timeAgo(s.at)}: ${(s.foundList || []).length ? 'confirmed ' + s.foundList.map((f) => `${f.name} ${fmtDay(f.date)}`).join(', ') : `no Islamic occasions listed yet (${s.events || 0} holidays read)`}${s.lastChange ? ` · last change ${timeAgo(s.lastChange)}` : ''}.`
         : `Couldn’t read the holiday calendar ${timeAgo(s.at)} (${s.error}). The expected dates stay as they are.`;
     el.innerHTML = `${esc(txt)}<button class="btn ghost xs" data-cal="check">Check now</button>`;
   }
@@ -314,7 +314,7 @@ const Cal = (() => {
     try {
       const s = await api('POST', '/api/holidays', {});
       paintCheck(s);
-      toast(s.ok ? (s.changed && s.changed.length && s.lastChange === s.at ? `Updated: ${s.changed.map((c) => c.name).join(', ')}` : 'Checked — no date changes') : 'Couldn’t read the holiday calendar');
+      toast(s.ok ? (s.changed && s.changed.length && s.lastChange === s.at ? `Updated: ${s.changed.map((c) => c.name).join(', ')}` : `Checked — ${(s.foundList || []).length} confirmed date${(s.foundList || []).length === 1 ? '' : 's'} found, no changes`) : 'Couldn’t read the holiday calendar');
     } catch (e) { toast(e.message); if (btn) { btn.disabled = false; btn.textContent = 'Check now'; } }
   }
   // Phone: the next 6 weeks as a list by day, and the occasions in them

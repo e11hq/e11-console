@@ -97,7 +97,8 @@ export function createHolidaySync({ store, webDir, url = DEFAULT_HOLIDAYS_URL, f
       const { rev, results } = store.apply([{ kind: 'meta', id: 'main', data: { ...meta, occDates: fixes } }], 'holidays');
       onChange(rev, results, changed.filter((c) => !c.same));
     }
-    const s = { at, ok: true, error: null, found: found.length, lastChange: changed.filter((c) => !c.same).length ? at : status().lastChange || null, changed: changed.filter((c) => !c.same).length ? changed.filter((c) => !c.same) : status().changed || [] };
+    const names = { ramadan: 'Ramadan', eidfitr: 'Eid al-Fitr', arafat: 'Arafat Day', eidadha: 'Eid al-Adha', hijri: 'Islamic New Year', mawlid: 'Prophet’s Birthday' };
+    const s = { at, ok: true, error: null, found: found.length, foundList: found.map((f) => ({ name: names[f.key], date: f.date })).sort((a, b) => a.date.localeCompare(b.date)), events: events.length, lastChange: changed.filter((c) => !c.same).length ? at : status().lastChange || null, changed: changed.filter((c) => !c.same).length ? changed.filter((c) => !c.same) : status().changed || [] };
     saveStatus(s);
     return s;
   }
