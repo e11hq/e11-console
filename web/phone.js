@@ -47,7 +47,6 @@ const Phone = (() => {
     let h = Math.max(bottom, window.innerHeight);
     // only an app that draws under the status bar (no space reserved at the top) can come up short
     const underBar = probe && parseFloat(getComputedStyle(probe).paddingTop) > 0;
-    root.classList.toggle('ph-underbar', !!(standalone && underBar)); // headers move down past iOS's blurred band
     if (standalone && underBar) {
       const full = window.innerHeight > window.innerWidth ? Math.max(screen.height, screen.width) : Math.min(screen.height, screen.width);
       if (full > h && full - h < 140) h = full; // not when the keyboard is open (that shrinks it a lot more)
