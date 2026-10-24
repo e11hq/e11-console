@@ -50,6 +50,18 @@ async def main():
         await pg.locator('.menu.cm-sheet .react-pick button').nth(2).tap(); await pg.wait_for_timeout(500)
         r = await E("task(ui.taskId).comments.find(c=>c.id==='c-mine').reactions")
         check(len(r) == 1, f'tapping a reaction adds it: {r}')
+        # holding low on the screen, where the sheet's items appear, and lifting late must not tap them
+        await E("closeMenus()"); await pg.wait_for_timeout(300)
+        bb = await pg.locator('.cm[data-comment="c-mine"] .cm-text').bounding_box()
+        await E("(()=>{const c=document.querySelector('.cm[data-comment=\"c-mine\"]'); const s=document.querySelector('#detail .tm-activity, #detail .tm-scroll') ; c.scrollIntoView({block:'end'});})()"); await pg.wait_for_timeout(300)
+        bb = await pg.locator('.cm[data-comment="c-mine"] .cm-text').bounding_box()
+        hx, hy = bb['x'] + 40, bb['y'] + bb['height'] / 2
+        await touch('touchStart', hx, hy); await pg.wait_for_timeout(1400)
+        under = await E(f"(()=>{{const m=document.querySelector('.menu.cm-sheet'); m.style.pointerEvents='auto'; const el=document.elementFromPoint({hx},{hy}); m.style.pointerEvents='none'; return !!(el && el.closest('.menu.cm-sheet'))}})()")
+        await touch('touchEnd', hx, hy); await pg.wait_for_timeout(500)
+        check(await pg.locator('.menu.cm-sheet').count() == 1 and await E("!ui.editingComment"), f'lifting a long hold over the sheet taps nothing (finger over the sheet: {under})')
+        await pg.locator('.menu.cm-sheet .mi').filter(has_text='Copy text').tap(); await pg.wait_for_timeout(400)
+        check(await pg.locator('.menu.cm-sheet').count() == 0, 'the sheet works normally once the finger is up')
         # someone else's comment: no Edit / Delete
         other = await E("task(ui.taskId).comments.find(c=>c.authorId!==currentUserId && !c.parentId).id")
         await E(f"document.querySelector('.cm[data-comment=\"{other}\"]').scrollIntoView({{block:'center'}})"); await pg.wait_for_timeout(300)

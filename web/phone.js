@@ -1079,7 +1079,7 @@ const Push = (() => {
    phones that support vibration vibrate; on iPhone (iOS 18 and later) a hidden switch gives a haptic tap. */
 (() => {
   const HOLD = 450;
-  let timer = null, el = null, x0 = 0, y0 = 0, swallow = 0;
+  let timer = null, el = null, x0 = 0, y0 = 0, swallow = 0, lifted = true, held = null;
   const buzz = () => {
     try { if (navigator.vibrate && navigator.vibrate(12)) return; } catch (e) { /* no vibration */ }
     try {
@@ -1118,13 +1118,26 @@ const Push = (() => {
       const id = cm.dataset.comment;
       cancel(); buzz();
       cm.classList.add('ph-held'); setTimeout(() => cm.classList.remove('ph-held'), 450);
-      swallow = Date.now() + 700;   // the finger lifting after the hold shouldn't tap the sheet
+      // the finger is still down where the sheet now appears: lifting it mustn't tap (or highlight) what's under it.
+      // The sheet ignores touches until the finger is up, and taps are swallowed for a moment after.
+      swallow = Infinity; lifted = false;
       sheet(id);
+      const m = document.querySelector('.menu.cm-sheet');
+      if (m) { m.style.pointerEvents = 'none'; held = m; }
     }, HOLD);
   }, { passive: true });
   document.addEventListener('touchmove', (e) => { if (timer && Math.hypot(e.touches[0].clientX - x0, e.touches[0].clientY - y0) > 10) cancel(); }, { passive: true });
-  document.addEventListener('touchend', (e) => { if (Date.now() < swallow) { e.preventDefault(); swallow = 0; } cancel(); }, { passive: false });
-  document.addEventListener('touchcancel', cancel, { passive: true });
+  const lift = (e) => {
+    if (swallow === Infinity && !lifted) {
+      e.preventDefault(); lifted = true;
+      swallow = Date.now() + 400;
+      const m = held; held = null;
+      setTimeout(() => { if (m) m.style.pointerEvents = ''; }, 350);
+    }
+    cancel();
+  };
+  document.addEventListener('touchend', lift, { passive: false });
+  document.addEventListener('touchcancel', lift, { passive: false });
   document.addEventListener('click', (e) => { if (Date.now() < swallow) { e.preventDefault(); e.stopPropagation(); } }, true);
   document.addEventListener('contextmenu', (e) => { if (Phone.on && e.target.closest && e.target.closest('.cm[data-comment]')) e.preventDefault(); });
 })();
