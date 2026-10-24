@@ -6767,7 +6767,8 @@ document.addEventListener('keydown', tipHide, true);
 // ---------- Startup screen ----------
 // Startup screen: shows a checklist of what the app is loading, ticked off with real numbers.
 // The look (light/dark) and the first name come from this device's last session, so it's right from the first frame.
-const SPLASH_MIN = 1800;
+const SPLASH_MIN = 3000;   // the icon assembles (~2 s), then the checklist ticks
+const SPLASH_ICON = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 300 : 2150;
 const Splash = (() => {
   const el = document.getElementById('splash');
   let start = performance.now(), gone = false, skipResolve = null;
@@ -6825,11 +6826,13 @@ const Splash = (() => {
     if (v) {
       const u = me();
       remember({ name: u ? firstName(u.id) : '', cd: v.cd });
+      // let the icon finish assembling and the checklist appear before it starts ticking
+      await Promise.race([wait(Math.max(0, SPLASH_ICON - (performance.now() - start))), skipped]);
       document.getElementById('sp-greet').textContent = greeting(u ? firstName(u.id) : '');
       rows[3].querySelector('.sp-lbl').textContent = v.label4;
       const fast = await Promise.race([wait(0).then(() => false), skipped.then(() => true)]);
       for (let i = 0; i < rows.length && !fast; i++) {
-        const r = await Promise.race([wait(i ? 300 : 120).then(() => false), skipped.then(() => true)]);
+        const r = await Promise.race([wait(i ? 220 : 120).then(() => false), skipped.then(() => true)]);
         if (r) break;
         rows.forEach((x) => x.classList.remove('now'));
         rows[i].classList.add('done', 'now');

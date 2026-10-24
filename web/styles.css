@@ -972,6 +972,7 @@ button[disabled], .pn.taken { cursor: not-allowed; }
 #splash {
   --sp-bg: #0c0d0f; --sp-card: #0f1013; --sp-line: #1d1f24; --sp-row: #16171b; --sp-text: #e9eaee; --sp-dim: #8b8e98; --sp-hint: #7d808a;
   --sp-track: #1d1f24; --sp-accent: #7c6cff; --sp-now: #16152a; --sp-now-ink: #c9c0ff; --sp-spin: #2c2f37;
+  --sp-file: #1b1c21; --sp-file-edge: #2c2e35; --sp-file-fold: #24262c; --sp-file-line: #2e3038;
   position: fixed; inset: 0; z-index: 10000; background: var(--sp-bg); color: var(--sp-text);
   display: flex; align-items: center; justify-content: center; overflow: hidden; cursor: pointer;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Helvetica Neue", Arial, sans-serif;
@@ -983,14 +984,45 @@ button[disabled], .pn.taken { cursor: not-allowed; }
 #splash.light {
   --sp-bg: #ffffff; --sp-card: #f7f7f8; --sp-line: #e6e6ea; --sp-row: #efeff2; --sp-text: #17181b; --sp-dim: #6e717a; --sp-hint: #6e717a;
   --sp-track: #e6e6ea; --sp-accent: #5b4bd6; --sp-now: #f0eeff; --sp-now-ink: #4c3cc7; --sp-spin: #d4d4da;
+  --sp-file: #ffffff; --sp-file-edge: #dcdbe3; --sp-file-fold: #eeedf3; --sp-file-line: #e2e1e8;
 }
 #splash.out { opacity: 0; transform: scale(1.02); pointer-events: none; }
 .sp-center { width: 100%; max-width: 440px; padding: 0 20px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; pointer-events: none; }
 .sp-logo { height: 52px; width: auto; display: block; -webkit-user-drag: none; opacity: 0; transform: translateY(6px); animation: spUp .5s ease .05s forwards; }
 #splash.light .sp-logo { filter: invert(1); }
-.sp-greet { margin: 18px 0 0; font-size: 26px; font-weight: 600; letter-spacing: -.015em; text-align: center; opacity: 0; animation: spUp .5s ease .15s forwards; }
-.sp-date { margin: 6px 0 0; font-size: 13.5px; color: var(--sp-dim); opacity: 0; animation: spUp .5s ease .22s forwards; }
-.sp-card { width: 100%; margin-top: 30px; border: 1px solid var(--sp-line); border-radius: 10px; background: var(--sp-card); overflow: hidden; opacity: 0; animation: spUp .5s ease .3s forwards; }
+/* The app icon assembles: files fly in from all sides and become the stacked cards, the purple tile grows in behind,
+   then E11, the two lines and the check (about 2 s). The greeting and checklist follow. */
+.sp-mark { width: 132px; height: auto; display: block; overflow: visible; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif; }
+.sp-mark .spa, .sp-mark .spf { transform-box: view-box; transform-origin: 512px 512px; }
+.sp-mark .spf { transform-origin: 512px 505px; animation: spFile .82s cubic-bezier(.2,.8,.2,1) both; }
+.sp-mark .spf-b { fill: var(--sp-file); stroke: var(--sp-file-edge); stroke-width: 2; }
+.sp-mark .spf-f { fill: var(--sp-file-fold); stroke: var(--sp-file-edge); stroke-width: 2; }
+.sp-mark .spf-l { fill: var(--sp-file-line); }
+@keyframes spFile {
+  0% { transform: translate(calc(var(--x) * 1px), calc(var(--y) * 1px)) rotate(calc(var(--r) * 1deg)); opacity: 0; }
+  12% { transform: translate(calc(var(--x) * .8px), calc(var(--y) * .8px)) rotate(calc(var(--r) * .8deg)); opacity: 1; }
+  62% { transform: translate(calc(var(--mx) * 1px), calc(var(--my) * 1px)) rotate(calc(var(--r) * .3deg)) scale(.8); opacity: 1; }
+  90% { transform: translate(0, 10px) scale(.5); opacity: 1; }
+  100% { transform: translate(0, 10px) scale(.42); opacity: 0; }
+}
+.sp-mark .sp-green { animation: spCardG .52s cubic-bezier(.3,1.5,.5,1) .7s both; }
+.sp-mark .sp-yellow { animation: spCardY .52s cubic-bezier(.3,1.5,.5,1) .76s both; }
+.sp-mark .sp-front { animation: spFront .56s cubic-bezier(.2,.8,.2,1) .82s both; }
+.sp-mark .sp-bg { animation: spTile .62s cubic-bezier(.2,.8,.2,1) .9s both; }
+.sp-mark .sp-e11 { animation: spE11 .42s cubic-bezier(.2,.8,.2,1) 1.22s both; }
+.sp-mark .sp-ln { transform-box: fill-box; transform-origin: 0 50%; animation: spLine .38s cubic-bezier(.2,.8,.2,1) 1.38s both; }
+.sp-mark .sp-l2 { animation-delay: 1.47s; }
+.sp-mark .sp-check { transform-origin: 692px 695px; animation: spCheck .38s cubic-bezier(.3,1.5,.5,1) 1.6s both; }
+@keyframes spCardG { from { transform: translateY(30px) rotate(-12deg) scale(.45); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes spCardY { from { transform: translateY(30px) rotate(10deg) scale(.45); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes spFront { 0% { transform: translateY(40px) scale(.5); opacity: 0; } 70% { transform: translateY(-6px) scale(1.03); opacity: 1; } 100% { transform: none; opacity: 1; } }
+@keyframes spTile { 0% { transform: scale(.55); opacity: 0; } 75% { transform: scale(1.03); opacity: 1; } 100% { transform: none; opacity: 1; } }
+@keyframes spE11 { from { transform: translateY(16px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes spLine { from { transform: scaleX(0); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes spCheck { from { transform: scale(0); opacity: 0; } to { transform: none; opacity: 1; } }
+.sp-greet { margin: 22px 0 0; font-size: 26px; font-weight: 600; letter-spacing: -.015em; text-align: center; opacity: 0; animation: spUp .5s ease 1.75s forwards; }
+.sp-date { margin: 6px 0 0; font-size: 13.5px; color: var(--sp-dim); opacity: 0; animation: spUp .5s ease 1.82s forwards; }
+.sp-card { width: 100%; margin-top: 30px; border: 1px solid var(--sp-line); border-radius: 10px; background: var(--sp-card); overflow: hidden; opacity: 0; animation: spUp .5s ease 1.9s forwards; }
 .sp-head { display: flex; align-items: center; height: 38px; padding: 0 16px; border-bottom: 1px solid var(--sp-line); font-size: 12px; color: var(--sp-dim); }
 .sp-head span:first-child { flex: 1; }
 .sp-n, .sp-val { font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace; }
@@ -1007,9 +1039,9 @@ button[disabled], .pn.taken { cursor: not-allowed; }
 .sp-row.now .sp-lbl { color: var(--sp-text); text-decoration: none; }
 .sp-row.now .sp-val { color: var(--sp-now-ink); }
 .sp-row.now .sp-box { box-shadow: 0 0 0 4px rgba(61, 220, 151, .18); }
-.sp-bar { width: 100%; height: 3px; margin-top: 22px; border-radius: 2px; background: var(--sp-track); overflow: hidden; opacity: 0; animation: spUp .5s ease .35s forwards; }
+.sp-bar { width: 100%; height: 3px; margin-top: 22px; border-radius: 2px; background: var(--sp-track); overflow: hidden; opacity: 0; animation: spUp .5s ease 1.95s forwards; }
 .sp-bar i { display: block; height: 100%; width: 0; background: var(--sp-accent); transition: width .35s ease; }
-.sp-hint { position: absolute; left: 0; right: 0; bottom: calc(22px + env(safe-area-inset-bottom)); text-align: center; font-size: 11.5px; color: var(--sp-hint); pointer-events: none; opacity: 0; animation: spUp .5s ease .8s forwards; }
+.sp-hint { position: absolute; left: 0; right: 0; bottom: calc(22px + env(safe-area-inset-bottom)); text-align: center; font-size: 11.5px; color: var(--sp-hint); pointer-events: none; opacity: 0; animation: spUp .5s ease 2.2s forwards; }
 @keyframes spSpin { to { transform: rotate(360deg); } }
 @keyframes spTick { from { transform: scale(.5); } to { transform: scale(1); } }
 @keyframes spUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
