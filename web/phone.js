@@ -1164,3 +1164,34 @@ const Push = (() => {
     }
   }, { passive: true });
 })();
+
+/* The iPhone paints the strip behind the time and battery itself (the page starts below it), so a dark
+   overlay can't reach it. While one is open, tint that strip to the same dimmed colour instead. */
+(() => {
+  const meta = () => document.querySelector('meta[name="theme-color"]');
+  const base = () => (document.documentElement.dataset.theme === 'light' ? [247, 247, 248] : [12, 13, 15]);
+  const hex = (c) => '#' + c.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
+  // the dark layer that's showing now, with its final colour (not mid-fade)
+  function dimNow() {
+    if (!Phone.on) return null;
+    const light = document.documentElement.dataset.theme === 'light';
+    if (document.getElementById('ph-menu-scrim')) return light ? [10, 10, 20, 0.35] : [0, 0, 0, 0.55];
+    if (document.querySelector('#ph-sheet-root .ph-scrim.in:not(.docked)')) return [0, 0, 0, 0.3];
+    if (document.querySelector('body > .scrim, #overlay-root .scrim')) return [0, 0, 0, 0.55];
+    return null;
+  }
+  let last = '';
+  function sync() {
+    const m = meta(); if (!m) return;
+    const d = dimNow(), b = base();
+    const want = d ? hex(b.map((v, i) => v * (1 - d[3]) + d[i] * d[3])) : hex(b);
+    if (want === last && m.content === want) return;
+    // only take over while something is dimmed, or to put the normal colour back afterwards
+    if (!d && !last) return;
+    m.content = want; last = d ? want : '';
+  }
+  let queued = false;
+  const later = () => { if (!queued) { queued = true; requestAnimationFrame(() => { queued = false; sync(); }); } };
+  const start = () => new MutationObserver(later).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+  if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
+})();
