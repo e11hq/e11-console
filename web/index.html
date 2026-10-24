@@ -16,7 +16,13 @@
 <meta name="theme-color" content="#0c0d0f">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<script>
+/* iPhone Home Screen app: in dark mode the page runs up under the time and battery (white text), so pop-up
+   overlays dim the whole screen; in light mode iOS keeps its own light strip so the time stays dark and readable.
+   iOS reads this when the app opens, so a theme change shows here the next time it's opened. */
+try { var t = (JSON.parse(localStorage.getItem('e11-splash') || '{}') || {}).theme; if (t === 'light') document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]').content = 'default'; } catch (e) {}
+</script>
 <meta name="apple-mobile-web-app-title" content="E11 Console">
 </head>
 <body>
