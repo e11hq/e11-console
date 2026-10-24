@@ -966,8 +966,9 @@ button[disabled], .pn.taken { cursor: not-allowed; }
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Helvetica Neue", Arial, sans-serif;
   transition: opacity .45s ease, transform .45s ease;
 }
-/* iPhone Home Screen app: a fixed screen can stop short of the true bottom edge; paint past it */
-#splash { box-shadow: 0 0 0 300px var(--sp-bg); }
+/* iPhone Home Screen app: a fixed screen can stop short of the true bottom edge; reach it like the tab bar does
+   (--ph-shift is measured by the phone layout; 0 everywhere else) */
+#splash { bottom: var(--ph-shift, 0px); box-shadow: 0 0 0 300px var(--sp-bg); }
 #splash.light {
   --sp-bg: #ffffff; --sp-card: #f7f7f8; --sp-line: #e6e6ea; --sp-row: #efeff2; --sp-text: #17181b; --sp-dim: #6e717a; --sp-hint: #6e717a;
   --sp-track: #e6e6ea; --sp-accent: #5b4bd6; --sp-now: #f0eeff; --sp-now-ink: #4c3cc7; --sp-spin: #d4d4da;
