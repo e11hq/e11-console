@@ -11,6 +11,7 @@ import { createFiles, mimeOf, httpError } from './files.js';
 import { createCfSync } from './cfsync.js';
 import { createWebPush, notifMessage } from './webpush.js';
 import { createDigest } from './digest.js';
+import { createOccasionReminders } from './occremind.js';
 import { createHolidaySync, DEFAULT_HOLIDAYS_URL } from './holidays.js';
 import { sampleData } from './sample.js';
 import { createAppIcon } from './appicon.js';
@@ -30,6 +31,8 @@ export function createServer(cfg) {
   const webPush = createWebPush({ store, fetchImpl: cfg.pushFetch || fetch, subject: cfg.pushSubject || 'mailto:admin@e11hq.com' });
   const digest = createDigest({ store, webPush, now: cfg.now || (() => Date.now()) });
   if (cfg.digest !== false) digest.start();
+  const occRemind = createOccasionReminders({ store, webDir, webPush, isAdm: (u) => access.isAdm(u), now: cfg.now || (() => Date.now()) });
+  if (cfg.occRemind !== false && webDir) occRemind.start();
   // Confirmed dates for Ramadan, the Eids… from a public UAE holiday calendar (off on a dev server unless a URL is given)
   const holidays = createHolidaySync({
     store, webDir: cfg.webDir, url: cfg.holidaysUrl || DEFAULT_HOLIDAYS_URL, fetchImpl: cfg.holidaysFetch || fetch, now: cfg.now || (() => Date.now()),
@@ -211,6 +214,7 @@ export function createServer(cfg) {
     // Phone notifications: the server's public key, and turning them on / off for this device
     // Morning summary: today's, for this person's open app (shown once per device); a test send to yourself
     if (p === '/api/digest') return json(res, 200, { ok: true, ...digest.forUser(u) });
+    if (p === '/api/occ-reminders') return json(res, 200, { ok: true, ...occRemind.forUser(u) });
     // Occasion dates: when the holiday calendar was last read (Admins and Account Managers can check now)
     if (p === '/api/holidays') {
       if (!(access.isAdm(u) || u.role === 'am')) return json(res, 403, { ok: false, error: 'Admins and Account Managers only' });
@@ -392,8 +396,8 @@ export function createServer(cfg) {
   return {
     server, store, files, cfSync, webPush,
     listen: (port, host) => new Promise((ok) => server.listen(port, host, () => ok(server.address().port))),
-    digest, holidays,
-    close: () => new Promise((ok) => { digest.stop(); holidays.stop(); for (const s of streams) try { s.res.end(); } catch { /* ignore */ } server.close(() => { store.close(); ok(); }); }),
+    digest, holidays, occRemind,
+    close: () => new Promise((ok) => { digest.stop(); holidays.stop(); occRemind.stop(); for (const s of streams) try { s.res.end(); } catch { /* ignore */ } server.close(() => { store.close(); ok(); }); }),
     broadcastVersion: (v) => { for (const s of streams) send(s, 'version', { version: v }); },
   };
 }

@@ -722,9 +722,19 @@ const Push = (() => {
     const iv = setInterval(() => { if (typeof db !== 'undefined' && db && currentUserId) { clearInterval(iv); setTimeout(go, 300); } }, 250);
     setTimeout(() => clearInterval(iv), 30000);
   }
+  // a notification that opens a page (occasion reminders open the Content calendar)
+  function openView(view) {
+    const ok = { calendar: 1 };
+    if (!ok[view]) return;
+    const run = () => go(view);
+    if (typeof db !== 'undefined' && db && currentUserId) return run();
+    const iv = setInterval(() => { if (typeof db !== 'undefined' && db && currentUserId) { clearInterval(iv); setTimeout(run, 300); } }, 250);
+    setTimeout(() => clearInterval(iv), 30000);
+  }
   const q = new URLSearchParams(location.search);
   if (q.get('task')) { openFrom(q.get('task'), q.get('n')); history.replaceState(null, '', '/'); }
-  if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.type === 'open-task') openFrom(e.data.taskId, e.data.nid); });
+  else if (q.get('view')) { openView(q.get('view')); history.replaceState(null, '', '/'); }
+  if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.type === 'open-task') openFrom(e.data.taskId, e.data.nid); if (e.data && e.data.type === 'open-view') openView(e.data.view); });
 
   return { row, refresh };
 })();

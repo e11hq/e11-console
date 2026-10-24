@@ -6061,6 +6061,35 @@ function alertUser({ title, body, taskId, from, open, stay }, force) {
   }
   if (!front || force) Host.call('notify', { title, body, sound: sound && !front ? 'Glass' : null }).catch(() => {});
 }
+// Occasion reminders (Social, AMs, Admins; 45, 30, 14 and 7 days before, 10:30 Dubai): the server sends them to
+// phones with notifications on; an open app shows each one once per device that day. Tapping opens the calendar.
+const OccRemind = (() => {
+  let busy = false;
+  async function check() {
+    if (busy || !Host.isServer || !db || !currentUserId || typeof Cal === 'undefined' || !Cal.canSee(me())) return;
+    busy = true;
+    try {
+      const r = await api('GET', '/api/occ-reminders');
+      const list = r.list || [];
+      if (!list.length) return;
+      const pushed = await Digest.pushOn();
+      for (const x of list) {
+        const k = `e11-occ-${currentUserId}-${x.id}-${x.step}`;
+        let seen = null; try { seen = localStorage.getItem(k); } catch (e) { /* storage off */ }
+        if (seen) continue;
+        try { localStorage.setItem(k, r.day); } catch (e) { /* storage off */ }
+        if (pushed) continue;                // this phone already got it as a notification
+        alertUser({ title: x.title, body: x.body, stay: 15000, open: () => go('calendar') }, true);
+      }
+    } catch (e) { /* offline: try again later */ } finally { busy = false; }
+  }
+  function start() {
+    setTimeout(check, 5000);
+    setInterval(check, 5 * 60_000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(check, 2000); });
+  }
+  return { start, check };
+})();
 // Morning summary (Production / Social, 10:30 Dubai, Monday to Friday): the server sends it to phones with
 // notifications on; an open app shows it as a banner, once per device per day, until midnight. Not in the Inbox.
 const Digest = (() => {
@@ -6095,7 +6124,7 @@ const Digest = (() => {
       alertUser({ title: r.title, body: r.body, stay: 12000 }, true);
     } catch (e) { toast(e.message); }
   }
-  return { start, check, test, wants };
+  return { start, check, test, wants, pushOn };
 })();
 // Show alerts for notifications this person hasn't been alerted about yet
 function deliverPending() {
@@ -6949,6 +6978,7 @@ async function bootServer() {
   if (u) { u.lastLoginAt = nowISO(); persist(2000); }
   setInterval(() => { if (currentUserId) { deliverPending(); renderSidebar(); Announce.check(); Claims.tick(); Fin.invoiceTick(); } }, 30000);
   Digest.start();
+  OccRemind.start();
   let day = todayStr();
   setInterval(() => { if (todayStr() !== day) { day = todayStr(); if (currentUserId) { purgeOldCompleted(); render({ keepDetail: true }); } } }, 60000);
 }
