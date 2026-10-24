@@ -23,6 +23,8 @@ export function sendDay(date, n) {
   if (w === 6) d = plus(d, -1); else if (w === 0) d = plus(d, -2);
   return d;
 }
+// Account Managers and Admins create the posts; Social are told so they know what's coming
+const tail = (u, isAdm) => (u.role === 'am' || isAdm(u) ? ' Plan posts in the Content calendar.' : ' See what’s planned in the Content calendar.');
 export const remindRole = (u, isAdm) => !!u && u.active !== false && (u.role === 'social' || u.role === 'am' || isAdm(u));
 
 export function createOccasionReminders({ store, webDir, webPush, isAdm, now = () => Date.now(), log = console }) {
@@ -47,7 +49,7 @@ export function createOccasionReminders({ store, webDir, webPush, isAdm, now = (
       out.push({
         id: o.id, name: o.name, date: o.date, days, step: n, planned, total: projects.length,
         title: `${o.name} in ${days} days`,
-        body: `${o.est ? 'Expected ' : ''}${fmt(o.date)} · ${planned ? `${planned} of ${projects.length} clients have posts planned` : 'Nothing planned yet'}. Tap to plan.`,
+        body: `${o.est ? 'Expected ' : ''}${fmt(o.date)} · ${planned ? `${planned} of ${projects.length} clients have posts planned` : 'Nothing planned yet'}.`,
       });
     }
     return out;
@@ -70,7 +72,7 @@ export function createOccasionReminders({ store, webDir, webPush, isAdm, now = (
       sent[key] = t.day;
       store.kv.set('occ-remind-sent', JSON.stringify(sent));          // marked first: a crash never sends twice
       for (const u of people) {
-        try { const res = await webPush.sendTo(u.id, { title: r.title, body: r.body, tag: 'occ-' + key, view: 'calendar' }, { ttl: Math.max(60, Math.floor((t.endOfDay - now()) / 1000)) }); n += res.sent || 0; }
+        try { const res = await webPush.sendTo(u.id, { title: r.title, body: r.body + tail(u, isAdm), tag: 'occ-' + key, view: 'calendar' }, { ttl: Math.max(60, Math.floor((t.endOfDay - now()) / 1000)) }); n += res.sent || 0; }
         catch (e) { log.error('Occasion reminder failed', e.message); }
       }
     }
@@ -85,7 +87,7 @@ export function createOccasionReminders({ store, webDir, webPush, isAdm, now = (
     forUser(user) {
       const t = dubaiNow(now());
       if (t.minutes < START || !remindRole(user, isAdm)) return { day: t.day, list: [] };
-      try { return { day: t.day, list: dueOn(t.day) }; } catch { return { day: t.day, list: [] }; }
+      try { return { day: t.day, list: dueOn(t.day).map((r) => ({ ...r, body: r.body + tail(user, isAdm) })) }; } catch { return { day: t.day, list: [] }; }
     },
   };
 }

@@ -34,6 +34,8 @@ async def main():
         check(await E("Occasions.byId('ramadan-2027').est") is True, 'moon-based dates are marked as estimates')
         # who sees it
         roles = await E("(()=>{ const out={}; for (const r of ['admin','am','social','production','freelancer']) out[r]=Cal.canSee({role:r, active:true}); return out; })()")
+        soc = await E("(() => { const id = currentUserId; const u = db.users.find(x => x.role === 'social' && x.active !== false); if (!u) return null; currentUserId = u.id; ui.view = 'calendar'; renderContent(); const r = [document.querySelectorAll('[data-cal=\"new\"]').length, document.querySelectorAll('[data-cal=\"plan\"]').length]; currentUserId = id; renderContent(); return r; })()")
+        check(soc == [0, 0], f'Social see no New post or Plan buttons (they can\'t create tasks) {soc}')
         check(roles == {'admin': True, 'am': True, 'social': True, 'production': False, 'freelancer': False}, f'Social, AMs and Admins only: {roles}')
         check(await pg.locator('#nav-calendar').is_visible(), 'the AM sees Content calendar in the sidebar')
         # month view with the sample posts on UAE National Day

@@ -227,7 +227,7 @@ const Cal = (() => {
         <button class="btn ghost sm cal-filter ${ps.length ? 'on' : ''}" data-cal="f-project"><span class="cal-fl">${pLabel}</span>${icon('chev')}</button>
         <button class="btn ghost sm cal-filter ${cs.length ? 'on' : ''}" data-cal="f-channel"><span class="cal-fl">${cLabel}</span>${icon('chev')}</button>
         <div class="cal-seg"><button class="${f.mode === 'month' ? 'on' : ''}" data-cal="mode" data-v="month">Month</button><button class="${f.mode === 'week' ? 'on' : ''}" data-cal="mode" data-v="week">Week</button></div>
-        <button class="btn primary sm" data-cal="new">${icon('plus')}New post</button>
+        ${can('createTask') ? `<button class="btn primary sm" data-cal="new">${icon('plus')}New post</button>` : ''}
       </div>
     </div>`;
   }
@@ -249,7 +249,7 @@ const Cal = (() => {
       const day = list.filter((t) => dayOf(t) === d);
       const out = parseYmd(d).getMonth() !== r.month;
       cells += `<div class="cal-cell ${out ? 'out' : ''} ${d === today ? 'today' : ''} ${occClass(d)}" data-day="${d}">
-        <div class="cal-dh"><span class="cal-num">${parseYmd(d).getDate()}</span>${occLine(d)}<button class="cal-add" data-cal="new" data-d="${d}" title="New post on this day">${icon('plus')}</button></div>
+        <div class="cal-dh"><span class="cal-num">${parseYmd(d).getDate()}</span>${occLine(d)}${can('createTask') ? `<button class="cal-add" data-cal="new" data-d="${d}" title="New post on this day">${icon('plus')}</button>` : ''}</div>
         ${day.slice(0, 3).map((t) => { const p = projOf(t); const s = statusOf(t); return `<button class="cal-chip" data-cal="open" data-id="${t.id}" title="${esc((p ? p.name + ' · ' : '') + (t.title || 'Untitled task') + ' · ' + STATUS[s][0])}">
           <span class="dot" style="background:${p ? p.color : '#8b8b96'}"></span><span class="cal-chip-t">${esc(t.title || 'Untitled task')}</span><span class="cal-sdot" style="background:${STATUS[s][1]}"></span></button>`; }).join('')}
         ${day.length > 3 ? `<button class="cal-more" data-cal="week-of" data-d="${d}">+${day.length - 3} more</button>` : ''}
@@ -268,7 +268,7 @@ const Cal = (() => {
       const mine = list.filter((t) => (t.projectId || '') === id);
       return `<div class="cal-wk-l"><span class="dot" style="background:${p ? p.color : '#8b8b96'}"></span><b>${esc(p ? p.name : 'No project')}</b><small>${mine.length} this week</small></div>${days.map((d) => `<div class="cal-wk-c ${occClass(d)}" data-day="${d}">${mine.filter((t) => dayOf(t) === d).map((t) => { const s = statusOf(t); return `<button class="cal-card" data-cal="open" data-id="${t.id}" style="--pc:${p ? p.color : '#8b8b96'}">
           <span class="cal-card-top">${chips(t) || '<span class="cal-ch none">No channel</span>'}</span>
-          <span class="cal-card-t">${esc(t.title || 'Untitled task')}</span>${pill(s)}</button>`; }).join('')}<button class="cal-add" data-cal="new" data-d="${d}" data-p="${esc(id)}" title="New post">${icon('plus')}</button></div>`).join('')}`;
+          <span class="cal-card-t">${esc(t.title || 'Untitled task')}</span>${pill(s)}</button>`; }).join('')}${can('createTask') ? `<button class="cal-add" data-cal="new" data-d="${d}" data-p="${esc(id)}" title="New post">${icon('plus')}</button>` : ''}</div>`).join('')}`;
     }).join('');
     return `<div class="cal-week">${head}${body || `<div class="cal-empty">No posts this week${st().projects.length || st().channels.length ? ' for these filters' : ''}. Use <b>New post</b>, or set a <b>Channel</b> on a task, to add one.</div>`}</div>`;
   }
@@ -292,7 +292,7 @@ const Cal = (() => {
             <div class="cal-occ-txt"><b>${esc(o.name)}</b><span>${o.est ? 'Expected · ' : o.confirmed ? '<i class="cal-conf">Confirmed</i> · ' : ''}${esc(Occasions.fmt(o))}</span>
               ${stale ? `<span class="warn">${stale} post${stale === 1 ? '' : 's'} still on the old date</span>` : ''}
               <span class="${linked.length ? (ok === linked.length ? 'ok' : 'warn') : 'none'}">${linked.length ? `${linked.length} planned · ${ok} approved` : 'Nothing planned yet'}</span></div>
-            <div class="cal-occ-acts"><button class="btn ghost xs" data-cal="plan" data-id="${esc(o.id)}">Plan</button>${mgr ? `<button class="icon-btn xs" data-cal="occ-edit" data-id="${esc(o.id)}" title="Change the date">${icon('edit')}</button>` : ''}</div>
+            <div class="cal-occ-acts">${can('createTask') ? `<button class="btn ghost xs" data-cal="plan" data-id="${esc(o.id)}">Plan</button>` : ''}${mgr ? `<button class="icon-btn xs" data-cal="occ-edit" data-id="${esc(o.id)}" title="Change the date">${icon('edit')}</button>` : ''}</div>
           </div>`;
         }).join('') : '<div class="cal-muted">No occasions in the next weeks</div>'}
         ${mgr && Host.isServer ? `<div class="cal-check" id="cal-check">${checkHTML(lastCheck())}</div>` : ''}
