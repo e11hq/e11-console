@@ -5,7 +5,7 @@
 const Phone = (() => {
   const mq = window.matchMedia('(max-width: 760px)');
   const OWN = new Set(['home', 'today', 'mytasks', 'inbox', 'reviews', 'review', 'me', 'projects', 'project', 'psearch']);
-  const TITLES = { trash: 'Trash', profile: 'My profile', team: 'Team members', updates: 'App updates', clients: 'Client Assets', client: 'Client Assets' };
+  const TITLES = { calendar: 'Content calendar', trash: 'Trash', profile: 'My profile', team: 'Team members', updates: 'App updates', clients: 'Client Assets', client: 'Client Assets' };
   const st = { on: false, ibf: 'unread', q: '' };
 
   const isOn = () => st.on;
@@ -290,6 +290,7 @@ const Phone = (() => {
       <div class="ph-rows">
         ${row('data-nav="profile"', 'user', 'My profile', 'Photo, office and notifications')}
         ${isCD() ? row('data-ph-tab="projects"', 'folder', 'Projects') : ''}
+        ${Cal.canSee() ? row('data-nav="calendar"', 'cal', 'Content calendar', 'Posts by day, channel and occasion') : ''}
         ${row('data-nav="clients"', 'assets', 'Client Assets', 'Logos, guidelines and fonts')}
         ${row('data-nav="team"', 'users', 'Team members')}
         ${isManager() ? row('data-nav="trash"', 'trash', 'Trash', trashList().length ? `${trashList().length} item${trashList().length === 1 ? '' : 's'} · restore within ${TRASH_DAYS} days` : `Deleted items wait here ${TRASH_DAYS} days`) : ''}

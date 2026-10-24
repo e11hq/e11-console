@@ -1,0 +1,88 @@
+"""Content calendar and occasions: who sees it, month and week views, planning an occasion, the Channel / Go-live / Occasion fields, and occasion greetings."""
+import asyncio, os, subprocess, tempfile, time, urllib.request, json
+from playwright.async_api import async_playwright
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PORT = 18272; BASE = f'http://127.0.0.1:{PORT}'; ADMIN = 'haris@e11-digital.com'
+OUT = tempfile.mkdtemp(); fails = []
+def check(c, m):
+    print(('PASS ' if c else 'FAIL ') + m)
+    if not c: fails.append(m)
+async def main():
+    env = {**os.environ, 'DATA_DIR': tempfile.mkdtemp(), 'AUTH_DEV': '1', 'ADMIN_EMAIL': ADMIN, 'PORT': str(PORT), 'WEB_DIR': os.path.join(ROOT, 'web'), 'APP_VERSION': '1.3.3-test.1'}
+    srv = subprocess.Popen(['node', os.path.join(ROOT, 'server/src/index.js')], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    for _ in range(50):
+        try: urllib.request.urlopen(BASE + '/api/health'); break
+        except Exception: time.sleep(0.1)
+    urllib.request.urlopen(urllib.request.Request(BASE + '/api/sample', method='POST', data=b'{}', headers={'X-Dev-Email': ADMIN, 'Content-Type': 'application/json'}))
+    async with async_playwright() as pw:
+        b = await pw.chromium.launch(executable_path='/opt/pw-browsers/chromium-1194/chrome-linux/chrome')
+        ctx = await b.new_context(viewport={'width': 1440, 'height': 900}, base_url=BASE)
+        await ctx.add_cookies([{'name': 'e11_dev_email', 'value': 'areej@e11-digital.com', 'url': BASE}])
+        pg = await ctx.new_page(); errs = []; pg.on('pageerror', lambda e: errs.append(str(e)))
+        await pg.goto('/'); await pg.wait_for_timeout(3500); await pg.mouse.click(5, 5); await pg.wait_for_timeout(800)
+        E = pg.evaluate
+        await E("closeDetail()")
+        # greetings
+        check(await E("Occasions.greeting('2026-12-02')") == 'Happy National Day', 'National Day greeting')
+        check(await E("Occasions.greeting('2027-02-20')") == 'Ramadan Kareem', 'Ramadan greeting all month')
+        check(await E("Occasions.greeting('2027-03-11')") == 'Eid Mubarak', 'Eid greeting')
+        check(await E("Occasions.greeting('2026-12-25')") == 'Merry Christmas', 'Christmas greeting')
+        check(await E("Occasions.greeting('2026-11-30')") is None, 'Commemoration Day has no greeting')
+        check(await E("Occasions.byId('ramadan-2027').est") is True, 'moon-based dates are marked as estimates')
+        # who sees it
+        roles = await E("(()=>{ const out={}; for (const r of ['admin','am','social','production','freelancer']) out[r]=Cal.canSee({role:r, active:true}); return out; })()")
+        check(roles == {'admin': True, 'am': True, 'social': True, 'production': False, 'freelancer': False}, f'Social, AMs and Admins only: {roles}')
+        check(await pg.locator('#nav-calendar').is_visible(), 'the AM sees Content calendar in the sidebar')
+        # month view with the sample posts on UAE National Day
+        await pg.locator('#nav-calendar').click(); await pg.wait_for_timeout(500)
+        nd = await E("Occasions.between(todayStr(), addDays(todayStr(), 400)).find(o=>o.key==='nationalday').date")
+        await E(f"ui.cal.anchor='{nd}'; renderContent()"); await pg.wait_for_timeout(300)
+        n = await pg.locator(f'.cal-cell[data-day="{nd}"] .cal-chip').count()
+        check(n >= 1, f'posts show on National Day ({n})')
+        check('UAE National Day' in (await pg.locator(f'.cal-cell[data-day="{nd}"] .cal-occ').inner_text()), 'the occasion is named on its day')
+        # week view, opening a post keeps the task open
+        await pg.locator('[data-cal="mode"][data-v="week"]').click(); await pg.wait_for_timeout(300)
+        check(await pg.locator('.cal-card').count() >= 1, 'week view shows cards by client')
+        await pg.locator('.cal-card').first.click(); await pg.wait_for_timeout(600)
+        check(await E("!!ui.taskId"), 'clicking a post opens its task')
+        check(await pg.locator('[data-action="field-pick"][data-k="channels"]').count() == 1, 'the task shows the Channel field')
+        await E("closeDetail()"); await pg.wait_for_timeout(300)
+        # plan an occasion: one task per chosen client
+        before = await E("db.tasks.length")
+        await E("Cal.render(document.getElementById('content'))")
+        await pg.locator('[data-cal="plan"]').first.click(); await pg.wait_for_timeout(300)
+        await pg.locator('.cal-plan [data-pp]').nth(0).click(); await pg.locator('.cal-plan [data-pp]').nth(1).click()
+        await pg.locator('.cal-plan [data-pc="tt"]').click()
+        await pg.locator('.cal-plan [data-r="1"]').click(); await pg.wait_for_timeout(500)
+        made = await E(f"db.tasks.slice({before})")
+        check(len(made) == 2 and all(t.get('occasion') and t.get('golive') and set(t['channels']) == {'ig', 'tt'} for t in made), f"Plan made 2 linked tasks: {[(t['title'], t.get('channels')) for t in made]}")
+        # fields on a new post: channel, go-live, suggested occasion
+        await pg.locator('.cal-bar [data-cal="new"]').click(); await pg.wait_for_timeout(700)
+        tid = await E("ui.taskId")
+        await pg.locator('[data-action="field-pick"][data-k="channels"]').click(); await pg.wait_for_timeout(200)
+        await pg.locator('.menu .mi', has_text='LinkedIn').click(); await pg.wait_for_timeout(300)
+        check(await E(f"task('{tid}').channels") == ['li'], 'pick a channel')
+        await E(f"(()=>{{ const el=document.getElementById('d-golive'); el.value='{nd}'; el.dispatchEvent(new Event('change',{{bubbles:true}})); }})()"); await pg.wait_for_timeout(300)
+        check(await E(f"task('{tid}').golive") == nd, 'set the go-live date')
+        check(await pg.locator('[data-action="occ-accept"]').count() == 1, 'the occasion is suggested from the go-live date')
+        await pg.locator('[data-action="occ-accept"]').click(); await pg.wait_for_timeout(300)
+        check((await E(f"task('{tid}').occasion")).startswith('nationalday-'), 'accepting the suggestion links it')
+        acts = await E(f"task('{tid}').activity.map(a=>a.text).join(' | ')")
+        check('channels' in acts and 'go-live' in acts and 'occasion' in acts, 'changes are in the activity log')
+        # Admins / AMs add an occasion (shared) and it appears
+        await E("closeDetail()"); await pg.wait_for_timeout(200)
+        await E("Cal.render(document.getElementById('content'))")
+        await pg.locator('[data-cal="occ-add"]').click(); await pg.wait_for_timeout(200)
+        await pg.fill('#occ-name', 'Ford anniversary')
+        d2 = await E("addDays(todayStr(), 5)")
+        await pg.fill('#occ-date', d2); await pg.fill('#occ-greet', 'Happy anniversary')
+        await pg.locator('.cal-plan [data-r="1"]').click(); await pg.wait_for_timeout(400)
+        check(await E(f"Occasions.on('{d2}').some(o=>o.name==='Ford anniversary')"), 'a new occasion is saved for everyone')
+        check(await E(f"Occasions.greeting('{d2}')") == 'Happy anniversary', 'with its greeting')
+        await pg.screenshot(path=os.path.join(OUT, 'calendar.png'))
+        check(not errs, f'no page errors {errs}')
+        await b.close()
+    srv.kill()
+    print('OUT', OUT)
+    print('ALL PASS' if not fails else f'FAILS {fails}')
+asyncio.run(main())

@@ -165,6 +165,18 @@ export function sampleData(store, me, filesRoot = null) {
       t.pendingSample = true;
     });
 
+    // ---------- Content calendar: channels and go-live dates on some open tasks, a few for UAE National Day ----------
+    {
+      const CHS = [['ig'], ['ig', 'tt'], ['li'], ['edm'], ['ig', 'fb'], ['tt'], ['yt'], ['x', 'li']];
+      const now = new Date();
+      const ndYear = now.getMonth() === 11 && now.getDate() > 3 ? now.getFullYear() + 1 : now.getFullYear();
+      out.tasks.filter((t) => !t.parentId && !t.done && t.projectId && !String(t.id).startsWith('smp-fin-')).slice(0, 14).forEach((t, k) => {
+        t.channels = CHS[k % CHS.length];
+        if (k < 4) { t.golive = `${ndYear}-12-0${k === 3 ? 1 : 2}`; t.occasion = `nationalday-${ndYear}`; }
+        else t.golive = dayStr(-(k * 2 - 6));
+      });
+    }
+
     // ---------- Expense claims (My reimbursements / Finance → Staff reimbursements) ----------
     {
       const today = new Date();

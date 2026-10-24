@@ -7,7 +7,7 @@ const Home = (() => {
   const DAY = 86400000;
   const WD = ['Mo', 'Tu', 'We', 'Th', 'Fr'];
   const first = (u) => fullName(u).split(' ')[0];
-  const greeting = () => { const h = new Date().getHours(); return h < 5 ? 'Good evening' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; };
+  const greeting = () => { const o = typeof Occasions !== 'undefined' && Occasions.greeting(todayStr()); if (o) return o; const h = new Date().getHours(); return h < 5 ? 'Good evening' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; };
   const dateLine = () => new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
   const ymdOf = (iso) => (iso ? ymd(new Date(iso)) : null);
   const pColor = (t) => (proj(t.projectId) || {}).color || 'var(--text-3)';

@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="finance.css">
 <link rel="stylesheet" href="home.css">
 <link rel="stylesheet" href="claims.css">
+<link rel="stylesheet" href="calendar.css">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="apple-touch-icon" href="icon-180.png">
@@ -91,6 +92,7 @@ try { var m = JSON.parse(localStorage.getItem('e11-splash') || '{}') || {}, h = 
       <a class="nav-item" data-nav="reviews" id="nav-reviews" style="display:none"><span class="ic" data-icon="shield"></span>Review Requests<span class="count ib" id="reviews-count"></span></a>
       <a class="nav-item" data-nav="today"><span class="ic" data-icon="sun"></span>My Day<span class="count" id="today-count"></span></a>
       <a class="nav-item" data-nav="mytasks"><span class="ic" data-icon="check-circle"></span>My Tasks<span class="count" id="mytasks-count"></span></a>
+      <a class="nav-item" data-nav="calendar" id="nav-calendar" style="display:none"><span class="ic" data-icon="cal"></span>Content calendar</a>
     </nav>
     <div class="nav-heading"><span>Projects</span><button class="icon-btn sm" data-action="new-project" title="New project"><span class="ic" data-icon="plus"></span></button></div>
     <div id="project-list" class="nav"></div>
@@ -128,6 +130,7 @@ try { var m = JSON.parse(localStorage.getItem('e11-splash') || '{}') || {}, h = 
 <div id="overlay-root"></div>
 <div id="toast-root"></div>
 
+<script src="calendar.js"></script>
 <script src="home.js"></script>
 <script src="app.js"></script>
 <script src="phone.js"></script>

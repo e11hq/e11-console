@@ -1057,6 +1057,7 @@ function fieldsHTML(t) {
     ...(mgr ? [{ k: 'finance', ic: 'coin', l: 'Finance', v: t.finance, html: t.finance ? fieldPill(t.finance, FINANCE[t.finance] || '#9aa4b2') : '', edit: true }] : []),
     { k: 'guardian', ic: 'user', l: 'Guardian', v: t.guardian && userById(t.guardian) ? t.guardian : null,
       html: t.guardian && userById(t.guardian) ? `<span class="fl-person">${avatarHTML(t.guardian, 20)}${esc(fullName(userById(t.guardian)))}</span>` : '', edit: canGuard },
+    ...Cal.fieldRows(t),
   ];
   const empty = rows.filter((r) => !r.v).length;
   const hide = !!ui.fieldsHideEmpty;
@@ -1065,7 +1066,7 @@ function fieldsHTML(t) {
     <button class="fl-head" data-action="fields-toggle">${icon('chev')}<span>Fields</span></button>
     ${open ? `<div class="fl-rows">${rows.filter((r) => !(hide && !r.v)).map((r) => `<div class="fl-row">
         <span class="fl-l">${icon(r.ic)}${esc(r.l)}</span>
-        <span class="fl-v">${r.edit ? `<button class="fl-btn" data-action="field-pick" data-k="${r.k}">${r.html || '<span class="fl-empty">–</span>'}</button>` : (r.html || '<span class="fl-empty">–</span>')}</span>
+        <span class="fl-v">${r.raw ? r.raw : r.edit ? `<button class="fl-btn" data-action="field-pick" data-k="${r.k}">${r.html || '<span class="fl-empty">–</span>'}</button>` : (r.html || '<span class="fl-empty">–</span>')}${r.extra || ''}</span>
       </div>`).join('')}
       ${empty ? `<button class="fl-more" data-action="fields-empty">${icon(hide ? 'chev' : 'chev-up')}${hide ? 'Show' : 'Hide'} ${empty} empty field${empty === 1 ? '' : 's'}</button>` : ''}
     </div>` : ''}
@@ -1074,6 +1075,7 @@ function fieldsHTML(t) {
 function fieldMenu(anchor, k) {
   const t = task(ui.taskId);
   if (!t) return;
+  if (k === 'channels' || k === 'occasion') return Cal.fieldMenu(anchor, k, t);
   const set = (v) => setField(t, k, v);
   const cur = t[k] || null;
   let items = [];
@@ -2020,6 +2022,7 @@ function renderSidebar() {
   $$('.nav-item[data-nav]').forEach((a) => a.classList.toggle('active', !ui.search && (ui.view === a.dataset.nav || (a.dataset.nav === 'clients' && ui.view === 'client'))));
   Fin.paintNav();
   { const cc = $('#clients-count'); if (cc) cc.textContent = (db.clients || []).length ? String(db.clients.length) : ''; }
+  { const cn = $('#nav-calendar'); if (cn) cn.style.display = Cal.canSee() ? '' : 'none'; }
   { const tn = $('#nav-trash'); if (tn) { tn.style.display = isManager() ? '' : 'none'; $('#trash-count').textContent = trashList().length ? String(trashList().length) : ''; } }
   const mt = Work.home().filter((t) => Work.homeOpen(t) && t.due && dayDiff(t.due) <= 0).length;
   $('#mytasks-count').textContent = mt ? String(mt) : '';
@@ -2052,6 +2055,7 @@ function renderTitle() {
   if (typeof Phone !== 'undefined' && Phone.on) { el.innerHTML = ''; return; }
   if (Fin.owns(ui.view)) { el.innerHTML = Fin.title(); return; }
   if (Claims.owns(ui.view)) { el.innerHTML = Claims.title(); return; }
+  if (Cal.owns(ui.view)) { el.innerHTML = Cal.title(); return; }
   if (ui.search) { el.innerHTML = `<div class="page-title">Search</div>`; return; }
   if (ui.view === 'home') { el.innerHTML = `<div class="page-title">Home</div>`; return; }
   if (ui.view === 'inbox') { el.innerHTML = `<div class="page-icon" style="background:#2b2650;color:#c9c0ff">${icon('inbox')}</div><div class="page-title">Inbox</div>`; return; }
@@ -2095,6 +2099,7 @@ function renderContent() {
   if (typeof Phone !== 'undefined' && Phone.renderContent(c)) { c.scrollTop = scroll.top; return; }
   if (Fin.owns(ui.view)) { Fin.render(c); c.scrollTop = scroll.top; return; }
   if (Claims.owns(ui.view)) { Claims.render(c); return; }
+  if (Cal.owns(ui.view)) { if (!Cal.canSee()) { ui.view = 'home'; return renderContent(); } Cal.render(c); if (typeof Phone !== 'undefined') Phone.decorate(c); c.scrollTop = scroll.top; return; }
   if (ui.search) c.innerHTML = viewSearch();
   else if (ui.view === 'home') c.innerHTML = viewHome();
   else if (ui.view === 'mytasks') c.innerHTML = viewMyTasks();
@@ -3512,7 +3517,7 @@ const Draft = (() => {
   const snaps = {};
   const sig = (t) => JSON.stringify([t.title || '', t.notes || '', t.notesHtml || '', t.due, t.start, t.prio, t.tags, (t.attachments || []).length,
     (t.comments || []).length, t.checklist, t.assignees, t.projectId, t.sectionId, t.update || null, t.finance || null, t.guardian || null,
-    !!t.needsCD, !!t.done, t.partsDone || null, db.tasks.some((x) => x.parentId === t.id)]);
+    !!t.needsCD, !!t.done, t.partsDone || null, db.tasks.some((x) => x.parentId === t.id), t.channels || [], t.golive || null, t.occasion || null]);
   const looksEmpty = (t) => !t.title && !t.notes && !(t.assignees || []).length && !(t.comments || []).length && !(t.attachments || []).length
     && !(t.checklist || []).length && !t.done && !db.tasks.some((x) => x.parentId === t.id);
   function start(t) { t.blankDraft = true; snaps[t.id] = sig(t); }
@@ -4540,6 +4545,8 @@ document.addEventListener('click', async (e) => {
       case 'allow-notifs': try { Notification.requestPermission().then(() => renderContent()); } catch (err) { /* unsupported */ } return;
       case 'test-notif': alertUser({ title: 'E11 Console', body: 'This is how new notifications will look and sound.', taskId: null }, true); return;
       case 'prio-menu': e.stopPropagation(); prioMenu(actEl, actEl.dataset.key); return;
+      case 'clear-golive': { const t = task(ui.taskId); if (t) Cal.setGolive(t, null); return; }
+      case 'occ-accept': { const t = task(ui.taskId); if (t) Cal.setOccasion(t, actEl.dataset.id); return; }
       case 'clear-start': { const t = task(ui.taskId); logChange(t, 'the <b>start date</b>', fmtDay(t.start), ''); t.start = null; t.updatedAt = nowISO(); commit(); return; }
       case 'cl-toggle': { const t = task(ui.taskId); const c = t.checklist.find((x) => x.id === id); if (c) { c.done = !c.done; logActivity(t, `${c.done ? 'checked' : 'unchecked'} <b>${esc(c.text)}</b>`); t.updatedAt = nowISO(); commit(); } return; }
       case 'cl-delete': { if (!can('deleteChecklist')) return denied(); const t = task(ui.taskId); const c = t.checklist.find((x) => x.id === id); if (c) logActivity(t, `removed checklist item ${struck(c.text)}`); t.checklist = t.checklist.filter((x) => x.id !== id); t.updatedAt = nowISO(); commit(); return; }
@@ -4604,7 +4611,7 @@ document.addEventListener('click', async (e) => {
   if (tr && !e.target.closest('button, input, textarea')) { openTask(tr.dataset.task); return; }
 
   // Click on empty content closes the detail pane
-  if (ui.taskId && e.target.closest('#content') && !e.target.closest('[data-task], .add-row, .col-add-input, .add-section, .add-col')) closeDetail();
+  if (ui.taskId && e.target.closest('#content') && !e.target.closest('[data-task], [data-cal], .add-row, .col-add-input, .add-section, .add-col')) closeDetail();
 });
 
 document.addEventListener('dblclick', (e) => {
@@ -4735,6 +4742,7 @@ document.addEventListener('change', (e) => {
   if (!t) return;
   const el = e.target;
   if (el.id === 'd-due') { setDue(t, el.value || null); commit(); }
+  else if (el.id === 'd-golive') Cal.setGolive(t, el.value || null);
   else if (el.id === 'd-start') { const o = t.start; t.start = el.value || null; logChange(t, 'the <b>start date</b>', fmtDay(o), fmtDay(t.start)); t.updatedAt = nowISO(); commit(); }
   else if (el.id === 'd-project') { if (!can('editProject')) { denied(); renderDetail(); return; } setTaskProject(t, el.value || null); commit(); }
   else if (el.id === 'd-section') { moveTask(t.id, el.value, null, false); commit(); }
@@ -6803,7 +6811,7 @@ const Splash = (() => {
   const remembered = () => { try { return JSON.parse(localStorage.getItem('e11-splash') || '{}') || {}; } catch (e) { return {}; } };
   function greeting(name) {
     const h = new Date().getHours();
-    const part = h < 5 ? 'Working late' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+    const part = Occasions.greeting(todayStr()) || (h < 5 ? 'Working late' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening');
     return name ? `${part}, ${name}` : part;
   }
   let rows = [];
