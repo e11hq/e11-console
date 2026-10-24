@@ -161,7 +161,8 @@ const Cal = (() => {
   const owns = (v) => v === 'calendar';
   const canSee = (u = me()) => !!u && u.active !== false && (isAdm(u) || u.role === 'am' || u.role === 'social');
   const phone = () => typeof Phone !== 'undefined' && Phone.on;
-  const st = () => (ui.cal = ui.cal || { mode: 'month', anchor: todayStr(), project: null, channel: null });
+  // filters: several clients and several channels can be picked (empty = all)
+  const st = () => { const f = (ui.cal = ui.cal || { mode: 'month', anchor: todayStr(), projects: [], channels: [] }); f.projects = f.projects || []; f.channels = f.channels || []; return f; };
 
   // what the calendar shows: top-level tasks with a channel or an occasion, on their go-live (else due) day
   const isPost = (t) => !t.parentId && ((t.channels || []).length || t.occasion);
@@ -182,7 +183,7 @@ const Cal = (() => {
   function posts(from, to) {
     const f = st();
     return db.tasks.filter((t) => isPost(t) && dayOf(t) && dayOf(t) >= from && dayOf(t) <= to
-      && (!f.project || t.projectId === f.project) && (!f.channel || (t.channels || []).includes(f.channel)))
+      && (!f.projects.length || f.projects.includes(t.projectId)) && (!f.channels.length || (t.channels || []).some((c) => f.channels.includes(c))))
       .sort((a, b) => dayOf(a).localeCompare(dayOf(b)) || (a.title || '').localeCompare(b.title || ''));
   }
   // Monday-first week start
@@ -208,7 +209,9 @@ const Cal = (() => {
   }
   function toolbar(r) {
     const f = st();
-    const p = f.project && proj(f.project), c = f.channel && CH[f.channel];
+    const ps = f.projects.map(proj).filter(Boolean), cs = f.channels.filter((k) => CH[k]);
+    const pLabel = !ps.length ? 'All clients' : ps.length === 1 ? `<span class="dot" style="background:${ps[0].color}"></span>${esc(ps[0].name)}` : `${ps.map((p) => `<span class="dot" style="background:${p.color}"></span>`).join('')}${ps.length} clients`;
+    const cLabel = !cs.length ? 'All channels' : cs.length <= 2 ? cs.map((k) => esc(CH[k].name)).join(', ') : `${cs.length} channels`;
     return `<div class="cal-bar">
       <div class="cal-nav">
         <button class="icon-btn" data-cal="prev" title="Previous ${f.mode}">${icon('chev-left')}</button>
@@ -217,8 +220,8 @@ const Cal = (() => {
         <button class="btn ghost sm" data-cal="today">Today</button>
       </div>
       <div class="cal-tools">
-        <button class="btn ghost sm cal-filter ${p ? 'on' : ''}" data-cal="f-project">${p ? `<span class="dot" style="background:${p.color}"></span>${esc(p.name)}` : 'All clients'}${icon('chev')}</button>
-        <button class="btn ghost sm cal-filter ${c ? 'on' : ''}" data-cal="f-channel">${c ? esc(c.name) : 'All channels'}${icon('chev')}</button>
+        <button class="btn ghost sm cal-filter ${ps.length ? 'on' : ''}" data-cal="f-project">${pLabel}${icon('chev')}</button>
+        <button class="btn ghost sm cal-filter ${cs.length ? 'on' : ''}" data-cal="f-channel">${cLabel}${icon('chev')}</button>
         <div class="cal-seg"><button class="${f.mode === 'month' ? 'on' : ''}" data-cal="mode" data-v="month">Month</button><button class="${f.mode === 'week' ? 'on' : ''}" data-cal="mode" data-v="week">Week</button></div>
         <button class="btn primary sm" data-cal="new">${icon('plus')}New post</button>
       </div>
@@ -263,7 +266,7 @@ const Cal = (() => {
           <span class="cal-card-top">${chips(t) || '<span class="cal-ch none">No channel</span>'}</span>
           <span class="cal-card-t">${esc(t.title || 'Untitled task')}</span>${pill(s)}</button>`; }).join('')}<button class="cal-add" data-cal="new" data-d="${d}" data-p="${esc(id)}" title="New post">${icon('plus')}</button></div>`).join('')}`;
     }).join('');
-    return `<div class="cal-week">${head}${body || `<div class="cal-empty">No posts this week${st().project || st().channel ? ' for this filter' : ''}. Use <b>New post</b>, or set a <b>Channel</b> on a task, to add one.</div>`}</div>`;
+    return `<div class="cal-week">${head}${body || `<div class="cal-empty">No posts this week${st().projects.length || st().channels.length ? ' for these filters' : ''}. Use <b>New post</b>, or set a <b>Channel</b> on a task, to add one.</div>`}</div>`;
   }
   function side(r) {
     const today = todayStr();
@@ -340,9 +343,9 @@ const Cal = (() => {
   function newPost(day, projectId) {
     if (!can('createTask')) return denied();
     const f = st();
-    const pid = projectId || f.project || null;
+    const pid = projectId || (f.projects.length === 1 ? f.projects[0] : null);
     const p = pid && proj(pid);
-    const t = createTask({ projectId: p ? p.id : null, sectionId: p ? p.sections[0].id : null, golive: day || null, channels: f.channel ? [f.channel] : [] });
+    const t = createTask({ projectId: p ? p.id : null, sectionId: p ? p.sections[0].id : null, golive: day || null, channels: f.channels.slice() });
     const sug = day && Occasions.suggest(day)[0];
     if (sug) t.occasion = sug.id;
     Draft.start(t);
@@ -424,10 +427,14 @@ const Cal = (() => {
   function filterMenu(anchor, kind) {
     const f = st();
     const ck = (on) => (on ? `<span class="wf-ck">${icon('check')}</span>` : '');
-    const set = (k, v) => { f[k] = v; render($('#content')); };
+    const list = kind === 'project' ? 'projects' : 'channels';
+    // tick and untick several; the menu stays open until you click elsewhere
+    const reopen = () => { render($('#content')); setTimeout(() => { const a = document.querySelector(`[data-cal="f-${kind}"]`); if (a) filterMenu(a, kind); }, 0); };
+    const toggle = (v) => { f[list] = f[list].includes(v) ? f[list].filter((x) => x !== v) : f[list].concat(v); reopen(); };
+    const all = () => { f[list] = []; render($('#content')); };
     const items = kind === 'project'
-      ? [{ html: `<div class="mi">All clients${ck(!f.project)}</div>`, run: () => set('project', null) }, ...db.projects.slice().sort(byOrder).map((p) => ({ html: `<div class="mi"><span class="dot" style="background:${p.color}"></span>${esc(p.name)}${ck(f.project === p.id)}</div>`, run: () => set('project', p.id) }))]
-      : [{ html: `<div class="mi">All channels${ck(!f.channel)}</div>`, run: () => set('channel', null) }, ...CHANNELS.map(([k, name]) => ({ html: `<div class="mi">${esc(name)}${ck(f.channel === k)}</div>`, run: () => set('channel', k) }))];
+      ? [{ html: `<div class="mi">All clients${ck(!f.projects.length)}</div>`, run: all }, ...db.projects.slice().sort(byOrder).map((p) => ({ html: `<div class="mi"><span class="dot" style="background:${p.color}"></span>${esc(p.name)}${ck(f.projects.includes(p.id))}</div>`, run: () => toggle(p.id) }))]
+      : [{ html: `<div class="mi">All channels${ck(!f.channels.length)}</div>`, run: all }, ...CHANNELS.map(([k, name]) => ({ html: `<div class="mi"><span class="cal-ch" style="--c:${CH[k].color}">${CH[k].short}</span>${esc(name)}${ck(f.channels.includes(k))}</div>`, run: () => toggle(k) }))];
     showMenu(anchor, items.map((it, i) => ({ ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) }))).classList.add('wf-menu');
   }
 
