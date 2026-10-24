@@ -23,8 +23,8 @@ export function sendDay(date, n) {
   if (w === 6) d = plus(d, -1); else if (w === 0) d = plus(d, -2);
   return d;
 }
-// Account Managers and Admins create the posts; Social are told so they know what's coming
-const tail = (u, isAdm) => (u.role === 'am' || isAdm(u) ? ' Plan posts in the Content calendar.' : ' See what’s planned in the Content calendar.');
+// Account Managers and Admins create the posts; Social can't create tasks but set the Occasion on the ones they have
+const tail = (u, isAdm) => (u.role === 'am' || isAdm(u) ? ' Plan posts in the Content calendar.' : ' Set the Occasion on your post tasks so they count as planned.');
 export const remindRole = (u, isAdm) => !!u && u.active !== false && (u.role === 'social' || u.role === 'am' || isAdm(u));
 
 export function createOccasionReminders({ store, webDir, webPush, isAdm, now = () => Date.now(), log = console }) {

@@ -46,7 +46,7 @@ test('Social, AMs and Admins get it at 10:30, once; Production and inactive peop
   assert.deepEqual(xmas.map((m) => m.id).sort(), ['adm', 'am', 'soc']);
   assert.match(xmas.find((m) => m.id === 'am').body, /25 Dec · Nothing planned yet\. Plan posts in the Content calendar\./);
   assert.match(xmas.find((m) => m.id === 'adm').body, /Plan posts in the Content calendar/);
-  assert.match(xmas.find((m) => m.id === 'soc').body, /See what’s planned in the Content calendar\./);
+  assert.match(xmas.find((m) => m.id === 'soc').body, /Set the Occasion on your post tasks so they count as planned\./);
   assert.equal(xmas[0].view, 'calendar');
   const before = sent.length;
   await r.tick();
