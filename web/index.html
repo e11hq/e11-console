@@ -22,6 +22,11 @@
    overlays dim the whole screen; in light mode iOS keeps its own light strip so the time stays dark and readable.
    iOS reads this when the app opens, so a theme change shows here the next time it's opened. */
 try { var t = (JSON.parse(localStorage.getItem('e11-splash') || '{}') || {}).theme; if (t === 'light') document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]').content = 'default'; } catch (e) {}
+/* Startup colour straight away (before the app loads), so the iPhone doesn't paint dark edges around a light startup screen:
+   the remembered look, or by the time of day on a first start */
+try { var m = JSON.parse(localStorage.getItem('e11-splash') || '{}') || {}, h = new Date().getHours();
+  var lt = (m.themeMode === 'light' || m.themeMode === 'dark') ? m.themeMode === 'light' : (h >= 6 && h < 18);
+  var c = lt ? '#ffffff' : '#0c0d0f'; document.querySelector('meta[name="theme-color"]').content = c; document.documentElement.style.backgroundColor = c; } catch (e) {}
 </script>
 <meta name="apple-mobile-web-app-title" content="E11 Console">
 </head>

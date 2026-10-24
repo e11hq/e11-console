@@ -6646,6 +6646,8 @@ const Splash = (() => {
     el.classList.toggle('light', light);
     // the page behind the startup screen matches it, so no dark edges show around it on the iPhone
     document.documentElement.style.backgroundColor = light ? '#ffffff' : '#0c0d0f';
+    // the iPhone paints anything outside the page (e.g. under a startup screen that comes up short) in the theme colour
+    const tc = document.querySelector('meta[name="theme-color"]'); if (tc) tc.content = light ? '#ffffff' : '#0c0d0f';
     document.getElementById('sp-greet').textContent = greeting(mem.name);
     document.getElementById('sp-date').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: window.innerWidth <= 760 ? 'short' : 'long', day: 'numeric' });
     document.getElementById('sp-hint').textContent = window.innerWidth <= 760 ? 'Tap to skip' : 'Click or press any key to skip';
