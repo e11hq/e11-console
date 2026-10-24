@@ -71,7 +71,7 @@ export function createWebPush({ store, fetchImpl = fetch, subject = 'mailto:admi
   const devices = (userId) => (loadSubs()[userId] || []).length;
   const has = (userId, endpoint) => (loadSubs()[userId] || []).some((s) => s.endpoint === endpoint);
 
-  async function sendTo(userId, message) {
+  async function sendTo(userId, message, { ttl = 86400 } = {}) {
     const list = loadSubs()[userId] || [];
     if (!list.length) return { sent: 0 };
     const payload = JSON.stringify(message);
@@ -81,7 +81,7 @@ export function createWebPush({ store, fetchImpl = fetch, subject = 'mailto:admi
       try {
         const res = await fetchImpl(s.endpoint, {
           method: 'POST',
-          headers: { Authorization: vapidHeader(s.endpoint), 'Content-Encoding': 'aes128gcm', 'Content-Type': 'application/octet-stream', TTL: '86400', Urgency: 'high' },
+          headers: { Authorization: vapidHeader(s.endpoint), 'Content-Encoding': 'aes128gcm', 'Content-Type': 'application/octet-stream', TTL: String(ttl), Urgency: 'high' },
           body: encryptPayload(s, payload),
         });
         if (res.status === 404 || res.status === 410) gone.push(s.endpoint);

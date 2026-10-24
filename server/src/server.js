@@ -10,6 +10,7 @@ import { createAccess } from './access.js';
 import { createFiles, mimeOf, httpError } from './files.js';
 import { createCfSync } from './cfsync.js';
 import { createWebPush, notifMessage } from './webpush.js';
+import { createDigest } from './digest.js';
 import { sampleData } from './sample.js';
 import { createAppIcon } from './appicon.js';
 
@@ -26,6 +27,8 @@ export function createServer(cfg) {
   const streams = new Set(); // open live-update connections
   const uploads = new Map(); // file path -> who is uploading it (pieces can only be added by them)
   const webPush = createWebPush({ store, fetchImpl: cfg.pushFetch || fetch, subject: cfg.pushSubject || 'mailto:admin@e11hq.com' });
+  const digest = createDigest({ store, webPush, now: cfg.now || (() => Date.now()) });
+  if (cfg.digest !== false) digest.start();
   const macDir = cfg.macDir || (webDir ? path.join(webDir, '..', 'mac') : null);
   const appIcon = createAppIcon({ store, defaultFile: macDir && path.join(macDir, 'AppIcon.png') });
   // The newest Mac app (native part) the installer hands out; older Mac apps are asked to update
@@ -191,6 +194,13 @@ export function createServer(cfg) {
     }
 
     // Phone notifications: the server's public key, and turning them on / off for this device
+    // Morning summary: today's, for this person's open app (shown once per device); a test send to yourself
+    if (p === '/api/digest') return json(res, 200, { ok: true, ...digest.forUser(u) });
+    if (p === '/api/digest/test' && req.method === 'POST') {
+      const m = digest.preview(u);
+      const r = await webPush.sendTo(u.id, { ...m, tag: 'digest-test' }, { ttl: 600 }).catch(() => ({ sent: 0 }));
+      return json(res, 200, { ok: true, ...m, phones: r.sent || 0 });
+    }
     if (p === '/api/push/key') return json(res, 200, { ok: true, key: webPush.publicKey() });
     if (p === '/api/push/subscribe' && req.method === 'POST') {
       const body = await readBody(req);
@@ -360,7 +370,8 @@ export function createServer(cfg) {
   return {
     server, store, files, cfSync, webPush,
     listen: (port, host) => new Promise((ok) => server.listen(port, host, () => ok(server.address().port))),
-    close: () => new Promise((ok) => { for (const s of streams) try { s.res.end(); } catch { /* ignore */ } server.close(() => { store.close(); ok(); }); }),
+    digest,
+    close: () => new Promise((ok) => { digest.stop(); for (const s of streams) try { s.res.end(); } catch { /* ignore */ } server.close(() => { store.close(); ok(); }); }),
     broadcastVersion: (v) => { for (const s of streams) send(s, 'version', { version: v }); },
   };
 }

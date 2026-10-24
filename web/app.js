@@ -4518,6 +4518,8 @@ document.addEventListener('click', async (e) => {
       case 'remove-photo': { const u = me(); if (u.avatar) Host.call('trashPath', { path: u.avatar }).catch(() => {}); u.avatar = null; persist(); render(); return; }
       case 'save-profile': saveProfile(); return;
       case 'change-password': changePasswordFlow(); return;
+      case 'toggle-digest': { const u = me(); u.prefs = u.prefs || {}; u.prefs.digestOff = !u.prefs.digestOff; persist(); renderContent(); toast(u.prefs.digestOff ? 'Morning summary off' : 'Morning summary on — 10:30 am, Monday to Friday'); return; }
+      case 'digest-test': Digest.test(); return;
       case 'toggle-sound': { const u = me(); u.prefs.sound = u.prefs.sound === false; persist(); renderContent(); return; }
       case 'toggle-notif-type': {
         const u = me(); u.prefs = u.prefs || {}; u.prefs.notifOff = u.prefs.notifOff || {};
@@ -6029,7 +6031,7 @@ function chime() {
     });
   } catch (e) { /* no audio */ }
 }
-function alertUser({ title, body, taskId, from, open }, force) {
+function alertUser({ title, body, taskId, from, open, stay }, force) {
   const u = me();
   const sound = !u || u.prefs.sound !== false;
   const front = document.hasFocus();
@@ -6041,12 +6043,48 @@ function alertUser({ title, body, taskId, from, open }, force) {
     el.innerHTML = `${from ? avatarHTML(from, 32) : `<span class="nc-ic">${icon('bell')}</span>`}<div><b>${esc(title)}</b><span>${esc(body)}</span></div><button class="icon-btn sm">${icon('x')}</button>`;
     root.appendChild(el);
     const close = () => { el.classList.add('out'); setTimeout(() => el.remove(), 250); };
-    const timer = setTimeout(close, 6000);
+    const timer = setTimeout(close, stay || 6000);
     el.addEventListener('click', (e) => { clearTimeout(timer); close(); if (e.target.closest('button')) return; if (open) open(); else if (taskId && task(taskId)) openTask(taskId); });
     if (sound) chime();
   }
   if (!front || force) Host.call('notify', { title, body, sound: sound && !front ? 'Glass' : null }).catch(() => {});
 }
+// Morning summary (Production / Social, 10:30 Dubai, Monday to Friday): the server sends it to phones with
+// notifications on; an open app shows it as a banner, once per device per day, until midnight. Not in the Inbox.
+const Digest = (() => {
+  const key = () => 'e11-digest-' + currentUserId;
+  const wants = (u) => !!u && (u.role === 'production' || u.role === 'social') && !((u.prefs || {}).digestOff);
+  async function pushOn() {
+    try { const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration(); return !!(reg && reg.pushManager && await reg.pushManager.getSubscription()); } catch (e) { return false; }
+  }
+  let busy = false;
+  async function check() {
+    if (busy || !Host.isServer || !db || !currentUserId || !wants(me())) return;
+    busy = true;
+    try {
+      const r = await api('GET', '/api/digest');
+      if (!r.due) return;
+      let seen = null; try { seen = localStorage.getItem(key()); } catch (e) { /* storage off */ }
+      if (seen === r.day) return;
+      try { localStorage.setItem(key(), r.day); } catch (e) { /* storage off */ }
+      if (await pushOn()) return;          // this phone already got it as a notification
+      alertUser({ title: r.title, body: r.body, stay: 12000 }, true);
+    } catch (e) { /* offline: try again later */ } finally { busy = false; }
+  }
+  function start() {
+    setTimeout(check, 4000);
+    setInterval(check, 60_000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(check, 1500); });
+  }
+  async function test() {
+    try {
+      const r = await api('POST', '/api/digest/test', {});
+      if (r.phones) toast(`Sent to your phone${r.phones > 1 ? 's' : ''}`);
+      alertUser({ title: r.title, body: r.body, stay: 12000 }, true);
+    } catch (e) { toast(e.message); }
+  }
+  return { start, check, test, wants };
+})();
 // Show alerts for notifications this person hasn't been alerted about yet
 function deliverPending() {
   const u = me();
@@ -6273,6 +6311,7 @@ function viewProfile() {
       <div class="pf-opt"><div><b>Sound</b><span>Play a sound with new notifications</span></div><button class="switch ${sound ? 'on' : ''}" data-action="toggle-sound"><i></i></button></div>
       ${Host.isServer && !Host.isMacApp && 'Notification' in window ? `<div class="pf-opt"><div><b>Desktop notifications</b><span>${Notification.permission === 'granted' ? 'On — you’ll see alerts even when this window is in the background' : Notification.permission === 'denied' ? 'Blocked in your browser settings for this site' : 'Show alerts when this window is in the background'}</span></div>${Notification.permission === 'default' ? '<button class="btn sm primary" data-action="allow-notifs">Turn on</button>' : ''}</div>` : ''}
       <div class="pf-opt"><div><b>Test</b><span>See and hear what a notification looks like</span></div><button class="btn sm" data-action="test-notif">Send test</button></div>
+      ${Host.isServer && (u.role === 'production' || u.role === 'social' || isAdm(u)) ? `<div class="pf-opt"><div><b>Morning summary</b><span>${u.role === 'production' || u.role === 'social' ? 'At 10:30 am, Monday to Friday: how your day looks. Switch it off for holidays or leave.' : 'Production and Social get a summary of their day at 10:30 am, Monday to Friday. Send yourself one to see it.'}</span></div><div class="pf-opt-btns"><button class="btn sm" data-action="digest-test">Send test</button>${u.role === 'production' || u.role === 'social' ? `<button class="switch ${(u.prefs || {}).digestOff ? '' : 'on'}" data-action="toggle-digest" aria-label="Morning summary"><i></i></button>` : ''}</div></div>` : ''}
       <h4 class="pf-sub">Notify me about</h4>
       ${notifToggles(u, false)}
       ${u.id === cdUserId() ? `<h4 class="pf-sub">As ${esc(cdTitle())}</h4>${notifToggles(u, true)}` : ''}
@@ -6867,6 +6906,7 @@ async function bootServer() {
   if (u && !u.setup) showWelcome(null); else { enterApp(); maybeShowWhatsNew(); }
   if (u) { u.lastLoginAt = nowISO(); persist(2000); }
   setInterval(() => { if (currentUserId) { deliverPending(); renderSidebar(); Announce.check(); Claims.tick(); Fin.invoiceTick(); } }, 30000);
+  Digest.start();
   let day = todayStr();
   setInterval(() => { if (todayStr() !== day) { day = todayStr(); if (currentUserId) { purgeOldCompleted(); render({ keepDetail: true }); } } }, 60000);
 }
