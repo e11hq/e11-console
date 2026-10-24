@@ -774,4 +774,4 @@ html.phone body.phone #detail .tm-composer .composer > .cb-replying > span:not(.
 html.phone body.phone #detail .tm-composer .composer > *, html.phone body.phone #detail .tm-composer .cb-foot > * { min-width: 0; }
 html.phone body.phone #detail .tm-composer { overflow: hidden; }
 /* keyboard up: no home-bar space under the formatting row */
-html.phone.ph-kb-open body.phone #detail .tm-composer { padding-bottom: 6px; }
+html.phone.ph-typing body.phone #detail .tm-composer { padding-bottom: 6px !important; }

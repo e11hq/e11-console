@@ -905,11 +905,15 @@ const Push = (() => {
     if (!v) return;
     const kb = Math.max(0, Math.round(window.innerHeight - v.height - v.offsetTop));
     root.style.setProperty('--ph-kb', kb + 'px');
-    root.classList.toggle('ph-kb-open', kb > 120 || v.height < window.innerHeight * 0.72);
+    // (an iPhone Home Screen app shrinks the whole page for the keyboard, so this number can stay 0 there;
+    //  the comment box uses the typing check below instead)
     root.style.setProperty('--ph-vh', Math.round(v.height) + 'px');
   };
   if (window.visualViewport) { visualViewport.addEventListener('resize', fit); visualViewport.addEventListener('scroll', fit); }
   fit();
+  // typing on a phone means the on-screen keyboard is up: drop the home-bar spacing under the comment box then
+  const typing = () => { const a = document.activeElement; root.classList.toggle('ph-typing', !!(Phone.on && a && a.closest && a.closest('#detail .tm-composer') && (a.isContentEditable || /^(INPUT|TEXTAREA)$/.test(a.tagName)))); };
+  document.addEventListener('focusin', typing); document.addEventListener('focusout', () => setTimeout(typing, 50));
   // Same feel as the review / New task sheets: the sheet follows the finger from its first movement
   // (taking over before iPhone starts scrolling or bouncing the list), and springs or slides on release.
   let drag = null;
