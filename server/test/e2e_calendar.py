@@ -23,7 +23,7 @@ async def main():
         E = pg.evaluate
         await E("closeDetail()")
         # greetings
-        check(await E("Occasions.greeting('2026-12-02')") == 'Happy National Day', 'National Day greeting')
+        check(await E("[Occasions.greeting('2026-12-02'), Occasions.greeting('2026-12-15'), Occasions.greeting('2027-12-09'), Occasions.greeting('2026-12-16')]") == ['Eshi Biladi', 'Eshi Biladi', 'Eshi Biladi', None], 'National Day greeting: Eshi Biladi from 2 to 15 Dec, every year')
         check(await E("Occasions.greeting('2027-02-20')") == 'Ramadan Kareem', 'Ramadan greeting all month')
         check(await E("Occasions.greeting('2027-03-11')") == 'Eid Mubarak', 'Eid greeting')
         check(await E("Occasions.greeting('2026-12-25')") == 'Merry Christmas', 'Christmas greeting')
