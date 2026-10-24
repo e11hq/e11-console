@@ -776,16 +776,58 @@ const ServerHost = (() => {
       });
     } finally { setTimeout(() => URL.revokeObjectURL(url), 5000); }
   }
+  // One upload piece as raw bytes (a third smaller than base64, nothing to encode)
+  async function sendRaw(blob, params) {
+    const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '').map(([k, v]) => [k, String(v)]));
+    const res = await fetch('/api/host/writeChunkBin?' + q, { method: 'POST', body: blob, headers: { 'Content-Type': 'application/octet-stream' }, credentials: 'same-origin', cache: 'no-store', redirect: 'manual' });
+    if (res.type === 'opaqueredirect' || (res.status >= 300 && res.status < 400)) { const err = new Error('Your sign-in has expired — sign in again to continue'); err.auth = true; throw err; }
+    let data = null;
+    try { data = await res.json(); } catch (e) { /* not JSON */ }
+    if (!res.ok || (data && data.ok === false)) { const err = new Error((data && data.error) || `Server error (${res.status})`); err.status = res.status; err.auth = res.status === 401 || res.status === 403; throw err; }
+    return data || {};
+  }
+  // Keep trying a piece through dropped connections — including the phone pausing the app while you're in
+  // another one: it waits until you're back, then carries on. Refusals (no access, too large) stop at once.
+  const whenVisible = () => (document.hidden ? new Promise((r) => { const on = () => { if (!document.hidden) { document.removeEventListener('visibilitychange', on); r(); } }; document.addEventListener('visibilitychange', on); }) : Promise.resolve());
+  async function persistently(run) {
+    for (let n = 0; ; n++) {
+      try { return await run(); } catch (e) {
+        if (e.auth || (e.status >= 400 && e.status < 500) || n >= 12) throw e;
+        if (document.hidden) await whenVisible();
+        else await new Promise((r) => setTimeout(r, Math.min(8000, 700 * 2 ** n)));
+      }
+    }
+  }
+  const PIECE = 4 * 1024 * 1024;
   async function uploadFile(file, target, onProgress) {
     const dims = await mediaDims(file).catch(() => null);
-    let path = null, last = null;
-    for (let off = 0; off < Math.max(file.size, 1); off += CHUNK_SIZE) {
-      const piece = await readPiece(file, off, CHUNK_SIZE);
-      last = await api('POST', '/api/host/writeChunk', { ...target, name: file.name, path, b64: piece });
-      path = last.path;
-      if (onProgress) onProgress(Math.min(1, (off + CHUNK_SIZE) / Math.max(file.size, 1)));
-    }
-    return { id: uid(), name: last.name || file.name, path, size: last.size != null ? last.size : file.size, addedAt: nowISO(), ...(dims || {}) };
+    const raw = file instanceof Blob;
+    const size = Math.max(file.size, 0);
+    const piece = raw ? PIECE : CHUNK_SIZE;
+    const put = (off, len, path) => persistently(async () => (raw
+      ? sendRaw(file.slice(off, off + len), { ...target, name: file.name, path, offset: path ? off : null })
+      : api('POST', '/api/host/writeChunk', { ...target, name: file.name, path, offset: path ? off : null, b64: await readPiece(file, off, len) })));
+    let sent = 0;
+    const tick = (n) => { sent += n; if (onProgress) onProgress(Math.min(1, sent / Math.max(size, 1))); };
+    // the first piece creates the file; the rest go up a few at a time, each to its own place in the file
+    const first = await put(0, Math.min(piece, size), null);
+    const path = first.path;
+    tick(Math.min(piece, size));
+    const offs = [];
+    for (let off = piece; off < size; off += piece) offs.push(off);
+    let biggest = first.size || 0;
+    const lanes = raw ? 3 : 1;
+    await Promise.all(Array.from({ length: Math.min(lanes, offs.length) }, async () => {
+      while (offs.length) {
+        const off = offs.shift();
+        const len = Math.min(piece, size - off);
+        const r = await put(off, len, path);
+        biggest = Math.max(biggest, r.size || 0);
+        tick(len);
+      }
+    }));
+    if (biggest < size) throw new Error('The upload didn’t finish — please try again');
+    return { id: uid(), name: first.name || file.name, path, size: size || biggest, addedAt: nowISO(), ...(dims || {}) };
   }
   // Small progress card while files upload
   function uploadToast(files) {
@@ -803,13 +845,18 @@ const ServerHost = (() => {
   async function uploadMany(files, target) {
     if (!files.length) return [];
     const ui1 = uploadToast(files);
-    const out = [];
-    for (let i = 0; i < files.length; i++) {
-      try { out.push(await uploadFile(files[i], target, (p) => ui1.set(i, p))); ui1.set(i, 1, 'Done'); }
-      catch (e) { ui1.set(i, 0, 'Failed'); toast(`Could not upload ${files[i].name}: ${e.message}`); }
-    }
+    // two files at a time (each sends a few pieces at once)
+    const out = new Array(files.length).fill(null);
+    let next = 0;
+    await Promise.all(Array.from({ length: Math.min(2, files.length) }, async () => {
+      while (next < files.length) {
+        const i = next++;
+        try { out[i] = await uploadFile(files[i], target, (p) => ui1.set(i, p)); ui1.set(i, 1, 'Done'); }
+        catch (e) { ui1.set(i, 0, 'Failed'); toast(`Could not upload ${files[i].name}: ${e.message}`); }
+      }
+    }));
     ui1.done();
-    return out;
+    return out.filter(Boolean);
   }
   const fileHref = (p) => '/__file/' + String(p).split('/').map(encodeURIComponent).join('/');
   function download(url, name) {

@@ -40,6 +40,13 @@ export function createServer(cfg) {
     res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Content-Length': Buffer.byteLength(s) });
     res.end(s);
   };
+  // Raw bytes (upload pieces sent as-is: no base64, a third smaller and nothing to decode)
+  const readRaw = (req, limit = BODY_LIMIT) => new Promise((resolve, reject) => {
+    let size = 0; const parts = [];
+    req.on('data', (c) => { size += c.length; if (size > limit) { reject(httpError(413, 'Too large')); req.destroy(); } else parts.push(c); });
+    req.on('end', () => resolve(Buffer.concat(parts)));
+    req.on('error', reject);
+  });
   const readBody = (req, limit = BODY_LIMIT) => new Promise((resolve, reject) => {
     let size = 0; const parts = [];
     req.on('data', (c) => { size += c.length; if (size > limit) { reject(httpError(413, 'Too large')); req.destroy(); } else parts.push(c); });
@@ -250,12 +257,20 @@ export function createServer(cfg) {
 
     if (p.startsWith('/api/host/') && req.method === 'POST') {
       const cmd = p.slice('/api/host/'.length);
-      const fn = files.commands[cmd];
+      const fn = files.commands[cmd === 'writeChunkBin' ? 'writeChunk' : cmd];
       if (!fn) return json(res, 404, { ok: false, error: 'Unknown command ' + cmd });
-      const body = await readBody(req, cmd === 'expenseReport' ? 96 * 1024 * 1024 : BODY_LIMIT);   // up to a year of report pages
+      // writeChunkBin: the same as writeChunk, with the details in the address and the piece as raw bytes
+      const bin = cmd === 'writeChunkBin';
+      let body;
+      if (bin) {
+        const q = new URL(req.url, 'http://x').searchParams;
+        body = {};
+        for (const k of ['taskId', 'dest', 'name', 'path', 'offset']) if (q.has(k)) body[k] = q.get(k);
+        body.data = await readRaw(req, BODY_LIMIT);
+      } else body = await readBody(req, cmd === 'expenseReport' ? 96 * 1024 * 1024 : BODY_LIMIT);   // up to a year of report pages
       const manager = access.isAdm(u) || u.role === 'am';
       const deny = (msg) => json(res, 403, { ok: false, error: msg || 'Not allowed' });
-      if (cmd === 'writeChunk') {
+      if (cmd === 'writeChunk' || bin) {
         if (body.dest && String(body.dest).startsWith('Finance/')) { if (access.finLevel(u) !== 'admin') return deny('Only a Finance Admin can add invoices'); }
         else if (body.dest && String(body.dest).startsWith('Claims/')) { if (String(body.dest).split('/')[1] !== u.id) return deny('You can only add files to your own claims'); }
         else if (body.dest && !manager) return deny('Only Admins and Account Managers can upload client assets');
@@ -263,7 +278,7 @@ export function createServer(cfg) {
         if (!body.dest && u.role === 'freelancer' && body.taskId !== '_uploads') { const t = store.get('tasks', String(body.taskId || '')); if (!t || !access.canSee(u, 'tasks', t)) return deny(); }
         // later pieces may only be added to a file this person started uploading
         if (body.path) { const up = uploads.get(body.path); if (!up || up.userId !== u.id) return deny('Upload not found — please try again'); }
-        const out = await fn(body, u);
+        const out = await files.commands.writeChunk(body, u);
         uploads.set(out.path, { userId: u.id, at: Date.now() });
         if (uploads.size > 500) for (const [k, v] of uploads) if (Date.now() - v.at > 6 * 3600_000) uploads.delete(k);
         return json(res, 200, out);

@@ -98,9 +98,14 @@ export function createFiles(root) {
   const zips = new Map();
 
   const commands = {
-    // Upload in pieces: the first call creates the file, later calls append to it
+    // Upload in pieces: the first call creates the file, later calls add to it.
+    // With an offset, each piece is written at its own place, so pieces can arrive in any order and a piece
+    // sent twice (the phone lost the answer and tried again) is simply written again — never doubled.
+    // Without one (older apps), pieces are appended in order.
     writeChunk(a) {
-      const data = Buffer.from(String(a.b64 || ''), 'base64');
+      const data = Buffer.isBuffer(a.data) ? a.data : Buffer.from(String(a.b64 || ''), 'base64');
+      const at = a.offset == null || a.offset === '' ? null : Number(a.offset);
+      if (at != null && (!Number.isFinite(at) || at < 0)) throw httpError(400, 'Bad offset');
       let dest;
       if (!a.path) {
         const dir = uploadDir(a);
@@ -110,7 +115,8 @@ export function createFiles(root) {
       } else {
         dest = resolve(a.path);
         if (!fs.existsSync(dest)) throw httpError(400, 'Upload file missing');
-        fs.appendFileSync(dest, data);
+        if (at == null) fs.appendFileSync(dest, data);
+        else { const fd = fs.openSync(dest, 'r+'); try { fs.writeSync(fd, data, 0, data.length, at); } finally { fs.closeSync(fd); } }
       }
       return { ok: true, path: rel(dest), name: path.basename(dest), size: fs.statSync(dest).size };
     },

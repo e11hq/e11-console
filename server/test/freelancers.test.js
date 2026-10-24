@@ -119,3 +119,22 @@ test('only Admins see the Cloudflare status', async () => {
   assert.equal(r.status, 200);
   assert.equal(r.body.configured, true);
 });
+
+test('raw upload pieces land at their own place: any order, sent twice is never doubled, same access rules', async () => {
+  const raw = async (who, q, buf) => {
+    const res = await fetch(base + '/api/host/writeChunkBin?' + new URLSearchParams(q), { method: 'POST', headers: { 'X-Dev-Email': who, 'Content-Type': 'application/octet-stream' }, body: buf });
+    return { status: res.status, body: await res.json().catch(() => null) };
+  };
+  const AM = 'areej@e11-digital.com';
+  const a = Buffer.alloc(5, 'a'), b = Buffer.alloc(5, 'b'), c = Buffer.alloc(3, 'c');
+  const first = await raw(AM, { taskId: 't-ford', name: 'video.mp4' }, a);
+  assert.equal(first.status, 200);
+  const p = first.body.path;
+  assert.equal((await raw(AM, { path: p, offset: 10 }, c)).status, 200);   // last piece first
+  assert.equal((await raw(AM, { path: p, offset: 5 }, b)).status, 200);
+  assert.equal((await raw(AM, { path: p, offset: 5 }, b)).body.size, 13); // the same piece again: not doubled
+  assert.equal(fs.readFileSync(path.join(dir, 'files', p), 'utf8'), 'aaaaabbbbbccc');
+  assert.equal((await raw(FREE, { path: p, offset: 0 }, a)).status, 403);  // someone else's upload
+  assert.equal((await raw(FREE, { taskId: 't-alain', name: 'x.bin' }, a)).status, 403); // a task they can't see
+  assert.equal((await raw(AM, { path: p, offset: -1 }, a)).status, 400);
+});
