@@ -6781,9 +6781,7 @@ function savePref(key, value) {
 }
 function setTheme(mode) {
   document.documentElement.dataset.theme = mode;
-  // iPhone status bar behind the time and battery: dark or light to match (used the next time the app opens)
-  const sb = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
-  if (sb) sb.content = mode === 'light' ? 'default' : 'black-translucent';
+  // (the iPhone status-bar style is fixed in index.html: changing it while open makes iOS resize the page)
   const tc = document.querySelector('meta[name="theme-color"]');
   if (tc) tc.content = mode === 'light' ? '#f7f7f8' : '#0c0d0f';
   paintThemeButtons();
