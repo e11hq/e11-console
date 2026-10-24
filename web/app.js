@@ -572,7 +572,9 @@ function notesHTML(md) {
 function showUpdateBanner(v) {
   let el = document.getElementById('update-banner');
   if (!el) { el = document.createElement('div'); el.id = 'update-banner'; document.body.appendChild(el); }
-  el.innerHTML = `${icon('download')}<span><b>A new version of E11 Console is ready</b> (${esc(v)})</span><button class="btn ghost sm" data-action="whats-new">What’s new</button><button class="btn primary sm" data-action="reload-app">Reload</button>`;
+  el.innerHTML = `<div class="ub-text">${icon('download')}<div><b>Update ready</b><span>Reload to get the latest version</span></div></div>
+    <div class="ub-acts"><button class="btn" data-action="whats-new">What’s new</button><button class="btn primary" data-action="reload-app">Reload</button></div>`;
+  el.title = `Version ${v}`;
   el.classList.add('on');
 }
 async function reloadApp() {

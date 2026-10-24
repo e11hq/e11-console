@@ -786,3 +786,12 @@ html.phone[data-theme="light"] { background: #f4f4f7; }
 /* Home Screen app: the page runs up under the time and battery, and iOS 26 blurs a band below them.
    Push every header down past that band so titles stay sharp (Safari in the browser doesn't blur: no extra space). */
 html.ph-underbar body.phone { --ph-top: calc(env(safe-area-inset-top) + 24px); } /* set by the phone layout once it has measured */
+
+/* Update ready: a simple card with two full-size buttons */
+html.phone body.phone #update-banner { flex-direction: column; align-items: stretch; gap: 14px; padding: 16px; border-radius: 20px; font-size: 15px; }
+html.phone body.phone #update-banner .ub-text { gap: 12px; }
+html.phone body.phone #update-banner .ub-text .ic { width: 22px; height: 22px; }
+html.phone body.phone #update-banner .ub-text b { font-size: 16px; }
+html.phone body.phone #update-banner .ub-text span { font-size: 14px; }
+html.phone body.phone #update-banner .ub-acts { gap: 10px; }
+html.phone body.phone #update-banner .ub-acts .btn { flex: 1; height: 46px; justify-content: center; font-size: 15.5px; font-weight: 600; border-radius: 12px; }

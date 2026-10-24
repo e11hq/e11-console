@@ -2025,6 +2025,12 @@ button.pv-empty:hover { background: var(--hover); color: var(--text-2); }
 #update-banner { position: fixed; left: 50%; top: 12px; transform: translate(-50%, -140%); z-index: 9600; display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 14px; border-radius: 12px; background: var(--raised); border: 1px solid rgba(123,104,238,.55); box-shadow: 0 16px 44px rgba(0,0,0,.45); font-size: 13.5px; transition: transform .35s cubic-bezier(.2,.8,.2,1); }
 #update-banner.on { transform: translate(-50%, 0); }
 #update-banner > .ic { width: 16px; height: 16px; color: #a99bff; }
+#update-banner { gap: 16px; padding: 10px 10px 10px 16px; }
+#update-banner .ub-text { display: flex; align-items: center; gap: 10px; }
+#update-banner .ub-text .ic { width: 18px; height: 18px; color: #a99bff; flex: none; }
+#update-banner .ub-text > div { display: flex; flex-direction: column; line-height: 1.3; }
+#update-banner .ub-text span { color: var(--text-3); font-size: 12.5px; }
+#update-banner .ub-acts { display: flex; gap: 8px; }
 .wn-dlg { width: 520px; }
 .wn-kick, .upd-kick { display: flex; align-items: center; gap: 6px; color: #a99bff; font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
 .wn-kick .ic { width: 14px; height: 14px; }
