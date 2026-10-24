@@ -500,8 +500,8 @@ const Cal = (() => {
       case 'week-of': f.mode = 'week'; f.anchor = el.dataset.d; return render($('#content'));
       case 'open': return openTask(el.dataset.id);
       case 'new': return newPost(el.dataset.d || null, el.dataset.p || null);
-      case 'f-project': e.stopPropagation(); return filterMenu(el, 'project');
-      case 'f-channel': e.stopPropagation(); return filterMenu(el, 'channel');
+      case 'f-project': e.stopImmediatePropagation(); return filterMenu(el, 'project');   // (the app closes menus on any other click)
+      case 'f-channel': e.stopImmediatePropagation(); return filterMenu(el, 'channel');
       case 'plan': { const o = Occasions.byId(el.dataset.id); if (o) planDialog(o); return; }
       case 'occ-add': return occDialog(null);
       case 'check': return checkNow(el);

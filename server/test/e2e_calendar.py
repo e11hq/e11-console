@@ -47,6 +47,15 @@ async def main():
         check(await E("!!ui.taskId"), 'clicking a post opens its task')
         check(await pg.locator('[data-action="field-pick"][data-k="channels"]').count() == 1, 'the task shows the Channel field')
         await E("closeDetail()"); await pg.wait_for_timeout(300)
+        # filters: by client and by channel
+        await pg.locator('[data-cal="f-project"]').click(); await pg.wait_for_timeout(300)
+        check(await pg.locator('.menu .mi').count() >= 3, 'the client filter opens')
+        await pg.locator('.menu .mi', has_text='ALAIN').first.click(); await pg.wait_for_timeout(300)
+        check('ALAIN' in await pg.locator('[data-cal="f-project"]').inner_text(), 'filtering by a client')
+        await pg.locator('[data-cal="f-channel"]').click(); await pg.wait_for_timeout(300)
+        await pg.locator('.menu .mi', has_text='Instagram').first.click(); await pg.wait_for_timeout(300)
+        check(await E("ui.cal.channel") == 'ig' and await E("ui.cal.project") is not None, 'filtering by a channel')
+        await E("ui.cal.project = null; ui.cal.channel = null; renderContent()")
         # plan an occasion: one task per chosen client
         before = await E("db.tasks.length")
         await E("Cal.render(document.getElementById('content'))")
