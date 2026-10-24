@@ -184,6 +184,9 @@ body.phone #ph-tabs[hidden] { display: none; }
 .ph-form > label:first-child { border-top: 0; }
 .ph-form > label > span { width: 92px; flex: none; color: var(--text-2); font-size: 13.5px; }
 .ph-form select, .ph-form input[type="date"] { flex: 1; min-width: 0; height: 50px; border: 0; background: none; color: var(--text); font-family: inherit; outline: none; -webkit-appearance: none; appearance: none; text-align: left; }
+/* iPhone centres a date's value inside the field; line it up with Project and Assign to */
+.ph-form input[type="date"]::-webkit-date-and-time-value { text-align: left; margin: 0; }
+.ph-form input[type="date"] { display: flex; align-items: center; padding: 0; }
 .ph-sw em { flex: 1; font-style: normal; font-size: 15px; }
 .ph-sw input { position: absolute; opacity: 0; inset: 0; width: 100%; margin: 0; }
 .ph-sw i { width: 46px; height: 28px; border-radius: 14px; background: var(--border-strong); position: relative; transition: background .2s; flex: none; }
