@@ -120,6 +120,21 @@ async def main():
         await touch('touchStart', 195, bb['y'] + 12); await touch('touchMove', 195, bb['y'] + 60); await touch('touchEnd', 195, bb['y'] + 60); await pg.wait_for_timeout(400)
         check('ph-open' not in (await c.get_attribute('class')), 'pulling the handle down tucks the box away')
         check(not errs, f'no page errors {errs}')
+        # Comments open at the newest one; scrolling up with a finger is not pulled back down while pictures load
+        await E("closeMenus()"); await E("closeDetail()"); await pg.wait_for_timeout(300)
+        tid2 = await E("db.tasks.filter(t=>(t.comments||[]).some(c=>(c.attachments||[]).length))[0].id")
+        await E(f"(()=>{{const t=task('{tid2}'); const img=t.comments.find(c=>(c.attachments||[]).length).attachments[0]; for(let i=0;i<12;i++) t.comments.push({{id:'fill'+i, authorId: currentUserId, text:'Filler comment '+i+' with enough words to take up some room.', html:'', at: nowISO(), reactions:{{}}, attachments: i%4===0 ? [{{...img, id:'fa'+i}}] : []}}); }})()")
+        await E(f"openTask('{tid2}')"); await pg.wait_for_timeout(300)
+        await pg.locator('#detail button', has_text='Comments').first.tap(); await pg.wait_for_timeout(400)
+        fe = "(()=>{const f=document.querySelector('#detail .tm-feed'); return [f.scrollTop, f.scrollHeight-f.clientHeight]})()"
+        r = await E(fe); check(r[1] > 200 and r[0] >= r[1] - 30, f'comments open at the newest one {r}')
+        fb = await pg.locator('#detail .tm-feed').bounding_box()
+        fx, fy = fb['x'] + fb['width'] / 2, fb['y'] + 80
+        await touch('touchStart', fx, fy)
+        for k in range(1, 8): await touch('touchMove', fx, fy + k * 40); await pg.wait_for_timeout(16)
+        await touch('touchEnd', fx, fy + 280)
+        await E("document.querySelector('#detail .tm-feed').scrollTop = 0"); await pg.wait_for_timeout(3000)
+        r = await E(fe); check(r[0] < 50, f'scrolling up stays put (not pulled back to the newest comment) {r}')
         await b.close()
     srv.terminate()
     print('OUT', OUT)

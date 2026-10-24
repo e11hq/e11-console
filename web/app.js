@@ -2886,6 +2886,8 @@ function stickFeedToBottom(feed) {
   const stop = () => { stick = false; };
   feed.addEventListener('wheel', stop, { once: true, passive: true });
   feed.addEventListener('mousedown', stop, { once: true });
+  feed.addEventListener('touchstart', stop, { once: true, passive: true }); // a finger on the phone counts too
+  feed.addEventListener('keydown', stop, { once: true });
   $$('img, video, iframe', feed).forEach((m) => {
     m.addEventListener('load', toEnd, { once: true });
     m.addEventListener('loadedmetadata', toEnd, { once: true });
