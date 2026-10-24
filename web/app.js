@@ -577,8 +577,14 @@ function showUpdateBanner(v) {
   el.title = `Version ${v}`;
   el.classList.add('on');
 }
-async function reloadApp() {
+async function reloadApp(btn) {
+  // "Reloading" with three bouncing dots, shown for a moment so it's seen, then the normal reload
+  const banner = document.getElementById('update-banner');
+  if (btn) { btn.innerHTML = 'Reloading<span class="ub-dots"><i></i><i></i><i></i></span>'; btn.classList.add('ub-busy'); }
+  if (banner) banner.querySelectorAll('button').forEach((b) => { b.disabled = true; });
+  const shown = new Promise((r) => setTimeout(r, 900));
   try { await Sync.push(); } catch (e) { /* offline: changes stay in this window until reload */ }
+  await shown;
   location.reload();
 }
 async function whatsNewDialog(auto) {
@@ -4473,7 +4479,7 @@ document.addEventListener('click', async (e) => {
         actEl.classList.toggle('on', !u.prefs.notifOff[k]); actEl.title = u.prefs.notifOff[k] ? 'Off' : 'On';
         persist(0); return;
       }
-      case 'reload-app': reloadApp(); return;
+      case 'reload-app': reloadApp(actEl); return;
       case 'import-mac': importFromMac(); return;
       case 'whats-new': whatsNewDialog(false); return;
       case 'upd': {
