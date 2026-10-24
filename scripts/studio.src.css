@@ -83,6 +83,8 @@ G .btn.primary { background: var(--btn); border-color: var(--accent-strong); col
 G .btn.primary:hover { background: var(--accent-strong); }
 G .btn.ghost { background: none; border-color: transparent; color: var(--text-2); }
 G .btn.ghost:hover { background: var(--hover); color: var(--text); }
+G .btn.ghost.danger { color: var(--red); }
+G .btn.ghost.danger:hover { background: var(--red-soft); color: var(--red); }
 G .btn.danger { border-radius: 7px; }
 G .icon-btn { border-radius: 6px; }
 G .icon-btn:hover { background: var(--hover); }

@@ -83,6 +83,8 @@
 :root:not(.phone) .btn.primary:hover { background: var(--accent-strong); }
 :root:not(.phone) .btn.ghost { background: none; border-color: transparent; color: var(--text-2); }
 :root:not(.phone) .btn.ghost:hover { background: var(--hover); color: var(--text); }
+:root:not(.phone) .btn.ghost.danger { color: var(--red); }
+:root:not(.phone) .btn.ghost.danger:hover { background: var(--red-soft); color: var(--red); }
 :root:not(.phone) .btn.danger { border-radius: 7px; }
 :root:not(.phone) .icon-btn { border-radius: 6px; }
 :root:not(.phone) .icon-btn:hover { background: var(--hover); }
