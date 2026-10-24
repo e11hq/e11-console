@@ -19,7 +19,7 @@ const Occasions = (() => {
     ['mothersday', 'Mother’s Day (UAE)', '03-21', null, 'Happy Mother’s Day'],
     ['halloween', 'Halloween', '10-31', null, 'Happy Halloween'],
     ['commemoration', 'Commemoration Day', '11-30', null, null],
-    ['nationalday', 'UAE National Day', '12-02', '12-03', 'Happy National Day'],
+    ['nationalday', 'UAE National Day', '12-02', '12-03', 'Eshi Biladi', '12-15'],   // the greeting stays until 15 Dec
     ['christmas', 'Christmas', '12-25', null, 'Merry Christmas'],
     ['nye', 'New Year’s Eve', '12-31', null, null],
   ];
@@ -99,7 +99,7 @@ const Occasions = (() => {
   const meta = () => (typeof db !== 'undefined' && db && db.meta) || {};
   function builtIn(y) {
     const out = [];
-    FIXED.forEach(([k, name, md, end, greet]) => out.push({ id: `${k}-${y}`, key: k, name, date: `${y}-${md}`, end: end ? `${y}-${end}` : null, greet, est: false }));
+    FIXED.forEach(([k, name, md, end, greet, until]) => out.push({ id: `${k}-${y}`, key: k, name, date: `${y}-${md}`, end: end ? `${y}-${end}` : null, greet, greetUntil: until ? `${y}-${until}` : null, est: false }));
     TABLE.forEach(([k, name, greet, est, extra, by]) => {
       const v = by[y];
       if (v) {
@@ -137,7 +137,8 @@ const Occasions = (() => {
   };
   // the greeting for a day, if one of its occasions has one ("Ramadan Kareem")
   function greeting(day) {
-    const o = on(day).find((x) => x.greet);
+    const o = on(day).find((x) => x.greet)
+      || between(plus(day, -45), day).find((x) => x.greet && x.greetUntil && x.date <= day && x.greetUntil >= day);   // a greeting that lasts past the day (National Day)
     return o ? o.greet : null;
   }
   // occasions a post on this day is likely for: on the day, or up to 3 days before it
