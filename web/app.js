@@ -343,6 +343,7 @@ const DatePicker = (() => {
     // every date field on a computer, including plain ones, so the Mac's own date box never shows
     const el = e.target.closest && e.target.closest('input.date-in, input[type="date"]');
     if (!el || !desktop()) return;
+    if (el.disabled) { e.preventDefault(); e.stopPropagation(); return; }   // (a date this person can't change)
     e.preventDefault(); e.stopPropagation();
     if (e.type === 'click') { if (pop && input === el) close(); else open(el); }
   };
@@ -1027,7 +1028,27 @@ function can(perm, t) {
   if (perm === 'manageUsers') return isAdm(u);
   if (isAdm(u) || isCD(u.id)) return true;   // Admins and the Creative Director: any client, any task
   if (u.role === 'am') return amScope(t === undefined ? taskCtx() : t) || !LIMITED.has(perm);
+  if ((ROLE_DENY[u.role] || []).includes(perm)) return false;
+  if ((ROLE_ALLOW[u.role] || []).includes(perm)) return true;
   return !LIMITED.has(perm);
+}
+// Production, Social and Freelancers don't set or clear start / due dates, or add / remove / rename checklist items
+// (they can tick them; Social still set a post's Go-live, Channel and Occasion)
+const NO_DATES_CHECKLIST = ['editDates', 'editChecklist', 'deleteChecklist'];
+const ROLE_DENY = { production: NO_DATES_CHECKLIST, social: NO_DATES_CHECKLIST, freelancer: NO_DATES_CHECKLIST };
+// Social also write and change a task's description
+const ROLE_ALLOW = { social: ['editDesc'] };
+function lockByRole(pane, t) {
+  if (!can('editDates', t)) {
+    $$('#d-start, #d-due', pane).forEach((el) => { el.disabled = true; });
+    $$('[data-action="clear-start"], [data-action="clear-due"], [data-action="due-today"], [data-action="due-tomorrow"]', pane).forEach((el) => el.remove());
+    $$('.prop-dates .date-chip', pane).forEach((el) => el.classList.add('locked'));
+  }
+  if (!can('editChecklist', t)) {
+    const add = $('#d-cl-add', pane); if (add) add.closest('.sub-add').remove();
+    $$('.cl-del', pane).forEach((el) => el.remove());
+    $$('.cl-text', pane).forEach((el) => { el.readOnly = true; });
+  }
 }
 // An Account Manager's extra rights (assign, edit title / description / priority / client, delete, Finance…) apply to
 // the tasks of the clients they're Account Manager for (not while on leave; the one covering has them meanwhile), and
@@ -3013,6 +3034,7 @@ function renderDetail() {
   else if (feed) stickFeedToBottom(feed);
   if (ui.focusDesc) { ui.focusDesc = false; setTimeout(() => { const d = $('#detail .desc-sec'); if (d) d.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 120); }
   hydrateThumbs(pane);
+  lockByRole(pane, t);
   readOnlyDetail(pane, t);
 }
 const RO_OK = new Set(['close-detail', 'close-preview', 'close-thread', 'close-lightbox', 'side-tab', 'detail-mode', 'nav-back', 'nav-forward', 'nav-task', 'open-task',
@@ -4283,6 +4305,7 @@ function partsRow(t) {
 
 /* ---- Field changes that notify the task's people ---- */
 function setDue(t, v) {
+  if (!can('editDates', t)) { denied(); return; }
   const o = t.due;
   t.due = v || null;
   if (o === t.due) return;
@@ -4667,7 +4690,7 @@ document.addEventListener('click', async (e) => {
       case 'prio-menu': e.stopPropagation(); prioMenu(actEl, actEl.dataset.key); return;
       case 'clear-golive': { const t = task(ui.taskId); if (t) Cal.setGolive(t, null); return; }
       case 'occ-accept': { const t = task(ui.taskId); if (t) Cal.setOccasion(t, actEl.dataset.id); return; }
-      case 'clear-start': { const t = task(ui.taskId); logChange(t, 'the <b>start date</b>', fmtDay(t.start), ''); t.start = null; t.updatedAt = nowISO(); commit(); return; }
+      case 'clear-start': { const t = task(ui.taskId); if (!can('editDates', t)) return denied(); logChange(t, 'the <b>start date</b>', fmtDay(t.start), ''); t.start = null; t.updatedAt = nowISO(); commit(); return; }
       case 'cl-toggle': { const t = task(ui.taskId); const c = t.checklist.find((x) => x.id === id); if (c) { c.done = !c.done; logActivity(t, `${c.done ? 'checked' : 'unchecked'} <b>${esc(c.text)}</b>`); t.updatedAt = nowISO(); commit(); } return; }
       case 'cl-delete': { if (!can('deleteChecklist')) return denied(); const t = task(ui.taskId); const c = t.checklist.find((x) => x.id === id); if (c) logActivity(t, `removed checklist item ${struck(c.text)}`); t.checklist = t.checklist.filter((x) => x.id !== id); t.updatedAt = nowISO(); commit(); return; }
       case 'act-filter': ui.activityFilter = actEl.dataset.f; ui.thread = null; ui.replyTo = null; renderDetail(); { const f = $('.tm-feed'); if (f) f.scrollTop = f.scrollHeight; } return;
@@ -4850,6 +4873,7 @@ document.addEventListener('input', (e) => {
     ui.commentDraft[el.dataset.draftKey] = el.innerHTML;
   }
   else if (el.id === 'edit-comment') autosize(el);
+  else if (el.classList.contains('cl-text') && !can('editChecklist', t)) { /* read only for this role */ }
   else if (el.classList.contains('cl-text')) {
     const c = (t.checklist || []).find((x) => x.id === el.dataset.clId);
     if (c) { c.text = el.value; t.updatedAt = nowISO(); commit({ keepDetail: true, delay: 400 }); }
@@ -4863,6 +4887,7 @@ document.addEventListener('change', (e) => {
   const el = e.target;
   if (el.id === 'd-due') { setDue(t, el.value || null); commit(); }
   else if (el.id === 'd-golive') Cal.setGolive(t, el.value || null);
+  else if (el.id === 'd-start' && !can('editDates', t)) { denied(); renderDetail(); }
   else if (el.id === 'd-start') { const o = t.start; t.start = el.value || null; logChange(t, 'the <b>start date</b>', fmtDay(o), fmtDay(t.start)); t.updatedAt = nowISO(); commit(); }
   else if (el.id === 'd-project') { if (!can('editProject')) { denied(); renderDetail(); return; } setTaskProject(t, el.value || null); commit(); }
   else if (el.id === 'd-section') { moveTask(t.id, el.value, null, false); commit(); }
@@ -4916,6 +4941,7 @@ document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { e.preventDefault(); ui.editingComment = null; renderDetail(); return; }
   }
   if (el.dataset && el.dataset.replyTo && e.key === 'Escape' && ui.replyTo && ui.thread !== el.dataset.replyTo) { e.preventDefault(); ui.replyTo = null; renderDetail(); setTimeout(() => { const b = $('#d-comment'); if (b) b.focus(); }, 0); return; }
+  if (el.id === 'd-cl-add' && e.key === 'Enter' && el.value.trim() && !e.isComposing && !can('editChecklist')) { e.preventDefault(); return denied(); }
   if (el.id === 'd-cl-add' && e.key === 'Enter' && el.value.trim() && !e.isComposing) {
     e.preventDefault();
     const t = task(ui.taskId);
@@ -6407,7 +6433,7 @@ function viewTeam() {
       <div><span class="role-pill r-admin">Admin</span> Full access, and the only role that can add or manage team members.</div>
       <div><span class="role-pill r-am">Account Manager</span> Can do everything except add or manage team members.</div>
       <div><span class="role-pill r-freelancer">Freelancer</span> Same as Production, but only sees the clients an Admin chooses for them, plus those clients’ Client Assets. Can sign in with a personal email (Gmail, Outlook…).</div>
-      <div><span class="role-pill r-production">Production</span> <span class="role-pill r-social">Social</span> Can update status, submit files for CD review, change dates, add tags, checklist items, files and comments. Can’t create or delete tasks/subtasks, change title, description, client or priority, assign people, remove tags or delete checklist items.</div>
+      <div><span class="role-pill r-production">Production</span> <span class="role-pill r-social">Social</span> Can update status, submit files for CD review, tick checklist items, add tags, files and comments. Social can also write and change the description, and set a post’s Channel, Go-live and Occasion. Can’t create or delete tasks/subtasks, change dates, add or remove checklist items, change title, client or priority, assign people or remove tags.</div>
       <div><span class="role-pill r-finance_admin">Finance only</span> Only sees the Finance pages (Dashboard, Clients, Expenses) — no tasks app. As Admin they add subscriptions, reimbursements and expenses; as Viewer they only look.</div>
       <div><span class="role-pill r-admin">+ Admin</span> <span class="role-pill r-finance_admin">+ Finance Admin / Viewer</span> Extras anyone can have on top of their role (••• menu): full Admin rights, or the Finance pages. A task’s Finance status is set by Account Managers and Admins.</div>
     </div>

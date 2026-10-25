@@ -43,6 +43,25 @@ async def main():
             ok.append(cal is True)
             ca = await pg.evaluate("clientsSorted().map(c => c.name)")
             ok.append(sorted(ca) == ['Ford & Lincoln', 'KOREA 360'])
+            # Production: no dates, no adding / removing checklist items (ticking is fine)
+            c2 = await b.new_context(viewport={'width':1440,'height':900},base_url=BASE)
+            await c2.add_cookies([{'name':'e11_dev_email','value':'yousef@e11-digital.com','url':BASE}])
+            pp = await c2.new_page(); pp.on('pageerror', lambda e: errs.append(str(e)))
+            await pp.goto('/'); await pp.wait_for_timeout(4000); await pp.mouse.click(5,5); await pp.wait_for_timeout(400)
+            tid = await pp.evaluate("(() => { const t = topTasks().find(x => (x.assignees || []).includes(currentUserId) && !x.done && (x.checklist || []).length) || topTasks().find(x => (x.assignees || []).includes(currentUserId) && !x.done); if (!(t.checklist || []).length) t.checklist = [{ id: 'k1', text: 'Item', done: false }]; openTask(t.id); return t.id; })()")
+            await pp.wait_for_timeout(600)
+            pr = await pp.evaluate(f"""(() => {{ const t = task('{tid}'); const due = t.due, n = t.checklist.length;
+              const r = {{ dueDisabled: !!document.querySelector('#d-due') && document.querySelector('#d-due').disabled, noClear: !document.querySelector('#detail [data-action="clear-due"], #detail [data-action="due-today"]'),
+                noAdd: !document.querySelector('#d-cl-add'), noDel: !document.querySelector('#detail .cl-del') }};
+              setDue(t, '2030-01-01'); r.dueSame = t.due === due;
+              const was = !!t.checklist[0].done; document.querySelector('#detail [data-action="cl-toggle"]').click(); r.ticked = !!task('{tid}').checklist[0].done !== was; r.sameCount = t.checklist.length === n;
+              return r; }})()""")
+            ok.append(pr == {'dueDisabled': True, 'noClear': True, 'noAdd': True, 'noDel': True, 'dueSame': True, 'ticked': True, 'sameCount': True})
+            if not ok[-1]: print('production:', pr)
+            # Social: same date / checklist limits, but they can write the description
+            soc = await pp.evaluate("(() => { const me0 = currentUserId; const s = db.users.find(u => u.role === 'social' && u.active !== false); const p = db.users.find(u => u.role === 'production' && u.active !== false); const as = (id, f) => { currentUserId = id; try { return f(); } finally { currentUserId = me0; } }; return { socDesc: as(s.id, () => can('editDesc', {})), socDates: as(s.id, () => can('editDates', {})), socCl: as(s.id, () => can('editChecklist', {})), prodDesc: as(p.id, () => can('editDesc', {})) }; })()")
+            ok.append(soc == {'socDesc': True, 'socDates': False, 'socCl': False, 'prodDesc': False})
+            if not ok[-1]: print('social:', soc)
             ok.append(not errs)
             print('ALL PASS' if all(ok) else f'FAILS {ok} {sb} {r} {errs}')
             await b.close()
