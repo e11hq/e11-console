@@ -731,18 +731,18 @@ const ServerHost = (() => {
     ? NativeMac.call('readLocalChunk', { token: file.macToken, offset: off, length: len, last: off + len >= file.size }).then((r) => r.b64)
     : b64(file.slice(off, off + len)));
   // A picked logo (browser File, or a file picked in the Mac app) → its square version; the original if that fails
+  // A file picked in the Mac app is read from the Mac once: turn it into an ordinary file first, so it can be used
+  // twice (the square logo, and the original for the Logos folder)
+  async function realFile(f) {
+    if (!f || !f.macToken) return f;
+    const b64 = await readPiece(f, 0, f.size);
+    const bin = atob(b64); const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    const ext = String(f.name).split('.').pop().toLowerCase();
+    return new File([arr], f.name, { type: ext === 'svg' ? 'image/svg+xml' : 'image/' + (ext === 'jpg' ? 'jpeg' : ext) });
+  }
   async function logoFile(f) {
-    try {
-      let blob = f;
-      if (f.macToken) {
-        const b64 = await readPiece(f, 0, f.size);
-        const bin = atob(b64); const arr = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-        const ext = String(f.name).split('.').pop().toLowerCase();
-        blob = new Blob([arr], { type: ext === 'svg' ? 'image/svg+xml' : 'image/' + (ext === 'jpg' ? 'jpeg' : ext) });
-      }
-      return await squareLogo(blob);
-    } catch (e) { return f; }
+    try { return await squareLogo(await realFile(f)); } catch (e) { return f; }
   }
   async function pickMacFiles(opts) {
     const r = await NativeMac.call('pickLocalFiles', opts);
@@ -884,8 +884,9 @@ const ServerHost = (() => {
       case 'pickImage': {
         const files = await pickFiles({ multiple: false, accept: args.kind === 'logo' ? 'image/*,.svg' : 'image/*' });
         if (!files.length) return { ok: true, path: null };
-        const up = await uploadFile(args.kind === 'logo' ? await logoFile(files[0]) : files[0], { taskId: '_uploads' });
-        return { ...(await api('POST', '/api/host/processImage', { path: up.path, kind: args.kind || 'avatar', userId: args.userId })), original: files[0] };
+        const picked = args.kind === 'logo' ? await realFile(files[0]) : files[0];
+        const up = await uploadFile(args.kind === 'logo' ? await logoFile(picked) : picked, { taskId: '_uploads' });
+        return { ...(await api('POST', '/api/host/processImage', { path: up.path, kind: args.kind || 'avatar', userId: args.userId })), original: picked };
       }
       case 'openPath': case 'quickLook': window.open(fileHref(args.path), '_blank', 'noopener'); return { ok: true };
       case 'revealPath': download(fileHref(args.path), String(args.path).split('/').pop()); return { ok: true };
@@ -916,8 +917,9 @@ const ServerHost = (() => {
       case 'pickImage': {
         const files = await pickMacFiles({ multiple: false, images: true, prompt: args.kind === 'logo' ? 'Use logo' : 'Use photo' });
         if (!files.length) return { ok: true, path: null };
-        const up = await uploadFile(args.kind === 'logo' ? await logoFile(files[0]) : files[0], { taskId: '_uploads' });
-        return { ...(await api('POST', '/api/host/processImage', { path: up.path, kind: args.kind || 'avatar', userId: args.userId })), original: files[0] };
+        const picked = args.kind === 'logo' ? await realFile(files[0]) : files[0];
+        const up = await uploadFile(args.kind === 'logo' ? await logoFile(picked) : picked, { taskId: '_uploads' });
+        return { ...(await api('POST', '/api/host/processImage', { path: up.path, kind: args.kind || 'avatar', userId: args.userId })), original: picked };
       }
       case 'openPath': case 'quickLook': await saveOnMac(fileHref(args.path), fileHrefName(args.path), true); return { ok: true };
       case 'revealPath': await saveOnMac(fileHref(args.path), fileHrefName(args.path), false); toast(`Saved to Downloads`); return { ok: true };
@@ -5270,21 +5272,19 @@ async function saveLogoOriginal(c, file) {
   if (!c || !file || !Host.isServer) return;
   const f = c.folders.find((x) => x.name === 'Logos' && isAutoFolder(c, x)) || c.folders.find((x) => x.name === 'Logos');
   if (!f) return;
+  // the new file is saved first; only once it's safely there is a file of the same name taken away
+  let up = [];
+  try { up = await ServerHost.uploadMany([file], { dest: f.dir }); } catch (e) { up = []; }
+  if (!up.length) { toast('The logo is set, but it couldn’t be added to the Logos folder — upload it there by hand'); return; }
   const same = f.files.filter((a) => a.name.toLowerCase() === file.name.toLowerCase());
+  f.files = f.files.filter((a) => !same.includes(a));
+  f.files.push(...up.map((x) => ({ ...x, name: file.name, addedAt: nowISO(), addedBy: currentUserId })));
+  assetNotify(c, f, same.length ? 'replaced' : 'added', [file.name]);
+  persist(0); render();
   if (same.length) {
-    f.files = f.files.filter((a) => !same.includes(a));
-    persist(0);
     try { await Sync.push(); } catch (e) { /* offline */ }
-    const paths = safeTrash(same.flatMap((a) => [a.path, '.thumbs/' + a.id]));   // (kept on disk if pasted into a task)
-    if (paths.length) await new Promise((r) => setTimeout(r, 400));                 // let the name free up
+    safeTrash(same.flatMap((a) => [a.path, '.thumbs/' + a.id]));   // (kept on disk if pasted into a task)
   }
-  try {
-    const up = await ServerHost.uploadMany([file], { dest: f.dir });
-    if (!up.length) return;
-    f.files.push(...up.map((x) => ({ ...x, name: file.name, addedAt: nowISO(), addedBy: currentUserId })));
-    assetNotify(c, f, same.length ? 'replaced' : 'added', [file.name]);
-    persist(0); render();
-  } catch (e) { toast('The logo is set, but it could not be added to Logos: ' + e.message); }
 }
 async function changeClientLogo(c) {
   if (!Host.isNative) { toast('Logos can be added in the Mac app'); return; }
