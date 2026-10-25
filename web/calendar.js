@@ -368,7 +368,7 @@ const Cal = (() => {
   }
   function planDialog(o) {
     if (!can('createTask')) return denied();
-    const projects = db.projects.filter((p) => !p.inactive).sort(byOrder);   // active clients
+    const projects = db.projects.filter((p) => !p.inactive && amClientOk(p)).sort(byOrder);   // active clients (an AM's own)
     const root = $('#overlay-root');
     const due = (() => { const d = addDays(o.date, -5); return d < todayStr() ? todayStr() : d; })();
     const sel = new Set(), chs = new Set(['ig']);

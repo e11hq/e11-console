@@ -1020,14 +1020,35 @@ const userName = (id) => (id && id === currentUserId ? 'You' : fullName(userById
 const activeUsers = () => db.users.filter((u) => u.active !== false).sort((a, b) => fullName(a).localeCompare(fullName(b)));
 // Production / Social cannot do these; Account Managers can do everything except manage users
 const LIMITED = new Set(['editProject', 'editPriority', 'assign', 'removeTag', 'editDesc', 'deleteTask', 'deleteChecklist', 'editTitle', 'createTask', 'deleteProject']);
-function can(perm) {
+function can(perm, t) {
   const u = me();
   if (!u) return false;
   if (isFinUser(u)) return false;
   if (perm === 'manageUsers') return isAdm(u);
-  if (isAdm(u) || u.role === 'am') return true;
+  if (isAdm(u)) return true;
+  if (u.role === 'am') return amScope(t === undefined ? taskCtx() : t) || !LIMITED.has(perm);
   return !LIMITED.has(perm);
 }
+// An Account Manager's extra rights (assign, edit title / description / priority / client, delete, Finance…) apply to
+// the tasks of the clients they're Account Manager for (not while on leave; the one covering has them meanwhile), and
+// to tasks they created wherever those are now. Elsewhere they have the same rights as Production.
+// (An AM not given any client yet keeps their rights everywhere.)
+function taskCtx() {
+  if (ui.taskId && task(ui.taskId)) return task(ui.taskId);
+  if (ui.view === 'project' && ui.projectId) return { projectId: ui.projectId };
+  return null;
+}
+function amScope(t, u = me()) {
+  if (!u || isAdm(u) || u.role !== 'am') return true;
+  if (!t) return true;
+  if (!db.projects.some((p) => (p.ams || []).some((a) => a.id === u.id))) return true;
+  const root = t.parentId ? task(t.parentId) || t : t;
+  if (root.createdBy === u.id || t.createdBy === u.id) return true;
+  const p = root.projectId ? proj(root.projectId) : null;
+  return !!p && (p.ams || []).some((a) => a.id === u.id && !a.onLeave);
+}
+// The clients an AM may move a task into, or start one in
+const amClientOk = (p, u = me()) => amScope({ projectId: p.id, createdBy: null }, u);
 function denied() { toast('Your role doesn’t allow this — ask an Admin or Account Manager'); }
 const isMine = (t) => (t.assignees || []).includes(currentUserId);
 // Each assignee can finish their own part of a shared task: t.partsDone = { userId: isoTime }
@@ -1053,7 +1074,7 @@ function updatesByUse() {
 }
 const fieldPill = (v, color) => `<span class="fl-pill" style="--c:${color}">${esc(v)}${icon('chev')}</span>`;
 function fieldsHTML(t) {
-  const mgr = isManager();
+  const mgr = isManager() && amScope(t);
   const canGuard = can('assign');
   const rows = [
     { k: 'update', ic: 'select', l: 'Task Update', v: t.update, html: t.update ? fieldPill(t.update, UPDATE_COLOR(t.update)) : '', edit: true },
@@ -1085,7 +1106,7 @@ function fieldMenu(anchor, k) {
   const ck = (on) => (on ? `<span class="wf-ck">${icon('check')}</span>` : '');
   if (k === 'update') items = updatesByUse().map((v) => ({ html: `<div class="mi">${fieldPill(v, UPDATE_COLOR(v)).replace(icon('chev'), '')}${ck(cur === v)}</div>`, run: () => set(v) }));
   else if (k === 'finance') {
-    if (!isManager()) return denied();
+    if (!(isManager() && amScope(task(ui.taskId)))) return denied();
     items = Object.entries(FINANCE).map(([v, c]) => ({ html: `<div class="mi">${fieldPill(v, c).replace(icon('chev'), '')}${ck(cur === v)}</div>`, run: () => set(v) }));
   } else if (k === 'guardian') {
     if (!can('assign')) return denied();
@@ -1103,7 +1124,7 @@ function fieldMenu(anchor, k) {
 function setField(t, k, v) {
   const old = t[k] || null;
   if (old === v) return;
-  if (k === 'finance' && !isManager()) return denied();
+  if (k === 'finance' && !(isManager() && amScope(t))) return denied();
   t[k] = v || null;
   if (k === 'finance') { t.financeAt = nowISO(); t.financeBy = currentUserId; }
   const name = (id) => (id && userById(id) ? fullName(userById(id)) : '');
@@ -2807,7 +2828,7 @@ function renderDetail() {
   const clDone = cl.filter((x) => x.done).length;
   const navIdx = ui.navIds.indexOf(t.id);
   const projectOptions = ['<option value="">No client (My Tasks)</option>']
-    .concat(db.projects.filter((x) => !x.inactive || x.id === t.projectId).sort(byOrder).map((x) => `<option value="${x.id}" ${x.id === t.projectId ? 'selected' : ''}>${esc(x.name)}</option>`)).join('');
+    .concat(db.projects.filter((x) => (!x.inactive && amClientOk(x)) || x.id === t.projectId).sort(byOrder).map((x) => `<option value="${x.id}" ${x.id === t.projectId ? 'selected' : ''}>${esc(x.name)}</option>`)).join('');
   const nComments = t.comments.length;
   const nTop = t.comments.filter((c) => !c.parentId).length;
   if (ui.thread && !t.comments.some((c) => c.id === ui.thread && !c.parentId)) ui.thread = null;

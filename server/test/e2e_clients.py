@@ -139,6 +139,21 @@ async def main():
         await E("go('profile')"); await pg.wait_for_timeout(600)
         check(await pg.locator('#pf-push').count() == 1, 'My profile has Notifications on this computer')
         await E("go('home')"); await pg.wait_for_timeout(300)
+        # an AM's extra rights only on their clients' tasks (and tasks they created); elsewhere like Production
+        r = await am.evaluate("""(() => {
+          const me0 = me(); const ps = db.projects.filter(p => !p.inactive);
+          const mineP = ps[0], otherP = ps[1];
+          const was = [mineP.ams, otherP.ams]; mineP.ams = [{ id: me0.id }]; otherP.ams = [];
+          const inMine = topTasks().find(t => t.projectId === mineP.id && t.createdBy !== me0.id);
+          const inOther = topTasks().find(t => t.projectId === otherP.id && t.createdBy !== me0.id);
+          const own = { id: 'x', projectId: otherP.id, createdBy: me0.id };
+          const res = { mine: can('assign', inMine), other: can('assign', inOther), otherComment: can('createTask', inOther) === false, ownElsewhere: can('editTitle', own),
+            pickerHasOther: amClientOk(otherP), pickerHasMine: amClientOk(mineP) };
+          mineP.ams = [{ id: me0.id, onLeave: true }]; res.onLeave = can('assign', inMine);
+          mineP.ams = was[0]; otherP.ams = was[1];
+          return res;
+        })()""")
+        check(r == {'mine': True, 'other': False, 'otherComment': True, 'ownElsewhere': True, 'pickerHasOther': False, 'pickerHasMine': True, 'onLeave': False}, f"AM rights follow their clients {r}")
         # Edit client list: switch a client off, rename it (its Client Assets folder follows)
         await E("go('clientlist')"); await pg.wait_for_timeout(400)
         check(await pg.locator('.cl-row').count() >= 3, 'Edit client list shows the clients')
