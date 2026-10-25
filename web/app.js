@@ -1280,8 +1280,20 @@ function avatarStack(ids, size = 20, max = 3, t = null) {
   return `<span class="av-stack">${shown}${ids.length > max ? `<span class="av more" style="width:${size}px;height:${size}px">+${ids.length - max}</span>` : ''}</span>`;
 }
 // People who follow a task: its assignees and whoever created it (a subtask also notifies its parent's people)
+// Who a task's creator updates go to. An Account Manager who created a task in a client and is no longer that client's
+// Account Manager (replaced, or on leave) stops getting them; the client's current Account Manager gets them instead.
+function creatorOf(t) {
+  const root = t && t.parentId ? task(t.parentId) || t : t;
+  const id = t && t.createdBy;
+  const u = id && userById(id);
+  if (!u || u.role !== 'am' || isAdm(u)) return id || null;
+  const p = root && root.projectId ? proj(root.projectId) : null;
+  if (!p || !(p.ams || []).length) return id;                       // a client without Account Managers set: as before
+  return (p.ams || []).some((a) => a.id === id && !a.onLeave) ? id : null;
+}
+const creatorAndAms = (t) => [...new Set([creatorOf(t)].concat(clientAmsOf(t)).filter(Boolean))];
 function watchersOf(t) {
-  const set = new Set((t.assignees || []).concat(t.createdBy ? [t.createdBy] : []));
+  const set = new Set((t.assignees || []).concat(creatorOf(t) ? [creatorOf(t)] : []));
   if (t.parentId) { const p = task(t.parentId); if (p) watchersOf(p).forEach((x) => set.add(x)); }
   return [...set];
 }
@@ -4191,9 +4203,9 @@ function setMyPart(t, done) {
     t.partsDone[currentUserId] = nowISO();
     const all = (t.assignees || []).length > 0 && t.assignees.every((u) => partDone(t, u));
     logActivity(t, all ? 'finished their part — <b>all parts are done</b>, ready for review' : 'finished their part');
-    notifyWatchers(t, 'part', 'finished their part of', { skip: all ? [t.createdBy] : [] });
+    notifyWatchers(t, 'part', 'finished their part of', { skip: all ? creatorAndAms(t) : [] });
     if (all) {
-      const to = new Set([t.createdBy].filter(Boolean));
+      const to = new Set(creatorAndAms(t));
       to.forEach((u) => pushNotif(u, t, 'allparts', 'marked the last part done — all parts are done, ready for review:'));
     }
     toast(`Your part is done — “${t.title || 'Untitled task'}” moved to your Done list`, { label: 'Undo', run: () => setMyPart(t, false) });
@@ -5376,7 +5388,7 @@ function assetNotify(c, f, verb, names) {
   const to = new Set();
   db.tasks.filter((t) => pids.has(t.projectId) || (t.parentId && pids.has((task(t.parentId) || {}).projectId))).forEach((t) => {
     (t.assignees || []).forEach((id) => to.add(id));
-    if (t.createdBy) to.add(t.createdBy);
+    if (creatorOf(t)) to.add(creatorOf(t));
     (t.watchers || []).forEach((id) => to.add(id));
   });
   projs.forEach((p) => (p.ams || []).forEach((a) => to.add(a.id)));
@@ -5586,7 +5598,7 @@ function decideReview(t, r, decision, noteHtml) {
     syncCD(t);
     if (allOK) {
       moveToSection(t, SEC_CTR);
-      if (t.createdBy && t.createdBy !== r.by) pushNotif(t.createdBy, t, 'review-ok', 'approved all files — it moved to CTR:');
+      creatorAndAms(t).forEach((u) => { if (u !== r.by) pushNotif(u, t, 'review-ok', 'approved all files — it moved to CTR:'); });
     } else if (!reviewPending(t)) moveToSection(t, SEC_PROGRESS);
   } else {
     r.state = 'amend';
@@ -5596,7 +5608,7 @@ function decideReview(t, r, decision, noteHtml) {
     t.comments.push(c);
     logActivity(t, `asked <b>${esc(who)}</b> for amendments`);
     pushNotif(r.by, t, 'review-amend', 'requested amendments on your submission for', { snippet: notifPlainHTML(noteHtml).slice(0, 160), commentId: c.id });
-    if (t.createdBy && t.createdBy !== r.by) pushNotif(t.createdBy, t, 'review-amend', `requested amendments from <b>${esc(who)}</b> on`, { commentId: c.id });
+    creatorAndAms(t).forEach((u) => { if (u !== r.by) pushNotif(u, t, 'review-amend', `requested amendments from <b>${esc(who)}</b> on`, { commentId: c.id }); });
     if (!reviewPending(t)) moveToSection(t, SEC_PROGRESS);
     syncCD(t);
   }

@@ -154,6 +154,24 @@ async def main():
           return res;
         })()""")
         check(r == {'mine': True, 'other': False, 'otherComment': True, 'ownElsewhere': True, 'pickerHasOther': False, 'pickerHasMine': True, 'onLeave': False}, f"AM rights follow their clients {r}")
+        # a replaced AM stops getting updates on tasks they created in that client; the new AM gets them
+        r = await E("""(() => {
+          const ams = db.users.filter(u => u.role === 'am' && u.active !== false && !u.admin).slice(0, 2);
+          const t = topTasks().find(x => x.projectId && !(x.assignees || []).some(id => ams.some(a => a.id === id)));
+          const p = proj(t.projectId); const was = [p.ams, t.createdBy];
+          t.createdBy = ams[0].id;
+          const got = (id) => db.notifications.filter(n => n.to === id && n.taskId === t.id && n.text === 'TEST-CHANGE on').length;
+          p.ams = [{ id: ams[0].id }];
+          notifyWatchers(t, 'status', 'TEST-CHANGE on');
+          const before = [got(ams[0].id), got(ams[1].id)];
+          db.notifications.forEach(n => { n.read = true; });
+          p.ams = [{ id: ams[1].id }];
+          notifyWatchers(t, 'status', 'TEST-CHANGE on');
+          const after = [got(ams[0].id), got(ams[1].id)];
+          p.ams = was[0]; t.createdBy = was[1];
+          return { before, after };
+        })()""")
+        check(r == {'before': [1, 0], 'after': [1, 1]}, f'the replaced AM stops, the new AM gets them {r}')
         # Edit client list: switch a client off, rename it (its Client Assets folder follows)
         await E("go('clientlist')"); await pg.wait_for_timeout(400)
         check(await pg.locator('.cl-row').count() >= 3, 'Edit client list shows the clients')
