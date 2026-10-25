@@ -30,7 +30,7 @@ before(async () => {
     ],
     projects: [{ id: 'p-ford', name: 'Ford', clientId: 'cl-ford' }, { id: 'p-alain', name: 'ALAIN', clientId: 'cl-alain' }],
     clients: [{ id: 'cl-ford', name: 'Ford', dir: 'Clients/Ford', folders: [] }, { id: 'cl-alain', name: 'ALAIN', dir: 'Clients/ALAIN', folders: [] }],
-    tasks: [{ id: 't-ford', projectId: 'p-ford', title: 'F' }, { id: 't-alain', projectId: 'p-alain', title: 'A' }],
+    tasks: [{ id: 't-ford', projectId: 'p-ford', title: 'F', assignees: ['u-free'] }, { id: 't-alain', projectId: 'p-alain', title: 'A' }],
   }, 'test');
   for (const f of ['attachments/t-ford/a.txt', 'attachments/t-alain/b.txt', 'Clients/Ford/Logos/f.txt', 'Clients/ALAIN/Logos/a.txt']) {
     fs.mkdirSync(path.join(dir, 'files', path.dirname(f)), { recursive: true });

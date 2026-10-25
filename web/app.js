@@ -369,8 +369,12 @@ const TaskLink = (() => {
     }
     toast(ok ? 'Link copied — it opens in the E11 Console app, or the browser' : 'Could not copy the link');
   }
-  function show(id) {
+  async function show(id) {
     ui.sideTab = 'details';
+    // not one of theirs (Production / Freelancers): ask the server to let them read it, then reload the data
+    if (!task(id) && ownSearchOnly()) {
+      try { await api('POST', '/api/peek', { taskId: id }); await Sync.resync(); } catch (e) { /* not available */ }
+    }
     if (task(id)) openTask(id); else toast('That task is not available');
   }
   // Called once data has loaded, for a link opened in this page
@@ -1069,10 +1073,15 @@ function amScope(t, u = me()) {
 }
 // A task an Account Manager only looks at: in a client that isn't theirs and not created by them. They can read it,
 // open its files and comment; nothing else changes (status, dates, checklist, fields, CD review, files…).
-const amReadOnly = (t, u = me()) => !!t && !!u && u.role === 'am' && !isAdm(u) && !isCD(u.id) && !amScope(t, u);
-const RO_MSG = 'View only — this task is in a client you’re not Account Manager for';
+// View only: an Account Manager on another AM's client's task, or Production / a Freelancer on a task they opened from
+// a link but aren't part of (they read it, open its files and comment)
+const amReadOnly = (t, u = me()) => !!t && !!u && ((u.role === 'am' && !isAdm(u) && !isCD(u.id) && !amScope(t, u)) || peekOnly(t, u));
+const peekOnly = (t, u = me()) => !!t && ownSearchOnly(u) && !partOfTask(t, u.id);
+const RO_AM = 'View only — this task is in a client you’re not Account Manager for';
+const RO_PEEK = 'View only — you’re not on this task';
+const roMsg = () => (ui.taskId && peekOnly(task(ui.taskId)) ? RO_PEEK : RO_AM);
 // The clients shown in an Account Manager's sidebar: the ones they look after (all of them until they're given one)
-const amSidebarOk = (p, u = me()) => !u || u.role !== 'am' || isAdm(u) || isCD(u.id) || !db.projects.some((x) => (x.ams || []).some((a) => a.id === u.id)) || (p.ams || []).some((a) => a.id === u.id && !a.onLeave);
+const amSidebarOk = (p, u = me()) => searchClientOk(p, u) && (!u || u.role !== 'am' || isAdm(u) || isCD(u.id) || !db.projects.some((x) => (x.ams || []).some((a) => a.id === u.id)) || (p.ams || []).some((a) => a.id === u.id && !a.onLeave));
 // The clients an AM may move a task into, or start one in
 const amClientOk = (p, u = me()) => amScope({ projectId: p.id, createdBy: null }, u);
 function denied() { toast('Your role doesn’t allow this — ask an Admin or Account Manager'); }
@@ -1679,7 +1688,7 @@ function removeTasks(ids) {
 }
 
 function setDone(t, done) {
-  if (amReadOnly(t)) { toast(RO_MSG); return; }
+  if (amReadOnly(t)) { toast(roMsg()); return; }
   if (!!t.done !== !!done) {
     logActivity(t, done ? 'completed this task' : 'reopened this task');
     notifyWatchers(t, 'done', done ? 'completed' : 'reopened');
@@ -2041,7 +2050,7 @@ const Sync = (() => {
     if (e.expired) { location.reload(); return; }
     document.body.innerHTML = `<div class="fatal" style="margin:20vh auto;max-width:420px;text-align:center"><h2>${esc(e.status === 403 ? 'No access' : 'Signed out')}</h2><p>${esc(e.message)}</p><button class="btn primary" onclick="location.reload()">Sign in again</button></div>`;
   }
-  return { start, push, savePrefs, get online() { return online; }, get version() { return version; }, clientId };
+  return { start, push, resync, savePrefs, get online() { return online; }, get version() { return version; }, clientId };
 })();
 
 /* ================= Persistence ================= */
@@ -2587,14 +2596,17 @@ function taskFields(t) {
 }
 
 // Part of a task: assigned (to it, the task it sits under or one of its subtasks), created it, its Guardian,
-// or mentioned / commented in it
+// or @mentioned in it (the server sends Production and Freelancers only these)
 function partOfTask(t, id = currentUserId, deep = true) {
   if (!t) return false;
   if ((t.assignees || []).includes(id) || t.createdBy === id || t.guardian === id) return true;
-  if ((t.comments || []).some((c) => c.authorId === id || mentionsIn(c.html).has(id)) || mentionsIn(t.notesHtml).has(id)) return true;
+  if ((t.comments || []).some((c) => mentionsIn(c.html).has(id)) || mentionsIn(t.notesHtml).has(id)) return true;
   if (!deep) return false;
   return (t.parentId && partOfTask(task(t.parentId), id, false)) || subtasksOf(t.id).some((x) => partOfTask(x, id, false));
 }
+const ownSearchOnly = (u = me()) => !!u && ['production', 'freelancer'].includes(u.role) && !isAdm(u) && !isCD(u.id);
+// ...and only the clients where they're part of at least one task
+const searchClientOk = (p, u = me()) => !ownSearchOnly(u) || db.tasks.some((t) => t.projectId === p.id && partOfTask(t, u.id, false)) || (u.role === 'freelancer' && (u.projectIds || []).includes(p.id));
 const searchOwnOk = (t, u = me()) => !u || !['production', 'freelancer'].includes(u.role) || isAdm(u) || isCD(u.id) || partOfTask(t, u.id);
 
 function taskSearch(query, { limit = 200 } = {}) {
@@ -3059,7 +3071,7 @@ function readOnlyDetail(pane, t) {
   $$('[contenteditable="true"]', pane).forEach((el) => { if (!inComments(el)) el.setAttribute('contenteditable', 'false'); });
   $$('input, select, textarea', pane).forEach((el) => { if (!inComments(el)) el.disabled = true; });
   const head = $('.tm-main', pane) || pane;
-  if (!$('.ro-note', pane)) head.insertAdjacentHTML('afterbegin', `<div class="ro-note">${icon('info')}<span>${RO_MSG}. You can read it, open its files and comment.</span></div>`);
+  if (!$('.ro-note', pane)) head.insertAdjacentHTML('afterbegin', `<div class="ro-note">${icon('info')}<span>${roMsg()}. You can read it, open its files and comment.</span></div>`);
 }
 // (belt and braces: clicks and edits on a view-only task page are stopped before they reach anything)
 ['click', 'mousedown', 'change', 'beforeinput', 'paste', 'drop'].forEach((type) => document.addEventListener(type, (e) => {
@@ -3071,7 +3083,7 @@ function readOnlyDetail(pane, t) {
   }
   if ((type === 'click' || type === 'mousedown') && !a) return;
   e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
-  if (type === 'click') toast(RO_MSG);
+  if (type === 'click') toast(roMsg());
 }, true));
 
 // Keep the activity feed scrolled to the newest item while images/videos finish loading,
@@ -5094,6 +5106,8 @@ const isAdmin = () => !!isAdm(me());
 const seesAll = () => isAdmin() || (typeof isCD === 'function' && isCD());
 const clientById = (id) => (db.clients || []).find((c) => c.id === id) || null;
 // Client Assets an Account Manager sees: their clients' folders, and folders not linked to any client
+// Client Assets: an Account Manager sees their clients' folders; Production and Freelancers the clients they're part of
+// (a task there); everyone sees folders not linked to a client
 const caVisible = (c) => { const linked = db.projects.filter((p) => p.clientId === c.id); return !linked.length || linked.some((p) => amSidebarOk(p)); };
 const clientsSorted = () => (db.clients || []).filter(caVisible).sort((a, b) => a.name.localeCompare(b.name));
 const clientFileCount = (c) => c.folders.reduce((n, f) => n + f.files.length, 0);
@@ -5128,7 +5142,7 @@ function clientFileById(id) {
 const clientOfProject = (p) => (p && p.clientId ? clientById(p.clientId) : null);
 function openClient(id, folderId = null) {
   if (!clientById(id)) { toast('That client has been removed'); return; }
-  if (!caVisible(clientById(id))) { toast('That client’s assets are for its Account Managers'); return; }
+  if (!caVisible(clientById(id))) { toast('That client’s assets are for the people working on it'); return; }
   ui.caQ = ''; ui.caScope = null;
   if (ui.taskId) closeDetail();
   ui.clientId = id; ui.folderId = folderId;
@@ -5748,7 +5762,7 @@ function choiceDialog({ title, body = '', choices }) {
 // Every status change from the interface goes through here (status menu, ▶ next, drag and drop)
 async function changeStatus(t, sectionId, targetId = null, after = false) {
   if (!t) return false;
-  if (amReadOnly(t)) { toast(RO_MSG); return false; }
+  if (amReadOnly(t)) { toast(roMsg()); return false; }
   if (t.sectionId !== sectionId && statusLocked(t)) { toast(LOCK_MSG); return false; }
   const list = statusList(t);
   const from = list.findIndex((x) => x.id === t.sectionId), to = list.findIndex((x) => x.id === sectionId);

@@ -179,12 +179,13 @@ export function createServer(cfg) {
       const u = store.get('users', s.userId) || s.user;
       // What someone can see changed (a freelancer's clients, which Client Assets a client uses, or a client switched
       // on / off): reload their data
-      if (changed.some((r) => (r.kind === 'users' && r.id === u.id) || r.kind === 'projects')) {
+      if (changed.some((r) => (r.kind === 'users' && r.id === u.id) || r.kind === 'projects' || r.kind === 'meta')) {
         const was = s.lastAccess, now = accessKey(u);
         s.lastAccess = now;
         if (was !== undefined && was !== now) { send(s, 'resync', { rev }); continue; }
       }
       const list = changed.map((r) => forUser(u, r)).filter((r) => !(r.hidden && r.kind === 'notifications'));
+      list.push(...ownViewDelta(s, u, changed));
       if (!list.length) continue;
       send(s, 'changes', { rev, client: fromClient || null, by: byUser || null, changes: list });
     }
@@ -207,7 +208,25 @@ export function createServer(cfg) {
     const out = store.apply(ops, 'rename');
     broadcast(out.rev, out.results, null, null);
   }
-  const accessKey = (u) => JSON.stringify([u.role === 'freelancer' ? u.projectIds || [] : null, store.list('projects').map((p) => [p.id, p.clientId || null, !!p.inactive])]);
+  // Production and Freelancers see only what they're part of, so one change can show or hide other things too (a
+  // subtask assigned to them brings its parent task and client; taken off, they go): send those as well
+  const VIEW_KINDS = ['tasks', 'projects', 'clients'];
+  const viewIds = (u) => { const v = access.ownView(u); return { tasks: v.tasks, projects: v.projects, clients: new Set(store.list('clients').filter((c) => access.canSee(u, 'clients', c)).map((c) => c.id)) }; };
+  function ownViewDelta(s, u, changed) {
+    if (!access.ownOnly(u)) { s.lastView = null; return []; }
+    if (!changed.some((r) => VIEW_KINDS.includes(r.kind))) return [];
+    const was = s.lastView, now = viewIds(u);
+    s.lastView = now;
+    if (!was) return [];
+    const done = new Set(changed.map((r) => r.kind + ':' + r.id));
+    const out = [], rev = store.rev();
+    for (const kind of VIEW_KINDS) {
+      for (const id of now[kind]) if (!was[kind].has(id) && !done.has(kind + ':' + id)) { const d = store.get(kind, id); if (d && access.canSee(u, kind, d)) out.push({ kind, id, data: access.shape(u, kind, d), rev }); }
+      for (const id of was[kind]) if (!now[kind].has(id) && !done.has(kind + ':' + id)) out.push({ kind, id, deleted: true, rev, hidden: true });
+    }
+    return out;
+  }
+  const accessKey = (u) => JSON.stringify([u.role === 'freelancer' ? u.projectIds || [] : null, u.role, !!u.admin, access.ownOnly(u), store.list('projects').map((p) => [p.id, p.clientId || null, !!p.inactive])]);
   const send = (s, event, data) => { try { s.res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); } catch { /* closed */ } };
 
   /* ---------- routes ---------- */
@@ -388,18 +407,31 @@ export function createServer(cfg) {
       return json(res, 200, { ok: true, rev, results: results.map((r) => ({ ...forUser(u, r), refused: !!r.refused })) });
     }
 
+    // A task link opened by someone who sees only their own tasks: they may read it and comment (view only)
+    if (p === '/api/peek' && req.method === 'POST') {
+      const body = await readBody(req);
+      if (!access.ownOnly(u)) return json(res, 200, { ok: true });
+      const t = access.addPeek(u, String((body && body.taskId) || ''));
+      if (!t) return json(res, 404, { ok: false, error: 'That task is not available' });
+      for (const s of streams) if (s.userId === u.id) s.lastView = viewIds(u);
+      return json(res, 200, { ok: true });
+    }
+
     // Live updates (Server-Sent Events). Sends anything missed since `since`, then changes as they happen.
     if (p === '/api/events' && req.method === 'GET') {
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
       res.write('retry: 3000\n\n');
       const s = { res, userId: u.id, user: u, client: url.searchParams.get('client') || null };
       s.lastAccess = accessKey(u);
+      s.lastView = access.ownOnly(u) ? viewIds(u) : null;
       streams.add(s);
       send(s, 'hello', { version, rev: store.rev(), appIcon: appIcon.info() });
       const since = Number(url.searchParams.get('since'));
       if (Number.isFinite(since) && since > 0 && since < store.rev()) {
         const missed = store.since(since);
-        if (missed.length) send(s, 'changes', { rev: store.rev(), client: null, changes: missed.map((r) => forUser(u, r)).filter((r) => !(r.hidden && r.kind === 'notifications')) });
+        // (for someone who sees only their own tasks, what they can see may have moved while away: reload instead)
+        if (access.ownOnly(u) && missed.some((r) => VIEW_KINDS.includes(r.kind))) send(s, 'resync', { rev: store.rev() });
+        else if (missed.length) send(s, 'changes', { rev: store.rev(), client: null, changes: missed.map((r) => forUser(u, r)).filter((r) => !(r.hidden && r.kind === 'notifications')) });
       }
       const ping = setInterval(() => { try { res.write('event: ping\ndata: {}\n\n'); } catch { /* closed */ } }, 25000);
       req.on('close', () => { clearInterval(ping); streams.delete(s); });
@@ -426,7 +458,7 @@ export function createServer(cfg) {
         else if (body.dest && String(body.dest).startsWith('Claims/')) { if (String(body.dest).split('/')[1] !== u.id) return deny('You can only add files to your own claims'); }
         else if (body.dest && (access.isFinance(u) || u.role === 'freelancer' || !access.canReadFile(u, String(body.dest) + '/x'))) return deny('You can’t add files to this client');
         if (!body.dest && access.isFinance(u) && body.taskId !== '_uploads') return deny();
-        if (!body.dest && u.role === 'freelancer' && body.taskId !== '_uploads') { const t = store.get('tasks', String(body.taskId || '')); if (!t || !access.canSee(u, 'tasks', t)) return deny(); }
+        if (!body.dest && access.ownOnly(u) && body.taskId !== '_uploads') { const t = store.get('tasks', String(body.taskId || '')); if (!t || !access.canSee(u, 'tasks', t)) return deny(); }
         // later pieces may only be added to a file this person started uploading
         if (body.path) { const up = uploads.get(body.path); if (!up || up.userId !== u.id) return deny('Upload not found — please try again'); }
         const out = await files.commands.writeChunk(body, u);

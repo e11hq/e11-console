@@ -63,7 +63,7 @@ async def main():
         # admin grants ALAIN live
         await A("()=>{const u=db.users.find(x=>x.email==='sam.design@gmail.com'); u.projectIds=[...u.projectIds, db.projects.find(p=>p.name==='ALAIN').id]; persist(0)}")
         await free.wait_for_timeout(2500)
-        check(await F("db.projects.length") == 2 and await F("db.tasks.some(t=>db.projects.find(p=>p.name==='ALAIN').id===t.projectId)"), 'granting a project shows it (and its tasks) live')
+        check(await F("db.projects.length") == 2 and await F("db.tasks.every(t=>(t.assignees||[]).includes(currentUserId)||t.createdBy===currentUserId||db.tasks.some(x=>(x.id===t.parentId||x.parentId===t.id)&&(x.assignees||[]).includes(currentUserId)))"), 'granting a client shows it live (only the tasks they are on)')
         check(await F("can('createTask')") is False and await free.locator('[data-action="new-project"]').count() >= 0, 'freelancer has production-level rights')
         print('page errors', e1, e2); check(not e1 and not e2, 'no page errors')
         await b.close()

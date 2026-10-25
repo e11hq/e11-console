@@ -36,13 +36,80 @@ export function createAccess(store) {
     const linked = store.list('projects').filter((p) => p.clientId === c.id);
     return linked.length > 0 && linked.every((p) => off.has(p.id));
   }
+  // Production and Freelancers only see what they're part of: the tasks they're assigned to, created, guard, or are
+  // @mentioned in (with the task such a task sits under, and its subtasks), the clients those tasks are in
+  // and those clients' Client Assets. A freelancer's clients are also limited to the ones an Admin gave them.
+  // (Not for someone with Admin rights or the Creative Director.)
+  const cdId = () => (store.get('meta', 'main') || {}).cdUserId || null;
+  const ownOnly = (u) => !!u && (u.role === 'production' || u.role === 'freelancer') && !isAdm(u) && u.id !== cdId();
+  const mentioned = (html, id) => String(html || '').includes(`data-user="${id}"`);
+  const partOf = (t, id) => (t.assignees || []).includes(id) || t.createdBy === id || t.guardian === id || mentioned(t.notesHtml, id)
+    || (t.comments || []).some((c) => mentioned(c.html, id));
+  // Tasks opened from a link someone sent (Production / Freelancers not on that task): they can read them and comment,
+  // nothing else. Remembered per person (the last 100), so it holds after reloads.
+  let peeks = null;
+  const peekMap = () => { if (!peeks) { try { peeks = new Map(Object.entries(JSON.parse(store.kv.get('peeks') || '{}')).map(([k, v]) => [k, new Set(v)])); } catch { peeks = new Map(); } } return peeks; };
+  const peekSet = (u) => peekMap().get(u.id) || new Set();
+  function addPeek(u, id) {
+    const t = store.get('tasks', String(id));
+    if (!ownOnly(u) || !t || inInactive(t)) return null;
+    const pid = taskProject(t);
+    if (isFreelancer(u) && pid && !projectSet(u).has(pid)) return null;    // freelancers: only within their clients
+    const set = new Set([...peekSet(u)].filter((x) => x !== t.id)); set.add(t.id);
+    peekMap().set(u.id, new Set([...set].slice(-100)));
+    store.kv.set('peeks', JSON.stringify(Object.fromEntries([...peekMap()].map(([k, v]) => [k, [...v]]))));
+    seenCache = { rev: -1, map: new Map() };
+    return t;
+  }
+  let seenCache = { rev: -1, map: new Map() };
+  // what this person may see: { tasks, projects, clients } (sets of ids), worked out once per data revision
+  function ownView(u) {
+    const rev = store.rev();
+    if (seenCache.rev !== rev) seenCache = { rev, map: new Map() };
+    if (seenCache.map.has(u.id)) return seenCache.map.get(u.id);
+    const all = store.list('tasks');
+    const direct = new Set(all.filter((t) => partOf(t, u.id)).map((t) => t.id));
+    const tasks = new Set(direct);
+    all.forEach((t) => {
+      if (!t.parentId) return;
+      if (direct.has(t.id)) tasks.add(String(t.parentId));          // the task a subtask of theirs sits under
+      if (direct.has(String(t.parentId))) tasks.add(t.id);          // the subtasks of a task of theirs
+    });
+    const byId = new Map(all.map((t) => [t.id, t]));
+    const allowed = isFreelancer(u) ? projectSet(u) : null;
+    const projects = new Set();
+    for (const id of [...tasks]) {
+      const pid = taskProject(byId.get(id));
+      if (pid && allowed && !allowed.has(pid)) { tasks.delete(id); continue; }
+      if (pid) projects.add(pid);
+    }
+    const clients = new Set(store.list('projects').filter((p) => projects.has(p.id) && p.clientId).map((p) => p.clientId));
+    const linked = new Set(store.list('projects').filter((p) => p.clientId).map((p) => p.clientId));
+    // opened from a link: the task and its client's name and statuses come along (not its Client Assets)
+    const peek = new Set();
+    for (const id of peekSet(u)) {
+      const t = byId.get(id);
+      if (!t || tasks.has(id)) continue;
+      const pid = taskProject(t);
+      if (isFreelancer(u) && pid && !projectSet(u).has(pid)) continue;
+      peek.add(id); tasks.add(id); if (pid) projects.add(pid);
+    }
+    const out = { tasks, projects, clients, linked, peek };
+    seenCache.map.set(u.id, out);
+    return out;
+  }
   function taskVisible(u, t) {
     if (inInactive(t)) return false;
-    if (!isFreelancer(u)) return true;
+    if (!ownOnly(u)) return true;
     if (!t) return false;
-    if (t.projectId) return projectSet(u).has(t.projectId);
-    return (t.assignees || []).includes(u.id) || t.createdBy === u.id;
+    // (or a change in flight: the task as it's being saved)
+    if (!ownView(u).tasks.has(String(t.id)) && !partOf(t, u.id)) return false;
+    const pid = taskProject(t);
+    return !pid || !isFreelancer(u) || projectSet(u).has(pid);
   }
+  const projectVisible = (u, p) => !ownOnly(u) || ownView(u).projects.has(p.id) || (isFreelancer(u) && projectSet(u).has(p.id));
+  // Client Assets: their clients' folders; for Production also folders not linked to any client
+  const clientVisible = (u, c) => !ownOnly(u) || ownView(u).clients.has(c.id) || (isFreelancer(u) ? clientSet(u).has(c.id) : !ownView(u).linked.has(c.id));
 
   // Freelancers see the Client Assets of the clients their projects belong to
   // Client Assets: anyone adds folders and files; people remove (or rename) only the folders and files they added,
@@ -101,7 +168,7 @@ export function createAccess(store) {
       const off = inactiveIds();
       if (off.size && store.list('clients').some((c) => (c.dir === dir || String(c.dir || '').startsWith(dir + '/')) && hiddenClient(c, off))) return false;
     }
-    if (!isFreelancer(u)) return true;
+    if (!ownOnly(u)) return true;
     if (parts[0] === 'attachments') {
       if (parts[1] === '_avatars') return true;
       if (parts[1] === '_uploads') return false;
@@ -111,8 +178,7 @@ export function createAccess(store) {
     if (parts[0] === 'Clients') {
       if (parts[1] === '_logos') return true;
       const dir = parts.slice(0, 2).join('/');
-      const allowed = clientSet(u);
-      return store.list('clients').some((c) => allowed.has(c.id) && (c.dir === dir || String(c.dir || '').startsWith(dir + '/')));
+      return store.list('clients').some((c) => clientVisible(u, c) && (c.dir === dir || String(c.dir || '').startsWith(dir + '/')));
     }
     if (parts[0] === '.thumbs') return true; // previews are small and only reachable by id
     return false;
@@ -122,9 +188,9 @@ export function createAccess(store) {
     if (!data) return true;
     switch (kind) {
       case 'notifications': return data.to === u.id && !(data.taskId && inInactive(store.get('tasks', String(data.taskId)))) && !(data.clientId && hiddenClient(store.get('clients', String(data.clientId))));
-      case 'projects': return !isFreelancer(u) || projectSet(u).has(data.id);
+      case 'projects': return projectVisible(u, data);
       case 'tasks': return taskVisible(u, data);
-      case 'clients': return !hiddenClient(data) && (!isFreelancer(u) || clientSet(u).has(data.id));
+      case 'clients': return !hiddenClient(data) && clientVisible(u, data);
       case 'trash': return isAdm(u) || u.role === 'am';   // the Trash is for Admins and Account Managers
       case 'finance': return !!finLevel(u) || isAdm(u) || (data.type === 'reimb' && data.userId === u.id);    // expense records (people see their own reimbursements)
       // expense claims: your own, and Finance sees everything except drafts and "submitted offline"
@@ -178,11 +244,13 @@ export function createAccess(store) {
         if (!current) return manager;                               // a new client (Admins make them with a new client)
         if (admin) return true;
         if (isFreelancer(u)) return false;                          // freelancers only look at Client Assets
+        if (!clientVisible(u, current)) return false;
         return clientEditOk(u, manager, ch.base !== undefined && ch.base ? ch.base : current, current, next);
       }
       case 'projects':
         if (isFreelancer(u)) return !ch.del && !!current && projectSet(u).has(current.id) && next.id === current.id;
         if (ch.del || !current || admin) return admin;              // only Admins add or remove a client
+        if (!projectVisible(u, current)) return false;
         // and only Admins change one (name, colour, statuses, Client Assets link); others may switch List / Board
         return ['name', 'color', 'sections', 'clientId', 'ams', 'inactive'].every((k) => deepEqual(next[k] ?? null, (ch.base !== undefined && ch.base ? ch.base[k] : current[k]) ?? null) || deepEqual(next[k] ?? null, current[k] ?? null));
       case 'tasks': {
@@ -191,6 +259,8 @@ export function createAccess(store) {
         if (!manager && next && !deepEqual(next.finance ?? null, (was && was.finance) ?? null)) return false;
         if ((current && inInactive(current)) || (next && inInactive(next))) return false;   // an inactive client's tasks are frozen
         if (isFreelancer(u)) return (!current || taskVisible(u, current)) && (ch.del || taskVisible(u, next));
+        if (ownOnly(u) && current && !taskVisible(u, current)) return false;
+        if (ownOnly(u) && current && ownView(u).peek.has(String(current.id))) return commentOnly(u, ch.base || current, current, next);
         return true;
       }
       case 'trash': {
@@ -208,6 +278,25 @@ export function createAccess(store) {
       default:
         return true;
     }
+  }
+
+  // a view-only task: only comments change — your own added, edited or removed, and reactions on anyone's
+  function commentOnly(u, base, current, next) {
+    if (!next) return false;
+    const FREE = ['comments', 'activity', 'updatedAt'];
+    const keys = new Set([...Object.keys(next), ...Object.keys(current)]);
+    for (const k of keys) if (!FREE.includes(k) && !deepEqual(next[k] ?? null, base[k] ?? null) && !deepEqual(next[k] ?? null, current[k] ?? null)) return false;
+    const was = new Map((base.comments || []).map((c) => [c.id, c]));
+    const now = new Map((next.comments || []).map((c) => [c.id, c]));
+    const strip = (c) => { const { reactions, ...rest } = c; return rest; };
+    for (const [id, c] of was) {
+      if (c.authorId === u.id) continue;
+      const n = now.get(id);
+      if (!n) { if ((current.comments || []).some((x) => x.id === id)) return false; continue; }
+      if (!deepEqual(strip(n), strip(c))) return false;
+    }
+    for (const [id, n] of now) if (!was.has(id) && !(current.comments || []).some((x) => x.id === id) && n.authorId !== u.id) return false;
+    return true;
   }
 
   // A month's claims close on the 28th (Dubai time): after that it can't be submitted or changed by the person
@@ -231,5 +320,5 @@ export function createAccess(store) {
     return CLAIM_CONTENT.every((k) => deepEqual(next[k], current[k]));
   }
 
-  return { userByEmail, canSee, canWrite, shape, isFreelancer, isFinance, isAdm, finLevel, canReadFile, monthClosed };
+  return { userByEmail, canSee, canWrite, shape, ownOnly, ownView, addPeek, isFreelancer, isFinance, isAdm, finLevel, canReadFile, monthClosed };
 }

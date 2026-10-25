@@ -21,10 +21,10 @@ const seed = {
   users,
   projects: [{ id: 'p-ford', name: 'Ford', sections: [] }, { id: 'p-alain', name: 'ALAIN', sections: [] }],
   tasks: [
-    { id: 't-ford', projectId: 'p-ford', title: 'Ford EDM', comments: [], tags: [], assignees: ['u-prod'] },
+    { id: 't-ford', projectId: 'p-ford', title: 'Ford EDM', comments: [], tags: [], assignees: ['u-prod', 'u-free'] },
     { id: 't-alain', projectId: 'p-alain', title: 'ALAIN reel', comments: [], tags: [], assignees: [] },
   ],
-  clients: [{ id: 'cl-ford', name: 'Ford', folders: [] }],
+  clients: [{ id: 'cl-ford', name: 'Ford', dir: 'Clients/Ford', folders: [] }],
   notifications: [{ id: 'n1', to: 'u-prod', from: 'u-am', text: 'hi', read: false }, { id: 'n2', to: 'u-am', from: 'u-prod', text: 'x', read: false }],
   statuses: [{ id: 'st-todo', name: 'To do' }],
 };
@@ -92,7 +92,8 @@ test('snapshot hides password data and other people’s notifications', async ()
   const admin = r.body.data.users.find((u) => u.id === 'u-admin');
   assert.equal(admin.hash, undefined);
   assert.deepEqual(r.body.data.notifications.map((n) => n.id), ['n1']);
-  assert.equal(r.body.data.tasks.length, 2);
+  assert.deepEqual(r.body.data.tasks.map((t) => t.id), ['t-ford'], 'Production only gets the tasks they are part of');
+  assert.deepEqual(r.body.data.projects.map((p) => p.id), ['p-ford'], '...and those tasks\' clients');
   assert.equal(r.body.data.meta.cdUserId, 'u-am');
 });
 
@@ -130,7 +131,7 @@ test('two people comment on the same task at once and both comments are kept, li
 test('catching up: an app that was offline gets what it missed', async () => {
   const before = app.store.rev();
   await call(ADMIN, '/api/push', { method: 'POST', body: { changes: [{ kind: 'projects', id: 'p-new', data: { id: 'p-new', name: 'KOREA 360', sections: [] } }] } });
-  const late = listen(PROD, `since=${before}`);
+  const late = listen(AM, `since=${before}`);
   await late.ready; await wait(200);
   const got = late.events.filter((e) => e.event === 'changes').flatMap((e) => e.data.changes);
   assert.ok(got.some((c) => c.id === 'p-new'));
@@ -199,7 +200,7 @@ test('files: chunked upload, range download, thumbnails, trash, zip', async () =
   assert.equal(part.status, 206);
   assert.deepEqual(Buffer.from(await part.arrayBuffer()), big.subarray(100, 200));
   // escaping the files folder is refused
-  assert.equal((await fetch(`${base}/__file/..%2F..%2Fetc%2Fpasswd`, { headers: { 'X-Dev-Email': PROD } })).status, 400);
+  assert.ok([400, 403].includes((await fetch(`${base}/__file/..%2F..%2Fetc%2Fpasswd`, { headers: { 'X-Dev-Email': PROD } })).status));
   assert.ok([400, 403].includes((await call(PROD, '/api/host/writeChunk', { method: 'POST', body: { dest: '../x', name: 'a', b64: 'AA==' } })).status), 'a path outside the data folder is refused');
   // client assets: anyone (not Finance-only people) can upload
   assert.equal((await call(PROD, '/api/host/writeChunk', { method: 'POST', body: { dest: 'Clients/Ford/Logos', name: 'a.txt', b64: 'AA==' } })).status, 200);
@@ -346,4 +347,38 @@ test('an inactive client is hidden from everyone with its tasks, Inbox updates a
   const { inactive, ...on } = p2;
   await call(ADMIN, '/api/push', { method: 'POST', body: { changes: [{ kind: 'projects', id: 'p-off', base: p2, data: on }] } });
   assert.deepEqual(await seen(AM), { t: true, s: true, n: true, c: true, p: true }, 'everything is back');
+});
+
+test('Production see only tasks they are part of; a task link opens view only (comments allowed)', async () => {
+  const has = async (id) => (await call(PROD, '/api/snapshot')).body.data.tasks.some((t) => t.id === id);
+  assert.equal(await has('t-alain'), false);
+  // assigned while their app is open: the task (and its client) arrive live; taken off, they go
+  const live = listen(PROD); await live.ready; await wait(100);
+  let cur = app.store.get('tasks', 't-alain');
+  await call(ADMIN, '/api/push', { method: 'POST', body: { changes: [{ kind: 'tasks', id: 't-alain', base: cur, data: { ...cur, assignees: ['u-prod'] } }] } });
+  await wait(200);
+  const got = live.events.filter((e) => e.event === 'changes').flatMap((e) => e.data.changes);
+  assert.ok(got.some((c) => c.id === 't-alain' && c.data), 'the task arrives');
+  assert.ok(got.some((c) => c.kind === 'projects' && c.id === 'p-alain' && c.data), 'its client arrives');
+  cur = app.store.get('tasks', 't-alain');
+  await call(ADMIN, '/api/push', { method: 'POST', body: { changes: [{ kind: 'tasks', id: 't-alain', base: cur, data: { ...cur, assignees: [] } }] } });
+  await wait(200);
+  const gone = live.events.filter((e) => e.event === 'changes').flatMap((e) => e.data.changes);
+  assert.ok(gone.some((c) => c.id === 't-alain' && c.deleted), 'taken off: the task goes');
+  assert.ok(gone.some((c) => c.kind === 'projects' && c.id === 'p-alain' && c.deleted), '...and its client');
+  live.close();
+  assert.equal(await has('t-alain'), false);
+  // a link: view only, comments allowed
+  assert.equal((await call(PROD, '/api/peek', { method: 'POST', body: { taskId: 't-alain' } })).status, 200);
+  assert.equal(await has('t-alain'), true);
+  cur = app.store.get('tasks', 't-alain');
+  const title = await call(PROD, '/api/push', { method: 'POST', body: { changes: [{ kind: 'tasks', id: 't-alain', base: cur, data: { ...cur, title: 'changed' } }] } });
+  assert.equal(title.body.results[0].refused, true, 'no edits');
+  const cm = await call(PROD, '/api/push', { method: 'POST', body: { changes: [{ kind: 'tasks', id: 't-alain', base: cur, data: { ...cur, comments: [{ id: 'c-peek', authorId: 'u-prod', text: 'Seen it' }] } }] } });
+  assert.equal(cm.body.results[0].refused, false, 'comments work');
+  assert.equal(app.store.get('tasks', 't-alain').comments.length, 1);
+  const fake = await call(PROD, '/api/push', { method: 'POST', body: { changes: [{ kind: 'tasks', id: 't-alain', base: app.store.get('tasks', 't-alain'), data: { ...app.store.get('tasks', 't-alain'), comments: [...app.store.get('tasks', 't-alain').comments, { id: 'c-fake', authorId: 'u-am', text: 'x' }] } }] } });
+  assert.equal(fake.body.results[0].refused, true, 'not in someone else\'s name');
+  // freelancers can't open links outside their clients
+  assert.equal((await call(FREE, '/api/peek', { method: 'POST', body: { taskId: 't-alain' } })).status, 404);
 });

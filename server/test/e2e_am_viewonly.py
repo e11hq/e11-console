@@ -65,9 +65,31 @@ async def main():
               const others = (id) => db.tasks.filter(t => t.projectId === 'p-ford' && !part(t, id)).length;
               const prod = currentUserId, free = 'u-smp-free', soc = db.users.find(u => u.role === 'social' && u.active !== false).id;
               const p = run(prod), f = run(free), s = run(soc);
-              return { prodOwn: p.own && p.n > 0, prodHides: others(prod) > 0, freeOwn: f.own && f.n > 0, socAll: s.n > p.n || !s.own }; })()""")
-            ok.append(ps == {'prodOwn': True, 'prodHides': True, 'freeOwn': True, 'socAll': True})
+              const cl = (id) => as(id, () => db.projects.filter(x => !x.inactive).every(x => { const hit = taskSearch(x.name).projects.some(y => y.id === x.id); return hit === db.tasks.some(t => t.projectId === x.id && partOfTask(t, id, false)); }));
+              const freeCl = as(free, () => db.projects.filter(x => !x.inactive && taskSearch(x.name).projects.some(y => y.id === x.id)).map(x => x.id));
+              return { prodOwn: p.own && p.n > 0, prodHides: db.tasks.every(t => part(t, prod)), freeOwn: f.own && f.n > 0, socAll: s.n > p.n || !s.own, prodCl: cl(prod), freeCl: freeCl.join() }; })()""")
+            ca2 = await pp.evaluate("(() => { const me0 = currentUserId; const as = (id, f) => { currentUserId = id; try { return f(); } finally { currentUserId = me0; } }; const ok = (id) => as(id, () => (db.clients || []).every(c => { const linked = db.projects.filter(p => p.clientId === c.id); const want = !linked.length || linked.some(p => db.tasks.some(t => t.projectId === p.id && partOfTask(t, id, false))); return caVisible(c) === want; })); const soc = db.users.find(u => u.role === 'social' && u.active !== false).id; return { prod: ok(currentUserId), free: as('u-smp-free', () => clientsSorted().map(c => c.name).join()), soc: as(soc, () => clientsSorted().length) === (db.clients || []).length }; })()")
+            ok.append(ca2 == {'prod': True, 'free': 'Ford & Lincoln', 'soc': True})
+            if not ok[-1]: print('assets:', ca2)
+            ok.append(ps == {'prodOwn': True, 'prodHides': True, 'freeOwn': True, 'socAll': True, 'prodCl': True, 'freeCl': 'p-ford'})
             if not ok[-1]: print('search:', ps)
+            # Production: a task link to someone else's task opens view only, with comments; the sidebar lists only their clients
+            pv = await pp.evaluate("""(async () => {
+              const side = [...document.querySelectorAll('#project-list .nav-item')].length;
+              const mine = db.projects.filter(p => !p.inactive && db.tasks.some(t => t.projectId === p.id && partOfTask(t, currentUserId, false))).length;
+              const r = await fetch('/api/snapshot', { headers: { 'X-Dev-Email': 'haris@e11-digital.com' } }).then(r => r.json());
+              const other = r.data.tasks.find(t => !t.parentId && !t.done && !(t.assignees || []).includes(currentUserId) && t.createdBy !== currentUserId && t.guardian !== currentUserId && !String(t.notesHtml || '').includes(currentUserId) && !(t.comments || []).some(c => String(c.html || '').includes(currentUserId)) && !db.tasks.some(x => x.parentId === t.id && (x.assignees || []).includes(currentUserId)));
+              const before = !!task(other.id);
+              closeDetail(); await TaskLink.show(other.id); await new Promise(r => setTimeout(r, 700));
+              const pane = document.querySelector('#detail');
+              return { side: side === mine, before, open: ui.taskId === other.id, ro: pane.classList.contains('ro-task'), note: (pane.querySelector('.ro-note') || {}).textContent || '', id: other.id,
+                notInSide: ![...document.querySelectorAll('#project-list .nav-item')].some(e => e.dataset.id === other.projectId) || db.tasks.some(t => t.projectId === other.projectId && partOfTask(t, currentUserId, false)) };
+            })()""")
+            n1 = await pp.evaluate(f"task('{pv['id']}').comments.length")
+            await pp.locator('#d-comment').click(); await pp.keyboard.type('Seen it'); await pp.locator('[data-action="add-comment"]').click(); await pp.wait_for_timeout(1200)
+            n2 = await pp.evaluate(f"task('{pv['id']}').comments.length")
+            ok.append(pv['side'] and not pv['before'] and pv['open'] and pv['ro'] and 'not on this task' in pv['note'] and pv['notInSide'] and n2 == n1 + 1)
+            if not ok[-1]: print('peek:', pv, n1, n2)
             # Social: same date / checklist limits, but they can write the description
             soc = await pp.evaluate("(() => { const me0 = currentUserId; const s = db.users.find(u => u.role === 'social' && u.active !== false); const p = db.users.find(u => u.role === 'production' && u.active !== false); const as = (id, f) => { currentUserId = id; try { return f(); } finally { currentUserId = me0; } }; return { socDesc: as(s.id, () => can('editDesc', {})), socDates: as(s.id, () => can('editDates', {})), socCl: as(s.id, () => can('editChecklist', {})), socAdd: as(s.id, () => can('addChecklist', {})), prodAdd: as(p.id, () => can('addChecklist', {})), prodDesc: as(p.id, () => can('editDesc', {})) }; })()")
             ok.append(soc == {'socDesc': True, 'socDates': False, 'socCl': False, 'socAdd': True, 'prodAdd': False, 'prodDesc': False})

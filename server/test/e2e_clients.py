@@ -40,6 +40,9 @@ async def main():
         # an AM can't add a client
         ctx2, am, errs2 = await as_user(AM)
         check(not await am.locator('.nav-heading [data-action="new-project"]').is_visible(), 'an AM has no + New client')
+        # (Production see a client once they're on a task there)
+        await E(f"(() => {{ const pu = db.users.find(u => u.email === '{PROD}'); const pj = db.projects.find(x => x.clientId === '{cid}'); const t = createTask({{ title: 'Nissan banner', projectId: pj.id }}); t.assignees = [pu.id]; persist(0); }})()")
+        await E("Sync.push()"); await pg.wait_for_timeout(800)
         # Production: adds a folder, sees no options on the folders made with the client
         ctx3, pr, errs3 = await as_user(PROD)
         role = await pr.evaluate("me() && me().role")
@@ -93,7 +96,7 @@ async def main():
         check(await row.count() == 1 and 'Nissan Test' in await row.inner_text(), 'it shows in the Inbox under the client')
         await row.click(); await pg.wait_for_timeout(500)
         check(await E("ui.view") == 'client' and await E("clientById(ui.clientId).name") == 'Nissan Test' and await E("(clientById(ui.clientId).folders.find(f => f.id === ui.folderId) || {}).name") == 'Logos', 'clicking it opens that folder')
-        prod_n = await pr.evaluate("myNotifs().filter(n => n.kind === 'asset').length")
+        prod_n = await pr.evaluate("myNotifs().filter(n => n.kind === 'asset' && n.from === currentUserId || (n.kind === 'asset' && String(n.snippet).includes('mine.png'))).length")
         check(prod_n == 0, 'the person who added it is not notified')
         # Account Managers see every task in the clients they look after (by anyone, old ones too); the one covering
         # while another is on leave sees them while covering

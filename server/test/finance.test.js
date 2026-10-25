@@ -24,7 +24,7 @@ before(async () => {
       { id: 'u-socadm', email: 'aish@e11-digital.com', role: 'social', admin: true, active: true },
     ],
     projects: [{ id: 'p1', name: 'Ford' }],
-    tasks: [{ id: 't1', projectId: 'p1', title: 'EDM', finance: 'LPO Pending', notesHtml: 'secret brief', comments: [{ id: 'c1', text: 'hi' }], attachments: [], assignees: ['u-am'] }],
+    tasks: [{ id: 't1', projectId: 'p1', title: 'EDM', finance: 'LPO Pending', notesHtml: 'secret brief', comments: [{ id: 'c1', text: 'hi' }], attachments: [], assignees: ['u-am', 'u-prod', 'u-prodf'] }],
     finance: [{ id: 'f1', type: 'expense', name: 'Printer', amount: 500, date: '2026-10-02' }],
   }, 'test');
   for (const f of ['Finance/Expenses/inv.pdf', 'attachments/t1/a.txt']) {
