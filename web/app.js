@@ -1047,6 +1047,12 @@ function amScope(t, u = me()) {
   const p = root.projectId ? proj(root.projectId) : null;
   return !!p && (p.ams || []).some((a) => a.id === u.id && !a.onLeave);
 }
+// A task an Account Manager only looks at: in a client that isn't theirs and not created by them. They can read it,
+// open its files and comment; nothing else changes (status, dates, checklist, fields, CD review, files…).
+const amReadOnly = (t, u = me()) => !!t && !!u && u.role === 'am' && !isAdm(u) && !isCD(u.id) && !amScope(t, u);
+const RO_MSG = 'View only — this task is in a client you’re not Account Manager for';
+// The clients shown in an Account Manager's sidebar: the ones they look after (all of them until they're given one)
+const amSidebarOk = (p, u = me()) => !u || u.role !== 'am' || isAdm(u) || isCD(u.id) || !db.projects.some((x) => (x.ams || []).some((a) => a.id === u.id)) || (p.ams || []).some((a) => a.id === u.id && !a.onLeave);
 // The clients an AM may move a task into, or start one in
 const amClientOk = (p, u = me()) => amScope({ projectId: p.id, createdBy: null }, u);
 function denied() { toast('Your role doesn’t allow this — ask an Admin or Account Manager'); }
@@ -1653,6 +1659,7 @@ function removeTasks(ids) {
 }
 
 function setDone(t, done) {
+  if (amReadOnly(t)) { toast(RO_MSG); return; }
   if (!!t.done !== !!done) {
     logActivity(t, done ? 'completed this task' : 'reopened this task');
     notifyWatchers(t, 'done', done ? 'completed' : 'reopened');
@@ -2108,7 +2115,7 @@ function renderSidebar() {
   renderMeChip();
   if (typeof Phone !== 'undefined') Phone.chrome();
   $('.create-btn').style.display = can('createTask') ? '' : 'none';
-  const list = db.projects.filter((x) => !x.inactive).sort(byOrder);   // inactive clients leave the sidebar
+  const list = db.projects.filter((x) => !x.inactive && amSidebarOk(x)).sort(byOrder);   // inactive clients leave the sidebar; an AM sees their own
   $('#project-list').innerHTML = list.length ? list.map((p) => {
     const open = db.tasks.filter((t) => t.projectId === p.id && !t.parentId && !t.done).length;
     const active = !ui.search && ui.view === 'project' && ui.projectId === p.id;
@@ -3005,7 +3012,33 @@ function renderDetail() {
   else if (feed) stickFeedToBottom(feed);
   if (ui.focusDesc) { ui.focusDesc = false; setTimeout(() => { const d = $('#detail .desc-sec'); if (d) d.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 120); }
   hydrateThumbs(pane);
+  readOnlyDetail(pane, t);
 }
+const RO_OK = new Set(['close-detail', 'close-preview', 'close-thread', 'close-lightbox', 'side-tab', 'detail-mode', 'nav-back', 'nav-forward', 'nav-task', 'open-task',
+  'open-att', 'quicklook', 'copy-att', 'reveal-att', 'lightbox', 'tile-open', 'fileref-open', 'open-url', 'share-task', 'go-project', 'open-client', 'disp-toggle', 'fields-toggle', 'collapse',
+  'reply', 'react', 'react-menu', 'add-comment', 'attach-comment', 'comment-menu', 'open-thread', 'cancel-reply', 'mention-user', 'fmt', 'save-edit', 'cancel-edit', 'paste-clip', 'act-filter']);
+const inComments = (el) => !!(el.closest && el.closest('.tm-feed, .tm-composer, .cm, .composer:not(.desc)'));
+function readOnlyDetail(pane, t) {
+  const ro = amReadOnly(t);
+  pane.classList.toggle('ro-task', ro);
+  if (!ro) return;
+  $$('[contenteditable="true"]', pane).forEach((el) => { if (!inComments(el)) el.setAttribute('contenteditable', 'false'); });
+  $$('input, select, textarea', pane).forEach((el) => { if (!inComments(el)) el.disabled = true; });
+  const head = $('.tm-main', pane) || pane;
+  if (!$('.ro-note', pane)) head.insertAdjacentHTML('afterbegin', `<div class="ro-note">${icon('info')}<span>${RO_MSG}. You can read it, open its files and comment.</span></div>`);
+}
+// (belt and braces: clicks and edits on a view-only task page are stopped before they reach anything)
+['click', 'mousedown', 'change', 'beforeinput', 'paste', 'drop'].forEach((type) => document.addEventListener(type, (e) => {
+  const pane = e.target.closest && e.target.closest('#detail.ro-task');
+  if (!pane || inComments(e.target)) return;
+  const a = e.target.closest('[data-action]');
+  if (type === 'click' || type === 'mousedown') {
+    if (!a || RO_OK.has(a.dataset.action)) return;
+  }
+  if ((type === 'click' || type === 'mousedown') && !a) return;
+  e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+  if (type === 'click') toast(RO_MSG);
+}, true));
 
 // Keep the activity feed scrolled to the newest item while images/videos finish loading,
 // until the user scrolls up themselves.
@@ -5668,6 +5701,7 @@ function choiceDialog({ title, body = '', choices }) {
 // Every status change from the interface goes through here (status menu, ▶ next, drag and drop)
 async function changeStatus(t, sectionId, targetId = null, after = false) {
   if (!t) return false;
+  if (amReadOnly(t)) { toast(RO_MSG); return false; }
   if (t.sectionId !== sectionId && statusLocked(t)) { toast(LOCK_MSG); return false; }
   const list = statusList(t);
   const from = list.findIndex((x) => x.id === t.sectionId), to = list.findIndex((x) => x.id === sectionId);

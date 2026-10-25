@@ -45,3 +45,7 @@
 .cl-ca:hover { color: var(--text); text-decoration: underline; }
 .nav-clogo { flex: none; display: flex; width: 16px; height: 16px; }
 .nav-clogo .cl-logo { border-radius: 4px; }
+/* A task an Account Manager only looks at (another AM's client) */
+.ro-note { display: flex; align-items: center; gap: 8px; margin: 10px 16px 0; padding: 8px 12px; border-radius: 9px; background: color-mix(in srgb, #f2a33a 14%, transparent); border: 1px solid color-mix(in srgb, #f2a33a 40%, transparent); color: var(--text); font-size: 13px; }
+.ro-note .ic { width: 15px; height: 15px; color: #f2a33a; flex: none; }
+#detail.ro-task :is(.date-chip, .fl-row, .prop .pv, .cl-item, .tag-add, .assignees, .status-btn) { cursor: default; }

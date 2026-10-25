@@ -251,7 +251,7 @@ const Phone = (() => {
   }
 
   function projects() {
-    const list = db.projects.filter((p) => !p.inactive).sort(byOrder);   // active clients
+    const list = db.projects.filter((p) => !p.inactive && amSidebarOk(p)).sort(byOrder);   // active clients (an AM: their own)
     return `<div class="ph-page">
       ${head('Clients', plural(list.length, 'client'))}
       <div class="ph-list">${list.map((p) => {
