@@ -148,7 +148,7 @@ export function createAccess(store) {
         if (ch.del) return admin;                                   // only Admins delete a client's main folder
         if (!current) return manager;                               // a new client (Admins make them with a new client)
         if (admin) return true;
-        if (isFreelancer(u) && !clientSet(u).has(current.id)) return false;
+        if (isFreelancer(u)) return false;                          // freelancers only look at Client Assets
         return clientEditOk(u, manager, ch.base !== undefined && ch.base ? ch.base : current, current, next);
       }
       case 'projects':

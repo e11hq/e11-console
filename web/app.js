@@ -4939,11 +4939,11 @@ const isFont = (a) => FONT_EXT.includes(fileExt(a.name));
 const canAssets = () => { const u = me(); return !!u && (isAdm(u) || u.role === 'am'); };
 // Client Assets: anyone adds folders and files; people remove (or rename) only the folders and files they added,
 // Account Managers anyone's; the folders made with the client stay unless an Admin removes them (the server checks the same)
-const canAddAssets = () => { const u = me(); return !!u && !isFinUser(u); };
+const canAddAssets = () => { const u = me(); return !!u && !isFinUser(u) && u.role !== 'freelancer'; };   // freelancers only look
 const isAutoFolder = (c, f) => !!f.auto || (DEFAULT_FOLDERS.includes(f.name) && (!f.createdBy || f.createdBy === c.createdBy) && Math.abs(Date.parse(f.createdAt || 0) - Date.parse(c.createdAt || 0)) < 60000);
 // (Account Managers remove anyone's files and added folders)
-const canDelAsset = (a) => canAssets() || (!!a && a.addedBy === currentUserId);
-const canEditFolder = (c, f) => isAdmin() || (!isAutoFolder(c, f) && (canAssets() || f.createdBy === currentUserId));
+const canDelAsset = (a) => canAddAssets() && (canAssets() || (!!a && a.addedBy === currentUserId));
+const canEditFolder = (c, f) => isAdmin() || (canAddAssets() && !isAutoFolder(c, f) && (canAssets() || f.createdBy === currentUserId));
 const canDelFolder = (c, f) => canEditFolder(c, f) && (canAssets() || f.files.every((a) => a.addedBy === currentUserId));
 const isAdmin = () => !!isAdm(me());
 const clientById = (id) => (db.clients || []).find((c) => c.id === id) || null;
@@ -5165,7 +5165,7 @@ function viewClientFolder(c, f) {
     </div>
     <div class="ca-uploads" id="ca-uploads"></div>
     ${f.files.length ? `<div class="tile-grid ca-files">${f.files.slice().sort((a, b) => a.name.localeCompare(b.name)).map((a) => caTile(f, a)).join('')}</div>`
-      : `<div class="ca-empty ${canAddAssets() ? 'drop' : ''}">${icon(canAddAssets() ? 'upload' : 'folder')}<b>${canAddAssets() ? 'Drag files here or click Upload files' : 'Nothing in this folder yet'}</b><span>${canAddAssets() ? 'Logos, guideline PDFs, fonts, templates — any file type.' : 'An Admin or Account Manager can add files.'}</span></div>`}
+      : `<div class="ca-empty ${canAddAssets() ? 'drop' : ''}">${icon(canAddAssets() ? 'upload' : 'folder')}<b>${canAddAssets() ? 'Drag files here or click Upload files' : 'Nothing in this folder yet'}</b><span>${canAddAssets() ? 'Logos, guideline PDFs, fonts, templates — any file type.' : 'The E11 team adds files here.'}</span></div>`}
     ${canAddAssets() ? `<div class="ca-dropscrim">${icon('upload')}<b>Drop to upload to ${esc(f.name)}</b></div>` : ''}
   </div>`;
 }

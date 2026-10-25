@@ -140,3 +140,20 @@ test('raw upload pieces land at their own place: any order, sent twice is never 
   assert.equal((await raw(FREE, { taskId: 't-alain', name: 'x.bin' }, a)).status, 403); // a task they can't see
   assert.equal((await raw(AM, { path: p, offset: -1 }, a)).status, 400);
 });
+
+test('Freelancers only look at Client Assets: no folders, uploads or deletes; their task work is unchanged', async () => {
+  const push = (data) => call(FREE, '/api/push', { changes: [{ kind: 'clients', id: 'cl-ford', data, base: { id: 'cl-ford', name: 'Ford', dir: 'Clients/Ford', folders: [] } }] });
+  const r = await push({ id: 'cl-ford', name: 'Ford', dir: 'Clients/Ford', folders: [{ id: 'f-x', name: 'Mine', dir: 'Clients/Ford/Mine', files: [], createdBy: 'u-free' }] });
+  assert.equal(r.body.results[0].refused, true, 'no new folder');
+  assert.equal((await call(FREE, '/api/host/writeChunk', { dest: 'Clients/Ford/Logos', name: 'x.txt', b64: 'AA==' })).status, 403, 'no upload');
+  assert.equal((await call(FREE, '/api/host/makeDir', { path: 'Clients/Ford/New' })).status, 403, 'no folder on disk');
+  assert.equal((await call(FREE, '/api/host/trashMany', { paths: ['Clients/Ford/Gone.txt'] })).status, 403, 'no deleting');
+  // they still see their client's assets, and attach files to their task
+  assert.equal((await fetch(`${base}/__file/Clients/Ford/Logos/f.txt`, { headers: { 'X-Dev-Email': FREE } })).status, 200);
+  const att = await call(FREE, '/api/host/writeChunk', { taskId: 't-ford', name: 'mine.txt', b64: 'AA==' });
+  assert.equal(att.status, 200, 'attaching to their task still works');
+  // and they download their client's assets (another client's files are left out)
+  const dl = await call(FREE, '/api/host/exportFiles', { folder: 'Ford - Logos', paths: ['Clients/Ford/Logos/f.txt', 'Clients/ALAIN/Logos/a.txt'] });
+  assert.equal(dl.status, 200);
+  assert.equal(dl.body.count, 1, 'downloads their client’s file only');
+});

@@ -63,6 +63,8 @@ async def main():
         await E("(() => { const p = db.projects.find(x => x.name === 'Nissan Test'); db.projects = db.projects.filter(x => x.id !== p.id); persist(0); })()")
         await E("Sync.push()"); await pg.wait_for_timeout(600)
         check(await E(f"!!clientById('{cid}')"), 'deleting the client keeps its Client Assets folder')
+        fr = await E(f"(() => {{ const u = me(); const r = u.role, a = u.admin; u.role = 'freelancer'; u.admin = false; const c = clientById('{cid}'); const v = [canAddAssets(), canDelAsset({{ addedBy: u.id }}), c.folders.some(f => canEditFolder(c, f))]; u.role = r; u.admin = a; return v; }})()")
+        check(fr == [False, False, False], f'freelancers only look: no adding, deleting or folder options {fr}')
         check(not errs2 and not errs3, f'no page errors {errs2} {errs3}')
         await b.close()
     srv.kill()
