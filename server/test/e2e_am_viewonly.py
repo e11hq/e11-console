@@ -10,7 +10,7 @@ async def main():
             try: urllib.request.urlopen(BASE+'/api/health'); break
             except Exception: time.sleep(0.1)
         urllib.request.urlopen(urllib.request.Request(BASE+'/api/me',headers={'X-Dev-Email':ADMIN}))
-        print(urllib.request.urlopen(urllib.request.Request(BASE+'/api/sample/reset',method='POST',data=b'{}',headers={'X-Dev-Email':ADMIN,'Content-Type':'application/json'})).read()
+        urllib.request.urlopen(urllib.request.Request(BASE+'/api/sample/reset',method='POST',data=b'{}',headers={'X-Dev-Email':ADMIN,'Content-Type':'application/json'})).read()
         async with async_playwright() as pw:
             b=await pw.chromium.launch(executable_path='/opt/pw-browsers/chromium-1194/chrome-linux/chrome')
             ctx=await b.new_context(viewport={'width':1440,'height':900},base_url=BASE)
