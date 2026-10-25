@@ -885,7 +885,7 @@ const ServerHost = (() => {
         const files = await pickFiles({ multiple: false, accept: args.kind === 'logo' ? 'image/*,.svg' : 'image/*' });
         if (!files.length) return { ok: true, path: null };
         const up = await uploadFile(args.kind === 'logo' ? await logoFile(files[0]) : files[0], { taskId: '_uploads' });
-        return api('POST', '/api/host/processImage', { path: up.path, kind: args.kind || 'avatar', userId: args.userId });
+        return { ...(await api('POST', '/api/host/processImage', { path: up.path, kind: args.kind || 'avatar', userId: args.userId })), original: files[0] };
       }
       case 'openPath': case 'quickLook': window.open(fileHref(args.path), '_blank', 'noopener'); return { ok: true };
       case 'revealPath': download(fileHref(args.path), String(args.path).split('/').pop()); return { ok: true };
@@ -917,7 +917,7 @@ const ServerHost = (() => {
         const files = await pickMacFiles({ multiple: false, images: true, prompt: args.kind === 'logo' ? 'Use logo' : 'Use photo' });
         if (!files.length) return { ok: true, path: null };
         const up = await uploadFile(args.kind === 'logo' ? await logoFile(files[0]) : files[0], { taskId: '_uploads' });
-        return api('POST', '/api/host/processImage', { path: up.path, kind: args.kind || 'avatar', userId: args.userId });
+        return { ...(await api('POST', '/api/host/processImage', { path: up.path, kind: args.kind || 'avatar', userId: args.userId })), original: files[0] };
       }
       case 'openPath': case 'quickLook': await saveOnMac(fileHref(args.path), fileHrefName(args.path), true); return { ok: true };
       case 'revealPath': await saveOnMac(fileHref(args.path), fileHrefName(args.path), false); toast(`Saved to Downloads`); return { ok: true };
@@ -5192,7 +5192,7 @@ function viewClientFolder(c, f) {
 /* ---- Actions ---- */
 function addClientDialog() {
   if (!canAssets()) return denied();
-  let logo = null;
+  let logo = null, logoOriginal = null;
   const root = $('#overlay-root');
   root.innerHTML = `<div class="scrim"><form class="dialog form-dlg ac-dlg" autocomplete="off">
     <h2>Add client</h2>
@@ -5218,7 +5218,7 @@ function addClientDialog() {
       const r = await Host.call('pickImage', { kind: 'logo', userId: 'client-sq' });
       if (!r.path) return;
       if (logo) safeTrash([logo]);
-      logo = r.path;
+      logo = r.path; logoOriginal = r.original || null;
       $('#ac-logo', root).innerHTML = `<img src="${'/__file/' + logo.split('/').map(encodeURIComponent).join('/')}" alt=""><span class="ac-change">Change</span>`;
       $('#ac-logo', root).classList.add('has');
     } catch (e) { toast('Could not use that logo: ' + e.message); }
@@ -5231,6 +5231,7 @@ function addClientDialog() {
     if (d) { err.textContent = dupMsg(d); inp.classList.add('bad'); return; }
     const c = createClient(name, logo);
     logo = null;
+    if (logoOriginal) setTimeout(() => saveLogoOriginal(c, logoOriginal), 300);
     close();
     persist(0);
     openClient(c.id);
@@ -5246,6 +5247,28 @@ async function renameClient(c) {
   if (!v) return;
   c.name = v.name.replace(/\s+/g, ' '); persist(0); render();
 }
+// A logo chosen with Add / Change logo also goes into the client's Logos folder, as the original file; a file of the
+// same name there is replaced
+async function saveLogoOriginal(c, file) {
+  if (!c || !file || !Host.isServer) return;
+  const f = c.folders.find((x) => x.name === 'Logos' && isAutoFolder(c, x)) || c.folders.find((x) => x.name === 'Logos');
+  if (!f) return;
+  const same = f.files.filter((a) => a.name.toLowerCase() === file.name.toLowerCase());
+  if (same.length) {
+    f.files = f.files.filter((a) => !same.includes(a));
+    persist(0);
+    try { await Sync.push(); } catch (e) { /* offline */ }
+    const paths = safeTrash(same.flatMap((a) => [a.path, '.thumbs/' + a.id]));   // (kept on disk if pasted into a task)
+    if (paths.length) await new Promise((r) => setTimeout(r, 400));                 // let the name free up
+  }
+  try {
+    const up = await ServerHost.uploadMany([file], { dest: f.dir });
+    if (!up.length) return;
+    f.files.push(...up.map((x) => ({ ...x, name: file.name, addedAt: nowISO(), addedBy: currentUserId })));
+    assetNotify(c, f, same.length ? 'replaced' : 'added', [file.name]);
+    persist(0); render();
+  } catch (e) { toast('The logo is set, but it could not be added to Logos: ' + e.message); }
+}
 async function changeClientLogo(c) {
   if (!Host.isNative) { toast('Logos can be added in the Mac app'); return; }
   try {
@@ -5253,6 +5276,7 @@ async function changeClientLogo(c) {
     if (!r.path) return;
     const old = c.logo; c.logo = r.path; delete c.logoAuto; persist(0); render(); renderSidebar();   // a chosen logo always wins
     if (old) safeTrash([old]);
+    saveLogoOriginal(c, r.original);
   } catch (e) { toast('Could not use that logo: ' + e.message); }
 }
 async function deleteClient(c) {
@@ -5320,7 +5344,7 @@ function assetNotify(c, f, verb, names) {
   projs.forEach((p) => (p.ams || []).forEach((a) => to.add(a.id)));
   db.users.forEach((u) => { if (isAdm(u)) to.add(u.id); });
   const n = names.length;
-  const text = `${verb} ${n === 1 ? 'a file' : n + ' files'} ${verb === 'added' ? 'to' : 'from'} ${c.name} › ${f.name}`;
+  const text = `${verb} ${n === 1 ? 'a file' : n + ' files'} ${verb === 'added' ? 'to' : verb === 'replaced' ? 'in' : 'from'} ${c.name} › ${f.name}`;
   const snippet = names.slice(0, 4).join(', ') + (n > 4 ? ` +${n - 4} more` : '');
   to.forEach((id) => {
     const u = userById(id);

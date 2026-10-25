@@ -77,6 +77,13 @@ async def main():
         await pr.evaluate("""(async () => { const c = document.createElement('canvas'); c.width = 50; c.height = 50; const b = await new Promise((r) => c.toBlob(r, 'image/png')); await uploadIntoFolder([new File([b], 'other.png', { type: 'image/png' })]); })()""")
         await pr.wait_for_timeout(2500)
         check(await E(f"clientById('{cid}').logo") == 'Clients/_logos/manual.png', "the Admin's logo stays")
+        # a logo the Admin chooses also goes into Logos; the same file name again replaces it
+        mk = """async (w) => { const c = document.createElement('canvas'); c.width = w; c.height = 40; c.getContext('2d').fillRect(0, 0, w, 40); const b = await new Promise((r) => c.toBlob(r, 'image/png')); return new File([b], 'Brand Logo.png', { type: 'image/png' }); }"""
+        await E(f"(async () => {{ const mk = {mk}; await saveLogoOriginal(clientById('{cid}'), await mk(100)); }})()"); await pg.wait_for_timeout(800)
+        first = await E(f"clientById('{cid}').folders.find(f => f.name === 'Logos').files.filter(a => a.name === 'Brand Logo.png').map(a => [a.id, a.size])")
+        await E(f"(async () => {{ const mk = {mk}; await saveLogoOriginal(clientById('{cid}'), await mk(400)); }})()"); await pg.wait_for_timeout(800)
+        second = await E(f"clientById('{cid}').folders.find(f => f.name === 'Logos').files.filter(a => a.name === 'Brand Logo.png').map(a => [a.id, a.size])")
+        check(len(first) == 1 and len(second) == 1 and first[0][0] != second[0][0] and first[0][1] != second[0][1], f'the chosen logo lands in Logos and replaces one of the same name {first} → {second}')
         # the Admin and the client's Account Manager get an Inbox update about the file
         await pg.wait_for_timeout(1200)
         n = await E(f"myNotifs().filter(n => n.kind === 'asset' && n.clientId === '{cid}').map(n => n.text + ' · ' + n.snippet)")
