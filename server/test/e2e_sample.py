@@ -1,4 +1,4 @@
-"""Test copy: Admin fills it with sample data from the phone Me page. Run: python3 server/test/e2e_sample.py"""
+"""Test copy: the owner starts fresh with sample data from the phone Me page. Run: python3 server/test/e2e_sample.py"""
 import asyncio, json, os, subprocess, tempfile, time, urllib.request
 from playwright.async_api import async_playwright
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -28,7 +28,8 @@ async def main():
             check(await pg.evaluate("db.tasks.length") == 0, 'test copy starts empty')
             await pg.locator('#ph-tabs [data-ph-tab="me"]').click(); await pg.wait_for_timeout(300)
             await pg.locator('[data-ph="sample"]').click(); await pg.wait_for_timeout(300)
-            await pg.locator('.dialog [data-r="1"]').click(); await pg.wait_for_timeout(2000)
+            await pg.locator('.dialog [data-r="1"]').click(); await pg.wait_for_timeout(6000)   # (Start fresh reloads the app)
+            await pg.keyboard.press('Shift'); await pg.wait_for_timeout(1500); await pg.evaluate("closeDetail()")
             n = await pg.evaluate("db.tasks.length"); people = await pg.evaluate("db.users.length")
             replies = await pg.evaluate("db.tasks.reduce((n,t)=>n+t.comments.filter(c=>c.parentId).length,0)")
             check(n >= 15 and people >= 10 and replies >= 10, f'sample data arrived live: {n} tasks, {people} people, {replies} replies')
@@ -46,7 +47,8 @@ async def main():
             await pg.evaluate("()=>closeDetail()"); await pg.wait_for_timeout(200)
             # Inbox → a mention → back: the list must start below the header, not behind it
             await pg.locator('#ph-tabs [data-ph-tab="inbox"]').click(); await pg.wait_for_timeout(300)
-            await pg.locator('.ph-ib').first.click(); await pg.wait_for_timeout(900)
+            nid = await pg.evaluate("(() => { const r = [...document.querySelectorAll('.ph-ib')].find((el) => { const n = db.notifications.find((x) => x.id === el.dataset.id); return n && n.taskId && db.tasks.some((t) => t.id === n.taskId); }); return r && r.dataset.id; })()")
+            await pg.locator(f'.ph-ib[data-id="{nid}"]').click(); await pg.wait_for_timeout(900)
             check(await pg.evaluate("!!ui.taskId"), 'tapping an Inbox mention opens the task')
             flashes = await pg.evaluate("document.querySelectorAll('#detail .flash').length")
             await pg.screenshot(path=os.path.join(SHOTS, 's3-flash.png'))
