@@ -24,7 +24,7 @@ export function createServer(cfg) {
   const dataDir = cfg.dataDir;
   const store = cfg.store || openStore(cfg.dbFile || path.join(dataDir, 'db', 'e11.sqlite'));
   const auth = cfg.auth || createAuth({ team: cfg.cfTeam, aud: cfg.cfAud, dev: !!cfg.dev });
-  const access = createAccess(store);
+  const access = createAccess(store, { ownerEmail: cfg.adminEmail });
   const files = createFiles(dataDir);
   const version = cfg.version || '0.0.0-dev';
   const webDir = cfg.webDir || null;
@@ -141,7 +141,37 @@ export function createServer(cfg) {
     req.realUser = u;
     const as = viewAsTarget(u);
     if (as) { req.viewingAs = as; return as; }
+    // Live site only: the owner stepped in with Owner view on this device (Admin rights on top, nothing stored)
+    const ov = ownerViewOf(req, u);
+    if (ov) { req.ownerView = ov.mode; return { ...u, admin: true, _ov: ov.mode }; }
     return u;
+  }
+  /* "Owner view" — LIVE SITE ONLY (never on the test copy; keep it in future updates). The owner (ADMIN_EMAIL) may use
+     the app day to day with another role (e.g. Production) and quietly step in with Admin rights from the bottom of
+     My profile. Nothing is stored or announced: their role stays as it is for everyone; the rights live in a cookie
+     on that one device, for that browser session only, and lapse after 15 minutes without use. It starts "look only"
+     (the server refuses every change) until they choose "Allow changes". The app also switches it off on every
+     reload. Changes made with changes allowed show under their name like any other. */
+  const OV_IDLE = 15 * 60000;
+  const ownerViews = new Map();                 // cookie token -> { userId, mode: 'look' | 'edit', until }
+  const ownerViewOk = (u) => !isTestSite && !!cfg.adminEmail && !!u && isOwner(u);
+  const cookieOf = (req, name) => { const m = String(req.headers.cookie || '').match(new RegExp('(?:^|;\\s*)' + name + '=([^;]+)')); return m ? decodeURIComponent(m[1]) : null; };
+  function ownerViewOf(req, u) {
+    if (!ownerViewOk(u)) return null;
+    const tok = cookieOf(req, 'e11_ov');
+    const v = tok && ownerViews.get(tok);
+    if (!v) return null;
+    if (v.userId !== u.id || v.until < Date.now()) { ownerViews.delete(tok); return null; }
+    v.until = Date.now() + OV_IDLE;
+    req.ownerViewToken = tok;
+    return v;
+  }
+  const ovCookie = (req, tok) => `e11_ov=${tok ? encodeURIComponent(tok) : ''}; Path=/; HttpOnly; SameSite=Lax${/https/.test(String(req.headers['x-forwarded-proto'] || '')) || req.socket.encrypted ? '; Secure' : ''}${tok ? '' : '; Max-Age=0'}`;
+  // what a stream sends: the person as stored, with Owner view on top while it lasts
+  function streamUser(s) {
+    const u = store.get('users', s.userId) || s.user;
+    const v = s.ovToken && ownerViews.get(s.ovToken);
+    return v && v.userId === u.id && v.until >= Date.now() && ownerViewOk(u) ? { ...u, admin: true, _ov: v.mode } : u;
   }
   /* "View as" — a testing aid on the TEST copy only (never on the live site): the owner (ADMIN_EMAIL) picks a team
      member and, until they switch back, the server treats every request of theirs as that person — what they see,
@@ -176,7 +206,7 @@ export function createServer(cfg) {
     const changed = results.filter((r) => !r.refused && !r.unchanged);
     if (!changed.length) return;
     for (const s of streams) {
-      const u = store.get('users', s.userId) || s.user;
+      const u = streamUser(s);
       // What someone can see changed (a freelancer's clients, which Client Assets a client uses, or a client switched
       // on / off): reload their data
       if (changed.some((r) => (r.kind === 'users' && r.id === u.id) || r.kind === 'projects' || r.kind === 'meta')) {
@@ -260,7 +290,44 @@ export function createServer(cfg) {
     const u = await who(req, res);
     if (!u) return;
 
+    // Owner view, look only: nothing changes (reading, files, previews and this device's notifications still work)
+    if (req.ownerView === 'look' && req.method !== 'GET' && req.method !== 'HEAD') {
+      const okPath = ['/api/owner-view', '/api/peek', '/api/push/subscribe', '/api/push/unsubscribe', '/api/push/status'].includes(p)
+        || (p.startsWith('/api/host/') && ['docPreview', 'pdfPages', 'thumb', 'exportFiles'].includes(p.slice('/api/host/'.length)));
+      if (p === '/api/push') {
+        const body = await readBody(req);
+        const results = (Array.isArray(body.changes) ? body.changes : []).filter(Boolean).map((ch) => {
+          const cur = store.get(ch.kind, String(ch.id));
+          return cur ? { kind: ch.kind, id: ch.id, data: access.shape(u, ch.kind, cur), rev: store.rev(), refused: true } : { kind: ch.kind, id: ch.id, deleted: true, rev: store.rev(), refused: true };
+        });
+        return json(res, 200, { ok: true, rev: store.rev(), results, lookOnly: true });
+      }
+      if (!okPath) return json(res, 403, { ok: false, error: 'Owner view is look only — choose Allow changes first', lookOnly: true });
+    }
+
+    // Owner view (live site, owner only): { mode: 'look' | 'edit' | 'off' }
+    if (p === '/api/owner-view' && req.method === 'POST') {
+      if (isTestSite) return json(res, 404, { ok: false, error: 'Not available on the test site' });
+      if (!ownerViewOk(req.realUser || u)) return json(res, 403, { ok: false, error: 'Only the owner can do this' });
+      const body = await readBody(req);
+      const mode = ['look', 'edit'].includes(body && body.mode) ? body.mode : 'off';
+      const me0 = req.realUser || u;
+      let tok = cookieOf(req, 'e11_ov');
+      if (tok) { const v = ownerViews.get(tok); if (!v || v.userId !== me0.id) tok = null; }
+      if (mode === 'off') { if (tok) ownerViews.delete(tok); tok = null; }
+      else {
+        if (!tok) tok = crypto.randomBytes(24).toString('base64url');
+        ownerViews.set(tok, { userId: me0.id, mode, until: Date.now() + OV_IDLE });
+      }
+      const out = JSON.stringify({ ok: true, mode: tok ? mode : null, idleMinutes: OV_IDLE / 60000 });
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Set-Cookie': ovCookie(req, tok), 'Content-Length': Buffer.byteLength(out) });
+      return res.end(out);
+    }
+
     if (p === '/api/me') return json(res, 200, { ok: true, user: access.shape(u, 'users', u), owner: isOwner(u), appIcon: appIcon.info(), macShell, version, rev: store.rev(),
+      ownerView: req.ownerView || null, canOwnerView: ownerViewOk(req.realUser || u),
+      // (Admins: whose account only its owner may change, so the Team page shows it locked)
+      ownerId: access.isAdm(u) && cfg.adminEmail ? (access.userByEmail(cfg.adminEmail) || {}).id || null : null,
       viewAs: isTestSite && isOwner(req.realUser) ? { real: { id: req.realUser.id, name: req.realUser.name || req.realUser.email }, as: req.viewingAs ? { id: u.id, name: u.name || u.email, role: u.role } : null } : null });
 
     // Test site, owner only: choose whom to view the app as (userId), or null to be yourself again
@@ -421,7 +488,7 @@ export function createServer(cfg) {
     if (p === '/api/events' && req.method === 'GET') {
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
       res.write('retry: 3000\n\n');
-      const s = { res, userId: u.id, user: u, client: url.searchParams.get('client') || null };
+      const s = { res, userId: u.id, user: u, client: url.searchParams.get('client') || null, ovToken: req.ownerViewToken || null };
       s.lastAccess = accessKey(u);
       s.lastView = access.ownOnly(u) ? viewIds(u) : null;
       streams.add(s);

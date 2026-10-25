@@ -1872,9 +1872,13 @@ const Sync = (() => {
   }
 
   async function start() {
-    const me = await api('GET', '/api/me');
+    let me = await api('GET', '/api/me');
+    // Owner view (live site) ends on every reload: back to the owner's own role before loading anything
+    if (me.ownerView) { try { await api('POST', '/api/owner-view', { mode: 'off' }); } catch (e) { /* fine */ } me = await api('GET', '/api/me'); }
     if (typeof ViewAs !== 'undefined') ViewAs.init(me.viewAs);   // test site only: the owner using the app as someone else
     AppIcon.setOwner(me.owner); if (me.appIcon) AppIcon.sync(me.appIcon);
+    ownerId = me.ownerId || null;
+    if (typeof OwnerView !== 'undefined') OwnerView.init(me);
     MacUpdate.check(me.macShell);
     MacChrome.init();
     const snap = await api('GET', '/api/snapshot');
@@ -1908,6 +1912,12 @@ const Sync = (() => {
     if (pushing) { again = true; return; }
     const list = changes();
     if (!list.length) { if (online) setSaveState('saved'); else paintOffline(); return; }
+    // Owner view, look only: nothing is saved — put back what was changed
+    if (typeof OwnerView !== 'undefined' && OwnerView.lookOnly()) {
+      list.forEach((c) => setLocal(c.kind, c.id, c.base === undefined ? null : c.base));
+      OwnerView.blocked(); refresh(); setSaveState('saved');
+      return;
+    }
     pushing = true;
     if (online) setSaveState('saving'); else paintOffline();
     try {
@@ -2050,7 +2060,7 @@ const Sync = (() => {
     if (e.expired) { location.reload(); return; }
     document.body.innerHTML = `<div class="fatal" style="margin:20vh auto;max-width:420px;text-align:center"><h2>${esc(e.status === 403 ? 'No access' : 'Signed out')}</h2><p>${esc(e.message)}</p><button class="btn primary" onclick="location.reload()">Sign in again</button></div>`;
   }
-  return { start, push, resync, savePrefs, get online() { return online; }, get version() { return version; }, clientId };
+  return { start, push, resync, reconnect, savePrefs, get online() { return online; }, get version() { return version; }, clientId };
 })();
 
 /* ================= Persistence ================= */
@@ -6557,16 +6567,37 @@ function projectAccessDialog(u) {
   });
 }
 
+let ownerId = null;   // the app's owner (Admins are told, so their Team page shows that account locked)
 function memberMenu(anchor, id) {
   const u = userById(id);
   if (!u) return;
+  // The owner's account: only the owner changes its role, rights or access (the server refuses anyone else)
+  if (u.id === ownerId && u.id !== currentUserId) {
+    const lock = (l, ic) => ({ html: `<div class="mi disabled" aria-disabled="true">${icon(ic)}${esc(l)}</div>` });
+    showMenu(anchor, [{ html: `<div class="menu-label">${icon('lock')} Only the owner can change this account</div>` }, lock('Change role', 'users'), lock('Admin rights', 'shield'), lock('Finance access', 'coin'), lock('Remove from team', 'trash')]);
+    return;
+  }
   // Your own row: only the extras (Finance access) — you can't change your own role or remove yourself
   if (u.id === currentUserId) {
-    const own = [{ html: '<div class="menu-label">Your Finance access</div>' }];
+    const own = [];
+    // the owner (and only the owner) may change their own role — e.g. work as Production while another Admin runs things;
+    // they step back in with Owner view (live site) — as long as someone else is an Admin
+    if (AppIcon.isOwner() && isAdm(u)) {
+      own.push({ html: '<div class="menu-label">Your role (owner)</div>' });
+      Object.entries(ROLES).forEach(([k, l]) => own.push({ html: `<div class="mi ${u.role === k ? 'cur' : ''}"><span class="role-pill r-${k}">${esc(l)}</span></div>`, run: async () => {
+        if (u.role === k) return;
+        const others = db.users.filter((x) => x.id !== u.id && isAdm(x) && x.active !== false);
+        if (k !== 'admin' && !others.length) return toast('Make someone else an Admin first');
+        if (k !== 'admin' && !(await dialog({ title: `Work as ${l}?`, body: `You’ll use the app as ${l}${u.admin ? ' — Admin rights stay switched on until you take them off' : ''}. As the owner, nobody else can change your role or access${Host.isServer && !isTestCopy() ? ', and you can step back in from Owner view at the bottom of My profile' : ''}.`, okText: `Work as ${l}` }))) return;
+        u.role = k; persist(0); renderContent(); renderSidebar(); toast(`You now work as ${l}`);
+      } }));
+      own.push('-');
+    }
+    own.push({ html: '<div class="menu-label">Your Finance access</div>' });
     Object.entries(FIN_ACCESS).forEach(([k, l]) => own.push({ html: `<div class="mi">${icon('coin')}${esc(l)}${(u.fin || '') === k ? `<span class="wf-ck">${icon('check')}</span>` : ''}</div>`, run: () => {
       u.fin = k || undefined; persist(); renderContent(); Fin.init(); renderSidebar(); toast(k ? `You now have ${l} access` : 'You no longer have Finance access');
     } }));
-    showMenu(anchor, own.map((it, i) => (it.run ? { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) } : it)));
+    showMenu(anchor, own.map((it, i) => (it !== '-' && it.run ? { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) } : it)));
     return;
   }
   const items = [{ html: '<div class="menu-label">Change role</div>' }];
@@ -6646,6 +6677,7 @@ function viewProfile() {
       ${u.id === cdUserId() ? `<h4 class="pf-sub">As ${esc(cdTitle())}</h4>${notifToggles(u, true)}` : ''}
       <p class="pf-note">You’re notified about tasks you’re assigned to or created: comments, status and CD Status changes, due dates, priority, files, completion, and when someone @mentions you. Remove yourself from a task to stop getting its updates.</p>
     </div>
+    ${typeof OwnerView !== 'undefined' ? OwnerView.card() : ''}
   </div>`;
 }
 function appIconCard() {

@@ -6,7 +6,11 @@ const SECRET_USER_FIELDS = ['hash', 'salt'];
 // Fields only an Admin may change on a person's account
 const PROTECTED_USER_FIELDS = ['role', 'active', 'email', 'projectIds', 'admin', 'fin'];
 
-export function createAccess(store) {
+export function createAccess(store, opts = {}) {
+  // The owner (ADMIN_EMAIL): nobody else may change their role, rights, email or clients, or deactivate them —
+  // whatever role they use the app with (they may work as Production and still own it)
+  const ownerEmail = String(opts.ownerEmail || '').toLowerCase();
+  const isOwnerUser = (x) => !!ownerEmail && !!x && String(x.email || '').toLowerCase() === ownerEmail;
   const users = () => store.list('users');
   const userByEmail = (email) => users().find((u) => u.active !== false && String(u.email || '').toLowerCase() === String(email || '').toLowerCase()) || null;
   const isFreelancer = (u) => u && u.role === 'freelancer';
@@ -209,6 +213,8 @@ export function createAccess(store) {
     if (kind !== 'users' || !data) return data;
     const out = { ...data };
     SECRET_USER_FIELDS.forEach((k) => delete out[k]);
+    // Owner view (live site): the owner's own app sees them with Admin rights; stored as it was, nobody else sees it
+    if (u && u._ov && out.id === u.id) out.admin = true;
     return out;
   }
 
@@ -229,6 +235,10 @@ export function createAccess(store) {
     switch (ch.kind) {
       case 'users':
         if (ch.del) return false;                                   // people are deactivated, never deleted
+        // the owner's account: only the owner changes its role, rights, email, clients or active state
+        if (current && isOwnerUser(current) && !isOwnerUser(u)) return PROTECTED_USER_FIELDS.every((k) => deepEqual(next[k] ?? null, (ch.base ? ch.base[k] : current[k]) ?? null) || deepEqual(next[k] ?? null, current[k] ?? null)) && admin;
+        if (!current && isOwnerUser(next) && !isOwnerUser(u)) return false;    // nobody else makes an account with the owner's email
+        if (current && next && isOwnerUser(next) && !isOwnerUser(current) && !isOwnerUser(u)) return false;   // ...or changes someone's email to it
         if (admin) return true;
         if (String(ch.id) !== u.id || !current) return false;      // only your own account
         // you may edit your own profile, but not your role, email, access or projects
@@ -320,5 +330,5 @@ export function createAccess(store) {
     return CLAIM_CONTENT.every((k) => deepEqual(next[k], current[k]));
   }
 
-  return { userByEmail, canSee, canWrite, shape, ownOnly, ownView, addPeek, isFreelancer, isFinance, isAdm, finLevel, canReadFile, monthClosed };
+  return { userByEmail, isOwnerUser, canSee, canWrite, shape, ownOnly, ownView, addPeek, isFreelancer, isFinance, isAdm, finLevel, canReadFile, monthClosed };
 }

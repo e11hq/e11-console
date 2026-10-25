@@ -1,0 +1,27 @@
+/* Owner view (live site only, ownerview.js): the bar only the owner sees while stepped in */
+#ov-bar { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 95; display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px 8px 14px; border-radius: 12px; background: #1a1d2e; border: 1px solid #6c7cff; color: #cfd5ff; box-shadow: 0 10px 30px rgba(0,0,0,.35); font-size: 13.5px; max-width: calc(100vw - 24px); }
+#ov-bar > .ic { width: 16px; height: 16px; color: #8d99ff; flex: none; }
+#ov-bar span { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; min-width: 0; }
+#ov-bar small { font-size: 12px; font-weight: 600; color: #8d99ff; }
+html.ov-edit #ov-bar small { color: #ff8a8a; }
+#ov-bar .btn { flex: none; }
+#ov-bar .btn i { font-style: normal; }
+#ov-bar .ov-s { display: none; }
+#ov-bar b { color: #fff; }
+html.ov-edit #ov-bar { background: #2e1414; border-color: #ff6b6b; color: #ffd0d0; }
+html.ov-edit #ov-bar > .ic { color: #ff8a8a; }
+:root[data-theme="light"] #ov-bar { background: #eef0ff; color: #2a3080; }
+:root[data-theme="light"] #ov-bar b { color: #141a5c; }
+:root[data-theme="light"] html.ov-edit #ov-bar, :root[data-theme="light"].ov-edit #ov-bar { background: #ffecec; color: #7a1414; }
+html.phone #ov-bar { left: 10px; right: 10px; transform: none; max-width: none; bottom: calc(var(--ph-shift, 0px) + 92px); font-size: 13px; gap: 8px; padding: 8px 8px 8px 12px; }
+html.phone #ov-bar span { flex: 1; flex-direction: column; align-items: flex-start; gap: 0; line-height: 1.25; }
+html.phone #ov-bar .ov-l { display: none; }
+html.phone #ov-bar .ov-s { display: inline; }
+.ov-card .pf-note { margin: 6px 0 12px; }
+/* a locked item in a menu (the owner's account on the Team page) */
+.mi.disabled { opacity: .45; cursor: not-allowed; pointer-events: none; }
+/* messages sit above the bar while it shows */
+html.ov-on #toast-root { bottom: 78px !important; }
+html.ov-on body.phone #toast-root { bottom: calc(var(--ph-tabs-h) + 82px + var(--ph-shift, 0px)) !important; }
+html.phone #ov-bar .btn:not(.primary) { background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.18); color: inherit; }
