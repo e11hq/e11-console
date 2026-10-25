@@ -2586,11 +2586,23 @@ function taskFields(t) {
   return f;
 }
 
+// Part of a task: assigned (to it, the task it sits under or one of its subtasks), created it, its Guardian,
+// or mentioned / commented in it
+function partOfTask(t, id = currentUserId, deep = true) {
+  if (!t) return false;
+  if ((t.assignees || []).includes(id) || t.createdBy === id || t.guardian === id) return true;
+  if ((t.comments || []).some((c) => c.authorId === id || mentionsIn(c.html).has(id)) || mentionsIn(t.notesHtml).has(id)) return true;
+  if (!deep) return false;
+  return (t.parentId && partOfTask(task(t.parentId), id, false)) || subtasksOf(t.id).some((x) => partOfTask(x, id, false));
+}
+const searchOwnOk = (t, u = me()) => !u || !['production', 'freelancer'].includes(u.role) || isAdm(u) || isCD(u.id) || partOfTask(t, u.id);
+
 function taskSearch(query, { limit = 200 } = {}) {
   const terms = sWords(query);
   if (!terms.length) return { tasks: [], projects: [], fixed: [] };
   // an Account Manager searches their own clients' tasks and the tasks they created (like their sidebar)
-  const docs = db.tasks.filter((t) => !amReadOnly(t)).map((t) => {
+  // Production and Freelancers search only the tasks they're part of
+  const docs = db.tasks.filter((t) => !amReadOnly(t) && searchOwnOk(t)).map((t) => {
     const fields = taskFields(t);
     const words = new Map(); // word -> best weight
     fields.forEach((fl, i) => sWords(fl.text).forEach((w) => { if (!words.has(w) || words.get(w).w < fl.w) words.set(w, { w: fl.w, i }); }));

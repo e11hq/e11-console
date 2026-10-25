@@ -58,6 +58,16 @@ async def main():
               return r; }})()""")
             ok.append(pr == {'dueDisabled': True, 'noClear': True, 'noAdd': True, 'noDel': True, 'dueSame': True, 'ticked': True, 'sameCount': True})
             if not ok[-1]: print('production:', pr)
+            # Production and Freelancers: search shows only the tasks they're part of; Social still sees everything
+            ps = await pp.evaluate("""(() => { const me0 = currentUserId; const as = (id, f) => { currentUserId = id; try { return f(); } finally { currentUserId = me0; } };
+              const part = (t, id) => partOfTask(t, id);
+              const run = (id) => as(id, () => { const r = taskSearch('Ford'); return { n: r.tasks.length, own: r.tasks.every(x => part(x.t, id)) }; });
+              const others = (id) => db.tasks.filter(t => t.projectId === 'p-ford' && !part(t, id)).length;
+              const prod = currentUserId, free = 'u-smp-free', soc = db.users.find(u => u.role === 'social' && u.active !== false).id;
+              const p = run(prod), f = run(free), s = run(soc);
+              return { prodOwn: p.own && p.n > 0, prodHides: others(prod) > 0, freeOwn: f.own && f.n > 0, socAll: s.n > p.n || !s.own }; })()""")
+            ok.append(ps == {'prodOwn': True, 'prodHides': True, 'freeOwn': True, 'socAll': True})
+            if not ok[-1]: print('search:', ps)
             # Social: same date / checklist limits, but they can write the description
             soc = await pp.evaluate("(() => { const me0 = currentUserId; const s = db.users.find(u => u.role === 'social' && u.active !== false); const p = db.users.find(u => u.role === 'production' && u.active !== false); const as = (id, f) => { currentUserId = id; try { return f(); } finally { currentUserId = me0; } }; return { socDesc: as(s.id, () => can('editDesc', {})), socDates: as(s.id, () => can('editDates', {})), socCl: as(s.id, () => can('editChecklist', {})), socAdd: as(s.id, () => can('addChecklist', {})), prodAdd: as(p.id, () => can('addChecklist', {})), prodDesc: as(p.id, () => can('editDesc', {})) }; })()")
             ok.append(soc == {'socDesc': True, 'socDates': False, 'socCl': False, 'socAdd': True, 'prodAdd': False, 'prodDesc': False})
