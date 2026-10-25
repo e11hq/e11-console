@@ -23,7 +23,7 @@ const OwnerView = (() => {
     mode = r.mode || null;
     last = Date.now();
     // stepping in or out changes what this device may see: reconnect and reload the data
-    if (!was !== !mode) { Sync.reconnect(0); await Sync.resync(); }
+    if (!was !== !mode) { Sync.reconnect(0); await Sync.resync(); if (typeof Fin !== 'undefined') Fin.init(); renderSidebar(); }
     paint(); render();
     toast(!mode ? 'Back to Production' : mode === 'look' ? (was ? 'Look only — nothing you do is saved' : 'Owner view: look only') : 'Changes allowed — they show under your name');
   }
@@ -41,7 +41,7 @@ const OwnerView = (() => {
       <h3>${icon('shield')}Owner view</h3>
       <p class="pf-note">${on()
         ? `You’re in Owner view on this device${lookOnly() ? ', <b>look only</b>' : ', with <b>changes allowed</b>'}. It ends after 15 minutes without use, or when the app reloads.`
-        : 'Step in with Admin rights on this device only. Nobody is told and your role stays the same for everyone. It starts look only — nothing can be changed until you choose Allow changes. It ends after 15 minutes without use, or when the app reloads.'}</p>
+        : 'Step in with Admin rights and Finance Admin on this device only. Nobody is told and your role stays the same for everyone. It starts look only — nothing can be changed until you choose Allow changes. It ends after 15 minutes without use, or when the app reloads.'}</p>
       <div class="pf-actions">${on() ? '<button class="btn" data-ov="off">Back to Production</button>' : '<button class="btn" data-ov="look">Step in as Admin (look only)</button>'}</div>
     </div>`;
   }

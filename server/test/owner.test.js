@@ -80,6 +80,8 @@ test('Owner view: look only, then changes allowed, then off — on this device o
   const snap = (await live.call(OWNER, '/api/snapshot', { cookie })).body.data;
   assert.ok(snap.tasks.some((t) => t.id === 't-other'), 'sees every task');
   assert.equal(snap.users.find((u) => u.id === 'u-haris').admin, true);
+  assert.equal(snap.users.find((u) => u.id === 'u-haris').fin, 'admin', 'and Finance Admin');
+  assert.ok(Array.isArray(snap.finance), 'sees the Finance records');
   assert.equal(snap.users.find((u) => u.id === 'u-haris').role, 'production', 'role unchanged');
   const me = (await live.call(OWNER, '/api/me', { cookie })).body;
   assert.equal(me.ownerView, 'look'); assert.equal(me.user.admin, true);
@@ -99,12 +101,17 @@ test('Owner view: look only, then changes allowed, then off — on this device o
   assert.equal(ed.body.mode, 'edit');
   const r2 = await live.call(OWNER, '/api/push', { cookie, body: { changes: [{ kind: 'tasks', id: 't-other', base: t, data: { ...t, title: 'Changed' } }] } });
   assert.equal(r2.body.results[0].refused, false); assert.equal(live.app.store.get('tasks', 't-other').title, 'Changed');
+  // ...and Finance records can be added (Finance Admin)
+  const fr = await live.call(OWNER, '/api/push', { cookie, body: { changes: [{ kind: 'finance', id: 'f-ov', data: { id: 'f-ov', type: 'expense', name: 'Domain', amount: 50, date: '2026-10-25' } }] } });
+  assert.equal(fr.body.results[0].refused, false);
+  assert.equal((await live.call(OWNER, '/api/push', { body: { changes: [{ kind: 'finance', id: 'f-ov2', data: { id: 'f-ov2', type: 'expense', name: 'X', amount: 1, date: '2026-10-25' } }] } })).body.results[0].refused, true, 'not without Owner view');
   // saving their own profile in Owner view doesn't store the Admin rights
   const mine = snap.users.find((u) => u.id === 'u-haris');
   const r3 = await live.call(OWNER, '/api/push', { cookie, body: { changes: [{ kind: 'users', id: 'u-haris', base: mine, data: { ...mine, name: 'Haris Sharif' } }] } });
   assert.equal(r3.body.results[0].refused, false);
   assert.equal(live.app.store.get('users', 'u-haris').name, 'Haris Sharif');
   assert.ok(!live.app.store.get('users', 'u-haris').admin, 'Admin rights not saved');
+  assert.ok(!live.app.store.get('users', 'u-haris').fin, 'Finance Admin not saved');
   assert.equal(live.app.store.get('users', 'u-haris').role, 'production');
   // off: back to Production, the cookie is cleared
   const off = await live.call(OWNER, '/api/owner-view', { cookie, body: { mode: 'off' } });

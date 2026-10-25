@@ -141,9 +141,9 @@ export function createServer(cfg) {
     req.realUser = u;
     const as = viewAsTarget(u);
     if (as) { req.viewingAs = as; return as; }
-    // Live site only: the owner stepped in with Owner view on this device (Admin rights on top, nothing stored)
+    // Live site only: the owner stepped in with Owner view on this device (Admin rights and Finance Admin on top, nothing stored)
     const ov = ownerViewOf(req, u);
-    if (ov) { req.ownerView = ov.mode; return { ...u, admin: true, _ov: ov.mode }; }
+    if (ov) { req.ownerView = ov.mode; return { ...u, admin: true, fin: 'admin', _ov: ov.mode }; }
     return u;
   }
   /* "Owner view" — LIVE SITE ONLY (never on the test copy; keep it in future updates). The owner (ADMIN_EMAIL) may use
@@ -171,7 +171,7 @@ export function createServer(cfg) {
   function streamUser(s) {
     const u = store.get('users', s.userId) || s.user;
     const v = s.ovToken && ownerViews.get(s.ovToken);
-    return v && v.userId === u.id && v.until >= Date.now() && ownerViewOk(u) ? { ...u, admin: true, _ov: v.mode } : u;
+    return v && v.userId === u.id && v.until >= Date.now() && ownerViewOk(u) ? { ...u, admin: true, fin: 'admin', _ov: v.mode } : u;
   }
   /* "View as" — a testing aid on the TEST copy only (never on the live site): the owner (ADMIN_EMAIL) picks a team
      member and, until they switch back, the server treats every request of theirs as that person — what they see,

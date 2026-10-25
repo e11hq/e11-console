@@ -52,6 +52,8 @@ async def main():
             check(cards and cards[-1] is True and cards.count(True) == 1, 'Owner view is the last card on My profile')
             await pg.click('[data-ov="look"]'); await pg.wait_for_timeout(1500)
             check(await E("isAdm(me()) && me().role === 'production'"), 'stepped in: Admin rights, role still Production')
+            check(await E("finLevel() === 'admin'"), 'and Finance Admin')
+            check(await E("/Finance/.test(document.querySelector('#sidebar, .sidebar, nav').innerText)"), 'Finance shows in the sidebar')
             check(await E("db.tasks.some(t => t.id === 't-other')"), 'sees every task')
             check(await pg.locator('#ov-bar').is_visible() and 'Look only' in await pg.locator('#ov-bar').inner_text(), 'the bar says Look only')
             await pg.wait_for_timeout(3500); await pg.screenshot(path='/tmp/claude-0/-home-claude/cbe383c5-0a7d-5e51-824e-d5c89984d379/scratchpad/ov-look.png')
@@ -77,10 +79,10 @@ async def main():
             await E("go('profile')"); await pg.wait_for_timeout(300)
             await pg.click('[data-action="save-profile"]'); await pg.wait_for_timeout(1200)
             lana_h=[u for u in api(base, LANA, '/api/snapshot')['data']['users'] if u['id']==hid][0]
-            check(lana_h['role'] == 'production' and not lana_h.get('admin'), 'saving the profile in Owner view keeps the stored role')
+            check(lana_h['role'] == 'production' and not lana_h.get('admin') and not lana_h.get('fin'), 'saving the profile in Owner view keeps the stored role and access')
             # back to Production
             await pg.click('#ov-bar [data-ov="off"]'); await pg.wait_for_timeout(1500)
-            check(not await E("isAdm(me())") and await E("db.tasks.map(t => t.id).join()") == 't-mine' and await pg.locator('#ov-bar').count() == 0, 'Back to Production: own tasks only, no bar')
+            check(not await E("isAdm(me())") and not await E("finLevel()") and await E("db.tasks.map(t => t.id).join()") == 't-mine' and await pg.locator('#ov-bar').count() == 0, 'Back to Production: own tasks only, no Finance, no bar')
             # a reload ends it
             await E("go('profile')"); await pg.wait_for_timeout(300)
             await pg.click('[data-ov="look"]'); await pg.wait_for_timeout(1500)
