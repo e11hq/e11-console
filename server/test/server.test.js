@@ -198,9 +198,9 @@ test('files: chunked upload, range download, thumbnails, trash, zip', async () =
   assert.deepEqual(Buffer.from(await part.arrayBuffer()), big.subarray(100, 200));
   // escaping the files folder is refused
   assert.equal((await fetch(`${base}/__file/..%2F..%2Fetc%2Fpasswd`, { headers: { 'X-Dev-Email': PROD } })).status, 400);
-  assert.equal((await call(PROD, '/api/host/writeChunk', { method: 'POST', body: { dest: '../x', name: 'a', b64: 'AA==' } })).status, 403);
-  // client assets: only Admin/AM upload
-  assert.equal((await call(PROD, '/api/host/writeChunk', { method: 'POST', body: { dest: 'Clients/Ford/Logos', name: 'a.txt', b64: 'AA==' } })).status, 403);
+  assert.ok([400, 403].includes((await call(PROD, '/api/host/writeChunk', { method: 'POST', body: { dest: '../x', name: 'a', b64: 'AA==' } })).status), 'a path outside the data folder is refused');
+  // client assets: anyone (not Finance-only people) can upload
+  assert.equal((await call(PROD, '/api/host/writeChunk', { method: 'POST', body: { dest: 'Clients/Ford/Logos', name: 'a.txt', b64: 'AA==' } })).status, 200);
   const logoPng = path.join(dir, 'files', 'attachments', 'logo.png');
   execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'color=c=blue:s=1200x800', '-frames:v', '1', logoPng]);
   const up = await call(AM, '/api/host/writeChunk', { method: 'POST', body: { dest: 'Clients/Ford/Logos', name: 'Ford Logo.png', b64: fs.readFileSync(logoPng).toString('base64') } });
@@ -282,4 +282,37 @@ test('import replaces the first-sign-in Admin account with the same person from 
   assert.equal(me2.user.id, 'u-haris-mac');
   assert.equal(a2.store.list('users').length, 1);
   await a2.close(); fs.rmSync(d2, { recursive: true, force: true });
+});
+
+test('Client Assets: anyone adds folders and files, removes only their own; folders made with the client are Admin-only', async () => {
+  const push = (who, data, base) => call(who, '/api/push', { method: 'POST', body: { changes: [{ kind: 'clients', id: 'cl-ca', data, ...(base ? { base } : {}) }] } });
+  const at = '2026-10-25T08:00:00.000Z';
+  const logos = { id: 'f-logos', name: 'Logos', dir: 'Clients/CA/Logos', files: [], createdAt: at, createdBy: 'u-admin', auto: true };
+  let c = { id: 'cl-ca', name: 'CA', dir: 'Clients/CA', folders: [logos], createdAt: at, createdBy: 'u-admin' };
+  assert.ok(!(await push(ADMIN, c)).body.results[0].refused, 'Admin makes the client');
+  // Production adds a folder and a file
+  const mine = { id: 'f-mine', name: 'Social templates', dir: 'Clients/CA/Social templates', files: [{ id: 'a1', name: 'a.png', path: 'Clients/CA/Social templates/a.png', addedBy: 'u-prod' }], createdAt: at, createdBy: 'u-prod' };
+  const withMine = { ...c, folders: [logos, mine] };
+  assert.ok(!(await push(PROD, withMine, c)).body.results[0].refused, 'Production adds a folder with a file');
+  // the AM adds a file to Logos
+  const logos2 = { ...logos, files: [{ id: 'a2', name: 'logo.svg', path: 'Clients/CA/Logos/logo.svg', addedBy: 'u-am' }] };
+  const withAm = { ...withMine, folders: [logos2, mine] };
+  assert.ok(!(await push(AM, withAm, withMine)).body.results[0].refused, 'AM adds a file');
+  // Production can't remove the AM's file, nor the Logos folder, nor rename Logos
+  assert.equal((await push(PROD, { ...withAm, folders: [{ ...logos2, files: [] }, mine] }, withAm)).body.results[0].refused, true, "can't remove someone else's file");
+  assert.equal((await push(PROD, { ...withAm, folders: [mine] }, withAm)).body.results[0].refused, true, "can't remove the folder made with the client");
+  assert.equal((await push(AM, { ...withAm, folders: [mine] }, withAm)).body.results[0].refused, true, "an AM can't either");
+  assert.equal((await push(PROD, { ...withAm, folders: [{ ...logos2, name: 'Logo' }, mine] }, withAm)).body.results[0].refused, true, "can't rename it");
+  assert.equal((await push(PROD, { ...withAm, name: 'Renamed' }, withAm)).body.results[0].refused, true, "can't rename the client");
+  // an AM removes anyone's file and anyone's added folder, but not the folders made with the client
+  const am2 = await push(AM, { ...withAm, folders: [logos2] }, withAm);
+  assert.ok(!am2.body.results[0].refused, "an AM removes Production's folder");
+  await push(PROD, withAm, { ...withAm, folders: [logos2] });   // (Production puts it back for the next checks)
+  // the AM removes their own file; Production removes their own folder
+  const noAmFile = { ...withAm, folders: [{ ...logos2, files: [] }, mine] };
+  assert.ok(!(await push(AM, noAmFile, withAm)).body.results[0].refused, 'AM removes their own file');
+  assert.ok(!(await push(PROD, { ...noAmFile, folders: [{ ...logos2, files: [] }] }, noAmFile)).body.results[0].refused, 'Production removes their own folder');
+  // only an Admin deletes the main folder
+  assert.equal((await call(AM, '/api/push', { method: 'POST', body: { changes: [{ kind: 'clients', id: 'cl-ca', del: true }] } })).body.results[0].refused, true);
+  assert.ok(!(await call(ADMIN, '/api/push', { method: 'POST', body: { changes: [{ kind: 'clients', id: 'cl-ca', del: true }] } })).body.results[0].refused);
 });

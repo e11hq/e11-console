@@ -2021,7 +2021,7 @@ function updateAppBadge() {
 }
 function renderSidebar() {
   updateAppBadge();
-  { const add = document.querySelector('.nav-heading [data-action="new-project"]'); if (add) add.hidden = !isAdmin(); }   // only Admins add clients
+  { const add = document.querySelector('.nav-heading [data-action="new-project"]'); if (add) add.style.display = isAdmin() ? '' : 'none'; }   // only Admins add clients
   if (typeof Season !== 'undefined') { const u = currentUserId && db && me(); Season.sync(u ? !!(u.prefs || {}).seasonOff : undefined); }
   $$('.nav-item[data-nav]').forEach((a) => a.classList.toggle('active', !ui.search && (ui.view === a.dataset.nav || (a.dataset.nav === 'clients' && ui.view === 'client'))));
   Fin.paintNav();
@@ -3497,8 +3497,12 @@ async function newProjectFlow() {
   });
   if (!res) return;
   const p = createProject(res.value, res.color);
+  // its Client Assets folder (with Logos, Brand Guidelines, Fonts, Files), linked; an existing one of that name is reused
+  const c = dupClient(p.name) || createClient(p.name);
+  p.clientId = c.id;
   persist(0);
   go('project', p.id);
+  toast(`Added ${p.name} — its Client Assets folder is ready`);
 }
 
 function newTaskInContext() {
@@ -3911,7 +3915,7 @@ async function renameProject(id) {
 async function deleteProjectFlow(id) {
   const p = proj(id);
   const n = db.tasks.filter((t) => t.projectId === id).length;
-  const ok = await dialog({ title: `Delete “${p.name}”?`, body: `The client and its ${n} task${n === 1 ? '' : 's'} move to the Trash. An Admin can restore them within ${TRASH_DAYS} days.`, okText: 'Move to Trash', danger: true });
+  const ok = await dialog({ title: `Delete “${p.name}”?`, body: `The client and its ${n} task${n === 1 ? '' : 's'} move to the Trash. An Admin can restore them within ${TRASH_DAYS} days. Its Client Assets folder stays.`, okText: 'Move to Trash', danger: true });
   if (!ok) return;
   db.projects = db.projects.filter((x) => x.id !== id);
   const removed = removeTasks(db.tasks.filter((t) => t.projectId === id).map((t) => t.id));
@@ -4933,6 +4937,14 @@ const DEFAULT_FOLDERS = ['Logos', 'Brand Guidelines', 'Fonts', 'Files'];
 const FONT_EXT = ['otf', 'ttf', 'woff', 'woff2'];
 const isFont = (a) => FONT_EXT.includes(fileExt(a.name));
 const canAssets = () => { const u = me(); return !!u && (isAdm(u) || u.role === 'am'); };
+// Client Assets: anyone adds folders and files; people remove (or rename) only the folders and files they added,
+// Account Managers anyone's; the folders made with the client stay unless an Admin removes them (the server checks the same)
+const canAddAssets = () => { const u = me(); return !!u && !isFinUser(u); };
+const isAutoFolder = (c, f) => !!f.auto || (DEFAULT_FOLDERS.includes(f.name) && (!f.createdBy || f.createdBy === c.createdBy) && Math.abs(Date.parse(f.createdAt || 0) - Date.parse(c.createdAt || 0)) < 60000);
+// (Account Managers remove anyone's files and added folders)
+const canDelAsset = (a) => canAssets() || (!!a && a.addedBy === currentUserId);
+const canEditFolder = (c, f) => isAdmin() || (!isAutoFolder(c, f) && (canAssets() || f.createdBy === currentUserId));
+const canDelFolder = (c, f) => canEditFolder(c, f) && (canAssets() || f.files.every((a) => a.addedBy === currentUserId));
 const isAdmin = () => !!isAdm(me());
 const clientById = (id) => (db.clients || []).find((c) => c.id === id) || null;
 const clientsSorted = () => (db.clients || []).slice().sort((a, b) => a.name.localeCompare(b.name));
@@ -4948,8 +4960,8 @@ function freeDir(base, name, taken) {
   while (taken.some((x) => x.toLowerCase() === d.toLowerCase())) d = `${base}/${n} (${i++})`;
   return d;
 }
-function newFolder(c, name) {
-  const f = { id: 'cf-' + uid(), name: name.trim(), dir: freeDir(c.dir, name, c.folders.map((x) => x.dir)), files: [], createdAt: nowISO(), createdBy: currentUserId };
+function newFolder(c, name, auto = false) {
+  const f = { id: 'cf-' + uid(), name: name.trim(), dir: freeDir(c.dir, name, c.folders.map((x) => x.dir)), files: [], createdAt: nowISO(), createdBy: currentUserId, ...(auto ? { auto: true } : {}) };
   c.folders.push(f);
   Host.call('makeDir', { path: f.dir }).catch(() => {});
   return f;
@@ -4957,7 +4969,7 @@ function newFolder(c, name) {
 function createClient(name, logo) {
   const c = { id: 'cl-' + uid(), name: name.trim().replace(/\s+/g, ' '), logo: logo || null, dir: '', folders: [], createdAt: nowISO(), createdBy: currentUserId };
   c.dir = freeDir('Clients', c.name, (db.clients || []).map((x) => x.dir));
-  DEFAULT_FOLDERS.forEach((n) => newFolder(c, n));
+  DEFAULT_FOLDERS.forEach((n) => newFolder(c, n, true));   // made with the client: only an Admin removes them
   db.clients.push(c);
   return c;
 }
@@ -5018,11 +5030,11 @@ function viewClient(c) {
       <div class="cf-name">${esc(f.name)}</div>
       <div class="cf-meta">${f.files.length ? `${f.files.length} file${f.files.length === 1 ? '' : 's'}` : 'Empty'}</div>
       ${imgs.length && Host.isNative ? `<div class="cf-peek">${imgs.map((a) => `<img src="${imgUrl(a, 160)}" alt="" loading="lazy">`).join('')}</div>` : ''}
-      ${canAssets() ? `<button class="icon-btn sm cf-more" data-action="cfolder-menu" data-id="${f.id}" title="Folder options">${icon('more')}</button>` : ''}
+      ${canEditFolder(c, f) ? `<button class="icon-btn sm cf-more" data-action="cfolder-menu" data-id="${f.id}" title="Folder options">${icon('more')}</button>` : ''}
     </div>`;
   }).join('');
   const grid = `<div class="cf-grid">${folders}
-      ${canAssets() ? `<div class="cf-card add" data-action="add-cfolder"><div class="cf-ic">${icon('plus')}</div><div class="cf-name">New folder</div><div class="cf-meta">Admins & Account Managers</div></div>` : ''}
+      ${canAddAssets() ? `<div class="cf-card add" data-action="add-cfolder"><div class="cf-ic">${icon('plus')}</div><div class="cf-name">New folder</div><div class="cf-meta">For anything else</div></div>` : ''}
     </div>`;
   const q = ui.caScope === c.id ? ui.caQ : '';
   return `<div class="ca-page">${head}
@@ -5046,7 +5058,7 @@ function caTile(f, a, loc = null) {
       <button class="icon-btn sm" data-action="quicklook" data-id="${a.id}" title="Preview">${icon('search')}</button>
       <button class="icon-btn sm" data-action="ca-download" data-id="${a.id}" title="Download to your Downloads folder">${icon('download')}</button>
       <button class="icon-btn sm" data-action="reveal-att" data-id="${a.id}" title="${FINDER_LABEL}">${icon(Host.isServer ? 'download' : 'folder')}</button>
-      ${canAssets() && !loc ? `<button class="icon-btn sm" data-action="ca-remove" data-id="${a.id}" title="Delete">${icon('trash')}</button>` : ''}
+      ${canDelAsset(a) && !loc ? `<button class="icon-btn sm" data-action="ca-remove" data-id="${a.id}" title="Delete">${icon('trash')}</button>` : ''}
     </div>
   </div>`;
 }
@@ -5149,12 +5161,12 @@ function viewClientFolder(c, f) {
       <div class="cfo-title"><h2>${esc(f.name)}</h2><small>${esc(c.name)} · ${f.files.length} file${f.files.length === 1 ? '' : 's'}</small></div>
       <span class="spacer"></span>
       ${f.files.length ? `<button class="btn ghost" data-action="ca-download-all">${icon('download')}Download all</button>` : ''}
-      ${canAssets() ? `<button class="btn primary" data-action="ca-upload">${icon('upload')}Upload files</button>` : ''}
+      ${canAddAssets() ? `<button class="btn primary" data-action="ca-upload">${icon('upload')}Upload files</button>` : ''}
     </div>
     <div class="ca-uploads" id="ca-uploads"></div>
     ${f.files.length ? `<div class="tile-grid ca-files">${f.files.slice().sort((a, b) => a.name.localeCompare(b.name)).map((a) => caTile(f, a)).join('')}</div>`
-      : `<div class="ca-empty ${canAssets() ? 'drop' : ''}">${icon(canAssets() ? 'upload' : 'folder')}<b>${canAssets() ? 'Drag files here or click Upload files' : 'Nothing in this folder yet'}</b><span>${canAssets() ? 'Logos, guideline PDFs, fonts, templates — any file type.' : 'An Admin or Account Manager can add files.'}</span></div>`}
-    ${canAssets() ? `<div class="ca-dropscrim">${icon('upload')}<b>Drop to upload to ${esc(f.name)}</b></div>` : ''}
+      : `<div class="ca-empty ${canAddAssets() ? 'drop' : ''}">${icon(canAddAssets() ? 'upload' : 'folder')}<b>${canAddAssets() ? 'Drag files here or click Upload files' : 'Nothing in this folder yet'}</b><span>${canAddAssets() ? 'Logos, guideline PDFs, fonts, templates — any file type.' : 'An Admin or Account Manager can add files.'}</span></div>`}
+    ${canAddAssets() ? `<div class="ca-dropscrim">${icon('upload')}<b>Drop to upload to ${esc(f.name)}</b></div>` : ''}
   </div>`;
 }
 
@@ -5247,13 +5259,14 @@ function clientMenu(anchor, c) {
 }
 const folderDup = (c, name, exceptId) => c.folders.find((f) => f.id !== exceptId && f.name.trim().toLowerCase() === name.trim().toLowerCase());
 async function addFolderFlow(c) {
-  if (!canAssets()) return denied();
+  if (!canAddAssets()) return denied();
   const v = await formDialog({ title: `New folder in ${c.name}`, fields: [{ key: 'name', label: 'Folder name', placeholder: 'e.g. Social templates' }], okText: 'Create folder',
     validate: (x) => (!x.name ? 'Enter a folder name' : folderDup(c, x.name) ? `There is already a folder named “${folderDup(c, x.name).name}”.` : null) });
   if (!v) return;
   newFolder(c, v.name); persist(0); render();
 }
 function folderMenu(anchor, c, f) {
+  if (!canEditFolder(c, f)) return;
   showMenu(anchor, [
     { label: 'Rename folder', icon: 'edit', run: async () => {
       const v = await formDialog({ title: 'Rename folder', fields: [{ key: 'name', label: 'Folder name', value: f.name }], okText: 'Save',
@@ -5262,20 +5275,20 @@ function folderMenu(anchor, c, f) {
     } },
     { label: 'Move left', icon: 'chev-left', run: () => { const i = c.folders.indexOf(f); if (i > 0) { c.folders.splice(i, 1); c.folders.splice(i - 1, 0, f); persist(0); render(); } } },
     { label: 'Move right', icon: 'chev-right', run: () => { const i = c.folders.indexOf(f); if (i < c.folders.length - 1) { c.folders.splice(i, 1); c.folders.splice(i + 1, 0, f); persist(0); render(); } } },
-    '-',
-    { label: 'Delete folder', icon: 'trash', danger: true, run: async () => {
+    ...(canDelFolder(c, f) ? ['-', { label: 'Delete folder', icon: 'trash', danger: true, run: async () => {
       const ok = await dialog({ title: `Delete “${f.name}”?`, body: f.files.length ? `Its ${f.files.length} file${f.files.length === 1 ? '' : 's'} will be moved to the Trash. Copies already pasted into tasks stay.` : 'This folder is empty.', okText: 'Delete folder', danger: true });
       if (!ok) return;
       c.folders = c.folders.filter((x) => x.id !== f.id);
       persist(0); render();
-      safeTrash([...f.files.flatMap((a) => [a.path, '.thumbs/' + a.id]), f.dir]);
-    } },
+      // the files go once the server has the change (it only lets people remove what they're allowed to)
+      Promise.resolve(typeof Sync !== 'undefined' && Sync.push ? Sync.push() : null).catch(() => {}).then(() => safeTrash([...f.files.flatMap((a) => [a.path, '.thumbs/' + a.id]), f.dir]));
+    } }] : []),
   ]);
 }
 function curFolder() { const c = clientById(ui.clientId); return c ? { c, f: c.folders.find((x) => x.id === ui.folderId) || null } : { c: null, f: null }; }
 async function pickIntoFolder() {
   const { c, f } = curFolder();
-  if (!f || !canAssets()) return;
+  if (!f || !canAddAssets()) return;
   try {
     const r = await Host.call('pickAttachments', { dest: f.dir });
     const files = (r.files || []).map((x) => ({ ...x, addedAt: nowISO(), addedBy: currentUserId }));
@@ -5287,7 +5300,7 @@ async function pickIntoFolder() {
 // Drag-and-drop upload in 2 MB pieces with a progress row per file
 async function uploadIntoFolder(fileList) {
   const { c, f } = curFolder();
-  if (!f || !canAssets()) return;
+  if (!f || !canAddAssets()) return;
   const box = $('#ca-uploads');
   const rows = [...fileList].map((file) => {
     const el = document.createElement('div'); el.className = 'sr-item';
@@ -5317,7 +5330,7 @@ async function uploadIntoFolder(fileList) {
 async function removeClientFile(id) {
   const { f } = curFolder();
   const a = f && f.files.find((x) => x.id === id);
-  if (!a || !canAssets()) return;
+  if (!a || !canDelAsset(a)) return;
   const ok = await dialog({ title: `Delete “${a.name}”?`, body: `It moves to the Trash, where it can be restored within ${TRASH_DAYS} days. Copies already pasted into tasks stay.`, okText: 'Delete', danger: true });
   if (!ok) return;
   const { c } = curFolder();
@@ -5343,13 +5356,13 @@ function projectClientMenu(anchor, p) {
 // Drag files from Finder onto a folder page
 document.addEventListener('dragover', (e) => {
   const pg = e.target.closest && e.target.closest('.ca-folder');
-  if (!pg || dragId || !canAssets() || !e.dataTransfer || ![...(e.dataTransfer.types || [])].includes('Files')) return;
+  if (!pg || dragId || !canAddAssets() || !e.dataTransfer || ![...(e.dataTransfer.types || [])].includes('Files')) return;
   e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; pg.classList.add('dropping');
 });
 document.addEventListener('dragleave', (e) => { const pg = $('.ca-folder.dropping'); if (pg && (!e.relatedTarget || !pg.contains(e.relatedTarget))) pg.classList.remove('dropping'); });
 document.addEventListener('drop', (e) => {
   const pg = e.target.closest && e.target.closest('.ca-folder');
-  if (!pg || dragId || !canAssets()) return;
+  if (!pg || dragId || !canAddAssets()) return;
   e.preventDefault(); pg.classList.remove('dropping');
   if (e.dataTransfer.files && e.dataTransfer.files.length) uploadIntoFolder(e.dataTransfer.files);
 });

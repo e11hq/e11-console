@@ -28,6 +28,38 @@ export function createAccess(store) {
   }
 
   // Freelancers see the Client Assets of the clients their projects belong to
+  // Client Assets: anyone adds folders and files; people remove (or rename) only the folders and files they added,
+  // Account Managers anyone's; the folders made with the client stay unless an Admin removes them.
+  // Name and logo: Admins and Account Managers.
+  const AUTO_FOLDERS = ['Logos', 'Brand Guidelines', 'Fonts', 'Files'];
+  const isAutoFolder = (c, f) => !!f.auto || (AUTO_FOLDERS.includes(f.name) && (!f.createdBy || f.createdBy === c.createdBy) && Math.abs(Date.parse(f.createdAt || 0) - Date.parse(c.createdAt || 0)) < 60000);
+  function clientEditOk(u, manager, base, current, next) {
+    if (!next) return false;
+    if (!manager && ['name', 'logo', 'dir'].some((k) => !deepEqual(next[k] ?? null, base[k] ?? null) && !deepEqual(next[k] ?? null, current[k] ?? null))) return false;
+    // judged against what this person's app last saw (base): what they removed or renamed; others' new folders and
+    // files from the meantime are kept by the merge
+    const was = new Map((base.folders || []).map((f) => [f.id, f]));
+    const now = new Map((next.folders || []).map((f) => [f.id, f]));
+    for (const [id, f] of was) {
+      const n = now.get(id);
+      // Account Managers look after anyone's folders and files; others only their own. Folders made with the client: Admins.
+      const mine = !isAutoFolder(base, f) && (manager || f.createdBy === u.id);
+      if (!n) {                                                     // folder removed
+        if (!mine || (!manager && (f.files || []).some((a) => a.addedBy !== u.id))) return false;
+        continue;
+      }
+      if (n.name !== f.name && !mine) return false;                 // renamed: only your own
+      if (n.dir !== f.dir || !!n.auto !== !!f.auto || n.createdBy !== f.createdBy) return false;
+      const keep = new Set((n.files || []).map((a) => a.id));
+      if (!manager && (f.files || []).some((a) => !keep.has(a.id) && a.addedBy !== u.id)) return false;   // only your own files go
+    }
+    const there = new Set((current.folders || []).map((f) => f.id));
+    for (const [id, n] of now) {
+      if (was.has(id) || there.has(id)) continue;
+      if (n.createdBy !== u.id || n.auto) return false;             // a new folder is yours
+    }
+    return true;
+  }
   function clientSet(u) {
     const ids = projectSet(u);
     return new Set(store.list('projects').filter((p) => ids.has(p.id) && p.clientId).map((p) => p.clientId));
@@ -112,10 +144,13 @@ export function createAccess(store) {
         return manager;
       case 'statuses':
         return manager;
-      case 'clients':
-        if (isFreelancer(u)) return false;
-        if (ch.del) return admin;                                   // only Admins delete a client
-        return manager;                                             // Admins + Account Managers manage Client Assets
+      case 'clients': {
+        if (ch.del) return admin;                                   // only Admins delete a client's main folder
+        if (!current) return manager;                               // a new client (Admins make them with a new client)
+        if (admin) return true;
+        if (isFreelancer(u) && !clientSet(u).has(current.id)) return false;
+        return clientEditOk(u, manager, ch.base !== undefined && ch.base ? ch.base : current, current, next);
+      }
       case 'projects':
         if (isFreelancer(u)) return !ch.del && !!current && projectSet(u).has(current.id) && next.id === current.id;
         if (ch.del || !current || admin) return admin;              // only Admins add or remove a client

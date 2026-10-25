@@ -308,7 +308,7 @@ export function createServer(cfg) {
       if (cmd === 'writeChunk' || bin) {
         if (body.dest && String(body.dest).startsWith('Finance/')) { if (access.finLevel(u) !== 'admin') return deny('Only a Finance Admin can add invoices'); }
         else if (body.dest && String(body.dest).startsWith('Claims/')) { if (String(body.dest).split('/')[1] !== u.id) return deny('You can only add files to your own claims'); }
-        else if (body.dest && !manager) return deny('Only Admins and Account Managers can upload client assets');
+        else if (body.dest && (access.isFinance(u) || !access.canReadFile(u, String(body.dest) + '/x'))) return deny('You can’t add files to this client');
         if (!body.dest && access.isFinance(u) && body.taskId !== '_uploads') return deny();
         if (!body.dest && u.role === 'freelancer' && body.taskId !== '_uploads') { const t = store.get('tasks', String(body.taskId || '')); if (!t || !access.canSee(u, 'tasks', t)) return deny(); }
         // later pieces may only be added to a file this person started uploading
@@ -318,14 +318,18 @@ export function createServer(cfg) {
         if (uploads.size > 500) for (const [k, v] of uploads) if (Date.now() - v.at > 6 * 3600_000) uploads.delete(k);
         return json(res, 200, out);
       }
-      if (cmd === 'makeDir' && !manager) return deny();
+      if (cmd === 'makeDir' && !manager && !(String(body.path || '').startsWith('Clients/') && access.canReadFile(u, String(body.path) + '/x'))) return deny();
       if (access.isFinance(u) && !['writeChunk', 'thumb', 'processImage', 'docPreview', 'pdfPages', 'exportFiles', 'claimPdf', 'expenseReport'].includes(cmd)) return deny();
       if (cmd === 'expenseReport' && !(access.finLevel(u) || access.isAdm(u))) return deny('Only Admins and Finance can download the expenses report');
       if (cmd === 'expenseReport' && (body.files || []).some((x) => { const fp = String((x && x.path) || ''); return !(fp.startsWith('Finance/') || fp.startsWith('Claims/')) || !access.canReadFile(u, fp); })) return deny();
       if (cmd === 'claimPdf' && !(String(body.userId || '') === u.id || access.finLevel(u))) return deny();
       if (cmd === 'trashMany' || cmd === 'trashPath') {
         const paths = body.paths || [body.path];
-        if (paths.some((x) => String(x || '').startsWith('Clients/')) && !manager) return deny();
+        // Client Assets: Admins anything; others only what's no longer in any client (they removed it, which the data rules allow)
+        if (!access.isAdm(u)) {
+          const live = new Set(store.list('clients').flatMap((c) => [c.dir, c.logo, ...(c.folders || []).flatMap((f) => [f.dir, ...(f.files || []).map((a) => a.path)])]).filter(Boolean));
+          if (paths.some((x) => { const v = String(x || ''); return v.startsWith('Clients/') && [...live].some((l) => l === v || l.startsWith(v.replace(/\/$/, '') + '/')); })) return deny();
+        }
         if (paths.some((x) => !access.canReadFile(u, String(x || '')))) return deny();
       }
       if (cmd === 'claimPdf' && (body.receipts || []).some((x) => !access.canReadFile(u, String(x || '')) || !String(x || '').startsWith('Claims/'))) return deny();

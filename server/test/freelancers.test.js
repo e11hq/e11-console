@@ -72,10 +72,12 @@ test('nobody can add pieces to a file someone else is uploading', async () => {
   assert.equal((await call('areej@e11-digital.com', '/api/host/writeChunk', { path: 'attachments/t-alain/b.txt', b64: 'AAAA' })).status, 403);
 });
 
-test('Production cannot delete or upload client assets', async () => {
-  app.store.apply([{ kind: 'users', id: 'u-prod', data: { id: 'u-prod', email: 'haris@e11-digital.com', role: 'production', active: true } }], 'test');
-  assert.equal((await call('haris@e11-digital.com', '/api/host/trashMany', { paths: ['Clients/Ford/Logos/f.txt'] })).status, 403);
-  assert.equal((await call('haris@e11-digital.com', '/api/host/makeDir', { path: 'Clients/Ford/New' })).status, 403);
+test('Production adds to client assets but cannot remove files that are still there', async () => {
+  app.store.apply([{ kind: 'users', id: 'u-prod', data: { id: 'u-prod', email: 'haris@e11-digital.com', role: 'production', active: true } },
+    { kind: 'clients', id: 'cl-trash', data: { id: 'cl-trash', name: 'Trash test', dir: 'Clients/Trash test', folders: [{ id: 'f1', name: 'Logos', dir: 'Clients/Trash test/Logos', files: [{ id: 'x1', name: 'f.txt', path: 'Clients/Trash test/Logos/f.txt', addedBy: 'u-am' }] }] } }], 'test');
+  assert.equal((await call('haris@e11-digital.com', '/api/host/trashMany', { paths: ['Clients/Trash test/Logos/f.txt'] })).status, 403);
+  assert.equal((await call('haris@e11-digital.com', '/api/host/trashMany', { paths: ['Clients/Trash test/Logos'] })).status, 403);
+  assert.equal((await call('haris@e11-digital.com', '/api/host/makeDir', { path: 'Clients/Trash test/New' })).status, 200);
 });
 
 test('Cloudflare sync: the freelancer group holds only non-company, active emails', async () => {
