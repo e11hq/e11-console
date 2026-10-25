@@ -43,3 +43,5 @@
 .cl-none { color: var(--text-3); font-size: 13px; }
 .cl-ca { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text-2); font-size: 13.5px; }
 .cl-ca:hover { color: var(--text); text-decoration: underline; }
+.nav-clogo { flex: none; display: flex; width: 16px; height: 16px; }
+.nav-clogo .cl-logo { border-radius: 4px; }

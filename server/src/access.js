@@ -52,7 +52,10 @@ export function createAccess(store) {
   const isAutoFolder = (c, f) => !!f.auto || (AUTO_FOLDERS.includes(f.name) && (!f.createdBy || f.createdBy === c.createdBy) && Math.abs(Date.parse(f.createdAt || 0) - Date.parse(c.createdAt || 0)) < 60000);
   function clientEditOk(u, manager, base, current, next) {
     if (!next) return false;
-    if (!manager && ['name', 'logo', 'dir'].some((k) => !deepEqual(next[k] ?? null, base[k] ?? null) && !deepEqual(next[k] ?? null, current[k] ?? null))) return false;
+    // (anyone may fill in a missing logo — the first image in Logos — but only Admins and AMs change one)
+    const firstLogo = !base.logo && !current.logo && !!next.logo && next.logoAuto === true;
+    if (!manager && ['name', 'dir'].some((k) => !deepEqual(next[k] ?? null, base[k] ?? null) && !deepEqual(next[k] ?? null, current[k] ?? null))) return false;
+    if (!manager && !firstLogo && ['logo', 'logoAuto'].some((k) => !deepEqual(next[k] ?? null, base[k] ?? null) && !deepEqual(next[k] ?? null, current[k] ?? null))) return false;
     // judged against what this person's app last saw (base): what they removed or renamed; others' new folders and
     // files from the meantime are kept by the merge
     const was = new Map((base.folders || []).map((f) => [f.id, f]));

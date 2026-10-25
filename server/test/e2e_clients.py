@@ -59,10 +59,28 @@ async def main():
         await am.evaluate(f"openClient('{cid}')"); await am.wait_for_timeout(400)
         names = await am.evaluate(f"[...document.querySelectorAll('.cf-card')].filter(c => c.querySelector('[data-action=\"cfolder-menu\"]')).map(c => c.querySelector('.cf-name').textContent)")
         check(names == ['Mood boards'], f"the AM gets options only on added folders {names}")
+        # the first image Production uploads into Logos becomes the client's logo; the sidebar shows it
+        await pr.evaluate(f"openClient('{cid}', clientById('{cid}').folders.find(x => x.name === 'Logos').id)"); await pr.wait_for_timeout(300)
+        await pr.evaluate("""(async () => { const c = document.createElement('canvas'); c.width = 300; c.height = 120; const g = c.getContext('2d'); g.fillStyle = '#c00'; g.fillRect(0, 0, 300, 120);
+          const b = await new Promise((r) => c.toBlob(r, 'image/png')); await uploadIntoFolder([new File([b], 'nissan-logo.png', { type: 'image/png' })]); })()""")
+        for _ in range(30):
+            await pr.wait_for_timeout(300)
+            if await pr.evaluate(f"!!clientById('{cid}').logo"): break
+        lg = await pr.evaluate(f"[clientById('{cid}').logo, clientById('{cid}').logoAuto]")
+        check(bool(lg[0]) and lg[0].startswith('Clients/_logos/') and lg[1] is True, f'the first logo file becomes the client logo {lg}')
+        await pg.wait_for_timeout(1500)
+        pid0 = await E("db.projects.find(x => x.name === 'Nissan Test').id")
+        check(await pg.locator(f'#project-list [data-project="{pid0}"] .nav-clogo img').count() == 1, 'the sidebar shows the logo instead of the colour')
+        # an Admin's own logo wins, and later uploads don't replace it
+        await E(f"(() => {{ const c = clientById('{cid}'); c.logo = 'Clients/_logos/manual.png'; delete c.logoAuto; persist(0); }})()")
+        await E("Sync.push()"); await pg.wait_for_timeout(1200)
+        await pr.evaluate("""(async () => { const c = document.createElement('canvas'); c.width = 50; c.height = 50; const b = await new Promise((r) => c.toBlob(r, 'image/png')); await uploadIntoFolder([new File([b], 'other.png', { type: 'image/png' })]); })()""")
+        await pr.wait_for_timeout(2500)
+        check(await E(f"clientById('{cid}').logo") == 'Clients/_logos/manual.png', "the Admin's logo stays")
         # the Admin and the client's Account Manager get an Inbox update about the file
         await pg.wait_for_timeout(1200)
         n = await E(f"myNotifs().filter(n => n.kind === 'asset' && n.clientId === '{cid}').map(n => n.text + ' · ' + n.snippet)")
-        check(len(n) == 1 and 'added a file to Nissan Test › Logos' in n[0] and 'mine.png' in n[0], f'the Admin gets an Inbox update {n}')
+        check(any('added a file to Nissan Test › Logos' in x and 'mine.png' in x for x in n), f'the Admin gets an Inbox update {n}')
         await E("go('inbox')"); await pg.wait_for_timeout(400)
         row = pg.locator('.ib-row', has_text='Client Assets').first
         check(await row.count() == 1 and 'Nissan Test' in await row.inner_text(), 'it shows in the Inbox under the client')

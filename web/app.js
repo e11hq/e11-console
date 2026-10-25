@@ -2047,7 +2047,7 @@ function renderSidebar() {
     const open = db.tasks.filter((t) => t.projectId === p.id && !t.parentId && !t.done).length;
     const active = !ui.search && ui.view === 'project' && ui.projectId === p.id;
     return `<a class="nav-item ${active ? 'active' : ''}" data-project="${p.id}" title="${esc(p.name)}">
-      <span class="dot" style="background:${p.color}"></span><span class="name">${esc(p.name)}</span>
+      ${clientOfProject(p) && clientOfProject(p).logo ? `<span class="nav-clogo">${clientLogoHTML(clientOfProject(p), 16)}</span>` : `<span class="dot" style="background:${p.color}"></span>`}<span class="name">${esc(p.name)}</span>
       <span class="count p">${open || ''}</span>
       ${isAdmin() ? `<button class="icon-btn sm more" data-action="project-menu" data-id="${p.id}" title="Client options">${icon('more')}</button>` : ''}
     </a>`;
@@ -5020,6 +5020,8 @@ function viewClients() {
 }
 
 function viewClient(c) {
+  // no logo yet but the Logos folder has an image (e.g. added before this existed): use it
+  if (!c.logo && canAddAssets()) { const lf = c.folders.find((f) => f.name === 'Logos'); if (lf && lf.files.length) setTimeout(() => autoLogo(c, lf), 0); }
   const projects = db.projects.filter((p) => p.clientId === c.id);
   const head = `<div class="cl-head">
       <div class="cl-head-logo">${clientLogoHTML(c, 88)}</div>
@@ -5237,7 +5239,7 @@ async function changeClientLogo(c) {
   try {
     const r = await Host.call('pickImage', { kind: 'logo', userId: 'client-sq' });
     if (!r.path) return;
-    const old = c.logo; c.logo = r.path; persist(0); render();
+    const old = c.logo; c.logo = r.path; delete c.logoAuto; persist(0); render(); renderSidebar();   // a chosen logo always wins
     if (old) safeTrash([old]);
   } catch (e) { toast('Could not use that logo: ' + e.message); }
 }
@@ -5324,6 +5326,7 @@ async function pickIntoFolder() {
     const files = (r.files || []).map((x) => ({ ...x, addedAt: nowISO(), addedBy: currentUserId }));
     if (!files.length) return;
     f.files.push(...files); assetNotify(c, f, 'added', files.map((x) => x.name)); persist(0); render();
+    autoLogo(c, f, files);
     toast(`Added ${files.length} file${files.length === 1 ? '' : 's'} to ${c.name} › ${f.name}`);
   } catch (e) { toast('Could not add files: ' + e.message); }
 }
@@ -5355,7 +5358,7 @@ async function uploadIntoFolder(fileList) {
       persist(300);
     } catch (e) { el.classList.add('err'); note.textContent = 'Upload failed — ' + e.message; }
   }
-  if (added) { assetNotify(c, f, 'added', f.files.slice(-added).map((x) => x.name)); persist(0); }
+  if (added) { assetNotify(c, f, 'added', f.files.slice(-added).map((x) => x.name)); persist(0); Promise.resolve(Sync.push()).catch(() => {}).then(() => autoLogo(c, f, f.files.slice(-added))); }
   if (added && ui.view === 'client' && ui.folderId === f.id) { render(); toast(`Added ${added} file${added === 1 ? '' : 's'} to ${c.name} › ${f.name}`); }
 }
 async function removeClientFile(id) {
@@ -6486,6 +6489,25 @@ async function squareLogo(blob) {
 }
 // One-time: older client logos become squares too (done by an Admin / Account Manager opening Client Assets)
 let logoMigration = null;
+// The client's logo: an Admin's or AM's choice (Client options › Add / Change logo) always wins. Without one, the first
+// image added to the Logos folder becomes the logo (made square), and the sidebar shows it instead of the colour.
+const LOGO_EXT = /\.(png|jpe?g|webp|gif|svg)$/i;
+let autoLogoBusy = false;
+async function autoLogo(c, f, files) {
+  if (!c || c.logo || autoLogoBusy || !Host.isServer || !f || f.name !== 'Logos' || !isAutoFolder(c, f)) return;
+  const a = (files || f.files).find((x) => LOGO_EXT.test(x.name || ''));
+  if (!a) return;
+  autoLogoBusy = true;
+  try {
+    const blob = await fetch(fileUrl(a), { credentials: 'same-origin' }).then((r) => (r.ok ? r.blob() : null));
+    if (!blob) return;
+    const sq = await squareLogo(blob);
+    const up = await ServerHost.uploadMany([sq], { taskId: '_uploads' });
+    const r = await api('POST', '/api/host/processImage', { path: up[0].path, kind: 'logo', userId: 'client-sq' });
+    const cur = clientById(c.id);
+    if (r.path && cur && !cur.logo) { cur.logo = r.path; cur.logoAuto = true; persist(0); renderSidebar(); if (ui.view === 'client' || ui.view === 'clients') render(); }
+  } catch (e) { /* no logo then; the colour stays */ } finally { autoLogoBusy = false; }
+}
 function migrateClientLogos() {
   if (logoMigration || !Host.isServer || !canAssets()) return;
   const todo = (db.clients || []).filter((c) => c.logo && !isSquareLogo(c.logo) && !/\.svg$/i.test(c.logo));
