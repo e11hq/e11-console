@@ -6076,7 +6076,7 @@ document.addEventListener('mouseover', (e) => {
   const bx = box.getBoundingClientRect(), clr = row.querySelector('.ib-clear');
   const cr = clr && clr.offsetParent ? clr.getBoundingClientRect() : null;
   const visible = Math.min(bx.right, cr && cr.left < bx.right ? cr.left - 10 : bx.right) - bx.left;
-  const over = Math.ceil(inner.getBoundingClientRect().width - visible);
+  const over = Math.ceil(Math.max(inner.getBoundingClientRect().width, inner.scrollWidth) - visible);   // (whichever is wider: Safari differs)
   box.classList.remove('measure');
   if (over < 4) { box.classList.remove('marq'); return; }
   box.style.setProperty('--dx', `-${over + 30}px`);   // a little past the end, clear of the fade

@@ -1429,7 +1429,7 @@ body { font-size: 14px; line-height: 1.45; letter-spacing: -.003em; background: 
 .ib-kic .ic { width: 16px; height: 16px; }
 .ib-msg { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-size: 14.5px; }
 .ib-msg b { font-weight: 400; }
-.ib-msg.marq { text-overflow: clip; padding-block: 2px; margin-block: -2px; -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 16px, #000 calc(100% - 22px), transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 16px, #000 calc(100% - 22px), transparent 100%); }
+.ib-msg.marq { text-overflow: clip; padding-block: 2px; margin-block: -2px; -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 22px), transparent 100%); mask-image: linear-gradient(90deg, #000 calc(100% - 22px), transparent 100%); }   /* (no fade on the left: it hid the first letters) */
 .ib-msg.marq .ib-mi { display: inline-block; vertical-align: top; padding-right: 4px; animation: ibMarq var(--dur, 6s) ease-in-out 1 both; }
 .ib-msg.marq.measure .ib-mi { animation: none; }
 @keyframes ibMarq { 0%, 12% { transform: none; } 78%, 88% { transform: translateX(var(--dx)); } 100% { transform: none; } }
