@@ -138,7 +138,7 @@ const Claims = (() => {
           <div class="ec-total"><b>TOTAL</b><span class="ec-count">${plural(itemsOf(c), 'item')} · ${plural(receiptsOf(c).length, 'receipt')}</span><b class="r" id="ec-total">${money(totalOf(c))}</b><span>AED</span></div>
         </div>
         <div class="ec-claimer">
-          <div><small>CLAIMER DETAILS</small><b>${esc(fullName(u))}</b><span>${esc(ROLES[(u || {}).role] || '')}${c.submittedAt ? ' · submitted ' + esc(fmtDay(ymd(new Date(c.submittedAt)))) : ''}</span></div>
+          <div><small>CLAIMER DETAILS</small><b>${esc(fullName(u))}</b><span>${esc(roleOf(u))}${c.submittedAt ? ' · submitted ' + esc(fmtDay(ymd(new Date(c.submittedAt)))) : ''}</span></div>
           <div class="ec-sigs"><small>SIGNATURE</small>
             ${edit ? `<div class="ec-sigrow">
               ${saved ? `<button type="button" class="ec-sig ${sig && sig.path === saved.path ? 'on' : ''}" data-cl="sig-saved"><img src="${fileUrlOf(saved)}" alt="Your saved signature"><span><b>Saved signature</b><small>Used again on each claim</small></span></button>` : ''}
@@ -310,7 +310,7 @@ const Claims = (() => {
     y += 80 * S;
     font(700, 10.5); ctx.fillStyle = '#6e717a'; text('CLAIMER DETAILS', P, y); text('SIGNATURE', W / 2, y);
     font(600, 14); ctx.fillStyle = '#17181b'; text(fullName(u), P, y + 26 * S);
-    font(400, 12); ctx.fillStyle = '#6e717a'; text(ROLES[(u || {}).role] || '', P, y + 46 * S);
+    font(400, 12); ctx.fillStyle = '#6e717a'; text(roleOf(u), P, y + 46 * S);
     if (sig) { const h = 54 * S, w = Math.min(220 * S, (sig.width / sig.height) * h); ctx.drawImage(sig, W / 2, y + 8 * S, w, h); }
     ctx.fillStyle = '#17181b'; ctx.fillRect(W / 2, y + 66 * S, 220 * S, 1.5);
     // Finance strip at the foot of the last page

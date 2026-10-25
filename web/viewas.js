@@ -13,7 +13,7 @@ const ViewAs = (() => {
     let bar = document.getElementById('viewas-bar');
     if (!viewing()) { if (bar) bar.remove(); return; }
     if (!bar) { bar = document.createElement('div'); bar.id = 'viewas-bar'; document.body.appendChild(bar); }
-    bar.innerHTML = `${icon('users')}<span>Viewing as <b>${esc(info.as.name)}</b> · ${esc(ROLES[info.as.role] || info.as.role)}<small>Test site only</small></span>
+    bar.innerHTML = `${icon('users')}<span>Viewing as <b>${esc(info.as.name)}</b> · ${esc(roleOf(userById(info.as.id)) || ROLES[info.as.role] || info.as.role)}<small>Test site only</small></span>
       <button class="btn sm" data-va="pick">Switch</button><button class="btn primary sm" data-va="me">Back to me</button>`;
   }
   async function set(userId) {
@@ -36,8 +36,8 @@ const ViewAs = (() => {
     const input = $('.va-search input', root), list = $('.va-list', root);
     const draw = () => {
       const q = input.value.trim().toLowerCase();
-      const rows = people.filter((u) => !q || fullName(u).toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || String(ROLES[u.role] || '').toLowerCase().includes(q));
-      list.innerHTML = rows.length ? rows.map((u) => `<button class="va-row ${info.as && info.as.id === u.id ? 'on' : ''}" data-va-id="${u.id}">${avatarHTML(u.id, 30)}<span><b>${esc(fullName(u))}</b><small>${esc(u.email)}</small></span><span class="role-pill r-${u.role}">${esc(ROLES[u.role] || u.role)}</span></button>`).join('')
+      const rows = people.filter((u) => !q || fullName(u).toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || String(roleOf(u)).toLowerCase().includes(q));
+      list.innerHTML = rows.length ? rows.map((u) => `<button class="va-row ${info.as && info.as.id === u.id ? 'on' : ''}" data-va-id="${u.id}">${avatarHTML(u.id, 30)}<span><b>${esc(fullName(u))}</b><small>${esc(u.email)}</small></span><span class="role-pill r-${roleCls(u)}">${esc(roleOf(u))}</span></button>`).join('')
         : `<div class="ap-none">No one matches “${esc(input.value.trim())}”</div>`;
     };
     input.addEventListener('input', draw);

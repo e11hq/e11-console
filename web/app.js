@@ -4219,7 +4219,7 @@ function assignMenu(anchor) {
     const item = (x, i) => `<div class="ap-item ${x.on ? 'on' : ''} ${i === hl ? 'hl' : ''}" data-ap="${x.u.id}" data-i="${i}">
       <span class="ap-av">${avatarHTML(x.u.id, 30)}${x.on ? `<button class="ap-x" data-ap-x="${x.u.id}" title="Remove assignee">${icon('x')}</button>` : ''}</span>
       <span class="ap-name">${x.u.id === currentUserId ? 'Me' : esc(fullName(x.u))}${x.u.name ? '' : ''}</span>
-      <small>${esc(ROLES[x.u.role] || '')}</small></div>`;
+      <small>${esc(roleOf(x.u))}</small></div>`;
     let i = 0;
     list.innerHTML = (assigned.length ? `<div class="ap-label">Assignees</div>${assigned.map(() => item(rows[i], i++)).join('')}` : '')
       + (people.length ? `<div class="ap-label">People</div>${people.map(() => item(rows[i], i++)).join('')}` : '')
@@ -5568,6 +5568,9 @@ const cdUserId = () => { const id = db && db.meta.cdUserId; const u = id && user
 const isCD = (id = currentUserId) => !!id && id === cdUserId();
 const cdActing = () => !!(db && db.meta.cdActing && cdUserId());
 const cdTitle = () => (cdActing() ? 'Acting CD' : 'Creative Director');
+// How a person's role reads anywhere in the app: whoever is the CD is described as the Creative Director (or Acting CD)
+const roleOf = (u) => (u && u.id === cdUserId() ? cdTitle() : (u && (ROLES[u.role] || u.role)) || '');
+const roleCls = (u) => (u && u.id === cdUserId() ? 'cd' : u ? u.role : '');
 // Who can be assigned to a task: Production, Social, Freelancers and the Creative Director (or the Acting CD) —
 // never Account Managers, Admins or Finance people
 const ASSIGNABLE = new Set(['production', 'social', 'freelancer']);
@@ -6425,7 +6428,7 @@ function viewTeam() {
       ${users.map((u) => `<div class="tt-row ${u.active === false ? 'inactive' : ''}">
         <div class="tt-name">${avatarHTML(u.id, 30)}<span>${esc(fullName(u))}${u.id === currentUserId ? ' <small>(you)</small>' : ''}</span></div>
         <div class="tt-email">${esc(u.email)}</div>
-        <div><span class="role-pill r-${u.role}">${esc(ROLES[u.role] || u.role)}</span>${u.admin && u.role !== 'admin' ? '<span class="role-pill r-admin xtra">+ Admin</span>' : ''}${u.fin && !isFinUser(u) ? `<span class="role-pill r-finance_${u.fin} xtra">+ ${esc(FIN_ACCESS[u.fin])}</span>` : ''}${u.role === 'freelancer' ? `<button class="tt-proj" ${admin ? `data-action="member-projects" data-id="${u.id}"` : ''} title="Clients they can see">${(u.projectIds || []).length} project${(u.projectIds || []).length === 1 ? '' : 's'}</button>` : ''}</div>
+        <div><span class="role-pill r-${roleCls(u)}">${esc(roleOf(u))}</span>${u.admin && u.role !== 'admin' ? '<span class="role-pill r-admin xtra">+ Admin</span>' : ''}${u.fin && !isFinUser(u) ? `<span class="role-pill r-finance_${u.fin} xtra">+ ${esc(FIN_ACCESS[u.fin])}</span>` : ''}${u.role === 'freelancer' ? `<button class="tt-proj" ${admin ? `data-action="member-projects" data-id="${u.id}"` : ''} title="Clients they can see">${(u.projectIds || []).length} project${(u.projectIds || []).length === 1 ? '' : 's'}</button>` : ''}</div>
         <div>${u.active === false ? '<span class="st-txt off">Removed</span>' : u.setup ? `<span class="st-txt on">Active</span>` : '<span class="st-txt pend">Hasn’t signed in yet</span>'}</div>
         ${cdCell(u, admin)}
         <div>${admin ? `<button class="icon-btn sm" data-action="member-menu" data-id="${u.id}" title="Manage">${icon('more')}</button>` : ''}</div>
@@ -6591,7 +6594,7 @@ function viewProfile() {
       <label class="dlg-label">Full name</label><input class="field" id="pf-name" value="${esc(u.name || '')}" placeholder="Your full name">
       <label class="dlg-label">Email</label><div class="field ro">${icon('lock')}${esc(u.email)}</div>
       <label class="dlg-label">Office</label><input class="field" id="pf-office" value="${esc(u.office || '')}" maxlength="80" placeholder="e.g. Dubai — Business Bay office">
-      <label class="dlg-label">Role</label><div class="pf-role"><span class="role-pill r-${u.role}">${esc(ROLES[u.role])}</span>${u.admin && u.role !== 'admin' ? '<span class="role-pill r-admin">+ Admin</span>' : ''}${u.fin && !isFinUser(u) ? `<span class="role-pill r-finance_${u.fin}">+ ${esc(FIN_ACCESS[u.fin])}</span>` : ''}${u.id === cdUserId() ? `<span class="role-pill r-cd">${esc(cdTitle())}</span>` : ''}<small>People see this and your office when they hover your name.</small></div>
+      <label class="dlg-label">Role</label><div class="pf-role"><span class="role-pill r-${roleCls(u)}">${esc(roleOf(u))}</span>${u.admin && u.role !== 'admin' ? '<span class="role-pill r-admin">+ Admin</span>' : ''}${u.fin && !isFinUser(u) ? `<span class="role-pill r-finance_${u.fin}">+ ${esc(FIN_ACCESS[u.fin])}</span>` : ''}${u.id === cdUserId() ? `<span class="role-pill r-cd">${esc(cdTitle())}</span>` : ''}<small>People see this and your office when they hover your name.</small></div>
       <div class="pf-actions"><button class="btn primary" data-action="save-profile">Save changes</button>${Host.isServer ? '' : `<button class="btn" data-action="change-password">${icon('lock')}Change password</button>`}</div>
     </div>
     ${Host.isServer && AppIcon.isOwner() ? appIconCard() : ''}
@@ -6861,7 +6864,7 @@ function renderMeChip() {
   const el = $('#me-chip');
   const u = me();
   if (!el || !u) return;
-  el.innerHTML = `${avatarHTML(u.id, 28)}<span class="me-txt"><b>${esc(fullName(u))}</b><small>${esc(ROLES[u.role])}</small></span>${icon('chev')}`;
+  el.innerHTML = `${avatarHTML(u.id, 28)}<span class="me-txt"><b>${esc(fullName(u))}</b><small>${esc(roleOf(u))}</small></span>${icon('chev')}`;
 }
 function meMenu(anchor) {
   if (isFinUser()) return Fin.meMenu(anchor, typeof ViewAs !== 'undefined' && ViewAs.viewing() ? [{ label: 'Back to me', icon: 'reply', run: ViewAs.back }] : []);

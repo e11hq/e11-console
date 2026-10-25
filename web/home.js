@@ -311,7 +311,7 @@ const Home = (() => {
     let streak = 0;
     for (const t of finished) { if (onTime(t, myDoneAt(t))) streak++; else break; }
 
-    const roleL = { production: 'Production', social: 'Social', freelancer: 'Freelancer' }[u.role] || ROLES[u.role] || '';
+    const roleL = roleOf(u);
     return `<div class="hm hm-member">
       <header class="hm-head"><div><div class="hm-date">${dateLine()}${roleL ? ' · ' + esc(roleL) : ''}</div><h1>${hello(first(u))}</h1></div>
         <div class="hm-btns"><button type="button" class="hm-btn" data-nav="today">My Day</button>${can('createTask') ? '<button type="button" class="hm-btn primary" data-action="new-task">+ New task</button>' : ''}</div></header>
