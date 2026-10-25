@@ -36,6 +36,11 @@ async def main():
             if mine:
                 await pg.evaluate("closeDetail()"); await pg.evaluate(f"openTask('{mine}')"); await pg.wait_for_timeout(500)
                 ok.append(not await pg.evaluate("document.querySelector('#detail').classList.contains('ro-task')"))
+            await pg.evaluate("closeDetail()")
+            srch = await pg.evaluate("(() => { const r = taskSearch('ALAIN'); return { other: r.tasks.some(x => x.t.projectId === 'p-alain' && x.t.createdBy !== currentUserId), clients: r.projects.map(p => p.name) }; })()")
+            ok.append(srch == {'other': False, 'clients': []})
+            cal = await pg.evaluate("Cal && db.tasks.filter(t => Cal.isPost(t) && !amReadOnly(t)).every(t => ['p-ford', 'p-korea'].includes(t.projectId) || t.createdBy === currentUserId)")
+            ok.append(cal is True)
             ok.append(not errs)
             print('ALL PASS' if all(ok) else f'FAILS {ok} {sb} {r} {errs}')
             await b.close()

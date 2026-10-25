@@ -186,7 +186,7 @@ const Cal = (() => {
   const projOf = (t) => (t.projectId && proj(t.projectId)) || null;
   function posts(from, to) {
     const f = st();
-    return db.tasks.filter((t) => isPost(t) && dayOf(t) && dayOf(t) >= from && dayOf(t) <= to
+    return db.tasks.filter((t) => isPost(t) && !amReadOnly(t) && dayOf(t) && dayOf(t) >= from && dayOf(t) <= to   // (an AM: their clients' posts)
       && (!f.projects.length || f.projects.includes(t.projectId)) && (!f.channels.length || (t.channels || []).some((c) => f.channels.includes(c))))
       .sort((a, b) => dayOf(a).localeCompare(dayOf(b)) || (a.title || '').localeCompare(b.title || ''));
   }
@@ -275,7 +275,7 @@ const Cal = (() => {
   function side(r) {
     const today = todayStr();
     const soon = Occasions.between(today, addDays(today, 75)).slice(0, 7);
-    const all = db.tasks.filter(isPost);
+    const all = db.tasks.filter((t) => isPost(t) && !amReadOnly(t));   // (an AM: their clients)
     const inRange = posts(r.from, r.to);
     const counts = Object.keys(STATUS).map((k) => [k, inRange.filter((t) => statusOf(t) === k).length]);
     const mgr = isManager();
@@ -453,7 +453,7 @@ const Cal = (() => {
     // tick and untick several: the menu stays open and only the ticks, the button and the calendar update
     // (no full redraw, so nothing flashes through the menu)
     const opts = kind === 'project'
-      ? db.projects.filter((p) => !p.inactive || f.projects.includes(p.id)).sort(byOrder).map((p) => [p.id, `<span class="dot" style="background:${p.color}"></span>${esc(p.name)}`])
+      ? db.projects.filter((p) => (!p.inactive && amSidebarOk(p)) || f.projects.includes(p.id)).sort(byOrder).map((p) => [p.id, `<span class="dot" style="background:${p.color}"></span>${esc(p.name)}`])
       : CHANNELS.map(([k, name]) => [k, `<span class="cal-ch" style="--c:${CH[k].color}">${CH[k].short}</span>${esc(name)}`]);
     const html = `<div class="mi" data-tog="">${kind === 'project' ? 'All clients' : 'All channels'}${ck(!f[list].length)}</div>`
       + opts.map(([v, label]) => `<div class="mi" data-tog="${esc(v)}">${label}${ck(f[list].includes(v))}</div>`).join('');

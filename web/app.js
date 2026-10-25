@@ -2569,7 +2569,8 @@ function taskFields(t) {
 function taskSearch(query, { limit = 200 } = {}) {
   const terms = sWords(query);
   if (!terms.length) return { tasks: [], projects: [], fixed: [] };
-  const docs = db.tasks.map((t) => {
+  // an Account Manager searches their own clients' tasks and the tasks they created (like their sidebar)
+  const docs = db.tasks.filter((t) => !amReadOnly(t)).map((t) => {
     const fields = taskFields(t);
     const words = new Map(); // word -> best weight
     fields.forEach((fl, i) => sWords(fl.text).forEach((w) => { if (!words.has(w) || words.get(w).w < fl.w) words.set(w, { w: fl.w, i }); }));
@@ -2600,7 +2601,7 @@ function taskSearch(query, { limit = 200 } = {}) {
   });
   tasks.sort((a, b) => b.score - a.score || (a.t.done - b.t.done) || b.t.updatedAt.localeCompare(a.t.updatedAt));
   // projects whose name (or client) matches every word
-  const projects = db.projects.filter((p) => {
+  const projects = db.projects.filter((p) => !p.inactive && amSidebarOk(p)).filter((p) => {
     const ws = new Set(sWords(`${p.name} ${(clientOfProject(p) || {}).name || ''}`));
     return per.every((pt) => [...pt.words.keys()].some((w) => ws.has(w)));
   });
