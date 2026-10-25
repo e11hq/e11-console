@@ -5985,6 +5985,11 @@ function ibGroup(iso) {
   return d.toLocaleDateString('en-US', { month: 'long', ...(d.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' }) });
 }
 // The message part of an Inbox row, with coloured status / CD / priority chips like the task page
+// The whole comment an update is about (the update itself keeps only its first 160 characters)
+function fullComment(n, t) {
+  const cm = n.commentId && t && (t.comments || []).find((x) => x.id === n.commentId);
+  return cm ? (cm.html ? notifPlainHTML(cm.html) : String(cm.text || '')).replace(/\s+/g, ' ').trim() : '';
+}
 function notifMsg(n, t) {
   const who = `<b>${esc(fullName(userById(n.from)))}</b>`;
   const val = ((n.text.match(/<b>([^<]*)<\/b>(?![^]*<b>)/) || [])[1] || '').replace(/&amp;/g, '&');
@@ -5999,10 +6004,10 @@ function notifMsg(n, t) {
   }
   if (/^claim/.test(n.kind)) return `${who} ${n.text}${n.snippet ? ` <span class="ib-dim">· ${esc(n.snippet)}</span>` : ''}`;
   if (n.kind === 'asset') return `${who} ${esc(n.text)}${n.snippet ? ` <span class="ib-dim">· ${esc(n.snippet)}</span>` : ''}`;
-  if (n.kind === 'review-amend' && n.snippet) return `${who} <span class="ib-dim">requested amendments:</span> ${esc(n.snippet)}`;
+  if (n.kind === 'review-amend' && n.snippet) return `${who} <span class="ib-dim">requested amendments:</span> ${esc(fullComment(n, t) || n.snippet)}`;
   if (n.kind === 'review-ok' && /your files/.test(n.text)) return `${who} approved your files <span class="ib-chip" style="background:${CD.approved.color};color:${textOn(CD.approved.color)}">APPROVED</span>`;
   if ((n.kind === 'comment' || n.kind === 'mention') && n.snippet) {
-    const snip = esc(n.snippet).replace(/@([A-Z][\w.'-]*(?: [A-Z][\w.'-]*){0,2})/g, '<span class="mention">@$1</span>');
+    const snip = esc(fullComment(n, t) || n.snippet).replace(/@([A-Z][\w.'-]*(?: [A-Z][\w.'-]*){0,2})/g, '<span class="mention">@$1</span>');
     return `${who} <span class="ib-dim">${n.kind === 'mention' ? 'mentioned you:' : n.text.includes('repl') ? 'replied:' : 'commented:'}</span> ${snip}`;
   }
   return `${who} ${n.text.replace(/ (on|to|from|of|for)$/, '').replace(/ —[^<]*:$|:$/, '')}${n.kind === 'assigned' ? ' this task' : n.kind === 'unassigned' ? ' this task' : ''}`;
@@ -6067,11 +6072,15 @@ document.addEventListener('mouseover', (e) => {
   if (!inner || box.classList.contains('marq')) return;
   // measure the whole message as one block (scrollWidth with an ellipsis isn't reliable in Safari / the Mac app)
   box.classList.add('marq', 'measure');
-  const over = Math.ceil(inner.getBoundingClientRect().width - box.getBoundingClientRect().width);
+  // the end has to land left of the Clear button that shows on hover (it can sit over the message)
+  const bx = box.getBoundingClientRect(), clr = row.querySelector('.ib-clear');
+  const cr = clr && clr.offsetParent ? clr.getBoundingClientRect() : null;
+  const visible = Math.min(bx.right, cr && cr.left < bx.right ? cr.left - 10 : bx.right) - bx.left;
+  const over = Math.ceil(inner.getBoundingClientRect().width - visible);
   box.classList.remove('measure');
   if (over < 4) { box.classList.remove('marq'); return; }
-  box.style.setProperty('--dx', `-${over + 16}px`);
-  box.style.setProperty('--dur', `${Math.min(16, Math.max(3, (over + 16) / 45 + 2.4))}s`);   // ~45px a second, with pauses
+  box.style.setProperty('--dx', `-${over + 30}px`);   // a little past the end, clear of the fade
+  box.style.setProperty('--dur', `${Math.min(16, Math.max(3, (over + 30) / 45 + 2.4))}s`);   // ~45px a second, with pauses
   const done = () => { box.classList.remove('marq'); inner.removeEventListener('animationend', done); };
   inner.addEventListener('animationend', done);
 });
