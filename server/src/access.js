@@ -118,6 +118,7 @@ export function createAccess(store) {
         return manager;                                             // Admins + Account Managers manage Client Assets
       case 'projects':
         if (isFreelancer(u)) return !ch.del && !!current && projectSet(u).has(current.id) && next.id === current.id;
+        if (ch.del || !current) return admin;                       // only Admins add or remove a client
         return true;
       case 'tasks': {
         // a task's Finance status is set by Account Managers and Admins only

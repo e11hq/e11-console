@@ -129,13 +129,25 @@ test('two people comment on the same task at once and both comments are kept, li
 
 test('catching up: an app that was offline gets what it missed', async () => {
   const before = app.store.rev();
-  await call(AM, '/api/push', { method: 'POST', body: { changes: [{ kind: 'projects', id: 'p-new', data: { id: 'p-new', name: 'KOREA 360', sections: [] } }] } });
+  await call(ADMIN, '/api/push', { method: 'POST', body: { changes: [{ kind: 'projects', id: 'p-new', data: { id: 'p-new', name: 'KOREA 360', sections: [] } }] } });
   const late = listen(PROD, `since=${before}`);
   await late.ready; await wait(200);
   const got = late.events.filter((e) => e.event === 'changes').flatMap((e) => e.data.changes);
   assert.ok(got.some((c) => c.id === 'p-new'));
   assert.equal(late.events[0].event, 'hello');
   late.close();
+});
+
+test('only Admins add or remove a client; Account Managers can still rename one', async () => {
+  const add = (who, id) => call(who, '/api/push', { method: 'POST', body: { changes: [{ kind: 'projects', id, data: { id, name: 'New client', sections: [] } }] } });
+  assert.equal((await add(AM, 'p-am')).body.results[0].refused, true);
+  assert.equal((await add(PROD, 'p-prod')).body.results[0].refused, true);
+  assert.ok(!(await add(ADMIN, 'p-adm')).body.results[0].refused);
+  const ren = await call(AM, '/api/push', { method: 'POST', body: { changes: [{ kind: 'projects', id: 'p-adm', data: { id: 'p-adm', name: 'Renamed', sections: [] } }] } });
+  assert.ok(!ren.body.results[0].refused);
+  const del = (who) => call(who, '/api/push', { method: 'POST', body: { changes: [{ kind: 'projects', id: 'p-adm', del: true }] } });
+  assert.equal((await del(AM)).body.results[0].refused, true);
+  assert.ok(!(await del(ADMIN)).body.results[0].refused);
 });
 
 test('permissions: production cannot edit settings, clients or other people', async () => {

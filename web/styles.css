@@ -2424,3 +2424,4 @@ html:not(.mac-chrome) #app:not(.sb-collapsed) #sidebar .brand { margin-right: -7
 /* phone: text boxes stay at 16px so iPhone doesn't zoom in while typing, so the description reads at 16px too */
 :root.phone .desc-view, :root.phone .desc-sec .composer.desc .d-notes { font-size: 16px; }
 .pf-opt-btns { display: flex; align-items: center; gap: 10px; flex: none; }
+.tr-only { font-size: 12px; color: var(--text-3); white-space: nowrap; }

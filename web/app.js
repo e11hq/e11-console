@@ -2021,6 +2021,7 @@ function updateAppBadge() {
 }
 function renderSidebar() {
   updateAppBadge();
+  { const add = document.querySelector('.nav-heading [data-action="new-project"]'); if (add) add.hidden = !isAdmin(); }   // only Admins add clients
   if (typeof Season !== 'undefined') { const u = currentUserId && db && me(); Season.sync(u ? !!(u.prefs || {}).seasonOff : undefined); }
   $$('.nav-item[data-nav]').forEach((a) => a.classList.toggle('active', !ui.search && (ui.view === a.dataset.nav || (a.dataset.nav === 'clients' && ui.view === 'client'))));
   Fin.paintNav();
@@ -2050,7 +2051,7 @@ function renderSidebar() {
       <span class="count p">${open || ''}</span>
       <button class="icon-btn sm more" data-action="project-menu" data-id="${p.id}" title="Client options">${icon('more')}</button>
     </a>`;
-  }).join('') : `<div class="nav-item ph" data-action="new-project" style="font-size:12.5px">${icon('plus')} Add your first client</div>`;
+  }).join('') : isAdmin() ? `<div class="nav-item ph" data-action="new-project" style="font-size:12.5px">${icon('plus')} Add your first client</div>` : '';
 }
 
 function renderTitle() {
@@ -3488,7 +3489,7 @@ function go(view, projectId = null) {
 }
 
 async function newProjectFlow() {
-  if (me() && me().role === 'freelancer') return denied();
+  if (!isAdmin()) { toast('Only Admins can add clients'); return; }
   const used = new Set(db.projects.map((p) => p.color));
   const res = await dialog({
     title: 'New client', input: { label: 'Client name', placeholder: 'e.g. Ford & Lincoln' },
@@ -3724,6 +3725,7 @@ const TRASH_ICON = { task: 'check-circle', project: 'folder', comment: 'chat', a
 
 /* ---- Putting things back ---- */
 function restoreTrash(id) {
+  { const it0 = (db.trash || []).find((x) => x.id === id); if (it0 && it0.type === 'project' && !isAdmin()) { toast('Only Admins can restore clients'); return; } }
   const it = trashList().find((x) => x.id === id);
   if (!it || !isManager()) return;
   const d = it.data || {};
@@ -3846,7 +3848,7 @@ function trashRow(it, r) {
     </div>
     <span class="tr-left ${left <= 3 ? 'soon' : ''}" title="Deleted for good after ${TRASH_DAYS} days">${left} day${left === 1 ? '' : 's'} left</span>
     <div class="tr-acts">
-      <button class="btn primary sm" data-action="tr-restore" data-id="${it.id}">${icon('reply')}Restore</button>
+      ${it.type !== 'project' || isAdm(me()) ? `<button class="btn primary sm" data-action="tr-restore" data-id="${it.id}">${icon('reply')}Restore</button>` : '<span class="tr-only" title="Only Admins add clients back">Admins restore clients</span>'}
       ${isAdm(me()) ? `<button class="icon-btn sm" data-action="tr-forever" data-id="${it.id}" title="Delete forever">${icon('trash')}</button>` : ''}
     </div>
   </div>`;
@@ -3894,7 +3896,7 @@ function projectMenu(anchor, id) {
     { label: 'Add section', icon: 'plus', run: () => { go('project', id); setTimeout(() => { const a = $('[data-action="add-section"]'); if (a) a.click(); }, 30); } },
     ...(can('editProject') ? [{ label: clientOfProject(p) ? `Client Assets: ${clientOfProject(p).name}` : 'Link to Client Assets…', icon: 'assets', run: () => setTimeout(() => projectClientMenu(anchor, p), 0) }] : []),
     '-',
-    ...(can('deleteProject') ? [{ label: 'Delete client', icon: 'trash', danger: true, run: () => deleteProjectFlow(id) }] : []),
+    ...(isAdmin() ? [{ label: 'Delete client', icon: 'trash', danger: true, run: () => deleteProjectFlow(id) }] : []),
   ]);
   m._onSwatch = (c) => { p.color = c; commit(); };
 }
@@ -3908,7 +3910,7 @@ async function renameProject(id) {
 async function deleteProjectFlow(id) {
   const p = proj(id);
   const n = db.tasks.filter((t) => t.projectId === id).length;
-  const ok = await dialog({ title: `Delete “${p.name}”?`, body: `The client and its ${n} task${n === 1 ? '' : 's'} move to the Trash. An Admin or Account Manager can restore them within ${TRASH_DAYS} days.`, okText: 'Move to Trash', danger: true });
+  const ok = await dialog({ title: `Delete “${p.name}”?`, body: `The client and its ${n} task${n === 1 ? '' : 's'} move to the Trash. An Admin can restore them within ${TRASH_DAYS} days.`, okText: 'Move to Trash', danger: true });
   if (!ok) return;
   db.projects = db.projects.filter((x) => x.id !== id);
   const removed = removeTasks(db.tasks.filter((t) => t.projectId === id).map((t) => t.id));
