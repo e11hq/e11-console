@@ -13,7 +13,7 @@ const Home = (() => {
   const dateLine = () => new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
   const ymdOf = (iso) => (iso ? ymd(new Date(iso)) : null);
   const pColor = (t) => (proj(t.projectId) || {}).color || 'var(--text-3)';
-  const pName = (t) => (proj(t.projectId) || {}).name || 'No project';
+  const pName = (t) => (proj(t.projectId) || {}).name || 'No client';
   const title = (t) => (t.title ? esc(t.title) : '<span class="ph">Untitled task</span>');
   const nComments = (t) => (t.comments || []).length;
   const nFiles = (t) => shownAtts(t).length;
@@ -147,7 +147,7 @@ const Home = (() => {
       return { p, open: ts.length - d, pc: pct(d, ts.length) };
     });
     const projCard = `<section class="hm-card">
-        <div class="hm-h"><h2>${admin ? 'Projects' : 'My projects'}</h2><span class="hm-mute">${projects.length}</span></div>
+        <div class="hm-h"><h2>${admin ? 'Clients' : 'My clients'}</h2><span class="hm-mute">${projects.length}</span></div>
         ${projects.length ? `<div class="hm-projs">${projects.map(({ p, open: o, pc }) => `<div class="hm-proj" data-project="${p.id}"><span class="hm-pi" style="background:${p.color}">${esc(initials(p.name))}</span><span class="hm-main"><b>${esc(p.name)}</b><span class="hm-sub">${o} open · ${pc}% done</span><span class="hm-pbar"><i style="width:${pc}%;background:${p.color}"></i></span></span></div>`).join('')}</div>` : '<div class="hm-empty">Projects with your tasks show up here.</div>'}
       </section>`;
 

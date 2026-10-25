@@ -612,7 +612,7 @@ function viewUpdates() {
   return `<div class="upd"><div class="upd-card" id="upd-body"><div class="ph">Checking for updates…</div></div>
     <div class="upd-card imp-card">
       <h3>${icon('upload')}Move data from the Mac app</h3>
-      <p class="upd-note">Choose <b>e11-data.json</b> from the “E11 Console Data” folder on the Mac. Tasks, projects, comments, people, notifications and client assets are added to the server. Copy the folders <b>attachments</b>, <b>Clients</b> and <b>.thumbs</b> into the NAS folder <b>E11Console/live/files</b> as well, so the files open. A copy of the database is made first.</p>
+      <p class="upd-note">Choose <b>e11-data.json</b> from the “E11 Console Data” folder on the Mac. Tasks, clients, comments, people, notifications and client assets are added to the server. Copy the folders <b>attachments</b>, <b>Clients</b> and <b>.thumbs</b> into the NAS folder <b>E11Console/live/files</b> as well, so the files open. A copy of the database is made first.</p>
       <button class="btn" data-action="import-mac">${icon('upload')}Choose e11-data.json…</button>
     </div></div>`;
 }
@@ -622,7 +622,7 @@ async function importFromMac() {
   let data;
   try { data = JSON.parse(await files[0].text()); } catch (e) { toast('That file isn’t an E11 Console data file'); return; }
   if (!data || !Array.isArray(data.tasks) || !Array.isArray(data.users)) { toast('That file isn’t an E11 Console data file'); return; }
-  const ok = await dialog({ title: 'Import from the Mac app?', body: `${data.tasks.length} tasks, ${(data.projects || []).length} projects, ${data.users.length} people and ${(data.clients || []).length} clients will be added to the server. Items that already exist are replaced by the Mac’s version.`, okText: 'Import' });
+  const ok = await dialog({ title: 'Import from the Mac app?', body: `${data.tasks.length} tasks, ${(data.projects || []).length} clients, ${data.users.length} people and ${(data.clients || []).length} Client Assets folders will be added to the server. Items that already exist are replaced by the Mac’s version.`, okText: 'Import' });
   if (!ok) return;
   if (data.meta) { delete data.meta.prefs; }
   try {
@@ -1623,7 +1623,7 @@ function moveTask(id, sectionId, targetId, after) {
 function setTaskProject(t, projectId) {
   const p = projectId ? proj(projectId) : null;
   const oldP = proj(t.projectId);
-  logChange(t, 'the <b>project</b>', oldP ? oldP.name : 'My Tasks', p ? p.name : 'My Tasks');
+  logChange(t, 'the <b>client</b>', oldP ? oldP.name : 'My Tasks', p ? p.name : 'My Tasks');
   t.projectId = p ? p.id : null;
   t.sectionId = p && p.sections[0] ? p.sections[0].id : db.statuses[0].id;
   const sibs = db.tasks.filter((x) => !x.parentId && x.projectId === t.projectId && x.sectionId === t.sectionId && x.id !== t.id);
@@ -1644,7 +1644,7 @@ function seed() {
   createTask({ parentId: t1.id, title: 'Open a task to see its details' });
   createTask({ parentId: t1.id, title: 'Tick a circle to complete a task' });
   createTask({ projectId: p.id, sectionId: todo.id, title: 'Switch to Board view and drag a card between columns', due: addDays(today, 1), tags: ['tour'], assignees: A });
-  createTask({ projectId: p.id, sectionId: todo.id, title: 'Create your first project from the sidebar', priority: 'urgent', due: addDays(today, 2), assignees: A });
+  createTask({ projectId: p.id, sectionId: todo.id, title: 'Add your first client from the sidebar', priority: 'urgent', due: addDays(today, 2), assignees: A });
   createTask({ projectId: p.id, sectionId: doing.id, title: 'Press ⌘K to search all tasks', tags: ['tip'], assignees: A });
   const d = createTask({ projectId: p.id, sectionId: done.id, title: 'Install E11 Console', assignees: A });
   setDone(d, true);
@@ -2048,9 +2048,9 @@ function renderSidebar() {
     return `<a class="nav-item ${active ? 'active' : ''}" data-project="${p.id}" title="${esc(p.name)}">
       <span class="dot" style="background:${p.color}"></span><span class="name">${esc(p.name)}</span>
       <span class="count p">${open || ''}</span>
-      <button class="icon-btn sm more" data-action="project-menu" data-id="${p.id}" title="Project options">${icon('more')}</button>
+      <button class="icon-btn sm more" data-action="project-menu" data-id="${p.id}" title="Client options">${icon('more')}</button>
     </a>`;
-  }).join('') : `<div class="nav-item ph" data-action="new-project" style="font-size:12.5px">${icon('plus')} Add your first project</div>`;
+  }).join('') : `<div class="nav-item ph" data-action="new-project" style="font-size:12.5px">${icon('plus')} Add your first client</div>`;
 }
 
 function renderTitle() {
@@ -2088,7 +2088,7 @@ function renderTitle() {
   if (!p) { ui.view = 'home'; return renderTitle(); }
   el.innerHTML = `<div class="page-icon" style="background:${p.color}">${esc(initials(p.name))}</div>
     <div class="page-title" data-action="rename-project" data-id="${p.id}" title="Double-click to rename">${esc(p.name)}</div>
-    <button class="icon-btn" data-action="project-menu" data-id="${p.id}" title="Project options">${icon('chev')}</button>
+    <button class="icon-btn" data-action="project-menu" data-id="${p.id}" title="Client options">${icon('chev')}</button>
     ${clientOfProject(p) ? `<button class="proj-client" data-action="open-client" data-id="${p.clientId}" title="Open ${esc(clientOfProject(p).name)} brand assets">${clientLogoHTML(clientOfProject(p), 20)}<span>${esc(clientOfProject(p).name)} assets</span>${icon('chev-right')}</button>` : ''}
     <div class="tabs">
       <button class="tab ${p.view === 'list' ? 'active' : ''}" data-action="set-view" data-v="list">${icon('list')}List</button>
@@ -2172,7 +2172,7 @@ function taskRow(t, o = {}) {
 
 function listHead(showProject) {
   return showProject
-    ? `<div class="list-head"><div>Name</div><div>Status</div><div>Project</div><div>Due date</div><div>Priority</div></div>`
+    ? `<div class="list-head"><div>Name</div><div>Status</div><div>Client</div><div>Due date</div><div>Priority</div></div>`
     : `<div class="list-head"><div>Name</div><div>Due date</div><div>Priority</div><div>Tags</div></div>`;
 }
 
@@ -2541,7 +2541,7 @@ function sMark(text, r) {
   }).join('');
 }
 // One line saying where a result matched, when it wasn't the title
-const FIELD_LABEL = { project: 'Project', client: 'Client', tag: 'Tag', people: 'Assigned to', status: 'Status', creator: 'Created by', desc: 'Description', check: 'Checklist', sub: 'Subtask', parent: 'Part of' };
+const FIELD_LABEL = { project: 'Client', client: 'Client Assets', tag: 'Tag', people: 'Assigned to', status: 'Status', creator: 'Created by', desc: 'Description', check: 'Checklist', sub: 'Subtask', parent: 'Part of' };
 function searchWhy(hit, r) {
   const fi = hit.hits.map((h) => h.field).filter((i) => i > 0)
     .sort((a, b) => hit.fields[b].w - hit.fields[a].w)[0];
@@ -2567,10 +2567,10 @@ function viewSearch() {
     return `<div class="sr-hit">${taskRow(h.t, { showProject: true, showParent: true, mark: r })}${why ? `<div class="sr-why-row">${why}</div>` : ''}</div>`;
   }).join('');
   return `<div class="list-wrap with-proj">
-    <div class="search-results-head">${r.total || 0} task${r.total === 1 ? '' : 's'}${r.projects.length ? ` and ${r.projects.length} project${r.projects.length === 1 ? '' : 's'}` : ''} for “${esc(ui.search.trim())}”</div>
+    <div class="search-results-head">${r.total || 0} task${r.total === 1 ? '' : 's'}${r.projects.length ? ` and ${r.projects.length} client${r.projects.length === 1 ? '' : 's'}` : ''} for “${esc(ui.search.trim())}”</div>
     ${searchFixedNote(r)}
     ${projects}
-    ${r.tasks.length ? listHead(true) + rows : (r.projects.length ? '' : '<div class="empty"><div class="big">No matching tasks</div>Try a project or client name, a person, a tag — or words like “overdue”, “urgent” or “mine”.</div>')}
+    ${r.tasks.length ? listHead(true) + rows : (r.projects.length ? '' : '<div class="empty"><div class="big">No matching tasks</div>Try a client name, a person, a tag — or words like “overdue”, “urgent” or “mine”.</div>')}
   </div>`;
 }
 
@@ -2772,7 +2772,7 @@ function renderDetail() {
   const cl = t.checklist || [];
   const clDone = cl.filter((x) => x.done).length;
   const navIdx = ui.navIds.indexOf(t.id);
-  const projectOptions = ['<option value="">No project (My Tasks)</option>']
+  const projectOptions = ['<option value="">No client (My Tasks)</option>']
     .concat(db.projects.slice().sort(byOrder).map((x) => `<option value="${x.id}" ${x.id === t.projectId ? 'selected' : ''}>${esc(x.name)}</option>`)).join('');
   const nComments = t.comments.length;
   const nTop = t.comments.filter((c) => !c.parentId).length;
@@ -2841,7 +2841,7 @@ function renderDetail() {
           <div class="prop prop-prio"><label>${icon('flag')}Priority</label><div class="pv">${(t.assignees || []).length > 1 || ((t.assignees || []).length === 1 && t.assignees[0] !== currentUserId)
             ? `<div class="prio-people">${t.assignees.map((id) => `<div class="pp-row ${id === currentUserId ? 'mine' : ''}">${avatarHTML(id, 20)}<span class="pp-name">${esc(id === currentUserId ? 'You' : fullName(userById(id)).split(' ')[0])}</span><button class="pv-btn" data-action="prio-menu" data-key="${id}" ${can('editPriority') ? '' : 'disabled'}>${prioOf(t, id) === 'none' ? '<span class="pv-empty">Empty</span>' : prioFlag(prioOf(t, id), true)}</button></div>`).join('')}</div>`
             : (() => { const key = (t.assignees || [])[0] || '_'; const v = key === '_' ? normPrio((t.prio || {})._) : prioOf(t, key); return `<button class="pv-btn" data-action="prio-menu" data-key="${key}" ${can('editPriority') ? '' : 'disabled'}>${v === 'none' ? '<span class="pv-empty">Empty</span>' : prioFlag(v, true)}</button>`; })()}</div></div>
-          ${parent ? '' : `<div class="prop"><label>${icon('folder')}Project</label><div class="pv"><select class="field" id="d-project" ${can('editProject') ? '' : 'disabled'}>${projectOptions}</select></div></div>`}
+          ${parent ? '' : `<div class="prop"><label>${icon('folder')}Client</label><div class="pv"><select class="field" id="d-project" ${can('editProject') ? '' : 'disabled'}>${projectOptions}</select></div></div>`}
           <div class="prop"><label>${icon('tag')}Tags</label><div class="pv"><div class="tag-editor" id="d-tags">${t.tags.map((g, i) => { const [bg, fg] = tagColor(g); return `<span class="tag" style="background:${bg};color:${fg}">${esc(g)}${can('removeTag') ? `<button data-action="remove-tag" data-i="${i}">${icon('x')}</button>` : ''}</span>`; }).join('')}<input id="d-tag-input" placeholder="${t.tags.length ? 'Add' : 'Empty'}" list="tag-suggest" autocomplete="off"></div>
             <datalist id="tag-suggest">${allTags().filter((g) => !t.tags.includes(g)).map((g) => `<option value="${esc(g)}">`).join('')}</datalist></div></div>
         </div>
@@ -3491,8 +3491,8 @@ async function newProjectFlow() {
   if (me() && me().role === 'freelancer') return denied();
   const used = new Set(db.projects.map((p) => p.color));
   const res = await dialog({
-    title: 'New project', input: { label: 'Project name', placeholder: 'e.g. Website redesign' },
-    colors: { value: COLORS.find((c) => !used.has(c)) || COLORS[0] }, okText: 'Create project',
+    title: 'New client', input: { label: 'Client name', placeholder: 'e.g. Ford & Lincoln' },
+    colors: { value: COLORS.find((c) => !used.has(c)) || COLORS[0] }, okText: 'Add client',
   });
   if (!res) return;
   const p = createProject(res.value, res.color);
@@ -3719,7 +3719,7 @@ function trashWhere(it) {
   if (it.type === 'cafile') { const c = clientById(d.clientId); const f = c && c.folders.find((x) => x.id === d.folderId); return c ? `${c.name}${f ? ' › ' + f.name : ''}` : it.where || 'Client Assets'; }
   return '';
 }
-const TRASH_TYPE = { task: 'Task', project: 'Project', comment: 'Comment', attachment: 'File', cafile: 'Client file' };
+const TRASH_TYPE = { task: 'Task', project: 'Client', comment: 'Comment', attachment: 'File', cafile: 'Client file' };
 const TRASH_ICON = { task: 'check-circle', project: 'folder', comment: 'chat', attachment: 'clip', cafile: 'assets' };
 
 /* ---- Putting things back ---- */
@@ -3747,8 +3747,8 @@ function restoreTrash(id) {
       logActivity(root, 'restored this task from the Trash');
       notifyWatchers(root, 'restore', 'restored from the Trash');
       open = root.id;
-      msg = `Restored “${root.title || 'Untitled task'}”${it.projectId && !proj(it.projectId) ? ' to My Tasks — its project is in the Trash' : ''}`;
-    } else msg = `Restored the project “${d.project.name}” with ${tasks.filter((t) => !t.parentId).length} tasks`;
+      msg = `Restored “${root.title || 'Untitled task'}”${it.projectId && !proj(it.projectId) ? ' to My Tasks — its client is in the Trash' : ''}`;
+    } else msg = `Restored the client “${d.project.name}” with ${tasks.filter((t) => !t.parentId).length} tasks`;
   } else if (it.type === 'comment' || it.type === 'attachment') {
     const t = task(d.taskId);
     if (!t) { toast('Restore its task first — it’s in the Trash too'); return; }
@@ -3789,7 +3789,7 @@ async function emptyTrashFlow() {
 function trashTitle(it) {
   const d = it.data || {};
   if (it.type === 'task') return (d.tasks && (d.tasks.find((t) => !t.parentId || !d.tasks.some((x) => x.id === t.parentId)) || d.tasks[0]) || {}).title || 'Untitled task';
-  if (it.type === 'project') return d.project ? d.project.name : 'Project';
+  if (it.type === 'project') return d.project ? d.project.name : 'Client';
   if (it.type === 'comment') { const c = (d.comments || [])[0]; return c ? trunc(c.text || notifPlainHTML(c.html), 80) || 'Comment' : 'Comment'; }
   if (it.type === 'attachment') return d.att ? d.att.name : 'File';
   if (it.type === 'cafile') return d.file ? d.file.name : 'File';
@@ -3827,7 +3827,7 @@ function trashSearch(q, list) {
   scored.sort((a, b) => b.score - a.score || b.it.deletedAt.localeCompare(a.it.deletedAt));
   return { items: scored.map((x) => x.it), fixed, terms: per };
 }
-const TRASH_FILTERS = [['all', 'All'], ['task', 'Tasks'], ['project', 'Projects'], ['file', 'Files'], ['comment', 'Comments'], ['mine', 'Deleted by me']];
+const TRASH_FILTERS = [['all', 'All'], ['task', 'Tasks'], ['project', 'Clients'], ['file', 'Files'], ['comment', 'Comments'], ['mine', 'Deleted by me']];
 function trashFiltered() {
   const f = ui.trashFilter || 'all';
   return trashList().filter((it) => f === 'all' || (f === 'file' ? it.type === 'attachment' || it.type === 'cafile' : f === 'mine' ? it.deletedBy === currentUserId : it.type === f));
@@ -3853,8 +3853,8 @@ function trashRow(it, r) {
 }
 function trashListHTML() {
   const r = trashSearch(ui.trashQ || '', trashFiltered());
-  if (!r.items.length) return ui.trashQ ? `<div class="empty"><div class="big">Nothing in the Trash matches “${esc(ui.trashQ)}”</div>Try a task or file name, a project, a file type like “pdf”, or who deleted it.</div>`
-    : `<div class="empty"><div class="big">The Trash is empty</div>Deleted tasks, projects, comments and files wait here for ${TRASH_DAYS} days.</div>`;
+  if (!r.items.length) return ui.trashQ ? `<div class="empty"><div class="big">Nothing in the Trash matches “${esc(ui.trashQ)}”</div>Try a task or file name, a client, a file type like “pdf”, or who deleted it.</div>`
+    : `<div class="empty"><div class="big">The Trash is empty</div>Deleted tasks, clients, comments and files wait here for ${TRASH_DAYS} days.</div>`;
   const groups = [];
   r.items.forEach((it) => {
     const days = -dayDiff(ymd(new Date(it.deletedAt)));
@@ -3888,27 +3888,27 @@ document.addEventListener('input', (e) => {
 function projectMenu(anchor, id) {
   const p = proj(id);
   const m = showMenu(anchor, [
-    { label: 'Rename project', icon: 'edit', run: () => renameProject(id) },
+    { label: 'Rename client', icon: 'edit', run: () => renameProject(id) },
     { html: `<div class="swatches">${COLORS.map((c) => `<button class="swatch ${c === p.color ? 'on' : ''}" data-swatch="${c}" style="background:${c}"></button>`).join('')}</div>` },
     '-',
     { label: 'Add section', icon: 'plus', run: () => { go('project', id); setTimeout(() => { const a = $('[data-action="add-section"]'); if (a) a.click(); }, 30); } },
-    ...(can('editProject') ? [{ label: clientOfProject(p) ? `Client: ${clientOfProject(p).name}` : 'Link to a client…', icon: 'assets', run: () => setTimeout(() => projectClientMenu(anchor, p), 0) }] : []),
+    ...(can('editProject') ? [{ label: clientOfProject(p) ? `Client Assets: ${clientOfProject(p).name}` : 'Link to Client Assets…', icon: 'assets', run: () => setTimeout(() => projectClientMenu(anchor, p), 0) }] : []),
     '-',
-    ...(can('deleteProject') ? [{ label: 'Delete project', icon: 'trash', danger: true, run: () => deleteProjectFlow(id) }] : []),
+    ...(can('deleteProject') ? [{ label: 'Delete client', icon: 'trash', danger: true, run: () => deleteProjectFlow(id) }] : []),
   ]);
   m._onSwatch = (c) => { p.color = c; commit(); };
 }
 
 async function renameProject(id) {
   const p = proj(id);
-  const res = await dialog({ title: 'Rename project', input: { label: 'Project name', value: p.name }, okText: 'Save' });
+  const res = await dialog({ title: 'Rename client', input: { label: 'Client name', value: p.name }, okText: 'Save' });
   if (res && res.value) { p.name = res.value; commit(); }
 }
 
 async function deleteProjectFlow(id) {
   const p = proj(id);
   const n = db.tasks.filter((t) => t.projectId === id).length;
-  const ok = await dialog({ title: `Delete “${p.name}”?`, body: `The project and its ${n} task${n === 1 ? '' : 's'} move to the Trash. An Admin or Account Manager can restore them within ${TRASH_DAYS} days.`, okText: 'Move to Trash', danger: true });
+  const ok = await dialog({ title: `Delete “${p.name}”?`, body: `The client and its ${n} task${n === 1 ? '' : 's'} move to the Trash. An Admin or Account Manager can restore them within ${TRASH_DAYS} days.`, okText: 'Move to Trash', danger: true });
   if (!ok) return;
   db.projects = db.projects.filter((x) => x.id !== id);
   const removed = removeTasks(db.tasks.filter((t) => t.projectId === id).map((t) => t.id));
@@ -3956,7 +3956,7 @@ function renameSectionInline(sid) {
 
 async function deleteSectionFlow(sid) {
   const p = proj(ui.projectId);
-  if (p.sections.length === 1) { toast('A project needs at least one section'); return; }
+  if (p.sections.length === 1) { toast('A client needs at least one section'); return; }
   const s = p.sections.find((x) => x.id === sid);
   const tasks = db.tasks.filter((t) => t.projectId === p.id && t.sectionId === sid);
   const target = p.sections.find((x) => x.id !== sid);
@@ -5002,7 +5002,7 @@ function viewClient(c) {
   const head = `<div class="cl-head">
       <div class="cl-head-logo">${clientLogoHTML(c, 88)}</div>
       <div class="cl-head-txt"><h2>${esc(c.name)}</h2>
-        <div class="cl-head-meta">${c.folders.length} folder${c.folders.length === 1 ? '' : 's'} · ${clientFileCount(c)} file${clientFileCount(c) === 1 ? '' : 's'}${projects.length ? ` · Projects: ${projects.map((p) => `<a class="cl-proj" data-action="go-project" data-id="${p.id}"><i style="background:${p.color}"></i>${esc(p.name)}</a>`).join('')}` : ''}</div>
+        <div class="cl-head-meta">${c.folders.length} folder${c.folders.length === 1 ? '' : 's'} · ${clientFileCount(c)} file${clientFileCount(c) === 1 ? '' : 's'}${projects.length ? ` · Clients: ${projects.map((p) => `<a class="cl-proj" data-action="go-project" data-id="${p.id}"><i style="background:${p.color}"></i>${esc(p.name)}</a>`).join('')}` : ''}</div>
       </div>
       ${canAssets() ? `<button class="btn" data-action="client-menu" data-id="${c.id}">${icon('more')}Client options</button>` : ''}
     </div>`;
@@ -6168,7 +6168,7 @@ function viewTeam() {
       ${users.map((u) => `<div class="tt-row ${u.active === false ? 'inactive' : ''}">
         <div class="tt-name">${avatarHTML(u.id, 30)}<span>${esc(fullName(u))}${u.id === currentUserId ? ' <small>(you)</small>' : ''}</span></div>
         <div class="tt-email">${esc(u.email)}</div>
-        <div><span class="role-pill r-${u.role}">${esc(ROLES[u.role] || u.role)}</span>${u.admin && u.role !== 'admin' ? '<span class="role-pill r-admin xtra">+ Admin</span>' : ''}${u.fin && !isFinUser(u) ? `<span class="role-pill r-finance_${u.fin} xtra">+ ${esc(FIN_ACCESS[u.fin])}</span>` : ''}${u.role === 'freelancer' ? `<button class="tt-proj" ${admin ? `data-action="member-projects" data-id="${u.id}"` : ''} title="Projects they can see">${(u.projectIds || []).length} project${(u.projectIds || []).length === 1 ? '' : 's'}</button>` : ''}</div>
+        <div><span class="role-pill r-${u.role}">${esc(ROLES[u.role] || u.role)}</span>${u.admin && u.role !== 'admin' ? '<span class="role-pill r-admin xtra">+ Admin</span>' : ''}${u.fin && !isFinUser(u) ? `<span class="role-pill r-finance_${u.fin} xtra">+ ${esc(FIN_ACCESS[u.fin])}</span>` : ''}${u.role === 'freelancer' ? `<button class="tt-proj" ${admin ? `data-action="member-projects" data-id="${u.id}"` : ''} title="Clients they can see">${(u.projectIds || []).length} project${(u.projectIds || []).length === 1 ? '' : 's'}</button>` : ''}</div>
         <div>${u.active === false ? '<span class="st-txt off">Removed</span>' : u.setup ? `<span class="st-txt on">Active</span>` : '<span class="st-txt pend">Hasn’t signed in yet</span>'}</div>
         ${cdCell(u, admin)}
         <div>${admin ? `<button class="icon-btn sm" data-action="member-menu" data-id="${u.id}" title="Manage">${icon('more')}</button>` : ''}</div>
@@ -6177,9 +6177,9 @@ function viewTeam() {
     <div class="role-guide">
       <div><span class="role-pill r-admin">Admin</span> Full access, and the only role that can add or manage team members.</div>
       <div><span class="role-pill r-am">Account Manager</span> Can do everything except add or manage team members.</div>
-      <div><span class="role-pill r-freelancer">Freelancer</span> Same as Production, but only sees the projects an Admin chooses for them, plus those projects’ Client Assets. Can sign in with a personal email (Gmail, Outlook…).</div>
-      <div><span class="role-pill r-production">Production</span> <span class="role-pill r-social">Social</span> Can update status, submit files for CD review, change dates, add tags, checklist items, files and comments. Can’t create or delete tasks/subtasks, change title, description, project or priority, assign people, remove tags or delete checklist items.</div>
-      <div><span class="role-pill r-finance_admin">Finance only</span> Only sees the Finance pages (Dashboard, Projects, Expenses) — no tasks app. As Admin they add subscriptions, reimbursements and expenses; as Viewer they only look.</div>
+      <div><span class="role-pill r-freelancer">Freelancer</span> Same as Production, but only sees the clients an Admin chooses for them, plus those clients’ Client Assets. Can sign in with a personal email (Gmail, Outlook…).</div>
+      <div><span class="role-pill r-production">Production</span> <span class="role-pill r-social">Social</span> Can update status, submit files for CD review, change dates, add tags, checklist items, files and comments. Can’t create or delete tasks/subtasks, change title, description, client or priority, assign people, remove tags or delete checklist items.</div>
+      <div><span class="role-pill r-finance_admin">Finance only</span> Only sees the Finance pages (Dashboard, Clients, Expenses) — no tasks app. As Admin they add subscriptions, reimbursements and expenses; as Viewer they only look.</div>
       <div><span class="role-pill r-admin">+ Admin</span> <span class="role-pill r-finance_admin">+ Finance Admin / Viewer</span> Extras anyone can have on top of their role (••• menu): full Admin rights, or the Finance pages. A task’s Finance status is set by Account Managers and Admins.</div>
     </div>
   </div>`;
@@ -6254,9 +6254,9 @@ function projectAccessDialog(u) {
   const root = $('#overlay-root');
   const list = db.projects.slice().sort(byOrder);
   root.innerHTML = `<div class="scrim"><form class="dialog form-dlg pa-dlg">
-    <h2>Projects ${esc(fullName(u))} can see</h2>
-    <p>Freelancers only see these projects, their tasks and files, and the Client Assets of those projects’ clients. Everything else stays hidden.</p>
-    <div class="pa-list">${list.length ? list.map((p) => `<label class="pa-row"><input type="checkbox" value="${p.id}" ${chosen.has(p.id) ? 'checked' : ''}><i style="background:${p.color}"></i><span>${esc(p.name)}</span>${clientOfProject(p) ? `<small>${esc(clientOfProject(p).name)}</small>` : ''}</label>`).join('') : '<div class="ph">No projects yet</div>'}</div>
+    <h2>Clients ${esc(fullName(u))} can see</h2>
+    <p>Freelancers only see these clients, their tasks and files, and their Client Assets. Everything else stays hidden.</p>
+    <div class="pa-list">${list.length ? list.map((p) => `<label class="pa-row"><input type="checkbox" value="${p.id}" ${chosen.has(p.id) ? 'checked' : ''}><i style="background:${p.color}"></i><span>${esc(p.name)}</span>${clientOfProject(p) ? `<small>${esc(clientOfProject(p).name)}</small>` : ''}</label>`).join('') : '<div class="ph">No clients yet</div>'}</div>
     <div class="actions"><button type="button" class="btn" data-r="0">Cancel</button><button type="submit" class="btn primary">Save</button></div>
   </form></div>`;
   const close = () => { root.innerHTML = ''; document.removeEventListener('keydown', onKey, true); };
@@ -6267,7 +6267,7 @@ function projectAccessDialog(u) {
     e.preventDefault();
     u.projectIds = $$('.pa-list input:checked', root).map((x) => x.value);
     close(); persist(0); renderContent();
-    toast(`${fullName(u)} can see ${u.projectIds.length} project${u.projectIds.length === 1 ? '' : 's'}`);
+    toast(`${fullName(u)} can see ${u.projectIds.length} client${u.projectIds.length === 1 ? '' : 's'}`);
   });
 }
 
@@ -6299,7 +6299,7 @@ function memberMenu(anchor, id) {
     u.fin = k || undefined; persist(); renderContent(); toast(k ? `${fullName(u)} now has ${l} access` : `${fullName(u)} no longer has Finance access`);
   } }));
   items.push('-');
-  if (u.role === 'freelancer') items.push({ label: 'Projects they can see…', icon: 'folder', run: () => projectAccessDialog(u) });
+  if (u.role === 'freelancer') items.push({ label: 'Clients they can see…', icon: 'folder', run: () => projectAccessDialog(u) });
   if (u.active === false) items.push({ label: 'Restore access', icon: 'user', run: () => { u.active = true; persist(); renderContent(); } });
   else {
     if (!Host.isServer) items.push({ label: 'Reset password…', icon: 'lock', run: () => resetPasswordFlow(u) });
@@ -6718,7 +6718,7 @@ function enterApp() {
 // The test copy (test.e11hq.com) can be filled with sample people, tasks and comments
 const isTestCopy = () => Host.isServer && /-test\./.test(String(Sync.version || ''));
 async function fillSampleData() {
-  const ok = await dialog({ title: 'Fill the test copy with sample data?', body: 'Adds E11 people, projects, tasks, comments with replies and Inbox updates, dated around today. Only on the test copy — the live app is never touched. You can run it again any time.', okText: 'Add sample data' });
+  const ok = await dialog({ title: 'Fill the test copy with sample data?', body: 'Adds E11 people, clients, tasks, comments with replies and Inbox updates, dated around today. Only on the test copy — the live app is never touched. You can run it again any time.', okText: 'Add sample data' });
   if (!ok) return;
   try {
     const r = await api('POST', '/api/sample', {});
@@ -6861,7 +6861,7 @@ const Splash = (() => {
     document.getElementById('sp-greet').textContent = greeting(mem.name);
     document.getElementById('sp-date').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: window.innerWidth <= 760 ? 'short' : 'long', day: 'numeric' });
     document.getElementById('sp-hint').textContent = window.innerWidth <= 760 ? 'Tap to skip' : 'Click or press any key to skip';
-    const labels = ['Projects', 'Your tasks', 'Inbox', mem.cd ? 'Review requests' : 'Client Assets'];
+    const labels = ['Clients', 'Your tasks', 'Inbox', mem.cd ? 'Review requests' : 'Client Assets'];
     document.getElementById('sp-rows').innerHTML = labels.map((l) => `<div class="sp-row"><span class="sp-box">${TICK}</span><span class="sp-lbl">${l}</span><span class="sp-val">…</span></div>`).join('');
     rows = $$('.sp-row', el);
     const skip = () => skipResolve();

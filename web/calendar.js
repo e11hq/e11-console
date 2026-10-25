@@ -266,7 +266,7 @@ const Cal = (() => {
     const head = `<div class="cal-wk-h"></div>${days.map((d, i) => `<div class="cal-wk-h ${d === today ? 'today' : ''} ${occClass(d)}"><span class="cal-wk-d"><small>${WD[i]}</small>${parseYmd(d).getDate()}</span>${occLine(d)}</div>`).join('')}`;
     const body = rows.map(({ p, id }) => {
       const mine = list.filter((t) => (t.projectId || '') === id);
-      return `<div class="cal-wk-l"><span class="dot" style="background:${p ? p.color : '#8b8b96'}"></span><b>${esc(p ? p.name : 'No project')}</b><small>${mine.length} this week</small></div>${days.map((d) => `<div class="cal-wk-c ${occClass(d)}" data-day="${d}">${mine.filter((t) => dayOf(t) === d).map((t) => { const s = statusOf(t); return `<button class="cal-card" data-cal="open" data-id="${t.id}" style="--pc:${p ? p.color : '#8b8b96'}">
+      return `<div class="cal-wk-l"><span class="dot" style="background:${p ? p.color : '#8b8b96'}"></span><b>${esc(p ? p.name : 'No client')}</b><small>${mine.length} this week</small></div>${days.map((d) => `<div class="cal-wk-c ${occClass(d)}" data-day="${d}">${mine.filter((t) => dayOf(t) === d).map((t) => { const s = statusOf(t); return `<button class="cal-card" data-cal="open" data-id="${t.id}" style="--pc:${p ? p.color : '#8b8b96'}">
           <span class="cal-card-top">${chips(t) || '<span class="cal-ch none">No channel</span>'}</span>
           <span class="cal-card-t">${esc(t.title || 'Untitled task')}</span>${pill(s)}</button>`; }).join('')}${can('createTask') ? `<button class="cal-add" data-cal="new" data-d="${d}" data-p="${esc(id)}" title="New post">${icon('plus')}</button>` : ''}</div>`).join('')}`;
     }).join('');
@@ -347,7 +347,7 @@ const Cal = (() => {
         const D = parseYmd(d);
         return `<section class="cal-ag-day"><h3>${d === today ? 'Today' : D.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' })}</h3>
           ${os.map((o) => `<div class="cal-ag-occ">${esc(o.name)}${o.est ? ' <small>expected</small>' : ''}</div>`).join('')}
-          ${ps.map((t) => { const p = projOf(t), s = statusOf(t); return `<button class="cal-card" data-cal="open" data-id="${t.id}" style="--pc:${p ? p.color : '#8b8b96'}"><span class="cal-card-top"><small>${esc(p ? p.name : 'No project')}</small>${chips(t)}</span><span class="cal-card-t">${esc(t.title || 'Untitled task')}</span>${pill(s)}</button>`; }).join('')}
+          ${ps.map((t) => { const p = projOf(t), s = statusOf(t); return `<button class="cal-card" data-cal="open" data-id="${t.id}" style="--pc:${p ? p.color : '#8b8b96'}"><span class="cal-card-top"><small>${esc(p ? p.name : 'No client')}</small>${chips(t)}</span><span class="cal-card-t">${esc(t.title || 'Untitled task')}</span>${pill(s)}</button>`; }).join('')}
         </section>`;
       }).join('') : '<div class="cal-empty">Nothing planned in the next 6 weeks.</div>'}
     </div>`;

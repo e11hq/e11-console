@@ -33,7 +33,7 @@ async def main():
         srv = start('1.1.0', data)
         await pg.wait_for_timeout(5000)
         check(await pg.locator('#update-banner.on').count() == 1, 'Reload banner appears after the update')
-        check('1.1.0' in await pg.locator('#update-banner').inner_text(), 'banner names the new version')
+        check('1.1.0' in (await pg.locator('#update-banner').get_attribute('title') or ''), 'banner names the new version (in its tooltip)')
         check('Synced' in await pg.locator('#save-label').inner_text(), 'back to Synced')
         await pg.screenshot(path=os.path.join(SHOTS, 'e2e_banner.png'))
         await pg.click('#update-banner [data-action="reload-app"]'); await pg.wait_for_timeout(1500); await pg.mouse.click(1390, 890); await pg.wait_for_timeout(1200)

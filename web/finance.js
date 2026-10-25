@@ -77,7 +77,7 @@ const Fin = (() => {
     }).join('');
     const label = sel.length === 1 ? monthName(sel[0], true) : `${sel.length} months · ${monthName(sel[0], true)} – ${monthName(sel[sel.length - 1], true)}`;
     return `<div class="fr-pop" role="dialog" aria-label="Download expenses report">
-      <div class="fr-h"><b>Expenses report (PDF)</b><span>Subscriptions, staff reimbursements and extra expenses. No tasks or projects.</span></div>
+      <div class="fr-h"><b>Expenses report (PDF)</b><span>Subscriptions, staff reimbursements and extra expenses. No tasks or clients.</span></div>
       <div class="fr-mh"><span>Months <small>· up to 12</small></span><span class="fr-y"><button class="icon-btn sm" data-fin-repy="-1" aria-label="Previous year">${icon('chev-left')}</button><b>${rep.year}</b><button class="icon-btn sm" data-fin-repy="1" aria-label="Next year" ${rep.year >= Number(now.slice(0, 4)) ? 'disabled' : ''}>${icon('chev-right')}</button></span></div>
       <div class="fr-grid">${grid}</div>
       <div class="fr-sel">${esc(label)}</div>
@@ -283,14 +283,14 @@ const Fin = (() => {
     if (fin) {
       const np = document.createElement('div');
       np.id = 'fin-phone';
-      np.innerHTML = `<div class="fp-card"><div class="fp-ic">${icon('coin')}</div><h2>Finance is on the computer</h2><p>Open ${esc(location.host)} on a computer, or the E11 Console Mac app, to see the Finance dashboard, projects and expenses.</p><button class="btn" data-fin-signout>Sign out</button></div>`;
+      np.innerHTML = `<div class="fp-card"><div class="fp-ic">${icon('coin')}</div><h2>Finance is on the computer</h2><p>Open ${esc(location.host)} on a computer, or the E11 Console Mac app, to see the Finance dashboard, clients and expenses.</p><button class="btn" data-fin-signout>Sign out</button></div>`;
       np.addEventListener('click', (e) => { if (e.target.closest('[data-fin-signout]')) signOut(); });
       document.body.appendChild(np);
     }
     if (fin) {
       const nav = document.createElement('nav');
       nav.className = 'nav fin-nav';
-      nav.innerHTML = [['fin-dash', 'home', 'Dashboard'], ['fin-projects', 'folder', 'Projects'], ['fin-expenses', 'coin', 'Expenses'], ['fin-reimb', 'users', 'Reimbursements']]
+      nav.innerHTML = [['fin-dash', 'home', 'Dashboard'], ['fin-projects', 'folder', 'Clients'], ['fin-expenses', 'coin', 'Expenses'], ['fin-reimb', 'users', 'Reimbursements']]
         .map(([v, ic, l]) => `<a class="nav-item" data-nav="${v}">${icon(ic)}${l}</a>`).join('');
       const head = $('#sidebar .sb-head');
       head.parentNode.insertBefore(nav, head);
@@ -299,7 +299,7 @@ const Fin = (() => {
       a.className = 'nav-item ca-nav fin-admin-nav';
       a.dataset.nav = 'fin-dash';
       a.title = 'Finance — task Finance status and expense records';
-      a.innerHTML = `<span class="ca-nav-ic">${icon('coin')}</span><span class="ca-nav-txt">Finance<small>Dashboard · Projects · Expenses</small></span>`;
+      a.innerHTML = `<span class="ca-nav-ic">${icon('coin')}</span><span class="ca-nav-txt">Finance<small>Dashboard · Clients · Expenses</small></span>`;
       const tr = $('#nav-trash');
       tr.parentNode.insertBefore(a, tr);
     }
@@ -331,9 +331,9 @@ const Fin = (() => {
 
   /* ---------- Titles ---------- */
   function title() {
-    const t = { 'fin-dash': 'Dashboard', 'fin-projects': 'Projects', 'fin-expenses': 'Expenses', 'fin-list': 'All transactions', 'fin-subs': 'Subscriptions', 'fin-reimb': 'Staff reimbursements', 'fin-extra': 'Extra expenses' }[ui.view] || 'Finance';
+    const t = { 'fin-dash': 'Dashboard', 'fin-projects': 'Clients', 'fin-expenses': 'Expenses', 'fin-list': 'All transactions', 'fin-subs': 'Subscriptions', 'fin-reimb': 'Staff reimbursements', 'fin-extra': 'Extra expenses' }[ui.view] || 'Finance';
     const tabs = !isFinUser() && ['fin-dash', 'fin-projects', 'fin-expenses'].includes(ui.view)
-      ? `<div class="tabs">${[['fin-dash', 'Dashboard'], ['fin-projects', 'Projects'], ['fin-expenses', 'Expenses']].map(([v, l]) => `<button class="tab ${ui.view === v ? 'active' : ''}" data-fin-go="${v}">${l}</button>`).join('')}</div>` : '';
+      ? `<div class="tabs">${[['fin-dash', 'Dashboard'], ['fin-projects', 'Clients'], ['fin-expenses', 'Expenses']].map(([v, l]) => `<button class="tab ${ui.view === v ? 'active' : ''}" data-fin-go="${v}">${l}</button>`).join('')}</div>` : '';
     return `<div class="page-icon" style="background:#173a2c;color:#3ddc97">${icon('coin')}</div><div class="page-title">${isFinUser() ? t : 'Finance'}</div>${tabs}`;
   }
 
@@ -380,7 +380,7 @@ const Fin = (() => {
     const byClient = {};
     ts.filter((t) => t.finance === 'Invoiced' && String(finAt(t)).slice(0, 7) >= since).forEach((t) => {
       const p = proj(t.projectId); const c = p && p.clientId && clientById(p.clientId);
-      const k = c ? c.name : p ? p.name : 'No project';
+      const k = c ? c.name : p ? p.name : 'No client';
       byClient[k] = byClient[k] || { n: 0, color: p ? p.color : '#9aa4b2' }; byClient[k].n++;
     });
     const clients = Object.entries(byClient).sort((a, b) => b[1].n - a[1].n).slice(0, 5);
@@ -430,7 +430,7 @@ const Fin = (() => {
             <div class="fa-hero-n">${invNow}</div>
             <div class="fa-center">${(() => { const p = pctChange(invNow, invPrev); return `<span class="fa-chip ${p >= 0 ? 'good' : 'bad'}">${p >= 0 ? '↑' : '↓'} ${Math.abs(p)}% vs ${esc(mname(prev))} (${invPrev})</span>`; })()}</div>
             ${invBy.length ? `<div class="fa-avs">${invBy.slice(0, 5).map((u) => avatarHTML(u, 34)).join('')}</div><p class="fa-cap">${invBy.length === 1 ? esc(fullName(userById(invBy[0]))) + ' invoiced this month' : 'Account Managers who invoiced this month'}</p>` : '<p class="fa-cap">No invoices yet this month</p>'}
-            <div class="fa-btns"><button class="btn" data-fin-go="fin-projects">Open Projects</button><button class="btn primary" data-fin-go="fin-expenses">Expenses</button></div>
+            <div class="fa-btns"><button class="btn" data-fin-go="fin-projects">Open Clients</button><button class="btn primary" data-fin-go="fin-expenses">Expenses</button></div>
           </section>
           <section class="fa-card">
             <div class="fa-ch"><h2>Recent changes</h2><button class="fa-link" data-fin-go="fin-projects">View all</button></div>
@@ -447,7 +447,7 @@ const Fin = (() => {
     const can = isManager(); // only Account Managers and Admins change a task's Finance status
     const groups = db.projects.slice().sort(byOrder).map((p) => ({ p, list: ts.filter((t) => t.projectId === p.id) })).filter((g) => g.list.length);
     const none = ts.filter((t) => !t.projectId || !proj(t.projectId));
-    if (none.length) groups.push({ p: { id: '_none', name: 'No project', color: '#666' }, list: none });
+    if (none.length) groups.push({ p: { id: '_none', name: 'No client', color: '#666' }, list: none });
     const sec = (t) => (sectionOf(t) || {}).name || '';
     const chips = [['all', 'All'], ...STATUSES.map((s) => [s, s]), ['none', 'No Finance status']];
     return `

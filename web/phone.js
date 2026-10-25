@@ -84,7 +84,7 @@ const Phone = (() => {
     bar.innerHTML = tab('today', 'sun', Work.dayTitle())
       + tab('mytasks', 'check-circle', 'My Tasks')
       + tab('inbox', 'inbox', 'Inbox', unread)
-      + (cd ? tab('reviews', 'shield', 'Reviews', rv) : tab('projects', 'folder', 'Projects'))
+      + (cd ? tab('reviews', 'shield', 'Reviews', rv) : tab('projects', 'folder', 'Clients'))
       + tab('me', 'user', 'Me');
     bar.hidden = !!ui.taskId;
     document.body.classList.toggle('task-open', !!ui.taskId);
@@ -253,12 +253,12 @@ const Phone = (() => {
   function projects() {
     const list = db.projects.slice().sort(byOrder);
     return `<div class="ph-page">
-      ${head('Projects', plural(list.length, 'project'))}
+      ${head('Clients', plural(list.length, 'client'))}
       <div class="ph-list">${list.map((p) => {
         const open = db.tasks.filter((t) => t.projectId === p.id && !t.parentId && !t.done).length;
         return `<div class="pc pj" data-ph="open-project" data-id="${p.id}"><span class="ph-pj-ic" style="background:${p.color}">${esc(initials(p.name))}</span>
           <span class="pc-body"><span class="pc-title">${esc(p.name)}</span><span class="pc-meta">${plural(open, 'open task')}</span></span>${icon('chev-right')}</div>`;
-      }).join('') || '<div class="ph-empty big">No projects yet</div>'}</div>
+      }).join('') || '<div class="ph-empty big">No clients yet</div>'}</div>
     </div>`;
   }
   function project() {
@@ -289,7 +289,7 @@ const Phone = (() => {
       <div class="ph-me-card">${avatarHTML(u.id, 64)}<div><b>${esc(fullName(u))}</b><span>${esc(designationOf(u))}</span><small>${esc(u.email)}</small></div></div>
       <div class="ph-rows">
         ${row('data-nav="profile"', 'user', 'My profile', 'Photo, office and notifications')}
-        ${isCD() ? row('data-ph-tab="projects"', 'folder', 'Projects') : ''}
+        ${isCD() ? row('data-ph-tab="projects"', 'folder', 'Clients') : ''}
         ${Cal.canSee() ? row('data-nav="calendar"', 'cal', 'Content calendar', 'Posts by day, channel and occasion') : ''}
         ${row('data-nav="clients"', 'assets', 'Client Assets', 'Logos, guidelines and fonts')}
         ${row('data-nav="team"', 'users', 'Team members')}
@@ -317,14 +317,14 @@ const Phone = (() => {
   }
   function results() {
     const q = st.q.trim();
-    if (!q) return '<div class="ph-empty">Search titles, projects, clients, people, tags, descriptions and comments. Try “overdue”, “urgent” or “mine” too.</div>';
+    if (!q) return '<div class="ph-empty">Search titles, clients, people, tags, descriptions and comments. Try “overdue”, “urgent” or “mine” too.</div>';
     const r = taskSearch(q, { limit: 80 });
     const projects = r.projects.map((p) => `<div class="pc pj" data-ph="open-project" data-id="${p.id}"><span class="ph-pj-ic" style="background:${p.color}">${esc(initials(p.name))}</span>
-      <span class="pc-body"><span class="pc-title">${sMark(p.name, r)}</span><span class="pc-meta">Project · ${plural(db.tasks.filter((t) => t.projectId === p.id && !t.parentId && !t.done).length, 'open task')}</span></span>${icon('chev-right')}</div>`).join('');
+      <span class="pc-body"><span class="pc-title">${sMark(p.name, r)}</span><span class="pc-meta">Client · ${plural(db.tasks.filter((t) => t.projectId === p.id && !t.parentId && !t.done).length, 'open task')}</span></span>${icon('chev-right')}</div>`).join('');
     const tasks = r.tasks.map((h) => { const why = searchWhy(h, r); return card(h.t, { mark: r }) + (why ? `<div class="ph-why">${why}</div>` : ''); }).join('');
     return (r.fixed.length ? searchFixedNote(r) : '')
-      + (projects ? `<div class="ph-gh">Projects<span>${r.projects.length}</span></div>${projects}` : '')
-      + (tasks ? `<div class="ph-gh">Tasks<span>${r.total}</span></div>${tasks}` : (projects ? '' : '<div class="ph-empty">No tasks found. Try a project, client or person’s name.</div>'));
+      + (projects ? `<div class="ph-gh">Clients<span>${r.projects.length}</span></div>${projects}` : '')
+      + (tasks ? `<div class="ph-gh">Tasks<span>${r.total}</span></div>${tasks}` : (projects ? '' : '<div class="ph-empty">No tasks found. Try a client or person’s name.</div>'));
   }
 
   /* ---------- Hooks called from app.js ---------- */
@@ -503,13 +503,13 @@ const Phone = (() => {
     const inProject = ui.view === 'project' && proj(ui.projectId) ? ui.projectId : '';
     const mgr = isAdm(me()) || me().role === 'am';
     const people = activeUsers();
-    const projOpts = `<option value="">No project (My Tasks)</option>` + db.projects.slice().sort(byOrder).map((p) => `<option value="${p.id}" ${p.id === inProject ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
+    const projOpts = `<option value="">No client (My Tasks)</option>` + db.projects.slice().sort(byOrder).map((p) => `<option value="${p.id}" ${p.id === inProject ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
     const userOpts = `<option value="${currentUserId}">Me</option>` + people.filter((u) => u.id !== currentUserId).map((u) => `<option value="${u.id}">${esc(fullName(u))}</option>`).join('') + '<option value="">Nobody yet</option>';
     sheet(`<div class="ph-sh-head"><h2>New task</h2><button class="ph-link" data-sheet-close>Cancel</button></div>
       <label class="ph-field"><span>Title</span><input id="qa-title" name="e11-task-title" type="text" placeholder="What needs doing?" autocomplete="off" aria-autocomplete="none" data-1p-ignore data-lpignore="true" data-form-type="other" enterkeyhint="next"></label>
       <label class="ph-field"><span>Description <i>(optional)</i></span><textarea id="qa-desc" name="e11-task-notes" autocomplete="off" aria-autocomplete="none" data-form-type="other" rows="3" placeholder="Details, links or notes for the team"></textarea></label>
       <div class="ph-form">
-        <label><span>Project</span><select id="qa-proj">${projOpts}</select></label>
+        <label><span>Client</span><select id="qa-proj">${projOpts}</select></label>
         ${can('assign') ? `<label><span>Assign to</span><select id="qa-who">${userOpts}</select></label>` : ''}
         <label><span>Due</span><input type="date" id="qa-due" value="${ui.view === 'today' || ui.view === 'home' || ui.view === 'mytasks' ? todayStr() : ''}"></label>
         ${mgr ? `<label class="ph-sw"><span>CD review</span><em>Needs CD review</em><input type="checkbox" id="qa-cd" ${inProject ? 'checked' : ''}><i></i></label>` : ''}
@@ -569,7 +569,7 @@ const Phone = (() => {
     if (!t) return;
     const items = [
       { label: 'Attach files', icon: 'clip', run: () => attachFiles('task') },
-      ...(t.projectId ? [{ label: 'Open project', icon: 'folder', run: () => { closeDetail(); go('project', t.projectId); } }] : []),
+      ...(t.projectId ? [{ label: 'Open client', icon: 'folder', run: () => { closeDetail(); go('project', t.projectId); } }] : []),
       ...(can('deleteTask') ? ['-', { label: 'Delete task', icon: 'trash', danger: true, run: () => deleteTaskFlow(t.id) }] : []),
     ];
     showMenu(document.body, items);
