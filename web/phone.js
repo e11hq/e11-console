@@ -657,12 +657,29 @@ const Push = (() => {
   function paint() {
     const el = document.getElementById('ph-push');
     if (el) el.outerHTML = row(true);
+    const pf = document.getElementById('pf-push');
+    if (pf) pf.outerHTML = profileRow(true);
   }
+  // My profile on a computer: the same notifications, for this browser (the Mac app shows its own while it's open)
+  function profileRow(noRefresh) {
+    if (Host.isMacApp) return `<div class="pf-opt" id="pf-push"><div><b>Notifications</b><span>The Mac app shows a banner for every Inbox update while it’s open. To get them when it’s closed too, open ${esc(location.host)} in Safari or Chrome and switch them on there.</span></div></div>`;
+    if (!noRefresh) setTimeout(refresh, 0);
+    if (st.state === 'none') return '';
+    const sub = { on: 'A banner for every Inbox update, even when this tab is closed', off: 'Get a banner for every Inbox update, even when this tab is closed', denied: 'Blocked in this browser — allow notifications for this site in the browser’s settings', unsupported: 'This browser can’t show notifications', unknown: '' }[st.state] || '';
+    const ctl = st.state === 'on' || st.state === 'off'
+      ? `<div class="pf-opt-btns">${st.state === 'on' ? '<button class="btn sm" data-pf-push="test">Send test</button>' : ''}<button class="switch ${st.state === 'on' ? 'on' : ''}" data-pf-push="toggle" aria-label="Notifications on this computer" ${st.busy ? 'disabled' : ''}><i></i></button></div>` : '';
+    return `<div class="pf-opt" id="pf-push"><div><b>Notifications on this computer</b><span>${sub}</span></div>${ctl}</div>`;
+  }
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-pf-push]'); if (!b || st.busy) return;
+    if (b.dataset.pfPush === 'test') api('POST', '/api/push/test', {}).then((r) => toast(r.sent ? 'Sent — it may take a few seconds' : 'Couldn’t reach this computer — switch it off and on again')).catch((er) => toast(er.message));
+    else if (st.state === 'on') turnOff(); else if (st.state === 'off') turnOn();
+  });
   function row(noRefresh) {
     if (!noRefresh) setTimeout(refresh, 0);
     if (st.state === 'none') return '';
     const label = { on: 'On', off: 'Off', denied: 'Blocked', install: 'Set up', unsupported: 'Not available', unknown: '' }[st.state];
-    const sub = { on: 'Banners for mentions, reviews and assignments', off: 'Get a banner even when the app is closed', denied: 'Allow them in iPhone Settings → Notifications → E11 Console', install: 'Add E11 Console to your Home Screen first', unsupported: 'This browser can’t show notifications', unknown: '' }[st.state];
+    const sub = { on: 'A banner for every Inbox update', off: 'Get a banner even when the app is closed', denied: 'Allow them in iPhone Settings → Notifications → E11 Console', install: 'Add E11 Console to your Home Screen first', unsupported: 'This browser can’t show notifications', unknown: '' }[st.state];
     return `<button class="ph-row" id="ph-push" data-ph-push>${icon('bell')}<span>Notifications on this phone<small>${sub}</small></span><i class="ph-state ${st.state === 'on' ? 'on' : ''}">${st.busy ? '…' : label}</i></button>`;
   }
 
@@ -676,7 +693,7 @@ const Push = (() => {
       const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(key) });
       await api('POST', '/api/push/subscribe', { subscription: sub.toJSON() });
       st.state = 'on';
-      toast('Notifications are on for this phone');
+      toast(`Notifications are on for this ${Phone.on ? 'phone' : 'computer'}`);
     } catch (e) { toast('Couldn’t turn on notifications: ' + e.message); } finally { st.busy = false; paint(); }
   }
   async function turnOff() {
@@ -685,7 +702,7 @@ const Push = (() => {
       const sub = await reg.pushManager.getSubscription();
       if (sub) { await api('POST', '/api/push/unsubscribe', { endpoint: sub.endpoint }).catch(() => {}); await sub.unsubscribe(); }
       st.state = 'off'; paint();
-      toast('Notifications are off for this phone');
+      toast(`Notifications are off for this ${Phone.on ? 'phone' : 'computer'}`);
     } catch (e) { toast(e.message); }
   }
   function installHelp() {
@@ -737,7 +754,7 @@ const Push = (() => {
   else if (q.get('view')) { openView(q.get('view')); history.replaceState(null, '', '/'); }
   if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.type === 'open-task') openFrom(e.data.taskId, e.data.nid); if (e.data && e.data.type === 'open-view') openView(e.data.view); });
 
-  return { row, refresh };
+  return { row, refresh, profileRow };
 })();
 
 /* Swipe from the left edge to go back, like a native iPhone app (only in the Home Screen app —

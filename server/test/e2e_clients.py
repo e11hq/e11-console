@@ -115,6 +115,30 @@ async def main():
         })()""")
         check(r['others'] > 0 and r['a1'] == r['others'], f"an AM sees all their client's tasks, by anyone {r}")
         check(r['a2'] == 0 and r['b2'] == r['others'] and r['b3'] < r['others'], f'the cover sees them only while covering {r}')
+        # the client's Account Manager hears about every change on its tasks, once per change
+        r = await E("""(() => {
+          const am = db.users.find(u => u.role === 'am' && u.active !== false && !u.admin);
+          const t = topTasks().find(x => x.projectId && x.createdBy !== am.id && !(x.assignees || []).includes(am.id));
+          const p = proj(t.projectId); const was = p.ams; p.ams = [{ id: am.id }];
+          const mine = () => db.notifications.filter(n => n.to === am.id && n.taskId === t.id);
+          const n0 = mine().length;
+          logActivity(t, 'changed the status from <b>To do</b> to <b>Review</b>'); notifyWatchers(t, 'status', 'changed the status to <b>Review</b> on');
+          const afterStatus = mine().slice(n0).map(n => n.kind);
+          db.notifications.forEach(n => { if (n.to === am.id) n.read = true; });
+          logActivity(t, 'changed the title');
+          const afterTitle = mine().slice(n0).map(n => n.kind);
+          p.ams = [{ id: am.id, onLeave: true }];
+          logActivity(t, 'changed the due date');
+          const onLeave = mine().slice(n0).length;
+          p.ams = was;
+          return { afterStatus, afterTitle, onLeave };
+        })()""")
+        check(r['afterStatus'] == ['status'], f"one update for a status change (not two) {r}")
+        check(r['afterTitle'] == ['status', 'edit'], f'any other change too {r}')
+        check(r['onLeave'] == 2, f'not while on leave {r}')
+        await E("go('profile')"); await pg.wait_for_timeout(600)
+        check(await pg.locator('#pf-push').count() == 1, 'My profile has Notifications on this computer')
+        await E("go('home')"); await pg.wait_for_timeout(300)
         # Edit client list: switch a client off, rename it (its Client Assets folder follows)
         await E("go('clientlist')"); await pg.wait_for_timeout(400)
         check(await pg.locator('.cl-row').count() >= 3, 'Edit client list shows the clients')

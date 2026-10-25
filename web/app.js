@@ -1447,6 +1447,14 @@ function logActivity(t, text) {
   t.activity = t.activity || [];
   t.activity.push({ id: uid(), at: nowISO(), text, actor: currentUserId });
   if (t.activity.length > 300) t.activity.splice(0, t.activity.length - 300);
+  // the client's Account Managers hear about every change on its tasks (whoever made it)
+  clientAmsOf(t).forEach((u) => pushNotif(u, t, 'edit', `${text} on`));
+}
+// The Account Managers looking after a task's client (not those on leave)
+function clientAmsOf(t) {
+  const root = t && t.parentId ? task(t.parentId) || t : t;
+  const p = root && root.projectId ? proj(root.projectId) : null;
+  return p ? (p.ams || []).filter((a) => !a.onLeave).map((a) => a.id) : [];
 }
 
 /* ================= Notifications ================= */
@@ -1458,6 +1466,7 @@ const NOTIF_TYPES = [
   { k: 'status', kinds: ['status', 'done'], l: 'Status & completion', d: 'A task moves to another status or is marked complete' },
   { k: 'update', kinds: ['update'], l: 'Task Update changes', d: 'The Task Update of a task you’re on changes' },
   { k: 'cd', kinds: ['cd'], l: 'CD Status changes', d: 'The CD Status of a task is set or cleared' },
+  { k: 'client', kinds: ['edit'], l: 'Changes on your clients’ tasks', d: 'Account Managers: anything changed on a task in a client you look after' },
   { k: 'due', kinds: ['due'], l: 'Due dates', d: 'A due date is added, moved or removed' },
   { k: 'priority', kinds: ['priority'], l: 'Priority', d: 'Your priority on a task is changed' },
   { k: 'attach', kinds: ['attach'], l: 'Files added', d: 'Someone attaches files to a task' },
@@ -1474,12 +1483,20 @@ function pushNotif(to, t, kind, text, extra = {}) {
   const u = userById(to);
   if (!u || u.active === false) return;
   if (!notifOn(u, kind)) return;
+  // one update per change: a specific one (status, comment…) replaces the general "changed …" sent moments before
+  const recent = Date.now() - 4000;
+  const same = (n) => n.to === to && n.taskId === t.id && n.from === currentUserId && !n.read && Date.parse(n.at) > recent;
+  if (kind === 'edit' && db.notifications.some((n) => same(n) && n.kind !== 'edit')) return;
+  if (kind !== 'edit') {
+    const gen = db.notifications.find((n) => same(n) && n.kind === 'edit');
+    if (gen) { Object.assign(gen, { kind, text, snippet: extra.snippet || '', commentId: extra.commentId || null, at: nowISO() }); return; }
+  }
   db.notifications.push({ id: uid(), to, from: currentUserId, taskId: t.id, kind, text, snippet: extra.snippet || '', commentId: extra.commentId || null, at: nowISO(), read: false });
   if (db.notifications.length > 5000) db.notifications.splice(0, db.notifications.length - 5000);
 }
 function notifyWatchers(t, kind, text, extra = {}) {
   const skip = new Set(extra.skip || []);
-  watchersOf(t).forEach((u) => { if (!skip.has(u)) pushNotif(u, t, kind, text, extra); });
+  new Set(watchersOf(t).concat(clientAmsOf(t))).forEach((u) => { if (!skip.has(u)) pushNotif(u, t, kind, text, extra); });   // (+ the client's Account Managers)
 }
 const mentionsIn = (html) => { const out = new Set(); String(html || '').replace(/data-user="([^"]+)"/g, (_, id) => { out.add(id); return ''; }); return out; };
 
@@ -6467,6 +6484,7 @@ function viewProfile() {
     </div>` : ''}
     <div class="pf-card">
       <h3>${icon('bell')}Notifications</h3>
+      ${typeof Push !== 'undefined' && !(typeof Phone !== 'undefined' && Phone.on) ? Push.profileRow() : ''}
       <div class="pf-opt"><div><b>Sound</b><span>Play a sound with new notifications</span></div><button class="switch ${sound ? 'on' : ''}" data-action="toggle-sound"><i></i></button></div>
       ${Host.isServer && !Host.isMacApp && 'Notification' in window ? `<div class="pf-opt"><div><b>Desktop notifications</b><span>${Notification.permission === 'granted' ? 'On — you’ll see alerts even when this window is in the background' : Notification.permission === 'denied' ? 'Blocked in your browser settings for this site' : 'Show alerts when this window is in the background'}</span></div>${Notification.permission === 'default' ? '<button class="btn sm primary" data-action="allow-notifs">Turn on</button>' : ''}</div>` : ''}
       <div class="pf-opt"><div><b>Test</b><span>See and hear what a notification looks like</span></div><button class="btn sm" data-action="test-notif">Send test</button></div>
