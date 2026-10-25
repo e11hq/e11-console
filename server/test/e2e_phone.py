@@ -98,7 +98,7 @@ async def main():
             await hr.locator('.ph-fab').click(); await hr.wait_for_timeout(400)
             await hr.locator('#qa-title').fill('Phone made task'); await hr.locator('#qa-desc').fill('Brief from the client call'); await shot(hr, '5-quickadd')
             await hr.locator('#qa-go').click(); await hr.wait_for_timeout(400)
-            check(await E("db.tasks.some(t=>t.title==='Phone made task' && t.due===todayStr() && t.assignees.includes('u-lina') && t.notes==='Brief from the client call')"), 'quick add creates a task with its description, due today, assigned to me')
+            check(await E("db.tasks.some(t=>t.title==='Phone made task' && t.due===todayStr() && !t.assignees.includes('u-lina') && t.notes==='Brief from the client call')"), 'quick add creates a task with its description, due today (an Account Manager isn’t assigned)')
             check(await hr.locator('.pc', has_text='Phone made task').count() == 1, 'new task appears on My Day')
             # Me + profile page with back
             await hr.locator('#ph-tabs [data-ph-tab="me"]').click(); await hr.wait_for_timeout(200)
