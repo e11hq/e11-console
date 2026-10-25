@@ -36,7 +36,7 @@ export function createOccasionReminders({ store, webDir, webPush, isAdm, now = (
   function dueOn(day) {
     const meta = store.get('meta', 'main') || {};
     const O = occasions(meta);
-    const projects = store.list('projects').filter((p) => !p.archived && !p.deleted);
+    const projects = store.list('projects').filter((p) => !p.archived && !p.deleted && !p.inactive);   // active clients
     const tasks = store.list('tasks').filter((t) => !t.deleted && !t.parentId && t.occasion);
     const out = [];
     for (const o of O.between(plus(day, 1), plus(day, 50))) {

@@ -140,8 +140,9 @@ const Home = (() => {
     const itemsDone = items.filter((x) => x.c.done).length;
 
     // projects: an AM sees the projects their tasks are in, an Admin sees them all
-    const pSet = admin ? null : new Set(mine.map((t) => t.projectId));
-    const projects = db.projects.slice().sort(byOrder).filter((p) => !pSet || pSet.has(p.id)).map((p) => {
+    // (an AM also sees the clients they're Account Manager for; inactive clients are left out)
+    const pSet = admin ? null : new Set(mine.map((t) => t.projectId).concat(db.projects.filter((p) => (p.ams || []).some((a) => a.id === currentUserId)).map((p) => p.id)));
+    const projects = db.projects.filter((p) => !p.inactive).sort(byOrder).filter((p) => !pSet || pSet.has(p.id)).map((p) => {
       const ts = topTasks().filter((t) => t.projectId === p.id);
       const d = ts.filter((t) => t.done).length;
       return { p, open: ts.length - d, pc: pct(d, ts.length) };

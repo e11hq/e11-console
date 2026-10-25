@@ -2042,7 +2042,7 @@ function renderSidebar() {
   renderMeChip();
   if (typeof Phone !== 'undefined') Phone.chrome();
   $('.create-btn').style.display = can('createTask') ? '' : 'none';
-  const list = db.projects.slice().sort(byOrder);
+  const list = db.projects.filter((x) => !x.inactive).sort(byOrder);   // inactive clients leave the sidebar
   $('#project-list').innerHTML = list.length ? list.map((p) => {
     const open = db.tasks.filter((t) => t.projectId === p.id && !t.parentId && !t.done).length;
     const active = !ui.search && ui.view === 'project' && ui.projectId === p.id;
@@ -2060,6 +2060,7 @@ function renderTitle() {
   if (Fin.owns(ui.view)) { el.innerHTML = Fin.title(); return; }
   if (Claims.owns(ui.view)) { el.innerHTML = Claims.title(); return; }
   if (Cal.owns(ui.view)) { el.innerHTML = Cal.title(); return; }
+  if (ClientList.owns(ui.view)) { el.innerHTML = ClientList.title(); return; }
   if (ui.search) { el.innerHTML = `<div class="page-title">Search</div>`; return; }
   if (ui.view === 'home') { el.innerHTML = `<div class="page-title">Home</div>`; return; }
   if (ui.view === 'inbox') { el.innerHTML = `<div class="page-icon" style="background:#2b2650;color:#c9c0ff">${icon('inbox')}</div><div class="page-title">Inbox</div>`; return; }
@@ -2104,6 +2105,7 @@ function renderContent() {
   if (Fin.owns(ui.view)) { Fin.render(c); c.scrollTop = scroll.top; return; }
   if (Claims.owns(ui.view)) { Claims.render(c); return; }
   if (Cal.owns(ui.view)) { if (!Cal.canSee()) { ui.view = 'home'; return renderContent(); } Cal.render(c); if (typeof Phone !== 'undefined') Phone.decorate(c); c.scrollTop = scroll.top; return; }
+  if (ClientList.owns(ui.view)) { ClientList.render(c); c.scrollTop = scroll.top; return; }
   if (ui.search) c.innerHTML = viewSearch();
   else if (ui.view === 'home') c.innerHTML = viewHome();
   else if (ui.view === 'mytasks') c.innerHTML = viewMyTasks();
@@ -2774,7 +2776,7 @@ function renderDetail() {
   const clDone = cl.filter((x) => x.done).length;
   const navIdx = ui.navIds.indexOf(t.id);
   const projectOptions = ['<option value="">No client (My Tasks)</option>']
-    .concat(db.projects.slice().sort(byOrder).map((x) => `<option value="${x.id}" ${x.id === t.projectId ? 'selected' : ''}>${esc(x.name)}</option>`)).join('');
+    .concat(db.projects.filter((x) => !x.inactive || x.id === t.projectId).sort(byOrder).map((x) => `<option value="${x.id}" ${x.id === t.projectId ? 'selected' : ''}>${esc(x.name)}</option>`)).join('');
   const nComments = t.comments.length;
   const nTop = t.comments.filter((c) => !c.parentId).length;
   if (ui.thread && !t.comments.some((c) => c.id === ui.thread && !c.parentId)) ui.thread = null;
@@ -3490,6 +3492,7 @@ function go(view, projectId = null) {
 
 async function newProjectFlow() {
   if (!isAdmin()) { toast('Only Admins can add clients'); return; }
+  return ClientList.dialog(null);       // name, colour, Account Managers, active (clientlist.js)
   const used = new Set(db.projects.map((p) => p.color));
   const res = await dialog({
     title: 'New client', input: { label: 'Client name', placeholder: 'e.g. Ford & Lincoln' },
@@ -3895,7 +3898,7 @@ function projectMenu(anchor, id) {
   if (!isAdmin()) return;              // only Admins change a client
   const p = proj(id);
   const m = showMenu(anchor, [
-    { label: 'Rename client', icon: 'edit', run: () => renameProject(id) },
+    { label: 'Edit client…', icon: 'edit', run: () => ClientList.dialog(p) },
     { html: `<div class="swatches">${COLORS.map((c) => `<button class="swatch ${c === p.color ? 'on' : ''}" data-swatch="${c}" style="background:${c}"></button>`).join('')}</div>` },
     '-',
     { label: 'Add section', icon: 'plus', run: () => { go('project', id); setTimeout(() => { const a = $('[data-action="add-section"]'); if (a) a.click(); }, 30); } },
@@ -3908,6 +3911,7 @@ function projectMenu(anchor, id) {
 
 async function renameProject(id) {
   const p = proj(id);
+  if (p) return ClientList.dialog(p);   // renaming also renames its Client Assets folder
   const res = await dialog({ title: 'Rename client', input: { label: 'Client name', value: p.name }, okText: 'Save' });
   if (res && res.value) { p.name = res.value; commit(); }
 }
@@ -6610,6 +6614,7 @@ function meMenu(anchor) {
     { label: 'My profile', icon: 'user', run: () => go('profile') },
     ...(Host.isServer ? [{ label: 'My reimbursements', icon: 'coin', run: () => go('claims') }] : []),
     { label: 'Team members', icon: 'users', run: () => go('team') },
+    ...(isAdm(me()) ? [{ label: 'Edit client list', icon: 'folder', run: () => go('clientlist') }] : []),
     ...(Host.isServer && isAdm(me()) ? [{ label: 'App updates', icon: 'download', run: () => go('updates') }] : []),
     ...(Host.isServer ? [{ label: 'What’s new', icon: 'info', run: () => whatsNewDialog(false) }] : []),
     ...(Host.isServer && !Host.isMacApp ? [{ label: 'Get the Mac app', icon: 'download', run: macAppDialog }] : []),

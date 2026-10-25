@@ -251,7 +251,7 @@ const Phone = (() => {
   }
 
   function projects() {
-    const list = db.projects.slice().sort(byOrder);
+    const list = db.projects.filter((p) => !p.inactive).sort(byOrder);   // active clients
     return `<div class="ph-page">
       ${head('Clients', plural(list.length, 'client'))}
       <div class="ph-list">${list.map((p) => {
@@ -503,7 +503,7 @@ const Phone = (() => {
     const inProject = ui.view === 'project' && proj(ui.projectId) ? ui.projectId : '';
     const mgr = isAdm(me()) || me().role === 'am';
     const people = activeUsers();
-    const projOpts = `<option value="">No client (My Tasks)</option>` + db.projects.slice().sort(byOrder).map((p) => `<option value="${p.id}" ${p.id === inProject ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
+    const projOpts = `<option value="">No client (My Tasks)</option>` + db.projects.filter((p) => !p.inactive || p.id === inProject).sort(byOrder).map((p) => `<option value="${p.id}" ${p.id === inProject ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
     const userOpts = `<option value="${currentUserId}">Me</option>` + people.filter((u) => u.id !== currentUserId).map((u) => `<option value="${u.id}">${esc(fullName(u))}</option>`).join('') + '<option value="">Nobody yet</option>';
     sheet(`<div class="ph-sh-head"><h2>New task</h2><button class="ph-link" data-sheet-close>Cancel</button></div>
       <label class="ph-field"><span>Title</span><input id="qa-title" name="e11-task-title" type="text" placeholder="What needs doing?" autocomplete="off" aria-autocomplete="none" data-1p-ignore data-lpignore="true" data-form-type="other" enterkeyhint="next"></label>

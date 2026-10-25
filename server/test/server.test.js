@@ -149,6 +149,8 @@ test('only Admins add, remove or change a client', async () => {
   assert.equal((await put(AM, { sections: [{ id: 's1', name: 'To do' }] })).body.results[0].refused, true, 'AM cannot add statuses');
   assert.equal((await put(AM, { clientId: 'cl-1' })).body.results[0].refused, true, 'AM cannot link Client Assets');
   assert.ok(!(await put(AM, { view: 'board' })).body.results[0].refused, 'AM can switch List / Board');
+  assert.equal((await put(AM, { ams: [{ id: 'u-am' }] })).body.results[0].refused, true, 'AM cannot change Account Managers');
+  assert.equal((await put(AM, { inactive: true })).body.results[0].refused, true, 'AM cannot switch a client off');
   assert.ok(!(await put(ADMIN, { name: 'Renamed' })).body.results[0].refused, 'Admin can rename');
   const del = (who) => call(who, '/api/push', { method: 'POST', body: { changes: [{ kind: 'projects', id: 'p-adm', del: true }] } });
   assert.equal((await del(AM)).body.results[0].refused, true);

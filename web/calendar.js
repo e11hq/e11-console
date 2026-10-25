@@ -368,7 +368,7 @@ const Cal = (() => {
   }
   function planDialog(o) {
     if (!can('createTask')) return denied();
-    const projects = db.projects.slice().sort(byOrder);
+    const projects = db.projects.filter((p) => !p.inactive).sort(byOrder);   // active clients
     const root = $('#overlay-root');
     const due = (() => { const d = addDays(o.date, -5); return d < todayStr() ? todayStr() : d; })();
     const sel = new Set(), chs = new Set(['ig']);
@@ -453,7 +453,7 @@ const Cal = (() => {
     // tick and untick several: the menu stays open and only the ticks, the button and the calendar update
     // (no full redraw, so nothing flashes through the menu)
     const opts = kind === 'project'
-      ? db.projects.slice().sort(byOrder).map((p) => [p.id, `<span class="dot" style="background:${p.color}"></span>${esc(p.name)}`])
+      ? db.projects.filter((p) => !p.inactive || f.projects.includes(p.id)).sort(byOrder).map((p) => [p.id, `<span class="dot" style="background:${p.color}"></span>${esc(p.name)}`])
       : CHANNELS.map(([k, name]) => [k, `<span class="cal-ch" style="--c:${CH[k].color}">${CH[k].short}</span>${esc(name)}`]);
     const html = `<div class="mi" data-tog="">${kind === 'project' ? 'All clients' : 'All channels'}${ck(!f[list].length)}</div>`
       + opts.map(([v, label]) => `<div class="mi" data-tog="${esc(v)}">${label}${ck(f[list].includes(v))}</div>`).join('');
