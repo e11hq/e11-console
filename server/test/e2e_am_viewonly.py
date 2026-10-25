@@ -41,6 +41,8 @@ async def main():
             ok.append(srch == {'other': False, 'clients': []})
             cal = await pg.evaluate("Cal && db.tasks.filter(t => Cal.isPost(t) && !amReadOnly(t)).every(t => ['p-ford', 'p-korea'].includes(t.projectId) || t.createdBy === currentUserId)")
             ok.append(cal is True)
+            ca = await pg.evaluate("clientsSorted().map(c => c.name)")
+            ok.append(sorted(ca) == ['Ford & Lincoln', 'KOREA 360'])
             ok.append(not errs)
             print('ALL PASS' if all(ok) else f'FAILS {ok} {sb} {r} {errs}')
             await b.close()

@@ -2098,7 +2098,7 @@ function renderSidebar() {
   if (typeof Season !== 'undefined') { const u = currentUserId && db && me(); Season.sync(u ? !!(u.prefs || {}).seasonOff : undefined); }
   $$('.nav-item[data-nav]').forEach((a) => a.classList.toggle('active', !ui.search && (ui.view === a.dataset.nav || (a.dataset.nav === 'clients' && ui.view === 'client'))));
   Fin.paintNav();
-  { const cc = $('#clients-count'); if (cc) cc.textContent = (db.clients || []).length ? String(db.clients.length) : ''; }
+  { const cc = $('#clients-count'); const n = (db.clients || []).filter(caVisible).length; if (cc) cc.textContent = n ? String(n) : ''; }
   { const cn = $('#nav-calendar'); if (cn) cn.style.display = Cal.canSee() ? '' : 'none'; }
   { const tn = $('#nav-trash'); if (tn) { tn.style.display = isManager() ? '' : 'none'; $('#trash-count').textContent = trashList().length ? String(trashList().length) : ''; } }
   const mt = Work.home().filter((t) => Work.homeOpen(t) && t.due && dayDiff(t.due) <= 0).length;
@@ -5056,7 +5056,9 @@ const isAdmin = () => !!isAdm(me());
 // The Creative Director's Home, My Day ("E11 Day") and My Tasks are the Admin's: every team task, with the same filters
 const seesAll = () => isAdmin() || (typeof isCD === 'function' && isCD());
 const clientById = (id) => (db.clients || []).find((c) => c.id === id) || null;
-const clientsSorted = () => (db.clients || []).slice().sort((a, b) => a.name.localeCompare(b.name));
+// Client Assets an Account Manager sees: their clients' folders, and folders not linked to any client
+const caVisible = (c) => { const linked = db.projects.filter((p) => p.clientId === c.id); return !linked.length || linked.some((p) => amSidebarOk(p)); };
+const clientsSorted = () => (db.clients || []).filter(caVisible).sort((a, b) => a.name.localeCompare(b.name));
 const clientFileCount = (c) => c.folders.reduce((n, f) => n + f.files.length, 0);
 // "Ford", "ford ", "FORD." and "Ford" with different spacing are the same client
 const clientKey = (n) => String(n || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/&/g, 'and').replace(/[^a-z0-9؀-ۿ]+/g, '');
@@ -5089,6 +5091,7 @@ function clientFileById(id) {
 const clientOfProject = (p) => (p && p.clientId ? clientById(p.clientId) : null);
 function openClient(id, folderId = null) {
   if (!clientById(id)) { toast('That client has been removed'); return; }
+  if (!caVisible(clientById(id))) { toast('That client’s assets are for its Account Managers'); return; }
   ui.caQ = ''; ui.caScope = null;
   if (ui.taskId) closeDetail();
   ui.clientId = id; ui.folderId = folderId;
