@@ -156,7 +156,7 @@ async def main():
         check(r == {'mine': True, 'other': False, 'otherComment': True, 'ownElsewhere': True, 'pickerHasOther': False, 'pickerHasMine': True, 'onLeave': False}, f"AM rights follow their clients {r}")
         # a replaced AM stops getting updates on tasks they created in that client; the new AM gets them
         r = await E("""(() => {
-          const ams = db.users.filter(u => u.role === 'am' && u.active !== false && !u.admin).slice(0, 2);
+          const ams = db.users.filter(u => u.role === 'am' && u.active !== false && !u.admin && u.id !== cdUserId()).slice(0, 2);
           const t = topTasks().find(x => x.projectId && !(x.assignees || []).some(id => ams.some(a => a.id === id)));
           const p = proj(t.projectId); const was = [p.ams, t.createdBy];
           t.createdBy = ams[0].id;
@@ -183,6 +183,31 @@ async def main():
         refused = await E("(() => { const t = topTasks()[0]; const am = db.users.find(u => u.role === 'am'); const n = (t.assignees || []).length; setAssignee(t, am.id, true); return (t.assignees || []).includes(am.id); })()")
         check(refused is False, 'an Account Manager cannot be assigned')
         await pg.keyboard.press('Escape'); await E("closeDetail()")
+        # the Creative Director: the Admin's views and rights; notified only about their own tasks and reviews;
+        # on a new task that needs CD review they can't be assigned (older tasks keep the old way)
+        cdEmail = await E("(userById(cdUserId()) || {}).email")
+        if cdEmail:
+            ctxc, cdp, errc = await as_user(cdEmail)
+            r = await cdp.evaluate("""(() => {
+              const other = topTasks().find(t => t.projectId && t.createdBy !== currentUserId);
+              return { seesAll: seesAll(), day: Work.dayTitle(), lead: Work.lead(), anyTask: can('assign', other) && can('editTitle', other) && can('deleteTask', other) };
+            })()""")
+            check(r == {'seesAll': True, 'day': 'E11 Day', 'lead': True, 'anyTask': True}, f"the CD gets the Admin's views and can change any task {r}")
+            check(await cdp.locator('.hm-lead').count() == 1, 'the CD’s Home is the Admin’s')
+            await ctxc.close()
+            r = await E("""(() => {
+              const cd = cdUserId(); const t0 = topTasks().find(t => t.projectId && t.createdBy !== cd && !(t.assignees || []).includes(cd));
+              const fresh = createTask({ projectId: t0.projectId, sectionId: proj(t0.projectId).sections[0].id, title: 'CD rule test' }); fresh.needsCD = true;
+              setAssignee(fresh, cd, true); const blocked = !(fresh.assignees || []).includes(cd);
+              const old = { ...t0 }; delete old.cdRule; old.id = 'old-x'; old.assignees = []; old.needsCD = true; db.tasks.push(old);
+              setAssignee(old, cd, true); const oldOk = (old.assignees || []).includes(cd);
+              const n = (k) => db.notifications.filter(x => x.to === cd && x.taskId === t0.id && x.kind === k).length;
+              const a = n('status'), b = n('review');
+              pushNotif(cd, t0, 'status', 'changed it on'); pushNotif(cd, t0, 'review', 'submitted files for your review on');
+              db.tasks = db.tasks.filter(x => x.id !== 'old-x' && x.id !== fresh.id);
+              return { blocked, oldOk, status: n('status') - a, review: n('review') - b };
+            })()""")
+            check(r == {'blocked': True, 'oldOk': True, 'status': 0, 'review': 1}, f'CD review rule and the CD’s notifications {r}')
         # Edit client list: switch a client off, rename it (its Client Assets folder follows)
         await E("go('clientlist')"); await pg.wait_for_timeout(400)
         check(await pg.locator('.cl-row').count() >= 3, 'Edit client list shows the clients')

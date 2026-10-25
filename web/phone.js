@@ -502,7 +502,7 @@ const Phone = (() => {
   function quickAdd() {
     if (!can('createTask')) return denied();
     const inProject = ui.view === 'project' && proj(ui.projectId) ? ui.projectId : '';
-    const mgr = isAdm(me()) || me().role === 'am';
+    const mgr = isAdm(me()) || me().role === 'am' || isCD();
     const people = activeUsers();
     const projOpts = `<option value="">No client (My Tasks)</option>` + db.projects.filter((p) => (!p.inactive && amClientOk(p)) || p.id === inProject).sort(byOrder).map((p) => `<option value="${p.id}" ${p.id === inProject ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
     // (only Production, Social, Freelancers and the Creative Director can be assigned)
@@ -525,6 +525,7 @@ const Phone = (() => {
         const title = ti.value.trim();
         if (!title) { ti.focus(); toast('Give the task a name'); return; }
         const who = $('#qa-who', scrim) ? $('#qa-who', scrim).value : assignable(me()) ? currentUserId : '';
+        if (cd && cd.checked && who && who === cdUserId()) { toast('A task that needs CD review can’t be assigned to the Creative Director. Turn off CD review or choose someone else.'); return; }
         const desc = $('#qa-desc', scrim).value.trim();
         const t = createTask({ title, projectId: pj.value || null, due: $('#qa-due', scrim).value || null, notes: desc, ...(desc ? { notesHtml: linkify(esc(desc)).replace(/\n/g, '<br>') } : {}) });
         if (cd) t.needsCD = !!(cd.checked && t.projectId);

@@ -68,7 +68,7 @@ const Home = (() => {
   /* ================= A · Account Manager / Admin ================= */
   function viewLead() {
     // An Admin sees every Account Manager's and Admin's created tasks (same as E11 Day); an AM sees their own
-    const admin = isAdmin();
+    const admin = seesAll();   // (the Creative Director sees what an Admin sees)
     // (an AM: every task in the clients they look after; see Work.leadSet)
     const mine = Work.leadSet(admin ? db.users.filter((x) => x.role === 'am' || isAdm(x)).map((x) => x.id) : [currentUserId]);
     const open = mine.filter((t) => !t.done);
@@ -370,7 +370,7 @@ const Home = (() => {
       // the three cards open My Tasks with the matching filter (an Admin: across the whole team)
       ui.workF = null;
       const F = Work.f();
-      if (isAdmin()) F.team = true;
+      if (seesAll()) F.team = true;
       if (v === 'today') F.due = 'today';
       if (v === 'finished') F.finished = true;
       if (v === 'cd') F.cd = true;
@@ -381,7 +381,7 @@ const Home = (() => {
       // My Tasks with the same list as the Home card: the team's tasks for an Admin, and the same due filter
       ui.workF = null; ui.myTasksTab = 'todo';
       const F = Work.f();
-      if (isAdmin()) F.team = true;
+      if (seesAll()) F.team = true;
       F.due = st.range === 'all' ? null : st.range;
       return go('mytasks');
     }

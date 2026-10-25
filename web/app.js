@@ -1025,7 +1025,7 @@ function can(perm, t) {
   if (!u) return false;
   if (isFinUser(u)) return false;
   if (perm === 'manageUsers') return isAdm(u);
-  if (isAdm(u)) return true;
+  if (isAdm(u) || isCD(u.id)) return true;   // Admins and the Creative Director: any client, any task
   if (u.role === 'am') return amScope(t === undefined ? taskCtx() : t) || !LIMITED.has(perm);
   return !LIMITED.has(perm);
 }
@@ -1039,7 +1039,7 @@ function taskCtx() {
   return null;
 }
 function amScope(t, u = me()) {
-  if (!u || isAdm(u) || u.role !== 'am') return true;
+  if (!u || isAdm(u) || u.role !== 'am' || isCD(u.id)) return true;
   if (!t) return true;
   if (!db.projects.some((p) => (p.ams || []).some((a) => a.id === u.id))) return true;
   const root = t.parentId ? task(t.parentId) || t : t;
@@ -1150,7 +1150,7 @@ function setField(t, k, v) {
 
 const Work = (() => {
   const f = () => (ui.workF = ui.workF || { created: null, due: null, finished: false, cd: false, people: [], ams: [], team: false, assigned: false });
-  const lead = () => isManager();
+  const lead = () => isManager() || seesAll();
   const personal = () => !lead() || f().assigned;
   const openOf = (t) => (personal() ? myOpen(t) : !t.done);
   const doneAtOf = (t) => (personal() ? myDoneAt(t) : t.done ? t.completedAt || null : null);
@@ -1168,7 +1168,7 @@ const Work = (() => {
   const leadSet = (ids) => { const am = ids.filter((id) => { const u = userById(id); return u && u.role === 'am' && !isAdm(u); }); const rest = ids.filter((id) => !am.includes(id)); const set = new Map(); ofAms(am).forEach((t) => set.set(t.id, t)); createdBy(rest).forEach((t) => set.set(t.id, t)); return [...set.values()]; };
   // Everyone whose created tasks an Admin can look at (same people as E11 Day)
   const teamIds = () => db.users.filter((x) => x.role === 'am' || isAdm(x)).map((x) => x.id);
-  const creators = () => (isAdmin() && f().team ? teamIds() : isAdmin() && f().ams.length ? f().ams : [currentUserId]);
+  const creators = () => (seesAll() && f().team ? teamIds() : seesAll() && f().ams.length ? f().ams : [currentUserId]);
   function inCreated(t, k) {
     if (!k) return true;
     const c = new Date(t.createdAt), now = new Date();
@@ -1196,12 +1196,12 @@ const Work = (() => {
   function day() {
     const u = me();
     if (!lead()) return { tasks: db.tasks.filter(onMyList), open: myOpen, doneAt: myDoneAt, doneTasks: db.tasks.filter(isMine) };
-    const who = isAdmin() ? db.users.filter((x) => x.role === 'am' || isAdm(x)).map((x) => x.id) : [u.id];
+    const who = seesAll() ? db.users.filter((x) => x.role === 'am' || isAdm(x)).map((x) => x.id) : [u.id];
     const ts = leadSet(who);
     const dAt = (t) => (t.done ? t.completedAt || null : null);
     return { tasks: ts, open: (t) => !t.done, doneAt: dAt, doneTasks: ts };
   }
-  const dayTitle = () => (isAdmin() ? 'E11 Day' : 'My Day');
+  const dayTitle = () => (seesAll() ? 'E11 Day' : 'My Day');
   const active = () => { const F = f(); return !!(F.created || F.due || F.finished || F.cd || F.people.length || F.ams.length || F.team || F.assigned); };
   return { f, lead, personal, openOf, doneAtOf, list, home, homeOpen, homeDoneAt, day, dayTitle, inCreated, active, leadSet, hasClients };
 })();
@@ -1234,7 +1234,7 @@ function workFilterBar() {
     <button class="wf-btn ${F.created ? 'on' : ''}" data-action="wf-created">${icon('cal')}Created date${icon('chev')}</button>
     <button class="wf-btn ${F.due ? 'on' : ''}" data-action="wf-due">${icon('flag')}Due date${icon('chev')}</button>
     <button class="wf-btn ${F.people.length ? 'on' : ''}" data-action="wf-people">${icon('users')}People${icon('chev')}</button>
-    ${isAdmin() ? `<button class="wf-btn ${F.ams.length || F.team ? 'on' : ''}" data-action="wf-ams">${icon('user')}Account managers${icon('chev')}</button>` : ''}
+    ${seesAll() ? `<button class="wf-btn ${F.ams.length || F.team ? 'on' : ''}" data-action="wf-ams">${icon('user')}Account managers${icon('chev')}</button>` : ''}
     <button class="wf-btn ${F.assigned ? 'on' : ''}" data-action="wf-assigned">${icon('check-circle')}Assigned to me</button></div>
     ${chips ? `<div class="wf-chips">${chips}${Work.active() ? '<button class="wf-reset" data-action="wf-reset">Clear all</button>' : ''}</div>` : ''}
   </div>`;
@@ -1518,6 +1518,7 @@ function pushNotif(to, t, kind, text, extra = {}) {
   const u = userById(to);
   if (!u || u.active === false) return;
   if (!notifOn(u, kind)) return;
+  if (to === cdUserId() && !['review', 'review-wd', 'mention'].includes(kind) && (t.parentId ? (task(t.parentId) || t) : t).createdBy !== to) return;   // the CD: their own tasks and review requests only
   // one update per change: a specific one (status, comment…) replaces the general "changed …" sent moments before
   const recent = Date.now() - 4000;
   const same = (n) => n.to === to && n.taskId === t.id && n.from === currentUserId && !n.read && Date.parse(n.at) > recent;
@@ -1614,6 +1615,7 @@ function createTask(fields = {}) {
     id: uid(), projectId: null, sectionId: null, parentId: null,
     title: '', notes: '', done: false, completedAt: null, due: null, prio: {},
     tags: [], attachments: [], comments: [], checklist: [], activity: [], start: null, createdAt: nowISO(), updatedAt: nowISO(),
+    cdRule: 2,   // (new tasks: the Creative Director can't be assigned while it needs CD review; older tasks keep the old way)
     cdStatus: '', assignees: [], createdBy: currentUserId || SEED_ADMIN_ID, reviews: [], needsCD: !fields.parentId && !!fields.projectId,
     ...fields,
   };
@@ -4107,6 +4109,7 @@ function cdMenu(anchor) {
 function setAssignee(t, userId, on) {
   if (!can('assign')) return denied();
   if (on && !assignable(userById(userId))) { toast('Only Production, Social, Freelancers and the Creative Director can be assigned'); return; }
+  if (on && userId === cdUserId() && t.cdRule && needsCD(t)) { toast('This task needs CD review, so the Creative Director can’t be assigned to it. Turn off “Needs CD review” first.'); return; }
   const has = (t.assignees || []).includes(userId);
   if (on === has) return;
   if (on) {
@@ -4579,7 +4582,7 @@ document.addEventListener('click', async (e) => {
       case 'cd-menu': e.stopPropagation(); toast('CD Status is set automatically when files are submitted and reviewed'); return;
       case 'submit-review': e.stopPropagation(); submitDialog(task(ui.taskId)); return;
       case 'withdraw-review': e.stopPropagation(); withdrawReview(task(ui.taskId)); return;
-      case 'needs-cd': e.stopPropagation(); setNeedsCD(task(ui.taskId), actEl.checked); if (!(me() && (isAdm(me()) || me().role === 'am'))) renderDetail(); return;
+      case 'needs-cd': e.stopPropagation(); setNeedsCD(task(ui.taskId), actEl.checked); renderDetail(); return;
       case 'cd-toggle': e.stopPropagation(); cdToggleFlow(id); return;
       case 'rr-tab': ui.rrTab = actEl.dataset.tab; renderContent(); return;
       case 'rr-open': e.preventDefault(); openTask(id); return;
@@ -5016,6 +5019,8 @@ const canDelAsset = (a) => canAddAssets() && (canAssets() || (!!a && a.addedBy =
 const canEditFolder = (c, f) => isAdmin() || (canAddAssets() && !isAutoFolder(c, f) && (canAssets() || f.createdBy === currentUserId));
 const canDelFolder = (c, f) => canEditFolder(c, f) && (canAssets() || f.files.every((a) => a.addedBy === currentUserId));
 const isAdmin = () => !!isAdm(me());
+// The Creative Director's Home, My Day ("E11 Day") and My Tasks are the Admin's: every team task, with the same filters
+const seesAll = () => isAdmin() || (typeof isCD === 'function' && isCD());
 const clientById = (id) => (db.clients || []).find((c) => c.id === id) || null;
 const clientsSorted = () => (db.clients || []).slice().sort((a, b) => a.name.localeCompare(b.name));
 const clientFileCount = (c) => c.folders.reduce((n, f) => n + f.files.length, 0);
@@ -5671,7 +5676,8 @@ async function changeStatus(t, sectionId, targetId = null, after = false) {
   if (backFromClient) {
     const allowed = (me() && (isAdm(me()) || me().role === 'am')) || t.createdBy === currentUserId;
     if (!allowed) { toast('Only an Account Manager or the person who created this task can send it back'); return false; }
-    const ans = await choiceDialog({
+    const cdOnIt = t.cdRule && cdUserId() && (t.assignees || []).includes(cdUserId());   // (the CD works on it: no CD review)
+    const ans = cdOnIt ? 'no' : await choiceDialog({
       title: 'Does this need CD review again?',
       body: 'The task is going back for changes. Choose whether the updated work goes to the Creative Director before it returns to the client.',
       choices: [{ label: 'Cancel', value: null }, { label: 'No, skip CD review', value: 'no' }, { label: 'Yes, needs CD review', value: 'yes', primary: true }],
@@ -5695,7 +5701,8 @@ async function changeStatus(t, sectionId, targetId = null, after = false) {
 }
 
 function setNeedsCD(t, on) {
-  if (!(me() && (isAdm(me()) || me().role === 'am'))) return denied();
+  if (!(me() && (isAdm(me()) || me().role === 'am' || isCD()))) return denied();
+  if (on && t.cdRule && cdUserId() && (t.assignees || []).includes(cdUserId())) { toast('The Creative Director is assigned to this task, so it doesn’t need CD review'); renderDetail(); return; }
   if (reviewPending(t)) { toast('Files are waiting for CD review — this can be changed after the CD decides'); return; }
   if (!!t.needsCD === !!on) return;
   t.needsCD = !!on;
@@ -5745,7 +5752,7 @@ function myPartControl(t) {
 }
 function cdReviewRow(t) {
   if (t.parentId || t.done) return '';
-  const canSet = me() && (isAdm(me()) || me().role === 'am');
+  const canSet = me() && (isAdm(me()) || me().role === 'am' || isCD());
   const cd = cdUserId();
   const who = cd ? `${esc(fullName(userById(cd)))}${cdActing() ? ' (Acting CD)' : ''}` : 'No Creative Director set';
   return `<div class="prop prop-cdreq"><label>${icon('shield')}CD review</label><div class="pv">
