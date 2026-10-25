@@ -19,6 +19,8 @@ services:
       - ADMIN_EMAIL=haris@e11-digital.com
     volumes:
       - /share/E11Console/live:/data
+    devices:                        # the processor's video hardware (Intel Quick Sync) for fast video conversion
+      - /dev/dri:/dev/dri
 
   test:
     image: ghcr.io/e11hq/e11-console:latest
@@ -32,6 +34,8 @@ services:
       - ADMIN_EMAIL=haris@e11-digital.com
     volumes:
       - /share/E11Console/test:/data
+    devices:                        # the processor's video hardware (Intel Quick Sync) for fast video conversion
+      - /dev/dri:/dev/dri
 
   cloudflared:
     image: cloudflare/cloudflared:latest
