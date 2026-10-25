@@ -5363,6 +5363,7 @@ function addClientDialog() {
 }
 
 async function renameClient(c) {
+  if (!canRenameCA(c)) { toast('Only an Admin, or whoever created it, can rename this'); return; }
   const v = await formDialog({ title: 'Rename client', fields: [{ key: 'name', label: 'Client name', value: c.name }], okText: 'Save',
     validate: (x) => (!x.name ? 'Enter the client’s name' : dupClient(x.name, c.id) ? dupMsg(dupClient(x.name, c.id)) : null) });
   if (!v) return;
@@ -5411,9 +5412,11 @@ async function deleteClient(c) {
   safeTrash(paths);
   toast(`Deleted ${c.name}`);
 }
+// Renaming a Client Assets folder: Admins, or whoever created it
+const canRenameCA = (c) => isAdmin() || (!!c && c.createdBy === currentUserId);
 function clientMenu(anchor, c) {
   showMenu(anchor, [
-    { label: 'Rename client', icon: 'edit', run: () => renameClient(c) },
+    ...(canRenameCA(c) ? [{ label: 'Rename client', icon: 'edit', run: () => renameClient(c) }] : []),
     { label: c.logo ? 'Change logo' : 'Add logo', icon: 'camera', run: () => changeClientLogo(c) },
     ...(Host.isServer ? [] : [{ label: 'Show in Finder', icon: 'folder', run: () => Host.call('makeDir', { path: c.dir }).then(() => Host.call('revealPath', { path: c.dir })).catch((e) => toast(e.message)) }]),
     ...(isAdmin() ? ['-', { label: 'Delete client', icon: 'trash', danger: true, run: () => deleteClient(c) }] : []),

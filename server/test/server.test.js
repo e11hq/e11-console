@@ -306,6 +306,10 @@ test('Client Assets: anyone adds folders and files, removes only their own; fold
   assert.equal((await push(AM, { ...withAm, folders: [mine] }, withAm)).body.results[0].refused, true, "an AM can't either");
   assert.equal((await push(PROD, { ...withAm, folders: [{ ...logos2, name: 'Logo' }, mine] }, withAm)).body.results[0].refused, true, "can't rename it");
   assert.equal((await push(PROD, { ...withAm, name: 'Renamed' }, withAm)).body.results[0].refused, true, "can't rename the client");
+  assert.equal((await push(AM, { ...withAm, name: 'Renamed' }, withAm)).body.results[0].refused, true, "an AM can't rename an Admin's Client Assets folder");
+  const own = { id: 'cl-am-own', name: 'AM own', dir: 'Clients/AM own', folders: [], createdAt: at, createdBy: 'u-am' };
+  assert.ok(!(await call(AM, '/api/push', { method: 'POST', body: { changes: [{ kind: 'clients', id: own.id, data: own }] } })).body.results[0].refused);
+  assert.ok(!(await call(AM, '/api/push', { method: 'POST', body: { changes: [{ kind: 'clients', id: own.id, base: own, data: { ...own, name: 'AM own 2' } }] } })).body.results[0].refused, 'but can rename one they created');
   // an AM removes anyone's file and anyone's added folder, but not the folders made with the client
   const am2 = await push(AM, { ...withAm, folders: [logos2] }, withAm);
   assert.ok(!am2.body.results[0].refused, "an AM removes Production's folder");

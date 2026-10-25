@@ -54,7 +54,9 @@ export function createAccess(store) {
     if (!next) return false;
     // (anyone may fill in a missing logo — the first image in Logos — but only Admins and AMs change one)
     const firstLogo = !base.logo && !current.logo && !!next.logo && next.logoAuto === true;
-    if (!manager && ['name', 'dir'].some((k) => !deepEqual(next[k] ?? null, base[k] ?? null) && !deepEqual(next[k] ?? null, current[k] ?? null))) return false;
+    const changed = (k) => !deepEqual(next[k] ?? null, base[k] ?? null) && !deepEqual(next[k] ?? null, current[k] ?? null);
+    if (changed('dir')) return false;
+    if (changed('name') && current.createdBy !== u.id) return false;   // its name: Admins (checked before), or whoever created it
     if (!manager && !firstLogo && ['logo', 'logoAuto'].some((k) => !deepEqual(next[k] ?? null, base[k] ?? null) && !deepEqual(next[k] ?? null, current[k] ?? null))) return false;
     // judged against what this person's app last saw (base): what they removed or renamed; others' new folders and
     // files from the meantime are kept by the merge
