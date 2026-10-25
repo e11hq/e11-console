@@ -101,7 +101,23 @@ export function createServer(cfg) {
       if (wantsHtml(req)) page(res, 403, 'No account yet', msg); else json(res, 403, { ok: false, error: 'No E11 Console account for ' + id.email });
       return null;
     }
+    // Test site only: the owner may use the app as any team member (see viewAsTarget)
+    req.realUser = u;
+    const as = viewAsTarget(u);
+    if (as) { req.viewingAs = as; return as; }
     return u;
+  }
+  /* "View as" — a testing aid on the TEST copy only (never on the live site): the owner (ADMIN_EMAIL) picks a team
+     member and, until they switch back, the server treats every request of theirs as that person — what they see,
+     what they may change, their role's rules. The choice is kept on the server (kv "view-as"), so it holds on every
+     device and after reloads. Their phone subscriptions are left alone while viewing as someone. */
+  const isTestSite = /-test\.|-dev$/.test(version);
+  function viewAsTarget(real) {
+    if (!isTestSite || !real || !isOwner(real)) return null;
+    let v = null; try { v = JSON.parse(store.kv.get('view-as') || 'null'); } catch { v = null; }
+    if (!v || !v.userId || v.userId === real.id) return null;
+    const t = store.get('users', String(v.userId));
+    return t && t.active !== false ? t : null;
   }
   const wantsHtml = (req) => req.method === 'GET' && /text\/html/.test(req.headers.accept || '') && !req.url.startsWith('/api/');
 
@@ -189,7 +205,19 @@ export function createServer(cfg) {
     const u = await who(req, res);
     if (!u) return;
 
-    if (p === '/api/me') return json(res, 200, { ok: true, user: access.shape(u, 'users', u), owner: isOwner(u), appIcon: appIcon.info(), macShell, version, rev: store.rev() });
+    if (p === '/api/me') return json(res, 200, { ok: true, user: access.shape(u, 'users', u), owner: isOwner(u), appIcon: appIcon.info(), macShell, version, rev: store.rev(),
+      viewAs: isTestSite && isOwner(req.realUser) ? { real: { id: req.realUser.id, name: req.realUser.name || req.realUser.email }, as: req.viewingAs ? { id: u.id, name: u.name || u.email, role: u.role } : null } : null });
+
+    // Test site, owner only: choose whom to view the app as (userId), or null to be yourself again
+    if (p === '/api/view-as' && req.method === 'POST') {
+      if (!isTestSite) return json(res, 404, { ok: false, error: 'Not available on the live site' });
+      if (!isOwner(req.realUser)) return json(res, 403, { ok: false, error: 'Only the owner can do this' });
+      const body = await readBody(req);
+      const id = body && body.userId ? String(body.userId) : null;
+      if (id && (!store.get('users', id) || store.get('users', id).active === false)) return json(res, 400, { ok: false, error: 'No such team member' });
+      if (!id || id === req.realUser.id) store.kv.set('view-as', 'null'); else store.kv.set('view-as', JSON.stringify({ userId: id, at: new Date().toISOString() }));
+      return json(res, 200, { ok: true });
+    }
 
     // Mac app Dock icon: everyone reads it; only the owner changes it (every open Mac app swaps it live)
     if (p === '/api/app-icon' && req.method === 'GET') {
@@ -249,11 +277,13 @@ export function createServer(cfg) {
     if (p === '/api/push/key') return json(res, 200, { ok: true, key: webPush.publicKey() });
     if (p === '/api/push/subscribe' && req.method === 'POST') {
       const body = await readBody(req);
+      if (req.viewingAs) return json(res, 200, { ok: true, devices: 0, viewingAs: true });   // (don't touch that person's phones)
       const n = webPush.subscribe(u.id, body.subscription, req.headers['user-agent']);
       return json(res, 200, { ok: true, devices: n });
     }
     if (p === '/api/push/unsubscribe' && req.method === 'POST') {
       const body = await readBody(req);
+      if (req.viewingAs) return json(res, 200, { ok: true, viewingAs: true });
       webPush.unsubscribe(u.id, String(body.endpoint || ''));
       return json(res, 200, { ok: true });
     }

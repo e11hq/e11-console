@@ -1783,6 +1783,7 @@ const Sync = (() => {
 
   async function start() {
     const me = await api('GET', '/api/me');
+    if (typeof ViewAs !== 'undefined') ViewAs.init(me.viewAs);   // test site only: the owner using the app as someone else
     AppIcon.setOwner(me.owner); if (me.appIcon) AppIcon.sync(me.appIcon);
     MacUpdate.check(me.macShell);
     MacChrome.init();
@@ -6680,7 +6681,7 @@ function renderMeChip() {
   el.innerHTML = `${avatarHTML(u.id, 28)}<span class="me-txt"><b>${esc(fullName(u))}</b><small>${esc(ROLES[u.role])}</small></span>${icon('chev')}`;
 }
 function meMenu(anchor) {
-  if (isFinUser()) return Fin.meMenu(anchor);
+  if (isFinUser()) return Fin.meMenu(anchor, typeof ViewAs !== 'undefined' && ViewAs.viewing() ? [{ label: 'Back to me', icon: 'reply', run: ViewAs.back }] : []);
   showMenu(anchor, [
     { label: 'My profile', icon: 'user', run: () => go('profile') },
     ...(Host.isServer ? [{ label: 'My reimbursements', icon: 'coin', run: () => go('claims') }] : []),
@@ -6691,6 +6692,7 @@ function meMenu(anchor) {
     ...(Host.isServer && !Host.isMacApp ? [{ label: 'Get the Mac app', icon: 'download', run: macAppDialog }] : []),
     ...(Host.isMacApp ? [{ label: 'Update Mac app', icon: 'download', run: () => MacUpdate.run() }] : []),
     ...(isTestCopy() && isAdm(me()) ? [{ label: 'Fill with sample data', icon: 'users', run: fillSampleData }] : []),
+    ...(typeof ViewAs !== 'undefined' && ViewAs.available() ? [{ label: ViewAs.viewing() ? 'View as someone else…' : 'View as… (test site)', icon: 'users', run: ViewAs.pick }, ...(ViewAs.viewing() ? [{ label: 'Back to me', icon: 'reply', run: ViewAs.back }] : [])] : []),
     ...Fin.addItems(),
     '-',
     { label: 'Sign out', icon: 'logout', run: signOut },

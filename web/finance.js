@@ -318,8 +318,9 @@ const Fin = (() => {
     { label: 'Add subscriptions', icon: 'cal', run: () => go('fin-subs') },
     { label: 'Add Staff Reimbursements', icon: 'users', run: () => go('fin-reimb') },
     { label: 'Add Extra Expense', icon: 'coin', run: () => go('fin-extra') }] : finLevel() && !isFinUser() ? ['-', { label: 'Staff reimbursements', icon: 'users', run: () => go('fin-reimb') }] : []);
-  function meMenu(anchor) {
+  function meMenu(anchor, extra = []) {
     showMenu(anchor, [
+      ...extra,
       { label: 'My profile', icon: 'user', run: () => go('profile') },
       ...addItems(),
       ...(Host.isServer ? ['-', { label: 'What’s new', icon: 'info', run: () => whatsNewDialog(false) }] : []),

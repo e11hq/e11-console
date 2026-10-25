@@ -303,6 +303,7 @@ const Phone = (() => {
         <div class="ph-row ph-theme"><div class="pt-top">${icon(light ? 'sun' : 'moon')}<span>Appearance<small>${Theme.mode() === 'auto' ? 'Follows sunrise and sunset' : 'Always ' + Theme.mode()}</small></span></div>${Theme.picker('ph-seg-sm')}</div>
         ${Host.isServer ? '<button class="ph-row" data-action="whats-new">' + icon('info') + '<span>What’s new</span>' + icon('chev-right') + '</button>' : ''}
       </div>
+      ${typeof ViewAs !== 'undefined' && ViewAs.available() ? `<div class="ph-rows"><button class="ph-row" data-va="pick">${icon('users')}<span>View as…<small>Test site only — use the app as a team member</small></span></button>${ViewAs.viewing() ? `<button class="ph-row" data-va="me">${icon('reply')}<span>Back to me</span></button>` : ''}</div>` : ''}
       <div class="ph-rows"><button class="ph-row danger" data-ph="sign-out">${icon('logout')}<span>Sign out</span></button></div>
       ${Host.isServer && Sync.version ? `<div class="ph-ver">E11 Console ${esc(Sync.version)}</div>` : ''}
     </div>`;
