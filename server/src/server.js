@@ -13,6 +13,7 @@ import { createWebPush, notifMessage } from './webpush.js';
 import { createDigest } from './digest.js';
 import { createOccasionReminders } from './occremind.js';
 import { createHolidaySync, DEFAULT_HOLIDAYS_URL } from './holidays.js';
+import zlib from 'node:zlib';
 import { sampleData } from './sample.js';
 import { freshSample } from './sample-fresh.js';
 import { createAppIcon } from './appicon.js';
@@ -32,6 +33,21 @@ export function createServer(cfg) {
   const webPush = createWebPush({ store, fetchImpl: cfg.pushFetch || fetch, subject: cfg.pushSubject || 'mailto:admin@e11hq.com' });
   const digest = createDigest({ store, webPush, now: cfg.now || (() => Date.now()) });
   if (cfg.digest !== false) digest.start();
+  // Inbox clean-up: read updates go after 60 days, any update after 180 days, so opening the app stays quick as
+  // the months go by (each person's whole Inbox comes with every start). Runs a minute after start and twice a day.
+  function pruneNotifications(now = Date.now()) {
+    const READ = 60 * 86400000, ANY = 180 * 86400000;
+    const old = store.list('notifications').filter((n) => { const at = Date.parse(n.at || 0) || 0; return at && (now - at > ANY || (n.read && now - at > READ)); });
+    if (!old.length) return 0;
+    const out = store.apply(old.map((n) => ({ kind: 'notifications', id: String(n.id), del: true })), 'inbox-cleanup');
+    broadcast(out.rev, out.results, null, null);
+    return old.length;
+  }
+  if (cfg.pruneInbox !== false) {
+    const t1 = setTimeout(() => { try { pruneNotifications(); } catch (e) { console.error('Inbox clean-up failed:', e.message); } }, 60_000);
+    const t2 = setInterval(() => { try { pruneNotifications(); } catch (e) { console.error('Inbox clean-up failed:', e.message); } }, 12 * 3600_000);
+    if (t1.unref) t1.unref(); if (t2.unref) t2.unref();
+  }
   // Once: Account Managers and Admins are taken off every task they're assigned to (only Production, Social,
   // Freelancers and the Creative Director are assigned now)
   if (!store.kv.get('unassign-managers-v1')) {
@@ -354,7 +370,7 @@ export function createServer(cfg) {
       return json(res, 200, { ok: true, rev, tasks: data.tasks.length, people: data.users.length });
     }
 
-    if (p === '/api/snapshot' && req.method === 'GET') return json(res, 200, { ok: true, version, ...visibleSnapshot(u) });
+    if (p === '/api/snapshot' && req.method === 'GET') return sendText(req, res, 200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }, Buffer.from(JSON.stringify({ ok: true, version, ...visibleSnapshot(u) })));
 
     if (p === '/api/push' && req.method === 'POST') {
       const body = await readBody(req);
@@ -478,15 +494,37 @@ export function createServer(cfg) {
     if (!fs.existsSync(full) || fs.statSync(full).isDirectory()) full = path.join(webDir, 'index.html');
     const type = mimeOf(full);
     const html = type.startsWith('text/html');
-    res.writeHead(200, { 'Content-Type': type, 'Cache-Control': html || /sw\.js$/.test(full) ? 'no-cache' : 'public, max-age=86400', 'X-Content-Type-Options': 'nosniff' });
-    if (req.method === 'HEAD') return res.end();
-    if (html) {
-      // app.js?v=1.2.0 — every version gets fresh files, older ones can be cached for a day
-      const v = encodeURIComponent(version);
-      // every local script and stylesheet (a new file can't be missed), so an update reaches everyone at once
-      return res.end(fs.readFileSync(full, 'utf8').replace(/(src|href)="([\w-]+\.(?:js|css))"/g, `$1="$2?v=${v}"`));
+    // app.js?v=1.5.4 — each update has new names, so a versioned file never changes: devices keep it until the next
+    // update (a year at most) instead of fetching it again every day. The page itself and sw.js are always checked.
+    const versioned = /[?&]v=/.test(req.url || '');
+    const cache = html || /sw\.js$/.test(full) ? 'no-cache' : versioned ? 'public, max-age=31536000, immutable' : 'public, max-age=86400';
+    const textual = /^(text\/|application\/(javascript|json|manifest\+json)|image\/svg)/.test(type);
+    if (!textual) {
+      res.writeHead(200, { 'Content-Type': type, 'Cache-Control': cache, 'X-Content-Type-Options': 'nosniff' });
+      if (req.method === 'HEAD') return res.end();
+      return fs.createReadStream(full).pipe(res);
     }
-    fs.createReadStream(full).pipe(res);
+    // text files go out compressed (Brotli or gzip, made once per file and version and kept in memory)
+    const body = html
+      // every local script and stylesheet (a new file can't be missed), so an update reaches everyone at once
+      ? Buffer.from(fs.readFileSync(full, 'utf8').replace(/(src|href)="([\w-]+\.(?:js|css))"/g, `$1="$2?v=${encodeURIComponent(version)}"`))
+      : fs.readFileSync(full);
+    return sendText(req, res, 200, { 'Content-Type': type, 'Cache-Control': cache, 'X-Content-Type-Options': 'nosniff' }, body, `${full}|${fs.statSync(full).mtimeMs}|${version}`);
+  }
+  // Compressed text: Brotli when the browser takes it, else gzip, else as is; small things go as they are
+  const packed = new Map();
+  function sendText(req, res, status, headers, body, key) {
+    const accept = String(req.headers['accept-encoding'] || '');
+    const enc = body.length < 1400 ? null : /\bbr\b/.test(accept) ? 'br' : /\bgzip\b/.test(accept) ? 'gzip' : null;
+    if (!enc) { res.writeHead(status, { ...headers, 'Content-Length': body.length, Vary: 'Accept-Encoding' }); return res.end(req.method === 'HEAD' ? undefined : body); }
+    const k = key ? `${enc}|${key}` : null;
+    let out = k && packed.get(k);
+    if (!out) {
+      out = enc === 'br' ? zlib.brotliCompressSync(body, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: key ? 9 : 4 } }) : zlib.gzipSync(body, { level: key ? 9 : 6 });
+      if (k) { packed.set(k, out); if (packed.size > 200) packed.delete(packed.keys().next().value); }
+    }
+    res.writeHead(status, { ...headers, 'Content-Encoding': enc, 'Content-Length': out.length, Vary: 'Accept-Encoding' });
+    return res.end(req.method === 'HEAD' ? undefined : out);
   }
 
   const server = http.createServer((req, res) => {
@@ -502,7 +540,7 @@ export function createServer(cfg) {
   return {
     server, store, files, cfSync, webPush,
     listen: (port, host) => new Promise((ok) => server.listen(port, host, () => ok(server.address().port))),
-    digest, holidays, occRemind,
+    digest, holidays, occRemind, pruneNotifications,
     close: () => new Promise((ok) => { digest.stop(); holidays.stop(); occRemind.stop(); for (const s of streams) try { s.res.end(); } catch { /* ignore */ } server.close(() => { store.close(); ok(); }); }),
     broadcastVersion: (v) => { for (const s of streams) send(s, 'version', { version: v }); },
   };
