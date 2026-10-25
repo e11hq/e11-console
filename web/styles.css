@@ -1430,7 +1430,8 @@ body { font-size: 14px; line-height: 1.45; letter-spacing: -.003em; background: 
 .ib-msg { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-size: 14.5px; }
 .ib-msg b { font-weight: 400; }
 .ib-msg.marq { text-overflow: clip; }
-.ib-msg.marq .ib-mi { display: inline-block; animation: ibMarq var(--dur, 6s) ease-in-out 1 both; }
+.ib-msg.marq .ib-mi { display: inline-block; vertical-align: top; padding-right: 4px; animation: ibMarq var(--dur, 6s) ease-in-out 1 both; }
+.ib-msg.marq.measure .ib-mi { animation: none; }
 @keyframes ibMarq { 0%, 12% { transform: none; } 78%, 88% { transform: translateX(var(--dx)); } 100% { transform: none; } }
 @media (prefers-reduced-motion: reduce) { .ib-msg.marq .ib-mi { animation: none; } }
 .ib-row:not(.unread) .ib-msg, .ib-row:not(.unread) .ib-time { color: var(--text-3); }

@@ -6065,11 +6065,13 @@ document.addEventListener('mouseover', (e) => {
   if (!row || row.contains(e.relatedTarget)) return;
   const box = row.querySelector('.ib-msg'), inner = box && box.querySelector('.ib-mi');
   if (!inner || box.classList.contains('marq')) return;
-  const over = box.scrollWidth - box.clientWidth;
-  if (over < 4) return;
-  box.style.setProperty('--dx', `-${over + 12}px`);
-  box.style.setProperty('--dur', `${Math.min(14, Math.max(3, (over + 12) / 45 + 2.4))}s`);   // ~45px a second, with pauses
-  box.classList.add('marq');
+  // measure the whole message as one block (scrollWidth with an ellipsis isn't reliable in Safari / the Mac app)
+  box.classList.add('marq', 'measure');
+  const over = Math.ceil(inner.getBoundingClientRect().width - box.getBoundingClientRect().width);
+  box.classList.remove('measure');
+  if (over < 4) { box.classList.remove('marq'); return; }
+  box.style.setProperty('--dx', `-${over + 16}px`);
+  box.style.setProperty('--dur', `${Math.min(16, Math.max(3, (over + 16) / 45 + 2.4))}s`);   // ~45px a second, with pauses
   const done = () => { box.classList.remove('marq'); inner.removeEventListener('animationend', done); };
   inner.addEventListener('animationend', done);
 });
