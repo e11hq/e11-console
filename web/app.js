@@ -6021,7 +6021,7 @@ function viewInbox() {
     return `<div class="ib-row ${unread ? 'unread' : ''}" data-action="open-notif" data-id="${target.id}">
       <span class="ib-title">${n.kind === 'asset' ? `<span class="st-ic ib-coin">${icon('assets')}</span><span class="ib-tname">${esc(assetTitle(n))}</span>` : `${t ? statusIcon(t) : /^claim/.test(n.kind) ? `<span class="st-ic ib-coin">${icon('coin')}</span>` : `<span class="st-ic">${statusIconSVG('#87909e', 'todo', 0)}</span>`}<span class="ib-tname">${t ? esc(t.title || 'Untitled task') : /^claim/.test(n.kind) ? 'Expense claims' : '<i>Deleted task</i>'}</span>`}</span>
       <span class="ib-lead">${lead}</span>
-      <span class="ib-msg">${notifMsg(shown, t)}</span>
+      <span class="ib-msg"><span class="ib-mi">${notifMsg(shown, t)}</span></span>
       <span class="ib-count">${items.length > 1 ? `<i>${items.length}</i>` : ''}</span>
       <span class="ib-time" title="${fmtDateTime(n.at)}">${ibTime(n.at)}</span>
  <button class="ib-clear" data-action="notif-clear" data-id="${esc(notifKey(n))}" data-read="${unread ? '0' : '1'}">${unread ? `${icon('check')}Clear` : 'Mark unread'}</button>
@@ -6042,6 +6042,25 @@ function viewInbox() {
       || `<div class="empty ib-empty"><div class="big">${tab === 'primary' ? 'Inbox zero 🎉' : 'Nothing here yet'}</div>${tab === 'primary' ? 'You’re all caught up. New updates on your tasks and @mentions land here.' : 'Updates on tasks you’re assigned to or created will appear here.'}</div>`}
   </div>`;
 }
+// A message cut off by the row's width: on hover it slides once to show the rest, then slides back
+document.addEventListener('mouseover', (e) => {
+  const row = e.target.closest && e.target.closest('.ib-row');
+  if (!row || row.contains(e.relatedTarget)) return;
+  const box = row.querySelector('.ib-msg'), inner = box && box.querySelector('.ib-mi');
+  if (!inner || box.classList.contains('marq')) return;
+  const over = box.scrollWidth - box.clientWidth;
+  if (over < 4) return;
+  box.style.setProperty('--dx', `-${over + 12}px`);
+  box.style.setProperty('--dur', `${Math.min(14, Math.max(3, (over + 12) / 45 + 2.4))}s`);   // ~45px a second, with pauses
+  box.classList.add('marq');
+  const done = () => { box.classList.remove('marq'); inner.removeEventListener('animationend', done); };
+  inner.addEventListener('animationend', done);
+});
+document.addEventListener('mouseout', (e) => {
+  const row = e.target.closest && e.target.closest('.ib-row');
+  if (!row || row.contains(e.relatedTarget)) return;
+  const box = row.querySelector('.ib-msg.marq'); if (box) box.classList.remove('marq');
+});
 function inboxFilterMenu(anchor) {
   showMenu(anchor, Object.entries(IB_FILTERS).map(([k, l]) => ({ html: `<div class="mi ${(ui.inboxFilter || 'all') === k ? 'cur' : ''}">${esc(l)}</div>`, run: () => { ui.inboxFilter = k; renderContent(); } })).map((it, i) => ({ ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) })));
 }
