@@ -2049,7 +2049,7 @@ function renderSidebar() {
     return `<a class="nav-item ${active ? 'active' : ''}" data-project="${p.id}" title="${esc(p.name)}">
       <span class="dot" style="background:${p.color}"></span><span class="name">${esc(p.name)}</span>
       <span class="count p">${open || ''}</span>
-      <button class="icon-btn sm more" data-action="project-menu" data-id="${p.id}" title="Client options">${icon('more')}</button>
+      ${isAdmin() ? `<button class="icon-btn sm more" data-action="project-menu" data-id="${p.id}" title="Client options">${icon('more')}</button>` : ''}
     </a>`;
   }).join('') : isAdmin() ? `<div class="nav-item ph" data-action="new-project" style="font-size:12.5px">${icon('plus')} Add your first client</div>` : '';
 }
@@ -2088,8 +2088,8 @@ function renderTitle() {
   const p = proj(ui.projectId);
   if (!p) { ui.view = 'home'; return renderTitle(); }
   el.innerHTML = `<div class="page-icon" style="background:${p.color}">${esc(initials(p.name))}</div>
-    <div class="page-title" data-action="rename-project" data-id="${p.id}" title="Double-click to rename">${esc(p.name)}</div>
-    <button class="icon-btn" data-action="project-menu" data-id="${p.id}" title="Client options">${icon('chev')}</button>
+    <div class="page-title" data-action="rename-project" data-id="${p.id}" ${isAdmin() ? 'title="Double-click to rename"' : ''}>${esc(p.name)}</div>
+    ${isAdmin() ? `<button class="icon-btn" data-action="project-menu" data-id="${p.id}" title="Client options">${icon('chev')}</button>` : ''}
     ${clientOfProject(p) ? `<button class="proj-client" data-action="open-client" data-id="${p.clientId}" title="Open ${esc(clientOfProject(p).name)} brand assets">${clientLogoHTML(clientOfProject(p), 20)}<span>${esc(clientOfProject(p).name)} assets</span>${icon('chev-right')}</button>` : ''}
     <div class="tabs">
       <button class="tab ${p.view === 'list' ? 'active' : ''}" data-action="set-view" data-v="list">${icon('list')}List</button>
@@ -2194,9 +2194,9 @@ function viewList(p) {
     return `<div class="section ${collapsed ? 'collapsed' : ''}" data-section="${s.id}">
       <div class="section-head" data-drop-section="${s.id}">
         <button class="icon-btn sm chev" data-action="collapse" data-id="${s.id}">${icon('chev')}</button>
-        <span class="sname" data-action="rename-section" data-id="${s.id}" title="Double-click to rename">${sectionPill(s)}</span>
+        <span class="sname" data-action="rename-section" data-id="${s.id}" ${isAdmin() ? 'title="Double-click to rename"' : ''}>${sectionPill(s)}</span>
         <span class="scount">${all.filter((t) => !t.done).length || ''}</span>
-        <button class="icon-btn sm more" data-action="section-menu" data-id="${s.id}">${icon('more')}</button>
+        ${isAdmin() ? `<button class="icon-btn sm more" data-action="section-menu" data-id="${s.id}">${icon('more')}</button>` : ''}
       </div>
       <div class="section-body">
         ${tasks.map((t) => taskRow(t, { drag: true })).join('')}
@@ -2214,7 +2214,7 @@ function viewList(p) {
     </div>
     ${listHead(false)}
     ${sections}
-    <div class="add-section" data-action="add-section">${icon('plus')}<span>Add status</span></div>
+    ${isAdmin() ? `<div class="add-section" data-action="add-section">${icon('plus')}<span>Add status</span></div>` : ''}
   </div>`;
 }
 
@@ -2235,17 +2235,17 @@ function viewBoard(p) {
     const tasks = showDone ? all : all.filter((t) => !t.done);
     return `<div class="col" data-col="${s.id}" style="--col:${s.color}">
       <div class="col-head">
-        <span class="sname" data-action="rename-section" data-id="${s.id}" title="Double-click to rename">${sectionPill(s)}</span>
+        <span class="sname" data-action="rename-section" data-id="${s.id}" ${isAdmin() ? 'title="Double-click to rename"' : ''}>${sectionPill(s)}</span>
         <span class="scount">${all.filter((t) => !t.done).length || ''}</span>
         <span class="spacer"></span>
         ${can('createTask') ? `<button class="icon-btn sm" data-action="add-card" data-section="${s.id}" title="Add task">${icon('plus')}</button>` : ''}
-        <button class="icon-btn sm" data-action="section-menu" data-id="${s.id}">${icon('more')}</button>
+        ${isAdmin() ? `<button class="icon-btn sm" data-action="section-menu" data-id="${s.id}">${icon('more')}</button>` : ''}
       </div>
       <div class="col-body">${tasks.map(card).join('')}</div>
       ${can('createTask') ? `<div class="col-add" data-action="add-card" data-section="${s.id}">${icon('plus')}Add task</div>` : ''}
     </div>`;
   }).join('');
-  return `<div class="board">${cols}<div class="add-col" data-action="add-section">${icon('plus')}<span>Add status</span></div>
+  return `<div class="board">${cols}${isAdmin() ? `<div class="add-col" data-action="add-section">${icon('plus')}<span>Add status</span></div>` : ''}
     <div style="flex:none;display:flex;align-items:flex-start;padding-top:6px"><button class="btn ghost" data-action="toggle-show-done">${showDone ? 'Hide' : 'Show'} completed</button></div></div>`;
 }
 
@@ -3888,13 +3888,14 @@ document.addEventListener('input', (e) => {
 
 
 function projectMenu(anchor, id) {
+  if (!isAdmin()) return;              // only Admins change a client
   const p = proj(id);
   const m = showMenu(anchor, [
     { label: 'Rename client', icon: 'edit', run: () => renameProject(id) },
     { html: `<div class="swatches">${COLORS.map((c) => `<button class="swatch ${c === p.color ? 'on' : ''}" data-swatch="${c}" style="background:${c}"></button>`).join('')}</div>` },
     '-',
     { label: 'Add section', icon: 'plus', run: () => { go('project', id); setTimeout(() => { const a = $('[data-action="add-section"]'); if (a) a.click(); }, 30); } },
-    ...(can('editProject') ? [{ label: clientOfProject(p) ? `Client Assets: ${clientOfProject(p).name}` : 'Link to Client Assets…', icon: 'assets', run: () => setTimeout(() => projectClientMenu(anchor, p), 0) }] : []),
+    ...(isAdmin() ? [{ label: clientOfProject(p) ? `Client Assets: ${clientOfProject(p).name}` : 'Link to Client Assets…', icon: 'assets', run: () => setTimeout(() => projectClientMenu(anchor, p), 0) }] : []),
     '-',
     ...(isAdmin() ? [{ label: 'Delete client', icon: 'trash', danger: true, run: () => deleteProjectFlow(id) }] : []),
   ]);
@@ -3921,6 +3922,7 @@ async function deleteProjectFlow(id) {
 }
 
 function sectionMenu(anchor, sid) {
+  if (!isAdmin()) return;
   const p = proj(ui.projectId);
   const s = p.sections.find((x) => x.id === sid);
   const i = p.sections.indexOf(s);
@@ -4364,6 +4366,7 @@ document.addEventListener('click', async (e) => {
         return;
       }
       case 'add-section': {
+        if (!isAdmin()) return;
         if (actEl.classList.contains('editing')) return;
         const p = proj(ui.projectId);
         inlineInput(actEl, {
@@ -4622,7 +4625,7 @@ document.addEventListener('click', async (e) => {
 
 document.addEventListener('dblclick', (e) => {
   const el = e.target.closest('[data-action="rename-project"], [data-action="rename-section"]');
-  if (!el) return;
+  if (!el || !isAdmin()) return;      // only Admins change a client and its statuses
   if (el.dataset.action === 'rename-project') renameProject(el.dataset.id);
   else renameSectionInline(el.dataset.id);
 });

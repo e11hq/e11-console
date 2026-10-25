@@ -138,13 +138,18 @@ test('catching up: an app that was offline gets what it missed', async () => {
   late.close();
 });
 
-test('only Admins add or remove a client; Account Managers can still rename one', async () => {
+test('only Admins add, remove or change a client', async () => {
   const add = (who, id) => call(who, '/api/push', { method: 'POST', body: { changes: [{ kind: 'projects', id, data: { id, name: 'New client', sections: [] } }] } });
   assert.equal((await add(AM, 'p-am')).body.results[0].refused, true);
   assert.equal((await add(PROD, 'p-prod')).body.results[0].refused, true);
   assert.ok(!(await add(ADMIN, 'p-adm')).body.results[0].refused);
-  const ren = await call(AM, '/api/push', { method: 'POST', body: { changes: [{ kind: 'projects', id: 'p-adm', data: { id: 'p-adm', name: 'Renamed', sections: [] } }] } });
-  assert.ok(!ren.body.results[0].refused);
+  const put = (who, data) => call(who, '/api/push', { method: 'POST', body: { changes: [{ kind: 'projects', id: 'p-adm', data: { id: 'p-adm', name: 'New client', sections: [], ...data } }] } });
+  assert.equal((await put(AM, { name: 'Renamed' })).body.results[0].refused, true, 'AM cannot rename');
+  assert.equal((await put(AM, { color: '#fff' })).body.results[0].refused, true, 'AM cannot recolour');
+  assert.equal((await put(AM, { sections: [{ id: 's1', name: 'To do' }] })).body.results[0].refused, true, 'AM cannot add statuses');
+  assert.equal((await put(AM, { clientId: 'cl-1' })).body.results[0].refused, true, 'AM cannot link Client Assets');
+  assert.ok(!(await put(AM, { view: 'board' })).body.results[0].refused, 'AM can switch List / Board');
+  assert.ok(!(await put(ADMIN, { name: 'Renamed' })).body.results[0].refused, 'Admin can rename');
   const del = (who) => call(who, '/api/push', { method: 'POST', body: { changes: [{ kind: 'projects', id: 'p-adm', del: true }] } });
   assert.equal((await del(AM)).body.results[0].refused, true);
   assert.ok(!(await del(ADMIN)).body.results[0].refused);

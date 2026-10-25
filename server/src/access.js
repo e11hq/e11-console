@@ -118,8 +118,9 @@ export function createAccess(store) {
         return manager;                                             // Admins + Account Managers manage Client Assets
       case 'projects':
         if (isFreelancer(u)) return !ch.del && !!current && projectSet(u).has(current.id) && next.id === current.id;
-        if (ch.del || !current) return admin;                       // only Admins add or remove a client
-        return true;
+        if (ch.del || !current || admin) return admin;              // only Admins add or remove a client
+        // and only Admins change one (name, colour, statuses, Client Assets link); others may switch List / Board
+        return ['name', 'color', 'sections', 'clientId'].every((k) => deepEqual(next[k] ?? null, (ch.base !== undefined && ch.base ? ch.base[k] : current[k]) ?? null) || deepEqual(next[k] ?? null, current[k] ?? null));
       case 'tasks': {
         // a task's Finance status is set by Account Managers and Admins only
         const was = ch.base !== undefined ? ch.base : current;
