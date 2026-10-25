@@ -59,8 +59,8 @@ async def main():
             ok.append(pr == {'dueDisabled': True, 'noClear': True, 'noAdd': True, 'noDel': True, 'dueSame': True, 'ticked': True, 'sameCount': True})
             if not ok[-1]: print('production:', pr)
             # Social: same date / checklist limits, but they can write the description
-            soc = await pp.evaluate("(() => { const me0 = currentUserId; const s = db.users.find(u => u.role === 'social' && u.active !== false); const p = db.users.find(u => u.role === 'production' && u.active !== false); const as = (id, f) => { currentUserId = id; try { return f(); } finally { currentUserId = me0; } }; return { socDesc: as(s.id, () => can('editDesc', {})), socDates: as(s.id, () => can('editDates', {})), socCl: as(s.id, () => can('editChecklist', {})), prodDesc: as(p.id, () => can('editDesc', {})) }; })()")
-            ok.append(soc == {'socDesc': True, 'socDates': False, 'socCl': False, 'prodDesc': False})
+            soc = await pp.evaluate("(() => { const me0 = currentUserId; const s = db.users.find(u => u.role === 'social' && u.active !== false); const p = db.users.find(u => u.role === 'production' && u.active !== false); const as = (id, f) => { currentUserId = id; try { return f(); } finally { currentUserId = me0; } }; return { socDesc: as(s.id, () => can('editDesc', {})), socDates: as(s.id, () => can('editDates', {})), socCl: as(s.id, () => can('editChecklist', {})), socAdd: as(s.id, () => can('addChecklist', {})), prodAdd: as(p.id, () => can('addChecklist', {})), prodDesc: as(p.id, () => can('editDesc', {})) }; })()")
+            ok.append(soc == {'socDesc': True, 'socDates': False, 'socCl': False, 'socAdd': True, 'prodAdd': False, 'prodDesc': False})
             if not ok[-1]: print('social:', soc)
             ok.append(not errs)
             print('ALL PASS' if all(ok) else f'FAILS {ok} {sb} {r} {errs}')

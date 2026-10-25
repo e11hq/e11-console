@@ -1034,8 +1034,9 @@ function can(perm, t) {
 }
 // Production, Social and Freelancers don't set or clear start / due dates, or add / remove / rename checklist items
 // (they can tick them; Social still set a post's Go-live, Channel and Occasion)
-const NO_DATES_CHECKLIST = ['editDates', 'editChecklist', 'deleteChecklist'];
-const ROLE_DENY = { production: NO_DATES_CHECKLIST, social: NO_DATES_CHECKLIST, freelancer: NO_DATES_CHECKLIST };
+const NO_DATES_CHECKLIST = ['editDates', 'addChecklist', 'editChecklist', 'deleteChecklist'];
+// (Social add checklist items, but don't rename or remove them)
+const ROLE_DENY = { production: NO_DATES_CHECKLIST, social: ['editDates', 'editChecklist', 'deleteChecklist'], freelancer: NO_DATES_CHECKLIST };
 // Social also write and change a task's description
 const ROLE_ALLOW = { social: ['editDesc'] };
 function lockByRole(pane, t) {
@@ -1044,11 +1045,9 @@ function lockByRole(pane, t) {
     $$('[data-action="clear-start"], [data-action="clear-due"], [data-action="due-today"], [data-action="due-tomorrow"]', pane).forEach((el) => el.remove());
     $$('.prop-dates .date-chip', pane).forEach((el) => el.classList.add('locked'));
   }
-  if (!can('editChecklist', t)) {
-    const add = $('#d-cl-add', pane); if (add) add.closest('.sub-add').remove();
-    $$('.cl-del', pane).forEach((el) => el.remove());
-    $$('.cl-text', pane).forEach((el) => { el.readOnly = true; });
-  }
+  if (!can('addChecklist', t)) { const add = $('#d-cl-add', pane); if (add) add.closest('.sub-add').remove(); }
+  if (!can('deleteChecklist', t)) $$('.cl-del', pane).forEach((el) => el.remove());
+  if (!can('editChecklist', t)) $$('.cl-text', pane).forEach((el) => { el.readOnly = true; });
 }
 // An Account Manager's extra rights (assign, edit title / description / priority / client, delete, Finance…) apply to
 // the tasks of the clients they're Account Manager for (not while on leave; the one covering has them meanwhile), and
@@ -4941,7 +4940,7 @@ document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { e.preventDefault(); ui.editingComment = null; renderDetail(); return; }
   }
   if (el.dataset && el.dataset.replyTo && e.key === 'Escape' && ui.replyTo && ui.thread !== el.dataset.replyTo) { e.preventDefault(); ui.replyTo = null; renderDetail(); setTimeout(() => { const b = $('#d-comment'); if (b) b.focus(); }, 0); return; }
-  if (el.id === 'd-cl-add' && e.key === 'Enter' && el.value.trim() && !e.isComposing && !can('editChecklist')) { e.preventDefault(); return denied(); }
+  if (el.id === 'd-cl-add' && e.key === 'Enter' && el.value.trim() && !e.isComposing && !can('addChecklist')) { e.preventDefault(); return denied(); }
   if (el.id === 'd-cl-add' && e.key === 'Enter' && el.value.trim() && !e.isComposing) {
     e.preventDefault();
     const t = task(ui.taskId);
@@ -6436,7 +6435,7 @@ function viewTeam() {
       <div><span class="role-pill r-admin">Admin</span> Full access, and the only role that can add or manage team members.</div>
       <div><span class="role-pill r-am">Account Manager</span> Can do everything except add or manage team members.</div>
       <div><span class="role-pill r-freelancer">Freelancer</span> Same as Production, but only sees the clients an Admin chooses for them, plus those clients’ Client Assets. Can sign in with a personal email (Gmail, Outlook…).</div>
-      <div><span class="role-pill r-production">Production</span> <span class="role-pill r-social">Social</span> Can update status, submit files for CD review, tick checklist items, add tags, files and comments. Social can also write and change the description, and set a post’s Channel, Go-live and Occasion. Can’t create or delete tasks/subtasks, change dates, add or remove checklist items, change title, client or priority, assign people or remove tags.</div>
+      <div><span class="role-pill r-production">Production</span> <span class="role-pill r-social">Social</span> Can update status, submit files for CD review, tick checklist items, add tags, files and comments. Social can also write and change the description, add checklist items, and set a post’s Channel, Go-live and Occasion. Can’t create or delete tasks/subtasks, change dates, rename or remove checklist items (Production can’t add them either), change title, client or priority, assign people or remove tags.</div>
       <div><span class="role-pill r-finance_admin">Finance only</span> Only sees the Finance pages (Dashboard, Clients, Expenses) — no tasks app. As Admin they add subscriptions, reimbursements and expenses; as Viewer they only look.</div>
       <div><span class="role-pill r-admin">+ Admin</span> <span class="role-pill r-finance_admin">+ Finance Admin / Viewer</span> Extras anyone can have on top of their role (••• menu): full Admin rights, or the Finance pages. A task’s Finance status is set by Account Managers and Admins.</div>
     </div>
