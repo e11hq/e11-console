@@ -31,6 +31,25 @@ export function createServer(cfg) {
   const webPush = createWebPush({ store, fetchImpl: cfg.pushFetch || fetch, subject: cfg.pushSubject || 'mailto:admin@e11hq.com' });
   const digest = createDigest({ store, webPush, now: cfg.now || (() => Date.now()) });
   if (cfg.digest !== false) digest.start();
+  // Once: Account Managers and Admins are taken off every task they're assigned to (only Production, Social,
+  // Freelancers and the Creative Director are assigned now)
+  if (!store.kv.get('unassign-managers-v1')) {
+    try {
+      const users = new Map(store.list('users').map((x) => [x.id, x]));
+      const cd = (store.get('meta', 'main') || {}).cdUserId || null;
+      const off = (id) => { const x = users.get(id); return !!x && id !== cd && (x.role === 'am' || x.role === 'admin'); };
+      const ops = [];
+      for (const t of store.list('tasks')) {
+        const gone = (t.assignees || []).filter(off);
+        if (!gone.length) continue;
+        const next = { ...t, assignees: (t.assignees || []).filter((id) => !off(id)) };
+        for (const k of ['prio', 'partsDone']) if (next[k]) { next[k] = { ...next[k] }; gone.forEach((id) => delete next[k][id]); }
+        ops.push({ kind: 'tasks', id: t.id, data: next });
+      }
+      if (ops.length) store.apply(ops, 'unassign-managers');
+      store.kv.set('unassign-managers-v1', JSON.stringify({ at: new Date().toISOString(), tasks: ops.length }));
+    } catch (e) { console.error('Unassigning managers failed:', e.message); }
+  }
   const occRemind = createOccasionReminders({ store, webDir, webPush, isAdm: (u) => access.isAdm(u), now: cfg.now || (() => Date.now()) });
   if (cfg.occRemind !== false && webDir) occRemind.start();
   // Confirmed dates for Ramadan, the Eids… from a public UAE holiday calendar (off on a dev server unless a URL is given)

@@ -505,7 +505,9 @@ const Phone = (() => {
     const mgr = isAdm(me()) || me().role === 'am';
     const people = activeUsers();
     const projOpts = `<option value="">No client (My Tasks)</option>` + db.projects.filter((p) => (!p.inactive && amClientOk(p)) || p.id === inProject).sort(byOrder).map((p) => `<option value="${p.id}" ${p.id === inProject ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
-    const userOpts = `<option value="${currentUserId}">Me</option>` + people.filter((u) => u.id !== currentUserId).map((u) => `<option value="${u.id}">${esc(fullName(u))}</option>`).join('') + '<option value="">Nobody yet</option>';
+    // (only Production, Social, Freelancers and the Creative Director can be assigned)
+    const meOk = assignable(me());
+    const userOpts = (meOk ? `<option value="${currentUserId}">Me</option>` : '<option value="">Nobody yet</option>') + people.filter((u) => u.id !== currentUserId && assignable(u)).map((u) => `<option value="${u.id}">${esc(fullName(u))}</option>`).join('') + (meOk ? '<option value="">Nobody yet</option>' : '');
     sheet(`<div class="ph-sh-head"><h2>New task</h2><button class="ph-link" data-sheet-close>Cancel</button></div>
       <label class="ph-field"><span>Title</span><input id="qa-title" name="e11-task-title" type="text" placeholder="What needs doing?" autocomplete="off" aria-autocomplete="none" data-1p-ignore data-lpignore="true" data-form-type="other" enterkeyhint="next"></label>
       <label class="ph-field"><span>Description <i>(optional)</i></span><textarea id="qa-desc" name="e11-task-notes" autocomplete="off" aria-autocomplete="none" data-form-type="other" rows="3" placeholder="Details, links or notes for the team"></textarea></label>
@@ -522,7 +524,7 @@ const Phone = (() => {
       const go = () => {
         const title = ti.value.trim();
         if (!title) { ti.focus(); toast('Give the task a name'); return; }
-        const who = $('#qa-who', scrim) ? $('#qa-who', scrim).value : currentUserId;
+        const who = $('#qa-who', scrim) ? $('#qa-who', scrim).value : assignable(me()) ? currentUserId : '';
         const desc = $('#qa-desc', scrim).value.trim();
         const t = createTask({ title, projectId: pj.value || null, due: $('#qa-due', scrim).value || null, notes: desc, ...(desc ? { notesHtml: linkify(esc(desc)).replace(/\n/g, '<br>') } : {}) });
         if (cd) t.needsCD = !!(cd.checked && t.projectId);

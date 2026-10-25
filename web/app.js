@@ -4106,6 +4106,7 @@ function cdMenu(anchor) {
 /* ---- Assignees ---- */
 function setAssignee(t, userId, on) {
   if (!can('assign')) return denied();
+  if (on && !assignable(userById(userId))) { toast('Only Production, Social, Freelancers and the Creative Director can be assigned'); return; }
   const has = (t.assignees || []).includes(userId);
   if (on === has) return;
   if (on) {
@@ -4154,7 +4155,7 @@ function assignMenu(anchor) {
     const q = input.value.trim().toLowerCase();
     const match = (u) => !q || fullName(u).toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
     const assigned = (tt.assignees || []).map(userById).filter(Boolean).filter(match);
-    const people = activeUsers().filter((u) => !(tt.assignees || []).includes(u.id) && match(u));
+    const people = activeUsers().filter((u) => assignable(u) && !(tt.assignees || []).includes(u.id) && match(u));
     rows = assigned.map((u) => ({ u, on: true })).concat(people.map((u) => ({ u, on: false })));
     if (hl >= rows.length) hl = Math.max(0, rows.length - 1);
     const item = (x, i) => `<div class="ap-item ${x.on ? 'on' : ''} ${i === hl ? 'hl' : ''}" data-ap="${x.u.id}" data-i="${i}">
@@ -5497,6 +5498,10 @@ const cdUserId = () => { const id = db && db.meta.cdUserId; const u = id && user
 const isCD = (id = currentUserId) => !!id && id === cdUserId();
 const cdActing = () => !!(db && db.meta.cdActing && cdUserId());
 const cdTitle = () => (cdActing() ? 'Acting CD' : 'Creative Director');
+// Who can be assigned to a task: Production, Social, Freelancers and the Creative Director (or the Acting CD) —
+// never Account Managers, Admins or Finance people
+const ASSIGNABLE = new Set(['production', 'social', 'freelancer']);
+const assignable = (u) => !!u && u.active !== false && (ASSIGNABLE.has(u.role) || u.id === cdUserId());
 const firstName = (id) => fullName(userById(id)).split(' ')[0];
 // "Needs CD review" is set per task by Account Managers / Admins
 const needsCD = (t) => !!t && !t.parentId && !!t.needsCD;

@@ -172,6 +172,17 @@ async def main():
           return { before, after };
         })()""")
         check(r == {'before': [1, 0], 'after': [1, 1]}, f'the replaced AM stops, the new AM gets them {r}')
+        # only Production, Social, Freelancers and the Creative Director can be assigned
+        roles = await E("(() => { const t = topTasks()[0]; openTask(t.id); return null; })()"); await pg.wait_for_timeout(500)
+        await E("assignMenu(document.querySelector('#detail [data-action=\"assign\"]') || document.body)"); await pg.wait_for_timeout(300)
+        shown = await E("[...document.querySelectorAll('.asg-pop .ap-item')].map(el => (userById(el.dataset.ap) || {}).role)")
+        cd = await E("cdUserId()")
+        ok = await E("[...document.querySelectorAll('.asg-pop .ap-item')].every(el => { const u = userById(el.dataset.ap); return ['production', 'social', 'freelancer'].includes(u.role) || u.id === cdUserId(); })")
+        cd_listed = await E("!cdUserId() || [...document.querySelectorAll('.asg-pop .ap-item')].some(el => el.dataset.ap === cdUserId()) || (task(ui.taskId).assignees || []).includes(cdUserId())")
+        check(ok and cd_listed, f'only Production, Social, Freelancers and the Creative Director (whatever their role) {sorted(set(shown))}')
+        refused = await E("(() => { const t = topTasks()[0]; const am = db.users.find(u => u.role === 'am'); const n = (t.assignees || []).length; setAssignee(t, am.id, true); return (t.assignees || []).includes(am.id); })()")
+        check(refused is False, 'an Account Manager cannot be assigned')
+        await pg.keyboard.press('Escape'); await E("closeDetail()")
         # Edit client list: switch a client off, rename it (its Client Assets folder follows)
         await E("go('clientlist')"); await pg.wait_for_timeout(400)
         check(await pg.locator('.cl-row').count() >= 3, 'Edit client list shows the clients')
