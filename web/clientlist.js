@@ -1,7 +1,8 @@
 /* ================= Clients: the Admin's client pop-up and the "Edit client list" page =================
    A client (stored as a project) has a name, a colour, its Account Managers and whether it's active:
      p.ams = [{ id, onLeave? }]   the AMs who look after it; one on leave stays listed but another covers
-     p.inactive = true            an inactive client leaves the sidebar, the client pickers and Home, its tasks stay
+     p.inactive = true            an inactive client is hidden from everyone with its tasks, Client Assets and Finance
+                                  history (the server stops sending them) until an Admin switches it back on
    Only Admins add or change clients (the server checks the same). A new client gets its Client Assets folder;
    renaming a client renames its Client Assets folder too (the folder on disk keeps its name). */
 const ClientList = (() => {
@@ -44,7 +45,7 @@ const ClientList = (() => {
       const cover = st.ams.filter((a) => !a.onLeave).length;
       if (st.ams.length && !cover) $('#cd-ams', root).insertAdjacentHTML('beforeend', '<div class="cd-warn">Everyone here is on leave — add or switch on another Account Manager to cover.</div>');
     };
-    const paintState = () => { $('#cd-state-txt', root).textContent = st.active ? 'Shows in the sidebar and the client lists' : 'Hidden from the sidebar and new tasks; its tasks and Client Assets stay'; };
+    const paintState = () => { $('#cd-state-txt', root).textContent = st.active ? 'Shows in the sidebar and the client lists' : 'Hidden from everyone with its tasks, Client Assets and Finance history until switched back on'; };
     const check = () => {
       const n = inp.value.trim();
       const d = n && db.projects.find((x) => x !== p && clientKey(x.name) === clientKey(n));
@@ -148,7 +149,7 @@ const ClientList = (() => {
     if (on) delete p.inactive; else p.inactive = true;
     persist(0);
     renderSidebar(); renderContent();
-    toast(on ? `${p.name} is active` : `${p.name} is inactive — hidden from the sidebar and new tasks`);
+    toast(on ? `${p.name} is active again — its tasks and Client Assets are back` : `${p.name} is inactive — hidden from everyone with its tasks, Client Assets and Finance history`);
   }
 
   /* ---------- the "Edit client list" page (Admins) ---------- */
@@ -163,7 +164,7 @@ const ClientList = (() => {
     const open = (p) => db.tasks.filter((t) => t.projectId === p.id && !t.parentId && !t.done).length;
     c.innerHTML = `<div class="team cl-list">
       <div class="team-head">
-        <div><div class="team-title">${act.length} active client${act.length === 1 ? '' : 's'}</div><div class="team-sub">Only Admins add and change clients. An inactive client leaves the sidebar, Home and new tasks; its tasks and Client Assets stay.</div></div>
+        <div><div class="team-title">${act.length} active client${act.length === 1 ? '' : 's'}</div><div class="team-sub">Only Admins add and change clients. An inactive client is hidden from everyone — with its tasks, Client Assets and Finance history — until you switch it back on. Nothing is deleted.</div></div>
         <span class="spacer"></span>
         <button class="btn primary" data-cl="new">${icon('plus')}New client</button>
       </div>
@@ -177,8 +178,8 @@ const ClientList = (() => {
         ${list.map((p) => { const ams = amsOf(p), ca = clientOfProject(p); return `<div class="tt-row cl-row ${isActive(p) ? '' : 'inactive'}">
           <div class="tt-name"><span class="cl-dot" style="background:${p.color}"></span><span>${esc(p.name)}</span></div>
           <div class="cl-ams">${ams.length ? ams.map((a) => `<span class="cl-am ${a.onLeave ? 'leave' : ''}" title="${esc(fullName(userById(a.id)))}${a.onLeave ? ' (on leave)' : ''}">${avatarHTML(a.id, 24)}<span>${esc(firstName(a.id))}${a.onLeave ? ' <small>on leave</small>' : ''}</span></span>`).join('') : '<span class="cl-none">None yet</span>'}</div>
-          <div>${open(p)}</div>
-          <div>${ca ? `<a class="cl-ca" data-action="open-client" data-id="${ca.id}">${clientLogoHTML(ca, 18)}${esc(ca.name)}</a>` : '<span class="cl-none">Not linked</span>'}</div>
+          <div>${isActive(p) ? open(p) : '<span class="cl-none" title="Hidden while the client is inactive">Hidden</span>'}</div>
+          <div>${ca ? `<a class="cl-ca" data-action="open-client" data-id="${ca.id}">${clientLogoHTML(ca, 18)}${esc(ca.name)}</a>` : !isActive(p) && p.clientId ? '<span class="cl-none">Hidden</span>' : '<span class="cl-none">Not linked</span>'}</div>
           <div><button class="switch ${isActive(p) ? 'on' : ''}" data-cl="active" data-id="${p.id}" aria-label="Active" title="${isActive(p) ? 'Make inactive' : 'Make active'}"><i></i></button></div>
           <div><button class="btn ghost sm" data-cl="edit" data-id="${p.id}">${icon('edit')}Edit</button></div>
         </div>`; }).join('')}

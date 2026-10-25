@@ -318,3 +318,28 @@ test('Client Assets: anyone adds folders and files, removes only their own; fold
   assert.equal((await call(AM, '/api/push', { method: 'POST', body: { changes: [{ kind: 'clients', id: 'cl-ca', del: true }] } })).body.results[0].refused, true);
   assert.ok(!(await call(ADMIN, '/api/push', { method: 'POST', body: { changes: [{ kind: 'clients', id: 'cl-ca', del: true }] } })).body.results[0].refused);
 });
+
+test('an inactive client is hidden from everyone with its tasks, Inbox updates and Client Assets, until switched back on', async () => {
+  const at = '2026-10-25T08:00:00.000Z';
+  app.store.apply([
+    { kind: 'clients', id: 'cl-off', data: { id: 'cl-off', name: 'Off', dir: 'Clients/Off', folders: [], createdAt: at } },
+    { kind: 'projects', id: 'p-off', data: { id: 'p-off', name: 'Off', sections: [], clientId: 'cl-off' } },
+    { kind: 'tasks', id: 't-off', data: { id: 't-off', projectId: 'p-off', title: 'Hidden one' } },
+    { kind: 'tasks', id: 't-off-sub', data: { id: 't-off-sub', parentId: 't-off', title: 'Its subtask' } },
+    { kind: 'notifications', id: 'n-off', data: { id: 'n-off', to: 'u-am', taskId: 't-off', kind: 'comment', text: 'x' } },
+  ], 'test');
+  const seen = async (who) => { const r = (await call(who, '/api/snapshot')).body.data; return { t: (r.tasks || []).some((t) => t.id === 't-off'), s: (r.tasks || []).some((t) => t.id === 't-off-sub'), n: (r.notifications || []).some((n) => n.id === 'n-off'), c: (r.clients || []).some((c) => c.id === 'cl-off'), p: (r.projects || []).some((p) => p.id === 'p-off') }; };
+  assert.deepEqual(await seen(AM), { t: true, s: true, n: true, c: true, p: true });
+  // the Admin switches it off
+  const p = app.store.get('projects', 'p-off');
+  assert.ok(!(await call(ADMIN, '/api/push', { method: 'POST', body: { changes: [{ kind: 'projects', id: 'p-off', base: p, data: { ...p, inactive: true } }] } })).body.results[0].refused);
+  assert.deepEqual(await seen(AM), { t: false, s: false, n: false, c: false, p: true }, 'only the client itself stays (for Edit client list)');
+  assert.deepEqual(await seen(ADMIN), { t: false, s: false, n: false, c: false, p: true }, 'hidden from Admins too');
+  const edit = await call(AM, '/api/push', { method: 'POST', body: { changes: [{ kind: 'tasks', id: 't-off', data: { id: 't-off', projectId: 'p-off', title: 'changed' } }] } });
+  assert.equal(edit.body.results[0].refused, true, 'its tasks are frozen');
+  // and back on
+  const p2 = app.store.get('projects', 'p-off');
+  const { inactive, ...on } = p2;
+  await call(ADMIN, '/api/push', { method: 'POST', body: { changes: [{ kind: 'projects', id: 'p-off', base: p2, data: on }] } });
+  assert.deepEqual(await seen(AM), { t: true, s: true, n: true, c: true, p: true }, 'everything is back');
+});

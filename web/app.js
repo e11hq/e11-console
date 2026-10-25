@@ -3918,6 +3918,7 @@ async function renameProject(id) {
 
 async function deleteProjectFlow(id) {
   const p = proj(id);
+  if (p && p.inactive) { toast('Switch the client back on before deleting it (its tasks are hidden while it’s inactive)'); return; }
   const n = db.tasks.filter((t) => t.projectId === id).length;
   const ok = await dialog({ title: `Delete “${p.name}”?`, body: `The client and its ${n} task${n === 1 ? '' : 's'} move to the Trash. An Admin can restore them within ${TRASH_DAYS} days. Its Client Assets folder stays.`, okText: 'Move to Trash', danger: true });
   if (!ok) return;

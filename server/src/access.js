@@ -20,7 +20,24 @@ export function createAccess(store) {
   const finLevel = (u) => (!u ? null : u.role === 'finance_admin' ? 'admin' : u.role === 'finance_viewer' ? 'viewer' : u.fin === 'admin' || u.fin === 'viewer' ? u.fin : null);
   const projectSet = (u) => new Set(Array.isArray(u.projectIds) ? u.projectIds : []);
 
+  // An inactive client (project.inactive) is hidden with everything in it — its tasks, their files and Inbox updates,
+  // its Client Assets and its Finance history — from everyone, until an Admin switches it back on
+  function inactiveIds() { return new Set(store.list('projects').filter((p) => p.inactive).map((p) => p.id)); }
+  function taskProject(t) {
+    if (!t) return null;
+    if (t.projectId) return t.projectId;
+    const parent = t.parentId ? store.get('tasks', String(t.parentId)) : null;
+    return parent ? parent.projectId || null : null;
+  }
+  const inInactive = (t, off = inactiveIds()) => !!t && off.size > 0 && off.has(taskProject(t));
+  // Client Assets of a client whose projects are all inactive
+  function hiddenClient(c, off = inactiveIds()) {
+    if (!c || !off.size) return false;
+    const linked = store.list('projects').filter((p) => p.clientId === c.id);
+    return linked.length > 0 && linked.every((p) => off.has(p.id));
+  }
   function taskVisible(u, t) {
+    if (inInactive(t)) return false;
     if (!isFreelancer(u)) return true;
     if (!t) return false;
     if (t.projectId) return projectSet(u).has(t.projectId);
@@ -72,6 +89,13 @@ export function createAccess(store) {
     // Invoices and other finance records: Finance people and Admins only
     if (parts[0] === 'Finance') return !!finLevel(u) || isAdm(u);
     if (isFinance(u)) return (parts[0] === 'attachments' && parts[1] === '_avatars') || (parts[0] === 'Clients' && parts[1] === '_logos') || parts[0] === '.thumbs';
+    // files of an inactive client: its tasks' attachments and its Client Assets
+    if (parts[0] === 'attachments' && parts[1] && parts[1][0] !== '_') { const t = store.get('tasks', parts[1]); if (t && inInactive(t)) return false; }
+    if (parts[0] === 'Clients' && parts[1] && parts[1] !== '_logos') {
+      const dir = parts.slice(0, 2).join('/');
+      const off = inactiveIds();
+      if (off.size && store.list('clients').some((c) => (c.dir === dir || String(c.dir || '').startsWith(dir + '/')) && hiddenClient(c, off))) return false;
+    }
     if (!isFreelancer(u)) return true;
     if (parts[0] === 'attachments') {
       if (parts[1] === '_avatars') return true;
@@ -92,10 +116,10 @@ export function createAccess(store) {
   function canSee(u, kind, data) {
     if (!data) return true;
     switch (kind) {
-      case 'notifications': return data.to === u.id;
+      case 'notifications': return data.to === u.id && !(data.taskId && inInactive(store.get('tasks', String(data.taskId))));
       case 'projects': return !isFreelancer(u) || projectSet(u).has(data.id);
       case 'tasks': return taskVisible(u, data);
-      case 'clients': return !isFreelancer(u) || clientSet(u).has(data.id);
+      case 'clients': return !hiddenClient(data) && (!isFreelancer(u) || clientSet(u).has(data.id));
       case 'trash': return isAdm(u) || u.role === 'am';   // the Trash is for Admins and Account Managers
       case 'finance': return !!finLevel(u) || isAdm(u) || (data.type === 'reimb' && data.userId === u.id);    // expense records (people see their own reimbursements)
       // expense claims: your own, and Finance sees everything except drafts and "submitted offline"
@@ -160,6 +184,7 @@ export function createAccess(store) {
         // a task's Finance status is set by Account Managers and Admins only
         const was = ch.base !== undefined ? ch.base : current;
         if (!manager && next && !deepEqual(next.finance ?? null, (was && was.finance) ?? null)) return false;
+        if ((current && inInactive(current)) || (next && inInactive(next))) return false;   // an inactive client's tasks are frozen
         if (isFreelancer(u)) return (!current || taskVisible(u, current)) && (ch.del || taskVisible(u, next));
         return true;
       }

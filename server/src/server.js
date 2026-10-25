@@ -125,9 +125,10 @@ export function createServer(cfg) {
     if (!changed.length) return;
     for (const s of streams) {
       const u = store.get('users', s.userId) || s.user;
-      // A freelancer's access changed (their projects, or which client a project belongs to): reload their data
-      if (u.role === 'freelancer' && changed.some((r) => (r.kind === 'users' && r.id === u.id) || r.kind === 'projects')) {
-        const was = s.lastAccess, now = JSON.stringify([u.projectIds || [], store.list('projects').map((p) => [p.id, p.clientId || null])]);
+      // What someone can see changed (a freelancer's clients, which Client Assets a client uses, or a client switched
+      // on / off): reload their data
+      if (changed.some((r) => (r.kind === 'users' && r.id === u.id) || r.kind === 'projects')) {
+        const was = s.lastAccess, now = accessKey(u);
         s.lastAccess = now;
         if (was !== undefined && was !== now) { send(s, 'resync', { rev }); continue; }
       }
@@ -136,6 +137,25 @@ export function createServer(cfg) {
       send(s, 'changes', { rev, client: fromClient || null, by: byUser || null, changes: list });
     }
   }
+  // A client renamed by an Admin: its Client Assets folder takes the new name too (also while the client is inactive,
+  // when the app can't see the folder), unless it was named differently already or another folder has the new name
+  const keyOf = (n) => String(n || '').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/&/g, 'and').replace(/[^a-z0-9\u0600-\u06ff]+/g, '');
+  function renameLinkedAssets(results, before) {
+    const ops = [];
+    for (const r of results) {
+      if (r.kind !== 'projects' || r.refused || r.unchanged || r.deleted) continue;
+      const pr = store.get('projects', String(r.id)), old = before.get(String(r.id));
+      if (!pr || !pr.clientId || !old || old === pr.name) continue;
+      const c = store.get('clients', pr.clientId);
+      if (!c || c.name === pr.name || keyOf(c.name) !== keyOf(old)) continue;
+      if (store.list('clients').some((x) => x.id !== c.id && keyOf(x.name) === keyOf(pr.name))) continue;
+      ops.push({ kind: 'clients', id: c.id, data: { ...c, name: pr.name } });
+    }
+    if (!ops.length) return;
+    const out = store.apply(ops, 'rename');
+    broadcast(out.rev, out.results, null, null);
+  }
+  const accessKey = (u) => JSON.stringify([u.role === 'freelancer' ? u.projectIds || [] : null, store.list('projects').map((p) => [p.id, p.clientId || null, !!p.inactive])]);
   const send = (s, event, data) => { try { s.res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); } catch { /* closed */ } };
 
   /* ---------- routes ---------- */
@@ -263,8 +283,10 @@ export function createServer(cfg) {
       const changes = Array.isArray(body.changes) ? body.changes : [];
       const fresh = new Set(changes.filter((ch) => ch && ch.kind === 'notifications' && !ch.del && !store.get('notifications', String(ch.id))).map((ch) => String(ch.id)));
       const restoring = new Set(changes.filter((ch) => ch && !ch.del && ch.kind !== 'trash').map((ch) => `${ch.kind}:${ch.id}`));
+      const namesBefore = new Map(changes.filter((ch) => ch && ch.kind === 'projects' && !ch.del).map((ch) => [String(ch.id), (store.get('projects', String(ch.id)) || {}).name]));
       const { rev, results } = store.apply(changes, u.id, (ch, current) => access.canWrite(u, ch, current, { restoring }));
       broadcast(rev, results, body.client, u.id);
+      renameLinkedAssets(results, namesBefore);
       // new notifications also go to the person's phone
       results.filter((r) => r.kind === 'notifications' && fresh.has(String(r.id)) && !r.refused && !r.deleted && r.data && r.data.to && r.data.to !== u.id)
         .forEach((r) => webPush.sendTo(r.data.to, notifMessage(store, r.data)).catch(() => {}));
@@ -277,7 +299,7 @@ export function createServer(cfg) {
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
       res.write('retry: 3000\n\n');
       const s = { res, userId: u.id, user: u, client: url.searchParams.get('client') || null };
-      if (u.role === 'freelancer') s.lastAccess = JSON.stringify([u.projectIds || [], store.list('projects').map((p) => [p.id, p.clientId || null])]);
+      s.lastAccess = accessKey(u);
       streams.add(s);
       send(s, 'hello', { version, rev: store.rev(), appIcon: appIcon.info() });
       const since = Number(url.searchParams.get('since'));

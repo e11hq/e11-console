@@ -23,7 +23,8 @@ const prioRank = (p) => { if (p === 'urgent' || p === 'high') return 0; const n 
 
 export function digestFor(store, user, day) {
   const first = String(user.name || user.email || '').trim().split(/\s+/)[0] || '';
-  const mine = store.list('tasks').filter((t) => !t.parentId && !t.done && (t.assignees || []).includes(user.id) && !(t.partsDone || {})[user.id]);
+  const off = new Set(store.list('projects').filter((p) => p.inactive).map((p) => p.id));   // inactive clients are hidden
+  const mine = store.list('tasks').filter((t) => !t.parentId && !t.done && !off.has(t.projectId) && (t.assignees || []).includes(user.id) && !(t.partsDone || {})[user.id]);
   const dueToday = mine.filter((t) => t.due === day).length;
   const overdue = mine.filter((t) => t.due && t.due < day).length;
   // their own files waiting with the CD (latest submission this round, not withdrawn)
