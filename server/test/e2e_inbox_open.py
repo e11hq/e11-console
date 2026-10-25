@@ -42,6 +42,42 @@ async def main():
                     good = r['task'] == tid and r['tab'] == 'details' and not r['focus']
                     ok.append(good)
                     print(('ok  ' if good else 'FAIL'), 'phone' if phone else 'desktop', tab, 'opens the Task Update on Details', '' if good else r)
+                # each kind of update opens the right place (a different task for each, so they don't group)
+                kinds = await pg.evaluate("""(() => {
+                  myNotifs().forEach(n => { n.read = true; });
+                  const ts = topTasks().filter(x => !x.done && (x.comments || []).length && x.id !== '%s').slice(0, 4);
+                  const now = Date.now(), at = (m) => new Date(now - m * 60000).toISOString();
+                  const c = (t) => t.comments[t.comments.length - 1];
+                  const cl = db.clients[0], fo = cl.folders[0];
+                  const add = (n) => db.notifications.push({ to: currentUserId, read: false, snippet: 'x', ...n });
+                  add({ id: 'k-comment', from: c(ts[0]).authorId, taskId: ts[0].id, kind: 'comment', text: 'commented on', commentId: c(ts[0]).id, at: at(5) });
+                  add({ id: 'k-mention', from: c(ts[1]).authorId, taskId: ts[1].id, kind: 'mention', text: 'mentioned you in', commentId: c(ts[1]).id, at: at(6) });
+                  add({ id: 'k-update', from: c(ts[2]).authorId, taskId: ts[2].id, kind: 'update', text: 'set the Task Update to Oversee', at: at(7) });
+                  add({ id: 'k-amend', from: c(ts[3]).authorId, taskId: ts[3].id, kind: 'review-amend', text: 'asked for amendments on', commentId: c(ts[3]).id, at: at(8) });
+                  add({ id: 'k-asset', from: c(ts[0]).authorId, kind: 'asset', clientId: cl.id, folderId: fo.id, text: 'added a file to ' + cl.name + ' › ' + fo.name, at: at(9) });
+                  persist(0); return { tasks: ts.map(t => t.id), client: cl.id, folder: fo.id, comments: ts.map(c).map(x => x.id) }; })()""" % tid)
+                want = {'k-comment': ('task', 0, 'comments'), 'k-mention': ('task', 1, 'comments'), 'k-update': ('task', 2, 'details'), 'k-amend': ('task', 3, 'comments'), 'k-asset': ('asset', None, None)}
+                tabs = (('unread', 'all', 'mentions') if phone else ('primary', 'all'))
+                for tab in tabs:
+                    for nid, (kind, i, side) in want.items():
+                        if tab == 'mentions' and nid != 'k-mention': continue
+                        await pg.evaluate("closeDetail(); myNotifs().forEach(n => { if (n.id.startsWith('k-')) n.read = false; }); persist(0)")
+                        if phone:
+                            await pg.locator('#ph-tabs [data-ph-tab="inbox"]').click(); await pg.wait_for_timeout(300)
+                            await pg.locator(f'[data-ph="ibf"][data-k="{tab}"]').click(); await pg.wait_for_timeout(300)
+                        else:
+                            await pg.evaluate(f"ui.inboxTab = '{tab}'; go('inbox')"); await pg.wait_for_timeout(300)
+                        row = pg.locator(f'{sel}[data-id="{nid}"]')
+                        if await row.count() != 1:
+                            ok.append(False); print('FAIL', 'phone' if phone else 'desktop', tab, nid, 'row not found'); continue
+                        await row.click(); await pg.wait_for_timeout(800)
+                        r = await pg.evaluate("({ task: ui.taskId, tab: ui.sideTab, view: ui.view, client: ui.clientId, folder: ui.folderId, flash: !!document.querySelector('#detail .flash, #detail .cm.flash, #detail .focus-flash'), read: myNotifs().filter(n => n.id.startsWith('k-') && !n.read).map(n => n.id) })")
+                        if kind == 'task':
+                            good = r['task'] == kinds['tasks'][i] and r['tab'] == side and nid not in r['read']
+                        else:
+                            good = r['view'] == 'client' and r['client'] == kinds['client'] and r['folder'] == kinds['folder'] and nid not in r['read']
+                        ok.append(good)
+                        print(('ok  ' if good else 'FAIL'), 'phone' if phone else 'desktop', tab, nid, '→', side or 'folder', '' if good else r)
                 ok.append(not errs)
                 if errs: print('FAIL errors', errs[:2])
                 await ctx.close()
