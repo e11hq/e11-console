@@ -116,7 +116,7 @@ export function createAccess(store) {
   function canSee(u, kind, data) {
     if (!data) return true;
     switch (kind) {
-      case 'notifications': return data.to === u.id && !(data.taskId && inInactive(store.get('tasks', String(data.taskId))));
+      case 'notifications': return data.to === u.id && !(data.taskId && inInactive(store.get('tasks', String(data.taskId)))) && !(data.clientId && hiddenClient(store.get('clients', String(data.clientId))));
       case 'projects': return !isFreelancer(u) || projectSet(u).has(data.id);
       case 'tasks': return taskVisible(u, data);
       case 'clients': return !hiddenClient(data) && (!isFreelancer(u) || clientSet(u).has(data.id));

@@ -5284,11 +5284,36 @@ function folderMenu(anchor, c, f) {
       const ok = await dialog({ title: `Delete “${f.name}”?`, body: f.files.length ? `Its ${f.files.length} file${f.files.length === 1 ? '' : 's'} will be moved to the Trash. Copies already pasted into tasks stay.` : 'This folder is empty.', okText: 'Delete folder', danger: true });
       if (!ok) return;
       c.folders = c.folders.filter((x) => x.id !== f.id);
+      if (f.files.length) assetNotify(c, f, 'removed', f.files.map((a) => a.name));
       persist(0); render();
       // the files go once the server has the change (it only lets people remove what they're allowed to)
       Promise.resolve(typeof Sync !== 'undefined' && Sync.push ? Sync.push() : null).catch(() => {}).then(() => safeTrash([...f.files.flatMap((a) => [a.path, '.thumbs/' + a.id]), f.dir]));
     } }] : []),
   ]);
+}
+// Files added to or removed from Client Assets: an Inbox update (and phone notification) for everyone working on that
+// client's tasks (assignees, creators, watchers), its Account Managers, and every Admin. Not the person who did it.
+function assetNotify(c, f, verb, names) {
+  if (!c || !names.length) return;
+  const projs = db.projects.filter((p) => p.clientId === c.id);
+  const pids = new Set(projs.map((p) => p.id));
+  const to = new Set();
+  db.tasks.filter((t) => pids.has(t.projectId) || (t.parentId && pids.has((task(t.parentId) || {}).projectId))).forEach((t) => {
+    (t.assignees || []).forEach((id) => to.add(id));
+    if (t.createdBy) to.add(t.createdBy);
+    (t.watchers || []).forEach((id) => to.add(id));
+  });
+  projs.forEach((p) => (p.ams || []).forEach((a) => to.add(a.id)));
+  db.users.forEach((u) => { if (isAdm(u)) to.add(u.id); });
+  const n = names.length;
+  const text = `${verb} ${n === 1 ? 'a file' : n + ' files'} ${verb === 'added' ? 'to' : 'from'} ${c.name} › ${f.name}`;
+  const snippet = names.slice(0, 4).join(', ') + (n > 4 ? ` +${n - 4} more` : '');
+  to.forEach((id) => {
+    const u = userById(id);
+    if (!u || id === currentUserId || u.active === false || isFinUser(u)) return;
+    if (u.role === 'freelancer' && !projs.some((p) => (u.projectIds || []).includes(p.id))) return;   // only their own clients
+    db.notifications.push({ id: uid(), to: id, from: currentUserId, kind: 'asset', clientId: c.id, folderId: f.id, text, snippet, at: nowISO(), read: false });
+  });
 }
 function curFolder() { const c = clientById(ui.clientId); return c ? { c, f: c.folders.find((x) => x.id === ui.folderId) || null } : { c: null, f: null }; }
 async function pickIntoFolder() {
@@ -5298,7 +5323,7 @@ async function pickIntoFolder() {
     const r = await Host.call('pickAttachments', { dest: f.dir });
     const files = (r.files || []).map((x) => ({ ...x, addedAt: nowISO(), addedBy: currentUserId }));
     if (!files.length) return;
-    f.files.push(...files); persist(0); render();
+    f.files.push(...files); assetNotify(c, f, 'added', files.map((x) => x.name)); persist(0); render();
     toast(`Added ${files.length} file${files.length === 1 ? '' : 's'} to ${c.name} › ${f.name}`);
   } catch (e) { toast('Could not add files: ' + e.message); }
 }
@@ -5330,6 +5355,7 @@ async function uploadIntoFolder(fileList) {
       persist(300);
     } catch (e) { el.classList.add('err'); note.textContent = 'Upload failed — ' + e.message; }
   }
+  if (added) { assetNotify(c, f, 'added', f.files.slice(-added).map((x) => x.name)); persist(0); }
   if (added && ui.view === 'client' && ui.folderId === f.id) { render(); toast(`Added ${added} file${added === 1 ? '' : 's'} to ${c.name} › ${f.name}`); }
 }
 async function removeClientFile(id) {
@@ -5341,6 +5367,7 @@ async function removeClientFile(id) {
   const { c } = curFolder();
   f.files = f.files.filter((x) => x.id !== id);
   toTrash('cafile', { clientId: c.id, folderId: f.id, file: a }, { key: 'clients:' + c.id, where: `${c.name} › ${f.name}` });
+  assetNotify(c, f, 'removed', [a.name]);
   persist(0); render();
 }
 function downloadClientFiles(list, folderName) {
@@ -5915,6 +5942,7 @@ function notifMsg(n, t) {
     return `${who} set CD Status to: <span class="ib-chip" style="background:${c};color:${textOn(c)}">${esc(val)}</span>`;
   }
   if (/^claim/.test(n.kind)) return `${who} ${n.text}${n.snippet ? ` <span class="ib-dim">· ${esc(n.snippet)}</span>` : ''}`;
+  if (n.kind === 'asset') return `${who} ${esc(n.text)}${n.snippet ? ` <span class="ib-dim">· ${esc(n.snippet)}</span>` : ''}`;
   if (n.kind === 'review-amend' && n.snippet) return `${who} <span class="ib-dim">requested amendments:</span> ${esc(n.snippet)}`;
   if (n.kind === 'review-ok' && /your files/.test(n.text)) return `${who} approved your files <span class="ib-chip" style="background:${CD.approved.color};color:${textOn(CD.approved.color)}">APPROVED</span>`;
   if ((n.kind === 'comment' || n.kind === 'mention') && n.snippet) {
@@ -5932,7 +5960,7 @@ function viewInbox() {
   // one row per task: latest update + how many updates
   const byTask = new Map();
   list.slice().sort((a, b) => b.at.localeCompare(a.at)).forEach((n) => {
-    const k = n.taskId || n.id;
+    const k = notifKey(n);
     if (!byTask.has(k)) byTask.set(k, { latest: n, items: [] });
     byTask.get(k).items.push(n);
   });
@@ -5950,14 +5978,14 @@ function viewInbox() {
     // opens what needs you first (an unread review or @mention); otherwise the update the row shows
     const target = items.find((x) => isRev(x) && !x.read) || items.find((x) => x.kind === 'mention' && !x.read) || n;
     const shown = isRev(target) ? target : n;
-    const lead = ['comment', 'mention', 'review-amend', 'review-ok', 'review', 'claim', 'claim-ok', 'claim-paid'].includes(shown.kind) ? avatarHTML(shown.from, 22) : `<span class="ib-kic">${icon(NOTIF_ICON[shown.kind] || 'bell')}</span>`;
+    const lead = ['comment', 'mention', 'review-amend', 'review-ok', 'review', 'claim', 'claim-ok', 'claim-paid', 'asset'].includes(shown.kind) ? avatarHTML(shown.from, 22) : `<span class="ib-kic">${icon(NOTIF_ICON[shown.kind] || 'bell')}</span>`;
     return `<div class="ib-row ${unread ? 'unread' : ''}" data-action="open-notif" data-id="${target.id}">
-      <span class="ib-title">${t ? statusIcon(t) : /^claim/.test(n.kind) ? `<span class="st-ic ib-coin">${icon('coin')}</span>` : `<span class="st-ic">${statusIconSVG('#87909e', 'todo', 0)}</span>`}<span class="ib-tname">${t ? esc(t.title || 'Untitled task') : /^claim/.test(n.kind) ? 'Expense claims' : '<i>Deleted task</i>'}</span></span>
+      <span class="ib-title">${n.kind === 'asset' ? `<span class="st-ic ib-coin">${icon('assets')}</span><span class="ib-tname">${esc(assetTitle(n))}</span>` : `${t ? statusIcon(t) : /^claim/.test(n.kind) ? `<span class="st-ic ib-coin">${icon('coin')}</span>` : `<span class="st-ic">${statusIconSVG('#87909e', 'todo', 0)}</span>`}<span class="ib-tname">${t ? esc(t.title || 'Untitled task') : /^claim/.test(n.kind) ? 'Expense claims' : '<i>Deleted task</i>'}</span>`}</span>
       <span class="ib-lead">${lead}</span>
       <span class="ib-msg">${notifMsg(shown, t)}</span>
       <span class="ib-count">${items.length > 1 ? `<i>${items.length}</i>` : ''}</span>
       <span class="ib-time" title="${fmtDateTime(n.at)}">${ibTime(n.at)}</span>
-      <button class="ib-clear" data-action="notif-clear" data-id="${esc(n.taskId)}" data-read="${unread ? '0' : '1'}">${unread ? `${icon('check')}Clear` : 'Mark unread'}</button>
+ <button class="ib-clear" data-action="notif-clear" data-id="${esc(notifKey(n))}" data-read="${unread ? '0' : '1'}">${unread ? `${icon('check')}Clear` : 'Mark unread'}</button>
     </div>`;
   };
   return `<div class="inbox">
@@ -5978,14 +6006,23 @@ function viewInbox() {
 function inboxFilterMenu(anchor) {
   showMenu(anchor, Object.entries(IB_FILTERS).map(([k, l]) => ({ html: `<div class="mi ${(ui.inboxFilter || 'all') === k ? 'cur' : ''}">${esc(l)}</div>`, run: () => { ui.inboxFilter = k; renderContent(); } })).map((it, i) => ({ ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) })));
 }
+// Inbox rows: a task's updates together; Client Assets updates together per client
+const notifKey = (n) => n.taskId || (n.kind === 'asset' ? 'asset:' + n.clientId : n.id);
+const assetTitle = (n) => `${(clientById(n.clientId) || {}).name || 'A client'} · Client Assets`;
 function clearTaskNotifs(taskId, read) {
-  myNotifs().forEach((n) => { if (n.taskId === taskId) n.read = read; });
+  myNotifs().forEach((n) => { if (notifKey(n) === taskId) n.read = read; });
   persist(); renderSidebar(); renderContent();
 }
 function openNotif(id) {
   const n = db.notifications.find((x) => x.id === id);
   if (!n) return;
   if (/^claim/.test(n.kind)) { myNotifs().forEach((x) => { if (x.claimId && x.claimId === n.claimId) x.read = true; }); persist(); renderSidebar(); return Claims.openNotif(n); }
+  if (n.kind === 'asset') {
+    myNotifs().forEach((x) => { if (notifKey(x) === notifKey(n)) x.read = true; }); persist(); renderSidebar();
+    if (!clientById(n.clientId)) { toast('That client’s assets aren’t available'); return; }
+    const c = clientById(n.clientId);
+    return openClient(c.id, c.folders.some((x) => x.id === n.folderId) ? n.folderId : null);
+  }
   myNotifs().forEach((x) => { if (x.taskId === n.taskId) x.read = true; });
   persist(); renderSidebar(); renderContent();
   const t = task(n.taskId);
@@ -6161,7 +6198,7 @@ function deliverPending() {
   persist();
   if (fresh.length === 1) {
     const n = fresh[0], t = task(n.taskId);
-    alertUser({ title: fullName(userById(n.from)), body: `${notifPlain(n)} ${t ? '“' + (t.title || 'Untitled task') + '”' : ''}${n.snippet ? ' — ' + n.snippet : ''}`, taskId: n.taskId, from: n.from, open: /^claim/.test(n.kind) ? () => { n.read = true; persist(); Claims.openNotif(n); } : null });
+    alertUser({ title: fullName(userById(n.from)), body: `${notifPlain(n)} ${t ? '“' + (t.title || 'Untitled task') + '”' : ''}${n.snippet ? ' — ' + n.snippet : ''}`, taskId: n.taskId, from: n.from, open: /^claim/.test(n.kind) ? () => { n.read = true; persist(); Claims.openNotif(n); } : n.kind === 'asset' ? () => openNotif(n.id) : null });
   } else if (isFinUser()) {
     alertUser({ title: 'E11 Console', body: `${fresh.length} new expense claims`, open: () => go('fin-reimb') });
   } else {

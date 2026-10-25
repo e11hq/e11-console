@@ -33,7 +33,7 @@ self.addEventListener('push', (e) => {
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
   const d = e.notification.data || {};
-  const qs = d.view ? `/?view=${encodeURIComponent(d.view)}` : d.taskId ? `/?task=${encodeURIComponent(d.taskId)}${d.nid ? '&n=' + encodeURIComponent(d.nid) : ''}` : '/';
+  const qs = d.view ? `/?view=${encodeURIComponent(d.view)}` : d.taskId ? `/?task=${encodeURIComponent(d.taskId)}${d.nid ? '&n=' + encodeURIComponent(d.nid) : ''}` : d.nid ? `/?n=${encodeURIComponent(d.nid)}` : '/';
   e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
     const c = list.find((x) => new URL(x.url).origin === self.location.origin);
     if (c) { c.postMessage(d.view ? { type: 'open-view', view: d.view } : { type: 'open-task', taskId: d.taskId, nid: d.nid }); return c.focus(); }

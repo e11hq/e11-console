@@ -182,7 +182,7 @@ const Phone = (() => {
     const f = st.ibf;
     const list = all.filter((n) => (f === 'unread' ? !n.read : f === 'mentions' ? n.kind === 'mention' : true)).sort((a, b) => b.at.localeCompare(a.at));
     const byTask = new Map();
-    list.forEach((n) => { const k = n.taskId || n.id; if (!byTask.has(k)) byTask.set(k, []); byTask.get(k).push(n); });
+    list.forEach((n) => { const k = notifKey(n); if (!byTask.has(k)) byTask.set(k, []); byTask.get(k).push(n); });
     const rows = [...byTask.values()].slice(0, 200).map((items) => {
       const n = items[0];
       const t = task(n.taskId);
@@ -191,7 +191,7 @@ const Phone = (() => {
       return `<div class="ph-ib ${unread ? 'unread' : ''}" data-action="open-notif" data-id="${target.id}">
         ${avatarHTML(target.from, 40)}
         <span class="ph-ib-b"><span class="ph-ib-m">${notifMsg(target, t)}</span>
-          <span class="ph-ib-t">${t ? esc(t.title || 'Untitled task') : /^claim/.test(n.kind) ? 'Expense claims' : '<i>Deleted task</i>'}</span>
+          <span class="ph-ib-t">${t ? esc(t.title || 'Untitled task') : /^claim/.test(n.kind) ? 'Expense claims' : n.kind === 'asset' ? esc(assetTitle(n)) : '<i>Deleted task</i>'}</span>
           <span class="ph-ib-w">${esc(timeAgo(n.at))}${items.length > 1 ? ` · ${items.length} updates` : ''}</span></span>
         ${unread ? '<i class="ph-ib-dot"></i>' : ''}
       </div>`;
@@ -732,7 +732,7 @@ const Push = (() => {
     setTimeout(() => clearInterval(iv), 30000);
   }
   const q = new URLSearchParams(location.search);
-  if (q.get('task')) { openFrom(q.get('task'), q.get('n')); history.replaceState(null, '', '/'); }
+  if (q.get('task') || q.get('n')) { openFrom(q.get('task'), q.get('n')); history.replaceState(null, '', '/'); }   // (an update without a task, e.g. Client Assets, has only n)
   else if (q.get('view')) { openView(q.get('view')); history.replaceState(null, '', '/'); }
   if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.type === 'open-task') openFrom(e.data.taskId, e.data.nid); if (e.data && e.data.type === 'open-view') openView(e.data.view); });
 
