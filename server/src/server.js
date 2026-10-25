@@ -14,6 +14,7 @@ import { createDigest } from './digest.js';
 import { createOccasionReminders } from './occremind.js';
 import { createHolidaySync, DEFAULT_HOLIDAYS_URL } from './holidays.js';
 import { sampleData } from './sample.js';
+import { freshSample } from './sample-fresh.js';
 import { createAppIcon } from './appicon.js';
 
 const BODY_LIMIT = 12 * 1024 * 1024; // 2 MB upload pieces arrive as ~2.7 MB of base64
@@ -313,6 +314,34 @@ export function createServer(cfg) {
     if (p === '/api/push/test' && req.method === 'POST') {
       const r = await webPush.sendTo(u.id, { title: 'E11 Console', body: 'Notifications are on. This is how they’ll look on this phone.', tag: 'test' });
       return json(res, 200, { ok: true, ...r });
+    }
+
+    // Test copy only, owner only: wipe everything (except the owner's account) and start again with fresh sample data
+    // set up the way the app works now. A backup of the database is kept first; files go to the trash folder.
+    if (p === '/api/sample/reset' && req.method === 'POST') {
+      if (!/-test\.|-dev$/.test(version)) return json(res, 403, { ok: false, error: 'Only on the test copy' });
+      if (!isOwner(req.realUser || u)) return json(res, 403, { ok: false, error: 'Only the owner can do this' });
+      const owner = req.realUser || u;
+      store.backup(path.join(dataDir, 'backups', `before-sample-reset-${Date.now()}.sqlite`));
+      // 1. every record except the owner's account
+      const dels = [];
+      for (const k of ['projects', 'tasks', 'clients', 'notifications', 'statuses', 'trash', 'finance', 'claims']) store.list(k).forEach((x) => dels.push({ kind: k, id: String(x.id), del: true }));
+      store.list('users').forEach((x) => { if (x.id !== owner.id) dels.push({ kind: 'users', id: String(x.id), del: true }); });
+      if (dels.length) store.apply(dels, 'sample-reset');
+      store.apply([{ kind: 'meta', id: 'main', data: { createdAt: new Date().toISOString() } }], 'sample-reset');
+      for (const k of ['view-as', 'digest-sent', 'occ-remind-sent']) store.kv.set(k, k === 'view-as' ? 'null' : '{}');
+      // 2. files (task attachments, Client Assets, Finance, claims, previews) moved to the trash folder; profile photos stay
+      const filesRoot = path.join(dataDir, 'files');
+      const bin = path.join(dataDir, 'trash', new Date().toISOString().slice(0, 10), `sample-reset-${Date.now()}`);
+      fs.mkdirSync(bin, { recursive: true });
+      for (const d of ['Clients', 'Finance', 'Claims', '.thumbs']) { const src = path.join(filesRoot, d); if (fs.existsSync(src)) fs.renameSync(src, path.join(bin, d)); }
+      const att = path.join(filesRoot, 'attachments');
+      if (fs.existsSync(att)) for (const d of fs.readdirSync(att)) if (d !== '_avatars') fs.renameSync(path.join(att, d), path.join(bin, 'attachments-' + d));
+      // 3. the fresh sample
+      const data = freshSample(store, owner.id, filesRoot);
+      const { rev } = store.importAll(data, owner.id);
+      for (const st of streams) send(st, 'resync', { rev });    // every open app reloads its data
+      return json(res, 200, { ok: true, rev, tasks: data.tasks.length, people: data.users.length, clients: data.projects.length });
     }
 
     // Test copy only: fill it with sample people, projects, tasks, comments and replies for trying things out

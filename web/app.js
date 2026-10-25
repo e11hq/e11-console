@@ -6809,6 +6809,7 @@ function meMenu(anchor) {
     ...(Host.isServer && !Host.isMacApp ? [{ label: 'Get the Mac app', icon: 'download', run: macAppDialog }] : []),
     ...(Host.isMacApp ? [{ label: 'Update Mac app', icon: 'download', run: () => MacUpdate.run() }] : []),
     ...(isTestCopy() && isAdm(me()) ? [{ label: 'Fill with sample data', icon: 'users', run: fillSampleData }] : []),
+    ...(isTestCopy() && (AppIcon.isOwner ? AppIcon.isOwner() : isAdm(me())) && !(typeof ViewAs !== 'undefined' && ViewAs.viewing()) ? [{ label: 'Start fresh with sample data…', icon: 'trash', run: resetSampleData }] : []),
     ...(typeof ViewAs !== 'undefined' && ViewAs.available() ? [{ label: ViewAs.viewing() ? 'View as someone else…' : 'View as… (test site)', icon: 'users', run: ViewAs.pick }, ...(ViewAs.viewing() ? [{ label: 'Back to me', icon: 'reply', run: ViewAs.back }] : [])] : []),
     ...Fin.addItems(),
     '-',
@@ -6937,6 +6938,18 @@ async function fillSampleData() {
     const r = await api('POST', '/api/sample', {});
     toast(`Added ${r.tasks} tasks and ${r.people} people — they appear in a moment`);
   } catch (e) { toast('Could not add sample data: ' + e.message); }
+}
+// Test copy, owner only: wipe everything (except your own account) and start again with fresh sample data
+async function resetSampleData() {
+  const ok = await dialog({ title: 'Start fresh with sample data?', danger: true, okText: 'Wipe and start fresh',
+    body: 'This wipes everything on the TEST site — every task, client, Client Assets file, Finance record, claim, Inbox update and person except you — and adds a new sample set up the way the app works now: clients with Account Managers (one on leave, someone covering), an inactive client, Client Assets with logos, a freelancer, and the Creative Director. A backup of the old data is kept on the server. The live site is never touched.' });
+  if (!ok) return;
+  try {
+    toast('Starting fresh…');
+    const r = await api('POST', '/api/sample/reset', {});
+    toast(`Fresh sample: ${r.clients} clients, ${r.tasks} tasks, ${r.people} people`);
+    setTimeout(() => location.reload(), 900);
+  } catch (e) { toast('Could not start fresh: ' + e.message); }
 }
 function signOut() {
   flushEdit();
