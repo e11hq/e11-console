@@ -1132,6 +1132,17 @@ const Work = (() => {
   const openOf = (t) => (personal() ? myOpen(t) : !t.done);
   const doneAtOf = (t) => (personal() ? myDoneAt(t) : t.done ? t.completedAt || null : null);
   const createdBy = (ids) => { const set = new Set(ids); return topTasks().filter((t) => set.has(t.createdBy)); };
+  // An Account Manager's work: every task (by anyone, old ones too) in the clients they look after — while they're not
+  // on leave; whoever covers sees them for as long as they're covering — plus their own tasks without a client.
+  // An AM not yet given any client keeps seeing the tasks they created.
+  const amClients = (id) => db.projects.filter((p) => (p.ams || []).some((a) => a.id === id && !a.onLeave)).map((p) => p.id);
+  const hasClients = (id) => db.projects.some((p) => (p.ams || []).some((a) => a.id === id));
+  const ofAms = (ids) => {
+    const pids = new Set(), byOwn = new Set();
+    ids.forEach((id) => { if (hasClients(id)) { amClients(id).forEach((x) => pids.add(x)); } byOwn.add(id); });
+    return topTasks().filter((t) => (t.projectId ? pids.has(t.projectId) || (byOwn.has(t.createdBy) && !hasClients(t.createdBy)) : byOwn.has(t.createdBy)));
+  };
+  const leadSet = (ids) => { const am = ids.filter((id) => { const u = userById(id); return u && u.role === 'am' && !isAdm(u); }); const rest = ids.filter((id) => !am.includes(id)); const set = new Map(); ofAms(am).forEach((t) => set.set(t.id, t)); createdBy(rest).forEach((t) => set.set(t.id, t)); return [...set.values()]; };
   // Everyone whose created tasks an Admin can look at (same people as E11 Day)
   const teamIds = () => db.users.filter((x) => x.role === 'am' || isAdm(x)).map((x) => x.id);
   const creators = () => (isAdmin() && f().team ? teamIds() : isAdmin() && f().ams.length ? f().ams : [currentUserId]);
@@ -1146,7 +1157,7 @@ const Work = (() => {
   // My Tasks list (both tabs), with the filters applied
   function list() {
     const F = f();
-    let l = personal() ? myTop() : createdBy(creators());
+    let l = personal() ? myTop() : leadSet(creators());
     if (F.created) l = l.filter((t) => inCreated(t, F.created));
     if (F.people.length) l = l.filter((t) => (t.assignees || []).some((u) => F.people.includes(u)));
     if (F.due) l = l.filter((t) => dueIn(t, F.due));
@@ -1155,7 +1166,7 @@ const Work = (() => {
     return l;
   }
   // Home: an AM / Admin's own created tasks (no filters); everyone else: their tasks
-  const home = () => (lead() ? createdBy([currentUserId]) : myTop());
+  const home = () => (lead() ? leadSet([currentUserId]) : myTop());
   const homeOpen = (t) => (lead() ? !t.done : myOpen(t));
   const homeDoneAt = (t) => (lead() ? (t.done ? t.completedAt || null : null) : myDoneAt(t));
   // My Day pool
@@ -1163,13 +1174,13 @@ const Work = (() => {
     const u = me();
     if (!lead()) return { tasks: db.tasks.filter(onMyList), open: myOpen, doneAt: myDoneAt, doneTasks: db.tasks.filter(isMine) };
     const who = isAdmin() ? db.users.filter((x) => x.role === 'am' || isAdm(x)).map((x) => x.id) : [u.id];
-    const ts = createdBy(who);
+    const ts = leadSet(who);
     const dAt = (t) => (t.done ? t.completedAt || null : null);
     return { tasks: ts, open: (t) => !t.done, doneAt: dAt, doneTasks: ts };
   }
   const dayTitle = () => (isAdmin() ? 'E11 Day' : 'My Day');
   const active = () => { const F = f(); return !!(F.created || F.due || F.finished || F.cd || F.people.length || F.ams.length || F.team || F.assigned); };
-  return { f, lead, personal, openOf, doneAtOf, list, home, homeOpen, homeDoneAt, day, dayTitle, inCreated, active };
+  return { f, lead, personal, openOf, doneAtOf, list, home, homeOpen, homeDoneAt, day, dayTitle, inCreated, active, leadSet, hasClients };
 })();
 const CREATED_L = { today: 'Today', week: 'This week', month: 'This month' };
 // Due date filter (same groups as the Home page): late = past due, today, week = today to Sunday

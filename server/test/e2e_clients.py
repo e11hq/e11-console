@@ -88,6 +88,26 @@ async def main():
         check(await E("ui.view") == 'client' and await E("clientById(ui.clientId).name") == 'Nissan Test' and await E("(clientById(ui.clientId).folders.find(f => f.id === ui.folderId) || {}).name") == 'Logos', 'clicking it opens that folder')
         prod_n = await pr.evaluate("myNotifs().filter(n => n.kind === 'asset').length")
         check(prod_n == 0, 'the person who added it is not notified')
+        # Account Managers see every task in the clients they look after (by anyone, old ones too); the one covering
+        # while another is on leave sees them while covering
+        r = await E("""(() => {
+          const ams = db.users.filter(u => u.role === 'am' && u.active !== false && !u.admin).slice(0, 2).map(u => u.id);
+          const p = db.projects.find(x => x.name === 'Ford & Lincoln') || db.projects[0];
+          const others = topTasks().filter(t => t.projectId === p.id).length;
+          const me0 = currentUserId;
+          const as = (id, fn) => { currentUserId = id; try { return fn(); } finally { currentUserId = me0; } };
+          const has = (id) => as(id, () => Work.home().filter(t => t.projectId === p.id).length);
+          p.ams = [{ id: ams[0] }];
+          const a1 = has(ams[0]), b1 = has(ams[1]);
+          p.ams = [{ id: ams[0], onLeave: true }, { id: ams[1] }];
+          const a2 = has(ams[0]), b2 = has(ams[1]);
+          p.ams = [{ id: ams[0] }];
+          const b3 = has(ams[1]);
+          delete p.ams;
+          return { others, a1, b1, a2, b2, b3 };
+        })()""")
+        check(r['others'] > 0 and r['a1'] == r['others'], f"an AM sees all their client's tasks, by anyone {r}")
+        check(r['a2'] == 0 and r['b2'] == r['others'] and r['b3'] < r['others'], f'the cover sees them only while covering {r}')
         # Edit client list: switch a client off, rename it (its Client Assets folder follows)
         await E("go('clientlist')"); await pg.wait_for_timeout(400)
         check(await pg.locator('.cl-row').count() >= 3, 'Edit client list shows the clients')

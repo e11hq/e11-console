@@ -41,7 +41,7 @@ async def main():
           commit(); return true; }})()""")
         await pg.wait_for_timeout(800)
         await E("go('home')"); await pg.wait_for_timeout(300)
-        check('Team’s created tasks' in await pg.locator('.hm-lead .hm-card h2').first.inner_text(), 'Admin home says "Team’s created tasks"')
+        check('Team’s tasks' in await pg.locator('.hm-lead .hm-card h2').first.inner_text(), 'Admin home says "Team’s tasks"')
         rows = await E("[...document.querySelectorAll('.hm-lead .hm-row')].map(r=>{const u=userById(task(r.dataset.task).createdBy); return !!u && (u.role==='am'||isAdm(u));})")
         check(rows and all(rows), f'it lists tasks created by AMs and Admins ({len(rows)})')
         check(await pg.locator('.hm-proj').count() == await E("db.projects.length"), 'Admin home shows all projects')

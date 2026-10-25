@@ -69,8 +69,8 @@ const Home = (() => {
   function viewLead() {
     // An Admin sees every Account Manager's and Admin's created tasks (same as E11 Day); an AM sees their own
     const admin = isAdmin();
-    const who = new Set(admin ? db.users.filter((x) => x.role === 'am' || isAdm(x)).map((x) => x.id) : [currentUserId]);
-    const mine = topTasks().filter((t) => who.has(t.createdBy));
+    // (an AM: every task in the clients they look after; see Work.leadSet)
+    const mine = Work.leadSet(admin ? db.users.filter((x) => x.role === 'am' || isAdm(x)).map((x) => x.id) : [currentUserId]);
     const open = mine.filter((t) => !t.done);
     const today = todayStr();
     const due0 = open.filter((t) => t.due === today);
@@ -168,7 +168,7 @@ const Home = (() => {
       <div class="hm-grid">
         <div class="hm-col">
           <section class="hm-card">
-            <div class="hm-h"><div class="hm-hl"><h2>${admin ? 'Team’s created tasks' : 'Your created tasks'}</h2><span class="hm-seg">${rangeTabs}</span></div><a class="hm-a" data-hm="see-all">See all</a></div>
+            <div class="hm-h"><div class="hm-hl"><h2>${admin ? 'Team’s tasks' : Work.hasClients(currentUserId) ? 'Your clients’ tasks' : 'Your created tasks'}</h2><span class="hm-seg">${rangeTabs}</span></div><a class="hm-a" data-hm="see-all">See all</a></div>
             ${rows.length ? rows.map((t) => `<div class="hm-row" data-task="${t.id}">
                 <i class="hm-pc" style="background:${pColor(t)}"></i>
                 <span class="hm-main"><span class="hm-t">${title(t)}</span><span class="hm-sub">${esc(pName(t))}${admin && t.createdBy !== currentUserId && userById(t.createdBy) ? ` · by ${esc(fullName(userById(t.createdBy)))}` : ''}${t.due ? ` · due <span class="due ${dueClass(t)}">${esc(fmtDue(t.due))}</span>` : ''}</span></span>
