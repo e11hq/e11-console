@@ -6808,7 +6808,6 @@ function meMenu(anchor) {
     ...(Host.isServer ? [{ label: 'What’s new', icon: 'info', run: () => whatsNewDialog(false) }] : []),
     ...(Host.isServer && !Host.isMacApp ? [{ label: 'Get the Mac app', icon: 'download', run: macAppDialog }] : []),
     ...(Host.isMacApp ? [{ label: 'Update Mac app', icon: 'download', run: () => MacUpdate.run() }] : []),
-    ...(isTestCopy() && isAdm(me()) ? [{ label: 'Fill with sample data', icon: 'users', run: fillSampleData }] : []),
     ...(isTestCopy() && (AppIcon.isOwner ? AppIcon.isOwner() : isAdm(me())) && !(typeof ViewAs !== 'undefined' && ViewAs.viewing()) ? [{ label: 'Start fresh with sample data…', icon: 'trash', run: resetSampleData }] : []),
     ...(typeof ViewAs !== 'undefined' && ViewAs.available() ? [{ label: ViewAs.viewing() ? 'View as someone else…' : 'View as… (test site)', icon: 'users', run: ViewAs.pick }, ...(ViewAs.viewing() ? [{ label: 'Back to me', icon: 'reply', run: ViewAs.back }] : [])] : []),
     ...Fin.addItems(),
@@ -6931,14 +6930,6 @@ function enterApp() {
 }
 // The test copy (test.e11hq.com) can be filled with sample people, tasks and comments
 const isTestCopy = () => Host.isServer && /-test\./.test(String(Sync.version || ''));
-async function fillSampleData() {
-  const ok = await dialog({ title: 'Fill the test copy with sample data?', body: 'Adds E11 people, clients, tasks, comments with replies and Inbox updates, dated around today. Only on the test copy — the live app is never touched. You can run it again any time.', okText: 'Add sample data' });
-  if (!ok) return;
-  try {
-    const r = await api('POST', '/api/sample', {});
-    toast(`Added ${r.tasks} tasks and ${r.people} people — they appear in a moment`);
-  } catch (e) { toast('Could not add sample data: ' + e.message); }
-}
 // Test copy, owner only: wipe everything (except your own account) and start again with fresh sample data
 async function resetSampleData() {
   const ok = await dialog({ title: 'Start fresh with sample data?', danger: true, okText: 'Wipe and start fresh',

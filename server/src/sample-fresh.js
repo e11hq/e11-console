@@ -85,6 +85,22 @@ export function freshSample(store, me, filesRoot) {
   // the Creative Director working on two newer tasks (no CD review on those)
   open.filter((t) => t.cdRule && !t.needsCD).slice(0, 2).forEach((t) => { t.assignees = [...new Set([...(t.assignees || []), cd])]; });
 
+  // who created each task: mostly the client's Account Manager, some by you (Admin), a few by the Creative Director,
+  // KOREA 360's older ones by Nadia (now on leave, so Areej covers), and a few made by an AM in a client that isn't
+  // theirs (moved since) — so every case can be tried
+  const CREATORS = { 'p-ford': ['u-lina', 'u-lina', me, 'u-karim'], 'p-alain': ['u-lana', 'u-lana', me, 'u-lina'], 'p-korea': ['u-nadia', 'u-nadia', 'u-lina', me],
+    'p-hre': ['u-lana', me, 'u-nadia'], 'p-deepal': ['u-nadia', 'u-nadia', me, 'u-karim'], 'p-nakheel': ['u-lana'] };
+  const roots = out.tasks.filter((t) => !t.parentId);
+  const nth = {};
+  roots.forEach((t) => {
+    const list = (CREATORS[t.projectId] || [me, 'u-lina', 'u-lana']).filter((id) => id === me || users.has(id));
+    const i = (nth[t.projectId] = (nth[t.projectId] || 0) + 1) - 1;    // each client follows its own list
+    t.createdBy = list[i % list.length] || me;
+  });
+  out.tasks.filter((t) => t.parentId).forEach((t) => { const r = out.tasks.find((x) => x.id === t.parentId); if (r) t.createdBy = r.createdBy; });
+  // (a CD-created task the CD is assigned to doesn't need review under the new rule)
+  out.tasks.forEach((t) => { if (t.cdRule && t.needsCD && (t.assignees || []).includes(cd)) t.assignees = t.assignees.filter((id) => id !== cd); });
+
   // Inbox updates of the newer kinds
   const fordFolder = out.clients[0].folders.find((f) => f.name === 'Logos');
   [me, 'u-sara', 'u-maya'].forEach((to, i) => out.notifications.push({ id: `smp-nas-${i}`, to, from: 'u-lina', kind: 'asset', clientId: out.clients[0].id, folderId: fordFolder.id, text: `added a file to ${out.clients[0].name} › Logos`, snippet: `${out.clients[0].name} logo.svg`, at: iso(0, 9 + i), read: false }));
