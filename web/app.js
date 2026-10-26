@@ -5636,9 +5636,10 @@ function caInfo(kind, id) {
   if (a && a.final) {
     const m = a.final, t = task(m.taskId);
     title = a.name;
-    const client = m.clientNone ? 'not needed' : m.clientBy ? `${who(m.clientBy)}` : 'not recorded';
+    // (the client isn't in the app: whoever pressed Client approved recorded it)
+    const client = m.clientNone ? 'not needed' : m.clientBy ? `recorded by ${who(m.clientBy)}` : 'not recorded';
     rows = [row('Completed', when(m.completedAt)), row('Task', esc(m.taskTitle || f.name)), row('Task created by', who(m.createdBy)), row('Assignee', who(m.assignee)),
-      row('Approved by', `${who(m.cdBy)} (CD)${m.clientBy ? ` &amp; ${who(m.clientBy)} (client)` : ''}`),
+      row('Approved by', `${who(m.cdBy)} (CD)${m.clientBy ? ' &amp; the client' : ''}`),
       row('CD approved', when(m.cdAt)), row('Client approval', m.clientBy ? when(m.clientAt) + ' · ' + client : client),
       row('Size', esc(fmtSize(a.size))), row('Type', esc((fileExt(a.name) || 'file').toUpperCase()))];
     if (t && !t.deleted && db.tasks.includes(t)) extra = `<button class="btn" data-ci-task="${t.id}">${icon('open')}Open task</button>`;
