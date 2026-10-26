@@ -32,7 +32,11 @@ curl -fsSL "$SERVER/install/AppIcon.png" -o "$WORK/AppIcon.png" || fail "Couldn'
 if [ "$LEGACY" != "1" ]; then
   if curl -fsSL "$SERVER/install/E11Console.zip" -o "$WORK/E11Console.zip" 2>/dev/null && unzip -q -o "$WORK/E11Console.zip" -d "$WORK/bin" 2>/dev/null && [ -s "$WORK/bin/E11Console" ]; then :; else LEGACY=1; fi
 fi
-[ "$LEGACY" = "1" ] && { curl -fsSL "$SERVER/install/main.js" -o "$WORK/main.js" || fail "Couldn't download the app from $SERVER"; }
+if [ "$LEGACY" = "1" ]; then
+  curl -fsSL "$SERVER/install/main.js" -o "$WORK/main.js" || fail "Couldn't download the app from $SERVER"
+  # (it's the newest this Mac can have: no update bar asking for the Swift app)
+  sed -i '' 's/var SHELL_VERSION = [0-9]*;/var SHELL_VERSION = 99;/' "$WORK/main.js"
+fi
 
 bold "2/4  Building the app…"
 ICONSET="$WORK/AppIcon.iconset"; mkdir -p "$ICONSET"

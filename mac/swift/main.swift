@@ -62,15 +62,18 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
 
   /* ---------- start ---------- */
   func applicationWillFinishLaunching(_ n: Notification) {
+    if SELFTEST.isEmpty { UNUserNotificationCenter.current().delegate = self }
     NSAppleEventManager.shared().setEventHandler(self, andSelector: #selector(handleURL(_:withReply:)), forEventClass: AEEventClass(kInternetEventClass), andEventID: AEEventID(kAEGetURL))
   }
   func applicationDidFinishLaunching(_ n: Notification) {
     // stay connected while minimised or in the background (no App Nap; the Mac can still sleep)
     activity = ProcessInfo.processInfo.beginActivity(options: [.userInitiatedAllowingIdleSystemSleep], reason: "Keeps E11 Console live and notifications arriving")
-    if SELFTEST.isEmpty { UNUserNotificationCenter.current().delegate = self }
     buildMenu()
     buildWindow()
     if defaults.bool(forKey: LOCK_KEY) { lock() }
+    // the lock also comes back when the screen sleeps or the Mac is locked
+    NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(lockNow), name: NSWorkspace.screensDidSleepNotification, object: nil)
+    DistributedNotificationCenter.default().addObserver(self, selector: #selector(lockNow), name: NSNotification.Name("com.apple.screenIsLocked"), object: nil)
     if !SELFTEST.isEmpty { startSelfTest() }
   }
   func applicationShouldHandleReopen(_ s: NSApplication, hasVisibleWindows: Bool) -> Bool { showWindow(); return true }
@@ -94,6 +97,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     let m = String(url[r])
     let id = m.replacingOccurrences(of: "^(?:task/|[?&]task=)", with: "", options: .regularExpression)
     if web == nil { pendingTask = id; return }
+    let ready = !web.isLoading && (web.url?.host == URL(string: SERVER)?.host)
+    if !ready { pendingTask = id; loadHome(); showWindow(); return }
     pageJS("window.__e11OpenTask ? window.__e11OpenTask(\(jsString(id))) : (location.href = '/?task=' + \(jsString(id)))")
     showWindow()
   }
@@ -186,15 +191,33 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     let offline = [NSURLErrorCannotConnectToHost, NSURLErrorNotConnectedToInternet, NSURLErrorTimedOut, NSURLErrorNetworkConnectionLost,
                    NSURLErrorCannotFindHost, NSURLErrorDNSLookupFailed, NSURLErrorBadServerResponse, NSURLErrorSecureConnectionFailed]
     guard e.domain == NSURLErrorDomain, offline.contains(e.code) else { return }
+    showOffline()
+  }
+  var retrying = false
+  func showOffline() {
+    if retrying { return }
+    retrying = true
     let html = "<html><body style=\"background:#0c0d0f;color:#bbb;font:15px -apple-system;display:flex;align-items:center;justify-content:center;height:100vh;margin:0\"><div style=\"text-align:center\"><b style=\"color:#fff\">Can’t reach E11 Console</b><br><br>Check your internet connection. Trying again…</div></body></html>"
     web.loadHTMLString(html, baseURL: nil)
-    DispatchQueue.main.asyncAfter(deadline: .now() + 5) { self.loadHome() }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 5) { self.retrying = false; self.loadHome() }
   }
   // links the window can't show itself (mailto:, e11console:, …) go to the Mac
   func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
     if let u = action.request.url, let s = u.scheme?.lowercased(), !["http", "https", "about", "blob", "data"].contains(s) {
-      if s == "e11console" || s == "e11console-test" { openLink(u.absoluteString) } else { NSWorkspace.shared.open(u) }
+      if action.targetFrame?.isMainFrame != false {
+        if s == "e11console" || s == "e11console-test" { openLink(u.absoluteString) }
+        else if ["mailto", "tel"].contains(s) { NSWorkspace.shared.open(u) }
+      }
       return decisionHandler(.cancel)
+    }
+    decisionHandler(.allow)
+  }
+  func webView(_ webView: WKWebView, decidePolicyFor response: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+    if response.isForMainFrame, let r = response.response as? HTTPURLResponse, r.url?.host == URL(string: SERVER)?.host,
+       (502...504).contains(r.statusCode) || (520...530).contains(r.statusCode) {
+      decisionHandler(.cancel)
+      DispatchQueue.main.async { self.showOffline() }
+      return
     }
     decisionHandler(.allow)
   }
@@ -288,12 +311,20 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
       let p = uniquePath(dir, a["name"] as? String ?? "file")
       guard FileManager.default.createFile(atPath: p, contents: data) else { return ["ok": false, "error": "Couldn’t save to " + dir] }
       saving[t] = p; dest = p
-    } else if let h = FileHandle(forWritingAtPath: dest!) {
-      h.seekToEndOfFile(); h.write(data); h.closeFile()
+    } else {
+      guard let h = FileHandle(forWritingAtPath: dest!) else { return ["ok": false, "error": "Couldn’t write " + (dest! as NSString).lastPathComponent] }
+      defer { h.closeFile() }
+      do { try h.seekToEnd(); try h.write(contentsOf: data) } catch { return ["ok": false, "error": "Couldn’t save — is the disk full?"] }
     }
     if (a["done"] as? Bool) == true {
       saving.removeValue(forKey: t)
-      if open { NSWorkspace.shared.open(URL(fileURLWithPath: dest!)) }
+      var u = URL(fileURLWithPath: dest!)
+      if (a["name"] as? String) != "Update E11 Console.terminal" {   // (the app's own updater runs as it is)
+        var rv = URLResourceValues()
+        rv.quarantineProperties = [kLSQuarantineTypeKey as String: kLSQuarantineTypeWebDownload as String, kLSQuarantineAgentNameKey as String: APP_NAME]
+        try? u.setResourceValues(rv)
+      }
+      if open { NSWorkspace.shared.open(u) }
       else if SELFTEST.isEmpty { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: dest!)]) }
     }
     return ["ok": true, "path": dest!]
@@ -342,9 +373,12 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     if #available(macOS 11.0, *) { done([.banner, .list]) } else { done([.alert]) }
   }
   func userNotificationCenter(_ c: UNUserNotificationCenter, didReceive r: UNNotificationResponse, withCompletionHandler done: @escaping () -> Void) {
-    clicked(r.notification.request.content.userInfo["click"] as? String ?? ""); done()
+    let k = r.notification.request.content.userInfo["click"] as? String ?? ""
+    DispatchQueue.main.async { self.clicked(k) }
+    done()
   }
   func clicked(_ key: String) {
+    if window == nil { return }
     showWindow()
     if !key.isEmpty { pageJS("window.__e11NotifClick && window.__e11NotifClick(\(jsString(key)))") }
   }
@@ -361,16 +395,25 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     b.centerYAnchor.constraint(equalTo: v.centerYAnchor).isActive = true
     cv.addSubview(v, positioned: .above, relativeTo: web)
     lockView = v
+    web.isHidden = true
+    window.makeFirstResponder(b)
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { self.unlock() }
   }
   @objc func unlock() {
     let ctx = LAContext()
     var err: NSError?
-    guard ctx.canEvaluatePolicy(.deviceOwnerAuthentication, error: &err) else { lockView?.removeFromSuperview(); lockView = nil; return }
+    guard ctx.canEvaluatePolicy(.deviceOwnerAuthentication, error: &err) else { unlocked(); return }
     ctx.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "unlock E11 Console") { ok, _ in
-      DispatchQueue.main.async { if ok { self.lockView?.removeFromSuperview(); self.lockView = nil; self.lastActive = Date() } }
+      DispatchQueue.main.async { if ok { self.unlocked() } }
     }
   }
+  func unlocked() {
+    lockView?.removeFromSuperview(); lockView = nil
+    web.isHidden = false
+    window.makeFirstResponder(web)
+    lastActive = Date()
+  }
+  @objc func lockNow() { if defaults.bool(forKey: LOCK_KEY) { lock() } }
   @objc func toggleLock(_ sender: NSMenuItem) {
     let on = !defaults.bool(forKey: LOCK_KEY)
     if on {
