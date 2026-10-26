@@ -4,6 +4,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { execFile } from 'node:child_process';
 import { openStore } from './store.js';
 import { createAuth } from './auth.js';
 import { createAccess } from './access.js';
@@ -152,6 +153,33 @@ export function createServer(cfg) {
      on that one device, for that browser session only, and lapse after 15 minutes without use. It starts "look only"
      (the server refuses every change) until they choose "Allow changes". The app also switches it off on every
      reload. Changes made with changes allowed show under their name like any other. */
+  // ---- Video hardware check (cached 10 minutes) ----
+  let videoHw = null;
+  const sh = (cmd, args, timeout) => new Promise((resolve) => execFile(cmd, args, { timeout }, (err, stdout, stderr) => resolve({ ok: !err, out: String(stdout || '') + String(stderr || '') })));
+  async function videoHardware(fresh) {
+    if (videoHw && !fresh && Date.now() - videoHw.at < 600000) return videoHw.result;
+    const dir = cfg.driDir || '/dev/dri';
+    let devices = [];
+    try { devices = fs.readdirSync(dir).filter((n) => /^renderD\d+$/.test(n)); } catch { devices = []; }
+    let result;
+    if (!devices.length) result = { state: 'missing', title: 'Not available', detail: 'The NAS isn’t passing its video hardware to the app (no /dev/dri). Videos are converted with the processor instead.' };
+    else {
+      const dev = `${dir}/${devices[0]}`;
+      const info = await sh('vainfo', ['--display', 'drm', '--device', dev], 15000);
+      const driver = (info.out.match(/Driver version:\s*(.+)/) || [])[1] || '';
+      const h264 = /VAProfileH264\w*\s*:\s*VAEntrypointEncSlice/.test(info.out);
+      const hevc = /VAProfileHEVC\w*\s*:\s*VAEntrypointEncSlice/.test(info.out);
+      const t0 = Date.now();
+      const enc = await sh('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-init_hw_device', `vaapi=va:${dev}`, '-filter_hw_device', 'va', '-f', 'lavfi', '-i', 'testsrc=size=1280x720:rate=25', '-t', '2',
+        '-vf', 'format=nv12,hwupload', '-c:v', 'h264_vaapi', '-f', 'null', '-'], 30000);
+      const secs = ((Date.now() - t0) / 1000).toFixed(1);
+      result = enc.ok
+        ? { state: 'ready', title: 'Intel Quick Sync is working', detail: `${driver || 'Intel driver loaded'} · H.264${hevc ? ' and HEVC' : ''} encoding · test clip (2 s of 720p) converted in ${secs} s`, device: dev }
+        : { state: 'error', title: info.ok ? 'Found, but the test conversion failed' : 'Found, but the driver didn’t load', detail: (driver ? driver + ' · ' : '') + (h264 ? 'H.264 listed · ' : '') + (enc.out || info.out).trim().split('\n').slice(-2).join(' ').slice(0, 300), device: dev };
+    }
+    videoHw = { at: Date.now(), result: { ...result, checkedAt: new Date().toISOString() } };
+    return videoHw.result;
+  }
   const errorCounts = new Map();                // person -> times of their recent error reports (a cap per hour)
   const OV_IDLE = 15 * 60000;
   const ownerViews = new Map();                 // cookie token -> { userId, mode: 'look' | 'edit', until }
@@ -387,6 +415,12 @@ export function createServer(cfg) {
       const route = action === 'check' ? '/check' : action === 'update' ? '/update' : action === 'rollback' ? '/rollback' : '/status';
       const r = await fetch(cfg.launcherUrl + route, { method: action ? 'POST' : 'GET' }).then((x) => x.json()).catch((e) => ({ ok: false, error: 'Updater not reachable: ' + e.message }));
       return json(res, 200, { managed: true, ...r });
+    }
+    // The NAS's video hardware (Intel Quick Sync), for the owner's App updates page: is it passed in, does the driver
+    // load, and can it actually encode a short test clip
+    if (p === '/api/system/video') {
+      if (!isOwner(req.realUser || u)) return json(res, 403, { ok: false, error: 'Only the owner can see this' });
+      return json(res, 200, { ok: true, video: await videoHardware(url.searchParams.get('fresh') === '1') });
     }
     // "What's new" for everyone after an update
     if (p === '/api/whatsnew') {

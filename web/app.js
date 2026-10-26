@@ -614,12 +614,27 @@ function maybeShowWhatsNew() {
 function viewUpdates() {
   // Ask for a fresh check every time the page opens (the server itself only checks once an hour)
   setTimeout(() => loadUpdates('check'), 0);
+  if (AppIcon.isOwner()) setTimeout(() => loadVideoHw(false), 0);
   return `<div class="upd"><div class="upd-card" id="upd-body"><div class="ph">Checking for updates…</div></div>
+    ${AppIcon.isOwner() ? `<div class="upd-card" id="vhw-card"><h3>${icon('play')}Video hardware</h3><p class="upd-note">Checking the NAS…</p></div>` : ''}
     <div class="upd-card imp-card">
       <h3>${icon('upload')}Move data from the Mac app</h3>
       <p class="upd-note">Choose <b>e11-data.json</b> from the “E11 Console Data” folder on the Mac. Tasks, clients, comments, people, notifications and client assets are added to the server. Copy the folders <b>attachments</b>, <b>Clients</b> and <b>.thumbs</b> into the NAS folder <b>E11Console/live/files</b> as well, so the files open. A copy of the database is made first.</p>
       <button class="btn" data-action="import-mac">${icon('upload')}Choose e11-data.json…</button>
     </div></div>`;
+}
+// Owner only: is the NAS's video hardware (Intel Quick Sync) available to the app — it speeds up video conversion
+async function loadVideoHw(fresh) {
+  const el = document.getElementById('vhw-card');
+  if (!el) return;
+  if (fresh) el.querySelector('.upd-note').textContent = 'Checking the NAS… (a short test conversion)';
+  let v;
+  try { v = (await api('GET', '/api/system/video' + (fresh ? '?fresh=1' : ''), null, { timeout: 45000 })).video; } catch (e) { el.querySelector('.upd-note').textContent = 'Couldn’t check: ' + e.message; return; }
+  const col = v.state === 'ready' ? 'var(--green, #3ddc97)' : v.state === 'missing' ? 'var(--text-3)' : '#f2a33a';
+  el.innerHTML = `<h3>${icon('play')}Video hardware</h3>
+    <p style="margin:6px 0 4px;font-weight:650;color:${col}">${v.state === 'ready' ? '✓ ' : v.state === 'missing' ? '– ' : '! '}${esc(v.title)}</p>
+    <p class="upd-note">${esc(v.detail || '')}${v.checkedAt ? ` · checked ${esc(timeAgo(v.checkedAt))}` : ''}</p>
+    <button class="btn sm" data-action="vhw-check">Check again</button>`;
 }
 async function importFromMac() {
   const files = await ServerHost.pickFiles({ multiple: false, accept: '.json,application/json' });
@@ -4690,6 +4705,7 @@ document.addEventListener('click', async (e) => {
       case 'assign-menu': e.stopPropagation(); assignMenu(actEl); return;
       case 'unassign': e.stopPropagation(); setAssignee(task(ui.taskId), id, false); return;
       case 'open-notif': openNotif(id); return;
+      case 'vhw-check': loadVideoHw(true); return;
       case 'notif-read': e.stopPropagation(); { const n = db.notifications.find((x) => x.id === id); if (n) { n.read = !n.read; persist(); renderSidebar(); renderContent(); } } return;
       case 'mark-all-read': myNotifs().forEach((n) => { n.read = true; }); persist(); renderSidebar(); renderContent(); return;
       case 'inbox-tab': ui.inboxTab = actEl.dataset.tab; renderContent(); return;
