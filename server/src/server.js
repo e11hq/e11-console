@@ -152,6 +152,7 @@ export function createServer(cfg) {
      on that one device, for that browser session only, and lapse after 15 minutes without use. It starts "look only"
      (the server refuses every change) until they choose "Allow changes". The app also switches it off on every
      reload. Changes made with changes allowed show under their name like any other. */
+  const errorCounts = new Map();                // person -> times of their recent error reports (a cap per hour)
   const OV_IDLE = 15 * 60000;
   const ownerViews = new Map();                 // cookie token -> { userId, mode: 'look' | 'edit', until }
   const ownerViewOk = (u) => !isTestSite && !!cfg.adminEmail && !!u && isOwner(u);
@@ -292,7 +293,7 @@ export function createServer(cfg) {
 
     // Owner view, look only: nothing changes (reading, files, previews and this device's notifications still work)
     if (req.ownerView === 'look' && req.method !== 'GET' && req.method !== 'HEAD') {
-      const okPath = ['/api/owner-view', '/api/peek', '/api/push/subscribe', '/api/push/unsubscribe', '/api/push/status'].includes(p)
+      const okPath = ['/api/owner-view', '/api/peek', '/api/push/subscribe', '/api/push/unsubscribe', '/api/push/status', '/api/client-error'].includes(p)
         || (p.startsWith('/api/host/') && ['docPreview', 'pdfPages', 'thumb', 'exportFiles'].includes(p.slice('/api/host/'.length)));
       if (p === '/api/push') {
         const body = await readBody(req);
@@ -303,6 +304,27 @@ export function createServer(cfg) {
         return json(res, 200, { ok: true, rev: store.rev(), results, lookOnly: true });
       }
       if (!okPath) return json(res, 403, { ok: false, error: 'Owner view is look only — choose Allow changes first', lookOnly: true });
+    }
+
+    // Errors from people's apps (startup crashes etc.): kept (last 100) so their cause can be found; a few per person per hour
+    if (p === '/api/client-error' && req.method === 'POST') {
+      const body = await readBody(req, 64 * 1024).catch(() => ({}));
+      const now = Date.now(), mine = (errorCounts.get(u.id) || []).filter((t) => now - t < 3600000);
+      if (mine.length >= 20) return json(res, 200, { ok: true, dropped: true });
+      mine.push(now); errorCounts.set(u.id, mine);
+      const clip = (v, n) => String(v == null ? '' : v).slice(0, n);
+      const entry = { at: new Date(now).toISOString(), user: u.email, where: clip(body.where, 20), message: clip(body.message, 500), stack: clip(body.stack, 2000),
+        version: clip(body.version, 40), ua: clip(body.ua, 300), standalone: !!body.standalone, width: Number(body.width) || 0, page: clip(body.page, 200) };
+      let list = []; try { list = JSON.parse(store.kv.get('client-errors') || '[]'); } catch { list = []; }
+      list.push(entry); store.kv.set('client-errors', JSON.stringify(list.slice(-100)));
+      console.error(`[app error] ${entry.user} ${entry.where} ${entry.version} ${entry.standalone ? '(Home Screen app) ' : ''}${entry.message}`);
+      return json(res, 200, { ok: true });
+    }
+    // ...the owner reads them
+    if (p === '/api/client-errors' && req.method === 'GET') {
+      if (!isOwner(req.realUser || u)) return json(res, 403, { ok: false, error: 'Only the owner can see this' });
+      let list = []; try { list = JSON.parse(store.kv.get('client-errors') || '[]'); } catch { list = []; }
+      return json(res, 200, { ok: true, errors: list.reverse() });
     }
 
     // Owner view (live site, owner only): { mode: 'look' | 'edit' | 'off' }

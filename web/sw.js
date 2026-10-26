@@ -1,16 +1,29 @@
 // E11 Console service worker: lets the browser install the app. It does not cache data —
-// everything comes live from the office server. If the server can't be reached, a short notice
-// is shown instead of the browser's error page.
+// everything comes live from the office server. If the server can't be reached, or the first page takes too long
+// on a weak connection (the iPhone otherwise sits on a blank screen), a "Connecting…" screen shows instead: it keeps
+// trying on its own and opens the app as soon as the connection answers.
+const OPEN_TIMEOUT = 8000;
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+const connectingPage = (offline) => new Response(
+  '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0c0d0f"><title>E11 Console — connecting</title>' +
+  '<body style="margin:0;min-height:100vh;display:grid;place-items:center;background:#0c0d0f;color:#e9eaee;font:15px/1.5 -apple-system,Segoe UI,sans-serif;text-align:center;padding:0 24px">' +
+  '<div><div style="width:46px;height:46px;margin:0 auto 18px;border-radius:50%;border:3px solid #2c2f37;border-top-color:#7c6cff;animation:s 1s linear infinite"></div>' +
+  '<div style="font-size:20px;font-weight:700;margin-bottom:6px" id="t">' + (offline ? 'You’re offline' : 'Connecting to E11 Console…') + '</div>' +
+  '<div style="color:#9d9da8" id="d">' + (offline ? 'Waiting for the internet connection.' : 'The connection is slow right now.') + '<br>It opens by itself as soon as it can.</div>' +
+  '<button onclick="location.reload()" style="margin-top:20px;padding:10px 20px;border-radius:999px;border:0;background:#5b4bd6;color:#fff;font-size:15px;font-weight:600">Try again</button></div>' +
+  '<style>@keyframes s{to{transform:rotate(360deg)}}</style>' +
+  '<script>let n=0;async function tryIt(){n++;try{await fetch("/api/health",{cache:"no-store",credentials:"same-origin",redirect:"manual"});location.reload();}catch(e){setTimeout(tryIt,Math.min(15000,2000*n));}}' +
+  'window.addEventListener("online",()=>location.reload());setTimeout(tryIt,1500);</script>',
+  { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
 self.addEventListener('fetch', (e) => {
   if (e.request.mode !== 'navigate') return;
-  e.respondWith(fetch(e.request).catch(() => new Response(
-    '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>E11 Console — offline</title>' +
-    '<body style="margin:0;min-height:100vh;display:grid;place-items:center;background:#0b0b0d;color:#ececf1;font:15px/1.5 -apple-system,Segoe UI,sans-serif;text-align:center">' +
-    '<div><div style="font-size:20px;font-weight:700;margin-bottom:6px">You’re offline</div><div style="color:#9d9da8">E11 Console can’t reach the office server right now.<br>Check your internet connection, then try again.</div>' +
-    '<button onclick="location.reload()" style="margin-top:18px;padding:9px 18px;border-radius:8px;border:0;background:#6a56e6;color:#fff;font-size:14px">Try again</button></div>',
-    { headers: { 'Content-Type': 'text/html; charset=utf-8' } })));
+  e.respondWith(new Promise((resolve) => {
+    let done = false;
+    const timer = setTimeout(() => { if (!done) { done = true; resolve(connectingPage(false)); } }, OPEN_TIMEOUT);
+    fetch(e.request).then((res) => { if (!done) { done = true; clearTimeout(timer); resolve(res); } })
+      .catch(() => { if (!done) { done = true; clearTimeout(timer); resolve(connectingPage(!self.navigator || self.navigator.onLine === false)); } });
+  }));
 });
 
 // Phone notifications (Web Push). The server sends { title, body, taskId, nid, tag, badge }.

@@ -382,3 +382,15 @@ test('Production see only tasks they are part of; a task link opens view only (c
   // freelancers can't open links outside their clients
   assert.equal((await call(FREE, '/api/peek', { method: 'POST', body: { taskId: 't-alain' } })).status, 404);
 });
+
+test('app error reports: kept for the owner, capped per person', async () => {
+  const r = await call(PROD, '/api/client-error', { method: 'POST', body: { where: 'opening', message: 'boom', stack: 'at x', version: '1.6.5', standalone: true } });
+  assert.equal(r.status, 200);
+  assert.equal((await call(PROD, '/api/client-errors')).status, 403, 'only the owner reads them');
+  const list = (await call(ADMIN, '/api/client-errors')).body;
+  // (ADMIN here is the configured owner)
+  assert.ok(list.errors.some((e) => e.message === 'boom' && e.user === PROD && e.standalone === true));
+  for (let i = 0; i < 25; i++) await call(PROD, '/api/client-error', { method: 'POST', body: { message: 'spam ' + i } });
+  const n = (await call(ADMIN, '/api/client-errors')).body.errors.filter((e) => e.user === PROD).length;
+  assert.ok(n <= 20, `capped (${n})`);
+});

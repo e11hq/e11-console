@@ -695,8 +695,16 @@ function paintCfStatus(s) {
     : `${icon('shield')}<span>Freelancer sign-in access is kept up to date automatically${s.at ? ` · last updated ${esc(timeAgo(s.at))}` : ''} (${(s.emails || []).length} personal email${(s.emails || []).length === 1 ? '' : 's'})</span>`;
 }
 // Requests to the server. Cloudflare signs people in before the page even loads.
-async function api(method, url, body) {
-  const res = await fetch(url, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined, credentials: 'same-origin', cache: 'no-store', redirect: 'manual' });
+async function api(method, url, body, opts = {}) {
+  // (opts.timeout: give up after that many ms — a weak connection shouldn't leave the app waiting forever)
+  const ctrl = opts.timeout ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), opts.timeout) : null;
+  let res;
+  try {
+    res = await fetch(url, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined, credentials: 'same-origin', cache: 'no-store', redirect: 'manual', signal: ctrl ? ctrl.signal : undefined });
+  } catch (e) {
+    const err = new Error(ctrl && ctrl.signal.aborted ? 'The connection is too slow right now' : 'Can’t reach the office server'); err.network = true; throw err;
+  } finally { if (timer) clearTimeout(timer); }
   if (res.type === 'opaqueredirect' || (res.status >= 300 && res.status < 400)) {
     const err = new Error('Your sign-in has expired — sign in again to continue'); err.auth = true; err.expired = true; throw err;
   }
@@ -1872,16 +1880,16 @@ const Sync = (() => {
   }
 
   async function start() {
-    let me = await api('GET', '/api/me');
+    let me = await api('GET', '/api/me', null, { timeout: 12000 });
     // Owner view (live site) ends on every reload: back to the owner's own role before loading anything
-    if (me.ownerView) { try { await api('POST', '/api/owner-view', { mode: 'off' }); } catch (e) { /* fine */ } me = await api('GET', '/api/me'); }
+    if (me.ownerView) { try { await api('POST', '/api/owner-view', { mode: 'off' }, { timeout: 12000 }); } catch (e) { /* fine */ } me = await api('GET', '/api/me', null, { timeout: 12000 }); }
     if (typeof ViewAs !== 'undefined') ViewAs.init(me.viewAs);   // test site only: the owner using the app as someone else
     AppIcon.setOwner(me.owner); if (me.appIcon) AppIcon.sync(me.appIcon);
     ownerId = me.ownerId || null;
     if (typeof OwnerView !== 'undefined') OwnerView.init(me);
     MacUpdate.check(me.macShell);
     MacChrome.init();
-    const snap = await api('GET', '/api/snapshot');
+    const snap = await api('GET', '/api/snapshot', null, { timeout: 45000 });
     rev = snap.rev; version = snap.version || me.version;
     const data = snap.data;
     KINDS.forEach((k) => { if (k === 'meta') remember('meta', 'main', sharedMeta(data.meta)); else (data[k] || []).forEach((x) => remember(k, String(x.id), x)); });
@@ -7230,6 +7238,18 @@ const Splash = (() => {
     };
   }
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  // While the server can't be reached: say so under the checklist, with Try again
+  let retryResolve = null;
+  function status(text, withRetry) {
+    const h = document.getElementById('sp-hint');
+    if (!h || gone) return;
+    if (!text) { h.textContent = window.innerWidth <= 760 ? 'Tap to skip' : 'Click or press any key to skip'; h.classList.remove('sp-warn'); return; }
+    h.classList.add('sp-warn');
+    h.innerHTML = `${esc(text)}${withRetry ? ' <button class="sp-retry" type="button">Try again</button>' : ''}`;
+    const b = h.querySelector('.sp-retry');
+    if (b) b.addEventListener('click', (e) => { e.stopPropagation(); if (retryResolve) retryResolve(); });
+  }
+  const retried = () => new Promise((r) => { retryResolve = r; });
   // Data is in: tick the rows one by one, then fade into the app
   async function finish() {
     if (!el || gone) return;
@@ -7260,12 +7280,48 @@ const Splash = (() => {
     setTimeout(() => { el.remove(); document.documentElement.style.backgroundColor = ''; document.getElementById('app').classList.remove('enter'); }, 500);
   }
   init();
-  return { finish, remember };
+  return { finish, remember, status, retried };
 })();
+
+/* Startup safety net: an unexpected error while the app opens shows "Something went wrong · Reload" instead of a blank
+   screen, and errors are sent to the server (a few per page) so their cause can be found */
+const StartupGuard = (() => {
+  let sent = 0, booted = false, shown = false;
+  function report(err, where) {
+    if (!Host.isServer || sent >= 5) return;
+    sent++;
+    const standalone = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+    try {
+      fetch('/api/client-error', { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ where, message: String((err && err.message) || err || '').slice(0, 500), stack: String((err && err.stack) || '').slice(0, 2000),
+          version: (typeof Sync !== 'undefined' && Sync.version) || '', ua: navigator.userAgent.slice(0, 300), standalone, width: window.innerWidth, page: location.pathname + location.search }) }).catch(() => {});
+    } catch (e) { /* never let reporting break anything */ }
+  }
+  function crashed(err) {
+    if (!err) return;
+    report(err, booted ? 'running' : 'opening');
+    if (booted || shown) return;
+    shown = true;
+    const sp = document.getElementById('splash'); if (sp) sp.remove();
+    document.body.innerHTML = `<div class="fatal" style="margin:20vh auto;max-width:420px;text-align:center;padding:0 20px"><h2>Something went wrong</h2><p>E11 Console couldn’t open properly. It has been reported. Please try again.</p><button class="btn primary" onclick="location.reload()">Reload</button></div>`;
+  }
+  window.addEventListener('error', (e) => crashed(e.error || (e.message ? new Error(e.message) : null)));
+  window.addEventListener('unhandledrejection', (e) => crashed(e.reason instanceof Error ? e.reason : new Error(String(e.reason))));
+  return { report, done: () => { booted = true; } };
+})();
+// a sign-in that expired while opening: reload once to reach the sign-in page (twice within a minute = stop and ask)
+function reauthOnce() {
+  try {
+    const last = Number(sessionStorage.getItem('e11-reauth') || 0);
+    if (Date.now() - last < 60000) return false;
+    sessionStorage.setItem('e11-reauth', String(Date.now()));
+  } catch (e) { /* storage off: one try is still fine */ }
+  return true;
+}
 
 async function boot() {
   hydrateIcons();
-  try { await bootInner(); } finally { Splash.finish(); }
+  try { await bootInner(); StartupGuard.done(); } finally { Splash.finish(); }
 }
 async function bootInner() {
   if (Host.isServer) return bootServer();
@@ -7309,10 +7365,21 @@ async function bootInner() {
 // On the server: sign-in is done by Cloudflare, data comes from the office server
 async function bootServer() {
   let me;
-  try { me = await Sync.start(); }
-  catch (err) {
-    if (err.auth) { document.body.innerHTML = `<div class="fatal" style="margin:20vh auto;max-width:440px;text-align:center"><h2>No access yet</h2><p>${esc(err.message)}</p></div>`; return; }
-    return fatal('Can’t reach the office server.', err.message + ' — check your internet connection and reload.');
+  // A weak or changing connection (e.g. Wi-Fi to mobile data): keep trying, say so on the startup screen, open as soon as it answers
+  for (let attempt = 1; ; attempt++) {
+    try { me = await Sync.start(); Splash.status(null); break; }
+    catch (err) {
+      if (err.auth) {
+        // sign-in expired: reload, which takes the browser / Home Screen app to the sign-in page (once — not in a loop)
+        if (err.expired && reauthOnce()) { location.reload(); return; }
+        document.body.innerHTML = `<div class="fatal" style="margin:20vh auto;max-width:440px;text-align:center"><h2>${err.expired ? 'Please sign in again' : 'No access yet'}</h2><p>${esc(err.message)}</p><button class="btn primary" onclick="location.reload()">Sign in</button></div>`;
+        return;
+      }
+      if (!err.network) { StartupGuard.report(err, 'start'); return fatal('E11 Console couldn’t start.', err.message + ' — try again in a moment.'); }
+      const wait = Math.min(15000, 2000 * attempt);
+      Splash.status(navigator.onLine === false ? 'You’re offline — waiting for the connection…' : attempt > 2 ? 'Still connecting — the connection is slow…' : 'Connecting…', true);
+      await Promise.race([new Promise((r) => setTimeout(r, wait)), new Promise((r) => window.addEventListener('online', r, { once: true })), Splash.retried()]);
+    }
   }
   setSaveState('saved');
   applyThemePref();
