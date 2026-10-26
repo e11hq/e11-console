@@ -56,7 +56,9 @@ try:
     check(not res.get('error'), 'no self-test error: ' + str(res.get('error')))
     check(res.get('page') == 'mac', 'the web app loaded and sees the Mac app')
     ai = c.get('appInfo', {})
-    check(ai.get('shell') == 7 and ai.get('native') == 'swift' and ai.get('server') == BASE, f'appInfo {ai}')
+    check(res.get('closedVisible') is False and res.get('reopenedVisible') is True, 'closing the window keeps the app running; the Dock icon brings it back')
+    check(res.get('loginOn') is True and res.get('loginOff') is True, 'Open at Login turns on and off')
+    check(ai.get('shell') == 8 and ai.get('native') == 'swift' and ai.get('server') == BASE, f'appInfo {ai}')
     for k in ['badge', 'badgeOff', 'notify', 'light', 'dark', 'save1', 'save2']:
         check((c.get(k) or {}).get('ok') is True, f'{k} answered ok: {c.get(k)}')
     check(res.get('saved') == 'hello mac', 'a download saved in pieces into Downloads: ' + repr(res.get('saved')))
