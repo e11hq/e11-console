@@ -6582,8 +6582,19 @@ function alertUser({ title, body, taskId, from, open, stay }, force) {
     el.addEventListener('click', (e) => { clearTimeout(timer); close(); if (e.target.closest('button')) return; if (open) open(); else if (taskId && task(taskId)) openTask(taskId); });
     if (sound) chime();
   }
-  if (!front || force) Host.call('notify', { title, body, sound: sound && !front ? 'Glass' : null }).catch(() => {});
+  if (!front || force) {
+    // the Mac app (7+) brings itself forward and calls back when its notification is clicked
+    const go = open || (taskId ? () => { if (task(taskId)) openTask(taskId); } : null);
+    const click = go ? NotifClicks.add(go) : '';
+    Host.call('notify', { title, body, sound: sound && !front ? 'Glass' : null, click }).catch(() => {});
+  }
 }
+const NotifClicks = (() => {
+  const map = new Map();
+  let n = 0;
+  window.__e11NotifClick = (k) => { const f = map.get(String(k)); if (f) { map.delete(String(k)); try { f(); } catch (e) { /* gone */ } } };
+  return { add(f) { const k = 'c' + (++n); map.set(k, f); if (map.size > 100) map.delete(map.keys().next().value); return k; } };
+})();
 // Occasion reminders (Social, AMs, Admins; 45, 30, 14 and 7 days before, 10:30 Dubai): the server sends them to
 // phones with notifications on; an open app shows each one once per device that day. Tapping opens the calendar.
 const OccRemind = (() => {

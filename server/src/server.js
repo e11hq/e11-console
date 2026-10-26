@@ -92,7 +92,14 @@ export function createServer(cfg) {
   const macDir = cfg.macDir || (webDir ? path.join(webDir, '..', 'mac') : null);
   const appIcon = createAppIcon({ store, defaultFile: macDir && path.join(macDir, 'AppIcon.png') });
   // The newest Mac app (native part) the installer hands out; older Mac apps are asked to update
-  const macShell = (() => { try { const m = fs.readFileSync(path.join(macDir, 'main.js'), 'utf8').match(/var SHELL_VERSION = (\d+);/); return m ? Number(m[1]) : 1; } catch { return 1; } })();
+  // (the Swift app when its build is here — mac/bin/E11Console.zip — otherwise the earlier script app)
+  const macSwift = !!macDir && fs.existsSync(path.join(macDir, 'bin', 'E11Console.zip'));
+  const macShell = (() => {
+    try {
+      if (macSwift) { const m = fs.readFileSync(path.join(macDir, 'swift', 'main.swift'), 'utf8').match(/let SHELL_VERSION = (\d+)/); if (m) return Number(m[1]); }
+      const m = fs.readFileSync(path.join(macDir, 'main.js'), 'utf8').match(/var SHELL_VERSION = (\d+);/); return m ? Number(m[1]) : 1;
+    } catch { return 1; }
+  })();
   // The owner (ADMIN_EMAIL) controls things that change every Mac, like the Dock icon. No owner set: any Admin.
   const isOwner = (u) => (cfg.adminEmail ? String(u.email || '').toLowerCase() === cfg.adminEmail.toLowerCase() : access.isAdm(u));
   const cfSync = cfg.cfSync || createCfSync({ accountId: cfg.cfAccountId, token: cfg.cfApiToken, groupId: cfg.cfGroupId, listUsers: () => store.list('users'), fetchImpl: cfg.cfFetch || fetch });
@@ -306,14 +313,14 @@ export function createServer(cfg) {
       res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-cache' });
       return res.end(appIcon.png());
     }
-    if (p === '/install' || p === '/install/main.js' || p === '/install/AppIcon.png') {
-      const file = p === '/install' ? 'install.sh' : p.slice('/install/'.length);
+    if (p === '/install' || p === '/install/legacy' || p === '/install/main.js' || p === '/install/AppIcon.png' || p === '/install/E11Console.zip') {
+      const file = p === '/install' || p === '/install/legacy' ? 'install.sh' : p === '/install/E11Console.zip' ? 'bin/E11Console.zip' : p.slice('/install/'.length);
       const full = macDir && path.join(macDir, file);
       if (!full || !fs.existsSync(full)) return json(res, 404, { ok: false, error: 'Installer not available' });
       if (file === 'install.sh') {
         const host = String(req.headers['x-forwarded-host'] || req.headers.host || 'console.e11hq.com').replace(/[^\w.:-]/g, '');
         const scheme = /^(localhost|127\.)/.test(host) ? 'http' : 'https';
-        const body = fs.readFileSync(full, 'utf8').replace('__SERVER__', `${scheme}://${host}`);
+        const body = fs.readFileSync(full, 'utf8').replace('__SERVER__', `${scheme}://${host}`).replace('__LEGACY__', p === '/install/legacy' ? '1' : '0');
         res.writeHead(200, { 'Content-Type': 'text/x-shellscript; charset=utf-8', 'Cache-Control': 'no-cache' });
         return res.end(body);
       }
