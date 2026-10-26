@@ -7,6 +7,19 @@ import crypto from 'node:crypto';
 const rid = (p) => p + crypto.randomBytes(6).toString('hex');
 const safe = (s) => String(s || '').replace(/[\/:\\]/g, '-').replace(/^\.+/, '').replace(/\s+/g, ' ').trim().slice(0, 80) || 'Untitled';
 export const isFilesFolder = (f) => !!f && !f.parentId && f.name === 'Files' && !!f.auto;
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+export const planFolderName = (pl) => { const [y, m] = String(pl.month || '').split('-').map(Number); return `Content plan – ${MONTHS[(m || 1) - 1]} ${y || ''}`.trim(); };
+// Content plans: Files › "Content plan – November 2026" holds the approved PowerPoint and a folder per task (made once)
+export function planFolderOf(client, top, pl, now, byUser) {
+  let f = client.folders.find((x) => x.planOf === pl.id);
+  if (f) return f;
+  const taken = new Set(client.folders.map((x) => String(x.dir).toLowerCase()));
+  let dir = `${top.dir}/${safe(planFolderName(pl))}`, i = 2;
+  while (taken.has(dir.toLowerCase())) dir = `${top.dir}/${safe(planFolderName(pl))} (${i++})`;
+  f = { id: rid('cf-'), name: planFolderName(pl), dir, files: [], createdAt: now, createdBy: byUser || null, auto: true, parentId: top.id, planOf: pl.id };
+  client.folders.push(f);
+  return f;
+}
 
 export function createFinals({ store, files, access }) {
   const projectOf = (t) => {
@@ -51,15 +64,18 @@ export function createFinals({ store, files, access }) {
     }
     let folder = client.folders.find((f) => f.finalOf === t.id);
     const ops = [];
+    // a task made from a content plan: its folder goes inside the plan's folder
+    const pl = t.planId ? store.get('plans', String(t.planId)) : null;
+    const parent = pl ? planFolderOf(client, top, pl, now, byUser) : top;
     // (a client approval from before the newest CD approval is out of date)
     const lastCD = sets.map((r) => String(r.decidedAt || r.at || '')).sort().pop() || '';
     const fresh = t.clientApproval && String(t.clientApproval.at || '') >= lastCD ? t.clientApproval : null;
     const ca = fresh && !fresh.none ? fresh : null;
     if (!folder) {
       const taken = new Set(client.folders.map((f) => String(f.dir).toLowerCase()));
-      let dir = `${top.dir}/${safe(t.title)}`, i = 2;
-      while (taken.has(dir.toLowerCase())) dir = `${top.dir}/${safe(t.title)} (${i++})`;
-      folder = { id: rid('cf-'), name: String(t.title || 'Untitled task').trim().slice(0, 120), dir, files: [], createdAt: now, createdBy: byUser || null, auto: true, parentId: top.id, finalOf: t.id };
+      let dir = `${parent.dir}/${safe(t.title)}`, i = 2;
+      while (taken.has(dir.toLowerCase())) dir = `${parent.dir}/${safe(t.title)} (${i++})`;
+      folder = { id: rid('cf-'), name: String(t.title || 'Untitled task').trim().slice(0, 120), dir, files: [], createdAt: now, createdBy: byUser || null, auto: true, parentId: parent.id, finalOf: t.id };
       client.folders.push(folder);
     } else {
       folder.name = String(t.title || folder.name).trim().slice(0, 120);
@@ -124,18 +140,21 @@ export function createFinals({ store, files, access }) {
   }
 
   // after a push: tasks just completed get filed; renamed ones get their folder renamed
+  // (each task's filing is saved before the next one's, so several tasks completed in one save — e.g. a content plan the
+  // client approved — each keep their folder in the same client)
   function afterPush(results, before, byUser) {
-    const ops = [];
+    let out = null;
     for (const r of results) {
       if (r.kind !== 'tasks' || r.refused || r.deleted || r.unchanged) continue;
       const t = store.get('tasks', String(r.id));
       const was = before.get(String(r.id));
       if (!t) continue;
-      if (t.done && !(was && was.done)) ops.push(...fileOps(t, byUser));
-      else if (was && was.title !== t.title) ops.push(...renameOps(t));
+      const ops = t.done && !(was && was.done) ? fileOps(t, byUser) : was && was.title !== t.title ? renameOps(t) : [];
+      if (!ops.length) continue;
+      const res = store.apply(ops, 'finals');
+      out = out ? { rev: res.rev, results: out.results.concat(res.results) } : res;
     }
-    if (!ops.length) return null;
-    return store.apply(ops, 'finals');
+    return out;
   }
   return { afterPush, fileOps, approvedSets };
 }

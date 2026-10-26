@@ -1,7 +1,7 @@
 """Content plans (trial, test copy): the list of clients for a month, starting a plan, the month calendar with occasions,
 adding and editing posts with references, skipping an occasion, who can edit, the Social Manager and the client's Social
 people, and the phone."""
-import asyncio, os, subprocess, tempfile, time, urllib.request, json
+import asyncio, os, subprocess, tempfile, time, urllib.request, urllib.parse, json
 from playwright.async_api import async_playwright
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 PORT = 18331; BASE = f'http://127.0.0.1:{PORT}'; ADMIN = 'haris@e11-digital.com'
@@ -193,7 +193,7 @@ async def main():
             ctx, pg, errs = await login('carine@e11-digital.com')
             E = pg.evaluate
             tid = t0['id']
-            await E(f"""(() => {{ const t = task('{tid}'); const a = t.attachments[0]; t.reviews = (t.reviews || []).concat({{ id: uid(), by: t.assignees[0] || 'u-joe', files: [a.id], at: nowISO(), state: 'approved', decidedAt: nowISO(), decidedBy: currentUserId, round: 1 }}); persist(0); }})()"""); await pg.wait_for_timeout(800)
+            await E(f"""(() => {{ const t = task('{tid}'); const a = t.attachments[0]; t.reviews = (t.reviews || []).concat({{ id: uid(), by: t.assignees[0] || 'u-joe', files: [a.id], at: nowISO(), state: 'approved', decidedAt: nowISO(), decidedBy: currentUserId, round: 1, epoch: t.reviewEpoch || 0 }}); syncCD(t); if (!t.cdStatus) t.cdStatus = 'approved'; persist(0); }})()"""); await pg.wait_for_timeout(800)
             await E("Plans.open('pl-smp-p-korea')"); await pg.wait_for_timeout(500)
             pid = t0['planPostId']
             chip = pg.locator(f'.pl-chip[data-id="{pid}"]')
@@ -202,6 +202,130 @@ async def main():
             check(await pg.locator('.pl-task-box .pl-ref-img').count() == 1, 'the finished work shows in the post')
             await pg.screenshot(path=os.path.join(OUT, 'plans-finished.png'))
             check('1 of' in await pg.locator('.pl-banner').inner_text(), 'the skeleton counts finished posts')
+            check(not errs, f'no page errors {errs}')
+            await ctx.close()
+            # ---------- Stage 4: the client round ----------
+            ctx, pg, errs = await login(EXEC)
+            E = pg.evaluate
+            await E("Plans.open('pl-smp-p-korea')"); await pg.wait_for_timeout(500)
+            await pg.locator('[data-pl="make-tasks"]').click(); await pg.wait_for_timeout(300)
+            await pg.locator('.mt-dlg [data-r="1"]').click(); await pg.wait_for_timeout(1200)
+            ids = await E("Plans.planById('pl-smp-p-korea').posts.map(x => x.taskId)")
+            check(all(ids), 'every post has its task now')
+            await ctx.close()
+            reel = await asyncio.to_thread(lambda: next(t['id'] for t in api(ADMIN, '/api/snapshot')['data']['tasks'] if t.get('planId') == 'pl-smp-p-korea' and t['title'] == 'K-pop night'))
+            import base64
+            vid = await asyncio.to_thread(lambda: api('carine@e11-digital.com', '/api/host/writeChunk', {'taskId': reel, 'name': 'kpop-night.mp4', 'b64': base64.b64encode(open(os.path.join(ROOT, 'server/src/sample-files/clickup/cu52.mp4'), 'rb').read()).decode()}))
+            # the CD approves every task's work (a picture each, the video on the reel)
+            APPROVE = """(async (vid) => { const ts = db.tasks.filter(t => t.planId === 'pl-smp-p-korea' && !t.done); const src = db.tasks.find(t => t.planId === 'pl-smp-p-korea' && t.attachments.length).attachments[0];
+              for (const t of ts) { let a;
+                if (vid && t.title === 'K-pop night') a = { id: uid(), name: vid.name, path: vid.path, size: vid.size, addedAt: nowISO() };
+                else { const blob = await (await fetch(fileUrl(src))).blob(); const up = await ServerHost.uploadMany([new File([blob], (t.title || 'post').replace(/\\W+/g, '-') + '.jpg', { type: 'image/jpeg' })], { taskId: t.id }); a = { ...up[0], id: uid(), addedAt: nowISO() }; }
+                t.attachments.push(a);
+                t.reviews = (t.reviews || []).concat({ id: uid(), by: t.assignees[0] || 'u-joe', files: [a.id], at: nowISO(), state: 'approved', decidedAt: nowISO(), decidedBy: currentUserId, round: 1, epoch: t.reviewEpoch || 0 });
+                syncCD(t); if (!t.cdStatus) t.cdStatus = 'approved'; t.updatedAt = nowISO(); }
+              persist(0); return ts.length; })"""
+            ctx, pg, errs = await login('carine@e11-digital.com')
+            E = pg.evaluate
+            n_ok = await E(APPROVE + "(" + json.dumps(vid) + ")"); await pg.wait_for_timeout(1500)
+            await E("Plans.open('pl-smp-p-korea')"); await pg.wait_for_timeout(500)
+            total = await E("Plans.planById('pl-smp-p-korea').posts.length")
+            check(f'{total} of {total}' in await pg.locator('.pl-banner').inner_text(), f'all {total} posts finished after the CD approves ({n_ok})')
+            await ctx.close()
+            # Aishwarya exports Round 1
+            ctx, pg, errs = await login(EXEC)
+            E = pg.evaluate
+            await E("Plans.open('pl-smp-p-korea')"); await pg.wait_for_timeout(500)
+            await pg.locator('[data-pl="export"]').click(); await pg.wait_for_timeout(400)
+            if await pg.locator('.ex-logo[data-logo]').count():
+                await pg.locator('.ex-logo[data-logo]').first.click(); await pg.wait_for_timeout(200)
+            else:
+                async with pg.expect_file_chooser() as fc:
+                    await pg.locator('[data-x="upload-logo"]').click()
+                await (await fc.value).set_files(os.path.join(ROOT, 'server/src/sample-files/clickup/cu09.jpg')); await pg.wait_for_timeout(1500)
+            check(await pg.locator('.ex-cur').count() == 1, 'the logo is picked (from Client Assets › Logos)')
+            check(await pg.locator('.ex-row').count() == total, f'{total} finished posts go in')
+            await pg.screenshot(path=os.path.join(OUT, 'plans-export.png'))
+            await pg.locator('.ex-dlg [data-r="1"]').click()
+            await pg.wait_for_selector('.ex-ok', timeout=240000)
+            check(await pg.locator('.ex-ok .pl-dl').count() == 2, 'PowerPoint and PDF ready to download')
+            await pg.locator('.ex-dlg [data-r="0"]').last.click(); await pg.wait_for_timeout(500)
+            check('With the client · Round 1' in await pg.locator('.pl-who').inner_text(), 'With the client · Round 1')
+            ex = await E("Plans.planById('pl-smp-p-korea').exports[0]")
+            check(await E("!!proj('p-korea').planLogo"), 'the logo is remembered for next time')
+            raw = await asyncio.to_thread(lambda: urllib.request.urlopen(urllib.request.Request(BASE + '/__file/' + urllib.parse.quote(ex['pptx']['path']), headers={'X-Dev-Email': EXEC})).read())
+            open(os.path.join(OUT, 'round1.pptx'), 'wb').write(raw)
+            from pptx import Presentation
+            prs = Presentation(os.path.join(OUT, 'round1.pptx'))
+            slides = list(prs.slides)
+            check(len(slides) == total + 4, f'the deck: cover, month, {total} posts, how to review, thank you ({len(slides)})')
+            boxes = [sh for sl in slides for sh in sl.shapes if sh.name.startswith('E11 client comments')]
+            check(len(boxes) == total, 'a Client comments box on each post')
+            vids = [sh for sl in slides for sh in sl.shapes if sh.name == 'kpop-night.mp4']
+            check(len(vids) == 1, 'the reel’s video is in it')
+            # the client comments on one post and sends it back
+            first = boxes[0]; first.text_frame.text = 'Make the title bigger please'
+            prs.save(os.path.join(OUT, 'back.pptx'))
+            changed_post = first.name.replace('E11 client comments ', '')
+            await pg.locator('[data-pl="reply"]').click(); await pg.wait_for_timeout(300)
+            async with pg.expect_file_chooser() as fc:
+                await pg.locator('.rp-dlg [data-x="upload"]').click()
+            await (await fc.value).set_files(os.path.join(OUT, 'back.pptx')); await pg.wait_for_timeout(2500)
+            check(await pg.locator('.rp-row.changes').count() == 1 and await pg.locator('.rp-row.approved').count() == total - 1, 'reading the client’s PowerPoint: 1 change, the rest approved')
+            check('Make the title bigger please' in await pg.locator('.rp-note').input_value(), 'their comment is on the post')
+            await pg.screenshot(path=os.path.join(OUT, 'plans-reply.png'))
+            await pg.locator('.rp-dlg [data-r="1"]').click(); await pg.wait_for_timeout(1500)
+            st = await E("db.tasks.filter(t => t.planId === 'pl-smp-p-korea').map(t => [t.planPostId, t.done, statusList(t).find(s => s.id === t.sectionId).name, (t.comments || []).some(c => /Client’s changes/.test(c.text))])")
+            done_n = len([x for x in st if x[1]]); back = [x for x in st if x[0] == changed_post][0]
+            check(done_n == total - 1, f'{total - 1} approved posts completed ({done_n})')
+            check(back[1] is False and back[2] == 'In progress' and back[3], f'the changed post’s task is back In progress with the client’s comment ({back})')
+            check(await pg.locator(f'.pl-chip[data-id="{changed_post}"]').count() == 1 and 'Client changes' in await pg.locator(f'.pl-chip[data-id="{changed_post}"]').inner_text(), 'the calendar shows Client changes')
+            check(await pg.locator('[data-pl="client-all"]').count() == 0, 'no Client approved for the whole plan while a post is being changed')
+            await pg.wait_for_timeout(800)
+            cl = await asyncio.to_thread(lambda: next(c for c in api(ADMIN, '/api/snapshot')['data']['clients'] if c['id'] == next(p['clientId'] for p in api(ADMIN, '/api/snapshot')['data']['projects'] if p['id'] == 'p-korea')))
+            pf = next((f for f in cl['folders'] if f.get('planOf') == 'pl-smp-p-korea'), None)
+            check(pf is not None and pf['name'].startswith('Content plan – '), 'Client Assets › Files › Content plan – <month>')
+            inside = [f for f in cl['folders'] if pf and f.get('parentId') == pf['id'] and f.get('finalOf')]
+            check(len(inside) == total - 1, f'a final-files folder per approved task inside it ({len(inside)})')
+            check(not errs, f'no page errors {errs}')
+            await ctx.close()
+            # the CD approves the new version; Round 2; the client approves
+            ctx, pg, errs = await login('carine@e11-digital.com')
+            E = pg.evaluate
+            await E(APPROVE + "(null)"); await pg.wait_for_timeout(1500)
+            await ctx.close()
+            ctx, pg, errs = await login(EXEC)
+            E = pg.evaluate
+            await E("Plans.open('pl-smp-p-korea')"); await pg.wait_for_timeout(500)
+            check('Finished' in await pg.locator(f'.pl-chip[data-id="{changed_post}"]').inner_text(), 'the new version is in the plan once the CD approves it')
+            await pg.locator('[data-pl="export"]').click(); await pg.wait_for_timeout(300)
+            check(await pg.locator('.ex-cur').count() == 1, 'Round 2 uses the same logo')
+            await pg.locator('.ex-dlg [data-r="1"]').click()
+            await pg.wait_for_selector('.ex-ok', timeout=240000)
+            await pg.locator('.ex-dlg [data-r="0"]').last.click(); await pg.wait_for_timeout(500)
+            check('Round 2' in await pg.locator('.pl-who').inner_text(), 'With the client · Round 2')
+            check(await pg.locator('[data-pl="client-all"]').count() == 1, 'every post finished: Client approved')
+            await pg.locator('[data-pl="client-all"]').click(); await pg.wait_for_timeout(300)
+            await pg.locator('.dialog [data-r="1"]').click(); await pg.wait_for_timeout(2500)
+            check(await E("!!Plans.planById('pl-smp-p-korea').clientApproved") and await E("db.tasks.filter(t => t.planId === 'pl-smp-p-korea').every(t => t.done)"), 'the content plan is client approved and every task complete')
+            await pg.screenshot(path=os.path.join(OUT, 'plans-client-approved.png'))
+            check(not errs, f'no page errors {errs}')
+            await ctx.close()
+            await asyncio.sleep(1)
+            snap = await asyncio.to_thread(lambda: api(ADMIN, '/api/snapshot')['data'])
+            pl = next(p for p in snap['plans'] if p['id'] == 'pl-smp-p-korea')
+            cl = next(c for c in snap['clients'] if c['id'] == next(p['clientId'] for p in snap['projects'] if p['id'] == 'p-korea'))
+            pf = next(f for f in cl['folders'] if f.get('planOf') == 'pl-smp-p-korea')
+            check(pl.get('filedDeck') and any(f['name'].endswith('Round 2.pptx') for f in pf['files']), 'the approved PowerPoint (Round 2) is filed in the plan’s folder')
+            check(len([f for f in cl['folders'] if f.get('parentId') == pf['id'] and f.get('finalOf')]) == total, 'with a final-files folder for every task')
+            # the Social Manager is told; the update opens the plan
+            ctx, pg, errs = await login(MGR)
+            E = pg.evaluate
+            await E("go('inbox')"); await pg.wait_for_timeout(400)
+            row = pg.locator('.ib-row', has_text='Content plan')
+            check(await row.count() >= 1 and 'client’s approval' in await row.first.inner_text(), 'Amelia: the client approved the content plan')
+            await row.first.click(); await pg.wait_for_timeout(500)
+            check(await E("ui.view") == 'plan' and await pg.locator('.pl-banner.approved').count() == 1, 'the update opens the approved plan')
             check(not errs, f'no page errors {errs}')
             await ctx.close()
             # ---------- the Account Manager: view only ----------

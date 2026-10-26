@@ -19,6 +19,7 @@ import { sampleData } from './sample.js';
 import { freshSample } from './sample-fresh.js';
 import { createAppIcon } from './appicon.js';
 import { createFinals } from './finals.js';
+import { createPlans } from './plans.js';
 
 const BODY_LIMIT = 12 * 1024 * 1024; // 2 MB upload pieces arrive as ~2.7 MB of base64
 
@@ -33,6 +34,7 @@ export function createServer(cfg) {
   const streams = new Set(); // open live-update connections
   const uploads = new Map(); // file path -> who is uploading it (pieces can only be added by them)
   const finals = createFinals({ store, files, access });
+  const plans = createPlans({ store, files, access });
   const webPush = createWebPush({ store, fetchImpl: cfg.pushFetch || fetch, subject: cfg.pushSubject || 'mailto:admin@e11hq.com' });
   const digest = createDigest({ store, webPush, now: cfg.now || (() => Date.now()) });
   if (cfg.digest !== false) digest.start();
@@ -538,6 +540,14 @@ export function createServer(cfg) {
           .filter((r) => { const to = store.get('users', String(r.data.to)); return !!to && access.canSee(to, 'notifications', r.data); })
           .forEach((r) => webPush.sendTo(r.data.to, notifMessage(store, r.data)).catch(() => {}));
       }
+      // content plans: a plan whose tasks are all complete is client approved; an approved plan's PowerPoint is filed
+      let planned = null;
+      try { const ops = plans.afterPush(results.concat(filed ? filed.results : []), u.id); if (ops.length) planned = store.apply(ops, 'plans'); } catch (e) { console.error('content plans:', e.message); }
+      if (planned) {
+        broadcast(planned.rev, planned.results, null, null);
+        planned.results.filter((r) => r.kind === 'notifications' && !r.refused && r.data && r.data.to)
+          .forEach((r) => webPush.sendTo(r.data.to, notifMessage(store, r.data)).catch(() => {}));
+      }
       // new notifications also go to the person's phone
       results.filter((r) => r.kind === 'notifications' && fresh.has(String(r.id)) && !r.refused && !r.deleted && r.data && r.data.to && r.data.to !== u.id)
         .filter((r) => { const to = store.get('users', String(r.data.to)); return !!to && access.canSee(to, 'notifications', r.data); })   // (only what they'd see in their Inbox)
@@ -577,6 +587,21 @@ export function createServer(cfg) {
       return;
     }
 
+    // Content plans: the client export (PowerPoint + PDF) and reading the client's PowerPoint back
+    if (p === '/api/plan-export' && req.method === 'POST') {
+      const body = await readBody(req);
+      const r = await plans.exportDeck(u, body || {});
+      if (r.error) return json(res, r.status || 400, { ok: false, error: r.error });
+      const out = store.apply(r.ops, u.id);
+      broadcast(out.rev, out.results, null, u.id);
+      return json(res, 200, { ok: true, export: r.exp, rev: out.rev });
+    }
+    if (p === '/api/plan-return' && req.method === 'POST') {
+      const body = await readBody(req);
+      const r = plans.readReturn(u, body || {});
+      if (r.error) return json(res, r.status || 400, { ok: false, error: r.error });
+      return json(res, 200, { ok: true, ...r.result });
+    }
     // Content plans: when tasks are made from a skeleton, its posts' reference files are linked into each new task
     if (p === '/api/plan-refs' && req.method === 'POST') {
       const body = await readBody(req);

@@ -63,6 +63,8 @@ export function createAccess(store, opts = {}) {
     const p = pid && store.get('projects', String(pid));
     return !!p && (p.socials || []).includes(u.id);
   }
+  // who makes tasks from an approved skeleton, exports it for the client and records the client's reply
+  const planMaker = (u, pl) => !!u && !!pl && (planEditor(u, pl.projectId) || u.id === cdId() || isAdm(u) || ((store.get('projects', String(pl.projectId)) || {}).ams || []).some((a) => a.id === u.id));
   const planVisible = (u, pl) => !isFinance(u) && !isOffice(u) && !ownOnly(u) && !isFreelancer(u) && !(pl && pl.projectId && inactiveIds().has(pl.projectId));
   const mentioned = (html, id) => String(html || '').includes(`data-user="${id}"`);
   const partOf = (t, id) => (t.assignees || []).includes(id) || t.createdBy === id || t.guardian === id || mentioned(t.notesHtml, id)
@@ -353,13 +355,17 @@ export function createAccess(store, opts = {}) {
         }
         if (ch.del) return editor && editable(current.status);
         // tasks are made from an approved skeleton by Social, the CD, the client's Account Managers or Admins
-        const maker = editor || u.id === cdId() || isAdm(u) || ((store.get('projects', String(pid)) || {}).ams || []).some((a) => a.id === u.id);
+        const maker = planMaker(u, pl);
         if (!editor && !approver && !maker) return false;
         const from = current.status || 'draft', to = next.status || 'draft';
         const tasksOf = (x) => (x.posts || []).filter((y) => y.taskId).map((y) => [y.id, y.taskId]);
         if (!deepEqual(tasksOf(next), tasksOf(current)) || !deepEqual(next.tasksAt ?? null, current.tasksAt ?? null)) {
           if (!maker || from !== 'approved' || to !== 'approved') return false;
         }
+        // the client round: the client's reply per post and the whole plan's approval (the exports are written by the server)
+        const clientOf = (x) => [x.clientApproved || null, x.sent || null, (x.posts || []).filter((y) => y.client).map((y) => [y.id, y.client])];
+        if (!deepEqual(clientOf(next), clientOf(current)) && (!maker || from !== 'approved' || to !== 'approved')) return false;
+        if (!deepEqual(next.exports ?? null, current.exports ?? null) || !deepEqual(next.filedDeck ?? null, current.filedDeck ?? null)) return false;
         if (from === 'approved' && to === 'draft' && (current.posts || []).some((y) => y.taskId)) return false;   // (tasks made: it stays approved)
         // the steps: send (Social) · take back (Social) · approve or send back (approver) · reopen an approved one (either)
         if (from !== to) {
@@ -368,14 +374,14 @@ export function createAccess(store, opts = {}) {
           if (!ok) return false;
         }
         // the posts themselves: Social, while it's a draft or sent back
-        const bare = (x) => ({ ...x, status: null, review: null, approval: null, log: null, round: null, updatedAt: null, tasksAt: null, posts: (x.posts || []).map(({ check, updatedAt, taskId, ...r }) => r) });
+        const bare = (x) => ({ ...x, status: null, review: null, approval: null, log: null, round: null, updatedAt: null, tasksAt: null, clientApproved: null, exports: null, filedDeck: null, sent: null, posts: (x.posts || []).map(({ check, updatedAt, taskId, client, ...r }) => r) });
         if (!deepEqual(bare(next), bare(current)) && !(editor && editable(from))) return false;
         // the approver's marks on posts (Social may only clear them)
         const was = new Map((current.posts || []).map((x) => [x.id, x.check || null]));
         for (const x of next.posts || []) if (x.check && !deepEqual(x.check, was.get(x.id) || null) && !approver) return false;
         if (!deepEqual(next.approval || null, current.approval || null) && !approver && !(from === 'approved' && to === 'draft')) return false;
         // (making tasks only: nothing else changes)
-        if (!editor && !approver && (from !== to || !deepEqual(next.log || null, current.log || null) && !(next.log || []).slice((current.log || []).length).every((x) => x.act === 'tasks'))) return false;
+        if (!editor && !approver && (from !== to || !deepEqual(next.log || null, current.log || null) && !(next.log || []).slice((current.log || []).length).every((x) => ['tasks', 'client', 'client-approved', 'client-sent'].includes(x.act)))) return false;
         return true;
       }
       case 'notifications':
@@ -455,5 +461,5 @@ export function createAccess(store, opts = {}) {
     return CLAIM_CONTENT.every((k) => deepEqual(next[k], current[k]));
   }
 
-  return { isSocialMgr, planEditor, userByEmail, isOwnerUser, isOffice, isSuper, canSee, canWrite, shape, ownOnly, ownView, addPeek, isFreelancer, isFinance, isAdm, finLevel, canReadFile, monthClosed };
+  return { isSocialMgr, planEditor, planMaker, userByEmail, isOwnerUser, isOffice, isSuper, canSee, canWrite, shape, ownOnly, ownView, addPeek, isFreelancer, isFinance, isAdm, finLevel, canReadFile, monthClosed };
 }

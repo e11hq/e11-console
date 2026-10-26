@@ -55,15 +55,18 @@ const Plans = (() => {
     latest.forEach((r) => (r.files || []).forEach((id) => { const a = (t.attachments || []).find((x) => x.id === id); if (a) files.push(a); }));
     return files;
   }
-  const PROG = { none: ['Not created', '#8b8b96'], prod: ['In production', '#a875ff'], cd: ['With the CD', '#f2b23e'], ready: ['Finished', '#3ddc97'], done: ['Completed', '#5b9bff'] };
+  const PROG = { none: ['Not created', '#8b8b96'], prod: ['In production', '#a875ff'], cd: ['With the CD', '#f2b23e'], ready: ['Finished', '#3ddc97'], changes: ['Client changes', '#ff8a4c'], done: ['Client approved', '#5b9bff'] };
   function progress(x) {
     const t = x.taskId && task(x.taskId);
     if (!x.taskId) return { k: 'none', t: null, files: [] };
     if (!t) return { k: 'none', t: null, files: [], gone: true };
     const files = finishedFiles(t);
-    const k = t.done ? 'done' : reviewPending(t) ? 'cd' : files.length ? 'ready' : 'prod';
-    return { k, t, files };
+    // finished: the work is CD approved (for the client changes too, once the CD approved the new version)
+    const fin = files.length && (t.cdStatus === 'approved' || !t.needsCD);
+    const k = t.done ? 'done' : reviewPending(t) ? 'cd' : fin ? 'ready' : x.client && x.client.state === 'changes' ? 'changes' : files.length ? 'prod' : 'prod';
+    return { k, t, files, fin: !!fin || t.done };
   }
+  const SHORT = { none: '', prod: 'In production', cd: 'With the CD', ready: 'Finished', changes: 'Changes', done: 'Approved' };   // (on the calendar)
   const progPill = (g) => `<span class="pl-prog" style="--c:${PROG[g.k][1]}">${esc(PROG[g.k][0])}</span>`;
   const hasTasks = (pl) => (pl.posts || []).some((x) => x.taskId);
   const toLabel = (to) => (to === 'cd' ? (userById(cdUserId()) ? firstName(cdUserId()) : 'the CD') : to === 'sm' ? 'the Social Manager' : `${userById(cdUserId()) ? firstName(cdUserId()) : 'the CD'} & the Social Manager`);
@@ -99,6 +102,8 @@ const Plans = (() => {
   const ST = { draft: ['draft', 'Skeleton · draft'], review: ['review', 'Waiting for approval'], changes: ['changes', 'Changes asked'], approved: ['approved', 'Skeleton approved'] };
   const statusPill = (pl) => {
     if (!pl) return '<span class="pl-st none">Not started</span>';
+    if (pl.status === 'approved' && pl.clientApproved) return '<span class="pl-st approved">Client approved</span>';
+    if (pl.status === 'approved' && pl.sent && (pl.exports || []).length && pl.sent.round === pl.exports[pl.exports.length - 1].round) return `<span class="pl-st client">With the client · Round ${pl.sent.round}</span>`;
     if (pl.status === 'approved' && (pl.posts || []).some((x) => x.taskId)) { const n = (pl.posts || []).length, r = (pl.posts || []).filter((x) => ['ready', 'done'].includes(progress(x).k)).length; return `<span class="pl-st prod">In production · ${r}/${n} finished</span>`; }
     const [c, l] = ST[pl.status] || ST.draft; return `<span class="pl-st ${c}">${l}</span>`;
   };
@@ -186,7 +191,7 @@ const Plans = (() => {
       const occ = all.filter((o) => !o.end || o.date === d || dayGap(o.date, o.end) <= 3 || parseYmd(d).getDay() === 1);
       cells += `<div class="cal-cell pl-cell ${inMonth ? '' : 'out'} ${d === today ? 'today' : ''} ${all.length ? 'occ' : ''}" data-day="${d}">
         <div class="cal-dh"><span class="cal-num">${parseYmd(d).getDate()}</span>${occ.length ? `<span class="cal-occ" title="${esc(occ.map((o) => o.name).join(', '))}">${esc(occ.map((o) => o.name).join(' · '))}</span>` : ''}${ed && inMonth ? `<button class="cal-add" data-pl="new-post" data-d="${d}" title="Add a post on this day">${icon('plus')}</button>` : ''}</div>
-        ${day.map((x) => `<button class="pl-chip ${checkCls(pl, x)}" data-pl="post" data-id="${x.id}" style="--c:${fmtOf(x.format).color}" title="${esc((x.title || 'Untitled post') + ' · ' + fmtOf(x.format).name + checkTip(pl, x))}"><span class="pl-chip-t">${checkMark(pl, x)}${esc(x.title || 'Untitled post')}</span><span class="pl-chip-f">${esc(fmtOf(x.format).name)}${x.taskId ? ` · <i style="color:${PROG[progress(x).k][1]}">${esc(PROG[progress(x).k][0])}</i>` : ''}</span></button>`).join('')}
+        ${day.map((x) => `<button class="pl-chip ${checkCls(pl, x)}" data-pl="post" data-id="${x.id}" style="--c:${fmtOf(x.format).color}" title="${esc((x.title || 'Untitled post') + ' · ' + fmtOf(x.format).name + checkTip(pl, x))}"><span class="pl-chip-t">${checkMark(pl, x)}${esc(x.title || 'Untitled post')}</span><span class="pl-chip-f">${esc(fmtOf(x.format).name)}${x.taskId ? ` · <i style="color:${PROG[progress(x).k][1]}">${esc(SHORT[progress(x).k])}</i>` : ''}</span></button>`).join('')}
       </div>`;
     }
     return `<div class="cal-month pl-month"><div class="cal-wd">${WD.map((w) => `<span>${w}</span>`).join('')}</div><div class="cal-grid">${cells}</div></div>`;
@@ -245,6 +250,11 @@ const Plans = (() => {
     const ed = canEdit(pl), editor = isEditor(pl), appr = canApprove(pl);
     if (ed) out.push(`<button class="btn sm" data-pl="new-post">${icon('plus')}Add post</button>`, `<button class="btn primary sm" data-pl="send">${icon('send')}${pl.status === 'changes' ? 'Send again' : 'Send for approval'}</button>`);
     if (canMakeTasks(pl) && (pl.posts || []).some((x) => !x.taskId)) out.push(`<button class="btn primary sm" data-pl="make-tasks">${icon('plus')}Create tasks</button>`);
+    if (canMakeTasks(pl) && hasTasks(pl) && !pl.clientApproved) {
+      if ((pl.exports || []).length) out.push(`<button class="btn sm" data-pl="reply">${icon('reply')}Client’s reply</button>`);
+      if ((pl.posts || []).some((x) => progress(x).fin && !progress(x).t.done)) out.push(`<button class="btn ${(pl.exports || []).length ? '' : 'primary '}sm" data-pl="export">${icon('download')}Export for client</button>`);
+      if (allFinished(pl) && (pl.exports || []).length) out.push(`<button class="btn primary sm" data-pl="client-all">${icon('check')}Client approved</button>`);
+    }
     if (pl.status === 'review' && appr) out.push(`<button class="btn sm" data-pl="send-back">${icon('edit')}Send back for changes</button>`, `<button class="btn primary sm" data-pl="approve">${icon('check')}Approve skeleton</button>`);
     if (editor || appr) out.push(`<button class="icon-btn" data-pl="plan-menu" title="Skeleton options">${icon('more')}</button>`);
     return out.length ? out.join('') : '<span class="pl-ro">View only</span>';
@@ -259,6 +269,18 @@ const Plans = (() => {
     if (pl.status === 'changes') {
       const l = last('changes'), n = (pl.posts || []).filter((x) => x.check && x.check.state === 'changes').length;
       return `<div class="pl-banner changes">${icon('edit')}<div><b>${esc(l ? who(l.by) : 'The approver')} asked for changes${n ? ` on ${n} post${n === 1 ? '' : 's'}` : ''}</b>${l && l.note ? `<p>${esc(l.note)}</p>` : ''}<span>${l ? esc(timeAgo(l.at)) : ''}${isEditor(pl) ? ' · Make the changes, then Send again.' : ''}</span></div></div>`;
+    }
+    if (pl.status === 'approved' && pl.clientApproved) {
+      const ca = pl.clientApproved;
+      return `<div class="pl-banner approved">${icon('check-circle')}<div><b>The client approved the content plan</b><span>${esc(fmtDateTime(ca.at))}${ca.auto ? ' · every post was approved' : ca.by ? ` · recorded by ${esc(who(ca.by))}` : ''}${pl.filedDeck ? ' · The approved PowerPoint and each post’s final files are in Client Assets › Files.' : ''}</span>${exportLinks(pl)}</div></div>`;
+    }
+    if (pl.status === 'approved' && (pl.exports || []).length) {
+      const ex = pl.exports[pl.exports.length - 1];
+      const sent = pl.sent && pl.sent.round === ex.round;
+      const posts = pl.posts || [];
+      const ap = posts.filter((x) => progress(x).k === 'done').length, ch = posts.filter((x) => progress(x).k === 'changes' || (x.client && x.client.state === 'changes' && x.client.round === ex.round && progress(x).k !== 'done')).length;
+      return `<div class="pl-banner client">${icon('send')}<div><b>${sent ? `Content plan with the client · Round ${ex.round}` : `Round ${ex.round} exported — not marked as sent yet`}</b><span>${sent ? `Sent ${esc(fmtDay(pl.sent.at.slice(0, 10)))}` : `Exported ${esc(timeAgo(ex.at))}`} · ${ex.posts.length} post${ex.posts.length === 1 ? '' : 's'} in it${ap ? ` · ${ap} client approved` : ''}${ch ? ` · ${ch} with client changes` : ''}${allFinished(pl) ? ' · Every post is finished: mark it Client approved when the client says yes.' : ''}</span>
+        ${exportLinks(pl)}${!sent && canMakeTasks(pl) ? '<button class="btn ghost xs pl-sent" data-pl="mark-sent">Mark as sent to the client</button>' : ''}</div></div>`;
     }
     if (pl.status === 'approved' && pl.approval) {
       const posts = pl.posts || [], made = posts.filter((x) => x.taskId).length;
@@ -481,6 +503,207 @@ const Plans = (() => {
     draw();
   }
 
+  /* ---------- stage 4: the client round ---------- */
+  const allFinished = (pl) => (pl.posts || []).length > 0 && (pl.posts || []).every((x) => { const g = progress(x); return g.t && (g.t.done || g.fin); });
+  const fileLink = (f, label) => `<a class="pl-dl" href="${fileUrl(f)}" download="${esc(f.name)}" data-pl="dl">${icon('download')}${esc(label)}</a>`;
+  function exportLinks(pl) {
+    const ex = (pl.exports || [])[(pl.exports || []).length - 1];
+    if (!ex) return '';
+    return `<div class="pl-dls">${fileLink(ex.pptx, `PowerPoint · Round ${ex.round}`)}${ex.pdf ? fileLink(ex.pdf, 'PDF') : ''}${pl.exports.length > 1 ? `<button class="btn ghost xs" data-pl="rounds">Earlier rounds</button>` : ''}</div>`;
+  }
+  function roundsMenu(anchor, pl) {
+    showMenu(anchor, (pl.exports || []).slice().reverse().map((ex) => ({ html: `<div class="mi pl-hist"><span>Round ${ex.round} · ${esc(fmtDay(ex.at.slice(0, 10)))}<small><a href="${fileUrl(ex.pptx)}" download="${esc(ex.pptx.name)}">PowerPoint</a>${ex.pdf ? ` · <a href="${fileUrl(ex.pdf)}" download="${esc(ex.pdf.name)}">PDF</a>` : ''}</small></span></div>` })));
+  }
+  // the client's logo, from Client Assets › Logos: picked the first time, used every time after
+  const logosFolder = (p) => { const c = p && clientOfProject(p); return c ? c.folders.find((f) => !f.parentId && /^logos?$/i.test(f.name)) || null : null; };
+  const logoFiles = (p) => { const f = logosFolder(p); return f ? (f.files || []).filter((a) => fileKind(a) === 'image') : []; };
+  function exportDialog(pl) {
+    if (!canMakeTasks(pl)) return denied();
+    const p = proj(pl.projectId);
+    const posts = postsSorted(pl);
+    const ready = posts.filter((x) => { const g = progress(x); return g.fin && g.t && !g.t.done; }).concat(posts.filter((x) => progress(x).k === 'done'));
+    const notReady = posts.filter((x) => !ready.includes(x));
+    const round = (pl.exports || []).length + 1;
+    let logo = (p.planLogo && logoFiles(p).find((a) => a.path === p.planLogo)) || null;
+    let picking = !logo && !!clientOfProject(p);
+    const root = $('#overlay-root');
+    const paint = () => {
+      const lf = logoFiles(p);
+      root.innerHTML = `<div class="scrim pl-scrim"><div class="dialog pl-dlg ex-dlg" role="dialog" aria-label="Export for client">
+        <div class="pl-dlg-top"><h2>Export for client</h2><span class="pl-dlg-sub">${esc(nameOf(pl))} · Round ${round}</span><button type="button" class="icon-btn" data-r="0" title="Close">${icon('x')}</button></div>
+        <div class="pl-dlg-body">
+          <label class="dlg-label">Client logo</label>
+          ${!clientOfProject(p) ? '<div class="pl-none">This client has no Client Assets, so the cover shows its name.</div>'
+            : picking ? `<div class="ex-logos">${lf.map((a) => `<button type="button" class="ex-logo ${logo && logo.id === a.id ? 'on' : ''}" data-logo="${a.id}" title="${esc(a.name)}"><img src="${imgUrl(a, 320)}" alt=""><span>${esc(a.name)}</span></button>`).join('')}
+                <button type="button" class="ex-logo up" data-x="upload-logo">${icon('upload')}<span>Upload a logo</span></button></div>
+                <div class="dlg-hint">${lf.length ? 'Pick the logo for the cover. It’s used every time after; change it here when needed.' : 'There’s no logo in this client’s Client Assets › Logos yet. Upload one: it’s saved there too.'}</div>`
+            : `<div class="ex-cur">${logo ? `<img src="${imgUrl(logo, 320)}" alt="">` : ''}<span>${logo ? esc(logo.name) : 'No logo'}</span><button type="button" class="btn ghost xs" data-x="change-logo">Change logo</button></div>`}
+          <label class="dlg-label">What goes in</label>
+          <div class="ex-sum"><b>${ready.length} finished post${ready.length === 1 ? '' : 's'}</b> (CD approved)${notReady.length ? ` · not in this round: ${esc(notReady.map((x) => x.title).join(', '))}` : ''}</div>
+          <div class="ex-list">${ready.map((x, i) => { const g = progress(x); const img = g.files.find((r) => fileKind(r) === 'image'); return `<div class="ex-row"><span class="ex-n">${String(i + 1).padStart(2, '0')}</span><span class="pl-thumb sm">${img ? `<img src="${imgUrl(img, 160)}" alt="">` : `<span class="pl-thumb-f" style="--c:${fmtOf(x.format).color}">${esc(fmtOf(x.format).name.slice(0, 1))}</span>`}</span><span class="ex-t">${esc(x.title)}<small>${esc(dayLong(x.day))} · ${esc(fmtOf(x.format).name)}${g.k === 'done' ? ' · client approved' : ''}</small></span></div>`; }).join('')}</div>
+          <label class="ex-send"><input type="checkbox" id="ex-send" checked> Mark it as sent to the client (you email the file yourself)</label>
+          <div class="ex-busy" id="ex-busy" hidden><span class="spin"></span>Making the PowerPoint and the PDF… this can take a minute with videos.</div>
+          <div id="ex-done"></div>
+        </div>
+        <div class="actions"><button class="btn" data-r="0">Close</button><button class="btn primary" data-r="1" ${ready.length && (logo || !clientOfProject(p) || !picking) ? '' : 'disabled'}>${icon('download')}Export Round ${round}</button></div>
+      </div></div>`;
+    };
+    paint();
+    const close = () => { root.innerHTML = ''; };
+    root.onclick = async (e) => {
+      const box = $('.ex-dlg', root); if (!box) return;
+      const b = e.target.closest('button'); if (!b || !box.contains(b)) return;
+      if (b.dataset.r === '0') { root.onclick = null; return close(); }
+      if (b.dataset.logo) { logo = logoFiles(p).find((a) => a.id === b.dataset.logo) || null; picking = false; return paint(); }
+      if (b.dataset.x === 'change-logo') { picking = true; return paint(); }
+      if (b.dataset.x === 'upload-logo') {
+        const c = clientOfProject(p); let f = logosFolder(p);
+        if (!c) return;
+        if (!f) { toast('This client has no Logos folder in Client Assets'); return; }
+        const picked = await ServerHost.pickFiles({ multiple: false, accept: 'image/*,.svg' });
+        if (!picked.length) return;
+        const up = await ServerHost.uploadMany(picked, { dest: f.dir });
+        if (!up.length) return;
+        const a = { ...up[0], id: uid(), addedAt: nowISO(), addedBy: currentUserId };
+        f = logosFolder(p); f.files = (f.files || []).concat(a);
+        persist(0);
+        logo = a; picking = false; paint();
+        toast('Saved in Client Assets › Logos');
+        return;
+      }
+      if (b.dataset.r !== '1') return;
+      const send = $('#ex-send', root).checked;
+      b.disabled = true; $('#ex-busy', root).hidden = false;
+      try {
+        const occ = Occasions.between(firstDay(pl.month), lastDay(pl.month)).map((o) => ({ id: o.id, name: o.name, date: o.date, end: o.end || null }));
+        const r = await api('POST', '/api/plan-export', { planId: pl.id, logo: logo ? logo.path : null, occasions: occ }, { timeout: 600000 });
+        const ex = r.export;
+        // (the server saved the export on the plan; add it here at once so the links show)
+        if (!(pl.exports || []).some((x) => x.id === ex.id)) pl.exports = (pl.exports || []).concat(ex);
+        if (send) { pl.sent = { round: ex.round, at: nowISO(), by: currentUserId }; logIt(pl, 'client-sent', { round: ex.round }); persist(0); }
+        $('#ex-busy', root).hidden = true;
+        $('#ex-done', root).innerHTML = `<div class="ex-ok">${icon('check-circle')}<div><b>Round ${ex.round} is ready</b><span>Download it and email it to the client.${send ? ' The plan shows it’s with the client.' : ''}</span><div class="pl-dls">${fileLink(ex.pptx, 'PowerPoint')}${ex.pdf ? fileLink(ex.pdf, 'PDF') : '<span class="pl-none">The PDF couldn’t be made</span>'}</div></div></div>`;
+        b.remove();
+        render2();
+      } catch (err) { $('#ex-busy', root).hidden = true; b.disabled = false; toast('Couldn’t export: ' + err.message); }
+    };
+  }
+  function markSent(pl) {
+    const ex = (pl.exports || [])[(pl.exports || []).length - 1];
+    if (!ex || !canMakeTasks(pl)) return;
+    pl.sent = { round: ex.round, at: nowISO(), by: currentUserId };
+    logIt(pl, 'client-sent', { round: ex.round });
+    persist(0); render2(); toast(`Round ${ex.round} marked as sent to the client`);
+  }
+  // the client asked for changes on a post: its task goes back to In progress, with the client's words as a comment, and
+  // the new version needs the CD's approval again
+  function sendBackTask(t, note, links, round) {
+    if (!t) return;
+    if (t.done) setDone(t, false);
+    t.partsDone = {};
+    t.needsCD = true; t.reviewEpoch = epochOf(t) + 1;
+    if (t.cdStatus) logChange(t, 'the <b>CD Status</b>', CD[t.cdStatus] ? CD[t.cdStatus].label : '', '');
+    t.cdStatus = '';
+    delete t.clientApproval;
+    logActivity(t, `sent it back for the client’s changes (content plan Round ${round}) — <b>needs CD review again</b>`);
+    const prog = statusList(t).find((x) => /^in ?-?progress$/i.test(String(x.name).trim()));
+    if (prog && t.sectionId !== prog.id) moveTask(t.id, prog.id);
+    const text = `Client’s changes (content plan, Round ${round}): ${note || 'see the links'}${(links || []).length ? '\n' + links.join('\n') : ''}`;
+    const html = `<b>Client’s changes</b> (content plan, Round ${round}):<br>${esc(note || 'See the links').replace(/\n/g, '<br>')}${(links || []).length ? '<br>' + links.map((u) => `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a>`).join('<br>') : ''}`;
+    const cid = uid();
+    t.comments.push({ id: cid, text, html, at: nowISO(), attachments: [], parentId: null, reactions: {}, authorId: currentUserId });
+    notifyWatchers(t, 'comment', 'added the client’s changes on', { snippet: trunc(text, 160), commentId: cid });
+    t.updatedAt = nowISO();
+  }
+  function approveTask(t) {
+    if (!t || t.done) return true;
+    if (!cdApprovedNow(t) && t.needsCD) return false;
+    setClientApproval(t, {});
+    setDone(t, true);
+    return true;
+  }
+  function replyDialog(pl) {
+    if (!canMakeTasks(pl)) return denied();
+    const ex = (pl.exports || [])[(pl.exports || []).length - 1];
+    if (!ex) return;
+    const posts = postsSorted(pl).filter((x) => ex.posts.includes(x.id));
+    const rows = posts.map((x) => { const g = progress(x); return { x, g, locked: g.k === 'done', state: g.k === 'done' ? 'approved' : null, note: '', links: [] }; });
+    const root = $('#overlay-root');
+    let hint = '';
+    const paint = () => {
+      root.innerHTML = `<div class="scrim pl-scrim"><div class="dialog pl-dlg rp-dlg" role="dialog" aria-label="Client's reply">
+        <div class="pl-dlg-top"><h2>Client’s reply</h2><span class="pl-dlg-sub">${esc(nameOf(pl))} · Round ${ex.round}</span><button type="button" class="icon-btn" data-r="0" title="Close">${icon('x')}</button></div>
+        <div class="pl-dlg-body">
+          <div class="rp-up"><button type="button" class="btn sm" data-x="upload">${icon('upload')}Upload the client’s PowerPoint</button><span>Their comments and links go on each post by themselves. Or mark each post below.</span></div>
+          ${hint ? `<div class="rp-hint">${hint}</div>` : ''}
+          ${rows.map((r, i) => { const img = r.g.files.find((f) => fileKind(f) === 'image'); return `<div class="rp-row ${r.state || ''}">
+            <span class="pl-thumb sm">${img ? `<img src="${imgUrl(img, 160)}" alt="">` : `<span class="pl-thumb-f" style="--c:${fmtOf(r.x.format).color}">${esc(fmtOf(r.x.format).name.slice(0, 1))}</span>`}</span>
+            <div class="rp-main"><b>${esc(r.x.title)}</b><small>${esc(dayLong(r.x.day))} · ${esc(fmtOf(r.x.format).name)}</small>
+              ${r.locked ? '<span class="pl-prog" style="--c:#5b9bff">Client approved</span>' : `<div class="pl-pick rp-pick"><button type="button" class="pl-opt ${r.state === 'approved' ? 'on' : ''}" style="--c:var(--green)" data-st="approved" data-i="${i}">${icon('check')}Approved</button><button type="button" class="pl-opt ${r.state === 'changes' ? 'on' : ''}" style="--c:#ff8a4c" data-st="changes" data-i="${i}">${icon('edit')}Changes</button><button type="button" class="pl-opt ${!r.state ? 'on' : ''}" style="--c:var(--text-3)" data-st="" data-i="${i}">No reply yet</button></div>
+              ${r.state === 'changes' ? `<textarea class="field rp-note" data-i="${i}" rows="2" placeholder="What the client wants changed">${esc(r.note)}</textarea>${r.links.length ? `<div class="rp-links">${r.links.map((u) => `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a>`).join('')}</div>` : ''}` : ''}`}
+            </div></div>`; }).join('')}
+        </div>
+        <div class="actions"><span class="mt-hint">Approved posts are completed (their final files go to Client Assets). Changes send the task back to In progress, and the new version goes to the CD again.</span><span class="spacer"></span><button class="btn" data-r="0">Cancel</button><button class="btn primary" data-r="1">Save the reply</button></div>
+      </div></div>`;
+    };
+    paint();
+    const close = () => { root.innerHTML = ''; root.onclick = null; root.oninput = null; };
+    root.oninput = (e) => { const t = e.target; if (t.classList.contains('rp-note')) rows[+t.dataset.i].note = t.value; };
+    root.onclick = async (e) => {
+      const box = $('.rp-dlg', root); if (!box) return;
+      const b = e.target.closest('button'); if (!b || !box.contains(b)) return;
+      if (b.dataset.r === '0') return close();
+      if (b.dataset.st !== undefined && b.dataset.i !== undefined) { rows[+b.dataset.i].state = b.dataset.st || null; return paint(); }
+      if (b.dataset.x === 'upload') {
+        const picked = await ServerHost.pickFiles({ multiple: false, accept: '.pptx' });
+        if (!picked.length) return;
+        b.disabled = true; b.textContent = 'Reading…';
+        try {
+          const up = await ServerHost.uploadMany(picked, { taskId: pl.id });
+          const r = await api('POST', '/api/plan-return', { planId: pl.id, path: up[0].path });
+          let n = 0;
+          rows.forEach((row) => {
+            if (row.locked) return;
+            const got = r.posts[row.x.id];
+            if (!got) return;
+            if (got.comments.length || got.links.length) { row.state = 'changes'; row.note = got.comments.join('\n'); row.links = got.links; n++; } else row.state = 'approved';
+          });
+          hint = `Read “${esc(picked[0].name)}”: ${n} post${n === 1 ? '' : 's'} with the client’s comments (set to Changes); posts without comments are set to Approved. Check them before saving.`;
+        } catch (err) { toast(err.message); }
+        return paint();
+      }
+      if (b.dataset.r !== '1') return;
+      const todo = rows.filter((r) => !r.locked && r.state);
+      if (!todo.length) { toast('Mark at least one post'); return; }
+      if (todo.some((r) => r.state === 'changes' && !r.note.trim() && !r.links.length)) { toast('Say what the client wants changed'); return; }
+      let ok = 0, ch = 0, skipped = 0;
+      const now = nowISO();
+      todo.forEach((r) => {
+        const x = (pl.posts || []).find((y) => y.id === r.x.id), t = x && x.taskId && task(x.taskId);
+        if (!x || !t) return;
+        if (r.state === 'approved') { if (approveTask(t)) { x.client = { state: 'approved', round: ex.round, at: now, by: currentUserId }; ok++; } else skipped++; }
+        else { sendBackTask(t, r.note.trim(), r.links, ex.round); x.client = { state: 'changes', note: r.note.trim(), links: r.links, round: ex.round, at: now, by: currentUserId }; ch++; }
+      });
+      logIt(pl, 'client', { round: ex.round, approved: ok, changes: ch });
+      close(); persist(0); render2();
+      toast(`Saved: ${ok} approved${ch ? `, ${ch} sent back for changes` : ''}${skipped ? ` · ${skipped} not finished yet` : ''}`);
+    };
+  }
+  async function clientApproveAll(pl) {
+    if (!canMakeTasks(pl) || !allFinished(pl)) return denied();
+    const p = proj(pl.projectId);
+    const ok = await dialog({ title: 'Did the client approve the content plan?', body: `All of ${p.name}’s ${monthLabel(pl.month)} posts are marked client approved and completed. Their final files and the approved PowerPoint go to Client Assets › Files › Content plan – ${monthLabel(pl.month)}.`, okText: 'Yes, client approved' });
+    if (!ok) return;
+    const now = nowISO();
+    let n = 0;
+    (pl.posts || []).forEach((x) => { const t = x.taskId && task(x.taskId); if (t && !t.done && approveTask(t)) { n++; } if (t && t.done && !(x.client && x.client.state === 'approved')) x.client = { state: 'approved', round: (pl.exports || []).length, at: now, by: currentUserId }; });
+    pl.clientApproved = { at: now, by: currentUserId };
+    logIt(pl, 'client-approved');
+    notify([pl.createdBy, ...socialsOf(p), ...socialMgrIds(), ...((p.ams || []).filter((x) => !x.onLeave).map((x) => x.id))], pl, 'plan-client', `recorded the client’s approval of the content plan for <b>${esc(nameOf(pl))}</b>`);
+    persist(0); render2();
+    toast(`Client approved — ${n} task${n === 1 ? '' : 's'} completed`);
+  }
+
   /* ---------- making and changing ---------- */
   function open(id) { ui.planId = id; go('plan'); }
   function startPlan(pid, month) {
@@ -508,7 +731,7 @@ const Plans = (() => {
     if (pl.status === 'review' && isEditor(pl)) items.push({ label: 'Take it back to change it', icon: 'reply', run: () => withdraw(pl) });
     if (pl.status === 'approved' && !hasTasks(pl) && (isEditor(pl) || canApprove(pl))) items.push({ label: 'Reopen as a draft', icon: 'edit', run: () => reopen(pl) });
     items.push({ html: `<div class="menu-label">History</div>` });
-    const acts = { sent: 'sent it for approval', approved: 'approved it', changes: 'asked for changes', withdrawn: 'took it back', reopened: 'reopened it', tasks: 'created tasks' };
+    const acts = { sent: 'sent it for approval', 'client-sent': 'sent it to the client', approved: 'approved it', changes: 'asked for changes', withdrawn: 'took it back', reopened: 'reopened it', tasks: 'created tasks', export: 'exported it for the client', client: 'saved the client’s reply', 'client-approved': 'recorded the client’s approval' };
     (pl.log || []).slice(-6).reverse().forEach((x) => items.push({ html: `<div class="mi pl-hist">${avatarHTML(x.by, 18)}<span>${esc(firstName(x.by))} ${acts[x.act] || x.act}<small>${esc(timeAgo(x.at))}</small></span></div>` }));
     if (!(pl.log || []).length) items.push({ html: '<div class="mi-note">Not sent yet</div>' });
     if (isEditor(pl) && editable(pl)) items.push('-', { label: 'Delete this skeleton', icon: 'trash', danger: true, run: () => delPlan(pl) });
@@ -553,6 +776,7 @@ const Plans = (() => {
       <div class="pl-dlg-top"><h2>${isNew ? 'New post' : ed ? 'Edit post' : 'Post'}</h2><span class="pl-dlg-sub">${esc(proj(pl.projectId).name)} · ${esc(monthLabel(m))}</span><button type="button" class="icon-btn" data-pp="close" title="Close">${icon('x')}</button></div>
       <div class="pl-dlg-body">
         ${checkBox()}
+        ${x && x.client && x.client.state === 'changes' && progress(x).k !== 'done' ? `<div class="pl-check chg">${icon('edit')}<div><b>Client’s changes · Round ${x.client.round}</b>${x.client.note ? `<p>${esc(x.client.note)}</p>` : ''}${(x.client.links || []).map((u) => `<p><a href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a></p>`).join('')}</div></div>` : ''}
         ${x && x.taskId ? (() => { const g = progress(x); return `<div class="pl-task-box"><div class="pl-task-h">${progPill(g)}${g.t ? `<a class="pl-task-l" data-pp="task" data-id="${g.t.id}">${icon('open')}Open the task</a><span class="pl-task-who">${avatarStack(g.t.assignees || [], 20, 4)}${g.t.due ? `<small>Due ${esc(fmtDay(g.t.due))}</small>` : ''}</span>` : '<small>The task was deleted</small>'}</div>
           ${g.files.length ? `<div class="pl-dlg-sub2">Finished work (CD approved)</div><div class="pl-ref-grid">${g.files.map((r) => `<div class="pl-ref" title="${esc(r.name)}"><button type="button" class="pl-ref-img" data-pp="viewf" data-id="${r.id}">${fileKind(r) === 'image' ? `<img src="${imgUrl(r, 320)}" alt="">` : `<span class="pl-ref-ext">${esc(fileExt(r.name) || 'file')}</span>`}${fileKind(r) === 'video' ? `<span class="tile-play">${icon('play')}</span>` : ''}</button><span class="pl-ref-n">${esc(r.name)}</span></div>`).join('')}</div>` : g.t ? '<div class="pl-none">The video or graphic shows here once the CD approves it.</div>' : ''}</div>`; })() : ''}
         <label class="dlg-label" for="pp-title">Title</label>
@@ -692,6 +916,12 @@ const Plans = (() => {
       case 'plan-menu': e.stopPropagation(); if (pl) planMenu(el, pl); return;
       case 'send': if (pl) sendFlow(pl); return;
       case 'make-tasks': if (pl) makeTasksDialog(pl); return;
+      case 'export': if (pl) exportDialog(pl); return;
+      case 'reply': if (pl) replyDialog(pl); return;
+      case 'client-all': if (pl) clientApproveAll(pl); return;
+      case 'mark-sent': if (pl) markSent(pl); return;
+      case 'rounds': e.stopPropagation(); if (pl) roundsMenu(el, pl); return;
+      case 'dl': { const a = el; ServerHost.download(a.getAttribute('href'), a.getAttribute('download')); return; }
       case 'approve': if (pl) approve(pl); return;
       case 'send-back': if (pl) sendBack(pl); return;
     }

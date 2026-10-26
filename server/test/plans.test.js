@@ -116,3 +116,38 @@ test('approval: Social sends; the CD or the Social Manager approves or sends bac
   assert.equal((await T.push(MGR, [{ kind: 'plans', id: 'pl-own', base: o(), data: { ...o(), status: 'approved' } }]))[0].refused, true, 'not your own');
   assert.equal((await T.push(CD, [{ kind: 'plans', id: 'pl-own', base: o(), data: { ...o(), status: 'approved' } }]))[0].refused, false, 'the CD');
 });
+
+test('the client round: when every task of a plan is complete the plan is client approved, and its PowerPoint goes to Client Assets with the final files', async () => {
+  const dir = path.join(T.dir, 'files', 'attachments', 'pl-cr', 'exports');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'Ford – Content plan – June 2027 – Round 1.pptx'), 'pptx');
+  fs.mkdirSync(path.join(T.dir, 'files', 'attachments', 't-a'), { recursive: true });
+  fs.writeFileSync(path.join(T.dir, 'files', 'attachments', 't-a', 'a.png'), 'png');
+  fs.mkdirSync(path.join(T.dir, 'files', 'attachments', 't-b'), { recursive: true });
+  fs.writeFileSync(path.join(T.dir, 'files', 'attachments', 't-b', 'b.png'), 'png');
+  const exp = { id: 'ex-1', round: 1, at: '2027-05-20T08:00:00Z', by: 'u-ex', pptx: { name: 'Ford – Content plan – June 2027 – Round 1.pptx', path: 'attachments/pl-cr/exports/Ford – Content plan – June 2027 – Round 1.pptx', size: 4 }, pdf: null, posts: ['a', 'b'], line: 0 };
+  const task = (id, post) => ({ id, title: `Post ${post}`, projectId: 'p-ford', assignees: ['u-p'], needsCD: true, cdStatus: 'approved', planId: 'pl-cr', planPostId: post, attachments: [{ id: 'f' + id, name: `${post}.png`, path: `attachments/${id}/${post}.png` }], reviews: [{ id: 'r' + id, by: 'u-p', files: ['f' + id], state: 'approved', at: '2027-05-19T08:00:00Z', decidedAt: '2027-05-19T09:00:00Z', decidedBy: 'u-cd' }] });
+  T.app.store.apply([
+    { kind: 'clients', id: 'cl-ford', data: { id: 'cl-ford', name: 'Ford', dir: 'Clients/Ford', folders: [{ id: 'f-files', name: 'Files', dir: 'Clients/Ford/Files', files: [], auto: true }] } },
+    { kind: 'projects', id: 'p-ford', data: { ...T.app.store.get('projects', 'p-ford'), clientId: 'cl-ford' } },
+    { kind: 'plans', id: 'pl-cr', data: { id: 'pl-cr', projectId: 'p-ford', month: '2027-06', status: 'approved', createdBy: 'u-ex', posts: [{ id: 'a', day: '2027-06-02', title: 'A', taskId: 't-a' }, { id: 'b', day: '2027-06-05', title: 'B', taskId: 't-b' }], exports: [exp] } },
+    { kind: 'tasks', id: 't-a', data: task('t-a', 'a') }, { kind: 'tasks', id: 't-b', data: task('t-b', 'b') },
+  ], 'test');
+  const done = (id) => { const t = T.app.store.get('tasks', id); return { kind: 'tasks', id, base: t, data: { ...t, done: true, completedAt: new Date().toISOString(), clientApproval: { by: 'u-ex', at: new Date().toISOString() } } }; };
+  assert.equal((await T.push(EXEC, [done('t-a')]))[0].refused, false);
+  assert.equal(T.app.store.get('plans', 'pl-cr').clientApproved, undefined, 'one post left: not yet');
+  let c = T.app.store.get('clients', 'cl-ford');
+  const pf = c.folders.find((f) => f.planOf === 'pl-cr');
+  assert.ok(pf && pf.name === 'Content plan – June 2027' && pf.parentId === 'f-files', 'the plan’s folder in Files');
+  assert.ok(c.folders.some((f) => f.finalOf === 't-a' && f.parentId === pf.id && f.files.length === 1), 'the task’s final files inside it');
+  assert.equal((await T.push(EXEC, [done('t-b')]))[0].refused, false);
+  const pl = T.app.store.get('plans', 'pl-cr');
+  assert.ok(pl.clientApproved && pl.clientApproved.auto, 'every post approved: the plan is client approved');
+  c = T.app.store.get('clients', 'cl-ford');
+  const pf2 = c.folders.find((f) => f.planOf === 'pl-cr');
+  assert.ok(pf2.files.some((f) => /Round 1\.pptx$/.test(f.name)), 'the approved PowerPoint is filed with them');
+  assert.ok(c.folders.filter((f) => f.parentId === pf2.id && f.finalOf).length === 2, 'next to a folder per task');
+  assert.ok(pl.filedDeck);
+  const notes = T.app.store.list('notifications').filter((n) => n.planId === 'pl-cr' && n.kind === 'plan-client').map((n) => n.to).sort();
+  assert.deepEqual(notes, ['u-am', 'u-ex2', 'u-mg'].sort(), 'the Social Managers (u-ex2 was made one above) and the AM are told, not the person who did it');
+});

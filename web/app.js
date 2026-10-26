@@ -6335,7 +6335,7 @@ async function cdToggleFlow(id) {
 
 /* ================= Inbox ================= */
 const myNotifs = () => (db && currentUserId ? db.notifications.filter((n) => n.to === currentUserId) : []);
-const NOTIF_ICON = { plan: 'cal', 'plan-ok': 'check', 'plan-changes': 'edit', 'plan-tasks': 'check-circle', claim: 'coin', 'claim-ok': 'check', 'claim-paid': 'coin', trash: 'trash', restore: 'reply', review: 'upload', 'review-ok': 'check', 'review-amend': 'edit', 'review-wd': 'x', part: 'check-circle', allparts: 'check-circle', assigned: 'user', unassigned: 'user', comment: 'chat', mention: 'chat', status: 'check-circle', cd: 'shield', done: 'check', due: 'cal', priority: 'flag', attach: 'clip' };
+const NOTIF_ICON = { plan: 'cal', 'plan-ok': 'check', 'plan-changes': 'edit', 'plan-tasks': 'check-circle', 'plan-client': 'check', claim: 'coin', 'claim-ok': 'check', 'claim-paid': 'coin', trash: 'trash', restore: 'reply', review: 'upload', 'review-ok': 'check', 'review-amend': 'edit', 'review-wd': 'x', part: 'check-circle', allparts: 'check-circle', assigned: 'user', unassigned: 'user', comment: 'chat', mention: 'chat', status: 'check-circle', cd: 'shield', done: 'check', due: 'cal', priority: 'flag', attach: 'clip' };
 function notifPlain(n) { const d = document.createElement('div'); d.innerHTML = n.text; return d.textContent; }
 const IB_FILTERS = { all: 'All updates', comments: 'Comments & mentions', assigned: 'Assigned to me', status: 'Status & CD review', dates: 'Dates & priority' };
 const ibMatch = (n, f) => f === 'all' || !f ? true : f === 'comments' ? ['comment', 'mention'].includes(n.kind) : f === 'assigned' ? ['assigned', 'unassigned'].includes(n.kind) : f === 'status' ? ['status', 'cd', 'done', 'review', 'review-ok', 'review-amend', 'review-wd'].includes(n.kind) : ['due', 'priority'].includes(n.kind);
@@ -6405,7 +6405,7 @@ function viewInbox() {
     const unread = items.some((x) => !x.read);
     // opens what the row shows: an unread update that needs action first, otherwise the newest
     const target = ibTarget(items), shown = target;
-    const lead = ['comment', 'mention', 'review-amend', 'review-ok', 'review', 'claim', 'claim-ok', 'claim-paid', 'asset', 'plan', 'plan-ok', 'plan-changes', 'plan-tasks'].includes(shown.kind) ? avatarHTML(shown.from, 22) : `<span class="ib-kic">${icon(NOTIF_ICON[shown.kind] || 'bell')}</span>`;
+    const lead = ['comment', 'mention', 'review-amend', 'review-ok', 'review', 'claim', 'claim-ok', 'claim-paid', 'asset', 'plan', 'plan-ok', 'plan-changes', 'plan-tasks', 'plan-client'].includes(shown.kind) ? avatarHTML(shown.from, 22) : `<span class="ib-kic">${icon(NOTIF_ICON[shown.kind] || 'bell')}</span>`;
     return `<div class="ib-row ${unread ? 'unread' : ''}" data-action="open-notif" data-id="${target.id}">
       <span class="ib-title">${/^plan/.test(n.kind) ? `<span class="st-ic ib-coin">${icon('cal')}</span><span class="ib-tname">${esc(planTitle(n))}</span>` : n.kind === 'asset' ? `<span class="st-ic ib-coin">${icon('assets')}</span><span class="ib-tname">${esc(assetTitle(n))}</span>` : `${t ? statusIcon(t) : /^claim/.test(n.kind) ? `<span class="st-ic ib-coin">${icon('coin')}</span>` : `<span class="st-ic">${statusIconSVG('#87909e', 'todo', 0)}</span>`}<span class="ib-tname">${t ? esc(t.title || 'Untitled task') : /^claim/.test(n.kind) ? 'Expense claims' : '<i>Deleted task</i>'}</span>`}</span>
       <span class="ib-lead">${lead}</span>
@@ -6460,7 +6460,7 @@ function inboxFilterMenu(anchor) {
 }
 // Inbox rows: a task's updates together; Client Assets updates together per client
 const notifKey = (n) => n.taskId || (n.kind === 'asset' ? 'asset:' + n.clientId : n.planId ? 'plan:' + n.planId : n.id);
-const planTitle = (n) => { const pl = typeof Plans !== 'undefined' && Plans.planById(n.planId); return pl ? `${Plans.nameOf(pl)} · Content skeleton` : 'Content skeleton'; };
+const planTitle = (n) => { const what = n.kind === 'plan-client' ? 'Content plan' : 'Content skeleton'; const pl = typeof Plans !== 'undefined' && Plans.planById(n.planId); return pl ? `${Plans.nameOf(pl)} · ${what}` : what; };
 const assetTitle = (n) => `${(clientById(n.clientId) || {}).name || 'A client'} · Client Assets`;
 function clearTaskNotifs(taskId, read) {
   myNotifs().forEach((n) => { if (notifKey(n) === taskId) n.read = read; });
