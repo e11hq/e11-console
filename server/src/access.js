@@ -351,6 +351,10 @@ export function createAccess(store, opts = {}) {
         const editable = (st) => !st || st === 'draft' || st === 'changes';
         if (!current) {
           if (!editor || !next || !pid || !/^\d{4}-\d{2}$/.test(String(next.month || '')) || next.createdBy !== u.id || !editable(next.status)) return false;
+          // (what the steps and the server write later starts empty: exports, filing, the client round, approval, tasks)
+          const blank = (v) => v == null || (Array.isArray(v) && !v.length);
+          if (!['exports', 'filedDeck', 'clientApproved', 'sent', 'approval', 'tasksAt', 'review'].every((k) => blank(next[k]))) return false;
+          if (!(Array.isArray(next.posts) || next.posts == null) || (next.posts || []).some((y) => !y || y.taskId || y.client || y.check)) return false;
           return !store.list('plans').some((x) => x.id !== String(ch.id) && x.projectId === pid && x.month === next.month);   // one plan per client per month
         }
         if (ch.del) return editor && editable(current.status);
@@ -358,14 +362,17 @@ export function createAccess(store, opts = {}) {
         const maker = planMaker(u, pl);
         if (!editor && !approver && !maker) return false;
         const from = current.status || 'draft', to = next.status || 'draft';
+        const base = ch.base && typeof ch.base === 'object' ? ch.base : null;
+        // unchanged: the same as now, or as the copy this save was made from (the server writes exports, filing and the client's approval itself)
+        const same = (f) => deepEqual(f(next), f(current)) || (!!base && deepEqual(f(next), f(base)));
         const tasksOf = (x) => (x.posts || []).filter((y) => y.taskId).map((y) => [y.id, y.taskId]);
-        if (!deepEqual(tasksOf(next), tasksOf(current)) || !deepEqual(next.tasksAt ?? null, current.tasksAt ?? null)) {
+        if (!same(tasksOf) || !same((x) => x.tasksAt ?? null)) {
           if (!maker || from !== 'approved' || to !== 'approved') return false;
         }
         // the client round: the client's reply per post and the whole plan's approval (the exports are written by the server)
         const clientOf = (x) => [x.clientApproved || null, x.sent || null, (x.posts || []).filter((y) => y.client).map((y) => [y.id, y.client])];
-        if (!deepEqual(clientOf(next), clientOf(current)) && (!maker || from !== 'approved' || to !== 'approved')) return false;
-        if (!deepEqual(next.exports ?? null, current.exports ?? null) || !deepEqual(next.filedDeck ?? null, current.filedDeck ?? null)) return false;
+        if (!same(clientOf) && (!maker || from !== 'approved' || to !== 'approved')) return false;
+        if (!same((x) => x.exports ?? null) || !same((x) => x.filedDeck ?? null)) return false;
         if (from === 'approved' && to === 'draft' && (current.posts || []).some((y) => y.taskId)) return false;   // (tasks made: it stays approved)
         // the steps: send (Social) · take back (Social) · approve or send back (approver) · reopen an approved one (either)
         if (from !== to) {
@@ -379,9 +386,9 @@ export function createAccess(store, opts = {}) {
         // the approver's marks on posts (Social may only clear them)
         const was = new Map((current.posts || []).map((x) => [x.id, x.check || null]));
         for (const x of next.posts || []) if (x.check && !deepEqual(x.check, was.get(x.id) || null) && !approver) return false;
-        if (!deepEqual(next.approval || null, current.approval || null) && !approver && !(from === 'approved' && to === 'draft')) return false;
+        if (!same((x) => x.approval || null) && !approver && !(from === 'approved' && to === 'draft')) return false;
         // (making tasks only: nothing else changes)
-        if (!editor && !approver && (from !== to || !deepEqual(next.log || null, current.log || null) && !(next.log || []).slice((current.log || []).length).every((x) => ['tasks', 'client', 'client-approved', 'client-sent'].includes(x.act)))) return false;
+        if (!editor && !approver && (from !== to || !same((x) => x.log || null) && !(next.log || []).slice((current.log || []).length).every((x) => ['tasks', 'client', 'client-approved', 'client-sent'].includes(x.act)))) return false;
         return true;
       }
       case 'notifications':

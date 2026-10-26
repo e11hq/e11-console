@@ -8,6 +8,8 @@ import { createPlanDeck, readReturnedDeck, LINES } from './deck/plandeck.js';
 import { isFilesFolder, planFolderOf } from './finals.js';
 
 const rid = (p) => p + crypto.randomBytes(6).toString('hex');
+// a stored path inside one folder of the files (no way out with "..")
+const okPath = (rel, under) => { const s = String(rel || ''); return s.startsWith(under) && !s.split('/').some((x) => x === '..' || x === '.' || x === '') && !s.includes('\\'); };
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const safe = (s) => String(s || '').replace(/[\/:\\]/g, '-').replace(/^\.+/, '').replace(/\s+/g, ' ').trim().slice(0, 120) || 'Content plan';
@@ -21,7 +23,7 @@ export function createPlans({ store, files, access }) {
     const latest = new Map();
     for (const r of t.reviews || []) { if (r.state !== 'approved') continue; const p = latest.get(r.by); if (!p || String(r.decidedAt || r.at) >= String(p.decidedAt || p.at)) latest.set(r.by, r); }
     const out = [];
-    latest.forEach((r) => (r.files || []).forEach((id) => { const a = (t.attachments || []).find((x) => x.id === id); if (a && a.path) out.push(a); }));
+    latest.forEach((r) => (r.files || []).forEach((id) => { const a = (t.attachments || []).find((x) => x.id === id); if (a && a.path && okPath(a.path, `attachments/${t.id}/`)) out.push(a); }));
     return out;
   }
   // a post is finished when its task's work is CD approved (or the task is complete)
@@ -43,7 +45,7 @@ export function createPlans({ store, files, access }) {
     // the client's logo: a file from its Client Assets
     let logo = null;
     const logoRel = String(body.logo || '');
-    if (logoRel && client && (client.folders || []).some((f) => (f.files || []).some((a) => a.path === logoRel))) logo = await deck.picture(logoRel);
+    if (logoRel && client && okPath(logoRel, 'Clients/') && (client.folders || []).some((f) => (f.files || []).some((a) => a.path === logoRel))) logo = await deck.picture(logoRel);
     // a Thank-you line this client didn't get last time
     const used = store.list('plans').filter((x) => x.projectId === pl.projectId).flatMap((x) => (x.exports || []).map((e) => ({ at: e.at, line: e.line }))).sort((a, b) => String(a.at).localeCompare(String(b.at)));
     const last = used.length ? used[used.length - 1].line : -1;
@@ -70,7 +72,8 @@ export function createPlans({ store, files, access }) {
     const cur = store.get('plans', pl.id);
     const next = { ...cur, exports: (cur.exports || []).concat(entry), log: (cur.log || []).concat({ act: 'export', by: u.id, at: now, round }), updatedAt: now };
     const ops = [{ kind: 'plans', id: pl.id, data: next }];
-    if (logoRel && logo && p.id && p.planLogo !== logoRel) ops.push({ kind: 'projects', id: p.id, data: { ...p, planLogo: logoRel } });
+    const pNow = p.id && store.get('projects', String(p.id));
+    if (logoRel && logo && pNow && pNow.planLogo !== logoRel) ops.push({ kind: 'projects', id: pNow.id, base: pNow, data: { ...pNow, planLogo: logoRel } });
     return { ops, exp: entry };
   }
 
@@ -89,16 +92,17 @@ export function createPlans({ store, files, access }) {
   }
 
   // after a save: complete plans get approved, approved plans get their PowerPoint filed
-  function afterPush(results, byUser) {
+  function afterPush(results, byUser, apply) {
     const ids = new Set();
     for (const r of results) {
       if (r.refused || r.deleted || r.unchanged) continue;
       if (r.kind === 'plans') ids.add(String(r.id));
       if (r.kind === 'tasks') { const t = store.get('tasks', String(r.id)); if (t && t.planId) ids.add(String(t.planId)); }
     }
-    const ops = [];
     const now = new Date().toISOString();
+    const all = [], outs = [];
     for (const id of ids) {
+      const ops = [];
       const pl = store.get('plans', id);
       if (!pl || pl.status !== 'approved') continue;
       const posts = pl.posts || [];
@@ -122,8 +126,10 @@ export function createPlans({ store, files, access }) {
         if (filed) { ops.push(...filed.ops); next = { ...cur, filedDeck: { at: now, round: last.round, folderId: filed.folderId } }; }
       }
       if (next) ops.unshift({ kind: 'plans', id, data: next });
+      if (!ops.length) continue;
+      if (apply) outs.push(apply(ops)); else all.push(...ops);
     }
-    return ops;
+    return apply ? outs : all;
   }
   function fileDeck(pl, exp, byUser, now) {
     const p = store.get('projects', String(pl.projectId));
@@ -135,7 +141,7 @@ export function createPlans({ store, files, access }) {
     if (!top) { top = { id: rid('cf-'), name: 'Files', dir: `${client.dir}/Files`, files: [], createdAt: now, createdBy: c.createdBy || null, auto: true }; client.folders.push(top); }
     const folder = planFolderOf(client, top, pl, now, byUser);
     folder.files = folder.files || [];
-    for (const f of [exp.pptx, exp.pdf].filter(Boolean)) {
+    for (const f of [exp.pptx, exp.pdf].filter((x) => x && okPath(x.path, `attachments/${pl.id}/exports/`))) {
       if (folder.files.some((x) => x.deckOf === exp.id && x.name === f.name)) continue;
       try { const made = files.linkInto(f.path, folder.dir, f.name); folder.files.push({ id: rid('caf-'), name: made.name, path: made.path, size: made.size, addedAt: now, addedBy: byUser || exp.by, deckOf: exp.id }); } catch { /* skipped */ }
     }

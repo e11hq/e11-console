@@ -151,3 +151,47 @@ test('the client round: when every task of a plan is complete the plan is client
   const notes = T.app.store.list('notifications').filter((n) => n.planId === 'pl-cr' && n.kind === 'plan-client').map((n) => n.to).sort();
   assert.deepEqual(notes, ['u-am', 'u-ex2', 'u-mg'].sort(), 'the Social Managers (u-ex2 was made one above) and the AM are told, not the person who did it');
 });
+
+test('a new plan can’t carry exports, approvals, tasks or the client’s answers (only the steps and the server write those)', async () => {
+  const mk = (id, extra, post) => ({ kind: 'plans', id, data: { id, projectId: 'p-ford', month: '2028-0' + id.slice(-1), status: 'draft', createdBy: 'u-ex', posts: [{ id: 'x', day: '2028-01-02', title: 'X', ...(post || {}) }], ...(extra || {}) } });
+  const bad = [
+    mk('pl-n1', { exports: [{ id: 'ex', pptx: { path: 'Claims/u-o/r.jpg', name: 'r.jpg' } }] }),
+    mk('pl-n2', { clientApproved: { at: 'x', by: 'u-ex' } }),
+    mk('pl-n3', { approval: { by: 'u-cd', at: 'x' } }),
+    mk('pl-n4', { filedDeck: { at: 'x' } }),
+    mk('pl-n5', null, { taskId: 't-other' }),
+    mk('pl-n6', null, { client: { state: 'approved' } }),
+    mk('pl-n7', null, { check: { state: 'ok' } }),
+  ];
+  for (const ch of bad) assert.equal((await T.push(EXEC, [ch]))[0].refused, true, ch.id);
+  assert.equal((await T.push(EXEC, [mk('pl-n8')]))[0].refused, false, 'a plain new plan is fine');
+});
+
+test('a save made from a copy before the server’s own change (an export, client approval) still goes through', async () => {
+  T.app.store.apply([{ kind: 'plans', id: 'pl-st', data: { id: 'pl-st', projectId: 'p-ford', month: '2029-01', status: 'approved', createdBy: 'u-ex', posts: [{ id: 'a', day: '2029-01-02', title: 'A' }] } }], 'test');
+  const old = T.app.store.get('plans', 'pl-st');
+  // the server writes an export meanwhile
+  T.app.store.apply([{ kind: 'plans', id: 'pl-st', data: { ...old, exports: [{ id: 'ex-s', round: 1, at: 'x', by: 'u-ex', posts: ['a'] }], log: [{ act: 'export', by: 'u-ex', at: 'x', round: 1 }] } }], 'plans');
+  const now = new Date().toISOString();
+  const r = await T.push(EXEC, [{ kind: 'plans', id: 'pl-st', base: old, data: { ...old, sent: { round: 1, at: now, by: 'u-ex' }, log: [{ act: 'client-sent', by: 'u-ex', at: now, round: 1 }] } }]);
+  assert.equal(r[0].refused, false);
+  const pl = T.app.store.get('plans', 'pl-st');
+  assert.equal(pl.exports.length, 1, 'the export stays');
+  assert.ok(pl.sent, 'and the save is kept');
+  // but a made-up export from a stale copy is still refused
+  const r2 = await T.push(EXEC, [{ kind: 'plans', id: 'pl-st', base: old, data: { ...old, exports: [{ id: 'ex-fake', pptx: { path: 'Claims/x.jpg' } }] } }]);
+  assert.equal(r2[0].refused, true);
+});
+
+test('plan reference files go only into a new task or one of the plan’s own, and only by someone who makes tasks', async () => {
+  const dir = path.join(T.dir, 'files', 'attachments', 'pl-1');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'ref.png'), 'png');
+  T.app.store.apply([{ kind: 'tasks', id: 't-foreign', data: { id: 't-foreign', title: 'Other', projectId: 'p-kia' } }], 'test');
+  const files = [{ path: 'attachments/pl-1/ref.png', name: 'ref.png' }];
+  assert.equal((await T.call(EXEC, '/api/plan-refs', { planId: 'pl-1', taskId: 't-foreign', files })).status, 403, 'not someone else’s task');
+  assert.equal((await T.call(PROD, '/api/plan-refs', { planId: 'pl-1', taskId: 't-newone', files })).status, 403, 'not Production');
+  const ok = await T.call(EXEC, '/api/plan-refs', { planId: 'pl-1', taskId: 't-newone', files });
+  assert.equal(ok.status, 200);
+  assert.equal(ok.body.files.length, 1);
+});

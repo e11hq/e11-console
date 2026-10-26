@@ -47,13 +47,21 @@ export function imageSize(buf) {
 }
 
 export function createPlanDeck({ filesRoot }) {
-  const abs = (rel) => path.join(filesRoot, ...String(rel).split('/'));
+  // a stored path inside the files folder (task files and Client Assets only; never out with "..")
+  const abs = (rel) => {
+    const s = String(rel || '');
+    if (!/^(attachments|Clients)\//.test(s) || s.split('/').some((x) => x === '..' || x === '.' || x === '') || s.includes('\\')) throw new Error('bad path');
+    const f = path.resolve(filesRoot, ...s.split('/'));
+    if (!f.startsWith(path.resolve(filesRoot) + path.sep)) throw new Error('bad path');
+    return f;
+  };
   const tmpDir = () => fs.mkdtempSync(path.join(os.tmpdir(), 'e11-deck-'));
 
   // a picture the slide can hold: PNG / JPEG / GIF as they are; anything else (HEIC, WebP, SVG…) turned into PNG / JPEG
   async function picture(rel) {
     const ext = extOf(rel);
-    const file = abs(rel);
+    let file;
+    try { file = abs(rel); } catch { return null; }
     if (!fs.existsSync(file)) return null;
     if (IMG.has(ext)) { const data = fs.readFileSync(file); const d = imageSize(data); return { data, ext: ext === 'jpg' ? 'jpeg' : ext, w: d && d.w, h: d && d.h }; }
     const tmp = tmpDir();

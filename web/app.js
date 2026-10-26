@@ -6371,7 +6371,7 @@ function notifMsg(n, t) {
   }
   if (/^claim/.test(n.kind)) return `${who} ${n.text}${n.snippet ? ` <span class="ib-dim">· ${esc(n.snippet)}</span>` : ''}`;
   if (n.kind === 'asset') return `${who} ${esc(n.text)}${n.snippet ? ` <span class="ib-dim">· ${esc(n.snippet)}</span>` : ''}`;
-  if (/^plan/.test(n.kind)) return `${who} ${n.text}${n.snippet ? ` <span class="ib-dim">· ${esc(n.snippet)}</span>` : ''}`;   // (content plans: the text is built escaped)
+  if (/^plan/.test(n.kind)) return `${who} ${String(n.text || '').replace(/<(?!\/?b>)/g, '&lt;')}${n.snippet ? ` <span class="ib-dim">· ${esc(n.snippet)}</span>` : ''}`;   // (content plans: the text is built escaped)
   if (n.kind === 'review-amend' && n.snippet) return `${who} <span class="ib-dim">requested amendments:</span> ${esc(fullComment(n, t) || n.snippet)}`;
   if (n.kind === 'review-ok' && /your files/.test(n.text)) return `${who} approved your files <span class="ib-chip" style="background:${CD.approved.color};color:${textOn(CD.approved.color)}">APPROVED</span>`;
   if ((n.kind === 'comment' || n.kind === 'mention') && n.snippet) {

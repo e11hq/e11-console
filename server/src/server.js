@@ -542,11 +542,12 @@ export function createServer(cfg) {
           .forEach((r) => webPush.sendTo(r.data.to, notifMessage(store, r.data)).catch(() => {}));
       }
       // content plans: a plan whose tasks are all complete is client approved; an approved plan's PowerPoint is filed
-      let planned = null;
-      try { const ops = plans.afterPush(results.concat(filed ? filed.results : []), u.id); if (ops.length) planned = store.apply(ops, 'plans'); } catch (e) { console.error('content plans:', e.message); }
-      if (planned) {
-        broadcast(planned.rev, planned.results, null, null);
-        planned.results.filter((r) => r.kind === 'notifications' && !r.refused && r.data && r.data.to)
+      let planned = [];
+      try { planned = plans.afterPush(results.concat(filed ? filed.results : []), u.id, (ops) => store.apply(ops, 'plans')); } catch (e) { console.error('content plans:', e.message); }
+      for (const out of planned) {
+        broadcast(out.rev, out.results, null, null);
+        out.results.filter((r) => r.kind === 'notifications' && !r.refused && r.data && r.data.to)
+          .filter((r) => { const to = store.get('users', String(r.data.to)); return !!to && access.canSee(to, 'notifications', r.data); })
           .forEach((r) => webPush.sendTo(r.data.to, notifMessage(store, r.data)).catch(() => {}));
       }
       // new notifications also go to the person's phone
@@ -621,7 +622,9 @@ export function createServer(cfg) {
     if (p === '/api/plan-refs' && req.method === 'POST') {
       const body = await readBody(req);
       const pl = store.get('plans', String((body && body.planId) || ''));
-      if (!pl || !access.canSee(u, 'plans', pl) || !/^[\w-]{3,80}$/.test(String(body.taskId || ''))) return json(res, 403, { ok: false, error: 'Not allowed' });
+      if (!pl || !access.canSee(u, 'plans', pl) || !access.planMaker(u, pl) || !/^[\w-]{3,80}$/.test(String(body.taskId || ''))) return json(res, 403, { ok: false, error: 'Not allowed' });
+      const tk = store.get('tasks', String(body.taskId));   // (a task still being made, or one of this plan's)
+      if (tk && tk.planId !== pl.id) return json(res, 403, { ok: false, error: 'Not allowed' });
       const out = [];
       for (const r of (body.files || []).slice(0, 40)) {
         const fp = String((r && r.path) || '');
