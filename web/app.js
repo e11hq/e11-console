@@ -2983,7 +2983,7 @@ function renderDetail() {
     </div>
     <div class="tm-body">
       <div class="tm-main">
-        <div class="tm-type"><span class="type-pill">${icon(parent ? 'sub' : 'check-circle')}${parent ? 'Subtask' : 'Task'}</span>${t.done ? `<span class="tm-id tm-done-note"><span>Completed ${timeAgo(t.completedAt)}</span><span>Auto-deletes in ${daysUntilAutoDelete(t)} day${daysUntilAutoDelete(t) === 1 ? '' : 's'}</span></span>` : ''}${creatorChip(t)}</div>
+        <div class="tm-type"><span class="type-pill">${icon(parent ? 'sub' : 'check-circle')}${parent ? 'Subtask' : 'Task'}</span>${t.done ? `<span class="tm-id tm-done-note"><span>Completed ${timeAgo(t.completedAt)}</span><i class="tdn-sep"> · </i><span class="tdn-del">auto-deletes in ${daysUntilAutoDelete(t)} day${daysUntilAutoDelete(t) === 1 ? '' : 's'}</span></span>` : ''}${creatorChip(t)}</div>
         <textarea class="d-title" id="d-title" rows="1" placeholder="Task name" spellcheck="true" ${can('editTitle') ? '' : 'readonly'}>${esc(t.title)}</textarea>
 
         <div class="props">

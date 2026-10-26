@@ -2463,7 +2463,13 @@ html:not(.mac-chrome) #app:not(.sb-collapsed) #sidebar .brand { margin-right: -7
 .ca-ap .ic { width: 13px; height: 13px; }
 .cfo-crumbs > a[data-action="open-client"], .cfo-crumbs > a[data-action="open-cfolder"] { color: var(--text-2); }
 .cfo-crumbs > a[data-action="open-client"]:hover, .cfo-crumbs > a[data-action="open-cfolder"]:hover { color: var(--accent); text-decoration: underline; }
-/* "Completed … / Auto-deletes in …" on two lines of their own; names in the Created-by chip on one line */
-.tm-done-note { display: inline-flex; flex-direction: column; line-height: 1.35; }
-.tm-done-note > span { white-space: nowrap; }
+/* "Completed … · auto-deletes in …": one line in the pop-up; two lines in the desktop sidebar; on the phone its own line
+   under the Task / created-by row. Names in the Created-by chip stay on one line. */
+.tm-done-note { white-space: nowrap; }
+.tdn-sep { font-style: normal; }
+body:not(.phone) #detail.side .tm-done-note { display: inline-flex; flex-direction: column; line-height: 1.35; }
+body:not(.phone) #detail.side .tdn-sep { display: none; }
+body:not(.phone) #detail.side .tdn-del { display: block; }
+body:not(.phone) #detail.side .tdn-del::first-letter { text-transform: uppercase; }
+body.phone #detail .tm-done-note { order: 9; flex-basis: 100%; }
 .cr-chip b, .cr-when { white-space: nowrap; }
