@@ -155,6 +155,55 @@ async def main():
             await ctx.close()
             note = await asyncio.to_thread(lambda: [n for n in api(EXEC, '/api/snapshot')['data']['notifications'] if n.get('planId') == 'pl-smp-p-korea' and n['kind'] == 'plan-ok'])
             check(len(note) == 1, 'Aishwarya is told it’s approved')
+            # ---------- Stage 3: Aishwarya creates the tasks ----------
+            ctx, pg, errs = await login(EXEC)
+            E = pg.evaluate
+            await E("Plans.open('pl-smp-p-korea')"); await pg.wait_for_timeout(500)
+            check(await pg.locator('[data-pl="make-tasks"]').count() == 1, 'Create tasks on the approved skeleton')
+            await pg.locator('[data-pl="make-tasks"]').click(); await pg.wait_for_timeout(300)
+            n = await pg.locator('.mt-row').count()
+            check(n >= 6, f'one row per post ({n})')
+            await pg.select_option('#mt-fmt', 'reel')
+            await pg.locator('[data-mt="bulk-who"]').click(); await pg.wait_for_timeout(200)
+            await pg.locator('.mt-menu .mi', has_text='Joe Hajj').click(); await pg.wait_for_timeout(200)
+            await pg.mouse.click(5, 5) if False else None
+            await pg.keyboard.press('Escape'); await E("closeMenus()")
+            reels = await E("Plans.planById('pl-smp-p-korea').posts.filter(x => x.format === 'reel').length")
+            check(await pg.locator('.mt-row .mt-who', has_text='Joe').count() == reels, f'all reels to Joe in one go ({reels})')
+            await pg.locator('.mt-row [data-mt="ck"]').last.click()
+            await pg.screenshot(path=os.path.join(OUT, 'plans-make-tasks.png'))
+            await pg.locator('.mt-dlg [data-r="1"]').click(); await pg.wait_for_timeout(1500)
+            made = await E("db.tasks.filter(t => t.planId === 'pl-smp-p-korea')")
+            check(len(made) == n - 1, f'{n - 1} tasks made (one left out)')
+            t0 = next((t for t in made if t['attachments']), None)
+            check(all(t['projectId'] == 'p-korea' and t['golive'] and 'From the content plan' in t['notesHtml'] for t in made), 'each task has the client, go-live and the skeleton’s details')
+            check(t0 is not None and t0['attachments'][0]['path'].startswith('attachments/' + t0['id'] + '/'), 'reference files go into the task')
+            check(await pg.locator('[data-pl="make-tasks"]').count() == 1, 'Create tasks stays for the post left out')
+            check('In production' in await pg.locator('.pl-chip').first.inner_text(), 'the calendar shows each post’s progress')
+            tid = made[0]['id']
+            check(await E(f"(() => {{ const t = task('{tid}'); return [can('editDates', t), can('assign', t), can('deleteTask', t), can('createTask')]; }})()") == [True, True, True, False], 'Social can do what an AM can on these tasks (not create others)')
+            check(not errs, f'no page errors {errs}')
+            await ctx.close()
+            am_note = await asyncio.to_thread(lambda: [n for n in api(AM, '/api/snapshot')['data']['notifications'] if n.get('planId') == 'pl-smp-p-korea' and n['kind'] == 'plan-tasks'])
+            check(len(am_note) == 1, 'the client’s AM is told')
+            joe = await asyncio.to_thread(lambda: [n for n in api('joe@e11-digital.com', '/api/snapshot')['data']['notifications'] if n['kind'] == 'assigned' and n.get('taskId') in [t['id'] for t in made]])
+            jn = len([t for t in made if 'u-joe' in t['assignees']])
+            check(jn >= 1 and len(joe) == jn, f'Joe is told about his {jn} tasks ({len(joe)})')
+            # the CD approves a task's files: the finished work comes into the post by itself
+            ctx, pg, errs = await login('carine@e11-digital.com')
+            E = pg.evaluate
+            tid = t0['id']
+            await E(f"""(() => {{ const t = task('{tid}'); const a = t.attachments[0]; t.reviews = (t.reviews || []).concat({{ id: uid(), by: t.assignees[0] || 'u-joe', files: [a.id], at: nowISO(), state: 'approved', decidedAt: nowISO(), decidedBy: currentUserId, round: 1 }}); persist(0); }})()"""); await pg.wait_for_timeout(800)
+            await E("Plans.open('pl-smp-p-korea')"); await pg.wait_for_timeout(500)
+            pid = t0['planPostId']
+            chip = pg.locator(f'.pl-chip[data-id="{pid}"]')
+            check('Finished' in await chip.inner_text(), 'Finished on the calendar once the CD approves')
+            await chip.click(); await pg.wait_for_timeout(300)
+            check(await pg.locator('.pl-task-box .pl-ref-img').count() == 1, 'the finished work shows in the post')
+            await pg.screenshot(path=os.path.join(OUT, 'plans-finished.png'))
+            check('1 of' in await pg.locator('.pl-banner').inner_text(), 'the skeleton counts finished posts')
+            check(not errs, f'no page errors {errs}')
+            await ctx.close()
             # ---------- the Account Manager: view only ----------
             ctx, pg, errs = await login(AM)
             E = pg.evaluate

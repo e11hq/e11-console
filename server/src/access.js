@@ -352,8 +352,15 @@ export function createAccess(store, opts = {}) {
           return !store.list('plans').some((x) => x.id !== String(ch.id) && x.projectId === pid && x.month === next.month);   // one plan per client per month
         }
         if (ch.del) return editor && editable(current.status);
-        if (!editor && !approver) return false;
+        // tasks are made from an approved skeleton by Social, the CD, the client's Account Managers or Admins
+        const maker = editor || u.id === cdId() || isAdm(u) || ((store.get('projects', String(pid)) || {}).ams || []).some((a) => a.id === u.id);
+        if (!editor && !approver && !maker) return false;
         const from = current.status || 'draft', to = next.status || 'draft';
+        const tasksOf = (x) => (x.posts || []).filter((y) => y.taskId).map((y) => [y.id, y.taskId]);
+        if (!deepEqual(tasksOf(next), tasksOf(current)) || !deepEqual(next.tasksAt ?? null, current.tasksAt ?? null)) {
+          if (!maker || from !== 'approved' || to !== 'approved') return false;
+        }
+        if (from === 'approved' && to === 'draft' && (current.posts || []).some((y) => y.taskId)) return false;   // (tasks made: it stays approved)
         // the steps: send (Social) · take back (Social) · approve or send back (approver) · reopen an approved one (either)
         if (from !== to) {
           const ok = (editable(from) && to === 'review' && editor) || (from === 'review' && to === 'draft' && editor)
@@ -361,12 +368,14 @@ export function createAccess(store, opts = {}) {
           if (!ok) return false;
         }
         // the posts themselves: Social, while it's a draft or sent back
-        const bare = (x) => ({ ...x, status: null, review: null, approval: null, log: null, round: null, updatedAt: null, posts: (x.posts || []).map(({ check, updatedAt, ...r }) => r) });
+        const bare = (x) => ({ ...x, status: null, review: null, approval: null, log: null, round: null, updatedAt: null, tasksAt: null, posts: (x.posts || []).map(({ check, updatedAt, taskId, ...r }) => r) });
         if (!deepEqual(bare(next), bare(current)) && !(editor && editable(from))) return false;
         // the approver's marks on posts (Social may only clear them)
         const was = new Map((current.posts || []).map((x) => [x.id, x.check || null]));
         for (const x of next.posts || []) if (x.check && !deepEqual(x.check, was.get(x.id) || null) && !approver) return false;
         if (!deepEqual(next.approval || null, current.approval || null) && !approver && !(from === 'approved' && to === 'draft')) return false;
+        // (making tasks only: nothing else changes)
+        if (!editor && !approver && (from !== to || !deepEqual(next.log || null, current.log || null) && !(next.log || []).slice((current.log || []).length).every((x) => x.act === 'tasks'))) return false;
         return true;
       }
       case 'notifications':

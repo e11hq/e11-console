@@ -42,6 +42,30 @@ const Plans = (() => {
     const cd = cdUserId(), sm = socialMgrIds().filter((id) => id !== pl.createdBy);
     return [...new Set(to === 'cd' ? [cd] : to === 'sm' ? sm : [cd, ...sm])].filter(Boolean);
   };
+  // who makes tasks from an approved skeleton: Social, the CD, the client's Account Managers, Admins
+  const canMakeTasks = (pl, u = me()) => !!pl && pl.status === 'approved' && !!u && (isEditor(pl) || u.id === cdUserId() || isAdm(u) || ((proj(pl.projectId) || {}).ams || []).some((a) => a.id === u.id));
+  // on tasks made from a plan, its Social people (and the Social Manager) do what an Account Manager can
+  const socialManages = (t) => { const pl = t && t.planId && planById(t.planId); return !!pl && canEditClient(pl.projectId); };
+  /* a post's progress, from its task: the finished work is each person's latest CD-approved files
+     (a newer version replaces the old one as soon as the CD approves it) */
+  function finishedFiles(t) {
+    const latest = new Map();
+    (t.reviews || []).forEach((r) => { if (r.state !== 'approved') return; const p = latest.get(r.by); if (!p || String(r.decidedAt || r.at) >= String(p.decidedAt || p.at)) latest.set(r.by, r); });
+    const files = [];
+    latest.forEach((r) => (r.files || []).forEach((id) => { const a = (t.attachments || []).find((x) => x.id === id); if (a) files.push(a); }));
+    return files;
+  }
+  const PROG = { none: ['Not created', '#8b8b96'], prod: ['In production', '#a875ff'], cd: ['With the CD', '#f2b23e'], ready: ['Finished', '#3ddc97'], done: ['Completed', '#5b9bff'] };
+  function progress(x) {
+    const t = x.taskId && task(x.taskId);
+    if (!x.taskId) return { k: 'none', t: null, files: [] };
+    if (!t) return { k: 'none', t: null, files: [], gone: true };
+    const files = finishedFiles(t);
+    const k = t.done ? 'done' : reviewPending(t) ? 'cd' : files.length ? 'ready' : 'prod';
+    return { k, t, files };
+  }
+  const progPill = (g) => `<span class="pl-prog" style="--c:${PROG[g.k][1]}">${esc(PROG[g.k][0])}</span>`;
+  const hasTasks = (pl) => (pl.posts || []).some((x) => x.taskId);
   const toLabel = (to) => (to === 'cd' ? (userById(cdUserId()) ? firstName(cdUserId()) : 'the CD') : to === 'sm' ? 'the Social Manager' : `${userById(cdUserId()) ? firstName(cdUserId()) : 'the CD'} & the Social Manager`);
   // the clients on the list: a Social Executive's own; an AM's own; everyone else (Social Manager, Admins, CD) all
   function clientsInScope() {
@@ -73,7 +97,11 @@ const Plans = (() => {
   // (the version made for the SM / CD to approve is the content skeleton; with the finished videos and graphics, from
   // Round 1 for the client, it's the content plan)
   const ST = { draft: ['draft', 'Skeleton · draft'], review: ['review', 'Waiting for approval'], changes: ['changes', 'Changes asked'], approved: ['approved', 'Skeleton approved'] };
-  const statusPill = (pl) => { if (!pl) return '<span class="pl-st none">Not started</span>'; const [c, l] = ST[pl.status] || ST.draft; return `<span class="pl-st ${c}">${l}</span>`; };
+  const statusPill = (pl) => {
+    if (!pl) return '<span class="pl-st none">Not started</span>';
+    if (pl.status === 'approved' && (pl.posts || []).some((x) => x.taskId)) { const n = (pl.posts || []).length, r = (pl.posts || []).filter((x) => ['ready', 'done'].includes(progress(x).k)).length; return `<span class="pl-st prod">In production · ${r}/${n} finished</span>`; }
+    const [c, l] = ST[pl.status] || ST.draft; return `<span class="pl-st ${c}">${l}</span>`;
+  };
   const occKey = (o) => o.key || o.id;
   const skipped = (p, o) => ((p && p.planSkips) || []).includes(occKey(o));
   const postsSorted = (pl) => (pl.posts || []).slice().sort((a, b) => String(a.day).localeCompare(String(b.day)) || String(a.createdAt).localeCompare(String(b.createdAt)));
@@ -158,7 +186,7 @@ const Plans = (() => {
       const occ = all.filter((o) => !o.end || o.date === d || dayGap(o.date, o.end) <= 3 || parseYmd(d).getDay() === 1);
       cells += `<div class="cal-cell pl-cell ${inMonth ? '' : 'out'} ${d === today ? 'today' : ''} ${all.length ? 'occ' : ''}" data-day="${d}">
         <div class="cal-dh"><span class="cal-num">${parseYmd(d).getDate()}</span>${occ.length ? `<span class="cal-occ" title="${esc(occ.map((o) => o.name).join(', '))}">${esc(occ.map((o) => o.name).join(' · '))}</span>` : ''}${ed && inMonth ? `<button class="cal-add" data-pl="new-post" data-d="${d}" title="Add a post on this day">${icon('plus')}</button>` : ''}</div>
-        ${day.map((x) => `<button class="pl-chip ${checkCls(pl, x)}" data-pl="post" data-id="${x.id}" style="--c:${fmtOf(x.format).color}" title="${esc((x.title || 'Untitled post') + ' · ' + fmtOf(x.format).name + checkTip(pl, x))}"><span class="pl-chip-t">${checkMark(pl, x)}${esc(x.title || 'Untitled post')}</span><span class="pl-chip-f">${esc(fmtOf(x.format).name)}</span></button>`).join('')}
+        ${day.map((x) => `<button class="pl-chip ${checkCls(pl, x)}" data-pl="post" data-id="${x.id}" style="--c:${fmtOf(x.format).color}" title="${esc((x.title || 'Untitled post') + ' · ' + fmtOf(x.format).name + checkTip(pl, x))}"><span class="pl-chip-t">${checkMark(pl, x)}${esc(x.title || 'Untitled post')}</span><span class="pl-chip-f">${esc(fmtOf(x.format).name)}${x.taskId ? ` · <i style="color:${PROG[progress(x).k][1]}">${esc(PROG[progress(x).k][0])}</i>` : ''}</span></button>`).join('')}
       </div>`;
     }
     return `<div class="cal-month pl-month"><div class="cal-wd">${WD.map((w) => `<span>${w}</span>`).join('')}</div><div class="cal-grid">${cells}</div></div>`;
@@ -173,11 +201,12 @@ const Plans = (() => {
   function postRow(x, pl) {
     const o = x.occasion && Occasions.byId(x.occasion);
     const n = (x.refs || []).length;
-    const img = (x.refs || []).find((r) => r.path && fileKind(r) === 'image');
+    const g = progress(x);
+    const img = g.files.find((r) => fileKind(r) === 'image') || (x.refs || []).find((r) => r.path && fileKind(r) === 'image');
     return `<button class="pl-post ${checkCls(pl, x)}" data-pl="post" data-id="${x.id}">
       <span class="pl-thumb">${img ? `<img src="${imgUrl(img, 160)}" alt="" loading="lazy">` : `<span class="pl-thumb-f" style="--c:${fmtOf(x.format).color}">${esc(fmtOf(x.format).name.slice(0, 1))}</span>`}</span>
       <span class="pl-post-txt"><b>${checkMark(pl, x)}${esc(x.title || 'Untitled post')}</b><span>${x.check && x.check.state === 'changes' && x.check.note && pl.status !== 'approved' ? `<i class="pl-chg-note">${esc(x.check.note)}</i>` : esc(String(x.desc || x.copyEn || '').replace(/\s+/g, ' ').slice(0, 140))}</span></span>
-      <span class="pl-post-meta">${fmtPill(x.format)}${chChips(x.channels)}${o ? `<span class="cal-occ-pill">${esc(o.name)}</span>` : ''}${n ? `<span class="pl-refs">${icon('clip')}${n}</span>` : ''}</span>
+      <span class="pl-post-meta">${x.taskId ? progPill(g) : ''}${fmtPill(x.format)}${chChips(x.channels)}${o ? `<span class="cal-occ-pill">${esc(o.name)}</span>` : ''}${n ? `<span class="pl-refs">${icon('clip')}${n}</span>` : ''}</span>
     </button>`;
   }
   function side(pl, p, ed) {
@@ -215,6 +244,7 @@ const Plans = (() => {
     const out = [];
     const ed = canEdit(pl), editor = isEditor(pl), appr = canApprove(pl);
     if (ed) out.push(`<button class="btn sm" data-pl="new-post">${icon('plus')}Add post</button>`, `<button class="btn primary sm" data-pl="send">${icon('send')}${pl.status === 'changes' ? 'Send again' : 'Send for approval'}</button>`);
+    if (canMakeTasks(pl) && (pl.posts || []).some((x) => !x.taskId)) out.push(`<button class="btn primary sm" data-pl="make-tasks">${icon('plus')}Create tasks</button>`);
     if (pl.status === 'review' && appr) out.push(`<button class="btn sm" data-pl="send-back">${icon('edit')}Send back for changes</button>`, `<button class="btn primary sm" data-pl="approve">${icon('check')}Approve skeleton</button>`);
     if (editor || appr) out.push(`<button class="icon-btn" data-pl="plan-menu" title="Skeleton options">${icon('more')}</button>`);
     return out.length ? out.join('') : '<span class="pl-ro">View only</span>';
@@ -231,7 +261,13 @@ const Plans = (() => {
       return `<div class="pl-banner changes">${icon('edit')}<div><b>${esc(l ? who(l.by) : 'The approver')} asked for changes${n ? ` on ${n} post${n === 1 ? '' : 's'}` : ''}</b>${l && l.note ? `<p>${esc(l.note)}</p>` : ''}<span>${l ? esc(timeAgo(l.at)) : ''}${isEditor(pl) ? ' · Make the changes, then Send again.' : ''}</span></div></div>`;
     }
     if (pl.status === 'approved' && pl.approval) {
-      return `<div class="pl-banner approved">${icon('check-circle')}<div><b>Content skeleton approved by ${esc(who(pl.approval.by))}</b><span>${esc(fmtDateTime(pl.approval.at))} · Next: creating the tasks from it (coming in the next stage of the trial).</span></div></div>`;
+      const posts = pl.posts || [], made = posts.filter((x) => x.taskId).length;
+      if (made) {
+        const gs = posts.map(progress), ready = gs.filter((g) => g.k === 'ready' || g.k === 'done').length;
+        const left = posts.length - made;
+        return `<div class="pl-banner approved">${icon('check-circle')}<div><b>${ready} of ${posts.length} post${posts.length === 1 ? '' : 's'} finished (CD approved)</b><span>Skeleton approved by ${esc(who(pl.approval.by))} · ${made} task${made === 1 ? '' : 's'} made${left ? ` · ${left} post${left === 1 ? '' : 's'} without a task yet` : ''} · The CD-approved video or graphic comes into each post by itself.</span></div></div>`;
+      }
+      return `<div class="pl-banner approved">${icon('check-circle')}<div><b>Content skeleton approved by ${esc(who(pl.approval.by))}</b><span>${esc(fmtDateTime(pl.approval.at))} · Next: ${canMakeTasks(pl) ? 'Create tasks from it.' : 'Social, the CD or the Account Manager creates the tasks.'}</span></div></div>`;
     }
     return '';
   }
@@ -337,6 +373,114 @@ const Plans = (() => {
   }
   const render2 = () => { renderContent(); renderSidebar(); };
 
+  /* ---------- stage 3: tasks from an approved skeleton ---------- */
+  const workers = () => db.users.filter((u) => u.active !== false && (['production', 'social', 'freelancer'].includes(u.role)) && u.id !== cdUserId()).sort((a, b) => fullName(a).localeCompare(fullName(b)));
+  const ROLE_H = { production: 'Production', social: 'Social', freelancer: 'Freelancers' };
+  function taskNotes(pl, x) {
+    const p = proj(pl.projectId), o = x.occasion && Occasions.byId(x.occasion);
+    const ch = CH(), chs = (x.channels || []).filter((k) => ch[k]).map((k) => ch[k].name).join(', ');
+    const para = (label, v, rtl) => (v ? `<p${rtl ? ' dir="rtl"' : ''}><b>${esc(label)}</b><br>${esc(v).replace(/\n/g, '<br>')}</p>` : '');
+    const links = (x.refs || []).filter((r) => r.url);
+    return `<p><b>From the content plan:</b> ${esc(p ? p.name : '')} · ${esc(monthLabel(pl.month))}</p>`
+      + `<p><b>Go-live:</b> ${esc(dayLong(x.day))} · <b>Format:</b> ${esc(fmtOf(x.format).name)}${chs ? ` · <b>Channels:</b> ${esc(chs)}` : ''}${o ? ` · <b>Occasion:</b> ${esc(o.name)}` : ''}</p>`
+      + para('Description', x.desc) + para('Type of shots / shot list', x.shots) + para('Copy · English', x.copyEn) + para('Copy · Arabic', x.copyAr, true)
+      + (links.length ? `<p><b>Reference links</b><br>${links.map((r) => `<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.label || r.url)}</a>`).join('<br>')}</p>` : '');
+  }
+  function makeTasksDialog(pl) {
+    if (!canMakeTasks(pl)) return denied();
+    const posts = postsSorted(pl).filter((x) => !x.taskId);
+    if (!posts.length) { toast('Every post already has its task'); return; }
+    const today = todayStr();
+    const defDue = (d) => { const x = addDays(d, -3); return x < today ? today : x; };
+    const rows = posts.map((x) => ({ x, on: true, who: [], due: defDue(x.day) }));
+    const root = $('#overlay-root');
+    const draw = () => {
+      const n = rows.filter((r) => r.on).length;
+      $('#mt-rows', root).innerHTML = rows.map((r, i) => `<div class="mt-row ${r.on ? '' : 'off'}">
+        <button type="button" class="mt-ck ${r.on ? 'on' : ''}" data-mt="ck" data-i="${i}" aria-label="Include">${r.on ? icon('check') : ''}</button>
+        <div class="mt-t"><b>${esc(r.x.title || 'Untitled post')}</b><span>${esc(dayLong(r.x.day))} · ${esc(fmtOf(r.x.format).name)}</span></div>
+        <button type="button" class="mt-who" data-mt="who" data-i="${i}">${r.who.length ? `${avatarStack(r.who, 20, 3)}<span>${esc(r.who.map((id) => firstName(id)).join(', '))}</span>` : `<span class="mt-none">${icon('user')}Pick people</span>`}</button>
+        <span class="date-chip pl-date mt-due set">${icon('cal')}<span class="date-lbl">${esc(fmtDay(r.due))}</span><input type="date" class="date-in" data-mt="due" data-i="${i}" value="${r.due}"></span>
+      </div>`).join('');
+      $('[data-r="1"]', root).textContent = n ? `Create ${n} task${n === 1 ? '' : 's'}` : 'Create tasks';
+      $('[data-r="1"]', root).disabled = !n;
+    };
+    root.innerHTML = `<div class="scrim pl-scrim"><div class="dialog pl-dlg mt-dlg" role="dialog" aria-label="Create tasks">
+      <div class="pl-dlg-top"><h2>Create tasks</h2><span class="pl-dlg-sub">${esc(nameOf(pl))} · one task per post, with everything from the skeleton</span><button type="button" class="icon-btn" data-r="0" title="Close">${icon('x')}</button></div>
+      <div class="pl-dlg-body">
+        <div class="mt-bulk"><span>For all</span>
+          <select class="field" id="mt-fmt"><option value="">posts</option>${FORMATS.map(([k, name]) => `<option value="${k}">${esc(name)}s</option>`).join('')}</select>
+          <button type="button" class="btn ghost sm" data-mt="bulk-who">${icon('user')}People…</button>
+          <span class="date-chip pl-date mt-due">${icon('cal')}<span class="date-lbl">Due date…</span><input type="date" class="date-in" id="mt-bulk-due"></span>
+        </div>
+        <div id="mt-rows"></div>
+      </div>
+      <div class="actions"><span class="mt-hint">Due dates are up to you (today is fine). The CD reviews each one as usual.</span><span class="spacer"></span><button class="btn" data-r="0">Cancel</button><button class="btn primary" data-r="1">Create tasks</button></div>
+    </div></div>`;
+    const close = () => { root.innerHTML = ''; };
+    // people: a list with ticks that stays open to pick several
+    const pick = (anchor, cur, done) => {
+      const ck = (on) => (on ? `<span class="wf-ck">${icon('check')}</span>` : '');
+      const items = [];
+      ['production', 'social', 'freelancer'].forEach((r) => {
+        const us = workers().filter((u) => u.role === r);
+        if (!us.length) return;
+        items.push({ html: `<div class="wf-mh">${ROLE_H[r]}</div>` });
+        us.forEach((u) => items.push({ html: `<div class="mi wf-person">${avatarHTML(u.id, 20)}<span>${esc(fullName(u))}</span>${ck(cur.includes(u.id))}</div>`, run: () => { const next = cur.includes(u.id) ? cur.filter((x) => x !== u.id) : cur.concat(u.id); done(next); setTimeout(() => pick(anchor, next, done), 0); } }));
+      });
+      const m = showMenu(anchor, items.map((it, i) => (it.run ? { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) } : it)));
+      m.classList.add('wf-menu', 'mt-menu');
+    };
+    const box = $('.scrim', root);
+    box.addEventListener('change', (e) => {
+      const el = e.target;
+      if (el.dataset.mt === 'due' && el.value) { rows[+el.dataset.i].due = el.value; draw(); }
+      if (el.id === 'mt-bulk-due' && el.value) { const f = $('#mt-fmt', root).value; rows.forEach((r) => { if (!f || r.x.format === f) r.due = el.value; }); el.value = ''; draw(); toast('Due date set'); }
+    });
+    box.addEventListener('click', async (e) => {
+      if (e.target.classList.contains('scrim')) return;
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.r === '0') return close();
+      if (b.dataset.mt === 'ck') { const r = rows[+b.dataset.i]; r.on = !r.on; draw(); return; }
+      if (b.dataset.mt === 'who') { e.stopPropagation(); const r = rows[+b.dataset.i]; pick(b, r.who, (v) => { r.who = v; draw(); }); return; }
+      if (b.dataset.mt === 'bulk-who') {
+        e.stopPropagation();
+        const f = $('#mt-fmt', root).value, targets = rows.filter((r) => !f || r.x.format === f);
+        pick(b, [], (v) => { targets.forEach((r) => { r.who = v.slice(); }); draw(); });
+        return;
+      }
+      if (b.dataset.r !== '1') return;
+      const go_ = rows.filter((r) => r.on);
+      if (!go_.length) return;
+      b.disabled = true; b.textContent = 'Creating…';
+      const p = proj(pl.projectId);
+      const made = [];
+      for (const r of go_) {
+        const x = (pl.posts || []).find((y) => y.id === r.x.id);
+        if (!x || x.taskId) continue;
+        const id = uid();
+        let atts = [];
+        const files = (x.refs || []).filter((y) => y.path);
+        if (files.length) { try { atts = ((await api('POST', '/api/plan-refs', { planId: pl.id, taskId: id, files: files.map((y) => ({ path: y.path, name: y.name, w: y.w, h: y.h })) })).files || []).map((a) => ({ id: uid(), ...a, addedAt: nowISO(), addedBy: currentUserId })); } catch (err) { /* the files stay on the plan */ } }
+        const html = taskNotes(pl, x);
+        const t = createTask({ id, title: x.title || 'Untitled post', projectId: pl.projectId, assignees: r.who.slice(), due: r.due, golive: x.day, channels: (x.channels || []).slice(), occasion: x.occasion || null,
+          notesHtml: html, notes: (() => { const d = document.createElement('div'); d.innerHTML = html; return d.textContent; })(), attachments: atts, planId: pl.id, planPostId: x.id });
+        x.taskId = t.id;
+        r.who.forEach((u) => pushNotif(u, t, 'assigned', 'assigned you to'));
+        made.push(t);
+      }
+      if (!made.length) { close(); return; }
+      pl.tasksAt = nowISO();
+      logIt(pl, 'tasks', { n: made.length });
+      // the client's Account Managers always hear about it (unless they made them)
+      const ams = ((p && p.ams) || []).filter((a) => !a.onLeave).map((a) => a.id);
+      notify(ams, pl, 'plan-tasks', `created ${made.length} task${made.length === 1 ? '' : 's'} from the content skeleton for <b>${esc(nameOf(pl))}</b>`);
+      close(); persist(0); render2();
+      toast(`Created ${made.length} task${made.length === 1 ? '' : 's'} in ${p ? p.name : 'the client'}`);
+    });
+    draw();
+  }
+
   /* ---------- making and changing ---------- */
   function open(id) { ui.planId = id; go('plan'); }
   function startPlan(pid, month) {
@@ -362,9 +506,9 @@ const Plans = (() => {
   function planMenu(anchor, pl) {
     const items = [];
     if (pl.status === 'review' && isEditor(pl)) items.push({ label: 'Take it back to change it', icon: 'reply', run: () => withdraw(pl) });
-    if (pl.status === 'approved' && (isEditor(pl) || canApprove(pl))) items.push({ label: 'Reopen as a draft', icon: 'edit', run: () => reopen(pl) });
+    if (pl.status === 'approved' && !hasTasks(pl) && (isEditor(pl) || canApprove(pl))) items.push({ label: 'Reopen as a draft', icon: 'edit', run: () => reopen(pl) });
     items.push({ html: `<div class="menu-label">History</div>` });
-    const acts = { sent: 'sent it for approval', approved: 'approved it', changes: 'asked for changes', withdrawn: 'took it back', reopened: 'reopened it' };
+    const acts = { sent: 'sent it for approval', approved: 'approved it', changes: 'asked for changes', withdrawn: 'took it back', reopened: 'reopened it', tasks: 'created tasks' };
     (pl.log || []).slice(-6).reverse().forEach((x) => items.push({ html: `<div class="mi pl-hist">${avatarHTML(x.by, 18)}<span>${esc(firstName(x.by))} ${acts[x.act] || x.act}<small>${esc(timeAgo(x.at))}</small></span></div>` }));
     if (!(pl.log || []).length) items.push({ html: '<div class="mi-note">Not sent yet</div>' });
     if (isEditor(pl) && editable(pl)) items.push('-', { label: 'Delete this skeleton', icon: 'trash', danger: true, run: () => delPlan(pl) });
@@ -409,6 +553,8 @@ const Plans = (() => {
       <div class="pl-dlg-top"><h2>${isNew ? 'New post' : ed ? 'Edit post' : 'Post'}</h2><span class="pl-dlg-sub">${esc(proj(pl.projectId).name)} · ${esc(monthLabel(m))}</span><button type="button" class="icon-btn" data-pp="close" title="Close">${icon('x')}</button></div>
       <div class="pl-dlg-body">
         ${checkBox()}
+        ${x && x.taskId ? (() => { const g = progress(x); return `<div class="pl-task-box"><div class="pl-task-h">${progPill(g)}${g.t ? `<a class="pl-task-l" data-pp="task" data-id="${g.t.id}">${icon('open')}Open the task</a><span class="pl-task-who">${avatarStack(g.t.assignees || [], 20, 4)}${g.t.due ? `<small>Due ${esc(fmtDay(g.t.due))}</small>` : ''}</span>` : '<small>The task was deleted</small>'}</div>
+          ${g.files.length ? `<div class="pl-dlg-sub2">Finished work (CD approved)</div><div class="pl-ref-grid">${g.files.map((r) => `<div class="pl-ref" title="${esc(r.name)}"><button type="button" class="pl-ref-img" data-pp="viewf" data-id="${r.id}">${fileKind(r) === 'image' ? `<img src="${imgUrl(r, 320)}" alt="">` : `<span class="pl-ref-ext">${esc(fileExt(r.name) || 'file')}</span>`}${fileKind(r) === 'video' ? `<span class="tile-play">${icon('play')}</span>` : ''}</button><span class="pl-ref-n">${esc(r.name)}</span></div>`).join('')}</div>` : g.t ? '<div class="pl-none">The video or graphic shows here once the CD approves it.</div>' : ''}</div>`; })() : ''}
         <label class="dlg-label" for="pp-title">Title</label>
         <input class="field" id="pp-title" maxlength="120" placeholder="e.g. Territory 2026 offer" value="${esc(s.title)}" ${ro}>
         <div class="pl-grid2">
@@ -457,9 +603,12 @@ const Plans = (() => {
     };
     $('#pp-link', root).addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addLink(); } });
     form.addEventListener('click', async (e) => {
+      const tl = e.target.closest('[data-pp="task"]');
+      if (tl) { e.preventDefault(); close(); openTask(tl.dataset.id); return; }
       const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.pp === 'close') return close();
       if (b.dataset.pp === 'view') { const r = s.refs.find((y) => y.id === b.dataset.id); if (r) previewFile(r); return; }
+      if (b.dataset.pp === 'viewf') { const g = progress(x); const r = g.files.find((y) => y.id === b.dataset.id); if (r) previewFile(r); return; }
       if (b.dataset.ck && appr) {
         ck.state = ck.state === b.dataset.ck ? null : b.dataset.ck;
         $$('#pp-check [data-ck]', root).forEach((y) => y.classList.toggle('on', y.dataset.ck === ck.state));
@@ -542,6 +691,7 @@ const Plans = (() => {
       case 'unskip': if (pl) setSkip(pl, el.dataset.o, false); return;
       case 'plan-menu': e.stopPropagation(); if (pl) planMenu(el, pl); return;
       case 'send': if (pl) sendFlow(pl); return;
+      case 'make-tasks': if (pl) makeTasksDialog(pl); return;
       case 'approve': if (pl) approve(pl); return;
       case 'send-back': if (pl) sendBack(pl); return;
     }
@@ -550,5 +700,5 @@ const Plans = (() => {
   // skeletons waiting for this person's approval (the sidebar count)
   const waiting = () => (canSee() ? list().filter((pl) => pl.status === 'review' && canApprove(pl) && proj(pl.projectId) && !proj(pl.projectId).inactive).length : 0);
   const nameOf = (pl) => { const p = proj(pl.projectId); return `${p ? p.name : 'A client'} · ${monthLabel(pl.month)}`; };
-  return { on, owns, canSee, render, title, isMgr, socialsOf, planById, monthLabel, FORMATS, waiting, nameOf, open };
+  return { on, owns, canSee, render, title, isMgr, socialsOf, planById, monthLabel, FORMATS, waiting, nameOf, open, socialManages, progress };
 })();

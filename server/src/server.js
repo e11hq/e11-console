@@ -577,6 +577,20 @@ export function createServer(cfg) {
       return;
     }
 
+    // Content plans: when tasks are made from a skeleton, its posts' reference files are linked into each new task
+    if (p === '/api/plan-refs' && req.method === 'POST') {
+      const body = await readBody(req);
+      const pl = store.get('plans', String((body && body.planId) || ''));
+      if (!pl || !access.canSee(u, 'plans', pl) || !/^[\w-]{3,80}$/.test(String(body.taskId || ''))) return json(res, 403, { ok: false, error: 'Not allowed' });
+      const out = [];
+      for (const r of (body.files || []).slice(0, 40)) {
+        const fp = String((r && r.path) || '');
+        if (!fp.startsWith(`attachments/${pl.id}/`)) continue;
+        try { out.push({ ...files.linkToTask(fp, body.taskId, r.name), w: r.w, h: r.h }); } catch { /* a missing file is skipped */ }
+      }
+      return json(res, 200, { ok: true, files: out });
+    }
+
     if (p.startsWith('/api/host/') && req.method === 'POST') {
       const cmd = p.slice('/api/host/'.length);
       const fn = files.commands[cmd === 'writeChunkBin' ? 'writeChunk' : cmd];

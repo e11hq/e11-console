@@ -107,6 +107,18 @@ export function createFiles(root) {
     return { path: rel(dest), name: path.basename(dest), size: fs.statSync(dest).size };
   }
 
+  // Content plans: a post's reference files go with the task made from it (hard links into the task's folder)
+  function linkToTask(srcRel, taskId, name) {
+    if (!/^attachments\/pl-[^/]+\//.test(String(srcRel))) throw httpError(400, 'Invalid file');
+    const src = resolve(srcRel);
+    if (!fs.existsSync(src)) throw httpError(404, 'File not found');
+    const dir = resolve('attachments/' + safeName(taskId));
+    fs.mkdirSync(dir, { recursive: true });
+    const dest = uniquePath(dir, safeName(name || path.basename(src)));
+    try { fs.linkSync(src, dest); } catch { fs.copyFileSync(src, dest, fs.constants.COPYFILE_EXCL); }
+    return { path: rel(dest), name: path.basename(dest), size: fs.statSync(dest).size };
+  }
+
   const zips = new Map();
 
   const commands = {
@@ -422,7 +434,7 @@ export function createFiles(root) {
     res.end(Buffer.concat([cd, endRec]));
   }
 
-  return { commands, serve, serveSized, serveZip, resolve, purgeTrash, linkInto, root: FILES };
+  return { commands, serve, serveSized, serveZip, resolve, purgeTrash, linkInto, linkToTask, root: FILES };
 }
 
 export function httpError(status, message) { const e = new Error(message); e.status = status; return e; }
