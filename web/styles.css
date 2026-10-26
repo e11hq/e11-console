@@ -2438,3 +2438,26 @@ html:not(.mac-chrome) #app:not(.sb-collapsed) #sidebar .brand { margin-right: -7
 .mi.mi-locked { opacity: .5; }
 .mi .mi-lock { margin-left: auto; display: flex; color: var(--text-3); }
 .mi .mi-lock .ic { width: 13px; height: 13px; }
+
+/* Client Assets: Info button, final-files folders, Info pop-up */
+.cf-info { position: absolute; top: 10px; right: 42px; opacity: 0; }
+.cf-card:hover .cf-info, .cf-card:focus-within .cf-info { opacity: 1; }
+.cf-card:not(:has(.cf-more)) .cf-info { right: 10px; }
+@media (hover: none) { .cf-info, .cf-more { opacity: .8; } }
+.cf-card.final .cf-ic { background: rgba(61, 220, 151, .14); color: #3ddc97; }
+.cf-final { display: inline-block; font-size: 11px; font-weight: 650; color: #3ddc97; background: rgba(61, 220, 151, .12); border-radius: 999px; padding: 1px 7px; margin-right: 6px; }
+.cfo-title small a { color: var(--accent); cursor: pointer; }
+.ci-dlg { width: 440px; max-width: calc(100vw - 32px); }
+.ci-dlg h2 { display: flex; align-items: center; gap: 10px; font-size: 17px; }
+.ci-dlg h2 span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.ci-dlg h2 svg { flex: none; width: 18px; height: 18px; color: var(--text-2); }
+.ci-rows { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin: 6px 0 4px; }
+.ci-row { display: flex; gap: 14px; justify-content: space-between; padding: 9px 13px; font-size: 13.5px; }
+.ci-row + .ci-row { border-top: 1px solid var(--border); }
+.ci-row span { color: var(--text-2); flex: none; }
+.ci-row b { font-weight: 550; text-align: right; overflow-wrap: anywhere; }
+.prop-capp .pv { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ca-ap { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.ca-ap.ok { color: #3ddc97; }
+.ca-ap.muted { color: var(--text-3); }
+.ca-ap .ic { width: 13px; height: 13px; }

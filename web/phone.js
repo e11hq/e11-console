@@ -352,7 +352,8 @@ const Phone = (() => {
       const cl = clientById(ui.clientId);
       const f = cl && cl.folders.find((x) => x.id === ui.folderId);
       title = esc(f ? f.name : cl ? cl.name : 'Client Assets');
-      back = f ? `data-action="open-client" data-id="${cl.id}"` : 'data-nav="clients"';
+      const up = f && f.parentId ? cl.folders.find((x) => x.id === f.parentId) : null;
+      back = up ? `data-action="open-cfolder" data-id="${up.id}"` : f ? `data-action="open-client" data-id="${cl.id}"` : 'data-nav="clients"';
     }
     if (ui.search) { title = 'Search'; back = 'data-ph-tab="today"'; }
     c.insertAdjacentHTML('afterbegin', backHead(title, back));

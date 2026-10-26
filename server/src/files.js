@@ -95,6 +95,18 @@ export function createFiles(root) {
     return p;
   }
 
+  // A second name for a file in another folder (a hard link — no extra space, and it stays if the first is removed);
+  // a copy where links aren't possible
+  function linkInto(srcRel, destDirRel, name) {
+    const src = resolve(srcRel);
+    const dir = resolve(destDirRel);
+    if (!String(destDirRel).startsWith('Clients/')) throw httpError(400, 'Invalid folder');
+    fs.mkdirSync(dir, { recursive: true });
+    const dest = uniquePath(dir, safeName(name || path.basename(src)));
+    try { fs.linkSync(src, dest); } catch { fs.copyFileSync(src, dest, fs.constants.COPYFILE_EXCL); }
+    return { path: rel(dest), name: path.basename(dest), size: fs.statSync(dest).size };
+  }
+
   const zips = new Map();
 
   const commands = {
@@ -410,7 +422,7 @@ export function createFiles(root) {
     res.end(Buffer.concat([cd, endRec]));
   }
 
-  return { commands, serve, serveSized, serveZip, resolve, purgeTrash, root: FILES };
+  return { commands, serve, serveSized, serveZip, resolve, purgeTrash, linkInto, root: FILES };
 }
 
 export function httpError(status, message) { const e = new Error(message); e.status = status; return e; }

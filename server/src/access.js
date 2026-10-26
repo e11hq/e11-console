@@ -127,6 +127,8 @@ export function createAccess(store, opts = {}) {
   // Name and logo: Admins and Account Managers.
   const AUTO_FOLDERS = ['Logos', 'Brand Guidelines', 'Fonts', 'Files'];
   const isAutoFolder = (c, f) => !!f.auto || (AUTO_FOLDERS.includes(f.name) && (!f.createdBy || f.createdBy === c.createdBy) && Math.abs(Date.parse(f.createdAt || 0) - Date.parse(c.createdAt || 0)) < 60000);
+  // the client's own Files folder: it holds sub-folders (one per job, and the final files), not loose files
+  const isFilesTop = (f, c) => !!f && !f.parentId && f.name === 'Files' && (!!f.auto || (!!c && isAutoFolder(c, f)));
   function clientEditOk(u, manager, base, current, next) {
     if (!next) return false;
     // (anyone may fill in a missing logo — the first image in Logos — but only Admins and AMs change one)
@@ -148,14 +150,24 @@ export function createAccess(store, opts = {}) {
         continue;
       }
       if (n.name !== f.name && !mine) return false;                 // renamed: only your own
-      if (n.dir !== f.dir || !!n.auto !== !!f.auto || n.createdBy !== f.createdBy) return false;
+      if (n.dir !== f.dir || !!n.auto !== !!f.auto || n.createdBy !== f.createdBy || (n.parentId || null) !== (f.parentId || null) || (n.finalOf || null) !== (f.finalOf || null)) return false;
+      // final files are filed by the app: nobody adds or removes them by hand; Files holds folders, not loose files
+      const curF = (current.folders || []).find((x) => x.id === id);
+      const had = new Set([...(f.files || []), ...((curF && curF.files) || [])].map((a) => a.id));
+      const added = (n.files || []).some((a) => !had.has(a.id));
+      if (added && (f.finalOf || isFilesTop(f, base))) return false;
+      if (f.finalOf && (f.files || []).some((a) => !(n.files || []).some((x) => x.id === a.id))) return false;
       const keep = new Set((n.files || []).map((a) => a.id));
       if (!manager && (f.files || []).some((a) => !keep.has(a.id) && a.addedBy !== u.id)) return false;   // only your own files go
     }
     const there = new Set((current.folders || []).map((f) => f.id));
     for (const [id, n] of now) {
       if (was.has(id) || there.has(id)) continue;
-      if (n.createdBy !== u.id || n.auto) return false;             // a new folder is yours
+      if (n.createdBy !== u.id || n.auto || n.finalOf) return false; // a new folder is yours
+      if (n.parentId) {                                             // a sub-folder: only one level, only inside Files
+        const parent = (current.folders || []).find((x) => x.id === n.parentId);
+        if (!parent || !isFilesTop(parent, current)) return false;
+      }
     }
     return true;
   }

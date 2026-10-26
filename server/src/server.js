@@ -18,6 +18,7 @@ import zlib from 'node:zlib';
 import { sampleData } from './sample.js';
 import { freshSample } from './sample-fresh.js';
 import { createAppIcon } from './appicon.js';
+import { createFinals } from './finals.js';
 
 const BODY_LIMIT = 12 * 1024 * 1024; // 2 MB upload pieces arrive as ~2.7 MB of base64
 
@@ -31,6 +32,7 @@ export function createServer(cfg) {
   const webDir = cfg.webDir || null;
   const streams = new Set(); // open live-update connections
   const uploads = new Map(); // file path -> who is uploading it (pieces can only be added by them)
+  const finals = createFinals({ store, files, access });
   const webPush = createWebPush({ store, fetchImpl: cfg.pushFetch || fetch, subject: cfg.pushSubject || 'mailto:admin@e11hq.com' });
   const digest = createDigest({ store, webPush, now: cfg.now || (() => Date.now()) });
   if (cfg.digest !== false) digest.start();
@@ -523,9 +525,19 @@ export function createServer(cfg) {
       const fresh = new Set(changes.filter((ch) => ch && ch.kind === 'notifications' && !ch.del && !store.get('notifications', String(ch.id))).map((ch) => String(ch.id)));
       const restoring = new Set(changes.filter((ch) => ch && !ch.del && ch.kind !== 'trash').map((ch) => `${ch.kind}:${ch.id}`));
       const namesBefore = new Map(changes.filter((ch) => ch && ch.kind === 'projects' && !ch.del).map((ch) => [String(ch.id), (store.get('projects', String(ch.id)) || {}).name]));
+      const tasksBefore = new Map(changes.filter((ch) => ch && ch.kind === 'tasks').map((ch) => [String(ch.id), store.get('tasks', String(ch.id))]));
       const { rev, results } = store.apply(changes, u.id, (ch, current) => access.canWrite(u, ch, current, { restoring }));
       broadcast(rev, results, body.client, u.id);
       renameLinkedAssets(results, namesBefore);
+      // a CD-reviewed task just completed: its final files go into Client Assets › Files
+      let filed = null;
+      try { filed = finals.afterPush(results, tasksBefore, u.id); } catch (e) { console.error('final files:', e.message); }
+      if (filed) {
+        broadcast(filed.rev, filed.results, null, null);
+        filed.results.filter((r) => r.kind === 'notifications' && !r.refused && r.data && r.data.to)
+          .filter((r) => { const to = store.get('users', String(r.data.to)); return !!to && access.canSee(to, 'notifications', r.data); })
+          .forEach((r) => webPush.sendTo(r.data.to, notifMessage(store, r.data)).catch(() => {}));
+      }
       // new notifications also go to the person's phone
       results.filter((r) => r.kind === 'notifications' && fresh.has(String(r.id)) && !r.refused && !r.deleted && r.data && r.data.to && r.data.to !== u.id)
         .filter((r) => { const to = store.get('users', String(r.data.to)); return !!to && access.canSee(to, 'notifications', r.data); })   // (only what they'd see in their Inbox)

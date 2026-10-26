@@ -28,12 +28,12 @@ const OfficeHome = (() => {
       const open = st.sel === a.id;
       return `<div class="oh-fwrap"><button class="oh-row ${open ? 'sel' : ''}" data-oh="file" data-id="${a.id}">
           <span class="oh-ext" style="background:${esc(projColorOfClient(c))}">${esc(extOf(a.name))}</span>
-          <span class="oh-t"><b>${esc(a.name)}</b><small>${esc(c.name)} › ${esc(f.name)}${a.addedBy ? ' · ' + esc(firstName(a.addedBy)) : ''}</small></span>
+          <span class="oh-t"><b>${esc(a.name)}</b><small>${esc(c.name)} › ${esc(folderPath(c, f))}${a.addedBy ? ' · ' + esc(firstName(a.addedBy)) : ''}</small></span>
           <span class="oh-w">${a.addedAt ? esc(short(a.addedAt)) : ''}</span></button>
         ${open ? `<div class="oh-detail">
           <div class="oh-kv"><span>Added by</span><span>${a.addedBy ? esc(fullName(userById(a.addedBy))) : '—'}</span>
             <span>Added</span><span>${a.addedAt ? esc(new Date(a.addedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })) : '—'}</span>
-            <span>Size</span><span>${esc(fmtSize(a.size))}</span><span>Folder</span><span>${esc(c.name)} › ${esc(f.name)}</span></div>
+            <span>Size</span><span>${esc(fmtSize(a.size))}</span><span>Folder</span><span>${esc(c.name)} › ${esc(folderPath(c, f))}</span></div>
           <div class="oh-acts"><button class="btn sm" data-oh="open-folder" data-client="${c.id}" data-folder="${f.id}">Open folder</button><a class="btn sm" href="${fileUrl(a)}" download="${esc(a.name)}">Download</a></div>
         </div>` : ''}</div>`;
     }).join('');

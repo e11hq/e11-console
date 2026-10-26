@@ -2996,6 +2996,7 @@ function renderDetail() {
             : (can('assign') ? `<button class="pv-empty" data-action="assign-menu">Empty</button>` : '<span class="pv-empty">Empty</span>')}${can('assign') && (t.assignees || []).length ? `<button class="asg-add" data-action="assign-menu" title="Assign people">${icon('plus')}</button>` : ''}</div></div>
           ${partsRow(t)}
           ${cdReviewRow(t)}
+          ${clientApprovalRow(t)}
           <div class="prop prop-dates"><label>${icon('cal')}Dates</label><div class="pv">
             <span class="date-chip ${t.start ? 'set' : 'is-empty'}">${icon('cal')}<span class="date-lbl">${t.start ? esc(fmtDay(t.start)) : 'Start'}</span><input type="date" class="date-in" id="d-start" value="${t.start || ''}" title="Start date"></span>${t.start ? `<button class="icon-btn xs" data-action="clear-start" title="Remove start date">${icon('x')}</button>` : ''}
             <span class="date-arrow">${icon('arrow')}</span>
@@ -4212,7 +4213,7 @@ function statusMenu(anchor) {
   const cdWait = !t.parentId && needsCD(t) && !cdOK(t);   // (statuses past Review wait for the CD's approval)
   statusList(t).forEach((st) => { const lock = cdWait && t.sectionId !== st.id && pastReview(t, st.id); items.push({ html: `<div class="mi ${!t.done && t.sectionId === st.id ? 'cur' : ''} ${lock ? 'mi-locked' : ''}" data-mi="${items.length}" ${lock ? `title="${esc(CD_WAIT_MSG(t))}"` : ''}><span class="sw" style="background:${st.color}"></span>${esc(st.name)}${lock ? `<span class="mi-lock">${icon('lock')}</span>` : ''}</div>`, run: () => { changeStatus(t, st.id); } }); });
   items.push('-');
-  if (t.done || canComplete(t)) items.push({ html: `<div class="mi ${t.done ? 'cur' : ''}" data-mi="${items.length}"><span class="sw" style="background:#3ddc97"></span>${t.done ? 'Complete' : 'Mark complete'}</div>`, run: () => { setDone(t, !t.done); commit(); } });
+  if (t.done || canComplete(t)) items.push({ html: `<div class="mi ${t.done ? 'cur' : ''}" data-mi="${items.length}"><span class="sw" style="background:#3ddc97"></span>${t.done ? 'Complete' : 'Mark complete'}</div>`, run: async () => { if (!(await askClientApproval(t))) return; setDone(t, !t.done); commit(); } });
   else items.push({ html: `<div class="mi-note">${icon('lock')}${esc(completeBlockedMsg(t))}</div>` });
   // showMenu needs index-aligned items: rebuild html with real indices
   showMenu(anchor, items.map((it, i) => (it === '-' ? it : { ...it, html: it.html.replace(/data-mi="\d+"/, `data-mi="${i}"`) })));
@@ -4513,11 +4514,14 @@ document.addEventListener('click', async (e) => {
         e.stopPropagation();
         const t = task(id);
         if (!t.done && !canComplete(t)) { toast(completeBlockedMsg(t)); return; }
-        setDone(t, !t.done);
-        commit({ delay: 0 });
-        const btn = $(`.check[data-id="${id}"]`);
-        if (btn && t.done) btn.classList.add('pop');
-        if (t.done && !t.parentId) toast(`Completed “${t.title || 'Untitled task'}”`, { label: 'Undo', run: () => { setDone(t, false); commit(); } });
+        (async () => {
+          if (!(await askClientApproval(t))) return;
+          setDone(t, !t.done);
+          commit({ delay: 0 });
+          const btn = $(`.check[data-id="${id}"]`);
+          if (btn && t.done) btn.classList.add('pop');
+          if (t.done && !t.parentId) toast(`Completed “${t.title || 'Untitled task'}”${hasApproved(t) && clientOfProject(proj(t.projectId)) ? ' — final files go to Client Assets' : ''}`, { label: 'Undo', run: () => { setDone(t, false); commit(); } });
+        })();
         return;
       }
       case 'collapse': ui.collapsed[id] = !ui.collapsed[id]; renderContent(); return;
@@ -4719,6 +4723,8 @@ document.addEventListener('click', async (e) => {
       case 'cd-menu': e.stopPropagation(); toast('CD Status is set automatically when files are submitted and reviewed'); return;
       case 'submit-review': e.stopPropagation(); submitDialog(task(ui.taskId)); return;
       case 'withdraw-review': e.stopPropagation(); withdrawReview(task(ui.taskId)); return;
+      case 'client-approved': e.stopPropagation(); { const t = task(ui.taskId); if (t && canClientApprove(t)) { setClientApproval(t, {}); commit(); renderDetail(); } } return;
+      case 'client-approved-clear': e.stopPropagation(); { const t = task(ui.taskId); if (t && canClientApprove(t)) { setClientApproval(t, null); commit(); renderDetail(); } } return;
       case 'needs-cd': e.stopPropagation(); setNeedsCD(task(ui.taskId), actEl.checked); renderDetail(); return;
       case 'cd-toggle': e.stopPropagation(); cdToggleFlow(id); return;
       case 'rr-tab': ui.rrTab = actEl.dataset.tab; renderContent(); return;
@@ -4799,7 +4805,9 @@ document.addEventListener('click', async (e) => {
       case 'client-menu': e.stopPropagation(); { const c = clientById(id); if (c) clientMenu(actEl, c); } return;
       case 'open-cfolder': PageHistory.mark(); ui.folderId = id; $('#content').scrollTop = 0; render(); PageHistory.mark(); return;
       case 'cfolder-menu': e.stopPropagation(); { const c = clientById(ui.clientId); const f = c && c.folders.find((x) => x.id === id); if (f) folderMenu(actEl, c, f); } return;
-      case 'add-cfolder': { const c = clientById(ui.clientId); if (c) addFolderFlow(c); } return;
+      case 'add-cfolder': { const c = clientById(ui.clientId); if (c) addFolderFlow(c, actEl.dataset.parent ? c.folders.find((x) => x.id === actEl.dataset.parent) : null); } return;
+      case 'ca-info': e.stopPropagation(); caInfo('file', id); return;
+      case 'ca-info-folder': e.stopPropagation(); caInfo('folder', id); return;
       case 'ca-upload': pickIntoFolder(); return;
       case 'open-cfolder-of': e.stopPropagation(); openClient(actEl.dataset.client, id); return;
       case 'ca-q-clear': { const i = $('#ca-q'); if (i) { i.value = ''; runCaSearch(i); i.focus(); } } return;
@@ -5157,9 +5165,18 @@ const canAssets = () => { const u = me(); return !!u && (isAdm(u) || u.role === 
 const canAddAssets = () => { const u = me(); return !!u && !isFinUser(u) && u.role !== 'freelancer'; };   // freelancers only look
 const isAutoFolder = (c, f) => !!f.auto || (DEFAULT_FOLDERS.includes(f.name) && (!f.createdBy || f.createdBy === c.createdBy) && Math.abs(Date.parse(f.createdAt || 0) - Date.parse(c.createdAt || 0)) < 60000);
 // (Account Managers remove anyone's files and added folders)
-const canDelAsset = (a) => canAddAssets() && (canAssets() || (!!a && a.addedBy === currentUserId));
+const canDelAsset = (a) => canAddAssets() && !(a && a.final) && (canAssets() || (!!a && a.addedBy === currentUserId));
 const canEditFolder = (c, f) => isAdmin() || (canAddAssets() && !isAutoFolder(c, f) && (canAssets() || f.createdBy === currentUserId));
-const canDelFolder = (c, f) => canEditFolder(c, f) && (canAssets() || f.files.every((a) => a.addedBy === currentUserId));
+const canDelFolder = (c, f) => canEditFolder(c, f) && (canAssets() || f.files.every((a) => a.addedBy === currentUserId)) && !subFolders(c, f).length;
+// Files (made with the client) holds folders — one per job, and the final files of finished tasks — never loose files.
+// Every other folder holds files only. Final-files folders are filled by the app: nobody adds or removes their files.
+const isFilesTop = (c, f) => !!f && !f.parentId && f.name === 'Files' && isAutoFolder(c, f);
+const topFolders = (c) => c.folders.filter((f) => !f.parentId);
+const subFolders = (c, f) => c.folders.filter((x) => x.parentId === f.id);
+const parentFolder = (c, f) => (f && f.parentId ? c.folders.find((x) => x.id === f.parentId) || null : null);
+const folderPath = (c, f) => { const p = parentFolder(c, f); return p ? `${p.name} › ${f.name}` : f.name; };
+const canUploadTo = (c, f) => canAddAssets() && !!f && !f.finalOf && !isFilesTop(c, f);
+const folderFileCount = (c, f) => f.files.length + subFolders(c, f).reduce((n, x) => n + x.files.length, 0);
 const isAdmin = () => !!isAdm(me());
 // The Creative Director's Home, My Day ("E11 Day") and My Tasks are the Admin's: every team task, with the same filters
 const seesAll = () => isAdmin() || (typeof isCD === 'function' && isCD());
@@ -5181,8 +5198,8 @@ function freeDir(base, name, taken) {
   while (taken.some((x) => x.toLowerCase() === d.toLowerCase())) d = `${base}/${n} (${i++})`;
   return d;
 }
-function newFolder(c, name, auto = false) {
-  const f = { id: 'cf-' + uid(), name: name.trim(), dir: freeDir(c.dir, name, c.folders.map((x) => x.dir)), files: [], createdAt: nowISO(), createdBy: currentUserId, ...(auto ? { auto: true } : {}) };
+function newFolder(c, name, auto = false, parent = null) {
+  const f = { id: 'cf-' + uid(), name: name.trim(), dir: freeDir(parent ? parent.dir : c.dir, name, c.folders.map((x) => x.dir)), files: [], createdAt: nowISO(), createdBy: currentUserId, ...(auto ? { auto: true } : {}), ...(parent ? { parentId: parent.id } : {}) };
   c.folders.push(f);
   Host.call('makeDir', { path: f.dir }).catch(() => {});
   return f;
@@ -5219,7 +5236,7 @@ function viewClients() {
   const cards = list.map((c) => `<div class="ca-card" data-action="open-client" data-id="${c.id}" data-q="${esc(c.name.toLowerCase())}" title="Open ${esc(c.name)}">
       <div class="ca-logo">${clientLogoHTML(c, 120)}</div>
       <div class="ca-name">${esc(c.name)}</div>
-      <div class="ca-meta">${c.folders.length} folder${c.folders.length === 1 ? '' : 's'} · ${clientFileCount(c)} file${clientFileCount(c) === 1 ? '' : 's'}</div>
+      <div class="ca-meta">${topFolders(c).length} folder${topFolders(c).length === 1 ? '' : 's'} · ${clientFileCount(c)} file${clientFileCount(c) === 1 ? '' : 's'}</div>
     </div>`).join('');
   const grid = `<div class="ca-grid">
       ${canAssets() ? `<div class="ca-card add" data-action="add-client"><div class="ca-logo"><span class="ca-plus">${icon('plus')}</span></div><div class="ca-name">Add client</div><div class="ca-meta">Name and logo</div></div>` : ''}
@@ -5243,20 +5260,11 @@ function viewClient(c) {
   const head = `<div class="cl-head">
       <div class="cl-head-logo">${clientLogoHTML(c, 88)}</div>
       <div class="cl-head-txt"><h2>${esc(c.name)}</h2>
-        <div class="cl-head-meta">${c.folders.length} folder${c.folders.length === 1 ? '' : 's'} · ${clientFileCount(c)} file${clientFileCount(c) === 1 ? '' : 's'}${projects.length ? ` · Clients: ${projects.map((p) => `<a class="cl-proj" data-action="go-project" data-id="${p.id}"><i style="background:${p.color}"></i>${esc(p.name)}</a>`).join('')}` : ''}</div>
+        <div class="cl-head-meta">${topFolders(c).length} folder${topFolders(c).length === 1 ? '' : 's'} · ${clientFileCount(c)} file${clientFileCount(c) === 1 ? '' : 's'}${projects.length ? ` · Clients: ${projects.map((p) => `<a class="cl-proj" data-action="go-project" data-id="${p.id}"><i style="background:${p.color}"></i>${esc(p.name)}</a>`).join('')}` : ''}</div>
       </div>
       ${canAssets() ? `<button class="btn" data-action="client-menu" data-id="${c.id}">${icon('more')}Client options</button>` : ''}
     </div>`;
-  const folders = c.folders.map((f) => {
-    const imgs = f.files.filter((a) => isImage(a)).slice(0, 3);
-    return `<div class="cf-card" data-action="open-cfolder" data-id="${f.id}" title="Open ${esc(f.name)}">
-      <div class="cf-ic">${icon('folder')}</div>
-      <div class="cf-name">${esc(f.name)}</div>
-      <div class="cf-meta">${f.files.length ? `${f.files.length} file${f.files.length === 1 ? '' : 's'}` : 'Empty'}</div>
-      ${imgs.length && Host.isNative ? `<div class="cf-peek">${imgs.map((a) => `<img src="${imgUrl(a, 160)}" alt="" loading="lazy">`).join('')}</div>` : ''}
-      ${canEditFolder(c, f) ? `<button class="icon-btn sm cf-more" data-action="cfolder-menu" data-id="${f.id}" title="Folder options">${icon('more')}</button>` : ''}
-    </div>`;
-  }).join('');
+  const folders = topFolders(c).map((f) => folderCard(c, f)).join('');
   const grid = `<div class="cf-grid">${folders}
       ${canAddAssets() ? `<div class="cf-card add" data-action="add-cfolder"><div class="cf-ic">${icon('plus')}</div><div class="cf-name">New folder</div><div class="cf-meta">For anything else</div></div>` : ''}
     </div>`;
@@ -5267,6 +5275,20 @@ function viewClient(c) {
     <template id="ca-default">${grid}</template></div>`;
 }
 
+function folderCard(c, f) {
+  const imgs = f.files.filter((a) => isImage(a)).slice(0, 3);
+  const subs = subFolders(c, f).length;
+  const meta = isFilesTop(c, f) ? (subs ? `${subs} folder${subs === 1 ? '' : 's'}` : 'Empty') : f.files.length ? `${f.files.length} file${f.files.length === 1 ? '' : 's'}` : 'Empty';
+  const mine = canEditFolder(c, f) && (!f.finalOf || canDelFolder(c, f));
+  return `<div class="cf-card ${f.finalOf ? 'final' : ''}" data-action="open-cfolder" data-id="${f.id}" title="Open ${esc(f.name)}">
+      <div class="cf-ic">${icon(f.finalOf ? 'check' : 'folder')}</div>
+      <div class="cf-name">${esc(f.name)}</div>
+      <div class="cf-meta">${f.finalOf ? '<span class="cf-final">Final</span>' : ''}${meta}</div>
+      ${imgs.length && Host.isNative ? `<div class="cf-peek">${imgs.map((a) => `<img src="${imgUrl(a, 160)}" alt="" loading="lazy">`).join('')}</div>` : ''}
+      <button class="icon-btn sm cf-info" data-action="ca-info-folder" data-id="${f.id}" title="Info">${icon('info')}</button>
+      ${mine ? `<button class="icon-btn sm cf-more" data-action="cfolder-menu" data-id="${f.id}" title="Folder options">${icon('more')}</button>` : ''}
+    </div>`;
+}
 function caTile(f, a, loc = null) {
   const kind = fileKind(a);
   let inner;
@@ -5276,11 +5298,12 @@ function caTile(f, a, loc = null) {
   else inner = `<div class="thumb-ph"><span class="ext">${esc(fileExt(a.name) || 'file')}</span></div>`;
   return `<div class="tile ca-tile" data-action="tile-open" data-id="${a.id}" title="${esc(a.name)}">
     <div class="tile-img ${isFont(a) ? 'is-font' : ''}">${inner}${kind === 'video' ? `<span class="tile-play">${icon('play')}</span>` : ''}</div>
-    <div class="tile-meta"><span>${loc ? caMark(a.name, loc.q) : esc(a.name)}</span>${loc ? `<a class="ca-loc" data-action="open-cfolder-of" data-client="${loc.c.id}" data-id="${f.id}" title="Open this folder">${clientLogoHTML(loc.c, 14)}${esc(loc.c.name)} › ${esc(f.name)}</a>` : ''}<small>${fmtSize(a.size)}${a.addedBy ? ` · ${esc(firstName(a.addedBy))}` : ''}</small></div>
+    <div class="tile-meta"><span>${loc ? caMark(a.name, loc.q) : esc(a.name)}</span>${loc ? `<a class="ca-loc" data-action="open-cfolder-of" data-client="${loc.c.id}" data-id="${f.id}" title="Open this folder">${clientLogoHTML(loc.c, 14)}${esc(loc.c.name)} › ${esc(folderPath(loc.c, f))}</a>` : ''}<small>${fmtSize(a.size)}${a.addedBy ? ` · ${esc(firstName(a.addedBy))}` : ''}</small></div>
     <button class="ca-copy" data-action="copy-att" data-id="${a.id}" title="Copy — paste into any task comment or description">${icon('copy')}Copy</button>
     <div class="tile-actions">
       <button class="icon-btn sm" data-action="quicklook" data-id="${a.id}" title="Preview">${icon('search')}</button>
       <button class="icon-btn sm" data-action="ca-download" data-id="${a.id}" title="Download to your Downloads folder">${icon('download')}</button>
+      <button class="icon-btn sm" data-action="ca-info" data-id="${a.id}" title="Info">${icon('info')}</button>
       ${Host.isServer ? '' : `<button class="icon-btn sm" data-action="reveal-att" data-id="${a.id}" title="${FINDER_LABEL}">${icon('folder')}</button>`}
       ${canDelAsset(a) && !loc ? `<button class="icon-btn sm" data-action="ca-remove" data-id="${a.id}" title="Delete">${icon('trash')}</button>` : ''}
     </div>
@@ -5349,7 +5372,7 @@ function caResultsHTML(q, scope) {
     ${fonts.length ? `<style>${fonts.map((x) => `@font-face{font-family:'caf-${x.a.id}';src:url("${fileUrl(x.a)}");}`).join('')}</style>` : ''}
     <div class="ca-rcount">${n} result${n === 1 ? '' : 's'} for “${esc(q.trim())}”${scope ? ` in ${esc(scope.name)}` : ''}${r.loose ? ' <span class="ca-loose">— close matches (check the spelling)</span>' : ''}</div>
     ${r.clients.length ? `<h4 class="ca-rh">Clients <span>${r.clients.length}</span></h4><div class="ca-rlist">${r.clients.map((c) => `<button class="ca-rrow" data-action="open-client" data-id="${c.id}">${clientLogoHTML(c, 34)}<span><b>${caMark(c.name, q)}</b><small>${c.folders.length} folders · ${clientFileCount(c)} files</small></span>${icon('chev-right')}</button>`).join('')}</div>` : ''}
-    ${r.folders.length ? `<h4 class="ca-rh">Folders <span>${r.folders.length}</span></h4><div class="ca-rlist">${r.folders.map(({ c, f }) => `<button class="ca-rrow" data-action="open-cfolder-of" data-client="${c.id}" data-id="${f.id}"><span class="cf-ic sm">${icon('folder')}</span><span><b>${caMark(f.name, q)}</b><small>${esc(c.name)} · ${f.files.length} file${f.files.length === 1 ? '' : 's'}</small></span>${icon('chev-right')}</button>`).join('')}</div>` : ''}
+    ${r.folders.length ? `<h4 class="ca-rh">Folders <span>${r.folders.length}</span></h4><div class="ca-rlist">${r.folders.map(({ c, f }) => `<button class="ca-rrow" data-action="open-cfolder-of" data-client="${c.id}" data-id="${f.id}"><span class="cf-ic sm">${icon('folder')}</span><span><b>${caMark(f.name, q)}</b><small>${esc(c.name)}${f.parentId ? ' › ' + esc((parentFolder(c, f) || {}).name || '') : ''} · ${isFilesTop(c, f) ? `${subFolders(c, f).length} folders` : `${f.files.length} file${f.files.length === 1 ? '' : 's'}`}</small></span>${icon('chev-right')}</button>`).join('')}</div>` : ''}
     ${r.files.length ? `<h4 class="ca-rh">Files <span>${r.files.length}</span></h4><div class="tile-grid ca-files">${shown.map(({ c, f, a }) => caTile(f, a, { c, q })).join('')}</div>${r.files.length > shown.length ? `<div class="ca-rmore">Showing the first ${shown.length} files — add another word to narrow it down.</div>` : ''}` : ''}
   </div>`;
 }
@@ -5377,20 +5400,31 @@ document.addEventListener('keydown', (e) => {
 
 function viewClientFolder(c, f) {
   const fonts = f.files.filter(isFont);
+  const parent = parentFolder(c, f), top = isFilesTop(c, f), up = canUploadTo(c, f);
+  const subs = top ? subFolders(c, f) : [];
+  const src = f.finalOf ? task(f.finalOf) : null;
+  const back = parent ? `data-action="open-cfolder" data-id="${parent.id}" title="Back to ${esc(parent.name)}"` : `data-action="open-client" data-id="${c.id}" title="Back to ${esc(c.name)}"`;
+  const count = top ? `${subs.length} folder${subs.length === 1 ? '' : 's'}` : `${f.files.length} file${f.files.length === 1 ? '' : 's'}`;
+  // (Files from before folders went inside it: still shown, and still downloadable — new ones go in a folder)
+  const files = f.files.length ? `${top ? '<h4 class="ca-rh">Other files</h4>' : ''}<div class="tile-grid ca-files">${f.files.slice().sort((a, b) => a.name.localeCompare(b.name)).map((a) => caTile(f, a)).join('')}</div>` : '';
+  const empty = top ? (subs.length || f.files.length ? '' : `<div class="ca-empty">${icon('folder')}<b>No folders yet</b><span>${canAddAssets() ? 'Make a folder for each job. Final files of finished tasks are filed here too.' : 'Final files of finished tasks are filed here.'}</span></div>`)
+    : f.files.length ? '' : `<div class="ca-empty ${up ? 'drop' : ''}">${icon(up ? 'upload' : 'folder')}<b>${up ? 'Drag files here or click Upload files' : 'Nothing in this folder yet'}</b><span>${f.finalOf ? 'The final files are filed here when the task is completed.' : up ? 'Logos, guideline PDFs, fonts, templates — any file type.' : 'The E11 team adds files here.'}</span></div>`;
   return `<div class="ca-page ca-folder" data-folder="${f.id}">
     ${fonts.length ? `<style>${fonts.map((a) => `@font-face{font-family:'caf-${a.id}';src:url("${fileUrl(a)}");}`).join('')}</style>` : ''}
     <div class="cfo-head">
-      <button class="icon-btn" data-action="open-client" data-id="${c.id}" title="Back to ${esc(c.name)}">${icon('chev-left')}</button>
+      <button class="icon-btn" ${back}>${icon('chev-left')}</button>
       ${clientLogoHTML(c, 40)}
-      <div class="cfo-title"><h2>${esc(f.name)}</h2><small>${esc(c.name)} · ${f.files.length} file${f.files.length === 1 ? '' : 's'}</small></div>
+      <div class="cfo-title"><h2>${esc(f.name)}</h2><small>${esc(c.name)}${parent ? ' › ' + esc(parent.name) : ''} · ${count}${f.finalOf ? ` · <span class="cf-final">Final files</span>${src && !src.deleted ? ` · <a data-action="open-task" data-id="${src.id}">Open task</a>` : ''}` : ''}</small></div>
       <span class="spacer"></span>
+      <button class="btn ghost" data-action="ca-info-folder" data-id="${f.id}">${icon('info')}Info</button>
       ${f.files.length ? `<button class="btn ghost" data-action="ca-download-all">${icon('download')}Download all</button>` : ''}
-      ${canAddAssets() ? `<button class="btn primary" data-action="ca-upload">${icon('upload')}Upload files</button>` : ''}
+      ${top && canAddAssets() ? `<button class="btn primary" data-action="add-cfolder" data-parent="${f.id}">${icon('plus')}New folder</button>` : ''}
+      ${up ? `<button class="btn primary" data-action="ca-upload">${icon('upload')}Upload files</button>` : ''}
     </div>
     <div class="ca-uploads" id="ca-uploads"></div>
-    ${f.files.length ? `<div class="tile-grid ca-files">${f.files.slice().sort((a, b) => a.name.localeCompare(b.name)).map((a) => caTile(f, a)).join('')}</div>`
-      : `<div class="ca-empty ${canAddAssets() ? 'drop' : ''}">${icon(canAddAssets() ? 'upload' : 'folder')}<b>${canAddAssets() ? 'Drag files here or click Upload files' : 'Nothing in this folder yet'}</b><span>${canAddAssets() ? 'Logos, guideline PDFs, fonts, templates — any file type.' : 'The E11 team adds files here.'}</span></div>`}
-    ${canAddAssets() ? `<div class="ca-dropscrim">${icon('upload')}<b>Drop to upload to ${esc(f.name)}</b></div>` : ''}
+    ${subs.length ? `<div class="cf-grid">${subs.slice().sort((a, b) => !!a.finalOf - !!b.finalOf || String(b.createdAt || '').localeCompare(String(a.createdAt || ''))).map((x) => folderCard(c, x)).join('')}</div>` : ''}
+    ${files}${empty}
+    ${up ? `<div class="ca-dropscrim">${icon('upload')}<b>Drop to upload to ${esc(f.name)}</b></div>` : ''}
   </div>`;
 }
 
@@ -5506,27 +5540,33 @@ function clientMenu(anchor, c) {
     ...(isAdmin() ? ['-', { label: 'Delete client', icon: 'trash', danger: true, run: () => deleteClient(c) }] : []),
   ]);
 }
-const folderDup = (c, name, exceptId) => c.folders.find((f) => f.id !== exceptId && f.name.trim().toLowerCase() === name.trim().toLowerCase());
-async function addFolderFlow(c) {
+const folderDup = (c, name, exceptId, parentId) => c.folders.find((f) => f.id !== exceptId && (f.parentId || null) === (parentId || null) && f.name.trim().toLowerCase() === name.trim().toLowerCase());
+async function addFolderFlow(c, parent = null) {
   if (!canAddAssets()) return denied();
-  const v = await formDialog({ title: `New folder in ${c.name}`, fields: [{ key: 'name', label: 'Folder name', placeholder: 'e.g. Social templates' }], okText: 'Create folder',
-    validate: (x) => (!x.name ? 'Enter a folder name' : folderDup(c, x.name) ? `There is already a folder named “${folderDup(c, x.name).name}”.` : null) });
+  if (parent && !isFilesTop(c, parent)) return;
+  const pid = parent ? parent.id : null;
+  const v = await formDialog({ title: `New folder in ${parent ? c.name + ' › ' + parent.name : c.name}`, fields: [{ key: 'name', label: 'Folder name', placeholder: parent ? 'e.g. Summer campaign shoot' : 'e.g. Social templates' }], okText: 'Create folder',
+    validate: (x) => (!x.name ? 'Enter a folder name' : folderDup(c, x.name, null, pid) ? `There is already a folder named “${folderDup(c, x.name, null, pid).name}”.` : null) });
   if (!v) return;
-  newFolder(c, v.name); persist(0); render();
+  newFolder(c, v.name, false, parent); persist(0); render();
 }
 function folderMenu(anchor, c, f) {
   if (!canEditFolder(c, f)) return;
+  // (moves among the folders next to it: the client's folders, or the folders inside Files)
+  const sibs = () => c.folders.filter((x) => (x.parentId || null) === (f.parentId || null));
+  const swap = (d) => { const s = sibs(), j = s.indexOf(f) + d; if (j < 0 || j >= s.length) return; const a = c.folders.indexOf(f), b = c.folders.indexOf(s[j]); c.folders[a] = s[j]; c.folders[b] = f; persist(0); render(); };
+  if (f.finalOf && !canDelFolder(c, f)) return;
   showMenu(anchor, [
-    { label: 'Rename folder', icon: 'edit', run: async () => {
+    ...(f.finalOf ? [] : [{ label: 'Rename folder', icon: 'edit', run: async () => {
       const v = await formDialog({ title: 'Rename folder', fields: [{ key: 'name', label: 'Folder name', value: f.name }], okText: 'Save',
-        validate: (x) => (!x.name ? 'Enter a folder name' : folderDup(c, x.name, f.id) ? `There is already a folder named “${folderDup(c, x.name, f.id).name}”.` : null) });
+        validate: (x) => (!x.name ? 'Enter a folder name' : folderDup(c, x.name, f.id, f.parentId) ? `There is already a folder named “${folderDup(c, x.name, f.id, f.parentId).name}”.` : null) });
       if (v) { f.name = v.name; persist(0); render(); }
-    } },
-    { label: 'Move left', icon: 'chev-left', run: () => { const i = c.folders.indexOf(f); if (i > 0) { c.folders.splice(i, 1); c.folders.splice(i - 1, 0, f); persist(0); render(); } } },
-    { label: 'Move right', icon: 'chev-right', run: () => { const i = c.folders.indexOf(f); if (i < c.folders.length - 1) { c.folders.splice(i, 1); c.folders.splice(i + 1, 0, f); persist(0); render(); } } },
+    } }]),
+    ...(f.parentId ? [] : [{ label: 'Move left', icon: 'chev-left', run: () => swap(-1) }, { label: 'Move right', icon: 'chev-right', run: () => swap(1) }]),
     ...(canDelFolder(c, f) ? ['-', { label: 'Delete folder', icon: 'trash', danger: true, run: async () => {
       const ok = await dialog({ title: `Delete “${f.name}”?`, body: `The folder${f.files.length ? ` and its ${f.files.length} file${f.files.length === 1 ? '' : 's'}` : ''} move${f.files.length ? '' : 's'} to the Trash, where ${f.files.length ? 'they' : 'it'} can be restored within ${TRASH_DAYS} days. Copies already pasted into tasks stay.`, okText: 'Delete folder', danger: true });
       if (!ok) return;
+      if (subFolders(c, f).length) { toast('Delete or move the folders inside it first'); return; }
       c.folders = c.folders.filter((x) => x.id !== f.id);
       // (into the Trash with its files — they're only removed from disk when the Trash entry is deleted for good)
       toTrash('cafolder', { clientId: c.id, folder: JSON.parse(JSON.stringify(f)) }, { key: 'clients:' + c.id, where: c.name });
@@ -5550,7 +5590,7 @@ function assetNotify(c, f, verb, names) {
   projs.forEach((p) => (p.ams || []).forEach((a) => to.add(a.id)));
   db.users.forEach((u) => { if (isAdm(u)) to.add(u.id); });
   const n = names.length;
-  const text = `${verb} ${n === 1 ? 'a file' : n + ' files'} ${verb === 'added' ? 'to' : verb === 'replaced' ? 'in' : 'from'} ${c.name} › ${f.name}`;
+  const text = `${verb} ${n === 1 ? 'a file' : n + ' files'} ${verb === 'added' ? 'to' : verb === 'replaced' ? 'in' : 'from'} ${c.name} › ${folderPath(c, f)}`;
   const snippet = names.slice(0, 4).join(', ') + (n > 4 ? ` +${n - 4} more` : '');
   to.forEach((id) => {
     const u = userById(id);
@@ -5559,10 +5599,57 @@ function assetNotify(c, f, verb, names) {
     db.notifications.push({ id: uid(), to: id, from: currentUserId, kind: 'asset', clientId: c.id, folderId: f.id, text, snippet, at: nowISO(), read: false });
   });
 }
+// Info pop-up for a Client Assets file or folder. Final files keep their details from when they were filed, so they
+// still show once the task has gone; "Open task" only while it's there.
+function caInfo(kind, id) {
+  let c = null, f = null, a = null;
+  for (const cl of db.clients || []) for (const fo of cl.folders) {
+    if (kind === 'folder' && fo.id === id) { c = cl; f = fo; }
+    if (kind === 'file') { const x = fo.files.find((y) => y.id === id); if (x) { c = cl; f = fo; a = x; } }
+  }
+  if (!f) return;
+  const who = (uid2) => (uid2 && userById(uid2) ? esc(fullName(userById(uid2))) : uid2 ? 'Former team member' : '—');
+  const when = (iso) => (iso ? esc(fmtDateTime(iso)) : '—');
+  const row = (k, v) => `<div class="ci-row"><span>${k}</span><b>${v}</b></div>`;
+  let title, rows = [], extra = '';
+  if (a && a.final) {
+    const m = a.final, t = task(m.taskId);
+    title = a.name;
+    const client = m.clientNone ? 'not needed' : m.clientBy ? `${who(m.clientBy)}` : 'not recorded';
+    rows = [row('Completed', when(m.completedAt)), row('Task', esc(m.taskTitle || f.name)), row('Task created by', who(m.createdBy)), row('Assignee', who(m.assignee)),
+      row('Approved by', `${who(m.cdBy)} (CD)${m.clientBy ? ` &amp; ${who(m.clientBy)} (client)` : ''}`),
+      row('CD approved', when(m.cdAt)), row('Client approval', m.clientBy ? when(m.clientAt) + ' · ' + client : client),
+      row('Size', esc(fmtSize(a.size))), row('Type', esc((fileExt(a.name) || 'file').toUpperCase()))];
+    if (t && !t.deleted && db.tasks.includes(t)) extra = `<button class="btn" data-ci-task="${t.id}">${icon('open')}Open task</button>`;
+  } else if (a) {
+    title = a.name;
+    rows = [row('Added by', who(a.addedBy)), row('Date added', when(a.addedAt)), row('Size', esc(fmtSize(a.size))), row('Type', esc((fileExt(a.name) || 'file').toUpperCase())), row('Folder', esc(`${c.name} › ${folderPath(c, f)}`))];
+  } else {
+    const all = f.files.concat(...subFolders(c, f).map((x) => x.files));
+    title = f.name;
+    rows = [row('Created by', isAutoFolder(c, f) && !f.finalOf ? 'Made with the client' : who(f.createdBy)), row('Date', when(f.createdAt || c.createdAt)),
+      ...(isFilesTop(c, f) ? [row('Folders', String(subFolders(c, f).length))] : []),
+      row('Files', String(all.length)), row('Size', esc(fmtSize(all.reduce((n, x) => n + (x.size || 0), 0))))];
+    if (f.finalOf) rows.unshift(row('Kind', 'Final files of a completed task'));
+  }
+  const root = $('#overlay-root');
+  root.innerHTML = `<div class="scrim"><div class="dialog ci-dlg" role="dialog" aria-label="Info">
+    <h2>${icon(a ? 'clip' : f.finalOf ? 'check' : 'folder')}<span>${esc(title)}</span></h2>
+    <div class="ci-rows">${rows.join('')}</div>
+    <div class="actions">${extra}<button class="btn primary" data-ci-close>Close</button></div>
+  </div></div>`;
+  const close = () => { root.innerHTML = ''; document.removeEventListener('keydown', onKey, true); };
+  const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); } };
+  document.addEventListener('keydown', onKey, true);
+  const scrim = $('.scrim', root);
+  scrim.addEventListener('mousedown', (e) => { if (e.target === scrim) close(); });
+  $('[data-ci-close]', root).addEventListener('click', close);
+  const ot = $('[data-ci-task]', root); if (ot) ot.addEventListener('click', () => { const tid = ot.dataset.ciTask; close(); openTask(tid); });
+}
 function curFolder() { const c = clientById(ui.clientId); return c ? { c, f: c.folders.find((x) => x.id === ui.folderId) || null } : { c: null, f: null }; }
 async function pickIntoFolder() {
   const { c, f } = curFolder();
-  if (!f || !canAddAssets()) return;
+  if (!f || !canUploadTo(c, f)) return;
   try {
     const r = await Host.call('pickAttachments', { dest: f.dir });
     const files = (r.files || []).map((x) => ({ ...x, addedAt: nowISO(), addedBy: currentUserId }));
@@ -5575,7 +5662,7 @@ async function pickIntoFolder() {
 // Drag-and-drop upload in 2 MB pieces with a progress row per file
 async function uploadIntoFolder(fileList) {
   const { c, f } = curFolder();
-  if (!f || !canAddAssets()) return;
+  if (!f || !canUploadTo(c, f)) { if (f && isFilesTop(c, f)) toast('Files holds folders — open or make a folder first, then add the files there'); else if (f && f.finalOf) toast('Final files are filed by the app when the task is completed'); return; }
   const box = $('#ca-uploads');
   const rows = [...fileList].map((file) => {
     const el = document.createElement('div'); el.className = 'sr-item';
@@ -5915,6 +6002,41 @@ function myPartControl(t) {
   if (soloReview(t)) return '';
   if (st === 'pending') return pendingPill(t);
   return submitBtn(t);
+}
+// Client approval: recorded by the client's Account Managers or an Admin (and asked once on completing). It's saved
+// with the final files in Client Assets. A newer CD approval makes an older one out of date.
+const hasApproved = (t) => (t.reviews || []).some((r) => r.state === 'approved');
+const lastCDApprovalAt = (t) => (t.reviews || []).filter((r) => r.state === 'approved').map((r) => r.decidedAt || r.at || '').sort().pop() || '';
+const clientApprovalFresh = (t) => !!t.clientApproval && String(t.clientApproval.at || '') >= lastCDApprovalAt(t);
+function canClientApprove(t) {
+  const u = me(); if (!u || amReadOnly(t)) return false;
+  if (isAdm(u)) return true;
+  const p = proj(t.projectId), ams = (p && p.ams) || [];
+  return u.role === 'am' && (!ams.length || ams.some((a) => a.id === u.id));
+}
+function setClientApproval(t, v) {
+  if (v === null) { delete t.clientApproval; logActivity(t, 'cleared the <b>client approval</b>'); }
+  else { t.clientApproval = { ...v, by: currentUserId, at: nowISO() }; logActivity(t, v.none ? 'noted that <b>client approval isn’t needed</b>' : 'recorded the <b>client’s approval</b>'); }
+  t.updatedAt = nowISO();
+}
+function clientApprovalRow(t) {
+  if (t.parentId || !hasApproved(t)) return '';
+  const ca = t.clientApproval, fresh = clientApprovalFresh(t), can = canClientApprove(t) && !t.done;
+  const state = ca && fresh ? (ca.none ? `<span class="ca-ap muted">Not needed</span>` : `<span class="ca-ap ok" title="${esc(fmtDateTime(ca.at))}">${icon('check')}Approved · ${esc(firstName(ca.by))} · ${esc(new Date(ca.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))}</span>`)
+    : `<span class="ca-ap muted">${ca ? 'Out of date — new files were approved since' : 'Not recorded yet'}</span>`;
+  return `<div class="prop prop-capp"><label>${icon('users')}Client approval</label><div class="pv">${state}
+    ${can && !(ca && fresh && !ca.none) ? `<button class="btn xs" data-action="client-approved">${icon('check')}Client approved</button>` : ''}
+    ${can && ca && fresh ? `<button class="btn ghost xs" data-action="client-approved-clear" title="Clear the client approval">Clear</button>` : ''}
+  </div></div>`;
+}
+// Completing a task with CD-approved files and no client approval recorded asks once (the answer goes with the final files)
+async function askClientApproval(t) {
+  if (t.done || t.parentId || !hasApproved(t) || clientApprovalFresh(t)) return true;
+  const ans = await choiceDialog({ title: 'Did the client approve?', body: 'Saved with the final files in Client Assets.',
+    choices: [{ label: 'Cancel', value: null }, { label: 'Not needed', value: 'none' }, { label: 'Yes, today', value: 'yes', primary: true }] });
+  if (!ans) return false;
+  setClientApproval(t, ans === 'none' ? { none: true } : {});
+  return true;
 }
 function cdReviewRow(t) {
   if (t.parentId || t.done) return '';
