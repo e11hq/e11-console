@@ -555,5 +555,5 @@ const Claims = (() => {
     }
   });
 
-  return { owns, render, title, financeSection, afterFinanceRender, openNotif, tick, claimMonth, newClaim, st, byId, sheetPages };
+  return { owns, render, title, financeSection, afterFinanceRender, openNotif, tick, claimMonth, newClaim, st, byId, sheetPages, all, totalOf, itemsOf, markApproved, markPaid, open: openClaim };
 })();
