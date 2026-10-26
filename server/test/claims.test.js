@@ -141,3 +141,18 @@ test('expenses report: PDF for Admin and Finance; with files a .zip with Attachm
   assert.equal((await call(AM, '/api/host/expenseReport', { name: 'x', pages: [b64] })).status, 403);
   assert.equal((await call(FA, '/api/host/expenseReport', { name: 'x', pages: [b64], zip: true, files: [{ path: 'attachments/t/x.pdf', as: 'a.pdf' }] })).status, 403);
 });
+
+test('a Finance Admin marks their own claim HR approved and paid, like anyone else’s (but still can’t change what was claimed)', async () => {
+  const id = `cl-u-fa-${OPEN}`;
+  const mine = { id, userId: 'u-fa', month: OPEN, state: 'submitted', groups: [{ id: 'g', date: `${OPEN}-06`, title: 'Bank', items: [{ id: 'i', desc: 'Courier', amount: 40, receipt: null }] }], total: 40 };
+  assert.equal(await push(FA, id, mine), false, 'submits it');
+  const cur = () => app.store.get('claims', id);
+  assert.equal(await push(FA, id, { ...cur(), state: 'approved', approvedAt: now.toISOString(), approvedBy: 'u-fa', total: 4000 }), true, 'not with a changed amount');
+  assert.equal(await push(FA, id, { ...cur(), state: 'approved', approvedAt: now.toISOString(), approvedBy: 'u-fa' }), false, 'HR approved');
+  assert.equal(await push(FA, id, { ...cur(), state: 'paid', paidOn: OPEN + '-27', paidBy: 'u-fa' }), false, 'paid');
+  assert.equal(cur().state, 'paid');
+  // someone without Finance Admin still can't approve their own
+  const p = `cl-u-prod-${OPEN}`;
+  if (!app.store.get('claims', p)) await push(PROD, p, { id: p, userId: 'u-prod', month: OPEN, state: 'submitted', groups: [], total: 0 });
+  assert.equal(await push(PROD, p, { ...app.store.get('claims', p), state: 'approved' }), true);
+});

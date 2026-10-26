@@ -294,6 +294,14 @@ const Fin = (() => {
         .map(([v, ic, l]) => `<a class="nav-item" data-nav="${v}">${icon(ic)}${l}</a>`).join('');
       const head = $('#sidebar .sb-head');
       head.parentNode.insertBefore(nav, head);
+    } else if (canLook() && typeof isOffice === 'function' && isOffice()) {
+      // an Office Admin: a Finance heading with its pages, in place of the single Finance button
+      const wrap = document.createElement('div');
+      wrap.className = 'fin-admin-nav fin-office';
+      wrap.innerHTML = `<div class="nav-heading fin-office-h"><span>Finance</span></div><nav class="nav">${[['fin-dash', 'home', 'Dashboard'], ['fin-reimb', 'users', 'Reimbursements'], ['fin-expenses', 'coin', 'Expenses']]
+        .map(([v, ic, l]) => `<a class="nav-item" data-nav="${v}">${icon(ic)}${l}<span class="count"></span></a>`).join('')}</nav>`;
+      const tr = $('#nav-trash');
+      tr.parentNode.insertBefore(wrap, tr);
     } else if (canLook()) {
       const a = document.createElement('a');
       a.className = 'nav-item ca-nav fin-admin-nav';
@@ -311,7 +319,9 @@ const Fin = (() => {
     if (ui.view === 'fin-reimb' && fresh.length) { fresh.forEach((n) => { n.read = true; }); persist(); }
     const rn = $('.fin-nav .nav-item[data-nav="fin-reimb"]');
     if (rn) { let c = rn.querySelector('.count'); if (!c) { c = document.createElement('span'); c.className = 'count'; rn.appendChild(c); } const k = ui.view === 'fin-reimb' ? 0 : fresh.length; c.textContent = k ? String(k) : ''; c.classList.toggle('hot', !!k); }
-    const an = $('.fin-admin-nav'); if (an) an.classList.toggle('active', owns(ui.view));
+    const an = $('.fin-admin-nav:not(.fin-office)'); if (an) an.classList.toggle('active', owns(ui.view));
+    $$('.fin-office .nav-item').forEach((a) => a.classList.toggle('active', ui.view === a.dataset.nav || (a.dataset.nav === 'fin-expenses' && ui.view === 'fin-list')));
+    const on = $('.fin-office .nav-item[data-nav="fin-reimb"] .count'); if (on) on.textContent = ui.view === 'fin-reimb' ? '' : (fresh.length ? String(fresh.length) : '');
   }
   // The Finance Admin's pages, in the name menu (Finance-only people, and anyone given Finance Admin access)
   const addItems = () => (isFinAdmin() ? ['-',

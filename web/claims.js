@@ -100,7 +100,7 @@ const Claims = (() => {
     const edit = c.userId === currentUserId && (c._new || editable(rec));
     const u = userById(c.userId);
     const mine = c.userId === currentUserId;
-    const fin = finLevel() === 'admin' && !mine;
+    const fin = finLevel() === 'admin';   // (a Finance Admin marks their own claim too, like anyone else's)
     const months = [claimMonth(), addMonth(claimMonth(), 1)];
     const groups = c.groups || [];
     const sig = c.signature;

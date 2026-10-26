@@ -1030,9 +1030,15 @@ const subtasksOf = (id) => db.tasks.filter((t) => t.parentId === id).sort(byOrde
 const topTasks = () => db.tasks.filter((t) => !t.parentId);
 
 /* ================= Team: users, roles, permissions ================= */
-const ROLES = { admin: 'Admin', am: 'Account Manager', production: 'Production', social: 'Social', freelancer: 'Freelancer', finance_admin: 'Finance only · Admin', finance_viewer: 'Finance only · Viewer' };
+const ROLES = { admin: 'Super Admin', office_admin: 'Office Admin', am: 'Account Manager', production: 'Production', social: 'Social', freelancer: 'Freelancer', finance_admin: 'Finance only · Admin', finance_viewer: 'Finance only · Viewer' };
 // Admin rights: the Admin role, or any other role given Admin rights on top (u.admin)
-const isAdm = (u) => !!u && (u.role === 'admin' || u.admin === true);
+const isAdm = (u) => !!u && (u.role === 'admin' || u.role === 'office_admin' || u.admin === true);
+// Office Admin: Admin rights (Team, Client Assets, App updates, Finance per their access) with a narrower view — no tasks,
+// no adding or editing clients; in the Trash only Client Assets items (restore, never delete forever). Super Admin = Admin.
+const isOffice = (u = me()) => !!u && u.role === 'office_admin' && u.admin !== true;
+const isSuper = (u = me()) => isAdm(u) && !isOffice(u);
+// the pages an Office Admin uses
+const OFFICE_VIEWS = new Set(['home', 'inbox', 'clients', 'client', 'trash', 'profile', 'team', 'updates', 'claims', 'claim']);
 // "Finance only" people (roles finance_admin / finance_viewer) only use the Finance pages.
 // Anyone else can also be given Finance access on top of their role: u.fin = 'admin' | 'viewer'.
 const isFinUser = (u = me()) => !!u && (u.role === 'finance_admin' || u.role === 'finance_viewer');
@@ -1053,6 +1059,7 @@ function can(perm, t) {
   if (!u) return false;
   if (isFinUser(u)) return false;
   if (perm === 'manageUsers') return isAdm(u);
+  if (isOffice(u)) return false;                // no task app for an Office Admin
   if (isAdm(u) || isCD(u.id)) return true;   // Admins and the Creative Director: any client, any task
   if (u.role === 'am') return amScope(t === undefined ? taskCtx() : t) || !LIMITED.has(perm);
   if ((ROLE_DENY[u.role] || []).includes(perm)) return false;
@@ -2155,6 +2162,7 @@ function updateAppBadge() {
   Host.call('badge', { n }).catch(() => {});
 }
 function renderSidebar() {
+  document.body.classList.toggle('office-mode', isOffice());
   updateAppBadge();
   { const add = document.querySelector('.nav-heading [data-action="new-project"]'); if (add) add.style.display = isAdmin() ? '' : 'none'; }   // only Admins add clients
   if (typeof Season !== 'undefined') { const u = currentUserId && db && me(); Season.sync(u ? !!(u.prefs || {}).seasonOff : undefined); }
@@ -2543,7 +2551,7 @@ function viewMyDay() {
 
 /* ---------- Home ---------- */
 // Home page: see home.js
-function viewHome() { return typeof Home !== 'undefined' ? Home.view() : ''; }
+function viewHome() { return isOffice() ? OfficeHome.view() : typeof Home !== 'undefined' ? Home.view() : ''; }
 
 /* ---------- Search ---------- */
 /* ================= Smart search (tasks and Client Assets) =================
@@ -3162,7 +3170,7 @@ function mentionInComposer(uidToTag) {
 }
 
 /* ---- People card on hover: @mentions, comment authors, task creator ---- */
-const TEAM_LABEL = { admin: 'Admin', am: 'Account Manager', production: 'Production Team', social: 'Social Team', freelancer: 'Freelancer' };
+const TEAM_LABEL = { admin: 'Super Admin', office_admin: 'Office Admin', am: 'Account Manager', production: 'Production Team', social: 'Social Team', freelancer: 'Freelancer' };
 function designationOf(u) {
   if (!u) return '';
   if (u.id === cdUserId()) return cdActing() ? `Acting Creative Director · ${TEAM_LABEL[u.role] || ''}` : 'Creative Director';
@@ -3654,6 +3662,7 @@ function inlineInput(el, { placeholder = '', value = '', multiline = false, keep
 /* ================= Actions ================= */
 function go(view, projectId = null) {
   if (isFinUser() && !Fin.owns(view) && view !== 'profile' && view !== 'claim') view = 'fin-dash';
+  if (isOffice() && !OFFICE_VIEWS.has(view) && !Fin.owns(view)) { view = 'home'; projectId = null; }
   PageHistory.mark();
   if (view === 'clients') { ui.caQ = ''; ui.caScope = null; }
   // The Inbox always opens on its unread tab (Primary on computers, Unread on phones)
@@ -3872,12 +3881,14 @@ function trashFiles(it) {
   if (it.type === 'comment') return (d.comments || []).flatMap((c) => c.attachments || []);
   if (it.type === 'attachment') return d.att ? [d.att] : [];
   if (it.type === 'cafile') return d.file ? [d.file] : [];
+  if (it.type === 'cafolder') return (d.folder && d.folder.files) || [];
   return [];
 }
 function trashPaths(it) {
   const paths = [];
   trashFiles(it).forEach((a) => { if (!a.linked) paths.push(a.path, '.thumbs/' + a.id); });
   if (it.type === 'task' || it.type === 'project') (it.data.tasks || []).forEach((t) => paths.push('attachments/' + t.id));
+  if (it.type === 'cafolder' && it.data.folder && it.data.folder.dir) paths.push(it.data.folder.dir);
   return paths;
 }
 // Delete for good: the item and its files
@@ -3903,10 +3914,11 @@ function trashWhere(it) {
   if (it.type === 'project') return `${(d.tasks || []).filter((t) => !t.parentId).length} tasks`;
   if (it.type === 'comment' || it.type === 'attachment') { const t = task(d.taskId); return t ? t.title || 'Untitled task' : it.taskTitle || 'a deleted task'; }
   if (it.type === 'cafile') { const c = clientById(d.clientId); const f = c && c.folders.find((x) => x.id === d.folderId); return c ? `${c.name}${f ? ' › ' + f.name : ''}` : it.where || 'Client Assets'; }
+  if (it.type === 'cafolder') { const c = clientById(d.clientId); return c ? c.name : it.where || 'Client Assets'; }
   return '';
 }
-const TRASH_TYPE = { task: 'Task', project: 'Client', comment: 'Comment', attachment: 'File', cafile: 'Client file' };
-const TRASH_ICON = { task: 'check-circle', project: 'folder', comment: 'chat', attachment: 'clip', cafile: 'assets' };
+const TRASH_TYPE = { task: 'Task', project: 'Client', comment: 'Comment', attachment: 'File', cafile: 'Client file', cafolder: 'Client folder' };
+const TRASH_ICON = { task: 'check-circle', project: 'folder', comment: 'chat', attachment: 'clip', cafile: 'assets', cafolder: 'folder' };
 
 /* ---- Putting things back ---- */
 function restoreTrash(id) {
@@ -3954,6 +3966,15 @@ function restoreTrash(id) {
     if (!f) { toast('Its client folder no longer exists'); return; }
     if (!f.files.some((x) => x.id === d.file.id)) f.files.push(d.file);
     msg = `Restored “${d.file.name}” to ${c.name} › ${f.name}`;
+  } else if (it.type === 'cafolder') {
+    const c = clientById(d.clientId);
+    if (!c) { toast('Its client’s Client Assets no longer exist'); return; }
+    const f = { ...d.folder };
+    if (!c.folders.some((x) => x.id === f.id)) {
+      if (folderDup(c, f.name)) f.name = `${f.name} (restored)`;
+      c.folders.push(f);
+    }
+    msg = `Restored the folder “${f.name}” to ${c.name}`;
   }
   dropTrash(id);
   commit({ delay: 0 });
@@ -3980,6 +4001,7 @@ function trashTitle(it) {
   if (it.type === 'comment') { const c = (d.comments || [])[0]; return c ? trunc(c.text || notifPlainHTML(c.html), 80) || 'Comment' : 'Comment'; }
   if (it.type === 'attachment') return d.att ? d.att.name : 'File';
   if (it.type === 'cafile') return d.file ? d.file.name : 'File';
+  if (it.type === 'cafolder') return d.folder ? d.folder.name : 'Folder';
   return 'Item';
 }
 
@@ -4017,7 +4039,7 @@ function trashSearch(q, list) {
 const TRASH_FILTERS = [['all', 'All'], ['task', 'Tasks'], ['project', 'Clients'], ['file', 'Files'], ['comment', 'Comments'], ['mine', 'Deleted by me']];
 function trashFiltered() {
   const f = ui.trashFilter || 'all';
-  return trashList().filter((it) => f === 'all' || (f === 'file' ? it.type === 'attachment' || it.type === 'cafile' : f === 'mine' ? it.deletedBy === currentUserId : it.type === f));
+  return trashList().filter((it) => f === 'all' || (f === 'file' ? it.type === 'attachment' || it.type === 'cafile' || it.type === 'cafolder' : f === 'mine' ? it.deletedBy === currentUserId : it.type === f));
 }
 function trashRow(it, r) {
   const left = trashDaysLeft(it);
@@ -4034,7 +4056,7 @@ function trashRow(it, r) {
     <span class="tr-left ${left <= 3 ? 'soon' : ''}" title="Deleted for good after ${TRASH_DAYS} days">${left} day${left === 1 ? '' : 's'} left</span>
     <div class="tr-acts">
       ${it.type !== 'project' || isAdm(me()) ? `<button class="btn primary sm" data-action="tr-restore" data-id="${it.id}">${icon('reply')}Restore</button>` : '<span class="tr-only" title="Only Admins add clients back">Admins restore clients</span>'}
-      ${isAdm(me()) ? `<button class="icon-btn sm" data-action="tr-forever" data-id="${it.id}" title="Delete forever">${icon('trash')}</button>` : ''}
+      ${isSuper() ? `<button class="icon-btn sm" data-action="tr-forever" data-id="${it.id}" title="Delete forever">${icon('trash')}</button>` : ''}
     </div>
   </div>`;
 }
@@ -4058,7 +4080,7 @@ function viewTrash() {
   return `<div class="trash">
     <div class="tr-head">
       <div class="tr-intro">Deleted items stay here for ${TRASH_DAYS} days, then they and their files are removed for good. Finished tasks arrive here ${AUTO_DELETE_DAYS} days after they’re completed.</div>
-      ${isAdm(me()) && n ? `<button class="btn ghost danger sm" data-action="tr-empty">${icon('trash')}Empty Trash</button>` : ''}
+      ${isSuper() && n ? `<button class="btn ghost danger sm" data-action="tr-empty">${icon('trash')}Empty Trash</button>` : ''}
     </div>
     <div class="ca-searchbar tr-search">${icon('search')}<input id="tr-q" value="${esc(ui.trashQ || '')}" placeholder="Search the Trash — names, files, “pdf”, people…" autocomplete="off" spellcheck="false" aria-autocomplete="none" data-form-type="other"></div>
     <div class="tr-chips">${TRASH_FILTERS.map(([k, l]) => `<button class="${f === k ? 'on' : ''}" data-action="tr-filter" data-k="${k}">${l}</button>`).join('')}</div>
@@ -5021,8 +5043,9 @@ document.addEventListener('keydown', (e) => {
   }
 
   if (mod && e.key.toLowerCase() === 'f' && $('#ca-q')) { e.preventDefault(); $('#ca-q').focus(); $('#ca-q').select(); return; }
+  if (mod && e.key.toLowerCase() === 'k' && isOffice()) { e.preventDefault(); return; }
   if (mod && e.key.toLowerCase() === 'k') { e.preventDefault(); const s = $('#search'); s.focus(); s.select(); return; }
-  if (mod && e.key.toLowerCase() === 'n') { e.preventDefault(); if (e.shiftKey) newProjectFlow(); else if (can('createTask')) newTaskInContext(); else denied(); return; }
+  if (mod && e.key.toLowerCase() === 'n') { e.preventDefault(); if (e.shiftKey) { if (isSuper()) newProjectFlow(); else denied(); } else if (can('createTask')) newTaskInContext(); else denied(); return; }
   if (e.key === 'Escape') {
     if ($('.lightbox') || $('.fv')) { $('#overlay-root').innerHTML = ''; return; }
     if ($('.menu')) { closeMenus(); return; }
@@ -5500,13 +5523,13 @@ function folderMenu(anchor, c, f) {
     { label: 'Move left', icon: 'chev-left', run: () => { const i = c.folders.indexOf(f); if (i > 0) { c.folders.splice(i, 1); c.folders.splice(i - 1, 0, f); persist(0); render(); } } },
     { label: 'Move right', icon: 'chev-right', run: () => { const i = c.folders.indexOf(f); if (i < c.folders.length - 1) { c.folders.splice(i, 1); c.folders.splice(i + 1, 0, f); persist(0); render(); } } },
     ...(canDelFolder(c, f) ? ['-', { label: 'Delete folder', icon: 'trash', danger: true, run: async () => {
-      const ok = await dialog({ title: `Delete “${f.name}”?`, body: f.files.length ? `Its ${f.files.length} file${f.files.length === 1 ? '' : 's'} will be moved to the Trash. Copies already pasted into tasks stay.` : 'This folder is empty.', okText: 'Delete folder', danger: true });
+      const ok = await dialog({ title: `Delete “${f.name}”?`, body: `The folder${f.files.length ? ` and its ${f.files.length} file${f.files.length === 1 ? '' : 's'}` : ''} move${f.files.length ? '' : 's'} to the Trash, where ${f.files.length ? 'they' : 'it'} can be restored within ${TRASH_DAYS} days. Copies already pasted into tasks stay.`, okText: 'Delete folder', danger: true });
       if (!ok) return;
       c.folders = c.folders.filter((x) => x.id !== f.id);
+      // (into the Trash with its files — they're only removed from disk when the Trash entry is deleted for good)
+      toTrash('cafolder', { clientId: c.id, folder: JSON.parse(JSON.stringify(f)) }, { key: 'clients:' + c.id, where: c.name });
       if (f.files.length) assetNotify(c, f, 'removed', f.files.map((a) => a.name));
       persist(0); render();
-      // the files go once the server has the change (it only lets people remove what they're allowed to)
-      Promise.resolve(typeof Sync !== 'undefined' && Sync.push ? Sync.push() : null).catch(() => {}).then(() => safeTrash([...f.files.flatMap((a) => [a.path, '.thumbs/' + a.id]), f.dir]));
     } }] : []),
   ]);
 }
@@ -6495,12 +6518,13 @@ function viewTeam() {
       </div>`).join('')}
     </div>`}
     <div class="role-guide">
-      <div><span class="role-pill r-admin">Admin</span> Full access, and the only role that can add or manage team members.</div>
+      <div><span class="role-pill r-admin">Super Admin</span> Full access, and can add or manage team members.</div>
+      <div><span class="role-pill r-office_admin">Office Admin</span> Admin rights without the task app: manages team members, Client Assets (full rights) and App updates, with Finance if given. Doesn’t see tasks or add/edit clients; in the Trash sees and restores Client Assets items only.</div>
       <div><span class="role-pill r-am">Account Manager</span> Can do everything except add or manage team members.</div>
       <div><span class="role-pill r-freelancer">Freelancer</span> Same as Production, but only sees the clients an Admin chooses for them, plus those clients’ Client Assets. Can sign in with a personal email (Gmail, Outlook…).</div>
       <div><span class="role-pill r-production">Production</span> <span class="role-pill r-social">Social</span> Can update status, submit files for CD review, tick checklist items, add tags, files and comments. Social can also write and change the description, add checklist items, and set a post’s Channel, Go-live and Occasion. Can’t create or delete tasks/subtasks, change dates, rename or remove checklist items (Production can’t add them either), change title, client or priority, assign people or remove tags.</div>
       <div><span class="role-pill r-finance_admin">Finance only</span> Only sees the Finance pages (Dashboard, Clients, Expenses) — no tasks app. As Admin they add subscriptions, reimbursements and expenses; as Viewer they only look.</div>
-      <div><span class="role-pill r-admin">+ Admin</span> <span class="role-pill r-finance_admin">+ Finance Admin / Viewer</span> Extras anyone can have on top of their role (••• menu): full Admin rights, or the Finance pages. A task’s Finance status is set by Account Managers and Admins.</div>
+      <div><span class="role-pill r-admin">+ Super Admin</span> <span class="role-pill r-finance_admin">+ Finance Admin / Viewer</span> Extras anyone can have on top of their role (••• menu): full Super Admin rights, or the Finance pages. A task’s Finance status is set by Account Managers and Admins.</div>
     </div>
   </div>`;
 }
@@ -6610,8 +6634,8 @@ function memberMenu(anchor, id) {
       own.push({ html: '<div class="menu-label">Your role (owner)</div>' });
       Object.entries(ROLES).forEach(([k, l]) => own.push({ html: `<div class="mi ${u.role === k ? 'cur' : ''}"><span class="role-pill r-${k}">${esc(l)}</span></div>`, run: async () => {
         if (u.role === k) return;
-        const others = db.users.filter((x) => x.id !== u.id && isAdm(x) && x.active !== false);
-        if (k !== 'admin' && !others.length) return toast('Make someone else an Admin first');
+        const others = db.users.filter((x) => x.id !== u.id && isSuper(x) && x.active !== false);
+        if (k !== 'admin' && !others.length) return toast('Make someone else a Super Admin first');
         if (k !== 'admin' && !(await dialog({ title: `Work as ${l}?`, body: `You’ll use the app as ${l}${u.admin ? ' — Admin rights stay switched on until you take them off' : ''}. As the owner, nobody else can change your role or access${Host.isServer && !isTestCopy() ? ', and you can step back in from Owner view at the bottom of My profile' : ''}.`, okText: `Work as ${l}` }))) return;
         u.role = k; persist(0); renderContent(); renderSidebar(); toast(`You now work as ${l}`);
       } }));
@@ -6626,14 +6650,14 @@ function memberMenu(anchor, id) {
   }
   const items = [{ html: '<div class="menu-label">Change role</div>' }];
   Object.entries(ROLES).forEach(([k, l]) => items.push({ html: `<div class="mi ${u.role === k ? 'cur' : ''}"><span class="role-pill r-${k}">${esc(l)}</span></div>`, run: () => {
-    if (isAdm(u) && k !== 'admin' && !u.admin && db.users.filter((x) => isAdm(x) && x.active !== false).length < 2) return toast('There must be at least one Admin');
+    if (isSuper(u) && k !== 'admin' && !u.admin && db.users.filter((x) => isSuper(x) && x.active !== false).length < 2) return toast('There must be at least one Super Admin');
     u.role = k; persist(); renderContent(); toast(`${fullName(u)} is now ${l}`);
     if (k === 'freelancer') setTimeout(() => projectAccessDialog(u), 0);
   } }));
   items.push('-');
   const finOnly = isFinUser(u);
-  if (u.role !== 'admin' && !finOnly) items.push({ html: `<div class="mi">${icon('shield')}Admin rights${u.admin ? `<span class="wf-ck">${icon('check')}</span>` : ''}</div>`, run: () => {
-    if (u.admin && db.users.filter((x) => isAdm(x) && x.active !== false).length < 2) return toast('There must be at least one Admin');
+  if (u.role !== 'admin' && !finOnly) items.push({ html: `<div class="mi">${icon('shield')}Super Admin rights${u.admin ? `<span class="wf-ck">${icon('check')}</span>` : ''}</div>`, run: () => {
+    if (u.admin && db.users.filter((x) => isSuper(x) && x.active !== false).length < 2) return toast('There must be at least one Super Admin');
     u.admin = u.admin ? undefined : true; persist(); renderContent(); toast(u.admin ? `${fullName(u)} now also has Admin rights` : `${fullName(u)} no longer has Admin rights`);
   } });
   if (!finOnly) Object.entries(FIN_ACCESS).forEach(([k, l]) => items.push({ html: `<div class="mi">${icon('coin')}${esc(l)}${(u.fin || '') === k ? `<span class="wf-ck">${icon('check')}</span>` : ''}</div>`, run: () => {
@@ -6656,7 +6680,7 @@ async function resetPasswordFlow(u) {
   toast('Password reset — share the temporary password with them privately');
 }
 async function removeMemberFlow(u) {
-  if (isAdm(u) && db.users.filter((x) => isAdm(x) && x.active !== false).length < 2) return toast('There must be at least one Admin');
+  if (isSuper(u) && db.users.filter((x) => isSuper(x) && x.active !== false).length < 2) return toast('There must be at least one Super Admin');
   const n = db.tasks.filter((t) => (t.assignees || []).includes(u.id)).length;
   const ok = await dialog({ title: `Remove ${fullName(u)}?`, body: `They won’t be able to sign in${n ? ` and will be unassigned from ${n} task${n === 1 ? '' : 's'}` : ''}. Their comments stay. You can restore access later.`, okText: 'Remove', danger: true });
   if (!ok) return;
@@ -6954,7 +6978,7 @@ function meMenu(anchor) {
     { label: 'My profile', icon: 'user', run: () => go('profile') },
     ...(Host.isServer ? [{ label: 'My reimbursements', icon: 'coin', run: () => go('claims') }] : []),
     { label: 'Team members', icon: 'users', run: () => go('team') },
-    ...(isAdm(me()) ? [{ label: 'Edit client list', icon: 'folder', run: () => go('clientlist') }] : []),
+    ...(isSuper() ? [{ label: 'Edit client list', icon: 'folder', run: () => go('clientlist') }] : []),
     ...(Host.isServer && isAdm(me()) ? [{ label: 'App updates', icon: 'download', run: () => go('updates') }] : []),
     ...(Host.isServer ? [{ label: 'What’s new', icon: 'info', run: () => whatsNewDialog(false) }] : []),
     ...(Host.isServer && !Host.isMacApp ? [{ label: 'Get the Mac app', icon: 'download', run: macAppDialog }] : []),

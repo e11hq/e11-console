@@ -1,0 +1,36 @@
+/* Office Admin (office.js): no task app — task pages, the client list and task search are hidden */
+body.office-mode .nav [data-nav="today"], body.office-mode .nav [data-nav="mytasks"], body.office-mode #nav-calendar, body.office-mode #nav-reviews,
+body.office-mode .nav-heading:not(.fin-office-h), body.office-mode #project-list, body.office-mode .search, body.office-mode [data-action="new-task"],
+body.office-mode .brand-acts [data-action="focus-search"] { display: none !important; }
+
+.oh { max-width: 1180px; margin: 0 auto; padding: 28px 36px 60px; display: flex; flex-direction: column; gap: 20px; }
+.oh-date { color: var(--text-3); font-size: 13px; }
+.oh-head h1 { margin: 4px 0 0; font-size: 28px; letter-spacing: -.01em; }
+.oh-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.oh-stat { text-align: left; font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
+.oh-stat:hover { border-color: var(--border-strong); }
+.oh-stat b { font-size: 26px; font-weight: 700; }
+.oh-stat span { color: var(--text-3); font-size: 13px; }
+.oh-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; align-items: start; }
+.oh-card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
+.oh-card-h { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+.oh-card-h h3 { margin: 0; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+.oh-card-h h3 .ic { width: 16px; height: 16px; }
+.oh-row { display: flex; align-items: center; gap: 10px; padding: 8px 8px; border-radius: 9px; border: 0; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; width: 100%; }
+.oh-row:hover { background: var(--hover); }
+.oh-ic { width: 26px; height: 26px; border-radius: 7px; background: var(--raised); display: flex; align-items: center; justify-content: center; flex: none; }
+.oh-ic .ic { width: 14px; height: 14px; }
+.oh-t { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.oh-t b { font-weight: 500; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.oh-t small { color: var(--text-3); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.oh-row.unread .oh-t b { font-weight: 650; }
+.oh-w { color: var(--text-3); font-size: 12px; flex: none; }
+.oh-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
+.oh-empty { color: var(--text-3); font-size: 13px; padding: 8px; }
+.oh-links { display: flex; flex-wrap: wrap; gap: 8px; }
+.r-office_admin { background: rgba(123,104,238,.12); color: #c6bdff; border: 1px solid rgba(123,104,238,.35); }
+:root[data-theme="light"] .r-office_admin { color: #5a46d6; }
+body.phone .oh { padding: 16px 16px 120px; }
+/* the Office Admin's Finance heading and pages in the sidebar (finance.js) */
+.fin-office { display: flex; flex-direction: column; margin: 6px 0 4px; }
+.fin-office .fin-office-h { padding: 8px 10px 4px; }

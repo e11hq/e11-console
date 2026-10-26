@@ -20,7 +20,13 @@ export function createAccess(store, opts = {}) {
   const TASK_FOR_FINANCE = ['id', 'title', 'projectId', 'sectionId', 'parentId', 'done', 'completedAt', 'due', 'createdAt', 'updatedAt', 'finance', 'financeAt', 'financeBy', 'order'];
   // Admin rights: the Admin role, or another role given Admin rights on top. Finance access: Finance-only
   // people, or anyone given Finance Admin / Finance Viewer on top of their role (u.fin).
-  const isAdm = (u) => !!u && (u.role === 'admin' || u.admin === true);
+  const isAdm = (u) => !!u && (u.role === 'admin' || u.role === 'office_admin' || u.admin === true);
+  // Office Admin: Admin rights (Team, Client Assets, App updates, Finance per their access) with a narrower view —
+  // no tasks (only the slim job list Finance needs), no adding or editing clients, and in the Trash only Client Assets
+  // items, which they can restore but not delete forever. Super Admin = the Admin role (or Admin rights on top).
+  const isOffice = (u) => !!u && u.role === 'office_admin' && u.admin !== true;
+  const isSuper = (u) => isAdm(u) && !isOffice(u);
+  const CA_TRASH = new Set(['cafile', 'cafolder']);
   const finLevel = (u) => (!u ? null : u.role === 'finance_admin' ? 'admin' : u.role === 'finance_viewer' ? 'viewer' : u.fin === 'admin' || u.fin === 'viewer' ? u.fin : null);
   const projectSet = (u) => new Set(Array.isArray(u.projectIds) ? u.projectIds : []);
 
@@ -191,11 +197,11 @@ export function createAccess(store, opts = {}) {
   function canSee(u, kind, data) {
     if (!data) return true;
     switch (kind) {
-      case 'notifications': return data.to === u.id && !(data.taskId && inInactive(store.get('tasks', String(data.taskId)))) && !(data.clientId && hiddenClient(store.get('clients', String(data.clientId))));
+      case 'notifications': return data.to === u.id && !(isOffice(u) && data.taskId) && !(data.taskId && inInactive(store.get('tasks', String(data.taskId)))) && !(data.clientId && hiddenClient(store.get('clients', String(data.clientId))));
       case 'projects': return projectVisible(u, data);
-      case 'tasks': return taskVisible(u, data);
+      case 'tasks': return isOffice(u) ? !!finLevel(u) && !inInactive(data) : taskVisible(u, data);
       case 'clients': return !hiddenClient(data) && clientVisible(u, data);
-      case 'trash': return isAdm(u) || u.role === 'am';   // the Trash is for Admins and Account Managers
+      case 'trash': return isOffice(u) ? CA_TRASH.has(data.type) : isAdm(u) || u.role === 'am';   // the Trash is for Admins and Account Managers (Office Admins: Client Assets items)
       case 'finance': return !!finLevel(u) || isAdm(u) || (data.type === 'reimb' && data.userId === u.id);    // expense records (people see their own reimbursements)
       // expense claims: your own, and Finance sees everything except drafts and "submitted offline"
       case 'claims': return data.userId === u.id || (!!finLevel(u) && !['draft', 'offline'].includes(data.state));
@@ -204,7 +210,7 @@ export function createAccess(store, opts = {}) {
   }
 
   function shape(u, kind, data) {
-    if (kind === 'tasks' && data && isFinance(u)) {
+    if (kind === 'tasks' && data && (isFinance(u) || isOffice(u))) {
       const out = {};
       TASK_FOR_FINANCE.forEach((k) => { if (data[k] !== undefined) out[k] = data[k]; });
       return out;
@@ -258,6 +264,7 @@ export function createAccess(store, opts = {}) {
         return clientEditOk(u, manager, ch.base !== undefined && ch.base ? ch.base : current, current, next);
       }
       case 'projects':
+        if (isOffice(u)) return false;                              // Office Admins don't add or change clients
         if (isFreelancer(u)) return !ch.del && !!current && projectSet(u).has(current.id) && next.id === current.id;
         if (ch.del || !current || admin) return admin;              // only Admins add or remove a client
         if (!projectVisible(u, current)) return false;
@@ -266,6 +273,8 @@ export function createAccess(store, opts = {}) {
       case 'tasks': {
         // a task's Finance status is set by Account Managers and Admins only
         const was = ch.base !== undefined ? ch.base : current;
+        // Office Admins: only a job's Finance status (with Finance access), nothing else on tasks
+        if (isOffice(u)) return !ch.del && !!current && !!next && finLevel(u) === 'admin' && Object.keys({ ...current, ...next }).every((k) => ['finance', 'financeAt', 'financeBy', 'updatedAt'].includes(k) || deepEqual(next[k] ?? null, (was || {})[k] ?? null) || deepEqual(next[k] ?? null, current[k] ?? null));
         if (!manager && next && !deepEqual(next.finance ?? null, (was && was.finance) ?? null)) return false;
         if ((current && inInactive(current)) || (next && inInactive(next))) return false;   // an inactive client's tasks are frozen
         if (isFreelancer(u)) return (!current || taskVisible(u, current)) && (ch.del || taskVisible(u, next));
@@ -274,6 +283,11 @@ export function createAccess(store, opts = {}) {
         return true;
       }
       case 'trash': {
+        // Office Admins: Client Assets items only — put there when deleting, taken out when restoring (never deleted forever)
+        if (isOffice(u)) {
+          if (!ch.del) return !current && !!next && CA_TRASH.has(next.type) && next.deletedBy === u.id;
+          return !!current && CA_TRASH.has(current.type) && !!current.key && !!(ctx.restoring && ctx.restoring.has(current.key));
+        }
         // anyone's deletions land here; only Admins and Account Managers look after it
         if (!ch.del) return !current ? manager || (!!next && next.deletedBy === u.id) : manager;
         if (!current || admin) return true;                          // only Admins delete forever
@@ -316,7 +330,10 @@ export function createAccess(store, opts = {}) {
   function canWriteClaim(u, ch, current) {
     const next = ch.del ? null : ch.data;
     const own = (current ? current.userId : next && next.userId) === u.id;
-    if (own) {
+    // a Finance Admin marking their own claim HR approved / paid: the same Finance rules as anyone else's claim
+    const financeMove = finLevel(u) === 'admin' && !ch.del && !!current && !!next && (next.state !== current.state || CLAIM_FINANCE.some((k) => !deepEqual(next[k] ?? null, current[k] ?? null)))
+      && ['approved', 'paid'].includes(next.state);
+    if (own && !financeMove) {
       if (ch.del) return !!current && current.state === 'draft';
       if (!next || next.userId !== u.id || !/^\d{4}-\d{2}$/.test(String(next.month || ''))) return false;
       if (!['draft', 'submitted', 'none', 'offline'].includes(next.state)) return !!current && current.state === next.state && CLAIM_CONTENT.every((k) => deepEqual(next[k], current[k])) && CLAIM_FINANCE.every((k) => deepEqual(next[k], current[k]));
@@ -330,5 +347,5 @@ export function createAccess(store, opts = {}) {
     return CLAIM_CONTENT.every((k) => deepEqual(next[k], current[k]));
   }
 
-  return { userByEmail, isOwnerUser, canSee, canWrite, shape, ownOnly, ownView, addPeek, isFreelancer, isFinance, isAdm, finLevel, canReadFile, monthClosed };
+  return { userByEmail, isOwnerUser, isOffice, isSuper, canSee, canWrite, shape, ownOnly, ownView, addPeek, isFreelancer, isFinance, isAdm, finLevel, canReadFile, monthClosed };
 }

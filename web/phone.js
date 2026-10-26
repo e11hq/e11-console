@@ -81,7 +81,9 @@ const Phone = (() => {
     const rv = cd ? activeReviews().length : 0;
     const cur = tabOf(ui.view);
     const tab = (v, ic, label, badge) => `<button class="ph-tab ${cur === v ? 'on' : ''}" data-ph-tab="${v}">${icon(ic)}${badge ? `<i class="ph-badge">${badge > 99 ? '99+' : badge}</i>` : ''}<span>${label}</span></button>`;
-    bar.innerHTML = tab('today', 'sun', Work.dayTitle())
+    bar.innerHTML = isOffice()      // an Office Admin: no task pages
+      ? tab('today', 'home', 'Home') + tab('inbox', 'inbox', 'Inbox', unread) + tab('clients', 'assets', 'Client Assets') + tab('me', 'user', 'Me')
+      : tab('today', 'sun', Work.dayTitle())
       + tab('mytasks', 'check-circle', 'My Tasks')
       + tab('inbox', 'inbox', 'Inbox', unread)
       + (cd ? tab('reviews', 'shield', 'Reviews', rv) : tab('projects', 'folder', 'Clients'))
@@ -332,7 +334,7 @@ const Phone = (() => {
   function renderContent(c) {
     if (!st.on || ui.search || !OWN.has(ui.view)) return false;
     const v = ui.view;
-    c.innerHTML = v === 'home' || v === 'today' ? myDay() : v === 'mytasks' ? myTasks() : v === 'inbox' ? inbox()
+    c.innerHTML = v === 'home' || v === 'today' ? (isOffice() ? OfficeHome.view() : myDay()) : v === 'mytasks' ? myTasks() : v === 'inbox' ? inbox()
       : v === 'reviews' ? reviews() : v === 'review' ? review() : v === 'projects' ? projects() : v === 'project' ? project()
       : v === 'psearch' ? search() : meScreen();
     if (ui.view === 'review') { wireSlides(c); hydrateThumbs(c); }

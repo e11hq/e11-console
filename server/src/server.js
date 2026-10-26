@@ -68,7 +68,7 @@ export function createServer(cfg) {
       store.kv.set('unassign-managers-v1', JSON.stringify({ at: new Date().toISOString(), tasks: ops.length }));
     } catch (e) { console.error('Unassigning managers failed:', e.message); }
   }
-  const occRemind = createOccasionReminders({ store, webDir, webPush, isAdm: (u) => access.isAdm(u), now: cfg.now || (() => Date.now()) });
+  const occRemind = createOccasionReminders({ store, webDir, webPush, isAdm: (u) => access.isSuper(u), now: cfg.now || (() => Date.now()) });
   if (cfg.occRemind !== false && webDir) occRemind.start();
   // Confirmed dates for Ramadan, the Eids… from a public UAE holiday calendar (off on a dev server unless a URL is given)
   const holidays = createHolidaySync({
@@ -78,9 +78,9 @@ export function createServer(cfg) {
       if (!changed.length) return;
       const f = (d) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
       const body = changed.map((c) => `${c.name}: ${f(c.date)} (was ${f(c.was)})`).join(' · ');
-      const managers = store.list('users').filter((x) => x.active !== false && (access.isAdm(x) || x.role === 'am'));
+      const managers = store.list('users').filter((x) => x.active !== false && (access.isSuper(x) || x.role === 'am'));
       for (const m of managers) webPush.sendTo(m.id, { title: 'Occasion date confirmed', body, tag: 'occasion' }).catch(() => {});
-      for (const st of streams) { const su = store.get('users', st.userId) || st.user; if (su && (access.isAdm(su) || su.role === 'am')) send(st, 'occasion', { changed }); }
+      for (const st of streams) { const su = store.get('users', st.userId) || st.user; if (su && (access.isSuper(su) || su.role === 'am')) send(st, 'occasion', { changed }); }
     },
   });
   if (cfg.holidays !== false && (!cfg.dev || cfg.holidaysUrl)) holidays.start();
@@ -528,6 +528,7 @@ export function createServer(cfg) {
       renameLinkedAssets(results, namesBefore);
       // new notifications also go to the person's phone
       results.filter((r) => r.kind === 'notifications' && fresh.has(String(r.id)) && !r.refused && !r.deleted && r.data && r.data.to && r.data.to !== u.id)
+        .filter((r) => { const to = store.get('users', String(r.data.to)); return !!to && access.canSee(to, 'notifications', r.data); })   // (only what they'd see in their Inbox)
         .forEach((r) => webPush.sendTo(r.data.to, notifMessage(store, r.data)).catch(() => {}));
       if (results.some((r) => r.kind === 'users' && !r.refused && !r.unchanged)) cfSync.schedule();
       return json(res, 200, { ok: true, rev, results: results.map((r) => ({ ...forUser(u, r), refused: !!r.refused })) });
