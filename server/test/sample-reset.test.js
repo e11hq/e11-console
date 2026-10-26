@@ -39,7 +39,7 @@ test('test copy: the owner wipes everything and starts again with sample data in
   assert.ok(fs.existsSync(path.join(dir, 'files', 'Claims', 'u-owner', 'signature', 'sig.png')), 'the owner keeps their saved signature');
   assert.ok(!fs.existsSync(path.join(dir, 'files', 'Claims', 'u-old')), 'other claim files go');
   const projects = s.list('projects'), clients = s.list('clients'), users = new Map(s.list('users').map((u) => [u.id, u]));
-  assert.equal(projects.length, 6);
+  assert.equal(projects.length, 14, 'the clients from ClickUp, and an inactive one');
   assert.ok(projects.every((p) => p.clientId && clients.some((c) => c.id === p.clientId)), 'every client has its Client Assets');
   assert.ok(clients.every((c) => ['Logos', 'Brand Guidelines', 'Fonts', 'Files'].every((n) => c.folders.some((f) => f.name === n && f.auto))));
   assert.ok(projects.some((p) => p.inactive), 'an inactive client');

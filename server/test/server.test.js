@@ -382,6 +382,13 @@ test('Production see only tasks they are part of; a task link opens view only (c
   assert.equal(app.store.get('tasks', 't-alain').comments.length, 1);
   const fake = await call(PROD, '/api/push', { method: 'POST', body: { changes: [{ kind: 'tasks', id: 't-alain', base: app.store.get('tasks', 't-alain'), data: { ...app.store.get('tasks', 't-alain'), comments: [...app.store.get('tasks', 't-alain').comments, { id: 'c-fake', authorId: 'u-am', text: 'x' }] } }] } });
   assert.equal(fake.body.results[0].refused, true, 'not in someone else\'s name');
+  // a preview image their app made for a file on it (a video's thumbnail) goes along with a comment: still fine
+  app.store.importAll({ tasks: [{ ...app.store.get('tasks', 't-alain'), attachments: [{ id: 'a-vid', name: 'cut.mp4', path: 'attachments/t-alain/cut.mp4' }] }] }, 'test');
+  cur = app.store.get('tasks', 't-alain');
+  const th = await call(PROD, '/api/push', { method: 'POST', body: { changes: [{ kind: 'tasks', id: 't-alain', base: cur, data: { ...cur, attachments: [{ ...cur.attachments[0], thumb: '.thumbs/a-vid/thumb.png' }], comments: [...cur.comments, { id: 'c-peek2', authorId: 'u-prod', text: 'Nice cut' }] } }] } });
+  assert.equal(th.body.results[0].refused, false, 'a comment with a video thumbnail made');
+  const swap = await call(PROD, '/api/push', { method: 'POST', body: { changes: [{ kind: 'tasks', id: 't-alain', base: app.store.get('tasks', 't-alain'), data: { ...app.store.get('tasks', 't-alain'), attachments: [] } }] } });
+  assert.equal(swap.body.results[0].refused, true, 'but not removing files');
   // freelancers can't open links outside their clients
   assert.equal((await call(FREE, '/api/peek', { method: 'POST', body: { taskId: 't-alain' } })).status, 404);
 });

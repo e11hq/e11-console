@@ -358,8 +358,11 @@ export function createAccess(store, opts = {}) {
   function commentOnly(u, base, current, next) {
     if (!next) return false;
     const FREE = ['comments', 'activity', 'updatedAt'];
+    // (a preview image the app made for a file — e.g. a video's thumbnail — isn't a change to the task)
+    const noThumbs = (v) => (Array.isArray(v) ? v.map((a) => { if (!a || typeof a !== 'object') return a; const { thumb, ...rest } = a; return rest; }) : v);
+    const same = (k, a, b) => deepEqual(k === 'attachments' ? noThumbs(a ?? null) : a ?? null, k === 'attachments' ? noThumbs(b ?? null) : b ?? null);
     const keys = new Set([...Object.keys(next), ...Object.keys(current)]);
-    for (const k of keys) if (!FREE.includes(k) && !deepEqual(next[k] ?? null, base[k] ?? null) && !deepEqual(next[k] ?? null, current[k] ?? null)) return false;
+    for (const k of keys) if (!FREE.includes(k) && !same(k, next[k], base[k]) && !same(k, next[k], current[k])) return false;
     const was = new Map((base.comments || []).map((c) => [c.id, c]));
     const now = new Map((next.comments || []).map((c) => [c.id, c]));
     const strip = (c) => { const { reactions, ...rest } = c; return rest; };

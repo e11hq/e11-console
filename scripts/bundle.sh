@@ -8,6 +8,8 @@ OUT="${OUT_DIR:-$ROOT/dist}"
 STAGE="$(mktemp -d)"
 mkdir -p "$STAGE/e11-console/server" "$OUT"
 cp -R "$ROOT/server/src" "$ROOT/server/package.json" "$STAGE/e11-console/server/"
+# the real-project sample (Start fresh with sample data) is for the test copy only: live releases leave it out
+case "$VERSION" in *-test.*|*-dev) ;; *) rm -rf "$STAGE/e11-console/server/src/sample-files/clickup" "$STAGE/e11-console/server/src/sample-story.json" ;; esac
 cp -R "$ROOT/web" "$STAGE/e11-console/web"
 cp -R "$ROOT/mac" "$STAGE/e11-console/mac"
 echo "$VERSION" > "$STAGE/e11-console/VERSION"

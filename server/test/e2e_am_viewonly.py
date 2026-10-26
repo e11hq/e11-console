@@ -29,7 +29,7 @@ async def main():
               await changeStatus(t, target); setDone(t, true);
               const due0 = document.querySelector('#detail [data-action="due-today"], #detail [data-action="clear-due"]'); if (due0) due0.click();
               return {{ ro, editable, enabled, statusSame: t.sectionId === sec, notDone: !t.done, dueSame: t.due === due, note: !!document.querySelector('#detail .ro-note') }}; }})()""")
-            ok = [sb == ['Ford & Lincoln', 'KOREA 360'], r == {'ro': True, 'editable': 0, 'enabled': 0, 'statusSame': True, 'notDone': True, 'dueSame': True, 'note': True}]
+            ok = [sb == ['KIA', 'DEEPAL', 'AL TAYER MOTORS', 'KOREA 360', 'Gebriel Motors'], r == {'ro': True, 'editable': 0, 'enabled': 0, 'statusSame': True, 'notDone': True, 'dueSame': True, 'note': True}]
             n0 = await pg.evaluate(f"task('{other}').comments.length")
             await pg.locator('#d-comment').click(); await pg.keyboard.type('Looks good from my side'); await pg.locator('[data-action="add-comment"]').click(); await pg.wait_for_timeout(400)
             ok.append(await pg.evaluate(f"task('{other}').comments.length") == n0 + 1)
@@ -39,13 +39,13 @@ async def main():
             await pg.evaluate("closeDetail()")
             srch = await pg.evaluate("(() => { const r = taskSearch('ALAIN'); return { other: r.tasks.some(x => x.t.projectId === 'p-alain' && x.t.createdBy !== currentUserId), clients: r.projects.map(p => p.name) }; })()")
             ok.append(srch == {'other': False, 'clients': []})
-            cal = await pg.evaluate("Cal && db.tasks.filter(t => Cal.isPost(t) && !amReadOnly(t)).every(t => ['p-ford', 'p-korea'].includes(t.projectId) || t.createdBy === currentUserId)")
+            cal = await pg.evaluate("Cal && db.tasks.filter(t => Cal.isPost(t) && !amReadOnly(t)).every(t => ['p-kia', 'p-deepal', 'p-atm', 'p-korea', 'p-gm'].includes(t.projectId) || t.createdBy === currentUserId)")
             ok.append(cal is True)
             ca = await pg.evaluate("clientsSorted().map(c => c.name)")
-            ok.append(sorted(ca) == ['Ford & Lincoln', 'KOREA 360'])
+            ok.append(sorted(ca) == sorted(['KIA', 'DEEPAL', 'AL TAYER MOTORS', 'KOREA 360', 'Gebriel Motors']))
             # Production: no dates, no adding / removing checklist items (ticking is fine)
             c2 = await b.new_context(viewport={'width':1440,'height':900},base_url=BASE)
-            await c2.add_cookies([{'name':'e11_dev_email','value':'yousef@e11-digital.com','url':BASE}])
+            await c2.add_cookies([{'name':'e11_dev_email','value':'joe@e11-digital.com','url':BASE}])
             pp = await c2.new_page(); pp.on('pageerror', lambda e: errs.append(str(e)))
             await pp.goto('/'); await pp.wait_for_timeout(4000); await pp.mouse.click(5,5); await pp.wait_for_timeout(400)
             tid = await pp.evaluate("(() => { const t = topTasks().find(x => (x.assignees || []).includes(currentUserId) && !x.done && (x.checklist || []).length) || topTasks().find(x => (x.assignees || []).includes(currentUserId) && !x.done); if (!(t.checklist || []).length) t.checklist = [{ id: 'k1', text: 'Item', done: false }]; openTask(t.id); return t.id; })()")
