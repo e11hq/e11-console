@@ -99,7 +99,7 @@ export function sampleData(store, me, filesRoot = null) {
   // two Finance-only people
   [['u-smp-fin-a', 'Rania Haddad', 'rania.finance@e11-digital.com', 'finance_admin', 'Finance Manager'], ['u-smp-fin-v', 'Omar Saleh', 'omar.accounts@e11-digital.com', 'finance_viewer', 'Accountant']]
     .forEach(([id, name, email, role, designation]) => { if (!have.has(email)) out.users.push({ id, name, email, role, designation, active: true, setup: true, avatar: null, prefs: {}, createdAt: iso(200), office: 'Dubai — Business Bay office' }); });
-  // expense records: subscriptions, staff reimbursements, extra expenses
+  // expense records: subscriptions, staff reimbursements, office expenses
   const monthKey = (d) => d.toISOString().slice(0, 7);
   const sixAgo = new Date(); sixAgo.setUTCDate(1); sixAgo.setUTCMonth(sixAgo.getUTCMonth() - 5);
   out.finance = [

@@ -1,5 +1,5 @@
 """Finance people: own layout (Dashboard / Projects / Expenses), dashboard counts + monthly graph + overview,
-Finance Admin sets task Finance status and adds subscriptions / reimbursements / extra expenses (with invoice),
+Finance Admin sets task Finance status and adds subscriptions / reimbursements / office expenses (with invoice),
 Expenses page + all-transactions list with month filter and 50 per page. Viewer only looks; Admin can look."""
 import asyncio, os, subprocess, tempfile, time, urllib.request, json
 from playwright.async_api import async_playwright
@@ -85,7 +85,7 @@ async def main():
         # Add pages via the Me menu
         await pg.click('#me-chip'); await pg.wait_for_timeout(200)
         items = await E("[...document.querySelectorAll('.menu .mi')].map(e=>e.textContent.trim())")
-        check(all(x in items for x in ['Add subscriptions', 'Add Staff Reimbursements', 'Add Extra Expense']) and 'Team members' not in items, f'Me menu {items}')
+        check(all(x in items for x in ['Add subscriptions', 'Add Staff Reimbursements', 'Add Office Expense']) and 'Team members' not in items, f'Me menu {items}')
         await pg.locator('.menu .mi', has_text='Add subscriptions').click(); await pg.wait_for_timeout(300)
         await pg.click('[data-fin-new="sub"]'); await pg.wait_for_timeout(200)
         await pg.fill('.fin-form [name="name"]', 'Adobe CC'); await pg.fill('.fin-form [name="amount"]', '1200.5'); await pg.select_option('.fin-form [name="day"]', '1')
@@ -113,7 +113,7 @@ async def main():
         await pg.click('.fin-form button[type="submit"]'); await pg.wait_for_timeout(400)
         r = await E("db.finance.find(x=>x.type==='reimb')")
         check(r and r['amount'] == 250 and r['date'] == now + '-01' and r.get('personId'), f'reimbursement saved {r and r["date"]}')
-        # extra expenses (many, for paging)
+        # office expenses (many, for paging)
         await E("go('fin-extra')"); await pg.wait_for_timeout(200)
         await pg.click('[data-fin-new="expense"]'); await pg.wait_for_timeout(200)
         await pg.fill('.fin-form [name="name"]', 'Studio lights'); await pg.fill('.fin-form [name="amount"]', '')

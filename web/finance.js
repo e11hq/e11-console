@@ -4,7 +4,7 @@
   sidebar); Finance Admins also get the add pages. A task's Finance status is only changed by Account
   Managers and Admins. Desktop only: on a phone-size screen
   Finance people see a note to use a computer. Only a Finance Admin changes things:
-   a task's Finance status, monthly subscriptions, staff reimbursements and extra expenses.
+   a task's Finance status, monthly subscriptions, staff reimbursements and office expenses.
    Records live in db.finance (server kind "finance"), one item each:
      { type: 'sub', name, amount, day, startMonth: 'YYYY-MM', endedAt, invoices: { 'YYYY-MM': file } }
      { type: 'reimb', userId | personId, amount, date, invoice }
@@ -53,7 +53,7 @@ const Fin = (() => {
   const KIND_C = { expense: '#ff8a4c', sub: '#4c9aff', reimb: '#a875ff' };
 
   /* ---------- Download report (Expenses page: Admins, Finance Admins, Finance Viewers) ----------
-     A PDF of the chosen months (1–12): subscriptions, staff reimbursements and extra expenses, no tasks.
+     A PDF of the chosen months (1–12): subscriptions, staff reimbursements and office expenses, no tasks.
      The pages are drawn here on A4 canvases and joined on the server. With "Include invoices and
      receipts" the download is a .zip: the PDF plus Attachments/<YYYY-MM>/<SUB|REI|EXT>-nn_<name>.<ext>,
      the names the report lists. A reimbursement from an expense claim gets its claim PDF (sheet + receipts). */
@@ -77,7 +77,7 @@ const Fin = (() => {
     }).join('');
     const label = sel.length === 1 ? monthName(sel[0], true) : `${sel.length} months · ${monthName(sel[0], true)} – ${monthName(sel[sel.length - 1], true)}`;
     return `<div class="fr-pop" role="dialog" aria-label="Download expenses report">
-      <div class="fr-h"><b>Expenses report (PDF)</b><span>Subscriptions, staff reimbursements and extra expenses. No tasks or clients.</span></div>
+      <div class="fr-h"><b>Expenses report (PDF)</b><span>Subscriptions, staff reimbursements and office expenses. No tasks or clients.</span></div>
       <div class="fr-mh"><span>Months <small>· up to 12</small></span><span class="fr-y"><button class="icon-btn sm" data-fin-repy="-1" aria-label="Previous year">${icon('chev-left')}</button><b>${rep.year}</b><button class="icon-btn sm" data-fin-repy="1" aria-label="Next year" ${rep.year >= Number(now.slice(0, 4)) ? 'disabled' : ''}>${icon('chev-right')}</button></span></div>
       <div class="fr-grid">${grid}</div>
       <div class="fr-sel">${esc(label)}</div>
@@ -199,7 +199,7 @@ const Fin = (() => {
       const c3 = [{ l: 'Name', w: 0.33 }, { l: 'Paid on', w: 0.11 }, { l: withFiles ? 'Invoice file' : 'Invoice', w: 0.40 }, { l: 'AED', w: 0.16, r: true, mono: true }];
       table(`${label}SUBSCRIPTIONS`, c3.map((c, i) => (i === 1 ? { ...c, l: 'Billed on' } : c)), mo.subs.map((x) => [x.name, day(x.date), fileCell(x), money(x.amount)]), ['Subscriptions total', '', '', money(mo.s)]);
       table(`${label}STAFF REIMBURSEMENTS`, c3.map((c, i) => (i === 0 ? { ...c, l: 'Person' } : i === 2 ? { ...c, l: withFiles ? 'Receipt file' : 'Receipts' } : c)), mo.reimbs.map((x) => [x.name, day(x.date), fileCell(x), money(x.amount)]), ['Reimbursements total', '', '', money(mo.r)]);
-      table(`${label}EXTRA EXPENSES`, c3, mo.extras.map((x) => [x.name, day(x.date), fileCell(x), money(x.amount)]), ['Extra expenses total', '', '', money(mo.e)]);
+      table(`${label}OFFICE EXPENSES`, c3, mo.extras.map((x) => [x.name, day(x.date), fileCell(x), money(x.amount)]), ['Office expenses total', '', '', money(mo.e)]);
     }
     newPage();
     const S3 = model.reduce((a, x) => a + x.s, 0), R3 = model.reduce((a, x) => a + x.r, 0), E3 = model.reduce((a, x) => a + x.e, 0), T = S3 + R3 + E3;
@@ -212,7 +212,7 @@ const Fin = (() => {
       const p = pctChange(T, prev);
       note = `${p > 0 ? '↑' : p < 0 ? '↓' : '—'} ${Math.abs(p)}% vs ${monthName(pm, true).split(' ')[0]}`;
     }
-    cards([['Total paid out', 'AED ' + money(T), note, true], ['Subscriptions', money(S3), `${plural(nS, 'payment')} · ${pct(S3, T)}%`], ['Reimbursements', money(R3), `${multi ? plural(nR, 'payment') : plural(people, 'person', 'people')} · ${pct(R3, T)}%`], ['Extra expenses', money(E3), `${plural(nE, 'purchase')} · ${pct(E3, T)}%`]]);
+    cards([['Total paid out', 'AED ' + money(T), note, true], ['Subscriptions', money(S3), `${plural(nS, 'payment')} · ${pct(S3, T)}%`], ['Reimbursements', money(R3), `${multi ? plural(nR, 'payment') : plural(people, 'person', 'people')} · ${pct(R3, T)}%`], ['Office expenses', money(E3), `${plural(nE, 'purchase')} · ${pct(E3, T)}%`]]);
     split(S3, R3, E3);
     if (!multi) monthTables(model[0], '');
     else {
@@ -221,7 +221,7 @@ const Fin = (() => {
         model.map((mo) => [monthName(mo.m, true), money(mo.s), money(mo.r), money(mo.e), { t: money(mo.t), b: true }, mo.missing.length ? { t: `${mo.missing.length} missing`, c: '#c2410c' } : { t: 'All attached', c: '#15803d' }]),
         [plural(model.length, 'month'), money(S3), money(R3), money(E3), money(T), String(missing.length)]);
       if (missing.length) table('MISSING INVOICES AND RECEIPTS', [{ l: 'Month', w: 0.18 }, { l: 'Name', w: 0.44 }, { l: 'Type', w: 0.22 }, { l: 'AED', w: 0.16, r: true, mono: true }],
-        missing.map((x) => [monthName(x.mo, true), x.name, { sub: 'Subscription', reimb: 'Reimbursement', expense: 'Extra expense' }[x.kind], money(x.amount)]));
+        missing.map((x) => [monthName(x.mo, true), x.name, { sub: 'Subscription', reimb: 'Reimbursement', expense: 'Office expense' }[x.kind], money(x.amount)]));
       model.forEach((mo) => {
         if (y + 160 * S > bottom) newPage();
         ctx.fillStyle = '#efecff'; ctx.fillRect(P, y, CW, 34 * S); ctx.fillStyle = '#5b4bd6'; ctx.fillRect(P, y, 3 * S, 34 * S);
@@ -327,7 +327,7 @@ const Fin = (() => {
   const addItems = () => (isFinAdmin() ? ['-',
     { label: 'Add subscriptions', icon: 'cal', run: () => go('fin-subs') },
     { label: 'Add Staff Reimbursements', icon: 'users', run: () => go('fin-reimb') },
-    { label: 'Add Extra Expense', icon: 'coin', run: () => go('fin-extra') }] : finLevel() && !isFinUser() ? ['-', { label: 'Staff reimbursements', icon: 'users', run: () => go('fin-reimb') }] : []);
+    { label: 'Add Office Expense', icon: 'coin', run: () => go('fin-extra') }] : finLevel() && !isFinUser() ? ['-', { label: 'Staff reimbursements', icon: 'users', run: () => go('fin-reimb') }] : []);
   function meMenu(anchor, extra = []) {
     showMenu(anchor, [
       ...extra,
@@ -342,7 +342,7 @@ const Fin = (() => {
 
   /* ---------- Titles ---------- */
   function title() {
-    const t = { 'fin-dash': 'Dashboard', 'fin-projects': 'Clients', 'fin-expenses': 'Expenses', 'fin-list': 'All transactions', 'fin-subs': 'Subscriptions', 'fin-reimb': 'Staff reimbursements', 'fin-extra': 'Extra expenses' }[ui.view] || 'Finance';
+    const t = { 'fin-dash': 'Dashboard', 'fin-projects': 'Clients', 'fin-expenses': 'Expenses', 'fin-list': 'All transactions', 'fin-subs': 'Subscriptions', 'fin-reimb': 'Staff reimbursements', 'fin-extra': 'Office expenses' }[ui.view] || 'Finance';
     const tabs = !isFinUser() && ['fin-dash', 'fin-projects', 'fin-expenses'].includes(ui.view)
       ? `<div class="tabs">${[['fin-dash', 'Dashboard'], ['fin-projects', 'Clients'], ['fin-expenses', 'Expenses']].map(([v, l]) => `<button class="tab ${ui.view === v ? 'active' : ''}" data-fin-go="${v}">${l}</button>`).join('')}</div>` : '';
     return `<div class="page-icon" style="background:#173a2c;color:#3ddc97">${icon('coin')}</div><div class="page-title">${isFinUser() ? t : 'Finance'}</div>${tabs}`;
@@ -662,7 +662,7 @@ const Fin = (() => {
     </div>`;
   }
   const reimbPage = () => Claims.financeSection() + monthRecords('reimb', 'Staff reimbursements', 'Add reimbursement');
-  const extraPage = () => monthRecords('expense', 'Extra expenses', 'Add expense');
+  const extraPage = () => monthRecords('expense', 'Office expenses', 'Add expense');
 
   /* ---------- Add form (pop-up) ---------- */
   async function pickInvoice(folder, month) {
@@ -674,7 +674,7 @@ const Fin = (() => {
     return new Promise((resolve) => {
       const root = $('#overlay-root');
       const st2 = { invoice: null, busy: false };
-      const T = { sub: 'Add subscription', reimb: 'Add staff reimbursement', expense: 'Add extra expense' }[kind];
+      const T = { sub: 'Add subscription', reimb: 'Add staff reimbursement', expense: 'Add office expense' }[kind];
       const peopleOpts = () => {
         const team = activeUsers().filter((u) => !isFinUser(u) || true);
         const extra = recs('person');
