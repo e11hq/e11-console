@@ -21,13 +21,18 @@ try:
     check('LEGACY="${E11_LEGACY:-0}"' in sh, 'installer served, Swift app chosen')
     check('LEGACY="${E11_LEGACY:-1}"' in urllib.request.urlopen(BASE + '/install/legacy').read().decode(), 'legacy installer served')
     check(len(urllib.request.urlopen(BASE + '/install/E11Console.zip').read()) > 100000, 'Swift build served')
+    # first the earlier app (as on the team's Macs today), then the Swift app over it, as Update now does
+    r = subprocess.run(['bash', '-c', f'curl -fsSL {BASE}/install/legacy | bash'], capture_output=True, text=True, timeout=300)
+    legacy = [d for d in ['/Applications/E11 Console Test.app', os.path.expanduser('~/Applications/E11 Console Test.app')] if os.path.isdir(d)]
+    check(r.returncode == 0 and legacy and os.path.isfile(os.path.join(legacy[0], 'Contents/MacOS/applet')), 'the earlier app installs from /install/legacy ' + r.stdout[-300:])
+    time.sleep(4)
     r = subprocess.run(['bash', '-c', f'curl -fsSL {BASE}/install | bash'], capture_output=True, text=True, timeout=300)
     print(r.stdout[-1500:], r.stderr[-1500:])
     check(r.returncode == 0 and 'Done!' in r.stdout, 'installer finished')
     app = '/Applications/E11 Console Test.app'
     if not os.path.isdir(app): app = os.path.expanduser('~/Applications/E11 Console Test.app')
     exe = os.path.join(app, 'Contents/MacOS/E11 Console Test')
-    check(os.path.isfile(exe), 'app installed with its program')
+    check(os.path.isfile(exe) and not os.path.exists(os.path.join(app, 'Contents/MacOS/applet')), 'the Swift app replaced the earlier one')
     lipo = subprocess.run(['lipo', '-archs', exe], capture_output=True, text=True).stdout
     check('arm64' in lipo and 'x86_64' in lipo, f'runs on Apple silicon and Intel ({lipo.strip()})')
     v = subprocess.run(['codesign', '--verify', '--deep', '--strict', app], capture_output=True, text=True)
