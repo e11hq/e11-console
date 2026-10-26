@@ -249,7 +249,7 @@ const Plans = (() => {
     const out = [];
     const ed = canEdit(pl), editor = isEditor(pl), appr = canApprove(pl);
     if (ed) out.push(`<button class="btn sm" data-pl="new-post">${icon('plus')}Add post</button>`, `<button class="btn primary sm" data-pl="send">${icon('send')}${pl.status === 'changes' ? 'Send again' : 'Send for approval'}</button>`);
-    if (canMakeTasks(pl) && (pl.posts || []).some((x) => !x.taskId)) out.push(`<button class="btn primary sm" data-pl="make-tasks">${icon('plus')}Create tasks</button>`);
+    if (canMakeTasks(pl) && (pl.posts || []).some((x) => !x.taskId || !task(x.taskId))) out.push(`<button class="btn primary sm" data-pl="make-tasks">${icon('plus')}Create tasks</button>`);
     if (canMakeTasks(pl) && hasTasks(pl) && !pl.clientApproved) {
       if ((pl.exports || []).length) out.push(`<button class="btn sm" data-pl="reply">${icon('reply')}Client’s reply</button>`);
       if ((pl.posts || []).some((x) => progress(x).fin && !progress(x).t.done)) out.push(`<button class="btn ${(pl.exports || []).length ? '' : 'primary '}sm" data-pl="export">${icon('download')}Export for client</button>`);
@@ -410,7 +410,7 @@ const Plans = (() => {
   }
   function makeTasksDialog(pl) {
     if (!canMakeTasks(pl)) return denied();
-    const posts = postsSorted(pl).filter((x) => !x.taskId);
+    const posts = postsSorted(pl).filter((x) => !x.taskId || !task(x.taskId));   // (a task deleted since can be made again)
     if (!posts.length) { toast('Every post already has its task'); return; }
     const today = todayStr();
     const defDue = (d) => { const x = addDays(d, -3); return x < today ? today : x; };
@@ -479,7 +479,7 @@ const Plans = (() => {
       const made = [];
       for (const r of go_) {
         const x = (pl.posts || []).find((y) => y.id === r.x.id);
-        if (!x || x.taskId) continue;
+        if (!x || (x.taskId && task(x.taskId))) continue;
         const id = uid();
         let atts = [];
         const files = (x.refs || []).filter((y) => y.path);
