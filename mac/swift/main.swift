@@ -15,7 +15,7 @@ import LocalAuthentication
 
 // Version of this Mac app's native part. Raise it when a change here needs everyone to reinstall: the web app
 // then shows a required-update banner in older Mac apps. (The earlier script app was 1–6.)
-let SHELL_VERSION = 7
+let SHELL_VERSION = 8
 
 let info = Bundle.main.infoDictionary ?? [:]
 let env = ProcessInfo.processInfo.environment
@@ -27,6 +27,8 @@ let APP_NAME = (info["CFBundleName"] as? String) ?? "E11 Console"
 let SELFTEST = env["E11_SELFTEST"] ?? ""
 let defaults = UserDefaults.standard
 let LOCK_KEY = "E11TouchIDLock"
+let AT_LOGIN = CommandLine.arguments.contains("--login")   // started by "Open at Login": stay in the background
+let LOGIN_AGENT = NSHomeDirectory() + "/Library/LaunchAgents/" + (Bundle.main.bundleIdentifier ?? "ae.e11.console.client") + ".login.plist"
 
 func token() -> String { String(Int(Date().timeIntervalSince1970 * 1000), radix: 36) + String(UUID().uuidString.prefix(6)).lowercased() }
 func uniquePath(_ dir: String, _ name: String) -> String {
@@ -132,8 +134,9 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
        let c = HTTPCookie(properties: [.domain: host, .path: "/", .name: "e11_dev_email", .value: email]) {
       web.configuration.websiteDataStore.httpCookieStore.setCookie(c) { self.loadHome() }
     } else { loadHome() }
-    window.makeKeyAndOrderFront(nil)
     placeLights()
+    if AT_LOGIN { return }   // (loads and stays connected; the Dock icon brings the window)
+    window.makeKeyAndOrderFront(nil)
     NSApp.activate(ignoringOtherApps: true)
   }
   func loadHome() {
@@ -155,7 +158,15 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     let y = ((BAR_H - bh) / 2).rounded()
     for (i, b) in [close, mini, zoom].enumerated() { b.setFrameOrigin(NSPoint(x: LIGHTS_X + CGFloat(i) * gap, y: y)) }
   }
-  func windowWillClose(_ n: Notification) { DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { NSApp.terminate(nil) } }
+  // Closing the window keeps the app running in the background (like Slack): still connected, notifications and the
+  // Dock badge keep coming; the Dock icon brings the window back. Quit (⌘Q) really quits.
+  func windowShouldClose(_ w: NSWindow) -> Bool {
+    if w.styleMask.contains(.fullScreen) {
+      w.toggleFullScreen(nil)
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { w.orderOut(nil) }
+    } else { w.orderOut(nil) }
+    return false
+  }
   func windowDidResize(_ n: Notification) { placeLights() }
   func windowDidEndLiveResize(_ n: Notification) { placeLights() }
   func windowDidBecomeKey(_ n: Notification) { placeLights() }
@@ -414,6 +425,22 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     lastActive = Date()
   }
   @objc func lockNow() { if defaults.bool(forKey: LOCK_KEY) { lock() } }
+  /* ---------- Open at Login (a small login item in ~/Library/LaunchAgents; no account needed) ---------- */
+  func atLogin() -> Bool { FileManager.default.fileExists(atPath: LOGIN_AGENT) }
+  @discardableResult func setAtLogin(_ on: Bool) -> Bool {
+    if !on { try? FileManager.default.removeItem(atPath: LOGIN_AGENT); return !atLogin() }
+    let plist: [String: Any] = ["Label": ((LOGIN_AGENT as NSString).lastPathComponent as NSString).deletingPathExtension,
+                                "ProgramArguments": ["/usr/bin/open", "-g", "-a", Bundle.main.bundlePath, "--args", "--login"],
+                                "RunAtLoad": true, "LimitLoadToSessionType": "Aqua"]
+    try? FileManager.default.createDirectory(atPath: (LOGIN_AGENT as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
+    guard let d = try? PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0) else { return false }
+    return FileManager.default.createFile(atPath: LOGIN_AGENT, contents: d)
+  }
+  @objc func toggleLogin(_ sender: NSMenuItem) {
+    let on = !atLogin()
+    if !setAtLogin(on) { let a = NSAlert(); a.messageText = "Couldn’t change Open at Login."; a.runModal() }
+    sender.state = atLogin() ? .on : .off
+  }
   @objc func toggleLock(_ sender: NSMenuItem) {
     let on = !defaults.bool(forKey: LOCK_KEY)
     if on {
@@ -447,9 +474,11 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     }
     let lockItem = item("Lock with Touch ID", #selector(toggleLock(_:)), "", .command, self)
     lockItem.state = defaults.bool(forKey: LOCK_KEY) ? .on : .off
+    let loginItem = item("Open at Login", #selector(toggleLogin(_:)), "", .command, self)
+    loginItem.state = atLogin() ? .on : .off
     _ = sub(APP_NAME, [
       item("About " + APP_NAME, #selector(NSApplication.orderFrontStandardAboutPanel(_:))), .separator(),
-      lockItem, .separator(),
+      loginItem, lockItem, .separator(),
       item("Hide " + APP_NAME, #selector(NSApplication.hide(_:)), "h"),
       item("Hide Others", #selector(NSApplication.hideOtherApplications(_:)), "h", [.command, .option]),
       item("Show All", #selector(NSApplication.unhideAllApplications(_:))), .separator(),
@@ -538,6 +567,12 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
       if let img = img, let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff), let png = rep.representation(using: .png, properties: [:]) {
         try? png.write(to: URL(fileURLWithPath: picture))
       }
+      _ = self.windowShouldClose(self.window)
+      self.selftest["closedVisible"] = self.window.isVisible
+      _ = self.applicationShouldHandleReopen(NSApp, hasVisibleWindows: false)
+      self.selftest["reopenedVisible"] = self.window.isVisible
+      self.selftest["loginOn"] = self.setAtLogin(true) && ((try? String(contentsOfFile: LOGIN_AGENT)) ?? "").contains(Bundle.main.bundlePath)
+      self.selftest["loginOff"] = self.setAtLogin(false) && !self.atLogin()
       try? Data(jsonString(self.selftest).utf8).write(to: URL(fileURLWithPath: SELFTEST))
       NSApp.terminate(nil)
     }

@@ -670,7 +670,7 @@ const Push = (() => {
   }
   // My profile on a computer: the same notifications, for this browser (the Mac app shows its own while it's open)
   function profileRow(noRefresh) {
-    if (Host.isMacApp) return `<div class="pf-opt" id="pf-push"><div><b>Notifications</b><span>The Mac app shows a banner for every Inbox update while it’s open. To get them when it’s closed too, open ${esc(location.host)} in Safari or Chrome and switch them on there.</span></div></div>`;
+    if (Host.isMacApp) return `<div class="pf-opt" id="pf-push"><div><b>Notifications</b><span>The Mac app shows a banner for every Inbox update while it’s running — closing its window keeps it running (⌘Q quits), and <b>Open at Login</b> in its app menu starts it with your Mac.</span></div></div>`;
     if (!noRefresh) setTimeout(refresh, 0);
     if (st.state === 'none') return '';
     const sub = { on: 'A banner for every Inbox update, even when this tab is closed', off: 'Get a banner for every Inbox update, even when this tab is closed', denied: 'Blocked in this browser — allow notifications for this site in the browser’s settings', unsupported: 'This browser can’t show notifications', unknown: '' }[st.state] || '';
