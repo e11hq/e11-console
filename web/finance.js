@@ -301,8 +301,9 @@ const Fin = (() => {
       wrap.className = 'fin-admin-nav fin-office';
       wrap.innerHTML = `<div class="nav-heading fin-office-h"><span>Finance</span></div><nav class="nav">${[['fin-dash', 'home', 'Dashboard'], ['fin-projects', 'folder', 'Clients'], ['fin-reimb', 'users', 'Reimbursements'], ['fin-expenses', 'coin', 'Expenses']]
         .map(([v, ic, l]) => `<a class="nav-item" data-nav="${v}">${icon(ic)}${l}<span class="count"></span></a>`).join('')}</nav>`;
-      const tr = $('#nav-trash');
-      tr.parentNode.insertBefore(wrap, tr);
+      // (under Home and Inbox; Client Assets and Trash stay together at the bottom)
+      const top = $('#sidebar > nav.nav');
+      top.parentNode.insertBefore(wrap, top.nextSibling);
     } else if (canLook()) {
       const a = document.createElement('a');
       a.className = 'nav-item ca-nav fin-admin-nav';

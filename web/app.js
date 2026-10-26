@@ -5422,8 +5422,8 @@ function viewClientFolder(c, f) {
       ${up ? `<button class="btn primary" data-action="ca-upload">${icon('upload')}Upload files</button>` : ''}
     </div>
     <div class="ca-uploads" id="ca-uploads"></div>
-    ${subs.length || (top && canAddAssets()) ? `<div class="cf-grid">${subs.slice().sort((a, b) => !!a.finalOf - !!b.finalOf || String(b.createdAt || '').localeCompare(String(a.createdAt || ''))).map((x) => folderCard(c, x)).join('')}
-      ${top && canAddAssets() ? `<div class="cf-card add" data-action="add-cfolder" data-parent="${f.id}"><div class="cf-ic">${icon('plus')}</div><div class="cf-name">New folder</div><div class="cf-meta">One for each job</div></div>` : ''}</div>` : ''}
+    ${subs.length || (top && canAddAssets()) ? `<div class="cf-grid">${top && canAddAssets() ? `<div class="cf-card add" data-action="add-cfolder" data-parent="${f.id}"><div class="cf-ic">${icon('plus')}</div><div class="cf-name">New folder</div><div class="cf-meta">One for each job</div></div>` : ''}
+      ${subs.slice().sort((a, b) => !!a.finalOf - !!b.finalOf || String(b.createdAt || '').localeCompare(String(a.createdAt || ''))).map((x) => folderCard(c, x)).join('')}</div>` : ''}
     ${files}${empty}
     ${up ? `<div class="ca-dropscrim">${icon('upload')}<b>Drop to upload to ${esc(f.name)}</b></div>` : ''}
   </div>`;

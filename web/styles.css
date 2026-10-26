@@ -1894,7 +1894,7 @@ button.pv-empty:hover { background: var(--hover); color: var(--text-2); }
 :root[data-theme="light"] .fileref.show { background: #fff; }
 
 /* v29 — Client Assets */
-.ca-nav-wrap { padding: 8px 0 10px; }
+.ca-nav-wrap { padding: 8px 0 10px; margin-top: auto; }   /* Client Assets, Trash and the profile always at the bottom */
 .ca-nav { position: relative; height: auto !important; min-height: 46px !important; padding: 7px 10px !important; gap: 10px; border-radius: 10px !important; color: var(--text) !important;
   background: linear-gradient(120deg, rgba(123,104,238,.22), rgba(63,185,173,.16)); border: 1px solid rgba(123,104,238,.45); box-shadow: 0 6px 18px rgba(91,71,214,.18); }
 .ca-nav:hover { background: linear-gradient(120deg, rgba(123,104,238,.32), rgba(63,185,173,.24)); border-color: rgba(150,135,255,.7); }

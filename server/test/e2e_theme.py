@@ -48,7 +48,8 @@ async def main():
         check(await ic() == 'sun' and await pg.evaluate("document.documentElement.dataset.theme") == 'light', 'light mode: the button shows a sun')
         await pg.click('.brand-btns .theme-toggle, #mac-bar .theme-toggle'); await pg.wait_for_timeout(300)
         check(await ic() == 'moon' and await pg.evaluate("document.documentElement.dataset.theme") == 'dark', 'dark mode: the button shows a moon')
-        # Finance card
+        # Finance card (an Admin has it with + Finance)
+        await pg.evaluate("(() => { me().fin = 'viewer'; persist(0); Fin.init(); renderSidebar(); })()"); await pg.wait_for_timeout(500)
         fin = await pg.locator('.fin-admin-nav').bounding_box(); ca = await pg.locator('.ca-nav-wrap .ca-nav[data-nav="clients"]').bounding_box(); tr = await pg.locator('#nav-trash').bounding_box()
         g1 = round(fin['y'] - (ca['y'] + ca['height'])); g2 = round(tr['y'] - (fin['y'] + fin['height']))
         check(abs(g1 - g2) <= 1 and await pg.locator('.fin-admin-nav .ca-nav-ic').count() == 1, f'Finance is a card like Client Assets, same gap above and below ({g1}px / {g2}px)')
