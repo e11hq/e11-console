@@ -7,6 +7,8 @@ on:
   workflow_dispatch:
   push:
     branches: ['mac-*']
+permissions:
+  contents: write
 jobs:
   mac:
     runs-on: macos-14
@@ -19,7 +21,7 @@ jobs:
       - name: Build
         run: bash mac/swift/build.sh
       - name: Install and self-test
-        run: python3 mac/swift/selftest.py
+        run: python3 mac/swift/selftest.py 2>&1 | tee "$RUNNER_TEMP/selftest.log"; exit ${PIPESTATUS[0]}
       - name: Pictures and logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -30,6 +32,14 @@ jobs:
             ${{ runner.temp }}/selftest.png
             ${{ runner.temp }}/server.log
           if-no-files-found: ignore
+      - name: Results for checking from Claude's workspace (mac-* branches only)
+        if: always() && startsWith(github.ref_name, 'mac-')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view mac-selftest >/dev/null 2>&1 || gh release create mac-selftest --prerelease --title "Mac app self-test (work branch)" --notes "Latest self-test results from a mac-* branch." --target "$GITHUB_SHA"
+          cp mac/selftest.log "$RUNNER_TEMP/" 2>/dev/null || true
+          for f in selftest.json selftest.png server.log selftest.log; do [ -f "$RUNNER_TEMP/$f" ] && gh release upload mac-selftest "$RUNNER_TEMP/$f" --clobber; done; true
       - uses: actions/upload-artifact@v4
         with:
           name: mac-app
