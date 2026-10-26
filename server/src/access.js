@@ -129,6 +129,19 @@ export function createAccess(store, opts = {}) {
   const isAutoFolder = (c, f) => !!f.auto || (AUTO_FOLDERS.includes(f.name) && (!f.createdBy || f.createdBy === c.createdBy) && Math.abs(Date.parse(f.createdAt || 0) - Date.parse(c.createdAt || 0)) < 60000);
   // the client's own Files folder: it holds sub-folders (one per job, and the final files), not loose files
   const isFilesTop = (f, c) => !!f && !f.parentId && f.name === 'Files' && (!!f.auto || (!!c && isAutoFolder(c, f)));
+  // Folders inside Files go up to 5 levels deep (Files › 1 › 2 › 3 › 4 › 5); each holds files and folders, the 5th files
+  // only; final-files folders hold no folders
+  const MAX_DEPTH = 5;
+  function folderChain(list, f) {                                  // [f, its parent, …, the top folder] (null: broken / a loop)
+    const byId = new Map(list.map((x) => [x.id, x]));
+    const out = [];
+    for (let x = f; x; x = x.parentId ? byId.get(x.parentId) : null) {
+      if (out.includes(x) || out.length > MAX_DEPTH + 1) return null;
+      out.push(x);
+      if (x.parentId && !byId.has(x.parentId)) return null;
+    }
+    return out;
+  }
   function clientEditOk(u, manager, base, current, next) {
     if (!next) return false;
     // (anyone may fill in a missing logo — the first image in Logos — but only Admins and AMs change one)
@@ -165,9 +178,10 @@ export function createAccess(store, opts = {}) {
       if (was.has(id) || there.has(id)) continue;
       if (n.createdBy !== u.id || n.auto || n.finalOf) return false; // a new folder is yours
       if (!n.parentId && !manager) return false;                    // a folder on the client's main page: Admins and AMs
-      if (n.parentId) {                                             // a sub-folder: only one level, only inside Files
-        const parent = (current.folders || []).find((x) => x.id === n.parentId);
-        if (!parent || !isFilesTop(parent, current)) return false;
+      if (n.parentId) {                                             // a folder inside Files, up to 5 levels deep
+        const chain = folderChain(next.folders || [], n);
+        if (!chain || chain.length > MAX_DEPTH + 1 || !isFilesTop(chain[chain.length - 1], current)) return false;
+        if (chain.slice(1).some((x) => x.finalOf)) return false;    // (nothing inside final files)
       }
     }
     return true;

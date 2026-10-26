@@ -60,7 +60,7 @@ test('completing files each person’s latest approved files in Files › <task>
   assert.ok(n.some((x) => x.to === 'u-p') && n.some((x) => x.to === 'u-s') && !n.some((x) => x.to === 'u-h'), 'the team, not the one who completed it');
 });
 
-test('folder rules: no loose files in Files or in a final folder; sub-folders only inside Files', async () => {
+test('folder rules: no loose files in Files or in a final folder; folders inside Files (not in Logos etc.)', async () => {
   const addFile = (fid) => (c) => { c.folders.find((x) => x.id === fid).files.push({ id: 'x' + fid, name: 'x.png', path: 'Clients/Ford/x.png', addedBy: 'u-p', addedAt: at(0) }); return c; };
   assert.equal(await push(PROD, 'clients', 'cl-ford', addFile('cf-files')), true, 'loose file in Files');
   assert.equal(await push(PROD, 'clients', 'cl-ford', addFile(finalsOf('t1').id)), true, 'file into a final folder');
@@ -71,7 +71,7 @@ test('folder rules: no loose files in Files or in a final folder; sub-folders on
   assert.equal(await push(PROD, 'clients', 'cl-ford', (c) => { c.folders.push({ id: 'cf-root', name: 'Mine', dir: 'Clients/Ford/Mine', files: [], createdAt: at(0), createdBy: 'u-p' }); return c; }), true, 'a folder on the client’s main page: Admins and AMs only');
   assert.equal(await push('carine@e11-digital.com', 'clients', 'cl-ford', (c) => { c.folders.push({ id: 'cf-root2', name: 'Social templates', dir: 'Clients/Ford/Social templates', files: [], createdAt: at(0), createdBy: 'u-cd' }); return c; }), false, 'an Account Manager makes one');
   assert.equal(await push(PROD, 'clients', 'cl-ford', sub('cf-files', 'cf-shoot')), false, 'sub-folder in Files');
-  assert.equal(await push(PROD, 'clients', 'cl-ford', sub('cf-shoot', 'cf-deep')), true, 'only one level');
+  assert.equal(await push(PROD, 'clients', 'cl-ford', sub('cf-shoot', 'cf-deep')), false, 'a folder inside it (up to 5 levels)');
   assert.equal(await push(PROD, 'clients', 'cl-ford', addFile('cf-shoot')), false, 'files go in the sub-folder');
   assert.equal(await push(PROD, 'clients', 'cl-ford', (c) => { c.folders.push({ id: 'cf-fake', name: 'Fake', dir: 'Clients/Ford/Files/Fake', files: [], createdAt: at(0), createdBy: 'u-p', parentId: 'cf-files', finalOf: 't1' }); return c; }), true, 'nobody makes a final folder by hand');
 });
@@ -94,4 +94,19 @@ test('tasks without approved files, or not linked to a client, file nothing', as
   app.store.importAll({ tasks: [{ id: 't2', projectId: 'p1', sectionId: 's-done', title: 'Plain', needsCD: false, assignees: ['u-p'], attachments: [], reviews: [] }] }, 'test');
   assert.equal(await push(ADMIN, 'tasks', 't2', { done: true }), false);
   assert.equal(finalsOf('t2'), undefined);
+});
+
+test('inside Files: folders up to 5 levels deep, files at any of them; nothing inside final files', async () => {
+  const mk = (id, parentId, name = id) => (c) => { c.folders.push({ id, name, dir: 'Clients/Ford/Files/' + id, files: [], createdAt: at(0), createdBy: 'u-p', parentId }); return c; };
+  let parent = 'cf-files';
+  for (const lvl of [1, 2, 3, 4, 5]) {
+    assert.equal(await push(PROD, 'clients', 'cl-ford', mk('cf-l' + lvl, parent)), false, `level ${lvl}`);
+    parent = 'cf-l' + lvl;
+  }
+  assert.equal(await push(PROD, 'clients', 'cl-ford', mk('cf-l6', 'cf-l5')), true, 'no 6th level');
+  assert.equal(await push(PROD, 'clients', 'cl-ford', (c) => { c.folders.find((x) => x.id === 'cf-l3').files.push({ id: 'l3f', name: 'x.png', path: 'Clients/Ford/Files/cf-l3/x.png', addedBy: 'u-p', addedAt: at(0) }); return c; }), false, 'files in a level-3 folder');
+  assert.equal(await push(PROD, 'clients', 'cl-ford', mk('cf-in-final', finalsOf('t1').id)), true, 'no folders inside final files');
+  // removing a folder with everything inside it: your own, in one go
+  assert.equal(await push(PROD, 'clients', 'cl-ford', (c) => { c.folders = c.folders.filter((x) => !/^cf-l[2-5]$/.test(x.id)); return c; }), false, 'removes level 2 and all inside');
+  assert.deepEqual(client().folders.filter((x) => /^cf-l\d$/.test(x.id)).map((x) => x.id), ['cf-l1']);
 });

@@ -3883,7 +3883,7 @@ function trashFiles(it) {
   if (it.type === 'comment') return (d.comments || []).flatMap((c) => c.attachments || []);
   if (it.type === 'attachment') return d.att ? [d.att] : [];
   if (it.type === 'cafile') return d.file ? [d.file] : [];
-  if (it.type === 'cafolder') return (d.folder && d.folder.files) || [];
+  if (it.type === 'cafolder') return [d.folder, ...(d.inner || [])].filter(Boolean).flatMap((x) => x.files || []);
   return [];
 }
 function trashPaths(it) {
@@ -3973,10 +3973,13 @@ function restoreTrash(id) {
     if (!c) { toast('Its client’s Client Assets no longer exist'); return; }
     const f = { ...d.folder };
     if (!c.folders.some((x) => x.id === f.id)) {
-      if (folderDup(c, f.name)) f.name = `${f.name} (restored)`;
+      // (the folder it was in is gone: back into Files, or onto the client's main page)
+      if (f.parentId && !c.folders.some((x) => x.id === f.parentId)) { const fl = c.folders.find((x) => isFilesTop(c, x)); if (fl && !f.finalOf) f.parentId = fl.id; else if (!fl) delete f.parentId; else f.parentId = fl.id; }
+      if (folderDup(c, f.name, null, f.parentId)) f.name = `${f.name} (restored)`;
       c.folders.push(f);
+      (d.inner || []).forEach((x) => { if (!c.folders.some((y) => y.id === x.id)) c.folders.push({ ...x }); });   // everything that was inside it
     }
-    msg = `Restored the folder “${f.name}” to ${c.name}`;
+    msg = `Restored the folder “${f.name}”${(d.inner || []).length ? ` and the ${(d.inner || []).length} folder${(d.inner || []).length === 1 ? '' : 's'} in it` : ''} to ${c.name}`;
   }
   dropTrash(id);
   commit({ delay: 0 });
@@ -5167,16 +5170,24 @@ const isAutoFolder = (c, f) => !!f.auto || (DEFAULT_FOLDERS.includes(f.name) && 
 // (Account Managers remove anyone's files and added folders)
 const canDelAsset = (a) => canAddAssets() && !(a && a.final) && (canAssets() || (!!a && a.addedBy === currentUserId));
 const canEditFolder = (c, f) => isAdmin() || (canAddAssets() && !isAutoFolder(c, f) && (canAssets() || f.createdBy === currentUserId));
-const canDelFolder = (c, f) => canEditFolder(c, f) && (canAssets() || f.files.every((a) => a.addedBy === currentUserId)) && !subFolders(c, f).length;
+// (a folder goes to the Trash with the folders inside it: others' folders or files inside need an Account Manager or Admin)
+const canDelFolder = (c, f) => canEditFolder(c, f) && (canAssets() || [f, ...folderTree(c, f)].every((x) => x.createdBy === currentUserId || x === f) && [f, ...folderTree(c, f)].every((x) => x.files.every((a) => a.addedBy === currentUserId)));
 // Files (made with the client) holds folders — one per job, and the final files of finished tasks — never loose files.
 // Every other folder holds files only. Final-files folders are filled by the app: nobody adds or removes their files.
 const isFilesTop = (c, f) => !!f && !f.parentId && f.name === 'Files' && isAutoFolder(c, f);
 const topFolders = (c) => c.folders.filter((f) => !f.parentId);
 const subFolders = (c, f) => c.folders.filter((x) => x.parentId === f.id);
 const parentFolder = (c, f) => (f && f.parentId ? c.folders.find((x) => x.id === f.parentId) || null : null);
-const folderPath = (c, f) => { const p = parentFolder(c, f); return p ? `${p.name} › ${f.name}` : f.name; };
+// Inside Files folders go up to 5 levels deep (Files › 1 › 2 › 3 › 4 › 5); each holds files and folders, the 5th files only
+const FOLDER_DEPTH = 5;
+const folderAncestors = (c, f) => { const out = []; let p = parentFolder(c, f); while (p && out.length <= FOLDER_DEPTH && !out.includes(p)) { out.unshift(p); p = parentFolder(c, p); } return out; };   // top first
+const folderDepth = (c, f) => folderAncestors(c, f).length;
+const folderTree = (c, f) => subFolders(c, f).flatMap((x) => [x, ...folderTree(c, x)]);   // everything inside, any depth
+const folderPath = (c, f) => [...folderAncestors(c, f), f].map((x) => x.name).join(' › ');
+const inFiles = (c, f) => { const a = folderAncestors(c, f); return !!a.length && isFilesTop(c, a[0]); };
 const canUploadTo = (c, f) => canAddAssets() && !!f && !f.finalOf && !isFilesTop(c, f);
-const folderFileCount = (c, f) => f.files.length + subFolders(c, f).reduce((n, x) => n + x.files.length, 0);
+const canMakeSub = (c, f) => canAddAssets() && !!f && !f.finalOf && (isFilesTop(c, f) || (inFiles(c, f) && folderDepth(c, f) < FOLDER_DEPTH));
+const folderFileCount = (c, f) => [f, ...folderTree(c, f)].reduce((n, x) => n + x.files.length, 0);
 const isAdmin = () => !!isAdm(me());
 // The Creative Director's Home, My Day ("E11 Day") and My Tasks are the Admin's: every team task, with the same filters
 const seesAll = () => isAdmin() || (typeof isCD === 'function' && isCD());
@@ -5278,7 +5289,7 @@ function viewClient(c) {
 function folderCard(c, f) {
   const imgs = f.files.filter((a) => isImage(a)).slice(0, 3);
   const subs = subFolders(c, f).length;
-  const meta = isFilesTop(c, f) ? (subs ? `${subs} folder${subs === 1 ? '' : 's'}` : 'Empty') : f.files.length ? `${f.files.length} file${f.files.length === 1 ? '' : 's'}` : 'Empty';
+  const meta = [subs ? `${subs} folder${subs === 1 ? '' : 's'}` : '', f.files.length ? `${f.files.length} file${f.files.length === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ') || 'Empty';
   const mine = canEditFolder(c, f) && (!f.finalOf || canDelFolder(c, f));
   return `<div class="cf-card ${f.finalOf ? 'final' : ''}" data-action="open-cfolder" data-id="${f.id}" title="Open ${esc(f.name)}">
       <div class="cf-ic">${icon(f.finalOf ? 'check' : 'folder')}</div>
@@ -5372,7 +5383,7 @@ function caResultsHTML(q, scope) {
     ${fonts.length ? `<style>${fonts.map((x) => `@font-face{font-family:'caf-${x.a.id}';src:url("${fileUrl(x.a)}");}`).join('')}</style>` : ''}
     <div class="ca-rcount">${n} result${n === 1 ? '' : 's'} for “${esc(q.trim())}”${scope ? ` in ${esc(scope.name)}` : ''}${r.loose ? ' <span class="ca-loose">— close matches (check the spelling)</span>' : ''}</div>
     ${r.clients.length ? `<h4 class="ca-rh">Clients <span>${r.clients.length}</span></h4><div class="ca-rlist">${r.clients.map((c) => `<button class="ca-rrow" data-action="open-client" data-id="${c.id}">${clientLogoHTML(c, 34)}<span><b>${caMark(c.name, q)}</b><small>${c.folders.length} folders · ${clientFileCount(c)} files</small></span>${icon('chev-right')}</button>`).join('')}</div>` : ''}
-    ${r.folders.length ? `<h4 class="ca-rh">Folders <span>${r.folders.length}</span></h4><div class="ca-rlist">${r.folders.map(({ c, f }) => `<button class="ca-rrow" data-action="open-cfolder-of" data-client="${c.id}" data-id="${f.id}"><span class="cf-ic sm">${icon('folder')}</span><span><b>${caMark(f.name, q)}</b><small>${esc(c.name)}${f.parentId ? ' › ' + esc((parentFolder(c, f) || {}).name || '') : ''} · ${isFilesTop(c, f) ? `${subFolders(c, f).length} folders` : `${f.files.length} file${f.files.length === 1 ? '' : 's'}`}</small></span>${icon('chev-right')}</button>`).join('')}</div>` : ''}
+    ${r.folders.length ? `<h4 class="ca-rh">Folders <span>${r.folders.length}</span></h4><div class="ca-rlist">${r.folders.map(({ c, f }) => `<button class="ca-rrow" data-action="open-cfolder-of" data-client="${c.id}" data-id="${f.id}"><span class="cf-ic sm">${icon('folder')}</span><span><b>${caMark(f.name, q)}</b><small>${esc(c.name)}${f.parentId ? ' › ' + esc(folderAncestors(c, f).map((x) => x.name).join(' › ')) : ''} · ${[subFolders(c, f).length ? `${subFolders(c, f).length} folders` : '', `${f.files.length} file${f.files.length === 1 ? '' : 's'}`].filter(Boolean).join(' · ')}</small></span>${icon('chev-right')}</button>`).join('')}</div>` : ''}
     ${r.files.length ? `<h4 class="ca-rh">Files <span>${r.files.length}</span></h4><div class="tile-grid ca-files">${shown.map(({ c, f, a }) => caTile(f, a, { c, q })).join('')}</div>${r.files.length > shown.length ? `<div class="ca-rmore">Showing the first ${shown.length} files — add another word to narrow it down.</div>` : ''}` : ''}
   </div>`;
 }
@@ -5400,29 +5411,31 @@ document.addEventListener('keydown', (e) => {
 
 function viewClientFolder(c, f) {
   const fonts = f.files.filter(isFont);
-  const parent = parentFolder(c, f), top = isFilesTop(c, f), up = canUploadTo(c, f);
-  const subs = top ? subFolders(c, f) : [];
+  const parent = parentFolder(c, f), top = isFilesTop(c, f), up = canUploadTo(c, f), mk = canMakeSub(c, f);
+  const subs = subFolders(c, f);
   const src = f.finalOf ? task(f.finalOf) : null;
   const back = parent ? `data-action="open-cfolder" data-id="${parent.id}" title="Back to ${esc(parent.name)}"` : `data-action="open-client" data-id="${c.id}" title="Back to ${esc(c.name)}"`;
-  const count = top ? `${subs.length} folder${subs.length === 1 ? '' : 's'}` : `${f.files.length} file${f.files.length === 1 ? '' : 's'}`;
+  const count = [subs.length || top ? `${subs.length} folder${subs.length === 1 ? '' : 's'}` : '', top && !f.files.length ? '' : `${f.files.length} file${f.files.length === 1 ? '' : 's'}`].filter(Boolean).join(' · ');
+  // the path, each part clickable: Client › Files › Ramadan › Shoot day
+  const crumbs = `<a data-action="open-client" data-id="${c.id}">${esc(c.name)}</a>${folderAncestors(c, f).map((x) => ` › <a data-action="open-cfolder" data-id="${x.id}">${esc(x.name)}</a>`).join('')}`;
   // (Files from before folders went inside it: still shown, and still downloadable — new ones go in a folder)
   const files = f.files.length ? `${top ? '<h4 class="ca-rh">Other files</h4>' : ''}<div class="tile-grid ca-files">${f.files.slice().sort((a, b) => a.name.localeCompare(b.name)).map((a) => caTile(f, a)).join('')}</div>` : '';
-  const empty = top ? (subs.length || f.files.length || canAddAssets() ? '' : `<div class="ca-empty">${icon('folder')}<b>No folders yet</b><span>${canAddAssets() ? 'Make a folder for each job. Final files of finished tasks are filed here too.' : 'Final files of finished tasks are filed here.'}</span></div>`)
+  const empty = top ? (subs.length || f.files.length || mk ? '' : `<div class="ca-empty">${icon('folder')}<b>No folders yet</b><span>${canAddAssets() ? 'Make a folder for each job. Final files of finished tasks are filed here too.' : 'Final files of finished tasks are filed here.'}</span></div>`)
     : f.files.length ? '' : `<div class="ca-empty ${up ? 'drop' : ''}">${icon(up ? 'upload' : 'folder')}<b>${up ? 'Drag files here or click Upload files' : 'Nothing in this folder yet'}</b><span>${f.finalOf ? 'The final files are filed here when the task is completed.' : up ? 'Logos, guideline PDFs, fonts, templates — any file type.' : 'The E11 team adds files here.'}</span></div>`;
   return `<div class="ca-page ca-folder" data-folder="${f.id}">
     ${fonts.length ? `<style>${fonts.map((a) => `@font-face{font-family:'caf-${a.id}';src:url("${fileUrl(a)}");}`).join('')}</style>` : ''}
     <div class="cfo-head">
       <button class="icon-btn" ${back}>${icon('chev-left')}</button>
       ${clientLogoHTML(c, 40)}
-      <div class="cfo-title"><h2>${esc(f.name)}</h2><small>${esc(c.name)}${parent ? ' › ' + esc(parent.name) : ''} · ${count}${f.finalOf ? ` · <span class="cf-final">Final files</span>${src && !src.deleted ? ` · <a data-action="open-task" data-id="${src.id}">Open task</a>` : ''}` : ''}</small></div>
+      <div class="cfo-title"><h2>${esc(f.name)}</h2><small class="cfo-crumbs">${crumbs} · ${count}${f.finalOf ? ` · <span class="cf-final">Final files</span>${src && !src.deleted ? ` · <a data-action="open-task" data-id="${src.id}">Open task</a>` : ''}` : ''}</small></div>
       <span class="spacer"></span>
       <button class="btn ghost" data-action="ca-info-folder" data-id="${f.id}">${icon('info')}Info</button>
       ${f.files.length ? `<button class="btn ghost" data-action="ca-download-all">${icon('download')}Download all</button>` : ''}
-      ${top && canAddAssets() ? `<button class="btn primary" data-action="add-cfolder" data-parent="${f.id}">${icon('plus')}New folder</button>` : ''}
+      ${mk ? `<button class="btn ${up ? '' : 'primary'}" data-action="add-cfolder" data-parent="${f.id}">${icon('plus')}New folder</button>` : ''}
       ${up ? `<button class="btn primary" data-action="ca-upload">${icon('upload')}Upload files</button>` : ''}
     </div>
     <div class="ca-uploads" id="ca-uploads"></div>
-    ${subs.length || (top && canAddAssets()) ? `<div class="cf-grid">${top && canAddAssets() ? `<div class="cf-card add" data-action="add-cfolder" data-parent="${f.id}"><div class="cf-ic">${icon('plus')}</div><div class="cf-name">New folder</div><div class="cf-meta">One for each job</div></div>` : ''}
+    ${subs.length || mk ? `<div class="cf-grid">${mk ? `<div class="cf-card add" data-action="add-cfolder" data-parent="${f.id}"><div class="cf-ic">${icon('plus')}</div><div class="cf-name">New folder</div><div class="cf-meta">${top ? 'One for each job' : `Inside ${esc(f.name)}`}</div></div>` : ''}
       ${subs.slice().sort((a, b) => !!a.finalOf - !!b.finalOf || String(b.createdAt || '').localeCompare(String(a.createdAt || ''))).map((x) => folderCard(c, x)).join('')}</div>` : ''}
     ${files}${empty}
     ${up ? `<div class="ca-dropscrim">${icon('upload')}<b>Drop to upload to ${esc(f.name)}</b></div>` : ''}
@@ -5544,10 +5557,10 @@ function clientMenu(anchor, c) {
 const folderDup = (c, name, exceptId, parentId) => c.folders.find((f) => f.id !== exceptId && (f.parentId || null) === (parentId || null) && f.name.trim().toLowerCase() === name.trim().toLowerCase());
 async function addFolderFlow(c, parent = null) {
   if (!canAddAssets()) return denied();
-  if (parent && !isFilesTop(c, parent)) return;
+  if (parent && !canMakeSub(c, parent)) return toast(parent.finalOf ? 'Final files hold no folders' : `Folders go up to ${FOLDER_DEPTH} levels deep inside Files`);
   if (!parent && !canAssets()) return toast('New folders here are made by Admins and Account Managers — add yours inside Files');
   const pid = parent ? parent.id : null;
-  const v = await formDialog({ title: `New folder in ${parent ? c.name + ' › ' + parent.name : c.name}`, fields: [{ key: 'name', label: 'Folder name', placeholder: parent ? 'e.g. Summer campaign shoot' : 'e.g. Social templates' }], okText: 'Create folder',
+  const v = await formDialog({ title: `New folder in ${parent ? c.name + ' › ' + folderPath(c, parent) : c.name}`, fields: [{ key: 'name', label: 'Folder name', placeholder: parent ? 'e.g. Summer campaign shoot' : 'e.g. Social templates' }], okText: 'Create folder',
     validate: (x) => (!x.name ? 'Enter a folder name' : folderDup(c, x.name, null, pid) ? `There is already a folder named “${folderDup(c, x.name, null, pid).name}”.` : null) });
   if (!v) return;
   newFolder(c, v.name, false, parent); persist(0); render();
@@ -5566,12 +5579,14 @@ function folderMenu(anchor, c, f) {
     } }]),
     ...(f.parentId ? [] : [{ label: 'Move left', icon: 'chev-left', run: () => swap(-1) }, { label: 'Move right', icon: 'chev-right', run: () => swap(1) }]),
     ...(canDelFolder(c, f) ? ['-', { label: 'Delete folder', icon: 'trash', danger: true, run: async () => {
-      const ok = await dialog({ title: `Delete “${f.name}”?`, body: `The folder${f.files.length ? ` and its ${f.files.length} file${f.files.length === 1 ? '' : 's'}` : ''} move${f.files.length ? '' : 's'} to the Trash, where ${f.files.length ? 'they' : 'it'} can be restored within ${TRASH_DAYS} days. Copies already pasted into tasks stay.`, okText: 'Delete folder', danger: true });
+      const nIn = folderTree(c, f).length, nF = folderFileCount(c, f);
+      const what = [nIn ? `${nIn} folder${nIn === 1 ? '' : 's'}` : '', nF ? `${nF} file${nF === 1 ? '' : 's'}` : ''].filter(Boolean).join(' and ');
+      const ok = await dialog({ title: `Delete “${f.name}”?`, body: `The folder${what ? ` and everything in it (${what})` : ''} move${what ? '' : 's'} to the Trash, where ${what ? 'it can all' : 'it can'} be restored in one go within ${TRASH_DAYS} days. Copies already pasted into tasks stay.`, okText: 'Delete folder', danger: true });
       if (!ok) return;
-      if (subFolders(c, f).length) { toast('Delete or move the folders inside it first'); return; }
-      c.folders = c.folders.filter((x) => x.id !== f.id);
+      const inner = folderTree(c, f);
+      c.folders = c.folders.filter((x) => x !== f && !inner.includes(x));
       // (into the Trash with its files — they're only removed from disk when the Trash entry is deleted for good)
-      toTrash('cafolder', { clientId: c.id, folder: JSON.parse(JSON.stringify(f)) }, { key: 'clients:' + c.id, where: c.name });
+      toTrash('cafolder', { clientId: c.id, folder: JSON.parse(JSON.stringify(f)), inner: JSON.parse(JSON.stringify(inner)) }, { key: 'clients:' + c.id, where: inner.length || f.parentId ? `${c.name} › ${folderPath(c, f)}` : c.name });
       if (f.files.length) assetNotify(c, f, 'removed', f.files.map((a) => a.name));
       persist(0); render();
     } }] : []),
@@ -5627,10 +5642,10 @@ function caInfo(kind, id) {
     title = a.name;
     rows = [row('Added by', who(a.addedBy)), row('Date added', when(a.addedAt)), row('Size', esc(fmtSize(a.size))), row('Type', esc((fileExt(a.name) || 'file').toUpperCase())), row('Folder', esc(`${c.name} › ${folderPath(c, f)}`))];
   } else {
-    const all = f.files.concat(...subFolders(c, f).map((x) => x.files));
+    const tree = folderTree(c, f), all = f.files.concat(...tree.map((x) => x.files));
     title = f.name;
     rows = [row('Created by', isAutoFolder(c, f) && !f.finalOf ? 'Made with the client' : who(f.createdBy)), row('Date', when(f.createdAt || c.createdAt)),
-      ...(isFilesTop(c, f) ? [row('Folders', String(subFolders(c, f).length))] : []),
+      ...(isFilesTop(c, f) || tree.length ? [row('Folders', String(tree.length))] : []), ...(f.parentId ? [row('Location', esc(`${c.name} › ${folderAncestors(c, f).map((x) => x.name).join(' › ')}`))] : []),
       row('Files', String(all.length)), row('Size', esc(fmtSize(all.reduce((n, x) => n + (x.size || 0), 0))))];
     if (f.finalOf) rows.unshift(row('Kind', 'Final files of a completed task'));
   }
