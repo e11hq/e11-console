@@ -166,11 +166,11 @@ const ClientList = (() => {
       <div class="team-head">
         <div><div class="team-title">${act.length} active client${act.length === 1 ? '' : 's'}</div><div class="team-sub">Only Admins add and change clients. An inactive client is hidden from everyone — with its tasks, Client Assets and Finance history — until you switch it back on. Nothing is deleted.</div></div>
         <span class="spacer"></span>
-        <button class="btn primary" data-cl="new">${icon('plus')}New client</button>
+        <button class="btn primary" data-clist="new">${icon('plus')}New client</button>
       </div>
       <div class="mt-tabs team-tabs" role="tablist">
-        <button class="mt-tab ${tab === 'active' ? 'on' : ''}" role="tab" data-cl="tab" data-tab="active">Active clients <span>${act.length}</span></button>
-        <button class="mt-tab ${tab === 'inactive' ? 'on' : ''}" role="tab" data-cl="tab" data-tab="inactive">Inactive clients <span>${inact.length}</span></button>
+        <button class="mt-tab ${tab === 'active' ? 'on' : ''}" role="tab" data-clist="tab" data-tab="active">Active clients <span>${act.length}</span></button>
+        <button class="mt-tab ${tab === 'inactive' ? 'on' : ''}" role="tab" data-clist="tab" data-tab="inactive">Inactive clients <span>${inact.length}</span></button>
       </div>
       ${!list.length ? `<div class="empty"><div class="big">${tab === 'inactive' ? 'No inactive clients' : 'No active clients'}</div>${tab === 'inactive' ? 'Clients you switch off show here, and you can switch them back on.' : 'Add a client with New client.'}</div>`
         : `<div class="team-table">
@@ -180,15 +180,15 @@ const ClientList = (() => {
           <div class="cl-ams">${ams.length ? ams.map((a) => `<span class="cl-am ${a.onLeave ? 'leave' : ''}" title="${esc(fullName(userById(a.id)))}${a.onLeave ? ' (on leave)' : ''}">${avatarHTML(a.id, 24)}<span>${esc(firstName(a.id))}${a.onLeave ? ' <small>on leave</small>' : ''}</span></span>`).join('') : '<span class="cl-none">None yet</span>'}</div>
           <div>${isActive(p) ? open(p) : '<span class="cl-none" title="Hidden while the client is inactive">Hidden</span>'}</div>
           <div>${ca ? `<a class="cl-ca" data-action="open-client" data-id="${ca.id}">${clientLogoHTML(ca, 18)}${esc(ca.name)}</a>` : !isActive(p) && p.clientId ? '<span class="cl-none">Hidden</span>' : '<span class="cl-none">Not linked</span>'}</div>
-          <div><button class="switch ${isActive(p) ? 'on' : ''}" data-cl="active" data-id="${p.id}" aria-label="Active" title="${isActive(p) ? 'Make inactive' : 'Make active'}"><i></i></button></div>
-          <div><button class="btn ghost sm" data-cl="edit" data-id="${p.id}">${icon('edit')}Edit</button></div>
+          <div><button class="switch ${isActive(p) ? 'on' : ''}" data-clist="active" data-id="${p.id}" aria-label="Active" title="${isActive(p) ? 'Make inactive' : 'Make active'}"><i></i></button></div>
+          <div><button class="btn ghost sm" data-clist="edit" data-id="${p.id}">${icon('edit')}Edit</button></div>
         </div>`; }).join('')}
       </div>`}
     </div>`;
   }
   document.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-cl]'); if (!b) return;
-    const k = b.dataset.cl, p = b.dataset.id ? proj(b.dataset.id) : null;
+    const b = e.target.closest('[data-clist]'); if (!b) return;
+    const k = b.dataset.clist, p = b.dataset.id ? proj(b.dataset.id) : null;
     if (k === 'tab') { ui.clTab = b.dataset.tab; renderContent(); }
     else if (k === 'new') dialog(null);
     else if (k === 'edit' && p) dialog(p);

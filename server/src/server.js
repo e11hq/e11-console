@@ -493,6 +493,9 @@ export function createServer(cfg) {
       const bin = path.join(dataDir, 'trash', new Date().toISOString().slice(0, 10), `sample-reset-${Date.now()}`);
       fs.mkdirSync(bin, { recursive: true });
       for (const d of ['Clients', 'Finance', 'Claims', '.thumbs']) { const src = path.join(filesRoot, d); if (fs.existsSync(src)) fs.renameSync(src, path.join(bin, d)); }
+      // (the owner stays, so their saved signature stays too)
+      const sigWas = path.join(bin, 'Claims', owner.id, 'signature');
+      if (fs.existsSync(sigWas)) { fs.mkdirSync(path.join(filesRoot, 'Claims', owner.id), { recursive: true }); fs.renameSync(sigWas, path.join(filesRoot, 'Claims', owner.id, 'signature')); }
       const att = path.join(filesRoot, 'attachments');
       if (fs.existsSync(att)) for (const d of fs.readdirSync(att)) if (d !== '_avatars') fs.renameSync(path.join(att, d), path.join(bin, 'attachments-' + d));
       // 3. the fresh sample

@@ -141,7 +141,7 @@ const Claims = (() => {
           <div><small>CLAIMER DETAILS</small><b>${esc(fullName(u))}</b><span>${esc(roleOf(u))}${c.submittedAt ? ' · submitted ' + esc(fmtDay(ymd(new Date(c.submittedAt)))) : ''}</span></div>
           <div class="ec-sigs"><small>SIGNATURE</small>
             ${edit ? `<div class="ec-sigrow">
-              ${saved ? `<button type="button" class="ec-sig ${sig && sig.path === saved.path ? 'on' : ''}" data-cl="sig-saved"><img src="${fileUrlOf(saved)}" alt="Your saved signature"><span><b>Saved signature</b><small>Used again on each claim</small></span></button>` : ''}
+              ${saved ? `<button type="button" class="ec-sig ${sig && sig.path === saved.path ? 'on' : ''}" data-cl="sig-saved"><img src="${fileUrlOf(saved)}" alt="Your saved signature" onerror="this.closest('.ec-sig').hidden = true"><span><b>Saved signature</b><small>Used again on each claim</small></span></button>` : ''}
               <button type="button" class="ec-sig" data-cl="sig-upload"><span class="ec-sig-ic">${icon('upload')}</span><span><b>Upload ${saved ? 'a new one' : 'your signature'}</b><small>PNG or JPG</small></span></button>
               <button type="button" class="ec-sig" data-cl="sig-draw"><span class="ec-sig-ic">${icon('edit')}</span><span><b>Draw it</b><small>With the mouse or trackpad</small></span></button>
             </div>` : sig ? `<img class="ec-sig-img" src="${fileUrlOf(sig)}" alt="Signature">` : '<span class="ec-dim">No signature</span>'}

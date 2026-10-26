@@ -56,6 +56,10 @@ async def main():
             # ---- outside 20th–27th: nothing
             ctx, pg, errs = await login(aish, at(19, 12, 0)); E = pg.evaluate
             check(await pg.locator('.ec-remind').count() == 0, 'no reminder on the 19th')
+            # the new-claim button opens a claim, never the New client pop-up (they once shared a button name)
+            await E("go('claims')"); await pg.wait_for_timeout(400)
+            await pg.locator('[data-cl="new"]').first.click(); await pg.wait_for_timeout(500)
+            check(await pg.locator('.cd-dlg').count() == 0 and await E("ui.view") == 'claim', 'New claim opens the claim form, not New client')
             await ctx.close()
 
             # ---- Submit now → the form
@@ -89,6 +93,13 @@ async def main():
             c = await E(f"(()=>{{const c=Claims.byId('{cid}'); return c && [c.state, c.total, c.groups.length]}})()")
             check(c == ['submitted', 272.5, 2], f'claim submitted {c}')
             check(await E("ui.view") == 'claims', 'back on My reimbursements')
+            # the new-claim button opens a claim, never the New client pop-up (they once shared a button name)
+            if await pg.locator('[data-cl="new"]').count():
+                await pg.locator('[data-cl="new"]').first.click(); await pg.wait_for_timeout(500)
+                check(await pg.locator('.cd-dlg').count() == 0, 'Add reimbursement doesn’t open New client')
+                if await pg.locator('[data-cl="sig-saved"] img').count():
+                    check(await E("document.querySelector('[data-cl=\"sig-saved\"] img').naturalWidth > 0"), 'the saved signature shows')
+                await E("go('claims')"); await pg.wait_for_timeout(400)
             await pg.wait_for_timeout(800)
             fa = [n for n in notifs('rania.finance@e11-digital.com') if n.get('claimId') == cid]; fv = [n for n in notifs('omar.accounts@e11-digital.com') if n.get('claimId') == cid]
             check(len(fa) == 1 and len(fv) == 1, f'Finance Admin and Viewer are notified ({len(fa)}, {len(fv)})')

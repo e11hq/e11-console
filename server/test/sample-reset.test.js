@@ -14,6 +14,10 @@ async function start(version) {
     projects: [{ id: 'p-old', name: 'Old client', sections: [] }], tasks: [{ id: 't-old', projectId: 'p-old', title: 'Old task' }] }, 'test');
   fs.mkdirSync(path.join(dir, 'files', 'attachments', 't-old'), { recursive: true });
   fs.writeFileSync(path.join(dir, 'files', 'attachments', 't-old', 'a.txt'), 'x');
+  fs.mkdirSync(path.join(dir, 'files', 'Claims', 'u-owner', 'signature'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'files', 'Claims', 'u-owner', 'signature', 'sig.png'), 'png');
+  fs.mkdirSync(path.join(dir, 'files', 'Claims', 'u-old'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'files', 'Claims', 'u-old', 'r.pdf'), 'pdf');
   const call = async (who, p, body) => {
     const res = await fetch(`http://127.0.0.1:${port}${p}`, { method: body ? 'POST' : 'GET', headers: { 'X-Dev-Email': who, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
     return { status: res.status, body: await res.json().catch(() => null) };
@@ -32,6 +36,8 @@ test('test copy: the owner wipes everything and starts again with sample data in
   assert.equal(s.get('tasks', 't-old'), null);
   assert.equal(s.get('projects', 'p-old'), null);
   assert.ok(!fs.existsSync(path.join(dir, 'files', 'attachments', 't-old')), 'old files moved to the trash folder');
+  assert.ok(fs.existsSync(path.join(dir, 'files', 'Claims', 'u-owner', 'signature', 'sig.png')), 'the owner keeps their saved signature');
+  assert.ok(!fs.existsSync(path.join(dir, 'files', 'Claims', 'u-old')), 'other claim files go');
   const projects = s.list('projects'), clients = s.list('clients'), users = new Map(s.list('users').map((u) => [u.id, u]));
   assert.equal(projects.length, 6);
   assert.ok(projects.every((p) => p.clientId && clients.some((c) => c.id === p.clientId)), 'every client has its Client Assets');
