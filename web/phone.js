@@ -193,7 +193,7 @@ const Phone = (() => {
       return `<div class="ph-ib ${unread ? 'unread' : ''}" data-action="open-notif" data-id="${target.id}">
         ${avatarHTML(target.from, 40)}
         <span class="ph-ib-b"><span class="ph-ib-m">${notifMsg(target, t)}</span>
-          <span class="ph-ib-t">${t ? esc(t.title || 'Untitled task') : /^claim/.test(n.kind) ? 'Expense claims' : n.kind === 'asset' ? esc(assetTitle(n)) : '<i>Deleted task</i>'}</span>
+          <span class="ph-ib-t">${t ? esc(t.title || 'Untitled task') : /^claim/.test(n.kind) ? 'Expense claims' : n.kind === 'asset' ? esc(assetTitle(n)) : n.planId ? esc(planTitle(n)) : '<i>Deleted task</i>'}</span>
           <span class="ph-ib-w">${esc(timeAgo(n.at))}${items.length > 1 ? ` · ${items.length} updates` : ''}</span></span>
         ${unread ? '<i class="ph-ib-dot"></i>' : ''}
       </div>`;
@@ -746,6 +746,7 @@ const Push = (() => {
       if ((k === 'review' || k === 'review-wd') && isCD()) { if (ui.taskId) closeDetail(); go('reviews'); return true; }
       if (k === 'asset' && hint.clientId && clientById(hint.clientId)) { const c = clientById(hint.clientId); openClient(c.id, c.folders.some((x) => x.id === hint.folderId) ? hint.folderId : null); return true; }
       if (/^claim/.test(k)) { Claims.openNotif({ kind: k }); return true; }
+      if (/^plan/.test(k) && hint.planId && Plans.planById(hint.planId)) { Plans.open(hint.planId); return true; }
       return false;
     };
     const start = () => {
@@ -778,7 +779,7 @@ const Push = (() => {
     setTimeout(() => clearInterval(iv), 30000);
   }
   const q = new URLSearchParams(location.search);
-  if (q.get('task') || q.get('n')) { openFrom(q.get('task'), q.get('n'), { kind: q.get('k'), clientId: q.get('c'), folderId: q.get('f') }); history.replaceState(null, '', '/'); }   // (an update without a task, e.g. Client Assets, has only n)
+  if (q.get('task') || q.get('n')) { openFrom(q.get('task'), q.get('n'), { kind: q.get('k'), clientId: q.get('c'), folderId: q.get('f'), planId: q.get('pl') }); history.replaceState(null, '', '/'); }   // (an update without a task, e.g. Client Assets, has only n)
   else if (q.get('view')) { openView(q.get('view')); history.replaceState(null, '', '/'); }
   if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.type === 'open-task') openFrom(e.data.taskId, e.data.nid, e.data.hint || {}); if (e.data && e.data.type === 'open-view') openView(e.data.view); });
 

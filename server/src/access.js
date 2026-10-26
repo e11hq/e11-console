@@ -340,13 +340,33 @@ export function createAccess(store, opts = {}) {
       }
       case 'plans': {
         if (!opts.plans || !planVisible(u, current || next)) return false;
-        const pid = (current || next || {}).projectId;
+        const pl = current || next || {};
+        const pid = pl.projectId;
         if (current && next && (next.projectId !== current.projectId || next.month !== current.month)) return false;   // a plan stays with its client and month
-        if (!planEditor(u, pid)) return false;
-        if (!current && next) {
-          if (!pid || !/^\d{4}-\d{2}$/.test(String(next.month || '')) || next.createdBy !== u.id) return false;
-          if (store.list('plans').some((x) => x.id !== String(ch.id) && x.projectId === pid && x.month === next.month)) return false;   // one plan per client per month
+        const editor = planEditor(u, pid);
+        // approvers: the Creative Director, and the Social Manager for a skeleton they didn't make
+        const approver = u.id === cdId() || (isSocialMgr(u) && pl.createdBy !== u.id);
+        const editable = (st) => !st || st === 'draft' || st === 'changes';
+        if (!current) {
+          if (!editor || !next || !pid || !/^\d{4}-\d{2}$/.test(String(next.month || '')) || next.createdBy !== u.id || !editable(next.status)) return false;
+          return !store.list('plans').some((x) => x.id !== String(ch.id) && x.projectId === pid && x.month === next.month);   // one plan per client per month
         }
+        if (ch.del) return editor && editable(current.status);
+        if (!editor && !approver) return false;
+        const from = current.status || 'draft', to = next.status || 'draft';
+        // the steps: send (Social) · take back (Social) · approve or send back (approver) · reopen an approved one (either)
+        if (from !== to) {
+          const ok = (editable(from) && to === 'review' && editor) || (from === 'review' && to === 'draft' && editor)
+            || (from === 'review' && (to === 'approved' || to === 'changes') && approver) || (from === 'approved' && to === 'draft' && (editor || approver));
+          if (!ok) return false;
+        }
+        // the posts themselves: Social, while it's a draft or sent back
+        const bare = (x) => ({ ...x, status: null, review: null, approval: null, log: null, round: null, updatedAt: null, posts: (x.posts || []).map(({ check, updatedAt, ...r }) => r) });
+        if (!deepEqual(bare(next), bare(current)) && !(editor && editable(from))) return false;
+        // the approver's marks on posts (Social may only clear them)
+        const was = new Map((current.posts || []).map((x) => [x.id, x.check || null]));
+        for (const x of next.posts || []) if (x.check && !deepEqual(x.check, was.get(x.id) || null) && !approver) return false;
+        if (!deepEqual(next.approval || null, current.approval || null) && !approver && !(from === 'approved' && to === 'draft')) return false;
         return true;
       }
       case 'notifications':

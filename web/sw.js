@@ -46,10 +46,10 @@ self.addEventListener('push', (e) => {
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
   const d = e.notification.data || {};
-  const qs = d.view ? `/?view=${encodeURIComponent(d.view)}` : d.taskId ? `/?task=${encodeURIComponent(d.taskId)}${d.nid ? '&n=' + encodeURIComponent(d.nid) : ''}${d.kind ? '&k=' + encodeURIComponent(d.kind) : ''}` : d.nid ? `/?n=${encodeURIComponent(d.nid)}${d.kind ? '&k=' + encodeURIComponent(d.kind) : ''}${d.clientId ? '&c=' + encodeURIComponent(d.clientId) : ''}${d.folderId ? '&f=' + encodeURIComponent(d.folderId) : ''}` : '/';
+  const qs = d.view ? `/?view=${encodeURIComponent(d.view)}` : d.taskId ? `/?task=${encodeURIComponent(d.taskId)}${d.nid ? '&n=' + encodeURIComponent(d.nid) : ''}${d.kind ? '&k=' + encodeURIComponent(d.kind) : ''}` : d.nid ? `/?n=${encodeURIComponent(d.nid)}${d.kind ? '&k=' + encodeURIComponent(d.kind) : ''}${d.clientId ? '&c=' + encodeURIComponent(d.clientId) : ''}${d.folderId ? '&f=' + encodeURIComponent(d.folderId) : ''}${d.planId ? '&pl=' + encodeURIComponent(d.planId) : ''}` : '/';
   e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
     const c = list.find((x) => new URL(x.url).origin === self.location.origin);
-    if (c) { c.postMessage(d.view ? { type: 'open-view', view: d.view } : { type: 'open-task', taskId: d.taskId, nid: d.nid, hint: { kind: d.kind || null, clientId: d.clientId || null, folderId: d.folderId || null, commentId: d.commentId || null } }); return c.focus(); }
+    if (c) { c.postMessage(d.view ? { type: 'open-view', view: d.view } : { type: 'open-task', taskId: d.taskId, nid: d.nid, hint: { kind: d.kind || null, clientId: d.clientId || null, folderId: d.folderId || null, commentId: d.commentId || null, planId: d.planId || null } }); return c.focus(); }
     return self.clients.openWindow(qs);
   }));
 });

@@ -7,8 +7,14 @@
    Who: a client's Social Executives (project.socials, set in the client pop-up) and the Social Manager (Social people an
    Admin picks on the Team page: db.meta.socialMgrIds) make and edit a client's plans; Admins, Account Managers and the CD
    look at them. An occasion skipped for a client stays skipped every year (project.planSkips: occasion keys).
-   Stage 1: plans, the month calendar and occasions. Next: approval by the Social Manager / CD, creating tasks, the
-   finished work coming back into the plan, the client export and the client's approval. */
+   Approval of the content skeleton (stage 2):
+     status: 'draft' → 'review' (sent to the Social Manager, the CD or both: pl.review = { to, by, at, round }) →
+             'approved' (pl.approval = { by, at, round }) or 'changes' (back to Social, with a note) → sent again …
+     post.check = { state: 'ok' | 'changes', note, by, at } — the approver's look at each post
+     pl.log = [{ act: 'sent' | 'approved' | 'changes' | 'withdrawn' | 'reopened', by, at, to?, note?, round }]
+   One approval is enough (also with "Both"); the SM or the CD may step in on any skeleton waiting; a skeleton the
+   Social Manager made goes to the CD (nobody approves their own). Next stages: creating tasks, the finished work coming
+   back into the plan, the client export (then it's the "content plan") and the client's approval. */
 const Plans = (() => {
   const on = () => typeof isTestCopy === 'function' && isTestCopy();
   const owns = (v) => on() && (v === 'plans' || v === 'plan');
@@ -27,7 +33,16 @@ const Plans = (() => {
   const canSee = (u = me()) => on() && !!u && u.active !== false && !isFinUser(u) && !isOffice(u) && (isAdm(u) || u.role === 'am' || u.role === 'social' || isCD(u.id));
   const socialsOf = (p) => ((p && p.socials) || []).filter((id) => { const u = userById(id); return u && u.active !== false; });
   const canEditClient = (pid, u = me()) => on() && !!u && u.role === 'social' && u.active !== false && (isMgr(u) || socialsOf(proj(pid)).includes(u.id));
-  const canEdit = (pl) => !!pl && canEditClient(pl.projectId);
+  const editable = (pl) => !pl.status || pl.status === 'draft' || pl.status === 'changes';
+  const canEdit = (pl) => !!pl && canEditClient(pl.projectId) && editable(pl);      // the posts: while a draft, or sent back
+  const isEditor = (pl) => !!pl && canEditClient(pl.projectId);                       // (the client's Social people + SM)
+  // who approves: the Social Manager (not a skeleton they made) and the Creative Director
+  const canApprove = (pl, u = me()) => !!pl && on() && !!u && ((u.id === cdUserId()) || (isMgr(u) && pl.createdBy !== u.id));
+  const approverIds = (pl, to) => {
+    const cd = cdUserId(), sm = socialMgrIds().filter((id) => id !== pl.createdBy);
+    return [...new Set(to === 'cd' ? [cd] : to === 'sm' ? sm : [cd, ...sm])].filter(Boolean);
+  };
+  const toLabel = (to) => (to === 'cd' ? (userById(cdUserId()) ? firstName(cdUserId()) : 'the CD') : to === 'sm' ? 'the Social Manager' : `${userById(cdUserId()) ? firstName(cdUserId()) : 'the CD'} & the Social Manager`);
   // the clients on the list: a Social Executive's own; an AM's own; everyone else (Social Manager, Admins, CD) all
   function clientsInScope() {
     const u = me();
@@ -57,7 +72,8 @@ const Plans = (() => {
   const chChips = (ks) => { const ch = CH(); return (ks || []).filter((k) => ch[k]).map((k) => `<span class="cal-ch" style="--c:${ch[k].color}" title="${esc(ch[k].name)}">${ch[k].short}</span>`).join(''); };
   // (the version made for the SM / CD to approve is the content skeleton; with the finished videos and graphics, from
   // Round 1 for the client, it's the content plan)
-  const statusPill = (pl) => (pl ? '<span class="pl-st draft" title="The content skeleton, being written">Skeleton · draft</span>' : '<span class="pl-st none">Not started</span>');
+  const ST = { draft: ['draft', 'Skeleton · draft'], review: ['review', 'Waiting for approval'], changes: ['changes', 'Changes asked'], approved: ['approved', 'Skeleton approved'] };
+  const statusPill = (pl) => { if (!pl) return '<span class="pl-st none">Not started</span>'; const [c, l] = ST[pl.status] || ST.draft; return `<span class="pl-st ${c}">${l}</span>`; };
   const occKey = (o) => o.key || o.id;
   const skipped = (p, o) => ((p && p.planSkips) || []).includes(occKey(o));
   const postsSorted = (pl) => (pl.posts || []).slice().sort((a, b) => String(a.day).localeCompare(String(b.day)) || String(a.createdAt).localeCompare(String(b.createdAt)));
@@ -120,8 +136,9 @@ const Plans = (() => {
         <div class="pl-who">${clientDot(p, 30)}<div><b>${esc(p.name)}</b><span>${esc(monthLabel(pl.month))} · ${n} post${n === 1 ? '' : 's'}${by ? ` · started by ${esc(fullName(by))}` : ''}</span></div>${statusPill(pl)}</div>
         <span class="spacer"></span>
         ${phone() ? '' : `<div class="cal-seg"><button class="${tab === 'calendar' ? 'on' : ''}" data-pl="tab" data-v="calendar">Calendar</button><button class="${tab === 'list' ? 'on' : ''}" data-pl="tab" data-v="list">List</button></div>`}
-        ${ed ? `<button class="btn primary sm" data-pl="new-post">${icon('plus')}Add post</button><button class="icon-btn" data-pl="plan-menu" title="Plan options">${icon('more')}</button>` : '<span class="pl-ro">View only</span>'}
+        ${headActions(pl)}
       </div>
+      ${banner(pl)}
       <div class="pl-body">
         <div class="pl-main">${tab === 'calendar' ? calendar(pl, ed) : listView(pl, ed)}</div>
         ${side(pl, p, ed)}
@@ -141,7 +158,7 @@ const Plans = (() => {
       const occ = all.filter((o) => !o.end || o.date === d || dayGap(o.date, o.end) <= 3 || parseYmd(d).getDay() === 1);
       cells += `<div class="cal-cell pl-cell ${inMonth ? '' : 'out'} ${d === today ? 'today' : ''} ${all.length ? 'occ' : ''}" data-day="${d}">
         <div class="cal-dh"><span class="cal-num">${parseYmd(d).getDate()}</span>${occ.length ? `<span class="cal-occ" title="${esc(occ.map((o) => o.name).join(', '))}">${esc(occ.map((o) => o.name).join(' · '))}</span>` : ''}${ed && inMonth ? `<button class="cal-add" data-pl="new-post" data-d="${d}" title="Add a post on this day">${icon('plus')}</button>` : ''}</div>
-        ${day.map((x) => `<button class="pl-chip" data-pl="post" data-id="${x.id}" style="--c:${fmtOf(x.format).color}" title="${esc((x.title || 'Untitled post') + ' · ' + fmtOf(x.format).name)}"><span class="pl-chip-t">${esc(x.title || 'Untitled post')}</span><span class="pl-chip-f">${esc(fmtOf(x.format).name)}</span></button>`).join('')}
+        ${day.map((x) => `<button class="pl-chip ${checkCls(pl, x)}" data-pl="post" data-id="${x.id}" style="--c:${fmtOf(x.format).color}" title="${esc((x.title || 'Untitled post') + ' · ' + fmtOf(x.format).name + checkTip(pl, x))}"><span class="pl-chip-t">${checkMark(pl, x)}${esc(x.title || 'Untitled post')}</span><span class="pl-chip-f">${esc(fmtOf(x.format).name)}</span></button>`).join('')}
       </div>`;
     }
     return `<div class="cal-month pl-month"><div class="cal-wd">${WD.map((w) => `<span>${w}</span>`).join('')}</div><div class="cal-grid">${cells}</div></div>`;
@@ -151,15 +168,15 @@ const Plans = (() => {
     if (!posts.length) return `<div class="empty pl-empty"><div class="big">No posts yet</div>${ed ? 'Use <b>Add post</b>, or the + on a day of the calendar.' : 'The Social team hasn’t added any posts yet.'}</div>`;
     const days = [...new Set(posts.map((x) => x.day))];
     return `<div class="pl-list">${days.map((d) => `<section class="pl-lday"><h3>${esc(dayLong(d))}${Occasions.on(d).length ? `<span class="pl-locc">${esc(Occasions.on(d).map((o) => o.name).join(' · '))}</span>` : ''}</h3>
-      ${posts.filter((x) => x.day === d).map(postRow).join('')}</section>`).join('')}</div>`;
+      ${posts.filter((x) => x.day === d).map((x) => postRow(x, pl)).join('')}</section>`).join('')}</div>`;
   }
-  function postRow(x) {
+  function postRow(x, pl) {
     const o = x.occasion && Occasions.byId(x.occasion);
     const n = (x.refs || []).length;
     const img = (x.refs || []).find((r) => r.path && fileKind(r) === 'image');
-    return `<button class="pl-post" data-pl="post" data-id="${x.id}">
+    return `<button class="pl-post ${checkCls(pl, x)}" data-pl="post" data-id="${x.id}">
       <span class="pl-thumb">${img ? `<img src="${imgUrl(img, 160)}" alt="" loading="lazy">` : `<span class="pl-thumb-f" style="--c:${fmtOf(x.format).color}">${esc(fmtOf(x.format).name.slice(0, 1))}</span>`}</span>
-      <span class="pl-post-txt"><b>${esc(x.title || 'Untitled post')}</b><span>${esc(String(x.desc || x.copyEn || '').replace(/\s+/g, ' ').slice(0, 140))}</span></span>
+      <span class="pl-post-txt"><b>${checkMark(pl, x)}${esc(x.title || 'Untitled post')}</b><span>${x.check && x.check.state === 'changes' && x.check.note && pl.status !== 'approved' ? `<i class="pl-chg-note">${esc(x.check.note)}</i>` : esc(String(x.desc || x.copyEn || '').replace(/\s+/g, ' ').slice(0, 140))}</span></span>
       <span class="pl-post-meta">${fmtPill(x.format)}${chChips(x.channels)}${o ? `<span class="cal-occ-pill">${esc(o.name)}</span>` : ''}${n ? `<span class="pl-refs">${icon('clip')}${n}</span>` : ''}</span>
     </button>`;
   }
@@ -189,6 +206,137 @@ const Plans = (() => {
     </aside>`;
   }
 
+  /* ---------- approval: the head, the banner, the marks ---------- */
+  const showChecks = (pl) => pl.status === 'review' || pl.status === 'changes';
+  const checkCls = (pl, x) => (!showChecks(pl) || !x.check ? '' : x.check.state === 'ok' ? 'ok' : 'chg');
+  const checkMark = (pl, x) => (!showChecks(pl) || !x.check ? '' : x.check.state === 'ok' ? `<span class="pl-mk ok" title="Looks good">${icon('check')}</span>` : '<span class="pl-mk chg" title="Changes asked">!</span>');
+  const checkTip = (pl, x) => (!showChecks(pl) || !x.check ? '' : x.check.state === 'ok' ? ' · Looks good' : ` · Changes asked${x.check.note ? ': ' + x.check.note : ''}`);
+  function headActions(pl) {
+    const out = [];
+    const ed = canEdit(pl), editor = isEditor(pl), appr = canApprove(pl);
+    if (ed) out.push(`<button class="btn sm" data-pl="new-post">${icon('plus')}Add post</button>`, `<button class="btn primary sm" data-pl="send">${icon('send')}${pl.status === 'changes' ? 'Send again' : 'Send for approval'}</button>`);
+    if (pl.status === 'review' && appr) out.push(`<button class="btn sm" data-pl="send-back">${icon('edit')}Send back for changes</button>`, `<button class="btn primary sm" data-pl="approve">${icon('check')}Approve skeleton</button>`);
+    if (editor || appr) out.push(`<button class="icon-btn" data-pl="plan-menu" title="Skeleton options">${icon('more')}</button>`);
+    return out.length ? out.join('') : '<span class="pl-ro">View only</span>';
+  }
+  function banner(pl) {
+    const who = (id) => (id === currentUserId ? 'You' : userById(id) ? fullName(userById(id)) : 'Someone');
+    const last = (act) => (pl.log || []).filter((x) => x.act === act).pop();
+    if (pl.status === 'review' && pl.review) {
+      const r = pl.review;
+      return `<div class="pl-banner review">${icon('clock')}<div><b>${esc(who(r.by))} sent this content skeleton to ${esc(toLabel(r.to))} for approval${r.round > 1 ? ` · Round ${r.round}` : ''}</b><span>${esc(timeAgo(r.at))}${canApprove(pl) ? ' · Open each post to mark it Looks good or Ask for changes, then approve the skeleton or send it back.' : isEditor(pl) ? ' · It can’t be changed while it waits. Take it back from ••• to change something.' : ''}</span></div></div>`;
+    }
+    if (pl.status === 'changes') {
+      const l = last('changes'), n = (pl.posts || []).filter((x) => x.check && x.check.state === 'changes').length;
+      return `<div class="pl-banner changes">${icon('edit')}<div><b>${esc(l ? who(l.by) : 'The approver')} asked for changes${n ? ` on ${n} post${n === 1 ? '' : 's'}` : ''}</b>${l && l.note ? `<p>${esc(l.note)}</p>` : ''}<span>${l ? esc(timeAgo(l.at)) : ''}${isEditor(pl) ? ' · Make the changes, then Send again.' : ''}</span></div></div>`;
+    }
+    if (pl.status === 'approved' && pl.approval) {
+      return `<div class="pl-banner approved">${icon('check-circle')}<div><b>Content skeleton approved by ${esc(who(pl.approval.by))}</b><span>${esc(fmtDateTime(pl.approval.at))} · Next: creating the tasks from it (coming in the next stage of the trial).</span></div></div>`;
+    }
+    return '';
+  }
+  function notify(ids, pl, kind, text, snippet = '') {
+    [...new Set(ids)].forEach((to) => {
+      const u = to && userById(to);
+      if (!u || to === currentUserId || u.active === false) return;
+      db.notifications.push({ id: uid(), to, from: currentUserId, kind, planId: pl.id, text, snippet: String(snippet || '').slice(0, 300), at: nowISO(), read: false });
+    });
+  }
+  const logIt = (pl, act, extra = {}) => { pl.log = (pl.log || []).concat({ act, by: currentUserId, at: nowISO(), round: pl.round || 1, ...extra }); pl.updatedAt = nowISO(); };
+  function sendFlow(pl) {
+    if (!canEdit(pl)) return denied();
+    if (!(pl.posts || []).length) { toast('Add at least one post first'); return; }
+    const p = proj(pl.projectId);
+    const cd = cdUserId(), sms = socialMgrIds().filter((id) => id !== pl.createdBy);
+    const opts = [sms.length && ['sm', `Social Manager${sms.length === 1 ? ` (${firstName(sms[0])})` : ''}`], cd && ['cd', `${fullName(userById(cd))} (CD)`], sms.length && cd && ['both', 'Both']].filter(Boolean);
+    if (!opts.length) { toast('There’s no Social Manager or Creative Director to send it to'); return; }
+    const missing = Occasions.between(firstDay(pl.month), lastDay(pl.month)).filter((o) => !(pl.posts || []).some((x) => x.occasion === o.id) && !skipped(p, o));
+    let to = (pl.review && opts.some(([k]) => k === pl.review.to) && pl.review.to) || opts[0][0];
+    const root = $('#overlay-root');
+    root.innerHTML = `<div class="scrim"><div class="dialog pl-send-dlg" role="dialog" aria-label="Send for approval">
+      <h2>${pl.status === 'changes' ? 'Send the skeleton again' : 'Send for approval'}</h2>
+      <p>${esc(p.name)}’s content skeleton for ${esc(monthLabel(pl.month))} · ${(pl.posts || []).length} post${(pl.posts || []).length === 1 ? '' : 's'}. One approval is enough.</p>
+      <label class="dlg-label">Send to</label>
+      <div class="pl-pick" id="ps-to">${opts.map(([k, l]) => `<button type="button" class="pl-opt ${k === to ? 'on' : ''}" data-to="${k}" style="--c:var(--accent)">${esc(l)}</button>`).join('')}</div>
+      ${pl.createdBy && isMgr(userById(pl.createdBy)) ? '<div class="dlg-hint">Made by the Social Manager, so it goes to the Creative Director.</div>' : ''}
+      ${missing.length ? `<div class="pl-warn">${icon('info')}<div><b>Not planned yet: ${esc(missing.map((o) => o.name).join(', '))}</b><span>Plan a post for ${missing.length === 1 ? 'it' : 'them'}, or Skip for this client from the occasions list, or send anyway.</span></div></div>` : ''}
+      <div class="actions"><button class="btn" data-r="0">Cancel</button><button class="btn primary" data-r="1">${missing.length ? 'Send anyway' : 'Send'}</button></div>
+    </div></div>`;
+    const close = () => { root.innerHTML = ''; };
+    $('.scrim', root).addEventListener('click', (e) => {
+      if (e.target.classList.contains('scrim')) return close();
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.to) { to = b.dataset.to; $$('#ps-to .pl-opt', root).forEach((x) => x.classList.toggle('on', x === b)); return; }
+      if (b.dataset.r === '0') return close();
+      if (b.dataset.r !== '1') return;
+      close();
+      pl.round = (pl.round || 0) + 1;
+      (pl.posts || []).forEach((x) => { if (x.check && x.check.state === 'changes') delete x.check; });   // (the changes were made)
+      pl.status = 'review';
+      pl.review = { to, by: currentUserId, at: nowISO(), round: pl.round };
+      logIt(pl, 'sent', { to });
+      notify(approverIds(pl, to), pl, 'plan', `sent the content skeleton for <b>${esc(nameOf(pl))}</b> for your approval${pl.round > 1 ? ` (Round ${pl.round})` : ''}`);
+      persist(0); render2();
+      toast(`Sent to ${toLabel(to)} for approval`);
+    });
+  }
+  function withdraw(pl) {
+    if (!isEditor(pl) || pl.status !== 'review') return denied();
+    pl.status = 'draft';
+    logIt(pl, 'withdrawn');
+    persist(0); render2(); toast('Taken back — you can change it and send it again');
+  }
+  async function approve(pl) {
+    if (!canApprove(pl) || pl.status !== 'review') return denied();
+    const flagged = (pl.posts || []).filter((x) => x.check && x.check.state === 'changes').length;
+    if (flagged) { toast(`${flagged} post${flagged === 1 ? ' is' : 's are'} marked Ask for changes — send it back instead`); return; }
+    const n = (pl.posts || []).length;
+    const ok = await dialog({ title: 'Approve this content skeleton?', body: `${nameOf(pl)} · ${n} post${n === 1 ? '' : 's'}. After this, tasks can be created from it.`, okText: 'Approve skeleton' });
+    if (!ok) return;
+    const now = nowISO();
+    (pl.posts || []).forEach((x) => { if (!x.check || x.check.state !== 'ok') x.check = { state: 'ok', by: currentUserId, at: now }; });
+    pl.status = 'approved';
+    pl.approval = { by: currentUserId, at: now, round: pl.round || 1 };
+    logIt(pl, 'approved');
+    notify([pl.createdBy, pl.review && pl.review.by, ...approverIds(pl, 'both')], pl, 'plan-ok', `approved the content skeleton for <b>${esc(nameOf(pl))}</b>`);
+    persist(0); render2(); toast('Content skeleton approved');
+  }
+  function sendBack(pl) {
+    if (!canApprove(pl) || pl.status !== 'review') return denied();
+    const flagged = (pl.posts || []).filter((x) => x.check && x.check.state === 'changes');
+    const root = $('#overlay-root');
+    root.innerHTML = `<div class="scrim"><div class="dialog pl-send-dlg" role="dialog" aria-label="Send back for changes">
+      <h2>Send back for changes</h2>
+      <p>${flagged.length ? `${flagged.length} post${flagged.length === 1 ? ' is' : 's are'} marked with your notes. Add anything else here.` : 'Say what should change. You can also open posts and mark them Ask for changes with a note.'}</p>
+      <textarea class="field" id="sb-note" rows="4" placeholder="${flagged.length ? 'A note for the whole skeleton (optional)' : 'What should change?'}"></textarea>
+      <div class="actions"><button class="btn" data-r="0">Cancel</button><button class="btn primary" data-r="1">Send back</button></div>
+    </div></div>`;
+    const close = () => { root.innerHTML = ''; };
+    setTimeout(() => $('#sb-note', root).focus(), 20);
+    $('.scrim', root).addEventListener('click', (e) => {
+      if (e.target.classList.contains('scrim')) return close();
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.r === '0') return close();
+      if (b.dataset.r !== '1') return;
+      const note = $('#sb-note', root).value.trim();
+      if (!note && !flagged.length) { $('#sb-note', root).focus(); toast('Say what should change'); return; }
+      close();
+      pl.status = 'changes';
+      logIt(pl, 'changes', { note });
+      notify([pl.createdBy, pl.review && pl.review.by], pl, 'plan-changes', `asked for changes on the content skeleton for <b>${esc(nameOf(pl))}</b>`, note || flagged.map((x) => `${x.title}: ${x.check.note || 'changes'}`).join(' · '));
+      persist(0); render2(); toast('Sent back to Social');
+    });
+  }
+  async function reopen(pl) {
+    if (!(isEditor(pl) || canApprove(pl)) || pl.status !== 'approved') return denied();
+    const ok = await dialog({ title: 'Reopen this content skeleton?', body: 'It goes back to draft so it can be changed, and needs approving again.', okText: 'Reopen' });
+    if (!ok) return;
+    pl.status = 'draft'; pl.approval = null;
+    logIt(pl, 'reopened');
+    persist(0); render2(); toast('Reopened as a draft');
+  }
+  const render2 = () => { renderContent(); renderSidebar(); };
+
   /* ---------- making and changing ---------- */
   function open(id) { ui.planId = id; go('plan'); }
   function startPlan(pid, month) {
@@ -212,13 +360,22 @@ const Plans = (() => {
     toast(skip ? `${o.name} skipped for ${p.name} — it stays skipped next year too` : `${o.name} is back on ${p.name}’s list`);
   }
   function planMenu(anchor, pl) {
-    showMenu(anchor, [{ label: 'Delete this plan', icon: 'trash', danger: true, run: async () => {
-      const n = (pl.posts || []).length, name = proj(pl.projectId).name;
-      const ok = await dialog({ title: 'Delete this plan?', body: `${name}’s ${monthLabel(pl.month)} plan${n ? ` and its ${n} post${n === 1 ? '' : 's'}` : ''} will be deleted.`, okText: 'Delete', danger: true });
-      if (!ok) return;
-      db.plans = list().filter((x) => x.id !== pl.id);
-      persist(0); go('plans'); toast('Plan deleted');
-    } }]);
+    const items = [];
+    if (pl.status === 'review' && isEditor(pl)) items.push({ label: 'Take it back to change it', icon: 'reply', run: () => withdraw(pl) });
+    if (pl.status === 'approved' && (isEditor(pl) || canApprove(pl))) items.push({ label: 'Reopen as a draft', icon: 'edit', run: () => reopen(pl) });
+    items.push({ html: `<div class="menu-label">History</div>` });
+    const acts = { sent: 'sent it for approval', approved: 'approved it', changes: 'asked for changes', withdrawn: 'took it back', reopened: 'reopened it' };
+    (pl.log || []).slice(-6).reverse().forEach((x) => items.push({ html: `<div class="mi pl-hist">${avatarHTML(x.by, 18)}<span>${esc(firstName(x.by))} ${acts[x.act] || x.act}<small>${esc(timeAgo(x.at))}</small></span></div>` }));
+    if (!(pl.log || []).length) items.push({ html: '<div class="mi-note">Not sent yet</div>' });
+    if (isEditor(pl) && editable(pl)) items.push('-', { label: 'Delete this skeleton', icon: 'trash', danger: true, run: () => delPlan(pl) });
+    showMenu(anchor, items);
+  }
+  async function delPlan(pl) {
+    const n = (pl.posts || []).length, name = proj(pl.projectId).name;
+    const ok = await dialog({ title: 'Delete this content skeleton?', body: `${name}’s ${monthLabel(pl.month)} skeleton${n ? ` and its ${n} post${n === 1 ? '' : 's'}` : ''} will be deleted.`, okText: 'Delete', danger: true });
+    if (!ok) return;
+    db.plans = list().filter((x) => x.id !== pl.id);
+    persist(0); go('plans'); toast('Deleted');
   }
 
   /* ---------- a post: the pop-up ---------- */
@@ -226,6 +383,16 @@ const Plans = (() => {
     const ed = canEdit(pl);
     const isNew = !x;
     const m = pl.month;
+    // the approver's look at this post while the skeleton waits for approval
+    const appr = !isNew && pl.status === 'review' && canApprove(pl);
+    const ck = { state: x && x.check ? x.check.state : null, note: x && x.check ? x.check.note || '' : '' };
+    const checkBox = () => {
+      if (appr) return `<div class="pl-check" id="pp-check"><div class="pl-check-btns"><button type="button" class="pl-opt ${ck.state === 'ok' ? 'on' : ''}" data-ck="ok" style="--c:var(--green)">${icon('check')}Looks good</button><button type="button" class="pl-opt ${ck.state === 'changes' ? 'on' : ''}" data-ck="changes" style="--c:var(--amber)">${icon('edit')}Ask for changes</button></div>
+        <textarea class="field" id="pp-cknote" rows="2" placeholder="What should change in this post?" ${ck.state === 'changes' ? '' : 'hidden'}>${esc(ck.note)}</textarea></div>`;
+      if (x && x.check && x.check.state === 'changes' && showChecks(pl)) return `<div class="pl-check chg">${icon('edit')}<div><b>${esc(firstName(x.check.by))} asked for changes</b>${x.check.note ? `<p>${esc(x.check.note)}</p>` : ''}</div></div>`;
+      if (x && x.check && x.check.state === 'ok' && showChecks(pl)) return `<div class="pl-check ok">${icon('check')}<div><b>${esc(firstName(x.check.by))}: looks good</b></div></div>`;
+      return '';
+    };
     const pd = preset.day || null;
     const d0 = !pd ? firstDay(m) : pd.slice(0, 7) === m ? pd : pd < firstDay(m) ? firstDay(m) : lastDay(m);
     const s = {
@@ -241,6 +408,7 @@ const Plans = (() => {
     root.innerHTML = `<div class="scrim pl-scrim"><form class="dialog pl-dlg" autocomplete="off" role="dialog" aria-label="${isNew ? 'New post' : 'Post'}">
       <div class="pl-dlg-top"><h2>${isNew ? 'New post' : ed ? 'Edit post' : 'Post'}</h2><span class="pl-dlg-sub">${esc(proj(pl.projectId).name)} · ${esc(monthLabel(m))}</span><button type="button" class="icon-btn" data-pp="close" title="Close">${icon('x')}</button></div>
       <div class="pl-dlg-body">
+        ${checkBox()}
         <label class="dlg-label" for="pp-title">Title</label>
         <input class="field" id="pp-title" maxlength="120" placeholder="e.g. Territory 2026 offer" value="${esc(s.title)}" ${ro}>
         <div class="pl-grid2">
@@ -263,7 +431,7 @@ const Plans = (() => {
         <div class="pl-link-add" id="pp-link-add" hidden><input class="field" id="pp-link" placeholder="Paste a link (Instagram, TikTok, Pinterest, Drive…)"><button type="button" class="btn primary sm" data-pp="link-ok">Add</button></div>
         <div class="pl-refs-list" id="pp-refs"></div>
       </div>
-      <div class="actions">${ed && !isNew ? `<button type="button" class="btn ghost danger" data-pp="del">${icon('trash')}Delete</button><span class="spacer"></span>` : ''}<button type="button" class="btn" data-pp="close">${ed ? 'Cancel' : 'Close'}</button>${ed ? `<button type="submit" class="btn primary">${isNew ? 'Add post' : 'Save'}</button>` : ''}</div>
+      <div class="actions">${ed && !isNew ? `<button type="button" class="btn ghost danger" data-pp="del">${icon('trash')}Delete</button><span class="spacer"></span>` : ''}<button type="button" class="btn" data-pp="close">${ed || appr ? 'Cancel' : 'Close'}</button>${ed ? `<button type="submit" class="btn primary">${isNew ? 'Add post' : 'Save'}</button>` : appr ? '<button type="submit" class="btn primary">Save</button>' : ''}</div>
     </form></div>`;
     const form = $('form', root);
     const paintRefs = () => {
@@ -292,6 +460,12 @@ const Plans = (() => {
       const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.pp === 'close') return close();
       if (b.dataset.pp === 'view') { const r = s.refs.find((y) => y.id === b.dataset.id); if (r) previewFile(r); return; }
+      if (b.dataset.ck && appr) {
+        ck.state = ck.state === b.dataset.ck ? null : b.dataset.ck;
+        $$('#pp-check [data-ck]', root).forEach((y) => y.classList.toggle('on', y.dataset.ck === ck.state));
+        const nt = $('#pp-cknote', root); nt.hidden = ck.state !== 'changes'; if (!nt.hidden) nt.focus();
+        return;
+      }
       if (!ed) return;
       if (b.dataset.fmt) { s.format = b.dataset.fmt; $$('#pp-fmt .pl-opt', root).forEach((y) => y.classList.toggle('on', y === b)); return; }
       if (b.dataset.ch) { const k = b.dataset.ch; s.channels = s.channels.includes(k) ? s.channels.filter((y) => y !== k) : s.channels.concat(k); b.classList.toggle('on', s.channels.includes(k)); return; }
@@ -316,6 +490,17 @@ const Plans = (() => {
     });
     form.addEventListener('submit', (e) => {
       e.preventDefault();
+      if (appr && !ed) {
+        const cur = (pl.posts || []).find((y) => y.id === x.id);
+        if (!cur || pl.status !== 'review') { close(); return; }
+        const note = ($('#pp-cknote', root).value || '').trim();
+        if (ck.state === 'changes' && !note) { $('#pp-cknote', root).focus(); toast('Say what should change'); return; }
+        if (ck.state) cur.check = { state: ck.state, note: ck.state === 'changes' ? note : '', by: currentUserId, at: nowISO() }; else delete cur.check;
+        pl.updatedAt = nowISO();
+        close(); persist(0); renderContent();
+        toast(ck.state === 'ok' ? 'Marked Looks good' : ck.state === 'changes' ? 'Marked Ask for changes' : 'Saved');
+        return;
+      }
       if (!ed) return close();
       const t = $('#pp-title', root).value.trim();
       if (!t) { $('#pp-title', root).focus(); toast('Give the post a title'); return; }
@@ -323,7 +508,11 @@ const Plans = (() => {
       const v = { day: s.day, title: t, format: s.format, channels: s.channels, occasion: $('#pp-occ', root).value || null,
         desc: $('#pp-desc', root).value.trim(), shots: $('#pp-shots', root).value.trim(), copyEn: $('#pp-en', root).value.trim(), copyAr: $('#pp-ar', root).value.trim(), refs: s.refs };
       if (isNew) pl.posts = (pl.posts || []).concat({ id: 'pp-' + uid(), ...v, createdBy: currentUserId, createdAt: nowISO(), updatedAt: nowISO() });
-      else { const cur = (pl.posts || []).find((y) => y.id === x.id); if (!cur) { close(); toast('This post was deleted'); return; } Object.assign(cur, v, { updatedAt: nowISO() }); }
+      else {
+        const cur = (pl.posts || []).find((y) => y.id === x.id); if (!cur) { close(); toast('This post was deleted'); return; }
+        Object.assign(cur, v, { updatedAt: nowISO() });
+        if (cur.check && cur.check.state === 'ok') delete cur.check;   // (changed after it was looked at: it needs another look)
+      }
       pl.updatedAt = nowISO();
       close(); persist(0); renderContent();
       toast(isNew ? `Added “${t}” on ${dayLong(s.day)}` : 'Saved');
@@ -352,8 +541,14 @@ const Plans = (() => {
       case 'skip': if (pl) setSkip(pl, el.dataset.o, true); return;
       case 'unskip': if (pl) setSkip(pl, el.dataset.o, false); return;
       case 'plan-menu': e.stopPropagation(); if (pl) planMenu(el, pl); return;
+      case 'send': if (pl) sendFlow(pl); return;
+      case 'approve': if (pl) approve(pl); return;
+      case 'send-back': if (pl) sendBack(pl); return;
     }
   });
 
-  return { on, owns, canSee, render, title, isMgr, socialsOf, planById, monthLabel, FORMATS };
+  // skeletons waiting for this person's approval (the sidebar count)
+  const waiting = () => (canSee() ? list().filter((pl) => pl.status === 'review' && canApprove(pl) && proj(pl.projectId) && !proj(pl.projectId).inactive).length : 0);
+  const nameOf = (pl) => { const p = proj(pl.projectId); return `${p ? p.name : 'A client'} · ${monthLabel(pl.month)}`; };
+  return { on, owns, canSee, render, title, isMgr, socialsOf, planById, monthLabel, FORMATS, waiting, nameOf, open };
 })();

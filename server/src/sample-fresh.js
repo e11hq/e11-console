@@ -370,6 +370,11 @@ export function freshSample(store, me, filesRoot) {
     ];
     if (occ0) koreaPosts.push({ day: occ0.day, title: occ0.name, format: 'reel', ch: ['ig', 'tt'], occ: occ0.id, desc: `A short greeting film for ${occ0.name} with the KOREA 360 team.`, en: `Happy ${occ0.name} from KOREA 360.` });
     mk('p-korea', exec, koreaPosts, 50);
+    // KOREA 360's skeleton is waiting for the Social Manager's approval
+    { const k = out.plans.find((x) => x.projectId === 'p-korea'); if (k && has(mgr)) {
+      Object.assign(k, { status: 'review', round: 1, review: { to: 'sm', by: exec, at: ago(3), round: 1 }, log: [{ act: 'sent', by: exec, at: ago(3), to: 'sm', round: 1 }] });
+      notifs.push({ id: 'smp-npl-1', to: mgr, from: exec, kind: 'plan', planId: k.id, text: `sent the content skeleton for <b>KOREA 360 · ${nm.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}</b> for your approval`, snippet: '', at: ago(3), read: false });
+    } }
     mk('p-cpt', exec2, [
       { day: day(3), title: 'Highlights of the month', format: 'reel', ch: ['ig', 'tt'], desc: 'Fast-cut highlights from last month’s events.' },
       { day: day(10), title: 'Behind the scenes', format: 'carousel', ch: ['ig', 'li'], desc: 'The team setting up, five photos.' },

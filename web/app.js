@@ -2173,7 +2173,7 @@ function renderSidebar() {
   Fin.paintNav();
   { const cc = $('#clients-count'); const n = (db.clients || []).filter(caVisible).length; if (cc) cc.textContent = n ? String(n) : ''; }
   { const cn = $('#nav-calendar'); if (cn) cn.style.display = Cal.canSee() ? '' : 'none'; }
-  { const pn = $('#nav-plans'); if (pn) pn.style.display = Plans.canSee() ? '' : 'none'; }
+  { const pn = $('#nav-plans'); if (pn) { pn.style.display = Plans.canSee() ? '' : 'none'; const k = Plans.waiting(), pc = $('#plans-count'); if (pc) { pc.textContent = k ? String(k) : ''; pc.classList.toggle('hot', !!k); } } }
   { const tn = $('#nav-trash'); if (tn) { tn.style.display = isManager() ? '' : 'none'; $('#trash-count').textContent = trashList().length ? String(trashList().length) : ''; } }
   const mt = Work.home().filter((t) => Work.homeOpen(t) && t.due && dayDiff(t.due) <= 0).length;
   $('#mytasks-count').textContent = mt ? String(mt) : '';
@@ -6333,7 +6333,7 @@ async function cdToggleFlow(id) {
 
 /* ================= Inbox ================= */
 const myNotifs = () => (db && currentUserId ? db.notifications.filter((n) => n.to === currentUserId) : []);
-const NOTIF_ICON = { claim: 'coin', 'claim-ok': 'check', 'claim-paid': 'coin', trash: 'trash', restore: 'reply', review: 'upload', 'review-ok': 'check', 'review-amend': 'edit', 'review-wd': 'x', part: 'check-circle', allparts: 'check-circle', assigned: 'user', unassigned: 'user', comment: 'chat', mention: 'chat', status: 'check-circle', cd: 'shield', done: 'check', due: 'cal', priority: 'flag', attach: 'clip' };
+const NOTIF_ICON = { plan: 'cal', 'plan-ok': 'check', 'plan-changes': 'edit', claim: 'coin', 'claim-ok': 'check', 'claim-paid': 'coin', trash: 'trash', restore: 'reply', review: 'upload', 'review-ok': 'check', 'review-amend': 'edit', 'review-wd': 'x', part: 'check-circle', allparts: 'check-circle', assigned: 'user', unassigned: 'user', comment: 'chat', mention: 'chat', status: 'check-circle', cd: 'shield', done: 'check', due: 'cal', priority: 'flag', attach: 'clip' };
 function notifPlain(n) { const d = document.createElement('div'); d.innerHTML = n.text; return d.textContent; }
 const IB_FILTERS = { all: 'All updates', comments: 'Comments & mentions', assigned: 'Assigned to me', status: 'Status & CD review', dates: 'Dates & priority' };
 const ibMatch = (n, f) => f === 'all' || !f ? true : f === 'comments' ? ['comment', 'mention'].includes(n.kind) : f === 'assigned' ? ['assigned', 'unassigned'].includes(n.kind) : f === 'status' ? ['status', 'cd', 'done', 'review', 'review-ok', 'review-amend', 'review-wd'].includes(n.kind) : ['due', 'priority'].includes(n.kind);
@@ -6369,6 +6369,7 @@ function notifMsg(n, t) {
   }
   if (/^claim/.test(n.kind)) return `${who} ${n.text}${n.snippet ? ` <span class="ib-dim">· ${esc(n.snippet)}</span>` : ''}`;
   if (n.kind === 'asset') return `${who} ${esc(n.text)}${n.snippet ? ` <span class="ib-dim">· ${esc(n.snippet)}</span>` : ''}`;
+  if (/^plan/.test(n.kind)) return `${who} ${n.text}${n.snippet ? ` <span class="ib-dim">· ${esc(n.snippet)}</span>` : ''}`;   // (content plans: the text is built escaped)
   if (n.kind === 'review-amend' && n.snippet) return `${who} <span class="ib-dim">requested amendments:</span> ${esc(fullComment(n, t) || n.snippet)}`;
   if (n.kind === 'review-ok' && /your files/.test(n.text)) return `${who} approved your files <span class="ib-chip" style="background:${CD.approved.color};color:${textOn(CD.approved.color)}">APPROVED</span>`;
   if ((n.kind === 'comment' || n.kind === 'mention') && n.snippet) {
@@ -6402,9 +6403,9 @@ function viewInbox() {
     const unread = items.some((x) => !x.read);
     // opens what the row shows: an unread update that needs action first, otherwise the newest
     const target = ibTarget(items), shown = target;
-    const lead = ['comment', 'mention', 'review-amend', 'review-ok', 'review', 'claim', 'claim-ok', 'claim-paid', 'asset'].includes(shown.kind) ? avatarHTML(shown.from, 22) : `<span class="ib-kic">${icon(NOTIF_ICON[shown.kind] || 'bell')}</span>`;
+    const lead = ['comment', 'mention', 'review-amend', 'review-ok', 'review', 'claim', 'claim-ok', 'claim-paid', 'asset', 'plan', 'plan-ok', 'plan-changes'].includes(shown.kind) ? avatarHTML(shown.from, 22) : `<span class="ib-kic">${icon(NOTIF_ICON[shown.kind] || 'bell')}</span>`;
     return `<div class="ib-row ${unread ? 'unread' : ''}" data-action="open-notif" data-id="${target.id}">
-      <span class="ib-title">${n.kind === 'asset' ? `<span class="st-ic ib-coin">${icon('assets')}</span><span class="ib-tname">${esc(assetTitle(n))}</span>` : `${t ? statusIcon(t) : /^claim/.test(n.kind) ? `<span class="st-ic ib-coin">${icon('coin')}</span>` : `<span class="st-ic">${statusIconSVG('#87909e', 'todo', 0)}</span>`}<span class="ib-tname">${t ? esc(t.title || 'Untitled task') : /^claim/.test(n.kind) ? 'Expense claims' : '<i>Deleted task</i>'}</span>`}</span>
+      <span class="ib-title">${/^plan/.test(n.kind) ? `<span class="st-ic ib-coin">${icon('cal')}</span><span class="ib-tname">${esc(planTitle(n))}</span>` : n.kind === 'asset' ? `<span class="st-ic ib-coin">${icon('assets')}</span><span class="ib-tname">${esc(assetTitle(n))}</span>` : `${t ? statusIcon(t) : /^claim/.test(n.kind) ? `<span class="st-ic ib-coin">${icon('coin')}</span>` : `<span class="st-ic">${statusIconSVG('#87909e', 'todo', 0)}</span>`}<span class="ib-tname">${t ? esc(t.title || 'Untitled task') : /^claim/.test(n.kind) ? 'Expense claims' : '<i>Deleted task</i>'}</span>`}</span>
       <span class="ib-lead">${lead}</span>
       <span class="ib-msg"><span class="ib-mi">${notifMsg(shown, t)}</span></span>
       <span class="ib-count">${items.length > 1 ? `<i>${items.length}</i>` : ''}</span>
@@ -6456,7 +6457,8 @@ function inboxFilterMenu(anchor) {
   showMenu(anchor, Object.entries(IB_FILTERS).map(([k, l]) => ({ html: `<div class="mi ${(ui.inboxFilter || 'all') === k ? 'cur' : ''}">${esc(l)}</div>`, run: () => { ui.inboxFilter = k; renderContent(); } })).map((it, i) => ({ ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) })));
 }
 // Inbox rows: a task's updates together; Client Assets updates together per client
-const notifKey = (n) => n.taskId || (n.kind === 'asset' ? 'asset:' + n.clientId : n.id);
+const notifKey = (n) => n.taskId || (n.kind === 'asset' ? 'asset:' + n.clientId : n.planId ? 'plan:' + n.planId : n.id);
+const planTitle = (n) => { const pl = typeof Plans !== 'undefined' && Plans.planById(n.planId); return pl ? `${Plans.nameOf(pl)} · Content skeleton` : 'Content skeleton'; };
 const assetTitle = (n) => `${(clientById(n.clientId) || {}).name || 'A client'} · Client Assets`;
 function clearTaskNotifs(taskId, read) {
   myNotifs().forEach((n) => { if (notifKey(n) === taskId) n.read = read; });
@@ -6464,12 +6466,18 @@ function clearTaskNotifs(taskId, read) {
 }
 // An Inbox row (one per task) shows and opens the newest update, except that an unread one needing action stays on
 // top: files waiting for the CD's review, and amendments requested from you
-const IB_ACTION = new Set(['review', 'review-amend']);
+const IB_ACTION = new Set(['review', 'review-amend', 'plan', 'plan-changes']);
 const ibTarget = (items) => items.find((x) => IB_ACTION.has(x.kind) && !x.read) || items.reduce((a, b) => (String(b.at) > String(a.at) ? b : a));
 function openNotif(id) {
   const n = db.notifications.find((x) => x.id === id);
   if (!n) return;
   if (/^claim/.test(n.kind)) { myNotifs().forEach((x) => { if (x.claimId && x.claimId === n.claimId) x.read = true; }); persist(); renderSidebar(); return Claims.openNotif(n); }
+  if (n.planId) {
+    myNotifs().forEach((x) => { if (notifKey(x) === notifKey(n)) x.read = true; }); persist(); renderSidebar();
+    if (!Plans.canSee() || !Plans.planById(n.planId)) { toast('That content skeleton isn’t available'); return renderContent(); }
+    if (ui.taskId) closeDetail();
+    return Plans.open(n.planId);
+  }
   if (n.kind === 'asset') {
     myNotifs().forEach((x) => { if (notifKey(x) === notifKey(n)) x.read = true; }); persist(); renderSidebar();
     if (!clientById(n.clientId)) { toast('That client’s assets aren’t available'); return; }
@@ -6651,7 +6659,7 @@ function deliverPending() {
   persist();
   if (fresh.length === 1) {
     const n = fresh[0], t = task(n.taskId);
-    alertUser({ title: fullName(userById(n.from)), body: `${notifPlain(n)} ${t ? '“' + (t.title || 'Untitled task') + '”' : ''}${n.snippet ? ' — ' + n.snippet : ''}`, taskId: n.taskId, from: n.from, open: /^claim/.test(n.kind) ? () => { n.read = true; persist(); Claims.openNotif(n); } : n.kind === 'asset' ? () => openNotif(n.id) : null });
+    alertUser({ title: fullName(userById(n.from)), body: `${notifPlain(n)} ${t ? '“' + (t.title || 'Untitled task') + '”' : ''}${n.snippet ? ' — ' + n.snippet : ''}`, taskId: n.taskId, from: n.from, open: /^claim/.test(n.kind) ? () => { n.read = true; persist(); Claims.openNotif(n); } : n.kind === 'asset' || n.planId ? () => openNotif(n.id) : null });
   } else if (isFinUser()) {
     alertUser({ title: 'E11 Console', body: `${fresh.length} new expense claims`, open: () => go('fin-reimb') });
   } else {

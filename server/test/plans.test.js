@@ -88,3 +88,31 @@ test('the live site: no content plans (a trial on the test copy only)', async ()
     assert.equal((await L.push(EXEC, [{ kind: 'plans', id: 'pl-1', base, data: { ...base, posts: [{ id: 'x', day: '2026-12-01', title: 'x' }] } }]))[0].refused, true);
   } finally { await L.app.close(); fs.rmSync(L.dir, { recursive: true, force: true }); }
 });
+
+test('approval: Social sends; the CD or the Social Manager approves or sends back; nobody approves their own; locked while waiting', async () => {
+  const mk = { kind: 'plans', id: 'pl-ap', data: { id: 'pl-ap', projectId: 'p-ford', month: '2027-05', status: 'draft', createdBy: 'u-ex', posts: [{ id: 'p1', day: '2027-05-02', title: 'One' }] } };
+  assert.equal((await T.push(EXEC, [mk]))[0].refused, false);
+  const cur = () => plan('pl-ap');
+  const put = (who, data) => T.push(who, [{ kind: 'plans', id: 'pl-ap', base: cur(), data }]).then((r) => r[0].refused);
+  assert.equal(await put(AM, { ...cur(), status: 'review' }), true, 'an AM can’t send it');
+  assert.equal(await put(EXEC, { ...cur(), status: 'approved' }), true, 'Social can’t approve');
+  assert.equal(await put(EXEC, { ...cur(), status: 'review', review: { to: 'cd', by: 'u-ex', round: 1 } }), false, 'Social sends it');
+  assert.equal(await put(EXEC, { ...cur(), posts: [{ ...cur().posts[0], title: 'Changed' }] }), true, 'locked while waiting');
+  assert.equal(await put(EXEC, { ...cur(), posts: [{ ...cur().posts[0], check: { state: 'ok', by: 'u-ex' } }] }), true, 'Social can’t mark posts');
+  assert.equal(await put(CD, { ...cur(), posts: [{ ...cur().posts[0], check: { state: 'changes', note: 'Shorter', by: 'u-cd' } }] }), false, 'the CD marks a post');
+  assert.equal(await put(CD, { ...cur(), posts: [{ ...cur().posts[0], title: 'CD edit' }] }), true, 'the CD doesn’t edit the posts');
+  assert.equal(await put(CD, { ...cur(), status: 'changes' }), false, 'the CD sends it back');
+  assert.equal(await put(EXEC, { ...cur(), posts: [{ ...cur().posts[0], title: 'Shorter', check: undefined }] }), false, 'Social changes it (and clears the mark)');
+  assert.equal(await put(EXEC, { ...cur(), status: 'review', round: 2 }), false, 'and sends it again');
+  assert.equal(await put(MGR, { ...cur(), status: 'approved', approval: { by: 'u-mg' } }), false, 'the Social Manager approves (any skeleton waiting)');
+  assert.equal(cur().status, 'approved');
+  assert.equal(await put(EXEC, { ...cur(), posts: [] }), true, 'approved: locked');
+  assert.equal(await put(EXEC, { ...cur(), status: 'draft', approval: null }), false, 'reopened as a draft');
+  // made by the Social Manager: only the CD approves
+  const own = { kind: 'plans', id: 'pl-own', data: { id: 'pl-own', projectId: 'p-kia', month: '2027-05', status: 'draft', createdBy: 'u-mg', posts: [{ id: 'q', day: '2027-05-03', title: 'Q' }] } };
+  assert.equal((await T.push(MGR, [own]))[0].refused, false);
+  const o = () => plan('pl-own');
+  assert.equal((await T.push(MGR, [{ kind: 'plans', id: 'pl-own', base: o(), data: { ...o(), status: 'review' } }]))[0].refused, false);
+  assert.equal((await T.push(MGR, [{ kind: 'plans', id: 'pl-own', base: o(), data: { ...o(), status: 'approved' } }]))[0].refused, true, 'not your own');
+  assert.equal((await T.push(CD, [{ kind: 'plans', id: 'pl-own', base: o(), data: { ...o(), status: 'approved' } }]))[0].refused, false, 'the CD');
+});
