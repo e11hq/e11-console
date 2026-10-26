@@ -35,6 +35,7 @@ export function createServer(cfg) {
   const uploads = new Map(); // file path -> who is uploading it (pieces can only be added by them)
   const finals = createFinals({ store, files, access });
   const plans = createPlans({ store, files, access });
+  const exportJobs = new Map();   // content plan exports in progress (id → { userId, state, export | error })
   const webPush = createWebPush({ store, fetchImpl: cfg.pushFetch || fetch, subject: cfg.pushSubject || 'mailto:admin@e11hq.com' });
   const digest = createDigest({ store, webPush, now: cfg.now || (() => Date.now()) });
   if (cfg.digest !== false) digest.start();
@@ -590,11 +591,25 @@ export function createServer(cfg) {
     // Content plans: the client export (PowerPoint + PDF) and reading the client's PowerPoint back
     if (p === '/api/plan-export' && req.method === 'POST') {
       const body = await readBody(req);
-      const r = await plans.exportDeck(u, body || {});
-      if (r.error) return json(res, r.status || 400, { ok: false, error: r.error });
-      const out = store.apply(r.ops, u.id);
-      broadcast(out.rev, out.results, null, u.id);
-      return json(res, 200, { ok: true, export: r.exp, rev: out.rev });
+      const pl = store.get('plans', String((body && body.planId) || ''));
+      if (!pl || !access.canSee(u, 'plans', pl) || !access.planMaker(u, pl)) return json(res, 403, { ok: false, error: 'Not allowed' });
+      // (it runs in the background: a deck with videos and its PDF can take longer than a request may last)
+      const job = 'job-' + crypto.randomBytes(8).toString('hex');
+      exportJobs.set(job, { userId: u.id, state: 'running', at: Date.now() });
+      plans.exportDeck(u, body || {}).then((r) => {
+        if (r.error) { exportJobs.set(job, { userId: u.id, state: 'error', error: r.error, at: Date.now() }); return; }
+        const out = store.apply(r.ops, u.id);
+        broadcast(out.rev, out.results, null, u.id);
+        exportJobs.set(job, { userId: u.id, state: 'done', export: r.exp, at: Date.now() });
+      }).catch((e) => { console.error('plan export:', e.message); exportJobs.set(job, { userId: u.id, state: 'error', error: 'The export failed — please try again', at: Date.now() }); });
+      for (const [k, v] of exportJobs) if (Date.now() - v.at > 3600_000) exportJobs.delete(k);
+      return json(res, 200, { ok: true, job });
+    }
+    if (p === '/api/plan-export' && req.method === 'GET') {
+      const j = exportJobs.get(String(url.searchParams.get('job') || ''));
+      if (!j || j.userId !== u.id) return json(res, 404, { ok: false, error: 'Export not found' });
+      if (j.state === 'error') return json(res, 200, { ok: true, state: 'error', error: j.error });
+      return json(res, 200, { ok: true, state: j.state, export: j.export || null });
     }
     if (p === '/api/plan-return' && req.method === 'POST') {
       const body = await readBody(req);

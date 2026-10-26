@@ -576,7 +576,15 @@ const Plans = (() => {
       b.disabled = true; $('#ex-busy', root).hidden = false;
       try {
         const occ = Occasions.between(firstDay(pl.month), lastDay(pl.month)).map((o) => ({ id: o.id, name: o.name, date: o.date, end: o.end || null }));
-        const r = await api('POST', '/api/plan-export', { planId: pl.id, logo: logo ? logo.path : null, occasions: occ }, { timeout: 600000 });
+        const st = await api('POST', '/api/plan-export', { planId: pl.id, logo: logo ? logo.path : null, occasions: occ });
+        let r = null;
+        for (let i = 0; i < 400 && !r; i++) {
+          await new Promise((ok) => setTimeout(ok, 2000));
+          const j = await api('GET', '/api/plan-export?job=' + encodeURIComponent(st.job)).catch(() => null);
+          if (j && j.state === 'error') throw new Error(j.error);
+          if (j && j.state === 'done') r = j;
+        }
+        if (!r) throw new Error('It’s taking too long — please try again');
         const ex = r.export;
         // (the server saved the export on the plan; add it here at once so the links show)
         if (!(pl.exports || []).some((x) => x.id === ex.id)) pl.exports = (pl.exports || []).concat(ex);
