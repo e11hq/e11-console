@@ -16,7 +16,8 @@ const Fin = (() => {
   const ADMIN_ONLY = ['fin-subs', 'fin-extra'];   // Staff reimbursements: Viewers see the claims too (read only)
   const STATUSES = Object.keys(FINANCE);
   const st = { proj: 'all', graph: 'Invoiced', list: { type: 'all', month: '', page: 0 }, open: {} };
-  const canLook = () => !!finLevel() || isAdmin();
+  // Finance shows only with Finance access (+ Finance Admin / + Finance Viewer) — Super Admins and Office Admins alike
+  const canLook = () => !!finLevel();
   const owns = (v) => VIEWS.includes(v);
   const recs = (type) => (db.finance || []).filter((x) => x.type === type);
   const aed = (n) => 'AED ' + (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -298,7 +299,7 @@ const Fin = (() => {
       // an Office Admin: a Finance heading with its pages, in place of the single Finance button
       const wrap = document.createElement('div');
       wrap.className = 'fin-admin-nav fin-office';
-      wrap.innerHTML = `<div class="nav-heading fin-office-h"><span>Finance</span></div><nav class="nav">${[['fin-dash', 'home', 'Dashboard'], ['fin-reimb', 'users', 'Reimbursements'], ['fin-expenses', 'coin', 'Expenses']]
+      wrap.innerHTML = `<div class="nav-heading fin-office-h"><span>Finance</span></div><nav class="nav">${[['fin-dash', 'home', 'Dashboard'], ['fin-projects', 'folder', 'Clients'], ['fin-reimb', 'users', 'Reimbursements'], ['fin-expenses', 'coin', 'Expenses']]
         .map(([v, ic, l]) => `<a class="nav-item" data-nav="${v}">${icon(ic)}${l}<span class="count"></span></a>`).join('')}</nav>`;
       const tr = $('#nav-trash');
       tr.parentNode.insertBefore(wrap, tr);

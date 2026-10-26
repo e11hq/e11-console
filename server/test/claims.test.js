@@ -117,7 +117,7 @@ test('claim PDF: the sheet pages plus the receipts, for the person or Finance on
   assert.equal((await call(AM, '/api/host/claimPdf', { ...body, receipts: ['attachments/x/secret.pdf'] })).status, 403);
 });
 
-test('expenses report: PDF for Admin and Finance; with files a .zip with Attachments/<month>/ folders', async () => {
+test('expenses report: PDF for Finance; with files a .zip with Attachments/<month>/ folders', async () => {
   const jpg = path.join(dir, 'r.jpg');
   execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=white:s=124x175', '-frames:v', '1', jpg]);
   const b64 = fs.readFileSync(jpg).toString('base64');
@@ -135,8 +135,8 @@ test('expenses report: PDF for Admin and Finance; with files a .zip with Attachm
   const buf = Buffer.from(await zr.arrayBuffer());
   const utf = buf.toString('utf8');
   assert.ok(utf.includes(`Attachments/${OPEN}/SUB-01_Google.pdf`) && utf.includes(`Attachments/${OPEN}/REI-01_Areej.pdf`) && utf.includes('E11 expenses — test.pdf'), 'zip entries in folders');
-  // Admins (no Finance access) can make the PDF, but not with claim receipts; others can't at all
-  assert.equal((await call(ADMIN, '/api/host/expenseReport', { name: 'x', pages: [b64] })).status, 200);
+  // Admins without Finance access can't make it at all (Finance shows for Admins only with + Finance); nor can others
+  assert.equal((await call(ADMIN, '/api/host/expenseReport', { name: 'x', pages: [b64] })).status, 403);
   assert.equal((await call(ADMIN, '/api/host/expenseReport', { name: 'x', pages: [b64], zip: true, files })).status, 403);
   assert.equal((await call(AM, '/api/host/expenseReport', { name: 'x', pages: [b64] })).status, 403);
   assert.equal((await call(FA, '/api/host/expenseReport', { name: 'x', pages: [b64], zip: true, files: [{ path: 'attachments/t/x.pdf', as: 'a.pdf' }] })).status, 403);

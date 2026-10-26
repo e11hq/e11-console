@@ -49,9 +49,10 @@ test('finance people get slim tasks (no comments, description or people) and the
   assert.equal(r.body.data.finance.length, 1);
 });
 
-test('finance records are hidden from everyone else except Admins', async () => {
+test('finance records are hidden from everyone without Finance access — Admins included', async () => {
   assert.equal((await call(AM, '/api/snapshot')).body.data.finance.length, 0);
-  assert.equal((await call(ADMIN, '/api/snapshot')).body.data.finance.length, 1);
+  assert.equal((await call(ADMIN, '/api/snapshot')).body.data.finance.length, 0);
+  assert.equal((await call(FV, '/api/snapshot')).body.data.finance.length, 1);
 });
 
 test('only a Finance Admin adds or removes finance records', async () => {
@@ -102,9 +103,9 @@ test('finance people cannot create tasks or projects', async () => {
   assert.ok(r.body.results.every((x) => x.refused));
 });
 
-test('invoices: Finance people and Admins can open them; task files are closed to Finance', async () => {
+test('invoices: people with Finance access can open them (not Admins without it); task files are closed to Finance', async () => {
   assert.equal((await call(FV, '/__file/Finance/Expenses/inv.pdf')).status, 200);
-  assert.equal((await call(ADMIN, '/__file/Finance/Expenses/inv.pdf')).status, 200);
+  assert.equal((await call(ADMIN, '/__file/Finance/Expenses/inv.pdf')).status, 403);
   assert.equal((await call(AM, '/__file/Finance/Expenses/inv.pdf')).status, 403);
   assert.equal((await call(FA, '/__file/attachments/t1/a.txt')).status, 403);
 });

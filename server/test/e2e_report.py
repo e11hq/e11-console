@@ -106,7 +106,7 @@ async def main():
         ctx, pg, errs = await login(fv); await pg.evaluate("go('fin-expenses')"); await pg.wait_for_timeout(400)
         check(await pg.is_visible('[data-fin-rep]'), 'Finance Viewer has Download report'); await ctx.close()
         ctx, pg, errs = await login(ADMIN); await pg.evaluate("go('fin-expenses')"); await pg.wait_for_timeout(400)
-        check(await pg.is_visible('[data-fin-rep]'), 'Admin has Download report'); await ctx.close()
+        check(not await pg.is_visible('[data-fin-rep]') and await pg.evaluate("ui.view") != 'fin-expenses', 'Admin without Finance access: no Finance pages, no report'); await ctx.close()
         ctx, pg, errs = await login(am); await pg.evaluate("go('fin-expenses')"); await pg.wait_for_timeout(400)
         check(not await pg.is_visible('[data-fin-rep]'), 'Account Manager does not'); await ctx.close()
         await b.close()

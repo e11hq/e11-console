@@ -24,7 +24,8 @@ async def main():
     # this test builds its own Finance numbers: clear the sample's Finance statuses, finished jobs and records
     snap = json.loads(urllib.request.urlopen(urllib.request.Request(BASE + '/api/snapshot', headers={'X-Dev-Email': ADMIN})).read())['data']
     push(ADMIN, [{'kind': 'users', 'id': 'u-tmpfa', 'data': {'id': 'u-tmpfa', 'email': 'tmpfa@e11-digital.com', 'role': 'finance_admin', 'active': True, 'setup': True}}])
-    push('tmpfa@e11-digital.com', [{'kind': 'finance', 'id': r['id'], 'del': True} for r in snap['finance']])
+    fsnap = json.loads(urllib.request.urlopen(urllib.request.Request(BASE + '/api/snapshot', headers={'X-Dev-Email': 'tmpfa@e11-digital.com'})).read())['data']   # (Admins see finance records only with Finance access)
+    push('tmpfa@e11-digital.com', [{'kind': 'finance', 'id': r['id'], 'del': True} for r in fsnap['finance']])
     clean = []
     for t in snap['tasks']:
         if t['id'].startswith('smp-fin-'): clean.append({'kind': 'tasks', 'id': t['id'], 'del': True})
@@ -164,7 +165,13 @@ async def main():
         await ctx.close()
         # ---------------- Admin
         ctx, pg, errs = await login(ADMIN); E = pg.evaluate
-        check(await pg.locator('.fin-admin-nav').count() == 1, 'Admin has Finance in the sidebar')
+        await E("(() => { const u = me(); delete u.fin; persist(0); Fin.init(); renderSidebar(); })()"); await pg.wait_for_timeout(1500)
+        check(await pg.locator('.fin-admin-nav').count() == 0, 'Admin without Finance access: no Finance in the sidebar')
+        # an Admin gives themselves Finance Viewer access from their own row: Finance appears, look only
+        await E("go('team')"); await pg.wait_for_timeout(300)
+        await pg.click(f'[data-action="member-menu"][data-id="{await E("currentUserId")}"]'); await pg.wait_for_timeout(200)
+        await pg.locator('.menu .mi', has_text='Finance Viewer').click(); await pg.wait_for_timeout(1500)
+        check(await pg.locator('.fin-admin-nav').count() == 1, 'with + Finance Viewer: Finance in the sidebar')
         await pg.click('.fin-admin-nav'); await pg.wait_for_timeout(300)
         check(await E("ui.view") == 'fin-dash' and await pg.locator('#title-area [data-fin-go]').count() == 3, 'Admin sees the Finance pages with tabs')
         await pg.click('#title-area [data-fin-go="fin-projects"]'); await pg.wait_for_timeout(300)
@@ -173,8 +180,8 @@ async def main():
         await pg.locator('.fl-menu .mi .fl-pill').get_by_text('Invoiced', exact=True).click(); await pg.wait_for_timeout(300)
         check(await E(f"task('{tid}').finance") == 'Invoiced', 'Admin changes a task’s Finance status on the Finance Projects page')
         await pg.click('#title-area [data-fin-go="fin-expenses"]'); await pg.wait_for_timeout(300)
-        check(await pg.locator('[data-fin-new]').count() == 0, 'Admin only looks at expenses (no adding)')
-        # an Admin gives themselves Finance Admin access from their own row
+        check(await pg.locator('[data-fin-new]').count() == 0, 'Finance Viewer only looks at expenses (no adding)')
+        # ...and Finance Admin access
         await E("go('team')"); await pg.wait_for_timeout(300)
         await pg.click(f'[data-action="member-menu"][data-id="{await E("currentUserId")}"]'); await pg.wait_for_timeout(200)
         await pg.locator('.menu .mi', has_text='Finance Admin').click(); await pg.wait_for_timeout(300)

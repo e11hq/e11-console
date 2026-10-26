@@ -287,7 +287,7 @@ export function createServer(cfg) {
     }
     return out;
   }
-  const accessKey = (u) => JSON.stringify([u.role === 'freelancer' ? u.projectIds || [] : null, u.role, !!u.admin, access.ownOnly(u), store.list('projects').map((p) => [p.id, p.clientId || null, !!p.inactive])]);
+  const accessKey = (u) => JSON.stringify([u.role === 'freelancer' ? u.projectIds || [] : null, u.role, !!u.admin, access.finLevel(u) || null, access.ownOnly(u), store.list('projects').map((p) => [p.id, p.clientId || null, !!p.inactive])]);
   const send = (s, event, data) => { try { s.res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); } catch { /* closed */ } };
 
   /* ---------- routes ---------- */
@@ -607,7 +607,7 @@ export function createServer(cfg) {
       }
       if (cmd === 'makeDir' && !manager && !(u.role !== 'freelancer' && String(body.path || '').startsWith('Clients/') && access.canReadFile(u, String(body.path) + '/x'))) return deny();
       if (access.isFinance(u) && !['writeChunk', 'thumb', 'processImage', 'docPreview', 'pdfPages', 'exportFiles', 'claimPdf', 'expenseReport'].includes(cmd)) return deny();
-      if (cmd === 'expenseReport' && !(access.finLevel(u) || access.isAdm(u))) return deny('Only Admins and Finance can download the expenses report');
+      if (cmd === 'expenseReport' && !access.finLevel(u)) return deny('Only people with Finance access can download the expenses report');
       if (cmd === 'expenseReport' && (body.files || []).some((x) => { const fp = String((x && x.path) || ''); return !(fp.startsWith('Finance/') || fp.startsWith('Claims/')) || !access.canReadFile(u, fp); })) return deny();
       if (cmd === 'claimPdf' && !(String(body.userId || '') === u.id || access.finLevel(u))) return deny();
       if (cmd === 'trashMany' || cmd === 'trashPath') {

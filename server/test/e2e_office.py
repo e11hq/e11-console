@@ -39,9 +39,9 @@ async def main():
             # --- the Office Admin
             ctx, pg, errs = await page_for(b, ARSAL); E=pg.evaluate
             vis = await E("""(() => { const v = (sel) => { const el = document.querySelector(sel); return !!el && el.offsetParent !== null; };
-              return { home: v('.nav [data-nav="home"]'), inbox: v('.nav [data-nav="inbox"]'), assets: v('[data-nav="clients"]'), fin: v('.fin-office .nav-item[data-nav="fin-dash"]') && v('.fin-office .nav-item[data-nav="fin-reimb"]') && v('.fin-office .nav-item[data-nav="fin-expenses"]'), trash: v('#nav-trash'),
+              return { home: v('.nav [data-nav="home"]'), inbox: v('.nav [data-nav="inbox"]'), assets: v('[data-nav="clients"]'), fin: v('.fin-office .nav-item[data-nav="fin-dash"]') && v('.fin-office .nav-item[data-nav="fin-projects"]') && v('.fin-office .nav-item[data-nav="fin-reimb"]') && v('.fin-office .nav-item[data-nav="fin-expenses"]'), trash: v('#nav-trash'),
                 myday: v('.nav [data-nav="today"]'), mytasks: v('.nav [data-nav="mytasks"]'), clients: v('#project-list'), search: v('.search'), newtask: v('[data-action="new-task"]') }; })()""")
-            check(vis == {'home': True, 'inbox': True, 'assets': True, 'fin': True, 'trash': True, 'myday': False, 'mytasks': False, 'clients': False, 'search': False, 'newtask': False}, f'sidebar: Home, Inbox, Client Assets, Finance (Dashboard, Reimbursements, Expenses), Trash only {vis}')
+            check(vis == {'home': True, 'inbox': True, 'assets': True, 'fin': True, 'trash': True, 'myday': False, 'mytasks': False, 'clients': False, 'search': False, 'newtask': False}, f'sidebar: Home, Inbox, Client Assets, Finance (Dashboard, Clients, Reimbursements, Expenses), Trash only {vis}')
             await pg.locator('.fin-office .nav-item[data-nav="fin-reimb"]').click(); await pg.wait_for_timeout(500)
             check(await E("ui.view") == 'fin-reimb' and await pg.locator('.fin-office .nav-item.active[data-nav="fin-reimb"]').count() == 1, 'Reimbursements opens from the Finance heading')
             await E("go('home')"); await pg.wait_for_timeout(300)

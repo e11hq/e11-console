@@ -181,7 +181,7 @@ export function createAccess(store, opts = {}) {
     // Expense claims (receipts, signatures, claim PDFs): the person who claims, and Finance
     if (parts[0] === 'Claims') return parts[1] === u.id || !!finLevel(u);
     // Invoices and other finance records: Finance people and Admins only
-    if (parts[0] === 'Finance') return !!finLevel(u) || isAdm(u);
+    if (parts[0] === 'Finance') return !!finLevel(u);
     if (isFinance(u)) return (parts[0] === 'attachments' && parts[1] === '_avatars') || (parts[0] === 'Clients' && parts[1] === '_logos') || parts[0] === '.thumbs';
     // files of an inactive client: its tasks' attachments and its Client Assets
     if (parts[0] === 'attachments' && parts[1] && parts[1][0] !== '_') { const t = store.get('tasks', parts[1]); if (t && inInactive(t)) return false; }
@@ -214,7 +214,7 @@ export function createAccess(store, opts = {}) {
       case 'tasks': return isOffice(u) ? !!finLevel(u) && !inInactive(data) : taskVisible(u, data);
       case 'clients': return !hiddenClient(data) && clientVisible(u, data);
       case 'trash': return isOffice(u) ? CA_TRASH.has(data.type) : isAdm(u) || u.role === 'am';   // the Trash is for Admins and Account Managers (Office Admins: Client Assets items)
-      case 'finance': return !!finLevel(u) || isAdm(u) || (data.type === 'reimb' && data.userId === u.id);    // expense records (people see their own reimbursements)
+      case 'finance': return !!finLevel(u) || (data.type === 'reimb' && data.userId === u.id);   // (Admins too: only with Finance access)    // expense records (people see their own reimbursements)
       // expense claims: your own, and Finance sees everything except drafts and "submitted offline"
       case 'claims': return data.userId === u.id || (!!finLevel(u) && !['draft', 'offline'].includes(data.state));
       default: return true;
