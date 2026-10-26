@@ -43,7 +43,7 @@ const CLIENT_OF = { 'Ford & Lincoln': 'p-ford', KIA: 'p-kia', DEEPAL: 'p-deepal'
 const PEOPLE = {
   'u-nadia': ['Nadia Khashem', 'Nadia_khashem'], 'u-lina': ['Areej Masri', 'Areej_Masri'], 'u-lana': ['Lana Al Ramli', 'Lana_E11'], 'u-karim': ['Carine Abou Jaoude', 'Carine_Abou_Jaoude'],
   'u-ali': ['Ali Raza', 'Ali_Raza'], 'u-moon': ['Moon-Ray Jabra', 'Moon_Ray_Jabra'], 'u-maab': ['Maab Osama', 'Maab_Osama'], 'u-omar': ['Zaahir Hamid', 'Zaahir_Hamid'],
-  'u-aish': ['Aishwarya Sanjay', 'Aishwarya_Sanjay'], 'u-maya': ['Amelia Aouidat', 'Amelia_Aouidat'], 'u-joe': ['Joe Hajj', 'Joe_Hajj'], 'u-sara': ['Yousef Al Hwij', null],
+  'u-aish': ['Aishwarya Sanjay', 'Aishwarya_Sanjay'], 'u-new': ['Maria', null], 'u-maya': ['Amelia Aouidat', 'Amelia_Aouidat'], 'u-joe': ['Joe Hajj', 'Joe_Hajj'], 'u-sara': ['Yousef Al Hwij', null],
 };
 // ClickUp status → stage here, and the Task Update shown with it
 const STAGE = { NEW: 'todo', BRAINSTORM: 'todo', '–': 'todo', '': 'todo', WIP: 'prog', STORYBOARD: 'prog', SHOOT: 'prog', 'EDIT VIDEO': 'prog', ADAPTATIONS: 'prog', 'ON HOLD': 'prog',
@@ -71,6 +71,11 @@ export function freshSample(store, me, filesRoot) {
   if (!users.has('u-joe') && !store.list('users').some((x) => String(x.email).toLowerCase() === 'joe@e11-digital.com')) {
     const joe = { id: 'u-joe', name: 'Joe Hajj', email: 'joe@e11-digital.com', role: 'production', designation: 'Senior Designer', active: true, setup: true, avatar: null, prefs: {}, createdAt: ago(24 * 200), office: 'Dubai — Business Bay office' };
     out.users.push(joe); users.set(joe.id, joe);
+  }
+  // Maria: a Social Executive (content plans trial)
+  if (!users.has('u-new') && !store.list('users').some((x) => String(x.email).toLowerCase() === 'maria@e11-digital.com')) {
+    const maria = { id: 'u-new', name: 'Maria', email: 'maria@e11-digital.com', role: 'social', designation: 'Social Media Executive', active: true, setup: true, avatar: null, prefs: {}, createdAt: ago(24 * 90), office: 'Dubai — Business Bay office' };
+    out.users.push(maria); users.set(maria.id, maria);
   }
   // Muhammad Arsal runs the office: Office Admin, with Finance Admin access
   { const a = users.get('u-arsal'); if (a) { a.role = 'office_admin'; a.fin = 'admin'; a.designation = 'Office Manager'; } }
@@ -329,12 +334,12 @@ export function freshSample(store, me, filesRoot) {
   // a Client Assets update
   { const c = clientOf('p-kia'); const f = c && c.folders.find((x) => x.name === 'Logos'); if (f) [me, 'u-sara', 'u-ali'].filter(has).forEach((to, i) => notifs.push({ id: `smp-nas-${i}`, to, from: 'u-lina', kind: 'asset', clientId: c.id, folderId: f.id, text: `added a file to ${c.name} › Logos`, snippet: f.files[0] ? f.files[0].name : '', at: ago(5 + i), read: false })); }
 
-  // ---------- content plans (trial): Aishwarya is Social Manager, Amelia the Social Executive on most clients ----------
-  const mgr = 'u-aish', exec = 'u-maya';
-  const SOCIALS = { 'p-ford': [exec], 'p-kia': [exec], 'p-alain': [exec], 'p-hre': [exec], 'p-asv': [exec], 'p-cpt': [exec], 'p-korea': [mgr], 'p-gm': [mgr], 'p-bizreh': [mgr] };
+  // ---------- content plans (trial): Amelia is Social Manager; Aishwarya and Maria are the Social Executives ----------
+  const mgr = 'u-maya', exec = 'u-aish', exec2 = 'u-new';
+  const SOCIALS = { 'p-korea': [exec], 'p-asv': [exec], 'p-cpt': [exec2] };   // (for now only these clients have Social people)
   out.projects.forEach((p) => { const s = (SOCIALS[p.id] || []).filter(has); if (s.length) p.socials = s; });
   out.plans = [];
-  if (has(exec) && has(mgr)) {
+  if (has(exec) && has(exec2)) {
     const nm = (() => { const d = new Date(today0); return new Date(d.getFullYear(), d.getMonth() + 1, 1); })();
     const month = `${nm.getFullYear()}-${String(nm.getMonth() + 1).padStart(2, '0')}`;
     const day = (n) => `${month}-${String(Math.min(n, new Date(nm.getFullYear(), nm.getMonth() + 1, 0).getDate())).padStart(2, '0')}`;
@@ -355,28 +360,24 @@ export function freshSample(store, me, filesRoot) {
       out.plans.push(pl);
     };
     const occ0 = occs[0], occ1 = occs[1];
-    const fordPosts = [
-      { day: day(1), title: 'Territory 2026 offer', format: 'post', ch: ['ig', 'fb'], desc: 'Monthly offer post for the Territory: hybrid and petrol side by side, offer lockup in the red band.', en: 'Territory 2026. Start the month in a new Ford, from AED 1,670 a month. Book your test drive today. T&Cs apply.', ar: 'تيريتوري 2026. ابدأ الشهر بسيارة فورد جديدة، بدفعات تبدأ من 1,670 درهم شهرياً. احجز تجربة القيادة اليوم.', shots: 'Approved key visual, resized 4:5 and 9:16.', refs: ['cu42.png', 'cu43.jpg'] },
-      { day: day(4), title: 'Everest features', format: 'carousel', ch: ['ig'], desc: '5 slides: one feature per slide (towing, 4x4 modes, cabin, safety, offer).', en: 'Built for every road you take. Swipe to see what makes the Everest ready for anything.', shots: 'Studio stills of each feature; end slide with the offer.', links: ['https://www.instagram.com/fordmiddleeast/'] },
-      { day: day(7), title: 'Buy now, pay in 2027', format: 'post', ch: ['ig', 'fb', 'li'], desc: 'Year-end sale headline post, sunset skyline visual.', en: 'Buy now, pay later. Drive home a new Ford today and start paying next year.', refs: ['cu09.jpg'] },
-      { day: day(9), title: 'Test drive day', format: 'reel', ch: ['ig', 'tt'], desc: 'Fast-cut reel of customers on a test drive at the Sheikh Zayed Road showroom.', shots: '1. Keys handed over (2s)\n2. Driver’s smile, close-up (2s)\n3. Car pulling out, wide (3s)\n4. Highway, drone (5s)\n5. End card with the offer (3s)', en: 'Your next drive starts here. Book a test drive this weekend.' },
-      { day: day(14), title: 'Family SUVs', format: 'carousel', ch: ['ig', 'fb'], desc: 'Explorer, Expedition and Everest for families: space, seats, safety.' },
-      { day: day(18), title: 'Desert drive', format: 'reel', ch: ['ig', 'tt', 'yt'], desc: 'Bronco in the dunes at golden hour.', shots: 'Drone follow, low tracking shot, sand spray close-up.', links: ['https://www.tiktok.com/@ford'] },
+    const koreaPosts = [
+      { day: day(1), title: 'This month at KOREA 360', format: 'carousel', ch: ['ig', 'fb'], desc: 'What’s on this month, one event per slide: K-food week, K-pop night, the beauty corner and the photo booth.', en: 'A whole month of Korea, right here in Dubai. Swipe to see what’s coming.', ar: 'شهر كامل من كوريا هنا في دبي. اسحب لترى ما ينتظرك.', shots: 'Event key visuals, one per slide; end slide with dates and location.' },
+      { day: day(5), title: 'K-food week', format: 'reel', ch: ['ig', 'tt'], desc: 'Tasting reel at the food stalls: tteokbokki, Korean fried chicken, bingsu.', shots: '1. Sizzling pan, close-up (2s)\n2. Stall owner serving (2s)\n3. First bite, reaction (3s)\n4. Wide of the food hall (3s)\n5. End card with dates (2s)', en: 'Hungry? K-food week starts today.', links: ['https://www.instagram.com/explore/tags/kfood/'] },
+      { day: day(9), title: 'K-pop night', format: 'reel', ch: ['ig', 'tt', 'yt'], desc: 'Dance cover crew on stage, crowd singing along. Night lighting like the reference.', en: 'Bring your lightstick. K-pop night is back.', refs: ['cu04.jpg'] },
+      { day: day(12), title: 'K-beauty corner', format: 'post', ch: ['ig'], desc: 'Flat lay of the products at the beauty corner, soft pastel set.', en: 'Glass skin, sorted. Visit the K-beauty corner this weekend.' },
+      { day: day(18), title: 'Hanbok photo booth', format: 'story', ch: ['ig', 'sc'], desc: 'Story series: visitors in hanbok at the photo booth, with a poll sticker.' },
+      { day: day(24), title: 'Win a trip to Seoul', format: 'post', ch: ['ig', 'fb'], desc: 'Giveaway announcement: follow, tag two friends, share to story.', en: 'Win a trip for two to Seoul. Follow, tag two friends and share to your story to enter. T&Cs apply.' },
     ];
-    if (occ0) fordPosts.push({ day: occ0.day, title: occ0.name, format: 'reel', ch: ['ig', 'tt'], occ: occ0.id, desc: `A short film for ${occ0.name}: the road and the people.`, en: `Happy ${occ0.name} from Ford UAE.` });
-    mk('p-ford', exec, fordPosts, 50);
-    mk('p-alain', exec, [
-      { day: day(3), title: 'Tower at night', format: 'reel', ch: ['ig', 'tt'], desc: 'The tower lit up, slow push-in.', refs: ['cu04.jpg'] },
-      { day: day(10), title: 'Weekend events', format: 'carousel', ch: ['ig', 'fb'], desc: 'What’s on this weekend, one event per slide.' },
-      { day: day(21), title: 'Food court favourites', format: 'post', ch: ['ig'] },
+    if (occ0) koreaPosts.push({ day: occ0.day, title: occ0.name, format: 'reel', ch: ['ig', 'tt'], occ: occ0.id, desc: `A short greeting film for ${occ0.name} with the KOREA 360 team.`, en: `Happy ${occ0.name} from KOREA 360.` });
+    mk('p-korea', exec, koreaPosts, 50);
+    mk('p-cpt', exec2, [
+      { day: day(3), title: 'Highlights of the month', format: 'reel', ch: ['ig', 'tt'], desc: 'Fast-cut highlights from last month’s events.' },
+      { day: day(10), title: 'Behind the scenes', format: 'carousel', ch: ['ig', 'li'], desc: 'The team setting up, five photos.' },
+      { day: day(21), title: 'Customer stories', format: 'video', ch: ['ig', 'yt'], desc: 'Two short interviews with customers.' },
     ].concat(occ1 ? [{ day: occ1.day, title: occ1.name, format: 'post', ch: ['ig', 'fb'], occ: occ1.id }] : []), 30);
-    mk('p-korea', mgr, [
-      { day: day(5), title: 'K-food week', format: 'reel', ch: ['ig', 'tt'], desc: 'Tasting reel at the food stalls.' },
-      { day: day(12), title: 'K-beauty corner', format: 'post', ch: ['ig'] },
-    ], 20);
   }
-  // the Creative Director is Carine; Aishwarya is Social Manager (content plans trial)
-  out.meta = { ...(out.meta || {}), cdUserId: has(cd) ? cd : (out.meta || {}).cdUserId || null, ...(has('u-aish') ? { socialMgrIds: ['u-aish'] } : {}) };
+  // the Creative Director is Carine; Amelia is Social Manager (content plans trial)
+  out.meta = { ...(out.meta || {}), cdUserId: has(cd) ? cd : (out.meta || {}).cdUserId || null, ...(has(mgr) ? { socialMgrIds: [mgr] } : {}) };
   const ids = new Set([me, ...out.users.map((u) => u.id), ...store.list('users').map((u) => u.id)]);
   out.notifications = notifs.filter((x) => ids.has(x.to));
   return out;
