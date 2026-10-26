@@ -9,7 +9,7 @@ import { sampleData } from './sample.js';
 
 const DEFAULT_FOLDERS = ['Logos', 'Brand Guidelines', 'Fonts', 'Files'];
 const LOGO_COLORS = { 'Ford & Lincoln': ['#0b2a63', '#ffffff'], ALAIN: ['#6c4cf0', '#ffffff'], 'KOREA 360': ['#c8102e', '#ffffff'], HRE: ['#0f8a5f', '#ffffff'], DEEPAL: ['#111111', '#f9be33'], Nakheel: ['#9a7b4f', '#ffffff'] };
-const logoSvg = (name, [bg, fg]) => `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="300" viewBox="0 0 600 300"><rect width="600" height="300" rx="24" fill="${bg}"/><text x="300" y="168" font-family="Helvetica, Arial, sans-serif" font-size="${name.length > 9 ? 64 : 84}" font-weight="700" fill="${fg}" text-anchor="middle" letter-spacing="2">${name.replace(/&/g, '&amp;').toUpperCase()}</text></svg>`;
+const logoSvg = (name, [bg, fg]) => `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="300" viewBox="0 0 600 300"><rect width="600" height="300" rx="24" fill="${bg}"/><text x="300" y="168" font-family="Helvetica, Arial, sans-serif" font-size="${name.length > 9 ? 64 : 84}" font-weight="700" fill="${fg}" text-anchor="middle" letter-spacing="2">${name.toUpperCase().replace(/&/g, '&amp;')}</text></svg>`;   // (escape after uppercasing: "&AMP;" breaks the SVG)
 
 export function freshSample(store, me, filesRoot) {
   const out = sampleData(store, me, filesRoot);

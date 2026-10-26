@@ -44,6 +44,9 @@ test('test copy: the owner wipes everything and starts again with sample data in
   assert.ok(s.list('tasks').some((t) => t.cdRule === 2) && s.list('tasks').some((t) => !t.parentId && !t.cdRule), 'newer and older tasks');
   assert.ok(s.list('tasks').every((t) => !(t.cdRule && t.needsCD && (t.assignees || []).includes(cd))), 'no new task needs CD review with the CD on it');
   assert.ok(fs.existsSync(path.join(dir, 'files', 'Clients', 'Ford & Lincoln', 'Logos', 'Ford & Lincoln logo.svg')), 'files are on disk');
+  // the sample logos are valid SVG: "&" written as &amp; (an uppercased "&AMP;" stops browsers drawing it)
+  const svg = fs.readFileSync(path.join(dir, 'files', 'Clients', 'Ford & Lincoln', 'Logos', 'Ford & Lincoln logo.svg'), 'utf8');
+  assert.match(svg, /FORD &amp; LINCOLN/); assert.doesNotMatch(svg, /&AMP;|&(?!amp;|lt;|gt;|quot;|#)/);
   await app.close(); fs.rmSync(dir, { recursive: true, force: true });
 });
 
