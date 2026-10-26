@@ -26,7 +26,7 @@ export function createServer(cfg) {
   const dataDir = cfg.dataDir;
   const store = cfg.store || openStore(cfg.dbFile || path.join(dataDir, 'db', 'e11.sqlite'));
   const auth = cfg.auth || createAuth({ team: cfg.cfTeam, aud: cfg.cfAud, dev: !!cfg.dev });
-  const access = createAccess(store, { ownerEmail: cfg.adminEmail });
+  const access = createAccess(store, { ownerEmail: cfg.adminEmail, plans: /-test\.|-dev$/.test(cfg.version || '0.0.0-dev') });   // (content plans: a trial on the test copy only)
   const files = createFiles(dataDir);
   const version = cfg.version || '0.0.0-dev';
   const webDir = cfg.webDir || null;
@@ -485,7 +485,7 @@ export function createServer(cfg) {
       store.backup(path.join(dataDir, 'backups', `before-sample-reset-${Date.now()}.sqlite`));
       // 1. every record except the owner's account
       const dels = [];
-      for (const k of ['projects', 'tasks', 'clients', 'notifications', 'statuses', 'trash', 'finance', 'claims']) store.list(k).forEach((x) => dels.push({ kind: k, id: String(x.id), del: true }));
+      for (const k of ['projects', 'tasks', 'clients', 'notifications', 'statuses', 'trash', 'finance', 'claims', 'plans']) store.list(k).forEach((x) => dels.push({ kind: k, id: String(x.id), del: true }));
       store.list('users').forEach((x) => { if (x.id !== owner.id) dels.push({ kind: 'users', id: String(x.id), del: true }); });
       if (dels.length) store.apply(dels, 'sample-reset');
       store.apply([{ kind: 'meta', id: 'main', data: { createdAt: new Date().toISOString() } }], 'sample-reset');

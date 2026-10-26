@@ -52,6 +52,18 @@ export function createAccess(store, opts = {}) {
   // (Not for someone with Admin rights or the Creative Director.)
   const cdId = () => (store.get('meta', 'main') || {}).cdUserId || null;
   const ownOnly = (u) => !!u && (u.role === 'production' || u.role === 'freelancer') && !isAdm(u) && u.id !== cdId();
+  /* Content plans (a trial on the test copy): one plan per client per month, made by that client's Social Executives
+     (project.socials) or a Social Manager (meta.socialMgrIds, Social people an Admin picks). Admins, Account Managers
+     and the CD look at them; Production, Freelancers, Finance-only people and Office Admins don't see them. */
+  const socialMgrs = () => new Set(((store.get('meta', 'main') || {}).socialMgrIds) || []);
+  const isSocialMgr = (u) => !!u && u.role === 'social' && u.active !== false && socialMgrs().has(u.id);
+  function planEditor(u, pid) {
+    if (!u || u.role !== 'social' || u.active === false) return false;
+    if (isSocialMgr(u)) return true;
+    const p = pid && store.get('projects', String(pid));
+    return !!p && (p.socials || []).includes(u.id);
+  }
+  const planVisible = (u, pl) => !isFinance(u) && !isOffice(u) && !ownOnly(u) && !isFreelancer(u) && !(pl && pl.projectId && inactiveIds().has(pl.projectId));
   const mentioned = (html, id) => String(html || '').includes(`data-user="${id}"`);
   const partOf = (t, id) => (t.assignees || []).includes(id) || t.createdBy === id || t.guardian === id || mentioned(t.notesHtml, id)
     || (t.comments || []).some((c) => mentioned(c.html, id));
@@ -232,6 +244,7 @@ export function createAccess(store, opts = {}) {
       case 'finance': return !!finLevel(u) || (data.type === 'reimb' && data.userId === u.id);   // (Admins too: only with Finance access)    // expense records (people see their own reimbursements)
       // expense claims: your own, and Finance sees everything except drafts and "submitted offline"
       case 'claims': return data.userId === u.id || (!!finLevel(u) && !['draft', 'offline'].includes(data.state));
+      case 'plans': return planVisible(u, data);
       default: return true;
     }
   }
@@ -279,6 +292,8 @@ export function createAccess(store, opts = {}) {
       case 'meta':
         // only Admins send a general announcement
         if (!admin && next && !deepEqual(next.announcement ?? null, (ch.base !== undefined ? (ch.base || {}).announcement : current && current.announcement) ?? null)) return false;
+        // ...and pick the Social Manager
+        if (!admin && next && !deepEqual(next.socialMgrIds ?? null, (ch.base !== undefined ? (ch.base || {}).socialMgrIds : current && current.socialMgrIds) ?? null) && !deepEqual(next.socialMgrIds ?? null, (current && current.socialMgrIds) ?? null)) return false;
         return manager;
       case 'statuses':
         return manager;
@@ -296,7 +311,7 @@ export function createAccess(store, opts = {}) {
         if (ch.del || !current || admin) return admin;              // only Admins add or remove a client
         if (!projectVisible(u, current)) return false;
         // and only Admins change one (name, colour, statuses, Client Assets link); others may switch List / Board
-        return ['name', 'color', 'sections', 'clientId', 'ams', 'inactive'].every((k) => deepEqual(next[k] ?? null, (ch.base !== undefined && ch.base ? ch.base[k] : current[k]) ?? null) || deepEqual(next[k] ?? null, current[k] ?? null));
+        return ['name', 'color', 'sections', 'clientId', 'ams', 'socials', 'inactive'].every((k) => deepEqual(next[k] ?? null, (ch.base !== undefined && ch.base ? ch.base[k] : current[k]) ?? null) || deepEqual(next[k] ?? null, current[k] ?? null));
       case 'tasks': {
         // a task's Finance status is set by Account Managers and Admins only
         const was = ch.base !== undefined ? ch.base : current;
@@ -322,6 +337,17 @@ export function createAccess(store, opts = {}) {
         if (!manager) return false;
         const old = Date.now() - Date.parse(current.deletedAt || 0) > 30 * 86400000;
         return old || (!!current.key && !!(ctx.restoring && ctx.restoring.has(current.key)));
+      }
+      case 'plans': {
+        if (!opts.plans || !planVisible(u, current || next)) return false;
+        const pid = (current || next || {}).projectId;
+        if (current && next && (next.projectId !== current.projectId || next.month !== current.month)) return false;   // a plan stays with its client and month
+        if (!planEditor(u, pid)) return false;
+        if (!current && next) {
+          if (!pid || !/^\d{4}-\d{2}$/.test(String(next.month || '')) || next.createdBy !== u.id) return false;
+          if (store.list('plans').some((x) => x.id !== String(ch.id) && x.projectId === pid && x.month === next.month)) return false;   // one plan per client per month
+        }
+        return true;
       }
       case 'notifications':
         if (ch.del) return !current || current.to === u.id;
@@ -400,5 +426,5 @@ export function createAccess(store, opts = {}) {
     return CLAIM_CONTENT.every((k) => deepEqual(next[k], current[k]));
   }
 
-  return { userByEmail, isOwnerUser, isOffice, isSuper, canSee, canWrite, shape, ownOnly, ownView, addPeek, isFreelancer, isFinance, isAdm, finLevel, canReadFile, monthClosed };
+  return { isSocialMgr, planEditor, userByEmail, isOwnerUser, isOffice, isSuper, canSee, canWrite, shape, ownOnly, ownView, addPeek, isFreelancer, isFinance, isAdm, finLevel, canReadFile, monthClosed };
 }

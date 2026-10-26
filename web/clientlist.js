@@ -7,6 +7,8 @@
    renaming a client renames its Client Assets folder too (the folder on disk keeps its name). */
 const ClientList = (() => {
   const amList = () => db.users.filter((u) => u.active !== false && u.role === 'am').sort((a, b) => fullName(a).localeCompare(fullName(b)));
+  // (content plans trial) the Social Executives who make this client's plans: p.socials = [ids]
+  const socialList = () => db.users.filter((u) => u.active !== false && u.role === 'social').sort((a, b) => fullName(a).localeCompare(fullName(b)));
   const amsOf = (p) => (p.ams || []).filter((a) => userById(a.id));
   const isActive = (p) => !p.inactive;
 
@@ -19,6 +21,7 @@ const ClientList = (() => {
       name: p ? p.name : '',
       color: p ? p.color : (COLORS.find((c) => !used.has(c)) || COLORS[0]),
       ams: p ? amsOf(p).map((a) => ({ ...a })) : [],
+      socials: p ? (p.socials || []).filter((id) => userById(id)).map((id) => ({ id })) : [],
       active: p ? isActive(p) : true,
     };
     const root = $('#overlay-root');
@@ -31,6 +34,8 @@ const ClientList = (() => {
       <div class="swatches cd-sw">${COLORS.map((c) => `<button type="button" class="swatch ${c === st.color ? 'on' : ''}" data-cd-color="${c}" style="background:${c}" title="${c}"></button>`).join('')}</div>
       <div class="cd-amh"><label class="dlg-label">Account Managers</label><button type="button" class="btn ghost sm" data-cd="add-am">${icon('plus')}Add</button></div>
       <div class="cd-ams" id="cd-ams"></div>
+      ${Plans.on() ? `<div class="cd-amh"><label class="dlg-label">Social</label><button type="button" class="btn ghost sm" data-cd="add-social">${icon('plus')}Add</button></div>
+      <div class="cd-ams" id="cd-socials"></div>` : ''}
       <div class="cd-state"><div><b>Active client</b><span id="cd-state-txt"></span></div><button type="button" class="switch ${st.active ? 'on' : ''}" data-cd="active" aria-label="Active client"><i></i></button></div>
       ${isNew ? `<div class="dlg-hint">${icon('folder')}Its Client Assets folder (${DEFAULT_FOLDERS.join(', ')}) is made too.</div>` : ''}
       <div class="actions"><button type="button" class="btn" data-cd="close">Cancel</button><button type="submit" class="btn primary">${isNew ? 'Add client' : 'Save'}</button></div>
@@ -44,6 +49,12 @@ const ClientList = (() => {
         : '<div class="cd-none">No Account Manager yet</div>';
       const cover = st.ams.filter((a) => !a.onLeave).length;
       if (st.ams.length && !cover) $('#cd-ams', root).insertAdjacentHTML('beforeend', '<div class="cd-warn">Everyone here is on leave — add or switch on another Account Manager to cover.</div>');
+    };
+    const paintSocials = () => {
+      const box = $('#cd-socials', root); if (!box) return;
+      box.innerHTML = st.socials.length ? st.socials.map((a) => `<div class="cd-am">${avatarHTML(a.id, 28)}<span class="cd-am-n">${esc(fullName(userById(a.id)))}${isSocialMgr(a.id) ? '<small>Social Manager</small>' : ''}</span>
+          <button type="button" class="icon-btn sm" data-cd-srm="${a.id}" title="Remove">${icon('x')}</button></div>`).join('')
+        : `<div class="cd-none">No Social person yet${socialMgrIds().length ? ' — the Social Manager can still plan for this client' : ''}</div>`;
     };
     const paintState = () => { $('#cd-state-txt', root).textContent = st.active ? 'Shows in the sidebar and the client lists' : 'Hidden from everyone with its tasks, Client Assets and Finance history until switched back on'; };
     const check = () => {
@@ -64,7 +75,9 @@ const ClientList = (() => {
       if (b.dataset.cd === 'active') { st.active = !st.active; b.classList.toggle('on', st.active); paintState(); return; }
       if (b.dataset.cdLeave) { const a = st.ams.find((x) => x.id === b.dataset.cdLeave); a.onLeave = !a.onLeave; if (!a.onLeave) delete a.onLeave; paintAms(); return; }
       if (b.dataset.cdRm) { st.ams = st.ams.filter((x) => x.id !== b.dataset.cdRm); paintAms(); return; }
+      if (b.dataset.cdSrm) { st.socials = st.socials.filter((x) => x.id !== b.dataset.cdSrm); paintSocials(); return; }
       if (b.dataset.cd === 'add-am') { e.stopPropagation(); pickAms(b, st, paintAms); }
+      if (b.dataset.cd === 'add-social') { e.stopPropagation(); pickAms(b, st, paintSocials, 'socials'); }
     });
     form.addEventListener('submit', (e) => {
       e.preventDefault();
@@ -73,16 +86,17 @@ const ClientList = (() => {
       save(p, { ...st, name: inp.value.trim().replace(/\s+/g, ' ') });
       close();
     });
-    paintAms(); paintState(); check();
+    paintAms(); paintSocials(); paintState(); check();
     setTimeout(() => inp.focus(), 20);
   }
 
   // the list of Account Managers, with a search on top (like a task's assignees); tick several
-  function pickAms(anchor, st, done) {
+  function pickAms(anchor, st, done, key = 'ams') {
+    const pool = key === 'socials' ? socialList : amList, what = key === 'socials' ? 'Social people' : 'Account Managers';
     closeMenus();
     const pop = document.createElement('div');
     pop.className = 'menu asg-pop cd-pick';
-    pop.innerHTML = `<div class="ap-search">${icon('search')}<input placeholder="Search Account Managers…" autocomplete="off" spellcheck="false"></div><div class="ap-list"></div>`;
+    pop.innerHTML = `<div class="ap-search">${icon('search')}<input placeholder="Search ${what}…" autocomplete="off" spellcheck="false"></div><div class="ap-list"></div>`;
     document.body.appendChild(pop);
     const input = $('input', pop), list = $('.ap-list', pop);
     const place = () => {
@@ -93,10 +107,10 @@ const ClientList = (() => {
     };
     const draw = () => {
       const q = input.value.trim().toLowerCase();
-      const people = amList().filter((u) => !q || fullName(u).toLowerCase().includes(q) || u.email.toLowerCase().includes(q));
-      list.innerHTML = people.length ? people.map((u) => { const on = st.ams.some((a) => a.id === u.id); return `<div class="ap-item ${on ? 'on' : ''}" data-cd-am="${u.id}">
-          <span class="ap-av">${avatarHTML(u.id, 30)}</span><span class="ap-name">${esc(fullName(u))}</span>${on ? `<span class="cd-tick">${icon('check')}</span>` : ''}</div>`; }).join('')
-        : `<div class="ap-none">${amList().length ? `No Account Manager matches “${esc(input.value.trim())}”` : 'No Account Managers in the team yet'}</div>`;
+      const people = pool().filter((u) => !q || fullName(u).toLowerCase().includes(q) || u.email.toLowerCase().includes(q));
+      list.innerHTML = people.length ? people.map((u) => { const on = st[key].some((a) => a.id === u.id); return `<div class="ap-item ${on ? 'on' : ''}" data-cd-am="${u.id}">
+          <span class="ap-av">${avatarHTML(u.id, 30)}</span><span class="ap-name">${esc(fullName(u))}${key === 'socials' && isSocialMgr(u.id) ? ' <small>Social Manager</small>' : ''}</span>${on ? `<span class="cd-tick">${icon('check')}</span>` : ''}</div>`; }).join('')
+        : `<div class="ap-none">${pool().length ? `Nobody matches “${esc(input.value.trim())}”` : `No ${what} in the team yet`}</div>`;
       place();
     };
     const off = (e) => { if (!pop.contains(e.target)) { pop.remove(); document.removeEventListener('mousedown', off, true); document.removeEventListener('keydown', esc_, true); } };
@@ -105,7 +119,7 @@ const ClientList = (() => {
       e.stopPropagation();
       const it = e.target.closest('[data-cd-am]'); if (!it) return;
       const id = it.dataset.cdAm;
-      st.ams = st.ams.some((a) => a.id === id) ? st.ams.filter((a) => a.id !== id) : st.ams.concat({ id });
+      st[key] = st[key].some((a) => a.id === id) ? st[key].filter((a) => a.id !== id) : st[key].concat({ id });
       draw(); done(); input.focus();
     });
     input.addEventListener('input', draw);
@@ -116,9 +130,12 @@ const ClientList = (() => {
 
   function save(p, st) {
     const ams = st.ams.map((a) => (a.onLeave ? { id: a.id, onLeave: true } : { id: a.id }));
+    const socials = st.socials.map((a) => a.id);
+    const setSocials = (x) => { if (!Plans.on()) return; if (socials.length) x.socials = socials; else delete x.socials; };
     if (!p) {
       const np = createProject(st.name, st.color);
       np.ams = ams;
+      setSocials(np);
       if (!st.active) np.inactive = true;
       // its Client Assets folder (Logos, Brand Guidelines, Fonts, Files), linked; an existing one of that name is reused
       const c = dupClient(np.name) || createClient(np.name);
@@ -130,7 +147,7 @@ const ClientList = (() => {
       return;
     }
     const was = p.name;
-    p.name = st.name; p.color = st.color; p.ams = ams;
+    p.name = st.name; p.color = st.color; p.ams = ams; setSocials(p);
     if (st.active) delete p.inactive; else p.inactive = true;
     // the linked Client Assets folder takes the new name (unless another Client Assets folder already has it)
     const c = clientOfProject(p);

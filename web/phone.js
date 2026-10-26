@@ -5,7 +5,7 @@
 const Phone = (() => {
   const mq = window.matchMedia('(max-width: 760px)');
   const OWN = new Set(['home', 'today', 'mytasks', 'inbox', 'reviews', 'review', 'me', 'projects', 'project', 'psearch']);
-  const TITLES = { calendar: 'Content calendar', trash: 'Trash', profile: 'My profile', team: 'Team members', updates: 'App updates', clients: 'Client Assets', client: 'Client Assets' };
+  const TITLES = { calendar: 'Content calendar', plans: 'Content plans', trash: 'Trash', profile: 'My profile', team: 'Team members', updates: 'App updates', clients: 'Client Assets', client: 'Client Assets' };
   const st = { on: false, ibf: 'unread', q: '' };
 
   const isOn = () => st.on;
@@ -293,6 +293,7 @@ const Phone = (() => {
         ${row('data-nav="profile"', 'user', 'My profile', 'Photo, office and notifications')}
         ${isCD() ? row('data-ph-tab="projects"', 'folder', 'Clients') : ''}
         ${Cal.canSee() ? row('data-nav="calendar"', 'cal', 'Content calendar', 'Posts by day, channel and occasion') : ''}
+        ${Plans.canSee() ? row('data-nav="plans"', 'cal', 'Content plans', 'Each client’s month · trial') : ''}
         ${row('data-nav="clients"', 'assets', 'Client Assets', 'Logos, guidelines and fonts')}
         ${row('data-nav="team"', 'users', 'Team members')}
         ${isManager() ? row('data-nav="trash"', 'trash', 'Trash', trashList().length ? `${trashList().length} item${trashList().length === 1 ? '' : 's'} · restore within ${TRASH_DAYS} days` : `Deleted items wait here ${TRASH_DAYS} days`) : ''}
@@ -355,6 +356,7 @@ const Phone = (() => {
       const up = f && f.parentId ? cl.folders.find((x) => x.id === f.parentId) : null;
       back = up ? `data-action="open-cfolder" data-id="${up.id}"` : f ? `data-action="open-client" data-id="${cl.id}"` : 'data-nav="clients"';
     }
+    if (ui.view === 'plan') { const pl = Plans.planById(ui.planId), p = pl && proj(pl.projectId); title = p ? `${esc(p.name)} · ${esc(Plans.monthLabel(pl.month))}` : 'Content plan'; back = 'data-nav="plans"'; }
     if (ui.search) { title = 'Search'; back = 'data-ph-tab="today"'; }
     c.insertAdjacentHTML('afterbegin', backHead(title, back));
     pinHead(c);

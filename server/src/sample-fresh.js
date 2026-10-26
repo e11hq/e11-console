@@ -329,8 +329,54 @@ export function freshSample(store, me, filesRoot) {
   // a Client Assets update
   { const c = clientOf('p-kia'); const f = c && c.folders.find((x) => x.name === 'Logos'); if (f) [me, 'u-sara', 'u-ali'].filter(has).forEach((to, i) => notifs.push({ id: `smp-nas-${i}`, to, from: 'u-lina', kind: 'asset', clientId: c.id, folderId: f.id, text: `added a file to ${c.name} › Logos`, snippet: f.files[0] ? f.files[0].name : '', at: ago(5 + i), read: false })); }
 
-  // the Creative Director is Carine
-  out.meta = { ...(out.meta || {}), cdUserId: has(cd) ? cd : (out.meta || {}).cdUserId || null };
+  // ---------- content plans (trial): Aishwarya is Social Manager, Amelia the Social Executive on most clients ----------
+  const mgr = 'u-aish', exec = 'u-maya';
+  const SOCIALS = { 'p-ford': [exec], 'p-kia': [exec], 'p-alain': [exec], 'p-hre': [exec], 'p-asv': [exec], 'p-cpt': [exec], 'p-korea': [mgr], 'p-gm': [mgr], 'p-bizreh': [mgr] };
+  out.projects.forEach((p) => { const s = (SOCIALS[p.id] || []).filter(has); if (s.length) p.socials = s; });
+  out.plans = [];
+  if (has(exec) && has(mgr)) {
+    const nm = (() => { const d = new Date(today0); return new Date(d.getFullYear(), d.getMonth() + 1, 1); })();
+    const month = `${nm.getFullYear()}-${String(nm.getMonth() + 1).padStart(2, '0')}`;
+    const day = (n) => `${month}-${String(Math.min(n, new Date(nm.getFullYear(), nm.getMonth() + 1, 0).getDate())).padStart(2, '0')}`;
+    // the fixed-date occasions of that month (the app has the full list; these link a few posts to them)
+    const FIXED = { '01-01': ['newyear', 'New Year’s Day'], '02-14': ['valentine', 'Valentine’s Day'], '03-08': ['womensday', 'Women’s Day'], '03-21': ['mothersday', 'Mother’s Day'], '10-31': ['halloween', 'Halloween'], '11-30': ['commemoration', 'Commemoration Day'], '12-02': ['nationalday', 'UAE National Day'], '12-25': ['christmas', 'Christmas'], '12-31': ['nye', 'New Year’s Eve'] };
+    const occs = Object.entries(FIXED).filter(([md]) => md.slice(0, 2) === month.slice(5)).map(([md, [k, name]]) => ({ id: `${k}-${month.slice(0, 4)}`, day: `${month.slice(0, 4)}-${md}`, name }));
+    const refFile = (plId, key) => {
+      if (!filesRoot) return null;
+      try { const rel = `attachments/${plId}/${key}`; const size = putFile(rel, new URL(key, MEDIA)); return { id: `pr-${plId}-${key}`, name: key, path: rel, size, addedAt: ago(30) }; } catch (e) { return null; }
+    };
+    const mk = (pid, by, posts, startedHours) => {
+      const id = `pl-smp-${pid}`;
+      const pl = { id, projectId: pid, month, status: 'draft', createdBy: by, createdAt: ago(startedHours), updatedAt: ago(2), posts: [] };
+      posts.forEach((x, i) => {
+        const refs = (x.refs || []).map((k) => refFile(id, k)).filter(Boolean).concat((x.links || []).map((u, j) => ({ id: `pr-${id}-l${i}-${j}`, url: u, label: u.replace(/^https?:\/\/(www\.)?/, '').slice(0, 50) })));
+        pl.posts.push({ id: `pp-${id}-${i}`, day: x.day, title: x.title, desc: x.desc || '', format: x.format || 'post', channels: x.ch || ['ig'], occasion: x.occ || null, shots: x.shots || '', copyEn: x.en || '', copyAr: x.ar || '', refs, createdBy: by, createdAt: ago(startedHours - i), updatedAt: ago(startedHours - i) });
+      });
+      out.plans.push(pl);
+    };
+    const occ0 = occs[0], occ1 = occs[1];
+    const fordPosts = [
+      { day: day(1), title: 'Territory 2026 offer', format: 'post', ch: ['ig', 'fb'], desc: 'Monthly offer post for the Territory: hybrid and petrol side by side, offer lockup in the red band.', en: 'Territory 2026. Start the month in a new Ford, from AED 1,670 a month. Book your test drive today. T&Cs apply.', ar: 'تيريتوري 2026. ابدأ الشهر بسيارة فورد جديدة، بدفعات تبدأ من 1,670 درهم شهرياً. احجز تجربة القيادة اليوم.', shots: 'Approved key visual, resized 4:5 and 9:16.', refs: ['cu42.png', 'cu43.jpg'] },
+      { day: day(4), title: 'Everest features', format: 'carousel', ch: ['ig'], desc: '5 slides: one feature per slide (towing, 4x4 modes, cabin, safety, offer).', en: 'Built for every road you take. Swipe to see what makes the Everest ready for anything.', shots: 'Studio stills of each feature; end slide with the offer.', links: ['https://www.instagram.com/fordmiddleeast/'] },
+      { day: day(7), title: 'Buy now, pay in 2027', format: 'post', ch: ['ig', 'fb', 'li'], desc: 'Year-end sale headline post, sunset skyline visual.', en: 'Buy now, pay later. Drive home a new Ford today and start paying next year.', refs: ['cu09.jpg'] },
+      { day: day(9), title: 'Test drive day', format: 'reel', ch: ['ig', 'tt'], desc: 'Fast-cut reel of customers on a test drive at the Sheikh Zayed Road showroom.', shots: '1. Keys handed over (2s)\n2. Driver’s smile, close-up (2s)\n3. Car pulling out, wide (3s)\n4. Highway, drone (5s)\n5. End card with the offer (3s)', en: 'Your next drive starts here. Book a test drive this weekend.' },
+      { day: day(14), title: 'Family SUVs', format: 'carousel', ch: ['ig', 'fb'], desc: 'Explorer, Expedition and Everest for families: space, seats, safety.' },
+      { day: day(18), title: 'Desert drive', format: 'reel', ch: ['ig', 'tt', 'yt'], desc: 'Bronco in the dunes at golden hour.', shots: 'Drone follow, low tracking shot, sand spray close-up.', links: ['https://www.tiktok.com/@ford'] },
+    ];
+    if (occ0) fordPosts.push({ day: occ0.day, title: occ0.name, format: 'reel', ch: ['ig', 'tt'], occ: occ0.id, desc: `A short film for ${occ0.name}: the road and the people.`, en: `Happy ${occ0.name} from Ford UAE.` });
+    mk('p-ford', exec, fordPosts, 50);
+    mk('p-alain', exec, [
+      { day: day(3), title: 'Tower at night', format: 'reel', ch: ['ig', 'tt'], desc: 'The tower lit up, slow push-in.', refs: ['cu04.jpg'] },
+      { day: day(10), title: 'Weekend events', format: 'carousel', ch: ['ig', 'fb'], desc: 'What’s on this weekend, one event per slide.' },
+      { day: day(21), title: 'Food court favourites', format: 'post', ch: ['ig'] },
+    ].concat(occ1 ? [{ day: occ1.day, title: occ1.name, format: 'post', ch: ['ig', 'fb'], occ: occ1.id }] : []), 30);
+    mk('p-korea', mgr, [
+      { day: day(5), title: 'K-food week', format: 'reel', ch: ['ig', 'tt'], desc: 'Tasting reel at the food stalls.' },
+      { day: day(12), title: 'K-beauty corner', format: 'post', ch: ['ig'] },
+    ], 20);
+  }
+  // the Creative Director is Carine; Aishwarya is Social Manager (content plans trial)
+  out.meta = { ...(out.meta || {}), cdUserId: has(cd) ? cd : (out.meta || {}).cdUserId || null, ...(has('u-aish') ? { socialMgrIds: ['u-aish'] } : {}) };
   const ids = new Set([me, ...out.users.map((u) => u.id), ...store.list('users').map((u) => u.id)]);
   out.notifications = notifs.filter((x) => ids.has(x.to));
   return out;

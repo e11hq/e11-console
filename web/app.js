@@ -1625,6 +1625,7 @@ function normalize(d) {
   d.trash = Array.isArray(d.trash) ? d.trash : [];
   d.finance = Array.isArray(d.finance) ? d.finance : [];
   d.claims = Array.isArray(d.claims) ? d.claims : [];
+  d.plans = Array.isArray(d.plans) ? d.plans : [];
   // Statuses for tasks that are not in a project
   d.statuses = Array.isArray(d.statuses) && d.statuses.length ? d.statuses : [
     { id: 'st-todo', name: 'To do', color: '#87909e' }, { id: 'st-progress', name: 'In progress', color: '#a875ff' },
@@ -1875,7 +1876,7 @@ function mergeSets(base, mine, theirs) {
 }
 
 const Sync = (() => {
-  const KINDS = ['users', 'projects', 'tasks', 'clients', 'notifications', 'statuses', 'trash', 'meta', 'finance', 'claims'];
+  const KINDS = ['users', 'projects', 'tasks', 'clients', 'notifications', 'statuses', 'trash', 'meta', 'finance', 'claims', 'plans'];
   const clientId = 'c-' + uid() + uid();
   const synced = {};               // kind -> Map(id -> JSON the server has)
   KINDS.forEach((k) => { synced[k] = new Map(); });
@@ -2168,10 +2169,11 @@ function renderSidebar() {
   updateAppBadge();
   { const add = document.querySelector('.nav-heading [data-action="new-project"]'); if (add) add.style.display = isAdmin() ? '' : 'none'; }   // only Admins add clients
   if (typeof Season !== 'undefined') { const u = currentUserId && db && me(); Season.sync(u ? !!(u.prefs || {}).seasonOff : undefined); }
-  $$('.nav-item[data-nav]').forEach((a) => a.classList.toggle('active', !ui.search && (ui.view === a.dataset.nav || (a.dataset.nav === 'clients' && ui.view === 'client'))));
+  $$('.nav-item[data-nav]').forEach((a) => a.classList.toggle('active', !ui.search && (ui.view === a.dataset.nav || (a.dataset.nav === 'clients' && ui.view === 'client') || (a.dataset.nav === 'plans' && ui.view === 'plan'))));
   Fin.paintNav();
   { const cc = $('#clients-count'); const n = (db.clients || []).filter(caVisible).length; if (cc) cc.textContent = n ? String(n) : ''; }
   { const cn = $('#nav-calendar'); if (cn) cn.style.display = Cal.canSee() ? '' : 'none'; }
+  { const pn = $('#nav-plans'); if (pn) pn.style.display = Plans.canSee() ? '' : 'none'; }
   { const tn = $('#nav-trash'); if (tn) { tn.style.display = isManager() ? '' : 'none'; $('#trash-count').textContent = trashList().length ? String(trashList().length) : ''; } }
   const mt = Work.home().filter((t) => Work.homeOpen(t) && t.due && dayDiff(t.due) <= 0).length;
   $('#mytasks-count').textContent = mt ? String(mt) : '';
@@ -2205,6 +2207,7 @@ function renderTitle() {
   if (Fin.owns(ui.view)) { el.innerHTML = Fin.title(); return; }
   if (Claims.owns(ui.view)) { el.innerHTML = Claims.title(); return; }
   if (Cal.owns(ui.view)) { el.innerHTML = Cal.title(); return; }
+  if (Plans.owns(ui.view)) { el.innerHTML = Plans.title(); return; }
   if (ClientList.owns(ui.view)) { el.innerHTML = ClientList.title(); return; }
   if (ui.search) { el.innerHTML = `<div class="page-title">Search</div>`; return; }
   if (ui.view === 'home') { el.innerHTML = `<div class="page-title">Home</div>`; return; }
@@ -2250,6 +2253,7 @@ function renderContent() {
   if (Fin.owns(ui.view)) { Fin.render(c); c.scrollTop = scroll.top; return; }
   if (Claims.owns(ui.view)) { Claims.render(c); return; }
   if (Cal.owns(ui.view)) { if (!Cal.canSee()) { ui.view = 'home'; return renderContent(); } Cal.render(c); if (typeof Phone !== 'undefined') Phone.decorate(c); c.scrollTop = scroll.top; return; }
+  if (Plans.owns(ui.view)) { Plans.render(c); if (typeof Phone !== 'undefined') Phone.decorate(c); c.scrollTop = scroll.top; return; }
   if (ClientList.owns(ui.view)) { ClientList.render(c); c.scrollTop = scroll.top; return; }
   if (ui.search) c.innerHTML = viewSearch();
   else if (ui.view === 'home') c.innerHTML = viewHome();
@@ -3177,6 +3181,7 @@ const TEAM_LABEL = { admin: 'Super Admin', office_admin: 'Office Admin', am: 'Ac
 function designationOf(u) {
   if (!u) return '';
   if (u.id === cdUserId()) return cdActing() ? `Acting Creative Director · ${TEAM_LABEL[u.role] || ''}` : 'Creative Director';
+  if (isSocialMgr(u.id)) return 'Social Manager';
   return TEAM_LABEL[u.role] || '';
 }
 let cardTimer = null, cardHideTimer = null, cardFor = null;
@@ -5761,9 +5766,12 @@ document.addEventListener('drop', (e) => {
 const cdUserId = () => { const id = db && db.meta.cdUserId; const u = id && userById(id); return u && u.active !== false ? id : null; };
 const isCD = (id = currentUserId) => !!id && id === cdUserId();
 const cdActing = () => !!(db && db.meta.cdActing && cdUserId());
+// Social Manager(s) (content plans trial): Social people an Admin picks on the Team page; they can make any client's plan
+const socialMgrIds = () => ((db && db.meta.socialMgrIds) || []).filter((id) => { const u = userById(id); return u && u.active !== false && u.role === 'social'; });
+const isSocialMgr = (id = currentUserId) => typeof Plans !== 'undefined' && Plans.on() && !!id && socialMgrIds().includes(id);
 const cdTitle = () => (cdActing() ? 'Acting CD' : 'Creative Director');
 // How a person's role reads anywhere in the app: whoever is the CD is described as the Creative Director (or Acting CD)
-const roleOf = (u) => (u && u.id === cdUserId() ? cdTitle() : (u && (ROLES[u.role] || u.role)) || '');
+const roleOf = (u) => (u && u.id === cdUserId() ? cdTitle() : u && isSocialMgr(u.id) ? 'Social Manager' : (u && (ROLES[u.role] || u.role)) || '');
 const roleCls = (u) => (u && u.id === cdUserId() ? 'cd' : u ? u.role : '');
 // Who can be assigned to a task: Production, Social, Freelancers and the Creative Director (or the Acting CD) —
 // never Account Managers, Admins or Finance people
@@ -6685,6 +6693,7 @@ function viewTeam() {
       <div><span class="role-pill r-am">Account Manager</span> Can do everything except add or manage team members.</div>
       <div><span class="role-pill r-freelancer">Freelancer</span> Same as Production, but only sees the clients an Admin chooses for them, plus those clients’ Client Assets. Can sign in with a personal email (Gmail, Outlook…).</div>
       <div><span class="role-pill r-production">Production</span> <span class="role-pill r-social">Social</span> Can update status, submit files for CD review, tick checklist items, add tags, files and comments. Social can also write and change the description, add checklist items, and set a post’s Channel, Go-live and Occasion. Can’t create or delete tasks/subtasks, change dates, rename or remove checklist items (Production can’t add them either), change title, client or priority, assign people or remove tags.</div>
+      ${Plans.on() ? '<div><span class="role-pill r-social">Social Manager</span> A Social person picked in the ••• menu. Can start and edit any client’s content plan (Social Executives: the clients they’re set on in the client pop-up). Trial on the test site.</div>' : ''}
       <div><span class="role-pill r-finance_admin">Finance only</span> Only sees the Finance pages (Dashboard, Clients, Expenses) — no tasks app. As Admin they add subscriptions, reimbursements and expenses; as Viewer they only look.</div>
       <div><span class="role-pill r-admin">+ Super Admin</span> <span class="role-pill r-finance_admin">+ Finance Admin / Viewer</span> Extras anyone can have on top of their role (••• menu): full Super Admin rights, or the Finance pages. A task’s Finance status is set by Account Managers and Admins.</div>
     </div>
@@ -6827,6 +6836,13 @@ function memberMenu(anchor, id) {
   } }));
   items.push('-');
   if (u.role === 'freelancer') items.push({ label: 'Clients they can see…', icon: 'folder', run: () => projectAccessDialog(u) });
+  // (content plans trial) a Social person can be the Social Manager: they make or edit any client's plan
+  if (u.role === 'social' && u.active !== false && Plans.on()) items.push({ html: `<div class="mi">${icon('users')}Social Manager${isSocialMgr(u.id) ? `<span class="wf-ck">${icon('check')}</span>` : ''}</div>`, run: () => {
+    const on = isSocialMgr(u.id);
+    db.meta.socialMgrIds = on ? socialMgrIds().filter((x) => x !== u.id) : socialMgrIds().concat(u.id);
+    persist(0); renderContent(); renderSidebar();
+    toast(on ? `${fullName(u)} is no longer Social Manager` : `${fullName(u)} is now Social Manager — they can make or edit any client’s content plan`);
+  } });
   if (u.active === false) items.push({ label: 'Restore access', icon: 'user', run: () => { u.active = true; persist(); renderContent(); } });
   else {
     if (!Host.isServer) items.push({ label: 'Reset password…', icon: 'lock', run: () => resetPasswordFlow(u) });

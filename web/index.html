@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="home.css">
 <link rel="stylesheet" href="claims.css">
 <link rel="stylesheet" href="calendar.css">
+<link rel="stylesheet" href="plans.css">
 <link rel="stylesheet" href="season.css">
 <link rel="stylesheet" href="clientlist.css">
 <link rel="stylesheet" href="viewas.css">
@@ -98,6 +99,7 @@ try { var m = JSON.parse(localStorage.getItem('e11-splash') || '{}') || {}, h = 
       <a class="nav-item" data-nav="today"><span class="ic" data-icon="sun"></span>My Day<span class="count" id="today-count"></span></a>
       <a class="nav-item" data-nav="mytasks"><span class="ic" data-icon="check-circle"></span>My Tasks<span class="count" id="mytasks-count"></span></a>
       <a class="nav-item" data-nav="calendar" id="nav-calendar" style="display:none"><span class="ic" data-icon="cal"></span>Content calendar</a>
+      <a class="nav-item" data-nav="plans" id="nav-plans" style="display:none"><span class="ic" data-icon="cal"></span>Content plans</a>
     </nav>
     <div class="nav-heading"><span>Clients</span><button class="icon-btn sm" data-action="new-project" title="New client"><span class="ic" data-icon="plus"></span></button></div>
     <div id="project-list" class="nav"></div>
@@ -137,6 +139,7 @@ try { var m = JSON.parse(localStorage.getItem('e11-splash') || '{}') || {}, h = 
 
 <script src="season.js"></script>
 <script src="calendar.js"></script>
+<script src="plans.js"></script>
 <script src="home.js"></script>
 <script src="office.js"></script>
 <script src="app.js"></script>
