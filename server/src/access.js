@@ -277,6 +277,7 @@ export function createAccess(store, opts = {}) {
         if (isOffice(u)) return !ch.del && !!current && !!next && finLevel(u) === 'admin' && Object.keys({ ...current, ...next }).every((k) => ['finance', 'financeAt', 'financeBy', 'updatedAt'].includes(k) || deepEqual(next[k] ?? null, (was || {})[k] ?? null) || deepEqual(next[k] ?? null, current[k] ?? null));
         if (!manager && next && !deepEqual(next.finance ?? null, (was && was.finance) ?? null)) return false;
         if ((current && inInactive(current)) || (next && inInactive(next))) return false;   // an inactive client's tasks are frozen
+        if (current && next && !cdGateOk(current, next)) return false;
         if (isFreelancer(u)) return (!current || taskVisible(u, current)) && (ch.del || taskVisible(u, next));
         if (ownOnly(u) && current && !taskVisible(u, current)) return false;
         if (ownOnly(u) && current && ownView(u).peek.has(String(current.id))) return commentOnly(u, ch.base || current, current, next);
@@ -302,6 +303,28 @@ export function createAccess(store, opts = {}) {
       default:
         return true;
     }
+  }
+
+  // CD review on and the files not approved: the task doesn't move past Review (CTR, Done or later) or get completed —
+  // also with nobody assigned. Only a task done by the CD alone needs no approval. Switching CD review off is the way out.
+  const isDoneName = (n) => /^(done|complete|completed)$/i.test(String(n || '').trim());
+  function pastReview(t, sectionId) {
+    const p = t.projectId && store.get('projects', String(t.projectId));
+    const list = (p && p.sections) || store.list('statuses');
+    const to = list.findIndex((x) => x.id === sectionId), sec = list[to];
+    if (!sec) return false;
+    if (/^ctr$/i.test(String(sec.name).trim()) || isDoneName(sec.name)) return true;
+    const rv = list.findIndex((x) => /^(internal )?review$/i.test(String(x.name).trim()));
+    return rv >= 0 && to > rv;
+  }
+  function cdGateOk(current, next) {
+    if (next.parentId || !next.needsCD || next.cdStatus === 'approved') return true;
+    const cd = (store.get('meta', 'main') || {}).cdUserId || null;
+    const people = next.assignees || [];
+    if (people.length && people.every((id) => id === cd)) return true;
+    if (next.done && !current.done) return false;
+    if (next.sectionId !== current.sectionId && pastReview(next, next.sectionId) && !pastReview(current, current.sectionId)) return false;
+    return true;
   }
 
   // a view-only task: only comments change — your own added, edited or removed, and reactions on anyone's

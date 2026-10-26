@@ -1410,6 +1410,7 @@ const CD_LOCK_MSG = 'CD Status can be set once the task moves out of To Do';
 // Main tasks can be completed only when the status is Done and CD Status is Approved
 const canComplete = (t) => !!t.parentId || (!!sectionOf(t) && isDoneName(sectionOf(t).name) && cdOK(t));
 function completeBlockedMsg(t) {
+  if (needsCD(t) && !cdOK(t)) return CD_WAIT_MSG(t);
   const s = sectionOf(t);
   const needDone = !(s && isDoneName(s.name)), needCD = !cdOK(t);
   return 'To mark complete, ' + [needDone ? 'set the status to Done' : '', needCD ? 'the Creative Director needs to approve the files' : ''].filter(Boolean).join(' and ');
@@ -4208,7 +4209,8 @@ async function attachFiles(target = 'task', replyTo = null) {
 function statusMenu(anchor) {
   const t = task(ui.taskId);
   const items = [];
-  statusList(t).forEach((st) => items.push({ html: `<div class="mi ${!t.done && t.sectionId === st.id ? 'cur' : ''}" data-mi="${items.length}"><span class="sw" style="background:${st.color}"></span>${esc(st.name)}</div>`, run: () => { changeStatus(t, st.id); } }));
+  const cdWait = !t.parentId && needsCD(t) && !cdOK(t);   // (statuses past Review wait for the CD's approval)
+  statusList(t).forEach((st) => { const lock = cdWait && t.sectionId !== st.id && pastReview(t, st.id); items.push({ html: `<div class="mi ${!t.done && t.sectionId === st.id ? 'cur' : ''} ${lock ? 'mi-locked' : ''}" data-mi="${items.length}" ${lock ? `title="${esc(CD_WAIT_MSG(t))}"` : ''}><span class="sw" style="background:${st.color}"></span>${esc(st.name)}${lock ? `<span class="mi-lock">${icon('lock')}</span>` : ''}</div>`, run: () => { changeStatus(t, st.id); } }); });
   items.push('-');
   if (t.done || canComplete(t)) items.push({ html: `<div class="mi ${t.done ? 'cur' : ''}" data-mi="${items.length}"><span class="sw" style="background:#3ddc97"></span>${t.done ? 'Complete' : 'Mark complete'}</div>`, run: () => { setDone(t, !t.done); commit(); } });
   else items.push({ html: `<div class="mi-note">${icon('lock')}${esc(completeBlockedMsg(t))}</div>` });
@@ -5677,7 +5679,18 @@ const iReview = (t) => needsCD(t) && isMine(t) && !isCD();
 // Files can be submitted once the task has left To Do
 const canSubmitNow = (t) => !t.done && !cdLocked(t);
 const soloReview = (t) => (t.assignees || []).length === 1 && reviewersOf(t).length === 1;
-const cdOK = (t) => !needsCD(t) || t.cdStatus === 'approved' || reviewersOf(t).length === 0;
+// CD review on: nothing moves past Review or completes until the CD approves — also with nobody assigned yet (switch CD
+// review off if it really isn't needed). Only a task done by the CD alone needs no approval (their own work).
+const cdOK = (t) => !needsCD(t) || t.cdStatus === 'approved' || ((t.assignees || []).length > 0 && reviewersOf(t).length === 0);
+const CD_WAIT_MSG = (t) => ((t.assignees || []).length ? 'Waiting for the Creative Director’s approval — the status can’t go past Review yet' : 'Assign someone and get the Creative Director’s approval, or turn off CD review');
+// a status past Review (CTR, Done or anything after Review in the list)
+function pastReview(t, sectionId) {
+  const list = statusList(t), to = list.findIndex((x) => x.id === sectionId), s = list[to];
+  if (!s) return false;
+  if (SEC_CTR.test(String(s.name).trim()) || isDoneName(s.name)) return true;
+  const rv = list.findIndex((x) => SEC_REVIEW.test(String(x.name).trim()));
+  return rv >= 0 && to > rv;
+}
 const secNamed = (t, re) => statusList(t).find((s) => re.test(String(s.name).trim()));
 const SEC_PROGRESS = /^in ?-?progress$/i, SEC_REVIEW = /^(internal )?review$/i, SEC_CTR = /^ctr$/i;
 function allReviews() {
@@ -5821,6 +5834,7 @@ async function changeStatus(t, sectionId, targetId = null, after = false) {
   if (!t) return false;
   if (amReadOnly(t)) { toast(roMsg()); return false; }
   if (t.sectionId !== sectionId && statusLocked(t)) { toast(LOCK_MSG); return false; }
+  if (t.sectionId !== sectionId && !t.parentId && needsCD(t) && !cdOK(t) && pastReview(t, sectionId)) { toast(CD_WAIT_MSG(t)); render({ keepDetail: true }); return false; }
   const list = statusList(t);
   const from = list.findIndex((x) => x.id === t.sectionId), to = list.findIndex((x) => x.id === sectionId);
   const fromS = list[from], toS = list[to];
