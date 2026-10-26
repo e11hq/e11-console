@@ -189,7 +189,7 @@ const Phone = (() => {
       const n = items[0];
       const t = task(n.taskId);
       const unread = items.some((x) => !x.read);
-      const target = items.find((x) => /^review/.test(x.kind) && !x.read) || n;   // (opens what the row shows)
+      const target = ibTarget(items);   // (opens what the row shows: the newest, or an unread one needing action)
       return `<div class="ph-ib ${unread ? 'unread' : ''}" data-action="open-notif" data-id="${target.id}">
         ${avatarHTML(target.from, 40)}
         <span class="ph-ib-b"><span class="ph-ib-m">${notifMsg(target, t)}</span>
@@ -735,15 +735,35 @@ const Push = (() => {
   }, true);
 
   // Opening the app from a notification
-  function openFrom(taskId, nid) {
-    const go = () => {
-      ui.sideTab = 'details';
-      if (nid && db.notifications.some((n) => n.id === nid)) { openNotif(nid); return; }
-      if (taskId && !nid) return TaskLink.open(taskId); // a shared link: may hand over to the Mac app
-      if (taskId && task(taskId)) openTask(taskId);
+  // The update a notification is about may not have reached the app yet (it was asleep, or is still catching up):
+  // go to the right kind of page straight away, then open the update itself as soon as it arrives (up to ~8 s).
+  function openFrom(taskId, nid, hint = {}) {
+    const has = () => nid && db.notifications.some((n) => n.id === nid);
+    const byKind = () => {
+      const k = hint.kind || '';
+      if ((k === 'review' || k === 'review-wd') && isCD()) { if (ui.taskId) closeDetail(); go('reviews'); return true; }
+      if (k === 'asset' && hint.clientId && clientById(hint.clientId)) { const c = clientById(hint.clientId); openClient(c.id, c.folders.some((x) => x.id === hint.folderId) ? hint.folderId : null); return true; }
+      if (/^claim/.test(k)) { Claims.openNotif({ kind: k }); return true; }
+      return false;
     };
-    if (typeof db !== 'undefined' && db && currentUserId) return go();
-    const iv = setInterval(() => { if (typeof db !== 'undefined' && db && currentUserId) { clearInterval(iv); setTimeout(go, 300); } }, 250);
+    const start = () => {
+      ui.sideTab = 'details';
+      if (has()) { openNotif(nid); return; }
+      if (taskId && !nid) return TaskLink.open(taskId); // a shared link: may hand over to the Mac app
+      // meanwhile: the right page for its kind, or the task (on Comments for a comment, @mention or amendments)
+      if (!byKind() && taskId && task(taskId)) {
+        if (['comment', 'mention', 'review-amend'].includes(hint.kind) && hint.commentId) ui.sideTab = ui.forceTab = 'comments';
+        openTask(taskId);
+      }
+      if (!nid) return;
+      const t0 = Date.now(), here = () => `${ui.view}|${ui.taskId || ''}`, was = here();
+      const wait = setInterval(() => {
+        if (here() !== was || Date.now() - t0 > 8000) clearInterval(wait);   // (they moved on themselves, or it never came)
+        else if (has()) { clearInterval(wait); openNotif(nid); }
+      }, 250);
+    };
+    if (typeof db !== 'undefined' && db && currentUserId) return start();
+    const iv = setInterval(() => { if (typeof db !== 'undefined' && db && currentUserId) { clearInterval(iv); setTimeout(start, 300); } }, 250);
     setTimeout(() => clearInterval(iv), 30000);
   }
   // a notification that opens a page (occasion reminders open the Content calendar)
@@ -756,9 +776,9 @@ const Push = (() => {
     setTimeout(() => clearInterval(iv), 30000);
   }
   const q = new URLSearchParams(location.search);
-  if (q.get('task') || q.get('n')) { openFrom(q.get('task'), q.get('n')); history.replaceState(null, '', '/'); }   // (an update without a task, e.g. Client Assets, has only n)
+  if (q.get('task') || q.get('n')) { openFrom(q.get('task'), q.get('n'), { kind: q.get('k'), clientId: q.get('c'), folderId: q.get('f') }); history.replaceState(null, '', '/'); }   // (an update without a task, e.g. Client Assets, has only n)
   else if (q.get('view')) { openView(q.get('view')); history.replaceState(null, '', '/'); }
-  if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.type === 'open-task') openFrom(e.data.taskId, e.data.nid); if (e.data && e.data.type === 'open-view') openView(e.data.view); });
+  if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.type === 'open-task') openFrom(e.data.taskId, e.data.nid, e.data.hint || {}); if (e.data && e.data.type === 'open-view') openView(e.data.view); });
 
   return { row, refresh, profileRow };
 })();

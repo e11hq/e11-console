@@ -76,6 +76,13 @@ async def main():
               persist(0); await Sync.push(); return t.id; }""", info['c'])
             await pg.evaluate(f"openTask('{tid}')"); await pg.wait_for_timeout(700)
             check(await pg.locator('#detail [data-action="client-approved"]').count() == 1, 'Client approved button for the Admin')
+            # the row follows the task's CD Status for the current round
+            rows = await pg.evaluate("""(() => { const p = db.projects[0]; const s = statusList({ projectId: p.id })[1];
+              const a = createTask({ projectId: p.id, sectionId: s.id, title: 'Approved without a submission' }); a.needsCD = true; a.cdStatus = 'approved'; a.assignees = [];
+              const b = createTask({ projectId: p.id, sectionId: s.id, title: 'Sent back for a new round' }); b.needsCD = true; b.cdStatus = ''; b.reviewEpoch = 1;
+              b.reviews = [{ id: 'old-r', by: currentUserId, at: nowISO(), files: [], state: 'approved', decidedAt: nowISO(), epoch: 0, round: 1 }];
+              return [!!clientApprovalRow(a), !!clientApprovalRow(b)]; })()""")
+            check(rows == [True, False], 'Client approval row: shown when CD Approved (even without a submission), hidden while a new round waits', rows)
             await pg.locator('#detail .done-btn[data-action="toggle"]').first.click(); await pg.wait_for_timeout(400)
             check(await pg.locator('.choice-dlg h2', has_text='Did the client approve?').count() == 1, 'completing asks: Did the client approve?')
             await pg.locator('.choice-dlg button', has_text='Yes, today').click(); await pg.wait_for_timeout(2500)

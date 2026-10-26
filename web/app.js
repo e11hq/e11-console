@@ -370,6 +370,7 @@ const TaskLink = (() => {
     toast(ok ? 'Link copied — it opens in the E11 Console app, or the browser' : 'Could not copy the link');
   }
   async function show(id) {
+    if (isOffice()) { officeNoTasks(); return; }
     ui.sideTab = 'details';
     // not one of theirs (Production / Freelancers): ask the server to let them read it, then reload the data
     if (!task(id) && ownSearchOnly()) {
@@ -3523,7 +3524,10 @@ function autosize(el) {
   el.style.height = el.scrollHeight + 2 + 'px';
 }
 
+// An Office Admin has no task pages (with Finance access they get only the tasks' Finance view): links to a task stay on Home
+function officeNoTasks() { if (ui.view !== 'home' && !Fin.owns(ui.view)) go('home'); toast('Tasks aren’t part of the Office Admin view'); }
 function openTask(id, focusTitle) {
+  if (isOffice()) { officeNoTasks(); return; }
   flushEdit();
   const pendingThread = ui.pendingThread; ui.pendingThread = null;
   // A task always opens on its Details tab, unless something asked for a tab on purpose (e.g. an Inbox mention → Comments)
@@ -6036,8 +6040,10 @@ function setClientApproval(t, v) {
   else { t.clientApproval = { ...v, by: currentUserId, at: nowISO() }; logActivity(t, v.none ? 'noted that <b>client approval isn’t needed</b>' : 'recorded the <b>client’s approval</b>'); }
   t.updatedAt = nowISO();
 }
+// (shown once the task's CD Status is Approved for the current round — also when it was approved without a submission)
+const cdApprovedNow = (t) => !t.parentId && t.cdStatus === 'approved';
 function clientApprovalRow(t) {
-  if (t.parentId || !hasApproved(t)) return '';
+  if (!cdApprovedNow(t)) return '';
   const ca = t.clientApproval, fresh = clientApprovalFresh(t), can = canClientApprove(t) && !t.done;
   const state = ca && fresh ? (ca.none ? `<span class="ca-ap muted">Not needed</span>` : `<span class="ca-ap ok" title="${esc(fmtDateTime(ca.at))}">${icon('check')}Approved · ${esc(firstName(ca.by))} · ${esc(new Date(ca.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))}</span>`)
     : `<span class="ca-ap muted">${ca ? 'Out of date — new files were approved since' : 'Not recorded yet'}</span>`;
@@ -6048,7 +6054,7 @@ function clientApprovalRow(t) {
 }
 // Completing a task with CD-approved files and no client approval recorded asks once (the answer goes with the final files)
 async function askClientApproval(t) {
-  if (t.done || t.parentId || !hasApproved(t) || clientApprovalFresh(t)) return true;
+  if (t.done || !cdApprovedNow(t) || clientApprovalFresh(t)) return true;
   const ans = await choiceDialog({ title: 'Did the client approve?', body: 'Saved with the final files in Client Assets.',
     choices: [{ label: 'Cancel', value: null }, { label: 'Not needed', value: 'none' }, { label: 'Yes, today', value: 'yes', primary: true }] });
   if (!ans) return false;
@@ -6385,10 +6391,8 @@ function viewInbox() {
   const row = ({ latest: n, items }) => {
     const t = task(n.taskId);
     const unread = items.some((x) => !x.read);
-    const isRev = (x) => /^review/.test(x.kind);
-    // opens what the row shows: an unread review on the task first (the row then shows it), otherwise the latest update
-    const target = items.find((x) => isRev(x) && !x.read) || n;
-    const shown = isRev(target) ? target : n;
+    // opens what the row shows: an unread update that needs action first, otherwise the newest
+    const target = ibTarget(items), shown = target;
     const lead = ['comment', 'mention', 'review-amend', 'review-ok', 'review', 'claim', 'claim-ok', 'claim-paid', 'asset'].includes(shown.kind) ? avatarHTML(shown.from, 22) : `<span class="ib-kic">${icon(NOTIF_ICON[shown.kind] || 'bell')}</span>`;
     return `<div class="ib-row ${unread ? 'unread' : ''}" data-action="open-notif" data-id="${target.id}">
       <span class="ib-title">${n.kind === 'asset' ? `<span class="st-ic ib-coin">${icon('assets')}</span><span class="ib-tname">${esc(assetTitle(n))}</span>` : `${t ? statusIcon(t) : /^claim/.test(n.kind) ? `<span class="st-ic ib-coin">${icon('coin')}</span>` : `<span class="st-ic">${statusIconSVG('#87909e', 'todo', 0)}</span>`}<span class="ib-tname">${t ? esc(t.title || 'Untitled task') : /^claim/.test(n.kind) ? 'Expense claims' : '<i>Deleted task</i>'}</span>`}</span>
@@ -6449,6 +6453,10 @@ function clearTaskNotifs(taskId, read) {
   myNotifs().forEach((n) => { if (notifKey(n) === taskId) n.read = read; });
   persist(); renderSidebar(); renderContent();
 }
+// An Inbox row (one per task) shows and opens the newest update, except that an unread one needing action stays on
+// top: files waiting for the CD's review, and amendments requested from you
+const IB_ACTION = new Set(['review', 'review-amend']);
+const ibTarget = (items) => items.find((x) => IB_ACTION.has(x.kind) && !x.read) || items.reduce((a, b) => (String(b.at) > String(a.at) ? b : a));
 function openNotif(id) {
   const n = db.notifications.find((x) => x.id === id);
   if (!n) return;

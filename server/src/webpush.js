@@ -104,5 +104,6 @@ export function notifMessage(store, n) {
   const name = from ? (from.name || String(from.email || '').split('@')[0]) : 'E11 Console';
   const body = `${strip(n.text)}${t ? ` “${t.title || 'Untitled task'}”` : ''}${n.snippet ? ' — ' + strip(n.snippet) : ''}`;
   const unread = store.list('notifications').filter((x) => x.to === n.to && !x.read).length;
-  return { title: name, body: body.slice(0, 300), taskId: n.taskId || null, nid: n.id, tag: n.taskId || n.id, badge: unread };
+  // (kind and place travel with it, so a tap opens the right page even before the update reaches the app)
+  return { title: name, body: body.slice(0, 300), taskId: n.taskId || null, nid: n.id, tag: n.taskId || n.id, badge: unread, kind: n.kind || null, clientId: n.clientId || null, folderId: n.folderId || null, commentId: n.commentId || null };
 }
