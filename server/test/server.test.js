@@ -287,7 +287,7 @@ test('import replaces the first-sign-in Admin account with the same person from 
   await a2.close(); fs.rmSync(d2, { recursive: true, force: true });
 });
 
-test('Client Assets: anyone adds folders and files, removes only their own; folders made with the client are Admin-only', async () => {
+test('Client Assets: anyone adds files (folders on the main page: Admins and AMs), removes only their own; folders made with the client are Admin-only', async () => {
   const push = (who, data, base) => call(who, '/api/push', { method: 'POST', body: { changes: [{ kind: 'clients', id: 'cl-ca', data, ...(base ? { base } : {}) }] } });
   const at = '2026-10-25T08:00:00.000Z';
   const logos = { id: 'f-logos', name: 'Logos', dir: 'Clients/CA/Logos', files: [], createdAt: at, createdBy: 'u-admin', auto: true };
@@ -296,7 +296,10 @@ test('Client Assets: anyone adds folders and files, removes only their own; fold
   // Production adds a folder and a file
   const mine = { id: 'f-mine', name: 'Social templates', dir: 'Clients/CA/Social templates', files: [{ id: 'a1', name: 'a.png', path: 'Clients/CA/Social templates/a.png', addedBy: 'u-prod' }], createdAt: at, createdBy: 'u-prod' };
   const withMine = { ...c, folders: [logos, mine] };
-  assert.ok(!(await push(PROD, withMine, c)).body.results[0].refused, 'Production adds a folder with a file');
+  // Production can't make a folder on the client's main page (Admins and AMs do; others add theirs inside Files);
+  // one they made before that rule (put here by an Admin) is still theirs
+  assert.equal((await push(PROD, withMine, c)).body.results[0].refused, true, 'Production can’t add a folder on the main page');
+  assert.ok(!(await push(ADMIN, withMine, c)).body.results[0].refused, 'an Admin can');
   // the AM adds a file to Logos
   const logos2 = { ...logos, files: [{ id: 'a2', name: 'logo.svg', path: 'Clients/CA/Logos/logo.svg', addedBy: 'u-am' }] };
   const withAm = { ...withMine, folders: [logos2, mine] };
@@ -314,7 +317,7 @@ test('Client Assets: anyone adds folders and files, removes only their own; fold
   // an AM removes anyone's file and anyone's added folder, but not the folders made with the client
   const am2 = await push(AM, { ...withAm, folders: [logos2] }, withAm);
   assert.ok(!am2.body.results[0].refused, "an AM removes Production's folder");
-  await push(PROD, withAm, { ...withAm, folders: [logos2] });   // (Production puts it back for the next checks)
+  await push(ADMIN, withAm, { ...withAm, folders: [logos2] });   // (put back for the next checks)
   // the AM removes their own file; Production removes their own folder
   const noAmFile = { ...withAm, folders: [{ ...logos2, files: [] }, mine] };
   assert.ok(!(await push(AM, noAmFile, withAm)).body.results[0].refused, 'AM removes their own file');

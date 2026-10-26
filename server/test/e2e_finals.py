@@ -26,7 +26,7 @@ async def main():
             info = await pg.evaluate("""(() => { const c = clientsSorted().find(c => db.projects.some(p => p.clientId === c.id) && c.folders.some(f => isFilesTop(c, f)));
               const files = c.folders.find(f => isFilesTop(c, f)); return { c: c.id, files: files.id, loose: files.files.length }; })()""")
             await pg.evaluate(f"openClient('{info['c']}', '{info['files']}')"); await pg.wait_for_timeout(600)
-            check(await pg.locator('[data-action="ca-upload"]').count() == 0 and await pg.locator('.cfo-head [data-action="add-cfolder"]').count() == 1, 'Files: New folder, no Upload files')
+            check(await pg.locator('[data-action="ca-upload"]').count() == 0 and await pg.locator('.cfo-head [data-action="add-cfolder"]').count() == 1 and await pg.locator('.cf-grid .cf-card.add[data-action="add-cfolder"]').count() == 1, 'Files: New folder button and a New folder card, no Upload files')
             await pg.locator('.cfo-head [data-action="add-cfolder"]').click(); await pg.wait_for_timeout(300)
             await pg.locator('#overlay-root input').first.fill('Summer shoot'); await pg.keyboard.press('Enter'); await pg.wait_for_timeout(500)
             sub = await pg.evaluate(f"(() => {{ const c = clientById('{info['c']}'); const f = c.folders.find(f => f.name === 'Summer shoot'); return f && {{ id: f.id, parent: f.parentId, dir: f.dir }}; }})()")

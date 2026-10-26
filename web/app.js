@@ -5266,7 +5266,7 @@ function viewClient(c) {
     </div>`;
   const folders = topFolders(c).map((f) => folderCard(c, f)).join('');
   const grid = `<div class="cf-grid">${folders}
-      ${canAddAssets() ? `<div class="cf-card add" data-action="add-cfolder"><div class="cf-ic">${icon('plus')}</div><div class="cf-name">New folder</div><div class="cf-meta">For anything else</div></div>` : ''}
+      ${canAssets() ? `<div class="cf-card add" data-action="add-cfolder"><div class="cf-ic">${icon('plus')}</div><div class="cf-name">New folder</div><div class="cf-meta">For anything else</div></div>` : ''}
     </div>`;
   const q = ui.caScope === c.id ? ui.caQ : '';
   return `<div class="ca-page">${head}
@@ -5407,7 +5407,7 @@ function viewClientFolder(c, f) {
   const count = top ? `${subs.length} folder${subs.length === 1 ? '' : 's'}` : `${f.files.length} file${f.files.length === 1 ? '' : 's'}`;
   // (Files from before folders went inside it: still shown, and still downloadable — new ones go in a folder)
   const files = f.files.length ? `${top ? '<h4 class="ca-rh">Other files</h4>' : ''}<div class="tile-grid ca-files">${f.files.slice().sort((a, b) => a.name.localeCompare(b.name)).map((a) => caTile(f, a)).join('')}</div>` : '';
-  const empty = top ? (subs.length || f.files.length ? '' : `<div class="ca-empty">${icon('folder')}<b>No folders yet</b><span>${canAddAssets() ? 'Make a folder for each job. Final files of finished tasks are filed here too.' : 'Final files of finished tasks are filed here.'}</span></div>`)
+  const empty = top ? (subs.length || f.files.length || canAddAssets() ? '' : `<div class="ca-empty">${icon('folder')}<b>No folders yet</b><span>${canAddAssets() ? 'Make a folder for each job. Final files of finished tasks are filed here too.' : 'Final files of finished tasks are filed here.'}</span></div>`)
     : f.files.length ? '' : `<div class="ca-empty ${up ? 'drop' : ''}">${icon(up ? 'upload' : 'folder')}<b>${up ? 'Drag files here or click Upload files' : 'Nothing in this folder yet'}</b><span>${f.finalOf ? 'The final files are filed here when the task is completed.' : up ? 'Logos, guideline PDFs, fonts, templates — any file type.' : 'The E11 team adds files here.'}</span></div>`;
   return `<div class="ca-page ca-folder" data-folder="${f.id}">
     ${fonts.length ? `<style>${fonts.map((a) => `@font-face{font-family:'caf-${a.id}';src:url("${fileUrl(a)}");}`).join('')}</style>` : ''}
@@ -5422,7 +5422,8 @@ function viewClientFolder(c, f) {
       ${up ? `<button class="btn primary" data-action="ca-upload">${icon('upload')}Upload files</button>` : ''}
     </div>
     <div class="ca-uploads" id="ca-uploads"></div>
-    ${subs.length ? `<div class="cf-grid">${subs.slice().sort((a, b) => !!a.finalOf - !!b.finalOf || String(b.createdAt || '').localeCompare(String(a.createdAt || ''))).map((x) => folderCard(c, x)).join('')}</div>` : ''}
+    ${subs.length || (top && canAddAssets()) ? `<div class="cf-grid">${subs.slice().sort((a, b) => !!a.finalOf - !!b.finalOf || String(b.createdAt || '').localeCompare(String(a.createdAt || ''))).map((x) => folderCard(c, x)).join('')}
+      ${top && canAddAssets() ? `<div class="cf-card add" data-action="add-cfolder" data-parent="${f.id}"><div class="cf-ic">${icon('plus')}</div><div class="cf-name">New folder</div><div class="cf-meta">One for each job</div></div>` : ''}</div>` : ''}
     ${files}${empty}
     ${up ? `<div class="ca-dropscrim">${icon('upload')}<b>Drop to upload to ${esc(f.name)}</b></div>` : ''}
   </div>`;
@@ -5544,6 +5545,7 @@ const folderDup = (c, name, exceptId, parentId) => c.folders.find((f) => f.id !=
 async function addFolderFlow(c, parent = null) {
   if (!canAddAssets()) return denied();
   if (parent && !isFilesTop(c, parent)) return;
+  if (!parent && !canAssets()) return toast('New folders here are made by Admins and Account Managers — add yours inside Files');
   const pid = parent ? parent.id : null;
   const v = await formDialog({ title: `New folder in ${parent ? c.name + ' › ' + parent.name : c.name}`, fields: [{ key: 'name', label: 'Folder name', placeholder: parent ? 'e.g. Summer campaign shoot' : 'e.g. Social templates' }], okText: 'Create folder',
     validate: (x) => (!x.name ? 'Enter a folder name' : folderDup(c, x.name, null, pid) ? `There is already a folder named “${folderDup(c, x.name, null, pid).name}”.` : null) });

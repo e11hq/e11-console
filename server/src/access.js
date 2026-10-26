@@ -164,6 +164,7 @@ export function createAccess(store, opts = {}) {
     for (const [id, n] of now) {
       if (was.has(id) || there.has(id)) continue;
       if (n.createdBy !== u.id || n.auto || n.finalOf) return false; // a new folder is yours
+      if (!n.parentId && !manager) return false;                    // a folder on the client's main page: Admins and AMs
       if (n.parentId) {                                             // a sub-folder: only one level, only inside Files
         const parent = (current.folders || []).find((x) => x.id === n.parentId);
         if (!parent || !isFilesTop(parent, current)) return false;

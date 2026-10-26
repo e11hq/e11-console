@@ -68,6 +68,8 @@ test('folder rules: no loose files in Files or in a final folder; sub-folders on
   assert.equal(await push(PROD, 'clients', 'cl-ford', (c) => { c.folders.find((x) => x.finalOf).name = 'Mine'; return c; }), true, 'rename a final folder');
   const sub = (pid, id) => (c) => { c.folders.push({ id, name: 'Shoot day', dir: 'Clients/Ford/Files/Shoot day', files: [], createdAt: at(0), createdBy: 'u-p', parentId: pid }); return c; };
   assert.equal(await push(PROD, 'clients', 'cl-ford', sub('cf-logos', 'cf-bad')), true, 'sub-folder in Logos');
+  assert.equal(await push(PROD, 'clients', 'cl-ford', (c) => { c.folders.push({ id: 'cf-root', name: 'Mine', dir: 'Clients/Ford/Mine', files: [], createdAt: at(0), createdBy: 'u-p' }); return c; }), true, 'a folder on the client’s main page: Admins and AMs only');
+  assert.equal(await push('carine@e11-digital.com', 'clients', 'cl-ford', (c) => { c.folders.push({ id: 'cf-root2', name: 'Social templates', dir: 'Clients/Ford/Social templates', files: [], createdAt: at(0), createdBy: 'u-cd' }); return c; }), false, 'an Account Manager makes one');
   assert.equal(await push(PROD, 'clients', 'cl-ford', sub('cf-files', 'cf-shoot')), false, 'sub-folder in Files');
   assert.equal(await push(PROD, 'clients', 'cl-ford', sub('cf-shoot', 'cf-deep')), true, 'only one level');
   assert.equal(await push(PROD, 'clients', 'cl-ford', addFile('cf-shoot')), false, 'files go in the sub-folder');
