@@ -431,7 +431,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     probe("page", wait + """
       await new Promise((r) => setTimeout(r, 1500));
       const info = await NativeMac.call('appInfo');
-      return JSON.stringify({ ios: document.documentElement.classList.contains('ios-app'), phone: !!(window.Phone && Phone.on), isIOSApp: Host.isIOSApp, isMacApp: Host.isMacApp,
+      return JSON.stringify({ ios: document.documentElement.classList.contains('ios-app'), phone: typeof Phone !== 'undefined' && !!Phone.on, isIOSApp: Host.isIOSApp, isMacApp: Host.isMacApp,
         webTabsShown: getComputedStyle(document.getElementById('ph-tabs')).display !== 'none', view: ui.view, appInfo: info,
         top: getComputedStyle(document.documentElement).getPropertyValue('--ph-top'), unknown: await NativeMac.call('nope').then(() => 'answered').catch((e) => e.message) });
       """) {
