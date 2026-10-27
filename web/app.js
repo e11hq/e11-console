@@ -345,9 +345,13 @@ const ProfileAsk = (() => {
       <div class="pa-btns"><button class="btn sm primary" data-pa="1">Go to My profile</button><button class="btn sm ghost" data-pa="0">Not now</button></div></div>`;
     document.body.appendChild(el);
     requestAnimationFrame(() => el.classList.add('in'));
+    const gone = () => { clearInterval(watch); el.classList.remove('in'); setTimeout(() => el.remove(), 300); };
+    // it moves out of the way as soon as you start working (another page or a task opened), or after 20 s
+    const view0 = ui.view, t0 = Date.now();
+    const watch = setInterval(() => { if (!el.isConnected) return clearInterval(watch); if (ui.view !== view0 || ui.taskId || Date.now() - t0 > 20000) gone(); }, 300);
     el.addEventListener('click', (e) => {
       const b = e.target.closest('[data-pa]'); if (!b) return;
-      el.classList.remove('in'); setTimeout(() => el.remove(), 300);
+      gone();
       if (b.dataset.pa === '1') { if (ui.taskId) closeDetail(); go('profile'); }
     });
   }
