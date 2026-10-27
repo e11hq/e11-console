@@ -350,15 +350,11 @@ const AppIcon = (() => {
     if (autoBusy || !info || !info.auto) return;
     autoBusy = true;
     try {
-      const sid = autoSeason(todayStr()), key = 'auto-' + (sid || 'none');
+      // no season this week: the everyday (default) icon, applied as before
+      const sid = autoSeason(todayStr()), key = sid ? 'auto-' + sid : 'def-' + (info.def || '0');
       if (lsGet() !== key) {
-        if (sid) {
-          const r = await fetch(`icons/seasonal/${sid}.png`, { cache: 'no-store', credentials: 'same-origin' });
-          if (r.ok) { await NativeMac.call('setIcon', { b64: await toB64(await r.blob()) }); lsSet(key); }
-        } else {
-          await NativeMac.call('setIcon', { reset: true });
-          lsSet(key);
-        }
+        const r = await fetch(sid ? `icons/seasonal/${sid}.png` : '/api/app-icon?v=' + encodeURIComponent(info.v), { cache: 'no-store', credentials: 'same-origin' });
+        if (r.ok) { await NativeMac.call('setIcon', { b64: await toB64(await r.blob()) }); lsSet(key); }
       }
       applied = info.v;
     } catch (e) { /* try again next hour */ }

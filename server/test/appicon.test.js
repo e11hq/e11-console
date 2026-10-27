@@ -71,3 +71,20 @@ test('app icon: reset goes back to the default with a new version', async () => 
   const inst = Buffer.from(await (await fetch(base + '/install/AppIcon.png')).arrayBuffer());
   assert.equal(inst.length, fs.readFileSync(path.join(macDir, 'AppIcon.png')).length);
 });
+
+test('app icon: Automatic by default; a seasonal pick remembers which one; Automatic again on request (owner only)', async () => {
+  const b64 = png(512, 512).toString('base64');
+  await call(OWNER, '/api/app-icon/auto', {});
+  let i = await (await call(OWNER, '/api/app-icon/info')).json();
+  assert.equal(i.auto, true);
+  assert.equal(i.custom, false);
+  i = await (await call(OWNER, '/api/app-icon', { png: b64, preset: 'ramadan' })).json();
+  assert.equal(i.auto, false); assert.equal(i.preset, 'ramadan'); assert.equal(i.custom, true);
+  i = await (await call(OWNER, '/api/app-icon', { png: b64, preset: '../x' })).json();
+  assert.equal(i.preset, null, 'only simple names are kept');
+  assert.equal((await call(AM, '/api/app-icon/auto', {})).status, 403);
+  i = await (await call(OWNER, '/api/app-icon/reset', {})).json();
+  assert.equal(i.auto, false, 'Everyday is a choice of its own');
+  i = await (await call(OWNER, '/api/app-icon/auto', {})).json();
+  assert.equal(i.auto, true); assert.equal(i.preset, null);
+});
