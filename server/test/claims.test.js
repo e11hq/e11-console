@@ -8,7 +8,8 @@ import { execFileSync } from 'node:child_process';
 import { createServer } from '../src/server.js';
 
 let app, base, dir;
-const now = new Date();
+// (the calendar day in Dubai, like the server's rule — not this machine's own time zone)
+const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Dubai' }));
 const ym = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 // an open month (claims for it close on the 28th) and a closed one
 const OPEN = now.getDate() >= 28 ? ym(new Date(now.getFullYear(), now.getMonth() + 1, 1)) : ym(now);

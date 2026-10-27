@@ -179,7 +179,7 @@ export function sampleData(store, me, filesRoot = null) {
 
     // ---------- Expense claims (My reimbursements / Finance → Staff reimbursements) ----------
     {
-      const today = new Date();
+      const today = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Dubai' }));   // (Dubai's day, like the closing rule)
       const ymdL = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
       const cm = today.getDate() >= 28 ? ymdL(new Date(today.getFullYear(), today.getMonth() + 1, 1)) : ymdL(today);
       const pm = ymdL(new Date(Number(cm.slice(0, 4)), Number(cm.slice(5)) - 2, 1));
