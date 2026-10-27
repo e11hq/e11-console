@@ -2187,6 +2187,8 @@ const Sync = (() => {
         remember(res.kind, res.id, res.data);
         // Keep anything typed while this save was on its way, on top of the server's merged version
         const local = localOf(res.kind, res.id);
+        // deleted here while its save was on the way (e.g. a new task deleted at once): it stays deleted; the next save removes it
+        if (!local && mine && !mine.del && !res.refused && res.kind !== 'meta') { again = true; return; }
         const next = res.refused || !mine || mine.del ? res.data : merge3(mine.data, local ? JSON.parse(JSON.stringify(local)) : null, res.data);
         if (!deepEqual(local && JSON.parse(JSON.stringify(local)), next)) { setLocal(res.kind, res.id, next); touched = true; }
       });
