@@ -18,7 +18,7 @@ const Sched = (() => {
   const fmtLongDay = (ms) => new Date(ms).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', ...TZ });
   const when = (ms) => `${fmtDay(ms)} · ${fmtTime(ms)}`;
   const outside = (ms) => { const p = dub(ms), mins = p.h * 60 + p.mi; return p.dow === 0 || p.dow === 6 || mins < START * 60 || mins > END * 60; };
-  const NOTE = 'Outside office hours (9 AM–6 PM, Mon–Fri)';
+  const NOTE = 'Outside office hours (Mon–Fri, 9–6)';
   const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
   const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
   const SVG = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
@@ -159,7 +159,7 @@ const Sched = (() => {
     const q = (st.q || '').trim();
     if (q) {
       const ms = parse(q);
-      return ms ? `<div class="sc-res"><button type="button" class="sc-hit" data-sc-at="${ms}">${icon('cal')}<span><b>${esc(fmtLongDay(ms))} · ${esc(fmtTime(ms))}</b><small>${esc(rel(ms))}</small></span><kbd>↵ Schedule</kbd></button>${noteHTML(ms)}</div>`
+      return ms ? `<div class="sc-res"><button type="button" class="sc-hit" data-sc-at="${ms}">${icon('cal')}<span><b>${esc(when(ms))}</b><small>${esc(rel(ms))}</small></span><kbd>↵ Schedule</kbd></button>${noteHTML(ms)}</div>`
         : '<div class="sc-res"><p class="sc-hint">Try “tomorrow 10am”, “in 3 hours”, “next Monday” or “5 Nov 4pm”.</p></div>';
     }
     return `<div class="sc-list">${quick(now).map((x) => `<button type="button" class="sc-q" data-sc-at="${x.ms}"><span class="sc-qi">${QI[x.k]}</span><span class="sc-ql">${x.l}</span><span class="sc-qt">${x.short ? fmtTime(x.ms) : `${wd(x.ms)}, ${fmtTime(x.ms)}`}${outside(x.ms) ? '<i>Outside office hours</i>' : ''}</span></button>`).join('')}</div>${calHTML()}`;
@@ -362,4 +362,47 @@ const Sched = (() => {
 
   window.addEventListener('resize', () => place());
   return { open, close, parse, quick, outside, when, feedHTML, reclaim, openCancelled, _dub: dub };
+})();
+
+/* ================= Pin to brief =================
+   A task's description is locked once it goes for CD review (idLocked in app.js), so changes to the brief go in
+   comments. Any comment can be pinned from its ••• menu ("Pin to brief"): pinned comments show as "Brief updates"
+   under the description, with who and when, and a click jumps to the comment. A pinned comment can't be edited
+   (the server refuses it too). Whoever pinned it, an Account Manager or an Admin can unpin it. */
+const Brief = (() => {
+  const pins = (t) => (t && t.briefPins) || [];
+  const isPinned = (t, cid) => pins(t).some((p) => p.cid === cid);
+  function pinMenu(t, c) {
+    if (!t || !c) return [];
+    const p = pins(t).find((x) => x.cid === c.id);
+    if (p) return p.by === currentUserId || isManager() ? [{ label: 'Unpin from brief', icon: 'pushpin', run: () => { t.briefPins = pins(t).filter((x) => x.cid !== c.id); t.updatedAt = nowISO(); commit(); } }, '-'] : [];
+    return [{ label: 'Pin to brief', icon: 'pushpin', run: () => {
+      t.briefPins = pins(t).concat({ cid: c.id, by: currentUserId, at: nowISO() });
+      logActivity(t, 'pinned a comment to the brief');
+      t.updatedAt = nowISO(); commit();
+      toast('Pinned under the description as a brief update');
+    } }, '-'];
+  }
+  function pinsHTML(t) {
+    const list = pins(t).map((p) => ({ p, c: (t.comments || []).find((c) => c.id === p.cid) })).filter((x) => x.c)
+      .sort((a, b) => String(a.c.at).localeCompare(String(b.c.at)));
+    if (!list.length) return '';
+    return `<div class="brief-pins"><div class="bp-h">${icon('pushpin')}<b>Brief updates</b><span>${list.length}</span></div>
+      ${list.map(({ p, c }) => `<button type="button" class="bp-row" data-bp="${esc(c.id)}">${avatarHTML(c.authorId, 22)}<span class="bp-b">
+        <span class="bp-m"><b>${esc(c.authorId === currentUserId ? 'You' : fullName(userById(c.authorId)))}</b> · ${esc(fmtShort(c.at))}${p.by !== c.authorId ? ` <i>· pinned by ${esc(p.by === currentUserId ? 'you' : firstName(p.by))}</i>` : ''}</span>
+        <span class="bp-t">${esc(trunc(c.text || `${(c.attachments || []).length} file${(c.attachments || []).length === 1 ? '' : 's'}`, 240))}</span></span></button>`).join('')}</div>`;
+  }
+  // a click on a brief update: its comment in the comments (in its thread if it's a reply)
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest && e.target.closest('[data-bp]');
+    if (!b) return;
+    e.preventDefault(); e.stopPropagation();
+    const t = task(ui.taskId); if (!t) return;
+    const c = (t.comments || []).find((x) => x.id === b.dataset.bp); if (!c) return;
+    ui.sideTab = 'comments'; ui.activityFilter = 'comments'; ui.replyTo = null;
+    ui.thread = c.parentId || null;
+    renderDetail();
+    setTimeout(() => focusCommentInFeed(c.id), 30);
+  }, true);
+  return { isPinned, pinMenu, pinsHTML };
 })();

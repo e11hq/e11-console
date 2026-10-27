@@ -325,6 +325,7 @@ export function createAccess(store, opts = {}) {
         if (!manager && next && !deepEqual(next.finance ?? null, (was && was.finance) ?? null)) return false;
         if ((current && inInactive(current)) || (next && inInactive(next))) return false;   // an inactive client's tasks are frozen
         if (current && next && !cdGateOk(current, next)) return false;
+        if (current && next && !identityOk(current, next, ch.base)) return false;
         if (isFreelancer(u)) return (!current || taskVisible(u, current)) && (ch.del || taskVisible(u, next));
         if (ownOnly(u) && current && !taskVisible(u, current)) return false;
         if (ownOnly(u) && current && ownView(u).peek.has(String(current.id))) return commentOnly(u, ch.base || current, current, next);
@@ -416,6 +417,33 @@ export function createAccess(store, opts = {}) {
       default:
         return true;
     }
+  }
+
+  // Once a task first goes for CD review its name, description and client (and its subtasks' names) are locked for
+  // everyone, so it can't be turned into another job; pinned brief updates (comments) can't be edited either
+  function idLocked(t) {
+    const root = t && t.parentId ? store.get('tasks', String(t.parentId)) || t : t;
+    return !!root && (!!root.lockedAt || (root.reviews || []).length > 0);
+  }
+  function identityOk(current, next, base) {
+    if (!idLocked(current)) return true;
+    const was = base && typeof base === 'object' ? base : current;
+    const changed = (a, b, k) => !deepEqual(a[k] ?? null, b[k] ?? null);
+    const edited = (k) => changed(next, current, k) && changed(next, was, k);
+    if (['title', 'notes', 'notesHtml'].some(edited)) return false;
+    if (!current.parentId && edited('projectId')) return false;
+    if (current.lockedAt && !next.lockedAt) return false;
+    const pinned = new Set((current.briefPins || []).map((p) => p.cid));
+    if (pinned.size) {
+      const now = new Map((current.comments || []).map((c) => [c.id, c]));
+      const old = new Map(((was.comments) || []).map((c) => [c.id, c]));
+      for (const c of next.comments || []) {
+        if (!pinned.has(c.id) || !now.has(c.id)) continue;
+        const a = now.get(c.id), b = old.get(c.id) || a;
+        if ((changed(c, a, 'text') && changed(c, b, 'text')) || (changed(c, a, 'html') && changed(c, b, 'html'))) return false;
+      }
+    }
+    return true;
   }
 
   // CD review on and the files not approved: the task doesn't move past Review (CTR, Done or later) or get completed —

@@ -76,7 +76,7 @@ test('folder rules: no loose files in Files or in a final folder; folders inside
   assert.equal(await push(PROD, 'clients', 'cl-ford', (c) => { c.folders.push({ id: 'cf-fake', name: 'Fake', dir: 'Clients/Ford/Files/Fake', files: [], createdAt: at(0), createdBy: 'u-p', parentId: 'cf-files', finalOf: 't1' }); return c; }), true, 'nobody makes a final folder by hand');
 });
 
-test('reopened and completed again: the newest approved files replace the old ones (to the Trash); the folder follows the title', async () => {
+test('reopened and completed again: the newest approved files replace the old ones (to the Trash); the task can’t be renamed', async () => {
   put('attachments/t1/edit-v3.mp4', 'video v3');
   assert.equal(await push(ADMIN, 'tasks', 't1', (t) => { t.done = false; t.completedAt = null; t.attachments.push({ id: 'a4', name: 'edit.mp4', path: 'attachments/t1/edit-v3.mp4', size: 8, reviewId: 'r4' });
     t.reviews.push({ id: 'r4', by: 'u-p', at: at(5), files: ['a4'], state: 'approved', decidedAt: at(4), decidedBy: 'u-cd' }); return t; }), false);
@@ -86,8 +86,10 @@ test('reopened and completed again: the newest approved files replace the old on
   assert.equal(client().folders.filter((x) => x.finalOf === 't1').length, 1, 'same folder');
   const tr = app.store.list('trash').filter((x) => x.type === 'cafile' && x.data.folderId === f.id);
   assert.deepEqual(tr.map((x) => x.data.file.final.srcId), ['a2'], 'v2 is in the Trash');
-  assert.equal(await push(ADMIN, 'tasks', 't1', { title: 'Ramadan reel — final' }), false);
-  assert.equal(finalsOf('t1').name, 'Ramadan reel — final');
+  // (a task that went for CD review can't be renamed any more, so its final files folder keeps its name)
+  const name = finalsOf('t1').name;
+  assert.equal(await push(ADMIN, 'tasks', 't1', { title: 'Ramadan reel — final' }), true, 'renaming is refused');
+  assert.equal(finalsOf('t1').name, name);
 });
 
 test('tasks without approved files, or not linked to a client, file nothing', async () => {

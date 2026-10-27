@@ -2569,13 +2569,15 @@ body.phone .us-acts .btn.ghost { height: 44px; }
 body.phone .us-note { display: none; }
 
 /* Scheduled comments (schedule.js): Send / Reply with a ⌄, the scheduler pop-up, waiting comments in the task */
-.send-split { display: inline-flex; border-radius: 7px; flex: none; }
-.send-split .btn { border-radius: 0; margin: 0; }
-.send-split .btn:first-child { border-radius: 7px 0 0 7px; gap: 6px; padding-left: 9px; padding-right: 10px; }
+.send-split { display: inline-flex; align-items: stretch; flex: none; height: 28px; border-radius: 8px; background: var(--btn); border: 1px solid var(--accent-strong); overflow: hidden; }
+.send-split .btn, .send-split .btn:hover { height: 100%; margin: 0 !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; background: transparent !important; color: #fff !important; }
+.send-split .btn:hover { background: rgba(255, 255, 255, .12) !important; }
+.send-split .btn:first-child { gap: 6px; padding: 0 10px 0 10px; }
 .send-split .btn:first-child .ic { width: 13px; height: 13px; }
-.send-split .sc-chev { border-radius: 0 7px 7px 0; border-left: 1px solid rgba(255, 255, 255, .32) !important; padding: 0 6px; min-width: 26px; justify-content: center; }
+.send-split .sc-chev { position: relative; padding: 0 8px; min-width: 28px; justify-content: center; }
+.send-split .sc-chev::before { content: ''; position: absolute; left: 0; top: 6px; bottom: 6px; width: 1px; background: rgba(255, 255, 255, .45); }
 .send-split .sc-chev .ic { width: 12px; height: 12px; }
-.sc-pop { position: fixed; z-index: 80; width: 300px; box-sizing: border-box; border-radius: 12px; background: var(--panel); border: 1px solid var(--border-strong); box-shadow: 0 22px 50px rgba(0, 0, 0, .35); color: var(--text); overflow: hidden; font-size: 13.5px; }
+.sc-pop { position: fixed; z-index: 80; width: 310px; box-sizing: border-box; border-radius: 12px; background: var(--panel); border: 1px solid var(--border-strong); box-shadow: 0 22px 50px rgba(0, 0, 0, .35); color: var(--text); overflow: hidden; font-size: 13.5px; }
 .sc-pop .sr, .sc-pop label > .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .sc-top { padding: 10px; border-bottom: 1px solid var(--border); }
 .sc-top input { width: 100%; box-sizing: border-box; height: 34px; padding: 0 11px; border-radius: 8px; background: var(--sidebar); border: 1px solid var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); color: var(--text); font: inherit; outline: none; }
@@ -2606,10 +2608,11 @@ body.phone .us-note { display: none; }
 .sc-res { padding: 6px; display: flex; flex-direction: column; gap: 6px; }
 .sc-hit { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 46px; padding: 6px 10px; border: 0; border-radius: 8px; background: var(--accent-soft); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
 .sc-hit > .ic { color: var(--accent-ink); }
-.sc-hit span { flex: 1; display: flex; flex-direction: column; }
-.sc-hit b { font-weight: 600; }
+.sc-hit > .ic { flex: none; width: 18px; height: 18px; }
+.sc-hit > span:not(.ic) { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.sc-hit b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sc-hit small { color: var(--text-2); font-size: 12px; }
-.sc-hit kbd { font: inherit; font-size: 11px; color: var(--accent-ink); border: 1px solid var(--accent-line); border-radius: 5px; padding: 1px 6px; white-space: nowrap; }
+.sc-hit kbd { flex: none; font: inherit; font-size: 11px; color: var(--accent-ink); border: 1px solid var(--accent-line); border-radius: 5px; padding: 1px 6px; white-space: nowrap; }
 .sc-hint { margin: 4px 6px 6px; font-size: 12.5px; color: var(--text-2); line-height: 1.5; }
 .sc-note { display: flex; align-items: center; gap: 6px; margin: 0 4px; padding: 6px 8px; border-radius: 7px; background: rgba(224, 163, 58, .12); color: #e0a33a; font-size: 12px; }
 :root[data-theme="light"] .sc-note, :root[data-theme="light"] .sc-qt i { color: #9a6200; }
@@ -2649,3 +2652,26 @@ body.phone .us-note { display: none; }
 .sc-lf > span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sc-lf .ic { width: 13px; height: 13px; flex: none; }
 .us-acts .btn .ic { width: 14px; height: 14px; margin-right: 6px; }
+
+/* Task identity lock (app.js idLocked) and brief updates (schedule.js Brief) */
+.d-title.locked { cursor: default; }
+.id-lock { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 2px 0 14px; padding: 8px 10px; border-radius: 9px; background: var(--raised); border: 1px solid var(--border); font-size: 12.5px; color: var(--text-2); }
+.id-lock > .ic { width: 14px; height: 14px; color: var(--text-3); }
+.id-lock > span { flex: 1; min-width: 200px; line-height: 1.45; }
+.id-lock a, .id-from a { color: var(--accent-ink); text-decoration: none; font-weight: 550; }
+.id-lock a:hover, .id-from a:hover { text-decoration: underline; }
+.id-lock .btn .ic { width: 12px; height: 12px; margin-right: 4px; }
+.id-from { display: flex; align-items: center; gap: 6px; margin: 2px 0 12px; font-size: 12.5px; color: var(--text-3); }
+.id-from .ic { width: 13px; height: 13px; }
+.brief-pins { margin: 10px 0 4px; border: 1px solid var(--accent-line); border-radius: 12px; background: var(--accent-soft); padding: 8px; display: flex; flex-direction: column; gap: 2px; }
+.bp-h { display: flex; align-items: center; gap: 7px; padding: 2px 6px 6px; font-size: 12px; color: var(--accent-ink); text-transform: uppercase; letter-spacing: .05em; }
+.bp-h b { font-weight: 650; }
+.bp-h span { font-weight: 600; opacity: .75; }
+.bp-h .ic { width: 14px; height: 14px; }
+.bp-row { display: flex; align-items: flex-start; gap: 10px; width: 100%; padding: 8px; border: 0; border-radius: 8px; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.bp-row:hover { background: var(--panel); }
+.bp-b { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.bp-m { font-size: 12px; color: var(--text-3); }
+.bp-m b { color: var(--text); font-weight: 600; }
+.bp-m i { font-style: normal; }
+.bp-t { font-size: 13.5px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }

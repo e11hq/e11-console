@@ -67,6 +67,7 @@ const ICONS = {
   download: '<path d="M8 2.7v7.7M4.9 7.4 8 10.5l3.1-3.1M2.8 10.2v2.2c0 .5.4.9.9.9h8.6c.5 0 .9-.4.9-.9v-2.2"/>',
   clock: '<circle cx="8" cy="8" r="5.8"/><path d="M8 4.8V8l2.2 1.5"/>',
   copy: '<rect x="5.4" y="5.4" width="8" height="8.2" rx="1.5"/><path d="M10.6 5.4V3.8c0-.6-.4-1-1-1H3.8c-.6 0-1 .4-1 1v5.8c0 .6.4 1 1 1h1.6"/>',
+  pushpin: '<g transform="scale(.6667)" stroke-width="2.2"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></g>',
   pin: '<path d="M8 14.2s4.6-4.2 4.6-7.8a4.6 4.6 0 0 0-9.2 0c0 3.6 4.6 7.8 4.6 7.8z"/><circle cx="8" cy="6.4" r="1.7"/>',
   mail: '<rect x="2.2" y="3.4" width="11.6" height="9.2" rx="1.5"/><path d="m2.6 4.3 5.4 4.3 5.4-4.3"/>',
   assets: '<rect x="2.4" y="2.4" width="4.8" height="4.8" rx="1.2"/><rect x="8.8" y="2.4" width="4.8" height="4.8" rx="1.2"/><rect x="2.4" y="8.8" width="4.8" height="4.8" rx="1.2"/><path d="M11.2 8.6v5M8.7 11.1h5"/>',
@@ -3256,7 +3257,8 @@ function renderDetail() {
     <div class="tm-body">
       <div class="tm-main">
         <div class="tm-type"><span class="type-pill">${icon(parent ? 'sub' : 'check-circle')}${parent ? 'Subtask' : 'Task'}</span>${t.done ? `<span class="tm-id tm-done-note"><span>Completed ${timeAgo(t.completedAt)}</span><i class="tdn-sep"> · </i><span class="tdn-del">auto-deletes in ${daysUntilAutoDelete(t)} day${daysUntilAutoDelete(t) === 1 ? '' : 's'}</span></span>` : ''}${creatorChip(t)}</div>
-        <textarea class="d-title" id="d-title" rows="1" placeholder="Task name" spellcheck="true" ${can('editTitle') ? '' : 'readonly'}>${esc(t.title)}</textarea>
+        <textarea class="d-title ${idLocked(t) ? 'locked' : ''}" id="d-title" rows="1" placeholder="Task name" spellcheck="true" ${can('editTitle') && !idLocked(t) ? '' : 'readonly'}>${esc(t.title)}</textarea>
+        ${lockNoteHTML(t)}${basedOnHTML(t)}
 
         <div class="props">
           <div class="prop prop-status"><label>${icon('check-circle')}Status</label><div class="pv">
@@ -3278,7 +3280,7 @@ function renderDetail() {
           <div class="prop prop-prio"><label>${icon('flag')}Priority</label><div class="pv">${(t.assignees || []).length > 1 || ((t.assignees || []).length === 1 && t.assignees[0] !== currentUserId)
             ? `<div class="prio-people">${t.assignees.map((id) => `<div class="pp-row ${id === currentUserId ? 'mine' : ''}">${avatarHTML(id, 20)}<span class="pp-name">${esc(id === currentUserId ? 'You' : fullName(userById(id)).split(' ')[0])}</span><button class="pv-btn" data-action="prio-menu" data-key="${id}" ${can('editPriority') ? '' : 'disabled'}>${prioOf(t, id) === 'none' ? '<span class="pv-empty">Empty</span>' : prioFlag(prioOf(t, id), true)}</button></div>`).join('')}</div>`
             : (() => { const key = (t.assignees || [])[0] || '_'; const v = key === '_' ? normPrio((t.prio || {})._) : prioOf(t, key); return `<button class="pv-btn" data-action="prio-menu" data-key="${key}" ${can('editPriority') ? '' : 'disabled'}>${v === 'none' ? '<span class="pv-empty">Empty</span>' : prioFlag(v, true)}</button>`; })()}</div></div>
-          ${parent ? '' : `<div class="prop"><label>${icon('folder')}Client</label><div class="pv"><select class="field" id="d-project" ${can('editProject') ? '' : 'disabled'}>${projectOptions}</select></div></div>`}
+          ${parent ? '' : `<div class="prop"><label>${icon('folder')}Client</label><div class="pv"><select class="field" id="d-project" ${can('editProject') && !idLocked(t) ? '' : 'disabled'} ${idLocked(t) ? 'title="Locked since this task went for CD review"' : ''}>${projectOptions}</select></div></div>`}
           <div class="prop"><label>${icon('tag')}Tags</label><div class="pv"><div class="tag-editor" id="d-tags">${t.tags.map((g, i) => { const [bg, fg] = tagColor(g); return `<span class="tag" style="background:${bg};color:${fg}">${esc(g)}${can('removeTag') ? `<button data-action="remove-tag" data-i="${i}">${icon('x')}</button>` : ''}</span>`; }).join('')}<input id="d-tag-input" placeholder="${t.tags.length ? 'Add' : 'Empty'}" list="tag-suggest" autocomplete="off"></div>
             <datalist id="tag-suggest">${allTags().filter((g) => !t.tags.includes(g)).map((g) => `<option value="${esc(g)}">`).join('')}</datalist></div></div>
         </div>
@@ -3286,13 +3288,13 @@ function renderDetail() {
         ${(() => {
           const open = !!ui.descOpen[t.id];
           const view = t.notesHtml ? sanitizeHTML(t.notesHtml, true) : t.notes ? linkify(esc(t.notes)).replace(/\n/g, '<br>') : '';
-          const ro = !can('editDesc');
-          if (ro && !view) return '';
+          const ro = !can('editDesc') || idLocked(t);
+          if (ro && !view) return '' + Brief.pinsHTML(t);
           const body = open && !ro
             ? `<div class="composer desc"><div class="rt-editor d-notes" contenteditable="true" id="d-notes" data-placeholder="Add a description, links or notes… Type @ to mention someone">${t.notesHtml ? sanitizeHTML(t.notesHtml) : esc(t.notes).replace(/\n/g, '<br>')}</div><div class="cb-foot">${fmtToolbar()}<span class="spacer"></span>${clipPasteBtn('desc')}</div></div>`
             : `<div class="desc-view ${open ? 'full' : ''} ${view ? '' : 'blank'} ${ro ? 'ro' : ''}" ${ro ? '' : 'data-action="desc-open"'}>${view || `<span class="ph">${can('editDesc') ? 'Add description… Type @ to mention someone' : 'No description'}</span>`}</div>`;
           return `<div class="d-section desc-sec ${open ? 'open' : ''} ${view ? '' : 'is-empty'}">${body}
-            <div class="desc-toggle-wrap"><button class="desc-toggle" data-action="desc-toggle">${icon(open ? 'chev-up' : 'chev')}${open ? 'Collapse' : 'Expand'}</button></div></div>`;
+            <div class="desc-toggle-wrap"><button class="desc-toggle" data-action="desc-toggle">${icon(open ? 'chev-up' : 'chev')}${open ? 'Collapse' : 'Expand'}</button></div></div>${Brief.pinsHTML(t)}`;
         })()}
 
         ${fieldsHTML(t)}
@@ -3301,7 +3303,7 @@ function renderDetail() {
           <h4>${icon('sub')}Subtasks <span class="n">${subs.length ? `${subsDone}/${subs.length}` : ''}</span>${subs.length ? `<span class="mini-bar"><i style="width:${Math.round(subsDone / subs.length * 100)}%"></i></span>` : ''}</h4>
           <div id="d-subs">
             ${subs.map((x) => `<div class="sub-row ${x.done ? 'is-done' : ''}" data-sub="${x.id}">${checkbox(x)}
-              <input class="sub-title" value="${esc(x.title)}" placeholder="Subtask name" data-sub-id="${x.id}" ${can('editTitle') ? '' : 'readonly'}>
+              <input class="sub-title" value="${esc(x.title)}" placeholder="Subtask name" data-sub-id="${x.id}" ${can('editTitle') && !idLocked(t) ? '' : `readonly ${idLocked(t) ? 'title="Locked with its main task"' : ''}`}>
               ${avatarStack(x.assignees, 18)}
               ${statusPill(x)}
               ${x.due ? `<span class="due ${dueClass(x)}">${fmtDue(x.due)}</span>` : ''}
@@ -4895,8 +4897,10 @@ function commentMenu(anchor, cid) {
   const t = task(ui.taskId);
   const c = t.comments.find((x) => x.id === cid);
   if (!c) return;
+  const pinned = Brief.isPinned(t, cid);
   showMenu(anchor, [
-    { label: 'Edit comment', icon: 'edit', run: () => { ui.editingComment = cid; renderDetail(); setTimeout(() => { const el = $('#edit-comment'); if (el) { el.focus(); placeCaretAtEnd(el); } }, 0); } },
+    ...Brief.pinMenu(t, c),
+    ...(pinned ? [] : [{ label: 'Edit comment', icon: 'edit', run: () => { ui.editingComment = cid; renderDetail(); setTimeout(() => { const el = $('#edit-comment'); if (el) { el.focus(); placeCaretAtEnd(el); } }, 0); } }]),
     { label: 'Copy text', icon: 'open', run: () => { try { navigator.clipboard.writeText(c.text); toast('Copied'); } catch (e) { toast('Could not copy'); } } },
     '-',
     { label: 'Delete comment', icon: 'trash', danger: true, run: () => deleteComment(cid) },
@@ -5046,6 +5050,7 @@ document.addEventListener('click', async (e) => {
       case 'attach': attachFiles('task'); return;
       case 'attach-comment': attachFiles('comment', actEl.dataset.reply || null); return;
       case 'sched-open': Sched.open(actEl, actEl.dataset.reply || null); return;
+      case 'task-from': taskFrom(task(ui.taskId)); return;
       case 'unstage-file': {
         e.stopPropagation();
         const key = actEl.dataset.key || ui.taskId;
@@ -5404,6 +5409,7 @@ document.addEventListener('input', (e) => {
     return;
   }
   if (!t) return;
+  if ((el.id === 'd-title' || el.id === 'd-notes' || el.classList.contains('sub-title')) && idLocked(t)) { renderDetail(); return; }
   if (el.id === 'd-title') { t.title = el.value.replace(/\n/g, ' '); t.updatedAt = nowISO(); autosize(el); commit({ keepDetail: true, delay: 400 }); }
   else if (el.id === 'd-notes') {
     if (editorEmpty(el) && !el.querySelector('blockquote')) el.innerHTML = '';
@@ -5435,7 +5441,7 @@ document.addEventListener('change', (e) => {
   else if (el.id === 'd-golive') Cal.setGolive(t, el.value || null);
   else if (el.id === 'd-start' && !can('editDates', t)) { denied(); renderDetail(); }
   else if (el.id === 'd-start') { const o = t.start; t.start = el.value || null; logChange(t, 'the <b>start date</b>', fmtDay(o), fmtDay(t.start)); t.updatedAt = nowISO(); commit(); }
-  else if (el.id === 'd-project') { if (!can('editProject')) { denied(); renderDetail(); return; } setTaskProject(t, el.value || null); commit(); }
+  else if (el.id === 'd-project') { if (!can('editProject') || idLocked(t)) { if (idLocked(t)) toast('The client is locked since this task went for CD review'); else denied(); renderDetail(); return; } setTaskProject(t, el.value || null); commit(); }
   else if (el.id === 'd-section') { moveTask(t.id, el.value, null, false); commit(); }
 });
 
@@ -6289,6 +6295,7 @@ function submitReview(t, files) {
   const round = (t.reviews || []).filter((r) => r.by === currentUserId && r.state !== 'withdrawn').length + 1;
   const r = { id: uid(), by: currentUserId, at: nowISO(), files: files.map((f) => f.id), state: 'pending', epoch: epochOf(t), round };
   t.reviews.push(r);
+  if (!t.lockedAt) t.lockedAt = r.at;   // (its name, description and client lock from now on: idLocked)
   files.forEach((f) => t.attachments.push({ ...f, addedAt: nowISO(), reviewId: r.id }));
   logActivity(t, `submitted ${files.length === 1 ? `<b>${esc(files[0].name)}</b>` : `<b>${files.length} files</b>`} for CD review${round > 1 ? ` (round ${round})` : ''}`);
   const cd = cdUserId();
@@ -6481,6 +6488,31 @@ function myPartControl(t) {
 // Client approval: recorded by the client's Account Managers or an Admin (and asked once on completing). It's saved
 // with the final files in Client Assets. A newer CD approval makes an older one out of date.
 const hasApproved = (t) => (t.reviews || []).some((r) => r.state === 'approved');
+/* A task's name, description and client (and its subtasks' names) lock for everyone once it first goes for CD review,
+   so a task can't be turned into another job and carried on. The server refuses the same changes (access.js).
+   Brief changes go in comments (Pin to brief); a similar job is a new task (New task from this). */
+const lockRoot = (t) => (t && t.parentId ? task(t.parentId) || t : t);
+const idLocked = (t) => { const r = lockRoot(t); return !!r && (!!r.lockedAt || (r.reviews || []).length > 0); };
+const lockedSince = (t) => { const r = lockRoot(t); return (r && (r.lockedAt || (r.reviews || []).map((x) => x.at).filter(Boolean).sort()[0])) || null; };
+function lockNoteHTML(t) {
+  if (!idLocked(t)) return '';
+  const at = lockedSince(t);
+  const kids = db.tasks.filter((x) => x.basedOn === t.id);
+  const from = t.basedOn && task(t.basedOn);
+  return `<div class="id-lock">${icon('lock')}<span>${t.parentId ? 'Its name is locked with its main task' : 'Name, description and client are locked'} — ${t.parentId ? 'it' : 'this task'} went for CD review${at ? ` on ${esc(fmtDay(at.slice(0, 10)))}` : ''}.${kids.length ? ` <span class="id-kids">New tasks from this: ${kids.map((k) => `<a href="#" data-action="open-task" data-id="${k.id}">${esc(k.title || 'Untitled task')}</a>`).join(', ')}</span>` : ''}</span>
+    ${!t.parentId && can('createTask') ? `<button class="btn xs" data-action="task-from">${icon('plus')}New task from this</button>` : ''}</div>${from ? '' : ''}`;
+}
+const basedOnHTML = (t) => { const f = t.basedOn && task(t.basedOn); return f ? `<div class="id-from">${icon('link')}<span>New task from <a href="#" data-action="open-task" data-id="${f.id}">${esc(f.title || 'Untitled task')}</a></span></div>` : ''; };
+// New task from a locked one: the same client, people, tags, channels, guardian and description, a name of its own
+function taskFrom(t) {
+  if (!t || t.parentId || !can('createTask')) return;
+  const n = createTask({ projectId: t.projectId, assignees: (t.assignees || []).slice(), tags: (t.tags || []).slice(), notes: t.notes || '', notesHtml: t.notesHtml || '',
+    channels: (t.channels || []).slice(), ...(t.guardian ? { guardian: t.guardian } : {}), basedOn: t.id });
+  logActivity(n, `started this from <b>${esc(t.title || 'Untitled task')}</b>`);
+  commit();
+  openTask(n.id, true);
+  toast('New task — give it its own name');
+}
 const lastCDApprovalAt = (t) => (t.reviews || []).filter((r) => r.state === 'approved').map((r) => r.decidedAt || r.at || '').sort().pop() || '';
 const clientApprovalFresh = (t) => !!t.clientApproval && String(t.clientApproval.at || '') >= lastCDApprovalAt(t);
 function canClientApprove(t) {
