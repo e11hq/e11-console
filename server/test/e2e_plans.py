@@ -110,7 +110,8 @@ async def main():
             check(await pg.locator('#plans-count').inner_text() == '2', f'the sidebar shows 2 skeletons waiting ({await pg.locator("#plans-count").inner_text()})')
             await E("go('inbox')"); await pg.wait_for_timeout(400)
             row = pg.locator('.ib-row', has_text='KOREA 360')
-            check(await row.count() == 1 and 'for your approval' in await row.inner_text(), 'Inbox: the skeleton sent for approval')
+            full = (await row.inner_text()) + ' ' + ((await row.locator('.ib-mi').get_attribute('title')) or '') if await row.count() == 1 else ''
+            check('for your approval' in full, 'Inbox: the skeleton sent for approval (all of it on hover when the line is cut)')
             await row.click(); await pg.wait_for_timeout(600)
             check(await E("ui.view") == 'plan' and await pg.locator('.pl-who b').inner_text() == 'KOREA 360', 'the update opens the skeleton')
             check(await pg.locator('[data-pl="approve"]').count() == 1 and await pg.locator('[data-pl="send-back"]').count() == 1, 'Approve skeleton / Send back for changes')

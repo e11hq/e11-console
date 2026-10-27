@@ -32,7 +32,12 @@ const Claims = (() => {
     draft: ['Draft', '#f3f3f6', '#6e717a'], submitted: ['Submitted', 'rgba(123,104,238,.16)', '#7b68ee'], approved: ['HR approved', 'rgba(79,209,197,.16)', '#1f9e93'],
     paid: ['Paid', 'rgba(61,220,151,.16)', '#18a565'], none: ['No claims', '#f3f3f6', '#6e717a'], offline: ['Submitted offline', '#f3f3f6', '#6e717a'],
   };
-  const pill = (c) => { const s = STATE[c.state] || STATE.draft; return `<span class="ec-pill" style="background:${s[1]};color:${s[2]}">${s[0]}${c.state === 'paid' && c.paidOn ? ' · ' + esc(fmtDay(c.paidOn)) : ''}</span>`; };
+  // a paid claim keeps its HR approved mark next to Paid
+  const pill = (c) => {
+    const s = STATE[c.state] || STATE.draft, a = STATE.approved;
+    const one = `<span class="ec-pill" style="background:${s[1]};color:${s[2]}">${s[0]}${c.state === 'paid' && c.paidOn ? ' · ' + esc(fmtDay(c.paidOn)) : ''}</span>`;
+    return c.state === 'paid' && c.approvedAt ? `<span class="ec-pills"><span class="ec-pill" style="background:${a[1]};color:${a[2]}">${a[0]}</span>${one}</span>` : one;
+  };
   const editable = (c) => !!c && c.userId === currentUserId && !['approved', 'paid'].includes(c.state) && !closed(c.month);
   const finUsers = () => db.users.filter((u) => u.active !== false && finLevel(u));
   const fileUrlOf = (f) => '/__file/' + String(f.path).split('/').map(encodeURIComponent).join('/');

@@ -21,7 +21,9 @@ async def main():
         pg = await ctx.new_page(); errs = []; pg.on('pageerror', lambda e: errs.append(str(e)))
         await pg.goto('/'); await pg.wait_for_timeout(3500); await pg.mouse.click(5, 5); await pg.wait_for_timeout(800)
         E = pg.evaluate
-        await E("closeDetail()")
+        # (the test copy has content plans instead of the Content calendar; the calendar is still the live copy's)
+        check(await E("[getComputedStyle(document.querySelector('#nav-calendar')).display, (go('calendar'), ui.view)]") == ['none', 'plans'], 'the test copy (content plans) has no Content calendar: its address opens Content plans')
+        await E("Plans.on = () => false; renderSidebar(); closeDetail()")
         # greetings
         check(await E("[Occasions.greeting('2026-12-02'), Occasions.greeting('2026-12-15'), Occasions.greeting('2027-12-09'), Occasions.greeting('2026-12-16')]") == ['Eshi Biladi', 'Eshi Biladi', 'Eshi Biladi', None], 'National Day greeting: Eshi Biladi from 2 to 15 Dec, every year')
         check(await E("Occasions.alone('Eshi Biladi') && !Occasions.alone('Eid Mubarak')") is True, 'Eshi Biladi is said without the name')
@@ -122,7 +124,7 @@ async def main():
         check('Occasion date confirmed' in (await pg.locator('#notif-root').inner_text()), 'open apps of Admins / AMs show the change')
         check(await pg.locator('#cal-check').count() == 1, 'Admins / AMs see when the holiday calendar was checked')
         await E("localStorage.setItem('e11-holcheck', JSON.stringify({ at: new Date().toISOString(), ok: true, foundList: [], tentativeList: [{ name: 'Ramadan', date: '2027-02-08' }], events: 139 }))")
-        await pg.reload(); await pg.wait_for_timeout(1500); await E("ui.view = 'calendar'; renderContent()")
+        await pg.reload(); await pg.wait_for_timeout(1500); await E("Plans.on = () => false; renderSidebar(); ui.view = 'calendar'; renderContent()")
         first = await pg.locator('#cal-check').inner_text()
         await pg.wait_for_timeout(1500)
         check('Expected dates are checked' not in first and first == await pg.locator('#cal-check').inner_text(), f'the check line shows the remembered status at once and stays the same ({first[:60]})')

@@ -292,7 +292,7 @@ const Phone = (() => {
       <div class="ph-rows">
         ${row('data-nav="profile"', 'user', 'My profile', 'Photo, office and notifications')}
         ${isCD() ? row('data-ph-tab="projects"', 'folder', 'Clients') : ''}
-        ${Cal.canSee() ? row('data-nav="calendar"', 'cal', 'Content calendar', 'Posts by day, channel and occasion') : ''}
+        ${Cal.canSee() && !calendarRetired() ? row('data-nav="calendar"', 'cal', 'Content calendar', 'Posts by day, channel and occasion') : ''}
         ${Plans.canSee() ? row('data-nav="plans"', 'cal', 'Content plans', 'Each client’s month · trial') : ''}
         ${row('data-nav="clients"', 'assets', 'Client Assets', 'Logos, guidelines and fonts')}
         ${row('data-nav="team"', 'users', 'Team members')}
@@ -339,6 +339,7 @@ const Phone = (() => {
       : v === 'reviews' ? reviews() : v === 'review' ? review() : v === 'projects' ? projects() : v === 'project' ? project()
       : v === 'psearch' ? search() : meScreen();
     if (ui.view === 'review') { wireSlides(c); hydrateThumbs(c); }
+    if (v === 'inbox' && typeof fitWords === 'function') c.querySelectorAll('.ph-ib-t').forEach(fitWords);   // (task names cut at a whole word)
     pinHead(c);
     document.body.classList.toggle('ph-fab-on', !!document.querySelector('#ph-fabslot .ph-fab'));
     document.body.classList.toggle('ph-strip', !c.querySelector('.ph-bar'));

@@ -629,7 +629,7 @@ a.crumb:hover { background: var(--hover); color: var(--text); }
 .cm-meta b { color: var(--text); font-weight: 600; }
 .cm-edited { font-style: italic; }
 .cm-tools { margin-left: auto; display: flex; gap: 1px; opacity: 0; transition: opacity .1s; }
-.cm:hover > .cm-body > .cm-meta .cm-tools { opacity: 1; }
+.cm.hov > .cm-body > .cm-meta .cm-tools { opacity: 1; }   /* (.hov is set by the mouse; Safari and the Mac app could leave :hover stuck) */
 .cm-text { white-space: pre-wrap; word-break: break-word; line-height: 1.5; margin-top: 2px; -webkit-user-select: text; user-select: text; }
 .cm-text a { color: #a99bff; }
 .cm-reacts { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
@@ -1432,11 +1432,6 @@ body { font-size: 14px; line-height: 1.45; letter-spacing: -.003em; background: 
 .ib-kic .ic { width: 16px; height: 16px; }
 .ib-msg { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-size: 14.5px; }
 .ib-msg b { font-weight: 400; }
-.ib-msg.marq { text-overflow: clip; padding-block: 2px; margin-block: -2px; -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 22px), transparent 100%); mask-image: linear-gradient(90deg, #000 calc(100% - 22px), transparent 100%); }   /* (no fade on the left: it hid the first letters) */
-.ib-msg.marq .ib-mi { display: inline-block; vertical-align: top; padding-right: 4px; width: max-content; max-width: none; overflow: visible; white-space: nowrap;   /* (Safari otherwise gives it the box's width and cuts the rest) */ animation: ibMarq var(--dur, 6s) ease-in-out 1 both; }
-.ib-msg.marq.measure .ib-mi { animation: none; }
-@keyframes ibMarq { 0%, 12% { transform: none; } 78%, 88% { transform: translateX(var(--dx)); } 100% { transform: none; } }
-@media (prefers-reduced-motion: reduce) { .ib-msg.marq .ib-mi { animation: none; } }
 .ib-row:not(.unread) .ib-msg, .ib-row:not(.unread) .ib-time { color: var(--text-3); }
 .ib-row:not(.unread) .ib-tname { color: var(--text-2); }
 .ib-dim { color: var(--text-3); }
@@ -2473,3 +2468,4 @@ body:not(.phone) #detail.side .tdn-del { display: block; }
 body:not(.phone) #detail.side .tdn-del::first-letter { text-transform: uppercase; }
 body.phone #detail .tm-done-note { order: 9; flex-basis: 100%; }
 .cr-chip b, .cr-when { white-space: nowrap; }
+.cf-grid + .ca-files, .cf-grid + .ca-rh { margin-top: 14px; }   /* (a folder's sub-folders, then its files: a gap between) */

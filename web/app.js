@@ -926,7 +926,8 @@ const ServerHost = (() => {
         try {
           if ('Notification' in window && Notification.permission === 'granted' && args.banner !== false) {
             const n = new Notification(args.title || 'E11 Console', { body: args.body || '', icon: '/icon-192.png', tag: 'e11-' + Date.now() });
-            n.onclick = () => { window.focus(); n.close(); };
+            // clicking it brings this window forward and opens what it's about
+            n.onclick = () => { try { window.focus(); } catch (e) { /* ignore */ } n.close(); if (args.click && window.__e11NotifClick) window.__e11NotifClick(args.click); };
           }
         } catch (e) { /* not available */ }
         if (args.sound) chime();
@@ -2174,7 +2175,7 @@ function renderSidebar() {
   $$('.nav-item[data-nav]').forEach((a) => a.classList.toggle('active', !ui.search && (ui.view === a.dataset.nav || (a.dataset.nav === 'clients' && ui.view === 'client') || (a.dataset.nav === 'plans' && ui.view === 'plan'))));
   Fin.paintNav();
   { const cc = $('#clients-count'); const n = (db.clients || []).filter(caVisible).length; if (cc) cc.textContent = n ? String(n) : ''; }
-  { const cn = $('#nav-calendar'); if (cn) cn.style.display = Cal.canSee() ? '' : 'none'; }
+  { const cn = $('#nav-calendar'); if (cn) cn.style.display = Cal.canSee() && !calendarRetired() ? '' : 'none'; }
   { const pn = $('#nav-plans'); if (pn) { pn.style.display = Plans.canSee() ? '' : 'none'; const k = Plans.waiting(), pc = $('#plans-count'); if (pc) { pc.textContent = k ? String(k) : ''; pc.classList.toggle('hot', !!k); } } }
   { const tn = $('#nav-trash'); if (tn) { tn.style.display = isManager() ? '' : 'none'; $('#trash-count').textContent = trashList().length ? String(trashList().length) : ''; } }
   const mt = Work.home().filter((t) => Work.homeOpen(t) && t.due && dayDiff(t.due) <= 0).length;
@@ -2254,14 +2255,14 @@ function renderContent() {
   if (typeof Phone !== 'undefined' && Phone.renderContent(c)) { c.scrollTop = scroll.top; return; }
   if (Fin.owns(ui.view)) { Fin.render(c); c.scrollTop = scroll.top; return; }
   if (Claims.owns(ui.view)) { Claims.render(c); return; }
-  if (Cal.owns(ui.view)) { if (!Cal.canSee()) { ui.view = 'home'; return renderContent(); } Cal.render(c); if (typeof Phone !== 'undefined') Phone.decorate(c); c.scrollTop = scroll.top; return; }
+  if (Cal.owns(ui.view)) { if (!Cal.canSee() || calendarRetired()) { ui.view = calendarRetired() && Plans.canSee() ? 'plans' : 'home'; renderTitle(); return renderContent(); } Cal.render(c); if (typeof Phone !== 'undefined') Phone.decorate(c); c.scrollTop = scroll.top; return; }
   if (Plans.owns(ui.view)) { Plans.render(c); if (typeof Phone !== 'undefined') Phone.decorate(c); c.scrollTop = scroll.top; return; }
   if (ClientList.owns(ui.view)) { ClientList.render(c); c.scrollTop = scroll.top; return; }
   if (ui.search) c.innerHTML = viewSearch();
   else if (ui.view === 'home') c.innerHTML = viewHome();
   else if (ui.view === 'mytasks') c.innerHTML = viewMyTasks();
   else if (ui.view === 'today') c.innerHTML = viewMyDay();
-  else if (ui.view === 'inbox') c.innerHTML = viewInbox();
+  else if (ui.view === 'inbox') { c.innerHTML = viewInbox(); fitInbox(c); }
   else if (ui.view === 'team') { c.innerHTML = viewTeam(); if (Host.isServer && can('manageUsers')) api('GET', '/api/cloudflare').then(paintCfStatus).catch(() => {}); }
   else if (ui.view === 'reviews') { c.innerHTML = viewReviews(); hydrateThumbs(c); }
   else if (ui.view === 'profile') c.innerHTML = viewProfile();
@@ -2787,6 +2788,15 @@ function shortWhen(iso) {
   if (mins < 24 * 60) return Math.round(mins / 60) + 'h';
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(d.getFullYear() === new Date().getFullYear() ? {} : { year: 'numeric' }) });
 }
+// A comment's React / Reply / ••• buttons show while the mouse is on it and go when it leaves (tracked here, not with
+// :hover, which Safari and the Mac app could leave stuck after the comments redraw or the window loses focus)
+(() => {
+  let on = null;
+  const set = (cm) => { if (on === cm) return; if (on) on.classList.remove('hov'); on = cm; if (cm) cm.classList.add('hov'); };
+  document.addEventListener('mouseover', (e) => set(e.target.closest ? e.target.closest('.cm') : null), true);
+  document.addEventListener('mouseleave', () => set(null));
+  window.addEventListener('blur', () => set(null));
+})();
 function commentHTML(t, c, isReply) {
   const editing = ui.editingComment === c.id;
   const reacts = Object.entries(c.reactions || {}).filter(([, n]) => n);
@@ -3673,9 +3683,12 @@ function inlineInput(el, { placeholder = '', value = '', multiline = false, keep
 }
 
 /* ================= Actions ================= */
+// The Content calendar page goes where content plans are on (the test copy for now): Haris, 2026-10-27
+const calendarRetired = () => typeof Plans !== 'undefined' && Plans.on();
 function go(view, projectId = null) {
   if (isFinUser() && !Fin.owns(view) && view !== 'profile' && view !== 'claim') view = 'fin-dash';
   if (isOffice() && !OFFICE_VIEWS.has(view) && !Fin.owns(view)) { view = 'home'; projectId = null; }
+  if (view === 'calendar' && calendarRetired()) view = Plans.canSee() ? 'plans' : 'home';   // (content plans replace it)
   PageHistory.mark();
   if (view === 'clients') { ui.caQ = ''; ui.caScope = null; }
   // The Inbox always opens on its unread tab (Primary on computers, Unread on phones)
@@ -6430,31 +6443,35 @@ function viewInbox() {
       || `<div class="empty ib-empty"><div class="big">${tab === 'primary' ? 'Inbox zero 🎉' : 'Nothing here yet'}</div>${tab === 'primary' ? 'You’re all caught up. New updates on your tasks and @mentions land here.' : 'Updates on tasks you’re assigned to or created will appear here.'}</div>`}
   </div>`;
 }
-// A message cut off by the row's width: on hover it slides once to show the rest, then slides back
-document.addEventListener('mouseover', (e) => {
-  const row = e.target.closest && e.target.closest('.ib-row');
-  if (!row || row.contains(e.relatedTarget)) return;
-  const box = row.querySelector('.ib-msg'), inner = box && box.querySelector('.ib-mi');
-  if (!inner || box.classList.contains('marq')) return;
-  // measure the whole message as one block (scrollWidth with an ellipsis isn't reliable in Safari / the Mac app)
-  box.classList.add('marq', 'measure');
-  // the end has to land left of the Clear button that shows on hover (it can sit over the message)
-  const bx = box.getBoundingClientRect(), clr = row.querySelector('.ib-clear');
-  const cr = clr && clr.offsetParent ? clr.getBoundingClientRect() : null;
-  const visible = Math.min(bx.right, cr && cr.left < bx.right ? cr.left - 10 : bx.right) - bx.left;
-  const over = Math.ceil(Math.max(inner.getBoundingClientRect().width, inner.scrollWidth) - visible);   // (whichever is wider: Safari differs)
-  box.classList.remove('measure');
-  if (over < 4) { box.classList.remove('marq'); return; }
-  box.style.setProperty('--dx', `-${over + 30}px`);   // a little past the end, clear of the fade
-  box.style.setProperty('--dur', `${Math.min(16, Math.max(3, (over + 30) / 45 + 2.4))}s`);   // ~45px a second, with pauses
-  const done = () => { box.classList.remove('marq'); inner.removeEventListener('animationend', done); };
-  inner.addEventListener('animationend', done);
-});
-document.addEventListener('mouseout', (e) => {
-  const row = e.target.closest && e.target.closest('.ib-row');
-  if (!row || row.contains(e.relatedTarget)) return;
-  const box = row.querySelector('.ib-msg.marq'); if (box) box.classList.remove('marq');
-});
+// A task name or message too long for its row is cut after the last whole word that fits, with "…" (never mid-word);
+// hovering shows all of it
+function fitWords(el) {
+  const box = el.parentElement && el.parentElement.classList.contains('ib-msg') ? el.parentElement : el;
+  if (!el.dataset.full) el.dataset.full = el.innerHTML; else el.innerHTML = el.dataset.full;
+  const fits = () => box.scrollWidth <= box.clientWidth + 1;
+  if (!box.clientWidth || fits()) { el.removeAttribute('title'); return; }
+  const text = el.textContent;
+  el.title = text.replace(/\s+/g, ' ').trim();
+  const ends = [];   // where each word ends
+  text.replace(/\S+/g, (w, at) => { ends.push(at + w.length); return w; });
+  const cutAt = (n) => {
+    el.innerHTML = el.dataset.full;
+    const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    let left = n, node;
+    while ((node = walk.nextNode())) { if (node.data.length >= left) break; left -= node.data.length; }
+    if (!node) return;
+    const r = document.createRange();
+    r.setStart(node, left); r.setEndAfter(el.lastChild); r.deleteContents();
+    node.data = node.data.replace(/[\s,;:·—–-]+$/, '') + '…';
+  };
+  let lo = 0, hi = ends.length - 1, best = -1;   // the most words that fit
+  while (lo <= hi) { const mid = (lo + hi) >> 1; cutAt(ends[mid]); if (fits()) { best = mid; lo = mid + 1; } else hi = mid - 1; }
+  if (best >= 0) cutAt(ends[best]); else { el.innerHTML = el.dataset.full; }   // (one long word: the box's own ellipsis)
+}
+function fitInbox(root) {
+  (root || document).querySelectorAll('.ib-row .ib-tname, .ib-row .ib-mi').forEach(fitWords);
+}
+window.addEventListener('resize', () => { clearTimeout(fitInbox.t); fitInbox.t = setTimeout(() => { if (ui.view === 'inbox') { fitInbox(); document.querySelectorAll('.ph-ib-t').forEach(fitWords); } }, 150); });
 function inboxFilterMenu(anchor) {
   showMenu(anchor, Object.entries(IB_FILTERS).map(([k, l]) => ({ html: `<div class="mi ${(ui.inboxFilter || 'all') === k ? 'cur' : ''}">${esc(l)}</div>`, run: () => { ui.inboxFilter = k; renderContent(); } })).map((it, i) => ({ ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) })));
 }
@@ -6672,11 +6689,11 @@ function deliverPending() {
   persist();
   if (fresh.length === 1) {
     const n = fresh[0], t = task(n.taskId);
-    alertUser({ title: fullName(userById(n.from)), body: `${notifPlain(n)} ${t ? '“' + (t.title || 'Untitled task') + '”' : ''}${n.snippet ? ' — ' + n.snippet : ''}`, taskId: n.taskId, from: n.from, open: /^claim/.test(n.kind) ? () => { n.read = true; persist(); Claims.openNotif(n); } : n.kind === 'asset' || n.planId ? () => openNotif(n.id) : null });
+    alertUser({ title: fullName(userById(n.from)), body: `${notifPlain(n)} ${t ? '“' + (t.title || 'Untitled task') + '”' : ''}${n.snippet ? ' — ' + n.snippet : ''}`, taskId: n.taskId, from: n.from, open: () => { if (db.notifications.some((x) => x.id === n.id)) openNotif(n.id); else if (n.taskId && task(n.taskId)) openTask(n.taskId); } });
   } else if (isFinUser()) {
     alertUser({ title: 'E11 Console', body: `${fresh.length} new expense claims`, open: () => go('fin-reimb') });
   } else {
-    alertUser({ title: 'E11 Console', body: `You have ${fresh.length} new notifications in your Inbox` });
+    alertUser({ title: 'E11 Console', body: `You have ${fresh.length} new notifications in your Inbox`, open: () => { if (ui.taskId) closeDetail(); go('inbox'); } });
   }
 }
 

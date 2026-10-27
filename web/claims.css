@@ -95,8 +95,9 @@
 .ec-who { display: flex; align-items: center; gap: 10px; position: relative; }
 .ec-who > span { display: flex; flex-direction: column; min-width: 0; }
 .ec-new { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); flex: none; margin-left: 4px; cursor: default; }
-.fa-row.ec-frow { grid-template-columns: minmax(0, 1fr) 120px 150px auto; }
-.ec-frow .ec-pill { justify-self: start; }
+.fa-row.ec-frow { grid-template-columns: minmax(0, 1fr) 120px 240px auto; }
+.ec-frow .ec-pill, .ec-frow .ec-pills { justify-self: start; }
+.ec-pills { display: inline-flex; flex-wrap: wrap; gap: 5px; align-items: center; }
 .ec-frow .ec-acts { min-width: 0; gap: 6px; }
 .ec-fgroup { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 12px 2px 4px; border-top: 1px solid var(--border); margin-top: 8px; }
 .ec-fgroup > span:first-child { font-size: 12px; font-weight: 600; color: var(--text-3); margin-right: 6px; min-width: 120px; }
