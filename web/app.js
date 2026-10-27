@@ -187,6 +187,124 @@ const NativeMac = (() => {
 })();
 
 
+/* ================= Seasonal icons: each one shows for a week around its day (Automatic) ================= */
+// md: the same day every year; occ: from the occasions calendar (moon dates, confirmed ones included).
+// A week = 3 days before to 3 days after; Ramadan: the whole month. Two close together: the nearer day wins
+// (Ramadan counts as nearest all month; Eid al-Fitr takes over on Eid day).
+const SEASON_WHEN = {
+  'new-year': ['md', '01-01'], syria: ['md', '04-17'], 'south-africa': ['md', '04-27'], pakistan: ['md', '08-14'], india: ['md', '08-15'],
+  'womens-day': ['md', '08-28'], armenia: ['md', '09-21'], algeria: ['md', '11-01'], lebanon: ['md', '11-22'], 'national-day': ['md', '12-02'],
+  christmas: ['md', '12-25'], ramadan: ['occ', 'ramadan', 'month'], 'eid-al-fitr': ['occ', 'eidfitr'], 'eid-al-adha': ['occ', 'eidadha'],
+  'islamic-new-year': ['occ', 'hijri'], diwali: ['occ', 'diwali'],
+};
+function autoSeason(day) {
+  try {
+    const S = window.E11_SEASONS || {};
+    const t = (d) => Date.UTC(Number(d.slice(0, 4)), Number(d.slice(5, 7)) - 1, Number(d.slice(8, 10))) / 864e5;
+    const y = Number(day.slice(0, 4)), now = t(day);
+    const occ = typeof Occasions !== 'undefined' ? Occasions.between(`${y - 1}-11-01`, `${y + 1}-02-28`) : [];
+    let best = null, bestGap = 99;
+    for (const [sid, w] of Object.entries(SEASON_WHEN)) {
+      if (!S[sid]) continue;
+      const spans = w[0] === 'md' ? [y - 1, y, y + 1].map((yy) => [`${yy}-${w[1]}`, null]) : occ.filter((o) => o.key === w[1]).map((o) => [o.date, o.end]);
+      for (const [d, end] of spans) {
+        const a = t(d), month = w[2] === 'month';
+        const from = month ? a : a - 3, to = month ? (end ? t(end) : a + 29) : a + 3;
+        if (now < from || now > to) continue;
+        const gap = month ? 0.5 : Math.abs(now - a);
+        if (gap < bestGap) { best = sid; bestGap = gap; }
+      }
+    }
+    return best;
+  } catch (e) { return null; }
+}
+
+/* ================= Occasion greeting, right after startup, once per device ================= */
+// Automatic: on the occasion's day itself. When Haris picks an icon himself, that replaces it: a seasonal one brings its
+// own greeting (once, the next time each device starts); Everyday or his own picture brings none.
+// Confetti in the season's colours and the greeting over the app, then back to work (click, a key, or 5 s).
+const OccasionHello = (() => {
+  const GREET = {
+    'new-year': 'Happy New Year', syria: 'Happy Evacuation Day, Syria', 'south-africa': 'Happy Freedom Day, South Africa',
+    pakistan: 'Happy Independence Day, Pakistan', india: 'Happy Independence Day, India', 'womens-day': 'Happy Emirati Women’s Day',
+    armenia: 'Happy Independence Day, Armenia', algeria: 'Happy Revolution Day, Algeria', lebanon: 'Happy Independence Day, Lebanon',
+    'national-day': 'Happy Eid Al Etihad', christmas: 'Merry Christmas', ramadan: 'Ramadan Kareem', 'eid-al-fitr': 'Eid Mubarak',
+    'eid-al-adha': 'Eid Al Adha Mubarak', 'islamic-new-year': 'Happy Hijri New Year', diwali: 'Happy Diwali',
+  };
+  const KEY = 'e11-hello';
+  // the season whose day is today (Ramadan: its first day)
+  function today() {
+    const day = todayStr(), y = Number(day.slice(0, 4));
+    const occ = typeof Occasions !== 'undefined' ? Occasions.between(`${y}-01-01`, `${y}-12-31`) : [];
+    for (const [sid, w] of Object.entries(SEASON_WHEN)) {
+      if (!window.E11_SEASONS || !E11_SEASONS[sid]) continue;
+      if (w[0] === 'md' ? day.slice(5) === w[1] : occ.some((o) => o.key === w[1] && o.date === day)) return sid;
+    }
+    return null;
+  }
+  // which greeting this start should show, and the key that makes it once per device
+  function due() {
+    const i = AppIcon.info();
+    if (i.auto) { const sid = today(); return sid ? [sid, todayStr() + ':' + sid] : null; }
+    return i.preset && window.E11_SEASONS && E11_SEASONS[i.preset] ? [i.preset, 'pick:' + i.v] : null;
+  }
+  function maybe() {
+    try {
+      const d = due(); if (!d) return;
+      if (localStorage.getItem(KEY) === d[1]) return;
+      localStorage.setItem(KEY, d[1]);
+      show(d[0]);
+    } catch (e) { /* storage off: skip */ }
+  }
+  function show(sid) {
+    const S = window.E11_SEASONS && E11_SEASONS[sid]; if (!S) return;
+    const still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const el = document.createElement('div');
+    el.className = 'hello-wrap';
+    el.innerHTML = `<canvas class="hello-confetti" aria-hidden="true"></canvas>
+      <div class="hello-card" role="dialog" aria-label="${esc(GREET[sid] || S.name)}" style="--oh-a:${S.tile[0]};--oh-b:${S.tile[1]}">
+        <img src="icons/seasonal/${sid}.png" alt="">
+        <h2>${esc(GREET[sid] || S.name)}</h2>
+        <p>${esc(S.name)} · from all of us at E11</p>
+        <small>Click anywhere to continue</small>
+      </div>`;
+    document.body.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('in'));
+    let raf = 0, closed = false;
+    const close = () => {
+      if (closed) return; closed = true;
+      el.classList.remove('in'); el.classList.add('out');
+      document.removeEventListener('keydown', close, true);
+      setTimeout(() => { cancelAnimationFrame(raf); el.remove(); }, 450);
+    };
+    el.addEventListener('click', close);
+    document.addEventListener('keydown', close, true);
+    setTimeout(close, 5200);
+    if (still) return;
+    // confetti in the season's colours
+    const cv = el.querySelector('canvas'), ctx = cv.getContext('2d'), dpr = window.devicePixelRatio || 1;
+    const W = cv.width = innerWidth * dpr, H = cv.height = innerHeight * dpr;
+    const cols = [S.tile[0], S.left, S.right, S.check, '#ffffff', '#ffd36e'];
+    const bits = Array.from({ length: Math.min(180, Math.round(innerWidth / 6)) }, (_, i) => ({
+      x: W / 2 + (Math.random() - 0.5) * W * 0.2, y: H * 0.55, vx: (Math.random() - 0.5) * 18 * dpr, vy: -(8 + Math.random() * 16) * dpr,
+      w: (6 + Math.random() * 6) * dpr, h: (3 + Math.random() * 4) * dpr, r: Math.random() * 6, vr: (Math.random() - 0.5) * 0.3, c: cols[i % cols.length],
+    }));
+    const t0 = performance.now();
+    const step = (t) => {
+      ctx.clearRect(0, 0, W, H);
+      const age = (t - t0) / 1000;
+      for (const b of bits) {
+        b.vy += 0.38 * dpr; b.vx *= 0.99; b.x += b.vx; b.y += b.vy; b.r += b.vr;
+        ctx.save(); ctx.globalAlpha = Math.max(0, 1 - Math.max(0, age - 3) / 1.5);
+        ctx.translate(b.x, b.y); ctx.rotate(b.r); ctx.fillStyle = b.c; ctx.fillRect(-b.w / 2, -b.h / 2, b.w, b.h); ctx.restore();
+      }
+      if (age < 4.6 && !closed) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+  }
+  return { maybe, show, today };
+})();
+
 /* ================= Mac app Dock icon (chosen by the owner on the server) ================= */
 const AppIcon = (() => {
   let info = null, applied = null, busy = null, owner = false;
@@ -197,6 +315,9 @@ const AppIcon = (() => {
   // Make this Mac's Dock icon match the server (old Mac apps without setIcon simply ignore it)
   async function sync(next) {
     if (next) info = next;
+    // the startup animation takes on the chosen seasonal look on every device (remembered for the next start)
+    if (next) { try { const m = JSON.parse(localStorage.getItem('e11-splash') || '{}') || {}; const sea = !next.auto && next.preset && window.E11_SEASONS && E11_SEASONS[next.preset] ? next.preset : null; if ((m.season || null) !== sea || !!m.iconAuto !== !!next.auto) { m.season = sea; m.iconAuto = !!next.auto; localStorage.setItem('e11-splash', JSON.stringify(m)); } } catch (e) { /* storage off */ } }
+    if (Host.isMacApp && info && info.auto) return applyAuto();
     if (!Host.isMacApp || !info || applied === info.v || busy === info.v) return;
     const v = info.v;
     busy = v;
@@ -223,12 +344,33 @@ const AppIcon = (() => {
     if (busy === v) busy = null;
     if (info && info.v !== v) sync(); // a newer icon arrived while this one was being applied
   }
+  // Automatic: this week's seasonal icon (or the everyday one), checked again every hour
+  let autoBusy = false;
+  async function applyAuto() {
+    if (autoBusy || !info || !info.auto) return;
+    autoBusy = true;
+    try {
+      const sid = autoSeason(todayStr()), key = 'auto-' + (sid || 'none');
+      if (lsGet() !== key) {
+        if (sid) {
+          const r = await fetch(`icons/seasonal/${sid}.png`, { cache: 'no-store', credentials: 'same-origin' });
+          if (r.ok) { await NativeMac.call('setIcon', { b64: await toB64(await r.blob()) }); lsSet(key); }
+        } else {
+          await NativeMac.call('setIcon', { reset: true });
+          lsSet(key);
+        }
+      }
+      applied = info.v;
+    } catch (e) { /* try again next hour */ }
+    autoBusy = false;
+  }
+  setInterval(() => { if (Host.isMacApp && info && info.auto) applyAuto(); }, 3600e3);
   return {
-    sync, toB64,
+    sync, toB64, autoNow: () => (info && info.auto ? autoSeason(todayStr()) : null),
     setOwner: (v) => { owner = !!v; },
     isOwner: () => owner,
     info: () => info || { v: 'default', custom: false },
-    url: () => '/api/app-icon?v=' + encodeURIComponent((info && info.v) || 'default'),
+    url: () => { const sid = info && info.auto ? autoSeason(todayStr()) : null; return sid ? `icons/seasonal/${sid}-160.png` : '/api/app-icon?v=' + encodeURIComponent((info && info.v) || 'default'); },
   };
 })();
 
@@ -4776,6 +4918,8 @@ document.addEventListener('click', async (e) => {
       case 'appicon-upload': appIconUploadFlow(); return;
       case 'mac-update': MacUpdate.run(); return;
       case 'appicon-reset': appIconResetFlow(); return;
+      case 'appicon-season': appIconSeasonFlow(actEl.dataset.sid); return;
+      case 'hello-preview': { const i = AppIcon.info(); OccasionHello.show((!i.auto && i.preset) || AppIcon.autoNow() || OccasionHello.today() || 'national-day'); return; }
       case 'remove-photo': { const u = me(); if (u.avatar) Host.call('trashPath', { path: u.avatar }).catch(() => {}); u.avatar = null; persist(); render(); return; }
       case 'save-profile': saveProfile(); return;
       case 'change-password': changePasswordFlow(); return;
@@ -6950,9 +7094,16 @@ function appIconCard() {
       <h3>${icon('image')}Mac app icon</h3>
       <div class="ai-row">
         <div class="ai-dock" aria-hidden="true"><img src="${AppIcon.url()}" alt=""></div>
-        <div class="ai-txt"><b>${i.custom ? 'Custom icon' : 'Default icon'}</b><span>${i.custom && i.at ? `Changed ${esc(timeAgo(i.at))}` : 'The icon that comes with the Mac app'}. It shows in everyone’s Dock and changes on every Mac as soon as you upload a new one.</span></div>
+        <div class="ai-txt"><b>${i.auto ? 'Automatic' : i.preset && window.E11_SEASONS && E11_SEASONS[i.preset] ? esc(E11_SEASONS[i.preset].name) : i.custom ? 'Custom icon' : 'Everyday icon'}</b><span>${i.auto ? `${AppIcon.autoNow() ? esc(E11_SEASONS[AppIcon.autoNow()].name) + ' this week' : 'Everyday icon this week'} — each seasonal icon comes on by itself for a week around its day` : i.custom && i.at ? `Chosen ${esc(timeAgo(i.at))}, until you pick another one or Automatic` : 'The icon that comes with the Mac app'}. It shows in everyone’s Dock and on the startup animation.</span></div>
       </div>
-      <div class="pf-actions"><button class="btn primary" data-action="appicon-upload">${icon('upload')}Upload new icon</button>${i.custom ? '<button class="btn" data-action="appicon-reset">Reset to default</button>' : ''}</div>
+      <h4 class="pf-sub">Seasonal icons</h4>
+      <div class="ai-seasons">
+        <button class="ai-sea auto ${i.auto ? 'on' : ''}" data-action="appicon-season" data-sid="auto" title="Each season’s icon for a week around its day"><img src="${AppIcon.autoNow() ? `icons/seasonal/${AppIcon.autoNow()}-160.png` : 'icons/seasonal/everyday-160.png'}" alt=""><span>Automatic<small>${AppIcon.autoNow() ? esc(E11_SEASONS[AppIcon.autoNow()].name) + ' now' : 'Everyday now'}</small></span></button>
+        <button class="ai-sea ${!i.auto && !i.custom ? 'on' : ''}" data-action="appicon-season" data-sid="" title="Everyday"><img src="icons/seasonal/everyday-160.png" alt=""><span>Everyday</span></button>
+        ${Object.entries(window.E11_SEASONS || {}).map(([k, x]) => `<button class="ai-sea ${i.preset === k ? 'on' : ''}" data-action="appicon-season" data-sid="${k}" title="${esc(x.name)}"><img src="icons/seasonal/${k}-160.png" alt=""><span>${esc(x.name)}</span></button>`).join('')}
+      </div>
+      <p class="pf-note"><b>Automatic</b> shows each icon for a week around its day (Ramadan: the whole month), then goes back to everyday. Pick one to use it instead until you choose Automatic again. The Dock icon on every Mac changes, and so does the startup animation on every device.</p>
+      <div class="pf-actions"><button class="btn primary" data-action="appicon-upload">${icon('upload')}Upload new icon</button><button class="btn" data-action="hello-preview">Preview the greeting</button>${i.custom ? '<button class="btn" data-action="appicon-reset">Reset to default</button>' : ''}</div>
       <p class="pf-note">Square PNG or JPG, 512 × 512 or larger. Only you can see this. Macs need the Mac app installed once after this update — then every change arrives by itself.</p>
     </div>`;
 }
@@ -7134,6 +7285,29 @@ async function appIconUploadFlow() {
       renderContent();
     } catch (err) { b.disabled = false; b.textContent = 'Use this icon for everyone'; toast('Couldn’t change the icon: ' + err.message); }
   });
+}
+// A ready-made seasonal icon (or back to everyday) for every Mac app, and the startup animation everywhere
+async function appIconSeasonFlow(sid) {
+  const S = sid && sid !== 'auto' && window.E11_SEASONS ? E11_SEASONS[sid] : null;
+  const cur = AppIcon.info();
+  if (sid === 'auto' ? cur.auto : !sid ? !cur.auto && !cur.custom : !cur.auto && cur.preset === sid) return;
+  const ok = await dialog(sid === 'auto'
+    ? { title: 'Switch to automatic?', body: 'Each seasonal icon shows for a week around its day, then the everyday icon comes back — on every Mac’s Dock and the startup animation.', okText: 'Use automatic' }
+    : { title: S ? `Use the ${S.name} icon?` : 'Use the everyday icon?', body: 'It stays until you choose another one or Automatic. Every Mac app’s Dock icon changes now, and the startup animation on every device takes on the same look from its next start.', okText: S ? 'Use it for everyone' : 'Use everyday icon' });
+  if (!ok) return;
+  try {
+    let r;
+    if (sid === 'auto') r = await api('POST', '/api/app-icon/auto', {});
+    else if (!S) r = await api('POST', '/api/app-icon/reset', {});
+    else {
+      const res = await fetch(`icons/seasonal/${sid}.png`, { cache: 'no-store', credentials: 'same-origin' });
+      if (!res.ok) throw new Error('the icon file is missing');
+      r = await api('POST', '/api/app-icon', { png: await AppIcon.toB64(await res.blob()), preset: sid });
+    }
+    AppIcon.sync(r);
+    toast(sid === 'auto' ? 'Automatic — each season’s icon comes on by itself' : S ? `${S.name} icon on — every open Mac app updates now` : 'Everyday icon on');
+    renderContent();
+  } catch (e) { toast('Couldn’t change the icon: ' + e.message); }
 }
 async function appIconResetFlow() {
   const ok = await dialog({ title: 'Go back to the default icon?', body: 'Every Mac app goes back to the icon it was installed with.', okText: 'Reset icon' });
@@ -7457,9 +7631,32 @@ const Splash = (() => {
     return name && !Occasions.alone(part) ? `${part}, ${name}` : part;
   }
   let rows = [];
+  // Same animation, seasonal look: the tile, the cards, the lines and the mark take on the season's colours,
+  // with its touches (stars, lanterns, fireworks…) on the tile and on the card
+  function dressUp(sid) {
+    const S = sid && window.E11_SEASONS && E11_SEASONS[sid], svg = el && el.querySelector('.sp-mark');
+    if (!S || !svg) return;
+    const stops = (id) => svg.querySelectorAll(`#${id} stop`);
+    const b = stops('sp-b'); if (b.length === 2) { b[0].setAttribute('stop-color', S.tile[0]); b[1].setAttribute('stop-color', S.tile[1]); }
+    stops('sp-glow').forEach((x) => x.setAttribute('stop-color', S.tile[0]));
+    stops('sp-edge').forEach((x) => x.setAttribute('stop-color', S.tile[1]));
+    const c = stops('sp-card'); if (c.length === 2) { c[0].setAttribute('stop-color', S.card[0]); c[1].setAttribute('stop-color', S.card[1]); }
+    const g = svg.querySelector('.sp-green rect'); if (g) g.setAttribute('fill', S.right);
+    const y = svg.querySelector('.sp-yellow rect'); if (y) y.setAttribute('fill', S.left);
+    const l1 = svg.querySelector('.sp-l1'), l2 = svg.querySelector('.sp-l2');
+    if (l1) l1.setAttribute('fill', S.lines[0]); if (l2) l2.setAttribute('fill', S.lines[1]);
+    const ck = svg.querySelector('.sp-check'); if (ck) ck.innerHTML = `<circle cx="692" cy="695" r="26" fill="${S.check}"/>${S.glyph}`;
+    const bg = svg.querySelector('.sp-bg > g[clip-path]'); if (bg && S.deco) bg.insertAdjacentHTML('beforeend', S.deco);
+    const defs = svg.querySelector('defs');
+    if (defs && !svg.querySelector('#sp-card-cl')) defs.insertAdjacentHTML('beforeend', '<clipPath id="sp-card-cl"><rect x="262" y="262" width="500" height="520" rx="64"/></clipPath>');
+    const front = svg.querySelector('.sp-front'), e11 = svg.querySelector('.sp-e11');
+    // (December's own Santa hat already sits on the icon: no second one)
+    if (front && e11 && S.front && !(sid === 'christmas' && svg.querySelector('.xm-hat'))) e11.insertAdjacentHTML('beforebegin', S.front);
+  }
   function init() {
     if (!el) return;
     const mem = remembered();
+    try { dressUp(mem.iconAuto !== false && !mem.season ? autoSeason(todayStr()) : mem.season); } catch (e) { /* keep the everyday look */ }
     const light = (mem.themeMode === 'light' || mem.themeMode === 'dark' ? mem.themeMode : sunTheme()) === 'light';
     el.classList.toggle('light', light);
     // the page behind the startup screen matches it, so no dark edges show around it on the iPhone
@@ -7577,7 +7774,7 @@ function reauthOnce() {
 
 async function boot() {
   hydrateIcons();
-  try { await bootInner(); StartupGuard.done(); } finally { Splash.finish(); }
+  try { await bootInner(); StartupGuard.done(); } finally { Splash.finish().then(() => { if (typeof db !== 'undefined' && db && currentUserId) setTimeout(() => OccasionHello.maybe(), 650); }); }
 }
 async function bootInner() {
   if (Host.isServer) return bootServer();

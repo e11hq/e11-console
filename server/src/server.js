@@ -411,10 +411,10 @@ export function createServer(cfg) {
       return res.end(buf);
     }
     if (p === '/api/app-icon/info') return json(res, 200, { ok: true, ...appIcon.info(), canEdit: isOwner(u) });
-    if ((p === '/api/app-icon' || p === '/api/app-icon/reset') && req.method === 'POST') {
+    if ((p === '/api/app-icon' || p === '/api/app-icon/reset' || p === '/api/app-icon/auto') && req.method === 'POST') {
       if (!isOwner(u)) return json(res, 403, { ok: false, error: 'Only the owner can change the app icon' });
       let info;
-      try { info = p.endsWith('/reset') ? appIcon.reset(u.id) : appIcon.set((await readBody(req)).png, u.id); } catch (e) { return json(res, e.status || 400, { ok: false, error: e.message }); }
+      try { info = p.endsWith('/reset') ? appIcon.reset(u.id) : p.endsWith('/auto') ? appIcon.setAuto(u.id) : (await readBody(req).then((b) => appIcon.set(b.png, u.id, b.preset))); } catch (e) { return json(res, e.status || 400, { ok: false, error: e.message }); }
       for (const s of streams) send(s, 'appicon', info);
       return json(res, 200, { ok: true, ...info });
     }
