@@ -175,6 +175,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if ["about", "blob", "data"].contains(s) { return decisionHandler(.allow) }
     if ["mailto", "tel"].contains(s) { UIApplication.shared.open(u); return decisionHandler(.cancel) }
     if s == "http" || s == "https" {
+      // a file of ours opened as the whole page would leave no way back: it's downloaded to the share sheet instead
+      if action.targetFrame?.isMainFrame != false, u.host == serverHost, u.path.hasPrefix("/__file/") { return decisionHandler(.download) }
       if action.targetFrame?.isMainFrame == false || allowedHere(u) { return decisionHandler(.allow) }
       UIApplication.shared.open(u)
       return decisionHandler(.cancel)

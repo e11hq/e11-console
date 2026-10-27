@@ -1281,7 +1281,8 @@ const ServerHost = (() => {
         const up = await uploadFile(args.kind === 'logo' ? await logoFile(picked) : picked, { taskId: '_uploads' });
         return { ...(await api('POST', '/api/host/processImage', { path: up.path, kind: args.kind || 'avatar', userId: args.userId })), original: picked };
       }
-      case 'openPath': case 'quickLook': window.open(fileHref(args.path), '_blank', 'noopener'); return { ok: true };
+      // (the iPhone app: never the bare file in the app's own window, which has no way back — it goes to the share sheet)
+      case 'openPath': case 'quickLook': if (Host.isIOSApp) download(fileHref(args.path), String(args.path).split('/').pop()); else window.open(fileHref(args.path), '_blank', 'noopener'); return { ok: true };
       case 'revealPath': download(fileHref(args.path), String(args.path).split('/').pop()); return { ok: true };
       case 'openURL': window.open(args.url, '_blank', 'noopener'); return { ok: true };
       case 'exportFiles': { const r = await api('POST', '/api/host/exportFiles', args); if (r.count) download(r.url); return { ...r, dir: (r.dir || 'E11 files') + '.zip' }; }
@@ -3843,7 +3844,7 @@ async function previewFile(a) {
   else if (kind === 'pdf') body = `<iframe class="fv-pdf" src="${url}"></iframe>`;
   else if (kind === 'text') body = `<pre class="fv-text" data-text-src="${url}">Loading…</pre>`;
   else if (OFFICE_EXT.includes(fileExt(a.name)) && Host.isServer) body = `<div class="fv-doc" id="fv-office">${thumbImg(a, 'wide')}<p class="fv-wait"><span class="spin"></span>Preparing the full preview…</p></div>`;
-  else body = `<div class="fv-doc">${thumbImg(a, 'wide')}<p>This preview shows the first page. Click <b>Open in app</b> to see the whole file.</p></div>`;
+  else body = `<div class="fv-doc">${thumbImg(a, 'wide')}<p>This preview shows the first page. ${typeof Phone !== 'undefined' && Phone.on ? 'Download it' : 'Click <b>Open in app</b>'} to see the whole file.</p></div>`;
   $('#overlay-root').innerHTML = `<div class="fv" data-action="close-preview">
     <div class="fv-box">
       <div class="fv-head">
@@ -3866,9 +3867,9 @@ async function previewFile(a) {
       const el = document.getElementById('fv-pages');
       if (!el || ui.previewAtt !== a) return;
       const pages = (r && r.pages) || [];
-      if (!pages.length) { el.innerHTML = `<p class="fv-wait">${r && r.unavailable ? 'Full previews of Office files arrive with the next server update.' : 'This file couldn’t be previewed — use <b>Open in app</b> or download it.'}</p>`; return; }
+      if (!pages.length) { el.innerHTML = `<p class="fv-wait">${r && r.unavailable ? 'Full previews of Office files arrive with the next server update.' : (typeof Phone !== 'undefined' && Phone.on ? 'This file couldn’t be previewed — download it to see it.' : 'This file couldn’t be previewed — use <b>Open in app</b> or download it.')}</p>`; return; }
       el.innerHTML = pages.map((pth, i) => `<img class="fv-page" src="${'/__file/' + pth.split('/').map(encodeURIComponent).join('/')}" alt="Page ${i + 1}" loading="${i < 2 ? 'eager' : 'lazy'}">`).join('')
-        + (r.total > pages.length ? `<p class="fv-wait">Showing the first ${pages.length} of ${r.total} pages — use <b>Open in app</b> for the rest.</p>` : '');
+        + (r.total > pages.length ? `<p class="fv-wait">Showing the first ${pages.length} of ${r.total} pages — ${typeof Phone !== 'undefined' && Phone.on ? 'download it' : 'use <b>Open in app</b>'} for the rest.</p>` : '');
     }).catch(() => { const el = document.getElementById('fv-pages'); if (el) el.innerHTML = '<p class="fv-wait">This file couldn’t be previewed right now.</p>'; });
   }
   // Word / PowerPoint / Excel: the server turns it into a PDF (once) and the whole document shows here
@@ -3877,7 +3878,7 @@ async function previewFile(a) {
       const el = document.getElementById('fv-office');
       if (!el || ui.previewAtt !== a) return;
       if (r && r.pdf) el.outerHTML = `<iframe class="fv-pdf" src="${'/__file/' + r.pdf.split('/').map(encodeURIComponent).join('/')}" title="${esc(a.name)}"></iframe>`;
-      else { const w = el.querySelector('.fv-wait'); if (w) w.innerHTML = r && r.unavailable ? 'Full previews of Office files arrive with the next server update. This shows the first page.' : 'This file couldn’t be previewed — use <b>Open in app</b> or download it.'; }
+      else { const w = el.querySelector('.fv-wait'); if (w) w.innerHTML = r && r.unavailable ? 'Full previews of Office files arrive with the next server update. This shows the first page.' : (typeof Phone !== 'undefined' && Phone.on ? 'This file couldn’t be previewed — download it to see it.' : 'This file couldn’t be previewed — use <b>Open in app</b> or download it.'); }
     }).catch(() => { const w = document.querySelector('#fv-office .fv-wait'); if (w) w.textContent = 'This file couldn’t be previewed right now.'; });
   }
 }
