@@ -7459,7 +7459,7 @@ function pickPlace(btn, kind) {
   const cur = btn.dataset.val || '';
   const draw = () => {
     const q = input.value.trim(), ql = q.toLowerCase();
-    rows = all.filter((x) => !ql || x.toLowerCase().includes(ql)).slice(0, 80).map((x) => ({ v: x, l: x }));
+    rows = all.filter((x) => !ql || x.toLowerCase().includes(ql)).map((x) => ({ v: x, l: x }));
     if (kind === 'city' && q && !all.some((x) => x.toLowerCase() === ql)) rows.push({ v: q, l: `Use “${q}”` });
     if (cur && !q) rows.unshift({ v: '', l: 'Not set', clear: true });
     if (hl >= rows.length) hl = Math.max(0, rows.length - 1);
