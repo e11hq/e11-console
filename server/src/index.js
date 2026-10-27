@@ -26,6 +26,11 @@ const cfg = {
   officeIp: env.OFFICE_IP || '',                // the office's internet address(es), comma separated
   localUrl: env.LOCAL_URL || '',                // how office Macs reach this copy, e.g. https://192.168.1.20:8443
   localPort: env.LOCAL_PORT ? Number(env.LOCAL_PORT) : 0,   // the port inside the container (8443)
+  // Notifications for the native iPhone app (apns.js): the push key from the Apple Developer account
+  apnsKeyFile: env.APNS_KEY_FILE || '',
+  apnsKeyId: env.APNS_KEY_ID || '',
+  apnsTeamId: env.APNS_TEAM_ID || '',
+  apnsTopic: env.APNS_TOPIC || 'ae.e11.console.ios',
 };
 function readVersion() {
   try { return fs.readFileSync(path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../VERSION'), 'utf8').trim(); } catch { return '0.0.0-dev'; }

@@ -19,6 +19,7 @@ import { createDaily } from './amdaily.js';
 import { createLinks } from './links.js';
 import { createViewCopies } from './viewcopy.js';
 import { createOffice } from './office.js';
+import { createApns } from './apns.js';
 import { createHolidaySync, DEFAULT_HOLIDAYS_URL } from './holidays.js';
 import zlib from 'node:zlib';
 import { sampleData } from './sample.js';
@@ -43,6 +44,13 @@ export function createServer(cfg) {
   const plans = createPlans({ store, files, access });
   const exportJobs = new Map();   // content plan exports in progress (id → { userId, state, export | error })
   const webPush = createWebPush({ store, fetchImpl: cfg.pushFetch || fetch, subject: cfg.pushSubject || 'mailto:admin@e11hq.com' });
+  // the native iPhone app's notifications (apns.js) go out with every phone/browser notification
+  const apns = createApns({ store, keyFile: cfg.apnsKeyFile, keyId: cfg.apnsKeyId, teamId: cfg.apnsTeamId, topic: cfg.apnsTopic || 'ae.e11.console.ios', hosts: cfg.apnsHosts, connectOpts: cfg.apnsConnectOpts });
+  { const webSend = webPush.sendTo;
+    webPush.sendTo = async (userId, msg, opts) => {
+      const [a, b] = await Promise.all([webSend(userId, msg, opts), apns.sendTo(userId, msg, opts).catch((e) => { console.error('APNs:', e.message); return { sent: 0 }; })]);
+      return { sent: (a.sent || 0) + (b.sent || 0), removed: (a.removed || 0) + (b.removed || 0) };
+    }; }
   const digest = createDigest({ store, webPush, now: cfg.now || (() => Date.now()) });
   if (cfg.digest !== false) digest.start();
   // Inbox clean-up: read updates go after 60 days, any update after 180 days, so opening the app stays quick as
@@ -565,6 +573,14 @@ export function createServer(cfg) {
       return json(res, 200, { ok: true, marked: n });
     }
 
+    // The native iPhone app: its notification address (device token) for this person; signing out removes it
+    if (p === '/api/apns/register' && req.method === 'POST') {
+      const b = await readBody(req, 16 * 1024).catch(() => ({}));
+      if (req.viewingAs) return json(res, 200, { ok: true, viewingAs: true });
+      return json(res, apns.register(u.id, b.token, b.env) ? 200 : 400, { ok: true, push: apns.enabled() });
+    }
+    if (p === '/api/apns/unregister' && req.method === 'POST') { const b = await readBody(req, 16 * 1024).catch(() => ({})); apns.unregister(b.token); return json(res, 200, { ok: true }); }
+
     // Phone notifications: the server's public key, and turning them on / off for this device
     // Morning summary: today's, for this person's open app (shown once per device); a test send to yourself
     if (p === '/api/digest') return json(res, 200, { ok: true, ...digest.forUser(u) });
@@ -941,9 +957,9 @@ export function createServer(cfg) {
       if (cfg.localPort) office.listen(cfg.localPort, office.localHandler({ readRaw, json, users: (id) => store.get('users', String(id)), uploads, canStill: (u, target, fp) => (fp ? access.canReadFile(u, fp) : !uploadDenied(u, target)) }));
       server.listen(port, host, () => ok(server.address().port));
     }),
-    office,
+    office, apns,
     digest, holidays, occRemind, birthdays, scheduled, daily, views, scanVideos, pruneNotifications,
-    close: () => new Promise((ok) => { digest.stop(); holidays.stop(); occRemind.stop(); birthdays.stop(); scheduled.stop(); daily.stop(); scanTimers.forEach((x) => { clearTimeout(x); clearInterval(x); }); office.close(); for (const s of streams) try { s.res.end(); } catch { /* ignore */ } server.close(() => { store.close(); ok(); }); }),
+    close: () => new Promise((ok) => { digest.stop(); holidays.stop(); occRemind.stop(); birthdays.stop(); scheduled.stop(); daily.stop(); apns.close(); scanTimers.forEach((x) => { clearTimeout(x); clearInterval(x); }); office.close(); for (const s of streams) try { s.res.end(); } catch { /* ignore */ } server.close(() => { store.close(); ok(); }); }),
     broadcastVersion: (v) => { for (const s of streams) send(s, 'version', { version: v }); },
   };
 }

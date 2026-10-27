@@ -813,3 +813,8 @@ body.phone .wf-btns, body.phone .wf-chips { width: auto; margin: 0 -16px; paddin
 
 /* Picture / video previews in comments and attachments: no taller than 240px on the phone */
 body.phone { --ap-max: 240px; }
+
+/* The native iPhone app (ios/): it draws the tab bar itself (UITabBar, from the page's own tabs), so the page's bar is
+   hidden and nothing leaves room for it; the page runs up under the status bar (titles at the top, as designed) */
+html.ios-app body.phone #ph-tabs { display: none !important; }
+html.ios-app.phone body.phone { --ph-tabs-h: 0px !important; --ph-tab-gap: 0px !important; }

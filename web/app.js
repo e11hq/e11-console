@@ -125,6 +125,9 @@ function fmtSize(b) {
 /* ================= Host bridge ================= */
 const Host = (() => {
   const native = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.e11;
+  // the native iPhone app (ios/) around the server: its own bridge, so nothing here mistakes it for the Mac app
+  const ios = !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.e11ios);
+  if (ios) document.documentElement.classList.add('ios-app');
   let seq = 0;
   const pending = new Map();
   window.__e11Reply = (id, res) => {
@@ -165,12 +168,13 @@ const Host = (() => {
     });
   }
   // isNative = files can be shown (true in the Mac app and on the server); isServer = connected to the server
-  return { call, isNative: !!native || server, isServer: server, isMacApp: server && !!native };
+  return { call, isNative: !!native || server, isServer: server, isMacApp: server && !!native, isIOSApp: server && ios };
 })();
 
 // Talking to the E11 Console Mac app around the page (file picker, Downloads, Dock badge…)
 const NativeMac = (() => {
-  const handler = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.e11;
+  // (the Mac app's bridge, or the iPhone app's: the same commands and replies)
+  const handler = window.webkit && window.webkit.messageHandlers && (window.webkit.messageHandlers.e11 || window.webkit.messageHandlers.e11ios);
   let seq = 0;
   const waiting = new Map();
   window.__e11NativeReply = (id, res) => {

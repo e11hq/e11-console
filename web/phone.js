@@ -90,8 +90,21 @@ const Phone = (() => {
       + tab('me', 'user', 'Me');
     bar.hidden = !!ui.taskId;
     document.body.classList.toggle('task-open', !!ui.taskId);
+    nativeTabs(bar);
     const top = document.getElementById('ph-top'); if (top) { top.hidden = !top.firstElementChild; if (!ui.taskId && top.firstElementChild) document.documentElement.style.setProperty('--ph-head-h', top.offsetHeight + 'px'); }
   }
+
+  // The iPhone app draws a real (native) tab bar from the same tabs; tapping one taps the page's own button
+  let tabsSent = '';
+  function nativeTabs(bar) {
+    if (typeof Host === 'undefined' || !Host.isIOSApp) return;
+    const tabs = [...bar.querySelectorAll('[data-ph-tab]')].map((b) => ({ v: b.dataset.phTab, label: (b.querySelector('span') || {}).textContent || '', badge: (b.querySelector('.ph-badge') || {}).textContent || '', on: b.classList.contains('on') }));
+    const msg = JSON.stringify({ tabs, hidden: !!ui.taskId || !!document.querySelector('.ph-sheet.open, .scrim') });
+    if (msg === tabsSent) return;
+    tabsSent = msg;
+    NativeMac.call('setTabs', JSON.parse(msg)).catch(() => {});
+  }
+  window.__e11Tab = (v) => { const b = document.querySelector(`#ph-tabs [data-ph-tab="${v}"]`); if (b) b.click(); };
 
   /* ---------- Pieces ---------- */
   function card(t, o = {}) {
@@ -647,8 +660,20 @@ const Push = (() => {
   const supported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
   const keyBytes = (k) => { const s = atob(k.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((k.length + 3) % 4)); return Uint8Array.from(s, (c) => c.charCodeAt(0)); };
 
+  // the native iPhone app (ios/): Apple's own notifications instead of Web Push
+  const iosApp = () => typeof Host !== 'undefined' && Host.isIOSApp;
+  st.lock = null;
   async function refresh() {
     if (!Host.isServer) { st.state = 'none'; return paint(); }
+    if (iosApp()) {
+      try {
+        const r = await NativeMac.call('pushStatus');
+        st.state = r.state === 'on' ? 'on' : r.state === 'denied' ? 'denied' : 'off';
+        if (st.state === 'on') NativeMac.call('pushRegister').catch(() => {});   // (the address can change: the app sends it again)
+        st.lock = (await NativeMac.call('appInfo')).faceID || null;
+      } catch (e) { st.state = 'off'; }
+      return paint();
+    }
     if (!supported()) { st.state = ios && !standalone() ? 'install' : 'unsupported'; return paint(); }
     if (Notification.permission === 'denied') { st.state = 'denied'; return paint(); }
     try {
@@ -666,6 +691,8 @@ const Push = (() => {
   function paint() {
     const el = document.getElementById('ph-push');
     if (el) el.outerHTML = row(true);
+    const lk = document.getElementById('ph-lock');
+    if (lk) lk.outerHTML = lockRow();
     const pf = document.getElementById('pf-push');
     if (pf) pf.outerHTML = profileRow(true);
   }
@@ -689,11 +716,35 @@ const Push = (() => {
     if (st.state === 'none') return '';
     const label = { on: 'On', off: 'Off', denied: 'Blocked', install: 'Set up', unsupported: 'Not available', unknown: '' }[st.state];
     const sub = { on: 'A banner for every Inbox update', off: 'Get a banner even when the app is closed', denied: 'Allow them in iPhone Settings → Notifications → E11 Console', install: 'Add E11 Console to your Home Screen first', unsupported: 'This browser can’t show notifications', unknown: '' }[st.state];
-    return `<button class="ph-row" id="ph-push" data-ph-push>${icon('bell')}<span>Notifications on this phone<small>${sub}</small></span><i class="ph-state ${st.state === 'on' ? 'on' : ''}">${st.busy ? '…' : label}</i></button>`;
+    return `<button class="ph-row" id="ph-push" data-ph-push>${icon('bell')}<span>Notifications on this phone<small>${sub}</small></span><i class="ph-state ${st.state === 'on' ? 'on' : ''}">${st.busy ? '…' : label}</i></button>` + (iosApp() ? lockRow() : '');
   }
+  // iPhone app: lock the app with Face ID (asked when it opens, and after 10 minutes away)
+  function lockRow() {
+    if (!iosApp() || !st.lock) return iosApp() ? '<i id="ph-lock" hidden></i>' : '';
+    return `<button class="ph-row" id="ph-lock" data-ph-lock>${icon('lock')}<span>Lock with ${esc(st.lock.kind || 'Face ID')}<small>Asks for your face when E11 Console opens</small></span><i class="ph-state ${st.lock.on ? 'on' : ''}">${st.lock.on ? 'On' : 'Off'}</i></button>`;
+  }
+  document.addEventListener('click', (e) => {
+    const el = e.target.closest && e.target.closest('[data-ph-lock]');
+    if (!el || !st.lock) return;
+    e.stopPropagation();
+    NativeMac.call('setLock', { on: !st.lock.on }).then((r) => { st.lock = { ...st.lock, on: !!r.on }; paint(); }).catch((er) => toast(er.message));
+  }, true);
+  // the iPhone app's notification address arrives from the app (after it's allowed, and on each start)
+  let lastToken = null;
+  window.__e11ApnsToken = (d) => { if (!d || !d.token) return; lastToken = d.token; api('POST', '/api/apns/register', { token: d.token, env: d.env }).catch(() => {}); };
+  // tapping an iPhone app notification
+  window.__e11PushTap = (d) => { d = d || {}; if (d.view) { if (typeof openView === 'function') openView(d.view); return; } openFrom(d.taskId || null, d.nid || null, { kind: d.kind || null, clientId: d.clientId || null, folderId: d.folderId || null, commentId: d.commentId || null, planId: d.planId || null }); };
 
   async function turnOn() {
     st.busy = true; paint();
+    if (iosApp()) {
+      try {
+        const r = await NativeMac.call('pushEnable');
+        st.state = r.state === 'on' ? 'on' : r.state === 'denied' ? 'denied' : 'off';
+        if (st.state === 'on') toast('Notifications are on for this phone');
+      } catch (e) { toast('Couldn’t turn on notifications: ' + e.message); } finally { st.busy = false; paint(); }
+      return;
+    }
     try {
       const perm = await Notification.requestPermission();
       if (perm !== 'granted') { st.state = perm === 'denied' ? 'denied' : 'off'; return; }
@@ -706,6 +757,15 @@ const Push = (() => {
     } catch (e) { toast('Couldn’t turn on notifications: ' + e.message); } finally { st.busy = false; paint(); }
   }
   async function turnOff() {
+    if (iosApp()) {
+      try {
+        const r = await NativeMac.call('pushDisable');
+        const tk = r.token || lastToken;
+        if (tk) await api('POST', '/api/apns/unregister', { token: tk }).catch(() => {});
+        st.state = 'off'; paint(); toast('Notifications are off for this phone');
+      } catch (e) { toast(e.message); }
+      return;
+    }
     try {
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.getSubscription();
@@ -727,7 +787,10 @@ const Push = (() => {
     if (!el || st.busy) return;
     e.stopPropagation();
     if (st.state === 'install') return installHelp();
-    if (st.state === 'denied') return dialog({ title: 'Notifications are blocked', body: 'Open iPhone Settings → Notifications → E11 Console and turn on Allow Notifications. Then come back here.', okText: 'OK', cancelText: null });
+    if (st.state === 'denied') {
+      if (iosApp()) return dialog({ title: 'Notifications are off in Settings', body: 'Turn on Allow Notifications for E11 Console in the iPhone’s Settings.', okText: 'Open Settings' }).then((ok) => { if (ok) NativeMac.call('openSettings').catch(() => {}); });
+      return dialog({ title: 'Notifications are blocked', body: 'Open iPhone Settings → Notifications → E11 Console and turn on Allow Notifications. Then come back here.', okText: 'OK', cancelText: null });
+    }
     if (st.state === 'off') return turnOn();
     if (st.state === 'on') {
       showMenu(el, [
