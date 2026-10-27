@@ -27,7 +27,22 @@ jobs:
           ffmpeg -version | head -1
       - name: Server tests
         working-directory: server
-        run: npm test
+        run: |
+          set +e
+          npm test 2>&1 | tee "$RUNNER_TEMP/server-tests.log"
+          status=${PIPESTATUS[0]}
+          [ $status -eq 0 ] || echo "$status" > "$RUNNER_TEMP/server-tests.failed"
+          exit $status
+      # (Claude's workspace can't read Actions logs: a failed run's test output goes on the release "ci-logs")
+      - name: Failed test output for checking from Claude's workspace
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ -f "$RUNNER_TEMP/server-tests.failed" ] || exit 0
+          grep -nE "^not ok|# Subtest|AssertionError|Error|expected|actual|at .*test\.js" "$RUNNER_TEMP/server-tests.log" | head -300 > "$RUNNER_TEMP/server-tests-failed.log"
+          gh release view ci-logs -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || gh release create ci-logs -R "$GITHUB_REPOSITORY" --prerelease --title "CI logs" --notes "Failed test output." --target "$GITHUB_SHA"
+          gh release upload ci-logs -R "$GITHUB_REPOSITORY" "$RUNNER_TEMP/server-tests-failed.log" "$RUNNER_TEMP/server-tests.log" --clobber; true
       - name: Updater tests
         working-directory: launcher
         run: npm test
