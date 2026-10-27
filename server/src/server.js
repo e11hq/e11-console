@@ -17,6 +17,7 @@ import { createBirthdays } from './birthdays.js';
 import { createScheduled } from './scheduled.js';
 import { createDaily } from './amdaily.js';
 import { createLinks } from './links.js';
+import { createViewCopies } from './viewcopy.js';
 import { createHolidaySync, DEFAULT_HOLIDAYS_URL } from './holidays.js';
 import zlib from 'node:zlib';
 import { sampleData } from './sample.js';
@@ -86,6 +87,21 @@ export function createServer(cfg) {
   const scheduled = createScheduled({ store, access, webPush, notifMessage, deliver: (out) => broadcast(out.rev, out.results, null, null), now: cfg.now || (() => Date.now()) });
   if (cfg.scheduled !== false) scheduled.start();
   // Confirmed dates for Ramadan, the Eids… from a public UAE holiday calendar (off on a dev server unless a URL is given)
+  // Light viewing copies of videos (viewcopy.js): every video in tasks, comments, Client Assets and plans, in the
+  // background; checked a minute after start, every 3 minutes, and a few seconds after changes arrive
+  const views = createViewCopies({ files, dri: cfg.driDir || '/dev/dri', minSize: cfg.viewMinSize });
+  function scanVideos() {
+    try {
+      const add = (a) => { if (a && a.path) views.want(a.path); };
+      for (const t of store.list('tasks')) { (t.attachments || []).forEach(add); (t.comments || []).forEach((c) => (c.attachments || []).forEach(add)); }
+      for (const c of store.list('clients')) (c.folders || []).forEach((f) => (f.files || []).forEach(add));
+      for (const pl of store.list('plans')) JSON.stringify(pl).replace(/"path":"([^"]+)"/g, (_, x) => { views.want(x); return ''; });
+    } catch (e) { console.error('video scan failed', e.message); }
+  }
+  let scanSoon = null;
+  const scanLater = () => { clearTimeout(scanSoon); scanSoon = setTimeout(scanVideos, 5000); if (scanSoon.unref) scanSoon.unref(); };
+  const scanTimers = [];
+  if (cfg.views !== false && !cfg.dev) { const a = setTimeout(scanVideos, 60_000), b = setInterval(scanVideos, 3 * 60_000); [a, b].forEach((x) => x.unref && x.unref()); scanTimers.push(a, b); }
   const links = createLinks({ store, dataDir, fetcher: cfg.linkFetch });
   const daily = createDaily({ store, access, webDir, webPush, notifMessage, deliver: (out) => broadcast(out.rev, out.results, null, null), now: cfg.now || (() => Date.now()) });
   if (cfg.daily !== false && (!cfg.dev || cfg.daily)) daily.start();   // (not on a developer's copy unless asked)
@@ -490,7 +506,7 @@ export function createServer(cfg) {
     // load, and can it actually encode a short test clip
     if (p === '/api/system/video') {
       if (!isOwner(req.realUser || u)) return json(res, 403, { ok: false, error: 'Only the owner can see this' });
-      return json(res, 200, { ok: true, video: await videoHardware(url.searchParams.get('fresh') === '1') });
+      return json(res, 200, { ok: true, video: await videoHardware(url.searchParams.get('fresh') === '1'), lightCopies: views.stats() });
     }
     // "What's new" for everyone after an update
     if (p === '/api/whatsnew') {
@@ -658,6 +674,7 @@ export function createServer(cfg) {
       if (results.some((r) => r.kind === 'users' && !r.refused && !r.unchanged)) cfSync.schedule();
       // a task completed or deleted cancels its scheduled comments straight away (and the author hears now)
       if (results.some((r) => (r.kind === 'tasks' || r.kind === 'scheduled') && !r.refused && !r.unchanged)) setTimeout(() => scheduled.tick().catch(() => {}), 50);
+      if (cfg.views !== false && results.some((r) => ['tasks', 'clients', 'plans'].includes(r.kind) && !r.refused && !r.unchanged)) scanLater();
       return json(res, 200, { ok: true, rev, results: results.map((r) => ({ ...forUser(u, r), refused: !!r.refused })) });
     }
 
@@ -792,6 +809,7 @@ export function createServer(cfg) {
         const hay = ['users', 'projects', 'tasks', 'clients', 'meta', 'finance', 'claims', 'plans', 'scheduled'].map((k) => JSON.stringify(store.list(k))).join('\n');
         const forms = (x) => [x, JSON.stringify(x).slice(1, -1), x.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;')];
         body = { paths: paths.map((x) => String(x || '')).filter((x) => x && !forms(x).some((f) => hay.includes(f))) };
+        body.paths.forEach((x) => views.remove(x));   // (its light copy goes too)
       }
       if (cmd === 'claimPdf' && (body.receipts || []).some((x) => !access.canReadFile(u, String(x || '')) || !String(x || '').startsWith('Claims/'))) return deny();
       if (['thumb', 'processImage', 'docPreview', 'pdfPages'].includes(cmd) && !access.canReadFile(u, String(body.path || '')) && !(cmd === 'processImage' && uploads.get(body.path) && uploads.get(body.path).userId === u.id)) return deny();
@@ -823,6 +841,7 @@ export function createServer(cfg) {
       const rel = p.slice('/__file/'.length);
       if (!access.canReadFile(u, rel)) return json(res, 403, { ok: false, error: 'Not allowed' });
       if (url.searchParams.get('w')) return files.serveSized(req, res, rel, url.searchParams.get('w'));
+      if (url.searchParams.get('view')) return files.serve(req, res, views.viewPath(rel));   // a video's light copy (when ready)
       return files.serve(req, res, rel);
     }
 
@@ -884,8 +903,8 @@ export function createServer(cfg) {
   return {
     server, store, files, cfSync, webPush,
     listen: (port, host) => new Promise((ok) => server.listen(port, host, () => ok(server.address().port))),
-    digest, holidays, occRemind, birthdays, scheduled, daily, pruneNotifications,
-    close: () => new Promise((ok) => { digest.stop(); holidays.stop(); occRemind.stop(); birthdays.stop(); scheduled.stop(); daily.stop(); for (const s of streams) try { s.res.end(); } catch { /* ignore */ } server.close(() => { store.close(); ok(); }); }),
+    digest, holidays, occRemind, birthdays, scheduled, daily, views, scanVideos, pruneNotifications,
+    close: () => new Promise((ok) => { digest.stop(); holidays.stop(); occRemind.stop(); birthdays.stop(); scheduled.stop(); daily.stop(); scanTimers.forEach((x) => { clearTimeout(x); clearInterval(x); }); for (const s of streams) try { s.res.end(); } catch { /* ignore */ } server.close(() => { store.close(); ok(); }); }),
     broadcastVersion: (v) => { for (const s of streams) send(s, 'version', { version: v }); },
   };
 }

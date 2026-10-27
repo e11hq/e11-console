@@ -19,6 +19,7 @@ const cfg = {
   cfGroupId: env.CF_FREELANCER_GROUP_ID || '',
   launcherUrl: env.LAUNCHER_URL || '',
   holidaysUrl: env.HOLIDAYS_ICS_URL || '',
+  viewMinSize: env.VIEW_MIN_SIZE ? Number(env.VIEW_MIN_SIZE) : undefined,
 };
 function readVersion() {
   try { return fs.readFileSync(path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../VERSION'), 'utf8').trim(); } catch { return '0.0.0-dev'; }

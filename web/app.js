@@ -880,12 +880,13 @@ async function loadVideoHw(fresh) {
   const el = document.getElementById('vhw-card');
   if (!el) return;
   if (fresh) el.querySelector('.upd-note').textContent = 'Checking the NAS… (a short test conversion)';
-  let v;
-  try { v = (await api('GET', '/api/system/video' + (fresh ? '?fresh=1' : ''), null, { timeout: 45000 })).video; } catch (e) { el.querySelector('.upd-note').textContent = 'Couldn’t check: ' + e.message; return; }
+  let v, lc = null;
+  try { const r = await api('GET', '/api/system/video' + (fresh ? '?fresh=1' : ''), null, { timeout: 45000 }); v = r.video; lc = r.lightCopies || null; } catch (e) { el.querySelector('.upd-note').textContent = 'Couldn’t check: ' + e.message; return; }
   const col = v.state === 'ready' ? 'var(--green, #3ddc97)' : v.state === 'missing' ? 'var(--text-3)' : '#f2a33a';
   el.innerHTML = `<h3>${icon('play')}Video hardware</h3>
     <p style="margin:6px 0 4px;font-weight:650;color:${col}">${v.state === 'ready' ? '✓ ' : v.state === 'missing' ? '– ' : '! '}${esc(v.title)}</p>
     <p class="upd-note">${esc(v.detail || '')}${v.checkedAt ? ` · checked ${esc(timeAgo(v.checkedAt))}` : ''}</p>
+    ${lc ? `<p class="upd-note"><b>Light copies of videos</b> (720p, for viewing): ${lc.made} made since the last restart${lc.waiting ? ` · ${lc.waiting} waiting${lc.working ? ` (now: ${esc(lc.working)})` : ''}` : ' · none waiting'}${lc.lastSeconds != null ? ` · the last took ${lc.lastSeconds} s${lc.lastWith ? ' with ' + esc(lc.lastWith) : ''}` : ''}.</p>` : ''}
     <button class="btn sm" data-action="vhw-check">Check again</button>`;
 }
 async function importFromMac() {
@@ -3592,6 +3593,11 @@ const fileExt = (name) => (String(name).split('.').pop() || '').toLowerCase();
 const isImage = (a) => IMG_EXT.includes(fileExt(a.name));
 const fileUrl = (a) => '/__file/' + String(a.path).split('/').map(encodeURIComponent).join('/');
 // A smaller copy of an image for lists, tiles and previews (made once by the server); full size stays for the viewer and downloads
+// Videos are watched from their light copy (720p, starts at once; server viewcopy.js); Download keeps the original
+const viewUrl = (a) => fileUrl(a) + (Host.isServer ? '?view=1' : '');
+const posterUrl = (a) => (a && a.thumb ? '/__file/' + a.thumb.split('/').map(encodeURIComponent).join('/') : '');
+// a video player that shows its thumbnail as a cover and loads nothing until someone presses play
+const videoTag = (a, cls, extra = '') => `<video class="${cls}" src="${viewUrl(a)}" controls playsinline preload="none"${a.thumb ? ` poster="${posterUrl(a)}"` : ''} data-vposter="${esc(a.id)}" ${extra}></video>`;
 const imgUrl = (a, w) => fileUrl(a) + (Host.isServer && !/\.svg$/i.test(String(a.path)) ? '?w=' + w : '');
 function fileIcon(a) {
   return isImage(a) && Host.isNative
@@ -3635,6 +3641,30 @@ function attTile(a) {
 let thumbQueue = Promise.resolve();
 function hydrateThumbs(root) {
   if (!Host.isNative) return;
+  // videos: the thumbnail as their cover (made on the server the first time), which also gives the box its size
+  $$('video[data-vposter]', root).forEach((v) => {
+    const id = v.dataset.vposter;
+    v.removeAttribute('data-vposter');
+    const tid = v.dataset.thumbTask || ui.taskId;
+    const settle = (src) => {
+      const frame = v.parentElement;
+      if (!src) { v.preload = 'metadata'; return; }   // no cover possible: show the first frame the usual way
+      const im = new Image();
+      im.onload = () => { if (frame && frame.classList.contains('ap-frame')) { if (frame.classList.contains('nodim')) { MediaDims.remember(id, im.naturalWidth, im.naturalHeight); frame.classList.remove('nodim'); frame.style.setProperty('--ar', (im.naturalWidth / im.naturalHeight).toFixed(4)); frame.style.setProperty('--nw', im.naturalWidth + 'px'); } frame.classList.add('loaded'); } };
+      im.onerror = () => { v.preload = 'metadata'; };
+      im.src = src;
+      if (!v.poster) v.poster = src;
+    };
+    const known = v.getAttribute('poster');
+    if (known) { settle(known); return; }
+    thumbQueue = thumbQueue.then(async () => {
+      const t = task(tid);
+      const a = v.dataset.thumbClient ? clientFileById(id) : (t && findAttachment(t, id)) || null;
+      if (!a) { settle(null); return; }
+      if (!a.thumb) { try { const r = await Host.call('thumb', { id: a.id, path: a.path }); if (r.thumb) { a.thumb = r.thumb; persist(800); } } catch (e) { /* none */ } }
+      settle(a.thumb ? posterUrl(a) : null);
+    });
+  });
   $$('[data-thumb-for]', root).forEach((ph) => {
     const id = ph.dataset.thumbFor;
     const tid = ph.dataset.thumbTask || ui.taskId;
@@ -3688,7 +3718,7 @@ function attPreview(a, scope) {
   const kind = fileKind(a);
   let media = '';
   if (kind === 'image') media = `<div class="ap-img" data-action="lightbox" data-src="${url}" data-name="${esc(a.name)}">${MediaDims.frame(a, `<img src="${imgUrl(a, 1280)}" alt="" loading="lazy">`)}</div>`;
-  else if (kind === 'video') media = `<div class="ap-vid">${MediaDims.frame(a, `<video class="ap-video" data-media-key="${key}" src="${url}" controls preload="metadata" playsinline></video>`)}</div>`;
+  else if (kind === 'video') media = `<div class="ap-vid">${MediaDims.frame(a, videoTag(a, 'ap-video', `data-media-key="${key}"${scope === 'client' ? ' data-thumb-client="1"' : ''}`))}</div>`;
   else if (kind === 'audio') media = `<div class="ap-audio"><audio data-media-key="${key}" src="${url}" controls preload="metadata"></audio></div>`;
   else if (kind === 'pdf') media = `<iframe class="ap-pdf" src="${url}" title="${esc(a.name)}"></iframe>`;
   else if (kind === 'text') media = `<pre class="ap-text" data-text-src="${url}">Loading preview…</pre>`;
@@ -3725,7 +3755,7 @@ async function previewFile(a) {
   const phonePages = Host.isServer && typeof Phone !== 'undefined' && Phone.on && (kind === 'pdf' || OFFICE_EXT.includes(fileExt(a.name)));
   if (phonePages) body = `<div class="fv-pages" id="fv-pages"><p class="fv-wait"><span class="spin"></span>Loading the pages…</p></div>`;
   else if (kind === 'image') body = `<img class="fv-img" src="${url}" alt="">`;
-  else if (kind === 'video') body = `<video class="fv-video" src="${url}" controls autoplay playsinline></video>`;
+  else if (kind === 'video') body = `<video class="fv-video" src="${viewUrl(a)}" controls autoplay playsinline${a.thumb ? ` poster="${posterUrl(a)}"` : ''}></video>`;
   else if (kind === 'audio') body = `<div class="fv-audio">${icon('play')}<audio src="${url}" controls autoplay></audio></div>`;
   else if (kind === 'pdf') body = `<iframe class="fv-pdf" src="${url}"></iframe>`;
   else if (kind === 'text') body = `<pre class="fv-text" data-text-src="${url}">Loading…</pre>`;
