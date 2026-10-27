@@ -17,8 +17,19 @@ services:
       - UPDATE_HOUR=2
       - TZ=Asia/Dubai
       - ADMIN_EMAIL=haris@e11-digital.com
+      # fast office use (office Macs send/fetch files straight over the office network; see office.js)
+      - OFFICE_IP=5.30.68.204
+      - LOCAL_URL=https://PASTE_NAS_LAN_IP:8443
+      - LOCAL_PORT=8443
+      # push notifications for the native apps (the .p8 key file copied into the data folder's keys/)
+      - APNS_KEY_FILE=/data/keys/AuthKey_PASTE_KEY_ID.p8
+      - APNS_KEY_ID=PASTE_KEY_ID
+      - APNS_TEAM_ID=PASTE_TEAM_ID
     volumes:
       - /share/E11Console/live:/data
+      - "/share/E11 Share:/share:ro"   # the projects shared folder, READ-ONLY (files picked from it are copied on the NAS)
+    ports:
+      - "8443:8443"                  # office network only — never forward this port on the router
     devices:                        # the processor's video hardware (Intel Quick Sync) for fast video conversion
       - /dev/dri:/dev/dri
 
@@ -32,8 +43,18 @@ services:
       - UPDATE_CHANNEL=staging
       - TZ=Asia/Dubai
       - ADMIN_EMAIL=haris@e11-digital.com
+      - OFFICE_IP=5.30.68.204
+      - LOCAL_URL=https://PASTE_NAS_LAN_IP:8444
+      - LOCAL_PORT=8443
+      # push notifications for the native apps (the .p8 key file copied into the data folder's keys/)
+      - APNS_KEY_FILE=/data/keys/AuthKey_PASTE_KEY_ID.p8
+      - APNS_KEY_ID=PASTE_KEY_ID
+      - APNS_TEAM_ID=PASTE_TEAM_ID
     volumes:
       - /share/E11Console/test:/data
+      - "/share/E11 Share:/share:ro"
+    ports:
+      - "8444:8443"
     devices:                        # the processor's video hardware (Intel Quick Sync) for fast video conversion
       - /dev/dri:/dev/dri
 
