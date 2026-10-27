@@ -1,4 +1,4 @@
-/* Morning summary for Account Managers and Super Admins (server/src/amdaily.js sends it at 9:00 Dubai, Monday to
+/* Morning round-up for Account Managers and Super Admins (server/src/amdaily.js sends it at 9:00 Dubai, Monday to
    Friday, not on UAE public holidays). Opening the Inbox update shows this card, worked out again with the latest
    data: Overdue, Due today, Waiting for CD review, Amendments sent back, Client approval missing, and your comments
    scheduled for today. An AM's card covers their own work (the same tasks as their Home page); a Super Admin's the
@@ -50,7 +50,7 @@ const Daily = (() => {
           <button type="button" class="dy-h" data-dy-sec="${s.k}" ${c ? '' : 'disabled'}><span class="dy-ic">${icon(s.ic)}</span><span class="dy-l">${esc(s.l)}</span><b class="dy-n">${c}</b>${c ? icon('chev') : ''}</button>
           ${on ? `<div class="dy-list">${list}</div>` : ''}</div>`;
       }).join('');
-    return `<div class="scrim dy-scrim"><div class="dialog dy-card" role="dialog" aria-label="Morning summary">
+    return `<div class="scrim dy-scrim"><div class="dialog dy-card" role="dialog" aria-label="Morning round-up">
       <div class="dy-top"><span class="dy-sun">${icon('sun')}</span><div><h2>Good morning, ${esc(firstName(u.id))}</h2><span>${esc(when)} · ${team(u) ? 'the whole team’s tasks' : Work.hasClients(u.id) ? 'your clients’ tasks' : 'your tasks'}</span></div>
         <button type="button" class="icon-btn dy-x" data-dy-close title="Close">${icon('x')}</button></div>
       <div class="dy-body">${body}</div>

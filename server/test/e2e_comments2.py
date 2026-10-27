@@ -1,5 +1,5 @@
 """Comments: Edit comment only for the first 10 minutes (with the minutes left); read receipts on @mentions (Seen);
-link preview cards (WeTransfer details, removable by the writer); and the morning summary card for Account Managers."""
+link preview cards (WeTransfer details, removable by the writer); and the morning round-up card for Account Managers."""
 import asyncio, os, tempfile, time, subprocess, urllib.request
 from playwright.async_api import async_playwright
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -80,13 +80,13 @@ async def main():
             check(await ali.evaluate("!document.querySelector('#detail .cm[data-comment=\"c-men\"] .lk-x')"), 'others can’t remove the cards')
             await am.hover('#detail .cm[data-comment="c-men"] .lk-card.wt'); await am.click('#detail .cm[data-comment="c-men"] .lk-card.wt .lk-x'); await am.wait_for_timeout(500)
             check(await am.locator('#detail .cm[data-comment="c-men"] .lk-card').count() == 1 and 'wetransfer.com' in await am.inner_text('#detail .cm[data-comment="c-men"] .cm-text'), 'the card is gone, the link stays')
-            # 4. morning summary
+            # 4. morning round-up
             await am.evaluate("api('POST', '/api/daily/test', {})"); await am.wait_for_timeout(1500)
             n = await am.evaluate("db.notifications.filter(n => n.kind === 'daily' && n.to === currentUserId).length")
             check(n == 1, f'the summary arrives in the Inbox ({n})')
             await am.evaluate("closeDetail(); go('inbox')"); await am.wait_for_timeout(600)
-            row = am.locator('.ib-row', has_text='Morning summary').first
-            check(await row.count() == 1, 'an Inbox row called Morning summary')
+            row = am.locator('.ib-row', has_text='Morning round-up').first
+            check(await row.count() == 1, 'an Inbox row called Morning round-up')
             txt = await row.inner_text()
             check('Your day' in txt, f'with the numbers {txt[:140]!r}')
             await row.click(); await am.wait_for_timeout(500)
@@ -110,7 +110,7 @@ async def main():
                 check(await am.evaluate("ui.view") == 'mytasks' and await am.evaluate("Work.f().due") == 'late' and await am.locator('.dy-card').count() == 0, 'See them in My Tasks opens My Tasks filtered to Overdue')
             # the profile switch
             await am.evaluate("go('profile')"); await am.wait_for_timeout(600)
-            check('Morning summary' in await am.inner_text('#content') if await am.query_selector('#content') else False, 'My profile has the Morning summary switch')
+            check('Morning round-up' in await am.inner_text('#content') if await am.query_selector('#content') else False, 'My profile has the Morning round-up switch')
             pr, prerr = ali, alerr
             await pr.evaluate("closeDetail(); go('profile')"); await pr.wait_for_timeout(600)
             check(not await pr.query_selector('[data-action="daily-try"]'), 'not for Production')

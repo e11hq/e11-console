@@ -1,5 +1,5 @@
 // Comments: words can be edited for 10 minutes only (everyone, Admins too); read receipts for @mentions; link previews
-// (public addresses only); and the AMs' / Super Admins' 9:00 morning summary (Mon–Fri, not on UAE public holidays)
+// (public addresses only); and the AMs' / Super Admins' 9:00 morning round-up (Mon–Fri, not on UAE public holidays)
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -119,7 +119,7 @@ test('link previews: WeTransfer with its files, size and expiry', async () => {
 });
 
 const daily = () => app.store.list('notifications').filter((n) => n.kind === 'daily');
-test('morning summary: not before 9:00, then once to each AM and Super Admin who wants it', async () => {
+test('morning round-up: not before 9:00, then once to each AM and Super Admin who wants it', async () => {
   assert.equal(await app.daily.tick(), 0, 'not before 9:00');
   clock = Date.parse('2026-10-27T05:02:00Z');   // Tue 09:02 Dubai
   assert.equal(await app.daily.tick(), 2);
@@ -134,7 +134,7 @@ test('morning summary: not before 9:00, then once to each AM and Super Admin who
   assert.match(a.text, /1 overdue · 1 due today · 1 waiting for CD · 1 need client approval/);
   assert.equal(await app.daily.tick(), 0, 'only once a day');
 });
-test('morning summary: not on weekends or UAE public holidays', async () => {
+test('morning round-up: not on weekends or UAE public holidays', async () => {
   clock = Date.parse('2026-10-31T05:10:00Z');   // Saturday
   assert.equal(await app.daily.tick(), 0);
   clock = Date.parse('2026-12-02T05:10:00Z');   // Wed 2 Dec, UAE National Day
@@ -146,7 +146,7 @@ test('morning summary: not on weekends or UAE public holidays', async () => {
   clock = Date.parse('2026-12-08T05:10:00Z');   // Tue 8 Dec
   assert.equal(await app.daily.tick(), 2);
 });
-test('morning summary: wording, and a try-out for yourself', async () => {
+test('morning round-up: wording, and a try-out for yourself', async () => {
   assert.equal(dailyText({ overdue: 0, today: 0, cd: 0, amend: 0, client: 0, sched: 0 }), 'All clear today — nothing overdue or due today.');
   assert.equal(dailyText({ overdue: 0, today: 2, cd: 0, amend: 1, client: 0, sched: 1 }), '2 due today · 1 with amendments · 1 scheduled comment today');
   const n0 = daily().length;

@@ -1,4 +1,4 @@
-// Morning summary for Account Managers and Super Admins: at 9:00 Dubai, Monday to Friday (not on UAE public
+// Morning round-up for Account Managers and Super Admins: at 9:00 Dubai, Monday to Friday (not on UAE public
 // holidays), each gets one Inbox update and a phone notification, e.g. "3 overdue · 5 due today · 2 waiting for CD".
 // An Account Manager's numbers cover their own work (every task in the clients they look after, plus their own tasks
 // without a client — the same tasks as their Home page, web/app.js Work.leadSet); a Super Admin's cover the whole
