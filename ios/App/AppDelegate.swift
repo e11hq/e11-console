@@ -118,6 +118,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     web.scrollView.showsHorizontalScrollIndicator = false
     if #available(iOS 16.4, *) { web.isInspectable = true }
     view.addSubview(web)
+    web.hideKeyboardBar()
     tabBar.delegate = self
     tabBar.isHidden = true
     view.addSubview(tabBar)
@@ -183,6 +184,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
     let onServer = webView.url?.host == serverHost
     pageReady = onServer
+    webView.hideKeyboardBar()
     if onServer { tabCover = -1; view.setNeedsLayout(); flushPending(); if !SELFTEST.isEmpty && !started { started = true; DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.selfTest() } } }
     else { tabBar.isHidden = true; tabsHidden = true; view.setNeedsLayout() }   // (the sign-in page: no tabs)
   }
@@ -579,5 +581,26 @@ final class DownloadHUD: UIVisualEffectView {
     title.frame = CGRect(x: 16, y: 11, width: w - cw - 30, height: 20)
     detail.frame = CGRect(x: 16, y: 32, width: w - cw - 30, height: 17)
     bar.frame = CGRect(x: 16, y: 56, width: w - cw - 30, height: 4)
+  }
+}
+
+// No ‹ › Done bar above the keyboard (it covered the page in a native app; the page has its own buttons).
+// The page's content view gets a version of itself without that bar, the same way other well-known iPhone apps
+// built on a web view do it.
+extension WKWebView {
+  func hideKeyboardBar() {
+    guard let content = scrollView.subviews.first(where: { String(describing: type(of: $0)).hasPrefix("WKContent") }),
+          let base: AnyClass = object_getClass(content) else { return }
+    let baseName = String(cString: class_getName(base))
+    if baseName.hasSuffix("_E11NoBar") { return }
+    let name = baseName + "_E11NoBar"
+    var cls: AnyClass? = NSClassFromString(name)
+    if cls == nil, let made = objc_allocateClassPair(base, name, 0) {
+      let none: @convention(block) (AnyObject) -> AnyObject? = { _ in nil }
+      class_addMethod(made, #selector(getter: UIResponder.inputAccessoryView), imp_implementationWithBlock(none), "@@:")
+      objc_registerClassPair(made)
+      cls = made
+    }
+    if let c = cls { object_setClass(content, c) }
   }
 }
