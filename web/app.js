@@ -11,6 +11,7 @@ const byOrder = (a, b) => (a.order || 0) - (b.order || 0);
 
 const ICONS = {
   plus: '<path d="M8 3v10M3 8h10"/>',
+  gift: '<rect x="2.5" y="6" width="11" height="3" rx=".6"/><path d="M3.5 9v4.5h9V9M8 6v7.5M8 6S7 3.1 5.3 3.4C4 3.7 4.4 6 8 6zm0 0s1-2.9 2.7-2.6C12 3.7 11.6 6 8 6z"/>',
   home: '<path d="M2.5 7.2 8 2.8l5.5 4.4V13a.5.5 0 0 1-.5.5H9.6V9.8H6.4v3.7H3a.5.5 0 0 1-.5-.5z"/>',
   'check-circle': '<circle cx="8" cy="8" r="5.8"/><path d="m5.6 8.1 1.7 1.7 3.2-3.4"/>',
   check: '<path d="m3.5 8.4 3 3 6-6.6"/>',
@@ -250,22 +251,43 @@ const OccasionHello = (() => {
   }
   function maybe() {
     try {
-      const d = due(); if (!d) return;
-      if (localStorage.getItem(KEY) === d[1]) return;
+      const d = due(); if (!d) return Promise.resolve();
+      if (localStorage.getItem(KEY) === d[1]) return Promise.resolve();
       localStorage.setItem(KEY, d[1]);
-      show(d[0]);
-    } catch (e) { /* storage off: skip */ }
+      return show(d[0]);
+    } catch (e) { return Promise.resolve(); }
   }
-  function show(sid) {
-    const S = window.E11_SEASONS && E11_SEASONS[sid]; if (!S) return;
+  // your own birthday (day and month on My profile; 29 Feb on 28 Feb in other years): once, on your first start that day
+  const BKEY = 'e11-hello-bday';
+  function isBday(md, day) {
+    if (!/^\d{2}-\d{2}$/.test(String(md || ''))) return false;
+    if (md === day.slice(5)) return true;
+    const y = Number(day.slice(0, 4)), leap = (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+    return md === '02-29' && !leap && day.slice(5) === '02-28';
+  }
+  function birthday() {
+    try {
+      const u = me(); if (!u || !isBday(u.bday, todayStr())) return Promise.resolve();
+      const k = todayStr() + ':' + u.id;
+      if (localStorage.getItem(BKEY) === k) return Promise.resolve();
+      localStorage.setItem(BKEY, k);
+      return show(null, { title: `Happy birthday, ${firstName(u.id)}`, sub: 'Wishing you a wonderful year · from all of us at E11', tile: ['#b3a6fb', '#5b44d4'], colors: ['#f0b93a', '#3fcf98', '#ffffff', '#ff8fb8', '#8b78ef'], img: avatarHTML(u.id, 110) });
+    } catch (e) { return Promise.resolve(); }
+  }
+  // sid: a season; or opts for another greeting (birthday). Resolves when it closes.
+  function show(sid, opts) {
+    const S0 = sid && window.E11_SEASONS && E11_SEASONS[sid];
+    if (!S0 && !opts) return Promise.resolve();
+    const S = S0 || { name: '', tile: opts.tile, left: opts.colors[0], right: opts.colors[1], check: opts.colors[4] };
+    let done = null; const closedP = new Promise((r) => { done = r; });
     const still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const el = document.createElement('div');
     el.className = 'hello-wrap';
     el.innerHTML = `<canvas class="hello-confetti" aria-hidden="true"></canvas>
-      <div class="hello-card" role="dialog" aria-label="${esc(GREET[sid] || S.name)}" style="--oh-a:${S.tile[0]};--oh-b:${S.tile[1]}">
-        <img src="icons/seasonal/${sid}.png" alt="">
-        <h2>${esc(GREET[sid] || S.name)}</h2>
-        <p>${esc(S.name)} · from all of us at E11</p>
+      <div class="hello-card ${opts ? 'hello-own' : ''}" role="dialog" aria-label="${esc(opts ? opts.title : GREET[sid] || S.name)}" style="--oh-a:${S.tile[0]};--oh-b:${S.tile[1]}">
+        ${opts ? `<div class="hello-av">${opts.img}</div>` : `<img src="icons/seasonal/${sid}.png" alt="">`}
+        <h2>${esc(opts ? opts.title : GREET[sid] || S.name)}</h2>
+        <p>${esc(opts ? opts.sub : S.name + ' · from all of us at E11')}</p>
         <small>Click anywhere to continue</small>
       </div>`;
     document.body.appendChild(el);
@@ -275,16 +297,16 @@ const OccasionHello = (() => {
       if (closed) return; closed = true;
       el.classList.remove('in'); el.classList.add('out');
       document.removeEventListener('keydown', close, true);
-      setTimeout(() => { cancelAnimationFrame(raf); el.remove(); }, 450);
+      setTimeout(() => { cancelAnimationFrame(raf); el.remove(); done(); }, 450);
     };
     el.addEventListener('click', close);
     document.addEventListener('keydown', close, true);
     setTimeout(close, 5200);
-    if (still) return;
+    if (still) return closedP;
     // confetti in the season's colours
     const cv = el.querySelector('canvas'), ctx = cv.getContext('2d'), dpr = window.devicePixelRatio || 1;
     const W = cv.width = innerWidth * dpr, H = cv.height = innerHeight * dpr;
-    const cols = [S.tile[0], S.left, S.right, S.check, '#ffffff', '#ffd36e'];
+    const cols = opts ? opts.colors : [S.tile[0], S.left, S.right, S.check, '#ffffff', '#ffd36e'];
     const bits = Array.from({ length: Math.min(180, Math.round(innerWidth / 6)) }, (_, i) => ({
       x: W / 2 + (Math.random() - 0.5) * W * 0.2, y: H * 0.55, vx: (Math.random() - 0.5) * 18 * dpr, vy: -(8 + Math.random() * 16) * dpr,
       w: (6 + Math.random() * 6) * dpr, h: (3 + Math.random() * 4) * dpr, r: Math.random() * 6, vr: (Math.random() - 0.5) * 0.3, c: cols[i % cols.length],
@@ -301,8 +323,35 @@ const OccasionHello = (() => {
       if (age < 4.6 && !closed) raf = requestAnimationFrame(step);
     };
     raf = requestAnimationFrame(step);
+    return closedP;
   }
-  return { maybe, show, today };
+  return { maybe, show, today, birthday };
+})();
+
+/* ================= One-time nudge to add your birthday and where you're based ================= */
+// Staff only (not Freelancers), once per person (remembered with their profile, on every device), after startup.
+const ProfileAsk = (() => {
+  async function maybe() {
+    const u = typeof me === 'function' ? me() : null;
+    if (!u || u.role === 'freelancer') return;
+    if ((u.prefs || {}).profileAsked || (u.bday && u.country && u.city)) return;
+    u.prefs = { ...(u.prefs || {}), profileAsked: todayStr() }; persist(0);
+    const missing = [!u.bday && 'your birthday', !(u.country && u.city) && 'where you’re based'].filter(Boolean).join(' and ');
+    // a small card in the corner (it doesn't stop you working): Go to My profile or Not now
+    const el = document.createElement('div');
+    el.className = 'pa-card';
+    el.setAttribute('role', 'status');
+    el.innerHTML = `<span class="pa-ic">${icon('gift')}</span><div><b>Add ${esc(missing)}?</b><span>The team gets a reminder to wish you on your birthday, and people see your city on your card. Both are optional.</span>
+      <div class="pa-btns"><button class="btn sm primary" data-pa="1">Go to My profile</button><button class="btn sm ghost" data-pa="0">Not now</button></div></div>`;
+    document.body.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('in'));
+    el.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-pa]'); if (!b) return;
+      el.classList.remove('in'); setTimeout(() => el.remove(), 300);
+      if (b.dataset.pa === '1') { if (ui.taskId) closeDetail(); go('profile'); }
+    });
+  }
+  return { maybe };
 })();
 
 /* ================= Mac app Dock icon (chosen by the owner on the server) ================= */
@@ -431,7 +480,17 @@ const DatePicker = (() => {
     for (let i = 0; i < 42; i++) { const d = new Date(start); d.setDate(start.getDate() + i); out.push(d); }
     return out;
   }
+  function drawMD() {
+    const sel = input.dataset.val || '', mm = String(view.m + 1).padStart(2, '0');
+    const n = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][view.m];
+    pop.innerHTML = `<div class="dp-head"><b>${MONTHS[view.m]}</b><span class="spacer"></span>
+        ${sel ? '<button class="dp-today" data-dp="clear">Clear</button>' : ''}
+        <button class="dp-nav" data-dp="prev" title="Previous month">${icon('chev-up')}</button>
+        <button class="dp-nav" data-dp="next" title="Next month">${icon('chev')}</button></div>
+      <div class="dp-grid dp-md">${Array.from({ length: n }, (_, i) => { const k = `${mm}-${String(i + 1).padStart(2, '0')}`; return `<button class="dp-day ${k === sel ? 'sel' : ''}" data-md="${k}">${i + 1}</button>`; }).join('')}</div>`;
+  }
   function draw() {
+    if (input && input.dataset.md) return drawMD();
     const today = todayStr(), sel = input.value || '';
     pop.innerHTML = `<div class="dp-head"><b>${MONTHS[view.m]} ${view.y}</b><span class="spacer"></span>
         <button class="dp-today" data-dp="today">Today</button>
@@ -449,7 +508,7 @@ const DatePicker = (() => {
   function open(el) {
     close();
     input = el;
-    const base = el.value ? parseYmd(el.value) : new Date();
+    const base = el.dataset.md ? new Date(2000, el.dataset.val ? Number(el.dataset.val.slice(0, 2)) - 1 : new Date().getMonth(), 1) : el.value ? parseYmd(el.value) : new Date();
     view = { y: base.getFullYear(), m: base.getMonth() };
     pop = document.createElement('div');
     pop.className = 'dp-pop';
@@ -466,6 +525,7 @@ const DatePicker = (() => {
       const b = e.target.closest('button'); if (!b) return;
       e.stopPropagation();
       if (b.dataset.day) return pick(b.dataset.day);
+      if (b.dataset.md || b.dataset.dp === 'clear') { const el2 = input; const v = b.dataset.md || ''; close(); el2.dataset.val = v; if (el2.tagName === 'INPUT') el2.value = fmtMD(v); else el2.innerHTML = `${v ? esc(fmtMD(v)) : '<span class="pf-ph">Choose your birthday</span>'}${icon('cal')}`; el2.dispatchEvent(new Event('change', { bubbles: true })); return; }
       if (b.dataset.dp === 'today') return pick(todayStr());
       view.m += b.dataset.dp === 'next' ? 1 : -1;
       if (view.m < 0) { view.m = 11; view.y--; } if (view.m > 11) { view.m = 0; view.y++; }
@@ -3368,10 +3428,12 @@ function designationOf(u) {
   return TEAM_LABEL[u.role] || '';
 }
 let cardTimer = null, cardHideTimer = null, cardFor = null;
+// "City, Country" from the profile (UAE, UK, USA, KSA shortened); nothing when not set
+const placeOf = (u) => [u && u.city, u && u.country && (window.E11_PLACES ? E11_PLACES.short(u.country) : u.country)].filter(Boolean).join(', ');
 function userCardHTML(u) {
   return `<div class="ucard-top">${avatarHTML(u.id, 56)}<div class="ucard-id"><b>${esc(fullName(u))}${u.id === currentUserId ? ' <small>(you)</small>' : ''}</b><span class="ucard-role ${u.id === cdUserId() ? 'cd' : 'r-' + u.role}">${esc(designationOf(u))}</span></div></div>
     <div class="ucard-rows">
-      <div>${icon('pin')}<span>${u.office ? esc(u.office) : '<i>Office not set</i>'}</span></div>
+      ${placeOf(u) ? `<div>${icon('pin')}<span>${esc(placeOf(u))}</span></div>` : ''}
       <div>${icon('mail')}<span>${esc(u.email)}</span></div>
       ${u.active === false ? `<div class="ucard-off">${icon('lock')}<span>No longer on the team</span></div>` : ''}
     </div>`;
@@ -4948,6 +5010,9 @@ document.addEventListener('click', async (e) => {
       case 'mac-update': MacUpdate.run(); return;
       case 'appicon-reset': appIconResetFlow(); return;
       case 'appicon-season': appIconSeasonFlow(actEl.dataset.sid); return;
+      case 'pick-country': e.stopPropagation(); pickPlace(actEl, 'country'); return;
+      case 'pick-city': e.stopPropagation(); pickPlace(actEl, 'city'); return;
+      case 'pick-bday': e.stopPropagation(); DatePicker.open(actEl); return;
       case 'hello-preview': { const i = AppIcon.info(); OccasionHello.show((!i.auto && i.preset) || AppIcon.autoNow() || OccasionHello.today() || 'national-day'); return; }
       case 'remove-photo': { const u = me(); if (u.avatar) Host.call('trashPath', { path: u.avatar }).catch(() => {}); u.avatar = null; persist(); render(); return; }
       case 'save-profile': saveProfile(); return;
@@ -6521,7 +6586,7 @@ async function cdToggleFlow(id) {
 
 /* ================= Inbox ================= */
 const myNotifs = () => (db && currentUserId ? db.notifications.filter((n) => n.to === currentUserId) : []);
-const NOTIF_ICON = { plan: 'cal', 'plan-ok': 'check', 'plan-changes': 'edit', 'plan-tasks': 'check-circle', 'plan-client': 'check', claim: 'coin', 'claim-ok': 'check', 'claim-paid': 'coin', trash: 'trash', restore: 'reply', review: 'upload', 'review-ok': 'check', 'review-amend': 'edit', 'review-wd': 'x', part: 'check-circle', allparts: 'check-circle', assigned: 'user', unassigned: 'user', comment: 'chat', mention: 'chat', status: 'check-circle', cd: 'shield', done: 'check', due: 'cal', priority: 'flag', attach: 'clip' };
+const NOTIF_ICON = { birthday: 'gift', plan: 'cal', 'plan-ok': 'check', 'plan-changes': 'edit', 'plan-tasks': 'check-circle', 'plan-client': 'check', claim: 'coin', 'claim-ok': 'check', 'claim-paid': 'coin', trash: 'trash', restore: 'reply', review: 'upload', 'review-ok': 'check', 'review-amend': 'edit', 'review-wd': 'x', part: 'check-circle', allparts: 'check-circle', assigned: 'user', unassigned: 'user', comment: 'chat', mention: 'chat', status: 'check-circle', cd: 'shield', done: 'check', due: 'cal', priority: 'flag', attach: 'clip' };
 function notifPlain(n) { const d = document.createElement('div'); d.innerHTML = n.text; return d.textContent; }
 const IB_FILTERS = { all: 'All updates', comments: 'Comments & mentions', assigned: 'Assigned to me', status: 'Status & CD review', dates: 'Dates & priority' };
 const ibMatch = (n, f) => f === 'all' || !f ? true : f === 'comments' ? ['comment', 'mention'].includes(n.kind) : f === 'assigned' ? ['assigned', 'unassigned'].includes(n.kind) : f === 'status' ? ['status', 'cd', 'done', 'review', 'review-ok', 'review-amend', 'review-wd'].includes(n.kind) : ['due', 'priority'].includes(n.kind);
@@ -6555,6 +6620,7 @@ function notifMsg(n, t) {
     const c = val === 'Approved' ? CD.approved.color : CD.review.color;
     return `${who} set CD Status to: <span class="ib-chip" style="background:${c};color:${textOn(c)}">${esc(val)}</span>`;
   }
+  if (n.kind === 'birthday') return `Today is <b>${esc(firstName(n.from))}</b>’s birthday`;
   if (/^claim/.test(n.kind)) return `${who} ${n.text}${n.snippet ? ` <span class="ib-dim">· ${esc(n.snippet)}</span>` : ''}`;
   if (n.kind === 'asset') return `${who} ${esc(n.text)}${n.snippet ? ` <span class="ib-dim">· ${esc(n.snippet)}</span>` : ''}`;
   if (/^plan/.test(n.kind)) return `${who} ${String(n.text || '').replace(/<(?!\/?b>)/g, '&lt;')}${n.snippet ? ` <span class="ib-dim">· ${esc(n.snippet)}</span>` : ''}`;   // (content plans: the text is built escaped)
@@ -6591,9 +6657,9 @@ function viewInbox() {
     const unread = items.some((x) => !x.read);
     // opens what the row shows: an unread update that needs action first, otherwise the newest
     const target = ibTarget(items), shown = target;
-    const lead = ['comment', 'mention', 'review-amend', 'review-ok', 'review', 'claim', 'claim-ok', 'claim-paid', 'asset', 'plan', 'plan-ok', 'plan-changes', 'plan-tasks', 'plan-client'].includes(shown.kind) ? avatarHTML(shown.from, 22) : `<span class="ib-kic">${icon(NOTIF_ICON[shown.kind] || 'bell')}</span>`;
+    const lead = ['comment', 'mention', 'review-amend', 'review-ok', 'review', 'claim', 'claim-ok', 'claim-paid', 'asset', 'plan', 'plan-ok', 'plan-changes', 'plan-tasks', 'plan-client', 'birthday'].includes(shown.kind) ? avatarHTML(shown.from, 22) : `<span class="ib-kic">${icon(NOTIF_ICON[shown.kind] || 'bell')}</span>`;
     return `<div class="ib-row ${unread ? 'unread' : ''}" data-action="open-notif" data-id="${target.id}">
-      <span class="ib-title">${/^plan/.test(n.kind) ? `<span class="st-ic ib-coin">${icon('cal')}</span><span class="ib-tname">${esc(planTitle(n))}</span>` : n.kind === 'asset' ? `<span class="st-ic ib-coin">${icon('assets')}</span><span class="ib-tname">${esc(assetTitle(n))}</span>` : `${t ? statusIcon(t) : /^claim/.test(n.kind) ? `<span class="st-ic ib-coin">${icon('coin')}</span>` : `<span class="st-ic">${statusIconSVG('#87909e', 'todo', 0)}</span>`}<span class="ib-tname">${t ? esc(t.title || 'Untitled task') : /^claim/.test(n.kind) ? 'Expense claims' : '<i>Deleted task</i>'}</span>`}</span>
+      <span class="ib-title">${n.kind === 'birthday' ? `<span class="st-ic ib-coin">${icon('gift')}</span><span class="ib-tname">Birthday</span>` : /^plan/.test(n.kind) ? `<span class="st-ic ib-coin">${icon('cal')}</span><span class="ib-tname">${esc(planTitle(n))}</span>` : n.kind === 'asset' ? `<span class="st-ic ib-coin">${icon('assets')}</span><span class="ib-tname">${esc(assetTitle(n))}</span>` : `${t ? statusIcon(t) : /^claim/.test(n.kind) ? `<span class="st-ic ib-coin">${icon('coin')}</span>` : `<span class="st-ic">${statusIconSVG('#87909e', 'todo', 0)}</span>`}<span class="ib-tname">${t ? esc(t.title || 'Untitled task') : /^claim/.test(n.kind) ? 'Expense claims' : '<i>Deleted task</i>'}</span>`}</span>
       <span class="ib-lead">${lead}</span>
       <span class="ib-msg"><span class="ib-mi">${notifMsg(shown, t)}</span></span>
       <span class="ib-count">${items.length > 1 ? `<i>${items.length}</i>` : ''}</span>
@@ -6649,7 +6715,7 @@ function inboxFilterMenu(anchor) {
   showMenu(anchor, Object.entries(IB_FILTERS).map(([k, l]) => ({ html: `<div class="mi ${(ui.inboxFilter || 'all') === k ? 'cur' : ''}">${esc(l)}</div>`, run: () => { ui.inboxFilter = k; renderContent(); } })).map((it, i) => ({ ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) })));
 }
 // Inbox rows: a task's updates together; Client Assets updates together per client
-const notifKey = (n) => n.taskId || (n.kind === 'asset' ? 'asset:' + n.clientId : n.planId ? 'plan:' + n.planId : n.id);
+const notifKey = (n) => n.taskId || (n.kind === 'birthday' ? 'bday:' + n.from + ':' + String(n.at).slice(0, 10) : n.kind === 'asset' ? 'asset:' + n.clientId : n.planId ? 'plan:' + n.planId : n.id);
 const planTitle = (n) => { const what = n.kind === 'plan-client' ? 'Content plan' : 'Content skeleton'; const pl = typeof Plans !== 'undefined' && Plans.planById(n.planId); return pl ? `${Plans.nameOf(pl)} · ${what}` : what; };
 const assetTitle = (n) => `${(clientById(n.clientId) || {}).name || 'A client'} · Client Assets`;
 function clearTaskNotifs(taskId, read) {
@@ -6663,6 +6729,8 @@ const ibTarget = (items) => items.find((x) => IB_ACTION.has(x.kind) && !x.read) 
 function openNotif(id) {
   const n = db.notifications.find((x) => x.id === id);
   if (!n) return;
+  // a birthday: just marked as read
+  if (n.kind === 'birthday') { n.read = true; persist(); renderSidebar(); if (ui.view === 'inbox') renderContent(); return; }
   if (/^claim/.test(n.kind)) { myNotifs().forEach((x) => { if (x.claimId && x.claimId === n.claimId) x.read = true; }); persist(); renderSidebar(); return Claims.openNotif(n); }
   if (n.planId) {
     myNotifs().forEach((x) => { if (notifKey(x) === notifKey(n)) x.read = true; }); persist(); renderSidebar();
@@ -7087,8 +7155,13 @@ function viewProfile() {
       <div class="pf-photo">${avatarHTML(u.id, 96, 'pf-av')}<div class="pf-photo-btns"><button class="btn sm" data-action="change-photo">${icon('camera')}${u.avatar ? 'Change photo' : 'Add photo'}</button>${u.avatar ? `<button class="btn ghost sm" data-action="remove-photo">Remove</button>` : ''}</div></div>
       <label class="dlg-label">Full name</label><input class="field" id="pf-name" value="${esc(u.name || '')}" placeholder="Your full name">
       <label class="dlg-label">Email</label><div class="field ro">${icon('lock')}${esc(u.email)}</div>
-      <label class="dlg-label">Office</label><input class="field" id="pf-office" value="${esc(u.office || '')}" maxlength="80" placeholder="e.g. Dubai — Business Bay office">
-      <label class="dlg-label">Role</label><div class="pf-role"><span class="role-pill r-${roleCls(u)}">${esc(roleOf(u))}</span>${u.admin && u.role !== 'admin' ? '<span class="role-pill r-admin">+ Admin</span>' : ''}${u.fin && !isFinUser(u) ? `<span class="role-pill r-finance_${u.fin}">+ ${esc(FIN_ACCESS[u.fin])}</span>` : ''}${u.id === cdUserId() ? `<span class="role-pill r-cd">${esc(cdTitle())}</span>` : ''}<small>People see this and your office when they hover your name.</small></div>
+      <div class="pf-two">
+        <div><label class="dlg-label">Your country</label><button type="button" class="field pf-pick" id="pf-country" data-action="pick-country" data-val="${esc(u.country || '')}">${u.country ? esc(u.country) : '<span class="pf-ph">Choose your country</span>'}${icon('chev')}</button></div>
+        <div><label class="dlg-label">Your city</label><button type="button" class="field pf-pick" id="pf-city" data-action="pick-city" data-val="${esc(u.city || '')}">${u.city ? esc(u.city) : '<span class="pf-ph">Choose your city</span>'}${icon('chev')}</button></div>
+      </div>
+      <div class="pf-two pf-bday-row"><div><label class="dlg-label">Birthday <small class="pf-opt-l">optional · day and month</small></label>
+      <button type="button" class="field pf-pick" id="pf-bday" data-md="1" data-action="pick-bday" data-val="${esc(u.bday || '')}">${u.bday ? esc(fmtMD(u.bday)) : '<span class="pf-ph">Choose your birthday</span>'}${icon('cal')}</button></div><div></div></div>
+      <label class="dlg-label">Role</label><div class="pf-role"><span class="role-pill r-${roleCls(u)}">${esc(roleOf(u))}</span>${u.admin && u.role !== 'admin' ? '<span class="role-pill r-admin">+ Admin</span>' : ''}${u.fin && !isFinUser(u) ? `<span class="role-pill r-finance_${u.fin}">+ ${esc(FIN_ACCESS[u.fin])}</span>` : ''}${u.id === cdUserId() ? `<span class="role-pill r-cd">${esc(cdTitle())}</span>` : ''}<small>People see this and your city when they hover your name. Your birthday stays private: on the day, the team is told it’s your birthday.</small></div>
       <div class="pf-actions"><button class="btn primary" data-action="save-profile">Save changes</button>${Host.isServer ? '' : `<button class="btn" data-action="change-password">${icon('lock')}Change password</button>`}</div>
     </div>
     ${Host.isServer && AppIcon.isOwner() ? appIconCard() : ''}
@@ -7352,6 +7425,55 @@ async function pickAvatar() {
   try { const r = await Host.call('pickImage', { userId: currentUserId }); return r.path || null; }
   catch (e) { toast('Could not use that photo: ' + e.message); return null; }
 }
+// "21 March" from a birthday "03-21"
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+function fmtMD(md) { const m = /^(\d{2})-(\d{2})$/.exec(String(md || '')); return m ? `${Number(m[2])} ${MONTH_NAMES[Number(m[1]) - 1]}` : ''; }
+// Country / city on My profile: a list to search; a city that isn't listed can be typed in
+function pickPlace(btn, kind) {
+  closeMenus();
+  const country = ($('#pf-country') || {}).dataset ? $('#pf-country').dataset.val : '';
+  const all = kind === 'country' ? E11_PLACES.COUNTRIES : E11_PLACES.cities(country);
+  const pop = document.createElement('div');
+  pop.className = 'menu asg-pop pl-pop';
+  pop.innerHTML = `<div class="ap-search">${icon('search')}<input placeholder="${kind === 'country' ? 'Search countries…' : all.length ? 'Search or type your city…' : 'Type your city…'}" autocomplete="off" spellcheck="false"></div><div class="ap-list"></div>`;
+  document.body.appendChild(pop);
+  const r = btn.getBoundingClientRect();
+  pop.style.width = Math.max(260, Math.min(360, r.width)) + 'px';
+  const place = () => { const h = pop.offsetHeight; let y = r.bottom + 6; if (y + h > innerHeight - 10) y = Math.max(10, r.top - h - 6); pop.style.left = Math.max(10, Math.min(r.left, innerWidth - pop.offsetWidth - 10)) + 'px'; pop.style.top = y + 'px'; };
+  const input = $('input', pop), list = $('.ap-list', pop);
+  let rows = [], hl = 0;
+  const cur = btn.dataset.val || '';
+  const draw = () => {
+    const q = input.value.trim(), ql = q.toLowerCase();
+    rows = all.filter((x) => !ql || x.toLowerCase().includes(ql)).slice(0, 80).map((x) => ({ v: x, l: x }));
+    if (kind === 'city' && q && !all.some((x) => x.toLowerCase() === ql)) rows.push({ v: q, l: `Use “${q}”` });
+    if (cur && !q) rows.unshift({ v: '', l: 'Not set', clear: true });
+    if (hl >= rows.length) hl = Math.max(0, rows.length - 1);
+    list.innerHTML = rows.map((x, i) => `<div class="ap-item pl-item ${x.v === cur && !x.clear ? 'on' : ''} ${i === hl ? 'hl' : ''} ${x.clear ? 'pl-clear' : ''}" data-i="${i}"><span class="ap-name">${esc(x.l)}</span>${x.v === cur && !x.clear ? icon('check') : ''}</div>`).join('')
+      || `<div class="ap-none">${kind === 'country' ? `No country matches “${esc(q)}”` : 'Type the name of your city'}</div>`;
+    place();
+  };
+  const choose = (x) => {
+    pop.remove();
+    btn.dataset.val = x.v;
+    btn.innerHTML = `${x.v ? esc(x.v) : `<span class="pf-ph">Choose your ${kind}</span>`}${icon('chev')}`;
+    // a new country: its city starts again
+    if (kind === 'country' && x.v !== cur) { const c = $('#pf-city'); if (c) { c.dataset.val = ''; c.innerHTML = `<span class="pf-ph">Choose your city</span>${icon('chev')}`; } }
+  };
+  pop.addEventListener('click', (e) => { e.stopPropagation(); const it = e.target.closest('[data-i]'); if (it) choose(rows[Number(it.dataset.i)]); });
+  input.addEventListener('input', () => { hl = 0; draw(); });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); hl = Math.min(rows.length - 1, hl + 1); draw(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); hl = Math.max(0, hl - 1); draw(); }
+    else if (e.key === 'Enter') { e.preventDefault(); if (rows[hl]) choose(rows[hl]); }
+    else if (e.key === 'Escape') { e.preventDefault(); pop.remove(); }
+  });
+  const off = (e) => { if (!pop.contains(e.target)) { pop.remove(); document.removeEventListener('mousedown', off, true); } };
+  setTimeout(() => document.addEventListener('mousedown', off, true), 0);
+  draw();
+  if (!(typeof Phone !== 'undefined' && Phone.on)) input.focus();
+  const sel = list.querySelector('.on'); if (sel) sel.scrollIntoView({ block: 'center' });
+}
 async function changePhoto() {
   const path = await pickAvatar();
   if (!path) return;
@@ -7364,7 +7486,9 @@ function saveProfile() {
   const name = ($('#pf-name').value || '').trim();
   if (!name) { toast('Please enter your name'); return; }
   u.name = name;
-  u.office = (($('#pf-office') || {}).value || '').trim();
+  u.country = (($('#pf-country') || {}).dataset || {}).val || '';
+  u.city = (($('#pf-city') || {}).dataset || {}).val || '';
+  u.bday = (($('#pf-bday') || {}).dataset || {}).val || null;
   persist(0); render(); toast('Profile saved');
 }
 async function changePasswordFlow() {
@@ -7803,7 +7927,10 @@ function reauthOnce() {
 
 async function boot() {
   hydrateIcons();
-  try { await bootInner(); StartupGuard.done(); } finally { Splash.finish().then(() => { if (typeof db !== 'undefined' && db && currentUserId) setTimeout(() => OccasionHello.maybe(), 650); }); }
+  try { await bootInner(); StartupGuard.done(); } finally {
+    // after startup: your birthday, then the occasion's greeting, then (once) a nudge to fill in your profile
+    Splash.finish().then(() => { if (typeof db !== 'undefined' && db && currentUserId) setTimeout(async () => { await OccasionHello.birthday(); await OccasionHello.maybe(); ProfileAsk.maybe(); }, 650); });
+  }
 }
 async function bootInner() {
   if (Host.isServer) return bootServer();

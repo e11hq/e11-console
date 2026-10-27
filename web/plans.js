@@ -921,14 +921,14 @@ const Plans = (() => {
       case 'occ-post': { const o = Occasions.byId(el.dataset.o); if (pl && o) postDialog(pl, null, { day: o.date, occasion: o.id, title: o.name }); return; }
       case 'skip': if (pl) setSkip(pl, el.dataset.o, true); return;
       case 'unskip': if (pl) setSkip(pl, el.dataset.o, false); return;
-      case 'plan-menu': e.stopPropagation(); if (pl) planMenu(el, pl); return;
+      case 'plan-menu': e.stopImmediatePropagation(); if (pl) planMenu(el, pl); return;   // (the app's own click handler would close it at once)
       case 'send': if (pl) sendFlow(pl); return;
       case 'make-tasks': if (pl) makeTasksDialog(pl); return;
       case 'export': if (pl) exportDialog(pl); return;
       case 'reply': if (pl) replyDialog(pl); return;
       case 'client-all': if (pl) clientApproveAll(pl); return;
       case 'mark-sent': if (pl) markSent(pl); return;
-      case 'rounds': e.stopPropagation(); if (pl) roundsMenu(el, pl); return;
+      case 'rounds': e.stopImmediatePropagation(); if (pl) roundsMenu(el, pl); return;
       case 'dl': { const a = el; ServerHost.download(a.getAttribute('href'), a.getAttribute('download')); return; }
       case 'approve': if (pl) approve(pl); return;
       case 'send-back': if (pl) sendBack(pl); return;

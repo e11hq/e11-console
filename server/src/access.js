@@ -261,6 +261,7 @@ export function createAccess(store, opts = {}) {
     if (kind !== 'users' || !data) return data;
     const out = { ...data };
     SECRET_USER_FIELDS.forEach((k) => delete out[k]);
+    if (!u || out.id !== u.id) delete out.bday;   // (a birthday is only in its owner's app; the server tells the team on the day)
     // Owner view (live site): the owner's own app sees them with Admin rights and Finance Admin; stored as it was, nobody else sees it
     if (u && u._ov && out.id === u.id) { out.admin = true; out.fin = 'admin'; }
     return out;

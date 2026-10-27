@@ -319,11 +319,15 @@ const Fin = (() => {
     // new expense claims: a count on Reimbursements; opening the page clears it
     const fresh = myNotifs().filter((n) => n.kind === 'claim' && !n.read);
     if (ui.view === 'fin-reimb' && fresh.length) { fresh.forEach((n) => { n.read = true; }); persist(); }
+    // Finance Admins: a red count of claims not yet marked HR approved (it stays until they're marked); others: new claims
+    const adminFin = finLevel() === 'admin';
+    const waitingHR = adminFin ? (db.claims || []).filter((c) => c.state === 'submitted').length : 0;
+    const k0 = adminFin ? waitingHR : (ui.view === 'fin-reimb' ? 0 : fresh.length);
     const rn = $('.fin-nav .nav-item[data-nav="fin-reimb"]');
-    if (rn) { let c = rn.querySelector('.count'); if (!c) { c = document.createElement('span'); c.className = 'count'; rn.appendChild(c); } const k = ui.view === 'fin-reimb' ? 0 : fresh.length; c.textContent = k ? String(k) : ''; c.classList.toggle('hot', !!k); }
+    if (rn) { let c = rn.querySelector('.count'); if (!c) { c = document.createElement('span'); c.className = 'count'; rn.appendChild(c); } c.textContent = k0 ? String(k0) : ''; c.classList.toggle('hot', !!k0 && adminFin); c.title = adminFin && k0 ? `${k0} waiting for HR approval` : ''; }
     const an = $('.fin-admin-nav:not(.fin-office)'); if (an) an.classList.toggle('active', owns(ui.view));
     $$('.fin-office .nav-item').forEach((a) => a.classList.toggle('active', ui.view === a.dataset.nav || (a.dataset.nav === 'fin-expenses' && ui.view === 'fin-list')));
-    const on = $('.fin-office .nav-item[data-nav="fin-reimb"] .count'); if (on) on.textContent = ui.view === 'fin-reimb' ? '' : (fresh.length ? String(fresh.length) : '');
+    const on = $('.fin-office .nav-item[data-nav="fin-reimb"] .count'); if (on) { on.textContent = k0 ? String(k0) : ''; on.classList.toggle('hot', !!k0 && adminFin); }
   }
   // The Finance Admin's pages, in the name menu (Finance-only people, and anyone given Finance Admin access)
   const addItems = () => (isFinAdmin() ? ['-',
