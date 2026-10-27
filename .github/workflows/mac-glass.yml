@@ -1,0 +1,50 @@
+# Trying the Liquid Glass app icon (mac/glass/AppIcon.icon) on macOS 26: compile it with Xcode 26's actool and
+# render how macOS draws it. glass-* branches only; results go to the mac-selftest release.
+name: Mac glass icon
+on:
+  push:
+    branches: ['glass-*']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  glass:
+    runs-on: macos-26
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and render
+        run: |
+          set -x
+          xcodebuild -version || true
+          OUT="$RUNNER_TEMP/glass"; mkdir -p "$OUT"
+          xcrun actool mac/glass/AppIcon.icon --compile "$OUT" --platform macosx --minimum-deployment-target 11.0 \
+            --app-icon AppIcon --output-partial-info-plist "$OUT/partial.plist" 2>&1 | tee "$OUT/actool.txt" || true
+          ls -la "$OUT" | tee -a "$OUT/actool.txt"
+          cat "$OUT/partial.plist" >> "$OUT/actool.txt" 2>/dev/null || true
+          ICT="$(find /Applications/Xcode*.app -name ictool -type f 2>/dev/null | head -1)"; echo "ictool: $ICT" >> "$OUT/actool.txt"
+          [ -n "$ICT" ] && ("$ICT" --help 2>&1 | head -60 >> "$OUT/actool.txt" || true)
+          APP="$RUNNER_TEMP/Glass.app"; mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+          cp "$OUT"/Assets.car "$APP/Contents/Resources/" 2>/dev/null || true
+          cp "$OUT"/AppIcon.icns "$APP/Contents/Resources/" 2>/dev/null || true
+          printf '#!/bin/sh\n' > "$APP/Contents/MacOS/Glass"; chmod +x "$APP/Contents/MacOS/Glass"
+          cat > "$APP/Contents/Info.plist" <<PL
+          <?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict><key>CFBundleExecutable</key><string>Glass</string><key>CFBundleIdentifier</key><string>ae.e11.glass.preview</string>
+          <key>CFBundleIconName</key><string>AppIcon</string><key>CFBundleIconFile</key><string>AppIcon</string><key>CFBundlePackageType</key><string>APPL</string></dict></plist>
+          PL
+          sed -i '' 's/^          //' "$APP/Contents/Info.plist"
+          swift mac/glass/preview.swift "$APP" "$OUT/preview" 2>&1 | tee -a "$OUT/actool.txt" || true
+          if [ -n "$ICT" ]; then
+            for r in Default Dark TintedLight TintedDark ClearLight ClearDark; do
+              "$ICT" mac/glass/AppIcon.icon --export-preview macOS $r 1024 1024 1 "$OUT/ictool-$r.png" >> "$OUT/actool.txt" 2>&1 || true
+            done
+          fi
+          ls -la "$OUT" >> "$OUT/actool.txt"
+      - name: Results
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view mac-selftest >/dev/null 2>&1 || gh release create mac-selftest --prerelease --title "Mac app self-test (work branch)" --notes "Latest results from a mac-* branch." --target "$GITHUB_SHA"
+          for f in "$RUNNER_TEMP"/glass/*.png "$RUNNER_TEMP"/glass/actool.txt; do [ -f "$f" ] && gh release upload mac-selftest "$f" --clobber; done; true
