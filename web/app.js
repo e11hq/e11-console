@@ -1845,6 +1845,7 @@ function normalize(d) {
   d.finance = Array.isArray(d.finance) ? d.finance : [];
   d.claims = Array.isArray(d.claims) ? d.claims : [];
   d.plans = Array.isArray(d.plans) ? d.plans : [];
+  d.scheduled = Array.isArray(d.scheduled) ? d.scheduled : [];   // your own scheduled comments (schedule.js)
   // Statuses for tasks that are not in a project
   d.statuses = Array.isArray(d.statuses) && d.statuses.length ? d.statuses : [
     { id: 'st-todo', name: 'To do', color: '#87909e' }, { id: 'st-progress', name: 'In progress', color: '#a875ff' },
@@ -2095,7 +2096,7 @@ function mergeSets(base, mine, theirs) {
 }
 
 const Sync = (() => {
-  const KINDS = ['users', 'projects', 'tasks', 'clients', 'notifications', 'statuses', 'trash', 'meta', 'finance', 'claims', 'plans'];
+  const KINDS = ['users', 'projects', 'tasks', 'clients', 'notifications', 'statuses', 'trash', 'meta', 'finance', 'claims', 'plans', 'scheduled'];
   const clientId = 'c-' + uid() + uid();
   const synced = {};               // kind -> Map(id -> JSON the server has)
   KINDS.forEach((k) => { synced[k] = new Map(); });
@@ -2368,6 +2369,7 @@ function commit(opts = {}) {
 
 /* ================= Rendering ================= */
 function render(opts = {}) {
+  if (typeof Sched !== 'undefined') Sched.reclaim();
   renderSidebar();
   renderTitle();
   renderContent();
@@ -3028,7 +3030,8 @@ function composer(t, cid) {
       <button class="icon-btn sm" data-action="attach-comment" ${cid ? `data-reply="${cid}"` : ''} title="Attach files" aria-label="Attach files">${icon(onPhone ? 'plus' : 'clip')}</button>
       ${fmtToolbar()}
       <span class="spacer"></span>${clipPasteBtn('comment')}<span class="hint">⌘ Enter</span>
-      <button class="btn primary sm" data-action="add-comment" ${cid ? `data-reply="${cid}"` : ''} title="⌘ Enter" aria-label="${cid ? 'Reply' : 'Comment'}">${onPhone ? icon('send') : cid ? 'Reply' : 'Comment'}</button>
+      ${onPhone ? `<button class="btn primary sm" data-action="add-comment" ${cid ? `data-reply="${cid}"` : ''} title="⌘ Enter" aria-label="${cid ? 'Reply' : 'Comment'}">${icon('send')}</button>`
+        : `<span class="send-split"><button class="btn primary sm" data-action="add-comment" ${cid ? `data-reply="${cid}"` : ''} title="⌘ Enter">${icon('send')}${cid ? 'Reply' : 'Send'}</button><button class="btn primary sm sc-chev" data-action="sched-open" ${cid ? `data-reply="${cid}"` : ''} title="Schedule" aria-label="Schedule this ${cid ? 'reply' : 'comment'}">${icon('chev')}</button></span>`}
     </div>
   </div>`;
 }
@@ -3337,7 +3340,7 @@ function renderDetail() {
             <button class="${ui.activityFilter === 'all' ? 'on' : ''}" data-action="act-filter" data-f="all">All</button>
           </div>`}
         </div>`}
-        <div class="tm-feed ${thread ? 'in-thread' : ''}">${thread ? threadPageHTML(t, thread) : activityHTML(t)}</div>
+        <div class="tm-feed ${thread ? 'in-thread' : ''}">${thread ? threadPageHTML(t, thread) : activityHTML(t)}${Sched.feedHTML(t, thread)}</div>
         <div class="tm-composer">${composer(t, thread ? thread.id : (ui.replyTo && t.comments.some((c) => c.id === ui.replyTo) ? ui.replyTo : null))}</div>
       </aside>
       ${side ? `<nav class="tm-rail">
@@ -3375,7 +3378,7 @@ function renderDetail() {
 }
 const RO_OK = new Set(['close-detail', 'close-preview', 'close-thread', 'close-lightbox', 'side-tab', 'detail-mode', 'nav-back', 'nav-forward', 'nav-task', 'open-task',
   'open-att', 'quicklook', 'copy-att', 'reveal-att', 'lightbox', 'tile-open', 'fileref-open', 'open-url', 'share-task', 'go-project', 'open-client', 'disp-toggle', 'fields-toggle', 'collapse',
-  'reply', 'react', 'react-menu', 'add-comment', 'attach-comment', 'comment-menu', 'open-thread', 'cancel-reply', 'mention-user', 'fmt', 'save-edit', 'cancel-edit', 'paste-clip', 'act-filter']);
+  'reply', 'react', 'react-menu', 'add-comment', 'sched-open', 'attach-comment', 'comment-menu', 'open-thread', 'cancel-reply', 'mention-user', 'fmt', 'save-edit', 'cancel-edit', 'paste-clip', 'act-filter']);
 const inComments = (el) => !!(el.closest && el.closest('.tm-feed, .tm-composer, .cm, .composer:not(.desc)'));
 function readOnlyDetail(pane, t) {
   const ro = amReadOnly(t);
@@ -3773,6 +3776,7 @@ function usedPaths() {
     fileRefsIn(t.notesHtml).forEach((p) => s.add(p));
   });
   Object.values(ui.commentFiles).forEach((l) => (l || []).forEach(add));
+  (db.scheduled || []).forEach((s) => { if (s.state !== 'sent') (s.attachments || []).forEach(add); });
   trashList().forEach((it) => trashFiles(it).forEach(add));
   (db.clients || []).forEach((c) => { if (c.logo) s.add(c.logo); c.folders.forEach((f) => f.files.forEach(add)); });
   return [...s];
@@ -5041,6 +5045,7 @@ document.addEventListener('click', async (e) => {
       case 'remove-tag': { if (!can('removeTag')) return denied(); const t = task(ui.taskId); logActivity(t, `removed tag ${struck(t.tags[+actEl.dataset.i])}`); t.tags.splice(+actEl.dataset.i, 1); t.updatedAt = nowISO(); commit(); setTimeout(() => { const i = $('#d-tag-input'); if (i) i.focus(); }, 0); return; }
       case 'attach': attachFiles('task'); return;
       case 'attach-comment': attachFiles('comment', actEl.dataset.reply || null); return;
+      case 'sched-open': Sched.open(actEl, actEl.dataset.reply || null); return;
       case 'unstage-file': {
         e.stopPropagation();
         const key = actEl.dataset.key || ui.taskId;
@@ -5332,17 +5337,7 @@ function addComment(replyTo, tid) {
   const html = empty ? '' : sanitizeHTML(box.innerHTML);
   const files = ui.commentFiles[key] || [];
   if (!text && !files.length) return false;
-  const cid = uid();
-  t.comments.push({ id: cid, text, html, at: nowISO(), attachments: files, parentId: replyTo || null, reactions: {}, authorId: currentUserId });
-  const mentioned = mentionsIn(html);
-  mentioned.forEach((u) => pushNotif(u, t, 'mention', `mentioned you in a ${replyTo ? 'reply' : 'comment'} on`, { snippet: trunc(text, 160), commentId: cid }));
-  // thread participants also hear about replies
-  const skip = [...mentioned];
-  if (replyTo) {
-    const people = new Set(t.comments.filter((c) => c.id === replyTo || c.parentId === replyTo).map((c) => c.authorId));
-    people.forEach((u) => { if (!mentioned.has(u) && !watchersOf(t).includes(u)) pushNotif(u, t, 'comment', 'replied in a thread on', { snippet: trunc(text, 160), commentId: cid }); });
-  }
-  notifyWatchers(t, 'comment', replyTo ? 'replied to a comment on' : 'commented on', { snippet: trunc(text || `${files.length} file${files.length === 1 ? '' : 's'}`, 160), skip, commentId: cid });
+  const cid = postComment(t, replyTo, text, html, files);
   delete ui.commentFiles[key];
   delete ui.commentDraft[key];
   Unsent.save();
@@ -5361,6 +5356,21 @@ function addComment(replyTo, tid) {
     if (el) { el.scrollIntoView({ block: 'nearest' }); const o = el.querySelector('.thread-open'); if (o) { o.classList.add('flash'); setTimeout(() => o.classList.remove('flash'), 1800); } }
   }, 0);
   return true;
+}
+// Add a comment (or reply) to a task and tell the people it concerns; returns its id (the caller saves)
+function postComment(t, replyTo, text, html, files) {
+  const cid = uid();
+  t.comments.push({ id: cid, text, html, at: nowISO(), attachments: files, parentId: replyTo || null, reactions: {}, authorId: currentUserId });
+  const mentioned = mentionsIn(html);
+  mentioned.forEach((u) => pushNotif(u, t, 'mention', `mentioned you in a ${replyTo ? 'reply' : 'comment'} on`, { snippet: trunc(text, 160), commentId: cid }));
+  // thread participants also hear about replies
+  const skip = [...mentioned];
+  if (replyTo) {
+    const people = new Set(t.comments.filter((c) => c.id === replyTo || c.parentId === replyTo).map((c) => c.authorId));
+    people.forEach((u) => { if (!mentioned.has(u) && !watchersOf(t).includes(u)) pushNotif(u, t, 'comment', 'replied in a thread on', { snippet: trunc(text, 160), commentId: cid }); });
+  }
+  notifyWatchers(t, 'comment', replyTo ? 'replied to a comment on' : 'commented on', { snippet: trunc(text || `${files.length} file${files.length === 1 ? '' : 's'}`, 160), skip, commentId: cid });
+  return cid;
 }
 
 function saveEdit(cid) {
@@ -6768,7 +6778,7 @@ async function cdToggleFlow(id) {
 
 /* ================= Inbox ================= */
 const myNotifs = () => (db && currentUserId ? db.notifications.filter((n) => n.to === currentUserId) : []);
-const NOTIF_ICON = { birthday: 'gift', plan: 'cal', 'plan-ok': 'check', 'plan-changes': 'edit', 'plan-tasks': 'check-circle', 'plan-client': 'check', claim: 'coin', 'claim-ok': 'check', 'claim-paid': 'coin', trash: 'trash', restore: 'reply', review: 'upload', 'review-ok': 'check', 'review-amend': 'edit', 'review-wd': 'x', part: 'check-circle', allparts: 'check-circle', assigned: 'user', unassigned: 'user', comment: 'chat', mention: 'chat', status: 'check-circle', cd: 'shield', done: 'check', due: 'cal', priority: 'flag', attach: 'clip' };
+const NOTIF_ICON = { 'sched-cancel': 'clock', birthday: 'gift', plan: 'cal', 'plan-ok': 'check', 'plan-changes': 'edit', 'plan-tasks': 'check-circle', 'plan-client': 'check', claim: 'coin', 'claim-ok': 'check', 'claim-paid': 'coin', trash: 'trash', restore: 'reply', review: 'upload', 'review-ok': 'check', 'review-amend': 'edit', 'review-wd': 'x', part: 'check-circle', allparts: 'check-circle', assigned: 'user', unassigned: 'user', comment: 'chat', mention: 'chat', status: 'check-circle', cd: 'shield', done: 'check', due: 'cal', priority: 'flag', attach: 'clip' };
 function notifPlain(n) { const d = document.createElement('div'); d.innerHTML = n.text; return d.textContent; }
 const IB_FILTERS = { all: 'All updates', comments: 'Comments & mentions', assigned: 'Assigned to me', status: 'Status & CD review', dates: 'Dates & priority' };
 const ibMatch = (n, f) => f === 'all' || !f ? true : f === 'comments' ? ['comment', 'mention'].includes(n.kind) : f === 'assigned' ? ['assigned', 'unassigned'].includes(n.kind) : f === 'status' ? ['status', 'cd', 'done', 'review', 'review-ok', 'review-amend', 'review-wd'].includes(n.kind) : ['due', 'priority'].includes(n.kind);
@@ -6803,6 +6813,7 @@ function notifMsg(n, t) {
     return `${who} set CD Status to: <span class="ib-chip" style="background:${c};color:${textOn(c)}">${esc(val)}</span>`;
   }
   if (n.kind === 'birthday') return `Today is <b>${esc(firstName(n.from))}</b>’s birthday`;
+  if (n.kind === 'sched-cancel') return `${String(n.text || '').replace(/<(?!\/?b>)/g, '&lt;')}${n.snippet ? ` <span class="ib-dim">· “${esc(n.snippet)}”</span>` : ''}`;   // (built escaped by the server)
   if (/^claim/.test(n.kind)) return `${who} ${n.text}${n.snippet ? ` <span class="ib-dim">· ${esc(n.snippet)}</span>` : ''}`;
   if (n.kind === 'asset') return `${who} ${esc(n.text)}${n.snippet ? ` <span class="ib-dim">· ${esc(n.snippet)}</span>` : ''}`;
   if (/^plan/.test(n.kind)) return `${who} ${String(n.text || '').replace(/<(?!\/?b>)/g, '&lt;')}${n.snippet ? ` <span class="ib-dim">· ${esc(n.snippet)}</span>` : ''}`;   // (content plans: the text is built escaped)
@@ -6841,7 +6852,7 @@ function viewInbox() {
     const target = ibTarget(items), shown = target;
     const lead = ['comment', 'mention', 'review-amend', 'review-ok', 'review', 'claim', 'claim-ok', 'claim-paid', 'asset', 'plan', 'plan-ok', 'plan-changes', 'plan-tasks', 'plan-client', 'birthday'].includes(shown.kind) ? avatarHTML(shown.from, 22) : `<span class="ib-kic">${icon(NOTIF_ICON[shown.kind] || 'bell')}</span>`;
     return `<div class="ib-row ${unread ? 'unread' : ''}" data-action="open-notif" data-id="${target.id}">
-      <span class="ib-title">${n.kind === 'birthday' ? `<span class="st-ic ib-coin">${icon('gift')}</span><span class="ib-tname">Birthday</span>` : /^plan/.test(n.kind) ? `<span class="st-ic ib-coin">${icon('cal')}</span><span class="ib-tname">${esc(planTitle(n))}</span>` : n.kind === 'asset' ? `<span class="st-ic ib-coin">${icon('assets')}</span><span class="ib-tname">${esc(assetTitle(n))}</span>` : `${t ? statusIcon(t) : /^claim/.test(n.kind) ? `<span class="st-ic ib-coin">${icon('coin')}</span>` : `<span class="st-ic">${statusIconSVG('#87909e', 'todo', 0)}</span>`}<span class="ib-tname">${t ? esc(t.title || 'Untitled task') : /^claim/.test(n.kind) ? 'Expense claims' : '<i>Deleted task</i>'}</span>`}</span>
+      <span class="ib-title">${n.kind === 'sched-cancel' ? `<span class="st-ic ib-coin">${icon('clock')}</span><span class="ib-tname">Scheduled ${n.text && /scheduled reply/.test(n.text) ? 'reply' : 'comment'}</span>` : n.kind === 'birthday' ? `<span class="st-ic ib-coin">${icon('gift')}</span><span class="ib-tname">Birthday</span>` : /^plan/.test(n.kind) ? `<span class="st-ic ib-coin">${icon('cal')}</span><span class="ib-tname">${esc(planTitle(n))}</span>` : n.kind === 'asset' ? `<span class="st-ic ib-coin">${icon('assets')}</span><span class="ib-tname">${esc(assetTitle(n))}</span>` : `${t ? statusIcon(t) : /^claim/.test(n.kind) ? `<span class="st-ic ib-coin">${icon('coin')}</span>` : `<span class="st-ic">${statusIconSVG('#87909e', 'todo', 0)}</span>`}<span class="ib-tname">${t ? esc(t.title || 'Untitled task') : /^claim/.test(n.kind) ? 'Expense claims' : '<i>Deleted task</i>'}</span>`}</span>
       <span class="ib-lead">${lead}</span>
       <span class="ib-msg"><span class="ib-mi">${notifMsg(shown, t)}</span></span>
       <span class="ib-count">${items.length > 1 ? `<i>${items.length}</i>` : ''}</span>
@@ -6897,7 +6908,7 @@ function inboxFilterMenu(anchor) {
   showMenu(anchor, Object.entries(IB_FILTERS).map(([k, l]) => ({ html: `<div class="mi ${(ui.inboxFilter || 'all') === k ? 'cur' : ''}">${esc(l)}</div>`, run: () => { ui.inboxFilter = k; renderContent(); } })).map((it, i) => ({ ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) })));
 }
 // Inbox rows: a task's updates together; Client Assets updates together per client
-const notifKey = (n) => n.taskId || (n.kind === 'birthday' ? 'bday:' + n.from + ':' + String(n.at).slice(0, 10) : n.kind === 'asset' ? 'asset:' + n.clientId : n.planId ? 'plan:' + n.planId : n.id);
+const notifKey = (n) => (n.kind === 'sched-cancel' ? 'sched:' + n.schedId : null) || n.taskId || (n.kind === 'birthday' ? 'bday:' + n.from + ':' + String(n.at).slice(0, 10) : n.kind === 'asset' ? 'asset:' + n.clientId : n.planId ? 'plan:' + n.planId : n.id);
 const planTitle = (n) => { const what = n.kind === 'plan-client' ? 'Content plan' : 'Content skeleton'; const pl = typeof Plans !== 'undefined' && Plans.planById(n.planId); return pl ? `${Plans.nameOf(pl)} · ${what}` : what; };
 const assetTitle = (n) => `${(clientById(n.clientId) || {}).name || 'A client'} · Client Assets`;
 function clearTaskNotifs(taskId, read) {
@@ -6913,6 +6924,8 @@ function openNotif(id) {
   if (!n) return;
   // a birthday: just marked as read
   if (n.kind === 'birthday') { n.read = true; persist(); renderSidebar(); if (ui.view === 'inbox') renderContent(); return; }
+  // a scheduled comment that wasn't sent: back into a draft, or (task deleted) the Trash or its text and files
+  if (n.kind === 'sched-cancel') { n.read = true; persist(); renderSidebar(); if (ui.view === 'inbox') renderContent(); return Sched.openCancelled(n); }
   if (/^claim/.test(n.kind)) { myNotifs().forEach((x) => { if (x.claimId && x.claimId === n.claimId) x.read = true; }); persist(); renderSidebar(); return Claims.openNotif(n); }
   if (n.planId) {
     myNotifs().forEach((x) => { if (notifKey(x) === notifKey(n)) x.read = true; }); persist(); renderSidebar();
@@ -7112,7 +7125,7 @@ function deliverPending() {
   persist();
   if (fresh.length === 1) {
     const n = fresh[0], t = task(n.taskId);
-    alertUser({ title: fullName(userById(n.from)), body: `${notifPlain(n)} ${t ? '“' + (t.title || 'Untitled task') + '”' : ''}${n.snippet ? ' — ' + n.snippet : ''}`, taskId: n.taskId, from: n.from, open: () => { if (db.notifications.some((x) => x.id === n.id)) openNotif(n.id); else if (n.taskId && task(n.taskId)) openTask(n.taskId); } });
+    alertUser({ title: n.kind === 'sched-cancel' ? `Scheduled ${/scheduled reply/.test(n.text || '') ? 'reply' : 'comment'} not sent` : fullName(userById(n.from)), body: n.kind === 'sched-cancel' ? `${notifPlain(n)}${n.snippet ? ' — “' + n.snippet + '”' : ''}` : `${notifPlain(n)} ${t ? '“' + (t.title || 'Untitled task') + '”' : ''}${n.snippet ? ' — ' + n.snippet : ''}`, taskId: n.taskId, from: n.from, open: () => { if (db.notifications.some((x) => x.id === n.id)) openNotif(n.id); else if (n.taskId && task(n.taskId)) openTask(n.taskId); } });
   } else if (isFinUser()) {
     alertUser({ title: 'E11 Console', body: `${fresh.length} new expense claims`, open: () => go('fin-reimb') });
   } else {

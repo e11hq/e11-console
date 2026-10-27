@@ -14,6 +14,7 @@ import { createWebPush, notifMessage } from './webpush.js';
 import { createDigest } from './digest.js';
 import { createOccasionReminders } from './occremind.js';
 import { createBirthdays } from './birthdays.js';
+import { createScheduled } from './scheduled.js';
 import { createHolidaySync, DEFAULT_HOLIDAYS_URL } from './holidays.js';
 import zlib from 'node:zlib';
 import { sampleData } from './sample.js';
@@ -79,6 +80,9 @@ export function createServer(cfg) {
   // Birthdays: the rest of the staff are told in the morning (Inbox + phone)
   const birthdays = createBirthdays({ store, webPush, notifMessage, deliver: (out) => broadcast(out.rev, out.results, null, null), now: cfg.now || (() => Date.now()) });
   if (cfg.birthdays !== false) birthdays.start();
+  // Scheduled comments: posted by the server at their time (or cancelled when the task is completed or deleted first)
+  const scheduled = createScheduled({ store, access, webPush, notifMessage, deliver: (out) => broadcast(out.rev, out.results, null, null), now: cfg.now || (() => Date.now()) });
+  if (cfg.scheduled !== false) scheduled.start();
   // Confirmed dates for Ramadan, the Eids… from a public UAE holiday calendar (off on a dev server unless a URL is given)
   const holidays = createHolidaySync({
     store, webDir: cfg.webDir, url: cfg.holidaysUrl || DEFAULT_HOLIDAYS_URL, fetchImpl: cfg.holidaysFetch || fetch, now: cfg.now || (() => Date.now()),
@@ -566,6 +570,8 @@ export function createServer(cfg) {
         .filter((r) => { const to = store.get('users', String(r.data.to)); return !!to && access.canSee(to, 'notifications', r.data); })   // (only what they'd see in their Inbox)
         .forEach((r) => webPush.sendTo(r.data.to, notifMessage(store, r.data)).catch(() => {}));
       if (results.some((r) => r.kind === 'users' && !r.refused && !r.unchanged)) cfSync.schedule();
+      // a task completed or deleted cancels its scheduled comments straight away (and the author hears now)
+      if (results.some((r) => (r.kind === 'tasks' || r.kind === 'scheduled') && !r.refused && !r.unchanged)) setTimeout(() => scheduled.tick().catch(() => {}), 50);
       return json(res, 200, { ok: true, rev, results: results.map((r) => ({ ...forUser(u, r), refused: !!r.refused })) });
     }
 
@@ -779,8 +785,8 @@ export function createServer(cfg) {
   return {
     server, store, files, cfSync, webPush,
     listen: (port, host) => new Promise((ok) => server.listen(port, host, () => ok(server.address().port))),
-    digest, holidays, occRemind, birthdays, pruneNotifications,
-    close: () => new Promise((ok) => { digest.stop(); holidays.stop(); occRemind.stop(); birthdays.stop(); for (const s of streams) try { s.res.end(); } catch { /* ignore */ } server.close(() => { store.close(); ok(); }); }),
+    digest, holidays, occRemind, birthdays, scheduled, pruneNotifications,
+    close: () => new Promise((ok) => { digest.stop(); holidays.stop(); occRemind.stop(); birthdays.stop(); scheduled.stop(); for (const s of streams) try { s.res.end(); } catch { /* ignore */ } server.close(() => { store.close(); ok(); }); }),
     broadcastVersion: (v) => { for (const s of streams) send(s, 'version', { version: v }); },
   };
 }

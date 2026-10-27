@@ -224,7 +224,8 @@ export function createAccess(store, opts = {}) {
       if (parts[1] === '_avatars') return true;
       if (parts[1] === '_uploads') return false;
       const t = store.get('tasks', parts[1]);
-      return !!t && taskVisible(u, t);
+      // (also the files of your own scheduled comment, e.g. after its task was deleted)
+      return (!!t && taskVisible(u, t)) || store.list('scheduled').some((s) => s.authorId === u.id && (s.attachments || []).some((a) => a.path === rel || a.thumb === rel));
     }
     if (parts[0] === 'Clients') {
       if (parts[1] === '_logos') return true;
@@ -247,6 +248,7 @@ export function createAccess(store, opts = {}) {
       // expense claims: your own, and Finance sees everything except drafts and "submitted offline"
       case 'claims': return data.userId === u.id || (!!finLevel(u) && !['draft', 'offline'].includes(data.state));
       case 'plans': return planVisible(u, data);
+      case 'scheduled': return data.authorId === u.id;   // a scheduled comment: only its author, until it's sent
       default: return true;
     }
   }
@@ -391,6 +393,21 @@ export function createAccess(store, opts = {}) {
         // (making tasks only: nothing else changes)
         if (!editor && !approver && (from !== to || !same((x) => x.log || null) && !(next.log || []).slice((current.log || []).length).every((x) => ['tasks', 'client', 'client-approved', 'client-sent'].includes(x.act)))) return false;
         return true;
+      }
+      case 'scheduled': {
+        // your own scheduled comments: made on a task you can comment on; changed while waiting; the server sends or cancels them
+        const mine = (x) => !!x && x.authorId === u.id;
+        if (ch.del) return mine(current);
+        if (!mine(next) || (current && !mine(current))) return false;
+        if (!current) {
+          if (isOffice(u) || next.state !== 'waiting' || !Date.parse(next.sendAt)) return false;
+          const t = store.get('tasks', String(next.taskId || ''));
+          if (!t || t.done || inInactive(t)) return false;
+          return canSee(u, 'tasks', t) || (ownOnly(u) && ownView(u).peek.has(String(t.id)));
+        }
+        if (current.state === 'waiting') return next.state === 'waiting' && next.taskId === current.taskId && !!Date.parse(next.sendAt);
+        const rest = ({ drafted, ...r }) => r;   // a sent or cancelled one: only marked as taken back into a draft
+        return deepEqual(rest(next), rest(current));
       }
       case 'notifications':
         if (ch.del) return !current || current.to === u.id;
