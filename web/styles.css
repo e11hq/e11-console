@@ -1165,6 +1165,7 @@ select.field:disabled { opacity: .6; }
 /* ---------- Team page ---------- */
 .team { max-width: 1000px; margin: 0 auto; padding: 24px 28px 80px; }
 .team-head { display: flex; align-items: center; gap: 16px; margin-bottom: 18px; }
+.team-head > .btn { margin-left: auto; flex-shrink: 0; }
 .team-title { font-size: 18px; font-weight: 650; }
 .team-sub { color: var(--text-3); font-size: 12.5px; margin-top: 3px; max-width: 560px; line-height: 1.45; }
 .team-table { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
