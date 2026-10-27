@@ -506,7 +506,13 @@ body { font-size: 13px; }
 
 /* rows */
 .list-head, .row { grid-template-columns: minmax(280px, 1fr) 120px 120px 200px; }
-.list-wrap.with-proj .list-head, .list-wrap.with-proj .row { grid-template-columns: minmax(260px, 1fr) 140px 170px 110px 110px; }
+.list-wrap.with-proj .list-head, .list-wrap.with-proj .row { grid-template-columns: minmax(300px, 1fr) 118px 150px 96px 72px; }
+/* (lists with a client column, e.g. search results: the name keeps its room; in a narrow window the client column goes) */
+.list-wrap.with-proj { container-type: inline-size; }
+@container (max-width: 980px) {
+  .list-wrap.with-proj .list-head, .list-wrap.with-proj .row { grid-template-columns: minmax(240px, 1fr) 112px 92px 64px; }
+  .list-wrap.with-proj .cl-cell { display: none; }
+}
 .row { min-height: 36px; }
 .task-row:hover { background: #232328; }
 .task-row.is-selected { background: var(--accent-soft); }

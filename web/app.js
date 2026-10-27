@@ -2577,14 +2577,14 @@ function taskRow(t, o = {}) {
   const due = `<div class="cell"><span class="due ${dueClass(t)}">${fmtDue(t.due)}</span></div>`;
   const prio = `<div class="cell">${prioFlag(prioOf(t), true)}</div>`;
   const cells = o.showProject
-    ? nameCell + `<div class="cell">${statusPill(t)}</div><div class="cell">${projChip(t)}</div>` + due + prio
+    ? nameCell + `<div class="cell">${statusPill(t)}</div><div class="cell cl-cell">${projChip(t)}</div>` + due + prio
     : nameCell + due + prio + `<div class="cell tags-cell">${t.tags.map(tagChip).join('')}</div>`;
   return `<div class="row task-row ${t.done ? 'is-done' : ''} ${isUrgent(t) && !t.done ? 'is-urgent' : ''} ${ui.taskId === t.id ? 'is-selected' : ''}" data-task="${t.id}" ${o.drag ? 'draggable="true"' : ''}>${cells}</div>`;
 }
 
 function listHead(showProject) {
   return showProject
-    ? `<div class="list-head"><div>Name</div><div>Status</div><div>Client</div><div>Due date</div><div>Priority</div></div>`
+    ? `<div class="list-head"><div>Name</div><div>Status</div><div class="cl-cell">Client</div><div>Due date</div><div>Priority</div></div>`
     : `<div class="list-head"><div>Name</div><div>Due date</div><div>Priority</div><div>Tags</div></div>`;
 }
 
@@ -3988,10 +3988,19 @@ function showMenu(anchor, items) {
   }).join('');
   document.body.appendChild(m);
   const r = anchor.getBoundingClientRect();
-  const mw = m.offsetWidth, mh = m.offsetHeight;
+  const mw = m.offsetWidth;
+  let mh = m.offsetHeight;
   let x = r.left, y = r.bottom + 4;
   if (x + mw > innerWidth - 8) x = innerWidth - mw - 8;
-  if (y + mh > innerHeight - 8) y = r.top - mh - 4;
+  // a long list stays next to what opened it: below if it fits, else on the roomier side, scrolling if needed
+  const below = innerHeight - r.bottom - 12, above = r.top - 12;
+  if (mh > below) {
+    const up = above > below;
+    const room = up ? above : below;
+    if (mh > room) { m.style.maxHeight = Math.max(120, room) + 'px'; m.style.overflowY = 'auto'; mh = Math.min(mh, Math.max(120, room)); }
+    y = up ? r.top - mh - 4 : r.bottom + 4;
+    if (!up) { const sel = m.querySelector('.cur, .on'); if (sel) sel.scrollIntoView({ block: 'nearest' }); }
+  }
   m.style.left = Math.max(8, x) + 'px';
   m.style.top = Math.max(8, y) + 'px';
   m.addEventListener('click', (e) => {
@@ -4149,7 +4158,7 @@ const Draft = (() => {
   const sig = (t) => JSON.stringify([t.title || '', t.notes || '', t.notesHtml || '', t.due, t.start, t.prio, t.tags, (t.attachments || []).length,
     (t.comments || []).length, t.checklist, t.assignees, t.projectId, t.sectionId, t.update || null, t.finance || null, t.guardian || null,
     !!t.needsCD, !!t.done, t.partsDone || null, db.tasks.some((x) => x.parentId === t.id), t.channels || [], t.golive || null, t.occasion || null]);
-  const looksEmpty = (t) => !t.title && !t.notes && !(t.assignees || []).length && !(t.comments || []).length && !(t.attachments || []).length
+  const looksEmpty = (t) => (!!t.basedOn && !t.title && !(t.comments || []).length && !(t.attachments || []).length && !db.tasks.some((x) => x.parentId === t.id)) || !t.title && !t.notes && !(t.assignees || []).length && !(t.comments || []).length && !(t.attachments || []).length
     && !(t.checklist || []).length && !t.done && !db.tasks.some((x) => x.parentId === t.id);
   function start(t) { t.blankDraft = true; snaps[t.id] = sig(t); }
   // Called when the task is closed or another one is opened
@@ -6511,6 +6520,7 @@ function taskFrom(t) {
   const n = createTask({ projectId: t.projectId, assignees: (t.assignees || []).slice(), tags: (t.tags || []).slice(), notes: t.notes || '', notesHtml: t.notesHtml || '',
     channels: (t.channels || []).slice(), ...(t.guardian ? { guardian: t.guardian } : {}), basedOn: t.id });
   logActivity(n, `started this from <b>${esc(t.title || 'Untitled task')}</b>`);
+  Draft.start(n);   // (closed without any change, it goes away again, like an empty new task)
   commit();
   openTask(n.id, true);
   toast('New task — give it its own name');

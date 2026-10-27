@@ -66,8 +66,21 @@ async def main():
             items = await pg.eval_on_selector_all('.menu .mi', 'els => els.map(e => e.textContent.trim())')
             check('Edit comment' not in items and 'Unpin from brief' in items, f'a pinned comment can’t be edited; it can be unpinned {items}')
             await pg.evaluate("closeMenus()")
-            # New task from this
+            # a long field list (Task Update) opens next to its button, not at the top of the window
             await pg.evaluate("ui.sideTab = 'details'; renderDetail()"); await pg.wait_for_timeout(200)
+            fb = await pg.query_selector('#detail .fl-btn[data-k="update"]')
+            if fb:
+                await fb.scroll_into_view_if_needed(); await fb.click(); await pg.wait_for_timeout(300)
+                gap = await pg.evaluate("(() => { const m = document.querySelector('.menu'), b = document.querySelector('#detail .fl-btn[data-k=\"update\"]').getBoundingClientRect(), r = m.getBoundingClientRect(); return Math.min(Math.abs(r.top - b.bottom), Math.abs(b.top - r.bottom)); })()")
+                check(gap < 12, f'the Task Update list opens right next to its button (gap {gap}px)')
+                await pg.evaluate("closeMenus()")
+            # New task from this, closed without changes: it goes away again
+            await pg.click('#detail [data-action="task-from"]'); await pg.wait_for_timeout(600)
+            tmp = await pg.evaluate('ui.taskId')
+            await pg.evaluate("closeDetail()"); await pg.wait_for_timeout(400)
+            check(tmp != lid and not await pg.evaluate(f"!!task('{tmp}')"), 'an untouched New task from this disappears when closed')
+            await pg.evaluate(f"openTask('{lid}')"); await pg.wait_for_timeout(400)
+            # New task from this
             await pg.click('#detail [data-action="task-from"]'); await pg.wait_for_timeout(600)
             nid = await pg.evaluate('ui.taskId')
             n = await pg.evaluate(f"task('{nid}')")
