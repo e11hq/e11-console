@@ -2089,7 +2089,12 @@ button.pv-empty:hover { background: var(--hover); color: var(--text-2); }
 #upload-root { position: fixed; right: 18px; bottom: 18px; z-index: 9500; display: grid; gap: 8px; width: 320px; }
 .up-card { padding: 12px 14px; border-radius: 12px; background: var(--raised); border: 1px solid var(--border-strong); box-shadow: 0 14px 40px rgba(0,0,0,.4); display: grid; gap: 8px; transition: opacity .3s, transform .3s; }
 .up-card.out { opacity: 0; transform: translateY(8px); }
-.up-row { display: grid; grid-template-columns: 1fr 70px 40px; align-items: center; gap: 8px; font-size: 12.5px; }
+.up-row { display: grid; grid-template-columns: 1fr 70px 52px 20px; align-items: center; gap: 8px; font-size: 12.5px; }
+.up-x { width: 20px; height: 20px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 5px; background: none; color: var(--text-3); cursor: pointer; }
+.up-x .ic { width: 11px; height: 11px; }
+.up-x:hover { background: var(--hover); color: var(--red); }
+.up-row.cancelled { opacity: .55; }
+.up-row.cancelled .up-bar i { background: var(--text-3); }
 .up-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .up-bar { height: 5px; border-radius: 3px; background: var(--active); overflow: hidden; }
 .up-bar i { display: block; height: 100%; width: 0; background: var(--btn); transition: width .15s; }

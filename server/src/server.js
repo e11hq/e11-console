@@ -786,6 +786,12 @@ export function createServer(cfg) {
           if (paths.some((x) => { const v = String(x || ''); return v.startsWith('Clients/') && [...live].some((l) => l === v || l.startsWith(v.replace(/\/$/, '') + '/')); })) return deny();
         }
         if (paths.some((x) => !access.canReadFile(u, String(x || '')))) return deny();
+        // deleting is for good now: never a file something else still uses (another task, a comment, Client Assets, a
+        // claim, Finance, a plan, a scheduled comment, a profile photo…), checked against everything on the server —
+        // the app's own check only sees what that person sees. (Items still in the app's Trash are checked by the app.)
+        const hay = ['users', 'projects', 'tasks', 'clients', 'meta', 'finance', 'claims', 'plans', 'scheduled'].map((k) => JSON.stringify(store.list(k))).join('\n');
+        const forms = (x) => [x, JSON.stringify(x).slice(1, -1), x.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;')];
+        body = { paths: paths.map((x) => String(x || '')).filter((x) => x && !forms(x).some((f) => hay.includes(f))) };
       }
       if (cmd === 'claimPdf' && (body.receipts || []).some((x) => !access.canReadFile(u, String(x || '')) || !String(x || '').startsWith('Claims/'))) return deny();
       if (['thumb', 'processImage', 'docPreview', 'pdfPages'].includes(cmd) && !access.canReadFile(u, String(body.path || '')) && !(cmd === 'processImage' && uploads.get(body.path) && uploads.get(body.path).userId === u.id)) return deny();

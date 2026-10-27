@@ -1058,9 +1058,9 @@ const ServerHost = (() => {
     } finally { setTimeout(() => URL.revokeObjectURL(url), 5000); }
   }
   // One upload piece as raw bytes (a third smaller than base64, nothing to encode)
-  async function sendRaw(blob, params) {
+  async function sendRaw(blob, params, signal) {
     const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '').map(([k, v]) => [k, String(v)]));
-    const res = await fetch('/api/host/writeChunkBin?' + q, { method: 'POST', body: blob, headers: { 'Content-Type': 'application/octet-stream' }, credentials: 'same-origin', cache: 'no-store', redirect: 'manual' });
+    const res = await fetch('/api/host/writeChunkBin?' + q, { method: 'POST', body: blob, headers: { 'Content-Type': 'application/octet-stream' }, credentials: 'same-origin', cache: 'no-store', redirect: 'manual', signal });
     if (res.type === 'opaqueredirect' || (res.status >= 300 && res.status < 400)) { const err = new Error('Your sign-in has expired — sign in again to continue'); err.auth = true; throw err; }
     let data = null;
     try { data = await res.json(); } catch (e) { /* not JSON */ }
@@ -1070,9 +1070,11 @@ const ServerHost = (() => {
   // Keep trying a piece through dropped connections — including the phone pausing the app while you're in
   // another one: it waits until you're back, then carries on. Refusals (no access, too large) stop at once.
   const whenVisible = () => (document.hidden ? new Promise((r) => { const on = () => { if (!document.hidden) { document.removeEventListener('visibilitychange', on); r(); } }; document.addEventListener('visibilitychange', on); }) : Promise.resolve());
-  async function persistently(run) {
+  async function persistently(run, sig) {
     for (let n = 0; ; n++) {
+      if (sig && sig.cancelled) throw cancelErr();
       try { return await run(); } catch (e) {
+        if (sig && sig.cancelled) throw cancelErr();
         if (e.auth || (e.status >= 400 && e.status < 500) || n >= 12) throw e;
         if (document.hidden) await whenVisible();
         else await new Promise((r) => setTimeout(r, Math.min(8000, 700 * 2 ** n)));
@@ -1080,19 +1082,31 @@ const ServerHost = (() => {
     }
   }
   const PIECE = 4 * 1024 * 1024;
-  async function uploadFile(file, target, onProgress) {
+  // Cancelling an upload (the × on its progress row): sig = { cancelled, ctrl } stops the pieces still to go, aborts the
+  // ones on the way, and deletes what already reached the server
+  const cancelErr = () => Object.assign(new Error('Upload cancelled'), { cancelled: true });
+  const newSig = () => ({ cancelled: false, ctrl: typeof AbortController !== 'undefined' ? new AbortController() : null, cancel() { this.cancelled = true; try { if (this.ctrl) this.ctrl.abort(); } catch (e) { /* fine */ } } });
+  async function uploadFile(file, target, onProgress, sig) {
+    let made = null;
+    try { return await uploadFile1(file, target, onProgress, sig, (p) => { made = p; }); } catch (e) {
+      if (sig && sig.cancelled) { if (made) api('POST', '/api/host/trashMany', { paths: [made] }).catch(() => {}); throw cancelErr(); }
+      throw e;
+    }
+  }
+  async function uploadFile1(file, target, onProgress, sig, onMade) {
     const dims = await mediaDims(file).catch(() => null);
     const raw = file instanceof Blob;
     const size = Math.max(file.size, 0);
     const piece = raw ? PIECE : CHUNK_SIZE;
     const put = (off, len, path) => persistently(async () => (raw
-      ? sendRaw(file.slice(off, off + len), { ...target, name: file.name, path, offset: path ? off : null })
-      : api('POST', '/api/host/writeChunk', { ...target, name: file.name, path, offset: path ? off : null, b64: await readPiece(file, off, len) })));
+      ? sendRaw(file.slice(off, off + len), { ...target, name: file.name, path, offset: path ? off : null }, sig && sig.ctrl ? sig.ctrl.signal : undefined)
+      : api('POST', '/api/host/writeChunk', { ...target, name: file.name, path, offset: path ? off : null, b64: await readPiece(file, off, len) })), sig);
     let sent = 0;
     const tick = (n) => { sent += n; if (onProgress) onProgress(Math.min(1, sent / Math.max(size, 1))); };
     // the first piece creates the file; the rest go up a few at a time, each to its own place in the file
     const first = await put(0, Math.min(piece, size), null);
     const path = first.path;
+    if (onMade) onMade(path);
     tick(Math.min(piece, size));
     const offs = [];
     for (let off = piece; off < size; off += piece) offs.push(off);
@@ -1116,10 +1130,21 @@ const ServerHost = (() => {
     if (!root) { root = document.createElement('div'); root.id = 'upload-root'; document.body.appendChild(root); }
     const el = document.createElement('div');
     el.className = 'up-card';
-    el.innerHTML = files.map((f, i) => `<div class="up-row" data-i="${i}"><span class="up-name">${esc(f.name)}</span><span class="up-bar"><i></i></span><small>0%</small></div>`).join('');
+    el.innerHTML = files.map((f, i) => `<div class="up-row" data-i="${i}"><span class="up-name">${esc(f.name)}</span><span class="up-bar"><i></i></span><small>0%</small><button type="button" class="up-x" data-up-x="${i}" title="Cancel upload">${icon('x')}</button></div>`).join('');
     root.appendChild(el);
+    const sigs = files.map(() => newSig());
+    el.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-up-x]');
+      if (!b) return;
+      e.stopPropagation();
+      const i = Number(b.dataset.upX);
+      sigs[i].cancel();
+      const r = el.querySelector(`[data-i="${i}"]`);
+      if (r) { r.classList.add('cancelled'); r.querySelector('small').textContent = 'Cancelled'; b.remove(); }
+    });
     return {
-      set(i, p, msg) { const r = el.querySelector(`[data-i="${i}"]`); if (!r) return; r.querySelector('i').style.width = Math.round(p * 100) + '%'; r.querySelector('small').textContent = msg || Math.round(p * 100) + '%'; },
+      sigs,
+      set(i, p, msg) { const r = el.querySelector(`[data-i="${i}"]`); if (!r || (sigs[i].cancelled && !msg)) return; r.querySelector('i').style.width = Math.round(p * 100) + '%'; r.querySelector('small').textContent = msg || Math.round(p * 100) + '%'; if (msg) { const x = r.querySelector('.up-x'); if (x) x.remove(); } },
       done() { setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 300); }, 700); },
     };
   }
@@ -1136,8 +1161,9 @@ const ServerHost = (() => {
     await Promise.all(Array.from({ length: Math.min(2, files.length) }, async () => {
       while (next < files.length) {
         const i = next++;
-        try { out[i] = await uploadFile(files[i], target, (p) => { ui1.set(i, p); parts[i] = p; report(); }); ui1.set(i, 1, 'Done'); parts[i] = 1; report(); }
-        catch (e) { ui1.set(i, 0, 'Failed'); toast(`Could not upload ${files[i].name}: ${e.message}`); }
+        if (ui1.sigs[i].cancelled) { parts[i] = 1; report(); continue; }
+        try { out[i] = await uploadFile(files[i], target, (p) => { ui1.set(i, p); parts[i] = p; report(); }, ui1.sigs[i]); ui1.set(i, 1, 'Done'); parts[i] = 1; report(); }
+        catch (e) { parts[i] = 1; report(); if (e.cancelled) ui1.set(i, 0, 'Cancelled'); else { ui1.set(i, 0, 'Failed'); toast(`Could not upload ${files[i].name}: ${e.message}`); } }
       }
     }));
     ui1.done();
@@ -6217,26 +6243,34 @@ async function uploadIntoFolder(fileList) {
   const box = $('#ca-uploads');
   const rows = [...fileList].map((file) => {
     const el = document.createElement('div'); el.className = 'sr-item';
-    el.innerHTML = `<span class="ficon">${esc((fileExt(file.name) || 'file').slice(0, 4))}</span><div class="sr-meta"><div class="sr-name">${esc(file.name)}</div><div class="sr-bar"><i style="width:0%"></i></div><small>Waiting…</small></div>`;
+    el.innerHTML = `<span class="ficon">${esc((fileExt(file.name) || 'file').slice(0, 4))}</span><div class="sr-meta"><div class="sr-name">${esc(file.name)}</div><div class="sr-bar"><i style="width:0%"></i></div><small>Waiting…</small></div><button type="button" class="icon-btn sm up-cx" title="Cancel upload">${icon('x')}</button>`;
     if (box) box.appendChild(el);
-    return { file, el };
+    const row = { file, el, cancelled: false };
+    el.querySelector('.up-cx').addEventListener('click', (e) => { e.stopPropagation(); row.cancelled = true; el.classList.add('err'); $('small', el).textContent = 'Cancelled'; e.currentTarget.remove(); });
+    return row;
   });
   let added = 0;
-  for (const { file, el } of rows) {
+  for (const row of rows) {
+    const { file, el } = row;
     const bar = $('.sr-bar i', el), note = $('small', el);
+    if (row.cancelled) continue;
+    let path = null;
     try {
-      let path = null, last = null;
+      let last = null;
       for (let off = 0; off < Math.max(file.size, 1); off += CHUNK) {
+        if (row.cancelled) { if (path) Host.call('trashMany', { paths: [path] }).catch(() => {}); path = null; break; }
         const b64 = await readChunkB64(file.slice(off, off + CHUNK));
         last = await Host.call('writeChunk', { dest: f.dir, name: file.name, path, b64 });
         path = last.path;
         const p = Math.min(1, (off + CHUNK) / Math.max(file.size, 1));
-        bar.style.width = Math.round(p * 100) + '%'; note.textContent = `Uploading… ${Math.round(p * 100)}%`;
+        if (!row.cancelled) { bar.style.width = Math.round(p * 100) + '%'; note.textContent = `Uploading… ${Math.round(p * 100)}%`; }
       }
+      if (row.cancelled) { if (path) Host.call('trashMany', { paths: [path] }).catch(() => {}); continue; }
+      { const x = el.querySelector('.up-cx'); if (x) x.remove(); }
       f.files.push({ id: uid(), name: last.name || file.name, path, size: last.size != null ? last.size : file.size, addedAt: nowISO(), addedBy: currentUserId });
       added++; el.classList.add('ok'); note.textContent = 'Uploaded';
       persist(300);
-    } catch (e) { el.classList.add('err'); note.textContent = 'Upload failed — ' + e.message; }
+    } catch (e) { el.classList.add('err'); note.textContent = 'Upload failed — ' + e.message; { const x = el.querySelector('.up-cx'); if (x) x.remove(); } }
   }
   if (added) { assetNotify(c, f, 'added', f.files.slice(-added).map((x) => x.name)); persist(0); Promise.resolve(Sync.push()).catch(() => {}).then(() => autoLogo(c, f, f.files.slice(-added))); }
   if (added && ui.view === 'client' && ui.folderId === f.id) { render(); toast(`Added ${added} file${added === 1 ? '' : 's'} to ${c.name} › ${f.name}`); }
@@ -6663,7 +6697,7 @@ function submitDialog(t) {
       <div class="sr-meta"><div class="sr-name">${esc(it.name)}</div>
         <div class="sr-bar"><i style="width:${Math.round((it.p || 0) * 100)}%"></i></div>
         <small>${it.error ? esc(it.error) : it.done ? `Uploaded · ${fmtSize(it.size)}` : `Uploading… ${Math.round((it.p || 0) * 100)}%`}</small></div>
-      <button class="icon-btn sm" data-sr-x="${i}" title="Remove">${icon('x')}</button>
+      <button class="icon-btn sm" data-sr-x="${i}" title="${it.done ? 'Remove' : 'Cancel upload'}">${icon('x')}</button>
     </div>`).join('');
     const ok = items.length && items.every((x) => x.done && !x.error);
     submit.disabled = !ok;

@@ -146,20 +146,21 @@ export function createFiles(root) {
     },
     makeDir(a) { fs.mkdirSync(uploadDir({ dest: a.path }), { recursive: true }); return { ok: true }; },
     // "Trash" keeps deleted files for 30 days in DATA_DIR/trash/<date>/… before they are removed
+    // Files whose item left the app's Trash for good (or an upload that was thrown away): deleted from the NAS for good
+    // straight away (Haris, 2026-10-27; they used to wait another 30 days in a hidden trash folder). The server first
+    // keeps anything still used elsewhere (server.js). A final file in Client Assets is a second link to the same data,
+    // so deleting the task's link leaves it whole.
     trashMany(a) {
       let n = 0;
-      const day = new Date().toISOString().slice(0, 10);
       for (const p of a.paths || []) {
         try {
           const src = resolve(p);
-          if (!fs.existsSync(src)) continue;
-          const dst = uniquePath(path.join(TRASH, day, path.dirname(rel(src))), path.basename(src));
-          fs.mkdirSync(path.dirname(dst), { recursive: true });
-          fs.renameSync(src, dst);
+          if (src === FILES || !fs.existsSync(src)) continue;
+          fs.rmSync(src, { recursive: true, force: true });
           n++;
         } catch { /* skip bad paths */ }
       }
-      return { ok: true, trashed: n };
+      return { ok: true, deleted: n };
     },
     trashPath(a) { return commands.trashMany({ paths: [a.path] }); },
     // Word / PowerPoint / Excel → PDF with LibreOffice, made once and kept in .thumbs/<id>/preview.pdf.

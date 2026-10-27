@@ -232,12 +232,15 @@ test('files: chunked upload, range download, thumbnails, trash, zip', async () =
   const listing = execFileSync('python3', ['-c', `import zipfile,sys; z=zipfile.ZipFile(sys.argv[1]); print(z.testzip()); print(sorted((i.filename,i.file_size) for i in z.infolist()))`, zipFile]).toString();
   assert.match(listing, /^None/);
   assert.match(listing, new RegExp(`'reel.bin', ${big.length}`));
-  // trash keeps the file for 30 days instead of deleting it
-  const tr = await call(PROD, '/api/host/trashMany', { method: 'POST', body: { paths: [pathRel] } });
-  assert.equal(tr.body.trashed, 1);
+  // leaving the Trash for good deletes the file for good (no hidden 30 days), unless something still uses it
+  const t0 = app.store.get('tasks', 't-ford');
+  app.store.apply([{ kind: 'tasks', id: 't-ford', data: { ...t0, attachments: [...(t0.attachments || []), { id: 'a-keep', name: 'reel.bin', path: up.body.path }] } }], 'test');
+  const tr = await call(PROD, '/api/host/trashMany', { method: 'POST', body: { paths: [pathRel, up.body.path] } });
+  assert.equal(tr.body.deleted, 1, 'only the file nothing uses');
   assert.equal(fs.existsSync(path.join(dir, 'files', pathRel)), false);
   const day = new Date().toISOString().slice(0, 10);
-  assert.equal(fs.existsSync(path.join(dir, 'trash', day, pathRel)), true);
+  assert.equal(fs.existsSync(path.join(dir, 'trash', day, pathRel)), false, 'not kept in a hidden trash folder');
+  assert.equal(fs.existsSync(path.join(dir, 'files', up.body.path)), true, 'a file still used by a task stays');
 });
 
 test('import is admin-only and takes a backup first', async () => {
