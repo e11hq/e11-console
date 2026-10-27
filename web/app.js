@@ -1084,16 +1084,20 @@ const ServerHost = (() => {
       done() { setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 300); }, 700); },
     };
   }
-  async function uploadMany(files, target) {
+  async function uploadMany(files, target, hooks = {}) {
     if (!files.length) return [];
     const ui1 = uploadToast(files);
+    // (callers can follow along: onStart(files), onProgress(fraction of all bytes))
+    const sizes = files.map((f) => f.size || 1), total = sizes.reduce((a, b) => a + b, 0), parts = files.map(() => 0);
+    const report = () => { try { if (hooks.onProgress) hooks.onProgress(parts.reduce((a, p, i) => a + p * sizes[i], 0) / total); } catch (e) { /* ignore */ } };
+    try { if (hooks.onStart) hooks.onStart(files); } catch (e) { /* ignore */ }
     // two files at a time (each sends a few pieces at once)
     const out = new Array(files.length).fill(null);
     let next = 0;
     await Promise.all(Array.from({ length: Math.min(2, files.length) }, async () => {
       while (next < files.length) {
         const i = next++;
-        try { out[i] = await uploadFile(files[i], target, (p) => ui1.set(i, p)); ui1.set(i, 1, 'Done'); }
+        try { out[i] = await uploadFile(files[i], target, (p) => { ui1.set(i, p); parts[i] = p; report(); }); ui1.set(i, 1, 'Done'); parts[i] = 1; report(); }
         catch (e) { ui1.set(i, 0, 'Failed'); toast(`Could not upload ${files[i].name}: ${e.message}`); }
       }
     }));
@@ -1116,7 +1120,7 @@ const ServerHost = (() => {
       case 'badge': try { if (navigator.setAppBadge) { if (args.n) navigator.setAppBadge(args.n); else navigator.clearAppBadge(); } } catch (e) { /* not installed */ } return { ok: true };
       case 'pickAttachments': {
         const files = await pickFiles({ multiple: !args.single, accept: args.accept || '' });
-        return { ok: true, files: await uploadMany(files, args.dest ? { dest: args.dest } : { taskId: args.taskId }) };
+        return { ok: true, files: await uploadMany(files, args.dest ? { dest: args.dest } : { taskId: args.taskId }, { onStart: args.onStart, onProgress: args.onProgress }) };
       }
       case 'uploadBlob': {
         const f = new File([args.blob], args.name || 'file', { type: args.blob.type || 'application/octet-stream' });
@@ -1154,7 +1158,7 @@ const ServerHost = (() => {
     switch (cmd) {
       case 'pickAttachments': {
         const files = await pickMacFiles({ multiple: !args.single, prompt: args.dest ? 'Upload' : 'Attach' });
-        return { ok: true, files: await uploadMany(files, args.dest ? { dest: args.dest } : { taskId: args.taskId }) };
+        return { ok: true, files: await uploadMany(files, args.dest ? { dest: args.dest } : { taskId: args.taskId }, { onStart: args.onStart, onProgress: args.onProgress }) };
       }
       case 'pickImage': {
         const files = await pickMacFiles({ multiple: false, images: true, prompt: args.kind === 'logo' ? 'Use logo' : 'Use photo' });
@@ -1234,7 +1238,7 @@ const ui = {
   view: 'home', projectId: null, taskId: null,
   search: '', prevView: null,
   showDone: {}, collapsed: {}, mytasksCollapsed: {},
-  commentDraft: {}, commentFiles: {}, descOpen: {},
+  commentDraft: {}, commentFiles: {}, commentUp: {}, descOpen: {},
   day: null, navIds: [], openThreads: {}, replyTo: null, editingComment: null, activityFilter: 'comments', thread: null, fileClip: null, previewAtt: null, clientId: null, folderId: null,
 };
 
@@ -2348,7 +2352,11 @@ async function doSave() {
   saving = false;
   if (saveAgain) { saveAgain = false; doSave(); }
 }
-window.addEventListener('beforeunload', () => { if (saveTimer) { clearTimeout(saveTimer); doSave(); } });
+window.addEventListener('beforeunload', (e) => {
+  if (saveTimer) { clearTimeout(saveTimer); doSave(); }
+  // files still uploading for an unsent comment would be lost: the browser's own "Leave site?" box
+  if (!window.__e11Quiet && typeof Unsent !== 'undefined' && Unsent.any()) { e.preventDefault(); e.returnValue = ''; }
+});
 // In the browser, a file dropped outside a drop area must not open in place of the app
 ['dragover', 'drop'].forEach((ev) => window.addEventListener(ev, (e) => { if (e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files') && !e.defaultPrevented) e.preventDefault(); }));
 
@@ -3740,6 +3748,7 @@ function pasteFileInto(ed) {
     const list = ui.commentFiles[key] || [];
     if (list.some((x) => x.path === a.path)) { toast('That file is already added'); return; }
     ui.commentFiles[key] = list.concat({ ...a, id: uid(), linked: true, addedAt: nowISO() });
+    Unsent.save();
     renderDetail();
     setTimeout(() => { const b = $(`[data-draft-key="${key}"]`); if (b) { b.focus(); placeCaretAtEnd(b); } }, 0);
     return;
@@ -3795,6 +3804,7 @@ function openTask(id, focusTitle) {
   flushEdit();
   const pendingThread = ui.pendingThread; ui.pendingThread = null;
   // A task always opens on its Details tab, unless something asked for a tab on purpose (e.g. an Inbox mention → Comments)
+  const leaving = ui.taskId !== id ? ui.taskId : null;
   if (ui.taskId !== id) { if (ui.taskId && Draft.settle(ui.taskId)) renderContent(); ui.replyTo = null; ui.thread = null; ui.editingComment = null; ui.descOpen = {}; ui.activityFilter = 'comments'; ui.sideTab = ui.forceTab || 'details'; }
   ui.forceTab = null;
   if (pendingThread) ui.thread = pendingThread;
@@ -3804,15 +3814,157 @@ function openTask(id, focusTitle) {
   renderDetail();
   $$('.task-row, .card').forEach((el) => el.classList.toggle('is-selected', el.dataset.task === id));
   if (focusTitle) setTimeout(() => { const el = $('#d-title'); if (el) { el.focus(); el.select(); } }, 30);
+  if (leaving) Unsent.left(leaving);
 }
 function closeDetail() {
   flushEdit();
+  const leaving = ui.taskId;
   const dropped = Draft.settle(ui.taskId);
   ui.taskId = null; ui.replyTo = null; ui.thread = null; ui.editingComment = null;
   renderDetail();
   if (dropped) renderContent();
   $$('.is-selected').forEach((el) => el.classList.remove('is-selected'));
+  Unsent.left(leaving);
 }
+
+/* ================= Unsent comments =================
+   Leaving a task (closing it or opening another) with a comment or reply written or files attached but not sent
+   shows a pop-up: Send comment / Keep as draft / Go back. Drafts are kept on this device (localStorage) so they
+   survive a reload; Keep as draft doesn't ask again until the draft changes. Send while its files still upload
+   sends it by itself once they finish. */
+const Unsent = (() => {
+  let ack = {};          // draft key → the draft as it was when "Keep as draft" was chosen
+  const sendAfter = {};  // draft key → send once its files finish uploading
+  let shown = null, saveT = null;
+  const lsKey = () => 'e11-drafts-' + (currentUserId || '');
+  const plain = (html) => { const d = document.createElement('div'); d.innerHTML = html || ''; return d.textContent.replace(/\u00a0/g, ' ').trim(); };
+  const sig = (k) => (ui.commentDraft[k] || '') + '|' + (ui.commentFiles[k] || []).map((a) => a.id).join(',') + '|' + (ui.commentUp[k] ? 'up' : '');
+  const filled = (k) => { const h = ui.commentDraft[k] || ''; return !!plain(h) || /<(img|li)\b/i.test(h) || (ui.commentFiles[k] || []).length > 0 || !!ui.commentUp[k]; };
+  const keysOf = (tid) => [...new Set([...Object.keys(ui.commentDraft), ...Object.keys(ui.commentFiles), ...Object.keys(ui.commentUp)])].filter((k) => k === tid || k.startsWith(tid + ':'));
+  const parts = (k) => { const i = k.indexOf(':'); return i < 0 ? { tid: k, replyTo: null } : { tid: k.slice(0, i), replyTo: k.slice(i + 1) }; };
+  function pending(tid) {
+    const ks = keysOf(tid).filter((k) => filled(k) && ack[k] !== sig(k) && !sendAfter[k]);
+    return ks.find((k) => k === tid) || ks[0] || null;
+  }
+  function save() {
+    clearTimeout(saveT);
+    saveT = setTimeout(() => {
+      if (!currentUserId) return;
+      const d = {}, f = {}, a = {};
+      for (const k of Object.keys(ui.commentDraft)) if (plain(ui.commentDraft[k]) || /<(img|li)\b/i.test(ui.commentDraft[k] || '')) d[k] = ui.commentDraft[k];
+      for (const k of Object.keys(ui.commentFiles)) if ((ui.commentFiles[k] || []).length) f[k] = ui.commentFiles[k];
+      for (const k of Object.keys(ack)) if (d[k] || f[k]) a[k] = ack[k];
+      try { localStorage.setItem(lsKey(), JSON.stringify({ d, f, a })); } catch (e) { /* storage full or blocked */ }
+    }, 300);
+  }
+  function load() {
+    try {
+      const v = JSON.parse(localStorage.getItem(lsKey()) || 'null');
+      if (!v) return;
+      const live = (k) => !!task(parts(k).tid);
+      for (const [k, h] of Object.entries(v.d || {})) if (live(k) && !ui.commentDraft[k]) ui.commentDraft[k] = h;
+      for (const [k, l] of Object.entries(v.f || {})) if (live(k) && !(ui.commentFiles[k] || []).length) ui.commentFiles[k] = l;
+      ack = v.a || {};
+    } catch (e) { /* ignore */ }
+  }
+  function close() { const w = $('#unsent-root'); if (w) w.remove(); shown = null; document.removeEventListener('keydown', onKey, true); }
+  function onKey(e) { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (shown && sendAfter[shown]) close(); else keep(); } }
+  const fileChips = (k) => {
+    const files = ui.commentFiles[k] || [], up = ui.commentUp[k];
+    const chips = [];
+    if (files.length) chips.push(`<span class="us-chip">${icon('clip')}<span>${esc(files[0].name)}</span></span>`);
+    if (files.length > 1) chips.push(`<span class="us-chip">+${files.length - 1} file${files.length === 2 ? '' : 's'}</span>`);
+    if (up) chips.push(`<span class="us-chip">${icon('clip')}<span>Uploading ${up.total} file${up.total === 1 ? '' : 's'}…</span></span>`);
+    return chips.length ? `<div class="us-files">${chips.join('')}</div>` : '';
+  };
+  function card(k) {
+    const { tid, replyTo } = parts(k);
+    const t = task(tid);
+    const target = replyTo && t && (t.comments || []).find((c) => c.id === replyTo);
+    const who = target ? (target.authorId === currentUserId ? 'your comment' : fullName(userById(target.authorId))) : '';
+    if (sendAfter[k]) {
+      const up = ui.commentUp[k] || { frac: 1, total: 0 };
+      return `<div class="us-head"><span class="us-ic">${icon('upload')}</span><div><h2 id="us-t">Sending once your files finish uploading</h2>
+        <p>${up.total} file${up.total === 1 ? '' : 's'} uploading. You can keep working; it sends by itself.</p></div></div>
+        <div class="us-box"><div class="us-prog"><span>Uploading</span><b id="us-pct">${Math.round((up.frac || 0) * 100)}%</b></div><div class="us-bar"><i id="us-bar" style="width:${Math.round((up.frac || 0) * 100)}%"></i></div></div>
+        <div class="us-acts"><span class="us-sp"></span><button class="btn" data-us="cancel-send">Cancel sending</button><button class="btn primary" data-us="ok">OK</button></div>`;
+    }
+    const text = plain(ui.commentDraft[k]);
+    return `<div class="us-head"><span class="us-ic">${icon(replyTo ? 'reply' : 'comment')}</span><div><h2 id="us-t">Your ${replyTo ? 'reply' : 'comment'} hasn’t been sent</h2>
+      <p>${replyTo && who ? `Reply to <b>${esc(who)}</b> on ` : 'On '}<b>${esc(t ? t.title || 'Untitled task' : 'a task')}</b></p></div></div>
+      ${text || fileChips(k) ? `<div class="us-box">${text ? `<p class="us-text">${esc(trunc(text, 400))}</p>` : ''}${fileChips(k)}</div>` : ''}
+      <div class="us-acts"><button class="btn ghost" data-us="back">Go back</button><span class="us-sp"></span><button class="btn" data-us="keep">Keep as draft</button><button class="btn primary" data-us="send">${icon('send')}Send ${replyTo ? 'reply' : 'comment'}</button></div>
+      <p class="us-note">Keep as draft saves it in the task, ready when you come back.</p>`;
+  }
+  function show(k) {
+    close();
+    if (!task(parts(k).tid)) return;
+    shown = k;
+    const w = document.createElement('div');
+    w.id = 'unsent-root'; w.className = 'us-wrap';
+    w.innerHTML = `<div class="us-card" role="dialog" aria-modal="true" aria-labelledby="us-t">${card(k)}</div>`;
+    w.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-us]');
+      if (!b) { if (e.target === w) { if (sendAfter[k]) close(); else keep(); } return; }
+      const a = b.dataset.us;
+      if (a === 'send') send(); else if (a === 'keep') keep(); else if (a === 'back') back(); else if (a === 'ok') close();
+      else if (a === 'cancel-send') { delete sendAfter[k]; ack[k] = sig(k); save(); close(); toast('Kept as a draft'); }
+    });
+    document.body.appendChild(w);
+    document.addEventListener('keydown', onKey, true);
+    if (!(typeof Phone !== 'undefined' && Phone.on)) setTimeout(() => { const b = w.querySelector('[data-us="send"], [data-us="ok"]'); if (b) b.focus({ focusVisible: false }); }, 30);
+  }
+  function refresh() { const c = $('#unsent-root .us-card'); if (c && shown) c.innerHTML = card(shown); }
+  function send() {
+    const k = shown; if (!k) return;
+    const { tid, replyTo } = parts(k);
+    if (ui.commentUp[k]) { sendAfter[k] = true; refresh(); return; }
+    const t = task(tid);
+    close();
+    if (addComment(replyTo, tid)) toast(`${replyTo ? 'Reply' : 'Comment'} sent on “${trunc(t ? t.title : '', 50)}”`);
+  }
+  function keep() { const k = shown; if (!k) return; ack[k] = sig(k); save(); close(); }
+  function back() {
+    const k = shown; if (!k) return;
+    const { tid, replyTo } = parts(k);
+    close();
+    if (!task(tid)) return;
+    ui.forceTab = 'comments';
+    openTask(tid);
+    if (ui.taskId !== tid) return;
+    if (replyTo) { ui.replyTo = replyTo; renderDetail(); }
+    setTimeout(() => { const b = $(`#detail [data-draft-key="${k}"]`); if (b) { b.focus(); placeCaretAtEnd(b); } }, 60);
+  }
+  return {
+    save, load,
+    // after leaving a task: ask about its unsent comment, if any (once the new page has drawn)
+    left(tid) {
+      if (!tid || ui.taskId === tid || shown || !task(tid)) return;
+      const k = pending(tid);
+      if (k) setTimeout(() => { if (!shown && ui.taskId !== tid && pending(tid) === k) show(k); }, 80);
+    },
+    progress(k) {
+      if (shown !== k) return;
+      const up = ui.commentUp[k]; if (!up) return;
+      const pct = Math.round((up.frac || 0) * 100) + '%';
+      const bar = $('#us-bar'), n = $('#us-pct');
+      if (bar) bar.style.width = pct; if (n) n.textContent = pct;
+    },
+    // a comment's files finished uploading (ok) or failed: send it now if "Send" was pressed meanwhile
+    uploaded(k, ok) {
+      const want = !!sendAfter[k]; delete sendAfter[k];
+      if (shown === k) { if (want) close(); else refresh(); }
+      if (!want) return false;
+      const { tid, replyTo } = parts(k);
+      if (!ok) { toast('The files didn’t upload, so your comment was kept as a draft'); return false; }
+      const t = task(tid);
+      if (addComment(replyTo, tid)) { toast(`${replyTo ? 'Reply' : 'Comment'} sent on “${trunc(t ? t.title : '', 50)}”`); return true; }
+      return false;
+    },
+    // anything unsent that would be lost (the browser's own "Leave site?" box)
+    any: () => Object.keys(ui.commentUp).length > 0,
+  };
+})();
 
 /* ================= Overlays ================= */
 function closeMenus() { $$('.menu').forEach((m) => m.remove()); }
@@ -4461,13 +4613,22 @@ async function deleteSectionFlow(sid) {
 async function attachFiles(target = 'task', replyTo = null) {
   const t = task(ui.taskId);
   if (!t) return;
+  const key = draftKey(t, replyTo);
+  // a comment's files: remembered while they upload (leaving the task asks about them; "Send" waits for them)
+  const hooks = target === 'comment' ? {
+    onStart: (fs) => { ui.commentUp[key] = { tid: t.id, replyTo, total: fs.length, frac: 0 }; },
+    onProgress: (f) => { if (ui.commentUp[key]) { ui.commentUp[key].frac = f; Unsent.progress(key); } },
+  } : {};
   try {
-    const res = await Host.call('pickAttachments', { taskId: t.id });
+    const res = await Host.call('pickAttachments', { taskId: t.id, ...hooks });
     const files = (res.files || []).map((f) => ({ ...f, addedAt: nowISO() }));
-    if (!files.length) return;
+    if (target === 'comment') delete ui.commentUp[key];
+    if (!files.length) { if (target === 'comment') Unsent.uploaded(key, false); return; }
     if (target === 'comment') {
-      const key = draftKey(t, replyTo);
       ui.commentFiles[key] = (ui.commentFiles[key] || []).concat(files);
+      Unsent.save();
+      if (Unsent.uploaded(key, true)) return;     // "Send comment" was pressed while they uploaded: sent now
+      if (ui.taskId !== t.id) return;
       renderDetail();
       setTimeout(() => { const b = $(`[data-draft-key="${key}"]`); if (b) { b.focus(); placeCaretAtEnd(b); } }, 0);
       return;
@@ -4478,7 +4639,7 @@ async function attachFiles(target = 'task', replyTo = null) {
     t.updatedAt = nowISO();
     commit();
     toast(`Attached ${files.length} file${files.length === 1 ? '' : 's'}`);
-  } catch (e) { toast('Could not attach: ' + e.message); }
+  } catch (e) { if (target === 'comment') { delete ui.commentUp[key]; Unsent.uploaded(key, false); } toast('Could not attach: ' + e.message); }
 }
 
 function statusMenu(anchor) {
@@ -4887,6 +5048,7 @@ document.addEventListener('click', async (e) => {
         const a = list.find((x) => x.id === id);
         ui.commentFiles[key] = list.filter((x) => x.id !== id);
         if (a) safeTrash([a.path]);
+        Unsent.save();
         renderDetail();
         return;
       }
@@ -5158,16 +5320,18 @@ function closeThread() {
   if (feed) stickFeedToBottom(feed);
 }
 
-function addComment(replyTo) {
-  const t = task(ui.taskId);
-  if (!t) return;
+function addComment(replyTo, tid) {
+  const t = task(tid || ui.taskId);
+  if (!t) return false;
   const key = draftKey(t, replyTo);
-  const box = $(`[data-draft-key="${key}"]`);
+  // (from the open composer, or from the saved draft when the task isn't open: the unsent-comment pop-up)
+  let box = ui.taskId === t.id ? $(`#detail [data-draft-key="${key}"]`) : null;
+  if (!box && ui.commentDraft[key]) { box = document.createElement('div'); box.innerHTML = ui.commentDraft[key]; }
   const empty = !box || editorEmpty(box);
-  const text = empty ? '' : box.innerText.trim();
+  const text = empty ? '' : (box.isConnected ? box.innerText : box.textContent).trim();
   const html = empty ? '' : sanitizeHTML(box.innerHTML);
   const files = ui.commentFiles[key] || [];
-  if (!text && !files.length) return;
+  if (!text && !files.length) return false;
   const cid = uid();
   t.comments.push({ id: cid, text, html, at: nowISO(), attachments: files, parentId: replyTo || null, reactions: {}, authorId: currentUserId });
   const mentioned = mentionsIn(html);
@@ -5181,6 +5345,8 @@ function addComment(replyTo) {
   notifyWatchers(t, 'comment', replyTo ? 'replied to a comment on' : 'commented on', { snippet: trunc(text || `${files.length} file${files.length === 1 ? '' : 's'}`, 160), skip, commentId: cid });
   delete ui.commentFiles[key];
   delete ui.commentDraft[key];
+  Unsent.save();
+  if (ui.taskId !== t.id) { t.updatedAt = nowISO(); commit(); return true; }
   const fromMain = replyTo && ui.thread !== replyTo;
   if (fromMain) ui.replyTo = null;
   t.updatedAt = nowISO();
@@ -5194,6 +5360,7 @@ function addComment(replyTo) {
     const el = $(`#detail [data-thread="${replyTo}"]`);
     if (el) { el.scrollIntoView({ block: 'nearest' }); const o = el.querySelector('.thread-open'); if (o) { o.classList.add('flash'); setTimeout(() => o.classList.remove('flash'), 1800); } }
   }, 0);
+  return true;
 }
 
 function saveEdit(cid) {
@@ -5239,6 +5406,7 @@ document.addEventListener('input', (e) => {
   } else if (el.dataset && el.dataset.draftKey) {
     if (editorEmpty(el) && !el.querySelector('blockquote')) el.innerHTML = '';
     ui.commentDraft[el.dataset.draftKey] = el.innerHTML;
+    Unsent.save();
   }
   else if (el.id === 'edit-comment') autosize(el);
   else if (el.classList.contains('cl-text') && !can('editChecklist', t)) { /* read only for this role */ }
@@ -7651,6 +7819,7 @@ function enterApp() {
   document.getElementById('app').classList.remove('locked');
   setTimeout(() => { root.classList.remove('on', 'leaving'); root.innerHTML = ''; }, 450);
   ui.view = isFinUser() ? 'fin-dash' : 'home'; ui.taskId = null; ui.search = '';
+  Unsent.load();
   if (typeof Phone !== 'undefined' && Phone.check) Phone.check();
   Fin.init();
   initSidebar();
