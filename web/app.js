@@ -68,6 +68,7 @@ const ICONS = {
   clock: '<circle cx="8" cy="8" r="5.8"/><path d="M8 4.8V8l2.2 1.5"/>',
   copy: '<rect x="5.4" y="5.4" width="8" height="8.2" rx="1.5"/><path d="M10.6 5.4V3.8c0-.6-.4-1-1-1H3.8c-.6 0-1 .4-1 1v5.8c0 .6.4 1 1 1h1.6"/>',
   pushpin: '<g transform="scale(.6667)" stroke-width="2.2"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></g>',
+  'arrow-down': '<path d="M8 3v10M3.8 8.8 8 13l4.2-4.2"/>',
   pin: '<path d="M8 14.2s4.6-4.2 4.6-7.8a4.6 4.6 0 0 0-9.2 0c0 3.6 4.6 7.8 4.6 7.8z"/><circle cx="8" cy="6.4" r="1.7"/>',
   mail: '<rect x="2.2" y="3.4" width="11.6" height="9.2" rx="1.5"/><path d="m2.6 4.3 5.4 4.3 5.4-4.3"/>',
   assets: '<rect x="2.4" y="2.4" width="4.8" height="4.8" rx="1.2"/><rect x="8.8" y="2.4" width="4.8" height="4.8" rx="1.2"/><rect x="2.4" y="8.8" width="4.8" height="4.8" rx="1.2"/><path d="M11.2 8.6v5M8.7 11.1h5"/>',
@@ -3377,6 +3378,7 @@ function renderDetail() {
   hydrateThumbs(pane);
   lockByRole(pane, t);
   readOnlyDetail(pane, t);
+  if (typeof Glass !== 'undefined') Glass.afterDetail(pane, t, prev);
 }
 const RO_OK = new Set(['close-detail', 'close-preview', 'close-thread', 'close-lightbox', 'side-tab', 'detail-mode', 'nav-back', 'nav-forward', 'nav-task', 'open-task',
   'open-att', 'quicklook', 'copy-att', 'reveal-att', 'lightbox', 'tile-open', 'fileref-open', 'open-url', 'share-task', 'go-project', 'open-client', 'disp-toggle', 'fields-toggle', 'collapse',
