@@ -1518,7 +1518,7 @@ function fieldsHTML(t) {
     ...Cal.fieldRows(t),
   ];
   const empty = rows.filter((r) => !r.v).length;
-  const hide = !!ui.fieldsHideEmpty;
+  const hide = !ui.fieldsShowEmpty;   // empty fields stay out of the way until asked for
   const open = ui.fieldsOpen !== false;
   return `<div class="d-section fl-sec ${open ? '' : 'closed'}">
     <button class="fl-head" data-action="fields-toggle">${icon('chev')}<span>Fields</span></button>
@@ -5341,7 +5341,7 @@ document.addEventListener('click', async (e) => {
       case 'home-view-all': if (Work.lead()) ui.workF = null; ui.myTasksTab = 'todo'; go('mytasks'); return;
       case 'field-pick': e.stopPropagation(); fieldMenu(actEl, actEl.dataset.k); return;
       case 'fields-toggle': ui.fieldsOpen = ui.fieldsOpen === false; renderDetail(); return;
-      case 'fields-empty': ui.fieldsHideEmpty = !ui.fieldsHideEmpty; renderDetail(); return;
+      case 'fields-empty': ui.fieldsShowEmpty = !ui.fieldsShowEmpty; renderDetail(); return;
       case 'nav-back': PageHistory.back(); return;
       case 'nav-forward': PageHistory.forward(); return;
       case 'toggle-sidebar': setSidebarCollapsed(!document.getElementById('app').classList.contains('sb-collapsed')); return;
