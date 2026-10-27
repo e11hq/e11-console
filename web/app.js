@@ -3388,7 +3388,7 @@ function renderDetail() {
   hydrateThumbs(pane);
   lockByRole(pane, t);
   readOnlyDetail(pane, t);
-  if (typeof Glass !== 'undefined') Glass.afterDetail(pane, t, prev);
+  if (typeof FeedJump !== 'undefined') FeedJump.afterDetail(pane, t, prev);
 }
 const RO_OK = new Set(['close-detail', 'close-preview', 'close-thread', 'close-lightbox', 'side-tab', 'detail-mode', 'nav-back', 'nav-forward', 'nav-task', 'open-task',
   'open-att', 'quicklook', 'copy-att', 'reveal-att', 'lightbox', 'tile-open', 'fileref-open', 'open-url', 'share-task', 'go-project', 'open-client', 'disp-toggle', 'fields-toggle', 'collapse',

@@ -1,9 +1,8 @@
-/* ================= Glass (Mac app only) =================
-   In the Mac app (html.mac-chrome) a few things float as frosted glass (styles: glass.css): toasts and alerts,
-   pop-ups like the date picker and the comment scheduler, and in a task's comments a round "jump to the latest"
-   button that shows once you've scrolled up — or a "2 new comments" pill when comments arrive meanwhile.
-   The website and the phone are unchanged. */
-const Glass = (() => {
+/* ================= Jump to the latest comment (Mac app) =================
+   In the Mac app (html.mac-chrome), a task's comments get a round "jump to the latest" button once you've scrolled
+   up, or a "2 new comments" pill when comments arrive meanwhile (styles: styles.css .jl). At the latest, new comments
+   stay in view. The website and the phone are unchanged. */
+const FeedJump = (() => {
   const on = () => document.documentElement.classList.contains('mac-chrome');
   const NEAR = 80;                       // within this many pixels of the end counts as "at the latest"
   const st = { taskId: null, thread: null, atEnd: true, seen: new Set() };

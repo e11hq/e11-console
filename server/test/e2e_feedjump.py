@@ -1,10 +1,9 @@
-"""Glass in the Mac app only: toasts, alerts, the date picker and the comment scheduler are frosted; a task's comments
-get a round "jump to the latest" button once scrolled up, or a "N new comments" pill when comments arrive meanwhile.
-A browser keeps the normal look."""
+"""Mac app: a task's comments get a round "jump to the latest" button once scrolled up, or a "N new comments" pill
+when comments arrive meanwhile, in the app's normal solid style (no glass anywhere). A browser has no jump button."""
 import asyncio, os, re, tempfile, time, subprocess, urllib.request
 from playwright.async_api import async_playwright
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-PORT = 18237; BASE = f'http://127.0.0.1:{PORT}'; ADMIN = 'haris@e11-digital.com'
+PORT = 18238; BASE = f'http://127.0.0.1:{PORT}'; ADMIN = 'haris@e11-digital.com'
 OUT = tempfile.gettempdir()
 SHELL = int(re.search(r'let SHELL_VERSION = (\d+)', open(os.path.join(ROOT, 'mac/swift/main.swift')).read()).group(1))
 fails = []
@@ -45,8 +44,8 @@ async def main():
                 jl = await pg.query_selector('#detail .jl.jl-round')
                 check(jl is not None, f'{theme}: scrolled up, the round jump button shows')
                 bf = await pg.evaluate("getComputedStyle(document.querySelector('#detail .jl')).backdropFilter || getComputedStyle(document.querySelector('#detail .jl')).webkitBackdropFilter")
-                check('blur' in str(bf), f'{theme}: it is frosted glass ({bf})')
-                await pg.screenshot(path=os.path.join(OUT, f'glass_jump_{theme}.png'))
+                check('blur' not in str(bf), f'{theme}: in the normal solid style, no glass ({bf})')
+                await pg.screenshot(path=os.path.join(OUT, f'jump_jump_{theme}.png'))
                 # a new comment from someone else arrives while scrolled up
                 await pg.evaluate(f"""(() => {{ const t = task('{tid}'); const who = db.users.find(u => u.id !== currentUserId && u.active !== false).id;
                   t.comments.push({{ id: 'c-new-{theme}', text: 'Updated the end card', html: 'Updated the end card', authorId: who, at: nowISO(), parentId: null, reactions: {{}}, attachments: [] }}); renderDetail(); }})()""")
@@ -54,7 +53,7 @@ async def main():
                 pill = await pg.inner_text('#detail .jl.jl-new') if await pg.query_selector('#detail .jl.jl-new') else ''
                 check('1 new comment' in pill, f'{theme}: a new comment shows the "1 new comment" pill {pill!r}')
                 check(await pg.evaluate("(() => { const f = document.querySelector('#detail .tm-feed'); return f.scrollTop < 50; })()"), f'{theme}: and doesn’t yank you down')
-                await pg.screenshot(path=os.path.join(OUT, f'glass_new_{theme}.png'))
+                await pg.screenshot(path=os.path.join(OUT, f'jump_new_{theme}.png'))
                 await pg.click('#detail .jl'); await pg.wait_for_timeout(900)
                 check(await pg.evaluate("(() => { const f = document.querySelector('#detail .tm-feed'); return f.scrollHeight - f.scrollTop - f.clientHeight < 80; })()") and not await pg.query_selector('#detail .jl'), f'{theme}: clicking it goes to the latest and it goes away')
                 # at the latest, a new comment stays in view
@@ -68,19 +67,19 @@ async def main():
                 for sel, name in [('#toast-root .toast', 'toast'), ('#notif-root .notif-card', 'alert')]:
                     el = await pg.query_selector(sel)
                     bf = await pg.evaluate("(el) => getComputedStyle(el).backdropFilter || getComputedStyle(el).webkitBackdropFilter", el) if el else ''
-                    check('blur' in str(bf), f'{theme}: the {name} is glass')
-                await pg.screenshot(path=os.path.join(OUT, f'glass_toasts_{theme}.png'))
+                    check('blur' not in str(bf), f'{theme}: the {name} keeps the normal look')
+                await pg.screenshot(path=os.path.join(OUT, f'jump_toasts_{theme}.png'))
                 await pg.evaluate("document.querySelectorAll('#notif-root .notif-card, #toast-root .toast').forEach(e => e.remove())")
                 await pg.evaluate("ui.sideTab = 'details'; renderDetail()"); await pg.wait_for_timeout(300)
                 await pg.click('#detail .date-chip:has(#d-due)'); await pg.wait_for_timeout(300)
                 dp = await pg.query_selector('.dp-pop')
-                check(dp is not None and 'blur' in str(await pg.evaluate("(el) => getComputedStyle(el).backdropFilter || getComputedStyle(el).webkitBackdropFilter", dp)), f'{theme}: the date picker is glass')
-                await pg.screenshot(path=os.path.join(OUT, f'glass_dp_{theme}.png'))
+                check(dp is not None and 'blur' not in str(await pg.evaluate("(el) => getComputedStyle(el).backdropFilter || getComputedStyle(el).webkitBackdropFilter", dp)), f'{theme}: the date picker keeps the normal look')
+                await pg.screenshot(path=os.path.join(OUT, f'jump_dp_{theme}.png'))
                 await pg.keyboard.press('Escape'); await pg.wait_for_timeout(200)
                 await pg.evaluate("ui.sideTab = 'comments'; renderDetail()"); await pg.wait_for_timeout(300)
                 await pg.click('#detail #d-comment'); await pg.keyboard.type('Hello'); await pg.click('#detail .sc-chev'); await pg.wait_for_timeout(300)
-                check('blur' in str(await pg.evaluate("getComputedStyle(document.getElementById('sc-pop')).backdropFilter || getComputedStyle(document.getElementById('sc-pop')).webkitBackdropFilter")), f'{theme}: the scheduler is glass')
-                await pg.screenshot(path=os.path.join(OUT, f'glass_sched_{theme}.png'))
+                check('blur' not in str(await pg.evaluate("getComputedStyle(document.getElementById('sc-pop')).backdropFilter || getComputedStyle(document.getElementById('sc-pop')).webkitBackdropFilter")), f'{theme}: the scheduler keeps the normal look')
+                await pg.screenshot(path=os.path.join(OUT, f'jump_sched_{theme}.png'))
                 check(not errs, f'{theme}: no page errors {errs}')
                 await ctx.close()
             # a browser: the normal look
