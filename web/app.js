@@ -1251,6 +1251,12 @@ const ServerHost = (() => {
     document.body.appendChild(a); a.click(); a.remove();
   }
   async function call(cmd, args = {}) {
+    // one file: the file itself, not a .zip with one file in it
+    if (cmd === 'exportFiles' && (args.paths || []).length === 1) {
+      const p = args.paths[0], name = String(p).split('/').pop();
+      if (Host.isMacApp) await saveOnMac(fileHref(p), name, false); else download(fileHref(p), name);
+      return { ok: true, count: 1, dir: name };
+    }
     if (Host.isMacApp) {
       const mac = await macCall(cmd, args);
       if (mac !== undefined) return mac;

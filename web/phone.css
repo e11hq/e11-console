@@ -817,4 +817,28 @@ body.phone { --ap-max: 240px; }
 /* The native iPhone app (ios/): it draws the tab bar itself (UITabBar, from the page's own tabs), so the page's bar is
    hidden and nothing leaves room for it; the page runs up under the status bar (titles at the top, as designed) */
 html.ios-app body.phone #ph-tabs { display: none !important; }
-html.ios-app.phone body.phone { --ph-tabs-h: 0px !important; --ph-tab-gap: 0px !important; }
+/* the page fills the whole screen and the native bar floats over its bottom: the app says how much it covers */
+html.ios-app.phone body.phone { --ph-tabs-h: var(--ios-tabs-h, 0px) !important; --ph-tab-gap: max(calc(var(--ios-tabs-h, 0px) - 64px), 0px) !important; }
+
+/* Client Assets on the phone: the client card and a folder's heading wrap instead of squeezing the title or
+   running off the side */
+body.phone .ca-page { padding: 14px 16px 40px; max-width: none; }
+body.phone .cl-head { flex-wrap: wrap; gap: 14px; padding: 16px; margin-bottom: 16px; }
+body.phone .cl-head-logo { width: 64px; height: 64px; border-radius: 12px; }
+body.phone .cl-head-txt { flex: 1 1 0; min-width: 0; }
+body.phone .cl-head-txt h2 { font-size: 22px; overflow-wrap: anywhere; }
+body.phone .cl-head > .btn { flex: 1 1 100%; justify-content: center; }
+body.phone .cfo-head { flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+body.phone .cfo-head .cfo-title { flex: 1 1 0; min-width: 0; }
+body.phone .cfo-head .cfo-title h2 { font-size: 20px; overflow-wrap: anywhere; }
+body.phone .cfo-head .spacer { flex: 0 0 100%; height: 0; }
+body.phone .cfo-head > .icon-btn[data-action="open-cfolder"] { display: none; }   /* (the page's own back is in the header) */
+body.phone .cfo-head > .btn { flex: 1 1 auto; justify-content: center; }
+body.phone .cf-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+body.phone .ca-searchbar { min-width: 0; }
+/* the brand assets link at the top of a client's tasks: room under the header */
+body.phone .ph-client { margin-top: 12px; margin-bottom: 4px; }
+body.phone .ph-search { margin-top: 12px; }
+/* nothing slides sideways: a sheet or page a pixel too wide could be dragged left in the app */
+html.ios-app, html.ios-app body { overflow-x: hidden; }
+.ph-sheet, body.phone #content { overflow-x: hidden; overscroll-behavior-x: none; }

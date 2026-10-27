@@ -11,7 +11,7 @@ import UserNotifications
 import LocalAuthentication
 
 // Version of this iPhone app's native part (raise it with changes the web app needs to know about)
-let SHELL_VERSION = 1
+let SHELL_VERSION = 2
 let procEnv = ProcessInfo.processInfo.environment
 let SELFTEST = procEnv["E11_SELFTEST"] ?? ""           // the build machine's self-test in the simulator
 let info = Bundle.main.infoDictionary ?? [:]
@@ -89,7 +89,13 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   var started = false
   var statusStyle: UIStatusBarStyle = .lightContent
   var downloads: [ObjectIdentifier: URL] = [:]
+  var downloadFrom: [ObjectIdentifier: String] = [:]      // what each download is fetching (one at a time per file)
+  var downloadWatch: [ObjectIdentifier: NSKeyValueObservation] = [:]
+  var downloadNames: [ObjectIdentifier: String] = [:]
+  var hud: DownloadHUD?
   var retrying = false
+  var launchLock = true          // ask for Face ID when the app starts (not every time it comes back to the front)
+  var authing = false            // Face ID is on screen (it makes the app inactive and active again: never a new lock)
 
   override var preferredStatusBarStyle: UIStatusBarStyle { statusStyle }
   override func loadView() { view = UIView(); view.backgroundColor = BG }
@@ -108,6 +114,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     web.scrollView.backgroundColor = BG
     web.scrollView.contentInsetAdjustmentBehavior = .never   // the page handles the status bar area itself
     web.scrollView.bounces = false
+    web.scrollView.alwaysBounceHorizontal = false
+    web.scrollView.showsHorizontalScrollIndicator = false
     if #available(iOS 16.4, *) { web.isInspectable = true }
     view.addSubview(web)
     tabBar.delegate = self
@@ -118,14 +126,15 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
     let b = view.bounds
-    if tabBar.isHidden {
-      web.frame = b
-    } else {
-      let h = tabBar.sizeThatFits(b.size).height + view.safeAreaInsets.bottom
-      tabBar.frame = CGRect(x: 0, y: b.height - h, width: b.width, height: h)
-      web.frame = CGRect(x: 0, y: 0, width: b.width, height: b.height - h)
-    }
+    // the page always fills the screen (no black band under it); the tab bar floats over its bottom and the page
+    // keeps that much room free (--ios-tabs-h, web/phone.css)
+    web.frame = b
+    let h = tabBar.sizeThatFits(b.size).height + view.safeAreaInsets.bottom
+    tabBar.frame = CGRect(x: 0, y: b.height - h, width: b.width, height: h)
+    let cover = tabBar.isHidden ? 0 : Int(h.rounded())
+    if cover != tabCover { tabCover = cover; pageJS("document.documentElement.style.setProperty('--ios-tabs-h','\(cover)px')") }
     lockView?.frame = b
+    hud?.place(in: b, above: tabBar.isHidden ? view.safeAreaInsets.bottom : h)
   }
   func loadHome(_ path: String = "/") {
     guard let u = URL(string: serverURL() + path) else { return }
@@ -134,6 +143,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       web.configuration.websiteDataStore.httpCookieStore.setCookie(c) { self.web.load(URLRequest(url: u)) }
     } else { web.load(URLRequest(url: u)) }
   }
+  var tabCover = -1
   func pageJS(_ js: String) { web?.evaluateJavaScript(js, completionHandler: nil) }
   var serverHost: String { URL(string: serverURL())?.host ?? "" }
 
@@ -164,10 +174,16 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     }
     decisionHandler(.allow)
   }
+  func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+    // our pages draw under the status bar themselves; the Cloudflare sign-in page doesn't, so it gets the usual margins
+    let ours = webView.url?.host == serverHost || webView.url?.scheme == "about"
+    webView.scrollView.contentInsetAdjustmentBehavior = ours ? .never : .always
+    if ours { tabCover = -1; view.setNeedsLayout() }
+  }
   func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
     let onServer = webView.url?.host == serverHost
     pageReady = onServer
-    if onServer { flushPending(); if !SELFTEST.isEmpty && !started { started = true; DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.selfTest() } } }
+    if onServer { tabCover = -1; view.setNeedsLayout(); flushPending(); if !SELFTEST.isEmpty && !started { started = true; DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.selfTest() } } }
     else { tabBar.isHidden = true; view.setNeedsLayout() }   // (the sign-in page: no tabs)
   }
   func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { failed(error) }
@@ -207,25 +223,73 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
 
   /* ---------- downloads: saved, then the share sheet (Save to Files, Save Image, AirDrop…) ---------- */
-  func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) { download.delegate = self }
-  func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) { download.delegate = self }
+  func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) { adopt(download) }
+  func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) { adopt(download) }
+  func adopt(_ d: WKDownload) {
+    let from = d.originalRequest?.url?.absoluteString ?? ""
+    if !from.isEmpty, downloadFrom.values.contains(from) {
+      d.cancel { _ in }
+      pageJS("window.toast && toast('Already downloading — it opens when it’s done')")
+      return
+    }
+    let k = ObjectIdentifier(d)
+    downloadFrom[k] = from
+    downloadNames[k] = d.originalRequest?.url?.lastPathComponent.removingPercentEncoding ?? "file"
+    d.delegate = self
+    downloadWatch[k] = d.progress.observe(\.fractionCompleted, options: [.new]) { [weak self] p, _ in
+      DispatchQueue.main.async { self?.paintHUD() }
+    }
+    paintHUD()
+  }
+  func endDownload(_ d: WKDownload) {
+    let k = ObjectIdentifier(d)
+    downloadFrom.removeValue(forKey: k); downloadNames.removeValue(forKey: k)
+    downloadWatch.removeValue(forKey: k)?.invalidate()
+    paintHUD()
+  }
+  var liveDownloads: [WKDownload] = []
+  func paintHUD() {
+    liveDownloads = liveDownloads.filter { downloadFrom[ObjectIdentifier($0)] != nil }
+    if downloadFrom.isEmpty { hud?.removeFromSuperview(); hud = nil; return }
+    if hud == nil { let h = DownloadHUD(); h.onCancel = { [weak self] in self?.cancelDownloads() }; view.addSubview(h); hud = h; view.setNeedsLayout(); view.layoutIfNeeded() }
+    var done: Int64 = 0, total: Int64 = 0, known = true
+    for d in liveDownloads where downloadFrom[ObjectIdentifier(d)] != nil {
+      done += d.progress.completedUnitCount
+      if d.progress.totalUnitCount > 0 { total += d.progress.totalUnitCount } else { known = false }
+    }
+    let n = downloadFrom.count
+    let name = n == 1 ? (downloadNames.values.first ?? "file") : "\(n) files"
+    let mb = { (b: Int64) in String(format: "%.1f MB", Double(b) / 1_048_576) }
+    let frac = known && total > 0 ? Float(done) / Float(total) : -1
+    hud?.show(title: "Downloading \(name)", detail: known && total > 0 ? "\(mb(done)) of \(mb(total))" : (done > 0 ? mb(done) : "Starting…"), progress: frac)
+  }
+  func cancelDownloads() {
+    for d in liveDownloads { d.cancel { _ in } }
+    for d in liveDownloads { endDownload(d) }
+    downloads.removeAll()
+  }
   func download(_ download: WKDownload, decideDestinationUsing response: URLResponse, suggestedFilename: String, completionHandler: @escaping (URL?) -> Void) {
     let dir = FileManager.default.temporaryDirectory.appendingPathComponent("downloads-\(UUID().uuidString.prefix(8))", isDirectory: true)
     try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     let name = suggestedFilename.isEmpty ? "file" : suggestedFilename.replacingOccurrences(of: "/", with: "-")
     let url = dir.appendingPathComponent(name)
     downloads[ObjectIdentifier(download)] = url
+    if !liveDownloads.contains(where: { $0 === download }) { liveDownloads.append(download) }
+    paintHUD()
     completionHandler(url)
   }
   func downloadDidFinish(_ download: WKDownload) {
+    endDownload(download)
     guard let url = downloads.removeValue(forKey: ObjectIdentifier(download)) else { return }
     let sheet = UIActivityViewController(activityItems: [url], applicationActivities: nil)
     sheet.popoverPresentationController?.sourceView = view
     (presentedViewController ?? self).present(sheet, animated: true)
   }
   func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {
+    let wasLive = downloadFrom[ObjectIdentifier(download)] != nil
     downloads.removeValue(forKey: ObjectIdentifier(download))
-    pageJS("window.toast && toast('Download failed')")
+    endDownload(download)
+    if wasLive, (error as NSError).code != NSURLErrorCancelled { pageJS("window.toast && toast('Download failed — check your connection and try again')") }
   }
 
   /* ---------- the native tab bar (the page's own tabs; tapping one taps the page's button) ---------- */
@@ -317,11 +381,13 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     return ["kind": kind, "on": defaults.bool(forKey: LOCK_KEY)]
   }
   func becameActive() {
-    if defaults.bool(forKey: LOCK_KEY), lockView == nil, awayAt == nil || Date().timeIntervalSince(awayAt!) > 600 { lock() }
+    let away = awayAt.map { Date().timeIntervalSince($0) } ?? 0
+    if defaults.bool(forKey: LOCK_KEY), lockView == nil, !authing, launchLock || away > 600 { lock() }
+    launchLock = false
     awayAt = nil
     if pageReady { pushState { st in if st == "on" { UIApplication.shared.registerForRemoteNotifications() } } }
   }
-  func wentAway() { awayAt = Date() }
+  func wentAway() { if !authing { awayAt = Date() } }
   func lock() {
     let v = UIVisualEffectView(effect: UIBlurEffect(style: .systemThickMaterialDark))
     v.frame = view.bounds
@@ -339,9 +405,16 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.unlock() }
   }
   @objc func unlock() {
+    if authing || lockView == nil { return }
     let ctx = LAContext(); var err: NSError?
     guard ctx.canEvaluatePolicy(.deviceOwnerAuthentication, error: &err) else { return unlocked() }
-    ctx.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "Unlock E11 Console") { ok, _ in DispatchQueue.main.async { if ok { self.unlocked() } } }
+    authing = true
+    ctx.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "Unlock E11 Console") { ok, _ in
+      DispatchQueue.main.async {
+        if ok { self.unlocked() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { self.authing = false }   // (after the app is active again)
+      }
+    }
   }
   func unlocked() { lockView?.removeFromSuperview(); lockView = nil }
 
@@ -399,8 +472,12 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       if !on { defaults.set(false, forKey: LOCK_KEY); return done(["ok": true, "on": false]) }
       let ctx = LAContext(); var err: NSError?
       guard ctx.canEvaluatePolicy(.deviceOwnerAuthentication, error: &err) else { return done(["ok": false, "error": "This iPhone has no Face ID or passcode set up"]) }
+      authing = true
       ctx.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "Lock E11 Console with Face ID") { ok, _ in
-        DispatchQueue.main.async { if ok { defaults.set(true, forKey: LOCK_KEY) }; done(["ok": true, "on": ok]) }
+        DispatchQueue.main.async {
+          if ok { defaults.set(true, forKey: LOCK_KEY) }; done(["ok": true, "on": ok])
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { self.authing = false }
+        }
       }
     default: done(["ok": false, "error": "Unknown command " + cmd])
     }
@@ -428,34 +505,69 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   func selfTest() {
     let wait = "for (let i = 0; i < 120 && !(window.db && typeof currentUserId !== 'undefined' && currentUserId && document.getElementById('ph-tabs')); i++) await new Promise((r) => setTimeout(r, 250));"
-    probe("page", wait + """
-      await new Promise((r) => setTimeout(r, 1500));
-      const info = await NativeMac.call('appInfo');
-      return JSON.stringify({ ios: document.documentElement.classList.contains('ios-app'), phone: typeof Phone !== 'undefined' && !!Phone.on, isIOSApp: Host.isIOSApp, isMacApp: Host.isMacApp,
-        webTabsShown: getComputedStyle(document.getElementById('ph-tabs')).display !== 'none', view: ui.view, appInfo: info,
-        top: getComputedStyle(document.documentElement).getPropertyValue('--ph-top'), unknown: await NativeMac.call('nope').then(() => 'answered').catch((e) => e.message) });
-      """) {
-      self.writeSelf("home")
-      DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
-        if let i = self.tabKeys.firstIndex(of: "inbox"), let item = self.tabBar.items?[i] { self.tabBar.selectedItem = item; self.tabBar(self.tabBar, didSelect: item) }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-          self.probe("inbox", "return JSON.stringify({ view: ui.view })") {
-            self.writeSelf("inbox")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
-              self.probe("task", "const t = db.tasks.find((x) => !x.parentId && !x.done); if (t) openTask(t.id); await new Promise((r) => setTimeout(r, 1500)); return JSON.stringify({ taskOpen: !!ui.taskId })") {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                  self.writeSelf("task")
-                  DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
-                    self.probe("back", "closeDetail(); await new Promise((r) => setTimeout(r, 800)); return JSON.stringify({ taskOpen: !!ui.taskId })") {
-                      DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.writeSelf("done") }
-                    }
-                  }
-                }
-              }
-            }
-          }
+    let sleep = { (ms: Int) in "await new Promise((r) => setTimeout(r, \(ms)));" }
+    let geo = "const cs = getComputedStyle(document.documentElement); const geo = { innerH: innerHeight, vvH: visualViewport ? visualViewport.height : null, shift: cs.getPropertyValue('--ph-shift'), tabsH: cs.getPropertyValue('--ios-tabs-h'), kb: cs.getPropertyValue('--ph-kb') };"
+    // (name, script run in the page, what to do in the app first)
+    let steps: [(String, String, (() -> Void)?)] = [
+      ("home", wait + sleep(1500) + """
+        const info = await NativeMac.call('appInfo');
+        \(geo)
+        return JSON.stringify({ ios: document.documentElement.classList.contains('ios-app'), phone: typeof Phone !== 'undefined' && !!Phone.on, isIOSApp: Host.isIOSApp, isMacApp: Host.isMacApp,
+          webTabsShown: getComputedStyle(document.getElementById('ph-tabs')).display !== 'none', view: ui.view, appInfo: info, geo,
+          top: getComputedStyle(document.documentElement).getPropertyValue('--ph-top'), unknown: await NativeMac.call('nope').then(() => 'answered').catch((e) => e.message) });
+        """, nil),
+      ("inbox", sleep(1500) + "return JSON.stringify({ view: ui.view })", {
+        if let i = self.tabKeys.firstIndex(of: "inbox"), let item = self.tabBar.items?[i] { self.tabBar.selectedItem = item; self.tabBar(self.tabBar, didSelect: item) } }),
+      ("me", "go('me'); " + sleep(1200) + "for (let i = 0; i < 3; i++) { await Push.refresh(); " + sleep(300) + " } return JSON.stringify({ lockRows: document.querySelectorAll('#ph-lock, [data-ph-lock]').length, pushRows: document.querySelectorAll('#ph-push').length })", nil),
+      ("client", "const c = db.clients.find((x) => x.folders.some((f) => f.files.length > 1)) || db.clients[0]; const f = c.folders.find((x) => x.files.length > 1) || c.folders[0]; openClient(c.id, f.id); " + sleep(1200) + "return JSON.stringify({ wide: document.getElementById('content').scrollWidth > innerWidth + 1 })", nil),
+      ("task", "const t = db.tasks.find((x) => !x.parentId && !x.done && (x.comments || []).length) || db.tasks.find((x) => !x.parentId && !x.done); openTask(t.id); " + sleep(1500) + "return JSON.stringify({ taskOpen: !!ui.taskId })", nil),
+      ("sheet", "const m = showMenu(document.body, [{ html: '<div class=\"react-pick\">' + REACTIONS.map((e) => '<button>' + e + '</button>').join('') + '</div>' }, { label: 'Reply', icon: 'reply', run() {} }, { label: 'Edit comment', icon: 'edit', run() {} }, { label: 'Copy text', icon: 'copy', run() {} }, '-', { label: 'Delete comment', icon: 'trash', danger: true, run() {} }]); m.classList.add('cm-sheet'); " + sleep(900) + geo + " const r = m.getBoundingClientRect(); return JSON.stringify({ menuTop: r.top, menuBottom: r.bottom, geo })", nil),
+      ("back", "document.querySelectorAll('.menu, #ph-menu-scrim').forEach((x) => x.remove()); closeDetail(); " + sleep(800) + "return JSON.stringify({ taskOpen: !!ui.taskId })", nil),
+      ("signin", sleep(4000) + "return JSON.stringify({ host: location.host, top: (document.querySelector('h1, h2, img, form') || document.body).getBoundingClientRect().top })", {
+        self.web.load(URLRequest(url: URL(string: "https://e11hq.cloudflareaccess.com/")!)) }),
+    ]
+    func run(_ i: Int) {
+      if i >= steps.count { selfResult["frame"] = ["web": web.frame.height, "screen": view.bounds.height, "inset": web.scrollView.contentInsetAdjustmentBehavior == .never ? "never" : "auto", "insetTop": web.scrollView.adjustedContentInset.top, "host": web.url?.host ?? ""]; return writeSelf("done") }
+      let (name, js, before) = steps[i]
+      before?()
+      DispatchQueue.main.asyncAfter(deadline: .now() + (before == nil ? 0.2 : 1.5)) {
+        self.probe(name, js) {
+          if name == "home" || name == "inbox" { self.selfResult[name + "Frame"] = ["web": self.web.frame.height, "screen": self.view.bounds.height, "tabBar": !self.tabBar.isHidden] }
+          DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.writeSelf(name); DispatchQueue.main.asyncAfter(deadline: .now() + 4) { run(i + 1) } }
         }
       }
     }
+    run(0)
+  }
+}
+
+// The download in progress, floating above the tab bar: the file, how far it's got, and Cancel
+final class DownloadHUD: UIVisualEffectView {
+  let title = UILabel(), detail = UILabel(), bar = UIProgressView(progressViewStyle: .default), cancel = UIButton(type: .system)
+  var onCancel: (() -> Void)?
+  init() {
+    super.init(effect: UIBlurEffect(style: .systemThickMaterial))
+    layer.cornerRadius = 18; layer.cornerCurve = .continuous; clipsToBounds = true
+    title.font = .systemFont(ofSize: 15, weight: .semibold); title.lineBreakMode = .byTruncatingMiddle
+    detail.font = .monospacedDigitSystemFont(ofSize: 13, weight: .regular); detail.textColor = .secondaryLabel
+    cancel.setTitle("Cancel", for: .normal); cancel.titleLabel?.font = .systemFont(ofSize: 15, weight: .semibold)
+    cancel.addTarget(self, action: #selector(tapCancel), for: .touchUpInside)
+    [title, detail, bar, cancel].forEach { contentView.addSubview($0) }
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  @objc func tapCancel() { onCancel?() }
+  func show(title t: String, detail d: String, progress p: Float) {
+    title.text = t; detail.text = d
+    if p >= 0 { bar.isHidden = false; bar.setProgress(p, animated: true) } else { bar.isHidden = true }
+  }
+  func place(in b: CGRect, above bottom: CGFloat) {
+    let w = min(b.width - 24, 420), h: CGFloat = 70
+    frame = CGRect(x: (b.width - w) / 2, y: b.height - bottom - h - 12, width: w, height: h)
+    cancel.sizeToFit()
+    let cw = cancel.bounds.width + 8
+    cancel.frame = CGRect(x: w - cw - 10, y: 0, width: cw, height: h)
+    title.frame = CGRect(x: 16, y: 11, width: w - cw - 30, height: 20)
+    detail.frame = CGRect(x: 16, y: 32, width: w - cw - 30, height: 17)
+    bar.frame = CGRect(x: 16, y: 56, width: w - cw - 30, height: 4)
   }
 }

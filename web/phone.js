@@ -52,6 +52,7 @@ const Phone = (() => {
       const full = window.innerHeight > window.innerWidth ? Math.max(screen.height, screen.width) : Math.min(screen.height, screen.width);
       if (full > h && full - h < 140) h = full; // not when the keyboard is open (that shrinks it a lot more)
     }
+    if (typeof Host !== 'undefined' && Host.isIOSApp) h = Math.round(bottom);
     const shift = Math.min(0, Math.round(bottom - h));
     const key = h + '/' + shift;
     if (key === lastKey) return;
@@ -88,10 +89,26 @@ const Phone = (() => {
       + tab('inbox', 'inbox', 'Inbox', unread)
       + (cd ? tab('reviews', 'shield', 'Reviews', rv) : tab('projects', 'folder', 'Clients'))
       + tab('me', 'user', 'Me');
+    stopFling();
     bar.hidden = !!ui.taskId;
     document.body.classList.toggle('task-open', !!ui.taskId);
     nativeTabs(bar);
     const top = document.getElementById('ph-top'); if (top) { top.hidden = !top.firstElementChild; if (!ui.taskId && top.firstElementChild) document.documentElement.style.setProperty('--ph-head-h', top.offsetHeight + 'px'); }
+  }
+
+  // A flick on one page mustn't keep scrolling the next one (the pages share one scrolling box): when the page
+  // changes, the scrolling is stopped dead (switching scrolling off for a moment is what stops iPhone's glide)
+  let pageKey = '';
+  function stopFling() {
+    const k = [ui.view, ui.projectId, ui.clientId, ui.folderId].join('|');
+    if (k === pageKey) return;
+    pageKey = k;
+    const c = document.getElementById('content');
+    if (!c) return;
+    c.style.overflowY = 'hidden';
+    void c.offsetHeight;
+    c.scrollTop = 0;
+    requestAnimationFrame(() => { c.style.overflowY = ''; });
   }
 
   // The iPhone app draws a real (native) tab bar from the same tabs; tapping one taps the page's own button
@@ -99,10 +116,21 @@ const Phone = (() => {
   function nativeTabs(bar) {
     if (typeof Host === 'undefined' || !Host.isIOSApp) return;
     const tabs = [...bar.querySelectorAll('[data-ph-tab]')].map((b) => ({ v: b.dataset.phTab, label: (b.querySelector('span') || {}).textContent || '', badge: (b.querySelector('.ph-badge') || {}).textContent || '', on: b.classList.contains('on') }));
-    const msg = JSON.stringify({ tabs, hidden: !!ui.taskId || !!document.querySelector('.ph-sheet.open, .scrim') });
+    // (the native bar sits above the page, so it steps aside for anything that rises from the bottom)
+    const msg = JSON.stringify({ tabs, hidden: !!ui.taskId || !!document.querySelector('.scrim, .menu:not(.mention-pop), #ph-sheet-root .ph-scrim:not(.docked), #overlay-root > *') });
     if (msg === tabsSent) return;
     tabsSent = msg;
     NativeMac.call('setTabs', JSON.parse(msg)).catch(() => {});
+  }
+  if (typeof Host !== 'undefined' && Host.isIOSApp) {
+    let q = 0;
+    const again = () => { if (q) return; q = requestAnimationFrame(() => { q = 0; const bar = document.getElementById('ph-tabs'); if (bar && st.on) nativeTabs(bar); }); };
+    const watch = () => {
+      new MutationObserver(again).observe(document.body, { childList: true });
+      ['ph-sheet-root', 'overlay-root'].forEach((id) => { const el = document.getElementById(id); if (el) new MutationObserver(again).observe(el, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] }); });
+    };
+    if (document.body) watch(); else document.addEventListener('DOMContentLoaded', watch);
+    setTimeout(watch, 3000);   // (the sheet holder is made on first use)
   }
   window.__e11Tab = (v) => { const b = document.querySelector(`#ph-tabs [data-ph-tab="${v}"]`); if (b) b.click(); };
 
@@ -690,7 +718,8 @@ const Push = (() => {
   }
   function paint() {
     const el = document.getElementById('ph-push');
-    if (el) el.outerHTML = row(true);
+    if (el) el.outerHTML = row('button');
+    document.querySelectorAll('#ph-lock ~ #ph-lock, #ph-lock + .ph-row[data-ph-lock]').forEach((x) => x.remove());
     const lk = document.getElementById('ph-lock');
     if (lk) lk.outerHTML = lockRow();
     const pf = document.getElementById('pf-push');
@@ -716,7 +745,9 @@ const Push = (() => {
     if (st.state === 'none') return '';
     const label = { on: 'On', off: 'Off', denied: 'Blocked', install: 'Set up', unsupported: 'Not available', unknown: '' }[st.state];
     const sub = { on: 'A banner for every Inbox update', off: 'Get a banner even when the app is closed', denied: 'Allow them in iPhone Settings → Notifications → E11 Console', install: 'Add E11 Console to your Home Screen first', unsupported: 'This browser can’t show notifications', unknown: '' }[st.state];
-    return `<button class="ph-row" id="ph-push" data-ph-push>${icon('bell')}<span>Notifications on this phone<small>${sub}</small></span><i class="ph-state ${st.state === 'on' ? 'on' : ''}">${st.busy ? '…' : label}</i></button>` + (iosApp() ? lockRow() : '');
+    const btn = `<button class="ph-row" id="ph-push" data-ph-push>${icon('bell')}<span>Notifications on this phone<small>${sub}</small></span><i class="ph-state ${st.state === 'on' ? 'on' : ''}">${st.busy ? '…' : label}</i></button>`;
+    // (a repaint replaces just this button: the lock row has its own repaint, so it never doubles up)
+    return noRefresh === 'button' ? btn : btn + (iosApp() && !document.getElementById('ph-lock') ? lockRow() : '');
   }
   // iPhone app: lock the app with Face ID (asked when it opens, and after 10 minutes away)
   function lockRow() {
@@ -860,7 +891,7 @@ const Push = (() => {
 (() => {
   const EDGE = 28, DONE = 0.33, PAR = 0.3, DIM = 0.22;
   let g = null;
-  const standalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true || window.__phSwipeAlways;
+  const standalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true || window.__phSwipeAlways || (typeof Host !== 'undefined' && Host.isIOSApp);
   function target() {
     if ($('#overlay-root').firstElementChild || $('.menu') || $('#ph-sheet-root .ph-scrim:not(.docked)')) return null; // a sheet or menu is open
     if (ui.taskId) {
@@ -1302,3 +1333,30 @@ const Push = (() => {
   }, { passive: true });
 })();
 
+
+/* Phone: a task's date wheel. iPhone fills an empty date with today the moment its wheel opens and reports it as
+   a change, which saved today straight away (and closed the wheel). Changes are held while the wheel is open and
+   saved once when it closes, only if the date really changed. Closing an empty date's wheel without touching it
+   (only iPhone's own "today" in it) leaves the date empty — the Today button next to it sets today. */
+(() => {
+  const SEL = '#d-due, #d-start, #d-golive';
+  const was = new WeakMap(), moves = new WeakMap();
+  let replay = false;
+  document.addEventListener('focusin', (e) => { const el = e.target; if (Phone.on && el.matches && el.matches(SEL)) was.set(el, el.value); }, true);
+  document.addEventListener('change', (e) => {
+    const el = e.target;
+    if (replay || !Phone.on || !el.matches || !el.matches(SEL) || !was.has(el) || document.activeElement !== el) return;
+    moves.set(el, (moves.get(el) || 0) + 1);
+    e.stopImmediatePropagation();
+  }, true);
+  document.addEventListener('input', (e) => { const el = e.target; if (!replay && Phone.on && el.matches && el.matches(SEL) && was.has(el) && document.activeElement === el) e.stopImmediatePropagation(); }, true);
+  document.addEventListener('focusout', (e) => {
+    const el = e.target;
+    if (!el.matches || !el.matches(SEL) || !was.has(el)) return;
+    const before = was.get(el), n = moves.get(el) || 0; was.delete(el); moves.delete(el);
+    if (!before && n <= 1 && el.value === todayStr()) { el.value = ''; return; }   // (only the wheel's own today)
+    if (el.value === before) return;
+    replay = true;
+    try { el.dispatchEvent(new Event('change', { bubbles: true })); } finally { replay = false; }
+  }, true);
+})();
