@@ -1,0 +1,41 @@
+{
+  "fill" : {
+    "linear-gradient" : [
+      "srgb:0.70196,0.65098,0.98431,1.00000",
+      "srgb:0.35686,0.26667,0.83137,1.00000"
+    ],
+    "orientation" : {
+      "start" : { "x" : 0.15, "y" : 0.0 },
+      "stop" : { "x" : 0.85, "y" : 1.0 }
+    }
+  },
+  "groups" : [
+    {
+      "layers" : [
+        { "glass" : false, "image-name" : "ink.png", "name" : "ink" }
+      ],
+      "shadow" : { "kind" : "none", "opacity" : 0 },
+      "translucency" : { "enabled" : false, "value" : 0 }
+    },
+    {
+      "layers" : [
+        { "glass" : true, "image-name" : "card.png", "name" : "card" }
+      ],
+      "shadow" : { "kind" : "neutral", "opacity" : 0.5 },
+      "specular" : true,
+      "translucency" : { "enabled" : true, "value" : 0.2 }
+    },
+    {
+      "layers" : [
+        { "glass" : true, "image-name" : "yellow.png", "name" : "yellow" },
+        { "glass" : true, "image-name" : "green.png", "name" : "green" }
+      ],
+      "shadow" : { "kind" : "neutral", "opacity" : 0.5 },
+      "specular" : true,
+      "translucency" : { "enabled" : true, "value" : 0.4 }
+    }
+  ],
+  "supported-platforms" : {
+    "squares" : [ "macOS" ]
+  }
+}

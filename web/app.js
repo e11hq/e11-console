@@ -366,6 +366,13 @@ const AppIcon = (() => {
   const lsSet = (v) => { try { if (v) localStorage.setItem(KEY, v); else localStorage.removeItem(KEY); } catch (e) { /* storage off */ } };
   const toB64 = (blob) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(blob); });
   // Make this Mac's Dock icon match the server (old Mac apps without setIcon simply ignore it)
+  // a Swift Mac app with the glass icon: everyday = its own icon (macOS draws the glass), never a flat copy
+  let glass = null;
+  const hasGlass = async () => { if (glass === null) { try { glass = !!(await NativeMac.call('appInfo')).glass; } catch (e) { glass = false; } } return glass; };
+  async function everyday() {
+    if (lsGet() === 'glass') return true;
+    await NativeMac.call('setIcon', { reset: true }); lsSet('glass'); return true;
+  }
   async function sync(next) {
     if (next) info = next;
     // the startup animation takes on the chosen seasonal look on every device (remembered for the next start)
@@ -380,6 +387,8 @@ const AppIcon = (() => {
         if (!r.ok) return;
         await NativeMac.call('setIcon', { b64: await toB64(await r.blob()) });
         lsSet(v);
+      } else if (await hasGlass()) {
+        await everyday();
       } else if (info.def) {
         // the default icon (it can change with an update): apply it unless this Mac already has it
         if (lsGet() !== 'def-' + info.def) {
@@ -405,7 +414,8 @@ const AppIcon = (() => {
     try {
       // no season this week: the everyday (default) icon, applied as before
       const sid = autoSeason(todayStr()), key = sid ? 'auto-' + sid : 'def-' + (info.def || '0');
-      if (lsGet() !== key) {
+      if (!sid && await hasGlass()) await everyday();
+      else if (lsGet() !== key) {
         const r = await fetch(sid ? `icons/seasonal/${sid}.png` : '/api/app-icon?v=' + encodeURIComponent(info.v), { cache: 'no-store', credentials: 'same-origin' });
         if (r.ok) { await NativeMac.call('setIcon', { b64: await toB64(await r.blob()) }); lsSet(key); }
       }

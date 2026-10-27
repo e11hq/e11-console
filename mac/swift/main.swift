@@ -15,7 +15,7 @@ import LocalAuthentication
 
 // Version of this Mac app's native part. Raise it when a change here needs everyone to reinstall: the web app
 // then shows a required-update banner in older Mac apps. (The earlier script app was 1–6.)
-let SHELL_VERSION = 8
+let SHELL_VERSION = 9
 
 let info = Bundle.main.infoDictionary ?? [:]
 let env = ProcessInfo.processInfo.environment
@@ -274,7 +274,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     case "zoomWindow": window.performZoom(nil); done(["ok": true])
     case "appInfo":
       done(["ok": true, "server": SERVER, "shell": SHELL_VERSION, "native": "swift",
-            "version": info["CFBundleShortVersionString"] as? String ?? "3.0.0", "touchID": defaults.bool(forKey: LOCK_KEY)])
+            "version": info["CFBundleShortVersionString"] as? String ?? "3.0.0", "touchID": defaults.bool(forKey: LOCK_KEY),
+            "glass": FileManager.default.fileExists(atPath: Bundle.main.bundlePath + "/Contents/Resources/Assets.car")])
     default: done(["ok": false, "error": "Unknown command " + cmd])
     }
   }
@@ -344,8 +345,9 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   func setIcon(_ a: [String: Any]) -> [String: Any] {
     let appPath = Bundle.main.bundlePath
     if (a["reset"] as? Bool) == true {
+      // back to the app's own icon: the glass one (macOS draws it) when the app has it
       NSWorkspace.shared.setIcon(nil, forFile: appPath, options: [])
-      NSApp.applicationIconImage = NSImage(contentsOfFile: appPath + "/Contents/Resources/AppIcon.icns")
+      NSApp.applicationIconImage = nil
       return ["ok": true, "saved": false]
     }
     guard let d = Data(base64Encoded: a["b64"] as? String ?? ""), let img = NSImage(data: d) else { return ["ok": false, "error": "Bad icon image"] }

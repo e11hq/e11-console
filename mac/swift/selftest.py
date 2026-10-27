@@ -41,6 +41,9 @@ try:
     pl = json.loads(pl)
     check(pl.get('E11ServerURL') == BASE and pl.get('CFBundleIdentifier') == 'ae.e11.console.client.test', 'server and app id in the app')
     check(pl['CFBundleURLTypes'][0]['CFBundleURLSchemes'] == ['e11console-test'], 'task links scheme')
+    check(pl.get('CFBundleIconName') == 'AppIcon' and os.path.isfile(os.path.join(app, 'Contents/Resources/Assets.car')), 'the glass everyday icon is in the app')
+    subprocess.run(['swift', os.path.join(ROOT, 'mac/swift/icon-preview.swift'), app, os.path.join(TMP, 'icon')], capture_output=True, text=True, timeout=300)
+    check(os.path.exists(os.path.join(TMP, 'icon-light.png')), 'a picture of the icon as macOS draws it')
     time.sleep(3)
     subprocess.run(['osascript', '-e', 'tell application id "ae.e11.console.client.test" to quit'], capture_output=True)
     time.sleep(2)
@@ -58,7 +61,7 @@ try:
     ai = c.get('appInfo', {})
     check(res.get('closedVisible') is False and res.get('reopenedVisible') is True, 'closing the window keeps the app running; the Dock icon brings it back')
     check(res.get('loginOn') is True and res.get('loginOff') is True, 'Open at Login turns on and off')
-    check(ai.get('shell') == 8 and ai.get('native') == 'swift' and ai.get('server') == BASE, f'appInfo {ai}')
+    check(ai.get('shell') == 9 and ai.get('glass') is True and ai.get('native') == 'swift' and ai.get('server') == BASE, f'appInfo {ai}')
     for k in ['badge', 'badgeOff', 'notify', 'light', 'dark', 'save1', 'save2']:
         check((c.get(k) or {}).get('ok') is True, f'{k} answered ok: {c.get(k)}')
     check(res.get('saved') == 'hello mac', 'a download saved in pieces into Downloads: ' + repr(res.get('saved')))

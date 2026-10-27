@@ -11,7 +11,7 @@ permissions:
   contents: write
 jobs:
   mac:
-    runs-on: macos-14
+    runs-on: macos-26
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -39,7 +39,7 @@ jobs:
         run: |
           gh release view mac-selftest >/dev/null 2>&1 || gh release create mac-selftest --prerelease --title "Mac app self-test (work branch)" --notes "Latest self-test results from a mac-* branch." --target "$GITHUB_SHA"
           cp mac/selftest.log "$RUNNER_TEMP/" 2>/dev/null || true
-          for f in selftest.json selftest.png server.log selftest.log; do [ -f "$RUNNER_TEMP/$f" ] && gh release upload mac-selftest "$RUNNER_TEMP/$f" --clobber; done; true
+          for f in selftest.json selftest.png server.log selftest.log icon-light.png icon-dark.png; do [ -f "$RUNNER_TEMP/$f" ] && gh release upload mac-selftest "$RUNNER_TEMP/$f" --clobber; done; true
       - uses: actions/upload-artifact@v4
         with:
           name: mac-app

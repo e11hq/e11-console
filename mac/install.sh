@@ -58,11 +58,17 @@ else
   RES="$BUILD/Contents/Resources"; PL="$BUILD/Contents/Info.plist"
   mkdir -p "$BUILD/Contents/MacOS" "$RES"
   cp "$WORK/bin/E11Console" "$BUILD/Contents/MacOS/$APP_NAME" && chmod 755 "$BUILD/Contents/MacOS/$APP_NAME" || fail "Couldn't put the app together."
-  iconutil -c icns "$ICONSET" -o "$RES/AppIcon.icns" || fail "Couldn't create the app icon."
+  if [ -s "$WORK/bin/Assets.car" ]; then
+    # the everyday icon in Apple's glass style (macOS 26 draws it in glass; older macOS uses AppIcon.icns)
+    cp "$WORK/bin/Assets.car" "$RES/Assets.car" && cp "$WORK/bin/AppIcon.icns" "$RES/AppIcon.icns" || fail "Couldn't put the app icon in."
+  else
+    iconutil -c icns "$ICONSET" -o "$RES/AppIcon.icns" || fail "Couldn't create the app icon."
+  fi
   printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict/></plist>\n' > "$PL"
   plutil -replace CFBundleExecutable -string "$APP_NAME" "$PL"
   plutil -replace CFBundlePackageType -string "APPL" "$PL"
   plutil -replace CFBundleIconFile -string "AppIcon" "$PL"
+  [ -s "$RES/Assets.car" ] && plutil -replace CFBundleIconName -string "AppIcon" "$PL"
   plutil -replace CFBundleShortVersionString -string "3.0.0" "$PL"
   plutil -replace CFBundleVersion -string "$(cat "$WORK/bin/SHELL_VERSION" 2>/dev/null || echo 7)" "$PL"
   plutil -replace CFBundleInfoDictionaryVersion -string "6.0" "$PL"
