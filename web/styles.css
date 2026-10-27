@@ -2162,7 +2162,7 @@ button.pv-empty:hover { background: var(--hover); color: var(--text-2); }
 .upd-hist small { color: var(--text-3); }
 .btn.ghost.danger { color: var(--red); }
 :root[data-theme="light"] .upd-chip { color: #9a6a00; }
-.imp-card { margin-top: 16px; }
+.upd-card + .upd-card { margin-top: 16px; }   /* every card on the App updates page, phone too */
 .imp-card .upd-note b { color: var(--text-2); }
 .imp-card .btn { margin-top: 12px; }
 .mac-dlg { width: 560px; }
