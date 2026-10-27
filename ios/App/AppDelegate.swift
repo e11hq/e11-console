@@ -330,12 +330,22 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let keys = list.map { $0["v"] as? String ?? "" }
     if keys != tabKeys || (tabBar.items?.count ?? 0) != keys.count {
       tabKeys = keys
+      tabPhoto = [:]
       tabBar.items = list.enumerated().map { i, t in
         let v = t["v"] as? String ?? ""
         return UITabBarItem(title: t["label"] as? String ?? "", image: UIImage(systemName: symbol(v)), tag: i)
       }
     } else {
       for (i, t) in list.enumerated() { tabBar.items?[i].title = t["label"] as? String ?? "" }
+    }
+    // the Me tab: the person's own picture (round, as drawn by the page), with a ring when it's the open tab
+    for (i, t) in list.enumerated() {
+      guard let ph = t["photo"] as? String, ph != tabPhoto[i], let item = tabBar.items?[i],
+            let comma = ph.firstIndex(of: ","), let data = Data(base64Encoded: String(ph[ph.index(after: comma)...])),
+            let src = UIImage(data: data) else { continue }
+      tabPhoto[i] = ph
+      item.image = roundPhoto(src, ring: nil)
+      item.selectedImage = roundPhoto(src, ring: tabBar.tintColor ?? .systemBlue)
     }
     for (i, t) in list.enumerated() {
       let b = t["badge"] as? String ?? ""
@@ -357,6 +367,22 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         UIView.animate(withDuration: 0.18) { self.tabBar.alpha = 1 }
       }
     }
+  }
+  var tabPhoto: [Int: String] = [:]
+  func roundPhoto(_ src: UIImage, ring: UIColor?) -> UIImage {
+    let size: CGFloat = 28
+    let r = UIGraphicsImageRenderer(size: CGSize(width: size, height: size))
+    return r.image { _ in
+      let box = CGRect(x: 0, y: 0, width: size, height: size)
+      let inset: CGFloat = ring == nil ? 1 : 2.5
+      let pic = box.insetBy(dx: inset, dy: inset)
+      UIBezierPath(ovalIn: pic).addClip()
+      src.draw(in: pic)
+      if let ring = ring {
+        let p = UIBezierPath(ovalIn: box.insetBy(dx: 1, dy: 1)); p.lineWidth = 2
+        UIGraphicsGetCurrentContext()?.resetClip(); ring.setStroke(); p.stroke()
+      }
+    }.withRenderingMode(.alwaysOriginal)
   }
   func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
     guard item.tag < tabKeys.count else { return }

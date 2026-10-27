@@ -4185,7 +4185,10 @@ function showMenu(anchor, items) {
   if (x + mw > innerWidth - 8) x = innerWidth - mw - 8;
   // a long list stays next to what opened it: below if it fits, else on the roomier side, scrolling if needed
   const below = innerHeight - r.bottom - 12, above = r.top - 12;
-  if (mh > below) {
+  // (on a phone every menu is a bottom sheet with its own height limit: no squeezing to the space by what opened it,
+  //  which left a sheet opened from the page itself or from low on the screen as a short strip)
+  const sheet = typeof Phone !== 'undefined' && Phone.on;
+  if (mh > below && !sheet) {
     const up = above > below;
     const room = up ? above : below;
     if (mh > room) { m.style.maxHeight = Math.max(120, room) + 'px'; m.style.overflowY = 'auto'; mh = Math.min(mh, Math.max(120, room)); }

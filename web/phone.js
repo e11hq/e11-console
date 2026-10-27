@@ -117,6 +117,8 @@ const Phone = (() => {
     if (typeof Host === 'undefined' || !Host.isIOSApp) return;
     const tabs = [...bar.querySelectorAll('[data-ph-tab]')].map((b) => ({ v: b.dataset.phTab, label: (b.querySelector('span') || {}).textContent || '', badge: (b.querySelector('.ph-badge') || {}).textContent || '', on: b.classList.contains('on') }));
     // (the native bar sits above the page, so it steps aside for anything that rises from the bottom)
+    const ph = mePhoto();
+    if (ph) tabs.forEach((t) => { if (t.v === 'me') t.photo = ph; });
     const msg = JSON.stringify({ tabs, hidden: !!ui.taskId || !!document.querySelector('.scrim, .menu:not(.mention-pop), #ph-sheet-root .ph-scrim:not(.docked), #overlay-root > *') });
     if (msg === tabsSent) return;
     tabsSent = msg;
@@ -131,6 +133,37 @@ const Phone = (() => {
     };
     if (document.body) watch(); else document.addEventListener('DOMContentLoaded', watch);
     setTimeout(watch, 3000);   // (the sheet holder is made on first use)
+  }
+  // the Me tab shows your own picture (or your initials on your colour), drawn here and handed to the app as a PNG
+  let photo = { key: '', url: '' };
+  function mePhoto() {
+    const u = typeof me === 'function' ? me() : null;
+    if (!u) return '';
+    const key = (u.avatar || '') + '|' + fullName(u);
+    if (photo.key === key) return photo.url;
+    photo = { key, url: '' };
+    const S = 84, c = document.createElement('canvas'); c.width = c.height = S;
+    const g = c.getContext('2d');
+    const round = () => { g.beginPath(); g.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2); g.closePath(); g.clip(); };
+    const initialsPic = () => {
+      g.save(); round(); g.fillStyle = avColor(u.id); g.fillRect(0, 0, S, S);
+      g.fillStyle = '#fff'; g.font = '600 34px -apple-system, system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText(initials(fullName(u)), S / 2, S / 2 + 1); g.restore();
+      return c.toDataURL('image/png');
+    };
+    if (!u.avatar) { photo.url = initialsPic(); return photo.url; }
+    const img = new Image();
+    img.onload = () => {
+      if (photo.key !== key) return;
+      g.save(); round();
+      const k = Math.max(S / img.width, S / img.height), w = img.width * k, h = img.height * k;
+      g.drawImage(img, (S - w) / 2, (S - h) / 2, w, h); g.restore();
+      try { photo.url = c.toDataURL('image/png'); } catch (e) { photo.url = initialsPic(); }
+      const bar = document.getElementById('ph-tabs'); if (bar) nativeTabs(bar);
+    };
+    img.onerror = () => { if (photo.key === key) { photo.url = initialsPic(); const bar = document.getElementById('ph-tabs'); if (bar) nativeTabs(bar); } };
+    img.src = fileUrl({ path: u.avatar });
+    return '';
   }
   window.__e11Tab = (v) => { const b = document.querySelector(`#ph-tabs [data-ph-tab="${v}"]`); if (b) b.click(); };
 
