@@ -2342,6 +2342,34 @@ function renderSidebar() {
   }).join('') : isAdmin() ? `<div class="nav-item ph" data-action="new-project" style="font-size:12.5px">${icon('plus')} Add your first client</div>` : '';
 }
 
+// A folder path too long for the title bar: the folders between the client and the last ones become "…" (oldest
+// first; hover shows them, a click opens the nearest hidden one); still too long: it fades out at the end
+function fitPath(root) {
+  const box = root && root.querySelector('.ca-path'); if (!box) return;
+  box.classList.remove('fade');
+  const mids = [...box.querySelectorAll('.ca-mid')];
+  mids.forEach((m) => { m.hidden = false; if (m.nextElementSibling) m.nextElementSibling.hidden = false; });
+  const old = box.querySelector('.ca-more'); if (old) { old.nextElementSibling.remove(); old.remove(); }
+  const over = () => box.scrollWidth > box.clientWidth + 1;
+  if (!over()) return;
+  let n = 0, more = null;
+  while (over() && n < mids.length) {
+    const m = mids[n++];
+    m.hidden = true; m.nextElementSibling.hidden = true;
+    if (!more) {
+      more = document.createElement('a');
+      more.className = 'page-title crumb-link ca-more';
+      m.before(more);
+      more.insertAdjacentHTML('afterend', '<span class="crumb-sep">/</span>');
+    }
+    const hid = mids.slice(0, n);
+    more.textContent = '…';
+    more.title = hid.map((x) => x.textContent).join(' / ');
+    more.dataset.action = 'open-cfolder'; more.dataset.id = hid[hid.length - 1].dataset.id;
+  }
+  if (over()) box.classList.add('fade');
+}
+window.addEventListener('resize', () => { clearTimeout(fitPath.t); fitPath.t = setTimeout(() => fitPath($('#title-area')), 100); });
 function renderTitle() {
   const el = $('#title-area');
   if (typeof Phone !== 'undefined' && Phone.on) { el.innerHTML = ''; return; }
@@ -2362,9 +2390,14 @@ function renderTitle() {
     const c = ui.view === 'client' ? clientById(ui.clientId) : null;
     if (ui.view === 'client' && !c) { ui.view = 'clients'; return renderTitle(); }
     const f = c && c.folders.find((x) => x.id === ui.folderId);
+    // the whole path: Client Assets / client / every folder down to this one (fitPath shortens it to fit)
+    const sep = '<span class="crumb-sep">/</span>';
     el.innerHTML = `<div class="page-icon ca-icon">${icon('assets')}</div>${c
-      ? `<a class="page-title crumb-link" data-nav="clients">Client Assets</a><span class="crumb-sep">/</span>${f ? `<a class="page-title crumb-link" data-action="open-client" data-id="${c.id}">${esc(c.name)}</a><span class="crumb-sep">/</span><div class="page-title">${esc(f.name)}</div>` : `<div class="page-title">${esc(c.name)}</div>`}`
+      ? `<div class="ca-path"><a class="page-title crumb-link" data-nav="clients">Client Assets</a>${sep}${f
+        ? `<a class="page-title crumb-link" data-action="open-client" data-id="${c.id}">${esc(c.name)}</a>${sep}${folderAncestors(c, f).map((x) => `<a class="page-title crumb-link ca-mid" data-action="open-cfolder" data-id="${x.id}">${esc(x.name)}</a>${sep}`).join('')}<div class="page-title">${esc(f.name)}</div>`
+        : `<div class="page-title">${esc(c.name)}</div>`}</div>`
       : '<div class="page-title">Client Assets</div>'}`;
+    fitPath(el);
     return;
   }
   if (ui.view === 'today') {

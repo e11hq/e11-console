@@ -2491,3 +2491,10 @@ body.phone #detail .tm-done-note { order: 9; flex-basis: 100%; }
 .hello-card p { margin: 0 0 14px; font-size: 13.5px; opacity: .92; }
 .hello-card small { font-size: 11.5px; opacity: .75; }
 @media (prefers-reduced-motion: reduce) { .hello-card, .hello-wrap { transition: none; } }
+
+/* Client Assets title bar: the whole folder path, shortened with "…" and faded at the end when it doesn't fit */
+.ca-path { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1 1 auto; overflow: hidden; white-space: nowrap; }
+.ca-path > * { flex: none; }
+.ca-path .page-title { overflow: visible; text-overflow: clip; }
+.ca-path [hidden] { display: none; }
+.ca-path.fade { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 48px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 48px), transparent); }
