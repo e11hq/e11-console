@@ -102,6 +102,9 @@ async def main():
             if first:
                 rows = await am.locator('.dy-card .dy-sec.open .dy-row').count()
                 check(rows >= 1, f'the first line with tasks is open ({rows} rows)')
+            await am.evaluate("document.querySelector('.dy-card')._keep = 1; document.querySelector('.dy-scrim')._keep = 1")
+            await am.click('.dy-card [data-dy-sec="cd"]'); await am.wait_for_timeout(200)
+            check(await am.evaluate("document.querySelector('.dy-card')._keep === 1 && document.querySelector('.dy-scrim')._keep === 1 && !!document.querySelector('.dy-sec.open.t-accent')"), 'opening a line keeps the window in place (no flicker)')
             ov = dict(counts).get('overdue', 0)
             if ov:
                 if not await am.evaluate("!!document.querySelector('.dy-sec.open [data-dy-all=\"overdue\"]')"):

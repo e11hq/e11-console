@@ -58,7 +58,16 @@ const Daily = (() => {
     </div></div>`;
   }
   let shown = false;
-  function paint() { const root = document.getElementById('overlay-root'); if (root && shown) root.innerHTML = cardHTML(); }
+  // opening a line only redraws the card's inside: the window and its backdrop stay put (no fade-in again)
+  function paint() {
+    const root = document.getElementById('overlay-root');
+    if (!root || !shown) return;
+    const card = root.querySelector('.dy-card');
+    if (!card) { root.innerHTML = cardHTML(); return; }
+    const tmp = document.createElement('div');
+    tmp.innerHTML = cardHTML();
+    ['.dy-body', '.dy-foot'].forEach((sel) => { const a = card.querySelector(sel), b = tmp.querySelector(sel); if (a && b) a.replaceWith(b); });
+  }
   function show() {
     if (!wants()) return;
     open.k = null; shown = true;

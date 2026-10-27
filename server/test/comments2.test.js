@@ -133,6 +133,12 @@ test('morning round-up: not before 9:00, then once to each AM and Super Admin wh
   assert.equal(h.team, true); assert.equal(h.counts.today, 2);
   assert.match(a.text, /1 overdue · 1 due today · 1 waiting for CD · 1 need client approval/);
   assert.equal(await app.daily.tick(), 0, 'only once a day');
+  // a server started after 11:00 skips the day (no afternoon "Good morning")
+  app.store.kv.set('daily-sent', '{}');
+  clock = Date.parse('2026-10-28T07:05:00Z');   // Wed 11:05 Dubai
+  assert.equal(await app.daily.tick(), 0, 'not after 11:00');
+  clock = Date.parse('2026-10-28T06:55:00Z');   // Wed 10:55 Dubai: catching up after a restart
+  assert.equal(await app.daily.tick(), 2, 'still before 11:00');
 });
 test('morning round-up: not on weekends or UAE public holidays', async () => {
   clock = Date.parse('2026-10-31T05:10:00Z');   // Saturday

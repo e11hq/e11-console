@@ -10,7 +10,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { dubaiNow } from './digest.js';
 
-const START = 9 * 60;
+const START = 9 * 60, LAST = 11 * 60;   // 9:00, or as soon as the server is back up until 11:00 (a restart later skips the day)
 const plusDay = (s, n) => new Date(Date.parse(s + 'T00:00:00Z') + n * 86400000).toISOString().slice(0, 10);
 
 // UAE public holidays (private sector): what the holiday calendar marks as a public holiday (holidays.js keeps them),
@@ -98,7 +98,7 @@ export function createDaily({ store, access, webDir, webPush, notifMessage, deli
   let timer = null;
   async function tick() {
     const t = dubaiNow(now());
-    if (t.weekday < 1 || t.weekday > 5 || t.minutes < START) return 0;
+    if (t.weekday < 1 || t.weekday > 5 || t.minutes < START || t.minutes >= LAST) return 0;
     if (holidayOn(t.day)) return 0;
     let sent = load();
     if (sent.day !== t.day) sent = { day: t.day, ids: [] };
