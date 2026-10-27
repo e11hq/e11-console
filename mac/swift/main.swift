@@ -537,6 +537,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
         await t('badURL', () => NativeMac.call('openURL', { url: 'file:///etc/passwd' }));
         await t('unknown', () => NativeMac.call('nope'));
         await t('chunkGone', () => NativeMac.call('readLocalChunk', { token: 'missing', offset: 0, length: 4 }));
+        for (let i = 0; i < 50 && !document.getElementById('mac-bar'); i++) await new Promise((r) => setTimeout(r, 100));   // (the page adds it a moment after it loads)
         out.macChrome = document.documentElement.classList.contains('mac-chrome');
         out.macBar = !!document.getElementById('mac-bar');
         out.updateBar = !!document.getElementById('mac-update');
