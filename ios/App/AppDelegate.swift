@@ -184,7 +184,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let onServer = webView.url?.host == serverHost
     pageReady = onServer
     if onServer { tabCover = -1; view.setNeedsLayout(); flushPending(); if !SELFTEST.isEmpty && !started { started = true; DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.selfTest() } } }
-    else { tabBar.isHidden = true; view.setNeedsLayout() }   // (the sign-in page: no tabs)
+    else { tabBar.isHidden = true; tabsHidden = true; view.setNeedsLayout() }   // (the sign-in page: no tabs)
   }
   func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { failed(error) }
   func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { failed(error) }
@@ -198,7 +198,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if retrying { return }
     retrying = true
     pageReady = false
-    tabBar.isHidden = true; view.setNeedsLayout()
+    tabBar.isHidden = true; tabsHidden = true; view.setNeedsLayout()
     let html = "<html><head><meta name=viewport content='width=device-width'></head><body style=\"background:#0c0d0f;color:#bbb;font:16px -apple-system;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center\"><div><b style=\"color:#fff\">Can’t reach E11 Console</b><br><br>Check your internet connection.<br>Trying again…</div></body></html>"
     web.loadHTMLString(html, baseURL: nil)
     DispatchQueue.main.asyncAfter(deadline: .now() + 5) { self.retrying = false; self.loadHome() }
@@ -323,9 +323,19 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       if (t["on"] as? Bool) == true { tabBar.selectedItem = tabBar.items?[i] }
     }
     let hide = (a["hidden"] as? Bool) == true || list.isEmpty
-    if hide != tabBar.isHidden {
-      tabBar.isHidden = hide
-      UIView.animate(withDuration: 0.2) { self.view.setNeedsLayout(); self.view.layoutIfNeeded() }
+    if hide != tabsHidden {
+      tabsHidden = hide
+      // in place first (never flying in from the corner), then a fade
+      UIView.performWithoutAnimation { self.view.layoutIfNeeded() }
+      if hide {
+        UIView.animate(withDuration: 0.18, animations: { self.tabBar.alpha = 0 }) { _ in
+          if self.tabsHidden { self.tabBar.isHidden = true; self.view.setNeedsLayout() }
+        }
+      } else {
+        if tabBar.isHidden { tabBar.alpha = 0; tabBar.isHidden = false }
+        UIView.performWithoutAnimation { self.view.setNeedsLayout(); self.view.layoutIfNeeded() }
+        UIView.animate(withDuration: 0.18) { self.tabBar.alpha = 1 }
+      }
     }
   }
   func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
