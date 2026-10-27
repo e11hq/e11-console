@@ -12,10 +12,11 @@ import Cocoa
 import WebKit
 import UserNotifications
 import LocalAuthentication
+import CryptoKit
 
 // Version of this Mac app's native part. Raise it when a change here needs everyone to reinstall: the web app
 // then shows a required-update banner in older Mac apps. (The earlier script app was 1–6.)
-let SHELL_VERSION = 9
+let SHELL_VERSION = 10   // 10: fast office use (shared-folder copies, office-network uploads and downloads)
 
 let info = Bundle.main.infoDictionary ?? [:]
 let env = ProcessInfo.processInfo.environment
@@ -272,6 +273,19 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
       if let ev = NSApp.currentEvent { window.performDrag(with: ev) }
       done(["ok": true])
     case "zoomWindow": window.performZoom(nil); done(["ok": true])
+    case "shareInfo": DispatchQueue.global(qos: .userInitiated).async { let r = self.shareInfo(a); DispatchQueue.main.async { done(r) } }
+    case "uploadLocal": done(uploadLocal(a))
+    case "uploadStatus": done(uploadStatus(a))
+    case "uploadCancel": (jobs[a["job"] as? String ?? ""])?.cancel(); done(["ok": true])
+    case "downloadLocal": downloadLocal(a, done)
+    case "selftestFile":
+      guard !SELFTEST.isEmpty else { return done(["ok": false, "error": "Unknown command selftestFile"]) }
+      let n = (a["size"] as? NSNumber)?.intValue ?? 1000
+      let p = NSTemporaryDirectory() + "e11-selftest-\(token()).bin"
+      var bytes = [UInt8](repeating: 0, count: n); for i in 0..<n { bytes[i] = UInt8(truncatingIfNeeded: i &* 31 &+ 7) }
+      FileManager.default.createFile(atPath: p, contents: Data(bytes))
+      let t = token(); picked[t] = p
+      done(["ok": true, "token": t, "size": n])
     case "appInfo":
       done(["ok": true, "server": SERVER, "shell": SHELL_VERSION, "native": "swift",
             "version": info["CFBundleShortVersionString"] as? String ?? "3.0.0", "touchID": defaults.bool(forKey: LOCK_KEY),
@@ -311,6 +325,87 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     if (a["last"] as? Bool) == true { picked.removeValue(forKey: t) }
     return ["ok": true, "b64": data.base64EncodedString()]
   }
+  /* ---------- fast office use (server office.js) ---------- */
+  // Is a picked file on the NAS shared folder? Its place in the share, size and fingerprint (SHA-256 of its first and
+  // last MB, the same as the server checks), so the server can copy it on the NAS instead of it being uploaded
+  func shareInfo(_ a: [String: Any]) -> [String: Any] {
+    guard let p = picked[a["token"] as? String ?? ""] else { return ["ok": false, "error": "File no longer available"] }
+    let want = (a["share"] as? String ?? "E11 Share").lowercased()
+    let u = URL(fileURLWithPath: p)
+    guard let rv = try? u.resourceValues(forKeys: [.volumeURLKey, .volumeURLForRemountingKey]),
+          let vol = rv.volume, let remote = rv.volumeURLForRemounting,
+          ["smb", "cifs", "afp", "nfs"].contains((remote.scheme ?? "").lowercased()) else { return ["ok": true, "onShare": false] }
+    let shareName = (remote.path as NSString).lastPathComponent.removingPercentEncoding ?? remote.lastPathComponent
+    guard shareName.lowercased() == want else { return ["ok": true, "onShare": false, "share": shareName] }
+    let root = vol.standardizedFileURL.path.hasSuffix("/") ? vol.standardizedFileURL.path : vol.standardizedFileURL.path + "/"
+    let full = u.standardizedFileURL.path
+    guard full.hasPrefix(root) else { return ["ok": true, "onShare": false] }
+    let rel = String(full.dropFirst(root.count))
+    let size = ((try? FileManager.default.attributesOfItem(atPath: p))?[.size] as? NSNumber)?.int64Value ?? 0
+    guard let fh = FileHandle(forReadingAtPath: p) else { return ["ok": true, "onShare": false] }
+    defer { fh.closeFile() }
+    let n = Int(min(Int64(1 << 20), size))
+    let head = fh.readData(ofLength: n)
+    fh.seek(toFileOffset: UInt64(max(0, size - Int64(n))))
+    let tail = fh.readData(ofLength: n)
+    var h = SHA256(); h.update(data: head); h.update(data: tail)
+    let fp = h.finalize().map { String(format: "%02x", $0) }.joined()
+    return ["ok": true, "onShare": true, "rel": rel, "size": size, "fp": fp]
+  }
+  // Uploads straight to the NAS over the office network: the server gave a pass (ticket) and its certificate's
+  // fingerprint (cert); only a server showing that certificate gets the file. Runs in the background; the page
+  // follows it with uploadStatus and can stop it with uploadCancel.
+  var jobs: [String: LocalJob] = [:]
+  func uploadLocal(_ a: [String: Any]) -> [String: Any] {
+    let t = a["token"] as? String ?? ""
+    guard let p = picked[t] else { return ["ok": false, "error": "File no longer available"] }
+    guard let base = a["url"] as? String, let ticket = a["ticket"] as? String, let pin = a["cert"] as? String, base.hasPrefix("https://") else { return ["ok": false, "error": "Missing details"] }
+    let size = ((try? FileManager.default.attributesOfItem(atPath: p))?[.size] as? NSNumber)?.int64Value ?? 0
+    let id = token()
+    let job = LocalJob(size: size)
+    jobs[id] = job
+    DispatchQueue.global(qos: .userInitiated).async {
+      job.run(path: p, base: base, ticket: ticket, pin: pin)
+      if job.snapshot()["state"] as? String == "done" { DispatchQueue.main.async { self.picked.removeValue(forKey: t) } }
+    }
+    return ["ok": true, "job": id]
+  }
+  func uploadStatus(_ a: [String: Any]) -> [String: Any] {
+    let id = a["job"] as? String ?? ""
+    guard let j = jobs[id] else { return ["ok": false, "state": "error", "error": "No such upload"] }
+    let s = j.snapshot()
+    if let st = s["state"] as? String, st != "sending" { jobs.removeValue(forKey: id) }
+    return s
+  }
+  // Downloads straight from the NAS over the office network, into Downloads (shown in Finder) or opened
+  func downloadLocal(_ a: [String: Any], _ done: @escaping ([String: Any]) -> Void) {
+    guard let base = a["url"] as? String, let ticket = a["ticket"] as? String, let pin = a["cert"] as? String, base.hasPrefix("https://"),
+          var comps = URLComponents(string: base + "/local/file") else { return done(["ok": false, "error": "Missing details"]) }
+    comps.queryItems = [URLQueryItem(name: "t", value: ticket)]
+    guard let url = comps.url else { return done(["ok": false, "error": "Bad address"]) }
+    let open = (a["open"] as? Bool) == true, name = a["name"] as? String ?? "file"
+    let session = URLSession(configuration: .ephemeral, delegate: Pinner(pin), delegateQueue: nil)
+    var req = URLRequest(url: url); req.timeoutInterval = 60
+    session.downloadTask(with: req) { tmp, resp, err in
+      defer { session.finishTasksAndInvalidate() }
+      guard err == nil, let tmp = tmp, (resp as? HTTPURLResponse)?.statusCode == 200 else {
+        return DispatchQueue.main.async { done(["ok": false, "error": err?.localizedDescription ?? "Download failed"]) }
+      }
+      let dir = open ? (NSTemporaryDirectory() as NSString).appendingPathComponent("E11 Console") : NSHomeDirectory() + "/Downloads"
+      try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+      let dest = uniquePath(dir, name)
+      do { try FileManager.default.moveItem(at: tmp, to: URL(fileURLWithPath: dest)) } catch { return DispatchQueue.main.async { done(["ok": false, "error": "Couldn’t save to " + dir]) } }
+      var u = URL(fileURLWithPath: dest)
+      var rv = URLResourceValues()
+      rv.quarantineProperties = [kLSQuarantineTypeKey as String: kLSQuarantineTypeWebDownload as String, kLSQuarantineAgentNameKey as String: APP_NAME]
+      try? u.setResourceValues(rv)
+      DispatchQueue.main.async {
+        if open { NSWorkspace.shared.open(u) } else if SELFTEST.isEmpty { NSWorkspace.shared.activateFileViewerSelecting([u]) }
+        done(["ok": true, "path": dest])
+      }
+    }.resume()
+  }
+
   // a download in pieces: into Downloads (and shown in Finder), or a temporary folder (and opened)
   func saveFile(_ a: [String: Any]) -> [String: Any] {
     let t = a["token"] as? String ?? token()
@@ -537,6 +632,17 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
         await t('badURL', () => NativeMac.call('openURL', { url: 'file:///etc/passwd' }));
         await t('unknown', () => NativeMac.call('nope'));
         await t('chunkGone', () => NativeMac.call('readLocalChunk', { token: 'missing', offset: 0, length: 4 }));
+        // fast office use: a local file isn't on the shared folder; an upload over the "office network" (the test
+        // server's own office port) with its pinned certificate; one with the wrong certificate is refused
+        await t('stFile', () => NativeMac.call('selftestFile', { size: 20000000 }));
+        await t('share', () => NativeMac.call('shareInfo', { token: out.stFile.token, share: 'E11 Share' }));
+        await t('ticket', () => api('POST', '/api/local/ticket', { kind: 'up', taskId: '_uploads', name: 'office-test.bin', size: 20000000 }));
+        const follow = async (job) => { for (let i = 0; i < 120; i++) { const q = await NativeMac.call('uploadStatus', { job }); if (q.state !== 'sending') return q; await new Promise((r) => setTimeout(r, 250)); } return { state: 'timeout' }; };
+        await t('upLocal', async () => follow((await NativeMac.call('uploadLocal', { token: out.stFile.token, url: out.ticket.url, ticket: out.ticket.token, cert: out.ticket.cert, size: 20000000 })).job));
+        await t('stFile2', () => NativeMac.call('selftestFile', { size: 1000 }));
+        await t('upBadPin', async () => follow((await NativeMac.call('uploadLocal', { token: out.stFile2.token, url: out.ticket.url, ticket: out.ticket.token, cert: '00'.repeat(32), size: 1000 })).job));
+        await t('dlTicket', () => api('POST', '/api/local/ticket', { kind: 'file', path: out.upLocal.file.path }));
+        await t('dlLocal', () => NativeMac.call('downloadLocal', { url: out.dlTicket.url, ticket: out.dlTicket.token, cert: out.dlTicket.cert, name: 'e11-office-dl.bin', open: false }));
         for (let i = 0; i < 50 && !document.getElementById('mac-bar'); i++) await new Promise((r) => setTimeout(r, 100));   // (the page adds it a moment after it loads)
         out.macChrome = document.documentElement.classList.contains('mac-chrome');
         out.macBar = !!document.getElementById('mac-bar');
@@ -579,6 +685,72 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
       try? Data(jsonString(self.selftest).utf8).write(to: URL(fileURLWithPath: SELFTEST))
       NSApp.terminate(nil)
     }
+  }
+}
+
+// Only talks to a server showing the certificate whose SHA-256 fingerprint the E11 server named (the office port's
+// own certificate isn't signed by anyone, so it's recognised by its fingerprint instead of its name)
+final class Pinner: NSObject, URLSessionDelegate {
+  let pin: String
+  init(_ pin: String) { self.pin = pin.lowercased() }
+  func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+    guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust, let trust = challenge.protectionSpace.serverTrust,
+          SecTrustGetCertificateCount(trust) > 0, let cert = SecTrustGetCertificateAtIndex(trust, 0) else { return completionHandler(.cancelAuthenticationChallenge, nil) }
+    let der = SecCertificateCopyData(cert) as Data
+    let fp = SHA256.hash(data: der).map { String(format: "%02x", $0) }.joined()
+    if fp == pin { completionHandler(.useCredential, URLCredential(trust: trust)) } else { completionHandler(.cancelAuthenticationChallenge, nil) }
+  }
+}
+// One upload over the office network, in 16 MB pieces, one after another (the office network is fast; the server
+// writes each piece at its place in the file)
+final class LocalJob {
+  let lock = NSLock()
+  let size: Int64
+  var sent: Int64 = 0, state = "sending", error = "", remotePath = "", file: [String: Any]? = nil, cancelled = false
+  init(size: Int64) { self.size = size }
+  func cancel() { lock.lock(); cancelled = true; lock.unlock() }
+  func snapshot() -> [String: Any] {
+    lock.lock(); defer { lock.unlock() }
+    var s: [String: Any] = ["ok": true, "state": state, "sent": sent, "size": size]
+    if !error.isEmpty { s["error"] = error }
+    if !remotePath.isEmpty { s["path"] = remotePath }
+    if let f = file { s["file"] = f }
+    return s
+  }
+  func set(_ f: () -> Void) { lock.lock(); f(); lock.unlock() }
+  func run(path: String, base: String, ticket: String, pin: String) {
+    let session = URLSession(configuration: .ephemeral, delegate: Pinner(pin), delegateQueue: nil)
+    defer { session.finishTasksAndInvalidate() }
+    guard let fh = FileHandle(forReadingAtPath: path) else { return set { state = "error"; error = "Could not read the file" } }
+    defer { fh.closeFile() }
+    let piece = 16 << 20
+    var off: Int64 = 0
+    repeat {
+      lock.lock(); let stop = cancelled; lock.unlock()
+      if stop { return set { state = "cancelled" } }
+      fh.seek(toFileOffset: UInt64(off))
+      let data = fh.readData(ofLength: piece)
+      guard var comps = URLComponents(string: base + "/local/upload") else { return set { state = "error"; error = "Bad address" } }
+      comps.queryItems = [URLQueryItem(name: "t", value: ticket), URLQueryItem(name: "offset", value: String(off))]
+      guard let url = comps.url else { return set { state = "error"; error = "Bad address" } }
+      var req = URLRequest(url: url)
+      req.httpMethod = "POST"; req.timeoutInterval = 120
+      req.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+      let sem = DispatchSemaphore(value: 0)
+      var answer: [String: Any]? = nil, failure = ""
+      session.uploadTask(with: req, from: data) { d, r, e in
+        if let e = e { failure = e.localizedDescription }
+        else if (r as? HTTPURLResponse)?.statusCode != 200 { failure = "The NAS answered \((r as? HTTPURLResponse)?.statusCode ?? 0)" }
+        else if let d = d { answer = (try? JSONSerialization.jsonObject(with: d)) as? [String: Any] }
+        sem.signal()
+      }.resume()
+      sem.wait()
+      guard failure.isEmpty, let a = answer, let rp = a["path"] as? String else { return set { state = "error"; error = failure.isEmpty ? "Unexpected answer" : failure } }
+      off += Int64(data.count)
+      set { sent = off; remotePath = rp; if off >= size { file = ["path": rp, "name": a["name"] as? String ?? "", "size": (a["size"] as? NSNumber)?.int64Value ?? off] } }
+      if data.isEmpty { break }
+    } while off < size
+    set { if state == "sending" { state = file != nil ? "done" : "error"; if file == nil { error = "The upload didn’t finish" } } }
   }
 }
 

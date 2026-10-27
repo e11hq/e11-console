@@ -11,7 +11,8 @@ fails = []
 def check(ok, what):
     print(('ok   ' if ok else 'FAIL ') + what); (None if ok else fails.append(what))
 
-env = dict(os.environ, AUTH_DEV='1', DATA_DIR=os.path.join(TMP, 'data'), PORT=str(PORT), ADMIN_EMAIL=EMAIL, APP_VERSION='9.9.9-test.1')
+env = dict(os.environ, AUTH_DEV='1', DATA_DIR=os.path.join(TMP, 'data'), PORT=str(PORT), ADMIN_EMAIL=EMAIL, APP_VERSION='9.9.9-test.1',
+           OFFICE_IP='127.0.0.1', LOCAL_PORT='18443', LOCAL_URL='https://127.0.0.1:18443', SHARE_DIR='')   # (this Mac is "the office")
 srv = subprocess.Popen(['node', os.path.join(ROOT, 'server/src/index.js')], env=env, stdout=open(os.path.join(TMP, 'server.log'), 'w'), stderr=subprocess.STDOUT)
 try:
     for _ in range(60):
@@ -65,13 +66,19 @@ try:
     ai = c.get('appInfo', {})
     check(res.get('closedVisible') is False and res.get('reopenedVisible') is True, 'closing the window keeps the app running; the Dock icon brings it back')
     check(res.get('loginOn') is True and res.get('loginOff') is True, 'Open at Login turns on and off')
-    check(ai.get('shell') == 9 and ai.get('glass') is True and ai.get('native') == 'swift' and ai.get('server') == BASE, f'appInfo {ai}')
+    check(ai.get('shell') == 10 and ai.get('glass') is True and ai.get('native') == 'swift' and ai.get('server') == BASE, f'appInfo {ai}')
     for k in ['badge', 'badgeOff', 'notify', 'light', 'dark', 'save1', 'save2']:
         check((c.get(k) or {}).get('ok') is True, f'{k} answered ok: {c.get(k)}')
     check(res.get('saved') == 'hello mac', 'a download saved in pieces into Downloads: ' + repr(res.get('saved')))
     check('error' in (c.get('badURL') or {}), 'only web links open')
     check('Unknown command' in str((c.get('unknown') or {}).get('error')), 'unknown command answered')
     check('error' in (c.get('chunkGone') or {}), 'reading a file not picked is refused')
+    check((c.get('share') or {}).get('onShare') is False, f"a file on this Mac isn't on the shared folder {c.get('share')}")
+    up = c.get('upLocal') or {}
+    check(up.get('state') == 'done' and (up.get('file') or {}).get('size') == 20000000, f'office-network upload with the pinned certificate {up}')
+    check((c.get('upBadPin') or {}).get('state') == 'error', f"a server with another certificate gets nothing {c.get('upBadPin')}")
+    dl = os.path.expanduser('~/Downloads/e11-office-dl.bin')
+    check((c.get('dlLocal') or {}).get('ok') is True and os.path.exists(dl) and os.path.getsize(dl) == 20000000, f"office-network download {c.get('dlLocal')}")
     check(c.get('macChrome') is True and c.get('macBar') is True, 'the page draws its own title bar (Mac app 4+)')
     check(c.get('updateBar') is False, 'no update bar for the newest Mac app')
     check(c.get('notifClick') == 'function' and c.get('openTask') == 'function', 'notification click and task links wired')

@@ -20,6 +20,12 @@ const cfg = {
   launcherUrl: env.LAUNCHER_URL || '',
   holidaysUrl: env.HOLIDAYS_ICS_URL || '',
   viewMinSize: env.VIEW_MIN_SIZE ? Number(env.VIEW_MIN_SIZE) : undefined,
+  // Fast office use (office.js): the NAS shared folder mounted read-only, and the office-network port
+  shareDir: env.SHARE_DIR !== undefined ? env.SHARE_DIR : undefined,   // default /share when it's there
+  shareName: env.SHARE_NAME || 'E11 Share',
+  officeIp: env.OFFICE_IP || '',                // the office's internet address(es), comma separated
+  localUrl: env.LOCAL_URL || '',                // how office Macs reach this copy, e.g. https://192.168.1.20:8443
+  localPort: env.LOCAL_PORT ? Number(env.LOCAL_PORT) : 0,   // the port inside the container (8443)
 };
 function readVersion() {
   try { return fs.readFileSync(path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../VERSION'), 'utf8').trim(); } catch { return '0.0.0-dev'; }

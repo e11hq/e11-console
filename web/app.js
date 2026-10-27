@@ -986,6 +986,62 @@ async function api(method, url, body, opts = {}) {
 }
 const ServerHost = (() => {
   const CHUNK_SIZE = 2 * 1024 * 1024;
+  /* Fast office use (server office.js), Mac app 10+: a picked file that's on the NAS shared folder is copied on the
+     NAS; in the office any other file goes straight to the NAS over the office network (and downloads come back that
+     way). Anything that doesn't work falls back to the normal upload / download by itself. */
+  let office = null;
+  let shell = null;
+  const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+  async function macShell() {
+    if (shell === null) { try { shell = Host.isMacApp ? Number((await NativeMac.call('appInfo')).shell) || 1 : 0; } catch (e) { shell = 0; } }
+    return shell;
+  }
+  async function viaOffice(file, target, onProgress, sig, onMade) {
+    const o = office;
+    if (!file || !file.macToken || !o || !(o.share || o.local) || (await macShell()) < 10) return null;
+    const via = (t) => { try { if (sig && sig.onVia) sig.onVia(t); } catch (e) { /* fine */ } };
+    const rec = (f) => ({ id: uid(), name: f.name, path: f.path, size: f.size, addedAt: nowISO() });
+    // 1. already on the NAS shared folder: copied there, nothing sent
+    if (o.share) {
+      let job = null;
+      try {
+        const s = await NativeMac.call('shareInfo', { token: file.macToken, share: o.shareName });
+        if (s && s.ok && s.onShare) {
+          const st = await api('POST', '/api/share/copy', { ...target, rel: s.rel, size: s.size, fp: s.fp });
+          job = st.job;
+          via('Copying on the NAS');
+          for (;;) {
+            if (sig && sig.cancelled) { api('POST', '/api/share/cancel', { job }).catch(() => {}); throw cancelErr(); }
+            const q = await api('POST', '/api/share/status', { job });
+            if (q.state === 'done' && q.file) { if (onProgress) onProgress(1); return rec(q.file); }
+            if (q.state !== 'copying') break;
+            if (onProgress) onProgress(q.size ? q.done / q.size : 0);
+            await pause(300);
+          }
+        }
+      } catch (e) { if (e.cancelled) throw e; }
+      via('');
+    }
+    // 2. in the office: straight to the NAS over the office network
+    if (o.local) {
+      try {
+        const tk = await api('POST', '/api/local/ticket', { kind: 'up', ...target, name: file.name, size: file.size });
+        const r = await NativeMac.call('uploadLocal', { token: file.macToken, url: tk.url, ticket: tk.token, cert: tk.cert, size: file.size });
+        if (!r || !r.ok) return null;
+        via('Office network');
+        for (;;) {
+          if (sig && sig.cancelled) { NativeMac.call('uploadCancel', { job: r.job }).catch(() => {}); throw cancelErr(); }
+          const q = await NativeMac.call('uploadStatus', { job: r.job });
+          if (q.path && onMade) onMade(q.path);
+          if (q.state === 'done' && q.file) { if (onProgress) onProgress(1); return rec(q.file); }
+          if (q.state !== 'sending') { if (q.path) api('POST', '/api/host/trashMany', { paths: [q.path] }).catch(() => {}); via(''); return null; }
+          if (onProgress) onProgress(q.size ? q.sent / q.size : 0);
+          await pause(250);
+        }
+      } catch (e) { if (e.cancelled) throw e; via(''); return null; }
+    }
+    return null;
+  }
   const b64 = (blob) => new Promise((resolve, reject) => {
     const fr = new FileReader();
     fr.onload = () => resolve(String(fr.result).split(',')[1] || '');
@@ -1031,6 +1087,15 @@ const ServerHost = (() => {
   }
   // Save something from the server on this Mac: into Downloads (shown in Finder) or opened directly
   async function saveOnMac(url, name, open) {
+    // in the office: straight from the NAS over the office network
+    if (office && office.local && /^\/__file\//.test(url) && (await macShell()) >= 10) {
+      try {
+        const fp = url.replace(/^\/__file\//, '').split('?')[0].split('/').map(decodeURIComponent).join('/');
+        const tk = await api('POST', '/api/local/ticket', { kind: 'file', path: fp });
+        const r = await NativeMac.call('downloadLocal', { url: tk.url, ticket: tk.token, cert: tk.cert, name, open });
+        if (r && r.ok) return;
+      } catch (e) { /* the usual way */ }
+    }
     const res = await fetch(url, { credentials: 'same-origin' });
     if (!res.ok) throw new Error(`Download failed (${res.status})`);
     const blob = await res.blob();
@@ -1089,7 +1154,12 @@ const ServerHost = (() => {
   const newSig = () => ({ cancelled: false, ctrl: typeof AbortController !== 'undefined' ? new AbortController() : null, cancel() { this.cancelled = true; try { if (this.ctrl) this.ctrl.abort(); } catch (e) { /* fine */ } } });
   async function uploadFile(file, target, onProgress, sig) {
     let made = null;
-    try { return await uploadFile1(file, target, onProgress, sig, (p) => { made = p; }); } catch (e) {
+    try {
+      const fast = await viaOffice(file, target, onProgress, sig, (p) => { made = p; });
+      if (fast) return fast;
+      made = null;
+      return await uploadFile1(file, target, onProgress, sig, (p) => { made = p; });
+    } catch (e) {
       if (sig && sig.cancelled) { if (made) api('POST', '/api/host/trashMany', { paths: [made] }).catch(() => {}); throw cancelErr(); }
       throw e;
     }
@@ -1133,7 +1203,7 @@ const ServerHost = (() => {
     el.className = 'up-card';
     el.innerHTML = files.map((f, i) => `<div class="up-row" data-i="${i}"><span class="up-name">${esc(f.name)}</span><span class="up-bar"><i></i></span><small>0%</small><button type="button" class="up-x" data-up-x="${i}" title="Cancel upload">${icon('x')}</button></div>`).join('');
     root.appendChild(el);
-    const sigs = files.map(() => newSig());
+    const sigs = files.map((f, i) => Object.assign(newSig(), { onVia: (t) => { const r = el.querySelector(`[data-i="${i}"]`); if (!r) return; let v = r.querySelector('.up-via'); if (!t) { if (v) v.remove(); return; } if (!v) { v = document.createElement('em'); v.className = 'up-via'; r.querySelector('.up-name').appendChild(v); } v.textContent = t; } }));
     el.addEventListener('click', (e) => {
       const b = e.target.closest('[data-up-x]');
       if (!b) return;
@@ -1245,7 +1315,7 @@ const ServerHost = (() => {
       default: return undefined;
     }
   }
-  return { call, uploadMany, pickFiles, download };
+  return { call, uploadMany, pickFiles, download, setOffice: (o) => { office = o || null; }, office: () => office };
 })();
 
 /* ================= Data ================= */
@@ -2200,6 +2270,7 @@ const Sync = (() => {
     ownerId = me.ownerId || null;
     if (typeof OwnerView !== 'undefined') OwnerView.init(me);
     MacUpdate.check(me.macShell);
+    if (ServerHost.setOffice) ServerHost.setOffice(me.office);
     MacChrome.init();
     const snap = await api('GET', '/api/snapshot', null, { timeout: 45000 });
     rev = snap.rev; version = snap.version || me.version;

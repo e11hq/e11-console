@@ -435,7 +435,15 @@ export function createFiles(root) {
     res.end(Buffer.concat([cd, endRec]));
   }
 
-  return { commands, serve, serveSized, serveZip, resolve, purgeTrash, linkInto, linkToTask, root: FILES };
+  // a new empty file for an upload or a NAS copy into a task / Client Assets folder (a free name in that folder)
+  function newUploadFile(a, name) {
+    const dir = uploadDir(a);
+    fs.mkdirSync(dir, { recursive: true });
+    const full = uniquePath(dir, safeName(name));
+    fs.writeFileSync(full, Buffer.alloc(0), { flag: 'wx' });
+    return { full, rel: rel(full) };
+  }
+  return { commands, serve, serveSized, serveZip, resolve, purgeTrash, linkInto, linkToTask, newUploadFile, rel, root: FILES };
 }
 
 export function httpError(status, message) { const e = new Error(message); e.status = status; return e; }

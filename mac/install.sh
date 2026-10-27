@@ -77,6 +77,7 @@ else
   plutil -replace NSHighResolutionCapable -bool YES "$PL"
   plutil -replace NSSupportsAutomaticGraphicsSwitching -bool YES "$PL"
   plutil -replace NSAppTransportSecurity -json '{"NSAllowsLocalNetworking":true}' "$PL"
+  plutil -replace NSLocalNetworkUsageDescription -string "In the office, E11 Console sends and fetches files straight from the office NAS, which is much faster." "$PL"
 fi
 plutil -replace CFBundleName -string "$APP_NAME" "$PL"
 plutil -replace CFBundleDisplayName -string "$APP_NAME" "$PL"

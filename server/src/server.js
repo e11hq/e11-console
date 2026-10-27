@@ -18,6 +18,7 @@ import { createScheduled } from './scheduled.js';
 import { createDaily } from './amdaily.js';
 import { createLinks } from './links.js';
 import { createViewCopies } from './viewcopy.js';
+import { createOffice } from './office.js';
 import { createHolidaySync, DEFAULT_HOLIDAYS_URL } from './holidays.js';
 import zlib from 'node:zlib';
 import { sampleData } from './sample.js';
@@ -102,6 +103,8 @@ export function createServer(cfg) {
   const scanLater = () => { clearTimeout(scanSoon); scanSoon = setTimeout(scanVideos, 5000); if (scanSoon.unref) scanSoon.unref(); };
   const scanTimers = [];
   if (cfg.views !== false && !cfg.dev) { const a = setTimeout(scanVideos, 60_000), b = setInterval(scanVideos, 3 * 60_000); [a, b].forEach((x) => x.unref && x.unref()); scanTimers.push(a, b); }
+  // Fast office use (office.js): copies from the NAS shared folder, and uploads/downloads over the office network
+  const office = createOffice({ store, files, cfg: { shareDir: cfg.shareDir, shareName: cfg.shareName, officeIp: cfg.officeIp, localUrl: cfg.localUrl }, ipOf: (req) => netInfo(req).ip });
   const links = createLinks({ store, dataDir, fetcher: cfg.linkFetch });
   const daily = createDaily({ store, access, webDir, webPush, notifMessage, deliver: (out) => broadcast(out.rev, out.results, null, null), now: cfg.now || (() => Date.now()) });
   if (cfg.daily !== false && (!cfg.dev || cfg.daily)) daily.start();   // (not on a developer's copy unless asked)
@@ -255,6 +258,15 @@ export function createServer(cfg) {
   const NETLOG_DAYS = 3;
   const netlogLoad = () => { try { return JSON.parse(store.kv.get('netlog') || 'null') || { start: null, entries: [] }; } catch { return { start: null, entries: [] }; } };
   const netlogOn = (L) => !L.start || Date.now() - Date.parse(L.start) < NETLOG_DAYS * 86400000;
+  // Who may add a file where (uploads, office-network uploads, copies from the shared folder): a reason, or null
+  function uploadDenied(u, body) {
+    if (body.dest && String(body.dest).startsWith('Finance/')) { if (access.finLevel(u) !== 'admin') return 'Only a Finance Admin can add invoices'; }
+    else if (body.dest && String(body.dest).startsWith('Claims/')) { if (String(body.dest).split('/')[1] !== u.id) return 'You can only add files to your own claims'; }
+    else if (body.dest && (access.isFinance(u) || u.role === 'freelancer' || !access.canReadFile(u, String(body.dest) + '/x'))) return 'You can’t add files to this client';
+    if (!body.dest && access.isFinance(u) && body.taskId !== '_uploads') return 'Not allowed';
+    if (!body.dest && access.ownOnly(u) && body.taskId !== '_uploads') { const t = store.get('tasks', String(body.taskId || '')); if (!t || !access.canSee(u, 'tasks', t)) return 'Not allowed'; }
+    return null;
+  }
   function netInfo(req) {
     const h = req.headers;
     const ip = String(h['cf-connecting-ip'] || String(h['x-forwarded-for'] || '').split(',')[0] || req.socket.remoteAddress || '').trim().replace(/^::ffff:/, '');
@@ -460,7 +472,7 @@ export function createServer(cfg) {
       store.kv.set('netlog', JSON.stringify(L));
       return json(res, 200, { ok: true });
     }
-    if (p === '/api/me') return json(res, 200, { ok: true, user: access.shape(u, 'users', u), owner: isOwner(u), appIcon: appIcon.info(), macShell, version, rev: store.rev(),
+    if (p === '/api/me') return json(res, 200, { ok: true, user: access.shape(u, 'users', u), owner: isOwner(u), appIcon: appIcon.info(), macShell, version, rev: store.rev(), office: office.info(req),
       ownerView: req.ownerView || null, canOwnerView: ownerViewOk(req.realUser || u),
       // (Admins: whose account only its owner may change, so the Team page shows it locked)
       ownerId: access.isAdm(u) && cfg.adminEmail ? (access.userByEmail(cfg.adminEmail) || {}).id || null : null,
@@ -754,6 +766,32 @@ export function createServer(cfg) {
       return json(res, 200, { ok: true, files: out });
     }
 
+    // Fast office use (office.js): start / follow / stop a copy from the NAS shared folder; a pass for the office network
+    if (p.startsWith('/api/share/') && req.method === 'POST') {
+      const b = await readBody(req, 64 * 1024).catch(() => ({}));
+      if (p === '/api/share/copy') {
+        const target = b.dest ? { dest: String(b.dest) } : { taskId: String(b.taskId || '') };
+        const why = uploadDenied(u, target);
+        if (why) return json(res, 403, { ok: false, error: why });
+        try { return json(res, 200, { ok: true, job: office.startCopy(u, target, b) }); } catch (e) { return json(res, e.status || 500, { ok: false, error: e.message }); }
+      }
+      if (p === '/api/share/status') { const st = office.status(u, b.job); return st ? json(res, 200, { ok: true, ...st }) : json(res, 404, { ok: false, error: 'No such copy' }); }
+      if (p === '/api/share/cancel') { office.cancel(u, b.job); return json(res, 200, { ok: true }); }
+    }
+    if (p === '/api/local/ticket' && req.method === 'POST') {
+      const b = await readBody(req, 64 * 1024).catch(() => ({}));
+      if (!office.info(req).local) return json(res, 409, { ok: false, error: 'Not in the office' });
+      if (b.kind === 'file') {
+        const fp = String(b.path || '');
+        if (!fp || !access.canReadFile(u, fp)) return json(res, 403, { ok: false, error: 'Not allowed' });
+        return json(res, 200, { ok: true, ...office.ticket(u, { k: 'file', path: fp }) });
+      }
+      const target = b.dest ? { dest: String(b.dest) } : { taskId: String(b.taskId || '') };
+      const why = uploadDenied(u, target);
+      if (why) return json(res, 403, { ok: false, error: why });
+      return json(res, 200, { ok: true, ...office.ticket(u, { k: 'up', target, name: String(b.name || 'file').slice(0, 200) }) });
+    }
+
     if (p.startsWith('/api/host/') && req.method === 'POST') {
       const reqAt = Date.now();   // (for the network check: when this piece started arriving)
       const cmd = p.slice('/api/host/'.length);
@@ -771,11 +809,7 @@ export function createServer(cfg) {
       const manager = access.isAdm(u) || u.role === 'am';
       const deny = (msg) => json(res, 403, { ok: false, error: msg || 'Not allowed' });
       if (cmd === 'writeChunk' || bin) {
-        if (body.dest && String(body.dest).startsWith('Finance/')) { if (access.finLevel(u) !== 'admin') return deny('Only a Finance Admin can add invoices'); }
-        else if (body.dest && String(body.dest).startsWith('Claims/')) { if (String(body.dest).split('/')[1] !== u.id) return deny('You can only add files to your own claims'); }
-        else if (body.dest && (access.isFinance(u) || u.role === 'freelancer' || !access.canReadFile(u, String(body.dest) + '/x'))) return deny('You can’t add files to this client');
-        if (!body.dest && access.isFinance(u) && body.taskId !== '_uploads') return deny();
-        if (!body.dest && access.ownOnly(u) && body.taskId !== '_uploads') { const t = store.get('tasks', String(body.taskId || '')); if (!t || !access.canSee(u, 'tasks', t)) return deny(); }
+        { const why = uploadDenied(u, body); if (why) return deny(why); }
         // later pieces may only be added to a file this person started uploading
         if (body.path) { const up = uploads.get(body.path); if (!up || up.userId !== u.id) return deny('Upload not found — please try again'); }
         const out = await files.commands.writeChunk(body, u);
@@ -902,9 +936,14 @@ export function createServer(cfg) {
 
   return {
     server, store, files, cfSync, webPush,
-    listen: (port, host) => new Promise((ok) => server.listen(port, host, () => ok(server.address().port))),
+    listen: (port, host) => new Promise((ok) => {
+      // the office-network port (HTTPS, own certificate), when the NAS has it set up
+      if (cfg.localPort) office.listen(cfg.localPort, office.localHandler({ readRaw, json, users: (id) => store.get('users', String(id)), uploads, canStill: (u, target, fp) => (fp ? access.canReadFile(u, fp) : !uploadDenied(u, target)) }));
+      server.listen(port, host, () => ok(server.address().port));
+    }),
+    office,
     digest, holidays, occRemind, birthdays, scheduled, daily, views, scanVideos, pruneNotifications,
-    close: () => new Promise((ok) => { digest.stop(); holidays.stop(); occRemind.stop(); birthdays.stop(); scheduled.stop(); daily.stop(); scanTimers.forEach((x) => { clearTimeout(x); clearInterval(x); }); for (const s of streams) try { s.res.end(); } catch { /* ignore */ } server.close(() => { store.close(); ok(); }); }),
+    close: () => new Promise((ok) => { digest.stop(); holidays.stop(); occRemind.stop(); birthdays.stop(); scheduled.stop(); daily.stop(); scanTimers.forEach((x) => { clearTimeout(x); clearInterval(x); }); office.close(); for (const s of streams) try { s.res.end(); } catch { /* ignore */ } server.close(() => { store.close(); ok(); }); }),
     broadcastVersion: (v) => { for (const s of streams) send(s, 'version', { version: v }); },
   };
 }
