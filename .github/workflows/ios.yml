@@ -1,0 +1,58 @@
+# The iPhone app (ios/): built on GitHub's Mac, run in an iPhone simulator against a local server (self-test with
+# screenshots). With the App Store Connect key in GitHub's secrets (ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8,
+# APPLE_TEAM_ID), main and manual runs also sign it and send it to TestFlight. ios-* branches try changes and put
+# the self-test results on the release "ios-selftest" (for checking from Claude's workspace).
+name: iPhone app
+on:
+  workflow_dispatch:
+  push:
+    branches: ['ios-*']
+permissions:
+  contents: write
+jobs:
+  ios:
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Xcode project
+        run: |
+          brew install xcodegen >/dev/null
+          cd ios && xcodegen generate
+      - name: Build for the simulator
+        run: |
+          set -o pipefail
+          xcodebuild -project ios/E11Console.xcodeproj -scheme E11Console -configuration Debug -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build | tail -40
+          test -d build/Build/Products/Debug-iphonesimulator/E11Console.app
+      - name: Self-test in the simulator
+        run: python3 ios/selftest.py build/Build/Products/Debug-iphonesimulator/E11Console.app 2>&1 | tee "$RUNNER_TEMP/ios-selftest.log"; exit ${PIPESTATUS[0]}
+      - name: Results for checking from Claude's workspace
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view ios-selftest >/dev/null 2>&1 || gh release create ios-selftest --prerelease --title "iPhone app self-test" --notes "Latest iPhone app self-test results." --target "$GITHUB_SHA"
+          for f in ios-home.png ios-inbox.png ios-task.png ios-done.png ios-selftest.log ios-server.log; do [ -f "$RUNNER_TEMP/$f" ] && gh release upload ios-selftest "$RUNNER_TEMP/$f" --clobber; done; true
+      - name: Sign and send to TestFlight
+        if: github.ref_name == 'main' || github.event_name == 'workflow_dispatch'
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -o pipefail
+          if [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_KEY_P8" ] || [ -z "$APPLE_TEAM_ID" ]; then echo "No App Store Connect key yet: skipped"; exit 0; fi
+          KEY="$RUNNER_TEMP/asc.p8"; printf '%s\n' "$ASC_KEY_P8" > "$KEY"
+          AUTH="-allowProvisioningUpdates -authenticationKeyPath $KEY -authenticationKeyID $ASC_KEY_ID -authenticationKeyIssuerID $ASC_ISSUER_ID"
+          BUILD=$((1000 + GITHUB_RUN_NUMBER))
+          xcodebuild -project ios/E11Console.xcodeproj -scheme E11Console -configuration Release -destination 'generic/platform=iOS' \
+            -archivePath build/E11Console.xcarchive DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CURRENT_PROJECT_VERSION="$BUILD" $AUTH archive | tail -40
+          sed "s/__TEAM__/$APPLE_TEAM_ID/" ios/ExportOptions.plist > "$RUNNER_TEMP/ExportOptions.plist"
+          xcodebuild -exportArchive -archivePath build/E11Console.xcarchive -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath build/export $AUTH | tail -40
+          rm -f "$KEY"
+          echo "Build $BUILD sent to TestFlight"

@@ -1255,6 +1255,8 @@ const ServerHost = (() => {
       const mac = await macCall(cmd, args);
       if (mac !== undefined) return mac;
     }
+    // the iPhone app: the app icon badge, the status bar for light / dark, links in Safari
+    if (Host.isIOSApp && ['badge', 'setAppearance', 'openURL'].includes(cmd)) return NativeMac.call(cmd, args);
     switch (cmd) {
       case 'load': case 'save': case 'sweepOrphans': case 'setAppearance': case 'revealData': return { ok: true };
       case 'badge': try { if (navigator.setAppBadge) { if (args.n) navigator.setAppBadge(args.n); else navigator.clearAppBadge(); } } catch (e) { /* not installed */ } return { ok: true };

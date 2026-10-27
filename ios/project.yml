@@ -1,0 +1,55 @@
+# The E11 Console iPhone app. GitHub's Mac turns this into an Xcode project (xcodegen), builds it, runs it in an
+# iPhone simulator (self-test with screenshots) and, with the App Store Connect key in GitHub's secrets, signs it
+# and sends it to TestFlight. See .github/workflows/ios.yml.
+name: E11Console
+options:
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Automatic
+targets:
+  E11Console:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ae.e11.console.ios
+        PRODUCT_NAME: E11Console
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGN_ENTITLEMENTS: App/E11Console.entitlements
+        GENERATE_INFOPLIST_FILE: NO
+    entitlements:
+      path: App/E11Console.entitlements
+      properties:
+        aps-environment: development
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: E11 Console
+        CFBundleName: E11 Console
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSRequiresIPhoneOS: true
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIRequiresFullScreen: true
+        UIViewControllerBasedStatusBarAppearance: true
+        UIStatusBarStyle: UIStatusBarStyleLightContent
+        ITSAppUsesNonExemptEncryption: false
+        NSFaceIDUsageDescription: Lock E11 Console with Face ID, if you turn it on in Me.
+        NSCameraUsageDescription: Take a photo or video to attach to a task.
+        NSMicrophoneUsageDescription: Record sound with a video you attach to a task.
+        NSPhotoLibraryAddUsageDescription: Save pictures and videos you download from E11 Console to Photos.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        E11ServerURL: https://console.e11hq.com
+        E11TestServerURL: https://test.e11hq.com
