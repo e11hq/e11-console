@@ -54,6 +54,10 @@ try:
     print('app exit', st.returncode, st.stderr[-2000:])
     check(os.path.exists(OUT), 'self-test finished and wrote its answers')
     res = json.load(open(OUT)) if os.path.exists(OUT) else {}
+    try:
+        errs = json.loads(urllib.request.urlopen(urllib.request.Request(BASE + '/api/client-errors', headers={'X-Dev-Email': EMAIL})).read())
+        for e in (errs.get('errors') or errs.get('list') or []): print('PAGE ERROR', e.get('message'), '\n', (e.get('stack') or '')[:1500])
+    except Exception as e: print('no error list', e)
     print(json.dumps(res, indent=1)[:4000])
     c = res.get('calls', {})
     check(not res.get('error'), 'no self-test error: ' + str(res.get('error')))
