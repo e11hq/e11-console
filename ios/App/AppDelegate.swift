@@ -531,36 +531,36 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       then()
     }
   }
+  func pause(_ ms: Int) -> String { "await new Promise((r) => setTimeout(r, \(ms)));" }
   func selfTest() {
     let wait = "for (let i = 0; i < 120 && !(window.db && typeof currentUserId !== 'undefined' && currentUserId && document.getElementById('ph-tabs')); i++) await new Promise((r) => setTimeout(r, 250));"
-    let sleep = { (ms: Int) in "await new Promise((r) => setTimeout(r, \(ms)));" }
     let geo = "const cs = getComputedStyle(document.documentElement); const geo = { innerH: innerHeight, vvH: visualViewport ? visualViewport.height : null, shift: cs.getPropertyValue('--ph-shift'), tabsH: cs.getPropertyValue('--ios-tabs-h'), kb: cs.getPropertyValue('--ph-kb') };"
     // (name, script run in the page, what to do in the app first)
     let steps: [(String, String, (() -> Void)?)] = [
-      ("home", wait + sleep(1500) + """
+      ("home", wait + pause(1500) + """
         const info = await NativeMac.call('appInfo');
         \(geo)
         return JSON.stringify({ ios: document.documentElement.classList.contains('ios-app'), phone: typeof Phone !== 'undefined' && !!Phone.on, isIOSApp: Host.isIOSApp, isMacApp: Host.isMacApp,
           webTabsShown: getComputedStyle(document.getElementById('ph-tabs')).display !== 'none', view: ui.view, appInfo: info, geo,
           top: getComputedStyle(document.documentElement).getPropertyValue('--ph-top'), unknown: await NativeMac.call('nope').then(() => 'answered').catch((e) => e.message) });
         """, nil),
-      ("inbox", sleep(1500) + "return JSON.stringify({ view: ui.view })", {
+      ("inbox", pause(1500) + "return JSON.stringify({ view: ui.view })", {
         if let i = self.tabKeys.firstIndex(of: "inbox"), let item = self.tabBar.items?[i] { self.tabBar.selectedItem = item; self.tabBar(self.tabBar, didSelect: item) } }),
-      ("me", "go('me'); " + sleep(1200) + "for (let i = 0; i < 3; i++) { await Push.refresh(); " + sleep(300) + " } return JSON.stringify({ lockRows: document.querySelectorAll('#ph-lock, [data-ph-lock]').length, pushRows: document.querySelectorAll('#ph-push').length })", nil),
-      ("client", "try { const c = db.clients.find((x) => (x.folders || []).some((f) => (f.files || []).length > 1)) || db.clients[0]; const f = (c.folders || []).find((x) => (x.files || []).length > 1) || (c.folders || [])[0]; if (!f) return JSON.stringify({ error: "no folder" }); openClient(c.id, f.id); " + sleep(1200) + "return JSON.stringify({ wide: document.getElementById('content').scrollWidth > innerWidth + 1 }) } catch (e) { return JSON.stringify({ error: String(e && e.message || e) }) }", nil),
-      ("task", "const t = db.tasks.find((x) => !x.parentId && !x.done && (x.comments || []).length) || db.tasks.find((x) => !x.parentId && !x.done); openTask(t.id); " + sleep(1500) + "return JSON.stringify({ taskOpen: !!ui.taskId })", nil),
-      ("sheet", "const m = showMenu(document.body, [{ html: '<div class=\"react-pick\">' + REACTIONS.map((e) => '<button>' + e + '</button>').join('') + '</div>' }, { label: 'Reply', icon: 'reply', run() {} }, { label: 'Edit comment', icon: 'edit', run() {} }, { label: 'Copy text', icon: 'copy', run() {} }, '-', { label: 'Delete comment', icon: 'trash', danger: true, run() {} }]); m.classList.add('cm-sheet'); " + sleep(900) + geo + " const r = m.getBoundingClientRect(); return JSON.stringify({ menuTop: r.top, menuBottom: r.bottom, geo })", nil),
-      ("back", "document.querySelectorAll('.menu, #ph-menu-scrim').forEach((x) => x.remove()); closeDetail(); " + sleep(800) + "return JSON.stringify({ taskOpen: !!ui.taskId })", nil),
-      ("signin", sleep(4000) + "return JSON.stringify({ host: location.host, top: (document.querySelector('h1, h2, img, form') || document.body).getBoundingClientRect().top })", {
+      ("me", "go('me'); " + pause(1200) + "for (let i = 0; i < 3; i++) { await Push.refresh(); " + pause(300) + " } return JSON.stringify({ lockRows: document.querySelectorAll('#ph-lock, [data-ph-lock]').length, pushRows: document.querySelectorAll('#ph-push').length })", nil),
+      ("client", "try { const c = db.clients.find((x) => (x.folders || []).some((f) => (f.files || []).length > 1)) || db.clients[0]; const f = (c.folders || []).find((x) => (x.files || []).length > 1) || (c.folders || [])[0]; if (!f) return JSON.stringify({ error: 'no folder' }); openClient(c.id, f.id); " + pause(1200) + "return JSON.stringify({ wide: document.getElementById('content').scrollWidth > innerWidth + 1 }) } catch (e) { return JSON.stringify({ error: String(e && e.message || e) }) }", nil),
+      ("task", "const t = db.tasks.find((x) => !x.parentId && !x.done && (x.comments || []).length) || db.tasks.find((x) => !x.parentId && !x.done); openTask(t.id); " + pause(1500) + "return JSON.stringify({ taskOpen: !!ui.taskId })", nil),
+      ("sheet", "const m = showMenu(document.body, [{ html: '<div class=\"react-pick\">' + REACTIONS.map((e) => '<button>' + e + '</button>').join('') + '</div>' }, { label: 'Reply', icon: 'reply', run() {} }, { label: 'Edit comment', icon: 'edit', run() {} }, { label: 'Copy text', icon: 'copy', run() {} }, '-', { label: 'Delete comment', icon: 'trash', danger: true, run() {} }]); m.classList.add('cm-sheet'); " + pause(900) + geo + " const r = m.getBoundingClientRect(); return JSON.stringify({ menuTop: r.top, menuBottom: r.bottom, geo })", nil),
+      ("back", "document.querySelectorAll('.menu, #ph-menu-scrim').forEach((x) => x.remove()); closeDetail(); " + pause(800) + "return JSON.stringify({ taskOpen: !!ui.taskId })", nil),
+      ("signin", pause(4000) + "return JSON.stringify({ host: location.host, top: (document.querySelector('h1, h2, img, form') || document.body).getBoundingClientRect().top })", {
         self.web.load(URLRequest(url: URL(string: "https://e11hq.cloudflareaccess.com/")!)) }),
     ]
     func run(_ i: Int) {
-      if i >= steps.count { selfResult["frame"] = ["web": web.frame.height, "screen": view.bounds.height, "inset": web.scrollView.contentInsetAdjustmentBehavior == .never ? "never" : "auto", "insetTop": web.scrollView.adjustedContentInset.top, "host": web.url?.host ?? ""]; return writeSelf("done") }
+      if i >= steps.count { selfResult["frame"] = ["web": web.frame.height, "screen": view.bounds.height, "inset": web.scrollView.contentInsetAdjustmentBehavior == .never ? "never" : "auto", "insetTop": web.scrollView.adjustedContentInset.top, "host": web.url?.host ?? ""] as [String: Any]; return writeSelf("done") }
       let (name, js, before) = steps[i]
       before?()
       DispatchQueue.main.asyncAfter(deadline: .now() + (before == nil ? 0.2 : 1.5)) {
         self.probe(name, js) {
-          if name == "home" || name == "inbox" { self.selfResult[name + "Frame"] = ["web": self.web.frame.height, "screen": self.view.bounds.height, "tabBar": !self.tabBar.isHidden] }
+          if name == "home" || name == "inbox" { self.selfResult[name + "Frame"] = ["web": self.web.frame.height, "screen": self.view.bounds.height, "tabBar": !self.tabBar.isHidden] as [String: Any] }
           DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.writeSelf(name); DispatchQueue.main.asyncAfter(deadline: .now() + 4) { run(i + 1) } }
         }
       }

@@ -24,9 +24,9 @@ jobs:
           cd ios && xcodegen generate
       - name: Build for the simulator
         run: |
-          set -o pipefail
+          set +e
           xcodebuild -project ios/E11Console.xcodeproj -scheme E11Console -configuration Debug -sdk iphonesimulator \
-            -destination 'generic/platform=iOS Simulator' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build | tail -40
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build 2>&1 | tee "$RUNNER_TEMP/ios-build-full.log" | tail -40; status=${PIPESTATUS[0]}; grep -E "error:|warning: unre" "$RUNNER_TEMP/ios-build-full.log" | head -60 > "$RUNNER_TEMP/ios-build.log"; [ $status -eq 0 ] || exit $status
           test -d build/Build/Products/Debug-iphonesimulator/E11Console.app
       - name: Self-test in the simulator
         run: python3 ios/selftest.py build/Build/Products/Debug-iphonesimulator/E11Console.app 2>&1 | tee "$RUNNER_TEMP/ios-selftest.log"; exit ${PIPESTATUS[0]}
@@ -36,7 +36,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release view ios-selftest >/dev/null 2>&1 || gh release create ios-selftest --prerelease --title "iPhone app self-test" --notes "Latest iPhone app self-test results." --target "$GITHUB_SHA"
-          for f in ios-home.png ios-inbox.png ios-me.png ios-client.png ios-task.png ios-sheet.png ios-back.png ios-signin.png ios-done.png ios-selftest.log ios-server.log; do [ -f "$RUNNER_TEMP/$f" ] && gh release upload ios-selftest "$RUNNER_TEMP/$f" --clobber; done; true
+          for f in ios-home.png ios-inbox.png ios-me.png ios-client.png ios-task.png ios-sheet.png ios-back.png ios-signin.png ios-done.png ios-build.log ios-selftest.log ios-server.log; do [ -f "$RUNNER_TEMP/$f" ] && gh release upload ios-selftest "$RUNNER_TEMP/$f" --clobber; done; true
       - name: Sign and send to TestFlight
         if: github.ref_name == 'main' || github.event_name == 'workflow_dispatch'
         env:
