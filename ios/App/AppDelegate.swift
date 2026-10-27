@@ -119,6 +119,20 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if #available(iOS 16.4, *) { web.isInspectable = true }
     view.addSubview(web)
     web.hideKeyboardBar()
+    // Our pages never scroll as a whole (each page scrolls inside itself). iPhone scrolls the whole page up to
+    // show a box being typed in and can leave it there after the keyboard goes, which pushed everything pinned
+    // to the bottom (sheets, menus) below the screen: once the keyboard is down, it goes back to the top.
+    offsetWatch = web.scrollView.observe(\.contentOffset, options: [.new]) { [weak self] sv, _ in
+      guard let self = self, !self.keyboardUp, self.pageReady, sv.contentOffset != .zero else { return }
+      DispatchQueue.main.async { if !self.keyboardUp, sv.contentOffset != .zero { sv.setContentOffset(.zero, animated: false) } }
+    }
+    let nc = NotificationCenter.default
+    nc.addObserver(forName: UIResponder.keyboardWillShowNotification, object: nil, queue: .main) { [weak self] _ in self?.keyboardUp = true }
+    nc.addObserver(forName: UIResponder.keyboardDidHideNotification, object: nil, queue: .main) { [weak self] _ in
+      guard let self = self else { return }
+      self.keyboardUp = false
+      if self.pageReady, self.web.scrollView.contentOffset != .zero { self.web.scrollView.setContentOffset(.zero, animated: true) }
+    }
     tabBar.delegate = self
     tabBar.isHidden = true
     view.addSubview(tabBar)
@@ -145,6 +159,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     } else { web.load(URLRequest(url: u)) }
   }
   var tabCover = -1
+  var keyboardUp = false
+  var offsetWatch: NSKeyValueObservation?
   func pageJS(_ js: String) { web?.evaluateJavaScript(js, completionHandler: nil) }
   var serverHost: String { URL(string: serverURL())?.host ?? "" }
 
