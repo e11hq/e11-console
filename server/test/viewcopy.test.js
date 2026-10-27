@@ -5,11 +5,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { createServer } from '../src/server.js';
 
 const OWNER = 'haris@e11-digital.com';
-let app, dir, base;
+let app, dir, base, can = true;
 const REL = 'attachments/t1/clip.mp4';
 before(async () => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'e11-view-'));
@@ -19,16 +19,20 @@ before(async () => {
   const src = path.join(dir, 'files', REL);
   fs.mkdirSync(path.dirname(src), { recursive: true });
   // a 1080p clip with sound, its index at the END (like many exports)
-  execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc=size=1920x1080:rate=25', '-f', 'lavfi', '-i', 'sine=frequency=440', '-t', '3', '-c:v', 'libx264', '-preset', 'ultrafast', '-c:a', 'aac', '-shortest', src]);
+  // (a build machine without ffmpeg's H.264 encoder skips these)
+  try { execFileSync('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc=size=1920x1080:rate=25', '-f', 'lavfi', '-i', 'sine=frequency=440', '-t', '3', '-c:v', 'libx264', '-preset', 'ultrafast', '-c:a', 'aac', '-shortest', src]); }
+  catch { can = false; fs.writeFileSync(src, 'x'); }
   app.store.importAll({ users: [{ id: 'u-h', email: OWNER, name: 'Haris', role: 'admin', active: true }], projects: [], statuses: [],
     tasks: [{ id: 't1', title: 'T', assignees: [], createdBy: 'u-h', tags: [], comments: [], attachments: [{ id: 'a1', name: 'clip.mp4', path: REL, size: fs.statSync(src).size }] }] }, 'test');
 });
 after(async () => { await app.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 const get = (p) => fetch(base + p, { headers: { 'X-Dev-Email': OWNER } });
-const probe = (file) => JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height,codec_name', '-of', 'json', file]).toString()).streams[0];
+// the video's codec and size, from ffmpeg's own description (no ffprobe needed)
+const probe = (file) => { const t = spawnSync('ffmpeg', ['-hide_banner', '-i', file]).stderr.toString(); const m = /Video: (\w+).*?, (\d{2,5})x(\d{2,5})/.exec(t) || []; return { codec_name: m[1], width: Number(m[2]), height: Number(m[3]) }; };
 const moovFirst = (file) => { const b = fs.readFileSync(file); return b.indexOf('moov') < b.indexOf('mdat'); };
 
-test('viewing serves the original until the light copy is ready, then the copy; Download keeps the original', async () => {
+test('viewing serves the original until the light copy is ready, then the copy; Download keeps the original', async (t) => {
+  if (!can) return t.skip('no H.264 encoder here');
   const orig = Buffer.from(await (await get('/__file/' + REL + '?view=1')).arrayBuffer());
   assert.equal(orig.length, fs.statSync(path.join(dir, 'files', REL)).size, 'the original meanwhile');
   for (let i = 0; i < 200 && !app.views.ready(REL); i++) await new Promise((r) => setTimeout(r, 100));
@@ -45,14 +49,15 @@ test('viewing serves the original until the light copy is ready, then the copy; 
   assert.equal(dl.length, fs.statSync(path.join(dir, 'files', REL)).size, 'Download is the original');
   assert.equal(app.views.stats().made, 1);
 });
-test('a video picked up by the scan, and the copy removed with its file', async () => {
+test('a video picked up by the scan, and the copy removed with its file', async (t) => {
+  if (!can) return t.skip('no H.264 encoder here');
   app.views.remove(REL);
   assert.equal(app.views.ready(REL), false);
   app.scanVideos();
   for (let i = 0; i < 200 && !app.views.ready(REL); i++) await new Promise((r) => setTimeout(r, 100));
   assert.ok(app.views.ready(REL), 'the scan makes copies for videos already in tasks');
-  const t = app.store.get('tasks', 't1');
-  app.store.apply([{ kind: 'tasks', id: 't1', data: { ...t, attachments: [] } }], 'test');
+  const tk = app.store.get('tasks', 't1');
+  app.store.apply([{ kind: 'tasks', id: 't1', data: { ...tk, attachments: [] } }], 'test');
   const r = await fetch(base + '/api/host/trashMany', { method: 'POST', headers: { 'X-Dev-Email': OWNER, 'Content-Type': 'application/json' }, body: JSON.stringify({ paths: [REL] }) }).then((x) => x.json());
   assert.equal(r.deleted, 1);
   assert.equal(app.views.ready(REL), false, 'its light copy is gone too');
