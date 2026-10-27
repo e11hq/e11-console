@@ -1375,8 +1375,8 @@ const Push = (() => {
 
 /* Phone: a task's date wheel. iPhone fills an empty date with today the moment its wheel opens and reports it as
    a change, which saved today straight away (and closed the wheel). Changes are held while the wheel is open and
-   saved once when it closes, only if the date really changed. Closing an empty date's wheel without touching it
-   (only iPhone's own "today" in it) leaves the date empty — the Today button next to it sets today. */
+   saved once when it closes, only if the date really changed. (Picking today, which iPhone already shows, can't be
+   told apart from just closing it, so a closed wheel keeps what it shows.) */
 (() => {
   const SEL = '#d-due, #d-start, #d-golive';
   const was = new WeakMap(), moves = new WeakMap();
@@ -1392,8 +1392,7 @@ const Push = (() => {
   document.addEventListener('focusout', (e) => {
     const el = e.target;
     if (!el.matches || !el.matches(SEL) || !was.has(el)) return;
-    const before = was.get(el), n = moves.get(el) || 0; was.delete(el); moves.delete(el);
-    if (!before && n <= 1 && el.value === todayStr()) { el.value = ''; return; }   // (only the wheel's own today)
+    const before = was.get(el); was.delete(el); moves.delete(el);
     if (el.value === before) return;
     replay = true;
     try { el.dispatchEvent(new Event('change', { bubbles: true })); } finally { replay = false; }
