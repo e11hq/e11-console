@@ -831,14 +831,50 @@ function viewUpdates() {
   // Ask for a fresh check every time the page opens (the server itself only checks once an hour)
   setTimeout(() => loadUpdates('check'), 0);
   if (AppIcon.isOwner()) setTimeout(() => loadVideoHw(false), 0);
+  if (AppIcon.isOwner()) setTimeout(() => NetCheck.load(), 0);
   return `<div class="upd"><div class="upd-card" id="upd-body"><div class="ph">Checking for updates…</div></div>
     ${AppIcon.isOwner() ? `<div class="upd-card" id="vhw-card"><h3>${icon('play')}Video hardware</h3><p class="upd-note">Checking the NAS…</p></div>` : ''}
+    ${AppIcon.isOwner() ? '<div class="upd-card nc-card" id="nc-card" hidden></div>' : ''}
     <div class="upd-card imp-card">
       <h3>${icon('upload')}Move data from the Mac app</h3>
       <p class="upd-note">Choose <b>e11-data.json</b> from the “E11 Console Data” folder on the Mac. Tasks, clients, comments, people, notifications and client assets are added to the server. Copy the folders <b>attachments</b>, <b>Clients</b> and <b>.thumbs</b> into the NAS folder <b>E11Console/live/files</b> as well, so the files open. A copy of the database is made first.</p>
       <button class="btn" data-action="import-mac">${icon('upload')}Choose e11-data.json…</button>
     </div></div>`;
 }
+// Owner only, test copy: the network check (server.js netlog) — where each app open and upload came from and how fast
+const NetCheck = (() => {
+  const fmtT = (iso) => { const d = new Date(iso); return `${d.toLocaleDateString('en-US', { weekday: 'short' })} ${d.getDate()} · ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`; };
+  const size = (b) => (b >= 1e9 ? (b / 1e9).toFixed(2) + ' GB' : b >= 1e6 ? (b / 1e6).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1e3)) + ' KB');
+  async function load() {
+    const el = document.getElementById('nc-card');
+    if (!el) return;
+    let r;
+    try { r = await api('GET', '/api/netlog'); } catch (e) { el.hidden = true; return; }   // (not on the live site)
+    el.hidden = false;
+    const rows = [...(r.entries || [])].reverse();
+    el.innerHTML = `<h3>${icon('activity')}Network check <span class="nc-tag">test only</span></h3>
+      <p class="upd-note">Records where your own app opens and uploads come from, to plan copying files inside the NAS. ${r.on ? (r.until ? `Recording until ${esc(fmtT(r.until))}.` : 'Starts with your next app open or upload.') : 'Finished (3 days).'} Right now: <b>${esc(r.here.ip)}</b> · ${r.here.via === 'cloudflare' ? `through Cloudflare (${esc(r.here.colo || '?')})` : 'straight over the local network'} · ${esc(r.here.app)}. Add a note to each row, e.g. “office Wi‑Fi” or “cable”.</p>
+      ${rows.length ? `<div class="nc-wrap"><table class="nc-tbl"><thead><tr><th>When</th><th>What</th><th>Address</th><th>Route · app</th><th>Speed</th><th>Note</th></tr></thead><tbody>
+        ${rows.map((e) => `<tr><td>${esc(fmtT(e.at))}</td><td>${e.kind === 'upload' ? `Upload ${esc(size(e.size || 0))}<small title="${esc(e.name || '')}">${esc(trunc(e.name || '', 14))}</small>` : 'App open'}</td><td class="mono">${esc(e.ip || '')}</td>
+          <td>${e.via === 'cloudflare' ? `Cloudflare ${esc(e.colo || '')}` : '<b>Local network</b>'} · ${esc(e.app || '')}</td>
+          <td>${e.kind === 'upload' ? `<b>${esc(String(e.mbps))} MB/s</b><small>${esc((e.ms / 1000).toFixed(1))} s</small>` : ''}</td>
+          <td><input class="field nc-note" data-nc="${esc(e.id)}" value="${esc(e.note || '')}" placeholder="Note"></td></tr>`).join('')}
+      </tbody></table></div>` : '<p class="upd-note">Nothing recorded yet.</p>'}
+      <div class="nc-btns"><button class="btn sm" data-action="nc-refresh">Refresh</button><button class="btn sm ghost" data-action="nc-restart">Start again (3 days)</button></div>`;
+  }
+  document.addEventListener('change', (e) => {
+    const inp = e.target.closest && e.target.closest('.nc-note');
+    if (inp) api('POST', '/api/netlog/note', { id: inp.dataset.nc, note: inp.value }).then(() => toast('Note saved')).catch(() => toast('Couldn’t save the note'));
+  });
+  document.addEventListener('click', async (e) => {
+    const b = e.target.closest && e.target.closest('[data-action="nc-refresh"], [data-action="nc-restart"]');
+    if (!b) return;
+    e.stopImmediatePropagation();
+    if (b.dataset.action === 'nc-restart') { const ok = await dialog({ title: 'Start the network check again?', body: 'The rows so far are cleared and it records for another 3 days.', okText: 'Start again' }); if (!ok) return; await api('POST', '/api/netlog/restart', {}).catch(() => {}); }
+    load();
+  }, true);
+  return { load };
+})();
 // Owner only: is the NAS's video hardware (Intel Quick Sync) available to the app — it speeds up video conversion
 async function loadVideoHw(fresh) {
   const el = document.getElementById('vhw-card');

@@ -324,7 +324,7 @@ select.field { -webkit-appearance: none; appearance: none; padding-right: 26px;
 .mini-row:last-child { border-bottom: 0; }
 .mini-row:hover { background: var(--hover); }
 .mini-row .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mini-row .proj-chip { max-width: 120px; }
+.mini-row .proj-chip { max-width: 104px; }
 .empty { color: var(--text-3); text-align: center; padding: 34px 10px; }
 .empty .big { font-size: 15px; color: var(--text-2); margin-bottom: 4px; }
 .proj-cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
@@ -2776,3 +2776,14 @@ body.phone .us-note { display: none; }
 .dy-foot { display: flex; align-items: center; gap: 10px; padding: 12px 16px 14px 20px; border-top: 1px solid var(--border); }
 .dy-foot span { color: var(--text-3); font-size: 11.5px; margin-right: auto; }
 .nt-try { color: var(--accent); font-weight: 600; white-space: nowrap; }
+
+/* Network check (owner, test copy) */
+.nc-card h3 .nc-tag { font-size: 10.5px; font-weight: 650; padding: 2px 6px; border-radius: 5px; background: var(--accent-soft); color: var(--accent); margin-left: 6px; vertical-align: middle; }
+.nc-wrap { overflow-x: auto; margin: 10px 0; }
+.nc-tbl { width: 100%; border-collapse: collapse; font-size: 12px; }
+.nc-tbl th { text-align: left; color: var(--text-3); font-weight: 600; padding: 6px 6px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.nc-tbl td { padding: 5px 6px; border-bottom: 1px solid var(--border); white-space: nowrap; vertical-align: middle; }
+.nc-tbl td small { color: var(--text-3); margin-left: 4px; }
+.nc-tbl .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; }
+.nc-tbl .nc-note { height: 26px; padding: 3px 8px; font-size: 12px; width: 120px; }
+.nc-btns { display: flex; gap: 8px; }
