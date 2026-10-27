@@ -2239,13 +2239,21 @@ const Sync = (() => {
     render({ keepDetail: typing });
     detailDirty = typing;
   }
-  document.addEventListener('focusout', () => setTimeout(() => {
+  // (a mouse button held down — e.g. leaving a field by clicking a button — waits until it's released and the click
+  //  has happened, so the button isn't redrawn under the pointer and the click lost)
+  let pointerDown = false;
+  document.addEventListener('pointerdown', () => { pointerDown = true; }, true);
+  document.addEventListener('pointerup', () => { pointerDown = false; }, true);
+  document.addEventListener('pointercancel', () => { pointerDown = false; }, true);
+  const catchUp = () => {
     if (!detailDirty || !db || !currentUserId) return;
+    if (pointerDown) { setTimeout(catchUp, 60); return; }
     const a = document.activeElement;
     if (a && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))) return;
     detailDirty = false;
     render({ keepDetail: false });
-  }, 50));
+  };
+  document.addEventListener('focusout', () => setTimeout(catchUp, 50));
 
   let lastHeard = Date.now(), downSince = 0;
   function connect() {
