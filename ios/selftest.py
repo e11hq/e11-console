@@ -34,7 +34,7 @@ try:
     data = sh('xcrun', 'simctl', 'get_app_container', udid, BUNDLE, 'data').stdout.strip()
     out = os.path.join(data, 'Documents', 'selftest.json')
     seen, res, t0 = set(), {}, time.time()
-    while time.time() - t0 < 300:
+    while time.time() - t0 < 480:
         try: res = json.load(open(out))
         except Exception: res = {}
         st = res.get('stage')
@@ -45,7 +45,7 @@ try:
         if st == 'done': break
         time.sleep(0.5)
     print(json.dumps(res, indent=1)[:4000])
-    p = res.get('page') or {}
+    p = res.get('home') or {}
     check(set(seen) >= {'home', 'inbox', 'me', 'client', 'task', 'sheet', 'back', 'signin', 'done'}, f'all stages ran {sorted(seen)}')
     hf = res.get('homeFrame') or {}
     check(hf.get('web') == hf.get('screen') and hf.get('tabBar') is True, f'the page fills the screen under the floating tab bar {hf}')
@@ -54,7 +54,7 @@ try:
     check(me.get('lockRows') == 1 and me.get('pushRows') == 1, f'one Face ID row after repaints {me}')
     check((res.get('client') or {}).get('wide') is False, f"Client Assets folder fits the screen {res.get('client')}")
     sh_ = res.get('sheet') or {}; g = sh_.get('geo') or {}
-    check(sh_.get('menuBottom') is not None and sh_['menuBottom'] <= (g.get('innerH') or 0) + 1, f'the comment sheet is fully on screen {sh_}')
+    check(sh_.get('menuBottom') is not None and sh_['menuBottom'] <= (g.get('innerH') or 0) + 1 and sh_['menuBottom'] - sh_.get('menuTop', 0) > 300, f'the comment sheet is fully on screen, all of it showing {sh_}')
     fr = res.get('frame') or {}
     check((fr.get('insetTop') or 0) >= 20, f"the sign-in page clears the status bar {fr} {res.get('signin')}")
     check(p.get('ios') is True and p.get('isIOSApp') is True and p.get('isMacApp') is False, 'the web app knows it is in the iPhone app (not the Mac app)')

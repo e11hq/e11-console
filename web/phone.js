@@ -1168,6 +1168,12 @@ const Push = (() => {
   };
   if (window.visualViewport) { visualViewport.addEventListener('resize', fit); visualViewport.addEventListener('scroll', fit); }
   fit();
+  // (the iPhone app's page can start tiny and grow without telling visualViewport: a stale small height here made
+  //  every sheet a short strip at the bottom; so also on resizes, when a sheet opens, and every second)
+  window.addEventListener('resize', fit);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) fit(); });
+  setInterval(() => { if (!document.hidden) fit(); }, 1000);
+  new MutationObserver(() => { if (document.querySelector('body > .menu')) fit(); }).observe(document.body || document.documentElement, { childList: true });
   // typing on a phone means the on-screen keyboard is up: drop the home-bar spacing under the comment box then
   const typing = () => { const a = document.activeElement; root.classList.toggle('ph-typing', !!(Phone.on && a && a.closest && a.closest('#detail .tm-composer') && (a.isContentEditable || /^(INPUT|TEXTAREA)$/.test(a.tagName)))); };
   document.addEventListener('focusin', typing); document.addEventListener('focusout', () => setTimeout(typing, 50));
