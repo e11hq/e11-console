@@ -842,3 +842,11 @@ body.phone .ph-search { margin-top: 12px; }
 /* nothing slides sideways: a sheet or page a pixel too wide could be dragged left in the app */
 html.ios-app, html.ios-app body { overflow-x: hidden; }
 .ph-sheet, body.phone #content { overflow-x: hidden; overscroll-behavior-x: none; }
+
+/* a task's dates on the phone: start (and its ×) on one line, due (and its × / Today) on the next — the × never
+   drops onto a line of its own */
+body.phone .prop-dates .pv { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 6px; }
+body.phone .prop-dates .date-arrow { flex: 0 0 100%; height: 0; overflow: hidden; margin: 0; padding: 0; }
+/* (on two lines they need their names: "Start Oct 25", "Due Today") */
+body.phone .prop-dates .date-chip.set:has(#d-start) .date-lbl::before { content: 'Start '; color: var(--text-3); font-weight: 400; }
+body.phone .prop-dates .date-chip.set:has(#d-due) .date-lbl::before { content: 'Due '; color: var(--text-3); font-weight: 400; }
