@@ -326,6 +326,7 @@ export function createAccess(store, opts = {}) {
         if ((current && inInactive(current)) || (next && inInactive(next))) return false;   // an inactive client's tasks are frozen
         if (current && next && !cdGateOk(current, next)) return false;
         if (current && next && !identityOk(current, next, ch.base)) return false;
+        if (current && next && !editWindowOk(current, next, ch.base)) return false;
         if (isFreelancer(u)) return (!current || taskVisible(u, current)) && (ch.del || taskVisible(u, next));
         if (ownOnly(u) && current && !taskVisible(u, current)) return false;
         if (ownOnly(u) && current && ownView(u).peek.has(String(current.id))) return commentOnly(u, ch.base || current, current, next);
@@ -442,6 +443,25 @@ export function createAccess(store, opts = {}) {
         const a = now.get(c.id), b = old.get(c.id) || a;
         if ((changed(c, a, 'text') && changed(c, b, 'text')) || (changed(c, a, 'html') && changed(c, b, 'html'))) return false;
       }
+    }
+    return true;
+  }
+
+  // A comment's words can be changed for 10 minutes after it was sent (everyone, Admins too; web/app.js EDIT_WINDOW).
+  // A few minutes' grace covers a save that took a while to arrive. Only the words count: deleting it, reactions,
+  // files' previews, link cards and "seen" marks aren't edits.
+  const EDIT_WINDOW = 10 * 60000, EDIT_GRACE = 3 * 60000;
+  function editWindowOk(current, next, base) {
+    const was = base && typeof base === 'object' ? base : current;
+    const now = new Map((current.comments || []).map((c) => [c.id, c]));
+    const old = new Map((was.comments || []).map((c) => [c.id, c]));
+    const changed = (a, b, k) => String(a[k] || '') !== String(b[k] || '');
+    for (const c of next.comments || []) {
+      const a = now.get(c.id);
+      if (!a) continue;
+      const b = old.get(c.id) || a;
+      const edited = ['text', 'html'].some((k) => changed(c, a, k) && changed(c, b, k));
+      if (edited && Date.now() - Date.parse(a.at) > EDIT_WINDOW + EDIT_GRACE) return false;
     }
     return true;
   }

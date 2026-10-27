@@ -15,6 +15,8 @@ import { createDigest } from './digest.js';
 import { createOccasionReminders } from './occremind.js';
 import { createBirthdays } from './birthdays.js';
 import { createScheduled } from './scheduled.js';
+import { createDaily } from './amdaily.js';
+import { createLinks } from './links.js';
 import { createHolidaySync, DEFAULT_HOLIDAYS_URL } from './holidays.js';
 import zlib from 'node:zlib';
 import { sampleData } from './sample.js';
@@ -84,6 +86,9 @@ export function createServer(cfg) {
   const scheduled = createScheduled({ store, access, webPush, notifMessage, deliver: (out) => broadcast(out.rev, out.results, null, null), now: cfg.now || (() => Date.now()) });
   if (cfg.scheduled !== false) scheduled.start();
   // Confirmed dates for Ramadan, the Eids… from a public UAE holiday calendar (off on a dev server unless a URL is given)
+  const links = createLinks({ store, dataDir, fetcher: cfg.linkFetch });
+  const daily = createDaily({ store, access, webDir, webPush, notifMessage, deliver: (out) => broadcast(out.rev, out.results, null, null), now: cfg.now || (() => Date.now()) });
+  if (cfg.daily !== false && (!cfg.dev || cfg.daily)) daily.start();   // (not on a developer's copy unless asked)
   const holidays = createHolidaySync({
     store, webDir: cfg.webDir, url: cfg.holidaysUrl || DEFAULT_HOLIDAYS_URL, fetchImpl: cfg.holidaysFetch || fetch, now: cfg.now || (() => Date.now()),
     onChange: (rev, results, changed) => {
@@ -457,6 +462,36 @@ export function createServer(cfg) {
       return json(res, 200, { ok: true, ...cfSync.status() });
     }
 
+    // Link previews in comments (links.js): the page's details, and its picture or icon, read by the server
+    if (p === '/api/link' && req.method === 'GET') {
+      const r = await links.look(url.searchParams.get('u') || '');
+      return json(res, 200, r);
+    }
+    if (p === '/api/link/img' && req.method === 'GET') {
+      const r = await links.image(url.searchParams.get('u') || '').catch(() => null);
+      if (!r) { res.writeHead(404, { 'Cache-Control': 'private, max-age=3600' }); return res.end(); }
+      res.writeHead(200, { 'Content-Type': r.type, 'Cache-Control': 'private, max-age=86400', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" });
+      return fs.createReadStream(r.file).pipe(res);
+    }
+    // Read receipts: a person @mentioned in a comment has seen it (opened the update, or the comment came into view
+    // in the task). Saved on the comment as seen[userId] = time; everyone who sees the task sees it.
+    if (p === '/api/seen' && req.method === 'POST') {
+      const b = await readBody(req, 64 * 1024).catch(() => ({}));
+      if (req.viewingAs || u._ov) return json(res, 200, { ok: true, skipped: true });   // (looking as someone else isn't them seeing it)
+      const t = b && b.taskId ? store.get('tasks', String(b.taskId)) : null;
+      if (!t || !access.canSee(u, 'tasks', t)) return json(res, 404, { ok: false });
+      const ids = new Set((Array.isArray(b.ids) ? b.ids : []).map(String).slice(0, 200));
+      const at = new Date().toISOString();
+      let n = 0;
+      const comments = (t.comments || []).map((c) => {
+        if (!ids.has(c.id) || c.authorId === u.id || (c.seen || {})[u.id] || !String(c.html || '').includes(`data-user="${u.id}"`)) return c;
+        n++;
+        return { ...c, seen: { ...(c.seen || {}), [u.id]: at } };
+      });
+      if (n) { const out = store.apply([{ kind: 'tasks', id: t.id, data: { ...t, comments } }], u.id); broadcast(out.rev, out.results, null, null); }
+      return json(res, 200, { ok: true, marked: n });
+    }
+
     // Phone notifications: the server's public key, and turning them on / off for this device
     // Morning summary: today's, for this person's open app (shown once per device); a test send to yourself
     if (p === '/api/digest') return json(res, 200, { ok: true, ...digest.forUser(u) });
@@ -466,6 +501,12 @@ export function createServer(cfg) {
       if (!(access.isAdm(u) || u.role === 'am')) return json(res, 403, { ok: false, error: 'Admins and Account Managers only' });
       const s = req.method === 'POST' ? await holidays.check() : holidays.status();
       return json(res, 200, { ok: true, ...s });
+    }
+    // AMs' and Super Admins' morning summary: one now, for yourself (My profile › Notifications), any day
+    if (p === '/api/daily/test' && req.method === 'POST') {
+      if (!(u.role === 'am' || access.isSuper(u))) return json(res, 403, { error: 'For Account Managers and Super Admins' });
+      const out = daily.sendNow(u);
+      return json(res, 200, { ok: true, id: out });
     }
     if (p === '/api/digest/test' && req.method === 'POST') {
       const m = digest.preview(u);
@@ -507,7 +548,7 @@ export function createServer(cfg) {
       store.list('users').forEach((x) => { if (x.id !== owner.id) dels.push({ kind: 'users', id: String(x.id), del: true }); });
       if (dels.length) store.apply(dels, 'sample-reset');
       store.apply([{ kind: 'meta', id: 'main', data: { createdAt: new Date().toISOString() } }], 'sample-reset');
-      for (const k of ['view-as', 'digest-sent', 'occ-remind-sent']) store.kv.set(k, k === 'view-as' ? 'null' : '{}');
+      for (const k of ['view-as', 'digest-sent', 'occ-remind-sent', 'daily-sent']) store.kv.set(k, k === 'view-as' ? 'null' : '{}');
       // 2. files (task attachments, Client Assets, Finance, claims, previews) moved to the trash folder; profile photos stay
       const filesRoot = path.join(dataDir, 'files');
       const bin = path.join(dataDir, 'trash', new Date().toISOString().slice(0, 10), `sample-reset-${Date.now()}`);
@@ -785,8 +826,8 @@ export function createServer(cfg) {
   return {
     server, store, files, cfSync, webPush,
     listen: (port, host) => new Promise((ok) => server.listen(port, host, () => ok(server.address().port))),
-    digest, holidays, occRemind, birthdays, scheduled, pruneNotifications,
-    close: () => new Promise((ok) => { digest.stop(); holidays.stop(); occRemind.stop(); birthdays.stop(); scheduled.stop(); for (const s of streams) try { s.res.end(); } catch { /* ignore */ } server.close(() => { store.close(); ok(); }); }),
+    digest, holidays, occRemind, birthdays, scheduled, daily, pruneNotifications,
+    close: () => new Promise((ok) => { digest.stop(); holidays.stop(); occRemind.stop(); birthdays.stop(); scheduled.stop(); daily.stop(); for (const s of streams) try { s.res.end(); } catch { /* ignore */ } server.close(() => { store.close(); ok(); }); }),
     broadcastVersion: (v) => { for (const s of streams) send(s, 'version', { version: v }); },
   };
 }

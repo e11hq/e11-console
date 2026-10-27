@@ -193,7 +193,7 @@ const Phone = (() => {
       return `<div class="ph-ib ${unread ? 'unread' : ''}" data-action="open-notif" data-id="${target.id}">
         ${avatarHTML(target.from, 40)}
         <span class="ph-ib-b"><span class="ph-ib-m">${notifMsg(target, t)}</span>
-          <span class="ph-ib-t">${n.kind === 'sched-cancel' ? `Scheduled ${/scheduled reply/.test(n.text || '') ? 'reply' : 'comment'}` : t ? esc(t.title || 'Untitled task') : n.kind === 'birthday' ? 'Birthday' : /^claim/.test(n.kind) ? 'Expense claims' : n.kind === 'asset' ? esc(assetTitle(n)) : n.planId ? esc(planTitle(n)) : '<i>Deleted task</i>'}</span>
+          <span class="ph-ib-t">${n.kind === 'sched-cancel' ? `Scheduled ${/scheduled reply/.test(n.text || '') ? 'reply' : 'comment'}` : t ? esc(t.title || 'Untitled task') : n.kind === 'birthday' ? 'Birthday' : n.kind === 'daily' ? 'Morning summary' : /^claim/.test(n.kind) ? 'Expense claims' : n.kind === 'asset' ? esc(assetTitle(n)) : n.planId ? esc(planTitle(n)) : '<i>Deleted task</i>'}</span>
           <span class="ph-ib-w">${esc(timeAgo(n.at))}${items.length > 1 ? ` · ${items.length} updates` : ''}</span></span>
         ${unread ? '<i class="ph-ib-dot"></i>' : ''}
       </div>`;
@@ -1160,7 +1160,7 @@ const Push = (() => {
     const on = c.reactions || {};
     const items = [{ html: `<div class="react-pick">${REACTIONS.map((e) => `<button data-swatch="${e}" class="${on[e] ? 'on' : ''}" aria-label="React ${e}">${e}</button>`).join('')}</div>` }];
     if (!isReply && ui.thread !== id) items.push({ label: 'Reply', icon: 'reply', run: () => { const b = document.querySelector(`.cm[data-comment="${id}"] [data-action="reply"]`); if (b) b.click(); } });
-    if (mine) items.push({ label: 'Edit comment', icon: 'edit', run: () => { ui.editingComment = id; renderDetail(); setTimeout(() => { const e2 = document.getElementById('edit-comment'); if (e2) { e2.focus(); placeCaretAtEnd(e2); } }, 0); } });
+    if (mine) items.push(...editCommentItem(t, c));
     items.push({ label: 'Copy text', icon: 'copy', run: () => { try { navigator.clipboard.writeText(c.text || ''); toast('Copied'); } catch (e) { toast('Could not copy'); } } });
     if (mine) items.push('-', { label: 'Delete comment', icon: 'trash', danger: true, run: () => deleteComment(id) });
     const m = showMenu(document.body, items);

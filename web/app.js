@@ -68,6 +68,7 @@ const ICONS = {
   clock: '<circle cx="8" cy="8" r="5.8"/><path d="M8 4.8V8l2.2 1.5"/>',
   copy: '<rect x="5.4" y="5.4" width="8" height="8.2" rx="1.5"/><path d="M10.6 5.4V3.8c0-.6-.4-1-1-1H3.8c-.6 0-1 .4-1 1v5.8c0 .6.4 1 1 1h1.6"/>',
   pushpin: '<g transform="scale(.6667)" stroke-width="2.2"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></g>',
+  eye: '<path d="M1.6 8s2.4-4.4 6.4-4.4S14.4 8 14.4 8 12 12.4 8 12.4 1.6 8 1.6 8z"/><circle cx="8" cy="8" r="1.9"/>',
   'arrow-down': '<path d="M8 3v10M3.8 8.8 8 13l4.2-4.2"/>',
   pin: '<path d="M8 14.2s4.6-4.2 4.6-7.8a4.6 4.6 0 0 0-9.2 0c0 3.6 4.6 7.8 4.6 7.8z"/><circle cx="8" cy="6.4" r="1.7"/>',
   mail: '<rect x="2.2" y="3.4" width="11.6" height="9.2" rx="1.5"/><path d="m2.6 4.3 5.4 4.3 5.4-4.3"/>',
@@ -1797,6 +1798,7 @@ const NOTIF_TYPES = [
   { k: 'result', kinds: ['review-ok', 'review-amend'], l: 'CD review results', d: 'The CD approves your files or asks for amendments' },
   { k: 'review', kinds: ['review'], l: 'New review requests', d: 'Someone submits files for your review', cd: true },
   { k: 'review-wd', kinds: ['review-wd'], l: 'Withdrawn submissions', d: 'Someone withdraws files they sent for review', cd: true },
+  { k: 'daily', kinds: ['daily'], l: 'Morning summary', d: '9:00, Monday to Friday (not on UAE public holidays): overdue, due today, waiting for CD and more in one update', lead: true },
 ];
 const notifTypeOf = (kind) => NOTIF_TYPES.find((x) => x.kinds.includes(kind));
 const notifOn = (u, kind) => { const g = notifTypeOf(kind); return !g || !((u.prefs || {}).notifOff || {})[g.k]; };
@@ -3082,7 +3084,9 @@ function commentHTML(t, c, isReply) {
         ? `<div class="composer edit"><div class="rt-editor" contenteditable="true" id="edit-comment" data-placeholder="Edit comment…">${c.html ? sanitizeHTML(c.html) : esc(c.text).replace(/\n/g, '<br>')}</div><div class="cb-foot">${fmtToolbar()}<span class="spacer"></span><button class="btn ghost sm" data-action="cancel-edit">Cancel</button><button class="btn primary sm" data-action="save-edit" data-id="${c.id}">Save</button></div></div>`
         : (c.html ? `<div class="cm-text rich">${sanitizeHTML(c.html, true)}</div>` : c.text ? `<div class="cm-text">${linkify(esc(c.text))}</div>` : '')}
       ${(c.attachments || []).length ? `<div class="c-files">${c.attachments.map((a) => attPreview(a, 'comment')).join('')}</div>` : ''}
+      ${typeof Cmx !== 'undefined' ? Cmx.cardsHTML(t, c) : ''}
       ${reacts.length ? `<div class="cm-reacts">${reacts.map(([e, n]) => `<button class="react on" data-action="react" data-id="${c.id}" data-emoji="${e}">${e}<span>${n}</span></button>`).join('')}</div>` : ''}
+      ${typeof Cmx !== 'undefined' ? Cmx.seenHTML(t, c) : ''}
     </div>
   </div>`;
 }
@@ -3389,6 +3393,7 @@ function renderDetail() {
   lockByRole(pane, t);
   readOnlyDetail(pane, t);
   if (typeof FeedJump !== 'undefined') FeedJump.afterDetail(pane, t, prev);
+  if (typeof Cmx !== 'undefined') Cmx.afterDetail(pane, t);
 }
 const RO_OK = new Set(['close-detail', 'close-preview', 'close-thread', 'close-lightbox', 'side-tab', 'detail-mode', 'nav-back', 'nav-forward', 'nav-task', 'open-task',
   'open-att', 'quicklook', 'copy-att', 'reveal-att', 'lightbox', 'tile-open', 'fileref-open', 'open-url', 'share-task', 'go-project', 'open-client', 'disp-toggle', 'fields-toggle', 'collapse',
@@ -3994,7 +3999,7 @@ function showMenu(anchor, items) {
   m.innerHTML = items.map((it, i) => {
     if (it === '-') return '<div class="sep"></div>';
     if (it.html) return it.html;
-    return `<div class="mi ${it.danger ? 'danger' : ''}" data-mi="${i}">${it.icon ? icon(it.icon) : ''}${esc(it.label)}</div>`;
+    return `<div class="mi ${it.danger ? 'danger' : ''}" data-mi="${i}">${it.icon ? icon(it.icon) : ''}${esc(it.label)}${it.hint ? `<small class="mi-hint">${esc(it.hint)}</small>` : ''}</div>`;
   }).join('');
   document.body.appendChild(m);
   const r = anchor.getBoundingClientRect();
@@ -4914,14 +4919,23 @@ function toggleReaction(cid, emoji) {
   commit();
 }
 
+// A comment can be edited for 10 minutes after it's sent (by everyone, Admins too); after that it can only be deleted.
+// The server refuses later edits as well (access.js editWindowOk).
+const EDIT_WINDOW = 10 * 60000;
+const editLeft = (c) => Math.max(0, EDIT_WINDOW - (Date.now() - Date.parse(c && c.at)));
+const canEditComment = (c) => !!c && editLeft(c) > 0;
+const editLeftText = (c) => { const m = Math.ceil(editLeft(c) / 60000); return m <= 1 ? 'under 1 min left' : `${m} min left`; };
+function editCommentItem(t, c) {
+  if (Brief.isPinned(t, c.id) || !canEditComment(c)) return [];
+  return [{ label: 'Edit comment', hint: editLeftText(c), icon: 'edit', run: () => { if (!canEditComment(c)) { toast('The 10 minutes to edit this comment have passed'); return; } ui.editingComment = c.id; renderDetail(); setTimeout(() => { const el = $('#edit-comment'); if (el) { el.focus(); placeCaretAtEnd(el); } }, 0); } }];
+}
 function commentMenu(anchor, cid) {
   const t = task(ui.taskId);
   const c = t.comments.find((x) => x.id === cid);
   if (!c) return;
-  const pinned = Brief.isPinned(t, cid);
   showMenu(anchor, [
     ...Brief.pinMenu(t, c),
-    ...(pinned ? [] : [{ label: 'Edit comment', icon: 'edit', run: () => { ui.editingComment = cid; renderDetail(); setTimeout(() => { const el = $('#edit-comment'); if (el) { el.focus(); placeCaretAtEnd(el); } }, 0); } }]),
+    ...editCommentItem(t, c),
     { label: 'Copy text', icon: 'open', run: () => { try { navigator.clipboard.writeText(c.text); toast('Copied'); } catch (e) { toast('Could not copy'); } } },
     '-',
     { label: 'Delete comment', icon: 'trash', danger: true, run: () => deleteComment(cid) },
@@ -5245,6 +5259,7 @@ document.addEventListener('click', async (e) => {
         loadUpdates(a); return;
       }
       case 'allow-notifs': try { Notification.requestPermission().then(() => renderContent()); } catch (err) { /* unsupported */ } return;
+      case 'daily-try': e.preventDefault(); Daily.tryNow(); return;
       case 'test-notif': alertUser({ title: 'E11 Console', body: 'This is how new notifications will look and sound.', taskId: null }, true); return;
       case 'prio-menu': e.stopPropagation(); prioMenu(actEl, actEl.dataset.key); return;
       case 'clear-golive': { const t = task(ui.taskId); if (t) Cal.setGolive(t, null); return; }
@@ -5406,6 +5421,7 @@ function saveEdit(cid) {
   if (!c || !el) return;
   const v = editorEmpty(el) ? '' : el.innerText.trim();
   if (!v && !(c.attachments || []).length) return;
+  if (Date.now() - Date.parse(c.at) > EDIT_WINDOW + 60000) { ui.editingComment = null; renderDetail(); toast('The 10 minutes to edit this comment have passed — it wasn’t changed'); return; }
   const html = v ? sanitizeHTML(el.innerHTML) : '';
   if (v !== c.text || html !== (c.html || '')) {
     const before = mentionsIn(c.html);
@@ -6832,7 +6848,7 @@ async function cdToggleFlow(id) {
 
 /* ================= Inbox ================= */
 const myNotifs = () => (db && currentUserId ? db.notifications.filter((n) => n.to === currentUserId) : []);
-const NOTIF_ICON = { 'sched-cancel': 'clock', birthday: 'gift', plan: 'cal', 'plan-ok': 'check', 'plan-changes': 'edit', 'plan-tasks': 'check-circle', 'plan-client': 'check', claim: 'coin', 'claim-ok': 'check', 'claim-paid': 'coin', trash: 'trash', restore: 'reply', review: 'upload', 'review-ok': 'check', 'review-amend': 'edit', 'review-wd': 'x', part: 'check-circle', allparts: 'check-circle', assigned: 'user', unassigned: 'user', comment: 'chat', mention: 'chat', status: 'check-circle', cd: 'shield', done: 'check', due: 'cal', priority: 'flag', attach: 'clip' };
+const NOTIF_ICON = { daily: 'sun', 'sched-cancel': 'clock', birthday: 'gift', plan: 'cal', 'plan-ok': 'check', 'plan-changes': 'edit', 'plan-tasks': 'check-circle', 'plan-client': 'check', claim: 'coin', 'claim-ok': 'check', 'claim-paid': 'coin', trash: 'trash', restore: 'reply', review: 'upload', 'review-ok': 'check', 'review-amend': 'edit', 'review-wd': 'x', part: 'check-circle', allparts: 'check-circle', assigned: 'user', unassigned: 'user', comment: 'chat', mention: 'chat', status: 'check-circle', cd: 'shield', done: 'check', due: 'cal', priority: 'flag', attach: 'clip' };
 function notifPlain(n) { const d = document.createElement('div'); d.innerHTML = n.text; return d.textContent; }
 const IB_FILTERS = { all: 'All updates', comments: 'Comments & mentions', assigned: 'Assigned to me', status: 'Status & CD review', dates: 'Dates & priority' };
 const ibMatch = (n, f) => f === 'all' || !f ? true : f === 'comments' ? ['comment', 'mention'].includes(n.kind) : f === 'assigned' ? ['assigned', 'unassigned'].includes(n.kind) : f === 'status' ? ['status', 'cd', 'done', 'review', 'review-ok', 'review-amend', 'review-wd'].includes(n.kind) : ['due', 'priority'].includes(n.kind);
@@ -6867,6 +6883,7 @@ function notifMsg(n, t) {
     return `${who} set CD Status to: <span class="ib-chip" style="background:${c};color:${textOn(c)}">${esc(val)}</span>`;
   }
   if (n.kind === 'birthday') return `Today is <b>${esc(firstName(n.from))}</b>’s birthday`;
+  if (n.kind === 'daily') return String(n.text || '').replace(/<(?!\/?b>)/g, '&lt;');   // (built escaped by the server)
   if (n.kind === 'sched-cancel') return `${String(n.text || '').replace(/<(?!\/?b>)/g, '&lt;')}${n.snippet ? ` <span class="ib-dim">· “${esc(n.snippet)}”</span>` : ''}`;   // (built escaped by the server)
   if (/^claim/.test(n.kind)) return `${who} ${n.text}${n.snippet ? ` <span class="ib-dim">· ${esc(n.snippet)}</span>` : ''}`;
   if (n.kind === 'asset') return `${who} ${esc(n.text)}${n.snippet ? ` <span class="ib-dim">· ${esc(n.snippet)}</span>` : ''}`;
@@ -6906,7 +6923,7 @@ function viewInbox() {
     const target = ibTarget(items), shown = target;
     const lead = ['comment', 'mention', 'review-amend', 'review-ok', 'review', 'claim', 'claim-ok', 'claim-paid', 'asset', 'plan', 'plan-ok', 'plan-changes', 'plan-tasks', 'plan-client', 'birthday'].includes(shown.kind) ? avatarHTML(shown.from, 22) : `<span class="ib-kic">${icon(NOTIF_ICON[shown.kind] || 'bell')}</span>`;
     return `<div class="ib-row ${unread ? 'unread' : ''}" data-action="open-notif" data-id="${target.id}">
-      <span class="ib-title">${n.kind === 'sched-cancel' ? `<span class="st-ic ib-coin">${icon('clock')}</span><span class="ib-tname">Scheduled ${n.text && /scheduled reply/.test(n.text) ? 'reply' : 'comment'}</span>` : n.kind === 'birthday' ? `<span class="st-ic ib-coin">${icon('gift')}</span><span class="ib-tname">Birthday</span>` : /^plan/.test(n.kind) ? `<span class="st-ic ib-coin">${icon('cal')}</span><span class="ib-tname">${esc(planTitle(n))}</span>` : n.kind === 'asset' ? `<span class="st-ic ib-coin">${icon('assets')}</span><span class="ib-tname">${esc(assetTitle(n))}</span>` : `${t ? statusIcon(t) : /^claim/.test(n.kind) ? `<span class="st-ic ib-coin">${icon('coin')}</span>` : `<span class="st-ic">${statusIconSVG('#87909e', 'todo', 0)}</span>`}<span class="ib-tname">${t ? esc(t.title || 'Untitled task') : /^claim/.test(n.kind) ? 'Expense claims' : '<i>Deleted task</i>'}</span>`}</span>
+      <span class="ib-title">${n.kind === 'sched-cancel' ? `<span class="st-ic ib-coin">${icon('clock')}</span><span class="ib-tname">Scheduled ${n.text && /scheduled reply/.test(n.text) ? 'reply' : 'comment'}</span>` : n.kind === 'birthday' ? `<span class="st-ic ib-coin">${icon('gift')}</span><span class="ib-tname">Birthday</span>` : n.kind === 'daily' ? `<span class="st-ic ib-coin">${icon('sun')}</span><span class="ib-tname">Morning summary</span>` : /^plan/.test(n.kind) ? `<span class="st-ic ib-coin">${icon('cal')}</span><span class="ib-tname">${esc(planTitle(n))}</span>` : n.kind === 'asset' ? `<span class="st-ic ib-coin">${icon('assets')}</span><span class="ib-tname">${esc(assetTitle(n))}</span>` : `${t ? statusIcon(t) : /^claim/.test(n.kind) ? `<span class="st-ic ib-coin">${icon('coin')}</span>` : `<span class="st-ic">${statusIconSVG('#87909e', 'todo', 0)}</span>`}<span class="ib-tname">${t ? esc(t.title || 'Untitled task') : /^claim/.test(n.kind) ? 'Expense claims' : '<i>Deleted task</i>'}</span>`}</span>
       <span class="ib-lead">${lead}</span>
       <span class="ib-msg"><span class="ib-mi">${notifMsg(shown, t)}</span></span>
       <span class="ib-count">${items.length > 1 ? `<i>${items.length}</i>` : ''}</span>
@@ -6962,7 +6979,7 @@ function inboxFilterMenu(anchor) {
   showMenu(anchor, Object.entries(IB_FILTERS).map(([k, l]) => ({ html: `<div class="mi ${(ui.inboxFilter || 'all') === k ? 'cur' : ''}">${esc(l)}</div>`, run: () => { ui.inboxFilter = k; renderContent(); } })).map((it, i) => ({ ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) })));
 }
 // Inbox rows: a task's updates together; Client Assets updates together per client
-const notifKey = (n) => (n.kind === 'sched-cancel' ? 'sched:' + n.schedId : null) || n.taskId || (n.kind === 'birthday' ? 'bday:' + n.from + ':' + String(n.at).slice(0, 10) : n.kind === 'asset' ? 'asset:' + n.clientId : n.planId ? 'plan:' + n.planId : n.id);
+const notifKey = (n) => (n.kind === 'sched-cancel' ? 'sched:' + n.schedId : n.kind === 'daily' ? 'daily:' + n.id : null) || n.taskId || (n.kind === 'birthday' ? 'bday:' + n.from + ':' + String(n.at).slice(0, 10) : n.kind === 'asset' ? 'asset:' + n.clientId : n.planId ? 'plan:' + n.planId : n.id);
 const planTitle = (n) => { const what = n.kind === 'plan-client' ? 'Content plan' : 'Content skeleton'; const pl = typeof Plans !== 'undefined' && Plans.planById(n.planId); return pl ? `${Plans.nameOf(pl)} · ${what}` : what; };
 const assetTitle = (n) => `${(clientById(n.clientId) || {}).name || 'A client'} · Client Assets`;
 function clearTaskNotifs(taskId, read) {
@@ -6978,6 +6995,8 @@ function openNotif(id) {
   if (!n) return;
   // a birthday: just marked as read
   if (n.kind === 'birthday') { n.read = true; persist(); renderSidebar(); if (ui.view === 'inbox') renderContent(); return; }
+  // the morning summary: its card, with today's latest numbers
+  if (n.kind === 'daily') { n.read = true; persist(); renderSidebar(); if (ui.view === 'inbox') renderContent(); return Daily.show(); }
   // a scheduled comment that wasn't sent: back into a draft, or (task deleted) the Trash or its text and files
   if (n.kind === 'sched-cancel') { n.read = true; persist(); renderSidebar(); if (ui.view === 'inbox') renderContent(); return Sched.openCancelled(n); }
   if (/^claim/.test(n.kind)) { myNotifs().forEach((x) => { if (x.claimId && x.claimId === n.claimId) x.read = true; }); persist(); renderSidebar(); return Claims.openNotif(n); }
@@ -7179,7 +7198,7 @@ function deliverPending() {
   persist();
   if (fresh.length === 1) {
     const n = fresh[0], t = task(n.taskId);
-    alertUser({ title: n.kind === 'sched-cancel' ? `Scheduled ${/scheduled reply/.test(n.text || '') ? 'reply' : 'comment'} not sent` : fullName(userById(n.from)), body: n.kind === 'sched-cancel' ? `${notifPlain(n)}${n.snippet ? ' — “' + n.snippet + '”' : ''}` : `${notifPlain(n)} ${t ? '“' + (t.title || 'Untitled task') + '”' : ''}${n.snippet ? ' — ' + n.snippet : ''}`, taskId: n.taskId, from: n.from, open: () => { if (db.notifications.some((x) => x.id === n.id)) openNotif(n.id); else if (n.taskId && task(n.taskId)) openTask(n.taskId); } });
+    alertUser({ title: n.kind === 'sched-cancel' ? `Scheduled ${/scheduled reply/.test(n.text || '') ? 'reply' : 'comment'} not sent` : n.kind === 'daily' ? (n.title || 'Good morning') : fullName(userById(n.from)), body: n.kind === 'sched-cancel' || n.kind === 'daily' ? `${notifPlain(n)}${n.snippet ? ' — “' + n.snippet + '”' : ''}` : `${notifPlain(n)} ${t ? '“' + (t.title || 'Untitled task') + '”' : ''}${n.snippet ? ' — ' + n.snippet : ''}`, taskId: n.taskId, from: n.kind === 'daily' ? null : n.from, open: () => { if (db.notifications.some((x) => x.id === n.id)) openNotif(n.id); else if (n.taskId && task(n.taskId)) openTask(n.taskId); } });
   } else if (isFinUser()) {
     alertUser({ title: 'E11 Console', body: `${fresh.length} new expense claims`, open: () => go('fin-reimb') });
   } else {
@@ -7667,7 +7686,7 @@ async function appIconResetFlow() {
 }
 function notifToggles(u, cdOnly) {
   const off = (u.prefs || {}).notifOff || {};
-  return NOTIF_TYPES.filter((x) => !!x.cd === cdOnly).map((x) => `<div class="pf-opt nt-opt"><div><b>${esc(x.l)}</b><span>${esc(x.d)}</span></div><button class="switch ${off[x.k] ? '' : 'on'}" data-action="toggle-notif-type" data-k="${x.k}" title="${off[x.k] ? 'Off' : 'On'}"><i></i></button></div>`).join('');
+  return NOTIF_TYPES.filter((x) => !!x.cd === cdOnly && (!x.lead || Daily.wants(u))).map((x) => `<div class="pf-opt nt-opt"><div><b>${esc(x.l)}</b><span>${esc(x.d)}${x.k === 'daily' ? ' <a href="#" class="nt-try" data-action="daily-try">Send me one now</a>' : ''}</span></div><button class="switch ${off[x.k] ? '' : 'on'}" data-action="toggle-notif-type" data-k="${x.k}" title="${off[x.k] ? 'Off' : 'On'}"><i></i></button></div>`).join('');
 }
 async function pickAvatar() {
   if (!Host.isNative) { toast('Photos can be added in the Mac app'); return null; }

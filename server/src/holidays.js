@@ -31,6 +31,7 @@ export function parseIcs(text) {
       const m = /^([A-Z-]+)(;[^:]*)?:(.*)$/.exec(l);
       if (!m) continue;
       if (m[1] === 'SUMMARY') ev.summary = m[3].replace(/\\,/g, ',').replace(/\\;/g, ';').trim();
+      if (m[1] === 'DESCRIPTION') ev.desc = m[3].replace(/\\n/g, '\n').replace(/\\,/g, ',').replace(/\\;/g, ';').trim();
       if (m[1] === 'DTSTART') { const d = /(\d{4})(\d{2})(\d{2})/.exec(m[3]); if (d) ev.date = `${d[1]}-${d[2]}-${d[3]}`; }
     }
   }
@@ -104,7 +105,11 @@ export function createHolidaySync({ store, webDir, url = DEFAULT_HOLIDAYS_URL, f
       onChange(rev, results, changed.filter((c) => !c.same));
     }
     const names = { ramadan: 'Ramadan', eidfitr: 'Eid al-Fitr', arafat: 'Arafat Day', eidadha: 'Eid al-Adha', hijri: 'Islamic New Year', mawlid: 'Prophet’s Birthday' };
-    const s = { at, ok: true, error: null, found: found.length, foundList: found.map((f) => ({ name: names[f.key], date: f.date })).sort((a, b) => a.date.localeCompare(b.date)), events: events.length,
+    // the days the calendar marks as public holidays (Google's: "Public holiday"; observances are left out), for the
+    // AMs' morning summary (amdaily.js), which isn't sent on them
+    const publicDays = events.filter((e) => /public holiday/i.test(e.desc || '') && e.date >= from && e.date <= to)
+      .map((e) => ({ date: e.date, name: e.summary })).sort((a, b) => a.date.localeCompare(b.date));
+    const s = { at, ok: true, error: null, publicDays, found: found.length, foundList: found.map((f) => ({ name: names[f.key], date: f.date })).sort((a, b) => a.date.localeCompare(b.date)), events: events.length,
       tentativeList: tentative.map((f) => ({ name: names[f.key], date: f.date })).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 6),
       // nothing recognised: a few names it does list (from today on), to see how the calendar words them
       sample: found.length || tentative.length ? [] : [...new Set(events.filter((e) => e.date >= today && e.date <= to).sort((a, b) => a.date.localeCompare(b.date)).map((e) => e.summary))].slice(0, 14), lastChange: changed.filter((c) => !c.same).length ? at : status().lastChange || null, changed: changed.filter((c) => !c.same).length ? changed.filter((c) => !c.same) : status().changed || [] };
