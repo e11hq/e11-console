@@ -8106,4 +8106,6 @@ function fatal(title, detail) {
   setSaveState('error', 'data unavailable');
 }
 
-boot();
+// (after every script on the page has run: the start can finish before finance.js / claims.js load otherwise —
+// seen in the Mac app as "Something went wrong": Can't find variable: Fin)
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once: true }); else boot();
