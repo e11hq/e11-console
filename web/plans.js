@@ -631,12 +631,28 @@ const Plans = (() => {
     setDone(t, true);
     return true;
   }
+  // The client's comment on a post, read from their PowerPoint: does it just say "approved"?
+  //  'auto'    — this client's usual way of saying it (remembered on the client: project.approvalWords)
+  //  'ask'     — no comment, or sounds like approval and asks for nothing: the person asks themselves (never approved by a guess)
+  //  'changes' — anything else, including "approved, but…"
+  const normWords = (t) => String(t || '').toLowerCase().replace(/[\u064B-\u0652\u0640]/g, '').replace(/[أإآ]/g, 'ا').replace(/[.!,;:،؛\s]+/g, ' ').trim();
+  const YES = /\b(approved?|approval|ok|okay|okey|okk+|good to go|go ahead|go for it|looks? (good|great|perfect|fine|amazing)|all good|perfect|great|love (it|this|this one)|loved it|fine|confirmed?|agreed?|yes|yep|nice|well done|amazing|excellent|superb|brilliant|good job|great job|thank you|thanks|noted)\b|👍|✅|👌|💯|🙌|👏|❤️|♥|موافق|موافقين|موافقه|تمام|ممتاز|ممتازه|حلو|جميل|رائع|معتمد|اعتماد|اوكي|اوك|يعطيكم العافيه|شكرا/i;
+  const ASK_CHANGE = /\b(but|however|except|although|though|change|changes|changed|replace|remove|delete|add|adding|update|fix|instead|can you|could you|can we|could we|would you|should|shouldn't|make it|make the|more|less|bigger|smaller|larger|too|not|don't|dont|no|revise|revision|amend|edit|adjust|move|swap|use the|increase|decrease|reduce|correct|typo|wrong|missing|resize|align|font|colour|color|logo|size|text|copy|caption|date|price)\b|\?|لكن|بس |تغيير|غير|غيروا|عدل|عدلوا|تعديل|ممكن|يرجى|الرجاء|بدل|اضف|اضافه|احذف|حذف|شيل|لا |ليس|بدون|اكبر|اصغر|كبر|صغر|الخط|اللون|الشعار|السعر|التاريخ/i;
+  function readApproval(text, learned) {
+    const n = normWords(text);
+    if (!n) return 'ask';   // no comment is a question too: never taken as approval by itself
+    if ((learned || []).includes(n)) return 'auto';
+    return YES.test(n) && !ASK_CHANGE.test(' ' + n + ' ') && n.length <= 160 ? 'ask' : 'changes';
+  }
   function replyDialog(pl) {
     if (!canMakeTasks(pl)) return denied();
     const ex = (pl.exports || [])[(pl.exports || []).length - 1];
     if (!ex) return;
     const posts = postsSorted(pl).filter((x) => ex.posts.includes(x.id));
-    const rows = posts.map((x) => { const g = progress(x); return { x, g, locked: g.k === 'done', state: g.k === 'done' ? 'approved' : null, note: '', links: [] }; });
+    const rows = posts.map((x) => { const g = progress(x); return { x, g, locked: g.k === 'done', state: g.k === 'done' ? 'approved' : null, note: '', links: [], comment: '', ask: false, auto: false, remember: false, confirmed: false }; });
+    const client = proj(pl.projectId);
+    const learned = () => (client && client.approvalWords) || [];
+    const asking = () => rows.filter((r) => !r.locked && r.ask).length;
     const root = $('#overlay-root');
     let hint = '';
     const paint = () => {
@@ -648,21 +664,31 @@ const Plans = (() => {
           ${rows.map((r, i) => { const img = r.g.files.find((f) => fileKind(f) === 'image'); return `<div class="rp-row ${r.state || ''}">
             <span class="pl-thumb sm">${img ? `<img src="${imgUrl(img, 160)}" alt="">` : `<span class="pl-thumb-f" style="--c:${fmtOf(r.x.format).color}">${esc(fmtOf(r.x.format).name.slice(0, 1))}</span>`}</span>
             <div class="rp-main"><b>${esc(r.x.title)}</b><small>${esc(dayLong(r.x.day))} · ${esc(fmtOf(r.x.format).name)}</small>
-              ${r.locked ? '<span class="pl-prog" style="--c:#5b9bff">Client approved</span>' : `<div class="pl-pick rp-pick"><button type="button" class="pl-opt ${r.state === 'approved' ? 'on' : ''}" style="--c:var(--green)" data-st="approved" data-i="${i}">${icon('check')}Approved</button><button type="button" class="pl-opt ${r.state === 'changes' ? 'on' : ''}" style="--c:#ff8a4c" data-st="changes" data-i="${i}">${icon('edit')}Changes</button><button type="button" class="pl-opt ${!r.state ? 'on' : ''}" style="--c:var(--text-3)" data-st="" data-i="${i}">No reply yet</button></div>
+              ${!r.locked && r.comment && (r.state !== 'changes' || r.ask) ? `<div class="rp-quote"><i>Client comment</i>${esc(r.comment).replace(/\n/g, '<br>')}</div>` : ''}
+              ${r.locked ? '<span class="pl-prog" style="--c:#5b9bff">Client approved</span>' : r.ask ? `<div class="rp-ask"><span>${r.comment ? 'This looks approved. Is it?' : 'No comment from the client. Approved?'}</span><button type="button" class="btn sm rp-yes" data-ask="yes" data-i="${i}">${icon('check')}Yes, approved</button><button type="button" class="btn sm rp-no" data-ask="no" data-i="${i}">${icon('edit')}No, changes</button></div>` : `<div class="pl-pick rp-pick"><button type="button" class="pl-opt ${r.state === 'approved' ? 'on' : ''}" style="--c:var(--green)" data-st="approved" data-i="${i}">${icon('check')}Approved</button><button type="button" class="pl-opt ${r.state === 'changes' ? 'on' : ''}" style="--c:#ff8a4c" data-st="changes" data-i="${i}">${icon('edit')}Changes</button><button type="button" class="pl-opt ${!r.state ? 'on' : ''}" style="--c:var(--text-3)" data-st="" data-i="${i}">No reply yet</button></div>
+              ${r.state === 'approved' && r.auto ? `<div class="rp-learn">Approved: ${esc(nameOf(pl))}’s usual wording</div>` : ''}
+              ${r.state === 'approved' && r.comment && !r.auto ? `<label class="rp-learn"><input type="checkbox" class="rp-rem" data-i="${i}" ${r.remember ? 'checked' : ''}>Remember “${esc(trunc(normWords(r.comment), 60))}” as approval for ${esc(nameOf(pl))}</label>` : ''}
               ${r.state === 'changes' ? `<textarea class="field rp-note" data-i="${i}" rows="2" placeholder="What the client wants changed">${esc(r.note)}</textarea>${r.links.length ? `<div class="rp-links">${r.links.map((u) => `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a>`).join('')}</div>` : ''}` : ''}`}
             </div></div>`; }).join('')}
         </div>
-        <div class="actions"><span class="mt-hint">Approved posts are completed (their final files go to Client Assets). Changes send the task back to In progress, and the new version goes to the CD again.</span><span class="spacer"></span><button class="btn" data-r="0">Cancel</button><button class="btn primary" data-r="1">Save the reply</button></div>
+        <div class="actions"><span class="mt-hint">${asking() ? `Answer the ${asking() === 1 ? 'post' : asking() + ' posts'} in yellow first. ` : ''}Approved posts are completed (their final files go to Client Assets). Changes send the task back to In progress, and the new version goes to the CD again.</span><span class="spacer"></span><button class="btn" data-r="0">Cancel</button><button class="btn primary" data-r="1" ${asking() ? 'disabled' : ''}>Save the reply</button></div>
       </div></div>`;
     };
     paint();
-    const close = () => { root.innerHTML = ''; root.onclick = null; root.oninput = null; };
+    const close = () => { root.innerHTML = ''; root.onclick = null; root.oninput = null; root.onchange = null; };
     root.oninput = (e) => { const t = e.target; if (t.classList.contains('rp-note')) rows[+t.dataset.i].note = t.value; };
+    root.onchange = (e) => { const t = e.target; if (t.classList.contains('rp-rem')) rows[+t.dataset.i].remember = t.checked; };
     root.onclick = async (e) => {
       const box = $('.rp-dlg', root); if (!box) return;
       const b = e.target.closest('button'); if (!b || !box.contains(b)) return;
       if (b.dataset.r === '0') return close();
-      if (b.dataset.st !== undefined && b.dataset.i !== undefined) { rows[+b.dataset.i].state = b.dataset.st || null; return paint(); }
+      if (b.dataset.st !== undefined && b.dataset.i !== undefined) { const r = rows[+b.dataset.i]; r.state = b.dataset.st || null; r.auto = false; if (r.state !== 'approved') r.remember = false; if (r.state === 'changes' && !r.note && r.comment) r.note = r.comment; return paint(); }
+      if (b.dataset.ask) {
+        const r = rows[+b.dataset.i]; r.ask = false; r.confirmed = b.dataset.ask === 'yes';
+        r.state = r.confirmed ? 'approved' : 'changes'; r.remember = r.confirmed;
+        if (!r.confirmed && !r.note) r.note = r.comment;
+        return paint();
+      }
       if (b.dataset.x === 'upload') {
         const picked = await ServerHost.pickFiles({ multiple: false, accept: '.pptx' });
         if (!picked.length) return;
@@ -670,18 +696,29 @@ const Plans = (() => {
         try {
           const up = await ServerHost.uploadMany(picked, { taskId: pl.id });
           const r = await api('POST', '/api/plan-return', { planId: pl.id, path: up[0].path });
-          let n = 0;
+          const n = { none: 0, auto: 0, ask: 0, ch: 0 };
           rows.forEach((row) => {
             if (row.locked) return;
             const got = r.posts[row.x.id];
             if (!got) return;
-            if (got.comments.length || got.links.length) { row.state = 'changes'; row.note = got.comments.join('\n'); row.links = got.links; n++; } else row.state = 'approved';
+            row.comment = got.comments.join('\n').trim(); row.links = got.links; row.ask = false; row.auto = false; row.remember = false;
+            const k = got.links.length ? 'changes' : readApproval(row.comment, learned());
+            if (k === 'changes') { row.state = 'changes'; row.note = row.comment; n.ch++; }
+            else if (k === 'ask') { row.state = null; row.ask = true; row.note = ''; n[row.comment ? 'ask' : 'none']++; }
+            else { row.state = 'approved'; row.note = ''; row.auto = true; n.auto++; }
           });
-          hint = `Read “${esc(picked[0].name)}”: ${n} post${n === 1 ? '' : 's'} with the client’s comments (set to Changes); posts without comments are set to Approved. Check them before saving.`;
+          const pl2 = (c, one, many) => `${c} ${c === 1 ? one : many}`;
+          const bits = [];
+          if (n.none) bits.push(`<b>${pl2(n.none, 'post', 'posts')}</b> with no comment (please check)`);
+          if (n.auto) bits.push(`<b>${pl2(n.auto, 'post', 'posts')}</b> approved in ${esc(nameOf(pl))}’s usual wording`);
+          if (n.ask) bits.push(`<b>${pl2(n.ask, 'post', 'posts')}</b> ${n.ask === 1 ? 'looks' : 'look'} approved (please check)`);
+          if (n.ch) bits.push(`<b>${pl2(n.ch, 'post', 'posts')}</b> with changes`);
+          hint = `Read “${esc(picked[0].name)}”: ${bits.join(', ') || 'no posts found in it'}. Check them before saving.`;
         } catch (err) { toast(err.message); }
         return paint();
       }
       if (b.dataset.r !== '1') return;
+      if (asking()) { toast('Answer the posts in yellow first'); return; }
       const todo = rows.filter((r) => !r.locked && r.state);
       if (!todo.length) { toast('Mark at least one post'); return; }
       if (todo.some((r) => r.state === 'changes' && !r.note.trim() && !r.links.length)) { toast('Say what the client wants changed'); return; }
@@ -690,9 +727,12 @@ const Plans = (() => {
       todo.forEach((r) => {
         const x = (pl.posts || []).find((y) => y.id === r.x.id), t = x && x.taskId && task(x.taskId);
         if (!x || !t) return;
-        if (r.state === 'approved') { if (approveTask(t)) { x.client = { state: 'approved', round: ex.round, at: now, by: currentUserId }; ok++; } else skipped++; }
+        if (r.state === 'approved') { if (approveTask(t)) { x.client = { state: 'approved', round: ex.round, at: now, by: currentUserId, ...(r.comment ? { note: r.comment } : {}) }; ok++; } else skipped++; }
         else { sendBackTask(t, r.note.trim(), r.links, ex.round); x.client = { state: 'changes', note: r.note.trim(), links: r.links, round: ex.round, at: now, by: currentUserId }; ch++; }
       });
+      // this client's ways of saying "approved", for the next rounds
+      const words = rows.filter((r) => r.state === 'approved' && r.remember && r.comment).map((r) => normWords(r.comment)).filter((w) => w && w.length <= 160);
+      if (client && words.length) client.approvalWords = [...new Set([...words, ...learned()])].slice(0, 60);
       logIt(pl, 'client', { round: ex.round, approved: ok, changes: ch });
       close(); persist(0); render2();
       toast(`Saved: ${ok} approved${ch ? `, ${ch} sent back for changes` : ''}${skipped ? ` · ${skipped} not finished yet` : ''}`);
