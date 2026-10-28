@@ -3643,6 +3643,27 @@ function stickFeedToBottom(feed) {
   [60, 250, 600, 1200, 2500].forEach((ms) => setTimeout(toEnd, ms));
 }
 
+// The feed kept on one comment (a third of the way down) while pictures above it load, until the person scrolls
+function stickFeedToComment(feed, el) {
+  let stick = true;
+  const place = () => {
+    if (!stick || !el.isConnected) return;
+    const top = el.getBoundingClientRect().top - feed.getBoundingClientRect().top + feed.scrollTop;
+    feed.scrollTop = Math.max(0, top - Math.max(16, Math.min(feed.clientHeight * 0.25, feed.clientHeight - el.offsetHeight - 16)));
+  };
+  place();
+  const stop = () => { stick = false; };
+  feed.addEventListener('wheel', stop, { once: true, passive: true });
+  feed.addEventListener('mousedown', stop, { once: true });
+  feed.addEventListener('touchstart', stop, { once: true, passive: true });
+  feed.addEventListener('keydown', stop, { once: true });
+  $$('img, video, iframe', feed).forEach((m) => {
+    m.addEventListener('load', place, { once: true });
+    m.addEventListener('loadedmetadata', place, { once: true });
+  });
+  [60, 250, 600, 1200].forEach((ms) => setTimeout(place, ms));
+}
+
 // "Created by" at the top of the task: hover for their card, click to @mention them in a comment
 function creatorChip(t) {
   const u = t.createdBy && userById(t.createdBy);
@@ -5677,8 +5698,10 @@ function closeThread() {
   ui.thread = null;
   renderDetail();
   const feed = $('#detail .tm-feed');
-  // back on the main page: always land on the latest comment
-  if (feed) stickFeedToBottom(feed);
+  // back on the main page: on the comment the thread was for (it flashes), not down at the latest comment
+  const el = feed && back && feed.querySelector(`.cm[data-comment="${back}"]`);
+  if (el) { stickFeedToComment(feed, el); el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 2500); }
+  else if (feed) stickFeedToBottom(feed);
 }
 
 function addComment(replyTo, tid) {
