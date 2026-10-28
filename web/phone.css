@@ -875,3 +875,7 @@ body.phone .react-pick button:hover, body.phone .swatch:hover { transform: none;
 
 /* Client Assets on the phone: touch and hold a file or folder for its options (no ⋯ or ⓘ on the cards) */
 body.phone .cf-card .cf-info, body.phone .cf-card .cf-more { display: none !important; }
+/* a task's attachments on the phone: no small buttons on the pictures — touch and hold for Copy, Preview, Download, Remove */
+body.phone #detail .tile .tile-actions { display: none !important; }
+body.phone #detail .tile { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; transition: transform .15s; }
+body.phone #detail .tile.ph-pressing { transform: scale(.97); }

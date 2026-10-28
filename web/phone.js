@@ -1407,7 +1407,22 @@ const Push = (() => {
 /* Phone: touch and hold a file or a folder in Client Assets for its sheet (the same as its ⋯), like a comment.
    A short buzz confirms the hold, and lifting the finger doesn't also open what's under it. */
 (() => {
-  const HOLD = 450, SEL = '.ca-tile[data-id], .cf-card[data-id]:not(.add)';
+  const HOLD = 450, SEL = '.ca-tile[data-id], .cf-card[data-id]:not(.add), #detail .tile[data-id]';
+  // a task's attachments: the sheet is made from the tile's own buttons
+  const NAMES = { 'copy-att': ['Copy', 'copy', 'Paste into a comment or description'], quicklook: ['Preview', 'search'], 'reveal-att': ['Download', 'download'], 'remove-att': ['Remove', 'trash'] };
+  function tileSheet(card) {
+    const btns = [...card.querySelectorAll('.tile-actions [data-action]')].filter((b) => NAMES[b.dataset.action]);
+    if (!btns.length) return false;
+    const items = [];
+    btns.forEach((b) => {
+      const [label, ic, hint] = NAMES[b.dataset.action];
+      const danger = b.dataset.action === 'remove-att';
+      if (danger) items.push('-');
+      items.push({ label, icon: ic, hint, danger, run: () => b.click() });
+    });
+    showMenu(card, items);
+    return true;
+  }
   let timer = null, el = null, x0 = 0, y0 = 0, swallow = 0;
   const cancel = () => { clearTimeout(timer); timer = null; if (el) el.classList.remove('ph-pressing'); el = null; };
   const buzz = () => {
@@ -1424,9 +1439,9 @@ const Push = (() => {
     timer = setTimeout(() => {
       const c = el; cancel();
       const more = c.querySelector('.ca-more, .cf-more');
-      if (!more) return;
-      buzz();
-      more.click();
+      if (more) { buzz(); more.click(); }
+      else if (tileSheet(c)) buzz();
+      else return;
       swallow = Date.now() + 700;
     }, HOLD);
   }, { passive: true });
