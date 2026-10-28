@@ -142,7 +142,11 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     web.frame = CGRect(x: 0, y: 0, width: b.width, height: b.height - keyboardCover)
     let h = tabBar.sizeThatFits(b.size).height + view.safeAreaInsets.bottom
     tabBar.frame = CGRect(x: 0, y: b.height - h, width: b.width, height: h)
-    let cover = tabBar.isHidden ? 0 : Int(h.rounded())
+    // (iOS 26's floating bar reports more height than the glass capsule it draws: the page keeps room for the
+    //  capsule itself, so the + button sits just above it rather than floating higher)
+    var seen = h
+    if #available(iOS 26, *) { seen = min(h, view.safeAreaInsets.bottom + 46) }
+    let cover = tabBar.isHidden ? 0 : Int(seen.rounded())
     if cover != tabCover { tabCover = cover; pageJS("document.documentElement.style.setProperty('--ios-tabs-h','\(cover)px')") }
     lockView?.frame = b
     hud?.place(in: b, above: tabBar.isHidden ? view.safeAreaInsets.bottom : h)
