@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   mac:
-    runs-on: macos-26
+    runs-on: [self-hosted, macOS, ARM64, e11-mac]   # (Haris's Mac: GitHub's own Macs are often unavailable; back to macos-26 if this Mac is gone)
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4

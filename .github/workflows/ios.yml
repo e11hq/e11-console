@@ -11,7 +11,7 @@ permissions:
   contents: write
 jobs:
   ios:
-    runs-on: macos-26
+    runs-on: [self-hosted, macOS, ARM64, e11-mac]   # (Haris's Mac: GitHub's own Macs are often unavailable; back to macos-26 if this Mac is gone)
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4

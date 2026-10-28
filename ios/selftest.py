@@ -69,5 +69,9 @@ try:
     check((res.get('task') or {}).get('taskOpen') is True and (res.get('back') or {}).get('taskOpen') is False, 'a task opens and closes')
 finally:
     srv.terminate()
+    # (on our own Mac: the simulator is shut down again, so it doesn't stay running in the background)
+    if os.environ.get('RUNNER_ENVIRONMENT') == 'self-hosted':
+        try: subprocess.run(['xcrun', 'simctl', 'shutdown', 'all'], capture_output=True, timeout=60)
+        except Exception: pass
 print('FAILS', len(fails), fails)
 sys.exit(1 if fails else 0)
