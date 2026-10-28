@@ -5669,7 +5669,10 @@ document.addEventListener('click', async (e) => {
   if (ui.taskId && e.target.closest('#content') && !e.target.closest('[data-task], [data-cal], .add-row, .col-add-input, .add-section, .add-col')) closeDetail();
 });
 
-document.addEventListener('dblclick', (e) => {
+// (not on an iPhone / iPad: a double-click listener makes iPhone hold every single tap back ~0.35 s to see whether a
+//  second one follows, and taps landing while the page changes in that time got no click at all — the tap trace on
+//  Client Assets showed both. Renaming there is in the ••• menus.)
+if (!/iPhone|iPad|iPod/.test(navigator.userAgent) && !(navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) document.addEventListener('dblclick', (e) => {
   const el = e.target.closest('[data-action="rename-project"], [data-action="rename-section"]');
   if (!el || !isAdmin()) return;      // only Admins change a client and its statuses
   if (el.dataset.action === 'rename-project') renameProject(el.dataset.id);
