@@ -510,9 +510,9 @@ export function createServer(cfg) {
       return json(res, 200, { ok: true, ...info });
     }
 
-    // App updates (the launcher runs inside the same container): Admins see status and can update or roll back
+    // App updates (the launcher runs inside the same container): only the owner sees status and can update or roll back
     if (p === '/api/updates') {
-      if (!access.isAdm(u)) return json(res, 403, { ok: false, error: 'Admins only' });
+      if (!isOwner(req.realUser || u)) return json(res, 403, { ok: false, error: 'Only the owner manages app updates' });
       if (!cfg.launcherUrl) return json(res, 200, { ok: true, managed: false, running: version });
       const action = req.method === 'POST' ? (await readBody(req)).action : null;
       if (review && action) return json(res, 403, { ok: false, error: 'Updates are automatic on the App Review copy' });

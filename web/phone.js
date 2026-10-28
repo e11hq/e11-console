@@ -379,7 +379,7 @@ const Phone = (() => {
         ${row('data-nav="clients"', 'assets', 'Client Assets', 'Logos, guidelines and fonts')}
         ${row('data-nav="team"', 'users', 'Team members')}
         ${isManager() ? row('data-nav="trash"', 'trash', 'Trash', trashList().length ? `${trashList().length} item${trashList().length === 1 ? '' : 's'} · restore within ${TRASH_DAYS} days` : `Deleted items wait here ${TRASH_DAYS} days`) : ''}
-        ${admin && Host.isServer ? row('data-nav="updates"', 'download', 'App updates') : ''}
+        ${AppIcon.isOwner() && Host.isServer ? row('data-nav="updates"', 'download', 'App updates') : ''}
         ${isTestCopy() && AppIcon.isOwner() && !(typeof ViewAs !== 'undefined' && ViewAs.viewing()) ? row('data-ph="sample"', 'trash', 'Start fresh with sample data', 'Test site only: wipes everything except you') : ''}
       </div>
       <div class="ph-rows">

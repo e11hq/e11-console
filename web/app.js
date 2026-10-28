@@ -2733,7 +2733,7 @@ function renderContentNow() {
   else if (ui.view === 'team') { c.innerHTML = viewTeam(); if (Host.isServer && can('manageUsers')) api('GET', '/api/cloudflare').then(paintCfStatus).catch(() => {}); }
   else if (ui.view === 'reviews') { c.innerHTML = viewReviews(); hydrateThumbs(c); }
   else if (ui.view === 'profile') c.innerHTML = viewProfile();
-  else if (ui.view === 'updates') c.innerHTML = viewUpdates();
+  else if (ui.view === 'updates') c.innerHTML = AppIcon.isOwner() ? viewUpdates() : '<div class="empty"><div class="big">App updates are managed by the owner</div></div>';
   else if (ui.view === 'trash') c.innerHTML = viewTrash();
   else if (ui.view === 'clients') { c.innerHTML = viewClients(); migrateClientLogos(); }
   else if (ui.view === 'client') {
@@ -7621,7 +7621,7 @@ function viewTeam() {
     </div>`}
     <div class="role-guide">
       <div><span class="role-pill r-admin">Super Admin</span> Full access, and can add or manage team members.</div>
-      <div><span class="role-pill r-office_admin">Office Admin</span> Admin rights without the task app: manages team members, Client Assets (full rights) and App updates, with Finance if given. Doesn’t see tasks or add/edit clients; in the Trash sees and restores Client Assets items only.</div>
+      <div><span class="role-pill r-office_admin">Office Admin</span> Admin rights without the task app: manages team members and Client Assets (full rights), with Finance if given. Doesn’t see tasks or add/edit clients; in the Trash sees and restores Client Assets items only.</div>
       <div><span class="role-pill r-am">Account Manager</span> Can do everything except add or manage team members.</div>
       <div><span class="role-pill r-freelancer">Freelancer</span> Same as Production, but only sees the clients an Admin chooses for them, plus those clients’ Client Assets. Can sign in with a personal email (Gmail, Outlook…).</div>
       <div><span class="role-pill r-production">Production</span> <span class="role-pill r-social">Social</span> Can update status, submit files for CD review, tick checklist items, add tags, files and comments. Social can also write and change the description, add checklist items, and set a post’s Channel, Go-live and Occasion. Can’t create or delete tasks/subtasks, change dates, rename or remove checklist items (Production can’t add them either), change title, client or priority, assign people or remove tags.</div>
@@ -8175,7 +8175,7 @@ function meMenu(anchor) {
     ...(Host.isServer ? [{ label: 'My reimbursements', icon: 'coin', run: () => go('claims') }] : []),
     { label: 'Team members', icon: 'users', run: () => go('team') },
     ...(isSuper() ? [{ label: 'Edit client list', icon: 'folder', run: () => go('clientlist') }] : []),
-    ...(Host.isServer && isAdm(me()) ? [{ label: 'App updates', icon: 'download', run: () => go('updates') }] : []),
+    ...(Host.isServer && AppIcon.isOwner() ? [{ label: 'App updates', icon: 'download', run: () => go('updates') }] : []),
     ...(Host.isServer ? [{ label: 'What’s new', icon: 'info', run: () => whatsNewDialog(false) }] : []),
     ...(Host.isServer && !Host.isMacApp ? [{ label: 'Get the Mac app', icon: 'download', run: macAppDialog }] : []),
     ...(Host.isMacApp ? [{ label: 'Update Mac app', icon: 'download', run: () => MacUpdate.run() }] : []),
