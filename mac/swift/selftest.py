@@ -8,6 +8,30 @@ OUT = os.path.join(TMP, 'selftest.json')
 EMAIL = 'haris@e11-digital.com'
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 fails = []
+# On our own Mac (a self-hosted runner, e.g. Haris's): the E11 Console Test app already installed there is put
+# aside before the check and put back after it, and the check's files in Downloads are removed
+OWN_MAC = os.environ.get('RUNNER_ENVIRONMENT') == 'self-hosted'
+APPS = ['/Applications/E11 Console Test.app', os.path.expanduser('~/Applications/E11 Console Test.app')]
+KEEP = os.path.join(TMP, 'kept-apps')
+kept = []
+def put_aside():
+    import shutil
+    os.makedirs(KEEP, exist_ok=True)
+    for i, a in enumerate(APPS):
+        if os.path.isdir(a):
+            dest = os.path.join(KEEP, str(i)); shutil.rmtree(dest, ignore_errors=True); shutil.move(a, dest); kept.append((a, dest))
+def put_back():
+    import shutil
+    subprocess.run(['osascript', '-e', 'tell application id "ae.e11.console.client.test" to quit'], capture_output=True)
+    subprocess.run(['pkill', '-f', 'E11 Console Test.app/Contents/MacOS'], capture_output=True); time.sleep(1)
+    for a in APPS: shutil.rmtree(a, ignore_errors=True)
+    for a, dest in kept:
+        try: shutil.move(dest, a)
+        except Exception as e: print('could not put back', a, e)
+    for f in ['e11-office-dl.bin', 'e11-office-dl2.bin', 'e11-selftest.txt']:
+        try: os.remove(os.path.expanduser('~/Downloads/' + f))
+        except OSError: pass
+if OWN_MAC: put_aside()
 def check(ok, what):
     print(('ok   ' if ok else 'FAIL ') + what); (None if ok else fails.append(what))
 
@@ -89,5 +113,6 @@ try:
     check(os.path.exists(OUT[:-5] + '.png') and os.path.getsize(OUT[:-5] + '.png') > 20000, 'a picture of the window')
 finally:
     srv.terminate()
+    if OWN_MAC: put_back()
 print('FAILS', len(fails), fails)
 sys.exit(1 if fails else 0)
