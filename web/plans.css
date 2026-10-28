@@ -261,3 +261,9 @@ body.phone .mt-hint { display: none; }
 .rp-note { width: 100%; box-sizing: border-box; resize: vertical; font: inherit; padding: 6px 9px; }
 .rp-links { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
 .rp-links a { color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* the phone: the month and its arrows on one line, "N of M clients planned" always on the line under it (it jumped
+   between lines when the Next month button came and went) */
+body.phone .pl-bar { flex-wrap: wrap; row-gap: 4px; }
+body.phone .pl-bar .cal-nav { flex: 1 1 100%; }
+body.phone .pl-bar .cal-nav [data-pl="reset"] { margin-left: auto; }
+body.phone .pl-count { flex: 1 1 100%; margin-left: 0; padding-left: 4px; }
