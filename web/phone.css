@@ -857,3 +857,5 @@ body.phone .prop-dates .date-chip .date-in { min-width: 0; max-width: 100%; -web
 body.phone .prop-dates [data-action="clear-start"], body.phone .prop-dates [data-action="clear-due"] { width: 40px; height: 40px; margin: -6px -8px -6px -4px; position: relative; z-index: 1; }
 /* no "Open in app" on the phone: it opened the bare file with no way back (preview and download cover it) */
 body.phone button[data-action="open-att"] { display: none !important; }
+/* touch and hold on a picture: no iPhone picture menu or picture drag (it dropped the picture back in as an upload) */
+body.phone img { -webkit-touch-callout: none; -webkit-user-drag: none; user-select: none; }

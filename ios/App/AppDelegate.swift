@@ -114,6 +114,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     web.scrollView.backgroundColor = BG
     web.scrollView.contentInsetAdjustmentBehavior = .never   // the page handles the status bar area itself
     web.scrollView.bounces = false
+    web.allowsLinkPreview = false   // (no Safari-style previews on touch and hold: the page has its own menus)
     web.scrollView.alwaysBounceHorizontal = false
     web.scrollView.showsHorizontalScrollIndicator = false
     if #available(iOS 16.4, *) { web.isInspectable = true }

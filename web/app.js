@@ -6419,6 +6419,16 @@ function projectClientMenu(anchor, p) {
     ...(!list.length ? [{ html: '<div class="mi-note">No clients yet — add one in Client Assets</div>' }] : []),
   ].map((it, i) => (it && it.html && it.run ? { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) } : it)));
 }
+// A picture dragged from this page itself (on iPhone: touch and hold an image, then move it) is not a new file:
+// dropping it back on the page never uploads it again
+let pageDrag = false;
+document.addEventListener('dragstart', () => { pageDrag = true; }, true);
+document.addEventListener('dragend', () => { setTimeout(() => { pageDrag = false; }, 0); }, true);
+['dragenter', 'dragover', 'drop'].forEach((ev) => document.addEventListener(ev, (e) => {
+  if (!pageDrag || dragId || !e.dataTransfer || ![...(e.dataTransfer.types || [])].includes('Files')) return;
+  e.stopImmediatePropagation();
+  if (ev === 'drop') { e.preventDefault(); pageDrag = false; document.querySelectorAll('.dropping').forEach((x) => x.classList.remove('dropping')); }
+}, true));
 // Drag files from Finder onto a folder page
 document.addEventListener('dragover', (e) => {
   const pg = e.target.closest && e.target.closest('.ca-folder');
