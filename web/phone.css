@@ -915,3 +915,8 @@ body.phone .tv-sheet .tv-body { padding: 6px 18px 22px; overflow: visible; }
 body.phone .tr-row.tr-open:active { background: var(--ph-row, var(--hover)); }
 /* a file preview opens above a sheet (e.g. an attachment of a Trash task) */
 body.phone .fv, body.phone .lightbox { z-index: 260; }
+
+/* Every sheet that slides up on the phone looks the same: a little space on either side, flush with the bottom of
+   the screen (rounded top corners only) */
+body.phone .ph-scrim:not(.docked) .ph-sheet { margin: 0 8px !important; border-bottom-left-radius: 0 !important; border-bottom-right-radius: 0 !important; padding-bottom: calc(env(safe-area-inset-bottom) + 16px) !important; }
+html.phone body.phone .menu:not(.mention-pop) { left: 8px !important; right: 8px !important; }

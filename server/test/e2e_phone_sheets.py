@@ -46,7 +46,7 @@ async def main():
         check('min left' in await E("document.querySelector('.menu.cm-sheet .mi-hint').textContent"), 'Edit comment shows the minutes left')
         check(await pg.locator('.menu.cm-sheet .react-pick button').count() >= 5, 'reactions across the top')
         box = await pg.locator('.menu.cm-sheet').bounding_box()
-        check(abs(box['x']) < 1 and abs(box['width'] - 390) < 1 and abs(box['y'] + box['height'] - 844) < 2, f'sheet runs edge to edge along the bottom {box}')
+        check(abs(box['x'] - 8) < 1 and abs(box['width'] - 374) < 1 and abs(box['y'] + box['height'] - 844) < 2, f'sheet sits on the bottom with a little space on either side {box}')
         await pg.screenshot(path=os.path.join(OUT, 'cm-sheet.png'))
         await pg.locator('.menu.cm-sheet .react-pick button').nth(2).tap(); await pg.wait_for_timeout(500)
         r = await E("task(ui.taskId).comments.find(c=>c.id==='c-mine').reactions")
