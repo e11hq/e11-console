@@ -4004,7 +4004,7 @@ function openTask(id, focusTitle) {
   const pendingThread = ui.pendingThread; ui.pendingThread = null;
   // A task always opens on its Details tab, unless something asked for a tab on purpose (e.g. an Inbox mention → Comments)
   const leaving = ui.taskId !== id ? ui.taskId : null;
-  if (ui.taskId !== id) { if (ui.taskId && Draft.settle(ui.taskId)) renderContent(); ui.replyTo = null; ui.thread = null; ui.editingComment = null; ui.descOpen = {}; ui.activityFilter = 'comments'; ui.sideTab = ui.forceTab || 'details'; }
+  if (ui.taskId !== id) { if (ui.taskId && Draft.settle(ui.taskId)) renderContent(); ui.replyTo = null; ui.thread = null; ui.editingComment = null; ui.descOpen = {}; ui.tabScroll = {}; ui.activityFilter = 'comments'; ui.sideTab = ui.forceTab || 'details'; }
   ui.forceTab = null;
   if (pendingThread) ui.thread = pendingThread;
   const ids = $$('#content [data-task]').map((el) => el.dataset.task).filter((x, i, a) => a.indexOf(x) === i);
@@ -4168,6 +4168,12 @@ const Unsent = (() => {
 /* ================= Overlays ================= */
 function closeMenus() { $$('.menu').forEach((m) => m.remove()); }
 
+// the part of the open task that scrolls (its comments, or the whole pane)
+function detailScroller() {
+  const pane = document.getElementById('detail');
+  if (!pane) return null;
+  return [...pane.querySelectorAll('.tm-feed, .tm-main, .tm-activity')].find((e) => e.scrollHeight > e.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(e).overflowY)) || null;
+}
 function showMenu(anchor, items) {
   closeMenus();
   // (no doubled, leading or trailing dividers when some options aren't there; positions kept for data-mi)
@@ -5323,7 +5329,20 @@ document.addEventListener('click', async (e) => {
       case 'theme-mode': Theme.setMode(actEl.dataset.mode); renderContent(); return;
       case 'disp-toggle': actEl.closest('.disp-wrap').classList.toggle('open'); return;
       case 'detail-mode': ui.detailMode = actEl.dataset.mode; savePref('detailMode', ui.detailMode); renderDetail(); return;
-      case 'side-tab': { const tb = actEl.dataset.tab; ui.thread = null; ui.replyTo = null; if (tb === 'activity') { ui.sideTab = 'comments'; ui.activityFilter = 'all'; } else { ui.sideTab = tb; if (tb === 'comments') ui.activityFilter = 'comments'; } } renderDetail(); if (ui.sideTab === 'comments') { const f = $('.tm-feed'); if (f) stickFeedToBottom(f); } return;
+      case 'side-tab': {
+        // each tab keeps its place while the task stays open (Details from the top, Comments at the latest only
+        // the first time each is shown)
+        const was = ui.sideTab === 'comments' ? (ui.activityFilter === 'all' ? 'activity' : 'comments') : 'details';
+        const sc0 = detailScroller(); ui.tabScroll = ui.tabScroll || {};
+        if (sc0) ui.tabScroll[was] = sc0.scrollTop;
+        const tb = actEl.dataset.tab; ui.thread = null; ui.replyTo = null;
+        if (tb === 'activity') { ui.sideTab = 'comments'; ui.activityFilter = 'all'; } else { ui.sideTab = tb; if (tb === 'comments') ui.activityFilter = 'comments'; }
+        renderDetail();
+        const sc = detailScroller();
+        if (sc && ui.tabScroll[tb] != null) sc.scrollTop = ui.tabScroll[tb];
+        else if (ui.sideTab === 'comments') { const f = $('.tm-feed'); if (f) stickFeedToBottom(f); }
+        return;
+      }
       case 'share-task': TaskLink.copy(id); return;
       case 'wf-created': e.stopPropagation(); workMenu(actEl, 'created'); return;
       case 'wf-people': e.stopPropagation(); workMenu(actEl, 'people'); return;
