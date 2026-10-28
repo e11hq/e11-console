@@ -5371,10 +5371,19 @@ document.addEventListener('click', async (e) => {
       case 'desc-toggle': {
         const t = task(ui.taskId);
         flushEdit();
+        // Collapsing: the button stays exactly where it is on the screen, and what was under the description comes
+        // up to meet it — the page doesn't jump to somewhere new
+        const before = actEl.getBoundingClientRect().top;
         ui.descOpen[t.id] = !ui.descOpen[t.id];
         renderDetail();
         if (ui.descOpen[t.id] && can('editDesc')) setTimeout(() => { const ed = $('#d-notes'); if (ed) { ed.focus(); placeCaretAtEnd(ed); } }, 0);
-        else { const sec = $('.desc-sec'); if (sec) sec.scrollIntoView({ block: 'nearest' }); }
+        else if (!ui.descOpen[t.id]) {
+          const b = $('#detail .desc-toggle');
+          let sc = b && b.parentElement;
+          while (sc && sc !== document.body && !(sc.scrollHeight > sc.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(sc).overflowY))) sc = sc.parentElement;
+          if (b && sc && sc !== document.body) sc.scrollTop += b.getBoundingClientRect().top - before;
+          const sec = $('.desc-sec'); if (sec && sec.getBoundingClientRect().bottom < 0) sec.scrollIntoView({ block: 'nearest' });
+        }
         return;
       }
       case 'my-part': { const t = task(ui.taskId); setMyPart(t, actEl.dataset.v === '1'); return; }

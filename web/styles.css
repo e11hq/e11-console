@@ -2798,3 +2798,6 @@ body.phone .us-note { display: none; }
 .ca-tile .ca-more { display: none; }
 /* a link's card in its place in the comment's words */
 .cm-text .lk-card.inline { white-space: normal; margin: 6px 0; max-width: 460px; font-size: 13px; line-height: 1.4; }
+/* a long description that's open: Collapse stays in reach at the bottom of the screen while reading it */
+.desc-sec.open:not(.fits) .desc-toggle-wrap { position: sticky; bottom: 10px; z-index: 3; pointer-events: none; }
+.desc-sec.open:not(.fits) .desc-toggle-wrap .desc-toggle { pointer-events: auto; box-shadow: 0 6px 18px rgba(0, 0, 0, .18); background: var(--panel); }
