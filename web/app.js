@@ -5398,14 +5398,18 @@ document.addEventListener('click', async (e) => {
         // Collapsing: the button stays exactly where it is on the screen, and what was under the description comes
         // up to meet it — the page doesn't jump to somewhere new
         const before = actEl.getBoundingClientRect().top;
+        const secBefore = (actEl.closest('.desc-sec') || actEl).getBoundingClientRect().top;
         ui.descOpen[t.id] = !ui.descOpen[t.id];
         renderDetail();
         if (ui.descOpen[t.id] && can('editDesc')) setTimeout(() => { const ed = $('#d-notes'); if (ed) { ed.focus(); placeCaretAtEnd(ed); } }, 0);
         else if (!ui.descOpen[t.id]) {
-          const b = $('#detail .desc-toggle');
+          const b0 = $('#detail .desc-toggle');
+          // (an empty description has no button once closed: then the section itself stays where it was)
+          const shown = b0 && b0.offsetParent !== null;
+          const b = shown ? b0 : $('#detail .desc-sec');
           let sc = b && b.parentElement;
           while (sc && sc !== document.body && !(sc.scrollHeight > sc.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(sc).overflowY))) sc = sc.parentElement;
-          if (b && sc && sc !== document.body) sc.scrollTop += b.getBoundingClientRect().top - before;
+          if (b && sc && sc !== document.body) sc.scrollTop += b.getBoundingClientRect().top - (shown ? before : secBefore);
           const sec = $('.desc-sec'); if (sec && sec.getBoundingClientRect().bottom < 0) sec.scrollIntoView({ block: 'nearest' });
         }
         return;
