@@ -183,7 +183,6 @@
 :root:not(.phone) .composer > .cb-replying { border-radius: 8px 8px 0 0; background: var(--accent-soft); }
 :root:not(.phone) .composer .btn.primary { border-radius: 6px; height: 26px; }
 :root:not(.phone) .composer.desc { background: transparent; border-color: var(--border); border-radius: 8px; }
-:root:not(.phone) .desc-view:not(.full)::after { background: linear-gradient(to bottom, transparent, var(--bg)); }
 :root:not(.phone) .ap { border-radius: 8px; }
 :root:not(.phone) .mention { background: var(--mention-bg); color: var(--mention-fg); }
 

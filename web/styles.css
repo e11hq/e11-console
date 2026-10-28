@@ -1666,8 +1666,10 @@ button.pv-empty:hover { background: var(--hover); color: var(--text-2); }
 .desc-sec { margin: 4px 0 24px; }
 .desc-view { position: relative; max-height: 168px; overflow: hidden; font-size: 15.5px; line-height: 1.65; color: var(--text); padding: 4px 2px; cursor: text; border-radius: 8px; }
 .desc-view.full { max-height: none; }
-.desc-view:not(.full)::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 64px; background: linear-gradient(to bottom, transparent, var(--bg)); pointer-events: none; }
-.desc-sec.fits .desc-view::after, .desc-sec.fits .desc-toggle-wrap { display: none; }
+/* (the text itself fades out, so the fade always matches whatever is behind it — page, panel, phone, light or dark) */
+.desc-view:not(.full) { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 64px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 64px), transparent); }
+.desc-sec.fits .desc-toggle-wrap { display: none; }
+.desc-sec.fits .desc-view, .desc-view.blank { -webkit-mask-image: none; mask-image: none; }
 .desc-sec.is-empty:not(.open) .desc-toggle-wrap { display: none; }
 .desc-view.blank::after { display: none; }
 .desc-view:hover { background: color-mix(in srgb, var(--hover) 50%, transparent); }
