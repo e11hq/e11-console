@@ -896,3 +896,5 @@ body.phone .menu .mi .mi-hint, body.phone .menu .mi:hover .mi-hint { color: var(
 body.phone .menu .mi:hover:not(:active):not(.hl) { background: none; color: inherit; }
 body.phone .menu .mi.danger:hover:not(:active) { color: var(--red, #e5484d); }
 body.phone .menu .mi:active { background: var(--ph-row, var(--hover)); }
+/* messages on a task's Details page (no comment box there) sit at the bottom, not where the comment box would be */
+body.phone.task-open:has(#detail[data-tab="details"]) #toast-root, body.phone.task-open:has(#detail[data-tab="details"]) #update-banner { bottom: calc(env(safe-area-inset-bottom) + 14px + var(--ph-shift, 0px)) !important; }

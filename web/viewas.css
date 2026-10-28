@@ -17,3 +17,7 @@ html.phone #viewas-bar small { display: none; }
 .va-row:hover, .va-row.on { background: var(--hover); }
 .va-row > span:nth-child(2) { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .va-row small { color: var(--text-3); font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+/* on the phone it sits just above whatever is at the bottom: the tab bar, the comment box, or nothing (Details) */
+html.phone #viewas-bar { bottom: calc(var(--ph-shift, 0px) + var(--ph-tabs-h, 0px) + 12px); }
+html.phone body.task-open #viewas-bar { bottom: calc(var(--ph-shift, 0px) + env(safe-area-inset-bottom) + 12px); }
+html.phone body.task-open:has(#detail[data-tab="comments"]) #viewas-bar { bottom: calc(var(--ph-shift, 0px) + env(safe-area-inset-bottom) + 90px); }
