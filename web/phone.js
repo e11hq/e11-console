@@ -1534,24 +1534,29 @@ const Push = (() => {
   }, { passive: false });
 })();
 
-/* Phone: a task in the Trash opens on the lift of the finger (not on the click iPhone makes of it a moment later,
-   which sometimes didn't come, or came late). A finger that moved (scrolling) doesn't open it. */
+/* Phone: a tap on a task (Home, My Tasks, lists, the Trash) acts as the finger lifts. iPhone sometimes makes no
+   click at all from a clean tap (seen with the tap trace: several taps in a row on Home after closing a task did
+   nothing), so the page doesn't wait for it. A finger that moved (scrolling, swiping), a hold, a second finger, or a
+   tap that only stops a gliding list does nothing extra. */
 (() => {
-  let g = null;
+  const SEL = '.pc[data-task], #content .task-row[data-task], .tr-row.tr-open[data-action="tr-view"]';
+  let g = null, lastScroll = 0;
+  document.addEventListener('scroll', () => { lastScroll = Date.now(); }, { capture: true, passive: true });
   document.addEventListener('touchstart', (e) => {
     g = null;
-    if (!Phone.on || e.touches.length !== 1) return;
-    const row = e.target.closest && e.target.closest('.tr-row.tr-open[data-action="tr-view"]');
-    if (!row || e.target.closest('button, a, .tr-file')) return;
-    g = { row, x0: e.touches[0].clientX, y0: e.touches[0].clientY, t0: Date.now() };
+    if (!Phone.on || e.touches.length !== 1 || Date.now() - lastScroll < 120) return;
+    const row = e.target.closest && e.target.closest(SEL);
+    if (!row || e.target.closest('input, textarea, select, label, [contenteditable="true"], .tr-file')) return;
+    g = { row, target: e.target, x0: e.touches[0].clientX, y0: e.touches[0].clientY, t0: Date.now() };
   }, { passive: true });
-  document.addEventListener('touchmove', (e) => { if (g && Math.hypot(e.touches[0].clientX - g.x0, e.touches[0].clientY - g.y0) > 10) g = null; }, { passive: true });
+  document.addEventListener('touchmove', (e) => { if (g && (e.touches.length !== 1 || Math.hypot(e.touches[0].clientX - g.x0, e.touches[0].clientY - g.y0) > 10)) g = null; }, { passive: true });
   document.addEventListener('touchcancel', () => { g = null; }, { passive: true });
   document.addEventListener('touchend', (e) => {
     const cur = g; g = null;
-    if (!cur || Date.now() - cur.t0 > 700 || !cur.row.isConnected) return;
-    e.preventDefault();   // (no click after it: it's opened here)
-    trashTaskView(cur.row.dataset.id);
+    if (!cur || e.defaultPrevented || e.touches.length || Date.now() - cur.t0 > 400 || !cur.row.isConnected || !cur.target.isConnected) return;
+    e.preventDefault();   // (iPhone makes no click of it now: it's done here, once)
+    if (cur.row.matches('.tr-row')) { trashTaskView(cur.row.dataset.id); return; }
+    cur.target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, clientX: cur.x0, clientY: cur.y0 }));
   }, { passive: false });
 })();
 
