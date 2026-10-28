@@ -1324,7 +1324,7 @@ const Push = (() => {
       if (m) { m.style.pointerEvents = 'none'; held = m; }
     }, HOLD);
   }, { passive: true });
-  document.addEventListener('touchmove', (e) => { if (timer && Math.hypot(e.touches[0].clientX - x0, e.touches[0].clientY - y0) > 10) { trace(`moved ${Math.round(Math.hypot(e.touches[0].clientX - x0, e.touches[0].clientY - y0))}px`); cancel(); } }, { passive: true });
+  document.addEventListener('touchmove', (e) => { if (timer && Math.hypot(e.touches[0].clientX - x0, e.touches[0].clientY - y0) > 10) cancel(); }, { passive: true });
   const lift = (e) => {
     if (swallow === Infinity && !lifted) {
       e.preventDefault(); lifted = true;
@@ -1408,16 +1408,6 @@ const Push = (() => {
    A short buzz confirms the hold, and lifting the finger doesn't also open what's under it. */
 (() => {
   const HOLD = 450, SEL = '.ca-tile[data-id], .cf-card[data-id]:not(.add), #detail .tile[data-id]';
-  // TEMPORARY (test copy only): what a hold does, shown at the top of the screen, to find why it fails on Haris's phone
-  const trace = (m) => {
-    try {
-      if (typeof isTestCopy !== 'function' || !isTestCopy()) return;
-      let b = document.getElementById('hold-trace');
-      if (!b) { b = document.createElement('div'); b.id = 'hold-trace'; b.style.cssText = 'position:fixed;left:8px;right:8px;top:calc(env(safe-area-inset-top) + 4px);z-index:99999;background:rgba(0,0,0,.78);color:#7CFC9A;font:11px/1.35 ui-monospace,Menlo,monospace;padding:6px 8px;border-radius:8px;pointer-events:none;white-space:pre-wrap'; document.body.appendChild(b); }
-      const lines = (b.textContent ? b.textContent.split('\n') : []).concat(`${(Date.now() % 100000)} ${m}`).slice(-7);
-      b.textContent = lines.join('\n');
-    } catch (e) { /* none */ }
-  };
   // a task's attachments: the sheet is made from the tile's own buttons
   const NAMES = { 'copy-att': ['Copy', 'copy', 'Paste into a comment or description'], quicklook: ['Preview', 'search'], 'reveal-att': ['Download', 'download'], 'remove-att': ['Remove', 'trash'] };
   function tileSheet(card) {
@@ -1430,7 +1420,7 @@ const Push = (() => {
       if (danger) items.push('-');
       items.push({ label, icon: ic, hint, danger, run: () => b.click() });
     });
-    try { showMenu(card, items); trace('sheet shown'); } catch (e) { trace('sheet error ' + e.message); }
+    showMenu(card, items);
     return true;
   }
   let timer = null, el = null, x0 = 0, y0 = 0, swallow = 0;
@@ -1442,7 +1432,6 @@ const Push = (() => {
   document.addEventListener('touchstart', (e) => {
     if (!Phone.on || e.touches.length !== 1) return;
     const card = e.target.closest && e.target.closest(SEL);
-    if (e.target.closest && e.target.closest('#detail .tile, .ca-tile, .cf-card')) trace(`start ${e.target.tagName}.${String(e.target.className).slice(0, 20)} card=${!!card}`);
     if (!card || e.target.closest('button, a, input')) return;
     cancel();
     el = card; x0 = e.touches[0].clientX; y0 = e.touches[0].clientY;
@@ -1453,21 +1442,19 @@ const Push = (() => {
   let t0 = 0;
   function fire() {
     const c = el; cancel();
-    trace(`fire c=${!!c}`);
     if (!c) return;
     const more = c.querySelector('.ca-more, .cf-more');
     if (more) { buzz(); more.click(); }
     else if (tileSheet(c)) buzz();
     else return;
-    swallow = Date.now() + 700;   // (lifting the finger mustn't tap the picture or close the sheet)
+    swallow = Infinity;   // (until the finger is lifted, however long it stays down: lifting it mustn't tap the picture or close the sheet)
   }
   // iPhone takes over a held picture (its own drag) and cancels the touch just before the hold time: a hold that
   // far along counts
-  document.addEventListener('touchcancel', () => { if (el) trace(`touchcancel at ${Date.now() - t0}ms timer=${!!timer}`); if (timer && Date.now() - t0 > 250) fire(); }, true);
-  document.addEventListener('touchend', () => { if (el || Date.now() - t0 < 3000) trace(`touchend at ${Date.now() - t0}ms timer=${!!timer}`); }, true);
+  document.addEventListener('touchcancel', () => { if (timer && Date.now() - t0 > 250) fire(); }, true);
   document.addEventListener('dragstart', (e) => { if (Phone.on && e.target.closest && e.target.closest(SEL)) e.preventDefault(); }, true);
-  document.addEventListener('touchmove', (e) => { if (timer && Math.hypot(e.touches[0].clientX - x0, e.touches[0].clientY - y0) > 10) { trace(`moved ${Math.round(Math.hypot(e.touches[0].clientX - x0, e.touches[0].clientY - y0))}px`); cancel(); } }, { passive: true });
-  document.addEventListener('touchend', (e) => { if (Date.now() < swallow) e.preventDefault(); cancel(); }, { passive: false });
+  document.addEventListener('touchmove', (e) => { if (timer && Math.hypot(e.touches[0].clientX - x0, e.touches[0].clientY - y0) > 10) cancel(); }, { passive: true });
+  document.addEventListener('touchend', (e) => { if (Date.now() < swallow) { e.preventDefault(); if (swallow === Infinity) swallow = Date.now() + 400; } cancel(); }, { passive: false });
   document.addEventListener('touchcancel', cancel, { passive: true });
   document.addEventListener('click', (e) => { if (Date.now() < swallow && !(e.target.closest && e.target.closest('.menu'))) { e.preventDefault(); e.stopPropagation(); } }, true);
 })();
