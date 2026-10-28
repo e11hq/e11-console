@@ -1469,4 +1469,13 @@ const Push = (() => {
   window.addEventListener('resize', soon);
   if (window.visualViewport) visualViewport.addEventListener('resize', soon);
   document.addEventListener('focusin', () => { setTimeout(reveal, 450); });
+  // dragging the page down while typing puts the keyboard away (like Messages); dragging inside the box itself doesn't
+  let y0 = null, from = null;
+  document.addEventListener('touchstart', (e) => { y0 = e.touches.length === 1 ? e.touches[0].clientY : null; from = e.target; }, { passive: true });
+  document.addEventListener('touchmove', (e) => {
+    if (y0 == null || !Phone.on) return;
+    const a = typingIn();
+    if (!a || (from && a.contains(from))) return;
+    if (e.touches[0].clientY - y0 > 28) { a.blur(); y0 = null; }
+  }, { passive: true });
 })();
