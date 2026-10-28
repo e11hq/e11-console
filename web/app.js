@@ -960,6 +960,17 @@ const ServerHost = (() => {
   let office = null;
   let shell = null;
   const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+  // The iPhone app 3 and later: its own Photo Library / Take Photo or Video / Choose Files sheet from the bottom of the
+  // screen (never where the keyboard was); the chosen files are read from the app in pieces, like the Mac app's.
+  // null: not available (older app, or not the app): the page's own file picker
+  let iosShell = null;
+  async function iosPicks(args) {
+    if (!Host.isIOSApp || args.accept) return null;
+    if (iosShell === null) { try { iosShell = Number((await NativeMac.call('appInfo')).shell) || 0; } catch (e) { iosShell = 0; } }
+    if (iosShell < 3) return null;
+    const r = await NativeMac.call('pickFiles', { single: !!args.single });
+    return (r.files || []).map((f) => ({ name: f.name, size: f.size, macToken: f.token }));
+  }
   async function macShell() {
     if (shell === null) { try { shell = Host.isMacApp ? Number((await NativeMac.call('appInfo')).shell) || 1 : 0; } catch (e) { shell = 0; } }
     return shell;
@@ -1022,8 +1033,7 @@ const ServerHost = (() => {
       const inp = document.createElement('input');
       inp.type = 'file'; inp.multiple = multiple; if (accept) inp.accept = accept;
       // iPhone shows its Photo Library / Camera / Files menu next to the file field, so the field goes on the button that
-      // was tapped (an off-screen field put the menu somewhere odd). The keyboard stays as it is (phone.js keeps the
-      // comment being written focused when its + is tapped).
+      // was tapped (an off-screen field put the menu somewhere odd).
       const btn = window.__e11LastDownEl && window.__e11LastDownEl.isConnected ? window.__e11LastDownEl.closest('button, [data-action]') || window.__e11LastDownEl : null;
       const put = () => {
         const r = btn && btn.isConnected ? btn.getBoundingClientRect() : null;
@@ -1037,7 +1047,11 @@ const ServerHost = (() => {
       inp.addEventListener('cancel', () => finish([]));
       window.addEventListener('focus', () => setTimeout(() => finish([...(inp.files || [])]), 800), { once: true });
       document.body.appendChild(inp);
-      inp.click();
+      // iPhone closes the keyboard as its menu opens, which moved the + after the menu had been placed: with the
+      // keyboard up, it goes down first and the menu opens on the + in its new place
+      const typing = /iPhone|iPad/.test(navigator.userAgent) && document.documentElement.classList.contains('ph-typing') && document.activeElement && document.activeElement !== document.body;
+      if (typing) { document.activeElement.blur(); setTimeout(() => { put(); inp.click(); }, 450); }
+      else inp.click();
     });
   }
   // A file to upload: a browser File, or a file picked in the Mac app (read through the app)
@@ -1287,7 +1301,7 @@ const ServerHost = (() => {
       case 'load': case 'save': case 'sweepOrphans': case 'setAppearance': case 'revealData': return { ok: true };
       case 'badge': try { if (navigator.setAppBadge) { if (args.n) navigator.setAppBadge(args.n); else navigator.clearAppBadge(); } } catch (e) { /* not installed */ } return { ok: true };
       case 'pickAttachments': {
-        const files = await pickFiles({ multiple: !args.single, accept: args.accept || '' });
+        const files = (await iosPicks(args)) || await pickFiles({ multiple: !args.single, accept: args.accept || '' });
         return { ok: true, files: await uploadMany(files, args.dest ? { dest: args.dest } : { taskId: args.taskId }, { onStart: args.onStart, onProgress: args.onProgress }) };
       }
       case 'uploadBlob': {

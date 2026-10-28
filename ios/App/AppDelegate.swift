@@ -9,9 +9,11 @@ import UIKit
 import WebKit
 import UserNotifications
 import LocalAuthentication
+import PhotosUI
+import UniformTypeIdentifiers
 
 // Version of this iPhone app's native part (raise it with changes the web app needs to know about)
-let SHELL_VERSION = 2
+let SHELL_VERSION = 3   // 3: its own sheet for attaching files (Photo Library / Take Photo or Video / Choose Files)
 let procEnv = ProcessInfo.processInfo.environment
 let SELFTEST = procEnv["E11_SELFTEST"] ?? ""           // the build machine's self-test in the simulator
 let info = Bundle.main.infoDictionary ?? [:]
@@ -681,6 +683,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
           DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { self.authing = false }
         }
       }
+    case "pickFiles": Picker.shared.pick(from: self, single: (a["single"] as? Bool) == true, done)
+    case "readLocalChunk": done(Picker.shared.read(a))
     default: done(["ok": false, "error": "Unknown command " + cmd])
     }
   }
@@ -792,5 +796,117 @@ extension WKWebView {
       cls = made
     }
     if let c = cls { object_setClass(content, c) }
+  }
+}
+
+
+/* ---------- Attaching files: the app's own sheet from the bottom of the screen (never where the keyboard was) ----------
+   Photo Library (several at once, pictures and videos in the usual formats), Take Photo or Video, or Choose Files. The
+   chosen files are copied into the app's temporary folder; the page reads them in pieces (readLocalChunk, like the Mac
+   app) and uploads them as usual. */
+final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate, UIDocumentPickerDelegate {
+  static let shared = Picker()
+  private var done: (([String: Any]) -> Void)?
+  private var files: [String: URL] = [:]
+  private let lock = NSLock()   // (photos are copied on background threads)
+  private let dir: URL = { let d = FileManager.default.temporaryDirectory.appendingPathComponent("picked", isDirectory: true); try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true); return d }()
+
+  func pick(from vc: UIViewController, single: Bool, _ done: @escaping ([String: Any]) -> Void) {
+    finish([])   // (a sheet still open from before answers "nothing")
+    self.done = done
+    vc.view.endEditing(true)
+    let sheet = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
+    sheet.addAction(UIAlertAction(title: "Photo Library", style: .default) { _ in
+      var c = PHPickerConfiguration()
+      c.selectionLimit = single ? 1 : 0
+      c.filter = .any(of: [.images, .videos])
+      c.preferredAssetRepresentationMode = .compatible   // (JPEG and H.264, like a web page gets)
+      let p = PHPickerViewController(configuration: c); p.delegate = self
+      vc.present(p, animated: true)
+    })
+    if UIImagePickerController.isSourceTypeAvailable(.camera) {
+      sheet.addAction(UIAlertAction(title: "Take Photo or Video", style: .default) { _ in
+        let p = UIImagePickerController(); p.sourceType = .camera
+        p.mediaTypes = UIImagePickerController.availableMediaTypes(for: .camera) ?? ["public.image"]
+        p.videoQuality = .typeHigh; p.delegate = self
+        vc.present(p, animated: true)
+      })
+    }
+    sheet.addAction(UIAlertAction(title: "Choose Files", style: .default) { _ in
+      let p = UIDocumentPickerViewController(forOpeningContentTypes: [.item], asCopy: true)
+      p.allowsMultipleSelection = !single; p.delegate = self
+      vc.present(p, animated: true)
+    })
+    sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in self.finish([]) })
+    if let pop = sheet.popoverPresentationController {   // (iPad: from the bottom middle)
+      pop.sourceView = vc.view; pop.sourceRect = CGRect(x: vc.view.bounds.midX, y: vc.view.bounds.maxY - 40, width: 1, height: 1); pop.permittedArrowDirections = []
+    }
+    vc.present(sheet, animated: true)
+  }
+
+  private func keep(_ src: URL, name: String) -> [String: Any]? {
+    let tok = UUID().uuidString
+    let dest = dir.appendingPathComponent(tok + "-" + name.replacingOccurrences(of: "/", with: "-"))
+    do { try FileManager.default.copyItem(at: src, to: dest) } catch { return nil }
+    lock.lock(); files[tok] = dest; lock.unlock()
+    let size = ((try? FileManager.default.attributesOfItem(atPath: dest.path))?[.size] as? NSNumber)?.int64Value ?? 0
+    return ["token": tok, "name": name, "size": size]
+  }
+  private func finish(_ out: [[String: Any]]) {
+    guard let d = done else { return }
+    done = nil
+    DispatchQueue.main.async { d(["ok": true, "files": out]) }
+  }
+
+  // Photo Library
+  func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+    picker.dismiss(animated: true)
+    if results.isEmpty { return finish([]) }
+    var out = [[String: Any]?](repeating: nil, count: results.count)
+    let group = DispatchGroup()
+    for (i, r) in results.enumerated() {
+      let p = r.itemProvider
+      let isVideo = p.hasItemConformingToTypeIdentifier(UTType.movie.identifier)
+      let type = isVideo ? UTType.movie.identifier : (p.registeredTypeIdentifiers.first { UTType($0)?.conforms(to: .image) == true } ?? UTType.image.identifier)
+      group.enter()
+      p.loadFileRepresentation(forTypeIdentifier: type) { url, _ in
+        if let url = url {
+          let ext = url.pathExtension.isEmpty ? (isVideo ? "mov" : "jpg") : url.pathExtension
+          let base = (p.suggestedName ?? (isVideo ? "Video" : "Photo"))
+          out[i] = self.keep(url, name: base.hasSuffix("." + ext) ? base : base + "." + ext)
+        }
+        group.leave()
+      }
+    }
+    group.notify(queue: .main) { self.finish(out.compactMap { $0 }) }
+  }
+  // Camera
+  func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+    picker.dismiss(animated: true)
+    let stamp = { () -> String in let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"; return f.string(from: Date()) }()
+    if let url = info[.mediaURL] as? URL { return finish([keep(url, name: "Video \(stamp).\(url.pathExtension.isEmpty ? "mov" : url.pathExtension)")].compactMap { $0 }) }
+    if let img = info[.originalImage] as? UIImage, let data = img.jpegData(compressionQuality: 0.9) {
+      let tmp = dir.appendingPathComponent(UUID().uuidString + ".jpg")
+      if (try? data.write(to: tmp)) != nil { let r = keep(tmp, name: "Photo \(stamp).jpg"); try? FileManager.default.removeItem(at: tmp); return finish([r].compactMap { $0 }) }
+    }
+    finish([])
+  }
+  func imagePickerControllerDidCancel(_ picker: UIImagePickerController) { picker.dismiss(animated: true); finish([]) }
+  // Files
+  func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+    finish(urls.compactMap { u in let ok = u.startAccessingSecurityScopedResource(); defer { if ok { u.stopAccessingSecurityScopedResource() } }; return keep(u, name: u.lastPathComponent) })
+  }
+  func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) { finish([]) }
+
+  // A piece of a chosen file, for the page to upload (the file is let go after its last piece)
+  func read(_ a: [String: Any]) -> [String: Any] {
+    lock.lock(); let known = (a["token"] as? String).flatMap { files[$0] }; lock.unlock()
+    guard let tok = a["token"] as? String, let url = known, let fh = try? FileHandle(forReadingFrom: url) else { return ["ok": false, "error": "File no longer available"] }
+    defer { try? fh.close() }
+    let off = UInt64((a["offset"] as? NSNumber)?.int64Value ?? 0), len = (a["length"] as? NSNumber)?.intValue ?? 0
+    try? fh.seek(toOffset: off)
+    let data = (try? fh.read(upToCount: max(0, len))) ?? Data()
+    if (a["last"] as? Bool) == true { lock.lock(); files[tok] = nil; lock.unlock(); try? FileManager.default.removeItem(at: url) }
+    return ["ok": true, "b64": data.base64EncodedString()]
   }
 }
