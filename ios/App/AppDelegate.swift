@@ -127,11 +127,12 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       guard let self = self, self.pageReady, sv.contentOffset != .zero else { return }
       DispatchQueue.main.async { if sv.contentOffset != .zero { sv.setContentOffset(.zero, animated: false) } }
     }
-    // like Messages: drag your finger down onto the top of the keyboard and it goes away
-    let pull = UIPanGestureRecognizer(target: self, action: #selector(pullKeyboard(_:)))
+    // like Messages: drag your finger down onto the top of the keyboard and it goes away. (Only attached while the
+    // keyboard is up: on the web view all the time it got in the way of ordinary taps, which then lagged.)
     pull.cancelsTouchesInView = false
+    pull.delaysTouchesBegan = false
+    pull.delaysTouchesEnded = false
     pull.delegate = self
-    web.addGestureRecognizer(pull)
     let nc = NotificationCenter.default
     nc.addObserver(forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: .main) { [weak self] n in self?.keyboardMoves(n) }
     nc.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { [weak self] n in self?.keyboardMoves(n, gone: true) }
@@ -179,6 +180,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     }
   }
   var keyboardCover: CGFloat = 0
+  lazy var pull = UIPanGestureRecognizer(target: self, action: #selector(pullKeyboard(_:)))
   @objc func pullKeyboard(_ g: UIPanGestureRecognizer) {
     guard keyboardUp, keyboardCover > 0, g.state == .changed, g.velocity(in: view).y > 0 else { return }
     let edge = view.bounds.height - keyboardCover
@@ -196,6 +198,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       cover = max(0, view.bounds.maxY - r.minY)
     }
     keyboardUp = cover > 0
+    if keyboardUp { if pull.view == nil { web.addGestureRecognizer(pull) } } else if pull.view != nil { web.removeGestureRecognizer(pull) }
     if cover == keyboardCover { return }
     keyboardCover = cover
     let dur = (n.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double) ?? 0.25
