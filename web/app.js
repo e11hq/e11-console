@@ -1214,9 +1214,12 @@ const ServerHost = (() => {
     if (!root) {
       root = document.createElement('div'); root.id = 'upload-root'; document.body.appendChild(root);
       const place = () => {
-        const box = typeof Phone !== 'undefined' && Phone.on && ui.taskId ? document.querySelector('#detail .tm-composer') : null;
+        const box = ui.taskId ? document.querySelector('#detail .tm-composer') : null;
         const r = box && box.getBoundingClientRect();
-        root.style.bottom = r && r.height ? `${Math.max(12, (window.visualViewport ? visualViewport.height : innerHeight) - r.top + 8)}px` : '';
+        const on = !!(r && r.height && r.width);
+        root.style.bottom = on ? `${Math.max(12, (window.visualViewport ? visualViewport.height : innerHeight) - r.top + 8)}px` : '';
+        // (a computer: lined up with the comment box's right edge)
+        root.style.right = on && !(typeof Phone !== 'undefined' && Phone.on) ? `${Math.max(12, innerWidth - r.right + 14)}px` : '';
       };
       place(); setInterval(() => { if (root.firstElementChild) place(); }, 250);
     }
@@ -3206,6 +3209,12 @@ function fmtShort(iso) {
     d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).toLowerCase();
 }
 
+// A file waiting in the comment box: a small square (the picture itself, a video's frame, or the file's type), × to remove
+function cbTile(a, key) {
+  const kind = fileKind(a);
+  const pic = kind === 'image' && Host.isNative ? `<img src="${imgUrl(a, 240)}" alt="" draggable="false">` : a.thumb ? `<img src="${posterUrl(a)}" alt="" draggable="false">` : '';
+  return `<span class="cb-tile ${pic ? '' : 'doc'} ${a.linked ? 'linked' : ''}" title="${esc(a.name)}">${pic || `<b>${esc((fileExt(a.name) || 'file').slice(0, 4))}</b><small>${esc(a.name)}</small>`}${kind === 'video' ? `<i class="cb-play">${icon('play')}</i>` : ''}<button type="button" class="cb-x" data-action="unstage-file" data-key="${key}" data-id="${a.id}" title="Remove" aria-label="Remove ${esc(a.name)}">${icon('x')}</button></span>`;
+}
 // The one composer at the bottom of the comments panel. It posts a comment, or a reply when
 // a thread is open or "Reply" was clicked on a comment.
 function composer(t, cid) {
@@ -3219,8 +3228,8 @@ function composer(t, cid) {
   const ph = inThread ? 'Reply to this thread… Type @ to mention someone' : cid ? 'Write a reply… Type @ to mention someone' : 'Write a comment… Type @ to mention someone';
   return `<div class="composer ${cid ? 'reply' : ''}">
     ${banner}
+    ${files.length ? `<div class="cb-files">${files.map((a) => cbTile(a, key)).join('')}</div>` : ''}
     <div class="rt-editor" contenteditable="true" id="d-comment" data-draft-key="${key}" ${cid ? `data-reply-to="${cid}"` : ''} data-placeholder="${ph}">${ui.commentDraft[key] || ''}</div>
-    ${files.length ? `<div class="cb-files">${files.map((a) => `<span class="cb-chip ${a.linked ? 'linked' : ''}">${isImage(a) && Host.isNative ? `<img src="${imgUrl(a, 160)}" alt="">` : icon('clip')}<span>${esc(a.name)}</span><button data-action="unstage-file" data-key="${key}" data-id="${a.id}" title="Remove">${icon('x')}</button></span>`).join('')}</div>` : ''}
     <div class="cb-foot">
       <button class="icon-btn sm" data-action="attach-comment" ${cid ? `data-reply="${cid}"` : ''} title="Attach files" aria-label="Attach files">${icon(onPhone ? 'plus' : 'clip')}</button>
       ${fmtToolbar()}
@@ -4880,7 +4889,7 @@ async function deleteSectionFlow(sid) {
   commit();
 }
 
-async function attachFiles(target = 'task', replyTo = null) {
+async function attachFiles(target = 'task', replyTo = null, dropped = null) {
   const t = task(ui.taskId);
   if (!t) return;
   const key = draftKey(t, replyTo);
@@ -4890,7 +4899,10 @@ async function attachFiles(target = 'task', replyTo = null) {
     onProgress: (f) => { if (ui.commentUp[key]) { ui.commentUp[key].frac = f; Unsent.progress(key); } },
   } : {};
   try {
-    const res = await Host.call('pickAttachments', { taskId: t.id, ...hooks });
+    // (files dropped on the comment box upload straight away; otherwise the file picker)
+    const res = dropped && dropped.length && Host.isServer
+      ? { files: await ServerHost.uploadMany([...dropped], { taskId: t.id }, { onStart: hooks.onStart, onProgress: hooks.onProgress }) }
+      : await Host.call('pickAttachments', { taskId: t.id, ...hooks });
     const files = (res.files || []).map((f) => ({ ...f, addedAt: nowISO() }));
     if (target === 'comment') delete ui.commentUp[key];
     if (!files.length) { if (target === 'comment') Unsent.uploaded(key, false); return; }
@@ -6547,6 +6559,24 @@ document.addEventListener('dragend', () => { setTimeout(() => { pageDrag = false
   e.stopImmediatePropagation();
   if (ev === 'drop') { e.preventDefault(); pageDrag = false; document.querySelectorAll('.dropping').forEach((x) => x.classList.remove('dropping')); }
 }, true));
+// Drag files from Finder (or the desktop) onto the comment / reply box: they're attached to the comment being written
+const fileDrag = (e) => !!e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files') && !dragId && !pageDrag;
+document.addEventListener('dragover', (e) => {
+  const box = e.target.closest && e.target.closest('#detail .tm-composer');
+  $$('.tm-composer.dropping').forEach((x) => { if (x !== box) x.classList.remove('dropping'); });
+  if (!box || !fileDrag(e)) return;
+  e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; box.classList.add('dropping');
+});
+document.addEventListener('dragleave', (e) => { const box = $('.tm-composer.dropping'); if (box && (!e.relatedTarget || !box.contains(e.relatedTarget))) box.classList.remove('dropping'); });
+document.addEventListener('drop', (e) => {
+  const box = e.target.closest && e.target.closest('#detail .tm-composer');
+  if (!box || !fileDrag(e)) return;
+  e.preventDefault(); e.stopPropagation(); box.classList.remove('dropping');
+  const files = e.dataTransfer.files;
+  if (!files || !files.length) return;
+  const ed = box.querySelector('.rt-editor');
+  attachFiles('comment', (ed && ed.dataset.replyTo) || null, files);
+}, true);
 // Drag files from Finder onto a folder page
 document.addEventListener('dragover', (e) => {
   const pg = e.target.closest && e.target.closest('.ca-folder');
