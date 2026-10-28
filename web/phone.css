@@ -883,3 +883,6 @@ body.phone #detail .tile { -webkit-user-select: none; user-select: none; -webkit
 body.phone #detail .tile.ph-pressing { transform: scale(.97); }
 /* an empty description is a generous target to tap */
 body.phone .desc-view.blank:not(.ro) { min-height: 52px; display: flex; align-items: center; cursor: text; }
+/* the comment count in a round grey badge next to "Comments" (light and dark) */
+body.phone .ph-seg.in-task i { display: inline-grid; place-items: center; min-width: 24px; height: 24px; padding: 0 7px; margin-left: 6px; border-radius: 12px; background: rgba(120, 120, 135, .16); color: var(--text); font-family: inherit; font-size: 13px; font-weight: 650; line-height: 1; vertical-align: 1px; }
+:root[data-theme="dark"] body.phone .ph-seg.in-task i { background: rgba(255, 255, 255, .14); }
