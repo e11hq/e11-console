@@ -1089,7 +1089,7 @@ const Push = (() => {
    Unread ↔ All ↔ Mentions. (A swipe that starts at the very left edge is "back" instead.) */
 (() => {
   let g = null;
-  const SKIP = 'input, textarea, select, [contenteditable="true"], .ph-slides, .ph-chips, .wf-bar, .tr-chips, .fin-chips, .fin-tabs, .fa-tabs, .tile-grid, .menu, .ph-sheet, .ap-video, video, .board';
+  const SKIP = 'input, textarea, select, [contenteditable="true"], .ph-slides, .ph-chips, .wf-bar, .tr-chips, .fin-chips, .fin-tabs, .fa-tabs, .menu, .ph-sheet, .ap-video, video, .board';
   function tabsHere() {
     if ($('#overlay-root').firstElementChild || $('#ph-sheet-root .ph-scrim:not(.docked)') || $('.menu')) return null;
     if (ui.taskId) {
@@ -1477,4 +1477,29 @@ const Push = (() => {
   window.addEventListener('resize', soon);
   if (window.visualViewport) visualViewport.addEventListener('resize', soon);
   document.addEventListener('focusin', () => { setTimeout(reveal, 450); });
+})();
+
+/* TEMPORARY (test copy only): a readout at the top of the screen of what happens around a held file in a task — to
+   find why its sheet doesn't stay open on Haris's iPhone. Removed once found. */
+(() => {
+  let t0 = 0, on = false;
+  const out = (m) => {
+    try {
+      if (typeof isTestCopy !== 'function' || !isTestCopy() || !on) return;
+      let b = document.getElementById('hold-trace');
+      if (!b) { b = document.createElement('div'); b.id = 'hold-trace'; b.style.cssText = 'position:fixed;left:8px;right:8px;top:calc(env(safe-area-inset-top) + 4px);z-index:99999;background:rgba(0,0,0,.82);color:#7CFC9A;font:11px/1.35 ui-monospace,Menlo,monospace;padding:6px 8px;border-radius:8px;pointer-events:none;white-space:pre-wrap'; document.body.appendChild(b); }
+      b.textContent = (b.textContent ? b.textContent.split('\n') : []).concat(`${Date.now() - t0}ms ${m}`).slice(-12).join('\n');
+    } catch (e) { /* none */ }
+  };
+  const what = (el) => (el && el.nodeType === 1 ? `${el.tagName.toLowerCase()}.${String(el.className || '').split(' ')[0]}${el.dataset && el.dataset.action ? '[' + el.dataset.action + ']' : ''}` : String(el));
+  document.addEventListener('touchstart', (e) => { const tile = e.target.closest && e.target.closest('#detail .tile'); if (tile) { t0 = Date.now(); on = true; const b = document.getElementById('hold-trace'); if (b) b.textContent = ''; out('touchstart ' + what(e.target)); } }, true);
+  ['touchend', 'touchcancel'].forEach((k) => document.addEventListener(k, (e) => { if (on && Date.now() - t0 < 5000) out(`${k} ${what(e.target)} prevented=${e.defaultPrevented}`); }, true));
+  ['touchend', 'touchcancel'].forEach((k) => document.addEventListener(k, (e) => { if (on && Date.now() - t0 < 5000) out(`${k}(after) prevented=${e.defaultPrevented}`); }, false));
+  ['mousedown', 'mouseup', 'click', 'contextmenu', 'dragstart', 'scroll'].forEach((k) => document.addEventListener(k, (e) => { if (on && Date.now() - t0 < 5000) out(`${k} ${what(e.target)}`); }, true));
+  new MutationObserver((list) => {
+    if (!on || Date.now() - t0 > 5000) return;
+    list.forEach((m) => { m.addedNodes.forEach((n) => { if (n.classList && n.classList.contains('menu')) out('menu ADDED'); }); m.removedNodes.forEach((n) => { if (n.classList && n.classList.contains('menu')) out('menu REMOVED ' + (new Error().stack || '').split('\n').slice(1, 4).join(' < ').replace(/https?:\/\/[^/]+\//g, '').slice(0, 160)); }); });
+  }).observe(document.body, { childList: true });
+  const orig = window.closeMenus;
+  if (typeof orig === 'function') window.closeMenus = function () { if (on && Date.now() - t0 < 5000) out('closeMenus < ' + (new Error().stack || '').split('\n').slice(2, 5).map((l) => l.trim().replace(/https?:\/\/[^/]+\//g, '')).join(' < ').slice(0, 200)); return orig.apply(this, arguments); };
 })();
