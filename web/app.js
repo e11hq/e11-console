@@ -3704,7 +3704,7 @@ const OFFICE_EXT = ['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'odt', 'odp', '
 const OFFICE_LABEL = { ppt: 'PowerPoint', pptx: 'PowerPoint', key: 'Keynote', doc: 'Word', docx: 'Word', pages: 'Pages', xls: 'Excel', xlsx: 'Excel', numbers: 'Numbers', zip: 'Archive' };
 // Thumbnail made by macOS Quick Look (cached in the data folder); placeholder until it exists
 function thumbImg(a, mode) {
-  if (a.thumb) return `<img class="qthumb" src="${'/__file/' + a.thumb.split('/').map(encodeURIComponent).join('/')}" alt="">`;
+  if (a.thumb) return `<img class="qthumb" draggable="false" src="${'/__file/' + a.thumb.split('/').map(encodeURIComponent).join('/')}" alt="">`;
   const e = fileExt(a.name);
   return `<div class="thumb-ph" data-thumb-for="${a.id}" data-mode="${mode}"><span class="ext">${esc((e || 'file').slice(0, 5))}</span><small>${esc(OFFICE_LABEL[e] || 'File')}</small></div>`;
 }
