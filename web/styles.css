@@ -472,6 +472,9 @@ select.field { -webkit-appearance: none; appearance: none; padding-right: 26px;
 .dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
 .toast-root, #toast-root { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 120; display: flex; flex-direction: column; gap: 8px; align-items: center; }
 .toast { background: #2b2c31; border: 1px solid var(--border-strong); color: var(--text); padding: 9px 14px; border-radius: 10px; box-shadow: var(--shadow); display: flex; align-items: center; gap: 14px; animation: rise .16s ease; }
+.toast.busy { gap: 10px; }
+.toast .tb-spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--border-strong); border-top-color: var(--accent); animation: tbSpin .8s linear infinite; flex: none; }
+@keyframes tbSpin { to { transform: rotate(360deg); } }
 .toast button { background: none; border: 0; color: var(--accent); font-weight: 600; padding: 0; }
 @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }

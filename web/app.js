@@ -1091,23 +1091,41 @@ const ServerHost = (() => {
   }
   // Save something from the server on this Mac: into Downloads (shown in Finder) or opened directly
   async function saveOnMac(url, name, open) {
-    // in the office: straight from the NAS over the office network
-    if (office && office.local && /^\/__file\//.test(url) && (await macShell()) >= 10) {
-      try {
-        const fp = url.replace(/^\/__file\//, '').split('?')[0].split('/').map(decodeURIComponent).join('/');
-        const tk = await api('POST', '/api/local/ticket', { kind: 'file', path: fp });
-        const r = await NativeMac.call('downloadLocal', { url: tk.url, ticket: tk.token, cert: tk.cert, name, open });
-        if (r && r.ok) return;
-      } catch (e) { /* the usual way */ }
-    }
-    const res = await fetch(url, { credentials: 'same-origin' });
-    if (!res.ok) throw new Error(`Download failed (${res.status})`);
-    const blob = await res.blob();
-    const tok = uid();
-    for (let off = 0; off < Math.max(blob.size, 1); off += CHUNK_SIZE) {
-      const piece = await b64(blob.slice(off, off + CHUNK_SIZE));
-      await NativeMac.call('saveFile', { token: tok, name, b64: piece, open, done: off + CHUNK_SIZE >= blob.size });
-    }
+    // a big file takes a while: say so straight away (and how far it is, when it comes the usual way)
+    const note = busyToast(`Downloading “${name}”…`);
+    try {
+      // in the office: straight from the NAS over the office network
+      if (office && office.local && /^\/__file\//.test(url) && (await macShell()) >= 10) {
+        try {
+          const fp = url.replace(/^\/__file\//, '').split('?')[0].split('/').map(decodeURIComponent).join('/');
+          const tk = await api('POST', '/api/local/ticket', { kind: 'file', path: fp });
+          note.set(`Downloading “${name}” over the office network…`);
+          const r = await NativeMac.call('downloadLocal', { url: tk.url, ticket: tk.token, cert: tk.cert, name, open });
+          if (r && r.ok) return;
+        } catch (e) { /* the usual way */ }
+        note.set(`Downloading “${name}”…`);
+      }
+      const res = await fetch(url, { credentials: 'same-origin' });
+      if (!res.ok) throw new Error(`Download failed (${res.status})`);
+      const total = Number(res.headers.get('Content-Length')) || 0;
+      const parts = []; let got = 0;
+      const rd = res.body && res.body.getReader ? res.body.getReader() : null;
+      if (rd) {
+        for (;;) {
+          const { done, value } = await rd.read();
+          if (done) break;
+          parts.push(value); got += value.length;
+          note.set(`Downloading “${name}”… ${total ? Math.floor((got / total) * 100) + '%' : fmtSize(got)}`);
+        }
+      }
+      const blob = rd ? new Blob(parts) : await res.blob();
+      const tok = uid();
+      note.set(`Saving “${name}”…`);
+      for (let off = 0; off < Math.max(blob.size, 1); off += CHUNK_SIZE) {
+        const piece = await b64(blob.slice(off, off + CHUNK_SIZE));
+        await NativeMac.call('saveFile', { token: tok, name, b64: piece, open, done: off + CHUNK_SIZE >= blob.size });
+      }
+    } finally { note.close(); }
   }
   // Upload one file in 2 MB pieces; onProgress(0..1)
   // Width and height of a picture or video before it uploads, so previews can hold their exact space while loading
@@ -4252,6 +4270,16 @@ function dialog({ title, body = '', input = null, okText = 'OK', cancelText = 'C
   });
 }
 
+// A message that stays while something runs (e.g. a big download on the Mac), updated as it goes
+function busyToast(msg) {
+  const root = $('#toast-root');
+  const el = document.createElement('div');
+  el.className = 'toast busy';
+  el.innerHTML = `<i class="tb-spin"></i><span></span>`;
+  el.querySelector('span').textContent = msg;
+  if (root) root.appendChild(el);
+  return { set(m) { el.querySelector('span').textContent = m; }, close() { el.remove(); } };
+}
 function toast(msg, action, ms) {
   const root = $('#toast-root');
   const el = document.createElement('div');
