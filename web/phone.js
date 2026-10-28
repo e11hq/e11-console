@@ -1403,3 +1403,35 @@ const Push = (() => {
     try { el.dispatchEvent(new Event('change', { bubbles: true })); } finally { replay = false; }
   }, true);
 })();
+
+/* Phone: touch and hold a file or a folder in Client Assets for its sheet (the same as its ⋯), like a comment.
+   A short buzz confirms the hold, and lifting the finger doesn't also open what's under it. */
+(() => {
+  const HOLD = 450, SEL = '.ca-tile[data-id], .cf-card[data-id]:not(.add)';
+  let timer = null, el = null, x0 = 0, y0 = 0, swallow = 0;
+  const cancel = () => { clearTimeout(timer); timer = null; if (el) el.classList.remove('ph-pressing'); el = null; };
+  const buzz = () => {
+    try { if (navigator.vibrate && navigator.vibrate(12)) return; } catch (e) { /* none */ }
+    try { const l = document.createElement('label'); l.style.cssText = 'position:fixed;left:-200px;top:0;opacity:0;pointer-events:none'; l.innerHTML = '<input type="checkbox" switch>'; document.body.appendChild(l); l.click(); setTimeout(() => l.remove(), 400); } catch (e) { /* none */ }
+  };
+  document.addEventListener('touchstart', (e) => {
+    if (!Phone.on || e.touches.length !== 1) return;
+    const card = e.target.closest && e.target.closest(SEL);
+    if (!card || e.target.closest('button, a, input')) return;
+    cancel();
+    el = card; x0 = e.touches[0].clientX; y0 = e.touches[0].clientY;
+    card.classList.add('ph-pressing');
+    timer = setTimeout(() => {
+      const c = el; cancel();
+      const more = c.querySelector('.ca-more, .cf-more');
+      if (!more) return;
+      buzz();
+      more.click();
+      swallow = Date.now() + 700;
+    }, HOLD);
+  }, { passive: true });
+  document.addEventListener('touchmove', (e) => { if (timer && Math.hypot(e.touches[0].clientX - x0, e.touches[0].clientY - y0) > 10) cancel(); }, { passive: true });
+  document.addEventListener('touchend', (e) => { if (Date.now() < swallow) e.preventDefault(); cancel(); }, { passive: false });
+  document.addEventListener('touchcancel', cancel, { passive: true });
+  document.addEventListener('click', (e) => { if (Date.now() < swallow && !(e.target.closest && e.target.closest('.menu'))) { e.preventDefault(); e.stopPropagation(); } }, true);
+})();

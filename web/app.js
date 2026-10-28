@@ -5479,7 +5479,7 @@ document.addEventListener('click', async (e) => {
       case 'add-client': addClientDialog(); return;
       case 'client-menu': e.stopPropagation(); { const c = clientById(id); if (c) clientMenu(actEl, c); } return;
       case 'open-cfolder': PageHistory.mark(); ui.folderId = id; $('#content').scrollTop = 0; render(); PageHistory.mark(); return;
-      case 'cfolder-menu': e.stopPropagation(); { const c = clientById(ui.clientId); const f = c && c.folders.find((x) => x.id === id); if (f) folderMenu(actEl, c, f); } return;
+      case 'cfolder-menu': e.stopPropagation(); { const c = clientById(ui.clientId); const f = c && c.folders.find((x) => x.id === id); if (f) folderMenu(actEl, c, f, Phone.on ? folderLead(f) : []); } return;
       case 'add-cfolder': { const c = clientById(ui.clientId); if (c) addFolderFlow(c, actEl.dataset.parent ? c.folders.find((x) => x.id === actEl.dataset.parent) : null); } return;
       case 'ca-info': e.stopPropagation(); caInfo('file', id); return;
       case 'ca-info-folder': e.stopPropagation(); caInfo('folder', id); return;
@@ -5997,7 +5997,7 @@ function folderCard(c, f) {
       <div class="cf-meta">${f.finalOf ? '<span class="cf-final">Final</span>' : ''}${meta}</div>
       ${imgs.length && Host.isNative ? `<div class="cf-peek">${imgs.map((a) => `<img src="${imgUrl(a, 160)}" alt="" loading="lazy">`).join('')}</div>` : ''}
       <button class="icon-btn sm cf-info" data-action="ca-info-folder" data-id="${f.id}" title="Info">${icon('info')}</button>
-      ${mine ? `<button class="icon-btn sm cf-more" data-action="cfolder-menu" data-id="${f.id}" title="Folder options">${icon('more')}</button>` : ''}
+      ${mine || (typeof Phone !== 'undefined' && Phone.on) ? `<button class="icon-btn sm cf-more" data-action="cfolder-menu" data-id="${f.id}" title="Folder options">${icon('more')}</button>` : ''}
     </div>`;
 }
 function caTile(f, a, loc = null) {
@@ -6266,13 +6266,19 @@ async function addFolderFlow(c, parent = null) {
   if (!v) return;
   newFolder(c, v.name, false, parent); persist(0); render();
 }
-function folderMenu(anchor, c, f) {
-  if (!canEditFolder(c, f)) return;
+// the phone's folder sheet starts with Open and Info
+const folderLead = (f) => [
+  { label: 'Open', icon: 'folder', run: () => { PageHistory.mark(); ui.folderId = f.id; $('#content').scrollTop = 0; render(); PageHistory.mark(); } },
+  { label: 'Info', icon: 'info', run: () => caInfo('folder', f.id) },
+];
+function folderMenu(anchor, c, f, lead = []) {
+  // (lead: Open / Info first, on the phone's sheet)
+  if (!canEditFolder(c, f) || (f.finalOf && !canDelFolder(c, f))) { if (lead.length) showMenu(anchor, lead); return; }
   // (moves among the folders next to it: the client's folders, or the folders inside Files)
   const sibs = () => c.folders.filter((x) => (x.parentId || null) === (f.parentId || null));
   const swap = (d) => { const s = sibs(), j = s.indexOf(f) + d; if (j < 0 || j >= s.length) return; const a = c.folders.indexOf(f), b = c.folders.indexOf(s[j]); c.folders[a] = s[j]; c.folders[b] = f; persist(0); render(); };
-  if (f.finalOf && !canDelFolder(c, f)) return;
   showMenu(anchor, [
+    ...lead, ...(lead.length ? ['-'] : []),
     ...(f.finalOf ? [] : [{ label: 'Rename folder', icon: 'edit', run: async () => {
       const v = await formDialog({ title: 'Rename folder', fields: [{ key: 'name', label: 'Folder name', value: f.name }], okText: 'Save',
         validate: (x) => (!x.name ? 'Enter a folder name' : folderDup(c, x.name, f.id, f.parentId) ? `There is already a folder named “${folderDup(c, x.name, f.id, f.parentId).name}”.` : null) });

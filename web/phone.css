@@ -867,3 +867,5 @@ body.phone .ca-tile .ca-more .ic { width: 18px; height: 18px; }
 /* touch and hold on a comment opens its sheet: no text selection magnifier underneath (Copy text is in the sheet) */
 body.phone #detail .cm, body.phone #detail .cm .cm-text, body.phone #detail .cm .cm-text * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 body.phone #detail .cm [contenteditable="true"], body.phone #detail .cm textarea, body.phone #detail .cm input { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
+body.phone :is(.ca-tile, .cf-card) { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; transition: transform .15s; }
+body.phone :is(.ca-tile, .cf-card).ph-pressing { transform: scale(.97); }
