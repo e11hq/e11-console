@@ -161,8 +161,21 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   var tabCover = -1
   var keyboardUp = false
+  // the app's own background (seen around the keyboard's rounded corners, and while the page resizes) takes the
+  // page's colour, light or dark — not a black band
+  func syncBackground() {
+    guard pageReady else { return }
+    web.evaluateJavaScript("getComputedStyle(document.body).backgroundColor") { v, _ in
+      guard let str = v as? String else { return }
+      let n = str.components(separatedBy: CharacterSet(charactersIn: "0123456789.").inverted).filter { !$0.isEmpty }.compactMap { Double($0) }
+      guard n.count >= 3, n.count < 4 || n[3] > 0.5 else { return }
+      let c = UIColor(red: n[0] / 255, green: n[1] / 255, blue: n[2] / 255, alpha: 1)
+      self.view.backgroundColor = c; self.web.backgroundColor = c; self.web.scrollView.backgroundColor = c
+    }
+  }
   var keyboardCover: CGFloat = 0
   func keyboardMoves(_ n: Notification, gone: Bool = false) {
+    if !gone { syncBackground() }
     var cover: CGFloat = 0
     if !gone, let end = (n.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue {
       let r = view.convert(end, from: nil)
@@ -221,6 +234,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let onServer = webView.url?.host == serverHost
     pageReady = onServer
     webView.hideKeyboardBar()
+    if onServer { DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.syncBackground() } }
     if onServer { tabCover = -1; view.setNeedsLayout(); flushPending(); if !SELFTEST.isEmpty && !started { started = true; DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.selfTest() } } }
     else { tabBar.isHidden = true; tabsHidden = true; view.setNeedsLayout() }   // (the sign-in page: no tabs)
   }
@@ -543,6 +557,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     case "setAppearance":
       statusStyle = (a["mode"] as? String) == "light" ? .darkContent : .lightContent
       setNeedsStatusBarAppearanceUpdate()
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { self.syncBackground() }
       done(["ok": true])
     case "openURL":
       let u = a["url"] as? String ?? ""
