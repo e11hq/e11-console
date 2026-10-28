@@ -4694,10 +4694,10 @@ function trashRow(it, r) {
   const files = trashFiles(it);
   const who = it.auto ? 'Cleaned up automatically (finished 30+ days ago)' : `Deleted by ${it.deletedBy === currentUserId ? 'you' : esc(fullName(userById(it.deletedBy)))}`;
   const chips = files.slice(0, 4).map((a) => `<button class="tr-file" data-action="tr-preview" data-id="${it.id}" data-file="${a.id}" title="Preview ${esc(a.name)}">${isImage(a) && Host.isNative ? `<img src="${imgUrl(a, 160)}" alt="" loading="lazy">` : `<i>${esc((fileExt(a.name) || 'file').slice(0, 4))}</i>`}<span>${r && r.terms.length ? sMark(a.name, r) : esc(a.name)}</span></button>`).join('');
-  return `<div class="tr-row">
+  return `<div class="tr-row ${it.type === 'task' ? 'tr-open' : ''}" ${it.type === 'task' ? `data-action="tr-view" data-id="${it.id}" title="Open to see it (view only)"` : ''}>
     <span class="tr-ic">${icon(TRASH_ICON[it.type] || 'trash')}</span>
     <div class="tr-main">
-      <div class="tr-title" ${it.type === 'task' ? `data-action="tr-view" data-id="${it.id}" title="Open to see it (view only)"` : ''}>${r && r.terms.length ? sMark(trashTitle(it), r) : esc(trashTitle(it))}</div>
+      <div class="tr-title">${r && r.terms.length ? sMark(trashTitle(it), r) : esc(trashTitle(it))}</div>
       <div class="tr-sub"><span class="tr-type">${TRASH_TYPE[it.type] || ''}</span>${esc(trashWhere(it))} · ${who} · ${esc(timeAgo(it.deletedAt))}</div>
       ${chips ? `<div class="tr-files">${chips}${files.length > 4 ? `<span class="tr-more">+${files.length - 4} more</span>` : ''}</div>` : ''}
     </div>
@@ -4729,15 +4729,7 @@ function trashTaskView(id) {
       ${c.html ? `<div class="tv-cm-text rich">${sanitizeHTML(c.html, true)}</div>` : c.text ? `<div class="tv-cm-text">${linkify(esc(c.text))}</div>` : ''}
       ${(c.attachments || []).length ? `<div class="tr-files">${c.attachments.map(fileChip).join('')}</div>` : ''}</div></div>`;
   const canRestore = it.type !== 'project' || isAdm(me());
-  // (its own layer, under the file preview, so previewing an attachment keeps this open behind it)
-  let root = $('#tv-root');
-  if (!root) { root = document.createElement('div'); root.id = 'tv-root'; document.body.appendChild(root); }
-  root.innerHTML = `<div class="scrim tv-scrim"><div class="dialog tv-dlg" role="dialog" aria-label="Task in the Trash">
-    <div class="tv-top"><h2>${esc(t.title || 'Untitled task')}</h2><button class="icon-btn" data-action="tv-close" title="Close">${icon('x')}</button></div>
-    <div class="tv-bar">${icon('trash')}<span>In the Trash · ${who} ${esc(timeAgo(it.deletedAt))} · ${left} day${left === 1 ? '' : 's'} left</span>
-      ${canRestore ? `<button class="btn primary sm" data-action="tv-restore" data-id="${it.id}">${icon('reply')}Restore</button>` : ''}</div>
-    <div class="tv-body">
-      <div class="tv-props">
+  const tvBody = `      <div class="tv-props">
         ${row('Client', esc(trashWhere(it)))}
         ${row('Status', `<span class="tv-status" style="--c:${st.color}">${esc(st.name)}</span>`)}
         ${row('Assignees', people)}
@@ -4748,8 +4740,24 @@ function trashTaskView(id) {
       ${subs.length ? `<div class="tv-sec"><h3>Subtasks <span>${subs.length}</span></h3>${subs.map((x) => `<div class="tv-line">${x.done ? icon('check') : '<i class="tv-dot"></i>'}${esc(x.title || 'Untitled')}</div>`).join('')}</div>` : ''}
       ${(t.checklist || []).length ? `<div class="tv-sec"><h3>Checklist</h3>${t.checklist.map((c) => `<div class="tv-line ${c.done ? 'done' : ''}">${c.done ? icon('check') : '<i class="tv-dot"></i>'}${esc(c.text || '')}</div>`).join('')}</div>` : ''}
       ${files.length ? `<div class="tv-sec"><h3>Attachments <span>${files.length}</span></h3><div class="tr-files">${files.map(fileChip).join('')}</div></div>` : ''}
-      <div class="tv-sec"><h3>Comments <span>${comments.length}</span></h3>${comments.length ? comments.map(commentHTML).join('') : '<div class="tv-none">No comments</div>'}</div>
-    </div>
+      <div class="tv-sec"><h3>Comments <span>${comments.length}</span></h3>${comments.length ? comments.map(commentHTML).join('') : '<div class="tv-none">No comments</div>'}</div>`;
+  const inner = `<div class="tv-top"><h2>${esc(t.title || 'Untitled task')}</h2>${typeof Phone !== 'undefined' && Phone.on ? '' : `<button class="icon-btn" data-action="tv-close" title="Close">${icon('x')}</button>`}</div>
+    <div class="tv-bar">${icon('trash')}<span>In the Trash · ${who} ${esc(timeAgo(it.deletedAt))} · ${left} day${left === 1 ? '' : 's'} left</span>
+      ${canRestore ? `<button class="btn primary sm" data-action="tv-restore" data-id="${it.id}">${icon('reply')}Restore</button>` : ''}</div>
+    <div class="tv-body">BODY</div>`;
+  // the phone: a tall sheet from the bottom, dragged down to close (it's only for a look)
+  if (typeof Phone !== 'undefined' && Phone.on && Phone.sheet) {
+    Phone.sheet(`<div class="tv-sheet">${inner.replace('BODY', () => tvBody)}</div>`, null, { kind: 'trash-view' });
+    return;
+  }
+  // (its own layer, under the file preview, so previewing an attachment keeps this open behind it)
+  let root = $('#tv-root');
+  if (!root) { root = document.createElement('div'); root.id = 'tv-root'; document.body.appendChild(root); }
+  root.innerHTML = `<div class="scrim tv-scrim"><div class="dialog tv-dlg" role="dialog" aria-label="Task in the Trash">
+    <div class="tv-top"><h2>${esc(t.title || 'Untitled task')}</h2><button class="icon-btn" data-action="tv-close" title="Close">${icon('x')}</button></div>
+    <div class="tv-bar">${icon('trash')}<span>In the Trash · ${who} ${esc(timeAgo(it.deletedAt))} · ${left} day${left === 1 ? '' : 's'} left</span>
+      ${canRestore ? `<button class="btn primary sm" data-action="tv-restore" data-id="${it.id}">${icon('reply')}Restore</button>` : ''}</div>
+    <div class="tv-body">${tvBody}    </div>
   </div></div>`;
   const scrim = root.querySelector('.tv-scrim');
   scrim.addEventListener('click', (e) => { if (e.target === scrim) root.innerHTML = ''; });
@@ -5590,7 +5598,7 @@ document.addEventListener('click', async (e) => {
       case 'tr-empty': emptyTrashFlow(); return;
       case 'tr-view': trashTaskView(id); return;
       case 'tv-close': $('#tv-root').innerHTML = ''; return;
-      case 'tv-restore': $('#tv-root').innerHTML = ''; restoreTrash(id); return;
+      case 'tv-restore': { const r = $('#tv-root'); if (r) r.innerHTML = ''; const sh = $('#ph-sheet-root .ph-scrim[data-kind="trash-view"]'); if (sh) sh.parentElement.innerHTML = ''; restoreTrash(id); return; }
       case 'tr-preview': { const it = trashList().find((x) => x.id === id); const a = it && trashFiles(it).find((x) => x.id === actEl.dataset.file); if (a) previewFile(a); return; }
       case 'mention-user': e.stopPropagation(); mentionInComposer(id); return;
       case 'cancel-edit': ui.editingComment = null; renderDetail(); return;

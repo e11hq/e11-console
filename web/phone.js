@@ -715,7 +715,7 @@ const Phone = (() => {
   });
 
   check();
-  return { get on() { return st.on; }, isOn, renderContent, decorate, chrome, taskHead, quickAdd, check, resetInbox: () => { st.ibf = 'unread'; } };
+  return { get on() { return st.on; }, isOn, renderContent, decorate, chrome, taskHead, quickAdd, check, sheet, resetInbox: () => { st.ibf = 'unread'; } };
 })();
 
 /* Phone notifications (Web Push): the switch on the Me page, and opening a task from a notification */

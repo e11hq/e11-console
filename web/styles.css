@@ -2803,8 +2803,8 @@ body.phone .us-note { display: none; }
 .desc-sec.open:not(.fits) .desc-toggle-wrap .desc-toggle { pointer-events: auto; box-shadow: 0 6px 18px rgba(0, 0, 0, .18); background: var(--panel); }
 
 /* A task in the Trash, view only */
-.tr-title[data-action="tr-view"] { cursor: pointer; }
-.tr-title[data-action="tr-view"]:hover { text-decoration: underline; text-underline-offset: 3px; }
+.tr-row.tr-open { cursor: pointer; }   /* (the whole row opens the task; no underline) */
+.tr-row.tr-open:hover { background: var(--hover); }
 .tv-scrim { z-index: 95; padding-top: 6vh; }
 .tv-dlg { width: min(680px, calc(100vw - 32px)); max-height: 86vh; display: flex; flex-direction: column; padding: 0; overflow: hidden; }
 .tv-top { display: flex; align-items: flex-start; gap: 12px; padding: 18px 20px 10px; }
