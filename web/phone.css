@@ -674,6 +674,10 @@ body.phone .ph-seg.in-task { border-radius: 10px; }
 
 /* Phone: no double-tap zoom */
 html.phone, html.phone body { touch-action: manipulation; }
+/* …and on everything inside, scrolling lists included (touch-action isn't inherited past a scrolling box): without it
+   iPhone treats a quick tap as the first half of a double-tap zoom and drops the taps that follow quickly — tasks
+   opened one after another "hung" until you waited a second. (:where keeps it weaker than any rule that sets its own) */
+:where(html.phone *) { touch-action: manipulation; }
 
 /* Phone: no "Download all" in CD review requests and Client Assets */
 body.phone [data-action="ca-download-all"], body.phone [data-action="rr-download"] { display: none !important; }
