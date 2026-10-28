@@ -140,6 +140,9 @@ export function createServer(cfg) {
   const macSwift = !!macDir && fs.existsSync(path.join(macDir, 'bin', 'E11Console.zip'));
   const macShell = (() => {
     try {
+      // the version of the Mac app actually in the build (mac/bin/SHELL_VERSION, from the zip): older Mac apps are asked to
+      // update to that — never to a newer one the build doesn't have yet (that would ask again after every update)
+      if (macSwift) { try { const n = Number(fs.readFileSync(path.join(macDir, 'bin', 'SHELL_VERSION'), 'utf8').trim()); if (n > 0) return n; } catch { /* not written: main.swift */ } }
       if (macSwift) { const m = fs.readFileSync(path.join(macDir, 'swift', 'main.swift'), 'utf8').match(/let SHELL_VERSION = (\d+)/); if (m) return Number(m[1]); }
       const m = fs.readFileSync(path.join(macDir, 'main.js'), 'utf8').match(/var SHELL_VERSION = (\d+);/); return m ? Number(m[1]) : 1;
     } catch { return 1; }

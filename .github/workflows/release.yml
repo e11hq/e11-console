@@ -60,6 +60,8 @@ jobs:
           else
             gh release download mac-app -p E11Console.zip -D mac/bin || echo "no stored Mac build: the installer uses the earlier app"
           fi
+          # the Mac app version inside the build (the server asks older Mac apps to update to this one, never past it)
+          if [ -f mac/bin/E11Console.zip ]; then unzip -p mac/bin/E11Console.zip SHELL_VERSION > mac/bin/SHELL_VERSION 2>/dev/null || rm -f mac/bin/SHELL_VERSION; fi
           ls -l mac/bin || true
       - name: Work out versions
         id: v
