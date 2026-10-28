@@ -1022,8 +1022,8 @@ const ServerHost = (() => {
       const inp = document.createElement('input');
       inp.type = 'file'; inp.multiple = multiple; if (accept) inp.accept = accept;
       // iPhone shows its Photo Library / Camera / Files menu next to the file field, so the field goes on the button that
-      // was tapped (an off-screen field put the menu somewhere odd). With the keyboard up, the keyboard goes down first
-      // and the menu opens once the page has settled, at the button's new place.
+      // was tapped (an off-screen field put the menu somewhere odd). The keyboard stays as it is (phone.js keeps the
+      // comment being written focused when its + is tapped).
       const btn = window.__e11LastDownEl && window.__e11LastDownEl.isConnected ? window.__e11LastDownEl.closest('button, [data-action]') || window.__e11LastDownEl : null;
       const put = () => {
         const r = btn && btn.isConnected ? btn.getBoundingClientRect() : null;
@@ -1037,9 +1037,7 @@ const ServerHost = (() => {
       inp.addEventListener('cancel', () => finish([]));
       window.addEventListener('focus', () => setTimeout(() => finish([...(inp.files || [])]), 800), { once: true });
       document.body.appendChild(inp);
-      const typing = Host.isIOSApp && document.documentElement.classList.contains('ph-typing') && document.activeElement && document.activeElement !== document.body;
-      if (typing) { document.activeElement.blur(); setTimeout(() => { put(); inp.click(); }, 420); }
-      else inp.click();
+      inp.click();
     });
   }
   // A file to upload: a browser File, or a file picked in the Mac app (read through the app)

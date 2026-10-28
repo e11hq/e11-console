@@ -1531,4 +1531,13 @@ const Push = (() => {
   const note = (e) => { const t = e.touches ? e.touches[0] : e; if (t) { window.__e11LastDown = { x: t.clientX, y: t.clientY }; window.__e11LastDownEl = e.target; } };
   document.addEventListener('touchstart', note, { capture: true, passive: true });
   document.addEventListener('mousedown', note, true);
+  // the comment box's + doesn't take the focus from the comment being written: the keyboard stays up, nothing moves,
+  // and the attach menu opens right on the +
+  const keep = (e) => {
+    if (!Phone.on || !e.target.closest || !e.target.closest('.composer [data-action="attach-comment"]')) return;
+    const a = document.activeElement;
+    if (a && a.closest && a.closest('.composer') && (a.isContentEditable || /^(INPUT|TEXTAREA)$/.test(a.tagName))) e.preventDefault();
+  };
+  document.addEventListener('mousedown', keep, true);
+  document.addEventListener('pointerdown', keep, true);
 })();
