@@ -7,7 +7,9 @@ const len = (n) => (n < 0x80 ? Buffer.from([n]) : n < 0x100 ? Buffer.from([0x81,
 const tlv = (tag, body) => Buffer.concat([Buffer.from([tag]), len(body.length), body]);
 const seq = (...items) => tlv(0x30, Buffer.concat(items));
 const set = (...items) => tlv(0x31, Buffer.concat(items));
-const int = (buf) => tlv(0x02, buf[0] & 0x80 ? Buffer.concat([Buffer.from([0]), buf]) : buf);
+// (DER wants the shortest form: no extra leading zero bytes, and one 0 byte only before a high first bit — a random
+//  serial starting with 0x00 made a certificate OpenSSL refuses, about once in 256)
+const int = (buf) => { let i = 0; while (i < buf.length - 1 && buf[i] === 0 && !(buf[i + 1] & 0x80)) i++; buf = buf.subarray(i); return tlv(0x02, buf[0] & 0x80 ? Buffer.concat([Buffer.from([0]), buf]) : buf); };
 const explicit = (n, body) => tlv(0xa0 + n, body);
 const utf8 = (s) => tlv(0x0c, Buffer.from(s, 'utf8'));
 const bits = (buf) => tlv(0x03, Buffer.concat([Buffer.from([0]), buf]));
