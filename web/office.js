@@ -19,16 +19,29 @@ const OfficeHome = (() => {
     return out.sort((x, y) => String(y.a.addedAt || '').localeCompare(String(x.a.addedAt || '')));
   }
   function filesHTML() {
-    const q = st.q.trim().toLowerCase();
-    const list = allFiles().filter(({ c, f, a }) => (st.client === 'all' || c.id === st.client) && (!q || `${a.name} ${c.name} ${f.name}`.toLowerCase().includes(q))).slice(0, 60);
-    st.count = `${list.length} file${list.length === 1 ? '' : 's'}`;
+    const q = st.q.trim();
+    // the same search as the Client Assets page: every word counts, client / folder / file names, file types
+    // ("ford logo png", "pdf", "font"), and small typos when nothing matches exactly
+    let list, loose = false;
+    if (q) {
+      const scope = st.client === 'all' ? null : clientsSorted().find((c) => c.id === st.client);
+      const r = caSearch(q, scope || null);
+      loose = !!r.loose;
+      list = r.files.sort((x, y) => String(y.a.addedAt || '').localeCompare(String(x.a.addedAt || '')));
+    } else list = allFiles().filter(({ c }) => st.client === 'all' || c.id === st.client);
+    const total = list.length;
+    list = list.slice(0, 60);
+    st.count = `${total} file${total === 1 ? '' : 's'}`;
     const n = $('#oh-fcount'); if (n) n.textContent = st.count;
-    if (!list.length) return `<div class="oh-empty">${q ? 'No files match' : 'No files yet'}</div>`;
-    return list.map(({ c, f, a }) => {
+    if (!list.length) return `<div class="oh-empty">${q ? 'No files match — try a client, a folder or a file type like “pdf”' : 'No files yet'}</div>`;
+    const name = (a) => (q ? caMark(a.name, q) : esc(a.name));
+    const where = (c, f) => (q ? caMark(`${c.name} › ${folderPath(c, f)}`, q) : `${esc(c.name)} › ${esc(folderPath(c, f))}`);
+    const note = loose ? '<div class="oh-empty oh-close">Nothing matched exactly — close matches:</div>' : '';
+    return note + list.map(({ c, f, a }) => {
       const open = st.sel === a.id;
       return `<div class="oh-fwrap"><button class="oh-row ${open ? 'sel' : ''}" data-oh="file" data-id="${a.id}">
           <span class="oh-ext" style="background:${esc(projColorOfClient(c))}">${esc(extOf(a.name))}</span>
-          <span class="oh-t"><b>${esc(a.name)}</b><small>${esc(c.name)} › ${esc(folderPath(c, f))}${a.addedBy ? ' · ' + esc(firstName(a.addedBy)) : ''}</small></span>
+          <span class="oh-t"><b>${name(a)}</b><small>${where(c, f)}${a.addedBy ? ' · ' + esc(firstName(a.addedBy)) : ''}</small></span>
           <span class="oh-w">${a.addedAt ? esc(short(a.addedAt)) : ''}</span></button>
         ${open ? `<div class="oh-detail">
           <div class="oh-kv"><span>Added by</span><span>${a.addedBy ? esc(fullName(userById(a.addedBy))) : '—'}</span>
@@ -66,7 +79,7 @@ const OfficeHome = (() => {
       <header class="oh-head">
         <div><div class="oh-date">${esc(new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }))} · Office Admin</div>
           <h1>${esc(part)}, ${esc(firstName(u.id))}</h1></div>
-        <label class="oh-search">${icon('search')}<span class="sr-only">Search Client Assets</span><input id="oh-q" value="${esc(st.q)}" placeholder="Search files in Client Assets…" autocomplete="off" spellcheck="false"></label>
+        <label class="oh-search">${icon('search')}<span class="sr-only">Search Client Assets</span><input id="oh-q" value="${esc(st.q)}" placeholder="Search Client Assets — e.g. “ford logo png”" autocomplete="off" spellcheck="false"></label>
       </header>
       <div class="oh-stats">
         ${tile(clients.length, 'Clients', 'in Client Assets', 'data-oh="focus" data-v="assets"', 'violet')}

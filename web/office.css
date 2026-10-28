@@ -58,6 +58,8 @@ body.office-mode .brand-acts [data-action="focus-search"] { display: none !impor
 .oh-link { border: 0; background: none; font: inherit; color: var(--accent-ink); font-weight: 600; cursor: pointer; }
 .oh-empty { color: var(--text-3); font-size: 13px; padding: 12px 8px; }
 .oh-empty.center { text-align: center; padding: 28px 8px; }
+.oh-empty.oh-close { padding: 4px 8px 6px; font-size: 12px; }
+.oh-t mark { background: rgba(249, 190, 51, .28); color: inherit; border-radius: 3px; padding: 0 1px; }
 .oh-fin-top { padding: 0 16px 12px; display: flex; flex-direction: column; gap: 8px; }
 .oh-fin-top:has(.oh-big) { flex-direction: row; align-items: baseline; gap: 10px; }
 .oh-big { font-size: 26px; }
