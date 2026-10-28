@@ -81,11 +81,11 @@ test('only Admins pick the Social Manager or a client’s Social people', async 
   assert.equal((await T.push(OWNER, [{ kind: 'meta', id: 'main', base: meta, data: { ...meta, socialMgrIds: ['u-mg', 'u-ex2'] } }]))[0].refused, false);
 });
 
-test('the live site: no content plans (a trial on the test copy only)', async () => {
+test('the live site has content plans too (a trial on the test copy until 2026-10-28)', async () => {
   const L = await start('1.6.5');
   try {
     const base = L.app.store.get('plans', 'pl-1');
-    assert.equal((await L.push(EXEC, [{ kind: 'plans', id: 'pl-1', base, data: { ...base, posts: [{ id: 'x', day: '2026-12-01', title: 'x' }] } }]))[0].refused, true);
+    assert.equal((await L.push(EXEC, [{ kind: 'plans', id: 'pl-1', base, data: { ...base, posts: [{ id: 'x', day: '2026-12-01', title: 'x' }] } }]))[0].refused, false);
   } finally { await L.app.close(); fs.rmSync(L.dir, { recursive: true, force: true }); }
 });
 

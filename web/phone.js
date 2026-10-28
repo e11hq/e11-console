@@ -123,7 +123,7 @@ const Phone = (() => {
     const ph = mePhoto();
     const u0 = typeof me === 'function' ? me() : null;
     if (ph) tabs.forEach((t) => { if (t.v === 'me') { t.photo = ph; if (u0 && u0.avatar) t.photoUrl = new URL(fileUrl({ path: u0.avatar }), location.href).href; } });
-    const msg = JSON.stringify({ tabs, hidden: !!ui.taskId || !!document.querySelector('.scrim, .menu:not(.mention-pop), #ph-sheet-root .ph-scrim:not(.docked), #overlay-root > *') });
+    const msg = JSON.stringify({ tabs, hidden: !!ui.taskId || !!document.querySelector('.scrim, .menu:not(.mention-pop), #ph-sheet-root .ph-scrim:not(.docked), #overlay-root > *, #pv-root > *') });
     if (msg === tabsSent) return;
     tabsSent = msg;
     NativeMac.call('setTabs', JSON.parse(msg)).catch(() => {});
@@ -375,7 +375,7 @@ const Phone = (() => {
         ${row('data-nav="profile"', 'user', 'My profile', 'Photo, office and notifications')}
         ${isCD() ? row('data-ph-tab="projects"', 'folder', 'Clients') : ''}
         ${Cal.canSee() && !calendarRetired() ? row('data-nav="calendar"', 'cal', 'Content calendar', 'Posts by day, channel and occasion') : ''}
-        ${Plans.canSee() ? row('data-nav="plans"', 'cal', 'Content plans', 'Each client’s month · trial') : ''}
+        ${Plans.canSee() ? row('data-nav="plans"', 'cal', 'Content plans', 'Each client’s month') : ''}
         ${row('data-nav="clients"', 'assets', 'Client Assets', 'Logos, guidelines and fonts')}
         ${row('data-nav="team"', 'users', 'Team members')}
         ${isManager() ? row('data-nav="trash"', 'trash', 'Trash', trashList().length ? `${trashList().length} item${trashList().length === 1 ? '' : 's'} · restore within ${TRASH_DAYS} days` : `Deleted items wait here ${TRASH_DAYS} days`) : ''}

@@ -921,3 +921,31 @@ body.phone .fv, body.phone .lightbox { z-index: 260; }
 body.phone .ph-scrim:not(.docked) .ph-sheet { margin: 0 8px !important; border-bottom-left-radius: 0 !important; border-bottom-right-radius: 0 !important; padding-bottom: calc(env(safe-area-inset-bottom) + 16px) !important; }
 html.phone body.phone .menu:not(.mention-pop) { left: 8px !important; right: 8px !important; }
 body.phone .ph-bar.ph-bar-root { padding-left: 20px; }
+
+/* ---- File preview on the phone (web/viewer.js): edge to edge, swipe, tap to hide everything ---- */
+body.phone #pv-root, body.phone .fpv { z-index: 255; }
+body.phone.pv-open .scrim { z-index: 270 !important; }
+body.phone.pv-open .menu { z-index: 300 !important; }
+body.phone.pv-open #toast-root { z-index: 310 !important; bottom: calc(env(safe-area-inset-bottom) + 150px) !important; }
+body.phone .fpv { --pv-bg: #000; background: color-mix(in srgb, var(--pv-bg) calc(var(--pv-fade, 1) * 100%), transparent); animation: none; }
+:root[data-theme="light"] body.phone .fpv { --pv-bg: #f5f5f7; }
+body.phone .fpv-top { height: auto; padding: calc(var(--ph-top, 44px) + 4px) 14px 8px; transition: opacity .2s; }
+body.phone .fpv-rb { width: 42px; height: 42px; }
+body.phone .fpv-slide { padding: 0; }
+body.phone .fpv-video { border-radius: 0; }
+body.phone .fpv-slide .fv-pdf { width: 100%; border-radius: 0; }
+body.phone .fpv-scroll .fv-pages { padding: 8px 0 30px; }
+body.phone .fpv-scroll .fv-text { border-radius: 0; }
+body.phone .fpv-bot { padding: 10px 0 calc(env(safe-area-inset-bottom) + 14px); gap: 12px; transition: opacity .2s; }
+body.phone .fpv-meta { padding: 0 24px; font-size: 12px; }
+body.phone .fpv-strip { gap: 6px; padding: 4px 12px; justify-content: safe center; width: 100%; }
+body.phone .fpv-th { width: 38px; height: 48px; border-radius: 7px; }
+body.phone .fpv-th.on { width: 44px; }
+body.phone .fpv-btns { display: flex; justify-content: center; gap: 12px; width: 100%; padding: 0 20px; }
+body.phone .fpv-bb { flex: 1; max-width: 130px; height: 56px; border-radius: 16px; border: 0; background: var(--pv-btn); color: var(--pv-fg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font: inherit; font-size: 12px; }
+body.phone .fpv-bb .ic { width: 20px; height: 20px; }
+body.phone .fpv-bb:active { background: var(--pv-btn-h); }
+body.phone .fpv.fpv-bare .fpv-top, body.phone .fpv.fpv-bare .fpv-bot, body.phone .fpv.fpv-pulling .fpv-top, body.phone .fpv.fpv-pulling .fpv-bot { opacity: 0; pointer-events: none; }
+body.phone .fpv.fpv-bare .fpv-stage, body.phone .fpv.fpv-pulling .fpv-stage { position: fixed; inset: 0; }
+body.phone .fpv .fpv-stage { touch-action: pan-y; }
+body.phone .fpv.fpv-zoomed .fpv-stage { touch-action: none; }

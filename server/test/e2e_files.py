@@ -69,7 +69,7 @@ async def main():
             th = await E("(a) => Host.call('thumb', { id: a.id, path: a.path })", att)
             check(bool(th.get('thumb')), f'{name} gets a first-page thumbnail')
         await E("(n) => previewFile(task(ui.taskId).attachments.find(a => a.name === n))", 'recap.pptx'); await pg.wait_for_timeout(1500)
-        check(await pg.locator('.fv-body iframe.fv-pdf').count() == 1, 'PowerPoint opens as a full preview in the viewer')
+        check(await pg.locator('.fpv-slide iframe.fv-pdf').count() == 1, 'PowerPoint opens as a full preview in the viewer')
         await pg.screenshot(path=os.path.join(SHOTS, 'files_pptx.png'))
         await E("document.getElementById('overlay-root').innerHTML=''")
         # --- task panel: Details first, wide, no shadow

@@ -1,4 +1,4 @@
-/* ================= Content plans (a trial on the test copy) =================
+/* ================= Content plans =================
    One plan per client per month (db.plans):
      { id, projectId, month: 'YYYY-MM', status: 'draft', createdBy, createdAt, updatedAt, posts: [post] }
      post = { id, day: 'YYYY-MM-DD', title, desc, format, channels: [], occasion, shots, copyEn, copyAr, refs: [ref],
@@ -16,7 +16,7 @@
    Social Manager made goes to the CD (nobody approves their own). Next stages: creating tasks, the finished work coming
    back into the plan, the client export (then it's the "content plan") and the client's approval. */
 const Plans = (() => {
-  const on = () => typeof isTestCopy === 'function' && isTestCopy();
+  const on = () => true;   // (a trial on the test copy until 2026-10-28; now on everywhere)
   const owns = (v) => on() && (v === 'plans' || v === 'plan');
   const FORMATS = [['post', 'Post', '#8b8b96'], ['carousel', 'Carousel', '#7b68ee'], ['reel', 'Reel', '#e5484d'], ['story', 'Story', '#f2b23e'], ['video', 'Video', '#3ddc97']];
   const FMT = Object.fromEntries(FORMATS.map(([k, name, color]) => [k, { k, name, color }]));
@@ -115,9 +115,9 @@ const Plans = (() => {
   function title() {
     if (ui.view === 'plan') {
       const pl = planById(ui.planId), p = pl && proj(pl.projectId);
-      if (pl && p) return `<div class="page-icon pl-icon">${icon('cal')}</div><a class="page-title crumb-link" data-nav="plans">Content plans</a><span class="crumb-sep">/</span><div class="page-title">${esc(p.name)} · ${esc(monthLabel(pl.month))}</div><span class="pl-trial">Trial · test site</span>`;
+      if (pl && p) return `<div class="page-icon pl-icon">${icon('cal')}</div><a class="page-title crumb-link" data-nav="plans">Content plans</a><span class="crumb-sep">/</span><div class="page-title">${esc(p.name)} · ${esc(monthLabel(pl.month))}</div>`;
     }
-    return `<div class="page-icon pl-icon">${icon('cal')}</div><div class="page-title">Content plans</div><span class="pl-trial">Trial · test site</span>`;
+    return `<div class="page-icon pl-icon">${icon('cal')}</div><div class="page-title">Content plans</div>`;
   }
   function render(c) {
     if (!canSee()) { ui.view = 'home'; return renderContent(); }
@@ -432,8 +432,8 @@ const Plans = (() => {
       <div class="pl-dlg-body">
         <div class="mt-bulk"><span>For all</span>
           <select class="field" id="mt-fmt"><option value="">posts</option>${FORMATS.map(([k, name]) => `<option value="${k}">${esc(name)}s</option>`).join('')}</select>
-          <button type="button" class="btn ghost sm" data-mt="bulk-who">${icon('user')}People…</button>
-          <span class="date-chip pl-date mt-due">${icon('cal')}<span class="date-lbl">Due date…</span><input type="date" class="date-in" id="mt-bulk-due"></span>
+          <button type="button" class="btn ghost sm" data-mt="bulk-who">${icon('user')}People</button>
+          <span class="date-chip pl-date mt-due">${icon('cal')}<span class="date-lbl">Due date</span><input type="date" class="date-in" id="mt-bulk-due"></span>
         </div>
         <div id="mt-rows"></div>
       </div>
@@ -819,7 +819,7 @@ const Plans = (() => {
         : `<div class="pl-none">${ed ? 'Photos, videos, PDFs or links that show what you have in mind' : 'No references'}</div>`;
     };
     const close = () => { root.innerHTML = ''; document.removeEventListener('keydown', onKey, true); };
-    const onKey = (e) => { if (e.key === 'Escape' && !$('.fv, .file-viewer')) { e.preventDefault(); e.stopPropagation(); close(); } };
+    const onKey = (e) => { if (e.key === 'Escape' && !$('.fv, .file-viewer, .fpv')) { e.preventDefault(); e.stopPropagation(); close(); } };
     document.addEventListener('keydown', onKey, true);
     $('.scrim', root).addEventListener('mousedown', (e) => { if (e.target.classList.contains('scrim') && !ed) close(); });
     if (ed) $('#pp-day', root).addEventListener('change', (e) => { if (e.target.value) { s.day = e.target.value; $('.date-lbl', e.target.closest('.date-chip')).textContent = dayLong(s.day); } });

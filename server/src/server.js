@@ -36,7 +36,7 @@ export function createServer(cfg) {
   const dataDir = cfg.dataDir;
   const store = cfg.store || openStore(cfg.dbFile || path.join(dataDir, 'db', 'e11.sqlite'));
   const auth = cfg.auth || createAuth({ team: cfg.cfTeam, aud: cfg.cfAud, dev: !!cfg.dev });
-  const access = createAccess(store, { ownerEmail: cfg.adminEmail, plans: /-test\.|-dev$/.test(cfg.version || '0.0.0-dev') });   // (content plans: a trial on the test copy only)
+  const access = createAccess(store, { ownerEmail: cfg.adminEmail, plans: true });   // (content plans: on everywhere since 2026-10-28)
   const files = createFiles(dataDir);
   // The App Review copy (review.js): only when REVIEW_PASSWORD is set — never on the live or test copy
   const review = cfg.reviewPassword ? createReview({ store, password: cfg.reviewPassword, email: cfg.reviewEmail || undefined }) : null;

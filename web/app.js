@@ -3538,7 +3538,7 @@ function renderDetail() {
         </div>` : `<div class="tm-act-head">
           <span class="tm-act-title">${railTabs && ui.activityFilter === 'all' ? 'Activity' : 'Comments'}<small>Created ${esc(fmtDay(ymd(new Date(t.createdAt))))}</small></span>
           ${railTabs ? '' : `<div class="seg">
-            <button class="${ui.activityFilter !== 'all' ? 'on' : ''}" data-action="act-filter" data-f="comments">Comments${nTop ? ` ${nTop}` : ''}</button>
+            <button class="${ui.activityFilter !== 'all' ? 'on' : ''}" data-action="act-filter" data-f="comments">Comments${nTop ? `<i class="seg-n">${nTop}</i>` : ''}</button>
             <button class="${ui.activityFilter === 'all' ? 'on' : ''}" data-action="act-filter" data-f="all">All</button>
           </div>`}
         </div>`}
@@ -3839,7 +3839,7 @@ function attPreview(a, scope) {
   const key = `${scope}-${a.id}`;
   const kind = fileKind(a);
   let media = '';
-  if (kind === 'image') media = `<div class="ap-img" data-action="lightbox" data-src="${url}" data-name="${esc(a.name)}">${MediaDims.frame(a, `<img src="${imgUrl(a, 1280)}" alt="" loading="lazy">`)}</div>`;
+  if (kind === 'image') media = `<div class="ap-img" data-action="quicklook" data-id="${a.id}">${MediaDims.frame(a, `<img src="${imgUrl(a, 1280)}" alt="" loading="lazy">`)}</div>`;
   else if (kind === 'video') media = `<div class="ap-vid">${MediaDims.frame(a, videoTag(a, 'ap-video', `data-media-key="${key}"${scope === 'client' ? ' data-thumb-client="1"' : ''}`))}</div>`;
   else if (kind === 'audio') media = `<div class="ap-audio"><audio data-media-key="${key}" src="${url}" controls preload="metadata"></audio></div>`;
   else if (kind === 'pdf') media = `<iframe class="ap-pdf" src="${url}" title="${esc(a.name)}"></iframe>`;
@@ -3852,7 +3852,6 @@ function attPreview(a, scope) {
       <div class="fname"><div>${esc(a.name)}</div><small>${fmtSize(a.size)}${a.addedAt ? ' · ' + timeAgo(a.addedAt) : ''}</small></div>
       <button class="icon-btn sm" data-action="copy-att" data-id="${a.id}" title="Copy — paste into a comment or description">${icon('copy')}</button>
       <button class="icon-btn sm" data-action="quicklook" data-id="${a.id}" title="Preview">${icon('search')}</button>
-      <button class="icon-btn sm" data-action="open-att" data-id="${a.id}" title="Open in default app">${icon('open')}</button>
       <button class="icon-btn sm" data-action="reveal-att" data-id="${a.id}" title="${FINDER_LABEL}">${icon(Host.isServer ? 'download' : 'folder')}</button>
       ${scope === 'task' ? `<button class="icon-btn sm" data-action="remove-att" data-id="${a.id}" title="Remove">${icon('trash')}</button>` : ''}
     </div>
@@ -3866,60 +3865,8 @@ function hydratePreviews(root) {
     el.removeAttribute('data-text-src');
   });
 }
-// Full-screen preview of an attachment inside the app
-async function previewFile(a) {
-  if (!a) return;
-  ui.previewAtt = a;
-  const url = fileUrl(a);
-  const kind = fileKind(a);
-  let body = '';
-  // Phones show a PDF at its printed size (cut off on the right), so there the pages come as images that fit the screen
-  const phonePages = Host.isServer && typeof Phone !== 'undefined' && Phone.on && (kind === 'pdf' || OFFICE_EXT.includes(fileExt(a.name)));
-  if (phonePages) body = `<div class="fv-pages" id="fv-pages"><p class="fv-wait"><span class="spin"></span>Loading the pages…</p></div>`;
-  else if (kind === 'image') body = `<img class="fv-img" src="${url}" alt="">`;
-  else if (kind === 'video') body = `<video class="fv-video" src="${viewUrl(a)}" controls autoplay playsinline${a.thumb ? ` poster="${posterUrl(a)}"` : ''}></video>`;
-  else if (kind === 'audio') body = `<div class="fv-audio">${icon('play')}<audio src="${url}" controls autoplay></audio></div>`;
-  else if (kind === 'pdf') body = `<iframe class="fv-pdf" src="${url}"></iframe>`;
-  else if (kind === 'text') body = `<pre class="fv-text" data-text-src="${url}">Loading…</pre>`;
-  else if (OFFICE_EXT.includes(fileExt(a.name)) && Host.isServer) body = `<div class="fv-doc" id="fv-office">${thumbImg(a, 'wide')}<p class="fv-wait"><span class="spin"></span>Preparing the full preview…</p></div>`;
-  else body = `<div class="fv-doc">${thumbImg(a, 'wide')}<p>This preview shows the first page. ${typeof Phone !== 'undefined' && Phone.on ? 'Download it' : 'Click <b>Open in app</b>'} to see the whole file.</p></div>`;
-  $('#overlay-root').innerHTML = `<div class="fv" data-action="close-preview">
-    <div class="fv-box">
-      <div class="fv-head">
-        ${fileIcon(a)}
-        <div class="fname"><div>${esc(a.name)}</div><small>${fmtSize(a.size)}</small></div>
-        <button class="btn ghost sm" data-action="copy-att" data-id="${a.id}" title="Paste it into any comment or description">${icon('copy')}Copy</button>
-        <button class="btn ghost sm" data-action="open-att" data-id="${a.id}">${icon('open')}Open in app</button>
-        <button class="icon-btn" data-action="reveal-att" data-id="${a.id}" title="${FINDER_LABEL}">${icon(Host.isServer ? 'download' : 'folder')}</button>
-        <button class="icon-btn" data-action="close-preview" title="Close (Esc)">${icon('x')}</button>
-      </div>
-      <div class="fv-body">${body}</div>
-    </div>
-  </div>`;
-  const root = $('#overlay-root');
-  hydratePreviews(root);
-  hydrateThumbs(root);
-  if (phonePages) {
-    const fb = root.querySelector('.fv-body'); if (fb) fb.classList.add('pages');
-    Host.call('pdfPages', { id: a.id, path: a.path }).then((r) => {
-      const el = document.getElementById('fv-pages');
-      if (!el || ui.previewAtt !== a) return;
-      const pages = (r && r.pages) || [];
-      if (!pages.length) { el.innerHTML = `<p class="fv-wait">${r && r.unavailable ? 'Full previews of Office files arrive with the next server update.' : (typeof Phone !== 'undefined' && Phone.on ? 'This file couldn’t be previewed — download it to see it.' : 'This file couldn’t be previewed — use <b>Open in app</b> or download it.')}</p>`; return; }
-      el.innerHTML = pages.map((pth, i) => `<img class="fv-page" src="${'/__file/' + pth.split('/').map(encodeURIComponent).join('/')}" alt="Page ${i + 1}" loading="${i < 2 ? 'eager' : 'lazy'}">`).join('')
-        + (r.total > pages.length ? `<p class="fv-wait">Showing the first ${pages.length} of ${r.total} pages — ${typeof Phone !== 'undefined' && Phone.on ? 'download it' : 'use <b>Open in app</b>'} for the rest.</p>` : '');
-    }).catch(() => { const el = document.getElementById('fv-pages'); if (el) el.innerHTML = '<p class="fv-wait">This file couldn’t be previewed right now.</p>'; });
-  }
-  // Word / PowerPoint / Excel: the server turns it into a PDF (once) and the whole document shows here
-  if (document.getElementById('fv-office')) {
-    Host.call('docPreview', { id: a.id, path: a.path }).then((r) => {
-      const el = document.getElementById('fv-office');
-      if (!el || ui.previewAtt !== a) return;
-      if (r && r.pdf) el.outerHTML = `<iframe class="fv-pdf" src="${'/__file/' + r.pdf.split('/').map(encodeURIComponent).join('/')}" title="${esc(a.name)}"></iframe>`;
-      else { const w = el.querySelector('.fv-wait'); if (w) w.innerHTML = r && r.unavailable ? 'Full previews of Office files arrive with the next server update. This shows the first page.' : (typeof Phone !== 'undefined' && Phone.on ? 'This file couldn’t be previewed — download it to see it.' : 'This file couldn’t be previewed — use <b>Open in app</b> or download it.'); }
-    }).catch(() => { const w = document.querySelector('#fv-office .fv-wait'); if (w) w.textContent = 'This file couldn’t be previewed right now.'; });
-  }
-}
+// Full-screen preview of a file, with its folder / task / comment files to swipe through (web/viewer.js)
+function previewFile(a, group) { if (a) Viewer.open(a, group); }
 
 function lightbox(src, name) {
   const root = $('#overlay-root');
@@ -3927,7 +3874,7 @@ function lightbox(src, name) {
 }
 
 function attRow(a, scope) {
-  return `<div class="att" data-action="open-att" data-id="${a.id}" data-scope="${scope}" title="Open">
+  return `<div class="att" data-action="quicklook" data-id="${a.id}" data-scope="${scope}" title="Preview">
     ${fileIcon(a)}
     <div class="fname"><div>${esc(a.name)}</div><small>${fmtSize(a.size)}${a.addedAt ? ' · added ' + timeAgo(a.addedAt) : ''}</small></div>
     <button class="icon-btn sm" data-action="copy-att" data-id="${a.id}" title="Copy — paste into a comment or description">${icon('copy')}</button>
@@ -5540,7 +5487,7 @@ document.addEventListener('click', async (e) => {
       case 'rr-open': e.preventDefault(); openTask(id); return;
       case 'rr-decide': e.stopPropagation(); decisionDialog(id); return;
       case 'rr-download': e.stopPropagation(); downloadReviewFiles(id); return;
-      case 'rr-file': { const rt = task(actEl.dataset.taskId); const a = rt && findAttachment(rt, id); if (a) previewFile(a); return; }
+      case 'rr-file': { const rt = task(actEl.dataset.taskId); const a = rt && findAttachment(rt, id); if (a) previewFile(a, a.reviewId ? (rt.attachments || []).filter((x) => x.reviewId === a.reviewId) : [a]); return; }
       case 'assign-menu': e.stopPropagation(); assignMenu(actEl); return;
       case 'unassign': e.stopPropagation(); setAssignee(task(ui.taskId), id, false); return;
       case 'open-notif': openNotif(id); return;
@@ -5904,6 +5851,7 @@ document.addEventListener('keydown', (e) => {
   if (mod && e.key.toLowerCase() === 'n') { e.preventDefault(); if (e.shiftKey) { if (isSuper()) newProjectFlow(); else denied(); } else if (can('createTask')) newTaskInContext(); else denied(); return; }
   if (e.key === 'Escape') {
     if ($('.lightbox') || $('.fv')) { $('#overlay-root').innerHTML = ''; return; }
+    if (typeof Viewer !== 'undefined' && Viewer.isOpen()) { Viewer.close(); return; }
     if ($('.menu')) { closeMenus(); return; }
     if (el.id === 'search') { el.value = ''; el.dispatchEvent(new Event('input', { bubbles: true })); el.blur(); return; }
     if (ui.taskId && ui.thread) { if (el.blur) el.blur(); closeThread(); return; }

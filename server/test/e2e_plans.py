@@ -36,7 +36,7 @@ async def main():
             await pg.locator('#nav-plans').click(); await pg.wait_for_timeout(500)
             rows = await pg.locator('.pl-row:not(.tt-head)').count()
             check(rows == 2, f'Aishwarya sees the 2 clients she is Social for ({rows})')
-            check('Trial' in await pg.locator('#title-area').inner_text(), 'marked as a trial')
+            check('Trial' not in await pg.locator('#title-area').inner_text(), 'no longer marked as a trial')
             kr = pg.locator('.pl-row', has_text='KOREA 360')
             check('Open' in await kr.inner_text() and await kr.locator('.pl-st.review').count() == 1, 'KOREA 360 has a skeleton, waiting for approval')
             await pg.screenshot(path=os.path.join(OUT, 'plans-list.png'))

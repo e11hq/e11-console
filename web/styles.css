@@ -2838,3 +2838,65 @@ body.phone .us-note { display: none; }
 .tv-cm-meta b { color: var(--text); }
 .tv-cm-text { font-size: 14px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .tv-cm-text.rich { white-space: normal; }
+
+/* ===== File preview (web/viewer.js): the file fills the screen; its folder / task / comment files to move through ===== */
+#pv-root { position: relative; z-index: 150; }
+body.pv-open .scrim { z-index: 160; }
+body.pv-open .menu { z-index: 170; }
+body.pv-open #toast-root { z-index: 180; }
+.fpv { --pv-bg: rgba(6, 6, 8, .985); --pv-fg: #ececf1; --pv-dim: #8a8a95; --pv-btn: #24242a; --pv-btn-h: #2e2e35; --pv-ring: #fff; --pv-doc: #1c1c22;
+  position: fixed; inset: 0; z-index: 150; background: var(--pv-bg); color: var(--pv-fg); display: flex; flex-direction: column; animation: fadein .14s ease; -webkit-user-select: none; user-select: none; }
+:root[data-theme="light"] .fpv { --pv-bg: rgba(245, 245, 247, .99); --pv-fg: #16161a; --pv-dim: #6b6b76; --pv-btn: #fff; --pv-btn-h: #f0f0f4; --pv-ring: #16161a; --pv-doc: #e7e7ec; }
+.fpv svg { stroke: currentColor; }
+.fpv-top { position: relative; z-index: 3; height: 64px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; gap: 10px; }
+.fpv-count { position: absolute; left: 50%; transform: translateX(-50%); font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.fpv-acts { display: flex; gap: 8px; margin-left: auto; }
+.fpv-rb { width: 38px; height: 38px; border-radius: 50%; border: 0; background: var(--pv-btn); color: var(--pv-fg); display: grid; place-items: center; flex: none; cursor: pointer; }
+.fpv-btn { height: 38px; border-radius: 10px; border: 0; background: var(--pv-btn); color: var(--pv-fg); display: inline-flex; align-items: center; gap: 7px; padding: 0 14px; font: inherit; font-size: 13px; cursor: pointer; }
+.fpv-rb:hover, .fpv-btn:hover, .fpv-arr:hover { background: var(--pv-btn-h); }
+:root[data-theme="light"] .fpv-rb, :root[data-theme="light"] .fpv-btn, :root[data-theme="light"] .fpv-arr, :root[data-theme="light"] .fpv-bb { box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
+.fpv-rb .ic, .fpv-btn .ic { width: 17px; height: 17px; }
+.fpv-stage { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+.fpv-track { position: absolute; inset: 0; will-change: transform; }
+.fpv-slide { position: absolute; top: 0; bottom: 0; width: 100%; display: flex; align-items: center; justify-content: center; padding: 0 90px; }
+.fpv-img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; transform-origin: center; -webkit-user-drag: none; }
+.fpv-video { max-width: 100%; max-height: 100%; background: #000; border-radius: 4px; }
+.fpv-light { position: relative; display: flex; align-items: center; justify-content: center; max-width: 100%; max-height: 100%; }
+.fpv-cover { max-width: 100%; max-height: 100%; object-fit: contain; display: block; border-radius: 4px; }
+.fpv-ph { width: 220px; height: 280px; border-radius: 14px; background: var(--pv-doc); display: grid; place-items: center; color: var(--pv-dim); font-weight: 700; font-size: 18px; text-transform: uppercase; }
+.fpv-play { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 70px; height: 70px; border-radius: 50%; background: rgba(15, 15, 18, .75); display: grid; place-items: center; color: #fff; }
+.fpv-play .ic { width: 28px; height: 28px; margin-left: 3px; }
+.fpv-play svg path { fill: #fff; }
+.fpv-slide .fv-pdf { width: min(100%, 980px); height: 100%; border: 0; background: #fff; border-radius: 4px; }
+.fpv-slide .fv-doc { color: var(--pv-dim); }
+.fpv-slide .fv-doc p { color: var(--pv-dim); }
+.fpv-slide .fv-audio audio { width: min(420px, 90vw); }
+.fpv-scroll { width: 100%; height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.fpv-scroll .fv-text { min-height: 100%; background: var(--pv-doc); color: var(--pv-fg); border-radius: 8px; }
+.fpv-arr { position: absolute; top: 50%; z-index: 3; width: 48px; height: 48px; margin-top: -24px; border-radius: 50%; border: 0; background: var(--pv-btn); color: var(--pv-fg); display: grid; place-items: center; cursor: pointer; opacity: 0; transition: opacity .2s; }
+.fpv-arr .ic { width: 22px; height: 22px; }
+.fpv-arr.prev { left: 22px; } .fpv-arr.next { right: 22px; }
+.fpv.fpv-awake .fpv-arr { opacity: 1; }
+.fpv.fpv-first .fpv-arr.prev, .fpv.fpv-last .fpv-arr.next { opacity: 0 !important; pointer-events: none; }
+.fpv-bot { position: relative; z-index: 3; flex: none; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 12px 18px 22px; }
+.fpv-meta { text-align: center; font-size: 12.5px; line-height: 1.5; color: var(--pv-dim); max-width: min(720px, 100%); }
+.fpv-meta b { display: block; font-weight: 500; color: var(--pv-fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fpv-strip { display: flex; gap: 8px; max-width: 100%; overflow-x: auto; padding: 4px; scrollbar-width: none; }
+.fpv-strip::-webkit-scrollbar { display: none; }
+.fpv-th { flex: none; width: 48px; height: 60px; border-radius: 8px; border: 0; padding: 0; overflow: hidden; background: var(--pv-doc); opacity: .5; cursor: pointer; display: grid; place-items: center; color: var(--pv-dim); font: 700 11px/1 inherit; text-transform: uppercase; transition: opacity .15s, width .15s; }
+.fpv-th img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.fpv-th:hover { opacity: .8; }
+.fpv-th.on { opacity: 1; width: 54px; outline: 2px solid var(--pv-ring); outline-offset: 2px; }
+.fpv-keys { font-size: 11.5px; color: var(--pv-dim); opacity: .7; }
+.fpv-keys kbd { font: inherit; border: 1px solid color-mix(in srgb, var(--pv-dim) 50%, transparent); border-radius: 5px; padding: 0 5px; margin: 0 1px; }
+.fpv-page { position: absolute; right: 14px; bottom: 10px; z-index: 2; background: var(--pv-btn); border-radius: 10px; padding: 5px 10px; font-size: 12px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+.fpv-page.on { opacity: 1; }
+.fpv-info { display: grid; gap: 10px; margin: 6px 0 4px; }
+.fpv-info div { display: flex; flex-direction: column; gap: 2px; }
+.fpv-info span { font-size: 12px; color: var(--text-3); }
+.fpv-info b { font-weight: 500; word-break: break-word; }
+/* the Mac app: the window's own buttons sit top left, so the preview's top bar starts after them (and drags the window) */
+html.mac-chrome .fpv-top { padding-left: 88px; }
+html.mac-chrome.mac-fs .fpv-top { padding-left: 18px; }
+/* the comment count on a task's Comments tab: a small round badge (as on the phone) */
+.seg .seg-n { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; margin-left: 6px; border-radius: 10px; background: rgba(120, 120, 135, .18); color: var(--text); font-style: normal; font-size: 11.5px; font-weight: 650; line-height: 1; vertical-align: 1px; }
