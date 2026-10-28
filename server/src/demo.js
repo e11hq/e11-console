@@ -68,7 +68,9 @@ export function demoData(store, me, filesRoot) {
     out.plans = [];   // (content plans are a trial on the test copy only)
     const data = JSON.parse(scrub(JSON.stringify(out)));
     // everyone's email made from their made-up name (the reviewer keeps the sign-in address)
-    for (const u of data.users) { delete u.salt; delete u.hash; } // (old local sign-in fields)
+    for (const u of data.users) { delete u.salt; delete u.hash; u.prefs = { ...(u.prefs || {}), profileAsked: true }; } // (old local sign-in fields; no "add your birthday" card in a demo)
+    // every client shows its drawn logo
+    for (const c of data.clients || []) { const lf = (c.folders || []).find((f) => f.name === 'Logos'); const svg = lf && lf.files.find((f) => /\.svg$/i.test(f.name)); if (svg && !c.logo) c.logo = svg.path; }
     for (const u of data.users) if (u.id !== me && u.name) u.email = `${u.name.toLowerCase().normalize('NFD').replace(/[^a-z ]/g, '').trim().replace(/\s+/g, '.')}@example.com`;
     if (stage) moveAll(stage, filesRoot);
     return data;

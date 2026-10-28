@@ -22,12 +22,42 @@
      "media": [],
      "reacts": 1,
      "replies": 0
+    },
+    {
+     "who": "u-joe",
+     "text": "Two directions for the key visual: A is the mountain road at dusk, B is the city at night.",
+     "media": [
+      {
+       "key": "dm01.jpg",
+       "name": "NorthlineMotors_EveryRoad,EverySeason_1080x1350_V02.jpg"
+      },
+      {
+       "key": "dm02.jpg",
+       "name": "NorthlineMotors_MadeForTheNightDrive_1080x1350_V03.jpg"
+      }
+     ],
+     "reacts": 2,
+     "replies": 0
+    },
+    {
+     "who": "u-karim",
+     "text": "A is the one. Warm the headlights up a little and give the logo more space at the bottom.",
+     "media": [],
+     "reacts": 3,
+     "replies": 0
+    },
+    {
+     "who": "u-nadia",
+     "text": "@Joe Hajj the client loves A too 🎉 Final sizes by Sunday please.",
+     "media": [],
+     "reacts": 2,
+     "replies": 0
     }
    ],
    "media": [
     {
-     "key": "dm01.jpg",
-     "name": "NorthlineMotors_EveryRoad,EverySeason_1080x1350_V02.jpg"
+     "key": "dm03.jpg",
+     "name": "NorthlineMotors_EveryRoad,EverySeason_1080x1350_V01.jpg"
     }
    ]
   },
@@ -50,12 +80,12 @@
    ],
    "media": [
     {
-     "key": "dm02.jpg",
-     "name": "NorthlineMotors_WinterServiceCheck_1080x1350_V03.jpg"
+     "key": "dm04.jpg",
+     "name": "NorthlineMotors_WinterServiceCheck_1080x1350_V02.jpg"
     },
     {
-     "key": "dm03.jpg",
-     "name": "NorthlineMotors_FreeCarWash_1080x1350_V01.jpg"
+     "key": "dm05.jpg",
+     "name": "NorthlineMotors_FreeCarWash_1080x1350_V03.jpg"
     }
    ]
   },
@@ -85,8 +115,8 @@
    ],
    "media": [
     {
-     "key": "dm04.jpg",
-     "name": "NorthlineMotors_YouAreInvited_1080x1350_V02.jpg"
+     "key": "dm06.jpg",
+     "name": "NorthlineMotors_YouAreInvited_1080x1350_V01.jpg"
     }
    ]
   },
@@ -128,8 +158,8 @@
    ],
    "media": [
     {
-     "key": "dm05.jpg",
-     "name": "NorthlineMotors_OwnersClubRoadTrip_1080x1350_V03.jpg"
+     "key": "dm07.jpg",
+     "name": "NorthlineMotors_OwnersClubRoadTrip_1080x1350_V02.jpg"
     }
    ]
   },
@@ -159,8 +189,8 @@
    ],
    "media": [
     {
-     "key": "dm06.jpg",
-     "name": "KestrelAuto_RoomForEveryone_1080x1350_V01.jpg"
+     "key": "dm08.jpg",
+     "name": "KestrelAuto_RoomForEveryone_1080x1350_V03.jpg"
     }
    ]
   },
@@ -183,8 +213,8 @@
    ],
    "media": [
     {
-     "key": "dm07.jpg",
-     "name": "KestrelAuto_YearEndSale_1920x1080_V02.jpg"
+     "key": "dm09.jpg",
+     "name": "KestrelAuto_YearEndSale_1920x1080_V01.jpg"
     }
    ]
   },
@@ -226,8 +256,8 @@
    ],
    "media": [
     {
-     "key": "dm08.jpg",
-     "name": "KestrelAuto_FiveStarsForSafety_1080x1350_V03.jpg"
+     "key": "dm10.jpg",
+     "name": "KestrelAuto_FiveStarsForSafety_1080x1350_V02.jpg"
     }
    ]
   },
@@ -269,8 +299,8 @@
    ],
    "media": [
     {
-     "key": "dm09.jpg",
-     "name": "VoltraEV_RangeMyths,Busted_1080x1350_V01.jpg"
+     "key": "dm11.jpg",
+     "name": "VoltraEV_RangeMyths,Busted_1080x1350_V03.jpg"
     }
    ]
   },
@@ -293,8 +323,8 @@
    ],
    "media": [
     {
-     "key": "dm10.jpg",
-     "name": "VoltraEV_Pre-BookYoursToday_1920x1080_V02.jpg"
+     "key": "dm12.jpg",
+     "name": "VoltraEV_Pre-BookYoursToday_1920x1080_V01.jpg"
     }
    ]
   },
@@ -335,8 +365,8 @@
    ],
    "media": [
     {
-     "key": "dm11.jpg",
-     "name": "AzureBayResidences_LivingAboveTheBay_1080x1350_V03.jpg"
+     "key": "dm13.jpg",
+     "name": "AzureBayResidences_LivingAboveTheBay_1080x1350_V02.jpg"
     }
    ]
   },
@@ -359,8 +389,8 @@
    ],
    "media": [
     {
-     "key": "dm12.jpg",
-     "name": "AzureBayResidences_OpenHouseThisFriday_1080x1920_V01.jpg"
+     "key": "dm14.jpg",
+     "name": "AzureBayResidences_OpenHouseThisFriday_1080x1920_V03.jpg"
     }
    ]
   },
@@ -383,8 +413,8 @@
    ],
    "media": [
     {
-     "key": "dm13.jpg",
-     "name": "AzureBayResidences_EverythingYouNeed,Downstairs_1080x1350_V02.jpg"
+     "key": "dm15.jpg",
+     "name": "AzureBayResidences_EverythingYouNeed,Downstairs_1080x1350_V01.jpg"
     }
    ]
   },
@@ -407,8 +437,8 @@
    ],
    "media": [
     {
-     "key": "dm14.jpg",
-     "name": "HaldenHotels_YourWeekendEscape_1080x1920_V03.jpg"
+     "key": "dm16.jpg",
+     "name": "HaldenHotels_YourWeekendEscape_1080x1920_V02.jpg"
     }
    ]
   },
@@ -431,8 +461,8 @@
    ],
    "media": [
     {
-     "key": "dm15.jpg",
-     "name": "HaldenHotels_FestiveBrunch_1080x1350_V01.jpg"
+     "key": "dm17.jpg",
+     "name": "HaldenHotels_FestiveBrunch_1080x1350_V03.jpg"
     }
    ]
   },
@@ -455,8 +485,8 @@
    ],
    "media": [
     {
-     "key": "dm16.jpg",
-     "name": "SeoulStreetMarket_FoodWeekIsHere_1080x1920_V02.jpg"
+     "key": "dm18.jpg",
+     "name": "SeoulStreetMarket_FoodWeekIsHere_1080x1920_V01.jpg"
     }
    ]
   },
@@ -490,8 +520,8 @@
    ],
    "media": [
     {
-     "key": "dm17.jpg",
-     "name": "CoastlinePantry_GoodMorningsStartHere_1080x1350_V03.jpg"
+     "key": "dm19.jpg",
+     "name": "CoastlinePantry_GoodMorningsStartHere_1080x1350_V02.jpg"
     }
    ]
   },
@@ -536,8 +566,8 @@
    ],
    "media": [
     {
-     "key": "dm18.jpg",
-     "name": "AsterHealth_FiveSmallHabits_1080x1350_V01.jpg"
+     "key": "dm20.jpg",
+     "name": "AsterHealth_FiveSmallHabits_1080x1350_V03.jpg"
     }
    ]
   },
@@ -579,8 +609,8 @@
    ],
    "media": [
     {
-     "key": "dm19.jpg",
-     "name": "AsterHealth_GetYourFluShot_1080x1350_V02.jpg"
+     "key": "dm21.jpg",
+     "name": "AsterHealth_GetYourFluShot_1080x1350_V01.jpg"
     }
    ]
   },
@@ -603,8 +633,8 @@
    ],
    "media": [
     {
-     "key": "dm20.jpg",
-     "name": "GraniteAutoParts_NoStandThisYear.SoWeBuiltOur_1080x1350_V03.jpg"
+     "key": "dm22.jpg",
+     "name": "GraniteAutoParts_NoStandThisYear.SoWeBuiltOur_1080x1350_V02.jpg"
     }
    ]
   },
@@ -627,8 +657,8 @@
    ],
    "media": [
     {
-     "key": "dm21.jpg",
-     "name": "GraniteAutoParts_StopWithConfidence_1080x1350_V01.jpg"
+     "key": "dm23.jpg",
+     "name": "GraniteAutoParts_StopWithConfidence_1080x1350_V03.jpg"
     }
    ]
   },
@@ -662,8 +692,8 @@
    ],
    "media": [
     {
-     "key": "dm22.jpg",
-     "name": "BloomCafé_AutumnInACup_1080x1350_V02.jpg"
+     "key": "dm24.jpg",
+     "name": "BloomCafé_AutumnInACup_1080x1350_V01.jpg"
     }
    ]
   },
@@ -686,8 +716,8 @@
    ],
    "media": [
     {
-     "key": "dm23.jpg",
-     "name": "FortisFitness_NewYear,StrongerYou_1080x1350_V03.jpg"
+     "key": "dm25.jpg",
+     "name": "FortisFitness_NewYear,StrongerYou_1080x1350_V02.jpg"
     }
    ]
   },
@@ -729,8 +759,8 @@
    ],
    "media": [
     {
-     "key": "dm24.jpg",
-     "name": "KestrelAuto_DealerTrainingDay_1920x1080_V01.jpg"
+     "key": "dm26.jpg",
+     "name": "KestrelAuto_DealerTrainingDay_1920x1080_V03.jpg"
     }
    ]
   }

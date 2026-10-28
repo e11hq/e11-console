@@ -159,7 +159,10 @@ def add(*a, **k): TASKS.append(T(*a, **k))
 
 N, K, V, CR, AZ, HD, SS, CP, AH, GA, BC, FF = 'Ford & Lincoln', 'KIA', 'DEEPAL', 'AL TAYER MOTORS', 'ALAIN', 'HRE', 'KOREA 360', 'CPT', 'ASV', 'Gebriel Motors', 'Bizreh', 'FORTA'
 add(N, 'Northline | Winter Drive Campaign – Key Visual', 'WIP', 'Hero key visual for the Winter Drive campaign. Mountain road at dusk, the new SUV in front, warm headlights.\nHeadline: Every road, every season.\nSizes: 1080x1350, 1080x1920, 1920x1080.', 'u-nadia',
-    [('u-nadia', 'Hi @Joe Hajj, brief and references are in the description. First direction by Thursday please.', [], 0), ('u-joe', 'On it. Sharing two looks tomorrow morning.', [], 1)],
+    [('u-nadia', 'Hi @Joe Hajj, brief and references are in the description. First direction by Thursday please.', [], 0), ('u-joe', 'On it. Sharing two looks tomorrow morning.', [], 1),
+     ('u-joe', 'Two directions for the key visual: A is the mountain road at dusk, B is the city at night.', [pic(N, 'Every road, every season', 'Direction A · mountain road'), pic(N, 'Made for the night drive', 'Direction B · city lights')], 2),
+     ('u-karim', 'A is the one. Warm the headlights up a little and give the logo more space at the bottom.', [], 3),
+     ('u-nadia', '@Joe Hajj the client loves A too 🎉 Final sizes by Sunday please.', [], 2)],
     [pic(N, 'Every road, every season', 'Winter Drive · test drive this weekend')], 'PO Received')
 add(N, 'Northline | Service Offer – Social Pack', 'INTERNAL REVIEW', 'Four posts for the winter service offer: 20% off the 10-point check, free car wash.', 'u-nadia',
     [('u-sara', 'Service pack ready for review, all four sizes attached.', [], 0)], [pic(N, 'Winter service check', '20% off this month'), pic(N, 'Free car wash', 'With every service booking')], 'LPO Pending')
