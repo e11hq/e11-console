@@ -470,26 +470,35 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   func becameActive() {
     let away = awayAt.map { Date().timeIntervalSince($0) } ?? 0
     if defaults.bool(forKey: LOCK_KEY), lockView == nil, !authing, launchLock || away > 600 { lock() }
+    else if lockView != nil, !authing { DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.unlock() } }   // (asked again on coming back)
     launchLock = false
     awayAt = nil
     if pageReady { pushState { st in if st == "on" { UIApplication.shared.registerForRemoteNotifications() } } }
   }
   func wentAway() { if !authing { awayAt = Date() } }
   func lock() {
-    let v = UIVisualEffectView(effect: UIBlurEffect(style: .systemThickMaterialDark))
-    v.frame = view.bounds
-    let b = UIButton(type: .system)
-    b.setTitle("Unlock E11 Console", for: .normal)
-    b.titleLabel?.font = .systemFont(ofSize: 18, weight: .semibold)
-    b.tintColor = .white
+    // a plain locked screen in the app's own colours: lock, name, and the button (Face ID is asked straight away)
+    let v = UIView(frame: view.bounds)
+    v.backgroundColor = BG
+    let ic = UIImageView(image: UIImage(systemName: "lock.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 44, weight: .semibold)))
+    ic.tintColor = UIColor(red: 0.48, green: 0.41, blue: 0.93, alpha: 1)
+    let t = UILabel(); t.text = "E11 Console is locked"; t.font = .systemFont(ofSize: 20, weight: .semibold); t.textColor = .white
+    let kind = (biometry()?["kind"] as? String) ?? "Face ID"
+    var cfg = UIButton.Configuration.filled()
+    cfg.title = "Unlock with \(kind)"; cfg.cornerStyle = .capsule
+    cfg.baseBackgroundColor = UIColor(red: 0.42, green: 0.34, blue: 0.9, alpha: 1)
+    cfg.contentInsets = NSDirectionalEdgeInsets(top: 12, leading: 22, bottom: 12, trailing: 22)
+    let b = UIButton(configuration: cfg)
     b.addTarget(self, action: #selector(unlock), for: .touchUpInside)
-    b.translatesAutoresizingMaskIntoConstraints = false
-    v.contentView.addSubview(b)
-    b.centerXAnchor.constraint(equalTo: v.contentView.centerXAnchor).isActive = true
-    b.centerYAnchor.constraint(equalTo: v.contentView.centerYAnchor).isActive = true
+    let st = UIStackView(arrangedSubviews: [ic, t, b]); st.axis = .vertical; st.alignment = .center; st.spacing = 18
+    st.setCustomSpacing(30, after: t)
+    st.translatesAutoresizingMaskIntoConstraints = false
+    v.addSubview(st)
+    st.centerXAnchor.constraint(equalTo: v.centerXAnchor).isActive = true
+    st.centerYAnchor.constraint(equalTo: v.centerYAnchor).isActive = true
     view.addSubview(v)
     lockView = v
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.unlock() }
+    if UIApplication.shared.applicationState == .active { DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.unlock() } }
   }
   @objc func unlock() {
     if authing || lockView == nil { return }
