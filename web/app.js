@@ -3710,7 +3710,7 @@ function thumbImg(a, mode) {
 }
 function attTile(a) {
   const kind = fileKind(a);
-  const inner = kind === 'image' && Host.isNative ? `<img src="${imgUrl(a, 640)}" alt="" loading="lazy">` : (Host.isNative ? thumbImg(a, 'tile') : `<div class="thumb-ph"><span class="ext">${esc(fileExt(a.name) || 'file')}</span></div>`);
+  const inner = kind === 'image' && Host.isNative ? `<img src="${imgUrl(a, 640)}" alt="" loading="lazy" draggable="false">` : (Host.isNative ? thumbImg(a, 'tile') : `<div class="thumb-ph"><span class="ext">${esc(fileExt(a.name) || 'file')}</span></div>`);
   return `<div class="tile" data-action="tile-open" data-id="${a.id}" title="${esc(a.name)}">
     <div class="tile-img">${inner}${kind === 'video' ? `<span class="tile-play">${icon('play')}</span>` : ''}</div>
     <div class="tile-meta"><span>${esc(a.name)}</span><small>${fmtSize(a.size)}</small></div>
@@ -6032,7 +6032,7 @@ function caTile(f, a, loc = null) {
   const kind = fileKind(a);
   let inner;
   if (isFont(a)) inner = `<div class="font-sample" style="font-family:'caf-${a.id}'"><b>Aa</b><span>The quick brown fox · ابجد ١٢٣</span></div>`;
-  else if (kind === 'image' && Host.isNative) inner = `<img src="${imgUrl(a, 640)}" alt="" loading="lazy">`;
+  else if (kind === 'image' && Host.isNative) inner = `<img src="${imgUrl(a, 640)}" alt="" loading="lazy" draggable="false">`;
   else if (Host.isNative) inner = thumbImg(a, 'tile').replace('data-thumb-for="', 'data-thumb-client="1" data-thumb-for="');
   else inner = `<div class="thumb-ph"><span class="ext">${esc(fileExt(a.name) || 'file')}</span></div>`;
   return `<div class="tile ca-tile" data-action="tile-open" data-id="${a.id}" title="${esc(a.name)}">
