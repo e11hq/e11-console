@@ -1,6 +1,7 @@
 # The Swift Mac app: built for Intel and Apple silicon on GitHub's Mac, installed with the real installer and
-# checked in self-test mode. Called by Release only when mac/ changed (Mac minutes count 10× toward the free
-# allowance); mac-* branches run it on their own for trying changes.
+# checked in self-test mode. Started by Release when mac/swift changed or the stored build is older than main.swift; on
+# success it stores the build (release "mac-app") and runs Release again. mac-* branches run it on their own for trying changes.
+
 name: Mac app
 on:
   workflow_call:
@@ -9,6 +10,10 @@ on:
     branches: ['mac-*']
 permissions:
   contents: write
+  actions: write
+concurrency:
+  group: mac-build
+  cancel-in-progress: false
 jobs:
   mac:
     runs-on: macos-26
@@ -44,3 +49,12 @@ jobs:
         with:
           name: mac-app
           path: mac/bin/E11Console.zip
+      # started by Release on main: keep the build (release "mac-app") and run Release again so test and live get it
+      - name: Store the build and publish it
+        if: success() && github.ref_name == 'main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view mac-app >/dev/null 2>&1 || gh release create mac-app --prerelease --title "Mac app build" --notes "The Swift Mac app's program, used by the installer. Updated when mac/ changes." --target "$GITHUB_SHA"
+          gh release upload mac-app mac/bin/E11Console.zip --clobber
+          gh workflow run release.yml --ref main
