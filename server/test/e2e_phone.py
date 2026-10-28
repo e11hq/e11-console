@@ -58,6 +58,7 @@ async def main():
             check(await E("document.getElementById('ph-tabs').hidden"), 'tab bar hidden on the task page')
             check(await hr.locator('#detail .tm-main').is_visible() and not await hr.locator('#detail .tm-activity').is_visible(), 'Details tab shown first')
             await shot(hr, '3-task')
+            await E("document.querySelectorAll('#notif-root > *').forEach((n) => n.remove())")   # (a pop-up update at the top can cover the tabs, e.g. the content plan reminder late in the month)
             await hr.locator('#detail .ph-task-head [data-tab="comments"]').click(); await hr.wait_for_timeout(300)
             check(await hr.locator('#detail .tm-activity').is_visible() and not await hr.locator('#detail .tm-main').is_visible(), 'Comments tab switches')
             ed = hr.locator('#d-comment'); await ed.click(); await hr.keyboard.type('Posted from my phone')
