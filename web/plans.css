@@ -87,7 +87,7 @@
 .pl-dlg { width: 720px; max-width: calc(100vw - 32px); max-height: calc(100vh - 48px); display: flex; flex-direction: column; padding: 0; box-sizing: border-box; }
 .pl-dlg-top { display: flex; align-items: center; gap: 10px; padding: 18px 20px 6px; flex: none; }
 .pl-dlg-top h2 { margin: 0; font-size: 18px; }
-.pl-dlg-sub { color: var(--text-3); font-size: 12.5px; flex: 1; }
+.pl-dlg-sub { color: var(--text-3); font-size: 12.5px; flex: 1; text-align: right; }   /* (client · month next to the ×) */
 .pl-dlg-body { padding: 0 20px 8px; overflow-y: auto; flex: 1 1 auto; min-height: 0; }
 .pl-dlg .actions { padding: 12px 20px 16px; border-top: 1px solid var(--border); margin: 0; flex: none; }
 .pl-dlg .actions .spacer { flex: 1; }
