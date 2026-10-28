@@ -920,3 +920,4 @@ body.phone .fv, body.phone .lightbox { z-index: 260; }
    the screen (rounded top corners only) */
 body.phone .ph-scrim:not(.docked) .ph-sheet { margin: 0 8px !important; border-bottom-left-radius: 0 !important; border-bottom-right-radius: 0 !important; padding-bottom: calc(env(safe-area-inset-bottom) + 16px) !important; }
 html.phone body.phone .menu:not(.mention-pop) { left: 8px !important; right: 8px !important; }
+body.phone .ph-bar.ph-bar-root { padding-left: 20px; }

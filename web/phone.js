@@ -69,7 +69,8 @@ const Phone = (() => {
   // the phone can settle on its real size a moment after opening without telling the page: keep checking
   setInterval(() => { if (st.on && !document.hidden) measure(); }, 1000);
 
-  const tabOf = (v) => (v === 'home' ? 'today' : v === 'review' ? 'reviews' : v === 'project' ? 'projects' : v);
+  const socialPlans = () => { const u = typeof me === 'function' ? me() : null; return !!u && u.role === 'social' && typeof Plans !== 'undefined' && Plans.canSee(u); };
+  const tabOf = (v) => (v === 'home' ? 'today' : v === 'review' ? 'reviews' : v === 'project' ? 'projects' : v === 'plan' ? 'plans' : v);
   const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 
   /* ---------- Bottom tab bar ---------- */
@@ -87,7 +88,9 @@ const Phone = (() => {
       : tab('today', 'sun', Work.dayTitle())
       + tab('mytasks', 'check-circle', 'My Tasks')
       + tab('inbox', 'inbox', 'Inbox', unread)
-      + (cd ? tab('reviews', 'shield', 'Reviews', rv) : tab('projects', 'folder', 'Clients'))
+      + (cd ? tab('reviews', 'shield', 'Reviews', rv)
+        // Social: their month's content plans instead of Clients (while content plans are on)
+        : socialPlans() ? tab('plans', 'cal', 'Plans', Plans.waiting()) : tab('projects', 'folder', 'Clients'))
       + tab('me', 'user', 'Me');
     stopFling();
     bar.hidden = !!ui.taskId;
@@ -438,7 +441,9 @@ const Phone = (() => {
     }
     if (ui.view === 'plan') { const pl = Plans.planById(ui.planId), p = pl && proj(pl.projectId); title = p ? `${esc(p.name)} · ${esc(Plans.monthLabel(pl.month))}` : 'Content plan'; back = 'data-nav="plans"'; }
     if (ui.search) { title = 'Search'; back = 'data-ph-tab="today"'; }
-    c.insertAdjacentHTML('afterbegin', backHead(title, back));
+    // Content plans as a Social person's own tab: a tab's page, so no back button
+    if (ui.view === 'plans' && socialPlans() && !ui.search) c.insertAdjacentHTML('afterbegin', `<header class="ph-bar ph-bar-root"><b>${title}</b><span class="ph-bar-sp"></span></header>`);
+    else c.insertAdjacentHTML('afterbegin', backHead(title, back));
     pinHead(c);
   }
   // iOS 26 softens the top edge of anything that scrolls, so page headers live in a fixed layer

@@ -370,6 +370,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     case "reviews": return "checkmark.shield"
     case "projects": return "folder"
     case "clients": return "square.grid.2x2"
+    case "plans": return "calendar"
     case "me": return "person.crop.circle"
     default: return "circle"
     }
