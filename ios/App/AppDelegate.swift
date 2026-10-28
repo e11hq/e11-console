@@ -380,6 +380,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if keys != tabKeys || (tabBar.items?.count ?? 0) != keys.count {
       tabKeys = keys
       tabPhoto = [:]
+      tabBadgeKey = [:]
       tabBar.items = list.enumerated().map { i, t in
         let v = t["v"] as? String ?? ""
         return UITabBarItem(title: t["label"] as? String ?? "", image: UIImage(systemName: symbol(v)), tag: i)
@@ -399,10 +400,26 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       if let comma = ph.firstIndex(of: ","), let data = Data(base64Encoded: String(ph[ph.index(after: comma)...])), let src = UIImage(data: data) { apply(src) }
       if let s = t["photoUrl"] as? String, let url = URL(string: s) { fetchPhoto(url) { img in if self.tabPhoto[i] == ph, let img = img { apply(img) } } }
     }
+    // counts sit on the icon's top-right corner, overlapping it a little (like an app icon's badge), drawn into the
+    // icon itself: iOS's own tab badge sits further out
+    lastTabs = a
     for (i, t) in list.enumerated() {
+      guard let item = tabBar.items?[i] else { continue }
       let b = t["badge"] as? String ?? ""
-      tabBar.items?[i].badgeValue = b.isEmpty ? nil : b
-      if (t["on"] as? Bool) == true { tabBar.selectedItem = tabBar.items?[i] }
+      let v = t["v"] as? String ?? ""
+      item.badgeValue = nil
+      if t["photo"] == nil {
+        let key = "\(v)|\(b)|\(traitCollection.userInterfaceStyle.rawValue)"
+        if tabBadgeKey[i] != key {
+          tabBadgeKey[i] = key
+          if b.isEmpty { item.image = UIImage(systemName: symbol(v)); item.selectedImage = nil }
+          else {
+            item.image = badged(symbol(v), b, color: tabBar.unselectedItemTintColor ?? .label)
+            item.selectedImage = badged(symbol(v), b, color: tabBar.tintColor ?? .systemBlue)
+          }
+        }
+      }
+      if (t["on"] as? Bool) == true { tabBar.selectedItem = item }
     }
     let hide = (a["hidden"] as? Bool) == true || list.isEmpty
     if hide != tabsHidden {
@@ -421,6 +438,32 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     }
   }
   var tabPhoto: [Int: String] = [:]
+  var tabBadgeKey: [Int: String] = [:]
+  var lastTabs: [String: Any]?
+  // a tab's icon with its count on the top-right corner, overlapping the icon a little
+  func badged(_ name: String, _ text: String, color: UIColor) -> UIImage {
+    let resolved = color.resolvedColor(with: traitCollection)
+    let sym = (UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: 21, weight: .regular)) ?? UIImage())
+      .withTintColor(resolved, renderingMode: .alwaysOriginal)
+    let font = UIFont.systemFont(ofSize: 11.5, weight: .bold)
+    let label = NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: UIColor.white])
+    let ls = label.size()
+    let bh: CGFloat = 17, bw = max(bh, ls.width + 9)
+    let pad = max(bw - 8, 9)                 // room for the badge beyond the icon, the same on every side so the icon stays centred
+    let size = CGSize(width: sym.size.width + pad * 2, height: sym.size.height + pad * 2)
+    return UIGraphicsImageRenderer(size: size).image { _ in
+      let ir = CGRect(x: pad, y: pad, width: sym.size.width, height: sym.size.height)
+      sym.draw(in: ir)
+      let br = CGRect(x: ir.maxX - bw + 8, y: ir.minY - 7, width: bw, height: bh)
+      UIColor.systemRed.setFill()
+      UIBezierPath(roundedRect: br, cornerRadius: bh / 2).fill()
+      label.draw(at: CGPoint(x: br.midX - ls.width / 2, y: br.midY - ls.height / 2))
+    }.withRenderingMode(.alwaysOriginal)
+  }
+  override func traitCollectionDidChange(_ previous: UITraitCollection?) {
+    super.traitCollectionDidChange(previous)
+    if previous?.userInterfaceStyle != traitCollection.userInterfaceStyle, let a = lastTabs { tabBadgeKey = [:]; setTabs(a) }
+  }
   // a picture from our server, with the page's sign-in (its cookies)
   func fetchPhoto(_ url: URL, _ done: @escaping (UIImage?) -> Void) {
     web.configuration.websiteDataStore.httpCookieStore.getAllCookies { cookies in
