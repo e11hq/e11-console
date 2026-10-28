@@ -82,6 +82,7 @@ const Plans = (() => {
   /* ---------- months ---------- */
   const monthKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   const nextMonth = () => { const d = new Date(); return monthKey(new Date(d.getFullYear(), d.getMonth() + 1, 1)); };
+  const thisMonth = () => monthKey(new Date());   // (plans are never for a month that's over: the list starts here)
   const st = () => (ui.plans = ui.plans || { month: nextMonth(), tab: 'calendar' });
   const monthLabel = (m) => { const [y, mm] = m.split('-').map(Number); return `${MONTHS[mm - 1]} ${y}`; };
   const shiftMonth = (m, n) => { const [y, mm] = m.split('-').map(Number); return monthKey(new Date(y, mm - 1 + n, 1)); };
@@ -129,7 +130,7 @@ const Plans = (() => {
     c.innerHTML = `<div class="pl-page">
       <div class="pl-bar">
         <div class="cal-nav">
-          <button class="icon-btn" data-pl="prev" title="Previous month">${icon('chev-left')}</button>
+          <button class="icon-btn" data-pl="prev" title="Previous month" ${m <= thisMonth() ? 'disabled' : ''}>${icon('chev-left')}</button>
           <b class="cal-label">${esc(monthLabel(m))}</b>
           <button class="icon-btn" data-pl="next" title="Next month">${icon('chev-right')}</button>
           ${m !== nextMonth() ? `<button class="btn ghost sm" data-pl="reset" title="Back to the month being planned">Back to ${esc(monthLabel(nextMonth()).split(' ')[0])}</button>` : ''}
@@ -910,7 +911,7 @@ const Plans = (() => {
     e.preventDefault();
     const pl = planById(ui.planId);
     switch (a) {
-      case 'prev': s.month = shiftMonth(s.month, -1); return renderContent();
+      case 'prev': if (s.month > thisMonth()) s.month = shiftMonth(s.month, -1); return renderContent();
       case 'next': s.month = shiftMonth(s.month, 1); return renderContent();
       case 'reset': s.month = nextMonth(); return renderContent();
       case 'open': e.stopPropagation(); return open(el.dataset.id);

@@ -2703,7 +2703,23 @@ function renderTitle() {
     </div>`;
 }
 
+// Pictures already on the page are kept when the page is drawn again (the same picture reappearing would otherwise
+// load and decode again: a blink on every click — e.g. Home's Latest files)
 function renderContent() {
+  const c = $('#content');
+  const had = new Map();
+  if (c) c.querySelectorAll('img').forEach((im) => { if (im.complete && im.naturalWidth && im.src) { const l = had.get(im.src) || []; l.push(im); had.set(im.src, l); } });
+  renderContentNow();
+  if (!c || !had.size) return;
+  c.querySelectorAll('img').forEach((im) => {
+    const l = had.get(im.src); const old = l && l.shift();
+    if (!old || old === im) return;
+    [...old.attributes].forEach((x) => { if (x.name !== 'src' && !im.hasAttribute(x.name)) old.removeAttribute(x.name); });
+    [...im.attributes].forEach((x) => { if (x.name !== 'src') old.setAttribute(x.name, x.value); });
+    im.replaceWith(old);
+  });
+}
+function renderContentNow() {
   const c = $('#content');
   const scroll = { top: c.scrollTop, left: (c.querySelector('.board') || {}).scrollLeft || 0 };
   if (typeof Phone !== 'undefined' && Phone.renderContent(c)) { c.scrollTop = scroll.top; return; }

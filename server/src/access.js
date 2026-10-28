@@ -356,6 +356,7 @@ export function createAccess(store, opts = {}) {
         const editable = (st) => !st || st === 'draft' || st === 'changes';
         if (!current) {
           if (!editor || !next || !pid || !/^\d{4}-\d{2}$/.test(String(next.month || '')) || next.createdBy !== u.id || !editable(next.status)) return false;
+          if (String(next.month) < new Date(Date.now() + 4 * 3600000).toISOString().slice(0, 7)) return false;   // (never for a month that's over: Dubai's month)
           // (what the steps and the server write later starts empty: exports, filing, the client round, approval, tasks)
           const blank = (v) => v == null || (Array.isArray(v) && !v.length);
           if (!['exports', 'filedDeck', 'clientApproved', 'sent', 'approval', 'tasksAt', 'review'].every((k) => blank(next[k]))) return false;

@@ -2246,7 +2246,7 @@ button.pv-empty:hover { background: var(--hover); color: var(--text-2); }
 .desc-view.ro, .desc-view.ro:hover { cursor: auto; background: none; -webkit-user-select: text; user-select: text; }
 /* Taller comment box */
 .tm-composer .composer:not(.reply):not(.edit) .rt-editor { min-height: 58px; }
-.tm-composer .composer.reply .rt-editor { min-height: 50px; }
+.tm-composer .composer.reply .rt-editor { min-height: 58px; }   /* (the reply box: the same size and place as the comment box) */
 /* "Replying to" strip sits inside the rounded box instead of spilling past it */
 .composer > .cb-replying { margin: 0; border-radius: 13px 13px 0 0; border-bottom: 1px solid var(--border); }
 
