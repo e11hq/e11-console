@@ -1483,3 +1483,40 @@ const Push = (() => {
   if (window.visualViewport) visualViewport.addEventListener('resize', soon);
   document.addEventListener('focusin', () => { setTimeout(reveal, 450); });
 })();
+
+/* Phone: a message card at the top (a new update, Good morning…) swipes away — to the right, or up — like iPhone's
+   own banners. A short drag springs back; a tap still opens it. */
+(() => {
+  let g = null;
+  document.addEventListener('touchstart', (e) => {
+    g = null;
+    const c = e.touches.length === 1 && e.target.closest && e.target.closest('#notif-root .notif-card');
+    if (!c || !Phone.on) return;
+    g = { c, x0: e.touches[0].clientX, y0: e.touches[0].clientY, t0: Date.now(), dx: 0, dy: 0, on: false };
+  }, { passive: true });
+  document.addEventListener('touchmove', (e) => {
+    if (!g) return;
+    g.dx = e.touches[0].clientX - g.x0; g.dy = e.touches[0].clientY - g.y0;
+    if (!g.on && Math.hypot(g.dx, g.dy) < 8) return;
+    g.on = true;
+    e.preventDefault();
+    const x = Math.max(g.dx, -g.dx * 0.15), y = Math.min(g.dy, g.dy * 0.15);   // (right and up move freely; the other ways resist)
+    g.c.style.transition = 'none';
+    g.c.style.transform = `translate(${x}px, ${y}px)`;
+    g.c.style.opacity = String(1 - Math.min(0.6, Math.max(x, -y) / 400));
+  }, { passive: false });
+  document.addEventListener('touchend', (e) => {
+    if (!g || !g.on) { g = null; return; }
+    const { c, dx, dy, t0 } = g; g = null;
+    e.preventDefault();   // (a swipe isn't a tap: it doesn't open the update)
+    const ms = Math.max(1, Date.now() - t0);
+    const right = dx > 70 || (dx > 25 && dx / ms > 0.45), up = -dy > 40 || (-dy > 15 && -dy / ms > 0.4);
+    c.style.transition = 'transform .22s cubic-bezier(.2,.8,.2,1), opacity .22s';
+    if (right || up) {
+      c.style.transform = right ? `translate(${innerWidth}px, 0)` : `translate(0, -160px)`;
+      c.style.opacity = '0';
+      c.style.pointerEvents = 'none';
+      setTimeout(() => c.remove(), 230);
+    } else { c.style.transform = ''; c.style.opacity = ''; }
+  }, { passive: false });
+})();
