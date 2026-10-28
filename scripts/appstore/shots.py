@@ -1,14 +1,16 @@
+import os
 import asyncio, sys, json
 from playwright.async_api import async_playwright
 import os; SP=os.environ.get('OUT', 'appstore-out')
 UA='Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1'
 CLEAN = "document.querySelectorAll('#notif-root > *, .toast').forEach(x=>x.remove()); for (const e of [...document.querySelectorAll('body *')]) { if (e.isConnected && /Black Friday/.test(e.textContent) && e.textContent.length < 300 && !(e.parentElement && /Black Friday/.test(e.parentElement.textContent) && e.parentElement.textContent.length < 300)) e.remove(); }"
-async def shot(b, email, name, js, wait=3500, dark=False):
+async def shot(b, email, name, js, wait=3500, dark=os.environ.get('DARK') == '1'):
     c = await b.new_context(viewport={'width':440,'height':956}, device_scale_factor=3, is_mobile=True, has_touch=True, user_agent=UA, color_scheme='dark' if dark else 'light')
     await c.add_cookies([{'name':'e11_dev_email','value':email,'url':'http://localhost:8772'}])
     pg = await c.new_page()
     await pg.goto('http://localhost:8772/'); await pg.wait_for_timeout(3500)
     await pg.evaluate(CLEAN)
+    if dark: await pg.evaluate("setTheme('dark'); render({ keepDetail: true })"); await pg.wait_for_timeout(400)
     if js: r = await pg.evaluate("async () => {" + js + "}"); print(name, r)
     await pg.wait_for_timeout(wait); await pg.evaluate(CLEAN)
     if name == 'comments': await pg.evaluate("(() => { const f=document.querySelector('.tm-feed'); f.scrollTop=f.scrollHeight;  })()"); await pg.wait_for_timeout(600)

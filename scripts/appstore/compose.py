@@ -17,8 +17,17 @@ def grad(a,b):
     return g.resize((W,H))
 def rounded(im,r):
     m=Image.new('L',im.size,0); ImageDraw.Draw(m).rounded_rectangle([0,0,im.size[0]-1,im.size[1]-1],r,fill=255); return m
+import os
+DARKBG = os.environ.get('DARK') == '1'
+def darkbg(accent):
+    # near-black, with a soft glow of the screen's colour behind the phone
+    base=Image.new('RGB',(W,H),'#0b0b0e')
+    glow=Image.new('RGBA',(W,H),(0,0,0,0)); g=ImageDraw.Draw(glow)
+    g.ellipse([-200,1100,W+200,H+600],fill=(123,104,238,34))   # (one faint E11 purple glow, the same on every screen)
+    glow=glow.filter(ImageFilter.GaussianBlur(260))
+    return Image.alpha_composite(base.convert('RGBA'),glow).convert('RGB')
 for n,(key,head,sub,(a,b)) in enumerate(SETS,1):
-    bg=grad(a,b); d=ImageDraw.Draw(bg)
+    bg=darkbg(b) if DARKBG else grad(a,b); d=ImageDraw.Draw(bg)
     y=150
     for line in head.split('\n'):
         w=d.textlength(line,font=fb); d.text(((W-w)/2,y),line,font=fb,fill='white'); y+=122
@@ -30,16 +39,16 @@ for n,(key,head,sub,(a,b)) in enumerate(SETS,1):
         else: cur=t
     lines.append(cur)
     for line in lines:
-        w=d.textlength(line,font=fr); d.text(((W-w)/2,y),line,font=fr,fill=(255,255,255,235)); y+=66
+        w=d.textlength(line,font=fr); d.text(((W-w)/2,y),line,font=fr,fill=(184,184,196) if DARKBG else (255,255,255,235)); y+=66
     scr=Image.open(f'{SP}/shots/{key}.png').convert('RGB')
     sw=980; sh=int(scr.height*sw/scr.width); scr=scr.resize((sw,sh),Image.LANCZOS)
     top=H-(sh+52)-60; bez=26; R=110
     fw,fh=sw+bez*2,sh+bez*2; fx=(W-fw)//2
     sh_=Image.new('RGBA',(W,H),(0,0,0,0)); ImageDraw.Draw(sh_).rounded_rectangle([fx+10,top+30,fx+fw+10,top+fh+30],R,fill=(0,0,0,90))
     bg=Image.alpha_composite(bg.convert('RGBA'),sh_.filter(ImageFilter.GaussianBlur(30)))
-    frame=Image.new('RGBA',(fw,fh),(0,0,0,0)); ImageDraw.Draw(frame).rounded_rectangle([0,0,fw-1,fh-1],R,fill='#111114')
+    frame=Image.new('RGBA',(fw,fh),(0,0,0,0)); ImageDraw.Draw(frame).rounded_rectangle([0,0,fw-1,fh-1],R,fill='#2a2a31' if DARKBG else '#111114')
     bg.alpha_composite(frame,(fx,top))
     bg.paste(scr,(fx+bez,top+bez),rounded(scr,R-bez))
     bg=bg.convert('RGB').crop((0,0,W,H))
-    bg.save(f'{SP}/appstore/{n}-{key}.png')
+    bg.save(f'{SP}/appstore/{n}-{key}' + ('-dark' if DARKBG else '') + '.png')
 print('ok')

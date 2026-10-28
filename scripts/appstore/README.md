@@ -7,3 +7,5 @@ Made from the App Review demo (made-up clients, people and pictures — never re
    then `AUTH_DEV=1 DATA_DIR=/tmp/demo PORT=8772 node server/src/index.js`
 2. `mkdir -p appstore-out/shots appstore-out/appstore && OUT=appstore-out python3 scripts/appstore/shots.py` — phone screens (Playwright, 440×956 @3x)
 3. `OUT=appstore-out python3 scripts/appstore/compose.py` — headline + screen → `appstore-out/appstore/*.png`
+
+The App Store set is the dark one (dark mode is E11's look): run both steps with `DARK=1` → `*-dark.png` (near-black background, one faint E11 purple glow).
