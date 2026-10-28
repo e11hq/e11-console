@@ -862,7 +862,7 @@ body.phone button[data-action="open-att"] { display: none !important; }
 body.phone img { -webkit-touch-callout: none; -webkit-user-drag: none; user-select: none; }
 /* Client Assets files on the phone: no hover buttons — one ⋯ at the top right, always there, its actions in a sheet */
 body.phone .ca-tile .tile-actions, body.phone .ca-tile .ca-copy { display: none !important; }
-body.phone .ca-tile .ca-more { display: grid; place-items: center; position: absolute; top: 8px; right: 8px; z-index: 2; width: 36px; height: 36px; border-radius: 18px; background: rgba(20, 20, 26, .6); color: #fff; border: 0; -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+body.phone .ca-tile .ca-more { display: none !important; place-items: center; position: absolute; top: 8px; right: 8px; z-index: 2; width: 36px; height: 36px; border-radius: 18px; background: rgba(20, 20, 26, .6); color: #fff; border: 0; -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
 body.phone .ca-tile .ca-more .ic { width: 18px; height: 18px; }
 /* touch and hold on a comment opens its sheet: no text selection magnifier underneath (Copy text is in the sheet) */
 body.phone #detail .cm, body.phone #detail .cm .cm-text, body.phone #detail .cm .cm-text * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
@@ -872,3 +872,6 @@ body.phone :is(.ca-tile, .cf-card).ph-pressing { transform: scale(.97); }
 /* no hover lift on the phone (a tap left the card raised a few pixels); a held card still shrinks */
 body.phone :is(.ca-card, .cf-card, .tile):hover:not(.ph-pressing) { transform: none; box-shadow: none; border-color: var(--border); }
 body.phone .react-pick button:hover, body.phone .swatch:hover { transform: none; }
+
+/* Client Assets on the phone: touch and hold a file or folder for its options (no ⋯ or ⓘ on the cards) */
+body.phone .cf-card .cf-info, body.phone .cf-card .cf-more { display: none !important; }
