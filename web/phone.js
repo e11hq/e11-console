@@ -1125,10 +1125,15 @@ const Push = (() => {
     if (t.clientX <= 28 || e.target.closest(SKIP)) return;
     const tabs = tabsHere();
     if (!tabs) return;
-    g = { x0: t.clientX, y0: t.clientY, dx: 0, on: false, tabs, el: tabs.area() };
+    g = { x0: t.clientX, y0: t.clientY, dx: 0, on: false, tabs, el: tabs.area(), ctx: here() };
   }, { passive: true });
+  // the page changed under the finger (a task opened from a tap just before, or one closed): the swipe is dropped,
+  // and whatever it moved is put back, so it never switches tabs on a page that isn't showing any more
+  const here = () => `${ui.view}|${ui.taskId || ''}|${ui.thread || ''}`;
+  const drop = () => { const cur = g; g = null; if (cur) each(cur.el, (el) => { el.style.transition = ''; el.style.transform = ''; el.style.opacity = ''; }); };
   document.addEventListener('touchmove', (e) => {
     if (!g) return;
+    if (g.ctx !== here()) { drop(); return; }
     const t = e.touches[0];
     const dx = t.clientX - g.x0, dy = t.clientY - g.y0;
     if (!g.on) {
@@ -1141,6 +1146,7 @@ const Push = (() => {
     each(g.el, (el) => { el.style.transition = 'none'; el.style.transform = `translateX(${dx * 0.25}px)`; el.style.opacity = String(1 - Math.min(0.35, Math.abs(dx) / 900)); });
   }, { passive: false });
   const end = () => {
+    if (g && g.ctx !== here()) { drop(); return; }
     if (!g || !g.on) { g = null; return; }
     const cur = g; g = null;
     const reset = (els) => each(els, (el) => { el.style.transition = 'transform .2s ease, opacity .2s ease'; el.style.transform = ''; el.style.opacity = ''; });
