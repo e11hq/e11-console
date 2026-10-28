@@ -1450,3 +1450,23 @@ const Push = (() => {
   document.addEventListener('touchcancel', cancel, { passive: true });
   document.addEventListener('click', (e) => { if (Date.now() < swallow && !(e.target.closest && e.target.closest('.menu'))) { e.preventDefault(); e.stopPropagation(); } }, true);
 })();
+
+/* Phone: a box being typed in stays in sight when the keyboard comes up (in the iPhone app the page gets shorter
+   instead of iPhone pushing the whole page up, so the page itself brings the box into view) */
+(() => {
+  const typingIn = () => { const a = document.activeElement; return a && a !== document.body && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) && a.type !== 'date' ? a : null; };
+  const reveal = () => {
+    const a = typingIn();
+    if (!a || !Phone.on) return;
+    const r = a.getBoundingClientRect(), vh = window.visualViewport ? window.visualViewport.height : innerHeight;
+    if (r.top >= 60 && r.bottom <= vh - 12) return;   // already in sight
+    // (the comment box sits at the bottom by itself; anything else scrolls into the middle of what's left)
+    if (a.closest && a.closest('.tm-composer')) return;
+    try { a.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) { a.scrollIntoView(); }
+  };
+  let t = 0;
+  const soon = () => { clearTimeout(t); t = setTimeout(reveal, 120); };
+  window.addEventListener('resize', soon);
+  if (window.visualViewport) visualViewport.addEventListener('resize', soon);
+  document.addEventListener('focusin', () => { setTimeout(reveal, 450); });
+})();
