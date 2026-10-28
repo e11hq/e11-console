@@ -906,11 +906,12 @@ body.phone .tv-bar { margin: 0 16px 6px; flex-wrap: wrap; }
 body.phone .tv-body { padding: 8px 16px calc(env(safe-area-inset-bottom) + 24px); }
 body.phone .tv-row { grid-template-columns: 86px 1fr; }
 /* the Trash task sheet: tall, dragged down by its top to close */
-.ph-scrim[data-kind="trash-view"] .ph-sheet { height: 92vh; max-height: 92vh; padding-left: 0; padding-right: 0; gap: 0; }
-.tv-sheet .tv-top { padding: 4px 18px 8px; }
+/* (as tall as what's in it, up to 75% of the screen, then it scrolls; flush with the bottom of the screen) */
+.ph-scrim[data-kind="trash-view"] .ph-sheet { height: auto; max-height: 75vh; overflow-y: auto; padding-left: 0; padding-right: 0; gap: 0; margin-bottom: 0 !important; border-bottom-left-radius: 0 !important; border-bottom-right-radius: 0 !important; padding-bottom: env(safe-area-inset-bottom); }
+body.phone .tv-sheet .tv-top { padding: 4px 18px 8px; }
 .tv-sheet .tv-top h2 { font-size: 18px; }
 .tv-sheet .tv-bar { margin: 0 16px 4px; flex-wrap: wrap; }
-.tv-sheet .tv-body { padding: 6px 18px 30px; overflow: visible; }
+body.phone .tv-sheet .tv-body { padding: 6px 18px 22px; overflow: visible; }
 body.phone .tr-row.tr-open:active { background: var(--ph-row, var(--hover)); }
 /* a file preview opens above a sheet (e.g. an attachment of a Trash task) */
 body.phone .fv, body.phone .lightbox { z-index: 260; }
