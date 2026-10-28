@@ -1,9 +1,9 @@
-/* ================= Jump to the latest comment (Mac app) =================
-   In the Mac app (html.mac-chrome), a task's comments get a round "jump to the latest" button once you've scrolled
+/* ================= Jump to the latest comment (Mac app and phone) =================
+   In the Mac app (html.mac-chrome) and on the phone, a task's comments (and a thread's replies) get a round "jump to the latest" button once you've scrolled
    up, or a "2 new comments" pill when comments arrive meanwhile (styles: styles.css .jl). At the latest, new comments
-   stay in view. The website and the phone are unchanged. */
+   stay in view. The website on a computer is unchanged. */
 const FeedJump = (() => {
-  const on = () => document.documentElement.classList.contains('mac-chrome');
+  const on = () => document.documentElement.classList.contains('mac-chrome') || (typeof Phone !== 'undefined' && Phone.on);
   const NEAR = 80;                       // within this many pixels of the end counts as "at the latest"
   const st = { taskId: null, thread: null, atEnd: true, seen: new Set() };
   const keyOf = () => `${ui.taskId}|${ui.thread || ''}|${ui.sideTab}|${ui.activityFilter}`;

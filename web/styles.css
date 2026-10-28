@@ -2730,20 +2730,20 @@ body.phone .us-note { display: none; }
 .bp-m i { font-style: normal; }
 .bp-t { font-size: 13.5px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
 
-/* Jump to the latest comment (Mac app, feedjump.js) */
-:root.mac-chrome .tm-activity { position: relative; }
-:root.mac-chrome:not(.phone) .jl { position: absolute; left: 50%; transform: translateX(-50%); z-index: 5; display: flex; align-items: center; justify-content: center; gap: 9px; font: inherit; cursor: pointer; color: var(--text); background: var(--raised); border: 1px solid var(--border-strong); box-shadow: 0 8px 22px rgba(0, 0, 0, .35); animation: jl-in .18s ease-out; }
-:root.mac-chrome[data-theme="light"]:not(.phone) .jl { background: #fff; box-shadow: 0 8px 22px rgba(20, 20, 40, .14); }
+/* Jump to the latest comment (Mac app and phone, feedjump.js) */
+:is(:root.mac-chrome, html.phone) .tm-activity { position: relative; }
+:is(:root.mac-chrome:not(.phone), html.phone) .jl { position: absolute; left: 50%; transform: translateX(-50%); z-index: 5; display: flex; align-items: center; justify-content: center; gap: 9px; font: inherit; cursor: pointer; color: var(--text); background: var(--raised); border: 1px solid var(--border-strong); box-shadow: 0 8px 22px rgba(0, 0, 0, .35); animation: jl-in .18s ease-out; }
+:is(:root.mac-chrome[data-theme="light"]:not(.phone), html.phone[data-theme="light"]) .jl { background: #fff; box-shadow: 0 8px 22px rgba(20, 20, 40, .14); }
 @keyframes jl-in { from { opacity: 0; transform: translate(-50%, 6px); } }
-:root.mac-chrome:not(.phone) .jl-round { width: 40px; height: 40px; border-radius: 20px; padding: 0; }
-:root.mac-chrome:not(.phone) .jl-round .ic { width: 18px; height: 18px; }
-:root.mac-chrome:not(.phone) .jl-new { height: 38px; padding: 0 16px 0 8px; border-radius: 19px; background: var(--btn); border-color: var(--accent-strong); color: #fff; font-size: 13.5px; font-weight: 600; white-space: nowrap; }
-:root.mac-chrome[data-theme="light"]:not(.phone) .jl-new { background: var(--btn); }
-:root.mac-chrome:not(.phone) .jl-new .ic { width: 16px; height: 16px; }
-:root.mac-chrome:not(.phone) .jl-avs { display: flex; }
-:root.mac-chrome:not(.phone) .jl-avs .av { border: 2px solid rgba(255, 255, 255, .55); box-sizing: content-box; }
-:root.mac-chrome:not(.phone) .jl-avs .av + .av { margin-left: -8px; }
-:root.mac-chrome:not(.phone) .jl:hover { filter: brightness(1.08); }
+:is(:root.mac-chrome:not(.phone), html.phone) .jl-round { width: 40px; height: 40px; border-radius: 20px; padding: 0; }
+:is(:root.mac-chrome:not(.phone), html.phone) .jl-round .ic { width: 18px; height: 18px; }
+:is(:root.mac-chrome:not(.phone), html.phone) .jl-new { height: 38px; padding: 0 16px 0 8px; border-radius: 19px; background: var(--btn); border-color: var(--accent-strong); color: #fff; font-size: 13.5px; font-weight: 600; white-space: nowrap; }
+:is(:root.mac-chrome[data-theme="light"]:not(.phone), html.phone[data-theme="light"]) .jl-new { background: var(--btn); }
+:is(:root.mac-chrome:not(.phone), html.phone) .jl-new .ic { width: 16px; height: 16px; }
+:is(:root.mac-chrome:not(.phone), html.phone) .jl-avs { display: flex; }
+:is(:root.mac-chrome:not(.phone), html.phone) .jl-avs .av { border: 2px solid rgba(255, 255, 255, .55); box-sizing: content-box; }
+:is(:root.mac-chrome:not(.phone), html.phone) .jl-avs .av + .av { margin-left: -8px; }
+:is(:root.mac-chrome:not(.phone), html.phone) .jl:hover { filter: brightness(1.08); }
 
 /* Morning summary card (daily.js) */
 .dialog.dy-card { width: 480px; max-width: calc(100vw - 32px); padding: 0; overflow: hidden; display: flex; flex-direction: column; max-height: min(680px, calc(100vh - 60px)); }
