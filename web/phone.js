@@ -1534,12 +1534,14 @@ const Push = (() => {
   }, { passive: false });
 })();
 
-/* Phone: a tap on a task (Home, My Tasks, lists, the Trash) acts as the finger lifts. iPhone sometimes makes no
+/* Phone: a tap on a task (Home, My Tasks, lists, the Trash) or in Client Assets acts as the finger lifts. iPhone sometimes makes no
    click at all from a clean tap (seen with the tap trace: several taps in a row on Home after closing a task did
    nothing), so the page doesn't wait for it. A finger that moved (scrolling, swiping), a hold, a second finger, or a
    tap that only stops a gliding list does nothing extra. */
 (() => {
-  const SEL = '.pc[data-task], #content .task-row[data-task], .tr-row.tr-open[data-action="tr-view"]';
+  // (and Client Assets: client cards, folders and files — there a first tap sometimes only "hovered" and a second
+  //  was needed)
+  const SEL = '.pc[data-task], #content .task-row[data-task], .tr-row.tr-open[data-action="tr-view"], #content .ca-card[data-action="open-client"], #content .cf-card[data-action="open-cfolder"], #content .ca-tile[data-action="tile-open"]';
   let g = null, lastScroll = 0;
   document.addEventListener('scroll', () => { lastScroll = Date.now(); }, { capture: true, passive: true });
   document.addEventListener('touchstart', (e) => {
