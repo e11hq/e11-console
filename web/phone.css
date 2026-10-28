@@ -859,3 +859,7 @@ body.phone .prop-dates [data-action="clear-start"], body.phone .prop-dates [data
 body.phone button[data-action="open-att"] { display: none !important; }
 /* touch and hold on a picture: no iPhone picture menu or picture drag (it dropped the picture back in as an upload) */
 body.phone img { -webkit-touch-callout: none; -webkit-user-drag: none; user-select: none; }
+/* Client Assets files on the phone: no hover buttons — one ⋯ at the top right, always there, its actions in a sheet */
+body.phone .ca-tile .tile-actions, body.phone .ca-tile .ca-copy { display: none !important; }
+body.phone .ca-tile .ca-more { display: grid; place-items: center; position: absolute; top: 8px; right: 8px; z-index: 2; width: 36px; height: 36px; border-radius: 18px; background: rgba(20, 20, 26, .6); color: #fff; border: 0; -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+body.phone .ca-tile .ca-more .ic { width: 18px; height: 18px; }

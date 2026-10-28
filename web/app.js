@@ -5478,6 +5478,21 @@ document.addEventListener('click', async (e) => {
       case 'open-cfolder-of': e.stopPropagation(); openClient(actEl.dataset.client, id); return;
       case 'ca-q-clear': { const i = $('#ca-q'); if (i) { i.value = ''; runCaSearch(i); i.focus(); } } return;
       case 'ca-remove': e.stopPropagation(); removeClientFile(id); return;
+      // the phone: one ⋯ on each file, its actions in a sheet (the same buttons a computer shows on hover)
+      case 'ca-tile-menu': {
+        e.stopPropagation();
+        const tile = actEl.closest('.ca-tile'); if (!tile) return;
+        const tap = (sel) => () => { const b = tile.querySelector(sel); if (b) b.click(); };
+        const has = (sel) => !!tile.querySelector(sel);
+        showMenu(actEl, [
+          { label: 'Copy', icon: 'copy', hint: 'Paste into a task comment or description', run: tap('[data-action="copy-att"]') },
+          { label: 'Preview', icon: 'search', run: tap('[data-action="quicklook"]') },
+          { label: 'Download', icon: 'download', run: tap('[data-action="ca-download"]') },
+          { label: 'Info', icon: 'info', run: tap('[data-action="ca-info"]') },
+          ...(has('[data-action="ca-remove"]') ? ['-', { label: 'Delete', icon: 'trash', danger: true, run: tap('[data-action="ca-remove"]') }] : []),
+        ]);
+        return;
+      }
       case 'ca-download': e.stopPropagation(); { const a = clientFileById(id); if (a) downloadClientFiles([a], a.name.replace(/\.[^.]+$/, '')); } return;
       case 'ca-download-all': { const { c, f } = curFolder(); if (f) downloadClientFiles(f.files, `${c.name} - ${f.name}`); } return;
       case 'close-thread': closeThread(); return;
@@ -5987,6 +6002,7 @@ function caTile(f, a, loc = null) {
     <div class="tile-img ${isFont(a) ? 'is-font' : ''}">${inner}${kind === 'video' ? `<span class="tile-play">${icon('play')}</span>` : ''}</div>
     <div class="tile-meta"><span>${loc ? caMark(a.name, loc.q) : esc(a.name)}</span>${loc ? `<a class="ca-loc" data-action="open-cfolder-of" data-client="${loc.c.id}" data-id="${f.id}" title="Open this folder">${clientLogoHTML(loc.c, 14)}${esc(loc.c.name)} › ${esc(folderPath(loc.c, f))}</a>` : ''}<small>${fmtSize(a.size)}${a.addedBy ? ` · ${esc(firstName(a.addedBy))}` : ''}</small></div>
     <button class="ca-copy" data-action="copy-att" data-id="${a.id}" title="Copy — paste into any task comment or description">${icon('copy')}Copy</button>
+    <button class="icon-btn ca-more" data-action="ca-tile-menu" data-id="${a.id}" title="File options" aria-label="File options">${icon('more')}</button>
     <div class="tile-actions">
       <button class="icon-btn sm" data-action="quicklook" data-id="${a.id}" title="Preview">${icon('search')}</button>
       <button class="icon-btn sm" data-action="ca-download" data-id="${a.id}" title="Download to your Downloads folder">${icon('download')}</button>

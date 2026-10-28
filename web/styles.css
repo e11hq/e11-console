@@ -2793,3 +2793,4 @@ body.phone .us-note { display: none; }
 .nc-tbl .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; }
 .nc-tbl .nc-note { height: 26px; padding: 3px 8px; font-size: 12px; width: 120px; }
 .nc-btns { display: flex; gap: 8px; }
+.ca-tile .ca-more { display: none; }
