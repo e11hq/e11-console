@@ -4697,7 +4697,7 @@ function trashRow(it, r) {
   return `<div class="tr-row">
     <span class="tr-ic">${icon(TRASH_ICON[it.type] || 'trash')}</span>
     <div class="tr-main">
-      <div class="tr-title">${r && r.terms.length ? sMark(trashTitle(it), r) : esc(trashTitle(it))}</div>
+      <div class="tr-title" ${it.type === 'task' ? `data-action="tr-view" data-id="${it.id}" title="Open to see it (view only)"` : ''}>${r && r.terms.length ? sMark(trashTitle(it), r) : esc(trashTitle(it))}</div>
       <div class="tr-sub"><span class="tr-type">${TRASH_TYPE[it.type] || ''}</span>${esc(trashWhere(it))} · ${who} · ${esc(timeAgo(it.deletedAt))}</div>
       ${chips ? `<div class="tr-files">${chips}${files.length > 4 ? `<span class="tr-more">+${files.length - 4} more</span>` : ''}</div>` : ''}
     </div>
@@ -4707,6 +4707,52 @@ function trashRow(it, r) {
       ${isSuper() ? `<button class="icon-btn sm" data-action="tr-forever" data-id="${it.id}" title="Delete forever">${icon('trash')}</button>` : ''}
     </div>
   </div>`;
+}
+/* A task in the Trash, opened to see what it was: view only (nothing can be changed), with Restore at the top */
+function trashTaskView(id) {
+  const it = trashList().find((x) => x.id === id);
+  if (!it || it.type !== 'task') return;
+  const list = (it.data && it.data.tasks) || [];
+  const t = list.find((x) => !x.parentId || !list.some((y) => y.id === x.parentId)) || list[0];
+  if (!t) return;
+  const subs = list.filter((x) => x.parentId === t.id);
+  const left = trashDaysLeft(it);
+  const who = it.auto ? 'cleaned up automatically' : `deleted by ${it.deletedBy === currentUserId ? 'you' : esc(fullName(userById(it.deletedBy)))}`;
+  const st = statusInfo(t);
+  const people = (t.assignees || []).map((u) => `<span class="tv-person">${avatarHTML(u, 20)}${esc(fullName(userById(u)) || 'Former member')}</span>`).join('') || '<span class="tv-none">Nobody</span>';
+  const row = (label, v) => `<div class="tv-row"><span>${label}</span><div>${v}</div></div>`;
+  const desc = t.notesHtml ? sanitizeHTML(t.notesHtml, true) : t.notes ? linkify(esc(t.notes)).replace(/\n/g, '<br>') : '';
+  const files = (t.attachments || []);
+  const fileChip = (a) => `<button class="tr-file" data-action="tr-preview" data-id="${it.id}" data-file="${a.id}" title="Preview ${esc(a.name)}">${isImage(a) && Host.isNative ? `<img src="${imgUrl(a, 160)}" alt="" loading="lazy">` : `<i>${esc((fileExt(a.name) || 'file').slice(0, 4))}</i>`}<span>${esc(a.name)}</span></button>`;
+  const comments = (t.comments || []).filter((c) => !c.deleted);
+  const commentHTML = (c) => `<div class="tv-cm">${avatarHTML(c.authorId, 24)}<div><div class="tv-cm-meta"><b>${esc(userName(c.authorId))}</b> · ${esc(timeAgo(c.at))}</div>
+      ${c.html ? `<div class="tv-cm-text rich">${sanitizeHTML(c.html, true)}</div>` : c.text ? `<div class="tv-cm-text">${linkify(esc(c.text))}</div>` : ''}
+      ${(c.attachments || []).length ? `<div class="tr-files">${c.attachments.map(fileChip).join('')}</div>` : ''}</div></div>`;
+  const canRestore = it.type !== 'project' || isAdm(me());
+  // (its own layer, under the file preview, so previewing an attachment keeps this open behind it)
+  let root = $('#tv-root');
+  if (!root) { root = document.createElement('div'); root.id = 'tv-root'; document.body.appendChild(root); }
+  root.innerHTML = `<div class="scrim tv-scrim"><div class="dialog tv-dlg" role="dialog" aria-label="Task in the Trash">
+    <div class="tv-top"><h2>${esc(t.title || 'Untitled task')}</h2><button class="icon-btn" data-action="tv-close" title="Close">${icon('x')}</button></div>
+    <div class="tv-bar">${icon('trash')}<span>In the Trash · ${who} ${esc(timeAgo(it.deletedAt))} · ${left} day${left === 1 ? '' : 's'} left</span>
+      ${canRestore ? `<button class="btn primary sm" data-action="tv-restore" data-id="${it.id}">${icon('reply')}Restore</button>` : ''}</div>
+    <div class="tv-body">
+      <div class="tv-props">
+        ${row('Client', esc(trashWhere(it)))}
+        ${row('Status', `<span class="tv-status" style="--c:${st.color}">${esc(st.name)}</span>`)}
+        ${row('Assignees', people)}
+        ${t.start || t.due ? row('Dates', `${t.start ? 'Start ' + esc(fmtDay(t.start)) : ''}${t.start && t.due ? ' → ' : ''}${t.due ? 'Due ' + esc(fmtDay(t.due)) : ''}`) : ''}
+        ${(t.tags || []).length ? row('Tags', t.tags.map((g) => `<span class="tag">${esc(g)}</span>`).join(' ')) : ''}
+      </div>
+      ${desc ? `<div class="tv-sec"><h3>Description</h3><div class="tv-desc">${desc}</div></div>` : ''}
+      ${subs.length ? `<div class="tv-sec"><h3>Subtasks <span>${subs.length}</span></h3>${subs.map((x) => `<div class="tv-line">${x.done ? icon('check') : '<i class="tv-dot"></i>'}${esc(x.title || 'Untitled')}</div>`).join('')}</div>` : ''}
+      ${(t.checklist || []).length ? `<div class="tv-sec"><h3>Checklist</h3>${t.checklist.map((c) => `<div class="tv-line ${c.done ? 'done' : ''}">${c.done ? icon('check') : '<i class="tv-dot"></i>'}${esc(c.text || '')}</div>`).join('')}</div>` : ''}
+      ${files.length ? `<div class="tv-sec"><h3>Attachments <span>${files.length}</span></h3><div class="tr-files">${files.map(fileChip).join('')}</div></div>` : ''}
+      <div class="tv-sec"><h3>Comments <span>${comments.length}</span></h3>${comments.length ? comments.map(commentHTML).join('') : '<div class="tv-none">No comments</div>'}</div>
+    </div>
+  </div></div>`;
+  const scrim = root.querySelector('.tv-scrim');
+  scrim.addEventListener('click', (e) => { if (e.target === scrim) root.innerHTML = ''; });
 }
 function trashListHTML() {
   const r = trashSearch(ui.trashQ || '', trashFiltered());
@@ -5542,6 +5588,9 @@ document.addEventListener('click', async (e) => {
       case 'tr-restore': restoreTrash(id); return;
       case 'tr-forever': eraseTrashFlow(id); return;
       case 'tr-empty': emptyTrashFlow(); return;
+      case 'tr-view': trashTaskView(id); return;
+      case 'tv-close': $('#tv-root').innerHTML = ''; return;
+      case 'tv-restore': $('#tv-root').innerHTML = ''; restoreTrash(id); return;
       case 'tr-preview': { const it = trashList().find((x) => x.id === id); const a = it && trashFiles(it).find((x) => x.id === actEl.dataset.file); if (a) previewFile(a); return; }
       case 'mention-user': e.stopPropagation(); mentionInComposer(id); return;
       case 'cancel-edit': ui.editingComment = null; renderDetail(); return;

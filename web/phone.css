@@ -898,3 +898,10 @@ body.phone .menu .mi.danger:hover:not(:active) { color: var(--red, #e5484d); }
 body.phone .menu .mi:active { background: var(--ph-row, var(--hover)); }
 /* messages on a task's Details page (no comment box there) sit at the bottom, not where the comment box would be */
 body.phone.task-open:has(#detail[data-tab="details"]) #toast-root, body.phone.task-open:has(#detail[data-tab="details"]) #update-banner { bottom: calc(env(safe-area-inset-bottom) + 14px + var(--ph-shift, 0px)) !important; }
+/* the phone: a Trash task opens full screen (still view only) */
+body.phone .tv-scrim { padding: 0 !important; align-items: stretch; }
+body.phone .tv-dlg { width: 100% !important; max-width: none !important; max-height: none !important; height: var(--app-h, 100%) !important; margin: 0 !important; border-radius: 0 !important; border: 0 !important; }
+body.phone .tv-top { padding: calc(env(safe-area-inset-top) + 12px) 16px 10px; }
+body.phone .tv-bar { margin: 0 16px 6px; flex-wrap: wrap; }
+body.phone .tv-body { padding: 8px 16px calc(env(safe-area-inset-bottom) + 24px); }
+body.phone .tv-row { grid-template-columns: 86px 1fr; }
