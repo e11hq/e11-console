@@ -2788,16 +2788,6 @@ body.phone .us-note { display: none; }
 .dy-foot span { color: var(--text-3); font-size: 11.5px; margin-right: auto; }
 .nt-try { color: var(--accent); font-weight: 600; white-space: nowrap; }
 
-/* Network check (owner, test copy) */
-.nc-card h3 .nc-tag { font-size: 10.5px; font-weight: 650; padding: 2px 6px; border-radius: 5px; background: var(--accent-soft); color: var(--accent); margin-left: 6px; vertical-align: middle; }
-.nc-wrap { overflow-x: auto; margin: 10px 0; }
-.nc-tbl { width: 100%; border-collapse: collapse; font-size: 12px; }
-.nc-tbl th { text-align: left; color: var(--text-3); font-weight: 600; padding: 6px 6px; border-bottom: 1px solid var(--border); white-space: nowrap; }
-.nc-tbl td { padding: 5px 6px; border-bottom: 1px solid var(--border); white-space: nowrap; vertical-align: middle; }
-.nc-tbl td small { color: var(--text-3); margin-left: 4px; }
-.nc-tbl .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; }
-.nc-tbl .nc-note { height: 26px; padding: 3px 8px; font-size: 12px; width: 120px; }
-.nc-btns { display: flex; gap: 8px; }
 .ca-tile .ca-more { display: none; }
 /* a link's card in its place in the comment's words */
 .cm-text .lk-card.inline { white-space: normal; margin: 6px 0; max-width: 460px; font-size: 13px; line-height: 1.4; }

@@ -267,13 +267,6 @@ export function createServer(cfg) {
      what they may change, their role's rules. The choice is kept on the server (kv "view-as"), so it holds on every
      device and after reloads. Their phone subscriptions are left alone while viewing as someone. */
   const isTestSite = /-test\.|-dev$/.test(version);
-  /* Network check (TEST copy only, the owner's own visits; 3 days): to plan copying files inside the NAS, record for
-     each app open and each upload the internet address the server sees, whether it came through Cloudflare (and which
-     location) or straight over the local network, which app, and for uploads the size and speed. Shown on the owner's
-     App updates page, with a note per row ("office Wi-Fi", "cable"…). Kept in kv "netlog". */
-  const NETLOG_DAYS = 3;
-  const netlogLoad = () => { try { return JSON.parse(store.kv.get('netlog') || 'null') || { start: null, entries: [] }; } catch { return { start: null, entries: [] }; } };
-  const netlogOn = (L) => !L.start || Date.now() - Date.parse(L.start) < NETLOG_DAYS * 86400000;
   // Who may add a file where (uploads, office-network uploads, copies from the shared folder): a reason, or null
   function uploadDenied(u, body) {
     if (body.dest && String(body.dest).startsWith('Finance/')) { if (access.finLevel(u) !== 'admin') return 'Only a Finance Admin can add invoices'; }
@@ -291,15 +284,6 @@ export function createServer(cfg) {
     const app = /iPhone|iPad|Android/.test(ua) ? (/iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android phone' : 'iPhone')
       : /Macintosh/.test(ua) && !/Safari\//.test(ua) ? 'Mac app' : /Edg\//.test(ua) ? 'Edge' : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : 'Other';
     return { ip, via: ray ? 'cloudflare' : 'direct', colo: ray.includes('-') ? ray.split('-').pop() : null, app };
-  }
-  function netlog(req, u, fn) {
-    if (!isTestSite || !u || !isOwner(req.realUser || u)) return;
-    const L = netlogLoad();
-    if (!netlogOn(L)) return;
-    if (!L.start) L.start = new Date().toISOString();
-    fn(L, netInfo(req));
-    if (L.entries.length > 400) L.entries = L.entries.slice(-400);
-    store.kv.set('netlog', JSON.stringify(L));
   }
   function viewAsTarget(real) {
     if (!isTestSite || !real || !isOwner(real)) return null;
@@ -453,20 +437,6 @@ export function createServer(cfg) {
       if (!okPath) return json(res, 403, { ok: false, error: 'Owner view is look only — choose Allow changes first', lookOnly: true });
     }
 
-    // TEMPORARY tap trace (test copy, owner only, the iPhone app): what happens to quick taps on tasks — touches, clicks,
-    // how long opening and closing a task takes, and moments the page was busy. Remove once the slow taps are found.
-    if (p === '/api/taptrace') {
-      if (!isTestSite || !isOwner(req.realUser || u)) return json(res, 404, { ok: false });
-      let list = []; try { list = JSON.parse(store.kv.get('taptrace') || '[]'); } catch { list = []; }
-      if (req.method === 'POST') {
-        const body = await readBody(req, 256 * 1024).catch(() => ({}));
-        list = list.concat((Array.isArray(body.entries) ? body.entries : []).slice(0, 400)).slice(-1500);
-        store.kv.set('taptrace', JSON.stringify(list));
-        return json(res, 200, { ok: true, n: list.length });
-      }
-      if (req.method === 'DELETE') { store.kv.set('taptrace', '[]'); return json(res, 200, { ok: true }); }
-      return json(res, 200, { ok: true, entries: list });
-    }
     // Errors from people's apps (startup crashes etc.): kept (last 100) so their cause can be found; a few per person per hour
     if (p === '/api/client-error' && req.method === 'POST') {
       const body = await readBody(req, 64 * 1024).catch(() => ({}));
@@ -507,27 +477,7 @@ export function createServer(cfg) {
       return res.end(out);
     }
 
-    if (p === '/api/me') netlog(req, u, (L, n) => {
-      // an app open (the same app and address again within 10 minutes counts once)
-      const last = [...L.entries].reverse().find((e) => e.kind === 'open');
-      if (last && last.ip === n.ip && last.app === n.app && Date.now() - Date.parse(last.at) < 10 * 60000) return;
-      L.entries.push({ id: crypto.randomBytes(5).toString('hex'), kind: 'open', at: new Date().toISOString(), ...n, note: '' });
-    });
-    if (p === '/api/netlog' && req.method === 'GET') {
-      if (!isTestSite || !isOwner(req.realUser || u)) return json(res, 404, { ok: false });
-      const L = netlogLoad();
-      return json(res, 200, { ok: true, on: netlogOn(L), start: L.start, until: L.start ? new Date(Date.parse(L.start) + NETLOG_DAYS * 86400000).toISOString() : null, entries: L.entries, here: netInfo(req) });
-    }
-    if ((p === '/api/netlog/note' || p === '/api/netlog/restart') && req.method === 'POST') {
-      if (!isTestSite || !isOwner(req.realUser || u)) return json(res, 404, { ok: false });
-      const b = await readBody(req, 16 * 1024).catch(() => ({}));
-      const L = netlogLoad();
-      if (p === '/api/netlog/restart') { L.start = new Date().toISOString(); L.entries = []; }
-      else { const e = L.entries.find((x) => x.id === b.id); if (e) e.note = String(b.note || '').slice(0, 80); }
-      store.kv.set('netlog', JSON.stringify(L));
-      return json(res, 200, { ok: true });
-    }
-    if (p === '/api/me') return json(res, 200, { ok: true, user: access.shape(u, 'users', u), owner: isOwner(u), review: !!review, tapTrace: isTestSite && isOwner(req.realUser || u), appIcon: appIcon.info(), macShell, version, rev: store.rev(), office: office.info(req),
+    if (p === '/api/me') return json(res, 200, { ok: true, user: access.shape(u, 'users', u), owner: isOwner(u), review: !!review, appIcon: appIcon.info(), macShell, version, rev: store.rev(), office: office.info(req),
       ownerView: req.ownerView || null, canOwnerView: ownerViewOk(req.realUser || u),
       // (Admins: whose account only its owner may change, so the Team page shows it locked)
       ownerId: access.isAdm(u) && cfg.adminEmail ? (access.userByEmail(cfg.adminEmail) || {}).id || null : null,
@@ -857,7 +807,6 @@ export function createServer(cfg) {
     }
 
     if (p.startsWith('/api/host/') && req.method === 'POST') {
-      const reqAt = Date.now();   // (for the network check: when this piece started arriving)
       const cmd = p.slice('/api/host/'.length);
       const fn = files.commands[cmd === 'writeChunkBin' ? 'writeChunk' : cmd];
       if (!fn) return json(res, 404, { ok: false, error: 'Unknown command ' + cmd });
@@ -878,12 +827,6 @@ export function createServer(cfg) {
         if (body.path) { const up = uploads.get(body.path); if (!up || up.userId !== u.id) return deny('Upload not found — please try again'); }
         const out = await files.commands.writeChunk(body, u);
         uploads.set(out.path, { userId: u.id, at: Date.now() });
-        netlog(req, u, (L, n) => {
-          // one row per uploaded file: from its first piece starting to arrive until its last piece arrived
-          let e = L.entries.find((x) => x.kind === 'upload' && x.path === out.path);
-          if (!e) { e = { id: crypto.randomBytes(5).toString('hex'), kind: 'upload', at: new Date(reqAt).toISOString(), path: out.path, name: out.name, startMs: reqAt, ...n, note: '' }; L.entries.push(e); }
-          e.size = out.size; e.ms = Math.max(1, Date.now() - e.startMs); e.mbps = Math.round((out.size / 1e6) / (e.ms / 1000) * 10) / 10;
-        });
         if (uploads.size > 500) for (const [k, v] of uploads) if (Date.now() - v.at > 6 * 3600_000) uploads.delete(k);
         return json(res, 200, out);
       }
