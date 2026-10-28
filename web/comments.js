@@ -75,7 +75,13 @@ const Cmx = (() => {
       if (!c) return;
       const tmp = document.createElement('div');
       tmp.innerHTML = cardHTML(c, url);
-      if (tmp.firstElementChild) el.replaceWith(tmp.firstElementChild); else el.remove();
+      const nu = tmp.firstElementChild;
+      if (nu && el.classList.contains('inline')) { nu.classList.add('inline'); nu.dataset.lkC = cid; }
+      if (nu) el.replaceWith(nu); else if (el.classList.contains('inline')) {
+        // (no card after all: the link goes back where it was)
+        const a = document.createElement('a'); a.href = url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = url;
+        el.replaceWith(a);
+      } else el.remove();
     });
     hideBroken();
   }
@@ -157,8 +163,60 @@ const Cmx = (() => {
   // back to the app with the task open: what's in view counts
   document.addEventListener('visibilitychange', () => { if (awake() && ui.taskId && db) { const p = document.getElementById('detail'); const t = task(ui.taskId); if (p && t) watch(p, t); } });
 
+  // A link on a line of its own: its card takes the link's place in the words (a link inside a sentence keeps its
+  // card under the comment)
+  const INLINE = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'SPAN', 'FONT', 'S', 'MARK']);
+  function lineEdge(el, dir) {
+    // true when nothing but spaces sits between the link and the line's start (dir 'previousSibling') or end
+    let n = el[dir];
+    while (n) {
+      if (n.nodeType === 3) {
+        const parts = n.textContent.split('\n');
+        const near = dir === 'previousSibling' ? parts[parts.length - 1] : parts[0];
+        if (near.trim()) return false;
+        if (parts.length > 1) return true;
+      } else if (n.nodeName === 'BR') return true;
+      else if (n.nodeType === 1 && getComputedStyle(n).display !== 'inline') return true;
+      else if (n.nodeType === 1) return false;
+      n = n[dir];
+    }
+    return true;
+  }
+  function trimEdge(el, dir) {
+    // the line break next to the card isn't needed (the card is its own line)
+    const n = el[dir];
+    if (!n) return;
+    if (n.nodeName === 'BR') { n.remove(); return; }
+    if (n.nodeType === 3) {
+      const t = n.textContent;
+      // (the card's own margins stand in for the empty lines around it)
+      if (dir === 'previousSibling') n.textContent = t.replace(/\s+$/, '');
+      else n.textContent = t.replace(/^\s+/, '');
+    }
+  }
+  function placeInline(pane) {
+    pane.querySelectorAll('.lk-cards[data-lk-c]').forEach((box) => {
+      const body = box.parentElement;
+      const text = body && body.querySelector(':scope > .cm-text');
+      if (!text) return;
+      [...box.querySelectorAll('.lk-card[data-lk-u]')].forEach((card) => {
+        const url = card.dataset.lkU;
+        const a = [...text.querySelectorAll('a[href]')].find((x) => x.getAttribute('href') === url || x.href === url || x.textContent.trim() === url);
+        if (!a) return;
+        let el = a;
+        while (el.parentElement && el.parentElement !== text && INLINE.has(el.parentElement.nodeName) && el.parentElement.childNodes.length === 1) el = el.parentElement;
+        if (!lineEdge(el, 'previousSibling') || !lineEdge(el, 'nextSibling')) return;
+        trimEdge(el, 'previousSibling'); trimEdge(el, 'nextSibling');
+        card.classList.add('inline');
+        card.dataset.lkC = box.dataset.lkC;
+        el.replaceWith(card);
+      });
+      if (!box.children.length) box.remove();
+    });
+  }
   function afterDetail(pane, t) {
     if (!pane || !t) return;
+    placeInline(pane);
     pane.querySelectorAll('.lk-card.loading[data-lk-u]').forEach((el) => load(el.dataset.lkU));
     hideBroken();
     watch(pane, t);

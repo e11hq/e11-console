@@ -145,9 +145,19 @@ async function weTransfer(finalUrl, fetcher) {
   } catch { return null; }
 }
 
+async function oEmbed(key, url, fetcher) {
+  const api = key === 'youtube' ? `https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(url)}` : `https://vimeo.com/api/oembed.json?url=${encodeURIComponent(url)}`;
+  try {
+    const r = await fetcher(api, { accept: 'application/json', max: 200_000 });
+    if (r.status >= 400) return null;
+    const j = JSON.parse(r.body.toString('utf8'));
+    return { title: String(j.title || '').slice(0, 200), author: String(j.author_name || '').slice(0, 120), image: j.thumbnail_url && /^https:\/\//.test(j.thumbnail_url) ? j.thumbnail_url : null };
+  } catch { return null; }
+}
+
 export function createLinks({ store, dataDir, fetcher = fetchSafe, now = () => Date.now(), log = console }) {
   const dir = path.join(dataDir, '.thumbs', '_links');
-  const key = (u) => crypto.createHash('sha256').update(String(u)).digest('hex').slice(0, 32);
+  const key = (u) => crypto.createHash('sha256').update('v2:' + String(u)).digest('hex').slice(0, 32);   // (v2: YouTube / Vimeo details)
   const mem = new Map();
   const inflight = new Map();
   const cached = (k) => {
@@ -175,6 +185,12 @@ export function createLinks({ store, dataDir, fetcher = fetchSafe, now = () => D
         if (/html|xml/i.test(r.type) || !r.type) {
           const m = readMeta(r.body.toString('utf8'), finalUrl);
           out = { ...out, title: m.title, desc: m.desc, image: m.image, icon: m.icon, site: s ? s.name : m.site || out.site };
+        }
+        // YouTube and Vimeo show a sign-in or cookie page to servers: their own oEmbed gives the video's title,
+        // channel and picture
+        if ((out.key === 'youtube' || out.key === 'vimeo') && (!out.title || !out.image || /^(youtube|vimeo)$/i.test(out.title))) {
+          const o = await oEmbed(out.key, url.toString(), fetcher);
+          if (o) { out.title = o.title || out.title; out.desc = o.author ? `${o.author}` : out.desc; out.image = o.image || out.image; }
         }
         if (out.key === 'wetransfer') {
           const w = await weTransfer(finalUrl, fetcher);
