@@ -4170,6 +4170,8 @@ function closeMenus() { $$('.menu').forEach((m) => m.remove()); }
 
 function showMenu(anchor, items) {
   closeMenus();
+  // (no doubled, leading or trailing dividers when some options aren't there; positions kept for data-mi)
+  items = items.map((it, i, a) => (it === '-' && (i === 0 || i === a.length - 1 || a[i - 1] === '-' || a.slice(i + 1).every((x) => x === '-') || a.slice(0, i).every((x) => x === '-')) ? { html: '' } : it));
   const m = document.createElement('div');
   m.className = 'menu';
   m.innerHTML = items.map((it, i) => {
