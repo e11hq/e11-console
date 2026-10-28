@@ -5387,7 +5387,9 @@ document.addEventListener('click', async (e) => {
         if (e.target.closest('a')) return;
         const t = task(ui.taskId);
         if (!ui.descOpen[t.id]) { ui.descOpen[t.id] = true; renderDetail(); }
-        if (can('editDesc')) setTimeout(() => { const ed = $('#d-notes'); if (ed) { ed.focus(); placeCaretAtEnd(ed); } }, 0);
+        // focused straight away, still inside the tap (iPhone only brings up the keyboard for a focus during the tap
+        // itself — a focus a moment later sometimes left it without the keyboard)
+        if (can('editDesc')) { const ed = $('#d-notes'); if (ed) { ed.focus(); placeCaretAtEnd(ed); } }
         return;
       }
       case 'desc-toggle': {

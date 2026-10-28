@@ -881,3 +881,5 @@ body.phone .cf-card .cf-info, body.phone .cf-card .cf-more { display: none !impo
 body.phone #detail .tile .tile-actions { display: none !important; }
 body.phone #detail .tile { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; transition: transform .15s; }
 body.phone #detail .tile.ph-pressing { transform: scale(.97); }
+/* an empty description is a generous target to tap */
+body.phone .desc-view.blank:not(.ro) { min-height: 52px; display: flex; align-items: center; cursor: text; }
