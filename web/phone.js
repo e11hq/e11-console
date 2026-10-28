@@ -498,7 +498,9 @@ const Phone = (() => {
   function sheet(html, onWire, o = {}) {
     const root = sheetRoot();
     const old = root.firstElementChild;
-    if (old && old.dataset.kind === o.kind && old._expand) { old._expand(); return; } // carry on with the tucked one
+    // carry on with the tucked one (only a tucked one: a sheet still sliding away is replaced, or the new one
+    // would vanish with it a moment later)
+    if (old && old.dataset.kind === o.kind && old._expand && old.classList.contains('docked')) { old._expand(); return; }
     root.innerHTML = `<div class="ph-scrim" data-kind="${o.kind || ''}"><div class="ph-sheet" role="dialog"><div class="ph-handle"><i class="ph-grab"></i></div>${html}<div class="ph-dock-hint">${esc(o.dockLabel || 'Draft')} · <b>Tap to continue</b></div></div></div>`;
     const scrim = root.firstElementChild;
     const box = scrim.firstElementChild;
@@ -1523,6 +1525,27 @@ const Push = (() => {
       c.style.pointerEvents = 'none';
       setTimeout(() => c.remove(), 230);
     } else { c.style.transform = ''; c.style.opacity = ''; }
+  }, { passive: false });
+})();
+
+/* Phone: a task in the Trash opens on the lift of the finger (not on the click iPhone makes of it a moment later,
+   which sometimes didn't come, or came late). A finger that moved (scrolling) doesn't open it. */
+(() => {
+  let g = null;
+  document.addEventListener('touchstart', (e) => {
+    g = null;
+    if (!Phone.on || e.touches.length !== 1) return;
+    const row = e.target.closest && e.target.closest('.tr-row.tr-open[data-action="tr-view"]');
+    if (!row || e.target.closest('button, a, .tr-file')) return;
+    g = { row, x0: e.touches[0].clientX, y0: e.touches[0].clientY, t0: Date.now() };
+  }, { passive: true });
+  document.addEventListener('touchmove', (e) => { if (g && Math.hypot(e.touches[0].clientX - g.x0, e.touches[0].clientY - g.y0) > 10) g = null; }, { passive: true });
+  document.addEventListener('touchcancel', () => { g = null; }, { passive: true });
+  document.addEventListener('touchend', (e) => {
+    const cur = g; g = null;
+    if (!cur || Date.now() - cur.t0 > 700 || !cur.row.isConnected) return;
+    e.preventDefault();   // (no click after it: it's opened here)
+    trashTaskView(cur.row.dataset.id);
   }, { passive: false });
 })();
 
