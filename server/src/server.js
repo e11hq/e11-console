@@ -453,6 +453,20 @@ export function createServer(cfg) {
       if (!okPath) return json(res, 403, { ok: false, error: 'Owner view is look only — choose Allow changes first', lookOnly: true });
     }
 
+    // TEMPORARY tap trace (test copy, owner only, the iPhone app): what happens to quick taps on tasks — touches, clicks,
+    // how long opening and closing a task takes, and moments the page was busy. Remove once the slow taps are found.
+    if (p === '/api/taptrace') {
+      if (!isTestSite || !isOwner(req.realUser || u)) return json(res, 404, { ok: false });
+      let list = []; try { list = JSON.parse(store.kv.get('taptrace') || '[]'); } catch { list = []; }
+      if (req.method === 'POST') {
+        const body = await readBody(req, 256 * 1024).catch(() => ({}));
+        list = list.concat((Array.isArray(body.entries) ? body.entries : []).slice(0, 400)).slice(-1500);
+        store.kv.set('taptrace', JSON.stringify(list));
+        return json(res, 200, { ok: true, n: list.length });
+      }
+      if (req.method === 'DELETE') { store.kv.set('taptrace', '[]'); return json(res, 200, { ok: true }); }
+      return json(res, 200, { ok: true, entries: list });
+    }
     // Errors from people's apps (startup crashes etc.): kept (last 100) so their cause can be found; a few per person per hour
     if (p === '/api/client-error' && req.method === 'POST') {
       const body = await readBody(req, 64 * 1024).catch(() => ({}));
@@ -513,7 +527,7 @@ export function createServer(cfg) {
       store.kv.set('netlog', JSON.stringify(L));
       return json(res, 200, { ok: true });
     }
-    if (p === '/api/me') return json(res, 200, { ok: true, user: access.shape(u, 'users', u), owner: isOwner(u), review: !!review, appIcon: appIcon.info(), macShell, version, rev: store.rev(), office: office.info(req),
+    if (p === '/api/me') return json(res, 200, { ok: true, user: access.shape(u, 'users', u), owner: isOwner(u), review: !!review, tapTrace: isTestSite && isOwner(req.realUser || u), appIcon: appIcon.info(), macShell, version, rev: store.rev(), office: office.info(req),
       ownerView: req.ownerView || null, canOwnerView: ownerViewOk(req.realUser || u),
       // (Admins: whose account only its owner may change, so the Team page shows it locked)
       ownerId: access.isAdm(u) && cfg.adminEmail ? (access.userByEmail(cfg.adminEmail) || {}).id || null : null,
