@@ -5399,9 +5399,14 @@ document.addEventListener('click', async (e) => {
         // up to meet it — the page doesn't jump to somewhere new
         const before = actEl.getBoundingClientRect().top;
         const secBefore = (actEl.closest('.desc-sec') || actEl).getBoundingClientRect().top;
+        const sc1 = detailScroller(), top1 = sc1 ? sc1.scrollTop : null;
         ui.descOpen[t.id] = !ui.descOpen[t.id];
         renderDetail();
-        if (ui.descOpen[t.id] && can('editDesc')) setTimeout(() => { const ed = $('#d-notes'); if (ed) { ed.focus(); placeCaretAtEnd(ed); } }, 0);
+        // Expanding: the text simply grows downwards where it is — the page stays put (it used to jump to the end
+        // of the text, where the cursor was placed); tapping into the text is what starts editing
+        if (ui.descOpen[t.id]) { const sc2 = detailScroller(); if (sc2 && top1 != null) sc2.scrollTop = top1; ui.descAt = { id: t.id, top: top1 }; }
+        // Collapsing after Expand: back to exactly where the page was before expanding (Expand undone)
+        else if (ui.descAt && ui.descAt.id === t.id && ui.descAt.top != null && detailScroller()) { detailScroller().scrollTop = ui.descAt.top; ui.descAt = null; }
         else if (!ui.descOpen[t.id]) {
           const b0 = $('#detail .desc-toggle');
           // (an empty description has no button once closed: then the section itself stays where it was)
