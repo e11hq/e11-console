@@ -1,9 +1,10 @@
 # E11 Console on the office NAS — paste into Container Station → Applications → Create,
-# then replace the four PASTE_… values. Never share this file once the values are filled in.
+# then replace the PASTE_… values. Never share this file once the values are filled in.
 #
 #   app         → console.e11hq.com   (the live copy everyone uses; updates at 2 AM)
 #   test        → test.e11hq.com      (test copy with its own data; updates with every change)
-#   cloudflared → connects both to Cloudflare (replaces the old "e11-tunnel" application)
+#   review      → review.e11hq.com     (Apple's App Review: made-up demo data and its own password; same version as live)
+#   cloudflared → connects them to Cloudflare (replaces the old "e11-tunnel" application)
 
 services:
   app:
@@ -58,6 +59,21 @@ services:
     devices:                        # the processor's video hardware (Intel Quick Sync) for fast video conversion
       - /dev/dri:/dev/dri
 
+  # The App Review copy: only made-up demo data (reset every night at 3 AM), signed in with its own password instead
+  # of Cloudflare's email code. Its own data folder; nothing from live or test is ever in it. In Cloudflare it has the
+  # public hostname review.e11hq.com → http://review:8080 and an Access "Bypass" policy for that hostname only.
+  review:
+    image: ghcr.io/e11hq/e11-console:latest
+    restart: unless-stopped
+    environment:
+      - GITHUB_TOKEN=PASTE_GITHUB_TOKEN
+      - UPDATE_CHANNEL=stable
+      - UPDATE_HOUR=2
+      - TZ=Asia/Dubai
+      - REVIEW_PASSWORD=PASTE_REVIEW_PASSWORD   # 10+ characters; the same one goes in App Store Connect › App Review Information
+    volumes:
+      - /share/E11Console/review:/data
+
   cloudflared:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
@@ -67,3 +83,4 @@ services:
     depends_on:
       - app
       - test
+      - review

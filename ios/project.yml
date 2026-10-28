@@ -53,3 +53,4 @@ targets:
           NSAllowsLocalNetworking: true
         E11ServerURL: https://console.e11hq.com
         E11TestServerURL: https://test.e11hq.com
+        E11ReviewServerURL: https://review.e11hq.com

@@ -17,12 +17,18 @@ let SELFTEST = procEnv["E11_SELFTEST"] ?? ""           // the build machine's se
 let info = Bundle.main.infoDictionary ?? [:]
 let LOCK_KEY = "E11FaceIDLock", PUSH_OFF_KEY = "E11PushOff"
 let defaults = UserDefaults.standard
-// Live by default; Settings › E11 Console › Server can switch to the test copy
+// Live by default; Settings › E11 Console › Server can switch to the test copy. "review" is the App Review copy
+// (made-up demo data, its own password sign-in) — chosen from the link under the sign-in page, for Apple's reviewer.
+let LIVE_URL = info["E11ServerURL"] as? String ?? "https://console.e11hq.com"
 func serverURL() -> String {
   if let s = procEnv["E11_SERVER"], !s.isEmpty { return s }
-  let live = info["E11ServerURL"] as? String ?? "https://console.e11hq.com"
   let test = info["E11TestServerURL"] as? String ?? "https://test.e11hq.com"
-  return defaults.string(forKey: "e11_server") == "test" ? test : live
+  let review = info["E11ReviewServerURL"] as? String ?? "https://review.e11hq.com"
+  switch defaults.string(forKey: "e11_server") {
+  case "test": return test
+  case "review": return review
+  default: return LIVE_URL
+  }
 }
 #if DEBUG
 let APNS_ENV = "sandbox"
@@ -96,6 +102,18 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   var retrying = false
   var launchLock = true          // ask for Face ID when the app starts (not every time it comes back to the front)
   var authing = false            // Face ID is on screen (it makes the app inactive and active again: never a new lock)
+  // under the Cloudflare sign-in page only: "App Review sign-in" (Apple's reviewer can't get an E11 email code)
+  lazy var reviewLink: UIButton = {
+    let b = UIButton(type: .system)
+    b.setTitle("App Review sign-in", for: .normal)
+    b.titleLabel?.font = .systemFont(ofSize: 14, weight: .medium)
+    b.setTitleColor(.secondaryLabel, for: .normal)
+    b.accessibilityIdentifier = "review-sign-in"
+    b.addTarget(self, action: #selector(toReview), for: .touchUpInside)
+    b.isHidden = true
+    return b
+  }()
+  @objc func toReview() { defaults.set("review", forKey: "e11_server"); reviewLink.isHidden = true; loadHome() }
 
   override var preferredStatusBarStyle: UIStatusBarStyle { statusStyle }
   override func loadView() { view = UIView(); view.backgroundColor = BG }
@@ -139,6 +157,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     tabBar.delegate = self
     tabBar.isHidden = true
     view.addSubview(tabBar)
+    view.addSubview(reviewLink)
     loadHome()
   }
   override func viewDidLayoutSubviews() {
@@ -156,6 +175,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let cover = tabBar.isHidden ? 0 : Int(seen.rounded())
     if cover != tabCover { tabCover = cover; pageJS("document.documentElement.style.setProperty('--ios-tabs-h','\(cover)px')") }
     lockView?.frame = b
+    reviewLink.frame = CGRect(x: 0, y: b.height - view.safeAreaInsets.bottom - 44, width: b.width, height: 44)
     hud?.place(in: b, above: tabBar.isHidden ? view.safeAreaInsets.bottom : h)
   }
   func loadHome(_ path: String = "/") {
@@ -225,6 +245,10 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if s == "http" || s == "https" {
       // a file of ours opened as the whole page would leave no way back: it's downloaded to the share sheet instead
       if action.targetFrame?.isMainFrame != false, u.host == serverHost, u.path.hasPrefix("/__file/") { return decisionHandler(.download) }
+      // the App Review copy's "Sign in to E11 Console" link: back to the live copy here, not in Safari
+      if defaults.string(forKey: "e11_server") == "review", action.targetFrame?.isMainFrame != false, u.host == URL(string: LIVE_URL)?.host {
+        defaults.set("live", forKey: "e11_server"); loadHome(); return decisionHandler(.cancel)
+      }
       if action.targetFrame?.isMainFrame == false || allowedHere(u) { return decisionHandler(.allow) }
       UIApplication.shared.open(u)
       return decisionHandler(.cancel)
@@ -250,6 +274,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
     let onServer = webView.url?.host == serverHost
     pageReady = onServer
+    reviewLink.isHidden = !(webView.url?.host ?? "").hasSuffix(".cloudflareaccess.com")
     webView.hideKeyboardBar()
     if onServer { DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.syncBackground() } }
     if onServer { tabCover = -1; view.setNeedsLayout(); flushPending(); if !SELFTEST.isEmpty && !started { started = true; DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.selfTest() } } }
@@ -704,7 +729,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         self.web.load(URLRequest(url: URL(string: "https://e11hq.cloudflareaccess.com/")!)) }),
     ]
     func run(_ i: Int) {
-      if i >= steps.count { selfResult["frame"] = ["web": web.frame.height, "screen": view.bounds.height, "inset": web.scrollView.contentInsetAdjustmentBehavior == .never ? "never" : "auto", "insetTop": web.scrollView.adjustedContentInset.top, "host": web.url?.host ?? ""] as [String: Any]; return writeSelf("done") }
+      if i >= steps.count { selfResult["frame"] = ["web": web.frame.height, "screen": view.bounds.height, "inset": web.scrollView.contentInsetAdjustmentBehavior == .never ? "never" : "auto", "insetTop": web.scrollView.adjustedContentInset.top, "host": web.url?.host ?? "", "reviewLink": !reviewLink.isHidden, "privacy": Bundle.main.url(forResource: "PrivacyInfo", withExtension: "xcprivacy") != nil] as [String: Any]; return writeSelf("done") }
       let (name, js, before) = steps[i]
       before?()
       DispatchQueue.main.asyncAfter(deadline: .now() + (before == nil ? 0.2 : 1.5)) {

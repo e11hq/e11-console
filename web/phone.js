@@ -708,7 +708,7 @@ const Phone = (() => {
       case 'open-project': go('project', id); break;
       case 'task-more': taskMore(); break;
       case 'sample': resetSampleData(); break;
-      case 'sign-out': dialog({ title: 'Sign out?', body: 'You’ll need the code from your email to sign in again.', okText: 'Sign out' }).then((ok) => { if (ok) signOut(); }); break;
+      case 'sign-out': dialog({ title: 'Sign out?', body: window.E11_REVIEW ? 'You’ll need the App Review password to sign in again.' : 'You’ll need the code from your email to sign in again.', okText: 'Sign out' }).then((ok) => { if (ok) signOut(); }); break;
       default: break;
     }
   }, true);

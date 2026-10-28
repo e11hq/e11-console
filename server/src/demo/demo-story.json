@@ -1,0 +1,738 @@
+{
+ "tasks": [
+  {
+   "key": "demo01",
+   "client": "Ford & Lincoln",
+   "title": "Northline | Winter Drive Campaign – Key Visual",
+   "status": "WIP",
+   "finance": "PO Received",
+   "notes": "Hero key visual for the Winter Drive campaign. Mountain road at dusk, the new SUV in front, warm headlights.\nHeadline: Every road, every season.\nSizes: 1080x1350, 1080x1920, 1920x1080.",
+   "creator": "u-nadia",
+   "comments": [
+    {
+     "who": "u-nadia",
+     "text": "Hi @Joe Hajj, brief and references are in the description. First direction by Thursday please.",
+     "media": [],
+     "reacts": 0,
+     "replies": 0
+    },
+    {
+     "who": "u-joe",
+     "text": "On it. Sharing two looks tomorrow morning.",
+     "media": [],
+     "reacts": 1,
+     "replies": 0
+    }
+   ],
+   "media": [
+    {
+     "key": "dm01.jpg",
+     "name": "NorthlineMotors_EveryRoad,EverySeason_1080x1350_V02.jpg"
+    }
+   ]
+  },
+  {
+   "key": "demo02",
+   "client": "Ford & Lincoln",
+   "title": "Northline | Service Offer – Social Pack",
+   "status": "INTERNAL REVIEW",
+   "finance": "LPO Pending",
+   "notes": "Four posts for the winter service offer: 20% off the 10-point check, free car wash.",
+   "creator": "u-nadia",
+   "comments": [
+    {
+     "who": "u-sara",
+     "text": "Service pack ready for review, all four sizes attached.",
+     "media": [],
+     "reacts": 0,
+     "replies": 0
+    }
+   ],
+   "media": [
+    {
+     "key": "dm02.jpg",
+     "name": "NorthlineMotors_WinterServiceCheck_1080x1350_V03.jpg"
+    },
+    {
+     "key": "dm03.jpg",
+     "name": "NorthlineMotors_FreeCarWash_1080x1350_V01.jpg"
+    }
+   ]
+  },
+  {
+   "key": "demo03",
+   "client": "Ford & Lincoln",
+   "title": "Northline | Showroom Opening – Invitation EDM",
+   "status": "AMENDMENTS",
+   "finance": "PO Received",
+   "notes": "English + Arabic invitation for the new showroom opening. RSVP button links to the event page.",
+   "creator": "u-nadia",
+   "comments": [
+    {
+     "who": "u-karim",
+     "text": "The date line is too small, make it the second thing you read.",
+     "media": [],
+     "reacts": 0,
+     "replies": 0
+    },
+    {
+     "who": "u-sara",
+     "text": "Noted, updating now.",
+     "media": [],
+     "reacts": 0,
+     "replies": 0
+    }
+   ],
+   "media": [
+    {
+     "key": "dm04.jpg",
+     "name": "NorthlineMotors_YouAreInvited_1080x1350_V02.jpg"
+    }
+   ]
+  },
+  {
+   "key": "demo04",
+   "client": "Ford & Lincoln",
+   "title": "Northline | Weekend Test Drive – Reel",
+   "status": "EDIT VIDEO",
+   "finance": "Quote to be sent",
+   "notes": "15s reel from the test drive shoot. Fast cuts, end card with the booking link.",
+   "creator": "u-nadia",
+   "comments": [
+    {
+     "who": "u-moon",
+     "text": "Rough cut is on the NAS, music still temporary.",
+     "media": [],
+     "reacts": 0,
+     "replies": 0
+    }
+   ],
+   "media": []
+  },
+  {
+   "key": "demo05",
+   "client": "Ford & Lincoln",
+   "title": "Northline | Owners Club – Newsletter",
+   "status": "COMPLETED",
+   "finance": "PO Received",
+   "notes": "Monthly owners club newsletter with the road trip story.",
+   "creator": "u-nadia",
+   "comments": [
+    {
+     "who": "u-joe",
+     "text": "Final files attached.",
+     "media": [],
+     "reacts": 1,
+     "replies": 0
+    }
+   ],
+   "media": [
+    {
+     "key": "dm05.jpg",
+     "name": "NorthlineMotors_OwnersClubRoadTrip_1080x1350_V03.jpg"
+    }
+   ]
+  },
+  {
+   "key": "demo06",
+   "client": "KIA",
+   "title": "Kestrel | Family Cars Campaign – Static",
+   "status": "WIP",
+   "finance": "PO Received",
+   "notes": "Static posts for the family cars campaign: seven seats, room for everything.",
+   "creator": "u-lina",
+   "comments": [
+    {
+     "who": "u-lina",
+     "text": "@Yousef Al Hwij please keep the family in the shot, not only the car.",
+     "media": [],
+     "reacts": 0,
+     "replies": 0
+    },
+    {
+     "who": "u-sara",
+     "text": "Got it, reworking the layout.",
+     "media": [],
+     "reacts": 0,
+     "replies": 0
+    }
+   ],
+   "media": [
+    {
+     "key": "dm06.jpg",
+     "name": "KestrelAuto_RoomForEveryone_1080x1350_V01.jpg"
+    }
+   ]
+  },
+  {
+   "key": "demo07",
+   "client": "KIA",
+   "title": "Kestrel | Year End Sale – Banners",
+   "status": "CTR",
+   "finance": "To be invoiced",
+   "notes": "Website and showroom banners for the year end sale.",
+   "creator": "u-lina",
+   "comments": [
+    {
+     "who": "u-ali",
+     "text": "All banner sizes approved by the CD, attached for the client.",
+     "media": [],
+     "reacts": 1,
+     "replies": 0
+    }
+   ],
+   "media": [
+    {
+     "key": "dm07.jpg",
+     "name": "KestrelAuto_YearEndSale_1920x1080_V02.jpg"
+    }
+   ]
+  },
+  {
+   "key": "demo08",
+   "client": "KIA",
+   "title": "Kestrel | Hybrid Launch – Storyboard",
+   "status": "STORYBOARD",
+   "finance": "Quote to be sent",
+   "notes": "Storyboard for the 30s hybrid launch film. City at night, quiet electric start.",
+   "creator": "u-lina",
+   "comments": [
+    {
+     "who": "u-ali",
+     "text": "Frames 1–6 drafted, sharing after lunch.",
+     "media": [],
+     "reacts": 0,
+     "replies": 0
+    }
+   ],
+   "media": []
+  },
+  {
+   "key": "demo09",
+   "client": "KIA",
+   "title": "Kestrel | Safety Week – Carousel",
+   "status": "AMENDMENTS",
+   "finance": "LPO Pending",
+   "notes": "Five-slide carousel on the five-star safety rating.",
+   "creator": "u-lina",
+   "comments": [
+    {
+     "who": "u-karim",
+     "text": "Slide 3 icon style doesn’t match the others.",
+     "media": [],
+     "reacts": 0,
+     "replies": 0
+    }
+   ],
+   "media": [
+    {
+     "key": "dm08.jpg",
+     "name": "KestrelAuto_FiveStarsForSafety_1080x1350_V03.jpg"
+    }
+   ]
+  },
+  {
+   "key": "demo10",
+   "client": "DEEPAL",
+   "title": "Voltra | City Charge – Launch Video",
+   "status": "SHOOT",
+   "finance": "PO Received",
+   "notes": "Shoot day at the marina: the car charging, the driver walking to a café. 2 locations, golden hour.",
+   "creator": "u-lina",
+   "comments": [
+    {
+     "who": "u-moon",
+     "text": "Location permits confirmed for Saturday.",
+     "media": [],
+     "reacts": 2,
+     "replies": 0
+    }
+   ],
+   "media": []
+  },
+  {
+   "key": "demo11",
+   "client": "DEEPAL",
+   "title": "Voltra | Range Myths – Social Series",
+   "status": "WIP",
+   "finance": "Retainer",
+   "notes": "Four short posts answering common range questions.",
+   "creator": "u-lina",
+   "comments": [
+    {
+     "who": "u-joe",
+     "text": "Copy for posts 1 and 2 is in the doc.",
+     "media": [],
+     "reacts": 0,
+     "replies": 0
+    }
+   ],
+   "media": [
+    {
+     "key": "dm09.jpg",
+     "name": "VoltraEV_RangeMyths,Busted_1080x1350_V01.jpg"
+    }
+   ]
+  },
+  {
+   "key": "demo12",
+   "client": "DEEPAL",
+   "title": "Voltra | Pre-Book – Landing Banner",
+   "status": "CTR",
+   "finance": "To be invoiced",
+   "notes": "Hero banner for the pre-book landing page.",
+   "creator": "u-lina",
+   "comments": [
+    {
+     "who": "u-maab",
+     "text": "Banner approved, ready for the client.",
+     "media": [],
+     "reacts": 0,
+     "replies": 0
+    }
+   ],
+   "media": [
+    {
+     "key": "dm10.jpg",
+     "name": "VoltraEV_Pre-BookYoursToday_1920x1080_V02.jpg"
+    }
+   ]
+  },
+  {
+   "key": "demo13",
+   "client": "AL TAYER MOTORS",
+   "title": "Crescent | Group Brand Film – Script",
+   "status": "BRAINSTORM",
+   "finance": "Quote to be sent",
+   "notes": "Brainstorm for the group brand film: 40 years of moving people.",
+   "creator": "u-lina",
+   "comments": [],
+   "media": []
+  },
+  {
+   "key": "demo14",
+   "client": "ALAIN",
+   "title": "Azure Bay | Tower Launch – Brochure",
+   "status": "WIP",
+   "finance": "PO Received",
+   "notes": "Twelve-page brochure for the new tower: floor plans, amenities, location map.",
+   "creator": "u-lana",
+   "comments": [
+    {
+     "who": "u-lana",
+     "text": "@Ali Raza the floor plans came in from the client, they are in the Files folder.",
+     "media": [],
+     "reacts": 0,
+     "replies": 0
+    },
+    {
+     "who": "u-ali",
+     "text": "Thanks, adding them today.",
+     "media": [],
+     "reacts": 0,
+     "replies": 0
+    }
+   ],
+   "media": [
+    {
+     "key": "dm11.jpg",
+     "name": "AzureBayResidences_LivingAboveTheBay_1080x1350_V03.jpg"
+    }
+   ]
+  },
+  {
+   "key": "demo15",
+   "client": "ALAIN",
+   "title": "Azure Bay | Open House – Reel",
+   "status": "INTERNAL REVIEW",
+   "finance": "Retainer",
+   "notes": "Open house invitation reel, 9:16.",
+   "creator": "u-lana",
+   "comments": [
+    {
+     "who": "u-maya",
+     "text": "Reel ready for review.",
+     "media": [],
+     "reacts": 0,
+     "replies": 0
+    }
+   ],
+   "media": [
+    {
+     "key": "dm12.jpg",
+     "name": "AzureBayResidences_OpenHouseThisFriday_1080x1920_V01.jpg"
+    }
+   ]
+  },
+  {
+   "key": "demo16",
+   "client": "ALAIN",
+   "title": "Azure Bay | Amenities – Carousel",
+   "status": "COMPLETED",
+   "finance": "PO Received",
+   "notes": "Carousel showing the pool, gym and kids club.",
+   "creator": "u-lana",
+   "comments": [
+    {
+     "who": "u-ali",
+     "text": "Final carousel attached.",
+     "media": [],
+     "reacts": 1,
+     "replies": 0
+    }
+   ],
+   "media": [
+    {
+     "key": "dm13.jpg",
+     "name": "AzureBayResidences_EverythingYouNeed,Downstairs_1080x1350_V02.jpg"
+    }
+   ]
+  },
+  {
+   "key": "demo17",
+   "client": "HRE",
+   "title": "Halden | Staycation Offer – Stories",
+   "status": "WIP",
+   "finance": "Retainer",
+   "notes": "Story set for the weekend staycation offer.",
+   "creator": "u-lana",
+   "comments": [
+    {
+     "who": "u-maab",
+     "text": "First two frames done.",
+     "media": [],
+     "reacts": 0,
+     "replies": 0
+    }
+   ],
+   "media": [
+    {
+     "key": "dm14.jpg",
+     "name": "HaldenHotels_YourWeekendEscape_1080x1920_V03.jpg"
+    }
+   ]
+  },
+  {
+   "key": "demo18",
+   "client": "HRE",
+   "title": "Halden | Festive Brunch – Poster",
+   "status": "AMENDMENTS",
+   "finance": "LPO Pending",
+   "notes": "Poster for the festive brunch, A2 and social.",
+   "creator": "u-lana",
+   "comments": [
+    {
+     "who": "u-karim",
+     "text": "Make the price clearer and drop the second font.",
+     "media": [],
+     "reacts": 0,
+     "replies": 0
+    }
+   ],
+   "media": [
+    {
+     "key": "dm15.jpg",
+     "name": "HaldenHotels_FestiveBrunch_1080x1350_V01.jpg"
+    }
+   ]
+  },
+  {
+   "key": "demo19",
+   "client": "KOREA 360",
+   "title": "Seoul Street | Food Week – Reel",
+   "status": "WIP",
+   "finance": "Retainer",
+   "notes": "Tasting reel at the food stalls.",
+   "creator": "u-nadia",
+   "comments": [
+    {
+     "who": "u-aish",
+     "text": "Shot list shared with the team.",
+     "media": [],
+     "reacts": 0,
+     "replies": 0
+    }
+   ],
+   "media": [
+    {
+     "key": "dm16.jpg",
+     "name": "SeoulStreetMarket_FoodWeekIsHere_1080x1920_V02.jpg"
+    }
+   ]
+  },
+  {
+   "key": "demo20",
+   "client": "KOREA 360",
+   "title": "Seoul Street | Monthly Content Plan",
+   "status": "WIP",
+   "finance": "Retainer",
+   "notes": "Content plan for next month: events, giveaways, weekend activities.",
+   "creator": "u-aish",
+   "comments": [],
+   "media": []
+  },
+  {
+   "key": "demo21",
+   "client": "CPT",
+   "title": "Coastline | New Menu – Static Posts",
+   "status": "CTR",
+   "finance": "Retainer",
+   "notes": "Three posts for the new breakfast menu.",
+   "creator": "u-aish",
+   "comments": [
+    {
+     "who": "u-aish",
+     "text": "Approved by the CD, sharing with the client now.",
+     "media": [],
+     "reacts": 0,
+     "replies": 0
+    }
+   ],
+   "media": [
+    {
+     "key": "dm17.jpg",
+     "name": "CoastlinePantry_GoodMorningsStartHere_1080x1350_V03.jpg"
+    }
+   ]
+  },
+  {
+   "key": "demo22",
+   "client": "CPT",
+   "title": "Coastline | Weekend Market – Story",
+   "status": "NEW",
+   "finance": "Retainer",
+   "notes": "Story announcing the weekend farmers market at the bakery.",
+   "creator": "u-aish",
+   "comments": [],
+   "media": []
+  },
+  {
+   "key": "demo23",
+   "client": "CPT",
+   "title": "Coastline | Monthly Content Plan",
+   "status": "WIP",
+   "finance": "Retainer",
+   "notes": "Next month’s plan: menu highlights, behind the scenes, customer stories.",
+   "creator": "u-maya",
+   "comments": [],
+   "media": []
+  },
+  {
+   "key": "demo24",
+   "client": "ASV",
+   "title": "Aster Health | Wellness Month – Carousel",
+   "status": "WIP",
+   "finance": "Retainer",
+   "notes": "Carousel with five everyday wellness tips.",
+   "creator": "u-maya",
+   "comments": [
+    {
+     "who": "u-omar",
+     "text": "Illustrations in progress.",
+     "media": [],
+     "reacts": 0,
+     "replies": 0
+    }
+   ],
+   "media": [
+    {
+     "key": "dm18.jpg",
+     "name": "AsterHealth_FiveSmallHabits_1080x1350_V01.jpg"
+    }
+   ]
+  },
+  {
+   "key": "demo25",
+   "client": "ASV",
+   "title": "Aster Health | Clinic Opening – Video",
+   "status": "ON HOLD",
+   "finance": "Retainer",
+   "notes": "Video for the new clinic opening, waiting for the client’s date.",
+   "creator": "u-maya",
+   "comments": [
+    {
+     "who": "u-maya",
+     "text": "On hold until the client confirms the opening date.",
+     "media": [],
+     "reacts": 0,
+     "replies": 0
+    }
+   ],
+   "media": []
+  },
+  {
+   "key": "demo26",
+   "client": "ASV",
+   "title": "Aster Health | Flu Season – Posts",
+   "status": "COMPLETED",
+   "finance": "Retainer",
+   "notes": "Reminder posts for flu vaccinations.",
+   "creator": "u-maya",
+   "comments": [
+    {
+     "who": "u-omar",
+     "text": "Final posts attached.",
+     "media": [],
+     "reacts": 0,
+     "replies": 0
+    }
+   ],
+   "media": [
+    {
+     "key": "dm19.jpg",
+     "name": "AsterHealth_GetYourFluShot_1080x1350_V02.jpg"
+    }
+   ]
+  },
+  {
+   "key": "demo27",
+   "client": "Gebriel Motors",
+   "title": "Granite | Trade Show – Mini Stand Static",
+   "status": "WIP",
+   "finance": "Retainer",
+   "notes": "We’re not exhibiting, so we built our trade show stand in miniature from our own parts.\nHeadline: No stand this year. So we built our own.",
+   "creator": "u-aish",
+   "comments": [
+    {
+     "who": "u-joe",
+     "text": "Hello @Aishwarya Sanjay, mini stand static attached.",
+     "media": [],
+     "reacts": 0,
+     "replies": 0
+    }
+   ],
+   "media": [
+    {
+     "key": "dm20.jpg",
+     "name": "GraniteAutoParts_NoStandThisYear.SoWeBuiltOur_1080x1350_V03.jpg"
+    }
+   ]
+  },
+  {
+   "key": "demo28",
+   "client": "Gebriel Motors",
+   "title": "Granite | Brake Pads – Product Posts",
+   "status": "INTERNAL REVIEW",
+   "finance": "Retainer",
+   "notes": "Product posts for the new ceramic brake pads.",
+   "creator": "u-aish",
+   "comments": [
+    {
+     "who": "u-joe",
+     "text": "Submitted for review.",
+     "media": [],
+     "reacts": 0,
+     "replies": 0
+    }
+   ],
+   "media": [
+    {
+     "key": "dm21.jpg",
+     "name": "GraniteAutoParts_StopWithConfidence_1080x1350_V01.jpg"
+    }
+   ]
+  },
+  {
+   "key": "demo29",
+   "client": "Gebriel Motors",
+   "title": "Granite | Workshop Tips – Reel",
+   "status": "NEW",
+   "finance": "Retainer",
+   "notes": "Short reel: three quick checks before a long drive.",
+   "creator": "u-aish",
+   "comments": [],
+   "media": []
+  },
+  {
+   "key": "demo30",
+   "client": "Bizreh",
+   "title": "Bloom Café | Autumn Drinks – Posts",
+   "status": "AMENDMENTS",
+   "finance": "Retainer",
+   "notes": "Posts for the autumn drinks menu.",
+   "creator": "u-maya",
+   "comments": [
+    {
+     "who": "u-karim",
+     "text": "Warmer colours please, it reads like summer.",
+     "media": [],
+     "reacts": 0,
+     "replies": 0
+    }
+   ],
+   "media": [
+    {
+     "key": "dm22.jpg",
+     "name": "BloomCafé_AutumnInACup_1080x1350_V02.jpg"
+    }
+   ]
+  },
+  {
+   "key": "demo31",
+   "client": "FORTA",
+   "title": "Fortis | New Year Membership – Campaign",
+   "status": "WIP",
+   "finance": "Quote to be sent",
+   "notes": "Campaign for the new year membership offer: posts, stories and an EDM.",
+   "creator": "u-nadia",
+   "comments": [
+    {
+     "who": "u-ali",
+     "text": "Moodboard shared in the folder.",
+     "media": [],
+     "reacts": 0,
+     "replies": 0
+    }
+   ],
+   "media": [
+    {
+     "key": "dm23.jpg",
+     "name": "FortisFitness_NewYear,StrongerYou_1080x1350_V03.jpg"
+    }
+   ]
+  },
+  {
+   "key": "demo32",
+   "client": "E11",
+   "title": "E11 | Agency Showreel 2026",
+   "status": "WIP",
+   "finance": "",
+   "notes": "Our own showreel with the best work of the year.",
+   "creator": "u-lana",
+   "comments": [
+    {
+     "who": "u-moon",
+     "text": "Collecting the selects this week.",
+     "media": [],
+     "reacts": 0,
+     "replies": 0
+    }
+   ],
+   "media": []
+  },
+  {
+   "key": "demo33",
+   "client": "KIA",
+   "title": "Kestrel | Dealer Training – Slides",
+   "status": "COMPLETED",
+   "finance": "PO Received",
+   "notes": "Slides for the dealer training day.",
+   "creator": "u-lina",
+   "comments": [
+    {
+     "who": "u-sara",
+     "text": "Final deck attached.",
+     "media": [],
+     "reacts": 0,
+     "replies": 0
+    }
+   ],
+   "media": [
+    {
+     "key": "dm24.jpg",
+     "name": "KestrelAuto_DealerTrainingDay_1920x1080_V01.jpg"
+    }
+   ]
+  }
+ ]
+}

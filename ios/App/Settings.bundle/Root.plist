@@ -8,15 +8,15 @@
     <dict>
       <key>Type</key><string>PSGroupSpecifier</string>
       <key>Title</key><string>Server</string>
-      <key>FooterText</key><string>Leave on Live. Test is the E11 test copy, for trying new features. Close and reopen E11 Console after changing it.</string>
+      <key>FooterText</key><string>Leave on Live. Test is the E11 test copy, for trying new features. App Review is a demo copy with made-up data, for Apple’s review. Close and reopen E11 Console after changing it.</string>
     </dict>
     <dict>
       <key>Type</key><string>PSMultiValueSpecifier</string>
       <key>Title</key><string>Server</string>
       <key>Key</key><string>e11_server</string>
       <key>DefaultValue</key><string>live</string>
-      <key>Titles</key><array><string>Live</string><string>Test</string></array>
-      <key>Values</key><array><string>live</string><string>test</string></array>
+      <key>Titles</key><array><string>Live</string><string>Test</string><string>App Review</string></array>
+      <key>Values</key><array><string>live</string><string>test</string><string>review</string></array>
     </dict>
   </array>
 </dict>

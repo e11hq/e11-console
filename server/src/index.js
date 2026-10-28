@@ -31,10 +31,15 @@ const cfg = {
   apnsKeyId: env.APNS_KEY_ID || '',
   apnsTeamId: env.APNS_TEAM_ID || '',
   apnsTopic: env.APNS_TOPIC || 'ae.e11.console.ios',
+  // The App Review copy only (review.js): the demo account's password — set on the NAS's "review" app, never elsewhere
+  reviewPassword: env.REVIEW_PASSWORD || '',
+  reviewEmail: env.REVIEW_EMAIL || '',
 };
 function readVersion() {
   try { return fs.readFileSync(path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../VERSION'), 'utf8').trim(); } catch { return '0.0.0-dev'; }
 }
+if (cfg.reviewPassword && cfg.reviewPassword.length < 10) { console.error('REVIEW_PASSWORD is too short (10 characters or more).'); process.exit(1); }
+if (cfg.reviewPassword) console.log('App Review copy: its own sign-in, made-up demo data only.');
 if (cfg.dev) console.warn('WARNING: AUTH_DEV=1 — sign-in checks are OFF. Never use this on the NAS.');
 
 const app = createServer(cfg);

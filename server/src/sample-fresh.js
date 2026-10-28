@@ -11,8 +11,8 @@ import { sampleData } from './sample.js';
 
 const DAY = 86400000;
 // (read only when the test copy starts fresh — live releases don't carry the story or its files)
-let STORY = null;
-const MEDIA = new URL('./sample-files/clickup/', import.meta.url);
+let STORY_CACHE = null;
+const MEDIA_DIR = new URL('./sample-files/clickup/', import.meta.url);
 const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 // clients: id, colour, Account Managers (first is the main one) — as in ClickUp
@@ -54,9 +54,12 @@ const FIN = { 'PO Pending': 'LPO Pending', 'LPO Pending': 'LPO Pending', 'PO Rec
 const CD_NOTES = ['The end frame logo comes in too early, hold it one second longer.', 'Raise the headline, it is fighting with the visual.', 'The Arabic line is too long, cut it to one line and check the kerning.'];
 const LOGO = (name, bg) => `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="300" viewBox="0 0 600 300"><rect width="600" height="300" rx="24" fill="${bg}"/><text x="300" y="168" font-family="Helvetica, Arial, sans-serif" font-size="${name.length > 9 ? 56 : 84}" font-weight="700" fill="#ffffff" text-anchor="middle" letter-spacing="2">${esc(name.toUpperCase())}</text></svg>`;
 
-export function freshSample(store, me, filesRoot) {
-  STORY = STORY || JSON.parse(fs.readFileSync(new URL('./sample-story.json', import.meta.url), 'utf8'));
-  const out = sampleData(store, me, filesRoot);
+// opts (the App Review demo, demo.js): its own story, media folder, sample files and photos
+export function freshSample(store, me, filesRoot, opts = {}) {
+  const STORY = opts.story || (STORY_CACHE = STORY_CACHE || JSON.parse(fs.readFileSync(new URL('./sample-story.json', import.meta.url), 'utf8')));
+  const MEDIA = opts.media || MEDIA_DIR;
+  const SRC = opts.src || new URL('./sample-files/', import.meta.url);
+  const out = sampleData(store, me, filesRoot, opts);
   const now = Date.now();
   const today0 = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); })();
   // "hours ago" from now; a day offset (negative = past) as YYYY-MM-DD in local time
@@ -86,7 +89,7 @@ export function freshSample(store, me, filesRoot) {
   for (const [id, [name, photo]] of Object.entries(PEOPLE)) {
     const u = users.get(id); if (!u) continue;
     u.name = name;
-    if (photo && filesRoot) { try { const rel = `attachments/_avatars/smp-${id}.jpg`; putFile(rel, new URL(`ph-${photo}.jpg`, MEDIA)); u.avatar = rel; } catch (e) { /* photo missing: initials */ } }
+    if ((photo || opts.photo) && filesRoot) { try { const rel = `attachments/_avatars/smp-${id}.jpg`; putFile(rel, opts.photo ? opts.photo(id) : new URL(`ph-${photo}.jpg`, MEDIA)); u.avatar = rel; } catch (e) { /* photo missing: initials */ } }
   }
   const has = (id) => id === me || users.has(id);
   const team = (pid) => (TEAM[pid] || []).map(ME).filter(has);
@@ -294,7 +297,7 @@ export function freshSample(store, me, filesRoot) {
     const am = ((p.ams || [])[0] || {}).id || me;
     const add = (f, name, src, by, hoursAgo, data) => { const rel = `${f.dir}/${name}`; const size = filesRoot ? (data ? putData(rel, data) : putFile(rel, src)) : 0; f.files.push({ id: `${f.id}-${f.files.length}`, name, path: rel, size, addedAt: ago(hoursAgo), addedBy: by }); };
     add(folders[0], `${p.name} logo.svg`, null, am, 24 * 40, LOGO(p.name, p.color));
-    if (['p-ford', 'p-kia', 'p-alain', 'p-hre'].includes(p.id)) add(folders[1], `${p.name} brand guidelines.pdf`, new URL('./sample-files/creative-brief.pdf', import.meta.url), am, 24 * 35);
+    if (['p-ford', 'p-kia', 'p-alain', 'p-hre'].includes(p.id)) add(folders[1], `${p.name} brand guidelines.pdf`, new URL('creative-brief.pdf', SRC), am, 24 * 35);
     p.clientId = `cl-${p.id}`;
     return { id: `cl-${p.id}`, name: p.name, logo: null, dir, folders, createdAt: at, createdBy: me };
   });

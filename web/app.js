@@ -2278,6 +2278,7 @@ const Sync = (() => {
     let me = await api('GET', '/api/me', null, { timeout: 12000 });
     // Owner view (live site) ends on every reload: back to the owner's own role before loading anything
     if (me.ownerView) { try { await api('POST', '/api/owner-view', { mode: 'off' }, { timeout: 12000 }); } catch (e) { /* fine */ } me = await api('GET', '/api/me', null, { timeout: 12000 }); }
+    window.E11_REVIEW = !!me.review;   // the App Review copy (its own sign-in instead of Cloudflare's)
     if (typeof ViewAs !== 'undefined') ViewAs.init(me.viewAs);   // test site only: the owner using the app as someone else
     AppIcon.setOwner(me.owner); if (me.appIcon) AppIcon.sync(me.appIcon);
     ownerId = me.ownerId || null;
@@ -8197,7 +8198,7 @@ function showWelcome(tempPw) {
     $('#wl-av').innerHTML = `${avatarHTML(u.id, 84)}<span class="wl-cam">${icon('camera')}</span>`;
     u.avatar = keep;
   });
-  $('#wl-back').addEventListener('click', () => { if (Host.isServer) { location.href = '/cdn-cgi/access/logout'; return; } currentUserId = null; showLogin(); });
+  $('#wl-back').addEventListener('click', () => { if (Host.isServer) { location.href = signOutUrl(); return; } currentUserId = null; showLogin(); });
   const form = $('#welcome-form');
   form.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -8247,9 +8248,10 @@ async function resetSampleData() {
     setTimeout(() => location.reload(), 900);
   } catch (e) { toast('Could not start fresh: ' + e.message); }
 }
+const signOutUrl = () => (window.E11_REVIEW ? '/review/sign-out' : '/cdn-cgi/access/logout');
 function signOut() {
   flushEdit();
-  if (Host.isServer) { Sync.push(); setTimeout(() => { location.href = '/cdn-cgi/access/logout'; }, 300); return; }
+  if (Host.isServer) { Sync.push(); setTimeout(() => { location.href = signOutUrl(); }, 300); return; }
   const email = me() ? me().email : '';
   savePref('session', null);
   currentUserId = null;

@@ -7,7 +7,7 @@ const REF_DAY = Date.UTC(2026, 9, 20); // the day the sample story was written
 const DAY = 86400000;
 const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-export function sampleData(store, me, filesRoot = null) {
+export function sampleData(store, me, filesRoot = null, opts = {}) {
   const raw = fs.readFileSync(new URL('./sample-data.json', import.meta.url), 'utf8');
   // Sample people already on the team (same email, e.g. from an earlier fill) keep their existing id,
   // so their comments, tasks and reviews point at a real person instead of a "Former member"
@@ -121,7 +121,7 @@ export function sampleData(store, me, filesRoot = null) {
 
   // ---------- Sample files: real small files copied into the data folder ----------
   if (filesRoot) {
-    const SRC = new URL('./sample-files/', import.meta.url);
+    const SRC = opts.src || new URL('./sample-files/', import.meta.url);   // (the App Review demo brings its own made-up files)
     const size = (n) => fs.statSync(new URL(n, SRC)).size;
     const put = (name, rel) => {
       const dest = path.join(filesRoot, ...rel.split('/'));

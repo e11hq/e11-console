@@ -27,6 +27,8 @@ import { freshSample } from './sample-fresh.js';
 import { createAppIcon } from './appicon.js';
 import { createFinals } from './finals.js';
 import { createPlans } from './plans.js';
+import { createReview, resetDue, REVIEW_USER_ID } from './review.js';
+import { demoData, DEMO_REVIEWER } from './demo.js';
 
 const BODY_LIMIT = 12 * 1024 * 1024; // 2 MB upload pieces arrive as ~2.7 MB of base64
 
@@ -36,6 +38,8 @@ export function createServer(cfg) {
   const auth = cfg.auth || createAuth({ team: cfg.cfTeam, aud: cfg.cfAud, dev: !!cfg.dev });
   const access = createAccess(store, { ownerEmail: cfg.adminEmail, plans: /-test\.|-dev$/.test(cfg.version || '0.0.0-dev') });   // (content plans: a trial on the test copy only)
   const files = createFiles(dataDir);
+  // The App Review copy (review.js): only when REVIEW_PASSWORD is set — never on the live or test copy
+  const review = cfg.reviewPassword ? createReview({ store, password: cfg.reviewPassword, email: cfg.reviewEmail || undefined }) : null;
   const version = cfg.version || '0.0.0-dev';
   const webDir = cfg.webDir || null;
   const streams = new Set(); // open live-update connections
@@ -141,7 +145,7 @@ export function createServer(cfg) {
     } catch { return 1; }
   })();
   // The owner (ADMIN_EMAIL) controls things that change every Mac, like the Dock icon. No owner set: any Admin.
-  const isOwner = (u) => (cfg.adminEmail ? String(u.email || '').toLowerCase() === cfg.adminEmail.toLowerCase() : access.isAdm(u));
+  const isOwner = (u) => (review ? false : cfg.adminEmail ? String(u.email || '').toLowerCase() === cfg.adminEmail.toLowerCase() : access.isAdm(u));
   const cfSync = cfg.cfSync || createCfSync({ accountId: cfg.cfAccountId, token: cfg.cfApiToken, groupId: cfg.cfGroupId, listUsers: () => store.list('users'), fetchImpl: cfg.cfFetch || fetch });
 
   /* ---------- helpers ---------- */
@@ -174,8 +178,9 @@ export function createServer(cfg) {
   // The person making this request (null + error page if they can't be identified)
   async function who(req, res) {
     let id;
-    try { id = await auth.identify(req); } catch (e) {
-      if (wantsHtml(req)) page(res, 401, 'Please sign in', esc(e.message));
+    try { id = review ? review.identify(req) : await auth.identify(req); } catch (e) {
+      if (review && wantsHtml(req)) { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(review.page()); }
+      else if (wantsHtml(req)) page(res, 401, 'Please sign in', esc(e.message));
       else json(res, 401, { ok: false, error: e.message });
       return null;
     }
@@ -381,6 +386,25 @@ export function createServer(cfg) {
 
     if (p === '/api/health') return json(res, 200, { ok: true, version, rev: store.rev() });
 
+    // App Review copy only: its own sign-in (review.js); no Mac installer here
+    if (review) {
+      if (p === '/review/sign-in' && req.method === 'POST') {
+        const raw = (await readRaw(req, 8192)).toString('utf8');
+        const f = new URLSearchParams(raw);
+        const r = review.signIn(netInfo(req).ip, f.get('email'), f.get('password'));
+        if (!r.ok) { res.writeHead(r.wait ? 429 : 401, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end(review.page({ error: r.error, email: f.get('email') || '' })); }
+        res.writeHead(303, { Location: '/', 'Set-Cookie': review.cookie(req, r.token), 'Cache-Control': 'no-store' });
+        return res.end();
+      }
+      if (p === '/review/sign-in') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end(review.page()); }
+      if (p === '/review/sign-out') {
+        review.signOut(req);
+        res.writeHead(303, { Location: '/review/sign-in', 'Set-Cookie': review.cookie(req, null), 'Cache-Control': 'no-store' });
+        return res.end();
+      }
+      if (p.startsWith('/install')) return json(res, 404, { ok: false, error: 'Not on the App Review copy' });
+    }
+
     // Mac app installer (no sign-in: these files hold no data — Cloudflare lets /install through)
     // New installs get the icon the owner chose
     if (p === '/install/AppIcon.png' && appIcon.info().custom) {
@@ -480,7 +504,7 @@ export function createServer(cfg) {
       store.kv.set('netlog', JSON.stringify(L));
       return json(res, 200, { ok: true });
     }
-    if (p === '/api/me') return json(res, 200, { ok: true, user: access.shape(u, 'users', u), owner: isOwner(u), appIcon: appIcon.info(), macShell, version, rev: store.rev(), office: office.info(req),
+    if (p === '/api/me') return json(res, 200, { ok: true, user: access.shape(u, 'users', u), owner: isOwner(u), review: !!review, appIcon: appIcon.info(), macShell, version, rev: store.rev(), office: office.info(req),
       ownerView: req.ownerView || null, canOwnerView: ownerViewOk(req.realUser || u),
       // (Admins: whose account only its owner may change, so the Team page shows it locked)
       ownerId: access.isAdm(u) && cfg.adminEmail ? (access.userByEmail(cfg.adminEmail) || {}).id || null : null,
@@ -518,6 +542,7 @@ export function createServer(cfg) {
       if (!access.isAdm(u)) return json(res, 403, { ok: false, error: 'Admins only' });
       if (!cfg.launcherUrl) return json(res, 200, { ok: true, managed: false, running: version });
       const action = req.method === 'POST' ? (await readBody(req)).action : null;
+      if (review && action) return json(res, 403, { ok: false, error: 'Updates are automatic on the App Review copy' });
       const route = action === 'check' ? '/check' : action === 'update' ? '/update' : action === 'rollback' ? '/rollback' : '/status';
       const r = await fetch(cfg.launcherUrl + route, { method: action ? 'POST' : 'GET' }).then((x) => x.json()).catch((e) => ({ ok: false, error: 'Updater not reachable: ' + e.message }));
       return json(res, 200, { managed: true, ...r });
@@ -940,6 +965,32 @@ export function createServer(cfg) {
     return res.end(req.method === 'HEAD' ? undefined : out);
   }
 
+  /* App Review copy only: the made-up demo data (demo.js), fresh on an empty copy and every night from 3:00 Dubai.
+     Everything in this copy's own data folder is replaced — it never holds anything else. */
+  function loadDemo(day) {
+    const dels = [];
+    for (const k of ['users', 'projects', 'tasks', 'clients', 'notifications', 'statuses', 'trash', 'finance', 'claims', 'plans']) store.list(k).forEach((x) => dels.push({ kind: k, id: String(x.id), del: true }));
+    if (dels.length) store.apply(dels, 'demo-reset');
+    store.apply([{ kind: 'meta', id: 'main', data: { createdAt: new Date().toISOString() } }], 'demo-reset');
+    for (const k of ['digest-sent', 'occ-remind-sent', 'daily-sent', 'bday-sent']) store.kv.set(k, '{}');
+    const filesRoot = path.join(dataDir, 'files');
+    fs.rmSync(filesRoot, { recursive: true, force: true });
+    fs.mkdirSync(filesRoot, { recursive: true });
+    store.apply([{ kind: 'users', id: REVIEW_USER_ID, data: { ...DEMO_REVIEWER, email: review.user, createdAt: new Date(Date.now() - 400 * 86400000).toISOString() } }], 'demo-reset');
+    const data = demoData(store, REVIEW_USER_ID, filesRoot);
+    const { rev } = store.importAll(data, REVIEW_USER_ID);
+    store.kv.set('demo-loaded', JSON.stringify({ day, at: new Date().toISOString() }));
+    for (const st of streams) send(st, 'resync', { rev });
+    console.log(`App Review demo data loaded: ${data.tasks.length} tasks, ${data.users.length} people`);
+    return data;
+  }
+  let demoTimer = null;
+  if (review) {
+    const check = () => { try { const r = resetDue(store); if (r.due) loadDemo(r.day); } catch (e) { console.error('App Review demo data failed:', e); } };
+    check();
+    demoTimer = setInterval(check, 10 * 60000); if (demoTimer.unref) demoTimer.unref();
+  }
+
   const server = http.createServer((req, res) => {
     handle(req, res).catch((e) => {
       const status = e.status || 500;
@@ -959,7 +1010,8 @@ export function createServer(cfg) {
     }),
     office, apns,
     digest, holidays, occRemind, birthdays, scheduled, daily, views, scanVideos, pruneNotifications,
-    close: () => new Promise((ok) => { digest.stop(); holidays.stop(); occRemind.stop(); birthdays.stop(); scheduled.stop(); daily.stop(); apns.close(); scanTimers.forEach((x) => { clearTimeout(x); clearInterval(x); }); office.close(); for (const s of streams) try { s.res.end(); } catch { /* ignore */ } server.close(() => { store.close(); ok(); }); }),
+    loadDemo,
+    close: () => new Promise((ok) => { clearInterval(demoTimer); digest.stop(); holidays.stop(); occRemind.stop(); birthdays.stop(); scheduled.stop(); daily.stop(); apns.close(); scanTimers.forEach((x) => { clearTimeout(x); clearInterval(x); }); office.close(); for (const s of streams) try { s.res.end(); } catch { /* ignore */ } server.close(() => { store.close(); ok(); }); }),
     broadcastVersion: (v) => { for (const s of streams) send(s, 'version', { version: v }); },
   };
 }
