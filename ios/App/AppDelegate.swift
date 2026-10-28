@@ -73,7 +73,7 @@ final class WeakHandler: NSObject, WKScriptMessageHandler {
   func userContentController(_ c: WKUserContentController, didReceive m: WKScriptMessage) { target?.userContentController(c, didReceive: m) }
 }
 
-final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate, UITabBarDelegate, WKDownloadDelegate {
+final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate, UITabBarDelegate, WKDownloadDelegate, UIGestureRecognizerDelegate {
   static let shared = Main()
   var web: WKWebView!
   let tabBar = UITabBar()
@@ -127,6 +127,11 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       guard let self = self, self.pageReady, sv.contentOffset != .zero else { return }
       DispatchQueue.main.async { if sv.contentOffset != .zero { sv.setContentOffset(.zero, animated: false) } }
     }
+    // like Messages: drag your finger down onto the top of the keyboard and it goes away
+    let pull = UIPanGestureRecognizer(target: self, action: #selector(pullKeyboard(_:)))
+    pull.cancelsTouchesInView = false
+    pull.delegate = self
+    web.addGestureRecognizer(pull)
     let nc = NotificationCenter.default
     nc.addObserver(forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: .main) { [weak self] n in self?.keyboardMoves(n) }
     nc.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { [weak self] n in self?.keyboardMoves(n, gone: true) }
@@ -174,6 +179,15 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     }
   }
   var keyboardCover: CGFloat = 0
+  @objc func pullKeyboard(_ g: UIPanGestureRecognizer) {
+    guard keyboardUp, keyboardCover > 0, g.state == .changed, g.velocity(in: view).y > 0 else { return }
+    let edge = view.bounds.height - keyboardCover
+    if g.location(in: view).y >= edge - 8 {
+      pageJS("document.activeElement && document.activeElement.blur && document.activeElement.blur()")
+      view.endEditing(true)
+    }
+  }
+  func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
   func keyboardMoves(_ n: Notification, gone: Bool = false) {
     if !gone { syncBackground() }
     var cover: CGFloat = 0
