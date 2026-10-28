@@ -443,8 +443,9 @@ select.field { -webkit-appearance: none; appearance: none; padding-right: 26px;
 .cb-play { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 26px; height: 26px; border-radius: 50%; background: rgba(15, 15, 18, .7); display: grid; place-items: center; }
 .cb-play .ic { width: 12px; height: 12px; margin-left: 2px; } .cb-play svg path { fill: #fff; stroke: #fff; }
 /* × on the top-right corner, a little over it: shows on hover on a computer (always on a phone) */
-.cb-x { position: absolute; top: -7px; right: -7px; width: 22px; height: 22px; border-radius: 50%; border: 0; padding: 0; background: #f2f2f5; color: #16161a; display: grid; place-items: center; box-shadow: 0 1px 4px rgba(0,0,0,.35); cursor: pointer; opacity: 0; transition: opacity .12s; }
+.cb-x { position: absolute; top: -7px; right: -7px; width: 22px; height: 22px; border-radius: 50%; border: 1px solid rgba(255,255,255,.12); padding: 0; background: #2c2c33; color: #ececf1; display: grid; place-items: center; box-shadow: 0 1px 4px rgba(0,0,0,.35); cursor: pointer; opacity: 0; transition: opacity .12s; }
 .cb-x .ic { width: 11px; height: 11px; } .cb-x svg { stroke-width: 2.2; }
+:root[data-theme="light"] .cb-x { background: #fff; color: #16161a; border-color: rgba(0,0,0,.08); box-shadow: 0 1px 4px rgba(0,0,0,.18); }
 .cb-tile:hover .cb-x, .cb-x:focus-visible { opacity: 1; }
 body.phone .cb-x { opacity: 1; width: 24px; height: 24px; }
 /* files dragged over the comment box */
