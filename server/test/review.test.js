@@ -13,7 +13,7 @@ const OFF = { digest: false, holidays: false, occRemind: false, birthdays: false
 let app, dir, base;
 before(async () => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'e11-review-'));
-  app = createServer({ dataDir: dir, version: '1.9.4', reviewPassword: PW, adminEmail: 'haris@e11-digital.com', ...OFF });
+  app = createServer({ dataDir: dir, webDir: new URL('../../web', import.meta.url).pathname, version: '1.9.4', reviewPassword: PW, adminEmail: 'haris@e11-digital.com', ...OFF });
   base = `http://127.0.0.1:${await app.listen(0, '127.0.0.1')}`;
 });
 after(async () => { await app.close(); fs.rmSync(dir, { recursive: true, force: true }); });
@@ -111,4 +111,12 @@ test('without REVIEW_PASSWORD (live and test) there is no password sign-in at al
     assert.equal(r.headers.get('set-cookie'), null);
     assert.equal(live.store.list('users').length, 0, 'no demo data either');
   } finally { await live.close(); fs.rmSync(d2, { recursive: true, force: true }); }
+});
+
+test('the privacy policy and support page open without signing in', async () => {
+  for (const p of ['/privacy', '/support']) {
+    const r = await fetch(base + p);
+    assert.equal(r.status, 200);
+    assert.match(await r.text(), p === '/privacy' ? /Privacy policy/ : /Support/);
+  }
 });

@@ -386,6 +386,12 @@ export function createServer(cfg) {
 
     if (p === '/api/health') return json(res, 200, { ok: true, version, rev: store.rev() });
 
+    // The privacy policy and support page (web/legal): public, no sign-in, no data — the App Store links to them
+    if ((p === '/privacy' || p === '/support') && webDir) {
+      const f = path.join(webDir, 'legal', p.slice(1) + '.html');
+      if (fs.existsSync(f)) { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=300' }); return res.end(req.method === 'HEAD' ? undefined : fs.readFileSync(f)); }
+    }
+
     // App Review copy only: its own sign-in (review.js); no Mac installer here
     if (review) {
       if (p === '/review/sign-in' && req.method === 'POST') {
