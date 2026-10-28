@@ -119,20 +119,16 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if #available(iOS 16.4, *) { web.isInspectable = true }
     view.addSubview(web)
     web.hideKeyboardBar()
-    // Our pages never scroll as a whole (each page scrolls inside itself). iPhone scrolls the whole page up to
-    // show a box being typed in and can leave it there after the keyboard goes, which pushed everything pinned
-    // to the bottom (sheets, menus) below the screen: once the keyboard is down, it goes back to the top.
+    // Like a native app, the keyboard makes the page shorter instead of pushing the whole page up (Safari's way):
+    // the page ends at the top of the keyboard, and the page itself never scrolls as a whole (each page scrolls
+    // inside itself), so the header stays put and boxes at the bottom (the comment box) sit just above the keyboard.
     offsetWatch = web.scrollView.observe(\.contentOffset, options: [.new]) { [weak self] sv, _ in
-      guard let self = self, !self.keyboardUp, self.pageReady, sv.contentOffset != .zero else { return }
-      DispatchQueue.main.async { if !self.keyboardUp, sv.contentOffset != .zero { sv.setContentOffset(.zero, animated: false) } }
+      guard let self = self, self.pageReady, sv.contentOffset != .zero else { return }
+      DispatchQueue.main.async { if sv.contentOffset != .zero { sv.setContentOffset(.zero, animated: false) } }
     }
     let nc = NotificationCenter.default
-    nc.addObserver(forName: UIResponder.keyboardWillShowNotification, object: nil, queue: .main) { [weak self] _ in self?.keyboardUp = true }
-    nc.addObserver(forName: UIResponder.keyboardDidHideNotification, object: nil, queue: .main) { [weak self] _ in
-      guard let self = self else { return }
-      self.keyboardUp = false
-      if self.pageReady, self.web.scrollView.contentOffset != .zero { self.web.scrollView.setContentOffset(.zero, animated: true) }
-    }
+    nc.addObserver(forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: .main) { [weak self] n in self?.keyboardMoves(n) }
+    nc.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { [weak self] n in self?.keyboardMoves(n, gone: true) }
     tabBar.delegate = self
     tabBar.isHidden = true
     view.addSubview(tabBar)
@@ -143,7 +139,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let b = view.bounds
     // the page always fills the screen (no black band under it); the tab bar floats over its bottom and the page
     // keeps that much room free (--ios-tabs-h, web/phone.css)
-    web.frame = b
+    web.frame = CGRect(x: 0, y: 0, width: b.width, height: b.height - keyboardCover)
     let h = tabBar.sizeThatFits(b.size).height + view.safeAreaInsets.bottom
     tabBar.frame = CGRect(x: 0, y: b.height - h, width: b.width, height: h)
     let cover = tabBar.isHidden ? 0 : Int(h.rounded())
@@ -160,6 +156,23 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   var tabCover = -1
   var keyboardUp = false
+  var keyboardCover: CGFloat = 0
+  func keyboardMoves(_ n: Notification, gone: Bool = false) {
+    var cover: CGFloat = 0
+    if !gone, let end = (n.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue {
+      let r = view.convert(end, from: nil)
+      cover = max(0, view.bounds.maxY - r.minY)
+    }
+    keyboardUp = cover > 0
+    if cover == keyboardCover { return }
+    keyboardCover = cover
+    let dur = (n.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double) ?? 0.25
+    let curve = (n.userInfo?[UIResponder.keyboardAnimationCurveUserInfoKey] as? UInt) ?? 7
+    UIView.animate(withDuration: dur, delay: 0, options: UIView.AnimationOptions(rawValue: curve << 16)) {
+      self.view.setNeedsLayout(); self.view.layoutIfNeeded()
+    }
+    if web.scrollView.contentOffset != .zero { web.scrollView.setContentOffset(.zero, animated: false) }
+  }
   var offsetWatch: NSKeyValueObservation?
   func pageJS(_ js: String) { web?.evaluateJavaScript(js, completionHandler: nil) }
   var serverHost: String { URL(string: serverURL())?.host ?? "" }
