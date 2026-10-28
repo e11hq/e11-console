@@ -832,6 +832,7 @@ body.phone .lk-x { display: grid; }
 .rt-btn { min-width: 24px; height: 24px; padding: 0 5px; border: 0; border-radius: 5px; background: none; color: var(--text-2); font-size: 12.5px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
 .rt-btn:hover { background: var(--hover); color: var(--text); }
 .composer.reply .rt-btn, .composer.edit .rt-btn { min-width: 22px; height: 22px; font-size: 12px; }
+.tm-composer .composer.reply .rt-btn { min-width: 24px; height: 24px; font-size: 12.5px; }   /* (the reply box's tools: the same as the comment box's) */
 .rt-editor ul, .rt-editor ol, .cm-text.rich ul, .cm-text.rich ol { margin: 4px 0; padding-left: 22px; }
 .rt-editor blockquote, .cm-text.rich blockquote { margin: 4px 0; padding: 2px 0 2px 10px; border-left: 3px solid var(--accent); color: var(--text-2); }
 .rt-editor code, .cm-text.rich code { font: 12px ui-monospace, Menlo, monospace; background: #2c2c33; border: 1px solid #3a3a42; border-radius: 4px; padding: 0 4px; }
@@ -2212,7 +2213,7 @@ button.pv-empty:hover { background: var(--hover); color: var(--text-2); }
 .sr-proj .page-icon.sm { width: 28px; height: 28px; font-size: 11px; border-radius: 8px; }
 .sr-proj > .ic { color: var(--text-3); }
 .sr-hit { border-bottom: 1px solid var(--border); }
-.sr-hit .task-row { border-bottom: 0; }
+:root .sr-hit .task-row.row { border-bottom: 0; }   /* (one line under the whole result, not between the task and why it matched) */
 .sr-why-row { padding: 0 12px 9px 46px; margin-top: -4px; }
 .sr-why { font-size: 12.5px; color: var(--text-3); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sr-why b { color: var(--text-2); font-weight: 600; }
