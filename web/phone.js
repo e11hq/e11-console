@@ -1561,3 +1561,45 @@ const Push = (() => {
   document.addEventListener('touchstart', note, { capture: true, passive: true });
   document.addEventListener('mousedown', note, true);
 })();
+
+/* TEMPORARY tap trace (test copy, the owner, the iPhone app only): records what happens to quick taps on tasks so
+   slow / ignored taps can be found — every touch and click (where, and whether something stopped it), how long
+   opening and closing a task takes, and moments the page was too busy to draw. Sent to /api/taptrace every 3 s.
+   Remove once found. */
+(() => {
+  let on = false; const out = [];
+  const t = () => Math.round(performance.now());
+  const what = (el) => {
+    if (!el || !el.closest) return '';
+    const x = el.closest('[data-ph], [data-action], [data-ph-tab], .pc[data-task], button, a, #detail, #content, #ph-top, .menu, .scrim');
+    if (!x) return el.tagName;
+    return (x.id ? '#' + x.id : x.tagName.toLowerCase()) + (x.dataset.ph ? ':' + x.dataset.ph : '') + (x.dataset.action ? ':' + x.dataset.action : '') + (x.dataset.task ? ':task' : '') + (x.dataset.phTab ? ':tab-' + x.dataset.phTab : '');
+  };
+  const add = (k, o) => { if (on && out.length < 400) out.push({ k, t: t(), ...o }); };
+  const start = () => {
+    if (on || !window.E11_TAPTRACE || !Host.isIOSApp) return;
+    on = true;
+    add('start', { v: typeof version !== 'undefined' ? version : '', w: innerWidth, h: innerHeight });
+    window.addEventListener('touchstart', (e) => add('down', { at: what(e.target), x: Math.round(e.touches[0].clientX), y: Math.round(e.touches[0].clientY) }), { capture: true, passive: true });
+    window.addEventListener('touchend', (e) => add('up', { at: what(e.target), dp: e.defaultPrevented }), { capture: true, passive: true });
+    window.addEventListener('touchcancel', (e) => add('cancel', { at: what(e.target) }), { capture: true, passive: true });
+    // the first real movement of each touch (a swipe or a scroll), and when a move was taken over (preventDefault)
+    let mv = null;
+    window.addEventListener('touchstart', (e) => { mv = { x: e.touches[0].clientX, y: e.touches[0].clientY, done: false }; }, { capture: true, passive: true });
+    window.addEventListener('touchmove', (e) => { if (!mv || mv.done) return; const dx = e.touches[0].clientX - mv.x, dy = e.touches[0].clientY - mv.y; if (Math.hypot(dx, dy) > 10) { mv.done = true; add('move', { dx: Math.round(dx), dy: Math.round(dy), at: what(e.target) }); } }, { capture: true, passive: true });
+    window.addEventListener('touchmove', (e) => { if (mv && e.defaultPrevented && !mv.pd) { mv.pd = true; add('move-taken', { at: what(e.target) }); } }, { passive: true });
+    window.addEventListener('click', (e) => add('click', { at: what(e.target) }), true);
+    window.addEventListener('click', (e) => add('clicked', { at: what(e.target), dp: e.defaultPrevented }), false);   // (missing after a 'click': something stopped it)
+    const wrap = (name) => { const f = window[name]; if (typeof f !== 'function') return; window[name] = function (...a) { const t0 = t(); try { return f.apply(this, a); } finally { add(name, { ms: t() - t0, task: ui.taskId || '' }); } }; };
+    ['openTask', 'closeDetail', 'renderDetail', 'renderContent', 'render', 'go', 'openThread', 'closeThread'].forEach(wrap);
+    let last = t();
+    const frame = () => { const n = t(); if (n - last > 120) add('busy', { ms: n - last }); last = n; requestAnimationFrame(frame); };
+    requestAnimationFrame(frame);
+    setInterval(() => {
+      if (!out.length) return;
+      const entries = out.splice(0, out.length);
+      fetch('/api/taptrace', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ entries }) }).catch(() => {});
+    }, 3000);
+  };
+  const wait = setInterval(() => { if (typeof currentUserId !== 'undefined' && currentUserId && 'E11_TAPTRACE' in window) { clearInterval(wait); start(); } }, 500);
+})();

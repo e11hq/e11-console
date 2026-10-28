@@ -2312,7 +2312,8 @@ const Sync = (() => {
     let me = await api('GET', '/api/me', null, { timeout: 12000 });
     // Owner view (live site) ends on every reload: back to the owner's own role before loading anything
     if (me.ownerView) { try { await api('POST', '/api/owner-view', { mode: 'off' }, { timeout: 12000 }); } catch (e) { /* fine */ } me = await api('GET', '/api/me', null, { timeout: 12000 }); }
-    window.E11_REVIEW = !!me.review;   // the App Review copy (its own sign-in instead of Cloudflare's)
+    window.E11_REVIEW = !!me.review;
+    window.E11_TAPTRACE = !!me.tapTrace;   // (TEMPORARY: the tap trace at the end of phone.js)   // the App Review copy (its own sign-in instead of Cloudflare's)
     if (typeof ViewAs !== 'undefined') ViewAs.init(me.viewAs);   // test site only: the owner using the app as someone else
     AppIcon.setOwner(me.owner); if (me.appIcon) AppIcon.sync(me.appIcon);
     ownerId = me.ownerId || null;
