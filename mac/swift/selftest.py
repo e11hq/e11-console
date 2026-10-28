@@ -66,7 +66,7 @@ try:
     ai = c.get('appInfo', {})
     check(res.get('closedVisible') is False and res.get('reopenedVisible') is True, 'closing the window keeps the app running; the Dock icon brings it back')
     check(res.get('loginOn') is True and res.get('loginOff') is True, 'Open at Login turns on and off')
-    check(ai.get('shell') == 10 and ai.get('glass') is True and ai.get('native') == 'swift' and ai.get('server') == BASE, f'appInfo {ai}')
+    check(ai.get('shell') == 11 and ai.get('glass') is True and ai.get('native') == 'swift' and ai.get('server') == BASE, f'appInfo {ai}')
     for k in ['badge', 'badgeOff', 'notify', 'light', 'dark', 'save1', 'save2']:
         check((c.get(k) or {}).get('ok') is True, f'{k} answered ok: {c.get(k)}')
     check(res.get('saved') == 'hello mac', 'a download saved in pieces into Downloads: ' + repr(res.get('saved')))
@@ -79,6 +79,8 @@ try:
     check((c.get('upBadPin') or {}).get('state') == 'error', f"a server with another certificate gets nothing {c.get('upBadPin')}")
     dl = os.path.expanduser('~/Downloads/e11-office-dl.bin')
     check((c.get('dlLocal') or {}).get('ok') is True and os.path.exists(dl) and os.path.getsize(dl) == 20000000, f"office-network download {c.get('dlLocal')}")
+    dl2 = os.path.expanduser('~/Downloads/e11-office-dl2.bin'); j = c.get('dlJob') or {}
+    check(j.get('job') and j.get('state') == 'done' and j.get('size') == 20000000 and os.path.exists(dl2) and os.path.getsize(dl2) == 20000000, f'office-network download with progress (Mac app 11) {j}')
     check(c.get('macChrome') is True and c.get('macBar') is True, 'the page draws its own title bar (Mac app 4+)')
     check(c.get('updateBar') is False, 'no update bar for the newest Mac app')
     check(c.get('notifClick') == 'function' and c.get('openTask') == 'function', 'notification click and task links wired')

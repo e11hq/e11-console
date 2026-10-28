@@ -1100,9 +1100,27 @@ const ServerHost = (() => {
           const fp = url.replace(/^\/__file\//, '').split('?')[0].split('/').map(decodeURIComponent).join('/');
           const tk = await api('POST', '/api/local/ticket', { kind: 'file', path: fp });
           note.set(`Downloading “${name}” over the office network…`);
-          const r = await NativeMac.call('downloadLocal', { url: tk.url, ticket: tk.token, cert: tk.cert, name, open });
-          if (r && r.ok) return;
-        } catch (e) { /* the usual way */ }
+          // Mac app 11 and later: in the background, with how much has arrived, and Cancel
+          if ((await macShell()) >= 11) {
+            const r = await NativeMac.call('downloadLocal', { url: tk.url, ticket: tk.token, cert: tk.cert, name, open, job: true });
+            if (r && r.ok && r.job) {
+              let stop = false;
+              note.cancel(() => { stop = true; NativeMac.call('downloadCancel', { job: r.job }).catch(() => {}); });
+              for (;;) {
+                await pause(300);
+                const q = await NativeMac.call('downloadStatus', { job: r.job });
+                if (q.state === 'done') return;
+                if (q.state === 'cancelled' || stop) { const err = new Error('Download cancelled'); err.cancelled = true; throw err; }
+                if (q.state !== 'receiving') break;   // (didn't work: the usual way below)
+                note.set(`Downloading “${name}” over the office network… ${q.size ? Math.floor((q.done / q.size) * 100) + '%' : fmtSize(q.done || 0)}`);
+              }
+              note.cancel(null);
+            }
+          } else {
+            const r = await NativeMac.call('downloadLocal', { url: tk.url, ticket: tk.token, cert: tk.cert, name, open });
+            if (r && r.ok) return;
+          }
+        } catch (e) { if (e.cancelled) throw e; /* the usual way */ }
         note.set(`Downloading “${name}”…`);
       }
       const res = await fetch(url, { credentials: 'same-origin' });
@@ -4275,10 +4293,15 @@ function busyToast(msg) {
   const root = $('#toast-root');
   const el = document.createElement('div');
   el.className = 'toast busy';
-  el.innerHTML = `<i class="tb-spin"></i><span></span>`;
+  el.innerHTML = `<i class="tb-spin"></i><span></span><button hidden>Cancel</button>`;
   el.querySelector('span').textContent = msg;
   if (root) root.appendChild(el);
-  return { set(m) { el.querySelector('span').textContent = m; }, close() { el.remove(); } };
+  const btn = el.querySelector('button');
+  return {
+    set(m) { el.querySelector('span').textContent = m; },
+    cancel(fn) { btn.hidden = !fn; btn.onclick = fn ? () => { btn.hidden = true; fn(); } : null; },   // (a Cancel button while fn is given)
+    close() { el.remove(); },
+  };
 }
 function toast(msg, action, ms) {
   const root = $('#toast-root');
@@ -5371,7 +5394,7 @@ document.addEventListener('click', async (e) => {
       case 'open-att': case 'reveal-att': {
         e.stopPropagation();
         const a = findAttachment(task(ui.taskId), id);
-        if (a) Host.call(act === 'open-att' ? 'openPath' : 'revealPath', { path: a.path }).catch((err) => toast('Could not open: ' + err.message));
+        if (a) Host.call(act === 'open-att' ? 'openPath' : 'revealPath', { path: a.path }).catch((err) => toast(err.cancelled ? 'Download cancelled' : 'Could not open: ' + err.message));
         return;
       }
       case 'remove-att': {

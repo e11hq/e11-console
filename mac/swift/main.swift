@@ -16,7 +16,7 @@ import CryptoKit
 
 // Version of this Mac app's native part. Raise it when a change here needs everyone to reinstall: the web app
 // then shows a required-update banner in older Mac apps. (The earlier script app was 1–6.)
-let SHELL_VERSION = 10   // 10: fast office use (shared-folder copies, office-network uploads and downloads)
+let SHELL_VERSION = 11   // 10: fast office use (shared-folder copies, office-network uploads and downloads) · 11: office-network downloads show their progress
 
 let info = Bundle.main.infoDictionary ?? [:]
 let env = ProcessInfo.processInfo.environment
@@ -277,7 +277,15 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     case "uploadLocal": done(uploadLocal(a))
     case "uploadStatus": done(uploadStatus(a))
     case "uploadCancel": (jobs[a["job"] as? String ?? ""])?.cancel(); done(["ok": true])
-    case "downloadLocal": downloadLocal(a, done)
+    case "downloadLocal":
+      if (a["job"] as? Bool) == true { done(downloadLocalJob(a)) } else { downloadLocal(a, done) }
+    case "downloadStatus":
+      let id = a["job"] as? String ?? ""
+      guard let j = downloads[id] else { return done(["ok": false, "state": "error", "error": "No such download"]) }
+      let st = j.snapshot()
+      if let x = st["state"] as? String, x != "receiving" { downloads.removeValue(forKey: id) }
+      done(st)
+    case "downloadCancel": (downloads[a["job"] as? String ?? ""])?.cancel(); done(["ok": true])
     case "selftestFile":
       guard !SELFTEST.isEmpty else { return done(["ok": false, "error": "Unknown command selftestFile"]) }
       let n = (a["size"] as? NSNumber)?.intValue ?? 1000
@@ -404,6 +412,21 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
         done(["ok": true, "path": dest])
       }
     }.resume()
+  }
+
+  // The same, in the background: the page follows it with downloadStatus (how much has arrived) and can stop it with
+  // downloadCancel
+  var downloads: [String: LocalDownload] = [:]
+  func downloadLocalJob(_ a: [String: Any]) -> [String: Any] {
+    guard let base = a["url"] as? String, let ticket = a["ticket"] as? String, let pin = a["cert"] as? String, base.hasPrefix("https://"),
+          var comps = URLComponents(string: base + "/local/file") else { return ["ok": false, "error": "Missing details"] }
+    comps.queryItems = [URLQueryItem(name: "t", value: ticket)]
+    guard let url = comps.url else { return ["ok": false, "error": "Bad address"] }
+    let id = token()
+    let d = LocalDownload(pin: pin, name: a["name"] as? String ?? "file", open: (a["open"] as? Bool) == true)
+    downloads[id] = d
+    d.start(url)
+    return ["ok": true, "job": id]
   }
 
   // a download in pieces: into Downloads (and shown in Finder), or a temporary folder (and opened)
@@ -643,6 +666,13 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
         await t('upBadPin', async () => follow((await NativeMac.call('uploadLocal', { token: out.stFile2.token, url: out.ticket.url, ticket: out.ticket.token, cert: '00'.repeat(32), size: 1000 })).job));
         await t('dlTicket', () => api('POST', '/api/local/ticket', { kind: 'file', path: out.upLocal.file.path }));
         await t('dlLocal', () => NativeMac.call('downloadLocal', { url: out.dlTicket.url, ticket: out.dlTicket.token, cert: out.dlTicket.cert, name: 'e11-office-dl.bin', open: false }));
+        await t('dlTicket2', () => api('POST', '/api/local/ticket', { kind: 'file', path: out.upLocal.file.path }));
+        await t('dlJob', async () => {
+          const r = await NativeMac.call('downloadLocal', { url: out.dlTicket2.url, ticket: out.dlTicket2.token, cert: out.dlTicket2.cert, name: 'e11-office-dl2.bin', open: false, job: true });
+          let q = null, seen = 0;
+          for (let i = 0; i < 300; i++) { q = await NativeMac.call('downloadStatus', { job: r.job }); if (q.done > seen) seen = q.done; if (q.state !== 'receiving') break; await new Promise((x) => setTimeout(x, 100)); }
+          return { ...q, seen, job: !!r.job };
+        });
         for (let i = 0; i < 50 && !document.getElementById('mac-bar'); i++) await new Promise((r) => setTimeout(r, 100));   // (the page adds it a moment after it loads)
         out.macChrome = document.documentElement.classList.contains('mac-chrome');
         out.macBar = !!document.getElementById('mac-bar');
@@ -690,6 +720,56 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
 
 // Only talks to a server showing the certificate whose SHA-256 fingerprint the E11 server named (the office port's
 // own certificate isn't signed by anyone, so it's recognised by its fingerprint instead of its name)
+// One download over the office network, with its progress (downloadLocalJob)
+final class LocalDownload: NSObject, URLSessionDownloadDelegate {
+  let pinner: Pinner, name: String, open: Bool
+  private let lock = NSLock()
+  private var state = "receiving", got: Int64 = 0, size: Int64 = 0, path = "", error = ""
+  private var task: URLSessionDownloadTask?
+  init(pin: String, name: String, open: Bool) { pinner = Pinner(pin); self.name = name; self.open = open }
+  func start(_ url: URL) {
+    let session = URLSession(configuration: .ephemeral, delegate: self, delegateQueue: nil)
+    var req = URLRequest(url: url); req.timeoutInterval = 60
+    task = session.downloadTask(with: req)
+    task?.resume()
+  }
+  private func set(_ f: () -> Void) { lock.lock(); f(); lock.unlock() }
+  func cancel() { set { if self.state == "receiving" { self.state = "cancelled" } }; task?.cancel() }
+  func snapshot() -> [String: Any] {
+    lock.lock(); defer { lock.unlock() }
+    var r: [String: Any] = ["ok": state != "error", "state": state, "done": got, "size": size]
+    if !path.isEmpty { r["path"] = path }
+    if !error.isEmpty { r["error"] = error }
+    return r
+  }
+  func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+    pinner.urlSession(session, didReceive: challenge, completionHandler: completionHandler)
+  }
+  func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
+    set { self.got = totalBytesWritten; if totalBytesExpectedToWrite > 0 { self.size = totalBytesExpectedToWrite } }
+  }
+  func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+    guard (downloadTask.response as? HTTPURLResponse)?.statusCode == 200 else { return set { self.state = "error"; self.error = "Download failed" } }
+    let dir = open ? (NSTemporaryDirectory() as NSString).appendingPathComponent("E11 Console") : NSHomeDirectory() + "/Downloads"
+    try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+    let dest = uniquePath(dir, name)
+    do { try FileManager.default.moveItem(at: location, to: URL(fileURLWithPath: dest)) } catch { return set { self.state = "error"; self.error = "Couldn’t save to " + dir } }
+    var u = URL(fileURLWithPath: dest)
+    var rv = URLResourceValues()
+    rv.quarantineProperties = [kLSQuarantineTypeKey as String: kLSQuarantineTypeWebDownload as String, kLSQuarantineAgentNameKey as String: APP_NAME]
+    try? u.setResourceValues(rv)
+    let open = self.open
+    DispatchQueue.main.async {
+      if open { NSWorkspace.shared.open(u) } else if SELFTEST.isEmpty { NSWorkspace.shared.activateFileViewerSelecting([u]) }
+      self.set { self.state = "done"; self.path = dest; if self.size == 0 { self.size = self.got } }
+    }
+  }
+  func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError err: Error?) {
+    if let err = err { set { if self.state == "receiving" { self.state = "error"; self.error = err.localizedDescription } } }
+    session.finishTasksAndInvalidate()
+  }
+}
+
 final class Pinner: NSObject, URLSessionDelegate {
   let pin: String
   init(_ pin: String) { self.pin = pin.lowercased() }
