@@ -632,7 +632,8 @@ const Plans = (() => {
     return true;
   }
   // The client's comment on a post, read from their PowerPoint: does it just say "approved"?
-  //  'auto'    — this client's usual way of saying it (remembered on the client: project.approvalWords)
+  //  'auto'    — this client's usual way of saying it (remembered on the client: project.approvalWords): still asked,
+  //              shown as "sure" — the person always decides
   //  'ask'     — no comment, or sounds like approval and asks for nothing: the person asks themselves (never approved by a guess)
   //  'changes' — anything else, including "approved, but…"
   const normWords = (t) => String(t || '').toLowerCase().replace(/[\u064B-\u0652\u0640]/g, '').replace(/[أإآ]/g, 'ا').replace(/[.!,;:،؛\s]+/g, ' ').trim();
@@ -665,8 +666,8 @@ const Plans = (() => {
             <span class="pl-thumb sm">${img ? `<img src="${imgUrl(img, 160)}" alt="">` : `<span class="pl-thumb-f" style="--c:${fmtOf(r.x.format).color}">${esc(fmtOf(r.x.format).name.slice(0, 1))}</span>`}</span>
             <div class="rp-main"><b>${esc(r.x.title)}</b><small>${esc(dayLong(r.x.day))} · ${esc(fmtOf(r.x.format).name)}</small>
               ${!r.locked && r.comment && (r.state !== 'changes' || r.ask) ? `<div class="rp-quote"><i>Client comment</i>${esc(r.comment).replace(/\n/g, '<br>')}</div>` : ''}
-              ${r.locked ? '<span class="pl-prog" style="--c:#5b9bff">Client approved</span>' : r.ask ? `<div class="rp-ask"><span>${r.comment ? 'This looks approved. Is it?' : 'No comment from the client. Approved?'}</span><button type="button" class="btn sm rp-yes" data-ask="yes" data-i="${i}">${icon('check')}Yes, approved</button><button type="button" class="btn sm rp-no" data-ask="no" data-i="${i}">${icon('edit')}No, changes</button></div>` : `<div class="pl-pick rp-pick"><button type="button" class="pl-opt ${r.state === 'approved' ? 'on' : ''}" style="--c:var(--green)" data-st="approved" data-i="${i}">${icon('check')}Approved</button><button type="button" class="pl-opt ${r.state === 'changes' ? 'on' : ''}" style="--c:#ff8a4c" data-st="changes" data-i="${i}">${icon('edit')}Changes</button><button type="button" class="pl-opt ${!r.state ? 'on' : ''}" style="--c:var(--text-3)" data-st="" data-i="${i}">No reply yet</button></div>
-              ${r.state === 'approved' && r.auto ? `<div class="rp-learn">Approved: ${esc(nameOf(pl))}’s usual wording</div>` : ''}
+              ${r.locked ? '<span class="pl-prog" style="--c:#5b9bff">Client approved</span>' : r.ask ? `<div class="rp-ask ${r.auto ? 'sure' : ''}"><span>${r.auto ? `${icon('check')}Approved, in ${esc(nameOf(pl))}’s usual wording. Confirm?` : r.comment ? 'This looks approved. Is it?' : 'No comment from the client. Approved?'}</span><button type="button" class="btn sm rp-yes" data-ask="yes" data-i="${i}">${icon('check')}Yes, approved</button><button type="button" class="btn sm rp-no" data-ask="no" data-i="${i}">${icon('edit')}No, changes</button></div>` : `<div class="pl-pick rp-pick"><button type="button" class="pl-opt ${r.state === 'approved' ? 'on' : ''}" style="--c:var(--green)" data-st="approved" data-i="${i}">${icon('check')}Approved</button><button type="button" class="pl-opt ${r.state === 'changes' ? 'on' : ''}" style="--c:#ff8a4c" data-st="changes" data-i="${i}">${icon('edit')}Changes</button><button type="button" class="pl-opt ${!r.state ? 'on' : ''}" style="--c:var(--text-3)" data-st="" data-i="${i}">No reply yet</button></div>
+              ${r.state === 'approved' && r.auto ? `<div class="rp-learn">${esc(nameOf(pl))}’s usual wording for approved</div>` : ''}
               ${r.state === 'approved' && r.comment && !r.auto ? `<label class="rp-learn"><input type="checkbox" class="rp-rem" data-i="${i}" ${r.remember ? 'checked' : ''}>Remember “${esc(trunc(normWords(r.comment), 60))}” as approval for ${esc(nameOf(pl))}</label>` : ''}
               ${r.state === 'changes' ? `<textarea class="field rp-note" data-i="${i}" rows="2" placeholder="What the client wants changed">${esc(r.note)}</textarea>${r.links.length ? `<div class="rp-links">${r.links.map((u) => `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a>`).join('')}</div>` : ''}` : ''}`}
             </div></div>`; }).join('')}
@@ -682,10 +683,11 @@ const Plans = (() => {
       const box = $('.rp-dlg', root); if (!box) return;
       const b = e.target.closest('button'); if (!b || !box.contains(b)) return;
       if (b.dataset.r === '0') return close();
-      if (b.dataset.st !== undefined && b.dataset.i !== undefined) { const r = rows[+b.dataset.i]; r.state = b.dataset.st || null; r.auto = false; if (r.state !== 'approved') r.remember = false; if (r.state === 'changes' && !r.note && r.comment) r.note = r.comment; return paint(); }
+      if (b.dataset.st !== undefined && b.dataset.i !== undefined) { const r = rows[+b.dataset.i]; r.state = b.dataset.st || null; if (r.state !== 'approved') r.remember = false; if (r.state === 'changes' && !r.note && r.comment) r.note = r.comment; return paint(); }
       if (b.dataset.ask) {
         const r = rows[+b.dataset.i]; r.ask = false; r.confirmed = b.dataset.ask === 'yes';
-        r.state = r.confirmed ? 'approved' : 'changes'; r.remember = r.confirmed;
+        r.state = r.confirmed ? 'approved' : 'changes'; r.remember = r.confirmed && !r.auto;
+        r.forget = !r.confirmed && r.auto;   // not their usual "approved" after all: forgotten when the reply is saved
         if (!r.confirmed && !r.note) r.note = r.comment;
         return paint();
       }
@@ -705,12 +707,12 @@ const Plans = (() => {
             const k = got.links.length ? 'changes' : readApproval(row.comment, learned());
             if (k === 'changes') { row.state = 'changes'; row.note = row.comment; n.ch++; }
             else if (k === 'ask') { row.state = null; row.ask = true; row.note = ''; n[row.comment ? 'ask' : 'none']++; }
-            else { row.state = 'approved'; row.note = ''; row.auto = true; n.auto++; }
+            else { row.state = null; row.ask = true; row.auto = true; row.note = ''; n.auto++; }
           });
           const pl2 = (c, one, many) => `${c} ${c === 1 ? one : many}`;
           const bits = [];
           if (n.none) bits.push(`<b>${pl2(n.none, 'post', 'posts')}</b> with no comment (please check)`);
-          if (n.auto) bits.push(`<b>${pl2(n.auto, 'post', 'posts')}</b> approved in ${esc(nameOf(pl))}’s usual wording`);
+          if (n.auto) bits.push(`<b>${pl2(n.auto, 'post', 'posts')}</b> approved in ${esc(nameOf(pl))}’s usual wording (please confirm)`);
           if (n.ask) bits.push(`<b>${pl2(n.ask, 'post', 'posts')}</b> ${n.ask === 1 ? 'looks' : 'look'} approved (please check)`);
           if (n.ch) bits.push(`<b>${pl2(n.ch, 'post', 'posts')}</b> with changes`);
           hint = `Read “${esc(picked[0].name)}”: ${bits.join(', ') || 'no posts found in it'}. Check them before saving.`;
@@ -732,7 +734,11 @@ const Plans = (() => {
       });
       // this client's ways of saying "approved", for the next rounds
       const words = rows.filter((r) => r.state === 'approved' && r.remember && r.comment).map((r) => normWords(r.comment)).filter((w) => w && w.length <= 160);
-      if (client && words.length) client.approvalWords = [...new Set([...words, ...learned()])].slice(0, 60);
+      const forget = new Set(rows.filter((r) => r.forget && r.comment).map((r) => normWords(r.comment)));
+      if (client && (words.length || forget.size)) {
+        client.approvalWords = [...new Set([...words, ...learned()])].filter((w) => !forget.has(w)).slice(0, 60);
+        if (!client.approvalWords.length) delete client.approvalWords;
+      }
       logIt(pl, 'client', { round: ex.round, approved: ok, changes: ch });
       close(); persist(0); render2();
       toast(`Saved: ${ok} approved${ch ? `, ${ch} sent back for changes` : ''}${skipped ? ` · ${skipped} not finished yet` : ''}`);

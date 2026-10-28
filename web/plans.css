@@ -265,6 +265,9 @@ body.phone .mt-hint { display: none; }
 .rp-quote i { display: block; font-style: normal; font-size: 11px; color: var(--text-3); margin-bottom: 1px; }
 .rp-ask { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; padding: 7px 10px; border-radius: 10px; border: 1px solid color-mix(in srgb, #f5c542 50%, transparent); background: color-mix(in srgb, #f5c542 11%, transparent); font-size: 13px; }
 .rp-ask > span { font-weight: 600; margin-right: auto; color: color-mix(in srgb, #f5c542 70%, var(--text)); }
+.rp-ask.sure { border-color: color-mix(in srgb, var(--green) 55%, transparent); background: color-mix(in srgb, var(--green) 11%, transparent); }
+.rp-ask.sure > span { color: color-mix(in srgb, var(--green) 75%, var(--text)); display: inline-flex; align-items: center; gap: 5px; }
+.rp-ask.sure > span .ic { width: 14px; height: 14px; }
 .rp-ask .btn .ic { width: 12px; height: 12px; margin-right: 4px; }
 .rp-ask .rp-yes { border-color: var(--green); background: color-mix(in srgb, var(--green) 18%, transparent); }
 .rp-ask .rp-no { border-color: #ff8a4c; background: color-mix(in srgb, #ff8a4c 15%, transparent); }

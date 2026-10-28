@@ -267,6 +267,8 @@ async def main():
             # the client comments on one post and sends it back
             first = boxes[0]; first.text_frame.text = 'Make the title bigger please'
             boxes[1].text_frame.text = 'Love it, go ahead 👍'
+            boxes[2].text_frame.text = 'Go for it!'
+            await E("(proj('p-korea').approvalWords = ['go for it'], true)")
             prs.save(os.path.join(OUT, 'back.pptx'))
             changed_post = first.name.replace('E11 client comments ', '')
             await pg.locator('[data-pl="reply"]').click(); await pg.wait_for_timeout(300)
@@ -275,12 +277,13 @@ async def main():
             await (await fc.value).set_files(os.path.join(OUT, 'back.pptx')); await pg.wait_for_timeout(2500)
             check(await pg.locator('.rp-row.changes').count() == 1 and await pg.locator('.rp-row.approved').count() == 0 and await pg.locator('.rp-ask').count() == total - 1, 'reading the client’s PowerPoint: 1 change; every other post is asked about (nothing approved by itself)')
             check(await pg.locator('.rp-ask', has_text='This looks approved').count() == 1 and 'Love it, go ahead' in await pg.locator('.rp-quote').first.inner_text(), 'a comment that sounds like approval is asked about, with the client’s words')
-            check(await pg.locator('.rp-ask', has_text='No comment from the client').count() == total - 2, 'posts with no comment are asked about too')
+            check(await pg.locator('.rp-ask', has_text='No comment from the client').count() == total - 3, 'posts with no comment are asked about too')
+            check(await pg.locator('.rp-ask.sure').count() == 1 and 'usual wording' in await pg.locator('.rp-ask.sure').inner_text(), 'the client’s usual wording: shown as sure, but still asked')
             check(await pg.locator('.rp-dlg [data-r="1"]').is_disabled(), 'Save waits until they are answered')
             await pg.screenshot(path=os.path.join(OUT, 'plans-reply-ask.png'))
             while await pg.locator('.rp-ask [data-ask="yes"]').count():
                 await pg.locator('.rp-ask [data-ask="yes"]').first.click(); await pg.wait_for_timeout(120)
-            check(await pg.locator('.rp-row.approved').count() == total - 1 and await pg.locator('.rp-rem').is_checked(), 'Yes, approved → Approved, and its wording will be remembered for this client')
+            check(await pg.locator('.rp-row.approved').count() == total - 1  and await pg.locator('.rp-rem').count() == 1 and await pg.locator('.rp-rem').is_checked(), 'Yes, approved → Approved, and its wording will be remembered for this client')
             check('Make the title bigger please' in await pg.locator('.rp-note').input_value(), 'their comment is on the post')
             await pg.screenshot(path=os.path.join(OUT, 'plans-reply.png'))
             await pg.locator('.rp-dlg [data-r="1"]').click(); await pg.wait_for_timeout(1500)
@@ -290,7 +293,7 @@ async def main():
             check(back[1] is False and back[2] == 'In progress' and back[3], f'the changed post’s task is back In progress with the client’s comment ({back})')
             check(await pg.locator(f'.pl-chip[data-id="{changed_post}"]').count() == 1 and 'Changes' in await pg.locator(f'.pl-chip[data-id="{changed_post}"]').inner_text(), 'the calendar shows the client’s changes')
             check(await pg.locator('[data-pl="client-all"]').count() == 0, 'no Client approved for the whole plan while a post is being changed')
-            check('love it go ahead 👍' in (await E("proj('p-korea').approvalWords") or []), 'the client’s way of saying approved is remembered')
+            check(sorted(await E("proj('p-korea').approvalWords") or []) == ['go for it', 'love it go ahead 👍'], 'the client’s way of saying approved is remembered')
             await pg.wait_for_timeout(800)
             cl = await asyncio.to_thread(lambda: next(c for c in api(ADMIN, '/api/snapshot')['data']['clients'] if c['id'] == next(p['clientId'] for p in api(ADMIN, '/api/snapshot')['data']['projects'] if p['id'] == 'p-korea')))
             pf = next((f for f in cl['folders'] if f.get('planOf') == 'pl-smp-p-korea'), None)
