@@ -889,3 +889,5 @@ body.phone .ph-seg.in-task i { display: inline-grid; place-items: center; min-wi
 /* the picture inside a file tile never takes the touch itself (iPhone would start its own picture drag/lift on a
    hold): the tile gets it, so touch and hold always opens the sheet */
 body.phone :is(.tile, .ca-tile, .cf-card) :is(img, video, .tile-img > *) { pointer-events: none; -webkit-user-drag: none; }
+/* a menu row's small note stays readable on the phone (the computer's hover colour made it white on light grey) */
+body.phone .menu .mi .mi-hint, body.phone .menu .mi:hover .mi-hint { color: var(--text-3); }
