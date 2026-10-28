@@ -132,7 +132,7 @@ const Plans = (() => {
           <button class="icon-btn" data-pl="prev" title="Previous month">${icon('chev-left')}</button>
           <b class="cal-label">${esc(monthLabel(m))}</b>
           <button class="icon-btn" data-pl="next" title="Next month">${icon('chev-right')}</button>
-          ${m !== nextMonth() ? '<button class="btn ghost sm" data-pl="reset">Next month</button>' : ''}
+          ${m !== nextMonth() ? `<button class="btn ghost sm" data-pl="reset" title="Back to the month being planned">Back to ${esc(monthLabel(nextMonth()).split(' ')[0])}</button>` : ''}
         </div>
         <span class="pl-count">${made} of ${rows.length} client${rows.length === 1 ? '' : 's'} planned</span>
       </div>
