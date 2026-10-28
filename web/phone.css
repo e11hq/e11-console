@@ -891,3 +891,8 @@ body.phone .ph-seg.in-task i { display: inline-grid; place-items: center; min-wi
 body.phone :is(.tile, .ca-tile, .cf-card) :is(img, video, .tile-img > *) { pointer-events: none; -webkit-user-drag: none; }
 /* a menu row's small note stays readable on the phone (the computer's hover colour made it white on light grey) */
 body.phone .menu .mi .mi-hint, body.phone .menu .mi:hover .mi-hint { color: var(--text-3); }
+/* phone sheets: a row only lights up while it's being pressed — not because the finger that opened the sheet happens
+   to rest where the row appears (iPhone's "hover" stays on the last touched spot) */
+body.phone .menu .mi:hover:not(:active):not(.hl) { background: none; color: inherit; }
+body.phone .menu .mi.danger:hover:not(:active) { color: var(--red, #e5484d); }
+body.phone .menu .mi:active { background: var(--ph-row, var(--hover)); }

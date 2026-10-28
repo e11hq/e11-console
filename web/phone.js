@@ -1448,13 +1448,17 @@ const Push = (() => {
     else if (tileSheet(c)) buzz();
     else return;
     swallow = Infinity;   // (until the finger is lifted, however long it stays down: lifting it mustn't tap the picture or close the sheet)
+    const m = document.querySelector('body > .menu'); if (m) { m.style.pointerEvents = 'none'; heldMenu = m; }
   }
   // iPhone takes over a held picture (its own drag) and cancels the touch just before the hold time: a hold that
   // far along counts
   document.addEventListener('touchcancel', () => { if (timer && Date.now() - t0 > 250) fire(); }, true);
   document.addEventListener('dragstart', (e) => { if (Phone.on && e.target.closest && e.target.closest(SEL)) e.preventDefault(); }, true);
   document.addEventListener('touchmove', (e) => { if (timer && Math.hypot(e.touches[0].clientX - x0, e.touches[0].clientY - y0) > 10) cancel(); }, { passive: true });
-  document.addEventListener('touchend', (e) => { if (Date.now() < swallow) { e.preventDefault(); if (swallow === Infinity) swallow = Date.now() + 400; } cancel(); }, { passive: false });
+  let heldMenu = null;
+  const letGo = () => { const m = heldMenu; heldMenu = null; if (m) setTimeout(() => { m.style.pointerEvents = ''; }, 350); };
+  document.addEventListener('touchend', (e) => { if (Date.now() < swallow) { e.preventDefault(); if (swallow === Infinity) { swallow = Date.now() + 400; letGo(); } } cancel(); }, { passive: false });
+  document.addEventListener('touchcancel', () => { if (swallow === Infinity) { swallow = Date.now() + 400; letGo(); } }, true);
   document.addEventListener('touchcancel', cancel, { passive: true });
   document.addEventListener('click', (e) => { if (Date.now() < swallow && !(e.target.closest && e.target.closest('.menu'))) { e.preventDefault(); e.stopPropagation(); } }, true);
 })();
