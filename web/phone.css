@@ -953,3 +953,6 @@ body.phone .fpv.fpv-bare .fpv-top, body.phone .fpv.fpv-bare .fpv-bot, body.phone
 body.phone .fpv.fpv-bare .fpv-stage, body.phone .fpv.fpv-pulling .fpv-stage { position: fixed; inset: 0; }
 body.phone .fpv .fpv-stage { touch-action: pan-y; }
 body.phone .fpv.fpv-zoomed .fpv-stage { touch-action: none; }
+
+/* upload progress on the phone: full width above the tab bar (or the comment box, placed by uploadToast) */
+body.phone #upload-root { left: 10px; right: 10px; width: auto; bottom: calc(var(--ph-tabs-h, 0px) + 12px); }

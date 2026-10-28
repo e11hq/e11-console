@@ -1021,14 +1021,25 @@ const ServerHost = (() => {
     return new Promise((resolve) => {
       const inp = document.createElement('input');
       inp.type = 'file'; inp.multiple = multiple; if (accept) inp.accept = accept;
-      inp.style.cssText = 'position:fixed;left:-9999px;top:0';
+      // iPhone shows its Photo Library / Camera / Files menu next to the file field, so the field goes on the button that
+      // was tapped (an off-screen field put the menu somewhere odd). With the keyboard up, the keyboard goes down first
+      // and the menu opens once the page has settled, at the button's new place.
+      const btn = window.__e11LastDownEl && window.__e11LastDownEl.isConnected ? window.__e11LastDownEl.closest('button, [data-action]') || window.__e11LastDownEl : null;
+      const put = () => {
+        const r = btn && btn.isConnected ? btn.getBoundingClientRect() : null;
+        const x = r ? r.left + r.width / 2 : (window.__e11LastDown || { x: -9999 }).x, y = r ? r.top + r.height / 2 : (window.__e11LastDown || { y: 0 }).y;
+        inp.style.cssText = `position:fixed;left:${Math.max(0, x - 1)}px;top:${Math.max(0, y - 1)}px;width:2px;height:2px;opacity:0;pointer-events:none`;
+      };
+      put();
       let done = false;
       const finish = (list) => { if (done) return; done = true; inp.remove(); resolve(list); };
       inp.addEventListener('change', () => finish([...(inp.files || [])]));
       inp.addEventListener('cancel', () => finish([]));
       window.addEventListener('focus', () => setTimeout(() => finish([...(inp.files || [])]), 800), { once: true });
       document.body.appendChild(inp);
-      inp.click();
+      const typing = Host.isIOSApp && document.documentElement.classList.contains('ph-typing') && document.activeElement && document.activeElement !== document.body;
+      if (typing) { document.activeElement.blur(); setTimeout(() => { put(); inp.click(); }, 420); }
+      else inp.click();
     });
   }
   // A file to upload: a browser File, or a file picked in the Mac app (read through the app)
@@ -1199,10 +1210,18 @@ const ServerHost = (() => {
     if (biggest < size) throw new Error('The upload didn’t finish — please try again');
     return { id: uid(), name: first.name || file.name, path, size: size || biggest, addedAt: nowISO(), ...(dims || {}) };
   }
-  // Small progress card while files upload
+  // Small progress card while files upload (on a phone with a task open: just above the comment box, never over it)
   function uploadToast(files) {
     let root = document.getElementById('upload-root');
-    if (!root) { root = document.createElement('div'); root.id = 'upload-root'; document.body.appendChild(root); }
+    if (!root) {
+      root = document.createElement('div'); root.id = 'upload-root'; document.body.appendChild(root);
+      const place = () => {
+        const box = typeof Phone !== 'undefined' && Phone.on && ui.taskId ? document.querySelector('#detail .tm-composer') : null;
+        const r = box && box.getBoundingClientRect();
+        root.style.bottom = r && r.height ? `${Math.max(12, (window.visualViewport ? visualViewport.height : innerHeight) - r.top + 8)}px` : '';
+      };
+      place(); setInterval(() => { if (root.firstElementChild) place(); }, 250);
+    }
     const el = document.createElement('div');
     el.className = 'up-card';
     el.innerHTML = files.map((f, i) => `<div class="up-row" data-i="${i}"><span class="up-name">${esc(f.name)}</span><span class="up-bar"><i></i></span><small>0%</small><button type="button" class="up-x" data-up-x="${i}" title="Cancel upload">${icon('x')}</button></div>`).join('');

@@ -1525,3 +1525,10 @@ const Push = (() => {
     } else { c.style.transform = ''; c.style.opacity = ''; }
   }, { passive: false });
 })();
+
+/* Where the finger last went down: the file picker's menu opens on that button (app.js pickFiles) */
+(() => {
+  const note = (e) => { const t = e.touches ? e.touches[0] : e; if (t) { window.__e11LastDown = { x: t.clientX, y: t.clientY }; window.__e11LastDownEl = e.target; } };
+  document.addEventListener('touchstart', note, { capture: true, passive: true });
+  document.addEventListener('mousedown', note, true);
+})();
