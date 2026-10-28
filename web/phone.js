@@ -118,21 +118,22 @@ const Phone = (() => {
     const tabs = [...bar.querySelectorAll('[data-ph-tab]')].map((b) => ({ v: b.dataset.phTab, label: (b.querySelector('span') || {}).textContent || '', badge: (b.querySelector('.ph-badge') || {}).textContent || '', on: b.classList.contains('on') }));
     // (the native bar sits above the page, so it steps aside for anything that rises from the bottom)
     const ph = mePhoto();
-    if (ph) tabs.forEach((t) => { if (t.v === 'me') t.photo = ph; });
+    const u0 = typeof me === 'function' ? me() : null;
+    if (ph) tabs.forEach((t) => { if (t.v === 'me') { t.photo = ph; if (u0 && u0.avatar) t.photoUrl = new URL(fileUrl({ path: u0.avatar }), location.href).href; } });
     const msg = JSON.stringify({ tabs, hidden: !!ui.taskId || !!document.querySelector('.scrim, .menu:not(.mention-pop), #ph-sheet-root .ph-scrim:not(.docked), #overlay-root > *') });
     if (msg === tabsSent) return;
     tabsSent = msg;
     NativeMac.call('setTabs', JSON.parse(msg)).catch(() => {});
   }
   if (typeof Host !== 'undefined' && Host.isIOSApp) {
+    // anything rising from the bottom (sheet, menu, dialog) appears or goes: tell the app again (it only sends on a
+    // change). The whole page is watched, since sheets and menus are made and dropped in several places.
     let q = 0;
     const again = () => { if (q) return; q = requestAnimationFrame(() => { q = 0; const bar = document.getElementById('ph-tabs'); if (bar && st.on) nativeTabs(bar); }); };
-    const watch = () => {
-      new MutationObserver(again).observe(document.body, { childList: true });
-      ['ph-sheet-root', 'overlay-root'].forEach((id) => { const el = document.getElementById(id); if (el) new MutationObserver(again).observe(el, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] }); });
-    };
+    const watch = () => new MutationObserver((list) => {
+      if (list.some((m) => m.type === 'childList' ? m.target === document.body || (m.target.closest && m.target.closest('#ph-sheet-root, #overlay-root')) : (m.target.classList && m.target.classList.contains('ph-scrim')))) again();
+    }).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
     if (document.body) watch(); else document.addEventListener('DOMContentLoaded', watch);
-    setTimeout(watch, 3000);   // (the sheet holder is made on first use)
   }
   // the Me tab shows your own picture (or your initials on your colour), drawn here and handed to the app as a PNG
   let photo = { key: '', url: '' };
@@ -158,7 +159,11 @@ const Phone = (() => {
       g.save(); round();
       const k = Math.max(S / img.width, S / img.height), w = img.width * k, h = img.height * k;
       g.drawImage(img, (S - w) / 2, (S - h) / 2, w, h); g.restore();
-      try { photo.url = c.toDataURL('image/png'); } catch (e) { photo.url = initialsPic(); }
+      try {
+        // (a picture that drew nothing — size unknown, not decoded — would leave an empty circle: initials then)
+        if (!img.naturalWidth || g.getImageData(S / 2, S / 2, 1, 1).data[3] === 0) throw new Error('blank');
+        photo.url = c.toDataURL('image/png');
+      } catch (e) { g.clearRect(0, 0, S, S); photo.url = initialsPic(); }
       const bar = document.getElementById('ph-tabs'); if (bar) nativeTabs(bar);
     };
     img.onerror = () => { if (photo.key === key) { photo.url = initialsPic(); const bar = document.getElementById('ph-tabs'); if (bar) nativeTabs(bar); } };
@@ -780,7 +785,7 @@ const Push = (() => {
     const sub = { on: 'A banner for every Inbox update', off: 'Get a banner even when the app is closed', denied: 'Allow them in iPhone Settings → Notifications → E11 Console', install: 'Add E11 Console to your Home Screen first', unsupported: 'This browser can’t show notifications', unknown: '' }[st.state];
     const btn = `<button class="ph-row" id="ph-push" data-ph-push>${icon('bell')}<span>Notifications on this phone<small>${sub}</small></span><i class="ph-state ${st.state === 'on' ? 'on' : ''}">${st.busy ? '…' : label}</i></button>`;
     // (a repaint replaces just this button: the lock row has its own repaint, so it never doubles up)
-    return noRefresh === 'button' ? btn : btn + (iosApp() && !document.getElementById('ph-lock') ? lockRow() : '');
+    return noRefresh === 'button' ? btn : btn + (iosApp() ? lockRow() : '');
   }
   // iPhone app: lock the app with Face ID (asked when it opens, and after 10 minutes away)
   function lockRow() {

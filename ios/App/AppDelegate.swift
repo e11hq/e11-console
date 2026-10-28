@@ -340,12 +340,15 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     }
     // the Me tab: the person's own picture (round, as drawn by the page), with a ring when it's the open tab
     for (i, t) in list.enumerated() {
-      guard let ph = t["photo"] as? String, ph != tabPhoto[i], let item = tabBar.items?[i],
-            let comma = ph.firstIndex(of: ","), let data = Data(base64Encoded: String(ph[ph.index(after: comma)...])),
-            let src = UIImage(data: data) else { continue }
+      guard let ph = t["photo"] as? String, ph != tabPhoto[i], let item = tabBar.items?[i] else { continue }
       tabPhoto[i] = ph
-      item.image = roundPhoto(src, ring: nil)
-      item.selectedImage = roundPhoto(src, ring: tabBar.tintColor ?? .systemBlue)
+      let apply = { (src: UIImage) in
+        item.image = self.roundPhoto(src, ring: nil)
+        item.selectedImage = self.roundPhoto(src, ring: self.tabBar.tintColor ?? .systemBlue)
+      }
+      // the page's own drawing first (initials, or the picture), then the picture itself fetched here when there is one
+      if let comma = ph.firstIndex(of: ","), let data = Data(base64Encoded: String(ph[ph.index(after: comma)...])), let src = UIImage(data: data) { apply(src) }
+      if let s = t["photoUrl"] as? String, let url = URL(string: s) { fetchPhoto(url) { img in if self.tabPhoto[i] == ph, let img = img { apply(img) } } }
     }
     for (i, t) in list.enumerated() {
       let b = t["badge"] as? String ?? ""
@@ -369,6 +372,19 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     }
   }
   var tabPhoto: [Int: String] = [:]
+  // a picture from our server, with the page's sign-in (its cookies)
+  func fetchPhoto(_ url: URL, _ done: @escaping (UIImage?) -> Void) {
+    web.configuration.websiteDataStore.httpCookieStore.getAllCookies { cookies in
+      var req = URLRequest(url: url)
+      let mine = cookies.filter { url.host?.hasSuffix($0.domain.hasPrefix(".") ? String($0.domain.dropFirst()) : $0.domain) == true }
+      req.allHTTPHeaderFields = HTTPCookie.requestHeaderFields(with: mine)
+      URLSession.shared.dataTask(with: req) { data, resp, _ in
+        let ok = (resp as? HTTPURLResponse)?.statusCode == 200
+        let img = ok ? data.flatMap { UIImage(data: $0) } : nil
+        DispatchQueue.main.async { done(img) }
+      }.resume()
+    }
+  }
   func roundPhoto(_ src: UIImage, ring: UIColor?) -> UIImage {
     let size: CGFloat = 28
     let r = UIGraphicsImageRenderer(size: CGSize(width: size, height: size))
@@ -377,7 +393,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       let inset: CGFloat = ring == nil ? 1 : 2.5
       let pic = box.insetBy(dx: inset, dy: inset)
       UIBezierPath(ovalIn: pic).addClip()
-      src.draw(in: pic)
+      let k = max(pic.width / max(src.size.width, 1), pic.height / max(src.size.height, 1))
+      let w = src.size.width * k, h = src.size.height * k
+      src.draw(in: CGRect(x: pic.midX - w / 2, y: pic.midY - h / 2, width: w, height: h))
       if let ring = ring {
         let p = UIBezierPath(ovalIn: box.insetBy(dx: 1, dy: 1)); p.lineWidth = 2
         UIGraphicsGetCurrentContext()?.resetClip(); ring.setStroke(); p.stroke()
