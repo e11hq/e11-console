@@ -1249,7 +1249,10 @@ const ServerHost = (() => {
         const box = ui.taskId ? document.querySelector('#detail .tm-composer') : null;
         const r = box && box.getBoundingClientRect();
         const on = !!(r && r.height && r.width);
-        root.style.bottom = on ? `${Math.max(12, (window.visualViewport ? visualViewport.height : innerHeight) - r.top + 8)}px` : '';
+        // (iPhone app 5+: the page stays full height under the keyboard and the box sits above it, while iPhone still
+        //  reports a viewport shortened by the keyboard — measured from that, the card ended up behind the keyboard)
+        const vh = document.documentElement.classList.contains('ios-kb') || !window.visualViewport ? innerHeight : visualViewport.height;
+        root.style.bottom = on ? `${Math.max(12, vh - r.top + 8)}px` : '';
         // (a computer: lined up with the comment box's right edge)
         root.style.right = on && !(typeof Phone !== 'undefined' && Phone.on) ? `${Math.max(12, innerWidth - r.right + 14)}px` : '';
       };
