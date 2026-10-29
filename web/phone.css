@@ -977,6 +977,12 @@ html.phone body.phone #detail .tm-composer .composer.ph-attach-on [data-action="
 
 /* iPhone app 5+: the page stays full height under the keyboard; what has to sit above the keyboard ends at its top
    (--ios-kb, from the app) and follows it as it slides */
-html.ios-kb body.phone #detail.open, html.ios-kb .ph-scrim:not(.docked), html.ios-kb body.phone .scrim, html.ios-kb body.phone .fv, html.ios-kb body.phone .lightbox { bottom: calc(var(--ph-shift, 0px) + var(--ios-kb, 0px)) !important; transition: bottom var(--ios-kb-t, 250ms) cubic-bezier(.2, .8, .2, 1); }
+html.ios-kb .ph-scrim:not(.docked), html.ios-kb body.phone .scrim, html.ios-kb body.phone .fv, html.ios-kb body.phone .lightbox { bottom: calc(var(--ph-shift, 0px) + var(--ios-kb, 0px)) !important; transition: bottom var(--ios-kb-t, 250ms) cubic-bezier(.2, .8, .2, 1); }
+/* (the open task itself stays full height: the room for the keyboard is made inside it, so when the keyboard goes —
+    at once, e.g. for the photo picker — there's never a strip of the page behind showing under the comment box) */
+html.ios-kb body.phone #detail.open .tm { box-sizing: border-box; padding-bottom: var(--ios-kb, 0px); transition: padding-bottom var(--ios-kb-t, 250ms) cubic-bezier(.2, .8, .2, 1); }
 html.ios-kb body.phone .menu:not(.mention-pop) { bottom: calc(var(--ph-shift, 0px) + max(var(--ph-kb, 0px), var(--ios-kb, 0px))) !important; }
 html.ios-kb.ios-kb-content body.phone #content { padding-bottom: var(--ios-kb, 0px) !important; }
+
+/* iPhone app: "Your comment hasn't been sent" and its buttons sit above the app's tab bar, not under it */
+html.ios-app body.phone .us-card { padding-bottom: calc(24px + max(env(safe-area-inset-bottom), var(--ios-tabs-h, 0px))); }

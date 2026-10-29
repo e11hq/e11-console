@@ -968,8 +968,26 @@ const ServerHost = (() => {
     if (!Host.isIOSApp || args.accept) return null;
     if (iosShell === null) { try { iosShell = Number((await NativeMac.call('appInfo')).shell) || 0; } catch (e) { iosShell = 0; } }
     if (iosShell < 3) return null;
-    const r = await NativeMac.call('pickFiles', { single: !!args.single, ...(args.source && iosShell >= 4 ? { source: args.source } : {}) });
+    // (app 6+: the cursor goes back where it was afterwards and the app brings the keyboard back with it)
+    const was = iosShell >= 6 ? caretNow() : null;
+    let r;
+    try { r = await NativeMac.call('pickFiles', { single: !!args.single, ...(args.source && iosShell >= 4 ? { source: args.source } : {}) }); } finally { if (was) caretBack(was); }
     return (r.files || []).map((f) => ({ name: f.name, size: f.size, macToken: f.token }));
+  }
+  function caretNow() {
+    const el = document.activeElement;
+    if (!el || el === document.body || !(el.isContentEditable || /^(TEXTAREA|INPUT)$/.test(el.tagName))) return null;
+    const sel = window.getSelection();
+    return { el, range: sel && sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null, start: el.selectionStart, end: el.selectionEnd };
+  }
+  function caretBack({ el, range, start, end }) {
+    if (!el.isConnected) return;
+    try {
+      if (document.activeElement === el) el.blur();   // (a focus that's already there doesn't bring the keyboard back)
+      el.focus({ preventScroll: true });
+      if (range && el.isContentEditable && el.contains(range.startContainer)) { const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range); }
+      else if (start != null && el.setSelectionRange) el.setSelectionRange(start, end);
+    } catch (e) { /* fine */ }
   }
   async function macShell() {
     if (shell === null) { try { shell = Host.isMacApp ? Number((await NativeMac.call('appInfo')).shell) || 1 : 0; } catch (e) { shell = 0; } }

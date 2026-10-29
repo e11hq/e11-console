@@ -13,7 +13,7 @@ import PhotosUI
 import UniformTypeIdentifiers
 
 // Version of this iPhone app's native part (raise it with changes the web app needs to know about)
-let SHELL_VERSION = 5   // 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
+let SHELL_VERSION = 6   // 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
 let procEnv = ProcessInfo.processInfo.environment
 let SELFTEST = procEnv["E11_SELFTEST"] ?? ""           // the build machine's self-test in the simulator
 let info = Bundle.main.infoDictionary ?? [:]
@@ -127,6 +127,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     config.applicationNameForUserAgent = "E11ConsoleiOS/\(SHELL_VERSION)"
     config.userContentController.add(WeakHandler(self), name: "e11ios")
     web = WKWebView(frame: view.bounds, configuration: config)
+    FocusAfterPicker.install()
     web.navigationDelegate = self
     web.uiDelegate = self
     web.isOpaque = false
@@ -644,6 +645,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       var r: [String: Any] = ["ok": true, "shell": SHELL_VERSION, "native": "ios", "server": serverURL(),
                               "version": info["CFBundleShortVersionString"] as? String ?? "1.0", "build": info["CFBundleVersion"] as? String ?? "1"]
       r["faceID"] = biometry() ?? NSNull()
+      r["refocus"] = FocusAfterPicker.installed
       done(r)
     case "setTabs": setTabs(a); done(["ok": true])
     case "badge":
@@ -874,6 +876,7 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
   private func finish(_ out: [[String: Any]]) {
     guard let d = done else { return }
     done = nil
+    FocusAfterPicker.allow()   // (the page puts the cursor back in the comment box, keyboard and all)
     DispatchQueue.main.async { d(["ok": true, "files": out]) }
   }
 
@@ -927,5 +930,27 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
     let data = (try? fh.read(upToCount: max(0, len))) ?? Data()
     if (a["last"] as? Bool) == true { lock.lock(); files[tok] = nil; lock.unlock(); try? FileManager.default.removeItem(at: url) }
     return ["ok": true, "b64": data.base64EncodedString()]
+  }
+}
+
+/* After Photos / Camera / Files the page puts the cursor back where it was, and the keyboard should come back with it.
+   The web view only brings the keyboard up for a focus that comes from a tap, so for a moment after a picker closes it
+   treats the page's focus as one (the same hook the Ionic/Capacitor keyboard settings use). Nowhere else. */
+enum FocusAfterPicker {
+  private(set) static var installed = false
+  private static var until = Date.distantPast
+  static func allow() { until = Date().addingTimeInterval(2) }
+  static func install() {
+    guard !installed, let cls = NSClassFromString("WKContentView") else { return }
+    let sel = sel_getUid("_elementDidFocus:userIsInteracting:blurPreviousNode:activityStateChanges:userObject:")
+    guard let m = class_getInstanceMethod(cls, sel) else { return }
+    // (activity-state changes is a set of flags: passed on whole)
+    typealias Orig = @convention(c) (AnyObject, Selector, UnsafeRawPointer, Bool, Bool, UInt64, AnyObject?) -> Void
+    let orig = unsafeBitCast(method_getImplementation(m), to: Orig.self)
+    let block: @convention(block) (AnyObject, UnsafeRawPointer, Bool, Bool, UInt64, AnyObject?) -> Void = { me, info, user, blur, changes, obj in
+      orig(me, sel, info, user || Date() < until, blur, changes, obj)
+    }
+    method_setImplementation(m, imp_implementationWithBlock(block))
+    installed = true
   }
 }
