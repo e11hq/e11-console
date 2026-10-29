@@ -54,8 +54,15 @@ jobs:
           AUTH="-allowProvisioningUpdates -authenticationKeyPath $KEY -authenticationKeyID $ASC_KEY_ID -authenticationKeyIssuerID $ASC_ISSUER_ID"
           BUILD=$((1000 + GITHUB_RUN_NUMBER))
           xcodebuild -project ios/E11Console.xcodeproj -scheme E11Console -configuration Release -destination 'generic/platform=iOS' \
-            -archivePath build/E11Console.xcarchive DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CURRENT_PROJECT_VERSION="$BUILD" $AUTH archive | tail -40
+            -archivePath build/E11Console.xcarchive DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CURRENT_PROJECT_VERSION="$BUILD" $AUTH archive 2>&1 | tee "$RUNNER_TEMP/ios-archive-full.log" | tail -40
           sed "s/__TEAM__/$APPLE_TEAM_ID/" ios/ExportOptions.plist > "$RUNNER_TEMP/ExportOptions.plist"
-          xcodebuild -exportArchive -archivePath build/E11Console.xcarchive -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath build/export $AUTH | tail -40
+          xcodebuild -exportArchive -archivePath build/E11Console.xcarchive -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath build/export $AUTH 2>&1 | tee "$RUNNER_TEMP/ios-export-full.log" | tail -40
           rm -f "$KEY"
           echo "Build $BUILD sent to TestFlight"
+      - name: TestFlight logs for checking from Claude's workspace
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # (errors and the last lines only: no keys or tokens are ever printed by xcodebuild)
+          for f in archive export; do if [ -s "$RUNNER_TEMP/ios-$f-full.log" ]; then { grep -E "error|Error|ERROR|failed|Failed" "$RUNNER_TEMP/ios-$f-full.log" | head -60; echo ---; tail -60 "$RUNNER_TEMP/ios-$f-full.log"; } > "$RUNNER_TEMP/ios-$f.log"; gh release upload ios-selftest "$RUNNER_TEMP/ios-$f.log" --clobber || true; fi; done; true
