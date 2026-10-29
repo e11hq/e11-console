@@ -912,9 +912,9 @@ const Push = (() => {
   }
   // a notification that opens a page (occasion reminders open the Content calendar)
   function openView(view) {
-    const ok = { calendar: 1 };
+    const ok = { calendar: 1, home: 1, plans: 1, 'fin-dash': 1 };   // (home / plans / fin-dash: a tap on the widget)
     if (!ok[view]) return;
-    const run = () => go(view);
+    const run = () => go(view === 'fin-dash' && !finLevel() ? 'home' : view);
     if (typeof db !== 'undefined' && db && currentUserId) return run();
     const iv = setInterval(() => { if (typeof db !== 'undefined' && db && currentUserId) { clearInterval(iv); setTimeout(run, 300); } }, 250);
     setTimeout(() => clearInterval(iv), 30000);

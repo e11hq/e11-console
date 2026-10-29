@@ -82,7 +82,9 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     w.rootViewController = Main.shared
     w.makeKeyAndVisible()
     window = w
+    if let u = connectionOptions.urlContexts.first?.url { Main.shared.openLink(u) }   // (started by a widget tap)
   }
+  func scene(_ scene: UIScene, openURLContexts contexts: Set<UIOpenURLContext>) { if let u = contexts.first?.url { Main.shared.openLink(u) } }
   func sceneDidBecomeActive(_ scene: UIScene) { Main.shared.becameActive() }
   func sceneDidEnterBackground(_ scene: UIScene) { Main.shared.wentAway() }
 }
@@ -301,6 +303,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     reviewLink.isHidden = !(webView.url?.host ?? "").hasSuffix(".cloudflareaccess.com")
     webView.hideKeyboardBar()
     if onServer { DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.syncBackground() } }
+    if onServer { shareSignIn() }
     if onServer { tabCover = -1; view.setNeedsLayout(); flushPending(); if !SELFTEST.isEmpty && !started { started = true; DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.selfTest() } } }
     else { tabBar.isHidden = true; tabsHidden = true; view.setNeedsLayout() }   // (the sign-in page: no tabs)
   }
@@ -604,7 +607,23 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     awayAt = nil
     if pageReady { pushState { st in if st == "on" { UIApplication.shared.registerForRemoteNotifications() } } }
   }
-  func wentAway() { if !authing { awayAt = Date() } }
+  func wentAway() { if !authing { awayAt = Date() }; if pageReady { shareSignIn() } }
+
+  /* ---------- the widget (widget/E11Widget.swift) ---------- */
+  // it asks the server with this app's own sign-in: the server and its cookies go to the shared Keychain
+  func shareSignIn() {
+    guard let store = web?.configuration.websiteDataStore.httpCookieStore else { return }
+    store.getAllCookies { cookies in WidgetShare.saveSignIn(server: serverURL(), cookies: cookies) }
+  }
+  // e11console://open?task=<id> | ?plan=<id> | ?view=home|plans|fin-dash — a tap on the widget
+  func openLink(_ u: URL) {
+    let q = URLComponents(url: u, resolvingAgainstBaseURL: false)?.queryItems ?? []
+    let v = { (k: String) in q.first { $0.name == k }?.value }
+    var d: [String: Any] = [:]
+    if let t = v("task") { d = ["taskId": t] } else if let p = v("plan") { d = ["planId": p, "kind": "plan"] } else if let w = v("view") { d = ["view": w] }
+    if d.isEmpty { return }
+    openPush(["e11": d])
+  }
   func lock() {
     // a plain locked screen in the app's own colours: lock, name, and the button (Face ID is asked straight away)
     let v = UIView(frame: view.bounds)

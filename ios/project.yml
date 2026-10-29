@@ -18,6 +18,9 @@ targets:
     platform: iOS
     sources:
       - path: App
+      - path: ../widget/WidgetShare.swift
+    dependencies:
+      - target: E11ConsoleWidget
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ae.e11.console.ios
@@ -30,6 +33,7 @@ targets:
       path: App/E11Console.entitlements
       properties:
         aps-environment: development
+        keychain-access-groups: [$(AppIdentifierPrefix)ae.e11.console.shared]   # (shared with the widget: WidgetShare)
     info:
       path: App/Info.plist
       properties:
@@ -60,3 +64,35 @@ targets:
         E11ServerURL: https://console.e11hq.com
         E11TestServerURL: https://test.e11hq.com
         E11ReviewServerURL: https://review.e11hq.com
+        E11KeychainGroup: $(AppIdentifierPrefix)ae.e11.console.shared
+        CFBundleURLTypes:
+          - CFBundleURLName: ae.e11.console.link
+            CFBundleURLSchemes: [e11console]
+  # The widget (home and lock screen): widget/E11Widget.swift, the same one the Mac App Store app has
+  E11ConsoleWidget:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: ../widget
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ae.e11.console.ios.widget
+        PRODUCT_NAME: E11ConsoleWidget
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_ENTITLEMENTS: Widget/E11ConsoleWidget.entitlements
+        SKIP_INSTALL: YES
+    entitlements:
+      path: Widget/E11ConsoleWidget.entitlements
+      properties:
+        keychain-access-groups: [$(AppIdentifierPrefix)ae.e11.console.shared]
+    info:
+      path: Widget/Info.plist
+      properties:
+        CFBundleDisplayName: E11 Console
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        E11KeychainGroup: $(AppIdentifierPrefix)ae.e11.console.shared
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension

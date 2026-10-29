@@ -30,6 +30,7 @@ jobs:
           xcodebuild -project ios/E11Console.xcodeproj -scheme E11Console -configuration Debug -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build 2>&1 | tee "$RUNNER_TEMP/ios-build-full.log" | tail -40; status=${PIPESTATUS[0]}; grep -E "error:|warning: unre" "$RUNNER_TEMP/ios-build-full.log" | head -60 > "$RUNNER_TEMP/ios-build.log"; [ $status -eq 0 ] || exit $status
           test -d build/Build/Products/Debug-iphonesimulator/E11Console.app
+          test -d build/Build/Products/Debug-iphonesimulator/E11Console.app/PlugIns/E11ConsoleWidget.appex && echo "widget: yes" || { echo "widget: MISSING"; exit 1; }
       - name: Self-test in the simulator
         # (its results are read from the release below; a failed check doesn't hold back the TestFlight build, which
         #  Haris tests on his phone anyway)

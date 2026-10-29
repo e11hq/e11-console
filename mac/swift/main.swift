@@ -107,7 +107,12 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     // Touch ID lock: again after 10 minutes away
     if defaults.bool(forKey: LOCK_KEY), lockView == nil, Date().timeIntervalSince(lastActive) > 600 { lock() }
   }
-  func applicationDidResignActive(_ n: Notification) { lastActive = Date() }
+  func applicationDidResignActive(_ n: Notification) {
+    lastActive = Date()
+    #if APPSTORE
+    if web?.url?.host == URL(string: SERVER)?.host { shareSignIn() }
+    #endif
+  }
   func showWindow() {
     if window.isMiniaturized { window.deminiaturize(nil) }
     window.makeKeyAndOrderFront(nil)
@@ -119,6 +124,14 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     openLink(event.paramDescriptor(forKeyword: AEKeyword(keyDirectObject))?.stringValue ?? "")
   }
   func openLink(_ url: String) {
+    // from the widget: e11console://open?plan=<id> or ?view=home|plans|fin-dash
+    if let q = URLComponents(string: url)?.queryItems, q.first(where: { $0.name == "task" }) == nil,
+       let item = q.first(where: { ["plan", "view"].contains($0.name) }), let v = item.value, v.range(of: "^[A-Za-z0-9_-]{1,80}$", options: .regularExpression) != nil {
+      let d = item.name == "plan" ? ["planId": v] : ["view": v]
+      if web != nil, !web.isLoading, web.url?.host == URL(string: SERVER)?.host { pageJS("window.__e11Widget && window.__e11Widget(\(jsonString(d)))") }
+      if window != nil { showWindow() }
+      return
+    }
     guard let r = url.range(of: "(?:task/|[?&]task=)([A-Za-z0-9_-]{1,80})", options: .regularExpression) else { if window != nil { showWindow() }; return }
     let m = String(url[r])
     let id = m.replacingOccurrences(of: "^(?:task/|[?&]task=)", with: "", options: .regularExpression)
@@ -261,6 +274,11 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   @objc func pickServer(_ sender: NSMenuItem) { setServer(sender.representedObject as? String ?? "live") }
   func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
     reviewLink.isHidden = !(webView.url?.host ?? "").hasSuffix(".cloudflareaccess.com")
+    if webView.url?.host == URL(string: SERVER)?.host { shareSignIn() }
+  }
+  // the widget (widget/E11Widget.swift) asks the server with this app's own sign-in: server + cookies to the shared Keychain
+  func shareSignIn() {
+    web?.configuration.websiteDataStore.httpCookieStore.getAllCookies { cookies in WidgetShare.saveSignIn(server: SERVER, cookies: cookies) }
   }
   #endif
   // links the window can't show itself (mailto:, e11console:, …) go to the Mac

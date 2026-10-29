@@ -12,6 +12,7 @@ import { createFiles, mimeOf, httpError } from './files.js';
 import { createCfSync } from './cfsync.js';
 import { createWebPush, notifMessage } from './webpush.js';
 import { createDigest } from './digest.js';
+import { createWidget } from './widget.js';
 import { createOccasionReminders } from './occremind.js';
 import { createBirthdays } from './birthdays.js';
 import { createScheduled } from './scheduled.js';
@@ -93,6 +94,7 @@ export function createServer(cfg) {
   }
   const occRemind = createOccasionReminders({ store, webDir, webPush, isAdm: (u) => access.isSuper(u), now: cfg.now || (() => Date.now()) });
   if (cfg.occRemind !== false && webDir) occRemind.start();
+  const widget = createWidget({ store, access, occRemind: webDir ? occRemind : null, now: cfg.now || (() => Date.now()) });
   // Birthdays: the rest of the staff are told in the morning (Inbox + phone)
   const birthdays = createBirthdays({ store, webPush, notifMessage, deliver: (out) => broadcast(out.rev, out.results, null, null), now: cfg.now || (() => Date.now()) });
   if (cfg.birthdays !== false) birthdays.start();
@@ -582,6 +584,8 @@ export function createServer(cfg) {
     // Phone notifications: the server's public key, and turning them on / off for this device
     // Morning summary: today's, for this person's open app (shown once per device); a test send to yourself
     if (p === '/api/digest') return json(res, 200, { ok: true, ...digest.forUser(u) });
+    // Widgets (iPhone, Mac): this person's summary for the categories they may see (read only)
+    if (p === '/api/widget' && req.method === 'GET') return json(res, 200, widget.summary(u));
     if (p === '/api/occ-reminders') return json(res, 200, { ok: true, ...occRemind.forUser(u) });
     // Occasion dates: when the holiday calendar was last read (Admins and Account Managers can check now)
     if (p === '/api/holidays') {

@@ -651,6 +651,19 @@ const TaskLink = (() => {
   return { copy, open, show };
 })();
 // The Mac app hands shared links to the page
+// From the Mac widget (e11console://open?plan=… / ?view=…): a content plan, or Home / Content plans / Finance
+window.__e11Widget = (d) => {
+  d = d || {};
+  const run = () => {
+    if (d.planId && typeof Plans !== 'undefined' && Plans.planById(d.planId)) return Plans.open(d.planId);
+    const v = { home: 'home', plans: 'plans', 'fin-dash': 'fin-dash' }[d.view];
+    if (v === 'fin-dash' && !finLevel()) return go('home');
+    if (v) go(v);
+  };
+  if (typeof db !== 'undefined' && db && currentUserId) return run();
+  const iv = setInterval(() => { if (typeof db !== 'undefined' && db && currentUserId) { clearInterval(iv); setTimeout(run, 300); } }, 250);
+  setTimeout(() => clearInterval(iv), 30000);
+};
 window.__e11OpenTask = (id) => { if (typeof db !== 'undefined' && db && currentUserId) TaskLink.show(id); else location.href = '/?task=' + encodeURIComponent(id); };
 
 /* ================= Page history (back / forward) ================= */

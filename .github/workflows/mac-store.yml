@@ -41,6 +41,7 @@ jobs:
           test -f "$APP/Contents/Resources/Assets.car" && echo "glass icon: yes" || { echo "glass icon: MISSING"; exit 1; }
           test -f "$APP/Contents/Resources/PrivacyInfo.xcprivacy" && echo "privacy manifest: yes" || { echo "privacy manifest: MISSING"; exit 1; }
           codesign -d --entitlements - --xml "$APP" 2>/dev/null | grep -q "com.apple.security.app-sandbox" && echo "sandbox: yes" || { echo "sandbox: MISSING"; exit 1; }
+          test -d "$APP/Contents/PlugIns/E11ConsoleWidget.appex" && echo "widget: yes" || { echo "widget: MISSING"; exit 1; }
           lipo -info "$APP/Contents/MacOS/E11 Console"
           sed "s/__TEAM__/$APPLE_TEAM_ID/" mac/appstore/ExportOptions.plist > "$RUNNER_TEMP/ExportOptions.plist"
           xcodebuild -exportArchive -archivePath build/mac-store/E11ConsoleMac.xcarchive -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath build/mac-store/export $AUTH 2>&1 | tee "$RUNNER_TEMP/mac-store-export-full.log" | tail -40

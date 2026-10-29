@@ -81,6 +81,11 @@ export function createOccasionReminders({ store, webDir, webPush, isAdm, now = (
   let timer = null;
   return {
     tick, dueOn,
+    // the next occasion after a day (widgets): { id, name, date, days }
+    nextOccasion(day) {
+      const o = occasions(store.get('meta', 'main') || {}).between(plus(day, 1), plus(day, 120)).find((x) => x.date > day);
+      return o ? { id: o.id, name: o.name, date: o.date, days: Math.round((toT(o.date) - toT(day)) / DAY) } : null;
+    },
     start() { if (!timer) { timer = setInterval(() => { tick().catch(() => {}); }, 60_000); if (timer.unref) timer.unref(); tick().catch(() => {}); } },
     stop() { clearInterval(timer); timer = null; },
     // for the person's own open app: today's reminders, from 10:30 until midnight
