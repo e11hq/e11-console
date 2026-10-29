@@ -1627,7 +1627,7 @@ const Pager = (() => {
   const body = () => document.querySelector('#detail .tm-body');
   const seg = () => document.querySelector('#detail .ph-seg.in-task');
   const width = (b) => b.clientWidth || 1;
-  let tapped = false, settleT = null;
+  let tapped = false, settleT = null, lastNear = null;
   // the pill: one highlight that slides between the two buttons (--pg: 0 = Details, 1 = Comments)
   function paintPill(p) {
     const s = seg();
@@ -1649,11 +1649,16 @@ const Pager = (() => {
     const want = ui.sideTab === 'comments' ? 1 : 0;
     if (force || !b.__pg) b.scrollLeft = want * width(b);
     paintPill(want);
+    lastNear = Math.round(b.scrollLeft / width(b));
     if (b.__pg) return;
     b.__pg = true;
     b.addEventListener('scroll', () => {
       const p = b.scrollLeft / width(b);
       paintPill(p);
+      // the tick comes the moment the swipe passes halfway (as iOS does), not when the page has come to rest
+      const near = Math.round(p);
+      if (near !== lastNear && !tapped) Haptic.select();
+      lastNear = near;
       clearTimeout(settleT);
       settleT = setTimeout(() => settle(b), 90);
     }, { passive: true });
@@ -1665,7 +1670,7 @@ const Pager = (() => {
     if (Math.abs(p - Math.round(p)) > 0.02) return;
     const tab = Math.round(p) === 1 ? 'comments' : 'details';
     const was = ui.sideTab === 'comments' ? 'comments' : 'details';
-    if (tab === was) { tapped = false; return; }
+    if (tab === was) { tapped = false; return; }   // (sprang back)
     const pane = document.getElementById('detail');
     const sc0 = detailScroller(); ui.tabScroll = ui.tabScroll || {};
     if (sc0) ui.tabScroll[was] = sc0.scrollTop;
@@ -1674,7 +1679,6 @@ const Pager = (() => {
     if (pane) pane.dataset.tab = tab;
     const s = seg();
     if (s) s.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x.dataset.tab === tab));
-    if (!tapped) Haptic.select();
     tapped = false;
     if (tab === 'comments' && ui.tabScroll.comments == null) { const f = document.querySelector('#detail .tm-feed'); if (f) stickFeedToBottom(f); }
   }
