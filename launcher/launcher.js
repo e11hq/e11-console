@@ -170,6 +170,7 @@ export function createLauncher(opts = {}) {
       saveState();
       pruneVersions();
       log(`now running ${v}`);
+      if (reason !== 'rollback') adoptLauncher(v);
       return { ok: true, version: v };
     }
     // Didn't start: go back
@@ -179,6 +180,22 @@ export function createLauncher(opts = {}) {
     saveState();
     if (from && installed(from)) { await startChild(from); await healthy(from); }
     return { ok: false, error: state.lastError };
+  }
+  // The updater updates itself: each release carries its own launcher.js; when it differs from the one running, it's
+  // kept in /data/app/launcher and boot.js switches to it (no new container image, Pull or Recreate needed)
+  function adoptLauncher(v) {
+    try {
+      const src = path.join(versionDir(v), 'launcher', 'launcher.js');
+      if (!fs.existsSync(src) || !opts.selfPath || !opts.onNewLauncher) return;
+      const next = fs.readFileSync(src, 'utf8');
+      if (!next.includes('export function createLauncher')) return;
+      let mine = ''; try { mine = fs.readFileSync(opts.selfPath, 'utf8'); } catch { /* none */ }
+      if (next === mine) return;
+      const dir = path.join(APP_DIR, 'launcher'); fs.mkdirSync(dir, { recursive: true });
+      const tmp = path.join(dir, 'launcher.js.new'); fs.writeFileSync(tmp, next); fs.renameSync(tmp, path.join(dir, 'launcher.js'));
+      log(`a new updater came with ${v}: switching to it`);
+      setTimeout(() => { opts.onNewLauncher(); }, 1000);
+    } catch (e) { log('could not take the new updater:', e.message); }
   }
   function pruneVersions() {
     const keep = new Set([state.current, state.previous].filter(Boolean));

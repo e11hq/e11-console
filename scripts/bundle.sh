@@ -12,6 +12,8 @@ cp -R "$ROOT/server/src" "$ROOT/server/package.json" "$STAGE/e11-console/server/
 case "$VERSION" in *-test.*|*-dev) ;; *) rm -rf "$STAGE/e11-console/server/src/sample-files/clickup" "$STAGE/e11-console/server/src/sample-story.json" ;; esac
 cp -R "$ROOT/web" "$STAGE/e11-console/web"
 cp -R "$ROOT/mac" "$STAGE/e11-console/mac"
+# (the updater too: the NAS switches to a newer one by itself — launcher/boot.js)
+mkdir -p "$STAGE/e11-console/launcher" && cp "$ROOT/launcher/launcher.js" "$ROOT/launcher/boot.js" "$ROOT/launcher/package.json" "$STAGE/e11-console/launcher/"
 echo "$VERSION" > "$STAGE/e11-console/VERSION"
 if [ "${2:-}" != "" ] && [ -f "$2" ]; then cp "$2" "$STAGE/e11-console/RELEASE_NOTES.md"; fi
 tar -czf "$OUT/e11-console-$VERSION.tar.gz" -C "$STAGE" e11-console

@@ -20,7 +20,7 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY launcher/package.json launcher/launcher.js launcher/
+COPY launcher/package.json launcher/launcher.js launcher/boot.js launcher/
 
 ENV NODE_ENV=production \
     NODE_NO_WARNINGS=1 \
@@ -34,4 +34,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:8080/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["node", "launcher/launcher.js"]
+CMD ["node", "launcher/boot.js"]

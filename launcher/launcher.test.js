@@ -17,6 +17,8 @@ const PORT = 18190, CONTROL = 18191;
 let gh, ghPort, launcher;
 let latest = null;                 // { version, notes }
 const requests = [];
+const SELF = path.join(tmp, 'running-launcher.js'); fs.writeFileSync(SELF, '// an older updater');
+let newLauncher = 0;
 
 function bundle(version, broken = false) {
   execFileSync(path.join(ROOT, 'scripts', 'bundle.sh'), [version], { env: { ...process.env, OUT_DIR: DIST } });
@@ -52,6 +54,7 @@ before(async () => {
   launcher = createLauncher({
     env: { DATA_DIR: DATA, PORT: String(PORT), LAUNCHER_PORT: String(CONTROL), GITHUB_API: `http://127.0.0.1:${ghPort}`, GITHUB_TOKEN: 'secret-token', UPDATE_HOUR: 'off', AUTH_DEV: '1', ADMIN_EMAIL: 'arsal@e11-digital.com', HEALTH_TIMEOUT_MS: '15000', NODE_NO_WARNINGS: '1' },
     childStdio: 'ignore', log: () => {},
+    selfPath: SELF, onNewLauncher: () => { newLauncher++; },
   });
   await launcher.start();
 });
@@ -82,6 +85,14 @@ test('a new release is found, installed with a database backup, and data is kept
   assert.ok(fs.readdirSync(path.join(DATA, 'backups')).some((f) => /^before-admin-1\.0\.0-to-1\.1\.0-.+\.sqlite$/.test(f)), 'database copied before the update');
   assert.equal(u.status.previous, '1.0.0');
   assert.equal(u.status.available, null);
+});
+
+test('the updater updates itself: a release with a different launcher.js is kept and switched to', async () => {
+  await new Promise((ok) => setTimeout(ok, 1500));
+  const adopted = path.join(DATA, 'app', 'launcher', 'launcher.js');
+  assert.ok(fs.existsSync(adopted), 'the new updater is kept in /data/app/launcher');
+  assert.equal(fs.readFileSync(adopted, 'utf8'), fs.readFileSync(path.join(ROOT, 'launcher', 'launcher.js'), 'utf8'));
+  assert.ok(newLauncher >= 1, 'boot.js is asked to switch to it');
 });
 
 test('Admins see the update status in the app; others don’t; everyone gets What’s new', async () => {
