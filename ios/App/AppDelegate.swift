@@ -45,16 +45,16 @@ let BG = UIColor(red: 0.047, green: 0.051, blue: 0.059, alpha: 1)
 
 @main
 final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate {
-  var window: UIWindow?
+  // (iOS 27: an app built with its SDK must start through a scene — SceneDelegate below makes the window; without one
+  //  iOS stops the app at launch)
   func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
     UNUserNotificationCenter.current().delegate = self
-    let w = UIWindow(frame: UIScreen.main.bounds)
-    w.backgroundColor = BG
-    w.rootViewController = Main.shared
-    w.makeKeyAndVisible()
-    window = w
-    if let n = launchOptions?[.remoteNotification] as? [AnyHashable: Any] { Main.shared.openPush(n) }
     return true
+  }
+  func application(_ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession, options: UIScene.ConnectionOptions) -> UISceneConfiguration {
+    let c = UISceneConfiguration(name: "Default", sessionRole: connectingSceneSession.role)
+    c.delegateClass = SceneDelegate.self
+    return c
   }
   func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
     Main.shared.gotToken(deviceToken.map { String(format: "%02x", $0) }.joined())
@@ -66,12 +66,25 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationC
   func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
     completionHandler([.list, .badge])
   }
+  // (also a tap on a notification that started the app: with scenes it comes here, not in the launch options)
   func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
     Main.shared.openPush(response.notification.request.content.userInfo)
     completionHandler()
   }
-  func applicationDidBecomeActive(_ application: UIApplication) { Main.shared.becameActive() }
-  func applicationDidEnterBackground(_ application: UIApplication) { Main.shared.wentAway() }
+}
+
+final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
+  var window: UIWindow?
+  func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
+    guard let ws = scene as? UIWindowScene else { return }
+    let w = UIWindow(windowScene: ws)
+    w.backgroundColor = BG
+    w.rootViewController = Main.shared
+    w.makeKeyAndVisible()
+    window = w
+  }
+  func sceneDidBecomeActive(_ scene: UIScene) { Main.shared.becameActive() }
+  func sceneDidEnterBackground(_ scene: UIScene) { Main.shared.wentAway() }
 }
 
 // (the page's message handler is held weakly, so the screen and the web view don't keep each other alive)
