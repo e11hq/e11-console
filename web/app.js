@@ -195,13 +195,13 @@ const NativeMac = (() => {
 })();
 
 
-/* ================= Seasonal icons: each one shows for a week around its day (Automatic) ================= */
-// md: the same day every year; occ: from the occasions calendar (moon dates, confirmed ones included).
-// A week = 3 days before to 3 days after; Ramadan: the whole month. Two close together: the nearer day wins
-// (Ramadan counts as nearest all month; Eid al-Fitr takes over on Eid day).
+/* ================= Seasonal icons: each one shows only on its own day(s) (Automatic) ================= */
+// md: the same day every year (a third value: its last day); occ: from the occasions calendar (moon dates, confirmed
+// ones included), with the calendar's own days — Eid al-Fitr 3 days, Eid al-Adha 4, Ramadan the whole month.
+// Two on the same day: the one that started latest wins (Eid al-Fitr over the end of Ramadan).
 const SEASON_WHEN = {
   'new-year': ['md', '01-01'], syria: ['md', '04-17'], 'south-africa': ['md', '04-27'], pakistan: ['md', '08-14'], india: ['md', '08-15'],
-  'womens-day': ['md', '08-28'], armenia: ['md', '09-21'], algeria: ['md', '11-01'], lebanon: ['md', '11-22'], 'national-day': ['md', '12-02'],
+  'womens-day': ['md', '08-28'], armenia: ['md', '09-21'], algeria: ['md', '11-01'], lebanon: ['md', '11-22'], 'national-day': ['md', '12-02', '12-03'],
   christmas: ['md', '12-25'], ramadan: ['occ', 'ramadan', 'month'], 'eid-al-fitr': ['occ', 'eidfitr'], 'eid-al-adha': ['occ', 'eidadha'],
   'islamic-new-year': ['occ', 'hijri'], diwali: ['occ', 'diwali'],
 };
@@ -214,12 +214,12 @@ function autoSeason(day) {
     let best = null, bestGap = 99;
     for (const [sid, w] of Object.entries(SEASON_WHEN)) {
       if (!S[sid]) continue;
-      const spans = w[0] === 'md' ? [y - 1, y, y + 1].map((yy) => [`${yy}-${w[1]}`, null]) : occ.filter((o) => o.key === w[1]).map((o) => [o.date, o.end]);
+      const spans = w[0] === 'md' ? [y - 1, y, y + 1].map((yy) => [`${yy}-${w[1]}`, w[2] ? `${yy}-${w[2]}` : null]) : occ.filter((o) => o.key === w[1]).map((o) => [o.date, o.end]);
       for (const [d, end] of spans) {
-        const a = t(d), month = w[2] === 'month';
-        const from = month ? a : a - 3, to = month ? (end ? t(end) : a + 29) : a + 3;
+        const a = t(d);
+        const from = a, to = end ? t(end) : w[2] === 'month' ? a + 29 : a;
         if (now < from || now > to) continue;
-        const gap = month ? 0.5 : Math.abs(now - a);
+        const gap = now - a;
         if (gap < bestGap) { best = sid; bestGap = gap; }
       }
     }
@@ -413,13 +413,13 @@ const AppIcon = (() => {
     if (busy === v) busy = null;
     if (info && info.v !== v) sync(); // a newer icon arrived while this one was being applied
   }
-  // Automatic: this week's seasonal icon (or the everyday one), checked again every hour
+  // Automatic: today's seasonal icon (or the everyday one), checked again every hour
   let autoBusy = false;
   async function applyAuto() {
     if (autoBusy || !info || !info.auto) return;
     autoBusy = true;
     try {
-      // no season this week: the everyday (default) icon, applied as before
+      // no occasion today: the everyday (default) icon, applied as before
       const sid = autoSeason(todayStr()), key = sid ? 'auto-' + sid : 'def-' + (info.def || '0');
       if (!sid && await hasGlass()) await everyday();
       else if (lsGet() !== key) {
@@ -7895,15 +7895,15 @@ function appIconCard() {
       <h3>${icon('image')}Mac app icon</h3>
       <div class="ai-row">
         <div class="ai-dock" aria-hidden="true"><img src="${AppIcon.url()}" alt=""></div>
-        <div class="ai-txt"><b>${i.auto ? 'Automatic' : i.preset && window.E11_SEASONS && E11_SEASONS[i.preset] ? esc(E11_SEASONS[i.preset].name) : i.custom ? 'Custom icon' : 'Everyday icon'}</b><span>${i.auto ? `${AppIcon.autoNow() ? esc(E11_SEASONS[AppIcon.autoNow()].name) + ' this week' : 'Everyday icon this week'} — each seasonal icon comes on by itself for a week around its day` : i.custom && i.at ? `Chosen ${esc(timeAgo(i.at))}, until you pick another one or Automatic` : 'The icon that comes with the Mac app'}. It shows in everyone’s Dock and on the startup animation.</span></div>
+        <div class="ai-txt"><b>${i.auto ? 'Automatic' : i.preset && window.E11_SEASONS && E11_SEASONS[i.preset] ? esc(E11_SEASONS[i.preset].name) : i.custom ? 'Custom icon' : 'Everyday icon'}</b><span>${i.auto ? `${AppIcon.autoNow() ? esc(E11_SEASONS[AppIcon.autoNow()].name) + ' today' : 'Everyday icon today'} — each seasonal icon comes on by itself on its own day (or days)` : i.custom && i.at ? `Chosen ${esc(timeAgo(i.at))}, until you pick another one or Automatic` : 'The icon that comes with the Mac app'}. It shows in everyone’s Dock and on the startup animation.</span></div>
       </div>
       <h4 class="pf-sub">Seasonal icons</h4>
       <div class="ai-seasons">
-        <button class="ai-sea auto ${i.auto ? 'on' : ''}" data-action="appicon-season" data-sid="auto" title="Each season’s icon for a week around its day"><img src="${AppIcon.autoNow() ? `icons/seasonal/${AppIcon.autoNow()}-160.png` : 'icons/seasonal/everyday-160.png'}" alt=""><span>Automatic<small>${AppIcon.autoNow() ? esc(E11_SEASONS[AppIcon.autoNow()].name) + ' now' : 'Everyday now'}</small></span></button>
+        <button class="ai-sea auto ${i.auto ? 'on' : ''}" data-action="appicon-season" data-sid="auto" title="Each occasion’s icon on its own day (or days)"><img src="${AppIcon.autoNow() ? `icons/seasonal/${AppIcon.autoNow()}-160.png` : 'icons/seasonal/everyday-160.png'}" alt=""><span>Automatic<small>${AppIcon.autoNow() ? esc(E11_SEASONS[AppIcon.autoNow()].name) + ' now' : 'Everyday now'}</small></span></button>
         <button class="ai-sea ${!i.auto && !i.custom ? 'on' : ''}" data-action="appicon-season" data-sid="" title="Everyday"><img src="icons/seasonal/everyday-160.png" alt=""><span>Everyday</span></button>
         ${Object.entries(window.E11_SEASONS || {}).map(([k, x]) => `<button class="ai-sea ${i.preset === k ? 'on' : ''}" data-action="appicon-season" data-sid="${k}" title="${esc(x.name)}"><img src="icons/seasonal/${k}-160.png" alt=""><span>${esc(x.name)}</span></button>`).join('')}
       </div>
-      <p class="pf-note"><b>Automatic</b> shows each icon for a week around its day (Ramadan: the whole month), then goes back to everyday. Pick one to use it instead until you choose Automatic again. The Dock icon on every Mac changes, and so does the startup animation on every device.</p>
+      <p class="pf-note"><b>Automatic</b> shows each icon only on its occasion’s day — or days: Eid al-Fitr 3, Eid al-Adha 4, National Day 2, Ramadan the whole month — then goes back to everyday. Pick one to use it instead until you choose Automatic again. The Dock icon on every Mac changes, and so does the startup animation on every device.</p>
       <div class="pf-actions"><button class="btn primary" data-action="appicon-upload">${icon('upload')}Upload new icon</button><button class="btn" data-action="hello-preview">Preview the greeting</button>${i.custom ? '<button class="btn" data-action="appicon-reset">Reset to default</button>' : ''}</div>
       <p class="pf-note">Square PNG or JPG, 512 × 512 or larger. Only you can see this. Macs need the Mac app installed once after this update — then every change arrives by itself.</p>
     </div>`;
@@ -8093,7 +8093,7 @@ async function appIconSeasonFlow(sid) {
   const cur = AppIcon.info();
   if (sid === 'auto' ? cur.auto : !sid ? !cur.auto && !cur.custom : !cur.auto && cur.preset === sid) return;
   const ok = await dialog(sid === 'auto'
-    ? { title: 'Switch to automatic?', body: 'Each seasonal icon shows for a week around its day, then the everyday icon comes back — on every Mac’s Dock and the startup animation.', okText: 'Use automatic' }
+    ? { title: 'Switch to automatic?', body: 'Each seasonal icon shows only on its occasion’s day (or days), then the everyday icon comes back — on every Mac’s Dock and the startup animation.', okText: 'Use automatic' }
     : { title: S ? `Use the ${S.name} icon?` : 'Use the everyday icon?', body: 'It stays until you choose another one or Automatic. Every Mac app’s Dock icon changes now, and the startup animation on every device takes on the same look from its next start.', okText: S ? 'Use it for everyone' : 'Use everyday icon' });
   if (!ok) return;
   try {

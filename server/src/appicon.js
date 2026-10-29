@@ -15,7 +15,7 @@ export function createAppIcon({ store, defaultFile }) {
     if (defHash === undefined) { try { defHash = crypto.createHash('sha1').update(fs.readFileSync(defaultFile)).digest('hex').slice(0, 10); } catch { defHash = null; } }
     return defHash;
   };
-  // auto: each app shows the seasonal icon of the week by itself (the default); the owner can pick one instead
+  // auto: each app shows the seasonal icon of the day by itself (only on its occasion's days) (the default); the owner can pick one instead
   const isAuto = (x) => !x || x.auto === true || (!x.png && x.auto === undefined);
   function info() {
     const x = read();
