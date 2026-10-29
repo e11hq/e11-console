@@ -1,10 +1,11 @@
 """The iPhone app on GitHub's Mac: runs it in an iPhone simulator against a local E11 Console server (sample data),
 lets it do its self-test (home, Inbox via the native tab bar, a task, back), takes a screenshot at each stage and
 checks its answers."""
-import json, os, subprocess, sys, time, urllib.request
+import glob, json, os, re, subprocess, sys, time, urllib.request
 PORT = 18450
 BASE = f'http://127.0.0.1:{PORT}'
 TMP = os.environ.get('RUNNER_TEMP', '/tmp')
+T_START = time.time()
 EMAIL = 'haris@e11-digital.com'
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 APP = sys.argv[1]
@@ -22,9 +23,12 @@ try:
         except Exception: time.sleep(0.5)
     urllib.request.urlopen(urllib.request.Request(BASE + '/api/sample', method='POST', data=b'{}', headers={'X-Dev-Email': EMAIL, 'Content-Type': 'application/json'}), timeout=60)
     devs = json.loads(sh('xcrun', 'simctl', 'list', 'devices', 'available', '-j').stdout)['devices']
-    phones = [d for rt, ds in devs.items() if 'iOS' in rt for d in ds if d['name'].startswith('iPhone') and 'Pro Max' not in d['name']]
-    phones.sort(key=lambda d: d['name'])
-    dev = phones[-1]; udid = dev['udid']
+    # (an ordinary numbered iPhone on the newest iOS: e.g. not the iPhone Duo, which sorts after them by name)
+    rtv = lambda rt: [int(x) for x in re.findall(r'(\d+)', rt.split('iOS')[-1])[:2]]
+    phones = [(rtv(rt), d) for rt, ds in devs.items() if 'iOS' in rt for d in ds if re.match(r'iPhone \d', d['name']) and 'Pro Max' not in d['name']]
+    if not phones: phones = [(rtv(rt), d) for rt, ds in devs.items() if 'iOS' in rt for d in ds if d['name'].startswith('iPhone')]
+    phones.sort(key=lambda x: (x[0], x[1]['name']))
+    dev = phones[-1][1]; udid = dev['udid']
     print('simulator', dev['name'], udid)
     sh('xcrun', 'simctl', 'boot', udid); sh('xcrun', 'simctl', 'bootstatus', udid, '-b', timeout=300)
     sh('xcrun', 'simctl', 'ui', udid, 'appearance', 'dark')
@@ -69,6 +73,14 @@ try:
     check((res.get('task') or {}).get('taskOpen') is True and (res.get('back') or {}).get('taskOpen') is False, 'a task opens and closes')
 finally:
     srv.terminate()
+    # if the app crashed: the newest crash report (on our own Mac, macOS keeps the simulator's apps' reports) goes with the results
+    try:
+        reps = [f for f in glob.glob(os.path.expanduser('~/Library/Logs/DiagnosticReports/E11Console*.ips')) if os.path.getmtime(f) > T_START]
+        if reps:
+            rep = max(reps, key=os.path.getmtime)
+            open(os.path.join(TMP, 'ios-crash.txt'), 'w').write(open(rep, errors='replace').read()[:200000])
+            print('CRASH report', os.path.basename(rep))
+    except Exception as e: print('crash report not read', e)
     # (on our own Mac: the simulator is shut down again, so it doesn't stay running in the background)
     if os.environ.get('RUNNER_ENVIRONMENT') == 'self-hosted':
         try: subprocess.run(['xcrun', 'simctl', 'shutdown', 'all'], capture_output=True, timeout=60)
