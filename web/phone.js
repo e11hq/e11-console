@@ -1101,7 +1101,7 @@ const Push = (() => {
   function tabsHere() {
     if ($('#overlay-root').firstElementChild || $('#ph-sheet-root .ph-scrim:not(.docked)') || $('.menu')) return null;
     if (ui.taskId) {
-      if (ui.thread) return null;
+      if (ui.thread || (typeof Pager !== 'undefined' && Pager.on())) return null;   // (iPhone app 9+: iOS swipes the task's tabs)
       const btns = $$('#detail .ph-task-head .ph-seg button');
       return btns.length > 1 ? { btns, area: () => [$('#detail .tm-body')].filter(Boolean) } : null;
     }
@@ -1608,4 +1608,95 @@ const Push = (() => {
   const note = (e) => { const t = e.touches ? e.touches[0] : e; if (t) { window.__e11LastDown = { x: t.clientX, y: t.clientY }; window.__e11LastDownEl = e.target; } };
   document.addEventListener('touchstart', note, { capture: true, passive: true });
   document.addEventListener('mousedown', note, true);
+})();
+
+/* iPhone app 9+: a task's Details and Comments sit side by side and iOS itself swipes between them (snap-to-page,
+   iOS's own flick and spring, no work for the page while the finger moves). The highlighted pill slides with the
+   finger; the tab changes when the page settles (no redraw). A tap on Details / Comments glides there. A swipe from
+   the very left edge is still "back". Older apps, the browser and the Mac app keep the swipe below (JS). */
+const Pager = (() => {
+  let on = false;
+  const root = document.documentElement;
+  if (typeof Host !== 'undefined' && Host.isIOSApp) {
+    NativeMac.call('appInfo').then((r) => {
+      on = Number(r && r.shell) >= 9;
+      root.classList.toggle('ph-pager', on);
+      if (on && ui.taskId) sync(true);
+    }).catch(() => {});
+  }
+  const body = () => document.querySelector('#detail .tm-body');
+  const seg = () => document.querySelector('#detail .ph-seg.in-task');
+  const width = (b) => b.clientWidth || 1;
+  let tapped = false, settleT = null;
+  // the pill: one highlight that slides between the two buttons (--pg: 0 = Details, 1 = Comments)
+  function paintPill(p) {
+    const s = seg();
+    if (!s) return;
+    if (!s.querySelector('.ph-seg-ind')) s.insertAdjacentHTML('afterbegin', '<span class="ph-seg-ind" aria-hidden="true"></span>');
+    p = Math.max(0, Math.min(1, p));
+    const btns = s.querySelectorAll('button');
+    if (btns.length < 2) return;
+    const a = btns[0], z = btns[1], ind = s.querySelector('.ph-seg-ind');
+    ind.style.width = a.offsetWidth + 'px'; ind.style.top = a.offsetTop + 'px'; ind.style.height = a.offsetHeight + 'px'; ind.style.left = a.offsetLeft + 'px';
+    ind.style.transform = `translate3d(${(z.offsetLeft - a.offsetLeft) * p}px, 0, 0)`;
+    btns.forEach((b, i) => b.classList.toggle('pg-near', Math.round(p) === i));
+  }
+  // after every redraw of the open task: show the current tab's page straight away, wire the scroll once
+  function sync(force) {
+    if (!on || !Phone.on) return;
+    const b = body();
+    if (!b) return;
+    const want = ui.sideTab === 'comments' ? 1 : 0;
+    if (force || !b.__pg) b.scrollLeft = want * width(b);
+    paintPill(want);
+    if (b.__pg) return;
+    b.__pg = true;
+    b.addEventListener('scroll', () => {
+      const p = b.scrollLeft / width(b);
+      paintPill(p);
+      clearTimeout(settleT);
+      settleT = setTimeout(() => settle(b), 90);
+    }, { passive: true });
+  }
+  // the page came to rest on Details or Comments: that's the tab now (same as tapping it, without a redraw)
+  function settle(b) {
+    if (!b.isConnected) return;
+    const p = b.scrollLeft / width(b);
+    if (Math.abs(p - Math.round(p)) > 0.02) return;
+    const tab = Math.round(p) === 1 ? 'comments' : 'details';
+    const was = ui.sideTab === 'comments' ? 'comments' : 'details';
+    if (tab === was) { tapped = false; return; }
+    const pane = document.getElementById('detail');
+    const sc0 = detailScroller(); ui.tabScroll = ui.tabScroll || {};
+    if (sc0) ui.tabScroll[was] = sc0.scrollTop;
+    ui.sideTab = tab; ui.thread = null; ui.replyTo = null;
+    if (tab === 'comments') ui.activityFilter = 'comments';
+    if (pane) pane.dataset.tab = tab;
+    const s = seg();
+    if (s) s.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x.dataset.tab === tab));
+    if (!tapped) Haptic.select();
+    tapped = false;
+    if (tab === 'comments' && ui.tabScroll.comments == null) { const f = document.querySelector('#detail .tm-feed'); if (f) stickFeedToBottom(f); }
+  }
+  // a tap on Details / Comments: glide there (the tab changes when it arrives)
+  document.addEventListener('click', (e) => {
+    if (!on || !Phone.on) return;
+    const btn = e.target.closest && e.target.closest('#detail .ph-seg.in-task [data-action="side-tab"]');
+    const b = body();
+    if (!btn || !b) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    tapped = true;
+    b.scrollTo({ left: (btn.dataset.tab === 'comments' ? 1 : 0) * width(b), behavior: 'smooth' });
+  }, true);
+  // a swipe from the very left edge is "back": the pages don't move under it
+  document.addEventListener('touchstart', (e) => {
+    if (!on || !Phone.on || !ui.taskId) return;
+    const t = e.touches[0];
+    const d = document.getElementById('detail');
+    if (d) d.classList.toggle('pg-lock', !!t && t.clientX <= 28);
+  }, { passive: true, capture: true });
+  const unlock = () => { const d = document.getElementById('detail'); if (d) d.classList.remove('pg-lock'); };
+  document.addEventListener('touchend', unlock, true);
+  document.addEventListener('touchcancel', unlock, true);
+  return { on: () => on, sync };
 })();

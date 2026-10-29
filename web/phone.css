@@ -991,3 +991,18 @@ html.ios-app body.phone .us-card { padding-bottom: calc(24px + max(env(safe-area
 
 /* the description on the phone: once expanded it stays open (no Collapse); Expand comes back when the task is opened again */
 body.phone .desc-sec.open .desc-toggle-wrap { display: none !important; }
+
+/* iPhone app 9+ (Pager in phone.js): a task's Details and Comments side by side, swiped by iOS with snap-to-page */
+html.ph-pager body.phone #detail .tm-body { flex-direction: row !important; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+html.ph-pager body.phone #detail .tm-body::-webkit-scrollbar { display: none; }
+html.ph-pager body.phone #detail.pg-lock .tm-body { overflow-x: hidden; }
+html.ph-pager body.phone #detail .tm-main, html.ph-pager body.phone #detail .tm-activity { flex: none !important; width: 100%; max-width: 100%; height: 100%; scroll-snap-align: start; scroll-snap-stop: always; }
+html.ph-pager body.phone #detail .tm-main { display: block !important; }
+html.ph-pager body.phone #detail .tm-activity { display: flex !important; flex-direction: column; }
+/* the pill: one highlight sliding between Details and Comments with the finger (--pg 0 → 1) */
+html.ph-pager body.phone #detail .ph-seg.in-task { position: relative; }
+html.ph-pager body.phone #detail .ph-seg.in-task button { position: relative; z-index: 1; background: transparent !important; box-shadow: none !important; transition: color .15s; }
+html.ph-pager body.phone #detail .ph-seg.in-task button.pg-near { color: var(--text); }
+html.ph-pager body.phone #detail .ph-seg.in-task button:not(.pg-near) { color: var(--text-2); }
+html.ph-pager body.phone #detail .ph-seg-ind { position: absolute; z-index: 0; border-radius: 7px; background: var(--active); box-shadow: inset 0 0 0 1px var(--ph-edge); pointer-events: none; will-change: transform; }
+html.ph-pager[data-theme="light"] body.phone #detail .ph-seg-ind { background: #fff; }

@@ -3704,6 +3704,7 @@ function renderDetail() {
   hydrateThumbs(pane);
   lockByRole(pane, t);
   readOnlyDetail(pane, t);
+  if (typeof Pager !== 'undefined') Pager.sync();
   if (typeof FeedJump !== 'undefined') FeedJump.afterDetail(pane, t, prev);
   if (typeof Cmx !== 'undefined') Cmx.afterDetail(pane, t);
 }
@@ -4336,6 +4337,10 @@ function closeMenus() { $$('.menu').forEach((m) => m.remove()); }
 function detailScroller() {
   const pane = document.getElementById('detail');
   if (!pane) return null;
+  if (typeof Pager !== 'undefined' && Pager.on()) {   // (iPhone app 9+: both pages are there; the current tab's one)
+    const el = pane.querySelector(ui.sideTab === 'comments' ? '.tm-feed' : '.tm-main');
+    if (el) return el;
+  }
   return [...pane.querySelectorAll('.tm-feed, .tm-main, .tm-activity')].find((e) => e.scrollHeight > e.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(e).overflowY)) || null;
 }
 function showMenu(anchor, items) {
