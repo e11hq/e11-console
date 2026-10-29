@@ -1,6 +1,7 @@
 // Sample data for the test copy: E11 people, projects, tasks, comments with replies and Inbox
 // updates, moved so they happen around today. The person who asks becomes "Haris" in the story.
 import fs from 'node:fs';
+import { copyFileSync } from './copy.js';
 import path from 'node:path';
 
 const REF_DAY = Date.UTC(2026, 9, 20); // the day the sample story was written
@@ -126,7 +127,7 @@ export function sampleData(store, me, filesRoot = null, opts = {}) {
     const put = (name, rel) => {
       const dest = path.join(filesRoot, ...rel.split('/'));
       fs.mkdirSync(path.dirname(dest), { recursive: true });
-      if (!fs.existsSync(dest)) fs.copyFileSync(new URL(name, SRC), dest);
+      if (!fs.existsSync(dest)) copyFileSync(new URL(name, SRC), dest);
       return { name, path: rel, size: size(name) };
     };
     const SETS = [

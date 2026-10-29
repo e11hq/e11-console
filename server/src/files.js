@@ -2,6 +2,7 @@
 // relative paths as the Mac app (attachments/<taskId>/…, Clients/<client>/<folder>/…, .thumbs/…).
 // These functions back the app's "host" commands so the interface works unchanged in the browser.
 import fs from 'node:fs';
+import { copyFileSync } from './copy.js';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import zlib from 'node:zlib';
@@ -103,7 +104,7 @@ export function createFiles(root) {
     if (!String(destDirRel).startsWith('Clients/')) throw httpError(400, 'Invalid folder');
     fs.mkdirSync(dir, { recursive: true });
     const dest = uniquePath(dir, safeName(name || path.basename(src)));
-    try { fs.linkSync(src, dest); } catch { fs.copyFileSync(src, dest, fs.constants.COPYFILE_EXCL); }
+    try { fs.linkSync(src, dest); } catch { copyFileSync(src, dest, fs.constants.COPYFILE_EXCL); }
     return { path: rel(dest), name: path.basename(dest), size: fs.statSync(dest).size };
   }
 
@@ -115,7 +116,7 @@ export function createFiles(root) {
     const dir = resolve('attachments/' + safeName(taskId));
     fs.mkdirSync(dir, { recursive: true });
     const dest = uniquePath(dir, safeName(name || path.basename(src)));
-    try { fs.linkSync(src, dest); } catch { fs.copyFileSync(src, dest, fs.constants.COPYFILE_EXCL); }
+    try { fs.linkSync(src, dest); } catch { copyFileSync(src, dest, fs.constants.COPYFILE_EXCL); }
     return { path: rel(dest), name: path.basename(dest), size: fs.statSync(dest).size };
   }
 
@@ -180,7 +181,7 @@ export function createFiles(root) {
         if (fs.existsSync(out)) return;
         const tmp = fs.mkdtempSync(path.join(dir, 'lo-'));
         const copy = path.join(tmp, 'doc.' + ext);
-        fs.copyFileSync(src, copy);
+        copyFileSync(src, copy);
         await run('soffice', ['-env:UserInstallation=file:///tmp/e11-libreoffice', '--headless', '--norestore', '--convert-to', 'pdf', '--outdir', tmp, copy], 120000);
         const made = path.join(tmp, 'doc.pdf');
         if (fs.existsSync(made)) fs.renameSync(made, out);
@@ -245,9 +246,9 @@ export function createFiles(root) {
         const name = safeName(String(a.name || 'Expense claim.pdf')).replace(/\.pdf$/i, '') + '.pdf';
         const out = path.join(dir, name);
         let ok = parts.length === 1;
-        if (ok) fs.copyFileSync(sheet, out);
+        if (ok) copyFileSync(sheet, out);
         else ok = await run('pdfunite', [...parts, out], 60000);
-        if (!ok || !fs.existsSync(out)) fs.copyFileSync(sheet, out);   // receipts couldn't be joined: the sheet alone
+        if (!ok || !fs.existsSync(out)) copyFileSync(sheet, out);   // receipts couldn't be joined: the sheet alone
         return { ok: true, path: rel(out), name, size: fs.statSync(out).size };
       } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
     },
@@ -311,12 +312,12 @@ export function createFiles(root) {
       const ext = src.split('.').pop().toLowerCase();
       const stem = `${safeName(a.userId || (logo ? 'client' : 'user'))}-${Date.now().toString(36)}`;
       let dest;
-      if (logo && ext === 'svg') { dest = path.join(dir, stem + '.svg'); fs.copyFileSync(src, dest); }
+      if (logo && ext === 'svg') { dest = path.join(dir, stem + '.svg'); copyFileSync(src, dest); }
       else {
         dest = path.join(dir, stem + (logo ? '.png' : '.jpg'));
         const size = logo ? 600 : 400;
         const ok = await run('ffmpeg', ['-y', '-v', 'error', '-i', src, '-frames:v', '1', '-vf', `scale='if(gt(iw,ih),min(${size},iw),-2)':'if(gt(iw,ih),-2,min(${size},ih))'`, ...(logo ? [] : ['-q:v', '3']), dest]);
-        if (!ok) { dest = path.join(dir, stem + '.' + ext); fs.copyFileSync(src, dest); }
+        if (!ok) { dest = path.join(dir, stem + '.' + ext); copyFileSync(src, dest); }
       }
       if (src.includes(`${path.sep}_uploads${path.sep}`)) fs.rmSync(src, { force: true });
       return { ok: true, path: rel(dest) };

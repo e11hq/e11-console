@@ -4,6 +4,7 @@
 // so everything it produces goes through scrub() — every real name and brand is swapped for its made-up one — and
 // the files are moved to the swapped paths. server/test/demo.test.js checks that nothing real is left.
 import fs from 'node:fs';
+import { copyFileSync } from './copy.js';
 import os from 'node:os';
 import path from 'node:path';
 import { freshSample } from './sample-fresh.js';
@@ -82,7 +83,7 @@ export function demoData(store, me, filesRoot) {
 function put(root, rel, src) {
   const dest = path.join(root, ...rel.split('/'));
   fs.mkdirSync(path.dirname(dest), { recursive: true });
-  fs.copyFileSync(src, dest);
+  copyFileSync(src, dest);
 }
 // every file to its swapped path; drawn logos (SVG text) get their names swapped inside too
 function moveAll(from, to) {
@@ -92,6 +93,6 @@ function moveAll(from, to) {
     const dest = path.join(to, ...scrub(rel).split('/'));
     fs.mkdirSync(path.dirname(dest), { recursive: true });
     if (/\.svg$/i.test(f)) fs.writeFileSync(dest, scrubUpper(fs.readFileSync(f, 'utf8')));
-    else fs.copyFileSync(f, dest);
+    else copyFileSync(f, dest);
   }
 }

@@ -6,6 +6,7 @@
 // Every date is relative to the day it's loaded (a task posted "today" is always posted today).
 // The finance records, expense claims and Finance people come from the older sample (sample.js).
 import fs from 'node:fs';
+import { copyFileSync } from './copy.js';
 import path from 'node:path';
 import { sampleData } from './sample.js';
 
@@ -84,7 +85,7 @@ export function freshSample(store, me, filesRoot, opts = {}) {
   { const a = users.get('u-arsal'); if (a) { a.role = 'office_admin'; a.fin = 'admin'; a.designation = 'Office Manager'; } }
   const free = { id: 'u-smp-free', name: 'Sam Rivera', email: 'sam.rivera.design@gmail.com', role: 'freelancer', designation: 'Motion Designer (freelance)', active: true, setup: true, avatar: null, prefs: {}, createdAt: ago(24 * 60), office: 'Remote', projectIds: ['p-ford'] };
   out.users.push(free); users.set(free.id, free);
-  const putFile = (rel, src) => { const dest = path.join(filesRoot, ...rel.split('/')); fs.mkdirSync(path.dirname(dest), { recursive: true }); fs.copyFileSync(src, dest); return fs.statSync(dest).size; };
+  const putFile = (rel, src) => { const dest = path.join(filesRoot, ...rel.split('/')); fs.mkdirSync(path.dirname(dest), { recursive: true }); copyFileSync(src, dest); return fs.statSync(dest).size; };
   const putData = (rel, data) => { const dest = path.join(filesRoot, ...rel.split('/')); fs.mkdirSync(path.dirname(dest), { recursive: true }); fs.writeFileSync(dest, data); return fs.statSync(dest).size; };
   for (const [id, [name, photo]] of Object.entries(PEOPLE)) {
     const u = users.get(id); if (!u) continue;
@@ -325,7 +326,7 @@ export function freshSample(store, me, filesRoot, opts = {}) {
     picked.forEach((a, k) => {
       const rel = `${fdir}/${a.name}`;
       let size = 0;
-      if (filesRoot) { const src = path.join(filesRoot, ...a.path.split('/')); const dest = path.join(filesRoot, ...rel.split('/')); fs.mkdirSync(path.dirname(dest), { recursive: true }); try { fs.linkSync(src, dest); } catch (e) { fs.copyFileSync(src, dest); } size = fs.statSync(dest).size; }
+      if (filesRoot) { const src = path.join(filesRoot, ...a.path.split('/')); const dest = path.join(filesRoot, ...rel.split('/')); fs.mkdirSync(path.dirname(dest), { recursive: true }); try { fs.linkSync(src, dest); } catch (e) { copyFileSync(src, dest); } size = fs.statSync(dest).size; }
       const ca = t.clientApproval || {};
       folder.files.push({ id: `caf-final-${t.id}-${k}`, name: a.name, path: rel, size, addedAt: t.completedAt, addedBy: r.by,
         final: { taskId: t.id, taskTitle: t.title, completedAt: t.completedAt, createdBy: t.createdBy, assignee: r.by, cdBy: r.decidedBy, cdAt: r.decidedAt, clientBy: ca.none ? null : ca.by || null, clientAt: ca.none ? null : ca.at || null, clientNone: !!ca.none, srcId: a.id } });
