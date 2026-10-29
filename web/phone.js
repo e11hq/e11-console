@@ -119,11 +119,12 @@ const Phone = (() => {
   function nativeTabs(bar) {
     if (typeof Host === 'undefined' || !Host.isIOSApp) return;
     const tabs = [...bar.querySelectorAll('[data-ph-tab]')].map((b) => ({ v: b.dataset.phTab, label: (b.querySelector('span') || {}).textContent || '', badge: (b.querySelector('.ph-badge') || {}).textContent || '', on: b.classList.contains('on') }));
-    // (the native bar sits above the page, so it steps aside for anything that rises from the bottom)
+    // (the native bar sits above the page, so it steps aside for anything that rises from the bottom, and stays
+    //  away until the startup animation has gone)
     const ph = mePhoto();
     const u0 = typeof me === 'function' ? me() : null;
     if (ph) tabs.forEach((t) => { if (t.v === 'me') { t.photo = ph; if (u0 && u0.avatar) t.photoUrl = new URL(fileUrl({ path: u0.avatar }), location.href).href; } });
-    const msg = JSON.stringify({ tabs, hidden: !!ui.taskId || !!document.querySelector('.scrim, .menu:not(.mention-pop), #ph-sheet-root .ph-scrim:not(.docked), #overlay-root > *, #pv-root > *') });
+    const msg = JSON.stringify({ tabs, hidden: !!ui.taskId || !!document.querySelector('#splash, .scrim, .menu:not(.mention-pop), #ph-sheet-root .ph-scrim:not(.docked), #overlay-root > *, #pv-root > *') });
     if (msg === tabsSent) return;
     tabsSent = msg;
     NativeMac.call('setTabs', JSON.parse(msg)).catch(() => {});
