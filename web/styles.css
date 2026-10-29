@@ -2919,7 +2919,6 @@ html.mac-chrome.mac-fs .fpv-top { padding-left: 18px; }
 .fpv-oncomputer .fpv-top { justify-content: flex-end; }
 html.mac-chrome .fpv-oncomputer .fpv-top { padding-left: 18px; }
 /* Preview on a computer: pinch / double-click zoom on pictures (viewer.js trackpad) */
-.fpv-oncomputer .fpv-slide .fpv-img { cursor: zoom-in; }
 .fpv-oncomputer.fpv-zoomed .fpv-slide .fpv-img { cursor: grab; }
 .fpv-oncomputer.fpv-zoomed.fpv-dragging .fpv-slide .fpv-img { cursor: grabbing; }
 .fpv-oncomputer.fpv-zoomed .fpv-arr { opacity: 0; pointer-events: none; }
