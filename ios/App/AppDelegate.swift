@@ -143,9 +143,15 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     // Like a native app, the keyboard makes the page shorter instead of pushing the whole page up (Safari's way):
     // the page ends at the top of the keyboard, and the page itself never scrolls as a whole (each page scrolls
     // inside itself), so the header stays put and boxes at the bottom (the comment box) sit just above the keyboard.
+    // (the page as a whole never moves: no automatic insets, no scrolling or bouncing of the page itself, and if iPhone
+    //  scrolls it anyway to show the comment box above the keyboard it's put straight back in the same moment — a
+    //  moment later showed as the whole page jumping down and back)
+    web.scrollView.contentInsetAdjustmentBehavior = .never
+    web.scrollView.isScrollEnabled = false
+    web.scrollView.bounces = false
     offsetWatch = web.scrollView.observe(\.contentOffset, options: [.new]) { [weak self] sv, _ in
-      guard let self = self, self.pageReady, sv.contentOffset != .zero else { return }
-      DispatchQueue.main.async { if sv.contentOffset != .zero { sv.setContentOffset(.zero, animated: false) } }
+      guard let self = self, self.pageReady, sv.contentOffset != .zero, !self.resetting else { return }
+      self.resetting = true; sv.setContentOffset(.zero, animated: false); self.resetting = false
     }
     // like Messages: drag your finger down onto the top of the keyboard and it goes away. (Only attached while the
     // keyboard is up: on the web view all the time it got in the way of ordinary taps, which then lagged.)
@@ -225,12 +231,19 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     keyboardCover = cover
     let dur = (n.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double) ?? 0.25
     let curve = (n.userInfo?[UIResponder.keyboardAnimationCurveUserInfoKey] as? UInt) ?? 7
-    UIView.animate(withDuration: dur, delay: 0, options: UIView.AnimationOptions(rawValue: curve << 16)) {
-      self.view.setNeedsLayout(); self.view.layoutIfNeeded()
+    if cover == 0 {
+      // keyboard going away: the page is full height at once and the keyboard slides off it (growing it along with the
+      // keyboard showed half a page and no tab bar for a moment, e.g. going back to E11 Day from a comment)
+      UIView.performWithoutAnimation { self.view.setNeedsLayout(); self.view.layoutIfNeeded() }
+    } else {
+      UIView.animate(withDuration: dur, delay: 0, options: UIView.AnimationOptions(rawValue: curve << 16)) {
+        self.view.setNeedsLayout(); self.view.layoutIfNeeded()
+      }
     }
     if web.scrollView.contentOffset != .zero { web.scrollView.setContentOffset(.zero, animated: false) }
   }
   var offsetWatch: NSKeyValueObservation?
+  var resetting = false
   func pageJS(_ js: String) { web?.evaluateJavaScript(js, completionHandler: nil) }
   var serverHost: String { URL(string: serverURL())?.host ?? "" }
 
