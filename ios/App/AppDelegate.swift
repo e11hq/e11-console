@@ -13,7 +13,7 @@ import PhotosUI
 import UniformTypeIdentifiers
 
 // Version of this iPhone app's native part (raise it with changes the web app needs to know about)
-let SHELL_VERSION = 7   // 7: the comment box rides down / up with the keyboard frame by frame (__e11KbStep) · 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
+let SHELL_VERSION = 7   // 7: the comment box rides down / up with the keyboard frame by frame (__e11KbStep), and a swipe down takes the keyboard with the finger · 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
 let procEnv = ProcessInfo.processInfo.environment
 let SELFTEST = procEnv["E11_SELFTEST"] ?? ""           // the build machine's self-test in the simulator
 let info = Bundle.main.infoDictionary ?? [:]
@@ -227,13 +227,67 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   var keyboardCover: CGFloat = 0
   lazy var pull = UIPanGestureRecognizer(target: self, action: #selector(pullKeyboard(_:)))
+  // Swipe down to put the keyboard away, like Messages: the keyboard follows the finger (iOS's own interactive
+  // dismissal, switched on for the page's scrolling areas — the comment list), and the comment box follows the
+  // keyboard frame by frame (followKeyboard). Let go part-way and it springs back. Where iOS doesn't move it (a part
+  // of the page that doesn't scroll), the finger reaching the keyboard puts it away as before.
   @objc func pullKeyboard(_ g: UIPanGestureRecognizer) {
-    guard keyboardUp, keyboardCover > 0, g.state == .changed, g.velocity(in: view).y > 0 else { return }
-    let edge = view.bounds.height - keyboardCover
-    if g.location(in: view).y >= edge - 8 {
-      pageJS("document.activeElement && document.activeElement.blur && document.activeElement.blur()")
-      view.endEditing(true)
+    switch g.state {
+    case .began:
+      interactiveScrolls()
+      startFollow()
+    case .changed:
+      guard keyboardUp, keyboardCover > 0, g.velocity(in: view).y > 0 else { return }
+      let edge = view.bounds.height - keyboardCover
+      let moved = followCover() < keyboardCover - 3            // (iOS is already moving it with the finger)
+      if !moved, g.location(in: view).y >= edge + 24 {
+        pageJS("document.activeElement && document.activeElement.blur && document.activeElement.blur()")
+        view.endEditing(true)
+      }
+    default:
+      followUntil = CACurrentMediaTime() + 0.8                 // (it springs back, or slides away: keep following)
     }
+  }
+  // the page's scrolling areas (WebKit makes each one a native scroll view): dragging one down past the keyboard's
+  // top takes the keyboard with it
+  func interactiveScrolls() {
+    func walk(_ v: UIView) {
+      if let sv = v as? UIScrollView, sv !== self.web.scrollView, sv.keyboardDismissMode != .interactive { sv.keyboardDismissMode = .interactive }
+      v.subviews.forEach(walk)
+    }
+    walk(web.scrollView)
+  }
+  // where the keyboard's top is right now, even mid-drag (iOS's keyboard layout guide follows the finger)
+  lazy var kbGuideView: UIView = {
+    let v = UIView(); v.alpha = 0; v.isUserInteractionEnabled = false; v.translatesAutoresizingMaskIntoConstraints = false
+    self.view.insertSubview(v, at: 0)
+    NSLayoutConstraint.activate([v.leadingAnchor.constraint(equalTo: self.view.leadingAnchor), v.widthAnchor.constraint(equalToConstant: 1),
+                                 v.topAnchor.constraint(equalTo: self.view.keyboardLayoutGuide.topAnchor), v.bottomAnchor.constraint(equalTo: self.view.bottomAnchor)])
+    return v
+  }()
+  func followCover() -> CGFloat {
+    view.layoutIfNeeded()
+    let y = kbGuideView.layer.presentation()?.frame.minY ?? kbGuideView.frame.minY
+    let c = max(0, view.bounds.maxY - y)
+    return c <= view.safeAreaInsets.bottom + 1 ? 0 : c       // (with no keyboard the guide rests on the safe area)
+  }
+  var followLink: CADisplayLink?
+  var followUntil: CFTimeInterval = .greatestFiniteMagnitude
+  func startFollow() {
+    guard keyboardUp, followLink == nil, kbLink == nil else { return }
+    _ = kbGuideView
+    followUntil = .greatestFiniteMagnitude
+    let l = CADisplayLink(target: self, selector: #selector(followTick))
+    if #available(iOS 15.0, *) { l.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120) }
+    l.add(to: .main, forMode: .common)
+    followLink = l
+  }
+  func stopFollow() { followLink?.invalidate(); followLink = nil }
+  @objc func followTick() {
+    if CACurrentMediaTime() >= followUntil || kbLink != nil { stopFollow(); return }
+    let c = followCover()
+    kbProbe.frame = CGRect(x: 0, y: view.bounds.maxY - c, width: 1, height: 1)   // (a following slide starts from here)
+    sendKb(Int(c.rounded()))
   }
   func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
   func keyboardMoves(_ n: Notification, gone: Bool = false) {
@@ -244,7 +298,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       cover = max(0, view.bounds.maxY - r.minY)
     }
     keyboardUp = cover > 0
-    if keyboardUp { if pull.view == nil { web.addGestureRecognizer(pull) } } else if pull.view != nil { web.removeGestureRecognizer(pull) }
+    if keyboardUp { interactiveScrolls(); if pull.view == nil { web.addGestureRecognizer(pull) } } else if pull.view != nil { web.removeGestureRecognizer(pull) }
     if cover == keyboardCover { return }
     keyboardCover = cover
     let dur = (n.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double) ?? 0.25
@@ -266,6 +320,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     return max(0, view.bounds.maxY - y)
   }
   func rideKeyboard(to cover: CGFloat, duration: Double, curve: UInt) {
+    stopFollow()
     if kbProbe.superview == nil { view.insertSubview(kbProbe, at: 0); kbProbe.frame = CGRect(x: 0, y: view.bounds.maxY, width: 1, height: 1) }
     let now = probeCover()                                   // (from where it is now, if the last move hasn't finished)
     kbProbe.layer.removeAllAnimations()
