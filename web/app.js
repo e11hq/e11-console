@@ -218,8 +218,10 @@ const Haptic = (() => {
   if (Host.isIOSApp) setTimeout(check, 0);
   // tabs inside the page (task Details / Comments, To Do / Done, Inbox…): also when swiped to, which clicks the button
   document.addEventListener('click', (e) => {
-    const b = e.target.closest && e.target.closest('.ph-seg button, .ph-chips button');
+    const b = e.target.closest && e.target.closest('.ph-seg button, .ph-chips button, .team-tabs .mt-tab');
     if (b && !b.classList.contains('on')) fire('selection');
+    // the + for a new quick task: a light knock as its sheet comes up
+    else if (e.target.closest && e.target.closest('.ph-fab, [data-ph="quick-add"]')) fire('light');
   }, true);
   return { on: () => { check(); return !!on; }, light: () => fire('light'), medium: () => fire('medium'), select: () => fire('selection'), success: () => fire('success'), warn: () => fire('warning') };
 })();
