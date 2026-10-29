@@ -1581,7 +1581,21 @@ const Push = (() => {
     root.classList.toggle('ios-kb-up', px > 0);
     if (px > 0) reveal();
   };
-  window.__e11KbStep = (px) => { root.style.setProperty('--ios-kb', Math.max(0, Number(px) || 0) + 'px'); };
+  window.__e11KbStep = (px) => {
+    const v = Math.max(0, Number(px) || 0) + 'px';
+    root.style.setProperty('--ios-kb-now', v);
+    if (!root.classList.contains('ios-kb-moving')) root.style.setProperty('--ios-kb', v);
+    else if (!document.querySelector('#detail.open .tm')) root.style.setProperty('--ios-kb', v);   // (no open task: pop-ups follow as before)
+  };
+  // while the keyboard moves (iPhone app 7+): the open task keeps its full height and only the comment box slides —
+  // a move the phone's graphics do by themselves, no new layout every frame (that's what made the box jerk); the
+  // task's layout changes once, when the keyboard stops
+  window.__e11KbMove = (on, px) => {
+    if (on) { root.style.setProperty('--ios-kb-now', getComputedStyle(root).getPropertyValue('--ios-kb') || '0px'); root.classList.add('ios-kb-moving'); return; }
+    const v = Math.max(0, Number(px) || 0) + 'px';
+    root.style.setProperty('--ios-kb', v); root.style.setProperty('--ios-kb-now', v);
+    root.classList.remove('ios-kb-moving');
+  };
   function reveal() {
     const a = document.activeElement;
     if (!a || !a.closest || a.closest('#detail, .ph-scrim, .scrim, .menu') || !a.closest('#content')) { root.classList.remove('ios-kb-content'); return; }

@@ -268,8 +268,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   func followCover() -> CGFloat {
     view.layoutIfNeeded()
     let y = kbGuideView.layer.presentation()?.frame.minY ?? kbGuideView.frame.minY
-    let c = max(0, view.bounds.maxY - y)
-    return c <= view.safeAreaInsets.bottom + 1 ? 0 : c       // (with no keyboard the guide rests on the safe area)
+    return max(0, view.bounds.maxY - y)   // (the last bit, below the home bar, is finished by the hide animation)
   }
   var followLink: CADisplayLink?
   var followUntil: CFTimeInterval = .greatestFiniteMagnitude
@@ -281,13 +280,38 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if #available(iOS 15.0, *) { l.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120) }
     l.add(to: .main, forMode: .common)
     followLink = l
+    moving(true)
   }
-  func stopFollow() { followLink?.invalidate(); followLink = nil }
+  func stopFollow(settle: Bool = false) {
+    guard let l = followLink else { return }
+    l.invalidate(); followLink = nil
+    if settle { moving(false) }
+  }
   @objc func followTick() {
-    if CACurrentMediaTime() >= followUntil || kbLink != nil { stopFollow(); return }
+    if kbLink != nil { stopFollow(); return }                          // (a slide took over)
     let c = followCover()
+    if CACurrentMediaTime() >= followUntil { stopFollow(settle: true); return }
     kbProbe.frame = CGRect(x: 0, y: view.bounds.maxY - c, width: 1, height: 1)   // (a following slide starts from here)
-    sendKb(Int(c.rounded()))
+    sendKb(lead(c))
+  }
+  // The page draws a frame or two after it's told: aim the box where the keyboard will be by then (its speed over the
+  // last frame), never past where it's going — so it doesn't trail behind, under the keyboard
+  var lastCover: CGFloat = -1
+  func lead(_ c: CGFloat, toward target: CGFloat? = nil) -> Int {
+    defer { lastCover = c }
+    guard lastCover >= 0 else { return Int(c.rounded()) }
+    var p = c + (c - lastCover) * 1.5
+    p = max(0, min(max(keyboardCover, c, lastCover) , p))
+    if let t = target { p = c <= t ? min(p, t) : max(p, t) }
+    return Int(p.rounded())
+  }
+  // the page: the keyboard starts / stops moving (the comment box slides on its own meanwhile; one layout at the end)
+  var isMoving = false
+  func moving(_ on: Bool) {
+    if on == isMoving { return }
+    isMoving = on
+    if on { lastCover = -1; pageJS("window.__e11KbMove && window.__e11KbMove(1)") }
+    else { kbSent = Int(keyboardCover.rounded()); pageJS("window.__e11KbMove && window.__e11KbMove(0, \(kbSent))") }
   }
   func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
   func keyboardMoves(_ n: Notification, gone: Bool = false) {
@@ -321,12 +345,13 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   func rideKeyboard(to cover: CGFloat, duration: Double, curve: UInt) {
     stopFollow()
+    moving(true)
     if kbProbe.superview == nil { view.insertSubview(kbProbe, at: 0); kbProbe.frame = CGRect(x: 0, y: view.bounds.maxY, width: 1, height: 1) }
     let now = probeCover()                                   // (from where it is now, if the last move hasn't finished)
     kbProbe.layer.removeAllAnimations()
     kbProbe.frame = CGRect(x: 0, y: view.bounds.maxY - now, width: 1, height: 1)
     kbTarget = Int(cover.rounded())
-    guard duration > 0.01 else { kbProbe.frame.origin.y = view.bounds.maxY - cover; sendKb(kbTarget); return }
+    guard duration > 0.01 else { kbProbe.frame.origin.y = view.bounds.maxY - cover; sendKb(kbTarget); moving(false); return }
     UIView.animate(withDuration: duration, delay: 0, options: [UIView.AnimationOptions(rawValue: curve << 16), .beginFromCurrentState]) {
       self.kbProbe.frame.origin.y = self.view.bounds.maxY - cover
     }
@@ -339,8 +364,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     }
   }
   @objc func kbTick() {
-    if CACurrentMediaTime() >= kbUntil { kbLink?.invalidate(); kbLink = nil; sendKb(kbTarget); return }
-    sendKb(Int(probeCover().rounded()))
+    if CACurrentMediaTime() >= kbUntil { kbLink?.invalidate(); kbLink = nil; sendKb(kbTarget); moving(false); return }
+    sendKb(lead(probeCover(), toward: CGFloat(kbTarget)))
   }
   func sendKb(_ px: Int) {
     if px == kbSent { return }
