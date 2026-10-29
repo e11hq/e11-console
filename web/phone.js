@@ -237,26 +237,37 @@ const Phone = (() => {
     </div>`;
   }
 
+  // (iPhone app 10+: Pager — every tab's list is drawn side by side and iOS swipes between them)
+  const pgOn = () => typeof Pager !== 'undefined' && Pager.lists();
+  const pgCols = (key, cur, cols) => `<div class="pg-wrap" data-pg="${key}" data-cur="${cur}">${cols.map(([k, html]) => `<div class="pg-col" data-k="${k}">${html}</div>`).join('')}</div>`;
   function myTasks() {
     const tab = ui.myTasksTab === 'done' ? 'done' : 'todo';
     const L = Work.list(), doneAt = Work.doneAtOf;
     const open = L.filter(Work.openOf);
-    let body;
-    if (tab === 'done') {
-      const cutoff = Date.now() - AUTO_DELETE_DAYS * 86400000;
-      const list = L.filter((t) => doneAt(t) && new Date(doneAt(t)).getTime() > cutoff).sort((a, b) => doneAt(b).localeCompare(doneAt(a)));
-      body = group('Last 30 days', list, { empty: 'Tasks you complete show here.', status: false });
-    } else {
-      body = group('Overdue', open.filter((t) => t.due && dayDiff(t.due) < 0).sort(byDayThenPrio))
+    const bodyOf = (tb) => {
+      if (tb === 'done') {
+        const cutoff = Date.now() - AUTO_DELETE_DAYS * 86400000;
+        const list = L.filter((t) => doneAt(t) && new Date(doneAt(t)).getTime() > cutoff).sort((a, b) => doneAt(b).localeCompare(doneAt(a)));
+        return group('Last 30 days', list, { empty: 'Tasks you complete show here.', status: false });
+      }
+      return group('Overdue', open.filter((t) => t.due && dayDiff(t.due) < 0).sort(byDayThenPrio))
         + group('Today', open.filter((t) => t.due && dayDiff(t.due) === 0).sort(byDayThenPrio), { empty: 'Nothing due today 🎉' })
         + group('Next', open.filter((t) => t.due && dayDiff(t.due) > 0).sort(byDayThenPrio))
         + group('No due date', open.filter((t) => !t.due).sort((a, b) => byPrio(a, b) || a.createdAt.localeCompare(b.createdAt)));
-    }
+    };
+    const seg = `<div class="ph-seg"><button class="${tab === 'todo' ? 'on' : ''}" data-action="mt-tab" data-tab="todo" data-pg-k="todo">To Do</button><button class="${tab === 'done' ? 'on' : ''}" data-action="mt-tab" data-tab="done" data-pg-k="done">Done</button></div>`;
+    if (pgOn()) return `<div class="ph-page pg-page">
+      ${head('My Tasks', plural(open.length, 'open task'))}
+      ${seg}
+      ${workFilterBar()}
+      ${pgCols('mytasks', tab, [['todo', `<div class="ph-list">${bodyOf('todo')}</div>`], ['done', `<div class="ph-list">${bodyOf('done')}</div>`]])}
+      ${fab()}
+    </div>`;
     return `<div class="ph-page">
       ${head('My Tasks', plural(open.length, 'open task'))}
-      <div class="ph-seg"><button class="${tab === 'todo' ? 'on' : ''}" data-action="mt-tab" data-tab="todo">To Do</button><button class="${tab === 'done' ? 'on' : ''}" data-action="mt-tab" data-tab="done">Done</button></div>
+      ${seg}
       ${workFilterBar()}
-      <div class="ph-list">${body}</div>
+      <div class="ph-list">${bodyOf(tab)}</div>
       ${fab()}
     </div>`;
   }
@@ -265,29 +276,35 @@ const Phone = (() => {
     const all = myNotifs();
     const unreadN = all.filter((n) => !n.read).length;
     const f = st.ibf;
-    const list = all.filter((n) => (f === 'unread' ? !n.read : f === 'mentions' ? n.kind === 'mention' : true)).sort((a, b) => b.at.localeCompare(a.at));
-    const byTask = new Map();
-    list.forEach((n) => { const k = notifKey(n); if (!byTask.has(k)) byTask.set(k, []); byTask.get(k).push(n); });
-    const rows = [...byTask.values()].slice(0, 200).map((items) => {
-      const n = items[0];
-      const t = task(n.taskId);
-      const unread = items.some((x) => !x.read);
-      const target = ibTarget(items);   // (opens what the row shows: the newest, or an unread one needing action)
-      return `<div class="ph-ib ${unread ? 'unread' : ''}" data-action="open-notif" data-id="${target.id}">
+    const rowsOf = (ff) => {
+      const list = all.filter((n) => (ff === 'unread' ? !n.read : ff === 'mentions' ? n.kind === 'mention' : true)).sort((a, b) => b.at.localeCompare(a.at));
+      const byTask = new Map();
+      list.forEach((n) => { const k = notifKey(n); if (!byTask.has(k)) byTask.set(k, []); byTask.get(k).push(n); });
+      const rows = [...byTask.values()].slice(0, 200).map((items) => {
+        const n = items[0];
+        const t = task(n.taskId);
+        const unread = items.some((x) => !x.read);
+        const target = ibTarget(items);   // (opens what the row shows: the newest, or an unread one needing action)
+        return `<div class="ph-ib ${unread ? 'unread' : ''}" data-action="open-notif" data-id="${target.id}">
         ${avatarHTML(target.from, 40)}
         <span class="ph-ib-b"><span class="ph-ib-m">${notifMsg(target, t)}</span>
           <span class="ph-ib-t">${n.kind === 'sched-cancel' ? `Scheduled ${/scheduled reply/.test(n.text || '') ? 'reply' : 'comment'}` : t ? esc(t.title || 'Untitled task') : n.kind === 'birthday' ? 'Birthday' : n.kind === 'daily' ? 'Morning round-up' : /^claim/.test(n.kind) ? 'Expense claims' : n.kind === 'asset' ? esc(assetTitle(n)) : n.planId ? esc(planTitle(n)) : '<i>Deleted task</i>'}</span>
           <span class="ph-ib-w">${esc(timeAgo(n.at))}${items.length > 1 ? ` · ${items.length} updates` : ''}</span></span>
         ${unread ? '<i class="ph-ib-dot"></i>' : ''}
       </div>`;
-    }).join('');
-    const chip = (k, l) => `<button class="${f === k ? 'on' : ''}" data-ph="ibf" data-k="${k}">${l}</button>`;
+      }).join('');
+      return `<div class="ph-ibl">${rows || `<div class="ph-empty big">${ff === 'unread' ? 'Inbox zero 🎉<small>New updates and @mentions land here.</small>' : 'Nothing here yet'}</div>`}</div>`;
+    };
+    const chip = (k, l) => `<button class="${f === k ? 'on' : ''}" data-ph="ibf" data-k="${k}" data-pg-k="${k}"><span>${l}</span></button>`;
+    const top = `${head('Inbox', unreadN ? plural(unreadN, 'unread update') : 'All caught up', unreadN ? '<button class="ph-pill" data-action="mark-all-read">Mark all read</button>' : '')}
+      <div class="ph-chips">${chip('unread', `Unread${unreadN ? ' ' + unreadN : ''}`)}${chip('all', 'All')}${chip('mentions', 'Mentions')}</div>`;
+    if (pgOn()) return `<div class="ph-page pg-page">${top}${pgCols('inbox', f, ['unread', 'all', 'mentions'].map((k) => [k, rowsOf(k)]))}</div>`;
     return `<div class="ph-page">
-      ${head('Inbox', unreadN ? plural(unreadN, 'unread update') : 'All caught up', unreadN ? '<button class="ph-pill" data-action="mark-all-read">Mark all read</button>' : '')}
-      <div class="ph-chips">${chip('unread', `Unread${unreadN ? ' ' + unreadN : ''}`)}${chip('all', 'All')}${chip('mentions', 'Mentions')}</div>
-      <div class="ph-ibl">${rows || `<div class="ph-empty big">${f === 'unread' ? 'Inbox zero 🎉<small>New updates and @mentions land here.</small>' : 'Nothing here yet'}</div>`}</div>
+      ${top}
+      ${rowsOf(f)}
     </div>`;
   }
+
 
   function reviews() {
     if (!isCD()) return `<div class="ph-page">${head('Reviews')}<div class="ph-empty big">Only the Creative Director sees review requests</div></div>`;
@@ -723,7 +740,7 @@ const Phone = (() => {
   });
 
   check();
-  return { get on() { return st.on; }, isOn, renderContent, decorate, chrome, taskHead, quickAdd, check, sheet, resetInbox: () => { st.ibf = 'unread'; } };
+  return { get on() { return st.on; }, isOn, renderContent, decorate, chrome, taskHead, quickAdd, check, sheet, resetInbox: () => { st.ibf = 'unread'; }, setIbf: (k) => { st.ibf = k; } };
 })();
 
 /* Phone notifications (Web Push): the switch on the Me page, and opening a task from a notification */
@@ -1105,6 +1122,7 @@ const Push = (() => {
       const btns = $$('#detail .ph-task-head .ph-seg button');
       return btns.length > 1 ? { btns, area: () => [$('#detail .tm-body')].filter(Boolean) } : null;
     }
+    if ($('#content .pg-page')) return null;   // (iPhone app 10+: iOS swipes these lists itself)
     const btns = $$('#content .ph-seg button').length ? $$('#content .ph-seg button') : $$('#content .ph-chips button');
     return btns.length > 1 ? { btns, area: () => below($$('#content .ph-seg button, #content .ph-chips button')[0], $('#content > .ph-page')) } : null;
   }
@@ -1615,13 +1633,15 @@ const Push = (() => {
    finger; the tab changes when the page settles (no redraw). A tap on Details / Comments glides there. A swipe from
    the very left edge is still "back". Older apps, the browser and the Mac app keep the swipe below (JS). */
 const Pager = (() => {
-  let on = false;
+  let on = false, lists = false;   // on: a task's Details / Comments (app 9+) · lists: My Tasks, Inbox, Team (app 10+)
   const root = document.documentElement;
   if (typeof Host !== 'undefined' && Host.isIOSApp) {
     NativeMac.call('appInfo').then((r) => {
       on = Number(r && r.shell) >= 9;
+      lists = Number(r && r.shell) >= 10;
       root.classList.toggle('ph-pager', on);
       if (on && ui.taskId) sync(true);
+      if (lists && Phone.on && ['mytasks', 'inbox', 'team'].includes(ui.view)) renderContent();
     }).catch(() => {});
   }
   const body = () => document.querySelector('#detail .tm-body');
@@ -1694,13 +1714,86 @@ const Pager = (() => {
   }, true);
   // a swipe from the very left edge is "back": the pages don't move under it
   document.addEventListener('touchstart', (e) => {
-    if (!on || !Phone.on || !ui.taskId) return;
+    if (!on || !Phone.on) return;
     const t = e.touches[0];
-    const d = document.getElementById('detail');
-    if (d) d.classList.toggle('pg-lock', !!t && t.clientX <= 28);
+    const edge = !!t && t.clientX <= 28;
+    ['detail', 'content'].forEach((id) => { const d = document.getElementById(id); if (d) d.classList.toggle('pg-lock', edge); });
   }, { passive: true, capture: true });
-  const unlock = () => { const d = document.getElementById('detail'); if (d) d.classList.remove('pg-lock'); };
+  const unlock = () => ['detail', 'content'].forEach((id) => { const d = document.getElementById(id); if (d) d.classList.remove('pg-lock'); });
   document.addEventListener('touchend', unlock, true);
   document.addEventListener('touchcancel', unlock, true);
-  return { on: () => on, sync };
+
+  /* My Tasks (To Do / Done), Inbox (Unread / All / Mentions), Team (Active / Past): every tab's list sits side by side
+     in .pg-wrap and iOS scrolls between them; the highlight under the tabs follows the finger */
+  const vScroll = {};   // each list's own up/down position, kept across redraws ("mytasks:done" → px)
+  const lw = () => document.querySelector('#content .pg-page .pg-wrap');
+  const ltabs = () => [...document.querySelectorAll('#content .pg-page [data-pg-k]')];
+  let lTapped = false, lSettleT = null, lNear = null;
+  function paintList(p) {
+    const btns = ltabs();
+    if (btns.length < 2) return;
+    const box = btns[0].parentElement;
+    let ind = box.querySelector(':scope > .pg-ind');
+    if (!ind) { box.insertAdjacentHTML('afterbegin', '<span class="pg-ind" aria-hidden="true"></span>'); ind = box.querySelector(':scope > .pg-ind'); }
+    p = Math.max(0, Math.min(btns.length - 1, p));
+    const i = Math.min(btns.length - 2, Math.floor(p)), f = p - i;
+    const a = btns[i], z = btns[i + 1];
+    const x = a.offsetLeft + (z.offsetLeft - a.offsetLeft) * f, w = a.offsetWidth + (z.offsetWidth - a.offsetWidth) * f;
+    const a0 = btns[0];
+    ind.style.left = a0.offsetLeft + 'px'; ind.style.top = a0.offsetTop + 'px'; ind.style.height = a0.offsetHeight + 'px';
+    ind.style.width = w + 'px';
+    ind.style.transform = `translate3d(${x - a0.offsetLeft}px, 0, 0)`;
+    btns.forEach((b, j) => b.classList.toggle('pg-near', Math.round(p) === j));
+  }
+  function syncLists() {
+    if (!lists || !Phone.on) return;
+    const w = lw();
+    if (!w) return;
+    const key = w.dataset.pg;
+    const cols = [...w.children];
+    const idx = Math.max(0, cols.findIndex((c) => c.dataset.k === w.dataset.cur));
+    cols.forEach((c) => {
+      const y = vScroll[key + ':' + c.dataset.k];
+      if (y) c.scrollTop = y;
+      c.addEventListener('scroll', () => { vScroll[key + ':' + c.dataset.k] = c.scrollTop; }, { passive: true });
+    });
+    w.scrollLeft = idx * width(w);
+    paintList(idx);
+    lNear = idx; lTapped = false;
+    w.addEventListener('scroll', () => {
+      const p = w.scrollLeft / width(w);
+      paintList(p);
+      const near = Math.round(p);
+      if (near !== lNear && !lTapped) Haptic.select();
+      lNear = near;
+      clearTimeout(lSettleT);
+      lSettleT = setTimeout(() => settleList(w), 90);
+    }, { passive: true });
+  }
+  function settleList(w) {
+    if (!w.isConnected) return;
+    const p = w.scrollLeft / width(w);
+    if (Math.abs(p - Math.round(p)) > 0.02) return;
+    const col = w.children[Math.round(p)];
+    lTapped = false;
+    if (!col || col.dataset.k === w.dataset.cur) return;
+    const k = col.dataset.k;
+    w.dataset.cur = k;
+    if (w.dataset.pg === 'mytasks') ui.myTasksTab = k;
+    else if (w.dataset.pg === 'inbox') Phone.setIbf(k);
+    else if (w.dataset.pg === 'team') ui.teamTab = k;
+    ltabs().forEach((b) => { b.classList.toggle('on', b.dataset.pgK === k); if (b.hasAttribute('aria-selected')) b.setAttribute('aria-selected', String(b.dataset.pgK === k)); });
+  }
+  document.addEventListener('click', (e) => {
+    if (!lists || !Phone.on) return;
+    const btn = e.target.closest && e.target.closest('#content .pg-page [data-pg-k]');
+    const w = lw();
+    if (!btn || !w) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    const i = [...w.children].findIndex((c) => c.dataset.k === btn.dataset.pgK);
+    if (i < 0) return;
+    lTapped = true;
+    w.scrollTo({ left: i * width(w), behavior: 'smooth' });
+  }, true);
+  return { on: () => on, lists: () => lists, sync, syncLists };
 })();

@@ -1006,3 +1006,34 @@ html.ph-pager body.phone #detail .ph-seg.in-task button.pg-near { color: var(--t
 html.ph-pager body.phone #detail .ph-seg.in-task button:not(.pg-near) { color: var(--text-2); }
 html.ph-pager body.phone #detail .ph-seg-ind { position: absolute; z-index: 0; border-radius: 7px; background: var(--active); box-shadow: inset 0 0 0 1px var(--ph-edge); pointer-events: none; will-change: transform; }
 html.ph-pager[data-theme="light"] body.phone #detail .ph-seg-ind { background: #fff; }
+
+/* iPhone app 10+: My Tasks, Inbox and Team — each tab's list sits side by side and iOS swipes between them (Pager in phone.js) */
+html.ph-pager body.phone #content:has(> .pg-page:not(.pg-flow)) { overflow: hidden; padding-bottom: 0; }
+html.ph-pager body.phone #content > .pg-page:not(.pg-flow) { height: 100%; display: flex; flex-direction: column; box-sizing: border-box; padding-bottom: 0 !important; }
+html.ph-pager body.phone #content > .pg-page > * { flex: none; }
+html.ph-pager body.phone #content > .pg-page > .pg-wrap { flex: 1 1 auto; min-height: 0; display: flex; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+html.ph-pager body.phone .pg-wrap::-webkit-scrollbar { display: none; }
+html.ph-pager body.phone #content.pg-lock .pg-wrap { overflow-x: hidden; }
+html.ph-pager body.phone .pg-col { flex: none; width: 100%; height: 100%; overflow-y: auto; overflow-x: hidden; scroll-snap-align: start; scroll-snap-stop: always; padding-bottom: calc(var(--ph-tabs-h) + 24px); box-sizing: border-box; overscroll-behavior-y: contain; }
+html.ph-pager body.phone .team.pg-page > .pg-wrap { margin: 0 -16px; }
+html.ph-pager body.phone .team.pg-page .pg-col { padding-left: 16px; padding-right: 16px; }
+/* the highlight that follows the finger */
+html.ph-pager body.phone .pg-page .ph-seg, html.ph-pager body.phone .pg-page .ph-chips, html.ph-pager body.phone .pg-page .team-tabs { position: relative; }
+html.ph-pager body.phone .pg-ind { position: absolute; pointer-events: none; will-change: transform, width; }
+html.ph-pager body.phone .pg-page .ph-seg [data-pg-k] { position: relative; z-index: 1; background: transparent !important; box-shadow: none !important; transition: color .15s; }
+html.ph-pager body.phone .pg-page .ph-seg [data-pg-k].pg-near { color: var(--text); }
+html.ph-pager body.phone .pg-page .ph-seg [data-pg-k]:not(.pg-near) { color: var(--text-2); }
+html.ph-pager body.phone .pg-page .ph-seg .pg-ind { z-index: 0; border-radius: 7px; background: var(--active); box-shadow: inset 0 0 0 1px var(--ph-edge); }
+html.ph-pager[data-theme="light"] body.phone .pg-page .ph-seg .pg-ind { background: #fff; }
+html.ph-pager body.phone .pg-page .ph-chips [data-pg-k], html.ph-pager[data-theme="light"] body.phone .pg-page .ph-chips [data-pg-k] { isolation: auto !important; background: var(--ph-raise); border-color: var(--ph-line); color: var(--text-2); transition: color .15s; }
+html.ph-pager body.phone .pg-page .ph-chips [data-pg-k].pg-near { color: var(--accent-ink); }
+html.ph-pager body.phone .pg-page .ph-chips [data-pg-k] > span { position: relative; z-index: 3; }
+html.ph-pager body.phone .pg-page .ph-chips [data-pg-k]::before { display: none; }
+html.ph-pager body.phone .pg-page .ph-chips .pg-ind { z-index: 2; border-radius: 8px; background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent-line); }
+html.ph-pager body.phone .pg-page .team-tabs [data-pg-k] { border-bottom-color: transparent !important; transition: color .15s; }
+html.ph-pager body.phone .pg-page .team-tabs [data-pg-k].pg-near { color: var(--text); }
+html.ph-pager body.phone .pg-page .team-tabs [data-pg-k]:not(.pg-near) { color: var(--text-3); }
+html.ph-pager body.phone .pg-page .team-tabs .pg-ind { z-index: 2; height: 2px !important; top: auto !important; bottom: -1px; background: var(--accent); border-radius: 1px; }
+/* Team: the heading scrolls away with the list (it's tall on a phone); only Active ↔ Past slide sideways */
+html.ph-pager body.phone #content > .pg-flow > .pg-wrap { flex: none; display: flex; align-items: flex-start; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; scrollbar-width: none; }
+html.ph-pager body.phone .pg-flow .pg-col { height: auto; overflow: visible; padding-bottom: 0; }

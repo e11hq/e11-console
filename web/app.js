@@ -2801,6 +2801,7 @@ function renderContent() {
   const had = new Map();
   if (c) c.querySelectorAll('img').forEach((im) => { if (im.complete && im.naturalWidth && im.src) { const l = had.get(im.src) || []; l.push(im); had.set(im.src, l); } });
   renderContentNow();
+  if (typeof Pager !== 'undefined') Pager.syncLists();
   if (!c || !had.size) return;
   c.querySelectorAll('img').forEach((im) => {
     const l = had.get(im.src); const old = l && l.shift();
@@ -7766,18 +7767,8 @@ function viewTeam() {
   const all = db.users.slice().sort((a, b) => fullName(a).localeCompare(fullName(b)));
   const current = all.filter((u) => u.active !== false), past = all.filter((u) => u.active === false);
   const tab = ui.teamTab === 'past' ? 'past' : 'active';
-  const users = tab === 'past' ? past : current;
-  return `<div class="team">
-    <div class="team-head">
-      <div><div class="team-title">${current.length} member${current.length === 1 ? '' : 's'}</div><div class="team-sub">${admin ? (Host.isServer ? `Only Admins can add people. New members sign in at ${esc(location.host)} with their email — no password needed.` : 'Only Admins can add people. New members sign in with the email and temporary password you give them, then set their own password.') : 'Only Admins can add or change team members.'}</div>${admin && Host.isServer ? '<div class="cf-status" id="cf-status"></div>' : ''}</div>
-      <span class="spacer"></span>
-      ${admin ? `<button class="btn primary" data-action="add-member">${icon('plus')}Add member</button>` : ''}
-    </div>
-    <div class="mt-tabs team-tabs" role="tablist">
-      <button class="mt-tab ${tab === 'active' ? 'on' : ''}" role="tab" aria-selected="${tab === 'active'}" data-action="team-tab" data-tab="active">Active members <span>${current.length}</span></button>
-      <button class="mt-tab ${tab === 'past' ? 'on' : ''}" role="tab" aria-selected="${tab === 'past'}" data-action="team-tab" data-tab="past">Past members <span>${past.length}</span></button>
-    </div>
-    ${tab === 'past' && !past.length ? '<div class="empty"><div class="big">No past members</div>People you remove from the team show here, and you can restore their access.</div>' : `<div class="team-table">
+  const pg = Phone.on && typeof Pager !== 'undefined' && Pager.lists();   // (iPhone app 10+: iOS swipes Active ↔ Past)
+  const listOf = (tb) => { const users = tb === 'past' ? past : current; return `${tb === 'past' && !past.length ? '<div class="empty"><div class="big">No past members</div>People you remove from the team show here, and you can restore their access.</div>' : `<div class="team-table">
       <div class="tt-row tt-head"><div>Name</div><div>Email</div><div>Role</div><div>Status</div><div>Creative Director</div><div></div></div>
       ${users.map((u) => `<div class="tt-row ${u.active === false ? 'inactive' : ''}">
         <div class="tt-name">${avatarHTML(u.id, 30)}<span>${esc(fullName(u))}${u.id === currentUserId ? ' <small>(you)</small>' : ''}</span></div>
@@ -7787,8 +7778,8 @@ function viewTeam() {
         ${cdCell(u, admin)}
         <div>${admin ? `<button class="icon-btn sm" data-action="member-menu" data-id="${u.id}" title="Manage">${icon('more')}</button>` : ''}</div>
       </div>`).join('')}
-    </div>`}
-    <div class="role-guide">
+    </div>`}`; };
+  const guide = `<div class="role-guide">
       <div><span class="role-pill r-admin">Super Admin</span> Full access, and can add or manage team members.</div>
       <div><span class="role-pill r-office_admin">Office Admin</span> Admin rights without the task app: manages team members and Client Assets (full rights), with Finance if given. Doesn’t see tasks or add/edit clients; in the Trash sees and restores Client Assets items only.</div>
       <div><span class="role-pill r-am">Account Manager</span> Can do everything except add or manage team members.</div>
@@ -7797,7 +7788,18 @@ function viewTeam() {
       ${Plans.on() ? '<div><span class="role-pill r-social">Social Manager</span> A Social person picked in the ••• menu. Can start and edit any client’s content plan (Social Executives: the clients they’re set on in the client pop-up). Trial on the test site.</div>' : ''}
       <div><span class="role-pill r-finance_admin">Finance only</span> Only sees the Finance pages (Dashboard, Clients, Expenses) — no tasks app. As Admin they add subscriptions, reimbursements and expenses; as Viewer they only look.</div>
       <div><span class="role-pill r-admin">+ Super Admin</span> <span class="role-pill r-finance_admin">+ Finance Admin / Viewer</span> Extras anyone can have on top of their role (••• menu): full Super Admin rights, or the Finance pages. A task’s Finance status is set by Account Managers and Admins.</div>
+    </div>`;
+  return `<div class="team${pg ? ' pg-page pg-flow' : ''}">
+    <div class="team-head">
+      <div><div class="team-title">${current.length} member${current.length === 1 ? '' : 's'}</div><div class="team-sub">${admin ? (Host.isServer ? `Only Admins can add people. New members sign in at ${esc(location.host)} with their email — no password needed.` : 'Only Admins can add people. New members sign in with the email and temporary password you give them, then set their own password.') : 'Only Admins can add or change team members.'}</div>${admin && Host.isServer ? '<div class="cf-status" id="cf-status"></div>' : ''}</div>
+      <span class="spacer"></span>
+      ${admin ? `<button class="btn primary" data-action="add-member">${icon('plus')}Add member</button>` : ''}
     </div>
+    <div class="mt-tabs team-tabs" role="tablist">
+      <button class="mt-tab ${tab === 'active' ? 'on' : ''}" role="tab" aria-selected="${tab === 'active'}" data-action="team-tab" data-tab="active" data-pg-k="active">Active members <span>${current.length}</span></button>
+      <button class="mt-tab ${tab === 'past' ? 'on' : ''}" role="tab" aria-selected="${tab === 'past'}" data-action="team-tab" data-tab="past" data-pg-k="past">Past members <span>${past.length}</span></button>
+    </div>
+    ${pg ? `<div class="pg-wrap" data-pg="team" data-cur="${tab}">${['active', 'past'].map((k) => `<div class="pg-col" data-k="${k}">${listOf(k)}${guide}</div>`).join('')}</div>` : listOf(tab) + guide}
   </div>`;
 }
 
