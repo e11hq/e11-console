@@ -903,7 +903,7 @@ async function loadUpdates(action) {
     }
   }
   if (!st.managed && s.managed === false) { el.innerHTML = `<h3>${icon('download')}App updates</h3><p class="upd-note">This copy (${esc(s.running)}) isn’t managed by the updater.</p>`; return; }
-  const hour = st.updateHour == null ? null : `${String(st.updateHour).padStart(2, '0')}:00`;
+  const hour = st.updateHour == null || st.updateHour === 'now' ? null : `${String(st.updateHour).padStart(2, '0')}:00`;
   el.innerHTML = `
     <h3>${icon('download')}App updates</h3>
     <div class="upd-row"><span>Running</span><b>${esc(st.running || st.current || '—')}</b>${st.channel === 'staging' ? '<span class="upd-chip">Test copy</span>' : ''}</div>

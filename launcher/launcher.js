@@ -22,7 +22,9 @@ export function createLauncher(opts = {}) {
   const CHANNEL = env.UPDATE_CHANNEL === 'staging' ? 'staging' : 'stable';
   const PORT = Number(env.PORT || 8080);
   const CONTROL_PORT = Number(env.LAUNCHER_PORT || 8090);
-  const UPDATE_HOUR = env.UPDATE_HOUR === 'off' ? null : Number(env.UPDATE_HOUR || 2);   // stable: install at 2 AM
+  // stable: install at 2 AM · 'now': as soon as a new release is found (the App Review copy, which follows live) · 'off': only on a click
+  const NOW = String(env.UPDATE_HOUR || '').toLowerCase() === 'now';
+  const UPDATE_HOUR = env.UPDATE_HOUR === 'off' || NOW ? null : Number(env.UPDATE_HOUR || 2);
   const CHECK_MIN = Number(env.CHECK_EVERY_MIN || (CHANNEL === 'staging' ? 5 : 60));
   const HEALTH_TIMEOUT = Number(env.HEALTH_TIMEOUT_MS || 30000);
   const log = opts.log || ((...a) => console.log(new Date().toISOString(), '[launcher]', ...a));
@@ -212,7 +214,7 @@ export function createLauncher(opts = {}) {
     const rel = await check();
     if (!rel || rel.version === state.current) return;
     // test copy: install straight away · live copy: wait for the quiet hour (or an Admin's click)
-    if (CHANNEL === 'staging' || (UPDATE_HOUR != null && hourNow() === UPDATE_HOUR)) await updateNow('scheduled');
+    if (CHANNEL === 'staging' || NOW || (UPDATE_HOUR != null && hourNow() === UPDATE_HOUR)) await updateNow('scheduled');
   }
 
   /* ---------- control API for the app (inside the container only) ---------- */
@@ -243,7 +245,7 @@ export function createLauncher(opts = {}) {
   function status() {
     let notes = null;
     try { notes = JSON.parse(fs.readFileSync(path.join(versionDir(state.current || ''), 'RELEASE.json'), 'utf8')); } catch { /* none */ }
-    return { ok: true, channel: CHANNEL, running: childVersion, lastResult, current: state.current, previous: state.previous, available: state.available, lastCheck: state.lastCheck, lastError: state.lastError, busy, updateHour: UPDATE_HOUR, history: (state.history || []).slice(0, 10), currentNotes: notes, tokenSet: !!TOKEN };
+    return { ok: true, channel: CHANNEL, running: childVersion, lastResult, current: state.current, previous: state.previous, available: state.available, lastCheck: state.lastCheck, lastError: state.lastError, busy, updateHour: NOW ? 'now' : UPDATE_HOUR, history: (state.history || []).slice(0, 10), currentNotes: notes, tokenSet: !!TOKEN };
   }
 
   async function start() {
@@ -257,7 +259,8 @@ export function createLauncher(opts = {}) {
       }
     }
     timer = setInterval(() => { tick().catch((e) => log('tick failed', e.message)); }, CHECK_MIN * 60000);
-    setTimeout(() => { check().catch(() => {}); }, 5000);
+    // (installing as soon as found: a version waiting since before this start goes in now, not an interval later)
+    setTimeout(() => { (NOW ? tick() : check()).catch(() => {}); }, 5000);
   }
   async function stop() { stopping = true; clearInterval(timer); await stopFallback(); await stopChild(); if (control) await new Promise((ok) => control.close(ok)); }
 

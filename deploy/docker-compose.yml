@@ -68,7 +68,8 @@ services:
     environment:
       - GITHUB_TOKEN=PASTE_GITHUB_TOKEN
       - UPDATE_CHANNEL=stable
-      - UPDATE_HOUR=2
+      - UPDATE_HOUR=now             # follows live within minutes (not at 2 AM)
+      - CHECK_EVERY_MIN=5
       - TZ=Asia/Dubai
       - REVIEW_PASSWORD=PASTE_REVIEW_PASSWORD   # 10+ characters; the same one goes in App Store Connect › App Review Information
     volumes:
