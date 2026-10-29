@@ -28,9 +28,9 @@
 /* iPhone Home Screen app: the page always runs up under the time and battery (iOS picks dark or light text by itself),
    so pop-up overlays dim the whole screen. Never switch this while the app is open: iOS then resizes the page and
    leaves a dark band at the bottom with taps there not registering. */
-/* The startup colour straight away (remembered look, or time of day on a first start), so nothing dark shows around a light startup screen */
+/* The startup colour straight away (remembered look, dark on a first start), so nothing dark shows around a light startup screen */
 try { var m = JSON.parse(localStorage.getItem('e11-splash') || '{}') || {}, h = new Date().getHours();
-  var lt = (m.themeMode === 'light' || m.themeMode === 'dark') ? m.themeMode === 'light' : (h >= 6 && h < 18); /* Automatic: by daylight, like the app */
+  var lt = m.themeMode === 'auto' ? (h >= 6 && h < 18) : m.themeMode === 'light'; /* dark unless picked; Automatic: by daylight, like the app */
   var c = lt ? '#ffffff' : '#0c0d0f'; document.querySelector('meta[name="theme-color"]').content = c; document.documentElement.style.backgroundColor = c;
   document.documentElement.dataset.theme = lt ? 'light' : 'dark'; /* the whole page in the right theme from the first frame (iOS fills the edges from it) */ } catch (e) {}
 </script>

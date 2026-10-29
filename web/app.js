@@ -8522,7 +8522,7 @@ const Splash = (() => {
     if (!el) return;
     const mem = remembered();
     try { dressUp(mem.iconAuto !== false && !mem.season ? autoSeason(todayStr()) : mem.season); } catch (e) { /* keep the everyday look */ }
-    const light = (mem.themeMode === 'light' || mem.themeMode === 'dark' ? mem.themeMode : sunTheme()) === 'light';
+    const light = (mem.themeMode === 'auto' ? sunTheme() : mem.themeMode === 'light' ? 'light' : 'dark') === 'light';
     el.classList.toggle('light', light);
     // the page behind the startup screen matches it, so no dark edges show around it on the iPhone
     document.documentElement.style.backgroundColor = light ? '#ffffff' : '#0c0d0f';
@@ -8739,7 +8739,7 @@ function setTheme(mode) {
 function paintThemeButtons() {
   const light = document.documentElement.dataset.theme === 'light';
   const pm = ((typeof db !== 'undefined' && db && db.meta && db.meta.prefs) || {}).themeMode;
-  const auto = pm !== 'light' && pm !== 'dark';
+  const auto = pm === 'auto';
   const title = `${auto ? `Automatic — ${light ? 'light' : 'dark'} now` : light ? 'Light mode' : 'Dark mode'}. Click for ${light ? 'dark' : 'light'} mode`;
   document.querySelectorAll('.theme-toggle').forEach((b) => { b.innerHTML = icon(auto ? 'theme-auto' : light ? 'sun' : 'moon'); b.title = title; b.setAttribute('aria-label', title); });
 }
@@ -8748,8 +8748,8 @@ function setSidebarCollapsed(on) {
   document.querySelectorAll('.sb-toggle').forEach((b) => { b.title = on ? 'Expand sidebar' : 'Collapse sidebar'; });
   savePref('sidebarCollapsed', on);
 }
-/* ---------- Light / dark: Automatic (default) follows sunrise and sunset in Dubai; anyone can pick
-   Light or Dark instead (My profile → Appearance, the phone's Me tab, or the sun/moon button). ---------- */
+/* ---------- Light / dark: Dark until a person picks otherwise (everyone, on every device); Automatic follows
+   sunrise and sunset in Dubai. Picked in My profile → Appearance, the phone's Me tab, or the sun/moon button. ---------- */
 // Sunrise / sunset at the E11 office in Dubai (the standard "sunrise equation", accurate to a minute or two).
 // A plain function so the startup screen can use it before everything else has loaded.
 function sunTimesDubai(d) {
@@ -8769,7 +8769,7 @@ function sunTheme(now = new Date()) { const t = sunTimesDubai(now); return now >
 const Theme = (() => {
   const sun = sunTimesDubai;
   const autoTheme = (now = new Date()) => { const t = sun(now); return now >= t.rise && now < t.set ? 'light' : 'dark'; };
-  const mode = () => { const m = ((db && db.meta.prefs) || {}).themeMode; return m === 'light' || m === 'dark' ? m : 'auto'; };
+  const mode = () => { const m = ((db && db.meta.prefs) || {}).themeMode; return m === 'light' || m === 'auto' ? m : 'dark'; };
   const apply = () => setTheme(mode() === 'auto' ? autoTheme() : mode());
   function setMode(m) { const v = m === 'light' || m === 'dark' ? m : 'auto'; savePref('themeMode', v); Splash.remember({ themeMode: v }); apply(); }
   setInterval(() => { if (db && currentUserId && mode() === 'auto') apply(); }, 60000);

@@ -1,4 +1,4 @@
-"""Light / dark: Automatic by default (sunrise–sunset in Dubai), Light or Dark chosen in My profile or the
+"""Light / dark: Dark by default; Automatic (sunrise–sunset in Dubai) when picked, Light or Dark chosen in My profile or the
 phone's Me tab; the sun/moon button picks one too. Finance link is a card like Client Assets."""
 import asyncio, os, subprocess, tempfile, time, urllib.request, datetime
 from playwright.async_api import async_playwright
@@ -27,8 +27,10 @@ async def main():
             await pg.goto('/'); await pg.wait_for_timeout(600); await pg.mouse.click(5, 5); await pg.wait_for_timeout(3500)
             return ctx, pg, errs
         ctx, pg, errs = await at(10)
-        check(await pg.evaluate("Theme.mode()") == 'auto' and await pg.evaluate("document.documentElement.dataset.theme") == 'light', 'Automatic by default: light at 10 am')
         ic = lambda: pg.evaluate("(()=>{const b=document.querySelector('.brand-btns .theme-toggle, #mac-bar .theme-toggle');const t=document.createElement('div');const h=b.innerHTML;return ['theme-auto','sun','moon'].find(k=>{t.innerHTML=icon(k);return t.innerHTML===h})||h.slice(0,120)})()")
+        check(await pg.evaluate("Theme.mode()") == 'dark' and await pg.evaluate("document.documentElement.dataset.theme") == 'dark' and await ic() == 'moon', 'Dark by default, even at 10 am (nobody picked yet)')
+        await pg.evaluate("Theme.setMode('auto')"); await pg.wait_for_timeout(300)
+        check(await pg.evaluate("Theme.mode()") == 'auto' and await pg.evaluate("document.documentElement.dataset.theme") == 'light', 'Automatic when picked: light at 10 am')
         check(await ic() == 'theme-auto', 'Automatic: the sidebar button shows the half-circle Auto icon')
         await pg.clock.fast_forward('09:00:00'); await pg.wait_for_timeout(500)
         check(await pg.evaluate("document.documentElement.dataset.theme") == 'dark', 'turns dark after sunset (7 pm) by itself')
