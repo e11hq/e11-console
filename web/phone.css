@@ -982,12 +982,6 @@ html.ios-kb .ph-scrim:not(.docked), html.ios-kb body.phone .scrim, html.ios-kb b
 /* (the open task itself stays full height: the room for the keyboard is made inside it, so when the keyboard goes —
     at once, e.g. for the photo picker — there's never a strip of the page behind showing under the comment box) */
 html.ios-kb body.phone #detail.open .tm { box-sizing: border-box; padding-bottom: var(--ios-kb, 0px); transition: padding-bottom var(--ios-kb-t, 250ms) cubic-bezier(.2, .8, .2, 1); }
-/* the keyboard moving (iPhone app 7+, __e11KbMove): the task stays full height and the comment box just slides with the
-   keyboard; its colour reaches down behind it so no gap shows between box and keyboard */
-html.ios-kb-moving body.phone #detail.open .tm { padding-bottom: 0 !important; transition: none !important; }
-html.ios-kb-moving body.phone #detail.open .tm .jl { transform: translate3d(0, calc(-1 * var(--ios-kb-now, 0px)), 0); }
-html.ios-kb-moving body.phone #detail.open .tm .tm-composer { transform: translate3d(0, calc(-1 * var(--ios-kb-now, 0px)), 0); will-change: transform; z-index: 3; }
-html.ios-kb-moving body.phone #detail.open .tm .tm-composer::after { content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 600px; background: var(--ph-bar, #111); pointer-events: none; }
 html.ios-kb body.phone .menu:not(.mention-pop) { bottom: calc(var(--ph-shift, 0px) + max(var(--ph-kb, 0px), var(--ios-kb, 0px))) !important; }
 html.ios-kb.ios-kb-content body.phone #content { padding-bottom: var(--ios-kb, 0px) !important; }
 
