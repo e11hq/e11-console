@@ -4350,13 +4350,13 @@ function showMenu(anchor, items) {
   return m;
 }
 
-function dialog({ title, body = '', input = null, okText = 'OK', cancelText = 'Cancel', danger = false, colors = null }) {
+function dialog({ title, body = '', bodyHtml = '', input = null, okText = 'OK', cancelText = 'Cancel', danger = false, colors = null }) {
   return new Promise((resolve) => {
     const root = $('#overlay-root');
     let color = colors ? colors.value : null;
     root.innerHTML = `<div class="scrim"><div class="dialog" role="dialog">
       <h2>${esc(title)}</h2>
-      ${body ? `<p>${esc(body)}</p>` : ''}
+      ${body ? `<p>${esc(body)}</p>` : ''}${bodyHtml ? `<div class="dlg-html">${bodyHtml}</div>` : ''}
       ${input ? `<label class="dlg-label">${esc(input.label || '')}</label><input class="field" id="dlg-input" value="${esc(input.value || '')}" placeholder="${esc(input.placeholder || '')}" autocomplete="off">` : ''}
       ${colors ? `<label class="dlg-label">Color</label><div class="swatches" style="display:flex;gap:8px">${COLORS.map((c) => `<button class="swatch ${c === color ? 'on' : ''}" data-c="${c}" style="background:${c}"></button>`).join('')}</div>` : ''}
       <div class="actions">${cancelText ? `<button class="btn" data-r="0">${esc(cancelText)}</button>` : ''}<button class="btn ${danger ? 'danger' : 'primary'}" data-r="1">${esc(okText)}</button></div>

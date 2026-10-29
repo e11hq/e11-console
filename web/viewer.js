@@ -213,7 +213,7 @@ const Viewer = (() => {
     const kind = fileKind(a), d = MediaDims.of(a);
     const rows = [['Name', a.name], ['Size', fmtSize(a.size)], ['Type', (fileExt(a.name) || 'file').toUpperCase() + (kind === 'image' || kind === 'video' ? (d ? ` · ${d[0]} × ${d[1]}` : '') : '')],
       a.addedBy ? ['Added by', userName(a.addedBy)] : null, a.addedAt ? ['Added', fmtDateTime(a.addedAt)] : null].filter(Boolean);
-    dialog({ title: 'File info', body: `<div class="fpv-info">${rows.map(([k, v]) => `<div><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('')}</div>`, okText: 'Done', cancelText: '' });
+    dialog({ title: 'File info', bodyHtml: `<div class="fpv-info">${rows.map(([k, v]) => `<div><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('')}</div>`, okText: 'Done', cancelText: '' });
   }
 
   // ---- computer: keys, and the side arrows showing while the mouse moves ----
