@@ -15,6 +15,9 @@ before(async () => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'e11-review-'));
   app = createServer({ dataDir: dir, webDir: new URL('../../web', import.meta.url).pathname, version: '1.9.4', reviewPassword: PW, adminEmail: 'haris@e11-digital.com', ...OFF });
   base = `http://127.0.0.1:${await app.listen(0, '127.0.0.1')}`;
+  // the server answers first; the demo is built just after (so the updater's 30 s start check never waits for it)
+  assert.equal((await fetch(base + '/api/health')).status, 200);
+  for (let i = 0; i < 300 && !app.store.kv.get('demo-loaded'); i++) await new Promise((ok) => setTimeout(ok, 100));
 });
 after(async () => { await app.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 

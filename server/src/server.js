@@ -953,7 +953,9 @@ export function createServer(cfg) {
   let demoTimer = null;
   if (review) {
     const check = () => { try { const r = resetDue(store); if (r.due) loadDemo(r.day); } catch (e) { console.error('App Review demo data failed:', e); } };
-    check();
+    // (after the server is answering, not before: building the demo takes ~10 s here and much longer on the NAS, and the
+    //  updater gives a new version 30 s to answer — the review copy's 2 AM update to 1.9.11 was rolled back that way)
+    const first = setTimeout(check, 5000); if (first.unref) first.unref();
     demoTimer = setInterval(check, 10 * 60000); if (demoTimer.unref) demoTimer.unref();
   }
 
