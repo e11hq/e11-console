@@ -13,6 +13,9 @@ import WebKit
 import UserNotifications
 import LocalAuthentication
 import CryptoKit
+#if APPSTORE
+import ServiceManagement
+#endif
 
 // Version of this Mac app's native part. Raise it when a change here needs everyone to reinstall: the web app
 // then shows a required-update banner in older Mac apps. (The earlier script app was 1–6.)
@@ -20,15 +23,30 @@ let SHELL_VERSION = 11   // 10: fast office use (shared-folder copies, office-ne
 
 let info = Bundle.main.infoDictionary ?? [:]
 let env = ProcessInfo.processInfo.environment
+#if APPSTORE
+// The Mac App Store app (sandboxed, same code; mac/appstore/): Live by default, or Test / App Review, chosen in
+// the app menu (Server) or with the "App Review sign-in" link under the sign-in page, like the iPhone app.
+var SERVER: String {
+  if let s = env["E11_SERVER"], !s.isEmpty { return s }
+  switch defaults.string(forKey: "e11_server") {
+  case "test": return (info["E11TestServerURL"] as? String) ?? "https://test.e11hq.com"
+  case "review": return (info["E11ReviewServerURL"] as? String) ?? "https://review.e11hq.com"
+  default: return (info["E11ServerURL"] as? String) ?? "https://console.e11hq.com"
+  }
+}
+let IS_STORE = true
+#else
 let SERVER: String = {
   if let s = env["E11_SERVER"], !s.isEmpty { return s }   // (the build machine's self-test)
   return (info["E11ServerURL"] as? String) ?? "https://console.e11hq.com"
 }()
+let IS_STORE = false
+#endif
 let APP_NAME = (info["CFBundleName"] as? String) ?? "E11 Console"
 let SELFTEST = env["E11_SELFTEST"] ?? ""
 let defaults = UserDefaults.standard
 let LOCK_KEY = "E11TouchIDLock"
-let AT_LOGIN = CommandLine.arguments.contains("--login")   // started by "Open at Login": stay in the background
+var AT_LOGIN = CommandLine.arguments.contains("--login")   // started by "Open at Login": stay in the background
 let LOGIN_AGENT = NSHomeDirectory() + "/Library/LaunchAgents/" + (Bundle.main.bundleIdentifier ?? "ae.e11.console.client") + ".login.plist"
 
 func token() -> String { String(Int(Date().timeIntervalSince1970 * 1000), radix: 36) + String(UUID().uuidString.prefix(6)).lowercased() }
@@ -65,6 +83,11 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
 
   /* ---------- start ---------- */
   func applicationWillFinishLaunching(_ n: Notification) {
+    #if APPSTORE
+    // (opened by macOS as a login item: stay in the background, like the Terminal app's --login)
+    if let ev = NSAppleEventManager.shared().currentAppleEvent, ev.eventID == AEEventID(kAEOpenApplication),
+       ev.paramDescriptor(forKeyword: AEKeyword(keyAEPropData))?.enumCodeValue == OSType(keyAELaunchedAsLogInItem) { AT_LOGIN = true }
+    #endif
     if SELFTEST.isEmpty { UNUserNotificationCenter.current().delegate = self }
     NSAppleEventManager.shared().setEventHandler(self, andSelector: #selector(handleURL(_:withReply:)), forEventClass: AEEventClass(kInternetEventClass), andEventID: AEEventID(kAEGetURL))
   }
@@ -128,9 +151,18 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     web.autoresizingMask = [.width, .height]
     web.uiDelegate = self
     web.navigationDelegate = self
+    #if APPSTORE
+    if #available(macOS 12.0, *) { web.underPageBackgroundColor = window.backgroundColor }   // (public API only in the store app)
+    #else
     web.setValue(false, forKey: "drawsBackground")
     if #available(macOS 13.3, *) { web.isInspectable = true }
+    #endif
     window.contentView!.addSubview(web)
+    #if APPSTORE
+    reviewLink.frame = NSRect(x: 0, y: 14, width: window.contentView!.bounds.width, height: 30)
+    reviewLink.autoresizingMask = [.width]
+    window.contentView!.addSubview(reviewLink)
+    #endif
     if !SELFTEST.isEmpty, let host = URL(string: SERVER)?.host, let email = env["E11_SELFTEST_EMAIL"],
        let c = HTTPCookie(properties: [.domain: host, .path: "/", .name: "e11_dev_email", .value: email]) {
       web.configuration.websiteDataStore.httpCookieStore.setCookie(c) { self.loadHome() }
@@ -213,8 +245,33 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     web.loadHTMLString(html, baseURL: nil)
     DispatchQueue.main.asyncAfter(deadline: .now() + 5) { self.retrying = false; self.loadHome() }
   }
+  #if APPSTORE
+  // under the Cloudflare sign-in page only: "App Review sign-in" (Apple's reviewer can't get an E11 email code)
+  lazy var reviewLink: NSButton = {
+    let b = NSButton(title: "App Review sign-in", target: self, action: #selector(toReview))
+    b.isBordered = false
+    b.font = .systemFont(ofSize: 13, weight: .medium)
+    b.contentTintColor = .secondaryLabelColor
+    b.setAccessibilityIdentifier("review-sign-in")
+    b.isHidden = true
+    return b
+  }()
+  @objc func toReview() { setServer("review") }
+  func setServer(_ k: String) { defaults.set(k, forKey: "e11_server"); reviewLink.isHidden = true; loadHome(); buildMenu() }
+  @objc func pickServer(_ sender: NSMenuItem) { setServer(sender.representedObject as? String ?? "live") }
+  func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+    reviewLink.isHidden = !(webView.url?.host ?? "").hasSuffix(".cloudflareaccess.com")
+  }
+  #endif
   // links the window can't show itself (mailto:, e11console:, …) go to the Mac
   func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+    #if APPSTORE
+    // the review copy's "Sign in to E11 Console" link goes back to the live server
+    if defaults.string(forKey: "e11_server") == "review", action.targetFrame?.isMainFrame != false,
+       let u = action.request.url, u.host == URL(string: (info["E11ServerURL"] as? String) ?? "https://console.e11hq.com")?.host {
+      setServer("live"); return decisionHandler(.cancel)
+    }
+    #endif
     if let u = action.request.url, let s = u.scheme?.lowercased(), !["http", "https", "about", "blob", "data"].contains(s) {
       if action.targetFrame?.isMainFrame != false {
         if s == "e11console" || s == "e11console-test" { openLink(u.absoluteString) }
@@ -297,7 +354,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     case "appInfo":
       done(["ok": true, "server": SERVER, "shell": SHELL_VERSION, "native": "swift",
             "version": info["CFBundleShortVersionString"] as? String ?? "3.0.0", "touchID": defaults.bool(forKey: LOCK_KEY),
-            "glass": FileManager.default.fileExists(atPath: Bundle.main.bundlePath + "/Contents/Resources/Assets.car")])
+            "glass": FileManager.default.fileExists(atPath: Bundle.main.bundlePath + "/Contents/Resources/Assets.car"), "store": IS_STORE])
     default: done(["ok": false, "error": "Unknown command " + cmd])
     }
   }
@@ -464,12 +521,14 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     let appPath = Bundle.main.bundlePath
     if (a["reset"] as? Bool) == true {
       // back to the app's own icon: the glass one (macOS draws it) when the app has it
-      NSWorkspace.shared.setIcon(nil, forFile: appPath, options: [])
+      if !IS_STORE { NSWorkspace.shared.setIcon(nil, forFile: appPath, options: []) }
       NSApp.applicationIconImage = nil
       return ["ok": true, "saved": false]
     }
     guard let d = Data(base64Encoded: a["b64"] as? String ?? ""), let img = NSImage(data: d) else { return ["ok": false, "error": "Bad icon image"] }
     NSApp.applicationIconImage = img
+    // (the Mac App Store app can't write onto itself: the icon shows while it runs)
+    if IS_STORE { return ["ok": true, "saved": false] }
     return ["ok": true, "saved": NSWorkspace.shared.setIcon(img, forFile: appPath, options: [])]
   }
 
@@ -546,8 +605,23 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   }
   @objc func lockNow() { if defaults.bool(forKey: LOCK_KEY) { lock() } }
   /* ---------- Open at Login (a small login item in ~/Library/LaunchAgents; no account needed) ---------- */
-  func atLogin() -> Bool { FileManager.default.fileExists(atPath: LOGIN_AGENT) }
+  func atLogin() -> Bool {
+    #if APPSTORE
+    if #available(macOS 13.0, *) { return SMAppService.mainApp.status == .enabled }
+    return false
+    #else
+    return FileManager.default.fileExists(atPath: LOGIN_AGENT)
+    #endif
+  }
   @discardableResult func setAtLogin(_ on: Bool) -> Bool {
+    #if APPSTORE
+    // (the store app is sandboxed: macOS's own login item, listed in System Settings › General › Login Items)
+    if #available(macOS 13.0, *) {
+      do { if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() } } catch { return false }
+      return atLogin() == on
+    }
+    return false
+    #endif
     if !on { try? FileManager.default.removeItem(atPath: LOGIN_AGENT); return !atLogin() }
     let plist: [String: Any] = ["Label": ((LOGIN_AGENT as NSString).lastPathComponent as NSString).deletingPathExtension,
                                 "ProgramArguments": ["/usr/bin/open", "-g", "-a", Bundle.main.bundlePath, "--args", "--login"],
@@ -596,9 +670,20 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     lockItem.state = defaults.bool(forKey: LOCK_KEY) ? .on : .off
     let loginItem = item("Open at Login", #selector(toggleLogin(_:)), "", .command, self)
     loginItem.state = atLogin() ? .on : .off
+    var serverItems: [NSMenuItem] = []
+    #if APPSTORE
+    let serverMenu = NSMenu(title: "Server")
+    let cur = defaults.string(forKey: "e11_server") ?? "live"
+    for (k, t) in [("live", "Live"), ("test", "Test"), ("review", "App Review")] {
+      let it = item(t, #selector(pickServer(_:)), "", .command, self); it.representedObject = k; it.state = cur == k ? .on : .off
+      serverMenu.addItem(it)
+    }
+    let serverItem = NSMenuItem(title: "Server", action: nil, keyEquivalent: ""); serverItem.submenu = serverMenu
+    serverItems = [serverItem, .separator()]
+    #endif
     _ = sub(APP_NAME, [
       item("About " + APP_NAME, #selector(NSApplication.orderFrontStandardAboutPanel(_:))), .separator(),
-      loginItem, lockItem, .separator(),
+      loginItem, lockItem, .separator()] + serverItems + [
       item("Hide " + APP_NAME, #selector(NSApplication.hide(_:)), "h"),
       item("Hide Others", #selector(NSApplication.hideOtherApplications(_:)), "h", [.command, .option]),
       item("Show All", #selector(NSApplication.unhideAllApplications(_:))), .separator(),

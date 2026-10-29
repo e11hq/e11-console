@@ -700,7 +700,7 @@ const MacUpdate = (() => {
   async function check(required) {
     if (!Host.isMacApp || !required) return;
     let shell = 1;
-    try { const r = await NativeMac.call('appInfo'); shell = Number(r.shell) || 1; } catch (e) { return; }
+    try { const r = await NativeMac.call('appInfo'); if (r.store) return; shell = Number(r.shell) || 1; } catch (e) { return; }   // (the Mac App Store app updates through the App Store)
     need = shell < required;
     paint();
   }

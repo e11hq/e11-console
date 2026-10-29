@@ -1,0 +1,70 @@
+# The E11 Console Mac App Store app: the same Swift app as the Terminal-installed one (mac/swift/main.swift), built
+# with APPSTORE on — sandboxed, Live / Test / App Review server, macOS's own login item, App Store updates.
+# Same bundle id as the iPhone app (one App Store listing for both, "universal purchase").
+# Built, signed and uploaded to TestFlight by .github/workflows/mac-store.yml on Haris's Mac (xcodegen).
+name: E11ConsoleMac
+options:
+  deploymentTarget:
+    macOS: "13.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Automatic
+targets:
+  E11ConsoleMac:
+    type: application
+    platform: macOS
+    sources:
+      - path: ../swift/main.swift
+      - path: PrivacyInfo.xcprivacy
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ae.e11.console.ios
+        PRODUCT_NAME: E11 Console
+        PRODUCT_MODULE_NAME: E11ConsoleMac
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: APPSTORE
+        ENABLE_HARDENED_RUNTIME: YES
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_ENTITLEMENTS: E11ConsoleMac.entitlements
+        COMBINE_HIDPI_IMAGES: YES
+    entitlements:
+      path: E11ConsoleMac.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
+        com.apple.security.files.user-selected.read-write: true
+        com.apple.security.files.downloads.read-write: true
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: E11 Console
+        CFBundleName: E11 Console
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleIconName: AppIcon
+        CFBundleIconFile: AppIcon
+        LSApplicationCategoryType: public.app-category.business
+        LSMinimumSystemVersion: "13.0"
+        NSHumanReadableCopyright: © 2026 E11 Agency
+        ITSAppUsesNonExemptEncryption: false
+        NSLocalNetworkUsageDescription: E11 Console connects to the office server directly when you are in the office, so big files move faster.
+        CFBundleURLTypes:
+          - CFBundleURLName: ae.e11.console.link
+            CFBundleURLSchemes: [e11console]
+        E11ServerURL: https://console.e11hq.com
+        E11TestServerURL: https://test.e11hq.com
+        E11ReviewServerURL: https://review.e11hq.com
+    postCompileScripts:
+      - name: Glass app icon
+        # Icon Composer's AppIcon.icon → Assets.car + AppIcon.icns in the app (needs Xcode 26 or newer)
+        script: |
+          xcrun actool "$SRCROOT/../swift/AppIcon.icon" --compile "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH" \
+            --platform macosx --minimum-deployment-target 13.0 --app-icon AppIcon \
+            --output-partial-info-plist "$DERIVED_FILE_DIR/icon-partial.plist"
+        outputFiles:
+          - $(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/Assets.car

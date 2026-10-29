@@ -1,0 +1,55 @@
+# The Mac App Store app (mac/appstore/, the same Swift code with APPSTORE on): built on the Mac runner (Haris's own
+# Mac), checked (sandbox, icon, privacy manifest), signed and sent to TestFlight with the App Store Connect key in
+# GitHub's secrets. Started by hand ("publish mac store build") or by pushing a mac-store branch. Its logs go on the
+# release "ios-selftest" as mac-store-*.log (for checking from Claude's workspace).
+name: Mac App Store app
+on:
+  workflow_dispatch:
+  push:
+    branches: ['mac-store']
+permissions:
+  contents: write
+concurrency:
+  group: mac-store
+  cancel-in-progress: false
+jobs:
+  mac-store:
+    runs-on: [self-hosted, macOS, ARM64]   # (Haris's own Mac)
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Homebrew's tools on this Mac
+        run: for d in /opt/homebrew/bin /usr/local/bin; do [ -d "$d" ] && echo "$d" >> "$GITHUB_PATH"; done; true
+      - name: Xcode project
+        run: cd mac/appstore && xcodegen generate
+      - name: Sign and send to TestFlight
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -o pipefail
+          KEY="$RUNNER_TEMP/asc.p8"; printf '%s\n' "$ASC_KEY_P8" > "$KEY"
+          AUTH="-allowProvisioningUpdates -authenticationKeyPath $KEY -authenticationKeyID $ASC_KEY_ID -authenticationKeyIssuerID $ASC_ISSUER_ID"
+          BUILD=$((2000 + GITHUB_RUN_NUMBER))
+          rm -rf build/mac-store
+          xcodebuild -project mac/appstore/E11ConsoleMac.xcodeproj -scheme E11ConsoleMac -configuration Release -destination 'generic/platform=macOS' \
+            -archivePath build/mac-store/E11ConsoleMac.xcarchive DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CURRENT_PROJECT_VERSION="$BUILD" $AUTH archive 2>&1 | tee "$RUNNER_TEMP/mac-store-archive-full.log" | tail -40
+          APP="build/mac-store/E11ConsoleMac.xcarchive/Products/Applications/E11 Console.app"
+          echo "--- checks"
+          test -f "$APP/Contents/Resources/Assets.car" && echo "glass icon: yes" || { echo "glass icon: MISSING"; exit 1; }
+          test -f "$APP/Contents/Resources/PrivacyInfo.xcprivacy" && echo "privacy manifest: yes" || { echo "privacy manifest: MISSING"; exit 1; }
+          codesign -d --entitlements - --xml "$APP" 2>/dev/null | grep -q "com.apple.security.app-sandbox" && echo "sandbox: yes" || { echo "sandbox: MISSING"; exit 1; }
+          lipo -info "$APP/Contents/MacOS/E11 Console"
+          sed "s/__TEAM__/$APPLE_TEAM_ID/" mac/appstore/ExportOptions.plist > "$RUNNER_TEMP/ExportOptions.plist"
+          xcodebuild -exportArchive -archivePath build/mac-store/E11ConsoleMac.xcarchive -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath build/mac-store/export $AUTH 2>&1 | tee "$RUNNER_TEMP/mac-store-export-full.log" | tail -40
+          rm -f "$KEY"
+          echo "Mac build $BUILD sent to TestFlight"
+      - name: Logs for checking from Claude's workspace
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # (errors and the last lines only: no keys or tokens are ever printed by xcodebuild)
+          for f in archive export; do if [ -s "$RUNNER_TEMP/mac-store-$f-full.log" ]; then { grep -E "error|Error|ERROR|failed|Failed|warning: .*(sandbox|entitlement)" "$RUNNER_TEMP/mac-store-$f-full.log" | head -60; echo ---; tail -60 "$RUNNER_TEMP/mac-store-$f-full.log"; } > "$RUNNER_TEMP/mac-store-$f.log"; gh release upload ios-selftest "$RUNNER_TEMP/mac-store-$f.log" --clobber || true; fi; done; true
