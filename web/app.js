@@ -3555,6 +3555,14 @@ function renderDetail() {
 
   const keepMedia = {};
   if (pane.dataset.shown === t.id) $$('[data-media-key]', pane).forEach((m) => { keepMedia[m.dataset.mediaKey] = m; });
+  // iPhone app 10+: a redraw of the same task keeps the pictures already showing (no flash), and a comment
+  // that wasn't there before slides in
+  const calm = pane.dataset.shown === t.id && typeof Pager !== 'undefined' && Pager.lists();
+  const keepImg = new Map(), hadCm = new Set();
+  if (calm) {
+    $$('img', pane).forEach((im) => { if (im.complete && im.naturalWidth && im.src && !im.closest('[data-media-key]')) { const l = keepImg.get(im.src) || []; l.push(im); keepImg.set(im.src, l); } });
+    $$('.cm[data-comment]', pane).forEach((c) => hadCm.add(c.dataset.comment));
+  }
   const fresh = !pane.classList.contains('open');
   pane.dataset.shown = t.id;
   pane.innerHTML = `
@@ -3689,6 +3697,17 @@ function renderDetail() {
   pane.dataset.tab = sideTab;
   pane.setAttribute('aria-hidden', 'false');
   $$('[data-media-key]', pane).forEach((m) => { const old = keepMedia[m.dataset.mediaKey]; if (old) m.replaceWith(old); });
+  if (calm) {
+    if (keepImg.size) $$('img', pane).forEach((im) => {
+      if (im.closest('[data-media-key]')) return;
+      const l = keepImg.get(im.src); const old = l && l.shift();
+      if (!old || old === im) return;
+      [...old.attributes].forEach((x) => { if (x.name !== 'src' && !im.hasAttribute(x.name)) old.removeAttribute(x.name); });
+      [...im.attributes].forEach((x) => { if (x.name !== 'src') old.setAttribute(x.name, x.value); });
+      im.replaceWith(old);
+    });
+    if (hadCm.size) $$('.cm[data-comment]', pane).forEach((c) => { if (!hadCm.has(c.dataset.comment)) c.classList.add('cm-in'); });
+  }
   hydratePreviews(pane);
   autosize($('#d-title'));
   // short descriptions don't need the Expand button
