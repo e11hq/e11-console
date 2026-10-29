@@ -2842,6 +2842,7 @@ body.phone .us-note { display: none; }
 /* ===== File preview (web/viewer.js): the file fills the screen; its folder / task / comment files to move through ===== */
 #pv-root { position: relative; z-index: 150; }
 body.pv-open .scrim { z-index: 160; }
+body.pv-open .scrim.pv-under { z-index: 90; }   /* (open before the preview: stays under it) */
 body.pv-open .menu { z-index: 170; }
 body.pv-open #toast-root { z-index: 180; }
 .fpv { --pv-bg: rgba(6, 6, 8, .985); --pv-fg: #ececf1; --pv-dim: #8a8a95; --pv-btn: #24242a; --pv-btn-h: #2e2e35; --pv-ring: #fff; --pv-doc: #1c1c22;

@@ -61,6 +61,11 @@ async def main():
         await E("(p)=>Host.call('openPath',{path:p})", att[0][2]); await pg.wait_for_timeout(1500)
         saved = list((await E("window.__native.saved")).values())
         check(any(s['open'] for s in saved), 'opening a file saves a temporary copy and opens it')
+        # a download link (a content plan's PowerPoint / PDF) is saved to Downloads, the window stays on the app
+        before = len(await E("Object.keys(window.__native.saved)")); url0 = pg.url
+        await E("(p)=>{const a=document.createElement('a'); a.href='/__file/'+p.split('/').map(encodeURIComponent).join('/'); a.download='Plan - Round 1.pptx'; a.textContent='dl'; document.body.appendChild(a); a.click(); a.remove();}", att[0][2]); await pg.wait_for_timeout(1500)
+        saved = list((await E("window.__native.saved")).values())
+        check(pg.url == url0 and len(saved) == before + 1 and any(x['name'] == 'Plan - Round 1.pptx' and x['done'] and not x['open'] for x in saved), f'a download link is saved through the app, not opened in its window: {[x["name"] for x in saved]}')
         # badge for unread notifications
         await E("()=>{db.notifications.push({id:'nx',to:currentUserId,from:currentUserId,taskId:db.tasks[0].id,kind:'mention',text:'x',at:nowISO(),read:false}); renderSidebar()}"); await pg.wait_for_timeout(300)
         check(await E("window.__native.badge") == 1, 'Dock badge shows unread notifications')

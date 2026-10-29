@@ -929,6 +929,7 @@ body.phone .ph-bar.ph-bar-root { padding-left: 20px; }
 /* ---- File preview on the phone (web/viewer.js): edge to edge, swipe, tap to hide everything ---- */
 body.phone #pv-root, body.phone .fpv { z-index: 255; }
 body.phone.pv-open .scrim { z-index: 270 !important; }
+body.phone.pv-open .scrim.pv-under { z-index: 200 !important; }   /* (open before the preview: stays under it) */
 body.phone.pv-open .menu { z-index: 300 !important; }
 body.phone.pv-open #toast-root { z-index: 310 !important; bottom: calc(env(safe-area-inset-bottom) + 150px) !important; }
 body.phone .fpv { --pv-bg: #000; background: color-mix(in srgb, var(--pv-bg) calc(var(--pv-fade, 1) * 100%), transparent); animation: none; }

@@ -651,6 +651,17 @@ const TaskLink = (() => {
   return { copy, open, show };
 })();
 // The Mac app hands shared links to the page
+// Mac app: a download link (<a download>, e.g. a content plan's PowerPoint / PDF) is saved to Downloads — the app's
+// window would otherwise show the file in place of the app, with no way back
+document.addEventListener('click', (e) => {
+  if (!Host.isMacApp) return;
+  const a = e.target.closest && e.target.closest('a[download][href]');
+  if (!a) return;
+  const href = a.getAttribute('href');
+  if (!/^\/(?!\/)/.test(href)) return;   // (this server's own files only)
+  e.preventDefault();
+  ServerHost.save(href, a.getAttribute('download') || '').catch((err) => { if (!err || !err.cancelled) toast('Could not download: ' + ((err && err.message) || err)); });
+}, true);
 // From the Mac widget (e11console://open?plan=… / ?view=…): a content plan, or Home / Content plans / Finance
 window.__e11Widget = (d) => {
   d = d || {};
@@ -1412,7 +1423,10 @@ const ServerHost = (() => {
       default: return undefined;
     }
   }
-  return { call, uploadMany, pickFiles, download, setOffice: (o) => { office = o || null; }, office: () => office };
+  // a file link to save (not to open): the Mac app saves it to Downloads itself — its window would otherwise show the
+  // file in place of the app, with no way back; a browser / the iPhone app download it as usual
+  const save = (url, name) => (Host.isMacApp ? saveOnMac(url, name || String(url).split('?')[0].split('/').pop(), false) : Promise.resolve(download(url, name)));
+  return { call, uploadMany, pickFiles, download, save, setOffice: (o) => { office = o || null; }, office: () => office };
 })();
 
 /* ================= Data ================= */

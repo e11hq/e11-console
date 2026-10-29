@@ -51,6 +51,9 @@ const Viewer = (() => {
     const many = list.length > 1;
     let host = document.getElementById('pv-root');
     if (!host) { host = document.createElement('div'); host.id = 'pv-root'; document.body.appendChild(host); }   // (its own layer: pop-ups use #overlay-root above it)
+    // a pop-up already open (a content plan's post, with its reference files) stays under the preview; pop-ups opened
+    // from the preview itself still come above it
+    if (!document.body.classList.contains('pv-open')) document.querySelectorAll('.scrim').forEach((x) => x.classList.add('pv-under'));
     document.body.classList.add('pv-open');
     host.innerHTML = `<div class="fpv ${phone() ? 'fpv-onphone' : 'fpv-oncomputer'} ${many ? 'fpv-many' : ''}" role="dialog" aria-label="File preview">
       <div class="fpv-top">
@@ -78,6 +81,7 @@ const Viewer = (() => {
     pauseAll();
     const h = document.getElementById('pv-root'); if (h) h.innerHTML = '';
     document.body.classList.remove('pv-open');
+    document.querySelectorAll('.pv-under').forEach((x) => x.classList.remove('pv-under'));
     root = null; ui.previewAtt = null; clearTimeout(hideT);
     if (keyOn) { document.removeEventListener('keydown', onKey, true); keyOn = false; }
   }

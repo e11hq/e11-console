@@ -976,7 +976,7 @@ const Plans = (() => {
       case 'client-all': if (pl) clientApproveAll(pl); return;
       case 'mark-sent': if (pl) markSent(pl); return;
       case 'rounds': e.stopImmediatePropagation(); if (pl) roundsMenu(el, pl); return;
-      case 'dl': { const a = el; ServerHost.download(a.getAttribute('href'), a.getAttribute('download')); return; }
+      case 'dl': { if (!Host.isMacApp) ServerHost.download(el.getAttribute('href'), el.getAttribute('download')); return; }   // (Mac app: saved by app.js's download-link catcher)
       case 'approve': if (pl) approve(pl); return;
       case 'send-back': if (pl) sendBack(pl); return;
     }
