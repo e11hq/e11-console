@@ -1,4 +1,4 @@
-# The iPhone app (ios/): built on GitHub's Mac, run in an iPhone simulator against a local server (self-test with
+# The iPhone app (ios/): built on the Mac runner (Haris's own Mac), run in an iPhone simulator against a local server (self-test with
 # screenshots). With the App Store Connect key in GitHub's secrets (ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8,
 # APPLE_TEAM_ID), main and manual runs also sign it and send it to TestFlight. ios-* branches try changes and put
 # the self-test results on the release "ios-selftest" (for checking from Claude's workspace).
@@ -11,10 +11,12 @@ permissions:
   contents: write
 jobs:
   ios:
-    runs-on: macos-26   # (GitHub's Mac; Haris's own Mac: [self-hosted, macOS, ARM64, e11-mac])
+    runs-on: [self-hosted, macOS, ARM64]   # (Haris's own Mac, the GitHub runner on it; GitHub's Mac: macos-26)
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+      - name: Homebrew's tools on this Mac
+        run: for d in /opt/homebrew/bin /usr/local/bin; do [ -d "$d" ] && echo "$d" >> "$GITHUB_PATH"; done; true
       - uses: actions/setup-node@v4
         with:
           node-version: 22

@@ -1,4 +1,4 @@
-# The Swift Mac app: built for Intel and Apple silicon on GitHub's Mac, installed with the real installer and
+# The Swift Mac app: built for Intel and Apple silicon on the Mac runner (Haris's own Mac), installed with the real installer and
 # checked in self-test mode. Started by Release when mac/swift changed or the stored build is older than main.swift; on
 # success it stores the build (release "mac-app") and runs Release again. mac-* branches run it on their own for trying changes.
 
@@ -16,10 +16,12 @@ concurrency:
   cancel-in-progress: false
 jobs:
   mac:
-    runs-on: macos-26   # (GitHub's Mac; Haris's own Mac: [self-hosted, macOS, ARM64, e11-mac])
+    runs-on: [self-hosted, macOS, ARM64]   # (Haris's own Mac, the GitHub runner on it; GitHub's Mac: macos-26)
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - name: Homebrew's tools on this Mac
+        run: for d in /opt/homebrew/bin /usr/local/bin; do [ -d "$d" ] && echo "$d" >> "$GITHUB_PATH"; done; true
       - uses: actions/setup-node@v4
         with:
           node-version: 22
