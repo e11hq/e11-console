@@ -987,8 +987,3 @@ html.ios-kb.ios-kb-content body.phone #content { padding-bottom: var(--ios-kb, 0
 /* iPhone app: "Your comment hasn't been sent" and its buttons sit above the app's tab bar, not under it */
 html.ios-app body.phone .us-card { padding-bottom: calc(24px + max(env(safe-area-inset-bottom), var(--ios-tabs-h, 0px))); }
 
-/* Preview, phone: a video and its cover (the neighbouring slide while swiping) take the same box — the whole slide,
-   picture fitted inside — so the cover doesn't look stretched and then jump to the video's size when it becomes current */
-body.phone .fpv-slide .fpv-light { width: 100%; height: 100%; }
-body.phone .fpv-slide .fpv-light .fpv-cover { width: 100%; height: 100%; max-width: none; max-height: none; object-fit: contain; border-radius: 0; }
-body.phone .fpv-slide .fpv-video { width: 100%; height: 100%; max-width: none; max-height: none; object-fit: contain; background: transparent; }
