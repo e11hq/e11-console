@@ -31,8 +31,10 @@ jobs:
         run: |
           set -o pipefail
           KEY="$RUNNER_TEMP/asc.p8"; printf '%s\n' "$ASC_KEY_P8" > "$KEY"
-          # (-allowProvisioningDeviceRegistration: this Mac is registered as the team's development Mac — the widget's shared Keychain needs a profile)
-          AUTH="-allowProvisioningUpdates -allowProvisioningDeviceRegistration -authenticationKeyPath $KEY -authenticationKeyID $ASC_KEY_ID -authenticationKeyIssuerID $ASC_ISSUER_ID"
+          # (this Mac is registered as the team's development Mac first — register-mac.swift: the widget's shared Keychain needs a profile)
+          AUTH="-allowProvisioningUpdates -authenticationKeyPath $KEY -authenticationKeyID $ASC_KEY_ID -authenticationKeyIssuerID $ASC_ISSUER_ID"
+          UDID=$(system_profiler SPHardwareDataType | awk -F': ' '/Provisioning UDID/{print $2}')
+          swift mac/appstore/register-mac.swift "$KEY" "$ASC_KEY_ID" "$ASC_ISSUER_ID" "$UDID" || true
           BUILD=$((2000 + GITHUB_RUN_NUMBER))
           rm -rf build/mac-store
           xcodebuild -project mac/appstore/E11ConsoleMac.xcodeproj -scheme E11ConsoleMac -configuration Release -destination 'generic/platform=macOS' \
