@@ -340,7 +340,7 @@ const Fin = (() => {
       { label: 'My profile', icon: 'user', run: () => go('profile') },
       ...addItems(),
       ...(Host.isServer ? ['-', { label: 'What’s new', icon: 'info', run: () => whatsNewDialog(false) }] : []),
-      ...(Host.isMacApp ? [{ label: 'Update Mac app', icon: 'download', run: () => MacUpdate.run() }] : []),
+      ...(Host.isMacApp && !MacUpdate.store() ? [{ label: 'Update Mac app', icon: 'download', run: () => MacUpdate.run() }] : []),
       '-',
       { label: 'Sign out', icon: 'logout', run: signOut },
     ]);

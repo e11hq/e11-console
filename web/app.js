@@ -757,7 +757,10 @@ const MacUpdate = (() => {
     document.body.appendChild(el);
     document.body.classList.add('mac-upd');
   }
-  return { check, run };
+  // the Mac App Store app updates through the App Store: no Terminal update for it (asked once, at start)
+  let store = false;
+  if (Host.isMacApp) setTimeout(() => { NativeMac.call('appInfo').then((r) => { store = !!(r && r.store); }).catch(() => {}); }, 0);
+  return { check, run, store: () => store };
 })();
 
 const FINDER_LABEL = Host.isServer ? 'Download' : 'Show in Finder';
@@ -8235,7 +8238,7 @@ function meMenu(anchor) {
     ...(Host.isServer && AppIcon.isOwner() ? [{ label: 'App updates', icon: 'download', run: () => go('updates') }] : []),
     ...(Host.isServer ? [{ label: 'What’s new', icon: 'info', run: () => whatsNewDialog(false) }] : []),
     ...(Host.isServer && !Host.isMacApp ? [{ label: 'Get the Mac app', icon: 'download', run: macAppDialog }] : []),
-    ...(Host.isMacApp ? [{ label: 'Update Mac app', icon: 'download', run: () => MacUpdate.run() }] : []),
+    ...(Host.isMacApp && !MacUpdate.store() ? [{ label: 'Update Mac app', icon: 'download', run: () => MacUpdate.run() }] : []),
     ...(isTestCopy() && (AppIcon.isOwner ? AppIcon.isOwner() : isAdm(me())) && !(typeof ViewAs !== 'undefined' && ViewAs.viewing()) ? [{ label: 'Start fresh with sample data…', icon: 'trash', run: resetSampleData }] : []),
     ...(typeof ViewAs !== 'undefined' && ViewAs.available() ? [{ label: ViewAs.viewing() ? 'View as someone else…' : 'View as… (test site)', icon: 'users', run: ViewAs.pick }, ...(ViewAs.viewing() ? [{ label: 'Back to me', icon: 'reply', run: ViewAs.back }] : [])] : []),
     ...Fin.addItems(),
