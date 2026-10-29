@@ -988,3 +988,6 @@ html.ios-kb.ios-kb-content body.phone #content { padding-bottom: var(--ios-kb, 0
 /* iPhone app: "Your comment hasn't been sent" and its buttons sit above the app's tab bar, not under it */
 html.ios-app body.phone .us-card { padding-bottom: calc(24px + max(env(safe-area-inset-bottom), var(--ios-tabs-h, 0px))); }
 
+
+/* the description on the phone: once expanded it stays open (no Collapse); Expand comes back when the task is opened again */
+body.phone .desc-sec.open .desc-toggle-wrap { display: none !important; }
