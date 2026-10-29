@@ -376,6 +376,8 @@ const AppIcon = (() => {
   // a Swift Mac app with the glass icon: everyday = its own icon (macOS draws the glass), never a flat copy
   let glass = null;
   const hasGlass = async () => { if (glass === null) { try { glass = !!(await NativeMac.call('appInfo')).glass; } catch (e) { glass = false; } } return glass; };
+  // the owner's own picture (not one of the ready-made seasonal ones)
+  function ownPic(x) { return !!(x && !x.auto && x.custom && !x.preset); }
   async function everyday() {
     if (lsGet() === 'glass') return true;
     await NativeMac.call('setIcon', { reset: true }); lsSet('glass'); return true;
@@ -383,14 +385,23 @@ const AppIcon = (() => {
   async function sync(next) {
     if (next) info = next;
     // the startup animation takes on the chosen seasonal look on every device (remembered for the next start)
-    if (next) { try { const m = JSON.parse(localStorage.getItem('e11-splash') || '{}') || {}; const sea = !next.auto && next.preset && window.E11_SEASONS && E11_SEASONS[next.preset] ? next.preset : null; if ((m.season || null) !== sea || !!m.iconAuto !== !!next.auto) { m.season = sea; m.iconAuto = !!next.auto; localStorage.setItem('e11-splash', JSON.stringify(m)); } } catch (e) { /* storage off */ } }
+    if (next) { try { const m = JSON.parse(localStorage.getItem('e11-splash') || '{}') || {}; const sea = !next.auto && next.preset && window.E11_SEASONS && E11_SEASONS[next.preset] ? next.preset : null; const occ = !!next.auto || ownPic(next); if ((m.season || null) !== sea || !!m.iconAuto !== occ) { m.season = sea; m.iconAuto = occ; localStorage.setItem('e11-splash', JSON.stringify(m)); } } catch (e) { /* storage off */ } }
     if (Host.isMacApp && info && info.auto) return applyAuto();
-    if (!Host.isMacApp || !info || applied === info.v || busy === info.v) return;
-    const v = info.v;
+    // the owner's own picture gives way to an occasion's icon on its day(s), and comes back after
+    const sid = info && ownPic(info) ? autoSeason(todayStr()) : null;
+    if (!Host.isMacApp || !info || applied === info.v + (sid ? '|' + sid : '') || busy === info.v + (sid ? '|' + sid : '')) return;
+    const v = info.v + (sid ? '|' + sid : '');
     busy = v;
     try {
-      if (info.custom) {
-        const r = await fetch('/api/app-icon?v=' + encodeURIComponent(v), { cache: 'no-store', credentials: 'same-origin' });
+      if (sid) {
+        if (lsGet() !== 'auto-' + sid) {
+          const r = await fetch(`icons/seasonal/${sid}.png`, { cache: 'no-store', credentials: 'same-origin' });
+          if (!r.ok) return;
+          await NativeMac.call('setIcon', { b64: await toB64(await r.blob()) });
+          lsSet('auto-' + sid);
+        }
+      } else if (info.custom) {
+        const r = await fetch('/api/app-icon?v=' + encodeURIComponent(info.v), { cache: 'no-store', credentials: 'same-origin' });
         if (!r.ok) return;
         await NativeMac.call('setIcon', { b64: await toB64(await r.blob()) });
         lsSet(v);
@@ -411,7 +422,7 @@ const AppIcon = (() => {
       applied = v;
     } catch (e) { /* older Mac app or offline: try again next time */ }
     if (busy === v) busy = null;
-    if (info && info.v !== v) sync(); // a newer icon arrived while this one was being applied
+    if (info && info.v !== String(v).split('|')[0]) sync(); // a newer icon arrived while this one was being applied
   }
   // Automatic: today's seasonal icon (or the everyday one), checked again every hour
   let autoBusy = false;
@@ -430,13 +441,13 @@ const AppIcon = (() => {
     } catch (e) { /* try again next hour */ }
     autoBusy = false;
   }
-  setInterval(() => { if (Host.isMacApp && info && info.auto) applyAuto(); }, 3600e3);
+  setInterval(() => { if (Host.isMacApp && info && info.auto) applyAuto(); else if (Host.isMacApp && info && ownPic(info)) sync(); }, 3600e3);
   return {
     sync, toB64, autoNow: () => (info && info.auto ? autoSeason(todayStr()) : null),
     setOwner: (v) => { owner = !!v; },
     isOwner: () => owner,
     info: () => info || { v: 'default', custom: false },
-    url: () => { const sid = info && info.auto ? autoSeason(todayStr()) : null; return sid ? `icons/seasonal/${sid}-160.png` : '/api/app-icon?v=' + encodeURIComponent((info && info.v) || 'default'); },
+    url: () => { const sid = info && (info.auto || ownPic(info)) ? autoSeason(todayStr()) : null; return sid ? `icons/seasonal/${sid}-160.png` : '/api/app-icon?v=' + encodeURIComponent((info && info.v) || 'default'); },
   };
 })();
 
@@ -7895,7 +7906,7 @@ function appIconCard() {
       <h3>${icon('image')}Mac app icon</h3>
       <div class="ai-row">
         <div class="ai-dock" aria-hidden="true"><img src="${AppIcon.url()}" alt=""></div>
-        <div class="ai-txt"><b>${i.auto ? 'Automatic' : i.preset && window.E11_SEASONS && E11_SEASONS[i.preset] ? esc(E11_SEASONS[i.preset].name) : i.custom ? 'Custom icon' : 'Everyday icon'}</b><span>${i.auto ? `${AppIcon.autoNow() ? esc(E11_SEASONS[AppIcon.autoNow()].name) + ' today' : 'Everyday icon today'} — each seasonal icon comes on by itself on its own day (or days)` : i.custom && i.at ? `Chosen ${esc(timeAgo(i.at))}, until you pick another one or Automatic` : 'The icon that comes with the Mac app'}. It shows in everyone’s Dock and on the startup animation.</span></div>
+        <div class="ai-txt"><b>${i.auto ? 'Automatic' : i.preset && window.E11_SEASONS && E11_SEASONS[i.preset] ? esc(E11_SEASONS[i.preset].name) : i.custom ? 'Custom icon' : 'Everyday icon'}</b><span>${i.auto ? `${AppIcon.autoNow() ? esc(E11_SEASONS[AppIcon.autoNow()].name) + ' today' : 'Everyday icon today'} — each seasonal icon comes on by itself on its own day (or days)` : i.custom && i.at ? `Chosen ${esc(timeAgo(i.at))}, until you pick another one or Automatic${!i.preset ? ' (occasion icons still show on their days)' : ''}` : 'The icon that comes with the Mac app'}. It shows in everyone’s Dock and on the startup animation.</span></div>
       </div>
       <h4 class="pf-sub">Seasonal icons</h4>
       <div class="ai-seasons">
