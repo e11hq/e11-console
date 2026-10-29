@@ -2900,3 +2900,10 @@ html.mac-chrome .fpv-top { padding-left: 88px; }
 html.mac-chrome.mac-fs .fpv-top { padding-left: 18px; }
 /* the comment count on a task's Comments tab: a small round badge (as on the phone) */
 .seg .seg-n { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; margin-left: 6px; border-radius: 10px; background: rgba(120, 120, 135, .18); color: var(--text); font-style: normal; font-size: 11.5px; font-weight: 650; line-height: 1; vertical-align: 1px; }
+
+/* Videos: a cover picture with a play mark; they play in the preview (app.js videoPlay) */
+.vcover { position: relative; cursor: pointer; }
+.vcover video { pointer-events: none; }
+.vplay { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 56px; height: 56px; border-radius: 50%; background: rgba(0, 0, 0, 0.55); border: 1px solid rgba(255, 255, 255, 0.25); color: #fff; display: grid; place-items: center; pointer-events: none; transition: transform .15s, background .15s; }
+.vplay .ic { width: 22px; height: 22px; margin-left: 3px; fill: currentColor; }
+.vcover:hover .vplay { background: rgba(0, 0, 0, 0.7); transform: translate(-50%, -50%) scale(1.06); }

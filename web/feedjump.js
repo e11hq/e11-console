@@ -32,8 +32,18 @@ const FeedJump = (() => {
     b.className = 'jl ' + (news.length ? 'jl-new' : 'jl-round');
     b.setAttribute('aria-label', news.length ? `${news.length} new comments — jump to the latest` : 'Jump to the latest comment');
     if (b.dataset.html !== html) { b.innerHTML = html; b.dataset.html = html; }
-    const comp = col.querySelector('.tm-composer');
-    b.style.bottom = ((comp ? comp.offsetHeight : 0) + 14) + 'px';
+    place(col);
+  }
+  // always just above the comment box, also when it grows (files added, more lines, the attach bar)
+  function place(col) {
+    const b = col.querySelector(':scope > .jl'), comp = col.querySelector('.tm-composer');
+    if (b) b.style.bottom = ((comp ? comp.offsetHeight : 0) + 14) + 'px';
+    if (comp && typeof ResizeObserver !== 'undefined' && col.__jlComp !== comp) {
+      if (col.__jlRO) col.__jlRO.disconnect();
+      col.__jlComp = comp;
+      col.__jlRO = new ResizeObserver(() => place(col));
+      col.__jlRO.observe(comp);
+    }
   }
   // after the task page is drawn (app.js renderDetail)
   function afterDetail(pane, t, prev) {

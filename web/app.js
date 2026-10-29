@@ -3810,7 +3810,11 @@ const fileUrl = (a) => '/__file/' + String(a.path).split('/').map(encodeURICompo
 const viewUrl = (a) => fileUrl(a) + (Host.isServer ? '?view=1' : '');
 const posterUrl = (a) => (a && a.thumb ? '/__file/' + a.thumb.split('/').map(encodeURIComponent).join('/') : '');
 // a video player that shows its thumbnail as a cover and loads nothing until someone presses play
-const videoTag = (a, cls, extra = '') => `<video class="${cls}" src="${viewUrl(a)}" controls playsinline preload="none"${a.thumb ? ` poster="${posterUrl(a)}"` : ''} data-vposter="${esc(a.id)}" ${extra}></video>`;
+// (controls off: a cover picture only — the video plays in the preview, see videoPlay)
+const videoTag = (a, cls, extra = '', controls = true) => `<video class="${cls}" src="${viewUrl(a)}" ${controls ? 'controls' : 'muted tabindex="-1"'} playsinline preload="none"${a.thumb ? ` poster="${posterUrl(a)}"` : ''} data-vposter="${esc(a.id)}" ${extra}></video>`;
+// Videos everywhere (comments, task files, Client Assets, reviews) show their cover picture with a play mark; a tap
+// opens the preview, where the video plays. Nothing plays inside a list.
+const videoPlay = () => `<span class="vplay" aria-hidden="true">${icon('play')}</span>`;
 const imgUrl = (a, w) => fileUrl(a) + (Host.isServer && !/\.svg$/i.test(String(a.path)) ? '?w=' + w : '');
 function fileIcon(a) {
   return isImage(a) && Host.isNative
@@ -3931,7 +3935,7 @@ function attPreview(a, scope) {
   const kind = fileKind(a);
   let media = '';
   if (kind === 'image') media = `<div class="ap-img" data-action="quicklook" data-id="${a.id}">${MediaDims.frame(a, `<img src="${imgUrl(a, 1280)}" alt="" loading="lazy">`)}</div>`;
-  else if (kind === 'video') media = `<div class="ap-vid">${MediaDims.frame(a, videoTag(a, 'ap-video', `data-media-key="${key}"${scope === 'client' ? ' data-thumb-client="1"' : ''}`))}</div>`;
+  else if (kind === 'video') media = `<div class="ap-vid vcover" data-action="quicklook" data-id="${a.id}" title="Play in the preview">${MediaDims.frame(a, videoTag(a, 'ap-video', `data-media-key="${key}"${scope === 'client' ? ' data-thumb-client="1"' : ''}`, false))}${videoPlay()}</div>`;
   else if (kind === 'audio') media = `<div class="ap-audio"><audio data-media-key="${key}" src="${url}" controls preload="metadata"></audio></div>`;
   else if (kind === 'pdf') media = `<iframe class="ap-pdf" src="${url}" title="${esc(a.name)}"></iframe>`;
   else if (kind === 'text') media = `<pre class="ap-text" data-text-src="${url}">Loading preview…</pre>`;
