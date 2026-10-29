@@ -195,6 +195,35 @@ const NativeMac = (() => {
 })();
 
 
+/* ================= Haptics (iPhone app 8 and newer) =================
+   iOS's own taps: a tick when switching tabs, a knock when a menu opens or something is held, success when a comment
+   is sent / work approved / a task done, warning when something fails. Nothing anywhere else (browser, Mac app, older
+   iPhone apps). Two taps closer than 0.15 s count as one. */
+const Haptic = (() => {
+  let on = null, last = 0;
+  const check = () => {
+    if (on !== null || !Host.isIOSApp) return;
+    on = false;
+    NativeMac.call('appInfo').then((r) => { on = Number(r && r.shell) >= 8; }).catch(() => {});
+  };
+  const fire = (kind) => {
+    if (!Host.isIOSApp) return;
+    check();
+    if (!on) return;
+    const now = Date.now();
+    if (now - last < 150) return;
+    last = now;
+    NativeMac.call('haptic', { kind }).catch(() => {});
+  };
+  if (Host.isIOSApp) setTimeout(check, 0);
+  // tabs inside the page (task Details / Comments, To Do / Done, Inbox…): also when swiped to, which clicks the button
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest && e.target.closest('.ph-seg button, .ph-chips button');
+    if (b && !b.classList.contains('on')) fire('selection');
+  }, true);
+  return { on: () => { check(); return !!on; }, light: () => fire('light'), medium: () => fire('medium'), select: () => fire('selection'), success: () => fire('success'), warn: () => fire('warning') };
+})();
+
 /* ================= Seasonal icons: each one shows only on its own day(s) (Automatic) ================= */
 // md: the same day every year (a third value: its last day); occ: from the occasions calendar (moon dates, confirmed
 // ones included), with the calendar's own days — Eid al-Fitr 3 days, Eid al-Adha 4, Ramadan the whole month.
@@ -2191,6 +2220,7 @@ function removeTasks(ids) {
 function setDone(t, done) {
   if (amReadOnly(t)) { toast(roMsg()); return; }
   if (!!t.done !== !!done) {
+    if (done) Haptic.success();
     logActivity(t, done ? 'completed this task' : 'reopened this task');
     notifyWatchers(t, 'done', done ? 'completed' : 'reopened');
   }
@@ -4310,6 +4340,7 @@ function detailScroller() {
 }
 function showMenu(anchor, items) {
   closeMenus();
+  if (typeof Phone !== 'undefined' && Phone.on) Haptic.light();
   // (no doubled, leading or trailing dividers when some options aren't there; positions kept for data-mi)
   items = items.map((it, i, a) => (it === '-' && (i === 0 || i === a.length - 1 || a[i - 1] === '-' || a.slice(i + 1).every((x) => x === '-') || a.slice(0, i).every((x) => x === '-')) ? { skip: true } : it));
   const m = document.createElement('div');
@@ -4401,6 +4432,7 @@ function busyToast(msg) {
   };
 }
 function toast(msg, action, ms) {
+  if (/^(Could ?n[’']?t|Could not|Something went wrong|Not sent)/i.test(String(msg))) Haptic.warn();   // (iPhone app: a warning tap)
   const root = $('#toast-root');
   const el = document.createElement('div');
   el.className = 'toast';
@@ -5850,6 +5882,7 @@ function addComment(replyTo, tid) {
   const files = ui.commentFiles[key] || [];
   if (!text && !files.length) return false;
   const cid = postComment(t, replyTo, text, html, files);
+  Haptic.success();
   delete ui.commentFiles[key];
   delete ui.commentDraft[key];
   Unsent.save();
@@ -6882,6 +6915,7 @@ function decideReview(t, r, decision, noteHtml) {
   r.decidedAt = nowISO(); r.decidedBy = currentUserId;
   const who = fullName(userById(r.by));
   if (decision === 'approve') {
+    Haptic.success();
     r.state = 'approved';
     t.partsDone = t.partsDone || {};
     t.partsDone[r.by] = nowISO();

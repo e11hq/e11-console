@@ -13,7 +13,7 @@ import PhotosUI
 import UniformTypeIdentifiers
 
 // Version of this iPhone app's native part (raise it with changes the web app needs to know about)
-let SHELL_VERSION = 7   // 7: the comment box rides down / up with the keyboard frame by frame (__e11KbStep) · 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
+let SHELL_VERSION = 8   // 8: iOS haptics for the page (haptic kind: light / medium / selection / success / warning / error) · 7: the comment box rides down / up with the keyboard frame by frame (__e11KbStep) · 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
 let procEnv = ProcessInfo.processInfo.environment
 let SELFTEST = procEnv["E11_SELFTEST"] ?? ""           // the build machine's self-test in the simulator
 let info = Bundle.main.infoDictionary ?? [:]
@@ -732,7 +732,17 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       let u = a["url"] as? String ?? ""
       guard u.range(of: "^(https?|mailto|tel):", options: [.regularExpression, .caseInsensitive]) != nil, let url = URL(string: u) else { return done(["ok": false, "error": "Only web links can be opened"]) }
       UIApplication.shared.open(url); done(["ok": true])
-    case "haptic": UIImpactFeedbackGenerator(style: .light).impactOccurred(); done(["ok": true])
+    case "haptic":
+      // iOS's own taps: a light / medium knock, a tab-switch tick, or success / warning / error
+      switch a["kind"] as? String ?? "light" {
+      case "medium": UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+      case "selection": UISelectionFeedbackGenerator().selectionChanged()
+      case "success": UINotificationFeedbackGenerator().notificationOccurred(.success)
+      case "warning": UINotificationFeedbackGenerator().notificationOccurred(.warning)
+      case "error": UINotificationFeedbackGenerator().notificationOccurred(.error)
+      default: UIImpactFeedbackGenerator(style: .light).impactOccurred()
+      }
+      done(["ok": true])
     case "notify": done(["ok": true])   // (Apple's notifications come from the server)
     case "pushStatus": pushState { done(["ok": true, "state": $0]) }
     case "pushRegister":

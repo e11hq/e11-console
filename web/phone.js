@@ -1293,6 +1293,7 @@ const Push = (() => {
   const HOLD = 450;
   let timer = null, el = null, x0 = 0, y0 = 0, swallow = 0, lifted = true, held = null;
   const buzz = () => {
+    if (Haptic.on()) return Haptic.medium();   // (iPhone app 8+: iOS's own tap)
     try { if (navigator.vibrate && navigator.vibrate(12)) return; } catch (e) { /* no vibration */ }
     try {
       const l = document.createElement('label');
@@ -1441,6 +1442,7 @@ const Push = (() => {
   let timer = null, el = null, x0 = 0, y0 = 0, swallow = 0;
   const cancel = () => { clearTimeout(timer); timer = null; if (el) el.classList.remove('ph-pressing'); el = null; };
   const buzz = () => {
+    if (Haptic.on()) return Haptic.medium();   // (iPhone app 8+: iOS's own tap)
     try { if (navigator.vibrate && navigator.vibrate(12)) return; } catch (e) { /* none */ }
     try { const l = document.createElement('label'); l.style.cssText = 'position:fixed;left:-200px;top:0;opacity:0;pointer-events:none'; l.innerHTML = '<input type="checkbox" switch>'; l.addEventListener('click', (e) => e.stopPropagation()); document.body.appendChild(l); l.click(); setTimeout(() => l.remove(), 400); } catch (e) { /* none */ }
   };
