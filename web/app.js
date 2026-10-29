@@ -3231,6 +3231,19 @@ function cbTile(a, key) {
   const pic = kind === 'image' && Host.isNative ? `<img src="${imgUrl(a, 240)}" alt="" draggable="false">` : a.thumb ? `<img src="${posterUrl(a)}" alt="" draggable="false">` : '';
   return `<span class="cb-tile ${pic ? '' : 'doc'} ${a.linked ? 'linked' : ''}" title="${esc(a.name)}">${pic || `<b>${esc((fileExt(a.name) || 'file').slice(0, 4))}</b><small>${esc(a.name)}</small>`}${kind === 'video' ? `<i class="cb-play">${icon('play')}</i>` : ''}<button type="button" class="cb-x" data-action="unstage-file" data-key="${key}" data-id="${a.id}" title="Remove" aria-label="Remove ${esc(a.name)}">${icon('x')}</button></span>`;
 }
+// The comment box's waiting files, redrawn on their own (the text being written, and its cursor, left alone).
+// false: that comment box isn't on screen
+function refreshComposerFiles(key) {
+  const ed = document.querySelector(`#detail [data-draft-key="${CSS.escape(key)}"]`);
+  const comp = ed && ed.closest('.composer');
+  if (!comp) return false;
+  const files = ui.commentFiles[key] || [];
+  let box = comp.querySelector(':scope > .cb-files');
+  if (!files.length) { if (box) box.remove(); return true; }
+  if (!box) { box = document.createElement('div'); box.className = 'cb-files'; comp.insertBefore(box, comp.querySelector(':scope > .ph-attach-bar') || ed); }
+  box.innerHTML = files.map((a) => cbTile(a, key)).join('');
+  return true;
+}
 // The one composer at the bottom of the comments panel. It posts a comment, or a reply when
 // a thread is open or "Reply" was clicked on a comment.
 function composer(t, cid) {
@@ -4949,8 +4962,11 @@ async function attachFiles(target = 'task', replyTo = null, dropped = null, sour
       Unsent.save();
       if (Unsent.uploaded(key, true)) return;     // "Send comment" was pressed while they uploaded: sent now
       if (ui.taskId !== t.id) return;
-      renderDetail();
-      setTimeout(() => { const b = $(`[data-draft-key="${key}"]`); if (b) { b.focus(); placeCaretAtEnd(b); } }, 0);
+      // only the waiting files are redrawn: the text box stays as it is, so the cursor (and an iPhone's keyboard) stays
+      if (!refreshComposerFiles(key)) {
+        renderDetail();
+        setTimeout(() => { const b = $(`[data-draft-key="${key}"]`); if (b) { b.focus(); placeCaretAtEnd(b); } }, 0);
+      }
       return;
     }
     files.forEach((f) => t.attachments.push(f));
@@ -5388,7 +5404,7 @@ document.addEventListener('click', async (e) => {
         ui.commentFiles[key] = list.filter((x) => x.id !== id);
         if (a) safeTrash([a.path]);
         Unsent.save();
-        renderDetail();
+        if (!refreshComposerFiles(key)) renderDetail();
         return;
       }
       case 'open-att': case 'reveal-att': {

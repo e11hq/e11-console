@@ -1562,10 +1562,33 @@ const Push = (() => {
   }, { passive: false });
 })();
 
+/* iPhone app 5+: the page stays full height under the keyboard and is told how much of it the keyboard covers
+   (window.__e11Kb from the app). The open task, sheets and pop-ups end at the keyboard's top (--ios-kb); the list
+   behind never changes size, so nothing has to be redrawn when the keyboard goes. Something typed into on a page
+   itself is scrolled into view above the keyboard. */
+(() => {
+  const root = document.documentElement;
+  window.__e11Kb = (px, ms) => {
+    root.classList.add('ios-kb');
+    root.style.setProperty('--ios-kb-t', Math.max(0, Math.min(600, Number(ms) || 250)) + 'ms');
+    root.style.setProperty('--ios-kb', Math.max(0, Number(px) || 0) + 'px');
+    root.classList.toggle('ios-kb-up', px > 0);
+    if (px > 0) reveal();
+  };
+  function reveal() {
+    const a = document.activeElement;
+    if (!a || !a.closest || a.closest('#detail, .ph-scrim, .scrim, .menu') || !a.closest('#content')) { root.classList.remove('ios-kb-content'); return; }
+    root.classList.add('ios-kb-content');
+    setTimeout(() => { try { a.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) { /* fine */ } }, 280);
+  }
+  document.addEventListener('focusin', () => { if (root.classList.contains('ios-kb-up')) reveal(); });
+  document.addEventListener('focusout', () => setTimeout(() => { if (!root.classList.contains('ios-kb-up')) root.classList.remove('ios-kb-content'); }, 300));
+})();
+
 /* Phone: the comment box's + and its Photos · Camera · Files bar don't take the focus from the text, so the keyboard
    stays up while the bar is open; typing again closes the bar */
 (() => {
-  const keep = (e) => { if (Phone.on && e.target.closest && e.target.closest('#detail .tm-composer [data-action="attach-comment"], #detail .tm-composer .ph-attach-bar button')) e.preventDefault(); };
+  const keep = (e) => { if (Phone.on && e.target.closest && e.target.closest('#detail .tm-composer [data-action="attach-comment"], #detail .tm-composer .ph-attach-bar button, #detail .tm-composer .cb-x')) e.preventDefault(); };
   document.addEventListener('mousedown', keep, true);
   document.addEventListener('pointerdown', keep, true);
   document.addEventListener('input', (e) => { const c = e.target.closest && e.target.closest('#detail .tm-composer .composer.ph-attach-on'); if (c) c.classList.remove('ph-attach-on'); }, true);

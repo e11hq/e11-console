@@ -13,7 +13,7 @@ import PhotosUI
 import UniformTypeIdentifiers
 
 // Version of this iPhone app's native part (raise it with changes the web app needs to know about)
-let SHELL_VERSION = 4   // 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
+let SHELL_VERSION = 5   // 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
 let procEnv = ProcessInfo.processInfo.environment
 let SELFTEST = procEnv["E11_SELFTEST"] ?? ""           // the build machine's self-test in the simulator
 let info = Bundle.main.infoDictionary ?? [:]
@@ -173,7 +173,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let b = view.bounds
     // the page always fills the screen (no black band under it); the tab bar floats over its bottom and the page
     // keeps that much room free (--ios-tabs-h, web/phone.css)
-    web.frame = CGRect(x: 0, y: 0, width: b.width, height: b.height - keyboardCover)
+    // (the page stays full height when the keyboard comes up — it's told how much the keyboard covers and makes room
+    //  for it itself, so the list behind an open task never changes size and never has to be redrawn afterwards)
+    web.frame = CGRect(x: 0, y: 0, width: b.width, height: b.height)
     let h = tabBar.sizeThatFits(b.size).height + view.safeAreaInsets.bottom
     tabBar.frame = CGRect(x: 0, y: b.height - h, width: b.width, height: h)
     // (iOS 26's floating bar reports more height than the glass capsule it draws: the page keeps room for the
@@ -231,15 +233,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     keyboardCover = cover
     let dur = (n.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double) ?? 0.25
     let curve = (n.userInfo?[UIResponder.keyboardAnimationCurveUserInfoKey] as? UInt) ?? 7
-    if cover == 0 {
-      // keyboard going away: the page is full height at once and the keyboard slides off it (growing it along with the
-      // keyboard showed half a page and no tab bar for a moment, e.g. going back to E11 Day from a comment)
-      UIView.performWithoutAnimation { self.view.setNeedsLayout(); self.view.layoutIfNeeded() }
-    } else {
-      UIView.animate(withDuration: dur, delay: 0, options: UIView.AnimationOptions(rawValue: curve << 16)) {
-        self.view.setNeedsLayout(); self.view.layoutIfNeeded()
-      }
-    }
+    _ = curve
+    pageJS("window.__e11Kb && window.__e11Kb(\(Int(cover.rounded())), \(Int(dur * 1000)))")
     if web.scrollView.contentOffset != .zero { web.scrollView.setContentOffset(.zero, animated: false) }
   }
   var offsetWatch: NSKeyValueObservation?
