@@ -3338,7 +3338,7 @@ function commentHTML(t, c, isReply) {
       ${editing
         ? `<div class="composer edit"><div class="rt-editor" contenteditable="true" id="edit-comment" data-placeholder="Edit comment…">${c.html ? sanitizeHTML(c.html) : esc(c.text).replace(/\n/g, '<br>')}</div><div class="cb-foot">${fmtToolbar()}<span class="spacer"></span><button class="btn ghost sm" data-action="cancel-edit">Cancel</button><button class="btn primary sm" data-action="save-edit" data-id="${c.id}">Save</button></div></div>`
         : (c.html ? `<div class="cm-text rich">${sanitizeHTML(c.html, true)}</div>` : c.text ? `<div class="cm-text">${linkify(esc(c.text))}</div>` : '')}
-      ${(c.attachments || []).length ? `<div class="c-files">${c.attachments.map((a) => attPreview(a, 'comment')).join('')}</div>` : ''}
+      ${(c.attachments || []).length ? commentFiles(c.attachments) : ''}
       ${typeof Cmx !== 'undefined' ? Cmx.cardsHTML(t, c) : ''}
       ${reacts.length ? `<div class="cm-reacts">${reacts.map(([e, n]) => `<button class="react on" data-action="react" data-id="${c.id}" data-emoji="${e}">${e}<span>${n}</span></button>`).join('')}</div>` : ''}
       ${typeof Cmx !== 'undefined' ? Cmx.seenHTML(t, c) : ''}
@@ -3651,7 +3651,7 @@ function renderDetail() {
   if (typeof Cmx !== 'undefined') Cmx.afterDetail(pane, t);
 }
 const RO_OK = new Set(['close-detail', 'close-preview', 'close-thread', 'close-lightbox', 'side-tab', 'detail-mode', 'nav-back', 'nav-forward', 'nav-task', 'open-task',
-  'open-att', 'quicklook', 'copy-att', 'reveal-att', 'lightbox', 'tile-open', 'fileref-open', 'open-url', 'share-task', 'go-project', 'open-client', 'disp-toggle', 'fields-toggle', 'collapse',
+  'open-att', 'quicklook', 'copy-att', 'reveal-att', 'ct-menu', 'lightbox', 'tile-open', 'fileref-open', 'open-url', 'share-task', 'go-project', 'open-client', 'disp-toggle', 'fields-toggle', 'collapse',
   'reply', 'react', 'react-menu', 'add-comment', 'sched-open', 'attach-comment', 'comment-menu', 'open-thread', 'cancel-reply', 'mention-user', 'fmt', 'save-edit', 'cancel-edit', 'paste-clip', 'act-filter']);
 const inComments = (el) => !!(el.closest && el.closest('.tm-feed, .tm-composer, .cm, .composer:not(.desc)'));
 function readOnlyDetail(pane, t) {
@@ -3949,6 +3949,33 @@ function attPreview(a, scope) {
       <button class="icon-btn sm" data-action="quicklook" data-id="${a.id}" title="Preview">${icon('search')}</button>
       <button class="icon-btn sm" data-action="reveal-att" data-id="${a.id}" title="${FINDER_LABEL}">${icon(Host.isServer ? 'download' : 'folder')}</button>
       ${scope === 'task' ? `<button class="icon-btn sm" data-action="remove-att" data-id="${a.id}" title="Remove">${icon('trash')}</button>` : ''}
+    </div>
+  </div>`;
+}
+// A comment's files: one shows full size as before; two or more become tiles, up to 3 a row and 6 in all
+// (the 6th says "+N" and opens the preview there; the preview swipes through every file in the comment)
+const COMMENT_TILES_MAX = 6;
+function commentFiles(list) {
+  if (list.length < 2 || !Host.isNative) return `<div class="c-files">${list.map((a) => attPreview(a, 'comment')).join('')}</div>`;
+  const shown = list.slice(0, COMMENT_TILES_MAX), more = list.length - shown.length;
+  return `<div class="c-files ct-grid ct-${Math.min(list.length, 3)}">${shown.map((a, i) => commentTile(a, i === shown.length - 1 ? more : 0)).join('')}</div>`;
+}
+function commentTile(a, more) {
+  const kind = fileKind(a);
+  let m;
+  if (kind === 'image') m = `<img src="${imgUrl(a, 640)}" alt="" loading="lazy" draggable="false">`;
+  else if (kind === 'video') m = a.thumb ? `<img src="${posterUrl(a)}" alt="" loading="lazy" draggable="false">` : videoTag(a, 'ct-video', '', false);
+  else m = thumbImg(a, 'tile');
+  return `<div class="ct ${kind === 'image' || (kind === 'video') || a.thumb ? '' : 'ct-doc'}">
+    <div class="ct-media${kind === 'video' ? ' vcover' : ''}" data-action="quicklook" data-id="${a.id}" title="${more ? `${more} more — open the preview` : 'Preview'}">${m}${kind === 'video' ? videoPlay() : ''}${more ? `<span class="ct-more">+${more}</span>` : ''}</div>
+    <div class="ct-bar">
+      <div class="fname"><div title="${esc(a.name)}">${esc(a.name)}</div><small>${fmtSize(a.size)}</small></div>
+      <button class="icon-btn sm" data-action="ct-menu" title="More">${icon('more')}</button>
+      <span hidden>
+        <button data-action="copy-att" data-id="${a.id}"></button>
+        <button data-action="quicklook" data-id="${a.id}"></button>
+        <button data-action="reveal-att" data-id="${a.id}"></button>
+      </span>
     </div>
   </div>`;
 }
@@ -5693,6 +5720,18 @@ document.addEventListener('click', async (e) => {
           { label: 'Download', icon: 'download', run: tap('[data-action="ca-download"]') },
           { label: 'Info', icon: 'info', run: tap('[data-action="ca-info"]') },
           ...(has('[data-action="ca-remove"]') ? ['-', { label: 'Delete', icon: 'trash', danger: true, run: tap('[data-action="ca-remove"]') }] : []),
+        ]);
+        return;
+      }
+      // a comment's file tile: its actions in a menu (Copy, Preview, Download / Show in Finder)
+      case 'ct-menu': {
+        e.stopPropagation();
+        const tile = actEl.closest('.ct'); if (!tile) return;
+        const tap = (sel) => () => { const b = tile.querySelector(sel); if (b) b.click(); };
+        showMenu(actEl, [
+          { label: 'Copy', icon: 'copy', hint: 'Paste into a comment or description', run: tap('[data-action="copy-att"]') },
+          { label: 'Preview', icon: 'search', run: tap('[data-action="quicklook"]') },
+          { label: FINDER_LABEL, icon: Host.isServer ? 'download' : 'folder', run: tap('[data-action="reveal-att"]') },
         ]);
         return;
       }

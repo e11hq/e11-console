@@ -2922,3 +2922,24 @@ html.mac-chrome .fpv-oncomputer .fpv-top { padding-left: 18px; }
 .fpv-oncomputer.fpv-zoomed .fpv-slide .fpv-img { cursor: grab; }
 .fpv-oncomputer.fpv-zoomed.fpv-dragging .fpv-slide .fpv-img { cursor: grabbing; }
 .fpv-oncomputer.fpv-zoomed .fpv-arr { opacity: 0; pointer-events: none; }
+
+/* A comment's files as tiles (2 or more): 2 side by side, then up to 3 a row; the 6th shows "+N" */
+.ct-grid { display: grid; gap: 8px; margin-top: 8px; }
+.ct-grid.ct-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ct-grid.ct-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ct { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--bg); min-width: 0; }
+.ct-media { position: relative; aspect-ratio: 4 / 3; background: #0e0e10; overflow: hidden; cursor: pointer; }
+.ct-media > img, .ct-media > video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.ct-doc .ct-media { background: #121215; }
+.ct-media .qthumb { position: absolute; inset: 8% 0 0; width: 100%; height: 92%; object-fit: contain; object-position: center top; }
+.ct-media .thumb-ph { position: absolute; inset: 0; }
+.ct-media .vplay { width: 40px; height: 40px; }
+.ct-media .vplay .ic { width: 17px; height: 17px; }
+.ct-3 .ct-media .vplay { width: 32px; height: 32px; }
+.ct-3 .ct-media .vplay .ic { width: 14px; height: 14px; margin-left: 2px; }
+.ct-more { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(10, 10, 14, 0.62); color: #fff; font-size: 24px; font-weight: 600; pointer-events: none; }
+.ct-bar { display: flex; align-items: center; gap: 4px; padding: 5px 4px 5px 8px; border-top: 1px solid var(--border); }
+.ct-bar .fname { flex: 1; min-width: 0; }
+.ct-bar .fname div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.ct-bar .fname small { color: var(--text-3); font-size: 10.5px; }
+.ct-bar .icon-btn { flex: none; }
