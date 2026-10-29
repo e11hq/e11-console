@@ -2913,3 +2913,13 @@ html.mac-chrome.mac-fs .fpv-top { padding-left: 18px; }
 .fpv-slide .fpv-light { width: 100%; height: 100%; }
 .fpv-slide .fpv-light .fpv-cover { width: 100%; height: 100%; max-width: none; max-height: none; object-fit: contain; border-radius: 0; }
 .fpv-slide .fpv-video { width: 100%; height: 100%; max-width: none; max-height: none; object-fit: contain; background: transparent; border-radius: 0; }
+
+/* Preview on a computer (Mac app too): Close sits on the right, after ⋯ (clear of the Mac window buttons); the
+   "1 of 2" stays in the middle */
+.fpv-oncomputer .fpv-top { justify-content: flex-end; }
+html.mac-chrome .fpv-oncomputer .fpv-top { padding-left: 18px; }
+/* Preview on a computer: pinch / double-click zoom on pictures (viewer.js trackpad) */
+.fpv-oncomputer .fpv-slide .fpv-img { cursor: zoom-in; }
+.fpv-oncomputer.fpv-zoomed .fpv-slide .fpv-img { cursor: grab; }
+.fpv-oncomputer.fpv-zoomed.fpv-dragging .fpv-slide .fpv-img { cursor: grabbing; }
+.fpv-oncomputer.fpv-zoomed .fpv-arr { opacity: 0; pointer-events: none; }

@@ -54,9 +54,9 @@ const Viewer = (() => {
     document.body.classList.add('pv-open');
     host.innerHTML = `<div class="fpv ${phone() ? 'fpv-onphone' : 'fpv-oncomputer'} ${many ? 'fpv-many' : ''}" role="dialog" aria-label="File preview">
       <div class="fpv-top">
-        <button class="fpv-rb" data-pv="close" aria-label="Close">${icon('x')}</button>
+        ${phone() ? `<button class="fpv-rb" data-pv="close" aria-label="Close">${icon('x')}</button>` : ''}
         <div class="fpv-count"></div>
-        <div class="fpv-acts">${phone() ? '' : `<button class="fpv-btn" data-pv="copy" title="Paste it into any comment or description">${icon('copy')}Copy</button><button class="fpv-btn" data-pv="dl">${icon('download')}Download</button>`}<button class="fpv-rb" data-pv="more" aria-label="More">${icon('more')}</button></div>
+        <div class="fpv-acts">${phone() ? '' : `<button class="fpv-btn" data-pv="copy" title="Paste it into any comment or description">${icon('copy')}Copy</button><button class="fpv-btn" data-pv="dl">${icon('download')}Download</button>`}<button class="fpv-rb" data-pv="more" aria-label="More">${icon('more')}</button>${phone() ? '' : `<button class="fpv-rb" data-pv="close" aria-label="Close" title="Close (esc)">${icon('x')}</button>`}</div>
       </div>
       <div class="fpv-stage"><div class="fpv-track"></div></div>
       ${!phone() && many ? `<button class="fpv-arr prev" data-pv="prev" aria-label="Previous">${icon('chev-left')}</button><button class="fpv-arr next" data-pv="next" aria-label="Next">${icon('chev-right')}</button>` : ''}
@@ -70,7 +70,7 @@ const Viewer = (() => {
     root = host.querySelector('.fpv');
     root.addEventListener('click', onClick);
     if (phone()) touch(root.querySelector('.fpv-stage'));
-    else { root.addEventListener('mousemove', wake); wake(); }
+    else { trackpad(root.querySelector('.fpv-stage')); root.addEventListener('mousemove', wake); wake(); }
     if (!keyOn) { document.addEventListener('keydown', onKey, true); keyOn = true; }
     show(at);
   }
@@ -243,6 +243,36 @@ const Viewer = (() => {
       get img() { return img; },
     };
   })();
+  // Mac / computer: pinch on the trackpad (or ctrl + mouse wheel) zooms a picture where the pointer is; zoomed, two
+  // fingers or dragging move it around; double-click zooms in / back. Safari and the Mac app send gesture events,
+  // other browsers a wheel with ctrlKey.
+  function trackpad(stage) {
+    const around = (ns, cx, cy) => {
+      const img = zoom.img; if (!img) return;
+      const r = img.getBoundingClientRect();
+      const bx = r.left + r.width / 2 - zoom.x, by = r.top + r.height / 2 - zoom.y;   // the picture's centre unzoomed
+      const k = Math.max(1, Math.min(5, ns)) / zoom.s;
+      zoom.set(ns, (cx - bx) - (cx - bx - zoom.x) * k, (cy - by) - (cy - by - zoom.y) * k);
+    };
+    const onImg = (e) => zoom.img && e.target && e.target.closest && e.target.closest('.fpv-slide') === zoom.img.closest('.fpv-slide');
+    stage.addEventListener('wheel', (e) => {
+      if (!zoom.img) return;
+      if (e.ctrlKey) { e.preventDefault(); around(zoom.s * Math.exp(-e.deltaY / 100), e.clientX, e.clientY); return; }
+      if (zoom.on) { e.preventDefault(); zoom.set(zoom.s, zoom.x - e.deltaX, zoom.y - e.deltaY); }
+    }, { passive: false });
+    let g0 = null;
+    stage.addEventListener('gesturestart', (e) => { if (!zoom.img) return; e.preventDefault(); g0 = zoom.s; });
+    stage.addEventListener('gesturechange', (e) => { if (g0 == null || !zoom.img) return; e.preventDefault(); around(g0 * e.scale, e.clientX, e.clientY); });
+    stage.addEventListener('gestureend', (e) => { if (g0 == null) return; e.preventDefault(); g0 = null; if (zoom.s < 1.05) zoom.set(1, 0, 0); });
+    stage.addEventListener('dblclick', (e) => { if (!onImg(e)) return; e.preventDefault(); if (zoom.on) zoom.set(1, 0, 0); else around(2.5, e.clientX, e.clientY); });
+    stage.addEventListener('mousedown', (e) => { if (!zoom.on || e.button !== 0 || !onImg(e)) return; e.preventDefault(); drag = { x: e.clientX, y: e.clientY, zx: zoom.x, zy: zoom.y }; root.classList.add('fpv-dragging'); });
+    if (!dragOn) {   // (once for the page; the preview itself is made anew each time it opens)
+      dragOn = true;
+      window.addEventListener('mousemove', (e) => { if (drag) zoom.set(zoom.s, drag.zx + e.clientX - drag.x, drag.zy + e.clientY - drag.y); });
+      window.addEventListener('mouseup', () => { if (drag) { drag = null; if (root) root.classList.remove('fpv-dragging'); } });
+    }
+  }
+  let drag = null, dragOn = false;
   function touch(stage) {
     let g = null, lastTap = 0, pinch = null;
     const dist = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
