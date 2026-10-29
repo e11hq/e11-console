@@ -55,13 +55,7 @@ const FeedJump = (() => {
     else if (prev && st.atEnd) feed.scrollTop = feed.scrollHeight;       // at the latest: new comments stay in view
     if (atEnd(feed)) st.seen = ids(t);
     paint(feed, t);
-    // phone: at the latest comment it stays at the latest while the list changes size (the keyboard going down and
-    // up again as the page redraws after Send made the list jump up by the keyboard's height)
-    let end = atEnd(feed);
-    feed.addEventListener('scroll', () => { end = atEnd(feed); const tt = task(ui.taskId); if (tt) paint(feed, tt); }, { passive: true });
-    if (typeof Phone !== 'undefined' && Phone.on && typeof ResizeObserver !== 'undefined') {
-      new ResizeObserver(() => { if (end && feed.isConnected && !atEnd(feed)) feed.scrollTop = feed.scrollHeight; }).observe(feed);
-    }
+    feed.addEventListener('scroll', () => { const tt = task(ui.taskId); if (tt) paint(feed, tt); }, { passive: true });
   }
   return { on, afterDetail };
 })();
