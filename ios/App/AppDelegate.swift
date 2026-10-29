@@ -13,7 +13,7 @@ import PhotosUI
 import UniformTypeIdentifiers
 
 // Version of this iPhone app's native part (raise it with changes the web app needs to know about)
-let SHELL_VERSION = 10   // 10: My Tasks, Inbox and Team lists swiped by iOS itself (Pager.syncLists in phone.js) · 9: a task’s Details / Comments swiped by iOS itself (the page: Pager in phone.js) · 8: iOS haptics for the page (haptic kind: light / medium / selection / success / warning / error) · 7: the comment box rides down / up with the keyboard frame by frame (__e11KbStep) · 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
+let SHELL_VERSION = 11   // 11: plain menus open as iOS's own action sheet (actionSheet; the page: showMenu in app.js) · 10: My Tasks, Inbox and Team lists swiped by iOS itself (Pager.syncLists in phone.js) · 9: a task’s Details / Comments swiped by iOS itself (the page: Pager in phone.js) · 8: iOS haptics for the page (haptic kind: light / medium / selection / success / warning / error) · 7: the comment box rides down / up with the keyboard frame by frame (__e11KbStep) · 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
 let procEnv = ProcessInfo.processInfo.environment
 let SELFTEST = procEnv["E11_SELFTEST"] ?? ""           // the build machine's self-test in the simulator
 let info = Bundle.main.infoDictionary ?? [:]
@@ -742,6 +742,31 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       case "error": UINotificationFeedbackGenerator().notificationOccurred(.error)
       default: UIImpactFeedbackGenerator(style: .light).impactOccurred()
       }
+      done(["ok": true])
+    case "actionSheet":
+      // a plain menu from the page (text only) as iOS's own action sheet; replies with the chosen row, or -1 for Cancel
+      let rows = a["items"] as? [[String: Any]] ?? []
+      let sheet = UIAlertController(title: (a["title"] as? String).flatMap { $0.isEmpty ? nil : $0 }, message: nil, preferredStyle: .actionSheet)
+      var answered = false
+      // (what the option does counts as from a tap: a text box it opens brings the keyboard up)
+      let answer: (Int) -> Void = { i in if !answered { answered = true; if i >= 0 { FocusAfterPicker.allow() }; done(["ok": true, "index": i]) } }
+      for (i, r) in rows.enumerated() {
+        let act = UIAlertAction(title: r["label"] as? String ?? "", style: (r["danger"] as? Bool) == true ? .destructive : .default) { _ in answer(i) }
+        sheet.addAction(act)
+      }
+      sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in answer(-1) })
+      if let pop = sheet.popoverPresentationController {   // (iPad: points at what opened it)
+        let r = a["rect"] as? [String: Any] ?? [:]
+        func n(_ k: String) -> CGFloat { CGFloat((r[k] as? NSNumber)?.doubleValue ?? 0) }
+        pop.sourceView = web
+        pop.sourceRect = CGRect(x: n("x"), y: n("y"), width: max(1, n("w")), height: max(1, n("h")))
+      }
+      let host = presentedViewController ?? self
+      if host is UIAlertController { return done(["ok": false]) }
+      host.present(sheet, animated: true)
+    case "copyText":
+      // the page's "Copy" (also when it runs from the action sheet, after the tap the browser would want)
+      UIPasteboard.general.string = a["text"] as? String ?? ""
       done(["ok": true])
     case "notify": done(["ok": true])   // (Apple's notifications come from the server)
     case "pushStatus": pushState { done(["ok": true, "state": $0]) }

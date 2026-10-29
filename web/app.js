@@ -4348,6 +4348,8 @@ function detailScroller() {
 }
 function showMenu(anchor, items) {
   closeMenus();
+  // iPhone app 11+: a plain menu (only text options) opens as iOS's own action sheet
+  if (NativeSheet.fits(items)) return NativeSheet.open(anchor, items);
   if (typeof Phone !== 'undefined' && Phone.on) Haptic.light();
   // (no doubled, leading or trailing dividers when some options aren't there; positions kept for data-mi)
   items = items.map((it, i, a) => (it === '-' && (i === 0 || i === a.length - 1 || a[i - 1] === '-' || a.slice(i + 1).every((x) => x === '-') || a.slice(0, i).every((x) => x === '-')) ? { skip: true } : it));
@@ -4388,6 +4390,28 @@ function showMenu(anchor, items) {
   });
   return m;
 }
+
+/* iPhone app 11+: menus whose options are all plain text (no avatars, search, colours, reactions or notes) open as
+   iOS's own action sheet; the chosen option runs here as if tapped. Anything else stays the page's own sheet. */
+const NativeSheet = (() => {
+  let on = false;
+  if (typeof Host !== 'undefined' && Host.isIOSApp) NativeMac.call('appInfo').then((r) => {
+    on = Number(r && r.shell) >= 11;
+    // (an option chosen in the sheet runs after the tap, where the browser refuses to copy: the app copies instead)
+    if (on && navigator.clipboard) try { navigator.clipboard.writeText = (text) => NativeMac.call('copyText', { text: String(text == null ? '' : text) }).then(() => undefined); } catch (e) { /* keeps the browser's */ }
+  }).catch(() => {});
+  const fits = (items) => on && typeof Phone !== 'undefined' && Phone.on && items.some((it) => it && it !== '-' && it.run)
+    && items.every((it) => it === '-' || (it && !it.html && !it.hint && typeof it.label === 'string' && typeof it.run === 'function'));
+  function open(anchor, items) {
+    const rows = items.filter((it) => it !== '-');
+    const r = anchor && anchor.getBoundingClientRect ? anchor.getBoundingClientRect() : { left: 0, top: 0, width: 0, height: 0 };
+    NativeMac.call('actionSheet', { items: rows.map((it) => ({ label: it.label, danger: !!it.danger })), rect: { x: r.left, y: r.top, w: r.width, h: r.height } })
+      .then((res) => { const i = res && res.ok ? Number(res.index) : -1; if (i >= 0 && rows[i]) rows[i].run(); })
+      .catch(() => {});
+    return document.createElement('div');   // (callers may add a class to the menu: nothing on screen)
+  }
+  return { fits, open };
+})();
 
 function dialog({ title, body = '', bodyHtml = '', input = null, okText = 'OK', cancelText = 'Cancel', danger = false, colors = null }) {
   return new Promise((resolve) => {
