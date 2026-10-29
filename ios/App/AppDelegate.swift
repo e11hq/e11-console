@@ -13,7 +13,7 @@ import PhotosUI
 import UniformTypeIdentifiers
 
 // Version of this iPhone app's native part (raise it with changes the web app needs to know about)
-let SHELL_VERSION = 6   // 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
+let SHELL_VERSION = 7   // 7: the comment box rides down / up with the keyboard frame by frame (__e11KbStep) · 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
 let procEnv = ProcessInfo.processInfo.environment
 let SELFTEST = procEnv["E11_SELFTEST"] ?? ""           // the build machine's self-test in the simulator
 let info = Bundle.main.infoDictionary ?? [:]
@@ -249,9 +249,48 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     keyboardCover = cover
     let dur = (n.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double) ?? 0.25
     let curve = (n.userInfo?[UIResponder.keyboardAnimationCurveUserInfoKey] as? UInt) ?? 7
-    _ = curve
-    pageJS("window.__e11Kb && window.__e11Kb(\(Int(cover.rounded())), \(Int(dur * 1000)))")
+    pageJS("window.__e11Kb && window.__e11Kb(\(Int(cover.rounded())), \(Int(dur * 1000)), 1)")
+    rideKeyboard(to: cover, duration: dur, curve: curve)
     if web.scrollView.contentOffset != .zero { web.scrollView.setContentOffset(.zero, animated: false) }
+  }
+  // The comment box moves with the keyboard, not ahead of it: an invisible view is animated with the keyboard's own
+  // duration and curve (the same animation iOS gives the keyboard), and every screen frame the page is told where
+  // the keyboard's top is now (--ios-kb). A CSS curve of the page's own raced ahead and the box slammed down.
+  let kbProbe: UIView = { let v = UIView(); v.alpha = 0; v.isUserInteractionEnabled = false; return v }()
+  var kbLink: CADisplayLink?
+  var kbUntil: CFTimeInterval = 0
+  var kbTarget = 0
+  var kbSent = -1
+  func probeCover() -> CGFloat {
+    let y = kbProbe.layer.presentation()?.frame.minY ?? kbProbe.frame.minY
+    return max(0, view.bounds.maxY - y)
+  }
+  func rideKeyboard(to cover: CGFloat, duration: Double, curve: UInt) {
+    if kbProbe.superview == nil { view.insertSubview(kbProbe, at: 0); kbProbe.frame = CGRect(x: 0, y: view.bounds.maxY, width: 1, height: 1) }
+    let now = probeCover()                                   // (from where it is now, if the last move hasn't finished)
+    kbProbe.layer.removeAllAnimations()
+    kbProbe.frame = CGRect(x: 0, y: view.bounds.maxY - now, width: 1, height: 1)
+    kbTarget = Int(cover.rounded())
+    guard duration > 0.01 else { kbProbe.frame.origin.y = view.bounds.maxY - cover; sendKb(kbTarget); return }
+    UIView.animate(withDuration: duration, delay: 0, options: [UIView.AnimationOptions(rawValue: curve << 16), .beginFromCurrentState]) {
+      self.kbProbe.frame.origin.y = self.view.bounds.maxY - cover
+    }
+    kbUntil = CACurrentMediaTime() + duration + 0.12
+    if kbLink == nil {
+      let l = CADisplayLink(target: self, selector: #selector(kbTick))
+      if #available(iOS 15.0, *) { l.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120) }
+      l.add(to: .main, forMode: .common)
+      kbLink = l
+    }
+  }
+  @objc func kbTick() {
+    if CACurrentMediaTime() >= kbUntil { kbLink?.invalidate(); kbLink = nil; sendKb(kbTarget); return }
+    sendKb(Int(probeCover().rounded()))
+  }
+  func sendKb(_ px: Int) {
+    if px == kbSent { return }
+    kbSent = px
+    pageJS("window.__e11KbStep ? window.__e11KbStep(\(px)) : (window.__e11Kb && window.__e11Kb(\(px), 0))")
   }
   var offsetWatch: NSKeyValueObservation?
   var resetting = false

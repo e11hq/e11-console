@@ -1569,13 +1569,19 @@ const Push = (() => {
    itself is scrolled into view above the keyboard. */
 (() => {
   const root = document.documentElement;
-  window.__e11Kb = (px, ms) => {
+  // stepped (iPhone app 7+): the app moves --ios-kb itself every frame with the keyboard's own timing (__e11KbStep),
+  // so the comment box rides with the keyboard instead of racing ahead of it on a CSS curve of its own
+  window.__e11Kb = (px, ms, stepped) => {
     root.classList.add('ios-kb');
-    root.style.setProperty('--ios-kb-t', Math.max(0, Math.min(600, Number(ms) || 250)) + 'ms');
-    root.style.setProperty('--ios-kb', Math.max(0, Number(px) || 0) + 'px');
+    if (stepped) root.style.setProperty('--ios-kb-t', '0ms');
+    else {
+      root.style.setProperty('--ios-kb-t', Math.max(0, Math.min(600, Number(ms) || 250)) + 'ms');
+      root.style.setProperty('--ios-kb', Math.max(0, Number(px) || 0) + 'px');
+    }
     root.classList.toggle('ios-kb-up', px > 0);
     if (px > 0) reveal();
   };
+  window.__e11KbStep = (px) => { root.style.setProperty('--ios-kb', Math.max(0, Number(px) || 0) + 'px'); };
   function reveal() {
     const a = document.activeElement;
     if (!a || !a.closest || a.closest('#detail, .ph-scrim, .scrim, .menu') || !a.closest('#content')) { root.classList.remove('ios-kb-content'); return; }
