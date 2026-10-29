@@ -956,3 +956,21 @@ body.phone .fpv.fpv-zoomed .fpv-stage { touch-action: none; }
 
 /* upload progress on the phone: full width above the tab bar (or the comment box, placed by uploadToast) */
 body.phone #upload-root { left: 10px; right: 10px; width: auto; bottom: calc(var(--ph-tabs-h, 0px) + 12px); }
+
+/* The comment box on the phone (Haris, 2026-10-29): one row — + · the text · send — with no formatting buttons; the
+   + opens a bar above it with Photos · Camera · Files (the keyboard stays up) */
+html.phone body.phone #detail .tm-composer .rt-tools, html.phone body.phone #detail .tm-composer .cb-foot > .spacer { display: none !important; }
+html.phone body.phone #detail .tm-composer.ph-open .cb-foot { display: contents; }
+html.phone body.phone #detail .tm-composer.ph-open .rt-editor { flex: 1 1 0; width: auto; min-width: 0; min-height: 44px !important; max-height: 30vh; padding: 11px 4px !important; overflow-y: auto; white-space: normal; order: 0; }
+html.phone body.phone #detail .tm-composer.ph-open [data-action="attach-comment"] { order: -1; width: 44px; height: 44px; align-self: flex-end; }
+html.phone body.phone #detail .tm-composer.ph-open [data-action="add-comment"] { order: 1; align-self: flex-end; }
+html.phone body.phone #detail .tm-composer.ph-open .clip-paste { order: -2; flex-basis: 100%; }
+html.phone body.phone #detail .tm-composer .composer > .cb-replying { order: -6; }
+html.phone body.phone #detail .tm-composer .cb-files { order: -5; }
+html.phone body.phone #detail .tm-composer .ph-attach-bar { order: -4; flex-basis: 100%; display: none; gap: 8px; padding: 8px; border-radius: 18px; background: var(--ph-raise); border: 1px solid var(--ph-line); }
+html.phone body.phone #detail .tm-composer .composer.ph-attach-on .ph-attach-bar { display: flex; animation: phBarIn .18s ease; }
+@keyframes phBarIn { from { opacity: 0; transform: translateY(8px); } }
+html.phone body.phone #detail .tm-composer .ph-attach-bar button { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 10px 0 8px; border: 0; border-radius: 12px; background: var(--ph-card, var(--hover)); color: var(--text); font: inherit; font-size: 12.5px; font-weight: 500; }
+html.phone body.phone #detail .tm-composer .ph-attach-bar .ic { width: 24px; height: 24px; }
+html.phone body.phone #detail .tm-composer [data-action="attach-comment"] { transition: transform .2s, background .2s; }
+html.phone body.phone #detail .tm-composer .composer.ph-attach-on [data-action="attach-comment"] { transform: rotate(45deg); background: var(--accent); color: #fff; }

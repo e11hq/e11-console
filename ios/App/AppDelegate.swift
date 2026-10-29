@@ -13,7 +13,7 @@ import PhotosUI
 import UniformTypeIdentifiers
 
 // Version of this iPhone app's native part (raise it with changes the web app needs to know about)
-let SHELL_VERSION = 3   // 3: its own sheet for attaching files (Photo Library / Take Photo or Video / Choose Files)
+let SHELL_VERSION = 4   // 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
 let procEnv = ProcessInfo.processInfo.environment
 let SELFTEST = procEnv["E11_SELFTEST"] ?? ""           // the build machine's self-test in the simulator
 let info = Bundle.main.infoDictionary ?? [:]
@@ -683,7 +683,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
           DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { self.authing = false }
         }
       }
-    case "pickFiles": Picker.shared.pick(from: self, single: (a["single"] as? Bool) == true, done)
+    case "pickFiles": Picker.shared.pick(from: self, single: (a["single"] as? Bool) == true, source: a["source"] as? String, done)
     case "readLocalChunk": done(Picker.shared.read(a))
     default: done(["ok": false, "error": "Unknown command " + cmd])
     }
@@ -811,32 +811,43 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
   private let lock = NSLock()   // (photos are copied on background threads)
   private let dir: URL = { let d = FileManager.default.temporaryDirectory.appendingPathComponent("picked", isDirectory: true); try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true); return d }()
 
-  func pick(from vc: UIViewController, single: Bool, _ done: @escaping ([String: Any]) -> Void) {
+  // (the keyboard isn't put down here: iPhone hides it while a picker covers the screen and brings it back for the
+  //  comment box afterwards)
+  func pick(from vc: UIViewController, single: Bool, source: String? = nil, _ done: @escaping ([String: Any]) -> Void) {
     finish([])   // (a sheet still open from before answers "nothing")
     self.done = done
-    vc.view.endEditing(true)
-    let sheet = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
-    sheet.addAction(UIAlertAction(title: "Photo Library", style: .default) { _ in
+    let photos = {
       var c = PHPickerConfiguration()
       c.selectionLimit = single ? 1 : 0
       c.filter = .any(of: [.images, .videos])
       c.preferredAssetRepresentationMode = .compatible   // (JPEG and H.264, like a web page gets)
       let p = PHPickerViewController(configuration: c); p.delegate = self
       vc.present(p, animated: true)
-    })
-    if UIImagePickerController.isSourceTypeAvailable(.camera) {
-      sheet.addAction(UIAlertAction(title: "Take Photo or Video", style: .default) { _ in
-        let p = UIImagePickerController(); p.sourceType = .camera
-        p.mediaTypes = UIImagePickerController.availableMediaTypes(for: .camera) ?? ["public.image"]
-        p.videoQuality = .typeHigh; p.delegate = self
-        vc.present(p, animated: true)
-      })
     }
-    sheet.addAction(UIAlertAction(title: "Choose Files", style: .default) { _ in
+    let camera = {
+      let p = UIImagePickerController(); p.sourceType = .camera
+      p.mediaTypes = UIImagePickerController.availableMediaTypes(for: .camera) ?? ["public.image"]
+      p.videoQuality = .typeHigh; p.delegate = self
+      vc.present(p, animated: true)
+    }
+    let files = {
       let p = UIDocumentPickerViewController(forOpeningContentTypes: [.item], asCopy: true)
       p.allowsMultipleSelection = !single; p.delegate = self
       vc.present(p, animated: true)
-    })
+    }
+    // straight to one (the page's attach bar: Photos · Camera · Files)
+    switch source {
+    case "photos": return photos()
+    case "camera": return UIImagePickerController.isSourceTypeAvailable(.camera) ? camera() : finish([])
+    case "files": return files()
+    default: break
+    }
+    let sheet = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
+    sheet.addAction(UIAlertAction(title: "Photo Library", style: .default) { _ in photos() })
+    if UIImagePickerController.isSourceTypeAvailable(.camera) {
+      sheet.addAction(UIAlertAction(title: "Take Photo or Video", style: .default) { _ in camera() })
+    }
+    sheet.addAction(UIAlertAction(title: "Choose Files", style: .default) { _ in files() })
     sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in self.finish([]) })
     if let pop = sheet.popoverPresentationController {   // (iPad: from the bottom middle)
       pop.sourceView = vc.view; pop.sourceRect = CGRect(x: vc.view.bounds.midX, y: vc.view.bounds.maxY - 40, width: 1, height: 1); pop.permittedArrowDirections = []

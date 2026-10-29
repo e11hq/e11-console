@@ -1562,6 +1562,15 @@ const Push = (() => {
   }, { passive: false });
 })();
 
+/* Phone: the comment box's + and its Photos · Camera · Files bar don't take the focus from the text, so the keyboard
+   stays up while the bar is open; typing again closes the bar */
+(() => {
+  const keep = (e) => { if (Phone.on && e.target.closest && e.target.closest('#detail .tm-composer [data-action="attach-comment"], #detail .tm-composer .ph-attach-bar button')) e.preventDefault(); };
+  document.addEventListener('mousedown', keep, true);
+  document.addEventListener('pointerdown', keep, true);
+  document.addEventListener('input', (e) => { const c = e.target.closest && e.target.closest('#detail .tm-composer .composer.ph-attach-on'); if (c) c.classList.remove('ph-attach-on'); }, true);
+})();
+
 /* Where the finger last went down: the file picker's menu opens on that button (app.js pickFiles) */
 (() => {
   const note = (e) => { const t = e.touches ? e.touches[0] : e; if (t) { window.__e11LastDown = { x: t.clientX, y: t.clientY }; window.__e11LastDownEl = e.target; } };

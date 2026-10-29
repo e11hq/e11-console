@@ -968,7 +968,7 @@ const ServerHost = (() => {
     if (!Host.isIOSApp || args.accept) return null;
     if (iosShell === null) { try { iosShell = Number((await NativeMac.call('appInfo')).shell) || 0; } catch (e) { iosShell = 0; } }
     if (iosShell < 3) return null;
-    const r = await NativeMac.call('pickFiles', { single: !!args.single });
+    const r = await NativeMac.call('pickFiles', { single: !!args.single, ...(args.source && iosShell >= 4 ? { source: args.source } : {}) });
     return (r.files || []).map((f) => ({ name: f.name, size: f.size, macToken: f.token }));
   }
   async function macShell() {
@@ -1028,10 +1028,10 @@ const ServerHost = (() => {
     fr.readAsDataURL(blob);
   });
   // Ask the browser for files (resolves with [] when the picker is cancelled)
-  function pickFiles({ multiple = true, accept = '' } = {}) {
+  function pickFiles({ multiple = true, accept = '', capture = '', direct = false } = {}) {
     return new Promise((resolve) => {
       const inp = document.createElement('input');
-      inp.type = 'file'; inp.multiple = multiple; if (accept) inp.accept = accept;
+      inp.type = 'file'; inp.multiple = multiple; if (accept) inp.accept = accept; if (capture) inp.setAttribute('capture', capture);
       // iPhone shows its Photo Library / Camera / Files menu next to the file field, so the field goes on the button that
       // was tapped (an off-screen field put the menu somewhere odd).
       const btn = window.__e11LastDownEl && window.__e11LastDownEl.isConnected ? window.__e11LastDownEl.closest('button, [data-action]') || window.__e11LastDownEl : null;
@@ -1049,7 +1049,7 @@ const ServerHost = (() => {
       document.body.appendChild(inp);
       // iPhone closes the keyboard as its menu opens, which moved the + after the menu had been placed: with the
       // keyboard up, it goes down first and the menu opens on the + in its new place
-      const typing = /iPhone|iPad/.test(navigator.userAgent) && document.documentElement.classList.contains('ph-typing') && document.activeElement && document.activeElement !== document.body;
+      const typing = !direct && /iPhone|iPad/.test(navigator.userAgent) && document.documentElement.classList.contains('ph-typing') && document.activeElement && document.activeElement !== document.body;
       if (typing) { document.activeElement.blur(); setTimeout(() => { put(); inp.click(); }, 450); }
       else inp.click();
     });
@@ -1301,7 +1301,9 @@ const ServerHost = (() => {
       case 'load': case 'save': case 'sweepOrphans': case 'setAppearance': case 'revealData': return { ok: true };
       case 'badge': try { if (navigator.setAppBadge) { if (args.n) navigator.setAppBadge(args.n); else navigator.clearAppBadge(); } } catch (e) { /* not installed */ } return { ok: true };
       case 'pickAttachments': {
-        const files = (await iosPicks(args)) || await pickFiles({ multiple: !args.single, accept: args.accept || '' });
+        // (Photos / Camera / Files from the phone's attach bar: straight to that one where the browser can)
+        const src = { photos: { accept: 'image/*,video/*' }, camera: { accept: 'image/*,video/*', capture: 'environment' }, files: {} }[args.source] || {};
+        const files = (await iosPicks(args)) || await pickFiles({ multiple: !args.single && !src.capture, accept: args.accept || src.accept || '', capture: src.capture, direct: !!args.source });
         return { ok: true, files: await uploadMany(files, args.dest ? { dest: args.dest } : { taskId: args.taskId }, { onStart: args.onStart, onProgress: args.onProgress }) };
       }
       case 'uploadBlob': {
@@ -3243,6 +3245,7 @@ function composer(t, cid) {
   return `<div class="composer ${cid ? 'reply' : ''}">
     ${banner}
     ${files.length ? `<div class="cb-files">${files.map((a) => cbTile(a, key)).join('')}</div>` : ''}
+    ${onPhone ? `<div class="ph-attach-bar">${[['photos', 'image', 'Photos'], ['camera', 'camera', 'Camera'], ['files', 'folder', 'Files']].map(([s, ic, l]) => `<button type="button" data-action="attach-src" data-src="${s}" ${cid ? `data-reply="${cid}"` : ''}>${icon(ic)}<span>${l}</span></button>`).join('')}</div>` : ''}
     <div class="rt-editor" contenteditable="true" id="d-comment" data-draft-key="${key}" ${cid ? `data-reply-to="${cid}"` : ''} data-placeholder="${ph}">${ui.commentDraft[key] || ''}</div>
     <div class="cb-foot">
       <button class="icon-btn sm" data-action="attach-comment" ${cid ? `data-reply="${cid}"` : ''} title="Attach files" aria-label="Attach files">${icon(onPhone ? 'plus' : 'clip')}</button>
@@ -4924,7 +4927,7 @@ async function deleteSectionFlow(sid) {
   commit();
 }
 
-async function attachFiles(target = 'task', replyTo = null, dropped = null) {
+async function attachFiles(target = 'task', replyTo = null, dropped = null, source = null) {
   const t = task(ui.taskId);
   if (!t) return;
   const key = draftKey(t, replyTo);
@@ -4937,7 +4940,7 @@ async function attachFiles(target = 'task', replyTo = null, dropped = null) {
     // (files dropped on the comment box upload straight away; otherwise the file picker)
     const res = dropped && dropped.length && Host.isServer
       ? { files: await ServerHost.uploadMany([...dropped], { taskId: t.id }, { onStart: hooks.onStart, onProgress: hooks.onProgress }) }
-      : await Host.call('pickAttachments', { taskId: t.id, ...hooks });
+      : await Host.call('pickAttachments', { taskId: t.id, source, ...hooks });
     const files = (res.files || []).map((f) => ({ ...f, addedAt: nowISO() }));
     if (target === 'comment') delete ui.commentUp[key];
     if (!files.length) { if (target === 'comment') Unsent.uploaded(key, false); return; }
@@ -5368,7 +5371,13 @@ document.addEventListener('click', async (e) => {
       }
       case 'remove-tag': { if (!can('removeTag')) return denied(); const t = task(ui.taskId); logActivity(t, `removed tag ${struck(t.tags[+actEl.dataset.i])}`); t.tags.splice(+actEl.dataset.i, 1); t.updatedAt = nowISO(); commit(); setTimeout(() => { const i = $('#d-tag-input'); if (i) i.focus(); }, 0); return; }
       case 'attach': attachFiles('task'); return;
-      case 'attach-comment': attachFiles('comment', actEl.dataset.reply || null); return;
+      case 'attach-comment': {
+        // the phone: + opens the bar above the comment box (Photos · Camera · Files); the keyboard stays up
+        const comp = typeof Phone !== 'undefined' && Phone.on && actEl.closest('.composer');
+        if (comp && comp.querySelector('.ph-attach-bar')) { comp.classList.toggle('ph-attach-on'); return; }
+        attachFiles('comment', actEl.dataset.reply || null); return;
+      }
+      case 'attach-src': { const comp = actEl.closest('.composer'); if (comp) comp.classList.remove('ph-attach-on'); attachFiles('comment', actEl.dataset.reply || null, null, actEl.dataset.src); return; }
       case 'sched-open': Sched.open(actEl, actEl.dataset.reply || null); return;
       case 'task-from': taskFrom(task(ui.taskId)); return;
       case 'unstage-file': {
