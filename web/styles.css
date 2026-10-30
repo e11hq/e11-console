@@ -2948,3 +2948,6 @@ html.mac-chrome .fpv-oncomputer .fpv-top { padding-left: 18px; }
 .l-short { display: none; }
 body.phone .l-long { display: none; }
 body.phone .l-short { display: inline; }
+
+/* The task owner's comments: a coloured bar down the left side (Haris, 2026-10-30) */
+:root:not(.phone) .cm.cm-owner { border-left: 3px solid var(--accent); padding-left: 10px; margin-left: -13px; }

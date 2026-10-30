@@ -3432,7 +3432,9 @@ function shortWhen(iso) {
 function commentHTML(t, c, isReply) {
   const editing = ui.editingComment === c.id;
   const reacts = Object.entries(c.reactions || {}).filter(([, n]) => n);
-  return `<div class="cm ${isReply ? 'cm-reply' : ''}" data-comment="${c.id}">
+  // (the task owner's comments: a coloured bar down their left side, so they stand out — Haris 2026-10-30)
+  const byOwner = !!t && !!t.createdBy && c.authorId === t.createdBy;
+  return `<div class="cm ${isReply ? 'cm-reply' : ''} ${byOwner ? 'cm-owner' : ''}" data-comment="${c.id}">
     <span class="cm-av-wrap" data-user-card="${esc(c.authorId)}">${avatarHTML(c.authorId, 28, 'cm-av')}</span>
     <div class="cm-body">
       <div class="cm-meta"><b data-user-card="${esc(c.authorId)}">${esc(c.authorId === currentUserId ? 'You' : userName(c.authorId))}</b><span class="cm-when" title="${fmtDateTime(c.at)}">${typeof Phone !== 'undefined' && Phone.on ? shortWhen(c.at) : fmtShort(c.at)}</span>${c.editedAt ? '<span class="cm-edited">(edited)</span>' : ''}

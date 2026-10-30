@@ -18,6 +18,8 @@
 .pl-none { color: var(--text-3); font-size: 12.5px; }
 .pl-n { font-variant-numeric: tabular-nums; font-weight: 700; }
 .pl-act { display: flex; justify-content: flex-end; }
+/* (the team table centres its last column: Open sits at the right edge here — Haris 2026-10-30) */
+.tt-row.pl-row > div.pl-act { justify-content: flex-end; }
 .pl-st { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 700; white-space: nowrap; }
 .pl-st.draft { background: color-mix(in srgb, #9ec0ff 16%, transparent); color: #9ec0ff; }
 :root[data-theme="light"] .pl-st.draft { color: #2a5bb8; }
