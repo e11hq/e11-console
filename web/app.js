@@ -4395,7 +4395,7 @@ function detailScroller() {
 function showMenu(anchor, items, opts = {}) {
   closeMenus();
   // iPhone app 11+: a menu marked native (plain options only) opens as iOS's own sheet
-  if (opts.native && NativeSheet.fits(opts.native)) { Haptic.light(); return NativeSheet.open(anchor, items); }   // (the same light knock as the page's own sheets)
+  if (opts.native && NativeSheet.fits(opts.native)) { Haptic.light(); return NativeSheet.open(anchor, items, opts); }   // (the same light knock as the page's own sheets)
   if (typeof Phone !== 'undefined' && Phone.on) Haptic.light();
   // (no doubled, leading or trailing dividers when some options aren't there; positions kept for data-mi)
   items = items.map((it, i, a) => (it === '-' && (i === 0 || i === a.length - 1 || a[i - 1] === '-' || a.slice(i + 1).every((x) => x === '-') || a.slice(0, i).every((x) => x === '-')) ? { skip: true } : it));
@@ -4449,6 +4449,17 @@ const NativeSheet = (() => {
   // native: true = plain rows (app 11+); a number = the app version the menu needs (12: colours, emoji, numbers)
   const fits = (need = true) => shell >= (need === true ? 11 : Number(need) || 99) && typeof Phone !== 'undefined' && Phone.on;
   const canMulti = () => shell >= 13;
+  // (app 14+: people rows — their round photo, else initials on their colour — and a search box in the sheet)
+  const canPeople = () => shell >= 14 && typeof Phone !== 'undefined' && Phone.on;
+  function avatarOf(uid) {
+    const u = typeof userById === 'function' ? userById(uid) : null;
+    const name = u ? fullName(u) : '';
+    const t = document.createElement('i'); t.style.color = avColor(uid || 'x'); document.body.appendChild(t);
+    const color = rgb(getComputedStyle(t).color) || [120, 120, 140]; t.remove();
+    const a = { initials: initials(name || '?'), color };
+    if (u && u.avatar && Host.isNative) a.photo = new URL(fileUrl({ path: u.avatar }), location.href).href;
+    return a;
+  }
   const rgb = (c) => { const m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)/.exec(c || ''); return m ? [+m[1], +m[2], +m[3]] : null; };
   // a colour from a dot / badge / pill: its --c, else its fill, else its text colour
   const colorOf = (el) => {
@@ -4518,14 +4529,18 @@ const NativeSheet = (() => {
       items.forEach((it, i) => {
         if (!it || it.skip) return;
         if (it === '-') { newSec(); return; }
-        if (!it.html) { cur().rows.push({ i: it.run ? i : -1, label: it.label || '', sub: it.hint || '', icon: it.icon || '', danger: !!it.danger }); return; }
+        if (!it.html) {
+          cur().rows.push({ i: it.run ? i : -1, label: it.label || '', sub: it.hint || '', icon: it.icon || '', danger: !!it.danger, checked: !!it.checked,
+            avatar: it.avatar ? avatarOf(it.avatar) : null, find: it.find || '' });
+          return;
+        }
         probe.innerHTML = it.html;
         [...probe.children].forEach((el) => take(el, i, it));
       });
     } finally { probe.remove(); }
     return sections.filter((x) => x.rows.length);
   }
-  function open(anchor, items) {
+  function open(anchor, items, opts = {}) {
     // (callers may add a class, a colour / reaction handler (_onSwatch) or their own option list (_items) to the menu:
     //  this stand-in carries them; nothing on screen)
     const m = document.createElement('div');
@@ -4537,7 +4552,7 @@ const NativeSheet = (() => {
     const secs = rows(items);
     if (multi) secs.forEach((sec) => sec.rows.forEach((r) => { if (r.i >= 0 && items[r.i] && items[r.i].multi) r.multi = true; }));
     window.__e11SheetPick = (i) => { const it = items[i]; if (it && it.run) { NativeSheet.ticking = true; try { it.run(); } finally { NativeSheet.ticking = false; } } };
-    NativeMac.call('nativeSheet', { sections: secs, multi })
+    NativeMac.call('nativeSheet', { sections: secs, multi, search: opts.search || null, empty: opts.empty || null })
       .then((res) => {
         if (!res || res.ok === false) { fallback(); return; }   // (the app couldn't show it: the page's own sheet)
         if (res.swatch != null) { if (m._onSwatch) m._onSwatch(res.swatch); return; }
@@ -4547,7 +4562,7 @@ const NativeSheet = (() => {
       .catch(fallback);
     return m;
   }
-  return { fits, open, rows, canMulti, ticking: false };
+  return { fits, open, rows, canMulti, canPeople, ticking: false };
 })();
 
 function dialog({ title, body = '', bodyHtml = '', input = null, okText = 'OK', cancelText = 'Cancel', danger = false, colors = null }) {
@@ -5341,6 +5356,20 @@ function assignMenu(anchor) {
   if (!can('assign')) return denied();
   closeMenus();
   const t = task(ui.taskId);
+  // iPhone app 14+: iOS's own sheet — search, everyone with their photo and role, tick / untick several (each tick
+  // saves at once); the sheet keeps everyone where they are while it's open
+  if (NativeSheet.canPeople()) {
+    const on = new Set(t.assignees || []);
+    const person = (u) => ({ label: u.id === currentUserId ? 'Me' : fullName(u), hint: roleOf(u), avatar: u.id, find: `${fullName(u)} ${u.email || ''}`,
+      multi: true, checked: on.has(u.id), run: () => { const tt = task(ui.taskId) || t; setAssignee(tt, u.id, !(tt.assignees || []).includes(u.id)); } });
+    const assigned = [...on].map(userById).filter(Boolean);
+    const people = activeUsers().filter((u) => assignable(u) && !on.has(u.id));
+    const items = [];
+    if (assigned.length) items.push({ html: '<div class="menu-label">Assignees</div>' }, ...assigned.map(person));
+    if (people.length) items.push({ html: '<div class="menu-label">People</div>' }, ...people.map(person));
+    showMenu(anchor, items, { native: 14, search: 'Search people', empty: 'No one matches' });
+    return;
+  }
   const pop = document.createElement('div');
   pop.className = 'menu asg-pop';
   pop.innerHTML = `<div class="ap-search">${icon('search')}<input placeholder="Search or enter email…" autocomplete="off" spellcheck="false"></div><div class="ap-list"></div>`;

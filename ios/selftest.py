@@ -55,7 +55,7 @@ try:
         time.sleep(0.5)
     print(json.dumps(res, indent=1)[:4000])
     p = res.get('home') or {}
-    check(set(seen) >= {'home', 'inbox', 'me', 'client', 'task', 'sheet', 'back', 'nsheet', 'nsheetEnd', 'nsheetChannel', 'nsheetTitled'}, f'all stages ran {sorted(seen)}')
+    check(set(seen) >= {'home', 'inbox', 'me', 'client', 'task', 'sheet', 'back', 'nsheet', 'nsheetEnd', 'nsheetChannel', 'nsheetTitled', 'nsheetPeople', 'nsheetSearch'}, f'all stages ran {sorted(seen)}')
     hf = res.get('homeFrame') or {}
     check(hf.get('web') == hf.get('screen') and hf.get('tabBar') is True, f'the page fills the screen under the floating tab bar {hf}')
     check(int(float(str((p.get('geo') or {}).get('tabsH') or '0').replace('px','') or 0)) > 40, f"the page knows the tab bar's height {p.get('geo')}")
@@ -74,6 +74,7 @@ try:
         g_ = res.get(k + 'Geo') or {}
         check(gap is not None and g_.get('endGap') is not None and abs(g_['endGap'] - gap) <= 2, f'native sheet {k}: gap under the last option {g_.get("endGap")} = Channel\'s {gap}')
     check((res.get('nsheetGeo') or {}).get('scrolls') is True, 'the long native sheet scrolls')
+    check('error' not in (res.get('nsheetPeopleGeo') or {'error': 1}), f"a people sheet with a search box opens {res.get('nsheetPeopleGeo')}")
     fr = res.get('frame') or {}
     print('note ' + ('ok' if (fr.get('insetTop') or 0) >= 20 else 'CHECK SCREENSHOT') + f" the sign-in page clears the status bar {fr} {res.get('signin')}")   # (needs the internet: not a blocker)
     print('note ' + ('ok' if fr.get('reviewLink') is True or 'cloudflareaccess' not in str(fr.get('host')) else 'CHECK SCREENSHOT') + f" the App Review sign-in link shows under the sign-in page {fr.get('host')} {fr.get('reviewLink')}")   # (needs the internet)
