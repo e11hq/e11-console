@@ -1276,12 +1276,29 @@ const SheetMotion = (() => {
     fill.className = 'ph-pan-fill';
     fill.style.background = getComputedStyle(m).backgroundColor;
     p.appendChild(fill);   // (over the sheet's own shadow, so the fill and the sheet read as one piece)
+    // At rest the sheet floats: a gap on the sides and below, every corner rounded like the screen's. Pulled up past
+    // open it grows to the edges and its bottom corners square off, following the finger; let go, it springs back.
+    // (Only its outline changes — clip-path — so nothing inside moves or reflows.) The fill under a lifted sheet has
+    // the same sides and bottom corners, so the two read as one piece.
+    const GAP = 8, R = 44, GROW = 70;
+    const shape = (over) => {
+      const k = Math.max(0, Math.min(1, over / GROW)), g = GAP * (1 - k), rb = R * (1 - k);
+      if (over > 0) {
+        m.style.clipPath = `inset(0 ${g}px 0 ${g}px round ${R}px ${R}px 0 0)`;
+        fill.style.left = fill.style.right = fill.style.bottom = g + 'px';
+        fill.style.borderRadius = `0 0 ${rb}px ${rb}px`;
+        fill.style.height = Math.ceil(over + 30 - g) + 'px';   // (reaching up into the sheet's empty bottom padding)
+      } else {
+        m.style.clipPath = `inset(0 ${GAP}px ${GAP}px ${GAP}px round ${R}px)`;
+        fill.style.height = '0';
+      }
+    };
+    shape(0);
     let filled = false;
     p.addEventListener('scroll', () => {
       const over = p.scrollTop - open();
-      // (reaching up into the sheet's empty bottom padding, so it never lags a frame behind the bounce)
-      if (over > 0) { fill.style.height = Math.ceil(over + 30) + 'px'; filled = true; }
-      else if (filled) { fill.style.height = '0'; filled = false; }
+      if (over > 0) { shape(over); filled = true; }
+      else if (filled) { shape(0); filled = false; }
       if (m.classList.contains('ph-out') || !moved) return;   // (not the opening itself: the dark area fades in on its own)
       const k = Math.max(0, Math.min(1, p.scrollTop / Math.max(1, open())));
       const s = document.getElementById('ph-menu-scrim');

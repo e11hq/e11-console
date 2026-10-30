@@ -1052,3 +1052,6 @@ html.ph-pager.phone body.phone .ph-pan > .menu:not(.mention-pop) { animation: no
 html.phone body.phone .ph-pan { animation: phSheetUp .45s cubic-bezier(.32, .72, 0, 1); }
 /* (under the sheet when it's pulled up past open: its own colour, never the page) */
 html.phone body.phone .ph-pan > .ph-pan-fill { position: fixed; left: 0; right: 0; bottom: 0; height: 0; pointer-events: none; }
+/* the floating sheet (its outline: SheetMotion.pan): room inside for the side gap, no shadow or border around it */
+html.phone body.phone .ph-pan > .menu:not(.mention-pop) { padding-left: 16px !important; padding-right: 16px !important; box-shadow: none !important; border: 0 !important; border-radius: 0 !important; }
+html.phone body.phone .ph-pan > .menu:not(.mention-pop)::before { top: 14px !important; }
