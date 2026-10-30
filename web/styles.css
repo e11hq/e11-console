@@ -2347,6 +2347,14 @@ html.mac-nsb #mac-bar .sb-toggle, html.mac-nsb #mac-bar .theme-toggle { display:
 html.mac-chrome.mac-nsb #topbar, html.mac-chrome.mac-nsb #app.sb-collapsed #topbar { padding-left: 84px !important; margin-left: 0; }
 html.mac-chrome.mac-nsb #detail.full .tm-top { padding-left: 84px; }
 html.mac-chrome.mac-nsb #detail.side .tm { max-width: calc(100% - 60px); }
+/* newer Mac apps: the page is the whole window wide (its layouts switch at the same window sizes as before) with the
+   glass sidebar over its left edge — the page keeps that room, and a task opened full or as a pop-up starts beside it */
+html.mac-nsb-o #app { padding-left: var(--nsb-room, 260px); transition: padding-left .22s ease; }
+html.mac-nsb-o #app.sb-collapsed { padding-left: var(--nsb-slim, 92px); }
+html.mac-chrome.mac-nsb-o #mac-bar { left: calc(var(--nsb-room, 260px) + 12px); transition: left .22s ease; }
+html.mac-chrome.mac-nsb-o #app.sb-collapsed ~ #mac-bar { left: calc(var(--nsb-slim, 92px) + 12px); }
+html.mac-nsb-o #detail { left: var(--nsb-room, 260px); }
+html.mac-nsb-o #app.sb-collapsed #detail { left: var(--nsb-slim, 92px); }
 /* shared task link opened in the browser, handing over to the Mac app */
 #open-app { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; background: var(--bg); }
 #open-app .oa-card { display: grid; gap: 16px; justify-items: center; text-align: center; padding: 28px 32px; border: 1px solid var(--border); border-radius: 12px; background: var(--raised, var(--bg)); }

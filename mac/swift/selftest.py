@@ -112,10 +112,10 @@ try:
     sb = res.get('sidebar') or {}; sc = res.get('sidebarCollapsed') or {}
     check(sb.get('on') is True and {'Home', 'Inbox', 'My Tasks', 'Client Assets'} <= set(sb.get('rows') or []) and 'Library' in (sb.get('heads') or []), f'the native sidebar shows the page\'s rows {sb}')
     check(sb.get('me') and 'E11 Agency' in str(sb.get('copy')) and sb.get('sync'), f"profile, Synced line and © under it {sb.get('me')} · {sb.get('sync')} · {sb.get('copy')}")
-    check(abs((sb.get('webX') or 0) - 260) < 1 and abs((sb.get('width') or 0) - 244) < 1, f"the page starts beside the sidebar {sb.get('webX')} {sb.get('width')}")
-    check(res.get('pageSidebar') == 'true none', f"the page's own sidebar is hidden {res.get('pageSidebar')}")
+    check(abs((sb.get('width') or 0) - 244) < 1 and (sb.get('webW') or 0) >= 1000, f"the sidebar floats over the page, which stays the window's width {sb.get('webW')} {sb.get('width')}")
+    check(res.get('pageSidebar') == 'true none 260px', f"the page's own sidebar is hidden, its content starts beside the native one {res.get('pageSidebar')}")
     check('Sign out' in (res.get('sideMenu') or []), f"the profile menu comes as the Mac's own menu {res.get('sideMenu')}")
-    check(sc.get('compact') is True and abs((sc.get('width') or 0) - 76) < 1 and abs((sc.get('webX') or 0) - 92) < 1, f'collapsed: a strip of icons, the page beside it {sc}')
+    check(sc.get('compact') is True and abs((sc.get('width') or 0) - 76) < 1 and res.get('pageCollapsed') == '92px', f"collapsed: a strip of icons, the page beside it {sc} {res.get('pageCollapsed')}")
     print('note glass (macOS 26):', sb.get('glass'))
     lights = res.get('lights') or {}
     check(abs(lights.get('x', 0) - 20) < 1, f'window buttons placed in the page’s top row {lights}')

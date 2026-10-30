@@ -236,11 +236,13 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     let js = "(function(){ var r = window.__e11Side ? window.__e11Side(\(jsonString(args))) : null; return typeof r === 'string' ? r : ''; })()"
     web?.evaluateJavaScript(js) { r, _ in done?(r) }
   }
-  // shown, hidden, collapsed or expanded: the page moves over to start beside it
+  // shown, hidden, collapsed or expanded: the sidebar floats over the page, which stays the whole window wide and keeps
+  // that much room on its left itself (html.mac-nsb-o) — a page narrower by the sidebar switched to its narrow-window
+  // layouts at sizes that used to show two columns (Haris, 2026-10-30)
   func sideLayoutChanged(animated: Bool) {
     guard let cv = window?.contentView, let web = web else { return }
     let sf = NSRect(x: Sidebar.INSET, y: Sidebar.INSET, width: side.width, height: cv.bounds.height - Sidebar.INSET * 2)
-    let wf = NSRect(x: side.pageX, y: 0, width: cv.bounds.width - side.pageX, height: cv.bounds.height)
+    web.frame = cv.bounds
     placeLights()
     if animated {
       NSAnimationContext.runAnimationGroup { c in
@@ -248,9 +250,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
         c.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
         c.allowsImplicitAnimation = true
         self.side.animator().frame = sf
-        web.animator().frame = wf
       }
-    } else { side.frame = sf; web.frame = wf }
+    } else { side.frame = sf }
   }
   @objc func toggleSidebar(_ s: Any?) {
     if side.on { sideCall(["kind": "collapse"], nil) } else { pageJS("(function(){ var b = document.querySelector('[data-action=\"toggle-sidebar\"]'); if (b) b.click(); })()") }
@@ -428,7 +429,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
       window.backgroundColor = light ? .white : NSColor(srgbRed: 0.047, green: 0.051, blue: 0.059, alpha: 1)
       placeLights()
       done(["ok": true])
-    case "sidebar": side.apply(a); if lockView != nil { side.isHidden = true }; done(["ok": true])
+    case "sidebar": side.apply(a); if lockView != nil { side.isHidden = true }; done(["ok": true, "overlay": true, "room": Sidebar.INSET * 2 + Sidebar.WIDE, "slim": Sidebar.INSET * 2 + Sidebar.SLIM])
     case "setIcon": done(setIcon(a))
     case "dragWindow":
       if let ev = NSApp.currentEvent { window.performDrag(with: ev) }
@@ -897,16 +898,17 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
       return
     }
     DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-      var s = self.side.snapshot(); s["webX"] = self.web.frame.minX
+      var s = self.side.snapshot(); s["webW"] = self.web.frame.width
       self.selftest["sidebar"] = s
-      self.web.evaluateJavaScript("[document.documentElement.classList.contains('mac-nsb'), getComputedStyle(document.getElementById('sidebar')).display].join(' ')") { r, _ in self.selftest["pageSidebar"] = r as? String ?? "" }
+      self.web.evaluateJavaScript("[document.documentElement.classList.contains('mac-nsb'), getComputedStyle(document.getElementById('sidebar')).display, getComputedStyle(document.getElementById('app')).paddingLeft].join(' ')") { r, _ in self.selftest["pageSidebar"] = r as? String ?? "" }
       self.sideCall(["kind": "menu", "key": "me", "y": 700]) { r in
         let m = ((r as? String).flatMap { $0.data(using: .utf8) }).flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]
         self.selftest["sideMenu"] = (m?["list"] as? [[String: Any]] ?? []).compactMap { $0["label"] as? String }
         self.sideCall(["kind": "collapse"], nil)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-          var c = self.side.snapshot(); c["webX"] = self.web.frame.minX
+          var c = self.side.snapshot(); c["webW"] = self.web.frame.width
           self.selftest["sidebarCollapsed"] = c
+          self.web.evaluateJavaScript("getComputedStyle(document.getElementById('app')).paddingLeft") { r, _ in self.selftest["pageCollapsed"] = r as? String ?? "" }
           self.snapWindow("-collapsed") {
             self.sideCall(["kind": "collapse"], nil)
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { done() }

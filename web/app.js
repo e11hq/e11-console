@@ -605,7 +605,13 @@ const NativeSide = (() => {
     const m = model(), j = JSON.stringify(m);
     if (j === sent) return;
     sent = j;
-    NativeMac.call('sidebar', m).then((r) => { document.documentElement.classList.toggle('mac-nsb', !!(r && r.ok && m.on)); }).catch(() => {});
+    NativeMac.call('sidebar', m).then((r) => {
+      const de = document.documentElement, show = !!(r && r.ok && m.on);
+      de.classList.toggle('mac-nsb', show);
+      // (newer Mac apps: the sidebar floats over a page as wide as the window — the page keeps room for it itself)
+      de.classList.toggle('mac-nsb-o', show && !!r.overlay);
+      if (r && r.room) { de.style.setProperty('--nsb-room', r.room + 'px'); de.style.setProperty('--nsb-slim', (r.slim || 92) + 'px'); }
+    }).catch(() => {});
   }
   function later() { if (on && !timer) timer = setTimeout(paint, 60); }
   // a 1px spot at the row's height, at the page's left edge: anything the page opens "next to" the row opens there
