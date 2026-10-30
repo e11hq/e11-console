@@ -222,6 +222,8 @@ const Haptic = (() => {
     if (b && !b.classList.contains('on')) fire('selection');
     // the + for a new quick task: a light knock as its sheet comes up
     else if (e.target.closest && e.target.closest('.ph-fab, [data-ph="quick-add"]')) fire('light');
+    // a client's ✓ (show / hide completed tasks): the same light knock as a task's ⋯
+    else if (e.target.closest && e.target.closest('[data-action="toggle-show-done"]')) fire('light');
   }, true);
   return { on: () => { check(); return !!on; }, light: () => fire('light'), medium: () => fire('medium'), select: () => fire('selection'), success: () => fire('success'), uploaded: () => fire('uploaded'), warn: () => fire('warning') };
 })();
