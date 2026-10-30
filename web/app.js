@@ -600,6 +600,41 @@ const DatePicker = (() => {
     setTimeout(() => { document.addEventListener('mousedown', onDoc, true); document.addEventListener('keydown', onKey, true); }, 0);
   }
   const desktop = () => !(typeof Phone !== 'undefined' && Phone.on);
+  // iPhone app 13+: a date field opens a native sheet with iPhone's calendar (iPhone's own date box set today's
+  // date whenever it was just opened and closed). A day tapped sets the field and fires its "change" as usual.
+  const nativeDates = () => typeof NativeSheet !== 'undefined' && NativeSheet.canMulti() && NativeSheet.fits(13);
+  let busy = false;
+  function openNative(el) {
+    if (busy) return;
+    busy = true;
+    Haptic.light();
+    const chip = el.closest('.date-chip');
+    const clearable = !!el.value && !!chip && !!((chip.parentElement && chip.parentElement.querySelector('[data-action^="clear-"]')) || chip.querySelector('.cal-date-x'));
+    NativeMac.call('pickDate', { value: el.value || '', min: el.min || '', max: el.max || '', clearable })
+      .then((r) => {
+        if (!r || r.ok === false || r.cancel) return;
+        const v = r.clear ? '' : r.date || '';
+        if (v === (el.value || '')) return;
+        el.value = v;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      })
+      .catch(() => {})
+      .finally(() => { busy = false; });
+  }
+  let t0 = null;
+  const dateEl = (e) => { const el = e.target.closest && e.target.closest('input.date-in, input[type="date"]'); return el && !el.dataset.md && !desktop() && nativeDates() ? el : null; };
+  // (a finger that only scrolls past a date field still scrolls; a tap opens the sheet)
+  document.addEventListener('touchstart', (e) => { t0 = dateEl(e) && e.touches[0] ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : null; }, { capture: true, passive: true });
+  document.addEventListener('touchend', (e) => {
+    const el = dateEl(e); if (!el || !t0) return;
+    const p = e.changedTouches[0], moved = p && Math.hypot(p.clientX - t0.x, p.clientY - t0.y) > 10; t0 = null;
+    if (moved) return;
+    e.preventDefault(); e.stopPropagation();   // (no focus, so iPhone's own date box never opens)
+    if (!el.disabled) openNative(el);
+  }, { capture: true, passive: false });
+  ['mousedown', 'click'].forEach((t) => document.addEventListener(t, (e) => { const el = dateEl(e); if (!el) return; e.preventDefault(); e.stopPropagation(); if (t === 'click' && !el.disabled) openNative(el); }, true));
+  document.addEventListener('focusin', (e) => { const el = e.target.closest && e.target.closest('input[type="date"]'); if (el && !el.dataset.md && !desktop() && nativeDates()) el.blur(); }, true);
   const grab = (e) => {
     // every date field on a computer, including plain ones, so the Mac's own date box never shows
     const el = e.target.closest && e.target.closest('input.date-in, input[type="date"]');

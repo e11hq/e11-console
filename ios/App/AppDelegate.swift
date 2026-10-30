@@ -13,7 +13,7 @@ import PhotosUI
 import UniformTypeIdentifiers
 
 // Version of this iPhone app's native part (raise it with changes the web app needs to know about)
-let SHELL_VERSION = 13   // 13: a native sheet can stay open for ticking several (multi; each tick: window.__e11SheetPick) · 12: native sheets also with colour dots, a row of colours / emoji / numbers (chips), tinted icons, locked rows · 11: plain menus as iOS's own sheets (nativeSheet; the page: NativeSheet in app.js, showMenu(…, { native: true })) · 10: My Tasks, Inbox and Team lists swiped by iOS itself (Pager.syncLists in phone.js) · 9: a task’s Details / Comments swiped by iOS itself (the page: Pager in phone.js) · 8: iOS haptics for the page (haptic kind: light / medium / selection / success / warning / error) · 7: the comment box rides down / up with the keyboard frame by frame (__e11KbStep) · 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
+let SHELL_VERSION = 13   // 13: also dates picked in a native sheet (pickDate: closing it never sets a date) · a native sheet can stay open for ticking several (multi; each tick: window.__e11SheetPick) · 12: native sheets also with colour dots, a row of colours / emoji / numbers (chips), tinted icons, locked rows · 11: plain menus as iOS's own sheets (nativeSheet; the page: NativeSheet in app.js, showMenu(…, { native: true })) · 10: My Tasks, Inbox and Team lists swiped by iOS itself (Pager.syncLists in phone.js) · 9: a task’s Details / Comments swiped by iOS itself (the page: Pager in phone.js) · 8: iOS haptics for the page (haptic kind: light / medium / selection / success / warning / error) · 7: the comment box rides down / up with the keyboard frame by frame (__e11KbStep) · 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
 let procEnv = ProcessInfo.processInfo.environment
 let SELFTEST = procEnv["E11_SELFTEST"] ?? ""           // the build machine's self-test in the simulator
 let info = Bundle.main.infoDictionary ?? [:]
@@ -756,6 +756,11 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         done(r)
       }
       present(vc, animated: true)
+    case "pickDate":
+      // a date from the page, picked in a native sheet with iPhone's own calendar: a day tapped → that date;
+      // Today / Clear; closed any other way → nothing changes (iPhone's own date box set today when just closed)
+      if presentedViewController != nil { return done(["ok": false]) }
+      present(DateSheetVC(a, dark: statusStyle != .darkContent) { r in done(r) }, animated: true)
     case "notify": done(["ok": true])   // (Apple's notifications come from the server)
     case "pushStatus": pushState { done(["ok": true, "state": $0]) }
     case "pushRegister":
@@ -1342,4 +1347,60 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     if kind == "emoji" { stack.widthAnchor.constraint(greaterThanOrEqualTo: scroll.frameLayoutGuide.widthAnchor).isActive = true }
     return cell
   }
+}
+
+
+/* A date picked in a native sheet (the page's date fields on the iPhone): iPhone's own calendar, with Today and —
+   when the field can be emptied — Clear. Tapping a day picks it and closes; dragging it down or tapping outside
+   changes nothing. */
+final class DateSheetVC: UIViewController, UISheetPresentationControllerDelegate {
+  private let picker = UIDatePicker()
+  private var answer: (([String: Any]) -> Void)?
+  private let fmt: DateFormatter = { let f = DateFormatter(); f.calendar = Calendar(identifier: .gregorian); f.locale = Locale(identifier: "en_US_POSIX"); f.timeZone = .current; f.dateFormat = "yyyy-MM-dd"; return f }()
+  private let clearable: Bool
+  init(_ a: [String: Any], dark: Bool, answer: @escaping ([String: Any]) -> Void) {
+    self.answer = answer
+    clearable = (a["clearable"] as? Bool) == true
+    super.init(nibName: nil, bundle: nil)
+    overrideUserInterfaceStyle = dark ? .dark : .light
+    picker.datePickerMode = .date
+    picker.preferredDatePickerStyle = .inline
+    if let v = a["value"] as? String, let d = fmt.date(from: v) { picker.date = d }
+    if let v = a["min"] as? String, let d = fmt.date(from: v) { picker.minimumDate = d }
+    if let v = a["max"] as? String, let d = fmt.date(from: v) { picker.maximumDate = d }
+    modalPresentationStyle = .pageSheet
+    if let sh = sheetPresentationController {
+      sh.detents = [.custom(identifier: .init("date")) { ctx in min(ctx.maximumDetentValue, 470) }]
+      sh.prefersGrabberVisible = true
+      sh.delegate = self
+    }
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  override func viewDidLoad() {
+    super.viewDidLoad()
+    if #available(iOS 26, *) { view.backgroundColor = .clear } else { view.backgroundColor = .systemGroupedBackground }
+    let today = UIButton(type: .system); today.setTitle("Today", for: .normal); today.titleLabel?.font = .systemFont(ofSize: 17, weight: .semibold)
+    today.addAction(UIAction { [weak self] _ in guard let self else { return }; self.finish(["ok": true, "date": self.fmt.string(from: Date())]) }, for: .touchUpInside)
+    let clear = UIButton(type: .system); clear.setTitle("Clear", for: .normal); clear.titleLabel?.font = .systemFont(ofSize: 17); clear.tintColor = .systemRed
+    clear.isHidden = !clearable
+    clear.addAction(UIAction { [weak self] _ in self?.finish(["ok": true, "clear": true]) }, for: .touchUpInside)
+    picker.addAction(UIAction { [weak self] _ in
+      guard let self else { return }
+      UISelectionFeedbackGenerator().selectionChanged()
+      self.finish(["ok": true, "date": self.fmt.string(from: self.picker.date)])
+    }, for: .valueChanged)
+    [today, clear, picker].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; view.addSubview($0) }
+    NSLayoutConstraint.activate([
+      clear.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 22), clear.topAnchor.constraint(equalTo: view.topAnchor, constant: 22),
+      today.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -22), today.centerYAnchor.constraint(equalTo: clear.centerYAnchor),
+      picker.topAnchor.constraint(equalTo: today.bottomAnchor, constant: 4),
+      picker.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 12), picker.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -12),
+    ])
+  }
+  private func finish(_ r: [String: Any]) {
+    guard let a = answer else { return }
+    answer = nil
+    dismiss(animated: true) { a(r) }
+  }
+  func presentationControllerDidDismiss(_ presentationController: UIPresentationController) { let a = answer; answer = nil; a?(["ok": true, "cancel": true]) }
 }
