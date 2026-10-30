@@ -580,21 +580,13 @@ final class Sidebar: NSView {
       }
       menu.addItem(mi); lastSep = false
     }
-    // (the client colours stay on the page's own menu: as Mac menu items they came out empty — Haris, 2026-10-31)
-    if false, let colors = m["colors"] as? [String], !colors.isEmpty {
-      let sub = NSMenu()
-      let cur = m["cur"] as? String
-      for c in colors {
-        let mi = NSMenuItem(title: "", action: #selector(pick(_:)), keyEquivalent: "")
-        mi.target = self
-        mi.representedObject = ["kind": "swatch", "m": id, "c": c] as [String: Any]
-        mi.image = Sidebar.swatch(c)
-        mi.state = c.lowercased() == cur?.lowercased() ? .on : .off
-        sub.addItem(mi)
-      }
-      let ci = NSMenuItem(title: "Colour", action: nil, keyEquivalent: "")
-      ci.image = sideSymbol("paintpalette", 13)
-      ci.submenu = sub
+    // the client's colours as a row of dots right in the menu, like Finder's tags (a submenu of them came out
+    // empty — Haris, 2026-10-31); the current one ringed
+    if let colors = m["colors"] as? [String], !colors.isEmpty {
+      let row = SwatchRow(colors: colors, cur: m["cur"] as? String)
+      row.onPick = { [weak self] c in self?.host?.sideCall(["kind": "swatch", "m": id, "c": c], nil) }
+      let ci = NSMenuItem()
+      ci.view = row
       // (after the first option, as on the page)
       menu.insertItem(ci, at: min(1, menu.numberOfItems))
     }
@@ -605,10 +597,13 @@ final class Sidebar: NSView {
     guard let a = sender.representedObject as? [String: Any] else { return }
     host?.sideCall(a, nil)
   }
-  static func swatch(_ hex: String) -> NSImage {
+  static func hexColor(_ hex: String) -> NSColor {
     var v: UInt64 = 0
     Scanner(string: hex.replacingOccurrences(of: "#", with: "")).scanHexInt64(&v)
-    let col = NSColor(srgbRed: CGFloat((v >> 16) & 255) / 255, green: CGFloat((v >> 8) & 255) / 255, blue: CGFloat(v & 255) / 255, alpha: 1)
+    return NSColor(srgbRed: CGFloat((v >> 16) & 255) / 255, green: CGFloat((v >> 8) & 255) / 255, blue: CGFloat(v & 255) / 255, alpha: 1)
+  }
+  static func swatch(_ hex: String) -> NSImage {
+    let col = hexColor(hex)
     return NSImage(size: NSSize(width: 14, height: 14), flipped: false) { r in col.setFill(); NSBezierPath(ovalIn: r.insetBy(dx: 1, dy: 1)).fill(); return true }
   }
 
@@ -621,6 +616,52 @@ final class Sidebar: NSView {
     if #available(macOS 26.0, *) { glass = backdrop is NSGlassEffectView }
     return ["on": on, "compact": compact, "width": frame.width, "x": frame.minX, "rows": names, "heads": heads, "hot": hot,
             "me": me.name.stringValue, "sync": syncText.stringValue, "copy": copy.stringValue, "glass": glass]
+  }
+}
+
+// a row of colour dots inside a menu: click one to pick it (the menu closes)
+final class SwatchRow: NSView {
+  let colors: [String], cur: String?
+  var onPick: ((String) -> Void)?
+  private var hover = -1 { didSet { if hover != oldValue { needsDisplay = true } } }
+  static let D: CGFloat = 16, GAP: CGFloat = 10, PAD: CGFloat = 14
+  init(colors: [String], cur: String?) {
+    self.colors = colors; self.cur = cur?.lowercased()
+    super.init(frame: NSRect(x: 0, y: 0, width: SwatchRow.PAD * 2 + CGFloat(colors.count) * (SwatchRow.D + SwatchRow.GAP) - SwatchRow.GAP, height: 32))
+  }
+  required init?(coder: NSCoder) { nil }
+  private func rect(_ i: Int) -> NSRect {
+    NSRect(x: SwatchRow.PAD + CGFloat(i) * (SwatchRow.D + SwatchRow.GAP), y: (bounds.height - SwatchRow.D) / 2, width: SwatchRow.D, height: SwatchRow.D)
+  }
+  private func index(_ e: NSEvent) -> Int {
+    let p = convert(e.locationInWindow, from: nil)
+    for i in colors.indices where rect(i).insetBy(dx: -GAPHALF, dy: -6).contains(p) { return i }
+    return -1
+  }
+  private var GAPHALF: CGFloat { SwatchRow.GAP / 2 }
+  override func updateTrackingAreas() {
+    super.updateTrackingAreas()
+    trackingAreas.forEach { removeTrackingArea($0) }
+    addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways], owner: self, userInfo: nil))
+  }
+  override func mouseMoved(with e: NSEvent) { hover = index(e) }
+  override func mouseExited(with e: NSEvent) { hover = -1 }
+  override func mouseUp(with e: NSEvent) {
+    let i = index(e)
+    guard i >= 0 else { return }
+    onPick?(colors[i])
+    enclosingMenuItem?.menu?.cancelTracking()
+  }
+  override func draw(_ r: NSRect) {
+    for (i, c) in colors.enumerated() {
+      let rc = rect(i)
+      if c.lowercased() == cur || i == hover {
+        let ring = NSBezierPath(ovalIn: rc.insetBy(dx: -3, dy: -3))
+        ring.lineWidth = 1.5
+        (c.lowercased() == cur ? NSColor.labelColor : NSColor.tertiaryLabelColor).setStroke(); ring.stroke()
+      }
+      Sidebar.hexColor(c).setFill(); NSBezierPath(ovalIn: rc).fill()
+    }
   }
 }
 
