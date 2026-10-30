@@ -1175,8 +1175,46 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     dismiss(animated: true) { a(i, swatch) }
   }
   func presentationControllerDidDismiss(_ presentationController: UIPresentationController) { let a = answer; answer = nil; a?(-1, nil) }
+  // Priority numbers: all in view, in rows of five (as on the page), each one round
+  private func numGrid(_ chips: [Chip]) -> UITableViewCell {
+    let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
+    cell.selectionStyle = .none
+    if #available(iOS 26, *) { cell.backgroundColor = UIColor.secondarySystemGroupedBackground.withAlphaComponent(0.6) }
+    let rows = UIStackView(); rows.axis = .vertical; rows.spacing = 10
+    stride(from: 0, to: chips.count, by: 5).forEach { start in
+      let line = UIStackView(); line.axis = .horizontal; line.distribution = .equalSpacing; line.alignment = .center
+      for ch in chips[start..<min(start + 5, chips.count)] {
+        let b = UIButton(type: .system)
+        b.translatesAutoresizingMaskIntoConstraints = false
+        b.widthAnchor.constraint(equalToConstant: 44).isActive = true
+        b.heightAnchor.constraint(equalToConstant: 44).isActive = true
+        b.layer.cornerRadius = 22
+        b.isEnabled = !ch.disabled
+        b.setTitle(ch.label ?? "", for: .normal)
+        b.titleLabel?.font = .systemFont(ofSize: 17, weight: .semibold)
+        b.backgroundColor = ch.on ? .systemBlue : .tertiarySystemFill
+        b.setTitleColor(ch.on ? .white : .label, for: .normal)
+        b.setTitleColor(.quaternaryLabel, for: .disabled)
+        b.addAction(UIAction { [weak self] _ in self?.choose(ch.i, nil) }, for: .touchUpInside)
+        line.addArrangedSubview(b)
+      }
+      // (a short last row keeps the same spacing as the full ones)
+      for _ in 0..<(5 - min(5, chips.count - start)) { let gap = UIView(); gap.translatesAutoresizingMaskIntoConstraints = false; gap.widthAnchor.constraint(equalToConstant: 44).isActive = true; line.addArrangedSubview(gap) }
+      rows.addArrangedSubview(line)
+    }
+    rows.translatesAutoresizingMaskIntoConstraints = false
+    cell.contentView.addSubview(rows)
+    NSLayoutConstraint.activate([
+      rows.leadingAnchor.constraint(equalTo: cell.contentView.leadingAnchor, constant: 16),
+      rows.trailingAnchor.constraint(equalTo: cell.contentView.trailingAnchor, constant: -16),
+      rows.topAnchor.constraint(equalTo: cell.contentView.topAnchor, constant: 12),
+      rows.bottomAnchor.constraint(equalTo: cell.contentView.bottomAnchor, constant: -12),
+    ])
+    return cell
+  }
   // A row of round choices: colours (swatch), emoji (reactions) or numbers (priority). Scrolls sideways if it doesn't fit.
   private func chipCell(_ chips: [Chip], kind: String) -> UITableViewCell {
+    if kind == "num" { return numGrid(chips) }
     let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
     cell.selectionStyle = .none
     if #available(iOS 26, *) { cell.backgroundColor = UIColor.secondarySystemGroupedBackground.withAlphaComponent(0.6) }
