@@ -819,6 +819,43 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       then()
     }
   }
+  // (self-test sheets — native sheets need the Channel sheet's room above and below everywhere: a long titled one,
+  //  a short untitled one like Channel, a short one titled with a person, a people picker with a search box)
+  func sheetRole() -> [[String: Any]] {
+    let roles: [String] = ["Super Admin", "Office Admin", "Account Manager", "Production", "Social", "Freelancer", "Finance only · Admin", "Finance only · Viewer"]
+    var rows: [[String: Any]] = []
+    for (k, r) in roles.enumerated() { rows.append(["i": k, "label": r, "dot": [124, 108, 240]]) }
+    let fin: [[String: Any]] = [["i": 20, "label": "Super Admin rights", "icon": "shield"], ["i": 21, "label": "No Finance access", "icon": "coin", "checked": true],
+                                ["i": 22, "label": "Finance Admin", "icon": "coin"], ["i": 23, "label": "Finance Viewer", "icon": "coin"]]
+    let rm: [[String: Any]] = [["i": 30, "label": "Remove from team", "icon": "trash", "danger": true]]
+    return [["header": "Change role", "rows": rows], ["rows": fin], ["rows": rm]]
+  }
+  func sheetChannel() -> [[String: Any]] {
+    var rows: [[String: Any]] = []
+    for (k, c) in ["Instagram", "Facebook", "TikTok", "LinkedIn", "X", "YouTube"].enumerated() { rows.append(["i": k, "label": c, "dot": [230, 120, 160]]) }
+    return [["rows": rows]]
+  }
+  func sheetTitled() -> [[String: Any]] {
+    var chips: [[String: Any]] = []
+    for n in 1...10 { chips.append(["i": n, "label": String(n)]) }
+    let urgent: [String: Any] = ["i": 0, "label": "Urgent", "sub": "always on top", "icon": "flag", "tint": [220, 60, 60]]
+    let grid: [String: Any] = ["i": -1, "label": "", "kind": "num", "chips": chips]
+    let none: [String: Any] = ["i": 11, "label": "No priority", "icon": "flag"]
+    let person: [String: Any] = ["initials": "AR", "color": [90, 120, 200]]
+    return [["header": "Ali Raza’s priority", "person": person, "rows": [urgent]], ["header": "Priority for Oct 28", "rows": [grid]], ["rows": [none]]]
+  }
+  func sheetPeople() -> [[String: Any]] {
+    let me: [String: Any] = ["i": 0, "label": "Me", "sub": "Super Admin", "checked": true, "multi": true, "find": "haris",
+                             "avatar": ["initials": "H", "color": [40, 160, 100]] as [String: Any]]
+    var rows: [[String: Any]] = []
+    let names: [String] = ["Ali Raza", "Areej Khan", "Claire Dubois", "Leila Aziz", "Lena Farouk", "Maya Rahman", "Omar Said", "Sara Noor", "Zain Ali"]
+    for (k, n) in names.enumerated() {
+      let ini: String = n.split(separator: " ").map { String($0.prefix(1)) }.joined()
+      let av: [String: Any] = ["initials": ini, "color": [90 + k * 15, 110, 200]]
+      rows.append(["i": k + 1, "label": n, "sub": "Production", "multi": true, "find": n, "avatar": av])
+    }
+    return [["header": "Assignees", "rows": [me]], ["header": "People", "rows": rows]]
+  }
   // (a native sheet for the self-test, replacing any open one)
   func selfSheet(_ sections: [[String: Any]], search: String? = nil) {
     var args: [String: Any] = ["sections": sections, "multi": true]
@@ -849,22 +886,12 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       // native sheets (Haris: the same room above and below as the Channel sheet, everywhere — and the last option of a
       // long list clear of the bottom edge at the end of the scroll): a long titled one at rest, the same scrolled to the
       // end, a short untitled one like Channel, a short one titled with a person
-      ("nsheet", "return '{}'", { self.selfSheet([
-        ["header": "Change role", "rows": ["Super Admin", "Office Admin", "Account Manager", "Production", "Social", "Freelancer", "Finance only · Admin", "Finance only · Viewer"].enumerated().map { ["i": $0.offset, "label": $0.element, "dot": [124, 108, 240]] }],
-        ["rows": [["i": 20, "label": "Super Admin rights", "icon": "shield"], ["i": 21, "label": "No Finance access", "icon": "coin", "checked": true], ["i": 22, "label": "Finance Admin", "icon": "coin"], ["i": 23, "label": "Finance Viewer", "icon": "coin"]]],
-        ["rows": [["i": 30, "label": "Remove from team", "icon": "trash", "danger": true]]]]) }),
+      ("nsheet", "return '{}'", { self.selfSheet(self.sheetRole()) }),
       ("nsheetEnd", "return '{}'", { (self.presentedViewController as? NativeSheetVC)?.scrollToEnd() }),
-      ("nsheetChannel", "return '{}'", { self.selfSheet([["rows": ["Instagram", "Facebook", "TikTok", "LinkedIn", "X", "YouTube"].enumerated().map { ["i": $0.offset, "label": $0.element, "dot": [230, 120, 160]] }]]) }),
-      ("nsheetTitled", "return '{}'", { self.selfSheet([
-        ["header": "Ali Raza’s priority", "person": ["initials": "AR", "color": [90, 120, 200]], "rows": [["i": 0, "label": "Urgent", "sub": "always on top", "icon": "flag", "tint": [220, 60, 60]]]],
-        ["header": "Priority for Oct 28", "rows": [["i": -1, "label": "", "kind": "num", "chips": (1...10).map { ["i": $0, "label": String($0)] }]]],
-        ["rows": [["i": 11, "label": "No priority", "icon": "flag"]]]]) }),
+      ("nsheetChannel", "return '{}'", { self.selfSheet(self.sheetChannel()) }),
+      ("nsheetTitled", "return '{}'", { self.selfSheet(self.sheetTitled()) }),
       // a people picker (app 14): search box, people with their photo / initials and role, ticks
-      ("nsheetPeople", "return '{}'", { self.selfSheet([
-        ["header": "Assignees", "rows": [["i": 0, "label": "Me", "sub": "Super Admin", "checked": true, "multi": true, "find": "haris", "avatar": ["initials": "H", "color": [40, 160, 100]]]]],
-        ["header": "People", "rows": ["Ali Raza", "Areej Khan", "Claire Dubois", "Leila Aziz", "Lena Farouk", "Maya Rahman", "Omar Said", "Sara Noor", "Zain Ali"].enumerated().map {
-          ["i": $0.offset + 1, "label": $0.element, "sub": "Production", "multi": true, "find": $0.element, "avatar": ["initials": String($0.element.split(separator: " ").map { $0.prefix(1) }.joined()), "color": [90 + $0.offset * 15, 110, 200]]] }]],
-        search: "Search people") }),
+      ("nsheetPeople", "return '{}'", { self.selfSheet(self.sheetPeople(), search: "Search people") }),
       ("nsheetSearch", "return '{}'", { (self.presentedViewController as? NativeSheetVC)?.selfSearch("al") }),
       ("signin", pause(4000) + "return JSON.stringify({ host: location.host, top: (document.querySelector('h1, h2, img, form') || document.body).getBoundingClientRect().top })", {
         self.presentedViewController?.dismiss(animated: false)
