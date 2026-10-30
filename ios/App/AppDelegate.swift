@@ -818,6 +818,11 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       then()
     }
   }
+  // (a native sheet for the self-test, replacing any open one)
+  func selfSheet(_ sections: [[String: Any]]) {
+    let show = { self.run("nativeSheet", ["sections": sections]) { _ in } }
+    if let p = presentedViewController { p.dismiss(animated: false) { show() } } else { show() }
+  }
   func pause(_ ms: Int) -> String { "await new Promise((r) => setTimeout(r, \(ms)));" }
   func selfTest() {
     let wait = "for (let i = 0; i < 120 && !(window.db && typeof currentUserId !== 'undefined' && currentUserId && document.getElementById('ph-tabs')); i++) await new Promise((r) => setTimeout(r, 250));"
@@ -838,7 +843,21 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       ("task", "const t = db.tasks.find((x) => !x.parentId && !x.done && (x.comments || []).length) || db.tasks.find((x) => !x.parentId && !x.done); openTask(t.id); " + pause(1500) + "return JSON.stringify({ taskOpen: !!ui.taskId })", nil),
       ("sheet", "const m = showMenu(document.body, [{ html: '<div class=\"react-pick\">' + REACTIONS.map((e) => '<button>' + e + '</button>').join('') + '</div>' }, { label: 'Reply', icon: 'reply', run() {} }, { label: 'Edit comment', icon: 'edit', run() {} }, { label: 'Copy text', icon: 'copy', run() {} }, '-', { label: 'Delete comment', icon: 'trash', danger: true, run() {} }]); m.classList.add('cm-sheet'); " + pause(900) + geo + " const r = m.getBoundingClientRect(); return JSON.stringify({ menuTop: r.top, menuBottom: r.bottom, geo })", nil),
       ("back", "document.querySelectorAll('.menu, #ph-menu-scrim').forEach((x) => x.remove()); closeDetail(); " + pause(800) + "return JSON.stringify({ taskOpen: !!ui.taskId })", nil),
+      // native sheets (Haris: the same room above and below as the Channel sheet, everywhere — and the last option of a
+      // long list clear of the bottom edge at the end of the scroll): a long titled one at rest, the same scrolled to the
+      // end, a short untitled one like Channel, a short one titled with a person
+      ("nsheet", "return '{}'", { self.selfSheet([
+        ["header": "Change role", "rows": ["Super Admin", "Office Admin", "Account Manager", "Production", "Social", "Freelancer", "Finance only · Admin", "Finance only · Viewer"].enumerated().map { ["i": $0.offset, "label": $0.element, "dot": [124, 108, 240]] }],
+        ["rows": [["i": 20, "label": "Super Admin rights", "icon": "shield"], ["i": 21, "label": "No Finance access", "icon": "coin", "checked": true], ["i": 22, "label": "Finance Admin", "icon": "coin"], ["i": 23, "label": "Finance Viewer", "icon": "coin"]]],
+        ["rows": [["i": 30, "label": "Remove from team", "icon": "trash", "danger": true]]]]) }),
+      ("nsheetEnd", "return '{}'", { (self.presentedViewController as? NativeSheetVC)?.scrollToEnd() }),
+      ("nsheetChannel", "return '{}'", { self.selfSheet([["rows": ["Instagram", "Facebook", "TikTok", "LinkedIn", "X", "YouTube"].enumerated().map { ["i": $0.offset, "label": $0.element, "dot": [230, 120, 160]] }]]) }),
+      ("nsheetTitled", "return '{}'", { self.selfSheet([
+        ["header": "Ali Raza’s priority", "person": ["initials": "AR", "color": [90, 120, 200]], "rows": [["i": 0, "label": "Urgent", "sub": "always on top", "icon": "flag", "tint": [220, 60, 60]]]],
+        ["header": "Priority for Oct 28", "rows": [["i": -1, "label": "", "kind": "num", "chips": (1...10).map { ["i": $0, "label": String($0)] }]]],
+        ["rows": [["i": 11, "label": "No priority", "icon": "flag"]]]]) }),
       ("signin", pause(4000) + "return JSON.stringify({ host: location.host, top: (document.querySelector('h1, h2, img, form') || document.body).getBoundingClientRect().top })", {
+        self.presentedViewController?.dismiss(animated: false)
         self.web.load(URLRequest(url: URL(string: "https://e11hq.cloudflareaccess.com/")!)) }),
     ]
     func run(_ i: Int) {
@@ -847,6 +866,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       before?()
       DispatchQueue.main.asyncAfter(deadline: .now() + (before == nil ? 0.2 : 1.5)) {
         self.probe(name, js) {
+          if name.hasPrefix("nsheet") { self.selfResult[name + "Geo"] = (self.presentedViewController as? NativeSheetVC)?.geo() ?? ["error": "no native sheet"] }
           if name == "home" || name == "inbox" { self.selfResult[name + "Frame"] = ["web": self.web.frame.height, "screen": self.view.bounds.height, "tabBar": !self.tabBar.isHidden] as [String: Any] }
           DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.writeSelf(name); DispatchQueue.main.asyncAfter(deadline: .now() + 4) { run(i + 1) } }
         }
@@ -1069,7 +1089,14 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     guard let d = v as? [NSNumber], d.count >= 3 else { return nil }
     return UIColor(red: CGFloat(d[0].doubleValue) / 255, green: CGFloat(d[1].doubleValue) / 255, blue: CGFloat(d[2].doubleValue) / 255, alpha: 1)
   }
-  static let TOP: CGFloat = 30   // (room under the grab handle before the first option)
+  // The same room on every sheet, as on the Channel sheet (Haris, 2026-10-30): from the sheet's top edge to the first
+  // thing in it (a title's text or the first option's card) is always TOP; from the last option's card to the sheet's
+  // visible bottom edge is always what a fitting list like Channel gets (END inside the list + iOS's own margin) —
+  // a list that scrolls gets the same at the end of its scroll.
+  static let TOP: CGFloat = 30
+  static let END: CGFloat = 8
+  private static var fitGap: CGFloat = 26   // (a fitting sheet's real gap under its last option — measured each time one is shown)
+  private static let TITLE_H: CGFloat = 18, TITLE_GAP: CGFloat = 8   // (a section title's text, and its gap to its card)
   private static let SYMBOLS: [String: String] = [
     "plus": "plus", "edit": "pencil", "trash": "trash", "x": "xmark", "clip": "paperclip", "folder": "folder",
     "info": "info.circle", "copy": "doc.on.doc", "search": "magnifyingglass", "download": "arrow.down.circle",
@@ -1131,7 +1158,8 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     //  automatic safe-area padding is off, the bottom margin is set by hand)
     table.contentInsetAdjustmentBehavior = .never
     // (the list starts under the grab handle, but scrolls up behind it to the sheet's own rounded edge — no flat cut)
-    table.contentInset = UIEdgeInsets(top: sections.first?.header == nil ? NativeSheetVC.TOP : 6, left: 0, bottom: 8 + (floating ? 0 : 34), right: 0)
+    // (a titled first section: its header is exactly the title's text + its gap, so the text starts at TOP too)
+    table.contentInset = UIEdgeInsets(top: NativeSheetVC.TOP, left: 0, bottom: NativeSheetVC.END + (floating ? 0 : 34), right: 0)
     table.alwaysBounceVertical = false   // (a list that fits doesn't scroll: the finger moves the sheet itself)
     // (rows ignore the screen's bottom safe area: a row lying over it had its text pushed up inside it, and the text
     //  slid about within the row as the sheet moved — "Remove from team")
@@ -1153,6 +1181,8 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
   // Sized from the list alone, once (and again only if the list itself changes) — never from the sheet's own size,
   // which iOS stretches while it's pulled: re-sizing then made the options jump at the end of a scroll.
   private var lastContent: CGFloat = -1
+  private var hiddenBelow: CGFloat?   // (how much of this sheet's own view lies below its visible bottom edge — measured once shown)
+  private var scrolls = false
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
     table.layoutIfNeeded()
@@ -1162,15 +1192,58 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     //  hand a table otherwise starts at 0, which hid that room and put the first option against the handle)
     if lastContent < 0 { table.contentOffset = CGPoint(x: 0, y: -table.contentInset.top) }
     lastContent = ch
+    resize()
+  }
+  private func resize() {
+    let ch = table.contentSize.height
     // (iOS adds the home-bar strip below a sheet's height by itself — on a floating sheet too, where it just showed
     //  as empty space under the last option — so that strip is taken off here)
     let strip = presentingViewController?.view.window?.safeAreaInsets.bottom ?? view.window?.safeAreaInsets.bottom ?? 0
-    fitHeight = max(120, ch + table.contentInset.top + 8 - (floating ? strip : 0) + (floating ? 0 : view.safeAreaInsets.bottom))
-    // (a list too long for the sheet scrolls: its end needs that strip back, or the last option sits under the edge;
-    //  a list that fits gets none, so it never scrolls — the finger moves the sheet)
+    fitHeight = max(120, NativeSheetVC.TOP + ch + NativeSheetVC.END - (floating ? strip : 0) + (floating ? 0 : view.safeAreaInsets.bottom))
+    // (a list too long for the sheet scrolls: at the end of the scroll its last option must clear the sheet's visible
+    //  bottom edge by the same gap as a fitting list (Channel) — whatever of the sheet lies below that edge is added
+    //  (measured once shown; until then iOS's home-bar strip). A list that fits gets none, so it never scrolls — the
+    //  finger moves the sheet.)
     let cap = ((presentingViewController?.view.bounds.height ?? view.window?.bounds.height ?? 800) - 60) * 0.68
-    table.contentInset.bottom = 8 + (fitHeight > cap ? strip : 0)
+    scrolls = fitHeight > cap
+    let below = floating ? (hiddenBelow ?? strip) : view.safeAreaInsets.bottom
+    table.contentInset.bottom = scrolls ? (floating ? NativeSheetVC.fitGap : NativeSheetVC.END) + below : NativeSheetVC.END + (floating ? 0 : below)
+    table.verticalScrollIndicatorInsets.bottom = 22 + (scrolls ? below : 0)
     sheetPresentationController?.animateChanges { sheetPresentationController?.invalidateDetents() }
+  }
+  // Once on screen, the real edges are measured (the bottom edge has differed between iOS versions and between
+  // fitting and scrolling sheets — the last option ended up under the rounded edge, "Remove from team"): a fitting
+  // sheet (like Channel) records its gap under the last option; a scrolling one gets exactly that gap at its end.
+  override func viewDidAppear(_ animated: Bool) {
+    super.viewDidAppear(animated)
+    guard floating, let g = edges() else { return }
+    hiddenBelow = g.hidden
+    if scrolls { resize() } else if g.endGap > 4 && g.endGap < 60 { NativeSheetVC.fitGap = g.endGap }
+  }
+  // the sheet's visible bottom edge, how much of this view is below it, and the gap under the last option's card
+  // (in a list that fits; at the very end of the scroll in one that scrolls) — also read by the self-test
+  func edges() -> (hidden: CGFloat, endGap: CGFloat, card: CGRect, topGap: CGFloat)? {
+    guard let win = view.window else { return nil }
+    let cardView: UIView = sheetPresentationController?.presentedView ?? view
+    let card = cardView.convert(cardView.bounds, to: win)
+    let visBottom = min(card.maxY, win.bounds.maxY)
+    let hidden = max(0, view.convert(view.bounds, to: win).maxY - visBottom)
+    let maxOffset = max(-table.contentInset.top, table.contentSize.height + table.contentInset.bottom - table.bounds.height)
+    let atEnd = scrolls ? maxOffset : table.contentOffset.y
+    let tableTop = table.superview?.convert(table.frame, to: win).minY ?? 0
+    let lastBottom = tableTop + table.contentSize.height - atEnd
+    // (the first thing's top when scrolled to the start: the first card, or a title's text — the header is exactly its text + gap)
+    let firstTop = tableTop + table.contentInset.top
+    return (hidden, visBottom - lastBottom, card, firstTop - card.minY)
+  }
+  func geo() -> [String: Any] {
+    guard let g = edges() else { return ["error": "not shown"] }
+    return ["card": [g.card.minX, g.card.minY, g.card.width, g.card.height], "hiddenBelow": g.hidden, "endGap": g.endGap,
+            "topGap": g.topGap, "scrolls": scrolls, "fitHeight": fitHeight, "fitGap": NativeSheetVC.fitGap, "insetBottom": table.contentInset.bottom,
+            "content": table.contentSize.height, "offset": table.contentOffset.y, "titled": sections.first?.header != nil]
+  }
+  func scrollToEnd() {
+    table.setContentOffset(CGPoint(x: 0, y: max(-table.contentInset.top, table.contentSize.height + table.contentInset.bottom - table.bounds.height)), animated: false)
   }
   // Each row's height, worked out here (exact, no estimates — estimates made the list jump while scrolling, and
   // without them iOS would squeeze every row to the default height)
@@ -1188,28 +1261,38 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
   func numberOfSections(in tableView: UITableView) -> Int { sections.count }
   func tableView(_ tableView: UITableView, numberOfRowsInSection s: Int) -> Int { sections[s].rows.count }
   func tableView(_ tableView: UITableView, titleForHeaderInSection s: Int) -> String? { sections[s].header }
-  // a title with the person's round picture (their photo, or initials on their colour)
+  // Every section title is drawn here (not iOS's own), so its place is exact: its text sits TITLE_GAP above its card,
+  // and a first section's title starts TOP under the sheet's top edge — where the first option starts on a sheet with
+  // no title (Channel). A person's title has their round picture first (their photo, or initials on their colour).
   func tableView(_ tableView: UITableView, viewForHeaderInSection s: Int) -> UIView? {
     let sec = sections[s]
-    guard let title = sec.header, sec.photo != nil || sec.initials != nil else { return nil }
+    guard let title = sec.header else { return nil }
     let v = UIView()
-    let pic = UIImageView(); pic.layer.cornerRadius = 11; pic.clipsToBounds = true; pic.contentMode = .scaleAspectFill
-    let ini = UILabel(); ini.font = .systemFont(ofSize: 10, weight: .bold); ini.textColor = .white; ini.textAlignment = .center
-    if let p = sec.photo { pic.image = p } else { pic.backgroundColor = sec.color ?? .systemGray; ini.text = sec.initials }
-    let label = UILabel(); label.text = title; label.font = .preferredFont(forTextStyle: .footnote).withSize(15); label.textColor = .secondaryLabel
+    let label = UILabel(); label.text = title; label.textColor = .secondaryLabel
     label.font = .systemFont(ofSize: 15, weight: .semibold)
-    [pic, ini, label].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; v.addSubview($0) }
-    NSLayoutConstraint.activate([
-      pic.leadingAnchor.constraint(equalTo: v.leadingAnchor, constant: 20), pic.bottomAnchor.constraint(equalTo: v.bottomAnchor, constant: -8),
-      pic.widthAnchor.constraint(equalToConstant: 22), pic.heightAnchor.constraint(equalToConstant: 22),
-      ini.centerXAnchor.constraint(equalTo: pic.centerXAnchor), ini.centerYAnchor.constraint(equalTo: pic.centerYAnchor),
-      label.leadingAnchor.constraint(equalTo: pic.trailingAnchor, constant: 8), label.centerYAnchor.constraint(equalTo: pic.centerYAnchor),
-      label.trailingAnchor.constraint(lessThanOrEqualTo: v.trailingAnchor, constant: -20),
-    ])
+    label.translatesAutoresizingMaskIntoConstraints = false; v.addSubview(label)
+    var cs = [label.bottomAnchor.constraint(equalTo: v.bottomAnchor, constant: -NativeSheetVC.TITLE_GAP),
+              label.heightAnchor.constraint(equalToConstant: NativeSheetVC.TITLE_H),
+              label.trailingAnchor.constraint(lessThanOrEqualTo: v.trailingAnchor, constant: -20)]
+    if sec.photo != nil || sec.initials != nil {
+      let pic = UIImageView(); pic.layer.cornerRadius = 11; pic.clipsToBounds = true; pic.contentMode = .scaleAspectFill
+      let ini = UILabel(); ini.font = .systemFont(ofSize: 10, weight: .bold); ini.textColor = .white; ini.textAlignment = .center
+      if let p = sec.photo { pic.image = p } else { pic.backgroundColor = sec.color ?? .systemGray; ini.text = sec.initials }
+      [pic, ini].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; v.addSubview($0) }
+      cs += [pic.leadingAnchor.constraint(equalTo: v.leadingAnchor, constant: 20), pic.centerYAnchor.constraint(equalTo: label.centerYAnchor),
+             pic.widthAnchor.constraint(equalToConstant: 22), pic.heightAnchor.constraint(equalToConstant: 22),
+             ini.centerXAnchor.constraint(equalTo: pic.centerXAnchor), ini.centerYAnchor.constraint(equalTo: pic.centerYAnchor),
+             label.leadingAnchor.constraint(equalTo: pic.trailingAnchor, constant: 8)]
+    } else {
+      cs.append(label.leadingAnchor.constraint(equalTo: v.leadingAnchor, constant: 17))
+    }
+    NSLayoutConstraint.activate(cs)
     return v
   }
-  // (a titled first section takes its title's room out of the space under the grab handle, so its top looks like the others)
-  func tableView(_ tableView: UITableView, heightForHeaderInSection s: Int) -> CGFloat { sections[s].header == nil ? (s == 0 ? .leastNonzeroMagnitude : 12) : (s == 0 ? 30 : 40) }
+  // (a first section's title is just its text + gap, so the text starts at TOP like a first card; later titles get room above)
+  func tableView(_ tableView: UITableView, heightForHeaderInSection s: Int) -> CGFloat {
+    sections[s].header == nil ? (s == 0 ? .leastNonzeroMagnitude : 12) : NativeSheetVC.TITLE_H + NativeSheetVC.TITLE_GAP + (s == 0 ? 0 : 14)
+  }
   func tableView(_ tableView: UITableView, heightForFooterInSection s: Int) -> CGFloat { .leastNonzeroMagnitude }
   func tableView(_ tableView: UITableView, viewForFooterInSection s: Int) -> UIView? { UIView() }
   // (iOS 26 floats a short sheet above the bottom edge: no home-indicator padding inside it then)
@@ -1379,7 +1462,8 @@ final class DateSheetVC: UIViewController, UISheetPresentationControllerDelegate
     if let v = a["max"] as? String, let d = fmt.date(from: v) { picker.maximumDate = d }
     modalPresentationStyle = .pageSheet
     if let sh = sheetPresentationController {
-      sh.detents = [.custom(identifier: .init("date")) { ctx in min(ctx.maximumDetentValue, 470) }]
+      // (sized to the calendar, with the same gap under it as under a native list's last option — Channel)
+      sh.detents = [.custom(identifier: .init("date")) { [weak self] ctx in min(ctx.maximumDetentValue, self?.fitHeight ?? 470) }]
       sh.prefersGrabberVisible = true
       sh.delegate = self
     }
@@ -1406,6 +1490,19 @@ final class DateSheetVC: UIViewController, UISheetPresentationControllerDelegate
       picker.topAnchor.constraint(equalTo: today.bottomAnchor, constant: 4),
       picker.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 12), picker.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -12),
     ])
+  }
+  private var fitHeight: CGFloat = 470
+  override func viewDidLayoutSubviews() {
+    super.viewDidLayoutSubviews()
+    guard view.bounds.width > 0 else { return }
+    let floating: Bool; if #available(iOS 26, *) { floating = true } else { floating = false }
+    let strip = presentingViewController?.view.window?.safeAreaInsets.bottom ?? view.window?.safeAreaInsets.bottom ?? 0
+    let pickerH = picker.systemLayoutSizeFitting(CGSize(width: view.bounds.width - 24, height: UIView.layoutFittingCompressedSize.height),
+                                                 withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height
+    let h = max(320, picker.frame.minY + pickerH + NativeSheetVC.END - (floating ? strip : 0) + (floating ? 0 : view.safeAreaInsets.bottom))
+    guard picker.frame.minY > 0, abs(h - fitHeight) > 0.5 else { return }
+    fitHeight = h
+    sheetPresentationController?.animateChanges { sheetPresentationController?.invalidateDetents() }
   }
   private func finish(_ r: [String: Any]) {
     guard let a = answer else { return }

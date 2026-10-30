@@ -32,7 +32,12 @@ try:
     print('simulator', dev['name'], udid)
     sh('xcrun', 'simctl', 'boot', udid); sh('xcrun', 'simctl', 'bootstatus', udid, '-b', timeout=300)
     sh('xcrun', 'simctl', 'ui', udid, 'appearance', 'dark')
+    # (a fresh install: on our own Mac the simulator keeps the app's data between runs, and the last run's finished
+    #  selftest.json made every later run stop at once — no stages, old screenshots, an old app's answers)
+    sh('xcrun', 'simctl', 'terminate', udid, BUNDLE); sh('xcrun', 'simctl', 'uninstall', udid, BUNDLE)
     r = sh('xcrun', 'simctl', 'install', udid, APP); check(r.returncode == 0, 'installed ' + r.stderr[-300:])
+    try: os.remove(os.path.join(sh('xcrun', 'simctl', 'get_app_container', udid, BUNDLE, 'data').stdout.strip(), 'Documents', 'selftest.json'))
+    except Exception: pass
     lenv = dict(os.environ, SIMCTL_CHILD_E11_SERVER=BASE, SIMCTL_CHILD_E11_SELFTEST='1', SIMCTL_CHILD_E11_SELFTEST_EMAIL=EMAIL)
     r = subprocess.run(['xcrun', 'simctl', 'launch', udid, BUNDLE], env=lenv, capture_output=True, text=True); check(r.returncode == 0, 'launched ' + r.stdout + r.stderr[-300:])
     data = sh('xcrun', 'simctl', 'get_app_container', udid, BUNDLE, 'data').stdout.strip()
@@ -50,7 +55,7 @@ try:
         time.sleep(0.5)
     print(json.dumps(res, indent=1)[:4000])
     p = res.get('home') or {}
-    check(set(seen) >= {'home', 'inbox', 'me', 'client', 'task', 'sheet', 'back'}, f'all stages ran {sorted(seen)}')
+    check(set(seen) >= {'home', 'inbox', 'me', 'client', 'task', 'sheet', 'back', 'nsheet', 'nsheetEnd', 'nsheetChannel', 'nsheetTitled'}, f'all stages ran {sorted(seen)}')
     hf = res.get('homeFrame') or {}
     check(hf.get('web') == hf.get('screen') and hf.get('tabBar') is True, f'the page fills the screen under the floating tab bar {hf}')
     check(int(float(str((p.get('geo') or {}).get('tabsH') or '0').replace('px','') or 0)) > 40, f"the page knows the tab bar's height {p.get('geo')}")
@@ -59,6 +64,16 @@ try:
     check((res.get('client') or {}).get('wide') is False, f"Client Assets folder fits the screen {res.get('client')}")
     sh_ = res.get('sheet') or {}; g = sh_.get('geo') or {}
     check(sh_.get('menuBottom') is not None and sh_['menuBottom'] <= (g.get('innerH') or 0) + 1 and sh_['menuBottom'] - sh_.get('menuTop', 0) > 300, f'the comment sheet is fully on screen, all of it showing {sh_}')
+    # native sheets: the same room above (TOP, 30) and below (as on the Channel sheet) everywhere; a long list's last
+    # option clear of the bottom edge at the end of the scroll
+    ch_ = res.get('nsheetChannelGeo') or {}; gap = ch_.get('endGap')
+    for k in ('nsheet', 'nsheetEnd', 'nsheetChannel', 'nsheetTitled'):
+        g_ = res.get(k + 'Geo') or {}
+        check(abs((g_.get('topGap') or 0) - 30) <= 1, f'native sheet {k}: first thing 30 under the top edge {g_}')
+    for k in ('nsheetEnd', 'nsheetTitled'):
+        g_ = res.get(k + 'Geo') or {}
+        check(gap is not None and g_.get('endGap') is not None and abs(g_['endGap'] - gap) <= 2, f'native sheet {k}: gap under the last option {g_.get("endGap")} = Channel\'s {gap}')
+    check((res.get('nsheetGeo') or {}).get('scrolls') is True, 'the long native sheet scrolls')
     fr = res.get('frame') or {}
     print('note ' + ('ok' if (fr.get('insetTop') or 0) >= 20 else 'CHECK SCREENSHOT') + f" the sign-in page clears the status bar {fr} {res.get('signin')}")   # (needs the internet: not a blocker)
     print('note ' + ('ok' if fr.get('reviewLink') is True or 'cloudflareaccess' not in str(fr.get('host')) else 'CHECK SCREENSHOT') + f" the App Review sign-in link shows under the sign-in page {fr.get('host')} {fr.get('reviewLink')}")   # (needs the internet)
