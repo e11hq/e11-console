@@ -174,6 +174,13 @@ final class CommentBar: UIView, UITextViewDelegate, UITableViewDataSource, UITab
     if abs(bounds.height - lastH) > 0.5 { lastH = bounds.height; onHeight?(bounds.height) }
   }
 
+  // the app's own light / dark (not the phone's): the box and its keyboard (Haris, 2026-10-30)
+  func setLook(light: Bool) {
+    overrideUserInterfaceStyle = light ? .light : .dark
+    text.keyboardAppearance = light ? .light : .dark
+    if text.isFirstResponder { text.reloadInputViews() }
+    refresh()
+  }
   /* ---------- from the page ---------- */
   func apply(_ a: [String: Any]) {
     if let c = NativeSheetVC.color(a["accent"]) { accent = c }

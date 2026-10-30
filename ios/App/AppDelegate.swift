@@ -194,15 +194,18 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   /* The comment box on a task's Comments (17+): iPhone's own, pinned to the keyboard (the keyboard layout guide moves
      it with the keyboard itself, frame by frame); hidden until the page shows it. The page is told how tall it is
      (--ph-cbar) and keeps that much room under the comments. */
+  var cbarIfMade: CommentBar?
   lazy var cbar: CommentBar = {
     let b = CommentBar()
     b.translatesAutoresizingMaskIntoConstraints = false
+    b.setLook(light: LAST_LIGHT)
     b.isHidden = true; b.alpha = 0
     self.view.insertSubview(b, belowSubview: self.tabBar)
     NSLayoutConstraint.activate([
       b.leadingAnchor.constraint(equalTo: self.view.leadingAnchor), b.trailingAnchor.constraint(equalTo: self.view.trailingAnchor),
       b.bottomAnchor.constraint(equalTo: self.view.keyboardLayoutGuide.topAnchor),
     ])
+    self.cbarIfMade = b
     b.onEvent = { [weak self] ev in self?.pageJS("window.__e11CBar && window.__e11CBar(\(jsonString(ev)))") }
     b.onHeight = { [weak self] h in self?.pageJS("window.__e11CBarH && window.__e11CBarH(\(Int(h.rounded())))") }
     return b
@@ -214,19 +217,22 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     }
     if uploadedSound != 0 { AudioServicesPlaySystemSound(uploadedSound) }
   }
+  var cbarShow = false, cbarOnComments = false
   func commentBar(_ a: [String: Any]) {
     let b = cbar
-    // (sliding between Details and Comments: the box slides with the Comments page)
-    if let p = (a["p"] as? NSNumber).map({ CGFloat($0.doubleValue) }) { b.transform = CGAffineTransform(translationX: (1 - max(0, min(1, p))) * view.bounds.width, y: 0) }
-    if let show = a["show"] as? Bool, show == b.isHidden {
-      if show {
+    if let show = a["show"] as? Bool { cbarShow = show }
+    if let p = a["p"] as? NSNumber { cbarOnComments = p.doubleValue > 0.5 }
+    // shown only on Comments at rest; leaving it (a swipe to Details, back to the list) takes the keyboard away too
+    let want = cbarShow && cbarOnComments
+    if want == b.isHidden {
+      if want {
         b.isHidden = false
-        UIView.animate(withDuration: 0.18) { b.alpha = 1 }
+        UIView.animate(withDuration: 0.16) { b.alpha = 1 }
       } else {
         if b.text.isFirstResponder { b.text.resignFirstResponder() }
-        UIView.animate(withDuration: 0.15, animations: { b.alpha = 0 }) { _ in if b.alpha == 0 { b.isHidden = true } }
+        UIView.animate(withDuration: 0.12, animations: { b.alpha = 0 }) { _ in if b.alpha == 0 { b.isHidden = true } }
       }
-    }
+    } else if !want, b.text.isFirstResponder { b.text.resignFirstResponder() }
     if (a["clear"] as? Bool) == true { b.clear() }
     b.apply(a)
   }
@@ -796,6 +802,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       // the tab bar follows the app's own light / dark (not only the phone's): every icon, the open page's too, white
       // in dark and black in light — Haris 2026-10-30 (only the tab bar: the page itself keeps following the phone)
       let style: UIUserInterfaceStyle = (a["mode"] as? String) == "light" ? .light : .dark
+      cbarIfMade?.setLook(light: style == .light)
       if tabBar.overrideUserInterfaceStyle != style || tabBar.tintColor != (style == .dark ? UIColor.white : UIColor.black) {
         tabBar.overrideUserInterfaceStyle = style
         let ink: UIColor = style == .dark ? .white : .black

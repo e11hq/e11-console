@@ -1088,7 +1088,9 @@ body.phone .pl-head .pl-acts > .icon-btn { flex: none; }
 /* iPhone app 17+: the comment box is iPhone's own (NativeComment, phone.js): the page's box is hidden and the comments
    keep room for the native one — its height (--ph-cbar) plus the home-bar strip while the keyboard is down */
 html.ph-cbar body.phone #detail .tm-composer { display: none !important; }
-html.ph-cbar body.phone #detail .tm-feed { padding-bottom: calc(var(--ph-cbar, 56px) + max(0px, env(safe-area-inset-bottom) - var(--ios-kb, 0px)) + 8px) !important; }
+html.ph-cbar body.phone #detail .tm-feed { padding-bottom: calc(var(--ph-cbar, 56px) + env(safe-area-inset-bottom) + var(--ph-kbpad, 0px) + 8px) !important; will-change: transform; }
+/* (on Comments the task itself doesn't shrink for the keyboard: only the list moves — NativeComment) */
+html.ph-cbar.ph-cb-on body.phone #detail.open .tm { padding-bottom: 0 !important; transition: none !important; }
 
 /* Start / Due / Priority keep the same height whether a value is set or not, so nothing below shifts when one is set
    or cleared (Haris, 2026-10-30): every date line and every priority row has a fixed height */

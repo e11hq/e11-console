@@ -2144,13 +2144,16 @@ const NativeComment = (() => {
     if (fresh) { st.runs = htmlToRuns(ui.commentDraft[key] || ''); lastKey = key; }
     call(st);
   }
-  // sliding between Details and Comments: the box slides with the Comments page (0 = Details, 1 = Comments)
+  // Details / Comments: the box shows only while Comments is at rest (0 = Details, 1 = Comments). The moment a swipe
+  // leaves Comments it goes (and the keyboard with it); it comes back once Comments is reached — following the finger
+  // frame by frame across the bridge lagged (Haris, 2026-10-30)
   function slide(p, now) {
     if (!on) return;
-    lastP = p;
-    if (now) { call({ p }); return; }
-    if (raf) return;
-    raf = requestAnimationFrame(() => { raf = 0; call({ p: lastP }); });
+    const at = p > 0.98 ? 1 : 0;
+    root.classList.toggle('ph-cb-on', at === 1);
+    if (at === lastP && !now) return;
+    lastP = at;
+    call({ p: at });
   }
   const feed = () => document.querySelector('#detail .tm-feed');
   const atEnd = (f) => !!f && f.scrollHeight - f.scrollTop - f.clientHeight < 60;
@@ -2188,9 +2191,40 @@ const NativeComment = (() => {
   };
   // the box's height (it grows as lines are typed): the comments keep that much room, and stay at the latest
   window.__e11CBarH = (h) => { const f = feed(), end = atEnd(f); root.style.setProperty('--ph-cbar', Math.max(0, Number(h) || 0) + 'px'); if (end && f) f.scrollTop = f.scrollHeight; };
-  // the keyboard sliding up / down: the comments that were at the latest stay at the latest, frame by frame
+  /* The keyboard sliding up / down on Comments: only the comments list moves, by a transform — no page redraw on every
+     frame (the page re-laid itself out each frame and it stuttered, Haris 2026-10-30). Once the keyboard is up, the
+     transform becomes padding + scroll (looks the same, lets the whole list be scrolled); going down, the other way. */
+  const safeB = (() => { let v = null; return () => { if (v == null) { const d = document.createElement('div'); d.style.cssText = 'position:fixed;visibility:hidden;padding-bottom:env(safe-area-inset-bottom)'; document.body.appendChild(d); v = parseFloat(getComputedStyle(d).paddingBottom) || 0; d.remove(); } return v; }; })();
+  let kbTarget = 0, kbPad = 0;
+  const comments = () => on && root.classList.contains('ph-cb-on') && openTaskNow() ? feed() : null;
+  const kb0 = window.__e11Kb;
+  window.__e11Kb = (px, ms, stepped) => {
+    const f = comments();
+    kbTarget = Math.max(0, Number(px) || 0);
+    if (f && kbTarget === 0 && kbPad > 0) {
+      // going down: padding back to a transform, so the list can ride down with the keyboard
+      const T = kbPad, st = f.scrollTop; kbPad = 0;
+      root.style.setProperty('--ph-kbpad', '0px');
+      f.scrollTop = Math.max(0, st - T);
+      f.style.transform = `translate3d(0, ${-T}px, 0)`;
+    }
+    if (kb0) kb0(px, ms, stepped);
+  };
   const step0 = window.__e11KbStep;
-  window.__e11KbStep = (px) => { const f = on ? feed() : null, end = atEnd(f); if (step0) step0(px); if (end && f) f.scrollTop = f.scrollHeight; };
+  window.__e11KbStep = (px) => {
+    const f = comments();
+    if (!f) { if (step0) step0(px); return; }
+    const T = Math.max(0, (Number(px) || 0) - safeB());
+    if (kbTarget > 0 && Number(px) >= kbTarget) {
+      // up and resting: the transform becomes padding + scroll (the same picture)
+      f.style.transform = '';
+      kbPad = T;
+      root.style.setProperty('--ph-kbpad', T + 'px');
+      f.scrollTop += T;
+      return;
+    }
+    f.style.transform = T ? `translate3d(0, ${-T}px, 0)` : '';
+  };
   // the page's own box asked for the keyboard (Reply, after Send, after Cancel reply…): the native box takes it
   const focus0 = HTMLElement.prototype.focus;
   HTMLElement.prototype.focus = function (...a) {
@@ -2200,7 +2234,7 @@ const NativeComment = (() => {
   // redraws, uploads and the files row: the box follows
   if (typeof renderDetail === 'function') { const rd = renderDetail; renderDetail = function (...a) { const r = rd.apply(this, a); if (on) setTimeout(() => sync(), 0); return r; }; }
   if (typeof refreshComposerFiles === 'function') { const rf = refreshComposerFiles; refreshComposerFiles = function (...a) { const r = rf.apply(this, a); if (on) setTimeout(() => sync(), 0); return r; }; }
-  if (typeof closeDetail === 'function') { const cd = closeDetail; closeDetail = function (...a) { const r = cd.apply(this, a); if (on) { lastP = -1; sync(); } return r; }; }
+  if (typeof closeDetail === 'function') { const cd = closeDetail; closeDetail = function (...a) { if (on) { call({ show: false, blur: true }); last = JSON.stringify({ show: false }); lastKey = null; lastP = -1; root.classList.remove('ph-cb-on'); kbPad = 0; root.style.setProperty('--ph-kbpad', '0px'); } return cd.apply(this, a); }; }
   if (typeof Unsent !== 'undefined' && Unsent.progress) { const pg = Unsent.progress; Unsent.progress = function (...a) { const r = pg.apply(this, a); if (on) sync(); return r; }; }
   return { get on() { return on; }, sync, slide, htmlToRuns, runsToHtml };
 })();
