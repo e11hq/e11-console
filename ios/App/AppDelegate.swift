@@ -754,6 +754,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   func flushPending() {
     if let t = pendingToken { pendingToken = nil; sendToken(t) }
+    // (every time the page loads: this phone's address again — the page wasn't told it after a fresh start, so the site
+    //  might not have it, and "Send test" couldn't say how this phone did)
+    else { pushState { st in if st == "on" { UIApplication.shared.registerForRemoteNotifications() } } }
     if let d = pendingPush { pendingPush = nil; pageJS(waitForApp("window.__e11PushTap && window.__e11PushTap(\(jsonString(d)))")) }
   }
 
