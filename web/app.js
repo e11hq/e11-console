@@ -7194,7 +7194,7 @@ function choiceDialog({ title, body = '', choices }) {
     const root = $('#overlay-root');
     root.innerHTML = `<div class="scrim"><div class="dialog choice-dlg" role="dialog">
       <h2>${esc(title)}</h2>${body ? `<p>${esc(body)}</p>` : ''}
-      <div class="actions">${choices.map((c, i) => `<button class="btn ${c.primary ? 'primary' : c.danger ? 'danger' : ''}" data-i="${i}">${esc(c.label)}</button>`).join('')}</div>
+      <div class="actions">${choices.map((c, i) => `<button class="btn ${c.primary ? 'primary' : c.danger ? 'danger' : ''}" data-i="${i}">${c.short ? `<span class="l-long">${esc(c.label)}</span><span class="l-short">${esc(c.short)}</span>` : esc(c.label)}</button>`).join('')}</div>
     </div></div>`;
     const done = (v) => { root.innerHTML = ''; document.removeEventListener('keydown', onKey, true); resolve(v); };
     const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(null); } };
@@ -7223,7 +7223,7 @@ async function changeStatus(t, sectionId, targetId = null, after = false) {
     const ans = cdOnIt ? 'no' : await choiceDialog({
       title: 'Does this need CD review again?',
       body: 'The task is going back for changes. Choose whether the updated work goes to the Creative Director before it returns to the client.',
-      choices: [{ label: 'Cancel', value: null }, { label: 'No, skip CD review', value: 'no' }, { label: 'Yes, needs CD review', value: 'yes', primary: true }],
+      choices: [{ label: 'Cancel', value: null }, { label: 'No, skip CD review', short: 'Skip CD', value: 'no' }, { label: 'Yes, needs CD review', short: 'Needs CD', value: 'yes', primary: true }],
     });
     if (!ans) return false;
     t.partsDone = {};

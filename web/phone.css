@@ -1078,3 +1078,9 @@ html.ios-app body.phone .asg-av.pdone .av, html.ios-app body.phone .av-done .av 
 html.ios-app body.phone .asg-av + .asg-av { margin-left: -4px; }
 html.ios-app body.phone .asg-av { pointer-events: none; }
 html.ios-app body.phone .asg-x { display: none !important; }
+/* a dialog's buttons and a content plan's actions stay on one line on the phone (shorter labels, equal widths) */
+body.phone .dialog.choice-dlg .actions { flex-wrap: nowrap; }
+body.phone .dialog.choice-dlg .actions .btn { flex: 1 1 0; min-width: 0; justify-content: center; padding-left: 8px; padding-right: 8px; white-space: nowrap; }
+body.phone .pl-head .pl-acts { width: 100%; display: flex; gap: 8px; flex-wrap: nowrap; align-items: center; }
+body.phone .pl-head .pl-acts > .btn { flex: 1 1 0; min-width: 0; justify-content: center; white-space: nowrap; padding-left: 8px; padding-right: 8px; }
+body.phone .pl-head .pl-acts > .icon-btn { flex: none; }

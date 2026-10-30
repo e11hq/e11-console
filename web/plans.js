@@ -170,7 +170,7 @@ const Plans = (() => {
         <div class="pl-who">${clientDot(p, 30)}<div><b>${esc(p.name)}</b><span>${esc(monthLabel(pl.month))} · ${n} post${n === 1 ? '' : 's'}${by ? ` · started by ${esc(fullName(by))}` : ''}</span></div>${statusPill(pl)}</div>
         <span class="spacer"></span>
         ${phone() ? '' : `<div class="cal-seg"><button class="${tab === 'calendar' ? 'on' : ''}" data-pl="tab" data-v="calendar">Calendar</button><button class="${tab === 'list' ? 'on' : ''}" data-pl="tab" data-v="list">List</button></div>`}
-        ${headActions(pl)}
+        ${phone() ? `<div class="pl-acts">${headActions(pl)}</div>` : headActions(pl)}
       </div>
       ${banner(pl)}
       <div class="pl-body">
@@ -249,14 +249,14 @@ const Plans = (() => {
   function headActions(pl) {
     const out = [];
     const ed = canEdit(pl), editor = isEditor(pl), appr = canApprove(pl);
-    if (ed) out.push(`<button class="btn sm" data-pl="new-post">${icon('plus')}Add post</button>`, `<button class="btn primary sm" data-pl="send">${icon('send')}${pl.status === 'changes' ? 'Send again' : 'Send for approval'}</button>`);
+    if (ed) out.push(`<button class="btn sm" data-pl="new-post">${icon('plus')}Add post</button>`, `<button class="btn primary sm" data-pl="send">${icon('send')}${pl.status === 'changes' ? 'Send again' : '<span class="l-long">Send for approval</span><span class="l-short">Send</span>'}</button>`);
     if (canMakeTasks(pl) && (pl.posts || []).some((x) => !x.taskId || !task(x.taskId))) out.push(`<button class="btn primary sm" data-pl="make-tasks">${icon('plus')}Create tasks</button>`);
     if (canMakeTasks(pl) && hasTasks(pl) && !pl.clientApproved) {
-      if ((pl.exports || []).length) out.push(`<button class="btn sm" data-pl="reply">${icon('reply')}Client’s reply</button>`);
-      if ((pl.posts || []).some((x) => progress(x).fin && !progress(x).t.done)) out.push(`<button class="btn ${(pl.exports || []).length ? '' : 'primary '}sm" data-pl="export">${icon('download')}Export for client</button>`);
-      if (allFinished(pl) && (pl.exports || []).length) out.push(`<button class="btn primary sm" data-pl="client-all">${icon('check')}Client approved</button>`);
+      if ((pl.exports || []).length) out.push(`<button class="btn sm" data-pl="reply">${icon('reply')}<span class="l-long">Client’s reply</span><span class="l-short">Reply</span></button>`);
+      if ((pl.posts || []).some((x) => progress(x).fin && !progress(x).t.done)) out.push(`<button class="btn ${(pl.exports || []).length ? '' : 'primary '}sm" data-pl="export">${icon('download')}<span class="l-long">Export for client</span><span class="l-short">Export</span></button>`);
+      if (allFinished(pl) && (pl.exports || []).length) out.push(`<button class="btn primary sm" data-pl="client-all">${icon('check')}<span class="l-long">Client approved</span><span class="l-short">Approved</span></button>`);
     }
-    if (pl.status === 'review' && appr) out.push(`<button class="btn sm" data-pl="send-back">${icon('edit')}Send back for changes</button>`, `<button class="btn primary sm" data-pl="approve">${icon('check')}Approve skeleton</button>`);
+    if (pl.status === 'review' && appr) out.push(`<button class="btn sm" data-pl="send-back">${icon('edit')}<span class="l-long">Send back for changes</span><span class="l-short">Send back</span></button>`, `<button class="btn primary sm" data-pl="approve">${icon('check')}<span class="l-long">Approve skeleton</span><span class="l-short">Approve</span></button>`);
     if (editor || appr) out.push(`<button class="icon-btn" data-pl="plan-menu" title="Skeleton options">${icon('more')}</button>`);
     return out.length ? out.join('') : '<span class="pl-ro">View only</span>';
   }

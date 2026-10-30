@@ -2944,3 +2944,7 @@ html.mac-chrome .fpv-oncomputer .fpv-top { padding-left: 18px; }
 .ct-bar .fname div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .ct-bar .fname small { color: var(--text-3); font-size: 10.5px; }
 .ct-bar .icon-btn { flex: none; }
+/* a button's shorter label for the phone (the full one on a computer) */
+.l-short { display: none; }
+body.phone .l-long { display: none; }
+body.phone .l-short { display: inline; }
