@@ -954,6 +954,10 @@ const Push = (() => {
 (() => {
   const EDGE = 28, DONE = 0.33, PAR = 0.3, DIM = 0.22;
   let g = null;
+  // iPhone app 10+: tuned — the let-go follows the finger's speed (a flick finishes, a flick back cancels), the
+  // glide takes as long as the distance needs, moving layers are readied for the GPU, the header dims with a
+  // see-through layer instead of a filter, and the page coming off casts a soft edge shadow (as iOS does)
+  const tuned = () => typeof Pager !== 'undefined' && Pager.lists();
   const standalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true || window.__phSwipeAlways || (typeof Host !== 'undefined' && Host.isIOSApp);
   function target() {
     if ($('#overlay-root').firstElementChild || $('.menu') || $('#ph-sheet-root .ph-scrim:not(.docked)')) return null; // a sheet or menu is open
@@ -967,10 +971,10 @@ const Push = (() => {
   }
   const move = (el, x, anim) => {
     if (!el) return;
-    el.style.transition = anim ? 'transform .22s cubic-bezier(.2,.8,.2,1)' : 'none';
+    el.style.transition = anim ? `transform ${typeof anim === 'number' ? anim : 220}ms cubic-bezier(.2,.8,.2,1)` : 'none';
     el.style.transform = x ? `translate3d(${x}px,0,0)` : '';
   };
-  const fade = (el, o, anim) => { if (!el) return; el.style.transition = anim ? 'opacity .22s cubic-bezier(.2,.8,.2,1)' : 'none'; el.style.opacity = String(o); };
+  const fade = (el, o, anim) => { if (!el) return; el.style.transition = anim ? `opacity ${typeof anim === 'number' ? anim : 220}ms cubic-bezier(.2,.8,.2,1)` : 'none'; el.style.opacity = String(o); };
   const dimLayer = (parent, before, z) => {
     const d = document.createElement('div');
     d.className = 'ph-swipe-dim';
@@ -1006,6 +1010,18 @@ const Push = (() => {
       c.dim = dimLayer(document.body, fg, 21);          // above the real header (z 20), below the copy
     } else c.under = [];
     c.under.forEach((el) => move(el, -w * PAR, false));
+    if (tuned()) {
+      c.tuned = true;
+      [c.layer, ...c.under, c.dim].forEach((el) => { if (el) el.style.willChange = el === c.dim ? 'opacity' : 'transform'; });
+      if (c.layer && c.kind !== 'page') c.layer.style.boxShadow = '-6px 0 22px rgba(0,0,0,.28)';
+      if (c.top) {
+        c.topDim = document.createElement('div');
+        c.topDim.className = 'ph-swipe-dim';
+        c.topDim.style.cssText = `position:absolute;inset:0;background:#000;opacity:${DIM};pointer-events:none;will-change:opacity;z-index:5`;
+        c.top.appendChild(c.topDim);
+        c.top.style.willChange = 'transform';
+      }
+    }
     if (c.top) track(c, 0);
   }
   function track(c, dx) {
@@ -1017,11 +1033,13 @@ const Push = (() => {
       const tx = -c.w * PAR * (1 - p);
       move(c.top, tx, false);
       c.top.style.clipPath = `inset(0 ${Math.max(0, c.w - (dx - tx))}px 0 0)`;
-      c.top.style.filter = `brightness(${1 - DIM * (1 - p)})`;
+      if (c.topDim) fade(c.topDim, DIM * (1 - p), false); else c.top.style.filter = `brightness(${1 - DIM * (1 - p)})`;
     }
   }
   function cleanup(c) {
     [...c.under, c.top].forEach((el) => { if (el) { el.style.transition = 'none'; el.style.transform = ''; } });
+    [c.layer, ...c.under, c.top].forEach((el) => { if (el) { el.style.willChange = ''; el.style.boxShadow = ''; } });
+    if (c.topDim) c.topDim.remove();
     const top = $('#ph-top'); if (top) { top.style.visibility = ''; top.style.clipPath = ''; top.style.filter = ''; }
     if (c.dim) c.dim.remove();
     if (c.fg) c.fg.remove();
@@ -1062,6 +1080,9 @@ const Push = (() => {
     }
     e.preventDefault();
     g.dx = Math.max(0, dx);
+    const now = performance.now();
+    (g.trail = g.trail || []).push([now, g.dx]);
+    while (g.trail.length > 2 && now - g.trail[0][0] > 100) g.trail.shift();   // (the last ~0.1 s: the speed at let-go)
     track(g, g.dx);
     clearTimeout(g.idle); const me = g;
     g.idle = setTimeout(() => { if (g === me) end(); }, 4000); // no word from the finger for a while: settle
@@ -1074,28 +1095,40 @@ const Push = (() => {
     if (!g || !g.on) { g = null; return; }
     const c = g; g = null;
     const w = c.w;
-    const fast = c.dx > 50 && c.dx / Math.max(1, Date.now() - c.t0) > 0.5;
+    let fast = c.dx > 50 && c.dx / Math.max(1, Date.now() - c.t0) > 0.5;
+    let dur = 220, back = false;
+    if (c.tuned) {
+      const tr = c.trail || [], a0 = tr[0], a1 = tr[tr.length - 1];
+      const v = a0 && a1 && a1[0] > a0[0] ? (a1[1] - a0[1]) / (a1[0] - a0[0]) : 0;   // px per ms (+ = towards back)
+      fast = v > 0.35 && c.dx > 20;
+      back = v < -0.35;                                                                 // flicked back: stay
+      const done = !back && (c.dx > w * DONE || fast);
+      const left = done ? w - c.dx : c.dx;
+      dur = Math.round(Math.max(170, Math.min(340, left / Math.max(Math.abs(v), 1.1))));
+      c.done = done;
+    }
     const glide = (to) => { // the header has no transform-only path, so walk it along with the release
       if (!c.top) return;
       const from = c.dx, t0 = performance.now();
-      const step = (now) => { const k = Math.min(1, (now - t0) / 220), e = 1 - Math.pow(1 - k, 3);
+      const step = (now) => { const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3);
         if (c.top.style.visibility !== 'visible') return;
         const dx = from + (to - from) * e, p = dx / w, tx = -w * PAR * (1 - p);
         c.top.style.transition = 'none'; c.top.style.transform = `translate3d(${tx}px,0,0)`;
-        c.top.style.clipPath = `inset(0 ${Math.max(0, w - (dx - tx))}px 0 0)`; c.top.style.filter = `brightness(${1 - DIM * (1 - p)})`;
+        c.top.style.clipPath = `inset(0 ${Math.max(0, w - (dx - tx))}px 0 0)`;
+        if (c.topDim) { c.topDim.style.transition = 'none'; c.topDim.style.opacity = String(DIM * (1 - p)); } else c.top.style.filter = `brightness(${1 - DIM * (1 - p)})`;
         if (k < 1) requestAnimationFrame(step); };
       requestAnimationFrame(step);
     };
-    if (c.dx > w * DONE || fast) {
+    if (c.tuned ? c.done : (c.dx > w * DONE || fast)) {
       glide(w);
-      move(c.layer, w, true); c.under.forEach((el) => move(el, 0, true)); fade(c.dim, 0, true);
+      move(c.layer, w, dur); c.under.forEach((el) => move(el, 0, dur)); fade(c.dim, 0, dur);
       setTimeout(() => {
         if (c.kind !== 'page') { c.btn.click(); move(c.layer, 0, false); } // (a page already went back underneath)
         cleanup(c);
-      }, 220);
+      }, dur);
     } else {
       glide(0);
-      move(c.layer, 0, true); c.under.forEach((el) => move(el, -w * PAR, true)); fade(c.dim, DIM, true);
+      move(c.layer, 0, dur); c.under.forEach((el) => move(el, -w * PAR, dur)); fade(c.dim, DIM, dur);
       setTimeout(() => {
         if (c.kind === 'page' && c.saved) {
           // let go early: put the page we were on back (still hidden under its copy), then lift the copy
@@ -1103,7 +1136,7 @@ const Push = (() => {
           const content = $('#content'); if (content) content.scrollTop = c.saved.scroll;
         }
         cleanup(c);
-      }, 220);
+      }, dur);
     }
   }
   document.addEventListener('touchend', end);
