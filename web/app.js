@@ -556,6 +556,8 @@ const NativeSide = (() => {
   function model() {
     const app = document.getElementById('app');
     if (!app || app.classList.contains('locked') || typeof currentUserId === 'undefined' || !currentUserId || !document.getElementById('me-chip')) return { on: false };
+    // (not over the start-up screen: it comes as that fades)
+    const sp = document.getElementById('splash'); if (sp && !sp.classList.contains('out')) return { on: false };
     const items = [];
     let lib = false;
     $$('#sidebar .nav-heading, #sidebar .nav-item').forEach((el) => {
@@ -596,7 +598,8 @@ const NativeSide = (() => {
       create: !!create && create.style.display !== 'none',
       me: { name: (chip.querySelector('b') || {}).textContent || '', role: (chip.querySelector('small') || {}).textContent || '',
         photo: mePic && mePic.photo || null, initials: mePic && mePic.initials || (chip.querySelector('.av') || {}).textContent || '', color: mePic && mePic.color || rgbOf((chip.querySelector('.av') || {}).style && chip.querySelector('.av').style.background) },
-      sync: { text: lab ? lab.textContent.trim() : '', rgb: dotEl ? rgbOf(getComputedStyle(dotEl).backgroundColor) : null, tip: lab && lab.parentElement ? lab.parentElement.title : '' },
+      // (the server's own address isn't shown — "Synced · E11 Server", Haris 2026-10-31)
+      sync: { text: lab ? lab.textContent.trim().replace(/^(Synced|Saved) · .+$/, '$1 · E11 Server') : '', rgb: dotEl ? rgbOf(getComputedStyle(dotEl).backgroundColor) : null, tip: lab && lab.parentElement ? lab.parentElement.title : '' },
       copy: ((document.querySelector('#sidebar .agency') || {}).textContent || '').trim(),
     };
   }
@@ -9219,6 +9222,7 @@ const Splash = (() => {
     }
     gone = true;
     el.classList.add('out');
+    if (typeof NativeSide !== 'undefined') NativeSide.paint();   // (the Mac app's own sidebar comes as it fades)
     document.getElementById('app').classList.add('enter');
     setTimeout(() => { el.remove(); document.documentElement.style.backgroundColor = ''; document.getElementById('app').classList.remove('enter'); }, 500);
   }

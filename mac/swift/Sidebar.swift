@@ -419,7 +419,25 @@ final class Sidebar: NSView {
         rows.append(r)
       }
     }
-    rows.forEach { list.addSubview($0) }
+    // only the clients scroll (Haris, 2026-10-31): the rows above their heading stay at the top, the ones after them
+    // (Library) at the bottom
+    let firstClient = rows.firstIndex { r in ((r as? SideRow)?.key ?? "").hasPrefix("project:") || (r as? SideRow)?.key == "act:new-project" }
+    if let fc = firstClient {
+      let start = fc
+      let end = rows[start...].firstIndex { $0 is SideHead } ?? rows.count
+      mid = start..<end
+    } else { mid = rows.count..<rows.count }
+    for (i, v) in rows.enumerated() { let into: NSView = mid.contains(i) ? list : inner; into.addSubview(v) }
+  }
+  private var mid: Range<Int> = 0..<0
+  private func rowHeight(_ v: NSView, first: Bool) -> CGFloat {
+    if v is SideHead { return compact ? 17 : (first ? 22 : 30) }
+    return compact ? 38 : 30
+  }
+  private func place(_ v: NSView, _ y: CGFloat, _ W: CGFloat) {
+    v.frame = v is SideHead ? NSRect(x: 10, y: y, width: W - 20, height: v.frame.height)
+      : compact ? NSRect(x: (W - 44) / 2, y: y, width: 44, height: 36) : NSRect(x: 10, y: y, width: W - 20, height: 30)
+    v.needsLayout = true
   }
 
   /* ---------- layout ---------- */
@@ -453,22 +471,31 @@ final class Sidebar: NSView {
       copy.sizeToFit()
       copy.frame = NSRect(x: 20, y: sync.frame.maxY + 1, width: W - 40, height: copy.frame.height)
     }
-    // the list between them, scrolling when it doesn't fit
-    scroll.frame = NSRect(x: 0, y: y, width: W, height: max(0, footY - 4 - y))
-    var ly: CGFloat = 0
-    if drag != nil { return }   // (rows stay where the drag has them)
-    for v in rows {
-      if let h = v as? SideHead {
-        let hh: CGFloat = compact ? 17 : (ly == 0 ? 22 : 30)
-        h.frame = NSRect(x: 10, y: ly, width: W - 20, height: hh)
-        ly += hh
-      } else {
-        v.frame = compact ? NSRect(x: (W - 44) / 2, y: ly, width: 44, height: 36) : NSRect(x: 10, y: ly, width: W - 20, height: 30)
-        ly += compact ? 38 : 30
-      }
-      v.needsLayout = true
+    // the rows above the clients at the top, the ones after them at the bottom, the clients scrolling between
+    let lo = min(mid.lowerBound, rows.count), hi = min(mid.upperBound, rows.count)
+    var ty = y
+    for (i, v) in rows[0..<lo].enumerated() {
+      let hh = rowHeight(v, first: i == 0)
+      if v is SideHead { v.frame.size.height = hh }
+      place(v, ty, W); ty += hh
     }
-    list.frame = NSRect(x: 0, y: 0, width: W, height: max(ly + 6, scroll.contentSize.height))
+    let after = Array(rows[hi...])
+    var bh: CGFloat = 0
+    for v in after { bh += rowHeight(v, first: false) }
+    var by = footY - 6 - bh
+    for v in after {
+      let hh = rowHeight(v, first: false)
+      if v is SideHead { v.frame.size.height = hh }
+      place(v, by, W); by += hh
+    }
+    scroll.frame = NSRect(x: 0, y: ty, width: W, height: max(0, footY - 6 - bh - ty))
+    if drag != nil { return }   // (the clients stay where the drag has them)
+    var ly: CGFloat = 0
+    for v in rows[lo..<hi] {
+      let hh = rowHeight(v, first: false)
+      place(v, ly, W); ly += hh
+    }
+    list.frame = NSRect(x: 0, y: 0, width: W, height: max(ly + 4, scroll.contentSize.height))
   }
 
   /* ---------- drag to reorder: picked up, the others slide aside, let go: the page saves the new order ---------- */
@@ -527,7 +554,12 @@ final class Sidebar: NSView {
             let m = (try? JSONSerialization.jsonObject(with: d)) as? [String: Any] else { return }
       let menu = self.makeMenu(m)
       if let e = ev { NSMenu.popUpContextMenu(menu, with: e, for: v) }
-      else { menu.popUp(positioning: nil, at: NSPoint(x: 0, y: v.isFlipped ? v.bounds.height + 4 : -4), in: v) }
+      else {
+        // (low in the window — the profile — it opens upwards, inside the window; higher up, downwards)
+        let up = inWin.midY < win.frame.height / 2, h = menu.size.height
+        let y: CGFloat = v.isFlipped ? (up ? -h - 4 : v.bounds.height + 4) : (up ? v.bounds.height + h + 4 : -4)
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: y), in: v)
+      }
     }
   }
   private func makeMenu(_ m: [String: Any]) -> NSMenu {
