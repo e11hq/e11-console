@@ -13,7 +13,7 @@ import PhotosUI
 import UniformTypeIdentifiers
 
 // Version of this iPhone app's native part (raise it with changes the web app needs to know about)
-let SHELL_VERSION = 16   // 16: iPhone's own banners also while the app is open (the page draws no cards), each notification confirmed by the Notification Service Extension so the server sends again the ones an offline phone missed (register ack) · 15: New task / Request amendments as native sheets with iPhone's own fields that tuck into a bar like a Mail draft (formSheet / formSet / formClose; the page: window.__e11Form), a Trash task as a native sheet (trashSheet); native sheets and dates also open on top of those · 14: native sheets with people (round photos / initials) and a search box (+ a typed entry, "Use …") · 13: also dates picked in a native sheet (pickDate: closing it never sets a date) · a native sheet can stay open for ticking several (multi; each tick: window.__e11SheetPick) · 12: native sheets also with colour dots, a row of colours / emoji / numbers (chips), tinted icons, locked rows · 11: plain menus as iOS's own sheets (nativeSheet; the page: NativeSheet in app.js, showMenu(…, { native: true })) · 10: My Tasks, Inbox and Team lists swiped by iOS itself (Pager.syncLists in phone.js) · 9: a task’s Details / Comments swiped by iOS itself (the page: Pager in phone.js) · 8: iOS haptics for the page (haptic kind: light / medium / selection / success / warning / error) · 7: the comment box rides down / up with the keyboard frame by frame (__e11KbStep) · 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
+let SHELL_VERSION = 17   // 17: the comment box on a task's Comments is iPhone's own, on the keyboard (commentBar / window.__e11CBar; CommentBar.swift) · 16: iPhone's own banners also while the app is open (the page draws no cards), each notification confirmed by the Notification Service Extension so the server sends again the ones an offline phone missed (register ack) · 15: New task / Request amendments as native sheets with iPhone's own fields that tuck into a bar like a Mail draft (formSheet / formSet / formClose; the page: window.__e11Form), a Trash task as a native sheet (trashSheet); native sheets and dates also open on top of those · 14: native sheets with people (round photos / initials) and a search box (+ a typed entry, "Use …") · 13: also dates picked in a native sheet (pickDate: closing it never sets a date) · a native sheet can stay open for ticking several (multi; each tick: window.__e11SheetPick) · 12: native sheets also with colour dots, a row of colours / emoji / numbers (chips), tinted icons, locked rows · 11: plain menus as iOS's own sheets (nativeSheet; the page: NativeSheet in app.js, showMenu(…, { native: true })) · 10: My Tasks, Inbox and Team lists swiped by iOS itself (Pager.syncLists in phone.js) · 9: a task’s Details / Comments swiped by iOS itself (the page: Pager in phone.js) · 8: iOS haptics for the page (haptic kind: light / medium / selection / success / warning / error) · 7: the comment box rides down / up with the keyboard frame by frame (__e11KbStep) · 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
 let procEnv = ProcessInfo.processInfo.environment
 let SELFTEST = procEnv["E11_SELFTEST"] ?? ""           // the build machine's self-test in the simulator
 let info = Bundle.main.infoDictionary ?? [:]
@@ -184,6 +184,38 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     view.addSubview(tabBar)
     view.addSubview(reviewLink)
     loadHome()
+  }
+  /* The comment box on a task's Comments (17+): iPhone's own, pinned to the keyboard (the keyboard layout guide moves
+     it with the keyboard itself, frame by frame); hidden until the page shows it. The page is told how tall it is
+     (--ph-cbar) and keeps that much room under the comments. */
+  lazy var cbar: CommentBar = {
+    let b = CommentBar()
+    b.translatesAutoresizingMaskIntoConstraints = false
+    b.isHidden = true; b.alpha = 0
+    self.view.insertSubview(b, belowSubview: self.tabBar)
+    NSLayoutConstraint.activate([
+      b.leadingAnchor.constraint(equalTo: self.view.leadingAnchor), b.trailingAnchor.constraint(equalTo: self.view.trailingAnchor),
+      b.bottomAnchor.constraint(equalTo: self.view.keyboardLayoutGuide.topAnchor),
+    ])
+    b.onEvent = { [weak self] ev in self?.pageJS("window.__e11CBar && window.__e11CBar(\(jsonString(ev)))") }
+    b.onHeight = { [weak self] h in self?.pageJS("window.__e11CBarH && window.__e11CBarH(\(Int(h.rounded())))") }
+    return b
+  }()
+  func commentBar(_ a: [String: Any]) {
+    let b = cbar
+    // (sliding between Details and Comments: the box slides with the Comments page)
+    if let p = (a["p"] as? NSNumber).map({ CGFloat($0.doubleValue) }) { b.transform = CGAffineTransform(translationX: (1 - max(0, min(1, p))) * view.bounds.width, y: 0) }
+    if let show = a["show"] as? Bool, show == b.isHidden {
+      if show {
+        b.isHidden = false
+        UIView.animate(withDuration: 0.18) { b.alpha = 1 }
+      } else {
+        if b.text.isFirstResponder { b.text.resignFirstResponder() }
+        UIView.animate(withDuration: 0.15, animations: { b.alpha = 0 }) { _ in if b.alpha == 0 { b.isHidden = true } }
+      }
+    }
+    if (a["clear"] as? Bool) == true { b.clear() }
+    b.apply(a)
   }
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
@@ -814,6 +846,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         UIView.animate(withDuration: 0.2) { self.tabBar.alpha = t || self.tabsHidden ? 0 : 1 }
       }
       host.present(vc, animated: true)
+    case "commentBar": commentBar(a); done(["ok": true])
     case "formSet":
       // what was picked for a field (Client, Assign to), CD review on / off, or a message about what's wrong
       if let f = FormSheetVC.current, f.isOpen, f.key == (a["key"] as? String ?? "") { f.set(a) }
@@ -925,8 +958,15 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         let show = { self.run("formSheet", FormSheetVC.selfArgs()) { _ in } }
         if let p = self.presentedViewController { p.dismiss(animated: false) { show() } } else { show() } }),
       ("formTuck", "return '{}'", { FormSheetVC.current?.selfFill("Spring launch reel"); DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { FormSheetVC.current?.selfTuck() } }),
+      // the native comment box (17+): replying, a file and one uploading, text typed — then @Sa for the people list
+      ("cbar", "return '{}'", {
+        self.presentedViewController?.dismiss(animated: false)
+        self.commentBar(CommentBar.selfArgs())
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.cbar.selfType("Thanks, can we make the logo a bit bigger on the last frame and keep the date as it is?") } }),
+      ("cbarMention", "return '{}'", { self.cbar.selfType("Hi @Sa") }),
       ("signin", pause(4000) + "return JSON.stringify({ host: location.host, top: (document.querySelector('h1, h2, img, form') || document.body).getBoundingClientRect().top })", {
         self.presentedViewController?.dismiss(animated: false)
+        self.commentBar(["show": false])
         self.web.load(URLRequest(url: URL(string: "https://e11hq.cloudflareaccess.com/")!)) }),
     ]
     func run(_ i: Int) {
@@ -935,6 +975,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       before?()
       DispatchQueue.main.asyncAfter(deadline: .now() + (before == nil ? 0.2 : 1.5)) {
         self.probe(name, js) {
+          if name.hasPrefix("cbar") { self.selfResult[name + "Geo"] = self.cbar.geo() }
           if name.hasPrefix("form") { self.selfResult[name + "Geo"] = FormSheetVC.current?.geo() ?? ["error": "no form"] }
           if name.hasPrefix("nsheet") { self.selfResult[name + "Geo"] = (self.presentedViewController as? NativeSheetVC)?.geo() ?? ["error": "no native sheet"] }
           if name == "home" || name == "inbox" { self.selfResult[name + "Frame"] = ["web": self.web.frame.height, "screen": self.view.bounds.height, "tabBar": !self.tabBar.isHidden] as [String: Any] }

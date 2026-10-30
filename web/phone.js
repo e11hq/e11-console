@@ -1904,6 +1904,7 @@ const Pager = (() => {
     b.addEventListener('scroll', () => {
       const p = b.scrollLeft / width(b);
       paintPill(p);
+      if (typeof NativeComment !== 'undefined') NativeComment.slide(Math.max(0, Math.min(1, p)));   // (the native comment box slides along)
       // the tick comes the moment the swipe passes halfway (as iOS does), not when the page has come to rest
       const near = Math.round(p);
       if (near !== lastNear && !tapped) Haptic.select();
@@ -2049,4 +2050,157 @@ const Pager = (() => {
   run();
   window.addEventListener('load', run);
   document.addEventListener('DOMContentLoaded', run);
+})();
+
+/* iPhone app 17+: the comment box on a task's Comments is iPhone's own, on the keyboard (CommentBar.swift) — it moves
+   with the keyboard itself, so the page never jumps. The page's own box is hidden (html.ph-cbar); the comments end
+   above the native one (--ph-cbar). What's typed comes here as runs ({ t, b, i, u } / { m: userId, t: "@Name" }) and
+   is kept as the draft (ui.commentDraft) and sent by addComment, as before; files go through the same attach and
+   upload as before, shown in the native box as tiles. */
+const NativeComment = (() => {
+  let on = false, last = '', lastKey = null, peopleSent = false, timer = null, lastP = -1, raf = 0;
+  const root = document.documentElement;
+  const thumbs = new Map();   // file id → small picture (data URL) for its tile
+  if (typeof Host !== 'undefined' && Host.isIOSApp) {
+    NativeMac.call('appInfo').then((r) => {
+      on = Number(r && r.shell) >= 17;
+      root.classList.toggle('ph-cbar', on);
+      if (on) { timer = setInterval(() => sync(), 400); sync(); }
+    }).catch(() => {});
+  }
+  const call = (args) => NativeMac.call('commentBar', args).catch(() => {});
+  const openTaskNow = () => (Phone.on && ui.taskId && task(ui.taskId) && document.querySelector('#detail.open') ? task(ui.taskId) : null);
+  // (anything drawn over the task — a file preview, a sheet, a pop-up — hides the box)
+  const covered = () => document.body.classList.contains('pv-open') || !!document.querySelector('#ph-sheet-root .ph-scrim:not(.docked), #overlay-root .scrim, #tv-root .scrim, .lightbox, .fv');
+
+  function htmlToRuns(html) {
+    const d = document.createElement('div'); d.innerHTML = html || '';
+    const out = [];
+    const walk = (n, st) => {
+      if (n.nodeType === 3) { if (n.nodeValue) out.push({ t: n.nodeValue.replace(/ /g, ' '), ...st }); return; }
+      if (n.nodeType !== 1) return;
+      const tag = n.tagName;
+      if (tag === 'BR') { out.push({ t: '\n' }); return; }
+      if (n.classList.contains('mention') && n.dataset.user) { out.push({ m: n.dataset.user, t: n.textContent }); return; }
+      const s2 = { ...st };
+      if (tag === 'B' || tag === 'STRONG') s2.b = 1;
+      if (tag === 'I' || tag === 'EM') s2.i = 1;
+      if (tag === 'U') s2.u = 1;
+      if (/^(DIV|P|LI|BLOCKQUOTE|PRE|UL|OL|H\d)$/.test(tag) && out.length && !/\n$/.test(out[out.length - 1].t || '')) out.push({ t: '\n' });
+      [...n.childNodes].forEach((c) => walk(c, s2));
+    };
+    [...d.childNodes].forEach((c) => walk(c, {}));
+    return out;
+  }
+  function runsToHtml(runs) {
+    return (runs || []).map((r) => {
+      if (r.m) return `<span class="mention" data-user="${esc(r.m)}" contenteditable="false">${esc(r.t || '')}</span>`;
+      let h = esc(r.t || '').replace(/\n/g, '<br>');
+      if (r.u) h = `<u>${h}</u>`;
+      if (r.i) h = `<i>${h}</i>`;
+      if (r.b) h = `<b>${h}</b>`;
+      return h;
+    }).join('');
+  }
+  function fileOf(a) {
+    const kind = fileKind(a);
+    const src = kind === 'image' && Host.isNative ? imgUrl(a, 240) : a.thumb ? posterUrl(a) : '';
+    if (src && !thumbs.has(a.id)) { thumbs.set(a.id, null); NativeSheet.thumb(src).then((v) => { thumbs.set(a.id, v); last = ''; sync(); }); }
+    return { id: a.id, name: a.name, ext: (fileExt(a.name) || 'file').slice(0, 4), video: kind === 'video', ...(thumbs.get(a.id) ? { thumb: thumbs.get(a.id) } : {}) };
+  }
+  function sendPeople() {
+    if (peopleSent) return;
+    peopleSent = true;
+    const us = activeUsers();
+    Promise.all(us.map((u) => NativeSheet.personFor(u.id).then((person) => ({ id: u.id, name: fullName(u), email: u.email || '', role: roleOf(u), person }))))
+      .then((people) => call({ people })).catch(() => { peopleSent = false; });
+  }
+  // the box's state from the open task (called after every redraw, on upload progress, and every so often)
+  function sync(force) {
+    if (!on) return;
+    const t = openTaskNow();
+    const show = !!t && !covered();
+    if (!t) { const s = JSON.stringify({ show: false }); if (s !== last) { last = s; lastKey = null; call({ show: false }); } return; }
+    sendPeople();
+    const thread = ui.thread ? t.comments.find((c) => c.id === ui.thread) : null;
+    const cid = thread ? thread.id : (ui.replyTo && t.comments.some((c) => c.id === ui.replyTo) ? ui.replyTo : null);
+    const key = draftKey(t, cid);
+    const target = cid && t.comments.find((c) => c.id === cid);
+    const inThread = !!cid && ui.thread === cid;
+    const up = ui.commentUp && ui.commentUp[key];
+    const st = {
+      show, key,
+      placeholder: inThread ? 'Reply to this thread' : cid ? 'Write a reply' : 'Write a comment',
+      replying: target && !inThread ? { name: target.authorId === currentUserId ? 'your comment' : firstName(target.authorId) } : null,
+      files: (ui.commentFiles[key] || []).map(fileOf),
+      uploading: up ? { n: up.total || 1, frac: up.frac || 0 } : null,
+      accent: NativeSheet.colorRGB(getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#5b4bf0'),
+    };
+    if (lastP < 0) slide(ui.sideTab === 'comments' ? 1 : 0, true);
+    const s = JSON.stringify(st);   // (what's typed isn't part of the comparison: it's only sent for a new box)
+    const fresh = key !== lastKey || force;
+    if (s === last && !fresh) return;
+    last = s;
+    if (fresh) { st.runs = htmlToRuns(ui.commentDraft[key] || ''); lastKey = key; }
+    call(st);
+  }
+  // sliding between Details and Comments: the box slides with the Comments page (0 = Details, 1 = Comments)
+  function slide(p, now) {
+    if (!on) return;
+    lastP = p;
+    if (now) { call({ p }); return; }
+    if (raf) return;
+    raf = requestAnimationFrame(() => { raf = 0; call({ p: lastP }); });
+  }
+  const feed = () => document.querySelector('#detail .tm-feed');
+  const atEnd = (f) => !!f && f.scrollHeight - f.scrollTop - f.clientHeight < 60;
+  // from the native box
+  window.__e11CBar = (ev) => {
+    const t = openTaskNow();
+    if (!ev || !t) return;
+    const cid = ev.key && String(ev.key).includes(':') ? String(ev.key).split(':')[1] : null;
+    const setDraft = () => {
+      const html = runsToHtml(ev.runs);
+      ui.commentDraft[ev.key] = html;
+      const box = document.querySelector(`#detail [data-draft-key="${CSS.escape(ev.key)}"]`);
+      if (box) box.innerHTML = html;
+      Unsent.save();
+    };
+    if (ev.ev === 'draft') { setDraft(); return; }
+    if (ev.ev === 'send') {
+      setDraft();
+      const f = feed(); const end = atEnd(f);
+      if (addComment(cid)) { lastKey = null; sync(true); if (end) setTimeout(() => { const g = feed(); if (g) g.scrollTop = g.scrollHeight; }, 60); }
+      return;
+    }
+    if (ev.ev === 'attach') { attachFiles('comment', cid); return; }
+    if (ev.ev === 'removeFile') {
+      const list = ui.commentFiles[ev.key] || [];
+      const a = list.find((x) => x.id === ev.id);
+      ui.commentFiles[ev.key] = list.filter((x) => x.id !== ev.id);
+      if (a) safeTrash([a.path]);
+      Unsent.save();
+      if (!refreshComposerFiles(ev.key)) renderDetail();
+      sync();
+      return;
+    }
+    if (ev.ev === 'cancelReply') { ui.replyTo = null; renderDetail(); call({ focus: true }); }
+  };
+  // the box's height (it grows as lines are typed): the comments keep that much room, and stay at the latest
+  window.__e11CBarH = (h) => { const f = feed(), end = atEnd(f); root.style.setProperty('--ph-cbar', Math.max(0, Number(h) || 0) + 'px'); if (end && f) f.scrollTop = f.scrollHeight; };
+  // the keyboard sliding up / down: the comments that were at the latest stay at the latest, frame by frame
+  const step0 = window.__e11KbStep;
+  window.__e11KbStep = (px) => { const f = on ? feed() : null, end = atEnd(f); if (step0) step0(px); if (end && f) f.scrollTop = f.scrollHeight; };
+  // the page's own box asked for the keyboard (Reply, after Send, after Cancel reply…): the native box takes it
+  const focus0 = HTMLElement.prototype.focus;
+  HTMLElement.prototype.focus = function (...a) {
+    if (on && this.id === 'd-comment' && openTaskNow()) { call({ focus: true }); return; }
+    return focus0.apply(this, a);
+  };
+  // redraws, uploads and the files row: the box follows
+  if (typeof renderDetail === 'function') { const rd = renderDetail; renderDetail = function (...a) { const r = rd.apply(this, a); if (on) setTimeout(() => sync(), 0); return r; }; }
+  if (typeof refreshComposerFiles === 'function') { const rf = refreshComposerFiles; refreshComposerFiles = function (...a) { const r = rf.apply(this, a); if (on) setTimeout(() => sync(), 0); return r; }; }
+  if (typeof closeDetail === 'function') { const cd = closeDetail; closeDetail = function (...a) { const r = cd.apply(this, a); if (on) { lastP = -1; sync(); } return r; }; }
+  if (typeof Unsent !== 'undefined' && Unsent.progress) { const pg = Unsent.progress; Unsent.progress = function (...a) { const r = pg.apply(this, a); if (on) sync(); return r; }; }
+  return { get on() { return on; }, sync, slide, htmlToRuns, runsToHtml };
 })();

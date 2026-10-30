@@ -1084,3 +1084,8 @@ body.phone .dialog.choice-dlg .actions .btn { flex: 1 1 0; min-width: 0; justify
 body.phone .pl-head .pl-acts { width: 100%; display: flex; gap: 8px; flex-wrap: nowrap; align-items: center; }
 body.phone .pl-head .pl-acts > .btn { flex: 1 1 0; min-width: 0; justify-content: center; white-space: nowrap; padding-left: 8px; padding-right: 8px; }
 body.phone .pl-head .pl-acts > .icon-btn { flex: none; }
+
+/* iPhone app 17+: the comment box is iPhone's own (NativeComment, phone.js): the page's box is hidden and the comments
+   keep room for the native one — its height (--ph-cbar) plus the home-bar strip while the keyboard is down */
+html.ph-cbar body.phone #detail .tm-composer { display: none !important; }
+html.ph-cbar body.phone #detail .tm-feed { padding-bottom: calc(var(--ph-cbar, 56px) + max(0px, env(safe-area-inset-bottom) - var(--ios-kb, 0px)) + 8px) !important; }
