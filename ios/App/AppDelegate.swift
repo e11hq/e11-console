@@ -1093,7 +1093,8 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     overrideUserInterfaceStyle = dark ? .dark : .light
     modalPresentationStyle = .pageSheet
     if let sh = sheetPresentationController {
-      sh.detents = [.custom(identifier: .init("fit")) { [weak self] ctx in min(ctx.maximumDetentValue, self?.fitHeight ?? 320) }]
+      // (at most about two-thirds of the screen, so even a long list stays the floating card; it scrolls inside)
+      sh.detents = [.custom(identifier: .init("fit")) { [weak self] ctx in min(ctx.maximumDetentValue * 0.68, self?.fitHeight ?? 320) }]
       sh.prefersGrabberVisible = true
       sh.prefersScrollingExpandsWhenScrolledToEdge = false
       sh.delegate = self
