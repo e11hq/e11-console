@@ -501,7 +501,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       let v = t["v"] as? String ?? ""
       item.badgeValue = nil
       if t["photo"] == nil {
-        let key = "\(v)|\(b)|\(traitCollection.userInterfaceStyle.rawValue)"
+        let key = "\(v)|\(b)|\(tabBar.traitCollection.userInterfaceStyle.rawValue)"
         if tabBadgeKey[i] != key {
           tabBadgeKey[i] = key
           if b.isEmpty { item.image = UIImage(systemName: symbol(v)); item.selectedImage = nil }
@@ -743,6 +743,15 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     case "setAppearance":
       statusStyle = (a["mode"] as? String) == "light" ? .darkContent : .lightContent
       setNeedsStatusBarAppearanceUpdate()
+      // the tab bar follows the app's own light / dark (not only the phone's): white icons in dark — Haris 2026-10-30
+      // (only the tab bar: the page itself keeps following the phone for Automatic)
+      let style: UIUserInterfaceStyle = (a["mode"] as? String) == "light" ? .light : .dark
+      if tabBar.overrideUserInterfaceStyle != style {
+        tabBar.overrideUserInterfaceStyle = style
+        tabBar.unselectedItemTintColor = style == .dark ? .white : nil
+        tabBadgeKey = [:]
+        if let t = lastTabs { setTabs(t) }
+      }
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { self.syncBackground() }
       done(["ok": true])
     case "openURL":
