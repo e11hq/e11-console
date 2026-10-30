@@ -686,7 +686,7 @@ const Phone = (() => {
       ...(t.projectId ? [{ label: 'Open client', icon: 'folder', run: () => { closeDetail(); go('project', t.projectId); } }] : []),
       ...(can('deleteTask') ? ['-', { label: 'Delete task', icon: 'trash', danger: true, run: () => deleteTaskFlow(t.id) }] : []),
     ];
-    showMenu(document.body, items);
+    showMenu(document.body, items, { native: true });
   }
 
   /* ---------- Taps ---------- */
@@ -890,7 +890,7 @@ const Push = (() => {
       showMenu(el, [
         { label: 'Send a test notification', icon: 'bell', run: () => api('POST', '/api/push/test', {}).then((r) => toast(r.sent ? 'Sent — it may take a few seconds' : 'Couldn’t reach this phone — try turning it off and on')).catch((err) => toast(err.message)) },
         { label: 'Turn off on this phone', icon: 'x', danger: true, run: turnOff },
-      ]);
+      ], { native: true });
     }
   }, true);
 
@@ -1610,7 +1610,7 @@ const SheetMotion = (() => {
       if (danger) items.push('-');
       items.push({ label, icon: ic, hint, danger, run: () => b.click() });
     });
-    showMenu(card, items);
+    showMenu(card, items, { native: true });
     return true;
   }
   let timer = null, el = null, x0 = 0, y0 = 0, swallow = 0;

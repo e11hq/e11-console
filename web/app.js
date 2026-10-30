@@ -76,7 +76,7 @@ const ICONS = {
   shield: '<path d="M8 1.9 13 3.8v3.8c0 3-2.1 5.4-5 6.5-2.9-1.1-5-3.5-5-6.5V3.8z"/><path d="m5.8 8 1.5 1.5 2.9-3"/>',
 };
 function icon(name, cls = '') {
-  return `<span class="ic ${cls}"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] || ''}</svg></span>`;
+  return `<span class="ic ${cls}" data-i="${name}"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] || ''}</svg></span>`;
 }
 function hydrateIcons(root = document) {
   $$('[data-icon]', root).forEach((el) => { el.outerHTML = icon(el.dataset.icon); });
@@ -1824,7 +1824,7 @@ function workMenu(anchor, kind) {
     });
     if (!items.length) items.push({ html: `<div class="wf-mh">Nobody here yet</div>` });
   }
-  const m = showMenu(anchor, items.map((it, i) => (it.run ? { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) } : it)));
+  const m = showMenu(anchor, items.map((it, i) => (it.run ? { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) } : it)), { native: kind === 'due' || kind === 'created' });
   m.classList.add('wf-menu');
 }
 
@@ -4346,8 +4346,10 @@ function detailScroller() {
   }
   return [...pane.querySelectorAll('.tm-feed, .tm-main, .tm-activity')].find((e) => e.scrollHeight > e.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(e).overflowY)) || null;
 }
-function showMenu(anchor, items) {
+function showMenu(anchor, items, opts = {}) {
   closeMenus();
+  // iPhone app 11+: a menu marked native (plain options only) opens as iOS's own sheet
+  if (opts.native && NativeSheet.fits()) return NativeSheet.open(anchor, items);
   if (typeof Phone !== 'undefined' && Phone.on) Haptic.light();
   // (no doubled, leading or trailing dividers when some options aren't there; positions kept for data-mi)
   items = items.map((it, i, a) => (it === '-' && (i === 0 || i === a.length - 1 || a[i - 1] === '-' || a.slice(i + 1).every((x) => x === '-') || a.slice(0, i).every((x) => x === '-')) ? { skip: true } : it));
@@ -4389,6 +4391,60 @@ function showMenu(anchor, items) {
   if (typeof SheetMotion !== 'undefined') SheetMotion.pan(m);   // (iPhone app: iOS itself drags the sheet down)
   return m;
 }
+
+/* iPhone app 11+: plain menus (text, icons, ticks, a second line, red for delete, a role's colour) open as iOS's own
+   sheet — floating, grown by iOS when pulled, no flicker. Only menus marked { native: true } (see the native-sheets
+   plan); the rest stay the page's own sheets. Options may be { label, icon, hint, danger, run } or the page's own
+   html rows (.mi with its icon, .cur / a tick, .danger, .disabled; .menu-label / .wf-mh start a titled section;
+   .mi-note is a greyed line); a '-' starts a new section. The chosen option runs here as if tapped. */
+const NativeSheet = (() => {
+  let on = false;
+  if (typeof Host !== 'undefined' && Host.isIOSApp) NativeMac.call('appInfo').then((r) => { on = Number(r && r.shell) >= 11; }).catch(() => {});
+  const fits = () => on && typeof Phone !== 'undefined' && Phone.on;
+  const rgb = (c) => { const m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)/.exec(c || ''); return m ? [+m[1], +m[2], +m[3]] : null; };
+  function rows(items) {
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:fixed;left:-9999px;top:0;width:320px;visibility:hidden;pointer-events:none';
+    document.body.appendChild(probe);
+    const sections = [{ rows: [] }];
+    const cur = () => sections[sections.length - 1];
+    const newSec = (header) => { if (cur().rows.length || cur().header) sections.push({ rows: [] }); if (header) cur().header = header; };
+    try {
+      items.forEach((it, i) => {
+        if (!it || it.skip) return;
+        if (it === '-') { newSec(); return; }
+        if (!it.html) { cur().rows.push({ i: it.run ? i : -1, label: it.label || '', sub: it.hint || '', icon: it.icon || '', danger: !!it.danger }); return; }
+        probe.innerHTML = it.html;
+        const head = probe.querySelector('.menu-label, .wf-mh');
+        if (head) { newSec(head.textContent.trim()); return; }
+        const note = probe.querySelector('.mi-note');
+        if (note) { cur().rows.push({ i: -1, label: note.textContent.trim(), disabled: true, icon: (note.querySelector('.ic[data-i]') || { dataset: {} }).dataset.i || '' }); return; }
+        const mi = probe.querySelector('.mi');
+        if (!mi) return;
+        const pill = mi.querySelector('.role-pill');
+        const ic = mi.querySelector('.ic[data-i]:not(.wf-ck .ic)');
+        const sub = mi.querySelector('small');
+        const checked = mi.classList.contains('cur') || !!mi.querySelector('.wf-ck');
+        const copy = mi.cloneNode(true);
+        copy.querySelectorAll('.ic, .wf-ck, small').forEach((x) => x.remove());
+        cur().rows.push({ i: it.run && !mi.classList.contains('disabled') ? i : -1, label: copy.textContent.replace(/\s+/g, ' ').trim(), sub: sub ? sub.textContent.trim() : (it.hint || ''),
+          icon: ic ? ic.dataset.i : '', danger: mi.classList.contains('danger') || !!it.danger, checked, disabled: mi.classList.contains('disabled'),
+          dot: pill ? rgb(getComputedStyle(pill).color) : null });
+      });
+    } finally { probe.remove(); }
+    return sections.filter((x) => x.rows.length);
+  }
+  function open(anchor, items) {
+    NativeMac.call('nativeSheet', { sections: rows(items) })
+      .then((res) => {
+        if (!res || res.ok === false) { showMenu(anchor, items); return; }   // (the app couldn't show it: the page's own sheet)
+        const i = Number(res.index); if (i >= 0 && items[i] && items[i].run) items[i].run();
+      })
+      .catch(() => showMenu(anchor, items));
+    return document.createElement('div');   // (callers may add a class to the menu: nothing on screen)
+  }
+  return { fits, open, rows };
+})();
 
 function dialog({ title, body = '', bodyHtml = '', input = null, okText = 'OK', cancelText = 'Cancel', danger = false, colors = null }) {
   return new Promise((resolve) => {
@@ -5676,7 +5732,7 @@ document.addEventListener('click', async (e) => {
         return;
       }
       case 'my-part': { const t = task(ui.taskId); setMyPart(t, actEl.dataset.v === '1'); return; }
-      case 'reopen-part': { e.stopPropagation(); const t = task(ui.taskId); const u = id; showMenu(actEl, [{ label: `Reopen ${fullName(userById(u)).split(' ')[0]}’s part`, icon: 'reply', run: () => reopenPart(t, u) }]); return; }
+      case 'reopen-part': { e.stopPropagation(); const t = task(ui.taskId); const u = id; showMenu(actEl, [{ label: `Reopen ${fullName(userById(u)).split(' ')[0]}’s part`, icon: 'reply', run: () => reopenPart(t, u) }], { native: true }); return; }
       case 'focus-search': { const sr = $('#search'); sr.focus(); sr.select(); return; }
       case 'cd-menu': e.stopPropagation(); toast('CD Status is set automatically when files are submitted and reviewed'); return;
       case 'submit-review': e.stopPropagation(); submitDialog(task(ui.taskId)); return;
@@ -5788,7 +5844,7 @@ document.addEventListener('click', async (e) => {
           { label: 'Download', icon: 'download', run: tap('[data-action="ca-download"]') },
           { label: 'Info', icon: 'info', run: tap('[data-action="ca-info"]') },
           ...(has('[data-action="ca-remove"]') ? ['-', { label: 'Delete', icon: 'trash', danger: true, run: tap('[data-action="ca-remove"]') }] : []),
-        ]);
+        ], { native: true });
         return;
       }
       // a comment's file tile: its actions in a menu (Copy, Preview, Download / Show in Finder)
@@ -5800,7 +5856,7 @@ document.addEventListener('click', async (e) => {
           { label: 'Copy', icon: 'copy', hint: 'Paste into a comment or description', run: tap('[data-action="copy-att"]') },
           { label: 'Preview', icon: 'search', run: tap('[data-action="quicklook"]') },
           { label: FINDER_LABEL, icon: Host.isServer ? 'download' : 'folder', run: tap('[data-action="reveal-att"]') },
-        ]);
+        ], { native: true });
         return;
       }
       case 'ca-download': e.stopPropagation(); { const a = clientFileById(id); if (a) downloadClientFiles([a], a.name.replace(/\.[^.]+$/, '')); } return;
@@ -6564,7 +6620,7 @@ function clientMenu(anchor, c) {
     { label: c.logo ? 'Change logo' : 'Add logo', icon: 'camera', run: () => changeClientLogo(c) },
     ...(Host.isServer ? [] : [{ label: 'Show in Finder', icon: 'folder', run: () => Host.call('makeDir', { path: c.dir }).then(() => Host.call('revealPath', { path: c.dir })).catch((e) => toast(e.message)) }]),
     ...(isAdmin() ? ['-', { label: 'Delete client', icon: 'trash', danger: true, run: () => deleteClient(c) }] : []),
-  ]);
+  ], { native: true });
 }
 const folderDup = (c, name, exceptId, parentId) => c.folders.find((f) => f.id !== exceptId && (f.parentId || null) === (parentId || null) && f.name.trim().toLowerCase() === name.trim().toLowerCase());
 async function addFolderFlow(c, parent = null) {
@@ -6584,7 +6640,7 @@ const folderLead = (f) => [
 ];
 function folderMenu(anchor, c, f, lead = []) {
   // (lead: Open / Info first, on the phone's sheet)
-  if (!canEditFolder(c, f) || (f.finalOf && !canDelFolder(c, f))) { if (lead.length) showMenu(anchor, lead); return; }
+  if (!canEditFolder(c, f) || (f.finalOf && !canDelFolder(c, f))) { if (lead.length) showMenu(anchor, lead, { native: true }); return; }
   // (moves among the folders next to it: the client's folders, or the folders inside Files)
   const sibs = () => c.folders.filter((x) => (x.parentId || null) === (f.parentId || null));
   const swap = (d) => { const s = sibs(), j = s.indexOf(f) + d; if (j < 0 || j >= s.length) return; const a = c.folders.indexOf(f), b = c.folders.indexOf(s[j]); c.folders[a] = s[j]; c.folders[b] = f; persist(0); render(); };
@@ -6608,7 +6664,7 @@ function folderMenu(anchor, c, f, lead = []) {
       if (f.files.length) assetNotify(c, f, 'removed', f.files.map((a) => a.name));
       persist(0); render();
     } }] : []),
-  ]);
+  ], { native: true });
 }
 // Files added to or removed from Client Assets: an Inbox update (and phone notification) for everyone working on that
 // client's tasks (assignees, creators, watchers), its Account Managers, and every Admin. Not the person who did it.
@@ -7534,7 +7590,7 @@ function fitInbox(root) {
 }
 window.addEventListener('resize', () => { clearTimeout(fitInbox.t); fitInbox.t = setTimeout(() => { if (ui.view === 'inbox') { fitInbox(); document.querySelectorAll('.ph-ib-t').forEach(fitWords); } }, 150); });
 function inboxFilterMenu(anchor) {
-  showMenu(anchor, Object.entries(IB_FILTERS).map(([k, l]) => ({ html: `<div class="mi ${(ui.inboxFilter || 'all') === k ? 'cur' : ''}">${esc(l)}</div>`, run: () => { ui.inboxFilter = k; renderContent(); } })).map((it, i) => ({ ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) })));
+  showMenu(anchor, Object.entries(IB_FILTERS).map(([k, l]) => ({ html: `<div class="mi ${(ui.inboxFilter || 'all') === k ? 'cur' : ''}">${esc(l)}</div>`, run: () => { ui.inboxFilter = k; renderContent(); } })).map((it, i) => ({ ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) })), { native: true });
 }
 // Inbox rows: a task's updates together; Client Assets updates together per client
 const notifKey = (n) => (n.kind === 'sched-cancel' ? 'sched:' + n.schedId : n.kind === 'daily' ? 'daily:' + n.id : null) || n.taskId || (n.kind === 'birthday' ? 'bday:' + n.from + ':' + String(n.at).slice(0, 10) : n.kind === 'asset' ? 'asset:' + n.clientId : n.planId ? 'plan:' + n.planId : n.id);
@@ -7899,7 +7955,7 @@ function memberMenu(anchor, id) {
   // The owner's account: only the owner changes its role, rights or access (the server refuses anyone else)
   if (u.id === ownerId && u.id !== currentUserId) {
     const lock = (l, ic) => ({ html: `<div class="mi disabled" aria-disabled="true">${icon(ic)}${esc(l)}</div>` });
-    showMenu(anchor, [{ html: `<div class="menu-label">${icon('lock')} Only the owner can change this account</div>` }, lock('Change role', 'users'), lock('Admin rights', 'shield'), lock('Finance access', 'coin'), lock('Remove from team', 'trash')]);
+    showMenu(anchor, [{ html: `<div class="menu-label">${icon('lock')} Only the owner can change this account</div>` }, lock('Change role', 'users'), lock('Admin rights', 'shield'), lock('Finance access', 'coin'), lock('Remove from team', 'trash')], { native: true });
     return;
   }
   // Your own row: only the extras (Finance access) — you can't change your own role or remove yourself
@@ -7922,7 +7978,7 @@ function memberMenu(anchor, id) {
     Object.entries(FIN_ACCESS).forEach(([k, l]) => own.push({ html: `<div class="mi">${icon('coin')}${esc(l)}${(u.fin || '') === k ? `<span class="wf-ck">${icon('check')}</span>` : ''}</div>`, run: () => {
       u.fin = k || undefined; persist(); renderContent(); Fin.init(); renderSidebar(); toast(k ? `You now have ${l} access` : 'You no longer have Finance access');
     } }));
-    showMenu(anchor, own.map((it, i) => (it !== '-' && it.run ? { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) } : it)));
+    showMenu(anchor, own.map((it, i) => (it !== '-' && it.run ? { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) } : it)), { native: true });
     return;
   }
   const items = [{ html: '<div class="menu-label">Change role</div>' }];
@@ -7954,7 +8010,7 @@ function memberMenu(anchor, id) {
     if (!Host.isServer) items.push({ label: 'Reset password…', icon: 'lock', run: () => resetPasswordFlow(u) });
     items.push({ label: 'Remove from team', icon: 'trash', danger: true, run: () => removeMemberFlow(u) });
   }
-  showMenu(anchor, items.map((it, i) => (it === '-' || it.label ? it : { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) })));
+  showMenu(anchor, items.map((it, i) => (it === '-' || it.label ? it : { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) })), { native: true });
 }
 async function resetPasswordFlow(u) {
   const v = await formDialog({ title: `Reset password for ${fullName(u)}`, okText: 'Reset password', intro: 'They’ll sign in with this temporary password and be asked to choose a new one.',
@@ -8358,7 +8414,7 @@ function meMenu(anchor) {
     ...Fin.addItems(),
     '-',
     { label: 'Sign out', icon: 'logout', run: signOut },
-  ]);
+  ], { native: true });
 }
 
 /* ================= Sign in & first-time setup ================= */

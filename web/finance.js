@@ -343,7 +343,7 @@ const Fin = (() => {
       ...(Host.isMacApp && !MacUpdate.store() ? [{ label: 'Update Mac app', icon: 'download', run: () => MacUpdate.run() }] : []),
       '-',
       { label: 'Sign out', icon: 'logout', run: signOut },
-    ]);
+    ], { native: true });
   }
 
   /* ---------- Titles ---------- */

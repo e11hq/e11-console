@@ -190,7 +190,7 @@ const Viewer = (() => {
     const items = [{ label: 'Info', icon: 'info', run: () => (client ? caInfo('file', a.id) : info(a)) }];
     if (client && canDelAsset(a)) items.push('-', { label: 'Delete', icon: 'trash', danger: true, run: async () => { const was = list.length; await removeClientFile(a.id); if (!clientFileById(a.id)) afterGone(a, was); } });
     if (onTask) items.push('-', { label: 'Remove from task', icon: 'trash', danger: true, run: () => act('remove-att', a.id, () => { if (!(task(ui.taskId).attachments || []).some((x) => x.id === a.id)) afterGone(a); }) });
-    const m = showMenu(anchor, items);
+    const m = showMenu(anchor, items, { native: true });
     if (m) m.classList.add('fpv-menu');
   }
   // a file was removed while shown: on to the next one (or close when it was the only one)

@@ -13,7 +13,7 @@ import PhotosUI
 import UniformTypeIdentifiers
 
 // Version of this iPhone app's native part (raise it with changes the web app needs to know about)
-let SHELL_VERSION = 10   // 10: My Tasks, Inbox and Team lists swiped by iOS itself (Pager.syncLists in phone.js) · 9: a task’s Details / Comments swiped by iOS itself (the page: Pager in phone.js) · 8: iOS haptics for the page (haptic kind: light / medium / selection / success / warning / error) · 7: the comment box rides down / up with the keyboard frame by frame (__e11KbStep) · 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
+let SHELL_VERSION = 11   // 11: plain menus as iOS's own sheets (nativeSheet; the page: NativeSheet in app.js, showMenu(…, { native: true })) · 10: My Tasks, Inbox and Team lists swiped by iOS itself (Pager.syncLists in phone.js) · 9: a task’s Details / Comments swiped by iOS itself (the page: Pager in phone.js) · 8: iOS haptics for the page (haptic kind: light / medium / selection / success / warning / error) · 7: the comment box rides down / up with the keyboard frame by frame (__e11KbStep) · 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
 let procEnv = ProcessInfo.processInfo.environment
 let SELFTEST = procEnv["E11_SELFTEST"] ?? ""           // the build machine's self-test in the simulator
 let info = Bundle.main.infoDictionary ?? [:]
@@ -743,6 +743,15 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       default: UIImpactFeedbackGenerator(style: .light).impactOccurred()
       }
       done(["ok": true])
+    case "nativeSheet":
+      // a plain menu from the page as a real iPhone sheet (floating; iOS grows it as it's pulled); replies with the
+      // chosen row's index, or -1 when it's closed without a choice
+      if presentedViewController != nil { return done(["ok": false]) }
+      let vc = NativeSheetVC(a, dark: statusStyle != .darkContent) { i in
+        if i >= 0 { FocusAfterPicker.allow() }   // (a text box the option opens still brings the keyboard)
+        done(["ok": true, "index": i])
+      }
+      present(vc, animated: true)
     case "notify": done(["ok": true])   // (Apple's notifications come from the server)
     case "pushStatus": pushState { done(["ok": true, "state": $0]) }
     case "pushRegister":
@@ -1034,4 +1043,107 @@ enum FocusAfterPicker {
     method_setImplementation(m, imp_implementationWithBlock(block))
     installed = true
   }
+}
+
+
+/* A plain menu from the page as iOS's own sheet: sections of rows (icon, text, an optional second line, a tick,
+   red for delete, a coloured dot for a role), sized to fit, with the grab handle. iOS draws it — floating at rest,
+   it grows with the finger when pulled and springs back; dragged down or tapped outside, it closes. */
+final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewDelegate, UISheetPresentationControllerDelegate {
+  struct Row { let i: Int; let label: String; let sub: String?; let icon: String?; let danger: Bool; let checked: Bool; let disabled: Bool; let dot: UIColor? }
+  struct Section { let header: String?; let rows: [Row] }
+  private var sections: [Section] = []
+  private let table = UITableView(frame: .zero, style: .insetGrouped)
+  private var answer: ((Int) -> Void)?
+  private static let SYMBOLS: [String: String] = [
+    "plus": "plus", "edit": "pencil", "trash": "trash", "x": "xmark", "clip": "paperclip", "folder": "folder",
+    "info": "info.circle", "copy": "doc.on.doc", "search": "magnifyingglass", "download": "arrow.down.circle",
+    "reply": "arrowshape.turn.up.left", "user": "person", "users": "person.2", "coin": "dollarsign.circle",
+    "shield": "checkmark.shield", "lock": "lock", "logout": "rectangle.portrait.and.arrow.right", "bell": "bell",
+    "camera": "camera", "image": "photo", "chev-left": "chevron.left", "chev-right": "chevron.right", "chev": "chevron.down",
+    "chev-up": "chevron.up", "link": "link", "open": "arrow.up.right.square", "check": "checkmark", "assets": "photo.on.rectangle",
+    "mail": "envelope", "clock": "clock", "eye": "eye", "upload": "arrow.up.circle", "sun": "sun.max", "moon": "moon",
+    "cal": "calendar", "flag": "flag", "tag": "tag", "pin": "pin", "pushpin": "pin", "gift": "gift", "home": "house",
+    "inbox": "tray", "comment": "text.bubble", "chat": "bubble.left", "list": "list.bullet", "board": "rectangle.split.3x1",
+    "send": "paperplane", "play": "play", "smile": "face.smiling", "more": "ellipsis", "check-circle": "checkmark.circle",
+    "checklist": "checklist", "activity": "waveform.path.ecg", "details": "doc.text", "arrow": "arrow.right", "select": "checkmark.square",
+  ]
+  init(_ a: [String: Any], dark: Bool, answer: @escaping (Int) -> Void) {
+    self.answer = answer
+    super.init(nibName: nil, bundle: nil)
+    for sec in a["sections"] as? [[String: Any]] ?? [] {
+      let rows = (sec["rows"] as? [[String: Any]] ?? []).map { r -> Row in
+        var dot: UIColor? = nil
+        if let d = r["dot"] as? [NSNumber], d.count >= 3 { dot = UIColor(red: CGFloat(d[0].doubleValue) / 255, green: CGFloat(d[1].doubleValue) / 255, blue: CGFloat(d[2].doubleValue) / 255, alpha: 1) }
+        return Row(i: (r["i"] as? NSNumber)?.intValue ?? -1, label: r["label"] as? String ?? "", sub: (r["sub"] as? String).flatMap { $0.isEmpty ? nil : $0 },
+                   icon: r["icon"] as? String, danger: (r["danger"] as? Bool) == true, checked: (r["checked"] as? Bool) == true,
+                   disabled: (r["disabled"] as? Bool) == true, dot: dot)
+      }
+      if !rows.isEmpty { sections.append(Section(header: (sec["header"] as? String).flatMap { $0.isEmpty ? nil : $0 }, rows: rows)) }
+    }
+    overrideUserInterfaceStyle = dark ? .dark : .light
+    modalPresentationStyle = .pageSheet
+    if let sh = sheetPresentationController {
+      sh.detents = [.custom(identifier: .init("fit")) { [weak self] ctx in min(ctx.maximumDetentValue, self?.fitHeight ?? 320) }]
+      sh.prefersGrabberVisible = true
+      sh.prefersScrollingExpandsWhenScrolledToEdge = false
+      sh.delegate = self
+    }
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  private var fitHeight: CGFloat = 320
+  override func viewDidLoad() {
+    super.viewDidLoad()
+    if #available(iOS 26, *) { view.backgroundColor = .clear; table.backgroundColor = .clear }
+    else { view.backgroundColor = .systemGroupedBackground; table.backgroundColor = .systemGroupedBackground }
+    table.dataSource = self; table.delegate = self
+    table.translatesAutoresizingMaskIntoConstraints = false
+    table.contentInset.top = 6
+    table.sectionHeaderTopPadding = 0
+    view.addSubview(table)
+    NSLayoutConstraint.activate([table.topAnchor.constraint(equalTo: view.topAnchor, constant: 14), table.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                                 table.trailingAnchor.constraint(equalTo: view.trailingAnchor), table.bottomAnchor.constraint(equalTo: view.bottomAnchor)])
+  }
+  override func viewDidLayoutSubviews() {
+    super.viewDidLayoutSubviews()
+    table.layoutIfNeeded()
+    let h = table.contentSize.height + 14 + 6 + view.safeAreaInsets.bottom + 4
+    if abs(h - fitHeight) > 1 { fitHeight = h; sheetPresentationController?.animateChanges { sheetPresentationController?.invalidateDetents() } }
+    table.isScrollEnabled = h > view.bounds.height + 1
+  }
+  func numberOfSections(in tableView: UITableView) -> Int { sections.count }
+  func tableView(_ tableView: UITableView, numberOfRowsInSection s: Int) -> Int { sections[s].rows.count }
+  func tableView(_ tableView: UITableView, titleForHeaderInSection s: Int) -> String? { sections[s].header }
+  func tableView(_ tableView: UITableView, heightForHeaderInSection s: Int) -> CGFloat { sections[s].header == nil ? (s == 0 ? 4 : 10) : UITableView.automaticDimension }
+  func tableView(_ tableView: UITableView, heightForFooterInSection s: Int) -> CGFloat { 4 }
+  func tableView(_ tableView: UITableView, cellForRowAt ip: IndexPath) -> UITableViewCell {
+    let r = sections[ip.section].rows[ip.row]
+    let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
+    var c = r.sub == nil ? cell.defaultContentConfiguration() : UIListContentConfiguration.subtitleCell()
+    c.text = r.label
+    c.secondaryText = r.sub
+    c.secondaryTextProperties.color = .secondaryLabel
+    let tint: UIColor = r.disabled ? .tertiaryLabel : r.danger ? .systemRed : .label
+    c.textProperties.color = r.disabled ? .secondaryLabel : r.danger ? .systemRed : .label
+    if let dot = r.dot {
+      c.image = UIImage(systemName: "circle.fill")?.withTintColor(dot, renderingMode: .alwaysOriginal)
+      c.imageProperties.maximumSize = CGSize(width: 12, height: 12)
+    } else if let name = r.icon.flatMap({ NativeSheetVC.SYMBOLS[$0] }), let img = UIImage(systemName: name) {
+      c.image = img; c.imageProperties.tintColor = tint
+    }
+    cell.contentConfiguration = c
+    cell.accessoryType = r.checked ? .checkmark : .none
+    cell.tintColor = .systemBlue
+    cell.selectionStyle = r.disabled || r.i < 0 ? .none : .default
+    if #available(iOS 26, *) { cell.backgroundColor = UIColor.secondarySystemGroupedBackground.withAlphaComponent(0.6) }
+    return cell
+  }
+  func tableView(_ tableView: UITableView, shouldHighlightRowAt ip: IndexPath) -> Bool { let r = sections[ip.section].rows[ip.row]; return !r.disabled && r.i >= 0 }
+  func tableView(_ tableView: UITableView, didSelectRowAt ip: IndexPath) {
+    let r = sections[ip.section].rows[ip.row]
+    guard !r.disabled, r.i >= 0 else { return }
+    let a = answer; answer = nil
+    dismiss(animated: true) { a?(r.i) }
+  }
+  func presentationControllerDidDismiss(_ presentationController: UIPresentationController) { let a = answer; answer = nil; a?(-1) }
 }
