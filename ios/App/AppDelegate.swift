@@ -1068,7 +1068,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       ("cbarAttach", "return '{}'", { self.cbar.openAttach() }),
       // 19: a task's Comments with the keyboard coming up and going down (a pretend keyboard: the simulator shows none) —
       // the list is moved by iOS and stays at the latest comment, the page keeps the room once it's up
-      ("cfeed", "const t = db.tasks.filter((x) => !x.parentId).sort((a, b) => (b.comments || []).length - (a.comments || []).length)[0]; ui.sideTab = 'comments'; openTask(t.id); " + pause(2500) + feedJS, {
+      ("cfeed", "const t = db.tasks.filter((x) => !x.parentId).sort((a, b) => (b.comments || []).length - (a.comments || []).length)[0]; openTask(t.id); " + pause(1200) + "document.querySelector('#detail .ph-seg.in-task [data-tab=\"comments\"]').click(); " + pause(2500) + feedJS, {
         self.presentedViewController?.dismiss(animated: false)
         self.commentBar(["show": false, "clear": true]) }),
       ("cfeedKb", pause(1200) + feedJS, { self.fakeKeyboard(336) }),
