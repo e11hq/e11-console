@@ -525,10 +525,11 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       } else {
         if tabBar.isHidden { tabBar.alpha = 0; tabBar.isHidden = false }
         UIView.performWithoutAnimation { self.view.setNeedsLayout(); self.view.layoutIfNeeded() }
-        UIView.animate(withDuration: 0.18) { self.tabBar.alpha = 1 }
+        UIView.animate(withDuration: 0.18) { self.tabBar.alpha = self.formTucked ? 0 : 1 }
       }
     }
   }
+  var formTucked = false   // (a New task / amendments draft tucked at the bottom: the tab bar stays faded)
   var tabPhoto: [Int: String] = [:]
   var tabBadgeKey: [Int: String] = [:]
   var lastTabs: [String: Any]?
@@ -791,6 +792,12 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       let vc = FormSheetVC(a, dark: statusStyle != .darkContent, event: { [weak self] ev in
         self?.pageJS("window.__e11Form && window.__e11Form(\(jsonString(ev)))")
       }) { r in done(r) }
+      vc.onTuck = { [weak self] t in
+        guard let self, self.formTucked != t else { return }
+        self.formTucked = t
+        self.tabBar.isUserInteractionEnabled = !t
+        UIView.animate(withDuration: 0.2) { self.tabBar.alpha = t || self.tabsHidden ? 0 : 1 }
+      }
       host.present(vc, animated: true)
     case "formSet":
       // what was picked for a field (Client, Assign to), CD review on / off, or a message about what's wrong
@@ -1622,6 +1629,8 @@ final class FormSheetVC: UIViewController, UITableViewDataSource, UITableViewDel
   private let event: ([String: Any]) -> Void
   private var answer: (([String: Any]) -> Void)?
   var isOpen: Bool { answer != nil }
+  // (tucked: the app's tab bar fades away, so the bar sits alone at the bottom — Haris 2026-10-30)
+  var onTuck: ((Bool) -> Void)?
   private let table = UITableView(frame: .zero, style: .insetGrouped)
   private let titleField = UITextField()
   private let desc = UITextView()
@@ -1972,6 +1981,7 @@ final class FormSheetVC: UIViewController, UITableViewDataSource, UITableViewDel
     UIView.animate(withDuration: 0.2, animations: {
       self.bar.alpha = t ? 1 : 0; self.table.alpha = t ? 0 : 1; self.topBar.alpha = t ? 0 : 1
     }, completion: { _ in self.bar.isHidden = !self.tucked })
+    onTuck?(t)
   }
   @objc private func barTapped() { expand() }
   func expand() {
@@ -1989,6 +1999,7 @@ final class FormSheetVC: UIViewController, UITableViewDataSource, UITableViewDel
   // (tapped outside, or pulled down past the bottom, with something typed: tucked)
   func presentationControllerDidAttemptToDismiss(_ presentationController: UIPresentationController) { tuck() }
   func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
+    onTuck?(false)
     let a = answer; answer = nil
     a?(["ok": true, "closed": dirty ? "discard" : "cancel"])
   }
@@ -2005,6 +2016,7 @@ final class FormSheetVC: UIViewController, UITableViewDataSource, UITableViewDel
     guard let a = answer else { then?(); return }
     answer = nil
     view.endEditing(true)
+    onTuck?(false)
     let done = { a(["ok": true, "closed": reason]); then?() }
     if let p = presentingViewController { p.dismiss(animated: true, completion: done) } else { done() }
   }
