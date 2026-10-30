@@ -1050,3 +1050,5 @@ html.phone body.phone .menu .mi.ph-press { background: var(--ph-row, var(--hover
 /* (the sheet rises with its layer: a moving sheet inside the layer would stretch what can be scrolled) */
 html.ph-pager.phone body.phone .ph-pan > .menu:not(.mention-pop) { animation: none; }
 html.phone body.phone .ph-pan { animation: phSheetUp .45s cubic-bezier(.32, .72, 0, 1); }
+/* (under the sheet when it's pulled up past open: its own colour, never the page) */
+html.phone body.phone .ph-pan > .ph-pan-fill { position: fixed; left: 0; right: 0; bottom: 0; height: 0; pointer-events: none; }

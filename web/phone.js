@@ -1271,7 +1271,16 @@ const SheetMotion = (() => {
       if (touching || !p.isConnected || m.classList.contains('ph-out')) return;
       if (p.scrollTop <= 2) closeMenus();
     }
+    // pulled up past open, iOS lifts the sheet off the bottom with its bounce: the sheet's colour fills in under it
+    const fill = document.createElement('div');
+    fill.className = 'ph-pan-fill';
+    fill.style.background = getComputedStyle(m).backgroundColor;
+    p.insertBefore(fill, m);
+    let filled = false;
     p.addEventListener('scroll', () => {
+      const over = p.scrollTop - open();
+      if (over > 0) { fill.style.height = Math.ceil(over + 2) + 'px'; filled = true; }
+      else if (filled) { fill.style.height = '0'; filled = false; }
       if (m.classList.contains('ph-out') || !moved) return;   // (not the opening itself: the dark area fades in on its own)
       const k = Math.max(0, Math.min(1, p.scrollTop / Math.max(1, open())));
       const s = document.getElementById('ph-menu-scrim');
