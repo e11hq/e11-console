@@ -901,6 +901,14 @@ const Push = (() => {
       if (me.reason === 'not registered on this site') return 'This phone isn’t registered on this site — turn notifications off and on here';
       return `Apple didn’t accept it for this phone (${me.status || 'no answer'}${me.reason ? ' · ' + me.reason : ''})`;
     }
+    // (no answer for this phone itself: what each Apple device on this site got)
+    const ds = (r && r.devices) || [];
+    if (ds.length) {
+      const name = (d) => (d.platform === 'mac' ? 'Mac' : 'iPhone');
+      return 'Apple devices on this site: ' + ds.map((d) => `${name(d)} ${d.status === 200 ? '✓ accepted' : `✗ ${d.status || 'no answer'}${d.reason ? ' ' + d.reason : ''}`}`).join(' · ');
+    }
+    if (r && r.apnsWhy === 'no-key') return 'This site can’t send Apple notifications (its Apple push key isn’t set up)';
+    if (r && r.apnsWhy === 'no-devices') return 'No iPhone is registered on this site — turn notifications off and on on the phone';
     return r && r.sent ? 'Sent — it may take a few seconds' : `Couldn’t reach this ${where} — switch it off and on again`;
   }
   window.__e11ApnsToken = (d) => { if (!d || !d.token) return; lastToken = d.token; api('POST', '/api/apns/register', { token: d.token, env: d.env, ack: d.ack === true, platform: d.platform || 'ios' }).catch(() => {}); };
