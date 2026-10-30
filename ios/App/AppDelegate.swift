@@ -898,6 +898,11 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         ["header": "Ali Raza’s priority", "person": ["initials": "AR", "color": [90, 120, 200]], "rows": [["i": 0, "label": "Urgent", "sub": "always on top", "icon": "flag", "tint": [220, 60, 60]]]],
         ["header": "Priority for Oct 28", "rows": [["i": -1, "label": "", "kind": "num", "chips": (1...10).map { ["i": $0, "label": String($0)] }]]],
         ["rows": [["i": 11, "label": "No priority", "icon": "flag"]]]]) }),
+      // New task as a native form: typed in, then tucked into the bar (title + Continue must show — Haris 2026-10-30)
+      ("form", "return '{}'", {
+        let show = { self.run("formSheet", FormSheetVC.selfArgs()) { _ in } }
+        if let p = self.presentedViewController { p.dismiss(animated: false) { show() } } else { show() } }),
+      ("formTuck", "return '{}'", { FormSheetVC.current?.selfFill("Spring launch reel"); DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { FormSheetVC.current?.selfTuck() } }),
       ("signin", pause(4000) + "return JSON.stringify({ host: location.host, top: (document.querySelector('h1, h2, img, form') || document.body).getBoundingClientRect().top })", {
         self.presentedViewController?.dismiss(animated: false)
         self.web.load(URLRequest(url: URL(string: "https://e11hq.cloudflareaccess.com/")!)) }),
@@ -908,6 +913,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       before?()
       DispatchQueue.main.asyncAfter(deadline: .now() + (before == nil ? 0.2 : 1.5)) {
         self.probe(name, js) {
+          if name.hasPrefix("form") { self.selfResult[name + "Geo"] = FormSheetVC.current?.geo() ?? ["error": "no form"] }
           if name.hasPrefix("nsheet") { self.selfResult[name + "Geo"] = (self.presentedViewController as? NativeSheetVC)?.geo() ?? ["error": "no native sheet"] }
           if name == "home" || name == "inbox" { self.selfResult[name + "Frame"] = ["web": self.web.frame.height, "screen": self.view.bounds.height, "tabBar": !self.tabBar.isHidden] as [String: Any] }
           DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.writeSelf(name); DispatchQueue.main.asyncAfter(deadline: .now() + 4) { run(i + 1) } }
@@ -1626,6 +1632,7 @@ final class FormSheetVC: UIViewController, UITableViewDataSource, UITableViewDel
   private let barText = UILabel()
   private var fitHeight: CGFloat = 420
   private var strip: CGFloat = 0
+  private var barTop: NSLayoutConstraint?
   private var dirtyNow = false
   private var focused = false
   private let fmt: DateFormatter = { let f = DateFormatter(); f.calendar = Calendar(identifier: .gregorian); f.locale = Locale(identifier: "en_US_POSIX"); f.timeZone = .current; f.dateFormat = "yyyy-MM-dd"; return f }()
@@ -1729,13 +1736,45 @@ final class FormSheetVC: UIViewController, UITableViewDataSource, UITableViewDel
       name.leadingAnchor.constraint(greaterThanOrEqualTo: cancel.trailingAnchor, constant: 8),
       table.topAnchor.constraint(equalTo: topBar.bottomAnchor, constant: 4), table.bottomAnchor.constraint(equalTo: view.bottomAnchor),
       table.leadingAnchor.constraint(equalTo: view.leadingAnchor), table.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-      bar.topAnchor.constraint(equalTo: view.topAnchor, constant: 10), bar.heightAnchor.constraint(equalToConstant: 48),
+      bar.heightAnchor.constraint(equalToConstant: 48),
       bar.leadingAnchor.constraint(equalTo: view.leadingAnchor), bar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
       barText.leadingAnchor.constraint(equalTo: bar.leadingAnchor, constant: 24), barText.centerYAnchor.constraint(equalTo: bar.centerYAnchor),
       go.leadingAnchor.constraint(greaterThanOrEqualTo: barText.trailingAnchor, constant: 10),
       go.trailingAnchor.constraint(equalTo: bar.trailingAnchor, constant: -22), go.centerYAnchor.constraint(equalTo: bar.centerYAnchor),
     ])
+    barTop = bar.topAnchor.constraint(equalTo: view.topAnchor, constant: 10)
+    barTop?.isActive = true
   }
+  // Where the sheet's card shows on screen, in this view (tucked, iOS 26 showed only a slice of this view, not its top
+  // — the bar sat outside it, Haris 2026-10-30): the bar goes just under the card's visible top
+  private func visibleCard() -> CGRect {
+    guard let win = view.window else { return view.bounds }
+    let cardView: UIView = sheetPresentationController?.presentedView ?? view
+    let card = cardView.convert(cardView.bounds, to: win).intersection(win.bounds)
+    return view.convert(card, from: win)
+  }
+  private func placeBar() {
+    let c = visibleCard()
+    let top = max(0, c.minY) + max(8, (min(c.height, 70) - 48) / 2 + 4)
+    if abs((barTop?.constant ?? 0) - top) > 0.5 { barTop?.constant = top }
+  }
+  func geo() -> [String: Any] {
+    guard let win = view.window else { return ["error": "not shown"] }
+    let f = { (v: UIView) -> [CGFloat] in let r = v.convert(v.bounds, to: win); return [r.minX, r.minY, r.width, r.height] }
+    return ["view": f(view), "card": f(sheetPresentationController?.presentedView ?? view), "bar": f(bar), "barText": f(barText),
+            "barAlpha": bar.alpha, "barHidden": bar.isHidden, "tableAlpha": table.alpha, "tucked": tucked, "text": barText.text ?? "",
+            "visible": [visibleCard().minY, visibleCard().height], "fit": fitHeight, "strip": strip]
+  }
+  func selfFill(_ t: String) { titleField.text = t; changed() }
+  static func selfArgs() -> [String: Any] {
+    let person: [String: Any] = ["initials": "HA", "color": [120, 90, 220]]
+    let assign: [String: Any] = ["label": "Me", "person": person]
+    var a: [String: Any] = ["kind": "task", "key": "selftest", "title": "New task", "titleHint": "What needs doing?", "descHint": "Details"]
+    a["client"] = "No client (My Tasks)"; a["assign"] = assign; a["due"] = ""; a["cd"] = false
+    a["button"] = "Create task"; a["dock"] = "New task"; a["required"] = "title"
+    return a
+  }
+  func selfTuck() { tuck() }
   override func viewDidAppear(_ animated: Bool) {
     super.viewDidAppear(animated)
     if !focused { focused = true; _ = (isTask ? titleField as UIView : desc).becomeFirstResponder() }
@@ -1745,6 +1784,7 @@ final class FormSheetVC: UIViewController, UITableViewDataSource, UITableViewDel
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
     if let w = view.window { strip = w.safeAreaInsets.bottom }
+    placeBar()
     if note != nil && abs(table.bounds.width - lastWidth) > 0.5 { lastWidth = table.bounds.width; table.beginUpdates(); table.endUpdates() }
     table.layoutIfNeeded()
     let ch = table.contentSize.height
@@ -1927,6 +1967,8 @@ final class FormSheetVC: UIViewController, UITableViewDataSource, UITableViewDel
     }
     isModalInPresentation = dirty && !t   // (tucked: pulled down, the draft goes)
     bar.isHidden = false
+    view.setNeedsLayout()
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in self?.placeBar() }
     UIView.animate(withDuration: 0.2, animations: {
       self.bar.alpha = t ? 1 : 0; self.table.alpha = t ? 0 : 1; self.topBar.alpha = t ? 0 : 1
     }, completion: { _ in self.bar.isHidden = !self.tucked })
