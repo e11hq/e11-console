@@ -4334,7 +4334,7 @@ const Unsent = (() => {
 })();
 
 /* ================= Overlays ================= */
-function closeMenus() { $$('.menu').forEach((m) => m.remove()); }
+function closeMenus() { $$('.menu:not(.ph-out)').forEach((m) => { if (typeof SheetMotion !== 'undefined' && SheetMotion.out(m)) return; m.remove(); }); }   // (iPhone app: a sheet slides away)
 
 // the part of the open task that scrolls (its comments, or the whole pane)
 function detailScroller() {
@@ -6071,7 +6071,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     if ($('.lightbox') || $('.fv')) { $('#overlay-root').innerHTML = ''; return; }
     if (typeof Viewer !== 'undefined' && Viewer.isOpen()) { Viewer.close(); return; }
-    if ($('.menu')) { closeMenus(); return; }
+    if ($('.menu:not(.ph-out)')) { closeMenus(); return; }
     if (el.id === 'search') { el.value = ''; el.dispatchEvent(new Event('input', { bubbles: true })); el.blur(); return; }
     if (ui.taskId && ui.thread) { if (el.blur) el.blur(); closeThread(); return; }
     if (ui.taskId) { if (el.blur) el.blur(); closeDetail(); return; }
