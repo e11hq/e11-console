@@ -1272,7 +1272,7 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     if searchBar != nil && lastContent >= 0 { lastContent = ch; return }   // (searching never re-sizes the sheet)
     // (first time: start at the very top of the list, below the room for the grab handle — with the insets set by
     //  hand a table otherwise starts at 0, which hid that room and put the first option against the handle)
-    if lastContent < 0 { table.contentOffset = CGPoint(x: 0, y: -table.contentInset.top) }
+    if lastContent < 0 { table.contentOffset = CGPoint(x: 0, y: -table.adjustedContentInset.top) }
     lastContent = ch
     resize()
   }
@@ -1292,9 +1292,12 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     scrolls = fitHeight > cap
     // (measured in the simulator: none of a floating sheet lies below its visible edge — 0 until measured)
     let below = floating ? (hiddenBelow ?? 0) : view.safeAreaInsets.bottom
-    // (a list that scrolls ends further above the sheet's bottom edge: its rounded corners otherwise cut into the last
-    //  option while the list bounces at its end — "squeezed" when dragged, Haris 2026-10-30)
-    table.contentInset.bottom = NativeSheetVC.END + (scrolls || !floating ? below : 0) + (scrolls ? 22 : 0)
+    // (a list that scrolls gets iOS's own room at its end — the space Apple leaves under a long list in a sheet —
+    //  instead of a gap worked out here: with ours the last option was squeezed under the bottom edge while the list
+    //  scrolled, Haris 2026-10-30. A list that fits keeps the Channel gap and doesn't scroll.)
+    table.contentInsetAdjustmentBehavior = scrolls ? .automatic : .never
+    table.contentInset.bottom = scrolls ? NativeSheetVC.END : NativeSheetVC.END + (!floating ? below : 0)
+    if scrolls { table.layoutIfNeeded(); if table.contentOffset.y < -table.adjustedContentInset.top { table.contentOffset.y = -table.adjustedContentInset.top } }
     table.verticalScrollIndicatorInsets.bottom = 22 + (scrolls ? below : 0)
     sheetPresentationController?.animateChanges { sheetPresentationController?.invalidateDetents() }
   }
