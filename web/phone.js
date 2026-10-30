@@ -1275,11 +1275,12 @@ const SheetMotion = (() => {
     const fill = document.createElement('div');
     fill.className = 'ph-pan-fill';
     fill.style.background = getComputedStyle(m).backgroundColor;
-    p.insertBefore(fill, m);
+    p.appendChild(fill);   // (over the sheet's own shadow, so the fill and the sheet read as one piece)
     let filled = false;
     p.addEventListener('scroll', () => {
       const over = p.scrollTop - open();
-      if (over > 0) { fill.style.height = Math.ceil(over + 2) + 'px'; filled = true; }
+      // (reaching up into the sheet's empty bottom padding, so it never lags a frame behind the bounce)
+      if (over > 0) { fill.style.height = Math.ceil(over + 30) + 'px'; filled = true; }
       else if (filled) { fill.style.height = '0'; filled = false; }
       if (m.classList.contains('ph-out') || !moved) return;   // (not the opening itself: the dark area fades in on its own)
       const k = Math.max(0, Math.min(1, p.scrollTop / Math.max(1, open())));
