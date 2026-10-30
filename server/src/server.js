@@ -577,7 +577,15 @@ export function createServer(cfg) {
     if (p === '/api/apns/register' && req.method === 'POST') {
       const b = await readBody(req, 16 * 1024).catch(() => ({}));
       if (req.viewingAs) return json(res, 200, { ok: true, viewingAs: true });
-      return json(res, apns.register(u.id, b.token, b.env) ? 200 : 400, { ok: true, push: apns.enabled() });
+      return json(res, apns.register(u.id, b.token, b.env, { ack: b.ack === true, platform: b.platform }) ? 200 : 400, { ok: true, push: apns.enabled() });
+    }
+    // The app's Notification Service Extension: notification pid arrived on this device — the older ones that didn't
+    // are sent again (apns.js ack)
+    if (p === '/api/apns/ack' && req.method === 'POST') {
+      const b = await readBody(req, 16 * 1024).catch(() => ({}));
+      if (req.viewingAs) return json(res, 200, { ok: true });
+      const r = await apns.ack(u.id, b.token, b.pid);
+      return json(res, r.ok ? 200 : 404, r);
     }
     if (p === '/api/apns/unregister' && req.method === 'POST') { const b = await readBody(req, 16 * 1024).catch(() => ({})); apns.unregister(b.token); return json(res, 200, { ok: true }); }
 

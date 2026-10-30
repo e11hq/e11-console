@@ -24,6 +24,7 @@ targets:
         buildPhase: resources
     dependencies:
       - target: E11ConsoleMacWidget
+      - target: E11ConsoleMacNotify
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ae.e11.console.ios
@@ -40,6 +41,7 @@ targets:
       properties:
         com.apple.security.app-sandbox: true
         com.apple.security.network.client: true
+        com.apple.developer.aps-environment: production   # (Apple's notifications, Haris 2026-10-30)
         com.apple.security.files.user-selected.read-write: true
         com.apple.security.files.downloads.read-write: true
         keychain-access-groups: [$(AppIdentifierPrefix)ae.e11.console.shared]   # (shared with the widget: WidgetShare)
@@ -104,3 +106,35 @@ targets:
         E11KeychainGroup: $(AppIdentifierPrefix)ae.e11.console.shared
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
+  # Confirms each notification to the server, so ones a Mac that was offline missed are sent again (notify/)
+  E11ConsoleMacNotify:
+    type: app-extension
+    platform: macOS
+    deploymentTarget: "13.0"
+    sources:
+      - path: ../../notify
+      - path: ../../widget/WidgetShare.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ae.e11.console.ios.notify
+        PRODUCT_NAME: E11ConsoleMacNotify
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_ENTITLEMENTS: E11ConsoleMacNotify.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
+        SKIP_INSTALL: YES
+    entitlements:
+      path: E11ConsoleMacNotify.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
+        keychain-access-groups: [$(AppIdentifierPrefix)ae.e11.console.shared]
+    info:
+      path: Notify-Info.plist
+      properties:
+        CFBundleDisplayName: E11 Console
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        E11KeychainGroup: $(AppIdentifierPrefix)ae.e11.console.shared
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.usernotifications.service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).NotificationService

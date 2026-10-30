@@ -1,4 +1,4 @@
-// Notifications for the native iPhone app through Apple's push service (APNs). The same messages as the phone /
+// Notifications for the native iPhone and Mac App Store apps through Apple's push service (APNs). The same messages as the phone /
 // browser notifications (webpush.js notifMessage), sent to every iPhone app the person has signed in on.
 // Needs the push key from the Apple Developer account, on the NAS (never in the code): APNS_KEY_FILE (the .p8 file),
 // APNS_KEY_ID, APNS_TEAM_ID. Without them nothing is sent (the app still works). No outside packages: HTTP/2 and
@@ -32,16 +32,57 @@ export function createApns({ store, keyFile = '', keyId = '', teamId = '', topic
   // the iPhones signed in, per person: kv apns-subs = { userId: [{ token, env, at }] }
   const load = () => { try { return JSON.parse(store.kv.get('apns-subs') || '{}'); } catch { return {}; } };
   const save = (v) => store.kv.set('apns-subs', JSON.stringify(v));
-  function register(userId, token, env) {
+  // ack: the app confirms each notification it gets (its Notification Service Extension: iPhone app 16+, Mac App
+  // Store app) — then the ones it didn't get are sent again (see ack below)
+  function register(userId, token, env, opts = {}) {
     token = String(token || '').toLowerCase();
     if (!/^[0-9a-f]{32,200}$/.test(token)) return false;
     const all = load();
     for (const k of Object.keys(all)) all[k] = (all[k] || []).filter((s) => s.token !== token);   // a phone signed in as someone else now
-    all[userId] = (all[userId] || []).concat({ token, env: env === 'sandbox' ? 'sandbox' : 'production', at: new Date(now()).toISOString() }).slice(-10);
+    if (!(all[userId] || []).length) dropPending(token);
+    all[userId] = (all[userId] || []).concat({ token, env: env === 'sandbox' ? 'sandbox' : 'production', at: new Date(now()).toISOString(),
+      ...(opts.ack ? { ack: true } : {}), ...(opts.platform === 'mac' ? { platform: 'mac' } : {}) }).slice(-10);
     save(all);
     return true;
   }
+  // ---- No missed notifications (Haris, 2026-10-30) ----
+  // Apple keeps only the newest notification for a phone / Mac that's offline and drops the earlier ones. So each
+  // one sent to an app that confirms (ack) is remembered per device (kv apns-pending = { token: [{ pid, msg, at,
+  // tries }] }) until the app says it arrived. When a confirmation comes in (the device is reachable again), every
+  // older one still unconfirmed is sent again — up to 3 times, for up to 4 days. Nothing is kept for apps that don't
+  // confirm (older iPhone apps).
+  const KEEP = 4 * 86400000, MAX = 60;
+  const loadP = () => { try { return JSON.parse(store.kv.get('apns-pending') || '{}'); } catch { return {}; } };
+  const saveP = (v) => store.kv.set('apns-pending', JSON.stringify(v));
+  function dropPending(token) { const p = loadP(); if (p[token]) { delete p[token]; saveP(p); } }
+  function ownerOf(token) { const all = load(); for (const [uid, list] of Object.entries(all)) { const s = (list || []).find((x) => x.token === token); if (s) return { uid, s }; } return null; }
+  // the app says notification pid arrived on this device: forget it, and send again the older ones that didn't
+  async function ack(userId, token, pid) {
+    token = String(token || '').toLowerCase();
+    const o = ownerOf(token);
+    if (!o || o.uid !== userId) return { ok: false };
+    const p = loadP(), list = p[token] || [];
+    const hit = list.find((x) => x.pid === String(pid || ''));
+    const t = now();
+    const cut = hit ? Date.parse(hit.at) : t - 60_000;   // (sent before the one that just arrived — or a minute ago)
+    const keep = [], again = [];
+    for (const x of list) {
+      if (x.pid === String(pid || '') || t - Date.parse(x.at) >= KEEP) continue;
+      if (Date.parse(x.at) < cut && x.tries < 3) again.push(x); else keep.push(x);
+    }
+    p[token] = keep;
+    if (!keep.length) delete p[token];
+    saveP(p);
+    let resent = 0;
+    for (const x of again) {
+      const r = await push1(o.s, x.msg, x.pid, 4 * 86400, x.tries + 1);
+      if (r.status === 200) resent++;
+    }
+    return { ok: true, resent };
+  }
+  const pendingFor = (token) => (loadP()[String(token || '').toLowerCase()] || []).map((x) => ({ pid: x.pid, tries: x.tries }));
   function unregister(token) {
+    dropPending(String(token || '').toLowerCase());
     const all = load();
     for (const k of Object.keys(all)) all[k] = (all[k] || []).filter((s) => s.token !== String(token || '').toLowerCase());
     save(all);
@@ -77,23 +118,38 @@ export function createApns({ store, keyFile = '', keyId = '', teamId = '', topic
     });
   }
   // msg: { title, body, taskId, nid, tag, badge, kind, clientId, folderId, commentId, planId, view } (webpush.js notifMessage)
-  async function sendTo(userId, msg, { ttl = 86400 } = {}) {
-    const list = load()[userId] || [];
-    if (!list.length || !enabled()) return { sent: 0 };
+  function payloadOf(msg, pid) {
     const data = {};
     for (const k of ['taskId', 'nid', 'kind', 'clientId', 'folderId', 'commentId', 'planId', 'view']) if (msg[k] != null) data[k] = msg[k];
-    const payload = { aps: { alert: { title: String(msg.title || 'E11 Console'), body: String(msg.body || '') }, sound: 'default', 'thread-id': String(msg.taskId || msg.tag || msg.kind || 'e11'),
-      ...(Number.isInteger(msg.badge) ? { badge: msg.badge } : {}) }, e11: data };
+    if (pid) data.pid = pid;
+    // (mutable-content: the app's Notification Service Extension sees each one first — it confirms it arrived)
+    return { aps: { alert: { title: String(msg.title || 'E11 Console'), body: String(msg.body || '') }, sound: 'default', 'thread-id': String(msg.taskId || msg.tag || msg.kind || 'e11'),
+      ...(Number.isInteger(msg.badge) ? { badge: msg.badge } : {}), ...(pid ? { 'mutable-content': 1 } : {}) }, e11: data };
+  }
+  async function push1(s, msg, pid, ttl, tries) {
+    const r = await post(s.env, s.token, payloadOf(msg, s.ack ? pid : null), ttl);
+    if (s.ack && r.status === 200) {
+      const p = loadP(), t = now();
+      p[s.token] = (p[s.token] || []).filter((x) => t - Date.parse(x.at) < KEEP && x.pid !== pid)
+        .concat({ pid, msg, at: tries ? ((loadP()[s.token] || []).find((x) => x.pid === pid) || {}).at || new Date(t).toISOString() : new Date(t).toISOString(), tries }).slice(-MAX);
+      saveP(p);
+    }
+    return r;
+  }
+  async function sendTo(userId, msg, { ttl = 4 * 86400 } = {}) {
+    const list = load()[userId] || [];
+    if (!list.length || !enabled()) return { sent: 0 };
+    const pid = crypto.randomBytes(8).toString('hex');
     let sent = 0;
     const gone = [];
     await Promise.all(list.map(async (s) => {
-      const r = await post(s.env, s.token, payload, ttl);
+      const r = await push1(s, msg, pid, ttl, 0);
       if (r.status === 200) sent++;
       else if (r.status === 410 || ['BadDeviceToken', 'Unregistered', 'DeviceTokenNotForTopic'].includes(r.reason)) gone.push(s.token);
       else log.error('APNs push failed', r.status, r.reason);
     }));
-    if (gone.length) { const all = load(); all[userId] = (all[userId] || []).filter((s) => !gone.includes(s.token)); save(all); }
+    if (gone.length) { const all = load(); all[userId] = (all[userId] || []).filter((s) => !gone.includes(s.token)); save(all); gone.forEach(dropPending); }
     return { sent, removed: gone.length };
   }
-  return { enabled, register, unregister, devices, sendTo, close: () => { for (const s of Object.values(sessions)) try { s.close(); } catch { /* fine */ } } };
+  return { enabled, register, unregister, devices, sendTo, ack, pendingFor, close: () => { for (const s of Object.values(sessions)) try { s.close(); } catch { /* fine */ } } };
 }

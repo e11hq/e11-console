@@ -70,3 +70,31 @@ test('every phone notification goes to the iPhone app too; a phone signed in as 
   await post(OWNER, '/api/apns/unregister', { token: GOOD });
   assert.equal(app.apns.devices('u-h'), 0, 'signing out removes it');
 });
+test('no missed notifications: an app that confirms gets the ones it missed sent again (Haris 2026-10-30)', async () => {
+  const TOK = 'c'.repeat(64);
+  assert.equal((await post(AM, '/api/apns/register', { token: TOK, env: 'production', ack: true, platform: 'mac' })).status, 200);
+  got = [];
+  for (const n of ['m1', 'm2', 'm3']) { await app.apns.sendTo('u-a', { title: 'T', body: n, nid: n }); await new Promise((r) => setTimeout(r, 5)); }
+  const mine = () => got.filter((x) => x.h[':path'] === '/3/device/' + TOK);
+  assert.equal(mine().length, 3);
+  assert.equal(mine()[0].body.aps['mutable-content'], 1, 'the app sees each one first');
+  const pids = mine().map((x) => x.body.e11.pid);
+  assert.ok(pids.every(Boolean) && new Set(pids).size === 3);
+  assert.equal(app.apns.pendingFor(TOK).length, 3);
+  // the Mac was offline: only the newest arrived, and it says so — the two before it go again
+  got = [];
+  const r = await (await post(AM, '/api/apns/ack', { token: TOK, pid: pids[2] })).json();
+  assert.equal(r.resent, 2);
+  assert.deepEqual(mine().map((x) => x.body.e11.nid), ['m1', 'm2']);
+  assert.deepEqual(mine().map((x) => x.body.e11.pid), [pids[0], pids[1]], 'the same ids, so they can be confirmed');
+  await post(AM, '/api/apns/ack', { token: TOK, pid: pids[0] });
+  await post(AM, '/api/apns/ack', { token: TOK, pid: pids[1] });
+  assert.equal(app.apns.pendingFor(TOK).length, 0);
+  // someone else's device can't be confirmed; an app that doesn't confirm keeps nothing
+  assert.equal((await post(OWNER, '/api/apns/ack', { token: TOK, pid: 'x' })).status, 404);
+  await app.apns.sendTo('u-a', { title: 'T', body: 'x' });
+  const plain = got.filter((x) => x.h[':path'] !== '/3/device/' + TOK).pop();
+  if (plain) { assert.equal(plain.body.aps['mutable-content'], undefined); assert.equal(plain.body.e11.pid, undefined); }
+  await post(AM, '/api/apns/unregister', { token: TOK });
+  assert.equal(app.apns.pendingFor(TOK).length, 0);
+});

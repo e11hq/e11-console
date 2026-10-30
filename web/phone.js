@@ -890,9 +890,9 @@ const Push = (() => {
     e.stopPropagation();
     NativeMac.call('setLock', { on: !st.lock.on }).then((r) => { st.lock = { ...st.lock, on: !!r.on }; paint(); }).catch((er) => toast(er.message));
   }, true);
-  // the iPhone app's notification address arrives from the app (after it's allowed, and on each start)
+  // the iPhone / Mac App Store app's notification address arrives from the app (after it's allowed, and on each start)
   let lastToken = null;
-  window.__e11ApnsToken = (d) => { if (!d || !d.token) return; lastToken = d.token; api('POST', '/api/apns/register', { token: d.token, env: d.env }).catch(() => {}); };
+  window.__e11ApnsToken = (d) => { if (!d || !d.token) return; lastToken = d.token; api('POST', '/api/apns/register', { token: d.token, env: d.env, ack: d.ack === true, platform: d.platform || 'ios' }).catch(() => {}); };
   // tapping an iPhone app notification
   window.__e11PushTap = (d) => { d = d || {}; if (d.view) { if (typeof openView === 'function') openView(d.view); return; } openFrom(d.taskId || null, d.nid || null, { kind: d.kind || null, clientId: d.clientId || null, folderId: d.folderId || null, commentId: d.commentId || null, planId: d.planId || null }); };
 

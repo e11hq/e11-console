@@ -21,6 +21,7 @@ targets:
       - path: ../widget/WidgetShare.swift
     dependencies:
       - target: E11ConsoleWidget
+      - target: E11ConsoleNotify
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ae.e11.console.ios
@@ -96,3 +97,32 @@ targets:
         E11KeychainGroup: $(AppIdentifierPrefix)ae.e11.console.shared
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
+  # Confirms each notification to the server, so ones an offline phone missed are sent again (notify/)
+  E11ConsoleNotify:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ../notify
+      - path: ../widget/WidgetShare.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ae.e11.console.ios.notify
+        PRODUCT_NAME: E11ConsoleNotify
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_ENTITLEMENTS: Notify/E11ConsoleNotify.entitlements
+        SKIP_INSTALL: YES
+    entitlements:
+      path: Notify/E11ConsoleNotify.entitlements
+      properties:
+        keychain-access-groups: [$(AppIdentifierPrefix)ae.e11.console.shared]
+    info:
+      path: Notify/Info.plist
+      properties:
+        CFBundleDisplayName: E11 Console
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        E11KeychainGroup: $(AppIdentifierPrefix)ae.e11.console.shared
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.usernotifications.service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).NotificationService

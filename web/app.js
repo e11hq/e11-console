@@ -6053,7 +6053,7 @@ document.addEventListener('click', async (e) => {
       }
       case 'allow-notifs': try { Notification.requestPermission().then(() => renderContent()); } catch (err) { /* unsupported */ } return;
       case 'daily-try': e.preventDefault(); Daily.tryNow(); return;
-      case 'test-notif': alertUser({ title: 'E11 Console', body: 'This is how new notifications will look and sound.', taskId: null }, true); return;
+      case 'test-notif': if (AppPush.on) { api('POST', '/api/push/test', {}).then((r) => toast(r.sent ? 'Sent — it shows as a notification in a few seconds' : 'Turn on notifications for this app first')).catch((er) => toast(er.message)); return; } alertUser({ title: 'E11 Console', body: 'This is how new notifications will look and sound.', taskId: null }, true); return;
       case 'prio-menu': e.stopPropagation(); prioMenu(actEl, actEl.dataset.key); return;
       case 'clear-golive': { const t = task(ui.taskId); if (t) Cal.setGolive(t, null); return; }
       case 'occ-accept': { const t = task(ui.taskId); if (t) Cal.setOccasion(t, actEl.dataset.id); return; }
@@ -7966,7 +7966,16 @@ function chime() {
     });
   } catch (e) { /* no audio */ }
 }
+/* The iPhone app (16+) and the Mac App Store app get every notification as Apple's own (APNs), also while open —
+   the page draws no cards there and posts nothing of its own (Haris, 2026-10-30). The website and the Terminal-
+   installed Mac app keep the page's cards and the Mac's notifications. */
+const AppPush = (() => {
+  const st = { on: false };
+  if (typeof Host !== 'undefined' && (Host.isIOSApp || Host.isMacApp)) NativeMac.call('appInfo').then((r) => { st.on = Host.isIOSApp ? Number(r && r.shell) >= 16 : !!(r && r.apns); }).catch(() => {});
+  return st;
+})();
 function alertUser({ title, body, taskId, from, open, stay }, force) {
+  if (AppPush.on) return;   // (Apple's banner shows it)
   const u = me();
   const sound = !u || u.prefs.sound !== false;
   const front = document.hasFocus();

@@ -101,6 +101,9 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(lockNow), name: NSWorkspace.screensDidSleepNotification, object: nil)
     DistributedNotificationCenter.default().addObserver(self, selector: #selector(lockNow), name: NSNotification.Name("com.apple.screenIsLocked"), object: nil)
     if !SELFTEST.isEmpty { startSelfTest() }
+    #if APPSTORE
+    registerPush()
+    #endif
   }
   func applicationShouldHandleReopen(_ s: NSApplication, hasVisibleWindows: Bool) -> Bool { showWindow(); return true }
   func applicationDidBecomeActive(_ n: Notification) {
@@ -274,7 +277,52 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   @objc func pickServer(_ sender: NSMenuItem) { setServer(sender.representedObject as? String ?? "live") }
   func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
     reviewLink.isHidden = !(webView.url?.host ?? "").hasSuffix(".cloudflareaccess.com")
-    if webView.url?.host == URL(string: SERVER)?.host { shareSignIn() }
+    if webView.url?.host == URL(string: SERVER)?.host { shareSignIn(); sendApnsToken(tries: 0) }
+  }
+  /* Apple's notifications (APNs) for the Mac App Store app (Haris, 2026-10-30): every notification comes as the
+     Mac's own, also when the app is closed or in front; the page draws none of its own (AppPush in app.js). The
+     Notification Service Extension (notify/) confirms each one, so the ones a Mac that was offline missed are sent
+     again. */
+  var apnsToken: String?
+  func registerPush() {
+    guard SELFTEST.isEmpty else { return }
+    UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { _, _ in
+      DispatchQueue.main.async { NSApp.registerForRemoteNotifications() }
+    }
+  }
+  func application(_ application: NSApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+    let hex = deviceToken.map { String(format: "%02x", $0) }.joined()
+    apnsToken = hex
+    WidgetShare.write("apnsToken", Data(hex.utf8))
+    sendApnsToken(tries: 0)
+  }
+  func application(_ application: NSApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+    NSLog("E11 Console: Apple notifications not available: %@", error.localizedDescription)
+  }
+  // to the page once it's signed in and has its data (it registers this Mac's address with the server)
+  func sendApnsToken(tries: Int) {
+    guard let hex = apnsToken, tries < 90, let web = web else { return }
+    #if DEBUG
+    let env = "sandbox"
+    #else
+    let env = "production"
+    #endif
+    let arg = jsonText(["token": hex, "env": env, "ack": true, "platform": "mac"])
+    web.evaluateJavaScript("(typeof window.__e11ApnsToken === 'function' && typeof db !== 'undefined' && db && typeof currentUserId !== 'undefined' && currentUserId) ? (window.__e11ApnsToken(\(arg)), 'ok') : 'wait'") { r, _ in
+      if (r as? String) != "ok" { DispatchQueue.main.asyncAfter(deadline: .now() + 2) { self.sendApnsToken(tries: tries + 1) } }
+    }
+  }
+  // a notification clicked: the window comes forward and the page opens what it's about
+  func openPush(_ d: [String: Any], tries: Int = 0) {
+    if tries == 0 { showWindow() }
+    guard tries < 30, let web = web else { return }
+    web.evaluateJavaScript("(typeof window.__e11PushTap === 'function' && typeof db !== 'undefined' && db && typeof currentUserId !== 'undefined' && currentUserId) ? (window.__e11PushTap(\(jsonText(d))), 'ok') : 'wait'") { r, _ in
+      if (r as? String) != "ok" { DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.openPush(d, tries: tries + 1) } }
+    }
+  }
+  func jsonText(_ v: Any) -> String {
+    guard JSONSerialization.isValidJSONObject(v), let d = try? JSONSerialization.data(withJSONObject: v), let t = String(data: d, encoding: .utf8) else { return "null" }
+    return t
   }
   // the widget (widget/E11Widget.swift) asks the server with this app's own sign-in: server + cookies to the shared Keychain
   func shareSignIn() {
@@ -372,7 +420,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     case "appInfo":
       done(["ok": true, "server": SERVER, "shell": SHELL_VERSION, "native": "swift",
             "version": info["CFBundleShortVersionString"] as? String ?? "3.0.0", "touchID": defaults.bool(forKey: LOCK_KEY),
-            "glass": FileManager.default.fileExists(atPath: Bundle.main.bundlePath + "/Contents/Resources/Assets.car"), "store": IS_STORE])
+            "glass": FileManager.default.fileExists(atPath: Bundle.main.bundlePath + "/Contents/Resources/Assets.car"), "store": IS_STORE, "apns": IS_STORE])
     default: done(["ok": false, "error": "Unknown command " + cmd])
     }
   }
@@ -578,9 +626,14 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     NSUserNotificationCenter.default.deliver(n)
   }
   func userNotificationCenter(_ c: UNUserNotificationCenter, willPresent n: UNNotification, withCompletionHandler done: @escaping (UNNotificationPresentationOptions) -> Void) {
-    if #available(macOS 11.0, *) { done([.banner, .list]) } else { done([.alert]) }
+    // (Apple's own from the server: also its sound and the Dock badge)
+    let remote = n.request.content.userInfo["e11"] != nil
+    if #available(macOS 11.0, *) { done(remote ? [.banner, .list, .sound, .badge] : [.banner, .list]) } else { done([.alert]) }
   }
   func userNotificationCenter(_ c: UNUserNotificationCenter, didReceive r: UNNotificationResponse, withCompletionHandler done: @escaping () -> Void) {
+    #if APPSTORE
+    if let d = r.notification.request.content.userInfo["e11"] as? [String: Any] { DispatchQueue.main.async { self.openPush(d) }; return done() }
+    #endif
     let k = r.notification.request.content.userInfo["click"] as? String ?? ""
     DispatchQueue.main.async { self.clicked(k) }
     done()
