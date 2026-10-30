@@ -2358,9 +2358,9 @@ html.mac-nsb-o #app.sb-collapsed #detail { left: var(--nsb-slim, 108px); }
 /* the E11 mark beside the search box (Mac app with its own sidebar — the page's sidebar, with the logo, is hidden there):
    as tall as the search box, white in dark, black in light (Haris, 2026-10-31) */
 .tb-mark { display: none; }
-html.mac-nsb .tb-mark { display: inline-flex; align-items: center; height: 30px; margin-left: 4px; color: #fff; flex: none; }
+html.mac-nsb .tb-mark { display: inline-flex; align-items: center; margin-left: 4px; color: #fff; flex: none; }
 html.mac-nsb[data-theme="light"] .tb-mark { color: #000; }
-html.mac-nsb .tb-mark svg { height: 100%; width: auto; display: block; }
+html.mac-nsb .tb-mark svg { height: var(--search-h, 30px); width: auto; display: block; }
 /* shared task link opened in the browser, handing over to the Mac app */
 #open-app { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; background: var(--bg); }
 #open-app .oa-card { display: grid; gap: 16px; justify-items: center; text-align: center; padding: 28px 32px; border: 1px solid var(--border); border-radius: 12px; background: var(--raised, var(--bg)); }
