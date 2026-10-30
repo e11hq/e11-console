@@ -976,7 +976,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       ("inbox", pause(1500) + "return JSON.stringify({ view: ui.view })", {
         if let i = self.tabKeys.firstIndex(of: "inbox"), let item = self.tabBar.items?[i] { self.tabBar.selectedItem = item; self.tabBar(self.tabBar, didSelect: item) } }),
       ("me", "go('me'); " + pause(1200) + "for (let i = 0; i < 3; i++) { await Push.refresh(); " + pause(300) + " } return JSON.stringify({ lockRows: document.querySelectorAll('#ph-lock, [data-ph-lock]').length, pushRows: document.querySelectorAll('#ph-push').length })", nil),
-      ("client", "try { const c = db.clients.find((x) => (x.folders || []).some((f) => (f.files || []).length > 1)) || db.clients[0]; const f = (c.folders || []).find((x) => (x.files || []).length > 1) || (c.folders || [])[0]; if (!f) return JSON.stringify({ error: 'no folder' }); openClient(c.id, f.id); " + pause(1200) + "return JSON.stringify({ wide: document.getElementById('content').scrollWidth > innerWidth + 1 }) } catch (e) { return JSON.stringify({ error: String(e && e.message || e) }) }", nil),
+      ("client", "try { let c = db.clients.find((x) => (x.folders || []).some((f) => (f.files || []).length > 1)) || db.clients[0]; if (!c) { c = createClient('Sample client'); c.folders[0].files = [{ id: 'st-a1', name: 'Logo primary.png', size: 48000, at: nowISO() }, { id: 'st-a2', name: 'Brand guidelines.pdf', size: 2400000, at: nowISO() }, { id: 'st-a3', name: 'Logo lockup.ai', size: 4800000, at: nowISO() }] } const f = (c.folders || []).find((x) => (x.files || []).length > 1) || (c.folders || [])[0]; if (!f) return JSON.stringify({ error: 'no folder' }); openClient(c.id, f.id); " + pause(1200) + "return JSON.stringify({ wide: document.getElementById('content').scrollWidth > innerWidth + 1 }) } catch (e) { return JSON.stringify({ error: String(e && e.message || e) }) }", nil),
       ("task", "const t = db.tasks.find((x) => !x.parentId && !x.done && (x.comments || []).length) || db.tasks.find((x) => !x.parentId && !x.done); openTask(t.id); " + pause(1500) + "return JSON.stringify({ taskOpen: !!ui.taskId })", nil),
       ("sheet", "const m = showMenu(document.body, [{ html: '<div class=\"react-pick\">' + REACTIONS.map((e) => '<button>' + e + '</button>').join('') + '</div>' }, { label: 'Reply', icon: 'reply', run() {} }, { label: 'Edit comment', icon: 'edit', run() {} }, { label: 'Copy text', icon: 'copy', run() {} }, '-', { label: 'Delete comment', icon: 'trash', danger: true, run() {} }]); m.classList.add('cm-sheet'); " + pause(900) + geo + " const r = m.getBoundingClientRect(); return JSON.stringify({ menuTop: r.top, menuBottom: r.bottom, geo })", nil),
       ("back", "document.querySelectorAll('.menu, #ph-menu-scrim').forEach((x) => x.remove()); closeDetail(); " + pause(800) + "return JSON.stringify({ taskOpen: !!ui.taskId })", nil),
@@ -1480,7 +1480,10 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     // (the last option's card itself — the list has ~20 of its own after its last section)
     let ls = sections.count - 1
     let lastRow = ls >= 0 && !sections[ls].rows.isEmpty ? table.rectForRow(at: IndexPath(row: sections[ls].rows.count - 1, section: ls)).maxY : table.contentSize.height
-    let lastBottom = tableTop + lastRow - atEnd
+    var lastBottom = tableTop + lastRow - atEnd
+    // (the last option's real place on screen when it's showing — the sum above came out ~8 short at the end of a scroll
+    // although the screenshots showed the same gap as in a list that fits)
+    if ls >= 0, !sections[ls].rows.isEmpty, let cell = table.cellForRow(at: IndexPath(row: sections[ls].rows.count - 1, section: ls)) { lastBottom = cell.convert(cell.bounds, to: win).maxY }
     // (the first thing's top when scrolled to the start: the first card, or a title's text — the header is exactly its text + gap)
     let firstTop = tableTop + table.contentInset.top
     return (hidden, visBottom - lastBottom, card, firstTop - card.minY)
