@@ -500,7 +500,9 @@ const Cal = (() => {
     let items = [];
     if (k === 'channels') {
       const cur = new Set(t.channels || []);
-      items = CHANNELS.map(([key, name]) => ({ html: `<div class="mi"><span class="cal-ch" style="--c:${CH[key].color}">${CH[key].short}</span>${esc(name)}${ck(cur.has(key))}</div>`, run: () => { setChannels(t, cur.has(key) ? [...cur].filter((x) => x !== key) : [...cur, key]); setTimeout(() => { const a = document.querySelector('[data-action="field-pick"][data-k="channels"]'); if (a) fieldMenu(a, 'channels', t); }, 0); } }));
+      // (iPhone app 13+: the native sheet stays open while channels are ticked — multi; elsewhere the menu reopens)
+      const stay = typeof NativeSheet !== 'undefined' && NativeSheet.canMulti() && NativeSheet.fits(12);
+      items = CHANNELS.map(([key, name]) => ({ multi: stay, html: `<div class="mi"><span class="cal-ch" style="--c:${CH[key].color}">${CH[key].short}</span>${esc(name)}${ck(cur.has(key))}</div>`, run: () => { const now = new Set(t.channels || []); setChannels(t, now.has(key) ? [...now].filter((x) => x !== key) : [...now, key]); if (stay) return; setTimeout(() => { const a = document.querySelector('[data-action="field-pick"][data-k="channels"]'); if (a) fieldMenu(a, 'channels', t); }, 0); } }));
       if (cur.size) items.push({ html: '<div class="sep"></div>' }, { html: `<div class="mi fl-clear">${icon('x')}Clear</div>`, run: () => setChannels(t, []) });
     } else {
       const day = dayOf(t) || todayStr();

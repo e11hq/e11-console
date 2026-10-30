@@ -519,6 +519,7 @@ const Phone = (() => {
     // carry on with the tucked one (only a tucked one: a sheet still sliding away is replaced, or the new one
     // would vanish with it a moment later)
     if (old && old.dataset.kind === o.kind && old._expand && old.classList.contains('docked')) { old._expand(); return; }
+    if (!o.quiet) Haptic.light();   // (the same light knock as every other sheet)
     root.innerHTML = `<div class="ph-scrim" data-kind="${o.kind || ''}"><div class="ph-sheet" role="dialog"><div class="ph-handle"><i class="ph-grab"></i></div>${html}<div class="ph-dock-hint">${esc(o.dockLabel || 'Draft')} · <b>Tap to continue</b></div></div></div>`;
     const scrim = root.firstElementChild;
     const box = scrim.firstElementChild;
@@ -1331,7 +1332,7 @@ const SheetMotion = (() => {
    page scrolling underneath. Tapping the dark area closes the menu. (The @mention list while typing is left alone.) */
 (() => {
   let scrim = null;
-  const open = () => !!document.querySelector('body > .menu:not(.mention-pop):not(.ph-out), .ph-pan > .menu:not(.ph-out)');
+  const open = () => !!document.querySelector('body > .menu:not(.mention-pop):not(.ph-out):not(.ns-probe), .ph-pan > .menu:not(.ph-out)');
   const sync = () => {
     const on = Phone.on && open();
     document.body.classList.toggle('ph-menu-open', on);
@@ -1366,6 +1367,9 @@ const SheetMotion = (() => {
   };
   new MutationObserver((recs) => {
     recs.forEach((r) => r.addedNodes.forEach((n) => { if (Phone.on && n.nodeType === 1 && n.classList.contains('menu')) wake(n); }));
+    // every sheet that opens gives the same light knock as the task's ⋯ (people pickers, search lists… made outside
+    // showMenu); a sheet that already knocked isn't knocked twice (taps closer than 0.15 s count as one)
+    recs.forEach((r) => r.addedNodes.forEach((n) => { if (Phone.on && n.nodeType === 1 && n.classList.contains('menu') && !n.classList.contains('mention-pop') && !n.classList.contains('ns-probe')) Haptic.light(); }));
     sync();
   }).observe(document.body, { childList: true });
   document.addEventListener('ph-menu-change', sync);

@@ -13,7 +13,7 @@ import PhotosUI
 import UniformTypeIdentifiers
 
 // Version of this iPhone app's native part (raise it with changes the web app needs to know about)
-let SHELL_VERSION = 12   // 12: native sheets also with colour dots, a row of colours / emoji / numbers (chips), tinted icons, locked rows · 11: plain menus as iOS's own sheets (nativeSheet; the page: NativeSheet in app.js, showMenu(…, { native: true })) · 10: My Tasks, Inbox and Team lists swiped by iOS itself (Pager.syncLists in phone.js) · 9: a task’s Details / Comments swiped by iOS itself (the page: Pager in phone.js) · 8: iOS haptics for the page (haptic kind: light / medium / selection / success / warning / error) · 7: the comment box rides down / up with the keyboard frame by frame (__e11KbStep) · 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
+let SHELL_VERSION = 13   // 13: a native sheet can stay open for ticking several (multi; each tick: window.__e11SheetPick) · 12: native sheets also with colour dots, a row of colours / emoji / numbers (chips), tinted icons, locked rows · 11: plain menus as iOS's own sheets (nativeSheet; the page: NativeSheet in app.js, showMenu(…, { native: true })) · 10: My Tasks, Inbox and Team lists swiped by iOS itself (Pager.syncLists in phone.js) · 9: a task’s Details / Comments swiped by iOS itself (the page: Pager in phone.js) · 8: iOS haptics for the page (haptic kind: light / medium / selection / success / warning / error) · 7: the comment box rides down / up with the keyboard frame by frame (__e11KbStep) · 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
 let procEnv = ProcessInfo.processInfo.environment
 let SELFTEST = procEnv["E11_SELFTEST"] ?? ""           // the build machine's self-test in the simulator
 let info = Bundle.main.infoDictionary ?? [:]
@@ -747,7 +747,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       // a plain menu from the page as a real iPhone sheet (floating; iOS grows it as it's pulled); replies with the
       // chosen row's index, or -1 when it's closed without a choice
       if presentedViewController != nil { return done(["ok": false]) }
-      let vc = NativeSheetVC(a, dark: statusStyle != .darkContent) { i, swatch in
+      let vc = NativeSheetVC(a, dark: statusStyle != .darkContent, pick: { [weak self] i in
+        self?.pageJS("window.__e11SheetPick && window.__e11SheetPick(\(i))")
+      }) { i, swatch in
         if i >= 0 { FocusAfterPicker.allow() }   // (a text box the option opens still brings the keyboard)
         var r: [String: Any] = ["ok": true, "index": i]
         if let sw = swatch { r["swatch"] = sw }
@@ -1053,7 +1055,7 @@ enum FocusAfterPicker {
    it grows with the finger when pulled and springs back; dragged down or tapped outside, it closes. */
 final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewDelegate, UISheetPresentationControllerDelegate {
   struct Chip { let i: Int; let swatch: String?; let label: String?; let color: UIColor?; let on: Bool; let disabled: Bool }
-  struct Row { let i: Int; let label: String; let sub: String?; let icon: String?; let danger: Bool; let checked: Bool; let disabled: Bool; let dot: UIColor?; let tint: UIColor?; let locked: Bool; let chips: [Chip]?; let chipKind: String }
+  struct Row { let i: Int; let label: String; let sub: String?; let icon: String?; let danger: Bool; let checked: Bool; let disabled: Bool; let dot: UIColor?; let tint: UIColor?; let locked: Bool; let chips: [Chip]?; let chipKind: String; var multi: Bool = false }
   struct Section { let header: String?; let rows: [Row]; var photo: UIImage? = nil; var initials: String? = nil; var color: UIColor? = nil }
   private var sections: [Section] = []
   private let table = UITableView(frame: .zero, style: .insetGrouped)
@@ -1076,8 +1078,12 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     "send": "paperplane", "play": "play", "smile": "face.smiling", "more": "ellipsis", "check-circle": "checkmark.circle",
     "checklist": "checklist", "activity": "waveform.path.ecg", "details": "doc.text", "arrow": "arrow.right", "select": "checkmark.square",
   ]
-  init(_ a: [String: Any], dark: Bool, answer: @escaping (Int, String?) -> Void) {
+  private var multi = false
+  private var pick: ((Int) -> Void)?
+  init(_ a: [String: Any], dark: Bool, pick: ((Int) -> Void)? = nil, answer: @escaping (Int, String?) -> Void) {
     self.answer = answer
+    self.pick = pick
+    multi = (a["multi"] as? Bool) == true
     super.init(nibName: nil, bundle: nil)
     for sec in a["sections"] as? [[String: Any]] ?? [] {
       let rows = (sec["rows"] as? [[String: Any]] ?? []).map { r -> Row in
@@ -1087,7 +1093,7 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
         return Row(i: (r["i"] as? NSNumber)?.intValue ?? -1, label: r["label"] as? String ?? "", sub: (r["sub"] as? String).flatMap { $0.isEmpty ? nil : $0 },
                    icon: r["icon"] as? String, danger: (r["danger"] as? Bool) == true, checked: (r["checked"] as? Bool) == true,
                    disabled: (r["disabled"] as? Bool) == true, dot: NativeSheetVC.color(r["dot"]), tint: NativeSheetVC.color(r["tint"]),
-                   locked: (r["locked"] as? Bool) == true, chips: chips, chipKind: r["kind"] as? String ?? "")
+                   locked: (r["locked"] as? Bool) == true, chips: chips, chipKind: r["kind"] as? String ?? "", multi: (r["multi"] as? Bool) == true)
       }
       if !rows.isEmpty {
         var sc = Section(header: (sec["header"] as? String).flatMap { $0.isEmpty ? nil : $0 }, rows: rows)
@@ -1228,6 +1234,19 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
   func tableView(_ tableView: UITableView, didSelectRowAt ip: IndexPath) {
     let r = sections[ip.section].rows[ip.row]
     guard r.chips == nil, !r.disabled, r.i >= 0 else { return }
+    // ticking several (channels…): the sheet stays open, the tick flips here, the page is told each time
+    if multi && r.multi {
+      tableView.deselectRow(at: ip, animated: true)
+      let old = sections[ip.section].rows[ip.row]
+      var rows = sections[ip.section].rows
+      rows[ip.row] = Row(i: old.i, label: old.label, sub: old.sub, icon: old.icon, danger: old.danger, checked: !old.checked, disabled: old.disabled,
+                         dot: old.dot, tint: old.tint, locked: old.locked, chips: old.chips, chipKind: old.chipKind, multi: true)
+      sections[ip.section] = Section(header: sections[ip.section].header, rows: rows, photo: sections[ip.section].photo, initials: sections[ip.section].initials, color: sections[ip.section].color)
+      if let cell = tableView.cellForRow(at: ip) { cell.accessoryType = rows[ip.row].checked ? .checkmark : .none }
+      UISelectionFeedbackGenerator().selectionChanged()
+      pick?(r.i)
+      return
+    }
     choose(r.i, nil)
   }
   private func choose(_ i: Int, _ swatch: String?) {

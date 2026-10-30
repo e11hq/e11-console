@@ -4402,6 +4402,7 @@ const NativeSheet = (() => {
   if (typeof Host !== 'undefined' && Host.isIOSApp) NativeMac.call('appInfo').then((r) => { shell = Number(r && r.shell) || 0; }).catch(() => {});
   // native: true = plain rows (app 11+); a number = the app version the menu needs (12: colours, emoji, numbers)
   const fits = (need = true) => shell >= (need === true ? 11 : Number(need) || 99) && typeof Phone !== 'undefined' && Phone.on;
+  const canMulti = () => shell >= 13;
   const rgb = (c) => { const m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)/.exec(c || ''); return m ? [+m[1], +m[2], +m[3]] : null; };
   // a colour from a dot / badge / pill: its --c, else its fill, else its text colour
   const colorOf = (el) => {
@@ -4485,7 +4486,12 @@ const NativeSheet = (() => {
     // (the button that opened it mustn't stay lit behind the sheet: iPhone keeps a tapped button "hovered")
     try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch (e) { /* fine */ }
     const fallback = () => { const w = showMenu(anchor, items); if (w) { w._onSwatch = m._onSwatch; if (m._items) w._items = m._items; } };
-    NativeMac.call('nativeSheet', { sections: rows(items) })
+    // (ticking several: options marked multi keep the sheet open; each tick runs here straight away)
+    const multi = items.some((it) => it && it.multi);
+    const secs = rows(items);
+    if (multi) secs.forEach((sec) => sec.rows.forEach((r) => { if (r.i >= 0 && items[r.i] && items[r.i].multi) r.multi = true; }));
+    window.__e11SheetPick = (i) => { const it = items[i]; if (it && it.run) { NativeSheet.ticking = true; try { it.run(); } finally { NativeSheet.ticking = false; } } };
+    NativeMac.call('nativeSheet', { sections: secs, multi })
       .then((res) => {
         if (!res || res.ok === false) { fallback(); return; }   // (the app couldn't show it: the page's own sheet)
         if (res.swatch != null) { if (m._onSwatch) m._onSwatch(res.swatch); return; }
@@ -4495,7 +4501,7 @@ const NativeSheet = (() => {
       .catch(fallback);
     return m;
   }
-  return { fits, open, rows };
+  return { fits, open, rows, canMulti, ticking: false };
 })();
 
 function dialog({ title, body = '', bodyHtml = '', input = null, okText = 'OK', cancelText = 'Cancel', danger = false, colors = null }) {
