@@ -2176,7 +2176,7 @@ const NativeComment = (() => {
       if (addComment(cid)) { lastKey = null; sync(true); if (end) setTimeout(() => { const g = feed(); if (g) g.scrollTop = g.scrollHeight; }, 60); }
       return;
     }
-    if (ev.ev === 'attach') { attachFiles('comment', cid); return; }
+    if (ev.ev === 'attach') { attachFiles('comment', cid, null, ev.source || null); return; }   // (Photos / Camera / Files straight away)
     if (ev.ev === 'removeFile') {
       const list = ui.commentFiles[ev.key] || [];
       const a = list.find((x) => x.id === ev.id);

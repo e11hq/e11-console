@@ -20,6 +20,7 @@ final class CommentBar: UIView, UITextViewDelegate, UITableViewDataSource, UITab
   private let tilesScroll = UIScrollView()
   private let tilesStack = UIStackView()
   private let row = UIStackView()
+  private let attachRow = UIStackView()
   private let plus = UIButton(type: .system)
   private let box = UIView()
   let text = UITextView()
@@ -108,7 +109,7 @@ final class CommentBar: UIView, UITextViewDelegate, UITableViewDataSource, UITab
     plus.tintColor = .label
     plus.backgroundColor = .tertiarySystemFill
     plus.layer.cornerRadius = 18
-    plus.addAction(UIAction { [weak self] _ in guard let self else { return }; self.onEvent?(["ev": "attach", "key": self.key]) }, for: .touchUpInside)
+    plus.addAction(UIAction { [weak self] _ in self?.toggleAttach() }, for: .touchUpInside)
     box.backgroundColor = .systemBackground
     box.layer.cornerRadius = 18; box.layer.cornerCurve = .continuous
     box.layer.borderWidth = 1; box.layer.borderColor = UIColor.separator.cgColor
@@ -137,6 +138,26 @@ final class CommentBar: UIView, UITextViewDelegate, UITableViewDataSource, UITab
       hint.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 15), hint.centerYAnchor.constraint(equalTo: box.topAnchor, constant: 18),
       hint.trailingAnchor.constraint(lessThanOrEqualTo: box.trailingAnchor, constant: -10),
     ])
+    // Photos · Camera · Files: under the + (as before), the keyboard stays; typing again closes it
+    attachRow.axis = .horizontal; attachRow.spacing = 8; attachRow.distribution = .fillEqually
+    for (src, sym, title) in [("photos", "photo.on.rectangle", "Photos"), ("camera", "camera", "Camera"), ("files", "folder", "Files")] {
+      var c = UIButton.Configuration.gray()
+      c.image = UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .medium))
+      c.title = title
+      c.imagePadding = 6
+      c.cornerStyle = .capsule
+      c.baseForegroundColor = .label
+      let b = UIButton(configuration: c)
+      b.heightAnchor.constraint(equalToConstant: 40).isActive = true
+      b.addAction(UIAction { [weak self] _ in
+        guard let self else { return }
+        self.toggleAttach(false)
+        self.onEvent?(["ev": "attach", "key": self.key, "source": src])
+      }, for: .touchUpInside)
+      attachRow.addArrangedSubview(b)
+    }
+    attachRow.isHidden = true; attachRow.alpha = 0
+    stack.addArrangedSubview(attachRow)
     stack.addArrangedSubview(row)
     // @mentions: people above the box
     mentionCard.backgroundColor = .secondarySystemGroupedBackground
@@ -261,7 +282,19 @@ final class CommentBar: UIView, UITextViewDelegate, UITableViewDataSource, UITab
   private func refresh() {
     hint.isHidden = !(text.text ?? "").isEmpty
     let ready = !uploading && (!isEmpty || hasFiles)
-    send.isHidden = isEmpty && !hasFiles && !uploading
+    // (the send button comes and goes with a short spring — the text box widens / narrows smoothly, not in a snap)
+    let hide = isEmpty && !hasFiles && !uploading
+    if send.isHidden != hide {
+      if window == nil { send.isHidden = hide; send.alpha = hide ? 0 : 1 } else {
+        if !hide { send.alpha = 0; send.transform = CGAffineTransform(scaleX: 0.6, y: 0.6) }
+        UIView.animate(withDuration: 0.32, delay: 0, usingSpringWithDamping: 0.82, initialSpringVelocity: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
+          self.send.isHidden = hide
+          self.send.alpha = hide ? 0 : 1
+          self.send.transform = hide ? CGAffineTransform(scaleX: 0.6, y: 0.6) : .identity
+          self.layoutIfNeeded()
+        }
+      }
+    }
     send.isEnabled = ready
     send.backgroundColor = ready ? accent : accent.withAlphaComponent(0.4)
     box.layer.borderColor = UIColor.separator.resolvedColor(with: traitCollection).cgColor
@@ -299,7 +332,21 @@ final class CommentBar: UIView, UITextViewDelegate, UITableViewDataSource, UITab
       text.typingAttributes = t
     }
   }
+  // + opens (or closes) the Photos · Camera · Files row; the + turns into × while it's open
+  func toggleAttach(_ to: Bool? = nil) {
+    let open = to ?? attachRow.isHidden
+    guard open == attachRow.isHidden else { return }
+    UISelectionFeedbackGenerator().selectionChanged()
+    UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.85, initialSpringVelocity: 0, options: [.beginFromCurrentState]) {
+      self.attachRow.isHidden = !open
+      self.attachRow.alpha = open ? 1 : 0
+      self.plus.transform = open ? CGAffineTransform(rotationAngle: .pi / 4) : .identity
+      self.layoutIfNeeded()
+      self.superview?.layoutIfNeeded()
+    }
+  }
   func textViewDidChange(_ textView: UITextView) {
+    if !attachRow.isHidden { toggleAttach(false) }
     tidyMentions()
     refresh()
     fitText()
