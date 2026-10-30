@@ -752,7 +752,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       }) { i, swatch in
         if i >= 0 { FocusAfterPicker.allow() }   // (a text box the option opens still brings the keyboard)
         var r: [String: Any] = ["ok": true, "index": i]
-        if let sw = swatch { r["swatch"] = sw }
+        if i == -2 { r["text"] = swatch ?? "" } else if let sw = swatch { r["swatch"] = sw }
         done(r)
       }
       vc.loadPhoto = { [weak self] u, got in self?.fetchPhoto(u, got) ?? got(nil) }
@@ -1092,7 +1092,7 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
   struct Chip { let i: Int; let swatch: String?; let label: String?; let color: UIColor?; let on: Bool; let disabled: Bool }
   struct Row { let i: Int; let label: String; let sub: String?; let icon: String?; let danger: Bool; let checked: Bool; let disabled: Bool; let dot: UIColor?; let tint: UIColor?; let locked: Bool; let chips: [Chip]?; let chipKind: String; var multi: Bool = false
                 var avatar: Avatar? = nil; var find: String = "" }
-  struct Avatar { let photo: URL?; let initials: String; let color: UIColor }
+  struct Avatar { let photo: URL?; let initials: String; let color: UIColor; var square = false }   // (square: a client's logo)
   struct Section { let header: String?; let rows: [Row]; var photo: UIImage? = nil; var initials: String? = nil; var color: UIColor? = nil }
   private var sections: [Section] = []      // (what's shown: all of them, or those matching the search)
   private var allSections: [Section] = []
@@ -1100,6 +1100,7 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
   // a search box at the top (people pickers): the list is filtered here as you type, by name and anything in find
   private var searchText: String?
   private var emptyText = "No matches"
+  private var customText: String?           // ("Use “%@”": what's typed can be chosen as it is — a city that isn't listed)
   private let searchBox = UISearchBar()
   private var frozen = false                // (searching: the sheet keeps its size while the list changes)
   private var kbPad: CGFloat = 0, baseBottom: CGFloat = 0
@@ -1149,7 +1150,7 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
                    disabled: (r["disabled"] as? Bool) == true, dot: NativeSheetVC.color(r["dot"]), tint: NativeSheetVC.color(r["tint"]),
                    locked: (r["locked"] as? Bool) == true, chips: chips, chipKind: r["kind"] as? String ?? "", multi: (r["multi"] as? Bool) == true,
                    avatar: (r["avatar"] as? [String: Any]).map { av in Avatar(photo: (av["photo"] as? String).flatMap { URL(string: $0) },
-                     initials: av["initials"] as? String ?? "?", color: NativeSheetVC.color(av["color"]) ?? .systemGray) },
+                     initials: av["initials"] as? String ?? "?", color: NativeSheetVC.color(av["color"]) ?? .systemGray, square: (av["square"] as? Bool) == true) },
                    find: r["find"] as? String ?? "")
       }
       if !rows.isEmpty {
@@ -1164,6 +1165,7 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     allSections = sections
     searchText = (a["search"] as? String).flatMap { $0.isEmpty ? nil : $0 }
     if let e = a["empty"] as? String, !e.isEmpty { emptyText = e }
+    customText = (a["custom"] as? String).flatMap { $0.isEmpty ? nil : $0 }
     overrideUserInterfaceStyle = dark ? .dark : .light
     modalPresentationStyle = .pageSheet
     if let sh = sheetPresentationController {
@@ -1253,6 +1255,10 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
       let rows = sec.rows.filter { r in r.chips == nil && r.i >= 0 && (has(r.label) || has(r.find)) }
       return rows.isEmpty ? nil : Section(header: sec.header, rows: rows, photo: sec.photo, initials: sec.initials, color: sec.color)
     }
+    if let c = customText, !t.isEmpty, !allSections.contains(where: { sec in sec.rows.contains { row in row.label.caseInsensitiveCompare(t) == .orderedSame } }) {
+      sections.insert(Section(header: nil, rows: [Row(i: -2, label: c.replacingOccurrences(of: "%@", with: t), sub: nil, icon: "plus", danger: false, checked: false,
+                                                     disabled: false, dot: nil, tint: nil, locked: false, chips: nil, chipKind: "")]), at: 0)
+    }
     table.backgroundView?.isHidden = !sections.isEmpty
     table.reloadData()
     table.setContentOffset(CGPoint(x: 0, y: -table.contentInset.top), animated: false)
@@ -1266,14 +1272,15 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
         load(u) { [weak self] img in
           NativeSheetVC.loading.remove(u.absoluteString)
           guard let img else { return }
-          NativeSheetVC.photos.setObject(NativeSheetVC.roundAvatar(img), forKey: u.absoluteString as NSString)
+          NativeSheetVC.photos.setObject(av.square ? NativeSheetVC.logo(img) : NativeSheetVC.roundAvatar(img), forKey: u.absoluteString as NSString)
           self?.refreshRows(photo: u)
         }
       }
     }
     let d: CGFloat = 30
     return UIGraphicsImageRenderer(size: CGSize(width: d, height: d)).image { _ in
-      av.color.setFill(); UIBezierPath(ovalIn: CGRect(x: 0, y: 0, width: d, height: d)).fill()
+      let box = CGRect(x: 0, y: 0, width: d, height: d)
+      av.color.setFill(); (av.square ? UIBezierPath(roundedRect: box, cornerRadius: 6) : UIBezierPath(ovalIn: box)).fill()
       let f = UIFont.systemFont(ofSize: 12, weight: .semibold)
       let s = NSAttributedString(string: av.initials, attributes: [.font: f, .foregroundColor: UIColor.white])
       let z = s.size(); s.draw(at: CGPoint(x: (d - z.width) / 2, y: (d - z.height) / 2))
@@ -1286,6 +1293,18 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     return UIGraphicsImageRenderer(size: CGSize(width: d, height: d)).image { _ in
       UIBezierPath(ovalIn: CGRect(x: 0, y: 0, width: d, height: d)).addClip()
       src.draw(in: CGRect(x: (d - w * sc) / 2, y: (d - h * sc) / 2, width: w * sc, height: h * sc))
+    }
+  }
+  // a client's logo: whole, on a white rounded square (as on the page)
+  private static func logo(_ src: UIImage) -> UIImage {
+    let d: CGFloat = 30, w = src.size.width, h = src.size.height
+    guard w > 0, h > 0 else { return src }
+    let k = min((d - 4) / w, (d - 4) / h)
+    return UIGraphicsImageRenderer(size: CGSize(width: d, height: d)).image { _ in
+      let box = CGRect(x: 0, y: 0, width: d, height: d)
+      UIBezierPath(roundedRect: box, cornerRadius: 6).addClip()
+      UIColor.white.setFill(); UIRectFill(box)
+      src.draw(in: CGRect(x: (d - w * k) / 2, y: (d - h * k) / 2, width: w * k, height: h * k))
     }
   }
   private func refreshRows(photo u: URL) {
@@ -1450,13 +1469,14 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     cell.accessoryType = on ? .checkmark : .none
     if r.locked && !on { let lock = UIImageView(image: UIImage(systemName: "lock.fill")); lock.tintColor = .tertiaryLabel; cell.accessoryView = lock }
     cell.tintColor = .systemBlue
-    cell.selectionStyle = r.disabled || r.i < 0 ? .none : .default
+    cell.selectionStyle = r.disabled || (r.i < 0 && r.i != -2) ? .none : .default
     if #available(iOS 26, *) { cell.backgroundColor = UIColor.secondarySystemGroupedBackground.withAlphaComponent(0.6) }
     return cell
   }
-  func tableView(_ tableView: UITableView, shouldHighlightRowAt ip: IndexPath) -> Bool { let r = sections[ip.section].rows[ip.row]; return r.chips == nil && !r.disabled && r.i >= 0 }
+  func tableView(_ tableView: UITableView, shouldHighlightRowAt ip: IndexPath) -> Bool { let r = sections[ip.section].rows[ip.row]; return r.chips == nil && !r.disabled && (r.i >= 0 || r.i == -2) }
   func tableView(_ tableView: UITableView, didSelectRowAt ip: IndexPath) {
     let r = sections[ip.section].rows[ip.row]
+    if r.i == -2 { return choose(-2, (searchBox.text ?? "").trimmingCharacters(in: .whitespaces)) }   // (what's typed, as it is)
     guard r.chips == nil, !r.disabled, r.i >= 0 else { return }
     // ticking several (channels…): the sheet stays open, the tick flips here, the page is told each time
     if multi && r.multi {

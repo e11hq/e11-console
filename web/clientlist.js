@@ -94,6 +94,14 @@ const ClientList = (() => {
   function pickAms(anchor, st, done, key = 'ams') {
     const pool = key === 'socials' ? socialList : amList, what = key === 'socials' ? 'Social people' : 'Account Managers';
     closeMenus();
+    // iPhone app 14+: iOS's own sheet — search, each person's photo, tick several (the form behind updates each time)
+    if (typeof NativeSheet !== 'undefined' && NativeSheet.canPeople() && pool().length) {
+      const items = pool().map((u) => ({ label: fullName(u), hint: key === 'socials' && isSocialMgr(u.id) ? 'Social Manager' : '', avatar: u.id,
+        find: `${fullName(u)} ${u.email || ''}`, multi: true, checked: st[key].some((a) => a.id === u.id),
+        run: () => { st[key] = st[key].some((a) => a.id === u.id) ? st[key].filter((a) => a.id !== u.id) : st[key].concat({ id: u.id }); done(); } }));
+      showMenu(anchor, items, { native: 14, search: items.length > 6 ? `Search ${what}` : null, empty: 'Nobody matches' });
+      return;
+    }
     const pop = document.createElement('div');
     pop.className = 'menu asg-pop cd-pick';
     pop.innerHTML = `<div class="ap-search">${icon('search')}<input placeholder="Search ${what}…" autocomplete="off" spellcheck="false"></div><div class="ap-list"></div>`;

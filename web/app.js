@@ -1870,7 +1870,11 @@ function workMenu(anchor, kind) {
     });
     if (!items.length) items.push({ html: `<div class="wf-mh">Nobody here yet</div>` });
   }
-  const m = showMenu(anchor, items.map((it, i) => (it.run ? { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) } : it)), { native: kind === 'due' || kind === 'created' });
+  // (iPhone app 14+: the people lists too — their photos, tick several while the sheet stays open; "All Account
+  //  Managers & Admins" closes it, as it clears the ticks)
+  const people = kind !== 'due' && kind !== 'created';
+  if (people && NativeSheet.canPeople()) items.forEach((it) => { if (it.run && /wf-person">\s*<span class="av/.test(it.html)) it.multi = true; });
+  const m = showMenu(anchor, items.map((it, i) => (it.run ? { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) } : it)), { native: people ? 14 : true });
   m.classList.add('wf-menu');
 }
 
@@ -4456,7 +4460,7 @@ const NativeSheet = (() => {
     const name = u ? fullName(u) : '';
     const t = document.createElement('i'); t.style.color = avColor(uid || 'x'); document.body.appendChild(t);
     const color = rgb(getComputedStyle(t).color) || [120, 120, 140]; t.remove();
-    const a = { initials: initials(name || '?'), color };
+    const a = { initials: initials(name || '?'), color, square: false };
     if (u && u.avatar && Host.isNative) a.photo = new URL(fileUrl({ path: u.avatar }), location.href).href;
     return a;
   }
@@ -4482,6 +4486,13 @@ const NativeSheet = (() => {
       } catch (e) { /* fall back to initials */ }
     }
     return { initials: av.textContent.trim(), color: rgb(av.style.background || av.style.backgroundColor) || [120, 120, 140] };
+  }
+  // a person's picture (.av) or a client's logo (.cl-logo) in a row: its image's address, else its letters on its colour
+  function picOf(el) {
+    const img = el.querySelector('img'), square = el.matches('.cl-logo');
+    const a = { initials: img ? '' : el.textContent.trim(), color: colorOf(el) || [120, 120, 140], square };
+    if (img && img.getAttribute('src')) a.photo = new URL(img.getAttribute('src'), location.href).href;
+    return a;
   }
   function rows(items) {
     const probe = document.createElement('div');
@@ -4511,16 +4522,18 @@ const NativeSheet = (() => {
       if (el.matches('.pm-grid')) { cur().rows.push({ kind: 'num', chips: [...el.querySelectorAll('button')].map((b) => ({ i: b.dataset.mi != null ? Number(b.dataset.mi) : -1, label: b.textContent.trim(), on: b.classList.contains('cur'), disabled: b.disabled || b.classList.contains('taken') })) }); return; }
       if (el.matches('.mi')) {
         const dotEl = el.querySelector('.sw, .cal-ch, .role-pill, .fl-pill, .dot');
+        const picEl = canPeople() ? el.querySelector('.av, .cl-logo') : null;
         const flag = el.querySelector('.prio-flag');
         const ic = [...el.querySelectorAll('.ic[data-i]')].find((x) => !x.closest('.wf-ck, .mi-lock'));
         const copy = el.cloneNode(true);
-        copy.querySelectorAll('.ic, .wf-ck, small, .mi-lock').forEach((x) => x.remove());
+        copy.querySelectorAll('.ic, .wf-ck, small, .mi-lock' + (picEl ? ', .av, .cl-logo' : '')).forEach((x) => x.remove());
         const sub = [...el.querySelectorAll('small')].map((x) => x.textContent.trim()).filter(Boolean).join(' · ');
         const label = (dotEl && dotEl.matches('.cal-ch') ? copy.textContent.replace(dotEl.textContent, '') : copy.textContent).replace(/\s+/g, ' ').trim();
         const disabled = el.classList.contains('disabled');
         cur().rows.push({ i: disabled ? -1 : idx(el, i, it), label, sub: sub || it.hint || '', icon: ic ? ic.dataset.i : '',
           danger: el.classList.contains('danger') || !!it.danger, checked: el.classList.contains('cur') || !!el.querySelector('.wf-ck'), disabled,
-          locked: el.classList.contains('mi-locked'), dot: dotEl ? colorOf(dotEl) : null, tint: flag ? colorOf(flag) : null });
+          locked: el.classList.contains('mi-locked'), dot: dotEl ? colorOf(dotEl) : null, tint: flag ? colorOf(flag) : null,
+          avatar: picEl ? picOf(picEl) : null, find: it.find || '' });
         return;
       }
       [...el.children].forEach((c) => take(c, i, it));   // (a wrapper, e.g. the priority menu: its parts in order)
@@ -4552,9 +4565,10 @@ const NativeSheet = (() => {
     const secs = rows(items);
     if (multi) secs.forEach((sec) => sec.rows.forEach((r) => { if (r.i >= 0 && items[r.i] && items[r.i].multi) r.multi = true; }));
     window.__e11SheetPick = (i) => { const it = items[i]; if (it && it.run) { NativeSheet.ticking = true; try { it.run(); } finally { NativeSheet.ticking = false; } } };
-    NativeMac.call('nativeSheet', { sections: secs, multi, search: opts.search || null, empty: opts.empty || null })
+    NativeMac.call('nativeSheet', { sections: secs, multi, search: opts.search || null, empty: opts.empty || null, custom: opts.custom || null })
       .then((res) => {
         if (!res || res.ok === false) { fallback(); return; }   // (the app couldn't show it: the page's own sheet)
+        if (res.text != null) { if (opts.onText && String(res.text).trim()) opts.onText(String(res.text)); return; }   // (typed in the search box: "Use …")
         if (res.swatch != null) { if (m._onSwatch) m._onSwatch(res.swatch); return; }
         const list = m._items || items, i = Number(res.index);
         if (i >= 0 && list[i] && list[i].run) list[i].run();
@@ -6948,7 +6962,8 @@ function projectClientMenu(anchor, p) {
     ...list.map((c) => ({ html: `<div class="mi ${p.clientId === c.id ? 'cur' : ''}">${clientLogoHTML(c, 18)}${esc(c.name)}</div>`, run: () => { p.clientId = c.id; persist(0); render(); toast(`${p.name} linked to ${c.name}`); } })),
     ...(p.clientId ? ['-', { label: 'No client', icon: 'x', run: () => { delete p.clientId; persist(0); render(); } }] : []),
     ...(!list.length ? [{ html: '<div class="mi-note">No clients yet — add one in Client Assets</div>' }] : []),
-  ].map((it, i) => (it && it.html && it.run ? { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) } : it)));
+  ].map((it, i) => (it && it.html && it.run ? { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) } : it)),
+  { native: 14, search: list.length > 8 ? 'Search clients' : null, empty: 'No client matches' });   // (iPhone app 14+: logos, search)
 }
 // A picture dragged from this page itself (on iPhone: touch and hold an image, then move it) is not a new file:
 // dropping it back on the page never uploads it again
@@ -8449,6 +8464,21 @@ function pickPlace(btn, kind) {
   closeMenus();
   const country = ($('#pf-country') || {}).dataset ? $('#pf-country').dataset.val : '';
   const all = kind === 'country' ? E11_PLACES.COUNTRIES : E11_PLACES.cities(country);
+  const set = (x) => {
+    btn.dataset.val = x.v;
+    btn.innerHTML = `${x.v ? esc(x.v) : `<span class="pf-ph">Choose your ${kind}</span>`}${icon('chev')}`;
+    // a new country: its city starts again
+    if (kind === 'country' && x.v !== cur0) { const c = $('#pf-city'); if (c) { c.dataset.val = ''; c.innerHTML = `<span class="pf-ph">Choose your city</span>${icon('chev')}`; } }
+  };
+  const cur0 = btn.dataset.val || '';
+  // iPhone app 14+: iOS's own sheet with a search box; a city that isn't listed: type it, then "Use …"
+  if (NativeSheet.canPeople() && all.length) {
+    const items = all.map((x) => ({ label: x, checked: x === cur0, run: () => set({ v: x }) }));
+    if (cur0) items.unshift({ label: 'Not set', icon: 'x', run: () => set({ v: '' }) }, '-');
+    showMenu(btn, items, { native: 14, search: kind === 'country' ? 'Search countries' : 'Search or type your city', empty: kind === 'country' ? 'No country matches' : 'Type the name of your city',
+      custom: kind === 'city' ? 'Use “%@”' : null, onText: (q) => set({ v: q.trim() }) });
+    return;
+  }
   const pop = document.createElement('div');
   pop.className = 'menu asg-pop pl-pop';
   pop.innerHTML = `<div class="ap-search">${icon('search')}<input placeholder="${kind === 'country' ? 'Search countries…' : all.length ? 'Search or type your city…' : 'Type your city…'}" autocomplete="off" spellcheck="false"></div><div class="ap-list"></div>`;
