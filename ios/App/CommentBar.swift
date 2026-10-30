@@ -20,7 +20,6 @@ final class CommentBar: UIView, UITextViewDelegate, UITableViewDataSource, UITab
   private let tilesScroll = UIScrollView()
   private let tilesStack = UIStackView()
   private let row = UIStackView()
-  private let attachRow = UIStackView()
   private let plus = UIButton(type: .system)
   private let box = UIView()
   let text = UITextView()
@@ -109,7 +108,7 @@ final class CommentBar: UIView, UITextViewDelegate, UITableViewDataSource, UITab
     plus.tintColor = .label
     plus.backgroundColor = .tertiarySystemFill
     plus.layer.cornerRadius = 18
-    plus.addAction(UIAction { [weak self] _ in self?.toggleAttach() }, for: .touchUpInside)
+    plus.addAction(UIAction { [weak self] _ in self?.openAttach() }, for: .touchUpInside)
     box.backgroundColor = .systemBackground
     box.layer.cornerRadius = 18; box.layer.cornerCurve = .continuous
     box.layer.borderWidth = 1; box.layer.borderColor = UIColor.separator.cgColor
@@ -138,26 +137,6 @@ final class CommentBar: UIView, UITextViewDelegate, UITableViewDataSource, UITab
       hint.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 15), hint.centerYAnchor.constraint(equalTo: box.topAnchor, constant: 18),
       hint.trailingAnchor.constraint(lessThanOrEqualTo: box.trailingAnchor, constant: -10),
     ])
-    // Photos · Camera · Files: under the + (as before), the keyboard stays; typing again closes it
-    attachRow.axis = .horizontal; attachRow.spacing = 8; attachRow.distribution = .fillEqually
-    for (src, sym, title) in [("photos", "photo.on.rectangle", "Photos"), ("camera", "camera", "Camera"), ("files", "folder", "Files")] {
-      var c = UIButton.Configuration.gray()
-      c.image = UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .medium))
-      c.title = title
-      c.imagePadding = 6
-      c.cornerStyle = .capsule
-      c.baseForegroundColor = .label
-      let b = UIButton(configuration: c)
-      b.heightAnchor.constraint(equalToConstant: 40).isActive = true
-      b.addAction(UIAction { [weak self] _ in
-        guard let self else { return }
-        self.toggleAttach(false)
-        self.onEvent?(["ev": "attach", "key": self.key, "source": src])
-      }, for: .touchUpInside)
-      attachRow.addArrangedSubview(b)
-    }
-    attachRow.isHidden = true; attachRow.alpha = 0
-    stack.addArrangedSubview(attachRow)
     stack.addArrangedSubview(row)
     // @mentions: people above the box
     mentionCard.backgroundColor = .secondarySystemGroupedBackground
@@ -332,21 +311,22 @@ final class CommentBar: UIView, UITextViewDelegate, UITableViewDataSource, UITab
       text.typingAttributes = t
     }
   }
-  // + opens (or closes) the Photos · Camera · Files row; the + turns into × while it's open
-  func toggleAttach(_ to: Bool? = nil) {
-    let open = to ?? attachRow.isHidden
-    guard open == attachRow.isHidden else { return }
-    UISelectionFeedbackGenerator().selectionChanged()
-    UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.85, initialSpringVelocity: 0, options: [.beginFromCurrentState]) {
-      self.attachRow.isHidden = !open
-      self.attachRow.alpha = open ? 1 : 0
-      self.plus.transform = open ? CGAffineTransform(rotationAngle: .pi / 4) : .identity
-      self.layoutIfNeeded()
-      self.superview?.layoutIfNeeded()
+  // + : Camera · Photos · Files in a small sheet above the keyboard (like the Claude app — Haris 2026-10-30)
+  var onPresent: ((UIViewController) -> Void)?
+  func openAttach() {
+    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    // (the keyboard goes down while the sheet is up — the keyboard sits above every sheet — and comes back if nothing
+    //  was picked)
+    let typing = text.isFirstResponder
+    if typing { text.resignFirstResponder() }
+    let sheet = AttachSheetVC(light: overrideUserInterfaceStyle == .light) { [weak self] src in
+      guard let self else { return }
+      self.onEvent?(["ev": "attach", "key": self.key, "source": src])
     }
+    sheet.onCancel = { [weak self] in if typing { self?.text.becomeFirstResponder() } }
+    onPresent?(sheet)
   }
   func textViewDidChange(_ textView: UITextView) {
-    if !attachRow.isHidden { toggleAttach(false) }
     tidyMentions()
     refresh()
     fitText()
@@ -504,5 +484,57 @@ final class CommentBar: UIView, UITextViewDelegate, UITableViewDataSource, UITab
     ring.strokeEnd = max(0.04, min(1, frac))
     sq.layer.addSublayer(track); sq.layer.addSublayer(ring)
     return wrap
+  }
+}
+
+
+/* Camera · Photos · Files: three big rounded tiles in a small sheet (the comment box's +) */
+final class AttachSheetVC: UIViewController, UISheetPresentationControllerDelegate {
+  private let pick: (String) -> Void
+  var onCancel: (() -> Void)?
+  init(light: Bool, pick: @escaping (String) -> Void) {
+    self.pick = pick
+    super.init(nibName: nil, bundle: nil)
+    overrideUserInterfaceStyle = light ? .light : .dark
+    modalPresentationStyle = .pageSheet
+    if let sh = sheetPresentationController {
+      sh.detents = [.custom(identifier: .init("attach")) { _ in 150 }]
+      sh.prefersGrabberVisible = true
+      sh.delegate = self
+    }
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  func presentationControllerDidDismiss(_ presentationController: UIPresentationController) { onCancel?() }
+  override func viewDidLoad() {
+    super.viewDidLoad()
+    if #available(iOS 26, *) { view.backgroundColor = .clear } else { view.backgroundColor = .systemGroupedBackground }
+    let row = UIStackView(); row.axis = .horizontal; row.spacing = 10; row.distribution = .fillEqually
+    for (src, sym, title) in [("camera", "camera", "Camera"), ("photos", "photo", "Photos"), ("files", "doc.badge.arrow.up", "Files")] {
+      var c = UIButton.Configuration.filled()
+      c.baseBackgroundColor = .tertiarySystemFill
+      c.baseForegroundColor = .label
+      c.image = UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 22, weight: .regular))
+      c.imagePlacement = .top
+      c.imagePadding = 10
+      c.title = title
+      c.background.cornerRadius = 22
+      c.cornerStyle = .fixed
+      let b = UIButton(configuration: c)
+      b.addAction(UIAction { [weak self] _ in
+        guard let self else { return }
+        UISelectionFeedbackGenerator().selectionChanged()
+        let p = self.pick
+        self.dismiss(animated: true) { p(src) }
+      }, for: .touchUpInside)
+      row.addArrangedSubview(b)
+    }
+    row.translatesAutoresizingMaskIntoConstraints = false
+    view.addSubview(row)
+    NSLayoutConstraint.activate([
+      row.topAnchor.constraint(equalTo: view.topAnchor, constant: 28),
+      row.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
+      row.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+      row.heightAnchor.constraint(equalToConstant: 100),
+    ])
   }
 }

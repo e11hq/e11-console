@@ -207,6 +207,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       b.bottomAnchor.constraint(equalTo: self.view.keyboardLayoutGuide.topAnchor),
     ])
     self.cbarIfMade = b
+    b.onPresent = { [weak self] vc in self?.topMost().present(vc, animated: true) }
     b.onEvent = { [weak self] ev in self?.pageJS("window.__e11CBar && window.__e11CBar(\(jsonString(ev)))") }
     b.onHeight = { [weak self] h in self?.pageJS("window.__e11CBarH && window.__e11CBarH(\(Int(h.rounded())))") }
     return b
@@ -1003,9 +1004,11 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         self.commentBar(CommentBar.selfArgs())
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.cbar.selfType("Thanks, can we make the logo a bit bigger on the last frame and keep the date as it is?") } }),
       ("cbarMention", "return '{}'", { self.cbar.selfType("Hi @Sa") }),
+      ("cbarAttach", "return '{}'", { self.cbar.openAttach() }),
       ("preview", "return '{}'", {
+        self.presentedViewController?.dismiss(animated: false)
         self.commentBar(["show": false])
-        self.run("preview", PreviewVC.selfArgs()) { _ in } }),
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.run("preview", PreviewVC.selfArgs()) { _ in } } }),
       ("signin", pause(4000) + "return JSON.stringify({ host: location.host, top: (document.querySelector('h1, h2, img, form') || document.body).getBoundingClientRect().top })", {
         self.presentedViewController?.dismiss(animated: false)
         self.commentBar(["show": false])

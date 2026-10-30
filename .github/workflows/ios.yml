@@ -42,7 +42,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release view ios-selftest >/dev/null 2>&1 || gh release create ios-selftest --prerelease --title "iPhone app self-test" --notes "Latest iPhone app self-test results." --target "$GITHUB_SHA"
-          for f in ios-home.png ios-inbox.png ios-me.png ios-client.png ios-task.png ios-sheet.png ios-back.png ios-nsheet.png ios-nsheetEnd.png ios-nsheetChannel.png ios-nsheetTitled.png ios-form.png ios-formTuck.png ios-cbar.png ios-cbarMention.png ios-preview.png ios-signin.png ios-done.png ios-build.log ios-selftest.log ios-server.log ios-crash.txt; do if [ -s "$RUNNER_TEMP/$f" ]; then gh release upload ios-selftest "$RUNNER_TEMP/$f" --clobber || echo "upload failed: $f"; fi; done; true
+          for f in ios-home.png ios-inbox.png ios-me.png ios-client.png ios-task.png ios-sheet.png ios-back.png ios-nsheet.png ios-nsheetEnd.png ios-nsheetChannel.png ios-nsheetTitled.png ios-form.png ios-formTuck.png ios-cbar.png ios-cbarMention.png ios-cbarAttach.png ios-preview.png ios-signin.png ios-done.png ios-build.log ios-selftest.log ios-server.log ios-crash.txt; do if [ -s "$RUNNER_TEMP/$f" ]; then gh release upload ios-selftest "$RUNNER_TEMP/$f" --clobber || echo "upload failed: $f"; fi; done; true
       - name: Sign and send to TestFlight
         if: github.ref_name == 'main' || github.event_name == 'workflow_dispatch'
         env:
