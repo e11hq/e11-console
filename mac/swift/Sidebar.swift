@@ -504,7 +504,13 @@ final class Sidebar: NSView {
     updateFade()
   }
   private let fade = CAGradientLayer()
-  @objc private func scrolled(_ n: Notification) { updateFade() }
+  @objc private func scrolled(_ n: Notification) {
+    updateFade()
+    // (scrolling under a still pointer: only the row now under it looks hovered — the ones it passed over lit up and
+    //  stayed lit, Haris 2026-10-31)
+    let at = window?.mouseLocationOutsideOfEventStream
+    for case let r as SideHit in list.subviews { r.hovering = at.map { r.bounds.contains(r.convert($0, from: nil)) } ?? false }
+  }
   private func updateFade() {
     let h = scroll.bounds.height
     guard h > 0 else { return }
