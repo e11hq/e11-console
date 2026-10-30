@@ -536,7 +536,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   var lastTabs: [String: Any]?
   // a tab's icon with its count on the top-right corner, overlapping the icon a little
   func badged(_ name: String, _ text: String, color: UIColor) -> UIImage {
-    let resolved = color.resolvedColor(with: traitCollection)
+    let resolved = color.resolvedColor(with: tabBar.traitCollection)   // (the tab bar's own light / dark — not the phone's)
     let sym = (UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: 21, weight: .regular)) ?? UIImage())
       .withTintColor(resolved, renderingMode: .alwaysOriginal)
     let font = UIFont.systemFont(ofSize: 11.5, weight: .bold)
@@ -747,12 +747,14 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     case "setAppearance":
       statusStyle = (a["mode"] as? String) == "light" ? .darkContent : .lightContent
       setNeedsStatusBarAppearanceUpdate()
-      // the tab bar follows the app's own light / dark (not only the phone's): white icons in dark — Haris 2026-10-30
-      // (only the tab bar: the page itself keeps following the phone for Automatic)
+      // the tab bar follows the app's own light / dark (not only the phone's): every icon, the open page's too, white
+      // in dark and black in light — Haris 2026-10-30 (only the tab bar: the page itself keeps following the phone)
       let style: UIUserInterfaceStyle = (a["mode"] as? String) == "light" ? .light : .dark
-      if tabBar.overrideUserInterfaceStyle != style {
+      if tabBar.overrideUserInterfaceStyle != style || tabBar.tintColor != (style == .dark ? UIColor.white : UIColor.black) {
         tabBar.overrideUserInterfaceStyle = style
-        tabBar.unselectedItemTintColor = style == .dark ? .white : nil
+        let ink: UIColor = style == .dark ? .white : .black
+        tabBar.tintColor = ink
+        tabBar.unselectedItemTintColor = ink
         tabBadgeKey = [:]
         if let t = lastTabs { setTabs(t) }
       }
