@@ -208,7 +208,7 @@ final class CommentBar: UIView, UITextViewDelegate, UITableViewDataSource, UITab
       } else { replyRow.isHidden = true }
       setTiles(a["files"] as? [[String: Any]] ?? [], uploading: a["uploading"] as? [String: Any])
     }
-    if (a["focus"] as? Bool) == true { text.becomeFirstResponder() }
+    if (a["focus"] as? Bool) == true && !attaching { text.becomeFirstResponder() }   // (while attaching: as it was before +)
     if (a["blur"] as? Bool) == true { text.resignFirstResponder() }
     refresh()
   }
@@ -313,17 +313,27 @@ final class CommentBar: UIView, UITextViewDelegate, UITableViewDataSource, UITab
   }
   // + : Camera · Photos · Files in a small sheet above the keyboard (like the Claude app — Haris 2026-10-30)
   var onPresent: ((UIViewController) -> Void)?
+  // + remembers whether the keyboard was up: after Camera / Photos / Files (a file attached, or nothing picked) it comes
+  // back if it was, and stays down if it wasn't — the page's own "focus" meanwhile changes nothing (Haris, 2026-10-30)
+  var attaching = false, keyboardBack = false
+  func attachDone() {
+    guard attaching else { return }
+    attaching = false
+    if keyboardBack && !isHidden { text.becomeFirstResponder() }
+    keyboardBack = false
+  }
   func openAttach() {
     UIImpactFeedbackGenerator(style: .light).impactOccurred()
     // (the keyboard goes down while the sheet is up — the keyboard sits above every sheet — and comes back if nothing
     //  was picked)
     let typing = text.isFirstResponder
+    attaching = true; keyboardBack = typing
     if typing { text.resignFirstResponder() }
     let sheet = AttachSheetVC(light: overrideUserInterfaceStyle == .light) { [weak self] src in
       guard let self else { return }
       self.onEvent?(["ev": "attach", "key": self.key, "source": src])
     }
-    sheet.onCancel = { [weak self] in if typing { self?.text.becomeFirstResponder() } }
+    sheet.onCancel = { [weak self] in self?.attachDone() }
     onPresent?(sheet)
   }
   func textViewDidChange(_ textView: UITextView) {

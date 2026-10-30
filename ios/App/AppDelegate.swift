@@ -219,6 +219,12 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     }
     if uploadedSound != 0 { AudioServicesPlaySystemSound(uploadedSound) }
   }
+  // after Camera / Photos / Files from the comment box's +: once the picker has gone, the keyboard as it was before
+  func cbarAfterPicker(_ n: Int) {
+    guard let b = cbarIfMade, b.attaching else { return }
+    if presentedViewController != nil && n < 30 { DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { self.cbarAfterPicker(n + 1) }; return }
+    b.attachDone()
+  }
   var cbarShow = false, cbarOnComments = false
   func commentBar(_ a: [String: Any]) {
     let b = cbar
@@ -982,7 +988,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
           DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { self.authing = false }
         }
       }
-    case "pickFiles": Picker.shared.pick(from: topMost(), single: (a["single"] as? Bool) == true, source: a["source"] as? String, done)
+    case "pickFiles": Picker.shared.pick(from: topMost(), single: (a["single"] as? Bool) == true, source: a["source"] as? String) { [weak self] r in done(r); self?.cbarAfterPicker(0) }
     case "readLocalChunk": done(Picker.shared.read(a))
     default: done(["ok": false, "error": "Unknown command " + cmd])
     }
