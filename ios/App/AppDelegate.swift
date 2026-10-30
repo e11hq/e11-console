@@ -1054,7 +1054,7 @@ enum FocusAfterPicker {
 final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewDelegate, UISheetPresentationControllerDelegate {
   struct Chip { let i: Int; let swatch: String?; let label: String?; let color: UIColor?; let on: Bool; let disabled: Bool }
   struct Row { let i: Int; let label: String; let sub: String?; let icon: String?; let danger: Bool; let checked: Bool; let disabled: Bool; let dot: UIColor?; let tint: UIColor?; let locked: Bool; let chips: [Chip]?; let chipKind: String }
-  struct Section { let header: String?; let rows: [Row] }
+  struct Section { let header: String?; let rows: [Row]; var photo: UIImage? = nil; var initials: String? = nil; var color: UIColor? = nil }
   private var sections: [Section] = []
   private let table = UITableView(frame: .zero, style: .insetGrouped)
   private var answer: ((Int, String?) -> Void)?
@@ -1089,7 +1089,14 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
                    disabled: (r["disabled"] as? Bool) == true, dot: NativeSheetVC.color(r["dot"]), tint: NativeSheetVC.color(r["tint"]),
                    locked: (r["locked"] as? Bool) == true, chips: chips, chipKind: r["kind"] as? String ?? "")
       }
-      if !rows.isEmpty { sections.append(Section(header: (sec["header"] as? String).flatMap { $0.isEmpty ? nil : $0 }, rows: rows)) }
+      if !rows.isEmpty {
+        var sc = Section(header: (sec["header"] as? String).flatMap { $0.isEmpty ? nil : $0 }, rows: rows)
+        if let p = sec["person"] as? [String: Any] {
+          if let d = p["photo"] as? String, let comma = d.firstIndex(of: ","), let data = Data(base64Encoded: String(d[d.index(after: comma)...])) { sc.photo = UIImage(data: data) }
+          sc.initials = p["initials"] as? String; sc.color = NativeSheetVC.color(p["color"])
+        }
+        sections.append(sc)
+      }
     }
     overrideUserInterfaceStyle = dark ? .dark : .light
     modalPresentationStyle = .pageSheet
@@ -1113,7 +1120,7 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     //  automatic safe-area padding is off, the bottom margin is set by hand)
     table.contentInsetAdjustmentBehavior = .never
     // (the list starts under the grab handle, but scrolls up behind it to the sheet's own rounded edge — no flat cut)
-    table.contentInset = UIEdgeInsets(top: NativeSheetVC.TOP, left: 0, bottom: 8 + (floating ? 0 : 34), right: 0)
+    table.contentInset = UIEdgeInsets(top: sections.first?.header == nil ? NativeSheetVC.TOP : 6, left: 0, bottom: 8 + (floating ? 0 : 34), right: 0)
     table.alwaysBounceVertical = false   // (a list that fits doesn't scroll: the finger moves the sheet itself)
     // (every row measured up front, not estimated: estimated heights changed the list's length while it scrolled,
     //  which made the options jump near the end)
@@ -1143,7 +1150,11 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     // (iOS adds the home-bar strip below a sheet's height by itself — on a floating sheet too, where it just showed
     //  as empty space under the last option — so that strip is taken off here)
     let strip = presentingViewController?.view.window?.safeAreaInsets.bottom ?? view.window?.safeAreaInsets.bottom ?? 0
-    fitHeight = max(120, ch + NativeSheetVC.TOP + 8 - (floating ? strip : 0) + (floating ? 0 : view.safeAreaInsets.bottom))
+    fitHeight = max(120, ch + table.contentInset.top + 8 - (floating ? strip : 0) + (floating ? 0 : view.safeAreaInsets.bottom))
+    // (a list too long for the sheet scrolls: its end needs that strip back, or the last option sits under the edge;
+    //  a list that fits gets none, so it never scrolls — the finger moves the sheet)
+    let cap = ((presentingViewController?.view.bounds.height ?? view.window?.bounds.height ?? 800) - 60) * 0.68
+    table.contentInset.bottom = 8 + (fitHeight > cap ? strip : 0)
     sheetPresentationController?.animateChanges { sheetPresentationController?.invalidateDetents() }
   }
   // Each row's height, worked out here (exact, no estimates — estimates made the list jump while scrolling, and
@@ -1162,7 +1173,28 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
   func numberOfSections(in tableView: UITableView) -> Int { sections.count }
   func tableView(_ tableView: UITableView, numberOfRowsInSection s: Int) -> Int { sections[s].rows.count }
   func tableView(_ tableView: UITableView, titleForHeaderInSection s: Int) -> String? { sections[s].header }
-  func tableView(_ tableView: UITableView, heightForHeaderInSection s: Int) -> CGFloat { sections[s].header == nil ? (s == 0 ? .leastNonzeroMagnitude : 12) : UITableView.automaticDimension }
+  // a title with the person's round picture (their photo, or initials on their colour)
+  func tableView(_ tableView: UITableView, viewForHeaderInSection s: Int) -> UIView? {
+    let sec = sections[s]
+    guard let title = sec.header, sec.photo != nil || sec.initials != nil else { return nil }
+    let v = UIView()
+    let pic = UIImageView(); pic.layer.cornerRadius = 11; pic.clipsToBounds = true; pic.contentMode = .scaleAspectFill
+    let ini = UILabel(); ini.font = .systemFont(ofSize: 10, weight: .bold); ini.textColor = .white; ini.textAlignment = .center
+    if let p = sec.photo { pic.image = p } else { pic.backgroundColor = sec.color ?? .systemGray; ini.text = sec.initials }
+    let label = UILabel(); label.text = title; label.font = .preferredFont(forTextStyle: .footnote).withSize(15); label.textColor = .secondaryLabel
+    label.font = .systemFont(ofSize: 15, weight: .semibold)
+    [pic, ini, label].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; v.addSubview($0) }
+    NSLayoutConstraint.activate([
+      pic.leadingAnchor.constraint(equalTo: v.leadingAnchor, constant: 20), pic.bottomAnchor.constraint(equalTo: v.bottomAnchor, constant: -8),
+      pic.widthAnchor.constraint(equalToConstant: 22), pic.heightAnchor.constraint(equalToConstant: 22),
+      ini.centerXAnchor.constraint(equalTo: pic.centerXAnchor), ini.centerYAnchor.constraint(equalTo: pic.centerYAnchor),
+      label.leadingAnchor.constraint(equalTo: pic.trailingAnchor, constant: 8), label.centerYAnchor.constraint(equalTo: pic.centerYAnchor),
+      label.trailingAnchor.constraint(lessThanOrEqualTo: v.trailingAnchor, constant: -20),
+    ])
+    return v
+  }
+  // (a titled first section takes its title's room out of the space under the grab handle, so its top looks like the others)
+  func tableView(_ tableView: UITableView, heightForHeaderInSection s: Int) -> CGFloat { sections[s].header == nil ? (s == 0 ? .leastNonzeroMagnitude : 12) : (s == 0 ? 30 : 40) }
   func tableView(_ tableView: UITableView, heightForFooterInSection s: Int) -> CGFloat { .leastNonzeroMagnitude }
   func tableView(_ tableView: UITableView, viewForFooterInSection s: Int) -> UIView? { UIView() }
   // (iOS 26 floats a short sheet above the bottom edge: no home-indicator padding inside it then)
@@ -1215,9 +1247,9 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
       for ch in chips[start..<min(start + 5, chips.count)] {
         let b = UIButton(type: .system)
         b.translatesAutoresizingMaskIntoConstraints = false
-        b.widthAnchor.constraint(equalToConstant: 44).isActive = true
+        b.widthAnchor.constraint(equalToConstant: 52).isActive = true
         b.heightAnchor.constraint(equalToConstant: 44).isActive = true
-        b.layer.cornerRadius = 22
+        b.layer.cornerRadius = 12; b.layer.cornerCurve = .continuous
         b.isEnabled = !ch.disabled
         b.setTitle(ch.label ?? "", for: .normal)
         b.titleLabel?.font = .systemFont(ofSize: 17, weight: .semibold)
@@ -1228,7 +1260,7 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
         line.addArrangedSubview(b)
       }
       // (a short last row keeps the same spacing as the full ones)
-      for _ in 0..<(5 - min(5, chips.count - start)) { let gap = UIView(); gap.translatesAutoresizingMaskIntoConstraints = false; gap.widthAnchor.constraint(equalToConstant: 44).isActive = true; line.addArrangedSubview(gap) }
+      for _ in 0..<(5 - min(5, chips.count - start)) { let gap = UIView(); gap.translatesAutoresizingMaskIntoConstraints = false; gap.widthAnchor.constraint(equalToConstant: 52).isActive = true; line.addArrangedSubview(gap) }
       rows.addArrangedSubview(line)
     }
     rows.translatesAutoresizingMaskIntoConstraints = false

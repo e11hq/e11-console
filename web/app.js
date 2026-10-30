@@ -4411,6 +4411,20 @@ const NativeSheet = (() => {
     if (bg && !/rgba\([^)]*,\s*0\)$/.test(cs.backgroundColor)) return bg;
     return rgb(cs.color);
   };
+  // a small round picture for a sheet title: the photo already shown on the page (drawn into a PNG), else initials
+  function personPic(av) {
+    const live = av.querySelector('img');
+    const shown = live && [...document.querySelectorAll('img')].find((x) => x.src === live.src && x.complete && x.naturalWidth);
+    if (shown) {
+      try {
+        const cv = document.createElement('canvas'); cv.width = cv.height = 72;
+        const g = cv.getContext('2d'), w = shown.naturalWidth, h = shown.naturalHeight, k = Math.min(w, h);
+        g.drawImage(shown, (w - k) / 2, (h - k) / 2, k, k, 0, 0, 72, 72);
+        return { photo: cv.toDataURL('image/png') };
+      } catch (e) { /* fall back to initials */ }
+    }
+    return { initials: av.textContent.trim(), color: rgb(av.style.background || av.style.backgroundColor) || [120, 120, 140] };
+  }
   function rows(items) {
     const probe = document.createElement('div');
     probe.className = 'menu ns-probe';   // (so the page's menu styles give the colours; never shown or counted as open)
@@ -4424,7 +4438,15 @@ const NativeSheet = (() => {
     const take = (el, i, it) => {
       if (el.matches('.sep')) { newSec(); return; }
       if (el.matches('.menu-label, .wf-mh, .pm-label')) { const c = el.cloneNode(true); c.querySelectorAll('small').forEach((x) => x.remove()); newSec(c.textContent.replace(/\s+/g, ' ').trim()); return; }
-      if (el.matches('.pm-who')) { newSec(el.textContent.replace(/\s+/g, ' ').trim()); return; }
+      if (el.matches('.pm-who')) {
+        // (the person's picture goes with the title: their photo, or their initials on their colour — never as letters
+        //  stuck to the name)
+        const c = el.cloneNode(true); c.querySelectorAll('.av').forEach((x) => x.remove());
+        newSec(c.textContent.replace(/\s+/g, ' ').trim());
+        const av = el.querySelector('.av');
+        if (av) cur().person = personPic(av);
+        return;
+      }
       if (el.matches('.mi-note')) { cur().rows.push({ i: -1, label: el.textContent.replace(/\s+/g, ' ').trim(), disabled: true, icon: (el.querySelector('.ic[data-i]') || { dataset: {} }).dataset.i || '' }); return; }
       if (el.matches('.swatches')) { cur().rows.push({ kind: 'swatch', chips: [...el.querySelectorAll('[data-swatch]')].map((b) => ({ swatch: b.dataset.swatch, color: colorOf(b), on: b.classList.contains('on') })) }); return; }
       if (el.matches('.react-pick')) { cur().rows.push({ kind: 'emoji', chips: [...el.querySelectorAll('[data-swatch]')].map((b) => ({ swatch: b.dataset.swatch, label: b.textContent.trim(), on: b.classList.contains('on') })) }); return; }
