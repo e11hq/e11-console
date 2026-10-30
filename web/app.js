@@ -512,6 +512,7 @@ const MacChrome = (() => {
     paintThemeButtons();
     if ($('#app') && $('#app').classList.contains('sb-collapsed')) bar.querySelector('.sb-toggle').title = 'Expand sidebar';
     PageHistory.paint();
+    if (shell >= 12) NativeSide.start();   // (Mac app 12: the sidebar is the Mac's own)
     const ACTIVE = 'button, a, input, textarea, select, label, [contenteditable="true"], [data-action], [data-nav], [data-id], .tabs, .search, .tm-crumbs > *, #overlay-root *, .tm-backdrop';
     const inBar = (e) => e.clientY <= 48 && !(e.target.closest && e.target.closest(ACTIVE));
     document.addEventListener('mousedown', (e) => {
@@ -522,6 +523,153 @@ const MacChrome = (() => {
     document.addEventListener('dblclick', (e) => { if (inBar(e)) NativeMac.call('zoomWindow').catch(() => {}); }, true);
   }
   return { init, on: () => on };
+})();
+
+/* ================= Mac app 12+: the sidebar is the Mac's own (Haris, 2026-10-30) ================= */
+// A floating glass panel like Finder's on macOS 26 (mac/swift/Sidebar.swift). What it shows is read from the page's own
+// sidebar (rows, counts, red badges, clients with their colours or logos, headings, profile, Synced line), so anything
+// added there shows in the Mac app too without a new Mac app; its clicks come back here (window.__e11Side) and do
+// exactly what the page's own sidebar does. Its menus (a client's options, the profile menu) are the page's own
+// options shown as the Mac's menu. While it shows, the page's own sidebar is hidden (html.mac-nsb).
+const NativeSide = (() => {
+  let on = false, sent = '', timer = 0, capturing = false, cap = null, seq = 0;
+  const menus = new Map(), logos = new Map();
+  let meKey = '', mePic = null;
+  const rgbOf = (c) => { const m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)/.exec(c || ''); return m ? [+m[1], +m[2], +m[3]] : null; };
+  // shown in the page's own sidebar (ignoring that the sidebar itself is hidden while the Mac draws it)
+  const shown = (el) => { for (let x = el; x && x.id !== 'sidebar'; x = x.parentElement) if (getComputedStyle(x).display === 'none') return false; return !!el; };
+  const keyOf = (el) => (el.dataset.nav ? 'nav:' + el.dataset.nav : el.dataset.project ? 'project:' + el.dataset.project : el.dataset.action ? 'act:' + el.dataset.action : '');
+  const find = (k) => {
+    const [kind, v] = [k.slice(0, k.indexOf(':')), k.slice(k.indexOf(':') + 1)];
+    const sel = kind === 'nav' ? `.nav-item[data-nav="${CSS.escape(v)}"]` : kind === 'project' ? `[data-project="${CSS.escape(v)}"]` : `[data-action="${CSS.escape(v)}"]`;
+    return [...document.querySelectorAll('#sidebar ' + sel)].find(shown) || document.querySelector('#sidebar ' + sel);
+  };
+  // a client's logo as a small picture (loaded once)
+  function logo(src) {
+    if (logos.has(src)) return logos.get(src);
+    logos.set(src, null);
+    const im = new Image();
+    im.onload = () => { try { const cv = document.createElement('canvas'); cv.width = cv.height = 64; const g = cv.getContext('2d'), w = im.naturalWidth, h = im.naturalHeight, k = Math.min(w, h); g.drawImage(im, (w - k) / 2, (h - k) / 2, k, k, 0, 0, 64, 64); logos.set(src, cv.toDataURL('image/png')); later(); } catch (e) { /* none */ } };
+    im.src = src;
+    return null;
+  }
+  function model() {
+    const app = document.getElementById('app');
+    if (!app || app.classList.contains('locked') || typeof currentUserId === 'undefined' || !currentUserId || !document.getElementById('me-chip')) return { on: false };
+    const items = [];
+    let lib = false;
+    $$('#sidebar .nav-heading, #sidebar .nav-item').forEach((el) => {
+      if (!shown(el)) return;
+      if (el.classList.contains('nav-heading')) {
+        const b = el.querySelector('[data-action]');
+        items.push({ t: 'h', title: (el.querySelector('span') || el).textContent.trim(), add: b && shown(b) ? 'act:' + b.dataset.action : null, addTip: b ? b.title : '' });
+        return;
+      }
+      // Client Assets and Trash (and the Finance button) under "Library"
+      if (!lib && el.closest('.ca-nav-wrap')) { lib = true; items.push({ t: 'h', title: 'Library' }); }
+      const k = keyOf(el); if (!k) return;
+      const c = el.cloneNode(true);
+      c.querySelectorAll('.count, small, button, .ic, .dot, .nav-clogo, svg').forEach((x) => x.remove());
+      const cnt = el.querySelector('.count');
+      const ic = [...el.querySelectorAll('.ic[data-i]')].find((x) => !x.closest('button'));
+      const dot = el.querySelector('.dot');
+      const img = el.querySelector('.nav-clogo img');
+      items.push({ t: 'i', k, title: c.textContent.replace(/\s+/g, ' ').trim(), n: cnt ? cnt.textContent.trim() : '', hot: !!(cnt && cnt.classList.contains('hot')),
+        sel: el.classList.contains('active'), ic: ic ? ic.dataset.i : '', c: dot ? rgbOf(getComputedStyle(dot).backgroundColor) : null,
+        logo: img && img.getAttribute('src') ? logo(img.src) : null, menu: !!el.querySelector('[data-action="project-menu"]') });
+      if (img && !items[items.length - 1].logo && !items[items.length - 1].c) { const p = typeof proj === 'function' ? proj(el.dataset.project) : null; if (p) { const t = document.createElement('i'); t.style.color = p.color; document.body.appendChild(t); items[items.length - 1].c = rgbOf(getComputedStyle(t).color); t.remove(); } }
+    });
+    const chip = document.getElementById('me-chip');
+    if (meKey !== currentUserId + '|' + chip.innerHTML.length) {
+      meKey = currentUserId + '|' + chip.innerHTML.length;
+      NativeSheet.personFor(currentUserId).then((v) => { mePic = v; later(); }).catch(() => {});
+    }
+    const theme = document.querySelector('#sidebar .theme-toggle');
+    const auto = ((typeof db !== 'undefined' && db && db.meta && db.meta.prefs) || {}).themeMode === 'auto';
+    const light = document.documentElement.dataset.theme === 'light';
+    const dotEl = document.getElementById('save-dot'), lab = document.getElementById('save-label');
+    const create = document.querySelector('#sidebar .create-btn');
+    return {
+      on: true, items, collapsed: app.classList.contains('sb-collapsed'), light,
+      themeIc: auto ? 'theme-auto' : light ? 'sun' : 'moon', themeTip: theme ? theme.title : '',
+      create: !!create && create.style.display !== 'none',
+      me: { name: (chip.querySelector('b') || {}).textContent || '', role: (chip.querySelector('small') || {}).textContent || '',
+        photo: mePic && mePic.photo || null, initials: mePic && mePic.initials || (chip.querySelector('.av') || {}).textContent || '', color: mePic && mePic.color || rgbOf((chip.querySelector('.av') || {}).style && chip.querySelector('.av').style.background) },
+      sync: { text: lab ? lab.textContent.trim() : '', rgb: dotEl ? rgbOf(getComputedStyle(dotEl).backgroundColor) : null, tip: lab && lab.parentElement ? lab.parentElement.title : '' },
+      copy: ((document.querySelector('#sidebar .agency') || {}).textContent || '').trim(),
+    };
+  }
+  function paint() {
+    timer = 0;
+    if (!on) return;
+    const m = model(), j = JSON.stringify(m);
+    if (j === sent) return;
+    sent = j;
+    NativeMac.call('sidebar', m).then((r) => { document.documentElement.classList.toggle('mac-nsb', !!(r && r.ok && m.on)); }).catch(() => {});
+  }
+  function later() { if (on && !timer) timer = setTimeout(paint, 60); }
+  // a 1px spot at the row's height, at the page's left edge: anything the page opens "next to" the row opens there
+  function anchorAt(y) {
+    let a = document.getElementById('nsb-anchor');
+    if (!a) { a = document.createElement('div'); a.id = 'nsb-anchor'; a.style.cssText = 'position:fixed;left:8px;width:1px;height:1px;pointer-events:none'; document.body.appendChild(a); }
+    a.style.top = Math.max(0, Math.round(+y || 0) - 1) + 'px';
+    return a;
+  }
+  // showMenu while the Mac asks for a menu: its options are kept here and handed over instead of drawn
+  function take(items) {
+    const id = ++seq, list = [], fake = {};
+    let colors = null, cur = null;
+    items.forEach((it, i) => {
+      if (!it || it.skip) return;
+      if (it === '-') { list.push({ sep: 1 }); return; }
+      if (it.html) {
+        const box = document.createElement('div'); box.innerHTML = it.html;
+        const sw = [...box.querySelectorAll('[data-swatch]')];
+        if (sw.length) { colors = sw.map((b) => b.dataset.swatch); const o = box.querySelector('[data-swatch].on'); cur = o ? o.dataset.swatch : null; }
+        return;
+      }
+      if (typeof it.run !== 'function') return;
+      list.push({ i, label: it.label, icon: it.icon || '', danger: !!it.danger });
+    });
+    menus.clear();
+    menus.set(id, { items, fake });
+    cap = { id, list, colors, cur };
+    return fake;
+  }
+  window.__e11Side = (a) => {
+    a = a || {};
+    switch (a.kind) {
+      case 'go': { const el = a.key && find(a.key); if (el) el.click(); return; }
+      case 'new': { const b = document.querySelector('#sidebar .create-btn'); if (b) b.click(); return; }
+      case 'theme': { const b = document.querySelector('#sidebar .theme-toggle'); if (b) b.click(); later(); return; }
+      case 'collapse': setSidebarCollapsed(!document.getElementById('app').classList.contains('sb-collapsed')); later(); return;
+      case 'sync': { const b = document.querySelector('#sidebar .data-link'); if (b) b.click(); return; }
+      case 'menu': {
+        cap = null; capturing = true;
+        try {
+          const at = anchorAt(a.y);
+          if (a.key === 'me') meMenu(at);
+          else if (String(a.key).startsWith('project:')) projectMenu(at, String(a.key).slice(8));
+        } finally { capturing = false; }
+        return cap ? JSON.stringify(cap) : '';
+      }
+      case 'pick': { const m = menus.get(+a.m); menus.clear(); const it = m && m.items[+a.i]; if (it && typeof it.run === 'function') it.run(); return; }
+      case 'swatch': { const m = menus.get(+a.m); menus.clear(); if (m && m.fake._onSwatch) m.fake._onSwatch(a.c); return; }
+      default: return;
+    }
+  };
+  function start() {
+    if (on) return;
+    on = true;
+    // anything that changes the page's sidebar, the look or the sign-in changes the Mac's
+    const mo = new MutationObserver(later);
+    const sb = document.getElementById('sidebar');
+    if (sb) mo.observe(sb, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['class', 'style', 'title', 'src'] });
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    const app = document.getElementById('app'); if (app) mo.observe(app, { attributes: true, attributeFilter: ['class'] });
+    later();
+  }
+  return { start, paint: later, capturing: () => capturing, take, on: () => on };
 })();
 
 /* ================= Date picker (computers) ================= */
@@ -4398,6 +4546,7 @@ function detailScroller() {
   return [...pane.querySelectorAll('.tm-feed, .tm-main, .tm-activity')].find((e) => e.scrollHeight > e.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(e).overflowY)) || null;
 }
 function showMenu(anchor, items, opts = {}) {
+  if (typeof NativeSide !== 'undefined' && NativeSide.capturing()) return NativeSide.take(items);   // (the Mac app shows it as its own menu)
   closeMenus();
   // iPhone app 11+: a menu marked native (plain options only) opens as iOS's own sheet
   if (opts.native && NativeSheet.fits(opts.native)) { Haptic.light(); return NativeSheet.open(anchor, items, opts); }   // (the same light knock as the page's own sheets)

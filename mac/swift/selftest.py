@@ -90,7 +90,7 @@ try:
     ai = c.get('appInfo', {})
     check(res.get('closedVisible') is False and res.get('reopenedVisible') is True, 'closing the window keeps the app running; the Dock icon brings it back')
     check(res.get('loginOn') is True and res.get('loginOff') is True, 'Open at Login turns on and off')
-    check(ai.get('shell') == 11 and ai.get('glass') is True and ai.get('native') == 'swift' and ai.get('server') == BASE, f'appInfo {ai}')
+    check(ai.get('shell') == 12 and ai.get('sidebar') is True and ai.get('glass') is True and ai.get('native') == 'swift' and ai.get('server') == BASE, f'appInfo {ai}')
     for k in ['badge', 'badgeOff', 'notify', 'light', 'dark', 'save1', 'save2']:
         check((c.get(k) or {}).get('ok') is True, f'{k} answered ok: {c.get(k)}')
     check(res.get('saved') == 'hello mac', 'a download saved in pieces into Downloads: ' + repr(res.get('saved')))
@@ -108,6 +108,15 @@ try:
     check(c.get('macChrome') is True and c.get('macBar') is True, 'the page draws its own title bar (Mac app 4+)')
     check(c.get('updateBar') is False, 'no update bar for the newest Mac app')
     check(c.get('notifClick') == 'function' and c.get('openTask') == 'function', 'notification click and task links wired')
+    # Mac app 12: the sidebar is the Mac's own (glass on macOS 26), drawn from the page's own; collapsed: a strip of icons
+    sb = res.get('sidebar') or {}; sc = res.get('sidebarCollapsed') or {}
+    check(sb.get('on') is True and {'Home', 'Inbox', 'My Tasks', 'Client Assets'} <= set(sb.get('rows') or []) and 'Library' in (sb.get('heads') or []), f'the native sidebar shows the page\'s rows {sb}')
+    check(sb.get('me') and 'E11 Agency' in str(sb.get('copy')) and sb.get('sync'), f"profile, Synced line and © under it {sb.get('me')} · {sb.get('sync')} · {sb.get('copy')}")
+    check(abs((sb.get('webX') or 0) - 260) < 1 and abs((sb.get('width') or 0) - 244) < 1, f"the page starts beside the sidebar {sb.get('webX')} {sb.get('width')}")
+    check(res.get('pageSidebar') == 'true none', f"the page's own sidebar is hidden {res.get('pageSidebar')}")
+    check('Sign out' in (res.get('sideMenu') or []), f"the profile menu comes as the Mac's own menu {res.get('sideMenu')}")
+    check(sc.get('compact') is True and abs((sc.get('width') or 0) - 76) < 1 and abs((sc.get('webX') or 0) - 92) < 1, f'collapsed: a strip of icons, the page beside it {sc}')
+    print('note glass (macOS 26):', sb.get('glass'))
     lights = res.get('lights') or {}
     check(abs(lights.get('x', 0) - 20) < 1, f'window buttons placed in the page’s top row {lights}')
     check(os.path.exists(OUT[:-5] + '.png') and os.path.getsize(OUT[:-5] + '.png') > 20000, 'a picture of the window')

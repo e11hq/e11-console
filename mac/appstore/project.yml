@@ -19,6 +19,7 @@ targets:
     platform: macOS
     sources:
       - path: ../swift/main.swift
+      - path: ../swift/Sidebar.swift
       - path: ../../widget/WidgetShare.swift
       - path: PrivacyInfo.xcprivacy
         buildPhase: resources

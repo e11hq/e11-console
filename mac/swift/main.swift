@@ -19,7 +19,7 @@ import ServiceManagement
 
 // Version of this Mac app's native part. Raise it when a change here needs everyone to reinstall: the web app
 // then shows a required-update banner in older Mac apps. (The earlier script app was 1–6.)
-let SHELL_VERSION = 11   // 10: fast office use (shared-folder copies, office-network uploads and downloads) · 11: office-network downloads show their progress
+let SHELL_VERSION = 12   // 12: the sidebar is the Mac's own (glass on macOS 26; Sidebar.swift; command sidebar / window.__e11Side) · 10: fast office use (shared-folder copies, office-network uploads and downloads) · 11: office-network downloads show their progress
 
 let info = Bundle.main.infoDictionary ?? [:]
 let env = ProcessInfo.processInfo.environment
@@ -68,7 +68,7 @@ func jsString(_ s: String) -> String {   // a JavaScript string literal
   return String(a.dropFirst().dropLast())
 }
 
-final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMessageHandler, WKUIDelegate, WKNavigationDelegate, UNUserNotificationCenterDelegate {
+final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMessageHandler, WKUIDelegate, WKNavigationDelegate, UNUserNotificationCenterDelegate, SidebarHost {
   var window: NSWindow!
   var web: WKWebView!
   var picked: [String: String] = [:]   // token -> picked file
@@ -80,6 +80,9 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   var notifAllowed: Bool?
   var selftest: [String: Any] = [:]
   let LIGHTS_X: CGFloat = 20, BAR_H: CGFloat = 48
+  let side = Sidebar()
+  // the window buttons' row: the page's own 48px top strip, or the native sidebar's top row
+  var barH: CGFloat { side.on ? Sidebar.INSET * 2 + Sidebar.TOP : BAR_H }
 
   /* ---------- start ---------- */
   func applicationWillFinishLaunching(_ n: Notification) {
@@ -174,6 +177,10 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     if #available(macOS 13.3, *) { web.isInspectable = true }
     #endif
     window.contentView!.addSubview(web)
+    side.host = self
+    side.frame = NSRect(x: Sidebar.INSET, y: Sidebar.INSET, width: Sidebar.WIDE, height: window.contentView!.bounds.height - Sidebar.INSET * 2)
+    side.autoresizingMask = [.height]
+    window.contentView!.addSubview(side, positioned: .above, relativeTo: web)
     #if APPSTORE
     reviewLink.frame = NSRect(x: 0, y: 14, width: window.contentView!.bounds.width, height: 30)
     reviewLink.autoresizingMask = [.width]
@@ -199,7 +206,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     guard let w = window, !w.styleMask.contains(.fullScreen),
           let close = w.standardWindowButton(.closeButton), let mini = w.standardWindowButton(.miniaturizeButton),
           let zoom = w.standardWindowButton(.zoomButton), let bar = close.superview, let container = bar.superview else { return }
-    let bh = close.frame.size.height
+    let bh = close.frame.size.height, BAR_H = barH
     container.frame = NSRect(x: container.frame.origin.x, y: w.frame.size.height - BAR_H, width: container.frame.size.width, height: BAR_H)
     bar.frame = NSRect(x: 0, y: 0, width: container.frame.size.width, height: BAR_H)
     var gap = mini.frame.origin.x - close.frame.origin.x
@@ -222,6 +229,36 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   func windowDidEnterFullScreen(_ n: Notification) { pageJS("document.documentElement.classList.add('mac-fs')") }
   func windowDidExitFullScreen(_ n: Notification) { placeLights(); pageJS("document.documentElement.classList.remove('mac-fs')") }
   func pageJS(_ js: String) { web?.evaluateJavaScript(js, completionHandler: nil) }
+
+  /* ---------- the native sidebar (Sidebar.swift) ---------- */
+  // something in it was clicked: the page does what its own sidebar would (a menu comes back as its options)
+  func sideCall(_ args: [String: Any], _ done: ((Any?) -> Void)?) {
+    let js = "(function(){ var r = window.__e11Side ? window.__e11Side(\(jsonString(args))) : null; return typeof r === 'string' ? r : ''; })()"
+    web?.evaluateJavaScript(js) { r, _ in done?(r) }
+  }
+  // shown, hidden, collapsed or expanded: the page moves over to start beside it
+  func sideLayoutChanged(animated: Bool) {
+    guard let cv = window?.contentView, let web = web else { return }
+    let sf = NSRect(x: Sidebar.INSET, y: Sidebar.INSET, width: side.width, height: cv.bounds.height - Sidebar.INSET * 2)
+    let wf = NSRect(x: side.pageX, y: 0, width: cv.bounds.width - side.pageX, height: cv.bounds.height)
+    placeLights()
+    if animated {
+      NSAnimationContext.runAnimationGroup { c in
+        c.duration = 0.22
+        c.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        c.allowsImplicitAnimation = true
+        self.side.animator().frame = sf
+        web.animator().frame = wf
+      }
+    } else { side.frame = sf; web.frame = wf }
+  }
+  @objc func toggleSidebar(_ s: Any?) {
+    if side.on { sideCall(["kind": "collapse"], nil) } else { pageJS("(function(){ var b = document.querySelector('[data-action=\"toggle-sidebar\"]'); if (b) b.click(); })()") }
+  }
+  // the page went elsewhere (signed out, another site): no sidebar until the E11 page sends it again
+  func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+    if side.on { side.apply(["on": false]) }
+  }
 
   /* ---------- the page's own boxes and windows ---------- */
   // links that open a new window (target=_blank) go to the default browser
@@ -391,6 +428,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
       window.backgroundColor = light ? .white : NSColor(srgbRed: 0.047, green: 0.051, blue: 0.059, alpha: 1)
       placeLights()
       done(["ok": true])
+    case "sidebar": side.apply(a); if lockView != nil { side.isHidden = true }; done(["ok": true])
     case "setIcon": done(setIcon(a))
     case "dragWindow":
       if let ev = NSApp.currentEvent { window.performDrag(with: ev) }
@@ -420,7 +458,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     case "appInfo":
       done(["ok": true, "server": SERVER, "shell": SHELL_VERSION, "native": "swift",
             "version": info["CFBundleShortVersionString"] as? String ?? "3.0.0", "touchID": defaults.bool(forKey: LOCK_KEY),
-            "glass": FileManager.default.fileExists(atPath: Bundle.main.bundlePath + "/Contents/Resources/Assets.car"), "store": IS_STORE, "apns": IS_STORE])
+            "glass": FileManager.default.fileExists(atPath: Bundle.main.bundlePath + "/Contents/Resources/Assets.car"), "store": IS_STORE, "apns": IS_STORE, "sidebar": true])
     default: done(["ok": false, "error": "Unknown command " + cmd])
     }
   }
@@ -654,9 +692,10 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     v.addSubview(b)
     b.centerXAnchor.constraint(equalTo: v.centerXAnchor).isActive = true
     b.centerYAnchor.constraint(equalTo: v.centerYAnchor).isActive = true
-    cv.addSubview(v, positioned: .above, relativeTo: web)
+    cv.addSubview(v, positioned: .above, relativeTo: nil)
     lockView = v
     web.isHidden = true
+    side.isHidden = true
     window.makeFirstResponder(b)
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { self.unlock() }
   }
@@ -671,6 +710,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   func unlocked() {
     lockView?.removeFromSuperview(); lockView = nil
     web.isHidden = false
+    side.isHidden = !side.on
     window.makeFirstResponder(web)
     lastActive = Date()
   }
@@ -767,7 +807,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     ])
     _ = sub("View", [
       item("Reload", #selector(reloadPage(_:)), "r", .command, self),
-      item("Go to Home", #selector(goHome(_:)), "h", [.command, .shift], self), .separator(),
+      item("Go to Home", #selector(goHome(_:)), "h", [.command, .shift], self),
+      item("Toggle Sidebar", #selector(toggleSidebar(_:)), "s", [.command, .control], self), .separator(),
       item("Actual Size", #selector(zoomReset(_:)), "0", .command, self),
       item("Zoom In", #selector(zoomIn(_:)), "+", .command, self),
       item("Zoom Out", #selector(zoomOut(_:)), "-", .command, self), .separator(),
@@ -844,9 +885,56 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
           case .success(let v): self.selftest["calls"] = (try? JSONSerialization.jsonObject(with: Data(((v as? String) ?? "{}").utf8))) ?? [:]
           case .failure(let e): self.selftest["callsError"] = e.localizedDescription
           }
-          DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { self.finishSelfTest(error: nil) }
+          self.sidebarTest(0) { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { self.finishSelfTest(error: nil) } }
         }
       }
+    }
+  }
+  // the native sidebar: shown with the page's rows, its menu, collapsed and expanded again; the page's own one hidden
+  func sidebarTest(_ n: Int, _ done: @escaping () -> Void) {
+    if !side.on {
+      if n < 60 { DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { self.sidebarTest(n + 1, done) } } else { selftest["sidebar"] = ["on": false]; done() }
+      return
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+      var s = self.side.snapshot(); s["webX"] = self.web.frame.minX
+      self.selftest["sidebar"] = s
+      self.web.evaluateJavaScript("[document.documentElement.classList.contains('mac-nsb'), getComputedStyle(document.getElementById('sidebar')).display].join(' ')") { r, _ in self.selftest["pageSidebar"] = r as? String ?? "" }
+      self.sideCall(["kind": "menu", "key": "me", "y": 700]) { r in
+        let m = ((r as? String).flatMap { $0.data(using: .utf8) }).flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]
+        self.selftest["sideMenu"] = (m?["list"] as? [[String: Any]] ?? []).compactMap { $0["label"] as? String }
+        self.sideCall(["kind": "collapse"], nil)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+          var c = self.side.snapshot(); c["webX"] = self.web.frame.minX
+          self.selftest["sidebarCollapsed"] = c
+          self.snapWindow("-collapsed") {
+            self.sideCall(["kind": "collapse"], nil)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { done() }
+          }
+        }
+      }
+    }
+  }
+  // a picture of the whole window: the page and the native sidebar over it
+  func snapWindow(_ suffix: String, _ then: @escaping () -> Void) {
+    let picture = (SELFTEST as NSString).deletingPathExtension + suffix + ".png"
+    web.takeSnapshot(with: nil) { img, _ in
+      if let cv = self.window.contentView, let page = img {
+        let out = NSImage(size: cv.bounds.size)
+        out.lockFocus()
+        (self.window.backgroundColor ?? .black).setFill(); NSRect(origin: .zero, size: cv.bounds.size).fill()
+        page.draw(in: self.web.frame)
+        if self.side.on, let rep = self.side.bitmapImageRepForCachingDisplay(in: self.side.bounds) {
+          self.side.cacheDisplay(in: self.side.bounds, to: rep)
+          let si = NSImage(size: self.side.bounds.size); si.addRepresentation(rep)
+          si.draw(in: self.side.frame)
+        }
+        out.unlockFocus()
+        if let tiff = out.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff), let png = rep.representation(using: .png, properties: [:]) {
+          try? png.write(to: URL(fileURLWithPath: picture))
+        }
+      }
+      then()
     }
   }
   var finished = false
@@ -857,11 +945,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     selftest["shell"] = SHELL_VERSION
     selftest["lights"] = window.standardWindowButton(.closeButton).map { ["x": $0.frame.origin.x, "y": $0.frame.origin.y] } ?? [:]
     selftest["saved"] = (try? String(contentsOfFile: NSHomeDirectory() + "/Downloads/e11-selftest.txt")) ?? ""
-    let picture = (SELFTEST as NSString).deletingPathExtension + ".png"
-    web.takeSnapshot(with: nil) { img, _ in
-      if let img = img, let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff), let png = rep.representation(using: .png, properties: [:]) {
-        try? png.write(to: URL(fileURLWithPath: picture))
-      }
+    snapWindow("") {
       _ = self.windowShouldClose(self.window)
       self.selftest["closedVisible"] = self.window.isVisible
       _ = self.applicationShouldHandleReopen(NSApp, hasVisibleWindows: false)

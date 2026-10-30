@@ -11,7 +11,7 @@ mkdir -p "$OUT"
 for arch in arm64 x86_64; do
   xcrun swiftc -O -target "$arch-apple-macos11.0" -sdk "$(xcrun --show-sdk-path)" \
     -framework Cocoa -framework WebKit -framework UserNotifications -framework LocalAuthentication \
-    "$HERE/main.swift" -o "$WORK/E11Console-$arch"
+    "$HERE/main.swift" "$HERE/Sidebar.swift" -o "$WORK/E11Console-$arch"
 done
 lipo -create "$WORK/E11Console-arm64" "$WORK/E11Console-x86_64" -output "$WORK/E11Console"
 lipo -info "$WORK/E11Console"

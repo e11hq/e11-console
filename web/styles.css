@@ -2338,6 +2338,15 @@ html.mac-chrome #app.sb-collapsed #sidebar { position: relative; border-right-co
   background: linear-gradient(to bottom, var(--bg) 0 47px, var(--border) 47px 48px, var(--sidebar) 48px) !important; }
 html.mac-chrome #app.sb-collapsed #sidebar::after { content: ''; position: absolute; top: 48px; bottom: 0; right: -1px; width: 1px; background: var(--border); pointer-events: none; }
 html.mac-chrome #app.sb-collapsed #topbar { margin-left: -1px; }
+/* Mac app 12+: the Mac draws the sidebar itself (NativeSide in app.js) and the page starts beside it — the page's own
+   sidebar, its sidebar / light-dark buttons in the title-bar row and the room kept for the window buttons go */
+html.mac-nsb #sidebar { display: none !important; }
+html.mac-nsb #app, html.mac-nsb #app.sb-collapsed { grid-template-columns: minmax(0, 1fr) !important; }
+html.mac-chrome.mac-nsb #mac-bar { left: 12px; }
+html.mac-nsb #mac-bar .sb-toggle, html.mac-nsb #mac-bar .theme-toggle { display: none; }
+html.mac-chrome.mac-nsb #topbar, html.mac-chrome.mac-nsb #app.sb-collapsed #topbar { padding-left: 84px !important; margin-left: 0; }
+html.mac-chrome.mac-nsb #detail.full .tm-top { padding-left: 84px; }
+html.mac-chrome.mac-nsb #detail.side .tm { max-width: calc(100% - 60px); }
 /* shared task link opened in the browser, handing over to the Mac app */
 #open-app { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; background: var(--bg); }
 #open-app .oa-card { display: grid; gap: 16px; justify-items: center; text-align: center; padding: 28px 32px; border: 1px solid var(--border); border-radius: 12px; background: var(--raised, var(--bg)); }
