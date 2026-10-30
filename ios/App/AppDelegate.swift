@@ -1776,10 +1776,15 @@ final class FormSheetVC: UIViewController, UITableViewDataSource, UITableViewDel
     guard let win = view.window else { return view.bounds }
     let cardView: UIView = sheetPresentationController?.presentedView ?? view
     let card = cardView.convert(cardView.bounds, to: win).intersection(win.bounds)
+    // (sliding away off the screen there's nothing in view: an empty rectangle has endless edges — giving that to the
+    //  bar crashed the app when an empty form was pulled down, crash report 2026-10-30)
+    if card.isNull || card.isEmpty { return view.bounds }
     return view.convert(card, from: win)
   }
   private func placeBar() {
+    guard isOpen, !isBeingDismissed else { return }
     let c = visibleCard()
+    guard c.minY.isFinite, c.height.isFinite else { return }
     // (the title and Continue in the very middle of the card's height — Haris 2026-10-30)
     let top = max(0, c.minY) + max(0, (min(c.height, 70) - 48) / 2)
     if abs((barTop?.constant ?? 0) - top) > 0.5 { barTop?.constant = top }
