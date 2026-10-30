@@ -1365,9 +1365,11 @@ final class DateSheetVC: UIViewController, UISheetPresentationControllerDelegate
   private var answer: (([String: Any]) -> Void)?
   private let fmt: DateFormatter = { let f = DateFormatter(); f.calendar = Calendar(identifier: .gregorian); f.locale = Locale(identifier: "en_US_POSIX"); f.timeZone = .current; f.dateFormat = "yyyy-MM-dd"; return f }()
   private let clearable: Bool
+  private let md: Bool
   init(_ a: [String: Any], dark: Bool, answer: @escaping ([String: Any]) -> Void) {
     self.answer = answer
     clearable = (a["clearable"] as? Bool) == true
+    md = (a["md"] as? Bool) == true
     super.init(nibName: nil, bundle: nil)
     overrideUserInterfaceStyle = dark ? .dark : .light
     picker.datePickerMode = .date
@@ -1387,6 +1389,7 @@ final class DateSheetVC: UIViewController, UISheetPresentationControllerDelegate
     super.viewDidLoad()
     if #available(iOS 26, *) { view.backgroundColor = .clear } else { view.backgroundColor = .systemGroupedBackground }
     let today = UIButton(type: .system); today.setTitle("Today", for: .normal); today.titleLabel?.font = .systemFont(ofSize: 17, weight: .semibold)
+    today.isHidden = md   // (a birthday: day and month only — the year shown doesn't matter)
     today.addAction(UIAction { [weak self] _ in guard let self else { return }; self.finish(["ok": true, "date": self.fmt.string(from: Date())]) }, for: .touchUpInside)
     let clear = UIButton(type: .system); clear.setTitle("Clear", for: .normal); clear.titleLabel?.font = .systemFont(ofSize: 17); clear.tintColor = .systemRed
     clear.isHidden = !clearable

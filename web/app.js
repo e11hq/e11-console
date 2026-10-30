@@ -568,8 +568,16 @@ const DatePicker = (() => {
     el.value = v;
     el.dispatchEvent(new Event('change', { bubbles: true }));
   }
+  // a day-and-month field (birthday): its value, its label, its "change"
+  function setMD(el2, v) {
+    el2.dataset.val = v;
+    if (el2.tagName === 'INPUT') el2.value = fmtMD(v); else el2.innerHTML = `${v ? esc(fmtMD(v)) : '<span class="pf-ph">Choose your birthday</span>'}${icon('cal')}`;
+    el2.dispatchEvent(new Event('change', { bubbles: true }));
+  }
   function open(el) {
     close();
+    // (iPhone app 13+: the same native date sheet as every other date — a birthday picks only day and month)
+    if (el.dataset.md && !desktop() && nativeDates()) { openNative(el); return; }
     input = el;
     const base = el.dataset.md ? new Date(2000, el.dataset.val ? Number(el.dataset.val.slice(0, 2)) - 1 : new Date().getMonth(), 1) : el.value ? parseYmd(el.value) : new Date();
     view = { y: base.getFullYear(), m: base.getMonth() };
@@ -588,7 +596,7 @@ const DatePicker = (() => {
       const b = e.target.closest('button'); if (!b) return;
       e.stopPropagation();
       if (b.dataset.day) return pick(b.dataset.day);
-      if (b.dataset.md || b.dataset.dp === 'clear') { const el2 = input; const v = b.dataset.md || ''; close(); el2.dataset.val = v; if (el2.tagName === 'INPUT') el2.value = fmtMD(v); else el2.innerHTML = `${v ? esc(fmtMD(v)) : '<span class="pf-ph">Choose your birthday</span>'}${icon('cal')}`; el2.dispatchEvent(new Event('change', { bubbles: true })); return; }
+      if (b.dataset.md || b.dataset.dp === 'clear') { const el2 = input; close(); setMD(el2, b.dataset.md || ''); return; }
       if (b.dataset.dp === 'today') return pick(todayStr());
       view.m += b.dataset.dp === 'next' ? 1 : -1;
       if (view.m < 0) { view.m = 11; view.y--; } if (view.m > 11) { view.m = 0; view.y++; }
@@ -609,10 +617,13 @@ const DatePicker = (() => {
     busy = true;
     Haptic.light();
     const chip = el.closest('.date-chip');
-    const clearable = !!el.value && !!chip && !!((chip.parentElement && chip.parentElement.querySelector('[data-action^="clear-"]')) || chip.querySelector('.cal-date-x'));
-    NativeMac.call('pickDate', { value: el.value || '', min: el.min || '', max: el.max || '', clearable })
+    const md = !!el.dataset.md;
+    const clearable = md ? !!el.dataset.val : !!el.value && !!chip && !!((chip.parentElement && chip.parentElement.querySelector('[data-action^="clear-"]')) || chip.querySelector('.cal-date-x'));
+    const value = md ? (el.dataset.val ? `${new Date().getFullYear()}-${el.dataset.val}` : '') : el.value || '';
+    NativeMac.call('pickDate', { value, min: md ? '' : el.min || '', max: md ? '' : el.max || '', clearable, md })
       .then((r) => {
         if (!r || r.ok === false || r.cancel) return;
+        if (md) { const v = r.clear ? '' : String(r.date || '').slice(5); if (v !== (el.dataset.val || '')) setMD(el, v); return; }
         const v = r.clear ? '' : r.date || '';
         if (v === (el.value || '')) return;
         el.value = v;
