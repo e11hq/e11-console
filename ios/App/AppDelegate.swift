@@ -228,7 +228,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if want == b.isHidden {
       if want {
         b.isHidden = false
-        UIView.animate(withDuration: 0.16) { b.alpha = 1 }
+        UIView.animate(withDuration: 0.1) { b.alpha = 1 }
       } else {
         if b.text.isFirstResponder { b.text.resignFirstResponder() }
         UIView.animate(withDuration: 0.12, animations: { b.alpha = 0 }) { _ in if b.alpha == 0 { b.isHidden = true } }

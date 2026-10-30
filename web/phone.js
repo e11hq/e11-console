@@ -2149,7 +2149,8 @@ const NativeComment = (() => {
   // frame by frame across the bridge lagged (Haris, 2026-10-30)
   function slide(p, now) {
     if (!on) return;
-    const at = p > 0.98 ? 1 : 0;
+    // (it comes in as the swipe nears Comments — not after it has come to rest — and goes as soon as it leaves)
+    const at = lastP === 1 ? (p > 0.8 ? 1 : 0) : (p > 0.9 ? 1 : 0);
     root.classList.toggle('ph-cb-on', at === 1);
     if (at === lastP && !now) return;
     lastP = at;
@@ -2195,18 +2196,29 @@ const NativeComment = (() => {
      frame (the page re-laid itself out each frame and it stuttered, Haris 2026-10-30). Once the keyboard is up, the
      transform becomes padding + scroll (looks the same, lets the whole list be scrolled); going down, the other way. */
   const safeB = (() => { let v = null; return () => { if (v == null) { const d = document.createElement('div'); d.style.cssText = 'position:fixed;visibility:hidden;padding-bottom:env(safe-area-inset-bottom)'; document.body.appendChild(d); v = parseFloat(getComputedStyle(d).paddingBottom) || 0; d.remove(); } return v; }; })();
-  let kbTarget = 0, kbPad = 0;
+  let kbTarget = 0, kbPad = 0, kbGap = 0;
+  // how far the list really has to move: a short list (empty room under its last comment) moves only by what the
+  // keyboard would cover of it — moving it the whole way and back made it jump (Haris, 2026-10-30)
+  const roomUnder = (f) => {
+    const last = f.lastElementChild;
+    if (!last) return f.clientHeight;
+    const r = f.getBoundingClientRect(), pad = parseFloat(getComputedStyle(f).paddingBottom) || 0;
+    return Math.max(0, (r.bottom - pad) - last.getBoundingClientRect().bottom);
+  };
   const comments = () => on && root.classList.contains('ph-cb-on') && openTaskNow() ? feed() : null;
   const kb0 = window.__e11Kb;
   window.__e11Kb = (px, ms, stepped) => {
     const f = comments();
     kbTarget = Math.max(0, Number(px) || 0);
+    if (f && kbTarget > 0 && kbPad === 0) kbGap = roomUnder(f);   // (coming up: measured once, before anything moves)
     if (f && kbTarget === 0 && kbPad > 0) {
       // going down: padding back to a transform, so the list can ride down with the keyboard
       const T = kbPad, st = f.scrollTop; kbPad = 0;
       root.style.setProperty('--ph-kbpad', '0px');
-      f.scrollTop = Math.max(0, st - T);
-      f.style.transform = `translate3d(0, ${-T}px, 0)`;
+      kbGap = roomUnder(f);
+      const shift = Math.max(0, T - kbGap);
+      f.scrollTop = Math.max(0, st - shift);
+      f.style.transform = shift ? `translate3d(0, ${-shift}px, 0)` : '';
     }
     if (kb0) kb0(px, ms, stepped);
   };
@@ -2215,15 +2227,17 @@ const NativeComment = (() => {
     const f = comments();
     if (!f) { if (step0) step0(px); return; }
     const T = Math.max(0, (Number(px) || 0) - safeB());
+    const shift = Math.max(0, T - kbGap);
     if (kbTarget > 0 && Number(px) >= kbTarget) {
       // up and resting: the transform becomes padding + scroll (the same picture)
-      f.style.transform = '';
+      const st = f.scrollTop;
       kbPad = T;
       root.style.setProperty('--ph-kbpad', T + 'px');
-      f.scrollTop += T;
+      f.scrollTop = st + shift;
+      f.style.transform = '';
       return;
     }
-    f.style.transform = T ? `translate3d(0, ${-T}px, 0)` : '';
+    f.style.transform = shift ? `translate3d(0, ${-shift}px, 0)` : '';
   };
   // the page's own box asked for the keyboard (Reply, after Send, after Cancel reply…): the native box takes it
   const focus0 = HTMLElement.prototype.focus;
