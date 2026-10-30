@@ -40,24 +40,50 @@ export function createWidget({ store, access, occRemind = null, now = () => Date
   const projects = () => { const m = new Map(); store.list('projects').forEach((p) => m.set(p.id, p)); return m; };
   const short = (s, n = 60) => { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
 
+  // Whose tasks (Haris, 2026-10-30): a Super Admin sees the team's, an Account Manager their own clients' (the same
+  // tasks as their Home and the Morning round-up: their clients' tasks, plus their own tasks without a client);
+  // everyone else the tasks they're assigned to
+  function scopeOf(u, top, P) {
+    const users = store.list('users');
+    const ams = (p) => (p && p.ams) || [];
+    const hasClients = (id) => [...P.values()].some((p) => ams(p).some((a) => a.id === id));
+    const ofAm = (id) => {
+      const pids = new Set([...P.values()].filter((p) => ams(p).some((a) => a.id === id && !a.onLeave)).map((p) => p.id));
+      const own = !hasClients(id);
+      return top.filter((t) => (t.projectId ? pids.has(t.projectId) || (own && t.createdBy === id) : t.createdBy === id));
+    };
+    const isAmOnly = (x) => !!x && x.role === 'am' && !adm(x);
+    if (access.isSuper(u)) {
+      const set = new Map();
+      users.filter((x) => x.active !== false && (x.role === 'am' || adm(x))).forEach((x) => (isAmOnly(x) ? ofAm(x.id) : top.filter((t) => t.createdBy === x.id)).forEach((t) => set.set(t.id, t)));
+      return { scope: 'team', list: [...set.values()] };
+    }
+    if (u.role === 'am') return { scope: 'clients', list: ofAm(u.id) };
+    return { scope: 'mine', list: top.filter((t) => t.projectId && (t.assignees || []).includes(u.id)) };   // (as before: tasks on a client)
+  }
+
   function production(u, day) {
     const P = projects();
-    const off = (id) => { const p = P.get(id); return !p || p.inactive; };
-    const all = store.list('tasks').filter((t) => !t.parentId && !t.deleted && !off(t.projectId) && (t.assignees || []).includes(u.id));
-    const isDone = (t) => !!t.done || !!(t.partsDone || {})[u.id];
+    const off = (id) => { const p = P.get(id); return !!id && (!p || p.inactive); };
+    const top = store.list('tasks').filter((t) => !t.parentId && !t.deleted && !off(t.projectId));
+    const { scope, list: all } = scopeOf(u, top, P);
+    const isDone = (t) => !!t.done || (scope === 'mine' && !!(t.partsDone || {})[u.id]);
     const mine = all.filter((t) => !isDone(t));
-    const waiting = mine.filter((t) => {
-      if (!t.needsCD) return false;
-      const list = (t.reviews || []).filter((r) => r.by === u.id && (r.epoch || 0) === (t.reviewEpoch || 0) && r.state !== 'withdrawn');
+    const cd = cdId();
+    const pendingBy = (t, by) => {
+      const list = (t.reviews || []).filter((r) => r.by === by && (r.epoch || 0) === (t.reviewEpoch || 0) && r.state !== 'withdrawn');
       const last = list[list.length - 1];
       return !!last && last.state === 'pending';
-    }).length;
+    };
+    const waiting = mine.filter((t) => t.needsCD && (scope === 'mine' ? pendingBy(t, u.id) : (t.assignees || []).some((a) => a !== cd && pendingBy(t, a)))).length;
     const sorted = mine.filter((t) => t.due).sort((a, b) => a.due.localeCompare(b.due) || prioRank((a.prio || {})[u.id]) - prioRank((b.prio || {})[u.id]));
     // this week, Monday to Friday (Dubai): due that day, and how many of those are finished
     const wd = new Date(toT(day)).getUTCDay();
     const mon = plus(day, wd === 0 ? -6 : 1 - wd);
     const week = [0, 1, 2, 3, 4].map((i) => { const d = plus(mon, i); const l = all.filter((t) => t.due === d); return { day: d, due: l.length, done: l.filter(isDone).length }; });
     return {
+      scope,
+      title: scope === 'team' ? 'Team' : scope === 'clients' ? 'My clients' : 'My day',
       dueToday: mine.filter((t) => t.due === day).length,
       doneToday: all.filter((t) => t.due === day && isDone(t)).length,
       overdue: mine.filter((t) => t.due && t.due < day).length,

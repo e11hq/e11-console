@@ -23,10 +23,11 @@ before(async () => {
       { id: 'u-adm', email: 'adm@e11-digital.com', role: 'admin', active: true, name: 'Haris' },
       { id: 'u-office', email: 'office@e11-digital.com', role: 'office_admin', active: true, name: 'Office', fin: 'viewer' },
       { id: 'u-cd', email: 'cd@e11-digital.com', role: 'production', active: true, name: 'Carine' },
+      { id: 'u-am', email: 'am@e11-digital.com', role: 'am', active: true, name: 'Leila' },
     ],
     projects: [
       { id: 'p1', name: 'Northline', color: '#3a7bd5', socials: ['u-soc'] },
-      { id: 'p2', name: 'Fortis', color: '#f2a03e', socials: [] },
+      { id: 'p2', name: 'Fortis', color: '#f2a03e', socials: [], ams: [{ id: 'u-am' }] },
       { id: 'p3', name: 'Old', color: '#000', inactive: true, socials: ['u-soc'] },
     ],
     tasks: [
@@ -36,6 +37,8 @@ before(async () => {
       { id: 't4', projectId: 'p1', title: 'Review', assignees: ['u-prod'], needsCD: true, reviews: [{ by: 'u-prod', state: 'pending', epoch: 0 }], due: '2026-10-30' },
       { id: 't5', projectId: 'p3', title: 'Hidden client', assignees: ['u-prod'], due: '2026-10-29', finance: 'To be invoiced' },
       { id: 't6', projectId: 'p1', title: 'Sub', parentId: 't1', assignees: ['u-prod'], due: '2026-10-29' },
+      { id: 't7', projectId: 'p2', title: 'AM client task', assignees: ['u-cd'], due: '2026-10-29', createdBy: 'u-adm' },
+      { id: 't8', projectId: 'p1', title: 'Admin made', assignees: ['u-cd'], due: '2026-10-28', createdBy: 'u-adm' },
     ],
     plans: [
       { id: 'pl1', projectId: 'p1', month: '2026-11', status: 'approved', posts: [{ id: 'x1', day: '2026-10-29', title: 'Reel', channels: ['IG'] }] },
@@ -93,4 +96,17 @@ test('Admins: tasks and plans (Finance only with Finance access); Office Admins 
   assert.deepEqual((await get('adm@e11-digital.com')).categories, ['production', 'social']);
   assert.deepEqual((await get('office@e11-digital.com')).categories, ['finance']);
   assert.deepEqual((await get('cd@e11-digital.com')).categories, ['production', 'social']);
+});
+
+test('Production widget: a Super Admin sees the team\'s tasks, an AM their own clients\' (Haris 2026-10-30)', async () => {
+  const a = (await get('adm@e11-digital.com')).production;
+  assert.equal(a.scope, 'team'); assert.equal(a.title, 'Team');
+  // the team = every AM's clients' tasks + every Admin's own: t2, t7 (the AM's client Fortis), t8 (made by the Admin)
+  assert.deepEqual(a.next.map((x) => x.id).sort(), ['t2', 't7', 't8']);
+  assert.equal(a.dueToday, 1); assert.equal(a.overdue, 2);
+  const m = (await get('am@e11-digital.com')).production;
+  assert.equal(m.scope, 'clients'); assert.equal(m.title, 'My clients');
+  assert.deepEqual(m.next.map((x) => x.id), ['t2', 't7']);
+  const p = (await get('prod@e11-digital.com')).production;
+  assert.equal(p.scope, 'mine'); assert.equal(p.title, 'My day');
 });

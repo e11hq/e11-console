@@ -4622,6 +4622,34 @@ const NativeForm = (() => {
   return { open, set, close };
 })();
 
+/* The task's Client box on the iPhone app (14+): iOS's own sheet (with search when the list is long) instead of
+   iPhone's wheel — a tap opens it, a finger that only scrolls past it still scrolls */
+(() => {
+  const box = (e) => {
+    const el = e.target.closest && e.target.closest('select#d-project');
+    return el && typeof Phone !== 'undefined' && Phone.on && NativeSheet.fits(14) ? el : null;
+  };
+  function open(el) {
+    if (el.disabled) return;
+    const opts = [...el.options];
+    const pick = (v) => { if (el.value === v) return; el.value = v; el.dispatchEvent(new Event('change', { bubbles: true })); };
+    const items = opts.map((o) => ({ label: o.textContent.trim(), checked: o.selected, find: o.textContent, run: () => pick(o.value) }));
+    if (opts[0] && opts[0].value === '' && items.length > 1) items.splice(1, 0, '-');   // (No client, then the clients)
+    showMenu(el, items, { native: 14, ...(opts.length > 8 ? { search: 'Search clients', empty: 'No client matches “%@”' } : {}) });
+  }
+  let t0 = null;
+  document.addEventListener('touchstart', (e) => { t0 = box(e) && e.touches[0] ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : null; }, { capture: true, passive: true });
+  document.addEventListener('touchend', (e) => {
+    const el = box(e); if (!el || !t0) return;
+    const p = e.changedTouches[0], moved = p && Math.hypot(p.clientX - t0.x, p.clientY - t0.y) > 10; t0 = null;
+    if (moved) return;
+    e.preventDefault(); e.stopPropagation();   // (iPhone's own wheel never opens)
+    open(el);
+  }, { capture: true, passive: false });
+  ['mousedown', 'click'].forEach((t) => document.addEventListener(t, (e) => { const el = box(e); if (!el) return; e.preventDefault(); e.stopPropagation(); if (t === 'click') open(el); }, true));
+  document.addEventListener('focusin', (e) => { const el = box(e); if (el) el.blur(); }, true);
+})();
+
 /* People who can be assigned, in their groups: Production, Social, Freelancers, the Creative Director, Others */
 function assignGroups(pool) {
   const group = (u) => (u.id === cdUserId() ? 'cd' : u.role === 'production' || u.role === 'social' || u.role === 'freelancer' ? u.role : 'other');

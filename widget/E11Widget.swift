@@ -13,7 +13,7 @@ struct WSummary: Codable {
   var day: String?; var name: String?; var categories: [String]?; var main: String?
   var production: WProd?; var social: WSoc?; var finance: WFin?
 }
-struct WProd: Codable { var dueToday: Int?; var doneToday: Int?; var overdue: Int?; var waitingCD: Int?; var open: Int?; var next: [WTask]?; var week: [WDay]? }
+struct WProd: Codable { var title: String?; var scope: String?; var dueToday: Int?; var doneToday: Int?; var overdue: Int?; var waitingCD: Int?; var open: Int?; var next: [WTask]?; var week: [WDay]? }
 struct WTask: Codable { var id: String; var title: String?; var client: String?; var color: String?; var due: String? }
 struct WDay: Codable { var day: String; var due: Int?; var done: Int? }
 struct WSoc: Codable {
@@ -228,14 +228,14 @@ struct ProdView: View {
         .gaugeStyle(.accessoryCircular)
     case .accessoryRectangular:
       VStack(alignment: .leading, spacing: 1) {
-        Text("My day").font(.headline).widgetAccentable()
+        Text(p.title ?? "My day").font(.headline).widgetAccentable()
         Text(rows.first?.title ?? "Nothing open").font(.caption).lineLimit(1)
         Text(over > 0 ? "\(due) due today · \(over) overdue" : "\(due) due today").font(.caption).lineLimit(1)
       }.frame(maxWidth: .infinity, alignment: .leading)
     #endif
     case .systemSmall:
       VStack(alignment: .leading, spacing: 2) {
-        Head(title: "My day")
+        Head(title: p.title ?? "My day")
         Big(n: due)
         HStack(spacing: 3) { Lbl(t: "due today"); if over > 0 { Lbl(t: "· \(over) overdue", color: W.red) } }
         Spacer(minLength: 4)
@@ -247,7 +247,7 @@ struct ProdView: View {
       }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     default:   // medium, large (Mac)
       VStack(alignment: .leading, spacing: 6) {
-        Head(title: "My day", right: dayTitle)
+        Head(title: p.title ?? "My day", right: dayTitle)
         HStack(alignment: .top, spacing: 12) {
           VStack(alignment: .leading, spacing: 6) {
             VStack(alignment: .leading, spacing: 0) { Big(n: due); Lbl(t: "Due today") }
@@ -255,7 +255,7 @@ struct ProdView: View {
           }.frame(width: family == .systemLarge ? 110 : 82, alignment: .leading)
           VStack(alignment: .leading, spacing: 4) {
             ForEach(Array(rows.prefix(family == .systemLarge ? 5 : 4).enumerated()), id: \.offset) { _, t in row(t) }
-            if rows.isEmpty { Note(text: "Nothing open on your list.") }
+            if rows.isEmpty { Note(text: p.scope == "team" || p.scope == "clients" ? "Nothing open." : "Nothing open on your list.") }
             if (p.waitingCD ?? 0) > 0 { Lbl(t: "+\(p.waitingCD ?? 0) waiting for CD review") }
           }
         }
