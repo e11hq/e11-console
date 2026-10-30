@@ -1687,7 +1687,9 @@ final class FormSheetVC: UIViewController, UITableViewDataSource, UITableViewDel
     if let sh = sheetPresentationController {
       sh.detents = [formDetent]
       sh.selectedDetentIdentifier = FormSheetVC.FORM
-      sh.largestUndimmedDetentIdentifier = FormSheetVC.TUCK   // (tucked: the app behind stays usable)
+      // (the app behind stays usable when tucked — set only while the tucked height exists: pulled down to close with
+      //  nothing typed, iOS crashed looking for it, Haris 2026-10-30)
+      sh.largestUndimmedDetentIdentifier = nil
       sh.prefersGrabberVisible = true
       sh.prefersScrollingExpandsWhenScrolledToEdge = false
       sh.delegate = self
@@ -1961,7 +1963,11 @@ final class FormSheetVC: UIViewController, UITableViewDataSource, UITableViewDel
     dirtyNow = d
     // (something typed: it can tuck, and pulling it down tucks it instead of closing it)
     isModalInPresentation = d && !tucked
-    sh.animateChanges { sh.detents = d ? [tuckDetent, formDetent] : [formDetent]; if !tucked { sh.selectedDetentIdentifier = FormSheetVC.FORM } }
+    sh.animateChanges {
+      sh.detents = d ? [tuckDetent, formDetent] : [formDetent]
+      sh.largestUndimmedDetentIdentifier = d ? FormSheetVC.TUCK : nil
+      if !tucked { sh.selectedDetentIdentifier = FormSheetVC.FORM }
+    }
   }
   func textViewDidChange(_ textView: UITextView) { changed() }
   func textFieldShouldReturn(_ textField: UITextField) -> Bool { desc.becomeFirstResponder(); return false }
