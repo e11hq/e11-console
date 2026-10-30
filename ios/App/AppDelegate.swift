@@ -1091,11 +1091,10 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
   }
   // The same room on every sheet, as on the Channel sheet (Haris, 2026-10-30): from the sheet's top edge to the first
   // thing in it (a title's text or the first option's card) is always TOP; from the last option's card to the sheet's
-  // visible bottom edge is always what a fitting list like Channel gets (END inside the list + iOS's own margin) —
-  // a list that scrolls gets the same at the end of its scroll.
+  // visible bottom edge is always what a fitting list like Channel gets (END + the list's own ~20 after its last
+  // section ≈ 25 on screen, simulator 2026-10-30) — a list that scrolls gets the same at the end of its scroll.
   static let TOP: CGFloat = 30
   static let END: CGFloat = 8
-  private static var fitGap: CGFloat = 26   // (a fitting sheet's real gap under its last option — measured each time one is shown)
   private static let TITLE_H: CGFloat = 18, TITLE_GAP: CGFloat = 8   // (a section title's text, and its gap to its card)
   private static let SYMBOLS: [String: String] = [
     "plus": "plus", "edit": "pencil", "trash": "trash", "x": "xmark", "clip": "paperclip", "folder": "folder",
@@ -1206,19 +1205,19 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     //  finger moves the sheet.)
     let cap = ((presentingViewController?.view.bounds.height ?? view.window?.bounds.height ?? 800) - 60) * 0.68
     scrolls = fitHeight > cap
-    let below = floating ? (hiddenBelow ?? strip) : view.safeAreaInsets.bottom
-    table.contentInset.bottom = scrolls ? (floating ? NativeSheetVC.fitGap : NativeSheetVC.END) + below : NativeSheetVC.END + (floating ? 0 : below)
+    // (measured in the simulator: none of a floating sheet lies below its visible edge — 0 until measured)
+    let below = floating ? (hiddenBelow ?? 0) : view.safeAreaInsets.bottom
+    table.contentInset.bottom = NativeSheetVC.END + (scrolls || !floating ? below : 0)
     table.verticalScrollIndicatorInsets.bottom = 22 + (scrolls ? below : 0)
     sheetPresentationController?.animateChanges { sheetPresentationController?.invalidateDetents() }
   }
   // Once on screen, the real edges are measured (the bottom edge has differed between iOS versions and between
-  // fitting and scrolling sheets — the last option ended up under the rounded edge, "Remove from team"): a fitting
-  // sheet (like Channel) records its gap under the last option; a scrolling one gets exactly that gap at its end.
+  // fitting and scrolling sheets — the last option ended up under the rounded edge, "Remove from team"): a scrolling
+  // one gets whatever of it lies below that edge added to the room at its end.
   override func viewDidAppear(_ animated: Bool) {
     super.viewDidAppear(animated)
     guard floating, let g = edges() else { return }
-    hiddenBelow = g.hidden
-    if scrolls { resize() } else if g.endGap > 4 && g.endGap < 60 { NativeSheetVC.fitGap = g.endGap }
+    if scrolls && abs(g.hidden - (hiddenBelow ?? 0)) > 0.5 { hiddenBelow = g.hidden; resize() } else { hiddenBelow = g.hidden }
   }
   // the sheet's visible bottom edge, how much of this view is below it, and the gap under the last option's card
   // (in a list that fits; at the very end of the scroll in one that scrolls) — also read by the self-test
@@ -1231,7 +1230,10 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     let maxOffset = max(-table.contentInset.top, table.contentSize.height + table.contentInset.bottom - table.bounds.height)
     let atEnd = scrolls ? maxOffset : table.contentOffset.y
     let tableTop = table.superview?.convert(table.frame, to: win).minY ?? 0
-    let lastBottom = tableTop + table.contentSize.height - atEnd
+    // (the last option's card itself — the list has ~20 of its own after its last section)
+    let ls = sections.count - 1
+    let lastRow = ls >= 0 ? table.rectForRow(at: IndexPath(row: sections[ls].rows.count - 1, section: ls)).maxY : table.contentSize.height
+    let lastBottom = tableTop + lastRow - atEnd
     // (the first thing's top when scrolled to the start: the first card, or a title's text — the header is exactly its text + gap)
     let firstTop = tableTop + table.contentInset.top
     return (hidden, visBottom - lastBottom, card, firstTop - card.minY)
@@ -1239,7 +1241,7 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
   func geo() -> [String: Any] {
     guard let g = edges() else { return ["error": "not shown"] }
     return ["card": [g.card.minX, g.card.minY, g.card.width, g.card.height], "hiddenBelow": g.hidden, "endGap": g.endGap,
-            "topGap": g.topGap, "scrolls": scrolls, "fitHeight": fitHeight, "fitGap": NativeSheetVC.fitGap, "insetBottom": table.contentInset.bottom,
+            "topGap": g.topGap, "scrolls": scrolls, "fitHeight": fitHeight, "end": NativeSheetVC.END, "insetBottom": table.contentInset.bottom,
             "content": table.contentSize.height, "offset": table.contentOffset.y, "titled": sections.first?.header != nil]
   }
   func scrollToEnd() {
@@ -1462,7 +1464,8 @@ final class DateSheetVC: UIViewController, UISheetPresentationControllerDelegate
     if let v = a["max"] as? String, let d = fmt.date(from: v) { picker.maximumDate = d }
     modalPresentationStyle = .pageSheet
     if let sh = sheetPresentationController {
-      // (sized to the calendar, with the same gap under it as under a native list's last option — Channel)
+      // (sized to the calendar, with the same gap under it as under a native list's last option — Channel: END + the
+      //  ~18 a list keeps after its last section)
       sh.detents = [.custom(identifier: .init("date")) { [weak self] ctx in min(ctx.maximumDetentValue, self?.fitHeight ?? 470) }]
       sh.prefersGrabberVisible = true
       sh.delegate = self
@@ -1499,7 +1502,7 @@ final class DateSheetVC: UIViewController, UISheetPresentationControllerDelegate
     let strip = presentingViewController?.view.window?.safeAreaInsets.bottom ?? view.window?.safeAreaInsets.bottom ?? 0
     let pickerH = picker.systemLayoutSizeFitting(CGSize(width: view.bounds.width - 24, height: UIView.layoutFittingCompressedSize.height),
                                                  withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height
-    let h = max(320, picker.frame.minY + pickerH + NativeSheetVC.END - (floating ? strip : 0) + (floating ? 0 : view.safeAreaInsets.bottom))
+    let h = max(320, picker.frame.minY + pickerH + NativeSheetVC.END + 18 - (floating ? strip : 0) + (floating ? 0 : view.safeAreaInsets.bottom))
     guard picker.frame.minY > 0, abs(h - fitHeight) > 0.5 else { return }
     fitHeight = h
     sheetPresentationController?.animateChanges { sheetPresentationController?.invalidateDetents() }
