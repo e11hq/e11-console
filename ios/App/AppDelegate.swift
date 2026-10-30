@@ -1133,6 +1133,10 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     // (the list starts under the grab handle, but scrolls up behind it to the sheet's own rounded edge — no flat cut)
     table.contentInset = UIEdgeInsets(top: sections.first?.header == nil ? NativeSheetVC.TOP : 6, left: 0, bottom: 8 + (floating ? 0 : 34), right: 0)
     table.alwaysBounceVertical = false   // (a list that fits doesn't scroll: the finger moves the sheet itself)
+    // (rows ignore the screen's bottom safe area: a row lying over it had its text pushed up inside it, and the text
+    //  slid about within the row as the sheet moved — "Remove from team")
+    table.insetsContentViewsToSafeArea = false
+    table.insetsLayoutMarginsFromSafeArea = false
     // (every row measured up front, not estimated: estimated heights changed the list's length while it scrolled,
     //  which made the options jump near the end)
     table.estimatedRowHeight = 0
@@ -1214,6 +1218,7 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     let r = sections[ip.section].rows[ip.row]
     if let chips = r.chips { return chipCell(chips, kind: r.chipKind) }
     let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
+    cell.insetsLayoutMarginsFromSafeArea = false; cell.contentView.insetsLayoutMarginsFromSafeArea = false
     var c = r.sub == nil ? cell.defaultContentConfiguration() : UIListContentConfiguration.subtitleCell()
     c.text = r.label
     c.secondaryText = r.sub
@@ -1263,6 +1268,7 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
   // Priority numbers: all in view, in rows of five (as on the page), each one round
   private func numGrid(_ chips: [Chip]) -> UITableViewCell {
     let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
+    cell.insetsLayoutMarginsFromSafeArea = false; cell.contentView.insetsLayoutMarginsFromSafeArea = false
     cell.selectionStyle = .none
     if #available(iOS 26, *) { cell.backgroundColor = UIColor.secondarySystemGroupedBackground.withAlphaComponent(0.6) }
     let rows = UIStackView(); rows.axis = .vertical; rows.spacing = 10
@@ -1301,6 +1307,7 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
   private func chipCell(_ chips: [Chip], kind: String) -> UITableViewCell {
     if kind == "num" { return numGrid(chips) }
     let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
+    cell.insetsLayoutMarginsFromSafeArea = false; cell.contentView.insetsLayoutMarginsFromSafeArea = false
     cell.selectionStyle = .none
     if #available(iOS 26, *) { cell.backgroundColor = UIColor.secondarySystemGroupedBackground.withAlphaComponent(0.6) }
     let size: CGFloat = kind == "emoji" ? 46 : kind == "swatch" ? 30 : 38
