@@ -54,7 +54,7 @@ export function createServer(cfg) {
   { const webSend = webPush.sendTo;
     webPush.sendTo = async (userId, msg, opts) => {
       const [a, b] = await Promise.all([webSend(userId, msg, opts), apns.sendTo(userId, msg, opts).catch((e) => { console.error('APNs:', e.message); return { sent: 0 }; })]);
-      return { sent: (a.sent || 0) + (b.sent || 0), removed: (a.removed || 0) + (b.removed || 0) };
+      return { sent: (a.sent || 0) + (b.sent || 0), removed: (a.removed || 0) + (b.removed || 0), apns: b.results || [], apnsWhy: b.why || '' };
     }; }
   const digest = createDigest({ store, webPush, now: cfg.now || (() => Date.now()) });
   if (cfg.digest !== false) digest.start();
@@ -630,8 +630,14 @@ export function createServer(cfg) {
       return json(res, 200, { ok: true, on: webPush.has(u.id, String(body.endpoint || '')), devices: webPush.devices(u.id) });
     }
     if (p === '/api/push/test' && req.method === 'POST') {
+      const body = await readBody(req).catch(() => ({}));
       const r = await webPush.sendTo(u.id, { title: 'E11 Console', body: 'Notifications are on. This is how they’ll look on this phone.', tag: 'test' });
-      return json(res, 200, { ok: true, ...r });
+      // (the iPhone app asks about itself: was this phone sent to, and what Apple said — token kept out of the answer)
+      const mine = String((body && body.token) || '').toLowerCase();
+      const me = mine ? (r.apns || []).find((x) => x.token === mine) : null;
+      return json(res, 200, { ok: true, sent: r.sent, removed: r.removed, apnsWhy: r.apnsWhy,
+        devices: (r.apns || []).map((x) => ({ platform: x.platform, env: x.env, status: x.status, reason: x.reason })),
+        ...(mine ? { thisPhone: me ? { status: me.status, reason: me.reason, env: me.env } : { status: 0, reason: 'not registered on this site' } } : {}) });
     }
 
     // Test copy only, owner only: wipe everything (except the owner's account) and start again with fresh sample data

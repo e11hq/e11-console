@@ -138,18 +138,19 @@ export function createApns({ store, keyFile = '', keyId = '', teamId = '', topic
   }
   async function sendTo(userId, msg, { ttl = 4 * 86400 } = {}) {
     const list = load()[userId] || [];
-    if (!list.length || !enabled()) return { sent: 0 };
+    if (!list.length || !enabled()) return { sent: 0, results: [], why: !enabled() ? 'no-key' : 'no-devices' };
     const pid = crypto.randomBytes(8).toString('hex');
     let sent = 0;
-    const gone = [];
+    const gone = [], results = [];
     await Promise.all(list.map(async (s) => {
       const r = await push1(s, msg, pid, ttl, 0);
+      results.push({ token: s.token, platform: s.platform || 'iphone', env: s.env, status: r.status, reason: r.reason || '' });
       if (r.status === 200) sent++;
       else if (r.status === 410 || ['BadDeviceToken', 'Unregistered', 'DeviceTokenNotForTopic'].includes(r.reason)) gone.push(s.token);
       else log.error('APNs push failed', r.status, r.reason);
     }));
     if (gone.length) { const all = load(); all[userId] = (all[userId] || []).filter((s) => !gone.includes(s.token)); save(all); gone.forEach(dropPending); }
-    return { sent, removed: gone.length };
+    return { sent, removed: gone.length, results };
   }
   return { enabled, register, unregister, devices, sendTo, ack, pendingFor, close: () => { for (const s of Object.values(sessions)) try { s.close(); } catch { /* fine */ } } };
 }

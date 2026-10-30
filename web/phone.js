@@ -867,7 +867,7 @@ const Push = (() => {
   }
   document.addEventListener('click', (e) => {
     const b = e.target.closest('[data-pf-push]'); if (!b || st.busy) return;
-    if (b.dataset.pfPush === 'test') api('POST', '/api/push/test', {}).then((r) => toast(r.sent ? 'Sent — it may take a few seconds' : 'Couldn’t reach this computer — switch it off and on again')).catch((er) => toast(er.message));
+    if (b.dataset.pfPush === 'test') api('POST', '/api/push/test', { token: lastToken || '' }).then((r) => toast(testSaid(r, 'computer'))).catch((er) => toast(er.message));
     else if (st.state === 'on') turnOff(); else if (st.state === 'off') turnOn();
   });
   function row(noRefresh) {
@@ -892,6 +892,17 @@ const Push = (() => {
   }, true);
   // the iPhone / Mac App Store app's notification address arrives from the app (after it's allowed, and on each start)
   let lastToken = null;
+  // what a test notification did, in words: for the iPhone app, this phone's own answer from Apple
+  function testSaid(r, where) {
+    const me = r && r.thisPhone;
+    if (me) {
+      if (me.status === 200) return 'Sent to this phone — Apple accepted it. Nothing showing? Check Focus and Settings → Notifications → E11 Console';
+      if (r.apnsWhy === 'no-key') return 'This site can’t send Apple notifications yet (its Apple push key isn’t set up)';
+      if (me.reason === 'not registered on this site') return 'This phone isn’t registered on this site — turn notifications off and on here';
+      return `Apple didn’t accept it for this phone (${me.status || 'no answer'}${me.reason ? ' · ' + me.reason : ''})`;
+    }
+    return r && r.sent ? 'Sent — it may take a few seconds' : `Couldn’t reach this ${where} — switch it off and on again`;
+  }
   window.__e11ApnsToken = (d) => { if (!d || !d.token) return; lastToken = d.token; api('POST', '/api/apns/register', { token: d.token, env: d.env, ack: d.ack === true, platform: d.platform || 'ios' }).catch(() => {}); };
   // tapping an iPhone app notification
   window.__e11PushTap = (d) => { d = d || {}; if (d.view) { if (typeof openView === 'function') openView(d.view); return; } openFrom(d.taskId || null, d.nid || null, { kind: d.kind || null, clientId: d.clientId || null, folderId: d.folderId || null, commentId: d.commentId || null, planId: d.planId || null }); };
@@ -955,7 +966,7 @@ const Push = (() => {
     if (st.state === 'off') return turnOn();
     if (st.state === 'on') {
       showMenu(el, [
-        { label: 'Send a test notification', icon: 'bell', run: () => api('POST', '/api/push/test', {}).then((r) => toast(r.sent ? 'Sent — it may take a few seconds' : 'Couldn’t reach this phone — try turning it off and on')).catch((err) => toast(err.message)) },
+        { label: 'Send a test notification', icon: 'bell', run: () => api('POST', '/api/push/test', { token: lastToken || '' }).then((r) => toast(testSaid(r, 'phone'))).catch((err) => toast(err.message)) },
         { label: 'Turn off on this phone', icon: 'x', danger: true, run: turnOff },
       ], { native: true });
     }
