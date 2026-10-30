@@ -2951,3 +2951,5 @@ body.phone .l-short { display: inline; }
 
 /* The task owner's comments: a coloured bar down the left side (Haris, 2026-10-30) */
 :root:not(.phone) .cm.cm-owner { border-left: 3px solid var(--accent); padding-left: 10px; margin-left: -13px; }
+/* (in the comments list the bar touches the list's left wall — Haris 2026-10-30) */
+:root:not(.phone) .tm-feed .thread > .cm.cm-owner { margin-left: -20px; padding-left: 17px; }
