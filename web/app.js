@@ -6207,7 +6207,7 @@ document.addEventListener('click', async (e) => {
       }
       case 'allow-notifs': try { Notification.requestPermission().then(() => renderContent()); } catch (err) { /* unsupported */ } return;
       case 'daily-try': e.preventDefault(); Daily.tryNow(); return;
-      case 'test-notif': if (AppPush.on) { api('POST', '/api/push/test', {}).then((r) => toast(r.sent ? 'Sent — it shows as a notification in a few seconds' : 'Turn on notifications for this app first')).catch((er) => toast(er.message)); return; } alertUser({ title: 'E11 Console', body: 'This is how new notifications will look and sound.', taskId: null }, true); return;
+      case 'test-notif': if (AppPush.on && Host.isIOSApp && typeof Push !== 'undefined' && Push.test) { Push.test(); return; } if (AppPush.on) { api('POST', '/api/push/test', {}).then((r) => toast(r.sent ? 'Sent — it shows as a notification in a few seconds' : 'Turn on notifications for this app first')).catch((er) => toast(er.message)); return; } alertUser({ title: 'E11 Console', body: 'This is how new notifications will look and sound.', taskId: null }, true); return;
       case 'prio-menu': e.stopPropagation(); prioMenu(actEl, actEl.dataset.key); return;
       case 'clear-golive': { const t = task(ui.taskId); if (t) Cal.setGolive(t, null); return; }
       case 'occ-accept': { const t = task(ui.taskId); if (t) Cal.setOccasion(t, actEl.dataset.id); return; }

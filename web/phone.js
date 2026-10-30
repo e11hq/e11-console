@@ -1019,7 +1019,9 @@ const Push = (() => {
   else if (q.get('view')) { openView(q.get('view')); history.replaceState(null, '', '/'); }
   if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.type === 'open-task') openFrom(e.data.taskId, e.data.nid, e.data.hint || {}); if (e.data && e.data.type === 'open-view') openView(e.data.view); });
 
-  return { row, refresh, profileRow };
+  // Send test (My profile): to every device, and the iPhone app hears what Apple said for this phone
+  const test = () => api('POST', '/api/push/test', { token: lastToken || '' }).then((r) => toast(testSaid(r, 'phone'))).catch((err) => toast(err.message));
+  return { row, refresh, profileRow, test };
 })();
 
 /* Swipe from the left edge to go back, like a native iPhone app (only in the Home Screen app —
