@@ -2358,8 +2358,8 @@ html.mac-nsb-o #app.sb-collapsed #detail { left: var(--nsb-slim, 108px); }
 /* the E11 mark beside the search box (Mac app with its own sidebar — the page's sidebar, with the logo, is hidden there):
    as tall as the search box, white in dark, black in light (Haris, 2026-10-31) */
 .tb-mark { display: none; }
-html.mac-nsb .tb-mark { display: inline-flex; align-items: center; margin-left: 6px; color: rgba(255, 255, 255, .45); flex: none; }
-html.mac-nsb[data-theme="light"] .tb-mark { color: rgba(0, 0, 0, .4); }
+html.mac-nsb .tb-mark { display: inline-flex; align-items: center; margin-left: 6px; color: #fff; flex: none; }
+html.mac-nsb[data-theme="light"] .tb-mark { color: #000; }
 html.mac-nsb .tb-mark svg { height: calc(var(--search-h, 30px) * .6); width: auto; display: block; }   /* (smaller and softer — Haris, 2026-10-31) */
 /* shared task link opened in the browser, handing over to the Mac app */
 #open-app { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; background: var(--bg); }
