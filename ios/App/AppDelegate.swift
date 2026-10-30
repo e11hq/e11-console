@@ -327,23 +327,33 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   var feedGeo: [String: Any] = [:]
   func feedScroll() -> UIScrollView? {
     guard cbarShow, cbarOnComments, let r = cbarFeed, r.width > 10, r.height > 10 else { return nil }
-    // (the page's list is one of WebKit's own scroll views: the one under its middle, of its size)
-    var v = web.hitTest(CGPoint(x: r.midX, y: r.minY + min(r.height / 2, 160)), with: nil)
-    while let cur = v {
-      if let sv = cur as? UIScrollView, sv !== web.scrollView, abs(sv.bounds.width - r.width) < 4, abs(sv.bounds.height - r.height) < 4 { return sv }
-      v = cur.superview
+    // (the page's list is one of WebKit's own scroll views: the one where the page says it is, of its size — looked for
+    //  among all of them, as hit-testing a point lands on the web view's own content)
+    var best: UIScrollView?
+    func walk(_ v: UIView) {
+      for c in v.subviews {
+        if let sv = c as? UIScrollView, sv !== web.scrollView, !sv.isHidden, sv.window != nil {
+          let f = sv.convert(sv.bounds, to: web)
+          if abs(f.width - r.width) < 4, abs(f.height - r.height) < 4, abs(f.minX - r.minX) < 4, abs(f.minY - r.minY) < 4 { best = sv }
+        }
+        walk(c)
+      }
     }
-    return nil
+    walk(web.scrollView)
+    return best
+  }
+  // (for the self-test: every WebKit scroll view and where it is)
+  func scrollViewsSeen() -> [String] {
+    var out: [String] = []
+    func walk(_ v: UIView) { for c in v.subviews { if let sv = c as? UIScrollView, sv !== web.scrollView { let f = sv.convert(sv.bounds, to: web); out.append("\(Int(f.minX)),\(Int(f.minY)) \(Int(f.width))x\(Int(f.height))") }; walk(c) } }
+    walk(web.scrollView)
+    return out
   }
   func feedRide(cover: CGFloat, duration: Double, curve: UInt) {
     guard let sv = feedScroll() else {
       if cover == 0 { feedT = 0 }
       // (why not, for the self-test: the box's state, where the page says the list is, the scroll views under that spot)
-      var seen: [String] = []
-      if let r = cbarFeed {
-        var v = web.hitTest(CGPoint(x: r.midX, y: r.minY + min(r.height / 2, 160)), with: nil)
-        while let cur = v { if let sv = cur as? UIScrollView { seen.append("\(type(of: sv)) \(Int(sv.bounds.width))x\(Int(sv.bounds.height))") }; v = cur.superview }
-      }
+      let seen = scrollViewsSeen()
       feedGeo = ["found": false, "show": cbarShow, "comments": cbarOnComments, "feed": cbarFeed.map { [$0.minX, $0.minY, $0.width, $0.height] } ?? [], "scrollViews": seen]
       return
     }
