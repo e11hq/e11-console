@@ -223,7 +223,7 @@ const Haptic = (() => {
     // the + for a new quick task: a light knock as its sheet comes up
     else if (e.target.closest && e.target.closest('.ph-fab, [data-ph="quick-add"]')) fire('light');
   }, true);
-  return { on: () => { check(); return !!on; }, light: () => fire('light'), medium: () => fire('medium'), select: () => fire('selection'), success: () => fire('success'), warn: () => fire('warning') };
+  return { on: () => { check(); return !!on; }, light: () => fire('light'), medium: () => fire('medium'), select: () => fire('selection'), success: () => fire('success'), uploaded: () => fire('uploaded'), warn: () => fire('warning') };
 })();
 
 /* ================= Seasonal icons: each one shows only on its own day(s) (Automatic) ================= */
@@ -5393,6 +5393,7 @@ async function attachFiles(target = 'task', replyTo = null, dropped = null, sour
       : await Host.call('pickAttachments', { taskId: t.id, source, ...hooks });
     const files = (res.files || []).map((f) => ({ ...f, addedAt: nowISO() }));
     if (target === 'comment') delete ui.commentUp[key];
+    if (files.length) Haptic.uploaded();   // (iPhone app: a tap and a soft sound when the upload is done)
     if (!files.length) { if (target === 'comment') Unsent.uploaded(key, false); return; }
     if (target === 'comment') {
       ui.commentFiles[key] = (ui.commentFiles[key] || []).concat(files);

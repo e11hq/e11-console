@@ -11,6 +11,7 @@ import UserNotifications
 import LocalAuthentication
 import PhotosUI
 import UniformTypeIdentifiers
+import AudioToolbox
 
 // Version of this iPhone app's native part (raise it with changes the web app needs to know about)
 let SHELL_VERSION = 17   // 17: the comment box on a task's Comments is iPhone's own, on the keyboard (commentBar / window.__e11CBar; CommentBar.swift) · 16: iPhone's own banners also while the app is open (the page draws no cards), each notification confirmed by the Notification Service Extension so the server sends again the ones an offline phone missed (register ack) · 15: New task / Request amendments as native sheets with iPhone's own fields that tuck into a bar like a Mail draft (formSheet / formSet / formClose; the page: window.__e11Form), a Trash task as a native sheet (trashSheet); native sheets and dates also open on top of those · 14: native sheets with people (round photos / initials) and a search box (+ a typed entry, "Use …") · 13: also dates picked in a native sheet (pickDate: closing it never sets a date) · a native sheet can stay open for ticking several (multi; each tick: window.__e11SheetPick) · 12: native sheets also with colour dots, a row of colours / emoji / numbers (chips), tinted icons, locked rows · 11: plain menus as iOS's own sheets (nativeSheet; the page: NativeSheet in app.js, showMenu(…, { native: true })) · 10: My Tasks, Inbox and Team lists swiped by iOS itself (Pager.syncLists in phone.js) · 9: a task’s Details / Comments swiped by iOS itself (the page: Pager in phone.js) · 8: iOS haptics for the page (haptic kind: light / medium / selection / success / warning / error) · 7: the comment box rides down / up with the keyboard frame by frame (__e11KbStep) · 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
@@ -201,6 +202,13 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     b.onHeight = { [weak self] h in self?.pageJS("window.__e11CBarH && window.__e11CBarH(\(Int(h.rounded())))") }
     return b
   }()
+  static var uploadedSound: SystemSoundID = 0
+  static func playUploaded() {
+    if uploadedSound == 0, let url = Bundle.main.url(forResource: "uploaded", withExtension: "wav") {
+      AudioServicesCreateSystemSoundID(url as CFURL, &uploadedSound)
+    }
+    if uploadedSound != 0 { AudioServicesPlaySystemSound(uploadedSound) }
+  }
   func commentBar(_ a: [String: Any]) {
     let b = cbar
     // (sliding between Details and Comments: the box slides with the Comments page)
@@ -804,6 +812,10 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       case "success": UINotificationFeedbackGenerator().notificationOccurred(.success)
       case "warning": UINotificationFeedbackGenerator().notificationOccurred(.warning)
       case "error": UINotificationFeedbackGenerator().notificationOccurred(.error)
+      // an upload finished: the success tap and a soft two-note sound (uploaded.wav; silent with the ring switch off)
+      case "uploaded":
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        Main.playUploaded()
       default: UIImpactFeedbackGenerator(style: .light).impactOccurred()
       }
       done(["ok": true])
