@@ -1765,7 +1765,8 @@ final class FormSheetVC: UIViewController, UITableViewDataSource, UITableViewDel
   }
   private func placeBar() {
     let c = visibleCard()
-    let top = max(0, c.minY) + max(8, (min(c.height, 70) - 48) / 2 + 4)
+    // (the title and Continue in the very middle of the card's height — Haris 2026-10-30)
+    let top = max(0, c.minY) + max(0, (min(c.height, 70) - 48) / 2)
     if abs((barTop?.constant ?? 0) - top) > 0.5 { barTop?.constant = top }
   }
   func geo() -> [String: Any] {
