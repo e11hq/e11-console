@@ -1646,15 +1646,16 @@ final class FormSheetVC: UIViewController, UITableViewDataSource, UITableViewDel
   private var focused = false
   private let fmt: DateFormatter = { let f = DateFormatter(); f.calendar = Calendar(identifier: .gregorian); f.locale = Locale(identifier: "en_US_POSIX"); f.timeZone = .current; f.dateFormat = "yyyy-MM-dd"; return f }()
   private var floating: Bool { if #available(iOS 26, *) { return true } else { return false } }
-  // (the form sized to fit — iOS keeps it above the keyboard; the tucked bar: a 58-point card)
+  // (the form sized to fit — iOS keeps it above the keyboard; the tucked bar: a 62-point card, as tall as the tab bar's pill)
   private var formDetent: UISheetPresentationController.Detent {
     .custom(identifier: FormSheetVC.FORM) { [weak self] ctx in min(ctx.maximumDetentValue, self?.fitHeight ?? 420) }
   }
   private var tuckDetent: UISheetPresentationController.Detent {
     .custom(identifier: FormSheetVC.TUCK) { _ in
       // (the card's own height on screen: iOS adds nothing under a sheet this small — self-test 2026-10-30 showed a
-      //  24-point card when the home-bar strip was taken off here, and the title and Continue were cut off)
-      58
+      //  24-point card when the home-bar strip was taken off here, and the title and Continue were cut off; 62 = the
+      //  height of the tab bar's own pill, Haris 2026-10-30)
+      62
     }
   }
 
