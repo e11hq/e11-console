@@ -335,6 +335,11 @@ final class Sidebar: NSView {
     scroll.borderType = .noBorder
     scroll.documentView = list
     scroll.contentView.drawsBackground = false
+    // the clients fade away at the list's edges instead of being cut (only where there's more to scroll to)
+    scroll.wantsLayer = true
+    scroll.layer?.mask = fade
+    scroll.contentView.postsBoundsChangedNotifications = true
+    NotificationCenter.default.addObserver(self, selector: #selector(scrolled), name: NSView.boundsDidChangeNotification, object: scroll.contentView)
     [scroll, themeBtn, newBtn, sideBtn, footLine, me, sync, copy].forEach { inner.addSubview($0) }
     sync.addSubview(syncDot); sync.addSubview(syncText)
     syncDot.wantsLayer = true; syncDot.layer?.cornerRadius = 3.5
@@ -496,6 +501,26 @@ final class Sidebar: NSView {
       place(v, ly, W); ly += hh
     }
     list.frame = NSRect(x: 0, y: 0, width: W, height: max(ly + 4, scroll.contentSize.height))
+    updateFade()
+  }
+  private let fade = CAGradientLayer()
+  @objc private func scrolled(_ n: Notification) { updateFade() }
+  private func updateFade() {
+    let h = scroll.bounds.height
+    guard h > 0 else { return }
+    let y = scroll.contentView.bounds.origin.y, end = list.frame.height - scroll.contentView.bounds.height
+    let more = (above: y > 1, below: y < end - 1)
+    let f = NSNumber(value: Double(min(28, h / 3) / h))
+    let solid = NSColor.black.cgColor, gone = NSColor.clear.cgColor
+    CATransaction.begin(); CATransaction.setDisableActions(true)
+    fade.frame = scroll.bounds
+    // (the scroll view's layer runs bottom to top)
+    fade.startPoint = CGPoint(x: 0.5, y: 0); fade.endPoint = CGPoint(x: 0.5, y: 1)
+    let bottomFirst = !scroll.isFlipped
+    let low = bottomFirst ? more.below : more.above, high = bottomFirst ? more.above : more.below
+    fade.colors = [low ? gone : solid, solid, solid, high ? gone : solid]
+    fade.locations = [0, f, NSNumber(value: 1 - f.doubleValue), 1]
+    CATransaction.commit()
   }
 
   /* ---------- drag to reorder: picked up, the others slide aside, let go: the page saves the new order ---------- */
