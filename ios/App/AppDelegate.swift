@@ -1140,7 +1140,10 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     //  hand a table otherwise starts at 0, which hid that room and put the first option against the handle)
     if lastContent < 0 { table.contentOffset = CGPoint(x: 0, y: -table.contentInset.top) }
     lastContent = ch
-    fitHeight = ch + NativeSheetVC.TOP + 8 + (floating ? 0 : view.safeAreaInsets.bottom)
+    // (iOS adds the home-bar strip below a sheet's height by itself — on a floating sheet too, where it just showed
+    //  as empty space under the last option — so that strip is taken off here)
+    let strip = presentingViewController?.view.window?.safeAreaInsets.bottom ?? view.window?.safeAreaInsets.bottom ?? 0
+    fitHeight = max(120, ch + NativeSheetVC.TOP + 8 - (floating ? strip : 0) + (floating ? 0 : view.safeAreaInsets.bottom))
     sheetPresentationController?.animateChanges { sheetPresentationController?.invalidateDetents() }
   }
   // Each row's height, worked out here (exact, no estimates — estimates made the list jump while scrolling, and
