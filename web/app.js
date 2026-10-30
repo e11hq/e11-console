@@ -576,7 +576,8 @@ const NativeSide = (() => {
       const img = el.querySelector('.nav-clogo img');
       items.push({ t: 'i', k, title: c.textContent.replace(/\s+/g, ' ').trim(), n: cnt ? cnt.textContent.trim() : '', hot: !!(cnt && cnt.classList.contains('hot')),
         sel: el.classList.contains('active'), ic: ic ? ic.dataset.i : '', c: dot ? rgbOf(getComputedStyle(dot).backgroundColor) : null,
-        logo: img && img.getAttribute('src') ? logo(img.src) : null, menu: !!el.querySelector('[data-action="project-menu"]') });
+        logo: img && img.getAttribute('src') ? logo(img.src) : null, menu: !!el.querySelector('[data-action="project-menu"]'),
+        drag: !!el.dataset.project && isAdmin() });   // (Admins drag clients into a new order — Mac app only)
       if (img && !items[items.length - 1].logo && !items[items.length - 1].c) { const p = typeof proj === 'function' ? proj(el.dataset.project) : null; if (p) { const t = document.createElement('i'); t.style.color = p.color; document.body.appendChild(t); items[items.length - 1].c = rgbOf(getComputedStyle(t).color); t.remove(); } }
     });
     const chip = document.getElementById('me-chip');
@@ -658,6 +659,15 @@ const NativeSide = (() => {
           else if (String(a.key).startsWith('project:')) projectMenu(at, String(a.key).slice(8));
         } finally { capturing = false; }
         return cap ? JSON.stringify(cap) : '';
+      }
+      // a client dragged to a new place in the Mac's sidebar: the clients in that order (the ones not in the list after)
+      case 'reorder': {
+        const ids = (a.keys || []).filter((k) => String(k).startsWith('project:')).map((k) => String(k).slice(8));
+        if (!isAdmin() || ids.length < 2) return;
+        ids.forEach((id, i) => { const p = proj(id); if (p) p.order = i + 1; });
+        db.projects.filter((p) => !ids.includes(p.id)).sort(byOrder).forEach((p, i) => { p.order = ids.length + i + 1; });
+        commit();
+        return;
       }
       case 'pick': { const m = menus.get(+a.m); menus.clear(); const it = m && m.items[+a.i]; if (it && typeof it.run === 'function') it.run(); return; }
       case 'swatch': { const m = menus.get(+a.m); menus.clear(); if (m && m.fake._onSwatch) m.fake._onSwatch(a.c); return; }

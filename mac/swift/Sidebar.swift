@@ -104,6 +104,29 @@ final class SideRow: SideHit {
   let icon = NSImageView(), title = sideLabel(13.5), count = sideLabel(12.5, .regular, .tertiaryLabelColor)
   let badge = FlippedView(), badgeText = sideLabel(11, .semibold, .white)
   var dot: NSColor?, logo: NSImage?, selected = false, compact = false, hot = false
+  // drag to reorder (clients, Admins: the page says which rows can be dragged)
+  var key = "", canDrag = false
+  var lifted = false { didSet { if lifted != oldValue { needsDisplay = true; shadowed(lifted) } } }
+  var onDrag: ((SideRow, NSEvent, Int) -> Void)?   // 0 picked up · 1 moved · 2 let go
+  private var downAt: NSPoint?, dragging = false
+  override func mouseDown(with e: NSEvent) { downAt = e.locationInWindow; dragging = false; super.mouseDown(with: e) }
+  override func mouseDragged(with e: NSEvent) {
+    guard canDrag, let d = downAt else { super.mouseDragged(with: e); return }
+    if !dragging && abs(e.locationInWindow.y - d.y) > 4 { dragging = true; pressed = false; onDrag?(self, e, 0) }
+    if dragging { onDrag?(self, e, 1) } else { super.mouseDragged(with: e) }
+  }
+  override func mouseUp(with e: NSEvent) {
+    downAt = nil
+    if dragging { dragging = false; pressed = false; onDrag?(self, e, 2); return }
+    super.mouseUp(with: e)
+  }
+  private func shadowed(_ on: Bool) {
+    wantsLayer = true
+    layer?.shadowColor = NSColor.black.cgColor
+    layer?.shadowOpacity = on ? 0.25 : 0
+    layer?.shadowRadius = on ? 8 : 0
+    layer?.shadowOffset = CGSize(width: 0, height: -2)
+  }
   init() {
     super.init(frame: .zero)
     icon.imageScaling = .scaleNone
@@ -130,6 +153,8 @@ final class SideRow: SideHit {
     badge.isHidden = !hot || c
     title.isHidden = c; count.isHidden = c
     toolTip = c ? name + (n.isEmpty ? "" : " (\(n))") : nil
+    key = e["k"] as? String ?? ""
+    canDrag = (e["drag"] as? Bool) == true
     needsLayout = true; needsDisplay = true
   }
   override func layout() {
@@ -158,6 +183,11 @@ final class SideRow: SideHit {
     title.frame = NSRect(x: 35, y: (h - th) / 2, width: max(0, right - 35), height: th)
   }
   override func draw(_ r: NSRect) {
+    if lifted {
+      // (picked up: a solid card of the panel's own colour, so it reads above the others)
+      dynColor(NSColor(white: 0.97, alpha: 1), NSColor(white: 0.22, alpha: 1)).setFill()
+      NSBezierPath(roundedRect: bounds, xRadius: compact ? 10 : 9, yRadius: compact ? 10 : 9).fill()
+    }
     if selected || hovering || pressed {
       let fill: NSColor = pressed ? SIDE_SEL : selected ? SIDE_SEL : SIDE_HOVER
       fill.setFill(); NSBezierPath(roundedRect: bounds, xRadius: compact ? 10 : 9, yRadius: compact ? 10 : 9).fill()
@@ -278,6 +308,9 @@ final class Sidebar: NSView {
   let sync = SideHit()
   private var rows: [NSView] = []
   var menuToken = 0
+  // a row being dragged: it, the run of rows it can move among, where those sit, where it was grabbed
+  private var drag: (row: SideRow, from: Int, group: [SideRow], slots: [CGFloat], grab: CGFloat)?
+  private var pendingModel: [String: Any]?
 
   override init(frame: NSRect) {
     super.init(frame: frame)
@@ -331,6 +364,7 @@ final class Sidebar: NSView {
 
   /* ---------- the page's model ---------- */
   func apply(_ m: [String: Any]) {
+    if drag != nil { pendingModel = m; return }   // (after the drag)
     let wasOn = on, wasCompact = compact
     model = m
     on = (m["on"] as? Bool) == true
@@ -380,6 +414,7 @@ final class Sidebar: NSView {
         r.set(e, compact: compact)
         let k = e["k"] as? String ?? ""
         r.onClick = { [weak self] in self?.host?.sideCall(["kind": "go", "key": k], nil) }
+        r.onDrag = { [weak self] row, ev, phase in self?.dragRow(row, ev, phase) }
         if (e["menu"] as? Bool) == true { r.onMenu = { [weak self, weak r] ev in self?.openMenu(k, from: r, at: ev) } }
         rows.append(r)
       }
@@ -421,6 +456,7 @@ final class Sidebar: NSView {
     // the list between them, scrolling when it doesn't fit
     scroll.frame = NSRect(x: 0, y: y, width: W, height: max(0, footY - 4 - y))
     var ly: CGFloat = 0
+    if drag != nil { return }   // (rows stay where the drag has them)
     for v in rows {
       if let h = v as? SideHead {
         let hh: CGFloat = compact ? 17 : (ly == 0 ? 22 : 30)
@@ -433,6 +469,52 @@ final class Sidebar: NSView {
       v.needsLayout = true
     }
     list.frame = NSRect(x: 0, y: 0, width: W, height: max(ly + 6, scroll.contentSize.height))
+  }
+
+  /* ---------- drag to reorder: picked up, the others slide aside, let go: the page saves the new order ---------- */
+  private func nearest(_ y: CGFloat, _ slots: [CGFloat]) -> Int {
+    var best = 0
+    for (i, s) in slots.enumerated() where abs(s - y) < abs(slots[best] - y) { best = i }
+    return best
+  }
+  func dragRow(_ r: SideRow, _ e: NSEvent, _ phase: Int) {
+    let p = list.convert(e.locationInWindow, from: nil)
+    switch phase {
+    case 0:
+      guard let i = rows.firstIndex(where: { $0 === r }) else { return }
+      var a = i, b = i
+      while a > 0, let x = rows[a - 1] as? SideRow, x.canDrag { a -= 1 }
+      while b < rows.count - 1, let x = rows[b + 1] as? SideRow, x.canDrag { b += 1 }
+      let group = rows[a...b].compactMap { $0 as? SideRow }
+      guard group.count > 1 else { return }
+      drag = (r, a, group, group.map { $0.frame.minY }, p.y - r.frame.minY)
+      list.addSubview(r, positioned: .above, relativeTo: nil)
+      r.lifted = true
+      NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+    case 1:
+      guard let d = drag else { return }
+      r.frame.origin.y = min(max(p.y - d.grab, d.slots.first!), d.slots.last!)
+      let target = nearest(r.frame.minY, d.slots)
+      let others = d.group.filter { $0 !== r }
+      var j = 0
+      NSAnimationContext.runAnimationGroup { c in
+        c.duration = 0.15; c.allowsImplicitAnimation = true
+        for (k, y) in d.slots.enumerated() where k != target { others[j].animator().frame.origin.y = y; j += 1 }
+      }
+    default:
+      guard let d = drag else { return }
+      let target = nearest(r.frame.minY, d.slots)
+      var order = d.group.filter { $0 !== r }
+      order.insert(r, at: target)
+      NSAnimationContext.runAnimationGroup({ c in
+        c.duration = 0.15; c.allowsImplicitAnimation = true
+        r.animator().frame.origin.y = d.slots[target]
+      }) { r.lifted = false }
+      rows.replaceSubrange(d.from..<(d.from + d.group.count), with: order as [NSView])
+      drag = nil
+      if order.map({ $0.key }) != d.group.map({ $0.key }) { host?.sideCall(["kind": "reorder", "keys": order.map { $0.key }], nil) }
+      if let m = pendingModel { pendingModel = nil; apply(m) }
+    }
   }
 
   /* ---------- menus: the page's own options, shown as the Mac's menu ---------- */
