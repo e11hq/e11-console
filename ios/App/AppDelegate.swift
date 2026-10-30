@@ -42,7 +42,12 @@ func jsonString(_ v: Any) -> String {
   guard JSONSerialization.isValidJSONObject(v), let d = try? JSONSerialization.data(withJSONObject: v), let s = String(data: d, encoding: .utf8) else { return "null" }
   return s
 }
-let BG = UIColor(red: 0.047, green: 0.051, blue: 0.059, alpha: 1)
+let DARK_BG = UIColor(red: 0.047, green: 0.051, blue: 0.059, alpha: 1)
+// The app's own light / dark from the last time it ran (the page says which with setAppearance): the app starts in it,
+// so a light app doesn't begin with a dark background and white status bar — that showed as a dark band across the
+// top of the light start-up screen (Haris, 2026-10-30)
+var LAST_LIGHT: Bool { defaults.string(forKey: "e11_look") == "light" }
+var BG: UIColor { LAST_LIGHT ? UIColor(red: 0.957, green: 0.957, blue: 0.969, alpha: 1) : DARK_BG }
 
 @main
 final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate {
@@ -112,7 +117,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   var lockView: UIView?
   var awayAt: Date?
   var started = false
-  var statusStyle: UIStatusBarStyle = .lightContent
+  var statusStyle: UIStatusBarStyle = LAST_LIGHT ? .darkContent : .lightContent
   var downloads: [ObjectIdentifier: URL] = [:]
   var downloadFrom: [ObjectIdentifier: String] = [:]      // what each download is fetching (one at a time per file)
   var downloadWatch: [ObjectIdentifier: NSKeyValueObservation] = [:]
@@ -786,6 +791,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       done(["ok": true])
     case "setAppearance":
       statusStyle = (a["mode"] as? String) == "light" ? .darkContent : .lightContent
+      defaults.set((a["mode"] as? String) == "light" ? "light" : "dark", forKey: "e11_look")
       setNeedsStatusBarAppearanceUpdate()
       // the tab bar follows the app's own light / dark (not only the phone's): every icon, the open page's too, white
       // in dark and black in light — Haris 2026-10-30 (only the tab bar: the page itself keeps following the phone)
