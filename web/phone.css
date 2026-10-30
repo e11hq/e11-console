@@ -104,6 +104,8 @@ body.phone #ph-tabs[hidden] { display: none; }
 .ph-ib.unread { background: rgba(123,104,238,.07); }
 .ph-ib-b { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .ph-ib-m { font-size: 14.5px; line-height: 1.4; overflow-wrap: anywhere; }
+/* a long comment shows three lines, then … (like Mail / Messages); the whole of it is in the task (Haris, 2026-10-30) */
+.ph-ib-m { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
 .ph-ib-m .ib-dim { color: var(--text-2); }
 .ph-ib-t { font-size: 13px; color: var(--text-2); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ph-ib-w { font-size: 12px; color: var(--text-3); }
