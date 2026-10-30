@@ -14,7 +14,7 @@ import UniformTypeIdentifiers
 import AudioToolbox
 
 // Version of this iPhone app's native part (raise it with changes the web app needs to know about)
-let SHELL_VERSION = 17   // 17: the comment box on a task's Comments is iPhone's own, on the keyboard (commentBar / window.__e11CBar; CommentBar.swift) · 16: iPhone's own banners also while the app is open (the page draws no cards), each notification confirmed by the Notification Service Extension so the server sends again the ones an offline phone missed (register ack) · 15: New task / Request amendments as native sheets with iPhone's own fields that tuck into a bar like a Mail draft (formSheet / formSet / formClose; the page: window.__e11Form), a Trash task as a native sheet (trashSheet); native sheets and dates also open on top of those · 14: native sheets with people (round photos / initials) and a search box (+ a typed entry, "Use …") · 13: also dates picked in a native sheet (pickDate: closing it never sets a date) · a native sheet can stay open for ticking several (multi; each tick: window.__e11SheetPick) · 12: native sheets also with colour dots, a row of colours / emoji / numbers (chips), tinted icons, locked rows · 11: plain menus as iOS's own sheets (nativeSheet; the page: NativeSheet in app.js, showMenu(…, { native: true })) · 10: My Tasks, Inbox and Team lists swiped by iOS itself (Pager.syncLists in phone.js) · 9: a task’s Details / Comments swiped by iOS itself (the page: Pager in phone.js) · 8: iOS haptics for the page (haptic kind: light / medium / selection / success / warning / error) · 7: the comment box rides down / up with the keyboard frame by frame (__e11KbStep) · 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
+let SHELL_VERSION = 18   // 18: the file preview is iOS's own (preview / previewSet / window.__e11Preview; Preview.swift) · 17: the comment box on a task's Comments is iPhone's own, on the keyboard (commentBar / window.__e11CBar; CommentBar.swift) · 16: iPhone's own banners also while the app is open (the page draws no cards), each notification confirmed by the Notification Service Extension so the server sends again the ones an offline phone missed (register ack) · 15: New task / Request amendments as native sheets with iPhone's own fields that tuck into a bar like a Mail draft (formSheet / formSet / formClose; the page: window.__e11Form), a Trash task as a native sheet (trashSheet); native sheets and dates also open on top of those · 14: native sheets with people (round photos / initials) and a search box (+ a typed entry, "Use …") · 13: also dates picked in a native sheet (pickDate: closing it never sets a date) · a native sheet can stay open for ticking several (multi; each tick: window.__e11SheetPick) · 12: native sheets also with colour dots, a row of colours / emoji / numbers (chips), tinted icons, locked rows · 11: plain menus as iOS's own sheets (nativeSheet; the page: NativeSheet in app.js, showMenu(…, { native: true })) · 10: My Tasks, Inbox and Team lists swiped by iOS itself (Pager.syncLists in phone.js) · 9: a task’s Details / Comments swiped by iOS itself (the page: Pager in phone.js) · 8: iOS haptics for the page (haptic kind: light / medium / selection / success / warning / error) · 7: the comment box rides down / up with the keyboard frame by frame (__e11KbStep) · 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
 let procEnv = ProcessInfo.processInfo.environment
 let SELFTEST = procEnv["E11_SELFTEST"] ?? ""           // the build machine's self-test in the simulator
 let info = Bundle.main.infoDictionary ?? [:]
@@ -195,6 +195,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
      it with the keyboard itself, frame by frame); hidden until the page shows it. The page is told how tall it is
      (--ph-cbar) and keeps that much room under the comments. */
   var cbarIfMade: CommentBar?
+  weak var previewVC: PreviewVC?
   lazy var cbar: CommentBar = {
     let b = CommentBar()
     b.translatesAutoresizingMaskIntoConstraints = false
@@ -778,7 +779,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     var v: UIViewController = self
     while let p = v.presentedViewController {
       if p.isBeingDismissed { return nil }
-      if p is FormSheetVC || p is TrashSheetVC { v = p } else { return nil }
+      if p is FormSheetVC || p is TrashSheetVC || p is PreviewVC { v = p } else { return nil }
     }
     return v
   }
@@ -872,6 +873,19 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       }
       host.present(vc, animated: true)
     case "commentBar": commentBar(a); done(["ok": true])
+    case "preview":
+      // the file preview (18+): files with their addresses on the server; fetched with the app's own cookies
+      guard !a.isEmpty else { return done(["ok": false]) }
+      PreviewLoad.refreshCookies(web.configuration.websiteDataStore.httpCookieStore) { [weak self] in
+        guard let self else { return }
+        if self.cbarIfMade?.text.isFirstResponder == true { self.cbarIfMade?.text.resignFirstResponder() }
+        let vc = PreviewVC(a, dark: self.statusStyle != .darkContent) { [weak self] ev in self?.pageJS("window.__e11Preview && window.__e11Preview(\(jsonString(ev)))") }
+        self.previewVC = vc
+        self.topMost().present(vc, animated: true)
+        done(["ok": true])
+      }
+    case "previewSet":
+      previewVC?.set(a); done(["ok": true])
     case "formSet":
       // what was picked for a field (Client, Assign to), CD review on / off, or a message about what's wrong
       if let f = FormSheetVC.current, f.isOpen, f.key == (a["key"] as? String ?? "") { f.set(a) }
@@ -989,9 +1003,13 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         self.commentBar(CommentBar.selfArgs())
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.cbar.selfType("Thanks, can we make the logo a bit bigger on the last frame and keep the date as it is?") } }),
       ("cbarMention", "return '{}'", { self.cbar.selfType("Hi @Sa") }),
+      ("preview", "return '{}'", {
+        self.commentBar(["show": false])
+        self.run("preview", PreviewVC.selfArgs()) { _ in } }),
       ("signin", pause(4000) + "return JSON.stringify({ host: location.host, top: (document.querySelector('h1, h2, img, form') || document.body).getBoundingClientRect().top })", {
         self.presentedViewController?.dismiss(animated: false)
         self.commentBar(["show": false])
+        self.previewVC = nil
         self.web.load(URLRequest(url: URL(string: "https://e11hq.cloudflareaccess.com/")!)) }),
     ]
     func run(_ i: Int) {

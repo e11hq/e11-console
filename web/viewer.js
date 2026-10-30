@@ -9,6 +9,77 @@ const Viewer = (() => {
   const phone = () => typeof Phone !== 'undefined' && Phone.on;
   const W = () => (root ? root.querySelector('.fpv-stage').clientWidth : innerWidth);
 
+  /* iPhone app 18+: the same preview drawn by iOS (Preview.swift) — Copy, Download and ⋯ still run here */
+  const Native = (() => {
+    let shell = 0, open = false;
+    if (typeof Host !== 'undefined' && Host.isIOSApp) NativeMac.call('appInfo').then((r) => { shell = Number(r && r.shell) || 0; }).catch(() => {});
+    const abs = (u) => (u ? new URL(u, location.href).href : '');
+    function fileOf(a) {
+      const kind = fileKind(a), ext = fileExt(a.name) || 'file';
+      const who = a.addedBy ? userName(a.addedBy) : '';
+      const base = { id: a.id, name: a.name, ext: ext.slice(0, 5), meta: [fmtSize(a.size), who, a.addedAt ? timeAgo(a.addedAt) : ''].filter(Boolean).join(' · ') };
+      const cover = a.thumb ? abs(posterUrl(a)) : '';
+      if (kind === 'image') return { ...base, kind: 'image', src: abs(imgUrl(a, 1600)), thumb: abs(imgUrl(a, 160)) };
+      if (kind === 'video') return { ...base, kind: 'video', src: abs(viewUrl(a)), cover, thumb: cover };
+      if (kind === 'audio') return { ...base, kind: 'audio', src: abs(fileUrl(a)) };
+      if (Host.isServer && (kind === 'pdf' || OFFICE_EXT.includes(ext))) return { ...base, kind: 'pages', cover, thumb: cover };
+      if (kind === 'text') return { ...base, kind: 'text', src: abs(fileUrl(a)) };
+      return { ...base, kind: 'other', cover, thumb: cover, note: 'Download it to see the whole file.' };
+    }
+    const set = (v) => NativeMac.call('previewSet', v).catch(() => {});
+    const byId = (id) => list.find((x) => x.id === id);
+    window.__e11Preview = (ev) => {
+      if (!ev) return;
+      const a = ev.id ? byId(ev.id) : null;
+      switch (ev.ev) {
+        case 'at': if (a) { at = list.indexOf(a); ui.previewAtt = a; } break;
+        case 'pages':
+          if (!a) break;
+          Host.call('pdfPages', { id: a.id, path: a.path }).then((r) => {
+            const pages = (r && r.pages) || [];
+            const note = !pages.length ? (r && r.unavailable ? 'Full previews of Office files arrive with the next server update.' : 'This file couldn’t be previewed — download it to see it.')
+              : r.total > pages.length ? `Showing the first ${pages.length} of ${r.total} pages — download it for the rest.` : null;
+            set({ id: a.id, pages: pages.map((x) => abs('/__file/' + x.split('/').map(encodeURIComponent).join('/'))), note });
+          }).catch(() => set({ id: a.id, pages: [], note: 'This file couldn’t be previewed right now.' }));
+          break;
+        case 'copy': if (a) copyAttachment(a); break;
+        case 'dl': if (a) Host.call('revealPath', { path: a.path }).catch((err) => set({ toast: err.cancelled ? 'Download cancelled' : 'Couldn’t download: ' + err.message })); break;
+        case 'more': if (a) moreNative(a); break;
+        case 'closed': {
+          open = false; ui.previewAtt = null;
+          const f = after; after = null;
+          if (f) setTimeout(f, 0);
+          break;
+        }
+      }
+    };
+    // ⋯: Info as a native message; Remove / Delete close the preview first (their questions are the page's)
+    function moreNative(a) {
+      const client = clientFileById(a.id) === a ? a : null;
+      const t = ui.taskId && task(ui.taskId);
+      const onTask = !client && t && (t.attachments || []).some((x) => x.id === a.id);
+      const items = [{ label: 'Info', icon: 'info', run: () => {
+        const kind = fileKind(a), d = MediaDims.of(a);
+        const rows = [['Name', a.name], ['Size', fmtSize(a.size)], ['Type', (fileExt(a.name) || 'file').toUpperCase() + (kind === 'image' || kind === 'video' ? (d ? ` · ${d[0]} × ${d[1]}` : '') : '')],
+          a.addedBy ? ['Added by', userName(a.addedBy)] : null, a.addedAt ? ['Added', fmtDateTime(a.addedAt)] : null].filter(Boolean);
+        set({ info: rows });
+      } }];
+      const closeThen = (f) => { set({ close: true }); setTimeout(f, 350); };
+      if (client && canDelAsset(a)) items.push('-', { label: 'Delete', icon: 'trash', danger: true, run: () => closeThen(() => removeClientFile(a.id)) });
+      if (onTask) items.push('-', { label: 'Remove from task', icon: 'trash', danger: true, run: () => closeThen(() => act('remove-att', a.id)) });
+      showMenu(document.body, items, { native: true });
+    }
+    return {
+      ok: () => shell >= 18 && phone(),
+      open() {
+        open = true;
+        ui.previewAtt = list[at];
+        NativeMac.call('preview', { files: list.map(fileOf), at }).catch(() => { open = false; });
+      },
+      get isOpen() { return open; },
+    };
+  })();
+
   // the group a file belongs to (order as shown there)
   function groupOf(a) {
     const t = ui.taskId && task(ui.taskId);
@@ -50,6 +121,7 @@ const Viewer = (() => {
     list = (group && group.length ? group : groupOf(a)).filter(Boolean);
     at = list.findIndex((x) => x.id === a.id);
     if (at < 0) { list = [a]; at = 0; }
+    if (Native.ok()) { Native.open(); return; }   // (iPhone app 18+: iOS's own preview)
     bare = false;
     const many = list.length > 1;
     let host = document.getElementById('pv-root');
