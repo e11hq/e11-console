@@ -292,7 +292,7 @@ protocol SidebarHost: AnyObject {
 }
 
 final class Sidebar: NSView {
-  static let WIDE: CGFloat = 244, SLIM: CGFloat = 76, INSET: CGFloat = 8, TOP: CGFloat = 44
+  static let WIDE: CGFloat = 244, SLIM: CGFloat = 92, INSET: CGFloat = 8, TOP: CGFloat = 44
   weak var host: SidebarHost?
   var on = false
   var compact = false

@@ -614,7 +614,7 @@ const NativeSide = (() => {
       de.classList.toggle('mac-nsb', show);
       // (newer Mac apps: the sidebar floats over a page as wide as the window — the page keeps room for it itself)
       de.classList.toggle('mac-nsb-o', show && !!r.overlay);
-      if (r && r.room) { de.style.setProperty('--nsb-room', r.room + 'px'); de.style.setProperty('--nsb-slim', (r.slim || 92) + 'px'); }
+      if (r && r.room) { de.style.setProperty('--nsb-room', r.room + 'px'); de.style.setProperty('--nsb-slim', (r.slim || 108) + 'px'); }
     }).catch(() => {});
   }
   function later() { if (on && !timer) timer = setTimeout(paint, 60); }

@@ -212,7 +212,10 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     var gap = mini.frame.origin.x - close.frame.origin.x
     if !(gap > 10 && gap < 40) { gap = 20 }
     let y = ((BAR_H - bh) / 2).rounded()
-    for (i, b) in [close, mini, zoom].enumerated() { b.setFrameOrigin(NSPoint(x: LIGHTS_X + CGFloat(i) * gap, y: y)) }
+    // (the collapsed strip: centred on it — at the usual place the buttons ran over its edge, Haris 2026-10-31)
+    let span = 2 * gap + zoom.frame.width
+    let x0 = side.on && side.compact ? (Sidebar.INSET + (side.width - span) / 2).rounded() : LIGHTS_X
+    for (i, b) in [close, mini, zoom].enumerated() { b.setFrameOrigin(NSPoint(x: x0 + CGFloat(i) * gap, y: y)) }
   }
   // Closing the window keeps the app running in the background (like Slack): still connected, notifications and the
   // Dock badge keep coming; the Dock icon brings the window back. Quit (⌘Q) really quits.
