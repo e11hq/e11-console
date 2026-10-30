@@ -13,7 +13,7 @@ import PhotosUI
 import UniformTypeIdentifiers
 
 // Version of this iPhone app's native part (raise it with changes the web app needs to know about)
-let SHELL_VERSION = 11   // 11: plain menus as iOS's own sheets (nativeSheet; the page: NativeSheet in app.js, showMenu(…, { native: true })) · 10: My Tasks, Inbox and Team lists swiped by iOS itself (Pager.syncLists in phone.js) · 9: a task’s Details / Comments swiped by iOS itself (the page: Pager in phone.js) · 8: iOS haptics for the page (haptic kind: light / medium / selection / success / warning / error) · 7: the comment box rides down / up with the keyboard frame by frame (__e11KbStep) · 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
+let SHELL_VERSION = 12   // 12: native sheets also with colour dots, a row of colours / emoji / numbers (chips), tinted icons, locked rows · 11: plain menus as iOS's own sheets (nativeSheet; the page: NativeSheet in app.js, showMenu(…, { native: true })) · 10: My Tasks, Inbox and Team lists swiped by iOS itself (Pager.syncLists in phone.js) · 9: a task’s Details / Comments swiped by iOS itself (the page: Pager in phone.js) · 8: iOS haptics for the page (haptic kind: light / medium / selection / success / warning / error) · 7: the comment box rides down / up with the keyboard frame by frame (__e11KbStep) · 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
 let procEnv = ProcessInfo.processInfo.environment
 let SELFTEST = procEnv["E11_SELFTEST"] ?? ""           // the build machine's self-test in the simulator
 let info = Bundle.main.infoDictionary ?? [:]
@@ -747,9 +747,11 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       // a plain menu from the page as a real iPhone sheet (floating; iOS grows it as it's pulled); replies with the
       // chosen row's index, or -1 when it's closed without a choice
       if presentedViewController != nil { return done(["ok": false]) }
-      let vc = NativeSheetVC(a, dark: statusStyle != .darkContent) { i in
+      let vc = NativeSheetVC(a, dark: statusStyle != .darkContent) { i, swatch in
         if i >= 0 { FocusAfterPicker.allow() }   // (a text box the option opens still brings the keyboard)
-        done(["ok": true, "index": i])
+        var r: [String: Any] = ["ok": true, "index": i]
+        if let sw = swatch { r["swatch"] = sw }
+        done(r)
       }
       present(vc, animated: true)
     case "notify": done(["ok": true])   // (Apple's notifications come from the server)
@@ -1050,11 +1052,16 @@ enum FocusAfterPicker {
    red for delete, a coloured dot for a role), sized to fit, with the grab handle. iOS draws it — floating at rest,
    it grows with the finger when pulled and springs back; dragged down or tapped outside, it closes. */
 final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewDelegate, UISheetPresentationControllerDelegate {
-  struct Row { let i: Int; let label: String; let sub: String?; let icon: String?; let danger: Bool; let checked: Bool; let disabled: Bool; let dot: UIColor? }
+  struct Chip { let i: Int; let swatch: String?; let label: String?; let color: UIColor?; let on: Bool; let disabled: Bool }
+  struct Row { let i: Int; let label: String; let sub: String?; let icon: String?; let danger: Bool; let checked: Bool; let disabled: Bool; let dot: UIColor?; let tint: UIColor?; let locked: Bool; let chips: [Chip]?; let chipKind: String }
   struct Section { let header: String?; let rows: [Row] }
   private var sections: [Section] = []
   private let table = UITableView(frame: .zero, style: .insetGrouped)
-  private var answer: ((Int) -> Void)?
+  private var answer: ((Int, String?) -> Void)?
+  private static func color(_ v: Any?) -> UIColor? {
+    guard let d = v as? [NSNumber], d.count >= 3 else { return nil }
+    return UIColor(red: CGFloat(d[0].doubleValue) / 255, green: CGFloat(d[1].doubleValue) / 255, blue: CGFloat(d[2].doubleValue) / 255, alpha: 1)
+  }
   private static let SYMBOLS: [String: String] = [
     "plus": "plus", "edit": "pencil", "trash": "trash", "x": "xmark", "clip": "paperclip", "folder": "folder",
     "info": "info.circle", "copy": "doc.on.doc", "search": "magnifyingglass", "download": "arrow.down.circle",
@@ -1068,16 +1075,18 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     "send": "paperplane", "play": "play", "smile": "face.smiling", "more": "ellipsis", "check-circle": "checkmark.circle",
     "checklist": "checklist", "activity": "waveform.path.ecg", "details": "doc.text", "arrow": "arrow.right", "select": "checkmark.square",
   ]
-  init(_ a: [String: Any], dark: Bool, answer: @escaping (Int) -> Void) {
+  init(_ a: [String: Any], dark: Bool, answer: @escaping (Int, String?) -> Void) {
     self.answer = answer
     super.init(nibName: nil, bundle: nil)
     for sec in a["sections"] as? [[String: Any]] ?? [] {
       let rows = (sec["rows"] as? [[String: Any]] ?? []).map { r -> Row in
-        var dot: UIColor? = nil
-        if let d = r["dot"] as? [NSNumber], d.count >= 3 { dot = UIColor(red: CGFloat(d[0].doubleValue) / 255, green: CGFloat(d[1].doubleValue) / 255, blue: CGFloat(d[2].doubleValue) / 255, alpha: 1) }
+        let chips = (r["chips"] as? [[String: Any]]).map { list in list.map { c in
+          Chip(i: (c["i"] as? NSNumber)?.intValue ?? -1, swatch: c["swatch"] as? String, label: c["label"] as? String,
+               color: NativeSheetVC.color(c["color"]), on: (c["on"] as? Bool) == true, disabled: (c["disabled"] as? Bool) == true) } }
         return Row(i: (r["i"] as? NSNumber)?.intValue ?? -1, label: r["label"] as? String ?? "", sub: (r["sub"] as? String).flatMap { $0.isEmpty ? nil : $0 },
                    icon: r["icon"] as? String, danger: (r["danger"] as? Bool) == true, checked: (r["checked"] as? Bool) == true,
-                   disabled: (r["disabled"] as? Bool) == true, dot: dot)
+                   disabled: (r["disabled"] as? Bool) == true, dot: NativeSheetVC.color(r["dot"]), tint: NativeSheetVC.color(r["tint"]),
+                   locked: (r["locked"] as? Bool) == true, chips: chips, chipKind: r["kind"] as? String ?? "")
       }
       if !rows.isEmpty { sections.append(Section(header: (sec["header"] as? String).flatMap { $0.isEmpty ? nil : $0 }, rows: rows)) }
     }
@@ -1118,6 +1127,7 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
   func tableView(_ tableView: UITableView, heightForFooterInSection s: Int) -> CGFloat { 4 }
   func tableView(_ tableView: UITableView, cellForRowAt ip: IndexPath) -> UITableViewCell {
     let r = sections[ip.section].rows[ip.row]
+    if let chips = r.chips { return chipCell(chips, kind: r.chipKind) }
     let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
     var c = r.sub == nil ? cell.defaultContentConfiguration() : UIListContentConfiguration.subtitleCell()
     c.text = r.label
@@ -1129,21 +1139,76 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
       c.image = UIImage(systemName: "circle.fill")?.withTintColor(dot, renderingMode: .alwaysOriginal)
       c.imageProperties.maximumSize = CGSize(width: 12, height: 12)
     } else if let name = r.icon.flatMap({ NativeSheetVC.SYMBOLS[$0] }), let img = UIImage(systemName: name) {
-      c.image = img; c.imageProperties.tintColor = tint
+      c.image = img; c.imageProperties.tintColor = r.tint ?? tint
     }
+    if r.locked { c.textProperties.color = .secondaryLabel }
     cell.contentConfiguration = c
     cell.accessoryType = r.checked ? .checkmark : .none
+    if r.locked && !r.checked { let lock = UIImageView(image: UIImage(systemName: "lock.fill")); lock.tintColor = .tertiaryLabel; cell.accessoryView = lock }
     cell.tintColor = .systemBlue
     cell.selectionStyle = r.disabled || r.i < 0 ? .none : .default
     if #available(iOS 26, *) { cell.backgroundColor = UIColor.secondarySystemGroupedBackground.withAlphaComponent(0.6) }
     return cell
   }
-  func tableView(_ tableView: UITableView, shouldHighlightRowAt ip: IndexPath) -> Bool { let r = sections[ip.section].rows[ip.row]; return !r.disabled && r.i >= 0 }
+  func tableView(_ tableView: UITableView, shouldHighlightRowAt ip: IndexPath) -> Bool { let r = sections[ip.section].rows[ip.row]; return r.chips == nil && !r.disabled && r.i >= 0 }
   func tableView(_ tableView: UITableView, didSelectRowAt ip: IndexPath) {
     let r = sections[ip.section].rows[ip.row]
-    guard !r.disabled, r.i >= 0 else { return }
-    let a = answer; answer = nil
-    dismiss(animated: true) { a?(r.i) }
+    guard r.chips == nil, !r.disabled, r.i >= 0 else { return }
+    choose(r.i, nil)
   }
-  func presentationControllerDidDismiss(_ presentationController: UIPresentationController) { let a = answer; answer = nil; a?(-1) }
+  private func choose(_ i: Int, _ swatch: String?) {
+    guard let a = answer else { return }
+    answer = nil
+    dismiss(animated: true) { a(i, swatch) }
+  }
+  func presentationControllerDidDismiss(_ presentationController: UIPresentationController) { let a = answer; answer = nil; a?(-1, nil) }
+  // A row of round choices: colours (swatch), emoji (reactions) or numbers (priority). Scrolls sideways if it doesn't fit.
+  private func chipCell(_ chips: [Chip], kind: String) -> UITableViewCell {
+    let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
+    cell.selectionStyle = .none
+    if #available(iOS 26, *) { cell.backgroundColor = UIColor.secondarySystemGroupedBackground.withAlphaComponent(0.6) }
+    let size: CGFloat = kind == "emoji" ? 46 : kind == "swatch" ? 30 : 38
+    let scroll = UIScrollView(); scroll.showsHorizontalScrollIndicator = false
+    let stack = UIStackView(); stack.axis = .horizontal; stack.spacing = kind == "emoji" ? 8 : 10; stack.alignment = .center
+    if kind == "emoji" { stack.distribution = .equalSpacing }
+    for ch in chips {
+      let b = UIButton(type: .system)
+      b.translatesAutoresizingMaskIntoConstraints = false
+      b.widthAnchor.constraint(equalToConstant: size).isActive = true
+      b.heightAnchor.constraint(equalToConstant: size).isActive = true
+      b.layer.cornerRadius = size / 2
+      b.isEnabled = !ch.disabled
+      if kind == "swatch" {
+        b.backgroundColor = ch.color ?? .systemGray
+        if ch.on { b.layer.borderWidth = 3; b.layer.borderColor = UIColor.label.cgColor }
+      } else {
+        b.setTitle(ch.label ?? "", for: .normal)
+        b.titleLabel?.font = kind == "emoji" ? .systemFont(ofSize: 26) : .systemFont(ofSize: 16, weight: .semibold)
+        b.backgroundColor = ch.on ? .systemBlue : .tertiarySystemFill
+        b.setTitleColor(ch.on ? .white : .label, for: .normal)
+        b.setTitleColor(.quaternaryLabel, for: .disabled)
+        if ch.on && kind == "emoji" { b.backgroundColor = .tertiarySystemFill; b.layer.borderWidth = 2; b.layer.borderColor = UIColor.systemBlue.cgColor }
+      }
+      b.addAction(UIAction { [weak self] _ in self?.choose(ch.swatch == nil ? ch.i : -1, ch.swatch) }, for: .touchUpInside)
+      stack.addArrangedSubview(b)
+    }
+    scroll.translatesAutoresizingMaskIntoConstraints = false
+    stack.translatesAutoresizingMaskIntoConstraints = false
+    scroll.addSubview(stack)
+    cell.contentView.addSubview(scroll)
+    NSLayoutConstraint.activate([
+      scroll.leadingAnchor.constraint(equalTo: cell.contentView.leadingAnchor, constant: 12),
+      scroll.trailingAnchor.constraint(equalTo: cell.contentView.trailingAnchor, constant: -12),
+      scroll.topAnchor.constraint(equalTo: cell.contentView.topAnchor, constant: 10),
+      scroll.bottomAnchor.constraint(equalTo: cell.contentView.bottomAnchor, constant: -10),
+      scroll.heightAnchor.constraint(equalToConstant: size),
+      stack.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor),
+      stack.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor),
+      stack.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor),
+      stack.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor),
+      stack.heightAnchor.constraint(equalTo: scroll.frameLayoutGuide.heightAnchor),
+    ])
+    if kind == "emoji" { stack.widthAnchor.constraint(greaterThanOrEqualTo: scroll.frameLayoutGuide.widthAnchor).isActive = true }
+    return cell
+  }
 }

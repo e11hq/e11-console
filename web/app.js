@@ -1681,7 +1681,7 @@ function fieldMenu(anchor, k) {
     });
   }
   if (cur) items.push({ html: '<div class="sep"></div>' }, { html: `<div class="mi fl-clear">${icon('x')}Clear</div>`, run: () => set(null) });
-  const m = showMenu(anchor, items.map((it, i) => (it.run ? { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) } : it)));
+  const m = showMenu(anchor, items.map((it, i) => (it.run ? { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) } : it)), { native: k !== 'guardian' && 12 });
   m.classList.add('wf-menu', 'fl-menu');
 }
 function setField(t, k, v) {
@@ -4349,7 +4349,7 @@ function detailScroller() {
 function showMenu(anchor, items, opts = {}) {
   closeMenus();
   // iPhone app 11+: a menu marked native (plain options only) opens as iOS's own sheet
-  if (opts.native && NativeSheet.fits()) { Haptic.light(); return NativeSheet.open(anchor, items); }   // (the same light knock as the page's own sheets)
+  if (opts.native && NativeSheet.fits(opts.native)) { Haptic.light(); return NativeSheet.open(anchor, items); }   // (the same light knock as the page's own sheets)
   if (typeof Phone !== 'undefined' && Phone.on) Haptic.light();
   // (no doubled, leading or trailing dividers when some options aren't there; positions kept for data-mi)
   items = items.map((it, i, a) => (it === '-' && (i === 0 || i === a.length - 1 || a[i - 1] === '-' || a.slice(i + 1).every((x) => x === '-') || a.slice(0, i).every((x) => x === '-')) ? { skip: true } : it));
@@ -4398,50 +4398,78 @@ function showMenu(anchor, items, opts = {}) {
    html rows (.mi with its icon, .cur / a tick, .danger, .disabled; .menu-label / .wf-mh start a titled section;
    .mi-note is a greyed line); a '-' starts a new section. The chosen option runs here as if tapped. */
 const NativeSheet = (() => {
-  let on = false;
-  if (typeof Host !== 'undefined' && Host.isIOSApp) NativeMac.call('appInfo').then((r) => { on = Number(r && r.shell) >= 11; }).catch(() => {});
-  const fits = () => on && typeof Phone !== 'undefined' && Phone.on;
+  let shell = 0;
+  if (typeof Host !== 'undefined' && Host.isIOSApp) NativeMac.call('appInfo').then((r) => { shell = Number(r && r.shell) || 0; }).catch(() => {});
+  // native: true = plain rows (app 11+); a number = the app version the menu needs (12: colours, emoji, numbers)
+  const fits = (need = true) => shell >= (need === true ? 11 : Number(need) || 99) && typeof Phone !== 'undefined' && Phone.on;
   const rgb = (c) => { const m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)/.exec(c || ''); return m ? [+m[1], +m[2], +m[3]] : null; };
+  // a colour from a dot / badge / pill: its --c, else its fill, else its text colour
+  const colorOf = (el) => {
+    const cs = getComputedStyle(el), v = cs.getPropertyValue('--c').trim();
+    if (v) { const t = document.createElement('i'); t.style.color = v; el.appendChild(t); const c = rgb(getComputedStyle(t).color); t.remove(); if (c) return c; }
+    const bg = rgb(cs.backgroundColor);
+    if (bg && !/rgba\([^)]*,\s*0\)$/.test(cs.backgroundColor)) return bg;
+    return rgb(cs.color);
+  };
   function rows(items) {
     const probe = document.createElement('div');
-    probe.style.cssText = 'position:fixed;left:-9999px;top:0;width:320px;visibility:hidden;pointer-events:none';
+    probe.className = 'menu ns-probe';   // (so the page's menu styles give the colours; never shown or counted as open)
+    probe.style.cssText = 'position:fixed;left:-9999px;top:0;width:320px;visibility:hidden;pointer-events:none;animation:none';
     document.body.appendChild(probe);
     const sections = [{ rows: [] }];
     const cur = () => sections[sections.length - 1];
     const newSec = (header) => { if (cur().rows.length || cur().header) sections.push({ rows: [] }); if (header) cur().header = header; };
+    const idx = (el, i, it) => (el.dataset.mi != null && el.dataset.mi !== '' ? Number(el.dataset.mi) : it.run ? i : -1);
+    // one element of a menu, in order: a row, a note, a section title, a divider, a row of colours / emoji / numbers
+    const take = (el, i, it) => {
+      if (el.matches('.sep')) { newSec(); return; }
+      if (el.matches('.menu-label, .wf-mh, .pm-label')) { const c = el.cloneNode(true); c.querySelectorAll('small').forEach((x) => x.remove()); newSec(c.textContent.replace(/\s+/g, ' ').trim()); return; }
+      if (el.matches('.pm-who')) { newSec(el.textContent.replace(/\s+/g, ' ').trim()); return; }
+      if (el.matches('.mi-note')) { cur().rows.push({ i: -1, label: el.textContent.replace(/\s+/g, ' ').trim(), disabled: true, icon: (el.querySelector('.ic[data-i]') || { dataset: {} }).dataset.i || '' }); return; }
+      if (el.matches('.swatches')) { cur().rows.push({ kind: 'swatch', chips: [...el.querySelectorAll('[data-swatch]')].map((b) => ({ swatch: b.dataset.swatch, color: colorOf(b), on: b.classList.contains('on') })) }); return; }
+      if (el.matches('.react-pick')) { cur().rows.push({ kind: 'emoji', chips: [...el.querySelectorAll('[data-swatch]')].map((b) => ({ swatch: b.dataset.swatch, label: b.textContent.trim(), on: b.classList.contains('on') })) }); return; }
+      if (el.matches('.pm-grid')) { cur().rows.push({ kind: 'num', chips: [...el.querySelectorAll('button')].map((b) => ({ i: b.dataset.mi != null ? Number(b.dataset.mi) : -1, label: b.textContent.trim(), on: b.classList.contains('cur'), disabled: b.disabled || b.classList.contains('taken') })) }); return; }
+      if (el.matches('.mi')) {
+        const dotEl = el.querySelector('.sw, .cal-ch, .role-pill, .fl-pill, .dot');
+        const flag = el.querySelector('.prio-flag');
+        const ic = [...el.querySelectorAll('.ic[data-i]')].find((x) => !x.closest('.wf-ck, .mi-lock'));
+        const copy = el.cloneNode(true);
+        copy.querySelectorAll('.ic, .wf-ck, small, .mi-lock').forEach((x) => x.remove());
+        const sub = [...el.querySelectorAll('small')].map((x) => x.textContent.trim()).filter(Boolean).join(' · ');
+        const label = (dotEl && dotEl.matches('.cal-ch') ? copy.textContent.replace(dotEl.textContent, '') : copy.textContent).replace(/\s+/g, ' ').trim();
+        const disabled = el.classList.contains('disabled');
+        cur().rows.push({ i: disabled ? -1 : idx(el, i, it), label, sub: sub || it.hint || '', icon: ic ? ic.dataset.i : '',
+          danger: el.classList.contains('danger') || !!it.danger, checked: el.classList.contains('cur') || !!el.querySelector('.wf-ck'), disabled,
+          locked: el.classList.contains('mi-locked'), dot: dotEl ? colorOf(dotEl) : null, tint: flag ? colorOf(flag) : null });
+        return;
+      }
+      [...el.children].forEach((c) => take(c, i, it));   // (a wrapper, e.g. the priority menu: its parts in order)
+    };
     try {
       items.forEach((it, i) => {
         if (!it || it.skip) return;
         if (it === '-') { newSec(); return; }
         if (!it.html) { cur().rows.push({ i: it.run ? i : -1, label: it.label || '', sub: it.hint || '', icon: it.icon || '', danger: !!it.danger }); return; }
         probe.innerHTML = it.html;
-        const head = probe.querySelector('.menu-label, .wf-mh');
-        if (head) { newSec(head.textContent.trim()); return; }
-        const note = probe.querySelector('.mi-note');
-        if (note) { cur().rows.push({ i: -1, label: note.textContent.trim(), disabled: true, icon: (note.querySelector('.ic[data-i]') || { dataset: {} }).dataset.i || '' }); return; }
-        const mi = probe.querySelector('.mi');
-        if (!mi) return;
-        const pill = mi.querySelector('.role-pill');
-        const ic = mi.querySelector('.ic[data-i]:not(.wf-ck .ic)');
-        const sub = mi.querySelector('small');
-        const checked = mi.classList.contains('cur') || !!mi.querySelector('.wf-ck');
-        const copy = mi.cloneNode(true);
-        copy.querySelectorAll('.ic, .wf-ck, small').forEach((x) => x.remove());
-        cur().rows.push({ i: it.run && !mi.classList.contains('disabled') ? i : -1, label: copy.textContent.replace(/\s+/g, ' ').trim(), sub: sub ? sub.textContent.trim() : (it.hint || ''),
-          icon: ic ? ic.dataset.i : '', danger: mi.classList.contains('danger') || !!it.danger, checked, disabled: mi.classList.contains('disabled'),
-          dot: pill ? rgb(getComputedStyle(pill).color) : null });
+        [...probe.children].forEach((el) => take(el, i, it));
       });
     } finally { probe.remove(); }
     return sections.filter((x) => x.rows.length);
   }
   function open(anchor, items) {
+    // (callers may add a class, a colour / reaction handler (_onSwatch) or their own option list (_items) to the menu:
+    //  this stand-in carries them; nothing on screen)
+    const m = document.createElement('div');
+    const fallback = () => { const w = showMenu(anchor, items); if (w) { w._onSwatch = m._onSwatch; if (m._items) w._items = m._items; } };
     NativeMac.call('nativeSheet', { sections: rows(items) })
       .then((res) => {
-        if (!res || res.ok === false) { showMenu(anchor, items); return; }   // (the app couldn't show it: the page's own sheet)
-        const i = Number(res.index); if (i >= 0 && items[i] && items[i].run) items[i].run();
+        if (!res || res.ok === false) { fallback(); return; }   // (the app couldn't show it: the page's own sheet)
+        if (res.swatch != null) { if (m._onSwatch) m._onSwatch(res.swatch); return; }
+        const list = m._items || items, i = Number(res.index);
+        if (i >= 0 && list[i] && list[i].run) list[i].run();
       })
-      .catch(() => showMenu(anchor, items));
-    return document.createElement('div');   // (callers may add a class to the menu: nothing on screen)
+      .catch(fallback);
+    return m;
   }
   return { fits, open, rows };
 })();
@@ -5053,7 +5081,7 @@ function projectMenu(anchor, id) {
     ...(isAdmin() ? [{ label: clientOfProject(p) ? `Client Assets: ${clientOfProject(p).name}` : 'Link to Client Assets…', icon: 'assets', run: () => setTimeout(() => projectClientMenu(anchor, p), 0) }] : []),
     '-',
     ...(isAdmin() ? [{ label: 'Delete client', icon: 'trash', danger: true, run: () => deleteProjectFlow(id) }] : []),
-  ]);
+  ], { native: 12 });
   m._onSwatch = (c) => { p.color = c; commit(); };
 }
 
@@ -5090,7 +5118,7 @@ function sectionMenu(anchor, sid) {
     ...(i < p.sections.length - 1 ? [{ label: 'Move right / down', icon: 'chev', run: () => { p.sections.splice(i, 1); p.sections.splice(i + 1, 0, s); commit(); } }] : []),
     '-',
     { label: 'Delete status', icon: 'trash', danger: true, run: () => deleteSectionFlow(sid) },
-  ]);
+  ], { native: 12 });
   m._onSwatch = (c) => { s.color = c; commit(); };
 }
 
@@ -5177,7 +5205,7 @@ function statusMenu(anchor) {
   if (t.done || canComplete(t)) items.push({ html: `<div class="mi ${t.done ? 'cur' : ''}" data-mi="${items.length}"><span class="sw" style="background:#3ddc97"></span>${t.done ? 'Complete' : 'Mark complete'}</div>`, run: async () => { if (!(await askClientApproval(t))) return; setDone(t, !t.done); commit(); } });
   else items.push({ html: `<div class="mi-note">${icon('lock')}${esc(completeBlockedMsg(t))}</div>` });
   // showMenu needs index-aligned items: rebuild html with real indices
-  showMenu(anchor, items.map((it, i) => (it === '-' ? it : { ...it, html: it.html.replace(/data-mi="\d+"/, `data-mi="${i}"`) })));
+  showMenu(anchor, items.map((it, i) => (it === '-' ? it : { ...it, html: it.html.replace(/data-mi="\d+"/, `data-mi="${i}"`) })), { native: 12 });
 }
 
 /* ---- CD Status ---- */
@@ -5200,7 +5228,7 @@ function cdMenu(anchor) {
   if (cdLocked(t)) { toast(CD_LOCK_MSG); return; }
   const items = Object.entries(CD).map(([k, c]) => ({ html: `<div class="mi ${t.cdStatus === k ? 'cur' : ''}"><span class="sw" style="background:${c.color}"></span>${esc(c.label)}</div>`, run: () => setCD(t, k) }));
   if (t.cdStatus) items.push('-', { html: `<div class="mi">${icon('x')}Clear</div>`, run: () => setCD(t, '') });
-  showMenu(anchor, items.map((it, i) => (it === '-' ? it : { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) })));
+  showMenu(anchor, items.map((it, i) => (it === '-' ? it : { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) })), { native: 12 });
 }
 
 /* ---- Assignees ---- */
@@ -5395,12 +5423,12 @@ function prioMenu(anchor, key) {
     <div class="sep"></div>
     <div class="mi ${cur === 'none' ? 'cur' : ''}" data-mi="${noneIdx}"><span class="prio-flag none">${icon('flag')}<span>No priority</span></span></div>
   </div>`;
-  const m = showMenu(anchor, [{ html }]);
+  const m = showMenu(anchor, [{ html }], { native: 12 });
   m._items = items; // data-mi indices above refer to this list
 }
 
 function reactMenu(anchor, cid) {
-  const m = showMenu(anchor, [{ html: `<div class="react-pick">${REACTIONS.map((e) => `<button data-swatch="${e}">${e}</button>`).join('')}</div>` }]);
+  const m = showMenu(anchor, [{ html: `<div class="react-pick">${REACTIONS.map((e) => `<button data-swatch="${e}">${e}</button>`).join('')}</div>` }], { native: 12 });
   m._onSwatch = (emoji) => toggleReaction(cid, emoji);
 }
 function toggleReaction(cid, emoji) {

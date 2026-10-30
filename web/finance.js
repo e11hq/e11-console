@@ -487,7 +487,7 @@ const Fin = (() => {
     if (!t || !isManager()) return;
     const items = STATUSES.map((s) => ({ html: `<div class="mi">${fieldPill(s, FINANCE[s]).replace(icon('chev'), '')}${t.finance === s ? `<span class="wf-ck">${icon('check')}</span>` : ''}</div>`, run: () => { setField(t, 'finance', s); renderContent(); } }));
     if (t.finance) items.push({ html: '<div class="sep"></div>' }, { html: `<div class="mi fl-clear">${icon('x')}Clear</div>`, run: () => { setField(t, 'finance', null); renderContent(); } });
-    const m = showMenu(anchor, items.map((it, i) => (it.run ? { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) } : it)));
+    const m = showMenu(anchor, items.map((it, i) => (it.run ? { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) } : it)), { native: 12 });
     m.classList.add('wf-menu', 'fl-menu');
   }
 

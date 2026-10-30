@@ -510,7 +510,7 @@ const Cal = (() => {
       if (!items.length) items.push({ html: '<div class="mi-note">No occasions near this date</div>' });
       if (t.occasion) items.push({ html: '<div class="sep"></div>' }, { html: `<div class="mi fl-clear">${icon('x')}Clear</div>`, run: () => setOccasion(t, null) });
     }
-    const m = showMenu(anchor, items.map((it, i) => (it.run ? { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) } : it)));
+    const m = showMenu(anchor, items.map((it, i) => (it.run ? { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) } : it)), { native: 12 });
     m.classList.add('wf-menu', 'fl-menu');
   }
   const names = (ks) => (ks || []).map((k) => (CH[k] ? CH[k].name : k)).join(', ');

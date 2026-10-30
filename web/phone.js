@@ -1491,7 +1491,7 @@ const SheetMotion = (() => {
     if (mine) items.push(...editCommentItem(t, c));
     items.push({ label: 'Copy text', icon: 'copy', run: () => { try { navigator.clipboard.writeText(c.text || ''); toast('Copied'); } catch (e) { toast('Could not copy'); } } });
     if (mine) items.push('-', { label: 'Delete comment', icon: 'trash', danger: true, run: () => deleteComment(id) });
-    const m = showMenu(document.body, items);
+    const m = showMenu(document.body, items, { native: 12 });
     m.classList.add('cm-sheet');
     m._onSwatch = (emoji) => toggleReaction(id, emoji);
   }
