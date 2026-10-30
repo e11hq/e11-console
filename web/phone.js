@@ -610,10 +610,11 @@ const Phone = (() => {
     scrim.addEventListener('click', (e) => { if (scrim._skipClick) { scrim._skipClick = false; e.stopImmediatePropagation(); } }, true);
   }
 
-  function quickAdd() {
+  function quickAdd(web) {
     if (!can('createTask')) return denied();
     const inProject = ui.view === 'project' && proj(ui.projectId) ? ui.projectId : '';
     const mgr = isAdm(me()) || me().role === 'am' || isCD();
+    if (web !== true && NativeSheet.fits(15)) { nativeQuickAdd(inProject, mgr); return; }
     const people = activeUsers();
     const projOpts = `<option value="">No client (My Tasks)</option>` + db.projects.filter((p) => (!p.inactive && amClientOk(p)) || p.id === inProject).sort(byOrder).map((p) => `<option value="${p.id}" ${p.id === inProject ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
     // (only Production, Social, Freelancers and the Creative Director can be assigned)
@@ -653,9 +654,74 @@ const Phone = (() => {
     }, { kind: 'new-task', dockLabel: 'New task', discardedMsg: 'New task discarded' });
   }
 
-  function amendSheet(id) {
+  // iPhone app 15+: the same form as iOS's own sheet, with iPhone's own fields (tucks into a bar like a Mail draft)
+  async function nativeQuickAdd(inProject, mgr) {
+    const key = 'new-task';
+    const st = { client: inProject || '', who: assignable(me()) ? currentUserId : '' };
+    const clientName = (id) => (id && proj(id) ? proj(id).name : 'No client (My Tasks)');
+    const whoOf = async (uid) => (uid ? { label: uid === currentUserId ? 'Me' : fullName(userById(uid)), person: await NativeSheet.personFor(uid) } : { label: 'Nobody yet' });
+    const pickClient = () => {
+      const list = db.projects.filter((p) => (!p.inactive && amClientOk(p)) || p.id === inProject).sort(byOrder);
+      // (picking a client turns CD review on, no client turns it off — as on the page)
+      const set = (id) => { st.client = id; NativeForm.set(key, { client: clientName(id), ...(mgr ? { cd: !!id } : {}) }); };
+      const items = [{ label: 'No client (My Tasks)', checked: !st.client, run: () => set('') }, '-',
+        ...list.map((p) => ({ label: p.name, checked: st.client === p.id, find: p.name, run: () => set(p.id) }))];
+      showMenu(document.body, items, { native: 14, ...(list.length > 7 ? { search: 'Search clients', empty: 'No client matches “%@”' } : {}) });
+    };
+    const pickWho = () => {
+      const set = async (uid) => { st.who = uid; NativeForm.set(key, { assign: await whoOf(uid) }); };
+      const row = (u) => ({ label: u.id === currentUserId ? 'Me' : fullName(u), hint: roleOf(u), person: u.id, checked: st.who === u.id,
+        find: `${fullName(u)} ${u.email} ${roleOf(u)}`, run: () => set(u.id) });
+      // (only Production, Social, Freelancers and the Creative Director can be assigned — in their groups)
+      const items = assignable(me()) ? [row(me())] : [];
+      assignGroups(activeUsers().filter((u) => u.id !== currentUserId && assignable(u))).forEach(([l, us]) => items.push({ html: `<div class="menu-label">${esc(l)}</div>` }, ...us.map(row)));
+      items.push('-', { label: 'Nobody yet', checked: !st.who, run: () => set('') });
+      showMenu(document.body, items, { native: 14, search: 'Search people', empty: 'No one matches “%@”' });
+    };
+    const due = ui.view === 'today' || ui.view === 'home' || ui.view === 'mytasks' ? todayStr() : '';
+    NativeForm.open({ kind: 'task', key, title: 'New task', titleHint: 'What needs doing?', descHint: 'Details, links or notes for the team',
+      client: clientName(st.client), ...(can('assign') ? { assign: await whoOf(st.who) } : {}), due, ...(mgr ? { cd: !!inProject } : {}),
+      button: 'Create task', color: 'blue', dock: 'New task', required: 'title' }, {
+      pick: (field) => (field === 'client' ? pickClient() : pickWho()),
+      submit: (ev) => {
+        const title = ev.title;
+        const who = can('assign') ? st.who : assignable(me()) ? currentUserId : '';
+        const cdOn = mgr && ev.cd;
+        if (cdOn && who && who === cdUserId()) { NativeForm.set(key, { alert: 'A task that needs CD review can’t be assigned to the Creative Director. Turn off CD review or choose someone else.' }); return; }
+        const desc = ev.desc || '';
+        const t = createTask({ title, projectId: st.client || null, due: ev.due || null, notes: desc, ...(desc ? { notesHtml: linkify(esc(desc)).replace(/\n/g, '<br>') } : {}) });
+        if (mgr) t.needsCD = !!(cdOn && t.projectId);
+        if (who) {
+          t.assignees = [who];
+          if (who !== currentUserId) { logActivity(t, `assigned <b>${esc(fullName(userById(who)))}</b>`); pushNotif(who, t, 'assigned', 'assigned you to'); }
+        }
+        commit({ delay: 0 });
+        NativeForm.close(key);
+        toast(`Created “${title}”`, { label: 'Open', run: () => openTask(t.id) });
+      },
+      closed: (r) => { if (r.closed === 'discard') toast('New task discarded'); },
+    }, () => quickAdd(true));
+  }
+
+  function amendSheet(id, web) {
     const f = findReview(id);
     if (!f || !isCD()) return;
+    if (web !== true && NativeSheet.fits(15)) {
+      const key = 'amend-' + id;
+      NativeForm.open({ kind: 'amend', key, title: 'Request amendments', note: `Tell ${firstName(f.r.by)} what to change. It's posted as a comment on the task.`,
+        descHint: 'e.g. Use the new logo lockup and make the date bigger', button: 'Send back', color: 'amber', dock: 'Amendments for ' + firstName(f.r.by), required: 'desc' }, {
+        submit: (ev) => {
+          const g = findReview(id);
+          NativeForm.close(key);
+          if (!g) return;
+          decideReview(g.t, g.r, 'amend', esc(ev.desc).replace(/\n/g, '<br>'));
+          toast(`Sent back to ${firstName(g.r.by)} with your notes`);
+          nextReview();
+        },
+        closed: (r) => { if (r.closed === 'discard') toast('Amendment notes discarded'); },
+      }, () => amendSheet(id, true));
+      return;
+    }
     sheet(`<div class="ph-sh-head"><h2>Request amendments</h2><button class="ph-link" data-sheet-close>Cancel</button></div>
       <p class="ph-sh-p">Tell ${esc(firstName(f.r.by))} what to change. It's posted as a comment on the task.</p>
       <textarea id="am-note" name="e11-amend-notes" autocomplete="off" aria-autocomplete="none" data-form-type="other" rows="5" placeholder="e.g. Use the new logo lockup and make the date bigger"></textarea>

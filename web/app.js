@@ -4550,6 +4550,18 @@ const NativeSheet = (() => {
     return { initials: av ? av.textContent.trim() : '', color: rgb(av && av.style.background) || [120, 120, 140] };
   }
   const canPeople = () => shell >= 14;
+  // a file's small square picture for a native sheet (app 15+): loaded once, drawn 152px
+  function thumb(src) {
+    return new Promise((done) => {
+      const im = new Image();
+      const t = setTimeout(() => done(null), 4000);
+      im.onload = () => { clearTimeout(t); try { const cv = document.createElement('canvas'); cv.width = cv.height = 152; const g = cv.getContext('2d'), w = im.naturalWidth, h = im.naturalHeight, k = Math.min(w, h); g.drawImage(im, (w - k) / 2, (h - k) / 2, k, k, 0, 0, 152, 152); done(cv.toDataURL('image/jpeg', 0.8)); } catch (e) { done(null); } };
+      im.onerror = () => { clearTimeout(t); done(null); };
+      im.src = src;
+    });
+  }
+  // any CSS colour as [r, g, b]
+  function colorRGB(css) { const t = document.createElement('i'); t.style.color = css; document.body.appendChild(t); const c = rgb(getComputedStyle(t).color); t.remove(); return c; }
   function open(anchor, items, opts = {}) {
     // (callers may add a class, a colour / reaction handler (_onSwatch) or their own option list (_items) to the menu:
     //  this stand-in carries them; nothing on screen)
@@ -4580,8 +4592,43 @@ const NativeSheet = (() => {
       .catch(fallback);
     return m;
   }
-  return { fits, open, rows, canMulti, canPeople, ticking: false };
+  return { fits, open, rows, canMulti, canPeople, personFor, thumb, colorRGB, ticking: false };
 })();
+
+/* New task / Request amendments as iOS's own sheet (iPhone app 15+): the app draws the fields and tucks the form into
+   a bar like a Mail draft. on.pick(field) opens the picker for Client / Assign to (a native sheet on top of the form;
+   what's picked goes back with set); on.submit({ title, desc, due, cd }) does the work and close()s it, or set()s an
+   alert; on.closed({ closed: submit / cancel / discard / replaced }). The page's own sheet (web) if the app can't. */
+const NativeForm = (() => {
+  const handlers = new Map();
+  window.__e11Form = (ev) => {
+    const h = ev && handlers.get(ev.key);
+    if (!h) return;
+    try { if (ev.ev === 'pick' && h.pick) h.pick(ev.field); else if (ev.ev === 'submit' && h.submit) h.submit(ev); } catch (e) { console.error(e); }
+  };
+  function open(args, on, web) {
+    const had = handlers.get(args.key);
+    handlers.set(args.key, on);
+    const restore = () => { if (had) handlers.set(args.key, had); else handlers.delete(args.key); };
+    Haptic.light();   // (the same light knock as every sheet)
+    NativeMac.call('formSheet', args).then((r) => {
+      if (r && r.already) { restore(); return; }   // (its tucked draft was opened again)
+      if (handlers.get(args.key) === on) handlers.delete(args.key);
+      if (on.closed) on.closed(r || {});
+    }).catch(() => { restore(); web(); });
+  }
+  const set = (key, v) => NativeMac.call('formSet', { key, ...v }).catch(() => {});
+  const close = (key) => NativeMac.call('formClose', { key }).catch(() => {});
+  return { open, set, close };
+})();
+
+/* People who can be assigned, in their groups: Production, Social, Freelancers, the Creative Director, Others */
+function assignGroups(pool) {
+  const group = (u) => (u.id === cdUserId() ? 'cd' : u.role === 'production' || u.role === 'social' || u.role === 'freelancer' ? u.role : 'other');
+  const byName = (a, b) => fullName(a).localeCompare(fullName(b));
+  return [['production', 'Production'], ['social', 'Social'], ['freelancer', 'Freelancers'], ['cd', cdTitle()], ['other', 'Others']]
+    .map(([k, l]) => [l, pool.filter((u) => group(u) === k).sort(byName)]).filter(([, us]) => us.length);
+}
 
 function dialog({ title, body = '', bodyHtml = '', input = null, okText = 'OK', cancelText = 'Cancel', danger = false, colors = null }) {
   return new Promise((resolve) => {
@@ -5092,7 +5139,7 @@ function trashRow(it, r) {
   </div>`;
 }
 /* A task in the Trash, opened to see what it was: view only (nothing can be changed), with Restore at the top */
-function trashTaskView(id) {
+function trashTaskView(id, web) {
   const it = trashList().find((x) => x.id === id);
   if (!it || it.type !== 'task') return;
   const list = (it.data && it.data.tasks) || [];
@@ -5128,6 +5175,39 @@ function trashTaskView(id) {
     <div class="tv-bar">${icon('trash')}<span>In the Trash · ${who} ${esc(timeAgo(it.deletedAt))} · ${left} day${left === 1 ? '' : 's'} left</span>
       ${canRestore ? `<button class="btn primary sm" data-action="tv-restore" data-id="${it.id}">${icon('reply')}Restore</button>` : ''}</div>
     <div class="tv-body">BODY</div>`;
+  // iPhone app 15+: iOS's own tall sheet (a file tapped: previewed, then this comes back)
+  if (!web && typeof Phone !== 'undefined' && Phone.on && NativeSheet.fits(15)) {
+    const plain = (html) => { const d = document.createElement('div'); d.innerHTML = String(html).replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|li|h\d)>/gi, '\n'); return d.textContent.replace(/\n{3,}/g, '\n\n').trim(); };
+    const fileOf = async (a) => ({ id: a.id, name: a.name, ext: (fileExt(a.name) || 'file').slice(0, 4), ...(isImage(a) && Host.isNative ? { thumb: await NativeSheet.thumb(imgUrl(a, 160)) } : {}) });
+    (async () => {
+      const args = {
+        title: t.title || 'Untitled task',
+        bar: `In the Trash · ${plain(who)} ${timeAgo(it.deletedAt)} · ${left} day${left === 1 ? '' : 's'} left`,
+        canRestore,
+        props: [
+          { label: 'Client', text: trashWhere(it) },
+          { label: 'Status', status: { name: st.name, color: NativeSheet.colorRGB(st.color) } },
+          { label: 'Assignees', people: await Promise.all((t.assignees || []).map(async (u) => ({ name: fullName(userById(u)) || 'Former member', person: await NativeSheet.personFor(u) }))) },
+          ...(t.start || t.due ? [{ label: 'Dates', text: `${t.start ? 'Start ' + fmtDay(t.start) : ''}${t.start && t.due ? ' → ' : ''}${t.due ? 'Due ' + fmtDay(t.due) : ''}` }] : []),
+          ...((t.tags || []).length ? [{ label: 'Tags', text: t.tags.join(', ') }] : []),
+        ],
+        desc: desc ? plain(desc) : '',
+        subtasks: subs.map((x) => ({ t: x.title || 'Untitled', done: !!x.done })),
+        checklist: (t.checklist || []).map((c) => ({ t: c.text || '', done: !!c.done })),
+        files: await Promise.all(files.map(fileOf)),
+        comments: await Promise.all(comments.map(async (c) => ({ name: userName(c.authorId), when: timeAgo(c.at), person: await NativeSheet.personFor(c.authorId),
+          text: c.html ? plain(sanitizeHTML(c.html, true)) : c.text || '', files: await Promise.all((c.attachments || []).map(fileOf)) }))),
+      };
+      Haptic.light();
+      const r = await NativeMac.call('trashSheet', args);
+      if (r.action === 'restore') restoreTrash(it.id);
+      else if (r.action === 'preview') {
+        const a = trashFiles(it).find((x) => x.id === r.file);
+        if (a) Viewer.open(a, undefined, { onClose: () => { if (trashList().some((x) => x.id === it.id)) trashTaskView(id); } });
+      }
+    })().catch(() => trashTaskView(id, true));
+    return;
+  }
   // the phone: a tall sheet from the bottom, dragged down to close (it's only for a look)
   if (typeof Phone !== 'undefined' && Phone.on && Phone.sheet) {
     Phone.sheet(`<div class="tv-sheet">${inner.replace('BODY', () => tvBody)}</div>`, null, { kind: 'trash-view' });
@@ -5383,13 +5463,8 @@ function assignMenu(anchor) {
     // (everyone in their group — Production, Social, Freelancers, Creative Director; whoever is assigned has a tick)
     const assigned = (tt.assignees || []).map(userById).filter(Boolean);
     const pool = [...assigned, ...activeUsers().filter((u) => assignable(u) && !(tt.assignees || []).includes(u.id))];
-    const group = (u) => (u.id === cdUserId() ? 'cd' : u.role === 'production' || u.role === 'social' || u.role === 'freelancer' ? u.role : 'other');
-    const byName = (a, b) => fullName(a).localeCompare(fullName(b));
     const items = [];
-    [['production', 'Production'], ['social', 'Social'], ['freelancer', 'Freelancers'], ['cd', cdTitle()], ['other', 'Others']].forEach(([k, l]) => {
-      const us = pool.filter((u) => group(u) === k).sort(byName);
-      if (us.length) items.push({ html: `<div class="menu-label">${esc(l)}</div>` }, ...us.map(row));
-    });
+    assignGroups(pool).forEach(([l, us]) => items.push({ html: `<div class="menu-label">${esc(l)}</div>` }, ...us.map(row)));
     if (!items.length) items.push({ label: 'No one can be assigned yet', disabled: true });
     showMenu(anchor, items, { native: 14, search: 'Search people', empty: 'No one matches “%@”' });
     return;

@@ -13,7 +13,7 @@ import PhotosUI
 import UniformTypeIdentifiers
 
 // Version of this iPhone app's native part (raise it with changes the web app needs to know about)
-let SHELL_VERSION = 14   // 14: native sheets with people (round photos / initials) and a search box (+ a typed entry, "Use …") · 13: also dates picked in a native sheet (pickDate: closing it never sets a date) · a native sheet can stay open for ticking several (multi; each tick: window.__e11SheetPick) · 12: native sheets also with colour dots, a row of colours / emoji / numbers (chips), tinted icons, locked rows · 11: plain menus as iOS's own sheets (nativeSheet; the page: NativeSheet in app.js, showMenu(…, { native: true })) · 10: My Tasks, Inbox and Team lists swiped by iOS itself (Pager.syncLists in phone.js) · 9: a task’s Details / Comments swiped by iOS itself (the page: Pager in phone.js) · 8: iOS haptics for the page (haptic kind: light / medium / selection / success / warning / error) · 7: the comment box rides down / up with the keyboard frame by frame (__e11KbStep) · 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
+let SHELL_VERSION = 15   // 15: New task / Request amendments as native sheets with iPhone's own fields that tuck into a bar like a Mail draft (formSheet / formSet / formClose; the page: window.__e11Form), a Trash task as a native sheet (trashSheet); native sheets and dates also open on top of those · 14: native sheets with people (round photos / initials) and a search box (+ a typed entry, "Use …") · 13: also dates picked in a native sheet (pickDate: closing it never sets a date) · a native sheet can stay open for ticking several (multi; each tick: window.__e11SheetPick) · 12: native sheets also with colour dots, a row of colours / emoji / numbers (chips), tinted icons, locked rows · 11: plain menus as iOS's own sheets (nativeSheet; the page: NativeSheet in app.js, showMenu(…, { native: true })) · 10: My Tasks, Inbox and Team lists swiped by iOS itself (Pager.syncLists in phone.js) · 9: a task’s Details / Comments swiped by iOS itself (the page: Pager in phone.js) · 8: iOS haptics for the page (haptic kind: light / medium / selection / success / warning / error) · 7: the comment box rides down / up with the keyboard frame by frame (__e11KbStep) · 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
 let procEnv = ProcessInfo.processInfo.environment
 let SELFTEST = procEnv["E11_SELFTEST"] ?? ""           // the build machine's self-test in the simulator
 let info = Bundle.main.infoDictionary ?? [:]
@@ -373,13 +373,13 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping () -> Void) {
     let a = UIAlertController(title: nil, message: message, preferredStyle: .alert)
     a.addAction(UIAlertAction(title: "OK", style: .default) { _ in completionHandler() })
-    present(a, animated: true)
+    topMost().present(a, animated: true)
   }
   func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (Bool) -> Void) {
     let a = UIAlertController(title: nil, message: message, preferredStyle: .alert)
     a.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in completionHandler(false) })
     a.addAction(UIAlertAction(title: "OK", style: .default) { _ in completionHandler(true) })
-    present(a, animated: true)
+    topMost().present(a, animated: true)
   }
 
   /* ---------- downloads: saved, then the share sheet (Save to Files, Save Image, AirDrop…) ---------- */
@@ -443,7 +443,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     guard let url = downloads.removeValue(forKey: ObjectIdentifier(download)) else { return }
     let sheet = UIActivityViewController(activityItems: [url], applicationActivities: nil)
     sheet.popoverPresentationController?.sourceView = view
-    (presentedViewController ?? self).present(sheet, animated: true)
+    topMost().present(sheet, animated: true)
   }
   func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {
     let wasLive = downloadFrom[ObjectIdentifier(download)] != nil
@@ -710,6 +710,22 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       self.pageJS("window.__e11NativeReply && window.__e11NativeReply(\(jsonString([id]).dropFirst().dropLast()),\(jsonString(res)))")
     }
   }
+  // the screen shown on top of everything now (alerts, the share sheet and file pickers go there)
+  func topMost() -> UIViewController {
+    var v: UIViewController = self
+    while let p = v.presentedViewController, !p.isBeingDismissed { v = p }
+    return v
+  }
+  // where a sheet from the page goes: on the app itself, or on top of an open form / Trash sheet (a tucked draft stays
+  // where it is); nil while anything else is up
+  func sheetHost() -> UIViewController? {
+    var v: UIViewController = self
+    while let p = v.presentedViewController {
+      if p.isBeingDismissed { return nil }
+      if p is FormSheetVC || p is TrashSheetVC { v = p } else { return nil }
+    }
+    return v
+  }
   func run(_ cmd: String, _ a: [String: Any], _ done: @escaping ([String: Any]) -> Void) {
     switch cmd {
     case "appInfo":
@@ -746,7 +762,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     case "nativeSheet":
       // a plain menu from the page as a real iPhone sheet (floating; iOS grows it as it's pulled); replies with the
       // chosen row's index, or -1 when it's closed without a choice
-      if presentedViewController != nil { return done(["ok": false]) }
+      guard let host = sheetHost() else { return done(["ok": false]) }
       let vc = NativeSheetVC(a, dark: statusStyle != .darkContent, pick: { [weak self] i in
         self?.pageJS("window.__e11SheetPick && window.__e11SheetPick(\(i))")
       }) { i, swatch in
@@ -756,12 +772,37 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         else if let sw = swatch { r["swatch"] = sw }
         done(r)
       }
-      present(vc, animated: true)
+      host.present(vc, animated: true)
     case "pickDate":
       // a date from the page, picked in a native sheet with iPhone's own calendar: a day tapped → that date;
       // Today / Clear; closed any other way → nothing changes (iPhone's own date box set today when just closed)
-      if presentedViewController != nil { return done(["ok": false]) }
-      present(DateSheetVC(a, dark: statusStyle != .darkContent) { r in done(r) }, animated: true)
+      guard let host = sheetHost() else { return done(["ok": false]) }
+      host.present(DateSheetVC(a, dark: statusStyle != .darkContent) { r in done(r) }, animated: true)
+    case "formSheet":
+      // New task / Request amendments as iOS's own sheet with iPhone's own fields; replies when it's closed:
+      // closed = submit / cancel / discard (a tucked draft pulled away) / replaced (another form opened instead)
+      let key = a["key"] as? String ?? ""
+      if let open = FormSheetVC.current, open.isOpen {
+        if open.key == key { open.expand(); return done(["ok": true, "already": true]) }   // (its tucked draft, carried on)
+        open.finish("replaced") { [weak self] in self?.run(cmd, a, done) }
+        return
+      }
+      guard let host = sheetHost() else { return done(["ok": false]) }
+      let vc = FormSheetVC(a, dark: statusStyle != .darkContent, event: { [weak self] ev in
+        self?.pageJS("window.__e11Form && window.__e11Form(\(jsonString(ev)))")
+      }) { r in done(r) }
+      host.present(vc, animated: true)
+    case "formSet":
+      // what was picked for a field (Client, Assign to), CD review on / off, or a message about what's wrong
+      if let f = FormSheetVC.current, f.isOpen, f.key == (a["key"] as? String ?? "") { f.set(a) }
+      done(["ok": true])
+    case "formClose":
+      if let f = FormSheetVC.current, f.isOpen, f.key == (a["key"] as? String ?? "") { f.finish("submit") }
+      done(["ok": true])
+    case "trashSheet":
+      // a task in the Trash, to look at: replies restore / preview (a file) / closed
+      guard let host = sheetHost() else { return done(["ok": false]) }
+      host.present(TrashSheetVC(a, dark: statusStyle != .darkContent) { r in done(r) }, animated: true)
     case "notify": done(["ok": true])   // (Apple's notifications come from the server)
     case "pushStatus": pushState { done(["ok": true, "state": $0]) }
     case "pushRegister":
@@ -793,7 +834,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
           DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { self.authing = false }
         }
       }
-    case "pickFiles": Picker.shared.pick(from: self, single: (a["single"] as? Bool) == true, source: a["source"] as? String, done)
+    case "pickFiles": Picker.shared.pick(from: topMost(), single: (a["single"] as? Bool) == true, source: a["source"] as? String, done)
     case "readLocalChunk": done(Picker.shared.read(a))
     default: done(["ok": false, "error": "Unknown command " + cmd])
     }
@@ -1094,12 +1135,12 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
   private var emptyText = "No matches"
   private let table = UITableView(frame: .zero, style: .insetGrouped)
   private var answer: ((Int, String?) -> Void)?
-  private static func photo(_ v: Any?) -> UIImage? {
+  static func photo(_ v: Any?) -> UIImage? {
     guard let p = v as? [String: Any], let d = p["photo"] as? String, let comma = d.firstIndex(of: ","),
           let data = Data(base64Encoded: String(d[d.index(after: comma)...])) else { return nil }
     return UIImage(data: data)
   }
-  private static func color(_ v: Any?) -> UIColor? {
+  static func color(_ v: Any?) -> UIColor? {
     guard let d = v as? [NSNumber], d.count >= 3 else { return nil }
     return UIColor(red: CGFloat(d[0].doubleValue) / 255, green: CGFloat(d[1].doubleValue) / 255, blue: CGFloat(d[2].doubleValue) / 255, alpha: 1)
   }
@@ -1532,6 +1573,602 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     if kind == "emoji" { stack.widthAnchor.constraint(greaterThanOrEqualTo: scroll.frameLayoutGuide.widthAnchor).isActive = true }
     return cell
   }
+}
+
+
+/* A person's round picture: their photo, or their initials on their colour */
+func roundPic(_ pic: UIImage?, initials: String?, color: UIColor?, size: CGFloat) -> UIImage {
+  let s = CGSize(width: size, height: size)
+  return UIGraphicsImageRenderer(size: s).image { _ in
+    let rect = CGRect(origin: .zero, size: s)
+    UIBezierPath(ovalIn: rect).addClip()
+    if let p = pic { p.draw(in: rect); return }
+    (color ?? .systemGray).setFill(); UIRectFill(rect)
+    let t = (initials ?? "") as NSString
+    let attrs: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: size * 0.4, weight: .bold), .foregroundColor: UIColor.white]
+    let ts = t.size(withAttributes: attrs)
+    t.draw(at: CGPoint(x: (size - ts.width) / 2, y: (size - ts.height) / 2), withAttributes: attrs)
+  }
+}
+
+
+/* New task / Request amendments as iOS's own sheet with iPhone's own fields (the computer keeps the page's form).
+   Pulled down (or tapped outside) with something typed, it tucks into a small bar at the bottom, like a draft in Mail:
+   the app behind stays usable; the bar tapped or pulled up brings the form back; the bar pulled down throws the draft
+   away. With nothing typed, pulling down just closes it. Client / Assign to are the page's own native sheets, shown on
+   top of this one; the page sets what was picked (formSet). Create / Send back asks the page (submit), which closes it
+   (formClose) or says what's wrong (an alert). */
+final class FormSheetVC: UIViewController, UITableViewDataSource, UITableViewDelegate, UISheetPresentationControllerDelegate, UITextFieldDelegate, UITextViewDelegate {
+  static weak var current: FormSheetVC?
+  static let TUCK = UISheetPresentationController.Detent.Identifier("tuck")
+  static let FORM = UISheetPresentationController.Detent.Identifier("form")
+  let key: String
+  private let isTask: Bool
+  private let dark: Bool
+  private let heading: String, dock: String, note: String?, button: String, need: String
+  private let tint: UIColor
+  private let showWho: Bool
+  private let hasCD: Bool
+  private var clientText: String
+  private var whoText = ""
+  private var whoPic: UIImage?
+  private var due: String
+  private let event: ([String: Any]) -> Void
+  private var answer: (([String: Any]) -> Void)?
+  var isOpen: Bool { answer != nil }
+  private let table = UITableView(frame: .zero, style: .insetGrouped)
+  private let titleField = UITextField()
+  private let desc = UITextView()
+  private let descHint = UILabel()
+  private let cdSwitch = UISwitch()
+  private let topBar = UIView()
+  private let bar = UIView()          // (the tucked draft)
+  private let barText = UILabel()
+  private var fitHeight: CGFloat = 420
+  private var strip: CGFloat = 0
+  private var dirtyNow = false
+  private var focused = false
+  private let fmt: DateFormatter = { let f = DateFormatter(); f.calendar = Calendar(identifier: .gregorian); f.locale = Locale(identifier: "en_US_POSIX"); f.timeZone = .current; f.dateFormat = "yyyy-MM-dd"; return f }()
+  private var floating: Bool { if #available(iOS 26, *) { return true } else { return false } }
+  // (the form sized to fit — iOS keeps it above the keyboard; the tucked bar: about 62 on screen, iOS adds the
+  //  home-bar strip under a floating sheet by itself)
+  private var formDetent: UISheetPresentationController.Detent {
+    .custom(identifier: FormSheetVC.FORM) { [weak self] ctx in min(ctx.maximumDetentValue, self?.fitHeight ?? 420) }
+  }
+  private var tuckDetent: UISheetPresentationController.Detent {
+    .custom(identifier: FormSheetVC.TUCK) { [weak self] _ in
+      guard let self else { return 40 }
+      return max(28, 62 - (self.floating ? self.strip : 0))
+    }
+  }
+
+  init(_ a: [String: Any], dark: Bool, event: @escaping ([String: Any]) -> Void, answer: @escaping ([String: Any]) -> Void) {
+    key = a["key"] as? String ?? ""
+    isTask = (a["kind"] as? String) == "task"
+    self.dark = dark
+    heading = a["title"] as? String ?? ""
+    dock = a["dock"] as? String ?? "Draft"
+    note = (a["note"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+    button = a["button"] as? String ?? "Done"
+    need = a["required"] as? String ?? ""
+    tint = (a["color"] as? String) == "amber" ? UIColor(red: 0.96, green: 0.62, blue: 0.11, alpha: 1) : .systemBlue
+    showWho = a["assign"] is [String: Any]
+    hasCD = a["cd"] is Bool
+    clientText = a["client"] as? String ?? ""
+    due = a["due"] as? String ?? ""
+    self.event = event
+    self.answer = answer
+    super.init(nibName: nil, bundle: nil)
+    FormSheetVC.current = self
+    if let w = a["assign"] as? [String: Any] { setWho(w) }
+    cdSwitch.isOn = (a["cd"] as? Bool) == true
+    titleField.placeholder = a["titleHint"] as? String
+    descHint.text = a["descHint"] as? String
+    overrideUserInterfaceStyle = dark ? .dark : .light
+    modalPresentationStyle = .pageSheet
+    if let w = UIApplication.shared.connectedScenes.compactMap({ ($0 as? UIWindowScene)?.keyWindow }).first { strip = w.safeAreaInsets.bottom }
+    if let sh = sheetPresentationController {
+      sh.detents = [formDetent]
+      sh.selectedDetentIdentifier = FormSheetVC.FORM
+      sh.largestUndimmedDetentIdentifier = FormSheetVC.TUCK   // (tucked: the app behind stays usable)
+      sh.prefersGrabberVisible = true
+      sh.prefersScrollingExpandsWhenScrolledToEdge = false
+      sh.delegate = self
+    }
+  }
+  required init?(coder: NSCoder) { fatalError() }
+
+  override func viewDidLoad() {
+    super.viewDidLoad()
+    if #available(iOS 26, *) { view.backgroundColor = .clear; table.backgroundColor = .clear }
+    else { view.backgroundColor = .systemGroupedBackground; table.backgroundColor = .systemGroupedBackground }
+    // the top: Cancel and the form's name
+    let cancel = UIButton(type: .system)
+    cancel.setTitle("Cancel", for: .normal); cancel.titleLabel?.font = .systemFont(ofSize: 17)
+    cancel.addAction(UIAction { [weak self] _ in self?.finish("cancel") }, for: .touchUpInside)
+    let name = UILabel(); name.text = heading; name.font = .systemFont(ofSize: 17, weight: .semibold); name.textAlignment = .center
+    [cancel, name].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; topBar.addSubview($0) }
+    topBar.translatesAutoresizingMaskIntoConstraints = false
+    view.addSubview(topBar)
+    // the fields
+    titleField.font = .systemFont(ofSize: 17); titleField.returnKeyType = .next; titleField.delegate = self
+    titleField.clearButtonMode = .whileEditing; titleField.autocapitalizationType = .sentences
+    titleField.addAction(UIAction { [weak self] _ in self?.changed() }, for: .editingChanged)
+    desc.font = .systemFont(ofSize: 17); desc.backgroundColor = .clear; desc.delegate = self
+    desc.textContainerInset = UIEdgeInsets(top: 15, left: 0, bottom: 12, right: 0); desc.textContainer.lineFragmentPadding = 0
+    descHint.font = .systemFont(ofSize: 17); descHint.textColor = .placeholderText; descHint.numberOfLines = 0
+    cdSwitch.addAction(UIAction { _ in UISelectionFeedbackGenerator().selectionChanged() }, for: .valueChanged)
+    table.dataSource = self; table.delegate = self
+    table.translatesAutoresizingMaskIntoConstraints = false
+    table.contentInsetAdjustmentBehavior = .never
+    table.contentInset = UIEdgeInsets(top: 0, left: 0, bottom: NativeSheetVC.END, right: 0)
+    table.estimatedRowHeight = 0; table.estimatedSectionHeaderHeight = 0; table.estimatedSectionFooterHeight = 0
+    table.sectionHeaderTopPadding = 0
+    table.tableHeaderView = UIView(frame: CGRect(x: 0, y: 0, width: 0, height: CGFloat.leastNonzeroMagnitude))
+    table.tableFooterView = UIView(frame: .zero)
+    table.keyboardDismissMode = .interactive
+    table.alwaysBounceVertical = false
+    table.insetsContentViewsToSafeArea = false
+    table.insetsLayoutMarginsFromSafeArea = false
+    view.addSubview(table)
+    // the tucked draft: "New task · its title" … Continue
+    bar.translatesAutoresizingMaskIntoConstraints = false; bar.alpha = 0; bar.isHidden = true
+    barText.translatesAutoresizingMaskIntoConstraints = false; barText.lineBreakMode = .byTruncatingTail
+    let go = UIButton(type: .system); go.setTitle("Continue", for: .normal); go.titleLabel?.font = .systemFont(ofSize: 17, weight: .semibold)
+    go.translatesAutoresizingMaskIntoConstraints = false
+    go.setContentCompressionResistancePriority(.required, for: .horizontal)
+    go.addAction(UIAction { [weak self] _ in self?.expand() }, for: .touchUpInside)
+    bar.addSubview(barText); bar.addSubview(go)
+    bar.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(barTapped)))
+    view.addSubview(bar)
+    NSLayoutConstraint.activate([
+      topBar.topAnchor.constraint(equalTo: view.topAnchor, constant: 14), topBar.heightAnchor.constraint(equalToConstant: 44),
+      topBar.leadingAnchor.constraint(equalTo: view.leadingAnchor), topBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+      cancel.leadingAnchor.constraint(equalTo: topBar.leadingAnchor, constant: 20), cancel.centerYAnchor.constraint(equalTo: topBar.centerYAnchor),
+      name.centerXAnchor.constraint(equalTo: topBar.centerXAnchor), name.centerYAnchor.constraint(equalTo: topBar.centerYAnchor),
+      name.leadingAnchor.constraint(greaterThanOrEqualTo: cancel.trailingAnchor, constant: 8),
+      table.topAnchor.constraint(equalTo: topBar.bottomAnchor, constant: 4), table.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+      table.leadingAnchor.constraint(equalTo: view.leadingAnchor), table.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+      bar.topAnchor.constraint(equalTo: view.topAnchor, constant: 10), bar.heightAnchor.constraint(equalToConstant: 48),
+      bar.leadingAnchor.constraint(equalTo: view.leadingAnchor), bar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+      barText.leadingAnchor.constraint(equalTo: bar.leadingAnchor, constant: 24), barText.centerYAnchor.constraint(equalTo: bar.centerYAnchor),
+      go.leadingAnchor.constraint(greaterThanOrEqualTo: barText.trailingAnchor, constant: 10),
+      go.trailingAnchor.constraint(equalTo: bar.trailingAnchor, constant: -22), go.centerYAnchor.constraint(equalTo: bar.centerYAnchor),
+    ])
+  }
+  override func viewDidAppear(_ animated: Bool) {
+    super.viewDidAppear(animated)
+    if !focused { focused = true; _ = (isTask ? titleField as UIView : desc).becomeFirstResponder() }
+  }
+  // sized to the form (its fields as they are — never to the sheet's own size, which iOS changes while it's pulled)
+  private var lastWidth: CGFloat = 0
+  override func viewDidLayoutSubviews() {
+    super.viewDidLayoutSubviews()
+    if let w = view.window { strip = w.safeAreaInsets.bottom }
+    if note != nil && abs(table.bounds.width - lastWidth) > 0.5 { lastWidth = table.bounds.width; table.beginUpdates(); table.endUpdates() }
+    table.layoutIfNeeded()
+    let ch = table.contentSize.height
+    guard ch > 0 else { return }
+    // (the top bar: 14 + 44 + 4; under the button: END + 10; iOS adds the home-bar strip under a floating sheet)
+    var h: CGFloat = 62 + ch + NativeSheetVC.END + 10
+    if floating { h -= strip } else { h += view.safeAreaInsets.bottom }
+    guard abs(h - fitHeight) > 0.5 else { return }
+    fitHeight = h
+    sheetPresentationController?.animateChanges { sheetPresentationController?.invalidateDetents() }
+  }
+
+  // ---- the rows ----
+  private var rows: [[String]] {
+    if !isTask { return [["desc"], ["go"]] }
+    var fields: [String] = ["client"]
+    if showWho { fields.append("who") }
+    fields.append("due")
+    if hasCD { fields.append("cd") }
+    return [["title", "desc"], fields, ["go"]]
+  }
+  func numberOfSections(in tableView: UITableView) -> Int { rows.count }
+  func tableView(_ tableView: UITableView, numberOfRowsInSection s: Int) -> Int { rows[s].count }
+  func tableView(_ tableView: UITableView, heightForRowAt ip: IndexPath) -> CGFloat {
+    switch rows[ip.section][ip.row] { case "desc": return isTask ? 96 : 150; case "go": return 52; default: return 52 }
+  }
+  func tableView(_ tableView: UITableView, heightForHeaderInSection s: Int) -> CGFloat {
+    if s == 0, let n = note { return noteHeight(n) }
+    return s == 0 ? .leastNonzeroMagnitude : (rows[s] == ["go"] ? 20 : 16)
+  }
+  func tableView(_ tableView: UITableView, viewForHeaderInSection s: Int) -> UIView? {
+    guard s == 0, let n = note else { return UIView() }
+    let v = UIView()
+    let l = UILabel(); l.text = n; l.numberOfLines = 0; l.font = .systemFont(ofSize: 15); l.textColor = .secondaryLabel
+    l.translatesAutoresizingMaskIntoConstraints = false; v.addSubview(l)
+    NSLayoutConstraint.activate([l.leadingAnchor.constraint(equalTo: v.leadingAnchor, constant: 20),
+                                 l.trailingAnchor.constraint(equalTo: v.trailingAnchor, constant: -20),
+                                 l.topAnchor.constraint(equalTo: v.topAnchor, constant: 2)])
+    return v
+  }
+  private func noteHeight(_ n: String) -> CGFloat {
+    let w = max(200, (table.bounds.width > 0 ? table.bounds.width : view.bounds.width) - 40)
+    let r = (n as NSString).boundingRect(with: CGSize(width: w, height: 400), options: [.usesLineFragmentOrigin],
+                                         attributes: [.font: UIFont.systemFont(ofSize: 15)], context: nil)
+    return ceil(r.height) + 2 + 12
+  }
+  func tableView(_ tableView: UITableView, heightForFooterInSection s: Int) -> CGFloat { .leastNonzeroMagnitude }
+  func tableView(_ tableView: UITableView, viewForFooterInSection s: Int) -> UIView? { UIView() }
+  private func put(_ v: UIView, in cell: UITableViewCell, _ i: UIEdgeInsets) {
+    v.removeFromSuperview(); v.translatesAutoresizingMaskIntoConstraints = false; cell.contentView.addSubview(v)
+    NSLayoutConstraint.activate([v.leadingAnchor.constraint(equalTo: cell.contentView.leadingAnchor, constant: i.left),
+                                 v.trailingAnchor.constraint(equalTo: cell.contentView.trailingAnchor, constant: -i.right),
+                                 v.topAnchor.constraint(equalTo: cell.contentView.topAnchor, constant: i.top),
+                                 v.bottomAnchor.constraint(equalTo: cell.contentView.bottomAnchor, constant: -i.bottom)])
+  }
+  // (a picker row's end: the person's picture, if any, then iOS's up-down chevron)
+  private func pickerEnd(_ pic: UIImage?) -> UIView {
+    let chev = UIImageView(image: UIImage(systemName: "chevron.up.chevron.down", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .medium)))
+    chev.tintColor = .tertiaryLabel
+    let cs = chev.intrinsicContentSize
+    guard let p = pic else { chev.frame = CGRect(origin: .zero, size: cs); return chev }
+    let v = UIView(frame: CGRect(x: 0, y: 0, width: 26 + 8 + cs.width, height: 26))
+    let iv = UIImageView(image: p); iv.frame = CGRect(x: 0, y: 0, width: 26, height: 26)
+    chev.frame = CGRect(x: 34, y: (26 - cs.height) / 2, width: cs.width, height: cs.height)
+    v.addSubview(iv); v.addSubview(chev)
+    return v
+  }
+  func tableView(_ tableView: UITableView, cellForRowAt ip: IndexPath) -> UITableViewCell {
+    let id = rows[ip.section][ip.row]
+    let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
+    cell.insetsLayoutMarginsFromSafeArea = false; cell.contentView.insetsLayoutMarginsFromSafeArea = false
+    if #available(iOS 26, *) { cell.backgroundColor = UIColor.secondarySystemGroupedBackground.withAlphaComponent(0.6) }
+    cell.selectionStyle = .none
+    switch id {
+    case "title": put(titleField, in: cell, UIEdgeInsets(top: 0, left: 20, bottom: 0, right: 12))
+    case "desc":
+      put(desc, in: cell, UIEdgeInsets(top: 0, left: 20, bottom: 0, right: 16))
+      descHint.removeFromSuperview(); descHint.translatesAutoresizingMaskIntoConstraints = false; cell.contentView.addSubview(descHint)
+      NSLayoutConstraint.activate([descHint.leadingAnchor.constraint(equalTo: cell.contentView.leadingAnchor, constant: 20),
+                                   descHint.trailingAnchor.constraint(equalTo: cell.contentView.trailingAnchor, constant: -16),
+                                   descHint.topAnchor.constraint(equalTo: cell.contentView.topAnchor, constant: 15)])
+      descHint.isHidden = !desc.text.isEmpty
+    case "client", "who", "due":
+      var c = UIListContentConfiguration.valueCell()
+      c.text = id == "client" ? "Client" : id == "who" ? "Assign to" : "Due"
+      c.secondaryText = id == "client" ? clientText : id == "who" ? whoText : dueText()
+      if id == "due" && !due.isEmpty { c.secondaryTextProperties.color = .systemBlue }
+      cell.contentConfiguration = c
+      cell.selectionStyle = .default
+      if id != "due" { cell.accessoryView = pickerEnd(id == "who" ? whoPic : nil) }
+    case "cd":
+      var c = cell.defaultContentConfiguration(); c.text = "CD review"
+      cell.contentConfiguration = c
+      cell.accessoryView = cdSwitch
+    case "go":
+      cell.backgroundConfiguration = UIBackgroundConfiguration.clear()
+      var bc = UIButton.Configuration.filled()
+      bc.cornerStyle = .capsule; bc.baseBackgroundColor = tint; bc.baseForegroundColor = .white
+      bc.title = button
+      let b = UIButton(configuration: bc)
+      b.addAction(UIAction { [weak self] _ in self?.submit() }, for: .touchUpInside)
+      put(b, in: cell, .zero)
+    default: break
+    }
+    return cell
+  }
+  func tableView(_ tableView: UITableView, shouldHighlightRowAt ip: IndexPath) -> Bool { ["client", "who", "due"].contains(rows[ip.section][ip.row]) }
+  func tableView(_ tableView: UITableView, didSelectRowAt ip: IndexPath) {
+    tableView.deselectRow(at: ip, animated: true)
+    let id = rows[ip.section][ip.row]
+    switch id {
+    case "client", "who": view.endEditing(true); event(["ev": "pick", "key": key, "field": id])
+    case "due": pickDue()
+    default: break
+    }
+  }
+  private func reloadRow(_ id: String) {
+    for (s, list) in rows.enumerated() { if let r = list.firstIndex(of: id) { table.reloadRows(at: [IndexPath(row: r, section: s)], with: .none) } }
+  }
+  private func dueText() -> String {
+    guard let d = fmt.date(from: due) else { return "None" }
+    let cal = Calendar.current
+    if cal.isDateInToday(d) { return "Today" }
+    if cal.isDateInTomorrow(d) { return "Tomorrow" }
+    if cal.isDateInYesterday(d) { return "Yesterday" }
+    let f = DateFormatter(); f.locale = Locale(identifier: "en_GB")
+    f.setLocalizedDateFormatFromTemplate(cal.isDate(d, equalTo: Date(), toGranularity: .year) ? "EEEdMMM" : "EEEdMMMyyyy")
+    return f.string(from: d)
+  }
+  private func pickDue() {
+    view.endEditing(true)
+    present(DateSheetVC(["value": due, "clearable": true], dark: dark) { [weak self] r in
+      guard let self else { return }
+      if (r["clear"] as? Bool) == true { self.due = "" } else if let d = r["date"] as? String { self.due = d } else { return }
+      self.reloadRow("due")
+    }, animated: true)
+  }
+  private func setWho(_ w: [String: Any]) {
+    whoText = w["label"] as? String ?? ""
+    whoPic = (w["person"] as? [String: Any]).map { p in roundPic(NativeSheetVC.photo(p), initials: p["initials"] as? String, color: NativeSheetVC.color(p["color"]), size: 26) }
+  }
+  // from the page: what was picked, CD review on / off, or what's wrong
+  func set(_ a: [String: Any]) {
+    if let c = a["client"] as? String { clientText = c; reloadRow("client") }
+    if let w = a["assign"] as? [String: Any] { setWho(w); reloadRow("who") }
+    if let cd = a["cd"] as? Bool { cdSwitch.setOn(cd, animated: true) }
+    if let msg = a["alert"] as? String {
+      UINotificationFeedbackGenerator().notificationOccurred(.warning)
+      let al = UIAlertController(title: nil, message: msg, preferredStyle: .alert)
+      al.addAction(UIAlertAction(title: "OK", style: .default))
+      (presentedViewController ?? self).present(al, animated: true)
+    }
+  }
+
+  // ---- typing, tucking ----
+  private var dirty: Bool {
+    !(titleField.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !desc.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+  private func changed() {
+    descHint.isHidden = !desc.text.isEmpty
+    let d = dirty
+    guard d != dirtyNow, let sh = sheetPresentationController else { return }
+    dirtyNow = d
+    // (something typed: it can tuck, and pulling it down tucks it instead of closing it)
+    isModalInPresentation = d && !tucked
+    sh.animateChanges { sh.detents = d ? [tuckDetent, formDetent] : [formDetent]; if !tucked { sh.selectedDetentIdentifier = FormSheetVC.FORM } }
+  }
+  func textViewDidChange(_ textView: UITextView) { changed() }
+  func textFieldShouldReturn(_ textField: UITextField) -> Bool { desc.becomeFirstResponder(); return false }
+  private var tucked: Bool { sheetPresentationController?.selectedDetentIdentifier == FormSheetVC.TUCK }
+  func sheetPresentationControllerDidChangeSelectedDetentIdentifier(_ sheetPresentationController: UISheetPresentationController) { applyMode() }
+  private func applyMode() {
+    let t = tucked
+    if t {
+      view.endEditing(true)
+      let first = (isTask ? (titleField.text ?? "") : desc.text).trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: .newlines).first ?? ""
+      let s = NSMutableAttributedString(string: dock, attributes: [.font: UIFont.systemFont(ofSize: 16, weight: .semibold), .foregroundColor: UIColor.label])
+      if !first.isEmpty { s.append(NSAttributedString(string: " · " + first, attributes: [.font: UIFont.systemFont(ofSize: 16), .foregroundColor: UIColor.secondaryLabel])) }
+      barText.attributedText = s
+    }
+    isModalInPresentation = dirty && !t   // (tucked: pulled down, the draft goes)
+    bar.isHidden = false
+    UIView.animate(withDuration: 0.2, animations: {
+      self.bar.alpha = t ? 1 : 0; self.table.alpha = t ? 0 : 1; self.topBar.alpha = t ? 0 : 1
+    }, completion: { _ in self.bar.isHidden = !self.tucked })
+  }
+  @objc private func barTapped() { expand() }
+  func expand() {
+    guard let sh = sheetPresentationController, tucked else { return }
+    sh.animateChanges { sh.selectedDetentIdentifier = FormSheetVC.FORM }
+    applyMode()
+  }
+  private func tuck() {
+    guard dirty, let sh = sheetPresentationController else { return }
+    view.endEditing(true)
+    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    sh.animateChanges { sh.selectedDetentIdentifier = FormSheetVC.TUCK }
+    applyMode()
+  }
+  // (tapped outside, or pulled down past the bottom, with something typed: tucked)
+  func presentationControllerDidAttemptToDismiss(_ presentationController: UIPresentationController) { tuck() }
+  func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
+    let a = answer; answer = nil
+    a?(["ok": true, "closed": dirty ? "discard" : "cancel"])
+  }
+
+  private func submit() {
+    let t = (titleField.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    let d = desc.text.trimmingCharacters(in: .whitespacesAndNewlines)
+    if need == "title" && t.isEmpty { UINotificationFeedbackGenerator().notificationOccurred(.warning); titleField.becomeFirstResponder(); return }
+    if need == "desc" && d.isEmpty { UINotificationFeedbackGenerator().notificationOccurred(.warning); desc.becomeFirstResponder(); return }
+    event(["ev": "submit", "key": key, "title": t, "desc": d, "due": due, "cd": cdSwitch.isOn])
+  }
+  // closed: submit (the page did it) / cancel / replaced (another form opened instead)
+  func finish(_ reason: String, then: (() -> Void)? = nil) {
+    guard let a = answer else { then?(); return }
+    answer = nil
+    view.endEditing(true)
+    let done = { a(["ok": true, "closed": reason]); then?() }
+    if let p = presentingViewController { p.dismiss(animated: true, completion: done) } else { done() }
+  }
+}
+
+
+/* A task in the Trash, to look at (nothing can be changed there): iOS's own tall sheet — the Trash bar with Restore,
+   the task's details, its description, subtasks, checklist, files (tapped: the page previews it, then brings this
+   back) and comments. */
+final class TrashSheetVC: UIViewController, UISheetPresentationControllerDelegate {
+  private let a: [String: Any]
+  private let dark: Bool
+  private var answer: (([String: Any]) -> Void)?
+  private let scroll = UIScrollView()
+  private let stack = UIStackView()
+  init(_ a: [String: Any], dark: Bool, answer: @escaping ([String: Any]) -> Void) {
+    self.a = a; self.dark = dark; self.answer = answer
+    super.init(nibName: nil, bundle: nil)
+    overrideUserInterfaceStyle = dark ? .dark : .light
+    modalPresentationStyle = .pageSheet
+    if let sh = sheetPresentationController { sh.detents = [.large()]; sh.prefersGrabberVisible = true; sh.delegate = self }
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  private var cardColor: UIColor {
+    if #available(iOS 26, *) { return UIColor.secondarySystemGroupedBackground.withAlphaComponent(0.6) } else { return .secondarySystemGroupedBackground }
+  }
+  override func viewDidLoad() {
+    super.viewDidLoad()
+    if #available(iOS 26, *) { view.backgroundColor = .clear } else { view.backgroundColor = .systemGroupedBackground }
+    scroll.translatesAutoresizingMaskIntoConstraints = false; stack.translatesAutoresizingMaskIntoConstraints = false
+    stack.axis = .vertical; stack.spacing = 8
+    scroll.alwaysBounceVertical = true
+    view.addSubview(scroll); scroll.addSubview(stack)
+    NSLayoutConstraint.activate([
+      scroll.topAnchor.constraint(equalTo: view.topAnchor), scroll.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+      scroll.leadingAnchor.constraint(equalTo: view.leadingAnchor), scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+      stack.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: NativeSheetVC.TOP),
+      stack.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -24),
+      stack.leadingAnchor.constraint(equalTo: scroll.frameLayoutGuide.leadingAnchor, constant: 16),
+      stack.trailingAnchor.constraint(equalTo: scroll.frameLayoutGuide.trailingAnchor, constant: -16),
+    ])
+    build()
+  }
+  private func label(_ text: String, size: CGFloat, weight: UIFont.Weight = .regular, color: UIColor = .label, lines: Int = 0) -> UILabel {
+    let l = UILabel(); l.text = text; l.font = .systemFont(ofSize: size, weight: weight); l.textColor = color; l.numberOfLines = lines
+    return l
+  }
+  private func padded(_ v: UIView, _ i: UIEdgeInsets) -> UIView {
+    let w = UIView(); v.translatesAutoresizingMaskIntoConstraints = false; w.addSubview(v)
+    NSLayoutConstraint.activate([v.leadingAnchor.constraint(equalTo: w.leadingAnchor, constant: i.left), v.trailingAnchor.constraint(equalTo: w.trailingAnchor, constant: -i.right),
+                                 v.topAnchor.constraint(equalTo: w.topAnchor, constant: i.top), v.bottomAnchor.constraint(equalTo: w.bottomAnchor, constant: -i.bottom)])
+    return w
+  }
+  // a rounded card of rows, with hairlines between them
+  private func card(_ rows: [UIView]) -> UIView {
+    let c = UIStackView(); c.axis = .vertical
+    c.backgroundColor = cardColor; c.layer.cornerRadius = 16; c.layer.cornerCurve = .continuous; c.clipsToBounds = true
+    for (i, r) in rows.enumerated() {
+      if i > 0 {
+        let line = UIView(); line.backgroundColor = .separator; line.translatesAutoresizingMaskIntoConstraints = false
+        line.heightAnchor.constraint(equalToConstant: 1 / UIScreen.main.scale).isActive = true
+        c.addArrangedSubview(padded(line, UIEdgeInsets(top: 0, left: 16, bottom: 0, right: 0)))
+      }
+      c.addArrangedSubview(r)
+    }
+    return c
+  }
+  private func section(_ title: String, _ count: Int?, _ body: UIView) {
+    let t = NSMutableAttributedString(string: title, attributes: [.font: UIFont.systemFont(ofSize: 15, weight: .semibold), .foregroundColor: UIColor.secondaryLabel])
+    if let n = count { t.append(NSAttributedString(string: "  \(n)", attributes: [.font: UIFont.systemFont(ofSize: 15), .foregroundColor: UIColor.tertiaryLabel])) }
+    let l = UILabel(); l.attributedText = t
+    let last = stack.arrangedSubviews.last
+    if let last { stack.setCustomSpacing(22, after: last) }
+    stack.addArrangedSubview(padded(l, UIEdgeInsets(top: 0, left: 4, bottom: 0, right: 0)))
+    stack.addArrangedSubview(body)
+  }
+  private func person(_ p: Any?, _ size: CGFloat) -> UIImage {
+    let d = p as? [String: Any]
+    return roundPic(NativeSheetVC.photo(d), initials: d?["initials"] as? String, color: NativeSheetVC.color(d?["color"]), size: size)
+  }
+  private func peopleText(_ list: [[String: Any]]) -> NSAttributedString {
+    let s = NSMutableAttributedString(), font = UIFont.systemFont(ofSize: 16)
+    for (i, p) in list.enumerated() {
+      if i > 0 { s.append(NSAttributedString(string: "    ", attributes: [.font: font])) }
+      let att = NSTextAttachment(); att.image = person(p["person"], 22)
+      att.bounds = CGRect(x: 0, y: (font.capHeight - 22) / 2, width: 22, height: 22)
+      s.append(NSAttributedString(attachment: att))
+      s.append(NSAttributedString(string: " " + (p["name"] as? String ?? ""), attributes: [.font: font, .foregroundColor: UIColor.label]))
+    }
+    return s
+  }
+  private func text(_ s: String) -> UITextView {
+    let t = UITextView(); t.text = s; t.font = .systemFont(ofSize: 16); t.isEditable = false; t.isScrollEnabled = false
+    t.backgroundColor = .clear; t.dataDetectorTypes = [.link]; t.textContainerInset = .zero; t.textContainer.lineFragmentPadding = 0
+    return t
+  }
+  // a file: its picture (or its type), its name under it; tapped → previewed
+  private func tile(_ f: [String: Any]) -> UIView {
+    let box = UIStackView(); box.axis = .vertical; box.spacing = 4; box.alignment = .leading
+    let b = UIButton(type: .custom)
+    b.translatesAutoresizingMaskIntoConstraints = false
+    b.widthAnchor.constraint(equalToConstant: 76).isActive = true; b.heightAnchor.constraint(equalToConstant: 76).isActive = true
+    b.layer.cornerRadius = 12; b.layer.cornerCurve = .continuous; b.clipsToBounds = true; b.backgroundColor = .tertiarySystemFill
+    if let img = NativeSheetVC.photo(f["thumb"].map { ["photo": $0] }) {
+      let iv = UIImageView(image: img); iv.contentMode = .scaleAspectFill; iv.isUserInteractionEnabled = false
+      iv.frame = CGRect(x: 0, y: 0, width: 76, height: 76); b.addSubview(iv)
+    } else {
+      b.setTitle((f["ext"] as? String ?? "file").uppercased(), for: .normal)
+      b.titleLabel?.font = .systemFont(ofSize: 13, weight: .bold); b.setTitleColor(.secondaryLabel, for: .normal)
+    }
+    let id = f["id"] as? String ?? ""
+    b.addAction(UIAction { [weak self] _ in self?.finish(["ok": true, "action": "preview", "file": id]) }, for: .touchUpInside)
+    let name = label(f["name"] as? String ?? "", size: 11, color: .secondaryLabel, lines: 1); name.lineBreakMode = .byTruncatingMiddle
+    name.translatesAutoresizingMaskIntoConstraints = false; name.widthAnchor.constraint(equalToConstant: 76).isActive = true
+    box.addArrangedSubview(b); box.addArrangedSubview(name)
+    return box
+  }
+  private func tiles(_ files: [[String: Any]]) -> UIView {
+    let sc = UIScrollView(); sc.showsHorizontalScrollIndicator = false
+    let row = UIStackView(); row.axis = .horizontal; row.spacing = 10; row.alignment = .top
+    files.forEach { row.addArrangedSubview(tile($0)) }
+    row.translatesAutoresizingMaskIntoConstraints = false; sc.addSubview(row)
+    sc.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([row.leadingAnchor.constraint(equalTo: sc.contentLayoutGuide.leadingAnchor), row.trailingAnchor.constraint(equalTo: sc.contentLayoutGuide.trailingAnchor),
+                                 row.topAnchor.constraint(equalTo: sc.contentLayoutGuide.topAnchor), row.bottomAnchor.constraint(equalTo: sc.contentLayoutGuide.bottomAnchor),
+                                 row.heightAnchor.constraint(equalTo: sc.frameLayoutGuide.heightAnchor), sc.heightAnchor.constraint(equalToConstant: 76 + 4 + 14)])
+    return sc
+  }
+  private func lines(_ list: [[String: Any]], strike: Bool) -> UIView {
+    card(list.map { l -> UIView in
+      let done = (l["done"] as? Bool) == true
+      let ic = UIImageView(image: UIImage(systemName: done ? "checkmark.circle.fill" : "circle"))
+      ic.tintColor = done ? .systemGreen : .tertiaryLabel; ic.setContentHuggingPriority(.required, for: .horizontal)
+      let t = label(l["t"] as? String ?? "", size: 16, color: done && strike ? .secondaryLabel : .label)
+      if done && strike { t.attributedText = NSAttributedString(string: t.text ?? "", attributes: [.strikethroughStyle: NSUnderlineStyle.single.rawValue, .font: UIFont.systemFont(ofSize: 16), .foregroundColor: UIColor.secondaryLabel]) }
+      let r = UIStackView(arrangedSubviews: [ic, t]); r.spacing = 10; r.alignment = .center
+      return padded(r, UIEdgeInsets(top: 13, left: 16, bottom: 13, right: 16))
+    })
+  }
+  private func build() {
+    // the task's name
+    stack.addArrangedSubview(padded(label(a["title"] as? String ?? "", size: 22, weight: .bold), UIEdgeInsets(top: 0, left: 4, bottom: 4, right: 4)))
+    // In the Trash · who · when · days left, and Restore
+    let orange = UIColor.systemOrange
+    let barL = label(a["bar"] as? String ?? "", size: 14, color: dark ? orange : UIColor(red: 0.55, green: 0.33, blue: 0, alpha: 1))
+    let barRow = UIStackView(arrangedSubviews: [UIImageView(image: UIImage(systemName: "trash")), barL]); barRow.spacing = 10; barRow.alignment = .center
+    (barRow.arrangedSubviews[0] as? UIImageView)?.tintColor = barL.textColor
+    barRow.arrangedSubviews[0].setContentHuggingPriority(.required, for: .horizontal)
+    if (a["canRestore"] as? Bool) == true {
+      var bc = UIButton.Configuration.filled(); bc.cornerStyle = .capsule; bc.image = UIImage(systemName: "arrow.uturn.backward"); bc.imagePadding = 6
+      bc.title = "Restore"; bc.buttonSize = .medium
+      bc.contentInsets = NSDirectionalEdgeInsets(top: 8, leading: 14, bottom: 8, trailing: 14)
+      let rb = UIButton(configuration: bc)
+      rb.setContentHuggingPriority(.required, for: .horizontal); rb.setContentCompressionResistancePriority(.required, for: .horizontal)
+      rb.addAction(UIAction { [weak self] _ in self?.finish(["ok": true, "action": "restore"]) }, for: .touchUpInside)
+      barRow.addArrangedSubview(rb)
+    }
+    let barBox = padded(barRow, UIEdgeInsets(top: 12, left: 14, bottom: 12, right: 12))
+    barBox.backgroundColor = orange.withAlphaComponent(0.14); barBox.layer.cornerRadius = 16; barBox.layer.cornerCurve = .continuous
+    stack.addArrangedSubview(barBox)
+    stack.setCustomSpacing(14, after: barBox)
+    // Client, Status, Assignees, Dates, Tags
+    let props = (a["props"] as? [[String: Any]] ?? []).map { p -> UIView in
+      let k = label(p["label"] as? String ?? "", size: 16, color: .secondaryLabel, lines: 1)
+      k.translatesAutoresizingMaskIntoConstraints = false; k.widthAnchor.constraint(equalToConstant: 96).isActive = true
+      let v: UIView
+      if let people = p["people"] as? [[String: Any]] {
+        let l = UILabel(); l.numberOfLines = 0; l.attributedText = people.isEmpty ? NSAttributedString(string: "Nobody", attributes: [.font: UIFont.systemFont(ofSize: 16), .foregroundColor: UIColor.secondaryLabel]) : peopleText(people); v = l
+      } else if let st = p["status"] as? [String: Any] {
+        let c = NativeSheetVC.color(st["color"]) ?? .systemBlue
+        let l = label(st["name"] as? String ?? "", size: 14, weight: .semibold, color: c, lines: 1)
+        let pill = padded(l, UIEdgeInsets(top: 3, left: 9, bottom: 3, right: 9)); pill.backgroundColor = c.withAlphaComponent(0.15); pill.layer.cornerRadius = 8
+        let w = UIStackView(arrangedSubviews: [pill, UIView()]); w.alignment = .center; v = w
+      } else { v = label(p["text"] as? String ?? "", size: 16) }
+      let r = UIStackView(arrangedSubviews: [k, v]); r.spacing = 8; r.alignment = .center
+      return padded(r, UIEdgeInsets(top: 13, left: 16, bottom: 13, right: 16))
+    }
+    if !props.isEmpty { stack.addArrangedSubview(card(props)) }
+    if let d = a["desc"] as? String, !d.isEmpty { section("Description", nil, card([padded(text(d), UIEdgeInsets(top: 13, left: 16, bottom: 13, right: 16))])) }
+    if let s = a["subtasks"] as? [[String: Any]], !s.isEmpty { section("Subtasks", s.count, lines(s, strike: false)) }
+    if let s = a["checklist"] as? [[String: Any]], !s.isEmpty { section("Checklist", nil, lines(s, strike: true)) }
+    if let f = a["files"] as? [[String: Any]], !f.isEmpty { section("Attachments", f.count, card([padded(tiles(f), UIEdgeInsets(top: 12, left: 12, bottom: 10, right: 12))])) }
+    let comments = a["comments"] as? [[String: Any]] ?? []
+    if comments.isEmpty {
+      section("Comments", 0, card([padded(label("No comments", size: 16, color: .secondaryLabel), UIEdgeInsets(top: 13, left: 16, bottom: 13, right: 16))]))
+      return
+    }
+    section("Comments", comments.count, card(comments.map { c -> UIView in
+        let pic = UIImageView(image: person(c["person"], 28)); pic.translatesAutoresizingMaskIntoConstraints = false
+        pic.widthAnchor.constraint(equalToConstant: 28).isActive = true; pic.heightAnchor.constraint(equalToConstant: 28).isActive = true
+        let meta = NSMutableAttributedString(string: c["name"] as? String ?? "", attributes: [.font: UIFont.systemFont(ofSize: 15, weight: .semibold), .foregroundColor: UIColor.label])
+        meta.append(NSAttributedString(string: " · " + (c["when"] as? String ?? ""), attributes: [.font: UIFont.systemFont(ofSize: 13), .foregroundColor: UIColor.secondaryLabel]))
+        let m = UILabel(); m.attributedText = meta
+        let col = UIStackView(arrangedSubviews: [m]); col.axis = .vertical; col.spacing = 4
+        if let t = c["text"] as? String, !t.isEmpty { col.addArrangedSubview(text(t)) }
+        if let f = c["files"] as? [[String: Any]], !f.isEmpty { col.addArrangedSubview(tiles(f)) }
+        let r = UIStackView(arrangedSubviews: [pic, col]); r.spacing = 10; r.alignment = .top
+        return padded(r, UIEdgeInsets(top: 12, left: 14, bottom: 12, right: 14))
+    }))
+  }
+  private func finish(_ r: [String: Any]) {
+    guard let a = answer else { return }
+    answer = nil
+    if let p = presentingViewController { p.dismiss(animated: true) { a(r) } } else { a(r) }
+  }
+  func presentationControllerDidDismiss(_ presentationController: UIPresentationController) { let a = answer; answer = nil; a?(["ok": true, "closed": true]) }
 }
 
 

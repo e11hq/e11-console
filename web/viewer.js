@@ -42,8 +42,11 @@ const Viewer = (() => {
     return `<button class="fpv-th ${k === at ? 'on' : ''} ${kind === 'image' || a.thumb ? '' : 'doc'}" data-pv="go" data-i="${k}" aria-label="${esc(a.name)}">${inner}</button>`;
   };
 
-  function open(a, group) {
+  // (opts.onClose: run once when this preview closes — the iPhone's Trash sheet comes back)
+  let after = null;
+  function open(a, group, opts) {
     if (!a) return;
+    after = (opts && opts.onClose) || null;
     list = (group && group.length ? group : groupOf(a)).filter(Boolean);
     at = list.findIndex((x) => x.id === a.id);
     if (at < 0) { list = [a]; at = 0; }
@@ -84,6 +87,8 @@ const Viewer = (() => {
     document.querySelectorAll('.pv-under').forEach((x) => x.classList.remove('pv-under'));
     root = null; ui.previewAtt = null; clearTimeout(hideT);
     if (keyOn) { document.removeEventListener('keydown', onKey, true); keyOn = false; }
+    const f = after; after = null;
+    if (f) setTimeout(f, 0);
   }
   const isOpen = () => !!(root && root.isConnected);
 
