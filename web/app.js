@@ -623,6 +623,9 @@ const NativeSide = (() => {
     let a = document.getElementById('nsb-anchor');
     if (!a) { a = document.createElement('div'); a.id = 'nsb-anchor'; a.style.cssText = 'position:fixed;left:8px;width:1px;height:1px;pointer-events:none'; document.body.appendChild(a); }
     a.style.top = Math.max(0, Math.round(+y || 0) - 1) + 'px';
+    // (beside the sidebar, which floats over the page's left edge in newer Mac apps — under it, a page menu was hidden)
+    const app = document.getElementById('app');
+    a.style.left = ((app && parseFloat(getComputedStyle(app).paddingLeft)) || 0) + 8 + 'px';
     return a;
   }
   // showMenu while the Mac asks for a menu: its options are kept here and handed over instead of drawn

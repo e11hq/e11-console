@@ -580,7 +580,8 @@ final class Sidebar: NSView {
       }
       menu.addItem(mi); lastSep = false
     }
-    if let colors = m["colors"] as? [String], !colors.isEmpty {
+    // (the client colours stay on the page's own menu: as Mac menu items they came out empty — Haris, 2026-10-31)
+    if false, let colors = m["colors"] as? [String], !colors.isEmpty {
       let sub = NSMenu()
       let cur = m["cur"] as? String
       for c in colors {
