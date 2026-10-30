@@ -1107,24 +1107,33 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     else { view.backgroundColor = .systemGroupedBackground; table.backgroundColor = .systemGroupedBackground }
     table.dataSource = self; table.delegate = self
     table.translatesAutoresizingMaskIntoConstraints = false
-    table.contentInset.top = 6
+    // (tight like Apple's own sheets: just room for the grab handle above, a small margin below — the page's
+    //  automatic safe-area padding is off, the bottom margin is set by hand)
+    table.contentInsetAdjustmentBehavior = .never
+    table.contentInset = UIEdgeInsets(top: 0, left: 0, bottom: 8, right: 0)
+    table.tableHeaderView = UIView(frame: CGRect(x: 0, y: 0, width: 0, height: CGFloat.leastNonzeroMagnitude))   // (no default gap on top)
+    table.tableFooterView = UIView(frame: .zero)
     table.sectionHeaderTopPadding = 0
     view.addSubview(table)
-    NSLayoutConstraint.activate([table.topAnchor.constraint(equalTo: view.topAnchor, constant: 14), table.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+    NSLayoutConstraint.activate([table.topAnchor.constraint(equalTo: view.topAnchor, constant: 18), table.leadingAnchor.constraint(equalTo: view.leadingAnchor),
                                  table.trailingAnchor.constraint(equalTo: view.trailingAnchor), table.bottomAnchor.constraint(equalTo: view.bottomAnchor)])
   }
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
     table.layoutIfNeeded()
-    let h = table.contentSize.height + 14 + 6 + view.safeAreaInsets.bottom + 4
+    let h = table.contentSize.height + 18 + 8 + (floating ? 0 : view.safeAreaInsets.bottom)
     if abs(h - fitHeight) > 1 { fitHeight = h; sheetPresentationController?.animateChanges { sheetPresentationController?.invalidateDetents() } }
     table.isScrollEnabled = h > view.bounds.height + 1
+    table.contentInset.bottom = 8 + (table.isScrollEnabled ? view.safeAreaInsets.bottom : 0)
   }
   func numberOfSections(in tableView: UITableView) -> Int { sections.count }
   func tableView(_ tableView: UITableView, numberOfRowsInSection s: Int) -> Int { sections[s].rows.count }
   func tableView(_ tableView: UITableView, titleForHeaderInSection s: Int) -> String? { sections[s].header }
-  func tableView(_ tableView: UITableView, heightForHeaderInSection s: Int) -> CGFloat { sections[s].header == nil ? (s == 0 ? 4 : 10) : UITableView.automaticDimension }
-  func tableView(_ tableView: UITableView, heightForFooterInSection s: Int) -> CGFloat { 4 }
+  func tableView(_ tableView: UITableView, heightForHeaderInSection s: Int) -> CGFloat { sections[s].header == nil ? (s == 0 ? .leastNonzeroMagnitude : 12) : UITableView.automaticDimension }
+  func tableView(_ tableView: UITableView, heightForFooterInSection s: Int) -> CGFloat { .leastNonzeroMagnitude }
+  func tableView(_ tableView: UITableView, viewForFooterInSection s: Int) -> UIView? { UIView() }
+  // (iOS 26 floats a short sheet above the bottom edge: no home-indicator padding inside it then)
+  private var floating: Bool { if #available(iOS 26, *) { return true } else { return false } }
   func tableView(_ tableView: UITableView, cellForRowAt ip: IndexPath) -> UITableViewCell {
     let r = sections[ip.section].rows[ip.row]
     if let chips = r.chips { return chipCell(chips, kind: r.chipKind) }
