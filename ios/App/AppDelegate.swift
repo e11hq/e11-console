@@ -13,7 +13,7 @@ import PhotosUI
 import UniformTypeIdentifiers
 
 // Version of this iPhone app's native part (raise it with changes the web app needs to know about)
-let SHELL_VERSION = 14   // 14: native sheets with people (their round photo, else initials on their colour) and a search box (search) · 13: also dates picked in a native sheet (pickDate: closing it never sets a date) · a native sheet can stay open for ticking several (multi; each tick: window.__e11SheetPick) · 12: native sheets also with colour dots, a row of colours / emoji / numbers (chips), tinted icons, locked rows · 11: plain menus as iOS's own sheets (nativeSheet; the page: NativeSheet in app.js, showMenu(…, { native: true })) · 10: My Tasks, Inbox and Team lists swiped by iOS itself (Pager.syncLists in phone.js) · 9: a task’s Details / Comments swiped by iOS itself (the page: Pager in phone.js) · 8: iOS haptics for the page (haptic kind: light / medium / selection / success / warning / error) · 7: the comment box rides down / up with the keyboard frame by frame (__e11KbStep) · 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
+let SHELL_VERSION = 13   // 13: also dates picked in a native sheet (pickDate: closing it never sets a date) · a native sheet can stay open for ticking several (multi; each tick: window.__e11SheetPick) · 12: native sheets also with colour dots, a row of colours / emoji / numbers (chips), tinted icons, locked rows · 11: plain menus as iOS's own sheets (nativeSheet; the page: NativeSheet in app.js, showMenu(…, { native: true })) · 10: My Tasks, Inbox and Team lists swiped by iOS itself (Pager.syncLists in phone.js) · 9: a task’s Details / Comments swiped by iOS itself (the page: Pager in phone.js) · 8: iOS haptics for the page (haptic kind: light / medium / selection / success / warning / error) · 7: the comment box rides down / up with the keyboard frame by frame (__e11KbStep) · 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
 let procEnv = ProcessInfo.processInfo.environment
 let SELFTEST = procEnv["E11_SELFTEST"] ?? ""           // the build machine's self-test in the simulator
 let info = Bundle.main.infoDictionary ?? [:]
@@ -752,10 +752,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       }) { i, swatch in
         if i >= 0 { FocusAfterPicker.allow() }   // (a text box the option opens still brings the keyboard)
         var r: [String: Any] = ["ok": true, "index": i]
-        if i == -2 { r["text"] = swatch ?? "" } else if let sw = swatch { r["swatch"] = sw }
+        if let sw = swatch { r["swatch"] = sw }
         done(r)
       }
-      vc.loadPhoto = { [weak self] u, got in self?.fetchPhoto(u, got) ?? got(nil) }
       present(vc, animated: true)
     case "pickDate":
       // a date from the page, picked in a native sheet with iPhone's own calendar: a day tapped → that date;
@@ -819,48 +818,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       then()
     }
   }
-  // (self-test sheets — native sheets need the Channel sheet's room above and below everywhere: a long titled one,
-  //  a short untitled one like Channel, a short one titled with a person, a people picker with a search box)
-  func sheetRole() -> [[String: Any]] {
-    let roles: [String] = ["Super Admin", "Office Admin", "Account Manager", "Production", "Social", "Freelancer", "Finance only · Admin", "Finance only · Viewer"]
-    var rows: [[String: Any]] = []
-    for (k, r) in roles.enumerated() { rows.append(["i": k, "label": r, "dot": [124, 108, 240]]) }
-    let fin: [[String: Any]] = [["i": 20, "label": "Super Admin rights", "icon": "shield"], ["i": 21, "label": "No Finance access", "icon": "coin", "checked": true],
-                                ["i": 22, "label": "Finance Admin", "icon": "coin"], ["i": 23, "label": "Finance Viewer", "icon": "coin"]]
-    let rm: [[String: Any]] = [["i": 30, "label": "Remove from team", "icon": "trash", "danger": true]]
-    return [["header": "Change role", "rows": rows], ["rows": fin], ["rows": rm]]
-  }
-  func sheetChannel() -> [[String: Any]] {
-    var rows: [[String: Any]] = []
-    for (k, c) in ["Instagram", "Facebook", "TikTok", "LinkedIn", "X", "YouTube"].enumerated() { rows.append(["i": k, "label": c, "dot": [230, 120, 160]]) }
-    return [["rows": rows]]
-  }
-  func sheetTitled() -> [[String: Any]] {
-    var chips: [[String: Any]] = []
-    for n in 1...10 { chips.append(["i": n, "label": String(n)]) }
-    let urgent: [String: Any] = ["i": 0, "label": "Urgent", "sub": "always on top", "icon": "flag", "tint": [220, 60, 60]]
-    let grid: [String: Any] = ["i": -1, "label": "", "kind": "num", "chips": chips]
-    let none: [String: Any] = ["i": 11, "label": "No priority", "icon": "flag"]
-    let person: [String: Any] = ["initials": "AR", "color": [90, 120, 200]]
-    return [["header": "Ali Raza’s priority", "person": person, "rows": [urgent]], ["header": "Priority for Oct 28", "rows": [grid]], ["rows": [none]]]
-  }
-  func sheetPeople() -> [[String: Any]] {
-    let me: [String: Any] = ["i": 0, "label": "Me", "sub": "Super Admin", "checked": true, "multi": true, "find": "haris",
-                             "avatar": ["initials": "H", "color": [40, 160, 100]] as [String: Any]]
-    var rows: [[String: Any]] = []
-    let names: [String] = ["Ali Raza", "Areej Khan", "Claire Dubois", "Leila Aziz", "Lena Farouk", "Maya Rahman", "Omar Said", "Sara Noor", "Zain Ali"]
-    for (k, n) in names.enumerated() {
-      let ini: String = n.split(separator: " ").map { String($0.prefix(1)) }.joined()
-      let av: [String: Any] = ["initials": ini, "color": [90 + k * 15, 110, 200]]
-      rows.append(["i": k + 1, "label": n, "sub": "Production", "multi": true, "find": n, "avatar": av])
-    }
-    return [["header": "Assignees", "rows": [me]], ["header": "People", "rows": rows]]
-  }
   // (a native sheet for the self-test, replacing any open one)
-  func selfSheet(_ sections: [[String: Any]], search: String? = nil) {
-    var args: [String: Any] = ["sections": sections, "multi": true]
-    if let q = search { args["search"] = q; args["empty"] = "No one matches" }
-    let show = { self.run("nativeSheet", args) { _ in } }
+  func selfSheet(_ sections: [[String: Any]]) {
+    let show = { self.run("nativeSheet", ["sections": sections]) { _ in } }
     if let p = presentedViewController { p.dismiss(animated: false) { show() } } else { show() }
   }
   func pause(_ ms: Int) -> String { "await new Promise((r) => setTimeout(r, \(ms)));" }
@@ -886,13 +846,16 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       // native sheets (Haris: the same room above and below as the Channel sheet, everywhere — and the last option of a
       // long list clear of the bottom edge at the end of the scroll): a long titled one at rest, the same scrolled to the
       // end, a short untitled one like Channel, a short one titled with a person
-      ("nsheet", "return '{}'", { self.selfSheet(self.sheetRole()) }),
+      ("nsheet", "return '{}'", { self.selfSheet([
+        ["header": "Change role", "rows": ["Super Admin", "Office Admin", "Account Manager", "Production", "Social", "Freelancer", "Finance only · Admin", "Finance only · Viewer"].enumerated().map { ["i": $0.offset, "label": $0.element, "dot": [124, 108, 240]] }],
+        ["rows": [["i": 20, "label": "Super Admin rights", "icon": "shield"], ["i": 21, "label": "No Finance access", "icon": "coin", "checked": true], ["i": 22, "label": "Finance Admin", "icon": "coin"], ["i": 23, "label": "Finance Viewer", "icon": "coin"]]],
+        ["rows": [["i": 30, "label": "Remove from team", "icon": "trash", "danger": true]]]]) }),
       ("nsheetEnd", "return '{}'", { (self.presentedViewController as? NativeSheetVC)?.scrollToEnd() }),
-      ("nsheetChannel", "return '{}'", { self.selfSheet(self.sheetChannel()) }),
-      ("nsheetTitled", "return '{}'", { self.selfSheet(self.sheetTitled()) }),
-      // a people picker (app 14): search box, people with their photo / initials and role, ticks
-      ("nsheetPeople", "return '{}'", { self.selfSheet(self.sheetPeople(), search: "Search people") }),
-      ("nsheetSearch", "return '{}'", { (self.presentedViewController as? NativeSheetVC)?.selfSearch("al") }),
+      ("nsheetChannel", "return '{}'", { self.selfSheet([["rows": ["Instagram", "Facebook", "TikTok", "LinkedIn", "X", "YouTube"].enumerated().map { ["i": $0.offset, "label": $0.element, "dot": [230, 120, 160]] }]]) }),
+      ("nsheetTitled", "return '{}'", { self.selfSheet([
+        ["header": "Ali Raza’s priority", "person": ["initials": "AR", "color": [90, 120, 200]], "rows": [["i": 0, "label": "Urgent", "sub": "always on top", "icon": "flag", "tint": [220, 60, 60]]]],
+        ["header": "Priority for Oct 28", "rows": [["i": -1, "label": "", "kind": "num", "chips": (1...10).map { ["i": $0, "label": String($0)] }]]],
+        ["rows": [["i": 11, "label": "No priority", "icon": "flag"]]]]) }),
       ("signin", pause(4000) + "return JSON.stringify({ host: location.host, top: (document.querySelector('h1, h2, img, form') || document.body).getBoundingClientRect().top })", {
         self.presentedViewController?.dismiss(animated: false)
         self.web.load(URLRequest(url: URL(string: "https://e11hq.cloudflareaccess.com/")!)) }),
@@ -1115,25 +1078,11 @@ enum FocusAfterPicker {
 /* A plain menu from the page as iOS's own sheet: sections of rows (icon, text, an optional second line, a tick,
    red for delete, a coloured dot for a role), sized to fit, with the grab handle. iOS draws it — floating at rest,
    it grows with the finger when pulled and springs back; dragged down or tapped outside, it closes. */
-final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewDelegate, UISheetPresentationControllerDelegate, UISearchBarDelegate {
+final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewDelegate, UISheetPresentationControllerDelegate {
   struct Chip { let i: Int; let swatch: String?; let label: String?; let color: UIColor?; let on: Bool; let disabled: Bool }
-  struct Row { let i: Int; let label: String; let sub: String?; let icon: String?; let danger: Bool; let checked: Bool; let disabled: Bool; let dot: UIColor?; let tint: UIColor?; let locked: Bool; let chips: [Chip]?; let chipKind: String; var multi: Bool = false
-                var avatar: Avatar? = nil; var find: String = "" }
-  struct Avatar { let photo: URL?; let initials: String; let color: UIColor }
+  struct Row { let i: Int; let label: String; let sub: String?; let icon: String?; let danger: Bool; let checked: Bool; let disabled: Bool; let dot: UIColor?; let tint: UIColor?; let locked: Bool; let chips: [Chip]?; let chipKind: String; var multi: Bool = false }
   struct Section { let header: String?; let rows: [Row]; var photo: UIImage? = nil; var initials: String? = nil; var color: UIColor? = nil }
-  private var sections: [Section] = []      // (what's shown: all of them, or those matching the search)
-  private var allSections: [Section] = []
-  private var ticked: [Int: Bool] = [:]     // (ticks flipped while the sheet is open — several can be ticked)
-  // a search box at the top (people pickers): the list is filtered here as you type, by name and anything in find
-  private var searchText: String?
-  private var emptyText = "No matches"
-  private var customText: String?           // ("Use “%@”": what's typed can be chosen as it is — a city that isn't listed)
-  private let searchBox = UISearchBar()
-  private var frozen = false                // (searching: the sheet keeps its size while the list changes)
-  private var kbPad: CGFloat = 0, baseBottom: CGFloat = 0
-  var loadPhoto: ((URL, @escaping (UIImage?) -> Void) -> Void)?
-  private static let photos = NSCache<NSString, UIImage>()
-  private static var loading = Set<String>()
+  private var sections: [Section] = []
   private let table = UITableView(frame: .zero, style: .insetGrouped)
   private var answer: ((Int, String?) -> Void)?
   private static func color(_ v: Any?) -> UIColor? {
@@ -1175,10 +1124,7 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
         return Row(i: (r["i"] as? NSNumber)?.intValue ?? -1, label: r["label"] as? String ?? "", sub: (r["sub"] as? String).flatMap { $0.isEmpty ? nil : $0 },
                    icon: r["icon"] as? String, danger: (r["danger"] as? Bool) == true, checked: (r["checked"] as? Bool) == true,
                    disabled: (r["disabled"] as? Bool) == true, dot: NativeSheetVC.color(r["dot"]), tint: NativeSheetVC.color(r["tint"]),
-                   locked: (r["locked"] as? Bool) == true, chips: chips, chipKind: r["kind"] as? String ?? "", multi: (r["multi"] as? Bool) == true,
-                   avatar: (r["avatar"] as? [String: Any]).map { av in Avatar(photo: (av["photo"] as? String).flatMap { URL(string: $0) },
-                     initials: av["initials"] as? String ?? "?", color: NativeSheetVC.color(av["color"]) ?? .systemGray) },
-                   find: r["find"] as? String ?? "")
+                   locked: (r["locked"] as? Bool) == true, chips: chips, chipKind: r["kind"] as? String ?? "", multi: (r["multi"] as? Bool) == true)
       }
       if !rows.isEmpty {
         var sc = Section(header: (sec["header"] as? String).flatMap { $0.isEmpty ? nil : $0 }, rows: rows)
@@ -1189,17 +1135,11 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
         sections.append(sc)
       }
     }
-    allSections = sections
-    searchText = (a["search"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-    if let e = a["empty"] as? String, !e.isEmpty { emptyText = e }
-    customText = (a["custom"] as? String).flatMap { $0.isEmpty ? nil : $0 }
     overrideUserInterfaceStyle = dark ? .dark : .light
     modalPresentationStyle = .pageSheet
     if let sh = sheetPresentationController {
       // (at most about two-thirds of the screen, so even a long list stays the floating card; it scrolls inside)
       sh.detents = [.custom(identifier: .init("fit")) { [weak self] ctx in min(ctx.maximumDetentValue * 0.68, self?.fitHeight ?? 320) }]
-      // (with a search box: typing takes the sheet to full height, so the list has room above the keyboard)
-      if searchText != nil { sh.detents.append(.large()) }
       sh.prefersGrabberVisible = true
       sh.prefersScrollingExpandsWhenScrolledToEdge = false
       sh.delegate = self
@@ -1234,99 +1174,8 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     table.tableFooterView = UIView(frame: .zero)
     table.sectionHeaderTopPadding = 0
     view.addSubview(table)
-    NSLayoutConstraint.activate([table.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+    NSLayoutConstraint.activate([table.topAnchor.constraint(equalTo: view.topAnchor), table.leadingAnchor.constraint(equalTo: view.leadingAnchor),
                                  table.trailingAnchor.constraint(equalTo: view.trailingAnchor), table.bottomAnchor.constraint(equalTo: view.bottomAnchor)])
-    if let ph = searchText {
-      // (the search box's field starts TOP under the sheet's top edge, like a first option; the list follows it)
-      searchBox.searchBarStyle = .minimal; searchBox.placeholder = ph; searchBox.delegate = self
-      searchBox.autocapitalizationType = .none; searchBox.autocorrectionType = .no; searchBox.returnKeyType = .done
-      searchBox.translatesAutoresizingMaskIntoConstraints = false
-      view.addSubview(searchBox)
-      NSLayoutConstraint.activate([searchBox.topAnchor.constraint(equalTo: view.topAnchor, constant: NativeSheetVC.TOP - NativeSheetVC.SEARCH_PAD),
-                                   searchBox.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 12),
-                                   searchBox.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -12),
-                                   searchBox.heightAnchor.constraint(equalToConstant: NativeSheetVC.SEARCH_H),
-                                   table.topAnchor.constraint(equalTo: searchBox.bottomAnchor)])
-      table.contentInset.top = NativeSheetVC.UNDER_SEARCH
-      table.keyboardDismissMode = .onDrag
-      let empty = UILabel(); empty.text = emptyText; empty.textColor = .secondaryLabel; empty.textAlignment = .center
-      empty.font = .systemFont(ofSize: 15); empty.isHidden = true; table.backgroundView = empty
-      NotificationCenter.default.addObserver(self, selector: #selector(keyboard(_:)), name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
-      NotificationCenter.default.addObserver(self, selector: #selector(keyboard(_:)), name: UIResponder.keyboardWillHideNotification, object: nil)
-    } else {
-      table.topAnchor.constraint(equalTo: view.topAnchor).isActive = true
-    }
-  }
-  static let SEARCH_H: CGFloat = 56, SEARCH_PAD: CGFloat = 10, UNDER_SEARCH: CGFloat = 6   // (a minimal search bar: 56 tall, its field ~10 in)
-  // the keyboard: the list's end clears it (the sheet has gone to full height)
-  @objc private func keyboard(_ n: Notification) {
-    var pad: CGFloat = 0
-    if n.name != UIResponder.keyboardWillHideNotification, let end = (n.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue,
-       let win = view.window {
-      pad = max(0, view.convert(view.bounds, to: win).maxY - end.minY)
-    }
-    kbPad = pad
-    table.contentInset.bottom = baseBottom + kbPad
-    table.verticalScrollIndicatorInsets.bottom = 22 + kbPad
-  }
-  func searchBarTextDidBeginEditing(_ searchBar: UISearchBar) {
-    frozen = true
-    if let sh = sheetPresentationController { sh.animateChanges { sh.selectedDetentIdentifier = .large } }
-  }
-  func searchBarSearchButtonClicked(_ searchBar: UISearchBar) { searchBar.resignFirstResponder() }
-  func searchBar(_ searchBar: UISearchBar, textDidChange q: String) {
-    frozen = true
-    let t = q.trimmingCharacters(in: .whitespaces)
-    let has = { (s: String) in s.range(of: t, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
-    sections = t.isEmpty ? allSections : allSections.compactMap { sec in
-      let rows = sec.rows.filter { r in r.chips == nil && r.i >= 0 && (has(r.label) || has(r.find)) }
-      return rows.isEmpty ? nil : Section(header: sec.header, rows: rows, photo: sec.photo, initials: sec.initials, color: sec.color)
-    }
-    if let c = customText, !t.isEmpty, !allSections.contains(where: { sec in sec.rows.contains { row in row.label.caseInsensitiveCompare(t) == .orderedSame } }) {
-      sections.insert(Section(header: nil, rows: [Row(i: -2, label: c.replacingOccurrences(of: "%@", with: t), sub: nil, icon: "plus", danger: false, checked: false,
-                                                     disabled: false, dot: nil, tint: nil, locked: false, chips: nil, chipKind: "")]), at: 0)
-    }
-    table.backgroundView?.isHidden = !sections.isEmpty
-    table.reloadData()
-    table.setContentOffset(CGPoint(x: 0, y: -table.contentInset.top), animated: false)
-  }
-  // a person's round picture: their photo (loaded once with the page's sign-in, then kept), else initials on their colour
-  private func avatarImage(_ av: Avatar, row i: Int) -> UIImage {
-    if let u = av.photo {
-      if let img = NativeSheetVC.photos.object(forKey: u.absoluteString as NSString) { return img }
-      if !NativeSheetVC.loading.contains(u.absoluteString), let load = loadPhoto {
-        NativeSheetVC.loading.insert(u.absoluteString)
-        load(u) { [weak self] img in
-          NativeSheetVC.loading.remove(u.absoluteString)
-          guard let img else { return }
-          NativeSheetVC.photos.setObject(NativeSheetVC.roundAvatar(img), forKey: u.absoluteString as NSString)
-          self?.refreshRows(photo: u)
-        }
-      }
-    }
-    let d: CGFloat = 30
-    return UIGraphicsImageRenderer(size: CGSize(width: d, height: d)).image { _ in
-      av.color.setFill(); UIBezierPath(ovalIn: CGRect(x: 0, y: 0, width: d, height: d)).fill()
-      let f = UIFont.systemFont(ofSize: 12, weight: .semibold)
-      let s = NSAttributedString(string: av.initials, attributes: [.font: f, .foregroundColor: UIColor.white])
-      let z = s.size(); s.draw(at: CGPoint(x: (d - z.width) / 2, y: (d - z.height) / 2))
-    }
-  }
-  private static func roundAvatar(_ src: UIImage) -> UIImage {
-    let d: CGFloat = 30, w = src.size.width, h = src.size.height, k = min(w, h)
-    guard k > 0 else { return src }
-    let sc = d / k
-    return UIGraphicsImageRenderer(size: CGSize(width: d, height: d)).image { _ in
-      UIBezierPath(ovalIn: CGRect(x: 0, y: 0, width: d, height: d)).addClip()
-      src.draw(in: CGRect(x: (d - w * sc) / 2, y: (d - h * sc) / 2, width: w * sc, height: h * sc))
-    }
-  }
-  private func refreshRows(photo u: URL) {
-    var ips: [IndexPath] = []
-    for (s, sec) in sections.enumerated() { for (k, r) in sec.rows.enumerated() where r.avatar?.photo == u { ips.append(IndexPath(row: k, section: s)) } }
-    let shown = Set(table.indexPathsForVisibleRows ?? [])
-    let now = ips.filter { shown.contains($0) }
-    if !now.isEmpty { table.reconfigureRows(at: now) }
   }
   // Sized from the list alone, once (and again only if the list itself changes) — never from the sheet's own size,
   // which iOS stretches while it's pulled: re-sizing then made the options jump at the end of a scroll.
@@ -1338,7 +1187,6 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     table.layoutIfNeeded()
     let ch = table.contentSize.height
     guard abs(ch - lastContent) > 0.5 else { return }
-    if frozen { lastContent = ch; return }
     // (first time: start at the very top of the list, below the room for the grab handle — with the insets set by
     //  hand a table otherwise starts at 0, which hid that room and put the first option against the handle)
     if lastContent < 0 { table.contentOffset = CGPoint(x: 0, y: -table.contentInset.top) }
@@ -1350,8 +1198,7 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     // (iOS adds the home-bar strip below a sheet's height by itself — on a floating sheet too, where it just showed
     //  as empty space under the last option — so that strip is taken off here)
     let strip = presentingViewController?.view.window?.safeAreaInsets.bottom ?? view.window?.safeAreaInsets.bottom ?? 0
-    let head = searchText != nil ? NativeSheetVC.TOP - NativeSheetVC.SEARCH_PAD + NativeSheetVC.SEARCH_H + NativeSheetVC.UNDER_SEARCH : NativeSheetVC.TOP
-    fitHeight = max(120, head + ch + NativeSheetVC.END - (floating ? strip : 0) + (floating ? 0 : view.safeAreaInsets.bottom))
+    fitHeight = max(120, NativeSheetVC.TOP + ch + NativeSheetVC.END - (floating ? strip : 0) + (floating ? 0 : view.safeAreaInsets.bottom))
     // (a list too long for the sheet scrolls: at the end of the scroll its last option must clear the sheet's visible
     //  bottom edge by the same gap as a fitting list (Channel) — whatever of the sheet lies below that edge is added
     //  (measured once shown; until then iOS's home-bar strip). A list that fits gets none, so it never scrolls — the
@@ -1360,9 +1207,8 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     scrolls = fitHeight > cap
     // (measured in the simulator: none of a floating sheet lies below its visible edge — 0 until measured)
     let below = floating ? (hiddenBelow ?? 0) : view.safeAreaInsets.bottom
-    baseBottom = NativeSheetVC.END + (scrolls || !floating ? below : 0)
-    table.contentInset.bottom = baseBottom + kbPad
-    table.verticalScrollIndicatorInsets.bottom = 22 + (scrolls ? below : 0) + kbPad
+    table.contentInset.bottom = NativeSheetVC.END + (scrolls || !floating ? below : 0)
+    table.verticalScrollIndicatorInsets.bottom = 22 + (scrolls ? below : 0)
     sheetPresentationController?.animateChanges { sheetPresentationController?.invalidateDetents() }
   }
   // Once on screen, the real edges are measured (the bottom edge has differed between iOS versions and between
@@ -1399,8 +1245,6 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
             "topGap": g.topGap, "scrolls": scrolls, "fitHeight": fitHeight, "end": NativeSheetVC.END, "insetBottom": table.contentInset.bottom,
             "content": table.contentSize.height, "offset": table.contentOffset.y, "titled": sections.first?.header != nil]
   }
-  // (self-test: type into the search box as a person would)
-  func selfSearch(_ q: String) { guard searchText != nil else { return }; searchBox.text = q; searchBarTextDidBeginEditing(searchBox); searchBar(searchBox, textDidChange: q) }
   func scrollToEnd() {
     table.setContentOffset(CGPoint(x: 0, y: max(-table.contentInset.top, table.contentSize.height + table.contentInset.bottom - table.bounds.height)), animated: false)
   }
@@ -1467,11 +1311,7 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     c.secondaryTextProperties.color = .secondaryLabel
     let tint: UIColor = r.disabled ? .tertiaryLabel : r.danger ? .systemRed : .label
     c.textProperties.color = r.disabled ? .secondaryLabel : r.danger ? .systemRed : .label
-    if let av = r.avatar {
-      c.image = avatarImage(av, row: r.i)
-      c.imageProperties.maximumSize = CGSize(width: 30, height: 30)
-      c.imageProperties.reservedLayoutSize = CGSize(width: 30, height: 30)
-    } else if let dot = r.dot {
+    if let dot = r.dot {
       c.image = UIImage(systemName: "circle.fill")?.withTintColor(dot, renderingMode: .alwaysOriginal)
       c.imageProperties.maximumSize = CGSize(width: 12, height: 12)
     } else if let name = r.icon.flatMap({ NativeSheetVC.SYMBOLS[$0] }), let img = UIImage(systemName: name) {
@@ -1479,25 +1319,26 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     }
     if r.locked { c.textProperties.color = .secondaryLabel }
     cell.contentConfiguration = c
-    let on = ticked[r.i] ?? r.checked
-    cell.accessoryType = on ? .checkmark : .none
-    if r.locked && !on { let lock = UIImageView(image: UIImage(systemName: "lock.fill")); lock.tintColor = .tertiaryLabel; cell.accessoryView = lock }
+    cell.accessoryType = r.checked ? .checkmark : .none
+    if r.locked && !r.checked { let lock = UIImageView(image: UIImage(systemName: "lock.fill")); lock.tintColor = .tertiaryLabel; cell.accessoryView = lock }
     cell.tintColor = .systemBlue
-    cell.selectionStyle = r.disabled || (r.i < 0 && r.i != -2) ? .none : .default
+    cell.selectionStyle = r.disabled || r.i < 0 ? .none : .default
     if #available(iOS 26, *) { cell.backgroundColor = UIColor.secondarySystemGroupedBackground.withAlphaComponent(0.6) }
     return cell
   }
-  func tableView(_ tableView: UITableView, shouldHighlightRowAt ip: IndexPath) -> Bool { let r = sections[ip.section].rows[ip.row]; return r.chips == nil && !r.disabled && (r.i >= 0 || r.i == -2) }
+  func tableView(_ tableView: UITableView, shouldHighlightRowAt ip: IndexPath) -> Bool { let r = sections[ip.section].rows[ip.row]; return r.chips == nil && !r.disabled && r.i >= 0 }
   func tableView(_ tableView: UITableView, didSelectRowAt ip: IndexPath) {
     let r = sections[ip.section].rows[ip.row]
-    if r.i == -2 { return choose(-2, (searchBox.text ?? "").trimmingCharacters(in: .whitespaces)) }   // (what's typed, as it is)
     guard r.chips == nil, !r.disabled, r.i >= 0 else { return }
     // ticking several (channels…): the sheet stays open, the tick flips here, the page is told each time
     if multi && r.multi {
       tableView.deselectRow(at: ip, animated: true)
-      let on = !(ticked[r.i] ?? r.checked)
-      ticked[r.i] = on
-      if let cell = tableView.cellForRow(at: ip) { cell.accessoryType = on ? .checkmark : .none }
+      let old = sections[ip.section].rows[ip.row]
+      var rows = sections[ip.section].rows
+      rows[ip.row] = Row(i: old.i, label: old.label, sub: old.sub, icon: old.icon, danger: old.danger, checked: !old.checked, disabled: old.disabled,
+                         dot: old.dot, tint: old.tint, locked: old.locked, chips: old.chips, chipKind: old.chipKind, multi: true)
+      sections[ip.section] = Section(header: sections[ip.section].header, rows: rows, photo: sections[ip.section].photo, initials: sections[ip.section].initials, color: sections[ip.section].color)
+      if let cell = tableView.cellForRow(at: ip) { cell.accessoryType = rows[ip.row].checked ? .checkmark : .none }
       UISelectionFeedbackGenerator().selectionChanged()
       pick?(r.i)
       return
