@@ -4386,6 +4386,7 @@ function showMenu(anchor, items) {
     const sw = e.target.closest('[data-swatch]');
     if (sw && m._onSwatch) { closeMenus(); m._onSwatch(sw.dataset.swatch); }
   });
+  if (typeof SheetMotion !== 'undefined') SheetMotion.pan(m);   // (iPhone app: iOS itself drags the sheet down)
   return m;
 }
 

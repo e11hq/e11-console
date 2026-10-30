@@ -1224,7 +1224,14 @@ const SheetMotion = (() => {
   const OUT = 300, EASE = 'cubic-bezier(.32, .72, 0, 1)';
   const tuned = () => typeof Pager !== 'undefined' && Pager.lists() && Phone.on;
   function out(m) {
-    if (!tuned() || !m || m.parentElement !== document.body || m.classList.contains('mention-pop')) return false;
+    const pan = m && m.parentElement && m.parentElement.classList.contains('ph-pan') ? m.parentElement : null;
+    if (pan) {
+      // already dragged off the bottom: just gone; otherwise it slides on down from where it is
+      const rest = pan.scrollHeight - pan.clientHeight - pan.scrollTop;
+      pan.style.pointerEvents = 'none';
+      if (!tuned() || rest >= m.offsetHeight - 2) { pan.remove(); document.dispatchEvent(new Event('ph-menu-change')); return true; }
+      setTimeout(() => pan.remove(), OUT + 30);
+    } else if (!tuned() || !m || m.parentElement !== document.body || m.classList.contains('mention-pop')) return false;
     const from = getComputedStyle(m).transform;           // (mid-opening or mid-drag: carry on from there)
     m.classList.add('ph-out');
     m.style.pointerEvents = 'none';
@@ -1238,14 +1245,63 @@ const SheetMotion = (() => {
     document.dispatchEvent(new Event('ph-menu-change'));   // (the dark area fades out together with it)
     return true;
   }
-  return { tuned, out, OUT, EASE };
+  /* The sheet sits at the bottom of its own full-screen scrolling layer (.ph-pan), under an empty screen-high gap.
+     Open = scrolled to the end; dragging it down is iOS scrolling that layer back (its own finger tracking, flick
+     and spring), snapping to open or closed. Come to rest closed: the menu is closed. Lists inside the sheet scroll
+     first and hand over at their top, as in iOS. Sheets with a search box or text field keep the page's own drag
+     (they must stay above the keyboard). */
+  function pan(m) {
+    if (!tuned() || !m || m.parentElement !== document.body || m.classList.contains('mention-pop') || m.querySelector('input, textarea, [contenteditable="true"]')) return;
+    const p = document.createElement('div');
+    p.className = 'ph-pan';
+    p.innerHTML = '<div class="ph-pan-gap"></div>';
+    document.body.appendChild(p);
+    p.appendChild(m);
+    p.style.overflowY = 'hidden';
+    p.scrollTop = p.scrollHeight;
+    // (iPhone registers a new scrolling area only after the next layout: switch scrolling on a moment later)
+    setTimeout(() => requestAnimationFrame(() => { p.style.overflowY = ''; p.scrollTop = p.scrollHeight; }), 60);
+    let touching = false, settleT = null, moved = false;
+    p.addEventListener('touchstart', () => { touching = true; moved = true; }, { passive: true });
+    const lift = () => { touching = false; clearTimeout(settleT); settleT = setTimeout(settle, 120); };
+    p.addEventListener('touchend', lift, { passive: true });
+    p.addEventListener('touchcancel', lift, { passive: true });
+    const open = () => p.scrollHeight - p.clientHeight;
+    function settle() {
+      if (touching || !p.isConnected || m.classList.contains('ph-out')) return;
+      if (p.scrollTop <= 2) closeMenus();
+    }
+    p.addEventListener('scroll', () => {
+      if (m.classList.contains('ph-out') || !moved) return;   // (not the opening itself: the dark area fades in on its own)
+      const k = Math.max(0, Math.min(1, p.scrollTop / Math.max(1, open())));
+      const s = document.getElementById('ph-menu-scrim');
+      if (s) { s.style.transition = 'none'; s.style.animation = 'none'; s.style.opacity = String(k); }
+      clearTimeout(settleT);
+      settleT = setTimeout(settle, 120);
+    }, { passive: true });
+  }
+  // an option lights up the moment a finger is on it (not when it lifts); a drag or scroll takes the light off
+  let lit = null, y0 = 0;
+  const unlit = () => { if (lit) { lit.classList.remove('ph-press'); lit = null; } };
+  document.addEventListener('touchstart', (e) => {
+    unlit();
+    if (!tuned() || e.touches.length !== 1) return;
+    const mi = e.target.closest && e.target.closest('.menu:not(.ph-out) .mi');
+    if (!mi) return;
+    lit = mi; y0 = e.touches[0].clientY;
+    mi.classList.add('ph-press');
+  }, { passive: true, capture: true });
+  document.addEventListener('touchmove', (e) => { if (lit && Math.abs(e.touches[0].clientY - y0) > 8) unlit(); }, { passive: true, capture: true });
+  document.addEventListener('touchend', () => setTimeout(unlit, 60), { passive: true, capture: true });
+  document.addEventListener('touchcancel', unlit, { passive: true, capture: true });
+  return { tuned, out, pan, OUT, EASE };
 })();
 
 /* Phone pop-up menus (reactions, ••• menus, priority, people…): darken everything behind and stop the
    page scrolling underneath. Tapping the dark area closes the menu. (The @mention list while typing is left alone.) */
 (() => {
   let scrim = null;
-  const open = () => !!document.querySelector('body > .menu:not(.mention-pop):not(.ph-out)');
+  const open = () => !!document.querySelector('body > .menu:not(.mention-pop):not(.ph-out), .ph-pan > .menu:not(.ph-out)');
   const sync = () => {
     const on = Phone.on && open();
     document.body.classList.toggle('ph-menu-open', on);
@@ -1288,6 +1344,7 @@ const SheetMotion = (() => {
     const inMenu = e.target.closest && e.target.closest('.menu');
     if (!inMenu) { e.preventDefault(); return; }
     // inside the menu: allow scrolling only where there is something to scroll
+    if (inMenu.parentElement && inMenu.parentElement.classList.contains('ph-pan')) return;   // (iOS drags the sheet itself)
     let el = e.target;
     while (el && el !== inMenu.parentElement) { if (el.scrollHeight > el.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(el).overflowY)) return; el = el.parentElement; }
     e.preventDefault();
@@ -1555,7 +1612,7 @@ const SheetMotion = (() => {
     buzz();   // (first: its hidden switch's tap would otherwise close the sheet that just opened)
     if (more) more.click(); else tileSheet(c);
     swallow = Infinity;   // (until the finger is lifted, however long it stays down: lifting it mustn't tap the picture or close the sheet)
-    const m = document.querySelector('body > .menu:not(.ph-out)'); if (m) { m.style.pointerEvents = 'none'; heldMenu = m; }
+    const m = document.querySelector('body > .menu:not(.ph-out), .ph-pan > .menu:not(.ph-out)'); if (m) { m.style.pointerEvents = 'none'; heldMenu = m; }
   }
   // iPhone takes over a held picture (its own drag) and cancels the touch just before the hold time: a hold that
   // far along counts

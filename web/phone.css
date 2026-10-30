@@ -1040,3 +1040,13 @@ html.ph-pager body.phone .pg-flow .pg-col { height: auto; overflow: visible; pad
 /* iPhone app 10+: sheets rise on Apple's sheet curve, the dark area fades in with them (closing: SheetMotion in phone.js) */
 html.ph-pager.phone body.phone .menu:not(.mention-pop) { animation: phSheetUp .45s cubic-bezier(.32, .72, 0, 1); }
 html.ph-pager body.phone #ph-menu-scrim { animation: ph-fade .45s cubic-bezier(.32, .72, 0, 1); }
+/* iPhone app 10+: iOS itself drags a sheet down — it sits at the end of a full-screen scrolling layer (SheetMotion.pan) */
+html.phone body.phone .ph-pan { position: fixed; inset: 0; z-index: 300; overflow-y: auto; overflow-x: hidden; scroll-snap-type: y mandatory; overscroll-behavior: contain; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+html.phone body.phone .ph-pan::-webkit-scrollbar { display: none; }
+html.phone body.phone .ph-pan > .ph-pan-gap { height: 100%; scroll-snap-align: start; }
+html.phone body.phone .ph-pan > .menu:not(.mention-pop) { position: relative !important; left: auto !important; right: auto !important; top: auto !important; bottom: auto !important; scroll-snap-align: end; margin: 0 !important; overscroll-behavior: auto; }
+/* an option lights up the moment a finger is on it */
+html.phone body.phone .menu .mi.ph-press { background: var(--ph-row, var(--hover)); transition: none; }
+/* (the sheet rises with its layer: a moving sheet inside the layer would stretch what can be scrolled) */
+html.ph-pager.phone body.phone .ph-pan > .menu:not(.mention-pop) { animation: none; }
+html.phone body.phone .ph-pan { animation: phSheetUp .45s cubic-bezier(.32, .72, 0, 1); }
