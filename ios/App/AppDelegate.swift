@@ -1113,7 +1113,14 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     modalPresentationStyle = .pageSheet
     if let sh = sheetPresentationController {
       // (at most about two-thirds of the screen, so even a long list stays the floating card; it scrolls inside)
-      sh.detents = [.custom(identifier: .init("fit")) { [weak self] ctx in min(ctx.maximumDetentValue * 0.68, self?.fitHeight ?? 320) }]
+      sh.detents = [.custom(identifier: .init("fit")) { [weak self] ctx in
+        // (iOS gives this only once the sheet is laid out: the list's end is measured again with it)
+        if let self, abs(self.maxDetent - ctx.maximumDetentValue) > 0.5 {
+          self.maxDetent = ctx.maximumDetentValue
+          DispatchQueue.main.async { self.remeasure = true; self.view.setNeedsLayout() }
+        }
+        return min(ctx.maximumDetentValue * 0.68, self?.fitHeight ?? 320)
+      }]
       sh.prefersGrabberVisible = true
       sh.prefersScrollingExpandsWhenScrolledToEdge = false
       sh.delegate = self
@@ -1121,6 +1128,8 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
   }
   required init?(coder: NSCoder) { fatalError() }
   private var fitHeight: CGFloat = 320
+  private var maxDetent: CGFloat = 0   // (the tallest a sheet can be, as iOS gives it to the height above)
+  private var remeasure = false
   override func viewDidLoad() {
     super.viewDidLoad()
     if #available(iOS 26, *) { view.backgroundColor = .clear; table.backgroundColor = .clear }
@@ -1131,7 +1140,9 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     //  automatic safe-area padding is off, the bottom margin is set by hand)
     table.contentInsetAdjustmentBehavior = .never
     // (the list starts under the grab handle, but scrolls up behind it to the sheet's own rounded edge — no flat cut)
-    table.contentInset = UIEdgeInsets(top: sections.first?.header == nil ? NativeSheetVC.TOP : 6, left: 0, bottom: 8 + (floating ? 0 : 34), right: 0)
+    // (the same 30pt from the sheet's top to the first thing in it on every sheet — a titled one too: its title is that
+    //  first thing, e.g. the person's picture and 'Ali Raza's priority', never squeezed up against the grab handle)
+    table.contentInset = UIEdgeInsets(top: NativeSheetVC.TOP, left: 0, bottom: 8 + (floating ? 0 : 34), right: 0)
     table.alwaysBounceVertical = false   // (a list that fits doesn't scroll: the finger moves the sheet itself)
     // (every row measured up front, not estimated: estimated heights changed the list's length while it scrolled,
     //  which made the options jump near the end)
@@ -1153,7 +1164,8 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     super.viewDidLayoutSubviews()
     table.layoutIfNeeded()
     let ch = table.contentSize.height
-    guard abs(ch - lastContent) > 0.5 else { return }
+    guard abs(ch - lastContent) > 0.5 || remeasure else { return }
+    remeasure = false
     // (first time: start at the very top of the list, below the room for the grab handle — with the insets set by
     //  hand a table otherwise starts at 0, which hid that room and put the first option against the handle)
     if lastContent < 0 { table.contentOffset = CGPoint(x: 0, y: -table.contentInset.top) }
@@ -1164,8 +1176,13 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     fitHeight = max(120, ch + table.contentInset.top + 8 - (floating ? strip : 0) + (floating ? 0 : view.safeAreaInsets.bottom))
     // (a list too long for the sheet scrolls: its end needs that strip back, or the last option sits under the edge;
     //  a list that fits gets none, so it never scrolls — the finger moves the sheet)
-    let cap = ((presentingViewController?.view.bounds.height ?? view.window?.bounds.height ?? 800) - 60) * 0.68
-    table.contentInset.bottom = 8 + (fitHeight > cap ? strip : 0)
+    //  The height iOS really caps the sheet at is used (an estimate from the screen missed it, so a long list like a
+    //  team member's options got no room, and 'Remove from team' ended in the sheet's rounded bottom edge). A list
+    //  that scrolls ends clear of that edge: the home-bar strip plus the same 30pt as the top.
+    let cap = (maxDetent > 0 ? maxDetent : ((presentingViewController?.view.bounds.height ?? view.window?.bounds.height ?? 800) - 60)) * 0.68
+    let scrolls = fitHeight > cap - 0.5
+    table.contentInset.bottom = scrolls ? max(strip, 20) + NativeSheetVC.TOP : 8
+    table.verticalScrollIndicatorInsets.bottom = scrolls ? max(strip, 20) + 8 : 22
     sheetPresentationController?.animateChanges { sheetPresentationController?.invalidateDetents() }
   }
   // Each row's height, worked out here (exact, no estimates — estimates made the list jump while scrolling, and

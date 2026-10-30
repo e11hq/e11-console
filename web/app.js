@@ -543,24 +543,14 @@ const DatePicker = (() => {
     for (let i = 0; i < 42; i++) { const d = new Date(start); d.setDate(start.getDate() + i); out.push(d); }
     return out;
   }
-  function drawMD() {
-    const sel = input.dataset.val || '', mm = String(view.m + 1).padStart(2, '0');
-    const n = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][view.m];
-    pop.innerHTML = `<div class="dp-head"><b>${MONTHS[view.m]}</b><span class="spacer"></span>
-        ${sel ? '<button class="dp-today" data-dp="clear">Clear</button>' : ''}
-        <button class="dp-nav" data-dp="prev" title="Previous month">${icon('chev-up')}</button>
-        <button class="dp-nav" data-dp="next" title="Next month">${icon('chev')}</button></div>
-      <div class="dp-grid dp-md">${Array.from({ length: n }, (_, i) => { const k = `${mm}-${String(i + 1).padStart(2, '0')}`; return `<button class="dp-day ${k === sel ? 'sel' : ''}" data-md="${k}">${i + 1}</button>`; }).join('')}</div>`;
-  }
   function draw() {
-    if (input && input.dataset.md) return drawMD();
     const today = todayStr(), sel = input.value || '';
     pop.innerHTML = `<div class="dp-head"><b>${MONTHS[view.m]} ${view.y}</b><span class="spacer"></span>
-        <button class="dp-today" data-dp="today">Today</button>
+        ${input.dataset.clearable && sel ? '<button class="dp-today" data-dp="clear">Clear</button>' : '<button class="dp-today" data-dp="today">Today</button>'}
         <button class="dp-nav" data-dp="prev" title="Previous month">${icon('chev-up')}</button>
         <button class="dp-nav" data-dp="next" title="Next month">${icon('chev')}</button></div>
       <div class="dp-grid">${['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((d) => `<span class="dp-wd">${d}</span>`).join('')}
-      ${days().map((d) => { const k = ymd(d); const cls = [k < today ? 'past' : '', d.getMonth() !== view.m ? 'out' : '', k === today ? 'today' : '', k === sel ? 'sel' : ''].join(' '); return `<button class="dp-day ${cls}" data-day="${k}">${d.getDate()}</button>`; }).join('')}</div>`;
+      ${days().map((d) => { const k = ymd(d); const cls = [k < today && !input.dataset.anyday ? 'past' : '', d.getMonth() !== view.m ? 'out' : '', k === today ? 'today' : '', k === sel ? 'sel' : ''].join(' '); return `<button class="dp-day ${cls}" data-day="${k}">${d.getDate()}</button>`; }).join('')}</div>`;
   }
   function pick(v) {
     const el = input; close();
@@ -571,7 +561,7 @@ const DatePicker = (() => {
   function open(el) {
     close();
     input = el;
-    const base = el.dataset.md ? new Date(2000, el.dataset.val ? Number(el.dataset.val.slice(0, 2)) - 1 : new Date().getMonth(), 1) : el.value ? parseYmd(el.value) : new Date();
+    const base = el.value ? parseYmd(el.value) : new Date();
     view = { y: base.getFullYear(), m: base.getMonth() };
     pop = document.createElement('div');
     pop.className = 'dp-pop';
@@ -588,7 +578,7 @@ const DatePicker = (() => {
       const b = e.target.closest('button'); if (!b) return;
       e.stopPropagation();
       if (b.dataset.day) return pick(b.dataset.day);
-      if (b.dataset.md || b.dataset.dp === 'clear') { const el2 = input; const v = b.dataset.md || ''; close(); el2.dataset.val = v; if (el2.tagName === 'INPUT') el2.value = fmtMD(v); else el2.innerHTML = `${v ? esc(fmtMD(v)) : '<span class="pf-ph">Choose your birthday</span>'}${icon('cal')}`; el2.dispatchEvent(new Event('change', { bubbles: true })); return; }
+      if (b.dataset.dp === 'clear') return pick('');
       if (b.dataset.dp === 'today') return pick(todayStr());
       view.m += b.dataset.dp === 'next' ? 1 : -1;
       if (view.m < 0) { view.m = 11; view.y--; } if (view.m > 11) { view.m = 0; view.y++; }
@@ -609,7 +599,7 @@ const DatePicker = (() => {
     busy = true;
     Haptic.light();
     const chip = el.closest('.date-chip');
-    const clearable = !!el.value && !!chip && !!((chip.parentElement && chip.parentElement.querySelector('[data-action^="clear-"]')) || chip.querySelector('.cal-date-x'));
+    const clearable = !!el.value && (!!el.dataset.clearable || (!!chip && !!((chip.parentElement && chip.parentElement.querySelector('[data-action^="clear-"]')) || chip.querySelector('.cal-date-x'))));
     NativeMac.call('pickDate', { value: el.value || '', min: el.min || '', max: el.max || '', clearable })
       .then((r) => {
         if (!r || r.ok === false || r.cancel) return;
@@ -623,7 +613,7 @@ const DatePicker = (() => {
       .finally(() => { busy = false; });
   }
   let t0 = null;
-  const dateEl = (e) => { const el = e.target.closest && e.target.closest('input.date-in, input[type="date"]'); return el && !el.dataset.md && !desktop() && nativeDates() ? el : null; };
+  const dateEl = (e) => { const el = e.target.closest && e.target.closest('input.date-in, input[type="date"]'); return el && !desktop() && nativeDates() ? el : null; };
   // (a finger that only scrolls past a date field still scrolls; a tap opens the sheet)
   document.addEventListener('touchstart', (e) => { t0 = dateEl(e) && e.touches[0] ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : null; }, { capture: true, passive: true });
   document.addEventListener('touchend', (e) => {
@@ -634,7 +624,7 @@ const DatePicker = (() => {
     if (!el.disabled) openNative(el);
   }, { capture: true, passive: false });
   ['mousedown', 'click'].forEach((t) => document.addEventListener(t, (e) => { const el = dateEl(e); if (!el) return; e.preventDefault(); e.stopPropagation(); if (t === 'click' && !el.disabled) openNative(el); }, true));
-  document.addEventListener('focusin', (e) => { const el = e.target.closest && e.target.closest('input[type="date"]'); if (el && !el.dataset.md && !desktop() && nativeDates()) el.blur(); }, true);
+  document.addEventListener('focusin', (e) => { const el = e.target.closest && e.target.closest('input[type="date"]'); if (el && !desktop() && nativeDates()) el.blur(); }, true);
   const grab = (e) => {
     // every date field on a computer, including plain ones, so the Mac's own date box never shows
     const el = e.target.closest && e.target.closest('input.date-in, input[type="date"]');
@@ -5859,7 +5849,6 @@ document.addEventListener('click', async (e) => {
       case 'appicon-season': appIconSeasonFlow(actEl.dataset.sid); return;
       case 'pick-country': e.stopPropagation(); pickPlace(actEl, 'country'); return;
       case 'pick-city': e.stopPropagation(); pickPlace(actEl, 'city'); return;
-      case 'pick-bday': e.stopPropagation(); DatePicker.open(actEl); return;
       case 'hello-preview': { const i = AppIcon.info(); OccasionHello.show((!i.auto && i.preset) || AppIcon.autoNow() || OccasionHello.today() || 'national-day'); return; }
       case 'remove-photo': { const u = me(); if (u.avatar) Host.call('trashPath', { path: u.avatar }).catch(() => {}); u.avatar = null; persist(); render(); return; }
       case 'save-profile': saveProfile(); return;
@@ -8136,7 +8125,7 @@ function viewProfile() {
         <div><label class="dlg-label">Your city</label><button type="button" class="field pf-pick" id="pf-city" data-action="pick-city" data-val="${esc(u.city || '')}">${u.city ? esc(u.city) : '<span class="pf-ph">Choose your city</span>'}${icon('chev')}</button></div>
       </div>
       <div class="pf-two pf-bday-row"><div><label class="dlg-label">Birthday <small class="pf-opt-l">optional · day and month</small></label>
-      <button type="button" class="field pf-pick" id="pf-bday" data-md="1" data-action="pick-bday" data-val="${esc(u.bday || '')}">${u.bday ? esc(fmtMD(u.bday)) : '<span class="pf-ph">Choose your birthday</span>'}${icon('cal')}</button></div><div></div></div>
+      <div class="field pf-pick pf-date" id="pf-bday" data-val="${esc(u.bday || '')}">${bdayLabel(u.bday)}${icon('cal')}<input type="date" class="date-in" id="pf-bday-in" data-clearable="1" data-anyday="1" value="${bdayYmd(u.bday)}" aria-label="Birthday"></div></div><div></div></div>
       <label class="dlg-label">Role</label><div class="pf-role"><span class="role-pill r-${roleCls(u)}">${esc(roleOf(u))}</span>${u.admin && u.role !== 'admin' ? '<span class="role-pill r-admin">+ Admin</span>' : ''}${u.fin && !isFinUser(u) ? `<span class="role-pill r-finance_${u.fin}">+ ${esc(FIN_ACCESS[u.fin])}</span>` : ''}${u.id === cdUserId() ? `<span class="role-pill r-cd">${esc(cdTitle())}</span>` : ''}<small>People see this and your city when they hover your name. Your birthday stays private: on the day, the team is told it’s your birthday.</small></div>
       <div class="pf-actions"><button class="btn primary" data-action="save-profile">Save changes</button>${Host.isServer ? '' : `<button class="btn" data-action="change-password">${icon('lock')}Change password</button>`}</div>
     </div>
@@ -8403,6 +8392,22 @@ async function pickAvatar() {
 }
 // "21 March" from a birthday "03-21"
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+// The birthday field is the same date field as a task's Due (same calendar on the computer, same iPhone sheet):
+// it shows this year's date of the birthday (29 Feb: the next leap year) and keeps only the day and month.
+const bdayLabel = (md) => `<span class="pf-bday-lbl${md ? '' : ' pf-ph'}">${md ? esc(fmtMD(md)) : 'Choose your birthday'}</span>`;
+function bdayYmd(md) {
+  if (!/^\d{2}-\d{2}$/.test(String(md || ''))) return '';
+  let y = new Date().getFullYear();
+  if (md === '02-29') while (new Date(y, 1, 29).getMonth() !== 1) y++;
+  return `${y}-${md}`;
+}
+document.addEventListener('change', (e) => {
+  if (!e.target || e.target.id !== 'pf-bday-in') return;
+  const box = $('#pf-bday'); if (!box) return;
+  const md = e.target.value ? e.target.value.slice(5) : '';
+  box.dataset.val = md;
+  const lbl = box.querySelector('.pf-bday-lbl'); if (lbl) lbl.outerHTML = bdayLabel(md);
+});
 function fmtMD(md) { const m = /^(\d{2})-(\d{2})$/.exec(String(md || '')); return m ? `${Number(m[2])} ${MONTH_NAMES[Number(m[1]) - 1]}` : ''; }
 // Country / city on My profile: a list to search; a city that isn't listed can be typed in
 function pickPlace(btn, kind) {
