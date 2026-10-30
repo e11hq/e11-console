@@ -2059,11 +2059,13 @@ const Pager = (() => {
    upload as before, shown in the native box as tiles. */
 const NativeComment = (() => {
   let on = false, last = '', lastKey = null, peopleSent = false, timer = null, lastP = -1, raf = 0;
+  let nf = false, nmove = false;   // 19+: iOS moves the comments list with the keyboard (nmove: while it does)
   const root = document.documentElement;
   const thumbs = new Map();   // file id → small picture (data URL) for its tile
   if (typeof Host !== 'undefined' && Host.isIOSApp) {
     NativeMac.call('appInfo').then((r) => {
       on = Number(r && r.shell) >= 17;
+      nf = Number(r && r.shell) >= 19;
       root.classList.toggle('ph-cbar', on);
       if (on) { timer = setInterval(() => sync(), 400); sync(); }
     }).catch(() => {});
@@ -2135,6 +2137,8 @@ const NativeComment = (() => {
       files: (ui.commentFiles[key] || []).map(fileOf),
       uploading: up ? { n: up.total || 1, frac: up.frac || 0 } : null,
       accent: NativeSheet.colorRGB(getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#5b4bf0'),
+      // (19+: where the comments list is, so iOS can find its scroll view and move it with the keyboard)
+      feed: (() => { const f = nf && root.classList.contains('ph-cb-on') ? feed() : null; if (!f) return null; const r = f.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top), Math.round(f.clientWidth), Math.round(f.clientHeight)]; })(),
     };
     if (lastP < 0) slide(ui.sideTab === 'comments' ? 1 : 0, true);
     const s = JSON.stringify(st);   // (what's typed isn't part of the comparison: it's only sent for a new box)
@@ -2191,7 +2195,17 @@ const NativeComment = (() => {
     if (ev.ev === 'cancelReply') { ui.replyTo = null; renderDetail(); call({ focus: true }); }
   };
   // the box's height (it grows as lines are typed): the comments keep that much room, and stay at the latest
-  window.__e11CBarH = (h) => { const f = feed(), end = atEnd(f); root.style.setProperty('--ph-cbar', Math.max(0, Number(h) || 0) + 'px'); if (end && f) f.scrollTop = f.scrollHeight; };
+  window.__e11CBarH = (h) => { const f = feed(), end = atEnd(f); root.style.setProperty('--ph-cbar', Math.max(0, Number(h) || 0) + 'px'); if (end && f && !nmove) f.scrollTop = f.scrollHeight; };
+  // 19+: iOS moves the list with the keyboard itself (start); once it's up the page keeps that room (up, the same
+  // picture); once it's down the page lets go of it (down). Nothing here moves the list meanwhile.
+  window.__e11FeedKb = (k, T) => {
+    if (k === 'start') { nmove = true; return; }
+    const f = feed();
+    if (f) f.style.transform = '';
+    if (k === 'up') { kbPad = kbTarget = Math.max(0, Number(T) || 0); root.style.setProperty('--ph-kbpad', kbPad + 'px'); }
+    if (k === 'down') { kbPad = 0; root.style.setProperty('--ph-kbpad', '0px'); }
+    nmove = false;
+  };
   /* The keyboard sliding up / down on Comments: only the comments list moves, by a transform — no page redraw on every
      frame (the page re-laid itself out each frame and it stuttered, Haris 2026-10-30). Once the keyboard is up, the
      transform becomes padding + scroll (looks the same, lets the whole list be scrolled); going down, the other way. */
@@ -2208,6 +2222,7 @@ const NativeComment = (() => {
   const comments = () => on && root.classList.contains('ph-cb-on') && openTaskNow() ? feed() : null;
   const kb0 = window.__e11Kb;
   window.__e11Kb = (px, ms, stepped) => {
+    if (nmove && comments()) { if (kb0) kb0(px, ms, stepped); return; }   // (iOS is moving the list itself)
     const f = comments();
     kbTarget = Math.max(0, Number(px) || 0);
     if (f && kbTarget > 0 && kbPad === 0) kbGap = roomUnder(f);   // (coming up: measured once, before anything moves)
@@ -2224,6 +2239,7 @@ const NativeComment = (() => {
   };
   const step0 = window.__e11KbStep;
   window.__e11KbStep = (px) => {
+    if (nmove && comments()) return;
     const f = comments();
     if (!f) { if (step0) step0(px); return; }
     const T = Math.max(0, (Number(px) || 0) - safeB());
@@ -2248,7 +2264,7 @@ const NativeComment = (() => {
   // redraws, uploads and the files row: the box follows
   if (typeof renderDetail === 'function') { const rd = renderDetail; renderDetail = function (...a) { const r = rd.apply(this, a); if (on) setTimeout(() => sync(), 0); return r; }; }
   if (typeof refreshComposerFiles === 'function') { const rf = refreshComposerFiles; refreshComposerFiles = function (...a) { const r = rf.apply(this, a); if (on) setTimeout(() => sync(), 0); return r; }; }
-  if (typeof closeDetail === 'function') { const cd = closeDetail; closeDetail = function (...a) { if (on) { call({ show: false, blur: true }); last = JSON.stringify({ show: false }); lastKey = null; lastP = -1; root.classList.remove('ph-cb-on'); kbPad = 0; root.style.setProperty('--ph-kbpad', '0px'); } return cd.apply(this, a); }; }
+  if (typeof closeDetail === 'function') { const cd = closeDetail; closeDetail = function (...a) { if (on) { call({ show: false, blur: true }); last = JSON.stringify({ show: false }); lastKey = null; lastP = -1; nmove = false; root.classList.remove('ph-cb-on'); kbPad = 0; root.style.setProperty('--ph-kbpad', '0px'); } return cd.apply(this, a); }; }
   if (typeof Unsent !== 'undefined' && Unsent.progress) { const pg = Unsent.progress; Unsent.progress = function (...a) { const r = pg.apply(this, a); if (on) sync(); return r; }; }
   return { get on() { return on; }, sync, slide, htmlToRuns, runsToHtml };
 })();

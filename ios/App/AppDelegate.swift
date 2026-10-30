@@ -14,7 +14,7 @@ import UniformTypeIdentifiers
 import AudioToolbox
 
 // Version of this iPhone app's native part (raise it with changes the web app needs to know about)
-let SHELL_VERSION = 18   // 18: the file preview is iOS's own (preview / previewSet / window.__e11Preview; Preview.swift) · 17: the comment box on a task's Comments is iPhone's own, on the keyboard (commentBar / window.__e11CBar; CommentBar.swift) · 16: iPhone's own banners also while the app is open (the page draws no cards), each notification confirmed by the Notification Service Extension so the server sends again the ones an offline phone missed (register ack) · 15: New task / Request amendments as native sheets with iPhone's own fields that tuck into a bar like a Mail draft (formSheet / formSet / formClose; the page: window.__e11Form), a Trash task as a native sheet (trashSheet); native sheets and dates also open on top of those · 14: native sheets with people (round photos / initials) and a search box (+ a typed entry, "Use …") · 13: also dates picked in a native sheet (pickDate: closing it never sets a date) · a native sheet can stay open for ticking several (multi; each tick: window.__e11SheetPick) · 12: native sheets also with colour dots, a row of colours / emoji / numbers (chips), tinted icons, locked rows · 11: plain menus as iOS's own sheets (nativeSheet; the page: NativeSheet in app.js, showMenu(…, { native: true })) · 10: My Tasks, Inbox and Team lists swiped by iOS itself (Pager.syncLists in phone.js) · 9: a task’s Details / Comments swiped by iOS itself (the page: Pager in phone.js) · 8: iOS haptics for the page (haptic kind: light / medium / selection / success / warning / error) · 7: the comment box rides down / up with the keyboard frame by frame (__e11KbStep) · 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
+let SHELL_VERSION = 19   // 19: on a task's Comments, iOS itself moves the comments list with the keyboard (its own scroll view, in the keyboard's own animation; window.__e11FeedKb) · 18: the file preview is iOS's own (preview / previewSet / window.__e11Preview; Preview.swift) · 17: the comment box on a task's Comments is iPhone's own, on the keyboard (commentBar / window.__e11CBar; CommentBar.swift) · 16: iPhone's own banners also while the app is open (the page draws no cards), each notification confirmed by the Notification Service Extension so the server sends again the ones an offline phone missed (register ack) · 15: New task / Request amendments as native sheets with iPhone's own fields that tuck into a bar like a Mail draft (formSheet / formSet / formClose; the page: window.__e11Form), a Trash task as a native sheet (trashSheet); native sheets and dates also open on top of those · 14: native sheets with people (round photos / initials) and a search box (+ a typed entry, "Use …") · 13: also dates picked in a native sheet (pickDate: closing it never sets a date) · a native sheet can stay open for ticking several (multi; each tick: window.__e11SheetPick) · 12: native sheets also with colour dots, a row of colours / emoji / numbers (chips), tinted icons, locked rows · 11: plain menus as iOS's own sheets (nativeSheet; the page: NativeSheet in app.js, showMenu(…, { native: true })) · 10: My Tasks, Inbox and Team lists swiped by iOS itself (Pager.syncLists in phone.js) · 9: a task’s Details / Comments swiped by iOS itself (the page: Pager in phone.js) · 8: iOS haptics for the page (haptic kind: light / medium / selection / success / warning / error) · 7: the comment box rides down / up with the keyboard frame by frame (__e11KbStep) · 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
 let procEnv = ProcessInfo.processInfo.environment
 let SELFTEST = procEnv["E11_SELFTEST"] ?? ""           // the build machine's self-test in the simulator
 let info = Bundle.main.infoDictionary ?? [:]
@@ -224,6 +224,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let b = cbar
     if let show = a["show"] as? Bool { cbarShow = show }
     if let p = a["p"] as? NSNumber { cbarOnComments = p.doubleValue > 0.5 }
+    if let f = a["feed"] as? [NSNumber], f.count == 4 { cbarFeed = CGRect(x: f[0].doubleValue, y: f[1].doubleValue, width: f[2].doubleValue, height: f[3].doubleValue) }
+    else if a["feed"] is NSNull || (a["show"] as? Bool) == false { cbarFeed = nil }
     // shown only on Comments at rest; leaving it (a swipe to Details, back to the list) takes the keyboard away too
     let want = cbarShow && cbarOnComments
     if want == b.isHidden {
@@ -303,9 +305,60 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     keyboardCover = cover
     let dur = (n.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double) ?? 0.25
     let curve = (n.userInfo?[UIResponder.keyboardAnimationCurveUserInfoKey] as? UInt) ?? 7
+    feedRide(cover: cover, duration: dur, curve: curve)   // (first: the page hears it's iOS moving the list this time)
     pageJS("window.__e11Kb && window.__e11Kb(\(Int(cover.rounded())), \(Int(dur * 1000)), 1)")
     rideKeyboard(to: cover, duration: dur, curve: curve)
     if web.scrollView.contentOffset != .zero { web.scrollView.setContentOffset(.zero, animated: false) }
+  }
+  /* Shell 19 (Haris, 2026-10-30: the comments "fight" and change position as the keyboard comes up): on a task's Comments
+     the list is moved by iOS itself — its own scroll view, inside the keyboard's own animation (same duration and curve),
+     as Messages does — instead of the page following the keyboard frame by frame. Coming up: the scroll view gets the
+     keyboard's room as its own and scrolls up with it (a short list only by what the keyboard would cover); once up, the
+     page keeps that room itself (--ph-kbpad, looks the same) and the scroll view's goes. Going down: it scrolls back
+     with the keyboard, then the page lets go of the room. */
+  var cbarFeed: CGRect?
+  var feedT: CGFloat = 0
+  var feedGeo: [String: Any] = [:]
+  func feedScroll() -> UIScrollView? {
+    guard cbarShow, cbarOnComments, let r = cbarFeed, r.width > 10, r.height > 10 else { return nil }
+    // (the page's list is one of WebKit's own scroll views: the one under its middle, of its size)
+    var v = web.hitTest(CGPoint(x: r.midX, y: r.minY + min(r.height / 2, 160)), with: nil)
+    while let cur = v {
+      if let sv = cur as? UIScrollView, sv !== web.scrollView, abs(sv.bounds.width - r.width) < 4, abs(sv.bounds.height - r.height) < 4 { return sv }
+      v = cur.superview
+    }
+    return nil
+  }
+  func feedRide(cover: CGFloat, duration: Double, curve: UInt) {
+    guard let sv = feedScroll() else { if cover == 0 { feedT = 0 }; feedGeo = ["found": false]; return }
+    let opts = UIView.AnimationOptions(rawValue: curve << 16).union(.beginFromCurrentState)
+    let H = sv.bounds.height, C = sv.contentSize.height, off = sv.contentOffset.y
+    if cover > 0 && feedT == 0 {
+      let T = max(0, cover - view.safeAreaInsets.bottom)
+      let shift = max(0, T - max(0, H + off - C))   // (a short list: only what the keyboard would cover of it)
+      feedT = T
+      feedGeo = ["found": true, "T": T, "shift": shift, "from": off]
+      pageJS("window.__e11FeedKb && window.__e11FeedKb('start')")
+      UIView.animate(withDuration: max(duration, 0.01), delay: 0, options: opts, animations: {
+        sv.contentInset.bottom = T
+        sv.contentOffset = CGPoint(x: sv.contentOffset.x, y: off + shift)
+      }) { _ in
+        self.web.evaluateJavaScript("window.__e11FeedKb && window.__e11FeedKb('up', \(Int(T.rounded())))") { _, _ in
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            if self.feedT > 0 { sv.contentInset.bottom = 0 }
+            self.feedGeo["inset"] = sv.contentInset.bottom; self.feedGeo["to"] = sv.contentOffset.y
+          }
+        }
+      }
+    } else if cover == 0 && feedT > 0 {
+      let T = feedT
+      feedT = 0
+      let to = max(0, min(off, C - T - H))
+      pageJS("window.__e11FeedKb && window.__e11FeedKb('start')")
+      UIView.animate(withDuration: max(duration, 0.01), delay: 0, options: opts, animations: {
+        sv.contentOffset = CGPoint(x: sv.contentOffset.x, y: to)
+      }) { _ in self.pageJS("window.__e11FeedKb && window.__e11FeedKb('down')"); self.feedGeo["down"] = to }
+    }
   }
   // The comment box moves with the keyboard, not ahead of it: an invisible view is animated with the keyboard's own
   // duration and curve (the same animation iOS gives the keyboard), and every screen frame the page is told where
@@ -961,6 +1014,14 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if let p = presentedViewController { p.dismiss(animated: false) { show() } } else { show() }
   }
   func pause(_ ms: Int) -> String { "await new Promise((r) => setTimeout(r, \(ms)));" }
+  // the comments list as the page sees it: where it's scrolled, whether the latest comment shows, the room kept
+  let feedJS = "const f = document.querySelector('#detail .tm-feed'); if (!f) return JSON.stringify({ error: 'no list' }); const last = f.lastElementChild; return JSON.stringify({ on: document.documentElement.classList.contains('ph-cb-on'), st: f.scrollTop, sh: f.scrollHeight, ch: f.clientHeight, toEnd: f.scrollHeight - f.scrollTop - f.clientHeight, lastBottom: last ? last.getBoundingClientRect().bottom : null, top: f.getBoundingClientRect().top, kbpad: getComputedStyle(document.documentElement).getPropertyValue('--ph-kbpad').trim(), transform: f.style.transform, n: f.children.length })"
+  func fakeKeyboard(_ h: CGFloat) {
+    let b = view.bounds
+    let end = view.convert(CGRect(x: 0, y: h > 0 ? b.height - h : b.height, width: b.width, height: max(h, 1)), to: nil)
+    NotificationCenter.default.post(name: UIResponder.keyboardWillChangeFrameNotification, object: nil, userInfo: [
+      UIResponder.keyboardFrameEndUserInfoKey: NSValue(cgRect: end), UIResponder.keyboardAnimationDurationUserInfoKey: 0.35, UIResponder.keyboardAnimationCurveUserInfoKey: UInt(7)])
+  }
   func selfTest() {
     let wait = "for (let i = 0; i < 120 && !(window.db && typeof currentUserId !== 'undefined' && currentUserId && document.getElementById('ph-tabs')); i++) await new Promise((r) => setTimeout(r, 250));"
     let geo = "const cs = getComputedStyle(document.documentElement); const geo = { innerH: innerHeight, vvH: visualViewport ? visualViewport.height : null, shift: cs.getPropertyValue('--ph-shift'), tabsH: cs.getPropertyValue('--ios-tabs-h'), kb: cs.getPropertyValue('--ph-kb') };"
@@ -1005,6 +1066,13 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.cbar.selfType("Thanks, can we make the logo a bit bigger on the last frame and keep the date as it is?") } }),
       ("cbarMention", "return '{}'", { self.cbar.selfType("Hi @Sa") }),
       ("cbarAttach", "return '{}'", { self.cbar.openAttach() }),
+      // 19: a task's Comments with the keyboard coming up and going down (a pretend keyboard: the simulator shows none) —
+      // the list is moved by iOS and stays at the latest comment, the page keeps the room once it's up
+      ("cfeed", "const t = db.tasks.filter((x) => !x.parentId).sort((a, b) => (b.comments || []).length - (a.comments || []).length)[0]; ui.sideTab = 'comments'; openTask(t.id); " + pause(2500) + feedJS, {
+        self.presentedViewController?.dismiss(animated: false)
+        self.commentBar(["show": false, "clear": true]) }),
+      ("cfeedKb", pause(1200) + feedJS, { self.fakeKeyboard(336) }),
+      ("cfeedDown", pause(1200) + feedJS, { self.fakeKeyboard(0) }),
       ("preview", "return '{}'", {
         self.presentedViewController?.dismiss(animated: false)
         self.commentBar(["show": false])
@@ -1022,6 +1090,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       DispatchQueue.main.asyncAfter(deadline: .now() + (before == nil ? 0.2 : 1.5)) {
         self.probe(name, js) {
           if name.hasPrefix("cbar") { self.selfResult[name + "Geo"] = self.cbar.geo() }
+          if name.hasPrefix("cfeed") { self.selfResult[name + "Geo"] = self.feedGeo }
           if name.hasPrefix("form") { self.selfResult[name + "Geo"] = FormSheetVC.current?.geo() ?? ["error": "no form"] }
           if name.hasPrefix("nsheet") { self.selfResult[name + "Geo"] = (self.presentedViewController as? NativeSheetVC)?.geo() ?? ["error": "no native sheet"] }
           if name == "home" || name == "inbox" { self.selfResult[name + "Frame"] = ["web": self.web.frame.height, "screen": self.view.bounds.height, "tabBar": !self.tabBar.isHidden] as [String: Any] }

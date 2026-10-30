@@ -74,6 +74,14 @@ try:
         g_ = res.get(k + 'Geo') or {}
         check(gap is not None and g_.get('endGap') is not None and abs(g_['endGap'] - gap) <= 2, f'native sheet {k}: gap under the last option {g_.get("endGap")} = Channel\'s {gap}')
     check((res.get('nsheetGeo') or {}).get('scrolls') is True, 'the long native sheet scrolls')
+    # 19: Comments with the keyboard (a pretend one): iOS moves the list itself, it stays at the latest comment, and once
+    # the keyboard is up the page keeps the room (same picture); down again, the room goes and it's still at the latest
+    f0, f1, f2 = res.get('cfeed') or {}, res.get('cfeedKb') or {}, res.get('cfeedDown') or {}
+    g1 = res.get('cfeedKbGeo') or {}
+    check(f0.get('on') is True and (f0.get('toEnd') or 0) <= 60, f'a task opened on Comments, at the latest comment {f0}')
+    check(g1.get('found') is True, f'iOS found the comments list to move with the keyboard {g1}')
+    check(f1.get('kbpad') == f"{round(g1.get('T') or 0)}px" and not f1.get('transform') and abs(f1.get('toEnd') or 99) <= 4 and (g1.get('inset') == 0), f'keyboard up: still at the latest comment, the page keeps the room {f1} {g1}')
+    check(f2.get('kbpad') in ('0px', '') and abs(f2.get('toEnd') or 99) <= 4, f'keyboard down: room gone, still at the latest comment {f2} {res.get("cfeedDownGeo")}')
     fr = res.get('frame') or {}
     print('note ' + ('ok' if (fr.get('insetTop') or 0) >= 20 else 'CHECK SCREENSHOT') + f" the sign-in page clears the status bar {fr} {res.get('signin')}")   # (needs the internet: not a blocker)
     print('note ' + ('ok' if fr.get('reviewLink') is True or 'cloudflareaccess' not in str(fr.get('host')) else 'CHECK SCREENSHOT') + f" the App Review sign-in link shows under the sign-in page {fr.get('host')} {fr.get('reviewLink')}")   # (needs the internet)
