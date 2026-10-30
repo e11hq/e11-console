@@ -1727,7 +1727,7 @@ function fieldMenu(anchor, k) {
     });
   }
   if (cur) items.push({ html: '<div class="sep"></div>' }, { html: `<div class="mi fl-clear">${icon('x')}Clear</div>`, run: () => set(null) });
-  const m = showMenu(anchor, items.map((it, i) => (it.run ? { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) } : it)), { native: k !== 'guardian' && 12 });
+  const m = showMenu(anchor, items.map((it, i) => (it.run ? { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) } : it)), { native: k === 'guardian' ? 14 : 12 });
   m.classList.add('wf-menu', 'fl-menu');
 }
 function setField(t, k, v) {
@@ -1861,16 +1861,17 @@ function workMenu(anchor, kind) {
     const roles = kind === 'ams' ? [['am', 'Account Managers']] : [['production', 'Production'], ['social', 'Social'], ['freelancer', 'Freelancers']];
     const key = kind === 'ams' ? 'ams' : 'people';
     if (kind === 'ams') items.push({ html: `<div class="mi wf-person"><span>All Account Managers &amp; Admins</span>${check(F.team)}</div>`, run: () => { F.team = !F.team; if (F.team) F.ams = []; redraw(); } });
+    const stay = NativeSheet.canPeople() && NativeSheet.fits(14);   // (iPhone app 14+: the native sheet stays open while ticking people)
     roles.forEach(([r, label]) => {
       const us = activeUsers().filter((u) => u.role === r && u.id !== currentUserId);
       if (!us.length) return;
       items.push({ html: `<div class="wf-mh">${esc(label)}</div>` });
-      us.forEach((u) => items.push({ html: `<div class="mi wf-person">${avatarHTML(u.id, 20)}<span>${esc(fullName(u))}</span>${check(F[key].includes(u.id))}</div>`,
+      us.forEach((u) => items.push({ multi: stay, find: `${fullName(u)} ${u.email}`, html: `<div class="mi wf-person">${avatarHTML(u.id, 20)}<span>${esc(fullName(u))}</span>${check(F[key].includes(u.id))}</div>`,
         run: () => { F[key] = F[key].includes(u.id) ? F[key].filter((x) => x !== u.id) : F[key].concat(u.id); if (key === 'ams') F.team = false; redraw(); } }));
     });
     if (!items.length) items.push({ html: `<div class="wf-mh">Nobody here yet</div>` });
   }
-  const m = showMenu(anchor, items.map((it, i) => (it.run ? { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) } : it)), { native: kind === 'due' || kind === 'created' });
+  const m = showMenu(anchor, items.map((it, i) => (it.run ? { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) } : it)), { native: kind === 'due' || kind === 'created' ? true : 14 });
   m.classList.add('wf-menu');
 }
 
@@ -1880,8 +1881,8 @@ function avatarHTML(id, size = 24, cls = '') {
   const u = userById(id);
   const name = fullName(u);
   const st = `width:${size}px;height:${size}px;font-size:${Math.round(size * 0.4)}px`;
-  if (u && u.avatar && Host.isNative) return `<span class="av ${cls}" style="${st}" title="${esc(name)}"><img src="${fileUrl({ path: u.avatar })}" alt=""></span>`;
-  return `<span class="av ${cls}" style="${st};background:${avColor(id || 'x')}" title="${esc(name)}">${esc(initials(name))}</span>`;
+  if (u && u.avatar && Host.isNative) return `<span class="av ${cls}" style="${st}" title="${esc(name)}" data-uid="${esc(id || '')}"><img src="${fileUrl({ path: u.avatar })}" alt=""></span>`;
+  return `<span class="av ${cls}" style="${st};background:${avColor(id || 'x')}" title="${esc(name)}" data-uid="${esc(id || '')}">${esc(initials(name))}</span>`;
 }
 function avatarStack(ids, size = 20, max = 3, t = null) {
   if (!ids || !ids.length) return '';
@@ -4395,7 +4396,7 @@ function detailScroller() {
 function showMenu(anchor, items, opts = {}) {
   closeMenus();
   // iPhone app 11+: a menu marked native (plain options only) opens as iOS's own sheet
-  if (opts.native && NativeSheet.fits(opts.native)) { Haptic.light(); return NativeSheet.open(anchor, items); }   // (the same light knock as the page's own sheets)
+  if (opts.native && NativeSheet.fits(opts.native)) { Haptic.light(); return NativeSheet.open(anchor, items, opts); }   // (the same light knock as the page's own sheets)
   if (typeof Phone !== 'undefined' && Phone.on) Haptic.light();
   // (no doubled, leading or trailing dividers when some options aren't there; positions kept for data-mi)
   items = items.map((it, i, a) => (it === '-' && (i === 0 || i === a.length - 1 || a[i - 1] === '-' || a.slice(i + 1).every((x) => x === '-') || a.slice(0, i).every((x) => x === '-')) ? { skip: true } : it));
@@ -4503,13 +4504,15 @@ const NativeSheet = (() => {
         const flag = el.querySelector('.prio-flag');
         const ic = [...el.querySelectorAll('.ic[data-i]')].find((x) => !x.closest('.wf-ck, .mi-lock'));
         const copy = el.cloneNode(true);
-        copy.querySelectorAll('.ic, .wf-ck, small, .mi-lock').forEach((x) => x.remove());
+        copy.querySelectorAll('.ic, .wf-ck, small, .mi-lock, .av').forEach((x) => x.remove());
+        const avEl = el.querySelector('.av[data-uid]');
         const sub = [...el.querySelectorAll('small')].map((x) => x.textContent.trim()).filter(Boolean).join(' · ');
         const label = (dotEl && dotEl.matches('.cal-ch') ? copy.textContent.replace(dotEl.textContent, '') : copy.textContent).replace(/\s+/g, ' ').trim();
         const disabled = el.classList.contains('disabled');
         cur().rows.push({ i: disabled ? -1 : idx(el, i, it), label, sub: sub || it.hint || '', icon: ic ? ic.dataset.i : '',
           danger: el.classList.contains('danger') || !!it.danger, checked: el.classList.contains('cur') || !!el.querySelector('.wf-ck'), disabled,
-          locked: el.classList.contains('mi-locked'), dot: dotEl ? colorOf(dotEl) : null, tint: flag ? colorOf(flag) : null });
+          locked: el.classList.contains('mi-locked'), dot: dotEl ? colorOf(dotEl) : null, tint: flag ? colorOf(flag) : null,
+          personUid: avEl ? avEl.dataset.uid : null, find: it.find || '' });
         return;
       }
       [...el.children].forEach((c) => take(c, i, it));   // (a wrapper, e.g. the priority menu: its parts in order)
@@ -4518,14 +4521,36 @@ const NativeSheet = (() => {
       items.forEach((it, i) => {
         if (!it || it.skip) return;
         if (it === '-') { newSec(); return; }
-        if (!it.html) { cur().rows.push({ i: it.run ? i : -1, label: it.label || '', sub: it.hint || '', icon: it.icon || '', danger: !!it.danger }); return; }
+        if (!it.html) { cur().rows.push({ i: it.run ? i : -1, label: it.label || '', sub: it.hint || '', icon: it.icon || '', danger: !!it.danger, checked: !!it.checked, disabled: !!it.disabled && !it.run, find: it.find || '', personUid: it.person || null }); return; }
         probe.innerHTML = it.html;
         [...probe.children].forEach((el) => take(el, i, it));
       });
     } finally { probe.remove(); }
     return sections.filter((x) => x.rows.length);
   }
-  function open(anchor, items) {
+  // people's round pictures for a sheet (app 14+): each photo loaded once and drawn small; else initials on their colour
+  const picCache = new Map();
+  function loadPic(src) {
+    if (picCache.has(src)) return picCache.get(src);
+    const p = new Promise((done) => {
+      const im = new Image();
+      const t = setTimeout(() => done(null), 2000);
+      im.onload = () => { clearTimeout(t); try { const cv = document.createElement('canvas'); cv.width = cv.height = 72; const g = cv.getContext('2d'), w = im.naturalWidth, h = im.naturalHeight, k = Math.min(w, h); g.drawImage(im, (w - k) / 2, (h - k) / 2, k, k, 0, 0, 72, 72); done(cv.toDataURL('image/jpeg', 0.85)); } catch (e) { done(null); } };
+      im.onerror = () => { clearTimeout(t); done(null); };
+      im.src = src;
+    });
+    picCache.set(src, p);
+    p.then((v) => { if (!v) picCache.delete(src); });
+    return p;
+  }
+  async function personFor(uid) {
+    const box = document.createElement('div'); box.innerHTML = avatarHTML(uid, 30);
+    const av = box.firstElementChild, img = av && av.querySelector('img');
+    if (img && img.getAttribute('src')) { const photo = await loadPic(img.src); if (photo) return { photo }; }
+    return { initials: av ? av.textContent.trim() : '', color: rgb(av && av.style.background) || [120, 120, 140] };
+  }
+  const canPeople = () => shell >= 14;
+  function open(anchor, items, opts = {}) {
     // (callers may add a class, a colour / reaction handler (_onSwatch) or their own option list (_items) to the menu:
     //  this stand-in carries them; nothing on screen)
     const m = document.createElement('div');
@@ -4537,9 +4562,17 @@ const NativeSheet = (() => {
     const secs = rows(items);
     if (multi) secs.forEach((sec) => sec.rows.forEach((r) => { if (r.i >= 0 && items[r.i] && items[r.i].multi) r.multi = true; }));
     window.__e11SheetPick = (i) => { const it = items[i]; if (it && it.run) { NativeSheet.ticking = true; try { it.run(); } finally { NativeSheet.ticking = false; } } };
-    NativeMac.call('nativeSheet', { sections: secs, multi })
+    const uids = [...new Set(secs.flatMap((sec) => sec.rows.map((r) => r.personUid).filter(Boolean)))];
+    const people = canPeople() && uids.length ? Promise.all(uids.map((u) => personFor(u).then((v) => [u, v]))).then((l) => new Map(l)) : Promise.resolve(new Map());
+    people.then((pics) => {
+      secs.forEach((sec) => sec.rows.forEach((r) => { if (r.personUid && pics.has(r.personUid)) r.person = pics.get(r.personUid); delete r.personUid; }));
+      const args = { sections: secs, multi };
+      if (opts.search && canPeople()) { args.search = opts.search; if (opts.custom) args.custom = opts.custom; if (opts.empty) args.empty = opts.empty; }
+      return NativeMac.call('nativeSheet', args);
+    })
       .then((res) => {
         if (!res || res.ok === false) { fallback(); return; }   // (the app couldn't show it: the page's own sheet)
+        if (res.custom != null) { if (opts.onCustom) opts.onCustom(String(res.custom)); return; }   // (a typed entry: "Use …")
         if (res.swatch != null) { if (m._onSwatch) m._onSwatch(res.swatch); return; }
         const list = m._items || items, i = Number(res.index);
         if (i >= 0 && list[i] && list[i].run) list[i].run();
@@ -4547,7 +4580,7 @@ const NativeSheet = (() => {
       .catch(fallback);
     return m;
   }
-  return { fits, open, rows, canMulti, ticking: false };
+  return { fits, open, rows, canMulti, canPeople, ticking: false };
 })();
 
 function dialog({ title, body = '', bodyHtml = '', input = null, okText = 'OK', cancelText = 'Cancel', danger = false, colors = null }) {
@@ -5341,6 +5374,21 @@ function assignMenu(anchor) {
   if (!can('assign')) return denied();
   closeMenus();
   const t = task(ui.taskId);
+  // iPhone app 14+: iOS's own sheet — search, people with photos, tick several (each tick saves straight away)
+  if (NativeSheet.canPeople() && NativeSheet.fits(14)) {
+    const tt = task(ui.taskId) || t;
+    const on = (uid) => ((task(ui.taskId) || tt).assignees || []).includes(uid);
+    const row = (u) => ({ label: u.id === currentUserId ? 'Me' : fullName(u), hint: roleOf(u), person: u.id, checked: on(u.id), multi: true,
+      find: `${fullName(u)} ${u.email} ${roleOf(u)}`, run: () => setAssignee(task(ui.taskId), u.id, !on(u.id)) });
+    const assigned = (tt.assignees || []).map(userById).filter(Boolean);
+    const people = activeUsers().filter((u) => assignable(u) && !(tt.assignees || []).includes(u.id));
+    const items = [];
+    if (assigned.length) items.push({ html: '<div class="menu-label">Assignees</div>' }, ...assigned.map(row));
+    if (people.length) items.push({ html: '<div class="menu-label">People</div>' }, ...people.map(row));
+    if (!items.length) items.push({ label: 'No one can be assigned yet', disabled: true });
+    showMenu(anchor, items, { native: 14, search: 'Search people', empty: 'No one matches “%@”' });
+    return;
+  }
   const pop = document.createElement('div');
   pop.className = 'menu asg-pop';
   pop.innerHTML = `<div class="ap-search">${icon('search')}<input placeholder="Search or enter email…" autocomplete="off" spellcheck="false"></div><div class="ap-list"></div>`;
@@ -8420,6 +8468,19 @@ function pickPlace(btn, kind) {
   closeMenus();
   const country = ($('#pf-country') || {}).dataset ? $('#pf-country').dataset.val : '';
   const all = kind === 'country' ? E11_PLACES.COUNTRIES : E11_PLACES.cities(country);
+  // iPhone app 14+: iOS's own sheet with a search box; a city that isn't listed can be typed ("Use “…”")
+  if (NativeSheet.canPeople() && NativeSheet.fits(14)) {
+    const cur0 = btn.dataset.val || '';
+    const set = (v) => {
+      btn.dataset.val = v;
+      btn.innerHTML = `${v ? esc(v) : `<span class="pf-ph">Choose your ${kind}</span>`}${icon('chev')}`;
+      if (kind === 'country' && v !== cur0) { const c = $('#pf-city'); if (c) { c.dataset.val = ''; c.innerHTML = `<span class="pf-ph">Choose your city</span>${icon('chev')}`; } }
+    };
+    const items = [...(cur0 ? [{ label: 'Not set', icon: 'x', run: () => set('') }, '-'] : []), ...all.map((x) => ({ label: x, checked: x === cur0, find: x, run: () => set(x) }))];
+    showMenu(btn, items, { native: 14, search: kind === 'country' ? 'Search countries' : all.length ? 'Search or type your city' : 'Type your city',
+      custom: kind === 'city' ? 'Use “%@”' : null, empty: kind === 'country' ? 'No country matches “%@”' : 'Type the name of your city', onCustom: (v) => set(v) });
+    return;
+  }
   const pop = document.createElement('div');
   pop.className = 'menu asg-pop pl-pop';
   pop.innerHTML = `<div class="ap-search">${icon('search')}<input placeholder="${kind === 'country' ? 'Search countries…' : all.length ? 'Search or type your city…' : 'Type your city…'}" autocomplete="off" spellcheck="false"></div><div class="ap-list"></div>`;

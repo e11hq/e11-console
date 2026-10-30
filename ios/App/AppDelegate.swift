@@ -13,7 +13,7 @@ import PhotosUI
 import UniformTypeIdentifiers
 
 // Version of this iPhone app's native part (raise it with changes the web app needs to know about)
-let SHELL_VERSION = 13   // 13: also dates picked in a native sheet (pickDate: closing it never sets a date) · a native sheet can stay open for ticking several (multi; each tick: window.__e11SheetPick) · 12: native sheets also with colour dots, a row of colours / emoji / numbers (chips), tinted icons, locked rows · 11: plain menus as iOS's own sheets (nativeSheet; the page: NativeSheet in app.js, showMenu(…, { native: true })) · 10: My Tasks, Inbox and Team lists swiped by iOS itself (Pager.syncLists in phone.js) · 9: a task’s Details / Comments swiped by iOS itself (the page: Pager in phone.js) · 8: iOS haptics for the page (haptic kind: light / medium / selection / success / warning / error) · 7: the comment box rides down / up with the keyboard frame by frame (__e11KbStep) · 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
+let SHELL_VERSION = 14   // 14: native sheets with people (round photos / initials) and a search box (+ a typed entry, "Use …") · 13: also dates picked in a native sheet (pickDate: closing it never sets a date) · a native sheet can stay open for ticking several (multi; each tick: window.__e11SheetPick) · 12: native sheets also with colour dots, a row of colours / emoji / numbers (chips), tinted icons, locked rows · 11: plain menus as iOS's own sheets (nativeSheet; the page: NativeSheet in app.js, showMenu(…, { native: true })) · 10: My Tasks, Inbox and Team lists swiped by iOS itself (Pager.syncLists in phone.js) · 9: a task’s Details / Comments swiped by iOS itself (the page: Pager in phone.js) · 8: iOS haptics for the page (haptic kind: light / medium / selection / success / warning / error) · 7: the comment box rides down / up with the keyboard frame by frame (__e11KbStep) · 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
 let procEnv = ProcessInfo.processInfo.environment
 let SELFTEST = procEnv["E11_SELFTEST"] ?? ""           // the build machine's self-test in the simulator
 let info = Bundle.main.infoDictionary ?? [:]
@@ -752,7 +752,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       }) { i, swatch in
         if i >= 0 { FocusAfterPicker.allow() }   // (a text box the option opens still brings the keyboard)
         var r: [String: Any] = ["ok": true, "index": i]
-        if let sw = swatch { r["swatch"] = sw }
+        if i == -2, let typed = swatch { r["custom"] = typed }   // (a typed entry: "Use …")
+        else if let sw = swatch { r["swatch"] = sw }
         done(r)
       }
       present(vc, animated: true)
@@ -1078,13 +1079,26 @@ enum FocusAfterPicker {
 /* A plain menu from the page as iOS's own sheet: sections of rows (icon, text, an optional second line, a tick,
    red for delete, a coloured dot for a role), sized to fit, with the grab handle. iOS draws it — floating at rest,
    it grows with the finger when pulled and springs back; dragged down or tapped outside, it closes. */
-final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewDelegate, UISheetPresentationControllerDelegate {
+final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewDelegate, UISheetPresentationControllerDelegate, UISearchBarDelegate {
   struct Chip { let i: Int; let swatch: String?; let label: String?; let color: UIColor?; let on: Bool; let disabled: Bool }
-  struct Row { let i: Int; let label: String; let sub: String?; let icon: String?; let danger: Bool; let checked: Bool; let disabled: Bool; let dot: UIColor?; let tint: UIColor?; let locked: Bool; let chips: [Chip]?; let chipKind: String; var multi: Bool = false }
+  struct Row { let i: Int; let label: String; let sub: String?; let icon: String?; let danger: Bool; let checked: Bool; let disabled: Bool; let dot: UIColor?; let tint: UIColor?; let locked: Bool; let chips: [Chip]?; let chipKind: String; var multi: Bool = false
+    var pic: UIImage? = nil; var initials: String? = nil; var picColor: UIColor? = nil; var find: String = "" }
   struct Section { let header: String?; let rows: [Row]; var photo: UIImage? = nil; var initials: String? = nil; var color: UIColor? = nil }
   private var sections: [Section] = []
+  // (a sheet with a search box: everything, what the search shows, the ticks flipped here, the typed entry option)
+  private var all: [Section] = []
+  private var ticks: [Int: Bool] = [:]
+  private var searchBar: UISearchBar?
+  private var searchHint = ""
+  private var customLabel: String?
+  private var emptyText = "No matches"
   private let table = UITableView(frame: .zero, style: .insetGrouped)
   private var answer: ((Int, String?) -> Void)?
+  private static func photo(_ v: Any?) -> UIImage? {
+    guard let p = v as? [String: Any], let d = p["photo"] as? String, let comma = d.firstIndex(of: ","),
+          let data = Data(base64Encoded: String(d[d.index(after: comma)...])) else { return nil }
+    return UIImage(data: data)
+  }
   private static func color(_ v: Any?) -> UIColor? {
     guard let d = v as? [NSNumber], d.count >= 3 else { return nil }
     return UIColor(red: CGFloat(d[0].doubleValue) / 255, green: CGFloat(d[1].doubleValue) / 255, blue: CGFloat(d[2].doubleValue) / 255, alpha: 1)
@@ -1124,7 +1138,9 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
         return Row(i: (r["i"] as? NSNumber)?.intValue ?? -1, label: r["label"] as? String ?? "", sub: (r["sub"] as? String).flatMap { $0.isEmpty ? nil : $0 },
                    icon: r["icon"] as? String, danger: (r["danger"] as? Bool) == true, checked: (r["checked"] as? Bool) == true,
                    disabled: (r["disabled"] as? Bool) == true, dot: NativeSheetVC.color(r["dot"]), tint: NativeSheetVC.color(r["tint"]),
-                   locked: (r["locked"] as? Bool) == true, chips: chips, chipKind: r["kind"] as? String ?? "", multi: (r["multi"] as? Bool) == true)
+                   locked: (r["locked"] as? Bool) == true, chips: chips, chipKind: r["kind"] as? String ?? "", multi: (r["multi"] as? Bool) == true,
+                   pic: NativeSheetVC.photo(r["person"]), initials: (r["person"] as? [String: Any])?["initials"] as? String,
+                   picColor: NativeSheetVC.color((r["person"] as? [String: Any])?["color"]), find: ((r["find"] as? String) ?? (r["label"] as? String) ?? "").lowercased())
       }
       if !rows.isEmpty {
         var sc = Section(header: (sec["header"] as? String).flatMap { $0.isEmpty ? nil : $0 }, rows: rows)
@@ -1135,11 +1151,17 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
         sections.append(sc)
       }
     }
+    all = sections
+    if let hint = a["search"] as? String { searchHint = hint; searchBar = UISearchBar() }
+    customLabel = a["custom"] as? String          // e.g. "Use “%@”" — a typed entry that isn't in the list
+    if let e = a["empty"] as? String { emptyText = e }
     overrideUserInterfaceStyle = dark ? .dark : .light
     modalPresentationStyle = .pageSheet
     if let sh = sheetPresentationController {
       // (at most about two-thirds of the screen, so even a long list stays the floating card; it scrolls inside)
       sh.detents = [.custom(identifier: .init("fit")) { [weak self] ctx in min(ctx.maximumDetentValue * 0.68, self?.fitHeight ?? 320) }]
+      // (a sheet with a search box can also go full height — it does when typing starts, so the keyboard leaves room)
+      if searchBar != nil { sh.detents.append(.large()) }
       sh.prefersGrabberVisible = true
       sh.prefersScrollingExpandsWhenScrolledToEdge = false
       sh.delegate = self
@@ -1174,8 +1196,68 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     table.tableFooterView = UIView(frame: .zero)
     table.sectionHeaderTopPadding = 0
     view.addSubview(table)
-    NSLayoutConstraint.activate([table.topAnchor.constraint(equalTo: view.topAnchor), table.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-                                 table.trailingAnchor.constraint(equalTo: view.trailingAnchor), table.bottomAnchor.constraint(equalTo: view.bottomAnchor)])
+    if let sb = searchBar {
+      // the search box sits where a first option would start (TOP under the sheet's top edge); the list below it
+      sb.searchBarStyle = .minimal
+      sb.placeholder = searchHint
+      sb.autocapitalizationType = .none
+      sb.autocorrectionType = .no
+      sb.delegate = self
+      sb.translatesAutoresizingMaskIntoConstraints = false
+      view.addSubview(sb)
+      table.contentInset.top = 6
+      table.keyboardDismissMode = .onDrag
+      NSLayoutConstraint.activate([sb.topAnchor.constraint(equalTo: view.topAnchor, constant: NativeSheetVC.TOP - 10),
+                                   sb.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 10),
+                                   sb.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -10),
+                                   table.topAnchor.constraint(equalTo: sb.bottomAnchor), table.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                                   table.trailingAnchor.constraint(equalTo: view.trailingAnchor), table.bottomAnchor.constraint(equalTo: view.bottomAnchor)])
+    } else {
+      NSLayoutConstraint.activate([table.topAnchor.constraint(equalTo: view.topAnchor), table.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                                   table.trailingAnchor.constraint(equalTo: view.trailingAnchor), table.bottomAnchor.constraint(equalTo: view.bottomAnchor)])
+    }
+  }
+  // Search: the rows whose name / email / role hold the text; a typed entry ("Use “…”") when allowed; else a grey line.
+  // (Only what's shown changes — the sheet keeps its size while typing.)
+  func searchBar(_ searchBar: UISearchBar, textDidChange text: String) { applySearch(text) }
+  func searchBarTextDidBeginEditing(_ searchBar: UISearchBar) {
+    guard let sh = sheetPresentationController else { return }
+    sh.animateChanges { sh.selectedDetentIdentifier = .large }
+  }
+  func searchBarSearchButtonClicked(_ searchBar: UISearchBar) { searchBar.resignFirstResponder() }
+  private func applySearch(_ text: String) {
+    let q = text.trimmingCharacters(in: .whitespaces).lowercased()
+    var out: [Section] = []
+    for sec in all {
+      let rows = q.isEmpty ? sec.rows : sec.rows.filter { $0.chips == nil && $0.find.contains(q) }
+      if !rows.isEmpty { out.append(Section(header: sec.header, rows: rows, photo: sec.photo, initials: sec.initials, color: sec.color)) }
+    }
+    let typed = text.trimmingCharacters(in: .whitespaces)
+    if let fmt = customLabel, !typed.isEmpty, !all.contains(where: { $0.rows.contains { $0.label.lowercased() == q } }) {
+      out.append(Section(header: nil, rows: [Row(i: -2, label: fmt.replacingOccurrences(of: "%@", with: typed), sub: nil, icon: "plus", danger: false, checked: false,
+                                                 disabled: false, dot: nil, tint: nil, locked: false, chips: nil, chipKind: "", find: typed)]))
+    }
+    if out.isEmpty {
+      out = [Section(header: nil, rows: [Row(i: -1, label: emptyText.replacingOccurrences(of: "%@", with: typed), sub: nil, icon: nil, danger: false, checked: false,
+                                             disabled: true, dot: nil, tint: nil, locked: false, chips: nil, chipKind: "")])]
+    }
+    sections = out
+    table.reloadData()
+  }
+  // a person's round picture for a row: their photo, or their initials on their colour
+  private static func avatar(_ r: Row) -> UIImage? {
+    guard r.pic != nil || r.initials != nil else { return nil }
+    let size = CGSize(width: 30, height: 30)
+    return UIGraphicsImageRenderer(size: size).image { _ in
+      let rect = CGRect(origin: .zero, size: size)
+      UIBezierPath(ovalIn: rect).addClip()
+      if let p = r.pic { p.draw(in: rect); return }
+      (r.picColor ?? .systemGray).setFill(); UIRectFill(rect)
+      let t = (r.initials ?? "") as NSString
+      let attrs: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 12, weight: .bold), .foregroundColor: UIColor.white]
+      let ts = t.size(withAttributes: attrs)
+      t.draw(at: CGPoint(x: (size.width - ts.width) / 2, y: (size.height - ts.height) / 2), withAttributes: attrs)
+    }
   }
   // Sized from the list alone, once (and again only if the list itself changes) — never from the sheet's own size,
   // which iOS stretches while it's pulled: re-sizing then made the options jump at the end of a scroll.
@@ -1187,6 +1269,7 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     table.layoutIfNeeded()
     let ch = table.contentSize.height
     guard abs(ch - lastContent) > 0.5 else { return }
+    if searchBar != nil && lastContent >= 0 { lastContent = ch; return }   // (searching never re-sizes the sheet)
     // (first time: start at the very top of the list, below the room for the grab handle — with the insets set by
     //  hand a table otherwise starts at 0, which hid that room and put the first option against the handle)
     if lastContent < 0 { table.contentOffset = CGPoint(x: 0, y: -table.contentInset.top) }
@@ -1198,7 +1281,9 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     // (iOS adds the home-bar strip below a sheet's height by itself — on a floating sheet too, where it just showed
     //  as empty space under the last option — so that strip is taken off here)
     let strip = presentingViewController?.view.window?.safeAreaInsets.bottom ?? view.window?.safeAreaInsets.bottom ?? 0
-    fitHeight = max(120, NativeSheetVC.TOP + ch + NativeSheetVC.END - (floating ? strip : 0) + (floating ? 0 : view.safeAreaInsets.bottom))
+    // (with a search box: its bottom — before it's laid out, where it will be — plus the list's own gap)
+    let above: CGFloat = searchBar.map { sb in (sb.frame.maxY > 0 ? sb.frame.maxY : NativeSheetVC.TOP - 10 + 56) + table.contentInset.top } ?? NativeSheetVC.TOP
+    fitHeight = max(120, above + ch + NativeSheetVC.END - (floating ? strip : 0) + (floating ? 0 : view.safeAreaInsets.bottom))
     // (a list too long for the sheet scrolls: at the end of the scroll its last option must clear the sheet's visible
     //  bottom edge by the same gap as a fitting list (Channel) — whatever of the sheet lies below that edge is added
     //  (measured once shown; until then iOS's home-bar strip). A list that fits gets none, so it never scrolls — the
@@ -1233,7 +1318,7 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     let tableTop = table.superview?.convert(table.frame, to: win).minY ?? 0
     // (the last option's card itself — the list has ~20 of its own after its last section)
     let ls = sections.count - 1
-    let lastRow = ls >= 0 ? table.rectForRow(at: IndexPath(row: sections[ls].rows.count - 1, section: ls)).maxY : table.contentSize.height
+    let lastRow = ls >= 0 && !sections[ls].rows.isEmpty ? table.rectForRow(at: IndexPath(row: sections[ls].rows.count - 1, section: ls)).maxY : table.contentSize.height
     let lastBottom = tableTop + lastRow - atEnd
     // (the first thing's top when scrolled to the start: the first card, or a title's text — the header is exactly its text + gap)
     let firstTop = tableTop + table.contentInset.top
@@ -1311,7 +1396,11 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     c.secondaryTextProperties.color = .secondaryLabel
     let tint: UIColor = r.disabled ? .tertiaryLabel : r.danger ? .systemRed : .label
     c.textProperties.color = r.disabled ? .secondaryLabel : r.danger ? .systemRed : .label
-    if let dot = r.dot {
+    if let av = NativeSheetVC.avatar(r) {
+      c.image = av
+      c.imageProperties.maximumSize = CGSize(width: 30, height: 30)
+      c.imageProperties.reservedLayoutSize = CGSize(width: 30, height: 30)
+    } else if let dot = r.dot {
       c.image = UIImage(systemName: "circle.fill")?.withTintColor(dot, renderingMode: .alwaysOriginal)
       c.imageProperties.maximumSize = CGSize(width: 12, height: 12)
     } else if let name = r.icon.flatMap({ NativeSheetVC.SYMBOLS[$0] }), let img = UIImage(systemName: name) {
@@ -1319,26 +1408,24 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     }
     if r.locked { c.textProperties.color = .secondaryLabel }
     cell.contentConfiguration = c
-    cell.accessoryType = r.checked ? .checkmark : .none
+    cell.accessoryType = (ticks[r.i] ?? r.checked) ? .checkmark : .none
     if r.locked && !r.checked { let lock = UIImageView(image: UIImage(systemName: "lock.fill")); lock.tintColor = .tertiaryLabel; cell.accessoryView = lock }
     cell.tintColor = .systemBlue
     cell.selectionStyle = r.disabled || r.i < 0 ? .none : .default
     if #available(iOS 26, *) { cell.backgroundColor = UIColor.secondarySystemGroupedBackground.withAlphaComponent(0.6) }
     return cell
   }
-  func tableView(_ tableView: UITableView, shouldHighlightRowAt ip: IndexPath) -> Bool { let r = sections[ip.section].rows[ip.row]; return r.chips == nil && !r.disabled && r.i >= 0 }
+  func tableView(_ tableView: UITableView, shouldHighlightRowAt ip: IndexPath) -> Bool { let r = sections[ip.section].rows[ip.row]; return r.chips == nil && !r.disabled && (r.i >= 0 || r.i == -2) }
   func tableView(_ tableView: UITableView, didSelectRowAt ip: IndexPath) {
     let r = sections[ip.section].rows[ip.row]
+    if r.i == -2 { searchBar?.resignFirstResponder(); choose(-2, searchBar?.text?.trimmingCharacters(in: .whitespaces)); return }   // (the typed entry)
     guard r.chips == nil, !r.disabled, r.i >= 0 else { return }
     // ticking several (channels…): the sheet stays open, the tick flips here, the page is told each time
     if multi && r.multi {
       tableView.deselectRow(at: ip, animated: true)
-      let old = sections[ip.section].rows[ip.row]
-      var rows = sections[ip.section].rows
-      rows[ip.row] = Row(i: old.i, label: old.label, sub: old.sub, icon: old.icon, danger: old.danger, checked: !old.checked, disabled: old.disabled,
-                         dot: old.dot, tint: old.tint, locked: old.locked, chips: old.chips, chipKind: old.chipKind, multi: true)
-      sections[ip.section] = Section(header: sections[ip.section].header, rows: rows, photo: sections[ip.section].photo, initials: sections[ip.section].initials, color: sections[ip.section].color)
-      if let cell = tableView.cellForRow(at: ip) { cell.accessoryType = rows[ip.row].checked ? .checkmark : .none }
+      let now = !(ticks[r.i] ?? r.checked)
+      ticks[r.i] = now
+      if let cell = tableView.cellForRow(at: ip) { cell.accessoryType = now ? .checkmark : .none }
       UISelectionFeedbackGenerator().selectionChanged()
       pick?(r.i)
       return

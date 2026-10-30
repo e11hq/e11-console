@@ -513,6 +513,18 @@ const Plans = (() => {
     return `<div class="pl-dls">${fileLink(ex.pptx, `PowerPoint · Round ${ex.round}`)}${ex.pdf ? fileLink(ex.pdf, 'PDF') : ''}${pl.exports.length > 1 ? `<button class="btn ghost xs" data-pl="rounds">Earlier rounds</button>` : ''}</div>`;
   }
   function roundsMenu(anchor, pl) {
+    // iPhone app 14+: iOS's own sheet — each round a section, its PowerPoint / PDF as options (they download)
+    if (typeof NativeSheet !== 'undefined' && NativeSheet.canPeople() && NativeSheet.fits(14)) {
+      const dl = (f) => () => { const a = document.createElement('a'); a.href = fileUrl(f); a.download = f.name; a.dataset.pl = 'dl'; document.body.appendChild(a); a.click(); a.remove(); };
+      const items = [];
+      (pl.exports || []).slice().reverse().forEach((ex) => {
+        items.push({ html: `<div class="menu-label">Round ${ex.round} · ${esc(fmtDay(ex.at.slice(0, 10)))}</div>` });
+        items.push({ label: 'PowerPoint', icon: 'download', run: dl(ex.pptx) });
+        if (ex.pdf) items.push({ label: 'PDF', icon: 'download', run: dl(ex.pdf) });
+      });
+      showMenu(anchor, items, { native: 14 });
+      return;
+    }
     showMenu(anchor, (pl.exports || []).slice().reverse().map((ex) => ({ html: `<div class="mi pl-hist"><span>Round ${ex.round} · ${esc(fmtDay(ex.at.slice(0, 10)))}<small><a href="${fileUrl(ex.pptx)}" download="${esc(ex.pptx.name)}">PowerPoint</a>${ex.pdf ? ` · <a href="${fileUrl(ex.pdf)}" download="${esc(ex.pdf.name)}">PDF</a>` : ''}</small></span></div>` })));
   }
   // the client's logo, from Client Assets › Logos: picked the first time, used every time after
@@ -790,7 +802,7 @@ const Plans = (() => {
     (pl.log || []).slice(-6).reverse().forEach((x) => items.push({ html: `<div class="mi pl-hist">${avatarHTML(x.by, 18)}<span>${esc(firstName(x.by))} ${acts[x.act] || x.act}<small>${esc(timeAgo(x.at))}</small></span></div>` }));
     if (!(pl.log || []).length) items.push({ html: '<div class="mi-note">Not sent yet</div>' });
     if (isEditor(pl) && editable(pl)) items.push('-', { label: 'Delete this skeleton', icon: 'trash', danger: true, run: () => delPlan(pl) });
-    showMenu(anchor, items);
+    showMenu(anchor, items, { native: 14 });   // (iPhone app 14+: iOS's own sheet; the history with people's photos)
   }
   async function delPlan(pl) {
     const n = (pl.posts || []).length, name = proj(pl.projectId).name;
