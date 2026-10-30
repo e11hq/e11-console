@@ -1111,12 +1111,14 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     // (tight like Apple's own sheets: just room for the grab handle above, a small margin below — the page's
     //  automatic safe-area padding is off, the bottom margin is set by hand)
     table.contentInsetAdjustmentBehavior = .never
-    table.contentInset = UIEdgeInsets(top: 0, left: 0, bottom: 8, right: 0)
+    // (the list starts under the grab handle, but scrolls up behind it to the sheet's own rounded edge — no flat cut)
+    table.contentInset = UIEdgeInsets(top: 18, left: 0, bottom: 8, right: 0)
+    table.verticalScrollIndicatorInsets = UIEdgeInsets(top: 22, left: 0, bottom: 22, right: 0)
     table.tableHeaderView = UIView(frame: CGRect(x: 0, y: 0, width: 0, height: CGFloat.leastNonzeroMagnitude))   // (no default gap on top)
     table.tableFooterView = UIView(frame: .zero)
     table.sectionHeaderTopPadding = 0
     view.addSubview(table)
-    NSLayoutConstraint.activate([table.topAnchor.constraint(equalTo: view.topAnchor, constant: 18), table.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+    NSLayoutConstraint.activate([table.topAnchor.constraint(equalTo: view.topAnchor), table.leadingAnchor.constraint(equalTo: view.leadingAnchor),
                                  table.trailingAnchor.constraint(equalTo: view.trailingAnchor), table.bottomAnchor.constraint(equalTo: view.bottomAnchor)])
   }
   override func viewDidLayoutSubviews() {
@@ -1125,7 +1127,8 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     let h = table.contentSize.height + 18 + 8 + (floating ? 0 : view.safeAreaInsets.bottom)
     if abs(h - fitHeight) > 1 { fitHeight = h; sheetPresentationController?.animateChanges { sheetPresentationController?.invalidateDetents() } }
     table.isScrollEnabled = h > view.bounds.height + 1
-    table.contentInset.bottom = 8 + (table.isScrollEnabled ? view.safeAreaInsets.bottom : 0)
+    table.contentInset.bottom = 8 + (table.isScrollEnabled && !floating ? view.safeAreaInsets.bottom : 0)
+    if !table.isScrollEnabled { table.contentOffset.y = -table.contentInset.top }
   }
   func numberOfSections(in tableView: UITableView) -> Int { sections.count }
   func tableView(_ tableView: UITableView, numberOfRowsInSection s: Int) -> Int { sections[s].rows.count }
