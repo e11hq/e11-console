@@ -1115,6 +1115,11 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     // (the list starts under the grab handle, but scrolls up behind it to the sheet's own rounded edge — no flat cut)
     table.contentInset = UIEdgeInsets(top: NativeSheetVC.TOP, left: 0, bottom: 8 + (floating ? 0 : 34), right: 0)
     table.alwaysBounceVertical = false   // (a list that fits doesn't scroll: the finger moves the sheet itself)
+    // (every row measured up front, not estimated: estimated heights changed the list's length while it scrolled,
+    //  which made the options jump near the end)
+    table.estimatedRowHeight = 0
+    table.estimatedSectionHeaderHeight = 0
+    table.estimatedSectionFooterHeight = 0
     table.verticalScrollIndicatorInsets = UIEdgeInsets(top: 22, left: 0, bottom: 22, right: 0)
     table.tableHeaderView = UIView(frame: CGRect(x: 0, y: 0, width: 0, height: CGFloat.leastNonzeroMagnitude))   // (no default gap on top)
     table.tableFooterView = UIView(frame: .zero)
@@ -1131,6 +1136,9 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     table.layoutIfNeeded()
     let ch = table.contentSize.height
     guard abs(ch - lastContent) > 0.5 else { return }
+    // (first time: start at the very top of the list, below the room for the grab handle — with the insets set by
+    //  hand a table otherwise starts at 0, which hid that room and put the first option against the handle)
+    if lastContent < 0 { table.contentOffset = CGPoint(x: 0, y: -table.contentInset.top) }
     lastContent = ch
     fitHeight = ch + NativeSheetVC.TOP + 8 + (floating ? 0 : view.safeAreaInsets.bottom)
     sheetPresentationController?.animateChanges { sheetPresentationController?.invalidateDetents() }
