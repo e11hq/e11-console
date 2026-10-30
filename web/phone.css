@@ -1055,5 +1055,3 @@ html.phone body.phone .ph-pan > .ph-pan-fill { position: fixed; left: 0; right: 
 /* the floating sheet (its outline: SheetMotion.pan): room inside for the side gap, no shadow or border around it */
 html.phone body.phone .ph-pan > .menu:not(.mention-pop) { padding-left: 16px !important; padding-right: 16px !important; box-shadow: none !important; border: 0 !important; border-radius: 0 !important; }
 html.phone body.phone .ph-pan > .menu:not(.mention-pop)::before { top: 14px !important; }
-/* a tap leaves no grey "hover" behind a field button (iPhone keeps the last tapped thing hovered) */
-@media (hover: none) { body.phone .fl-btn:hover { background: none; } }

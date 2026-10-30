@@ -1953,3 +1953,27 @@ const Pager = (() => {
   }, true);
   return { on: () => on, lists: () => lists, sync, syncLists };
 })();
+
+/* Touch screens: no "hover" looks at all. iPhone keeps the last tapped thing "hovered" (a grey box stays behind a
+   button after its menu or sheet opens) until something else is tapped, so on a screen without a mouse every
+   :hover rule of the page's styles is taken out once they've loaded. (Pressed looks — :active — stay.) */
+(() => {
+  if (!(window.matchMedia && matchMedia('(hover: none)').matches)) return;
+  const strip = (list, owner) => {
+    for (let i = list.length - 1; i >= 0; i--) {
+      const r = list[i];
+      if (r.cssRules && !r.selectorText) { try { strip(r.cssRules, r); } catch (e) { /* fine */ } continue; }
+      if (!r.selectorText || r.selectorText.indexOf(':hover') < 0) continue;
+      // (split at the top-level commas only: ":is(a, b):hover" is one selector)
+      const parts = []; let depth = 0, cur = '';
+      for (const ch of r.selectorText) { if (ch === '(') depth++; else if (ch === ')') depth--; if (ch === ',' && !depth) { parts.push(cur); cur = ''; } else cur += ch; }
+      parts.push(cur);
+      const keep = parts.filter((x) => x.indexOf(':hover') < 0);
+      try { if (keep.length) r.selectorText = keep.join(','); else owner.deleteRule(i); } catch (e) { /* fine */ }
+    }
+  };
+  const run = () => [...document.styleSheets].forEach((sh) => { try { if (!sh.__noHover) { strip(sh.cssRules, sh); sh.__noHover = true; } } catch (e) { /* another site's sheet */ } });
+  run();
+  window.addEventListener('load', run);
+  document.addEventListener('DOMContentLoaded', run);
+})();
