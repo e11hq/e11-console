@@ -1280,8 +1280,11 @@ const SheetMotion = (() => {
     // open it grows to the edges and its bottom corners square off, following the finger; let go, it springs back.
     // (Only its outline changes — clip-path — so nothing inside moves or reflows.) The fill under a lifted sheet has
     // the same sides and bottom corners, so the two read as one piece.
+    // (now the same floating card as the iPhone's own sheets — its gap and corners come from the page's styles —
+    //  so the outline no longer changes as it's pulled: that part glitched)
+    const shape = () => {};
     const GAP = 8, R = 44, GROW = 70;
-    const shape = (over) => {
+    const shapeOld = (over) => {
       const k = Math.max(0, Math.min(1, over / GROW)), g = GAP * (1 - k), rb = R * (1 - k);
       if (over > 0) {
         m.style.clipPath = `inset(0 ${g}px 0 ${g}px round ${R}px ${R}px 0 0)`;

@@ -1055,3 +1055,18 @@ html.phone body.phone .ph-pan > .ph-pan-fill { position: fixed; left: 0; right: 
 /* the floating sheet (its outline: SheetMotion.pan): room inside for the side gap, no shadow or border around it */
 html.phone body.phone .ph-pan > .menu:not(.mention-pop) { padding-left: 16px !important; padding-right: 16px !important; box-shadow: none !important; border: 0 !important; border-radius: 0 !important; }
 html.phone body.phone .ph-pan > .menu:not(.mention-pop)::before { top: 14px !important; }
+
+/* iPhone app: every slide-up sheet the page still draws itself has the same spacing as the iPhone's own sheets —
+   a floating card 8px from the sides and the bottom, round corners, 30px from its top to the first thing in it
+   (room for the grab handle), 8px under the last thing. (The iPhone's own sheets: NativeSheetVC in the app.) */
+html.ph-pager.phone body.phone .menu:not(.mention-pop) {
+  left: 8px !important; right: 8px !important; bottom: calc(8px + var(--ph-shift, 0px) + var(--ph-kb, 0px)) !important;
+  border-radius: 38px !important; padding: 30px 8px 8px !important; border: 0 !important;
+}
+html.ph-pager.phone body.phone .menu:not(.mention-pop)::before { top: 10px !important; }
+html.ph-pager.phone body.phone .ph-pan > .menu:not(.mention-pop) { left: auto !important; right: auto !important; bottom: auto !important; margin: 0 8px 8px !important; clip-path: none !important; scroll-margin-bottom: 8px; }
+html.ph-pager.phone body.phone .ph-pan > .ph-pan-fill { display: none; }
+html.ph-pager body.phone .ph-scrim:not(.docked) .ph-sheet {
+  margin: 0 8px 8px !important; border-radius: 38px !important; padding: 10px 18px 8px !important; border: 0 !important;
+}
+html.ph-pager body.phone .ph-scrim[data-kind="trash-view"]:not(.docked) .ph-sheet { padding: 10px 0 8px !important; }
