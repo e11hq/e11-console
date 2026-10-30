@@ -4460,7 +4460,7 @@ const NativeSheet = (() => {
     const name = u ? fullName(u) : '';
     const t = document.createElement('i'); t.style.color = avColor(uid || 'x'); document.body.appendChild(t);
     const color = rgb(getComputedStyle(t).color) || [120, 120, 140]; t.remove();
-    const a = { initials: initials(name || '?'), color, square: false };
+    const a = { initials: initials(name || '?'), color };
     if (u && u.avatar && Host.isNative) a.photo = new URL(fileUrl({ path: u.avatar }), location.href).href;
     return a;
   }
@@ -4487,10 +4487,10 @@ const NativeSheet = (() => {
     }
     return { initials: av.textContent.trim(), color: rgb(av.style.background || av.style.backgroundColor) || [120, 120, 140] };
   }
-  // a person's picture (.av) or a client's logo (.cl-logo) in a row: its image's address, else its letters on its colour
+  // a person's picture (.av) in a row: its photo's address, else their initials on their colour
   function picOf(el) {
-    const img = el.querySelector('img'), square = el.matches('.cl-logo');
-    const a = { initials: img ? '' : el.textContent.trim(), color: colorOf(el) || [120, 120, 140], square };
+    const img = el.querySelector('img');
+    const a = { initials: img ? '' : el.textContent.trim(), color: colorOf(el) || [120, 120, 140] };
     if (img && img.getAttribute('src')) a.photo = new URL(img.getAttribute('src'), location.href).href;
     return a;
   }
@@ -4522,11 +4522,11 @@ const NativeSheet = (() => {
       if (el.matches('.pm-grid')) { cur().rows.push({ kind: 'num', chips: [...el.querySelectorAll('button')].map((b) => ({ i: b.dataset.mi != null ? Number(b.dataset.mi) : -1, label: b.textContent.trim(), on: b.classList.contains('cur'), disabled: b.disabled || b.classList.contains('taken') })) }); return; }
       if (el.matches('.mi')) {
         const dotEl = el.querySelector('.sw, .cal-ch, .role-pill, .fl-pill, .dot');
-        const picEl = canPeople() ? el.querySelector('.av, .cl-logo') : null;
+        const picEl = canPeople() ? el.querySelector('.av') : null;
         const flag = el.querySelector('.prio-flag');
         const ic = [...el.querySelectorAll('.ic[data-i]')].find((x) => !x.closest('.wf-ck, .mi-lock'));
         const copy = el.cloneNode(true);
-        copy.querySelectorAll('.ic, .wf-ck, small, .mi-lock' + (picEl ? ', .av, .cl-logo' : '')).forEach((x) => x.remove());
+        copy.querySelectorAll('.ic, .wf-ck, small, .mi-lock' + (picEl ? ', .av' : '')).forEach((x) => x.remove());
         const sub = [...el.querySelectorAll('small')].map((x) => x.textContent.trim()).filter(Boolean).join(' · ');
         const label = (dotEl && dotEl.matches('.cal-ch') ? copy.textContent.replace(dotEl.textContent, '') : copy.textContent).replace(/\s+/g, ' ').trim();
         const disabled = el.classList.contains('disabled');
@@ -6962,8 +6962,7 @@ function projectClientMenu(anchor, p) {
     ...list.map((c) => ({ html: `<div class="mi ${p.clientId === c.id ? 'cur' : ''}">${clientLogoHTML(c, 18)}${esc(c.name)}</div>`, run: () => { p.clientId = c.id; persist(0); render(); toast(`${p.name} linked to ${c.name}`); } })),
     ...(p.clientId ? ['-', { label: 'No client', icon: 'x', run: () => { delete p.clientId; persist(0); render(); } }] : []),
     ...(!list.length ? [{ html: '<div class="mi-note">No clients yet — add one in Client Assets</div>' }] : []),
-  ].map((it, i) => (it && it.html && it.run ? { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) } : it)),
-  { native: 14, search: list.length > 8 ? 'Search clients' : null, empty: 'No client matches' });   // (iPhone app 14+: logos, search)
+  ].map((it, i) => (it && it.html && it.run ? { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) } : it)));
 }
 // A picture dragged from this page itself (on iPhone: touch and hold an image, then move it) is not a new file:
 // dropping it back on the page never uploads it again

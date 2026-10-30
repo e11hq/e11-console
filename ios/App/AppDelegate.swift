@@ -1092,7 +1092,7 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
   struct Chip { let i: Int; let swatch: String?; let label: String?; let color: UIColor?; let on: Bool; let disabled: Bool }
   struct Row { let i: Int; let label: String; let sub: String?; let icon: String?; let danger: Bool; let checked: Bool; let disabled: Bool; let dot: UIColor?; let tint: UIColor?; let locked: Bool; let chips: [Chip]?; let chipKind: String; var multi: Bool = false
                 var avatar: Avatar? = nil; var find: String = "" }
-  struct Avatar { let photo: URL?; let initials: String; let color: UIColor; var square = false }   // (square: a client's logo)
+  struct Avatar { let photo: URL?; let initials: String; let color: UIColor }
   struct Section { let header: String?; let rows: [Row]; var photo: UIImage? = nil; var initials: String? = nil; var color: UIColor? = nil }
   private var sections: [Section] = []      // (what's shown: all of them, or those matching the search)
   private var allSections: [Section] = []
@@ -1150,7 +1150,7 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
                    disabled: (r["disabled"] as? Bool) == true, dot: NativeSheetVC.color(r["dot"]), tint: NativeSheetVC.color(r["tint"]),
                    locked: (r["locked"] as? Bool) == true, chips: chips, chipKind: r["kind"] as? String ?? "", multi: (r["multi"] as? Bool) == true,
                    avatar: (r["avatar"] as? [String: Any]).map { av in Avatar(photo: (av["photo"] as? String).flatMap { URL(string: $0) },
-                     initials: av["initials"] as? String ?? "?", color: NativeSheetVC.color(av["color"]) ?? .systemGray, square: (av["square"] as? Bool) == true) },
+                     initials: av["initials"] as? String ?? "?", color: NativeSheetVC.color(av["color"]) ?? .systemGray) },
                    find: r["find"] as? String ?? "")
       }
       if !rows.isEmpty {
@@ -1272,15 +1272,14 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
         load(u) { [weak self] img in
           NativeSheetVC.loading.remove(u.absoluteString)
           guard let img else { return }
-          NativeSheetVC.photos.setObject(av.square ? NativeSheetVC.logo(img) : NativeSheetVC.roundAvatar(img), forKey: u.absoluteString as NSString)
+          NativeSheetVC.photos.setObject(NativeSheetVC.roundAvatar(img), forKey: u.absoluteString as NSString)
           self?.refreshRows(photo: u)
         }
       }
     }
     let d: CGFloat = 30
     return UIGraphicsImageRenderer(size: CGSize(width: d, height: d)).image { _ in
-      let box = CGRect(x: 0, y: 0, width: d, height: d)
-      av.color.setFill(); (av.square ? UIBezierPath(roundedRect: box, cornerRadius: 6) : UIBezierPath(ovalIn: box)).fill()
+      av.color.setFill(); UIBezierPath(ovalIn: CGRect(x: 0, y: 0, width: d, height: d)).fill()
       let f = UIFont.systemFont(ofSize: 12, weight: .semibold)
       let s = NSAttributedString(string: av.initials, attributes: [.font: f, .foregroundColor: UIColor.white])
       let z = s.size(); s.draw(at: CGPoint(x: (d - z.width) / 2, y: (d - z.height) / 2))
@@ -1293,18 +1292,6 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     return UIGraphicsImageRenderer(size: CGSize(width: d, height: d)).image { _ in
       UIBezierPath(ovalIn: CGRect(x: 0, y: 0, width: d, height: d)).addClip()
       src.draw(in: CGRect(x: (d - w * sc) / 2, y: (d - h * sc) / 2, width: w * sc, height: h * sc))
-    }
-  }
-  // a client's logo: whole, on a white rounded square (as on the page)
-  private static func logo(_ src: UIImage) -> UIImage {
-    let d: CGFloat = 30, w = src.size.width, h = src.size.height
-    guard w > 0, h > 0 else { return src }
-    let k = min((d - 4) / w, (d - 4) / h)
-    return UIGraphicsImageRenderer(size: CGSize(width: d, height: d)).image { _ in
-      let box = CGRect(x: 0, y: 0, width: d, height: d)
-      UIBezierPath(roundedRect: box, cornerRadius: 6).addClip()
-      UIColor.white.setFill(); UIRectFill(box)
-      src.draw(in: CGRect(x: (d - w * k) / 2, y: (d - h * k) / 2, width: w * k, height: h * k))
     }
   }
   private func refreshRows(photo u: URL) {
