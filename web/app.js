@@ -4349,7 +4349,7 @@ function detailScroller() {
 function showMenu(anchor, items, opts = {}) {
   closeMenus();
   // iPhone app 11+: a menu marked native (plain options only) opens as iOS's own sheet
-  if (opts.native && NativeSheet.fits()) return NativeSheet.open(anchor, items);
+  if (opts.native && NativeSheet.fits()) { Haptic.light(); return NativeSheet.open(anchor, items); }   // (the same light knock as the page's own sheets)
   if (typeof Phone !== 'undefined' && Phone.on) Haptic.light();
   // (no doubled, leading or trailing dividers when some options aren't there; positions kept for data-mi)
   items = items.map((it, i, a) => (it === '-' && (i === 0 || i === a.length - 1 || a[i - 1] === '-' || a.slice(i + 1).every((x) => x === '-') || a.slice(0, i).every((x) => x === '-')) ? { skip: true } : it));
