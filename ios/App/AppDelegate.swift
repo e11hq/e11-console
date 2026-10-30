@@ -225,6 +225,25 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if presentedViewController != nil && n < 30 { DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { self.cbarAfterPicker(n + 1) }; return }
     b.attachDone()
   }
+  /* The page's "jump to the latest" button on Comments, tapped through a native spot over it: a tap on the page itself
+     would take the keyboard away (the web view takes over the typing) and the list then jumped about (Haris,
+     2026-10-30). Here the keyboard stays and iOS scrolls the list down itself. */
+  lazy var jumpHit: UIButton = {
+    let b = UIButton(type: .custom)
+    b.backgroundColor = .clear
+    b.isHidden = true
+    b.accessibilityLabel = "Jump to the latest comment"
+    b.addAction(UIAction { [weak self] _ in self?.jumpToLatest() }, for: .touchUpInside)
+    view.insertSubview(b, aboveSubview: web)
+    return b
+  }()
+  func jumpToLatest() {
+    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    if let sv = feedScroll() {
+      let end = max(-sv.adjustedContentInset.top, sv.contentSize.height + sv.adjustedContentInset.bottom - sv.bounds.height)
+      sv.setContentOffset(CGPoint(x: sv.contentOffset.x, y: end), animated: true)
+    } else { pageJS("(function(){ var b = document.querySelector('#detail .jl'); if (b) b.click(); })()") }
+  }
   var cbarShow = false, cbarOnComments = false
   func commentBar(_ a: [String: Any]) {
     let b = cbar
@@ -232,6 +251,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if let p = a["p"] as? NSNumber { cbarOnComments = p.doubleValue > 0.5 }
     if let f = a["feed"] as? [NSNumber], f.count == 4 { cbarFeed = CGRect(x: f[0].doubleValue, y: f[1].doubleValue, width: f[2].doubleValue, height: f[3].doubleValue) }
     else if a["feed"] is NSNull || (a["show"] as? Bool) == false { cbarFeed = nil }
+    if let j = a["jump"] as? [NSNumber], j.count == 4 { jumpHit.frame = CGRect(x: j[0].doubleValue, y: j[1].doubleValue, width: j[2].doubleValue, height: j[3].doubleValue); jumpHit.isHidden = false }
+    else if a["jump"] is NSNull || (a["show"] as? Bool) == false { if cbarIfMade != nil || !jumpHit.isHidden { jumpHit.isHidden = true } }
+    if !(cbarShow && cbarOnComments) && !jumpHit.isHidden { jumpHit.isHidden = true }
     // shown only on Comments at rest; leaving it (a swipe to Details, back to the list) takes the keyboard away too
     let want = cbarShow && cbarOnComments
     if want == b.isHidden {
@@ -329,12 +351,14 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     guard cbarShow, cbarOnComments, let r = cbarFeed, r.width > 10, r.height > 10 else { return nil }
     // (the page's list is one of WebKit's own scroll views: the one where the page says it is, of its size — looked for
     //  among all of them, as hit-testing a point lands on the web view's own content)
-    var best: UIScrollView?
+    // (its size and top; the nearest to where the page said it was across — the page may say it a moment before a
+    //  swipe to Comments has quite come to rest)
+    var best: UIScrollView?, bestDX = CGFloat.greatestFiniteMagnitude
     func walk(_ v: UIView) {
       for c in v.subviews {
         if let sv = c as? UIScrollView, sv !== web.scrollView, !sv.isHidden, sv.window != nil {
           let f = sv.convert(sv.bounds, to: web)
-          if abs(f.width - r.width) < 4, abs(f.height - r.height) < 4, abs(f.minX - r.minX) < 4, abs(f.minY - r.minY) < 4 { best = sv }
+          if abs(f.width - r.width) < 4, abs(f.height - r.height) < 4, abs(f.minY - r.minY) < 4, abs(f.minX - r.minX) < bestDX { best = sv; bestDX = abs(f.minX - r.minX) }
         }
         walk(c)
       }

@@ -17,7 +17,7 @@ const FeedJump = (() => {
     const col = feed.parentElement;
     let b = col.querySelector(':scope > .jl');
     const show = !atEnd(feed);
-    if (!show) { if (b) b.remove(); st.atEnd = true; st.seen = ids(t); return; }
+    if (!show) { if (b) { b.remove(); nativeSync(); } st.atEnd = true; st.seen = ids(t); return; }
     st.atEnd = false;
     const news = fresh(t);
     const html = news.length
@@ -33,7 +33,11 @@ const FeedJump = (() => {
     b.setAttribute('aria-label', news.length ? `${news.length} new comments — jump to the latest` : 'Jump to the latest comment');
     if (b.dataset.html !== html) { b.innerHTML = html; b.dataset.html = html; }
     place(col);
+    nativeSync();
   }
+  // (iPhone app 19+: iOS's own comment box hears where the button is)
+  let ns = 0;
+  function nativeSync() { if (typeof NativeComment !== 'undefined' && NativeComment.on && !ns) ns = requestAnimationFrame(() => { ns = 0; NativeComment.sync(); }); }
   // always just above the comment box, also when it grows (files added, more lines, the attach bar)
   function place(col) {
     const b = col.querySelector(':scope > .jl'), comp = col.querySelector('.tm-composer');

@@ -2160,6 +2160,8 @@ const NativeComment = (() => {
       accent: NativeSheet.colorRGB(getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#5b4bf0'),
       // (19+: where the comments list is, so iOS can find its scroll view and move it with the keyboard)
       feed: (() => { const f = nf && root.classList.contains('ph-cb-on') ? feed() : null; if (!f) return null; const r = f.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top), Math.round(f.clientWidth), Math.round(f.clientHeight)]; })(),
+      // (19+: the "jump to the latest" button, tapped through iOS so the keyboard stays)
+      jump: (() => { const b = nf && root.classList.contains('ph-cb-on') ? document.querySelector('#detail .jl') : null; if (!b) return null; const r = b.getBoundingClientRect(); return r.width ? [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)] : null; })(),
     };
     if (lastP < 0) slide(ui.sideTab === 'comments' ? 1 : 0, true);
     const s = JSON.stringify(st);   // (what's typed isn't part of the comparison: it's only sent for a new box)
@@ -2180,6 +2182,7 @@ const NativeComment = (() => {
     if (at === lastP && !now) return;
     lastP = at;
     call({ p: at });
+    if (at === 1) setTimeout(() => sync(), 0);   // (where the list is, straight away: the keyboard may come at once)
   }
   const feed = () => document.querySelector('#detail .tm-feed');
   const atEnd = (f) => !!f && f.scrollHeight - f.scrollTop - f.clientHeight < 60;
