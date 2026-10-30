@@ -1143,6 +1143,19 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     fitHeight = ch + NativeSheetVC.TOP + 8 + (floating ? 0 : view.safeAreaInsets.bottom)
     sheetPresentationController?.animateChanges { sheetPresentationController?.invalidateDetents() }
   }
+  // Each row's height, worked out here (exact, no estimates — estimates made the list jump while scrolling, and
+  // without them iOS would squeeze every row to the default height)
+  func tableView(_ tableView: UITableView, heightForRowAt ip: IndexPath) -> CGFloat {
+    let r = sections[ip.section].rows[ip.row]
+    if let chips = r.chips {
+      switch r.chipKind {
+      case "num": let lines = CGFloat((chips.count + 4) / 5); return lines * 44 + (lines - 1) * 10 + 24
+      case "emoji": return 46 + 20
+      default: return 30 + 20
+      }
+    }
+    return r.sub == nil ? 52 : 66
+  }
   func numberOfSections(in tableView: UITableView) -> Int { sections.count }
   func tableView(_ tableView: UITableView, numberOfRowsInSection s: Int) -> Int { sections[s].rows.count }
   func tableView(_ tableView: UITableView, titleForHeaderInSection s: Int) -> String? { sections[s].header }
