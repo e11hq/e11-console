@@ -1228,7 +1228,8 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     let visBottom = min(card.maxY, win.bounds.maxY)
     let hidden = max(0, view.convert(view.bounds, to: win).maxY - visBottom)
     let maxOffset = max(-table.contentInset.top, table.contentSize.height + table.contentInset.bottom - table.bounds.height)
-    let atEnd = scrolls ? maxOffset : table.contentOffset.y
+    // (where the list is now — the self-test scrolls it to the end first; a sheet's own room is set by resize(), not by this)
+    let atEnd = table.contentOffset.y; _ = maxOffset
     let tableTop = table.superview?.convert(table.frame, to: win).minY ?? 0
     // (the last option's card itself — the list has ~20 of its own after its last section)
     let ls = sections.count - 1
