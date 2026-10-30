@@ -37,7 +37,10 @@ const FeedJump = (() => {
   // always just above the comment box, also when it grows (files added, more lines, the attach bar)
   function place(col) {
     const b = col.querySelector(':scope > .jl'), comp = col.querySelector('.tm-composer');
-    if (b) b.style.bottom = ((comp ? comp.offsetHeight : 0) + 14) + 'px';
+    // (iPhone app 17+: the comment box is iOS's own, over the page — the button sits above it, and above the keyboard)
+    if (b) b.style.bottom = document.documentElement.classList.contains('ph-cbar')
+      ? 'calc(var(--ph-cbar, 56px) + env(safe-area-inset-bottom) + var(--ph-kbpad, 0px) + 14px)'
+      : ((comp ? comp.offsetHeight : 0) + 14) + 'px';
     if (comp && typeof ResizeObserver !== 'undefined' && col.__jlComp !== comp) {
       if (col.__jlRO) col.__jlRO.disconnect();
       col.__jlComp = comp;
