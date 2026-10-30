@@ -1070,3 +1070,11 @@ html.ph-pager body.phone .ph-scrim:not(.docked) .ph-sheet {
   margin: 0 8px 8px !important; border-radius: 38px !important; padding: 10px 18px 8px !important; border: 0 !important;
 }
 html.ph-pager body.phone .ph-scrim[data-kind="trash-view"]:not(.docked) .ph-sheet { padding: 10px 0 8px !important; }
+
+/* iPhone app: a person whose part is done has a green ring (no tick badge, which slid behind the next picture);
+   tapping a picture in the Assignees row does nothing — people are added and removed in the Assignees sheet (+) */
+html.ios-app body.phone .asg-av .pd-tick, html.ios-app body.phone .av-done > i { display: none; }
+html.ios-app body.phone .asg-av.pdone .av, html.ios-app body.phone .av-done .av { box-shadow: 0 0 0 2px var(--green) !important; }
+html.ios-app body.phone .asg-av + .asg-av { margin-left: -4px; }
+html.ios-app body.phone .asg-av { pointer-events: none; }
+html.ios-app body.phone .asg-x { display: none !important; }

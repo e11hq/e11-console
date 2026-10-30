@@ -5380,11 +5380,16 @@ function assignMenu(anchor) {
     const on = (uid) => ((task(ui.taskId) || tt).assignees || []).includes(uid);
     const row = (u) => ({ label: u.id === currentUserId ? 'Me' : fullName(u), hint: roleOf(u), person: u.id, checked: on(u.id), multi: true,
       find: `${fullName(u)} ${u.email} ${roleOf(u)}`, run: () => setAssignee(task(ui.taskId), u.id, !on(u.id)) });
+    // (everyone in their group — Production, Social, Freelancers, Creative Director; whoever is assigned has a tick)
     const assigned = (tt.assignees || []).map(userById).filter(Boolean);
-    const people = activeUsers().filter((u) => assignable(u) && !(tt.assignees || []).includes(u.id));
+    const pool = [...assigned, ...activeUsers().filter((u) => assignable(u) && !(tt.assignees || []).includes(u.id))];
+    const group = (u) => (u.id === cdUserId() ? 'cd' : u.role === 'production' || u.role === 'social' || u.role === 'freelancer' ? u.role : 'other');
+    const byName = (a, b) => fullName(a).localeCompare(fullName(b));
     const items = [];
-    if (assigned.length) items.push({ html: '<div class="menu-label">Assignees</div>' }, ...assigned.map(row));
-    if (people.length) items.push({ html: '<div class="menu-label">People</div>' }, ...people.map(row));
+    [['production', 'Production'], ['social', 'Social'], ['freelancer', 'Freelancers'], ['cd', cdTitle()], ['other', 'Others']].forEach(([k, l]) => {
+      const us = pool.filter((u) => group(u) === k).sort(byName);
+      if (us.length) items.push({ html: `<div class="menu-label">${esc(l)}</div>` }, ...us.map(row));
+    });
     if (!items.length) items.push({ label: 'No one can be assigned yet', disabled: true });
     showMenu(anchor, items, { native: 14, search: 'Search people', empty: 'No one matches “%@”' });
     return;
