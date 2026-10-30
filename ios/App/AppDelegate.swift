@@ -336,7 +336,17 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     return nil
   }
   func feedRide(cover: CGFloat, duration: Double, curve: UInt) {
-    guard let sv = feedScroll() else { if cover == 0 { feedT = 0 }; feedGeo = ["found": false]; return }
+    guard let sv = feedScroll() else {
+      if cover == 0 { feedT = 0 }
+      // (why not, for the self-test: the box's state, where the page says the list is, the scroll views under that spot)
+      var seen: [String] = []
+      if let r = cbarFeed {
+        var v = web.hitTest(CGPoint(x: r.midX, y: r.minY + min(r.height / 2, 160)), with: nil)
+        while let cur = v { if let sv = cur as? UIScrollView { seen.append("\(type(of: sv)) \(Int(sv.bounds.width))x\(Int(sv.bounds.height))") }; v = cur.superview }
+      }
+      feedGeo = ["found": false, "show": cbarShow, "comments": cbarOnComments, "feed": cbarFeed.map { [$0.minX, $0.minY, $0.width, $0.height] } ?? [], "scrollViews": seen]
+      return
+    }
     let opts = UIView.AnimationOptions(rawValue: curve << 16).union(.beginFromCurrentState)
     let H = sv.bounds.height, C = sv.contentSize.height, off = sv.contentOffset.y
     if cover > 0 && feedT == 0 {
