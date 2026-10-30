@@ -1292,7 +1292,9 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     scrolls = fitHeight > cap
     // (measured in the simulator: none of a floating sheet lies below its visible edge — 0 until measured)
     let below = floating ? (hiddenBelow ?? 0) : view.safeAreaInsets.bottom
-    table.contentInset.bottom = NativeSheetVC.END + (scrolls || !floating ? below : 0)
+    // (a list that scrolls ends further above the sheet's bottom edge: its rounded corners otherwise cut into the last
+    //  option while the list bounces at its end — "squeezed" when dragged, Haris 2026-10-30)
+    table.contentInset.bottom = NativeSheetVC.END + (scrolls || !floating ? below : 0) + (scrolls ? 22 : 0)
     table.verticalScrollIndicatorInsets.bottom = 22 + (scrolls ? below : 0)
     sheetPresentationController?.animateChanges { sheetPresentationController?.invalidateDetents() }
   }
