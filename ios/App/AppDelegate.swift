@@ -348,7 +348,11 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   var feedT: CGFloat = 0
   var feedGeo: [String: Any] = [:]
   func feedScroll() -> UIScrollView? {
-    guard cbarShow, cbarOnComments, let r = cbarFeed, r.width > 10, r.height > 10 else { return nil }
+    guard cbarShow, cbarOnComments else { return nil }
+    // (the page hasn't said where the list is yet — the box tapped the moment Comments opened: the tall list that fills
+    //  the screen's width, below the task's header)
+    let W = web.bounds.width
+    let r = (cbarFeed.flatMap { $0.width > 10 && $0.height > 10 ? $0 : nil }) ?? CGRect(x: 0, y: -1, width: W, height: -1)
     // (the page's list is one of WebKit's own scroll views: the one where the page says it is, of its size — looked for
     //  among all of them, as hit-testing a point lands on the web view's own content)
     // (its size and top; the nearest to where the page said it was across — the page may say it a moment before a
@@ -358,7 +362,10 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       for c in v.subviews {
         if let sv = c as? UIScrollView, sv !== web.scrollView, !sv.isHidden, sv.window != nil {
           let f = sv.convert(sv.bounds, to: web)
-          if abs(f.width - r.width) < 4, abs(f.height - r.height) < 4, abs(f.minY - r.minY) < 4, abs(f.minX - r.minX) < bestDX { best = sv; bestDX = abs(f.minX - r.minX) }
+          let fits = r.height < 0
+            ? abs(f.width - W) < 4 && abs(f.minX) < 4 && f.height > 300 && f.minY > 80 && sv.contentSize.height > 0
+            : abs(f.width - r.width) < 4 && abs(f.height - r.height) < 4 && abs(f.minY - r.minY) < 4
+          if fits, abs(f.minX - r.minX) < bestDX { best = sv; bestDX = abs(f.minX - r.minX) }
         }
         walk(c)
       }
@@ -395,7 +402,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       }) { _ in
         self.web.evaluateJavaScript("window.__e11FeedKb && window.__e11FeedKb('up', \(Int(T.rounded())))") { _, _ in
           DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            if self.feedT > 0 { sv.contentInset.bottom = 0 }
+            sv.contentInset.bottom = 0   // (the page keeps the room now — also when the keyboard has gone again meanwhile; it was left behind, a keyboard-high gap under the last comment)
             self.feedGeo["inset"] = sv.contentInset.bottom; self.feedGeo["to"] = sv.contentOffset.y
           }
         }
@@ -407,6 +414,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       pageJS("window.__e11FeedKb && window.__e11FeedKb('start')")
       UIView.animate(withDuration: max(duration, 0.01), delay: 0, options: opts, animations: {
         sv.contentOffset = CGPoint(x: sv.contentOffset.x, y: to)
+        sv.contentInset.bottom = 0
       }) { _ in self.pageJS("window.__e11FeedKb && window.__e11FeedKb('down')"); self.feedGeo["down"] = to }
     }
   }
