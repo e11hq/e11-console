@@ -4460,6 +4460,8 @@ const NativeSheet = (() => {
     // (callers may add a class, a colour / reaction handler (_onSwatch) or their own option list (_items) to the menu:
     //  this stand-in carries them; nothing on screen)
     const m = document.createElement('div');
+    // (the button that opened it mustn't stay lit behind the sheet: iPhone keeps a tapped button "hovered")
+    try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch (e) { /* fine */ }
     const fallback = () => { const w = showMenu(anchor, items); if (w) { w._onSwatch = m._onSwatch; if (m._items) w._items = m._items; } };
     NativeMac.call('nativeSheet', { sections: rows(items) })
       .then((res) => {

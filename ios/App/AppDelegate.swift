@@ -1062,6 +1062,7 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     guard let d = v as? [NSNumber], d.count >= 3 else { return nil }
     return UIColor(red: CGFloat(d[0].doubleValue) / 255, green: CGFloat(d[1].doubleValue) / 255, blue: CGFloat(d[2].doubleValue) / 255, alpha: 1)
   }
+  static let TOP: CGFloat = 30   // (room under the grab handle before the first option)
   private static let SYMBOLS: [String: String] = [
     "plus": "plus", "edit": "pencil", "trash": "trash", "x": "xmark", "clip": "paperclip", "folder": "folder",
     "info": "info.circle", "copy": "doc.on.doc", "search": "magnifyingglass", "download": "arrow.down.circle",
@@ -1112,7 +1113,8 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     //  automatic safe-area padding is off, the bottom margin is set by hand)
     table.contentInsetAdjustmentBehavior = .never
     // (the list starts under the grab handle, but scrolls up behind it to the sheet's own rounded edge — no flat cut)
-    table.contentInset = UIEdgeInsets(top: 18, left: 0, bottom: 8, right: 0)
+    table.contentInset = UIEdgeInsets(top: NativeSheetVC.TOP, left: 0, bottom: 8 + (floating ? 0 : 34), right: 0)
+    table.alwaysBounceVertical = false   // (a list that fits doesn't scroll: the finger moves the sheet itself)
     table.verticalScrollIndicatorInsets = UIEdgeInsets(top: 22, left: 0, bottom: 22, right: 0)
     table.tableHeaderView = UIView(frame: CGRect(x: 0, y: 0, width: 0, height: CGFloat.leastNonzeroMagnitude))   // (no default gap on top)
     table.tableFooterView = UIView(frame: .zero)
@@ -1121,14 +1123,17 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     NSLayoutConstraint.activate([table.topAnchor.constraint(equalTo: view.topAnchor), table.leadingAnchor.constraint(equalTo: view.leadingAnchor),
                                  table.trailingAnchor.constraint(equalTo: view.trailingAnchor), table.bottomAnchor.constraint(equalTo: view.bottomAnchor)])
   }
+  // Sized from the list alone, once (and again only if the list itself changes) — never from the sheet's own size,
+  // which iOS stretches while it's pulled: re-sizing then made the options jump at the end of a scroll.
+  private var lastContent: CGFloat = -1
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
     table.layoutIfNeeded()
-    let h = table.contentSize.height + 18 + 8 + (floating ? 0 : view.safeAreaInsets.bottom)
-    if abs(h - fitHeight) > 1 { fitHeight = h; sheetPresentationController?.animateChanges { sheetPresentationController?.invalidateDetents() } }
-    table.isScrollEnabled = h > view.bounds.height + 1
-    table.contentInset.bottom = 8 + (table.isScrollEnabled && !floating ? view.safeAreaInsets.bottom : 0)
-    if !table.isScrollEnabled { table.contentOffset.y = -table.contentInset.top }
+    let ch = table.contentSize.height
+    guard abs(ch - lastContent) > 0.5 else { return }
+    lastContent = ch
+    fitHeight = ch + NativeSheetVC.TOP + 8 + (floating ? 0 : view.safeAreaInsets.bottom)
+    sheetPresentationController?.animateChanges { sheetPresentationController?.invalidateDetents() }
   }
   func numberOfSections(in tableView: UITableView) -> Int { sections.count }
   func tableView(_ tableView: UITableView, numberOfRowsInSection s: Int) -> Int { sections[s].rows.count }
