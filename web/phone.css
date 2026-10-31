@@ -512,6 +512,9 @@ body.phone .cm-tools .icon-btn .ic { width: 17px; height: 17px; }
 /* Highlight of the comment you came to from the Inbox: one glowing outline, the card keeps its colour */
 @keyframes phFlash { 0%, 40% { box-shadow: 0 0 0 2px rgba(160, 145, 255, .85), 0 0 24px rgba(123, 104, 238, .35); } 100% { box-shadow: 0 0 0 2px transparent; } }
 body.phone .cm.flash { animation: phFlash 2.4s ease; }
+/* a comment with its own card (a thread on the main list): the whole card flashes, not the comment inside it (Haris, 2026-10-31) */
+body.phone .thread:has(> .cm.flash) { animation: phFlash 2.4s ease; }
+body.phone .thread > .cm.flash { animation: none; }
 
 /* Comment top line: name · short time, then the buttons — always one line, long names end with … */
 body.phone .cm-meta { flex-wrap: nowrap; align-items: center; min-width: 0; gap: 6px; }
