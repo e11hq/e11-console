@@ -1,6 +1,9 @@
 import UIKit
 import CoreImage
 
+// (who's in the pictures and who has a photo: redrawn when that changes — a photo arriving later too)
+func picsKey(_ p: [String: [String: Any]]) -> String { p.keys.sorted().map { $0 + (p[$0]?["photo"] != nil ? "+" : "") }.joined(separator: ",") }
+
 /* ================= Home (E11 Day / My Day), drawn by the app itself (23+, Haris 2026-10-31) =================
    The same page as the website's phone Home (phone.js myDay / card, phone.css .ph-head / .ph-stats / .ph-gh / .pc),
    only scrolled and tapped by iPhone itself. The page stays the engine: it sends what to show — the header, the three
@@ -40,7 +43,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private var cards: [String: HomeCard] = [:]
   private var m: [String: Any] = [:]
   private var L = HomeLook(nil)
-  var people: [String: [String: Any]] = [:] { didSet { if oldValue.count != people.count { cards.values.forEach { $0.people = people }; meChanged() } } }
+  var people: [String: [String: Any]] = [:] { didSet { if picsKey(oldValue) != picsKey(people) { cards.values.forEach { $0.people = people }; meChanged() } } }
   private var meId = ""
   var bottomRoom: CGFloat = 120 { didSet { if oldValue != bottomRoom { setNeedsLayout() } } }
   // the top of the app's tab bar: the + sits 14 above it, 18 from the right (phone.css .ph-fab), so it's in place from
@@ -757,7 +760,7 @@ final class HomeCard: UIControl {
     let s: CGFloat = isHighlighted ? 0.985 : 1
     transform = CGAffineTransform(translationX: swipeX, y: 0).scaledBy(x: s, y: s)
   }
-  var people: [String: [String: Any]] = [:] { didSet { if oldValue.count != people.count { drawPeople() } } }
+  var people: [String: [String: Any]] = [:] { didSet { if picsKey(oldValue) != picsKey(people) { drawPeople() } } }
   private let icon = UIImageView(), titleL = UILabel(), metaL = UILabel(), chip = UIView(), chipL = UILabel(), badge = UILabel(), avs = UIView()
   private var c: [String: Any] = [:]
   private var L = HomeLook(nil)

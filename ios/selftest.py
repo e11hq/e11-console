@@ -61,6 +61,8 @@ try:
     check(stg.get('ticked') == 4 and stg.get('n') == '4/4' and all(v not in ('', '…') for v in (stg.get('values') or [''])), f'the page ticked all four rows with real numbers {stg}')
     hn = res.get('homeNative') or {}
     check(hn.get('shown') is True and (hn.get('cards') or 0) > 0 and len(hn.get('stats') or []) == 3 and hn.get('title') in ('E11 Day', 'My Day'), f'Home is the app\'s own, with its boxes and task cards {hn}')
+    hsc0 = res.get('homeScrolledNative') or {}
+    check(hsc0.get('server') is True, f'Home comes straight from the server (/api/home) {hsc0.get("server")}')
     hs = res.get('homeSwipeNative') or {}; hp = res.get('homePressNative') or {}
     check(hs.get('open') is True and (hs.get('openShift') or 0) < -80 and (hs.get('actions') or 0) >= 1, f'a Home card swiped left shows Copy link / Delete {hs}')
     hl = res.get('homeLeadNative') or {}
