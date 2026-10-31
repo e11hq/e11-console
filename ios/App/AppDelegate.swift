@@ -2989,8 +2989,11 @@ final class TrashSheetVC: UIViewController, UISheetPresentationControllerDelegat
 /* A date picked in a native sheet (the page's date fields on the iPhone): iPhone's own calendar, with Today and —
    when the field can be emptied — Clear. Tapping a day picks it and closes; dragging it down or tapping outside
    changes nothing. */
-final class DateSheetVC: UIViewController, UISheetPresentationControllerDelegate {
-  private let picker = UIDatePicker()
+final class DateSheetVC: UIViewController, UISheetPresentationControllerDelegate, UICalendarViewDelegate, UICalendarSelectionSingleDateDelegate {
+  // iPhone's own calendar (the one inside its date picker), so today can carry a mark: a blue dot under it, only to see —
+  // the date picked is still the filled circle (Haris, 2026-11-01)
+  private let cal = UICalendarView()
+  private let gregorian = Calendar(identifier: .gregorian)
   private var answer: (([String: Any]) -> Void)?
   private let fmt: DateFormatter = { let f = DateFormatter(); f.calendar = Calendar(identifier: .gregorian); f.locale = Locale(identifier: "en_US_POSIX"); f.timeZone = .current; f.dateFormat = "yyyy-MM-dd"; return f }()
   private let clearable: Bool
@@ -3001,11 +3004,18 @@ final class DateSheetVC: UIViewController, UISheetPresentationControllerDelegate
     md = (a["md"] as? Bool) == true
     super.init(nibName: nil, bundle: nil)
     overrideUserInterfaceStyle = dark ? .dark : .light
-    picker.datePickerMode = .date
-    picker.preferredDatePickerStyle = .inline
-    if let v = a["value"] as? String, let d = fmt.date(from: v) { picker.date = d }
-    if let v = a["min"] as? String, let d = fmt.date(from: v) { picker.minimumDate = d }
-    if let v = a["max"] as? String, let d = fmt.date(from: v) { picker.maximumDate = d }
+    cal.calendar = gregorian
+    cal.locale = Locale(identifier: "en_US")
+    let pick = UICalendarSelectionSingleDate(delegate: self)
+    if let v = a["value"] as? String, let d = fmt.date(from: v) {
+      let dc = gregorian.dateComponents([.year, .month, .day], from: d)
+      pick.selectedDate = dc
+      cal.visibleDateComponents = dc
+    }
+    cal.selectionBehavior = pick
+    let lo = (a["min"] as? String).flatMap { fmt.date(from: $0) }, hi = (a["max"] as? String).flatMap { fmt.date(from: $0) }
+    if lo != nil || hi != nil { cal.availableDateRange = DateInterval(start: lo ?? .distantPast, end: max(hi ?? .distantFuture, lo ?? .distantPast)) }
+    cal.delegate = self
     modalPresentationStyle = .pageSheet
     if let sh = sheetPresentationController {
       // (sized to the calendar, with the same gap under it as under a native list's last option — Channel: END + the
@@ -3014,6 +3024,17 @@ final class DateSheetVC: UIViewController, UISheetPresentationControllerDelegate
       sh.prefersGrabberVisible = true
       sh.delegate = self
     }
+  }
+  // today: a small blue dot under it
+  func calendarView(_ calendarView: UICalendarView, decorationFor dateComponents: DateComponents) -> UICalendarView.Decoration? {
+    let t = gregorian.dateComponents([.year, .month, .day], from: Date())
+    return dateComponents.year == t.year && dateComponents.month == t.month && dateComponents.day == t.day ? .default(color: .systemBlue, size: .small) : nil
+  }
+  // a day tapped: that date
+  func dateSelection(_ selection: UICalendarSelectionSingleDate, didSelectDate dateComponents: DateComponents?) {
+    guard let dc = dateComponents, let d = gregorian.date(from: dc) else { return }
+    UISelectionFeedbackGenerator().selectionChanged()
+    finish(["ok": true, "date": fmt.string(from: d)])
   }
   required init?(coder: NSCoder) { fatalError() }
   override func viewDidLoad() {
@@ -3025,17 +3046,12 @@ final class DateSheetVC: UIViewController, UISheetPresentationControllerDelegate
     let clear = UIButton(type: .system); clear.setTitle("Clear", for: .normal); clear.titleLabel?.font = .systemFont(ofSize: 17); clear.tintColor = .systemRed
     clear.isHidden = !clearable
     clear.addAction(UIAction { [weak self] _ in self?.finish(["ok": true, "clear": true]) }, for: .touchUpInside)
-    picker.addAction(UIAction { [weak self] _ in
-      guard let self else { return }
-      UISelectionFeedbackGenerator().selectionChanged()
-      self.finish(["ok": true, "date": self.fmt.string(from: self.picker.date)])
-    }, for: .valueChanged)
-    [today, clear, picker].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; view.addSubview($0) }
+    [today, clear, cal].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; view.addSubview($0) }
     NSLayoutConstraint.activate([
       clear.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 22), clear.topAnchor.constraint(equalTo: view.topAnchor, constant: 22),
       today.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -22), today.centerYAnchor.constraint(equalTo: clear.centerYAnchor),
-      picker.topAnchor.constraint(equalTo: today.bottomAnchor, constant: 4),
-      picker.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 12), picker.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -12),
+      cal.topAnchor.constraint(equalTo: today.bottomAnchor, constant: 4),
+      cal.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 12), cal.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -12),
     ])
   }
   private var fitHeight: CGFloat = 470, sized = false
@@ -3044,11 +3060,11 @@ final class DateSheetVC: UIViewController, UISheetPresentationControllerDelegate
   // sheet from Home's Due)
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
-    guard !sized, view.bounds.width > 0, picker.frame.minY > 0, picker.frame.height > 100 else { return }
+    guard !sized, view.bounds.width > 0, cal.frame.minY > 0, cal.frame.height > 100 else { return }
     sized = true
     let floating: Bool; if #available(iOS 26, *) { floating = true } else { floating = false }
     let strip = presentingViewController?.view.window?.safeAreaInsets.bottom ?? view.window?.safeAreaInsets.bottom ?? 0
-    let h = max(320, picker.frame.maxY + NativeSheetVC.END + 18 - (floating ? strip : 0) + (floating ? 0 : view.safeAreaInsets.bottom))
+    let h = max(320, cal.frame.maxY + NativeSheetVC.END + 18 - (floating ? strip : 0) + (floating ? 0 : view.safeAreaInsets.bottom))
     guard abs(h - fitHeight) > 0.5 else { return }
     fitHeight = h
     DispatchQueue.main.async { [weak self] in
