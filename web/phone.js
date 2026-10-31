@@ -213,18 +213,8 @@ const Phone = (() => {
 
   /* ---------- Screens ---------- */
   // what Home shows (also the iPhone app's own Home, 23+: NativeHome)
-  function myDayData() {
-    const today = todayStr();
-    const D = Work.day();
-    const open = D.tasks.filter(D.open);
-    const sortP = (a, b) => byPrio(a, b) || (a.due || '').localeCompare(b.due || '') || a.createdAt.localeCompare(b.createdAt);
-    const overdue = open.filter((t) => t.due && t.due < today).sort(sortP);
-    const due = open.filter((t) => t.due === today).sort(sortP);
-    const going = open.filter((t) => t.start && t.start <= today && t.due && t.due > today).sort(sortP);
-    const done = D.doneTasks.filter((t) => D.doneAt(t) && ymd(new Date(D.doneAt(t))) === today);
-    const review = open.filter((t) => t.cdStatus === 'review').length;
-    return { overdue, due, going, done, review };
-  }
+  // (the rules are shared with the server: web/rules.js — the iPhone app gets the same Home from /api/home)
+  function myDayData() { return E11Rules.make(db, currentUserId, todayStr()).myDayData(); }
   function myDay() {
     const { overdue, due, going, done, review } = myDayData();
     const d = new Date();
@@ -2445,51 +2435,16 @@ const NativeHome = (() => {
       fab: fab ? { bg: rgba(getComputedStyle(fab).backgroundColor), line: rgba(getComputedStyle(fab).borderTopColor), rect: [fr.left, fr.top, fr.width, fr.height] } : null,
     };
   }
-  // one task card, as Phone's card() draws it
-  function cardOf(t, o = {}) {
-    const p = proj(t.projectId), s = statusInfo(t);
-    const open = !t.done && !partDone(t);
-    const late = open && t.due && dayDiff(t.due) < 0;
-    const meta = [p ? { t: p.name, dot: rgbOfCss(p.color) } : { t: 'My Tasks' }];
-    if (o.status !== false) meta.push({ t: s.name });
-    if (t.due) meta.push({ t: mwDue(t), b: late ? 'late' : dayDiff(t.due) === 0 && open ? 'today' : 'plain' });
-    if (t.comments.length) meta.push({ t: `${t.comments.length} comment${t.comments.length === 1 ? '' : 's'}`, cm: true });
-    const pr = prioOf(t);
-    const badge = isUrgent(t) && !t.done ? { t: 'Urgent', urgent: true } : typeof normPrio(pr) === 'number' ? { t: String(normPrio(pr)) } : null;
-    const c = t.cdStatus && !t.done ? CD[t.cdStatus] : null;
-    // the status icon: done (filled, ticked), to do (dashed ring), or how far along (a ring with a slice)
-    const st = sectionOf(t);
-    let kind = 'mid', frac = 0.5;
-    if (t.done || (st && isDoneName(st.name))) kind = 'done';
-    else if (!st || isToDoName(st.name)) kind = 'todo';
-    else { const list = statusList(t); const i = list.indexOf(st); frac = list.length > 1 ? i / (list.length - 1) : 0.5; }
-    const ids = t.assignees || [];
-    ids.slice(0, 2).forEach(person);
-    return {
-      id: t.id, title: t.title || '', late: !!late, done: !!t.done, meta,
-      // (swiped right: Done — ready means the page's own tick would complete it now, else it says why — and Due, with
-      //  the date, for those who may change dates)
-      due: t.due || '', canDone: !t.parentId && !(typeof amReadOnly === 'function' && amReadOnly(t)), doneReady: !!t.done || canComplete(t),
-      canDue: typeof can === 'function' && can('editDates', t),
-      icon: { kind, frac, rgb: rgbOfCss(t.done ? '#3ddc97' : s.color) },
-      badge, cd: c ? { t: t.cdStatus === 'approved' ? 'CD Approved' : 'CD Review', check: t.cdStatus === 'approved', rgb: rgbOfCss(c.color) } : null,
-      av: ids.slice(0, 2).map((id) => ({ id, done: !!partDone(t, id) })), more: Math.max(0, ids.length - 2),
-    };
-  }
+  // the cards and groups: the shared rules (web/rules.js), the same the server sends the app (/api/home)
+  const rules = () => E11Rules.make(db, currentUserId, todayStr());
+  function cardOf(t, o = {}) { const c = rules().cardOf(t, o); c.av.forEach((a) => person(a.id)); return c; }
   function model() {
-    const { overdue, due, going, done, review } = Phone.myDayData();
-    const grp = (name, tasks, o = {}) => (tasks.length || o.empty ? { name, n: tasks.length, empty: tasks.length ? '' : o.empty || '', cards: tasks.map((t) => cardOf(t, o)) } : null);
-    person(currentUserId);
-    return {
-      show: true,
-      title: Work.dayTitle(), date: new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }),
-      me: currentUserId, stats: [due.length, overdue.length, review],
-      // (the app's Home: Today first, then In progress, then Overdue — Haris, 2026-10-31; Completed today stays at the end)
-      groups: [grp('Today', due, { empty: 'Nothing due today 🎉' }), grp('In progress', going), grp('Overdue', overdue), grp('Completed today', done, { status: false })].filter(Boolean),
-      add: typeof can === 'function' && can('createTask'),
-      canDelete: typeof can === 'function' && can('deleteTask'),
-      look: look(),
-    };
+    const m = E11Rules.home(db, currentUserId, todayStr());
+    if (!m) return null;
+    Object.keys(m.people || {}).forEach(person);
+    delete m.people;   // (the page sends the pictures apart, once loaded)
+    m.look = look();
+    return m;
   }
   function sync() {
     if (!on) return;

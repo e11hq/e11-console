@@ -13,6 +13,7 @@ import { createCfSync } from './cfsync.js';
 import { createWebPush, notifMessage } from './webpush.js';
 import { createDigest } from './digest.js';
 import { createWidget } from './widget.js';
+import { createHomeView } from './homeview.js';
 import { createOccasionReminders } from './occremind.js';
 import { createBirthdays } from './birthdays.js';
 import { createScheduled } from './scheduled.js';
@@ -95,6 +96,7 @@ export function createServer(cfg) {
   const occRemind = createOccasionReminders({ store, webDir, webPush, isAdm: (u) => access.isSuper(u), now: cfg.now || (() => Date.now()) });
   if (cfg.occRemind !== false && webDir) occRemind.start();
   const widget = createWidget({ store, access, occRemind: webDir ? occRemind : null, now: cfg.now || (() => Date.now()) });
+  const homeView = createHomeView({ webDir, now: cfg.now || (() => Date.now()) });
   // Birthdays: the rest of the staff are told in the morning (Inbox + phone)
   const birthdays = createBirthdays({ store, webPush, notifMessage, deliver: (out) => broadcast(out.rev, out.results, null, null), now: cfg.now || (() => Date.now()) });
   if (cfg.birthdays !== false) birthdays.start();
@@ -594,6 +596,14 @@ export function createServer(cfg) {
     if (p === '/api/digest') return json(res, 200, { ok: true, ...digest.forUser(u) });
     // Widgets (iPhone, Mac): this person's summary for the categories they may see (read only)
     if (p === '/api/widget' && req.method === 'GET') return json(res, 200, widget.summary(u));
+    // The iPhone app's Home, worked out here (homeview.js, with the website's own rules: web/rules.js). Switch: the kv
+    // 'home-server' set to 'off' sends the app back to getting Home from the page behind it (no app build needed).
+    if (p === '/api/home' && req.method === 'GET') {
+      if (store.kv.get('home-server') === 'off') return json(res, 200, { ok: true, off: true, rev: store.rev() });
+      let home = null;
+      try { home = homeView.home(u, visibleSnapshot(u).data); } catch (e) { console.error('home:', e.message); return json(res, 500, { ok: false, error: 'Home could not be worked out' }); }
+      return json(res, 200, { ok: true, rev: store.rev(), home });
+    }
     if (p === '/api/occ-reminders') return json(res, 200, { ok: true, ...occRemind.forUser(u) });
     // Occasion dates: when the holiday calendar was last read (Admins and Account Managers can check now)
     if (p === '/api/holidays') {
