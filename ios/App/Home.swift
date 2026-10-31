@@ -291,58 +291,56 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // lower edge — the bar switches over in one quick move, not with the scroll — Haris, 2026-10-31)
   private var barIn = false
   private var shrink: CGFloat { barIn ? 1 : 0 }
-  private var pastBig: Bool { scrolled > 66 + 33 - 54 }
-  // Mail's blur fade (its "All Inboxes" coming into the bar): a label goes or comes through a soft blur, the coming one
-  // rising a few points into place; its blurred copy crossfades with it
-  private func blurCopy(_ l: UILabel) -> UIImageView? {
-    let pad: CGFloat = 10, b = l.bounds
-    guard b.width > 0, b.height > 0, let text = l.text, !text.isEmpty, let font = l.font else { return nil }
-    let colour = (l.textColor ?? .label).resolvedColor(with: traitCollection)
-    let fmt = UIGraphicsImageRendererFormat.preferred(); let sc = fmt.scale
-    let size = CGSize(width: b.width + pad * 2, height: b.height + pad * 2)
-    let sharp = UIGraphicsImageRenderer(size: size, format: fmt).image { _ in
-      let a = NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: colour])
-      a.draw(with: CGRect(x: pad, y: pad + (b.height - font.lineHeight) / 2, width: b.width, height: font.lineHeight),
-             options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine], context: nil)
+  // (Mail switches once its big title is up in the bar's row, under the buttons: its top at the status bar)
+  private var pastBig: Bool { scrolled > 62 }
+  // Mail's blur fade, measured frame by frame (Haris, 2026-10-31): over ~0.3 s the big title's blur builds up as it
+  // fades; the small title comes in very blurred and see-through ~10 pt low, rises and sharpens, its line just after;
+  // the frost comes in the first few frames. Driven frame by frame (0 big … 1 small), so a quick scroll back reverses it
+  // from wherever it is.
+  private var barK: CGFloat = 0
+  private var barLink: CADisplayLink?, barT: CFTimeInterval = 0
+  private let barDur: CGFloat = 0.3
+  private var fades: [ObjectIdentifier: HomeBlurFade] = [:]
+  private func fade(_ l: UILabel) -> HomeBlurFade {
+    if let f = fades[ObjectIdentifier(l)] { return f }
+    let f = HomeBlurFade(l); fades[ObjectIdentifier(l)] = f; return f
+  }
+  private func easeOut(_ x: CGFloat) -> CGFloat { let t = min(1, max(0, x)); return 1 - pow(1 - t, 3) }
+  private func applyBar() {
+    let tr = traitCollection
+    if searching {
+      fades.values.forEach { $0.clear() }
+      smallTitle.alpha = 0; smallSub.alpha = 0; title.alpha = 1; sub.alpha = 1
+      return
     }
-    guard let ci = CIImage(image: sharp), let f = CIFilter(name: "CIGaussianBlur") else { return nil }
-    f.setValue(ci, forKey: kCIInputImageKey); f.setValue(5 * sc, forKey: kCIInputRadiusKey)
-    guard let out = f.outputImage?.cropped(to: ci.extent), let cg = HomeView.ci.createCGImage(out, from: ci.extent) else { return nil }
-    let v = UIImageView(image: UIImage(cgImage: cg, scale: sc, orientation: .up))
-    v.isUserInteractionEnabled = false
-    v.bounds = CGRect(origin: .zero, size: size); v.center = l.center
-    return v
+    let k = barK, k2 = max(0, min(1, (k - 0.12) / 0.88))
+    fade(smallTitle).set(blur: 8 * (1 - ease(0.1, 0.8, k)), alpha: ease(0.02, 0.55, k), dy: 10 * (1 - easeOut(k)), trait: tr)
+    fade(smallSub).set(blur: 8 * (1 - ease(0.1, 0.8, k2)), alpha: ease(0.02, 0.55, k2), dy: 10 * (1 - easeOut(k2)), trait: tr)
+    fade(title).set(blur: 8 * ease(0, 0.6, k), alpha: 1 - ease(0.15, 0.7, k), dy: 0, trait: tr)
+    fade(sub).set(blur: 8 * ease(0, 0.6, k), alpha: 1 - ease(0.1, 0.6, k), dy: 0, trait: tr)
   }
-  private static let ci = CIContext()
-  private func blurFade(_ l: UILabel, in on: Bool, rise: CGFloat) {
-    l.layer.removeAllAnimations()
-    let g = blurCopy(l)
-    if let g = g { l.superview?.insertSubview(g, aboveSubview: l) }
-    let lift = CGAffineTransform(translationX: 0, y: rise)
-    if on { l.alpha = 0; l.transform = lift; g?.alpha = 0; g?.transform = lift } else { g?.alpha = 0 }
-    UIView.animateKeyframes(withDuration: 0.28, delay: 0, options: [.allowUserInteraction, .beginFromCurrentState]) {
-      if on {
-        UIView.addKeyframe(withRelativeStartTime: 0, relativeDuration: 0.4) { g?.alpha = 1 }
-        UIView.addKeyframe(withRelativeStartTime: 0, relativeDuration: 1) { l.transform = .identity; g?.transform = .identity }
-        UIView.addKeyframe(withRelativeStartTime: 0.3, relativeDuration: 0.7) { l.alpha = 1 }
-        UIView.addKeyframe(withRelativeStartTime: 0.45, relativeDuration: 0.55) { g?.alpha = 0 }
-      } else {
-        UIView.addKeyframe(withRelativeStartTime: 0, relativeDuration: 0.6) { l.alpha = 0 }
-        UIView.addKeyframe(withRelativeStartTime: 0, relativeDuration: 0.35) { g?.alpha = 0.9 }
-        UIView.addKeyframe(withRelativeStartTime: 0.35, relativeDuration: 0.65) { g?.alpha = 0 }
-      }
-    } completion: { _ in g?.removeFromSuperview() }
+  @objc private func barTick() {
+    let now = CACurrentMediaTime(), dt = CGFloat(min(now - barT, 1.0 / 30)); barT = now
+    let target: CGFloat = barIn ? 1 : 0, step = dt / barDur
+    barK = target > barK ? min(target, barK + step) : max(target, barK - step)
+    applyBar()
+    if barK == target { barLink?.invalidate(); barLink = nil }
   }
-  // the bar switching over (the frost, its line, the small title and date in; the big ones out) — or back
-  private func setBar(_ on: Bool) {
+  // the bar switching over (the frost and its line, the small title and date in; the big ones out) — or back
+  private func setBar(_ on: Bool, now: Bool = false) {
     barIn = on
     if #available(iOS 26.0, *) {
-      UIView.animate(withDuration: 0.28) { self.scroll.topEdgeEffect.isHidden = !on; self.topLine.alpha = on ? 1 : 0 }
+      UIView.animate(withDuration: now ? 0 : 0.15) { self.scroll.topEdgeEffect.isHidden = !on; self.topLine.alpha = on ? 1 : 0 }
     } else {
-      UIView.animate(withDuration: 0.28) { self.blur.alpha = on ? 1 : 0 }
+      UIView.animate(withDuration: now ? 0 : 0.15) { self.blur.alpha = on ? 1 : 0 }
     }
-    blurFade(smallTitle, in: on, rise: on ? 6 : 0); blurFade(smallSub, in: on, rise: on ? 6 : 0)
-    blurFade(title, in: !on, rise: 0); blurFade(sub, in: !on, rise: 0)
+    if now { barLink?.invalidate(); barLink = nil; barK = on ? 1 : 0; applyBar(); return }
+    if barLink == nil {
+      barT = CACurrentMediaTime()
+      let l = CADisplayLink(target: self, selector: #selector(barTick))
+      if #available(iOS 15.0, *) { l.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120) }
+      l.add(to: .main, forMode: .common); barLink = l
+    }
   }
   private func layoutHeader() {
     let W = bounds.width
@@ -356,7 +354,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if #available(iOS 26.0, *) {
       if let i = edgeHook as? UIScrollEdgeElementContainerInteraction { let want: UIScrollView = searching ? results : scroll; if i.scrollView !== want { i.scrollView = want } }
       let hide = !searching && !barIn
-      if scroll.topEdgeEffect.isHidden != hide { UIView.animate(withDuration: 0.28) { self.scroll.topEdgeEffect.isHidden = hide } }
+      if scroll.topEdgeEffect.isHidden != hide { UIView.animate(withDuration: 0.15) { self.scroll.topEdgeEffect.isHidden = hide } }
       topLine.frame = CGRect(x: 0, y: smallH - 0.5, width: W, height: 0.5)
       topLine.alpha = searching || !barIn ? 0 : 1
     } else {
@@ -381,8 +379,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let smallCY = top + 22
     let stw = W - 16 - R - BTN - 12 - BTN - 12
     place(smallTitle, CGRect(x: 16, y: top + 1, width: stw, height: 21)); place(smallSub, CGRect(x: 16, y: top + 25, width: stw, height: 15))
-    if searching { smallTitle.alpha = 0; smallSub.alpha = 0 }
-    else if smallTitle.layer.animationKeys() == nil { let k: CGFloat = barIn ? 1 : 0; smallTitle.alpha = k; smallSub.alpha = k; title.alpha = 1 - k; sub.alpha = 1 - k }
+    applyBar()
     // Search and your photo: with the title until they reach the bar, then they stay on it
     // (Search and your photo stay on the bar's row from the start — they don't move with the list — Haris, 2026-10-31)
     let cy = smallCY
@@ -693,7 +690,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   func selfPress() { if let c = firstCard { attach(c) } }
   func selfSwipeRight() { if let c = firstCard { setOpen(c, true, leading: true) } }
   func selfClose() { if let o = openCard { setOpen(o, false) } }
-  func selfScroll(_ y: CGFloat) { scroll.setContentOffset(CGPoint(x: 0, y: y - scroll.contentInset.top), animated: false); layoutHeader() }
+  func selfScroll(_ y: CGFloat) { scroll.setContentOffset(CGPoint(x: 0, y: y - scroll.contentInset.top), animated: false); layoutHeader(); setBar(barIn, now: true) }
   func selfFind(_ q: String) { openSearch(); field.text = q; typed() }
   func selfFindDone() { closeSearch() }
   func geo() -> [String: Any] {
@@ -1017,6 +1014,60 @@ final class HomeActions: UIView {
     if leading { var x: CGFloat = 16; for v in items { v.center = CGPoint(x: x + 26, y: bounds.height / 2); x += 52 + 12 } }
     else { var x = bounds.width - 16; for v in items.reversed() { v.center = CGPoint(x: x - 26, y: bounds.height / 2); x -= 52 + 12 } }
   }
+}
+
+// a label going or coming through a blur that builds up / clears frame by frame (Mail's bar titles): its copies at a few
+// blur strengths, the nearest two shown over each other; sharp (the label itself) when there's no blur
+final class HomeBlurFade {
+  static let radii: [CGFloat] = [0, 1.5, 3, 4.5, 6, 8]
+  static let ci = CIContext()
+  weak var label: UILabel?
+  private let a = UIImageView(), b = UIImageView()
+  private var imgs: [UIImage] = [], key = ""
+  private let pad: CGFloat = 22
+  init(_ l: UILabel) { label = l; [a, b].forEach { $0.isUserInteractionEnabled = false; $0.isHidden = true } }
+  private func ready(_ trait: UITraitCollection) -> Bool {
+    guard let l = label, let text = l.text, !text.isEmpty, let font = l.font, l.bounds.width > 0, l.bounds.height > 0 else { return false }
+    let colour = (l.textColor ?? .label).resolvedColor(with: trait)
+    let k = "\(text)|\(l.bounds.size)|\(colour)|\(font.pointSize)|\(font.fontName)"
+    if k == key { return !imgs.isEmpty }
+    key = k; imgs = []
+    let fmt = UIGraphicsImageRendererFormat.preferred(); let sc = fmt.scale, bs = l.bounds.size, p = pad
+    let size = CGSize(width: bs.width + p * 2, height: bs.height + p * 2)
+    // (as the label draws it: shrunk to fit if it does, middle of its height)
+    let fit = l.adjustsFontSizeToFitWidth ? min(1, max(l.minimumScaleFactor, bs.width / max(1, (text as NSString).size(withAttributes: [.font: font]).width))) : 1
+    let f2 = fit < 1 ? font.withSize(font.pointSize * fit) : font
+    let sharp = UIGraphicsImageRenderer(size: size, format: fmt).image { _ in
+      NSAttributedString(string: text, attributes: [.font: f2, .foregroundColor: colour])
+        .draw(with: CGRect(x: p, y: p + (bs.height - f2.lineHeight) / 2, width: bs.width, height: f2.lineHeight), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine], context: nil)
+    }
+    guard let src = CIImage(image: sharp) else { return false }
+    for r in HomeBlurFade.radii {
+      if r == 0 { imgs.append(sharp); continue }
+      guard let f = CIFilter(name: "CIGaussianBlur") else { imgs = []; return false }
+      f.setValue(src, forKey: kCIInputImageKey); f.setValue(r * sc, forKey: kCIInputRadiusKey)
+      guard let o = f.outputImage?.cropped(to: src.extent), let cg = Self.ci.createCGImage(o, from: src.extent) else { imgs = []; return false }
+      imgs.append(UIImage(cgImage: cg, scale: sc, orientation: .up))
+    }
+    return true
+  }
+  // blur (points; 0 = sharp), how see-through, how far below its place
+  func set(blur r: CGFloat, alpha: CGFloat, dy: CGFloat, trait: UITraitCollection) {
+    guard let l = label else { return }
+    let t = CGAffineTransform(translationX: 0, y: dy)
+    if l.transform != t { l.transform = t }
+    if alpha < 0.01 { l.alpha = 0; a.isHidden = true; b.isHidden = true; return }
+    if r < 0.2 || !ready(trait) { l.alpha = alpha; a.isHidden = true; b.isHidden = true; return }
+    if a.superview !== l.superview { l.superview?.insertSubview(a, aboveSubview: l); l.superview?.insertSubview(b, aboveSubview: a) }
+    let R = HomeBlurFade.radii
+    var i = 0; while i < R.count - 2 && r > R[i + 1] { i += 1 }
+    let f = min(1, max(0, (r - R[i]) / (R[i + 1] - R[i])))
+    l.alpha = 0
+    for v in [a, b] { v.bounds = CGRect(origin: .zero, size: imgs[0].size); v.center = l.center; v.transform = t; v.isHidden = false }
+    a.image = imgs[i]; b.image = imgs[i + 1]
+    a.alpha = alpha; b.alpha = alpha * f
+  }
+  func clear() { a.isHidden = true; b.isHidden = true; label?.transform = .identity }
 }
 
 // a Liquid Glass circle or capsule (iOS 26+: iPhone's own glass; before: a thin blur with a light edge)
