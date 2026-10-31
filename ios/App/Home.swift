@@ -38,7 +38,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private var findTimer: Timer?, keyboardH: CGFloat = 0
   private let scroll = UIScrollView()
   private let fab = UIButton(type: .system)
-  // at the end of the list, beside "+ New task": "YOUR OWN CREATIVE AGENCY" — it fades in (0.2 s — Haris) once
+  // at the end of the list, beside "+ New task": "NOT JUST ANY AGENCY" (Haris, 2026-10-31) — it fades in (0.2 s — Haris) once
   // the list has reached its end, and out again on scrolling back (Haris, 2026-10-31)
   private let motto = UILabel()
   private var mottoOn = false
@@ -298,7 +298,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // (in the room left of the +, its middle level with the +'s)
     if motto.superview == nil {
       // (Haris, 2026-10-31: in capitals, 9 pt medium, letter spacing 2.4, the frost bar date's grey)
-      motto.attributedText = NSAttributedString(string: "YOUR OWN CREATIVE AGENCY", attributes: [.font: UIFont.systemFont(ofSize: 9, weight: .medium), .kern: 2.4, .foregroundColor: UIColor.secondaryLabel])
+      motto.attributedText = NSAttributedString(string: "NOT JUST ANY AGENCY", attributes: [.font: UIFont.systemFont(ofSize: 9, weight: .medium), .kern: 2.4, .foregroundColor: UIColor.secondaryLabel])
       motto.textAlignment = .center
       motto.adjustsFontSizeToFitWidth = true; motto.minimumScaleFactor = 0.7
       motto.alpha = 0; motto.isUserInteractionEnabled = false
