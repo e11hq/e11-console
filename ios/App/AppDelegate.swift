@@ -208,6 +208,12 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     showSplash()
     loadHome()
   }
+  // the app's own light / dark (from the page; at launch the last one, or the startup screen's)
+  var appStyle: UIUserInterfaceStyle = LAST_LIGHT ? .light : .dark
+  override func viewWillAppear(_ animated: Bool) {
+    super.viewWillAppear(animated)
+    view.window?.overrideUserInterfaceStyle = appStyle
+  }
   /* ---------- the startup screen (22+): the app's own, over everything until the page says it's done ---------- */
   var splash: SplashView?
   var splashHeard = false
@@ -215,6 +221,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let m = SplashView.memo()
     if (m["native"] as? Bool) == false { return }   // (the website switched it off: the page's own startup screen)
     let s = SplashView(memo: m)
+    appStyle = s.light ? .light : .dark
     s.frame = view.bounds; s.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     s.onSkip = { [weak self] in self?.pageJS("window.__e11SplashSkip && window.__e11SplashSkip()") }
     s.onRetry = { [weak self] in self?.pageJS("window.__e11SplashRetry && window.__e11SplashRetry()") }
@@ -1224,6 +1231,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       // the tab bar follows the app's own light / dark (not only the phone's): every icon, the open page's too, white
       // in dark and black in light — Haris 2026-10-30 (only the tab bar: the page itself keeps following the phone)
       let style: UIUserInterfaceStyle = (a["mode"] as? String) == "light" ? .light : .dark
+      // (everything the app draws itself follows the app's own light / dark, never the phone's — Haris, 2026-10-31:
+      //  set on the whole window, so every native screen, sheet, alert, picker and keyboard takes it, now and later)
+      appStyle = style; view.window?.overrideUserInterfaceStyle = style
       cbarIfMade?.setLook(light: style == .light)
       if tabBar.overrideUserInterfaceStyle != style || tabBar.tintColor != (style == .dark ? UIColor.white : UIColor.black) {
         tabBar.overrideUserInterfaceStyle = style
