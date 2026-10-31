@@ -248,6 +248,8 @@ var E11Rules = (() => {
         // (swiped right: Done — ready means the page's own tick would complete it now, else `why` — and Due, for those
         //  who may change dates)
         due: t.due || '', canDone: !t.parentId && !amReadOnly(t), doneReady: !!t.done || canFinish(t), why: t.done ? '' : finishBlocked(t),
+        // (held by the CD's review: the app shows a faded orange CD · Review instead of Done)
+        cdHold: !t.done && !canComplete(t) && (reviewPending(t) || !cdOK(t)),
         canDue: can('editDates', t) && !amReadOnly(t), canDelete: can('deleteTask', t) && !amReadOnly(t),
       };
     }

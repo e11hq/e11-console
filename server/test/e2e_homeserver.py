@@ -72,9 +72,9 @@ async def main():
                 if got:
                     for g in got['groups']:
                         for c in g['cards']:
-                            c.pop('why', None); c.pop('canDelete', None); c.pop('canDue', None); c.pop('doneReady', None)
+                            c.pop('why', None); c.pop('canDelete', None); c.pop('canDue', None); c.pop('doneReady', None); c.pop('cdHold', None)
                 for g in old['groups']:
-                    for c in g['cards']: c.pop('canDue', None); c.pop('doneReady', None)
+                    for c in g['cards']: c.pop('canDue', None); c.pop('doneReady', None); c.pop('cdHold', None)
                 same = json.dumps(got, sort_keys=True) == json.dumps(old, sort_keys=True)
                 if not same and got:
                     for k in old:

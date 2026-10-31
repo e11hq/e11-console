@@ -578,7 +578,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let a: HomeActions
     if leading {
       let d = card.info
-      a = HomeActions(done: (d["done"] as? Bool) == true, showDone: (d["canDone"] as? Bool) == true, due: d["due"] as? String, showDue: (d["canDue"] as? Bool) == true)
+      a = HomeActions(done: (d["done"] as? Bool) == true, showDone: (d["canDone"] as? Bool) == true, due: d["due"] as? String, showDue: (d["canDue"] as? Bool) == true, cdHold: (d["cdHold"] as? Bool) == true)
     } else { a = HomeActions(delete: canDelete, light: L.light) }
     let w = 20 + CGFloat(a.count) * 64
     a.frame = CGRect(x: leading ? card.center.x - card.bounds.width / 2 : card.center.x + card.bounds.width / 2 - w, y: card.center.y - card.bounds.height / 2, width: w, height: card.bounds.height)
@@ -983,7 +983,7 @@ final class HomeActions: UIView {
   private var items: [UIView] = []
   private(set) var doneBtn: UIButton?
   var progress: CGFloat = 0 { didSet { items.forEach { $0.alpha = progress; $0.transform = CGAffineTransform(scaleX: 0.6 + 0.4 * progress, y: 0.6 + 0.4 * progress) } } }
-  static let grey = SplashView.hex(0x8a8d96), green = SplashView.hex(0x30d158), purple = SplashView.hex(0x7a6ff0)
+  static let grey = SplashView.hex(0x8a8d96), green = SplashView.hex(0x30d158), purple = SplashView.hex(0x7a6ff0), orange = SplashView.hex(0xff9f0a)
   private func item(_ name: String, _ col: UIColor, sym: String? = nil, inner: UIView? = nil, _ act: @escaping () -> Void) -> (UIView, UIButton) {
     let v = UIView()
     let b = UIButton(type: .custom)
@@ -1010,10 +1010,17 @@ final class HomeActions: UIView {
   }
   // swiped right (leading), as Mail's Unread · Remind Me: Done (grey, green once done) · Due (the day big, the month under
   // it; SET with a calendar when there's none) — Haris, 2026-10-31
-  init(done: Bool, showDone: Bool, due: String?, showDue: Bool) {
+  init(done: Bool, showDone: Bool, due: String?, showDue: Bool, cdHold: Bool = false) {
     leading = true
     super.init(frame: .zero)
-    if showDone {
+    if showDone && cdHold {
+      // held by the CD's review: a faded orange "CD" · Review — a tap says why (Haris, 2026-10-31)
+      let cd = UILabel(); cd.text = "CD"; cd.font = .systemFont(ofSize: 16, weight: .bold); cd.textColor = .white; cd.textAlignment = .center
+      let (v, b) = item("Review", HomeActions.orange, inner: cd, { [weak self] in self?.onDone?() })
+      b.alpha = 0.42
+      (v.subviews.compactMap { $0 as? UILabel }.first)?.textColor = .tertiaryLabel
+      items.append(v)
+    } else if showDone {
       let (v, b) = item("Done", done ? HomeActions.green : HomeActions.grey, sym: "checkmark", { [weak self] in self?.onDone?() })
       doneBtn = b; items.append(v)
     }
