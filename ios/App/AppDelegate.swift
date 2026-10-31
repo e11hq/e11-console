@@ -295,7 +295,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if want {
       if cwebTask != cbarTask {
         cwebTask = cbarTask; cwebReadyToShow = false
-        w.evaluateJavaScript("window.__e11ShowComments && window.__e11ShowComments(\(jsString(cbarTask ?? "")))", completionHandler: nil)
+        w.evaluateJavaScript("window.__e11ShowComments && window.__e11ShowComments(\(jsonString([cbarTask ?? ""]).dropFirst().dropLast()))", completionHandler: nil)
       }
       let top = cbarFeed?.minY ?? 172
       let f = CGRect(x: 0, y: top, width: view.bounds.width, height: view.bounds.height - top)
