@@ -295,11 +295,11 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // "+ New task": 44 tall like Mail's buttons, 16 from the right, 14 above the tab bar
     let fw = ceil(fab.sizeThatFits(CGSize(width: 300, height: BTN)).width)
     fab.frame = CGRect(x: W - R - fw, y: (tabTop ?? H - 100) - 14 - BTN, width: fw, height: BTN)
-    // (in the room left of the +, its middle level with the +'s)
+    // (from the page's left edge, its middle level with the +'s)
     if motto.superview == nil {
       // (Haris, 2026-10-31: in capitals, 9 pt medium, letter spacing 2.4, the frost bar date's grey)
       motto.attributedText = NSAttributedString(string: "NOT JUST ANY AGENCY", attributes: [.font: UIFont.systemFont(ofSize: 9, weight: .medium), .kern: 2.4, .foregroundColor: UIColor.secondaryLabel])
-      motto.textAlignment = .center
+      motto.textAlignment = .left   // (left, on the page's own edge — as the cards and the tab bar: Haris, 2026-11-01)
       motto.adjustsFontSizeToFitWidth = true; motto.minimumScaleFactor = 0.7
       motto.alpha = 0; motto.isUserInteractionEnabled = false
       insertSubview(motto, belowSubview: fab)
