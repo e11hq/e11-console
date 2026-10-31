@@ -2159,8 +2159,9 @@ const NativeComment = (() => {
       files: (ui.commentFiles[key] || []).map(fileOf),
       uploading: up ? { n: up.total || 1, frac: up.frac || 0 } : null,
       accent: NativeSheet.colorRGB(getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#5b4bf0'),
-      // (20+: which task — the comments screen shows its comments; "task~comment~n": a comment opened from the Inbox, to flash)
-      task: (() => { if (ui.cmFocus && ui.cmFocus.task !== ui.taskId) ui.cmFocus = null; const f = ui.cmFocus; return ui.taskId ? (f ? `${ui.taskId}~${f.id}~${f.n}` : ui.taskId) : null; })(),
+      // (20+: which task — the comments screen shows its comments; "task~comment~n~person": a comment opened from the
+      // Inbox, to flash, or a person to @mention in the box — each once per n)
+      task: (() => { if (ui.cmFocus && ui.cmFocus.task !== ui.taskId) ui.cmFocus = null; const f = ui.cmFocus; return ui.taskId ? (f ? `${ui.taskId}~${f.id || ''}~${f.n}~${f.mention || ''}` : ui.taskId) : null; })(),
       // (19+: where the comments list is, so iOS can find its scroll view and move it with the keyboard)
       feed: (() => { const f = !window.__e11CommentsOnly && nf && root.classList.contains('ph-cb-on') ? feed() : null; if (!f) return null; const r = f.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top), Math.round(f.clientWidth), Math.round(f.clientHeight)]; })(),
       // (19+: the "jump to the latest" button, tapped through iOS so the keyboard stays)
@@ -2293,8 +2294,32 @@ const NativeComment = (() => {
   if (typeof refreshComposerFiles === 'function') { const rf = refreshComposerFiles; refreshComposerFiles = function (...a) { const r = rf.apply(this, a); if (on) setTimeout(() => sync(), 0); return r; }; }
   if (typeof closeDetail === 'function') { const cd = closeDetail; closeDetail = function (...a) { if (on) { call({ show: false, blur: true }); last = JSON.stringify({ show: false }); lastKey = null; lastP = -1; nmove = false; root.classList.remove('ph-cb-on'); kbPad = 0; root.style.setProperty('--ph-kbpad', '0px'); } return cd.apply(this, a); }; }
   if (typeof Unsent !== 'undefined' && Unsent.progress) { const pg = Unsent.progress; Unsent.progress = function (...a) { const r = pg.apply(this, a); if (on) sync(); return r; }; }
-  window.NativeComment = { get on() { return on; }, sync };
-  return { get on() { return on; }, sync, slide, htmlToRuns, runsToHtml };
+  // an @mention added to the end of what's in the box (the creator's name on Details), then the keyboard
+  // (keep: false — the main page while the app's comments screen may take the box over: the name goes into the box but
+  // not into this page's saved draft, which would otherwise be left behind once the comments screen has sent it)
+  function mention(uid, keep = true) {
+    const t = openTaskNow(), u = userById(uid);
+    if (!on || !t || !u) return false;
+    const thread = ui.thread ? t.comments.find((c) => c.id === ui.thread) : null;
+    const cid = thread ? thread.id : (ui.replyTo && t.comments.some((c) => c.id === ui.replyTo) ? ui.replyTo : null);
+    const key = draftKey(t, cid);
+    const cur = ui.commentDraft[key] || '';
+    const d = document.createElement('div'); d.innerHTML = cur;
+    const txt = d.textContent || '';
+    const html = `${cur}${txt && !/\s$/.test(txt) ? '&nbsp;' : ''}<span class="mention" data-user="${esc(u.id)}" contenteditable="false">@${esc(fullName(u))}</span>&nbsp;`;
+    ui.commentDraft[key] = html;
+    lastKey = null; sync(true);
+    if (keep) {
+      const box = document.querySelector(`#detail [data-draft-key="${CSS.escape(key)}"]`);
+      if (box) box.innerHTML = html;
+      Unsent.save();
+    } else if (cur) ui.commentDraft[key] = cur; else delete ui.commentDraft[key];
+    // (once the box is up on Comments)
+    [350, 700].forEach((ms) => setTimeout(() => call({ focus: true }), ms));
+    return true;
+  }
+  window.NativeComment = { get on() { return on; }, sync, mention };
+  return { get on() { return on; }, sync, slide, htmlToRuns, runsToHtml, mention };
 })();
 
 /* ================= iPhone app 20+: a task's Comments on a screen of their own (Haris, 2026-10-31) =================
@@ -2322,11 +2347,13 @@ const CommentsOnly = (() => {
   window.__e11CmPlace = place;
   let lastFocus = '';
   window.__e11ShowComments = (arg) => {
-    const [id, fid, fn] = String(arg || '').split('~');
+    const [id, fid, fn, mu] = String(arg || '').split('~');
     if (!on || typeof task !== 'function' || !task(id)) return 'no';
-    // opened from the Inbox: that comment (in its thread, for a reply), once per tap in the Inbox
-    const fkey = fid ? `${fid}~${fn}` : '';
-    const fc = fkey && fkey !== lastFocus ? (task(id).comments || []).find((c) => c.id === fid) : null;
+    // opened from the Inbox: that comment (in its thread, for a reply), once per tap in the Inbox; or a person to @mention
+    const fkey = fid || mu ? `${fid}~${fn}~${mu}` : '';
+    const fresh = !!fkey && fkey !== lastFocus;
+    const fc = fresh && fid ? (task(id).comments || []).find((c) => c.id === fid) : null;
+    const mention = fresh && mu ? mu : null;
     if (fkey) lastFocus = fkey;
     const same = ui.taskId === id && !!document.querySelector('#detail.open .tm-feed') && !fc;
     if (!same) { ui.thread = fc ? fc.parentId || null : null; ui.replyTo = null; }
@@ -2336,6 +2363,7 @@ const CommentsOnly = (() => {
       NativeMac.call('cmReady', { id }).catch(() => {});
       // (after the app has shown the screen at the latest comment)
       if (fc) setTimeout(() => { const el = document.querySelector(`#detail .cm[data-comment="${fc.id}"]`); if (el) { place(el); flash(el); } }, 220);
+      if (mention) setTimeout(() => { if (window.NativeComment) NativeComment.mention(mention); }, 220);
     }));
     return 'ok';
   };

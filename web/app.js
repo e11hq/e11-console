@@ -4011,6 +4011,13 @@ function mentionInComposer(uidToTag) {
   const u = userById(uidToTag);
   if (!u) return;
   if ((ui.detailMode === 'side' || (typeof Phone !== 'undefined' && Phone.on)) && ui.sideTab !== 'comments') { ui.sideTab = 'comments'; renderDetail(); }
+  // iPhone app: the comment box is iPhone's own — the name goes in there, with the keyboard up (and on the comments
+  // screen of app 20+, which keeps its own copy of the box: it's told through the task it shows)
+  if (window.NativeComment && NativeComment.on && ui.taskId) {
+    ui.cmFocus = { task: ui.taskId, id: '', n: Date.now() % 1e6, mention: u.id };
+    NativeComment.mention(u.id, false);
+    return;
+  }
   const ed = $('#d-comment');
   if (!ed) return;
   ed.focus();
