@@ -245,8 +245,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private var scrolled: CGFloat { scroll.contentOffset.y + scroll.contentInset.top }
   // (0 big … 1 small: once the big title has gone under the bar)
   private var shrink: CGFloat {
-    let subH = ceil(sub.font.lineHeight), by = bigHead - 12 - (subH + 2 + 37)
-    return ease(by + subH - smallHead + 4, by + subH + 30 - smallHead, scrolled)
+    // (the big title starts in the bar's own row: the small one comes as the big one rises out of it)
+    return ease(18, 46, scrolled)
   }
   private func layoutHeader() {
     let W = bounds.width
@@ -258,7 +258,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // the bar: frosted, with its soft line, there once the list reaches it
     blur.frame = CGRect(x: 0, y: 0, width: W, height: smallH)
     hairline.frame = CGRect(x: 0, y: smallH - 0.5, width: W, height: 0.5)
-    blur.alpha = searching ? 1 : ease(by - smallH - 6, by - smallH + 10, s)
+    blur.alpha = searching ? 1 : ease(2, 18, s)
     scroll.verticalScrollIndicatorInsets = UIEdgeInsets(top: smallH - bigH, left: 0, bottom: bottomRoom - 20, right: 0)
     // the big date and title: moving with the list (finger for finger), going under the bar
     let tw = W - 20 - 40 - 10 - 46 - 10 - 20
