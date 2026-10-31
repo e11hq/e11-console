@@ -14,7 +14,7 @@ import UniformTypeIdentifiers
 import AudioToolbox
 
 // Version of this iPhone app's native part (raise it with changes the web app needs to know about)
-let SHELL_VERSION = 22   // 22: the startup screen is the app's own, there the moment it opens (Splash.swift; the page drives it: splash hello / memo / greet / tick / status / out; window.__e11SplashSkip / __e11SplashRetry) · 21: the comments screen tells its page how far it's slid up for the keyboard (--cm-top: a thread's bar stays in sight); its swipe right also takes iPhone's slow back drag from the edge; it starts at the latest comment only when the task opens and when the keyboard comes up, and keeps its place across Details / Comments · 20: a task's Comments on a screen of their own (a second web view showing only the comments, scrolled by iOS itself; window.__e11ShowComments, cmReady / cmEnd) · 19: on a task's Comments, iOS itself moves the comments list with the keyboard (its own scroll view, in the keyboard's own animation; window.__e11FeedKb) · 18: the file preview is iOS's own (preview / previewSet / window.__e11Preview; Preview.swift) · 17: the comment box on a task's Comments is iPhone's own, on the keyboard (commentBar / window.__e11CBar; CommentBar.swift) · 16: iPhone's own banners also while the app is open (the page draws no cards), each notification confirmed by the Notification Service Extension so the server sends again the ones an offline phone missed (register ack) · 15: New task / Request amendments as native sheets with iPhone's own fields that tuck into a bar like a Mail draft (formSheet / formSet / formClose; the page: window.__e11Form), a Trash task as a native sheet (trashSheet); native sheets and dates also open on top of those · 14: native sheets with people (round photos / initials) and a search box (+ a typed entry, "Use …") · 13: also dates picked in a native sheet (pickDate: closing it never sets a date) · a native sheet can stay open for ticking several (multi; each tick: window.__e11SheetPick) · 12: native sheets also with colour dots, a row of colours / emoji / numbers (chips), tinted icons, locked rows · 11: plain menus as iOS's own sheets (nativeSheet; the page: NativeSheet in app.js, showMenu(…, { native: true })) · 10: My Tasks, Inbox and Team lists swiped by iOS itself (Pager.syncLists in phone.js) · 9: a task’s Details / Comments swiped by iOS itself (the page: Pager in phone.js) · 8: iOS haptics for the page (haptic kind: light / medium / selection / success / warning / error) · 7: the comment box rides down / up with the keyboard frame by frame (__e11KbStep) · 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
+let SHELL_VERSION = 23   // 23: Home (E11 Day / My Day) is the app's own (Home.swift; the page sends it: home show / people; taps back: window.__e11Home) · 22: the startup screen is the app's own, there the moment it opens (Splash.swift; the page drives it: splash hello / memo / greet / tick / status / out; window.__e11SplashSkip / __e11SplashRetry) · 21: the comments screen tells its page how far it's slid up for the keyboard (--cm-top: a thread's bar stays in sight); its swipe right also takes iPhone's slow back drag from the edge; it starts at the latest comment only when the task opens and when the keyboard comes up, and keeps its place across Details / Comments · 20: a task's Comments on a screen of their own (a second web view showing only the comments, scrolled by iOS itself; window.__e11ShowComments, cmReady / cmEnd) · 19: on a task's Comments, iOS itself moves the comments list with the keyboard (its own scroll view, in the keyboard's own animation; window.__e11FeedKb) · 18: the file preview is iOS's own (preview / previewSet / window.__e11Preview; Preview.swift) · 17: the comment box on a task's Comments is iPhone's own, on the keyboard (commentBar / window.__e11CBar; CommentBar.swift) · 16: iPhone's own banners also while the app is open (the page draws no cards), each notification confirmed by the Notification Service Extension so the server sends again the ones an offline phone missed (register ack) · 15: New task / Request amendments as native sheets with iPhone's own fields that tuck into a bar like a Mail draft (formSheet / formSet / formClose; the page: window.__e11Form), a Trash task as a native sheet (trashSheet); native sheets and dates also open on top of those · 14: native sheets with people (round photos / initials) and a search box (+ a typed entry, "Use …") · 13: also dates picked in a native sheet (pickDate: closing it never sets a date) · a native sheet can stay open for ticking several (multi; each tick: window.__e11SheetPick) · 12: native sheets also with colour dots, a row of colours / emoji / numbers (chips), tinted icons, locked rows · 11: plain menus as iOS's own sheets (nativeSheet; the page: NativeSheet in app.js, showMenu(…, { native: true })) · 10: My Tasks, Inbox and Team lists swiped by iOS itself (Pager.syncLists in phone.js) · 9: a task’s Details / Comments swiped by iOS itself (the page: Pager in phone.js) · 8: iOS haptics for the page (haptic kind: light / medium / selection / success / warning / error) · 7: the comment box rides down / up with the keyboard frame by frame (__e11KbStep) · 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
 let procEnv = ProcessInfo.processInfo.environment
 let SELFTEST = procEnv["E11_SELFTEST"] ?? ""           // the build machine's self-test in the simulator
 let info = Bundle.main.infoDictionary ?? [:]
@@ -1005,7 +1005,39 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
     guard item.tag < tabKeys.count else { return }
     UISelectionFeedbackGenerator().selectionChanged()
+    // (23+: Home is the app's own — another tab: it goes at once; Home again while on it: back to the top)
+    if let h = homeIfMade, !h.isHidden { if tabKeys[item.tag] == "today" { h.scrollToTop() } else { h.isHidden = true } }
     pageJS("window.__e11Tab && window.__e11Tab(\(jsonString([tabKeys[item.tag]]).dropFirst().dropLast()))")
+  }
+  /* ---------- Home (23+): the app's own, under the tab bar; the page says what's on it (NativeHome in phone.js) ---------- */
+  var homeIfMade: HomeView?
+  lazy var homeView: HomeView = {
+    let h = HomeView(frame: view.bounds)
+    h.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    h.isHidden = true
+    h.onEvent = { [weak self] ev in
+      // (a task opening: Home goes at once, so the task slides in over the page's own Home, scrolled the same)
+      if (ev["ev"] as? String) == "open" { self?.homeIfMade?.isHidden = true }
+      self?.pageJS("window.__e11Home && window.__e11Home(\(jsonString(ev)))")
+    }
+    view.insertSubview(h, belowSubview: tabBar)
+    homeIfMade = h
+    return h
+  }()
+  func homeGeo() -> [String: Any] {
+    guard let h = homeIfMade else { return ["shown": false, "made": false] }
+    if h.isHidden { return ["shown": false, "made": true] }
+    var g = h.geo(); g["shown"] = true
+    return g
+  }
+  func homeCommand(_ a: [String: Any]) {
+    if let p = a["people"] as? [String: [String: Any]] { homeView.people = p; return }
+    guard let show = a["show"] as? Bool else { return }
+    if !show { homeIfMade?.isHidden = true; return }
+    let h = homeView
+    h.bottomRoom = (tabBar.isHidden ? 40 : view.bounds.height - tabBar.frame.minY) + 96
+    h.update(a)
+    h.isHidden = false
   }
 
   /* ---------- notifications ---------- */
@@ -1137,7 +1169,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let cmd = msg["cmd"] as? String ?? ""
     // (the comments screen's page: only what comments need — the app's tabs, look, badge and notifications stay the
     //  main page's)
-    if from != nil, from === cweb, ["setTabs", "badge", "setAppearance", "pushRegister", "pushEnable", "pushDisable", "notify", "setLock", "pickDate", "formSheet", "formSet", "formClose", "trashSheet", "splash"].contains(cmd) { return reply(["ok": true, "ignored": true]) }
+    if from != nil, from === cweb, ["setTabs", "badge", "setAppearance", "pushRegister", "pushEnable", "pushDisable", "notify", "setLock", "pickDate", "formSheet", "formSet", "formClose", "trashSheet", "splash", "home"].contains(cmd) { return reply(["ok": true, "ignored": true]) }
     cmdSource = from
     run(cmd, msg["args"] as? [String: Any] ?? [:], reply)
     cmdSource = nil
@@ -1307,6 +1339,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       }
     case "cmReady": cwebReadyToShow = true; cwebUpdate(); done(["ok": true])
     case "splash": done(splashCommand(a))
+    case "home": homeCommand(a); done(["ok": true])
     case "cmEnd": cwebToEnd(animated: (a["animated"] as? Bool) == true); done(["ok": true])
     case "pickFiles": Picker.shared.pick(from: topMost(), single: (a["single"] as? Bool) == true, source: a["source"] as? String) { [weak self] r in done(r); self?.cbarAfterPicker(0) }
     case "readLocalChunk": done(Picker.shared.read(a))
@@ -1430,6 +1463,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
           }
           if name.hasPrefix("form") { self.selfResult[name + "Geo"] = FormSheetVC.current?.geo() ?? ["error": "no form"] }
           if name.hasPrefix("nsheet") { self.selfResult[name + "Geo"] = (self.presentedViewController as? NativeSheetVC)?.geo() ?? ["error": "no native sheet"] }
+          if name == "home" || name == "inbox" { self.selfResult[name + "Native"] = self.homeGeo() }
           if name == "home" || name == "inbox" { self.selfResult[name + "Frame"] = ["web": self.web.frame.height, "screen": self.view.bounds.height, "tabBar": !self.tabBar.isHidden] as [String: Any] }
           DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.writeSelf(name); DispatchQueue.main.asyncAfter(deadline: .now() + 4) { run(i + 1) } }
         }

@@ -59,6 +59,9 @@ try:
     sg = res.get('splashGeo') or {}; stg = res.get('splashTickedGeo') or {}
     check('splash' in seen and sg.get('greet') and len(sg.get('rows') or []) == 4 and sg.get('iconLayers') == 14, f'the startup screen shows at once: icon, greeting, four rows {sg}')
     check(stg.get('ticked') == 4 and stg.get('n') == '4/4' and all(v not in ('', '…') for v in (stg.get('values') or [''])), f'the page ticked all four rows with real numbers {stg}')
+    hn = res.get('homeNative') or {}
+    check(hn.get('shown') is True and (hn.get('cards') or 0) > 0 and len(hn.get('stats') or []) == 3 and hn.get('title') in ('E11 Day', 'My Day'), f'Home is the app\'s own, with its boxes and task cards {hn}')
+    check((res.get('inboxNative') or {}).get('shown') is False, f"the app's Home goes on another tab {res.get('inboxNative')}")
     check(res.get('splashGone') is True, f"the startup screen went before Home {res.get('splashGone')}")
     check(set(seen) >= {'home', 'inbox', 'me', 'client', 'task', 'sheet', 'back', 'nsheet', 'nsheetEnd', 'nsheetChannel', 'nsheetTitled'}, f'all stages ran {sorted(seen)}')
     hf = res.get('homeFrame') or {}

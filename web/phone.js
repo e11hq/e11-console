@@ -208,7 +208,8 @@ const Phone = (() => {
   const backHead = (title, back, right = '') => `<header class="ph-bar"><button class="ph-back" ${back} aria-label="Back">${icon('chev-left')}</button><b>${title}</b>${right || '<span class="ph-bar-sp"></span>'}</header>`;
 
   /* ---------- Screens ---------- */
-  function myDay() {
+  // what Home shows (also the iPhone app's own Home, 23+: NativeHome)
+  function myDayData() {
     const today = todayStr();
     const D = Work.day();
     const open = D.tasks.filter(D.open);
@@ -218,6 +219,10 @@ const Phone = (() => {
     const going = open.filter((t) => t.start && t.start <= today && t.due && t.due > today).sort(sortP);
     const done = D.doneTasks.filter((t) => D.doneAt(t) && ymd(new Date(D.doneAt(t))) === today);
     const review = open.filter((t) => t.cdStatus === 'review').length;
+    return { overdue, due, going, done, review };
+  }
+  function myDay() {
+    const { overdue, due, going, done, review } = myDayData();
     const d = new Date();
     return `<div class="ph-page">
       ${head(Work.dayTitle(), esc(d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })),
@@ -807,7 +812,7 @@ const Phone = (() => {
   });
 
   check();
-  return { get on() { return st.on; }, isOn, renderContent, decorate, chrome, taskHead, quickAdd, check, sheet, resetInbox: () => { st.ibf = 'unread'; }, setIbf: (k) => { st.ibf = k; } };
+  return { get on() { return st.on; }, isOn, myDayData, renderContent, decorate, chrome, taskHead, quickAdd, check, sheet, resetInbox: () => { st.ibf = 'unread'; }, setIbf: (k) => { st.ibf = k; } };
 })();
 
 /* Phone notifications (Web Push): the switch on the Me page, and opening a task from a notification */
@@ -2370,4 +2375,128 @@ const CommentsOnly = (() => {
   // a swipe right on the comments screen: out of a thread first ('thread'); otherwise the app goes back to Details
   window.__e11CmBack = () => { if (!on || !ui.thread) return ''; const b = document.querySelector('#detail .th-back'); if (b) b.click(); return 'thread'; };
   return { on };
+})();
+
+/* ================= iPhone app 23+: Home (E11 Day / My Day) drawn by the app itself (Haris, 2026-10-31) =================
+   Same design and the same lists as the page's Home (Phone.myDayData); the page stays the engine: it sends what to show
+   (the "home" command) whenever it changes, and the app's taps come back here (window.__e11Home). The colours are read
+   from the page's own Home, drawn under it, so the two always match (light / dark). Not here: the Office Admin's Home.
+   NATIVE_HOME = false: the page's own Home again (no app build needed). */
+const NATIVE_HOME = true;
+const NativeHome = (() => {
+  let on = false, last = '', shown = false;
+  const people = new Map(), asked = new Set();
+  let peopleSent = '';
+  if (NATIVE_HOME && window.__e11CommentsOnly !== true && typeof Host !== 'undefined' && Host.isIOSApp) {
+    NativeMac.call('appInfo').then((r) => { on = Number(r && r.shell) >= 23; if (on) { setInterval(sync, 350); sync(); } }).catch(() => {});
+  }
+  const call = (a) => NativeMac.call('home', a).catch(() => {});
+  const rgba = (c) => { const m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?/.exec(c || ''); return m ? [+m[1], +m[2], +m[3], m[4] == null ? 1 : +m[4]] : null; };
+  const rgbOfCss = (css) => { try { return NativeSheet.colorRGB(css); } catch (e) { return null; } };
+  // a person's round picture for the app (photo or initials), fetched once
+  function person(uid) {
+    if (!uid) return;
+    if (!people.has(uid) && !asked.has(uid)) {
+      asked.add(uid);
+      NativeSheet.personFor(uid).then((v) => { people.set(uid, v); }).catch(() => { asked.delete(uid); });
+    }
+  }
+  const visible = () => {
+    if (!Phone.on || !(ui.view === 'home' || ui.view === 'today') || ui.search || (typeof isOffice === 'function' && isOffice())) return false;
+    if (ui.taskId || document.querySelector('#detail.open')) return false;
+    if (document.querySelector('#ph-sheet-root .ph-scrim:not(.docked), #overlay-root .scrim, #tv-root .scrim, .menu, .lightbox, .fv')) return false;
+    return !!document.querySelector('#content .ph-page .ph-stats');
+  };
+  // the page's own Home's colours (drawn under the app's), so the app's match them exactly
+  function look() {
+    const pg = document.querySelector('#content .ph-page');
+    // (the header is pinned outside the page itself: looked for anywhere on the page)
+    const g = (sel, prop) => { const el = (pg && pg.querySelector(sel)) || document.querySelector('#content ' + sel) || document.querySelector(sel); return el ? rgba(getComputedStyle(el)[prop]) : null; };
+    const anyBg = (el) => { while (el) { const c = rgba(getComputedStyle(el).backgroundColor); if (c && c[3] > 0) return c; el = el.parentElement; } return null; };
+    const fab = document.querySelector('.ph-fab');
+    const fr = fab && fab.getBoundingClientRect();
+    const top = document.getElementById('ph-top'), tr = top && !top.hidden ? top.getBoundingClientRect() : null;
+    return {
+      headH: tr ? Math.round(tr.bottom) : null, headBg: top ? anyBg(top) : null,
+      light: document.documentElement.dataset.theme === 'light',
+      bg: anyBg(pg), sub: g('.ph-sub', 'color'), h1: g('.ph-head h1', 'color'),
+      round: g('.ph-round', 'backgroundColor'), roundIc: g('.ph-round', 'color'), roundLine: g('.ph-round', 'borderTopColor'),
+      statBg: g('.ph-stats > div', 'backgroundColor'), statLine: g('.ph-stats > div', 'borderTopColor'), statLabel: g('.ph-stats span', 'color'),
+      statG: g('.ph-stats b.g', 'color'), statR: g('.ph-stats b.r', 'color'), statA: g('.ph-stats b.a', 'color'),
+      gh: g('.ph-gh', 'color'), empty: g('.ph-empty', 'color'),
+      card: g('.pc', 'backgroundColor'), cardLine: g('.pc:not(.late)', 'borderTopColor'), lateLine: g('.pc.late', 'borderTopColor'),
+      title: g('.pc-title', 'color'), meta: g('.pc-meta', 'color'), sep: g('.pc-meta em', 'color'),
+      late: g('.pc-meta b.late', 'color'), today: g('.pc-meta b.today', 'color'), doneTitle: g('.pc.done .pc-title', 'color'),
+      tag: g('.ph-tag:not(.urgent)', 'color'), tagBg: g('.ph-tag:not(.urgent)', 'backgroundColor'),
+      urgent: g('.ph-tag.urgent', 'color'), urgentBg: g('.ph-tag.urgent', 'backgroundColor'),
+      more: g('.av.more', 'color'), moreBg: g('.av.more', 'backgroundColor'),
+      fab: fab ? { bg: rgba(getComputedStyle(fab).backgroundColor), line: rgba(getComputedStyle(fab).borderTopColor), rect: [fr.left, fr.top, fr.width, fr.height] } : null,
+    };
+  }
+  // one task card, as Phone's card() draws it
+  function cardOf(t, o = {}) {
+    const p = proj(t.projectId), s = statusInfo(t);
+    const open = !t.done && !partDone(t);
+    const late = open && t.due && dayDiff(t.due) < 0;
+    const meta = [p ? { t: p.name, dot: rgbOfCss(p.color) } : { t: 'My Tasks' }];
+    if (o.status !== false) meta.push({ t: s.name });
+    if (t.due) meta.push({ t: mwDue(t), b: late ? 'late' : dayDiff(t.due) === 0 && open ? 'today' : 'plain' });
+    if (t.comments.length) meta.push({ t: `${t.comments.length} comment${t.comments.length === 1 ? '' : 's'}` });
+    const pr = prioOf(t);
+    const badge = isUrgent(t) && !t.done ? { t: 'Urgent', urgent: true } : typeof normPrio(pr) === 'number' ? { t: String(normPrio(pr)) } : null;
+    const c = t.cdStatus && !t.done ? CD[t.cdStatus] : null;
+    // the status icon: done (filled, ticked), to do (dashed ring), or how far along (a ring with a slice)
+    const st = sectionOf(t);
+    let kind = 'mid', frac = 0.5;
+    if (t.done || (st && isDoneName(st.name))) kind = 'done';
+    else if (!st || isToDoName(st.name)) kind = 'todo';
+    else { const list = statusList(t); const i = list.indexOf(st); frac = list.length > 1 ? i / (list.length - 1) : 0.5; }
+    const ids = t.assignees || [];
+    ids.slice(0, 2).forEach(person);
+    return {
+      id: t.id, title: t.title || '', late: !!late, done: !!t.done, meta,
+      icon: { kind, frac, rgb: rgbOfCss(t.done ? '#3ddc97' : s.color) },
+      badge, cd: c ? { t: t.cdStatus === 'approved' ? 'CD Approved' : 'CD Review', check: t.cdStatus === 'approved', rgb: rgbOfCss(c.color) } : null,
+      av: ids.slice(0, 2).map((id) => ({ id, done: !!partDone(t, id) })), more: Math.max(0, ids.length - 2),
+    };
+  }
+  function model() {
+    const { overdue, due, going, done, review } = Phone.myDayData();
+    const grp = (name, tasks, o = {}) => (tasks.length || o.empty ? { name, n: tasks.length, empty: tasks.length ? '' : o.empty || '', cards: tasks.map((t) => cardOf(t, o)) } : null);
+    person(currentUserId);
+    return {
+      show: true,
+      title: Work.dayTitle(), date: new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }),
+      me: currentUserId, stats: [due.length, overdue.length, review],
+      groups: [grp('Overdue', overdue), grp('Today', due, { empty: overdue.length ? 'Nothing else due today' : 'Nothing due today 🎉' }), grp('In progress', going), grp('Completed today', done, { status: false })].filter(Boolean),
+      add: typeof can === 'function' && can('createTask'),
+      look: look(),
+    };
+  }
+  function sync() {
+    if (!on) return;
+    let m;
+    try { m = visible() ? model() : null; } catch (e) { m = null; }
+    if (!m) { if (shown) { shown = false; last = ''; call({ show: false }); } return; }
+    // the pictures of the people on it, once each has loaded (sent apart: they're big and don't change)
+    const ps = [...people.keys()].sort().join(',');
+    if (ps !== peopleSent) { peopleSent = ps; call({ people: Object.fromEntries(people) }); }
+    const s = JSON.stringify(m);
+    if (s === last) return;
+    last = s; shown = true;
+    call(m);
+  }
+  // taps on the app's Home: what the page's own would do
+  window.__e11Home = (ev) => {
+    if (!ev) return;
+    const click = (sel) => { const el = document.querySelector(sel); if (el) el.click(); };
+    // (the page's own Home, under it, scrolled to where the app's was: the task slides in over the same picture)
+    if (ev.y != null) { const c = document.getElementById('content'); if (c) c.scrollTop = ev.y; if (document.scrollingElement) document.scrollingElement.scrollTop = ev.y; }
+    if (ev.ev === 'open' && ev.id && task(ev.id)) openTask(ev.id);
+    else if (ev.ev === 'search') click('#content [data-ph="search"]');
+    else if (ev.ev === 'me') click('#content [data-ph-tab="me"], [data-ph-tab="me"]');
+    else if (ev.ev === 'add') click('.ph-fab');
+    setTimeout(sync, 0);
+  };
+  return { sync, get on() { return on; } };
 })();
