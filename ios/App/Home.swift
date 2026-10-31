@@ -405,7 +405,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
   func scrollViewWillBeginDragging(_ scrollView: UIScrollView) { if let o = openCard { setOpen(o, false) } }
 
   // ---------- swipe left on a card: Copy link · Delete (as in Mail: round buttons with their names under them) ----------
-  func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
+  override func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
     guard let p = g as? UIPanGestureRecognizer, let card = p.view as? HomeCard else { return true }
     let v = p.velocity(in: self)
     return abs(v.x) > abs(v.y) * 1.2 && (v.x < 0 || card.swipeX < 0)
