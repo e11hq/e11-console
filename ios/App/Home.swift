@@ -55,7 +55,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // the search results (in place of the list while searching)
     results.alwaysBounceVertical = true; results.contentInsetAdjustmentBehavior = .never; results.keyboardDismissMode = .onDrag
     results.alpha = 0; results.isHidden = true
-    hint.font = .systemFont(ofSize: 14); hint.numberOfLines = 0; results.addSubview(hint)
+    hint.font = .systemFont(ofSize: 15); hint.numberOfLines = 0; hint.textAlignment = .center; results.addSubview(hint)
     addSubview(results)
     blur.isUserInteractionEnabled = false
     // (the bar once scrolled: frosted glass with a soft line under it, as Mail's)
@@ -149,7 +149,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     topLine.backgroundColor = hairline.backgroundColor
     [searchCircle, closeCircle, searchBar].forEach { $0.setLook(light: L.light, tint: L.roundIc) }
     lens.tintColor = L.sub; field.textColor = L.h1; field.tintColor = L.tag
-    field.attributedPlaceholder = NSAttributedString(string: "Search tasks, clients, people", attributes: [.foregroundColor: L.sub.withAlphaComponent(0.8)])
+    field.attributedPlaceholder = NSAttributedString(string: "Search tasks, clients, people", attributes: [.foregroundColor: L.sub])
     field.keyboardAppearance = L.light ? .light : .dark
     hint.textColor = L.empty
     meId = model["me"] as? String ?? ""; meChanged()
@@ -225,7 +225,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     layoutHeader()
     results.frame = CGRect(x: 0, y: searchBar.frame.maxY + 8, width: W, height: H - searchBar.frame.maxY - 8)
     results.contentInset.bottom = max(keyboardH, bottomRoom - 60)
-    results.contentInset.top = 18   // (clear of the blur under the search bar)
+    results.contentInset.top = 12   // (clear of the blur under the search bar)
     layoutResults()
     // the three boxes (.ph-stats: 4 above, 6 below, 8 apart)
     var y: CGFloat = 4
@@ -441,7 +441,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private func layoutResults() {
     let W = bounds.width, lw = W - 32
     var y: CGFloat = 0
-    if let t = hint.text, !t.isEmpty { let h = hint.sizeThatFits(CGSize(width: lw - 8, height: 400)).height; hint.frame = CGRect(x: 20, y: 14, width: lw - 8, height: h); y = 14 + h + 14 } else { hint.frame = .zero }
+    // (the hint: just under the search bar, in the middle of the page)
+    if let t = hint.text, !t.isEmpty { let h = hint.sizeThatFits(CGSize(width: lw, height: 400)).height; hint.frame = CGRect(x: 16, y: 0, width: lw, height: h); y = h + 14 } else { hint.frame = .zero }
     for (i, v) in resultViews.enumerated() {
       if i > 0 { y += 10 }
       if v.tag == 7 { y += i > 0 ? 12 : 4; v.frame = CGRect(x: 20, y: y, width: lw - 8, height: 15); y += 15 }
@@ -596,20 +597,22 @@ struct HomeLook {
     }
     let w = UIColor.white, k = UIColor.black
     bg = c("bg", SplashView.hex(0x0c0d0f), SplashView.hex(0xf4f4f7)); headBg = c("headBg", bg, bg)
-    sub = c("sub", SplashView.hex(0xb4b7c0), SplashView.hex(0x5d6068)); h1 = c("h1", SplashView.hex(0xe9eaee), SplashView.hex(0x17181b))
+    // (every grey on the app's own screens is the date's grey: iPhone's secondary label — Haris, 2026-10-31)
+    let grey = UIColor.secondaryLabel
+    sub = grey; h1 = c("h1", SplashView.hex(0xe9eaee), SplashView.hex(0x17181b))
     round = c("round", w.withAlphaComponent(0.08), k.withAlphaComponent(0.05)); roundIc = c("roundIc", h1, h1)
     statBg = c("statBg", w.withAlphaComponent(0.06), w.withAlphaComponent(0.7)); statLine = c("statLine", w.withAlphaComponent(0.12), w)
-    statLabel = c("statLabel", SplashView.hex(0xb4b7c0), SplashView.hex(0x5d6068))
+    statLabel = grey
     statG = c("statG", SplashView.hex(0x3ddc97), SplashView.hex(0x1a9e63)); statR = c("statR", SplashView.hex(0xff7a7a), SplashView.hex(0xd9363e)); statA = c("statA", SplashView.hex(0xf9be33), SplashView.hex(0xb57d00))
-    gh = c("gh", SplashView.hex(0x7d808a), SplashView.hex(0x8a8d96)); empty = c("empty", gh, gh)
+    gh = grey; empty = grey
     card = c("card", SplashView.hex(0x121317), w); cardLine = c("cardLine", SplashView.hex(0x1d1f24), .clear)
     lateLine = c("lateLine", UIColor(red: 229 / 255, green: 72 / 255, blue: 77 / 255, alpha: 0.45), UIColor(red: 229 / 255, green: 72 / 255, blue: 77 / 255, alpha: 0.45))
-    title = c("title", SplashView.hex(0xe9eaee), SplashView.hex(0x17181b)); meta = c("meta", SplashView.hex(0xb4b7c0), SplashView.hex(0x5d6068))
-    sep = c("sep", gh, gh); late = c("late", SplashView.hex(0xff8a8a), SplashView.hex(0xd9363e)); today = c("today", SplashView.hex(0x8fbcff), SplashView.hex(0x2f6fd6))
-    doneTitle = c("doneTitle", gh, gh)
+    title = c("title", SplashView.hex(0xe9eaee), SplashView.hex(0x17181b)); meta = grey
+    sep = grey; late = c("late", SplashView.hex(0xff8a8a), SplashView.hex(0xd9363e)); today = c("today", SplashView.hex(0x8fbcff), SplashView.hex(0x2f6fd6))
+    doneTitle = grey
     tag = c("tag", SplashView.hex(0xc9c0ff), SplashView.hex(0x5b4bd6)); tagBg = c("tagBg", UIColor(red: 123 / 255, green: 104 / 255, blue: 238 / 255, alpha: 0.18), UIColor(red: 123 / 255, green: 104 / 255, blue: 238 / 255, alpha: 0.14))
     urgent = c("urgent", SplashView.hex(0xff9494), SplashView.hex(0xd9363e)); urgentBg = c("urgentBg", UIColor(red: 229 / 255, green: 72 / 255, blue: 77 / 255, alpha: 0.16), UIColor(red: 229 / 255, green: 72 / 255, blue: 77 / 255, alpha: 0.12))
-    more = c("more", meta, meta); moreBg = c("moreBg", w.withAlphaComponent(0.08), k.withAlphaComponent(0.06))
+    more = grey; moreBg = c("moreBg", w.withAlphaComponent(0.08), k.withAlphaComponent(0.06))
     let f = d?["fab"] as? [String: Any]
     func fc(_ k: String, _ dflt: UIColor) -> UIColor {
       guard let a = f?[k] as? [NSNumber], a.count >= 3 else { return dflt }
@@ -842,7 +845,7 @@ final class HomeActions: UIView {
       b.frame = CGRect(x: 0, y: 0, width: 52, height: 52)
       b.addAction(UIAction { _ in act() }, for: .touchUpInside)
       b.accessibilityLabel = name
-      let l = UILabel(); l.text = name; l.font = .systemFont(ofSize: 12); l.textColor = light ? SplashView.hex(0x5d6068) : SplashView.hex(0xb4b7c0); l.textAlignment = .center
+      let l = UILabel(); l.text = name; l.font = .systemFont(ofSize: 12); l.textColor = .secondaryLabel; l.textAlignment = .center
       l.frame = CGRect(x: -14, y: 58, width: 80, height: 15)
       v.addSubview(b); v.addSubview(l)
       v.bounds = CGRect(x: 0, y: 0, width: 52, height: 73)
