@@ -1116,6 +1116,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       }
     }
     s.onModel = { [weak self] m in self?.drawServerHome(m) }
+    // switched off on the server (or no Home for this person): the page's Home again, drawn at once
+    s.onOff = { [weak self] in self?.pageJS("window.__e11HomeResend && window.__e11HomeResend()") }
     s.onToast = { [weak self] t, a, run in
       guard let h = self?.homeIfMade, !h.isHidden else { return }
       self?.homeToastRun = run
@@ -1132,6 +1134,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     return s
   }()
   var homeToastRun: (() -> Void)?
+  var homePageMe: String?
   var homeLook: Any?, homePagePeople: [String: [String: Any]] = [:], homeServerPeople: [String: [String: Any]] = [:]
   // the server's Home drawn (with the page's colours), when Home is on screen
   func drawServerHome(_ m: [String: Any]) {
@@ -1150,7 +1153,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   // Home's own taps the server does itself (false: the page does it, as before)
   func homeEventOnServer(_ ev: [String: Any]) -> Bool {
-    guard serverHome.on, let kind = ev["ev"] as? String else { return false }
+    // (only for the person the page shows: right after another sign-in, the page's Home until the server's catches up)
+    guard serverHome.on, serverHome.me != nil, serverHome.me == homePageMe, let kind = ev["ev"] as? String else { return false }
     let id = ev["id"] as? String ?? ""
     let card = ((serverHome.shown?["groups"] as? [[String: Any]]) ?? []).flatMap { $0["cards"] as? [[String: Any]] ?? [] }.first { ($0["id"] as? String) == id }
     switch kind {
@@ -1194,6 +1198,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     h.bottomRoom = (tabBar.isHidden ? 40 : view.bounds.height - tabBar.frame.minY) + 96
     h.tabTop = tabBar.isHidden ? nil : tabPillTop
     homeLook = a["look"]
+    homePageMe = a["me"] as? String
     // (the server's Home when it's on — the page's model is only a sign something changed: the server asked again)
     if serverHome.on, let m = serverHome.shown, (m["me"] as? String) == (a["me"] as? String) {
       h.isHidden = false

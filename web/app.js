@@ -1712,7 +1712,8 @@ function prioTakenBy(n, day, key, exceptId) {
 }
 // the task rules shared with the server (web/rules.js): the iPhone app's Home actions go straight to the server, which
 // runs these same ones — one copy
-const R = () => E11Rules.withEnv({ nowISO, nowMs: () => Date.now(), uid }, db, currentUserId, todayStr());
+const RULES_ENV = { nowISO, nowMs: () => Date.now(), uid, dayOf: (iso) => ymd(new Date(iso)) };
+const R = () => E11Rules.withEnv(RULES_ENV, db, currentUserId, todayStr());
 // After a task's day changes (or it is reopened), make sure its number is still free that day
 function checkPrioConflict(t) { R().checkPrioConflict(t).forEach((m) => toast(m)); }
 // Sort helpers: urgent first, then 1–10, then no priority

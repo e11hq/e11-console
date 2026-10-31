@@ -49,15 +49,21 @@ var E11Rules = (() => {
 
   function make(db, meId, today) {
     const users = db.users || [], projects = db.projects || [], tasks = db.tasks || [], meta = db.meta || {};
-    const uMap = new Map(users.map((u) => [u.id, u])), pMap = new Map(projects.map((p) => [p.id, p])), tMap = new Map(tasks.map((t) => [t.id, t]));
-    const userById = (id) => uMap.get(id) || null;
-    const proj = (id) => pMap.get(id);
-    const task = (id) => tMap.get(id);
+    // (lookups by id: a plain search for the first few, a map once it's asked often — the website calls these rules for
+    //  every single change, so building maps up front each time was slow with thousands of tasks)
+    const finder = (list) => { let m = null, n = 0; return (id) => { if (m) return m.get(id); if (++n > 12) { m = new Map(list.map((x) => [x.id, x])); return m.get(id); } return list.find((x) => x.id === id); }; };
+    const uFind = finder(users), pFind = finder(projects), tFind = finder(tasks);
+    const userById = (id) => uFind(id) || null;
+    const proj = (id) => pFind(id);
+    const task = (id) => tFind(id);
     const me = () => userById(meId);
     const fullName = (u) => (u ? (u.name || String(u.email || '').split('@')[0]) : 'Former member');
     const topTasks = () => tasks.filter((t) => !t.parentId);
     const statuses = () => (Array.isArray(db.statuses) && db.statuses.length ? db.statuses : DEFAULT_STATUSES);
     const dayDiff = (s) => dayNum(s) - dayNum(today);
+    const env = make.env || {};
+    // (the day something was done: the device's own on the website, Dubai's on the server)
+    const dayOf = env.dayOf || ((iso) => dubaiDay(Date.parse(iso)));
 
     // ---------- who ----------
     const isAdm = (u) => !!u && (u.role === 'admin' || u.role === 'office_admin' || u.admin === true);
@@ -180,7 +186,7 @@ var E11Rules = (() => {
       const overdue = open.filter((t) => t.due && t.due < today).sort(sortP);
       const due = open.filter((t) => t.due === today).sort(sortP);
       const going = open.filter((t) => t.start && t.start <= today && t.due && t.due > today).sort(sortP);
-      const done = D.doneTasks.filter((t) => D.doneAt(t) && dubaiDay(Date.parse(D.doneAt(t))) === today);
+      const done = D.doneTasks.filter((t) => D.doneAt(t) && dayOf(D.doneAt(t)) === today);
       const review = open.filter((t) => t.cdStatus === 'review').length;
       return { overdue, due, going, done, review };
     }
@@ -250,7 +256,7 @@ var E11Rules = (() => {
     // ---------- actions (they change the data they were given; the website and the server both use them) ----------
     // env: { nowISO(), nowMs(), uid() }. Activity lines, notifications and the Trash go into db.tasks[].activity,
     // db.notifications and db.trash, exactly as the website always did.
-    const env = make.env || {};
+
     const nowISO = () => (env.nowISO ? env.nowISO() : new Date().toISOString());
     const nowMs = () => (env.nowMs ? env.nowMs() : Date.now());
     const newId = () => (env.uid ? env.uid() : Date.now().toString(36) + Math.random().toString(36).slice(2, 8));
@@ -389,11 +395,11 @@ var E11Rules = (() => {
     }
 
     return { home, myDayData, cardOf, can, amReadOnly, canComplete, completeBlocked, dayTitle, statusInfo, sectionOf,
-      logActivity, logChange, pushNotif, notifyWatchers, checkPrioConflict, setDone, setDue, setClientApproval, asksClientApproval, deleteTask, watchersOf, creatorOf, clientAmsOf, fmtDue };
+      notifGroups: NOTIF_GROUPS, logActivity, logChange, pushNotif, notifyWatchers, checkPrioConflict, setDone, setDue, setClientApproval, asksClientApproval, deleteTask, watchersOf, creatorOf, clientAmsOf, fmtDue };
   }
 
   // (the clock and new ids for the actions: the website's own, or the server's)
   const withEnv = (env, db, meId, today) => { make.env = env; try { return make(db, meId, today); } finally { make.env = null; } };
-  return { make, withEnv, home: (db, meId, today) => make(db, meId, today).home(), dubaiDay, rgbOf };
+  return { make, withEnv, NOTIF_GROUPS_OF: (db) => make(db || {}, null, '2000-01-01').notifGroups, home: (db, meId, today) => make(db, meId, today).home(), dubaiDay, rgbOf };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = E11Rules;

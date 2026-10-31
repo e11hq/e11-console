@@ -648,21 +648,31 @@ export function createServer(cfg) {
     // Home. `op` (the app's id for the action) makes a retry after a lost answer harmless.
     if (p === '/api/home/act' && req.method === 'POST') {
       const body = await readBody(req);
+      if (store.kv.get('home-server') === 'off') return json(res, 200, { ok: false, off: true, error: 'Try again in a moment' });
       const op = body && body.op ? String(body.op).slice(0, 80) : null;
+      const freshHome = () => { try { return homeView.home(u, visibleSnapshot(u).data); } catch { return null; } };
+      // (a retry of an action already done: its answer again, with Home as it is now)
       const seen = op && homeOps.get(u.id + ':' + op);
-      if (seen) return json(res, 200, seen);
+      if (seen) return json(res, 200, { ...seen, rev: store.rev(), home: freshHome() });
       let r;
-      try { r = homeView.act(u, visibleSnapshot(u).data, body || {}, store); } catch (e) { console.error('home act:', e.message); return json(res, 500, { ok: false, error: 'That didn’t work — try again' }); }
+      try { r = homeView.act(u, visibleSnapshot(u).data, body || {}, store); } catch (e) { console.error('home act:', e.message); return json(res, 200, { ok: false, error: 'That didn’t work — try again' }); }
       let out;
       if (!r.ok) out = { ok: false, error: r.error, need: r.need || null, why: !!r.why, status: r.status };
       else {
-        const { results } = r.changes.length ? pushAs(u, r.changes, body.client || null) : { results: [] };
-        const refused = results.some((x) => x.refused && (x.kind === 'tasks' || x.kind === 'trash'));
-        let home = null; try { home = homeView.home(u, visibleSnapshot(u).data); } catch { /* the app keeps its own */ }
-        out = refused ? { ok: false, error: 'Your role doesn’t allow this', status: 403, home } : { ok: true, messages: r.messages, undo: r.undo || null, rev: store.rev(), home };
+        // all or nothing: the task (and Trash) changes are checked first — refused, nothing is saved or sent (no
+        // notifications about a change that didn't happen)
+        const restoring = new Set(r.changes.filter((ch) => !ch.del && ch.kind !== 'trash').map((ch) => `${ch.kind}:${ch.id}`));
+        const allowed = r.changes.filter((ch) => ch.kind === 'tasks' || ch.kind === 'trash').every((ch) => access.canWrite(u, ch, store.get(ch.kind, String(ch.id)), { restoring }));
+        if (!allowed) out = { ok: false, error: 'Your role doesn’t allow this', status: 403 };
+        else {
+          if (r.changes.length) pushAs(u, r.changes, body.client || null);
+          // (Undo: the Trash entry of what this person just deleted goes too — whoever may delete may undo it)
+          if (r.sysChanges && r.sysChanges.length) { const out2 = store.apply(r.sysChanges, u.id); broadcast(out2.rev, out2.results, null, u.id); }
+          out = { ok: true, messages: r.messages, undo: r.undo || null };
+        }
       }
       if (op) { homeOps.set(u.id + ':' + op, out); if (homeOps.size > 1000) homeOps.delete(homeOps.keys().next().value); }
-      return json(res, 200, out);
+      return json(res, 200, { ...out, rev: store.rev(), home: freshHome() });
     }
     if (p === '/api/occ-reminders') return json(res, 200, { ok: true, ...occRemind.forUser(u) });
     // Occasion dates: when the holiday calendar was last read (Admins and Account Managers can check now)

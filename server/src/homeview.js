@@ -55,10 +55,11 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
       if (!it || it.type !== 'task' || it.deletedBy !== u.id) return fail(404, 'Already restored or no longer in the Trash');
       const changes = [];
       for (const x of (it.data && it.data.tasks) || []) if (!store.get('tasks', String(x.id))) changes.push({ kind: 'tasks', id: x.id, data: x });
-      changes.push({ kind: 'trash', id: it.id, del: true });
-      return { ok: true, changes, messages: [] };
+      return { ok: true, changes, sysChanges: [{ kind: 'trash', id: it.id, del: true }], messages: [] };
     }
     if (!t) return fail(404, 'This task is no longer here');
+    // (no Home, no Home actions: Office Admins and Finance-only people)
+    if (u.role === 'finance_admin' || u.role === 'finance_viewer' || (u.role === 'office_admin' && u.admin !== true)) return fail(403, 'Your role doesn’t allow this');
     const view = () => fail(403, 'View only — you can’t change this task');
     if (a === 'done') {
       if (t.done) return { ok: true, changes: [], messages: [] };
@@ -77,7 +78,7 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
     } else if (a === 'due') {
       if (!rules.can('editDates', t) || rules.amReadOnly(t)) return fail(403, 'Your role doesn’t allow changing dates');
       const v = body.due == null || body.due === '' ? null : String(body.due);
-      if (v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) return fail(400, 'Not a date');
+      if (v && !(/^\d{4}-\d{2}-\d{2}$/.test(v) && new Date(v + 'T00:00:00Z').toISOString().slice(0, 10) === v)) return fail(400, 'Not a date');
       messages = rules.setDue(t, v);
     } else if (a === 'delete') {
       if (!rules.can('deleteTask', t) || rules.amReadOnly(t)) return fail(403, 'Your role doesn’t allow deleting tasks');

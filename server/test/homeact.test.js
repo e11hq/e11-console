@@ -113,3 +113,39 @@ test('The switch sends the app back to the page', async () => {
   assert.equal(r.off, true); assert.equal(r.home, undefined);
   app.store.kv.set('home-server', 'on');
 });
+
+test('Refused by the server\'s own checks: nothing saved, nobody told', async () => {
+  app.store.apply([{ kind: 'users', id: 'u-off', data: { id: 'u-off', email: 'off@e11-digital.com', role: 'office_admin', active: true, name: 'Office' } }], 'test');
+  const n0 = app.store.list('notifications').length;
+  const r = await act('off@e11-digital.com', { act: 'reopen', id: 't3' });
+  assert.equal(r.ok, false);
+  assert.equal(T('t3').done, true);
+  assert.equal(app.store.list('notifications').length, n0);
+});
+
+test('Undo by someone who isn\'t a manager (the CD) works and empties the Trash entry', async () => {
+  app.store.apply([{ kind: 'tasks', id: 't9', data: { id: 't9', projectId: 'p1', sectionId: 's2', title: 'CD made', assignees: ['u-prod'], createdBy: 'u-cd', comments: [], activity: [] } }], 'test');
+  let r = await act('cd@e11-digital.com', { act: 'delete', id: 't9' });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  r = await act('cd@e11-digital.com', { act: 'undoDelete', trashId: r.undo });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.equal(T('t9').title, 'CD made');
+  assert.equal(app.store.list('trash').filter((x) => x.key === 'tasks:t9').length, 0);
+});
+
+test('A date that isn\'t one is refused', async () => {
+  const r = await act('am@e11-digital.com', { act: 'due', id: 't1', due: '2026-13-45' });
+  assert.equal(r.ok, false); assert.equal(T('t1').due, '2026-11-23');
+});
+
+test('The shared rules switch notifications off by the same groups as the profile page (app.js NOTIF_TYPES)', async () => {
+  const { createRequire } = await import('node:module');
+  const R = createRequire(import.meta.url)('../../web/rules.js');
+  const groups = R.NOTIF_GROUPS_OF();
+  const src = fs.readFileSync(new URL('../../web/app.js', import.meta.url), 'utf8');
+  const block = src.slice(src.indexOf('const NOTIF_TYPES = ['), src.indexOf('];', src.indexOf('const NOTIF_TYPES = [')));
+  const want = {};
+  for (const m of block.matchAll(/\{ k: '([^']+)', kinds: \[([^\]]*)\]/g)) for (const kind of m[2].match(/'([^']+)'/g).map((x) => x.slice(1, -1))) want[kind] = m[1];
+  assert.ok(Object.keys(want).length > 10);
+  assert.deepEqual({ ...groups }, want);
+});

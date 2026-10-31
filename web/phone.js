@@ -216,7 +216,7 @@ const Phone = (() => {
   /* ---------- Screens ---------- */
   // what Home shows (also the iPhone app's own Home, 23+: NativeHome)
   // (the rules are shared with the server: web/rules.js — the iPhone app gets the same Home from /api/home)
-  function myDayData() { return E11Rules.make(db, currentUserId, todayStr()).myDayData(); }
+  function myDayData() { return R().myDayData(); }
   function myDay() {
     const { overdue, due, going, done, review } = myDayData();
     const d = new Date();
@@ -2438,10 +2438,9 @@ const NativeHome = (() => {
     };
   }
   // the cards and groups: the shared rules (web/rules.js), the same the server sends the app (/api/home)
-  const rules = () => E11Rules.make(db, currentUserId, todayStr());
-  function cardOf(t, o = {}) { const c = rules().cardOf(t, o); c.av.forEach((a) => person(a.id)); return c; }
+  function cardOf(t, o = {}) { const c = R().cardOf(t, o); c.av.forEach((a) => person(a.id)); return c; }
   function model() {
-    const m = E11Rules.home(db, currentUserId, todayStr());
+    const m = R().home();
     if (!m) return null;
     Object.keys(m.people || {}).forEach(person);
     delete m.people;   // (the page sends the pictures apart, once loaded)
@@ -2461,6 +2460,8 @@ const NativeHome = (() => {
     last = s; shown = true;
     call(m);
   }
+  // (the app's Home from the server switched off: the page's own model again, at once)
+  window.__e11HomeResend = () => { last = ''; shown = false; sync(); };
   // taps on the app's Home: what the page's own would do
   window.__e11Home = (ev) => {
     if (!ev) return;
