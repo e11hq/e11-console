@@ -14,7 +14,7 @@ import UniformTypeIdentifiers
 import AudioToolbox
 
 // Version of this iPhone app's native part (raise it with changes the web app needs to know about)
-let SHELL_VERSION = 21   // 21: the comments screen tells its page how far it's slid up for the keyboard (--cm-top: a thread's bar stays in sight) · 20: a task's Comments on a screen of their own (a second web view showing only the comments, scrolled by iOS itself; window.__e11ShowComments, cmReady / cmEnd) · 19: on a task's Comments, iOS itself moves the comments list with the keyboard (its own scroll view, in the keyboard's own animation; window.__e11FeedKb) · 18: the file preview is iOS's own (preview / previewSet / window.__e11Preview; Preview.swift) · 17: the comment box on a task's Comments is iPhone's own, on the keyboard (commentBar / window.__e11CBar; CommentBar.swift) · 16: iPhone's own banners also while the app is open (the page draws no cards), each notification confirmed by the Notification Service Extension so the server sends again the ones an offline phone missed (register ack) · 15: New task / Request amendments as native sheets with iPhone's own fields that tuck into a bar like a Mail draft (formSheet / formSet / formClose; the page: window.__e11Form), a Trash task as a native sheet (trashSheet); native sheets and dates also open on top of those · 14: native sheets with people (round photos / initials) and a search box (+ a typed entry, "Use …") · 13: also dates picked in a native sheet (pickDate: closing it never sets a date) · a native sheet can stay open for ticking several (multi; each tick: window.__e11SheetPick) · 12: native sheets also with colour dots, a row of colours / emoji / numbers (chips), tinted icons, locked rows · 11: plain menus as iOS's own sheets (nativeSheet; the page: NativeSheet in app.js, showMenu(…, { native: true })) · 10: My Tasks, Inbox and Team lists swiped by iOS itself (Pager.syncLists in phone.js) · 9: a task’s Details / Comments swiped by iOS itself (the page: Pager in phone.js) · 8: iOS haptics for the page (haptic kind: light / medium / selection / success / warning / error) · 7: the comment box rides down / up with the keyboard frame by frame (__e11KbStep) · 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
+let SHELL_VERSION = 21   // 21: the comments screen tells its page how far it's slid up for the keyboard (--cm-top: a thread's bar stays in sight); its swipe right also takes iPhone's slow back drag from the edge · 20: a task's Comments on a screen of their own (a second web view showing only the comments, scrolled by iOS itself; window.__e11ShowComments, cmReady / cmEnd) · 19: on a task's Comments, iOS itself moves the comments list with the keyboard (its own scroll view, in the keyboard's own animation; window.__e11FeedKb) · 18: the file preview is iOS's own (preview / previewSet / window.__e11Preview; Preview.swift) · 17: the comment box on a task's Comments is iPhone's own, on the keyboard (commentBar / window.__e11CBar; CommentBar.swift) · 16: iPhone's own banners also while the app is open (the page draws no cards), each notification confirmed by the Notification Service Extension so the server sends again the ones an offline phone missed (register ack) · 15: New task / Request amendments as native sheets with iPhone's own fields that tuck into a bar like a Mail draft (formSheet / formSet / formClose; the page: window.__e11Form), a Trash task as a native sheet (trashSheet); native sheets and dates also open on top of those · 14: native sheets with people (round photos / initials) and a search box (+ a typed entry, "Use …") · 13: also dates picked in a native sheet (pickDate: closing it never sets a date) · a native sheet can stay open for ticking several (multi; each tick: window.__e11SheetPick) · 12: native sheets also with colour dots, a row of colours / emoji / numbers (chips), tinted icons, locked rows · 11: plain menus as iOS's own sheets (nativeSheet; the page: NativeSheet in app.js, showMenu(…, { native: true })) · 10: My Tasks, Inbox and Team lists swiped by iOS itself (Pager.syncLists in phone.js) · 9: a task’s Details / Comments swiped by iOS itself (the page: Pager in phone.js) · 8: iOS haptics for the page (haptic kind: light / medium / selection / success / warning / error) · 7: the comment box rides down / up with the keyboard frame by frame (__e11KbStep) · 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
 let procEnv = ProcessInfo.processInfo.environment
 let SELFTEST = procEnv["E11_SELFTEST"] ?? ""           // the build machine's self-test in the simulator
 let info = Bundle.main.infoDictionary ?? [:]
@@ -271,8 +271,14 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     w.isHidden = true; w.alpha = 0
     w.hideKeyboardBar()
     if #available(iOS 16.4, *) { w.isInspectable = true }
-    // swiping right on the comments: back to Details, as on the page
-    let sw = UISwipeGestureRecognizer(target: self, action: #selector(cwebSwipe)); sw.direction = .right
+    /* swiping right on the comments — a quick flick anywhere, or iPhone's slow "back" drag from the left edge: out of a
+       reply thread to the comments first, from the comments to Details (Haris, 2026-10-31). On Details the page's own
+       swipe goes back to the previous page. It acts once the finger has gone far enough sideways, without waiting for
+       it to lift; a mostly-up/down drag stays a scroll. */
+    let sw = UIPanGestureRecognizer(target: self, action: #selector(cwebPan(_:)))
+    sw.delegate = self
+    sw.cancelsTouchesInView = false
+    cwebPanG = sw
     w.addGestureRecognizer(sw)
     // (in a box that clips it below the task's header: with the keyboard up the screen slides up under it)
     cbox.clipsToBounds = true
@@ -284,6 +290,27 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if jumpHitMade { view.insertSubview(jumpHit, aboveSubview: cbox) }
     cweb = w
     w.load(URLRequest(url: u))
+  }
+  var cwebPanG: UIPanGestureRecognizer?, cwebPanDone = false
+  @objc func cwebPan(_ g: UIPanGestureRecognizer) {
+    let t = g.translation(in: view), v = g.velocity(in: view)
+    switch g.state {
+    case .began: cwebPanDone = false
+    case .changed, .ended:
+      if cwebPanDone { return }
+      // far enough to the right (or a quick flick), and more sideways than up / down
+      if (t.x > 56 || (g.state == .ended && t.x > 16 && v.x > 500)) && t.x > abs(t.y) * 1.4 {
+        cwebPanDone = true
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        cwebSwipe()
+      }
+    default: break
+    }
+  }
+  func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
+    guard g === cwebPanG, let p = g as? UIPanGestureRecognizer else { return true }
+    let v = p.velocity(in: view)
+    return v.x > 0 && v.x > abs(v.y)
   }
   @objc func cwebSwipe() {
     cweb?.evaluateJavaScript("window.__e11CmBack ? window.__e11CmBack() : ''") { r, _ in
