@@ -2990,8 +2990,7 @@ final class TrashSheetVC: UIViewController, UISheetPresentationControllerDelegat
    when the field can be emptied — Clear. Tapping a day picks it and closes; dragging it down or tapping outside
    changes nothing. */
 final class DateSheetVC: UIViewController, UISheetPresentationControllerDelegate, UICalendarViewDelegate, UICalendarSelectionSingleDateDelegate {
-  // iPhone's own calendar (the one inside its date picker), so today can carry a mark: a blue dot under it, only to see —
-  // the date picked is still the filled circle (Haris, 2026-11-01)
+  // iPhone's own calendar (the one inside its date picker): today as iPhone marks it, the date picked the filled circle
   private let cal = UICalendarView()
   private let gregorian = Calendar(identifier: .gregorian)
   private var answer: (([String: Any]) -> Void)?
@@ -3025,11 +3024,8 @@ final class DateSheetVC: UIViewController, UISheetPresentationControllerDelegate
       sh.delegate = self
     }
   }
-  // today: a small blue dot under it
-  func calendarView(_ calendarView: UICalendarView, decorationFor dateComponents: DateComponents) -> UICalendarView.Decoration? {
-    let t = gregorian.dateComponents([.year, .month, .day], from: Date())
-    return dateComponents.year == t.year && dateComponents.month == t.month && dateComponents.day == t.day ? .default(color: .systemBlue, size: .small) : nil
-  }
+  // today: only iPhone's own mark for it (no dot of ours — Haris, 2026-11-01)
+  func calendarView(_ calendarView: UICalendarView, decorationFor dateComponents: DateComponents) -> UICalendarView.Decoration? { nil }
   // a day tapped: that date
   func dateSelection(_ selection: UICalendarSelectionSingleDate, didSelectDate dateComponents: DateComponents?) {
     guard let dc = dateComponents, let d = gregorian.date(from: dc) else { return }
