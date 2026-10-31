@@ -283,7 +283,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   // its page has loaded: wait until it's signed in and has its data
   func cwebPageLoaded(_ n: Int = 0) {
-    cweb?.evaluateJavaScript("(window.db && typeof currentUserId !== 'undefined' && currentUserId && window.__e11ShowComments) ? 'ok' : 'wait'") { r, _ in
+    cweb?.evaluateJavaScript("((typeof db !== 'undefined' && db) && typeof currentUserId !== 'undefined' && currentUserId && window.__e11ShowComments) ? 'ok' : 'wait'") { r, _ in
       if (r as? String) == "ok" { self.cwebLoaded = true; self.cwebTask = nil; self.cwebUpdate() }
       else if n < 120 { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.cwebPageLoaded(n + 1) } }
     }
@@ -930,7 +930,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   // run something once the web app has its data (it may still be starting when the app opens from a notification)
   func waitForApp(_ js: String) -> String {
-    "(function f(n){ if (window.db && typeof currentUserId !== 'undefined' && currentUserId) { \(js) } else if (n < 80) setTimeout(function(){ f(n+1) }, 250); })(0)"
+    "(function f(n){ if ((typeof db !== 'undefined' && db) && typeof currentUserId !== 'undefined' && currentUserId) { \(js) } else if (n < 80) setTimeout(function(){ f(n+1) }, 250); })(0)"
   }
   func openPush(_ userInfo: [AnyHashable: Any]) {
     let d = userInfo["e11"] as? [String: Any] ?? [:]
@@ -1239,7 +1239,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       UIResponder.keyboardFrameEndUserInfoKey: NSValue(cgRect: end), UIResponder.keyboardAnimationDurationUserInfoKey: 0.35, UIResponder.keyboardAnimationCurveUserInfoKey: UInt(7)])
   }
   func selfTest() {
-    let wait = "for (let i = 0; i < 120 && !(window.db && typeof currentUserId !== 'undefined' && currentUserId && document.getElementById('ph-tabs')); i++) await new Promise((r) => setTimeout(r, 250));"
+    let wait = "for (let i = 0; i < 120 && !((typeof db !== 'undefined' && db) && typeof currentUserId !== 'undefined' && currentUserId && document.getElementById('ph-tabs')); i++) await new Promise((r) => setTimeout(r, 250));"
     let geo = "const cs = getComputedStyle(document.documentElement); const geo = { innerH: innerHeight, vvH: visualViewport ? visualViewport.height : null, shift: cs.getPropertyValue('--ph-shift'), tabsH: cs.getPropertyValue('--ios-tabs-h'), kb: cs.getPropertyValue('--ph-kb') };"
     // (name, script run in the page, what to do in the app first)
     let steps: [(String, String, (() -> Void)?)] = [
