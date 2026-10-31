@@ -3035,18 +3035,23 @@ final class DateSheetVC: UIViewController, UISheetPresentationControllerDelegate
       picker.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 12), picker.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -12),
     ])
   }
-  private var fitHeight: CGFloat = 470
+  private var fitHeight: CGFloat = 470, sized = false
+  // sized to the calendar once, from where it was laid out — measuring it again inside the layout (and resizing the sheet
+  // from there) sent iOS 27's calendar round in circles until the app crashed (TestFlight report, build 1195: the date
+  // sheet from Home's Due)
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
-    guard view.bounds.width > 0 else { return }
+    guard !sized, view.bounds.width > 0, picker.frame.minY > 0, picker.frame.height > 100 else { return }
+    sized = true
     let floating: Bool; if #available(iOS 26, *) { floating = true } else { floating = false }
     let strip = presentingViewController?.view.window?.safeAreaInsets.bottom ?? view.window?.safeAreaInsets.bottom ?? 0
-    let pickerH = picker.systemLayoutSizeFitting(CGSize(width: view.bounds.width - 24, height: UIView.layoutFittingCompressedSize.height),
-                                                 withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height
-    let h = max(320, picker.frame.minY + pickerH + NativeSheetVC.END + 18 - (floating ? strip : 0) + (floating ? 0 : view.safeAreaInsets.bottom))
-    guard picker.frame.minY > 0, abs(h - fitHeight) > 0.5 else { return }
+    let h = max(320, picker.frame.maxY + NativeSheetVC.END + 18 - (floating ? strip : 0) + (floating ? 0 : view.safeAreaInsets.bottom))
+    guard abs(h - fitHeight) > 0.5 else { return }
     fitHeight = h
-    sheetPresentationController?.animateChanges { sheetPresentationController?.invalidateDetents() }
+    DispatchQueue.main.async { [weak self] in
+      guard let sh = self?.sheetPresentationController else { return }
+      sh.animateChanges { sh.invalidateDetents() }
+    }
   }
   private func finish(_ r: [String: Any]) {
     guard let a = answer else { return }
