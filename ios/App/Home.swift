@@ -795,7 +795,9 @@ final class HomeCard: UIControl {
       let a = NSTextAttachment(); a.image = img
       let f = UIFont.systemFont(ofSize: 12.5)
       a.bounds = CGRect(x: 0, y: ((f.capHeight - img.size.height) / 2).rounded(), width: img.size.width, height: img.size.height)
-      if ml.length > 0 { ml.append(NSAttributedString(string: " ", attributes: [.font: f, .kern: 4.9])) }
+      // (after the comments on the second line; with no comments, the second line is the chip's own)
+      let hasCm = (d["meta"] as? [[String: Any]] ?? []).contains(where: HomeCard.isComments)
+      if ml.length > 0 { ml.append(NSAttributedString(string: hasCm ? " " : "\n", attributes: hasCm ? [.font: f, .kern: 4.9] : [.font: f])) }
       ml.append(NSAttributedString(attachment: a))
     }
     metaL.attributedText = ml
@@ -811,14 +813,22 @@ final class HomeCard: UIControl {
     drawPeople()
     setNeedsLayout()
   }
+  static func isComments(_ it: [String: Any]) -> Bool {
+    if (it["cm"] as? Bool) == true { return true }
+    let t = (it["t"] as? String ?? "").replacingOccurrences(of: "\u{00A0}", with: " ")
+    return t.hasSuffix(" comment") || t.hasSuffix(" comments")
+  }
   // the line under the title: client (with its colour), status, due date, comments — 6 apart, "·" between
   private func meta(_ items: [[String: Any]]) -> NSAttributedString {
     let f = UIFont.systemFont(ofSize: 12.5)
     let s = NSMutableAttributedString()
     // (as the page wraps it: whole pieces only — "3 comments" never split — and a "·" stays at the end of its line)
     let gap = { (breaks: Bool) in NSAttributedString(string: breaks ? " " : "\u{00A0}", attributes: [.font: f, .kern: 2.9]) }
+    // (the comments always start the second line, the CD chip after them — the same on every card, Haris 2026-10-31)
     for (i, it) in items.enumerated() {
-      if i > 0 { s.append(gap(false)); s.append(NSAttributedString(string: "·", attributes: [.font: f, .foregroundColor: L.sep])); s.append(gap(true)) }
+      let cm = HomeCard.isComments(it)
+      if i > 0 && cm { s.append(NSAttributedString(string: "\n", attributes: [.font: f])) }
+      else if i > 0 { s.append(gap(false)); s.append(NSAttributedString(string: "·", attributes: [.font: f, .foregroundColor: L.sep])); s.append(gap(true)) }
       if let dot = NativeSheetVC.color(it["dot"]) {
         let img = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { _ in dot.setFill(); UIBezierPath(roundedRect: CGRect(x: 0, y: 0, width: 8, height: 8), cornerRadius: 2).fill() }
         let a = NSTextAttachment(); a.image = img; a.bounds = CGRect(x: 0, y: 0, width: 8, height: 8)

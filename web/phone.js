@@ -2453,7 +2453,7 @@ const NativeHome = (() => {
     const meta = [p ? { t: p.name, dot: rgbOfCss(p.color) } : { t: 'My Tasks' }];
     if (o.status !== false) meta.push({ t: s.name });
     if (t.due) meta.push({ t: mwDue(t), b: late ? 'late' : dayDiff(t.due) === 0 && open ? 'today' : 'plain' });
-    if (t.comments.length) meta.push({ t: `${t.comments.length} comment${t.comments.length === 1 ? '' : 's'}` });
+    if (t.comments.length) meta.push({ t: `${t.comments.length} comment${t.comments.length === 1 ? '' : 's'}`, cm: true });
     const pr = prioOf(t);
     const badge = isUrgent(t) && !t.done ? { t: 'Urgent', urgent: true } : typeof normPrio(pr) === 'number' ? { t: String(normPrio(pr)) } : null;
     const c = t.cdStatus && !t.done ? CD[t.cdStatus] : null;
