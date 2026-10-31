@@ -17,7 +17,11 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
      shrinks as it rises into a small bar — the small title with the date under it — and the cards pass under it
      through a soft blur. Search is a Liquid Glass circle that stretches into a glass search bar; your photo then
      turns into a glass ✕ that closes it. */
-  private let blur = UIVisualEffectView(effect: nil), hairline = UIView()
+  private let blur = UIVisualEffectView(effect: nil), hairline = UIView(), blurMask = CAGradientLayer()
+  // the bar's own row (the small title on it): on iOS 26+ iPhone's own scroll edge effect frosts the list under it, as in Mail
+  private let topBar = HomePassThrough(), topLine = UIView()
+  private var edgeHook: AnyObject?
+  private let R: CGFloat = 26   // (from the right edge: Search / your photo / ✕ — Haris: they sat too close to it)
   private let sub = UILabel(), title = UILabel(), smallTitle = UILabel(), smallSub = UILabel()
   private let searchCircle = HomeGlass(), me = UIButton(type: .custom), closeCircle = HomeGlass()
   private let searchBar = HomeGlass(), field = UITextField(), lens = UIImageView()
@@ -54,15 +58,29 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // (the bar once scrolled: frosted glass with a soft line under it, as Mail's)
     blur.contentView.addSubview(hairline)
     blur.alpha = 0
+    blurMask.colors = [UIColor.black.cgColor, UIColor.black.cgColor, UIColor.clear.cgColor]
+    blur.layer.mask = blurMask
     addSubview(blur)
+    addSubview(topBar)
+    topLine.alpha = 0; topBar.addSubview(topLine)   // (the soft line under the bar, as Mail's)
+    if #available(iOS 26.0, *) {
+      blur.isHidden = true
+      let i = UIScrollEdgeElementContainerInteraction()
+      i.scrollView = scroll; i.edge = .top
+      topBar.addInteraction(i)
+      edgeHook = i
+      scroll.topEdgeEffect.style = .soft
+      results.topEdgeEffect.style = .soft
+    }
     sub.font = .systemFont(ofSize: 13, weight: .medium)
     title.font = .systemFont(ofSize: 32, weight: .heavy)
     title.adjustsFontSizeToFitWidth = true; title.minimumScaleFactor = 0.6
     smallTitle.font = .systemFont(ofSize: 17, weight: .bold); smallSub.font = .systemFont(ofSize: 12)
     smallTitle.alpha = 0; smallSub.alpha = 0
     // (the big title scrolls with the list and goes under the frosted bar; the small title is on the bar)
-    insertSubview(sub, belowSubview: blur); insertSubview(title, belowSubview: blur)
-    [smallTitle, smallSub].forEach { addSubview($0) }
+    // (the big date and title are the list's own first lines: they scroll with it, under the frosted edge)
+    scroll.addSubview(sub); scroll.addSubview(title)
+    [smallTitle, smallSub].forEach { topBar.addSubview($0) }
     searchCircle.setIcon("magnifyingglass", 18)
     searchCircle.accessibilityLabel = "Search"
     searchCircle.onTap = { [weak self] in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.openSearch() }
@@ -117,8 +135,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     title.attributedText = NSAttributedString(string: model["title"] as? String ?? "", attributes: [.font: UIFont.systemFont(ofSize: 32, weight: .heavy), .kern: -0.64, .foregroundColor: L.h1])
     smallTitle.text = model["title"] as? String; smallTitle.textColor = L.h1
     smallSub.text = model["date"] as? String; smallSub.textColor = L.sub
-    blur.effect = UIBlurEffect(style: L.light ? .systemMaterialLight : .systemMaterialDark)
-    hairline.backgroundColor = L.light ? UIColor.black.withAlphaComponent(0.12) : UIColor.white.withAlphaComponent(0.12)
+    blur.effect = UIBlurEffect(style: L.light ? .systemUltraThinMaterialLight : .systemUltraThinMaterialDark)
+    hairline.backgroundColor = L.light ? UIColor.black.withAlphaComponent(0.08) : UIColor.white.withAlphaComponent(0.08)
+    topLine.backgroundColor = hairline.backgroundColor
     [searchCircle, closeCircle, searchBar].forEach { $0.setLook(light: L.light, tint: L.roundIc) }
     lens.tintColor = L.sub; field.textColor = L.h1; field.tintColor = L.tag
     field.attributedPlaceholder = NSAttributedString(string: "Search tasks, clients, people", attributes: [.foregroundColor: L.sub.withAlphaComponent(0.8)])
@@ -255,15 +274,27 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let subH = ceil(sub.font.lineHeight), tH: CGFloat = 37
     let blockH = subH + 2 + tH
     let by = bigH - 12 - blockH
-    // the bar: frosted, with its soft line, there once the list reaches it
-    blur.frame = CGRect(x: 0, y: 0, width: W, height: smallH)
-    hairline.frame = CGRect(x: 0, y: smallH - 0.5, width: W, height: 0.5)
-    blur.alpha = searching ? 1 : ease(2, 18, s)
+    // the bar's frost: iPhone's own scroll edge effect under the bar's row (iOS 26+), there once the list moves under it;
+    // before iOS 26 a thin see-through blur that softens out at its lower edge
+    topBar.frame = CGRect(x: 0, y: 0, width: W, height: smallH)
+    if #available(iOS 26.0, *) {
+      if let i = edgeHook as? UIScrollEdgeElementContainerInteraction { let want: UIScrollView = searching ? results : scroll; if i.scrollView !== want { i.scrollView = want } }
+      scroll.topEdgeEffect.isHidden = !searching && s < 2
+      topLine.frame = CGRect(x: 0, y: smallH - 0.5, width: W, height: 0.5)
+      topLine.alpha = searching ? 0 : ease(2, 18, s)
+    } else {
+      blur.frame = CGRect(x: 0, y: 0, width: W, height: smallH + 14)
+      CATransaction.begin(); CATransaction.setDisableActions(true)
+      blurMask.frame = blur.bounds; blurMask.locations = [0, NSNumber(value: Double(smallH / (smallH + 14))), 1]
+      CATransaction.commit()
+      hairline.frame = CGRect(x: 0, y: smallH - 0.5, width: W, height: 0.5)
+      blur.alpha = searching ? 1 : ease(2, 18, s)
+    }
     scroll.verticalScrollIndicatorInsets = UIEdgeInsets(top: smallH - bigH, left: 0, bottom: bottomRoom - 20, right: 0)
-    // the big date and title: moving with the list (finger for finger), going under the bar
-    let tw = W - 20 - 40 - 10 - 46 - 10 - 20
-    sub.frame = CGRect(x: 20, y: by - s, width: tw, height: subH)
-    title.frame = CGRect(x: 20, y: by + subH + 2 - s, width: tw, height: tH)
+    // the big date and title: the list's own first lines (above its top, in the room it keeps for them)
+    let tw = W - 20 - 40 - 10 - 46 - 10 - R
+    sub.frame = CGRect(x: 20, y: by - bigH, width: tw, height: subH)
+    title.frame = CGRect(x: 20, y: by + subH + 2 - bigH, width: tw, height: tH)
     let bigA: CGFloat = searching ? 0 : 1
     sub.alpha = bigA; title.alpha = bigA
     // the small title and date on the bar, fading in as the big ones go under it
@@ -275,12 +306,12 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let bigCY = by + blockH / 2
     let cy = max(smallCY, bigCY - max(0, s))
     if !searching {
-      me.bounds = CGRect(x: 0, y: 0, width: 40, height: 40); me.center = CGPoint(x: W - 20 - 20, y: cy); me.layer.cornerRadius = 20
-      searchCircle.frame = CGRect(x: W - 20 - 40 - 10 - 46, y: cy - 23, width: 46, height: 46)
+      me.bounds = CGRect(x: 0, y: 0, width: 40, height: 40); me.center = CGPoint(x: W - R - 20, y: cy); me.layer.cornerRadius = 20
+      searchCircle.frame = CGRect(x: W - R - 40 - 10 - 46, y: cy - 23, width: 46, height: 46)
     } else {
       // (the bar in the row the buttons are in; the ✕ where your photo was)
-      searchBar.frame = CGRect(x: 20, y: cy - 23, width: W - 20 - 46 - 10 - 20, height: 46)
-      closeCircle.frame = CGRect(x: W - 20 - 46, y: cy - 23, width: 46, height: 46)
+      searchBar.frame = CGRect(x: 20, y: cy - 23, width: W - 20 - 46 - 10 - R, height: 46)
+      closeCircle.frame = CGRect(x: W - R - 46, y: cy - 23, width: 46, height: 46)
     }
     lens.frame = CGRect(x: 12, y: 0, width: 22, height: searchBar.bounds.height)
     field.frame = CGRect(x: 40, y: 0, width: max(0, searchBar.bounds.width - 40 - 10), height: searchBar.bounds.height)
@@ -881,4 +912,9 @@ final class HomeClientRow: UIControl {
     name.frame = CGRect(x: 67, y: bounds.height / 2 - 20, width: bounds.width - 82, height: 21)
     meta.frame = CGRect(x: 67, y: bounds.height / 2 + 3, width: bounds.width - 82, height: 17)
   }
+}
+
+// a view that only takes touches on what's in it (the bar's row: the list under its empty parts still scrolls)
+final class HomePassThrough: UIView {
+  override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? { let v = super.hitTest(point, with: event); return v === self ? nil : v }
 }
