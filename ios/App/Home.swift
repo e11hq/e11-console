@@ -6,8 +6,13 @@ import UIKit
    boxes, the groups and their task cards, and the colours of its own Home drawn under this one (light / dark) — with
    the "home" command whenever something changes (NativeHome in phone.js), and the taps go back to it
    (window.__e11Home: open a task, Search, Me, New task). */
-final class HomeView: UIView, UIScrollViewDelegate {
+final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate {
   var onEvent: (([String: Any]) -> Void)?
+  var present: ((UIViewController) -> Void)?
+  private var canDelete = false
+  private weak var openCard: HomeCard?
+  private var actions: HomeActions?
+  private var toastView: UIView?
   private let head = UIView(), sub = UILabel(), title = UILabel(), search = UIButton(type: .custom), me = UIButton(type: .custom)
   private let scroll = UIScrollView()
   private let fab = UIButton(type: .custom)
@@ -97,7 +102,15 @@ final class HomeView: UIView, UIScrollViewDelegate {
         seen.insert(id)
         let v: HomeCard
         if let old = cards[id] { v = old } else {
-          v = HomeCard(); v.onTap = { [weak self] in self?.send(["ev": "open", "id": id]) }
+          v = HomeCard(); v.id = id
+          v.onTap = { [weak self, weak v] in
+            guard let self = self else { return }
+            // (a card swiped open: a tap closes it, as in Mail)
+            if let o = self.openCard { self.setOpen(o, false); if o === v { return } }
+            self.send(["ev": "open", "id": id])
+          }
+          let pan = UIPanGestureRecognizer(target: self, action: #selector(self.swipe(_:))); pan.delegate = self; v.addGestureRecognizer(pan)
+          let lp = UILongPressGestureRecognizer(target: self, action: #selector(self.press(_:))); lp.minimumPressDuration = 0.45; v.addGestureRecognizer(lp)
           self.scroll.addSubview(v); self.cards[id] = v
         }
         v.people = people
@@ -109,7 +122,9 @@ final class HomeView: UIView, UIScrollViewDelegate {
         scroll.addSubview(l); content.append(l)
       }
     }
-    for (id, v) in cards where !seen.contains(id) { v.removeFromSuperview(); cards[id] = nil }
+    for (id, v) in cards where !seen.contains(id) { if v === openCard { actions?.removeFromSuperview(); actions = nil; openCard = nil }; v.removeFromSuperview(); cards[id] = nil }
+    canDelete = (model["canDelete"] as? Bool) == true
+    if let t = model["toast"] as? [String: Any] { toast(t) }
     fab.isHidden = (model["add"] as? Bool) != true
     fab.backgroundColor = L.fabBg; fab.layer.borderColor = L.fabLine.cgColor
     setNeedsLayout(); layoutIfNeeded()
@@ -160,7 +175,9 @@ final class HomeView: UIView, UIScrollViewDelegate {
         y += 14 + h + 14
       } else if let c = v as? HomeCard {
         let h = c.height(for: lw)
-        if c.frame.size != CGSize(width: lw, height: h) || c.frame.origin != CGPoint(x: 16, y: y) { c.frame = CGRect(x: 16, y: y, width: lw, height: h) }
+        // (bounds and centre: a card swiped open keeps its sideways shift)
+        c.bounds = CGRect(x: 0, y: 0, width: lw, height: h); c.center = CGPoint(x: 16 + lw / 2, y: y + h / 2)
+        if c === openCard, let a = actions { a.frame = CGRect(x: 16 + lw - a.frame.width, y: y, width: a.frame.width, height: h) }
         y += h
       }
     }
@@ -172,8 +189,126 @@ final class HomeView: UIView, UIScrollViewDelegate {
     else if let r = L.fabRect { fab.frame = r; fab.layer.cornerRadius = r.height / 2 } else { fab.frame = CGRect(x: W - 18 - 60, y: H - 170, width: 60, height: 60); fab.layer.cornerRadius = 30 }
   }
   func scrollToTop() { scroll.setContentOffset(.zero, animated: true) }
+  func scrollViewWillBeginDragging(_ scrollView: UIScrollView) { if let o = openCard { setOpen(o, false) } }
+
+  // ---------- swipe left on a card: Copy link · Delete (as in Mail: round buttons with their names under them) ----------
+  func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
+    guard let p = g as? UIPanGestureRecognizer, let card = p.view as? HomeCard else { return true }
+    let v = p.velocity(in: self)
+    return abs(v.x) > abs(v.y) * 1.2 && (v.x < 0 || card.swipeX < 0)
+  }
+  private var reveal: CGFloat { canDelete ? 148 : 84 }
+  private func actionsFor(_ card: HomeCard) -> HomeActions {
+    if let a = actions, openCard === card { return a }
+    actions?.removeFromSuperview()
+    let a = HomeActions(delete: canDelete, light: L.light)
+    a.frame = CGRect(x: card.center.x + card.bounds.width / 2 - reveal, y: card.center.y - card.bounds.height / 2, width: reveal, height: card.bounds.height)
+    a.onCopy = { [weak self, weak card] in
+      guard let self = self, let card = card else { return }
+      UIImpactFeedbackGenerator(style: .light).impactOccurred()
+      self.send(["ev": "copy", "id": card.id]); self.setOpen(card, false)
+    }
+    a.onDelete = { [weak self, weak card] in
+      guard let self = self, let card = card else { return }
+      // (asked first: the task goes to the Trash)
+      let al = UIAlertController(title: "Delete this task?", message: card.taskTitle.isEmpty ? nil : card.taskTitle, preferredStyle: .actionSheet)
+      al.addAction(UIAlertAction(title: "Delete Task", style: .destructive) { _ in self.send(["ev": "delete", "id": card.id]); self.setOpen(card, false) })
+      al.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in self.setOpen(card, false) })
+      al.overrideUserInterfaceStyle = self.L.light ? .light : .dark
+      self.present?(al)
+    }
+    scroll.insertSubview(a, belowSubview: card)
+    actions = a; openCard = card
+    return a
+  }
+  @objc private func swipe(_ g: UIPanGestureRecognizer) {
+    guard let card = g.view as? HomeCard else { return }
+    switch g.state {
+    case .began:
+      if let o = openCard, o !== card { setOpen(o, false) }
+      card.swipeStart = card.swipeX
+      _ = actionsFor(card)
+    case .changed:
+      var x = card.swipeStart + g.translation(in: self).x
+      if x > 0 { x = 0 }
+      if x < -reveal { x = -reveal + (x + reveal) / 3 }   // (past the buttons: held back)
+      card.swipeX = x
+      actions?.progress = min(1, -x / reveal)
+    case .ended, .cancelled, .failed:
+      let v = g.velocity(in: self).x
+      setOpen(card, v < -350 || (card.swipeX < -reveal / 2 && v < 300))
+    default: break
+    }
+  }
+  func setOpen(_ card: HomeCard, _ open: Bool) {
+    if open { _ = actionsFor(card) }
+    let a = actions
+    UIView.animate(withDuration: 0.32, delay: 0, usingSpringWithDamping: 0.86, initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState]) {
+      card.swipeX = open ? -self.reveal : 0
+      a?.progress = open ? 1 : 0
+    } completion: { _ in
+      if !open && card.swipeX == 0 && self.openCard === card { a?.removeFromSuperview(); if self.actions === a { self.actions = nil }; self.openCard = nil }
+    }
+  }
+
+  // ---------- long press a card: Attach Files (Camera · Photos · Files), the card lifted over the dimmed screen ----------
+  @objc private func press(_ g: UILongPressGestureRecognizer) {
+    guard g.state == .began, let card = g.view as? HomeCard else { return }
+    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+    attach(card)
+  }
+  private func attach(_ card: HomeCard) {
+    if let o = openCard { setOpen(o, false) }
+    card.isHighlighted = false
+    let id = card.id
+    let sheet = AttachSheetVC(light: L.light, title: "Attach Files") { [weak self] src in self?.send(["ev": "attach", "id": id, "source": src]) }
+    if let snap = card.snapshotView(afterScreenUpdates: true) {
+      sheet.lifted = snap; sheet.liftedFrame = card.convert(card.bounds, to: nil)
+    }
+    present?(sheet)
+  }
+
+  // ---------- a toast over Home (the page's own would be under it): "Link copied", "2 files added to …", Undo ----------
+  func toast(_ t: [String: Any]) {
+    toastView?.removeFromSuperview()
+    let text = t["t"] as? String ?? "", act = t["a"] as? String ?? ""
+    let v = UIView(); v.backgroundColor = L.light ? .white : SplashView.hex(0x2b2c31); v.layer.cornerRadius = 10
+    v.layer.borderWidth = 1; v.layer.borderColor = (L.light ? UIColor.black.withAlphaComponent(0.1) : UIColor.white.withAlphaComponent(0.12)).cgColor
+    v.layer.shadowColor = UIColor.black.cgColor; v.layer.shadowOpacity = 0.3; v.layer.shadowRadius = 12; v.layer.shadowOffset = CGSize(width: 0, height: 6)
+    let l = UILabel(); l.text = text; l.font = .systemFont(ofSize: 14); l.textColor = L.title; l.numberOfLines = 2
+    v.addSubview(l)
+    var bw: CGFloat = 0
+    var b: UIButton?
+    if !act.isEmpty {
+      let btn = UIButton(type: .system); btn.setTitle(act, for: .normal); btn.titleLabel?.font = .systemFont(ofSize: 14, weight: .semibold); btn.tintColor = L.tag
+      btn.addAction(UIAction { [weak self, weak v] _ in v?.removeFromSuperview(); self?.onEvent?(["ev": "toast"]) }, for: .touchUpInside)
+      v.addSubview(btn); b = btn; bw = btn.sizeThatFits(CGSize(width: 200, height: 40)).width + 14
+    }
+    let W = bounds.width
+    let maxL = W - 32 - 28 - bw
+    let ls = l.sizeThatFits(CGSize(width: maxL, height: 60))
+    let w = min(W - 32, ls.width + 28 + bw), h = max(40, ls.height + 18)
+    let bottom = (tabTop ?? bounds.height - 40) - 14 - (fab.isHidden ? 0 : fab.frame.height + 12)
+    v.frame = CGRect(x: (W - w) / 2, y: bottom - h, width: w, height: h)
+    l.frame = CGRect(x: 14, y: (h - ls.height) / 2, width: ls.width, height: ls.height)
+    b?.frame = CGRect(x: w - bw, y: 0, width: bw - 4, height: h)
+    v.alpha = 0; v.transform = CGAffineTransform(translationX: 0, y: 8)
+    addSubview(v); toastView = v
+    UIView.animate(withDuration: 0.16) { v.alpha = 1; v.transform = .identity }
+    let ms = (t["ms"] as? Double) ?? 3000
+    DispatchQueue.main.asyncAfter(deadline: .now() + ms / 1000) { [weak v] in
+      guard let v = v else { return }
+      UIView.animate(withDuration: 0.2, animations: { v.alpha = 0 }) { _ in v.removeFromSuperview() }
+    }
+  }
+  // (for the self-test: the first card swiped open, held, closed)
+  private var firstCard: HomeCard? { content.compactMap { $0 as? HomeCard }.first }
+  func selfSwipe() { if let c = firstCard { setOpen(c, true) } }
+  func selfPress() { if let c = firstCard { attach(c) } }
+  func selfClose() { if let o = openCard { setOpen(o, false) } }
   func geo() -> [String: Any] {
-    ["title": title.text ?? "", "date": sub.text ?? "", "stats": stats.map { ($0.viewWithTag(1) as? UILabel)?.text ?? "" },
+    ["open": openCard != nil, "openShift": openCard?.swipeX ?? 0, "actions": actions?.subviews.count ?? 0,
+     "title": title.text ?? "", "date": sub.text ?? "", "stats": stats.map { ($0.viewWithTag(1) as? UILabel)?.text ?? "" },
      "groups": content.filter { $0.tag == 7 }.map { ($0 as? UILabel)?.text ?? "" }, "cards": cards.count, "fab": !fab.isHidden,
      "headH": head.frame.height, "light": L.light]
   }
@@ -222,6 +357,15 @@ struct HomeLook {
 // one task card (phone.js card(), phone.css .pc)
 final class HomeCard: UIControl {
   var onTap: (() -> Void)?
+  var id = ""
+  var taskTitle: String { c["title"] as? String ?? "" }
+  var swipeStart: CGFloat = 0
+  // (sideways when swiped open; pressed in a little while touched — both at once)
+  var swipeX: CGFloat = 0 { didSet { applyTransform() } }
+  private func applyTransform() {
+    let s: CGFloat = isHighlighted ? 0.985 : 1
+    transform = CGAffineTransform(translationX: swipeX, y: 0).scaledBy(x: s, y: s)
+  }
   var people: [String: [String: Any]] = [:] { didSet { if oldValue.count != people.count { drawPeople() } } }
   private let icon = UIImageView(), titleL = UILabel(), metaL = UILabel(), chip = UIView(), chipL = UILabel(), badge = UILabel(), avs = UIView()
   private var c: [String: Any] = [:]
@@ -238,7 +382,7 @@ final class HomeCard: UIControl {
   }
   required init?(coder: NSCoder) { fatalError() }
   // (.pc:active: pressed in a little)
-  override var isHighlighted: Bool { didSet { UIView.animate(withDuration: 0.08) { self.transform = self.isHighlighted ? CGAffineTransform(scaleX: 0.985, y: 0.985) : .identity } } }
+  override var isHighlighted: Bool { didSet { if oldValue != isHighlighted { UIView.animate(withDuration: 0.08) { self.applyTransform() } } } }
 
   func set(_ d: [String: Any], look: HomeLook) {
     c = d; L = look
@@ -414,5 +558,40 @@ final class HomeCard: UIControl {
       s.addArc(withCenter: CGPoint(x: 8, y: 8), radius: 3.6, startAngle: -.pi / 2, endAngle: -.pi / 2 + a, clockwise: true); s.close()
       col.setFill(); s.fill()
     }
+  }
+}
+
+// the buttons a swiped card shows: Copy link (grey) and Delete (red, for those who may), round with their names under
+final class HomeActions: UIView {
+  var onCopy: (() -> Void)?, onDelete: (() -> Void)?
+  private var items: [UIView] = []
+  var progress: CGFloat = 0 { didSet { items.forEach { $0.alpha = progress; $0.transform = CGAffineTransform(scaleX: 0.6 + 0.4 * progress, y: 0.6 + 0.4 * progress) } } }
+  init(delete: Bool, light: Bool) {
+    super.init(frame: .zero)
+    func item(_ sym: String, _ name: String, _ col: UIColor, _ act: @escaping () -> Void) -> UIView {
+      let v = UIView()
+      let b = UIButton(type: .custom)
+      b.backgroundColor = col; b.layer.cornerRadius = 26; b.tintColor = .white
+      b.setImage(UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .semibold)), for: .normal)
+      b.frame = CGRect(x: 0, y: 0, width: 52, height: 52)
+      b.addAction(UIAction { _ in act() }, for: .touchUpInside)
+      b.accessibilityLabel = name
+      let l = UILabel(); l.text = name; l.font = .systemFont(ofSize: 12); l.textColor = light ? SplashView.hex(0x5d6068) : SplashView.hex(0xb4b7c0); l.textAlignment = .center
+      l.frame = CGRect(x: -14, y: 58, width: 80, height: 15)
+      v.addSubview(b); v.addSubview(l)
+      v.bounds = CGRect(x: 0, y: 0, width: 52, height: 73)
+      return v
+    }
+    items.append(item("link", "Copy link", SplashView.hex(0x8a8d96), { [weak self] in self?.onCopy?() }))
+    if delete { items.append(item("trash", "Delete", SplashView.hex(0xe5484d), { [weak self] in self?.onDelete?() })) }
+    items.forEach { addSubview($0) }
+    progress = 0
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    // (from the right: 16 in, 12 between)
+    var x = bounds.width - 16
+    for v in items.reversed() { v.center = CGPoint(x: x - 26, y: bounds.height / 2); x -= 52 + 12 }
   }
 }

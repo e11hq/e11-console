@@ -4892,6 +4892,8 @@ function busyToast(msg) {
 }
 function toast(msg, action, ms) {
   if (/^(Could ?n[’']?t|Could not|Something went wrong|Not sent)/i.test(String(msg))) Haptic.warn();   // (iPhone app: a warning tap)
+  // (iPhone app 23+: over the app's own Home the page's toasts can't be seen — the app shows it there)
+  if (typeof NativeHome !== 'undefined' && NativeHome.shown) NativeHome.toast(msg, action, ms);
   const root = $('#toast-root');
   const el = document.createElement('div');
   el.className = 'toast';
@@ -5557,8 +5559,9 @@ async function deleteSectionFlow(sid) {
   commit();
 }
 
-async function attachFiles(target = 'task', replyTo = null, dropped = null, source = null) {
-  const t = task(ui.taskId);
+async function attachFiles(target = 'task', replyTo = null, dropped = null, source = null, tid = null) {
+  // (tid: a task that isn't open — the iPhone app's Home, a long press on its card)
+  const t = task(tid || ui.taskId);
   if (!t) return;
   const key = draftKey(t, replyTo);
   // a comment's files: remembered while they upload (leaving the task asks about them; "Send" waits for them)
@@ -5592,7 +5595,7 @@ async function attachFiles(target = 'task', replyTo = null, dropped = null, sour
     notifyWatchers(t, 'attach', `attached ${files.length === 1 ? `<b>${esc(files[0].name)}</b>` : files.length + ' files'}`);
     t.updatedAt = nowISO();
     commit();
-    toast(`Attached ${files.length} file${files.length === 1 ? '' : 's'}`);
+    toast(tid && tid !== ui.taskId ? `${files.length} file${files.length === 1 ? '' : 's'} added to ${t.title || 'Untitled task'}` : `Attached ${files.length} file${files.length === 1 ? '' : 's'}`);
   } catch (e) { if (target === 'comment') { delete ui.commentUp[key]; Unsent.uploaded(key, false); } toast('Could not attach: ' + e.message); }
 }
 

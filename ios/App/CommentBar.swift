@@ -501,14 +501,19 @@ final class CommentBar: UIView, UITextViewDelegate, UITableViewDataSource, UITab
 /* Camera · Photos · Files: three big rounded tiles in a small sheet (the comment box's +) */
 final class AttachSheetVC: UIViewController, UISheetPresentationControllerDelegate {
   private let pick: (String) -> Void
+  private let heading: String?
   var onCancel: (() -> Void)?
-  init(light: Bool, pick: @escaping (String) -> Void) {
+  // (23+, Home's long press: the card it's for, lifted over the dimmed screen while the sheet is up)
+  var lifted: UIView?, liftedFrame: CGRect = .zero
+  init(light: Bool, title: String? = nil, pick: @escaping (String) -> Void) {
     self.pick = pick
+    self.heading = title
     super.init(nibName: nil, bundle: nil)
     overrideUserInterfaceStyle = light ? .light : .dark
     modalPresentationStyle = .pageSheet
     if let sh = sheetPresentationController {
-      sh.detents = [.custom(identifier: .init("attach")) { _ in 150 }]
+      let h: CGFloat = title == nil ? 150 : 194
+      sh.detents = [.custom(identifier: .init("attach")) { _ in h }]
       sh.prefersGrabberVisible = true
       sh.delegate = self
     }
@@ -540,11 +545,36 @@ final class AttachSheetVC: UIViewController, UISheetPresentationControllerDelega
     }
     row.translatesAutoresizingMaskIntoConstraints = false
     view.addSubview(row)
+    var top: CGFloat = 28
+    if let h = heading {
+      let l = UILabel(); l.text = h; l.font = .systemFont(ofSize: 17, weight: .semibold); l.textAlignment = .center; l.textColor = .label
+      l.translatesAutoresizingMaskIntoConstraints = false
+      view.addSubview(l)
+      NSLayoutConstraint.activate([l.topAnchor.constraint(equalTo: view.topAnchor, constant: 24), l.centerXAnchor.constraint(equalTo: view.centerXAnchor)])
+      top = 66
+    }
     NSLayoutConstraint.activate([
-      row.topAnchor.constraint(equalTo: view.topAnchor, constant: 28),
+      row.topAnchor.constraint(equalTo: view.topAnchor, constant: top),
       row.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
       row.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
       row.heightAnchor.constraint(equalToConstant: 100),
     ])
+  }
+  override func viewWillAppear(_ animated: Bool) {
+    super.viewWillAppear(animated)
+    guard let v = lifted, let pc = presentationController, let cv = pc.containerView else { return }
+    v.frame = cv.convert(liftedFrame, from: nil)
+    v.layer.shadowColor = UIColor.black.cgColor; v.layer.shadowOpacity = 0.5; v.layer.shadowRadius = 20; v.layer.shadowOffset = CGSize(width: 0, height: 18)
+    cv.insertSubview(v, belowSubview: pc.presentedView ?? view)
+    transitionCoordinator?.animate(alongsideTransition: { _ in v.transform = CGAffineTransform(scaleX: 1.02, y: 1.02) })
+  }
+  override func viewWillDisappear(_ animated: Bool) {
+    super.viewWillDisappear(animated)
+    guard let v = lifted else { return }
+    if let tc = transitionCoordinator {
+      tc.animate(alongsideTransition: { _ in v.transform = .identity; v.alpha = 0 }) { ctx in
+        if ctx.isCancelled { v.alpha = 1; v.transform = CGAffineTransform(scaleX: 1.02, y: 1.02) } else { v.removeFromSuperview() }
+      }
+    } else { v.removeFromSuperview() }
   }
 }

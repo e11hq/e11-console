@@ -2386,7 +2386,7 @@ const CommentsOnly = (() => {
    NATIVE_HOME = false: the page's own Home again (no app build needed). */
 const NATIVE_HOME = true;
 const NativeHome = (() => {
-  let on = false, last = '', shown = false;
+  let on = false, last = '', shown = false, toastAction = null;
   const people = new Map(), asked = new Set();
   let peopleSent = '';
   if (NATIVE_HOME && window.__e11CommentsOnly !== true && typeof Host !== 'undefined' && Host.isIOSApp) {
@@ -2472,6 +2472,7 @@ const NativeHome = (() => {
       me: currentUserId, stats: [due.length, overdue.length, review],
       groups: [grp('Overdue', overdue), grp('Today', due, { empty: overdue.length ? 'Nothing else due today' : 'Nothing due today 🎉' }), grp('In progress', going), grp('Completed today', done, { status: false })].filter(Boolean),
       add: typeof can === 'function' && can('createTask'),
+      canDelete: typeof can === 'function' && can('deleteTask'),
       look: look(),
     };
   }
@@ -2495,10 +2496,20 @@ const NativeHome = (() => {
     // (the page's own Home, under it, scrolled to where the app's was: the task slides in over the same picture)
     if (ev.y != null) { const c = document.getElementById('content'); if (c) c.scrollTop = ev.y; if (document.scrollingElement) document.scrollingElement.scrollTop = ev.y; }
     if (ev.ev === 'open' && ev.id && task(ev.id)) openTask(ev.id);
+    // swipe left on a card: Copy link / Delete (the app has asked "Delete this task?" first); long press: Attach Files
+    else if (ev.ev === 'copy' && ev.id) TaskLink.copy(ev.id);
+    else if (ev.ev === 'delete' && ev.id && task(ev.id)) { if (can('deleteTask')) deleteTaskFlow(ev.id); }
+    else if (ev.ev === 'attach' && ev.id && task(ev.id)) attachFiles('task', null, null, ev.source || null, ev.id);
+    else if (ev.ev === 'toast') { const a = toastAction; toastAction = null; if (a && a.run) a.run(); }
     else if (ev.ev === 'search') click('#content [data-ph="search"]');
     else if (ev.ev === 'me') click('#content [data-ph-tab="me"], [data-ph-tab="me"]');
     else if (ev.ev === 'add') click('.ph-fab');
     setTimeout(sync, 0);
   };
-  return { sync, get on() { return on; } };
+  // a toast while the app's Home is showing (the page's own would be under it)
+  function toastOut(msg, action, ms) {
+    toastAction = action || null;
+    call({ toast: { t: String(msg || ''), a: action ? action.label : '', ms: ms || (action ? 6000 : 3000) } });
+  }
+  return { sync, toast: toastOut, get on() { return on; }, get shown() { return shown; } };
 })();
