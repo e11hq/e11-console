@@ -38,6 +38,10 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private var findTimer: Timer?, keyboardH: CGFloat = 0
   private let scroll = UIScrollView()
   private let fab = UIButton(type: .system)
+  // at the end of the list, beside "+ New task": "Your own creative agency", in a script hand — it fades in (0.5 s) once
+  // the list has reached its end, and out again on scrolling back (Haris, 2026-10-31)
+  private let motto = UILabel()
+  private var mottoOn = false
   private var stats: [UIView] = []
   private var content: [UIView] = []
   private var cards: [String: HomeCard] = [:]
@@ -278,9 +282,28 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // "+ New task": 44 tall like Mail's buttons, 16 from the right, 14 above the tab bar
     let fw = ceil(fab.sizeThatFits(CGSize(width: 300, height: BTN)).width)
     fab.frame = CGRect(x: W - R - fw, y: (tabTop ?? H - 100) - 14 - BTN, width: fw, height: BTN)
+    // (in the room left of the +, its middle level with the +'s)
+    if motto.superview == nil {
+      motto.text = "Your own creative agency"
+      motto.font = UIFont(name: "SnellRoundhand-Bold", size: 21) ?? UIFont(name: "BradleyHandITCTT-Bold", size: 18) ?? .italicSystemFont(ofSize: 17)
+      motto.textColor = .secondaryLabel; motto.textAlignment = .center
+      motto.adjustsFontSizeToFitWidth = true; motto.minimumScaleFactor = 0.7
+      motto.alpha = 0; motto.isUserInteractionEnabled = false
+      insertSubview(motto, belowSubview: fab)
+    }
+    motto.frame = CGRect(x: 16, y: fab.frame.midY - 16, width: max(0, fab.frame.minX - 12 - 16), height: 32)
+    showMotto()
   }
   func scrollToTop() { scroll.setContentOffset(CGPoint(x: 0, y: -scroll.contentInset.top), animated: true) }
-  func scrollViewDidScroll(_ scrollView: UIScrollView) { if scrollView === scroll { layoutHeader() } }
+  func scrollViewDidScroll(_ scrollView: UIScrollView) { if scrollView === scroll { layoutHeader(); showMotto() } }
+  // the list at its end (or too short to scroll), Home not searching, no toast beside the + — the motto shows
+  private func showMotto() {
+    let end = max(-scroll.contentInset.top, scroll.contentSize.height + scroll.contentInset.bottom - scroll.bounds.height)
+    let want = !searching && !fab.isHidden && toastView == nil && scroll.contentOffset.y >= end - 2
+    guard want != mottoOn else { return }
+    mottoOn = want
+    UIView.animate(withDuration: 0.5, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) { self.motto.alpha = want ? 1 : 0 }
+  }
 
   // ---------- the header (as Mail): the big title scrolls with the list, under a frosted bar that comes as it goes ----------
   // (where the list's boxes start: under the big title and its line, 18 below them — as Mail's filters)
@@ -406,6 +429,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if let o = openCard { setOpen(o, false) }
     let start = searchCircle.frame, meF = me.frame
     searching = true
+    showMotto()
     searchBar.frame = start; searchBar.isHidden = false; searchBar.alpha = 1
     searchBar.layer.cornerRadius = start.height / 2
     closeCircle.frame = meF; closeCircle.isHidden = false; closeCircle.alpha = 0
@@ -428,6 +452,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     field.resignFirstResponder()
     findTimer?.invalidate()
     searching = false
+    showMotto()
     setNeedsLayout(); layoutIfNeeded()
     let back = searchCircle.frame
     UIView.animate(withDuration: 0.5, delay: 0, usingSpringWithDamping: 0.85, initialSpringVelocity: 0.3, options: [.allowUserInteraction]) {
@@ -665,7 +690,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     var b: UIButton?
     if !act.isEmpty {
       let btn = UIButton(type: .system); btn.setTitle(act, for: .normal); btn.titleLabel?.font = .systemFont(ofSize: 14, weight: .semibold); btn.tintColor = L.tag
-      btn.addAction(UIAction { [weak self, weak v] _ in v?.removeFromSuperview(); self?.onEvent?(["ev": "toast"]) }, for: .touchUpInside)
+      btn.addAction(UIAction { [weak self, weak v] _ in v?.removeFromSuperview(); if self?.toastView === v { self?.toastView = nil }; self?.showMotto(); self?.onEvent?(["ev": "toast"]) }, for: .touchUpInside)
       v.addSubview(btn); b = btn; bw = btn.sizeThatFits(CGSize(width: 200, height: 40)).width + 14
     }
     // (low, just above the tab bar: beside the +, its bottom level with the +'s — Haris: it sat far too high)
@@ -680,11 +705,12 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     b?.frame = CGRect(x: w - bw, y: 0, width: bw - 4, height: h)
     v.alpha = 0; v.transform = CGAffineTransform(translationX: 0, y: 8)
     addSubview(v); toastView = v
+    showMotto()
     UIView.animate(withDuration: 0.16) { v.alpha = 1; v.transform = .identity }
     let ms = (t["ms"] as? Double) ?? 3000
     DispatchQueue.main.asyncAfter(deadline: .now() + ms / 1000) { [weak v] in
       guard let v = v else { return }
-      UIView.animate(withDuration: 0.2, animations: { v.alpha = 0 }) { _ in v.removeFromSuperview() }
+      UIView.animate(withDuration: 0.2, animations: { v.alpha = 0 }) { [weak self] _ in v.removeFromSuperview(); if self?.toastView === v { self?.toastView = nil }; self?.showMotto() }
     }
   }
   // (for the self-test: the first card swiped open, held, closed)
