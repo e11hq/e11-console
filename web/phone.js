@@ -2502,8 +2502,9 @@ const NativeHome = (() => {
   window.__e11Home = (ev) => {
     if (!ev) return;
     const click = (sel) => { const el = document.querySelector(sel); if (el) el.click(); };
-    // (the page's own Home, under it, scrolled to where the app's was: the task slides in over the same picture)
-    if (ev.y != null) { const c = document.getElementById('content'); if (c) c.scrollTop = ev.y; if (document.scrollingElement) document.scrollingElement.scrollTop = ev.y; }
+    // (nothing on the page is scrolled to follow the app's Home: that left the page's other screens scrolled away —
+    //  only their titles showed, Haris 2026-10-31)
+    const pageScroller = document.scrollingElement; if (pageScroller && pageScroller.scrollTop) pageScroller.scrollTop = 0;
     if (ev.ev === 'open' && ev.id && task(ev.id)) openTask(ev.id);
     // swipe left on a card: Copy link / Delete (the app has asked "Delete this task?" first); long press: Attach Files
     else if (ev.ev === 'copy' && ev.id) TaskLink.copy(ev.id);
