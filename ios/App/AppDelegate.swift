@@ -334,8 +334,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     w.evaluateJavaScript("document.documentElement.style.setProperty('--cm-bottom','\(Int(inset))px')", completionHandler: nil)
   }
   // the keyboard coming / going: the comments move with it, in its own animation
-  func cwebRide(cover: CGFloat, duration: Double, curve: UInt) {
-    let atEnd = cwebAtEnd()
+  func cwebRide(cover: CGFloat, duration: Double, curve: UInt, atEnd: Bool) {
     UIView.animate(withDuration: max(duration, 0.01), delay: 0, options: UIView.AnimationOptions(rawValue: curve << 16).union(.beginFromCurrentState)) {
       self.cwebInset(keepEnd: atEnd, cover: cover)
     }
@@ -474,7 +473,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     keyboardCover = cover
     let dur = (n.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double) ?? 0.25
     let curve = (n.userInfo?[UIResponder.keyboardAnimationCurveUserInfoKey] as? UInt) ?? 7
-    if cwebShown { cwebRide(cover: cover, duration: dur, curve: curve) }
+    // (the comments screen's own web view also shifts itself for the keyboard — WebKit's automatic keyboard avoidance
+    //  on its scroll view, which ran after ours and left the list short of the latest comment: ours goes after it)
+    if cwebShown { let e = cwebAtEnd(); DispatchQueue.main.async { self.cwebRide(cover: cover, duration: dur, curve: curve, atEnd: e) } }
     else { feedRide(cover: cover, duration: dur, curve: curve) }   // (first: the page hears it's iOS moving the list this time)
     pageJS("window.__e11Kb && window.__e11Kb(\(Int(cover.rounded())), \(Int(dur * 1000)), 1)")
     rideKeyboard(to: cover, duration: dur, curve: curve)
@@ -937,7 +938,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if pageReady { pageJS(waitForApp("window.__e11PushTap && window.__e11PushTap(\(jsonString(d)))")) } else { pendingPush = d }
   }
   func flushPending() {
-    if cweb == nil { DispatchQueue.main.asyncAfter(deadline: .now() + 3) { self.makeCommentsWeb() } }
+    // (well after the app's own page has started — loading both at once slowed the start)
+    if cweb == nil { DispatchQueue.main.asyncAfter(deadline: .now() + 8) { self.makeCommentsWeb() } }
     if let t = pendingToken { pendingToken = nil; sendToken(t) }
     // (every time the page loads: this phone's address again — the page wasn't told it after a fresh start, so the site
     //  might not have it, and "Send test" couldn't say how this phone did)
