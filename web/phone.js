@@ -2159,7 +2159,8 @@ const NativeComment = (() => {
       files: (ui.commentFiles[key] || []).map(fileOf),
       uploading: up ? { n: up.total || 1, frac: up.frac || 0 } : null,
       accent: NativeSheet.colorRGB(getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#5b4bf0'),
-      task: ui.taskId || null,   // (20+: which task — the comments screen shows its comments)
+      // (20+: which task — the comments screen shows its comments; "task~comment~n": a comment opened from the Inbox, to flash)
+      task: (() => { if (ui.cmFocus && ui.cmFocus.task !== ui.taskId) ui.cmFocus = null; const f = ui.cmFocus; return ui.taskId ? (f ? `${ui.taskId}~${f.id}~${f.n}` : ui.taskId) : null; })(),
       // (19+: where the comments list is, so iOS can find its scroll view and move it with the keyboard)
       feed: (() => { const f = !window.__e11CommentsOnly && nf && root.classList.contains('ph-cb-on') ? feed() : null; if (!f) return null; const r = f.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top), Math.round(f.clientWidth), Math.round(f.clientHeight)]; })(),
       // (19+: the "jump to the latest" button, tapped through iOS so the keyboard stays)
@@ -2304,13 +2305,38 @@ const NativeComment = (() => {
 const CommentsOnly = (() => {
   const on = window.__e11CommentsOnly === true;
   if (on) document.documentElement.classList.add('cm-only', 'ph-cb-on');
-  window.__e11ShowComments = (id) => {
+  // a comment on this screen: brought into view (a little above the middle) and flashed; kept there while pictures
+  // above it load, until a finger touches the screen (here the page itself scrolls, not .tm-feed)
+  const place = (el) => {
+    let stick = true;
+    const go = () => {
+      if (!stick || !el.isConnected) return;
+      const vh = window.innerHeight, r = el.getBoundingClientRect();
+      window.scrollTo(0, Math.max(0, window.scrollY + r.top - Math.max(16, Math.min(vh * 0.3, vh - r.height - 120))));
+    };
+    go();
+    window.addEventListener('touchstart', () => { stick = false; }, { once: true, passive: true });
+    [120, 400, 900, 1600].forEach((ms) => setTimeout(go, ms));
+  };
+  const flash = (el) => { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 2600); };
+  window.__e11CmPlace = place;
+  let lastFocus = '';
+  window.__e11ShowComments = (arg) => {
+    const [id, fid, fn] = String(arg || '').split('~');
     if (!on || typeof task !== 'function' || !task(id)) return 'no';
-    const same = ui.taskId === id && !!document.querySelector('#detail.open .tm-feed');
-    if (!same) { ui.thread = null; ui.replyTo = null; }
+    // opened from the Inbox: that comment (in its thread, for a reply), once per tap in the Inbox
+    const fkey = fid ? `${fid}~${fn}` : '';
+    const fc = fkey && fkey !== lastFocus ? (task(id).comments || []).find((c) => c.id === fid) : null;
+    if (fkey) lastFocus = fkey;
+    const same = ui.taskId === id && !!document.querySelector('#detail.open .tm-feed') && !fc;
+    if (!same) { ui.thread = fc ? fc.parentId || null : null; ui.replyTo = null; }
     ui.sideTab = 'comments'; ui.activityFilter = 'comments';
-    if (ui.taskId !== id || !document.querySelector('#detail.open')) openTask(id); else if (!same) renderDetail();
-    requestAnimationFrame(() => requestAnimationFrame(() => NativeMac.call('cmReady', { id }).catch(() => {})));
+    if (ui.taskId !== id || !document.querySelector('#detail.open')) { ui.pendingThread = ui.thread; openTask(id); } else if (!same) renderDetail();
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      NativeMac.call('cmReady', { id }).catch(() => {});
+      // (after the app has shown the screen at the latest comment)
+      if (fc) setTimeout(() => { const el = document.querySelector(`#detail .cm[data-comment="${fc.id}"]`); if (el) { place(el); flash(el); } }, 220);
+    }));
     return 'ok';
   };
   // a swipe right on the comments screen: out of a thread first ('thread'); otherwise the app goes back to Details

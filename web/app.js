@@ -6366,7 +6366,7 @@ function closeThread() {
   const feed = $('#detail .tm-feed');
   // back on the main page: on the comment the thread was for (it flashes), not down at the latest comment
   const el = feed && back && feed.querySelector(`.cm[data-comment="${back}"]`);
-  if (el) { stickFeedToComment(feed, el); el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 2500); }
+  if (el) { if (window.__e11CommentsOnly && window.__e11CmPlace) window.__e11CmPlace(el); else stickFeedToComment(feed, el); el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 2500); }
   else if (feed) stickFeedToBottom(feed);
 }
 
@@ -8093,6 +8093,7 @@ function openNotif(id) {
     ui.pendingThread = c.parentId || null;
     ui.replyTo = null;
     ui.focusComment = c.id;
+    ui.cmFocus = { task: t.id, id: c.id, n: Date.now() % 1e6 };   // (iPhone app 20+: the comments screen flashes it too)
   } else if (n.kind === 'mention') {
     ui.sideTab = 'details';
     ui.descOpen[t.id] = true;
