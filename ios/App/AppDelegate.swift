@@ -1035,8 +1035,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   func homeCommand(_ a: [String: Any]) {
     if let p = a["people"] as? [String: [String: Any]] { homeView.people = p; return }
     if let t = a["toast"] as? [String: Any] { if let h = homeIfMade, !h.isHidden { h.toast(t) }; return }
+    if let r = a["search"] as? [String: Any] { homeIfMade?.searchResults(r); return }
     guard let show = a["show"] as? Bool else { return }
-    if !show { homeIfMade?.isHidden = true; return }
+    if !show { homeIfMade?.endEditing(true); homeIfMade?.isHidden = true; return }
     let h = homeView
     h.bottomRoom = (tabBar.isHidden ? 40 : view.bounds.height - tabBar.frame.minY) + 96
     h.tabTop = tabBar.isHidden ? nil : tabBar.frame.minY
@@ -1401,6 +1402,10 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       ("homeSwipe", "return '{}'", { self.homeIfMade?.selfSwipe() }),
       ("homePress", "return '{}'", { self.homeIfMade?.selfClose(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.homeIfMade?.selfPress() } }),
       ("homeDone", "return '{}'", { self.presentedViewController?.dismiss(animated: false) }),
+      // the header shrunk to its small bar once scrolled; Search stretched into its bar with results ("Ford")
+      ("homeScrolled", "return '{}'", { self.homeIfMade?.selfScroll(400) }),
+      ("homeFind", "return '{}'", { self.homeIfMade?.selfScroll(0); self.homeIfMade?.selfFind("Ford") }),
+      ("homeFindDone", "return '{}'", { self.homeIfMade?.selfFindDone() }),
       ("inbox", pause(1500) + "return JSON.stringify({ view: ui.view })", {
         if let i = self.tabKeys.firstIndex(of: "inbox"), let item = self.tabBar.items?[i] { self.tabBar.selectedItem = item; self.tabBar(self.tabBar, didSelect: item) } }),
       ("me", "go('me'); " + pause(1200) + "for (let i = 0; i < 3; i++) { await Push.refresh(); " + pause(300) + " } return JSON.stringify({ lockRows: document.querySelectorAll('#ph-lock, [data-ph-lock]').length, pushRows: document.querySelectorAll('#ph-push').length })", nil),

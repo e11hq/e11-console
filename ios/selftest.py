@@ -64,6 +64,10 @@ try:
     hs = res.get('homeSwipeNative') or {}; hp = res.get('homePressNative') or {}
     check(hs.get('open') is True and (hs.get('openShift') or 0) < -80 and (hs.get('actions') or 0) >= 1, f'a Home card swiped left shows Copy link / Delete {hs}')
     check(hp.get('sheet') == 'AttachSheetVC' and hp.get('open') is False, f'a Home card held opens Attach Files {hp}')
+    hsc = res.get('homeScrolledNative') or {}; hf = res.get('homeFindNative') or {}; hfd = res.get('homeFindDoneNative') or {}
+    check((hsc.get('shrink') or 0) >= 0.99 and (hsc.get('smallTitle') or 0) > 0.9, f'scrolled, Home\'s title shrinks into the small bar {hsc}')
+    check(hf.get('searching') is True and (hf.get('searchBarW') or 0) > 250 and (hf.get('results') or 0) > 0, f'Search stretches into a bar with results for "Ford" {hf}')
+    check(hfd.get('searching') is False, f'the ✕ closes the search {hfd}')
     check((res.get('inboxNative') or {}).get('shown') is False, f"the app's Home goes on another tab {res.get('inboxNative')}")
     check(res.get('splashGone') is True, f"the startup screen went before Home {res.get('splashGone')}")
     check(set(seen) >= {'home', 'inbox', 'me', 'client', 'task', 'sheet', 'back', 'nsheet', 'nsheetEnd', 'nsheetChannel', 'nsheetTitled'}, f'all stages ran {sorted(seen)}')

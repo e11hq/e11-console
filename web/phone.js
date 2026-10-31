@@ -2501,6 +2501,22 @@ const NativeHome = (() => {
     else if (ev.ev === 'delete' && ev.id && task(ev.id)) { if (can('deleteTask')) deleteTaskFlow(ev.id); }
     else if (ev.ev === 'attach' && ev.id && task(ev.id)) attachFiles('task', null, null, ev.source || null, ev.id);
     else if (ev.ev === 'toast') { const a = toastAction; toastAction = null; if (a && a.run) a.run(); }
+    // the app's own search bar (from the search circle): its results, as the page's Search finds them
+    else if (ev.ev === 'find') {
+      const q = String(ev.q || '').trim();
+      let res = { q: ev.q || '', clients: [], tasks: [], total: 0 };
+      if (q) {
+        const r = taskSearch(q, { limit: 80 });
+        res = {
+          q: ev.q, total: r.total,
+          clients: r.projects.map((p) => ({ id: p.id, name: p.name, ini: initials(p.name), rgb: rgbOfCss(p.color), open: db.tasks.filter((t) => t.projectId === p.id && !t.parentId && !t.done).length })),
+          tasks: r.tasks.map((h) => cardOf(h.t)),
+        };
+      }
+      call({ search: res });
+      return;
+    }
+    else if (ev.ev === 'client' && ev.id) go('project', ev.id);
     else if (ev.ev === 'search') click('#content [data-ph="search"]');
     else if (ev.ev === 'me') click('#content [data-ph-tab="me"], [data-ph-tab="me"]');
     else if (ev.ev === 'add') click('.ph-fab');

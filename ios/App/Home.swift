@@ -13,7 +13,18 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
   private weak var openCard: HomeCard?
   private var actions: HomeActions?
   private var toastView: UIView?
-  private let head = UIView(), sub = UILabel(), title = UILabel(), search = UIButton(type: .custom), me = UIButton(type: .custom)
+  /* The header (Haris, 2026-10-31, as Mail): at the top the big title with the date over it; as the list scrolls it
+     shrinks as it rises into a small bar — the small title with the date under it — and the cards pass under it
+     through a soft blur. Search is a Liquid Glass circle that stretches into a glass search bar; your photo then
+     turns into a glass ✕ that closes it. */
+  private let blur = UIVisualEffectView(effect: nil), blurMask = CAGradientLayer()
+  private let sub = UILabel(), title = UILabel(), smallTitle = UILabel(), smallSub = UILabel()
+  private let searchCircle = HomeGlass(), me = UIButton(type: .custom), closeCircle = HomeGlass()
+  private let searchBar = HomeGlass(), field = UITextField(), lens = UIImageView()
+  private let results = UIScrollView(), hint = UILabel()
+  private var resultViews: [UIView] = [], resultCards: [String: HomeCard] = [:]
+  private(set) var searching = false
+  private var findTimer: Timer?, keyboardH: CGFloat = 0
   private let scroll = UIScrollView()
   private let fab = UIButton(type: .custom)
   private var stats: [UIView] = []
@@ -34,19 +45,50 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
     scroll.contentInsetAdjustmentBehavior = .never
     scroll.delegate = self
     addSubview(scroll)
-    addSubview(head)
+    // the search results (in place of the list while searching)
+    results.alwaysBounceVertical = true; results.contentInsetAdjustmentBehavior = .never; results.keyboardDismissMode = .onDrag
+    results.alpha = 0; results.isHidden = true
+    hint.font = .systemFont(ofSize: 14); hint.numberOfLines = 0; results.addSubview(hint)
+    addSubview(results)
+    blur.isUserInteractionEnabled = false
+    blurMask.colors = [UIColor.black.cgColor, UIColor.black.cgColor, UIColor.clear.cgColor]
+    blur.layer.mask = blurMask
+    addSubview(blur)
     sub.font = .systemFont(ofSize: 13, weight: .medium)
     title.font = .systemFont(ofSize: 32, weight: .heavy)
     title.adjustsFontSizeToFitWidth = true; title.minimumScaleFactor = 0.6
-    head.addSubview(sub); head.addSubview(title)
-    search.setImage(UIImage(systemName: "magnifyingglass", withConfiguration: UIImage.SymbolConfiguration(pointSize: 18, weight: .medium)), for: .normal)
-    search.layer.cornerRadius = 23
-    search.accessibilityLabel = "Search"
-    search.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.send(["ev": "search"]) }, for: .touchUpInside)
-    me.layer.cornerRadius = 20; me.clipsToBounds = true
+    // (the big title shrinks from its left edge)
+    sub.layer.anchorPoint = CGPoint(x: 0, y: 0.5); title.layer.anchorPoint = CGPoint(x: 0, y: 0.5)
+    smallTitle.font = .systemFont(ofSize: 17, weight: .bold); smallSub.font = .systemFont(ofSize: 12)
+    smallTitle.alpha = 0; smallSub.alpha = 0
+    [sub, title, smallTitle, smallSub].forEach { addSubview($0) }
+    searchCircle.setIcon("magnifyingglass", 18)
+    searchCircle.accessibilityLabel = "Search"
+    searchCircle.onTap = { [weak self] in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.openSearch() }
+    me.clipsToBounds = true
     me.accessibilityLabel = "Me"
     me.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.send(["ev": "me"]) }, for: .touchUpInside)
-    head.addSubview(search); head.addSubview(me)
+    closeCircle.setIcon("xmark", 17)
+    closeCircle.accessibilityLabel = "Close search"
+    closeCircle.onTap = { [weak self] in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.closeSearch() }
+    closeCircle.alpha = 0; closeCircle.isHidden = true
+    // the search bar: a glass capsule with the lens and the text field
+    lens.image = UIImage(systemName: "magnifyingglass", withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .medium))
+    lens.contentMode = .center
+    field.font = .systemFont(ofSize: 17)
+    field.returnKeyType = .search; field.autocorrectionType = .no; field.clearButtonMode = .whileEditing
+    field.addAction(UIAction { [weak self] _ in self?.typed() }, for: .editingChanged)
+    field.addAction(UIAction { [weak self] _ in self?.field.resignFirstResponder() }, for: .editingDidEndOnExit)
+    searchBar.content.addSubview(lens); searchBar.content.addSubview(field)
+    searchBar.isHidden = true
+    [searchCircle, me, searchBar, closeCircle].forEach { addSubview($0) }
+    let nc = NotificationCenter.default
+    nc.addObserver(forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: .main) { [weak self] n in
+      guard let self = self, let end = (n.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue else { return }
+      let r = self.convert(end, from: nil)
+      self.keyboardH = max(0, self.bounds.maxY - r.minY); self.setNeedsLayout()
+    }
+    nc.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { [weak self] _ in self?.keyboardH = 0; self?.setNeedsLayout() }
     fab.setImage(UIImage(systemName: "plus", withConfiguration: UIImage.SymbolConfiguration(pointSize: 24, weight: .semibold)), for: .normal)
     fab.tintColor = .white
     fab.accessibilityLabel = "New task"
@@ -60,7 +102,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
   required init?(coder: NSCoder) { fatalError() }
 
   private func send(_ ev: [String: Any]) {
-    var e = ev; e["y"] = Int(scroll.contentOffset.y.rounded())
+    var e = ev; e["y"] = Int((scroll.contentOffset.y + scroll.contentInset.top).rounded())
     onEvent?(e)
   }
 
@@ -69,10 +111,16 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
     m = model
     L = HomeLook(model["look"] as? [String: Any])
     backgroundColor = L.bg
-    head.backgroundColor = L.headBg
     sub.text = model["date"] as? String; sub.textColor = L.sub
     title.attributedText = NSAttributedString(string: model["title"] as? String ?? "", attributes: [.font: UIFont.systemFont(ofSize: 32, weight: .heavy), .kern: -0.64, .foregroundColor: L.h1])
-    search.backgroundColor = L.round; search.tintColor = L.roundIc
+    smallTitle.text = model["title"] as? String; smallTitle.textColor = L.h1
+    smallSub.text = model["date"] as? String; smallSub.textColor = L.sub
+    blur.effect = UIBlurEffect(style: L.light ? .systemChromeMaterialLight : .systemChromeMaterialDark)
+    [searchCircle, closeCircle, searchBar].forEach { $0.setLook(light: L.light, tint: L.roundIc) }
+    lens.tintColor = L.sub; field.textColor = L.h1; field.tintColor = L.tag
+    field.attributedPlaceholder = NSAttributedString(string: "Search tasks, clients, people", attributes: [.foregroundColor: L.sub.withAlphaComponent(0.8)])
+    field.keyboardAppearance = L.light ? .light : .dark
+    hint.textColor = L.empty
     meId = model["me"] as? String ?? ""; meChanged()
     let st = model["stats"] as? [Int] ?? [0, 0, 0]
     let names = ["Due today", "Overdue", "In review"], cols = [L.statG, L.statR, L.statA]
@@ -139,19 +187,14 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
   override func layoutSubviews() {
     super.layoutSubviews()
     let W = bounds.width, H = bounds.height
-    let safeTop = safeAreaInsets.top
-    let headH = L.headH ?? (safeTop + 18 + 55 + 12)
-    head.frame = CGRect(x: 0, y: 0, width: W, height: headH)
-    // (.ph-head: the date over the title on the left, Search and your photo on the right, all centred on one line)
-    let subH = ceil(sub.font.lineHeight), tH: CGFloat = 37
-    let blockH = subH + 2 + tH
-    let by = headH - 12 - blockH
-    me.frame = CGRect(x: W - 20 - 40, y: by + (blockH - 40) / 2, width: 40, height: 40)
-    search.frame = CGRect(x: me.frame.minX - 10 - 46, y: by + (blockH - 46) / 2, width: 46, height: 46)
-    let tw = search.frame.minX - 10 - 20
-    sub.frame = CGRect(x: 20, y: by, width: tw, height: subH)
-    title.frame = CGRect(x: 20, y: by + subH + 2, width: tw, height: tH)
-    scroll.frame = CGRect(x: 0, y: headH, width: W, height: H - headH)
+    let bigH = bigHead
+    // the list runs the full height, under the header; it starts below the big header
+    if scroll.frame != bounds { scroll.frame = bounds }
+    if scroll.contentInset.top != bigH { let s0 = scroll.contentOffset.y + scroll.contentInset.top; scroll.contentInset.top = bigH; scroll.contentOffset.y = s0 - bigH }
+    layoutHeader()
+    results.frame = CGRect(x: 0, y: searchBar.frame.maxY + 8, width: W, height: H - searchBar.frame.maxY - 8)
+    results.contentInset.bottom = max(keyboardH, bottomRoom - 60)
+    layoutResults()
     // the three boxes (.ph-stats: 4 above, 6 below, 8 apart)
     var y: CGFloat = 4
     let bw = (W - 40 - 16) / 3, bh: CGFloat = 1 + 12 + 29 + 14 + 12 + 1
@@ -182,13 +225,183 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
       }
     }
     scroll.contentSize = CGSize(width: W, height: y + bottomRoom)
-    scroll.verticalScrollIndicatorInsets = UIEdgeInsets(top: 0, left: 0, bottom: bottomRoom - 20, right: 0)
     // the + button where the page has it
     let fs = L.fabRect?.width ?? 60
     if let tt = tabTop { fab.frame = CGRect(x: W - 18 - fs, y: tt - 14 - fs, width: fs, height: fs); fab.layer.cornerRadius = fs / 2 }
     else if let r = L.fabRect { fab.frame = r; fab.layer.cornerRadius = r.height / 2 } else { fab.frame = CGRect(x: W - 18 - 60, y: H - 170, width: 60, height: 60); fab.layer.cornerRadius = 30 }
   }
-  func scrollToTop() { scroll.setContentOffset(.zero, animated: true) }
+  func scrollToTop() { scroll.setContentOffset(CGPoint(x: 0, y: -scroll.contentInset.top), animated: true) }
+  func scrollViewDidScroll(_ scrollView: UIScrollView) { if scrollView === scroll { layoutHeader() } }
+
+  // ---------- the header: big at the top, a small bar once scrolled (in between: following the finger) ----------
+  private var bigHead: CGFloat { L.headH ?? (safeAreaInsets.top + 18 + 55 + 12) }
+  private var smallHead: CGFloat { safeAreaInsets.top + 52 }
+  private func mix(_ a: CGFloat, _ b: CGFloat, _ t: CGFloat) -> CGFloat { a + (b - a) * t }
+  private func ease(_ a: CGFloat, _ b: CGFloat, _ t: CGFloat) -> CGFloat { let x = min(1, max(0, (t - a) / (b - a))); return x * x * (3 - 2 * x) }
+  // (how far it has shrunk: 0 big … 1 small)
+  private var shrink: CGFloat {
+    let s = scroll.contentOffset.y + scroll.contentInset.top
+    return min(1, max(0, s / max(1, bigHead - smallHead)))
+  }
+  private func layoutHeader() {
+    let W = bounds.width
+    let bigH = bigHead, smallH = smallHead, top = safeAreaInsets.top
+    let t = shrink
+    let s = max(0, scroll.contentOffset.y + scroll.contentInset.top)
+    let headH = mix(bigH, smallH, shrink)
+    // the blur: there as soon as the list goes under the header, fading out at its lower edge
+    blur.frame = CGRect(x: 0, y: 0, width: W, height: headH + 22)
+    CATransaction.begin(); CATransaction.setDisableActions(true)
+    blurMask.frame = blur.bounds
+    blurMask.locations = [0, NSNumber(value: Double(headH / (headH + 22))), 1]
+    CATransaction.commit()
+    blur.alpha = searching ? 1 : min(1, s / 14)
+    scroll.verticalScrollIndicatorInsets = UIEdgeInsets(top: headH - top, left: 0, bottom: bottomRoom - 20, right: 0)
+    // (.ph-head at the top: the date over the title on the left, Search and your photo on the right, centred on one line)
+    let subH = ceil(sub.font.lineHeight), tH: CGFloat = 37
+    let blockH = subH + 2 + tH
+    let by = bigH - 12 - blockH
+    let bigCY = by + blockH / 2, smallCY = top + 26
+    let cy = mix(bigCY, smallCY, shrink)
+    let ss = mix(46, 40, shrink), ms = mix(40, 36, shrink)
+    if !searching {
+      me.bounds = CGRect(x: 0, y: 0, width: ms, height: ms); me.center = CGPoint(x: W - 20 - ms / 2, y: cy); me.layer.cornerRadius = ms / 2
+      searchCircle.frame = CGRect(x: W - 20 - ms - 10 - ss, y: cy - ss / 2, width: ss, height: ss)
+    }
+    let tw = W - 20 - 40 - 10 - 46 - 10 - 20
+    // the big title rises and shrinks (to 70%) from its left edge, fading as the small one comes
+    let k = 1 - 0.3 * t, lift = (bigH - smallH) * t
+    sub.transform = .identity; title.transform = .identity
+    sub.frame = CGRect(x: 20, y: by, width: tw, height: subH)
+    title.frame = CGRect(x: 20, y: by + subH + 2, width: tw, height: tH)
+    sub.transform = CGAffineTransform(translationX: 0, y: -lift).scaledBy(x: k, y: k)
+    title.transform = CGAffineTransform(translationX: 0, y: -lift - 8 * t).scaledBy(x: k, y: k)
+    let bigA = searching ? 0 : 1 - ease(0.45, 0.85, t), smallA = searching ? 0 : ease(0.7, 1, t)
+    sub.alpha = bigA; title.alpha = bigA
+    smallTitle.frame = CGRect(x: 20, y: smallCY - 19, width: tw, height: 21); smallSub.frame = CGRect(x: 20, y: smallCY + 2, width: tw, height: 15)
+    smallTitle.alpha = smallA; smallSub.alpha = smallA
+    if searching {
+      // (the bar in the row the buttons are in; the ✕ where your photo was)
+      searchBar.frame = CGRect(x: 20, y: cy - 23, width: W - 20 - 46 - 10 - 20, height: 46)
+      closeCircle.frame = CGRect(x: W - 20 - 46, y: cy - 23, width: 46, height: 46)
+    }
+    lens.frame = CGRect(x: 12, y: 0, width: 22, height: searchBar.bounds.height)
+    field.frame = CGRect(x: 40, y: 0, width: max(0, searchBar.bounds.width - 40 - 10), height: searchBar.bounds.height)
+  }
+
+  // ---------- search: the glass circle stretches into a search bar, your photo becomes a glass ✕ ----------
+  func openSearch() {
+    if searching { field.becomeFirstResponder(); return }
+    if let o = openCard { setOpen(o, false) }
+    let start = searchCircle.frame, meF = me.frame
+    searching = true
+    searchBar.frame = start; searchBar.isHidden = false; searchBar.alpha = 1
+    searchBar.layer.cornerRadius = start.height / 2
+    closeCircle.frame = meF; closeCircle.isHidden = false; closeCircle.alpha = 0
+    closeCircle.transform = CGAffineTransform(scaleX: 0.6, y: 0.6)
+    searchCircle.alpha = 0
+    results.isHidden = false
+    field.text = ""; showResults(nil)
+    UIView.animate(withDuration: 0.55, delay: 0, usingSpringWithDamping: 0.8, initialSpringVelocity: 0.4, options: [.allowUserInteraction]) {
+      self.layoutHeader()
+      self.searchBar.layer.cornerRadius = 23
+      self.me.alpha = 0; self.me.transform = CGAffineTransform(scaleX: 0.6, y: 0.6)
+      self.closeCircle.alpha = 1; self.closeCircle.transform = .identity
+      self.scroll.alpha = 0; self.results.alpha = 1; self.fab.alpha = 0
+      self.results.frame.origin.y = self.searchBar.frame.maxY + 8
+    }
+    field.becomeFirstResponder()
+  }
+  func closeSearch() {
+    guard searching else { return }
+    field.resignFirstResponder()
+    findTimer?.invalidate()
+    searching = false
+    setNeedsLayout(); layoutIfNeeded()
+    let back = searchCircle.frame
+    UIView.animate(withDuration: 0.5, delay: 0, usingSpringWithDamping: 0.85, initialSpringVelocity: 0.3, options: [.allowUserInteraction]) {
+      self.searchBar.frame = back; self.searchBar.layer.cornerRadius = back.height / 2
+      self.lens.frame = CGRect(x: 12, y: 0, width: 22, height: back.height)
+      self.field.alpha = 0
+      self.closeCircle.alpha = 0; self.closeCircle.transform = CGAffineTransform(scaleX: 0.6, y: 0.6)
+      self.me.alpha = 1; self.me.transform = .identity
+      self.scroll.alpha = 1; self.results.alpha = 0; self.fab.alpha = 1
+      self.layoutHeader()
+    } completion: { _ in
+      if self.searching { return }
+      self.searchBar.isHidden = true; self.closeCircle.isHidden = true; self.field.alpha = 1
+      self.searchCircle.alpha = 1; self.results.isHidden = true
+      self.field.text = ""; self.showResults(nil)
+    }
+  }
+  private func typed() {
+    findTimer?.invalidate()
+    let q = field.text ?? ""
+    if q.trimmingCharacters(in: .whitespaces).isEmpty { showResults(nil); return }
+    findTimer = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: false) { [weak self] _ in self?.onEvent?(["ev": "find", "q": q]) }
+  }
+  // what the page found for the bar (the search command): clients, then tasks — in the cards of Home
+  func searchResults(_ r: [String: Any]) {
+    guard searching, (r["q"] as? String) == field.text else { return }
+    showResults(r)
+  }
+  private func showResults(_ r: [String: Any]?) {
+    resultViews.forEach { $0.removeFromSuperview() }
+    resultViews = []
+    var seen = Set<String>()
+    let q = (field.text ?? "").trimmingCharacters(in: .whitespaces)
+    if let r = r {
+      let clients = r["clients"] as? [[String: Any]] ?? [], tasks = r["tasks"] as? [[String: Any]] ?? []
+      if !clients.isEmpty {
+        resultViews.append(groupHead("Clients", clients.count))
+        for c in clients {
+          let row = HomeClientRow(); row.set(c, look: L)
+          let id = c["id"] as? String ?? ""
+          row.addAction(UIAction { [weak self] _ in self?.field.resignFirstResponder(); self?.send(["ev": "client", "id": id]) }, for: .touchUpInside)
+          results.addSubview(row); resultViews.append(row)
+        }
+      }
+      if !tasks.isEmpty {
+        resultViews.append(groupHead("Tasks", (r["total"] as? Int) ?? tasks.count))
+        for c in tasks {
+          guard let id = c["id"] as? String else { continue }
+          seen.insert(id)
+          let v: HomeCard
+          if let old = resultCards[id] { v = old } else {
+            v = HomeCard(); v.id = id
+            v.onTap = { [weak self] in self?.field.resignFirstResponder(); self?.send(["ev": "open", "id": id]) }
+            resultCards[id] = v
+          }
+          v.people = people; v.set(c, look: L)
+          results.addSubview(v); resultViews.append(v)
+        }
+      }
+      hint.text = clients.isEmpty && tasks.isEmpty ? "No tasks found. Try a client or person’s name." : nil
+    } else { hint.text = q.isEmpty ? "Search tasks, clients or people." : nil }
+    for (id, v) in resultCards where !seen.contains(id) { v.removeFromSuperview(); resultCards[id] = nil }
+    setNeedsLayout()
+  }
+  private func groupHead(_ name: String, _ n: Int) -> UILabel {
+    let h = UILabel(); h.tag = 7
+    let s = NSMutableAttributedString(string: name.uppercased(), attributes: [.font: UIFont.systemFont(ofSize: 12, weight: .bold), .kern: 0.72, .foregroundColor: L.gh])
+    s.append(NSAttributedString(string: " ", attributes: [.font: UIFont.systemFont(ofSize: 12), .kern: 3.6]))
+    s.append(NSAttributedString(string: "\(n)", attributes: [.font: UIFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: L.gh.withAlphaComponent(0.8)]))
+    h.attributedText = s
+    results.addSubview(h)
+    return h
+  }
+  private func layoutResults() {
+    let W = bounds.width, lw = W - 32
+    var y: CGFloat = 0
+    if let t = hint.text, !t.isEmpty { let h = hint.sizeThatFits(CGSize(width: lw - 8, height: 400)).height; hint.frame = CGRect(x: 20, y: 14, width: lw - 8, height: h); y = 14 + h + 14 } else { hint.frame = .zero }
+    for (i, v) in resultViews.enumerated() {
+      if i > 0 { y += 10 }
+      if v.tag == 7 { y += i > 0 ? 12 : 4; v.frame = CGRect(x: 20, y: y, width: lw - 8, height: 15); y += 15 }
+      else if let c = v as? HomeCard { let h = c.height(for: lw); c.bounds = CGRect(x: 0, y: 0, width: lw, height: h); c.center = CGPoint(x: 16 + lw / 2, y: y + h / 2); y += h }
+      else { v.frame = CGRect(x: 16, y: y, width: lw, height: 70); y += 70 }
+    }
+    results.contentSize = CGSize(width: W, height: y + 20)
+  }
   func scrollViewWillBeginDragging(_ scrollView: UIScrollView) { if let o = openCard { setOpen(o, false) } }
 
   // ---------- swipe left on a card: Copy link · Delete (as in Mail: round buttons with their names under them) ----------
@@ -306,11 +519,15 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
   func selfSwipe() { if let c = firstCard { setOpen(c, true) } }
   func selfPress() { if let c = firstCard { attach(c) } }
   func selfClose() { if let o = openCard { setOpen(o, false) } }
+  func selfScroll(_ y: CGFloat) { scroll.setContentOffset(CGPoint(x: 0, y: y - scroll.contentInset.top), animated: false); layoutHeader() }
+  func selfFind(_ q: String) { openSearch(); field.text = q; typed() }
+  func selfFindDone() { closeSearch() }
   func geo() -> [String: Any] {
     ["open": openCard != nil, "openShift": openCard?.swipeX ?? 0, "actions": actions?.subviews.count ?? 0,
      "title": title.text ?? "", "date": sub.text ?? "", "stats": stats.map { ($0.viewWithTag(1) as? UILabel)?.text ?? "" },
      "groups": content.filter { $0.tag == 7 }.map { ($0 as? UILabel)?.text ?? "" }, "cards": cards.count, "fab": !fab.isHidden,
-     "headH": head.frame.height, "light": L.light]
+     "headH": blur.frame.height - 22, "shrink": shrink, "smallTitle": smallTitle.alpha, "searching": searching,
+     "searchBarW": searchBar.isHidden ? 0 : searchBar.frame.width, "results": resultViews.count, "light": L.light]
   }
 }
 
@@ -593,5 +810,77 @@ final class HomeActions: UIView {
     // (from the right: 16 in, 12 between)
     var x = bounds.width - 16
     for v in items.reversed() { v.center = CGPoint(x: x - 26, y: bounds.height / 2); x -= 52 + 12 }
+  }
+}
+
+// a Liquid Glass circle or capsule (iOS 26+: iPhone's own glass; before: a thin blur with a light edge)
+final class HomeGlass: UIView {
+  var onTap: (() -> Void)?
+  let content = UIView()
+  private let fx = UIVisualEffectView(effect: nil), icon = UIImageView()
+  override init(frame: CGRect) {
+    super.init(frame: frame)
+    fx.isUserInteractionEnabled = false
+    addSubview(fx)
+    content.isUserInteractionEnabled = true
+    fx.contentView.addSubview(content)
+    icon.contentMode = .center; addSubview(icon)
+    addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tap)))
+    isAccessibilityElement = true; accessibilityTraits = .button
+    fx.clipsToBounds = true
+    if #available(iOS 26.0, *) {
+      let g = UIGlassEffect(style: .regular); g.isInteractive = true
+      fx.effect = g
+    }
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  @objc private func tap() { onTap?() }
+  override func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool { g is UITapGestureRecognizer ? onTap != nil : true }
+  func setIcon(_ sym: String, _ size: CGFloat) { icon.image = UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: size, weight: .medium)) }
+  func setLook(light: Bool, tint: UIColor) {
+    icon.tintColor = tint
+    overrideUserInterfaceStyle = light ? .light : .dark
+    if #available(iOS 26.0, *) { return }
+    fx.effect = UIBlurEffect(style: light ? .systemUltraThinMaterialLight : .systemUltraThinMaterialDark)
+    fx.layer.borderWidth = 1; fx.layer.borderColor = UIColor.white.withAlphaComponent(light ? 0.6 : 0.18).cgColor
+  }
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    fx.frame = bounds; content.frame = fx.contentView.bounds; icon.frame = bounds
+    fx.layer.cornerRadius = min(bounds.height, bounds.width) / 2
+  }
+  // (the search bar's field gets the taps inside it; the glass itself only when there's no field)
+  override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+    let v = super.hitTest(point, with: event)
+    if let v = v, v !== self, v.isDescendant(of: content), v !== content { return v }
+    return v == nil ? nil : self
+  }
+}
+
+// a client in the search results (phone.js search(): the coloured square with its initials, the name, its open tasks)
+final class HomeClientRow: UIControl {
+  private let sq = UILabel(), name = UILabel(), meta = UILabel()
+  override init(frame: CGRect) {
+    super.init(frame: frame)
+    layer.cornerRadius = 20; layer.borderWidth = 1
+    sq.layer.cornerRadius = 11; sq.clipsToBounds = true; sq.textAlignment = .center; sq.font = .systemFont(ofSize: 14, weight: .heavy); sq.textColor = .white
+    name.font = .systemFont(ofSize: 15.5, weight: .semibold); meta.font = .systemFont(ofSize: 12.5)
+    [sq, name, meta].forEach { $0.isUserInteractionEnabled = false; addSubview($0) }
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  override var isHighlighted: Bool { didSet { UIView.animate(withDuration: 0.08) { self.transform = self.isHighlighted ? CGAffineTransform(scaleX: 0.985, y: 0.985) : .identity } } }
+  func set(_ c: [String: Any], look L: HomeLook) {
+    backgroundColor = L.card; layer.borderColor = L.cardLine.cgColor
+    sq.text = c["ini"] as? String; sq.backgroundColor = NativeSheetVC.color(c["rgb"]) ?? .systemIndigo
+    name.text = c["name"] as? String; name.textColor = L.title
+    let n = c["open"] as? Int ?? 0
+    meta.text = "Client · \(n) open task\(n == 1 ? "" : "s")"; meta.textColor = L.meta
+    accessibilityLabel = name.text
+  }
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    sq.frame = CGRect(x: 15, y: (bounds.height - 40) / 2, width: 40, height: 40)
+    name.frame = CGRect(x: 67, y: bounds.height / 2 - 20, width: bounds.width - 82, height: 21)
+    meta.frame = CGRect(x: 67, y: bounds.height / 2 + 3, width: bounds.width - 82, height: 17)
   }
 }
