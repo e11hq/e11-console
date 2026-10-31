@@ -257,6 +257,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       }
     }
     scroll.contentSize = CGSize(width: W, height: y + bottomRoom)
+    // (a list that got shorter — a task deleted — never leaves the view scrolled past its end, showing nothing)
+    let maxY = max(-scroll.contentInset.top, scroll.contentSize.height + scroll.contentInset.bottom - scroll.bounds.height)
+    if !scroll.isDragging && !scroll.isDecelerating && scroll.contentOffset.y > maxY + 1 { scroll.setContentOffset(CGPoint(x: 0, y: maxY), animated: true) }
     // the + button where the page has it
     // "+ New task": 44 tall like Mail's buttons, 16 from the right, 14 above the tab bar
     let fw = ceil(fab.sizeThatFits(CGSize(width: 300, height: BTN)).width)
