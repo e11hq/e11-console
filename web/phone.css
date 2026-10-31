@@ -1124,3 +1124,8 @@ html.cm-only body.phone #detail .tm-activity, html.cm-only body.phone #detail .t
 /* a thread's "‹ Thread" bar stays at the top of what can be seen — with the keyboard up the app slides the comments up
    by its height (--cm-top, app 21+), so the top of the page is then under the task's header (Haris, 2026-10-31) */
 html.cm-only body.phone #detail .tm-act-head.thread-head { position: sticky !important; top: var(--cm-top, 0px) !important; z-index: 2; background: var(--bg); border-bottom: 1px solid var(--border); margin-top: -12px; padding-top: 10px; padding-bottom: 10px; }
+
+/* No drop shadows on the phone's boxes and cards (Haris, 2026-10-31: "so old school") — task cards, the Home boxes,
+   lists, Client Assets cards and tiles; menus, sheets and pop-ups that float over the page keep theirs */
+body.phone :is(.pc, .ph-stats > div, .ph-rows, .ca-card, .cf-card, .tile, .card, .thread),
+:root[data-theme="light"] body.phone :is(.pc, .ph-stats > div, .ph-rows, .ca-card, .cf-card, .tile, .card, .thread) { box-shadow: none !important; }

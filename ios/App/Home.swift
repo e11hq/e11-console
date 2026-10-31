@@ -129,7 +129,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let names = ["Due today", "Overdue", "In review"], cols = [L.statG, L.statR, L.statA]
     for (i, v) in stats.enumerated() {
       v.backgroundColor = L.statBg; v.layer.borderColor = L.statLine.cgColor
-      if L.light { v.layer.shadowColor = UIColor(red: 30 / 255, green: 30 / 255, blue: 60 / 255, alpha: 1).cgColor; v.layer.shadowOpacity = 0.06; v.layer.shadowRadius = 7; v.layer.shadowOffset = CGSize(width: 0, height: 4) } else { v.layer.shadowOpacity = 0 }
+      v.layer.shadowOpacity = 0   // (no drop shadows on boxes or cards — Haris, 2026-10-31)
       let n = v.viewWithTag(1) as? UILabel, l = v.viewWithTag(2) as? UILabel
       n?.text = "\(st.indices.contains(i) ? st[i] : 0)"; n?.font = .systemFont(ofSize: 24, weight: .heavy); n?.textColor = cols[i]
       l?.text = names[i]; l?.font = .systemFont(ofSize: 12); l?.textColor = L.statLabel
@@ -605,7 +605,7 @@ final class HomeCard: UIControl {
     let late = (d["late"] as? Bool) == true, done = (d["done"] as? Bool) == true
     backgroundColor = L.card
     layer.borderColor = (late ? L.lateLine : L.cardLine).cgColor
-    if L.light { layer.shadowColor = UIColor(red: 30 / 255, green: 30 / 255, blue: 60 / 255, alpha: 1).cgColor; layer.shadowOpacity = 0.07; layer.shadowRadius = 8; layer.shadowOffset = CGSize(width: 0, height: 4) } else { layer.shadowOpacity = 0 }
+    layer.shadowOpacity = 0
     let t = d["title"] as? String ?? ""
     let ps = NSMutableParagraphStyle(); ps.minimumLineHeight = 20.15; ps.maximumLineHeight = 20.15
     var ta: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 15.5, weight: t.isEmpty ? .medium : .semibold), .foregroundColor: done || t.isEmpty ? L.doneTitle : L.title, .paragraphStyle: ps, .baselineOffset: 1.5]
@@ -715,7 +715,6 @@ final class HomeCard: UIControl {
   override func layoutSubviews() {
     super.layoutSubviews()
     let w = bounds.width
-    if L.light { layer.shadowPath = UIBezierPath(roundedRect: bounds, cornerRadius: 20).cgPath }
     icon.frame = CGRect(x: 15, y: 16, width: 22, height: 22)
     let side = sideSize()
     let bx: CGFloat = 15 + 22 + 12
