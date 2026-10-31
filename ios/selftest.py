@@ -63,6 +63,8 @@ try:
     check(hn.get('shown') is True and (hn.get('cards') or 0) > 0 and len(hn.get('stats') or []) == 3 and hn.get('title') in ('E11 Day', 'My Day'), f'Home is the app\'s own, with its boxes and task cards {hn}')
     hs = res.get('homeSwipeNative') or {}; hp = res.get('homePressNative') or {}
     check(hs.get('open') is True and (hs.get('openShift') or 0) < -80 and (hs.get('actions') or 0) >= 1, f'a Home card swiped left shows Copy link / Delete {hs}')
+    hl = res.get('homeLeadNative') or {}
+    check(hl.get('open') is True and hl.get('lead') is True and (hl.get('openShift') or 0) > 80 and (hl.get('actions') or 0) >= 1, f'a Home card swiped right shows Done / Due {hl}')
     check(hp.get('sheet') == 'AttachSheetVC' and hp.get('open') is False, f'a Home card held opens Attach Files {hp}')
     hsc = res.get('homeScrolledNative') or {}; hf = res.get('homeFindNative') or {}; hfd = res.get('homeFindDoneNative') or {}
     check((hsc.get('shrink') or 0) >= 0.99 and (hsc.get('smallTitle') or 0) > 0.9, f'scrolled, Home\'s title shrinks into the small bar {hsc}')

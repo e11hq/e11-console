@@ -255,7 +255,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
         let h = c.height(for: lw)
         // (bounds and centre: a card swiped open keeps its sideways shift)
         c.bounds = CGRect(x: 0, y: 0, width: lw, height: h); c.center = CGPoint(x: 16 + lw / 2, y: y + h / 2)
-        if c === openCard, let a = actions { a.frame = CGRect(x: 16 + lw - a.frame.width, y: y, width: a.frame.width, height: h) }
+        if c === openCard, let a = actions { a.frame = CGRect(x: a.leading ? 16 : 16 + lw - a.frame.width, y: y, width: a.frame.width, height: h) }
         y += h
       }
     }
@@ -510,18 +510,30 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }
   func scrollViewWillBeginDragging(_ scrollView: UIScrollView) { if let o = openCard { setOpen(o, false) } }
 
-  // ---------- swipe left on a card: Copy link · Delete (as in Mail: round buttons with their names under them) ----------
+  // ---------- swipe left on a card: Copy link · Delete; swipe right: Done · Due (as in Mail: round buttons with their names
+  // under them) ----------
+  private func leadOK(_ card: HomeCard) -> Bool { (card.info["canDone"] as? Bool) == true || (card.info["canDue"] as? Bool) == true }
   override func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
     guard let p = g as? UIPanGestureRecognizer, let card = p.view as? HomeCard else { return true }
     let v = p.velocity(in: self)
-    return abs(v.x) > abs(v.y) * 1.2 && (v.x < 0 || card.swipeX < 0)
+    return abs(v.x) > abs(v.y) * 1.2 && (v.x < 0 || card.swipeX != 0 || leadOK(card))
   }
-  private var reveal: CGFloat { canDelete ? 148 : 84 }
-  private func actionsFor(_ card: HomeCard) -> HomeActions {
-    if let a = actions, openCard === card { return a }
+  private func reveal(_ leading: Bool) -> CGFloat {
+    let n = leading ? max(1, actions?.leading == true ? actions!.count : 2) : (canDelete ? 2 : 1)
+    return 20 + CGFloat(n) * 64
+  }
+  // (+1: the card slid right, Done · Due on its left; -1: slid left, Copy link · Delete on its right)
+  private var openSide: CGFloat { (openCard?.swipeX ?? 0) > 0 ? 1 : -1 }
+  private func actionsFor(_ card: HomeCard, leading: Bool) -> HomeActions {
+    if let a = actions, openCard === card, a.leading == leading { return a }
     actions?.removeFromSuperview()
-    let a = HomeActions(delete: canDelete, light: L.light)
-    a.frame = CGRect(x: card.center.x + card.bounds.width / 2 - reveal, y: card.center.y - card.bounds.height / 2, width: reveal, height: card.bounds.height)
+    let a: HomeActions
+    if leading {
+      let d = card.info
+      a = HomeActions(done: (d["done"] as? Bool) == true, showDone: (d["canDone"] as? Bool) == true, due: d["due"] as? String, showDue: (d["canDue"] as? Bool) == true)
+    } else { a = HomeActions(delete: canDelete, light: L.light) }
+    let w = 20 + CGFloat(a.count) * 64
+    a.frame = CGRect(x: leading ? card.center.x - card.bounds.width / 2 : card.center.x + card.bounds.width / 2 - w, y: card.center.y - card.bounds.height / 2, width: w, height: card.bounds.height)
     a.onCopy = { [weak self, weak card] in
       guard let self = self, let card = card else { return }
       UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -536,34 +548,64 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       al.overrideUserInterfaceStyle = self.L.light ? .light : .dark
       self.present?(al)
     }
+    // Done: green at once (grey again when a done task is reopened), then the card closes and the page does the rest — as
+    // its own tick: a task not ready to complete only shows why (the circle stays grey), Undo on the toast
+    a.onDone = { [weak self, weak card, weak a] in
+      guard let self = self, let card = card else { return }
+      let wasDone = (card.info["done"] as? Bool) == true, ready = (card.info["doneReady"] as? Bool) == true
+      if wasDone || ready {
+        a?.markDone(!wasDone)
+        if !wasDone { UINotificationFeedbackGenerator().notificationOccurred(.success) } else { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
+      }
+      DispatchQueue.main.asyncAfter(deadline: .now() + (wasDone || ready ? 0.35 : 0)) {
+        self.send(["ev": "done", "id": card.id, "done": !wasDone]); self.setOpen(card, false)
+      }
+    }
+    // Due: the card closes and the page opens the date sheet the task page uses
+    a.onDue = { [weak self, weak card] in
+      guard let self = self, let card = card else { return }
+      UIImpactFeedbackGenerator(style: .light).impactOccurred()
+      self.send(["ev": "due", "id": card.id]); self.setOpen(card, false)
+    }
     scroll.insertSubview(a, belowSubview: card)
     actions = a; openCard = card
     return a
   }
+  private var swipeLead = false
   @objc private func swipe(_ g: UIPanGestureRecognizer) {
     guard let card = g.view as? HomeCard else { return }
     switch g.state {
     case .began:
       if let o = openCard, o !== card { setOpen(o, false) }
       card.swipeStart = card.swipeX
-      _ = actionsFor(card)
+      swipeLead = card.swipeX != 0 ? card.swipeX > 0 : g.velocity(in: self).x > 0
+      if swipeLead && !leadOK(card) { swipeLead = false }
+      _ = actionsFor(card, leading: swipeLead)
     case .changed:
       var x = card.swipeStart + g.translation(in: self).x
-      if x > 0 { x = 0 }
-      if x < -reveal { x = -reveal + (x + reveal) / 3 }   // (past the buttons: held back)
+      let r = reveal(swipeLead)
+      if swipeLead {
+        if x < 0 { x = 0 }
+        if x > r { x = r + (x - r) / 3 }   // (past the buttons: held back)
+      } else {
+        if x > 0 { x = 0 }
+        if x < -r { x = -r + (x + r) / 3 }
+      }
       card.swipeX = x
-      actions?.progress = min(1, -x / reveal)
+      actions?.progress = min(1, abs(x) / r)
     case .ended, .cancelled, .failed:
-      let v = g.velocity(in: self).x
-      setOpen(card, v < -350 || (card.swipeX < -reveal / 2 && v < 300))
+      let v = g.velocity(in: self).x, r = reveal(swipeLead)
+      if swipeLead { setOpen(card, v > 350 || (card.swipeX > r / 2 && v > -300), leading: true) }
+      else { setOpen(card, v < -350 || (card.swipeX < -r / 2 && v < 300), leading: false) }
     default: break
     }
   }
-  func setOpen(_ card: HomeCard, _ open: Bool) {
-    if open { _ = actionsFor(card) }
-    let a = actions
+  func setOpen(_ card: HomeCard, _ open: Bool, leading: Bool? = nil) {
+    let lead = leading ?? (openCard === card ? openSide > 0 : false)
+    if open { _ = actionsFor(card, leading: lead) }
+    let a = actions, r = reveal(lead)
     UIView.animate(withDuration: 0.32, delay: 0, usingSpringWithDamping: 0.86, initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState]) {
-      card.swipeX = open ? -self.reveal : 0
+      card.swipeX = open ? (lead ? r : -r) : 0
       a?.progress = open ? 1 : 0
     } completion: { _ in
       if !open && card.swipeX == 0 && self.openCard === card { a?.removeFromSuperview(); if self.actions === a { self.actions = nil }; self.openCard = nil }
@@ -626,12 +668,13 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private var firstCard: HomeCard? { content.compactMap { $0 as? HomeCard }.first }
   func selfSwipe() { if let c = firstCard { setOpen(c, true) } }
   func selfPress() { if let c = firstCard { attach(c) } }
+  func selfSwipeRight() { if let c = firstCard { setOpen(c, true, leading: true) } }
   func selfClose() { if let o = openCard { setOpen(o, false) } }
   func selfScroll(_ y: CGFloat) { scroll.setContentOffset(CGPoint(x: 0, y: y - scroll.contentInset.top), animated: false); layoutHeader() }
   func selfFind(_ q: String) { openSearch(); field.text = q; typed() }
   func selfFindDone() { closeSearch() }
   func geo() -> [String: Any] {
-    ["open": openCard != nil, "openShift": openCard?.swipeX ?? 0, "actions": actions?.subviews.count ?? 0,
+    ["open": openCard != nil, "openShift": openCard?.swipeX ?? 0, "actions": actions?.subviews.count ?? 0, "lead": actions?.leading ?? false,
      "title": title.text ?? "", "date": sub.text ?? "", "stats": stats.map { ($0.viewWithTag(1) as? UILabel)?.text ?? "" },
      "groups": content.filter { $0.tag == 7 }.map { ($0 as? UILabel)?.text ?? "" }, "cards": cards.count, "fab": !fab.isHidden,
      "headH": blur.frame.height, "shrink": shrink, "bar": blur.alpha, "smallTitle": smallTitle.alpha, "searching": searching,
@@ -686,6 +729,7 @@ final class HomeCard: UIControl {
   var onTap: (() -> Void)?
   var id = ""
   var taskTitle: String { c["title"] as? String ?? "" }
+  var info: [String: Any] { c }
   var swipeStart: CGFloat = 0
   // (sideways when swiped open; pressed in a little while touched — both at once)
   var swipeX: CGFloat = 0 { didSet { applyTransform() } }
@@ -875,36 +919,80 @@ final class HomeCard: UIControl {
 
 // the buttons a swiped card shows: Copy link (grey) and Delete (red, for those who may), round with their names under
 final class HomeActions: UIView {
-  var onCopy: (() -> Void)?, onDelete: (() -> Void)?
+  var onCopy: (() -> Void)?, onDelete: (() -> Void)?, onDone: (() -> Void)?, onDue: (() -> Void)?
+  let leading: Bool
   private var items: [UIView] = []
+  private(set) var doneBtn: UIButton?
   var progress: CGFloat = 0 { didSet { items.forEach { $0.alpha = progress; $0.transform = CGAffineTransform(scaleX: 0.6 + 0.4 * progress, y: 0.6 + 0.4 * progress) } } }
+  static let grey = SplashView.hex(0x8a8d96), green = SplashView.hex(0x30d158), purple = SplashView.hex(0x7a6ff0)
+  private func item(_ name: String, _ col: UIColor, sym: String? = nil, inner: UIView? = nil, _ act: @escaping () -> Void) -> (UIView, UIButton) {
+    let v = UIView()
+    let b = UIButton(type: .custom)
+    b.backgroundColor = col; b.layer.cornerRadius = 26; b.tintColor = .white
+    if let sym = sym { b.setImage(UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .semibold)), for: .normal) }
+    b.frame = CGRect(x: 0, y: 0, width: 52, height: 52)
+    if let inner = inner { inner.isUserInteractionEnabled = false; inner.frame = b.bounds; b.addSubview(inner) }
+    b.addAction(UIAction { _ in act() }, for: .touchUpInside)
+    b.accessibilityLabel = name
+    let l = UILabel(); l.text = name; l.font = .systemFont(ofSize: 12); l.textColor = .secondaryLabel; l.textAlignment = .center
+    l.frame = CGRect(x: -14, y: 58, width: 80, height: 15)
+    v.addSubview(b); v.addSubview(l)
+    v.bounds = CGRect(x: 0, y: 0, width: 52, height: 73)
+    return (v, b)
+  }
+  // swiped left (trailing): Copy link · Delete
   init(delete: Bool, light: Bool) {
+    leading = false
     super.init(frame: .zero)
-    func item(_ sym: String, _ name: String, _ col: UIColor, _ act: @escaping () -> Void) -> UIView {
-      let v = UIView()
-      let b = UIButton(type: .custom)
-      b.backgroundColor = col; b.layer.cornerRadius = 26; b.tintColor = .white
-      b.setImage(UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .semibold)), for: .normal)
-      b.frame = CGRect(x: 0, y: 0, width: 52, height: 52)
-      b.addAction(UIAction { _ in act() }, for: .touchUpInside)
-      b.accessibilityLabel = name
-      let l = UILabel(); l.text = name; l.font = .systemFont(ofSize: 12); l.textColor = .secondaryLabel; l.textAlignment = .center
-      l.frame = CGRect(x: -14, y: 58, width: 80, height: 15)
-      v.addSubview(b); v.addSubview(l)
-      v.bounds = CGRect(x: 0, y: 0, width: 52, height: 73)
-      return v
-    }
-    items.append(item("link", "Copy link", SplashView.hex(0x8a8d96), { [weak self] in self?.onCopy?() }))
-    if delete { items.append(item("trash", "Delete", SplashView.hex(0xe5484d), { [weak self] in self?.onDelete?() })) }
+    items.append(item("Copy link", HomeActions.grey, sym: "link", { [weak self] in self?.onCopy?() }).0)
+    if delete { items.append(item("Delete", SplashView.hex(0xe5484d), sym: "trash", { [weak self] in self?.onDelete?() }).0) }
     items.forEach { addSubview($0) }
     progress = 0
+  }
+  // swiped right (leading), as Mail's Unread · Remind Me: Done (grey, green once done) · Due (the day big, the month under
+  // it; SET with a calendar when there's none) — Haris, 2026-10-31
+  init(done: Bool, showDone: Bool, due: String?, showDue: Bool) {
+    leading = true
+    super.init(frame: .zero)
+    if showDone {
+      let (v, b) = item("Done", done ? HomeActions.green : HomeActions.grey, sym: "checkmark", { [weak self] in self?.onDone?() })
+      doneBtn = b; items.append(v)
+    }
+    if showDue {
+      let inner = UIView()
+      let top = UILabel(), bot = UILabel()
+      top.textColor = .white; bot.textColor = .white; top.textAlignment = .center; bot.textAlignment = .center
+      if let d = due, d.count >= 10, let day = Int(d.dropFirst(8).prefix(2)), let mon = Int(d.dropFirst(5).prefix(2)), (1...12).contains(mon) {
+        top.text = "\(day)"; top.font = .systemFont(ofSize: 21, weight: .bold)
+        bot.text = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"][mon - 1]; bot.font = .systemFont(ofSize: 10, weight: .semibold)
+        top.frame = CGRect(x: 0, y: 8, width: 52, height: 24); bot.frame = CGRect(x: 0, y: 31, width: 52, height: 12)
+        inner.addSubview(top)
+      } else {
+        let cal = UIImageView(image: UIImage(systemName: "calendar", withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold)))
+        cal.tintColor = .white; cal.contentMode = .center; cal.frame = CGRect(x: 0, y: 9, width: 52, height: 22)
+        bot.text = "SET"; bot.font = .systemFont(ofSize: 10, weight: .semibold); bot.frame = CGRect(x: 0, y: 31, width: 52, height: 12)
+        inner.addSubview(cal)
+      }
+      inner.addSubview(bot)
+      items.append(item("Due", HomeActions.purple, inner: inner, { [weak self] in self?.onDue?() }).0)
+    }
+    items.forEach { addSubview($0) }
+    progress = 0
+  }
+  var count: Int { items.count }
+  // (Done tapped: the circle turns green — or grey again, reopened — with a little pop)
+  func markDone(_ on: Bool) {
+    guard let b = doneBtn else { return }
+    UIView.animate(withDuration: 0.12, animations: { b.transform = CGAffineTransform(scaleX: 1.12, y: 1.12); b.backgroundColor = on ? HomeActions.green : HomeActions.grey }) { _ in
+      UIView.animate(withDuration: 0.18, delay: 0, usingSpringWithDamping: 0.6, initialSpringVelocity: 0) { b.transform = .identity }
+    }
   }
   required init?(coder: NSCoder) { fatalError() }
   override func layoutSubviews() {
     super.layoutSubviews()
-    // (from the right: 16 in, 12 between)
-    var x = bounds.width - 16
-    for v in items.reversed() { v.center = CGPoint(x: x - 26, y: bounds.height / 2); x -= 52 + 12 }
+    // (16 in from the side they're on, 12 between)
+    if leading { var x: CGFloat = 16; for v in items { v.center = CGPoint(x: x + 26, y: bounds.height / 2); x += 52 + 12 } }
+    else { var x = bounds.width - 16; for v in items.reversed() { v.center = CGPoint(x: x - 26, y: bounds.height / 2); x -= 52 + 12 } }
   }
 }
 

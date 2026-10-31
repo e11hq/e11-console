@@ -2465,6 +2465,10 @@ const NativeHome = (() => {
     ids.slice(0, 2).forEach(person);
     return {
       id: t.id, title: t.title || '', late: !!late, done: !!t.done, meta,
+      // (swiped right: Done — ready means the page's own tick would complete it now, else it says why — and Due, with
+      //  the date, for those who may change dates)
+      due: t.due || '', canDone: !t.parentId && !(typeof amReadOnly === 'function' && amReadOnly(t)), doneReady: !!t.done || canComplete(t),
+      canDue: typeof can === 'function' && can('editDates', t),
       icon: { kind, frac, rgb: rgbOfCss(t.done ? '#3ddc97' : s.color) },
       badge, cd: c ? { t: t.cdStatus === 'approved' ? 'CD Approved' : 'CD Review', check: t.cdStatus === 'approved', rgb: rgbOfCss(c.color) } : null,
       av: ids.slice(0, 2).map((id) => ({ id, done: !!partDone(t, id) })), more: Math.max(0, ids.length - 2),
@@ -2510,6 +2514,33 @@ const NativeHome = (() => {
     else if (ev.ev === 'copy' && ev.id) TaskLink.copy(ev.id);
     else if (ev.ev === 'delete' && ev.id && task(ev.id)) { if (can('deleteTask')) deleteTaskFlow(ev.id); }
     else if (ev.ev === 'attach' && ev.id && task(ev.id)) attachFiles('task', null, null, ev.source || null, ev.id);
+    // swipe right: Done (as the page's own tick: not ready → why; done → toast with Undo; a done task → reopened)
+    else if (ev.ev === 'done' && ev.id && task(ev.id)) {
+      const t = task(ev.id);
+      if (!ev.done) { if (t.done) { setDone(t, false); commit({ delay: 0 }); } }
+      else if (!t.done) {
+        if (!canComplete(t)) { toast(completeBlockedMsg(t)); return; }
+        (async () => {
+          if (!(await askClientApproval(t))) return;
+          setDone(t, true);
+          commit({ delay: 0 });
+          if (t.done) toast(`Completed “${t.title || 'Untitled task'}”${hasApproved(t) && clientOfProject(proj(t.projectId)) ? ' — final files go to Client Assets' : ''}`, { label: 'Undo', run: () => { setDone(t, false); commit(); } });
+        })();
+      }
+    }
+    // … and Due: the date sheet the task page uses (iPhone's own calendar; Today / Clear)
+    else if (ev.ev === 'due' && ev.id && task(ev.id)) {
+      const t = task(ev.id);
+      if (!can('editDates', t)) { denied(); return; }
+      NativeMac.call('pickDate', { value: t.due || '', min: '', max: '', clearable: !!t.due, md: false })
+        .then((r) => {
+          if (!r || r.ok === false || r.cancel) return;
+          const v = r.clear ? '' : r.date || '';
+          if (v === (t.due || '')) return;
+          setDue(t, v || null); commit();
+        })
+        .catch(() => {});
+    }
     else if (ev.ev === 'toast') { const a = toastAction; toastAction = null; if (a && a.run) a.run(); }
     // the app's own search bar (from the search circle): its results, as the page's Search finds them
     else if (ev.ev === 'find') {
