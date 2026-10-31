@@ -124,6 +124,8 @@ const Phone = (() => {
     const ph = mePhoto();
     const u0 = typeof me === 'function' ? me() : null;
     if (ph) tabs.forEach((t) => { if (t.v === 'me') { t.photo = ph; if (u0 && u0.avatar) t.photoUrl = new URL(fileUrl({ path: u0.avatar }), location.href).href; } });
+    // (online or not: a small green or red dot on the Me tab's picture)
+    tabs.forEach((t) => { if (t.v === 'me') t.online = !(typeof Sync !== 'undefined' && Sync.offline); });
     // (22+: the app's own startup screen is over everything — the bar comes under it, ready when it goes)
     const splashCovers = !window.__e11NativeSplashOn && !!document.querySelector('#splash');
     const msg = JSON.stringify({ tabs, hidden: !!ui.taskId || splashCovers || !!document.querySelector('.scrim, .menu:not(.mention-pop), #ph-sheet-root .ph-scrim:not(.docked), #overlay-root > *, #pv-root > *') });
@@ -814,7 +816,7 @@ const Phone = (() => {
   });
 
   check();
-  return { get on() { return st.on; }, isOn, myDayData, renderContent, decorate, chrome, taskHead, quickAdd, check, sheet, resetInbox: () => { st.ibf = 'unread'; }, setIbf: (k) => { st.ibf = k; } };
+  return { get on() { return st.on; }, tabsAgain: () => { const bar = document.getElementById('ph-tabs'); if (bar && st.on) nativeTabs(bar); }, isOn, myDayData, renderContent, decorate, chrome, taskHead, quickAdd, check, sheet, resetInbox: () => { st.ibf = 'unread'; }, setIbf: (k) => { st.ibf = k; } };
 })();
 
 /* Phone notifications (Web Push): the switch on the Me page, and opening a task from a notification */

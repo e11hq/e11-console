@@ -2762,13 +2762,18 @@ const Sync = (() => {
   function paintOffline() {
     // only call it "Offline" after a real wait while someone is looking; before that it's "Reconnecting…"
     setSaveState(downSince && Date.now() - downSince > 15000 ? 'offline' : 'reconnecting');
+    tellApp();
   }
+  // the iPhone app's Me tab shows it: a green dot online, red offline (Haris, 2026-10-31)
+  const isOffline = () => !online && !!downSince && Date.now() - downSince > 15000;
+  const tellApp = () => { if (typeof Phone !== 'undefined' && Phone.tabsAgain) Phone.tabsAgain(); };
   function setOnline(v) {
     if (online === v) return;
     online = v;
     downSince = v ? 0 : Date.now();
     if (v) setSaveState(changes().length ? 'saving' : 'saved');
     else if (!document.hidden) paintOffline();
+    tellApp();
   }
   function checkVersion(v) {
     if (!v) return;
@@ -2780,7 +2785,7 @@ const Sync = (() => {
     if (e.expired) { location.reload(); return; }
     document.body.innerHTML = `<div class="fatal" style="margin:20vh auto;max-width:420px;text-align:center"><h2>${esc(e.status === 403 ? 'No access' : 'Signed out')}</h2><p>${esc(e.message)}</p><button class="btn primary" onclick="location.reload()">Sign in again</button></div>`;
   }
-  return { start, push, resync, reconnect, savePrefs, get online() { return online; }, get version() { return version; }, clientId };
+  return { start, push, resync, reconnect, savePrefs, get online() { return online; }, get offline() { return isOffline(); }, get version() { return version; }, clientId };
 })();
 
 /* ================= Persistence ================= */

@@ -6,6 +6,7 @@
 // It talks to the page through the same kind of bridge as the Mac app (handler "e11ios"; replies via
 // window.__e11NativeReply), so the web app (web/app.js Host.isIOSApp, web/phone.js) knows it's here.
 import UIKit
+import Network
 import WebKit
 import UserNotifications
 import LocalAuthentication
@@ -159,6 +160,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   override func loadView() { view = UIView(); view.backgroundColor = BG }
   override func viewDidLoad() {
     super.viewDidLoad()
+    _ = netWatch   // (the phone's connection, for the Me tab's dot)
     let config = WKWebViewConfiguration()
     config.websiteDataStore = .default()             // stay signed in between launches
     config.allowsInlineMediaPlayback = true
@@ -904,12 +906,22 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       for (i, t) in list.enumerated() { tabBar.items?[i].title = t["label"] as? String ?? "" }
     }
     // the Me tab: the person's own picture (round, as drawn by the page), with a ring when it's the open tab
+    // (and a small dot at its bottom right: green online, red offline — Haris, 2026-10-31)
     for (i, t) in list.enumerated() {
+      let online = (t["online"] as? Bool ?? true) && netUp
+      if let item = tabBar.items?[i], let src = tabPhotoSrc[i], tabOnline[i] != online, t["photo"] as? String == tabPhoto[i] {
+        tabOnline[i] = online
+        item.image = roundPhoto(src, ring: nil, online: online)
+        item.selectedImage = roundPhoto(src, ring: tabBar.tintColor ?? .systemBlue, online: online)
+      }
       guard let ph = t["photo"] as? String, ph != tabPhoto[i], let item = tabBar.items?[i] else { continue }
       tabPhoto[i] = ph
+      tabOnline[i] = online
       let apply = { (src: UIImage) in
-        item.image = self.roundPhoto(src, ring: nil)
-        item.selectedImage = self.roundPhoto(src, ring: self.tabBar.tintColor ?? .systemBlue)
+        self.tabPhotoSrc[i] = src
+        let on = self.tabOnline[i] ?? true
+        item.image = self.roundPhoto(src, ring: nil, online: on)
+        item.selectedImage = self.roundPhoto(src, ring: self.tabBar.tintColor ?? .systemBlue, online: on)
       }
       // the page's own drawing first (initials, or the picture), then the picture itself fetched here when there is one
       if let comma = ph.firstIndex(of: ","), let data = Data(base64Encoded: String(ph[ph.index(after: comma)...])), let src = UIImage(data: data) { apply(src) }
@@ -954,6 +966,22 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   var formTucked = false   // (a New task / amendments draft tucked at the bottom: the tab bar stays faded)
   var tabPhoto: [Int: String] = [:]
+  var tabPhotoSrc: [Int: UIImage] = [:], tabOnline: [Int: Bool] = [:]
+  // the phone's own connection: gone → the Me tab's dot turns red at once (the page says so too after a while)
+  var netUp = true
+  lazy var netWatch: NWPathMonitor = {
+    let m = NWPathMonitor()
+    m.pathUpdateHandler = { [weak self] path in
+      DispatchQueue.main.async {
+        guard let self = self else { return }
+        let up = path.status == .satisfied
+        if up != self.netUp { self.netUp = up; if let t = self.lastTabs { self.setTabs(t) } }
+        if up { self.serverHome.send() }   // (anything waiting goes now)
+      }
+    }
+    m.start(queue: DispatchQueue(label: "e11.net"))
+    return m
+  }()
   var tabBadgeKey: [Int: String] = [:]
   var lastTabs: [String: Any]?
   // a tab's icon with its count on the top-right corner, overlapping the icon a little
@@ -993,10 +1021,22 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       }.resume()
     }
   }
-  func roundPhoto(_ src: UIImage, ring: UIColor?) -> UIImage {
+  func roundPhoto(_ src: UIImage, ring: UIColor?, online: Bool? = nil) -> UIImage {
     let size: CGFloat = 28
     let r = UIGraphicsImageRenderer(size: CGSize(width: size, height: size))
-    return r.image { _ in
+    return r.image { ctx in
+      defer {
+        // the dot: 9 pt, at the bottom right, edged in the bar's colour (as a status dot on a photo)
+        if let on = online {
+          ctx.cgContext.resetClip()
+          let d: CGFloat = 9, edge: CGFloat = 1.5
+          let dot = CGRect(x: size - d, y: size - d, width: d, height: d)
+          (appStyle == .light ? UIColor.white : UIColor(white: 0.12, alpha: 1)).setFill()
+          UIBezierPath(ovalIn: dot.insetBy(dx: -edge, dy: -edge).intersection(CGRect(x: 0, y: 0, width: size, height: size).insetBy(dx: -edge, dy: -edge))).fill()
+          (on ? UIColor.systemGreen : UIColor.systemRed).setFill()
+          UIBezierPath(ovalIn: dot.insetBy(dx: 0.5, dy: 0.5)).fill()
+        }
+      }
       let box = CGRect(x: 0, y: 0, width: size, height: size)
       let inset: CGFloat = ring == nil ? 1 : 2.5
       let pic = box.insetBy(dx: inset, dy: inset)
