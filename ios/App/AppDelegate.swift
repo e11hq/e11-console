@@ -514,7 +514,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
-    defer { if let h = homeIfMade { h.tabTop = tabBar.isHidden ? nil : tabBar.frame.minY } }   // (23+: Home's + by the tab bar)
+    defer { if let h = homeIfMade { h.tabTop = tabBar.isHidden ? nil : tabPillTop } }   // (23+: Home's + by the tab bar)
     let b = view.bounds
     // the page always fills the screen (no black band under it); the tab bar floats over its bottom and the page
     // keeps that much room free (--ios-tabs-h, web/phone.css)
@@ -1026,6 +1026,15 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     homeIfMade = h
     return h
   }()
+  /* the top of the tab bar as it's seen: iOS 26's floating bar is a pill inside a taller UITabBar view, so the view's
+     own top is well above it (the + and the toasts sat ~35 pt too high — Haris, 2026-10-31). The pill: 61 tall, its
+     bottom 11 pt into the home-indicator room (8 from the edge on a phone without one). */
+  var tabPillTop: CGFloat {
+    let H = view.bounds.height, safe = view.safeAreaInsets.bottom
+    let pillBottom = H - (safe > 0 ? max(8, safe - 11) : 8)
+    if #available(iOS 26.0, *) { return pillBottom - 61 }
+    return tabBar.frame.minY
+  }
   func homeGeo() -> [String: Any] {
     guard let h = homeIfMade else { return ["shown": false, "made": false] }
     if h.isHidden { return ["shown": false, "made": true] }
@@ -1040,7 +1049,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if !show { homeIfMade?.endEditing(true); homeIfMade?.isHidden = true; return }
     let h = homeView
     h.bottomRoom = (tabBar.isHidden ? 40 : view.bounds.height - tabBar.frame.minY) + 96
-    h.tabTop = tabBar.isHidden ? nil : tabBar.frame.minY
+    h.tabTop = tabBar.isHidden ? nil : tabPillTop
     h.update(a)
     h.isHidden = false
   }

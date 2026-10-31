@@ -532,12 +532,14 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       btn.addAction(UIAction { [weak self, weak v] _ in v?.removeFromSuperview(); self?.onEvent?(["ev": "toast"]) }, for: .touchUpInside)
       v.addSubview(btn); b = btn; bw = btn.sizeThatFits(CGSize(width: 200, height: 40)).width + 14
     }
+    // (low, just above the tab bar: beside the +, its bottom level with the +'s — Haris: it sat far too high)
     let W = bounds.width
-    let maxL = W - 32 - 28 - bw
+    let room = fab.isHidden ? W - 32 : fab.frame.minX - 12 - 16
+    let maxL = room - 28 - bw
     let ls = l.sizeThatFits(CGSize(width: maxL, height: 60))
-    let w = min(W - 32, ls.width + 28 + bw), h = max(40, ls.height + 18)
-    let bottom = (tabTop ?? bounds.height - 40) - 14 - (fab.isHidden ? 0 : fab.frame.height + 12)
-    v.frame = CGRect(x: (W - w) / 2, y: bottom - h, width: w, height: h)
+    let w = min(room, ls.width + 28 + bw), h = max(44, ls.height + 18)
+    let bottom = fab.isHidden ? (tabTop ?? bounds.height - 40) - 12 : fab.frame.maxY
+    v.frame = CGRect(x: 16, y: bottom - h, width: w, height: h)
     l.frame = CGRect(x: 14, y: (h - ls.height) / 2, width: ls.width, height: ls.height)
     b?.frame = CGRect(x: w - bw, y: 0, width: bw - 4, height: h)
     v.alpha = 0; v.transform = CGAffineTransform(translationX: 0, y: 8)
