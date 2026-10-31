@@ -124,6 +124,8 @@ const Phone = (() => {
     const ph = mePhoto();
     const u0 = typeof me === 'function' ? me() : null;
     if (ph) tabs.forEach((t) => { if (t.v === 'me') { t.photo = ph; if (u0 && u0.avatar) t.photoUrl = new URL(fileUrl({ path: u0.avatar }), location.href).href; } });
+    // the Home tab: how many tasks are due today (the Due today box's number) — the app's tab bar only (Haris, 2026-11-01)
+    if (!(typeof isOffice === 'function' && isOffice())) try { const n = R().myDayData().due.length; tabs.forEach((t) => { if (t.v === 'today' && !t.badge && n > 0) t.badge = String(n); }); } catch (e) { /* data not in yet */ }
     // (online or not: a small green or red dot on the Me tab's picture)
     tabs.forEach((t) => { if (t.v === 'me') t.online = !(typeof Sync !== 'undefined' && Sync.offline); });
     // (22+: the app's own startup screen is over everything — the bar comes under it, ready when it goes)
