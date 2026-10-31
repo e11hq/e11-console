@@ -296,13 +296,13 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private var shrink: CGFloat { barIn ? 1 : 0 }
   // (Mail switches once its big title is up in the bar's row, under the buttons: its top at the status bar)
   private var pastBig: Bool { scrolled > 62 }
-  // Mail's blur fade, measured frame by frame (Haris, 2026-10-31): over ~0.3 s the big title's blur builds up as it
+  // Mail's blur fade, measured frame by frame (Haris, 2026-10-31): over 0.5 s (Haris chose 0.5; Mail ~0.3) the big title's blur builds up as it
   // fades; the small title comes in very blurred and see-through ~10 pt low, rises and sharpens, its line just after;
   // the frost comes in the first few frames. Driven frame by frame (0 big … 1 small), so a quick scroll back reverses it
   // from wherever it is.
   private var barK: CGFloat = 0
   private var barLink: CADisplayLink?, barT: CFTimeInterval = 0
-  private let barDur: CGFloat = 0.3
+  private let barDur: CGFloat = 0.5   // (Haris, 2026-10-31: 0.5 s)
   private var fades: [ObjectIdentifier: HomeBlurFade] = [:]
   private func fade(_ l: UILabel) -> HomeBlurFade {
     if let f = fades[ObjectIdentifier(l)] { return f }
