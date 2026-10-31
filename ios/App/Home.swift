@@ -795,37 +795,23 @@ final class HomeCard: UIControl {
     return UIGraphicsImageRenderer(size: size).image { _ in
       color.withAlphaComponent(0.16).setFill()
       UIBezierPath(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: 4).fill()
-      if check {
-        let p = UIBezierPath(); let o = CGPoint(x: 6, y: 3)
-        p.move(to: CGPoint(x: o.x + 1.6, y: o.y + 5.2)); p.addLine(to: CGPoint(x: o.x + 4, y: o.y + 7.6)); p.addLine(to: CGPoint(x: o.x + 8.6, y: o.y + 2.6))
-        color.setStroke(); p.lineWidth = 1.9; p.lineCapStyle = .round; p.lineJoinStyle = .round; p.stroke()
+      if check, let ck = UIImage(systemName: "checkmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: 9, weight: .bold))?.withTintColor(color, renderingMode: .alwaysOriginal) {
+        ck.draw(in: CGRect(x: 6 + (10 - ck.size.width) / 2, y: (16 - ck.size.height) / 2, width: ck.size.width, height: ck.size.height))
       }
       (text as NSString).draw(at: CGPoint(x: 6 + tick, y: (16 - ts.height) / 2), withAttributes: [.font: f, .foregroundColor: color])
     }
   }
-  // the status icon (app.js statusIconSVG, 16 units → 22 pt): done (filled, ticked), to do (dashed ring), or a ring with a slice for how far along
+  // the status icon, in SF Symbols (Haris, 2026-10-31): to do — a dashed circle; under way — a half-filled circle; nearly
+  // there (the later statuses) — a filled circle in a ring; done — a filled circle with a tick. In the status's colour.
   static func statusIcon(_ d: [String: Any]?) -> UIImage {
     let col = NativeSheetVC.color(d?["rgb"]) ?? .systemGray
     let kind = d?["kind"] as? String ?? "todo"
     let frac = CGFloat((d?["frac"] as? NSNumber)?.doubleValue ?? 0.5)
-    let k: CGFloat = 22 / 16
-    return UIGraphicsImageRenderer(size: CGSize(width: 22, height: 22)).image { ctx in
-      let g = ctx.cgContext
-      g.scaleBy(x: k, y: k)
-      if kind == "done" {
-        col.setFill(); UIBezierPath(arcCenter: CGPoint(x: 8, y: 8), radius: 7, startAngle: 0, endAngle: .pi * 2, clockwise: true).fill()
-        let p = UIBezierPath(); p.move(to: CGPoint(x: 4.9, y: 8.2)); p.addLine(to: CGPoint(x: 7, y: 10.3)); p.addLine(to: CGPoint(x: 11, y: 6))
-        UIColor.white.setStroke(); p.lineWidth = 1.7; p.lineCapStyle = .round; p.lineJoinStyle = .round; p.stroke()
-        return
-      }
-      let ring = UIBezierPath(arcCenter: CGPoint(x: 8, y: 8), radius: 6.2, startAngle: 0, endAngle: .pi * 2, clockwise: true)
-      ring.lineWidth = 1.7; col.setStroke()
-      if kind == "todo" { ring.setLineDash([2.4, 1.9], count: 2, phase: 0); ring.stroke(); return }
-      ring.stroke()
-      let a = min(0.999, max(0.08, frac)) * .pi * 2
-      let s = UIBezierPath(); s.move(to: CGPoint(x: 8, y: 8)); s.addLine(to: CGPoint(x: 8, y: 8 - 3.6))
-      s.addArc(withCenter: CGPoint(x: 8, y: 8), radius: 3.6, startAngle: -.pi / 2, endAngle: -.pi / 2 + a, clockwise: true); s.close()
-      col.setFill(); s.fill()
+    let name = kind == "done" ? "checkmark.circle.fill" : kind == "todo" ? "circle.dashed" : frac < 0.6 ? "circle.lefthalf.filled" : "circle.inset.filled"
+    let cfg = UIImage.SymbolConfiguration(pointSize: 19, weight: .medium)
+    let sym = UIImage(systemName: name, withConfiguration: cfg)?.withTintColor(col, renderingMode: .alwaysOriginal) ?? UIImage()
+    return UIGraphicsImageRenderer(size: CGSize(width: 22, height: 22)).image { _ in
+      sym.draw(in: CGRect(x: (22 - sym.size.width) / 2, y: (22 - sym.size.height) / 2, width: sym.size.width, height: sym.size.height))
     }
   }
 }
