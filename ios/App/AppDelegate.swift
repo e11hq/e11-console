@@ -1014,11 +1014,25 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     guard item.tag < tabKeys.count else { return }
     UISelectionFeedbackGenerator().selectionChanged()
     // (23+: Home is the app's own — another tab: it goes at once; Home again while on it: back to the top)
-    if let h = homeIfMade, !h.isHidden { if tabKeys[item.tag] == "today" { h.scrollToTop() } else { h.isHidden = true } }
+    // (the page's own Home must never show in between — Haris, 2026-10-31: leaving Home, it stays until the page has
+    //  drawn the other tab and says so (show: false), at most 1.2 s; coming back, it's there at once with what it had,
+    //  and the page brings it up to date)
+    if let h = homeIfMade {
+      if tabKeys[item.tag] == "today" {
+        if !h.isHidden { h.scrollToTop() } else if homeHadModel { h.isHidden = false }
+      } else if !h.isHidden {
+        h.endEditing(true)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+          guard let self = self, let sel = self.tabBar.selectedItem, sel.tag < self.tabKeys.count, self.tabKeys[sel.tag] != "today" else { return }
+          self.homeIfMade?.isHidden = true
+        }
+      }
+    }
     pageJS("window.__e11Tab && window.__e11Tab(\(jsonString([tabKeys[item.tag]]).dropFirst().dropLast()))")
   }
   /* ---------- Home (23+): the app's own, under the tab bar; the page says what's on it (NativeHome in phone.js) ---------- */
   var homeIfMade: HomeView?
+  var homeHadModel = false
   lazy var homeView: HomeView = {
     let h = HomeView(frame: view.bounds)
     h.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -1058,6 +1072,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     h.bottomRoom = (tabBar.isHidden ? 40 : view.bounds.height - tabBar.frame.minY) + 96
     h.tabTop = tabBar.isHidden ? nil : tabPillTop
     h.update(a)
+    homeHadModel = true
     h.isHidden = false
   }
 

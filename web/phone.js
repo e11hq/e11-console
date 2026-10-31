@@ -176,7 +176,9 @@ const Phone = (() => {
     img.src = fileUrl({ path: u.avatar });
     return '';
   }
-  window.__e11Tab = (v) => { const b = document.querySelector(`#ph-tabs [data-ph-tab="${v}"]`); if (b) b.click(); };
+  // (then the app's own Home is told at once whether it's on: it stays up while the page draws the other tab, and goes
+  //  the moment that tab is there — the page's own Home never shows in between)
+  window.__e11Tab = (v) => { const b = document.querySelector(`#ph-tabs [data-ph-tab="${v}"]`); if (b) b.click(); if (typeof NativeHome !== 'undefined') NativeHome.sync(); };
 
   /* ---------- Pieces ---------- */
   function card(t, o = {}) {
