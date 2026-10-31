@@ -250,6 +250,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   var cwebTask: String?, cbarTask: String?
   var cmdSource: WKWebView?
   var cbarPage: WKWebView? { cwebShown ? cweb : web }
+  let cbox = UIView()
   lazy var cwebNav = CommentsNav(self)
   func makeCommentsWeb() {
     guard cweb == nil, !defaults.bool(forKey: "e11_cweb_off"), let u = URL(string: serverURL() + "/?cm=1") else { return }
@@ -273,12 +274,24 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     // swiping right on the comments: back to Details, as on the page
     let sw = UISwipeGestureRecognizer(target: self, action: #selector(cwebSwipe)); sw.direction = .right
     w.addGestureRecognizer(sw)
-    view.insertSubview(w, aboveSubview: web)
-    if jumpHitMade { view.insertSubview(jumpHit, aboveSubview: w) }
+    // (in a box that clips it below the task's header: with the keyboard up the screen slides up under it)
+    cbox.clipsToBounds = true
+    cbox.isHidden = true
+    cbox.backgroundColor = .clear
+    w.isHidden = false; w.alpha = 1
+    cbox.addSubview(w)
+    view.insertSubview(cbox, aboveSubview: web)
+    if jumpHitMade { view.insertSubview(jumpHit, aboveSubview: cbox) }
     cweb = w
     w.load(URLRequest(url: u))
   }
   @objc func cwebSwipe() {
+    cweb?.evaluateJavaScript("window.__e11CmBack ? window.__e11CmBack() : ''") { r, _ in
+      if (r as? String) == "thread" { return }   // (out of a thread first)
+      self.toDetails()
+    }
+  }
+  func toDetails() {
     pageJS("(function(){ var b = document.querySelector('#detail .ph-seg.in-task [data-tab=\"details\"]'); if (b) b.click(); })()")
   }
   // its page has loaded: wait until it's signed in and has its data
@@ -293,22 +306,30 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     guard let w = cweb else { return }
     let want = cwebLoaded && !cwebPaused && cbarShow && cbarOnComments && cbarTask != nil && lockView == nil
     if want {
-      if cwebTask != cbarTask {
-        cwebTask = cbarTask; cwebReadyToShow = false
+      if cwebTask != cbarTask || !cwebShown {
+        // (every time it comes back: the task is opened again if its page closed it meanwhile)
+        if cwebTask != cbarTask { cwebReadyToShow = false }
+        cwebTask = cbarTask
         w.evaluateJavaScript("window.__e11ShowComments && window.__e11ShowComments(\(jsonString([cbarTask ?? ""]).dropFirst().dropLast()))", completionHandler: nil)
       }
-      if !cwebShown { cwebInset(keepEnd: false) }   // (its place: under the header, down to the comment box)
       if !cwebShown && cwebReadyToShow {
         cwebShown = true
-        w.isHidden = false
+        cbox.layer.removeAllAnimations()
+        cbox.transform = .identity
+        cbox.alpha = 0
+        cbox.isHidden = false
         cwebInset(keepEnd: true)
-        UIView.animate(withDuration: 0.12) { w.alpha = 1 }
+        UIView.animate(withDuration: 0.12) { self.cbox.alpha = 1 }
         // (the box is its page's now: it says what's in it)
         w.evaluateJavaScript("window.NativeComment && NativeComment.sync(true)", completionHandler: nil)
       }
     } else if cwebShown {
+      // going: it slides off to the right with the task page going back to Details
       cwebShown = false
-      UIView.animate(withDuration: 0.1, animations: { w.alpha = 0 }) { _ in if !self.cwebShown { w.isHidden = true } }
+      let W = view.bounds.width
+      UIView.animate(withDuration: 0.28, delay: 0, options: [.curveEaseOut], animations: { self.cbox.transform = CGAffineTransform(translationX: W, y: 0) }) { _ in
+        if !self.cwebShown { self.cbox.isHidden = true; self.cbox.transform = .identity }
+      }
       pageJS("window.NativeComment && NativeComment.sync(true)")
     }
   }
@@ -317,25 +338,29 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     guard let sv = cweb?.scrollView else { return true }
     return sv.contentOffset.y + sv.bounds.height >= sv.contentSize.height + sv.contentInset.bottom - 60
   }
+  /* Where the comments screen is (Haris, 2026-10-31 — the third way; the first two fought WebKit):
+     its box runs from below the task's header to the bottom of the screen and never changes size (a web view that
+     changes size puts its scroll position back afterwards: the list jumped). With the keyboard up the comments slide
+     up by the keyboard's height as one picture (a transform, in the keyboard's own animation) — so the web view is
+     never under the keyboard and doesn't shift itself for it either; the room above (under the header) becomes
+     scrollable room at the top, so the first comments can still be reached. Under the comments: the comment box. */
   func cwebInset(keepEnd: Bool, cover: CGFloat? = nil) {
     guard let w = cweb else { return }
     let sv = w.scrollView
-    let kb = max(cover ?? keyboardCover, view.safeAreaInsets.bottom)
+    let kb = cover ?? keyboardCover
+    let safe = view.safeAreaInsets.bottom
     let barH = cbarIfMade.map { $0.isHidden ? 0 : $0.bounds.height } ?? 0
-    let barTop = view.bounds.height - kb - barH
-    // the comments screen ends at the top of the comment box (and so above the keyboard): it's never under the
-    // keyboard, so its web view doesn't shift itself for it as well — that fought this and left the list short of the
-    // latest comment / back at the top (Haris, 2026-10-31)
     let top = cbarFeed?.minY ?? 172
-    let oldH = w.frame.height, off = sv.contentOffset.y
-    let f = CGRect(x: 0, y: top, width: view.bounds.width, height: max(120, barTop - top))
-    if w.frame != f { w.frame = f }
-    let inset: CGFloat = 6
-    sv.contentInset.bottom = inset
-    sv.verticalScrollIndicatorInsets.bottom = 0
-    let end = max(0, sv.contentSize.height + inset - f.height)
-    sv.contentOffset = CGPoint(x: 0, y: keepEnd ? end : min(max(0, off + (oldH - f.height)), end))
-    w.evaluateJavaScript("document.documentElement.style.setProperty('--cm-bottom','\(Int(inset))px')", completionHandler: nil)
+    let box = CGRect(x: 0, y: top, width: view.bounds.width, height: view.bounds.height - top)
+    if cbox.frame != box { cbox.frame = box }
+    if w.frame.size != box.size || w.frame.origin != .zero { w.transform = .identity; w.frame = CGRect(origin: .zero, size: box.size) }
+    let off = sv.contentOffset.y
+    w.transform = CGAffineTransform(translationX: 0, y: -kb)
+    sv.contentInset = UIEdgeInsets(top: kb, left: 0, bottom: (kb > 0 ? barH : safe + barH) + 6, right: 0)
+    sv.verticalScrollIndicatorInsets = UIEdgeInsets(top: kb, left: 0, bottom: (kb > 0 ? barH : safe + barH), right: 0)
+    let end = max(-kb, sv.contentSize.height + sv.contentInset.bottom - box.height)
+    sv.contentOffset = CGPoint(x: 0, y: keepEnd ? end : min(max(-kb, off), end))
+    w.evaluateJavaScript("document.documentElement.style.setProperty('--cm-bottom','\(Int(sv.contentInset.bottom))px')", completionHandler: nil)
   }
   // the keyboard coming / going: the comments move with it, in its own animation
   func cwebRide(cover: CGFloat, duration: Double, curve: UInt, atEnd: Bool) {
@@ -345,7 +370,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   func cwebToEnd(animated: Bool) {
     guard let sv = cweb?.scrollView else { return }
-    let end = max(0, sv.contentSize.height + sv.contentInset.bottom - sv.bounds.height)
+    let end = max(-sv.contentInset.top, sv.contentSize.height + sv.contentInset.bottom - sv.bounds.height)
     sv.setContentOffset(CGPoint(x: 0, y: end), animated: animated)
   }
   // after Camera / Photos / Files from the comment box's +: once the picker has gone, the keyboard as it was before
@@ -365,7 +390,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     b.isHidden = true
     b.accessibilityLabel = "Jump to the latest comment"
     b.addAction(UIAction { [weak self] _ in self?.jumpToLatest() }, for: .touchUpInside)
-    view.insertSubview(b, aboveSubview: cweb ?? web)
+    view.insertSubview(b, aboveSubview: cweb == nil ? web : cbox)
     return b
   }()
   func jumpToLatest() {
@@ -384,7 +409,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if let w = cweb, cmdSource === w {
       guard cwebShown else { return }
       for k in ["show", "p", "feed", "task"] { a.removeValue(forKey: k) }
-      if let j = a["jump"] as? [NSNumber], j.count == 4 { a["jump"] = [j[0], NSNumber(value: j[1].doubleValue + w.frame.minY), j[2], j[3]] }
+      if let j = a["jump"] as? [NSNumber], j.count == 4 { a["jump"] = [j[0], NSNumber(value: j[1].doubleValue + cbox.frame.minY + w.transform.ty), j[2], j[3]] }
     } else if cweb != nil {
       if let t = a["task"] as? String { cbarTask = t } else if a["task"] is NSNull { cbarTask = nil }
       if cwebShown { a = a.filter { ["show", "p", "feed", "blur"].contains($0.key) } }
@@ -479,7 +504,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let curve = (n.userInfo?[UIResponder.keyboardAnimationCurveUserInfoKey] as? UInt) ?? 7
     // (the comments screen's own web view also shifts itself for the keyboard — WebKit's automatic keyboard avoidance
     //  on its scroll view, which ran after ours and left the list short of the latest comment: ours goes after it)
-    if cwebShown { let e = cwebAtEnd(); DispatchQueue.main.async { self.cwebRide(cover: cover, duration: dur, curve: curve, atEnd: e) } }
+    if cwebShown { cwebRide(cover: cover, duration: dur, curve: curve, atEnd: cwebAtEnd()) }   // (now, before its web view looks at the keyboard: by then it's no longer under it)
     else { feedRide(cover: cover, duration: dur, curve: curve) }   // (first: the page hears it's iOS moving the list this time)
     pageJS("window.__e11Kb && window.__e11Kb(\(Int(cover.rounded())), \(Int(dur * 1000)), 1)")
     rideKeyboard(to: cover, duration: dur, curve: curve)
@@ -1322,7 +1347,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
             let sv = self.cweb?.scrollView
             self.selfResult[name + "Geo"] = ["made": self.cweb != nil, "loaded": self.cwebLoaded, "shown": self.cwebShown, "atEnd": self.cwebAtEnd(),
               "inset": sv?.contentInset.bottom ?? -1, "offset": sv?.contentOffset.y ?? -1, "content": sv?.contentSize.height ?? -1, "height": sv?.bounds.height ?? -1,
-              "top": self.cweb?.frame.minY ?? -1, "task": self.cwebTask ?? "", "cover": self.keyboardCover] as [String: Any]
+              "top": self.cbox.frame.minY, "ty": self.cweb?.transform.ty ?? 0, "task": self.cwebTask ?? "", "cover": self.keyboardCover] as [String: Any]
           }
           if name.hasPrefix("form") { self.selfResult[name + "Geo"] = FormSheetVC.current?.geo() ?? ["error": "no form"] }
           if name.hasPrefix("nsheet") { self.selfResult[name + "Geo"] = (self.presentedViewController as? NativeSheetVC)?.geo() ?? ["error": "no native sheet"] }

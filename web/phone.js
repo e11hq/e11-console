@@ -1048,6 +1048,7 @@ const Push = (() => {
   const tuned = () => typeof Pager !== 'undefined' && Pager.lists();
   const standalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true || window.__phSwipeAlways || (typeof Host !== 'undefined' && Host.isIOSApp);
   function target() {
+    if (window.__e11CommentsOnly) return null;   // (the comments screen: the app's own swipe — __e11CmBack)
     if ($('#overlay-root').firstElementChild || $('.menu:not(.ph-out)') || $('#ph-sheet-root .ph-scrim:not(.docked)')) return null; // a sheet or menu is open
     if (ui.taskId) {
       const pane = $('#detail');
@@ -2305,10 +2306,14 @@ const CommentsOnly = (() => {
   if (on) document.documentElement.classList.add('cm-only', 'ph-cb-on');
   window.__e11ShowComments = (id) => {
     if (!on || typeof task !== 'function' || !task(id)) return 'no';
-    ui.thread = null; ui.replyTo = null; ui.sideTab = 'comments'; ui.activityFilter = 'comments';
-    if (ui.taskId !== id) openTask(id); else renderDetail();
+    const same = ui.taskId === id && !!document.querySelector('#detail.open .tm-feed');
+    if (!same) { ui.thread = null; ui.replyTo = null; }
+    ui.sideTab = 'comments'; ui.activityFilter = 'comments';
+    if (ui.taskId !== id || !document.querySelector('#detail.open')) openTask(id); else if (!same) renderDetail();
     requestAnimationFrame(() => requestAnimationFrame(() => NativeMac.call('cmReady', { id }).catch(() => {})));
     return 'ok';
   };
+  // a swipe right on the comments screen: out of a thread first ('thread'); otherwise the app goes back to Details
+  window.__e11CmBack = () => { if (!on || !ui.thread) return ''; const b = document.querySelector('#detail .th-back'); if (b) b.click(); return 'thread'; };
   return { on };
 })();
