@@ -277,18 +277,23 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // the bar's frost: iPhone's own scroll edge effect under the bar's row (iOS 26+), there once the list moves under it;
     // before iOS 26 a thin see-through blur that softens out at its lower edge
     topBar.frame = CGRect(x: 0, y: 0, width: W, height: smallH)
+    // (it comes gradually while the three boxes pass under the bar — Haris, 2026-10-31)
+    let boxes0 = bigH + 4 - smallH, boxes1 = boxes0 + 70
+    let frost = searching ? 1 : ease(boxes0, boxes1, s)
     if #available(iOS 26.0, *) {
       if let i = edgeHook as? UIScrollEdgeElementContainerInteraction { let want: UIScrollView = searching ? results : scroll; if i.scrollView !== want { i.scrollView = want } }
-      scroll.topEdgeEffect.isHidden = !searching && s < 2
+      // (iPhone's edge effect is on or off: it fades in once the boxes are a third of the way under, and out again)
+      let hide = !searching && s < boxes0 + 24
+      if scroll.topEdgeEffect.isHidden != hide { UIView.animate(withDuration: 0.3) { self.scroll.topEdgeEffect.isHidden = hide } }
       topLine.frame = CGRect(x: 0, y: smallH - 0.5, width: W, height: 0.5)
-      topLine.alpha = searching ? 0 : ease(2, 18, s)
+      topLine.alpha = searching ? 0 : frost
     } else {
       blur.frame = CGRect(x: 0, y: 0, width: W, height: smallH + 14)
       CATransaction.begin(); CATransaction.setDisableActions(true)
       blurMask.frame = blur.bounds; blurMask.locations = [0, NSNumber(value: Double(smallH / (smallH + 14))), 1]
       CATransaction.commit()
       hairline.frame = CGRect(x: 0, y: smallH - 0.5, width: W, height: 0.5)
-      blur.alpha = searching ? 1 : ease(2, 18, s)
+      blur.alpha = frost
     }
     scroll.verticalScrollIndicatorInsets = UIEdgeInsets(top: smallH - bigH, left: 0, bottom: bottomRoom - 20, right: 0)
     // the big date and title: the list's own first lines (above its top, in the room it keeps for them)
