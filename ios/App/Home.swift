@@ -6,7 +6,7 @@ import UIKit
    boxes, the groups and their task cards, and the colours of its own Home drawn under this one (light / dark) — with
    the "home" command whenever something changes (NativeHome in phone.js), and the taps go back to it
    (window.__e11Home: open a task, Search, Me, New task). */
-final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate {
+final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate, UITextFieldDelegate {
   var onEvent: (([String: Any]) -> Void)?
   var present: ((UIViewController) -> Void)?
   private var canDelete = false
@@ -17,7 +17,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
      shrinks as it rises into a small bar — the small title with the date under it — and the cards pass under it
      through a soft blur. Search is a Liquid Glass circle that stretches into a glass search bar; your photo then
      turns into a glass ✕ that closes it. */
-  private let blur = UIVisualEffectView(effect: nil), blurMask = CAGradientLayer()
+  private let blur = UIVisualEffectView(effect: nil), hairline = UIView()
   private let sub = UILabel(), title = UILabel(), smallTitle = UILabel(), smallSub = UILabel()
   private let searchCircle = HomeGlass(), me = UIButton(type: .custom), closeCircle = HomeGlass()
   private let searchBar = HomeGlass(), field = UITextField(), lens = UIImageView()
@@ -51,17 +51,18 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
     hint.font = .systemFont(ofSize: 14); hint.numberOfLines = 0; results.addSubview(hint)
     addSubview(results)
     blur.isUserInteractionEnabled = false
-    blurMask.colors = [UIColor.black.cgColor, UIColor.black.cgColor, UIColor.clear.cgColor]
-    blur.layer.mask = blurMask
+    // (the bar once scrolled: frosted glass with a soft line under it, as Mail's)
+    blur.contentView.addSubview(hairline)
+    blur.alpha = 0
     addSubview(blur)
     sub.font = .systemFont(ofSize: 13, weight: .medium)
     title.font = .systemFont(ofSize: 32, weight: .heavy)
     title.adjustsFontSizeToFitWidth = true; title.minimumScaleFactor = 0.6
-    // (the big title shrinks from its left edge)
-    sub.layer.anchorPoint = CGPoint(x: 0, y: 0.5); title.layer.anchorPoint = CGPoint(x: 0, y: 0.5)
     smallTitle.font = .systemFont(ofSize: 17, weight: .bold); smallSub.font = .systemFont(ofSize: 12)
     smallTitle.alpha = 0; smallSub.alpha = 0
-    [sub, title, smallTitle, smallSub].forEach { addSubview($0) }
+    // (the big title scrolls with the list and goes under the frosted bar; the small title is on the bar)
+    insertSubview(sub, belowSubview: blur); insertSubview(title, belowSubview: blur)
+    [smallTitle, smallSub].forEach { addSubview($0) }
     searchCircle.setIcon("magnifyingglass", 18)
     searchCircle.accessibilityLabel = "Search"
     searchCircle.onTap = { [weak self] in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.openSearch() }
@@ -76,6 +77,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
     lens.image = UIImage(systemName: "magnifyingglass", withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .medium))
     lens.contentMode = .center
     field.font = .systemFont(ofSize: 17)
+    field.delegate = self
     field.returnKeyType = .search; field.autocorrectionType = .no; field.clearButtonMode = .whileEditing
     field.addAction(UIAction { [weak self] _ in self?.typed() }, for: .editingChanged)
     field.addAction(UIAction { [weak self] _ in self?.field.resignFirstResponder() }, for: .editingDidEndOnExit)
@@ -115,7 +117,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
     title.attributedText = NSAttributedString(string: model["title"] as? String ?? "", attributes: [.font: UIFont.systemFont(ofSize: 32, weight: .heavy), .kern: -0.64, .foregroundColor: L.h1])
     smallTitle.text = model["title"] as? String; smallTitle.textColor = L.h1
     smallSub.text = model["date"] as? String; smallSub.textColor = L.sub
-    blur.effect = UIBlurEffect(style: L.light ? .systemChromeMaterialLight : .systemChromeMaterialDark)
+    blur.effect = UIBlurEffect(style: L.light ? .systemMaterialLight : .systemMaterialDark)
+    hairline.backgroundColor = L.light ? UIColor.black.withAlphaComponent(0.12) : UIColor.white.withAlphaComponent(0.12)
     [searchCircle, closeCircle, searchBar].forEach { $0.setLook(light: L.light, tint: L.roundIc) }
     lens.tintColor = L.sub; field.textColor = L.h1; field.tintColor = L.tag
     field.attributedPlaceholder = NSAttributedString(string: "Search tasks, clients, people", attributes: [.foregroundColor: L.sub.withAlphaComponent(0.8)])
@@ -234,54 +237,47 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
   func scrollToTop() { scroll.setContentOffset(CGPoint(x: 0, y: -scroll.contentInset.top), animated: true) }
   func scrollViewDidScroll(_ scrollView: UIScrollView) { if scrollView === scroll { layoutHeader() } }
 
-  // ---------- the header: big at the top, a small bar once scrolled (in between: following the finger) ----------
+  // ---------- the header (as Mail): the big title scrolls with the list, under a frosted bar that comes as it goes ----------
   private var bigHead: CGFloat { L.headH ?? (safeAreaInsets.top + 18 + 55 + 12) }
   private var smallHead: CGFloat { safeAreaInsets.top + 52 }
-  private func mix(_ a: CGFloat, _ b: CGFloat, _ t: CGFloat) -> CGFloat { a + (b - a) * t }
   private func ease(_ a: CGFloat, _ b: CGFloat, _ t: CGFloat) -> CGFloat { let x = min(1, max(0, (t - a) / (b - a))); return x * x * (3 - 2 * x) }
-  // (how far it has shrunk: 0 big … 1 small)
+  // (how far the list has scrolled)
+  private var scrolled: CGFloat { scroll.contentOffset.y + scroll.contentInset.top }
+  // (0 big … 1 small: once the big title has gone under the bar)
   private var shrink: CGFloat {
-    let s = scroll.contentOffset.y + scroll.contentInset.top
-    return min(1, max(0, s / max(1, bigHead - smallHead)))
+    let subH = ceil(sub.font.lineHeight), by = bigHead - 12 - (subH + 2 + 37)
+    return ease(by + subH - smallHead + 4, by + subH + 30 - smallHead, scrolled)
   }
   private func layoutHeader() {
     let W = bounds.width
     let bigH = bigHead, smallH = smallHead, top = safeAreaInsets.top
-    let t = shrink
-    let s = max(0, scroll.contentOffset.y + scroll.contentInset.top)
-    let headH = mix(bigH, smallH, shrink)
-    // the blur: there as soon as the list goes under the header, fading out at its lower edge
-    blur.frame = CGRect(x: 0, y: 0, width: W, height: headH + 22)
-    CATransaction.begin(); CATransaction.setDisableActions(true)
-    blurMask.frame = blur.bounds
-    blurMask.locations = [0, NSNumber(value: Double(headH / (headH + 22))), 1]
-    CATransaction.commit()
-    blur.alpha = searching ? 1 : min(1, s / 14)
-    scroll.verticalScrollIndicatorInsets = UIEdgeInsets(top: headH - top, left: 0, bottom: bottomRoom - 20, right: 0)
-    // (.ph-head at the top: the date over the title on the left, Search and your photo on the right, centred on one line)
+    let s = scrolled
     let subH = ceil(sub.font.lineHeight), tH: CGFloat = 37
     let blockH = subH + 2 + tH
     let by = bigH - 12 - blockH
-    let bigCY = by + blockH / 2, smallCY = top + 26
-    let cy = mix(bigCY, smallCY, shrink)
-    let ss = mix(46, 40, shrink), ms = mix(40, 36, shrink)
-    if !searching {
-      me.bounds = CGRect(x: 0, y: 0, width: ms, height: ms); me.center = CGPoint(x: W - 20 - ms / 2, y: cy); me.layer.cornerRadius = ms / 2
-      searchCircle.frame = CGRect(x: W - 20 - ms - 10 - ss, y: cy - ss / 2, width: ss, height: ss)
-    }
+    // the bar: frosted, with its soft line, there once the list reaches it
+    blur.frame = CGRect(x: 0, y: 0, width: W, height: smallH)
+    hairline.frame = CGRect(x: 0, y: smallH - 0.5, width: W, height: 0.5)
+    blur.alpha = searching ? 1 : ease(by - smallH - 6, by - smallH + 10, s)
+    scroll.verticalScrollIndicatorInsets = UIEdgeInsets(top: smallH - bigH, left: 0, bottom: bottomRoom - 20, right: 0)
+    // the big date and title: moving with the list (finger for finger), going under the bar
     let tw = W - 20 - 40 - 10 - 46 - 10 - 20
-    // the big title rises and shrinks (to 70%) from its left edge, fading as the small one comes
-    let k = 1 - 0.3 * t, lift = (bigH - smallH) * t
-    sub.transform = .identity; title.transform = .identity
-    sub.frame = CGRect(x: 20, y: by, width: tw, height: subH)
-    title.frame = CGRect(x: 20, y: by + subH + 2, width: tw, height: tH)
-    sub.transform = CGAffineTransform(translationX: 0, y: -lift).scaledBy(x: k, y: k)
-    title.transform = CGAffineTransform(translationX: 0, y: -lift - 8 * t).scaledBy(x: k, y: k)
-    let bigA = searching ? 0 : 1 - ease(0.45, 0.85, t), smallA = searching ? 0 : ease(0.7, 1, t)
+    sub.frame = CGRect(x: 20, y: by - s, width: tw, height: subH)
+    title.frame = CGRect(x: 20, y: by + subH + 2 - s, width: tw, height: tH)
+    let bigA: CGFloat = searching ? 0 : 1
     sub.alpha = bigA; title.alpha = bigA
+    // the small title and date on the bar, fading in as the big ones go under it
+    let smallCY = top + 26
+    let k = searching ? 0 : shrink
     smallTitle.frame = CGRect(x: 20, y: smallCY - 19, width: tw, height: 21); smallSub.frame = CGRect(x: 20, y: smallCY + 2, width: tw, height: 15)
-    smallTitle.alpha = smallA; smallSub.alpha = smallA
-    if searching {
+    smallTitle.alpha = k; smallSub.alpha = k
+    // Search and your photo: with the title until they reach the bar, then they stay on it
+    let bigCY = by + blockH / 2
+    let cy = max(smallCY, bigCY - max(0, s))
+    if !searching {
+      me.bounds = CGRect(x: 0, y: 0, width: 40, height: 40); me.center = CGPoint(x: W - 20 - 20, y: cy); me.layer.cornerRadius = 20
+      searchCircle.frame = CGRect(x: W - 20 - 40 - 10 - 46, y: cy - 23, width: 46, height: 46)
+    } else {
       // (the bar in the row the buttons are in; the ✕ where your photo was)
       searchBar.frame = CGRect(x: 20, y: cy - 23, width: W - 20 - 46 - 10 - 20, height: 46)
       closeCircle.frame = CGRect(x: W - 20 - 46, y: cy - 23, width: 46, height: 46)
@@ -289,6 +285,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
     lens.frame = CGRect(x: 12, y: 0, width: 22, height: searchBar.bounds.height)
     field.frame = CGRect(x: 40, y: 0, width: max(0, searchBar.bounds.width - 40 - 10), height: searchBar.bounds.height)
   }
+  // the field's own ✕: clears what's typed (and the results)
+  func textFieldShouldClear(_ textField: UITextField) -> Bool { DispatchQueue.main.async { self.typed() }; return true }
 
   // ---------- search: the glass circle stretches into a search bar, your photo becomes a glass ✕ ----------
   func openSearch() {
@@ -527,7 +525,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
     ["open": openCard != nil, "openShift": openCard?.swipeX ?? 0, "actions": actions?.subviews.count ?? 0,
      "title": title.text ?? "", "date": sub.text ?? "", "stats": stats.map { ($0.viewWithTag(1) as? UILabel)?.text ?? "" },
      "groups": content.filter { $0.tag == 7 }.map { ($0 as? UILabel)?.text ?? "" }, "cards": cards.count, "fab": !fab.isHidden,
-     "headH": blur.frame.height - 22, "shrink": shrink, "smallTitle": smallTitle.alpha, "searching": searching,
+     "headH": blur.frame.height, "shrink": shrink, "bar": blur.alpha, "smallTitle": smallTitle.alpha, "searching": searching,
      "searchBarW": searchBar.isHidden ? 0 : searchBar.frame.width, "results": resultViews.count, "light": L.light]
   }
 }
@@ -821,7 +819,7 @@ final class HomeGlass: UIView {
   private let fx = UIVisualEffectView(effect: nil), icon = UIImageView()
   override init(frame: CGRect) {
     super.init(frame: frame)
-    fx.isUserInteractionEnabled = false
+    fx.isUserInteractionEnabled = true   // (the search bar's field, inside it, gets its taps — its ✕ too)
     addSubview(fx)
     content.isUserInteractionEnabled = true
     fx.contentView.addSubview(content)
