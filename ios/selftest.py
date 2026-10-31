@@ -55,6 +55,11 @@ try:
         time.sleep(0.5)
     print(json.dumps(res, indent=1)[:4000])
     p = res.get('home') or {}
+    # 22: the startup screen is the app's own — there at once (icon, greeting, four rows), ticked by the page, gone before Home
+    sg = res.get('splashGeo') or {}; stg = res.get('splashTickedGeo') or {}
+    check('splash' in seen and sg.get('greet') and len(sg.get('rows') or []) == 4 and sg.get('iconLayers') == 14, f'the startup screen shows at once: icon, greeting, four rows {sg}')
+    check(stg.get('ticked') == 4 and stg.get('n') == '4/4' and all(v not in ('', '…') for v in (stg.get('values') or [''])), f'the page ticked all four rows with real numbers {stg}')
+    check(res.get('splashGone') is True, f"the startup screen went before Home {res.get('splashGone')}")
     check(set(seen) >= {'home', 'inbox', 'me', 'client', 'task', 'sheet', 'back', 'nsheet', 'nsheetEnd', 'nsheetChannel', 'nsheetTitled'}, f'all stages ran {sorted(seen)}')
     hf = res.get('homeFrame') or {}
     check(hf.get('web') == hf.get('screen') and hf.get('tabBar') is True, f'the page fills the screen under the floating tab bar {hf}')

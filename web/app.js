@@ -9125,10 +9125,32 @@ document.addEventListener('keydown', tipHide, true);
 // The look (light/dark) and the first name come from this device's last session, so it's right from the first frame.
 const SPLASH_MIN = 3000;   // the icon assembles (~2 s), then the checklist ticks
 const SPLASH_ICON = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 300 : 2150;
+/* The iPhone app (22+) draws this screen itself the moment it opens (ios/App/Splash.swift), before this page has
+   loaded; the page still does the work underneath and tells the app what to show (the greeting, each tick, the
+   connection message, when to go) — its own copy stays under the app's. NATIVE_SPLASH = false: the app leaves it to the
+   page again from its next start (no app build needed). */
+const NATIVE_SPLASH = true;
 const Splash = (() => {
   const el = document.getElementById('splash');
   let start = performance.now(), gone = false, skipResolve = null;
   const skipped = new Promise((r) => { skipResolve = r; });
+  const toApp = (a) => { if (Host.isIOSApp) NativeMac.call('splash', a).catch(() => {}); };
+  window.__e11SplashSkip = () => skipResolve();
+  window.__e11SplashRetry = () => { if (retryResolve) retryResolve(); };
+  // what the app needs for its next start: the look, the first name, the CD's row, and for the next three weeks each
+  // day's greeting (occasions) and Dubai's sunrise / sunset (Automatic look)
+  function toAppMemo() {
+    if (!Host.isIOSApp) return;
+    const hm = (d) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    const days = {};
+    for (let i = 0; i < 21; i++) {
+      const ds = addDays(todayStr(), i), d = parseYmd(ds), t = sunTimesDubai(d);
+      let g = ''; try { g = Occasions.greeting(ds) || ''; } catch (e) { /* data not in yet */ }
+      days[ds] = { g, alone: !!(g && Occasions.alone(g)), rise: hm(t.rise), set: hm(t.set) };
+    }
+    const m = remembered();
+    toApp({ memo: { themeMode: m.themeMode || 'dark', name: m.name || '', cd: !!m.cd, native: NATIVE_SPLASH, days } });
+  }
   const TICK = '<svg viewBox="0 0 16 16" fill="none" stroke="#0c0d0f" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3.5 8.5 3 3 6-7"/></svg>';
   const remembered = () => { try { return JSON.parse(localStorage.getItem('e11-splash') || '{}') || {}; } catch (e) { return {}; } };
   function greeting(name) {
@@ -9177,10 +9199,12 @@ const Splash = (() => {
     rows = $$('.sp-row', el);
     const skip = () => skipResolve();
     el.addEventListener('click', skip);
+    // (the app's own copy: how long it has been showing, so the ticks come no later than they would here)
+    if (Host.isIOSApp) NativeMac.call('splash', { hello: true }).then((r) => { if (r && r.shown && r.age > 0) start = Math.min(start, performance.now() - r.age); }).catch(() => {});
     window.addEventListener('keydown', function k() { if (!gone) skip(); window.removeEventListener('keydown', k); });
   }
   // Remember the look and name for the next startup on this device
-  function remember(extra) { try { localStorage.setItem('e11-splash', JSON.stringify({ ...remembered(), ...extra })); } catch (e) { /* storage off */ } }
+  function remember(extra) { try { localStorage.setItem('e11-splash', JSON.stringify({ ...remembered(), ...extra })); } catch (e) { /* storage off */ } toAppMemo(); }
   function values() {
     if (!db || !currentUserId) return null;
     const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
@@ -9202,6 +9226,7 @@ const Splash = (() => {
   function status(text, withRetry) {
     const h = document.getElementById('sp-hint');
     if (!h || gone) return;
+    toApp({ status: text || '', retry: !!(text && withRetry) });
     if (!text) { h.textContent = window.innerWidth <= 760 ? 'Tap to skip' : 'Click or press any key to skip'; h.classList.remove('sp-warn'); return; }
     h.classList.add('sp-warn');
     h.innerHTML = `${esc(text)}${withRetry ? ' <button class="sp-retry" type="button">Try again</button>' : ''}`;
@@ -9221,6 +9246,7 @@ const Splash = (() => {
       await Promise.race([wait(Math.max(0, SPLASH_ICON - (performance.now() - start))), skipped]);
       document.getElementById('sp-greet').textContent = greeting(u ? firstName(u.id) : '');
       rows[3].querySelector('.sp-lbl').textContent = v.label4;
+      toApp({ greet: greeting(u ? firstName(u.id) : ''), label4: v.label4 });
       const fast = await Promise.race([wait(0).then(() => false), skipped.then(() => true)]);
       for (let i = 0; i < rows.length && !fast; i++) {
         const r = await Promise.race([wait(i ? 220 : 120).then(() => false), skipped.then(() => true)]);
@@ -9230,10 +9256,12 @@ const Splash = (() => {
         rows[i].querySelector('.sp-val').textContent = v.list[i];
         n.textContent = `${i + 1}/${rows.length}`;
         bar.style.width = ((i + 1) / rows.length * 100) + '%';
+        toApp({ tick: i, value: v.list[i], n: i + 1 });
       }
       await Promise.race([wait(Math.max(420, SPLASH_MIN - (performance.now() - start))), skipped]);
     }
     gone = true;
+    toApp({ out: true });
     el.classList.add('out');
     if (typeof NativeSide !== 'undefined') NativeSide.paint();   // (the Mac app's own sidebar comes as it fades)
     document.getElementById('app').classList.add('enter');
