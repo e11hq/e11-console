@@ -45,6 +45,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   var bottomRoom: CGFloat = 120 { didSet { if oldValue != bottomRoom { setNeedsLayout() } } }
   // the top of the app's tab bar: the + sits 14 above it, 18 from the right (phone.css .ph-fab), so it's in place from
   // the first frame — not where the page had it a moment before the tab bar came (it jumped up, Haris 2026-10-31)
+  // (the room under the list's last card: up to 12 above "+ New task", which sits 14 above the tab bar)
+  private var endRoom: CGFloat { tabTop.map { bounds.height - ($0 - 14 - BTN) + 12 } ?? bottomRoom }
   var tabTop: CGFloat? { didSet { if oldValue != tabTop { setNeedsLayout() } } }
 
   override init(frame: CGRect) {
@@ -257,7 +259,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
         y += h
       }
     }
-    scroll.contentSize = CGSize(width: W, height: y + bottomRoom)
+    // (the list ends with its last card 12 above "+ New task", so nothing is hidden behind it and no empty third of the
+    //  screen is left under it — Haris, 2026-10-31; while scrolling the cards still pass under the + and the tab bar)
+    scroll.contentSize = CGSize(width: W, height: y + endRoom)
     // (a list that got shorter — a task deleted — never leaves the view scrolled past its end, showing nothing)
     let maxY = max(-scroll.contentInset.top, scroll.contentSize.height + scroll.contentInset.bottom - scroll.bounds.height)
     if !scroll.isDragging && !scroll.isDecelerating && scroll.contentOffset.y > maxY + 1 { scroll.setContentOffset(CGPoint(x: 0, y: maxY), animated: true) }
@@ -359,7 +363,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     }
     // (the scroll bar on the right runs from the bar's lower edge down, never up beside it — as Mail's; set here, not by iPhone)
     if scroll.automaticallyAdjustsScrollIndicatorInsets { scroll.automaticallyAdjustsScrollIndicatorInsets = false }
-    scroll.verticalScrollIndicatorInsets = UIEdgeInsets(top: smallH, left: 0, bottom: bottomRoom - 20, right: 0)
+    // (… down to just above the tab bar, as Mail's)
+    scroll.verticalScrollIndicatorInsets = UIEdgeInsets(top: smallH, left: 0, bottom: tabTop.map { bounds.height - $0 + 8 } ?? bottomRoom - 20, right: 0)
     // the big date and title: the list's own first lines (above its top, in the room it keeps for them)
     let tw = W - 16 - R
     // (bounds and centre, not frame: the blur fade moves them with a transform)
