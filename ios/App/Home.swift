@@ -1,4 +1,5 @@
 import UIKit
+import CoreImage
 
 /* ================= Home (E11 Day / My Day), drawn by the app itself (23+, Haris 2026-10-31) =================
    The same page as the website's phone Home (phone.js myDay / card, phone.css .ph-head / .ph-stats / .ph-gh / .pc),
@@ -276,50 +277,99 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private func ease(_ a: CGFloat, _ b: CGFloat, _ t: CGFloat) -> CGFloat { let x = min(1, max(0, (t - a) / (b - a))); return x * x * (3 - 2 * x) }
   // (how far the list has scrolled)
   private var scrolled: CGFloat { scroll.contentOffset.y + scroll.contentInset.top }
-  // (0 big … 1 small: once the big title has gone under the bar)
-  private var shrink: CGFloat {
-    // (the big title starts in the bar's own row: the small one comes as the big one rises out of it)
-    return ease(14, 50, scrolled)
+  // (0 big … 1 small: as Mail, once the big title has scrolled up under the bar's row — its baseline past the bar's
+  // lower edge — the bar switches over in one quick move, not with the scroll — Haris, 2026-10-31)
+  private var barIn = false
+  private var shrink: CGFloat { barIn ? 1 : 0 }
+  private var pastBig: Bool { scrolled > 66 + 33 - 54 }
+  // Mail's blur fade (its "All Inboxes" coming into the bar): a label goes or comes through a soft blur, the coming one
+  // rising a few points into place; its blurred copy crossfades with it
+  private func blurCopy(_ l: UILabel) -> UIImageView? {
+    let pad: CGFloat = 10, b = l.bounds
+    guard b.width > 0, b.height > 0, let text = l.text, !text.isEmpty, let font = l.font else { return nil }
+    let colour = (l.textColor ?? .label).resolvedColor(with: traitCollection)
+    let fmt = UIGraphicsImageRendererFormat.preferred(); let sc = fmt.scale
+    let size = CGSize(width: b.width + pad * 2, height: b.height + pad * 2)
+    let sharp = UIGraphicsImageRenderer(size: size, format: fmt).image { _ in
+      let a = NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: colour])
+      a.draw(with: CGRect(x: pad, y: pad + (b.height - font.lineHeight) / 2, width: b.width, height: font.lineHeight),
+             options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine], context: nil)
+    }
+    guard let ci = CIImage(image: sharp), let f = CIFilter(name: "CIGaussianBlur") else { return nil }
+    f.setValue(ci, forKey: kCIInputImageKey); f.setValue(5 * sc, forKey: kCIInputRadiusKey)
+    guard let out = f.outputImage?.cropped(to: ci.extent), let cg = HomeView.ci.createCGImage(out, from: ci.extent) else { return nil }
+    let v = UIImageView(image: UIImage(cgImage: cg, scale: sc, orientation: .up))
+    v.isUserInteractionEnabled = false
+    v.bounds = CGRect(origin: .zero, size: size); v.center = l.center
+    return v
+  }
+  private static let ci = CIContext()
+  private func blurFade(_ l: UILabel, in on: Bool, rise: CGFloat) {
+    l.layer.removeAllAnimations()
+    let g = blurCopy(l)
+    if let g = g { l.superview?.insertSubview(g, aboveSubview: l) }
+    let lift = CGAffineTransform(translationX: 0, y: rise)
+    if on { l.alpha = 0; l.transform = lift; g?.alpha = 0; g?.transform = lift } else { g?.alpha = 0 }
+    UIView.animateKeyframes(withDuration: 0.28, delay: 0, options: [.allowUserInteraction, .beginFromCurrentState]) {
+      if on {
+        UIView.addKeyframe(withRelativeStartTime: 0, relativeDuration: 0.4) { g?.alpha = 1 }
+        UIView.addKeyframe(withRelativeStartTime: 0, relativeDuration: 1) { l.transform = .identity; g?.transform = .identity }
+        UIView.addKeyframe(withRelativeStartTime: 0.3, relativeDuration: 0.7) { l.alpha = 1 }
+        UIView.addKeyframe(withRelativeStartTime: 0.45, relativeDuration: 0.55) { g?.alpha = 0 }
+      } else {
+        UIView.addKeyframe(withRelativeStartTime: 0, relativeDuration: 0.6) { l.alpha = 0 }
+        UIView.addKeyframe(withRelativeStartTime: 0, relativeDuration: 0.35) { g?.alpha = 0.9 }
+        UIView.addKeyframe(withRelativeStartTime: 0.35, relativeDuration: 0.65) { g?.alpha = 0 }
+      }
+    } completion: { _ in g?.removeFromSuperview() }
+  }
+  // the bar switching over (the frost, its line, the small title and date in; the big ones out) — or back
+  private func setBar(_ on: Bool) {
+    barIn = on
+    if #available(iOS 26.0, *) {
+      UIView.animate(withDuration: 0.28) { self.scroll.topEdgeEffect.isHidden = !on; self.topLine.alpha = on ? 1 : 0 }
+    } else {
+      UIView.animate(withDuration: 0.28) { self.blur.alpha = on ? 1 : 0 }
+    }
+    blurFade(smallTitle, in: on, rise: on ? 6 : 0); blurFade(smallSub, in: on, rise: on ? 6 : 0)
+    blurFade(title, in: !on, rise: 0); blurFade(sub, in: !on, rise: 0)
   }
   private func layoutHeader() {
     let W = bounds.width
     let bigH = bigHead, smallH = smallHead, top = safeAreaInsets.top
-    let s = scrolled
     let titleY = top + 66   // (the big title's top, as Mail's)
     // the bar's frost: iPhone's own scroll edge effect under the bar's row (iOS 26+), there once the list moves under it;
     // before iOS 26 a thin see-through blur that softens out at its lower edge
     topBar.frame = CGRect(x: 0, y: 0, width: W, height: smallH)
-    // (it comes gradually while the three boxes pass under the bar — Haris, 2026-10-31)
-    let boxes0 = bigH + 4 - smallH, boxes1 = boxes0 + 82
-    let frost = searching ? 1 : ease(boxes0, boxes1, s)
+    // (it comes the moment the big title has gone under the bar, as Mail's — Haris, 2026-10-31)
+    if !searching && pastBig != barIn { setBar(pastBig) }
     if #available(iOS 26.0, *) {
       if let i = edgeHook as? UIScrollEdgeElementContainerInteraction { let want: UIScrollView = searching ? results : scroll; if i.scrollView !== want { i.scrollView = want } }
-      // (iPhone's edge effect is on or off: it fades in once the boxes are a third of the way under, and out again)
-      let hide = !searching && s < boxes0 + 24
-      if scroll.topEdgeEffect.isHidden != hide { UIView.animate(withDuration: 0.3) { self.scroll.topEdgeEffect.isHidden = hide } }
+      let hide = !searching && !barIn
+      if scroll.topEdgeEffect.isHidden != hide { UIView.animate(withDuration: 0.28) { self.scroll.topEdgeEffect.isHidden = hide } }
       topLine.frame = CGRect(x: 0, y: smallH - 0.5, width: W, height: 0.5)
-      topLine.alpha = searching ? 0 : frost
+      topLine.alpha = searching || !barIn ? 0 : 1
     } else {
       blur.frame = CGRect(x: 0, y: 0, width: W, height: smallH + 14)
       CATransaction.begin(); CATransaction.setDisableActions(true)
       blurMask.frame = blur.bounds; blurMask.locations = [0, NSNumber(value: Double(smallH / (smallH + 14))), 1]
       CATransaction.commit()
       hairline.frame = CGRect(x: 0, y: smallH - 0.5, width: W, height: 0.5)
-      blur.alpha = frost
+      blur.alpha = searching || barIn ? 1 : 0
     }
     scroll.verticalScrollIndicatorInsets = UIEdgeInsets(top: smallH - bigH, left: 0, bottom: bottomRoom - 20, right: 0)
     // the big date and title: the list's own first lines (above its top, in the room it keeps for them)
     let tw = W - 16 - R
-    title.frame = CGRect(x: 16, y: titleY - bigH, width: tw, height: 41)
-    sub.frame = CGRect(x: 16, y: titleY + 41 + 1 - bigH, width: tw, height: 19)
-    let bigA: CGFloat = searching ? 0 : 1
-    sub.alpha = bigA; title.alpha = bigA
-    // the small title and date on the bar, fading in as the big ones go under it
+    // (bounds and centre, not frame: the blur fade moves them with a transform)
+    func place(_ l: UILabel, _ r: CGRect) { l.bounds = CGRect(origin: .zero, size: r.size); l.center = CGPoint(x: r.midX, y: r.midY) }
+    place(title, CGRect(x: 16, y: titleY - bigH, width: tw, height: 41))
+    place(sub, CGRect(x: 16, y: titleY + 41 + 1 - bigH, width: tw, height: 19))
+    // the small title and date on the bar: there once the big ones have gone under it (gone while searching, under its bar)
     let smallCY = top + 22
-    let k = searching ? 0 : shrink
     let stw = W - 16 - R - BTN - 12 - BTN - 12
-    smallTitle.frame = CGRect(x: 16, y: top + 1, width: stw, height: 21); smallSub.frame = CGRect(x: 16, y: top + 25, width: stw, height: 15)
-    smallTitle.alpha = k; smallSub.alpha = k
+    place(smallTitle, CGRect(x: 16, y: top + 1, width: stw, height: 21)); place(smallSub, CGRect(x: 16, y: top + 25, width: stw, height: 15))
+    if searching { smallTitle.alpha = 0; smallSub.alpha = 0 }
+    else if smallTitle.layer.animationKeys() == nil { let k: CGFloat = barIn ? 1 : 0; smallTitle.alpha = k; smallSub.alpha = k; title.alpha = 1 - k; sub.alpha = 1 - k }
     // Search and your photo: with the title until they reach the bar, then they stay on it
     // (Search and your photo stay on the bar's row from the start — they don't move with the list — Haris, 2026-10-31)
     let cy = smallCY
