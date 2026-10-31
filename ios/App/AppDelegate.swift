@@ -1585,6 +1585,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       ("homeScrolled", "return '{}'", { self.homeIfMade?.selfScroll(400) }),
       ("homeFind", "return '{}'", { self.homeIfMade?.selfScroll(0); self.homeIfMade?.selfFind("Ford") }),
       ("homeFindDone", "return '{}'", { self.homeIfMade?.selfFindDone() }),
+      // (the date sheet, as Home's Due opens it — it once crashed on iOS 27 while sizing itself)
+      ("homeDate", "return '{}'", { if let host = self.sheetHost() { host.present(DateSheetVC(["value": "2026-11-23", "min": "", "max": "", "clearable": true, "md": false], dark: true) { _ in }, animated: false) } }),
+      ("homeDateDone", "return '{}'", { self.presentedViewController?.dismiss(animated: false) }),
       ("inbox", pause(1500) + "return JSON.stringify({ view: ui.view })", {
         if let i = self.tabKeys.firstIndex(of: "inbox"), let item = self.tabBar.items?[i] { self.tabBar.selectedItem = item; self.tabBar(self.tabBar, didSelect: item) } }),
       ("me", "go('me'); " + pause(1200) + "for (let i = 0; i < 3; i++) { await Push.refresh(); " + pause(300) + " } return JSON.stringify({ lockRows: document.querySelectorAll('#ph-lock, [data-ph-lock]').length, pushRows: document.querySelectorAll('#ph-push').length })", nil),
