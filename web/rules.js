@@ -230,7 +230,7 @@ var E11Rules = (() => {
         // (swiped right: Done — ready means the page's own tick would complete it now, else `why` — and Due, for those
         //  who may change dates)
         due: t.due || '', canDone: !t.parentId && !amReadOnly(t), doneReady: !!t.done || canComplete(t), why: t.done ? '' : completeBlocked(t),
-        canDue: can('editDates', t), canDelete: can('deleteTask', t),
+        canDue: can('editDates', t) && !amReadOnly(t), canDelete: can('deleteTask', t) && !amReadOnly(t),
       };
     }
     function home() {
@@ -247,9 +247,153 @@ var E11Rules = (() => {
         people: Object.fromEntries([...peopleOn].map((id) => { const p = userById(id); return [id, { initials: initials(fullName(p)), color: rgbOf(avColor(id || 'x')), photo: p && p.avatar ? p.avatar : null }]; })),
       };
     }
-    return { home, myDayData, cardOf, can, amReadOnly, canComplete, completeBlocked, dayTitle, statusInfo, sectionOf };
+    // ---------- actions (they change the data they were given; the website and the server both use them) ----------
+    // env: { nowISO(), nowMs(), uid() }. Activity lines, notifications and the Trash go into db.tasks[].activity,
+    // db.notifications and db.trash, exactly as the website always did.
+    const env = make.env || {};
+    const nowISO = () => (env.nowISO ? env.nowISO() : new Date().toISOString());
+    const nowMs = () => (env.nowMs ? env.nowMs() : Date.now());
+    const newId = () => (env.uid ? env.uid() : Date.now().toString(36) + Math.random().toString(36).slice(2, 8));
+    const notifs = () => db.notifications || (db.notifications = []);
+    const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const trunc = (v, n = 140) => { v = String(v == null ? '' : v).replace(/\s+/g, ' ').trim(); return v.length > n ? v.slice(0, n - 1) + '…' : v; };
+    const fmtDay = (d) => { if (!d) return ''; const [y, m, dd] = d.split('-').map(Number); return `${MON3[m - 1]} ${dd}${y !== Number(today.slice(0, 4)) ? `, ${y}` : ''}`; };
+    function chg(oldV, newV, long) {
+      const o = trunc(oldV, long ? 220 : 80), n = trunc(newV, long ? 220 : 80);
+      const empty = '<i class="chg-empty">empty</i>';
+      return `<span class="chg${long ? ' long' : ''}"><span class="chg-old">${o ? esc(o) : empty}</span><span class="chg-arrow">→</span><span class="chg-new">${n ? esc(n) : empty}</span></span>`;
+    }
+    const prioLabel = (p) => { p = normPrio(p); return p === 'urgent' ? 'Urgent' : p === 'none' ? 'No priority' : `Priority ${p}`; };
+    const prioOwnerName = (key) => (key === '_' ? '' : fullName(userById(key)));
+    function creatorOf(t) {
+      const root = t && t.parentId ? task(t.parentId) || t : t;
+      const id = t && t.createdBy;
+      const u = id && userById(id);
+      if (!u || u.role !== 'am' || isAdm(u)) return id || null;
+      const p = root && root.projectId ? proj(root.projectId) : null;
+      if (!p || !(p.ams || []).length) return id;
+      return (p.ams || []).some((a) => a.id === id && !a.onLeave) ? id : null;
+    }
+    function watchersOf(t) {
+      const set = new Set((t.assignees || []).concat(creatorOf(t) ? [creatorOf(t)] : []));
+      if (t.parentId) { const p = task(t.parentId); if (p) watchersOf(p).forEach((x) => set.add(x)); }
+      return [...set];
+    }
+    function clientAmsOf(t) {
+      const root = t && t.parentId ? task(t.parentId) || t : t;
+      const p = root && root.projectId ? proj(root.projectId) : null;
+      return p ? (p.ams || []).filter((a) => !a.onLeave).map((a) => a.id) : [];
+    }
+    const NOTIF_GROUPS = { assigned: 'assign', unassigned: 'assign', mention: 'mention', comment: 'comment', status: 'status', done: 'status', update: 'update', cd: 'cd', edit: 'client', due: 'due', priority: 'priority', attach: 'attach', part: 'part', allparts: 'part', 'review-ok': 'result', 'review-amend': 'result', review: 'review', 'review-wd': 'review-wd', daily: 'daily' };
+    const notifOn = (u, kind) => { const g = NOTIF_GROUPS[kind]; return !g || !((u.prefs || {}).notifOff || {})[g]; };
+    // one notification per person; never to the person who made the change
+    function pushNotif(to, t, kind, text, extra = {}) {
+      if (!to || !meId || to === meId || !t) return;
+      const u = userById(to);
+      if (!u || u.active === false) return;
+      if (!notifOn(u, kind)) return;
+      if (to === cdUserId() && !['review', 'review-wd', 'mention'].includes(kind) && (t.parentId ? (task(t.parentId) || t) : t).createdBy !== to) return;   // the CD: their own tasks and review requests only
+      // one update per change: a specific one (status, comment…) replaces the general "changed …" sent moments before
+      const recent = nowMs() - 4000;
+      const same = (n) => n.to === to && n.taskId === t.id && n.from === meId && !n.read && Date.parse(n.at) > recent;
+      const list = notifs();
+      if (kind === 'edit' && list.some((n) => same(n) && n.kind !== 'edit')) return;
+      if (kind !== 'edit') {
+        const gen = list.find((n) => same(n) && n.kind === 'edit');
+        if (gen) { Object.assign(gen, { kind, text, snippet: extra.snippet || '', commentId: extra.commentId || null, at: nowISO() }); return; }
+      }
+      list.push({ id: newId(), to, from: meId, taskId: t.id, kind, text, snippet: extra.snippet || '', commentId: extra.commentId || null, at: nowISO(), read: false });
+      if (list.length > 5000) list.splice(0, list.length - 5000);
+    }
+    function notifyWatchers(t, kind, text, extra = {}) {
+      const skip = new Set(extra.skip || []);
+      new Set(watchersOf(t).concat(clientAmsOf(t))).forEach((u) => { if (!skip.has(u)) pushNotif(u, t, kind, text, extra); });   // (+ the client's Account Managers)
+    }
+    function logActivity(t, text) {
+      t.activity = t.activity || [];
+      t.activity.push({ id: newId(), at: nowISO(), text, actor: meId });
+      if (t.activity.length > 300) t.activity.splice(0, t.activity.length - 300);
+      // the client's Account Managers hear about every change on its tasks (whoever made it)
+      clientAmsOf(t).forEach((u) => pushNotif(u, t, 'edit', `${text} on`));
+    }
+    function logChange(t, label, oldV, newV, long) {
+      if (String(oldV || '') === String(newV || '')) return;
+      logActivity(t, `changed ${label} ${chg(oldV, newV, long)}`);
+    }
+    // each priority number once per person per day: after a task's day changes (or it's reopened) → the messages to show
+    const dayKey = (t) => t.due || 'none';
+    const prioTakenBy = (n, d, key, exceptId) => tasks.find((x) => !x.done && !partDone(x, key) && x.id !== exceptId && dayKey(x) === d && normPrio((x.prio || {})[key]) === n) || null;
+    function checkPrioConflict(t) {
+      const out = [];
+      if (t.done) return out;
+      Object.entries(t.prio || {}).forEach(([key, v]) => {
+        const p = normPrio(v);
+        if (typeof p !== 'number') return;
+        const other = prioTakenBy(p, dayKey(t), key, t.id);
+        if (!other) return;
+        delete t.prio[key];
+        const who = prioOwnerName(key);
+        logActivity(t, `cleared ${who ? `<b>${esc(who)}</b>’s` : 'the'} <b>priority</b> ${chg(prioLabel(p), prioLabel('none'))} (already used by another task that day)`);
+        out.push(`${who ? who + '’s ' : ''}Priority ${p} is already used by “${other.title || 'Untitled task'}” ${t.due ? 'on ' + fmtDue(t.due) : 'with no due date'} — cleared`);
+      });
+      return out;
+    }
+    function setDone(t, done) {
+      if (!!t.done !== !!done) {
+        logActivity(t, done ? 'completed this task' : 'reopened this task');
+        notifyWatchers(t, 'done', done ? 'completed' : 'reopened');
+      }
+      t.done = done;
+      t.completedAt = done ? nowISO() : null;
+      t.updatedAt = nowISO();
+      return !done && tasks.includes(t) ? checkPrioConflict(t) : [];
+    }
+    function setDue(t, v) {
+      const o = t.due;
+      t.due = v || null;
+      if (o === t.due) return [];
+      logChange(t, 'the <b>due date</b>', fmtDay(o), fmtDay(t.due));
+      notifyWatchers(t, 'due', t.due ? `changed the due date to <b>${esc(fmtDay(t.due))}</b>` : 'removed the due date');
+      const out = checkPrioConflict(t);
+      t.updatedAt = nowISO();
+      return out;
+    }
+    // completing a task the CD approved asks whether the client approved (kept with the final files)
+    const lastCDApprovalAt = (t) => (t.reviews || []).filter((r) => r.state === 'approved').map((r) => r.decidedAt || r.at || '').sort().pop() || '';
+    const clientApprovalFresh = (t) => !!t.clientApproval && String(t.clientApproval.at || '') >= lastCDApprovalAt(t);
+    const cdApprovedNow = (t) => !t.parentId && t.cdStatus === 'approved';
+    const asksClientApproval = (t) => !t.done && cdApprovedNow(t) && !clientApprovalFresh(t);
+    function setClientApproval(t, v) {
+      if (v === null) { delete t.clientApproval; logActivity(t, 'cleared the <b>client approval</b>'); }
+      else { t.clientApproval = { ...v, by: meId, at: nowISO() }; logActivity(t, v.none ? 'noted that <b>client approval isn’t needed</b>' : 'recorded the <b>client’s approval</b>'); }
+      t.updatedAt = nowISO();
+    }
+    function descendants(id) {
+      const out = [];
+      const walk = (pid) => db.tasks.filter((t) => t.parentId === pid).forEach((t) => { out.push(t); walk(t.id); });
+      walk(id);
+      return out;
+    }
+    // a task (and its subtasks) to the Trash; the people on it hear about it, so a mistake is spotted early
+    function deleteTask(t) {
+      const ids = [t.id, ...descendants(t.id).map((d) => d.id)];
+      if (t.parentId && task(t.parentId)) logActivity(task(t.parentId), `deleted subtask <span class="chg-old">${esc(trunc(t.title || 'Untitled task', 80))}</span>`);
+      const set = new Set(ids);
+      const removed = db.tasks.filter((x) => set.has(x.id));
+      db.tasks = db.tasks.filter((x) => !set.has(x.id));
+      if (!t.parentId) notifyWatchers(t, 'trash', `moved <b>${esc(t.title || 'Untitled task')}</b> to the Trash —`);
+      db.trash = db.trash || [];
+      const item = { id: 'tr-' + newId(), type: 'task', deletedAt: nowISO(), deletedBy: meId, key: 'tasks:' + t.id, projectId: t.projectId, projectName: (proj(t.projectId) || {}).name || '', data: { tasks: removed } };
+      db.trash.push(item);
+      return { ids, removed, item };
+    }
+
+    return { home, myDayData, cardOf, can, amReadOnly, canComplete, completeBlocked, dayTitle, statusInfo, sectionOf,
+      logActivity, logChange, pushNotif, notifyWatchers, checkPrioConflict, setDone, setDue, setClientApproval, asksClientApproval, deleteTask, watchersOf, creatorOf, clientAmsOf, fmtDue };
   }
 
-  return { make, home: (db, meId, today) => make(db, meId, today).home(), dubaiDay, rgbOf };
+  // (the clock and new ids for the actions: the website's own, or the server's)
+  const withEnv = (env, db, meId, today) => { make.env = env; try { return make(db, meId, today); } finally { make.env = null; } };
+  return { make, withEnv, home: (db, meId, today) => make(db, meId, today).home(), dubaiDay, rgbOf };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = E11Rules;

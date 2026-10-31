@@ -97,6 +97,7 @@ export function createServer(cfg) {
   if (cfg.occRemind !== false && webDir) occRemind.start();
   const widget = createWidget({ store, access, occRemind: webDir ? occRemind : null, now: cfg.now || (() => Date.now()) });
   const homeView = createHomeView({ webDir, now: cfg.now || (() => Date.now()) });
+  const homeOps = new Map();   // (the app's Home actions already done: their answers, for a retry)
   // Birthdays: the rest of the staff are told in the morning (Inbox + phone)
   const birthdays = createBirthdays({ store, webPush, notifMessage, deliver: (out) => broadcast(out.rev, out.results, null, null), now: cfg.now || (() => Date.now()) });
   if (cfg.birthdays !== false) birthdays.start();
@@ -370,6 +371,45 @@ export function createServer(cfg) {
   const accessKey = (u) => JSON.stringify([u.role === 'freelancer' ? u.projectIds || [] : null, u.role, !!u.admin, access.finLevel(u) || null, access.ownOnly(u), store.list('projects').map((p) => [p.id, p.clientId || null, !!p.inactive])]);
   const send = (s, event, data) => { try { s.res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); } catch { /* closed */ } };
 
+  // Save a person's changes and do what follows (live updates, final files, content plans, phone notifications…):
+  // what /api/push does for the website, and the iPhone app's Home actions (/api/home/act) too
+  function pushAs(u, changes, client) {
+      const fresh = new Set(changes.filter((ch) => ch && ch.kind === 'notifications' && !ch.del && !store.get('notifications', String(ch.id))).map((ch) => String(ch.id)));
+      const restoring = new Set(changes.filter((ch) => ch && !ch.del && ch.kind !== 'trash').map((ch) => `${ch.kind}:${ch.id}`));
+      const namesBefore = new Map(changes.filter((ch) => ch && ch.kind === 'projects' && !ch.del).map((ch) => [String(ch.id), (store.get('projects', String(ch.id)) || {}).name]));
+      const tasksBefore = new Map(changes.filter((ch) => ch && ch.kind === 'tasks').map((ch) => [String(ch.id), store.get('tasks', String(ch.id))]));
+      const { rev, results } = store.apply(changes, u.id, (ch, current) => access.canWrite(u, ch, current, { restoring }));
+      broadcast(rev, results, client, u.id);
+      renameLinkedAssets(results, namesBefore);
+      // a CD-reviewed task just completed: its final files go into Client Assets › Files
+      let filed = null;
+      try { filed = finals.afterPush(results, tasksBefore, u.id); } catch (e) { console.error('final files:', e.message); }
+      if (filed) {
+        broadcast(filed.rev, filed.results, null, null);
+        filed.results.filter((r) => r.kind === 'notifications' && !r.refused && r.data && r.data.to)
+          .filter((r) => { const to = store.get('users', String(r.data.to)); return !!to && access.canSee(to, 'notifications', r.data); })
+          .forEach((r) => webPush.sendTo(r.data.to, notifMessage(store, r.data)).catch(() => {}));
+      }
+      // content plans: a plan whose tasks are all complete is client approved; an approved plan's PowerPoint is filed
+      let planned = [];
+      try { planned = plans.afterPush(results.concat(filed ? filed.results : []), u.id, (ops) => store.apply(ops, 'plans')); } catch (e) { console.error('content plans:', e.message); }
+      for (const out of planned) {
+        broadcast(out.rev, out.results, null, null);
+        out.results.filter((r) => r.kind === 'notifications' && !r.refused && r.data && r.data.to)
+          .filter((r) => { const to = store.get('users', String(r.data.to)); return !!to && access.canSee(to, 'notifications', r.data); })
+          .forEach((r) => webPush.sendTo(r.data.to, notifMessage(store, r.data)).catch(() => {}));
+      }
+      // new notifications also go to the person's phone
+      results.filter((r) => r.kind === 'notifications' && fresh.has(String(r.id)) && !r.refused && !r.deleted && r.data && r.data.to && r.data.to !== u.id)
+        .filter((r) => { const to = store.get('users', String(r.data.to)); return !!to && access.canSee(to, 'notifications', r.data); })   // (only what they'd see in their Inbox)
+        .forEach((r) => webPush.sendTo(r.data.to, notifMessage(store, r.data)).catch(() => {}));
+      if (results.some((r) => r.kind === 'users' && !r.refused && !r.unchanged)) cfSync.schedule();
+      // a task completed or deleted cancels its scheduled comments straight away (and the author hears now)
+      if (results.some((r) => (r.kind === 'tasks' || r.kind === 'scheduled') && !r.refused && !r.unchanged)) setTimeout(() => scheduled.tick().catch(() => {}), 50);
+      if (cfg.views !== false && results.some((r) => ['tasks', 'clients', 'plans'].includes(r.kind) && !r.refused && !r.unchanged)) scanLater();
+    return { rev, results };
+  }
+
   /* ---------- routes ---------- */
   async function handle(req, res) {
     const url = new URL(req.url, 'http://local');
@@ -604,6 +644,26 @@ export function createServer(cfg) {
       try { home = homeView.home(u, visibleSnapshot(u).data); } catch (e) { console.error('home:', e.message); return json(res, 500, { ok: false, error: 'Home could not be worked out' }); }
       return json(res, 200, { ok: true, rev: store.rev(), home });
     }
+    // …and its actions (Done / reopen, Due, Delete and its Undo): saved as the website would save them, then the fresh
+    // Home. `op` (the app's id for the action) makes a retry after a lost answer harmless.
+    if (p === '/api/home/act' && req.method === 'POST') {
+      const body = await readBody(req);
+      const op = body && body.op ? String(body.op).slice(0, 80) : null;
+      const seen = op && homeOps.get(u.id + ':' + op);
+      if (seen) return json(res, 200, seen);
+      let r;
+      try { r = homeView.act(u, visibleSnapshot(u).data, body || {}, store); } catch (e) { console.error('home act:', e.message); return json(res, 500, { ok: false, error: 'That didn’t work — try again' }); }
+      let out;
+      if (!r.ok) out = { ok: false, error: r.error, need: r.need || null, why: !!r.why, status: r.status };
+      else {
+        const { results } = r.changes.length ? pushAs(u, r.changes, body.client || null) : { results: [] };
+        const refused = results.some((x) => x.refused && (x.kind === 'tasks' || x.kind === 'trash'));
+        let home = null; try { home = homeView.home(u, visibleSnapshot(u).data); } catch { /* the app keeps its own */ }
+        out = refused ? { ok: false, error: 'Your role doesn’t allow this', status: 403, home } : { ok: true, messages: r.messages, undo: r.undo || null, rev: store.rev(), home };
+      }
+      if (op) { homeOps.set(u.id + ':' + op, out); if (homeOps.size > 1000) homeOps.delete(homeOps.keys().next().value); }
+      return json(res, 200, out);
+    }
     if (p === '/api/occ-reminders') return json(res, 200, { ok: true, ...occRemind.forUser(u) });
     // Occasion dates: when the holiday calendar was last read (Admins and Account Managers can check now)
     if (p === '/api/holidays') {
@@ -696,39 +756,7 @@ export function createServer(cfg) {
     if (p === '/api/push' && req.method === 'POST') {
       const body = await readBody(req);
       const changes = Array.isArray(body.changes) ? body.changes : [];
-      const fresh = new Set(changes.filter((ch) => ch && ch.kind === 'notifications' && !ch.del && !store.get('notifications', String(ch.id))).map((ch) => String(ch.id)));
-      const restoring = new Set(changes.filter((ch) => ch && !ch.del && ch.kind !== 'trash').map((ch) => `${ch.kind}:${ch.id}`));
-      const namesBefore = new Map(changes.filter((ch) => ch && ch.kind === 'projects' && !ch.del).map((ch) => [String(ch.id), (store.get('projects', String(ch.id)) || {}).name]));
-      const tasksBefore = new Map(changes.filter((ch) => ch && ch.kind === 'tasks').map((ch) => [String(ch.id), store.get('tasks', String(ch.id))]));
-      const { rev, results } = store.apply(changes, u.id, (ch, current) => access.canWrite(u, ch, current, { restoring }));
-      broadcast(rev, results, body.client, u.id);
-      renameLinkedAssets(results, namesBefore);
-      // a CD-reviewed task just completed: its final files go into Client Assets › Files
-      let filed = null;
-      try { filed = finals.afterPush(results, tasksBefore, u.id); } catch (e) { console.error('final files:', e.message); }
-      if (filed) {
-        broadcast(filed.rev, filed.results, null, null);
-        filed.results.filter((r) => r.kind === 'notifications' && !r.refused && r.data && r.data.to)
-          .filter((r) => { const to = store.get('users', String(r.data.to)); return !!to && access.canSee(to, 'notifications', r.data); })
-          .forEach((r) => webPush.sendTo(r.data.to, notifMessage(store, r.data)).catch(() => {}));
-      }
-      // content plans: a plan whose tasks are all complete is client approved; an approved plan's PowerPoint is filed
-      let planned = [];
-      try { planned = plans.afterPush(results.concat(filed ? filed.results : []), u.id, (ops) => store.apply(ops, 'plans')); } catch (e) { console.error('content plans:', e.message); }
-      for (const out of planned) {
-        broadcast(out.rev, out.results, null, null);
-        out.results.filter((r) => r.kind === 'notifications' && !r.refused && r.data && r.data.to)
-          .filter((r) => { const to = store.get('users', String(r.data.to)); return !!to && access.canSee(to, 'notifications', r.data); })
-          .forEach((r) => webPush.sendTo(r.data.to, notifMessage(store, r.data)).catch(() => {}));
-      }
-      // new notifications also go to the person's phone
-      results.filter((r) => r.kind === 'notifications' && fresh.has(String(r.id)) && !r.refused && !r.deleted && r.data && r.data.to && r.data.to !== u.id)
-        .filter((r) => { const to = store.get('users', String(r.data.to)); return !!to && access.canSee(to, 'notifications', r.data); })   // (only what they'd see in their Inbox)
-        .forEach((r) => webPush.sendTo(r.data.to, notifMessage(store, r.data)).catch(() => {}));
-      if (results.some((r) => r.kind === 'users' && !r.refused && !r.unchanged)) cfSync.schedule();
-      // a task completed or deleted cancels its scheduled comments straight away (and the author hears now)
-      if (results.some((r) => (r.kind === 'tasks' || r.kind === 'scheduled') && !r.refused && !r.unchanged)) setTimeout(() => scheduled.tick().catch(() => {}), 50);
-      if (cfg.views !== false && results.some((r) => ['tasks', 'clients', 'plans'].includes(r.kind) && !r.refused && !r.unchanged)) scanLater();
+      const { rev, results } = pushAs(u, changes, body.client);
       return json(res, 200, { ok: true, rev, results: results.map((r) => ({ ...forUser(u, r), refused: !!r.refused })) });
     }
 

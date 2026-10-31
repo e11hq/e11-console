@@ -1710,20 +1710,11 @@ const dayKey = (t) => t.due || 'none';
 function prioTakenBy(n, day, key, exceptId) {
   return db.tasks.find((x) => !x.done && !partDone(x, key) && x.id !== exceptId && dayKey(x) === day && normPrio((x.prio || {})[key]) === n) || null;
 }
+// the task rules shared with the server (web/rules.js): the iPhone app's Home actions go straight to the server, which
+// runs these same ones — one copy
+const R = () => E11Rules.withEnv({ nowISO, nowMs: () => Date.now(), uid }, db, currentUserId, todayStr());
 // After a task's day changes (or it is reopened), make sure its number is still free that day
-function checkPrioConflict(t) {
-  if (t.done) return;
-  Object.entries(t.prio || {}).forEach(([key, v]) => {
-    const p = normPrio(v);
-    if (typeof p !== 'number') return;
-    const other = prioTakenBy(p, dayKey(t), key, t.id);
-    if (!other) return;
-    delete t.prio[key];
-    const who = prioOwnerName(key);
-    logActivity(t, `cleared ${who ? `<b>${esc(who)}</b>’s` : 'the'} <b>priority</b> ${chg(prioLabel(p), prioLabel('none'))} (already used by another task that day)`);
-    toast(`${who ? who + '’s ' : ''}Priority ${p} is already used by “${other.title || 'Untitled task'}” ${t.due ? 'on ' + fmtDue(t.due) : 'with no due date'} — cleared`);
-  });
-}
+function checkPrioConflict(t) { R().checkPrioConflict(t).forEach((m) => toast(m)); }
 // Sort helpers: urgent first, then 1–10, then no priority
 const byPrio = (a, b) => prioRank(prioOf(a)) - prioRank(prioOf(b));
 const urgentFirst = (a, b) => (isUrgent(b) ? 1 : 0) - (isUrgent(a) ? 1 : 0);
@@ -2064,21 +2055,9 @@ function avatarStack(ids, size = 20, max = 3, t = null) {
 // People who follow a task: its assignees and whoever created it (a subtask also notifies its parent's people)
 // Who a task's creator updates go to. An Account Manager who created a task in a client and is no longer that client's
 // Account Manager (replaced, or on leave) stops getting them; the client's current Account Manager gets them instead.
-function creatorOf(t) {
-  const root = t && t.parentId ? task(t.parentId) || t : t;
-  const id = t && t.createdBy;
-  const u = id && userById(id);
-  if (!u || u.role !== 'am' || isAdm(u)) return id || null;
-  const p = root && root.projectId ? proj(root.projectId) : null;
-  if (!p || !(p.ams || []).length) return id;                       // a client without Account Managers set: as before
-  return (p.ams || []).some((a) => a.id === id && !a.onLeave) ? id : null;
-}
+function creatorOf(t) { return R().creatorOf(t); }
 const creatorAndAms = (t) => [...new Set([creatorOf(t)].concat(clientAmsOf(t)).filter(Boolean))];
-function watchersOf(t) {
-  const set = new Set((t.assignees || []).concat(creatorOf(t) ? [creatorOf(t)] : []));
-  if (t.parentId) { const p = task(t.parentId); if (p) watchersOf(p).forEach((x) => set.add(x)); }
-  return [...set];
-}
+function watchersOf(t) { return R().watchersOf(t); }
 
 /* ---- Password hashing (SHA-256, salted, stretched) ---- */
 function sha256(str) {
@@ -2261,19 +2240,9 @@ document.addEventListener('focusin', (e) => {
 });
 document.addEventListener('focusout', (e) => { if (editSnap && editSnap.el === e.target) flushEdit(); });
 
-function logActivity(t, text) {
-  t.activity = t.activity || [];
-  t.activity.push({ id: uid(), at: nowISO(), text, actor: currentUserId });
-  if (t.activity.length > 300) t.activity.splice(0, t.activity.length - 300);
-  // the client's Account Managers hear about every change on its tasks (whoever made it)
-  clientAmsOf(t).forEach((u) => pushNotif(u, t, 'edit', `${text} on`));
-}
+function logActivity(t, text) { R().logActivity(t, text); }
 // The Account Managers looking after a task's client (not those on leave)
-function clientAmsOf(t) {
-  const root = t && t.parentId ? task(t.parentId) || t : t;
-  const p = root && root.projectId ? proj(root.projectId) : null;
-  return p ? (p.ams || []).filter((a) => !a.onLeave).map((a) => a.id) : [];
-}
+function clientAmsOf(t) { return R().clientAmsOf(t); }
 
 /* ================= Notifications ================= */
 // Notification types each person can switch off in their profile (all on by default)
@@ -2297,27 +2266,9 @@ const NOTIF_TYPES = [
 const notifTypeOf = (kind) => NOTIF_TYPES.find((x) => x.kinds.includes(kind));
 const notifOn = (u, kind) => { const g = notifTypeOf(kind); return !g || !((u.prefs || {}).notifOff || {})[g.k]; };
 // One notification per person; never to the person who made the change
-function pushNotif(to, t, kind, text, extra = {}) {
-  if (!to || !currentUserId || to === currentUserId || !t) return;
-  const u = userById(to);
-  if (!u || u.active === false) return;
-  if (!notifOn(u, kind)) return;
-  if (to === cdUserId() && !['review', 'review-wd', 'mention'].includes(kind) && (t.parentId ? (task(t.parentId) || t) : t).createdBy !== to) return;   // the CD: their own tasks and review requests only
-  // one update per change: a specific one (status, comment…) replaces the general "changed …" sent moments before
-  const recent = Date.now() - 4000;
-  const same = (n) => n.to === to && n.taskId === t.id && n.from === currentUserId && !n.read && Date.parse(n.at) > recent;
-  if (kind === 'edit' && db.notifications.some((n) => same(n) && n.kind !== 'edit')) return;
-  if (kind !== 'edit') {
-    const gen = db.notifications.find((n) => same(n) && n.kind === 'edit');
-    if (gen) { Object.assign(gen, { kind, text, snippet: extra.snippet || '', commentId: extra.commentId || null, at: nowISO() }); return; }
-  }
-  db.notifications.push({ id: uid(), to, from: currentUserId, taskId: t.id, kind, text, snippet: extra.snippet || '', commentId: extra.commentId || null, at: nowISO(), read: false });
-  if (db.notifications.length > 5000) db.notifications.splice(0, db.notifications.length - 5000);
-}
-function notifyWatchers(t, kind, text, extra = {}) {
-  const skip = new Set(extra.skip || []);
-  new Set(watchersOf(t).concat(clientAmsOf(t))).forEach((u) => { if (!skip.has(u)) pushNotif(u, t, kind, text, extra); });   // (+ the client's Account Managers)
-}
+// One notification per person; never to the person who made the change (the shared rules: web/rules.js)
+function pushNotif(to, t, kind, text, extra = {}) { R().pushNotif(to, t, kind, text, extra); }
+function notifyWatchers(t, kind, text, extra = {}) { R().notifyWatchers(t, kind, text, extra); }
 const mentionsIn = (html) => { const out = new Set(); String(html || '').replace(/data-user="([^"]+)"/g, (_, id) => { out.add(id); return ''; }); return out; };
 
 function normalize(d) {
@@ -2440,15 +2391,8 @@ function removeTasks(ids) {
 
 function setDone(t, done) {
   if (amReadOnly(t)) { toast(roMsg()); return; }
-  if (!!t.done !== !!done) {
-    if (done) Haptic.success();
-    logActivity(t, done ? 'completed this task' : 'reopened this task');
-    notifyWatchers(t, 'done', done ? 'completed' : 'reopened');
-  }
-  t.done = done;
-  t.completedAt = done ? nowISO() : null;
-  t.updatedAt = nowISO();
-  if (!done && db.tasks.includes(t)) checkPrioConflict(t);
+  if (done && !t.done) Haptic.success();
+  R().setDone(t, done).forEach((m) => toast(m));
 }
 
 function moveTask(id, sectionId, targetId, after) {
@@ -5118,13 +5062,9 @@ function filesOfTasks(list) {
 function deleteTaskFlow(id) {
   const t = task(id);
   if (!t) return;
-  const ids = [t.id, ...descendants(t.id).map((d) => d.id)];
-  if (t.parentId && task(t.parentId)) logActivity(task(t.parentId), `deleted subtask ${struck(t.title || 'Untitled task')}`);
-  const removed = removeTasks(ids);
+  // (to the Trash, the people on it told: the shared rules, as the server does for the iPhone app)
+  const { ids, removed, item: it } = R().deleteTask(t);
   if (ui.taskId && ids.includes(ui.taskId)) ui.taskId = t.parentId || null;
-  // the people on it hear about it, so a mistake is spotted early
-  if (!t.parentId) notifyWatchers(t, 'trash', `moved <b>${esc(t.title || 'Untitled task')}</b> to the Trash —`);
-  const it = toTrash('task', { tasks: removed }, { key: 'tasks:' + t.id, projectId: t.projectId, projectName: (proj(t.projectId) || {}).name || '' });
   commit();
   toast(`Moved “${t.title || 'Untitled task'}”${ids.length > 1 ? ` and ${ids.length - 1} subtask${ids.length > 2 ? 's' : ''}` : ''} to the Trash`, {
     label: 'Undo', run: () => { db.trash = trashList().filter((x) => x.id !== it.id); removed.forEach((x) => { if (!task(x.id)) db.tasks.push(x); }); commit(); },
@@ -5806,13 +5746,7 @@ function partsRow(t) {
 /* ---- Field changes that notify the task's people ---- */
 function setDue(t, v) {
   if (!can('editDates', t)) { denied(); return; }
-  const o = t.due;
-  t.due = v || null;
-  if (o === t.due) return;
-  logChange(t, 'the <b>due date</b>', fmtDay(o), fmtDay(t.due));
-  notifyWatchers(t, 'due', t.due ? `changed the due date to <b>${esc(fmtDay(t.due))}</b>` : 'removed the due date');
-  checkPrioConflict(t);
-  t.updatedAt = nowISO();
+  R().setDue(t, v).forEach((m) => toast(m));
 }
 
 function setPrio(t, key, k) {
@@ -7633,11 +7567,7 @@ function canClientApprove(t) {
   const p = proj(t.projectId), ams = (p && p.ams) || [];
   return u.role === 'am' && (!ams.length || ams.some((a) => a.id === u.id));
 }
-function setClientApproval(t, v) {
-  if (v === null) { delete t.clientApproval; logActivity(t, 'cleared the <b>client approval</b>'); }
-  else { t.clientApproval = { ...v, by: currentUserId, at: nowISO() }; logActivity(t, v.none ? 'noted that <b>client approval isn’t needed</b>' : 'recorded the <b>client’s approval</b>'); }
-  t.updatedAt = nowISO();
-}
+function setClientApproval(t, v) { R().setClientApproval(t, v); }
 // (shown once the task's CD Status is Approved for the current round — also when it was approved without a submission)
 const cdApprovedNow = (t) => !t.parentId && t.cdStatus === 'approved';
 function clientApprovalRow(t) {

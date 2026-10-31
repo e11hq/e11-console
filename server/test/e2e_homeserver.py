@@ -5,7 +5,7 @@ import asyncio, json, os, shutil, subprocess, tempfile, time, urllib.request
 from playwright.async_api import async_playwright
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 PORT = 18291; BASE = f'http://127.0.0.1:{PORT}'; ADMIN = 'haris@e11-digital.com'
-OLD = os.environ.get('OLD_REF', 'HEAD')
+OLD = os.environ.get('OLD_REF', '71b932a~1')   # (the page before the rules moved to web/rules.js)
 fails = []
 def check(c, m):
     print(('PASS ' if c else 'FAIL ') + m)
@@ -15,7 +15,7 @@ def old_web():
     """the web folder with the page as it was (OLD_REF) — the server's homeview still reads the new rules.js"""
     d = tempfile.mkdtemp()
     shutil.copytree(os.path.join(ROOT, 'web'), os.path.join(d, 'web'))
-    for f in ('phone.js', 'index.html'):
+    for f in ('phone.js', 'index.html', 'app.js'):
         src = subprocess.run(['git', '-C', ROOT, 'show', f'{OLD}:web/{f}'], capture_output=True, text=True, check=True).stdout
         open(os.path.join(d, 'web', f), 'w').write(src)
     return os.path.join(d, 'web')
@@ -72,7 +72,9 @@ async def main():
                 if got:
                     for g in got['groups']:
                         for c in g['cards']:
-                            c.pop('why', None); c.pop('canDelete', None)
+                            c.pop('why', None); c.pop('canDelete', None); c.pop('canDue', None)
+                for g in old['groups']:
+                    for c in g['cards']: c.pop('canDue', None)
                 same = json.dumps(got, sort_keys=True) == json.dumps(old, sort_keys=True)
                 if not same and got:
                     for k in old:
@@ -92,6 +94,53 @@ async def main():
                 checked += 1
                 await ctx.close()
             check(checked >= 4, f'{checked} people compared')
+            # the actions: the old website code and the server make the same activity lines and notifications
+            ctx, pg, errs = await login(ADMIN)
+            pick = await pg.evaluate("""() => {
+              const open = topTasks().filter((t) => !t.done && (t.assignees || []).length && !amReadOnly(t));
+              const ready = open.find((t) => canComplete(t) && !(t.cdStatus === 'approved')) || null;
+              const dated = open.find((t) => t !== ready && t.due) || null;
+              return { ready: ready && ready.id, dated: dated && dated.id };
+            }""")
+            async def old_effect(js):
+                return await pg.evaluate("""(js) => {
+                  const saved = db; db = JSON.parse(JSON.stringify(saved));
+                  try {
+                    const n0 = new Set(db.notifications.map((n) => n.id));
+                    const t = (0, eval)(js);
+                    return { act: (t.activity || []).slice(-3).map((a) => a.text), notes: db.notifications.filter((n) => !n.id || !n0.has(n.id)).map((n) => [n.to, n.kind, n.text]).sort() };
+                  } finally { db = saved; }
+                }""", js)
+            async def server_effect(body, tid):
+                seen_notes = set()
+                for em in await pg.evaluate("db.users.map(u=>u.email)"):
+                    try: seen_notes |= {x['id'] for x in json.loads(urllib.request.urlopen(urllib.request.Request(BASE + '/api/snapshot', headers={'X-Dev-Email': em})).read())['data'].get('notifications') or []}
+                    except Exception: pass
+                r = await pg.evaluate("(b) => fetch('/api/home/act', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(b)}).then(r=>r.json())", body)
+                snap = await pg.evaluate("fetch('/api/snapshot').then(r=>r.json())")
+                t = next((x for x in snap['data']['tasks'] if x['id'] == tid), {})
+                # (each person's notifications are only in their own data: read as each of them)
+                emails = {u['id']: u['email'] for u in snap['data']['users']}
+                notes = []
+                for uid_, em in emails.items():
+                    req = urllib.request.Request(BASE + '/api/snapshot', headers={'X-Dev-Email': em})
+                    try: theirs = json.loads(urllib.request.urlopen(req).read())['data'].get('notifications') or []
+                    except Exception: continue
+                    notes += [[x['to'], x['kind'], x['text']] for x in theirs if x.get('to') == uid_ and x.get('taskId') == tid and x['id'] not in seen_notes]
+                notes = sorted(notes)
+                return r, { 'act': [a['text'] for a in (t.get('activity') or [])[-3:]], 'notes': notes }
+            if pick['dated']:
+                tid = pick['dated']
+                o = await old_effect(f"(() => {{ const t = task('{tid}'); setDue(t, '2027-01-15'); return t; }})()")
+                r, n = await server_effect({'act': 'due', 'id': tid, 'due': '2027-01-15'}, tid)
+                check(r.get('ok') and o == n, f'Due: the same activity and notifications as the website ({len(o["notes"])} notifications) {"" if o == n else (o, n)}')
+            if pick['ready']:
+                tid = pick['ready']
+                o = await old_effect(f"(() => {{ const t = task('{tid}'); setDone(t, true); return t; }})()")
+                r, n = await server_effect({'act': 'done', 'id': tid}, tid)
+                check(r.get('ok') and o == n, f'Done: the same activity and notifications as the website ({len(o["notes"])} notifications) {"" if o == n else (o, n)}')
+            check(bool(pick['dated']), f'a task to try the actions on {pick}')
+            await ctx.close()
             # the switch: 'home-server' off → the app is told to use the page
             await b.close()
     finally:
