@@ -194,6 +194,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate 
     layoutHeader()
     results.frame = CGRect(x: 0, y: searchBar.frame.maxY + 8, width: W, height: H - searchBar.frame.maxY - 8)
     results.contentInset.bottom = max(keyboardH, bottomRoom - 60)
+    results.contentInset.top = 18   // (clear of the blur under the search bar)
     layoutResults()
     // the three boxes (.ph-stats: 4 above, 6 below, 8 apart)
     var y: CGFloat = 4

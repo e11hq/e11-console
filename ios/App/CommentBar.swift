@@ -565,7 +565,10 @@ final class AttachSheetVC: UIViewController, UISheetPresentationControllerDelega
     guard let v = lifted, let pc = presentationController, let cv = pc.containerView else { return }
     v.frame = cv.convert(liftedFrame, from: nil)
     v.layer.shadowColor = UIColor.black.cgColor; v.layer.shadowOpacity = 0.5; v.layer.shadowRadius = 20; v.layer.shadowOffset = CGSize(width: 0, height: 18)
-    cv.insertSubview(v, belowSubview: pc.presentedView ?? view)
+    // (over the dimming, under the sheet: under the sheet's own outermost view in the container)
+    var top: UIView = pc.presentedView ?? view
+    while let sup = top.superview, sup !== cv { top = sup }
+    if top.superview === cv { cv.insertSubview(v, belowSubview: top) } else { cv.addSubview(v) }
     transitionCoordinator?.animate(alongsideTransition: { _ in v.transform = CGAffineTransform(scaleX: 1.02, y: 1.02) })
   }
   override func viewWillDisappear(_ animated: Bool) {
