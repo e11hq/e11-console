@@ -38,7 +38,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private var findTimer: Timer?, keyboardH: CGFloat = 0
   private let scroll = UIScrollView()
   private let fab = UIButton(type: .system)
-  // at the end of the list, beside "+ New task": "YOUR OWN CREATIVE AGENCY" — it fades in (0.5 s) once
+  // at the end of the list, beside "+ New task": "YOUR OWN CREATIVE AGENCY" — it fades in (0.2 s — Haris) once
   // the list has reached its end, and out again on scrolling back (Haris, 2026-10-31)
   private let motto = UILabel()
   private var mottoOn = false
@@ -302,7 +302,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let want = !searching && !fab.isHidden && toastView == nil && scroll.contentOffset.y >= end - 2
     guard want != mottoOn else { return }
     mottoOn = want
-    UIView.animate(withDuration: 0.5, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) { self.motto.alpha = want ? 1 : 0 }
+    UIView.animate(withDuration: 0.2, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) { self.motto.alpha = want ? 1 : 0 }
   }
 
   // ---------- the header (as Mail): the big title scrolls with the list, under a frosted bar that comes as it goes ----------
