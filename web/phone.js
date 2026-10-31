@@ -2487,14 +2487,14 @@ const NativeHome = (() => {
       if (!ev.done) { if (t.done) { setDone(t, false); commit({ delay: 0 }); } }
       else if (!t.done) {
         // (the app's toasts are short — Haris, 2026-10-31: the page's longer ones were cut off)
-        if (!canComplete(t)) {
-          const s = sectionOf(t), needDone = !(s && isDoneName(s.name)), needCD = !cdOK(t);
-          toast(needDone && needCD ? 'Set to Done and get CD approval first' : needCD ? 'Waiting for CD approval' : 'Set the status to Done first');
-          return;
-        }
+        // (to the Done status and complete, in one go — as the server does for the app — unless the CD is in the way)
+        if (amReadOnly(t)) { toast(roMsg()); return; }
+        const why = R().finishBlocked(t);
+        if (why) { toast(why); return; }
         (async () => {
           if (!(await askClientApproval(t))) return;
-          setDone(t, true);
+          Haptic.success();
+          R().finish(t).forEach((m) => toast(m));
           commit({ delay: 0 });
           if (t.done) toast('Task completed', { label: 'Undo', run: () => { setDone(t, false); commit(); } });
         })();

@@ -132,6 +132,18 @@ var E11Rules = (() => {
     const reviewPending = (t) => needsCD(t) && reviewersOf(t).some((u) => reviewState(t, u) === 'pending');
     const cdOK = (t) => !needsCD(t) || t.cdStatus === 'approved' || ((t.assignees || []).length > 0 && reviewersOf(t).length === 0);
     const canComplete = (t) => !!t.parentId || (!!sectionOf(t) && isDoneName(sectionOf(t).name) && cdOK(t));
+    // the app's Done (swipe right): to the Done status and complete, in one go (Haris, 2026-10-31) — unless the CD's
+    // review is in the way (the website's own rules for a status change: files with the CD lock it; with CD review on,
+    // nothing goes past Review until the CD approves)
+    const doneSection = (t) => (statusList(t) || []).find((x) => isDoneName(x.name)) || null;
+    function finishBlocked(t) {
+      if (t.done || canComplete(t)) return '';
+      if (reviewPending(t)) return 'Files are with the CD for review';
+      if (!cdOK(t)) return 'Waiting for CD approval';
+      if (!doneSection(t)) return 'This task has no Done status';
+      return '';
+    }
+    const canFinish = (t) => !t.done && !finishBlocked(t);
     // the short reason a task can't be completed yet (the app's toasts are short — Haris, 2026-10-31)
     function completeBlocked(t) {
       if (canComplete(t)) return '';
@@ -235,7 +247,7 @@ var E11Rules = (() => {
         av: ids.slice(0, 2).map((id) => ({ id, done: !!partDone(t, id) })), more: Math.max(0, ids.length - 2),
         // (swiped right: Done — ready means the page's own tick would complete it now, else `why` — and Due, for those
         //  who may change dates)
-        due: t.due || '', canDone: !t.parentId && !amReadOnly(t), doneReady: !!t.done || canComplete(t), why: t.done ? '' : completeBlocked(t),
+        due: t.due || '', canDone: !t.parentId && !amReadOnly(t), doneReady: !!t.done || canFinish(t), why: t.done ? '' : finishBlocked(t),
         canDue: can('editDates', t) && !amReadOnly(t), canDelete: can('deleteTask', t) && !amReadOnly(t),
       };
     }
@@ -364,6 +376,25 @@ var E11Rules = (() => {
       t.updatedAt = nowISO();
       return out;
     }
+    // a status change (app.js moveTask): logged; the people on it told unless `quiet` (Done's own "completed" says it)
+    function moveToStatus(t, sectionId, quiet) {
+      if (t.sectionId !== sectionId) {
+        const list = statusList(t) || [];
+        const from = list.find((x) => x.id === t.sectionId), to = list.find((x) => x.id === sectionId);
+        if (to) { logChange(t, 'the <b>status</b>', from ? from.name : '', to.name); if (!quiet) notifyWatchers(t, 'status', `changed the status to <b>${esc(to.name)}</b>`); }
+      }
+      t.sectionId = sectionId;
+      descendants(t.id).forEach((d) => { d.sectionId = sectionId; });
+      const sibs = db.tasks.filter((x) => !x.parentId && x.projectId === t.projectId && x.sectionId === sectionId && x.id !== t.id).sort((a, b) => (a.order || 0) - (b.order || 0));
+      sibs.push(t);
+      sibs.forEach((x, i) => { x.order = i + 1; });
+      t.updatedAt = nowISO();
+    }
+    // the app's Done: to the Done status (when it isn't there yet), then complete → the messages to show
+    function finish(t) {
+      if (!canComplete(t)) { const d = doneSection(t); if (d) moveToStatus(t, d.id, true); }
+      return setDone(t, true);
+    }
     // completing a task the CD approved asks whether the client approved (kept with the final files)
     const lastCDApprovalAt = (t) => (t.reviews || []).filter((r) => r.state === 'approved').map((r) => r.decidedAt || r.at || '').sort().pop() || '';
     const clientApprovalFresh = (t) => !!t.clientApproval && String(t.clientApproval.at || '') >= lastCDApprovalAt(t);
@@ -395,7 +426,7 @@ var E11Rules = (() => {
     }
 
     return { home, myDayData, cardOf, can, amReadOnly, canComplete, completeBlocked, dayTitle, statusInfo, sectionOf,
-      notifGroups: NOTIF_GROUPS, logActivity, logChange, pushNotif, notifyWatchers, checkPrioConflict, setDone, setDue, setClientApproval, asksClientApproval, deleteTask, watchersOf, creatorOf, clientAmsOf, fmtDue };
+      notifGroups: NOTIF_GROUPS, finish, finishBlocked, canFinish, moveToStatus, logActivity, logChange, pushNotif, notifyWatchers, checkPrioConflict, setDone, setDue, setClientApproval, asksClientApproval, deleteTask, watchersOf, creatorOf, clientAmsOf, fmtDue };
   }
 
   // (the clock and new ids for the actions: the website's own, or the server's)

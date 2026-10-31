@@ -64,12 +64,14 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
     if (a === 'done') {
       if (t.done) return { ok: true, changes: [], messages: [] };
       if (rules.amReadOnly(t)) return view();
-      if (!rules.canComplete(t)) return fail(409, rules.completeBlocked(t), { why: true });
+      // (to the Done status and complete, in one go — unless the CD's review is in the way)
+      const blocked = rules.finishBlocked(t);
+      if (blocked) return fail(409, blocked, { why: true });
       if (rules.asksClientApproval(t)) {
         if (!['yes', 'none'].includes(body.clientApproval)) return fail(409, 'Did the client approve?', { need: 'clientApproval' });
         rules.setClientApproval(t, body.clientApproval === 'none' ? { none: true } : {});
       }
-      messages = rules.setDone(t, true);
+      messages = rules.finish(t);
       messages.unshift('Task completed');
     } else if (a === 'reopen') {
       if (!t.done) return { ok: true, changes: [], messages: [] };

@@ -49,15 +49,12 @@ test('Home: the AM\'s My Day with what they may do on each card', async () => {
   assert.equal(r.home.date, 'Thursday, October 29');
   const cards = r.home.groups.flatMap((g) => g.cards);
   const c1 = cards.find((c) => c.id === 't1');
-  assert.equal(c1.canDue, true); assert.equal(c1.doneReady, false); assert.equal(c1.why, 'Set the status to Done first');
+  assert.equal(c1.canDue, true); assert.equal(c1.doneReady, true, 'Done also moves it to the Done status'); assert.equal(c1.why, '');
   assert.ok(!cards.some((c) => c.id === 't4'), 'another AM\'s client is not on their Home');
 });
 
-test('Done: not ready → why; ready → completed, logged, the people on it told', async () => {
-  let r = await act('am@e11-digital.com', { act: 'done', id: 't1' });
-  assert.equal(r.ok, false); assert.equal(r.error, 'Set the status to Done first');
-  assert.equal(T('t1').done, undefined);
-  r = await act('am@e11-digital.com', { act: 'done', id: 't2', op: 'op-1' });
+test('Done: ready → completed, logged, the people on it told', async () => {
+  let r = await act('am@e11-digital.com', { act: 'done', id: 't2', op: 'op-1' });
   assert.equal(r.ok, true); assert.deepEqual(r.messages, ['Task completed']);
   assert.equal(T('t2').done, true); assert.ok(T('t2').completedAt);
   assert.equal(T('t2').activity.at(-1).text, 'completed this task'); assert.equal(T('t2').activity.at(-1).actor, 'u-am');
@@ -148,4 +145,22 @@ test('The shared rules switch notifications off by the same groups as the profil
   for (const m of block.matchAll(/\{ k: '([^']+)', kinds: \[([^\]]*)\]/g)) for (const kind of m[2].match(/'([^']+)'/g).map((x) => x.slice(1, -1))) want[kind] = m[1];
   assert.ok(Object.keys(want).length > 10);
   assert.deepEqual({ ...groups }, want);
+});
+
+test('Done on a task still in progress: to the Done status and complete, in one go; CD review in the way → why', async () => {
+  app.store.apply([
+    { kind: 'tasks', id: 't10', data: { id: 't10', projectId: 'p1', sectionId: 's2', title: 'Mid way', assignees: ['u-prod'], createdBy: 'u-am', comments: [], activity: [] } },
+    { kind: 'tasks', id: 't11', data: { id: 't11', projectId: 'p1', sectionId: 's2', title: 'Needs CD', assignees: ['u-prod'], createdBy: 'u-am', needsCD: true, comments: [], activity: [] } },
+    { kind: 'tasks', id: 't12', data: { id: 't12', projectId: 'p1', sectionId: 's2', title: 'With the CD', assignees: ['u-prod'], createdBy: 'u-am', needsCD: true, reviews: [{ by: 'u-prod', state: 'pending', epoch: 0 }], comments: [], activity: [] } },
+  ], 'test');
+  const n0 = notesFor('t10').length;
+  let r = await act('am@e11-digital.com', { act: 'done', id: 't10' });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.equal(T('t10').sectionId, 's3'); assert.equal(T('t10').done, true);
+  assert.deepEqual(T('t10').activity.map((a) => a.text.replace(/<[^>]+>/g, '')), ['changed the status In progress→Done', 'completed this task']);
+  assert.deepEqual(notesFor('t10').slice(n0).map((n) => n.kind), ['done'], 'one notification: completed');
+  r = await act('am@e11-digital.com', { act: 'done', id: 't11' });
+  assert.equal(r.ok, false); assert.equal(r.error, 'Waiting for CD approval'); assert.equal(T('t11').sectionId, 's2');
+  r = await act('am@e11-digital.com', { act: 'done', id: 't12' });
+  assert.equal(r.ok, false); assert.equal(r.error, 'Files are with the CD for review'); assert.equal(T('t12').done, undefined);
 });
