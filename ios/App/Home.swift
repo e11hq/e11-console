@@ -275,17 +275,18 @@ final class HomeCard: UIControl {
   private func meta(_ items: [[String: Any]]) -> NSAttributedString {
     let f = UIFont.systemFont(ofSize: 12.5)
     let s = NSMutableAttributedString()
-    let gap = { NSAttributedString(string: " ", attributes: [.font: f, .kern: 2.9]) }
+    // (as the page wraps it: whole pieces only — "3 comments" never split — and a "·" stays at the end of its line)
+    let gap = { (breaks: Bool) in NSAttributedString(string: breaks ? " " : "\u{00A0}", attributes: [.font: f, .kern: 2.9]) }
     for (i, it) in items.enumerated() {
-      if i > 0 { s.append(gap()); s.append(NSAttributedString(string: "·", attributes: [.font: f, .foregroundColor: L.sep])); s.append(gap()) }
+      if i > 0 { s.append(gap(false)); s.append(NSAttributedString(string: "·", attributes: [.font: f, .foregroundColor: L.sep])); s.append(gap(true)) }
       if let dot = NativeSheetVC.color(it["dot"]) {
         let img = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { _ in dot.setFill(); UIBezierPath(roundedRect: CGRect(x: 0, y: 0, width: 8, height: 8), cornerRadius: 2).fill() }
         let a = NSTextAttachment(); a.image = img; a.bounds = CGRect(x: 0, y: 0, width: 8, height: 8)
-        s.append(NSAttributedString(attachment: a)); s.append(gap())
+        s.append(NSAttributedString(attachment: a)); s.append(gap(false))
       }
       let b = it["b"] as? String
       let col = b == "late" ? L.late : b == "today" ? L.today : L.meta
-      s.append(NSAttributedString(string: it["t"] as? String ?? "", attributes: [.font: b != nil ? UIFont.systemFont(ofSize: 12.5, weight: .semibold) : f, .foregroundColor: col]))
+      s.append(NSAttributedString(string: (it["t"] as? String ?? "").replacingOccurrences(of: " ", with: "\u{00A0}"), attributes: [.font: b != nil ? UIFont.systemFont(ofSize: 12.5, weight: .semibold) : f, .foregroundColor: col]))
     }
     let ps = NSMutableParagraphStyle(); ps.lineSpacing = 1
     s.addAttribute(.paragraphStyle, value: ps, range: NSRange(location: 0, length: s.length))
@@ -337,7 +338,7 @@ final class HomeCard: UIControl {
   private func bodyHeight(_ bw: CGFloat) -> (CGFloat, CGFloat, CGFloat) {
     let th = ceil(titleL.sizeThatFits(CGSize(width: bw, height: 1000)).height)
     let mh = ceil(metaL.sizeThatFits(CGSize(width: bw, height: 1000)).height)
-    return (th, mh, chip.isHidden ? 0 : 15)
+    return (th, mh, chip.isHidden ? 0 : 16)
   }
   func height(for w: CGFloat) -> CGFloat {
     let side = sideSize()
@@ -360,7 +361,7 @@ final class HomeCard: UIControl {
     if ch > 0 {
       let cs = chipL.attributedText?.size() ?? .zero
       chip.frame = CGRect(x: bx + 8, y: metaL.frame.maxY + 5, width: ceil(cs.width) + 12, height: ch)
-      chipL.frame = CGRect(x: 6, y: 1, width: ceil(cs.width), height: ch - 2)
+      chipL.frame = CGRect(x: 6, y: 0, width: ceil(cs.width) + 2, height: ch)
     }
     var y: CGFloat = 15
     if !badge.isHidden { let s = badge.attributedText?.size() ?? .zero; badge.frame = CGRect(x: w - 15 - ceil(s.width) - 14, y: y, width: ceil(s.width) + 14, height: ceil(s.height) + 6); y = badge.frame.maxY + 6 }
