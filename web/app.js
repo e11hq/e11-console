@@ -2602,7 +2602,18 @@ const Sync = (() => {
   let rev = 0, es = null, pushing = false, again = false, online = true, retryTimer = null, version = null;
   const prefKey = (id) => 'e11-prefs-' + id;
   const loadPrefs = (id) => { try { return JSON.parse(localStorage.getItem(prefKey(id)) || '{}') || {}; } catch (e) { return {}; } };
-  const savePrefs = () => { try { if (currentUserId) localStorage.setItem(prefKey(currentUserId), JSON.stringify(db.meta.prefs || {})); } catch (e) { /* private mode */ } };
+  // (the iPhone app keeps them too, at once: the page's own storage can lose its last change when the app is closed soon
+  //  after — the look came back as light — Haris, 2026-10-31)
+  let lastToApp = '';
+  const savePrefs = () => {
+    if (!currentUserId) return;
+    const json = JSON.stringify(db.meta.prefs || {});
+    try { localStorage.setItem(prefKey(currentUserId), json); } catch (e) { /* private mode */ }
+    if (Host.isIOSApp && json !== lastToApp) { lastToApp = json; NativeMac.call('prefs', { id: String(currentUserId), set: db.meta.prefs || {} }).catch(() => {}); }
+  };
+  // (the app's copy wins when it has one; an older app without it answers an error, and the page's own copy is used)
+  const appPrefs = (id) => !Host.isIOSApp ? Promise.resolve(null)
+    : Promise.race([NativeMac.call('prefs', { id: String(id) }).then((r) => (r && r.prefs && typeof r.prefs === 'object' ? r.prefs : null), () => null), new Promise((r) => setTimeout(() => r(null), 1500))]);
   // Settings that belong to this device/person, not shared with the team
   const sharedMeta = (m) => { const o = { ...(m || {}) }; delete o.prefs; delete o.updatedAt; return o; };
   const items = (kind) => (kind === 'meta' ? [['main', sharedMeta(db.meta)]] : (db[kind] || []).map((x) => [String(x.id), x]));
@@ -2639,7 +2650,8 @@ const Sync = (() => {
     rev = snap.rev; version = snap.version || me.version;
     const data = snap.data;
     KINDS.forEach((k) => { if (k === 'meta') remember('meta', 'main', sharedMeta(data.meta)); else (data[k] || []).forEach((x) => remember(k, String(x.id), x)); });
-    data.meta = { ...(data.meta || {}), prefs: loadPrefs(me.user.id) };
+    const kept = await appPrefs(me.user.id);
+    data.meta = { ...(data.meta || {}), prefs: kept || loadPrefs(me.user.id) };
     db = normalize(JSON.parse(JSON.stringify(data)));
     if (me.user && (me.user.role === 'finance_admin' || me.user.role === 'finance_viewer')) db.tasks.forEach((t) => remember('tasks', String(t.id), t));
     connect();

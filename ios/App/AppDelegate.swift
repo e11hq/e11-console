@@ -1224,6 +1224,16 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       let n = (a["n"] as? NSNumber)?.intValue ?? Int(a["n"] as? String ?? "") ?? 0
       UNUserNotificationCenter.current().setBadgeCount(max(0, n)) { _ in }
       done(["ok": true])
+    // your own settings on this phone (the look, …): kept by the app too — the page's own storage can lose its last
+    // change when the app is closed soon after (Haris, 2026-10-31: dark came back as light on reopening)
+    case "prefs":
+      let key = "e11_prefs_\(a["id"].map { "\($0)" } ?? "")"
+      if let p = a["set"] as? [String: Any] {
+        if let d = try? JSONSerialization.data(withJSONObject: p) { defaults.set(d, forKey: key) }
+        return done(["ok": true])
+      }
+      if let d = defaults.data(forKey: key), let p = try? JSONSerialization.jsonObject(with: d) as? [String: Any] { return done(["ok": true, "prefs": p]) }
+      done(["ok": true])
     case "setAppearance":
       statusStyle = (a["mode"] as? String) == "light" ? .darkContent : .lightContent
       defaults.set((a["mode"] as? String) == "light" ? "light" : "dark", forKey: "e11_look")
