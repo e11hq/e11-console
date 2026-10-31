@@ -3051,6 +3051,39 @@ final class DateSheetVC: UIViewController, UISheetPresentationControllerDelegate
     ])
   }
   private var fitHeight: CGFloat = 470, sized = false
+  private var fullH: CGFloat = 0, rowH: CGFloat = 0
+  // how many week rows a month takes (5 or 6, sometimes 4): the sheet fits them, so no empty row under a short month
+  // (iPhone's calendar keeps room for six — Haris, 2026-11-01)
+  private func rows(_ dc: DateComponents) -> Int {
+    guard let y = dc.year, let m = dc.month, let first = gregorian.date(from: DateComponents(year: y, month: m, day: 1)),
+          let days = gregorian.range(of: .day, in: .month, for: first)?.count else { return 6 }
+    let lead = (gregorian.component(.weekday, from: first) - gregorian.firstWeekday + 7) % 7
+    return Int(ceil(Double(lead + days) / 7))
+  }
+  // one week row's height, as the calendar draws it (from its day cells); nil → an estimate
+  private func measuredRow() -> CGFloat? {
+    func find(_ v: UIView) -> UICollectionView? { if let c = v as? UICollectionView { return c }; for s in v.subviews { if let c = find(s) { return c } }; return nil }
+    guard let cv = find(cal) else { return nil }
+    let ys = Set(cv.visibleCells.filter { $0.bounds.height > 20 }.map { round(cv.convert($0.frame, to: cal).minY) }).sorted()
+    guard ys.count >= 3 else { return nil }
+    let steps = zip(ys.dropFirst(), ys).map { $0 - $1 }.filter { $0 > 20 }.sorted()
+    return steps.isEmpty ? nil : steps[steps.count / 2]
+  }
+  private func fit(animated: Bool) {
+    guard fullH > 0 else { return }
+    let floating: Bool; if #available(iOS 26, *) { floating = true } else { floating = false }
+    let strip = presentingViewController?.view.window?.safeAreaInsets.bottom ?? view.window?.safeAreaInsets.bottom ?? 0
+    let calH = fullH - CGFloat(max(0, 6 - rows(cal.visibleDateComponents))) * rowH
+    let h = max(320, cal.frame.minY + calH + NativeSheetVC.END + 18 - (floating ? strip : 0) + (floating ? 0 : view.safeAreaInsets.bottom))
+    guard abs(h - fitHeight) > 0.5 else { return }
+    fitHeight = h
+    DispatchQueue.main.async { [weak self] in
+      guard let sh = self?.sheetPresentationController else { return }
+      if animated { sh.animateChanges { sh.invalidateDetents() } } else { sh.invalidateDetents() }
+    }
+  }
+  // another month: the sheet grows or shrinks to its rows
+  func calendarView(_ calendarView: UICalendarView, didChangeVisibleDateComponentsFrom previousDateComponents: DateComponents) { fit(animated: true) }
   // sized to the calendar once, from where it was laid out — measuring it again inside the layout (and resizing the sheet
   // from there) sent iOS 27's calendar round in circles until the app crashed (TestFlight report, build 1195: the date
   // sheet from Home's Due)
@@ -3058,14 +3091,13 @@ final class DateSheetVC: UIViewController, UISheetPresentationControllerDelegate
     super.viewDidLayoutSubviews()
     guard !sized, view.bounds.width > 0, cal.frame.minY > 0, cal.frame.height > 100 else { return }
     sized = true
-    let floating: Bool; if #available(iOS 26, *) { floating = true } else { floating = false }
-    let strip = presentingViewController?.view.window?.safeAreaInsets.bottom ?? view.window?.safeAreaInsets.bottom ?? 0
-    let h = max(320, cal.frame.maxY + NativeSheetVC.END + 18 - (floating ? strip : 0) + (floating ? 0 : view.safeAreaInsets.bottom))
-    guard abs(h - fitHeight) > 0.5 else { return }
-    fitHeight = h
+    fullH = cal.frame.height
+    // (the row is read a moment later, once the calendar has drawn its days; until then an estimate)
+    rowH = cal.frame.width / 5
+    fit(animated: true)
     DispatchQueue.main.async { [weak self] in
-      guard let sh = self?.sheetPresentationController else { return }
-      sh.animateChanges { sh.invalidateDetents() }
+      guard let self = self, let r = self.measuredRow(), r > 20, r < 140 else { return }
+      self.rowH = r; self.fit(animated: true)
     }
   }
   private func finish(_ r: [String: Any]) {
