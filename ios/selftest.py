@@ -74,6 +74,12 @@ try:
         g_ = res.get(k + 'Geo') or {}
         check(gap is not None and g_.get('endGap') is not None and abs(g_['endGap'] - gap) <= 2, f'native sheet {k}: gap under the last option {g_.get("endGap")} = Channel\'s {gap}')
     check((res.get('nsheetGeo') or {}).get('scrolls') is True, 'the long native sheet scrolls')
+    # 20: the task's Comments on their own screen, scrolled by iOS: shown over the task, at the latest comment; with the
+    # keyboard up still at the latest (the room under it the keyboard's and the box's); down again, at the latest
+    w0, w1, w2 = res.get('cwebGeo') or {}, res.get('cwebKbGeo') or {}, res.get('cwebDownGeo') or {}
+    check(w0.get('made') and w0.get('loaded') and w0.get('shown') and w0.get('atEnd'), f'the comments screen shows the task, at the latest comment {w0}')
+    check(w1.get('shown') and w1.get('atEnd') and (w1.get('inset') or 0) > 300, f'keyboard up: comments still at the latest, room for the keyboard {w1}')
+    check(w2.get('shown') and w2.get('atEnd') and (w2.get('inset') or 999) < 200, f'keyboard down: at the latest, the room gone {w2}')
     # 19: Comments with the keyboard (a pretend one): iOS moves the list itself, it stays at the latest comment, and once
     # the keyboard is up the page keeps the room (same picture); down again, the room goes and it's still at the latest
     f0, f1, f2 = res.get('cfeed') or {}, res.get('cfeedKb') or {}, res.get('cfeedDown') or {}

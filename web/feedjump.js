@@ -8,7 +8,11 @@ const FeedJump = (() => {
   const st = { taskId: null, thread: null, atEnd: true, seen: new Set() };
   const keyOf = () => `${ui.taskId}|${ui.thread || ''}|${ui.sideTab}|${ui.activityFilter}`;
   let lastKey = null;
-  const atEnd = (feed) => feed.scrollHeight - feed.scrollTop - feed.clientHeight <= NEAR;
+  // (iPhone app 20+, the comments screen: the comments are the whole page, scrolled by iOS — "the latest" is iOS's to
+  //  scroll to, cmEnd)
+  const CM = () => window.__e11CommentsOnly === true;
+  const atEnd = (feed) => (CM() ? document.documentElement.scrollHeight - window.scrollY - window.innerHeight : feed.scrollHeight - feed.scrollTop - feed.clientHeight) <= NEAR;
+  const toEnd = (feed, smooth) => { if (CM()) NativeMac.call('cmEnd', { animated: !!smooth }).catch(() => {}); else if (smooth) feed.scrollTo({ top: feed.scrollHeight, behavior: 'smooth' }); else feed.scrollTop = feed.scrollHeight; };
   const ids = (t) => new Set((t.comments || []).map((c) => c.id));
   function fresh(t) {
     return (t.comments || []).filter((c) => !st.seen.has(c.id) && c.authorId !== currentUserId && (!ui.thread || c.parentId === ui.thread || c.id === ui.thread));
@@ -26,7 +30,7 @@ const FeedJump = (() => {
     if (!b) {
       b = document.createElement('button');
       b.type = 'button';
-      b.addEventListener('click', () => { feed.scrollTo({ top: feed.scrollHeight, behavior: 'smooth' }); });
+      b.addEventListener('click', () => toEnd(feed, true));
       col.appendChild(b);
     }
     b.className = 'jl ' + (news.length ? 'jl-new' : 'jl-round');
@@ -42,6 +46,7 @@ const FeedJump = (() => {
   function place(col) {
     const b = col.querySelector(':scope > .jl'), comp = col.querySelector('.tm-composer');
     // (iPhone app 17+: the comment box is iOS's own, over the page — the button sits above it, and above the keyboard)
+    if (b && CM()) { b.style.bottom = 'calc(var(--cm-bottom, 90px) + 14px)'; return; }
     if (b) b.style.bottom = document.documentElement.classList.contains('ph-cbar')
       ? 'calc(var(--ph-cbar, 56px) + env(safe-area-inset-bottom) + var(--ph-kbpad, 0px) + 14px)'
       : ((comp ? comp.offsetHeight : 0) + 14) + 'px';
@@ -59,10 +64,11 @@ const FeedJump = (() => {
     if (!feed) return;
     const key = keyOf();
     if (key !== lastKey) { lastKey = key; st.atEnd = true; st.seen = ids(t); }
-    else if (prev && st.atEnd) feed.scrollTop = feed.scrollHeight;       // at the latest: new comments stay in view
+    else if (prev && st.atEnd) toEnd(feed, false);       // at the latest: new comments stay in view
     if (atEnd(feed)) st.seen = ids(t);
     paint(feed, t);
-    feed.addEventListener('scroll', () => { const tt = task(ui.taskId); if (tt) paint(feed, tt); }, { passive: true });
+    if (CM()) { if (!window.__cmScroll) { window.__cmScroll = true; window.addEventListener('scroll', () => { const f = document.querySelector('#detail .tm-feed'), tt = task(ui.taskId); if (f && tt) paint(f, tt); }, { passive: true }); } }
+    else feed.addEventListener('scroll', () => { const tt = task(ui.taskId); if (tt) paint(feed, tt); }, { passive: true });
   }
   return { on, afterDetail };
 })();

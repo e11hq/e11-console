@@ -2158,12 +2158,13 @@ const NativeComment = (() => {
       files: (ui.commentFiles[key] || []).map(fileOf),
       uploading: up ? { n: up.total || 1, frac: up.frac || 0 } : null,
       accent: NativeSheet.colorRGB(getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#5b4bf0'),
+      task: ui.taskId || null,   // (20+: which task — the comments screen shows its comments)
       // (19+: where the comments list is, so iOS can find its scroll view and move it with the keyboard)
-      feed: (() => { const f = nf && root.classList.contains('ph-cb-on') ? feed() : null; if (!f) return null; const r = f.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top), Math.round(f.clientWidth), Math.round(f.clientHeight)]; })(),
+      feed: (() => { const f = !window.__e11CommentsOnly && nf && root.classList.contains('ph-cb-on') ? feed() : null; if (!f) return null; const r = f.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top), Math.round(f.clientWidth), Math.round(f.clientHeight)]; })(),
       // (19+: the "jump to the latest" button, tapped through iOS so the keyboard stays)
       jump: (() => { const b = nf && root.classList.contains('ph-cb-on') ? document.querySelector('#detail .jl') : null; if (!b) return null; const r = b.getBoundingClientRect(); return r.width ? [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)] : null; })(),
     };
-    if (lastP < 0) slide(ui.sideTab === 'comments' ? 1 : 0, true);
+    if (lastP < 0) slide(window.__e11CommentsOnly ? 1 : ui.sideTab === 'comments' ? 1 : 0, true);
     const s = JSON.stringify(st);   // (what's typed isn't part of the comparison: it's only sent for a new box)
     const fresh = key !== lastKey || force;
     if (s === last && !fresh) return;
@@ -2202,7 +2203,7 @@ const NativeComment = (() => {
     if (ev.ev === 'send') {
       setDraft();
       const f = feed(); const end = atEnd(f);
-      if (addComment(cid)) { lastKey = null; sync(true); if (end) setTimeout(() => { const g = feed(); if (g) g.scrollTop = g.scrollHeight; }, 60); }
+      if (addComment(cid)) { lastKey = null; sync(true); if (window.__e11CommentsOnly) setTimeout(() => NativeMac.call('cmEnd', { animated: true }).catch(() => {}), 60); else if (end) setTimeout(() => { const g = feed(); if (g) g.scrollTop = g.scrollHeight; }, 60); }
       return;
     }
     if (ev.ev === 'attach') { attachFiles('comment', cid, null, ev.source || null); return; }   // (Photos / Camera / Files straight away)
@@ -2219,7 +2220,7 @@ const NativeComment = (() => {
     if (ev.ev === 'cancelReply') { ui.replyTo = null; renderDetail(); call({ focus: true }); }
   };
   // the box's height (it grows as lines are typed): the comments keep that much room, and stay at the latest
-  window.__e11CBarH = (h) => { const f = feed(), end = atEnd(f); root.style.setProperty('--ph-cbar', Math.max(0, Number(h) || 0) + 'px'); if (end && f && !nmove) f.scrollTop = f.scrollHeight; };
+  window.__e11CBarH = (h) => { const f = feed(), end = atEnd(f); root.style.setProperty('--ph-cbar', Math.max(0, Number(h) || 0) + 'px'); if (end && f && !nmove && !window.__e11CommentsOnly) f.scrollTop = f.scrollHeight; };
   // 19+: iOS moves the list with the keyboard itself (start); once it's up the page keeps that room (up, the same
   // picture); once it's down the page lets go of it (down). Nothing here moves the list meanwhile.
   window.__e11FeedKb = (k, T) => {
@@ -2290,5 +2291,24 @@ const NativeComment = (() => {
   if (typeof refreshComposerFiles === 'function') { const rf = refreshComposerFiles; refreshComposerFiles = function (...a) { const r = rf.apply(this, a); if (on) setTimeout(() => sync(), 0); return r; }; }
   if (typeof closeDetail === 'function') { const cd = closeDetail; closeDetail = function (...a) { if (on) { call({ show: false, blur: true }); last = JSON.stringify({ show: false }); lastKey = null; lastP = -1; nmove = false; root.classList.remove('ph-cb-on'); kbPad = 0; root.style.setProperty('--ph-kbpad', '0px'); } return cd.apply(this, a); }; }
   if (typeof Unsent !== 'undefined' && Unsent.progress) { const pg = Unsent.progress; Unsent.progress = function (...a) { const r = pg.apply(this, a); if (on) sync(); return r; }; }
+  window.NativeComment = { get on() { return on; }, sync };
   return { get on() { return on; }, sync, slide, htmlToRuns, runsToHtml };
+})();
+
+/* ================= iPhone app 20+: a task's Comments on a screen of their own (Haris, 2026-10-31) =================
+   The app keeps a second page (window.__e11CommentsOnly, html.cm-only) that shows only the open task's comments, as
+   its whole page, over the task below its header — so they're scrolled by iOS itself (the keyboard, staying at the
+   latest comment, the jump button), with nothing here moving them. The app says which task; once it's drawn, the app
+   hears so (cmReady) and shows it. */
+const CommentsOnly = (() => {
+  const on = window.__e11CommentsOnly === true;
+  if (on) document.documentElement.classList.add('cm-only', 'ph-cb-on');
+  window.__e11ShowComments = (id) => {
+    if (!on || typeof task !== 'function' || !task(id)) return 'no';
+    ui.thread = null; ui.replyTo = null; ui.sideTab = 'comments'; ui.activityFilter = 'comments';
+    if (ui.taskId !== id) openTask(id); else renderDetail();
+    requestAnimationFrame(() => requestAnimationFrame(() => NativeMac.call('cmReady', { id }).catch(() => {})));
+    return 'ok';
+  };
+  return { on };
 })();
