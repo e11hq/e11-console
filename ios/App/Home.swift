@@ -258,7 +258,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
 
   // ---------- the header (as Mail): the big title scrolls with the list, under a frosted bar that comes as it goes ----------
   private var bigHead: CGFloat { L.headH ?? (safeAreaInsets.top + 18 + 55 + 12) }
-  private var smallHead: CGFloat { safeAreaInsets.top + 52 }
+  // (the bar's row: its middle 28 under the status bar, 14 of room under the 46 pt buttons — Haris: they sat on its edge)
+  private var smallHead: CGFloat { safeAreaInsets.top + 28 + 23 + 14 }
   private func ease(_ a: CGFloat, _ b: CGFloat, _ t: CGFloat) -> CGFloat { let x = min(1, max(0, (t - a) / (b - a))); return x * x * (3 - 2 * x) }
   // (how far the list has scrolled)
   private var scrolled: CGFloat { scroll.contentOffset.y + scroll.contentInset.top }
@@ -303,13 +304,13 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let bigA: CGFloat = searching ? 0 : 1
     sub.alpha = bigA; title.alpha = bigA
     // the small title and date on the bar, fading in as the big ones go under it
-    let smallCY = top + 26
+    let smallCY = top + 28
     let k = searching ? 0 : shrink
     smallTitle.frame = CGRect(x: 20, y: smallCY - 19, width: tw, height: 21); smallSub.frame = CGRect(x: 20, y: smallCY + 2, width: tw, height: 15)
     smallTitle.alpha = k; smallSub.alpha = k
     // Search and your photo: with the title until they reach the bar, then they stay on it
-    let bigCY = by + blockH / 2
-    let cy = max(smallCY, bigCY - max(0, s))
+    // (Search and your photo stay on the bar's row from the start — they don't move with the list — Haris, 2026-10-31)
+    let cy = smallCY
     if !searching {
       me.bounds = CGRect(x: 0, y: 0, width: 40, height: 40); me.center = CGPoint(x: W - R - 20, y: cy); me.layer.cornerRadius = 20
       searchCircle.frame = CGRect(x: W - R - 40 - 10 - 46, y: cy - 23, width: 46, height: 46)
