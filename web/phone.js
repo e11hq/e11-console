@@ -2528,12 +2528,17 @@ const NativeHome = (() => {
       const t = task(ev.id);
       if (!ev.done) { if (t.done) { setDone(t, false); commit({ delay: 0 }); } }
       else if (!t.done) {
-        if (!canComplete(t)) { toast(completeBlockedMsg(t)); return; }
+        // (the app's toasts are short — Haris, 2026-10-31: the page's longer ones were cut off)
+        if (!canComplete(t)) {
+          const s = sectionOf(t), needDone = !(s && isDoneName(s.name)), needCD = !cdOK(t);
+          toast(needDone && needCD ? 'Set to Done and get CD approval first' : needCD ? 'Waiting for CD approval' : 'Set the status to Done first');
+          return;
+        }
         (async () => {
           if (!(await askClientApproval(t))) return;
           setDone(t, true);
           commit({ delay: 0 });
-          if (t.done) toast(`Completed “${t.title || 'Untitled task'}”${hasApproved(t) && clientOfProject(proj(t.projectId)) ? ' — final files go to Client Assets' : ''}`, { label: 'Undo', run: () => { setDone(t, false); commit(); } });
+          if (t.done) toast('Task completed', { label: 'Undo', run: () => { setDone(t, false); commit(); } });
         })();
       }
     }
