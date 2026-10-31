@@ -6259,6 +6259,8 @@ document.addEventListener('click', async (e) => {
           renderDetail();
         }
         setTimeout(() => { const el = $('#d-comment'); if (el) { el.focus(); placeCaretAtEnd(el); } }, 0);
+        // (the iPhone app's comments screen: Reply takes the list to the latest comment, by the box — Haris, 2026-10-31)
+        if (window.__e11CommentsOnly) setTimeout(() => NativeMac.call('cmEnd', { animated: true }).catch(() => {}), 80);
         return;
       }
       case 'cancel-reply': ui.replyTo = null; renderDetail(); setTimeout(() => { const el = $('#d-comment'); if (el) el.focus(); }, 0); return;

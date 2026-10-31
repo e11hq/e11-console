@@ -2144,7 +2144,7 @@ const NativeComment = (() => {
     if (!on) return;
     const t = openTaskNow();
     const show = !!t && !covered();
-    if (!t) { const s = JSON.stringify({ show: false }); if (s !== last) { last = s; lastKey = null; call({ show: false }); } return; }
+    if (!t) { const s = JSON.stringify({ show: false }); if (s !== last) { last = s; lastKey = null; call({ show: false, task: null }); } return; }   // (task: null — 20+: no task open, so opened again it starts at the latest comment)
     sendPeople();
     const thread = ui.thread ? t.comments.find((c) => c.id === ui.thread) : null;
     const cid = thread ? thread.id : (ui.replyTo && t.comments.some((c) => c.id === ui.replyTo) ? ui.replyTo : null);
