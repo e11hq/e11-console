@@ -297,9 +297,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         cwebTask = cbarTask; cwebReadyToShow = false
         w.evaluateJavaScript("window.__e11ShowComments && window.__e11ShowComments(\(jsonString([cbarTask ?? ""]).dropFirst().dropLast()))", completionHandler: nil)
       }
-      let top = cbarFeed?.minY ?? 172
-      let f = CGRect(x: 0, y: top, width: view.bounds.width, height: view.bounds.height - top)
-      if w.frame != f { w.frame = f }
+      if !cwebShown { cwebInset(keepEnd: false) }   // (its place: under the header, down to the comment box)
       if !cwebShown && cwebReadyToShow {
         cwebShown = true
         w.isHidden = false
@@ -325,12 +323,18 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let kb = max(cover ?? keyboardCover, view.safeAreaInsets.bottom)
     let barH = cbarIfMade.map { $0.isHidden ? 0 : $0.bounds.height } ?? 0
     let barTop = view.bounds.height - kb - barH
-    let inset = max(0, w.frame.maxY - barTop) + 6
-    let old = sv.contentInset.bottom, off = sv.contentOffset.y
+    // the comments screen ends at the top of the comment box (and so above the keyboard): it's never under the
+    // keyboard, so its web view doesn't shift itself for it as well — that fought this and left the list short of the
+    // latest comment / back at the top (Haris, 2026-10-31)
+    let top = cbarFeed?.minY ?? 172
+    let oldH = w.frame.height, off = sv.contentOffset.y
+    let f = CGRect(x: 0, y: top, width: view.bounds.width, height: max(120, barTop - top))
+    if w.frame != f { w.frame = f }
+    let inset: CGFloat = 6
     sv.contentInset.bottom = inset
-    sv.verticalScrollIndicatorInsets.bottom = inset
-    let end = max(0, sv.contentSize.height + inset - sv.bounds.height)
-    sv.contentOffset = CGPoint(x: 0, y: keepEnd ? end : min(max(0, off + (inset - old)), end))
+    sv.verticalScrollIndicatorInsets.bottom = 0
+    let end = max(0, sv.contentSize.height + inset - f.height)
+    sv.contentOffset = CGPoint(x: 0, y: keepEnd ? end : min(max(0, off + (oldH - f.height)), end))
     w.evaluateJavaScript("document.documentElement.style.setProperty('--cm-bottom','\(Int(inset))px')", completionHandler: nil)
   }
   // the keyboard coming / going: the comments move with it, in its own animation
