@@ -38,7 +38,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private var findTimer: Timer?, keyboardH: CGFloat = 0
   private let scroll = UIScrollView()
   private let fab = UIButton(type: .system)
-  // at the end of the list, beside "+ New task": "Your own creative agency", in a script hand — it fades in (0.5 s) once
+  // at the end of the list, beside "+ New task": "YOUR OWN CREATIVE AGENCY" — it fades in (0.5 s) once
   // the list has reached its end, and out again on scrolling back (Haris, 2026-10-31)
   private let motto = UILabel()
   private var mottoOn = false
@@ -284,9 +284,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     fab.frame = CGRect(x: W - R - fw, y: (tabTop ?? H - 100) - 14 - BTN, width: fw, height: BTN)
     // (in the room left of the +, its middle level with the +'s)
     if motto.superview == nil {
-      motto.text = "Your own creative agency"
-      motto.font = UIFont(name: "SnellRoundhand-Bold", size: 21) ?? UIFont(name: "BradleyHandITCTT-Bold", size: 18) ?? .italicSystemFont(ofSize: 17)
-      motto.textColor = .secondaryLabel; motto.textAlignment = .center
+      // (Haris, 2026-10-31: in capitals, 9 pt medium, letter spacing 2.4, the frost bar date's grey)
+      motto.attributedText = NSAttributedString(string: "YOUR OWN CREATIVE AGENCY", attributes: [.font: UIFont.systemFont(ofSize: 9, weight: .medium), .kern: 2.4, .foregroundColor: UIColor.secondaryLabel])
+      motto.textAlignment = .center
       motto.adjustsFontSizeToFitWidth = true; motto.minimumScaleFactor = 0.7
       motto.alpha = 0; motto.isUserInteractionEnabled = false
       insertSubview(motto, belowSubview: fab)
