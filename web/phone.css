@@ -1121,4 +1121,6 @@ html.cm-only body.phone #detail .tm-composer { display: none !important; }
 html.cm-only body.phone #detail .tm-feed { overflow: visible !important; height: auto !important; max-height: none !important; padding-bottom: 12px !important; transform: none !important; }
 html.cm-only .jl { position: fixed !important; }
 html.cm-only body.phone #detail .tm-activity, html.cm-only body.phone #detail .tm-feed { padding-top: 12px !important; margin-top: 0 !important; }
-html.cm-only body.phone #detail .tm-act-head.thread-head { position: sticky !important; top: 0 !important; z-index: 2; }
+/* a thread's "‹ Thread" bar stays at the top of what can be seen — with the keyboard up the app slides the comments up
+   by its height (--cm-top, app 21+), so the top of the page is then under the task's header (Haris, 2026-10-31) */
+html.cm-only body.phone #detail .tm-act-head.thread-head { position: sticky !important; top: var(--cm-top, 0px) !important; z-index: 2; background: var(--bg); border-bottom: 1px solid var(--border); margin-top: -12px; padding-top: 10px; padding-bottom: 10px; }
