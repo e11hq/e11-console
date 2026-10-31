@@ -333,9 +333,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private func setBar(_ on: Bool, now: Bool = false) {
     barIn = on
     if #available(iOS 26.0, *) {
-      UIView.animate(withDuration: now ? 0 : 0.15) { self.scroll.topEdgeEffect.isHidden = !on; self.topLine.alpha = on ? 1 : 0 }
+      UIView.animate(withDuration: now ? 0 : 0.25) { self.scroll.topEdgeEffect.isHidden = !on; self.topLine.alpha = on ? 1 : 0 }
     } else {
-      UIView.animate(withDuration: now ? 0 : 0.15) { self.blur.alpha = on ? 1 : 0 }
+      UIView.animate(withDuration: now ? 0 : 0.25) { self.blur.alpha = on ? 1 : 0 }
     }
     if now { barLink?.invalidate(); barLink = nil; barK = on ? 1 : 0; applyBar(); return }
     if barLink == nil {
@@ -357,7 +357,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if #available(iOS 26.0, *) {
       if let i = edgeHook as? UIScrollEdgeElementContainerInteraction { let want: UIScrollView = searching ? results : scroll; if i.scrollView !== want { i.scrollView = want } }
       let hide = !searching && !barIn
-      if scroll.topEdgeEffect.isHidden != hide { UIView.animate(withDuration: 0.15) { self.scroll.topEdgeEffect.isHidden = hide } }
+      if scroll.topEdgeEffect.isHidden != hide { UIView.animate(withDuration: 0.25) { self.scroll.topEdgeEffect.isHidden = hide } }
       topLine.frame = CGRect(x: 0, y: smallH - 0.5, width: W, height: 0.5)
       topLine.alpha = searching || !barIn ? 0 : 1
     } else {
