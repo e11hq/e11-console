@@ -2359,7 +2359,8 @@ final class FormSheetVC: UIViewController, UITableViewDataSource, UITableViewDel
   func selfTuck() { tuck() }
   override func viewDidAppear(_ animated: Bool) {
     super.viewDidAppear(animated)
-    if !focused { focused = true; _ = (isTask ? titleField as UIView : desc).becomeFirstResponder() }
+    // (New task: no keyboard until a field is tapped — Haris, 2026-10-31; Request amendments still opens typing)
+    if !focused { focused = true; if !isTask { _ = desc.becomeFirstResponder() } }
   }
   // sized to the form (its fields as they are — never to the sheet's own size, which iOS changes while it's pulled)
   private var lastWidth: CGFloat = 0

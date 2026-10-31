@@ -664,9 +664,15 @@ const Phone = (() => {
   // iPhone app 15+: the same form as iOS's own sheet, with iPhone's own fields (tucks into a bar like a Mail draft)
   async function nativeQuickAdd(inProject, mgr) {
     const key = 'new-task';
-    const st = { client: inProject || '', who: assignable(me()) ? currentUserId : '' };
+    // (Assign to: several people can be picked — Haris, 2026-10-31)
+    const st = { client: inProject || '', who: assignable(me()) ? [currentUserId] : [] };
     const clientName = (id) => (id && proj(id) ? proj(id).name : 'No client (My Tasks)');
-    const whoOf = async (uid) => (uid ? { label: uid === currentUserId ? 'Me' : fullName(userById(uid)), person: await NativeSheet.personFor(uid) } : { label: 'Nobody yet' });
+    const nameOf = (uid) => (uid === currentUserId ? 'Me' : fullName(userById(uid)));
+    const whoOf = async (ids) => {
+      if (!ids.length) return { label: 'Nobody yet' };
+      const label = ids.length === 1 ? nameOf(ids[0]) : ids.length === 2 ? `${nameOf(ids[0])}, ${nameOf(ids[1])}` : `${nameOf(ids[0])} + ${ids.length - 1} others`;
+      return { label, person: await NativeSheet.personFor(ids[0]) };
+    };
     const pickClient = () => {
       const list = db.projects.filter((p) => (!p.inactive && amClientOk(p)) || p.id === inProject).sort(byOrder);
       // (picking a client turns CD review on, no client turns it off — as on the page)
@@ -676,13 +682,15 @@ const Phone = (() => {
       showMenu(document.body, items, { native: 14, ...(list.length > 7 ? { search: 'Search clients', empty: 'No client matches “%@”' } : {}) });
     };
     const pickWho = () => {
-      const set = async (uid) => { st.who = uid; NativeForm.set(key, { assign: await whoOf(uid) }); };
-      const row = (u) => ({ label: u.id === currentUserId ? 'Me' : fullName(u), hint: roleOf(u), person: u.id, checked: st.who === u.id,
-        find: `${fullName(u)} ${u.email} ${roleOf(u)}`, run: () => set(u.id) });
+      const show = async () => NativeForm.set(key, { assign: await whoOf(st.who) });
+      // (each tick adds or removes that person; the sheet stays open for the next)
+      const toggle = (uid) => { st.who = st.who.includes(uid) ? st.who.filter((x) => x !== uid) : [...st.who, uid]; show(); };
+      const row = (u) => ({ label: u.id === currentUserId ? 'Me' : fullName(u), hint: roleOf(u), person: u.id, checked: st.who.includes(u.id), multi: true,
+        find: `${fullName(u)} ${u.email} ${roleOf(u)}`, run: () => toggle(u.id) });
       // (only Production, Social, Freelancers and the Creative Director can be assigned — in their groups)
       const items = assignable(me()) ? [row(me())] : [];
       assignGroups(activeUsers().filter((u) => u.id !== currentUserId && assignable(u))).forEach(([l, us]) => items.push({ html: `<div class="menu-label">${esc(l)}</div>` }, ...us.map(row)));
-      items.push('-', { label: 'Nobody yet', checked: !st.who, run: () => set('') });
+      items.push('-', { label: 'Nobody yet', checked: !st.who.length, run: () => { st.who = []; show(); } });
       showMenu(document.body, items, { native: 14, search: 'Search people', empty: 'No one matches “%@”' });
     };
     const due = ui.view === 'today' || ui.view === 'home' || ui.view === 'mytasks' ? todayStr() : '';
@@ -692,15 +700,15 @@ const Phone = (() => {
       pick: (field) => (field === 'client' ? pickClient() : pickWho()),
       submit: (ev) => {
         const title = ev.title;
-        const who = can('assign') ? st.who : assignable(me()) ? currentUserId : '';
+        const who = can('assign') ? st.who : assignable(me()) ? [currentUserId] : [];
         const cdOn = mgr && ev.cd;
-        if (cdOn && who && who === cdUserId()) { NativeForm.set(key, { alert: 'A task that needs CD review can’t be assigned to the Creative Director. Turn off CD review or choose someone else.' }); return; }
+        if (cdOn && who.includes(cdUserId())) { NativeForm.set(key, { alert: 'A task that needs CD review can’t be assigned to the Creative Director. Turn off CD review or choose someone else.' }); return; }
         const desc = ev.desc || '';
         const t = createTask({ title, projectId: st.client || null, due: ev.due || null, notes: desc, ...(desc ? { notesHtml: linkify(esc(desc)).replace(/\n/g, '<br>') } : {}) });
         if (mgr) t.needsCD = !!(cdOn && t.projectId);
-        if (who) {
-          t.assignees = [who];
-          if (who !== currentUserId) { logActivity(t, `assigned <b>${esc(fullName(userById(who)))}</b>`); pushNotif(who, t, 'assigned', 'assigned you to'); }
+        if (who.length) {
+          t.assignees = [...who];
+          who.filter((u) => u !== currentUserId).forEach((u) => { logActivity(t, `assigned <b>${esc(fullName(userById(u)))}</b>`); pushNotif(u, t, 'assigned', 'assigned you to'); });
         }
         commit({ delay: 0 });
         NativeForm.close(key);
