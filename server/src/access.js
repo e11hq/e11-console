@@ -270,6 +270,23 @@ export function createAccess(store, opts = {}) {
   }
 
   // ctx.restoring: the items this same save puts back (so a Trash entry may be cleared as it's restored)
+  // A completed task is locked (Haris, 2026-11-01): read only, comments too, its subtasks with it — while it waits its 30 days
+  // for the Trash. Reopened only by an Admin, by whoever completed it within a few seconds (Undo), or when a content plan's
+  // client changes send its post back (a new CD round). Its Finance status still moves (jobs are invoiced after the work).
+  const DONE_FREE = new Set(['finance', 'financeAt', 'financeBy', 'updatedAt', 'order']);   // (+ its place in a list: moving other tasks renumbers it)
+  function doneLockOk(u, current, next, base) {
+    const parent = current.parentId ? store.get('tasks', String(current.parentId)) : null;
+    const locked = current.parentId ? !!(parent && parent.done && !parent.parentId) : !!current.done;
+    if (!locked) return true;
+    if (!current.parentId && current.done && !next.done) {
+      if (isAdm(u)) return true;
+      if (current.completedBy === u.id && (opts.now ? opts.now() : Date.now()) - Date.parse(current.completedAt || 0) < 20000) return true;
+      if (current.planId && (next.reviewEpoch || 0) > (current.reviewEpoch || 0)) return true;
+      return false;
+    }
+    const was = base || current;
+    return Object.keys({ ...current, ...next }).every((k) => DONE_FREE.has(k) || deepEqual(next[k] ?? null, current[k] ?? null) || deepEqual(next[k] ?? null, was[k] ?? null));
+  }
   function canWrite(u, ch, current, ctx = {}) {
     const admin = isAdm(u);
     const manager = admin || u.role === 'am';
@@ -327,6 +344,7 @@ export function createAccess(store, opts = {}) {
         if (current && next && !cdGateOk(current, next)) return false;
         if (current && next && !identityOk(current, next, ch.base)) return false;
         if (current && next && !editWindowOk(current, next, ch.base)) return false;
+        if (current && next && !doneLockOk(u, current, next, ch.base)) return false;
         if (isFreelancer(u)) return (!current || taskVisible(u, current)) && (ch.del || taskVisible(u, next));
         if (ownOnly(u) && current && !taskVisible(u, current)) return false;
         if (ownOnly(u) && current && ownView(u).peek.has(String(current.id))) return commentOnly(u, ch.base || current, current, next);

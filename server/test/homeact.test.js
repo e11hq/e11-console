@@ -182,3 +182,24 @@ test('Today: no heading of its own, its tasks by priority in runs under their cl
   assert.equal(c.inline, true);
   assert.deepEqual(c.meta.map((m) => m.t), ['In progress', '1 comment'], 'no client, no date');
 });
+
+test('A completed task is locked: no changes or comments; Undo only right after; Admins reopen', async () => {
+  app.store.apply([{ kind: 'tasks', id: 'L1', data: { id: 'L1', projectId: 'p1', sectionId: 's3', title: 'Locked', assignees: ['u-prod'], createdBy: 'u-am', done: true, completedAt: '2026-10-28T08:00:00Z', completedBy: 'u-am', comments: [], activity: [] } }], 'test');
+  // the AM who completed it, a day later: no reopening, no comment, no due date
+  let r = await act('am@e11-digital.com', { act: 'reopen', id: 'L1' });
+  assert.equal(r.ok, false); assert.match(r.error, /locked/);
+  const t = T('L1');
+  const push = async (who, data) => (await (await fetch(base + '/api/push', { method: 'POST', headers: { 'X-Dev-Email': who, 'Content-Type': 'application/json' }, body: JSON.stringify({ changes: [{ kind: 'tasks', id: 'L1', base: t, data }] }) })).json());
+  r = await push('am@e11-digital.com', { ...t, comments: [{ id: 'cx', text: 'late', at: '2026-10-29T08:00:00Z', authorId: 'u-am' }] });
+  assert.equal(r.results[0].refused, true, 'no comments on a completed task');
+  r = await push('am@e11-digital.com', { ...t, finance: 'Invoiced', financeAt: '2026-10-29T08:00:00Z', financeBy: 'u-am' });
+  assert.equal(r.results[0].refused, false, 'its Finance status still moves');
+  // an Admin may reopen it
+  r = await act('adm@e11-digital.com', { act: 'reopen', id: 'L1' });
+  assert.equal(r.ok, true, JSON.stringify(r)); assert.equal(T('L1').done, false);
+  // Undo right after completing: fine
+  r = await act('am@e11-digital.com', { act: 'done', id: 'L1' });
+  assert.equal(r.ok, true); assert.equal(T('L1').completedBy, 'u-am');
+  r = await act('am@e11-digital.com', { act: 'reopen', id: 'L1' });
+  assert.equal(r.ok, true, 'Undo within a few seconds'); assert.equal(T('L1').done, false);
+});

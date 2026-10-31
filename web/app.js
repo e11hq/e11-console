@@ -1817,7 +1817,7 @@ const amReadOnly = (t, u = me()) => !!t && !!u && ((u.role === 'am' && !isAdm(u)
 const peekOnly = (t, u = me()) => !!t && ownSearchOnly(u) && !partOfTask(t, u.id);
 const RO_AM = 'View only — this task is in a client you’re not Account Manager for';
 const RO_PEEK = 'View only — you’re not on this task';
-const roMsg = () => (ui.taskId && peekOnly(task(ui.taskId)) ? RO_PEEK : RO_AM);
+const roMsg = () => (ui.taskId && doneLocked(task(ui.taskId)) ? DONE_LOCK_MSG : ui.taskId && peekOnly(task(ui.taskId)) ? RO_PEEK : RO_AM);
 // The clients shown in an Account Manager's sidebar: the ones they look after (all of them until they're given one)
 const amSidebarOk = (p, u = me()) => searchClientOk(p, u) && (!u || u.role !== 'am' || isAdm(u) || isCD(u.id) || !db.projects.some((x) => (x.ams || []).some((a) => a.id === u.id)) || (p.ams || []).some((a) => a.id === u.id && !a.onLeave));
 // The clients an AM may move a task into, or start one in
@@ -2390,8 +2390,15 @@ function removeTasks(ids) {
   return removed;
 }
 
-function setDone(t, done) {
-  if (amReadOnly(t)) { toast(roMsg()); return; }
+// A completed task is locked: read only (comments too) for its 30 days, its subtasks with it — only Admins reopen it, and
+// whoever completed it may undo that for a few seconds (Haris, 2026-11-01). The server holds to it too (access.js).
+// (`how`: 'plan' — a content plan's client changes send its post back, as before)
+const doneLocked = (t) => R().doneLocked(t);
+const canReopen = (t) => R().canReopen(t);
+const DONE_LOCK_MSG = 'Completed tasks are locked — only Admins can reopen them';
+function setDone(t, done, how) {
+  if (!done && t.done) { if (how !== 'plan' && !canReopen(t)) { toast(DONE_LOCK_MSG); return; } }
+  else if (amReadOnly(t) || doneLocked(t)) { toast(roMsg()); return; }
   if (done && !t.done) Haptic.success();
   R().setDone(t, done).forEach((m) => toast(m));
 }
@@ -3899,21 +3906,34 @@ const RO_OK = new Set(['close-detail', 'close-preview', 'close-thread', 'close-l
   'reply', 'react', 'react-menu', 'add-comment', 'sched-open', 'attach-comment', 'comment-menu', 'open-thread', 'cancel-reply', 'mention-user', 'fmt', 'save-edit', 'cancel-edit', 'paste-clip', 'act-filter']);
 const inComments = (el) => !!(el.closest && el.closest('.tm-feed, .tm-composer, .cm, .composer:not(.desc)'));
 function readOnlyDetail(pane, t) {
-  const ro = amReadOnly(t);
+  const locked = doneLocked(t);
+  const ro = locked || amReadOnly(t);
   pane.classList.toggle('ro-task', ro);
+  pane.classList.toggle('done-lock', locked);
   if (!ro) return;
-  $$('[contenteditable="true"]', pane).forEach((el) => { if (!inComments(el)) el.setAttribute('contenteditable', 'false'); });
-  $$('input, select, textarea', pane).forEach((el) => { if (!inComments(el)) el.disabled = true; });
+  // (a completed task: comments are locked too)
+  $$('[contenteditable="true"]', pane).forEach((el) => { if (locked || !inComments(el)) el.setAttribute('contenteditable', 'false'); });
+  $$('input, select, textarea', pane).forEach((el) => { if (locked || !inComments(el)) el.disabled = true; });
   const head = $('.tm-main', pane) || pane;
-  if (!$('.ro-note', pane)) head.insertAdjacentHTML('afterbegin', `<div class="ro-note">${icon('info')}<span>${roMsg()}. You can read it, open its files and comment.</span></div>`);
+  if ($('.ro-note', pane)) return;
+  if (locked) {
+    const root = t.parentId ? task(t.parentId) || t : t;
+    const on = root.completedAt ? ` on ${esc(fmtDay(ymd(new Date(root.completedAt))))}` : '';
+    head.insertAdjacentHTML('afterbegin', `<div class="ro-note done-note">${icon('lock')}<span>Completed${on} — read only.</span>${!t.parentId && can('createTask') ? `<button class="btn xs" data-action="task-from">${icon('plus')}New task from this</button>` : ''}${!t.parentId && isAdm(me()) ? `<button class="btn xs" data-action="reopen-done">Reopen</button>` : ''}</div>`);
+  } else head.insertAdjacentHTML('afterbegin', `<div class="ro-note">${icon('info')}<span>${roMsg()}. You can read it, open its files and comment.</span></div>`);
 }
+// comment actions: not on a completed task
+const RO_COMMENT = new Set(['reply', 'react', 'react-menu', 'add-comment', 'sched-open', 'attach-comment', 'comment-menu', 'mention-user', 'fmt', 'save-edit', 'paste-clip']);
 // (belt and braces: clicks and edits on a view-only task page are stopped before they reach anything)
 ['click', 'mousedown', 'change', 'beforeinput', 'paste', 'drop'].forEach((type) => document.addEventListener(type, (e) => {
   const pane = e.target.closest && e.target.closest('#detail.ro-task');
-  if (!pane || inComments(e.target)) return;
+  const locked = !!pane && pane.classList.contains('done-lock');
+  if (!pane || (inComments(e.target) && !locked)) return;
   const a = e.target.closest('[data-action]');
   if (type === 'click' || type === 'mousedown') {
-    if (!a || RO_OK.has(a.dataset.action)) return;
+    if (a && locked && (a.dataset.action === 'task-from' || a.dataset.action === 'reopen-done')) return;
+    if (!a && locked && inComments(e.target)) return;   // (reading the comments: scrolling, selecting)
+    if (!a || (RO_OK.has(a.dataset.action) && !(locked && RO_COMMENT.has(a.dataset.action)))) return;
   }
   if ((type === 'click' || type === 'mousedown') && !a) return;
   e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
@@ -5984,6 +6004,17 @@ document.addEventListener('click', async (e) => {
       case 'attach-src': { const comp = actEl.closest('.composer'); if (comp) comp.classList.remove('ph-attach-on'); attachFiles('comment', actEl.dataset.reply || null, null, actEl.dataset.src); return; }
       case 'sched-open': Sched.open(actEl, actEl.dataset.reply || null); return;
       case 'task-from': taskFrom(task(ui.taskId)); return;
+      // an Admin reopens a completed task (a mistake found later)
+      case 'reopen-done': {
+        const t = task(ui.taskId);
+        if (!t || !t.done || !isAdm(me())) return;
+        (async () => {
+          const ok = await choiceDialog({ title: 'Reopen this task?', body: 'It was completed, so it’s locked. Reopening lets everyone change it and comment again.', choices: [{ label: 'Cancel', value: null }, { label: 'Reopen', value: 'yes', primary: true }] });
+          if (!ok) return;
+          setDone(t, false); commit(); renderDetail();
+        })();
+        return;
+      }
       case 'unstage-file': {
         e.stopPropagation();
         const key = actEl.dataset.key || ui.taskId;
@@ -7452,7 +7483,7 @@ function choiceDialog({ title, body = '', choices }) {
 // Every status change from the interface goes through here (status menu, ▶ next, drag and drop)
 async function changeStatus(t, sectionId, targetId = null, after = false) {
   if (!t) return false;
-  if (amReadOnly(t)) { toast(roMsg()); return false; }
+  if (amReadOnly(t) || doneLocked(t)) { toast(roMsg()); return false; }
   if (t.sectionId !== sectionId && statusLocked(t)) { toast(LOCK_MSG); return false; }
   if (t.sectionId !== sectionId && !t.parentId && needsCD(t) && !cdOK(t) && pastReview(t, sectionId)) { toast(CD_WAIT_MSG(t)); render({ keepDetail: true }); return false; }
   const list = statusList(t);

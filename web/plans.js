@@ -620,7 +620,7 @@ const Plans = (() => {
   // the new version needs the CD's approval again
   function sendBackTask(t, note, links, round) {
     if (!t) return;
-    if (t.done) setDone(t, false);
+    if (t.done) setDone(t, false, 'plan');   // (the client's changes: past the completed-task lock)
     t.partsDone = {};
     t.needsCD = true; t.reviewEpoch = epochOf(t) + 1;
     if (t.cdStatus) logChange(t, 'the <b>CD Status</b>', CD[t.cdStatus] ? CD[t.cdStatus].label : '', '');

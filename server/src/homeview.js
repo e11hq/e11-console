@@ -76,6 +76,7 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
     } else if (a === 'reopen') {
       if (!t.done) return { ok: true, changes: [], messages: [] };
       if (rules.amReadOnly(t)) return view();
+      if (!rules.canReopen(t)) return fail(403, 'Completed tasks are locked — only Admins can reopen them');
       messages = rules.setDone(t, false);
     } else if (a === 'due') {
       if (!rules.can('editDates', t) || rules.amReadOnly(t)) return fail(403, 'Your role doesn’t allow changing dates');

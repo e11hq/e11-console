@@ -51,3 +51,7 @@
 #detail.ro-task :is(.date-chip, .fl-row, .prop .pv, .cl-item, .tag-add, .assignees, .status-btn) { cursor: default; }
 #detail .prop-dates .date-chip.locked { cursor: default; }
 #detail .prop-dates .date-chip.locked:hover { background: none; }
+/* a completed task: locked — no comment box, and a note saying so (Haris, 2026-11-01) */
+#detail.done-lock .tm-composer { display: none !important; }
+#detail .ro-note.done-note { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+#detail .ro-note.done-note span { flex: 1; min-width: 140px; }

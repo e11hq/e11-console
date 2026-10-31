@@ -132,6 +132,11 @@ var E11Rules = (() => {
     const reviewPending = (t) => needsCD(t) && reviewersOf(t).some((u) => reviewState(t, u) === 'pending');
     const cdOK = (t) => !needsCD(t) || t.cdStatus === 'approved' || ((t.assignees || []).length > 0 && reviewersOf(t).length === 0);
     const canComplete = (t) => !!t.parentId || (!!sectionOf(t) && isDoneName(sectionOf(t).name) && cdOK(t));
+    // a completed task is locked (read only, comments too) for its 30 days — its subtasks with it; only Admins reopen it,
+    // and whoever completed it may undo that for a few seconds (Haris, 2026-11-01)
+    const UNDO_MS = 10000;
+    const doneLocked = (t) => { if (!t) return false; const root = t.parentId ? task(t.parentId) || t : t; return !!root.done && !root.parentId; };
+    const canReopen = (t) => !!t && !!t.done && (isAdm(me()) || (t.completedBy === meId && nowMs() - Date.parse(t.completedAt || 0) < UNDO_MS));
     // the app's Done (swipe right): to the Done status and complete, in one go (Haris, 2026-10-31) — unless the CD's
     // review is in the way (the website's own rules for a status change: files with the CD lock it; with CD review on,
     // nothing goes past Review until the CD approves)
@@ -248,7 +253,7 @@ var E11Rules = (() => {
         av: ids.slice(0, 2).map((id) => ({ id, done: !!partDone(t, id) })), more: Math.max(0, ids.length - 2),
         // (swiped right: Done — ready means the page's own tick would complete it now, else `why` — and Due, for those
         //  who may change dates)
-        due: t.due || '', canDone: !t.parentId && !amReadOnly(t), doneReady: !!t.done || canFinish(t), why: t.done ? '' : finishBlocked(t),
+        due: t.due || '', canDone: !t.parentId && !amReadOnly(t) && (!t.done || canReopen(t)), doneReady: !!t.done || canFinish(t), why: t.done ? '' : finishBlocked(t),
         // (held by the CD's review: the app shows a faded orange CD · Review instead of Done)
         cdHold: !t.done && !canComplete(t) && (reviewPending(t) || !cdOK(t)),
         canDue: can('editDates', t) && !amReadOnly(t), canDelete: can('deleteTask', t) && !amReadOnly(t),
@@ -378,6 +383,7 @@ var E11Rules = (() => {
       }
       t.done = done;
       t.completedAt = done ? nowISO() : null;
+      t.completedBy = done ? meId : null;   // (who completed it: they may undo it for a few seconds)
       t.updatedAt = nowISO();
       return !done && tasks.includes(t) ? checkPrioConflict(t) : [];
     }
@@ -441,7 +447,7 @@ var E11Rules = (() => {
     }
 
     return { home, myDayData, cardOf, can, amReadOnly, canComplete, completeBlocked, dayTitle, statusInfo, sectionOf,
-      notifGroups: NOTIF_GROUPS, finish, finishBlocked, canFinish, moveToStatus, logActivity, logChange, pushNotif, notifyWatchers, checkPrioConflict, setDone, setDue, setClientApproval, asksClientApproval, deleteTask, watchersOf, creatorOf, clientAmsOf, fmtDue };
+      notifGroups: NOTIF_GROUPS, doneLocked, canReopen, finish, finishBlocked, canFinish, moveToStatus, logActivity, logChange, pushNotif, notifyWatchers, checkPrioConflict, setDone, setDue, setClientApproval, asksClientApproval, deleteTask, watchersOf, creatorOf, clientAmsOf, fmtDue };
   }
 
   // (the clock and new ids for the actions: the website's own, or the server's)
