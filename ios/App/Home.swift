@@ -357,7 +357,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       hairline.frame = CGRect(x: 0, y: smallH - 0.5, width: W, height: 0.5)
       blur.alpha = searching || barIn ? 1 : 0
     }
-    scroll.verticalScrollIndicatorInsets = UIEdgeInsets(top: smallH - bigH, left: 0, bottom: bottomRoom - 20, right: 0)
+    // (the scroll bar on the right runs from the bar's lower edge down, never up beside it — as Mail's; set here, not by iPhone)
+    if scroll.automaticallyAdjustsScrollIndicatorInsets { scroll.automaticallyAdjustsScrollIndicatorInsets = false }
+    scroll.verticalScrollIndicatorInsets = UIEdgeInsets(top: smallH, left: 0, bottom: bottomRoom - 20, right: 0)
     // the big date and title: the list's own first lines (above its top, in the room it keeps for them)
     let tw = W - 16 - R
     // (bounds and centre, not frame: the blur fade moves them with a transform)
