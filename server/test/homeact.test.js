@@ -59,7 +59,8 @@ test('Done: ready → completed, logged, the people on it told', async () => {
   assert.equal(T('t2').done, true); assert.ok(T('t2').completedAt);
   assert.equal(T('t2').activity.at(-1).text, 'completed this task'); assert.equal(T('t2').activity.at(-1).actor, 'u-am');
   assert.ok(notesFor('t2').some((n) => n.to === 'u-prod' && n.kind === 'done' && n.text === 'completed'), 'the assignee is told');
-  assert.ok(r.home.groups.find((g) => g.name === 'Completed today').cards.some((c) => c.id === 't2'), 'the fresh Home comes back');
+  assert.ok(r.home && !r.home.groups.some((g) => g.cards.some((c) => c.id === 't2')), 'the fresh Home comes back, the completed task gone from it');
+  assert.ok(!r.home.groups.some((g) => ['In progress', 'Completed today'].includes(g.name)));
   // the same action again (a retry after a lost answer) is done once
   const n = T('t2').activity.length;
   r = await act('am@e11-digital.com', { act: 'done', id: 't2', op: 'op-1' });
@@ -163,4 +164,21 @@ test('Done on a task still in progress: to the Done status and complete, in one 
   assert.equal(r.ok, false); assert.equal(r.error, 'Waiting for CD approval'); assert.equal(T('t11').sectionId, 's2');
   r = await act('am@e11-digital.com', { act: 'done', id: 't12' });
   assert.equal(r.ok, false); assert.equal(r.error, 'Files are with the CD for review'); assert.equal(T('t12').done, undefined);
+});
+
+test('Today: no heading of its own, its tasks by priority in runs under their client, each card one line', async () => {
+  app.store.apply([
+    { kind: 'projects', id: 'p3', data: { id: 'p3', name: 'Deepal', color: '#3366ff', ams: [{ id: 'u-am' }], sections: [{ id: 'd1', name: 'In progress', color: '#a875ff' }, { id: 'd3', name: 'Done', color: '#3ddc97' }] } },
+    { kind: 'tasks', id: 'a1', data: { id: 'a1', projectId: 'p1', sectionId: 's2', title: 'F1', assignees: ['u-prod'], createdBy: 'u-am', due: '2026-10-29', prio: { 'u-am': 1 }, comments: [{ id: 'c' }], activity: [] } },
+    { kind: 'tasks', id: 'a2', data: { id: 'a2', projectId: 'p3', sectionId: 'd1', title: 'D2', assignees: ['u-prod'], createdBy: 'u-am', due: '2026-10-29', prio: { 'u-am': 2 }, comments: [], activity: [] } },
+    { kind: 'tasks', id: 'a3', data: { id: 'a3', projectId: 'p1', sectionId: 's2', title: 'F3', assignees: ['u-prod'], createdBy: 'u-am', due: '2026-10-29', prio: { 'u-am': 3 }, comments: [], activity: [] } },
+  ], 'test');
+  const h = (await home('am@e11-digital.com')).home;
+  assert.equal(h.groups[0].anchor, true); assert.equal(h.groups[0].name, 'Today');
+  const runs = h.groups.filter((g) => g.today);
+  assert.deepEqual(runs.slice(0, 3).map((g) => [g.name, g.cards[0].id, g.n === g.cards.length]), [['Northline', 'a1', true], ['Deepal', 'a2', true], ['Northline', 'a3', true]]);
+  assert.deepEqual(runs[0].dot, [58, 123, 213]);
+  const c = runs[0].cards[0];
+  assert.equal(c.inline, true);
+  assert.deepEqual(c.meta.map((m) => m.t), ['In progress', '1 comment'], 'no client, no date');
 });

@@ -185,12 +185,21 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     for g in model["groups"] as? [[String: Any]] ?? [] {
       let h = UILabel()
       let name = (g["name"] as? String ?? "").uppercased()
-      let s = NSMutableAttributedString(string: name, attributes: [.font: UIFont.systemFont(ofSize: 12, weight: .bold), .kern: 0.72, .foregroundColor: L.gh])
+      let s = NSMutableAttributedString()
+      // (a client's run under Today: its colour dot first, as on the cards)
+      if let dot = NativeSheetVC.color(g["dot"]) {
+        let img = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { _ in dot.setFill(); UIBezierPath(roundedRect: CGRect(x: 0, y: 0, width: 8, height: 8), cornerRadius: 2).fill() }
+        let a = NSTextAttachment(); a.image = img; a.bounds = CGRect(x: 0, y: 0.5, width: 8, height: 8)
+        s.append(NSAttributedString(attachment: a)); s.append(NSAttributedString(string: " ", attributes: [.font: UIFont.systemFont(ofSize: 12), .kern: 2]))
+      }
+      s.append(NSAttributedString(string: name, attributes: [.font: UIFont.systemFont(ofSize: 12, weight: .bold), .kern: 0.72, .foregroundColor: L.gh]))
       if let n = g["n"] as? Int, n > 0 {
         s.append(NSAttributedString(string: " ", attributes: [.font: UIFont.systemFont(ofSize: 12), .kern: 3.6]))
         s.append(NSAttributedString(string: "\(n)", attributes: [.font: UIFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: L.gh.withAlphaComponent(0.8)]))
       }
       h.attributedText = s; h.tag = 7; h.accessibilityIdentifier = g["name"] as? String
+      // (Today: no heading on screen — only the mark the Due today box scrolls to)
+      if (g["anchor"] as? Bool) == true { h.isHidden = true }
       scroll.addSubview(h); content.append(h)
       for c in g["cards"] as? [[String: Any]] ?? [] {
         guard let id = c["id"] as? String else { continue }
@@ -256,7 +265,11 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let lw = W - 32
     for (i, v) in content.enumerated() {
       if i > 0 { y += 10 }
-      if v.tag == 7 {
+      if v.tag == 7 && v.isHidden {
+        // (Today's mark: no room taken — the first client's heading starts where Today's used to)
+        if i > 0 { y -= 10 }
+        v.frame = CGRect(x: 20, y: y, width: lw - 8, height: 0)
+      } else if v.tag == 7 {
         y += 12
         v.frame = CGRect(x: 20, y: y, width: lw - 8, height: 15)
         y += 15
@@ -779,6 +792,7 @@ final class HomeCard: UIControl {
   var id = ""
   var taskTitle: String { c["title"] as? String ?? "" }
   var info: [String: Any] { c }
+  private var inline = false   // (a Today card: one line, comments and the CD chip on it)
   var swipeStart: CGFloat = 0
   // (sideways when swiped open; pressed in a little while touched — both at once)
   var swipeX: CGFloat = 0 { didSet { applyTransform() } }
@@ -818,6 +832,7 @@ final class HomeCard: UIControl {
     titleL.attributedText = NSAttributedString(string: t.isEmpty ? "Untitled task" : t, attributes: ta)
     // the CD chip (CD Review / ✓ CD Approved) at the end of the line under the title, on its last line when it fits
     // (Haris, 2026-10-31: "1 comment" and the chip together)
+    inline = (d["inline"] as? Bool) == true
     let ml = NSMutableAttributedString(attributedString: meta(d["meta"] as? [[String: Any]] ?? []))
     if let cd = d["cd"] as? [String: Any] {
       let img = HomeCard.cdChip(cd["t"] as? String ?? "", check: (cd["check"] as? Bool) == true, color: NativeSheetVC.color(cd["rgb"]) ?? .systemYellow)
@@ -825,7 +840,8 @@ final class HomeCard: UIControl {
       let f = UIFont.systemFont(ofSize: 12.5)
       a.bounds = CGRect(x: 0, y: ((f.capHeight - img.size.height) / 2).rounded(), width: img.size.width, height: img.size.height)
       // (after the comments on the second line; with no comments, the second line is the chip's own)
-      let hasCm = (d["meta"] as? [[String: Any]] ?? []).contains(where: HomeCard.isComments)
+      // (a Today card is one line: status · comments · CD chip)
+      let hasCm = (d["inline"] as? Bool) == true || (d["meta"] as? [[String: Any]] ?? []).contains(where: HomeCard.isComments)
       if ml.length > 0 { ml.append(NSAttributedString(string: hasCm ? " " : "\n", attributes: hasCm ? [.font: f, .kern: 4.9] : [.font: f])) }
       ml.append(NSAttributedString(attachment: a))
     }
@@ -855,7 +871,7 @@ final class HomeCard: UIControl {
     let gap = { (breaks: Bool) in NSAttributedString(string: breaks ? " " : "\u{00A0}", attributes: [.font: f, .kern: 2.9]) }
     // (the comments always start the second line, the CD chip after them — the same on every card, Haris 2026-10-31)
     for (i, it) in items.enumerated() {
-      let cm = HomeCard.isComments(it)
+      let cm = HomeCard.isComments(it) && !inline
       if i > 0 && cm { s.append(NSAttributedString(string: "\n", attributes: [.font: f])) }
       else if i > 0 { s.append(gap(false)); s.append(NSAttributedString(string: "·", attributes: [.font: f, .foregroundColor: L.sep])); s.append(gap(true)) }
       if let dot = NativeSheetVC.color(it["dot"]) {

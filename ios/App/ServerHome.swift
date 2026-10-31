@@ -170,26 +170,21 @@ final class ServerHome {
       for (gi, g) in groups.enumerated() { if let ci = (g["cards"] as? [[String: Any]] ?? []).firstIndex(where: { ($0["id"] as? String) == id }) { return (gi, ci) } }
       return nil
     }
+    // (a card taken off: the boxes' numbers follow — a client's run under Today counts in Due today)
     func remove(_ gi: Int, _ ci: Int) -> [String: Any] {
       var cards = groups[gi]["cards"] as? [[String: Any]] ?? []
       let c = cards.remove(at: ci)
       groups[gi]["cards"] = cards; groups[gi]["n"] = cards.count
-      let name = groups[gi]["name"] as? String
-      if name == "Today", stats.count > 0 { stats[0] = max(0, stats[0] - 1) }
-      if name == "Overdue", stats.count > 1 { stats[1] = max(0, stats[1] - 1) }
-      if cards.isEmpty, name != "Today" { groups.remove(at: gi) }
+      if (groups[gi]["today"] as? Bool) == true, stats.count > 0 { stats[0] = max(0, stats[0] - 1) }
+      if (groups[gi]["name"] as? String) == "Overdue", stats.count > 1 { stats[1] = max(0, stats[1] - 1) }
+      if cards.isEmpty, (groups[gi]["anchor"] as? Bool) != true { groups.remove(at: gi) }
       return c
     }
     for o in queue {
       switch o.act {
       case "done":
-        guard let (gi, ci) = find(o.id) else { continue }
-        var c = remove(gi, ci)
-        c["done"] = true; c["late"] = false
-        if var ic = c["icon"] as? [String: Any] { ic["kind"] = "done"; ic["rgb"] = [61, 220, 151]; c["icon"] = ic }
-        if let i = groups.firstIndex(where: { ($0["name"] as? String) == "Completed today" }) {
-          var cards = groups[i]["cards"] as? [[String: Any]] ?? []; cards.insert(c, at: 0); groups[i]["cards"] = cards; groups[i]["n"] = cards.count
-        } else { groups.append(["name": "Completed today", "n": 1, "empty": "", "cards": [c]]) }
+        // (a completed task leaves Home)
+        if let (gi, ci) = find(o.id) { _ = remove(gi, ci) }
       case "reopen":
         guard let (gi, ci) = find(o.id) else { continue }
         var cards = groups[gi]["cards"] as? [[String: Any]] ?? []
@@ -202,7 +197,7 @@ final class ServerHome {
         var c = cards[ci]
         c["due"] = o.due ?? ""
         var meta = (c["meta"] as? [[String: Any]] ?? []).filter { $0["b"] == nil }
-        if let d = o.due {
+        if let d = o.due, (c["inline"] as? Bool) != true {
           let i = meta.firstIndex(where: { ($0["cm"] as? Bool) == true }) ?? meta.count
           meta.insert(["t": ServerHome.label(d), "b": "plain"], at: i)
         }

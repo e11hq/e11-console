@@ -225,9 +225,10 @@ var E11Rules = (() => {
       const p = proj(t.projectId), s = statusInfo(t);
       const open = !t.done && !partDone(t);
       const late = open && t.due && dayDiff(t.due) < 0;
-      const metaL = [p ? { t: p.name, dot: rgbOf(p.color) } : { t: 'My Tasks' }];
+      // (o.client / o.due false: under the app's Today, where the client is the heading and every task is today's)
+      const metaL = o.client === false ? [] : [p ? { t: p.name, dot: rgbOf(p.color) } : { t: 'My Tasks' }];
       if (o.status !== false) metaL.push({ t: s.name });
-      if (t.due) metaL.push({ t: mwDue(t), b: late ? 'late' : dayDiff(t.due) === 0 && open ? 'today' : 'plain' });
+      if (t.due && o.due !== false) metaL.push({ t: mwDue(t), b: late ? 'late' : dayDiff(t.due) === 0 && open ? 'today' : 'plain' });
       const nc = (t.comments || []).length;
       if (nc) metaL.push({ t: `${nc} comment${nc === 1 ? '' : 's'}`, cm: true });
       const pr = prioOf(t);
@@ -241,7 +242,7 @@ var E11Rules = (() => {
       const ids = t.assignees || [];
       ids.slice(0, 2).forEach((id) => peopleOn.add(id));
       return {
-        id: t.id, title: t.title || '', late: !!late, done: !!t.done, meta: metaL,
+        id: t.id, title: t.title || '', late: !!late, done: !!t.done, meta: metaL, inline: !!o.inline,
         icon: { kind, frac, rgb: rgbOf(t.done ? '#3ddc97' : s.color) },
         badge, cd: c ? { t: t.cdStatus === 'approved' ? 'CD Approved' : 'CD Review', check: t.cdStatus === 'approved', rgb: rgbOf(c.color) } : null,
         av: ids.slice(0, 2).map((id) => ({ id, done: !!partDone(t, id) })), more: Math.max(0, ids.length - 2),
@@ -256,10 +257,22 @@ var E11Rules = (() => {
     function home() {
       const u = me();
       if (!u || u.active === false || isOffice(u) || isFinUser(u)) return null;
-      const { overdue, due, going, done, review } = myDayData();
-      const grp = (name, list, o = {}) => (list.length || o.empty ? { name, n: list.length, empty: list.length ? '' : o.empty || '', cards: list.map((t) => cardOf(t, o)) } : null);
+      const { overdue, due, review } = myDayData();
       peopleOn.add(meId);
-      const groups = [grp('Today', due, { empty: 'Nothing due today 🎉' }), grp('In progress', going), grp('Overdue', overdue), grp('Completed today', done, { status: false })].filter(Boolean);
+      // the app's Home (Haris, 2026-10-31): Today, then Overdue — no In progress, and a completed task leaves Home.
+      // Today has no heading of its own (only a mark the Due today box scrolls to): its tasks in priority order, each run
+      // of one client's tasks under that client's name (its colour dot and how many in the run), the card a single line
+      // (status · comments · CD chip)
+      const groups = [{ name: 'Today', anchor: true, n: due.length, empty: due.length ? '' : 'Nothing due today 🎉', cards: [] }];
+      for (const t of due) {
+        const last = groups[groups.length - 1];
+        const pid = t.projectId || null;
+        if (last.anchor || last.pid !== pid) { const p = pid ? proj(pid) : null; groups.push({ name: p ? p.name : 'My Tasks', dot: p ? rgbOf(p.color) : null, today: true, pid, n: 0, empty: '', cards: [] }); }
+        const g = groups[groups.length - 1];
+        g.cards.push(cardOf(t, { client: false, due: false, inline: true })); g.n = g.cards.length;
+      }
+      groups.forEach((g) => { delete g.pid; });
+      if (overdue.length) groups.push({ name: 'Overdue', n: overdue.length, empty: '', cards: overdue.map((t) => cardOf(t)) });
       return {
         show: true, title: dayTitle(), date: longDate(today), me: meId, stats: [due.length, overdue.length, review], groups,
         add: can('createTask'), canDelete: can('deleteTask'),

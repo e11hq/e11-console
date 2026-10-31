@@ -75,18 +75,22 @@ async def main():
                             c.pop('why', None); c.pop('canDelete', None); c.pop('canDue', None); c.pop('doneReady', None); c.pop('cdHold', None)
                 for g in old['groups']:
                     for c in g['cards']: c.pop('canDue', None); c.pop('doneReady', None); c.pop('cdHold', None)
-                same = json.dumps(got, sort_keys=True) == json.dumps(old, sort_keys=True)
-                if not same and got:
-                    for k in old:
-                        if json.dumps(old[k], sort_keys=True) != json.dumps(got.get(k), sort_keys=True):
-                            print('   differs:', k)
-                            if k == 'groups':
-                                for go, gn in zip(old['groups'], got['groups']):
-                                    for co, cn in zip(go['cards'], gn['cards']):
-                                        for kk in co:
-                                            if json.dumps(co[kk], sort_keys=True) != json.dumps(cn.get(kk), sort_keys=True): print('     card', co['id'], kk, co[kk], '≠', cn.get(kk))
-                                    if len(go['cards']) != len(gn['cards']): print('     group', go['name'], len(go['cards']), '≠', len(gn['cards']))
-                            else: print('     ', old[k], '≠', got.get(k))
+                # (the app's Home, 2026-10-31: Today's tasks — the same ones, same order — in runs under their client, the
+                #  card without the client and the date; Overdue as it was; no In progress, no Completed today)
+                if got:
+                    og = {g['name']: g for g in old['groups']}
+                    runs = [g for g in got['groups'] if g.get('today')]
+                    anchor = got['groups'][0] if got['groups'] else {}
+                    old_today = [c['id'] for c in og.get('Today', {}).get('cards', [])]
+                    ok_today = [c['id'] for g in runs for c in g['cards']] == old_today and anchor.get('anchor') is True
+                    proj_of = {c['id']: c['meta'][0]['t'] for c in og.get('Today', {}).get('cards', [])}
+                    ok_runs = all(c.get('inline') and proj_of.get(c['id']) == g['name'] and all(m.get('b') is None and m['t'] != g['name'] for m in c['meta']) and g['n'] == len(g['cards']) for g in runs for c in g['cards'])
+                    ok_runs = ok_runs and all(runs[i]['name'] != runs[i + 1]['name'] for i in range(len(runs) - 1))
+                    ok_over = json.dumps([g for g in got['groups'] if g['name'] == 'Overdue'], sort_keys=True) == json.dumps([dict(og['Overdue'], cards=[dict(c, inline=False) for c in og['Overdue']['cards']])] if 'Overdue' in og else [], sort_keys=True)
+                    ok_rest = all(got[k] == old[k] for k in ('title', 'date', 'me', 'stats', 'add', 'canDelete')) and not any(g['name'] in ('In progress', 'Completed today') for g in got['groups'])
+                    same = ok_today and ok_runs and ok_over and ok_rest
+                    if not same: print('   today', ok_today, 'runs', ok_runs, 'overdue', ok_over, 'rest', ok_rest)
+                else: same = False
                 n = sum(len(g['cards']) for g in old['groups'])
                 check(same, f"{p['role']} {p['email']}: the server's Home is the old page's ({n} cards, boxes {old['stats']})")
                 check(bool(home) and isinstance(home.get('people'), dict) and p['id'] in home['people'], f"{p['email']}: the people on it come with it")
