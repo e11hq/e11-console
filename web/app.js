@@ -9200,7 +9200,7 @@ const Splash = (() => {
     const skip = () => skipResolve();
     el.addEventListener('click', skip);
     // (the app's own copy: how long it has been showing, so the ticks come no later than they would here)
-    if (Host.isIOSApp) NativeMac.call('splash', { hello: true }).then((r) => { if (r && r.shown && r.age > 0) start = Math.min(start, performance.now() - r.age); }).catch(() => {});
+    if (Host.isIOSApp) NativeMac.call('splash', { hello: true }).then((r) => { if (r && r.shown) { window.__e11NativeSplashOn = true; if (r.age > 0) start = Math.min(start, performance.now() - r.age); } }).catch(() => {});
     window.addEventListener('keydown', function k() { if (!gone) skip(); window.removeEventListener('keydown', k); });
   }
   // Remember the look and name for the next startup on this device

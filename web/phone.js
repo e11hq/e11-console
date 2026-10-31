@@ -124,7 +124,9 @@ const Phone = (() => {
     const ph = mePhoto();
     const u0 = typeof me === 'function' ? me() : null;
     if (ph) tabs.forEach((t) => { if (t.v === 'me') { t.photo = ph; if (u0 && u0.avatar) t.photoUrl = new URL(fileUrl({ path: u0.avatar }), location.href).href; } });
-    const msg = JSON.stringify({ tabs, hidden: !!ui.taskId || !!document.querySelector('#splash, .scrim, .menu:not(.mention-pop), #ph-sheet-root .ph-scrim:not(.docked), #overlay-root > *, #pv-root > *') });
+    // (22+: the app's own startup screen is over everything — the bar comes under it, ready when it goes)
+    const splashCovers = !window.__e11NativeSplashOn && !!document.querySelector('#splash');
+    const msg = JSON.stringify({ tabs, hidden: !!ui.taskId || splashCovers || !!document.querySelector('.scrim, .menu:not(.mention-pop), #ph-sheet-root .ph-scrim:not(.docked), #overlay-root > *, #pv-root > *') });
     if (msg === tabsSent) return;
     tabsSent = msg;
     NativeMac.call('setTabs', JSON.parse(msg)).catch(() => {});

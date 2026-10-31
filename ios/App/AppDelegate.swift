@@ -514,6 +514,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
+    defer { if let h = homeIfMade { h.tabTop = tabBar.isHidden ? nil : tabBar.frame.minY } }   // (23+: Home's + by the tab bar)
     let b = view.bounds
     // the page always fills the screen (no black band under it); the tab bar floats over its bottom and the page
     // keeps that much room free (--ios-tabs-h, web/phone.css)
@@ -1036,6 +1037,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if !show { homeIfMade?.isHidden = true; return }
     let h = homeView
     h.bottomRoom = (tabBar.isHidden ? 40 : view.bounds.height - tabBar.frame.minY) + 96
+    h.tabTop = tabBar.isHidden ? nil : tabBar.frame.minY
     h.update(a)
     h.isHidden = false
   }

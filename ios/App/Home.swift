@@ -19,6 +19,9 @@ final class HomeView: UIView, UIScrollViewDelegate {
   var people: [String: [String: Any]] = [:] { didSet { if oldValue.count != people.count { cards.values.forEach { $0.people = people }; meChanged() } } }
   private var meId = ""
   var bottomRoom: CGFloat = 120 { didSet { if oldValue != bottomRoom { setNeedsLayout() } } }
+  // the top of the app's tab bar: the + sits 14 above it, 18 from the right (phone.css .ph-fab), so it's in place from
+  // the first frame — not where the page had it a moment before the tab bar came (it jumped up, Haris 2026-10-31)
+  var tabTop: CGFloat? { didSet { if oldValue != tabTop { setNeedsLayout() } } }
 
   override init(frame: CGRect) {
     super.init(frame: frame)
@@ -164,7 +167,9 @@ final class HomeView: UIView, UIScrollViewDelegate {
     scroll.contentSize = CGSize(width: W, height: y + bottomRoom)
     scroll.verticalScrollIndicatorInsets = UIEdgeInsets(top: 0, left: 0, bottom: bottomRoom - 20, right: 0)
     // the + button where the page has it
-    if let r = L.fabRect { fab.frame = r; fab.layer.cornerRadius = r.height / 2 } else { fab.frame = CGRect(x: W - 18 - 60, y: H - 170, width: 60, height: 60); fab.layer.cornerRadius = 30 }
+    let fs = L.fabRect?.width ?? 60
+    if let tt = tabTop { fab.frame = CGRect(x: W - 18 - fs, y: tt - 14 - fs, width: fs, height: fs); fab.layer.cornerRadius = fs / 2 }
+    else if let r = L.fabRect { fab.frame = r; fab.layer.cornerRadius = r.height / 2 } else { fab.frame = CGRect(x: W - 18 - 60, y: H - 170, width: 60, height: 60); fab.layer.cornerRadius = 30 }
   }
   func scrollToTop() { scroll.setContentOffset(.zero, animated: true) }
   func geo() -> [String: Any] {
@@ -247,20 +252,20 @@ final class HomeCard: UIControl {
     if t.isEmpty { ta[.font] = UIFont.italicSystemFont(ofSize: 15.5) }
     if done { ta[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
     titleL.attributedText = NSAttributedString(string: t.isEmpty ? "Untitled task" : t, attributes: ta)
-    metaL.attributedText = meta(d["meta"] as? [[String: Any]] ?? [])
-    icon.image = HomeCard.statusIcon(d["icon"] as? [String: Any])
-    // the CD chip (CD Review / ✓ CD Approved) under the line
+    // the CD chip (CD Review / ✓ CD Approved) at the end of the line under the title, on its last line when it fits
+    // (Haris, 2026-10-31: "1 comment" and the chip together)
+    let ml = NSMutableAttributedString(attributedString: meta(d["meta"] as? [[String: Any]] ?? []))
     if let cd = d["cd"] as? [String: Any] {
-      let col = NativeSheetVC.color(cd["rgb"]) ?? .systemYellow
-      chip.isHidden = false; chip.backgroundColor = col.withAlphaComponent(0.16)
-      let s = NSMutableAttributedString()
-      if (cd["check"] as? Bool) == true, let ck = UIImage(systemName: "checkmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: 8, weight: .heavy))?.withTintColor(col, renderingMode: .alwaysOriginal) {
-        let a = NSTextAttachment(); a.image = ck; a.bounds = CGRect(x: 0, y: -0.5, width: 8, height: 8)
-        s.append(NSAttributedString(attachment: a)); s.append(NSAttributedString(string: " ", attributes: [.font: UIFont.systemFont(ofSize: 10.5), .kern: 0.5]))
-      }
-      s.append(NSAttributedString(string: cd["t"] as? String ?? "", attributes: [.font: UIFont.systemFont(ofSize: 10.5, weight: .bold), .foregroundColor: col]))
-      chipL.attributedText = s
-    } else { chip.isHidden = true }
+      let img = HomeCard.cdChip(cd["t"] as? String ?? "", check: (cd["check"] as? Bool) == true, color: NativeSheetVC.color(cd["rgb"]) ?? .systemYellow)
+      let a = NSTextAttachment(); a.image = img
+      let f = UIFont.systemFont(ofSize: 12.5)
+      a.bounds = CGRect(x: 0, y: ((f.capHeight - img.size.height) / 2).rounded(), width: img.size.width, height: img.size.height)
+      if ml.length > 0 { ml.append(NSAttributedString(string: " ", attributes: [.font: f, .kern: 4.9])) }
+      ml.append(NSAttributedString(attachment: a))
+    }
+    metaL.attributedText = ml
+    icon.image = HomeCard.statusIcon(d["icon"] as? [String: Any])
+    chip.isHidden = true
     // Urgent, or the priority number
     if let b = d["badge"] as? [String: Any] {
       let u = (b["urgent"] as? Bool) == true
@@ -338,7 +343,7 @@ final class HomeCard: UIControl {
   private func bodyHeight(_ bw: CGFloat) -> (CGFloat, CGFloat, CGFloat) {
     let th = ceil(titleL.sizeThatFits(CGSize(width: bw, height: 1000)).height)
     let mh = ceil(metaL.sizeThatFits(CGSize(width: bw, height: 1000)).height)
-    return (th, mh, chip.isHidden ? 0 : 16)
+    return (th, mh, 0)
   }
   func height(for w: CGFloat) -> CGFloat {
     let side = sideSize()
@@ -366,6 +371,24 @@ final class HomeCard: UIControl {
     var y: CGFloat = 15
     if !badge.isHidden { let s = badge.attributedText?.size() ?? .zero; badge.frame = CGRect(x: w - 15 - ceil(s.width) - 14, y: y, width: ceil(s.width) + 14, height: ceil(s.height) + 6); y = badge.frame.maxY + 6 }
     if stackW > 0 { avs.frame = CGRect(x: w - 15 - stackW, y: y, width: stackW, height: 22) }
+  }
+  // the CD chip (app.css .cd-chip): 10.5 bold in the CD colour on a 16% wash, 4 round, a tick before "CD Approved" —
+  // the tick and the words on one centre line
+  static func cdChip(_ text: String, check: Bool, color: UIColor) -> UIImage {
+    let f = UIFont.systemFont(ofSize: 10.5, weight: .bold)
+    let ts = (text as NSString).size(withAttributes: [.font: f])
+    let tick: CGFloat = check ? 10 + 3 : 0
+    let size = CGSize(width: ceil(6 + tick + ts.width + 6), height: 16)
+    return UIGraphicsImageRenderer(size: size).image { _ in
+      color.withAlphaComponent(0.16).setFill()
+      UIBezierPath(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: 4).fill()
+      if check {
+        let p = UIBezierPath(); let o = CGPoint(x: 6, y: 3)
+        p.move(to: CGPoint(x: o.x + 1.6, y: o.y + 5.2)); p.addLine(to: CGPoint(x: o.x + 4, y: o.y + 7.6)); p.addLine(to: CGPoint(x: o.x + 8.6, y: o.y + 2.6))
+        color.setStroke(); p.lineWidth = 1.9; p.lineCapStyle = .round; p.lineJoinStyle = .round; p.stroke()
+      }
+      (text as NSString).draw(at: CGPoint(x: 6 + tick, y: (16 - ts.height) / 2), withAttributes: [.font: f, .foregroundColor: color])
+    }
   }
   // the status icon (app.js statusIconSVG, 16 units → 22 pt): done (filled, ticked), to do (dashed ring), or a ring with a slice for how far along
   static func statusIcon(_ d: [String: Any]?) -> UIImage {
