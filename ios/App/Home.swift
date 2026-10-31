@@ -127,7 +127,13 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     fab.accessibilityLabel = "New task"
     fab.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.send(["ev": "add"]) }, for: .touchUpInside)
     addSubview(fab)
-    for _ in 0..<3 { let v = UIView(); v.layer.cornerRadius = 18; v.layer.borderWidth = 1; let n = UILabel(), l = UILabel(); n.tag = 1; l.tag = 2; v.addSubview(n); v.addSubview(l); scroll.addSubview(v); stats.append(v) }
+    for i in 0..<3 {
+      let v = UIView(); v.layer.cornerRadius = 18; v.layer.borderWidth = 1; let n = UILabel(), l = UILabel(); n.tag = 1; l.tag = 2; v.addSubview(n); v.addSubview(l); scroll.addSubview(v); stats.append(v)
+      // (tapped: Due today / Overdue bring their group up to where the big title is; In review opens My Tasks waiting
+      //  for the CD's review — Haris, 2026-10-31)
+      let tap = UITapGestureRecognizer(target: self, action: #selector(statTap(_:))); v.tag = 100 + i; v.addGestureRecognizer(tap)
+      v.isAccessibilityElement = true; v.accessibilityTraits = .button
+    }
   }
   required init?(coder: NSCoder) { fatalError() }
 
@@ -177,7 +183,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
         s.append(NSAttributedString(string: " ", attributes: [.font: UIFont.systemFont(ofSize: 12), .kern: 3.6]))
         s.append(NSAttributedString(string: "\(n)", attributes: [.font: UIFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: L.gh.withAlphaComponent(0.8)]))
       }
-      h.attributedText = s; h.tag = 7
+      h.attributedText = s; h.tag = 7; h.accessibilityIdentifier = g["name"] as? String
       scroll.addSubview(h); content.append(h)
       for c in g["cards"] as? [[String: Any]] ?? [] {
         guard let id = c["id"] as? String else { continue }
@@ -508,6 +514,23 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     }
     results.contentSize = CGSize(width: W, height: y + 20)
   }
+  @objc private func statTap(_ g: UITapGestureRecognizer) {
+    guard let v = g.view, !searching else { return }
+    if let o = openCard { setOpen(o, false) }
+    UIView.animate(withDuration: 0.08, animations: { v.transform = CGAffineTransform(scaleX: 0.96, y: 0.96) }) { _ in UIView.animate(withDuration: 0.15) { v.transform = .identity } }
+    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    let i = v.tag - 100
+    if i == 2 { send(["ev": "review"]); return }
+    showGroup(i == 0 ? "Today" : "Overdue")
+  }
+  // a group's heading brought up to where the big title is (as far as the list goes)
+  func showGroup(_ name: String) {
+    guard let h = content.first(where: { $0.tag == 7 && $0.accessibilityIdentifier == name }) else { return }
+    let want = h.frame.minY - (safeAreaInsets.top + 66)
+    let maxY = max(-scroll.contentInset.top, scroll.contentSize.height + scroll.contentInset.bottom - scroll.bounds.height)
+    scroll.setContentOffset(CGPoint(x: 0, y: min(maxY, max(-scroll.contentInset.top, want))), animated: true)
+  }
+  func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) { if scrollView === scroll { layoutHeader() } }
   func scrollViewWillBeginDragging(_ scrollView: UIScrollView) { if let o = openCard { setOpen(o, false) } }
 
   // ---------- swipe left on a card: Copy link · Delete; swipe right: Done · Due (as in Mail: round buttons with their names

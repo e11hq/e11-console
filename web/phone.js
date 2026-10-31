@@ -2514,6 +2514,13 @@ const NativeHome = (() => {
     else if (ev.ev === 'copy' && ev.id) TaskLink.copy(ev.id);
     else if (ev.ev === 'delete' && ev.id && task(ev.id)) { if (can('deleteTask')) deleteTaskFlow(ev.id); }
     else if (ev.ev === 'attach' && ev.id && task(ev.id)) attachFiles('task', null, null, ev.source || null, ev.id);
+    // the In review box: My Tasks, waiting for the CD's review — for those who see everyone's (E11 Day), all Account
+    // Managers & Admins too; an AM sees their own as usual (Haris, 2026-10-31)
+    else if (ev.ev === 'review') {
+      ui.workF = null; ui.myTasksTab = 'todo';
+      if (Work.lead()) { const F = Work.f(); F.cd = true; if (seesAll()) F.team = true; }
+      go('mytasks');
+    }
     // swipe right: Done (as the page's own tick: not ready → why; done → toast with Undo; a done task → reopened)
     else if (ev.ev === 'done' && ev.id && task(ev.id)) {
       const t = task(ev.id);
