@@ -498,14 +498,16 @@ final class CommentBar: UIView, UITextViewDelegate, UITableViewDataSource, UITab
 }
 
 
-/* Camera · Photos · Files: three big rounded tiles in a small sheet (the comment box's +) */
+/* Attach Files: "Attach Files" over three big rounded tiles — Camera · Photos · Files — with a Liquid Glass ✕ at the top
+   right. The one attach sheet of the app (the comment box's +, a Home card held, and any to come). */
 final class AttachSheetVC: UIViewController, UISheetPresentationControllerDelegate {
   private let pick: (String) -> Void
   private let heading: String?
   var onCancel: (() -> Void)?
   // (23+, Home's long press: the card it's for, lifted over the dimmed screen while the sheet is up)
   var lifted: UIView?, liftedFrame: CGRect = .zero
-  init(light: Bool, title: String? = nil, pick: @escaping (String) -> Void) {
+  // (every attach sheet is the same: "Attach Files", a glass ✕, Camera · Photos · Files — Haris, 2026-10-31)
+  init(light: Bool, title: String? = "Attach Files", pick: @escaping (String) -> Void) {
     self.pick = pick
     self.heading = title
     super.init(nibName: nil, bundle: nil)
