@@ -563,7 +563,7 @@ final class AttachSheetVC: UIViewController, UISheetPresentationControllerDelega
   override func viewWillAppear(_ animated: Bool) {
     super.viewWillAppear(animated)
     guard let v = lifted, let pc = presentationController, let cv = pc.containerView else { return }
-    v.layer.shadowColor = UIColor.black.cgColor; v.layer.shadowOpacity = 0.5; v.layer.shadowRadius = 20; v.layer.shadowOffset = CGSize(width: 0, height: 18)
+    v.layer.shadowOpacity = 0   // (no drop shadow under the held card — Haris, 2026-10-31)
     v.alpha = 0
     // (over the dimming, under the sheet: under the sheet's own outermost view in the container)
     var top: UIView = pc.presentedView ?? view
