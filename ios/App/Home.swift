@@ -21,7 +21,10 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // the bar's own row (the small title on it): on iOS 26+ iPhone's own scroll edge effect frosts the list under it, as in Mail
   private let topBar = HomePassThrough(), topLine = UIView()
   private var edgeHook: AnyObject?
-  private let R: CGFloat = 26   // (from the right edge: Search / your photo / ✕ — Haris: they sat too close to it)
+  /* Mail's own measures (Haris, 2026-10-31, from his Mail screenshots): the bar's buttons 44 pt, 16 from the right
+     edge, 12 apart, their middle 22 under the status bar; the bar 54 under it; the small title 17 semibold with the
+     line under it 12 regular; the big title 34 bold, 16 from the left, the line under it 15 regular; system colours */
+  private let R: CGFloat = 16, BTN: CGFloat = 44
   private let sub = UILabel(), title = UILabel(), smallTitle = UILabel(), smallSub = UILabel()
   private let searchCircle = HomeGlass(), me = UIButton(type: .custom), closeCircle = HomeGlass()
   private let searchBar = HomeGlass(), field = UITextField(), lens = UIImageView()
@@ -30,7 +33,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private(set) var searching = false
   private var findTimer: Timer?, keyboardH: CGFloat = 0
   private let scroll = UIScrollView()
-  private let fab = UIButton(type: .custom)
+  private let fab = UIButton(type: .system)
   private var stats: [UIView] = []
   private var content: [UIView] = []
   private var cards: [String: HomeCard] = [:]
@@ -72,10 +75,10 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       scroll.topEdgeEffect.style = .soft
       results.topEdgeEffect.style = .soft
     }
-    sub.font = .systemFont(ofSize: 13, weight: .medium)
-    title.font = .systemFont(ofSize: 32, weight: .heavy)
+    sub.font = .systemFont(ofSize: 15)
+    title.font = .systemFont(ofSize: 34, weight: .bold)
     title.adjustsFontSizeToFitWidth = true; title.minimumScaleFactor = 0.6
-    smallTitle.font = .systemFont(ofSize: 17, weight: .bold); smallSub.font = .systemFont(ofSize: 12)
+    smallTitle.font = .systemFont(ofSize: 17, weight: .semibold); smallSub.font = .systemFont(ofSize: 12)
     smallTitle.alpha = 0; smallSub.alpha = 0
     // (the big title scrolls with the list and goes under the frosted bar; the small title is on the bar)
     // (the big date and title are the list's own first lines: they scroll with it, under the frosted edge)
@@ -109,12 +112,16 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       self.keyboardH = max(0, self.bounds.maxY - r.minY); self.setNeedsLayout()
     }
     nc.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { [weak self] _ in self?.keyboardH = 0; self?.setNeedsLayout() }
-    fab.setImage(UIImage(systemName: "plus", withConfiguration: UIImage.SymbolConfiguration(pointSize: 24, weight: .semibold)), for: .normal)
-    fab.tintColor = .white
+    // "+ New task": a Liquid Glass capsule the size of Mail's "Select" (iOS 26's own glass button; before: a grey capsule)
+    var fc: UIButton.Configuration
+    if #available(iOS 26.0, *) { fc = .glass() } else { fc = .gray(); fc.cornerStyle = .capsule }
+    fc.image = UIImage(systemName: "plus", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold))
+    fc.imagePadding = 6
+    fc.attributedTitle = AttributedString("New task", attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 17, weight: .semibold)]))
+    fc.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 18)
+    fc.baseForegroundColor = .label
+    fab.configuration = fc
     fab.accessibilityLabel = "New task"
-    fab.layer.shadowColor = UIColor(red: 106 / 255, green: 86 / 255, blue: 230 / 255, alpha: 1).cgColor
-    fab.layer.shadowOpacity = 0.5; fab.layer.shadowRadius = 14; fab.layer.shadowOffset = CGSize(width: 0, height: 10)
-    fab.layer.borderWidth = 1
     fab.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.send(["ev": "add"]) }, for: .touchUpInside)
     addSubview(fab)
     for _ in 0..<3 { let v = UIView(); v.layer.cornerRadius = 18; v.layer.borderWidth = 1; let n = UILabel(), l = UILabel(); n.tag = 1; l.tag = 2; v.addSubview(n); v.addSubview(l); scroll.addSubview(v); stats.append(v) }
@@ -131,10 +138,12 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     m = model
     L = HomeLook(model["look"] as? [String: Any])
     backgroundColor = L.bg
-    sub.text = model["date"] as? String; sub.textColor = L.sub
-    title.attributedText = NSAttributedString(string: model["title"] as? String ?? "", attributes: [.font: UIFont.systemFont(ofSize: 32, weight: .heavy), .kern: -0.64, .foregroundColor: L.h1])
-    smallTitle.text = model["title"] as? String; smallTitle.textColor = L.h1
-    smallSub.text = model["date"] as? String; smallSub.textColor = L.sub
+    // (the system's own text colours, as Mail: label for the titles, secondary label for the lines under them)
+    overrideUserInterfaceStyle = L.light ? .light : .dark
+    sub.text = model["date"] as? String; sub.textColor = .secondaryLabel
+    title.attributedText = NSAttributedString(string: model["title"] as? String ?? "", attributes: [.font: UIFont.systemFont(ofSize: 34, weight: .bold), .foregroundColor: UIColor.label])
+    smallTitle.text = model["title"] as? String; smallTitle.textColor = .label
+    smallSub.text = model["date"] as? String; smallSub.textColor = .secondaryLabel
     blur.effect = UIBlurEffect(style: L.light ? .systemUltraThinMaterialLight : .systemUltraThinMaterialDark)
     hairline.backgroundColor = L.light ? UIColor.black.withAlphaComponent(0.08) : UIColor.white.withAlphaComponent(0.08)
     topLine.backgroundColor = hairline.backgroundColor
@@ -150,7 +159,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       v.backgroundColor = L.statBg; v.layer.borderColor = L.statLine.cgColor
       v.layer.shadowOpacity = 0   // (no drop shadows on boxes or cards — Haris, 2026-10-31)
       let n = v.viewWithTag(1) as? UILabel, l = v.viewWithTag(2) as? UILabel
-      n?.text = "\(st.indices.contains(i) ? st[i] : 0)"; n?.font = .systemFont(ofSize: 24, weight: .heavy); n?.textColor = cols[i]
+      n?.text = "\(st.indices.contains(i) ? st[i] : 0)"; n?.font = .systemFont(ofSize: 34, weight: .bold); n?.textColor = cols[i]   // (as Mail's big title)
       l?.text = names[i]; l?.font = .systemFont(ofSize: 12); l?.textColor = L.statLabel
     }
     // the groups: their headers, cards (kept by task, so a change doesn't redraw the rest) and "nothing due" lines
@@ -196,12 +205,12 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     canDelete = (model["canDelete"] as? Bool) == true
     if let t = model["toast"] as? [String: Any] { toast(t) }
     fab.isHidden = (model["add"] as? Bool) != true
-    fab.backgroundColor = L.fabBg; fab.layer.borderColor = L.fabLine.cgColor
+
     setNeedsLayout(); layoutIfNeeded()
   }
   private func meChanged() {
     let p = people[meId]
-    let img = roundPic(NativeSheetVC.photo(p), initials: p?["initials"] as? String, color: NativeSheetVC.color(p?["color"]), size: 40)
+    let img = roundPic(NativeSheetVC.photo(p), initials: p?["initials"] as? String, color: NativeSheetVC.color(p?["color"]), size: 44)
     me.setImage(img, for: .normal)
   }
 
@@ -220,11 +229,11 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     layoutResults()
     // the three boxes (.ph-stats: 4 above, 6 below, 8 apart)
     var y: CGFloat = 4
-    let bw = (W - 40 - 16) / 3, bh: CGFloat = 1 + 12 + 29 + 14 + 12 + 1
+    let bw = (W - 32 - 16) / 3, bh: CGFloat = 1 + 10 + 41 + 15 + 12 + 1
     for (i, v) in stats.enumerated() {
-      v.frame = CGRect(x: 20 + CGFloat(i) * (bw + 8), y: y, width: bw, height: bh)
-      v.viewWithTag(1)?.frame = CGRect(x: 13, y: 13, width: bw - 26, height: 29)
-      v.viewWithTag(2)?.frame = CGRect(x: 13, y: 13 + 29, width: bw - 26, height: 15)
+      v.frame = CGRect(x: 16 + CGFloat(i) * (bw + 8), y: y, width: bw, height: bh)
+      v.viewWithTag(1)?.frame = CGRect(x: 13, y: 11, width: bw - 26, height: 41)
+      v.viewWithTag(2)?.frame = CGRect(x: 13, y: 11 + 41, width: bw - 26, height: 15)
     }
     y += bh + 6
     // the list (.ph-list: 16 from the sides, 10 between things; a group's title 12 lower than that)
@@ -249,37 +258,36 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     }
     scroll.contentSize = CGSize(width: W, height: y + bottomRoom)
     // the + button where the page has it
-    let fs = L.fabRect?.width ?? 60
-    if let tt = tabTop { fab.frame = CGRect(x: W - 18 - fs, y: tt - 14 - fs, width: fs, height: fs); fab.layer.cornerRadius = fs / 2 }
-    else if let r = L.fabRect { fab.frame = r; fab.layer.cornerRadius = r.height / 2 } else { fab.frame = CGRect(x: W - 18 - 60, y: H - 170, width: 60, height: 60); fab.layer.cornerRadius = 30 }
+    // "+ New task": 44 tall like Mail's buttons, 16 from the right, 14 above the tab bar
+    let fw = ceil(fab.sizeThatFits(CGSize(width: 300, height: BTN)).width)
+    fab.frame = CGRect(x: W - R - fw, y: (tabTop ?? H - 100) - 14 - BTN, width: fw, height: BTN)
   }
   func scrollToTop() { scroll.setContentOffset(CGPoint(x: 0, y: -scroll.contentInset.top), animated: true) }
   func scrollViewDidScroll(_ scrollView: UIScrollView) { if scrollView === scroll { layoutHeader() } }
 
   // ---------- the header (as Mail): the big title scrolls with the list, under a frosted bar that comes as it goes ----------
-  private var bigHead: CGFloat { L.headH ?? (safeAreaInsets.top + 18 + 55 + 12) }
+  // (where the list's boxes start: under the big title and its line, 18 below them — as Mail's filters)
+  private var bigHead: CGFloat { safeAreaInsets.top + 66 + 41 + 1 + 19 + 18 - 4 }
   // (the bar's row: its middle 28 under the status bar, 14 of room under the 46 pt buttons — Haris: they sat on its edge)
-  private var smallHead: CGFloat { safeAreaInsets.top + 28 + 23 + 14 }
+  private var smallHead: CGFloat { safeAreaInsets.top + 54 }
   private func ease(_ a: CGFloat, _ b: CGFloat, _ t: CGFloat) -> CGFloat { let x = min(1, max(0, (t - a) / (b - a))); return x * x * (3 - 2 * x) }
   // (how far the list has scrolled)
   private var scrolled: CGFloat { scroll.contentOffset.y + scroll.contentInset.top }
   // (0 big … 1 small: once the big title has gone under the bar)
   private var shrink: CGFloat {
     // (the big title starts in the bar's own row: the small one comes as the big one rises out of it)
-    return ease(18, 46, scrolled)
+    return ease(14, 50, scrolled)
   }
   private func layoutHeader() {
     let W = bounds.width
     let bigH = bigHead, smallH = smallHead, top = safeAreaInsets.top
     let s = scrolled
-    let subH = ceil(sub.font.lineHeight), tH: CGFloat = 37
-    let blockH = subH + 2 + tH
-    let by = bigH - 12 - blockH
+    let titleY = top + 66   // (the big title's top, as Mail's)
     // the bar's frost: iPhone's own scroll edge effect under the bar's row (iOS 26+), there once the list moves under it;
     // before iOS 26 a thin see-through blur that softens out at its lower edge
     topBar.frame = CGRect(x: 0, y: 0, width: W, height: smallH)
     // (it comes gradually while the three boxes pass under the bar — Haris, 2026-10-31)
-    let boxes0 = bigH + 4 - smallH, boxes1 = boxes0 + 70
+    let boxes0 = bigH + 4 - smallH, boxes1 = boxes0 + 82
     let frost = searching ? 1 : ease(boxes0, boxes1, s)
     if #available(iOS 26.0, *) {
       if let i = edgeHook as? UIScrollEdgeElementContainerInteraction { let want: UIScrollView = searching ? results : scroll; if i.scrollView !== want { i.scrollView = want } }
@@ -298,26 +306,27 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     }
     scroll.verticalScrollIndicatorInsets = UIEdgeInsets(top: smallH - bigH, left: 0, bottom: bottomRoom - 20, right: 0)
     // the big date and title: the list's own first lines (above its top, in the room it keeps for them)
-    let tw = W - 20 - 40 - 10 - 46 - 10 - R
-    sub.frame = CGRect(x: 20, y: by - bigH, width: tw, height: subH)
-    title.frame = CGRect(x: 20, y: by + subH + 2 - bigH, width: tw, height: tH)
+    let tw = W - 16 - R
+    title.frame = CGRect(x: 16, y: titleY - bigH, width: tw, height: 41)
+    sub.frame = CGRect(x: 16, y: titleY + 41 + 1 - bigH, width: tw, height: 19)
     let bigA: CGFloat = searching ? 0 : 1
     sub.alpha = bigA; title.alpha = bigA
     // the small title and date on the bar, fading in as the big ones go under it
-    let smallCY = top + 28
+    let smallCY = top + 22
     let k = searching ? 0 : shrink
-    smallTitle.frame = CGRect(x: 20, y: smallCY - 19, width: tw, height: 21); smallSub.frame = CGRect(x: 20, y: smallCY + 2, width: tw, height: 15)
+    let stw = W - 16 - R - BTN - 12 - BTN - 12
+    smallTitle.frame = CGRect(x: 16, y: top + 1, width: stw, height: 21); smallSub.frame = CGRect(x: 16, y: top + 25, width: stw, height: 15)
     smallTitle.alpha = k; smallSub.alpha = k
     // Search and your photo: with the title until they reach the bar, then they stay on it
     // (Search and your photo stay on the bar's row from the start — they don't move with the list — Haris, 2026-10-31)
     let cy = smallCY
     if !searching {
-      me.bounds = CGRect(x: 0, y: 0, width: 40, height: 40); me.center = CGPoint(x: W - R - 20, y: cy); me.layer.cornerRadius = 20
-      searchCircle.frame = CGRect(x: W - R - 40 - 10 - 46, y: cy - 23, width: 46, height: 46)
+      me.bounds = CGRect(x: 0, y: 0, width: BTN, height: BTN); me.center = CGPoint(x: W - R - BTN / 2, y: cy); me.layer.cornerRadius = BTN / 2
+      searchCircle.frame = CGRect(x: W - R - BTN - 12 - BTN, y: cy - BTN / 2, width: BTN, height: BTN)
     } else {
       // (the bar in the row the buttons are in; the ✕ where your photo was)
-      searchBar.frame = CGRect(x: 20, y: cy - 23, width: W - 20 - 46 - 10 - R, height: 46)
-      closeCircle.frame = CGRect(x: W - R - 46, y: cy - 23, width: 46, height: 46)
+      searchBar.frame = CGRect(x: 16, y: cy - BTN / 2, width: W - 16 - BTN - 12 - R, height: BTN)
+      closeCircle.frame = CGRect(x: W - R - BTN, y: cy - BTN / 2, width: BTN, height: BTN)
     }
     lens.frame = CGRect(x: 12, y: 0, width: 22, height: searchBar.bounds.height)
     field.frame = CGRect(x: 40, y: 0, width: max(0, searchBar.bounds.width - 40 - 10), height: searchBar.bounds.height)
@@ -340,7 +349,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     field.text = ""; showResults(nil)
     UIView.animate(withDuration: 0.55, delay: 0, usingSpringWithDamping: 0.8, initialSpringVelocity: 0.4, options: [.allowUserInteraction]) {
       self.layoutHeader()
-      self.searchBar.layer.cornerRadius = 23
+      self.searchBar.layer.cornerRadius = self.BTN / 2
       self.me.alpha = 0; self.me.transform = CGAffineTransform(scaleX: 0.6, y: 0.6)
       self.closeCircle.alpha = 1; self.closeCircle.transform = .identity
       self.scroll.alpha = 0; self.results.alpha = 1; self.fab.alpha = 0

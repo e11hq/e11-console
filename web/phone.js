@@ -2478,7 +2478,8 @@ const NativeHome = (() => {
       show: true,
       title: Work.dayTitle(), date: new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }),
       me: currentUserId, stats: [due.length, overdue.length, review],
-      groups: [grp('Overdue', overdue), grp('Today', due, { empty: overdue.length ? 'Nothing else due today' : 'Nothing due today 🎉' }), grp('In progress', going), grp('Completed today', done, { status: false })].filter(Boolean),
+      // (the app's Home: Today first, then In progress, then Overdue — Haris, 2026-10-31; Completed today stays at the end)
+      groups: [grp('Today', due, { empty: 'Nothing due today 🎉' }), grp('In progress', going), grp('Overdue', overdue), grp('Completed today', done, { status: false })].filter(Boolean),
       add: typeof can === 'function' && can('createTask'),
       canDelete: typeof can === 'function' && can('deleteTask'),
       look: look(),
