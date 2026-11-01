@@ -162,7 +162,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     smallSub.text = model["date"] as? String; smallSub.textColor = .secondaryLabel
     blur.effect = UIBlurEffect(style: L.light ? .systemUltraThinMaterialLight : .systemUltraThinMaterialDark)
     hairline.backgroundColor = L.light ? UIColor.black.withAlphaComponent(0.08) : UIColor.white.withAlphaComponent(0.08)
-    topLine.backgroundColor = hairline.backgroundColor
+    topLine.backgroundColor = L.light ? UIColor.black.withAlphaComponent(0.12) : UIColor.white.withAlphaComponent(0.12)
     [searchCircle, closeCircle, searchBar].forEach { $0.setLook(light: L.light, tint: L.roundIc) }
     lens.tintColor = L.sub; field.textColor = L.h1; field.tintColor = L.tag
     field.attributedPlaceholder = NSAttributedString(string: "Search tasks, clients, people", attributes: [.foregroundColor: L.sub])
@@ -444,8 +444,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // is driven frame by frame, so a quick turn back reverses it from wherever it is.
   private var barIn = false
   private var shrink: CGFloat { barIn ? 1 : 0 }
-  // (once the big title and its line have gone up under the bar)
-  private var pastBig: Bool { scrolled > 66 + 41 + 1 + 19 }
+  // (once the big title and its line have gone up behind the bar — the line's foot past the bar's lower edge; Haris,
+  //  2026-11-01: waiting till they'd left the screen felt late)
+  private var pastBig: Bool { scrolled > 66 + 41 + 1 + 19 - 54 }
   private var fades: [ObjectIdentifier: HomeBlurFade] = [:]
   private func fade(_ l: UILabel) -> HomeBlurFade {
     if let f = fades[ObjectIdentifier(l)] { return f }
@@ -454,8 +455,10 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private func easeOut(_ x: CGFloat) -> CGFloat { let t = min(1, max(0, x)); return 1 - pow(1 - t, 3) }
   // each piece: 0 hidden … 1 shown; (delay, duration) in seconds, coming in and going out
   private var pT: CGFloat = 0, pS: CGFloat = 0, pB: CGFloat = 1   // small title, small line, big line
-  private let inT = (0.0, 0.07), inS = (0.05, 0.07)
+  // (Mail's, frame by frame: in — the title over ~5 frames, its line from the 3rd; out — the line over 4, the title over 9)
+  private let inT = (0.0, 0.1), inS = (0.05, 0.1)
   private let outS = (0.0, 0.067), outT = (0.017, 0.15), outB = (0.167, 0.067)
+  private var lineK: CGFloat = 0   // the line under the bar: fades in with the title (0.1 s), gone at once going back
   private var barLink: CADisplayLink?, barT0: CFTimeInterval = 0, barLast: CFTimeInterval = 0
   private func applyBar() {
     let tr = traitCollection
@@ -467,17 +470,20 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // coming in: eased out (quick, then settling); going out: the blur builds first, the fade follows
     func show(_ l: UILabel, _ p: CGFloat, rise: CGFloat) {
       if barIn {
-        let e = easeOut(p)
-        fade(l).set(blur: 8 * (1 - e), alpha: min(1, e * 1.25), dy: rise * (1 - e), trait: tr)
+        // (comes up and sharpens over the whole time; see-through to solid in the first 60 %)
+        fade(l).set(blur: 8 * pow(1 - p, 1.5), alpha: ease(0, 0.6, p), dy: rise * (1 - easeOut(p)), trait: tr)
       } else {
+        // (the blur builds over the first third, the fade runs the whole time, sinking a little)
         let x = 1 - p
-        fade(l).set(blur: 8 * easeOut(min(1, x * 1.6)), alpha: 1 - pow(x, 1.6), dy: rise * x, trait: tr)
+        fade(l).set(blur: 8 * min(1, x / 0.35), alpha: 1 - x, dy: rise * x, trait: tr)
       }
     }
     show(smallTitle, pT, rise: barIn ? 6 : 5)
     show(smallSub, pS, rise: barIn ? 6 : 3)
     fade(title).set(blur: 0, alpha: 1, dy: 0, trait: tr)
     fade(sub).set(blur: 0, alpha: pB, dy: 0, trait: tr)
+    // (Mail's line under the bar: there once things are under it)
+    if #available(iOS 26.0, *) { topLine.alpha = lineK }
   }
   @objc private func barTick() {
     let now = CACurrentMediaTime(), dt = CGFloat(min(now - barLast, 1.0 / 30)); barLast = now
@@ -487,10 +493,10 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       let s = dt / CGFloat(d.1)
       p = to > p ? min(to, p + s) : max(to, p - s)
     }
-    if barIn { step(&pT, 1, inT); step(&pS, 1, inS); pB = 0 }
-    else { step(&pS, 0, outS); step(&pT, 0, outT); if pT == 0 && pS == 0 { step(&pB, 1, outB) } }
+    if barIn { step(&pT, 1, inT); step(&pS, 1, inS); pB = 0; lineK = min(1, lineK + dt / 0.1) }
+    else { lineK = 0; step(&pS, 0, outS); step(&pT, 0, outT); if pT == 0 && pS == 0 { step(&pB, 1, outB) } }
     applyBar()
-    let done = barIn ? (pT == 1 && pS == 1) : (pT == 0 && pS == 0 && pB == 1)
+    let done = barIn ? (pT == 1 && pS == 1 && lineK == 1) : (pT == 0 && pS == 0 && pB == 1)
     if done { barLink?.invalidate(); barLink = nil }
   }
   // the bar switching over (the small title and line in; the big line out) — or back
@@ -500,7 +506,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if #available(iOS 26.0, *) {} else {
       UIView.animate(withDuration: now ? 0 : 0.2) { self.blur.alpha = on ? 1 : 0 }
     }
-    if now { barLink?.invalidate(); barLink = nil; pT = on ? 1 : 0; pS = pT; pB = on ? 0 : 1; applyBar(); return }
+    if !on { lineK = 0 }
+    if now { barLink?.invalidate(); barLink = nil; pT = on ? 1 : 0; pS = pT; pB = on ? 0 : 1; lineK = pT; applyBar(); return }
     barT0 = CACurrentMediaTime(); barLast = barT0
     if barLink == nil {
       let l = CADisplayLink(target: self, selector: #selector(barTick))
@@ -539,8 +546,10 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       //  them — the soft one fades out half way down them; Apple's own advice for things pinned under a bar)
       let style: UIScrollEdgeEffect.Style = pinned ? .hard : .soft
       if scroll.topEdgeEffect.style != style { scroll.topEdgeEffect.style = style }
-      topLine.frame = CGRect(x: 0, y: barH - 0.5, width: W, height: 0.5)
-      topLine.alpha = 0
+      // (one pixel, as Mail's)
+      let px = 1 / max(1, traitCollection.displayScale)
+      topLine.frame = CGRect(x: 0, y: barH - px, width: W, height: px)
+      if searching { topLine.alpha = 0 }
     } else {
       blur.frame = CGRect(x: 0, y: 0, width: W, height: barH + 14)
       CATransaction.begin(); CATransaction.setDisableActions(true)
