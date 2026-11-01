@@ -1835,7 +1835,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       // stages after it)
       ("tpage", "const t = db.tasks.find((x) => !x.parentId && !x.done && (x.comments || []).length && (x.checklist || []).length) || db.tasks.find((x) => !x.parentId && !x.done && (x.comments || []).length) || db.tasks.find((x) => !x.parentId && !x.done); openTask(t.id); " + pause(3000) + "return JSON.stringify({ webTask: !!ui.taskId, id: t.id })", { self.presentedViewController?.dismiss(animated: false) }),
       ("tpageScrolled", pause(900) + "return '{}'", { self.taskPages.last?.scroll.setContentOffset(CGPoint(x: 0, y: 380), animated: false) }),
-      ("tpageComments", pause(5000) + "return '{}'", { self.taskPages.last?.setTab("comments", tell: true) }),
+      ("tpageSheet", pause(1500) + "return '{}'", { self.taskPages.last?.pickPeople() }),
+      ("tpageComments", pause(5000) + "return '{}'", { self.presentedViewController?.dismiss(animated: false); self.taskPages.last?.setTab("comments", tell: true) }),
       ("tpageBack", pause(1500) + "return JSON.stringify({ webTask: !!ui.taskId })", { if let p = self.taskPages.last { p.setTab("details", tell: true); self.closeTaskPage(p, animated: false) } }),
       ("task", "window.__e11WebTask = true; const t = db.tasks.find((x) => !x.parentId && !x.done && (x.comments || []).length) || db.tasks.find((x) => !x.parentId && !x.done); openTask(t.id); " + pause(1500) + "return JSON.stringify({ taskOpen: !!ui.taskId })", nil),
       ("sheet", "const m = showMenu(document.body, [{ html: '<div class=\"react-pick\">' + REACTIONS.map((e) => '<button>' + e + '</button>').join('') + '</div>' }, { label: 'Reply', icon: 'reply', run() {} }, { label: 'Edit comment', icon: 'edit', run() {} }, { label: 'Copy text', icon: 'copy', run() {} }, '-', { label: 'Delete comment', icon: 'trash', danger: true, run() {} }]); m.classList.add('cm-sheet'); " + pause(900) + geo + " const r = m.getBoundingClientRect(); return JSON.stringify({ menuTop: r.top, menuBottom: r.bottom, geo })", nil),
@@ -1907,7 +1908,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
           if name.hasPrefix("tpage") {
             let p = self.taskPages.last
             self.selfResult[name + "Native"] = ["pages": self.taskPages.count, "title": p?.model?["title"] as? String ?? "", "tab": p?.tab ?? "", "drawn": p?.model != nil,
-              "x": p?.transform.tx ?? -1, "tabBar": !self.tabBar.isHidden, "comments": self.cwebShown, "box": self.cbarIfMade.map { !$0.isHidden } ?? false, "content": p?.scroll.contentSize.height ?? 0, "corner": self.corner.kind, "cornerW": self.corner.frame.width, "cornerX": self.corner.frame.maxX] as [String: Any]
+              "x": p?.transform.tx ?? -1, "tabBar": !self.tabBar.isHidden, "comments": self.cwebShown, "box": self.cbarIfMade.map { !$0.isHidden } ?? false, "content": p?.scroll.contentSize.height ?? 0, "corner": self.corner.kind, "sheet": self.presentedViewController.map { String(describing: type(of: $0)) } ?? "", "cornerW": self.corner.frame.width, "cornerX": self.corner.frame.maxX] as [String: Any]
           }
           if name == "daily" { self.selfResult["dailyNative"] = ["sheet": self.presentedViewController.map { String(describing: type(of: $0)) } ?? ""] }
           if name.hasPrefix("ibx") {

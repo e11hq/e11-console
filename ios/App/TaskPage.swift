@@ -60,6 +60,8 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   var onOpen: ((String) -> Void)?                      // another task (a subtask, "New task from")
   var onDate: ((String, String, @escaping (String?) -> Void) -> Void)?   // which (start / due), its value → the new one
   var onComplete: (() -> Void)?
+  // iPhone's own sheet (NativeSheetVC): its args, a tick (several), the answer (a row, or -2 with what was typed)
+  var onSheet: (([String: Any], @escaping (Int) -> Void, @escaping (Int, String?) -> Void) -> Void)?
   var light = LAST_LIGHT { didSet { applyLook() } }
   private(set) var tab = "details"
 
@@ -283,7 +285,8 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       g.append(row(sym: "pencil", key: "Created by", value: personLine(cid, extra: (c["when"] as? String).map { " · " + $0 } ?? "")))
     }
     let asg = (m["assignees"] as? [[String: Any]]) ?? []
-    g.append(row(sym: "person", key: "Assignees", value: asg.isEmpty ? greyText("Nobody yet") as UIView : avatars(asg)))
+    let canAsg = (m["canAssign"] as? Bool) == true
+    g.append(row(sym: "person", key: "Assignees", value: asg.isEmpty ? greyText(canAsg ? "Add" : "Nobody yet") as UIView : avatars(asg), chevron: canAsg, tap: canAsg ? { [weak self] in self?.pickPeople() } : nil))
     if let p = m["parts"] as? [String: Any] { g.append(partsRow(p)) }
     if let d = m["dates"] as? [String: Any] { g.append(datesRow(d)) }
     if let pr = m["prio"] as? [[String: Any]] { g.append(contentsOf: prioRows(pr, can: (m["canPrio"] as? Bool) == true)) }
@@ -296,10 +299,14 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       g.append(row(sym: "square.grid.2x2", key: "Client", value: v))
     }
     let tags = (m["tags"] as? [[String: Any]]) ?? []
-    if !tags.isEmpty { g.append(row(sym: "tag", key: "Tags", value: chips(tags.map { ($0["t"] as? String ?? "", TaskPage.rgb($0["rgb"])) }))) }
+    let canTags = (m["canTags"] as? Bool) == true
+    if !tags.isEmpty || canTags { g.append(row(sym: "tag", key: "Tags", value: tags.isEmpty ? greyText("Add") as UIView : chips(tags.map { ($0["t"] as? String ?? "", TaskPage.rgb($0["rgb"])) }), chevron: canTags, tap: canTags ? { [weak self] in self?.pickTags() } : nil)) }
     let ch = (m["channels"] as? [String]) ?? []
-    if !ch.isEmpty { g.append(row(sym: "paperplane", key: "Channels", value: label(ch.joined(separator: " · "), size: 17, color: .secondaryLabel))) }
-    if let gd = m["guardian"] as? String { g.append(row(sym: "star", key: "Guardian", value: personLine(gd, extra: ""))) }
+    let canCh = (m["canChannels"] as? Bool) == true
+    if !ch.isEmpty || canCh { g.append(row(sym: "paperplane", key: "Channels", value: label(ch.isEmpty ? "None" : ch.joined(separator: " · "), size: 17, color: .secondaryLabel), chevron: canCh, tap: canCh ? { [weak self] in self?.pickChannels() } : nil)) }
+    let canGd = (m["canGuardian"] as? Bool) == true
+    if let gd = m["guardian"] as? String { g.append(row(sym: "star", key: "Guardian", value: personLine(gd, extra: ""), chevron: canGd, tap: canGd ? { [weak self] in self?.pickGuardian() } : nil)) }
+    else if canGd { g.append(row(sym: "star", key: "Guardian", value: greyText("None"), chevron: true, tap: { [weak self] in self?.pickGuardian() })) }
     blocks.append(group(g))
     // ---- Review ----
     var r: [UIView] = []
@@ -327,9 +334,12 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     }
     // ---- Checklist ----
     let cl = (m["checklist"] as? [[String: Any]]) ?? []
-    if !cl.isEmpty {
-      blocks.append(header("Checklist · \(cl.filter { ($0["done"] as? Bool) == true }.count)/\(cl.count)"))
-      blocks.append(group(cl.map { checkRow($0, can: (m["canCheck"] as? Bool) == true) }))
+    let canAddCheck = (m["canAddCheck"] as? Bool) == true
+    if !cl.isEmpty || canAddCheck {
+      blocks.append(header(cl.isEmpty ? "Checklist" : "Checklist · \(cl.filter { ($0["done"] as? Bool) == true }.count)/\(cl.count)"))
+      var rows = cl.map { checkRow($0, can: (m["canCheck"] as? Bool) == true) }
+      if canAddCheck { rows.append(addRow("Add checklist item") { [weak self] in self?.askText("Add checklist item", placeholder: "Item") { v in guard let self = self else { return }; self.onAct?(["act": "addCheck", "id": self.taskId, "value": v]) } }) }
+      blocks.append(group(rows))
     }
     // ---- Files ----
     let files = (m["files"] as? [[String: Any]]) ?? []
@@ -718,6 +728,87 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       }
     }
     return r
+  }
+
+  // ---------- the sheets: people, tags, channels; a line of text ----------
+  private func addRow(_ t: String, tap: @escaping () -> Void) -> UIView {
+    let r = TaskRow()
+    let h = UIStackView(arrangedSubviews: [symbol("plus.circle.fill", 20, .systemBlue), label(t, size: 17, color: .systemBlue)]); h.spacing = 12; h.alignment = .center
+    h.translatesAutoresizingMaskIntoConstraints = false; r.addSubview(h)
+    NSLayoutConstraint.activate([h.leadingAnchor.constraint(equalTo: r.leadingAnchor, constant: 15), h.trailingAnchor.constraint(lessThanOrEqualTo: r.trailingAnchor, constant: -16), h.topAnchor.constraint(equalTo: r.topAnchor, constant: 13), h.bottomAnchor.constraint(equalTo: r.bottomAnchor, constant: -13)])
+    r.onTap = tap
+    return r
+  }
+  func askText(_ title: String, placeholder: String, value: String = "", _ done: @escaping (String) -> Void) {
+    let a = UIAlertController(title: title, message: nil, preferredStyle: .alert)
+    a.addTextField { f in f.placeholder = placeholder; f.text = value; f.autocapitalizationType = .sentences; f.returnKeyType = .done }
+    a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+    a.addAction(UIAlertAction(title: "Add", style: .default) { [weak a] _ in let v = (a?.textFields?.first?.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines); if !v.isEmpty { done(v) } })
+    present(a)
+  }
+  private func personArg(_ p: [String: Any]) -> [String: Any] {
+    let id = p["id"] as? String ?? ""
+    var o: [String: Any] = ["initials": p["initials"] as? String ?? "?"]
+    if let c = p["color"] { o["color"] = c }
+    if let ph = people[id]?["photo"] as? String, ph.hasPrefix("data:") { o["photo"] = ph }
+    return o
+  }
+  // Assignees: everyone who may be assigned, those on it ticked; each tick saves at once (as the website's sheet)
+  func pickPeople() {
+    guard let pool = model?["pool"] as? [[String: Any]], !pool.isEmpty else { return }
+    var on = pool.map { ($0["on"] as? Bool) == true }
+    let rows: [[String: Any]] = pool.enumerated().map { i, p in ["i": i, "label": (p["id"] as? String) == (model?["me"] as? String) ? "Me" : (p["name"] as? String ?? ""), "sub": p["role"] as? String ?? "", "person": personArg(p), "checked": on[i], "multi": true, "find": (p["name"] as? String ?? "") + " " + (p["role"] as? String ?? "")] }
+    onSheet?(["sections": [["header": "Assignees", "rows": rows]], "multi": true, "search": "Search people"], { [weak self] i in
+      guard let self = self, i >= 0, i < pool.count, let id = pool[i]["id"] as? String else { return }
+      on[i].toggle()
+      UISelectionFeedbackGenerator().selectionChanged()
+      self.onAct?(["act": "assign", "id": self.taskId, "key": id, "value": on[i]])
+    }, { _, _ in })
+  }
+  func pickGuardian() {
+    guard let pool = model?["pool"] as? [[String: Any]] else { return }
+    let cur = model?["guardian"] as? String
+    var rows: [[String: Any]] = pool.enumerated().map { i, p in ["i": i, "label": p["name"] as? String ?? "", "sub": p["role"] as? String ?? "", "person": personArg(p), "checked": (p["id"] as? String) == cur, "find": p["name"] as? String ?? ""] }
+    if cur != nil { rows.append(["i": 999, "label": "No Guardian", "icon": "x"]) }
+    onSheet?(["sections": [["header": "Guardian", "rows": rows]], "search": "Search people"], { _ in }, { [weak self] i, _ in
+      guard let self = self, i >= 0 else { return }
+      var v: Any = NSNull()
+      if i != 999, i < pool.count, let id = pool[i]["id"] as? String { v = id }
+      self.onAct?(["act": "guardian", "id": self.taskId, "value": v])
+    })
+  }
+  // Tags: this task's (ticked — untick to remove), then the ones used most; type to add a new one
+  func pickTags() {
+    guard let m = model else { return }
+    let mine = ((m["tags"] as? [[String: Any]]) ?? []).compactMap { $0["t"] as? String }
+    let others = ((m["allTags"] as? [String]) ?? []).filter { t in !mine.contains { $0.lowercased() == t.lowercased() } }
+    let list = mine + others
+    var on = list.map { mine.contains($0) }
+    let canRemove = (m["canRemoveTag"] as? Bool) == true
+    let row = { (i: Int, t: String) -> [String: Any] in ["i": i, "label": t, "checked": on[i], "multi": true, "icon": "tag", "disabled": on[i] && !canRemove] }
+    var secs: [[String: Any]] = []
+    if !mine.isEmpty { secs.append(["header": "On this task", "rows": mine.enumerated().map { row($0.offset, $0.element) }]) }
+    if !others.isEmpty { secs.append(["header": "Used most", "rows": others.enumerated().map { row(mine.count + $0.offset, $0.element) }]) }
+    onSheet?(["sections": secs, "multi": true, "search": "Search or add a tag", "custom": "Add “%@”"], { [weak self] i in
+      guard let self = self, i >= 0, i < list.count else { return }
+      on[i].toggle()
+      UISelectionFeedbackGenerator().selectionChanged()
+      self.onAct?(["act": on[i] ? "addTag" : "removeTag", "id": self.taskId, "value": list[i]])
+    }, { [weak self] i, typed in
+      guard let self = self, i == -2, let v = typed?.trimmingCharacters(in: .whitespacesAndNewlines), !v.isEmpty else { return }
+      self.onAct?(["act": "addTag", "id": self.taskId, "value": v])
+    })
+  }
+  func pickChannels() {
+    guard let m = model, let all = m["allChannels"] as? [[String: Any]] else { return }
+    var keys = (m["channelKeys"] as? [String]) ?? []
+    let rows: [[String: Any]] = all.enumerated().map { i, c in ["i": i, "label": c["n"] as? String ?? "", "checked": keys.contains(c["k"] as? String ?? ""), "multi": true, "icon": "send"] }
+    onSheet?(["sections": [["header": "Channels", "rows": rows]], "multi": true], { [weak self] i in
+      guard let self = self, i >= 0, i < all.count, let k = all[i]["k"] as? String else { return }
+      if let j = keys.firstIndex(of: k) { keys.remove(at: j) } else { keys.append(k) }
+      UISelectionFeedbackGenerator().selectionChanged()
+      self.onAct?(["act": "channels", "id": self.taskId, "value": keys])
+    }, { _, _ in })
   }
 
   // ---------- the title, edited in place ----------

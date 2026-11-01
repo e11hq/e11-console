@@ -122,7 +122,7 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
       const r = rules.deleteTask(t);
       undo = r.item.id;
       messages = ['Moved to the Trash'];
-    } else if (['title', 'start', 'status', 'myPart', 'prio', 'check', 'needsCD', 'update', 'clientApproval'].includes(a)) {
+    } else if (['title', 'start', 'status', 'myPart', 'prio', 'check', 'needsCD', 'update', 'clientApproval', 'assign', 'guardian', 'addTag', 'removeTag', 'channels', 'addCheck'].includes(a)) {
       // the native task page's (shell 30+) — each checked as the website checks it
       if (rules.amReadOnly(t) || rules.doneLocked(t)) return view();
       let r = [];
@@ -139,6 +139,12 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
       else if (a === 'check') r = rules.toggleCheck(t, String(body.value || ''));
       else if (a === 'needsCD') r = rules.setNeedsCD(t, !!body.value);
       else if (a === 'update') { if (t.parentId) return fail(400, 'Not on a subtask'); r = rules.setUpdate(t, body.value ? String(body.value) : null); }
+      else if (a === 'assign') { if (!rules.can('assign', t)) return fail(403, 'Your role doesn’t allow assigning'); r = rules.setAssignee(t, String(body.key || ''), !!body.value); }
+      else if (a === 'guardian') { if (!rules.can('assign', t) || t.parentId) return fail(403, 'Your role doesn’t allow this'); r = rules.setGuardian(t, body.value ? String(body.value) : null); }
+      else if (a === 'addTag') { if (!rules.can('addTag', t)) return fail(403, 'Your role doesn’t allow adding tags'); r = rules.addTag(t, body.value); }
+      else if (a === 'removeTag') { if (!rules.can('removeTag', t)) return fail(403, 'Your role doesn’t allow removing tags'); r = rules.removeTag(t, String(body.value || '')); }
+      else if (a === 'channels') { const u0 = (data.users || []).find((x) => x.id === u.id); if (!u0 || !(u0.role === 'admin' || u0.admin === true || u0.role === 'am' || u0.role === 'social') || t.parentId) return fail(403, 'Your role doesn’t allow this'); r = rules.setChannels(t, Array.isArray(body.value) ? body.value : []); }
+      else if (a === 'addCheck') { if (!rules.can('addChecklist', t)) return fail(403, 'Your role doesn’t allow adding checklist items'); r = rules.addCheck(t, body.value); }
       else if (a === 'clientApproval') {
         const ca = (rules.taskPage(t.id) || {}).clientApproval;
         if (!ca || !ca.canSet) return fail(403, 'Your role doesn’t allow this');

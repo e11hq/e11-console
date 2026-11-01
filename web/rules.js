@@ -623,7 +623,8 @@ var E11Rules = (() => {
           if (k !== '_') person(k);
           return { key: k, name: k === '_' ? '' : firstName(k), v: v === 'none' ? '' : String(v), label: v === 'urgent' ? 'Urgent' : v === 'none' ? '' : String(v) };
         }), canPrio: !ro && can('editPriority', t),
-        tags: (t.tags || []).map((g) => ({ t: g, rgb: tagRgb(g) })), canTags: !ro && can('addTag', t),
+        tags: (t.tags || []).map((g) => ({ t: g, rgb: tagRgb(g) })), canTags: !ro && can('addTag', t), canRemoveTag: !ro && can('removeTag', t), allTags: !ro && can('addTag', t) ? allTags() : [],
+        pool: !ro && can('assign', t) ? assignPool(t) : [], channelKeys: t.channels || [], canChannels: !ro && !t.parentId && !!u && (isAdm(u) || u.role === 'am' || u.role === 'social'), canGuardian: !ro && !t.parentId && can('assign', t), allChannels: Object.entries(CHANNEL_NAMES).map(([k, n]) => ({ k, n })),
         channels: (t.channels || []).map((c) => CHANNEL_NAMES[c] || c),
         guardian: t.guardian && userById(t.guardian) ? person(t.guardian) : null,
         update: t.update ? { t: t.update, rgb: updateRgb(t.update) } : null, updates: UPDATES,
@@ -642,6 +643,94 @@ var E11Rules = (() => {
       };
       m.people = Object.fromEntries([...pp].filter(Boolean).map((pid) => { const x = userById(pid); return [pid, { name: fullName(x) || 'Someone', first: firstName(pid), initials: initials(fullName(x) || '?'), color: rgbOf(avColor(pid || 'x')), photo: x && x.avatar ? x.avatar : null }]; }));
       return m;
+    }
+    // ---------- step 1b: assignees, guardian, tags, channels, checklist items (as app.js does them) ----------
+    const ASSIGNABLE = new Set(['production', 'social', 'freelancer']);
+    const assignable = (x) => !!x && x.active !== false && (ASSIGNABLE.has(x.role) || x.id === cdUserId());
+    const struck = (v) => `<span class="chg-old">${esc(trunc(v, 80))}</span>`;
+    // who may be picked (the people sheet): those assigned first, then everyone else who may be assigned
+    function assignPool(t) {
+      const ids = t.assignees || [];
+      const others = users.filter((x) => assignable(x) && !ids.includes(x.id)).sort((a, b) => fullName(a).localeCompare(fullName(b)));
+      return ids.map(userById).filter(Boolean).concat(others).map((x) => ({ id: x.id, name: fullName(x), role: x.id === cdUserId() ? 'Creative Director' : ({ production: 'Production', social: 'Social', freelancer: 'Freelancer' })[x.role] || '', on: ids.includes(x.id), photo: x.avatar || null, initials: initials(fullName(x) || '?'), color: rgbOf(avColor(x.id)) }));
+    }
+    function syncCDOf(t) {
+      if (!needsCD(t)) return;
+      const rv = reviewersOf(t);
+      if (!rv.length) return;
+      const st = rv.map((x) => reviewState(t, x)), prev = t.cdStatus || '';
+      t.cdStatus = st.includes('pending') ? 'review' : st.every((x) => x === 'approved') ? 'approved' : '';
+      if (prev === t.cdStatus) return;
+      if (prev && t.cdStatus) logChange(t, 'the <b>CD Status</b>', CD[prev].label, CD[t.cdStatus].label);
+      else if (t.cdStatus) logActivity(t, `CD Status is now <b>${esc(CD[t.cdStatus].label)}</b>`);
+      else logActivity(t, `CD Status cleared ${struck(CD[prev].label)}`);
+    }
+    function setAssignee(t, uid, on) {
+      const x = userById(uid);
+      if (on && !assignable(x)) return { error: 'Only Production, Social, Freelancers and the CD can be assigned' };
+      if (on && uid === cdUserId() && t.cdRule && needsCD(t)) return { error: 'Turn off “Needs CD review” to assign the CD' };
+      const has = (t.assignees || []).includes(uid);
+      if (!!on === has) return [];
+      if (on) {
+        t.assignees = (t.assignees || []).concat(uid);
+        t.prio = t.prio || {};
+        if (t.prio._ != null) { const v = normPrio(t.prio._); delete t.prio._; if (!(typeof v === 'number' && prioTakenBy(v, dayKey(t), uid, t.id))) t.prio[uid] = v; }
+        logActivity(t, `assigned <b>${esc(fullName(x))}</b>`);
+        pushNotif(uid, t, 'assigned', 'assigned you to');
+      } else {
+        t.assignees = t.assignees.filter((y) => y !== uid);
+        if (t.prio) delete t.prio[uid];
+        if (t.partsDone) delete t.partsDone[uid];
+        (t.reviews || []).forEach((r) => { if (r.by === uid && r.state === 'pending') r.state = 'withdrawn'; });
+        logActivity(t, `unassigned ${struck(fullName(x))}`);
+        pushNotif(uid, t, 'unassigned', 'removed you from');
+      }
+      syncCDOf(t);
+      t.updatedAt = nowISO();
+      return [];
+    }
+    function setGuardian(t, v) {
+      v = v || null;
+      if (v && !userById(v)) return { error: 'That person is no longer here' };
+      const old = t.guardian || null;
+      if (old === v) return [];
+      t.guardian = v;
+      logChange(t, 'the <b>Guardian</b>', old ? fullName(userById(old)) : '', v ? fullName(userById(v)) : '');
+      if (v) pushNotif(v, t, 'assigned', 'made you the Guardian of');
+      t.updatedAt = nowISO();
+      return [];
+    }
+    function addTag(t, v) {
+      v = String(v || '').trim().replace(/,$/, '').slice(0, 40);
+      if (!v) return [];
+      t.tags = t.tags || [];
+      if (!t.tags.some((g) => g.toLowerCase() === v.toLowerCase())) { t.tags.push(v); logActivity(t, `added tag <b>${esc(v)}</b>`); t.updatedAt = nowISO(); }
+      return [];
+    }
+    function removeTag(t, v) {
+      const i = (t.tags || []).indexOf(v);
+      if (i < 0) return [];
+      logActivity(t, `removed tag ${struck(v)}`);
+      t.tags.splice(i, 1); t.updatedAt = nowISO();
+      return [];
+    }
+    const allTags = () => { const n = {}; tasks.forEach((x) => (x.tags || []).forEach((g) => { n[g] = (n[g] || 0) + 1; })); return Object.keys(n).sort((a, b) => n[b] - n[a] || a.localeCompare(b)).slice(0, 60); };
+    function setChannels(t, v) {
+      v = [...new Set((v || []).map(String).filter((k) => CHANNEL_NAMES[k]))];
+      const names = (ks) => (ks || []).map((k) => CHANNEL_NAMES[k] || k).join(', ');
+      if (names(t.channels) === names(v)) return [];
+      logChange(t, 'the <b>channels</b>', names(t.channels), names(v));
+      t.channels = v; t.updatedAt = nowISO();
+      return [];
+    }
+    function addCheck(t, text) {
+      text = String(text || '').trim().slice(0, 300);
+      if (!text) return [];
+      t.checklist = t.checklist || [];
+      t.checklist.push({ id: newId(), text, done: false });
+      logActivity(t, `added checklist item <b>${esc(text)}</b>`);
+      t.updatedAt = nowISO();
+      return [];
     }
     // ---------- the native task page's changes (POST /api/task/act) → messages, or { error } / { need } ----------
     function setTitle(t, v) {
@@ -764,7 +853,8 @@ var E11Rules = (() => {
 
     return { home, myTasks, myTasksFilters, inbox, inboxRow, myDayData, cardOf, can, amReadOnly, canComplete, completeBlocked, dayTitle, statusInfo, sectionOf,
       notifGroups: NOTIF_GROUPS, doneLocked, canReopen, finish, finishBlocked, canFinish, moveToStatus, logActivity, logChange, pushNotif, notifyWatchers, checkPrioConflict, setDone, setDue, setClientApproval, asksClientApproval, deleteTask, watchersOf, creatorOf, clientAmsOf, fmtDue,
-      taskPage, setTitle, setStart, setStatus, setMyPart, setPrio, prioTaken, toggleCheck, setNeedsCD, setUpdate, idLocked };
+      taskPage, setTitle, setStart, setStatus, setMyPart, setPrio, prioTaken, toggleCheck, setNeedsCD, setUpdate, idLocked,
+      setAssignee, setGuardian, addTag, removeTag, setChannels, addCheck };
   }
 
   // (the clock and new ids for the actions: the website's own, or the server's)

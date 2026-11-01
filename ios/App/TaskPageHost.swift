@@ -151,6 +151,10 @@ extension Main {
       if (c["ok"] as? Bool) != true { p.toast(c["why"] as? String ?? "Not ready yet"); return }
       self.taskAct(p, ["act": "done", "id": p.taskId])
     }
+    p.onSheet = { [weak self] args, pick, answer in
+      guard let self = self, let host = self.sheetHost() else { return }
+      host.present(NativeSheetVC(args, dark: self.statusStyle != .darkContent, pick: pick, answer: answer), animated: true)
+    }
     p.onDate = { [weak self] which, value, answer in
       guard let self = self, let host = self.sheetHost() else { return }
       host.present(DateSheetVC(["value": value, "min": "", "max": "", "clearable": !value.isEmpty, "md": false], dark: self.statusStyle != .darkContent) { r in

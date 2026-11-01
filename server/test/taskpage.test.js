@@ -99,6 +99,32 @@ test('my part, priority, checklist, title, start, Task Update', async () => {
   assert.equal(r.ok, false, 'a completed task is read only');
 });
 
+test('assignees, guardian, tags, channels, checklist items', async () => {
+  let r = await act('am@e11-digital.com', { act: 'assign', id: 't2', key: 'u-prod2', value: true });
+  assert.equal(r.ok, true); assert.deepEqual(T('t2').assignees, ['u-prod', 'u-prod2']);
+  assert.ok(r.task.pool.some((p) => p.id === 'u-prod2' && p.on));
+  r = await act('am@e11-digital.com', { act: 'assign', id: 't2', key: 'u-am', value: true });
+  assert.equal(r.ok, false, 'an AM can\'t be assigned');
+  r = await act('am@e11-digital.com', { act: 'assign', id: 't2', key: 'u-prod2', value: false });
+  assert.deepEqual(T('t2').assignees, ['u-prod']);
+  r = await act('prod@e11-digital.com', { act: 'assign', id: 't2', key: 'u-prod2', value: true });
+  assert.equal(r.ok, false, 'production can\'t assign');
+  r = await act('am@e11-digital.com', { act: 'guardian', id: 't2', value: 'u-prod' });
+  assert.equal(T('t2').guardian, 'u-prod');
+  r = await act('am@e11-digital.com', { act: 'addTag', id: 't2', value: 'Urgent print' });
+  assert.deepEqual(T('t2').tags, ['Urgent print']);
+  r = await act('am@e11-digital.com', { act: 'removeTag', id: 't2', value: 'Urgent print' });
+  assert.deepEqual(T('t2').tags, []);
+  r = await act('am@e11-digital.com', { act: 'channels', id: 't2', value: ['ig', 'tt', 'nope'] });
+  assert.deepEqual(T('t2').channels, ['ig', 'tt']); assert.deepEqual(r.task.channels, ['Instagram', 'TikTok']);
+  r = await act('prod@e11-digital.com', { act: 'channels', id: 't2', value: [] });
+  assert.equal(r.ok, false);
+  r = await act('prod@e11-digital.com', { act: 'addCheck', id: 't2', value: 'Bleed' });
+  assert.equal(r.ok, false, 'production can\'t add checklist items');
+  r = await act('am@e11-digital.com', { act: 'addCheck', id: 't2', value: ' Bleed ' });
+  assert.equal(T('t2').checklist.at(-1).text, 'Bleed');
+});
+
 test('the switch: off → the page asks the website again', async () => {
   app.store.kv.set('task-server', 'off');
   assert.equal((await page('am@e11-digital.com', 't1')).off, true);

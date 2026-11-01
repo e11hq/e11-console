@@ -77,6 +77,7 @@ try:
     tp, tps, tpc, tpb = res.get('tpageNative') or {}, res.get('tpageScrolledNative') or {}, res.get('tpageCommentsNative') or {}, res.get('tpageBackNative') or {}
     check(tp.get('pages') == 1 and tp.get('drawn') is True and tp.get('x') == 0 and tp.get('tabBar') is False and (res.get('tpage') or {}).get('webTask') is False, f"a task opens as the app's own page, drawn from the server, nothing of the website's under it {tp} {res.get('tpage')}")
     check(tp.get('corner') == 'more' and tpb.get('corner') != 'more', f"the corner button is the task page's ••• and back again {tp.get('corner')} → {tpb.get('corner')}")
+    check((res.get('tpageSheetNative') or {}).get('sheet') == 'NativeSheetVC', f"Assignees opens iPhone's own people sheet {res.get('tpageSheetNative')}")
     check(tps.get('content', 0) > 500, f"the task page has its rows {tps}")
     check(tpc.get('tab') == 'comments' and tpc.get('comments') is True and tpc.get('box') is True, f"its Comments tab shows the comments and the box {tpc}")
     check(tpb.get('pages') == 0 and tpb.get('tabBar') is True and (res.get('tpageBack') or {}).get('webTask') is False, f"back: the page goes, the tab bar is back {tpb}")
