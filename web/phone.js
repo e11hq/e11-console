@@ -2419,10 +2419,14 @@ const NativeHome = (() => {
     if (!Phone.on || !(ui.view === 'home' || ui.view === 'today') || ui.search || (typeof isOffice === 'function' && isOffice())) return false;
     if (ui.taskId || document.querySelector('#detail.open')) return false;
     if (document.querySelector('#ph-sheet-root .ph-scrim:not(.docked), #overlay-root .scrim, #tv-root .scrim, .menu, .lightbox, .fv')) return false;
-    return !!keptLook || !!document.querySelector('#content .ph-page .ph-stats');
+    return !!kept() || !!document.querySelector('#content .ph-page .ph-stats');
   };
   // (the colours read once from the page's own Home; after that the page draws nothing under the app's)
-  let keptLook = null;
+  // (one for light and one for dark: switching Appearance, the page draws its own Home once more to read the other's —
+  //  with one kept, Home stayed in the old colours until the app was opened again, Haris 2026-11-01)
+  const keptLooks = {};
+  const theme = () => (document.documentElement.dataset.theme === 'light' ? 'light' : 'dark');
+  const kept = () => keptLooks[theme()] || null;
   // the page's own Home's colours (drawn under the app's), so the app's match them exactly
   function look() {
     const pg = document.querySelector('#content .ph-page');
@@ -2456,8 +2460,8 @@ const NativeHome = (() => {
     if (!m) return null;
     Object.keys(m.people || {}).forEach(person);
     delete m.people;   // (the page sends the pictures apart, once loaded)
-    if (!keptLook && document.querySelector('#content .ph-page .ph-stats')) keptLook = look();
-    m.look = keptLook || look();
+    if (!kept() && document.querySelector('#content .ph-page .ph-stats')) keptLooks[theme()] = look();
+    m.look = kept() || look();
     return m;
   }
   function sync() {
@@ -2553,7 +2557,7 @@ const NativeHome = (() => {
     toastAction = action || null;
     call({ toast: { t: String(msg || ''), a: action ? action.label : '', ms: ms || (action ? 6000 : 3000) } });
   }
-  return { sync, toast: toastOut, get on() { return on; }, get shown() { return shown; }, get light() { return on && !!keptLook; } };
+  return { sync, toast: toastOut, get on() { return on; }, get shown() { return shown; }, get light() { return on && !!kept(); } };
 })();
 
 /* ---------- My Tasks drawn by the iPhone app itself (26+): the app gets its lists from the server (/api/mytasks, the
