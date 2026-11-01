@@ -976,7 +976,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         guard let self = self else { return }
         let up = path.status == .satisfied
         if up != self.netUp { self.netUp = up; if let t = self.lastTabs { self.setTabs(t) } }
-        if up { self.serverHome.send(); self.serverMyTasksIfMade?.send() }   // (anything waiting goes now)
+        if up { self.serverHome.send(); self.myTasksWaiting()?.send() }   // (anything waiting goes now)
       }
     }
     m.start(queue: DispatchQueue(label: "e11.net"))
@@ -1273,6 +1273,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if myTasksWanted && h.isHidden { h.isHidden = false }
   }
   var myTasksWanted = false
+  // (My Tasks' actions still waiting from before the app was closed go even if My Tasks isn't opened)
+  func myTasksWaiting() -> ServerHome? { serverMyTasksIfMade ?? (defaults.data(forKey: "e11HomeQueue-mytasks").map { $0.count > 2 } == true ? serverMyTasks : nil) }
   func myTasksCommand(_ a: [String: Any]) {
     guard let show = a["show"] as? Bool else { return }
     if !show { myTasksWanted = false; myTasksIfMade?.endEditing(true); myTasksIfMade?.isHidden = true; return }
@@ -1285,7 +1287,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let s = serverMyTasks
     s.query = "tab=" + ((a["tab"] as? String) == "done" ? "done" : "all") + ((a["q"] as? String).map { $0.isEmpty ? "" : "&" + $0 } ?? "")
     h.setFilters(a)
-    if s.on, let m = s.shown { drawServerMyTasks(m) }
+    // (no list yet for this tab and these filters: the page's own shows until the server's comes — never the old one
+    //  under the new filters)
+    if s.on, let m = s.shown { drawServerMyTasks(m) } else { h.isHidden = true }
     s.refresh()
   }
 
@@ -1350,7 +1354,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     launchLock = false
     awayAt = nil
     if pageReady { serverHome.refresh() }   // (Home as it is now; anything still waiting goes)
-    if pageReady, myTasksWanted { serverMyTasksIfMade?.refresh() }
+    if pageReady, myTasksWanted { serverMyTasksIfMade?.refresh() } else if pageReady { myTasksWaiting()?.send() }
     if pageReady { pushState { st in if st == "on" { UIApplication.shared.registerForRemoteNotifications() } } }
   }
   func wentAway() { if !authing { awayAt = Date() }; if pageReady { shareSignIn() } }

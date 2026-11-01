@@ -9,7 +9,9 @@ import UIKit
 final class ServerHome {
   // "home" (/api/home) or "mytasks" (/api/mytasks?<query> — the filters and tab, 26+): each its own kept copy and queue
   let kind: String
-  var query = "" { didSet { if oldValue != query, kind != "home" { model = loadCache(); lastRev = 0 } } }
+  // (each tab and set of filters asked for this session kept in memory too: All ↔ Done shows at once)
+  var query = "" { didSet { if oldValue != query, kind != "home" { if let m = model { seen[oldValue] = m }; model = seen[query] ?? loadCache(); lastRev = 0 } } }
+  private var seen: [String: [String: Any]] = [:]
   private var path: String { kind == "home" ? "/api/home" : "/api/mytasks?" + query }
   // (each waiting action belongs to one server and one person: another sign-in or server never sends it)
   struct Op: Codable { var op: String; var act: String; var id: String; var due: String?; var clientApproval: String?; var trashId: String?; var server: String?; var me: String? }
@@ -85,7 +87,10 @@ final class ServerHome {
     request(path, body: nil) { [weak self] j in
       guard let self = self else { return }
       self.fetching = false
-      if let j = j, (j["ok"] as? Bool) == true {
+      if let j = j, (j["ok"] as? Bool) == true, self.kind != "home" && asked != self.query {
+        // (filters changed meanwhile: that answer is for the old ones — fetchAgain asks for the new)
+        if self.fetchAgain == false { self.fetchAgain = true }
+      } else if let j = j, (j["ok"] as? Bool) == true {
         if (j["off"] as? Bool) == true || j["home"] is NSNull || j["home"] == nil {
           // (switched off, or no Home for this person: the page's own again — and nothing kept of it)
           let was = self.on
@@ -93,12 +98,9 @@ final class ServerHome {
           if let f = self.cacheFile { try? FileManager.default.removeItem(at: f) }
           if was { self.onOff?() }
         } else if let h = j["home"] as? [String: Any] {
-          if self.kind != "home" && asked != self.query { /* (filters changed meanwhile: that answer is for the old ones) */ }
-          else {
           self.off = false
           self.confirmedMe = h["me"] as? String
           self.take(h, rev: j["rev"] as? Int ?? 0)
-          }
         }
       }
       if self.fetchAgain { self.fetchAgain = false; self.refresh() }
@@ -130,7 +132,7 @@ final class ServerHome {
     if queue.count != before { keep() }
     guard !sending, let o = queue.first else { return }
     sending = true
-    var b: [String: Any] = ["op": o.op, "act": o.act, "id": o.id]
+    var b: [String: Any] = ["op": o.op, "act": o.act, "id": o.id, "from": kind]   // (from: which screen's switch counts)
     if let v = o.due { b["due"] = v } else if o.act == "due" { b["due"] = NSNull() }
     if let v = o.clientApproval { b["clientApproval"] = v }
     if let v = o.trashId { b["trashId"] = v }

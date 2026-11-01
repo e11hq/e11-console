@@ -655,7 +655,8 @@ export function createServer(cfg) {
     // Home. `op` (the app's id for the action) makes a retry after a lost answer harmless.
     if (p === '/api/home/act' && req.method === 'POST') {
       const body = await readBody(req);
-      if (store.kv.get('home-server') === 'off') return json(res, 200, { ok: false, off: true, error: 'Try again in a moment' });
+      // (My Tasks' actions go by My Tasks' own switch)
+      if (store.kv.get(body && body.from === 'mytasks' ? 'mytasks-server' : 'home-server') === 'off') return json(res, 200, { ok: false, off: true, error: 'Try again in a moment' });
       const op = body && body.op ? String(body.op).slice(0, 80) : null;
       const freshHome = () => { try { return homeView.home(u, visibleSnapshot(u).data); } catch { return null; } };
       // (a retry of an action already done: its answer again, with Home as it is now)

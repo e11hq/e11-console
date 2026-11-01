@@ -258,6 +258,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       self.send(["ev": "tab", "tab": self.listTab])
     }, for: .valueChanged)
     [filterRow, chipRow].forEach { $0.showsHorizontalScrollIndicator = false; $0.alwaysBounceHorizontal = true; $0.clipsToBounds = false; $0.contentInset = UIEdgeInsets(top: 0, left: 16, bottom: 0, right: 16) }
+    [filterRow, chipRow].forEach { $0.contentOffset.x = -16 }   // (the first button 16 in, as the cards)
     [seg, filterRow, chipRow].forEach { scroll.addSubview($0) }
   }
   private func capsule(_ t: String, sym: String?, on: Bool, small: Bool) -> UIButton {
@@ -773,7 +774,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
 
   // ---------- long press a card: Attach Files (Camera · Photos · Files), the card lifted over the dimmed screen ----------
   @objc private func press(_ g: UILongPressGestureRecognizer) {
-    guard g.state == .began, let card = g.view as? HomeCard else { return }
+    guard g.state == .began, let card = g.view as? HomeCard, !(isList && listTab == "done") else { return }   // (Done tab: read only)
     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     attach(card)
   }
