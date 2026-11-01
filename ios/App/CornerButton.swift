@@ -103,9 +103,11 @@ final class CornerButton: UIView {
         if animated { UIView.transition(with: b, duration: 0.22, options: [.transitionCrossDissolve, .allowUserInteraction]) { self.dress(b, now, menu: menu) } }
         else { dress(b, now, menu: menu) }
       } else { b.menu = now.kind == "more" ? menu : nil; b.showsMenuAsPrimaryAction = now.kind == "more" && menu != nil }
-      moves.append { b.transform = .identity; b.frame = now.frame; b.alpha = 1; b.layer.cornerRadius = now.frame.height / 2 }
+      // (the button's own glass laid out inside the spring too — left to the next layout pass it only stretched, with
+      //  no bounce: Haris, 2026-11-01)
+      moves.append { b.transform = .identity; b.frame = now.frame; b.alpha = 1; b.layer.cornerRadius = now.frame.height / 2; b.setNeedsLayout(); b.layoutIfNeeded() }
     }
-    let run = { moves.forEach { $0() } }
+    let run = { moves.forEach { $0() }; self.container.contentView.layoutIfNeeded() }
     if !animated { run(); return }
     if #available(iOS 17.0, *) { UIView.animate(springDuration: CornerButton.duration, bounce: CornerButton.bounce, initialSpringVelocity: 0, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction], animations: run) }
     else { UIView.animate(withDuration: CornerButton.duration, delay: 0, usingSpringWithDamping: 0.75, initialSpringVelocity: 0, options: [.beginFromCurrentState, .allowUserInteraction], animations: run) }
