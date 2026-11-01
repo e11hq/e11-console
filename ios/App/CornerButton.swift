@@ -30,7 +30,9 @@ final class CornerModel: ObservableObject {
     var image: UIImage? = nil
     var opacity: Double = 1
   }
-  @Published var left = B(), mid = B(), corner = B()
+  @Published var left = B()
+  @Published var mid = B()
+  @Published var corner = B()
   @Published var items: [CornerMenuItem] = []
   var onLeft: (() -> Void)?, onMid: (() -> Void)?, onCorner: (() -> Void)?
 }
