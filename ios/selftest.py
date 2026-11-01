@@ -41,7 +41,10 @@ try:
     lenv = dict(os.environ, SIMCTL_CHILD_E11_SERVER=BASE, SIMCTL_CHILD_E11_SELFTEST='1', SIMCTL_CHILD_E11_SELFTEST_EMAIL=EMAIL)
     # a film of the whole run (ios-run.mp4), so the moving parts — the shared top buttons, search, a page sliding in —
     # can be watched frame by frame from Claude's workspace; each stage's time in it is printed ('at 12.3s')
-    rec = subprocess.Popen(['xcrun', 'simctl', 'io', udid, 'recordVideo', '--codec=h264', '--force', os.path.join(TMP, 'ios-run.mp4')], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    # (simctl itself, in its own process group: Ctrl-C to the whole group lets it finish the file — sent to xcrun alone
+    #  it never reached simctl and the film came out empty)
+    simctl = sh('xcrun', '-f', 'simctl').stdout.strip() or 'simctl'
+    rec = subprocess.Popen([simctl, 'io', udid, 'recordVideo', '--codec=h264', '--force', os.path.join(TMP, 'ios-run.mp4')], stdout=subprocess.DEVNULL, stderr=open(os.path.join(TMP, 'ios-rec.log'), 'w'), start_new_session=True)
     rec_t0 = time.time()
     r = subprocess.run(['xcrun', 'simctl', 'launch', udid, BUNDLE], env=lenv, capture_output=True, text=True); check(r.returncode == 0, 'launched ' + r.stdout + r.stderr[-300:])
     data = sh('xcrun', 'simctl', 'get_app_container', udid, BUNDLE, 'data').stdout.strip()
@@ -57,8 +60,10 @@ try:
             print('stage', st, f'at {time.time() - rec_t0:.1f}s')
         if st == 'done': break
         time.sleep(0.5)
-    try: rec.send_signal(signal.SIGINT); rec.wait(timeout=30)
+    try: os.killpg(rec.pid, signal.SIGINT); rec.wait(timeout=60)
     except Exception: rec.kill()
+    try: print('film', os.path.getsize(os.path.join(TMP, 'ios-run.mp4')), 'bytes;', open(os.path.join(TMP, 'ios-rec.log')).read()[-300:])
+    except Exception as e: print('film: none', e)
     print(json.dumps(res, indent=1)[:4000])
     p = res.get('home') or {}
     # 22: the startup screen is the app's own — there at once (icon, greeting, four rows), ticked by the page, gone before Home
