@@ -32,7 +32,25 @@ final class GlassSpot: UIVisualEffectView {
   }
   required init?(coder: NSCoder) { fatalError() }
   @objc private func tapped() { UIImpactFeedbackGenerator(style: .light).impactOccurred(); onTap?() }
-  var shown: Bool { effect != nil }
+  var shown: Bool { effect != nil || buttonGlass }
+  // ••• at rest: iPhone's own glass button takes over (looks the same), so its menu grows out of the glass and goes
+  // back into it; while moving / changing, the glass shape is back so the container keeps it liquid
+  private(set) var buttonGlass = false
+  func useButtonGlass(_ on: Bool) {
+    guard on != buttonGlass else { return }
+    buttonGlass = on
+    if on {
+      var c: UIButton.Configuration
+      if #available(iOS 26.0, *) { c = .glass() } else { c = .gray() }
+      c.cornerStyle = .capsule; c.baseForegroundColor = .label; c.contentInsets = .zero
+      c.image = UIImage(systemName: "ellipsis", withConfiguration: UIImage.SymbolConfiguration(pointSize: 18, weight: .medium))
+      menuBtn.configuration = c
+      UIView.performWithoutAnimation { effect = nil; icon.isHidden = true }
+    } else {
+      menuBtn.configuration = nil
+      UIView.performWithoutAnimation { effect = GlassSpot.glass; icon.isHidden = icon.image == nil }
+    }
+  }
   override func layoutSubviews() {
     super.layoutSubviews()
     layer.cornerRadius = bounds.height / 2; layer.cornerCurve = .continuous
@@ -92,6 +110,7 @@ final class CornerButton: UIView {
     b.word.isHidden = b.word.text == nil
     b.photo.image = s.kind == "photo" ? s.image : nil
     b.photo.isHidden = s.kind != "photo"
+    if s.kind != "more" { b.useButtonGlass(false) }
     b.menuBtn.menu = s.kind == "more" ? menu : nil
     b.menuBtn.isHidden = !(s.kind == "more" && menu != nil)
     b.accessibilityLabel = ["back": "Back", "search": "Search", "more": "More", "close": "Close search", "photo": "Me"][s.kind] ?? s.text
@@ -102,6 +121,8 @@ final class CornerButton: UIView {
   // spring, and the glass container makes it liquid (no squash or stretch of our own)
   func go(left l: Spot, mid m: Spot, corner c: Spot, menu: UIMenu?, animated: Bool) {
     let oldCorner = corner
+    let settled = c.kind == "more" && oldCorner.kind == "more" && c.frame == oldCorner.frame
+    if !settled { cornerB.useButtonGlass(false) }
     let pairs: [(GlassSpot, Spot, Spot)] = [(leftB, left, l), (midB, mid, m), (cornerB, corner, c)]
     left = l; mid = m; corner = c
     var moves: [() -> Void] = []
@@ -117,6 +138,7 @@ final class CornerButton: UIView {
       if now.kind == "none" {
         // going: 🔍 melts into the corner (moves onto it as its glass goes — the container joins them), others dissolve
         let into: CGRect? = b === midB && was.kind == "search" && c.kind != "none" ? c.frame : nil
+        b.useButtonGlass(false)
         moves.append { if let f = into { self.put(b, f) }; b.effect = nil; b.contentView.alpha = 0 }
         continue
       }
@@ -129,17 +151,19 @@ final class CornerButton: UIView {
         if animated { UIView.transition(with: b.contentView, duration: 0.22, options: [.transitionCrossDissolve, .allowUserInteraction]) { self.dress(b, now, menu: menu) } }
         else { dress(b, now, menu: menu) }
       } else { b.menuBtn.menu = now.kind == "more" ? menu : nil; b.menuBtn.isHidden = !(now.kind == "more" && menu != nil) }
-      moves.append { self.put(b, now.frame); if b.effect == nil { b.effect = GlassSpot.glass }; b.alpha = 1; b.contentView.alpha = 1 }
+      moves.append { self.put(b, now.frame); if b.effect == nil && !b.buttonGlass { b.effect = GlassSpot.glass }; b.alpha = 1; b.contentView.alpha = 1 }
     }
     let run = { moves.forEach { $0() }; self.container.contentView.layoutIfNeeded() }
-    if !animated { run(); return }
-    if #available(iOS 17.0, *) { UIView.animate(springDuration: CornerButton.duration, bounce: CornerButton.bounce, initialSpringVelocity: 0, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction], animations: run) }
-    else { UIView.animate(withDuration: CornerButton.duration, delay: 0, usingSpringWithDamping: 0.75, initialSpringVelocity: 0, options: [.beginFromCurrentState, .allowUserInteraction], animations: run) }
+    let rest: (Bool) -> Void = { [weak self] _ in guard let self = self, self.corner.kind == "more", self.corner.frame == c.frame else { return }; self.cornerB.useButtonGlass(true) }
+    if !animated { run(); rest(true); return }
+    if #available(iOS 17.0, *) { UIView.animate(springDuration: CornerButton.duration, bounce: CornerButton.bounce, initialSpringVelocity: 0, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction], animations: run, completion: rest) }
+    else { UIView.animate(withDuration: CornerButton.duration, delay: 0, usingSpringWithDamping: 0.75, initialSpringVelocity: 0, options: [.beginFromCurrentState, .allowUserInteraction], animations: run, completion: rest) }
   }
   // part way between two sets (the swipe back): t = 0 at `a`, 1 at `b`
   func between(_ a: (Spot, Spot, Spot), _ b: (Spot, Spot, Spot), _ t: CGFloat) {
     let t = max(0, min(1, t))
     func lerp(_ x: CGRect, _ y: CGRect) -> CGRect { CGRect(x: x.minX + (y.minX - x.minX) * t, y: x.minY + (y.minY - x.minY) * t, width: x.width + (y.width - x.width) * t, height: x.height + (y.height - x.height) * t) }
+    cornerB.useButtonGlass(false)
     let rows: [(GlassSpot, Spot, Spot)] = [(leftB, a.0, b.0), (midB, a.1, b.1), (cornerB, a.2, b.2)]
     for (btn, x, y) in rows {
       btn.layer.removeAllAnimations()
