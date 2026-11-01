@@ -23,7 +23,8 @@ final class DailySheetVC: UIViewController, UISheetPresentationControllerDelegat
     overrideUserInterfaceStyle = (d["light"] as? Bool) == false ? .dark : .light
     modalPresentationStyle = .pageSheet
     if let sh = sheetPresentationController {
-      sh.detents = [.custom(identifier: .init("daily")) { [weak self] ctx in min(ctx.maximumDetentValue * 0.85, self?.fitHeight ?? 520) }]
+      // (as tall as what's in it, up to 80 % of the screen — only past that does the inside scroll; Haris, 2026-11-01)
+      sh.detents = [.custom(identifier: .init("daily")) { [weak self] ctx in min(ctx.maximumDetentValue, UIScreen.main.bounds.height * 0.8, self?.fitHeight ?? 520) }]
       sh.prefersGrabberVisible = true
       sh.preferredCornerRadius = 38
       sh.delegate = self
@@ -40,6 +41,16 @@ final class DailySheetVC: UIViewController, UISheetPresentationControllerDelegat
     scroll.alwaysBounceVertical = false; scroll.showsVerticalScrollIndicator = false
     view.addSubview(scroll)
     stack.axis = .vertical; stack.spacing = 16; scroll.addSubview(stack)
+    // (pinned by constraints, so its height is what's in it — sized from its own frame, it kept the old height and a
+    //  shorter section's first line took the rest)
+    stack.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([
+      stack.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: 34),
+      stack.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor, constant: 16),
+      stack.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor, constant: -16),
+      stack.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -22),
+      stack.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor, constant: -32),
+    ])
     // the top: the sun, Good morning, the date and whose tasks, ✕
     sun.backgroundColor = .systemOrange; sun.layer.cornerRadius = 22
     sunIcon.image = UIImage(systemName: "sun.max.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .semibold)); sunIcon.tintColor = .white; sunIcon.contentMode = .center
@@ -193,14 +204,16 @@ final class DailySheetVC: UIViewController, UISheetPresentationControllerDelegat
     let textW = W - pad * 2 - 44 - 12 - 12 - 44
     let subH = ceil(subL.sizeThatFits(CGSize(width: textW, height: 100)).height)
     let headH = max(44, 25 + 2 + subH)
-    head.frame.size = CGSize(width: W - pad * 2, height: headH)
     sun.frame = CGRect(x: 4, y: (headH - 44) / 2, width: 44, height: 44); sunIcon.frame = sun.bounds
     titleL.frame = CGRect(x: 4 + 44 + 12, y: 0, width: textW, height: 25)
     subL.frame = CGRect(x: 4 + 44 + 12, y: 27, width: textW, height: subH)
     close.frame = CGRect(x: W - pad * 2 - 44, y: (headH - 44) / 2, width: 44, height: 44)
     head.heightAnchorConstraint(headH)
-    stack.frame = CGRect(x: pad, y: 34, width: W - pad * 2, height: stack.systemLayoutSizeFitting(CGSize(width: W - pad * 2, height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height)
-    scroll.contentSize = CGSize(width: W, height: stack.frame.maxY + 22)
+    scroll.layoutIfNeeded()
+    // (scrolls only when it's taller than the sheet can be)
+    scroll.isScrollEnabled = scroll.contentSize.height > scroll.bounds.height + 1
+    scroll.showsVerticalScrollIndicator = scroll.isScrollEnabled
+    if !scroll.isScrollEnabled && scroll.contentOffset != .zero { scroll.contentOffset = .zero }
     measure()
   }
   private var measured = false
