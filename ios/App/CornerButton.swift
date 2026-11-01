@@ -8,7 +8,16 @@ import UIKit
 final class CornerButton: UIView {
   private let fx = UIVisualEffectView(effect: nil)
   private let icon = UIImageView(), word = UILabel()
-  private let menuBtn = UIButton(type: .custom)       // (••• : iPhone's own menu, from a tap)
+  // (••• : a real glass button with iPhone's own menu — on iOS 26 the circle turns into the menu as it opens and
+  //  the menu shrinks back into it, as iPhone's own ••• buttons do; Haris 2026-11-01)
+  private let menuBtn: UIButton = {
+    var c: UIButton.Configuration
+    if #available(iOS 26.0, *) { c = .glass() } else { c = .plain() }
+    c.image = UIImage(systemName: "ellipsis", withConfiguration: UIImage.SymbolConfiguration(pointSize: 18, weight: .medium))
+    c.baseForegroundColor = .label
+    c.cornerStyle = .capsule
+    return UIButton(configuration: c)
+  }()
   private(set) var kind = "none"
   private var text = ""
   var onTap: ((String) -> Void)?
@@ -51,6 +60,10 @@ final class CornerButton: UIView {
   func go(_ k: String, text t: String, frame f: CGRect, menu: UIMenu?, animated: Bool) {
     let same = k == kind && t == text && frame.equalTo(f)
     menuBtn.menu = menu; menuBtn.isHidden = k != "more" || menu == nil
+    // (the drawn glass and icon step aside for the real ••• button, and come back for the other kinds)
+    let real = k == "more" && menu != nil
+    fx.alpha = real ? 0 : 1
+    if real { icon.alpha = 0 }
     word.textColor = k == "done" ? .systemBlue : .label
     accessibilityLabel = k == "search" ? "Search" : k == "more" ? "More" : t
     if same { return }
@@ -64,7 +77,7 @@ final class CornerButton: UIView {
     let fromNone = was == "none" || alpha < 0.05
     if fromNone { frame = f; alpha = 0; transform = CGAffineTransform(scaleX: 0.7, y: 0.7) }
     // the new icon / words in, the old out (cross-fading while the glass changes shape)
-    let sym = CornerButton.symbol(k)
+    let sym = real ? nil : CornerButton.symbol(k)   // (the real ••• button draws its own)
     let newIcon = sym.map { UIImage(systemName: $0, withConfiguration: UIImage.SymbolConfiguration(pointSize: k == "more" ? 18 : 18, weight: .medium)) } ?? nil
     let iconChanges = icon.image != newIcon || (sym == nil) != (icon.alpha < 0.5)
     if iconChanges && animated && !fromNone {
@@ -81,6 +94,7 @@ final class CornerButton: UIView {
   // part way between two (the swipe back): t = 0 at `a`, 1 at `b`
   func between(_ a: (kind: String, text: String, frame: CGRect), _ b: (kind: String, text: String, frame: CGRect), _ t: CGFloat) {
     let t = max(0, min(1, t))
+    menuBtn.isHidden = true; fx.alpha = 1
     func lerp(_ x: CGFloat, _ y: CGFloat) -> CGFloat { x + (y - x) * t }
     if b.kind == "none" { frame = a.frame; alpha = 1 - t; return }
     if a.kind == "none" { frame = b.frame; alpha = t; return }
