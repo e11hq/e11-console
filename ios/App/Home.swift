@@ -471,11 +471,14 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     func show(_ l: UILabel, _ p: CGFloat, rise: CGFloat) {
       if barIn {
         // (comes up and sharpens over the whole time; see-through to solid in the first 60 %)
-        fade(l).set(blur: 8 * pow(1 - p, 1.5), alpha: ease(0, 0.6, p), dy: rise * (1 - easeOut(p)), trait: tr)
+        // (the rise on iOS's own spring — critically damped, as UIKit's bar titles move — so it arrives quickly and settles
+        //  softly; the fade and the blur eased in and out)
+        let k = 7 * p, spring = (1 + k) * exp(-k)
+        fade(l).set(blur: 8 * pow(1 - ease(0, 1, p), 1.2), alpha: ease(0, 0.6, p), dy: rise * spring, trait: tr)
       } else {
         // (the blur builds over the first third, the fade runs the whole time, sinking a little)
         let x = 1 - p
-        fade(l).set(blur: 8 * min(1, x / 0.35), alpha: 1 - x, dy: rise * x, trait: tr)
+        fade(l).set(blur: 8 * ease(0, 0.35, x), alpha: 1 - ease(0, 1, x), dy: rise * ease(0, 1, x), trait: tr)
       }
     }
     show(smallTitle, pT, rise: barIn ? 6 : 5)
