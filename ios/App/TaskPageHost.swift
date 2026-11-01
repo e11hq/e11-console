@@ -96,6 +96,8 @@ extension Main {
       // (the last page gone: whatever was moved aside when it came in is back in place — a screen hidden or shown
       //  meanwhile too; one left aside showed a blank page, Haris 2026-11-01)
       if last { self.view.subviews.forEach { v in if v !== self.tabBar && !(v is TaskPage) && v.transform.tx != 0 { v.transform = .identity } } }
+      // (and the screen under it drawn again as it is now: the page says what's showing — Home, My Tasks, the Inbox)
+      if last { self.pageJS("window.__e11HomeResend && __e11HomeResend(); window.__e11MyTasksResend && __e11MyTasksResend(); window.__e11InboxResend && __e11InboxResend()"); self.updateCorner() }
       if last { self.pageJS("window.__e11Task && window.__e11Task({ev:'closed'})") }
       else if let top = self.taskPages.last, top.tab == "comments" { self.taskShowComments(top, focus: "") }
     }
@@ -155,6 +157,17 @@ extension Main {
     p.onCornerChange = { [weak self] in self?.updateCornerNow() }
     p.onSwipeToDetails = { [weak self, weak p] in guard let self = self, let p = p else { return }; self.toDetailsFromComments(p) }
     p.onOpenFiles = { [weak self] list, i in self?.openFiles(list, at: i) }
+    p.onAttachFrom = { [weak self, weak p] src in
+      guard let self = self, let p = p else { return }
+      Picker.shared.pick(from: self.topMost(), single: false, source: src) { [weak self, weak p] r in
+        guard let self = self, let p = p else { return }
+        let picked = ((r["files"] as? [[String: Any]]) ?? []).compactMap { f -> (URL, String)? in
+          guard let tok = f["token"] as? String, let u = Picker.shared.url(tok) else { return nil }
+          return (u, f["name"] as? String ?? "File")
+        }
+        self.uploadToTask(p, picked)
+      }
+    }
     p.onAttachFiles = { [weak self, weak p] in
       guard let self = self, let p = p, let host = self.sheetHost() else { return }
       host.present(AttachSheetVC(light: self.statusStyle == .darkContent) { [weak self, weak p] src in
@@ -502,6 +515,7 @@ extension Main {
           p.uploads = []
           if done.isEmpty { p.toast("Upload failed — try again"); return }
           UINotificationFeedbackGenerator().notificationOccurred(.success)
+          Main.playUploaded()
           self.taskAct(p, ["act": "attach", "id": p.taskId, "files": done])
         }
       }

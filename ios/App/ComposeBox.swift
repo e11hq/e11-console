@@ -57,7 +57,7 @@ final class ComposeBox: UIView, UITextViewDelegate {
   private let replyLine = UIStackView(), replyLabel = UILabel()
   private let tiles = UIStackView()
   private let mentions = UIStackView()
-  private var files: [(name: String, size: Int64, path: String?, progress: Double, failed: Bool)] = []
+  private var files: [(name: String, size: Int64, path: String?, progress: Double, failed: Bool, thumb: UIImage?)] = []
   private var textH: NSLayoutConstraint!
   private var tilesH: NSLayoutConstraint!
 
@@ -213,12 +213,15 @@ final class ComposeBox: UIView, UITextViewDelegate {
   }
   private func addFile(_ url: URL, name: String, voice: Double?) {
     let size = ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.int64Value ?? 0
-    files.append((name: name, size: size, path: nil, progress: 0, failed: false))
+    // (a picture shows itself in its tile straight away)
+    var thumb: UIImage?
+    if CommentCell.isPic(name), let img = UIImage(contentsOfFile: url.path) { thumb = img.preparingThumbnail(of: CGSize(width: 120, height: 120)) ?? img }
+    files.append((name: name, size: size, path: nil, progress: 0, failed: false, thumb: thumb))
     let i = files.count - 1
     paintTiles()
     Uploader.send(url, name: name, task: taskId, cookies: cookies, progress: { [weak self] p in guard let self = self, i < self.files.count else { return }; self.files[i].progress = p; self.paintTiles() }) { [weak self] path in
       guard let self = self, i < self.files.count else { return }
-      if let p = path { self.files[i].path = p; self.files[i].progress = 1 } else { self.files[i].failed = true; self.onToast?("Upload failed — try again") }
+      if let p = path { self.files[i].path = p; self.files[i].progress = 1; Main.playUploaded(); UINotificationFeedbackGenerator().notificationOccurred(.success) } else { self.files[i].failed = true; self.onToast?("Upload failed — try again") }
       self.paintTiles()
     }
   }
@@ -230,8 +233,13 @@ final class ComposeBox: UIView, UITextViewDelegate {
       t.widthAnchor.constraint(equalToConstant: 56).isActive = true; t.heightAnchor.constraint(equalToConstant: 56).isActive = true
       let ext = (f.name as NSString).pathExtension.uppercased()
       let l = UILabel(); l.text = ext.isEmpty ? "FILE" : String(ext.prefix(4)); l.font = .systemFont(ofSize: 11, weight: .bold); l.textColor = .secondaryLabel; l.textAlignment = .center
-      l.frame = CGRect(x: 0, y: 0, width: 56, height: 56); t.addSubview(l)
-      if f.progress < 1 && !f.failed { l.text = "\(Int(f.progress * 100))%"; l.textColor = .label; let bar = UIProgressView(progressViewStyle: .bar); bar.progress = Float(f.progress); bar.frame = CGRect(x: 8, y: 46, width: 40, height: 3); t.addSubview(bar) }
+      l.frame = CGRect(x: 0, y: 0, width: 56, height: 56)
+      if let th = f.thumb {
+        let iv = UIImageView(image: th); iv.contentMode = .scaleAspectFill; iv.clipsToBounds = true; iv.layer.cornerRadius = 12; iv.frame = l.frame; t.addSubview(iv)
+        if f.progress < 1 && !f.failed { let dim = UIView(frame: l.frame); dim.backgroundColor = UIColor.black.withAlphaComponent(0.35); dim.layer.cornerRadius = 12; t.addSubview(dim); l.textColor = .white } else { l.isHidden = true }
+      }
+      t.addSubview(l)
+      if f.progress < 1 && !f.failed { l.text = "\(Int(f.progress * 100))%"; if f.thumb == nil { l.textColor = .label }; let bar = UIProgressView(progressViewStyle: .bar); bar.progress = Float(f.progress); bar.frame = CGRect(x: 8, y: 46, width: 40, height: 3); t.addSubview(bar) }
       if f.failed { l.textColor = .systemRed }
       let x = UIButton(type: .system); x.setImage(UIImage(systemName: "xmark.circle.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 16)), for: .normal); x.tintColor = .label
       x.frame = CGRect(x: 38, y: -4, width: 22, height: 22)

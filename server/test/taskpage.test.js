@@ -171,6 +171,13 @@ test('the description from the phone; Submit for CD review and Withdraw', async 
   assert.equal(r.ok, true); assert.equal(T('t2').attachments.length, 0);
 });
 
+test('attaching files from the phone: the page that comes back has them at once', async () => {
+  const before = (T('t3').attachments || []).length;
+  const r = await act('prod@e11-digital.com', { act: 'attach', id: 't3', files: [{ name: 'brief.pdf', size: 1200, path: 'attachments/t3/brief.pdf' }] });
+  assert.equal(r.ok, true, JSON.stringify(r)); assert.equal(T('t3').attachments.length, before + 1);
+  assert.ok(JSON.stringify(r.task).includes('brief.pdf'), 'the returned page lists the new file');
+});
+
 test('writing a comment, a reply with a mention, a voice message; editing', async () => {
   let r = await act('prod@e11-digital.com', { act: 'comment', id: 't3', html: 'Done <b>now</b>', text: 'Done now' });
   assert.equal(r.ok, true); const c = T('t3').comments.at(-1); assert.equal(c.html, 'Done <b>now</b>'); assert.equal(c.authorId, 'u-prod');

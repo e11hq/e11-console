@@ -89,8 +89,23 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   var onSubmitFiles: ((String) -> Void)?
   var onOpenFiles: (([[String: Any]], Int) -> Void)?
   var onAttachFiles: (() -> Void)?
+  var onAttachFrom: ((String) -> Void)?   // (••• → Attach Files → Camera / Photos / Files)
+  private var filesBlock: UIView?
   // files uploading from the phone: name → 0…1 (shown under Files with a bar)
-  var uploads: [(String, Double)] = [] { didSet { built = ""; if let m = model { draw(m) } } }
+  var uploads: [(String, Double)] = [] { didSet {
+    let started = oldValue.isEmpty && !uploads.isEmpty
+    built = ""; if let m = model { draw(m) }
+    // (attaching: down to Files, where their bars are)
+    if started { DispatchQueue.main.async { self.showFiles() } }
+  } }
+  func showFiles() {
+    guard let b = filesBlock, tab == "details" else { return }
+    // (the Files block's bottom just above the bottom edge; never past the end)
+    let top = -scroll.adjustedContentInset.top
+    let end = max(top, scroll.contentSize.height + scroll.adjustedContentInset.bottom - scroll.bounds.height)
+    let want = b.convert(b.bounds, to: scroll).maxY + 20 + scroll.adjustedContentInset.bottom - scroll.bounds.height
+    scroll.setContentOffset(CGPoint(x: 0, y: min(max(want, top), end)), animated: true)
+  }
   private let back = HomeGlass(), more = HomeGlass()
   private let moreBtn = UIButton(type: .custom)        // (over the ••• circle: iPhone's own menu)
   private let dot = UIView(), client = UILabel()
@@ -286,9 +301,9 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     items.append(UIAction(title: "Copy link", image: UIImage(systemName: "link")) { [weak self] _ in guard let self = self else { return }; self.onEvent?(["ev": "copy", "id": self.taskId]) })
     if (m["readOnly"] as? Bool) != true {   // (attaching stays on the phone — Haris, 2026-11-01)
       items.append(UIMenu(title: "Attach Files", image: UIImage(systemName: "paperclip"), children: [
-        UIAction(title: "Camera", image: UIImage(systemName: "camera")) { [weak self] _ in guard let self = self else { return }; self.onEvent?(["ev": "attach", "id": self.taskId, "source": "camera"]) },
-        UIAction(title: "Photos", image: UIImage(systemName: "photo.on.rectangle")) { [weak self] _ in guard let self = self else { return }; self.onEvent?(["ev": "attach", "id": self.taskId, "source": "photos"]) },
-        UIAction(title: "Files", image: UIImage(systemName: "folder")) { [weak self] _ in guard let self = self else { return }; self.onEvent?(["ev": "attach", "id": self.taskId, "source": "files"]) },
+        UIAction(title: "Camera", image: UIImage(systemName: "camera")) { [weak self] _ in guard let self = self else { return }; self.onAttachFrom?("camera") },
+        UIAction(title: "Photos", image: UIImage(systemName: "photo.on.rectangle")) { [weak self] _ in guard let self = self else { return }; self.onAttachFrom?("photos") },
+        UIAction(title: "Files", image: UIImage(systemName: "folder")) { [weak self] _ in guard let self = self else { return }; self.onAttachFrom?("files") },
       ]))
     }
     if (m["canDelete"] as? Bool) == true && !TaskPage.viewOnly {
@@ -452,7 +467,8 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       }
       for (n, pr) in uploads { fr.append(progressRow(n, pr)) }
       if canAttach { fr.append(addRow("Attach Files") { [weak self] in self?.attachSheet() }) }
-      blocks.append(group(fr))
+      let fg = group(fr); filesBlock = fg
+      blocks.append(fg)
     }
     // ---- Activity ----
     let act = (m["activity"] as? [[String: Any]]) ?? []

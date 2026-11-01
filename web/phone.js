@@ -2648,7 +2648,7 @@ const NativeTask = (() => {
   if (NATIVE_TASK && window.__e11CommentsOnly !== true && typeof Host !== 'undefined' && Host.isIOSApp) {
     NativeMac.call('appInfo').then((r) => { on = Number(r && r.shell) >= 30; if (on) setInterval(watch, 400); }).catch(() => {});
   }
-  const sigOf = (id) => { const t = task(id); if (!t) return 'gone'; return [t.updatedAt, (t.comments || []).length, (t.activity || []).length, t.done ? 1 : 0, t.sectionId, db.tasks.filter((x) => x.parentId === id).map((x) => `${x.id}:${x.updatedAt}:${x.done ? 1 : 0}`).join(',')].join('|'); };
+  const sigOf = (id) => { const t = task(id); if (!t) return 'gone'; return [t.updatedAt, (t.comments || []).length, (t.attachments || []).length, (t.activity || []).length, t.done ? 1 : 0, t.sectionId, db.tasks.filter((x) => x.parentId === id).map((x) => `${x.id}:${x.updatedAt}:${x.done ? 1 : 0}`).join(',')].join('|'); };
   // openTask asks first: the app's page instead (not for a new task being named — that's the website's for now)
   function wants(id, focusTitle) {
     if (!on || !Phone.on || focusTitle || window.__e11WebTask || webOnce === id || typeof task !== 'function' || !task(id)) { if (webOnce === id) webOnce = null; return false; }
