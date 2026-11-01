@@ -493,6 +493,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   lazy var serverTask: ServerTask = { let s = ServerTask(); s.cookies = serverHome.cookies; return s }()
   var taskPan: UIScreenEdgePanGestureRecognizer?
   var taskPanSpent = false
+  // the screen hidden as a task was tapped (for the website's task page): the app's own page shows it again under itself
+  var hiddenForOpen: (UIView?, Date)?
   var taskComments: String?           // the task whose comments show inside the page (its Comments tab)
   var taskTabHidden = false
   var cornerPending = false
@@ -1124,7 +1126,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     h.onEvent = { [weak self] ev in
       if self?.homeEventOnServer(ev) == true { return }
       // (a task opening: Home goes at once, so the task slides in over the page's own Home, scrolled the same)
-      if (ev["ev"] as? String) == "open" { self?.homeIfMade?.isHidden = true }
+      if (ev["ev"] as? String) == "open" { self?.homeIfMade?.isHidden = true; self?.hiddenForOpen = (self?.homeIfMade, Date()) }
       self?.pageJS("window.__e11Home && window.__e11Home(\(jsonString(ev)))")
     }
     h.present = { [weak self] vc in self?.topMost().present(vc, animated: true) }
@@ -1282,7 +1284,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     h.onEvent = { [weak self] ev in
       guard let self = self else { return }
       if self.eventOnServer(ev, self.serverMyTasks, pageMe: self.myTasksPageMe) { return }
-      if (ev["ev"] as? String) == "open" { self.myTasksIfMade?.isHidden = true }
+      if (ev["ev"] as? String) == "open" { self.myTasksIfMade?.isHidden = true; self.hiddenForOpen = (self.myTasksIfMade, Date()) }
       self.pageJS("window.__e11MyTasks && window.__e11MyTasks(\(jsonString(ev)))")
     }
     h.present = { [weak self] vc in self?.topMost().present(vc, animated: true) }

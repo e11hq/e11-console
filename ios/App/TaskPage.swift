@@ -12,6 +12,7 @@ final class ServerTask {
   var cookies: (@escaping (String) -> Void) -> Void = { $0("") }
   private var lastRev = 0
   var lastUndo: String?
+  var cache: [String: [String: Any]] = [:]   // each task as last fetched (opened again: shown at once)
   func request(_ path: String, body: [String: Any]?, timeout: Double = 20, _ done: @escaping ([String: Any]?) -> Void) {
     cookies { cookie in
       guard let url = URL(string: serverURL() + path) else { return done(nil) }
@@ -35,6 +36,7 @@ final class ServerTask {
       let rev = j["rev"] as? Int ?? 0
       if let self = self, rev < self.lastRev { return }
       self?.lastRev = rev
+      if let m = j["task"] as? [String: Any] { self?.cache[id] = m } else { self?.cache[id] = nil }
       done(j["task"] as? [String: Any], false)
     }
   }

@@ -154,11 +154,25 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
   }
 
   // ---------- data ----------
-  func load(_ done: (() -> Void)? = nil) {
+  // each task's comments (and threads) as last fetched: shown at once, then brought up to date — no empty wait
+  static var cache: [String: [String: Any]] = [:]
+  static func path(_ taskId: String, _ thread: String?) -> String {
     var p = "/api/comments?id=" + (taskId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? taskId)
     if let t = thread { p += "&thread=" + (t.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? t) }
+    return p
+  }
+  // fetched ahead (a task page opening), so its Comments tab has them ready
+  static func prefetch(_ taskId: String, cookies: @escaping (@escaping (String) -> Void) -> Void) {
+    FeedLoader.shared.cookies = cookies
+    let p = path(taskId, nil)
+    FeedLoader.shared.get(p) { j in if let f = j?["feed"] as? [String: Any] { cache[p] = f } }
+  }
+  func load(_ done: (() -> Void)? = nil) {
+    let p = CommentsFeed.path(taskId, thread)
+    if model == nil, let c = CommentsFeed.cache[p] { draw(c) }
     FeedLoader.shared.get(p) { [weak self] j in
       guard let self = self, let f = j?["feed"] as? [String: Any] else { done?(); return }
+      CommentsFeed.cache[p] = f
       self.draw(f); done?()
     }
   }

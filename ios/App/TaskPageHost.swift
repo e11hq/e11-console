@@ -26,6 +26,10 @@ extension Main {
     p.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     p.light = statusStyle == .darkContent
     let under: UIView? = taskPages.last
+    // (Home / My Tasks hid itself as the task was tapped — for the website's page, which slid over the page's own
+    //  Home; the app's page slides over the screen itself, so it stays: no black under it, none on the way back)
+    if let h = hiddenForOpen, Date().timeIntervalSince(h.1) < 3, let v = h.0 { v.isHidden = false }
+    hiddenForOpen = nil
     if taskPages.isEmpty { taskTabHidden = tabBar.isHidden }
     view.insertSubview(p, belowSubview: tabBar)
     // (the comment box and its jump spot stay above the page)
@@ -36,7 +40,10 @@ extension Main {
     p.people = serverHome.shown.flatMap { $0["people"] as? [String: [String: Any]] } ?? [:]
     p.setTab(tab == "comments" ? "comments" : "details", tell: false)
     p.loading()
+    // (opened before: drawn at once as it was, then brought up to date; its comments fetched now, so the Comments tab is ready)
+    if let m = serverTask.cache[id] { drawTask(p, m) }
     refreshTaskPage(p)
+    CommentsFeed.prefetch(id, cookies: serverHome.cookies)
     // (the corner button: Search / Mark all read slides over into ••• as the page comes in)
     updateCornerNow()
     // the edge swipe: one, on the app's screen, for whichever page is on top
