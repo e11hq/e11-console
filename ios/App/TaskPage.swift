@@ -159,6 +159,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     titleView.textContainer.lineFragmentPadding = 0
     titleView.returnKeyType = .done
     setUpDesc()
+    addTabSwipe()
     applyLook()
   }
   required init?(coder: NSCoder) { fatalError() }
@@ -196,16 +197,64 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }
 
   // ---------- the tabs ----------
-  func setTab(_ t: String, tell: Bool) {
+  func setTab(_ t: String, tell: Bool, slide: Bool = false) {
+    let was = tab
     tab = t
     seg.selectedSegmentIndex = t == "comments" ? 1 : 0
     let c = t == "comments"
-    commentsHost.isHidden = !c
-    scroll.isHidden = c
-    fab.alpha = c ? 0 : 1
     if c { endEditing(true) } else { edgeScroll(scroll) }
+    // (a swipe: the tabs slide sideways, Comments in from the right, Details back in from the left)
+    if slide && was != t {
+      let W = bounds.width, inV: UIView = c ? commentsHost : scroll, outV: UIView = c ? scroll : commentsHost
+      inV.isHidden = false
+      inV.transform = CGAffineTransform(translationX: c ? W : -W, y: 0)
+      UIView.animate(withDuration: 0.36, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
+        inV.transform = .identity
+        outV.transform = CGAffineTransform(translationX: c ? -W * 0.3 : W, y: 0)
+        self.fab.alpha = c ? 0 : 1
+      } completion: { _ in
+        outV.transform = .identity
+        if self.tab == t { outV.isHidden = true }
+      }
+    } else {
+      commentsHost.isHidden = !c
+      scroll.isHidden = c
+      fab.alpha = c ? 0 : 1
+    }
     if tell { onTab?(t) }
   }
+  // the swipe across the middle of the page: Details ← → Comments (Haris, 2026-11-01); from the edge on Details it's
+  // iPhone's back swipe (Main's), so a swipe starting at the very edge is left to that
+  private lazy var tabSwipe: UIPanGestureRecognizer = {
+    let g = UIPanGestureRecognizer(target: self, action: #selector(swiped(_:)))
+    g.delegate = self; g.cancelsTouchesInView = false
+    return g
+  }()
+  private var swipeDone = false
+  func addTabSwipe() { addGestureRecognizer(tabSwipe) }
+  @objc private func swiped(_ g: UIPanGestureRecognizer) {
+    let t = g.translation(in: self), v = g.velocity(in: self)
+    switch g.state {
+    case .began: swipeDone = false
+    case .changed, .ended:
+      if swipeDone { return }
+      let far = abs(t.x) > 56 || (g.state == .ended && abs(t.x) > 16 && abs(v.x) > 500)
+      guard far, abs(t.x) > abs(t.y) * 1.4 else { return }
+      swipeDone = true
+      if t.x < 0, tab == "details" { UISelectionFeedbackGenerator().selectionChanged(); setTab("comments", tell: true, slide: true) }
+      else if t.x > 0, tab == "comments" { UISelectionFeedbackGenerator().selectionChanged(); onSwipeToDetails?() }
+    default: break
+    }
+  }
+  var onSwipeToDetails: (() -> Void)?
+  override func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
+    guard g === tabSwipe, let p = g as? UIPanGestureRecognizer else { return true }
+    let v = p.velocity(in: self), x = p.location(in: self).x
+    if x < 24 { return false }   // (the edge: iPhone's back swipe)
+    if editingDesc || titleView.isFirstResponder { return false }
+    return abs(v.x) > abs(v.y) * 1.2
+  }
+  func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith o: UIGestureRecognizer) -> Bool { g === tabSwipe }
   func setComments(_ n: Int) { seg.setTitle(n > 0 ? "Comments \(n)" : "Comments", forSegmentAt: 1) }
 
   // ---------- drawing the model ----------

@@ -119,7 +119,7 @@ extension Main {
       if g.state == .began {
         composeIfMade?.text.resignFirstResponder()
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        if p.threadFeed != nil { closeThread(p) } else { p.setTab("details", tell: true) }
+        toDetailsFromComments(p)
         g.isEnabled = false; g.isEnabled = true   // (this swipe is used up)
       }
       return
@@ -153,6 +153,7 @@ extension Main {
   private func wire(_ p: TaskPage) {
     p.onBack = { [weak self, weak p] in guard let self = self, let p = p else { return }; if p.editingDesc { p.finishDesc() }; self.closeTaskPage(p) }
     p.onCornerChange = { [weak self] in self?.updateCornerNow() }
+    p.onSwipeToDetails = { [weak self, weak p] in guard let self = self, let p = p else { return }; self.toDetailsFromComments(p) }
     p.onOpenFiles = { [weak self] list, i in self?.openFiles(list, at: i) }
     p.onAttachFiles = { [weak self, weak p] in
       guard let self = self, let p = p, let host = self.sheetHost() else { return }
@@ -549,5 +550,20 @@ extension Main {
       vc?.set(["info": [["Name", f["name"] as? String ?? ""], ["Size", TaskPage.size(f["size"] as? Int ?? 0)]]])
     default: break
     }
+  }
+}
+
+extension Main {
+  // a swipe right on Comments — or on a reply thread — goes to Details (Haris, 2026-11-01); from Details the edge
+  // swipe then goes back to the page before
+  func toDetailsFromComments(_ p: TaskPage) {
+    composeIfMade?.text.resignFirstResponder()
+    if let t = p.threadFeed {
+      p.threadFeed = nil
+      composeIfMade?.switchTo(task: p.taskId, parent: nil)
+      t.removeFromSuperview()
+      if let f = p.feed { p.edgeScroll(f.scroll) }
+    }
+    p.setTab("details", tell: true, slide: true)
   }
 }
