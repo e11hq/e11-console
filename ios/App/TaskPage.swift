@@ -85,6 +85,12 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   var feed: CommentsFeed?, threadFeed: CommentsFeed?
   // the description's editor (DescEditor.swift)
   let descView = UITextView()
+  // (the description as it's read — view only — links tappable)
+  private lazy var descRead: UITextView = {
+    let t = UITextView(); t.isEditable = false; t.isScrollEnabled = false; t.backgroundColor = .clear
+    t.textContainerInset = .zero; t.textContainer.lineFragmentPadding = 0; t.dataDetectorTypes = [.link]
+    return t
+  }()
   var editingDesc = false, descEmpty = true
   let mentionBox = UIStackView()
   var onCornerChange: (() -> Void)?
@@ -430,7 +436,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // ---- Description ----
     let desc = m["desc"] as? String ?? ""
     let canDesc = (m["canDesc"] as? Bool) == true
-    if !desc.isEmpty || canDesc || editingDesc {
+    if !TaskPage.viewOnly && (!desc.isEmpty || canDesc || editingDesc) {
       blocks.append(header("Description", lock: m["lock"] != nil))
       // (edited right where it is, looking the same — DescEditor.swift)
       let tv = descView
@@ -456,6 +462,14 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       var rows = cl.map { checkRow($0, can: (m["canCheck"] as? Bool) == true) }
       if canAddCheck { rows.append(addRow("Add checklist item") { [weak self] in self?.askText("Add checklist item", placeholder: "Item") { v in guard let self = self else { return }; self.onAct?(["act": "addCheck", "id": self.taskId, "value": v]) } }) }
       blocks.append(group(rows))
+    }
+    // ---- the description, view only: straight on the page like the title, in the body size, above Files — no box,
+    //      no heading (Haris, 2026-11-01) ----
+    if TaskPage.viewOnly && !desc.isEmpty {
+      let rich = DescEditor.attributed((m["descRuns"] as? [[String: Any]]) ?? [], done: (m["done"] as? Bool) == true)
+      // (its plain words if the formatted ones didn't come)
+      descRead.attributedText = rich.length > 0 ? rich : NSAttributedString(string: desc, attributes: [.font: UIFont.systemFont(ofSize: 17), .foregroundColor: UIColor.label])
+      blocks.append(descRead)
     }
     // ---- Files ---- (the task's; the comments' own under them, Haris 2026-11-01)
     let files = (m["files"] as? [[String: Any]]) ?? []
