@@ -396,7 +396,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     UISelectionFeedbackGenerator().selectionChanged()
     inboxTab = k
     openRow?.close(animated: false); openRow = nil
-    catsView.select(["all", "unread", "mentions"].firstIndex(of: k) ?? 0, animated: true)
+    catsView.choose(["all", "unread", "mentions"].firstIndex(of: k) ?? 0, animated: true)
     keep = Set((m["rows"] as? [[String: Any]] ?? []).filter { ($0["read"] as? Bool) != true }.compactMap { $0["id"] as? String })
     switching = true
     drawInbox(m)
@@ -1705,7 +1705,7 @@ final class MailCats: UIView {
     if i == selected { onPick?(i); return }
     onPick?(i)
   }
-  func select(_ i: Int, animated: Bool) {
+  func choose(_ i: Int, animated: Bool) {
     guard i != selected, i >= 0, i < items.count else { return }
     selected = i
     UIView.animate(withDuration: animated ? 0.3 : 0, delay: 0, options: [.curveEaseInOut, .beginFromCurrentState, .allowUserInteraction]) {
