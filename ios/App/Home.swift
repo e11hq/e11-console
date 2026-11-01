@@ -1628,7 +1628,9 @@ final class InboxRow: UIControl, UIGestureRecognizerDelegate {
   }
   // swiped right only (as Mail's leading swipe); left does nothing
   override func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
-    guard let p = g as? UIPanGestureRecognizer else { return true }
+    // (only the row's own swipe: iOS asks this for the list's scrolling too — answering no to that stopped the Inbox
+    //  from scrolling, Haris 2026-11-01)
+    guard g.view === self, let p = g as? UIPanGestureRecognizer else { return true }
     let v = p.velocity(in: self)
     return abs(v.x) > abs(v.y) * 1.2 && (v.x > 0 || isOpen)
   }
