@@ -655,6 +655,9 @@ export function createServer(cfg) {
       try { fd = homeView.commentsFeed(u, visibleSnapshot(u).data, url.searchParams.get('id'), url.searchParams.get('thread')); } catch (e) { console.error('comments:', e.message); return json(res, 500, { ok: false, error: 'The comments could not be worked out' }); }
       return json(res, 200, { ok: true, rev: store.rev(), feed: fd });
     }
+    // the iPhone app's own copy of the data (iOS app data plan): on unless the kv 'app-copy' is 'off' — then the app asks
+    // for each screen again, as before (no app build needed)
+    if (p === '/api/appcopy' && req.method === 'GET') return json(res, 200, { ok: true, on: store.kv.get('app-copy') !== 'off' });
     // the iPhone app's native task page (shell 30+): the task as this person sees it, with what they may change
     if (p === '/api/task' && req.method === 'GET') {
       if (store.kv.get('task-server') === 'off') return json(res, 200, { ok: true, off: true, rev: store.rev() });

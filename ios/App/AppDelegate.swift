@@ -494,6 +494,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   var taskPan: UIScreenEdgePanGestureRecognizer?
   var taskPanSpent = false
   var cornerWaited = false
+  var copyWatch: UUID?
   var prefetchedAt: [String: Date] = [:]
   // the screen hidden as a task was tapped (for the website's task page): the app's own page shows it again under itself
   var hiddenForOpen: (UIView?, Date)?
@@ -1169,7 +1170,13 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         done(mine.map { "\($0.name)=\($0.value)" }.joined(separator: "; "))
       }
     }
-    s.onModel = { [weak self] m in if kind == "home" { self?.drawServerHome(m) } else if kind == "inbox" { self?.drawServerInbox(m) } else { self?.drawServerMyTasks(m) }; if kind != "inbox" { self?.prefetchTasks(m) } }
+    s.onModel = { [weak self] m in
+      if kind == "home" { self?.drawServerHome(m) } else if kind == "inbox" { self?.drawServerInbox(m) } else { self?.drawServerMyTasks(m) }
+      // (the app's own copy of the data — iOS app data plan: started once we know who's signed in; until it's ready,
+      //  the tasks on screen are fetched ahead as before)
+      if let self = self, let me = m["me"] as? String { AppData.shared.start(me: me, cookies: self.serverHome.cookies); self.watchCopy() }
+      if kind != "inbox", AppData.shared.ready == false { self?.prefetchTasks(m) }
+    }
     // switched off on the server (or no Home for this person): the page's Home again, drawn at once
     // (My Tasks: the page's own list, under it)
     s.onOff = { [weak self] in

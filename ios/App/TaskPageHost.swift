@@ -44,7 +44,7 @@ extension Main {
     // (opened before: drawn at once as it was, then brought up to date; its comments fetched now, so the Comments tab is ready)
     if let m = serverTask.cache[id] { drawTask(p, m) }
     refreshTaskPage(p)
-    CommentsFeed.prefetch(id, cookies: serverHome.cookies)
+    if !AppData.shared.ready { CommentsFeed.prefetch(id, cookies: serverHome.cookies) }
     // (the corner button: Search / Mark all read slides over into ••• as the page comes in — the page laid out
     //  first: before that its ‹ and ••• places are nothing, at the top-left corner, and the buttons flew off there)
     p.setNeedsLayout(); p.layoutIfNeeded()
@@ -238,6 +238,13 @@ extension Main {
   }
 
   func refreshTaskPage(_ p: TaskPage) {
+    // the app's own copy first: no request at all (iOS app data plan)
+    let c = AppData.shared.screen("task", p.taskId)
+    if c.ready {
+      if let m = c.model { drawTask(p, m) }
+      else if p.model == nil { p.toast("This task is no longer here"); DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self, weak p] in if let p = p { self?.closeTaskPage(p) } } }
+      return
+    }
     serverTask.fetch(p.taskId) { [weak self, weak p] m, off in
       guard let self = self, let p = p, self.taskPages.contains(where: { $0 === p }) else { return }
       if off { self.taskPageToWeb(p); return }
@@ -664,5 +671,19 @@ extension Main {
       }
     }
     next(0)
+  }
+}
+
+extension Main {
+  // the app's own copy changed (the live stream): the open task pages and their comments drawn again from it
+  func watchCopy() {
+    if copyWatch != nil { return }
+    copyWatch = AppData.shared.listen { [weak self] in
+      guard let self = self else { return }
+      for p in self.taskPages {
+        self.refreshTaskPage(p)
+        p.feed?.load(); p.threadFeed?.load()
+      }
+    }
   }
 }

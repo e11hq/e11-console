@@ -168,6 +168,9 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
     FeedLoader.shared.get(p) { j in if let f = j?["feed"] as? [String: Any] { cache[p] = f } }
   }
   func load(_ done: (() -> Void)? = nil) {
+    // the app's own copy first: no request at all (iOS app data plan)
+    let c = AppData.shared.screen("comments", taskId, thread)
+    if c.ready, let f = c.model { dropArrived(f); draw(f); done?(); return }
     let p = CommentsFeed.path(taskId, thread)
     if model == nil, let c = CommentsFeed.cache[p] { draw(c) }
     FeedLoader.shared.get(p) { [weak self] j in
@@ -186,6 +189,19 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
     let it: [String: Any] = ["id": id, "who": m["me"] as? String ?? "", "at": at, "runs": [[String: Any]](), "files": [["id": id, "name": "Voice message.m4a", "voice": true, "dur": Int(dur.rounded()), "pending": true]]]
     pending.append((id, it, false))
     draw(m, mine: true)
+  }
+  // (a sent one goes once the real one is in the comments: your own voice message, from about then)
+  private func dropArrived(_ f: [String: Any]) {
+    let items = (f["items"] as? [[String: Any]]) ?? []
+    let iso = ISO8601DateFormatter(); iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    let when: (String) -> Date? = { iso.date(from: $0) ?? ISO8601DateFormatter().date(from: $0) }
+    pending.removeAll { p in
+      guard p.done, let pa = when(p.item["at"] as? String ?? "") else { return false }
+      return items.contains { it in
+        (it["who"] as? String) == (p.item["who"] as? String) && (when(it["at"] as? String ?? "") ?? .distantPast) >= pa.addingTimeInterval(-20)
+          && ((it["files"] as? [[String: Any]]) ?? []).contains { ($0["voice"] as? Bool) == true }
+      }
+    }
   }
   // sent: it stays until the feed that has the real one arrives; not sent: it goes now
   func endPending(id: String, ok: Bool) {
