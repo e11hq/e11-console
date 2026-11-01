@@ -376,10 +376,8 @@ final class CommentCell: UIView {
       stack.addArrangedSubview(w)
     }
     let rest = files.filter { ($0["voice"] as? Bool) != true }
-    let pics = rest.filter { CommentCell.isPic($0["name"] as? String ?? "") }
-    // (tapped: the picture in the preview, any other file in iPhone's Quick Look)
-    if !pics.isEmpty { stack.addArrangedSubview(CommentCell.tiles(pics) { [weak self] i in self?.onOpen?(rest, rest.firstIndex { ($0["id"] as? String) == (pics[i]["id"] as? String) } ?? 0) }) }
-    for (k, f) in rest.enumerated() where !CommentCell.isPic(f["name"] as? String ?? "") { stack.addArrangedSubview(CommentCell.fileRow(f) { [weak self] in self?.onOpen?(rest, k) }) }
+    // (tapped: the preview, with all of this comment's files to swipe through)
+    if !rest.isEmpty { stack.addArrangedSubview(CommentCell.tiles(rest, open: { [weak self] i in self?.onOpen?(rest, i) })) }
     for u in ((it["urls"] as? [String]) ?? []).prefix(3) { stack.addArrangedSubview(LinkCard(u)) }
     let rx = (it["reactions"] as? [[String: Any]]) ?? []
     if !rx.isEmpty {
@@ -483,30 +481,65 @@ final class CommentCell: UIView {
     return out
   }
   static func isPic(_ n: String) -> Bool { ["jpg", "jpeg", "png", "heic", "gif", "webp"].contains((n as NSString).pathExtension.lowercased()) }
-  // up to 3 a row, 4:3 each (one alone: wider) — a grey shimmer until the picture arrives
-  static func tiles(_ pics: [[String: Any]], open: @escaping (Int) -> Void = { _ in }) -> UIView {
+  static let videoExt = ["mp4", "mov", "m4v", "webm", "avi", "mkv"]
+  static func isVideo(_ n: String) -> Bool { videoExt.contains((n as NSString).pathExtension.lowercased()) }
+  // every file the same card (Haris, 2026-11-01): squares, three a row, a third of the width each — a picture shows
+  // itself, a video its frame with ▶, a PDF / Office file its first page, anything else its type; the name under
+  // all but pictures. A grey shimmer until the picture arrives (the room kept from the start, so nothing jumps).
+  static func tiles(_ files: [[String: Any]], open: @escaping (Int) -> Void = { _ in }, menu: ((Int) -> UIMenu?)? = nil) -> UIView {
     let grid = UIStackView(); grid.axis = .vertical; grid.spacing = 6
-    let perRow = pics.count == 1 ? 1 : min(3, pics.count)
     var i = 0
-    while i < min(pics.count, 6) {
+    while i < files.count {
       let row = UIStackView(); row.spacing = 6; row.distribution = .fillEqually
-      for (k, f) in pics.enumerated() where k >= i && k < min(i + perRow, min(pics.count, 6)) {
-        let v = TapImage(); v.contentMode = .scaleAspectFill; v.clipsToBounds = true; v.layer.cornerRadius = 12; v.layer.cornerCurve = .continuous
-        v.onTap = { open(k) }
-        v.backgroundColor = .tertiarySystemFill
-        v.translatesAutoresizingMaskIntoConstraints = false
-        v.heightAnchor.constraint(equalTo: v.widthAnchor, multiplier: 0.75).isActive = true
-        let shimmer = Shimmer(); shimmer.frame = .zero; shimmer.translatesAutoresizingMaskIntoConstraints = false; v.addSubview(shimmer)
-        NSLayoutConstraint.activate([shimmer.leadingAnchor.constraint(equalTo: v.leadingAnchor), shimmer.trailingAnchor.constraint(equalTo: v.trailingAnchor), shimmer.topAnchor.constraint(equalTo: v.topAnchor), shimmer.bottomAnchor.constraint(equalTo: v.bottomAnchor)])
-        if let p = (f["thumbUrl"] as? String) ?? (f["url"] as? String) { FeedLoader.shared.image(p) { [weak v, weak shimmer] img in shimmer?.removeFromSuperview(); if let img = img { v?.image = img } } }
-        row.addArrangedSubview(v)
+      for k in i..<(i + 3) {
+        guard k < files.count else { row.addArrangedSubview(UIView()); continue }   // (an empty place keeps the size)
+        row.addArrangedSubview(tile(files[k], open: { open(k) }, menu: menu.map { m in { () -> UIMenu? in m(k) } }))
       }
-      if pics.count == 1 { let w = row.widthAnchor.constraint(equalToConstant: 240); w.priority = .required; w.isActive = true }   // (one picture: a 240 pt tile, 4:3)
-      let wrap = UIStackView(arrangedSubviews: pics.count == 1 ? [row, UIView()] : [row])   // (one picture: its own width, the rest of the line empty)
-      grid.addArrangedSubview(wrap)
-      i += perRow
+      grid.addArrangedSubview(row)
+      i += 3
     }
     return grid
+  }
+  static func tile(_ f: [String: Any], open: @escaping () -> Void, menu: (() -> UIMenu?)?) -> UIView {
+    let n = f["name"] as? String ?? "File"
+    let pic = isPic(n), video = isVideo(n)
+    let v = TapImage(); v.contentMode = .scaleAspectFill; v.clipsToBounds = true; v.layer.cornerRadius = 12; v.layer.cornerCurve = .continuous
+    v.onTap = open
+    v.menu = menu
+    v.backgroundColor = .tertiarySystemFill
+    v.translatesAutoresizingMaskIntoConstraints = false
+    v.heightAnchor.constraint(equalTo: v.widthAnchor).isActive = true
+    func pin(_ x: UIView, _ l: CGFloat?, _ t: CGFloat?, _ r: CGFloat?, _ b: CGFloat?) {
+      x.translatesAutoresizingMaskIntoConstraints = false; v.addSubview(x)
+      if let l { x.leadingAnchor.constraint(equalTo: v.leadingAnchor, constant: l).isActive = true }
+      if let t { x.topAnchor.constraint(equalTo: v.topAnchor, constant: t).isActive = true }
+      if let r { x.trailingAnchor.constraint(equalTo: v.trailingAnchor, constant: -r).isActive = true }
+      if let b { x.bottomAnchor.constraint(equalTo: v.bottomAnchor, constant: -b).isActive = true }
+    }
+    let ext = (n as NSString).pathExtension.uppercased()
+    // the type, in the middle until a picture covers it
+    let typeL = UILabel(); typeL.text = ext.isEmpty ? "FILE" : String(ext.prefix(4)); typeL.font = .systemFont(ofSize: 15, weight: .bold); typeL.textColor = .secondaryLabel; typeL.textAlignment = .center
+    if !pic { pin(typeL, 0, 0, 0, 28) }
+    let picURL = (f["thumbUrl"] as? String) ?? (pic ? f["url"] as? String : nil)
+    let shimmer = Shimmer()
+    if picURL != nil { pin(shimmer, 0, 0, 0, 0) }
+    // the name (not on pictures), on a soft shade when there's a picture under it
+    let shade = CAGradientLayer(); shade.colors = [UIColor.clear.cgColor, UIColor.black.withAlphaComponent(0.55).cgColor]
+    let name = UILabel(); name.text = n; name.font = .systemFont(ofSize: 11.5, weight: .medium); name.textColor = .label; name.lineBreakMode = .byTruncatingMiddle; name.textAlignment = .center
+    let shadeView = ShadeView(shade); shadeView.isHidden = true
+    if !pic { pin(shadeView, 0, nil, 0, 0); shadeView.heightAnchor.constraint(equalToConstant: 34).isActive = true; pin(name, 6, nil, 6, 8) }
+    let play = UIImageView(image: UIImage(systemName: "play.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .bold)))
+    play.tintColor = .white; play.contentMode = .center; play.backgroundColor = UIColor.black.withAlphaComponent(0.45); play.layer.cornerRadius = 15
+    if video { pin(play, nil, nil, nil, nil); play.widthAnchor.constraint(equalToConstant: 30).isActive = true; play.heightAnchor.constraint(equalToConstant: 30).isActive = true; play.centerXAnchor.constraint(equalTo: v.centerXAnchor).isActive = true; play.centerYAnchor.constraint(equalTo: v.centerYAnchor, constant: -6).isActive = true }
+    if let p = picURL {
+      FeedLoader.shared.image(p) { [weak v, weak shimmer, weak typeL, weak name, weak shadeView] img in
+        shimmer?.removeFromSuperview()
+        guard let img = img else { return }
+        v?.image = img; typeL?.isHidden = true
+        if !pic { shadeView?.isHidden = false; name?.textColor = .white }
+      }
+    }
+    return v
   }
   static func fileRow(_ f: [String: Any], open: (() -> Void)? = nil) -> UIView {
     let box = TapView(); box.onTap = open; box.backgroundColor = .tertiarySystemFill; box.layer.cornerRadius = 12; box.layer.cornerCurve = .continuous
@@ -569,13 +602,31 @@ final class Shimmer: UIView {
 }
 
 // a picture / file box that can be tapped
-final class TapImage: UIImageView {
+final class TapImage: UIImageView, UIContextMenuInteractionDelegate {
   var onTap: (() -> Void)? { didSet { isUserInteractionEnabled = onTap != nil; if gestureRecognizers?.isEmpty ?? true { addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(t))) } } }
+  // touch and hold: iPhone's own menu (Open, Copy, Download…), the tile lifted as its preview
+  var menu: (() -> UIMenu?)? { didSet { if menu != nil && interactions.isEmpty { isUserInteractionEnabled = true; addInteraction(UIContextMenuInteraction(delegate: self)) } } }
   @objc private func t() { UIImpactFeedbackGenerator(style: .light).impactOccurred(); onTap?() }
+  func contextMenuInteraction(_ i: UIContextMenuInteraction, configurationForMenuAtLocation l: CGPoint) -> UIContextMenuConfiguration? {
+    guard let m = menu?() else { return nil }
+    return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in m }
+  }
 }
-final class TapView: UIView {
+final class TapView: UIView, UIContextMenuInteractionDelegate {
   var onTap: (() -> Void)? { didSet { if onTap != nil && (gestureRecognizers?.isEmpty ?? true) { addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(t))) } } }
+  var menu: (() -> UIMenu?)? { didSet { if menu != nil && interactions.isEmpty { addInteraction(UIContextMenuInteraction(delegate: self)) } } }
   @objc private func t() { UIImpactFeedbackGenerator(style: .light).impactOccurred(); onTap?() }
+  func contextMenuInteraction(_ i: UIContextMenuInteraction, configurationForMenuAtLocation l: CGPoint) -> UIContextMenuConfiguration? {
+    guard let m = menu?() else { return nil }
+    return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in m }
+  }
+}
+// a gradient that keeps to its view's size
+final class ShadeView: UIView {
+  private let g: CAGradientLayer
+  init(_ g: CAGradientLayer) { self.g = g; super.init(frame: .zero); isUserInteractionEnabled = false; layer.addSublayer(g) }
+  required init?(coder: NSCoder) { fatalError() }
+  override func layoutSubviews() { super.layoutSubviews(); g.frame = bounds }
 }
 
 final class ScheduledCard: UIView {

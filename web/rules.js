@@ -639,6 +639,8 @@ var E11Rules = (() => {
         canAddSub: !ro && !t.parentId && can('createTask', t),
         checklist: (t.checklist || []).map((c) => ({ id: c.id, text: c.text || '', done: !!c.done })), canCheck: !ro, canAddCheck: !ro && can('addChecklist', t),
         files: (t.attachments || []).filter((a) => !a.reviewId || (t.reviews || []).some((r) => r.id === a.reviewId && r.state === 'approved')).map((a) => ({ id: a.id, name: a.name || 'File', size: a.size || 0, path: a.path || null, thumb: a.thumb || null, type: a.type || '' })),
+        // the comments' own files (not voice messages), newest first: their own group under Files (the app only)
+        commentFiles: (t.comments || []).slice().reverse().flatMap((c) => (c.attachments || []).filter((a) => !a.voice).map((a) => { person(c.authorId); return { id: a.id, name: a.name || 'File', size: a.size || 0, path: a.path || null, thumb: a.thumb || null, type: a.type || '', by: c.authorId || null, at: c.at || '' }; })),
         activity: (t.activity || []).slice(-30).reverse().map((a) => { person(a.actor); return { who: a.actor || null, text: plainOfHtml(a.text).replace(/\s*→\s*/g, ' → '), at: a.at || '' }; }),
         comments: (t.comments || []).length, canDelete: !ro && can('deleteTask', t),
         complete: t.done ? null : { ok: !ro && canComplete(t), why: ro ? '' : completeBlocked(t), show: !ro && !t.parentId },

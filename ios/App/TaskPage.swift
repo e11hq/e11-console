@@ -12,10 +12,10 @@ final class ServerTask {
   var cookies: (@escaping (String) -> Void) -> Void = { $0("") }
   private var lastRev = 0
   var lastUndo: String?
-  private func request(_ path: String, body: [String: Any]?, _ done: @escaping ([String: Any]?) -> Void) {
+  func request(_ path: String, body: [String: Any]?, timeout: Double = 20, _ done: @escaping ([String: Any]?) -> Void) {
     cookies { cookie in
       guard let url = URL(string: serverURL() + path) else { return done(nil) }
-      var r = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
+      var r = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: timeout)
       r.setValue("application/json", forHTTPHeaderField: "Accept")
       if !cookie.isEmpty { r.setValue(cookie, forHTTPHeaderField: "Cookie") }
       if let b = body { r.httpMethod = "POST"; r.setValue("application/json", forHTTPHeaderField: "Content-Type"); r.httpBody = try? JSONSerialization.data(withJSONObject: b) }
@@ -89,7 +89,8 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   var onSubmitFiles: ((String) -> Void)?
   var onOpenFiles: (([[String: Any]], Int) -> Void)?
   var onAttachFiles: (() -> Void)?
-  var onAttachFrom: ((String) -> Void)?   // (••• → Attach Files → Camera / Photos / Files)
+  var onAttachFrom: ((String) -> Void)?
+  var onFileAction: (([String: Any], String) -> Void)?   // a file's "open" / "copy" / "download" (its touch-and-hold menu)   // (••• → Attach Files → Camera / Photos / Files)
   private var filesBlock: UIView?
   // files uploading from the phone: name → 0…1 (shown under Files with a bar)
   var uploads: [(String, Double)] = [] { didSet {
@@ -453,22 +454,21 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       if canAddCheck { rows.append(addRow("Add checklist item") { [weak self] in self?.askText("Add checklist item", placeholder: "Item") { v in guard let self = self else { return }; self.onAct?(["act": "addCheck", "id": self.taskId, "value": v]) } }) }
       blocks.append(group(rows))
     }
-    // ---- Files ----
+    // ---- Files ---- (the task's; the comments' own under them, Haris 2026-11-01)
     let files = (m["files"] as? [[String: Any]]) ?? []
     let canAttach = (m["readOnly"] as? Bool) != true
     if !files.isEmpty || canAttach || !uploads.isEmpty {
       blocks.append(header(files.isEmpty ? "Files" : "Files · \(files.count)"))
-      // pictures as tiles, other files as rows — tapped, they open (the preview / Quick Look)
-      let picsF = files.filter { CommentCell.isPic($0["name"] as? String ?? "") }
-      var fr: [UIView] = []
-      if !picsF.isEmpty { fr.append(pad(CommentCell.tiles(picsF) { [weak self] i in self?.onOpenFiles?(files, files.firstIndex { ($0["id"] as? String) == (picsF[i]["id"] as? String) } ?? 0) })) }
-      for (k, f) in files.enumerated() where !CommentCell.isPic(f["name"] as? String ?? "") {
-        fr.append(row(sym: TaskPage.fileSym(f["name"] as? String ?? ""), key: f["name"] as? String ?? "File", value: greyText(TaskPage.size(f["size"] as? Int ?? 0)), chevron: true, keyLines: 1, tap: { [weak self] in self?.onOpenFiles?(files, k) }))
-      }
+      var fr = fileViews(files)
       for (n, pr) in uploads { fr.append(progressRow(n, pr)) }
       if canAttach { fr.append(addRow("Attach Files") { [weak self] in self?.attachSheet() }) }
       let fg = group(fr); filesBlock = fg
       blocks.append(fg)
+    }
+    let cfiles = (m["commentFiles"] as? [[String: Any]]) ?? []
+    if !cfiles.isEmpty {
+      blocks.append(header("From comments · \(cfiles.count)"))
+      blocks.append(group(fileViews(cfiles, who: true)))
     }
     // ---- Activity ----
     let act = (m["activity"] as? [[String: Any]]) ?? []
@@ -489,6 +489,32 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if let c = m["complete"] as? [String: Any], (c["show"] as? Bool) == true { fab.isHidden = false } else { fab.isHidden = true }
     layoutContent()
     scroll.contentOffset.y = min(max(-scroll.contentInset.top, keepY), max(-scroll.contentInset.top, scroll.contentSize.height - scroll.bounds.height + scroll.contentInset.bottom))
+  }
+  // a list's files: pictures as tiles, others as rows — tapped, the preview (all of the list's files to swipe
+  // through); touched and held, Open / Copy / Download
+  private func fileViews(_ files: [[String: Any]], who: Bool = false) -> [UIView] {
+    var out: [UIView] = []
+    let picsF = files.filter { CommentCell.isPic($0["name"] as? String ?? "") }
+    let at: ([String: Any]) -> Int = { f in files.firstIndex { ($0["id"] as? String) == (f["id"] as? String) } ?? 0 }
+    if !picsF.isEmpty {
+      out.append(pad(CommentCell.tiles(picsF, open: { [weak self] i in self?.onOpenFiles?(files, at(picsF[i])) }, menu: { [weak self] i in self?.fileMenu(files, at(picsF[i])) })))
+    }
+    for (k, f) in files.enumerated() where !CommentCell.isPic(f["name"] as? String ?? "") {
+      let sub: String? = who ? [(f["by"] as? String).map { name($0) }, (f["at"] as? String).map { TaskPage.when($0) }].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ") : nil
+      let r = row(sym: TaskPage.fileSym(f["name"] as? String ?? ""), key: f["name"] as? String ?? "File", sub: sub, value: greyText(TaskPage.size(f["size"] as? Int ?? 0)), chevron: true, keyLines: 1, tap: { [weak self] in self?.onOpenFiles?(files, k) })
+      (r as? TaskRow)?.holdMenu = { [weak self] in self?.fileMenu(files, k) }
+      out.append(r)
+    }
+    return out
+  }
+  private func fileMenu(_ files: [[String: Any]], _ i: Int) -> UIMenu? {
+    guard i < files.count else { return nil }
+    let f = files[i]
+    return UIMenu(title: f["name"] as? String ?? "", children: [
+      UIAction(title: "Open", image: UIImage(systemName: "eye")) { [weak self] _ in self?.onOpenFiles?(files, i) },
+      UIAction(title: "Copy", image: UIImage(systemName: "doc.on.doc")) { [weak self] _ in self?.onFileAction?(f, "copy") },
+      UIAction(title: "Download", image: UIImage(systemName: "arrow.down.circle")) { [weak self] _ in self?.onFileAction?(f, "download") },
+    ])
   }
   private func layoutContent() {
     let W = bounds.width
@@ -1060,8 +1086,14 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
 }
 
 // a row that can be tapped (greys while pressed, as iPhone's lists) or hold iPhone's own menu
-final class TaskRow: UIView {
+final class TaskRow: UIView, UIContextMenuInteractionDelegate {
   var onTap: (() -> Void)? { didSet { if onTap != nil && tapG == nil { let g = UITapGestureRecognizer(target: self, action: #selector(tapped)); addGestureRecognizer(g); tapG = g } } }
+  // touch and hold: iPhone's own menu (a file's Open, Copy, Download)
+  var holdMenu: (() -> UIMenu?)? { didSet { if holdMenu != nil && !interactions.contains(where: { $0 is UIContextMenuInteraction }) { addInteraction(UIContextMenuInteraction(delegate: self)) } } }
+  func contextMenuInteraction(_ i: UIContextMenuInteraction, configurationForMenuAtLocation l: CGPoint) -> UIContextMenuConfiguration? {
+    guard let m = holdMenu?() else { return nil }
+    return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in m }
+  }
   var pressBg = true
   private var tapG: UITapGestureRecognizer?
   private var menuBtn: UIButton?

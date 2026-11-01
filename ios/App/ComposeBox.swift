@@ -1,5 +1,6 @@
 import UIKit
 import AVFoundation
+import UniformTypeIdentifiers
 
 /* The comment box, the app's own (step 3, Haris 2026-10-31 / 2026-11-01): the Claude app's box — rounded, 16 from
    each side, + on the left (the one Attach Files sheet), the mic on the right turning into ↑ once something is typed.
@@ -51,7 +52,7 @@ final class ComposeBox: UIView, UITextViewDelegate {
   var onToast: ((String) -> Void)?
 
   private let box = UIView()
-  let text = UITextView()
+  let text = PasteTextView()
   private let placeholder = UILabel()
   private let plus = UIButton(type: .system), right = UIButton(type: .system)
   private let replyLine = UIStackView(), replyLabel = UILabel()
@@ -74,6 +75,7 @@ final class ComposeBox: UIView, UITextViewDelegate {
     box.addSubview(glass)
     NSLayoutConstraint.activate([glass.leadingAnchor.constraint(equalTo: box.leadingAnchor), glass.trailingAnchor.constraint(equalTo: box.trailingAnchor), glass.topAnchor.constraint(equalTo: box.topAnchor), glass.bottomAnchor.constraint(equalTo: box.bottomAnchor)])
     text.font = .systemFont(ofSize: 17); text.backgroundColor = .clear; text.delegate = self
+    text.onPasteFiles = { [weak self] in self?.pasteFiles() ?? false }
     text.textContainerInset = UIEdgeInsets(top: 4, left: 0, bottom: 4, right: 0); text.textContainer.lineFragmentPadding = 0
     text.isScrollEnabled = false
     placeholder.text = "Comment"; placeholder.font = .systemFont(ofSize: 17); placeholder.textColor = .secondaryLabel
@@ -211,11 +213,38 @@ final class ComposeBox: UIView, UITextViewDelegate {
       }
     })
   }
+  // a file pasted (a picture, or one copied from a preview: its own name): added as if picked
+  private func pasteFiles() -> Bool {
+    let pb = UIPasteboard.general
+    var added = false
+    for (k, item) in pb.items.enumerated() {
+      // (words are the text box's own)
+      guard let type = item.keys.first(where: { t in guard let u = UTType(t) else { return false }; return !u.conforms(to: .text) }) else { continue }
+      var data: Data? = item[type] as? Data
+      if data == nil, let img = item[type] as? UIImage { data = img.pngData() }
+      guard let d = data else { continue }
+      let ext = (item[type] is UIImage) ? "png" : (UTType(type)?.preferredFilenameExtension ?? "dat")
+      var name = (FileClip.change == pb.changeCount && k == 0 ? FileClip.name : nil) ?? (UTType(type)?.conforms(to: .image) == true ? "Pasted image.\(ext)" : "Pasted file.\(ext)")
+      if (name as NSString).pathExtension.isEmpty { name += "." + ext }
+      let dir = FileManager.default.temporaryDirectory.appendingPathComponent("paste-\(UUID().uuidString)", isDirectory: true)
+      try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+      let u = dir.appendingPathComponent(name.replacingOccurrences(of: "/", with: "-"))
+      guard (try? d.write(to: u)) != nil else { continue }
+      addFile(u, name: u.lastPathComponent, voice: nil)
+      added = true
+    }
+    return added
+  }
   private func addFile(_ url: URL, name: String, voice: Double?) {
     let size = ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.int64Value ?? 0
     // (a picture shows itself in its tile straight away)
     var thumb: UIImage?
     if CommentCell.isPic(name), let img = UIImage(contentsOfFile: url.path) { thumb = img.preparingThumbnail(of: CGSize(width: 120, height: 120)) ?? img }
+    else if CommentCell.isVideo(name) {
+      // (a video: its first frame)
+      let g = AVAssetImageGenerator(asset: AVURLAsset(url: url)); g.appliesPreferredTrackTransform = true; g.maximumSize = CGSize(width: 240, height: 240)
+      if let cg = try? g.copyCGImage(at: CMTime(seconds: 0.5, preferredTimescale: 600), actualTime: nil) { thumb = UIImage(cgImage: cg) }
+    }
     files.append((name: name, size: size, path: nil, progress: 0, failed: false, thumb: thumb))
     let i = files.count - 1
     paintTiles()
@@ -445,4 +474,23 @@ final class VoiceBubble: UIView, AVAudioPlayerDelegate {
     time.text = VoiceBubble.fmt(Int(p.currentTime)) + " / " + VoiceBubble.fmt(Int(p.duration))
   }
   func audioPlayerDidFinishPlaying(_ p: AVAudioPlayer, successfully flag: Bool) { paint(false); p.currentTime = 0; bars.forEach { $0.backgroundColor = .secondaryLabel }; time.text = VoiceBubble.fmt(Int(p.duration)) }
+}
+
+// what Copy in a preview put on the clipboard: its name (pasted into a comment, the file keeps it)
+enum FileClip { static var name: String?; static var change = -1 }
+// the comment box's text: a pasted picture or file goes in as an attachment; words paste as words
+final class PasteTextView: UITextView {
+  var onPasteFiles: (() -> Bool)?
+  private var hasFiles: Bool {
+    let pb = UIPasteboard.general
+    return pb.hasImages || pb.types.contains { t in guard let u = UTType(t) else { return false }; return !u.conforms(to: .text) && (u.conforms(to: .data) || u.conforms(to: .content)) }
+  }
+  override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+    if action == #selector(paste(_:)) && hasFiles { return true }
+    return super.canPerformAction(action, withSender: sender)
+  }
+  override func paste(_ sender: Any?) {
+    if hasFiles, onPasteFiles?() == true { return }
+    super.paste(sender)
+  }
 }

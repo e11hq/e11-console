@@ -22,6 +22,16 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
     return rules;
   }
   const fileUrl = (p) => '/__file/' + String(p).split('/').map(encodeURIComponent).join('/');
+  // a file as the app gets it: its address, its picture's (a video's frame, a PDF's or Office file's first page — made
+  // on the server the first time it's asked for: /api/fthumb), and its place on the server (for its page pictures)
+  const THUMBED = ['mp4', 'mov', 'm4v', 'webm', 'avi', 'mkv', 'pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'odt', 'odp', 'ods', 'rtf'];
+  const appFile = (f) => {
+    const ext = String(f.name || '').split('.').pop().toLowerCase();
+    f.file = f.path || null;
+    f.url = f.path ? fileUrl(f.path) + '?view=1' : null;
+    f.thumbUrl = f.thumb ? fileUrl(f.thumb) + '?view=1' : f.path && THUMBED.includes(ext) ? '/api/fthumb?path=' + encodeURIComponent(f.path) + '&id=' + encodeURIComponent(f.id || '') : null;
+    delete f.path; delete f.thumb;
+  };
   // data: what this person's own app downloads (visibleSnapshot in server.js)
   function home(u, data) {
     const R = load();
@@ -201,7 +211,7 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
     const m = R.withEnv(env, { users: data.users || [], projects: data.projects || [], tasks: data.tasks || [], statuses: data.statuses || [], plans: data.plans || [], meta: data.meta || {} }, u.id, today).taskPage(String(id || ''));
     if (!m) return null;
     for (const p of Object.values(m.people || {})) { if (p.photo) p.photo = fileUrl(p.photo) + '?view=1'; }
-    for (const f of m.files || []) { f.url = f.path ? fileUrl(f.path) + '?view=1' : null; f.thumbUrl = f.thumb ? fileUrl(f.thumb) + '?view=1' : null; delete f.path; delete f.thumb; }
+    for (const f of (m.files || []).concat(m.commentFiles || [])) appFile(f);
     return { ...m, today };
   }
   // the app's native Comments (GET /api/comments?id=&thread=)
@@ -211,7 +221,7 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
     const m = R.withEnv(env, { users: data.users || [], projects: data.projects || [], tasks: data.tasks || [], statuses: data.statuses || [], plans: data.plans || [], meta: data.meta || {}, scheduled: data.scheduled || [] }, u.id, R.dubaiDay(now())).commentsFeed(String(id || ''), thread ? String(thread) : null);
     if (!m) return null;
     for (const p of Object.values(m.people || {})) { if (p.photo) p.photo = fileUrl(p.photo) + '?view=1'; }
-    for (const it of m.items) for (const f of it.files) { f.url = f.path ? fileUrl(f.path) + '?view=1' : null; f.thumbUrl = f.thumb ? fileUrl(f.thumb) + '?view=1' : null; delete f.path; delete f.thumb; }
+    for (const it of m.items) for (const f of it.files) appFile(f);
     return m;
   }
   return { home, myTasks, inbox, act, taskPage, commentsFeed };

@@ -1,4 +1,5 @@
 import UIKit
+import UniformTypeIdentifiers
 import QuickLook
 
 /* The app's own task page (shell 30) on the app's screen: opened when the page behind asks (taskPage open — a card,
@@ -157,6 +158,11 @@ extension Main {
     p.onCornerChange = { [weak self] in self?.updateCornerNow() }
     p.onSwipeToDetails = { [weak self, weak p] in guard let self = self, let p = p else { return }; self.toDetailsFromComments(p) }
     p.onOpenFiles = { [weak self] list, i in self?.openFiles(list, at: i) }
+    p.onFileAction = { [weak self, weak p] f, what in
+      guard let self = self, let p = p else { return }
+      let toast: (String) -> Void = { [weak p] t in p?.toast(t) }
+      if what == "copy" { self.copyFile(f, toast) } else if what == "download" { self.downloadFile(f, from: self.topMost(), toast) }
+    }
     p.onAttachFrom = { [weak self, weak p] src in
       guard let self = self, let p = p else { return }
       Picker.shared.pick(from: self.topMost(), single: false, source: src) { [weak self, weak p] r in
@@ -473,25 +479,80 @@ final class QuickFile: NSObject, QLPreviewControllerDataSource {
   }
 }
 extension Main {
+  static let officeExt = ["doc", "docx", "ppt", "pptx", "xls", "xlsx", "odt", "odp", "ods", "rtf"]
+  // a file as the preview shows it: a picture, a video / sound (Apple's player), a PDF's / Office file's pages, text, or its card
+  static func previewItem(_ p: [String: Any]) -> [String: Any] {
+    let n = p["name"] as? String ?? ""
+    let ext = (n as NSString).pathExtension.lowercased()
+    let src = serverURL() + (p["url"] as? String ?? "")
+    let thumb = (p["thumbUrl"] as? String).map { serverURL() + $0 } ?? ""
+    let meta = [TaskPage.size(p["size"] as? Int ?? 0)].joined()
+    var it: [String: Any] = ["id": p["id"] ?? "", "name": n, "ext": String(ext.prefix(5)), "meta": meta, "src": src, "thumb": thumb, "cover": thumb]
+    if CommentCell.isPic(n) { it["kind"] = "image" }
+    else if CommentCell.isVideo(n) { it["kind"] = "video" }
+    else if ["m4a", "mp3", "wav", "aac", "caf"].contains(ext) { it["kind"] = "audio"; it["src"] = src.replacingOccurrences(of: "?view=1", with: "") }
+    else if ext == "pdf" || officeExt.contains(ext) { it["kind"] = "pages" }
+    else if ["txt", "csv", "md", "json"].contains(ext) { it["kind"] = "text" }
+    else { it["kind"] = "other"; it["note"] = "Download it to see the whole file." }
+    return it
+  }
+  // a file tapped: the app's preview, with all the files beside it (a comment's, the task's) to swipe through
   func openFiles(_ files: [[String: Any]], at i: Int) {
     guard i < files.count else { return }
-    let f = files[i]
     PreviewLoad.refreshCookies(web.configuration.websiteDataStore.httpCookieStore) { [weak self] in
       guard let self = self, let host = self.sheetHost() else { return }
       self.composeIfMade?.text.resignFirstResponder()
-      if CommentCell.isPic(f["name"] as? String ?? "") {
-        let pics = files.filter { CommentCell.isPic($0["name"] as? String ?? "") }
-        let list: [[String: Any]] = pics.map { p in
-          let ext = ((p["name"] as? String ?? "") as NSString).pathExtension.lowercased()
-          return ["id": p["id"] ?? "", "name": p["name"] ?? "", "kind": "image", "ext": ext, "src": serverURL() + (p["url"] as? String ?? ""), "thumb": (p["thumbUrl"] as? String).map { serverURL() + $0 } ?? "", "meta": TaskPage.size(p["size"] as? Int ?? 0)]
-        }
-        let at = pics.firstIndex { ($0["id"] as? String) == (f["id"] as? String) } ?? 0
-        let vc = PreviewVC(["files": list, "at": at], dark: self.statusStyle != .darkContent) { [weak self] ev in self?.previewEvent(ev, pics) }
-        self.previewVC = vc
-        host.present(vc, animated: true)
-      } else {
-        QuickFile.shared.show(f, from: host) { [weak self] t in self?.taskPages.last?.toast(t) }
+      let vc = PreviewVC(["files": files.map { Main.previewItem($0) }, "at": i], dark: self.statusStyle != .darkContent) { [weak self] ev in self?.previewEvent(ev, files) }
+      self.previewVC = vc
+      host.present(vc, animated: true)
+    }
+  }
+  // Copy: the file itself on iPhone's clipboard (a picture as a picture), its name kept for pasting into a comment
+  func copyFile(_ f: [String: Any], _ toast: @escaping (String) -> Void) {
+    guard let path = f["url"] as? String else { return toast("This file isn’t available") }
+    let name = f["name"] as? String ?? "File"
+    toast("Copying…")
+    PreviewLoad.refreshCookies(web.configuration.websiteDataStore.httpCookieStore) {
+      // (the original, not the light copy a video plays from)
+      PreviewLoad.data(serverURL() + path.replacingOccurrences(of: "?view=1", with: "")) { d in
+        guard let d = d else { return toast("Couldn’t copy — try again") }
+        let ext = (name as NSString).pathExtension.lowercased()
+        let uti = UTType(filenameExtension: ext)?.identifier ?? "public.data"
+        UIPasteboard.general.setItems([[uti: d]])
+        FileClip.name = name; FileClip.change = UIPasteboard.general.changeCount
+        toast("Copied — paste it into a comment")
       }
+    }
+  }
+  // Download: fetched with its progress shown, then iPhone's own Save / Share sheet (Save Image, Save to Files…)
+  func downloadFile(_ f: [String: Any], from vc: UIViewController, _ toast: @escaping (String) -> Void) {
+    guard let path = f["url"] as? String, let url = URL(string: serverURL() + path.replacingOccurrences(of: "?view=1", with: "")) else { return toast("This file isn’t available") }
+    PreviewLoad.refreshCookies(web.configuration.websiteDataStore.httpCookieStore) {
+      var r = URLRequest(url: url); r.allHTTPHeaderFields = PreviewLoad.headers(url)
+      let name = (f["name"] as? String ?? "File").replacingOccurrences(of: "/", with: "-")
+      var watch: NSKeyValueObservation?
+      let task = URLSession.shared.downloadTask(with: r) { [weak vc] tmp, resp, _ in
+        watch?.invalidate()
+        let ok = ((resp as? HTTPURLResponse)?.statusCode ?? 0) / 100 == 2
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("dl-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let dest = dir.appendingPathComponent(name)
+        let moved = ok && tmp.map { (try? FileManager.default.moveItem(at: $0, to: dest)) != nil } == true
+        DispatchQueue.main.async {
+          guard moved, let vc = vc else { return toast("Couldn’t download — try again") }
+          let item: Any = CommentCell.isPic(name) ? (UIImage(contentsOfFile: dest.path).map { $0 as Any } ?? dest) : dest
+          let share = UIActivityViewController(activityItems: [item], applicationActivities: nil)
+          share.popoverPresentationController?.sourceView = vc.view
+          vc.present(share, animated: true)
+        }
+      }
+      var last = -1
+      watch = task.progress.observe(\.fractionCompleted) { pr, _ in
+        let n = Int(pr.fractionCompleted * 100)
+        if n / 10 != last / 10 { last = n; DispatchQueue.main.async { toast(n >= 100 ? "Downloaded" : "Downloading… \(n)%") } }
+      }
+      toast("Downloading…")
+      task.resume()
     }
   }
 }
@@ -521,47 +582,28 @@ extension Main {
       }
     }
   }
-  // the preview's own buttons for a file opened here (not the page's): Copy, Download (with its progress), Info
+  // the preview's own buttons for a file opened here (not the page's): Copy, Download (with its progress), Info; and
+  // a PDF's / Office file's page pictures (made on the server)
   func previewEvent(_ ev: [String: Any], _ files: [[String: Any]]) {
-    guard let id = ev["id"] as? String, let f = files.first(where: { ($0["id"] as? String) == id }), let path = f["url"] as? String else { return }
+    guard let id = ev["id"] as? String, let f = files.first(where: { ($0["id"] as? String) == id }) else { return }
     let vc = previewVC
+    let toast: (String) -> Void = { [weak vc] t in vc?.set(["toast": t]) }
     switch ev["ev"] as? String ?? "" {
-    case "copy":
-      PreviewLoad.data(serverURL() + path) { d in
-        guard let d = d else { vc?.set(["toast": "Couldn’t copy"]); return }
-        if let img = UIImage(data: d) { UIPasteboard.general.image = img } else { UIPasteboard.general.setData(d, forPasteboardType: "public.data") }
-        vc?.set(["toast": "Copied"])
-      }
-    case "dl":
-      // fetched with its progress shown, then iPhone's own Save / Share sheet (Save Image, Save to Files…)
-      guard let url = URL(string: serverURL() + path) else { return }
-      var r = URLRequest(url: url); r.allHTTPHeaderFields = PreviewLoad.headers(url)
-      let name = (f["name"] as? String ?? "File").replacingOccurrences(of: "/", with: "-")
-      var watch: NSKeyValueObservation?
-      let task = URLSession.shared.downloadTask(with: r) { tmp, resp, _ in
-        watch?.invalidate()
-        let ok = ((resp as? HTTPURLResponse)?.statusCode ?? 0) / 100 == 2
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("dl-\(UUID().uuidString)", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let dest = dir.appendingPathComponent(name)
-        let moved = ok && tmp.map { (try? FileManager.default.moveItem(at: $0, to: dest)) != nil } == true
-        DispatchQueue.main.async {
-          guard moved, let vc = vc else { vc?.set(["toast": "Couldn’t download — try again"]); return }
-          let item: Any = CommentCell.isPic(name) ? (UIImage(contentsOfFile: dest.path).map { $0 as Any } ?? dest) : dest
-          let share = UIActivityViewController(activityItems: [item], applicationActivities: nil)
-          share.popoverPresentationController?.sourceView = vc.view
-          vc.present(share, animated: true)
-        }
-      }
-      var last = -1
-      watch = task.progress.observe(\.fractionCompleted) { pr, _ in
-        let n = Int(pr.fractionCompleted * 100)
-        if n / 10 != last / 10 { last = n; DispatchQueue.main.async { vc?.set(["toast": n >= 100 ? "Downloaded" : "Downloading… \(n)%"]) } }
-      }
-      vc?.set(["toast": "Downloading…"])
-      task.resume()
+    case "copy": copyFile(f, toast)
+    case "dl": if let vc = vc { downloadFile(f, from: vc, toast) }
     case "more":
       vc?.set(["info": [["Name", f["name"] as? String ?? ""], ["Size", TaskPage.size(f["size"] as? Int ?? 0)]]])
+    case "pages":
+      guard let fp = f["file"] as? String else { vc?.set(["id": id, "pages": [String](), "note": "This file couldn’t be previewed — download it to see it."]); return }
+      serverTask.request("/api/host/pdfPages", body: ["id": id, "path": fp], timeout: 150) { [weak vc] j in
+        let pages = (j?["pages"] as? [String]) ?? []
+        let total = j?["total"] as? Int ?? 0
+        let note: String? = pages.isEmpty ? ((j?["unavailable"] as? Bool) == true ? "This file can’t be previewed yet — download it to see it." : "This file couldn’t be previewed — download it to see it.")
+          : total > pages.count ? "Showing the first \(pages.count) of \(total) pages — download it for the rest." : nil
+        var out: [String: Any] = ["id": id, "pages": pages.map { pg in serverURL() + "/__file/" + pg.split(separator: "/").map { String($0).addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? String($0) }.joined(separator: "/") }]
+        if let note { out["note"] = note }
+        vc?.set(out)
+      }
     default: break
     }
   }

@@ -662,6 +662,15 @@ export function createServer(cfg) {
       try { tk = homeView.taskPage(u, visibleSnapshot(u).data, url.searchParams.get('id')); } catch (e) { console.error('task page:', e.message); return json(res, 500, { ok: false, error: 'The task could not be worked out' }); }
       return json(res, 200, { ok: true, rev: store.rev(), task: tk });
     }
+    // a file's picture for the app (a video's frame, a PDF's / Office file's first page), made the first time it's asked for
+    if (p === '/api/fthumb' && req.method === 'GET') {
+      const fp = String(url.searchParams.get('path') || '');
+      if (!fp || !access.canReadFile(u, fp)) return json(res, 403, { ok: false, error: 'Not allowed' });
+      let r = null;
+      try { r = await files.commands.thumb({ id: url.searchParams.get('id') || undefined, path: fp }); } catch { r = null; }
+      if (!r || !r.thumb) return json(res, 404, { ok: false, error: 'No picture' });
+      return files.serve(req, res, r.thumb);
+    }
     if (p === '/api/inbox' && req.method === 'GET') {
       if (store.kv.get('inbox-server') === 'off') return json(res, 200, { ok: true, off: true, rev: store.rev() });
       let list = null;

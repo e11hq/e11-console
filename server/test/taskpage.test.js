@@ -178,6 +178,21 @@ test('attaching files from the phone: the page that comes back has them at once'
   assert.ok(JSON.stringify(r.task).includes('brief.pdf'), 'the returned page lists the new file');
 });
 
+test('the comments\' files under Files (not voice messages); a video\'s picture asked for', async () => {
+  await act('prod@e11-digital.com', { act: 'comment', id: 't3', html: 'clip', text: 'clip', files: [{ name: 'cut.mp4', size: 900, path: 'attachments/t3/cut.mp4' }] });
+  await act('prod@e11-digital.com', { act: 'comment', id: 't3', html: '', text: '', files: [{ name: 'Voice message.m4a', size: 20, path: 'attachments/t3/v2.m4a', voice: true, dur: 3 }] });
+  const m = (await page('am@e11-digital.com', 't3')).task;
+  const cf = m.commentFiles;
+  assert.ok(cf.some((f) => f.name === 'cut.mp4' && f.by === 'u-prod'), JSON.stringify(cf));
+  assert.ok(!cf.some((f) => f.name === 'Voice message.m4a'), 'no voice messages');
+  const v = cf.find((f) => f.name === 'cut.mp4');
+  assert.ok(v.thumbUrl.startsWith('/api/fthumb?path=attachments%2Ft3%2Fcut.mp4'), v.thumbUrl); assert.equal(v.file, 'attachments/t3/cut.mp4');
+  const r = await fetch(base + v.thumbUrl, { headers: { 'X-Dev-Email': 'am@e11-digital.com' } });
+  assert.equal(r.status, 404, 'no such file here: no picture');
+  const r2 = await fetch(base + '/api/fthumb?path=' + encodeURIComponent('Finance/x.pdf'), { headers: { 'X-Dev-Email': 'prod@e11-digital.com' } });
+  assert.equal(r2.status, 403);
+});
+
 test('writing a comment, a reply with a mention, a voice message; editing', async () => {
   let r = await act('prod@e11-digital.com', { act: 'comment', id: 't3', html: 'Done <b>now</b>', text: 'Done now' });
   assert.equal(r.ok, true); const c = T('t3').comments.at(-1); assert.equal(c.html, 'Done <b>now</b>'); assert.equal(c.authorId, 'u-prod');
