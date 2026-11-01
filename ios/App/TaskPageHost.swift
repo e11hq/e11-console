@@ -463,8 +463,10 @@ extension Main {
       c.text.resignFirstResponder()
       c.switchTo(task: c.taskId, parent: c.parentId)   // (keeps what's written)
       UIView.animate(withDuration: 0.12, animations: { c.alpha = 0 }) { _ in if c.alpha == 0 { c.isHidden = true } }
-      if defaults.bool(forKey: "e11_feed_off") == false { return }
     }
+    // (the app's own comments: nothing of the old website comments screen to put away — going on into it slid the
+    //  page's comments in over Details for a moment, Haris 2026-11-01, seen in the self-test film)
+    if defaults.bool(forKey: "e11_feed_off") == false { return }
     cbarOnComments = false; cbarShow = false; cbarTask = nil
     cwebUpdate()
     let b = cbar
