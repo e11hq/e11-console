@@ -69,6 +69,9 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private let content = UIView()
   private let barBox = UIView()                        // what the frost edge sits under (the buttons and the switch)
   var barBoxView: UIView { barBox }
+  private var edgeHook: AnyObject?
+  // the frost under the bar follows whichever list is showing (Details, the comments, a thread)
+  func edgeScroll(_ sv: UIScrollView) { if #available(iOS 26.0, *) { (edgeHook as? UIScrollEdgeElementContainerInteraction)?.scrollView = sv } }
   // the corner button (Main's CornerButton) stands in for ••• — this page's own stays invisible; its menu is lent
   var cornerShared = false { didSet { more.alpha = cornerShared ? 0 : 1; moreBtn.isHidden = cornerShared } }
   var cornerFrame: CGRect { more.frame }
@@ -109,6 +112,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       let i = UIScrollEdgeElementContainerInteraction()
       i.scrollView = scroll; i.edge = .top
       barBox.addInteraction(i)
+      edgeHook = i
       scroll.topEdgeEffect.style = .soft
     }
     back.setIcon("chevron.left", 19)
@@ -193,7 +197,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     commentsHost.isHidden = !c
     scroll.isHidden = c
     fab.alpha = c ? 0 : 1
-    if c { endEditing(true) }
+    if c { endEditing(true) } else { edgeScroll(scroll) }
     if tell { onTab?(t) }
   }
   func setComments(_ n: Int) { seg.setTitle(n > 0 ? "Comments \(n)" : "Comments", forSegmentAt: 1) }

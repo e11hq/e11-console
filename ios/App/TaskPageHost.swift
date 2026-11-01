@@ -298,6 +298,7 @@ extension Main {
     }
     f.frame = p.commentsHost.bounds
     f.isHidden = false
+    p.edgeScroll(p.threadFeed?.scroll ?? f.scroll)
     p.commentsHost.bringSubviewToFront(f)
     if let t = p.threadFeed { p.commentsHost.bringSubviewToFront(t) }
     f.load { [weak self, weak p, weak f] in
@@ -361,6 +362,7 @@ extension Main {
     t.transform = CGAffineTransform(translationX: p.bounds.width, y: 0)
     composeIfMade?.parentId = cid; composeIfMade?.replyTo = nil
     t.load { [weak t] in if let id = pulse { t?.pulse(id) } }
+    p.edgeScroll(t.scroll)
     UIView.animate(withDuration: 0.38, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0) { t.transform = .identity }
   }
   func closeThread(_ p: TaskPage) {
@@ -368,6 +370,7 @@ extension Main {
     let back = t.thread
     p.threadFeed = nil
     composeIfMade?.parentId = nil
+    if let f = p.feed { p.edgeScroll(f.scroll) }
     UIView.animate(withDuration: 0.32, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.beginFromCurrentState]) { t.transform = CGAffineTransform(translationX: p.bounds.width, y: 0) } completion: { _ in t.removeFromSuperview() }
     // back on the comment the thread is for: it pulses
     if let id = back, let f = p.feed { f.load { f.pulse(id) } }
