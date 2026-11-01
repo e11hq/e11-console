@@ -456,12 +456,19 @@ final class CommentCell: UIView {
   }
   func height(for W: CGFloat) -> CGFloat {
     if let m = measured, m.0 == W { return m.1 }
-    card.frame = CGRect(x: 16, y: 6, width: W - 32, height: 10)
+    card.bounds = CGRect(x: 0, y: 0, width: W - 32, height: 10)
     let h = card.systemLayoutSizeFitting(CGSize(width: W - 32, height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height
     measured = (W, h + 12)
     return h + 12
   }
-  override func layoutSubviews() { super.layoutSubviews(); card.frame = CGRect(x: 16, y: 6, width: bounds.width - 32, height: bounds.height - 12) }
+  // (its size and place set without touching its shrink: setting the frame of a card that's shrunk while held re-laid
+  //  its insides — the text moved; now the whole card shrinks as one picture, Haris 2026-11-01)
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    let size = CGSize(width: bounds.width - 32, height: bounds.height - 12)
+    if card.bounds.size != size { card.bounds = CGRect(origin: .zero, size: size) }
+    card.center = CGPoint(x: 16 + size.width / 2, y: 6 + size.height / 2)
+  }
 
   // ---------- pieces ----------
   static func avatar(_ p: [String: Any], _ side: CGFloat) -> UIView {
