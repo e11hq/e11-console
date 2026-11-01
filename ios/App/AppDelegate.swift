@@ -1924,11 +1924,16 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
             var g: [String: Any] = ["made": self.inboxIfMade != nil, "shown": self.inboxIfMade?.isHidden == false, "server": self.serverInboxIfMade?.on ?? false, "query": self.serverInboxIfMade?.query ?? ""]
             if let h = self.inboxIfMade { g.merge(h.inboxGeo()) { a, _ in a } }
             g["corner"] = self.corner.kind; g["cornerW"] = self.corner.frame.width; g["cornerA"] = self.corner.alpha
+            // (who the server's Inbox is for, who the page says is signed in, and what the server sent — for the empty-Inbox runs)
+            g["me"] = self.serverInboxIfMade?.me ?? ""; g["pageMe"] = self.inboxPageMe ?? ""
+            g["modelRows"] = (self.serverInboxIfMade?.shown?["rows"] as? [Any])?.count ?? -1; g["modelMe"] = self.serverInboxIfMade?.shown?["me"] as? String ?? ""
             self.selfResult[name + "Inbox"] = g
           }
           if name.hasPrefix("mytasks") || name == "inbox" {
             var g: [String: Any] = ["made": self.myTasksIfMade != nil, "shown": self.myTasksIfMade?.isHidden == false, "server": self.serverMyTasksIfMade?.on ?? false, "query": self.serverMyTasksIfMade?.query ?? ""]
             if let h = self.myTasksIfMade { g.merge(h.listGeo()) { a, _ in a }; g["title"] = h.geo()["title"] }
+            g["me"] = self.serverMyTasksIfMade?.me ?? ""; g["pageMe"] = self.myTasksPageMe ?? ""; g["modelMe"] = self.serverMyTasksIfMade?.shown?["me"] as? String ?? ""
+            g["modelCards"] = ((self.serverMyTasksIfMade?.shown?["groups"] as? [[String: Any]]) ?? []).reduce(0) { $0 + (($1["cards"] as? [Any])?.count ?? 0) }
             self.selfResult[name + "MyTasks"] = g
           }
           if name == "home" || name == "inbox" { self.selfResult[name + "Frame"] = ["web": self.web.frame.height, "screen": self.view.bounds.height, "tabBar": !self.tabBar.isHidden] as [String: Any] }

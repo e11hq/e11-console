@@ -92,6 +92,13 @@ try:
     check(ms.get('pinned') is True and abs((ms.get('headTop') or 0) - (ms.get('barBottom') or 0) - 8) < 1, f"scrolled, All / Done and the filters stay under the frost bar {ms}")
     check((res.get('mytasksScrolled') or {}).get('blank') is True, f"the page draws nothing under the app's My Tasks {res.get('mytasksScrolled')}")
     check((res.get('mytasksTopMyTasks') or {}).get('pinned') is False, f"back at the top they're with the list again {res.get('mytasksTopMyTasks')}")
+    # (the empty-Inbox / empty-Done runs: what the server itself has for this person now, and who's who)
+    try:
+        hdr = {'X-Dev-Email': EMAIL}
+        si = json.loads(urllib.request.urlopen(urllib.request.Request(BASE + '/api/inbox?tab=all', headers=hdr), timeout=10).read()).get('home') or {}
+        sd = json.loads(urllib.request.urlopen(urllib.request.Request(BASE + '/api/mytasks?tab=done', headers=hdr), timeout=10).read()).get('home') or {}
+        print('diag server: inbox rows', len(si.get('rows') or []), 'me', si.get('me'), '· done cards', sum(len(g.get('cards') or []) for g in sd.get('groups') or []), 'me', sd.get('me'))
+    except Exception as e: print('diag server: failed', e)
     ib = res.get('ibxInbox') or {}; ibs = res.get('ibxSwipeInbox') or {}; ibu = res.get('ibxUnreadInbox') or {}; ibm = res.get('ibxMentionsInbox') or {}
     check(ib.get('shown') is True and ib.get('server') is True and ib.get('tab') == 'all' and (ib.get('rows') or 0) > 0 and len(ib.get('cats') or []) == 3, f"the Inbox is the app's own, from the server, a row for each notification {ib}")
     check((res.get('ibx') or {}).get('blank') is True, f"the page draws nothing under the app's Inbox {res.get('ibx')}")
