@@ -428,6 +428,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       v.set(r, photo: roundPic(NativeSheetVC.photo(p), initials: p?["initials"] as? String, color: NativeSheetVC.color(p?["color"]), size: 44))
       content.append(v)
     }
+    let rowsNow = content.compactMap { $0 as? InboxRow }
+    rowsNow.forEach { $0.last = $0 === rowsNow.last }
     // the rows that don't belong any more: faded out where they are, then gone
     for (id, v) in inboxRows where !seen.contains(id) {
       if v === openRow { openRow = nil }
@@ -1537,6 +1539,7 @@ final class InboxRow: UIControl, UIGestureRecognizerDelegate {
   var onTap: (() -> Void)?, onToggle: (() -> Void)?, onOpen: ((InboxRow) -> Void)?
   var id = ""
   private(set) var read = false
+  var last = false { didSet { sep.isHidden = last } }   // (the list's last row: no separator under it — Haris, 2026-11-01)
   static let H: CGFloat = 82.8   // (Mail's)
   private let body = UIView(), dot = UIView(), av = UIImageView(), head = UILabel(), when = UILabel(), chev = UIImageView(), titleL = UILabel(), descL = UILabel(), sep = UIView()
   private let act = UIView(), actCircle = UIView(), actIcon = UIImageView(), actLabel = UILabel()
