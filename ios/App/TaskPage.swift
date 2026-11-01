@@ -485,7 +485,8 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if TaskPage.viewOnly && !desc.isEmpty {
       let rich = DescEditor.attributed((m["descRuns"] as? [[String: Any]]) ?? [], done: (m["done"] as? Bool) == true)
       // (its plain words if the formatted ones didn't come)
-      descRead.attributedText = rich.length > 0 ? rich : NSAttributedString(string: desc, attributes: [.font: UIFont.systemFont(ofSize: 17), .foregroundColor: UIColor.label])
+      let onlyFiles = !((m["descFiles"] as? [[String: Any]]) ?? []).isEmpty
+      descRead.attributedText = rich.length > 0 || onlyFiles ? rich : NSAttributedString(string: desc, attributes: [.font: UIFont.systemFont(ofSize: 17), .foregroundColor: UIColor.label])
       if descRead.attributedText.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false { blocks.append(descRead) }
     }
     // (files pasted into the description: the same cards as comments' — tapped, the preview with them)
