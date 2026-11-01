@@ -120,6 +120,34 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
       const r = rules.deleteTask(t);
       undo = r.item.id;
       messages = ['Moved to the Trash'];
+    } else if (['title', 'start', 'status', 'myPart', 'prio', 'check', 'needsCD', 'update', 'clientApproval'].includes(a)) {
+      // the native task page's (shell 30+) — each checked as the website checks it
+      if (rules.amReadOnly(t) || rules.doneLocked(t)) return view();
+      let r = [];
+      if (a === 'title') { if (!rules.can('editTitle', t) || rules.idLocked(t)) return fail(403, 'The name can’t be changed'); r = rules.setTitle(t, body.value); }
+      else if (a === 'start') {
+        if (!rules.can('editDates', t)) return fail(403, 'Your role doesn’t allow changing dates');
+        const v = body.value == null || body.value === '' ? null : String(body.value);
+        if (v && !(/^\d{4}-\d{2}-\d{2}$/.test(v) && new Date(v + 'T00:00:00Z').toISOString().slice(0, 10) === v)) return fail(400, 'Not a date');
+        r = rules.setStart(t, v);
+      }
+      else if (a === 'status') r = rules.setStatus(t, String(body.value || ''), body.cdAgain);
+      else if (a === 'myPart') r = rules.setMyPart(t, !!body.value);
+      else if (a === 'prio') { if (!rules.can('editPriority', t)) return fail(403, 'Your role doesn’t allow changing priority'); r = rules.setPrio(t, String(body.key || '_'), body.value); }
+      else if (a === 'check') r = rules.toggleCheck(t, String(body.value || ''));
+      else if (a === 'needsCD') r = rules.setNeedsCD(t, !!body.value);
+      else if (a === 'update') { if (t.parentId) return fail(400, 'Not on a subtask'); r = rules.setUpdate(t, body.value ? String(body.value) : null); }
+      else if (a === 'clientApproval') {
+        const ca = (rules.taskPage(t.id) || {}).clientApproval;
+        if (!ca || !ca.canSet) return fail(403, 'Your role doesn’t allow this');
+        rules.setClientApproval(t, body.value === 'yes' ? {} : body.value === 'none' ? { none: true } : null);
+      }
+      if (r && !Array.isArray(r)) {
+        if (r.error) return fail(409, r.error);
+        if (r.need) return fail(409, 'Does this need CD review again?', { need: r.need });
+        r = r.messages || [];
+      }
+      messages = r;
     } else return fail(400, 'Unknown action');
     // what changed, as the website pushes it (each with the version it started from, merged on the server)
     const changes = [];
@@ -137,5 +165,16 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
     for (const it of db.trash) changes.push({ kind: 'trash', id: it.id, data: it });
     return { ok: true, changes, messages, undo };
   }
-  return { home, myTasks, inbox, act };
+  // the app's native task page (GET /api/task?id=) — null: not there, or not for this person
+  function taskPage(u, data, id) {
+    const R = load();
+    const today = R.dubaiDay(now());
+    const env = { nowISO: () => new Date(now()).toISOString(), nowMs: () => now() };
+    const m = R.withEnv(env, { users: data.users || [], projects: data.projects || [], tasks: data.tasks || [], statuses: data.statuses || [], plans: data.plans || [], meta: data.meta || {} }, u.id, today).taskPage(String(id || ''));
+    if (!m) return null;
+    for (const p of Object.values(m.people || {})) { if (p.photo) p.photo = fileUrl(p.photo) + '?view=1'; }
+    for (const f of m.files || []) { f.url = f.path ? fileUrl(f.path) + '?view=1' : null; f.thumbUrl = f.thumb ? fileUrl(f.thumb) + '?view=1' : null; delete f.path; delete f.thumb; }
+    return { ...m, today };
+  }
+  return { home, myTasks, inbox, act, taskPage };
 }

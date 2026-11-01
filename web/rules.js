@@ -561,8 +561,210 @@ var E11Rules = (() => {
       return { ids, removed, item };
     }
 
+    // ---------- the iPhone app's native task page (shell 30+, 2026-11-01): GET /api/task?id= ----------
+    // Everything the Details tab shows, worked out here (the website's own rules), with what this person may change.
+    const TAG_HUES = ['#5b8cff', '#3ddc97', '#ffb547', '#ff6b6b', '#c27cff', '#4fd1c5', '#ff8fc7', '#9aa0ab'];
+    const tagRgb = (name) => { let h = 0; for (const c of String(name).toLowerCase()) h = (h * 31 + c.charCodeAt(0)) >>> 0; return rgbOf(TAG_HUES[h % TAG_HUES.length]); };
+    const UPDATES = ['WIP', 'Brief to come', 'Amendments', 'Minor Amendments', 'Shoot', 'Edit Video', 'Adaptations', 'On hold', 'Oversee', 'Followup', 'Meeting', 'Reel Cover', 'Ready to Post', 'Ongoing', 'Redesign', 'Awaiting client assets', 'Storyboard', 'Open files', 'Brainstorm', 'Briefing', 'Out of scope', 'Dispatch', 'Copy Writing', 'Edit images', 'HTML', 'Mockup'];
+    const FIELD_COLORS = ['#f9be33', '#4c9aff', '#ff6b70', '#3ddc97', '#a875ff', '#ff8a4c', '#4fd1c5', '#ff8fc7', '#9aa4b2', '#7b68ee'];
+    const updateRgb = (v) => rgbOf(FIELD_COLORS[Math.max(0, UPDATES.indexOf(v)) % FIELD_COLORS.length]);
+    const CHANNEL_NAMES = { ig: 'Instagram', tt: 'TikTok', li: 'LinkedIn', x: 'X', fb: 'Facebook', yt: 'YouTube', sc: 'Snapchat', edm: 'EDM' };
+    const SEC_REVIEW = /^(internal )?review$/i, SEC_CTR = /^ctr$/i;
+    const lockRoot = (t) => (t && t.parentId ? task(t.parentId) || t : t);
+    const idLocked = (t) => { const r = lockRoot(t); return !!r && (!!r.lockedAt || (r.reviews || []).length > 0); };
+    const lockedSince = (t) => { const r = lockRoot(t); return (r && (r.lockedAt || (r.reviews || []).map((x) => x.at).filter(Boolean).sort()[0])) || null; };
+    const iReview = (t) => needsCD(t) && isMine(t) && !isCD(meId);
+    const statusLocked = (t) => reviewPending(t);
+    function pastReview(t, sectionId) {
+      const list = statusList(t) || [], to = list.findIndex((x) => x.id === sectionId), s = list[to];
+      if (!s) return false;
+      if (SEC_CTR.test(String(s.name).trim()) || isDoneName(s.name)) return true;
+      const rv = list.findIndex((x) => SEC_REVIEW.test(String(x.name).trim()));
+      return rv >= 0 && to > rv;
+    }
+    const plainOfHtml = (h) => String(h || '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|li|h\d)>/gi, '\n').replace(/<li[^>]*>/gi, '• ').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\n{3,}/g, '\n\n').trim();
+    const firstName = (id) => (id === meId ? 'You' : (fullName(userById(id)) || '').split(' ')[0] || 'Someone');
+    function taskPage(id) {
+      const t = task(id);
+      const u = me();
+      if (!t || !u || isFinUser(u)) return null;
+      const ro = amReadOnly(t) || doneLocked(t);
+      const pp = new Set();
+      const person = (pid) => { if (pid) pp.add(pid); return pid; };
+      const p = proj(t.projectId), parent = t.parentId ? task(t.parentId) : null;
+      const s = statusInfo(t), list = statusList(t) || [];
+      const at = list.findIndex((x) => x.id === t.sectionId);
+      const lockedId = idLocked(t);
+      const ids = t.assignees || [];
+      const cdWait = !t.parentId && needsCD(t) && !cdOK(t);
+      const m = {
+        id: t.id, title: t.title || '', done: !!t.done, sub: !!t.parentId, parent: parent ? { id: parent.id, title: parent.title || 'Untitled task' } : null,
+        client: p ? { id: p.id, name: p.name, rgb: rgbOf(p.color || '#87909e') } : null,
+        readOnly: ro, why: doneLocked(t) ? 'Completed tasks are read only' : amReadOnly(t) ? 'View only — you can’t change this task' : '',
+        canTitle: !ro && can('editTitle', t) && !lockedId,
+        lock: lockedId ? { text: `${t.parentId ? 'Its name is locked with its main task' : 'Name, description and client are locked'} — ${t.parentId ? 'it' : 'this task'} went for CD review${lockedSince(t) ? ` on ${fmtDay(String(lockedSince(t)).slice(0, 10))}` : ''}.`, from: !t.parentId && can('createTask', t) } : null,
+        basedOn: t.basedOn && task(t.basedOn) ? { id: t.basedOn, title: task(t.basedOn).title || 'Untitled task' } : null,
+        kids: db.tasks.filter((x) => x.basedOn === t.id).map((x) => ({ id: x.id, title: x.title || 'Untitled task' })),
+        completed: t.done ? { at: t.completedAt ? dayOf(t.completedAt) : '', label: t.completedAt ? fmtDay(dayOf(t.completedAt)) : '', left: t.completedAt ? Math.max(0, 30 - Math.floor((nowMs() - Date.parse(t.completedAt)) / 86400000)) : null, canReopen: canReopen(t), canFrom: !t.parentId && can('createTask', t) } : null,
+        status: { name: s.name, rgb: rgbOf(s.color), canSet: !ro && !t.done && !statusLocked(t), why: statusLocked(t) ? 'The status is locked while files are with the CD for review' : '',
+          next: !ro && !t.done && !statusLocked(t) && at < list.length - 1 && !(cdWait && pastReview(t, (list[Math.max(0, at) + 1] || {}).id)) ? (list[Math.max(0, at) + 1] || {}).id || null : null,
+          options: list.map((x) => ({ id: x.id, name: x.name, rgb: rgbOf(x.color || '#87909e'), on: !t.done && x.id === t.sectionId, locked: cdWait && x.id !== t.sectionId && pastReview(t, x.id) })) },
+        cd: !t.parentId && (needsCD(t) || t.cdStatus) && t.cdStatus && CD[t.cdStatus] ? { label: t.cdStatus === 'approved' ? 'CD Approved' : 'CD · Review', rgb: rgbOf(CD[t.cdStatus].color), check: t.cdStatus === 'approved' } : null,
+        creator: t.createdBy && userById(t.createdBy) ? { id: person(t.createdBy), when: t.createdAt ? fmtDay(dayOf(t.createdAt)) : '' } : null,
+        assignees: ids.map((x) => ({ id: person(x), done: partDone(t, x) })), canAssign: !ro && can('assign', t),
+        parts: !t.parentId && !t.done && ids.length ? {
+          n: ids.filter((x) => partDone(t, x)).length, of: ids.length,
+          chips: ids.map((x) => ({ id: x, name: firstName(x), done: partDone(t, x), pending: !partDone(t, x) && needsCD(t) && reviewState(t, x) === 'pending' })),
+          mine: isMine(t) && !ro ? (iReview(t) ? (reviewState(t, meId) === 'approved' ? 'approved' : reviewState(t, meId) === 'pending' ? 'pending' : 'review') : partDone(t) ? 'done' : 'open') : null,
+        } : null,
+        dates: { start: t.start || '', due: t.due || '', startLabel: t.start ? fmtDay(t.start) : '', dueLabel: t.due ? fmtDay(t.due) : '', late: !t.done && !!t.due && dayDiff(t.due) < 0, today: !t.done && !!t.due && dayDiff(t.due) === 0, canEdit: !ro && can('editDates', t) },
+        prio: (ids.length > 1 || (ids.length === 1 && ids[0] !== meId) ? ids : [ids[0] || '_']).map((k) => {
+          const v = k === '_' ? normPrio((t.prio || {})._) : prioOf(t, k);
+          if (k !== '_') person(k);
+          return { key: k, name: k === '_' ? '' : firstName(k), v: v === 'none' ? '' : String(v), label: v === 'urgent' ? 'Urgent' : v === 'none' ? '' : String(v) };
+        }), canPrio: !ro && can('editPriority', t),
+        tags: (t.tags || []).map((g) => ({ t: g, rgb: tagRgb(g) })), canTags: !ro && can('addTag', t),
+        channels: (t.channels || []).map((c) => CHANNEL_NAMES[c] || c),
+        guardian: t.guardian && userById(t.guardian) ? person(t.guardian) : null,
+        update: t.update ? { t: t.update, rgb: updateRgb(t.update) } : null, updates: UPDATES,
+        canFields: !ro && !t.parentId,
+        review: !t.parentId && !t.done ? { on: !!t.needsCD, canSet: !ro && !!u && (isAdm(u) || u.role === 'am' || isCD(meId)) && !reviewPending(t), who: cdUserId() ? fullName(userById(cdUserId())) : '' } : null,
+        clientApproval: cdApprovedNow(t) ? (() => { const ca = t.clientApproval, fresh = clientApprovalFresh(t);
+          return { state: ca && fresh ? (ca.none ? 'none' : 'yes') : ca ? 'old' : 'missing', text: ca && fresh ? (ca.none ? 'Not needed' : `Approved · ${firstName(ca.by)} · ${fmtDay(dayOf(ca.at))}`) : ca ? 'Out of date' : 'Missing', canSet: !ro && !t.done && !!u && (isAdm(u) || u.role === 'am' || t.createdBy === meId) }; })() : null,
+        desc: t.notesHtml ? plainOfHtml(t.notesHtml) : String(t.notes || '').trim(), canDesc: !ro && can('editDesc', t) && !lockedId,
+        subtasks: subtasksOf(t.id).map((x) => { (x.assignees || []).slice(0, 1).forEach(person); return { id: x.id, title: x.title || 'Untitled', done: !!x.done, due: x.due ? fmtDay(x.due) : '', late: !x.done && !!x.due && dayDiff(x.due) < 0, av: (x.assignees || [])[0] || null, canTick: !ro && !amReadOnly(x) }; }),
+        canAddSub: !ro && !t.parentId && can('createTask', t),
+        checklist: (t.checklist || []).map((c) => ({ id: c.id, text: c.text || '', done: !!c.done })), canCheck: !ro, canAddCheck: !ro && can('addChecklist', t),
+        files: (t.attachments || []).filter((a) => !a.reviewId || (t.reviews || []).some((r) => r.id === a.reviewId && r.state === 'approved')).map((a) => ({ id: a.id, name: a.name || 'File', size: a.size || 0, path: a.path || null, thumb: a.thumb || null, type: a.type || '' })),
+        activity: (t.activity || []).slice(-30).reverse().map((a) => { person(a.actor); return { who: a.actor || null, text: plainOfHtml(a.text).replace(/\s*→\s*/g, ' → '), at: a.at || '' }; }),
+        comments: (t.comments || []).length,
+        complete: t.done ? null : { ok: !ro && canComplete(t), why: ro ? '' : completeBlocked(t), show: !ro && !t.parentId },
+      };
+      m.people = Object.fromEntries([...pp].filter(Boolean).map((pid) => { const x = userById(pid); return [pid, { name: fullName(x) || 'Someone', first: firstName(pid), initials: initials(fullName(x) || '?'), color: rgbOf(avColor(pid || 'x')), photo: x && x.avatar ? x.avatar : null }]; }));
+      return m;
+    }
+    // ---------- the native task page's changes (POST /api/task/act) → messages, or { error } / { need } ----------
+    function setTitle(t, v) {
+      v = String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, 300);
+      if (v === (t.title || '')) return [];
+      logChange(t, 'the <b>title</b>', t.title || '', v);
+      t.title = v; t.updatedAt = nowISO();
+      return [];
+    }
+    function setStart(t, v) {
+      const o = t.start; t.start = v || null;
+      if (o === t.start) return [];
+      logChange(t, 'the <b>start date</b>', fmtDay(o), fmtDay(t.start)); t.updatedAt = nowISO();
+      return [];
+    }
+    // the status (app.js changeStatus): cdAgain 'yes' | 'no' answers "Does this need CD review again?" when it goes back
+    function setStatus(t, sectionId, cdAgain) {
+      const list = statusList(t) || [];
+      if (!list.some((x) => x.id === sectionId)) return { error: 'That status is no longer here' };
+      if (t.sectionId === sectionId && !t.done) return { messages: [] };
+      if (statusLocked(t)) return { error: 'The status is locked while files are with the CD for review' };
+      if (!t.parentId && needsCD(t) && !cdOK(t) && pastReview(t, sectionId)) return { error: 'Waiting for CD approval' };
+      const from = list.findIndex((x) => x.id === t.sectionId), to = list.findIndex((x) => x.id === sectionId);
+      const fromS = list[from], toS = list[to];
+      const back = !t.parentId && fromS && toS && to < from && (SEC_CTR.test(fromS.name.trim()) || isDoneName(fromS.name)) && !(SEC_CTR.test(toS.name.trim()) || isDoneName(toS.name));
+      if (back) {
+        const u = me();
+        if (!((u && (isAdm(u) || u.role === 'am')) || t.createdBy === meId)) return { error: 'Only an Account Manager or the task’s creator can send it back' };
+        const cdOnIt = t.cdRule && cdUserId() && (t.assignees || []).includes(cdUserId());
+        const ans = cdOnIt ? 'no' : cdAgain;
+        if (ans !== 'yes' && ans !== 'no') return { need: 'cdAgain' };
+        t.partsDone = {};
+        if (ans === 'yes') {
+          t.needsCD = true; t.reviewEpoch = epochOf(t) + 1;
+          if (t.cdStatus) logChange(t, 'the <b>CD Status</b>', CD[t.cdStatus] ? CD[t.cdStatus].label : '', '');
+          t.cdStatus = '';
+          logActivity(t, 'sent it back for changes — <b>needs CD review again</b>');
+        } else { t.needsCD = false; logActivity(t, 'sent it back for changes — <b>no CD review needed</b>'); }
+      }
+      const out = t.done ? setDone(t, false) : [];
+      moveToStatus(t, sectionId);
+      return { messages: out };
+    }
+    function setMyPart(t, done) {
+      if (!isMine(t)) return { error: 'This isn’t your task' };
+      if (iReview(t)) return { error: 'Your part is done when the CD approves your files' };
+      t.partsDone = t.partsDone || {};
+      if (!!t.partsDone[meId] === !!done) return { messages: [] };
+      if (done) {
+        t.partsDone[meId] = nowISO();
+        const all = (t.assignees || []).length > 0 && t.assignees.every((x) => partDone(t, x));
+        const lead2 = [...new Set([creatorOf(t)].concat(clientAmsOf(t)).filter(Boolean))];
+        logActivity(t, all ? 'finished their part — <b>all parts are done</b>, ready for review' : 'finished their part');
+        notifyWatchers(t, 'part', 'finished their part of', { skip: all ? lead2 : [] });
+        if (all) lead2.forEach((x) => pushNotif(x, t, 'allparts', 'marked the last part done — all parts are done, ready for review:'));
+        t.updatedAt = nowISO();
+        return { messages: ['Your part is done'] };
+      }
+      delete t.partsDone[meId];
+      logActivity(t, 'reopened their part');
+      t.updatedAt = nowISO();
+      return { messages: checkPrioConflict(t) };
+    }
+    function setPrio(t, key, k) {
+      t.prio = t.prio || {};
+      k = normPrio(k);
+      const cur = normPrio(t.prio[key]);
+      if (cur === k) return [];
+      if (typeof k === 'number' && prioTakenBy(k, dayKey(t), key, t.id)) return { error: `Priority ${k} is already used that day` };
+      const who = prioOwnerName(key);
+      logChange(t, who ? `<b>${esc(who)}</b>’s <b>priority</b>` : 'the <b>priority</b>', prioLabel(cur), prioLabel(k));
+      if (k === 'none') delete t.prio[key]; else t.prio[key] = k;
+      if (who) {
+        pushNotif(key, t, 'priority', `set your priority to <b>${esc(prioLabel(k))}</b> on`);
+        notifyWatchers(t, 'priority', `changed <b>${esc(who)}</b>’s priority to <b>${esc(prioLabel(k))}</b> on`, { skip: [key] });
+      } else notifyWatchers(t, 'priority', `changed the priority to <b>${esc(prioLabel(k))}</b> on`);
+      t.updatedAt = nowISO();
+      return [];
+    }
+    // which numbers are taken that day (the priority sheet greys them)
+    const prioTaken = (t, key) => { const out = []; for (let n = 1; n <= 10; n++) if (prioTakenBy(n, dayKey(t), key, t.id)) out.push(n); return out; };
+    function toggleCheck(t, cid) {
+      const c = (t.checklist || []).find((x) => x.id === cid);
+      if (!c) return { error: 'That item is no longer here' };
+      c.done = !c.done;
+      logActivity(t, `${c.done ? 'checked' : 'unchecked'} <b>${esc(c.text)}</b>`);
+      t.updatedAt = nowISO();
+      return [];
+    }
+    function setNeedsCD(t, on) {
+      const u = me();
+      if (!(u && (isAdm(u) || u.role === 'am' || isCD(meId)))) return { error: 'Your role doesn’t allow this' };
+      if (on && t.cdRule && cdUserId() && (t.assignees || []).includes(cdUserId())) return { error: 'The CD is assigned, so no CD review is needed' };
+      if (reviewPending(t)) return { error: 'Files are with the CD — change this after they decide' };
+      if (!!t.needsCD === !!on) return [];
+      t.needsCD = !!on;
+      logActivity(t, on ? 'turned on <b>CD review</b> for this task' : 'turned off <b>CD review</b> for this task');
+      if (on) {   // (app.js syncCD)
+        const rv = reviewersOf(t);
+        if (rv.length) {
+          const st = rv.map((x) => reviewState(t, x)), prev = t.cdStatus || '';
+          t.cdStatus = st.includes('pending') ? 'review' : st.every((x) => x === 'approved') ? 'approved' : '';
+          if (prev !== t.cdStatus) { if (prev && t.cdStatus) logChange(t, 'the <b>CD Status</b>', CD[prev].label, CD[t.cdStatus].label); else if (t.cdStatus) logActivity(t, `CD Status is now <b>${esc(CD[t.cdStatus].label)}</b>`); }
+        }
+      }
+      t.updatedAt = nowISO();
+      return [];
+    }
+    function setUpdate(t, v) {
+      const old = t.update || null; v = v || null;
+      if (old === v) return [];
+      if (v && !UPDATES.includes(v)) return { error: 'Not a Task Update' };
+      t.update = v;
+      logChange(t, 'the <b>Task Update</b>', old, v);
+      const to = new Set(watchersOf(t)); if (t.guardian) to.add(t.guardian);
+      to.forEach((x) => pushNotif(x, t, 'update', v ? `set the Task Update to <b>${esc(v)}</b> on` : 'cleared the Task Update on'));
+      t.updatedAt = nowISO();
+      return [];
+    }
+
     return { home, myTasks, myTasksFilters, inbox, inboxRow, myDayData, cardOf, can, amReadOnly, canComplete, completeBlocked, dayTitle, statusInfo, sectionOf,
-      notifGroups: NOTIF_GROUPS, doneLocked, canReopen, finish, finishBlocked, canFinish, moveToStatus, logActivity, logChange, pushNotif, notifyWatchers, checkPrioConflict, setDone, setDue, setClientApproval, asksClientApproval, deleteTask, watchersOf, creatorOf, clientAmsOf, fmtDue };
+      notifGroups: NOTIF_GROUPS, doneLocked, canReopen, finish, finishBlocked, canFinish, moveToStatus, logActivity, logChange, pushNotif, notifyWatchers, checkPrioConflict, setDone, setDue, setClientApproval, asksClientApproval, deleteTask, watchersOf, creatorOf, clientAmsOf, fmtDue,
+      taskPage, setTitle, setStart, setStatus, setMyPart, setPrio, prioTaken, toggleCheck, setNeedsCD, setUpdate, idLocked };
   }
 
   // (the clock and new ids for the actions: the website's own, or the server's)

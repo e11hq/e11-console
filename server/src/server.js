@@ -648,6 +648,13 @@ export function createServer(cfg) {
       return json(res, 200, { ok: true, rev: store.rev(), home });
     }
     // …the app's My Tasks (the same rules; its filters in the address)
+    // the iPhone app's native task page (shell 30+): the task as this person sees it, with what they may change
+    if (p === '/api/task' && req.method === 'GET') {
+      if (store.kv.get('task-server') === 'off') return json(res, 200, { ok: true, off: true, rev: store.rev() });
+      let tk = null;
+      try { tk = homeView.taskPage(u, visibleSnapshot(u).data, url.searchParams.get('id')); } catch (e) { console.error('task page:', e.message); return json(res, 500, { ok: false, error: 'The task could not be worked out' }); }
+      return json(res, 200, { ok: true, rev: store.rev(), task: tk });
+    }
     if (p === '/api/inbox' && req.method === 'GET') {
       if (store.kv.get('inbox-server') === 'off') return json(res, 200, { ok: true, off: true, rev: store.rev() });
       let list = null;
@@ -665,12 +672,12 @@ export function createServer(cfg) {
     if (p === '/api/home/act' && req.method === 'POST') {
       const body = await readBody(req);
       // (My Tasks' actions go by My Tasks' own switch)
-      if (store.kv.get(body && body.from === 'mytasks' ? 'mytasks-server' : body && body.from === 'inbox' ? 'inbox-server' : 'home-server') === 'off') return json(res, 200, { ok: false, off: true, error: 'Try again in a moment' });
+      if (store.kv.get(body && body.from === 'mytasks' ? 'mytasks-server' : body && body.from === 'inbox' ? 'inbox-server' : body && body.from === 'task' ? 'task-server' : 'home-server') === 'off') return json(res, 200, { ok: false, off: true, error: 'Try again in a moment' });
       const op = body && body.op ? String(body.op).slice(0, 80) : null;
       const freshHome = () => { try { return homeView.home(u, visibleSnapshot(u).data); } catch { return null; } };
       // (a retry of an action already done: its answer again, with Home as it is now)
       const seen = op && homeOps.get(u.id + ':' + op);
-      if (seen) return json(res, 200, { ...seen, rev: store.rev(), home: freshHome() });
+      if (seen) return json(res, 200, { ...seen, rev: store.rev(), ...(body.from === 'task' ? { task: (() => { try { return homeView.taskPage(u, visibleSnapshot(u).data, body.id); } catch { return null; } })() } : { home: freshHome() }) });
       let r;
       try { r = homeView.act(u, visibleSnapshot(u).data, body || {}, store); } catch (e) { console.error('home act:', e.message); return json(res, 200, { ok: false, error: 'That didn’t work — try again' }); }
       let out;
@@ -689,6 +696,8 @@ export function createServer(cfg) {
         }
       }
       if (op) { homeOps.set(u.id + ':' + op, out); if (homeOps.size > 1000) homeOps.delete(homeOps.keys().next().value); }
+      // (the native task page: that task as it is now)
+      if (body && body.from === 'task') { let tk = null; try { tk = homeView.taskPage(u, visibleSnapshot(u).data, body.id); } catch (e) { console.error('task page:', e.message); } return json(res, 200, { ...out, rev: store.rev(), task: tk }); }
       return json(res, 200, { ...out, rev: store.rev(), home: freshHome() });
     }
     if (p === '/api/occ-reminders') return json(res, 200, { ok: true, ...occRemind.forUser(u) });
