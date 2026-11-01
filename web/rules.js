@@ -259,6 +259,59 @@ var E11Rules = (() => {
         canDue: can('editDates', t) && !amReadOnly(t), canDelete: can('deleteTask', t) && !amReadOnly(t),
       };
     }
+    // ---------- My Tasks (the iPhone app's, 2026-11-01): All (open) · Done (the last 30 days) ----------
+    // F: { due: 'late'|'today'|'week', people: [ids], ams: [ids], team, assigned, cd } — the filters this person may use
+    // (myTasksFilters); All in groups Today · Next · Overdue · No due date (by date, then priority), Done newest first.
+    // (The website's My Tasks keeps its own: Work.list in app.js.)
+    const byDayThenPrio = (a, b) => (a.due || '9999').localeCompare(b.due || '9999') || byPrio(a, b) || String(a.createdAt || '').localeCompare(String(b.createdAt || ''));
+    // who sees which filter (Haris, 2026-11-01): Due date everyone; People Account Managers, Admins and the CD; Account
+    // managers Admins and the CD; Assigned to me the CD only (Account Managers and Admins aren't assigned)
+    function myTasksFilters() {
+      const u = me(), out = ['due'];
+      if (!u) return out;
+      if (lead()) out.push('people');
+      if (seesAll()) out.push('ams');
+      if (isCD(meId)) out.push('assigned');
+      return out;
+    }
+    const weekEnd = () => ofNum(dayNum(today) + (6 - ((wdayOf(today) + 6) % 7)));
+    const dueOk = (t, k) => (k === 'late' ? !!t.due && t.due < today : k === 'today' ? t.due === today : k === 'week' ? !!t.due && t.due >= today && t.due <= weekEnd() : true);
+    function myTasks(F0 = {}, tab = 'all') {
+      const ok = new Set(myTasksFilters());
+      const F = { due: ok.has('due') ? F0.due || null : null, people: ok.has('people') ? F0.people || [] : [], ams: ok.has('ams') ? F0.ams || [] : [], team: ok.has('ams') && !!F0.team, assigned: ok.has('assigned') && !!F0.assigned, cd: !!F0.cd };
+      const personal = !lead() || F.assigned;
+      const teamIds = () => users.filter((x) => x.role === 'am' || isAdm(x)).map((x) => x.id);
+      const creators = seesAll() && F.team ? teamIds() : seesAll() && F.ams.length ? F.ams : [meId];
+      let l = personal ? topTasks().filter(onMyList) : leadSet(creators);
+      if (F.people.length) l = l.filter((t) => (t.assignees || []).some((x) => F.people.includes(x)));
+      if (F.cd) l = l.filter((t) => reviewPending(t));
+      const openOf = (t) => (personal ? myOpen(t) : !t.done);
+      const doneAtOf = (t) => (personal ? myDoneAt(t) : t.done ? t.completedAt || null : null);
+      const open = l.filter(openOf).filter((t) => dueOk(t, F.due));
+      let groups;
+      if (tab === 'done') {
+        const cut = nowMs() - 30 * 86400000;
+        const list = l.filter((t) => doneAtOf(t) && Date.parse(doneAtOf(t)) > cut && (F.due === 'late' || dueOk(t, F.due))).sort((a, b) => String(doneAtOf(b)).localeCompare(String(doneAtOf(a))));
+        groups = [{ name: 'Last 30 days', n: list.length, empty: list.length ? '' : 'Tasks completed in the last 30 days show here.', cards: list.map((t) => {
+          const c = cardOf(t);
+          // (a completed task is locked: said on its card)
+          const at = t.completedAt ? dayOf(t.completedAt) : '';
+          if (t.done) c.meta.push({ t: `Completed${at ? ' ' + fmtDay(at) : ''} — read only`, line: true, lock: true });
+          return c;
+        }) }];
+      } else {
+        const g = (name, list, empty) => (list.length || empty ? { name, n: list.length, empty: list.length ? '' : empty || '', cards: list.sort(byDayThenPrio).map((t) => cardOf(t)) } : null);
+        groups = [g('Today', open.filter((t) => t.due === today), F.due === 'today' ? 'Nothing due today 🎉' : ''), g('Next', open.filter((t) => t.due && t.due > today)),
+          g('Overdue', open.filter((t) => t.due && t.due < today)), g('No due date', open.filter((t) => !t.due))].filter(Boolean);
+        if (!groups.length) groups = [{ name: 'All', n: 0, empty: 'No open tasks here.', cards: [] }];
+      }
+      peopleOn.add(meId);
+      return {
+        show: true, kind: 'mytasks', tab: tab === 'done' ? 'done' : 'all', title: 'My Tasks', date: `${open.length} open task${open.length === 1 ? '' : 's'}`,
+        me: meId, filters: [...ok], groups, add: can('createTask'), canDelete: can('deleteTask'),
+        people: Object.fromEntries([...peopleOn].map((id) => { const p = userById(id); return [id, { initials: initials(fullName(p)), color: rgbOf(avColor(id || 'x')), photo: p && p.avatar ? p.avatar : null }]; })),
+      };
+    }
     function home() {
       const u = me();
       if (!u || u.active === false || isOffice(u) || isFinUser(u)) return null;
@@ -446,7 +499,7 @@ var E11Rules = (() => {
       return { ids, removed, item };
     }
 
-    return { home, myDayData, cardOf, can, amReadOnly, canComplete, completeBlocked, dayTitle, statusInfo, sectionOf,
+    return { home, myTasks, myTasksFilters, myDayData, cardOf, can, amReadOnly, canComplete, completeBlocked, dayTitle, statusInfo, sectionOf,
       notifGroups: NOTIF_GROUPS, doneLocked, canReopen, finish, finishBlocked, canFinish, moveToStatus, logActivity, logChange, pushNotif, notifyWatchers, checkPrioConflict, setDone, setDue, setClientApproval, asksClientApproval, deleteTask, watchersOf, creatorOf, clientAmsOf, fmtDue };
   }
 

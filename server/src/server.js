@@ -644,6 +644,13 @@ export function createServer(cfg) {
       try { home = homeView.home(u, visibleSnapshot(u).data); } catch (e) { console.error('home:', e.message); return json(res, 500, { ok: false, error: 'Home could not be worked out' }); }
       return json(res, 200, { ok: true, rev: store.rev(), home });
     }
+    // …the app's My Tasks (the same rules; its filters in the address)
+    if (p === '/api/mytasks' && req.method === 'GET') {
+      if (store.kv.get('mytasks-server') === 'off') return json(res, 200, { ok: true, off: true, rev: store.rev() });
+      let list = null;
+      try { list = homeView.myTasks(u, visibleSnapshot(u).data, url.searchParams); } catch (e) { console.error('mytasks:', e.message); return json(res, 500, { ok: false, error: 'My Tasks could not be worked out' }); }
+      return json(res, 200, { ok: true, rev: store.rev(), home: list });
+    }
     // …and its actions (Done / reopen, Due, Delete and its Undo): saved as the website would save them, then the fresh
     // Home. `op` (the app's id for the action) makes a retry after a lost answer harmless.
     if (p === '/api/home/act' && req.method === 'POST') {

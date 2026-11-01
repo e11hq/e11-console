@@ -32,6 +32,18 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
     for (const p of Object.values(m.people || {})) { if (p.photo) p.photo = fileUrl(p.photo) + '?view=1'; }
     return { ...m, today };
   }
+  // the app's My Tasks (GET /api/mytasks?tab=all|done&due=&people=a,b&ams=&team=1&assigned=1&cd=1)
+  function myTasks(u, data, q) {
+    if (u.role === 'finance_admin' || u.role === 'finance_viewer' || (u.role === 'office_admin' && u.admin !== true)) return null;
+    const R = load();
+    const today = R.dubaiDay(now());
+    const list = (k) => String(q.get(k) || '').split(',').map((x) => x.trim()).filter(Boolean).slice(0, 100);
+    const F = { due: ['late', 'today', 'week'].includes(q.get('due')) ? q.get('due') : null, people: list('people'), ams: list('ams'), team: q.get('team') === '1', assigned: q.get('assigned') === '1', cd: q.get('cd') === '1' };
+    const env = { nowISO: () => new Date(now()).toISOString(), nowMs: () => now() };
+    const m = R.withEnv(env, { users: data.users || [], projects: data.projects || [], tasks: data.tasks || [], statuses: data.statuses || [], plans: data.plans || [], meta: data.meta || {} }, u.id, today).myTasks(F, q.get('tab') === 'done' ? 'done' : 'all');
+    for (const p of Object.values(m.people || {})) { if (p.photo) p.photo = fileUrl(p.photo) + '?view=1'; }
+    return { ...m, today };
+  }
   // ---------- the app's Home actions (POST /api/home/act) ----------
   // Done / reopen, the due date, to the Trash and back — done here with the same shared rules the website uses, on the
   // same data this person's own app has (what they may see), so the activity lines, notifications and checks are
@@ -105,5 +117,5 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
     for (const it of db.trash) changes.push({ kind: 'trash', id: it.id, data: it });
     return { ok: true, changes, messages, undo };
   }
-  return { home, act };
+  return { home, myTasks, act };
 }
