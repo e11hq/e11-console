@@ -538,7 +538,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       motto.alpha = 0; motto.isUserInteractionEnabled = false
       insertSubview(motto, belowSubview: fab)
     }
-    motto.frame = CGRect(x: 16, y: fab.frame.midY - 16, width: max(0, fab.frame.minX - 12 - 16), height: 32)
+    // (starting where the "O" of NOT was — the N's width and its letter spacing in from the page's edge; Haris, 2026-11-01)
+    let nW = ceil(("N" as NSString).size(withAttributes: [.font: UIFont.systemFont(ofSize: 9, weight: .medium), .kern: 2.4]).width)
+    motto.frame = CGRect(x: 16 + nW, y: fab.frame.midY - 16, width: max(0, fab.frame.minX - 12 - 16 - nW), height: 32)
     showMotto()
   }
   func scrollToTop() { scroll.setContentOffset(CGPoint(x: 0, y: -scroll.contentInset.top), animated: true) }
