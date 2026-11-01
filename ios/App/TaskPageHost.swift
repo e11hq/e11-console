@@ -35,6 +35,8 @@ extension Main {
     p.setTab(tab == "comments" ? "comments" : "details", tell: false)
     p.loading()
     refreshTaskPage(p)
+    // (the corner button: Search / Mark all read slides over into ••• as the page comes in)
+    updateCorner()
     // the edge swipe: one, on the app's screen, for whichever page is on top
     if taskPan == nil {
       let g = UIScreenEdgePanGestureRecognizer(target: self, action: #selector(taskEdgePan(_:)))
@@ -85,6 +87,7 @@ extension Main {
     let back = underViews(below: p, under: under)
     let W = view.bounds.width
     let last = taskPages.isEmpty
+    updateCorner()
     if last { tabBar.isHidden = taskTabHidden; taskPan?.isEnabled = false }
     let finish = {
       p.removeFromSuperview()
@@ -116,6 +119,7 @@ extension Main {
       back.forEach { $0.transform = CGAffineTransform(translationX: -W * 0.3 * (1 - x / W), y: 0) }
       if taskPages.count == 1 && !taskTabHidden { tabBar.isHidden = false; tabBar.alpha = x / W }
       if p.tab == "comments" { cbarIfMade?.transform = CGAffineTransform(translationX: x, y: 0) }
+      corner.between(cornerTarget(), cornerTarget(skipTop: true), x / W)
     case .ended, .cancelled, .failed:
       let v = g.velocity(in: view).x
       let go = g.state == .ended && (v > 300 || (x > W * 0.4 && v > -200))
@@ -130,6 +134,7 @@ extension Main {
           if self.taskPages.count == 1 { self.tabBar.alpha = 0 }
           self.cbarIfMade?.transform = .identity
         } completion: { _ in if !self.taskPages.isEmpty { self.tabBar.isHidden = true } }
+        updateCorner()
       }
     default: break
     }

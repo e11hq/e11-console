@@ -186,6 +186,7 @@ final class ServerHome {
       var rows = (h["rows"] as? [[String: Any]]) ?? []
       for o in queue {
         if o.act == "readAll" { for i in rows.indices { rows[i]["read"] = true } }
+        else if o.act == "unreadList" { let ids = Set(o.id.split(separator: ",").map(String.init)); for i in rows.indices where ids.contains(rows[i]["id"] as? String ?? "") { rows[i]["read"] = false } }
         else if o.act == "read" || o.act == "unread", let i = rows.firstIndex(where: { ($0["id"] as? String) == o.id }) { rows[i]["read"] = o.act == "read" }
       }
       m["rows"] = rows

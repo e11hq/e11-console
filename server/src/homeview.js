@@ -73,13 +73,15 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
     const t = db.tasks.find((x) => x.id === String(body.id || ''));
     const a = String(body.act || '');
     // the Inbox's: one read / unread, or all read (only this person's own)
-    if (a === 'read' || a === 'unread' || a === 'readAll') {
+    if (a === 'read' || a === 'unread' || a === 'readAll' || a === 'unreadList') {
       const mine = db.notifications.filter((n) => n.to === u.id && !/^claim/.test(n.kind || ''));   // (claims: on the computer)
       const changes = [];
       const set = (n, v) => { if (!!n.read !== v) { const base = JSON.parse(JSON.stringify(n)); n.read = v; changes.push({ kind: 'notifications', id: n.id, base, data: n }); } };
       if (a === 'readAll') mine.forEach((n) => set(n, true));
+      // (the Inbox's Mark all unread: only the ones in the list on screen — Haris, 2026-11-01)
+      else if (a === 'unreadList') { const ids = new Set(String(body.id || '').split(',').filter(Boolean).slice(0, 500)); mine.filter((n) => ids.has(n.id)).forEach((n) => set(n, false)); }
       else { const n = mine.find((x) => x.id === String(body.id || '')); if (!n) return fail(404, 'This update is no longer here'); set(n, a === 'read'); }
-      return { ok: true, changes, messages: a === 'readAll' && changes.length ? ['All marked read'] : [] };
+      return { ok: true, changes, messages: a === 'readAll' && changes.length ? ['All marked read'] : a === 'unreadList' && changes.length ? ['Marked unread'] : [] };
     }
     let messages = [], undo = null;
     if (a === 'undoDelete') {

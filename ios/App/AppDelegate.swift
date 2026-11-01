@@ -493,6 +493,11 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   var taskPan: UIScreenEdgePanGestureRecognizer?
   var taskComments: String?           // the task whose comments show inside the page (its Comments tab)
   var taskTabHidden = false
+  lazy var corner: CornerButton = {
+    let c = CornerButton()
+    c.onTap = { [weak self] k in self?.shownScreen?.cornerTap(k) }
+    return c
+  }()
   func commentBar(_ a0: [String: Any]) {
     var a = a0
     // 30: under the app's own task page the page behind has no task open — what it says about the task (shown, on
@@ -1233,6 +1238,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     }
   }
   func homeCommand(_ a: [String: Any]) {
+    defer { updateCorner() }
     if let p = a["people"] as? [String: [String: Any]] {
       homePagePeople = p
       homeView.people = serverHome.on ? homeServerPeople.merging(p, uniquingKeysWith: { s, pg in pg["photo"] != nil || s["photo"] == nil ? pg : s }) : p
@@ -1309,6 +1315,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   // (My Tasks' actions still waiting from before the app was closed go even if My Tasks isn't opened)
   func myTasksWaiting() -> ServerHome? { serverMyTasksIfMade ?? (defaults.data(forKey: "e11HomeQueue-mytasks").map { $0.count > 2 } == true ? serverMyTasks : nil) }
   func myTasksCommand(_ a: [String: Any]) {
+    defer { updateCorner() }
     guard let show = a["show"] as? Bool else { return }
     if !show { myTasksWanted = false; myTasksIfMade?.endEditing(true); myTasksIfMade?.isHidden = true; return }
     let h = myTasksView
@@ -1357,6 +1364,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         if s.on, s.me == self.inboxPageMe, let id = ev["id"] as? String { s.act(ev["ev"] as! String, id) }
       case "readAll":
         if s.on, s.me == self.inboxPageMe { s.act("readAll", "") } else { self.pageJS("window.__e11Inbox && window.__e11Inbox({ev:'readAll'})") }
+      case "unreadList":
+        let ids = (ev["ids"] as? [String]) ?? []
+        if s.on, s.me == self.inboxPageMe, !ids.isEmpty { s.act("unreadList", ids.joined(separator: ",")) }
       default:
         // (not hidden here: the page hides it the moment what's tapped opens a page — a round-up or a sheet opens over
         //  the Inbox, which stays; hiding it first flashed the page behind — Haris, 2026-11-01)
@@ -1389,6 +1399,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     pageJS("window.__e11InboxOwn && window.__e11InboxOwn(\(v))")
   }
   func inboxCommand(_ a: [String: Any]) {
+    defer { updateCorner() }
     guard let show = a["show"] as? Bool else { return }
     if !show { inboxWanted = false; inboxIfMade?.isHidden = true; return }
     let h = inboxView
@@ -1896,7 +1907,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
           if name.hasPrefix("tpage") {
             let p = self.taskPages.last
             self.selfResult[name + "Native"] = ["pages": self.taskPages.count, "title": p?.model?["title"] as? String ?? "", "tab": p?.tab ?? "", "drawn": p?.model != nil,
-              "x": p?.transform.tx ?? -1, "tabBar": !self.tabBar.isHidden, "comments": self.cwebShown, "box": self.cbarIfMade.map { !$0.isHidden } ?? false, "content": p?.scroll.contentSize.height ?? 0] as [String: Any]
+              "x": p?.transform.tx ?? -1, "tabBar": !self.tabBar.isHidden, "comments": self.cwebShown, "box": self.cbarIfMade.map { !$0.isHidden } ?? false, "content": p?.scroll.contentSize.height ?? 0, "corner": self.corner.kind, "cornerW": self.corner.frame.width, "cornerX": self.corner.frame.maxX] as [String: Any]
           }
           if name == "daily" { self.selfResult["dailyNative"] = ["sheet": self.presentedViewController.map { String(describing: type(of: $0)) } ?? ""] }
           if name.hasPrefix("ibx") {

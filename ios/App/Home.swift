@@ -35,6 +35,36 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private let results = UIScrollView(), hint = UILabel()
   private var resultViews: [UIView] = [], resultCards: [String: HomeCard] = [:]
   private(set) var searching = false
+  /* The corner button (shell 30, Haris 2026-11-01): Search here, Mark all read / unread on the Inbox and ••• on a
+     task page are one glass button of the app's (CornerButton, Main): this screen's own ones then stay invisible and
+     only say where the button goes and what it is. */
+  var cornerShared = false { didSet { searchCircle.alpha = cornerShared || searching ? 0 : 1; markAll.alpha = cornerShared ? 0 : 1 } }
+  var onCorner: (() -> Void)?
+  // what the corner is here: "search", "read", "unread" or "none", and where (its right edge left of your photo)
+  func corner() -> (kind: String, text: String, frame: CGRect) {
+    let f = searchCircle.frame
+    if searching || isHidden { return ("none", "", f) }
+    guard isInbox else { return ("search", "", f) }
+    if !markAll.isHidden { return ("read", "Mark all read", f) }
+    let rows = content.compactMap { $0 as? InboxRow }
+    return rows.isEmpty ? ("none", "", f) : ("unread", "Mark all unread", f)
+  }
+  // the corner button tapped
+  func cornerTap(_ kind: String) {
+    switch kind {
+    case "search": UIImpactFeedbackGenerator(style: .light).impactOccurred(); openSearch()
+    case "read": UIImpactFeedbackGenerator(style: .light).impactOccurred(); send(["ev": "readAll"])
+    case "unread":
+      // only the ones in the list on screen — and asked first (Haris, 2026-11-01)
+      let ids = content.compactMap { ($0 as? InboxRow)?.id }
+      guard !ids.isEmpty else { return }
+      let a = UIAlertController(title: "Mark all unread?", message: "The \(ids.count) update\(ids.count == 1 ? "" : "s") in this list will show as unread again.", preferredStyle: .alert)
+      a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+      a.addAction(UIAlertAction(title: "Mark unread", style: .default) { [weak self] _ in self?.send(["ev": "unreadList", "ids": ids]) })
+      present?(a)
+    default: break
+    }
+  }
   private var findTimer: Timer?, keyboardH: CGFloat = 0
   private let scroll = UIScrollView()
   private let fab = UIButton(type: .system)
@@ -406,6 +436,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private func drawInbox(_ model: [String: Any]) {
     fab.isHidden = (model["add"] as? Bool) != true   // (+ New task, as on Home — for those who may)
     markAll.isHidden = ((model["unread"] as? Int) ?? 0) == 0
+    markAll.alpha = cornerShared ? 0 : 1
+    defer { onCorner?() }
     catsView.light = L.light
     // where each row is now (to move it from there), and which go
     var was: [String: CGPoint] = [:]
@@ -764,6 +796,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if let o = openCard { setOpen(o, false) }
     let start = searchCircle.frame, meF = me.frame
     searching = true
+    onCorner?()
     showMotto()
     searchBar.frame = start; searchBar.isHidden = false; searchBar.alpha = 1
     searchBar.layer.cornerRadius = start.height / 2
@@ -801,7 +834,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     } completion: { _ in
       if self.searching { return }
       self.searchBar.isHidden = true; self.closeCircle.isHidden = true; self.field.alpha = 1
-      self.searchCircle.alpha = 1; self.results.isHidden = true
+      self.searchCircle.alpha = self.cornerShared ? 0 : 1; self.results.isHidden = true
+      self.onCorner?()
       self.field.text = ""; self.showResults(nil)
     }
   }

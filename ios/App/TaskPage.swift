@@ -67,6 +67,11 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private let content = UIView()
   private let barBox = UIView()                        // what the frost edge sits under (the buttons and the switch)
   var barBoxView: UIView { barBox }
+  // the corner button (Main's CornerButton) stands in for ••• — this page's own stays invisible; its menu is lent
+  var cornerShared = false { didSet { more.alpha = cornerShared ? 0 : 1; moreBtn.isHidden = cornerShared } }
+  var cornerFrame: CGRect { more.frame }
+  var cornerMenu: UIMenu? { moreBtn.menu }
+  var onMenu: (() -> Void)?
   private let back = HomeGlass(), more = HomeGlass()
   private let moreBtn = UIButton(type: .custom)        // (over the ••• circle: iPhone's own menu)
   private let dot = UIView(), client = UILabel()
@@ -218,6 +223,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       items.append(UIMenu(options: .displayInline, children: [UIAction(title: "Delete task", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in self?.confirmDelete() }]))
     }
     moreBtn.menu = UIMenu(children: items)
+    onMenu?()
   }
   private func confirmDelete() {
     let a = UIAlertController(title: "Delete this task?", message: "It goes to the Trash.", preferredStyle: .alert)
