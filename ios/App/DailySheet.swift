@@ -65,6 +65,11 @@ final class DailySheetVC: UIViewController, UISheetPresentationControllerDelegat
     foot.font = .systemFont(ofSize: 13); foot.textColor = .secondaryLabel; foot.textAlignment = .center; foot.text = d["foot"] as? String
     stack.addArrangedSubview(foot)
     build()
+    // (measured before it shows, at the sheet's width — it opens at its own height: no starting size, no jump)
+    let w = UIScreen.main.bounds.width - (UIDevice.current.userInterfaceIdiom == .phone ? 16 : 0)
+    view.frame = CGRect(x: 0, y: 0, width: w, height: UIScreen.main.bounds.height)
+    view.setNeedsLayout(); view.layoutIfNeeded()
+    measured = false
   }
 
   // ---------- the sections ----------
