@@ -524,22 +524,14 @@ extension Main {
       host.present(vc, animated: true)
     }
   }
-  // Copy: the file itself on iPhone's clipboard (a picture as a picture), its name kept for pasting into a comment
+  // Copy, as the website's: the file itself isn't copied — the app remembers which file it is, and pasting it into a
+  // comment adds that same file (no upload, no second copy on the server; Haris, 2026-11-01)
   func copyFile(_ f: [String: Any], _ toast: @escaping (String) -> Void) {
-    guard let path = f["url"] as? String else { return toast("This file isn’t available") }
+    guard f["file"] is String else { return toast("This file isn’t available") }
     let name = f["name"] as? String ?? "File"
-    toast("Copying…")
-    PreviewLoad.refreshCookies(web.configuration.websiteDataStore.httpCookieStore) {
-      // (the original, not the light copy a video plays from)
-      PreviewLoad.data(serverURL() + path.replacingOccurrences(of: "?view=1", with: "")) { d in
-        guard let d = d else { return toast("Couldn’t copy — try again") }
-        let ext = (name as NSString).pathExtension.lowercased()
-        let uti = UTType(filenameExtension: ext)?.identifier ?? "public.data"
-        UIPasteboard.general.setItems([[uti: d]])
-        FileClip.name = name; FileClip.change = UIPasteboard.general.changeCount
-        toast("Copied — paste it into a comment")
-      }
-    }
+    UIPasteboard.general.string = "📎 " + name
+    FileClip.file = f; FileClip.name = name; FileClip.change = UIPasteboard.general.changeCount
+    toast("Copied — paste it into a comment")
   }
   // Download: fetched with its progress shown, then iPhone's own Save / Share sheet (Save Image, Save to Files…)
   func downloadFile(_ f: [String: Any], from vc: UIViewController, _ toast: @escaping (String) -> Void) {

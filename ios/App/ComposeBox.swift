@@ -83,7 +83,7 @@ final class ComposeBox: UIView, UITextViewDelegate {
       b.setImage(UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold)), for: .normal)
       b.tintColor = .label; b.backgroundColor = .tertiarySystemFill; b.layer.cornerRadius = 18
     }
-    plus.addAction(UIAction { [weak self] _ in self?.attach() }, for: .touchUpInside)
+    plus.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.attach() }, for: .touchUpInside)
     right.addAction(UIAction { [weak self] _ in self?.sendTapped() }, for: .touchUpInside)
     let hold = UILongPressGestureRecognizer(target: self, action: #selector(holdMic(_:))); hold.minimumPressDuration = 0.18
     right.addGestureRecognizer(hold); holdG = hold
@@ -216,6 +216,18 @@ final class ComposeBox: UIView, UITextViewDelegate {
   // a file pasted (a picture, or one copied from a preview: its own name): added as if picked
   private func pasteFiles() -> Bool {
     let pb = UIPasteboard.general
+    // a file copied in the app: that same file, at once (nothing uploaded)
+    if let f = FileClip.current, let path = f["file"] as? String {
+      if files.contains(where: { $0.path == path }) { return true }
+      let size = Int64(f["size"] as? Int ?? 0)
+      files.append((name: f["name"] as? String ?? "File", size: size, path: path, progress: 1, failed: false, thumb: nil))
+      let i = files.count - 1
+      paintTiles()
+      UIImpactFeedbackGenerator(style: .light).impactOccurred()
+      let pic = (f["thumbUrl"] as? String) ?? (CommentCell.isPic(f["name"] as? String ?? "") ? f["url"] as? String : nil)
+      if let p = pic { FeedLoader.shared.image(p) { [weak self] img in guard let self = self, let img = img, i < self.files.count, self.files[i].path == path else { return }; self.files[i].thumb = img; self.paintTiles() } }
+      return true
+    }
     var added = false
     for (k, item) in pb.items.enumerated() {
       // (words are the text box's own)
@@ -477,13 +489,17 @@ final class VoiceBubble: UIView, AVAudioPlayerDelegate {
 }
 
 // what Copy in a preview put on the clipboard: its name (pasted into a comment, the file keeps it)
-enum FileClip { static var name: String?; static var change = -1 }
+enum FileClip {
+  static var name: String?, change = -1
+  static var file: [String: Any]?   // the server's file (Copy in a preview / a file's menu): pasted, that same file
+  static var current: [String: Any]? { change == UIPasteboard.general.changeCount ? file : nil }
+}
 // the comment box's text: a pasted picture or file goes in as an attachment; words paste as words
 final class PasteTextView: UITextView {
   var onPasteFiles: (() -> Bool)?
   private var hasFiles: Bool {
     let pb = UIPasteboard.general
-    return pb.hasImages || pb.types.contains { t in guard let u = UTType(t) else { return false }; return !u.conforms(to: .text) && (u.conforms(to: .data) || u.conforms(to: .content)) }
+    return FileClip.current != nil || pb.hasImages || pb.types.contains { t in guard let u = UTType(t) else { return false }; return !u.conforms(to: .text) && (u.conforms(to: .data) || u.conforms(to: .content)) }
   }
   override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
     if action == #selector(paste(_:)) && hasFiles { return true }

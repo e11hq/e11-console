@@ -304,9 +304,9 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     items.append(UIAction(title: "Copy link", image: UIImage(systemName: "link")) { [weak self] _ in guard let self = self else { return }; self.onEvent?(["ev": "copy", "id": self.taskId]) })
     if (m["readOnly"] as? Bool) != true {   // (attaching stays on the phone — Haris, 2026-11-01)
       items.append(UIMenu(title: "Attach Files", image: UIImage(systemName: "paperclip"), children: [
-        UIAction(title: "Camera", image: UIImage(systemName: "camera")) { [weak self] _ in guard let self = self else { return }; self.onAttachFrom?("camera") },
-        UIAction(title: "Photos", image: UIImage(systemName: "photo.on.rectangle")) { [weak self] _ in guard let self = self else { return }; self.onAttachFrom?("photos") },
-        UIAction(title: "Files", image: UIImage(systemName: "folder")) { [weak self] _ in guard let self = self else { return }; self.onAttachFrom?("files") },
+        UIAction(title: "Camera", image: UIImage(systemName: "camera")) { [weak self] _ in guard let self = self else { return }; UIImpactFeedbackGenerator(style: .light).impactOccurred(); self.onAttachFrom?("camera") },
+        UIAction(title: "Photos", image: UIImage(systemName: "photo.on.rectangle")) { [weak self] _ in guard let self = self else { return }; UIImpactFeedbackGenerator(style: .light).impactOccurred(); self.onAttachFrom?("photos") },
+        UIAction(title: "Files", image: UIImage(systemName: "folder")) { [weak self] _ in guard let self = self else { return }; UIImpactFeedbackGenerator(style: .light).impactOccurred(); self.onAttachFrom?("files") },
       ]))
     }
     if (m["canDelete"] as? Bool) == true && !TaskPage.viewOnly {
@@ -934,7 +934,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     return r
   }
   // the one Attach Files sheet (Camera · Photos · Files); the app uploads them itself, with their bars
-  func attachSheet() { onAttachFiles?() }
+  func attachSheet() { UIImpactFeedbackGenerator(style: .light).impactOccurred(); onAttachFiles?() }   // (a tap felt, as every button — Haris, 2026-11-01)
   func askText(_ title: String, placeholder: String, value: String = "", _ done: @escaping (String) -> Void) {
     let a = UIAlertController(title: title, message: nil, preferredStyle: .alert)
     a.addTextField { f in f.placeholder = placeholder; f.text = value; f.autocapitalizationType = .sentences; f.returnKeyType = .done }

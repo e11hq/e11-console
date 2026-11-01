@@ -224,8 +224,11 @@ export function createAccess(store, opts = {}) {
       if (parts[1] === '_avatars') return true;
       if (parts[1] === '_uploads') return false;
       const t = store.get('tasks', parts[1]);
-      // (also the files of your own scheduled comment, e.g. after its task was deleted)
-      return (!!t && taskVisible(u, t)) || store.list('scheduled').some((s) => s.authorId === u.id && (s.attachments || []).some((a) => a.path === rel || a.thumb === rel));
+      if (t && taskVisible(u, t)) return true;
+      // (also the files of your own scheduled comment, e.g. after its task was deleted; and a file pasted from another
+      //  task into one you can see — the same file, not a copy: it opens wherever it's used)
+      return store.list('scheduled').some((s) => s.authorId === u.id && (s.attachments || []).some((a) => a.path === rel || a.thumb === rel))
+        || store.list('tasks').some((x) => taskVisible(u, x) && (x.attachments || []).concat(...(x.comments || []).map((c) => c.attachments || [])).some((a) => a && (a.path === rel || a.thumb === rel)));
     }
     if (parts[0] === 'Clients') {
       if (parts[1] === '_logos') return true;

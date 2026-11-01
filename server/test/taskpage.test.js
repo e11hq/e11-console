@@ -193,6 +193,16 @@ test('the comments\' files under Files (not voice messages); a video\'s picture 
   assert.equal(r2.status, 403);
 });
 
+test('a file copied from another task and pasted into a comment: the same file, no copy; not one from a task out of sight', async () => {
+  await act('am@e11-digital.com', { act: 'attach', id: 't1', files: [{ name: 'deck.pdf', size: 500, path: 'attachments/t1/deck.pdf' }] });
+  let r = await act('am@e11-digital.com', { act: 'comment', id: 't3', html: 'see', text: 'see', files: [{ name: 'deck.pdf', path: 'attachments/t1/deck.pdf' }] });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  const a = T('t3').comments.at(-1).attachments[0];
+  assert.equal(a.path, 'attachments/t1/deck.pdf'); assert.equal(a.size, 500, 'its details from the file it is');
+  r = await act('am@e11-digital.com', { act: 'comment', id: 't3', html: 'x', text: 'x', files: [{ name: 'evil', path: 'attachments/nowhere/secret.pdf' }] });
+  assert.equal(r.ok, true); assert.equal(T('t3').comments.at(-1).attachments.length, 0, 'a file on no task this person sees is left out');
+});
+
 test('writing a comment, a reply with a mention, a voice message; editing', async () => {
   let r = await act('prod@e11-digital.com', { act: 'comment', id: 't3', html: 'Done <b>now</b>', text: 'Done now' });
   assert.equal(r.ok, true); const c = T('t3').comments.at(-1); assert.equal(c.html, 'Done <b>now</b>'); assert.equal(c.authorId, 'u-prod');

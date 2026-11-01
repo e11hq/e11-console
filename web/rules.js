@@ -921,10 +921,17 @@ var E11Rules = (() => {
       return { messages: ['Submission withdrawn'] };
     }
     // ---------- writing a comment from the phone (step 3; app.js postComment / saveEdit) ----------
+    // a file already on a task this person can see (a task's own or a comment's) — pasted after Copy, as the website's
+    // file references: the same file, no second copy (it stays while anything still uses it)
+    function knownFile(path) {
+      for (const x of db.tasks || []) for (const a of (x.attachments || []).concat(...(x.comments || []).map((c) => c.attachments || []))) if (a && a.path === path) return a;
+      return null;
+    }
     function postComment(t, parentId, html, text, files) {
       const clean = cleanHtml(html), plain = String(text || '').trim().slice(0, 20000);
-      const list = (files || []).filter((f) => f && f.path && String(f.path).startsWith(`attachments/${t.id}/`)).slice(0, 30)
-        .map((f) => ({ id: newId(), name: String(f.name || 'File').slice(0, 200), size: Number(f.size) || 0, path: String(f.path), type: String(f.type || ''), ...(f.voice ? { voice: true, dur: Math.max(0, Math.round(Number(f.dur) || 0)) } : {}), addedAt: nowISO(), addedBy: meId }));
+      const list = (files || []).filter((f) => f && f.path && (String(f.path).startsWith(`attachments/${t.id}/`) || knownFile(String(f.path)))).slice(0, 30)
+        .map((f) => { const k = String(f.path).startsWith(`attachments/${t.id}/`) ? null : knownFile(String(f.path));
+          return { id: newId(), name: String(f.name || (k && k.name) || 'File').slice(0, 200), size: Number(f.size) || (k && k.size) || 0, path: String(f.path), type: String(f.type || (k && k.type) || ''), ...(k && k.thumb ? { thumb: k.thumb } : {}), ...(f.voice ? { voice: true, dur: Math.max(0, Math.round(Number(f.dur) || 0)) } : {}), addedAt: nowISO(), addedBy: meId }; });
       if (!plain && !list.length) return { error: 'Nothing to send' };
       if (parentId) { const p = (t.comments || []).find((c) => c.id === parentId); if (!p || p.parentId) return { error: 'That comment is no longer here' }; }
       t.comments = t.comments || [];
