@@ -497,7 +497,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   var cornerPending = false
   lazy var corner: CornerButton = {
     let c = CornerButton()
-    c.onTap = { [weak self] k in self?.shownScreen?.cornerTap(k) }
+    c.onTap = { [weak self] k in if k == "done" { self?.taskPages.last?.finishDesc(); return }; self?.shownScreen?.cornerTap(k) }
     return c
   }()
   func commentBar(_ a0: [String: Any]) {
@@ -2106,6 +2106,8 @@ final class Picker: NSObject, PHPickerViewControllerDelegate, UIImagePickerContr
   }
   func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) { finish([]) }
 
+  // (30: the app uploads a chosen file itself — SubmitSheet.swift)
+  func url(_ tok: String) -> URL? { lock.lock(); defer { lock.unlock() }; return files[tok] }
   // A piece of a chosen file, for the page to upload (the file is let go after its last piece)
   func read(_ a: [String: Any]) -> [String: Any] {
     lock.lock(); let known = (a["token"] as? String).flatMap { files[$0] }; lock.unlock()

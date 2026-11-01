@@ -75,6 +75,12 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   var cornerMenu: UIMenu? { moreBtn.menu }
   var onMenu: (() -> Void)?
   var feed: CommentsFeed?, threadFeed: CommentsFeed?
+  // the description's editor (DescEditor.swift)
+  let descView = UITextView()
+  var editingDesc = false, descEmpty = true
+  let mentionBox = UIStackView()
+  var onCornerChange: (() -> Void)?
+  var onSubmitFiles: ((String) -> Void)?
   private let back = HomeGlass(), more = HomeGlass()
   private let moreBtn = UIButton(type: .custom)        // (over the ••• circle: iPhone's own menu)
   private let dot = UIView(), client = UILabel()
@@ -84,7 +90,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private let spinner = UIActivityIndicatorView(style: .medium)
   private var toastView: UIView?
   private var titleView = UITextView()
-  private var built = ""
+  var built = ""
 
   init(id: String, frame: CGRect) {
     taskId = id
@@ -142,6 +148,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     titleView.textContainerInset = .zero
     titleView.textContainer.lineFragmentPadding = 0
     titleView.returnKeyType = .done
+    setUpDesc()
     applyLook()
   }
   required init?(coder: NSCoder) { fatalError() }
@@ -205,6 +212,8 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // (unchanged: nothing redrawn — a tick or a title being typed stays as it is)
     let sig = (try? JSONSerialization.data(withJSONObject: m, options: [.sortedKeys])).map { String(decoding: $0, as: UTF8.self) } ?? UUID().uuidString
     if sig == built { return }
+    // (while the description is being written nothing is redrawn under the finger: done, it catches up)
+    if editingDesc || titleView.isFirstResponder { return }
     built = sig
     rebuild()
     setNeedsLayout()
@@ -323,10 +332,15 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if !r.isEmpty { blocks.append(header("Review")); blocks.append(group(r)) }
     // ---- Description ----
     let desc = m["desc"] as? String ?? ""
-    if !desc.isEmpty {
+    let canDesc = (m["canDesc"] as? Bool) == true
+    if !desc.isEmpty || canDesc || editingDesc {
       blocks.append(header("Description", lock: m["lock"] != nil))
-      let l = label(desc, size: 16, color: (m["done"] as? Bool) == true ? .secondaryLabel : .label); l.numberOfLines = 0
-      blocks.append(group([pad(l)]))
+      // (edited right where it is, looking the same — DescEditor.swift)
+      let tv = descView
+      if !editingDesc { tv.attributedText = desc.isEmpty ? NSAttributedString(string: "Add a description… Type @ to mention someone", attributes: [.font: UIFont.systemFont(ofSize: 17), .foregroundColor: UIColor.tertiaryLabel]) : DescEditor.attributed((m["descRuns"] as? [[String: Any]]) ?? [], done: (m["done"] as? Bool) == true) }
+      descEmpty = desc.isEmpty
+      tv.isEditable = canDesc
+      blocks.append(group([pad(tv)]))
     }
     // ---- Subtasks ----
     let subs = (m["subtasks"] as? [[String: Any]]) ?? []
@@ -592,6 +606,32 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     }
     let n = p["n"] as? Int ?? 0, of = p["of"] as? Int ?? 0
     let r = row(sym: "circle.dotted.circle", key: "Parts", sub: "\(n)/\(of) done", value: chipsV)
+    // files for the CD (an assignee on a task that needs CD review): Submit / Withdraw (dm-mock 2, 3)
+    if let rv = model?["review2"] as? [String: Any], let st = rv["state"] as? String, st != "approved" {
+      let wrap = UIStackView(arrangedSubviews: [r]); wrap.axis = .vertical
+      let pending = st == "pending"
+      var c: UIButton.Configuration = pending ? .tinted() : .filled()
+      c.cornerStyle = .capsule; c.baseBackgroundColor = pending ? .systemRed : .systemBlue; c.baseForegroundColor = pending ? .systemRed : .white
+      if !pending { c.image = UIImage(systemName: "arrow.up.circle.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .semibold)); c.imagePadding = 6 }
+      c.attributedTitle = AttributedString(pending ? "Withdraw" : "Submit files for CD review", attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 16, weight: .semibold)]))
+      c.contentInsets = NSDirectionalEdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16)
+      let b = UIButton(configuration: c)
+      b.addAction(UIAction { [weak self] _ in
+        guard let self = self else { return }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        if pending {
+          let a = UIAlertController(title: "Withdraw your submission?", message: "The files you sent will be removed so you can upload the right ones.", preferredStyle: .alert)
+          a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+          a.addAction(UIAlertAction(title: "Withdraw", style: .destructive) { _ in self.onAct?(["act": "withdrawReview", "id": self.taskId]) })
+          self.present(a)
+        } else if (rv["canSubmit"] as? Bool) != true { self.toast("Move the task to In Progress first") }
+        else { self.onSubmitFiles?(rv["cd"] as? String ?? "") }
+      }, for: .touchUpInside)
+      let bw = UIView(); b.translatesAutoresizingMaskIntoConstraints = false; bw.addSubview(b)
+      NSLayoutConstraint.activate([b.leadingAnchor.constraint(equalTo: bw.leadingAnchor, constant: 52), b.topAnchor.constraint(equalTo: bw.topAnchor), b.bottomAnchor.constraint(equalTo: bw.bottomAnchor, constant: -12), b.trailingAnchor.constraint(lessThanOrEqualTo: bw.trailingAnchor, constant: -16)])
+      wrap.addArrangedSubview(bw)
+      return wrap
+    }
     guard let mine = p["mine"] as? String, mine == "open" || mine == "done" else { return r }
     // Mark my part done / Undo
     let wrap = UIStackView(arrangedSubviews: [r]); wrap.axis = .vertical
@@ -826,11 +866,14 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
 
   // ---------- the title, edited in place ----------
   func textView(_ tv: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
+    if tv === descView { return true }
     if text == "\n" { tv.resignFirstResponder(); return false }
     return true
   }
-  func textViewDidChange(_ tv: UITextView) { setNeedsLayout() }
+  func textViewDidBeginEditing(_ tv: UITextView) { if tv === descView { beginDesc() } }
+  func textViewDidChange(_ tv: UITextView) { setNeedsLayout(); if tv === descView { descChanged() } }
   func textViewDidEndEditing(_ tv: UITextView) {
+    if tv === descView { return }
     let v = tv.text.trimmingCharacters(in: .whitespacesAndNewlines)
     let was = model?["title"] as? String ?? ""
     if v.isEmpty { tv.text = was; return }

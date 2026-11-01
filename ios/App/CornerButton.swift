@@ -38,7 +38,7 @@ final class CornerButton: UIView {
   static func symbol(_ kind: String) -> String? { kind == "search" ? "magnifyingglass" : kind == "more" ? "ellipsis" : nil }
   // how wide it is for this kind (a circle, or a capsule fitting its words)
   func width(_ kind: String, _ text: String) -> CGFloat {
-    if kind == "read" || kind == "unread" { return ceil((text as NSString).size(withAttributes: [.font: word.font!]).width) + 32 }
+    if kind == "read" || kind == "unread" || kind == "done" { return ceil((text as NSString).size(withAttributes: [.font: word.font!]).width) + 32 }
     return 44
   }
   // its place for a screen whose circle would be at `f` (a capsule keeps the circle's right edge)
@@ -51,6 +51,7 @@ final class CornerButton: UIView {
   func go(_ k: String, text t: String, frame f: CGRect, menu: UIMenu?, animated: Bool) {
     let same = k == kind && t == text && frame.equalTo(f)
     menuBtn.menu = menu; menuBtn.isHidden = k != "more" || menu == nil
+    word.textColor = k == "done" ? .systemBlue : .label
     accessibilityLabel = k == "search" ? "Search" : k == "more" ? "More" : t
     if same { return }
     let was = kind
@@ -106,7 +107,11 @@ extension Main {
   // what the corner should be now: the top task page's •••, else the shown screen's
   func cornerTarget(skipTop: Bool = false) -> (kind: String, text: String, frame: CGRect) {
     let pages = skipTop ? Array(taskPages.dropLast()) : taskPages
-    if let p = pages.last { return ("more", "", p.convert(p.cornerFrame, to: view).offsetBy(dx: -p.transform.tx, dy: 0)) }
+    if let p = pages.last {
+      let f = p.convert(p.cornerFrame, to: view).offsetBy(dx: -p.transform.tx, dy: 0)
+      if p.editingDesc { return ("done", "Done", corner.place("done", "Done", circle: f)) }   // (writing the description: Done saves it)
+      return ("more", "", f)
+    }
     if let h = shownScreen {
       let c = h.corner()
       return (c.kind, c.text, corner.place(c.kind, c.text, circle: h.convert(c.frame, to: view).offsetBy(dx: -h.transform.tx, dy: 0)))

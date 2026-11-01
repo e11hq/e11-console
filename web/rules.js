@@ -633,7 +633,8 @@ var E11Rules = (() => {
         review: !t.parentId && !t.done ? { on: !!t.needsCD, canSet: !ro && !!u && (isAdm(u) || u.role === 'am' || isCD(meId)) && !reviewPending(t), who: cdUserId() ? fullName(userById(cdUserId())) : '' } : null,
         clientApproval: cdApprovedNow(t) ? (() => { const ca = t.clientApproval, fresh = clientApprovalFresh(t);
           return { state: ca && fresh ? (ca.none ? 'none' : 'yes') : ca ? 'old' : 'missing', text: ca && fresh ? (ca.none ? 'Not needed' : `Approved · ${firstName(ca.by)} · ${fmtDay(dayOf(ca.at))}`) : ca ? 'Out of date' : 'Missing', canSet: !ro && !t.done && !!u && (isAdm(u) || u.role === 'am' || t.createdBy === meId) }; })() : null,
-        desc: t.notesHtml ? plainOfHtml(t.notesHtml) : String(t.notes || '').trim(), canDesc: !ro && can('editDesc', t) && !lockedId,
+        desc: t.notesHtml ? plainOfHtml(t.notesHtml) : String(t.notes || '').trim(), descRuns: runsOf({ html: t.notesHtml || '', text: t.notes || '' }), canDesc: !ro && can('editDesc', t) && !lockedId, mentionable: !ro && can('editDesc', t) && !lockedId ? mentionable() : [],
+        review2: !t.parentId && needsCD(t) && isMine(t) && !isCD(meId) && !ro ? { state: reviewState(t, meId), canSubmit: !t.done && !(sectionOf(t) && isToDoName(sectionOf(t).name)), cd: cdUserId() ? fullName(userById(cdUserId())) : '', since: (lastReview(t, meId) || {}).at || '' } : null,
         subtasks: subtasksOf(t.id).map((x) => { (x.assignees || []).slice(0, 1).forEach(person); return { id: x.id, title: x.title || 'Untitled', done: !!x.done, due: x.due ? fmtDay(x.due) : '', late: !x.done && !!x.due && dayDiff(x.due) < 0, av: (x.assignees || [])[0] || null, canTick: !ro && !amReadOnly(x) }; }),
         canAddSub: !ro && !t.parentId && can('createTask', t),
         checklist: (t.checklist || []).map((c) => ({ id: c.id, text: c.text || '', done: !!c.done })), canCheck: !ro, canAddCheck: !ro && can('addChecklist', t),
@@ -855,6 +856,66 @@ var E11Rules = (() => {
       t.updatedAt = nowISO();
       return [];
     }
+    // ---------- the description, edited on the phone (HTML the app built: only these tags are kept) ----------
+    function cleanHtml(h) {
+      return String(h || '').slice(0, 40000).replace(/<[^>]*>/g, (tag) => {
+        const m = /^<\s*(\/)?\s*([a-z0-9]+)([^>]*)>$/i.exec(tag);
+        if (!m) return '';
+        const close = m[1] ? '/' : '', name = m[2].toLowerCase(), attrs = m[3] || '';
+        if (['b', 'i', 'u', 's', 'br', 'p', 'ul', 'ol', 'li', 'div'].includes(name)) return `<${close}${name}>`;
+        if (name === 'a') { if (close) return '</a>'; const h = /href="(https?:\/\/[^"]+)"/i.exec(attrs); return h ? `<a href="${h[1].replace(/"/g, '')}" target="_blank" rel="noopener">` : '<a>'; }
+        if (name === 'span') { if (close) return '</span>'; const u = /data-user="([^"]+)"/i.exec(attrs); return u && userById(u[1]) ? `<span class="mention" data-user="${esc(u[1])}" contenteditable="false">` : '<span>'; }
+        return '';
+      });
+    }
+    function setDesc(t, html, text) {
+      const clean = cleanHtml(html), plain = String(text == null ? '' : text).slice(0, 20000);
+      if (clean === (t.notesHtml || '') && plain === (t.notes || '')) return [];
+      const before = mentionsIn(t.notesHtml);
+      t.notesHtml = clean; t.notes = plain;
+      logActivity(t, 'changed the <b>description</b>');
+      mentionsIn(t.notesHtml).forEach((x) => { if (!before.has(x)) pushNotif(x, t, 'mention', 'mentioned you in the description of', { snippet: trunc(t.notes, 160) }); });
+      t.updatedAt = nowISO();
+      return [];
+    }
+    // the people who can be @mentioned (everyone active, not Finance-only)
+    const mentionable = () => users.filter((x) => x.active !== false && !isFinUser(x)).map((x) => ({ id: x.id, name: fullName(x), initials: initials(fullName(x) || '?'), color: rgbOf(avColor(x.id)) }));
+    // ---------- Submit for CD review / Withdraw (app.js submitReview / withdrawReview) ----------
+    const secNamedOf = (t, re) => (statusList(t) || []).find((x) => re.test(String(x.name).trim()));
+    function submitReview(t, files) {
+      if (!(needsCD(t) && isMine(t) && !isCD(meId))) return { error: 'This task doesn’t need your files for CD review' };
+      if (t.done || (sectionOf(t) && isToDoName(sectionOf(t).name))) return { error: 'Move the task to In Progress first' };
+      const list = (files || []).filter((f) => f && f.path && String(f.path).startsWith(`attachments/${t.id}/`)).slice(0, 30);
+      if (!list.length) return { error: 'No files' };
+      t.reviews = t.reviews || []; t.attachments = t.attachments || [];
+      const round = t.reviews.filter((r) => r.by === meId && r.state !== 'withdrawn').length + 1;
+      const r = { id: newId(), by: meId, at: nowISO(), files: [], state: 'pending', epoch: epochOf(t), round };
+      const atts = list.map((f) => ({ id: newId(), name: String(f.name || 'File').slice(0, 200), size: Number(f.size) || 0, path: String(f.path), type: String(f.type || ''), w: Number(f.w) || undefined, h: Number(f.h) || undefined, addedAt: nowISO(), addedBy: meId, reviewId: r.id }));
+      r.files = atts.map((a) => a.id);
+      t.reviews.push(r);
+      if (!t.lockedAt) t.lockedAt = r.at;
+      atts.forEach((a) => t.attachments.push(a));
+      logActivity(t, `submitted ${atts.length === 1 ? `<b>${esc(atts[0].name)}</b>` : `<b>${atts.length} files</b>`} for CD review${round > 1 ? ` (round ${round})` : ''}`);
+      const cd = cdUserId();
+      if (cd) pushNotif(cd, t, 'review', `submitted ${atts.length === 1 ? '1 file' : atts.length + ' files'} for your review on`);
+      const rv = secNamedOf(t, SEC_REVIEW); if (rv && t.sectionId !== rv.id) moveToStatus(t, rv.id, true);
+      syncCDOf(t);
+      t.updatedAt = nowISO();
+      return { messages: [cd ? `Sent to ${firstName(cd)} for review` : 'Submitted — no Creative Director is set yet'] };
+    }
+    function withdrawReview(t) {
+      const r = lastReview(t, meId);
+      if (!r || r.state !== 'pending') return { error: 'Nothing to withdraw' };
+      r.state = 'withdrawn';
+      t.attachments = (t.attachments || []).filter((a) => a.reviewId !== r.id);
+      logActivity(t, 'withdrew their submission for CD review');
+      const cd = cdUserId();
+      if (cd) pushNotif(cd, t, 'review-wd', 'withdrew their submission for');
+      if (!reviewPending(t)) { const pg = secNamedOf(t, /^in ?-?progress$/i); if (pg && t.sectionId !== pg.id) moveToStatus(t, pg.id, true); }
+      syncCDOf(t);
+      t.updatedAt = nowISO();
+      return { messages: ['Submission withdrawn'] };
+    }
     // ---------- the native task page's changes (POST /api/task/act) → messages, or { error } / { need } ----------
     function setTitle(t, v) {
       v = String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, 300);
@@ -977,7 +1038,7 @@ var E11Rules = (() => {
     return { home, myTasks, myTasksFilters, inbox, inboxRow, myDayData, cardOf, can, amReadOnly, canComplete, completeBlocked, dayTitle, statusInfo, sectionOf,
       notifGroups: NOTIF_GROUPS, doneLocked, canReopen, finish, finishBlocked, canFinish, moveToStatus, logActivity, logChange, pushNotif, notifyWatchers, checkPrioConflict, setDone, setDue, setClientApproval, asksClientApproval, deleteTask, watchersOf, creatorOf, clientAmsOf, fmtDue,
       taskPage, setTitle, setStart, setStatus, setMyPart, setPrio, prioTaken, toggleCheck, setNeedsCD, setUpdate, idLocked,
-      setAssignee, setGuardian, addTag, removeTag, setChannels, addCheck, addSubtask, setClient, commentsFeed, toggleReaction, deleteComment };
+      setAssignee, setGuardian, addTag, removeTag, setChannels, addCheck, addSubtask, setClient, commentsFeed, toggleReaction, deleteComment, setDesc, submitReview, withdrawReview };
   }
 
   // (the clock and new ids for the actions: the website's own, or the server's)

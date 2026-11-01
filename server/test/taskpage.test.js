@@ -156,6 +156,19 @@ test('comments: the feed, a thread, reactions, delete', async () => {
   assert.equal(r.ok, true); assert.equal(T('t1').comments.length, 0, 'the replies go with it');
 });
 
+test('the description from the phone; Submit for CD review and Withdraw', async () => {
+  let r = await act('am@e11-digital.com', { act: 'desc', id: 't3', html: '<b>Big</b> <span class="mention" data-user="u-prod">@Yousef A</span><script>x</script><img src=x>', text: 'Big @Yousef A' });
+  assert.equal(r.ok, true); assert.equal(T('t3').notesHtml, '<b>Big</b> <span class="mention" data-user="u-prod" contenteditable="false">@Yousef A</span>x');
+  assert.ok(app.store.list('notifications').some((n) => n.to === 'u-prod' && n.taskId === 't3' && n.kind === 'mention'));
+  // t2 needs CD review, Yousef is on it, in Review
+  await act('am@e11-digital.com', { act: 'client', id: 't2', value: 'p1' }); await act('am@e11-digital.com', { act: 'status', id: 't2', value: 's2' });
+  r = await act('prod@e11-digital.com', { act: 'submitReview', id: 't2', files: [{ name: 'a.pdf', size: 10, path: 'attachments/t2/a.pdf' }, { name: 'evil', path: 'attachments/other/x' }] });
+  assert.equal(r.ok, true, JSON.stringify(r)); assert.equal(T('t2').attachments.length, 1); assert.equal(T('t2').cdStatus, 'review');
+  assert.equal(r.task.review2.state, 'pending');
+  r = await act('prod@e11-digital.com', { act: 'withdrawReview', id: 't2' });
+  assert.equal(r.ok, true); assert.equal(T('t2').attachments.length, 0);
+});
+
 test('the switch: off → the page asks the website again', async () => {
   app.store.kv.set('task-server', 'off');
   assert.equal((await page('am@e11-digital.com', 't1')).off, true);

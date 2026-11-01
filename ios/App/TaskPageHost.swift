@@ -141,7 +141,17 @@ extension Main {
   }
 
   private func wire(_ p: TaskPage) {
-    p.onBack = { [weak self, weak p] in guard let self = self, let p = p else { return }; self.closeTaskPage(p) }
+    p.onBack = { [weak self, weak p] in guard let self = self, let p = p else { return }; if p.editingDesc { p.finishDesc() }; self.closeTaskPage(p) }
+    p.onCornerChange = { [weak self] in self?.updateCornerNow() }
+    p.onSubmitFiles = { [weak self, weak p] cd in
+      guard let self = self, let p = p, let host = self.sheetHost() else { return }
+      let vc = SubmitSheetVC(task: p.taskId, cd: cd, light: self.statusStyle == .darkContent) { [weak self, weak p] files in
+        guard let self = self, let p = p else { return }
+        self.taskAct(p, ["act": "submitReview", "id": p.taskId, "files": files])
+      }
+      vc.cookies = self.serverHome.cookies
+      host.present(vc, animated: true)
+    }
     p.onOpen = { [weak self] id in self?.openTaskPage(id, tab: "details", focus: "") }
     p.onTab = { [weak self, weak p] t in guard let self = self, let p = p else { return }; if t == "comments" { self.taskShowComments(p, focus: "") } else { self.taskHideComments() } }
     p.onEvent = { [weak self] ev in self?.pageJS("window.__e11Task && window.__e11Task(\(jsonString(ev)))") }
