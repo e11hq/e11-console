@@ -9,62 +9,29 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 export function createHomeView({ webDir, now = () => Date.now() }) {
-  const file = path.join(webDir || path.resolve(here, '../../web'), 'rules.js');
-  let rules = null, loadedAt = 0;
-  // (read again when the file changes — a new version installed)
-  function load() {
-    const m = fs.statSync(file).mtimeMs;
+  const dir = webDir || path.resolve(here, '../../web');
+  const file = path.join(dir, 'rules.js'), viewFile = path.join(dir, 'appview.js');
+  let rules = null, view = null, loadedAt = '';
+  // (read again when a file changes — a new version installed). The screens are web/appview.js — the same file the
+  // iPhone app runs on its own copy of the data (iOS app data plan), so the two always agree.
+  function loadBoth() {
+    const m = fs.statSync(file).mtimeMs + ':' + fs.statSync(viewFile).mtimeMs;
     if (!rules || m !== loadedAt) {
-      const src = fs.readFileSync(file, 'utf8');
-      rules = vm.runInNewContext(`${src}; E11Rules`, { Date, Math, Number, String, Object, Array, JSON, Map, Set, parseInt, isNaN });
+      const both = vm.runInNewContext(`${fs.readFileSync(file, 'utf8')}; ${fs.readFileSync(viewFile, 'utf8')}; ({ E11Rules, E11AppView })`, { Date, Math, Number, String, Object, Array, JSON, Map, Set, parseInt, isNaN, encodeURIComponent });
+      rules = both.E11Rules; view = both.E11AppView;
       loadedAt = m;
     }
-    return rules;
   }
-  const fileUrl = (p) => '/__file/' + String(p).split('/').map(encodeURIComponent).join('/');
-  // a file as the app gets it: its address, its picture's (a video's frame, a PDF's or Office file's first page — made
-  // on the server the first time it's asked for: /api/fthumb), and its place on the server (for its page pictures)
-  const THUMBED = ['mp4', 'mov', 'm4v', 'webm', 'avi', 'mkv', 'pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'odt', 'odp', 'ods', 'rtf'];
-  const appFile = (f) => {
-    const ext = String(f.name || '').split('.').pop().toLowerCase();
-    f.file = f.path || null;
-    f.url = f.path ? fileUrl(f.path) + '?view=1' : null;
-    f.thumbUrl = f.thumb ? fileUrl(f.thumb) + '?view=1' : f.path && THUMBED.includes(ext) ? '/api/fthumb?path=' + encodeURIComponent(f.path) + '&id=' + encodeURIComponent(f.id || '') : null;
-    delete f.path; delete f.thumb;
-  };
-  // data: what this person's own app downloads (visibleSnapshot in server.js)
-  function home(u, data) {
-    const R = load();
-    const today = R.dubaiDay(now());
-    const m = R.home({ users: data.users || [], projects: data.projects || [], tasks: data.tasks || [], statuses: data.statuses || [], plans: data.plans || [], meta: data.meta || {} }, u.id, today);
-    if (!m) return null;
-    // photos: the app fetches them itself (a small copy), signed in as it is
-    for (const p of Object.values(m.people || {})) { if (p.photo) p.photo = fileUrl(p.photo) + '?view=1'; }
-    return { ...m, today };
-  }
+  function load() { loadBoth(); return rules; }
+  function V() { loadBoth(); return view; }
+  // data: what this person's own app downloads (visibleSnapshot in server.js) — the screens are web/appview.js's
+  function home(u, data) { return V().home(load(), data, u.id, now); }
   // the app's My Tasks (GET /api/mytasks?tab=all|done&due=&people=a,b&ams=&team=1&assigned=1&cd=1)
   function myTasks(u, data, q) {
-    if (u.role === 'finance_admin' || u.role === 'finance_viewer' || (u.role === 'office_admin' && u.admin !== true)) return null;
-    const R = load();
-    const today = R.dubaiDay(now());
-    const list = (k) => String(q.get(k) || '').split(',').map((x) => x.trim()).filter(Boolean).slice(0, 100);
-    const F = { due: ['late', 'today', 'week'].includes(q.get('due')) ? q.get('due') : null, people: list('people'), ams: list('ams'), team: q.get('team') === '1', assigned: q.get('assigned') === '1', cd: q.get('cd') === '1' };
-    const env = { nowISO: () => new Date(now()).toISOString(), nowMs: () => now() };
-    const m = R.withEnv(env, { users: data.users || [], projects: data.projects || [], tasks: data.tasks || [], statuses: data.statuses || [], plans: data.plans || [], meta: data.meta || {} }, u.id, today).myTasks(F, q.get('tab') === 'done' ? 'done' : 'all');
-    for (const p of Object.values(m.people || {})) { if (p.photo) p.photo = fileUrl(p.photo) + '?view=1'; }
-    return { ...m, today };
+    return V().myTasks(load(), { ...data, users: data.users || [] }, u.id, now, { tab: q.get('tab'), due: q.get('due'), people: q.get('people') || '', ams: q.get('ams') || '', team: q.get('team') === '1', assigned: q.get('assigned') === '1', cd: q.get('cd') === '1' }, u);
   }
   // the app's Inbox (GET /api/inbox?tab=all|unread|mentions)
-  function inbox(u, data, q) {
-    if (u.role === 'finance_admin' || u.role === 'finance_viewer') return null;
-    const R = load();
-    const today = R.dubaiDay(now());
-    const tab = ['unread', 'mentions'].includes(q.get('tab')) ? q.get('tab') : 'all';
-    const m = R.make({ users: data.users || [], projects: data.projects || [], tasks: data.tasks || [], statuses: data.statuses || [], plans: data.plans || [], meta: data.meta || {}, notifications: data.notifications || [] }, u.id, today).inbox(tab);
-    if (!m) return null;
-    for (const p of Object.values(m.people || {})) { if (p.photo) p.photo = fileUrl(p.photo) + '?view=1'; }
-    return { ...m, today };
-  }
+  function inbox(u, data, q) { return V().inbox(load(), data, u.id, now, q.get('tab'), u); }
   // ---------- the app's Home actions (POST /api/home/act) ----------
   // Done / reopen, the due date, to the Trash and back — done here with the same shared rules the website uses, on the
   // same data this person's own app has (what they may see), so the activity lines, notifications and checks are
@@ -204,25 +171,8 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
     return { ok: true, changes, messages, undo };
   }
   // the app's native task page (GET /api/task?id=) — null: not there, or not for this person
-  function taskPage(u, data, id) {
-    const R = load();
-    const today = R.dubaiDay(now());
-    const env = { nowISO: () => new Date(now()).toISOString(), nowMs: () => now() };
-    const m = R.withEnv(env, { users: data.users || [], projects: data.projects || [], tasks: data.tasks || [], statuses: data.statuses || [], plans: data.plans || [], meta: data.meta || {} }, u.id, today).taskPage(String(id || ''));
-    if (!m) return null;
-    for (const p of Object.values(m.people || {})) { if (p.photo) p.photo = fileUrl(p.photo) + '?view=1'; }
-    for (const f of (m.files || []).concat(m.commentFiles || [], m.descFiles || [])) appFile(f);
-    return { ...m, today };
-  }
+  function taskPage(u, data, id) { return V().taskPage(load(), data, u.id, now, id); }
   // the app's native Comments (GET /api/comments?id=&thread=)
-  function commentsFeed(u, data, id, thread) {
-    const R = load();
-    const env = { nowISO: () => new Date(now()).toISOString(), nowMs: () => now() };
-    const m = R.withEnv(env, { users: data.users || [], projects: data.projects || [], tasks: data.tasks || [], statuses: data.statuses || [], plans: data.plans || [], meta: data.meta || {}, scheduled: data.scheduled || [] }, u.id, R.dubaiDay(now())).commentsFeed(String(id || ''), thread ? String(thread) : null);
-    if (!m) return null;
-    for (const p of Object.values(m.people || {})) { if (p.photo) p.photo = fileUrl(p.photo) + '?view=1'; }
-    for (const it of m.items) for (const f of it.files) appFile(f);
-    return m;
-  }
+  function commentsFeed(u, data, id, thread) { return V().commentsFeed(load(), data, u.id, now, id, thread); }
   return { home, myTasks, inbox, act, taskPage, commentsFeed };
 }
