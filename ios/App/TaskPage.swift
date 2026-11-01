@@ -218,6 +218,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // ---------- the tabs ----------
   func setTab(_ t: String, tell: Bool, slide: Bool = false) {
     let was = tab
+    if slide && was == t { return }   // (a second swipe for the same change — the edge and the middle at once: nothing more)
     tab = t
     seg.selectedSegmentIndex = t == "comments" ? 1 : 0
     let c = t == "comments"

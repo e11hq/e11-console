@@ -1846,6 +1846,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       ("tpageScrolled", pause(900) + "return '{}'", { self.taskPages.last?.scroll.setContentOffset(CGPoint(x: 0, y: 380), animated: false) }),
       ("tpageSheet", pause(1500) + "return '{}'", { self.taskPages.last?.pickPeople() }),
       ("tpageComments", pause(5000) + "return '{}'", { self.presentedViewController?.dismiss(animated: false); self.taskPages.last?.setTab("comments", tell: true) }),
+      // (Comments → Details as the swipe does it — for the film: nothing of Comments may show on Details on the way)
+      ("tpageSwipeDetails", pause(1500) + "return '{}'", { if let p = self.taskPages.last { self.toDetailsFromComments(p) } }),
       ("tpageBack", pause(1500) + "return JSON.stringify({ webTask: !!ui.taskId })", { if let p = self.taskPages.last { p.setTab("details", tell: true); self.closeTaskPage(p, animated: false) } }),
       ("task", "window.__e11WebTask = true; const t = db.tasks.find((x) => !x.parentId && !x.done && (x.comments || []).length) || db.tasks.find((x) => !x.parentId && !x.done); openTask(t.id); " + pause(1500) + "return JSON.stringify({ taskOpen: !!ui.taskId })", nil),
       ("sheet", "const m = showMenu(document.body, [{ html: '<div class=\"react-pick\">' + REACTIONS.map((e) => '<button>' + e + '</button>').join('') + '</div>' }, { label: 'Reply', icon: 'reply', run() {} }, { label: 'Edit comment', icon: 'edit', run() {} }, { label: 'Copy text', icon: 'copy', run() {} }, '-', { label: 'Delete comment', icon: 'trash', danger: true, run() {} }]); m.classList.add('cm-sheet'); " + pause(900) + geo + " const r = m.getBoundingClientRect(); return JSON.stringify({ menuTop: r.top, menuBottom: r.bottom, geo })", nil),
