@@ -294,7 +294,7 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
     let ro = (model?["readOnly"] as? Bool) == true
     var rows: [[String: Any]] = []
     let emojis = ["👍", "✅", "🎉", "❤️", "👀", "🙏"]
-    if !ro { rows.append(["i": -1, "label": "", "kind": "emoji", "chips": emojis.enumerated().map { ["i": 100 + $0.offset, "swatch": $0.element] }]) }
+    if !ro { rows.append(["i": -1, "label": "", "kind": "emoji", "chips": emojis.enumerated().map { ["i": 100 + $0.offset, "swatch": $0.element, "label": $0.element] }]) }
     if (it["canReply"] as? Bool) == true && thread == nil { rows.append(["i": 1, "label": "Reply", "icon": "reply"]) }
     if thread != nil && !ro { rows.append(["i": 1, "label": "Reply", "icon": "reply"]) }
     if (it["canEdit"] as? Bool) == true { rows.append(["i": 4, "label": "Edit comment", "icon": "edit"]) }

@@ -91,6 +91,14 @@ final class ComposeBox: UIView, UITextViewDelegate {
     x.addAction(UIAction { [weak self] _ in self?.replyTo = nil }, for: .touchUpInside)
     replyLine.addArrangedSubview(replyLabel); replyLine.addArrangedSubview(UIView()); replyLine.addArrangedSubview(x)
     replyLine.isHidden = true
+    // (on its own glass capsule, so it reads over the comments behind it)
+    replyLine.isLayoutMarginsRelativeArrangement = true; replyLine.layoutMargins = UIEdgeInsets(top: 0, left: 14, bottom: 0, right: 10)
+    let rg = UIVisualEffectView(effect: nil)
+    if #available(iOS 26.0, *) { rg.effect = UIGlassEffect(style: .regular) } else { rg.effect = UIBlurEffect(style: .systemThickMaterial) }
+    rg.layer.cornerRadius = 16; rg.layer.cornerCurve = .continuous; rg.clipsToBounds = true
+    rg.translatesAutoresizingMaskIntoConstraints = false; rg.isUserInteractionEnabled = false
+    replyLine.insertSubview(rg, at: 0)
+    NSLayoutConstraint.activate([rg.leadingAnchor.constraint(equalTo: replyLine.leadingAnchor), rg.trailingAnchor.constraint(equalTo: replyLine.trailingAnchor), rg.topAnchor.constraint(equalTo: replyLine.topAnchor), rg.bottomAnchor.constraint(equalTo: replyLine.bottomAnchor)])
     mentions.axis = .vertical; mentions.backgroundColor = .secondarySystemGroupedBackground; mentions.layer.cornerRadius = 16; mentions.clipsToBounds = true; mentions.isHidden = true
     let tilesScroll = UIScrollView(); tilesScroll.showsHorizontalScrollIndicator = false
     tilesScroll.addSubview(tiles); tiles.translatesAutoresizingMaskIntoConstraints = false
@@ -102,7 +110,7 @@ final class ComposeBox: UIView, UITextViewDelegate {
     NSLayoutConstraint.activate([
       v.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16), v.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
       v.topAnchor.constraint(equalTo: topAnchor), v.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8),
-      replyLine.heightAnchor.constraint(equalToConstant: 18),
+      replyLine.heightAnchor.constraint(equalToConstant: 32),
       tilesScroll.topAnchor.constraint(equalTo: box.topAnchor, constant: 10), tilesScroll.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 12), tilesScroll.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -12), tilesH,
       tiles.leadingAnchor.constraint(equalTo: tilesScroll.contentLayoutGuide.leadingAnchor), tiles.trailingAnchor.constraint(equalTo: tilesScroll.contentLayoutGuide.trailingAnchor), tiles.topAnchor.constraint(equalTo: tilesScroll.contentLayoutGuide.topAnchor), tiles.bottomAnchor.constraint(equalTo: tilesScroll.contentLayoutGuide.bottomAnchor), tiles.heightAnchor.constraint(equalTo: tilesScroll.heightAnchor),
       text.topAnchor.constraint(equalTo: tilesScroll.bottomAnchor, constant: 4), text.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 14), text.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -14), textH,
@@ -120,7 +128,7 @@ final class ComposeBox: UIView, UITextViewDelegate {
   var hasSomething: Bool { !(text.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !files.isEmpty }
   private func paintSend() {
     let send = hasSomething || editing != nil
-    right.setImage(UIImage(systemName: send ? "arrow.up" : "mic.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .bold)), for: .normal)
+    right.setImage(UIImage(systemName: send ? "arrow.up" : "mic.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: send ? 16 : 13.5, weight: send ? .bold : .semibold)), for: .normal)
     right.backgroundColor = send ? .label : .tertiarySystemFill
     right.tintColor = send ? .systemBackground : .label
     holdG?.isEnabled = !send
