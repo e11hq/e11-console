@@ -1571,11 +1571,13 @@ final class InboxRow: UIControl, UIGestureRecognizerDelegate {
     act.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(toggle)))
     dot.backgroundColor = .systemBlue; dot.layer.cornerRadius = 5
     av.clipsToBounds = true; av.layer.cornerRadius = 20
-    head.font = .systemFont(ofSize: 17, weight: .semibold); head.textColor = .label
-    when.font = .systemFont(ofSize: 15); when.textColor = .secondaryLabel; when.textAlignment = .right
+    // (Mail's sizes, from the height of the capitals in Haris's screenshots side by side, 2026-11-01: ours at 17 / 15 / 15
+    //  read bigger — Mail's are ~16.5 / 14 / 14)
+    head.font = .systemFont(ofSize: 16.5, weight: .semibold); head.textColor = .label
+    when.font = .systemFont(ofSize: 14); when.textColor = .secondaryLabel; when.textAlignment = .right
     chev.image = UIImage(systemName: "chevron.right", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .semibold)); chev.tintColor = .tertiaryLabel; chev.contentMode = .bottom
-    titleL.font = .systemFont(ofSize: 15); titleL.textColor = .label
-    descL.font = .systemFont(ofSize: 15); descL.textColor = .secondaryLabel
+    titleL.font = .systemFont(ofSize: 14); titleL.textColor = .label
+    descL.font = .systemFont(ofSize: 14); descL.textColor = .secondaryLabel
     [head, titleL, descL].forEach { $0.lineBreakMode = .byTruncatingTail; $0.numberOfLines = 1 }
     sep.backgroundColor = .separator
     [dot, av, head, when, chev, titleL, descL, sep].forEach { body.addSubview($0) }
