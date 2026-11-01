@@ -438,6 +438,14 @@ const Phone = (() => {
   function renderContent(c) {
     if (!st.on || ui.search || !OWN.has(ui.view)) return false;
     const v = ui.view;
+    // (under the app's own My Day / My Tasks the page draws nothing — they were drawn unseen behind them; lighter, and
+    //  anything that shows through for a moment is empty — Haris, 2026-11-01)
+    if (((v === 'home' || v === 'today') && typeof NativeHome !== 'undefined' && NativeHome.light) || (v === 'mytasks' && typeof NativeMyTasks !== 'undefined' && NativeMyTasks.light)) {
+      c.innerHTML = '<div class="ph-page ph-under-app"></div>';
+      unpin();
+      document.body.classList.remove('ph-fab-on'); document.body.classList.add('ph-strip');
+      return true;
+    }
     c.innerHTML = v === 'home' || v === 'today' ? (isOffice() ? OfficeHome.view() : myDay()) : v === 'mytasks' ? myTasks() : v === 'inbox' ? inbox()
       : v === 'reviews' ? reviews() : v === 'review' ? review() : v === 'projects' ? projects() : v === 'project' ? project()
       : v === 'psearch' ? search() : meScreen();
@@ -2411,8 +2419,10 @@ const NativeHome = (() => {
     if (!Phone.on || !(ui.view === 'home' || ui.view === 'today') || ui.search || (typeof isOffice === 'function' && isOffice())) return false;
     if (ui.taskId || document.querySelector('#detail.open')) return false;
     if (document.querySelector('#ph-sheet-root .ph-scrim:not(.docked), #overlay-root .scrim, #tv-root .scrim, .menu, .lightbox, .fv')) return false;
-    return !!document.querySelector('#content .ph-page .ph-stats');
+    return !!keptLook || !!document.querySelector('#content .ph-page .ph-stats');
   };
+  // (the colours read once from the page's own Home; after that the page draws nothing under the app's)
+  let keptLook = null;
   // the page's own Home's colours (drawn under the app's), so the app's match them exactly
   function look() {
     const pg = document.querySelector('#content .ph-page');
@@ -2446,7 +2456,8 @@ const NativeHome = (() => {
     if (!m) return null;
     Object.keys(m.people || {}).forEach(person);
     delete m.people;   // (the page sends the pictures apart, once loaded)
-    m.look = look();
+    if (!keptLook && document.querySelector('#content .ph-page .ph-stats')) keptLook = look();
+    m.look = keptLook || look();
     return m;
   }
   function sync() {
@@ -2542,7 +2553,7 @@ const NativeHome = (() => {
     toastAction = action || null;
     call({ toast: { t: String(msg || ''), a: action ? action.label : '', ms: ms || (action ? 6000 : 3000) } });
   }
-  return { sync, toast: toastOut, get on() { return on; }, get shown() { return shown; } };
+  return { sync, toast: toastOut, get on() { return on; }, get shown() { return shown; }, get light() { return on && !!keptLook; } };
 })();
 
 /* ---------- My Tasks drawn by the iPhone app itself (26+): the app gets its lists from the server (/api/mytasks, the
@@ -2551,9 +2562,9 @@ const NativeHome = (() => {
    NATIVE_MYTASKS = false: the page's own My Tasks again (no app build needed). ---------- */
 const NATIVE_MYTASKS = true;
 const NativeMyTasks = (() => {
-  let on = false, last = '', shown = false;
+  let on = false, last = '', shown = false, lightOK = false;   // (lightOK: the app tells the page when to draw its own, 27+)
   if (NATIVE_MYTASKS && window.__e11CommentsOnly !== true && typeof Host !== 'undefined' && Host.isIOSApp) {
-    NativeMac.call('appInfo').then((r) => { on = Number(r && r.shell) >= 26; if (on) { setInterval(sync, 350); sync(); } }).catch(() => {});
+    NativeMac.call('appInfo').then((r) => { on = Number(r && r.shell) >= 26; lightOK = Number(r && r.shell) >= 27; if (on) { setInterval(sync, 350); sync(); } }).catch(() => {});
   }
   const call = (a) => NativeMac.call('mytasks', a).catch(() => {});
   const visible = () => {
@@ -2613,5 +2624,9 @@ const NativeMyTasks = (() => {
     if (window.__e11Home) window.__e11Home(ev);
   };
   window.__e11MyTasksResend = () => { last = ''; shown = false; sync(); };
-  return { sync, get on() { return on; }, get shown() { return shown; } };
+  // the app can't show its own My Tasks (switched off on the server, or no list for these filters yet with no signal):
+  // the page's own list until it can
+  let own = false;
+  window.__e11MyTasksOwn = (v) => { const was = own; own = !!v; if (was !== own && ui.view === 'mytasks' && !ui.taskId) renderContent(); };
+  return { sync, get on() { return on; }, get shown() { return shown; }, get light() { return on && lightOK && !own; } };
 })();
