@@ -34,6 +34,9 @@ final class DailySheetVC: UIViewController, UISheetPresentationControllerDelegat
   override func viewDidLoad() {
     super.viewDidLoad()
     view.backgroundColor = .systemGroupedBackground
+    // (a solid back: a sheet not at full height is see-through glass on iOS 26 — the Inbox showed through the sections)
+    let back = UIView(); back.backgroundColor = .systemGroupedBackground; back.frame = view.bounds; back.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    view.addSubview(back)
     scroll.alwaysBounceVertical = false; scroll.showsVerticalScrollIndicator = false
     view.addSubview(scroll)
     stack.axis = .vertical; stack.spacing = 16; scroll.addSubview(stack)

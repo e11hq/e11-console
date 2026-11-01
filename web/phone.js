@@ -2665,7 +2665,8 @@ const NativeInbox = (() => {
   // the app's taps: a row (opens what it's about, as the page's own row), your photo
   window.__e11Inbox = (ev) => {
     if (!ev) return;
-    if (ev.ev === 'open' && ev.id) { openNotif(ev.id); return; }
+    // (what can't open here — nothing happens on the page — the app's Inbox comes back, not a blank page)
+    if (ev.ev === 'open' && ev.id) { openNotif(ev.id); setTimeout(() => { last = ''; shown = false; sync(); }, 400); return; }
     if (ev.ev === 'readAll') { myNotifs().forEach((n) => { n.read = true; }); persist(); renderSidebar(); return; }   // (the server's switched off: the page does it)
     if (window.__e11Home) window.__e11Home(ev);
   };
