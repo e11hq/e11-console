@@ -70,9 +70,49 @@ const Daily = (() => {
   }
   function show() {
     if (!wants()) return;
-    open.k = null; shown = true;
+    open.k = null;
+    if (nativeOK) return nativeShow();
+    shown = true;
     paint();
   }
+  // ---------- the iPhone app (29+): iPhone's own sheet — the same sections, at most 7 lines in the open one ----------
+  let nativeOK = false;
+  if (typeof Host !== 'undefined' && Host.isIOSApp && window.__e11CommentsOnly !== true) {
+    NativeMac.call('appInfo').then((r) => { nativeOK = Number(r && r.shell) >= 29; }).catch(() => {});
+  }
+  const SYM = { overdue: 'flag.fill', today: 'calendar', cd: 'checkmark.shield.fill', amend: 'pencil', client: 'checkmark', sched: 'clock.fill' };
+  const RGB = { red: [255, 59, 48], amber: [255, 159, 10], accent: [10, 132, 255], sched: [142, 92, 247] };
+  function nativeShow(u = me()) {
+    const S = sections(u);
+    const n = (s) => (s.sched ? s.sched.length : s.tasks.length);
+    const first = S.find((s) => n(s));
+    const late = (t) => t.due && t.due < todayStr();
+    const out = S.map((s) => {
+      const c = n(s);
+      // (7 lines at most — "See … in My Tasks" is one of them)
+      const room = s.filter ? 6 : 7;
+      const rows = s.sched
+        ? s.sched.slice(0, 7).map((x) => { const t = task(x.taskId); return { id: x.taskId, t: trunc(x.text || 'Files', 70), m: t ? (t.title || 'Untitled task') : '', d: fmtClock(x.sendAt), late: false }; })
+        : s.tasks.slice(0, room).map((t) => { const p = proj(t.projectId); return { id: t.id, t: t.title || 'Untitled task', m: p ? p.name : '', d: t.due ? fmtDay(t.due) : '', late: !!late(t) }; });
+      return { k: s.k, l: s.l, sym: SYM[s.k] || 'circle', rgb: s.k === 'sched' ? RGB.sched : RGB[s.tone] || RGB.accent, n: c, rows,
+        more: s.filter && c ? { t: c > 6 ? `See all ${c} in My Tasks` : 'See them in My Tasks' } : null };
+    });
+    const when = new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' });
+    NativeMac.call('dailySheet', {
+      title: `Good morning, ${firstName(u.id)}`, sub: `${when} · ${team(u) ? 'the whole team’s tasks' : Work.hasClients(u.id) ? 'your clients’ tasks' : 'your tasks'}`,
+      foot: `Up to date as of ${new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`,
+      light: document.documentElement.dataset.theme === 'light', open: first ? first.k : '', sections: out,
+    }).catch(() => { shown = true; paint(); });
+  }
+  // what's tapped on the app's sheet: a task, or a section's "See … in My Tasks"
+  window.__e11Daily = (ev) => {
+    if (!ev) return;
+    if (ev.ev === 'open' && ev.id) { if (task(ev.id)) openTask(ev.id); else toast('That task isn’t there anymore'); return; }
+    if (ev.ev === 'all') {
+      const s = sections().find((x) => x.k === ev.k);
+      if (s && s.filter) { ui.workF = null; ui.myTasksTab = 'todo'; const F = Work.f(); if (team()) F.team = true; Object.assign(F, s.filter); go('mytasks'); }
+    }
+  };
   function close() { shown = false; const root = document.getElementById('overlay-root'); if (root && root.querySelector('.dy-scrim')) root.innerHTML = ''; }
   document.addEventListener('click', (e) => {
     if (!shown || !e.target.closest) return;

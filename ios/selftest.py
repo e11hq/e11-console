@@ -74,6 +74,7 @@ try:
     check(hfd.get('searching') is False, f'the ✕ closes the search {hfd}')
     hd = res.get('homeDateNative') or {}
     check(hd.get('sheet') == 'DateSheetVC', f'the date sheet opens (and the app is still running) {hd.get("sheet")}')
+    check((res.get('dailyNative') or {}).get('sheet') == 'DailySheetVC', f"the morning round-up opens as iPhone's own sheet {res.get('dailyNative')}")
     mt = res.get('mytasksMyTasks') or {}; mtd = res.get('mytasksDoneMyTasks') or {}; mta = res.get('mytasksAllMyTasks') or {}
     check(mt.get('shown') is True and mt.get('server') is True and mt.get('tab') == 'all' and 'filter-due' in (mt.get('filters') or []), f"My Tasks is the app's own, from the server, with All and its filter buttons {mt}")
     check(mtd.get('shown') is True and mtd.get('tab') == 'done' and 'tab=done' in (mtd.get('query') or ''), f"My Tasks' Done tab asks the server for completed tasks {mtd}")
