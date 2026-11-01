@@ -223,7 +223,9 @@ extension Main {
     // (only once there's a screen of the app's own to show it on)
     guard homeIfMade != nil || myTasksIfMade != nil || inboxIfMade != nil || !taskPages.isEmpty else { return }
     for h in [homeIfMade, myTasksIfMade, inboxIfMade].compactMap({ $0 }) where !h.cornerShared { h.cornerShared = true; h.onCorner = { [weak self] in self?.updateCorner() } }
-    for p in taskPages where !p.cornerShared { p.cornerShared = true; p.onMenu = { [weak self] in self?.updateCorner(animated: false) } }
+    // (the page's ••• menu ready or changed: only the menu — moving the buttons again here, without the spring, cut
+    //  the melt into ••• short as a task opened: build 1275's film)
+    for p in taskPages where !p.cornerShared { p.cornerShared = true; p.onMenu = { [weak self, weak p] in if let p = p, p === self?.taskPages.last { self?.corner.items = p.cornerItems } } }
     if corner.superview == nil {
       corner.onLeft = { [weak self] in guard let self = self, let p = self.taskPages.last else { return }; if p.editingDesc { p.finishDesc() }; self.closeTaskPage(p) }
       corner.onMid = { [weak self] k in if k == "done" { self?.taskPages.last?.finishDesc(); return }; self?.shownScreen?.cornerTap(k) }
@@ -244,7 +246,8 @@ extension Main {
     let t = cornerTarget()
     // (between two screens — a tab change hides one a moment before the next shows — nothing is there for an instant:
     //  the buttons wait for the next screen instead of vanishing and coming back; seen in build 1271's film)
-    if t.0.kind == "none" && t.1.kind == "none" && t.2.kind == "none" && taskPages.isEmpty && corner.kind != "none" && !cornerWaited {
+    let between = (t.0.kind == "none" && t.1.kind == "none" && t.2.kind == "none") || (t.1.kind == "none" && corner.kind != "none" && !(shownScreen?.searching ?? false))
+    if between && taskPages.isEmpty && corner.kind != "none" && !cornerWaited {
       cornerWaited = true
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.cornerWaited = false; self?.updateCornerNow(animated: animated) }
       return
