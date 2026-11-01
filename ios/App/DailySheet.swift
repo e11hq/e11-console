@@ -23,8 +23,8 @@ final class DailySheetVC: UIViewController, UISheetPresentationControllerDelegat
     overrideUserInterfaceStyle = (d["light"] as? Bool) == false ? .dark : .light
     modalPresentationStyle = .pageSheet
     if let sh = sheetPresentationController {
-      // (as tall as what's in it, up to 80 % of the screen — only past that does the inside scroll; Haris, 2026-11-01)
-      sh.detents = [.custom(identifier: .init("daily")) { [weak self] ctx in min(ctx.maximumDetentValue, UIScreen.main.bounds.height * 0.8, self?.fitHeight ?? 520) }]
+      // (as tall as what's in it, up to 85 % of the screen — only past that does the inside scroll; Haris, 2026-11-01)
+      sh.detents = [.custom(identifier: .init("daily")) { [weak self] ctx in min(ctx.maximumDetentValue, UIScreen.main.bounds.height * 0.85, self?.fitHeight ?? 520) }]
       sh.prefersGrabberVisible = true
       sh.preferredCornerRadius = 38
       sh.delegate = self
