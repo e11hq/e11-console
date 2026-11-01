@@ -537,9 +537,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     show(smallTitle, dT, rise: 6)
     show(smallSub, dS, rise: 6)
     // the big title: blurs and fades where it is; the big line under it with it
-    // (as Mail's: it blurs out first — well blurred by half way, still mostly there — then fades; Haris: ours only faded)
-    fade(title).set(blur: 11 * ease(0, 0.5, dBig), alpha: 1 - ease(0.35, 1, dBig), dy: 0, trait: tr)
-    fade(sub).set(blur: 8 * ease(0, 0.5, dBig), alpha: 1 - ease(0.25, 1, dBig), dy: 0, trait: tr)
+    // (as Mail's: no blur of its own — it just fades away behind the frost; Haris, 2026-11-01)
+    fade(title).set(blur: 0, alpha: 1 - ease(0, 1, dBig), dy: 0, trait: tr)
+    fade(sub).set(blur: 0, alpha: 1 - ease(0, 0.8, dBig), dy: 0, trait: tr)
     if #available(iOS 26.0, *) { topLine.alpha = dLine } else { blur.alpha = dT }
   }
   // (Search's end, a self-test, a new layout: everything where the scroll says, at once)
