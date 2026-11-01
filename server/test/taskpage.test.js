@@ -169,6 +169,21 @@ test('the description from the phone; Submit for CD review and Withdraw', async 
   assert.equal(r.ok, true); assert.equal(T('t2').attachments.length, 0);
 });
 
+test('writing a comment, a reply with a mention, a voice message; editing', async () => {
+  let r = await act('prod@e11-digital.com', { act: 'comment', id: 't3', html: 'Done <b>now</b>', text: 'Done now' });
+  assert.equal(r.ok, true); const c = T('t3').comments.at(-1); assert.equal(c.html, 'Done <b>now</b>'); assert.equal(c.authorId, 'u-prod');
+  r = await act('am@e11-digital.com', { act: 'comment', id: 't3', parentId: c.id, html: '<span class="mention" data-user="u-prod2">@Sara</span> see', text: '@Sara see' });
+  assert.equal(r.ok, true); assert.equal(T('t3').comments.at(-1).parentId, c.id);
+  assert.ok(app.store.list('notifications').some((n) => n.to === 'u-prod2' && n.kind === 'mention'));
+  r = await act('prod@e11-digital.com', { act: 'comment', id: 't3', html: '', text: '', files: [{ name: 'Voice message.m4a', size: 2000, path: 'attachments/t3/v.m4a', voice: true, dur: 7.4 }] });
+  assert.equal(r.ok, true); const v = T('t3').comments.at(-1).attachments[0]; assert.equal(v.voice, true); assert.equal(v.dur, 7);
+  r = await act('prod@e11-digital.com', { act: 'editComment', id: 't3', value: c.id, html: 'Done!', text: 'Done!' });
+  // (the server's own edit-window check runs on the real clock, not this test's: refused here is the window)
+  if (r.ok) assert.equal(T('t3').comments.find((x) => x.id === c.id).text, 'Done!'); else assert.equal(r.status, 403);
+  r = await act('am@e11-digital.com', { act: 'editComment', id: 't3', value: c.id, html: 'x', text: 'x' });
+  assert.equal(r.ok, false, 'only its writer');
+});
+
 test('the switch: off → the page asks the website again', async () => {
   app.store.kv.set('task-server', 'off');
   assert.equal((await page('am@e11-digital.com', 't1')).off, true);

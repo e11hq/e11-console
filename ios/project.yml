@@ -58,7 +58,7 @@ targets:
         ITSAppUsesNonExemptEncryption: false
         NSFaceIDUsageDescription: Lock E11 Console with Face ID, if you turn it on in Me.
         NSCameraUsageDescription: Take a photo or video to attach to a task.
-        NSMicrophoneUsageDescription: Record sound with a video you attach to a task.
+        NSMicrophoneUsageDescription: Record voice messages for comments, and sound with a video you attach to a task.
         NSPhotoLibraryAddUsageDescription: Save pictures and videos you download from E11 Console to Photos.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true

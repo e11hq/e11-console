@@ -122,9 +122,9 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
       const r = rules.deleteTask(t);
       undo = r.item.id;
       messages = ['Moved to the Trash'];
-    } else if (['title', 'start', 'status', 'myPart', 'prio', 'check', 'needsCD', 'update', 'clientApproval', 'assign', 'guardian', 'addTag', 'removeTag', 'channels', 'addCheck', 'addSub', 'client', 'react', 'deleteComment', 'desc', 'submitReview', 'withdrawReview'].includes(a)) {
+    } else if (['title', 'start', 'status', 'myPart', 'prio', 'check', 'needsCD', 'update', 'clientApproval', 'assign', 'guardian', 'addTag', 'removeTag', 'channels', 'addCheck', 'addSub', 'client', 'react', 'deleteComment', 'desc', 'submitReview', 'withdrawReview', 'comment', 'editComment'].includes(a)) {
       // the native task page's (shell 30+) — each checked as the website checks it
-      if ((a !== 'react' && a !== 'deleteComment' && rules.amReadOnly(t)) || rules.doneLocked(t)) return view();   // (a view-only task: comments still)
+      if ((!['react', 'deleteComment', 'comment', 'editComment'].includes(a) && rules.amReadOnly(t)) || rules.doneLocked(t)) return view();   // (a view-only task: comments still)
       let r = [];
       if (a === 'title') { if (!rules.can('editTitle', t) || rules.idLocked(t)) return fail(403, 'The name can’t be changed'); r = rules.setTitle(t, body.value); }
       else if (a === 'start') {
@@ -151,6 +151,8 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
       else if (a === 'desc') { if (!rules.can('editDesc', t) || rules.idLocked(t)) return fail(403, 'The description can’t be changed'); r = rules.setDesc(t, body.html, body.text); }
       else if (a === 'submitReview') r = rules.submitReview(t, Array.isArray(body.files) ? body.files : []);
       else if (a === 'withdrawReview') r = rules.withdrawReview(t);
+      else if (a === 'comment') r = rules.postComment(t, body.parentId ? String(body.parentId) : null, body.html, body.text, Array.isArray(body.files) ? body.files : []);
+      else if (a === 'editComment') r = rules.editComment(t, String(body.value || ''), body.html, body.text);
       else if (a === 'addCheck') { if (!rules.can('addChecklist', t)) return fail(403, 'Your role doesn’t allow adding checklist items'); r = rules.addCheck(t, body.value); }
       else if (a === 'clientApproval') {
         const ca = (rules.taskPage(t.id) || {}).clientApproval;

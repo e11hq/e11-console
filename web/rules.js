@@ -827,7 +827,7 @@ var E11Rules = (() => {
       };
       const root = threadId ? all.find((c) => c.id === threadId && !c.parentId) : null;
       const list = threadId ? (root ? [root, ...kids(root.id)] : []) : all.filter((c) => !c.parentId);
-      const out = { id: t.id, me: meId, thread: root ? root.id : null, readOnly: ro, items: list.map(item), n: all.length, parents: Object.fromEntries(all.filter((c) => c.parentId).map((c) => [c.id, c.parentId])) };
+      const out = { id: t.id, me: meId, thread: root ? root.id : null, readOnly: ro, canWrite: !doneLocked(t), mentionable: doneLocked(t) ? [] : mentionable(), items: list.map(item), n: all.length, parents: Object.fromEntries(all.filter((c) => c.parentId).map((c) => [c.id, c.parentId])) };
       out.people = Object.fromEntries([...pp].filter(Boolean).map((pid) => { const x = userById(pid); return [pid, { name: fullName(x) || 'Someone', first: firstName(pid), initials: initials(fullName(x) || '?'), color: rgbOf(avColor(pid || 'x')), photo: x && x.avatar ? x.avatar : null }]; }));
       return out;
     }
@@ -915,6 +915,40 @@ var E11Rules = (() => {
       syncCDOf(t);
       t.updatedAt = nowISO();
       return { messages: ['Submission withdrawn'] };
+    }
+    // ---------- writing a comment from the phone (step 3; app.js postComment / saveEdit) ----------
+    function postComment(t, parentId, html, text, files) {
+      const clean = cleanHtml(html), plain = String(text || '').trim().slice(0, 20000);
+      const list = (files || []).filter((f) => f && f.path && String(f.path).startsWith(`attachments/${t.id}/`)).slice(0, 30)
+        .map((f) => ({ id: newId(), name: String(f.name || 'File').slice(0, 200), size: Number(f.size) || 0, path: String(f.path), type: String(f.type || ''), ...(f.voice ? { voice: true, dur: Math.max(0, Math.round(Number(f.dur) || 0)) } : {}), addedAt: nowISO(), addedBy: meId }));
+      if (!plain && !list.length) return { error: 'Nothing to send' };
+      if (parentId) { const p = (t.comments || []).find((c) => c.id === parentId); if (!p || p.parentId) return { error: 'That comment is no longer here' }; }
+      t.comments = t.comments || [];
+      const cid = newId();
+      t.comments.push({ id: cid, text: plain, html: clean, at: nowISO(), attachments: list, parentId: parentId || null, reactions: {}, authorId: meId });
+      const mentioned = mentionsIn(clean);
+      mentioned.forEach((x) => pushNotif(x, t, 'mention', `mentioned you in a ${parentId ? 'reply' : 'comment'} on`, { snippet: trunc(plain, 160), commentId: cid }));
+      if (parentId) {
+        const ppl = new Set(t.comments.filter((c) => c.id === parentId || c.parentId === parentId).map((c) => c.authorId));
+        ppl.forEach((x) => { if (!mentioned.has(x) && !watchersOf(t).includes(x)) pushNotif(x, t, 'comment', 'replied in a thread on', { snippet: trunc(plain, 160), commentId: cid }); });
+      }
+      const voice = list.some((f) => f.voice);
+      notifyWatchers(t, 'comment', parentId ? 'replied to a comment on' : 'commented on', { snippet: trunc(plain || (voice ? 'Voice message' : `${list.length} file${list.length === 1 ? '' : 's'}`), 160), skip: [...mentioned], commentId: cid });
+      t.updatedAt = nowISO();
+      return { messages: [], id: cid };
+    }
+    function editComment(t, cid, html, text) {
+      const c = (t.comments || []).find((x) => x.id === cid);
+      if (!c) return { error: 'That comment is no longer here' };
+      if (c.authorId !== meId) return { error: 'Only its writer can edit it' };
+      if (nowMs() - Date.parse(c.at || 0) > 10 * 60000 + 60000) return { error: 'The 10 minutes to edit it have passed' };
+      const clean = cleanHtml(html), plain = String(text || '').trim();
+      if (!plain && !(c.attachments || []).length) return { error: 'Nothing left — delete it instead' };
+      const before = mentionsIn(c.html);
+      mentionsIn(clean).forEach((x) => { if (!before.has(x)) pushNotif(x, t, 'mention', 'mentioned you in a comment on', { snippet: trunc(plain, 160), commentId: c.id }); });
+      c.text = plain; c.html = clean; c.editedAt = nowISO();
+      t.updatedAt = nowISO();
+      return [];
     }
     // ---------- the native task page's changes (POST /api/task/act) → messages, or { error } / { need } ----------
     function setTitle(t, v) {
@@ -1038,7 +1072,7 @@ var E11Rules = (() => {
     return { home, myTasks, myTasksFilters, inbox, inboxRow, myDayData, cardOf, can, amReadOnly, canComplete, completeBlocked, dayTitle, statusInfo, sectionOf,
       notifGroups: NOTIF_GROUPS, doneLocked, canReopen, finish, finishBlocked, canFinish, moveToStatus, logActivity, logChange, pushNotif, notifyWatchers, checkPrioConflict, setDone, setDue, setClientApproval, asksClientApproval, deleteTask, watchersOf, creatorOf, clientAmsOf, fmtDue,
       taskPage, setTitle, setStart, setStatus, setMyPart, setPrio, prioTaken, toggleCheck, setNeedsCD, setUpdate, idLocked,
-      setAssignee, setGuardian, addTag, removeTag, setChannels, addCheck, addSubtask, setClient, commentsFeed, toggleReaction, deleteComment, setDesc, submitReview, withdrawReview };
+      setAssignee, setGuardian, addTag, removeTag, setChannels, addCheck, addSubtask, setClient, commentsFeed, toggleReaction, deleteComment, setDesc, submitReview, withdrawReview, postComment, editComment, mentionable };
   }
 
   // (the clock and new ids for the actions: the website's own, or the server's)

@@ -23,6 +23,13 @@ final class FeedLoader {
       }.resume()
     }
   }
+  func data(_ path: String, _ done: @escaping (Data?) -> Void) {
+    cookies { c in
+      guard let url = URL(string: path.hasPrefix("http") ? path : serverURL() + path) else { return done(nil) }
+      var r = URLRequest(url: url); if !c.isEmpty { r.setValue(c, forHTTPHeaderField: "Cookie") }
+      URLSession.shared.dataTask(with: r) { d, _, _ in DispatchQueue.main.async { done(d) } }.resume()
+    }
+  }
   func link(_ u: String, _ done: @escaping ([String: Any]?) -> Void) {
     if let l = links[u] { return done(l) }
     cookies { c in
@@ -60,17 +67,19 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
   let taskId: String
   let thread: String?
   var onAct: (([String: Any]) -> Void)?             // react / deleteComment (the server's)
-  var onReply: ((String) -> Void)?                   // Reply: the box replies to this comment
+  var onReply: ((String, String) -> Void)?           // Reply: the box replies to this comment (its writer's name)
+  var onEdit: ((String, [[String: Any]]) -> Void)?   // Edit (its first 10 minutes): the words back in the box
   var onThread: ((String) -> Void)?                  // "N replies" → the thread's page
   var onBack: (() -> Void)?                          // (a thread page) back to the comments
   var onToast: ((String) -> Void)?
+  var onLoaded: (([String: Any]) -> Void)?
   var onSheet: (([String: Any], @escaping (Int, String?) -> Void) -> Void)?
   let scroll = UIScrollView()
   private let content = UIView()
   private var cells: [String: CommentCell] = [:]
   private var order: [String] = []
   private(set) var model: [String: Any]?
-  private var people: [String: [String: Any]] = [:]
+  var people: [String: [String: Any]] = [:]
   private let jump = UIButton(type: .custom)
   private let jumpFx = UIVisualEffectView(effect: nil)
   private let jumpLabel = UILabel()
@@ -154,6 +163,7 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
   }
   private func draw(_ m: [String: Any]) {
     model = m
+    onLoaded?(m)
     if let pp = m["people"] as? [String: [String: Any]] { people.merge(pp) { _, b in b } }
     let items = (m["items"] as? [[String: Any]]) ?? []
     let atEnd = isAtEnd()
@@ -279,6 +289,7 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
     if !ro { rows.append(["i": -1, "label": "", "kind": "emoji", "chips": emojis.enumerated().map { ["i": 100 + $0.offset, "swatch": $0.element] }]) }
     if (it["canReply"] as? Bool) == true && thread == nil { rows.append(["i": 1, "label": "Reply", "icon": "reply"]) }
     if thread != nil && !ro { rows.append(["i": 1, "label": "Reply", "icon": "reply"]) }
+    if (it["canEdit"] as? Bool) == true { rows.append(["i": 4, "label": "Edit comment", "icon": "edit"]) }
     rows.append(["i": 2, "label": "Copy text", "icon": "copy"])
     var secs: [[String: Any]] = [["rows": rows]]
     if (it["canDelete"] as? Bool) == true { secs.append(["rows": [["i": 3, "label": "Delete comment", "icon": "trash", "danger": true]]]) }
@@ -286,7 +297,11 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
       guard let self = self else { return }
       if let e = swatch, emojis.contains(e) { self.onAct?(["act": "react", "id": self.taskId, "key": id, "value": e]); return }
       switch i {
-      case 1: self.onReply?(id); DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { self.keepInView(id) }
+      case 1:
+        let who = it["who"] as? String ?? ""
+        self.onReply?(self.thread ?? id, (self.people[who]?["first"] as? String) ?? "them")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { self.keepInView(id) }
+      case 4: self.onEdit?(id, (it["runs"] as? [[String: Any]]) ?? [])
       case 2: UIPasteboard.general.string = it["text"] as? String ?? ""; self.onToast?("Copied")
       case 3: self.confirmDelete(id, replies: ((it["replies"] as? [String: Any])?["n"] as? Int) ?? 0)
       default: break
@@ -347,9 +362,14 @@ final class CommentCell: UIView {
     if (words.attributedText?.length ?? 0) > 0 { stack.addArrangedSubview(words) }
     // files: pictures as fixed-size tiles (their room kept from the start), others as file rows
     let files = (it["files"] as? [[String: Any]]) ?? []
-    let pics = files.filter { CommentCell.isPic($0["name"] as? String ?? "") }
+    for f in files where (f["voice"] as? Bool) == true {
+      let w = UIStackView(arrangedSubviews: [VoiceBubble(path: f["url"] as? String ?? "", dur: f["dur"] as? Int ?? 0), UIView()]); w.alignment = .center
+      stack.addArrangedSubview(w)
+    }
+    let rest = files.filter { ($0["voice"] as? Bool) != true }
+    let pics = rest.filter { CommentCell.isPic($0["name"] as? String ?? "") }
     if !pics.isEmpty { stack.addArrangedSubview(CommentCell.tiles(pics)) }
-    for f in files where !CommentCell.isPic(f["name"] as? String ?? "") { stack.addArrangedSubview(CommentCell.fileRow(f)) }
+    for f in rest where !CommentCell.isPic(f["name"] as? String ?? "") { stack.addArrangedSubview(CommentCell.fileRow(f)) }
     for u in ((it["urls"] as? [String]) ?? []).prefix(3) { stack.addArrangedSubview(LinkCard(u)) }
     let rx = (it["reactions"] as? [[String: Any]]) ?? []
     if !rx.isEmpty {
