@@ -182,7 +182,7 @@ const Phone = (() => {
   }
   // (then the app's own Home is told at once whether it's on: it stays up while the page draws the other tab, and goes
   //  the moment that tab is there — the page's own Home never shows in between)
-  window.__e11Tab = (v) => { const b = document.querySelector(`#ph-tabs [data-ph-tab="${v}"]`); if (b) b.click(); if (typeof NativeHome !== 'undefined') NativeHome.sync(); if (typeof NativeMyTasks !== 'undefined') NativeMyTasks.sync(); };
+  window.__e11Tab = (v) => { const b = document.querySelector(`#ph-tabs [data-ph-tab="${v}"]`); if (b) b.click(); if (typeof NativeHome !== 'undefined') NativeHome.sync(); if (typeof NativeMyTasks !== 'undefined') NativeMyTasks.sync(); if (typeof NativeInbox !== 'undefined') NativeInbox.sync(); };
 
   /* ---------- Pieces ---------- */
   function card(t, o = {}) {
@@ -440,7 +440,8 @@ const Phone = (() => {
     const v = ui.view;
     // (under the app's own My Day / My Tasks the page draws nothing — they were drawn unseen behind them; lighter, and
     //  anything that shows through for a moment is empty — Haris, 2026-11-01)
-    if (((v === 'home' || v === 'today') && typeof NativeHome !== 'undefined' && NativeHome.light) || (v === 'mytasks' && typeof NativeMyTasks !== 'undefined' && NativeMyTasks.light)) {
+    if (((v === 'home' || v === 'today') && typeof NativeHome !== 'undefined' && NativeHome.light) || (v === 'mytasks' && typeof NativeMyTasks !== 'undefined' && NativeMyTasks.light)
+      || (v === 'inbox' && typeof NativeInbox !== 'undefined' && NativeInbox.light)) {
       c.innerHTML = '<div class="ph-page ph-under-app"></div>';
       unpin();
       document.body.classList.remove('ph-fab-on'); document.body.classList.add('ph-strip');
@@ -2633,4 +2634,43 @@ const NativeMyTasks = (() => {
   let own = false;
   window.__e11MyTasksOwn = (v) => { const was = own; own = !!v; if (was !== own && ui.view === 'mytasks' && !ui.taskId) renderContent(); };
   return { sync, get on() { return on; }, get shown() { return shown; }, get light() { return on && lightOK && !own; } };
+})();
+
+/* ---------- The app's own Inbox (iPhone app 28+): each notification a row as Mail's, from the server (/api/inbox — the
+   shared rules); the page only says when the Inbox is on screen and who's signed in, and opens what's tapped.
+   NATIVE_INBOX = false: the page's own Inbox again (no app build needed). ---------- */
+const NATIVE_INBOX = true;
+const NativeInbox = (() => {
+  let on = false, last = '', shown = false, own = false;
+  if (NATIVE_INBOX && window.__e11CommentsOnly !== true && typeof Host !== 'undefined' && Host.isIOSApp) {
+    NativeMac.call('appInfo').then((r) => { on = Number(r && r.shell) >= 28; if (on) { setInterval(sync, 350); sync(); } }).catch(() => {});
+  }
+  const call = (a) => NativeMac.call('inbox', a).catch(() => {});
+  const visible = () => {
+    if (!Phone.on || ui.view !== 'inbox' || ui.search || (typeof isFinUser === 'function' && isFinUser())) return false;
+    if (ui.taskId || document.querySelector('#detail.open')) return false;
+    if (document.querySelector('#ph-sheet-root .ph-scrim:not(.docked), #overlay-root .scrim, #tv-root .scrim, .menu, .lightbox, .fv')) return false;
+    return true;
+  };
+  function sync() {
+    if (!on) return;
+    let m = null;
+    try { m = visible() ? { show: true, me: currentUserId, light: document.documentElement.dataset.theme === 'light' } : null; } catch (e) { m = null; }
+    if (!m) { if (shown) { shown = false; last = ''; call({ show: false }); } return; }
+    const s = JSON.stringify(m);
+    if (s === last) return;
+    last = s; shown = true;
+    call(m);
+  }
+  // the app's taps: a row (opens what it's about, as the page's own row), your photo
+  window.__e11Inbox = (ev) => {
+    if (!ev) return;
+    if (ev.ev === 'open' && ev.id) { openNotif(ev.id); return; }
+    if (ev.ev === 'readAll') { myNotifs().forEach((n) => { n.read = true; }); persist(); renderSidebar(); return; }   // (the server's switched off: the page does it)
+    if (window.__e11Home) window.__e11Home(ev);
+  };
+  window.__e11InboxResend = () => { last = ''; shown = false; sync(); };
+  // the app can't show its own (switched off on the server, or nothing yet with no signal): the page's own list
+  window.__e11InboxOwn = (v) => { const was = own; own = !!v; if (was !== own && ui.view === 'inbox' && !ui.taskId) renderContent(); };
+  return { sync, get on() { return on; }, get shown() { return shown; }, get light() { return on && !own; } };
 })();

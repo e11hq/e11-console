@@ -82,6 +82,12 @@ try:
     check(ms.get('pinned') is True and abs((ms.get('headTop') or 0) - (ms.get('barBottom') or 0) - 8) < 1, f"scrolled, All / Done and the filters stay under the frost bar {ms}")
     check((res.get('mytasksScrolled') or {}).get('blank') is True, f"the page draws nothing under the app's My Tasks {res.get('mytasksScrolled')}")
     check((res.get('mytasksTopMyTasks') or {}).get('pinned') is False, f"back at the top they're with the list again {res.get('mytasksTopMyTasks')}")
+    ib = res.get('ibxInbox') or {}; ibs = res.get('ibxSwipeInbox') or {}; ibu = res.get('ibxUnreadInbox') or {}; ibm = res.get('ibxMentionsInbox') or {}
+    check(ib.get('shown') is True and ib.get('server') is True and ib.get('tab') == 'all' and (ib.get('rows') or 0) > 0 and len(ib.get('cats') or []) == 3, f"the Inbox is the app's own, from the server, a row for each notification {ib}")
+    check((res.get('ibx') or {}).get('blank') is True, f"the page draws nothing under the app's Inbox {res.get('ibx')}")
+    check(ibs.get('open') is True, f"a row swiped right shows Read / Unread {ibs}")
+    check(ibu.get('tab') == 'unread' and 'tab=unread' in (ibu.get('query') or '') and (ibu.get('unreadRows') or 0) == (ibu.get('rows') or 0), f"Unread: only the unread ones {ibu}")
+    check(ibm.get('tab') == 'mentions' and 'tab=mentions' in (ibm.get('query') or ''), f"Mentions {ibm}")
     check((res.get('inboxMyTasks') or {}).get('shown') is not True, f"My Tasks isn't over the Inbox {res.get('inboxMyTasks')}")
     check((res.get('inboxNative') or {}).get('shown') is False, f"the app's Home goes on another tab {res.get('inboxNative')}")
     check(res.get('splashGone') is True, f"the startup screen went before Home {res.get('splashGone')}")

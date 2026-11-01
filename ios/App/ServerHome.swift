@@ -12,7 +12,7 @@ final class ServerHome {
   // (each tab and set of filters asked for this session kept in memory too: All ↔ Done shows at once)
   var query = "" { didSet { if oldValue != query, kind != "home" { if let m = model { seen[oldValue] = m }; model = seen[query] ?? loadCache(); lastRev = 0 } } }
   private var seen: [String: [String: Any]] = [:]
-  private var path: String { kind == "home" ? "/api/home" : "/api/mytasks?" + query }
+  private var path: String { kind == "home" ? "/api/home" : "/api/" + kind + "?" + query }   // (/api/mytasks, /api/inbox — 28+)
   // (each waiting action belongs to one server and one person: another sign-in or server never sends it)
   struct Op: Codable { var op: String; var act: String; var id: String; var due: String?; var clientApproval: String?; var trashId: String?; var server: String?; var me: String? }
   private var QUEUE: String { kind == "home" ? "e11HomeQueue" : "e11HomeQueue-" + kind }
@@ -181,6 +181,16 @@ final class ServerHome {
   private func overlay(_ h: [String: Any]) -> [String: Any] {
     guard !queue.isEmpty else { return h }
     var m = h
+    // the Inbox (28+): read / unread / all read shown at once
+    if kind == "inbox" {
+      var rows = (h["rows"] as? [[String: Any]]) ?? []
+      for o in queue {
+        if o.act == "readAll" { for i in rows.indices { rows[i]["read"] = true } }
+        else if o.act == "read" || o.act == "unread", let i = rows.firstIndex(where: { ($0["id"] as? String) == o.id }) { rows[i]["read"] = o.act == "read" }
+      }
+      m["rows"] = rows
+      return m
+    }
     var groups = (h["groups"] as? [[String: Any]]) ?? []
     var stats = (h["stats"] as? [Int]) ?? [0, 0, 0]
     func find(_ id: String) -> (Int, Int)? {
