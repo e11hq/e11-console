@@ -203,3 +203,29 @@ test('A completed task is locked: no changes or comments; Undo only right after;
   r = await act('am@e11-digital.com', { act: 'reopen', id: 'L1' });
   assert.equal(r.ok, true, 'Undo within a few seconds'); assert.equal(T('L1').done, false);
 });
+
+test('Inbox: each notification its own row (who did what, the task, one line), read / unread / all read', async () => {
+  // (the Done test above told the people on t2 — and a mention, a comment, a status change for the production person)
+  const put = (n) => app.store.apply([{ kind: 'notifications', id: n.id, data: n }], 'u-am');
+  put({ id: 'nx1', to: 'u-prod', from: 'u-am', taskId: 't1', kind: 'mention', text: 'mentioned you in a comment on', snippet: 'Kindly find the feedback below', at: '2026-10-29T07:00:00Z', read: false });
+  put({ id: 'nx2', to: 'u-prod', from: 'u-am', taskId: 't1', kind: 'status', text: 'changed Status to <b>In progress</b> on', at: '2026-10-29T06:00:00Z', read: true });
+  put({ id: 'nx3', to: 'u-am', from: 'u-prod', taskId: 't1', kind: 'comment', text: 'commented on', snippet: 'Not mine', at: '2026-10-29T06:30:00Z', read: false });
+  const get = async (tab) => (await (await fetch(base + '/api/inbox?tab=' + tab, { headers: { 'X-Dev-Email': 'prod@e11-digital.com' } })).json()).home;
+  let m = await get('all');
+  assert.ok(!m.rows.some((r) => r.id === 'nx3'), 'only their own');
+  const r1 = m.rows.find((r) => r.id === 'nx1');
+  assert.equal(r1.head, 'Leila mentioned you'); assert.equal(r1.title, 'Offer pack'); assert.equal(r1.desc, 'Kindly find the feedback below'); assert.equal(r1.read, false);
+  assert.equal(m.rows.find((r) => r.id === 'nx2').desc, 'Status: In progress');
+  assert.deepEqual((await get('mentions')).rows.map((r) => r.id), ['nx1']);
+  assert.ok((await get('unread')).rows.every((r) => !r.read));
+  let r = await act('prod@e11-digital.com', { act: 'read', id: 'nx1', from: 'inbox' });
+  assert.equal(r.ok, true); assert.equal(app.store.get('notifications', 'nx1').read, true);
+  r = await act('prod@e11-digital.com', { act: 'unread', id: 'nx1', from: 'inbox' });
+  assert.equal(app.store.get('notifications', 'nx1').read, false);
+  r = await act('prod@e11-digital.com', { act: 'read', id: 'nx3', from: 'inbox' });
+  assert.equal(r.ok, false, 'not someone else\'s'); assert.equal(app.store.get('notifications', 'nx3').read, false);
+  r = await act('prod@e11-digital.com', { act: 'readAll', from: 'inbox' });
+  assert.equal(r.ok, true);
+  assert.ok(app.store.list('notifications').filter((n) => n.to === 'u-prod').every((n) => n.read));
+  m = await get('all'); assert.equal(m.date, 'All caught up');
+});

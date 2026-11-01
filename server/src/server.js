@@ -645,6 +645,12 @@ export function createServer(cfg) {
       return json(res, 200, { ok: true, rev: store.rev(), home });
     }
     // …the app's My Tasks (the same rules; its filters in the address)
+    if (p === '/api/inbox' && req.method === 'GET') {
+      if (store.kv.get('inbox-server') === 'off') return json(res, 200, { ok: true, off: true, rev: store.rev() });
+      let list = null;
+      try { list = homeView.inbox(u, visibleSnapshot(u).data, url.searchParams); } catch (e) { console.error('inbox:', e.message); return json(res, 500, { ok: false, error: 'The Inbox could not be worked out' }); }
+      return json(res, 200, { ok: true, rev: store.rev(), home: list });
+    }
     if (p === '/api/mytasks' && req.method === 'GET') {
       if (store.kv.get('mytasks-server') === 'off') return json(res, 200, { ok: true, off: true, rev: store.rev() });
       let list = null;
@@ -656,7 +662,7 @@ export function createServer(cfg) {
     if (p === '/api/home/act' && req.method === 'POST') {
       const body = await readBody(req);
       // (My Tasks' actions go by My Tasks' own switch)
-      if (store.kv.get(body && body.from === 'mytasks' ? 'mytasks-server' : 'home-server') === 'off') return json(res, 200, { ok: false, off: true, error: 'Try again in a moment' });
+      if (store.kv.get(body && body.from === 'mytasks' ? 'mytasks-server' : body && body.from === 'inbox' ? 'inbox-server' : 'home-server') === 'off') return json(res, 200, { ok: false, off: true, error: 'Try again in a moment' });
       const op = body && body.op ? String(body.op).slice(0, 80) : null;
       const freshHome = () => { try { return homeView.home(u, visibleSnapshot(u).data); } catch { return null; } };
       // (a retry of an action already done: its answer again, with Home as it is now)

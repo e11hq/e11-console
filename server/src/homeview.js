@@ -44,6 +44,17 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
     for (const p of Object.values(m.people || {})) { if (p.photo) p.photo = fileUrl(p.photo) + '?view=1'; }
     return { ...m, today };
   }
+  // the app's Inbox (GET /api/inbox?tab=all|unread|mentions)
+  function inbox(u, data, q) {
+    if (u.role === 'finance_admin' || u.role === 'finance_viewer') return null;
+    const R = load();
+    const today = R.dubaiDay(now());
+    const tab = ['unread', 'mentions'].includes(q.get('tab')) ? q.get('tab') : 'all';
+    const m = R.make({ users: data.users || [], projects: data.projects || [], tasks: data.tasks || [], statuses: data.statuses || [], plans: data.plans || [], meta: data.meta || {}, notifications: data.notifications || [] }, u.id, today).inbox(tab);
+    if (!m) return null;
+    for (const p of Object.values(m.people || {})) { if (p.photo) p.photo = fileUrl(p.photo) + '?view=1'; }
+    return { ...m, today };
+  }
   // ---------- the app's Home actions (POST /api/home/act) ----------
   // Done / reopen, the due date, to the Trash and back — done here with the same shared rules the website uses, on the
   // same data this person's own app has (what they may see), so the activity lines, notifications and checks are
@@ -61,6 +72,15 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
     const fail = (status, error, extra = {}) => ({ ok: false, status, error, ...extra });
     const t = db.tasks.find((x) => x.id === String(body.id || ''));
     const a = String(body.act || '');
+    // the Inbox's: one read / unread, or all read (only this person's own)
+    if (a === 'read' || a === 'unread' || a === 'readAll') {
+      const mine = db.notifications.filter((n) => n.to === u.id);
+      const changes = [];
+      const set = (n, v) => { if (!!n.read !== v) { const base = JSON.parse(JSON.stringify(n)); n.read = v; changes.push({ kind: 'notifications', id: n.id, base, data: n }); } };
+      if (a === 'readAll') mine.forEach((n) => set(n, true));
+      else { const n = mine.find((x) => x.id === String(body.id || '')); if (!n) return fail(404, 'This update is no longer here'); set(n, a === 'read'); }
+      return { ok: true, changes, messages: a === 'readAll' && changes.length ? ['All marked read'] : [] };
+    }
     let messages = [], undo = null;
     if (a === 'undoDelete') {
       const it = store.get('trash', String(body.trashId || ''));
@@ -117,5 +137,5 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
     for (const it of db.trash) changes.push({ kind: 'trash', id: it.id, data: it });
     return { ok: true, changes, messages, undo };
   }
-  return { home, myTasks, act };
+  return { home, myTasks, inbox, act };
 }

@@ -339,6 +339,62 @@ var E11Rules = (() => {
         people: Object.fromEntries([...peopleOn].map((id) => { const p = userById(id); return [id, { initials: initials(fullName(p)), color: rgbOf(avColor(id || 'x')), photo: p && p.avatar ? p.avatar : null }]; })),
       };
     }
+    // ---------- the app's Inbox (iPhone app 28+): every notification its own row, as Mail's messages ----------
+    // a row: who did what (bold), the task (or what it's about), one line of detail, when — Haris, 2026-11-01:
+    // "Areej mentioned you" / "KIA | Sheikh Zayed Heritage Festival Screens" / "Kindly find the feedback below, …"
+    const plainOf = (h) => String(h || '').replace(/<(br|\/p|\/li|\/div)>/gi, ' ').replace(/<[^>]*>/g, '')
+      .replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+    const firstOf = (id) => { const u = userById(id); return u ? fullName(u).split(' ')[0] : 'Someone'; };
+    function inboxRow(n) {
+      const t = n.taskId ? task(n.taskId) : null;
+      const who = firstOf(n.from);
+      const text = plainOf(n.text);
+      const val = plainOf(((String(n.text || '').match(/<b>([^<]*)<\/b>(?![^]*<b>)/) || [])[1]) || '');
+      const cm = n.commentId && t ? (t.comments || []).find((x) => x.id === n.commentId) : null;
+      const said = cm ? plainOf(cm.html || cm.text) : plainOf(n.snippet);
+      // what it is about: the task — or the morning round-up, a birthday, claims, a plan, a client's assets
+      const about = n.kind === 'sched-cancel' ? `Scheduled ${/scheduled reply/.test(n.text || '') ? 'reply' : 'comment'}` : t ? (t.title || 'Untitled task')
+        : n.kind === 'birthday' ? 'Birthday' : n.kind === 'daily' ? 'Morning round-up' : /^claim/.test(n.kind) ? 'Expense claims' : n.kind === 'asset' ? 'Client Assets' : n.planId ? 'Content plan' : 'Deleted task';
+      // who did what: short, so it fits one line (the sentence's verb up to "to / on / for / from / :")
+      const verb = text.replace(/\s*(?:—.*)?$/, '').split(/ (?:to|on|for|from|in|of)\b| —|:/)[0].replace(/\s+/g, ' ').trim();
+      let head = `${who} ${verb}`, desc = val || '';
+      if (n.kind === 'mention') { head = `${who} mentioned you`; desc = said; }
+      else if (n.kind === 'comment') { head = `${who} ${/repl/.test(n.text || '') ? 'replied' : 'commented'}`; desc = said; }
+      else if (n.kind === 'assigned') { head = /Guardian/.test(text) ? `${who} made you Guardian` : `${who} assigned you`; desc = ''; }
+      else if (n.kind === 'unassigned') { head = `${who} removed you`; desc = ''; }
+      else if (n.kind === 'status') { head = `${who} changed the status`; desc = val ? `Status: ${val}` : ''; }
+      else if (n.kind === 'cd') { head = val === 'Approved' ? `${who} approved it (CD)` : `${who} set CD Review`; desc = val ? `CD ${val}` : ''; }
+      else if (n.kind === 'review') { head = `${who} sent files for review`; desc = text.replace(/ for your review on$/, ''); desc = desc.charAt(0).toUpperCase() + desc.slice(1); }
+      else if (n.kind === 'review-ok') { head = `${who} approved the files`; desc = /moved to CTR/.test(text) ? 'All approved — moved to CTR' : ''; }
+      else if (n.kind === 'review-amend') { head = `${who} requested amendments`; desc = said; }
+      else if (n.kind === 'review-wd') { head = `${who} withdrew a submission`; desc = ''; }
+      else if (n.kind === 'priority') { head = `${who} set your priority`; desc = val ? `Priority: ${val}` : ''; }
+      else if (n.kind === 'update') { head = `${who} set the Task Update`; desc = val; }
+      else if (n.kind === 'allparts') { head = `${who} finished the last part`; desc = 'All parts are done — ready for review'; }
+      else if (n.kind === 'part') { head = `${who} reopened your part`; desc = ''; }
+      else if (n.kind === 'birthday') { head = `${who}’s birthday 🎂`; desc = `Today is ${who}’s birthday`; }
+      else if (n.kind === 'daily') { head = 'Your morning round-up'; desc = text; }
+      else if (n.kind === 'sched-cancel') { head = 'Not sent'; desc = text + (n.snippet ? ` · “${plainOf(n.snippet)}”` : ''); }
+      else if (/^claim|^plan|^asset/.test(n.kind)) { desc = plainOf(n.snippet) || val; }
+      if (!desc && n.snippet) desc = plainOf(n.snippet);
+      return { id: n.id, read: !!n.read, from: n.from || null, head, title: about, desc, at: n.at, mention: n.kind === 'mention' };
+    }
+    function inbox(tab = 'all') {
+      const u = me();
+      if (!u || u.active === false) return null;
+      const mine = (db.notifications || []).filter((n) => n.to === meId);
+      const unread = mine.filter((n) => !n.read).length;
+      const list = mine.filter((n) => (tab === 'unread' ? !n.read : tab === 'mentions' ? n.kind === 'mention' : true))
+        .sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 200);
+      const rows = list.map(inboxRow);
+      rows.forEach((r) => { if (r.from) peopleOn.add(r.from); });
+      peopleOn.add(meId);
+      return {
+        show: true, kind: 'inbox', tab, title: 'Inbox', date: unread ? `${unread} unread update${unread === 1 ? '' : 's'}` : 'All caught up', me: meId, unread, rows,
+        empty: tab === 'unread' ? 'Inbox zero 🎉' : tab === 'mentions' ? 'No mentions yet' : 'Nothing here yet',
+        people: Object.fromEntries([...peopleOn].map((id) => { const p = userById(id); return [id, { initials: initials(fullName(p)), color: rgbOf(avColor(id || 'x')), photo: p && p.avatar ? p.avatar : null }]; })),
+      };
+    }
     // ---------- actions (they change the data they were given; the website and the server both use them) ----------
     // env: { nowISO(), nowMs(), uid() }. Activity lines, notifications and the Trash go into db.tasks[].activity,
     // db.notifications and db.trash, exactly as the website always did.
@@ -500,7 +556,7 @@ var E11Rules = (() => {
       return { ids, removed, item };
     }
 
-    return { home, myTasks, myTasksFilters, myDayData, cardOf, can, amReadOnly, canComplete, completeBlocked, dayTitle, statusInfo, sectionOf,
+    return { home, myTasks, myTasksFilters, inbox, inboxRow, myDayData, cardOf, can, amReadOnly, canComplete, completeBlocked, dayTitle, statusInfo, sectionOf,
       notifGroups: NOTIF_GROUPS, doneLocked, canReopen, finish, finishBlocked, canFinish, moveToStatus, logActivity, logChange, pushNotif, notifyWatchers, checkPrioConflict, setDone, setDue, setClientApproval, asksClientApproval, deleteTask, watchersOf, creatorOf, clientAmsOf, fmtDue };
   }
 
