@@ -499,7 +499,7 @@ final class CommentCell: UIView {
         row.addArrangedSubview(v)
       }
       if pics.count == 1 { let w = row.widthAnchor.constraint(equalToConstant: 240); w.priority = .required; w.isActive = true }   // (one picture: a 240 pt tile, 4:3)
-      let wrap = UIStackView(arrangedSubviews: [row]); wrap.alignment = pics.count == 1 ? .leading : .fill
+      let wrap = UIStackView(arrangedSubviews: pics.count == 1 ? [row, UIView()] : [row])   // (one picture: its own width, the rest of the line empty)
       grid.addArrangedSubview(wrap)
       i += perRow
     }
