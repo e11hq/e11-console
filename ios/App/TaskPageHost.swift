@@ -44,7 +44,9 @@ extension Main {
     if let m = serverTask.cache[id] { drawTask(p, m) }
     refreshTaskPage(p)
     CommentsFeed.prefetch(id, cookies: serverHome.cookies)
-    // (the corner button: Search / Mark all read slides over into ••• as the page comes in)
+    // (the corner button: Search / Mark all read slides over into ••• as the page comes in — the page laid out
+    //  first: before that its ‹ and ••• places are nothing, at the top-left corner, and the buttons flew off there)
+    p.setNeedsLayout(); p.layoutIfNeeded()
     updateCornerNow()
     // the edge swipe: one, on the app's screen, for whichever page is on top
     if taskPan == nil {

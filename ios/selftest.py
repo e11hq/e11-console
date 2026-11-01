@@ -1,7 +1,7 @@
 """The iPhone app on GitHub's Mac: runs it in an iPhone simulator against a local E11 Console server (sample data),
 lets it do its self-test (home, Inbox via the native tab bar, a task, back), takes a screenshot at each stage and
 checks its answers."""
-import glob, json, os, re, subprocess, sys, time, urllib.request
+import signal, glob, json, os, re, subprocess, sys, time, urllib.request
 PORT = 18450
 BASE = f'http://127.0.0.1:{PORT}'
 TMP = os.environ.get('RUNNER_TEMP', '/tmp')
@@ -39,6 +39,10 @@ try:
     try: os.remove(os.path.join(sh('xcrun', 'simctl', 'get_app_container', udid, BUNDLE, 'data').stdout.strip(), 'Documents', 'selftest.json'))
     except Exception: pass
     lenv = dict(os.environ, SIMCTL_CHILD_E11_SERVER=BASE, SIMCTL_CHILD_E11_SELFTEST='1', SIMCTL_CHILD_E11_SELFTEST_EMAIL=EMAIL)
+    # a film of the whole run (ios-run.mp4), so the moving parts — the shared top buttons, search, a page sliding in —
+    # can be watched frame by frame from Claude's workspace; each stage's time in it is printed ('at 12.3s')
+    rec = subprocess.Popen(['xcrun', 'simctl', 'io', udid, 'recordVideo', '--codec=h264', '--force', os.path.join(TMP, 'ios-run.mp4')], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    rec_t0 = time.time()
     r = subprocess.run(['xcrun', 'simctl', 'launch', udid, BUNDLE], env=lenv, capture_output=True, text=True); check(r.returncode == 0, 'launched ' + r.stdout + r.stderr[-300:])
     data = sh('xcrun', 'simctl', 'get_app_container', udid, BUNDLE, 'data').stdout.strip()
     out = os.path.join(data, 'Documents', 'selftest.json')
@@ -50,9 +54,11 @@ try:
         if st and st not in seen:
             seen.add(st); time.sleep(0.5)
             sh('xcrun', 'simctl', 'io', udid, 'screenshot', os.path.join(TMP, f'ios-{st}.png'))
-            print('stage', st)
+            print('stage', st, f'at {time.time() - rec_t0:.1f}s')
         if st == 'done': break
         time.sleep(0.5)
+    try: rec.send_signal(signal.SIGINT); rec.wait(timeout=30)
+    except Exception: rec.kill()
     print(json.dumps(res, indent=1)[:4000])
     p = res.get('home') or {}
     # 22: the startup screen is the app's own — there at once (icon, greeting, four rows), ticked by the page, gone before Home

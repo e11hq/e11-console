@@ -152,6 +152,7 @@ extension Main {
   func cornerTarget(skipTop: Bool = false) -> (CornerButton.Spot, CornerButton.Spot, CornerButton.Spot) {
     let pages = skipTop ? Array(taskPages.dropLast()) : taskPages
     if let p = pages.last {
+      if p.cornerFrame.width == 0 { p.setNeedsLayout(); p.layoutIfNeeded() }   // (never aim at a page not laid out yet)
       let f = p.convert(p.cornerFrame, to: view).offsetBy(dx: -p.transform.tx, dy: 0)
       let bf = p.convert(p.backFrame, to: view).offsetBy(dx: -p.transform.tx, dy: 0)
       let mid = p.editingDesc ? CornerButton.Spot(kind: "done", text: "Done", frame: corner.place("done", "Done", circle: f.offsetBy(dx: -56, dy: 0))) : CornerButton.Spot()
