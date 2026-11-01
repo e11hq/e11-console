@@ -460,7 +460,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     }
   }
   func selfInboxTab(_ k: String) { pickTab(k) }
-  func selfSwipeRow() { (content.first as? InboxRow)?.selfOpen() }
+  func selfSwipeRow() { if let r = content.first as? InboxRow { r.selfOpen(); openRow = r } }
   func inboxGeo() -> [String: Any] {
     ["tab": inboxTab, "rows": content.filter { $0 is InboxRow }.count, "unreadRows": content.compactMap { $0 as? InboxRow }.filter { !$0.read }.count,
      "cats": cats.map { $0.frame.width }, "markAll": !markAll.isHidden, "open": openRow?.isOpen ?? false, "pinned": pinned]
@@ -1606,7 +1606,8 @@ final class InboxRow: UIControl, UIGestureRecognizerDelegate {
   override func layoutSubviews() {
     super.layoutSubviews()
     let W = bounds.width, H = bounds.height
-    body.frame = bounds
+    // (bounds and centre, not frame: the row slid right keeps its shift through a new layout)
+    body.bounds = CGRect(origin: .zero, size: bounds.size); body.center = CGPoint(x: W / 2, y: H / 2)
     dot.frame = CGRect(x: 6, y: 28, width: 10, height: 10)
     av.frame = CGRect(x: 22, y: 13, width: 40, height: 40)
     let x: CGFloat = 73, R: CGFloat = 16
