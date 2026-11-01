@@ -502,13 +502,26 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       if k >= 1 { snapping = false }
     }
     // (shown values close in on u's quickly — ~30 ms — so a flick takes a few frames, as Mail's, and nothing jumps)
+    // (Mail never goes quicker than its own pace, however fast the flick — measured from Haris's flick recordings: in, the
+    //  big title gone in ~0.07 s, the small title over ~0.09 s once the big one is mostly gone, its line over ~0.09 s
+    //  from the small title's 60 %; out, the line in ~0.07 s, the small title in ~0.15 s, the big title back once the
+    //  small one has gone. Each piece moves at most at that pace, and waits for the one before it.)
     let a = 1 - exp(-dt / 0.03)
-    func near(_ d: inout CGFloat, _ to: CGFloat) { d += (to - d) * a; if abs(to - d) < 0.002 { d = to } }
-    near(&dBig, tBig); near(&dT, tT); near(&dS, tS)
+    func near(_ d: inout CGFloat, _ to: CGFloat, upIn: Double, downIn: Double) {
+      var n = d + (to - d) * a
+      let up = dt / CGFloat(upIn), down = dt / CGFloat(downIn)
+      n = min(n, d + up); n = max(n, d - down)
+      d = abs(to - n) < 0.002 ? to : n
+    }
+    let gT = min(tT, clamp01((dBig - 0.5) / 0.5)), gS = min(tS, clamp01((dT - 0.6) / 0.4))   // (in: each after the one before)
+    let bT = max(gT, dS - 0.25), bBig = max(tBig, dT)                                         // (out: the line first, the big title last)
+    near(&dBig, bBig, upIn: 0.07, downIn: 0.07)
+    near(&dT, bT, upIn: 0.09, downIn: 0.15)
+    near(&dS, gS, upIn: 0.09, downIn: 0.07)
     // (the line: in with the title; going back, gone at once)
     if goingUp || snapping && snapTo > snapFrom { near(&dLine, tT) } else { dLine = tT >= 1 ? dLine : 0 }
     applyBar()
-    if !snapping && dBig == tBig && dT == tT && dS == tS && !scroll.isTracking && !scroll.isDecelerating { barLink?.invalidate(); barLink = nil }
+    if !snapping && dBig == bBig && dT == bT && dS == gS && dBig == tBig && dT == tT && dS == tS && !scroll.isTracking && !scroll.isDecelerating { barLink?.invalidate(); barLink = nil }
   }
   private func applyBar() {
     let tr = traitCollection
