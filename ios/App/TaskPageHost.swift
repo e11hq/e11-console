@@ -67,7 +67,8 @@ extension Main {
     if let u = under { return [u] }
     let W = view.bounds.width
     return view.subviews.filter { v in
-      if v === p || v === tabBar || v === cbarIfMade || v === cbox || v.isHidden || v.frame.width < W - 1 { return false }
+      // (the app's comment box belongs to the page above, not to the screen under it: it never moves aside)
+      if v === p || v === tabBar || v === cbarIfMade || v === cbox || (composeIfMade != nil && v === composeIfMade) || v.isHidden || v.frame.width < W - 1 { return false }
       if jumpHitMade && v === jumpHit { return false }
       return !taskPages.contains { $0 === v }
     }
@@ -311,6 +312,7 @@ extension Main {
       let c = compose
       c.switchTo(task: p.taskId, parent: p.threadFeed?.thread)
       view.insertSubview(c, aboveSubview: p)
+      c.transform = .identity   // (never left moved aside by a swipe back)
       if c.isHidden { c.alpha = 0; c.isHidden = false; UIView.animate(withDuration: 0.12) { c.alpha = 1 } }
       showFeed(p, focus: focus)
       return
