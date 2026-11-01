@@ -86,6 +86,13 @@ final class CornerButton: UIView {
     var moves: [() -> Void] = []
     for (b, was, now) in pairs {
       let changed = was.kind != now.kind || was.text != now.text || was.image !== now.image
+      // Search opening: Home's own bar starts exactly where 🔍 is and stretches out — 🔍 hands over to it at once;
+      // closing, the bar shrinks back into that circle and 🔍 takes over there, in place (no shrinking, no pop)
+      if b === midB && was.kind == "search" && now.kind == "none" && c.kind == "close" { b.layer.removeAllAnimations(); b.alpha = 0; continue }
+      if b === midB && now.kind == "search" && oldCorner.kind == "close" && (was.kind == "none" || b.alpha < 0.05) {
+        b.layer.removeAllAnimations(); b.transform = .identity; b.frame = now.frame; dress(b, now, menu: menu); b.alpha = 1; b.layoutIfNeeded()
+        continue
+      }
       if now.kind == "none" {
         // going: 🔍 melts into the corner (moves onto it as it fades — the glass joins them), others shrink away
         let into: CGRect? = b === midB && was.kind == "search" && c.kind != "none" ? c.frame : nil
@@ -100,7 +107,8 @@ final class CornerButton: UIView {
         if from == nil && animated { b.transform = CGAffineTransform(scaleX: 0.4, y: 0.4) }
         dress(b, now, menu: menu)
       } else if changed {
-        if animated { UIView.transition(with: b, duration: 0.22, options: [.transitionCrossDissolve, .allowUserInteraction]) { self.dress(b, now, menu: menu) } }
+        // (kept round while it changes — your photo turning into ••• showed square corners)
+        if animated { b.clipsToBounds = true; UIView.transition(with: b, duration: 0.22, options: [.transitionCrossDissolve, .allowUserInteraction], animations: { self.dress(b, now, menu: menu); b.clipsToBounds = true }, completion: { _ in b.clipsToBounds = now.kind == "photo" }) }
         else { dress(b, now, menu: menu) }
       } else { b.menu = now.kind == "more" ? menu : nil; b.showsMenuAsPrimaryAction = now.kind == "more" && menu != nil }
       // (the button's own glass laid out inside the spring too — left to the next layout pass it only stretched, with

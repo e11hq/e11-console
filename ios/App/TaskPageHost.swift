@@ -75,7 +75,8 @@ extension Main {
     let W = view.bounds.width
     return view.subviews.filter { v in
       // (the app's comment box belongs to the page above, not to the screen under it: it never moves aside)
-      if v === p || v === tabBar || v === cbarIfMade || v === cbox || (composeIfMade != nil && v === composeIfMade) || v.isHidden || v.frame.width < W - 1 { return false }
+      // (nor do the shared top buttons: they change in place — 🔍 melting into your photo, ••• — not slide off with the screen)
+      if v === p || v === tabBar || v === cbarIfMade || v === cbox || (composeIfMade != nil && v === composeIfMade) || v is CornerButton || v.isHidden || v.frame.width < W - 1 { return false }
       if jumpHitMade && v === jumpHit { return false }
       return !taskPages.contains { $0 === v }
     }
