@@ -11,7 +11,7 @@ final class DailySheetVC: UIViewController, UISheetPresentationControllerDelegat
   private let answer: ([String: Any]) -> Void
   private var openK: String
   private let scroll = UIScrollView(), stack = UIStackView()
-  private let head = UIView(), sun = UIView(), sunIcon = UIImageView(), titleL = UILabel(), subL = UILabel(), close = UIButton(type: .system)
+  private let head = UIView(), sun = UIView(), sunIcon = UIImageView(), titleL = UILabel(), subL = UILabel(), close = SheetClose.make()   // (the one sheet ✕)
   private let group = UIStackView(), foot = UILabel()
   private var fitHeight: CGFloat = 520
   private var sections: [[String: Any]] { d["sections"] as? [[String: Any]] ?? [] }
@@ -46,12 +46,6 @@ final class DailySheetVC: UIViewController, UISheetPresentationControllerDelegat
     sun.addSubview(sunIcon)
     titleL.font = .systemFont(ofSize: 20, weight: .bold); titleL.text = d["title"] as? String
     subL.font = .systemFont(ofSize: 14); subL.textColor = .secondaryLabel; subL.numberOfLines = 2; subL.text = d["sub"] as? String
-    var c: UIButton.Configuration
-    if #available(iOS 26.0, *) { c = .glass() } else { c = .gray(); c.cornerStyle = .capsule }
-    // (the same ✕ as the Attach Files sheet: 44 pt glass, 15 pt semibold, the label colour — Haris, 2026-11-01)
-    c.image = UIImage(systemName: "xmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)); c.baseForegroundColor = .label
-    c.cornerStyle = .capsule
-    close.configuration = c; close.accessibilityLabel = "Close"
     close.addAction(UIAction { [weak self] _ in self?.dismiss(animated: true) }, for: .touchUpInside)
     [sun, titleL, subL, close].forEach { head.addSubview($0) }
     stack.addArrangedSubview(head)

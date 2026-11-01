@@ -555,12 +555,7 @@ final class AttachSheetVC: UIViewController, UISheetPresentationControllerDelega
       NSLayoutConstraint.activate([l.topAnchor.constraint(equalTo: view.topAnchor, constant: 24), l.centerXAnchor.constraint(equalTo: view.centerXAnchor)])
       top = 66
       // a Liquid Glass ✕ at the top right, level with the heading, that closes it (Haris, 2026-10-31)
-      var xc: UIButton.Configuration
-      if #available(iOS 26.0, *) { xc = .glass() } else { xc = .gray() }
-      xc.image = UIImage(systemName: "xmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold))
-      xc.cornerStyle = .capsule; xc.baseForegroundColor = .label
-      let x = UIButton(configuration: xc)
-      x.accessibilityLabel = "Close"
+      let x = SheetClose.make()
       x.addAction(UIAction { [weak self] _ in
         guard let self else { return }
         let cancel = self.onCancel
@@ -598,4 +593,21 @@ final class AttachSheetVC: UIViewController, UISheetPresentationControllerDelega
     // (gone at once as the sheet goes: the card itself is under it, in its place — no picture left floating)
     lifted?.removeFromSuperview()
   }
+}
+
+
+// ---------- the one ✕ every sheet uses (Haris, 2026-10-31 / 2026-11-01: "keep these things consistent") ----------
+// A 44 pt Liquid Glass circle, xmark 15 pt semibold in the label colour, 16 from the sheet's right edge, level with its
+// heading. Every sheet takes its ✕ from here — never its own.
+enum SheetClose {
+  static func make() -> UIButton {
+    var c: UIButton.Configuration
+    if #available(iOS 26.0, *) { c = .glass() } else { c = .gray() }
+    c.image = UIImage(systemName: "xmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold))
+    c.cornerStyle = .capsule; c.baseForegroundColor = .label
+    let b = UIButton(configuration: c)
+    b.accessibilityLabel = "Close"
+    return b
+  }
+  static let size: CGFloat = 44
 }
