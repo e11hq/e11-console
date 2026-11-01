@@ -40,7 +40,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
      only say where the button goes and what it is. */
   var cornerShared = false { didSet { searchCircle.alpha = cornerShared || searching ? 0 : 1; markAll.alpha = cornerShared ? 0 : 1; me.isHidden = cornerShared; if cornerShared { closeCircle.isHidden = true } } }
   // (the shared top buttons: your photo — where, what, and its tap)
-  var meFrame: CGRect { me.frame }
+  // (its place at full size — while searching it's shrunk away, and the ✕ that takes its place came out shrunk too)
+  var meFrame: CGRect { CGRect(x: me.center.x - me.bounds.width / 2, y: me.center.y - me.bounds.height / 2, width: me.bounds.width, height: me.bounds.height) }
   var meImage: UIImage? { me.image(for: .normal) }
   func meTap() { send(["ev": "me"]) }
   var onCorner: (() -> Void)?
@@ -806,6 +807,10 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     showMotto()
     searchBar.frame = start; searchBar.isHidden = false; searchBar.alpha = 1
     searchBar.layer.cornerRadius = start.height / 2
+    // (its glass starts as the circle too — it was laid out at full width at once, so the bar seemed to come in from
+    //  the right; now the glass and the field stretch out of 🔍 together, inside the spring)
+    lens.frame = CGRect(x: 12, y: 0, width: 22, height: start.height); field.frame = CGRect(x: 40, y: 0, width: 0, height: start.height)
+    searchBar.layoutIfNeeded()
     closeCircle.frame = meF; closeCircle.isHidden = cornerShared; closeCircle.alpha = 0
     closeCircle.transform = CGAffineTransform(scaleX: 0.6, y: 0.6)
     searchCircle.alpha = 0
@@ -814,6 +819,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     UIView.animate(withDuration: 0.55, delay: 0, usingSpringWithDamping: 0.8, initialSpringVelocity: 0.4, options: [.allowUserInteraction]) {
       self.layoutHeader()
       self.searchBar.layer.cornerRadius = self.BTN / 2
+      self.searchBar.layoutIfNeeded()
       self.me.alpha = 0; self.me.transform = CGAffineTransform(scaleX: 0.6, y: 0.6)
       self.closeCircle.alpha = 1; self.closeCircle.transform = .identity
       self.scroll.alpha = 0; self.results.alpha = 1; self.fab.alpha = 0
@@ -837,6 +843,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       self.me.alpha = 1; self.me.transform = .identity
       self.scroll.alpha = 1; self.results.alpha = 0; self.fab.alpha = 1
       self.layoutHeader()
+      self.searchBar.frame = back; self.searchBar.layoutIfNeeded()   // (its glass shrinks back into 🔍 with it)
     } completion: { _ in
       if self.searching { return }
       self.searchBar.isHidden = true; self.closeCircle.isHidden = true; self.field.alpha = 1
