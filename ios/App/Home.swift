@@ -535,6 +535,10 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if #available(iOS 26.0, *) {
       if let i = edgeHook as? UIScrollEdgeElementContainerInteraction { let want: UIScrollView = searching ? results : scroll; if i.scrollView !== want { i.scrollView = want } }
       if scroll.topEdgeEffect.isHidden { scroll.topEdgeEffect.isHidden = false }
+      // (My Tasks' tabs and filters stuck under the bar: iPhone's firmer frost, so the cards don't show through between
+      //  them — the soft one fades out half way down them; Apple's own advice for things pinned under a bar)
+      let style: UIScrollEdgeEffect.Style = pinned ? .hard : .soft
+      if scroll.topEdgeEffect.style != style { scroll.topEdgeEffect.style = style }
       topLine.frame = CGRect(x: 0, y: barH - 0.5, width: W, height: 0.5)
       topLine.alpha = 0
     } else {
