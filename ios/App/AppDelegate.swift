@@ -492,6 +492,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   var taskPages: [TaskPage] = []
   lazy var serverTask: ServerTask = { let s = ServerTask(); s.cookies = serverHome.cookies; return s }()
   var taskPan: UIScreenEdgePanGestureRecognizer?
+  var taskPanSpent = false
   var taskComments: String?           // the task whose comments show inside the page (its Comments tab)
   var taskTabHidden = false
   var cornerPending = false

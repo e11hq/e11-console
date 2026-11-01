@@ -118,9 +118,14 @@ extension Main {
     let x = max(0, g.translation(in: view).x)
     let under: UIView? = taskPages.count > 1 ? taskPages[taskPages.count - 2] : nil
     let back = underViews(below: p, under: under)
-    // on Comments the swipe from the edge goes to Details (out of a thread first), not back to the list
+    // on Comments the swipe from the edge goes to Details (out of a thread first), not back to the list — and the
+    // rest of that swipe is used up: its "cancelled" (the page now on Details) mustn't run the slide back below,
+    // which moved the comment box aside and left it cut off (Haris, 2026-11-01)
+    if g.state == .began { taskPanSpent = false }
+    if taskPanSpent { return }
     if p.tab == "comments" {
       if g.state == .began {
+        taskPanSpent = true
         composeIfMade?.text.resignFirstResponder()
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         toDetailsFromComments(p)
