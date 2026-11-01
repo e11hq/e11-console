@@ -1549,7 +1549,15 @@ final class InboxRow: UIControl, UIGestureRecognizerDelegate {
   static let H: CGFloat = 82.8   // (Mail's)
   private let body = UIView(), dot = UIView(), av = UIImageView(), head = UILabel(), when = UILabel(), chev = UIImageView(), titleL = UILabel(), descL = UILabel(), sep = UIView()
   private let act = UIView(), actCircle = UIView(), actIcon = UIImageView(), actLabel = UILabel()
-  private var shift: CGFloat = 0 { didSet { body.transform = CGAffineTransform(translationX: shift, y: 0); let k = min(1, shift / 86); act.alpha = k; act.transform = CGAffineTransform(scaleX: 0.6 + 0.4 * k, y: 0.6 + 0.4 * k); body.backgroundColor = shift > 0.5 ? UIColor.systemGray5 : .clear } }
+  // (the button grows from / shrinks to its own middle, as on the task cards; the grey row rounds its corners as it slides,
+  //  as Mail's — Haris, 2026-11-01)
+  private var shift: CGFloat = 0 { didSet {
+    body.transform = CGAffineTransform(translationX: shift, y: 0)
+    let k = min(1, shift / 86)
+    act.alpha = k; act.transform = CGAffineTransform(scaleX: 0.6 + 0.4 * k, y: 0.6 + 0.4 * k)
+    body.backgroundColor = shift > 0.5 ? UIColor.systemGray5 : .clear
+    body.layer.cornerRadius = 18 * k
+  } }
   var isOpen: Bool { shift > 1 }
   override init(frame: CGRect) {
     super.init(frame: frame)
@@ -1571,6 +1579,7 @@ final class InboxRow: UIControl, UIGestureRecognizerDelegate {
     sep.backgroundColor = .separator
     [dot, av, head, when, chev, titleL, descL, sep].forEach { body.addSubview($0) }
     body.isUserInteractionEnabled = false
+    body.layer.cornerCurve = .continuous
     addSubview(body)
     let pan = UIPanGestureRecognizer(target: self, action: #selector(pan(_:))); pan.delegate = self; addGestureRecognizer(pan)
     addAction(UIAction { [weak self] _ in guard let self = self else { return }; if self.isOpen { self.close() } else { self.onTap?() } }, for: .touchUpInside)
@@ -1627,10 +1636,11 @@ final class InboxRow: UIControl, UIGestureRecognizerDelegate {
     descL.frame = CGRect(x: x, y: top(descL, capTop: 56.3), width: W - R - x, height: ceil(descL.font.lineHeight))
     let px = 1 / max(1, traitCollection.displayScale)
     sep.frame = CGRect(x: 86, y: H - px, width: W - 86 - 17, height: px)
-    act.frame = CGRect(x: 16, y: 0, width: 58, height: H)
-    actCircle.frame = CGRect(x: 2, y: (H - 54 - 18) / 2, width: 54, height: 54)
+    // (the button and its name as one, placed by bounds and centre so its shrinking stays on its own middle)
+    act.bounds = CGRect(x: 0, y: 0, width: 70, height: 54 + 3 + 15); act.center = CGPoint(x: 16 + 29, y: H / 2)
+    actCircle.frame = CGRect(x: 8, y: 0, width: 54, height: 54)
     actIcon.frame = actCircle.bounds
-    actLabel.frame = CGRect(x: -6, y: actCircle.frame.maxY + 3, width: 70, height: 15)
+    actLabel.frame = CGRect(x: 0, y: 57, width: 70, height: 15)
   }
   // swiped right only (as Mail's leading swipe); left does nothing
   override func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
