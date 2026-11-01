@@ -67,7 +67,7 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
   let taskId: String
   let thread: String?
   var onAct: (([String: Any]) -> Void)?             // react / deleteComment (the server's)
-  var onReply: ((String, String) -> Void)?           // Reply: the box replies to this comment (its writer's name)
+  var onReply: ((String, String, [String: Any]?) -> Void)?   // Reply: the box replies to this comment (its writer's name, and them — their picture)
   var onEdit: ((String, [[String: Any]]) -> Void)?   // Edit (its first 10 minutes): the words back in the box
   var onThread: ((String) -> Void)?                  // "N replies" → the thread's page
   var onBack: (() -> Void)?                          // (a thread page) back to the comments
@@ -321,7 +321,7 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
       switch i {
       case 1:
         let who = it["who"] as? String ?? ""
-        self.onReply?(self.thread ?? id, (self.people[who]?["first"] as? String) ?? "them")
+        self.onReply?(self.thread ?? id, (self.people[who]?["first"] as? String) ?? "them", self.people[who])
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { self.keepInView(id) }
       case 4: self.onEdit?(id, (it["runs"] as? [[String: Any]]) ?? [])
       case 2: UIPasteboard.general.string = it["text"] as? String ?? ""; self.onToast?("Copied")

@@ -407,10 +407,10 @@ extension Main {
       host.present(NativeSheetVC(args, dark: self.statusStyle != .darkContent, pick: nil, answer: answer), animated: true)
     }
     // Reply: the comments screen behind sets the reply (its box line says "Replying to …"); the keyboard comes up
-    f.onReply = { [weak self] cid, name in
+    f.onReply = { [weak self] cid, name, person in
       guard let self = self else { return }
       let c = self.compose
-      if thread == nil { c.replyTo = (cid, name) }
+      if thread == nil { c.replyPerson = person; c.replyTo = (cid, name) }
       c.text.becomeFirstResponder()
     }
     f.onEdit = { [weak self] cid, runs in

@@ -39,10 +39,12 @@ enum Uploader {
   }
 }
 
-final class ComposeBox: UIView, UITextViewDelegate {
+final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate {
   var taskId = ""
   var parentId: String?                 // a thread page's: every reply goes to it
   var replyTo: (id: String, name: String)? { didSet { paintReply() } }
+  var replyPerson: [String: Any]?                 // (who's being replied to: their picture or initials in the pill)
+  private let replyPill = UIButton(type: .custom)
   var editing: String? { didSet { paintSend() } }
   var mentionable: [[String: Any]] = []
   var cookies: (@escaping (String) -> Void) -> Void = { $0("") }
@@ -104,15 +106,14 @@ final class ComposeBox: UIView, UITextViewDelegate {
     mentions.axis = .vertical; mentions.backgroundColor = .secondarySystemGroupedBackground; mentions.layer.cornerRadius = 16; mentions.clipsToBounds = true; mentions.isHidden = true
     let tilesScroll = UIScrollView(); tilesScroll.showsHorizontalScrollIndicator = false
     tilesScroll.addSubview(tiles); tiles.translatesAutoresizingMaskIntoConstraints = false
-    let v = UIStackView(arrangedSubviews: [mentions, replyLine, box]); v.axis = .vertical; v.spacing = 8
-    [plus, right, text, placeholder, tilesScroll].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; box.addSubview($0) }
+    let v = UIStackView(arrangedSubviews: [mentions, box]); v.axis = .vertical; v.spacing = 8
+    [plus, right, text, placeholder, tilesScroll, replyPill].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; box.addSubview($0) }
     v.translatesAutoresizingMaskIntoConstraints = false; addSubview(v)
     textH = text.heightAnchor.constraint(equalToConstant: 30)
     tilesH = tilesScroll.heightAnchor.constraint(equalToConstant: 0)
     NSLayoutConstraint.activate([
       v.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16), v.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
       v.topAnchor.constraint(equalTo: topAnchor), v.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8),
-      replyLine.heightAnchor.constraint(equalToConstant: 32),
       tilesScroll.topAnchor.constraint(equalTo: box.topAnchor, constant: 10), tilesScroll.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 12), tilesScroll.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -12), tilesH,
       tiles.leadingAnchor.constraint(equalTo: tilesScroll.contentLayoutGuide.leadingAnchor), tiles.trailingAnchor.constraint(equalTo: tilesScroll.contentLayoutGuide.trailingAnchor), tiles.topAnchor.constraint(equalTo: tilesScroll.contentLayoutGuide.topAnchor), tiles.bottomAnchor.constraint(equalTo: tilesScroll.contentLayoutGuide.bottomAnchor), tiles.heightAnchor.constraint(equalTo: tilesScroll.heightAnchor),
       text.topAnchor.constraint(equalTo: tilesScroll.bottomAnchor, constant: 4), text.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 14), text.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -14), textH,
@@ -120,7 +121,17 @@ final class ComposeBox: UIView, UITextViewDelegate {
       plus.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 8), plus.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -8), plus.widthAnchor.constraint(equalToConstant: 36), plus.heightAnchor.constraint(equalToConstant: 36),
       right.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -8), right.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -8), right.widthAnchor.constraint(equalToConstant: 36), right.heightAnchor.constraint(equalToConstant: 36),
       plus.topAnchor.constraint(equalTo: text.bottomAnchor, constant: 6),
+      // "Replying to Carine (picture)": a grey pill in the buttons' row, where the Claude app has its model's
+      replyPill.leadingAnchor.constraint(equalTo: plus.trailingAnchor, constant: 8), replyPill.centerYAnchor.constraint(equalTo: plus.centerYAnchor),
+      replyPill.heightAnchor.constraint(equalToConstant: 36), replyPill.trailingAnchor.constraint(lessThanOrEqualTo: right.leadingAnchor, constant: -8),
     ])
+    replyPill.backgroundColor = .tertiarySystemFill; replyPill.layer.cornerRadius = 18; replyPill.layer.cornerCurve = .continuous
+    replyPill.isHidden = true
+    // (tapped: no longer a reply — an ordinary comment)
+    replyPill.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.replyPerson = nil; self?.replyTo = nil }, for: .touchUpInside)
+    // a tap anywhere on the box is a tap in it: the keyboard comes up (its buttons and files keep their own taps)
+    let tapBox = UITapGestureRecognizer(target: self, action: #selector(tappedBox)); tapBox.delegate = self; tapBox.cancelsTouchesInView = false
+    box.addGestureRecognizer(tapBox)
     paintSend()
   }
   required init?(coder: NSCoder) { fatalError() }
@@ -147,9 +158,27 @@ final class ComposeBox: UIView, UITextViewDelegate {
     placeholder.isHidden = !(text.text ?? "").isEmpty
     placeholder.text = parentId != nil || replyTo != nil ? "Reply" : "Comment"
   }
+  @objc private func tappedBox() { if !text.isFirstResponder { text.becomeFirstResponder() } }
+  func gestureRecognizer(_ g: UIGestureRecognizer, shouldReceive t: UITouch) -> Bool {
+    var v = t.view
+    while let x = v, x !== box { if x is UIControl || x === text || x === tiles { return false }; v = x.superview }
+    return true
+  }
   private func paintReply() {
-    replyLine.isHidden = replyTo == nil
-    if let r = replyTo { replyLabel.attributedText = { let s = NSMutableAttributedString(string: "Replying to ", attributes: [.font: UIFont.systemFont(ofSize: 13), .foregroundColor: UIColor.secondaryLabel]); s.append(NSAttributedString(string: r.name, attributes: [.font: UIFont.systemFont(ofSize: 13, weight: .semibold), .foregroundColor: UIColor.label])); return s }() }
+    replyLine.isHidden = true
+    replyPill.subviews.forEach { $0.removeFromSuperview() }
+    replyPill.isHidden = replyTo == nil
+    if let r = replyTo {
+      let l = UILabel(); l.isUserInteractionEnabled = false
+      let s = NSMutableAttributedString(string: "Replying to ", attributes: [.font: UIFont.systemFont(ofSize: 15), .foregroundColor: UIColor.secondaryLabel])
+      s.append(NSAttributedString(string: r.name, attributes: [.font: UIFont.systemFont(ofSize: 15, weight: .medium), .foregroundColor: UIColor.label]))
+      l.attributedText = s; l.lineBreakMode = .byTruncatingTail
+      let av = CommentCell.avatar(replyPerson ?? ["initials": String(r.name.prefix(1)).uppercased()], 24); av.isUserInteractionEnabled = false
+      let row = UIStackView(arrangedSubviews: [l, av]); row.spacing = 8; row.alignment = .center; row.isUserInteractionEnabled = false
+      row.translatesAutoresizingMaskIntoConstraints = false; replyPill.addSubview(row)
+      NSLayoutConstraint.activate([row.leadingAnchor.constraint(equalTo: replyPill.leadingAnchor, constant: 14), row.trailingAnchor.constraint(equalTo: replyPill.trailingAnchor, constant: -6), row.centerYAnchor.constraint(equalTo: replyPill.centerYAnchor)])
+      replyPill.accessibilityLabel = "Replying to \(r.name). Tap to stop replying"
+    }
     paintSend()
   }
   func textViewDidChange(_ tv: UITextView) {
