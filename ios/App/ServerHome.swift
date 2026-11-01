@@ -7,9 +7,13 @@ import UIKit
    when Home is on screen, and still does everything else on it (opening a task, search, + New task, Copy link,
    attaching files). The server can switch this off (the app then uses the page's Home as before). */
 final class ServerHome {
+  // "home" (/api/home) or "mytasks" (/api/mytasks?<query> — the filters and tab, 26+): each its own kept copy and queue
+  let kind: String
+  var query = "" { didSet { if oldValue != query, kind != "home" { model = loadCache(); lastRev = 0 } } }
+  private var path: String { kind == "home" ? "/api/home" : "/api/mytasks?" + query }
   // (each waiting action belongs to one server and one person: another sign-in or server never sends it)
   struct Op: Codable { var op: String; var act: String; var id: String; var due: String?; var clientApproval: String?; var trashId: String?; var server: String?; var me: String? }
-  private static let QUEUE = "e11HomeQueue"
+  private var QUEUE: String { kind == "home" ? "e11HomeQueue" : "e11HomeQueue-" + kind }
 
   var cookies: (@escaping (String) -> Void) -> Void = { $0("") }
   var onModel: (([String: Any]) -> Void)?         // a new Home to draw (the server's, with what's still waiting on top)
@@ -25,27 +29,31 @@ final class ServerHome {
   private var sending = false, fetching = false, fetchAgain = false
   private var retry: Timer?
 
-  init() {
-    if let d = defaults.data(forKey: ServerHome.QUEUE), let q = try? JSONDecoder().decode([Op].self, from: d) { queue = q }
-    if let m = ServerHome.loadCache() { model = m }
+  init(kind: String = "home") {
+    self.kind = kind
+    if let d = defaults.data(forKey: QUEUE), let q = try? JSONDecoder().decode([Op].self, from: d) { queue = q }
+    if let m = loadCache() { model = m }
   }
   var on: Bool { !off && model != nil && server == serverURL() }
   var me: String? { model?["me"] as? String }
   // another server chosen (Settings, the App Review copy): that one's own Home and nothing of the other's
   private func checkServer() {
     guard server != serverURL() else { return }
-    server = serverURL(); model = ServerHome.loadCache(); confirmedMe = nil; lastRev = 0; off = false
+    server = serverURL(); model = loadCache(); confirmedMe = nil; lastRev = 0; off = false
   }
   var shown: [String: Any]? { model.map { overlay($0) } }
 
   // ---------- the last Home, kept on the phone ----------
-  private static var cacheFile: URL? { FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("home-" + serverURL().replacingOccurrences(of: "[^A-Za-z0-9]+", with: "-", options: .regularExpression) + ".json") }
-  private static func loadCache() -> [String: Any]? {
+  private var cacheFile: URL? { FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent((kind == "home" ? "home-" : kind + "-") + serverURL().replacingOccurrences(of: "[^A-Za-z0-9]+", with: "-", options: .regularExpression) + ".json") }
+  // (My Tasks: the copy is for the filters and tab it was asked with)
+  private func loadCache() -> [String: Any]? {
     guard let f = cacheFile, let d = try? Data(contentsOf: f), let m = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { return nil }
+    if kind != "home", (m["_q"] as? String ?? "") != query { return nil }
     return m
   }
-  private func saveCache(_ m: [String: Any]) {
-    guard let f = ServerHome.cacheFile, let d = try? JSONSerialization.data(withJSONObject: m) else { return }
+  private func saveCache(_ m0: [String: Any]) {
+    var m = m0; if kind != "home" { m["_q"] = query }
+    guard let f = cacheFile, let d = try? JSONSerialization.data(withJSONObject: m) else { return }
     try? FileManager.default.createDirectory(at: f.deletingLastPathComponent(), withIntermediateDirectories: true)
     try? d.write(to: f, options: .atomic)
   }
@@ -73,7 +81,8 @@ final class ServerHome {
     checkServer()
     if fetching { fetchAgain = true; return }
     fetching = true
-    request("/api/home", body: nil) { [weak self] j in
+    let asked = query
+    request(path, body: nil) { [weak self] j in
       guard let self = self else { return }
       self.fetching = false
       if let j = j, (j["ok"] as? Bool) == true {
@@ -81,12 +90,15 @@ final class ServerHome {
           // (switched off, or no Home for this person: the page's own again — and nothing kept of it)
           let was = self.on
           self.off = true; self.model = nil; self.confirmedMe = nil
-          if let f = ServerHome.cacheFile { try? FileManager.default.removeItem(at: f) }
+          if let f = self.cacheFile { try? FileManager.default.removeItem(at: f) }
           if was { self.onOff?() }
         } else if let h = j["home"] as? [String: Any] {
+          if self.kind != "home" && asked != self.query { /* (filters changed meanwhile: that answer is for the old ones) */ }
+          else {
           self.off = false
           self.confirmedMe = h["me"] as? String
           self.take(h, rev: j["rev"] as? Int ?? 0)
+          }
         }
       }
       if self.fetchAgain { self.fetchAgain = false; self.refresh() }
@@ -107,7 +119,7 @@ final class ServerHome {
     if let m = model { onModel?(overlay(m)) }   // (shown at once)
     send()
   }
-  private func keep() { if let d = try? JSONEncoder().encode(queue) { defaults.set(d, forKey: ServerHome.QUEUE) } }
+  private func keep() { if let d = try? JSONEncoder().encode(queue) { defaults.set(d, forKey: QUEUE) } }
   // one at a time, in order; no answer (no signal) → kept, tried again in a while
   func send() {
     checkServer()
@@ -154,7 +166,10 @@ final class ServerHome {
         else { self.onToast?(first, nil, nil) }
         msgs.dropFirst().forEach { self.onToast?($0, nil, nil) }
       }
-      if let h = j["home"] as? [String: Any] { self.take(h, rev: j["rev"] as? Int ?? 0) } else if let m = self.model { self.onModel?(self.overlay(m)) }
+      // (the answer carries the fresh Home; My Tasks asks for its own)
+      if self.kind == "home", let h = j["home"] as? [String: Any] { self.take(h, rev: j["rev"] as? Int ?? 0) }
+      else if self.kind != "home" { self.refresh() }
+      else if let m = self.model { self.onModel?(self.overlay(m)) }
       self.send()
     }
   }

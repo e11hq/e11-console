@@ -15,7 +15,7 @@ import UniformTypeIdentifiers
 import AudioToolbox
 
 // Version of this iPhone app's native part (raise it with changes the web app needs to know about)
-let SHELL_VERSION = 25   // 25: Home straight from the server (/api/home; Done / reopen / Due / Delete / Undo to /api/home/act, kept on the phone until sent — ServerHome.swift); the page still says when Home shows · 24: a Home card swiped right: Done · Due (taps back: window.__e11Home — done, due; the page opens its date sheet) · 23: Home (E11 Day / My Day) is the app's own (Home.swift; the page sends it: home show / people / toast; taps back: window.__e11Home — open, search, me, add, copy, delete, attach, toast); a card swiped left: Copy link · Delete; held: Attach Files · 22: the startup screen is the app's own, there the moment it opens (Splash.swift; the page drives it: splash hello / memo / greet / tick / status / out; window.__e11SplashSkip / __e11SplashRetry) · 21: the comments screen tells its page how far it's slid up for the keyboard (--cm-top: a thread's bar stays in sight); its swipe right also takes iPhone's slow back drag from the edge; it starts at the latest comment only when the task opens and when the keyboard comes up, and keeps its place across Details / Comments · 20: a task's Comments on a screen of their own (a second web view showing only the comments, scrolled by iOS itself; window.__e11ShowComments, cmReady / cmEnd) · 19: on a task's Comments, iOS itself moves the comments list with the keyboard (its own scroll view, in the keyboard's own animation; window.__e11FeedKb) · 18: the file preview is iOS's own (preview / previewSet / window.__e11Preview; Preview.swift) · 17: the comment box on a task's Comments is iPhone's own, on the keyboard (commentBar / window.__e11CBar; CommentBar.swift) · 16: iPhone's own banners also while the app is open (the page draws no cards), each notification confirmed by the Notification Service Extension so the server sends again the ones an offline phone missed (register ack) · 15: New task / Request amendments as native sheets with iPhone's own fields that tuck into a bar like a Mail draft (formSheet / formSet / formClose; the page: window.__e11Form), a Trash task as a native sheet (trashSheet); native sheets and dates also open on top of those · 14: native sheets with people (round photos / initials) and a search box (+ a typed entry, "Use …") · 13: also dates picked in a native sheet (pickDate: closing it never sets a date) · a native sheet can stay open for ticking several (multi; each tick: window.__e11SheetPick) · 12: native sheets also with colour dots, a row of colours / emoji / numbers (chips), tinted icons, locked rows · 11: plain menus as iOS's own sheets (nativeSheet; the page: NativeSheet in app.js, showMenu(…, { native: true })) · 10: My Tasks, Inbox and Team lists swiped by iOS itself (Pager.syncLists in phone.js) · 9: a task’s Details / Comments swiped by iOS itself (the page: Pager in phone.js) · 8: iOS haptics for the page (haptic kind: light / medium / selection / success / warning / error) · 7: the comment box rides down / up with the keyboard frame by frame (__e11KbStep) · 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
+let SHELL_VERSION = 26   // 26: My Tasks is the app's own too (Home's screen as a list — All / Done, the filter buttons, what's on — from /api/mytasks?<filters>; the page sends mytasks show / tab / q / buttons / chips; taps back: window.__e11MyTasks — tab, filter, chip, reset, and Home's) · 25: Home straight from the server (/api/home; Done / reopen / Due / Delete / Undo to /api/home/act, kept on the phone until sent — ServerHome.swift); the page still says when Home shows · 24: a Home card swiped right: Done · Due (taps back: window.__e11Home — done, due; the page opens its date sheet) · 23: Home (E11 Day / My Day) is the app's own (Home.swift; the page sends it: home show / people / toast; taps back: window.__e11Home — open, search, me, add, copy, delete, attach, toast); a card swiped left: Copy link · Delete; held: Attach Files · 22: the startup screen is the app's own, there the moment it opens (Splash.swift; the page drives it: splash hello / memo / greet / tick / status / out; window.__e11SplashSkip / __e11SplashRetry) · 21: the comments screen tells its page how far it's slid up for the keyboard (--cm-top: a thread's bar stays in sight); its swipe right also takes iPhone's slow back drag from the edge; it starts at the latest comment only when the task opens and when the keyboard comes up, and keeps its place across Details / Comments · 20: a task's Comments on a screen of their own (a second web view showing only the comments, scrolled by iOS itself; window.__e11ShowComments, cmReady / cmEnd) · 19: on a task's Comments, iOS itself moves the comments list with the keyboard (its own scroll view, in the keyboard's own animation; window.__e11FeedKb) · 18: the file preview is iOS's own (preview / previewSet / window.__e11Preview; Preview.swift) · 17: the comment box on a task's Comments is iPhone's own, on the keyboard (commentBar / window.__e11CBar; CommentBar.swift) · 16: iPhone's own banners also while the app is open (the page draws no cards), each notification confirmed by the Notification Service Extension so the server sends again the ones an offline phone missed (register ack) · 15: New task / Request amendments as native sheets with iPhone's own fields that tuck into a bar like a Mail draft (formSheet / formSet / formClose; the page: window.__e11Form), a Trash task as a native sheet (trashSheet); native sheets and dates also open on top of those · 14: native sheets with people (round photos / initials) and a search box (+ a typed entry, "Use …") · 13: also dates picked in a native sheet (pickDate: closing it never sets a date) · a native sheet can stay open for ticking several (multi; each tick: window.__e11SheetPick) · 12: native sheets also with colour dots, a row of colours / emoji / numbers (chips), tinted icons, locked rows · 11: plain menus as iOS's own sheets (nativeSheet; the page: NativeSheet in app.js, showMenu(…, { native: true })) · 10: My Tasks, Inbox and Team lists swiped by iOS itself (Pager.syncLists in phone.js) · 9: a task’s Details / Comments swiped by iOS itself (the page: Pager in phone.js) · 8: iOS haptics for the page (haptic kind: light / medium / selection / success / warning / error) · 7: the comment box rides down / up with the keyboard frame by frame (__e11KbStep) · 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
 let procEnv = ProcessInfo.processInfo.environment
 let SELFTEST = procEnv["E11_SELFTEST"] ?? ""           // the build machine's self-test in the simulator
 let info = Bundle.main.infoDictionary ?? [:]
@@ -976,7 +976,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         guard let self = self else { return }
         let up = path.status == .satisfied
         if up != self.netUp { self.netUp = up; if let t = self.lastTabs { self.setTabs(t) } }
-        if up { self.serverHome.send() }   // (anything waiting goes now)
+        if up { self.serverHome.send(); self.serverMyTasksIfMade?.send() }   // (anything waiting goes now)
       }
     }
     m.start(queue: DispatchQueue(label: "e11.net"))
@@ -1068,6 +1068,18 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         }
       }
     }
+    // (My Tasks, 26+: the same — kept until the page has drawn the other tab; again while on it: back to the top)
+    if let h = myTasksIfMade {
+      if tabKeys[item.tag] == "mytasks" {
+        if !h.isHidden { h.scrollToTop() } else if myTasksHadModel, serverMyTasks.on, (serverMyTasks.shown?["me"] as? String) == myTasksPageMe { h.isHidden = false }
+      } else if !h.isHidden {
+        h.endEditing(true)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+          guard let self = self, let sel = self.tabBar.selectedItem, sel.tag < self.tabKeys.count, self.tabKeys[sel.tag] != "mytasks" else { return }
+          self.myTasksIfMade?.isHidden = true
+        }
+      }
+    }
     pageJS("window.__e11Tab && window.__e11Tab(\(jsonString([tabKeys[item.tag]]).dropFirst().dropLast()))")
   }
   /* ---------- Home (23+): the app's own, under the tab bar; the page says what's on it (NativeHome in phone.js) ---------- */
@@ -1105,8 +1117,14 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   /* ---------- Home straight from the server (25+, ServerHome.swift): its model and its Done / Due / Delete; the page
      still says when Home is on screen (and does the rest) ---------- */
-  lazy var serverHome: ServerHome = {
-    let s = ServerHome()
+  lazy var serverHome: ServerHome = makeServer("home")
+  var serverMyTasksIfMade: ServerHome?
+  lazy var serverMyTasks: ServerHome = { let s = self.makeServer("mytasks"); self.serverMyTasksIfMade = s; return s }()
+  // the screen a server's things show on (Home's or My Tasks'), when it's up
+  func screenOf(_ kind: String) -> HomeView? { let h = kind == "home" ? homeIfMade : myTasksIfMade; return h?.isHidden == false ? h : nil }
+  var shownScreen: HomeView? { screenOf("mytasks") ?? screenOf("home") }
+  func makeServer(_ kind: String) -> ServerHome {
+    let s = ServerHome(kind: kind)
     s.cookies = { [weak self] done in
       guard let store = self?.web?.configuration.websiteDataStore.httpCookieStore else { return done(WidgetShare.signIn()?.cookie ?? "") }
       store.getAllCookies { cs in
@@ -1115,11 +1133,14 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         done(mine.map { "\($0.name)=\($0.value)" }.joined(separator: "; "))
       }
     }
-    s.onModel = { [weak self] m in self?.drawServerHome(m) }
+    s.onModel = { [weak self] m in if kind == "home" { self?.drawServerHome(m) } else { self?.drawServerMyTasks(m) } }
     // switched off on the server (or no Home for this person): the page's Home again, drawn at once
-    s.onOff = { [weak self] in self?.pageJS("window.__e11HomeResend && window.__e11HomeResend()") }
+    // (My Tasks: the page's own list, under it)
+    s.onOff = { [weak self] in
+      if kind == "home" { self?.pageJS("window.__e11HomeResend && window.__e11HomeResend()") } else { self?.myTasksIfMade?.isHidden = true }
+    }
     s.onToast = { [weak self] t, a, run in
-      guard let h = self?.homeIfMade, !h.isHidden else { return }
+      guard let h = self?.screenOf(kind) else { return }
       self?.homeToastRun = run
       h.toast(["t": t, "a": a ?? "", "ms": a != nil ? 6000.0 : 3000.0])
     }
@@ -1132,7 +1153,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       self.topMost().present(al, animated: true)
     }
     return s
-  }()
+  }
   var homeToastRun: (() -> Void)?
   var homePageMe: String?
   var homeLook: Any?, homePagePeople: [String: [String: Any]] = [:], homeServerPeople: [String: [String: Any]] = [:]
@@ -1152,9 +1173,10 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     h.update(mm)
   }
   // Home's own taps the server does itself (false: the page does it, as before)
-  func homeEventOnServer(_ ev: [String: Any]) -> Bool {
+  func homeEventOnServer(_ ev: [String: Any]) -> Bool { eventOnServer(ev, serverHome, pageMe: homePageMe) }
+  func eventOnServer(_ ev: [String: Any], _ serverHome: ServerHome, pageMe: String?) -> Bool {
     // (only for the person the page shows: right after another sign-in, the page's Home until the server's catches up)
-    guard serverHome.on, serverHome.me != nil, serverHome.me == homePageMe, let kind = ev["ev"] as? String else { return false }
+    guard serverHome.on, serverHome.me != nil, serverHome.me == pageMe, let kind = ev["ev"] as? String else { return false }
     let id = ev["id"] as? String ?? ""
     let card = ((serverHome.shown?["groups"] as? [[String: Any]]) ?? []).flatMap { $0["cards"] as? [[String: Any]] ?? [] }.first { ($0["id"] as? String) == id }
     switch kind {
@@ -1172,11 +1194,11 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       let due = c["due"] as? String ?? ""
       // the date sheet the task page uses (Today / Clear; closed any other way: nothing changes)
       guard let host = sheetHost() else { return true }
-      host.present(DateSheetVC(["value": due, "min": "", "max": "", "clearable": !due.isEmpty, "md": false], dark: statusStyle != .darkContent) { [weak self] r in
+      host.present(DateSheetVC(["value": due, "min": "", "max": "", "clearable": !due.isEmpty, "md": false], dark: statusStyle != .darkContent) { r in
         if (r["cancel"] as? Bool) == true || (r["ok"] as? Bool) == false { return }
         let v = (r["clear"] as? Bool) == true ? "" : (r["date"] as? String ?? "")
         if v == due { return }
-        self?.serverHome.act("due", id, due: v.isEmpty ? nil : v)
+        serverHome.act("due", id, due: v.isEmpty ? nil : v)
       }, animated: true)
       return true
     case "delete":
@@ -1188,10 +1210,11 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if let p = a["people"] as? [String: [String: Any]] {
       homePagePeople = p
       homeView.people = serverHome.on ? homeServerPeople.merging(p, uniquingKeysWith: { s, pg in pg["photo"] != nil || s["photo"] == nil ? pg : s }) : p
+      myTasksIfMade?.people = myTasksServerPeople.merging(p, uniquingKeysWith: { s, pg in pg["photo"] != nil || s["photo"] == nil ? pg : s })
       return
     }
-    if let t = a["toast"] as? [String: Any] { homeToastRun = nil; if let h = homeIfMade, !h.isHidden { h.toast(t) }; return }   // (its button is the page's)
-    if let r = a["search"] as? [String: Any] { homeIfMade?.searchResults(r); return }
+    if let t = a["toast"] as? [String: Any] { homeToastRun = nil; shownScreen?.toast(t); return }   // (its button is the page's)
+    if let r = a["search"] as? [String: Any] { (shownScreen ?? homeIfMade)?.searchResults(r); return }
     guard let show = a["show"] as? Bool else { return }
     if !show { homeIfMade?.endEditing(true); homeIfMade?.isHidden = true; return }
     let h = homeView
@@ -1207,6 +1230,63 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     homeHadModel = true
     h.isHidden = false
     serverHome.refresh()
+  }
+
+  /* ---------- My Tasks (26+): Home's screen as a list (HomeView.isList), straight from the server (/api/mytasks with the
+     page's filters); the page says when it's on screen, its tab and filters (NativeMyTasks in phone.js) and does the
+     filter sheets; Done / Due / Delete as on Home ---------- */
+  var myTasksIfMade: HomeView?
+  var myTasksHadModel = false, myTasksPageMe: String?, myTasksLight = true
+  var myTasksServerPeople: [String: [String: Any]] = [:]
+  lazy var myTasksView: HomeView = {
+    let h = HomeView(frame: view.bounds)
+    h.isList = true
+    h.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    h.isHidden = true
+    h.onEvent = { [weak self] ev in
+      guard let self = self else { return }
+      if self.eventOnServer(ev, self.serverMyTasks, pageMe: self.myTasksPageMe) { return }
+      if (ev["ev"] as? String) == "open" { self.myTasksIfMade?.isHidden = true }
+      self.pageJS("window.__e11MyTasks && window.__e11MyTasks(\(jsonString(ev)))")
+    }
+    h.present = { [weak self] vc in self?.topMost().present(vc, animated: true) }
+    view.insertSubview(h, belowSubview: tabBar)
+    myTasksIfMade = h
+    return h
+  }()
+  func drawServerMyTasks(_ m: [String: Any]) {
+    guard let h = myTasksIfMade, myTasksPageMe != nil, (m["me"] as? String) == myTasksPageMe else { return }
+    var mm = m; mm["show"] = true
+    // (Home's colours from the page when they're for the same light / dark)
+    if let l = homeLook as? [String: Any], (l["light"] as? Bool) == myTasksLight { mm["look"] = l } else { mm["look"] = ["light": myTasksLight] }
+    if let p = m["people"] as? [String: [String: Any]] {
+      serverMyTasks.photos(p) { [weak self] got in
+        guard let self = self else { return }
+        self.myTasksServerPeople = got
+        self.myTasksIfMade?.people = got.merging(self.homePagePeople, uniquingKeysWith: { s, pg in pg["photo"] != nil || s["photo"] == nil ? pg : s })
+      }
+    }
+    mm["people"] = nil
+    h.update(mm)
+    myTasksHadModel = true
+    // (shown once there's a list for these filters — until then the page's own, under it)
+    if myTasksWanted && h.isHidden { h.isHidden = false }
+  }
+  var myTasksWanted = false
+  func myTasksCommand(_ a: [String: Any]) {
+    guard let show = a["show"] as? Bool else { return }
+    if !show { myTasksWanted = false; myTasksIfMade?.endEditing(true); myTasksIfMade?.isHidden = true; return }
+    let h = myTasksView
+    myTasksWanted = true
+    h.bottomRoom = (tabBar.isHidden ? 40 : view.bounds.height - tabBar.frame.minY) + 96
+    h.tabTop = tabBar.isHidden ? nil : tabPillTop
+    myTasksPageMe = a["me"] as? String
+    myTasksLight = (a["light"] as? Bool) ?? (appStyle == .light)
+    let s = serverMyTasks
+    s.query = "tab=" + ((a["tab"] as? String) == "done" ? "done" : "all") + ((a["q"] as? String).map { $0.isEmpty ? "" : "&" + $0 } ?? "")
+    h.setFilters(a)
+    if s.on, let m = s.shown { drawServerMyTasks(m) }
+    s.refresh()
   }
 
   /* ---------- notifications ---------- */
@@ -1270,6 +1350,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     launchLock = false
     awayAt = nil
     if pageReady { serverHome.refresh() }   // (Home as it is now; anything still waiting goes)
+    if pageReady, myTasksWanted { serverMyTasksIfMade?.refresh() }
     if pageReady { pushState { st in if st == "on" { UIApplication.shared.registerForRemoteNotifications() } } }
   }
   func wentAway() { if !authing { awayAt = Date() }; if pageReady { shareSignIn() } }
@@ -1339,7 +1420,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let cmd = msg["cmd"] as? String ?? ""
     // (the comments screen's page: only what comments need — the app's tabs, look, badge and notifications stay the
     //  main page's)
-    if from != nil, from === cweb, ["setTabs", "badge", "setAppearance", "pushRegister", "pushEnable", "pushDisable", "notify", "setLock", "pickDate", "formSheet", "formSet", "formClose", "trashSheet", "splash", "home"].contains(cmd) { return reply(["ok": true, "ignored": true]) }
+    if from != nil, from === cweb, ["setTabs", "badge", "setAppearance", "pushRegister", "pushEnable", "pushDisable", "notify", "setLock", "pickDate", "formSheet", "formSet", "formClose", "trashSheet", "splash", "home", "mytasks"].contains(cmd) { return reply(["ok": true, "ignored": true]) }
     cmdSource = from
     run(cmd, msg["args"] as? [String: Any] ?? [:], reply)
     cmdSource = nil
@@ -1523,6 +1604,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     case "cmReady": cwebReadyToShow = true; cwebUpdate(); done(["ok": true])
     case "splash": done(splashCommand(a))
     case "home": homeCommand(a); done(["ok": true])
+    case "mytasks": myTasksCommand(a); done(["ok": true])
     case "cmEnd": cwebToEnd(animated: (a["animated"] as? Bool) == true); done(["ok": true])
     case "pickFiles": Picker.shared.pick(from: topMost(), single: (a["single"] as? Bool) == true, source: a["source"] as? String) { [weak self] r in done(r); self?.cbarAfterPicker(0) }
     case "readLocalChunk": done(Picker.shared.read(a))
@@ -1588,6 +1670,11 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       // (the date sheet, as Home's Due opens it — it once crashed on iOS 27 while sizing itself)
       ("homeDate", "return '{}'", { if let host = self.sheetHost() { host.present(DateSheetVC(["value": "2026-11-23", "min": "", "max": "", "clearable": true, "md": false], dark: true) { _ in }, animated: false) } }),
       ("homeDateDone", "return '{}'", { self.presentedViewController?.dismiss(animated: false) }),
+      // 26: My Tasks, the app's own (from the server): All, then the Done tab (read only), then All again
+      ("mytasks", pause(2500) + "return JSON.stringify({ view: ui.view })", {
+        if let i = self.tabKeys.firstIndex(of: "mytasks"), let item = self.tabBar.items?[i] { self.tabBar.selectedItem = item; self.tabBar(self.tabBar, didSelect: item) } }),
+      ("mytasksDone", pause(2500) + "return JSON.stringify({ tab: ui.myTasksTab })", { self.myTasksIfMade?.selfTab("done") }),
+      ("mytasksAll", pause(2000) + "return JSON.stringify({ tab: ui.myTasksTab })", { self.myTasksIfMade?.selfTab("all") }),
       ("inbox", pause(1500) + "return JSON.stringify({ view: ui.view })", {
         if let i = self.tabKeys.firstIndex(of: "inbox"), let item = self.tabBar.items?[i] { self.tabBar.selectedItem = item; self.tabBar(self.tabBar, didSelect: item) } }),
       ("me", "go('me'); " + pause(1200) + "for (let i = 0; i < 3; i++) { await Push.refresh(); " + pause(300) + " } return JSON.stringify({ lockRows: document.querySelectorAll('#ph-lock, [data-ph-lock]').length, pushRows: document.querySelectorAll('#ph-push').length })", nil),
@@ -1659,6 +1746,11 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
           if name.hasPrefix("form") { self.selfResult[name + "Geo"] = FormSheetVC.current?.geo() ?? ["error": "no form"] }
           if name.hasPrefix("nsheet") { self.selfResult[name + "Geo"] = (self.presentedViewController as? NativeSheetVC)?.geo() ?? ["error": "no native sheet"] }
           if name == "home" || name == "inbox" || name.hasPrefix("home") { var g = self.homeGeo(); g["sheet"] = self.presentedViewController.map { String(describing: type(of: $0)) } ?? ""; self.selfResult[name + "Native"] = g }
+          if name.hasPrefix("mytasks") || name == "inbox" {
+            var g: [String: Any] = ["made": self.myTasksIfMade != nil, "shown": self.myTasksIfMade?.isHidden == false, "server": self.serverMyTasksIfMade?.on ?? false, "query": self.serverMyTasksIfMade?.query ?? ""]
+            if let h = self.myTasksIfMade { g.merge(h.listGeo()) { a, _ in a }; g["title"] = h.geo()["title"] }
+            self.selfResult[name + "MyTasks"] = g
+          }
           if name == "home" || name == "inbox" { self.selfResult[name + "Frame"] = ["web": self.web.frame.height, "screen": self.view.bounds.height, "tabBar": !self.tabBar.isHidden] as [String: Any] }
           DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.writeSelf(name); DispatchQueue.main.asyncAfter(deadline: .now() + 4) { run(i + 1) } }
         }

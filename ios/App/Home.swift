@@ -169,6 +169,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     field.keyboardAppearance = L.light ? .light : .dark
     hint.textColor = L.empty
     meId = model["me"] as? String ?? ""; meChanged()
+    stats.forEach { $0.isHidden = isList }
     let st = model["stats"] as? [Int] ?? [0, 0, 0]
     let names = ["Due today", "Overdue", "In review"], cols = [L.statG, L.statR, L.statA]
     for (i, v) in stats.enumerated() {
@@ -239,6 +240,98 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     me.setImage(img, for: .normal)
   }
 
+  // ---------- My Tasks (26+): the same screen as a list — All / Done, the filter buttons and the filters that are on ----------
+  // (the page says which buttons this person has and what's on: setFilters; taps go back as tab / filter / chip / reset)
+  var isList = false { didSet { if isList && seg.superview == nil { makeList() } } }
+  private let seg = UISegmentedControl(items: ["All", "Done"])
+  private let filterRow = UIScrollView(), chipRow = UIScrollView()
+  private var filterBtns: [UIButton] = [], chipBtns: [UIButton] = []
+  private(set) var listTab = "all"
+  private var filtersKey = ""
+  private func makeList() {
+    seg.selectedSegmentIndex = 0
+    seg.addAction(UIAction { [weak self] _ in
+      guard let self = self else { return }
+      UISelectionFeedbackGenerator().selectionChanged()
+      self.listTab = self.seg.selectedSegmentIndex == 1 ? "done" : "all"
+      if let o = self.openCard { self.setOpen(o, false) }
+      self.send(["ev": "tab", "tab": self.listTab])
+    }, for: .valueChanged)
+    [filterRow, chipRow].forEach { $0.showsHorizontalScrollIndicator = false; $0.alwaysBounceHorizontal = true; $0.clipsToBounds = false; $0.contentInset = UIEdgeInsets(top: 0, left: 16, bottom: 0, right: 16) }
+    [seg, filterRow, chipRow].forEach { scroll.addSubview($0) }
+  }
+  private func capsule(_ t: String, sym: String?, on: Bool, small: Bool) -> UIButton {
+    var c: UIButton.Configuration
+    if #available(iOS 26.0, *) { c = on ? .prominentGlass() : .glass() } else { c = on ? .filled() : .gray(); c.cornerStyle = .capsule }
+    if on { c.baseBackgroundColor = .label; c.baseForegroundColor = .systemBackground } else { c.baseForegroundColor = .label }
+    let f = UIFont.systemFont(ofSize: small ? 13 : 15, weight: on ? .semibold : .regular)
+    c.attributedTitle = AttributedString(t, attributes: AttributeContainer([.font: f]))
+    if let sym = sym { c.image = UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: small ? 10 : 12, weight: .semibold)); c.imagePadding = small ? 5 : 6 }
+    c.imagePlacement = small ? .trailing : .leading
+    c.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: small ? 12 : 14, bottom: 0, trailing: small ? 10 : 14)
+    let b = UIButton(type: .system); b.configuration = c
+    return b
+  }
+  func setFilters(_ a: [String: Any]) {
+    if !isList { isList = true }
+    let tab = (a["tab"] as? String) == "done" ? "done" : "all"
+    if tab != listTab { listTab = tab; if let o = openCard { setOpen(o, false) } }
+    seg.selectedSegmentIndex = listTab == "done" ? 1 : 0
+    let key = String(describing: a["buttons"] ?? "") + "|" + String(describing: a["chips"] ?? "") + "|" + (L.light ? "l" : "d")
+    if key == filtersKey { return }
+    filtersKey = key
+    filterBtns.forEach { $0.removeFromSuperview() }; chipBtns.forEach { $0.removeFromSuperview() }
+    let syms = ["due": "calendar", "people": "person.2", "ams": "person.crop.circle", "assigned": "person.fill.checkmark"]
+    filterBtns = (a["buttons"] as? [[String: Any]] ?? []).map { d -> UIButton in
+      let k = d["k"] as? String ?? ""
+      let b = capsule((d["t"] as? String ?? ""), sym: syms[k] ?? "line.3.horizontal.decrease", on: (d["on"] as? Bool) == true, small: false)
+      b.accessibilityIdentifier = "filter-" + k
+      b.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.send(["ev": "filter", "k": k]) }, for: .touchUpInside)
+      filterRow.addSubview(b); return b
+    }
+    var chips = (a["chips"] as? [[String: Any]] ?? []).map { d -> UIButton in
+      let b = capsule(d["t"] as? String ?? "", sym: "xmark", on: false, small: true)
+      b.accessibilityLabel = "Remove " + (d["t"] as? String ?? "")
+      var ev: [String: Any] = ["ev": "chip", "act": d["act"] as? String ?? ""]; if let id = d["id"] as? String { ev["id"] = id }
+      b.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.send(ev) }, for: .touchUpInside)
+      return b
+    }
+    if chips.count > 1 {
+      let b = UIButton(type: .system)
+      b.setAttributedTitle(NSAttributedString(string: "Clear all", attributes: [.font: UIFont.systemFont(ofSize: 13, weight: .semibold), .foregroundColor: UIColor.secondaryLabel]), for: .normal)
+      b.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.send(["ev": "reset"]) }, for: .touchUpInside)
+      chips.append(b)
+    }
+    chips.forEach { chipRow.addSubview($0) }
+    chipBtns = chips
+    setNeedsLayout()
+  }
+  // (where the boxes are on Home: All / Done 32 tall, the filter buttons 36, what's on 30 under them; returns where the list starts)
+  private func layoutList(_ W: CGFloat) -> CGFloat {
+    var y: CGFloat = 4
+    seg.frame = CGRect(x: 16, y: y, width: W - 32, height: 32); y += 32 + 10
+    func row(_ r: UIScrollView, _ bs: [UIButton], _ h: CGFloat) {
+      var x: CGFloat = 0
+      for (i, b) in bs.enumerated() {
+        let w = ceil(b.sizeThatFits(CGSize(width: 400, height: h)).width)
+        if i > 0 { x += 8 }
+        b.frame = CGRect(x: x, y: 0, width: w, height: h); x += w
+      }
+      r.frame = CGRect(x: 0, y: y, width: W, height: h)
+      r.contentSize = CGSize(width: x, height: h)
+    }
+    filterRow.isHidden = filterBtns.isEmpty
+    if !filterBtns.isEmpty { row(filterRow, filterBtns, 36); y += 36 + 10 }
+    chipRow.isHidden = chipBtns.isEmpty
+    if !chipBtns.isEmpty { row(chipRow, chipBtns, 30); y += 30 + 10 }
+    return y - 4
+  }
+  func selfTab(_ t: String) { seg.selectedSegmentIndex = t == "done" ? 1 : 0; seg.sendActions(for: .valueChanged) }
+  func listGeo() -> [String: Any] {
+    ["tab": listTab, "filters": filterBtns.map { $0.accessibilityIdentifier ?? "" }, "chips": chipBtns.count, "cards": cards.count,
+     "groups": content.compactMap { ($0 as? UILabel)?.tag == 7 ? $0.accessibilityIdentifier : nil }]
+  }
+
   // ---------- where things go ----------
   override func layoutSubviews() {
     super.layoutSubviews()
@@ -252,10 +345,11 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     results.contentInset.bottom = max(keyboardH, bottomRoom - 60)
     results.contentInset.top = 12   // (clear of the blur under the search bar)
     layoutResults()
-    // the three boxes (.ph-stats: 4 above, 6 below, 8 apart)
+    // the three boxes (.ph-stats: 4 above, 6 below, 8 apart) — My Tasks: All / Done, the filters and what's on instead
     var y: CGFloat = 4
     let bw = (W - 32 - 16) / 3, bh: CGFloat = 1 + 10 + 41 + 15 + 12 + 1
-    for (i, v) in stats.enumerated() {
+    if isList { y = layoutList(W) - bh - 6 }
+    for (i, v) in stats.enumerated() where !isList {
       v.frame = CGRect(x: 16 + CGFloat(i) * (bw + 8), y: y, width: bw, height: bh)
       v.viewWithTag(1)?.frame = CGRect(x: 13, y: 11, width: bw - 26, height: 41)
       v.viewWithTag(2)?.frame = CGRect(x: 13, y: 11 + 41, width: bw - 26, height: 15)
@@ -575,6 +669,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // under them) ----------
   private func leadOK(_ card: HomeCard) -> Bool { (card.info["canDone"] as? Bool) == true || (card.info["canDue"] as? Bool) == true }
   override func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
+    // (My Tasks' Done tab: completed tasks are read only — no swipes, no Attach Files)
+    if isList && listTab == "done" && g.view is HomeCard && (g is UIPanGestureRecognizer || g is UILongPressGestureRecognizer) { return false }
     guard let p = g as? UIPanGestureRecognizer, let card = p.view as? HomeCard else { return true }
     let v = p.velocity(in: self)
     return abs(v.x) > abs(v.y) * 1.2 && (v.x < 0 || card.swipeX != 0 || leadOK(card))
@@ -872,7 +968,9 @@ final class HomeCard: UIControl {
     // (the comments always start the second line, the CD chip after them — the same on every card, Haris 2026-10-31)
     for (i, it) in items.enumerated() {
       let cm = HomeCard.isComments(it) && !inline
-      if i > 0 && cm { s.append(NSAttributedString(string: "\n", attributes: [.font: f])) }
+      // (My Tasks' Done tab: "Completed Oct 30 — read only" on a line of its own, after a lock)
+      let own = (it["line"] as? Bool) == true
+      if i > 0 && (cm || own) { s.append(NSAttributedString(string: "\n", attributes: [.font: f])) }
       else if i > 0 { s.append(gap(false)); s.append(NSAttributedString(string: "·", attributes: [.font: f, .foregroundColor: L.sep])); s.append(gap(true)) }
       if let dot = NativeSheetVC.color(it["dot"]) {
         let img = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { _ in dot.setFill(); UIBezierPath(roundedRect: CGRect(x: 0, y: 0, width: 8, height: 8), cornerRadius: 2).fill() }
@@ -881,6 +979,10 @@ final class HomeCard: UIControl {
       }
       let b = it["b"] as? String
       let col = b == "late" ? L.late : b == "today" ? L.today : L.meta
+      if (it["lock"] as? Bool) == true, let lk = UIImage(systemName: "lock.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 10, weight: .semibold))?.withTintColor(col, renderingMode: .alwaysOriginal) {
+        let a = NSTextAttachment(); a.image = lk; a.bounds = CGRect(x: 0, y: -0.5, width: lk.size.width, height: lk.size.height)
+        s.append(NSAttributedString(attachment: a)); s.append(gap(false))
+      }
       s.append(NSAttributedString(string: (it["t"] as? String ?? "").replacingOccurrences(of: " ", with: "\u{00A0}"), attributes: [.font: b != nil ? UIFont.systemFont(ofSize: 12.5, weight: .semibold) : f, .foregroundColor: col]))
     }
     let ps = NSMutableParagraphStyle(); ps.lineSpacing = 1

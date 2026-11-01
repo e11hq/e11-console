@@ -182,7 +182,7 @@ const Phone = (() => {
   }
   // (then the app's own Home is told at once whether it's on: it stays up while the page draws the other tab, and goes
   //  the moment that tab is there — the page's own Home never shows in between)
-  window.__e11Tab = (v) => { const b = document.querySelector(`#ph-tabs [data-ph-tab="${v}"]`); if (b) b.click(); if (typeof NativeHome !== 'undefined') NativeHome.sync(); };
+  window.__e11Tab = (v) => { const b = document.querySelector(`#ph-tabs [data-ph-tab="${v}"]`); if (b) b.click(); if (typeof NativeHome !== 'undefined') NativeHome.sync(); if (typeof NativeMyTasks !== 'undefined') NativeMyTasks.sync(); };
 
   /* ---------- Pieces ---------- */
   function card(t, o = {}) {
@@ -2543,4 +2543,75 @@ const NativeHome = (() => {
     call({ toast: { t: String(msg || ''), a: action ? action.label : '', ms: ms || (action ? 6000 : 3000) } });
   }
   return { sync, toast: toastOut, get on() { return on; }, get shown() { return shown; } };
+})();
+
+/* ---------- My Tasks drawn by the iPhone app itself (26+): the app gets its lists from the server (/api/mytasks, the
+   shared rules); the page says when My Tasks is on screen, which tab and which filters are on (they live here, as the
+   website's: Home's In review box sets them too), and opens the filter sheets (its own native ones) when asked.
+   NATIVE_MYTASKS = false: the page's own My Tasks again (no app build needed). ---------- */
+const NATIVE_MYTASKS = true;
+const NativeMyTasks = (() => {
+  let on = false, last = '', shown = false;
+  if (NATIVE_MYTASKS && window.__e11CommentsOnly !== true && typeof Host !== 'undefined' && Host.isIOSApp) {
+    NativeMac.call('appInfo').then((r) => { on = Number(r && r.shell) >= 26; if (on) { setInterval(sync, 350); sync(); } }).catch(() => {});
+  }
+  const call = (a) => NativeMac.call('mytasks', a).catch(() => {});
+  const visible = () => {
+    if (!Phone.on || ui.view !== 'mytasks' || ui.search || (typeof isOffice === 'function' && isOffice()) || (typeof isFinUser === 'function' && isFinUser())) return false;
+    if (ui.taskId || document.querySelector('#detail.open')) return false;
+    if (document.querySelector('#ph-sheet-root .ph-scrim:not(.docked), #overlay-root .scrim, #tv-root .scrim, .menu, .lightbox, .fv')) return false;
+    return true;
+  };
+  // what's on: the tab, the filters (as the server reads them), the filter buttons and chips
+  function signal() {
+    const F = Work.f(), ok = R().myTasksFilters();
+    const q = [];
+    if (F.due && ['late', 'today', 'week'].includes(F.due)) q.push('due=' + F.due);
+    if (ok.includes('people') && F.people.length) q.push('people=' + F.people.join(','));
+    if (ok.includes('ams') && F.team) q.push('team=1');
+    else if (ok.includes('ams') && F.ams.length) q.push('ams=' + F.ams.join(','));
+    if (ok.includes('assigned') && F.assigned) q.push('assigned=1');
+    if (F.cd) q.push('cd=1');
+    const name = (id) => fullName(userById(id));
+    const chips = [];
+    if (F.due && DUE_L[F.due]) chips.push({ t: `Due: ${DUE_L[F.due]}`, act: 'due' });
+    if (F.cd) chips.push({ t: 'Waiting for CD review', act: 'cd' });
+    if (ok.includes('assigned') && F.assigned) chips.push({ t: 'Assigned to me', act: 'assigned' });
+    if (ok.includes('ams') && F.team) chips.push({ t: 'All Account Managers & Admins', act: 'team' });
+    if (ok.includes('ams') && !F.team) F.ams.forEach((id) => chips.push({ t: `${name(id)}’s tasks`, act: 'am', id }));
+    if (ok.includes('people')) F.people.forEach((id) => chips.push({ t: name(id), act: 'person', id }));
+    const L = { due: 'Due date', people: 'People', ams: 'Account managers', assigned: 'Assigned to me' };
+    const buttons = ok.map((k) => ({ k, t: L[k], on: k === 'due' ? !!F.due : k === 'people' ? F.people.length > 0 : k === 'ams' ? (F.team || F.ams.length > 0) : !!F.assigned }));
+    return { show: true, tab: ui.myTasksTab === 'done' ? 'done' : 'all', q: q.join('&'), buttons, chips, me: currentUserId, light: document.documentElement.dataset.theme === 'light' };
+  }
+  function sync() {
+    if (!on) return;
+    let m = null;
+    try { m = visible() ? signal() : null; } catch (e) { m = null; }
+    if (!m) { if (shown) { shown = false; last = ''; call({ show: false }); } return; }
+    const s = JSON.stringify(m);
+    if (s === last) return;
+    last = s; shown = true;
+    call(m);
+  }
+  // the app's taps: a filter button (its native sheet), a chip's ✕, Clear all, the tab; anything else as Home's
+  window.__e11MyTasks = (ev) => {
+    if (!ev) return;
+    const F = Work.f(), redraw = () => { renderContent(); setTimeout(sync, 0); };
+    if (ev.ev === 'filter') {
+      if (ev.k === 'assigned') { F.assigned = !F.assigned; redraw(); return; }
+      if (['due', 'people', 'ams'].includes(ev.k)) workMenu(document.body, ev.k);
+      return;
+    }
+    if (ev.ev === 'chip') {
+      if (ev.act === 'due') F.due = null; else if (ev.act === 'cd') F.cd = false; else if (ev.act === 'assigned') F.assigned = false; else if (ev.act === 'team') F.team = false;
+      else if (ev.act === 'am') F.ams = F.ams.filter((x) => x !== ev.id); else if (ev.act === 'person') F.people = F.people.filter((x) => x !== ev.id);
+      redraw(); return;
+    }
+    if (ev.ev === 'reset') { ui.workF = null; redraw(); return; }
+    if (ev.ev === 'tab') { ui.myTasksTab = ev.tab === 'done' ? 'done' : 'todo'; redraw(); return; }
+    if (window.__e11Home) window.__e11Home(ev);
+  };
+  window.__e11MyTasksResend = () => { last = ''; shown = false; sync(); };
+  return { sync, get on() { return on; }, get shown() { return shown; } };
 })();

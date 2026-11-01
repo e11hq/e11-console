@@ -74,6 +74,11 @@ try:
     check(hfd.get('searching') is False, f'the ✕ closes the search {hfd}')
     hd = res.get('homeDateNative') or {}
     check(hd.get('sheet') == 'DateSheetVC', f'the date sheet opens (and the app is still running) {hd.get("sheet")}')
+    mt = res.get('mytasksMyTasks') or {}; mtd = res.get('mytasksDoneMyTasks') or {}; mta = res.get('mytasksAllMyTasks') or {}
+    check(mt.get('shown') is True and mt.get('server') is True and mt.get('tab') == 'all' and 'filter-due' in (mt.get('filters') or []), f"My Tasks is the app's own, from the server, with All and its filter buttons {mt}")
+    check(mtd.get('shown') is True and mtd.get('tab') == 'done' and 'tab=done' in (mtd.get('query') or ''), f"My Tasks' Done tab asks the server for completed tasks {mtd}")
+    check(mta.get('tab') == 'all' and 'tab=all' in (mta.get('query') or ''), f"back to All {mta}")
+    check((res.get('inboxMyTasks') or {}).get('shown') is not True, f"My Tasks isn't over the Inbox {res.get('inboxMyTasks')}")
     check((res.get('inboxNative') or {}).get('shown') is False, f"the app's Home goes on another tab {res.get('inboxNative')}")
     check(res.get('splashGone') is True, f"the startup screen went before Home {res.get('splashGone')}")
     check(set(seen) >= {'home', 'inbox', 'me', 'client', 'task', 'sheet', 'back', 'nsheet', 'nsheetEnd', 'nsheetChannel', 'nsheetTitled'}, f'all stages ran {sorted(seen)}')
