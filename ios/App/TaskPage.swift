@@ -81,6 +81,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   var backFrame: CGRect { back.frame }
   var cornerFrame: CGRect { more.frame }
   var cornerMenu: UIMenu? { moreBtn.menu }
+  var cornerItems: [CornerMenuItem] = []
   var onMenu: (() -> Void)?
   var feed: CommentsFeed?, threadFeed: CommentsFeed?
   // the description's editor (DescEditor.swift)
@@ -326,6 +327,16 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       items.append(UIMenu(options: .displayInline, children: [UIAction(title: "Delete task", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in self?.confirmDelete() }]))
     }
     moreBtn.menu = UIMenu(children: items)
+    // (the same, for the shared top buttons' ••• — SwiftUI's menu, which grows out of the glass)
+    var ci: [CornerMenuItem] = [CornerMenuItem(title: "Copy link", symbol: "link", run: { [weak self] in guard let self = self else { return }; self.onEvent?(["ev": "copy", "id": self.taskId]) })]
+    if (m["readOnly"] as? Bool) != true {
+      ci.append(CornerMenuItem(title: "Attach Files", symbol: "paperclip", children: [("Camera", "camera", "camera"), ("Photos", "photo.on.rectangle", "photos"), ("Files", "folder", "files")].map { x -> CornerMenuItem in
+        CornerMenuItem(title: x.0, symbol: x.1, run: { [weak self] in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.onAttachFrom?(x.2) }) }))
+    }
+    if (m["canDelete"] as? Bool) == true && !TaskPage.viewOnly {
+      ci.append(CornerMenuItem(title: "", inline: true, children: [CornerMenuItem(title: "Delete task", symbol: "trash", destructive: true, run: { [weak self] in self?.confirmDelete() })]))
+    }
+    cornerItems = ci
     onMenu?()
   }
   private func confirmDelete() {
