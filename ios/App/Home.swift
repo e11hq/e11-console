@@ -957,6 +957,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     return a
   }
   private var swipeLead = false
+  private var lastSwipeV: CGFloat = 0   // (the finger's speed as it let go: the spring carries it on)
   @objc private func swipe(_ g: UIPanGestureRecognizer) {
     guard let card = g.view as? HomeCard else { return }
     switch g.state {
@@ -980,6 +981,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       actions?.progress = min(1, abs(x) / r)
     case .ended, .cancelled, .failed:
       let v = g.velocity(in: self).x, r = reveal(swipeLead)
+      lastSwipeV = v
       if swipeLead { setOpen(card, v > 350 || (card.swipeX > r / 2 && v > -300), leading: true) }
       else { setOpen(card, v < -350 || (card.swipeX < -r / 2 && v < 300), leading: false) }
     default: break
@@ -989,10 +991,11 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let lead = leading ?? (openCard === card ? openSide > 0 : false)
     if open { _ = actionsFor(card, leading: lead) }
     let a = actions, r = reveal(lead)
-    UIView.animate(withDuration: 0.32, delay: 0, usingSpringWithDamping: 0.86, initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState]) {
+    let fingerV = lastSwipeV; lastSwipeV = 0
+    SwipeSpring.run(from: card.swipeX, to: open ? (lead ? r : -r) : 0, velocity: fingerV) {
       card.swipeX = open ? (lead ? r : -r) : 0
       a?.progress = open ? 1 : 0
-    } completion: { _ in
+    } completion: {
       if !open && card.swipeX == 0 && self.openCard === card { a?.removeFromSuperview(); if self.actions === a { self.actions = nil }; self.openCard = nil }
     }
   }
@@ -1663,10 +1666,11 @@ final class InboxRow: UIControl, UIGestureRecognizerDelegate {
     default:
       let open = shift > 44 || g.velocity(in: self).x > 400
       if open && shift < 44 { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
-      UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 0.9, initialSpringVelocity: 0, options: [.allowUserInteraction]) { self.shift = open && g.velocity(in: self).x > -300 ? 86 : 0 }
+      let to: CGFloat = open && g.velocity(in: self).x > -300 ? 86 : 0
+      SwipeSpring.run(from: shift, to: to, velocity: g.velocity(in: self).x) { self.shift = to }
     }
   }
-  func close(animated: Bool = true) { UIView.animate(withDuration: animated ? 0.3 : 0, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) { self.shift = 0 } }
+  func close(animated: Bool = true) { if animated { SwipeSpring.run(from: shift, to: 0, velocity: 0) { self.shift = 0 } } else { shift = 0 } }
   func selfOpen() { shift = 86 }
   @objc private func toggle() {
     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
@@ -1749,4 +1753,22 @@ final class MailCats: UIView {
     }
   }
   override func layoutSubviews() { super.layoutSubviews(); place() }
+}
+
+// ---------- how every swiped row settles, opening or closing (Haris, 2026-11-01: "wherever there's a swipe list") ----------
+// Mail's, measured frame by frame from Haris's recording: a critically damped spring (no bounce) of ~0.44 s — from rest it
+// starts slowly and eases in to its place over ~0.5 s; let go mid-swipe, it carries the finger's speed on.
+enum SwipeSpring {
+  static func run(from: CGFloat, to: CGFloat, velocity: CGFloat, _ change: @escaping () -> Void, completion: (() -> Void)? = nil) {
+    let dist = to - from
+    let v = abs(dist) > 0.5 ? max(-30, min(30, velocity / dist)) : 0
+    // (response 0.44 s: ω = 2π / 0.44; critically damped — damping 2ω, no bounce)
+    let w: CGFloat = 2 * .pi / 0.44
+    let spring = UISpringTimingParameters(mass: 1, stiffness: w * w, damping: 2 * w, initialVelocity: CGVector(dx: v, dy: 0))
+    let a = UIViewPropertyAnimator(duration: 0.5, timingParameters: spring)
+    a.isUserInteractionEnabled = true
+    a.addAnimations(change)
+    if let c = completion { a.addCompletion { _ in c() } }
+    a.startAnimation()
+  }
 }
