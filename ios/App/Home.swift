@@ -231,6 +231,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     canDelete = (model["canDelete"] as? Bool) == true
     if let t = model["toast"] as? [String: Any] { toast(t) }
     fab.isHidden = (model["add"] as? Bool) != true
+    // (the filter buttons again in this light / dark, if it changed)
+    if isList, let f = lastFilters { setFilters(f) }
 
     setNeedsLayout(); layoutIfNeeded()
   }
@@ -269,17 +271,24 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private func capsule(_ t: String, sym: String?, on: Bool, small: Bool) -> UIButton {
     var c: UIButton.Configuration
     if #available(iOS 26.0, *) { c = on ? .prominentGlass() : .glass() } else { c = on ? .filled() : .gray(); c.cornerStyle = .capsule }
-    if on { c.baseBackgroundColor = .label; c.baseForegroundColor = .systemBackground } else { c.baseForegroundColor = .label }
+    // (a filter that's on: filled — black with white in light, white with black in dark, as Mail's "All Mail"; fixed
+    //  colours, not the system's: the glass worked its own text colour out and it came out white on white in dark — Haris,
+    //  2026-11-01)
+    let ink: UIColor = on ? (L.light ? .white : .black) : (L.light ? .black : .white)
+    if on { c.baseBackgroundColor = L.light ? .black : .white }
+    c.baseForegroundColor = ink
     let f = UIFont.systemFont(ofSize: small ? 13 : 15, weight: on ? .semibold : .regular)
-    c.attributedTitle = AttributedString(t, attributes: AttributeContainer([.font: f]))
-    if let sym = sym { c.image = UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: small ? 10 : 12, weight: .semibold)); c.imagePadding = small ? 5 : 6 }
+    c.attributedTitle = AttributedString(t, attributes: AttributeContainer([.font: f, .foregroundColor: ink]))
+    if let sym = sym { c.image = UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: small ? 10 : 12, weight: .semibold))?.withTintColor(ink, renderingMode: .alwaysOriginal); c.imagePadding = small ? 5 : 6 }
     c.imagePlacement = small ? .trailing : .leading
     c.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: small ? 12 : 14, bottom: 0, trailing: small ? 10 : 14)
     let b = UIButton(type: .system); b.configuration = c
     return b
   }
+  private var lastFilters: [String: Any]?
   func setFilters(_ a: [String: Any]) {
     if !isList { isList = true }
+    lastFilters = a
     let tab = (a["tab"] as? String) == "done" ? "done" : "all"
     if tab != listTab { listTab = tab; if let o = openCard { setOpen(o, false) } }
     seg.selectedSegmentIndex = listTab == "done" ? 1 : 0
