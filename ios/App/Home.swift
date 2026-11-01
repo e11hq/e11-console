@@ -657,11 +657,14 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       return
     }
     // the small title and its line: rising ~6 pt and sharpening as they come; blurring and sinking as they go
-    func show(_ l: UILabel, _ p: CGFloat, rise: CGFloat) {
-      fade(l).set(blur: 8 * pow(1 - p, 1.4), alpha: ease(0, 0.7, p), dy: rise * (1 - easeOut(p)), trait: tr)
+    // (each starts half its own height low — its top where its middle will be — and comes up into place: the fade and
+    //  sharpening eased out, the rise eased in; going back, the same way down — Haris, 2026-11-01)
+    func show(_ l: UILabel, _ p: CGFloat) {
+      let rise = l.bounds.height / 2
+      fade(l).set(blur: 8 * (1 - easeOut(p)), alpha: easeOut(min(1, p / 0.7)), dy: rise * (1 - p * p), trait: tr)
     }
-    show(smallTitle, dT, rise: 6)
-    show(smallSub, dS, rise: 6)
+    show(smallTitle, dT)
+    show(smallSub, dS)
     // the big title: blurs and fades where it is; the big line under it with it
     // (as Mail's: no blur of its own — it just fades away behind the frost; Haris, 2026-11-01)
     fade(title).set(blur: 0, alpha: 1 - ease(0, 1, dBig), dy: 0, trait: tr)
