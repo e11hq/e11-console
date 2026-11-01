@@ -293,8 +293,8 @@ var E11Rules = (() => {
         const cut = nowMs() - 30 * 86400000;
         const list = l.filter((t) => doneAtOf(t) && Date.parse(doneAtOf(t)) > cut && (F.due === 'late' || dueOk(t, F.due))).sort((a, b) => String(doneAtOf(b)).localeCompare(String(doneAtOf(a))));
         groups = [{ name: 'Last 30 days', n: list.length, empty: list.length ? '' : 'Tasks completed in the last 30 days show here.', cards: list.map((t) => {
-          // (no due date on a completed task's card: "Completed Oct 31" says when — Haris, 2026-11-01)
-          const c = cardOf(t, { due: false });
+          // (no due date or status on a completed task's card: the tick and "Completed Oct 31" say it — Haris, 2026-11-01)
+          const c = cardOf(t, { due: false, status: false });
           // (a completed task is locked: said on its card)
           const at = t.completedAt ? dayOf(t.completedAt) : '';
           if (t.done) c.meta.push({ t: `Completed${at ? ' ' + fmtDay(at) : ''} — read only`, line: true, lock: true });
