@@ -1170,6 +1170,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         done(mine.map { "\($0.name)=\($0.value)" }.joined(separator: "; "))
       }
     }
+    // (pictures and files are fetched with the same sign-in, from the start — the app's own copy draws a task page at
+    //  once, before anything else would have handed it over: the file cards stayed grey)
+    if kind == "home" { FeedLoader.shared.cookies = s.cookies }
     s.onModel = { [weak self] m in
       if kind == "home" { self?.drawServerHome(m) } else if kind == "inbox" { self?.drawServerInbox(m) } else { self?.drawServerMyTasks(m) }
       // (the app's own copy of the data — iOS app data plan: started once we know who's signed in; until it's ready,
