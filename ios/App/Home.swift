@@ -449,14 +449,14 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // shown (eased toward u's values each frame, so nothing jumps)
   private var dBig: CGFloat = 0, dT: CGFloat = 0, dS: CGFloat = 0, dLine: CGFloat = 0
   private var barLink: CADisplayLink?, barLast: CFTimeInterval = 0
-  private var uEnd: CGFloat { bigFrom + 6 + 14 + 8 }   // (all in)
-  private var barIn: Bool { u >= bigFrom + 6 + 7 }      // (more than half way: what the rest of the screen goes by)
+  private var uEnd: CGFloat { bigFrom + 8 + 14 }   // (all in)
+  private var barIn: Bool { u >= bigFrom + 7 }      // (more than half way: what the rest of the screen goes by)
   private var shrink: CGFloat { barIn ? 1 : 0 }
   private var pastBig: Bool { barIn }
   private func clamp01(_ x: CGFloat) -> CGFloat { min(1, max(0, x)) }
   private var tBig: CGFloat { clamp01((u - bigFrom) / 8) }
-  private var tT: CGFloat { clamp01((u - bigFrom - 6) / 14) }
-  private var tS: CGFloat { clamp01((u - bigFrom - 14) / 14) }
+  private var tT: CGFloat { clamp01((u - bigFrom) / 14) }   // (starting the moment the big title starts to fade — Haris, 2026-11-01)
+  private var tS: CGFloat { clamp01((u - bigFrom - 8) / 14) }
   private var fades: [ObjectIdentifier: HomeBlurFade] = [:]
   private func fade(_ l: UILabel) -> HomeBlurFade {
     if let f = fades[ObjectIdentifier(l)] { return f }
@@ -513,8 +513,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       n = min(n, d + up); n = max(n, d - down)
       d = abs(to - n) < 0.002 ? to : n
     }
-    let gT = min(tT, clamp01((dBig - 0.5) / 0.5)), gS = min(tS, clamp01((dT - 0.6) / 0.4))   // (in: each after the one before)
-    let bT = max(gT, dS - 0.25), bBig = max(tBig, dT)                                         // (out: the line first, the big title last)
+    // (the big title and the small one cross: one starts as the other starts; the line follows the small title)
+    let gT = tT, gS = min(tS, clamp01((dT - 0.6) / 0.4))
+    let bT = max(gT, dS - 0.25), bBig = tBig
     near(&dBig, bBig, upIn: 0.1, downIn: 0.1)
     near(&dT, bT, upIn: 0.09, downIn: 0.15)
     near(&dS, gS, upIn: 0.09, downIn: 0.07)
