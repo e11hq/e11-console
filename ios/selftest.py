@@ -44,6 +44,8 @@ try:
     # (simctl itself, in its own process group: Ctrl-C to the whole group lets it finish the file — sent to xcrun alone
     #  it never reached simctl and the film came out empty)
     simctl = sh('xcrun', '-f', 'simctl').stdout.strip() or 'simctl'
+    # (a recorder left over from an earlier run holds the screen: this one would make no film)
+    subprocess.run(['pkill', '-INT', '-f', 'recordVideo'], capture_output=True); time.sleep(1)
     rec = subprocess.Popen([simctl, 'io', udid, 'recordVideo', '--codec=h264', '--force', os.path.join(TMP, 'ios-run.mp4')], stdout=subprocess.DEVNULL, stderr=open(os.path.join(TMP, 'ios-rec.log'), 'w'), start_new_session=True)
     rec_t0 = time.time()
     r = subprocess.run(['xcrun', 'simctl', 'launch', udid, BUNDLE], env=lenv, capture_output=True, text=True); check(r.returncode == 0, 'launched ' + r.stdout + r.stderr[-300:])
@@ -62,8 +64,10 @@ try:
         time.sleep(0.5)
     try: os.killpg(rec.pid, signal.SIGINT); rec.wait(timeout=60)
     except Exception: rec.kill()
-    try: print('film', os.path.getsize(os.path.join(TMP, 'ios-run.mp4')), 'bytes;', open(os.path.join(TMP, 'ios-rec.log')).read()[-300:])
+    try: print('film', os.path.getsize(os.path.join(TMP, 'ios-run.mp4')), 'bytes')
     except Exception as e: print('film: none', e)
+    try: print('recorder said:', open(os.path.join(TMP, 'ios-rec.log')).read()[-600:])
+    except Exception: pass
     print(json.dumps(res, indent=1)[:4000])
     p = res.get('home') or {}
     # 22: the startup screen is the app's own — there at once (icon, greeting, four rows), ticked by the page, gone before Home
