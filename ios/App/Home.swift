@@ -404,7 +404,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     send(["ev": "tab", "tab": k])
   }
   private func drawInbox(_ model: [String: Any]) {
-    fab.isHidden = true
+    fab.isHidden = (model["add"] as? Bool) != true   // (+ New task, as on Home — for those who may)
     markAll.isHidden = ((model["unread"] as? Int) ?? 0) == 0
     catsView.light = L.light
     // where each row is now (to move it from there), and which go
@@ -533,7 +533,14 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     }
     // (starting where the "O" of NOT was — the N's width and its letter spacing in from the page's edge; Haris, 2026-11-01)
     let nW = ceil(("N" as NSString).size(withAttributes: [.font: UIFont.systemFont(ofSize: 9, weight: .medium), .kern: 2.4]).width)
-    motto.frame = CGRect(x: 16 + nW, y: fab.frame.midY - 16, width: max(0, fab.frame.minX - 12 - 16 - nW), height: 32)
+    if fab.isHidden {
+      // (no "+ New task" for this person: the motto in the middle of the page, at the same height — Haris, 2026-11-01)
+      motto.textAlignment = .center
+      motto.frame = CGRect(x: 16, y: fab.frame.midY - 16, width: W - 32, height: 32)
+    } else {
+      motto.textAlignment = .left
+      motto.frame = CGRect(x: 16 + nW, y: fab.frame.midY - 16, width: max(0, fab.frame.minX - 12 - 16 - nW), height: 32)
+    }
     showMotto()
   }
   func scrollToTop() { scroll.setContentOffset(CGPoint(x: 0, y: -scroll.contentInset.top), animated: true) }
@@ -541,7 +548,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // the list at its end (or too short to scroll), Home not searching, no toast beside the + — the motto shows
   private func showMotto() {
     let end = max(-scroll.contentInset.top, scroll.contentSize.height + scroll.contentInset.bottom - scroll.bounds.height)
-    let want = !searching && !fab.isHidden && toastView == nil && scroll.contentOffset.y >= end - 2
+    let want = !searching && toastView == nil && scroll.contentOffset.y >= end - 2
     guard want != mottoOn else { return }
     mottoOn = want
     UIView.animate(withDuration: 0.2, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) { self.motto.alpha = want ? 1 : 0 }

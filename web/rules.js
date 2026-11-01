@@ -394,7 +394,7 @@ var E11Rules = (() => {
       rows.forEach((r) => { if (r.from) peopleOn.add(r.from); });
       peopleOn.add(meId);
       return {
-        show: true, kind: 'inbox', tab, title: 'Inbox', date: unread ? `${unread} unread update${unread === 1 ? '' : 's'}` : 'All caught up', me: meId, unread, rows,
+        show: true, kind: 'inbox', tab, title: 'Inbox', add: can('createTask'), date: unread ? `${unread} unread update${unread === 1 ? '' : 's'}` : 'All caught up', me: meId, unread, rows,
         empty: tab === 'unread' ? 'Inbox zero 🎉' : tab === 'mentions' ? 'No mentions yet' : 'Nothing here yet',
         people: Object.fromEntries([...peopleOn].map((id) => { const p = userById(id); return [id, { initials: initials(fullName(p)), color: rgbOf(avColor(id || 'x')), photo: p && p.avatar ? p.avatar : null }]; })),
       };
