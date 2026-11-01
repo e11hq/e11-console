@@ -1,136 +1,160 @@
 import UIKit
 
-/* The corner button (shell 30, Haris 2026-11-01): one Liquid Glass button for Home's and My Tasks' Search, the
-   Inbox's Mark all read / Mark all unread and a task page's •••. It isn't swapped between screens: it changes in
-   place — slides to where the next screen has it, stretches from a circle to a capsule and back, its icon or words
-   cross-fading — with a spring that overshoots a little and settles, as Mail's own back button does between pages.
-   With the swipe back from the edge it follows the finger, part way between the two. */
+/* The top buttons, shared by every screen of the app's own (Haris, 2026-11-01): three Liquid Glass buttons in one
+   glass container — so when two come close they melt together like drops of liquid, and part again:
+     left    ‹ (a task page)                                  — grows in / shrinks away
+     middle  🔍 · Mark all read · Mark all unread · Done      — stretches between a circle and a capsule
+     corner  your photo · ••• (its menu opens out of it) · ✕
+   Opening a task: 🔍 melts into your photo, the photo turns into •••, ‹ grows in; back: the other way; the swipe from
+   the edge in between follows the finger. Each screen only says what its buttons are and where (HomeView.corner(),
+   TaskPage.cornerFrame); its own buttons stay invisible. */
 final class CornerButton: UIView {
-  private let fx = UIVisualEffectView(effect: nil)
-  private let icon = UIImageView(), word = UILabel()
-  // (••• : a real glass button with iPhone's own menu — on iOS 26 the circle turns into the menu as it opens and
-  //  the menu shrinks back into it, as iPhone's own ••• buttons do; Haris 2026-11-01)
-  private let menuBtn: UIButton = {
-    var c: UIButton.Configuration
-    if #available(iOS 26.0, *) { c = .glass() } else { c = .plain() }
-    c.image = UIImage(systemName: "ellipsis", withConfiguration: UIImage.SymbolConfiguration(pointSize: 18, weight: .medium))
-    c.baseForegroundColor = .label
-    c.cornerStyle = .capsule
-    return UIButton(configuration: c)
+  struct Spot { var kind = "none", text = "", frame = CGRect.zero, image: UIImage? = nil }
+  private let container: UIVisualEffectView = {
+    let v = UIVisualEffectView(effect: nil)
+    if #available(iOS 26.0, *) { let c = UIGlassContainerEffect(); c.spacing = 24; v.effect = c }
+    return v
   }()
-  private(set) var kind = "none"
-  private var text = ""
-  var onTap: ((String) -> Void)?
-  // Mail's: the glass reaches its new shape in about 0.4 s, overshooting a touch before it settles
+  let leftB = CornerButton.glassButton(), midB = CornerButton.glassButton(), cornerB = CornerButton.glassButton()
+  private(set) var left = Spot(), mid = Spot(), corner = Spot()
+  var onLeft: (() -> Void)?, onMid: ((String) -> Void)?, onCorner: ((String) -> Void)?
+  // (what the self-test reads: the corner's ••• on a task page, else the middle one's kind)
+  var kind: String { corner.kind == "more" ? "more" : mid.kind }
   static let duration: TimeInterval = 0.42, bounce: CGFloat = 0.22
 
+  static func glassButton() -> UIButton {
+    var c: UIButton.Configuration
+    if #available(iOS 26.0, *) { c = .glass() } else { c = .gray() }
+    c.cornerStyle = .capsule
+    c.baseForegroundColor = .label
+    c.contentInsets = .zero
+    let b = UIButton(configuration: c)
+    b.alpha = 0
+    return b
+  }
   override init(frame: CGRect) {
     super.init(frame: frame)
-    fx.clipsToBounds = true
-    if #available(iOS 26.0, *) { let g = UIGlassEffect(style: .regular); g.isInteractive = true; fx.effect = g }
-    else { fx.effect = UIBlurEffect(style: .systemUltraThinMaterial); fx.layer.borderWidth = 1; fx.layer.borderColor = UIColor.white.withAlphaComponent(0.18).cgColor }
-    addSubview(fx)
-    icon.contentMode = .center; icon.tintColor = .label
-    word.font = .systemFont(ofSize: 15, weight: .semibold); word.textColor = .label; word.textAlignment = .center
-    addSubview(icon); addSubview(word)
-    menuBtn.showsMenuAsPrimaryAction = true
-    menuBtn.isHidden = true
-    addSubview(menuBtn)
-    addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapped)))
-    isAccessibilityElement = true; accessibilityTraits = .button
-    alpha = 0
+    addSubview(container)
+    [leftB, midB, cornerB].forEach { container.contentView.addSubview($0) }
+    leftB.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.onLeft?() }, for: .touchUpInside)
+    midB.addAction(UIAction { [weak self] _ in guard let self = self else { return }; UIImpactFeedbackGenerator(style: .light).impactOccurred(); self.onMid?(self.mid.kind) }, for: .touchUpInside)
+    cornerB.addAction(UIAction { [weak self] _ in guard let self = self, self.corner.kind != "more" else { return }; UIImpactFeedbackGenerator(style: .light).impactOccurred(); self.onCorner?(self.corner.kind) }, for: .touchUpInside)
   }
   required init?(coder: NSCoder) { fatalError() }
-  @objc private func tapped() { if kind != "more" { onTap?(kind) } }
-  override func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool { kind != "more" && kind != "none" }
+  override func layoutSubviews() { super.layoutSubviews(); container.frame = bounds }
+  // only the buttons take touches; the rest of the strip lets them through to the screen
+  override func hitTest(_ p: CGPoint, with e: UIEvent?) -> UIView? {
+    let q = convert(p, to: container.contentView)
+    for b in [cornerB, midB, leftB] where b.alpha > 0.05 && !b.isHidden && b.frame.contains(q) { return b }
+    return nil
+  }
 
-  static func symbol(_ kind: String) -> String? { kind == "search" ? "magnifyingglass" : kind == "more" ? "ellipsis" : nil }
-  // how wide it is for this kind (a circle, or a capsule fitting its words)
+  // what a capsule with words needs; a place for the middle one (a capsule keeps the circle's right edge)
   func width(_ kind: String, _ text: String) -> CGFloat {
-    if kind == "read" || kind == "unread" || kind == "done" { return ceil((text as NSString).size(withAttributes: [.font: word.font!]).width) + 32 }
+    if ["read", "unread", "done"].contains(kind) { return ceil((text as NSString).size(withAttributes: [.font: UIFont.systemFont(ofSize: 15, weight: .semibold)]).width) + 32 }
     return 44
   }
-  // its place for a screen whose circle would be at `f` (a capsule keeps the circle's right edge)
-  func place(_ kind: String, _ text: String, circle f: CGRect) -> CGRect {
-    let w = width(kind, text)
-    return CGRect(x: f.maxX - w, y: f.minY, width: w, height: f.height)
-  }
+  func place(_ kind: String, _ text: String, circle f: CGRect) -> CGRect { let w = width(kind, text); return CGRect(x: f.maxX - w, y: f.minY, width: w, height: f.height) }
 
-  // to a kind and place — with Mail's spring, or at once
-  func go(_ k: String, text t: String, frame f: CGRect, menu: UIMenu?, animated: Bool) {
-    let same = k == kind && t == text && frame.equalTo(f)
-    menuBtn.menu = menu; menuBtn.isHidden = k != "more" || menu == nil
-    // (the drawn glass and icon step aside for the real ••• button, and come back for the other kinds)
-    let real = k == "more" && menu != nil
-    fx.alpha = real ? 0 : 1
-    if real { icon.alpha = 0 }
-    word.textColor = k == "done" ? .systemBlue : .label
-    accessibilityLabel = k == "search" ? "Search" : k == "more" ? "More" : t
-    if same { return }
-    let was = kind
-    kind = k; text = t
-    if k == "none" {
-      // (going: it fades where it is — Search stretching into the search bar takes over from it)
-      UIView.animate(withDuration: animated ? 0.12 : 0, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) { self.alpha = 0 }
-      return
+  private func dress(_ b: UIButton, _ s: Spot, menu: UIMenu?) {
+    var c = b.configuration ?? .plain()
+    c.title = nil; c.attributedTitle = nil; c.image = nil
+    switch s.kind {
+    case "back": c.image = UIImage(systemName: "chevron.left", withConfiguration: UIImage.SymbolConfiguration(pointSize: 19, weight: .medium))
+    case "search": c.image = UIImage(systemName: "magnifyingglass", withConfiguration: UIImage.SymbolConfiguration(pointSize: 18, weight: .medium))
+    case "more": c.image = UIImage(systemName: "ellipsis", withConfiguration: UIImage.SymbolConfiguration(pointSize: 18, weight: .medium))
+    case "close": c.image = UIImage(systemName: "xmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .medium))
+    case "photo": c.image = s.image?.withRenderingMode(.alwaysOriginal)
+    case "read", "unread", "done": c.attributedTitle = AttributedString(s.text, attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 15, weight: .semibold), .foregroundColor: s.kind == "done" ? UIColor.systemBlue : UIColor.label]))
+    default: break
     }
-    let fromNone = was == "none" || alpha < 0.05
-    if fromNone { frame = f; alpha = 0; transform = CGAffineTransform(scaleX: 0.7, y: 0.7) }
-    // the new icon / words in, the old out (cross-fading while the glass changes shape)
-    let sym = real ? nil : CornerButton.symbol(k)   // (the real ••• button draws its own)
-    let newIcon = sym.map { UIImage(systemName: $0, withConfiguration: UIImage.SymbolConfiguration(pointSize: k == "more" ? 18 : 18, weight: .medium)) } ?? nil
-    let iconChanges = icon.image != newIcon || (sym == nil) != (icon.alpha < 0.5)
-    if iconChanges && animated && !fromNone {
-      UIView.animate(withDuration: 0.12) { self.icon.alpha = 0; self.word.alpha = 0 } completion: { _ in
-        self.icon.image = newIcon; self.word.text = t
-        UIView.animate(withDuration: 0.18) { self.icon.alpha = sym == nil ? 0 : 1; self.word.alpha = sym == nil ? 1 : 0 }
+    c.baseForegroundColor = .label
+    b.configuration = c
+    // (your photo fills its circle; the ••• opens iPhone's own menu straight out of the glass)
+    b.clipsToBounds = s.kind == "photo"
+    b.layer.cornerRadius = s.frame.height / 2
+    b.menu = s.kind == "more" ? menu : nil
+    b.showsMenuAsPrimaryAction = s.kind == "more" && menu != nil
+    b.accessibilityLabel = ["back": "Back", "search": "Search", "more": "More", "close": "Close search", "photo": "Me"][s.kind] ?? s.text
+  }
+  // to these three spots — with the spring, or at once
+  func go(left l: Spot, mid m: Spot, corner c: Spot, menu: UIMenu?, animated: Bool) {
+    let oldCorner = corner
+    let pairs: [(UIButton, Spot, Spot)] = [(leftB, left, l), (midB, mid, m), (cornerB, corner, c)]
+    left = l; mid = m; corner = c
+    var moves: [() -> Void] = []
+    for (b, was, now) in pairs {
+      let changed = was.kind != now.kind || was.text != now.text || was.image !== now.image
+      if now.kind == "none" {
+        // going: 🔍 melts into the corner (moves onto it as it fades — the glass joins them), others shrink away
+        let into: CGRect? = b === midB && was.kind == "search" && c.kind != "none" ? c.frame : nil
+        moves.append { if let f = into { b.frame = f } else { b.transform = CGAffineTransform(scaleX: 0.4, y: 0.4) }; b.alpha = 0 }
+        continue
       }
-    } else { icon.image = newIcon; word.text = t; icon.alpha = sym == nil ? 0 : 1; word.alpha = sym == nil ? 1 : 0 }
-    let apply = { self.frame = f; self.alpha = 1; self.transform = .identity; self.layoutNow() }
-    if !animated { apply() }
-    else if #available(iOS 17.0, *) { UIView.animate(springDuration: CornerButton.duration, bounce: CornerButton.bounce, initialSpringVelocity: 0, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction], animations: apply) }
-    else { UIView.animate(withDuration: CornerButton.duration, delay: 0, usingSpringWithDamping: 0.75, initialSpringVelocity: 0, options: [.beginFromCurrentState, .allowUserInteraction], animations: apply) }
+      if was.kind == "none" || b.alpha < 0.05 {
+        // coming: 🔍 comes back out of the corner, the rest grow in where they go
+        let from: CGRect? = b === midB && now.kind == "search" && oldCorner.kind != "none" && animated ? oldCorner.frame : nil
+        b.transform = .identity
+        b.frame = from ?? now.frame
+        if from == nil && animated { b.transform = CGAffineTransform(scaleX: 0.4, y: 0.4) }
+        dress(b, now, menu: menu)
+      } else if changed {
+        if animated { UIView.transition(with: b, duration: 0.22, options: [.transitionCrossDissolve, .allowUserInteraction]) { self.dress(b, now, menu: menu) } }
+        else { dress(b, now, menu: menu) }
+      } else { b.menu = now.kind == "more" ? menu : nil; b.showsMenuAsPrimaryAction = now.kind == "more" && menu != nil }
+      moves.append { b.transform = .identity; b.frame = now.frame; b.alpha = 1; b.layer.cornerRadius = now.frame.height / 2 }
+    }
+    let run = { moves.forEach { $0() } }
+    if !animated { run(); return }
+    if #available(iOS 17.0, *) { UIView.animate(springDuration: CornerButton.duration, bounce: CornerButton.bounce, initialSpringVelocity: 0, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction], animations: run) }
+    else { UIView.animate(withDuration: CornerButton.duration, delay: 0, usingSpringWithDamping: 0.75, initialSpringVelocity: 0, options: [.beginFromCurrentState, .allowUserInteraction], animations: run) }
   }
-  // part way between two (the swipe back): t = 0 at `a`, 1 at `b`
-  func between(_ a: (kind: String, text: String, frame: CGRect), _ b: (kind: String, text: String, frame: CGRect), _ t: CGFloat) {
+  // part way between two sets (the swipe back): t = 0 at `a`, 1 at `b`
+  func between(_ a: (Spot, Spot, Spot), _ b: (Spot, Spot, Spot), _ t: CGFloat) {
     let t = max(0, min(1, t))
-    menuBtn.isHidden = true; fx.alpha = 1
-    func lerp(_ x: CGFloat, _ y: CGFloat) -> CGFloat { x + (y - x) * t }
-    if b.kind == "none" { frame = a.frame; alpha = 1 - t; return }
-    if a.kind == "none" { frame = b.frame; alpha = t; return }
-    frame = CGRect(x: lerp(a.frame.minX, b.frame.minX), y: lerp(a.frame.minY, b.frame.minY), width: lerp(a.frame.width, b.frame.width), height: lerp(a.frame.height, b.frame.height))
-    alpha = 1
-    // the icon / words of whichever it's nearer
-    let near = t < 0.5 ? a : b
-    let sym = CornerButton.symbol(near.kind)
-    icon.image = sym.map { UIImage(systemName: $0, withConfiguration: UIImage.SymbolConfiguration(pointSize: 18, weight: .medium)) } ?? nil
-    word.text = near.text
-    let k = abs(t - 0.5) * 2   // (faint in the middle)
-    icon.alpha = sym == nil ? 0 : k; word.alpha = sym == nil ? k : 0
-    layoutNow()
+    func lerp(_ x: CGRect, _ y: CGRect) -> CGRect { CGRect(x: x.minX + (y.minX - x.minX) * t, y: x.minY + (y.minY - x.minY) * t, width: x.width + (y.width - x.width) * t, height: x.height + (y.height - x.height) * t) }
+    let rows: [(UIButton, Spot, Spot)] = [(leftB, a.0, b.0), (midB, a.1, b.1), (cornerB, a.2, b.2)]
+    for (btn, x, y) in rows {
+      btn.transform = .identity
+      if x.kind == "none" && y.kind == "none" { btn.alpha = 0; continue }
+      if x.kind == "none" {
+        btn.frame = btn === midB && a.2.kind != "none" ? lerp(a.2.frame, y.frame) : y.frame
+        btn.alpha = t
+        if t > 0.5 { dress(btn, y, menu: nil) }
+        continue
+      }
+      if y.kind == "none" {
+        btn.frame = btn === midB && b.2.kind != "none" ? lerp(x.frame, b.2.frame) : x.frame
+        btn.alpha = 1 - t
+        continue
+      }
+      btn.frame = lerp(x.frame, y.frame); btn.alpha = 1
+      dress(btn, t < 0.5 ? x : y, menu: nil)
+      btn.layer.cornerRadius = btn.frame.height / 2
+    }
   }
-  private func layoutNow() {
-    fx.frame = bounds; fx.layer.cornerRadius = bounds.height / 2
-    icon.frame = bounds; word.frame = bounds.insetBy(dx: 8, dy: 0); menuBtn.frame = bounds
-  }
-  override func layoutSubviews() { super.layoutSubviews(); layoutNow() }
 }
 
 // ---------- on the app's screen ----------
 extension Main {
-  // what the corner should be now: the top task page's •••, else the shown screen's
-  func cornerTarget(skipTop: Bool = false) -> (kind: String, text: String, frame: CGRect) {
+  // the three spots now: the top task page's, else the shown screen's
+  func cornerTarget(skipTop: Bool = false) -> (CornerButton.Spot, CornerButton.Spot, CornerButton.Spot) {
     let pages = skipTop ? Array(taskPages.dropLast()) : taskPages
     if let p = pages.last {
       let f = p.convert(p.cornerFrame, to: view).offsetBy(dx: -p.transform.tx, dy: 0)
-      if p.editingDesc { return ("done", "Done", corner.place("done", "Done", circle: f)) }   // (writing the description: Done saves it)
-      return ("more", "", f)
+      let bf = p.convert(p.backFrame, to: view).offsetBy(dx: -p.transform.tx, dy: 0)
+      let mid = p.editingDesc ? CornerButton.Spot(kind: "done", text: "Done", frame: corner.place("done", "Done", circle: f.offsetBy(dx: -56, dy: 0))) : CornerButton.Spot()
+      return (CornerButton.Spot(kind: "back", frame: bf), mid, CornerButton.Spot(kind: "more", frame: f))
     }
     if let h = shownScreen {
+      let dx = -h.transform.tx
       let c = h.corner()
-      return (c.kind, c.text, corner.place(c.kind, c.text, circle: h.convert(c.frame, to: view).offsetBy(dx: -h.transform.tx, dy: 0)))
+      let mf = corner.place(c.kind, c.text, circle: h.convert(c.frame, to: view).offsetBy(dx: dx, dy: 0))
+      let meF = h.convert(h.meFrame, to: view).offsetBy(dx: dx, dy: 0)
+      let cornerSpot = h.searching ? CornerButton.Spot(kind: "close", frame: meF) : CornerButton.Spot(kind: "photo", frame: meF, image: h.meImage)
+      return (CornerButton.Spot(), CornerButton.Spot(kind: c.kind, text: c.text, frame: mf), cornerSpot)
     }
-    return ("none", "", corner.frame)
+    return (CornerButton.Spot(), CornerButton.Spot(), CornerButton.Spot())
   }
   // (a tab change hides one screen and shows the next a moment apart: settled together, so it changes in place
   //  rather than going and coming back)
@@ -144,11 +168,18 @@ extension Main {
     guard homeIfMade != nil || myTasksIfMade != nil || inboxIfMade != nil || !taskPages.isEmpty else { return }
     for h in [homeIfMade, myTasksIfMade, inboxIfMade].compactMap({ $0 }) where !h.cornerShared { h.cornerShared = true; h.onCorner = { [weak self] in self?.updateCorner() } }
     for p in taskPages where !p.cornerShared { p.cornerShared = true; p.onMenu = { [weak self] in self?.updateCorner(animated: false) } }
-    if corner.superview == nil { view.insertSubview(corner, belowSubview: tabBar) }
-    // (above the screens and task pages; under sheets and the tab bar)
+    if corner.superview == nil {
+      corner.onLeft = { [weak self] in guard let self = self, let p = self.taskPages.last else { return }; if p.editingDesc { p.finishDesc() }; self.closeTaskPage(p) }
+      corner.onMid = { [weak self] k in if k == "done" { self?.taskPages.last?.finishDesc(); return }; self?.shownScreen?.cornerTap(k) }
+      corner.onCorner = { [weak self] k in guard let h = self?.shownScreen else { return }; if k == "close" { h.closeSearch() } else { h.meTap() } }
+    }
+    // (a strip across the top, above the screens and task pages, under sheets and the tab bar)
+    let strip = CGRect(x: 0, y: 0, width: view.bounds.width, height: view.safeAreaInsets.top + 60)
+    if corner.frame != strip { corner.frame = strip }
     if let top = taskPages.last { view.insertSubview(corner, aboveSubview: top) } else { view.insertSubview(corner, belowSubview: tabBar) }
     if lockView != nil { corner.alpha = 0; return }
+    corner.alpha = 1
     let t = cornerTarget()
-    corner.go(t.kind, text: t.text, frame: t.frame, menu: taskPages.last?.cornerMenu, animated: animated && corner.window != nil)
+    corner.go(left: t.0, mid: t.1, corner: t.2, menu: taskPages.last?.cornerMenu, animated: animated && corner.window != nil)
   }
 }

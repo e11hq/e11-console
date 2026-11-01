@@ -38,7 +38,11 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   /* The corner button (shell 30, Haris 2026-11-01): Search here, Mark all read / unread on the Inbox and ••• on a
      task page are one glass button of the app's (CornerButton, Main): this screen's own ones then stay invisible and
      only say where the button goes and what it is. */
-  var cornerShared = false { didSet { searchCircle.alpha = cornerShared || searching ? 0 : 1; markAll.alpha = cornerShared ? 0 : 1 } }
+  var cornerShared = false { didSet { searchCircle.alpha = cornerShared || searching ? 0 : 1; markAll.alpha = cornerShared ? 0 : 1; me.isHidden = cornerShared; if cornerShared { closeCircle.isHidden = true } } }
+  // (the shared top buttons: your photo — where, what, and its tap)
+  var meFrame: CGRect { me.frame }
+  var meImage: UIImage? { me.image(for: .normal) }
+  func meTap() { send(["ev": "me"]) }
   var onCorner: (() -> Void)?
   // (shown or hidden — a tab changed: the corner button goes to this screen's, or away)
   override var isHidden: Bool { didSet { if oldValue != isHidden { onCorner?() } } }
@@ -802,7 +806,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     showMotto()
     searchBar.frame = start; searchBar.isHidden = false; searchBar.alpha = 1
     searchBar.layer.cornerRadius = start.height / 2
-    closeCircle.frame = meF; closeCircle.isHidden = false; closeCircle.alpha = 0
+    closeCircle.frame = meF; closeCircle.isHidden = cornerShared; closeCircle.alpha = 0
     closeCircle.transform = CGAffineTransform(scaleX: 0.6, y: 0.6)
     searchCircle.alpha = 0
     results.isHidden = false

@@ -497,9 +497,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   var cornerPending = false
   var composeIfMade: ComposeBox?
   lazy var corner: CornerButton = {
-    let c = CornerButton()
-    c.onTap = { [weak self] k in if k == "done" { self?.taskPages.last?.finishDesc(); return }; self?.shownScreen?.cornerTap(k) }
-    return c
+    CornerButton()   // (its taps are set the first time it's placed: updateCornerNow)
   }()
   func commentBar(_ a0: [String: Any]) {
     var a = a0

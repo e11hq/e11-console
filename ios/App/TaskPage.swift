@@ -75,7 +75,8 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // the frost under the bar follows whichever list is showing (Details, the comments, a thread)
   func edgeScroll(_ sv: UIScrollView) { if #available(iOS 26.0, *) { (edgeHook as? UIScrollEdgeElementContainerInteraction)?.scrollView = sv } }
   // the corner button (Main's CornerButton) stands in for ••• — this page's own stays invisible; its menu is lent
-  var cornerShared = false { didSet { more.alpha = cornerShared ? 0 : 1; moreBtn.isHidden = cornerShared } }
+  var cornerShared = false { didSet { more.alpha = cornerShared ? 0 : 1; moreBtn.isHidden = cornerShared; back.alpha = cornerShared ? 0 : 1; back.isUserInteractionEnabled = !cornerShared } }
+  var backFrame: CGRect { back.frame }
   var cornerFrame: CGRect { more.frame }
   var cornerMenu: UIMenu? { moreBtn.menu }
   var onMenu: (() -> Void)?
