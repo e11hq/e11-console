@@ -48,7 +48,9 @@ final class DailySheetVC: UIViewController, UISheetPresentationControllerDelegat
     subL.font = .systemFont(ofSize: 14); subL.textColor = .secondaryLabel; subL.numberOfLines = 2; subL.text = d["sub"] as? String
     var c: UIButton.Configuration
     if #available(iOS 26.0, *) { c = .glass() } else { c = .gray(); c.cornerStyle = .capsule }
-    c.image = UIImage(systemName: "xmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .semibold)); c.baseForegroundColor = .secondaryLabel
+    // (the same ✕ as the Attach Files sheet: 44 pt glass, 15 pt semibold, the label colour — Haris, 2026-11-01)
+    c.image = UIImage(systemName: "xmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)); c.baseForegroundColor = .label
+    c.cornerStyle = .capsule
     close.configuration = c; close.accessibilityLabel = "Close"
     close.addAction(UIAction { [weak self] _ in self?.dismiss(animated: true) }, for: .touchUpInside)
     [sun, titleL, subL, close].forEach { head.addSubview($0) }
@@ -194,14 +196,14 @@ final class DailySheetVC: UIViewController, UISheetPresentationControllerDelegat
     scroll.frame = view.bounds
     let pad: CGFloat = 16
     // (the top: placed by hand — the sun, the two lines, the ✕)
-    let textW = W - pad * 2 - 44 - 12 - 12 - 36
+    let textW = W - pad * 2 - 44 - 12 - 12 - 44
     let subH = ceil(subL.sizeThatFits(CGSize(width: textW, height: 100)).height)
     let headH = max(44, 25 + 2 + subH)
     head.frame.size = CGSize(width: W - pad * 2, height: headH)
     sun.frame = CGRect(x: 4, y: (headH - 44) / 2, width: 44, height: 44); sunIcon.frame = sun.bounds
     titleL.frame = CGRect(x: 4 + 44 + 12, y: 0, width: textW, height: 25)
     subL.frame = CGRect(x: 4 + 44 + 12, y: 27, width: textW, height: subH)
-    close.frame = CGRect(x: W - pad * 2 - 36, y: (headH - 36) / 2, width: 36, height: 36)
+    close.frame = CGRect(x: W - pad * 2 - 44, y: (headH - 44) / 2, width: 44, height: 44)
     head.heightAnchorConstraint(headH)
     stack.frame = CGRect(x: pad, y: 34, width: W - pad * 2, height: stack.systemLayoutSizeFitting(CGSize(width: W - pad * 2, height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height)
     scroll.contentSize = CGSize(width: W, height: stack.frame.maxY + 22)
