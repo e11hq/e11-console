@@ -12,7 +12,8 @@ final class CornerButton: UIView {
   struct Spot { var kind = "none", text = "", frame = CGRect.zero, image: UIImage? = nil }
   private let container: UIVisualEffectView = {
     let v = UIVisualEffectView(effect: nil)
-    if #available(iOS 26.0, *) { let c = UIGlassContainerEffect(); c.spacing = 24; v.effect = c }
+    // (they join only when closer than this — at rest, 12 apart, they stay two)
+    if #available(iOS 26.0, *) { let c = UIGlassContainerEffect(); c.spacing = 6; v.effect = c }
     return v
   }()
   let leftB = CornerButton.glassButton(), midB = CornerButton.glassButton(), cornerB = CornerButton.glassButton()
