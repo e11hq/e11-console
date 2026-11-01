@@ -825,8 +825,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       self.scroll.alpha = 0; self.results.alpha = 1; self.fab.alpha = 0
       self.results.frame.origin.y = self.searchBar.frame.maxY + 8
     }
-    // (squash and stretch as it lands, as the shared buttons do)
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { [weak self] in guard let self = self, self.searching else { return }; CornerButton.jelly(self.searchBar, 0.05, wider: true) }
     field.becomeFirstResponder()
   }
   func closeSearch() {
