@@ -88,6 +88,8 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   var onSubmitFiles: ((String) -> Void)?
   var onOpenFiles: (([[String: Any]], Int) -> Void)?
   var onAttachFiles: (() -> Void)?
+  // files uploading from the phone: name → 0…1 (shown under Files with a bar)
+  var uploads: [(String, Double)] = [] { didSet { built = ""; if let m = model { draw(m) } } }
   private let back = HomeGlass(), more = HomeGlass()
   private let moreBtn = UIButton(type: .custom)        // (over the ••• circle: iPhone's own menu)
   private let dot = UIView(), client = UILabel()
@@ -389,7 +391,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // ---- Files ----
     let files = (m["files"] as? [[String: Any]]) ?? []
     let canAttach = (m["readOnly"] as? Bool) != true
-    if !files.isEmpty || canAttach {
+    if !files.isEmpty || canAttach || !uploads.isEmpty {
       blocks.append(header(files.isEmpty ? "Files" : "Files · \(files.count)"))
       // pictures as tiles, other files as rows — tapped, they open (the preview / Quick Look)
       let picsF = files.filter { CommentCell.isPic($0["name"] as? String ?? "") }
@@ -398,6 +400,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       for (k, f) in files.enumerated() where !CommentCell.isPic(f["name"] as? String ?? "") {
         fr.append(row(sym: TaskPage.fileSym(f["name"] as? String ?? ""), key: f["name"] as? String ?? "File", value: greyText(TaskPage.size(f["size"] as? Int ?? 0)), chevron: true, keyLines: 1, tap: { [weak self] in self?.onOpenFiles?(files, k) }))
       }
+      for (n, pr) in uploads { fr.append(progressRow(n, pr)) }
       if canAttach { fr.append(addRow("Attach Files") { [weak self] in self?.attachSheet() }) }
       blocks.append(group(fr))
     }
@@ -780,6 +783,10 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if done { t.attributedText = NSAttributedString(string: t.text ?? "", attributes: [.strikethroughStyle: NSUnderlineStyle.single.rawValue, .foregroundColor: UIColor.secondaryLabel, .font: UIFont.systemFont(ofSize: 17)]) }
     t.lineBreakMode = .byTruncatingTail
     let h = UIStackView(arrangedSubviews: [tick, t]); h.spacing = 12; h.alignment = .center
+    // (the name starts right after the circle and takes the room; the circle, picture, date and › keep their size)
+    tick.setContentHuggingPriority(.required, for: .horizontal); tick.widthAnchor.constraint(equalToConstant: 26).isActive = true
+    t.textAlignment = .natural
+    t.setContentHuggingPriority(.defaultLow - 1, for: .horizontal)
     t.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
     if let av = s["av"] as? String { h.addArrangedSubview(avatar(av, 22)) }
     if let due = s["due"] as? String, !due.isEmpty { h.addArrangedSubview(label(due, size: 15, color: (s["late"] as? Bool) == true ? .systemRed : .secondaryLabel)) }
@@ -819,7 +826,20 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     r.onTap = tap
     return r
   }
-  // the one Attach Files sheet (Camera · Photos · Files); the page behind uploads them to this task
+  private func progressRow(_ name: String, _ p: Double) -> UIView {
+    let r = UIView()
+    let l = label(name, size: 15, color: .label); l.lineBreakMode = .byTruncatingMiddle
+    let pct = label("\(Int(p * 100))%", size: 13, color: .secondaryLabel)
+    let bar = UIProgressView(progressViewStyle: .default); bar.progress = Float(p)
+    let top = UIStackView(arrangedSubviews: [l, pct]); top.spacing = 8
+    let v = UIStackView(arrangedSubviews: [top, bar]); v.axis = .vertical; v.spacing = 6
+    v.translatesAutoresizingMaskIntoConstraints = false; r.addSubview(v)
+    NSLayoutConstraint.activate([v.leadingAnchor.constraint(equalTo: r.leadingAnchor, constant: 52), v.trailingAnchor.constraint(equalTo: r.trailingAnchor, constant: -16), v.topAnchor.constraint(equalTo: r.topAnchor, constant: 12), v.bottomAnchor.constraint(equalTo: r.bottomAnchor, constant: -12)])
+    let ic = symbol("arrow.up.circle", 16, .systemBlue); ic.translatesAutoresizingMaskIntoConstraints = false; r.addSubview(ic)
+    NSLayoutConstraint.activate([ic.leadingAnchor.constraint(equalTo: r.leadingAnchor, constant: 16), ic.widthAnchor.constraint(equalToConstant: 24), ic.centerYAnchor.constraint(equalTo: r.centerYAnchor)])
+    return r
+  }
+  // the one Attach Files sheet (Camera · Photos · Files); the app uploads them itself, with their bars
   func attachSheet() { onAttachFiles?() }
   func askText(_ title: String, placeholder: String, value: String = "", _ done: @escaping (String) -> Void) {
     let a = UIAlertController(title: title, message: nil, preferredStyle: .alert)

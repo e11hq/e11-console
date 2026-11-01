@@ -93,6 +93,9 @@ extension Main {
     let finish = {
       p.removeFromSuperview()
       back.forEach { $0.transform = .identity }
+      // (the last page gone: whatever was moved aside when it came in is back in place — a screen hidden or shown
+      //  meanwhile too; one left aside showed a blank page, Haris 2026-11-01)
+      if last { self.view.subviews.forEach { v in if v !== self.tabBar && !(v is TaskPage) && v.transform.tx != 0 { v.transform = .identity } } }
       if last { self.pageJS("window.__e11Task && window.__e11Task({ev:'closed'})") }
       else if let top = self.taskPages.last, top.tab == "comments" { self.taskShowComments(top, focus: "") }
     }
@@ -111,29 +114,35 @@ extension Main {
     let x = max(0, g.translation(in: view).x)
     let under: UIView? = taskPages.count > 1 ? taskPages[taskPages.count - 2] : nil
     let back = underViews(below: p, under: under)
+    // on Comments the swipe from the edge goes to Details (out of a thread first), not back to the list
+    if p.tab == "comments" {
+      if g.state == .began {
+        composeIfMade?.text.resignFirstResponder()
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        if p.threadFeed != nil { closeThread(p) } else { p.setTab("details", tell: true) }
+        g.isEnabled = false; g.isEnabled = true   // (this swipe is used up)
+      }
+      return
+    }
     switch g.state {
     case .began:
       p.endEditing(true)
-      if p.tab == "comments" { cbarIfMade?.text.resignFirstResponder() }
     case .changed:
       p.transform = CGAffineTransform(translationX: x, y: 0)
       back.forEach { $0.transform = CGAffineTransform(translationX: -W * 0.3 * (1 - x / W), y: 0) }
       if taskPages.count == 1 && !taskTabHidden { tabBar.isHidden = false; tabBar.alpha = x / W }
-      if p.tab == "comments" { cbarIfMade?.transform = CGAffineTransform(translationX: x, y: 0) }
       corner.between(cornerTarget(), cornerTarget(skipTop: true), x / W)
     case .ended, .cancelled, .failed:
       let v = g.velocity(in: view).x
       let go = g.state == .ended && (v > 300 || (x > W * 0.4 && v > -200))
       if go {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        cbarIfMade?.transform = .identity
         closeTaskPage(p)
       } else {
         UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState]) {
           p.transform = .identity
           back.forEach { $0.transform = CGAffineTransform(translationX: -W * 0.3, y: 0) }
           if self.taskPages.count == 1 { self.tabBar.alpha = 0 }
-          self.cbarIfMade?.transform = .identity
         } completion: { _ in if !self.taskPages.isEmpty { self.tabBar.isHidden = true } }
         updateCorner()
       }
@@ -147,8 +156,16 @@ extension Main {
     p.onOpenFiles = { [weak self] list, i in self?.openFiles(list, at: i) }
     p.onAttachFiles = { [weak self, weak p] in
       guard let self = self, let p = p, let host = self.sheetHost() else { return }
-      host.present(AttachSheetVC(light: self.statusStyle == .darkContent) { [weak self] src in
-        self?.pageJS("window.__e11Task && window.__e11Task(\(jsonString(["ev": "attach", "id": p.taskId, "source": src])))")
+      host.present(AttachSheetVC(light: self.statusStyle == .darkContent) { [weak self, weak p] src in
+        guard let self = self, let p = p else { return }
+        Picker.shared.pick(from: self.topMost(), single: false, source: src) { [weak self, weak p] r in
+          guard let self = self, let p = p else { return }
+          let picked = ((r["files"] as? [[String: Any]]) ?? []).compactMap { f -> (URL, String)? in
+            guard let tok = f["token"] as? String, let u = Picker.shared.url(tok) else { return nil }
+            return (u, f["name"] as? String ?? "File")
+          }
+          self.uploadToTask(p, picked)
+        }
       }, animated: true)
     }
     p.onSubmitFiles = { [weak self, weak p] cd in
@@ -455,12 +472,82 @@ extension Main {
           return ["id": p["id"] ?? "", "name": p["name"] ?? "", "kind": "image", "ext": ext, "src": serverURL() + (p["url"] as? String ?? ""), "thumb": (p["thumbUrl"] as? String).map { serverURL() + $0 } ?? "", "meta": TaskPage.size(p["size"] as? Int ?? 0)]
         }
         let at = pics.firstIndex { ($0["id"] as? String) == (f["id"] as? String) } ?? 0
-        let vc = PreviewVC(["files": list, "at": at], dark: self.statusStyle != .darkContent) { _ in }
+        let vc = PreviewVC(["files": list, "at": at], dark: self.statusStyle != .darkContent) { [weak self] ev in self?.previewEvent(ev, pics) }
         self.previewVC = vc
         host.present(vc, animated: true)
       } else {
         QuickFile.shared.show(f, from: host) { [weak self] t in self?.taskPages.last?.toast(t) }
       }
+    }
+  }
+}
+
+extension Main {
+  // files from the phone onto the task: each uploads with its bar under Files, then all are added at once
+  func uploadToTask(_ p: TaskPage, _ picked: [(URL, String)]) {
+    guard !picked.isEmpty else { return }
+    p.uploads = picked.map { ($0.1, 0) }
+    var done: [[String: Any]] = [], left = picked.count
+    for (i, (url, name)) in picked.enumerated() {
+      let size = ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.int64Value ?? 0
+      Uploader.send(url, name: name, task: p.taskId, cookies: serverHome.cookies, progress: { [weak p] f in
+        guard let p = p, i < p.uploads.count else { return }
+        p.uploads[i].1 = f
+      }) { [weak self, weak p] path in
+        guard let self = self, let p = p else { return }
+        if let path = path { done.append(["name": name, "size": size, "path": path]) }
+        left -= 1
+        if left == 0 {
+          p.uploads = []
+          if done.isEmpty { p.toast("Upload failed — try again"); return }
+          UINotificationFeedbackGenerator().notificationOccurred(.success)
+          self.taskAct(p, ["act": "attach", "id": p.taskId, "files": done])
+        }
+      }
+    }
+  }
+  // the preview's own buttons for a file opened here (not the page's): Copy, Download (with its progress), Info
+  func previewEvent(_ ev: [String: Any], _ files: [[String: Any]]) {
+    guard let id = ev["id"] as? String, let f = files.first(where: { ($0["id"] as? String) == id }), let path = f["url"] as? String else { return }
+    let vc = previewVC
+    switch ev["ev"] as? String ?? "" {
+    case "copy":
+      PreviewLoad.data(serverURL() + path) { d in
+        guard let d = d else { vc?.set(["toast": "Couldn’t copy"]); return }
+        if let img = UIImage(data: d) { UIPasteboard.general.image = img } else { UIPasteboard.general.setData(d, forPasteboardType: "public.data") }
+        vc?.set(["toast": "Copied"])
+      }
+    case "dl":
+      // fetched with its progress shown, then iPhone's own Save / Share sheet (Save Image, Save to Files…)
+      guard let url = URL(string: serverURL() + path) else { return }
+      var r = URLRequest(url: url); r.allHTTPHeaderFields = PreviewLoad.headers(url)
+      let name = (f["name"] as? String ?? "File").replacingOccurrences(of: "/", with: "-")
+      var watch: NSKeyValueObservation?
+      let task = URLSession.shared.downloadTask(with: r) { tmp, resp, _ in
+        watch?.invalidate()
+        let ok = ((resp as? HTTPURLResponse)?.statusCode ?? 0) / 100 == 2
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("dl-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let dest = dir.appendingPathComponent(name)
+        let moved = ok && tmp.map { (try? FileManager.default.moveItem(at: $0, to: dest)) != nil } == true
+        DispatchQueue.main.async {
+          guard moved, let vc = vc else { vc?.set(["toast": "Couldn’t download — try again"]); return }
+          let item: Any = CommentCell.isPic(name) ? (UIImage(contentsOfFile: dest.path).map { $0 as Any } ?? dest) : dest
+          let share = UIActivityViewController(activityItems: [item], applicationActivities: nil)
+          share.popoverPresentationController?.sourceView = vc.view
+          vc.present(share, animated: true)
+        }
+      }
+      var last = -1
+      watch = task.progress.observe(\.fractionCompleted) { pr, _ in
+        let n = Int(pr.fractionCompleted * 100)
+        if n / 10 != last / 10 { last = n; DispatchQueue.main.async { vc?.set(["toast": n >= 100 ? "Downloaded" : "Downloading… \(n)%"]) } }
+      }
+      vc?.set(["toast": "Downloading…"])
+      task.resume()
+    case "more":
+      vc?.set(["info": [["Name", f["name"] as? String ?? ""], ["Size", TaskPage.size(f["size"] as? Int ?? 0)]]])
+    default: break
     }
   }
 }

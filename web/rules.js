@@ -952,6 +952,18 @@ var E11Rules = (() => {
       t.updatedAt = nowISO();
       return [];
     }
+    // files attached on the phone (app.js attachFiles): on the task, logged, the people on it told
+    function attachFilesTo(t, files) {
+      const list = (files || []).filter((f) => f && f.path && String(f.path).startsWith(`attachments/${t.id}/`)).slice(0, 30)
+        .map((f) => ({ id: newId(), name: String(f.name || 'File').slice(0, 200), size: Number(f.size) || 0, path: String(f.path), type: String(f.type || ''), addedAt: nowISO(), addedBy: meId }));
+      if (!list.length) return { error: 'No files' };
+      t.attachments = (t.attachments || []).concat(list);
+      const what = list.length === 1 ? `<b>${esc(list[0].name)}</b>` : list.length + ' files';
+      logActivity(t, `attached ${what}`);
+      notifyWatchers(t, 'attach', `attached ${what}`);
+      t.updatedAt = nowISO();
+      return { messages: [list.length === 1 ? 'File attached' : `${list.length} files attached`] };
+    }
     // ---------- the native task page's changes (POST /api/task/act) → messages, or { error } / { need } ----------
     function setTitle(t, v) {
       v = String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, 300);
@@ -1074,7 +1086,7 @@ var E11Rules = (() => {
     return { home, myTasks, myTasksFilters, inbox, inboxRow, myDayData, cardOf, can, amReadOnly, canComplete, completeBlocked, dayTitle, statusInfo, sectionOf,
       notifGroups: NOTIF_GROUPS, doneLocked, canReopen, finish, finishBlocked, canFinish, moveToStatus, logActivity, logChange, pushNotif, notifyWatchers, checkPrioConflict, setDone, setDue, setClientApproval, asksClientApproval, deleteTask, watchersOf, creatorOf, clientAmsOf, fmtDue,
       taskPage, setTitle, setStart, setStatus, setMyPart, setPrio, prioTaken, toggleCheck, setNeedsCD, setUpdate, idLocked,
-      setAssignee, setGuardian, addTag, removeTag, setChannels, addCheck, addSubtask, setClient, commentsFeed, toggleReaction, deleteComment, setDesc, submitReview, withdrawReview, postComment, editComment, mentionable };
+      setAssignee, setGuardian, addTag, removeTag, setChannels, addCheck, addSubtask, setClient, commentsFeed, toggleReaction, deleteComment, setDesc, submitReview, withdrawReview, postComment, editComment, mentionable, attachFilesTo };
   }
 
   // (the clock and new ids for the actions: the website's own, or the server's)

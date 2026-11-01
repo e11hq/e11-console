@@ -395,13 +395,21 @@ final class CommentCell: UIView {
       r.addArrangedSubview(UIView())
       stack.addArrangedSubview(r)
     }
+    // the task's creator: an orange "Creator" chip by the Seen line (no bar down the side — Haris, 2026-11-01)
+    let creator: UIView? = (it["owner"] as? Bool) == true ? {
+      let c = PaddedLabel(); c.text = "Creator"; c.font = .systemFont(ofSize: 11.5, weight: .semibold); c.textColor = .systemOrange
+      c.backgroundColor = UIColor.systemOrange.withAlphaComponent(0.16); c.layer.cornerRadius = 7; c.clipsToBounds = true; c.insets = UIEdgeInsets(top: 2, left: 7, bottom: 2, right: 7)
+      return c }() : nil
+    if it["seen"] == nil, let c = creator { let s = UIStackView(arrangedSubviews: [c, UIView()]); stack.addArrangedSubview(s) }
     if let sn = it["seen"] as? [String: Any] {
       let l = UILabel(); l.font = .systemFont(ofSize: 12.5); l.textColor = .secondaryLabel
       var t = sn["label"] as? String ?? ""
       if let at = sn["at"] as? String { t += " · " + TaskPage.when(at) }
       let eye = UIImageView(image: UIImage(systemName: (sn["on"] as? Bool) == true ? "eye" : "eye.slash", withConfiguration: UIImage.SymbolConfiguration(pointSize: 11))); eye.tintColor = .secondaryLabel
       l.text = t
-      let s = UIStackView(arrangedSubviews: [eye, l, UIView()]); s.spacing = 5; s.alignment = .center
+      let s = UIStackView(arrangedSubviews: [eye, l]); s.spacing = 5; s.alignment = .center
+      if let c = creator { s.setCustomSpacing(8, after: l); s.addArrangedSubview(c) }
+      s.addArrangedSubview(UIView())
       stack.addArrangedSubview(s)
     }
     if hasReplies, let r = it["replies"] as? [String: Any] {
@@ -424,11 +432,6 @@ final class CommentCell: UIView {
     card.addSubview(row)
     let pad: CGFloat = hasReplies || root ? 12 : 4
     NSLayoutConstraint.activate([row.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: pad), row.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -pad), row.topAnchor.constraint(equalTo: card.topAnchor, constant: pad), row.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -pad)])
-    if (it["owner"] as? Bool) == true {
-      let bar = UIView(); bar.backgroundColor = .systemOrange; bar.layer.cornerRadius = 1.5
-      bar.translatesAutoresizingMaskIntoConstraints = false; card.addSubview(bar)
-      NSLayoutConstraint.activate([bar.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: hasReplies || root ? 3 : -8), bar.widthAnchor.constraint(equalToConstant: 3), bar.topAnchor.constraint(equalTo: card.topAnchor, constant: 10), bar.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -10)])
-    }
     let lp = UILongPressGestureRecognizer(target: self, action: #selector(held(_:))); lp.minimumPressDuration = 0.45
     addGestureRecognizer(lp)
   }

@@ -63,10 +63,16 @@ final class ComposeBox: UIView, UITextViewDelegate {
 
   override init(frame: CGRect) {
     super.init(frame: frame)
-    box.backgroundColor = .secondarySystemGroupedBackground
+    // Liquid Glass, as the Claude app's box (iOS 26's own; before it a frosted material)
+    box.backgroundColor = .clear
     box.layer.cornerRadius = 30; box.layer.cornerCurve = .continuous
-    box.layer.borderWidth = 1; box.layer.borderColor = UIColor.separator.withAlphaComponent(0.4).cgColor
-    box.layer.shadowColor = UIColor.black.cgColor; box.layer.shadowOpacity = 0.08; box.layer.shadowRadius = 12; box.layer.shadowOffset = CGSize(width: 0, height: 2)
+    let glass = UIVisualEffectView(effect: nil)
+    if #available(iOS 26.0, *) { let g = UIGlassEffect(style: .regular); g.isInteractive = true; glass.effect = g }
+    else { glass.effect = UIBlurEffect(style: .systemThickMaterial); box.layer.borderWidth = 1; box.layer.borderColor = UIColor.separator.withAlphaComponent(0.4).cgColor }
+    glass.layer.cornerRadius = 30; glass.layer.cornerCurve = .continuous; glass.clipsToBounds = true
+    glass.translatesAutoresizingMaskIntoConstraints = false
+    box.addSubview(glass)
+    NSLayoutConstraint.activate([glass.leadingAnchor.constraint(equalTo: box.leadingAnchor), glass.trailingAnchor.constraint(equalTo: box.trailingAnchor), glass.topAnchor.constraint(equalTo: box.topAnchor), glass.bottomAnchor.constraint(equalTo: box.bottomAnchor)])
     text.font = .systemFont(ofSize: 17); text.backgroundColor = .clear; text.delegate = self
     text.textContainerInset = UIEdgeInsets(top: 4, left: 0, bottom: 4, right: 0); text.textContainer.lineFragmentPadding = 0
     text.isScrollEnabled = false
@@ -207,7 +213,7 @@ final class ComposeBox: UIView, UITextViewDelegate {
       let ext = (f.name as NSString).pathExtension.uppercased()
       let l = UILabel(); l.text = ext.isEmpty ? "FILE" : String(ext.prefix(4)); l.font = .systemFont(ofSize: 11, weight: .bold); l.textColor = .secondaryLabel; l.textAlignment = .center
       l.frame = CGRect(x: 0, y: 0, width: 56, height: 56); t.addSubview(l)
-      if f.progress < 1 && !f.failed { let bar = UIProgressView(progressViewStyle: .bar); bar.progress = Float(f.progress); bar.frame = CGRect(x: 8, y: 46, width: 40, height: 3); t.addSubview(bar) }
+      if f.progress < 1 && !f.failed { l.text = "\(Int(f.progress * 100))%"; l.textColor = .label; let bar = UIProgressView(progressViewStyle: .bar); bar.progress = Float(f.progress); bar.frame = CGRect(x: 8, y: 46, width: 40, height: 3); t.addSubview(bar) }
       if f.failed { l.textColor = .systemRed }
       let x = UIButton(type: .system); x.setImage(UIImage(systemName: "xmark.circle.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 16)), for: .normal); x.tintColor = .label
       x.frame = CGRect(x: 38, y: -4, width: 22, height: 22)
@@ -294,7 +300,7 @@ final class ComposeBox: UIView, UITextViewDelegate {
   }
   private func showRecording() {
     recView.subviews.forEach { $0.removeFromSuperview() }
-    recView.backgroundColor = box.backgroundColor; recView.layer.cornerRadius = 30
+    recView.backgroundColor = .secondarySystemGroupedBackground; recView.layer.cornerRadius = 30; recView.clipsToBounds = true
     recView.frame = box.bounds; box.addSubview(recView)
     recDot.backgroundColor = .systemRed; recDot.layer.cornerRadius = 5; recDot.frame = CGRect(x: 18, y: 22, width: 10, height: 10)
     recTime.font = .monospacedDigitSystemFont(ofSize: 16, weight: .medium); recTime.frame = CGRect(x: 36, y: 12, width: 50, height: 30); recTime.text = "0:00"
