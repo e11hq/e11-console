@@ -126,11 +126,21 @@ final class ComposeBox: UIView, UITextViewDelegate {
 
   // ---------- typing ----------
   var hasSomething: Bool { !(text.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !files.isEmpty }
+  private var showingSend: Bool?
   private func paintSend() {
     let send = hasSomething || editing != nil
-    right.setImage(UIImage(systemName: send ? "arrow.up" : "mic.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: send ? 16 : 13.5, weight: send ? .bold : .semibold)), for: .normal)
-    right.backgroundColor = send ? .label : .tertiarySystemFill
-    right.tintColor = send ? .systemBackground : .label
+    // mic ↔ ↑ as the Claude app does: the symbol swaps with iPhone's own replace effect while the circle fills
+    if showingSend != send {
+      let first = showingSend == nil
+      showingSend = send
+      let img = UIImage(systemName: send ? "arrow.up" : "mic.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: send ? 14 : 13.5, weight: send ? .bold : .semibold))
+      if #available(iOS 17.0, *), !first, let iv = right.imageView, let img = img {
+        iv.setSymbolImage(img, contentTransition: .replace.downUp)
+        right.setImage(img, for: .normal)
+      } else { right.setImage(img, for: .normal) }
+      let paint = { self.right.backgroundColor = send ? .label : .tertiarySystemFill; self.right.tintColor = send ? .systemBackground : .label }
+      if first { paint() } else { UIView.animate(withDuration: 0.22, delay: 0, options: [.curveEaseInOut, .allowUserInteraction], animations: paint) }
+    }
     holdG?.isEnabled = !send
     placeholder.isHidden = !(text.text ?? "").isEmpty
     placeholder.text = parentId != nil || replyTo != nil ? "Reply" : "Comment"
