@@ -44,6 +44,9 @@ extension Main {
     // (opened before: drawn at once as it was, then brought up to date; its comments fetched now, so the Comments tab is ready)
     if let m = serverTask.cache[id] { drawTask(p, m) }
     refreshTaskPage(p)
+    // (pictures and files are fetched with the app's sign-in — given here, not only by the comments' fetch, which the
+    //  app's own copy makes unnecessary: without it the file cards stayed grey)
+    FeedLoader.shared.cookies = serverHome.cookies
     if !AppData.shared.ready { CommentsFeed.prefetch(id, cookies: serverHome.cookies) }
     // (the corner button: Search / Mark all read slides over into ••• as the page comes in — the page laid out
     //  first: before that its ‹ and ••• places are nothing, at the top-left corner, and the buttons flew off there)
