@@ -87,6 +87,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   var onCornerChange: (() -> Void)?
   var onSubmitFiles: ((String) -> Void)?
   var onOpenFiles: (([[String: Any]], Int) -> Void)?
+  var onAttachFiles: (() -> Void)?
   private let back = HomeGlass(), more = HomeGlass()
   private let moreBtn = UIButton(type: .custom)        // (over the ••• circle: iPhone's own menu)
   private let dot = UIView(), client = UILabel()
@@ -231,7 +232,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     guard let m = model else { return }
     var items: [UIMenuElement] = []
     items.append(UIAction(title: "Copy link", image: UIImage(systemName: "link")) { [weak self] _ in guard let self = self else { return }; self.onEvent?(["ev": "copy", "id": self.taskId]) })
-    if (m["readOnly"] as? Bool) != true && !TaskPage.viewOnly {
+    if (m["readOnly"] as? Bool) != true {   // (attaching stays on the phone — Haris, 2026-11-01)
       items.append(UIMenu(title: "Attach Files", image: UIImage(systemName: "paperclip"), children: [
         UIAction(title: "Camera", image: UIImage(systemName: "camera")) { [weak self] _ in guard let self = self else { return }; self.onEvent?(["ev": "attach", "id": self.taskId, "source": "camera"]) },
         UIAction(title: "Photos", image: UIImage(systemName: "photo.on.rectangle")) { [weak self] _ in guard let self = self else { return }; self.onEvent?(["ev": "attach", "id": self.taskId, "source": "photos"]) },
@@ -387,8 +388,9 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     }
     // ---- Files ----
     let files = (m["files"] as? [[String: Any]]) ?? []
-    if !files.isEmpty {
-      blocks.append(header("Files · \(files.count)"))
+    let canAttach = (m["readOnly"] as? Bool) != true
+    if !files.isEmpty || canAttach {
+      blocks.append(header(files.isEmpty ? "Files" : "Files · \(files.count)"))
       // pictures as tiles, other files as rows — tapped, they open (the preview / Quick Look)
       let picsF = files.filter { CommentCell.isPic($0["name"] as? String ?? "") }
       var fr: [UIView] = []
@@ -396,6 +398,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       for (k, f) in files.enumerated() where !CommentCell.isPic(f["name"] as? String ?? "") {
         fr.append(row(sym: TaskPage.fileSym(f["name"] as? String ?? ""), key: f["name"] as? String ?? "File", value: greyText(TaskPage.size(f["size"] as? Int ?? 0)), chevron: true, keyLines: 1, tap: { [weak self] in self?.onOpenFiles?(files, k) }))
       }
+      if canAttach { fr.append(addRow("Attach Files") { [weak self] in self?.attachSheet() }) }
       blocks.append(group(fr))
     }
     // ---- Activity ----
@@ -816,6 +819,8 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     r.onTap = tap
     return r
   }
+  // the one Attach Files sheet (Camera · Photos · Files); the page behind uploads them to this task
+  func attachSheet() { onAttachFiles?() }
   func askText(_ title: String, placeholder: String, value: String = "", _ done: @escaping (String) -> Void) {
     let a = UIAlertController(title: title, message: nil, preferredStyle: .alert)
     a.addTextField { f in f.placeholder = placeholder; f.text = value; f.autocapitalizationType = .sentences; f.returnKeyType = .done }

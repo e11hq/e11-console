@@ -145,6 +145,12 @@ extension Main {
     p.onBack = { [weak self, weak p] in guard let self = self, let p = p else { return }; if p.editingDesc { p.finishDesc() }; self.closeTaskPage(p) }
     p.onCornerChange = { [weak self] in self?.updateCornerNow() }
     p.onOpenFiles = { [weak self] list, i in self?.openFiles(list, at: i) }
+    p.onAttachFiles = { [weak self, weak p] in
+      guard let self = self, let p = p, let host = self.sheetHost() else { return }
+      host.present(AttachSheetVC(light: self.statusStyle == .darkContent) { [weak self] src in
+        self?.pageJS("window.__e11Task && window.__e11Task(\(jsonString(["ev": "attach", "id": p.taskId, "source": src])))")
+      }, animated: true)
+    }
     p.onSubmitFiles = { [weak self, weak p] cd in
       guard let self = self, let p = p, let host = self.sheetHost() else { return }
       let vc = SubmitSheetVC(task: p.taskId, cd: cd, light: self.statusStyle == .darkContent) { [weak self, weak p] files in
