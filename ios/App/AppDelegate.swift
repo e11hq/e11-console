@@ -3105,7 +3105,10 @@ final class DateSheetVC: UIViewController, UISheetPresentationControllerDelegate
     if let v = a["value"] as? String, let d = fmt.date(from: v) {
       let dc = gregorian.dateComponents([.year, .month, .day], from: d)
       pick.selectedDate = dc
-      cal.visibleDateComponents = dc
+      // (the month only, and set again once on screen — set with its day before the calendar was laid out, its first
+      //  swipe forward skipped a month: October → December, Haris 2026-11-01)
+      startMonth = DateComponents(calendar: gregorian, year: dc.year, month: dc.month)
+      cal.visibleDateComponents = startMonth!
     }
     cal.selectionBehavior = pick
     let lo = (a["min"] as? String).flatMap { fmt.date(from: $0) }, hi = (a["max"] as? String).flatMap { fmt.date(from: $0) }
@@ -3146,6 +3149,11 @@ final class DateSheetVC: UIViewController, UISheetPresentationControllerDelegate
       cal.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 12), cal.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -12),
     ])
   }
+  private var startMonth: DateComponents?
+  override func viewDidAppear(_ animated: Bool) {
+    super.viewDidAppear(animated)
+    if let m = startMonth { startMonth = nil; cal.setVisibleDateComponents(m, animated: false) }
+  }
   private var fitHeight: CGFloat = 470, sized = false
   private var fullH: CGFloat = 0, rowH: CGFloat = 0
   // how many week rows a month takes (5 or 6, sometimes 4): the sheet fits them, so no empty row under a short month
@@ -3179,7 +3187,16 @@ final class DateSheetVC: UIViewController, UISheetPresentationControllerDelegate
     }
   }
   // another month: the sheet grows or shrinks to its rows
-  func calendarView(_ calendarView: UICalendarView, didChangeVisibleDateComponentsFrom previousDateComponents: DateComponents) { fit(animated: true) }
+  // (only once the swipe has settled: the sheet resizing while the months still slide threw the calendar a month on)
+  func calendarView(_ calendarView: UICalendarView, didChangeVisibleDateComponentsFrom previousDateComponents: DateComponents) { fitWhenStill(0) }
+  private func fitWhenStill(_ n: Int) {
+    func find(_ v: UIView) -> UIScrollView? { if let c = v as? UIScrollView, c.isScrollEnabled { return c }; for s in v.subviews { if let c = find(s) { return c } }; return nil }
+    if n < 40, let sv = find(cal), sv.isDragging || sv.isDecelerating || sv.isTracking {
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.fitWhenStill(n + 1) }
+      return
+    }
+    fit(animated: true)
+  }
   // sized to the calendar once, from where it was laid out — measuring it again inside the layout (and resizing the sheet
   // from there) sent iOS 27's calendar round in circles until the app crashed (TestFlight report, build 1195: the date
   // sheet from Home's Due)
