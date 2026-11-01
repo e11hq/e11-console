@@ -432,7 +432,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // from wherever it is.
   private var barK: CGFloat = 0
   private var barLink: CADisplayLink?, barT: CFTimeInterval = 0
-  private let barDur: CGFloat = 0.5   // (Haris, 2026-10-31: 0.5 s)
+  private let barDur: CGFloat = 0.3   // (Haris, 2026-11-01: back to 0.3 s)
   private var fades: [ObjectIdentifier: HomeBlurFade] = [:]
   private func fade(_ l: UILabel) -> HomeBlurFade {
     if let f = fades[ObjectIdentifier(l)] { return f }
@@ -446,8 +446,10 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       smallTitle.alpha = 0; smallSub.alpha = 0; title.alpha = 1; sub.alpha = 1
       return
     }
-    let k = barK, k2 = max(0, min(1, (k - 0.12) / 0.88))
-    fade(smallTitle).set(blur: 8 * (1 - ease(0.1, 0.8, k)), alpha: ease(0.02, 0.55, k), dy: 10 * (1 - easeOut(k)), trait: tr)
+    // (the date under the title starts once the title is half way up — Haris, 2026-11-01: they came up almost together;
+    //  the title runs the first two thirds of the 0.3 s, the date the last two thirds)
+    let k = barK, k1 = min(1, k / 0.67), k2 = max(0, min(1, (k - 0.335) / 0.665))
+    fade(smallTitle).set(blur: 8 * (1 - ease(0.1, 0.8, k1)), alpha: ease(0.02, 0.55, k1), dy: 10 * (1 - easeOut(k1)), trait: tr)
     fade(smallSub).set(blur: 8 * (1 - ease(0.1, 0.8, k2)), alpha: ease(0.02, 0.55, k2), dy: 10 * (1 - easeOut(k2)), trait: tr)
     fade(title).set(blur: 8 * ease(0, 0.6, k), alpha: 1 - ease(0.15, 0.7, k), dy: 0, trait: tr)
     fade(sub).set(blur: 8 * ease(0, 0.6, k), alpha: 1 - ease(0.1, 0.6, k), dy: 0, trait: tr)
