@@ -1031,8 +1031,11 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
           ctx.cgContext.resetClip()
           let d: CGFloat = 9, edge: CGFloat = 1.5
           let dot = CGRect(x: size - d, y: size - d, width: d, height: d)
-          (appStyle == .light ? UIColor.white : UIColor(white: 0.12, alpha: 1)).setFill()
-          UIBezierPath(ovalIn: dot.insetBy(dx: -edge, dy: -edge).intersection(CGRect(x: 0, y: 0, width: size, height: size).insetBy(dx: -edge, dy: -edge))).fill()
+          // (the gap round it cut out of the photo, not painted: the bar shows through in light and dark alike — painted in
+          //  the colour of the moment, it stayed white after a switch to dark, Haris 2026-11-01)
+          ctx.cgContext.setBlendMode(.clear)
+          UIBezierPath(ovalIn: dot.insetBy(dx: -edge, dy: -edge)).fill()
+          ctx.cgContext.setBlendMode(.normal)
           (on ? UIColor.systemGreen : UIColor.systemRed).setFill()
           UIBezierPath(ovalIn: dot.insetBy(dx: 0.5, dy: 0.5)).fill()
         }
