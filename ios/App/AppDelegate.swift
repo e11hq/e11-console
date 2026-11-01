@@ -1348,7 +1348,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       case "readAll":
         if s.on, s.me == self.inboxPageMe { s.act("readAll", "") } else { self.pageJS("window.__e11Inbox && window.__e11Inbox({ev:'readAll'})") }
       default:
-        if (ev["ev"] as? String) == "open" { self.inboxIfMade?.isHidden = true }
+        // (not hidden here: the page hides it the moment what's tapped opens a page — a round-up or a sheet opens over
+        //  the Inbox, which stays; hiding it first flashed the page behind — Haris, 2026-11-01)
         self.pageJS("window.__e11Inbox && window.__e11Inbox(\(jsonString(ev)))")
       }
     }
