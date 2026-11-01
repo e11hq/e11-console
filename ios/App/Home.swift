@@ -350,16 +350,21 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
      "groups": content.compactMap { ($0 as? UILabel)?.tag == 7 ? $0.accessibilityIdentifier : nil }]
   }
 
-  // ---------- the Inbox (28+): Home's screen with Mail's rows — All / Unread / Mentions as Mail's categories (icons; the
-  // chosen one a coloured capsule with its name), Mark all read in Search's place, rows swiped right: Read / Unread ----------
+  // ---------- the Inbox (28+): Home's screen with Mail's rows — All / Unread / Mentions as Mail's categories (MailCats),
+  // Mark all read in Search's place, rows swiped right: Read / Unread. The server sends all of them; Unread and Mentions
+  // are picked here, so switching is instant: the rows that don't belong fade out where they are and the others close
+  // up — and back the other way (Haris, 2026-11-01, from Mail) ----------
   var isInbox = false { didSet { if isInbox && !isList { isList = true } } }
-  private var cats: [UIButton] = []
+  private let catsView = MailCats(items: [
+    .init(key: "all", sym: "tray", name: "All", fill: MailCats.neutral),
+    .init(key: "unread", sym: "envelope", name: "Unread", fill: MailCats.blue),
+    .init(key: "mentions", sym: "at", name: "Mentions", fill: MailCats.purple)])
   private let markAll = UIButton(type: .system)
   private(set) var inboxTab = "all"
   private var inboxRows: [String: InboxRow] = [:]
   private var openRow: InboxRow?
-  private var slideIn: CGFloat = 0   // (switching lists: where the new one comes in from)
-  private let catDefs: [(String, String, String, UIColor)] = [("all", "tray", "All", .label), ("unread", "envelope", "Unread", .systemBlue), ("mentions", "at", "Mentions", .systemPurple)]
+  private var keep = Set<String>()     // (rows that were in the list when it was picked stay until it's left — read or not)
+  private var switching = false
   private func makeInbox() {
     var c: UIButton.Configuration
     if #available(iOS 26.0, *) { c = .glass() } else { c = .gray(); c.cornerStyle = .capsule }
@@ -370,67 +375,45 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     markAll.accessibilityIdentifier = "mark-all-read"
     markAll.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.send(["ev": "readAll"]) }, for: .touchUpInside)
     addSubview(markAll)
-    for (k, _, _, _) in catDefs {
-      let b = UIButton(type: .system)
-      b.accessibilityIdentifier = "cat-" + k
-      b.addAction(UIAction { [weak self] _ in self?.pickTab(k) }, for: .touchUpInside)
-      listHead.addSubview(b); cats.append(b)
-    }
-    drawCats()
+    catsView.onPick = { [weak self] i in guard let self = self else { return }; self.pickTab(["all", "unread", "mentions"][i]) }
+    listHead.addSubview(catsView)
     insertSubview(listHead, belowSubview: topBar)
   }
-  private func drawCats() {
-    for (i, (k, sym, name, col)) in catDefs.enumerated() where i < cats.count {
-      let on = k == inboxTab
-      var c: UIButton.Configuration
-      if #available(iOS 26.0, *) { c = on ? .prominentGlass() : .glass() } else { c = on ? .filled() : .gray(); c.cornerStyle = .capsule }
-      // (the chosen one: its colour, icon and name — All in black (white in dark), as Mail's All Mail; the others an icon)
-      let fill: UIColor = k == "all" ? (L.light ? .black : .white) : col
-      let ink: UIColor = on ? (k == "all" ? (L.light ? .white : .black) : .white) : (L.light ? UIColor(white: 0.24, alpha: 1) : UIColor(white: 0.85, alpha: 1))
-      if on { c.baseBackgroundColor = fill }
-      c.baseForegroundColor = ink
-      c.image = UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .medium))?.withTintColor(ink, renderingMode: .alwaysOriginal)
-      c.imagePadding = 7
-      c.attributedTitle = on ? AttributedString(name, attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 15, weight: .semibold), .foregroundColor: ink])) : nil
-      c.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: on ? 13 : 17, bottom: 0, trailing: on ? 16 : 17)
-      cats[i].configuration = c
-      cats[i].accessibilityLabel = name
-      cats[i].accessibilityTraits = on ? [.button, .selected] : .button
-    }
-  }
   private func layoutCats(_ W: CGFloat) -> CGFloat {
-    var x: CGFloat = 16
-    for b in cats {
-      let w = max(52, ceil(b.sizeThatFits(CGSize(width: 300, height: 36)).width))
-      b.frame = CGRect(x: x, y: 0, width: w, height: 36); x += w + 8
-    }
-    return 36
+    catsView.frame = CGRect(x: 0, y: 0, width: W, height: MailCats.H)
+    return MailCats.H
   }
-  // another list: the capsule moves over (springing, as Mail's), the rows slide out and the new ones in from that side
+  private func fits(_ r: [String: Any]) -> Bool {
+    let id = r["id"] as? String ?? ""
+    switch inboxTab {
+    case "unread": return (r["read"] as? Bool) != true || keep.contains(id)
+    case "mentions": return (r["mention"] as? Bool) == true
+    default: return true
+    }
+  }
   private func pickTab(_ k: String) {
     guard k != inboxTab else { scrollToTop(); return }
     UISelectionFeedbackGenerator().selectionChanged()
-    let from = catDefs.firstIndex { $0.0 == inboxTab } ?? 0, to = catDefs.firstIndex { $0.0 == k } ?? 0
-    let dir: CGFloat = to > from ? 1 : -1
     inboxTab = k
     openRow?.close(animated: false); openRow = nil
-    drawCats()
-    UIView.animate(withDuration: 0.45, delay: 0, usingSpringWithDamping: 0.82, initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState]) { _ = self.layoutCats(self.bounds.width) }
-    let old = content
-    UIView.animate(withDuration: 0.18, delay: 0, options: [.curveEaseIn]) { old.forEach { $0.transform = CGAffineTransform(translationX: -dir * 60, y: 0); $0.alpha = 0 } }
-    slideIn = dir * 60
+    catsView.select(["all", "unread", "mentions"].firstIndex(of: k) ?? 0, animated: true)
+    keep = Set((m["rows"] as? [[String: Any]] ?? []).filter { ($0["read"] as? Bool) != true }.compactMap { $0["id"] as? String })
+    switching = true
+    drawInbox(m)
+    switching = false
     send(["ev": "tab", "tab": k])
   }
   private func drawInbox(_ model: [String: Any]) {
-    let tab = model["tab"] as? String ?? inboxTab
-    if tab != inboxTab { return }   // (an answer for the list just left)
     fab.isHidden = true
     markAll.isHidden = ((model["unread"] as? Int) ?? 0) == 0
-    drawCats()
+    catsView.light = L.light
+    // where each row is now (to move it from there), and which go
+    var was: [String: CGPoint] = [:]
+    for v in content { if let r = v as? InboxRow { was[r.id] = r.center } }
     content.forEach { if !($0 is InboxRow) { $0.removeFromSuperview() } }
     content = []
     var seen = Set<String>()
-    for r in model["rows"] as? [[String: Any]] ?? [] {
+    for r in (model["rows"] as? [[String: Any]] ?? []) where fits(r) {
       guard let id = r["id"] as? String else { continue }
       seen.insert(id)
       let v: InboxRow
@@ -443,27 +426,34 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       }
       let p = people[r["from"] as? String ?? ""]
       v.set(r, photo: roundPic(NativeSheetVC.photo(p), initials: p?["initials"] as? String, color: NativeSheetVC.color(p?["color"]), size: 44))
-      v.transform = .identity; v.alpha = 1
       content.append(v)
     }
-    for (id, v) in inboxRows where !seen.contains(id) { if v === openRow { openRow = nil }; v.removeFromSuperview(); inboxRows[id] = nil }
+    // the rows that don't belong any more: faded out where they are, then gone
+    for (id, v) in inboxRows where !seen.contains(id) {
+      if v === openRow { openRow = nil }
+      inboxRows[id] = nil
+      UIView.animate(withDuration: 0.25, delay: 0, options: [.curveEaseInOut, .beginFromCurrentState]) { v.alpha = 0 } completion: { _ in v.removeFromSuperview() }
+    }
     if content.isEmpty, let e = model["empty"] as? String {
       let l = UILabel(); l.text = e; l.font = .systemFont(ofSize: 15); l.textColor = .secondaryLabel; l.tag = 8; l.numberOfLines = 0; l.textAlignment = .center
       scroll.addSubview(l); content.append(l)
     }
-    // (a new list: in from the side it was asked from)
-    if slideIn != 0 {
-      let d = slideIn; slideIn = 0
-      let fresh = content
-      fresh.forEach { $0.transform = CGAffineTransform(translationX: d, y: 0); $0.alpha = 0 }
-      UIView.animate(withDuration: 0.32, delay: 0, usingSpringWithDamping: 0.9, initialSpringVelocity: 0, options: [.allowUserInteraction]) { fresh.forEach { $0.transform = .identity; $0.alpha = 1 } }
+    // the others close up (or open up for the ones coming back, which fade in where they belong) — smoothly, no bounce
+    setNeedsLayout(); layoutIfNeeded()
+    let moved = content.compactMap { $0 as? InboxRow }
+    for r in moved {
+      if let from = was[r.id] { r.center = from; r.alpha = 1 } else { r.alpha = switching ? 0 : 1 }
+    }
+    UIView.animate(withDuration: switching ? 0.35 : 0, delay: 0, options: [.curveEaseInOut, .allowUserInteraction]) {
+      self.setNeedsLayout(); self.layoutIfNeeded()
+      moved.forEach { $0.alpha = 1 }
     }
   }
   func selfInboxTab(_ k: String) { pickTab(k) }
   func selfSwipeRow() { if let r = content.first as? InboxRow { r.selfOpen(); openRow = r } }
   func inboxGeo() -> [String: Any] {
     ["tab": inboxTab, "rows": content.filter { $0 is InboxRow }.count, "unreadRows": content.compactMap { $0 as? InboxRow }.filter { !$0.read }.count,
-     "cats": cats.map { $0.frame.width }, "markAll": !markAll.isHidden, "open": openRow?.isOpen ?? false, "pinned": pinned]
+     "cats": catsView.widths, "markAll": !markAll.isHidden, "open": openRow?.isOpen ?? false, "pinned": pinned]
   }
 
   // ---------- where things go ----------
@@ -1670,4 +1660,81 @@ final class InboxRow: UIControl, UIGestureRecognizerDelegate {
     onToggle?()
     close()
   }
+}
+
+// ---------- Mail's category buttons (28+): the same everywhere in the app (Haris, 2026-11-01) ----------
+// Solid (not glass), 38 tall, 9 apart, from 16 in. Not chosen: 49 wide, icon only — light #EAEAEC with a #868689 icon,
+// dark #272729 with a #9D9CA4 icon. The chosen one widens smoothly (no bounce) to its icon and name in white on its colour.
+// A swipe across them goes to the next / the one before (not past the ends) — the row doesn't scroll.
+final class MailCats: UIView {
+  struct Item { let key: String; let sym: String; let name: String; let fill: (Bool) -> UIColor }
+  static let H: CGFloat = 38
+  static let neutral: (Bool) -> UIColor = { $0 ? UIColor(red: 58 / 255, green: 58 / 255, blue: 60 / 255, alpha: 1) : UIColor(red: 229 / 255, green: 229 / 255, blue: 234 / 255, alpha: 1) }
+  static let blue: (Bool) -> UIColor = { $0 ? UIColor(red: 0, green: 122 / 255, blue: 1, alpha: 1) : UIColor(red: 89 / 255, green: 151 / 255, blue: 224 / 255, alpha: 1) }
+  static let purple: (Bool) -> UIColor = { $0 ? UIColor(red: 175 / 255, green: 82 / 255, blue: 222 / 255, alpha: 1) : UIColor(red: 160 / 255, green: 120 / 255, blue: 214 / 255, alpha: 1) }
+  let items: [Item]
+  private(set) var selected = 0
+  var onPick: ((Int) -> Void)?
+  var light = true { didSet { if oldValue != light { paint() } } }
+  private var pills: [(bg: UIView, icon: UIImageView, label: UILabel)] = []
+  var widths: [CGFloat] { pills.map { $0.bg.frame.width } }
+  init(items: [Item]) {
+    self.items = items
+    super.init(frame: .zero)
+    for (i, it) in items.enumerated() {
+      let bg = UIView(); bg.layer.cornerRadius = MailCats.H / 2; bg.layer.cornerCurve = .continuous; bg.clipsToBounds = true
+      let icon = UIImageView(image: UIImage(systemName: it.sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .medium)))
+      icon.contentMode = .center
+      let label = UILabel(); label.text = it.name; label.font = .systemFont(ofSize: 17, weight: .semibold)
+      bg.addSubview(icon); bg.addSubview(label); addSubview(bg)
+      bg.isAccessibilityElement = true; bg.accessibilityLabel = it.name; bg.accessibilityIdentifier = "cat-" + it.key
+      let tap = UITapGestureRecognizer(target: self, action: #selector(tapped(_:))); bg.tag = i; bg.addGestureRecognizer(tap)
+      pills.append((bg, icon, label))
+    }
+    for d in [UISwipeGestureRecognizer.Direction.left, .right] {
+      let sw = UISwipeGestureRecognizer(target: self, action: #selector(swiped(_:))); sw.direction = d; addGestureRecognizer(sw)
+    }
+    paint()
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  @objc private func tapped(_ g: UITapGestureRecognizer) { if let i = g.view?.tag { pick(i) } }
+  // (left: the next one; right: the one before — nothing past the ends)
+  @objc private func swiped(_ g: UISwipeGestureRecognizer) { pick(g.direction == .left ? selected + 1 : selected - 1) }
+  private func pick(_ i: Int) {
+    guard i >= 0, i < items.count else { return }
+    if i == selected { onPick?(i); return }
+    onPick?(i)
+  }
+  func select(_ i: Int, animated: Bool) {
+    guard i != selected, i >= 0, i < items.count else { return }
+    selected = i
+    UIView.animate(withDuration: animated ? 0.3 : 0, delay: 0, options: [.curveEaseInOut, .beginFromCurrentState, .allowUserInteraction]) {
+      self.paint(); self.place()
+    }
+  }
+  private func paint() {
+    let idle = light ? UIColor(red: 234 / 255, green: 234 / 255, blue: 236 / 255, alpha: 1) : UIColor(red: 39 / 255, green: 39 / 255, blue: 41 / 255, alpha: 1)
+    let idleInk = light ? UIColor(red: 134 / 255, green: 134 / 255, blue: 137 / 255, alpha: 1) : UIColor(red: 157 / 255, green: 156 / 255, blue: 164 / 255, alpha: 1)
+    for (i, p) in pills.enumerated() {
+      let on = i == selected
+      // (the neutral one in dark: light grey with black, as the others' white on colour)
+      let ink: UIColor = on ? (items[i].key == "all" && !light ? .black : .white) : idleInk
+      p.bg.backgroundColor = on ? items[i].fill(light) : idle
+      p.icon.tintColor = ink; p.label.textColor = ink
+      p.label.alpha = on ? 1 : 0
+      p.bg.accessibilityTraits = on ? [.button, .selected] : .button
+    }
+  }
+  private func onWidth(_ i: Int) -> CGFloat { ceil(13 + 22 + 6 + pills[i].label.intrinsicContentSize.width + 16) }
+  private func place() {
+    var x: CGFloat = 16
+    for (i, p) in pills.enumerated() {
+      let on = i == selected, w: CGFloat = on ? onWidth(i) : 49
+      p.bg.frame = CGRect(x: x, y: 0, width: w, height: MailCats.H)
+      p.icon.frame = on ? CGRect(x: 13, y: 0, width: 22, height: MailCats.H) : CGRect(x: (49 - 22) / 2, y: 0, width: 22, height: MailCats.H)
+      p.label.frame = CGRect(x: 13 + 22 + 6, y: 0, width: pills[i].label.intrinsicContentSize.width + 2, height: MailCats.H)
+      x += w + 9
+    }
+  }
+  override func layoutSubviews() { super.layoutSubviews(); place() }
 }

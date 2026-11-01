@@ -1342,10 +1342,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       let s = self.serverInbox
       switch ev["ev"] as? String ?? "" {
       case "tab":
-        // (another list: asked for at once — the one kept from before shows meanwhile)
-        s.query = "tab=" + (ev["tab"] as? String ?? "all")
-        if s.on, let m = s.shown { self.drawServerInbox(m) }
-        s.refresh()
+        break   // (Unread and Mentions are picked from all of them in the app itself — at once, no asking)
       case "read", "unread":
         if s.on, s.me == self.inboxPageMe, let id = ev["id"] as? String { s.act(ev["ev"] as! String, id) }
       case "readAll":
