@@ -764,6 +764,97 @@ var E11Rules = (() => {
       t.updatedAt = nowISO();
       return [];
     }
+    // ---------- the native Comments (step 2): the feed as runs of text, files, reactions, Seen by, threads ----------
+    const ENT = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'", '&nbsp;': ' ' };
+    const unent = (v) => String(v).replace(/&(amp|lt|gt|quot|#39|nbsp);/g, (m) => ENT[m] || m);
+    // a comment's words → [{ t, b, i, u, s, link, user }] (what the app draws); new lines as "\n"
+    function runsOf(c) {
+      if (!c.html) return [{ t: String(c.text || '') }];
+      const out = [], st = { b: 0, i: 0, u: 0, s: 0, link: null, user: null, li: 0 };
+      const push = (t) => { if (!t) return; const r = { t }; if (st.b) r.b = 1; if (st.i) r.i = 1; if (st.u) r.u = 1; if (st.s) r.s = 1; if (st.link) r.link = st.link; if (st.user) r.user = st.user; out.push(r); };
+      String(c.html).replace(/<[^>]+>|[^<]+/g, (tok) => {
+        if (tok[0] !== '<') { push(unent(tok)); return ''; }
+        const m = /^<\s*(\/)?\s*([a-z0-9]+)([^>]*)>/i.exec(tok); if (!m) return '';
+        const close = !!m[1], tag = m[2].toLowerCase(), attrs = m[3] || '';
+        if (tag === 'b' || tag === 'strong') st.b += close ? -1 : 1;
+        else if (tag === 'i' || tag === 'em') st.i += close ? -1 : 1;
+        else if (tag === 'u') st.u += close ? -1 : 1;
+        else if (tag === 's' || tag === 'strike' || tag === 'del') st.s += close ? -1 : 1;
+        else if (tag === 'br') push('\n');
+        else if (tag === 'li') { if (!close) push((out.length && !/\n$/.test(out[out.length - 1].t) ? '\n' : '') + '• '); }
+        else if (tag === 'p' || tag === 'div' || tag === 'ul' || tag === 'ol') { if (close) push('\n'); }
+        else if (tag === 'a') { if (close) st.link = null; else { const h = /href="([^"]+)"/i.exec(attrs); st.link = h ? unent(h[1]) : null; } }
+        else if (tag === 'span') { const u = /data-user="([^"]+)"/i.exec(attrs); if (u && !close) st.user = u[1]; else if (close) st.user = null; }
+        return '';
+      });
+      while (out.length && /^\s*$/.test(out[out.length - 1].t)) out.pop();
+      if (out.length) out[out.length - 1].t = out[out.length - 1].t.replace(/\n+$/, '');
+      return out;
+    }
+    const urlsIn = (c) => { const f = []; const add = (u) => { u = String(u || '').replace(/[),.;:!?'"\]]+$/, ''); if (/^https?:\/\//i.test(u) && !f.includes(u)) f.push(u); };
+      String(c.text || '').replace(/https?:\/\/[^\s<>"']+/gi, (m) => { add(m); return m; }); String(c.html || '').replace(/href="(https?:\/\/[^"]+)"/gi, (_, m) => { add(m.replace(/&amp;/g, '&')); return _; });
+      const off = new Set(c.noPreview || []); return f.filter((u) => !off.has(u)).slice(0, 3); };
+    function seenOf(c) {
+      const who = [...mentionsIn(c.html)].filter((x) => x !== c.authorId && userById(x));
+      if (!who.length) return null;
+      const seen = c.seen || {}, yes = who.filter((x) => seen[x]).sort((a, b) => String(seen[a]).localeCompare(String(seen[b]))), no = who.filter((x) => !seen[x]);
+      const nm = (x) => (x === meId ? 'You' : firstName(x));
+      const label = !yes.length ? (who.length === 1 ? `Not seen by ${nm(who[0])} yet` : 'Not seen yet') : who.length === 1 ? `Seen${who[0] === meId ? '' : ` by ${nm(who[0])}`}` : no.length ? `Seen by ${yes.length} of ${who.length}` : 'Seen by everyone mentioned';
+      return { label, on: yes.length > 0, at: yes.length === 1 && who.length === 1 ? seen[yes[0]] : null, who: yes.slice(0, 5) };
+    }
+    function commentsFeed(id, threadId) {
+      const t = task(id);
+      if (!t || !me()) return null;
+      const pp = new Set();
+      const ro = amReadOnly(t) || doneLocked(t);
+      const all = t.comments || [];
+      const kids = (pid) => all.filter((x) => x.parentId === pid);
+      const item = (c) => {
+        pp.add(c.authorId);
+        const reps = c.parentId ? [] : kids(c.id);
+        const rx = Object.entries(c.reactions || {}).map(([e, v]) => ({ e, n: Array.isArray(v) ? v.length : Number(v) || 0 })).filter((r) => r.n);   // (as the website keeps them: a count each)
+        const sn = seenOf(c); if (sn) sn.who.forEach((x) => pp.add(x));
+        reps.slice(-3).forEach((r) => pp.add(r.authorId));
+        return {
+          id: c.id, who: c.authorId, at: c.at, edited: !!c.editedAt, owner: !!t.createdBy && c.authorId === t.createdBy, mine: c.authorId === meId,
+          runs: runsOf(c), text: String(c.text || ''), mentionsMe: mentionsIn(c.html).has(meId),
+          files: (c.attachments || []).map((a) => ({ id: a.id, name: a.name || 'File', size: a.size || 0, path: a.path || null, thumb: a.thumb || null, w: a.w || 0, h: a.h || 0, voice: !!a.voice, dur: a.dur || 0 })),
+          urls: urlsIn(c), reactions: rx, seen: sn,
+          replies: reps.length ? { n: reps.length, last: reps[reps.length - 1].at, people: [...new Set(reps.map((r) => r.authorId).reverse())].slice(0, 3) } : null,
+          canEdit: !ro && c.authorId === meId && nowMs() - Date.parse(c.at || 0) < 10 * 60000, canDelete: !ro && (c.authorId === meId || isAdm(me())), canReply: !ro && !c.parentId,
+        };
+      };
+      const root = threadId ? all.find((c) => c.id === threadId && !c.parentId) : null;
+      const list = threadId ? (root ? [root, ...kids(root.id)] : []) : all.filter((c) => !c.parentId);
+      const out = { id: t.id, me: meId, thread: root ? root.id : null, readOnly: ro, items: list.map(item), n: all.length };
+      out.people = Object.fromEntries([...pp].filter(Boolean).map((pid) => { const x = userById(pid); return [pid, { name: fullName(x) || 'Someone', first: firstName(pid), initials: initials(fullName(x) || '?'), color: rgbOf(avColor(pid || 'x')), photo: x && x.avatar ? x.avatar : null }]; }));
+      return out;
+    }
+    // a comment and its replies to the Trash (app.js deleteComment) → its Trash entry, for Undo
+    function deleteComment(t, cid) {
+      const c = (t.comments || []).find((x) => x.id === cid);
+      if (!c) return { error: 'That comment is no longer here' };
+      if (c.authorId !== meId && !isAdm(me())) return { error: 'Only its writer can delete it' };
+      const group = t.comments.filter((x) => x.id === cid || x.parentId === cid);
+      const ids = new Set(group.map((x) => x.id));
+      t.comments = t.comments.filter((x) => !ids.has(x.id));
+      db.trash = db.trash || [];
+      const item = { id: 'tr-' + newId(), type: 'comment', deletedAt: nowISO(), deletedBy: meId, key: 'tasks:' + t.id, taskTitle: t.title, data: { taskId: t.id, comments: group } };
+      db.trash.push(item);
+      t.updatedAt = nowISO();
+      return { messages: ['Comment deleted'], undo: item.id };
+    }
+    function toggleReaction(t, cid, emoji) {
+      const c = (t.comments || []).find((x) => x.id === cid);
+      if (!c) return { error: 'That comment is no longer here' };
+      if (!['👍', '✅', '🎉', '❤️', '👀', '🙏'].includes(emoji)) return { error: 'Not a reaction' };
+      // (app.js toggleReaction: on or off)
+      c.reactions = c.reactions || {};
+      c.reactions[emoji] = c.reactions[emoji] ? 0 : 1;
+      if (!c.reactions[emoji]) delete c.reactions[emoji];
+      t.updatedAt = nowISO();
+      return [];
+    }
     // ---------- the native task page's changes (POST /api/task/act) → messages, or { error } / { need } ----------
     function setTitle(t, v) {
       v = String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, 300);
@@ -886,7 +977,7 @@ var E11Rules = (() => {
     return { home, myTasks, myTasksFilters, inbox, inboxRow, myDayData, cardOf, can, amReadOnly, canComplete, completeBlocked, dayTitle, statusInfo, sectionOf,
       notifGroups: NOTIF_GROUPS, doneLocked, canReopen, finish, finishBlocked, canFinish, moveToStatus, logActivity, logChange, pushNotif, notifyWatchers, checkPrioConflict, setDone, setDue, setClientApproval, asksClientApproval, deleteTask, watchersOf, creatorOf, clientAmsOf, fmtDue,
       taskPage, setTitle, setStart, setStatus, setMyPart, setPrio, prioTaken, toggleCheck, setNeedsCD, setUpdate, idLocked,
-      setAssignee, setGuardian, addTag, removeTag, setChannels, addCheck, addSubtask, setClient };
+      setAssignee, setGuardian, addTag, removeTag, setChannels, addCheck, addSubtask, setClient, commentsFeed, toggleReaction, deleteComment };
   }
 
   // (the clock and new ids for the actions: the website's own, or the server's)

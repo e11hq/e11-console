@@ -122,9 +122,9 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
       const r = rules.deleteTask(t);
       undo = r.item.id;
       messages = ['Moved to the Trash'];
-    } else if (['title', 'start', 'status', 'myPart', 'prio', 'check', 'needsCD', 'update', 'clientApproval', 'assign', 'guardian', 'addTag', 'removeTag', 'channels', 'addCheck', 'addSub', 'client'].includes(a)) {
+    } else if (['title', 'start', 'status', 'myPart', 'prio', 'check', 'needsCD', 'update', 'clientApproval', 'assign', 'guardian', 'addTag', 'removeTag', 'channels', 'addCheck', 'addSub', 'client', 'react', 'deleteComment'].includes(a)) {
       // the native task page's (shell 30+) — each checked as the website checks it
-      if (rules.amReadOnly(t) || rules.doneLocked(t)) return view();
+      if ((a !== 'react' && a !== 'deleteComment' && rules.amReadOnly(t)) || rules.doneLocked(t)) return view();   // (a view-only task: comments still)
       let r = [];
       if (a === 'title') { if (!rules.can('editTitle', t) || rules.idLocked(t)) return fail(403, 'The name can’t be changed'); r = rules.setTitle(t, body.value); }
       else if (a === 'start') {
@@ -146,6 +146,8 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
       else if (a === 'channels') { const u0 = (data.users || []).find((x) => x.id === u.id); if (!u0 || !(u0.role === 'admin' || u0.admin === true || u0.role === 'am' || u0.role === 'social') || t.parentId) return fail(403, 'Your role doesn’t allow this'); r = rules.setChannels(t, Array.isArray(body.value) ? body.value : []); }
       else if (a === 'addSub') { if (!rules.can('createTask', t) || t.parentId) return fail(403, 'Your role doesn’t allow adding subtasks'); r = rules.addSubtask(t, body.value); }
       else if (a === 'client') { if (!rules.can('editProject', t) || t.parentId || rules.idLocked(t)) return fail(403, 'The client can’t be changed'); r = rules.setClient(t, body.value ? String(body.value) : null); }
+      else if (a === 'react') r = rules.toggleReaction(t, String(body.key || ''), String(body.value || ''));
+      else if (a === 'deleteComment') { const d = rules.deleteComment(t, String(body.value || '')); if (d.error) return fail(409, d.error); undo = d.undo; r = d.messages; }
       else if (a === 'addCheck') { if (!rules.can('addChecklist', t)) return fail(403, 'Your role doesn’t allow adding checklist items'); r = rules.addCheck(t, body.value); }
       else if (a === 'clientApproval') {
         const ca = (rules.taskPage(t.id) || {}).clientApproval;
@@ -187,5 +189,15 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
     for (const f of m.files || []) { f.url = f.path ? fileUrl(f.path) + '?view=1' : null; f.thumbUrl = f.thumb ? fileUrl(f.thumb) + '?view=1' : null; delete f.path; delete f.thumb; }
     return { ...m, today };
   }
-  return { home, myTasks, inbox, act, taskPage };
+  // the app's native Comments (GET /api/comments?id=&thread=)
+  function commentsFeed(u, data, id, thread) {
+    const R = load();
+    const env = { nowISO: () => new Date(now()).toISOString(), nowMs: () => now() };
+    const m = R.withEnv(env, { users: data.users || [], projects: data.projects || [], tasks: data.tasks || [], statuses: data.statuses || [], plans: data.plans || [], meta: data.meta || {} }, u.id, R.dubaiDay(now())).commentsFeed(String(id || ''), thread ? String(thread) : null);
+    if (!m) return null;
+    for (const p of Object.values(m.people || {})) { if (p.photo) p.photo = fileUrl(p.photo) + '?view=1'; }
+    for (const it of m.items) for (const f of it.files) { f.url = f.path ? fileUrl(f.path) + '?view=1' : null; f.thumbUrl = f.thumb ? fileUrl(f.thumb) + '?view=1' : null; delete f.path; delete f.thumb; }
+    return m;
+  }
+  return { home, myTasks, inbox, act, taskPage, commentsFeed };
 }

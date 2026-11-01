@@ -648,6 +648,13 @@ export function createServer(cfg) {
       return json(res, 200, { ok: true, rev: store.rev(), home });
     }
     // …the app's My Tasks (the same rules; its filters in the address)
+    // the iPhone app's native Comments (shell 30+): a task's comments (or one thread) as the app draws them
+    if (p === '/api/comments' && req.method === 'GET') {
+      if (store.kv.get('comments-server') === 'off') return json(res, 200, { ok: true, off: true, rev: store.rev() });
+      let fd = null;
+      try { fd = homeView.commentsFeed(u, visibleSnapshot(u).data, url.searchParams.get('id'), url.searchParams.get('thread')); } catch (e) { console.error('comments:', e.message); return json(res, 500, { ok: false, error: 'The comments could not be worked out' }); }
+      return json(res, 200, { ok: true, rev: store.rev(), feed: fd });
+    }
     // the iPhone app's native task page (shell 30+): the task as this person sees it, with what they may change
     if (p === '/api/task' && req.method === 'GET') {
       if (store.kv.get('task-server') === 'off') return json(res, 200, { ok: true, off: true, rev: store.rev() });

@@ -28,7 +28,7 @@ before(async () => {
       { id: 'p1', name: 'Northline', color: '#3a7bd5', ams: [{ id: 'u-am' }], sections: [{ id: 's1', name: 'To do', color: '#87909e' }, { id: 's2', name: 'In progress', color: '#a875ff' }, { id: 's3', name: 'Review', color: '#f9be33' }, { id: 's4', name: 'CTR', color: '#4c9aff' }, { id: 's5', name: 'Done', color: '#3ddc97' }] },
     ],
     tasks: [
-      { id: 't1', projectId: 'p1', sectionId: 's2', title: 'Offer pack', assignees: ['u-prod', 'u-prod2'], createdBy: 'u-am', due: '2026-10-29', tags: ['Print'], notesHtml: '<p>Matte <b>vinyl</b></p>', checklist: [{ id: 'c1', text: 'Bleed', done: false }], comments: [{ id: 'm1' }], activity: [] },
+      { id: 't1', projectId: 'p1', sectionId: 's2', title: 'Offer pack', assignees: ['u-prod', 'u-prod2'], createdBy: 'u-am', due: '2026-10-29', tags: ['Print'], notesHtml: '<p>Matte <b>vinyl</b></p>', checklist: [{ id: 'c1', text: 'Bleed', done: false }], comments: [{ id: 'm1', authorId: 'u-am', at: '2026-10-28T08:00:00Z', text: '@Yousef A check https://we.tl/x', html: '<span class="mention" data-user="u-prod">@Yousef A</span> <b>check</b> <a href="https://we.tl/x">https://we.tl/x</a>', attachments: [], parentId: null, reactions: { '👍': 1 } }, { id: 'm2', authorId: 'u-prod', at: '2026-10-28T09:00:00Z', text: 'ok', html: 'ok', attachments: [], parentId: 'm1', reactions: {} }], activity: [] },
       { id: 't2', projectId: 'p1', sectionId: 's3', title: 'Needs CD', assignees: ['u-prod'], createdBy: 'u-am', needsCD: true, comments: [], activity: [] },
       { id: 't3', projectId: 'p1', sectionId: 's4', title: 'At the client', assignees: ['u-prod'], createdBy: 'u-am', comments: [], activity: [] },
       { id: 't4', projectId: 'p1', sectionId: 's5', title: 'Finished', assignees: ['u-prod'], createdBy: 'u-am', done: true, completedAt: '2026-10-28T08:00:00Z', comments: [], activity: [] },
@@ -47,7 +47,7 @@ test('the page: what the AM sees and may change', async () => {
   const m = r.task;
   assert.equal(m.title, 'Offer pack'); assert.equal(m.client.name, 'Northline');
   assert.equal(m.status.name, 'In progress'); assert.equal(m.status.next, 's3');
-  assert.equal(m.desc, 'Matte vinyl'); assert.equal(m.comments, 1);
+  assert.equal(m.desc, 'Matte vinyl'); assert.equal(m.comments, 2);
   assert.equal(m.subtasks.length, 1); assert.equal(m.checklist.length, 1);
   assert.equal(m.canTitle, true); assert.equal(m.dates.canEdit, true); assert.equal(m.parts.of, 2);
   assert.equal(m.people['u-prod'].first, 'Yousef');
@@ -138,6 +138,22 @@ test('a subtask added; the client changed', async () => {
   assert.equal(m.canClient, true); assert.ok(m.clients.some((c) => c.id === 'p1' && c.on));
   r = await act('am@e11-digital.com', { act: 'client', id: 't2', value: null });
   assert.equal(r.ok, true); assert.equal(T('t2').projectId, null);
+});
+
+test('comments: the feed, a thread, reactions, delete', async () => {
+  const f = (await (await fetch(base + '/api/comments?id=t1', { headers: { 'X-Dev-Email': 'am@e11-digital.com' } })).json()).feed;
+  assert.equal(f.items.length, 1); const c = f.items[0];
+  assert.equal(c.owner, true); assert.equal(c.replies.n, 1); assert.deepEqual(c.urls, ['https://we.tl/x']);
+  assert.deepEqual(c.runs[0], { t: '@Yousef A', user: 'u-prod' }); assert.ok(c.runs.some((r) => r.b && r.t === 'check'));
+  assert.equal(c.seen.label, 'Not seen by Yousef yet'); assert.deepEqual(c.reactions, [{ e: '👍', n: 1 }]);
+  const th = (await (await fetch(base + '/api/comments?id=t1&thread=m1', { headers: { 'X-Dev-Email': 'am@e11-digital.com' } })).json()).feed;
+  assert.equal(th.items.length, 2); assert.equal(th.thread, 'm1');
+  let r = await act('prod@e11-digital.com', { act: 'react', id: 't1', key: 'm1', value: '🎉' });
+  assert.equal(r.ok, true); assert.equal(T('t1').comments[0].reactions['🎉'], 1);
+  r = await act('prod@e11-digital.com', { act: 'deleteComment', id: 't1', value: 'm1' });
+  assert.equal(r.ok, false, 'only its writer');
+  r = await act('am@e11-digital.com', { act: 'deleteComment', id: 't1', value: 'm1' });
+  assert.equal(r.ok, true); assert.equal(T('t1').comments.length, 0, 'the replies go with it');
 });
 
 test('the switch: off → the page asks the website again', async () => {
