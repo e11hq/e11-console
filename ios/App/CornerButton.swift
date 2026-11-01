@@ -21,7 +21,7 @@ final class CornerButton: UIView {
   var onLeft: (() -> Void)?, onMid: ((String) -> Void)?, onCorner: ((String) -> Void)?
   // (what the self-test reads: the corner's ••• on a task page, else the middle one's kind)
   var kind: String { corner.kind == "more" ? "more" : mid.kind }
-  static let duration: TimeInterval = 0.5, bounce: CGFloat = 0.3
+  static let duration: TimeInterval = 0.42, bounce: CGFloat = 0.22   // (Mail's spring; the liquid feel is the squash and stretch, below)
 
   static func glassButton() -> UIButton {
     var c: UIButton.Configuration
