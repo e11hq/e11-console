@@ -454,7 +454,7 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     let name = "Voice message.m4a"
     // (in the comments at once, pulsing while it goes up)
     let pendingId = "pending-" + UUID().uuidString
-    let thread = parentId
+    let thread = parentId ?? replyTo?.id   // (a reply shows in its thread, not in the list)
     onPending?(pendingId, thread, dur)
     Uploader.send(url, name: name, task: taskId, cookies: cookies, progress: { _ in }) { [weak self] path in
       guard let self = self else { return }

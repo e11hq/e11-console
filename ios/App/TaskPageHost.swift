@@ -319,7 +319,7 @@ extension Main {
     // a voice message on its way: in the feed it's for (the thread page's, or the task's) at once
     c.onPending = { [weak self] id, thread, dur in
       guard let p = self?.taskPages.last else { return }
-      if let t = p.threadFeed, thread != nil { t.addPending(id: id, parent: thread, dur: dur) } else { p.feed?.addPending(id: id, parent: nil, dur: dur) }
+      if let t = p.threadFeed, thread != nil { t.addPending(id: id, parent: thread, dur: dur) } else { p.feed?.addPending(id: id, parent: thread, dur: dur) }
     }
     c.onPendingEnd = { [weak self] id, ok in
       guard let p = self?.taskPages.last else { return }
