@@ -266,7 +266,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   static func basic(_ m0: [String: Any]) -> [String: Any] {
     guard viewOnly else { return m0 }
     var m = m0
-    for k in ["creator", "parts", "tags", "channels", "guardian", "review", "clientApproval", "update", "activity", "complete", "review2", "kids"] { m[k] = nil }
+    for k in ["creator", "parts", "tags", "channels", "review", "clientApproval", "activity", "complete", "review2", "kids"] { m[k] = nil }   // (Guardian and Task Update show — Haris)
     for k in ["canTitle", "canAssign", "canPrio", "canTags", "canRemoveTag", "canChannels", "canGuardian", "canClient", "canDesc", "canAddSub", "canCheck", "canAddCheck", "canFields", "canDelete"] { m[k] = false }
     if var st = m["status"] as? [String: Any] { st["canSet"] = false; st["next"] = nil; st["why"] = ""; m["status"] = st }
     if var d = m["dates"] as? [String: Any] { d["canEdit"] = false; m["dates"] = d }
@@ -341,6 +341,8 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let canGd = (m["canGuardian"] as? Bool) == true
     if let gd = m["guardian"] as? String { g.append(row(sym: "star", key: "Guardian", value: personLine(gd, extra: ""), chevron: canGd, tap: canGd ? { [weak self] in self?.pickGuardian() } : nil)) }
     else if canGd { g.append(row(sym: "star", key: "Guardian", value: greyText("None"), chevron: true, tap: { [weak self] in self?.pickGuardian() })) }
+    // (view only: the Task Update under Status)
+    if TaskPage.viewOnly, (m["sub"] as? Bool) != true, let u = m["update"] as? [String: Any] { g.insert(updateRow(u, all: [], can: false), at: min(g.count, 1)) }
     blocks.append(group(g))
     // ---- Review ----
     var r: [UIView] = []
