@@ -1693,10 +1693,10 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       ("mytasks", pause(2500) + "return JSON.stringify({ view: ui.view })", {
         if let i = self.tabKeys.firstIndex(of: "mytasks"), let item = self.tabBar.items?[i] { self.tabBar.selectedItem = item; self.tabBar(self.tabBar, didSelect: item) } }),
       ("mytasksDone", pause(2500) + "return JSON.stringify({ tab: ui.myTasksTab })", { self.myTasksIfMade?.selfTab("done") }),
-      ("mytasksAll", pause(2000) + "return JSON.stringify({ tab: ui.myTasksTab })", { self.myTasksIfMade?.selfTab("all") }),
-      // (scrolled: All / Done and the filters stuck under the frost bar)
+      // (scrolled on the Done tab — the longer list: All / Done and the filters stuck under the frost bar)
       ("mytasksScrolled", "return JSON.stringify({ blank: !!document.querySelector('#content .ph-under-app') })", { self.myTasksIfMade?.selfScroll(400) }),
       ("mytasksTop", "return '{}'", { self.myTasksIfMade?.selfScroll(0) }),
+      ("mytasksAll", pause(2000) + "return JSON.stringify({ tab: ui.myTasksTab })", { self.myTasksIfMade?.selfTab("all") }),
       ("inbox", pause(1500) + "return JSON.stringify({ view: ui.view })", {
         if let i = self.tabKeys.firstIndex(of: "inbox"), let item = self.tabBar.items?[i] { self.tabBar.selectedItem = item; self.tabBar(self.tabBar, didSelect: item) } }),
       ("me", "go('me'); " + pause(1200) + "for (let i = 0; i < 3; i++) { await Push.refresh(); " + pause(300) + " } return JSON.stringify({ lockRows: document.querySelectorAll('#ph-lock, [data-ph-lock]').length, pushRows: document.querySelectorAll('#ph-push').length })", nil),
