@@ -837,6 +837,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }
   // Assignees: everyone who may be assigned, those on it ticked; each tick saves at once (as the website's sheet)
   func pickPeople() {
+    guard !TaskPage.viewOnly else { return }   // (Details is view only)
     guard let pool = model?["pool"] as? [[String: Any]], !pool.isEmpty else { return }
     var on = pool.map { ($0["on"] as? Bool) == true }
     let rows: [[String: Any]] = pool.enumerated().map { i, p in ["i": i, "label": (p["id"] as? String) == (model?["me"] as? String) ? "Me" : (p["name"] as? String ?? ""), "sub": p["role"] as? String ?? "", "person": personArg(p), "checked": on[i], "multi": true, "find": (p["name"] as? String ?? "") + " " + (p["role"] as? String ?? "")] }
