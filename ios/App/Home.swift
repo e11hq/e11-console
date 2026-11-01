@@ -442,7 +442,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
         scroll.addSubview(v); inboxRows[id] = v
       }
       let p = people[r["from"] as? String ?? ""]
-      v.set(r, photo: roundPic(NativeSheetVC.photo(p), initials: p?["initials"] as? String, color: NativeSheetVC.color(p?["color"]), size: 40))
+      v.set(r, photo: roundPic(NativeSheetVC.photo(p), initials: p?["initials"] as? String, color: NativeSheetVC.color(p?["color"]), size: 44))
       v.transform = .identity; v.alpha = 1
       content.append(v)
     }
