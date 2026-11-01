@@ -200,10 +200,16 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // ---------- layout ----------
   var safeTop: CGFloat { max(safeAreaInsets.top, window?.safeAreaInsets.top ?? 0, 20) }
   var barBottom: CGFloat { safeTop + 54 + 8 + 32 + 10 }
+  // (the two tabs placed by size and centre, never frame: while one slides (its transform moving) a layout pass that set
+  //  its frame threw it back across the screen — Comments slid back in over Details, the flash Haris saw)
+  private func place(_ v: UIView) {
+    if v.bounds.size != bounds.size { v.bounds = CGRect(origin: .zero, size: bounds.size) }
+    v.center = CGPoint(x: bounds.midX, y: bounds.midY)
+  }
   override func layoutSubviews() {
     super.layoutSubviews()
     let W = bounds.width, top = safeTop
-    scroll.frame = bounds
+    place(scroll)
     barBox.frame = CGRect(x: 0, y: 0, width: W, height: barBottom)
     back.frame = CGRect(x: 16, y: top, width: 44, height: 44)
     more.frame = CGRect(x: W - 60, y: top, width: 44, height: 44)
@@ -212,7 +218,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     dot.frame = CGRect(x: 76, y: top + 22 - 5, width: 10, height: 10)
     client.frame = CGRect(x: dot.isHidden ? 76 : 94, y: top, width: cw, height: 44)
     seg.frame = CGRect(x: 16, y: top + 54 + 8, width: W - 32, height: 32)
-    commentsHost.frame = bounds
+    place(commentsHost)
     let fs = fab.sizeThatFits(CGSize(width: 300, height: 48))
     let bottom = max(safeAreaInsets.bottom, window?.safeAreaInsets.bottom ?? 0)
     fab.frame = CGRect(x: W - 16 - fs.width, y: bounds.height - bottom - 8 - 48, width: fs.width, height: 48)
