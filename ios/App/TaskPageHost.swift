@@ -31,7 +31,8 @@ extension Main {
     if let h = hiddenForOpen, Date().timeIntervalSince(h.1) < 3, let v = h.0 { v.isHidden = false }
     hiddenForOpen = nil
     if taskPages.isEmpty { taskTabHidden = tabBar.isHidden }
-    view.insertSubview(p, belowSubview: tabBar)
+    // (under the shared top buttons, which stay where they are)
+    if corner.superview === view { view.insertSubview(p, belowSubview: corner) } else { view.insertSubview(p, belowSubview: tabBar) }
     // (the comment box and its jump spot stay above the page)
     if let b = cbarIfMade { view.insertSubview(b, aboveSubview: p) }
     if jumpHitMade { view.insertSubview(jumpHit, aboveSubview: cbarIfMade ?? p) }

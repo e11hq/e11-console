@@ -232,7 +232,13 @@ extension Main {
     // (a strip across the top, above the screens and task pages, under sheets and the tab bar)
     let strip = CGRect(x: 0, y: 0, width: view.bounds.width, height: view.safeAreaInsets.top + 60)
     if corner.frame != strip { corner.frame = strip }
-    if let top = taskPages.last { view.insertSubview(corner, aboveSubview: top) } else { view.insertSubview(corner, belowSubview: tabBar) }
+    // (put in once, and never taken out again: re-inserting it took it off the screen and back, so iPhone drew the
+    //  glass afresh — the buttons blurred out and in on every change (build 1273's film). Task pages go under it.)
+    if corner.superview !== view { view.insertSubview(corner, belowSubview: tabBar) }
+    else if let i = view.subviews.firstIndex(of: corner), view.subviews[(i + 1)...].contains(where: { $0 is HomeView || $0 is TaskPage }) {
+      // (a screen made later went on top of it — My Tasks or the Inbox the first time: only then is it moved back up)
+      view.bringSubviewToFront(corner); view.bringSubviewToFront(tabBar)
+    }
     if lockView != nil { corner.alpha = 0; return }
     corner.alpha = 1
     let t = cornerTarget()
