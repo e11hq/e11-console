@@ -4380,6 +4380,8 @@ function autosize(el) {
 function officeNoTasks() { if (ui.view !== 'home' && !Fin.owns(ui.view)) go('home'); toast('Tasks aren’t part of the Office Admin view'); }
 function openTask(id, focusTitle) {
   if (isOffice()) { officeNoTasks(); return; }
+  // (iPhone app 30+: the app's own task page — phone.js NativeTask)
+  if (typeof NativeTask !== 'undefined' && NativeTask.wants(id, focusTitle)) return;
   flushEdit();
   const pendingThread = ui.pendingThread; ui.pendingThread = null;
   // A task always opens on its Details tab, unless something asked for a tab on purpose (e.g. an Inbox mention → Comments)

@@ -2636,6 +2636,47 @@ const NativeMyTasks = (() => {
   return { sync, get on() { return on; }, get shown() { return shown; }, get light() { return on && lightOK && !own; } };
 })();
 
+/* ---------- The app's own task page (iPhone app 30+, Haris 2026-11-01) ----------
+   A task opened on the phone (a card, an Inbox row, a search result…) is the app's own page: it slides in from the
+   right and gets its Details from the server (/api/task); this page only says which task to open (and on which tab,
+   with the comment to show from the Inbox), says when that task changed, and does what only it can do (Copy link,
+   attaching files, New task from this). Nothing of the website's task page is drawn under it.
+   NATIVE_TASK = false: the website's task page again (no app build needed). ---------- */
+const NATIVE_TASK = true;
+const NativeTask = (() => {
+  let on = false, openId = null, sig = '', webOnce = null;
+  if (NATIVE_TASK && window.__e11CommentsOnly !== true && typeof Host !== 'undefined' && Host.isIOSApp) {
+    NativeMac.call('appInfo').then((r) => { on = Number(r && r.shell) >= 30; if (on) setInterval(watch, 400); }).catch(() => {});
+  }
+  const sigOf = (id) => { const t = task(id); if (!t) return 'gone'; return [t.updatedAt, (t.comments || []).length, (t.activity || []).length, t.done ? 1 : 0, t.sectionId, db.tasks.filter((x) => x.parentId === id).map((x) => `${x.id}:${x.updatedAt}:${x.done ? 1 : 0}`).join(',')].join('|'); };
+  // openTask asks first: the app's page instead (not for a new task being named — that's the website's for now)
+  function wants(id, focusTitle) {
+    if (!on || !Phone.on || focusTitle || window.__e11WebTask || webOnce === id || typeof task !== 'function' || !task(id)) { if (webOnce === id) webOnce = null; return false; }
+    const f = ui.cmFocus && ui.cmFocus.task === id ? ui.cmFocus : null;
+    const tab = ui.forceTab === 'comments' || f ? 'comments' : 'details';
+    ui.forceTab = null; ui.pendingThread = null; ui.cmFocus = null; ui.focusComment = null;
+    if (ui.taskId) closeDetail();
+    openId = id; sig = sigOf(id);
+    NativeMac.call('taskPage', { open: id, tab, focus: f ? `${id}~${f.id || ''}~${f.n}~${f.mention || ''}` : '' }).catch(() => {});
+    return true;
+  }
+  function watch() {
+    if (!openId) return;
+    const s = sigOf(openId);
+    if (s !== sig) { sig = s; NativeMac.call('taskPage', { changed: openId }).catch(() => {}); }
+  }
+  window.__e11Task = (ev) => {
+    if (!ev) return;
+    if (ev.ev === 'closed') { openId = null; return; }
+    if (ev.ev === 'copy' && ev.id) { TaskLink.copy(ev.id); return; }
+    if (ev.ev === 'attach' && ev.id && task(ev.id)) { attachFiles('task', null, null, ev.source || null, ev.id); return; }
+    if (ev.ev === 'from' && ev.id && task(ev.id)) { NativeMac.call('taskPage', { closeAll: true }).catch(() => {}); openId = null; taskFrom(task(ev.id)); return; }
+    // (the server switched the app's page off: the website's task page)
+    if (ev.ev === 'web' && ev.id && task(ev.id)) { openId = null; webOnce = ev.id; if (ev.tab === 'comments') ui.forceTab = 'comments'; openTask(ev.id); }
+  };
+  return { wants, on: () => on };
+})();
+
 /* ---------- The app's own Inbox (iPhone app 28+): each notification a row as Mail's, from the server (/api/inbox — the
    shared rules); the page only says when the Inbox is on screen and who's signed in, and opens what's tapped.
    NATIVE_INBOX = false: the page's own Inbox again (no app build needed). ---------- */

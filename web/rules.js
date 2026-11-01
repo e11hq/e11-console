@@ -598,7 +598,7 @@ var E11Rules = (() => {
       const ids = t.assignees || [];
       const cdWait = !t.parentId && needsCD(t) && !cdOK(t);
       const m = {
-        id: t.id, title: t.title || '', done: !!t.done, sub: !!t.parentId, parent: parent ? { id: parent.id, title: parent.title || 'Untitled task' } : null,
+        id: t.id, me: meId, title: t.title || '', done: !!t.done, sub: !!t.parentId, parent: parent ? { id: parent.id, title: parent.title || 'Untitled task' } : null,
         client: p ? { id: p.id, name: p.name, rgb: rgbOf(p.color || '#87909e') } : null,
         readOnly: ro, why: doneLocked(t) ? 'Completed tasks are read only' : amReadOnly(t) ? 'View only — you can’t change this task' : '',
         canTitle: !ro && can('editTitle', t) && !lockedId,
@@ -637,7 +637,7 @@ var E11Rules = (() => {
         checklist: (t.checklist || []).map((c) => ({ id: c.id, text: c.text || '', done: !!c.done })), canCheck: !ro, canAddCheck: !ro && can('addChecklist', t),
         files: (t.attachments || []).filter((a) => !a.reviewId || (t.reviews || []).some((r) => r.id === a.reviewId && r.state === 'approved')).map((a) => ({ id: a.id, name: a.name || 'File', size: a.size || 0, path: a.path || null, thumb: a.thumb || null, type: a.type || '' })),
         activity: (t.activity || []).slice(-30).reverse().map((a) => { person(a.actor); return { who: a.actor || null, text: plainOfHtml(a.text).replace(/\s*→\s*/g, ' → '), at: a.at || '' }; }),
-        comments: (t.comments || []).length,
+        comments: (t.comments || []).length, canDelete: !ro && can('deleteTask', t),
         complete: t.done ? null : { ok: !ro && canComplete(t), why: ro ? '' : completeBlocked(t), show: !ro && !t.parentId },
       };
       m.people = Object.fromEntries([...pp].filter(Boolean).map((pid) => { const x = userById(pid); return [pid, { name: fullName(x) || 'Someone', first: firstName(pid), initials: initials(fullName(x) || '?'), color: rgbOf(avColor(pid || 'x')), photo: x && x.avatar ? x.avatar : null }]; }));
