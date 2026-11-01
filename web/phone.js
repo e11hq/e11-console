@@ -78,7 +78,7 @@ const Phone = (() => {
     if (!st.on) return;
     let bar = document.getElementById('ph-tabs');
     if (!bar) { bar = document.createElement('nav'); bar.id = 'ph-tabs'; document.body.appendChild(bar); }
-    const unread = myNotifs().filter((n) => !n.read).length;
+    const unread = myNotifs().filter((n) => !n.read && phoneOnly(n)).length;
     const cd = isCD();
     const rv = cd ? activeReviews().length : 0;
     const cur = tabOf(ui.view);

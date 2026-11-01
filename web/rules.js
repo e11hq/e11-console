@@ -382,7 +382,8 @@ var E11Rules = (() => {
     function inbox(tab = 'all') {
       const u = me();
       if (!u || u.active === false) return null;
-      const mine = (db.notifications || []).filter((n) => n.to === meId);
+      // (expense claims are on the computer: not in the app's Inbox, nor its counts — Haris, 2026-11-01)
+      const mine = (db.notifications || []).filter((n) => n.to === meId && !/^claim/.test(n.kind || ''));
       const unread = mine.filter((n) => !n.read).length;
       // (All: the newest 200 — and every unread one and every mention as well, so the app's Unread and Mentions, picked
       //  from these, miss none)

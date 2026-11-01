@@ -54,7 +54,10 @@ export function createServer(cfg) {
   const apns = createApns({ store, keyFile: cfg.apnsKeyFile, keyId: cfg.apnsKeyId, teamId: cfg.apnsTeamId, topic: cfg.apnsTopic || 'ae.e11.console.ios', hosts: cfg.apnsHosts, connectOpts: cfg.apnsConnectOpts });
   { const webSend = webPush.sendTo;
     webPush.sendTo = async (userId, msg, opts) => {
-      const [a, b] = await Promise.all([webSend(userId, msg, opts), apns.sendTo(userId, msg, opts).catch((e) => { console.error('APNs:', e.message); return { sent: 0 }; })]);
+      // (the iPhone app: no expense claims — they're on the computer — and its badge counts without them; Haris, 2026-11-01)
+      const claim = /^claim/.test(String((msg && msg.kind) || ''));
+      const phoneMsg = msg && Number.isInteger(msg.badge) ? { ...msg, badge: store.list('notifications').filter((x) => x.to === userId && !x.read && !/^claim/.test(x.kind || '')).length } : msg;
+      const [a, b] = await Promise.all([webSend(userId, msg, opts), claim ? Promise.resolve({ sent: 0 }) : apns.sendTo(userId, phoneMsg, opts).catch((e) => { console.error('APNs:', e.message); return { sent: 0 }; })]);
       return { sent: (a.sent || 0) + (b.sent || 0), removed: (a.removed || 0) + (b.removed || 0), apns: b.results || [], apnsWhy: b.why || '' };
     }; }
   const digest = createDigest({ store, webPush, now: cfg.now || (() => Date.now()) });

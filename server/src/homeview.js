@@ -74,7 +74,7 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
     const a = String(body.act || '');
     // the Inbox's: one read / unread, or all read (only this person's own)
     if (a === 'read' || a === 'unread' || a === 'readAll') {
-      const mine = db.notifications.filter((n) => n.to === u.id);
+      const mine = db.notifications.filter((n) => n.to === u.id && !/^claim/.test(n.kind || ''));   // (claims: on the computer)
       const changes = [];
       const set = (n, v) => { if (!!n.read !== v) { const base = JSON.parse(JSON.stringify(n)); n.read = v; changes.push({ kind: 'notifications', id: n.id, base, data: n }); } };
       if (a === 'readAll') mine.forEach((n) => set(n, true));

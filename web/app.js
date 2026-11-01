@@ -2861,10 +2861,12 @@ function openTasksCount() {
   return topTasks().filter((t) => !t.done).length;
 }
 
+// (on the iPhone: expense claims are on the computer — their updates aren't shown, counted or sent there; Haris, 2026-11-01)
+const phoneOnly = (n) => !(Host.isIOSApp && /^claim/.test(n.kind || ''));
 let lastBadge = -1;
 function updateAppBadge() {
   if (!Host.isServer || !currentUserId) return;
-  const n = myNotifs().filter((x) => !x.read).length;
+  const n = myNotifs().filter((x) => !x.read && phoneOnly(x)).length;
   if (n === lastBadge) return;
   lastBadge = n;
   Host.call('badge', { n }).catch(() => {});
