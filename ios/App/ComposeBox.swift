@@ -239,7 +239,17 @@ final class ComposeBox: UIView, UITextViewDelegate {
       if ok { UINotificationFeedbackGenerator().notificationOccurred(.success); self.clear() }
     }
   }
-  func clear() { text.attributedText = NSAttributedString(string: ""); files = []; replyTo = nil; editing = nil; paintTiles(); textViewDidChange(text) }
+  // what's written but not sent stays with its task (and thread) while the app is open
+  private static var drafts: [String: NSAttributedString] = [:]
+  private var draftKey = ""
+  func switchTo(task: String, parent: String?) {
+    if !draftKey.isEmpty, editing == nil { ComposeBox.drafts[draftKey] = text.attributedText }
+    taskId = task; parentId = parent
+    draftKey = task + "|" + (parent ?? "")
+    if editing == nil { setText(ComposeBox.drafts[draftKey] ?? NSAttributedString(string: "")) }
+  }
+  func clear() {
+    if !draftKey.isEmpty { ComposeBox.drafts[draftKey] = nil } text.attributedText = NSAttributedString(string: ""); files = []; replyTo = nil; editing = nil; paintTiles(); textViewDidChange(text) }
 
   // ---------- voice: hold to record, slide left to cancel, up to lock ----------
   private var holdG: UILongPressGestureRecognizer?

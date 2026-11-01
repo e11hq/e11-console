@@ -11,6 +11,7 @@ import UIKit
 final class ServerTask {
   var cookies: (@escaping (String) -> Void) -> Void = { $0("") }
   private var lastRev = 0
+  var lastUndo: String?
   private func request(_ path: String, body: [String: Any]?, _ done: @escaping ([String: Any]?) -> Void) {
     cookies { cookie in
       guard let url = URL(string: serverURL() + path) else { return done(nil) }
@@ -44,6 +45,7 @@ final class ServerTask {
       guard let j = j else { return done(false, nil, "No connection — try again", nil, []) }
       if (j["off"] as? Bool) == true { return done(false, nil, "Try again in a moment", nil, []) }
       if let rev = j["rev"] as? Int { self?.lastRev = max(self?.lastRev ?? 0, rev) }
+      self?.lastUndo = j["undo"] as? String
       done((j["ok"] as? Bool) == true, j["task"] as? [String: Any], j["error"] as? String, j["need"] as? String, j["messages"] as? [String] ?? [])
     }
   }
@@ -84,6 +86,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   let mentionBox = UIStackView()
   var onCornerChange: (() -> Void)?
   var onSubmitFiles: ((String) -> Void)?
+  var onOpenFiles: (([[String: Any]], Int) -> Void)?
   private let back = HomeGlass(), more = HomeGlass()
   private let moreBtn = UIButton(type: .custom)        // (over the ••• circle: iPhone's own menu)
   private let dot = UIView(), client = UILabel()
@@ -368,7 +371,14 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let files = (m["files"] as? [[String: Any]]) ?? []
     if !files.isEmpty {
       blocks.append(header("Files · \(files.count)"))
-      blocks.append(group(files.prefix(12).map { f in row(sym: TaskPage.fileSym(f["name"] as? String ?? ""), key: f["name"] as? String ?? "File", value: greyText(TaskPage.size(f["size"] as? Int ?? 0)), keyLines: 1) }))
+      // pictures as tiles, other files as rows — tapped, they open (the preview / Quick Look)
+      let picsF = files.filter { CommentCell.isPic($0["name"] as? String ?? "") }
+      var fr: [UIView] = []
+      if !picsF.isEmpty { fr.append(pad(CommentCell.tiles(picsF) { [weak self] i in self?.onOpenFiles?(files, files.firstIndex { ($0["id"] as? String) == (picsF[i]["id"] as? String) } ?? 0) })) }
+      for (k, f) in files.enumerated() where !CommentCell.isPic(f["name"] as? String ?? "") {
+        fr.append(row(sym: TaskPage.fileSym(f["name"] as? String ?? ""), key: f["name"] as? String ?? "File", value: greyText(TaskPage.size(f["size"] as? Int ?? 0)), chevron: true, keyLines: 1, tap: { [weak self] in self?.onOpenFiles?(files, k) }))
+      }
+      blocks.append(group(fr))
     }
     // ---- Activity ----
     let act = (m["activity"] as? [[String: Any]]) ?? []
@@ -885,21 +895,30 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }
 
   // ---------- a short message, low on the screen ----------
-  func toast(_ text: String) {
+  func toast(_ text: String, action: (String, () -> Void)? = nil) {
     toastView?.removeFromSuperview()
     let v = UIView(); v.backgroundColor = .secondarySystemGroupedBackground; v.layer.cornerRadius = 14; v.layer.cornerCurve = .continuous
     v.layer.shadowColor = UIColor.black.cgColor; v.layer.shadowOpacity = 0.18; v.layer.shadowRadius = 12; v.layer.shadowOffset = CGSize(width: 0, height: 4)
     let l = label(text, size: 15, color: .label, weight: .medium); l.numberOfLines = 2; l.textAlignment = .center
     v.addSubview(l)
-    let W = bounds.width, ls = l.sizeThatFits(CGSize(width: W - 64, height: 60))
-    let w = ls.width + 32, h = max(44, ls.height + 20)
-    let bottom = (fab.isHidden || tab == "comments" ? bounds.height - max(safeAreaInsets.bottom, 20) - 8 : fab.frame.minY - 10)
+    var bw: CGFloat = 0
+    let btn = UIButton(type: .system)
+    if let act = action {
+      let (t, run) = act
+      btn.setTitle(t, for: .normal); btn.titleLabel?.font = .systemFont(ofSize: 15, weight: .semibold)
+      btn.addAction(UIAction { [weak v] _ in v?.removeFromSuperview(); run() }, for: .touchUpInside)
+      v.addSubview(btn); bw = btn.sizeThatFits(CGSize(width: 200, height: 40)).width + 16
+    }
+    let W = bounds.width, ls = l.sizeThatFits(CGSize(width: W - 64 - bw, height: 60))
+    let w = ls.width + 32 + bw, h = max(44, ls.height + 20)
+    let bottom = tab == "comments" ? barBottom + 60 : (fab.isHidden ? bounds.height - max(safeAreaInsets.bottom, 20) - 8 : fab.frame.minY - 10)
     v.frame = CGRect(x: (W - w) / 2, y: bottom - h, width: w, height: h)
     l.frame = CGRect(x: 16, y: (h - ls.height) / 2, width: ls.width, height: ls.height)
+    btn.frame = CGRect(x: w - bw - 4, y: 0, width: bw, height: h)
     v.alpha = 0; v.transform = CGAffineTransform(translationX: 0, y: 8)
     addSubview(v); toastView = v
     UIView.animate(withDuration: 0.16) { v.alpha = 1; v.transform = .identity }
-    DispatchQueue.main.asyncAfter(deadline: .now() + 2.6) { [weak self, weak v] in
+    DispatchQueue.main.asyncAfter(deadline: .now() + (action == nil ? 2.6 : 8)) { [weak self, weak v] in
       UIView.animate(withDuration: 0.2, animations: { v?.alpha = 0 }) { _ in v?.removeFromSuperview(); if self?.toastView === v { self?.toastView = nil } }
     }
   }

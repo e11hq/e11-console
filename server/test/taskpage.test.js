@@ -154,6 +154,8 @@ test('comments: the feed, a thread, reactions, delete', async () => {
   assert.equal(r.ok, false, 'only its writer');
   r = await act('am@e11-digital.com', { act: 'deleteComment', id: 't1', value: 'm1' });
   assert.equal(r.ok, true); assert.equal(T('t1').comments.length, 0, 'the replies go with it');
+  r = await act('am@e11-digital.com', { act: 'undoDelete', trashId: r.undo });
+  assert.equal(r.ok, true); assert.equal(T('t1').comments.length, 2, 'Undo brings them back');
 });
 
 test('the description from the phone; Submit for CD review and Withdraw', async () => {

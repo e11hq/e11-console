@@ -73,6 +73,7 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
   var onBack: (() -> Void)?                          // (a thread page) back to the comments
   var onToast: ((String) -> Void)?
   var onLoaded: (([String: Any]) -> Void)?
+  var onOpenFile: (([[String: Any]], Int) -> Void)?
   var onSheet: (([String: Any], @escaping (Int, String?) -> Void) -> Void)?
   let scroll = UIScrollView()
   private let content = UIView()
@@ -181,10 +182,15 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
       c.sig = sig
       c.onHold = { [weak self] in self?.hold(it) }
       c.onReplies = { [weak self] in self?.onThread?(id) }
+      c.onOpen = { [weak self] list, i in self?.onOpenFile?(list, i) }
       c.onReact = { [weak self] e in guard let self = self else { return }; self.onAct?(["act": "react", "id": self.taskId, "key": id, "value": e]) }
       content.addSubview(c); cells[id] = c
     }
     for (id, c) in cells where !seen.contains(id) { c.removeFromSuperview(); cells[id] = nil }
+    // your scheduled comments, last (dashed: "Scheduled · 4:00 PM")
+    schedViews.forEach { $0.removeFromSuperview() }
+    schedViews = ((m["scheduled"] as? [[String: Any]]) ?? []).map { ScheduledCard($0) }
+    schedViews.forEach { content.addSubview($0) }
     let newOnes = next.filter { !seenIds.contains($0) }
     order = next
     layoutCells()
@@ -198,6 +204,7 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
     tellSeen()
   }
   private var pendingNew = 0
+  private var schedViews: [ScheduledCard] = []
 
   // ---------- layout ----------
   override func layoutSubviews() {
@@ -219,6 +226,7 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
       c.frame = CGRect(x: 0, y: y, width: W, height: h)
       y += h
     }
+    for v in schedViews { let h = v.height(for: W); v.frame = CGRect(x: 0, y: y, width: W, height: h); y += h }
     content.frame = CGRect(x: 0, y: 0, width: W, height: y + 8)
     scroll.contentSize = content.frame.size
     scroll.contentInset.bottom = bottomRoom
@@ -337,6 +345,7 @@ final class CommentCell: UIView {
   var onHold: (() -> Void)?
   var onReplies: (() -> Void)?
   var onReact: ((String) -> Void)?
+  var onOpen: (([[String: Any]], Int) -> Void)?
   private let card = UIView()
   private let stack = UIStackView()
   private var measured: (CGFloat, CGFloat)?
@@ -368,8 +377,9 @@ final class CommentCell: UIView {
     }
     let rest = files.filter { ($0["voice"] as? Bool) != true }
     let pics = rest.filter { CommentCell.isPic($0["name"] as? String ?? "") }
-    if !pics.isEmpty { stack.addArrangedSubview(CommentCell.tiles(pics)) }
-    for f in rest where !CommentCell.isPic(f["name"] as? String ?? "") { stack.addArrangedSubview(CommentCell.fileRow(f)) }
+    // (tapped: the picture in the preview, any other file in iPhone's Quick Look)
+    if !pics.isEmpty { stack.addArrangedSubview(CommentCell.tiles(pics) { [weak self] i in self?.onOpen?(rest, rest.firstIndex { ($0["id"] as? String) == (pics[i]["id"] as? String) } ?? 0) }) }
+    for (k, f) in rest.enumerated() where !CommentCell.isPic(f["name"] as? String ?? "") { stack.addArrangedSubview(CommentCell.fileRow(f) { [weak self] in self?.onOpen?(rest, k) }) }
     for u in ((it["urls"] as? [String]) ?? []).prefix(3) { stack.addArrangedSubview(LinkCard(u)) }
     let rx = (it["reactions"] as? [[String: Any]]) ?? []
     if !rx.isEmpty {
@@ -471,14 +481,15 @@ final class CommentCell: UIView {
   }
   static func isPic(_ n: String) -> Bool { ["jpg", "jpeg", "png", "heic", "gif", "webp"].contains((n as NSString).pathExtension.lowercased()) }
   // up to 3 a row, 4:3 each (one alone: wider) — a grey shimmer until the picture arrives
-  static func tiles(_ pics: [[String: Any]]) -> UIView {
+  static func tiles(_ pics: [[String: Any]], open: @escaping (Int) -> Void = { _ in }) -> UIView {
     let grid = UIStackView(); grid.axis = .vertical; grid.spacing = 6
     let perRow = pics.count == 1 ? 1 : min(3, pics.count)
     var i = 0
     while i < min(pics.count, 6) {
       let row = UIStackView(); row.spacing = 6; row.distribution = .fillEqually
-      for f in pics[i..<min(i + perRow, min(pics.count, 6))] {
-        let v = UIImageView(); v.contentMode = .scaleAspectFill; v.clipsToBounds = true; v.layer.cornerRadius = 12; v.layer.cornerCurve = .continuous
+      for (k, f) in pics.enumerated() where k >= i && k < min(i + perRow, min(pics.count, 6)) {
+        let v = TapImage(); v.contentMode = .scaleAspectFill; v.clipsToBounds = true; v.layer.cornerRadius = 12; v.layer.cornerCurve = .continuous
+        v.onTap = { open(k) }
         v.backgroundColor = .tertiarySystemFill
         v.translatesAutoresizingMaskIntoConstraints = false
         v.heightAnchor.constraint(equalTo: v.widthAnchor, multiplier: 0.75).isActive = true
@@ -494,8 +505,8 @@ final class CommentCell: UIView {
     }
     return grid
   }
-  static func fileRow(_ f: [String: Any]) -> UIView {
-    let box = UIView(); box.backgroundColor = .tertiarySystemFill; box.layer.cornerRadius = 12; box.layer.cornerCurve = .continuous
+  static func fileRow(_ f: [String: Any], open: (() -> Void)? = nil) -> UIView {
+    let box = TapView(); box.onTap = open; box.backgroundColor = .tertiarySystemFill; box.layer.cornerRadius = 12; box.layer.cornerCurve = .continuous
     let n = f["name"] as? String ?? "File"
     let ext = (n as NSString).pathExtension.uppercased()
     let tag = PaddedLabel(); tag.text = ext.isEmpty ? "FILE" : String(ext.prefix(4)); tag.font = .systemFont(ofSize: 10, weight: .bold); tag.textColor = .white
@@ -552,4 +563,45 @@ final class Shimmer: UIView {
   }
   required init?(coder: NSCoder) { fatalError() }
   override func layoutSubviews() { super.layoutSubviews(); g.frame = bounds.insetBy(dx: -bounds.width, dy: 0) }
+}
+
+// a picture / file box that can be tapped
+final class TapImage: UIImageView {
+  var onTap: (() -> Void)? { didSet { isUserInteractionEnabled = onTap != nil; if gestureRecognizers?.isEmpty ?? true { addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(t))) } } }
+  @objc private func t() { UIImpactFeedbackGenerator(style: .light).impactOccurred(); onTap?() }
+}
+final class TapView: UIView {
+  var onTap: (() -> Void)? { didSet { if onTap != nil && (gestureRecognizers?.isEmpty ?? true) { addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(t))) } } }
+  @objc private func t() { UIImpactFeedbackGenerator(style: .light).impactOccurred(); onTap?() }
+}
+
+final class ScheduledCard: UIView {
+  private let box = UIView(), label = UILabel()
+  init(_ x: [String: Any]) {
+    super.init(frame: .zero)
+    box.layer.cornerRadius = 16; box.layer.cornerCurve = .continuous
+    let dash = CAShapeLayer(); dash.strokeColor = UIColor.separator.cgColor; dash.fillColor = UIColor.clear.cgColor; dash.lineDashPattern = [5, 4]; dash.lineWidth = 1
+    box.layer.addSublayer(dash); self.dash = dash
+    addSubview(box)
+    let when: String = {
+      let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+      guard let d = f.date(from: x["at"] as? String ?? "") ?? ISO8601DateFormatter().date(from: x["at"] as? String ?? "") else { return "" }
+      let o = DateFormatter(); o.locale = Locale(identifier: "en_US"); o.dateFormat = Calendar.current.isDateInToday(d) ? "h:mm a" : "MMM d, h:mm a"
+      return o.string(from: d)
+    }()
+    let s = NSMutableAttributedString(string: "🕓 Scheduled · \(when)", attributes: [.font: UIFont.systemFont(ofSize: 14, weight: .semibold), .foregroundColor: UIColor.label])
+    let t = x["text"] as? String ?? "", n = x["files"] as? Int ?? 0
+    s.append(NSAttributedString(string: "\n" + (t.isEmpty ? "\(n) file\(n == 1 ? "" : "s")" : t), attributes: [.font: UIFont.systemFont(ofSize: 15), .foregroundColor: UIColor.secondaryLabel]))
+    label.attributedText = s; label.numberOfLines = 4
+    box.addSubview(label)
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  private var dash: CAShapeLayer?
+  func height(for W: CGFloat) -> CGFloat { ceil(label.sizeThatFits(CGSize(width: W - 32 - 28, height: 200)).height) + 24 + 12 }
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    box.frame = CGRect(x: 16, y: 6, width: bounds.width - 32, height: bounds.height - 12)
+    label.frame = box.bounds.insetBy(dx: 14, dy: 12)
+    dash?.frame = box.bounds; dash?.path = UIBezierPath(roundedRect: box.bounds, cornerRadius: 16).cgPath
+  }
 }

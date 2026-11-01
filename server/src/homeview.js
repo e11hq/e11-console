@@ -86,8 +86,17 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
     let messages = [], undo = null;
     if (a === 'undoDelete') {
       const it = store.get('trash', String(body.trashId || ''));
-      if (!it || it.type !== 'task' || it.deletedBy !== u.id) return fail(404, 'Already restored or no longer in the Trash');
+      if (!it || !['task', 'comment'].includes(it.type) || it.deletedBy !== u.id) return fail(404, 'Already restored or no longer in the Trash');
       const changes = [];
+      // a comment (and its replies) back into its task
+      if (it.type === 'comment') {
+        const tk = (data.tasks || []).find((x) => x.id === (it.data || {}).taskId);
+        if (!tk) return fail(404, 'Its task is no longer here');
+        const base = JSON.parse(JSON.stringify(tk)), next = JSON.parse(JSON.stringify(tk));
+        for (const c of (it.data.comments || [])) if (!next.comments.some((x) => x.id === c.id)) next.comments.push(c);
+        next.comments.sort((a, b) => String(a.at).localeCompare(String(b.at)));
+        return { ok: true, changes: [{ kind: 'tasks', id: tk.id, base, data: next }], sysChanges: [{ kind: 'trash', id: it.id, del: true }], messages: [] };
+      }
       for (const x of (it.data && it.data.tasks) || []) if (!store.get('tasks', String(x.id))) changes.push({ kind: 'tasks', id: x.id, data: x });
       return { ok: true, changes, sysChanges: [{ kind: 'trash', id: it.id, del: true }], messages: [] };
     }
@@ -198,7 +207,7 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
   function commentsFeed(u, data, id, thread) {
     const R = load();
     const env = { nowISO: () => new Date(now()).toISOString(), nowMs: () => now() };
-    const m = R.withEnv(env, { users: data.users || [], projects: data.projects || [], tasks: data.tasks || [], statuses: data.statuses || [], plans: data.plans || [], meta: data.meta || {} }, u.id, R.dubaiDay(now())).commentsFeed(String(id || ''), thread ? String(thread) : null);
+    const m = R.withEnv(env, { users: data.users || [], projects: data.projects || [], tasks: data.tasks || [], statuses: data.statuses || [], plans: data.plans || [], meta: data.meta || {}, scheduled: data.scheduled || [] }, u.id, R.dubaiDay(now())).commentsFeed(String(id || ''), thread ? String(thread) : null);
     if (!m) return null;
     for (const p of Object.values(m.people || {})) { if (p.photo) p.photo = fileUrl(p.photo) + '?view=1'; }
     for (const it of m.items) for (const f of it.files) { f.url = f.path ? fileUrl(f.path) + '?view=1' : null; f.thumbUrl = f.thumb ? fileUrl(f.thumb) + '?view=1' : null; delete f.path; delete f.thumb; }

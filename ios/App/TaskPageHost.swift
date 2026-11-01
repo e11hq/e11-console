@@ -1,4 +1,5 @@
 import UIKit
+import QuickLook
 
 /* The app's own task page (shell 30) on the app's screen: opened when the page behind asks (taskPage open — a card,
    a row in the Inbox, a search result…), pushed in from the right as iPhone's own pages are, and taken back with ‹
@@ -143,6 +144,7 @@ extension Main {
   private func wire(_ p: TaskPage) {
     p.onBack = { [weak self, weak p] in guard let self = self, let p = p else { return }; if p.editingDesc { p.finishDesc() }; self.closeTaskPage(p) }
     p.onCornerChange = { [weak self] in self?.updateCornerNow() }
+    p.onOpenFiles = { [weak self] list, i in self?.openFiles(list, at: i) }
     p.onSubmitFiles = { [weak self, weak p] cd in
       guard let self = self, let p = p, let host = self.sheetHost() else { return }
       let vc = SubmitSheetVC(task: p.taskId, cd: cd, light: self.statusStyle == .darkContent) { [weak self, weak p] files in
@@ -264,7 +266,7 @@ extension Main {
       taskComments = focus.isEmpty ? p.taskId : focus
       p.bringSubviewToFront(p.commentsHost); p.bringSubviewToFront(p.barBoxView)
       let c = compose
-      c.taskId = p.taskId; c.parentId = p.threadFeed?.thread
+      c.switchTo(task: p.taskId, parent: p.threadFeed?.thread)
       view.insertSubview(c, aboveSubview: p)
       if c.isHidden { c.alpha = 0; c.isHidden = false; UIView.animate(withDuration: 0.12) { c.alpha = 1 } }
       showFeed(p, focus: focus)
@@ -323,12 +325,22 @@ extension Main {
       guard let self = self, let p = p else { return }
       self.serverTask.act(body.merging(["page": p.taskId]) { a, _ in a }) { ok, m, err, _, messages in
         if !ok { p.toast(err ?? "That didn’t work — try again") }
-        else if let first = messages.first { p.toast(first) }
+        else if (body["act"] as? String) == "deleteComment", let u = self.serverTask.lastUndo {
+          // Undo for 8 seconds: the comment and its replies back
+          p.toast("Comment deleted", action: ("Undo", { [weak self, weak p, weak f] in
+            guard let self = self, let p = p else { return }
+            self.serverTask.act(["act": "undoDelete", "trashId": u, "id": p.taskId, "page": p.taskId]) { ok, _, err, _, _ in
+              if !ok { p.toast(err ?? "Couldn’t bring it back") }
+              f?.load(); p.feed?.load(); self.refreshTaskPage(p)
+            }
+          }))
+        } else if let first = messages.first { p.toast(first) }
         if let m = m { p.draw(m) }
         f?.load(); p.feed?.load()
       }
     }
     f.onLoaded = { [weak self] m in if let ml = m["mentionable"] as? [[String: Any]] { self?.composeIfMade?.mentionable = ml } }
+    f.onOpenFile = { [weak self] list, i in self?.openFiles(list, at: i) }
     f.onToast = { [weak p] t in p?.toast(t) }
     f.onSheet = { [weak self] args, answer in
       guard let self = self, let host = self.sheetHost() else { return }
@@ -360,7 +372,7 @@ extension Main {
     t.frame = p.commentsHost.bounds
     p.commentsHost.addSubview(t)
     t.transform = CGAffineTransform(translationX: p.bounds.width, y: 0)
-    composeIfMade?.parentId = cid; composeIfMade?.replyTo = nil
+    composeIfMade?.replyTo = nil; composeIfMade?.switchTo(task: p.taskId, parent: cid)
     t.load { [weak t] in if let id = pulse { t?.pulse(id) } }
     p.edgeScroll(t.scroll)
     UIView.animate(withDuration: 0.38, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0) { t.transform = .identity }
@@ -369,7 +381,7 @@ extension Main {
     guard let t = p.threadFeed else { return }
     let back = t.thread
     p.threadFeed = nil
-    composeIfMade?.parentId = nil
+    composeIfMade?.switchTo(task: p.taskId, parent: nil)
     if let f = p.feed { p.edgeScroll(f.scroll) }
     UIView.animate(withDuration: 0.32, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.beginFromCurrentState]) { t.transform = CGAffineTransform(translationX: p.bounds.width, y: 0) } completion: { _ in t.removeFromSuperview() }
     // back on the comment the thread is for: it pulses
@@ -380,6 +392,7 @@ extension Main {
     taskComments = nil
     if let c = composeIfMade, !c.isHidden {
       c.text.resignFirstResponder()
+      c.switchTo(task: c.taskId, parent: c.parentId)   // (keeps what's written)
       UIView.animate(withDuration: 0.12, animations: { c.alpha = 0 }) { _ in if c.alpha == 0 { c.isHidden = true } }
       if defaults.bool(forKey: "e11_feed_off") == false { return }
     }
@@ -396,4 +409,52 @@ extension Main {
     }
   }
   func endEditing() { view.endEditing(true) }
+}
+
+/* A comment's or a task's file, opened (Haris: "finish off the whole task detail / comment"): pictures in the app's
+   own preview (swipe through the others beside it); any other file fetched and shown by iPhone's own Quick Look —
+   PDFs, videos, documents — with its Share button (Save to Files, AirDrop…). */
+final class QuickFile: NSObject, QLPreviewControllerDataSource {
+  static let shared = QuickFile()
+  private var url: URL?
+  func numberOfPreviewItems(in c: QLPreviewController) -> Int { url == nil ? 0 : 1 }
+  func previewController(_ c: QLPreviewController, previewItemAt i: Int) -> QLPreviewItem { (url ?? URL(fileURLWithPath: "/")) as NSURL }
+  func show(_ f: [String: Any], from host: UIViewController, toast: @escaping (String) -> Void) {
+    guard let path = f["url"] as? String else { return toast("This file isn’t available") }
+    toast("Opening…")
+    PreviewLoad.data(serverURL() + path) { d in
+      guard let d = d else { return toast("Couldn’t open the file — try again") }
+      let name = (f["name"] as? String ?? "File").replacingOccurrences(of: "/", with: "-")
+      let dir = FileManager.default.temporaryDirectory.appendingPathComponent("open-\(UUID().uuidString)", isDirectory: true)
+      try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+      let u = dir.appendingPathComponent(name)
+      guard (try? d.write(to: u)) != nil else { return toast("Couldn’t open the file") }
+      self.url = u
+      let q = QLPreviewController(); q.dataSource = self
+      host.present(q, animated: true)
+    }
+  }
+}
+extension Main {
+  func openFiles(_ files: [[String: Any]], at i: Int) {
+    guard i < files.count else { return }
+    let f = files[i]
+    PreviewLoad.refreshCookies(web.configuration.websiteDataStore.httpCookieStore) { [weak self] in
+      guard let self = self, let host = self.sheetHost() else { return }
+      self.composeIfMade?.text.resignFirstResponder()
+      if CommentCell.isPic(f["name"] as? String ?? "") {
+        let pics = files.filter { CommentCell.isPic($0["name"] as? String ?? "") }
+        let list: [[String: Any]] = pics.map { p in
+          let ext = ((p["name"] as? String ?? "") as NSString).pathExtension.lowercased()
+          return ["id": p["id"] ?? "", "name": p["name"] ?? "", "kind": "image", "ext": ext, "src": serverURL() + (p["url"] as? String ?? ""), "thumb": (p["thumbUrl"] as? String).map { serverURL() + $0 } ?? "", "meta": TaskPage.size(p["size"] as? Int ?? 0)]
+        }
+        let at = pics.firstIndex { ($0["id"] as? String) == (f["id"] as? String) } ?? 0
+        let vc = PreviewVC(["files": list, "at": at], dark: self.statusStyle != .darkContent) { _ in }
+        self.previewVC = vc
+        host.present(vc, animated: true)
+      } else {
+        QuickFile.shared.show(f, from: host) { [weak self] t in self?.taskPages.last?.toast(t) }
+      }
+    }
+  }
 }
