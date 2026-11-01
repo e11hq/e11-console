@@ -211,7 +211,7 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
     const m = R.withEnv(env, { users: data.users || [], projects: data.projects || [], tasks: data.tasks || [], statuses: data.statuses || [], plans: data.plans || [], meta: data.meta || {} }, u.id, today).taskPage(String(id || ''));
     if (!m) return null;
     for (const p of Object.values(m.people || {})) { if (p.photo) p.photo = fileUrl(p.photo) + '?view=1'; }
-    for (const f of (m.files || []).concat(m.commentFiles || [])) appFile(f);
+    for (const f of (m.files || []).concat(m.commentFiles || [], m.descFiles || [])) appFile(f);
     return { ...m, today };
   }
   // the app's native Comments (GET /api/comments?id=&thread=)

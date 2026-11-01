@@ -203,6 +203,15 @@ test('a file copied from another task and pasted into a comment: the same file, 
   assert.equal(r.ok, true); assert.equal(T('t3').comments.at(-1).attachments.length, 0, 'a file on no task this person sees is left out');
 });
 
+test('files pasted into a description or a comment (the website\'s 📎 chips) come as file cards, not words', async () => {
+  const chip = '<span class="fileref" contenteditable="false" data-fpath="attachments/t1/deck.pdf" data-fname="deck.pdf" data-fsize="500">📎 deck.pdf</span>';
+  let r = await act('am@e11-digital.com', { act: 'desc', id: 't3', html: 'See ' + chip + ' please', text: 'See deck.pdf please' });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  const m = (await page('am@e11-digital.com', 't3')).task;
+  assert.deepEqual(m.descFiles.map((f) => f.name), ['deck.pdf']); assert.equal(m.descFiles[0].file, 'attachments/t1/deck.pdf');
+  assert.ok(!m.descRuns.some((x) => /deck\.pdf/.test(x.t)), JSON.stringify(m.descRuns));
+});
+
 test('writing a comment, a reply with a mention, a voice message; editing', async () => {
   let r = await act('prod@e11-digital.com', { act: 'comment', id: 't3', html: 'Done <b>now</b>', text: 'Done now' });
   assert.equal(r.ok, true); const c = T('t3').comments.at(-1); assert.equal(c.html, 'Done <b>now</b>'); assert.equal(c.authorId, 'u-prod');

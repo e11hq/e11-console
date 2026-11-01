@@ -633,7 +633,7 @@ var E11Rules = (() => {
         review: !t.parentId && !t.done ? { on: !!t.needsCD, canSet: !ro && !!u && (isAdm(u) || u.role === 'am' || isCD(meId)) && !reviewPending(t), who: cdUserId() ? fullName(userById(cdUserId())) : '' } : null,
         clientApproval: cdApprovedNow(t) ? (() => { const ca = t.clientApproval, fresh = clientApprovalFresh(t);
           return { state: ca && fresh ? (ca.none ? 'none' : 'yes') : ca ? 'old' : 'missing', text: ca && fresh ? (ca.none ? 'Not needed' : `Approved · ${firstName(ca.by)} · ${fmtDay(dayOf(ca.at))}`) : ca ? 'Out of date' : 'Missing', canSet: !ro && !t.done && !!u && (isAdm(u) || u.role === 'am' || t.createdBy === meId) }; })() : null,
-        desc: t.notesHtml ? plainOfHtml(t.notesHtml) : String(t.notes || '').trim(), descRuns: runsOf({ html: t.notesHtml || '', text: t.notes || '' }), canDesc: !ro && can('editDesc', t) && !lockedId, mentionable: !ro && can('editDesc', t) && !lockedId ? mentionable() : [],
+        desc: t.notesHtml ? plainOfHtml(t.notesHtml) : String(t.notes || '').trim(), descRuns: runsOf({ html: t.notesHtml || '', text: t.notes || '' }), descFiles: fileRefsOf(t.notesHtml), canDesc: !ro && can('editDesc', t) && !lockedId, mentionable: !ro && can('editDesc', t) && !lockedId ? mentionable() : [],
         review2: !t.parentId && needsCD(t) && isMine(t) && !isCD(meId) && !ro ? { state: reviewState(t, meId), canSubmit: !t.done && !(sectionOf(t) && isToDoName(sectionOf(t).name)), cd: cdUserId() ? fullName(userById(cdUserId())) : '', since: (lastReview(t, meId) || {}).at || '' } : null,
         subtasks: subtasksOf(t.id).map((x) => { (x.assignees || []).slice(0, 1).forEach(person); return { id: x.id, title: x.title || 'Untitled', done: !!x.done, due: x.due ? fmtDay(x.due) : '', late: !x.done && !!x.due && dayDiff(x.due) < 0, av: (x.assignees || [])[0] || null, canTick: !ro && !amReadOnly(x) }; }),
         canAddSub: !ro && !t.parentId && can('createTask', t),
@@ -771,12 +771,23 @@ var E11Rules = (() => {
     const ENT = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'", '&nbsp;': ' ' };
     const unent = (v) => String(v).replace(/&(amp|lt|gt|quot|#39|nbsp);/g, (m) => ENT[m] || m);
     // a comment's words → [{ t, b, i, u, s, link, user }] (what the app draws); new lines as "\n"
+    // the files pasted into a description or comment (the website's 📎 chips: data-fpath …) — shown as file cards
+    function fileRefsOf(html) {
+      const out = [], seenP = new Set();
+      String(html || '').replace(/<span[^>]*data-fpath="([^"]+)"[^>]*>/gi, (tag, p) => {
+        const path = unent(p); if (seenP.has(path)) return tag; seenP.add(path);
+        const at = (k) => { const m = new RegExp(k + '="([^"]*)"', 'i').exec(tag); return m ? unent(m[1]) : ''; };
+        out.push({ id: 'ref-' + out.length + '-' + path.length, name: at('data-fname') || path.split('/').pop(), size: Number(at('data-fsize')) || 0, path, thumb: at('data-fthumb') || null });
+        return tag;
+      });
+      return out;
+    }
     function runsOf(c) {
       if (!c.html) return [{ t: String(c.text || '') }];
-      const out = [], st = { b: 0, i: 0, u: 0, s: 0, link: null, user: null, li: 0 };
+      const out = [], st = { b: 0, i: 0, u: 0, s: 0, link: null, user: null, li: 0, ref: 0 };
       const push = (t) => { if (!t) return; const r = { t }; if (st.b) r.b = 1; if (st.i) r.i = 1; if (st.u) r.u = 1; if (st.s) r.s = 1; if (st.link) r.link = st.link; if (st.user) r.user = st.user; out.push(r); };
       String(c.html).replace(/<[^>]+>|[^<]+/g, (tok) => {
-        if (tok[0] !== '<') { push(unent(tok)); return ''; }
+        if (tok[0] !== '<') { if (!st.ref) push(unent(tok)); return ''; }
         const m = /^<\s*(\/)?\s*([a-z0-9]+)([^>]*)>/i.exec(tok); if (!m) return '';
         const close = !!m[1], tag = m[2].toLowerCase(), attrs = m[3] || '';
         if (tag === 'b' || tag === 'strong') st.b += close ? -1 : 1;
@@ -787,7 +798,12 @@ var E11Rules = (() => {
         else if (tag === 'li') { if (!close) push((out.length && !/\n$/.test(out[out.length - 1].t) ? '\n' : '') + '• '); }
         else if (tag === 'p' || tag === 'div' || tag === 'ul' || tag === 'ol') { if (close) push('\n'); }
         else if (tag === 'a') { if (close) st.link = null; else { const h = /href="([^"]+)"/i.exec(attrs); st.link = h ? unent(h[1]) : null; } }
-        else if (tag === 'span') { const u = /data-user="([^"]+)"/i.exec(attrs); if (u && !close) st.user = u[1]; else if (close) st.user = null; }
+        else if (tag === 'span') {
+          // (a file pasted in — the website's 📎 chip: shown as a file card, not as words)
+          if (!close && /data-fpath=/i.test(attrs)) { st.ref++; return ''; }
+          if (close && st.ref) { st.ref--; return ''; }
+          const u = /data-user="([^"]+)"/i.exec(attrs); if (u && !close) st.user = u[1]; else if (close) st.user = null;
+        }
         return '';
       });
       while (out.length && /^\s*$/.test(out[out.length - 1].t)) out.pop();
@@ -821,7 +837,7 @@ var E11Rules = (() => {
         return {
           id: c.id, who: c.authorId, at: c.at, edited: !!c.editedAt, owner: !!t.createdBy && c.authorId === t.createdBy, mine: c.authorId === meId,
           runs: runsOf(c), text: String(c.text || ''), mentionsMe: mentionsIn(c.html).has(meId),
-          files: (c.attachments || []).map((a) => ({ id: a.id, name: a.name || 'File', size: a.size || 0, path: a.path || null, thumb: a.thumb || null, w: a.w || 0, h: a.h || 0, voice: !!a.voice, dur: a.dur || 0 })),
+          files: (c.attachments || []).map((a) => ({ id: a.id, name: a.name || 'File', size: a.size || 0, path: a.path || null, thumb: a.thumb || null, w: a.w || 0, h: a.h || 0, voice: !!a.voice, dur: a.dur || 0 })).concat(fileRefsOf(c.html).map((f) => ({ ...f, id: c.id + '-' + f.id, w: 0, h: 0, voice: false, dur: 0 }))),
           urls: urlsIn(c), reactions: rx, seen: sn,
           replies: reps.length ? { n: reps.length, last: reps[reps.length - 1].at, people: [...new Set(reps.map((r) => r.authorId).reverse())].slice(0, 3) } : null,
           canEdit: !ro && c.authorId === meId && nowMs() - Date.parse(c.at || 0) < 10 * 60000, canDelete: !ro && (c.authorId === meId || isAdm(me())), canReply: !ro && !c.parentId,
@@ -868,7 +884,14 @@ var E11Rules = (() => {
         const close = m[1] ? '/' : '', name = m[2].toLowerCase(), attrs = m[3] || '';
         if (['b', 'i', 'u', 's', 'br', 'p', 'ul', 'ol', 'li', 'div'].includes(name)) return `<${close}${name}>`;
         if (name === 'a') { if (close) return '</a>'; const h = /href="(https?:\/\/[^"]+)"/i.exec(attrs); return h ? `<a href="${h[1].replace(/"/g, '')}" target="_blank" rel="noopener">` : '<a>'; }
-        if (name === 'span') { if (close) return '</span>'; const u = /data-user="([^"]+)"/i.exec(attrs); return u && userById(u[1]) ? `<span class="mention" data-user="${esc(u[1])}" contenteditable="false">` : '<span>'; }
+        if (name === 'span') {
+          if (close) return '</span>';
+          // (a pasted file's chip, as the website writes it, kept)
+          const fp = /data-fpath="([^"]+)"/i.exec(attrs);
+          if (fp) { const at = (k) => { const x = new RegExp(k + '="([^"]*)"', 'i').exec(attrs); return x ? x[1].replace(/"/g, '') : ''; };
+            return `<span class="fileref" contenteditable="false" data-fpath="${fp[1].replace(/"/g, '')}" data-fname="${at('data-fname')}" data-fsize="${at('data-fsize')}"${at('data-fthumb') ? ` data-fthumb="${at('data-fthumb')}"` : ''}>`; }
+          const u = /data-user="([^"]+)"/i.exec(attrs); return u && userById(u[1]) ? `<span class="mention" data-user="${esc(u[1])}" contenteditable="false">` : '<span>';
+        }
         return '';
       });
     }
