@@ -231,14 +231,14 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     guard let m = model else { return }
     var items: [UIMenuElement] = []
     items.append(UIAction(title: "Copy link", image: UIImage(systemName: "link")) { [weak self] _ in guard let self = self else { return }; self.onEvent?(["ev": "copy", "id": self.taskId]) })
-    if (m["readOnly"] as? Bool) != true {
+    if (m["readOnly"] as? Bool) != true && !TaskPage.viewOnly {
       items.append(UIMenu(title: "Attach Files", image: UIImage(systemName: "paperclip"), children: [
         UIAction(title: "Camera", image: UIImage(systemName: "camera")) { [weak self] _ in guard let self = self else { return }; self.onEvent?(["ev": "attach", "id": self.taskId, "source": "camera"]) },
         UIAction(title: "Photos", image: UIImage(systemName: "photo.on.rectangle")) { [weak self] _ in guard let self = self else { return }; self.onEvent?(["ev": "attach", "id": self.taskId, "source": "photos"]) },
         UIAction(title: "Files", image: UIImage(systemName: "folder")) { [weak self] _ in guard let self = self else { return }; self.onEvent?(["ev": "attach", "id": self.taskId, "source": "files"]) },
       ]))
     }
-    if (m["canDelete"] as? Bool) == true {
+    if (m["canDelete"] as? Bool) == true && !TaskPage.viewOnly {
       items.append(UIMenu(options: .displayInline, children: [UIAction(title: "Delete task", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in self?.confirmDelete() }]))
     }
     moreBtn.menu = UIMenu(children: items)
@@ -259,8 +259,24 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // the rows: built as views, laid out top to bottom
   private var blocks: [UIView] = []
   private var heights: [CGFloat] = []
+  /* View only for everyone, the basics (Haris, 2026-11-01: "no one uses an iOS app to do the full process" — the
+     Comments stay complete): title, notes, status / CD status, assignees with their ticks, dates, priority, client,
+     description, checklist, subtasks, files (open to look at). Nothing on Details is changed from the phone. */
+  static let viewOnly = true
+  static func basic(_ m0: [String: Any]) -> [String: Any] {
+    guard viewOnly else { return m0 }
+    var m = m0
+    for k in ["creator", "parts", "tags", "channels", "guardian", "review", "clientApproval", "update", "activity", "complete", "review2", "kids"] { m[k] = nil }
+    for k in ["canTitle", "canAssign", "canPrio", "canTags", "canRemoveTag", "canChannels", "canGuardian", "canClient", "canDesc", "canAddSub", "canCheck", "canAddCheck", "canFields", "canDelete"] { m[k] = false }
+    if var st = m["status"] as? [String: Any] { st["canSet"] = false; st["next"] = nil; st["why"] = ""; m["status"] = st }
+    if var d = m["dates"] as? [String: Any] { d["canEdit"] = false; m["dates"] = d }
+    if var c = m["completed"] as? [String: Any] { c["canFrom"] = false; c["canReopen"] = false; m["completed"] = c }
+    if var l = m["lock"] as? [String: Any] { l["from"] = false; m["lock"] = l }
+    m["subtasks"] = ((m["subtasks"] as? [[String: Any]]) ?? []).map { var x = $0; x["canTick"] = false; return x }
+    return m
+  }
   private func rebuild() {
-    guard let m = model else { return }
+    guard let m = model.map({ TaskPage.basic($0) }) else { return }
     let keepY = scroll.contentOffset.y
     let typing = titleView.isFirstResponder
     blocks.forEach { if $0 !== titleView { $0.removeFromSuperview() } }
@@ -335,7 +351,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       r.append(row(sym: "checkmark.shield", key: "Needs CD review", sub: who.isEmpty ? nil : who, value: sw))
     }
     if let ca = m["clientApproval"] as? [String: Any] { r.append(clientApprovalRow(ca)) }
-    if (m["sub"] as? Bool) != true { r.append(updateRow(m["update"] as? [String: Any], all: (m["updates"] as? [String]) ?? [], can: (m["canFields"] as? Bool) == true)) }
+    if (m["sub"] as? Bool) != true && !TaskPage.viewOnly { r.append(updateRow(m["update"] as? [String: Any], all: (m["updates"] as? [String]) ?? [], can: (m["canFields"] as? Bool) == true)) }
     if !r.isEmpty { blocks.append(header("Review")); blocks.append(group(r)) }
     // ---- Description ----
     let desc = m["desc"] as? String ?? ""
