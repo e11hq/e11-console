@@ -249,7 +249,8 @@ final class ComposeBox: UIView, UITextViewDelegate {
     if editing == nil { setText(ComposeBox.drafts[draftKey] ?? NSAttributedString(string: "")) }
   }
   func clear() {
-    if !draftKey.isEmpty { ComposeBox.drafts[draftKey] = nil } text.attributedText = NSAttributedString(string: ""); files = []; replyTo = nil; editing = nil; paintTiles(); textViewDidChange(text) }
+    if !draftKey.isEmpty { ComposeBox.drafts[draftKey] = nil }
+    text.attributedText = NSAttributedString(string: ""); files = []; replyTo = nil; editing = nil; paintTiles(); textViewDidChange(text) }
 
   // ---------- voice: hold to record, slide left to cancel, up to lock ----------
   private var holdG: UILongPressGestureRecognizer?
