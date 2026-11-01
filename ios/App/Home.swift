@@ -1546,7 +1546,7 @@ final class InboxRow: UIControl, UIGestureRecognizerDelegate {
   var onTap: (() -> Void)?, onToggle: (() -> Void)?, onOpen: ((InboxRow) -> Void)?
   var id = ""
   private(set) var read = false
-  static let H: CGFloat = 84
+  static let H: CGFloat = 82.8   // (Mail's)
   private let body = UIView(), dot = UIView(), av = UIImageView(), head = UILabel(), when = UILabel(), chev = UIImageView(), titleL = UILabel(), descL = UILabel(), sep = UIView()
   private let act = UIView(), actCircle = UIView(), actIcon = UIImageView(), actLabel = UILabel()
   private var shift: CGFloat = 0 { didSet { body.transform = CGAffineTransform(translationX: shift, y: 0); let k = min(1, shift / 86); act.alpha = k; act.transform = CGAffineTransform(scaleX: 0.6 + 0.4 * k, y: 0.6 + 0.4 * k); body.backgroundColor = shift > 0.5 ? UIColor.systemGray5 : .clear } }
@@ -1564,7 +1564,7 @@ final class InboxRow: UIControl, UIGestureRecognizerDelegate {
     av.clipsToBounds = true; av.layer.cornerRadius = 20
     head.font = .systemFont(ofSize: 17, weight: .semibold); head.textColor = .label
     when.font = .systemFont(ofSize: 15); when.textColor = .secondaryLabel; when.textAlignment = .right
-    chev.image = UIImage(systemName: "chevron.right", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .semibold)); chev.tintColor = .tertiaryLabel; chev.contentMode = .center
+    chev.image = UIImage(systemName: "chevron.right", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .semibold)); chev.tintColor = .tertiaryLabel; chev.contentMode = .bottom
     titleL.font = .systemFont(ofSize: 15); titleL.textColor = .label
     descL.font = .systemFont(ofSize: 15); descL.textColor = .secondaryLabel
     [head, titleL, descL].forEach { $0.lineBreakMode = .byTruncatingTail; $0.numberOfLines = 1 }
@@ -1610,17 +1610,23 @@ final class InboxRow: UIControl, UIGestureRecognizerDelegate {
     let W = bounds.width, H = bounds.height
     // (bounds and centre, not frame: the row slid right keeps its shift through a new layout)
     body.bounds = CGRect(origin: .zero, size: bounds.size); body.center = CGPoint(x: W / 2, y: H / 2)
-    dot.frame = CGRect(x: 6, y: 28, width: 10, height: 10)
-    av.frame = CGRect(x: 22, y: 13, width: 40, height: 40)
-    let x: CGFloat = 73, R: CGFloat = 16
-    chev.frame = CGRect(x: W - R - 9, y: 11, width: 9, height: 22)
+    // Mail's row, measured from Haris's screenshot (2026-11-01): 82.8 tall; the dot 7.8 at 20.7 from the edge and the
+    // picture 43.5 at 34.3, both centred 36.3 down; text from 88; the three lines' capitals' tops 15.9 / 37.3 / 56.3
+    // down; the time on the first line's baseline with the › 18 from the right; the separator from 86 to 17 short of the edge
+    let midY: CGFloat = 36.3
+    dot.frame = CGRect(x: 20.7 - 3.9, y: midY - 3.9, width: 7.8, height: 7.8); dot.layer.cornerRadius = 3.9
+    av.frame = CGRect(x: 34.3, y: midY - 21.75, width: 43.5, height: 43.5); av.layer.cornerRadius = 21.75
+    let x: CGFloat = 88, R: CGFloat = 18
+    func top(_ l: UILabel, capTop: CGFloat) -> CGFloat { capTop - (l.font.ascender - l.font.capHeight) }
+    let base1 = 15.9 + head.font.capHeight
+    chev.frame = CGRect(x: W - R - 9, y: base1 - 11, width: 9, height: 13)
     let ww = ceil(when.sizeThatFits(CGSize(width: 200, height: 22)).width)
-    when.frame = CGRect(x: chev.frame.minX - 6 - ww, y: 11, width: ww, height: 22)
-    head.frame = CGRect(x: x, y: 10, width: max(0, when.frame.minX - 8 - x), height: 23)
-    titleL.frame = CGRect(x: x, y: 33, width: W - R - x, height: 20)
-    descL.frame = CGRect(x: x, y: 53, width: W - R - x, height: 20)
+    when.frame = CGRect(x: chev.frame.minX - 7 - ww, y: base1 - when.font.ascender, width: ww, height: ceil(when.font.lineHeight))
+    head.frame = CGRect(x: x, y: top(head, capTop: 15.9), width: max(0, when.frame.minX - 8 - x), height: ceil(head.font.lineHeight))
+    titleL.frame = CGRect(x: x, y: top(titleL, capTop: 37.3), width: W - R - x, height: ceil(titleL.font.lineHeight))
+    descL.frame = CGRect(x: x, y: top(descL, capTop: 56.3), width: W - R - x, height: ceil(descL.font.lineHeight))
     let px = 1 / max(1, traitCollection.displayScale)
-    sep.frame = CGRect(x: x, y: H - px, width: W - x, height: px)
+    sep.frame = CGRect(x: 86, y: H - px, width: W - 86 - 17, height: px)
     act.frame = CGRect(x: 16, y: 0, width: 58, height: H)
     actCircle.frame = CGRect(x: 2, y: (H - 54 - 18) / 2, width: 54, height: 54)
     actIcon.frame = actCircle.bounds
