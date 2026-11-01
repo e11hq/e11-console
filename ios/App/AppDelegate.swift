@@ -399,6 +399,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         cbox.transform = .identity
         cbox.alpha = 0
         cbox.isHidden = false
+        if taskComments != nil, taskPages.last?.feed != nil { cbox.isHidden = true }   // (30: the app draws the comments; this stays behind for writing)
         // at the latest comment only when the task has just been opened; back from Details, where it was (Haris, 2026-10-31)
         cwebInset(keepEnd: cwebFresh)
         cwebFresh = false
@@ -504,6 +505,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     // 30: under the app's own task page the page behind has no task open — what it says about the task (shown, on
     // Comments, which, where) is the task page's to say
     if taskComments != nil || !taskPages.isEmpty, cmdSource !== cweb { for k in ["show", "p", "feed", "task", "jump"] { a.removeValue(forKey: k) } }
+    if taskPages.last?.feed != nil, cmdSource === cweb { a.removeValue(forKey: "jump") }   // (its jump button isn't seen)
     // 20: while the comments screen shows, the box is its page's; the main page only says where the task is (shown, on
     // Comments, which task, where its list starts) — and the other way round
     if let w = cweb, cmdSource === w {
@@ -1912,7 +1914,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
           if name.hasPrefix("tpage") {
             let p = self.taskPages.last
             self.selfResult[name + "Native"] = ["pages": self.taskPages.count, "title": p?.model?["title"] as? String ?? "", "tab": p?.tab ?? "", "drawn": p?.model != nil,
-              "x": p?.transform.tx ?? -1, "tabBar": !self.tabBar.isHidden, "comments": self.cwebShown, "box": self.cbarIfMade.map { !$0.isHidden } ?? false, "content": p?.scroll.contentSize.height ?? 0, "corner": self.corner.kind, "sheet": self.presentedViewController.map { String(describing: type(of: $0)) } ?? "", "cornerW": self.corner.frame.width, "cornerX": self.corner.frame.maxX] as [String: Any]
+              "x": p?.transform.tx ?? -1, "tabBar": !self.tabBar.isHidden, "comments": self.cwebShown, "box": self.cbarIfMade.map { !$0.isHidden } ?? false, "content": p?.scroll.contentSize.height ?? 0, "feed": (p?.feed?.model?["items"] as? [Any])?.count ?? -1, "corner": self.corner.kind, "sheet": self.presentedViewController.map { String(describing: type(of: $0)) } ?? "", "cornerW": self.corner.frame.width, "cornerX": self.corner.frame.maxX] as [String: Any]
           }
           if name == "daily" { self.selfResult["dailyNative"] = ["sheet": self.presentedViewController.map { String(describing: type(of: $0)) } ?? ""] }
           if name.hasPrefix("ibx") {

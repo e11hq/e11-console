@@ -74,6 +74,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   var cornerFrame: CGRect { more.frame }
   var cornerMenu: UIMenu? { moreBtn.menu }
   var onMenu: (() -> Void)?
+  var feed: CommentsFeed?, threadFeed: CommentsFeed?
   private let back = HomeGlass(), more = HomeGlass()
   private let moreBtn = UIButton(type: .custom)        // (over the ••• circle: iPhone's own menu)
   private let dot = UIView(), client = UILabel()

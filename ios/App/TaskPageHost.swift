@@ -12,7 +12,7 @@ extension Main {
       if let top = taskPages.last, top.taskId == id { if let t = a["tab"] as? String, t != top.tab { top.setTab(t, tell: true) }; return }
       openTaskPage(id, tab: a["tab"] as? String ?? "details", focus: a["focus"] as? String ?? "")
     } else if let id = a["changed"] as? String {
-      for p in taskPages where p.taskId == id || ((p.model?["subtasks"] as? [[String: Any]]) ?? []).contains(where: { ($0["id"] as? String) == id }) { refreshTaskPage(p) }
+      for p in taskPages where p.taskId == id || ((p.model?["subtasks"] as? [[String: Any]]) ?? []).contains(where: { ($0["id"] as? String) == id }) { refreshTaskPage(p); p.feed?.load(); p.threadFeed?.load() }
     } else if (a["closeAll"] as? Bool) == true {
       while let p = taskPages.last { closeTaskPage(p, animated: false) }
     }
@@ -237,6 +237,85 @@ extension Main {
     let b = cbar
     if b.isHidden { b.isHidden = false; UIView.animate(withDuration: 0.1) { b.alpha = 1 } }
     if let cp = cwebPanG, let tp = taskPan { cp.require(toFail: tp) }
+    // step 2: the comments drawn by the app (the comments screen stays behind it, unseen, for writing until step 3)
+    if !defaults.bool(forKey: "e11_feed_off") { showFeed(p, focus: focus) }
+  }
+  private func showFeed(_ p: TaskPage, focus: String) {
+    cbox.isHidden = true; jumpHit.isHidden = true
+    FeedLoader.shared.cookies = serverHome.cookies
+    let f: CommentsFeed
+    if let old = p.feed { f = old } else {
+      f = makeFeed(p, thread: nil)
+      p.feed = f
+      p.commentsHost.addSubview(f)
+    }
+    f.frame = p.commentsHost.bounds
+    f.isHidden = false
+    p.commentsHost.bringSubviewToFront(f)
+    if let t = p.threadFeed { p.commentsHost.bringSubviewToFront(t) }
+    f.load { [weak self, weak p, weak f] in
+      // from the Inbox: that comment pulses — in its thread for a reply
+      let parts = focus.split(separator: "~", omittingEmptySubsequences: false).map(String.init)
+      guard let self = self, let p = p, let f = f, parts.count > 1, !parts[1].isEmpty else { return }
+      let cid = parts[1]
+      if f.has(cid) { f.pulse(cid) }
+      else if let parent = (f.model?["parents"] as? [String: String])?[cid] { self.openThread(p, parent, pulse: cid) }
+    }
+  }
+  private func makeFeed(_ p: TaskPage, thread: String?) -> CommentsFeed {
+    let f = CommentsFeed(task: p.taskId, thread: thread)
+    f.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    f.topInset = p.barBottom
+    f.boxTop = { [weak self] in
+      guard let self = self, let b = self.cbarIfMade, !b.isHidden, let w = self.view.window else { return nil }
+      let fr = b.layer.presentation()?.frame ?? b.frame
+      return self.view.convert(fr, to: w).minY
+    }
+    f.onAct = { [weak self, weak p, weak f] body in
+      guard let self = self, let p = p else { return }
+      self.serverTask.act(body.merging(["page": p.taskId]) { a, _ in a }) { ok, m, err, _, messages in
+        if !ok { p.toast(err ?? "That didn’t work — try again") }
+        else if let first = messages.first { p.toast(first) }
+        if let m = m { p.draw(m) }
+        f?.load(); p.feed?.load()
+      }
+    }
+    f.onToast = { [weak p] t in p?.toast(t) }
+    f.onSheet = { [weak self] args, answer in
+      guard let self = self, let host = self.sheetHost() else { return }
+      host.present(NativeSheetVC(args, dark: self.statusStyle != .darkContent, pick: nil, answer: answer), animated: true)
+    }
+    // Reply: the comments screen behind sets the reply (its box line says "Replying to …"); the keyboard comes up
+    f.onReply = { [weak self] cid in
+      guard let self = self else { return }
+      let js = "(function(){var b=document.querySelector('#detail .cm[data-comment=\"" + cid.replacingOccurrences(of: "\"", with: "") + "\"] [data-action=\"reply\"]');if(b){b.click();return 'ok'}return 'no'})()"
+      self.cweb?.evaluateJavaScript(js) { _, _ in self.cbar.text.becomeFirstResponder() }
+    }
+    f.onThread = { [weak self, weak p] cid in guard let self = self, let p = p else { return }; self.openThread(p, cid, pulse: nil) }
+    f.onBack = { [weak self, weak p] in guard let self = self, let p = p else { return }; self.closeThread(p) }
+    return f
+  }
+  // a thread on a page of its own, sliding in from the right; the comments screen behind opens it too (for replying)
+  func openThread(_ p: TaskPage, _ cid: String, pulse: String?) {
+    p.threadFeed?.removeFromSuperview()
+    let t = makeFeed(p, thread: cid)
+    p.threadFeed = t
+    t.frame = p.commentsHost.bounds
+    p.commentsHost.addSubview(t)
+    t.transform = CGAffineTransform(translationX: p.bounds.width, y: 0)
+    t.load { [weak t] in if let id = pulse { t?.pulse(id) } }
+    UIView.animate(withDuration: 0.38, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0) { t.transform = .identity }
+    let js = "(function(){var b=document.querySelector('#detail [data-action=\"open-thread\"][data-id=\"" + cid.replacingOccurrences(of: "\"", with: "") + "\"]');if(b)b.click();})()"
+    cweb?.evaluateJavaScript(js, completionHandler: nil)
+  }
+  func closeThread(_ p: TaskPage) {
+    guard let t = p.threadFeed else { return }
+    let back = t.thread
+    p.threadFeed = nil
+    UIView.animate(withDuration: 0.32, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.beginFromCurrentState]) { t.transform = CGAffineTransform(translationX: p.bounds.width, y: 0) } completion: { _ in t.removeFromSuperview() }
+    cweb?.evaluateJavaScript("window.__e11CmBack && window.__e11CmBack()", completionHandler: nil)
+    // back on the comment the thread is for: it pulses
+    if let id = back, let f = p.feed { f.load { f.pulse(id) } }
   }
   func taskHideComments() {
     guard taskComments != nil else { return }

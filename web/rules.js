@@ -826,7 +826,7 @@ var E11Rules = (() => {
       };
       const root = threadId ? all.find((c) => c.id === threadId && !c.parentId) : null;
       const list = threadId ? (root ? [root, ...kids(root.id)] : []) : all.filter((c) => !c.parentId);
-      const out = { id: t.id, me: meId, thread: root ? root.id : null, readOnly: ro, items: list.map(item), n: all.length };
+      const out = { id: t.id, me: meId, thread: root ? root.id : null, readOnly: ro, items: list.map(item), n: all.length, parents: Object.fromEntries(all.filter((c) => c.parentId).map((c) => [c.id, c.parentId])) };
       out.people = Object.fromEntries([...pp].filter(Boolean).map((pid) => { const x = userById(pid); return [pid, { name: fullName(x) || 'Someone', first: firstName(pid), initials: initials(fullName(x) || '?'), color: rgbOf(avColor(pid || 'x')), photo: x && x.avatar ? x.avatar : null }]; }));
       return out;
     }
