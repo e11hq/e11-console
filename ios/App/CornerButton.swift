@@ -21,7 +21,7 @@ final class CornerButton: UIView {
   var onLeft: (() -> Void)?, onMid: ((String) -> Void)?, onCorner: ((String) -> Void)?
   // (what the self-test reads: the corner's ••• on a task page, else the middle one's kind)
   var kind: String { corner.kind == "more" ? "more" : mid.kind }
-  static let duration: TimeInterval = 0.42, bounce: CGFloat = 0.22
+  static let duration: TimeInterval = 0.5, bounce: CGFloat = 0.3
 
   static func glassButton() -> UIButton {
     var c: UIButton.Configuration
@@ -79,11 +79,26 @@ final class CornerButton: UIView {
     b.accessibilityLabel = ["back": "Back", "search": "Search", "more": "More", "close": "Close search", "photo": "Me"][s.kind] ?? s.text
   }
   // to these three spots — with the spring, or at once
+  // the liquid drop (Haris, 2026-11-01 — as Mail's buttons): as it changes shape or place the glass stretches the way it
+  // goes, squashes back past its shape and settles — on top of the spring that moves it
+  static func jelly(_ v: UIView, _ s: CGFloat, wider: Bool = true) {
+    let s = max(0.03, min(0.14, s))
+    let a = wider ? CGAffineTransform(scaleX: 1 + s, y: 1 - s * 0.7) : CGAffineTransform(scaleX: 1 - s * 0.7, y: 1 + s)
+    let b = wider ? CGAffineTransform(scaleX: 1 - s * 0.45, y: 1 + s * 0.35) : CGAffineTransform(scaleX: 1 + s * 0.35, y: 1 - s * 0.45)
+    UIView.animateKeyframes(withDuration: 0.6, delay: 0, options: [.calculationModeCubic, .allowUserInteraction, .beginFromCurrentState]) {
+      UIView.addKeyframe(withRelativeStartTime: 0, relativeDuration: 0.3) { v.transform = a }
+      UIView.addKeyframe(withRelativeStartTime: 0.3, relativeDuration: 0.35) { v.transform = b }
+      UIView.addKeyframe(withRelativeStartTime: 0.65, relativeDuration: 0.35) { v.transform = .identity }
+    }
+  }
+  // (a place set by bounds and centre: it keeps the drop's stretch out of the way)
+  private func put(_ b: UIView, _ f: CGRect) { b.bounds = CGRect(origin: .zero, size: f.size); b.center = CGPoint(x: f.midX, y: f.midY) }
   func go(left l: Spot, mid m: Spot, corner c: Spot, menu: UIMenu?, animated: Bool) {
     let oldCorner = corner
     let pairs: [(UIButton, Spot, Spot)] = [(leftB, left, l), (midB, mid, m), (cornerB, corner, c)]
     left = l; mid = m; corner = c
     var moves: [() -> Void] = []
+    var drops: [(UIView, CGFloat, Bool)] = []
     for (b, was, now) in pairs {
       let changed = was.kind != now.kind || was.text != now.text || was.image !== now.image
       // Search opening: Home's own bar starts exactly where 🔍 is and stretches out — 🔍 hands over to it at once;
@@ -96,7 +111,7 @@ final class CornerButton: UIView {
       if now.kind == "none" {
         // going: 🔍 melts into the corner (moves onto it as it fades — the glass joins them), others shrink away
         let into: CGRect? = b === midB && was.kind == "search" && c.kind != "none" ? c.frame : nil
-        moves.append { if let f = into { b.frame = f } else { b.transform = CGAffineTransform(scaleX: 0.4, y: 0.4) }; b.alpha = 0 }
+        moves.append { if let f = into { b.transform = .identity; self.put(b, f) } else { b.transform = CGAffineTransform(scaleX: 0.4, y: 0.4) }; b.alpha = 0 }
         continue
       }
       if was.kind == "none" || b.alpha < 0.05 {
@@ -113,12 +128,18 @@ final class CornerButton: UIView {
       } else { b.menu = now.kind == "more" ? menu : nil; b.showsMenuAsPrimaryAction = now.kind == "more" && menu != nil }
       // (the button's own glass laid out inside the spring too — left to the next layout pass it only stretched, with
       //  no bounce: Haris, 2026-11-01)
-      moves.append { b.transform = .identity; b.frame = now.frame; b.alpha = 1; b.layer.cornerRadius = now.frame.height / 2; b.setNeedsLayout(); b.layoutIfNeeded() }
+      // (staying: it moves and reshapes as a drop — stretching more the more it changes)
+      if animated && b.alpha > 0.05 && was.kind != "none" {
+        let dw = now.frame.width - b.bounds.width, dx = abs(now.frame.midX - b.center.x)
+        if abs(dw) > 1 || dx > 1 || changed { drops.append((b, abs(dw) / max(44, now.frame.width) * 0.35 + min(dx, 120) / 120 * 0.08 + (changed ? 0.05 : 0), dw >= 0)) }
+      }
+      moves.append { if drops.contains(where: { $0.0 === b }) == false { b.transform = .identity }; self.put(b, now.frame); b.alpha = 1; b.layer.cornerRadius = now.frame.height / 2; b.setNeedsLayout(); b.layoutIfNeeded() }
     }
     let run = { moves.forEach { $0() }; self.container.contentView.layoutIfNeeded() }
     if !animated { run(); return }
     if #available(iOS 17.0, *) { UIView.animate(springDuration: CornerButton.duration, bounce: CornerButton.bounce, initialSpringVelocity: 0, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction], animations: run) }
-    else { UIView.animate(withDuration: CornerButton.duration, delay: 0, usingSpringWithDamping: 0.75, initialSpringVelocity: 0, options: [.beginFromCurrentState, .allowUserInteraction], animations: run) }
+    else { UIView.animate(withDuration: CornerButton.duration, delay: 0, usingSpringWithDamping: 0.7, initialSpringVelocity: 0, options: [.beginFromCurrentState, .allowUserInteraction], animations: run) }
+    for (v, amount, wider) in drops { CornerButton.jelly(v, amount, wider: wider) }
   }
   // part way between two sets (the swipe back): t = 0 at `a`, 1 at `b`
   func between(_ a: (Spot, Spot, Spot), _ b: (Spot, Spot, Spot), _ t: CGFloat) {
@@ -126,6 +147,7 @@ final class CornerButton: UIView {
     func lerp(_ x: CGRect, _ y: CGRect) -> CGRect { CGRect(x: x.minX + (y.minX - x.minX) * t, y: x.minY + (y.minY - x.minY) * t, width: x.width + (y.width - x.width) * t, height: x.height + (y.height - x.height) * t) }
     let rows: [(UIButton, Spot, Spot)] = [(leftB, a.0, b.0), (midB, a.1, b.1), (cornerB, a.2, b.2)]
     for (btn, x, y) in rows {
+      if btn.transform != .identity { btn.layer.removeAllAnimations(); btn.transform = .identity }   // (a drop still settling: straight to the finger)
       btn.transform = .identity
       if x.kind == "none" && y.kind == "none" { btn.alpha = 0; continue }
       if x.kind == "none" {

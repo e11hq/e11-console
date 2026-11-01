@@ -816,7 +816,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     searchCircle.alpha = 0
     results.isHidden = false
     field.text = ""; showResults(nil)
-    UIView.animate(withDuration: 0.55, delay: 0, usingSpringWithDamping: 0.8, initialSpringVelocity: 0.4, options: [.allowUserInteraction]) {
+    UIView.animate(withDuration: 0.6, delay: 0, usingSpringWithDamping: 0.68, initialSpringVelocity: 0.4, options: [.allowUserInteraction]) {
       self.layoutHeader()
       self.searchBar.layer.cornerRadius = self.BTN / 2
       self.searchBar.layoutIfNeeded()
@@ -835,7 +835,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     showMotto()
     setNeedsLayout(); layoutIfNeeded()
     let back = searchCircle.frame
-    UIView.animate(withDuration: 0.5, delay: 0, usingSpringWithDamping: 0.85, initialSpringVelocity: 0.3, options: [.allowUserInteraction]) {
+    UIView.animate(withDuration: 0.55, delay: 0, usingSpringWithDamping: 0.7, initialSpringVelocity: 0.3, options: [.allowUserInteraction]) {
       self.searchBar.frame = back; self.searchBar.layer.cornerRadius = back.height / 2
       self.lens.frame = CGRect(x: 12, y: 0, width: 22, height: back.height)
       self.field.alpha = 0
