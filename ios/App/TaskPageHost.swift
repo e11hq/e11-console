@@ -684,6 +684,8 @@ extension Main {
         self.refreshTaskPage(p)
         p.feed?.load(); p.threadFeed?.load()
       }
+      // (Home, My Tasks and the Inbox too — step 2: from the copy, no request)
+      self.serverHome.refresh(); self.serverMyTasksIfMade?.refresh(); self.serverInboxIfMade?.refresh()
     }
   }
 }

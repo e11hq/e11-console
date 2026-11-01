@@ -81,6 +81,20 @@ final class ServerHome {
   // a fresh Home (when the app opens or comes back, and whenever the page hears of a change)
   func refresh() {
     checkServer()
+    // the app's own copy of the data (iOS app data plan, step 2): the screen worked out on the phone, no request — once
+    // the copy has caught up with the server's last answer here (an action's), so nothing just done comes back
+    if AppData.shared.ready, !off, AppData.shared.rev >= lastRev {
+      let c: (ready: Bool, model: [String: Any]?)
+      if kind == "home" { c = AppData.shared.screen("home") }
+      else if kind == "inbox" { c = AppData.shared.screen("inbox", ServerHome.param(query, "tab") ?? "all") }
+      else { c = AppData.shared.screen("mytasks", ServerHome.filtersJSON(query)) }
+      if c.ready, let h = c.model {
+        confirmedMe = h["me"] as? String ?? confirmedMe
+        take(h, rev: lastRev)
+        if !queue.isEmpty { send() }
+        return
+      }
+    }
     if fetching { fetchAgain = true; return }
     fetching = true
     let asked = query
@@ -106,6 +120,16 @@ final class ServerHome {
       if self.fetchAgain { self.fetchAgain = false; self.refresh() }
       else if !self.queue.isEmpty { self.send() }
     }
+  }
+  // (My Tasks' filters, from the address it asks the server with: tab=done&due=late&people=a,b&team=1 …)
+  static func param(_ q: String, _ k: String) -> String? {
+    for part in q.split(separator: "&") { let kv = part.split(separator: "=", maxSplits: 1).map(String.init); if kv.first == k { return kv.count > 1 ? (kv[1].removingPercentEncoding ?? kv[1]) : "" } }
+    return nil
+  }
+  static func filtersJSON(_ q: String) -> String {
+    let f: [String: Any] = ["tab": param(q, "tab") ?? "all", "due": param(q, "due") ?? "", "people": param(q, "people") ?? "", "ams": param(q, "ams") ?? "",
+                            "team": param(q, "team") == "1", "assigned": param(q, "assigned") == "1", "cd": param(q, "cd") == "1"]
+    return (try? JSONSerialization.data(withJSONObject: f)).map { String(decoding: $0, as: UTF8.self) } ?? "{}"
   }
   private func take(_ h: [String: Any], rev: Int) {
     if rev < lastRev { return }   // (an answer that left before a newer one)

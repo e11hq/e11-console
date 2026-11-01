@@ -198,6 +198,8 @@ final class AppData: NSObject, URLSessionDataDelegate {
     if j["error"] != nil { return (false, nil) }   // (something it couldn't work out: the server's instead)
     return (true, j["model"] as? [String: Any])
   }
+  // how far the copy has caught up with the server (its last change)
+  var rev: Int { guard copyReady else { return 0 }; return q.sync { (call("E11AppView.rev", []) as? NSNumber)?.intValue ?? 0 } }
   // something changed (the stream, a download): whoever's showing a screen from the copy redraws
   @discardableResult func listen(_ f: @escaping () -> Void) -> UUID { let id = UUID(); listeners[id] = f; return id }
   func stopListening(_ id: UUID) { listeners[id] = nil }
