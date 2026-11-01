@@ -487,7 +487,7 @@ final class CommentCell: UIView {
         if let p = (f["thumbUrl"] as? String) ?? (f["url"] as? String) { FeedLoader.shared.image(p) { [weak v, weak shimmer] img in shimmer?.removeFromSuperview(); if let img = img { v?.image = img } } }
         row.addArrangedSubview(v)
       }
-      if pics.count == 1 { row.widthAnchor.constraint(lessThanOrEqualToConstant: 260).isActive = true }
+      if pics.count == 1 { let w = row.widthAnchor.constraint(equalToConstant: 240); w.priority = .required; w.isActive = true }   // (one picture: a 240 pt tile, 4:3)
       let wrap = UIStackView(arrangedSubviews: [row]); wrap.alignment = pics.count == 1 ? .leading : .fill
       grid.addArrangedSubview(wrap)
       i += perRow
