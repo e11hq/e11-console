@@ -519,7 +519,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     near(&dT, bT, upIn: 0.09, downIn: 0.15)
     near(&dS, gS, upIn: 0.09, downIn: 0.07)
     // (the line: in with the title; going back, gone at once)
-    if goingUp || snapping && snapTo > snapFrom { near(&dLine, tT) } else { dLine = tT >= 1 ? dLine : 0 }
+    if goingUp || snapping && snapTo > snapFrom { near(&dLine, dT, upIn: 0.09, downIn: 0.01) } else { dLine = tT >= 1 ? dLine : 0 }
     applyBar()
     if !snapping && dBig == bBig && dT == bT && dS == gS && dBig == tBig && dT == tT && dS == tS && !scroll.isTracking && !scroll.isDecelerating { barLink?.invalidate(); barLink = nil }
   }
