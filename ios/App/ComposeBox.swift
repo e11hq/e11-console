@@ -52,6 +52,8 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
   var onAttach: ((@escaping (String) -> Void) -> Void)?             // the Attach Files sheet → camera / photos / files
   var present: ((UIViewController) -> Void)?
   var onToast: ((String) -> Void)?
+  var onPending: ((String, String?, Double) -> Void)?   // a voice message on its way: (its id, the thread it's in, its length)
+  var onPendingEnd: ((String, Bool) -> Void)?          // …sent (true) or not
 
   private let box = UIView()
   let text = PasteTextView()
@@ -450,14 +452,18 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     // straight up, then sent as its own comment (a reply where the box is replying)
     UIImpactFeedbackGenerator(style: .light).impactOccurred()
     let name = "Voice message.m4a"
+    // (in the comments at once, pulsing while it goes up)
+    let pendingId = "pending-" + UUID().uuidString
+    let thread = parentId
+    onPending?(pendingId, thread, dur)
     Uploader.send(url, name: name, task: taskId, cookies: cookies, progress: { _ in }) { [weak self] path in
       guard let self = self else { return }
       try? FileManager.default.removeItem(at: url)
-      guard let p = path else { self.onToast?("The voice message didn’t upload — try again"); return }
+      guard let p = path else { self.onPendingEnd?(pendingId, false); self.onToast?("The voice message didn’t upload — try again"); return }
       let size = 0
       var body: [String: Any] = ["act": "comment", "id": self.taskId, "html": "", "text": "", "files": [["name": name, "size": size, "path": p, "voice": true, "dur": dur]]]
       if let pid = self.parentId ?? self.replyTo?.id { body["parentId"] = pid }
-      self.onSend?(body) { ok in if ok { UINotificationFeedbackGenerator().notificationOccurred(.success); self.replyTo = nil } }
+      self.onSend?(body) { ok in self.onPendingEnd?(pendingId, ok); if ok { UINotificationFeedbackGenerator().notificationOccurred(.success); self.replyTo = nil } }
     }
   }
 }
@@ -468,9 +474,18 @@ final class VoiceBubble: UIView, AVAudioPlayerDelegate {
   private var player: AVAudioPlayer?, timer: Timer?
   private let path: String, dur: Int
   private var bars: [UIView] = []
-  init(path: String, dur: Int) {
+  init(path: String, dur: Int, pending: Bool = false) {
     self.path = path; self.dur = dur
     super.init(frame: .zero)
+    defer {
+      // uploading: the pill pulses softly and can't play yet; its length shows once it's there (the server's one)
+      if pending {
+        play.isEnabled = false; time.text = ""
+        let a = CABasicAnimation(keyPath: "opacity"); a.fromValue = 1; a.toValue = 0.45; a.duration = 0.75
+        a.autoreverses = true; a.repeatCount = .infinity; a.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        layer.add(a, forKey: "uploading")
+      }
+    }
     backgroundColor = .tertiarySystemFill; layer.cornerRadius = 22
     heightAnchor.constraint(equalToConstant: 46).isActive = true
     widthAnchor.constraint(equalToConstant: 260).isActive = true

@@ -173,15 +173,31 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
     FeedLoader.shared.get(p) { [weak self] j in
       guard let self = self, let f = j?["feed"] as? [String: Any] else { done?(); return }
       CommentsFeed.cache[p] = f
+      self.pending.removeAll { $0.done }   // (the real ones are in this one)
       self.draw(f); done?()
     }
   }
-  private func draw(_ m: [String: Any]) {
+  // ---------- a voice message on its way (Haris, 2026-11-01): in the feed at once, its pill pulsing while it uploads,
+  // then the real one (with its length) from the server takes its place ----------
+  private var pending: [(id: String, item: [String: Any], done: Bool)] = []
+  func addPending(id: String, parent: String?, dur: Double) {
+    guard parent == thread, let m = model else { return }
+    let at = ISO8601DateFormatter().string(from: Date())
+    let it: [String: Any] = ["id": id, "who": m["me"] as? String ?? "", "at": at, "runs": [[String: Any]](), "files": [["id": id, "name": "Voice message.m4a", "voice": true, "dur": Int(dur.rounded()), "pending": true]]]
+    pending.append((id, it, false))
+    draw(m, mine: true)
+  }
+  // sent: it stays until the feed that has the real one arrives; not sent: it goes now
+  func endPending(id: String, ok: Bool) {
+    guard let i = pending.firstIndex(where: { $0.id == id }) else { return }
+    if ok { pending[i].done = true } else { pending.remove(at: i); if let m = model { draw(m) } }
+  }
+  private func draw(_ m: [String: Any], mine: Bool = false) {
     model = m
     onLoaded?(m)
     if let pp = m["people"] as? [String: [String: Any]] { people.merge(pp) { _, b in b } }
-    let items = (m["items"] as? [[String: Any]]) ?? []
-    let atEnd = isAtEnd()
+    let items = ((m["items"] as? [[String: Any]]) ?? []) + pending.map { $0.item }
+    let atEnd = mine || isAtEnd()   // (your own voice message: down to it)
     let keepTopId = order.first { (cells[$0]?.frame.maxY ?? 0) > scroll.contentOffset.y + scroll.contentInset.top }
     let keepTopY = keepTopId.flatMap { cells[$0] }.map { $0.frame.minY - scroll.contentOffset.y }
     var next: [String] = [], seen = Set<String>()
@@ -386,7 +402,7 @@ final class CommentCell: UIView {
     // files: pictures as fixed-size tiles (their room kept from the start), others as file rows
     let files = (it["files"] as? [[String: Any]]) ?? []
     for f in files where (f["voice"] as? Bool) == true {
-      let w = UIStackView(arrangedSubviews: [VoiceBubble(path: f["url"] as? String ?? "", dur: f["dur"] as? Int ?? 0), UIView()]); w.alignment = .center
+      let w = UIStackView(arrangedSubviews: [VoiceBubble(path: f["url"] as? String ?? "", dur: f["dur"] as? Int ?? 0, pending: (f["pending"] as? Bool) == true), UIView()]); w.alignment = .center
       stack.addArrangedSubview(w)
     }
     let rest = files.filter { ($0["voice"] as? Bool) != true }
