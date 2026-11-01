@@ -1933,7 +1933,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
           if name.hasPrefix("tpage") {
             let p = self.taskPages.last
             self.selfResult[name + "Native"] = ["pages": self.taskPages.count, "title": p?.model?["title"] as? String ?? "", "tab": p?.tab ?? "", "drawn": p?.model != nil,
-              "x": p?.transform.tx ?? -1, "tabBar": !self.tabBar.isHidden, "comments": self.cwebShown, "box": self.cbarIfMade.map { !$0.isHidden } ?? false, "compose": self.composeIfMade.map { !$0.isHidden } ?? false, "content": p?.scroll.contentSize.height ?? 0, "feed": (p?.feed?.model?["items"] as? [Any])?.count ?? -1, "corner": self.corner.kind, "sheet": self.presentedViewController.map { String(describing: type(of: $0)) } ?? "", "cornerW": self.corner.frame.width, "cornerX": self.corner.frame.maxX] as [String: Any]
+              "x": p?.transform.tx ?? -1, "tabBar": !self.tabBar.isHidden, "comments": self.cwebShown, "box": self.cbarIfMade.map { !$0.isHidden } ?? false, "compose": self.composeIfMade.map { !$0.isHidden } ?? false, "content": p?.scroll.contentSize.height ?? 0, "feed": (p?.feed?.model?["items"] as? [Any])?.count ?? -1, "corner": self.corner.kind, "sheet": self.presentedViewController.map { String(describing: type(of: $0)) } ?? "", "cornerW": self.corner.frame.width, "cornerX": self.corner.frame.maxX, "copy": AppData.shared.ready, "copyTask": p.map { AppData.shared.screen("task", $0.taskId).model?["title"] as? String ?? "" } ?? ""] as [String: Any]
           }
           if name == "daily" { self.selfResult["dailyNative"] = ["sheet": self.presentedViewController.map { String(describing: type(of: $0)) } ?? ""] }
           if name.hasPrefix("ibx") {
