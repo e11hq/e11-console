@@ -426,25 +426,28 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private func ease(_ a: CGFloat, _ b: CGFloat, _ t: CGFloat) -> CGFloat { let x = min(1, max(0, (t - a) / (b - a))); return x * x * (3 - 2 * x) }
   // (how far the list has scrolled)
   private var scrolled: CGFloat { scroll.contentOffset.y + scroll.contentInset.top }
-  // (0 big … 1 small: as Mail, once the big title has scrolled up under the bar's row — its baseline past the bar's
-  // lower edge — the bar switches over in one quick move, not with the scroll — Haris, 2026-10-31)
+  // ---------- the bar switching over, as Mail (measured frame by frame from Haris's recording, 2026-11-01) ----------
+  // Mail: the big title and the line under it simply scroll up under the bar (iPhone's own soft frost there all the time,
+  // only seen once something is under it). Once both have gone under, the small title comes in — from ~6 pt low, very
+  // blurred and see-through, sharp and in place in 0.07 s — and the line under it the same, starting 0.05 s in (all in
+  // 0.12 s). Back at the top: the small line goes first (0.07 s, a little down, blurring), the small title from 0.02 s
+  // (0.15 s, blurring as it fades, ~5 pt down), then the big line under the big title fades back in (0.07 s). Each piece
+  // is driven frame by frame, so a quick turn back reverses it from wherever it is.
   private var barIn = false
   private var shrink: CGFloat { barIn ? 1 : 0 }
-  // (Mail switches once its big title is up in the bar's row, under the buttons: its top at the status bar)
-  private var pastBig: Bool { scrolled > 62 }
-  // Mail's blur fade, measured frame by frame (Haris, 2026-10-31): over 0.5 s (Haris chose 0.5; Mail ~0.3) the big title's blur builds up as it
-  // fades; the small title comes in very blurred and see-through ~10 pt low, rises and sharpens, its line just after;
-  // the frost comes in the first few frames. Driven frame by frame (0 big … 1 small), so a quick scroll back reverses it
-  // from wherever it is.
-  private var barK: CGFloat = 0
-  private var barLink: CADisplayLink?, barT: CFTimeInterval = 0
-  private let barDur: CGFloat = 0.3   // (Haris, 2026-11-01: back to 0.3 s)
+  // (once the big title and its line have gone up under the bar)
+  private var pastBig: Bool { scrolled > 66 + 41 + 1 + 19 }
   private var fades: [ObjectIdentifier: HomeBlurFade] = [:]
   private func fade(_ l: UILabel) -> HomeBlurFade {
     if let f = fades[ObjectIdentifier(l)] { return f }
     let f = HomeBlurFade(l); fades[ObjectIdentifier(l)] = f; return f
   }
   private func easeOut(_ x: CGFloat) -> CGFloat { let t = min(1, max(0, x)); return 1 - pow(1 - t, 3) }
+  // each piece: 0 hidden … 1 shown; (delay, duration) in seconds, coming in and going out
+  private var pT: CGFloat = 0, pS: CGFloat = 0, pB: CGFloat = 1   // small title, small line, big line
+  private let inT = (0.0, 0.07), inS = (0.05, 0.07)
+  private let outS = (0.0, 0.067), outT = (0.017, 0.15), outB = (0.167, 0.067)
+  private var barLink: CADisplayLink?, barT0: CFTimeInterval = 0, barLast: CFTimeInterval = 0
   private func applyBar() {
     let tr = traitCollection
     if searching {
@@ -452,32 +455,45 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       smallTitle.alpha = 0; smallSub.alpha = 0; title.alpha = 1; sub.alpha = 1
       return
     }
-    // (the date under the title starts once the title is half way up — Haris, 2026-11-01: they came up almost together;
-    //  the title runs the first two thirds of the 0.3 s, the date the last two thirds)
-    let k = barK, k1 = min(1, k / 0.67), k2 = max(0, min(1, (k - 0.335) / 0.665))
-    fade(smallTitle).set(blur: 8 * (1 - ease(0.1, 0.8, k1)), alpha: ease(0.02, 0.55, k1), dy: 10 * (1 - easeOut(k1)), trait: tr)
-    fade(smallSub).set(blur: 8 * (1 - ease(0.1, 0.8, k2)), alpha: ease(0.02, 0.55, k2), dy: 10 * (1 - easeOut(k2)), trait: tr)
-    fade(title).set(blur: 8 * ease(0, 0.6, k), alpha: 1 - ease(0.15, 0.7, k), dy: 0, trait: tr)
-    fade(sub).set(blur: 8 * ease(0, 0.6, k), alpha: 1 - ease(0.1, 0.6, k), dy: 0, trait: tr)
+    // coming in: eased out (quick, then settling); going out: the blur builds first, the fade follows
+    func show(_ l: UILabel, _ p: CGFloat, rise: CGFloat) {
+      if barIn {
+        let e = easeOut(p)
+        fade(l).set(blur: 8 * (1 - e), alpha: min(1, e * 1.25), dy: rise * (1 - e), trait: tr)
+      } else {
+        let x = 1 - p
+        fade(l).set(blur: 8 * easeOut(min(1, x * 1.6)), alpha: 1 - pow(x, 1.6), dy: rise * x, trait: tr)
+      }
+    }
+    show(smallTitle, pT, rise: barIn ? 6 : 5)
+    show(smallSub, pS, rise: barIn ? 6 : 3)
+    fade(title).set(blur: 0, alpha: 1, dy: 0, trait: tr)
+    fade(sub).set(blur: 0, alpha: pB, dy: 0, trait: tr)
   }
   @objc private func barTick() {
-    let now = CACurrentMediaTime(), dt = CGFloat(min(now - barT, 1.0 / 30)); barT = now
-    let target: CGFloat = barIn ? 1 : 0, step = dt / barDur
-    barK = target > barK ? min(target, barK + step) : max(target, barK - step)
+    let now = CACurrentMediaTime(), dt = CGFloat(min(now - barLast, 1.0 / 30)); barLast = now
+    let t = now - barT0
+    func step(_ p: inout CGFloat, _ to: CGFloat, _ d: (Double, Double)) {
+      guard t >= d.0, p != to else { return }
+      let s = dt / CGFloat(d.1)
+      p = to > p ? min(to, p + s) : max(to, p - s)
+    }
+    if barIn { step(&pT, 1, inT); step(&pS, 1, inS); pB = 0 }
+    else { step(&pS, 0, outS); step(&pT, 0, outT); if pT == 0 && pS == 0 { step(&pB, 1, outB) } }
     applyBar()
-    if barK == target { barLink?.invalidate(); barLink = nil }
+    let done = barIn ? (pT == 1 && pS == 1) : (pT == 0 && pS == 0 && pB == 1)
+    if done { barLink?.invalidate(); barLink = nil }
   }
-  // the bar switching over (the frost and its line, the small title and date in; the big ones out) — or back
+  // the bar switching over (the small title and line in; the big line out) — or back
   private func setBar(_ on: Bool, now: Bool = false) {
     barIn = on
-    if #available(iOS 26.0, *) {
-      UIView.animate(withDuration: now ? 0 : 0.25) { self.scroll.topEdgeEffect.isHidden = !on; self.topLine.alpha = on ? 1 : 0 }
-    } else {
-      UIView.animate(withDuration: now ? 0 : 0.25) { self.blur.alpha = on ? 1 : 0 }
+    // (iPhone's soft frost is there all the time, as Mail's — no line under the bar; before iOS 26 a thin blur)
+    if #available(iOS 26.0, *) {} else {
+      UIView.animate(withDuration: now ? 0 : 0.2) { self.blur.alpha = on ? 1 : 0 }
     }
-    if now { barLink?.invalidate(); barLink = nil; barK = on ? 1 : 0; applyBar(); return }
+    if now { barLink?.invalidate(); barLink = nil; pT = on ? 1 : 0; pS = pT; pB = on ? 0 : 1; applyBar(); return }
+    barT0 = CACurrentMediaTime(); barLast = barT0
     if barLink == nil {
-      barT = CACurrentMediaTime()
       let l = CADisplayLink(target: self, selector: #selector(barTick))
       if #available(iOS 15.0, *) { l.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120) }
       l.add(to: .main, forMode: .common); barLink = l
@@ -509,10 +525,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if !searching && pastBig != barIn { setBar(pastBig) }
     if #available(iOS 26.0, *) {
       if let i = edgeHook as? UIScrollEdgeElementContainerInteraction { let want: UIScrollView = searching ? results : scroll; if i.scrollView !== want { i.scrollView = want } }
-      let hide = !searching && !barIn
-      if scroll.topEdgeEffect.isHidden != hide { UIView.animate(withDuration: 0.25) { self.scroll.topEdgeEffect.isHidden = hide } }
+      if scroll.topEdgeEffect.isHidden { scroll.topEdgeEffect.isHidden = false }
       topLine.frame = CGRect(x: 0, y: barH - 0.5, width: W, height: 0.5)
-      topLine.alpha = searching || !barIn ? 0 : 1
+      topLine.alpha = 0
     } else {
       blur.frame = CGRect(x: 0, y: 0, width: W, height: barH + 14)
       CATransaction.begin(); CATransaction.setDisableActions(true)
