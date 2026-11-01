@@ -493,6 +493,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   lazy var serverTask: ServerTask = { let s = ServerTask(); s.cookies = serverHome.cookies; return s }()
   var taskPan: UIScreenEdgePanGestureRecognizer?
   var taskPanSpent = false
+  var prefetchedAt: [String: Date] = [:]
   // the screen hidden as a task was tapped (for the website's task page): the app's own page shows it again under itself
   var hiddenForOpen: (UIView?, Date)?
   var taskComments: String?           // the task whose comments show inside the page (its Comments tab)
@@ -1167,7 +1168,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         done(mine.map { "\($0.name)=\($0.value)" }.joined(separator: "; "))
       }
     }
-    s.onModel = { [weak self] m in if kind == "home" { self?.drawServerHome(m) } else if kind == "inbox" { self?.drawServerInbox(m) } else { self?.drawServerMyTasks(m) } }
+    s.onModel = { [weak self] m in if kind == "home" { self?.drawServerHome(m) } else if kind == "inbox" { self?.drawServerInbox(m) } else { self?.drawServerMyTasks(m) }; if kind != "inbox" { self?.prefetchTasks(m) } }
     // switched off on the server (or no Home for this person): the page's Home again, drawn at once
     // (My Tasks: the page's own list, under it)
     s.onOff = { [weak self] in

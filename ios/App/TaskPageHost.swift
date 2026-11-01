@@ -637,3 +637,25 @@ extension Main {
     p.setTab("details", tell: true, slide: true)
   }
 }
+
+extension Main {
+  // the tasks on Home / My Tasks fetched ahead, a few at a time, so a tapped task opens drawn (Haris, 2026-11-01):
+  // the first 15 shown, each again at most every 5 minutes
+  func prefetchTasks(_ m: [String: Any]) {
+    let ids = ((m["groups"] as? [[String: Any]]) ?? []).flatMap { ($0["cards"] as? [[String: Any]]) ?? [] }.compactMap { $0["id"] as? String }
+    let now = Date()
+    let want = Array(ids.filter { id in prefetchedAt[id].map { now.timeIntervalSince($0) > 300 } ?? true }.prefix(15))
+    guard !want.isEmpty else { return }
+    want.forEach { prefetchedAt[$0] = now }
+    func next(_ i: Int) {
+      guard i < want.count else { return }
+      let id = want[i]
+      serverTask.request("/api/task?id=" + (id.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? id), body: nil) { [weak self] j in
+        if (j?["off"] as? Bool) == true { return }   // (the app's task page switched off: nothing to fetch for)
+        if let t = j?["task"] as? [String: Any] { self?.serverTask.cache[id] = t }
+        next(i + 1)
+      }
+    }
+    next(0)
+  }
+}
