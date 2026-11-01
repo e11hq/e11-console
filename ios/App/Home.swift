@@ -245,6 +245,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   var isList = false { didSet { if isList && seg.superview == nil { makeList() } } }
   private let seg = UISegmentedControl(items: ["All", "Done"])
   private let filterRow = UIScrollView(), chipRow = UIScrollView()
+  private let listHead = HomePassThrough()
+  private var listHeadH: CGFloat = 0
+  private var pinned = false   // (the tabs and filters stuck under the bar)
   private var filterBtns: [UIButton] = [], chipBtns: [UIButton] = []
   private(set) var listTab = "all"
   private var filtersKey = ""
@@ -259,7 +262,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     }, for: .valueChanged)
     [filterRow, chipRow].forEach { $0.showsHorizontalScrollIndicator = false; $0.alwaysBounceHorizontal = true; $0.clipsToBounds = false; $0.contentInset = UIEdgeInsets(top: 0, left: 16, bottom: 0, right: 16) }
     [filterRow, chipRow].forEach { $0.contentOffset.x = -16 }   // (the first button 16 in, as the cards)
-    [seg, filterRow, chipRow].forEach { scroll.addSubview($0) }
+    // (together, over the list: they move with it until they reach the frost bar, then stay under it — Haris, 2026-11-01)
+    [seg, filterRow, chipRow].forEach { listHead.addSubview($0) }
+    insertSubview(listHead, belowSubview: topBar)
   }
   private func capsule(_ t: String, sym: String?, on: Bool, small: Bool) -> UIButton {
     var c: UIButton.Configuration
@@ -309,7 +314,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }
   // (where the boxes are on Home: All / Done 32 tall, the filter buttons 36, what's on 30 under them; returns where the list starts)
   private func layoutList(_ W: CGFloat) -> CGFloat {
-    var y: CGFloat = 4
+    var y: CGFloat = 0
     seg.frame = CGRect(x: 16, y: y, width: W - 32, height: 32); y += 32 + 10
     func row(_ r: UIScrollView, _ bs: [UIButton], _ h: CGFloat) {
       var x: CGFloat = 0
@@ -325,11 +330,11 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if !filterBtns.isEmpty { row(filterRow, filterBtns, 36); y += 36 + 10 }
     chipRow.isHidden = chipBtns.isEmpty
     if !chipBtns.isEmpty { row(chipRow, chipBtns, 30); y += 30 + 10 }
-    return y - 4
+    return y - 10
   }
   func selfTab(_ t: String) { seg.selectedSegmentIndex = t == "done" ? 1 : 0; seg.sendActions(for: .valueChanged) }
   func listGeo() -> [String: Any] {
-    ["tab": listTab, "filters": filterBtns.map { $0.accessibilityIdentifier ?? "" }, "chips": chipBtns.count, "cards": cards.count,
+    ["tab": listTab, "pinned": pinned, "headTop": listHead.frame.minY, "barBottom": smallHead, "filters": filterBtns.map { $0.accessibilityIdentifier ?? "" }, "chips": chipBtns.count, "cards": cards.count,
      "groups": content.compactMap { ($0 as? UILabel)?.tag == 7 ? $0.accessibilityIdentifier : nil }]
   }
 
@@ -349,7 +354,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // the three boxes (.ph-stats: 4 above, 6 below, 8 apart) — My Tasks: All / Done, the filters and what's on instead
     var y: CGFloat = 4
     let bw = (W - 32 - 16) / 3, bh: CGFloat = 1 + 10 + 41 + 15 + 12 + 1
-    if isList { y = layoutList(W) - bh - 6 }
+    if isList { listHeadH = layoutList(W); y = 4 + listHeadH - bh; layoutHeader() }
     for (i, v) in stats.enumerated() where !isList {
       v.frame = CGRect(x: 16 + CGFloat(i) * (bw + 8), y: y, width: bw, height: bh)
       v.viewWithTag(1)?.frame = CGRect(x: 13, y: 11, width: bw - 26, height: 41)
@@ -484,27 +489,42 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let titleY = top + 66   // (the big title's top, as Mail's)
     // the bar's frost: iPhone's own scroll edge effect under the bar's row (iOS 26+), there once the list moves under it;
     // before iOS 26 a thin see-through blur that softens out at its lower edge
-    topBar.frame = CGRect(x: 0, y: 0, width: W, height: smallH)
+    // My Tasks: All / Done and the filters where the list has them (4 under its top) — once they reach the bar, stuck
+    // 8 under it, the frost reaching down under them (so the cards go under them too)
+    var barH = smallH
+    if isList && listHead.superview != nil {
+      let atY = 4 - scroll.contentOffset.y, pinY = smallH + 8
+      let pin = !searching && atY < pinY
+      listHead.frame = CGRect(x: 0, y: max(atY, pin ? pinY : atY), width: W, height: listHeadH)
+      if pin != pinned {
+        pinned = pin
+        // (in the bar while stuck — iPhone's frost goes under what's in it; otherwise over the list)
+        if pin { topBar.addSubview(listHead) } else { insertSubview(listHead, belowSubview: topBar) }
+      }
+      listHead.isHidden = searching
+      if pin { barH = pinY + listHeadH + 8 }
+    }
+    topBar.frame = CGRect(x: 0, y: 0, width: W, height: barH)
     // (it comes the moment the big title has gone under the bar, as Mail's — Haris, 2026-10-31)
     if !searching && pastBig != barIn { setBar(pastBig) }
     if #available(iOS 26.0, *) {
       if let i = edgeHook as? UIScrollEdgeElementContainerInteraction { let want: UIScrollView = searching ? results : scroll; if i.scrollView !== want { i.scrollView = want } }
       let hide = !searching && !barIn
       if scroll.topEdgeEffect.isHidden != hide { UIView.animate(withDuration: 0.25) { self.scroll.topEdgeEffect.isHidden = hide } }
-      topLine.frame = CGRect(x: 0, y: smallH - 0.5, width: W, height: 0.5)
+      topLine.frame = CGRect(x: 0, y: barH - 0.5, width: W, height: 0.5)
       topLine.alpha = searching || !barIn ? 0 : 1
     } else {
-      blur.frame = CGRect(x: 0, y: 0, width: W, height: smallH + 14)
+      blur.frame = CGRect(x: 0, y: 0, width: W, height: barH + 14)
       CATransaction.begin(); CATransaction.setDisableActions(true)
-      blurMask.frame = blur.bounds; blurMask.locations = [0, NSNumber(value: Double(smallH / (smallH + 14))), 1]
+      blurMask.frame = blur.bounds; blurMask.locations = [0, NSNumber(value: Double(barH / (barH + 14))), 1]
       CATransaction.commit()
-      hairline.frame = CGRect(x: 0, y: smallH - 0.5, width: W, height: 0.5)
+      hairline.frame = CGRect(x: 0, y: barH - 0.5, width: W, height: 0.5)
       blur.alpha = searching || barIn ? 1 : 0
     }
     // (the scroll bar on the right runs from the bar's lower edge down, never up beside it — as Mail's; set here, not by iPhone)
     if scroll.automaticallyAdjustsScrollIndicatorInsets { scroll.automaticallyAdjustsScrollIndicatorInsets = false }
     // (… down to just above the tab bar, as Mail's)
-    scroll.verticalScrollIndicatorInsets = UIEdgeInsets(top: smallH, left: 0, bottom: tabTop.map { bounds.height - $0 + 8 } ?? bottomRoom - 20, right: 0)
+    scroll.verticalScrollIndicatorInsets = UIEdgeInsets(top: barH, left: 0, bottom: tabTop.map { bounds.height - $0 + 8 } ?? bottomRoom - 20, right: 0)
     // the big date and title: the list's own first lines (above its top, in the room it keeps for them)
     let tw = W - 16 - R
     // (bounds and centre, not frame: the blur fade moves them with a transform)

@@ -78,6 +78,10 @@ try:
     check(mt.get('shown') is True and mt.get('server') is True and mt.get('tab') == 'all' and 'filter-due' in (mt.get('filters') or []), f"My Tasks is the app's own, from the server, with All and its filter buttons {mt}")
     check(mtd.get('shown') is True and mtd.get('tab') == 'done' and 'tab=done' in (mtd.get('query') or ''), f"My Tasks' Done tab asks the server for completed tasks {mtd}")
     check(mta.get('tab') == 'all' and 'tab=all' in (mta.get('query') or ''), f"back to All {mta}")
+    ms = res.get('mytasksScrolledMyTasks') or {}
+    check(ms.get('pinned') is True and abs((ms.get('headTop') or 0) - (ms.get('barBottom') or 0) - 8) < 1, f"scrolled, All / Done and the filters stay under the frost bar {ms}")
+    check((res.get('mytasksScrolled') or {}).get('blank') is True, f"the page draws nothing under the app's My Tasks {res.get('mytasksScrolled')}")
+    check((res.get('mytasksTopMyTasks') or {}).get('pinned') is False, f"back at the top they're with the list again {res.get('mytasksTopMyTasks')}")
     check((res.get('inboxMyTasks') or {}).get('shown') is not True, f"My Tasks isn't over the Inbox {res.get('inboxMyTasks')}")
     check((res.get('inboxNative') or {}).get('shown') is False, f"the app's Home goes on another tab {res.get('inboxNative')}")
     check(res.get('splashGone') is True, f"the startup screen went before Home {res.get('splashGone')}")
