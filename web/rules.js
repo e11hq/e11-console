@@ -624,7 +624,8 @@ var E11Rules = (() => {
           return { key: k, name: k === '_' ? '' : firstName(k), v: v === 'none' ? '' : String(v), label: v === 'urgent' ? 'Urgent' : v === 'none' ? '' : String(v) };
         }), canPrio: !ro && can('editPriority', t),
         tags: (t.tags || []).map((g) => ({ t: g, rgb: tagRgb(g) })), canTags: !ro && can('addTag', t), canRemoveTag: !ro && can('removeTag', t), allTags: !ro && can('addTag', t) ? allTags() : [],
-        pool: !ro && can('assign', t) ? assignPool(t) : [], channelKeys: t.channels || [], canChannels: !ro && !t.parentId && !!u && (isAdm(u) || u.role === 'am' || u.role === 'social'), canGuardian: !ro && !t.parentId && can('assign', t), allChannels: Object.entries(CHANNEL_NAMES).map(([k, n]) => ({ k, n })),
+        pool: !ro && can('assign', t) ? assignPool(t) : [], channelKeys: t.channels || [], canChannels: !ro && !t.parentId && !!u && (isAdm(u) || u.role === 'am' || u.role === 'social'), canGuardian: !ro && !t.parentId && can('assign', t),
+        canClient: !ro && !t.parentId && can('editProject', t) && !lockedId, clients: !ro && !t.parentId && can('editProject', t) && !lockedId ? movable().map((p) => ({ id: p.id, name: p.name, rgb: rgbOf(p.color || '#87909e'), on: p.id === t.projectId })) : [], allChannels: Object.entries(CHANNEL_NAMES).map(([k, n]) => ({ k, n })),
         channels: (t.channels || []).map((c) => CHANNEL_NAMES[c] || c),
         guardian: t.guardian && userById(t.guardian) ? person(t.guardian) : null,
         update: t.update ? { t: t.update, rgb: updateRgb(t.update) } : null, updates: UPDATES,
@@ -729,6 +730,37 @@ var E11Rules = (() => {
       t.checklist = t.checklist || [];
       t.checklist.push({ id: newId(), text, done: false });
       logActivity(t, `added checklist item <b>${esc(text)}</b>`);
+      t.updatedAt = nowISO();
+      return [];
+    }
+    // a subtask (app.js createTask with a parent): the parent's client and status, logged on both
+    function addSubtask(t, title) {
+      title = String(title || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+      if (!title || t.parentId) return [];
+      const at = nowISO();
+      const sibs = db.tasks.filter((x) => x.parentId === t.id);
+      const n = { id: newId(), projectId: t.projectId, sectionId: t.sectionId, parentId: t.id, title, notes: '', done: false, completedAt: null, due: null, prio: {},
+        tags: [], attachments: [], comments: [], checklist: [], activity: [{ id: newId(), at, text: 'created this task', actor: meId }], start: null, createdAt: at, updatedAt: at,
+        cdRule: 2, cdStatus: '', assignees: [], createdBy: meId, reviews: [], needsCD: false, order: sibs.length + 1 };
+      db.tasks.push(n);
+      logActivity(t, `added subtask <b>${esc(title)}</b>`);
+      t.updatedAt = at;
+      return [];
+    }
+    // the clients this person may move a task into (app.js amClientOk): everyone's for Admins and the CD
+    const movable = () => { const u = me(); return projects.filter((p) => !p.archived && (isAdm(u) || isCD(meId) || amScope({ projectId: p.id, createdBy: null }, u))); };
+    function setClient(t, pid) {
+      const p = pid ? proj(pid) : null;
+      if (pid && !p) return { error: 'That client is no longer here' };
+      if ((t.projectId || null) === (p ? p.id : null)) return [];
+      if (p && !movable().includes(p)) return { error: 'You can’t move tasks into that client' };
+      const oldP = proj(t.projectId);
+      logChange(t, 'the <b>client</b>', oldP ? oldP.name : 'My Tasks', p ? p.name : 'My Tasks');
+      t.projectId = p ? p.id : null;
+      t.sectionId = p && p.sections[0] ? p.sections[0].id : (statuses()[0] || {}).id || null;
+      const sibs = db.tasks.filter((x) => !x.parentId && x.projectId === t.projectId && x.sectionId === t.sectionId && x.id !== t.id);
+      t.order = sibs.length ? Math.max(...sibs.map((x) => x.order || 0)) + 1 : 1;
+      descendants(t.id).forEach((d) => { d.projectId = t.projectId; d.sectionId = t.sectionId; });
       t.updatedAt = nowISO();
       return [];
     }
@@ -854,7 +886,7 @@ var E11Rules = (() => {
     return { home, myTasks, myTasksFilters, inbox, inboxRow, myDayData, cardOf, can, amReadOnly, canComplete, completeBlocked, dayTitle, statusInfo, sectionOf,
       notifGroups: NOTIF_GROUPS, doneLocked, canReopen, finish, finishBlocked, canFinish, moveToStatus, logActivity, logChange, pushNotif, notifyWatchers, checkPrioConflict, setDone, setDue, setClientApproval, asksClientApproval, deleteTask, watchersOf, creatorOf, clientAmsOf, fmtDue,
       taskPage, setTitle, setStart, setStatus, setMyPart, setPrio, prioTaken, toggleCheck, setNeedsCD, setUpdate, idLocked,
-      setAssignee, setGuardian, addTag, removeTag, setChannels, addCheck };
+      setAssignee, setGuardian, addTag, removeTag, setChannels, addCheck, addSubtask, setClient };
   }
 
   // (the clock and new ids for the actions: the website's own, or the server's)

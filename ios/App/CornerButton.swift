@@ -113,7 +113,14 @@ extension Main {
     }
     return ("none", "", corner.frame)
   }
+  // (a tab change hides one screen and shows the next a moment apart: settled together, so it changes in place
+  //  rather than going and coming back)
   func updateCorner(animated: Bool = true) {
+    if cornerPending { return }
+    cornerPending = true
+    DispatchQueue.main.async { self.cornerPending = false; self.updateCornerNow(animated: animated) }
+  }
+  func updateCornerNow(animated: Bool = true) {
     // (only once there's a screen of the app's own to show it on)
     guard homeIfMade != nil || myTasksIfMade != nil || inboxIfMade != nil || !taskPages.isEmpty else { return }
     for h in [homeIfMade, myTasksIfMade, inboxIfMade].compactMap({ $0 }) where !h.cornerShared { h.cornerShared = true; h.onCorner = { [weak self] in self?.updateCorner() } }

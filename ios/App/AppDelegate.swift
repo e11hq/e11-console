@@ -493,6 +493,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   var taskPan: UIScreenEdgePanGestureRecognizer?
   var taskComments: String?           // the task whose comments show inside the page (its Comments tab)
   var taskTabHidden = false
+  var cornerPending = false
   lazy var corner: CornerButton = {
     let c = CornerButton()
     c.onTap = { [weak self] k in self?.shownScreen?.cornerTap(k) }
@@ -1190,6 +1191,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   var homeLook: Any?, homePagePeople: [String: [String: Any]] = [:], homeServerPeople: [String: [String: Any]] = [:]
   // the server's Home drawn (with the page's colours), when Home is on screen
   func drawServerHome(_ m: [String: Any]) {
+    defer { updateCorner() }
     guard let h = homeIfMade, !h.isHidden else { return }
     var mm = m; mm["show"] = true
     mm["look"] = homeLook ?? ["light": appStyle == .light]
@@ -1287,6 +1289,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     return h
   }()
   func drawServerMyTasks(_ m: [String: Any]) {
+    defer { updateCorner() }
     guard let h = myTasksIfMade, myTasksPageMe != nil, (m["me"] as? String) == myTasksPageMe else { return }
     var mm = m; mm["show"] = true
     // (Home's colours from the page when they're for the same light / dark)
@@ -1379,6 +1382,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     return h
   }()
   func drawServerInbox(_ m: [String: Any]) {
+    defer { updateCorner() }
     guard let h = inboxIfMade, inboxPageMe != nil, (m["me"] as? String) == inboxPageMe else { return }
     var mm = m; mm["show"] = true
     if let l = homeLook as? [String: Any], (l["light"] as? Bool) == inboxLight { mm["look"] = l } else { mm["look"] = ["light": inboxLight] }
@@ -1904,7 +1908,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
           }
           if name.hasPrefix("form") { self.selfResult[name + "Geo"] = FormSheetVC.current?.geo() ?? ["error": "no form"] }
           if name.hasPrefix("nsheet") { self.selfResult[name + "Geo"] = (self.presentedViewController as? NativeSheetVC)?.geo() ?? ["error": "no native sheet"] }
-          if name == "home" || name == "inbox" || name.hasPrefix("home") { var g = self.homeGeo(); g["sheet"] = self.presentedViewController.map { String(describing: type(of: $0)) } ?? ""; self.selfResult[name + "Native"] = g }
+          if name == "home" || name == "inbox" || name.hasPrefix("home") { var g = self.homeGeo(); g["corner"] = self.corner.kind; g["sheet"] = self.presentedViewController.map { String(describing: type(of: $0)) } ?? ""; self.selfResult[name + "Native"] = g }
           if name.hasPrefix("tpage") {
             let p = self.taskPages.last
             self.selfResult[name + "Native"] = ["pages": self.taskPages.count, "title": p?.model?["title"] as? String ?? "", "tab": p?.tab ?? "", "drawn": p?.model != nil,
@@ -1914,6 +1918,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
           if name.hasPrefix("ibx") {
             var g: [String: Any] = ["made": self.inboxIfMade != nil, "shown": self.inboxIfMade?.isHidden == false, "server": self.serverInboxIfMade?.on ?? false, "query": self.serverInboxIfMade?.query ?? ""]
             if let h = self.inboxIfMade { g.merge(h.inboxGeo()) { a, _ in a } }
+            g["corner"] = self.corner.kind; g["cornerW"] = self.corner.frame.width; g["cornerA"] = self.corner.alpha
             self.selfResult[name + "Inbox"] = g
           }
           if name.hasPrefix("mytasks") || name == "inbox" {

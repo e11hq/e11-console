@@ -125,6 +125,21 @@ test('assignees, guardian, tags, channels, checklist items', async () => {
   assert.equal(T('t2').checklist.at(-1).text, 'Bleed');
 });
 
+test('a subtask added; the client changed', async () => {
+  let r = await act('am@e11-digital.com', { act: 'addSub', id: 't2', value: 'Resize for story' });
+  assert.equal(r.ok, true);
+  const sub = app.store.list('tasks').find((x) => x.parentId === 't2');
+  assert.ok(sub); assert.equal(sub.title, 'Resize for story'); assert.equal(sub.projectId, 'p1');
+  assert.ok(r.task.subtasks.some((x) => x.title === 'Resize for story'));
+  r = await act('prod@e11-digital.com', { act: 'addSub', id: 't2', value: 'x' });
+  assert.equal(r.ok, false, 'production can\'t add subtasks');
+  assert.ok(r.ok === false);
+  const m = (await page('am@e11-digital.com', 't2')).task;
+  assert.equal(m.canClient, true); assert.ok(m.clients.some((c) => c.id === 'p1' && c.on));
+  r = await act('am@e11-digital.com', { act: 'client', id: 't2', value: null });
+  assert.equal(r.ok, true); assert.equal(T('t2').projectId, null);
+});
+
 test('the switch: off → the page asks the website again', async () => {
   app.store.kv.set('task-server', 'off');
   assert.equal((await page('am@e11-digital.com', 't1')).off, true);

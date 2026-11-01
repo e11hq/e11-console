@@ -296,7 +296,8 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       if let c = c { let d = UIView(); d.backgroundColor = TaskPage.rgb(c["rgb"]); d.layer.cornerRadius = 4; d.widthAnchor.constraint(equalToConstant: 9).isActive = true; d.heightAnchor.constraint(equalToConstant: 9).isActive = true; v.addArrangedSubview(d) }
       v.addArrangedSubview(label(c?["name"] as? String ?? "No client", size: 17, color: .secondaryLabel))
       if m["lock"] != nil { v.addArrangedSubview(symbol("lock.fill", 12, .secondaryLabel)) }
-      g.append(row(sym: "square.grid.2x2", key: "Client", value: v))
+      let canCl = (m["canClient"] as? Bool) == true
+      g.append(row(sym: "square.grid.2x2", key: "Client", value: v, chevron: canCl, tap: canCl ? { [weak self] in self?.pickClient() } : nil))
     }
     let tags = (m["tags"] as? [[String: Any]]) ?? []
     let canTags = (m["canTags"] as? Bool) == true
@@ -328,9 +329,12 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     }
     // ---- Subtasks ----
     let subs = (m["subtasks"] as? [[String: Any]]) ?? []
-    if !subs.isEmpty {
-      blocks.append(header("Subtasks · \(subs.filter { ($0["done"] as? Bool) == true }.count)/\(subs.count)"))
-      blocks.append(group(subs.map { subRow($0, ro: ro) }))
+    let canAddSub = (m["canAddSub"] as? Bool) == true
+    if !subs.isEmpty || canAddSub {
+      blocks.append(header(subs.isEmpty ? "Subtasks" : "Subtasks · \(subs.filter { ($0["done"] as? Bool) == true }.count)/\(subs.count)"))
+      var rows = subs.map { subRow($0, ro: ro) }
+      if canAddSub { rows.append(addRow("Add subtask") { [weak self] in self?.askText("Add subtask", placeholder: "Subtask name") { v in guard let self = self else { return }; self.onAct?(["act": "addSub", "id": self.taskId, "value": v]) } }) }
+      blocks.append(group(rows))
     }
     // ---- Checklist ----
     let cl = (m["checklist"] as? [[String: Any]]) ?? []
@@ -797,6 +801,14 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     }, { [weak self] i, typed in
       guard let self = self, i == -2, let v = typed?.trimmingCharacters(in: .whitespacesAndNewlines), !v.isEmpty else { return }
       self.onAct?(["act": "addTag", "id": self.taskId, "value": v])
+    })
+  }
+  func pickClient() {
+    guard let list = model?["clients"] as? [[String: Any]], !list.isEmpty else { return }
+    let rows: [[String: Any]] = list.enumerated().map { i, c in ["i": i, "label": c["name"] as? String ?? "", "dot": c["rgb"] ?? [128, 128, 128], "checked": (c["on"] as? Bool) == true, "find": c["name"] as? String ?? ""] }
+    onSheet?(["sections": [["header": "Move to client", "rows": rows]], "search": "Search clients"], { _ in }, { [weak self] i, _ in
+      guard let self = self, i >= 0, i < list.count, (list[i]["on"] as? Bool) != true, let id = list[i]["id"] as? String else { return }
+      self.onAct?(["act": "client", "id": self.taskId, "value": id])
     })
   }
   func pickChannels() {

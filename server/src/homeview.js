@@ -122,7 +122,7 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
       const r = rules.deleteTask(t);
       undo = r.item.id;
       messages = ['Moved to the Trash'];
-    } else if (['title', 'start', 'status', 'myPart', 'prio', 'check', 'needsCD', 'update', 'clientApproval', 'assign', 'guardian', 'addTag', 'removeTag', 'channels', 'addCheck'].includes(a)) {
+    } else if (['title', 'start', 'status', 'myPart', 'prio', 'check', 'needsCD', 'update', 'clientApproval', 'assign', 'guardian', 'addTag', 'removeTag', 'channels', 'addCheck', 'addSub', 'client'].includes(a)) {
       // the native task page's (shell 30+) — each checked as the website checks it
       if (rules.amReadOnly(t) || rules.doneLocked(t)) return view();
       let r = [];
@@ -144,6 +144,8 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
       else if (a === 'addTag') { if (!rules.can('addTag', t)) return fail(403, 'Your role doesn’t allow adding tags'); r = rules.addTag(t, body.value); }
       else if (a === 'removeTag') { if (!rules.can('removeTag', t)) return fail(403, 'Your role doesn’t allow removing tags'); r = rules.removeTag(t, String(body.value || '')); }
       else if (a === 'channels') { const u0 = (data.users || []).find((x) => x.id === u.id); if (!u0 || !(u0.role === 'admin' || u0.admin === true || u0.role === 'am' || u0.role === 'social') || t.parentId) return fail(403, 'Your role doesn’t allow this'); r = rules.setChannels(t, Array.isArray(body.value) ? body.value : []); }
+      else if (a === 'addSub') { if (!rules.can('createTask', t) || t.parentId) return fail(403, 'Your role doesn’t allow adding subtasks'); r = rules.addSubtask(t, body.value); }
+      else if (a === 'client') { if (!rules.can('editProject', t) || t.parentId || rules.idLocked(t)) return fail(403, 'The client can’t be changed'); r = rules.setClient(t, body.value ? String(body.value) : null); }
       else if (a === 'addCheck') { if (!rules.can('addChecklist', t)) return fail(403, 'Your role doesn’t allow adding checklist items'); r = rules.addCheck(t, body.value); }
       else if (a === 'clientApproval') {
         const ca = (rules.taskPage(t.id) || {}).clientApproval;
@@ -165,6 +167,7 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
       if (!x) changes.push({ kind: 'tasks', id, del: true });
       else if (JSON.stringify(x) !== was) changes.push({ kind: 'tasks', id, base: JSON.parse(was), data: x });
     }
+    for (const x of db.tasks) if (!before.has(x.id)) changes.push({ kind: 'tasks', id: x.id, data: x });   // (new: a subtask)
     for (const n of db.notifications) {
       const was = notifBefore.get(n.id);
       if (!was) changes.push({ kind: 'notifications', id: n.id, data: n });

@@ -40,6 +40,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
      only say where the button goes and what it is. */
   var cornerShared = false { didSet { searchCircle.alpha = cornerShared || searching ? 0 : 1; markAll.alpha = cornerShared ? 0 : 1 } }
   var onCorner: (() -> Void)?
+  // (shown or hidden — a tab changed: the corner button goes to this screen's, or away)
+  override var isHidden: Bool { didSet { if oldValue != isHidden { onCorner?() } } }
   // what the corner is here: "search", "read", "unread" or "none", and where (its right edge left of your photo)
   func corner() -> (kind: String, text: String, frame: CGRect) {
     let f = searchCircle.frame

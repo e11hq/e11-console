@@ -36,7 +36,7 @@ extension Main {
     p.loading()
     refreshTaskPage(p)
     // (the corner button: Search / Mark all read slides over into ••• as the page comes in)
-    updateCorner()
+    updateCornerNow()
     // the edge swipe: one, on the app's screen, for whichever page is on top
     if taskPan == nil {
       let g = UIScreenEdgePanGestureRecognizer(target: self, action: #selector(taskEdgePan(_:)))
@@ -87,7 +87,7 @@ extension Main {
     let back = underViews(below: p, under: under)
     let W = view.bounds.width
     let last = taskPages.isEmpty
-    updateCorner()
+    updateCornerNow()
     if last { tabBar.isHidden = taskTabHidden; taskPan?.isEnabled = false }
     let finish = {
       p.removeFromSuperview()
