@@ -434,7 +434,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       inboxRows[id] = nil
       UIView.animate(withDuration: 0.25, delay: 0, options: [.curveEaseInOut, .beginFromCurrentState]) { v.alpha = 0 } completion: { _ in v.removeFromSuperview() }
     }
-    if content.isEmpty, let e = model["empty"] as? String {
+    if content.isEmpty {
+      let e = inboxTab == "unread" ? "Inbox zero 🎉" : inboxTab == "mentions" ? "No mentions yet" : "Nothing here yet"
       let l = UILabel(); l.text = e; l.font = .systemFont(ofSize: 15); l.textColor = .secondaryLabel; l.tag = 8; l.numberOfLines = 0; l.textAlignment = .center
       scroll.addSubview(l); content.append(l)
     }
@@ -1702,7 +1703,6 @@ final class MailCats: UIView {
   @objc private func swiped(_ g: UISwipeGestureRecognizer) { pick(g.direction == .left ? selected + 1 : selected - 1) }
   private func pick(_ i: Int) {
     guard i >= 0, i < items.count else { return }
-    if i == selected { onPick?(i); return }
     onPick?(i)
   }
   func choose(_ i: Int, animated: Bool) {

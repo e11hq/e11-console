@@ -384,8 +384,12 @@ var E11Rules = (() => {
       if (!u || u.active === false) return null;
       const mine = (db.notifications || []).filter((n) => n.to === meId);
       const unread = mine.filter((n) => !n.read).length;
-      const list = mine.filter((n) => (tab === 'unread' ? !n.read : tab === 'mentions' ? n.kind === 'mention' : true))
-        .sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 200);
+      // (All: the newest 200 — and every unread one and every mention as well, so the app's Unread and Mentions, picked
+      //  from these, miss none)
+      const byNew = (a, b) => String(b.at).localeCompare(String(a.at));
+      const all = mine.slice().sort(byNew);
+      const list = tab === 'unread' ? all.filter((n) => !n.read) : tab === 'mentions' ? all.filter((n) => n.kind === 'mention')
+        : all.filter((n, i) => i < 200 || !n.read || n.kind === 'mention');
       const rows = list.map(inboxRow);
       rows.forEach((r) => { if (r.from) peopleOn.add(r.from); });
       peopleOn.add(meId);
