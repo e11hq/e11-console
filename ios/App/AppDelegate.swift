@@ -493,6 +493,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   lazy var serverTask: ServerTask = { let s = ServerTask(); s.cookies = serverHome.cookies; return s }()
   var taskPan: UIScreenEdgePanGestureRecognizer?
   var taskPanSpent = false
+  var cornerWaited = false
   var prefetchedAt: [String: Date] = [:]
   // the screen hidden as a task was tapped (for the website's task page): the app's own page shows it again under itself
   var hiddenForOpen: (UIView?, Date)?
@@ -1849,6 +1850,12 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       // (Comments → Details as the swipe does it — for the film: nothing of Comments may show on Details on the way)
       ("tpageSwipeDetails", pause(1500) + "return '{}'", { if let p = self.taskPages.last { self.toDetailsFromComments(p) } }),
       ("tpageBack", pause(1500) + "return JSON.stringify({ webTask: !!ui.taskId })", { if let p = self.taskPages.last { p.setTab("details", tell: true); self.closeTaskPage(p, animated: false) } }),
+      // (for the film: from Home into a task and back — 🔍 and your photo melting into •••, ‹ growing in, and back)
+      ("melt", pause(2500) + "return '{}'", { if let i = self.tabKeys.firstIndex(of: "today"), let item = self.tabBar.items?[i] { self.tabBar.selectedItem = item; self.tabBar(self.tabBar, didSelect: item) } }),
+      ("meltOpen", pause(2500) + "return '{}'", {
+        let id = ((self.serverHome.shown?["groups"] as? [[String: Any]]) ?? []).flatMap { $0["cards"] as? [[String: Any]] ?? [] }.compactMap { $0["id"] as? String }.first
+        if let id = id { self.openTaskPage(id, tab: "details", focus: "") } }),
+      ("meltBack", pause(2500) + "return '{}'", { if let p = self.taskPages.last { self.closeTaskPage(p) } }),
       ("task", "window.__e11WebTask = true; const t = db.tasks.find((x) => !x.parentId && !x.done && (x.comments || []).length) || db.tasks.find((x) => !x.parentId && !x.done); openTask(t.id); " + pause(1500) + "return JSON.stringify({ taskOpen: !!ui.taskId })", nil),
       ("sheet", "const m = showMenu(document.body, [{ html: '<div class=\"react-pick\">' + REACTIONS.map((e) => '<button>' + e + '</button>').join('') + '</div>' }, { label: 'Reply', icon: 'reply', run() {} }, { label: 'Edit comment', icon: 'edit', run() {} }, { label: 'Copy text', icon: 'copy', run() {} }, '-', { label: 'Delete comment', icon: 'trash', danger: true, run() {} }]); m.classList.add('cm-sheet'); " + pause(900) + geo + " const r = m.getBoundingClientRect(); return JSON.stringify({ menuTop: r.top, menuBottom: r.bottom, geo })", nil),
       ("back", "document.querySelectorAll('.menu, #ph-menu-scrim').forEach((x) => x.remove()); closeDetail(); " + pause(800) + "return JSON.stringify({ taskOpen: !!ui.taskId })", nil),
