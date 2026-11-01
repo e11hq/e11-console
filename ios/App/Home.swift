@@ -515,7 +515,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     }
     let gT = min(tT, clamp01((dBig - 0.5) / 0.5)), gS = min(tS, clamp01((dT - 0.6) / 0.4))   // (in: each after the one before)
     let bT = max(gT, dS - 0.25), bBig = max(tBig, dT)                                         // (out: the line first, the big title last)
-    near(&dBig, bBig, upIn: 0.07, downIn: 0.07)
+    near(&dBig, bBig, upIn: 0.1, downIn: 0.1)
     near(&dT, bT, upIn: 0.09, downIn: 0.15)
     near(&dS, gS, upIn: 0.09, downIn: 0.07)
     // (the line: in with the title; going back, gone at once)
@@ -537,8 +537,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     show(smallTitle, dT, rise: 6)
     show(smallSub, dS, rise: 6)
     // the big title: blurs and fades where it is; the big line under it with it
-    fade(title).set(blur: 8 * ease(0, 0.7, dBig), alpha: 1 - ease(0.1, 1, dBig), dy: 0, trait: tr)
-    fade(sub).set(blur: 8 * ease(0, 0.7, dBig), alpha: 1 - ease(0, 0.8, dBig), dy: 0, trait: tr)
+    // (as Mail's: it blurs out first — well blurred by half way, still mostly there — then fades; Haris: ours only faded)
+    fade(title).set(blur: 11 * ease(0, 0.5, dBig), alpha: 1 - ease(0.35, 1, dBig), dy: 0, trait: tr)
+    fade(sub).set(blur: 8 * ease(0, 0.5, dBig), alpha: 1 - ease(0.25, 1, dBig), dy: 0, trait: tr)
     if #available(iOS 26.0, *) { topLine.alpha = dLine } else { blur.alpha = dT }
   }
   // (Search's end, a self-test, a new layout: everything where the scroll says, at once)
@@ -1274,7 +1275,7 @@ final class HomeActions: UIView {
 // a label going or coming through a blur that builds up / clears frame by frame (Mail's bar titles): its copies at a few
 // blur strengths, the nearest two shown over each other; sharp (the label itself) when there's no blur
 final class HomeBlurFade {
-  static let radii: [CGFloat] = [0, 1.5, 3, 4.5, 6, 8]
+  static let radii: [CGFloat] = [0, 1.5, 3, 4.5, 6, 8, 11]
   static let ci = CIContext()
   weak var label: UILabel?
   private let a = UIImageView(), b = UIImageView()
