@@ -35,7 +35,6 @@ final class CornerModel: ObservableObject {
   @Published var mid = B()
   @Published var corner = B()
   @Published var items: [CornerMenuItem] = []
-  @Published var swell: CGFloat = 1   // (while they change: a touch bigger, then back — as WhatsApp's buttons do)
   var onLeft: (() -> Void)?, onMid: (() -> Void)?, onCorner: (() -> Void)?
 }
 
@@ -72,7 +71,6 @@ struct CornerBar: View {
       // (the middle one: each kind its own glass shape — 🔍 and Mark all read — so iPhone morphs one glass into the other,
       //  the liquid drop way. The corner — your photo, ••• and ✕ — is one glass that stays: what's on it cross-fades.)
       .modifier(GlassLook(id: id == "mid" ? id + "-" + b.kind : id, ns: ns))
-      .scaleEffect(m.swell)
       .opacity(b.opacity)
       .position(x: b.frame.midX, y: b.frame.midY)
       .id(id == "mid" ? id + "-" + b.kind : id)
@@ -191,23 +189,10 @@ final class CornerButton: UIView {
     if #available(iOS 17.0, *) { withAnimation(.spring(duration: CornerButton.duration, bounce: CornerButton.bounce)) { apply() } }
     else { withAnimation(.spring(response: CornerButton.duration, dampingFraction: 0.78)) { apply() } }
     if outOfCorner { withAnimation(.easeOut(duration: 0.22).delay(0.2)) { model.mid.icon = 1 } }
-    // (every change of the buttons: they swell a little and settle back with the morph — Haris, 2026-11-02, as
-    //  WhatsApp's back button does)
-    if fromSwipe || was.0.kind != l.kind || was.1.kind != m.kind || was.2.kind != c.kind { swell() }
     // (after a swipe: the icon finishes fading in on its own, after the glass — not at once with the spring)
     if fromSwipe && m.kind == "search" && iconWas < 1 { withAnimation(.easeOut(duration: 0.25).delay(0.08)) { model.mid.icon = 1 } }
     if m.kind == "none" && was.1.kind == "search" && c.kind != "none" {
       DispatchQueue.main.asyncAfter(deadline: .now() + CornerButton.duration) { [weak self] in guard let self = self, self.mid.kind == "none" else { return }; self.now { self.model.mid = self.b(self.mid) } }
-    }
-  }
-  private var swellAt = Date.distantPast
-  private func swell() {
-    swellAt = Date(); let at = swellAt
-    withAnimation(.easeOut(duration: 0.14)) { model.swell = 1.07 }
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) { [weak self] in
-      guard let self = self, self.swellAt == at else { return }
-      if #available(iOS 17.0, *) { withAnimation(.spring(duration: 0.45, bounce: 0.3)) { self.model.swell = 1 } }
-      else { withAnimation(.spring(response: 0.45, dampingFraction: 0.7)) { self.model.swell = 1 } }
     }
   }
   // part way between two sets (the swipe back): t = 0 at `a`, 1 at `b` — straight from the finger, no animation
