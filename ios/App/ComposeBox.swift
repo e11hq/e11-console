@@ -170,23 +170,57 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     while let x = v, x !== box { if x is UIControl || x === text || x === tiles { return false }; v = x.superview }
     return true
   }
+  // Coming in (Haris, 2026-11-02): her picture fades in in a small round pill by the +, then the pill stretches to the
+  // right, her picture riding its right end, and the words fade in — iPhone's spring. Cancelled: the same, backwards.
+  private lazy var pillNarrow = replyPill.widthAnchor.constraint(equalToConstant: 36)
+  private var pillShownFor: String?
   private func paintReply() {
     replyLine.isHidden = true
+    replyPill.clipsToBounds = true
+    guard let r = replyTo else {
+      guard pillShownFor != nil, !replyPill.isHidden, window != nil else { pillShownFor = nil; replyPill.isHidden = true; paintSend(); return }
+      pillShownFor = nil
+      let words = replyPill.viewWithTag(51)
+      UIView.animate(withDuration: 0.12) { words?.alpha = 0 }
+      pillNarrow.isActive = true
+      UIView.animate(withDuration: 0.36, delay: 0.04, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState]) { self.box.layoutIfNeeded() } completion: { _ in
+        guard self.replyTo == nil else { return }
+        UIView.animate(withDuration: 0.16, animations: { self.replyPill.alpha = 0; self.replyPill.transform = CGAffineTransform(scaleX: 0.7, y: 0.7) }) { _ in
+          guard self.replyTo == nil else { return }
+          self.replyPill.isHidden = true; self.replyPill.alpha = 1; self.replyPill.transform = .identity; self.pillNarrow.isActive = false
+        }
+      }
+      paintSend(); return
+    }
+    let coming = pillShownFor == nil && window != nil
+    pillShownFor = r.id
     replyPill.subviews.forEach { $0.removeFromSuperview() }
-    replyPill.isHidden = replyTo == nil
-    if let r = replyTo {
+    replyPill.isHidden = false
+    do {
       // two lines (Haris, 2026-11-02): "Replying to Carine" a little smaller, and under it, smaller and grey, "Tap to cancel"
       let l = UILabel(); l.isUserInteractionEnabled = false
       let a = NSMutableAttributedString(string: "Replying to ", attributes: [.font: UIFont.systemFont(ofSize: 13), .foregroundColor: UIColor.secondaryLabel])
       a.append(NSAttributedString(string: r.name, attributes: [.font: UIFont.systemFont(ofSize: 13, weight: .semibold), .foregroundColor: UIColor.label]))
       l.attributedText = a; l.lineBreakMode = .byTruncatingTail
+      l.setContentCompressionResistancePriority(UILayoutPriority(760), for: .horizontal)   // (narrow, it slides past the left edge rather than squeezing)
       let hint = UILabel(); hint.text = "Tap to cancel"; hint.font = .systemFont(ofSize: 11); hint.textColor = .secondaryLabel; hint.isUserInteractionEnabled = false
-      let words = UIStackView(arrangedSubviews: [l, hint]); words.axis = .vertical; words.spacing = 0; words.alignment = .leading; words.isUserInteractionEnabled = false
+      let words = UIStackView(arrangedSubviews: [l, hint]); words.axis = .vertical; words.spacing = 0; words.alignment = .leading; words.isUserInteractionEnabled = false; words.tag = 51
       let av = CommentCell.avatar(replyPerson ?? ["initials": String(r.name.prefix(1)).uppercased()], 22); av.isUserInteractionEnabled = false
       let row = UIStackView(arrangedSubviews: [words, av]); row.spacing = 8; row.alignment = .center; row.isUserInteractionEnabled = false
       row.translatesAutoresizingMaskIntoConstraints = false; replyPill.addSubview(row)
-      NSLayoutConstraint.activate([row.leadingAnchor.constraint(equalTo: replyPill.leadingAnchor, constant: 14), row.trailingAnchor.constraint(equalTo: replyPill.trailingAnchor, constant: -6), row.centerYAnchor.constraint(equalTo: replyPill.centerYAnchor)])
+      // (its left edge gives way while it's a small circle: the picture stays at the right end, the words hidden past the left)
+      let lead = row.leadingAnchor.constraint(equalTo: replyPill.leadingAnchor, constant: 14); lead.priority = .defaultHigh
+      NSLayoutConstraint.activate([lead, row.trailingAnchor.constraint(equalTo: replyPill.trailingAnchor, constant: -7), row.centerYAnchor.constraint(equalTo: replyPill.centerYAnchor)])
       replyPill.accessibilityLabel = "Replying to \(r.name). Tap to stop replying"
+      if coming {
+        pillNarrow.isActive = true
+        words.alpha = 0; replyPill.alpha = 0; replyPill.transform = CGAffineTransform(scaleX: 0.7, y: 0.7)
+        box.layoutIfNeeded()
+        UIView.animate(withDuration: 0.2, delay: 0, options: [.curveEaseOut, .allowUserInteraction]) { self.replyPill.alpha = 1; self.replyPill.transform = .identity }
+        pillNarrow.isActive = false
+        UIView.animate(withDuration: 0.5, delay: 0.14, usingSpringWithDamping: 0.82, initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState]) { self.box.layoutIfNeeded() }
+        UIView.animate(withDuration: 0.28, delay: 0.3, options: [.curveEaseOut, .allowUserInteraction]) { words.alpha = 1 }
+      } else { pillNarrow.isActive = false }
     }
     paintSend()
   }
