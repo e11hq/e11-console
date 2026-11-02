@@ -924,6 +924,11 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       self.field.text = ""; self.showResults(nil)
     }
   }
+  // (a search result changed — done, due, deleted: the results again, a moment later, as they are now)
+  private func findAgain() {
+    guard searching else { return }
+    for t in [0.8, 2.5] { DispatchQueue.main.asyncAfter(deadline: .now() + t) { [weak self] in if self?.searching == true { self?.typed() } } }
+  }
   private func typed() {
     findTimer?.invalidate()
     let q = field.text ?? ""
@@ -959,7 +964,16 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
           let v: HomeCard
           if let old = resultCards[id] { v = old } else {
             v = HomeCard(); v.id = id
-            v.onTap = { [weak self] in self?.field.resignFirstResponder(); self?.send(["ev": "open", "id": id]) }
+            v.onTap = { [weak self, weak v] in
+              guard let self = self else { return }
+              if let o = self.openCard { self.setOpen(o, false); if o === v { return } }
+              self.field.resignFirstResponder(); self.send(["ev": "open", "id": id])
+            }
+            // (a task card is the same card wherever it shows — Haris, 2026-11-02: swipe right Done · Due, left Copy link ·
+            //  Delete, touch and hold Attach Files — in the search results too)
+            let pan = UIPanGestureRecognizer(target: self, action: #selector(self.swipe(_:))); pan.delegate = self; v.addGestureRecognizer(pan)
+            let lp = UILongPressGestureRecognizer(target: self, action: #selector(self.press(_:))); lp.minimumPressDuration = 0.45; v.addGestureRecognizer(lp)
+            _ = PressShrink.add(to: v)
             resultCards[id] = v
           }
           v.people = people; v.set(c, look: L)
@@ -1047,7 +1061,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       guard let self = self, let card = card else { return }
       // (asked first: the task goes to the Trash)
       let al = UIAlertController(title: "Delete this task?", message: card.taskTitle.isEmpty ? nil : card.taskTitle, preferredStyle: .actionSheet)
-      al.addAction(UIAlertAction(title: "Delete Task", style: .destructive) { _ in self.send(["ev": "delete", "id": card.id]); self.setOpen(card, false) })
+      al.addAction(UIAlertAction(title: "Delete Task", style: .destructive) { _ in self.send(["ev": "delete", "id": card.id, "card": card.info]); self.setOpen(card, false); self.findAgain() })
       al.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in self.setOpen(card, false) })
       al.overrideUserInterfaceStyle = self.L.light ? .light : .dark
       self.present?(al)
@@ -1062,16 +1076,16 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
         if !wasDone { UINotificationFeedbackGenerator().notificationOccurred(.success) } else { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
       }
       DispatchQueue.main.asyncAfter(deadline: .now() + (wasDone || ready ? 0.35 : 0)) {
-        self.send(["ev": "done", "id": card.id, "done": !wasDone]); self.setOpen(card, false)
+        self.send(["ev": "done", "id": card.id, "done": !wasDone, "card": card.info]); self.setOpen(card, false); self.findAgain()
       }
     }
     // Due: the card closes and the page opens the date sheet the task page uses
     a.onDue = { [weak self, weak card] in
       guard let self = self, let card = card else { return }
       UIImpactFeedbackGenerator(style: .light).impactOccurred()
-      self.send(["ev": "due", "id": card.id]); self.setOpen(card, false)
+      self.send(["ev": "due", "id": card.id, "card": card.info]); self.setOpen(card, false); self.findAgain()
     }
-    scroll.insertSubview(a, belowSubview: card)
+    (card.superview as? UIScrollView ?? scroll).insertSubview(a, belowSubview: card)   // (Home's list, or the search results)
     actions = a; openCard = card
     return a
   }

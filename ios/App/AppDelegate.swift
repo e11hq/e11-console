@@ -1229,7 +1229,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     // (only for the person the page shows: right after another sign-in, the page's Home until the server's catches up)
     guard serverHome.on, serverHome.me != nil, serverHome.me == pageMe, let kind = ev["ev"] as? String else { return false }
     let id = ev["id"] as? String ?? ""
-    let card = ((serverHome.shown?["groups"] as? [[String: Any]]) ?? []).flatMap { $0["cards"] as? [[String: Any]] ?? [] }.first { ($0["id"] as? String) == id }
+    // (the card on this screen — or, for a search result that isn't on it, the card that sent it)
+    let card = ((serverHome.shown?["groups"] as? [[String: Any]]) ?? []).flatMap { $0["cards"] as? [[String: Any]] ?? [] }.first { ($0["id"] as? String) == id } ?? (ev["card"] as? [String: Any])
     switch kind {
     case "toast":
       guard let run = homeToastRun else { return false }
