@@ -397,7 +397,6 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     //  view only)
     for k in ["canTags", "canRemoveTag", "canChannels", "canGuardian", "canAddSub", "canCheck", "canAddCheck", "canDelete"] { m[k] = false }
     if var st = m["status"] as? [String: Any] { st["next"] = nil; m["status"] = st }
-    if var d = m["dates"] as? [String: Any] { d["canEdit"] = false; m["dates"] = d }
     if var c = m["completed"] as? [String: Any] { c["canFrom"] = false; c["canReopen"] = false; m["completed"] = c }
     if var l = m["lock"] as? [String: Any] { l["from"] = false; m["lock"] = l }
     m["subtasks"] = ((m["subtasks"] as? [[String: Any]]) ?? []).map { var x = $0; x["canTick"] = false; return x }
@@ -734,11 +733,29 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     s.spacing = 7; s.alignment = .center
     return s
   }
+  // (someone added: their picture springs in; someone taken off: it shrinks away and the others close up — Haris,
+  //  2026-11-02)
+  private var shownAvatars: [String]?
   private func avatars(_ list: [[String: Any]]) -> UIView {
     let s = UIStackView(); s.spacing = -6; s.alignment = .center
-    for a in list.prefix(5) {
+    let ids = list.prefix(5).compactMap { $0["id"] as? String }
+    let before = shownAvatars; shownAvatars = ids
+    let live = window != nil && before != nil
+    var rows = Array(list.prefix(5))
+    var going: [String] = []
+    if live, let b = before { for (k, id) in b.enumerated() where !ids.contains(id) { going.append(id); rows.insert(["id": id], at: min(k, rows.count)) } }
+    for a in rows {
       guard let id = a["id"] as? String else { continue }
       let v = avatar(id, 30, ring: true)
+      let isNew = live && !(before ?? []).contains(id), isGoing = going.contains(id)
+      if isNew || isGoing {
+        let cell = v
+        if isNew { cell.alpha = 0; cell.transform = CGAffineTransform(scaleX: 0.4, y: 0.4) }
+        DispatchQueue.main.async {
+          if isNew { UIView.animate(withDuration: 0.45, delay: 0, usingSpringWithDamping: 0.7, initialSpringVelocity: 0, options: [.allowUserInteraction]) { cell.alpha = 1; cell.transform = .identity } }
+          else { UIView.animate(withDuration: 0.3, delay: 0, options: [.curveEaseIn, .allowUserInteraction], animations: { cell.alpha = 0; cell.transform = CGAffineTransform(scaleX: 0.4, y: 0.4) }) { _ in UIView.animate(withDuration: 0.25) { cell.isHidden = true; s.layoutIfNeeded() } } }
+        }
+      }
       if (a["done"] as? Bool) == true {
         let tick = symbol("checkmark.circle.fill", 13, .systemGreen, weight: .bold)
         tick.backgroundColor = .secondarySystemGroupedBackground; tick.layer.cornerRadius = 7; tick.clipsToBounds = true
@@ -801,9 +818,8 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       let locked = (o["locked"] as? Bool) == true
       return ["i": locked ? -1 : i, "label": o["name"] as? String ?? "", "dot": o["rgb"] ?? [135, 144, 158], "checked": (o["on"] as? Bool) == true, "locked": locked, "disabled": locked, "sub": locked ? "Waiting for CD approval" : ""]
     }
-    onSheet?(["sections": [["header": "Status", "rows": rows]]], { _ in }, { [weak self] i, _ in
+    onSheet?(["sections": [["header": "Status", "rows": rows]], "instant": true], { [weak self] i in
       guard let self = self, i >= 0, i < opts.count, (opts[i]["on"] as? Bool) != true, let id = opts[i]["id"] as? String else { return }
-      UISelectionFeedbackGenerator().selectionChanged()
       self.local { m in
         guard var st = m["status"] as? [String: Any] else { return }
         st["name"] = opts[i]["name"]; st["rgb"] = opts[i]["rgb"]
@@ -811,7 +827,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
         m["status"] = st
       }
       self.setStatus(id)
-    })
+    }, { _, _ in })
   }
   func setStatus(_ id: String, cdAgain: String? = nil) {
     var b: [String: Any] = ["act": "status", "id": taskId, "value": id]
@@ -899,6 +915,15 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
           guard let v = v else { return }
           var b: [String: Any] = ["act": which, "id": self.taskId]
           if which == "due" { b["due"] = v } else { b["value"] = v }
+          // (shown at once: the day as the page writes it — "Nov 2")
+          self.local { m in
+            guard var d = m["dates"] as? [String: Any] else { return }
+            let f = DateFormatter(); f.calendar = Calendar(identifier: .gregorian); f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "yyyy-MM-dd"
+            let day = f.date(from: v); let o = DateFormatter(); o.locale = Locale(identifier: "en_US"); o.dateFormat = "MMM d"
+            let label = v.isEmpty ? "" : day.map { o.string(from: $0) } ?? v
+            if which == "due" { d["due"] = v; d["dueLabel"] = label; let t = f.string(from: Date()); d["today"] = v == t; d["late"] = !v.isEmpty && v < t } else { d["start"] = v; d["startLabel"] = label }
+            m["dates"] = d
+          }
           self.onAct?(b)
         }
       }, for: .touchUpInside)
@@ -914,7 +939,15 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       let key = p["key"] as? String ?? "_", lab = p["label"] as? String ?? ""
       let v: UIView = lab.isEmpty ? greyText(can ? "None" : "–") : lab == "Urgent" ? pill("Urgent", fg: .systemRed, bg: UIColor.systemRed.withAlphaComponent(0.15)) : pill(lab, fg: .label, bg: .tertiarySystemFill)
       let who = p["name"] as? String ?? ""
-      return row(sym: "flag", key: who.isEmpty || list.count == 1 && key == (model?["me"] as? String) ? "Priority" : "Priority · " + who, value: v, chevron: can, tap: can ? { [weak self] in self?.pickPrio(p) } : nil)
+      let plain = who.isEmpty || list.count == 1 && key == (model?["me"] as? String)
+      let r = row(sym: "flag", key: plain ? "Priority" : "Priority · " + who, value: v, chevron: can, tap: can ? { [weak self] in self?.pickPrio(p) } : nil)
+      // (whose priority it is in blue, as the date — Haris, 2026-11-02)
+      if !plain, let k = findKey(r, "Priority · " + who) {
+        let a = NSMutableAttributedString(string: "Priority · ", attributes: [.font: UIFont.systemFont(ofSize: TaskPage.T), .foregroundColor: UIColor.secondaryLabel])
+        a.append(NSAttributedString(string: who, attributes: [.font: UIFont.systemFont(ofSize: TaskPage.T), .foregroundColor: UIColor.systemBlue]))
+        k.attributedText = a
+      }
+      return r
     }
   }
   // Priority, as the website's sheet: whose it is, Urgent (always on top), the numbers for that day (one each per
@@ -930,10 +963,10 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     secs.append(top)
     secs.append(["header": "Priority for " + (day ?? "tasks with no due date"), "rows": [["i": -1, "label": "", "kind": "num", "chips": (1...10).map { n in ["i": 100 + n, "label": String(n), "on": cur == String(n), "disabled": taken.contains(n)] }]]])
     secs.append(["rows": [["i": 2, "label": "No priority", "icon": "flag", "checked": cur.isEmpty]]])
-    onSheet?(["sections": secs], { _ in }, { [weak self] i, _ in
+    onSheet?(["sections": secs, "instant": true], { [weak self] i in
       guard let self = self else { return }
       if i == 1 { self.setPrio(key, "urgent") } else if i == 2 { self.setPrio(key, "none") } else if i > 100 && i <= 110 { self.setPrio(key, String(i - 100)) }
-    })
+    }, { _, _ in })
   }
   private func prioItems(_ key: String, cur: String) -> [UIMenuElement] {
     var out: [UIMenuElement] = []
@@ -944,8 +977,12 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     out.append(UIMenu(options: .displayInline, children: [UIAction(title: "No priority", state: cur.isEmpty ? .on : .off) { [weak self] _ in self?.setPrio(key, "none") }]))
     return out
   }
+  private func findKey(_ v: UIView, _ t: String) -> UILabel? {
+    if let l = v as? UILabel, l.text == t { return l }
+    for s in v.subviews { if let l = findKey(s, t) { return l } }
+    return nil
+  }
   private func setPrio(_ key: String, _ v: String) {
-    UISelectionFeedbackGenerator().selectionChanged()
     local { m in
       m["prio"] = ((m["prio"] as? [[String: Any]]) ?? []).map { p in
         guard (p["key"] as? String) == key else { return p }
@@ -980,14 +1017,13 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     var rows: [[String: Any]] = all.enumerated().map { i, x in ["i": i, "label": x, "checked": x == cur] }
     var secs: [[String: Any]] = [["header": "Task Update", "rows": rows]]
     if !cur.isEmpty { rows = [["i": 999, "label": "Clear", "icon": "x"]]; secs.append(["rows": rows]) }
-    onSheet?(["sections": secs], { _ in }, { [weak self] i, _ in
+    onSheet?(["sections": secs, "instant": true], { [weak self] i in
       guard let self = self, i >= 0 else { return }
       if i == 999 { self.local { $0["update"] = NSNull() }; self.onAct?(["act": "update", "id": self.taskId, "value": NSNull()]); return }
       guard i < all.count, all[i] != cur else { return }
-      UISelectionFeedbackGenerator().selectionChanged()
       self.local { m in var u = (m["update"] as? [String: Any]) ?? [:]; u["t"] = all[i]; m["update"] = u }
       self.onAct?(["act": "update", "id": self.taskId, "value": all[i]])
-    })
+    }, { _, _ in })
   }
   private func subRow(_ s: [String: Any], ro: Bool) -> UIView {
     let id = s["id"] as? String ?? "", done = (s["done"] as? Bool) == true
@@ -1121,15 +1157,14 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   func pickClient() {
     guard let list = model?["clients"] as? [[String: Any]], !list.isEmpty else { return }
     let rows: [[String: Any]] = list.enumerated().map { i, c in ["i": i, "label": c["name"] as? String ?? "", "dot": c["rgb"] ?? [128, 128, 128], "checked": (c["on"] as? Bool) == true, "find": c["name"] as? String ?? ""] }
-    onSheet?(["sections": [["header": "Move to client", "rows": rows]], "search": "Search clients"], { _ in }, { [weak self] i, _ in
+    onSheet?(["sections": [["header": "Move to client", "rows": rows]], "search": "Search clients", "instant": true], { [weak self] i in
       guard let self = self, i >= 0, i < list.count, (list[i]["on"] as? Bool) != true, let id = list[i]["id"] as? String else { return }
-      UISelectionFeedbackGenerator().selectionChanged()
       self.local { m in
         m["client"] = ["id": id, "name": list[i]["name"] ?? "", "rgb": list[i]["rgb"] ?? [128, 128, 128]]
         m["clients"] = list.map { var c = $0; c["on"] = ($0["id"] as? String) == id; return c }
       }
       self.onAct?(["act": "client", "id": self.taskId, "value": id])
-    })
+    }, { _, _ in })
   }
   func pickChannels() {
     guard let m = model, let all = m["allChannels"] as? [[String: Any]] else { return }

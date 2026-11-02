@@ -2227,6 +2227,7 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     self.answer = answer
     self.pick = pick
     multi = (a["multi"] as? Bool) == true
+    instant = (a["instant"] as? Bool) == true
     super.init(nibName: nil, bundle: nil)
     for sec in a["sections"] as? [[String: Any]] ?? [] {
       let rows = (sec["rows"] as? [[String: Any]] ?? []).map { r -> Row in
@@ -2538,9 +2539,13 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     }
     choose(r.i, nil)
   }
+  private var instant = false
   private func choose(_ i: Int, _ swatch: String?) {
     guard let a = answer else { return }
     answer = nil
+    // (instant: the page changes and the tap is felt the moment the row is touched, while the sheet slides away —
+    //  they came only once it had gone, Haris 2026-11-02)
+    if instant { if i >= 0 { UISelectionFeedbackGenerator().selectionChanged() }; pick?(i); dismiss(animated: true) { a(i, swatch) }; return }
     dismiss(animated: true) { a(i, swatch) }
   }
   func presentationControllerDidDismiss(_ presentationController: UIPresentationController) { let a = answer; answer = nil; a?(-1, nil) }
