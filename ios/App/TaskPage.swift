@@ -168,9 +168,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private func descStripAfter(_ m: [String: Any]) {
     let saved = Set(((m["descFiles"] as? [[String: Any]]) ?? []).compactMap { $0["file"] as? String })
     descPending.removeAll { saved.contains($0["file"] as? String ?? "") }
-    let files = descShown
-    descStrip.set(files, open: { [weak self] i in self?.onOpenFiles?(files, i) }, menu: { [weak self] i in self?.fileMenu(files, i) })
-    if !files.isEmpty { blocks.append(descStrip) }
+    // (no cards under the description: its chips are where its files are — Haris 2026-11-02)
   }
   // a file copied in the app (a preview's Copy), pasted while writing the description: its 📎 where the cursor is, its
   // card under the description at once — saved with Done, as the website keeps it (Haris 2026-11-02)
@@ -188,13 +186,8 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     tv.selectedRange = NSRange(location: r.location + add.length, length: 0)
     tv.typingAttributes = plain
     UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    // (kept, so tapping its chip opens it before it's saved)
     if !descShown.contains(where: { ($0["file"] as? String) == path }) { descPending.append(f) }
-    let files = descShown
-    descStrip.set(files, open: { [weak self] i in self?.onOpenFiles?(files, i) }, menu: { [weak self] i in self?.fileMenu(files, i) })
-    if !blocks.contains(where: { $0 === descStrip }), let i = blocks.firstIndex(where: { $0 === descBox }) {
-      blocks.insert(descStrip, at: i + 1); content.addSubview(descStrip); descStrip.alpha = 0
-      UIView.animate(withDuration: 0.3) { self.descStrip.alpha = 1 }
-    }
     setNeedsLayout(); relayAnimated()
     return true
   }
@@ -1727,7 +1720,9 @@ extension TaskPage {
     DescEditor.dark = !light
     if let path = path {
       a.replaceCharacters(in: r, with: DescEditor.chip(["path": path, "name": name, "size": size], size: TaskPage.T))
-      // (no card under the description for it: it's in the task's Files already — Haris 2026-11-02)
+      // (no card under the description for it: it's in the task's Files already — Haris 2026-11-02; kept for its chip)
+      let url = "/__file/" + path.split(separator: "/").map { String($0).addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? String($0) }.joined(separator: "/") + "?view=1"
+      descPending.append(["id": "desc-" + id, "file": path, "name": name, "size": size, "url": url])
     } else {
       a.deleteCharacters(in: r)
       toast("Upload failed — try again")
