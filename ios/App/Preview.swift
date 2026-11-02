@@ -349,6 +349,14 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     guard at < files.count, let id = files[at]["id"] as? String else { return }
     event(["ev": ev, "id": id])
   }
+  // the one showing: a ring round it with a gap between — clear on any picture, dark or light, as Photos' strip does
+  //  (a border right on the picture blended into dark ones — Haris, 2026-11-02)
+  static func paintPick(_ c: UICollectionViewCell, _ on: Bool, animated: Bool) {
+    c.contentView.layer.borderWidth = 0
+    c.layer.cornerRadius = 10; c.layer.borderColor = UIColor.label.cgColor
+    let go = { c.layer.borderWidth = on ? 2 : 0; c.contentView.transform = on ? CGAffineTransform(scaleX: 0.8, y: 0.8) : .identity }
+    if animated { UIView.animate(withDuration: 0.25, delay: 0, usingSpringWithDamping: 0.8, initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState], animations: go) } else { go() }
+  }
   private func refreshBars() {
     guard at < files.count else { return }
     let f = files[at]
@@ -357,7 +365,7 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     details.text = f["meta"] as? String
     // (only the frame moves to the one showing — the strip isn't drawn again: that emptied its pictures, Haris 2026-11-02)
     if strip.numberOfItems(inSection: 0) != files.count { strip.reloadData() }
-    for c in strip.visibleCells { if let ip = strip.indexPath(for: c) { c.contentView.layer.borderWidth = ip.item == at ? 2 : 0 } }
+    for c in strip.visibleCells { if let ip = strip.indexPath(for: c) { PreviewVC.paintPick(c, ip.item == at, animated: true) } }
     if files.count > 1 { strip.scrollToItem(at: IndexPath(item: at, section: 0), at: .centeredHorizontally, animated: true) }
     event(["ev": "at", "id": f["id"] as? String ?? ""])
   }
@@ -405,8 +413,7 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
       c.contentView.subviews.forEach { $0.removeFromSuperview() }
       c.contentView.layer.cornerRadius = 8; c.contentView.clipsToBounds = true
       c.contentView.backgroundColor = .tertiarySystemFill
-      c.contentView.layer.borderWidth = ip.item == at ? 2 : 0
-      c.contentView.layer.borderColor = UIColor.label.cgColor
+      PreviewVC.paintPick(c, ip.item == at, animated: false)
       let iv = UIImageView(frame: c.contentView.bounds); iv.contentMode = .scaleAspectFill; iv.autoresizingMask = [.flexibleWidth, .flexibleHeight]
       c.contentView.addSubview(iv)
       let l = UILabel(frame: c.contentView.bounds); l.text = ((f["ext"] as? String) ?? "").uppercased(); l.font = .systemFont(ofSize: 10, weight: .bold)
