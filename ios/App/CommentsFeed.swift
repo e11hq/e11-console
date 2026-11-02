@@ -183,25 +183,27 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
   func load(_ done: (() -> Void)? = nil) {
     // the app's own copy first: no request at all (iOS app data plan)
     let c = AppData.shared.screen("comments", taskId, thread)
-    if c.ready, let f = c.model { dropArrived(f); draw(f); done?(); return }
+    if c.ready, let f = c.model { draw(f); done?(); return }
     let p = CommentsFeed.path(taskId, thread)
     if model == nil, let c = CommentsFeed.cache[p] { draw(c) }
     FeedLoader.shared.get(p) { [weak self] j in
       guard let self = self, let f = j?["feed"] as? [String: Any] else { done?(); return }
       CommentsFeed.cache[p] = f
-      self.dropArrived(f); self.pending.removeAll { $0.done }   // (the real ones are in this one)
+      self.dropArrived(f); self.pending.removeAll { $0.done }   // (the server's own: the real ones are in it)
       self.draw(f); done?()
     }
   }
   // ---------- a voice message on its way (Haris, 2026-11-01): in the feed at once, its pill pulsing while it uploads,
   // then the real one (with its length) from the server takes its place ----------
-  private var pending: [(id: String, item: [String: Any], done: Bool)] = []
+  // (known: the comments there when it was added — its real one is a new one)
+  private var pending: [(id: String, item: [String: Any], done: Bool, known: Set<String>)] = []
+  private func knownIds(_ m: [String: Any]) -> Set<String> { Set(((m["items"] as? [[String: Any]]) ?? []).compactMap { $0["id"] as? String }) }
   func addPending(id: String, parent: String?, dur: Double) {
     guard parent == thread, let m = model else { return }
     let at = ISO8601DateFormatter().string(from: Date())
     // (shaped as the server's one — "replies": null makes it a card like every comment — so nothing moves when it's swapped)
     let it: [String: Any] = ["id": id, "who": m["me"] as? String ?? "", "at": at, "runs": [[String: Any]](), "replies": NSNull(), "files": [["id": id, "name": "Voice message.m4a", "voice": true, "dur": Int(dur.rounded()), "pending": true]]]
-    pending.append((id, it, false))
+    pending.append((id, it, false, knownIds(m)))
     draw(m, mine: true)
   }
   // a comment with files sent before they finished uploading (Haris, 2026-11-02): in the feed at once, its cards
@@ -211,16 +213,20 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
     let at = ISO8601DateFormatter().string(from: Date())
     let runs: [[String: Any]] = text.isEmpty ? [] : [["t": text]]
     let it: [String: Any] = ["id": id, "who": m["me"] as? String ?? "", "at": at, "runs": runs, "replies": NSNull(), "files": files]
-    pending.append((id, it, false))
+    pending.append((id, it, false, knownIds(m)))
     draw(m, mine: true)
   }
-  // (a sent one goes once the real one is in the comments: your own voice message, from about then)
+  // (one on its way goes the moment its real one is in the comments — a new comment of yours from about then, with
+  //  the same files — whether or not the send has answered yet: the real one came first and the pulsing one stayed
+  //  beside it, Haris 2026-11-02)
   private func dropArrived(_ f: [String: Any]) {
+    guard !pending.isEmpty else { return }
     let items = (f["items"] as? [[String: Any]]) ?? []
     let iso = ISO8601DateFormatter(); iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     let when: (String) -> Date? = { iso.date(from: $0) ?? ISO8601DateFormatter().date(from: $0) }
+    var claimed = Set<String>()
     pending.removeAll { p in
-      guard p.done, let pa = when(p.item["at"] as? String ?? "") else { return false }
+      guard let pa = when(p.item["at"] as? String ?? "") else { return false }
       let pf = (p.item["files"] as? [[String: Any]]) ?? []
       let voice = pf.contains { ($0["voice"] as? Bool) == true }
       let names = pf.map { $0["name"] as? String ?? "" }.sorted()
@@ -228,11 +234,12 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
         let rf = (it["files"] as? [[String: Any]]) ?? []
         return (it["who"] as? String) == (p.item["who"] as? String) && (when(it["at"] as? String ?? "") ?? .distantPast) >= pa.addingTimeInterval(-20)
           && (voice ? rf.contains { ($0["voice"] as? Bool) == true } : rf.map { $0["name"] as? String ?? "" }.sorted() == names)
-          && cells[it["id"] as? String ?? ""] == nil
+          && !p.known.contains(it["id"] as? String ?? "") && !claimed.contains(it["id"] as? String ?? "")
       }
       // (the real one takes its place: a voice message's ••• turning into ▶; files' cards with the pictures they had)
       if let r = real, let id = r["id"] as? String {
-        arriving.insert(id)
+        claimed.insert(id)
+        if cells[id] == nil { arriving.insert(id) }
         if !voice { CommentCell.handOver(from: pf, to: (r["files"] as? [[String: Any]]) ?? []) }
       }
       return real != nil
@@ -245,6 +252,7 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
     if ok { pending[i].done = true } else { pending.remove(at: i); if let m = model { draw(m) } }
   }
   private func draw(_ m: [String: Any], mine: Bool = false) {
+    dropArrived(m)
     model = m
     onLoaded?(m)
     if let pp = m["people"] as? [String: [String: Any]] { people.merge(pp) { _, b in b } }

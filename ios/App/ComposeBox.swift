@@ -342,7 +342,7 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
       x.backgroundColor = UIColor.black.withAlphaComponent(0.62); x.layer.cornerRadius = 11
       x.layer.borderWidth = 1.5; x.layer.borderColor = UIColor.white.withAlphaComponent(0.9).cgColor
       x.layer.shadowColor = UIColor.black.cgColor; x.layer.shadowOpacity = 0.25; x.layer.shadowRadius = 2; x.layer.shadowOffset = .zero
-      x.frame = CGRect(x: 38, y: -4, width: 22, height: 22)
+      x.frame = CGRect(x: 31, y: 3, width: 22, height: 22)   // (inside the tile's corner: nothing of it or its shadow cut off)
       x.addAction(UIAction { [weak self] _ in self?.files.removeAll { $0.uid == uid }; self?.paintTiles() }, for: .touchUpInside)
       t.addSubview(x)
       tiles.addArrangedSubview(t)
