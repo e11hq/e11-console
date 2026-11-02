@@ -357,6 +357,7 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
     // (the keyboard dragged down with the list: the list follows the finger, nothing else moves it — keeping it at the
     //  latest at the same time made it jump about, Haris 2026-11-02)
     if wasEnd && !scroll.isTracking && !scroll.isDragging && !scroll.isDecelerating { toEnd(animated: false) }
+    else if let k = keepId, !scroll.isTracking, !scroll.isDragging { keepInView(k) }
     placeJump()
   }
   func isAtEnd() -> Bool { scroll.contentOffset.y + scroll.bounds.height >= scroll.contentSize.height + scroll.contentInset.bottom - 80 }
@@ -365,6 +366,7 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
     let end = max(-scroll.contentInset.top, scroll.contentSize.height + scroll.contentInset.bottom - scroll.bounds.height)
     scroll.setContentOffset(CGPoint(x: 0, y: end), animated: animated)
   }
+  func scrollViewWillBeginDragging(_ s: UIScrollView) { keepId = nil }   // (moved by the finger: it's theirs again)
   func scrollViewDidScroll(_ s: UIScrollView) {
     if isAtEnd() { if pendingNew > 0 || jump.alpha > 0 { pendingNew = 0; seenIds = Set(order) }; paintJump(newCount: 0) }
     else if jump.alpha == 0 { paintJump(newCount: pendingNew) }
@@ -401,10 +403,14 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
   func has(_ id: String) -> Bool { cells[id] != nil }
   @objc private func tappedList() { window?.endEditing(true) }
   // Reply (rule 7): the list stays where it is; the replied comment is kept in view above the box
+  // (above the ↓ button too, so all of it shows — and again once the keyboard is up: Haris, 2026-11-02)
+  private var keepId: String?
   func keepInView(_ id: String) {
     guard let c = cells[id] else { return }
-    let visibleBottom = scroll.contentOffset.y + scroll.bounds.height - bottomRoom
-    if c.frame.maxY > visibleBottom { scroll.setContentOffset(CGPoint(x: 0, y: c.frame.maxY - scroll.bounds.height + bottomRoom + 8), animated: true) }
+    keepId = id
+    let jumpRoom: CGFloat = 44 + 14 + 10
+    let visibleBottom = scroll.contentOffset.y + scroll.bounds.height - bottomRoom - jumpRoom
+    if c.frame.maxY > visibleBottom { scroll.setContentOffset(CGPoint(x: 0, y: c.frame.maxY - scroll.bounds.height + bottomRoom + jumpRoom), animated: true) }
     else if c.frame.minY < scroll.contentOffset.y + scroll.contentInset.top { scroll.setContentOffset(CGPoint(x: 0, y: c.frame.minY - scroll.contentInset.top - 8), animated: true) }
   }
 
