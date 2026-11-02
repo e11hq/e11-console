@@ -833,9 +833,14 @@ export function createServer(cfg) {
       s.lastAccess = accessKey(u);
       s.lastView = access.ownOnly(u) ? viewIds(u) : null;
       streams.add(s);
-      send(s, 'hello', { version, rev: store.rev(), appIcon: appIcon.info() });
+      // (access: a short mark of what this person may see — an app that keeps its copy between launches sends the one it
+      //  had, and gets a fresh download if it changed while it was away)
+      const accessMark = crypto.createHash('sha1').update(s.lastAccess).digest('hex').slice(0, 12);
+      send(s, 'hello', { version, rev: store.rev(), appIcon: appIcon.info(), access: accessMark });
       const since = Number(url.searchParams.get('since'));
-      if (Number.isFinite(since) && since > 0 && since < store.rev()) {
+      const hadMark = url.searchParams.get('access');
+      if (hadMark && hadMark !== accessMark && Number.isFinite(since) && since > 0) send(s, 'resync', { rev: store.rev() });
+      else if (Number.isFinite(since) && since > 0 && since < store.rev()) {
         const missed = store.since(since);
         // (for someone who sees only their own tasks, what they can see may have moved while away: reload instead)
         if (access.ownOnly(u) && missed.some((r) => VIEW_KINDS.includes(r.kind))) send(s, 'resync', { rev: store.rev() });

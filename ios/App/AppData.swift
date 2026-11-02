@@ -51,13 +51,22 @@ final class AppData: NSObject, URLSessionDataDelegate {
     let saved = ["rules.js", "appview.js"].map { (try? String(contentsOf: dir.appendingPathComponent($0), encoding: .utf8)) ?? "" }
     if saved.allSatisfy({ !$0.isEmpty }) { makeEngine(saved[0], saved[1]) }
     // the saved copy (if it's this person's)
-    if ctx != nil, let raw = try? String(contentsOf: dir.appendingPathComponent("copy-\(me).json"), encoding: .utf8), !raw.isEmpty {
-      if call("E11AppView.load", [raw]) != nil { markReady() }
+    // Kept between launches (Haris, 2026-11-02: "only update what changed, without re-downloading all"): with a saved
+    // copy, the app asks only for what changed since it (the stream's "since"); the server sends a fresh download only
+    // when it must — what this person may see changed, or the copy is from before a restore. A week-old copy: a fresh one.
+    var fromSaved = false
+    let file = dir.appendingPathComponent("copy-\(me).json")
+    if ctx != nil, let raw = try? String(contentsOf: file, encoding: .utf8), !raw.isEmpty {
+      if call("E11AppView.load", [raw]) != nil {
+        markReady()
+        let age = ((try? FileManager.default.attributesOfItem(atPath: file.path)[.modificationDate]) as? Date).map { Date().timeIntervalSince($0) } ?? .infinity
+        fromSaved = age < 7 * 24 * 3600 && accessMark != nil
+      }
     }
     fetchScripts { [weak self] in
       guard let self = self else { return }
       if self.ctx == nil { return }
-      self.download()
+      if fromSaved && ((self.call("E11AppView.rev", []) as? NSNumber)?.intValue ?? 0) > 0 { self.openStream() } else { self.download() }
     }
   }
   private func makeEngine(_ rules: String, _ view: String) {
@@ -101,7 +110,8 @@ final class AppData: NSObject, URLSessionDataDelegate {
         guard let s = s, s.hasPrefix("{"), self.ctx != nil else { self.retryLater(); return }
         // (who it's for goes in with it: a copy is only ever used for that person)
         guard self.callFn("(function(raw, me){ var s = JSON.parse(raw); if (!s.ok || !s.data) return null; s.me = me; return E11AppView.load(s); })", [s, me]) != nil else { self.retryLater(); return }
-        self.markReady(); self.saveSoon(); self.changed()
+        if let m = self.newMark { self.accessMark = m; self.newMark = nil }
+        self.markReady(); self.saveNow(); self.changed()
         self.openStream()
       }
     }
@@ -118,7 +128,9 @@ final class AppData: NSObject, URLSessionDataDelegate {
     guard stream == nil, let me = me, started else { return }
     let rev = (call("E11AppView.rev", []) as? NSNumber)?.intValue ?? 0
     onMain { self.cookies { [weak self] cookie in
-      guard let self = self, let url = URL(string: serverURL() + "/api/events?since=\(rev)&client=ios-\(me)") else { return }
+      guard let self = self else { return }
+      let mark = self.accessMark.map { "&access=" + $0 } ?? ""
+      guard let url = URL(string: serverURL() + "/api/events?since=\(rev)&client=ios-\(me)" + mark) else { return }
       self.q.async {
         guard self.stream == nil else { return }
         var r = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 90)
@@ -165,13 +177,21 @@ final class AppData: NSObject, URLSessionDataDelegate {
     case "resync":
       download()
     case "hello":
+      guard let d = body.data(using: .utf8), let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { break }
+      // (a new mark is kept only once the copy that goes with it is in: the server sends a fresh download for it)
+      if let a = j["access"] as? String { if accessMark == nil || accessMark == a { accessMark = a } else { newMark = a } }
       // (the server's history is behind this copy — a restore: start again from a fresh download)
-      if let d = body.data(using: .utf8), let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any], let srv = j["rev"] as? Int,
-         let mine = (call("E11AppView.rev", []) as? NSNumber)?.intValue, srv < mine { download() }
+      if let srv = j["rev"] as? Int, let mine = (call("E11AppView.rev", []) as? NSNumber)?.intValue, srv < mine { download() }
     default: break
     }
   }
   private var inBackground = false
+  private var newMark: String?
+  // what this person may see, as the server marks it (kept with the copy; sent back when the stream opens)
+  private var accessMark: String? {
+    get { me.flatMap { UserDefaults.standard.string(forKey: "app-copy-access-\($0)") } }
+    set { if let me = me { UserDefaults.standard.set(newValue, forKey: "app-copy-access-\(me)") } }
+  }
   private func wake() { q.async { self.inBackground = false; if self.started && self.stream == nil { self.backoff = 2; self.openStream() } } }
   private func sleep() { q.async { self.inBackground = true }; saveNow(); stopStream() }
 
