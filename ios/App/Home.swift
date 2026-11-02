@@ -1138,15 +1138,20 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     guard g.state == .began, let card = g.view as? HomeCard, !(isList && listTab == "done") else { return }   // (Done tab: read only)
     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     attach(card)
-    (card.gestureRecognizers?.first { $0 is PressShrink } as? PressShrink)?.release()
   }
   private func attach(_ card: HomeCard) {
     if let o = openCard { setOpen(o, false) }
     card.isHighlighted = false
     let id = card.id
     let sheet = AttachSheetVC(light: L.light, title: "Attach Files") { [weak self] src in self?.send(["ev": "attach", "id": id, "source": src]) }
+    // (the lifted picture is the card at its full size, and the card itself is hidden under it while the sheet is up —
+    //  the shrunk card showed its border round the picture: a double border, Haris 2026-11-02)
+    (card.gestureRecognizers?.first { $0 is PressShrink } as? PressShrink)?.release()
+    card.layer.removeAllAnimations(); card.transform = CGAffineTransform(translationX: card.swipeX, y: 0)
     if let snap = card.snapshotView(afterScreenUpdates: true) {
       sheet.lifted = snap; sheet.liftedFrame = card.convert(card.bounds, to: nil)
+      card.alpha = 0
+      sheet.onLiftedGone = { [weak card] in card?.alpha = 1 }
     }
     present?(sheet)
   }

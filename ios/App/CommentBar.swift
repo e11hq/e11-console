@@ -506,6 +506,7 @@ final class AttachSheetVC: UIViewController, UISheetPresentationControllerDelega
   var onCancel: (() -> Void)?
   // (23+, Home's long press: the card it's for, lifted over the dimmed screen while the sheet is up)
   var lifted: UIView?, liftedFrame: CGRect = .zero
+  var onLiftedGone: (() -> Void)?   // (the card it pictures, shown again)
   // (every attach sheet is the same: "Attach Files", a glass ✕, Camera · Photos · Files — Haris, 2026-10-31)
   init(light: Bool, title: String? = "Attach Files", pick: @escaping (String) -> Void) {
     self.pick = pick
@@ -592,6 +593,7 @@ final class AttachSheetVC: UIViewController, UISheetPresentationControllerDelega
     super.viewWillDisappear(animated)
     // (gone at once as the sheet goes: the card itself is under it, in its place — no picture left floating)
     lifted?.removeFromSuperview()
+    onLiftedGone?(); onLiftedGone = nil
   }
 }
 
