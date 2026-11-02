@@ -366,13 +366,16 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if key == meKey, me.image(for: .normal) != nil { return }
     meKey = key
     // (no picture of yours here yet: the one kept on the phone from the Me tab — never an empty circle; Haris 2026-11-02)
-    let pic = NativeSheetVC.photo(p) ?? (keptMe ?? DiskPics.get("me-photo").flatMap { UIImage(data: $0) })
+    let own = NativeSheetVC.photo(p)
+    if let o = own { Home.onMePhoto?(o) }   // (the Me tab gets it too, when it has none — Haris 2026-11-02)
+    let pic = own ?? (keptMe ?? DiskPics.get("me-photo").flatMap { UIImage(data: $0) })
     if photo == nil, pic != nil { meKey = meId + "|photo:kept" }
     let img = roundPic(pic, initials: p?["initials"] as? String, color: NativeSheetVC.color(p?["color"]), size: 44)
     me.setImage(img, for: .normal)
     onCorner?()
   }
   private var keptMe: UIImage?
+  static var onMePhoto: ((UIImage) -> Void)?
   // your photo fetched for the Me tab: here too, when there's none of yours yet
   func mePhotoKept(_ img: UIImage) {
     keptMe = img

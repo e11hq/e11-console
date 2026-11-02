@@ -989,7 +989,18 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     default: return "circle"
     }
   }
+  // your photo found by the top corner while the Me tab has none of its own yet: the Me tab shows it too
+  func mePhotoFromHome(_ img: UIImage) {
+    guard let i = tabKeys.firstIndex(of: "me"), let item = tabBar.items?[i], !tabFetched else { return }   // (until the tab's own fetch has worked)
+    tabPhotoSrc[i] = img; keptTabPhoto = nil
+    let on = tabOnline[i] ?? netUp
+    item.image = roundPhoto(img, ring: nil, online: on)
+    item.selectedImage = roundPhoto(img, ring: tabBar.tintColor ?? .systemBlue, online: on)
+    if let d = img.jpegData(compressionQuality: 0.85) { DiskPics.put("me-photo", d) }
+  }
+  private var keptTabPhoto: UIImage?, tabFetched = false
   func setTabs(_ a: [String: Any]) {
+    if Home.onMePhoto == nil { Home.onMePhoto = { [weak self] img in self?.mePhotoFromHome(img) } }
     let list = a["tabs"] as? [[String: Any]] ?? []
     let keys = list.map { $0["v"] as? String ?? "" }
     if keys != tabKeys || (tabBar.items?.count ?? 0) != keys.count {
@@ -1001,7 +1012,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         let v = t["v"] as? String ?? ""
         // (the Me tab: your photo kept on the phone at once, not the plain icon, until it's fetched again)
         if t["photo"] != nil || t["photoUrl"] != nil, let k = kept {
-          tabPhotoSrc[i] = k
+          tabPhotoSrc[i] = k; keptTabPhoto = k
           let it = UITabBarItem(title: t["label"] as? String ?? "", image: roundPhoto(k, ring: nil, online: netUp), selectedImage: roundPhoto(k, ring: tabBar.tintColor ?? .systemBlue, online: netUp))
           it.tag = i; return it
         }
@@ -1023,7 +1034,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       tabPhoto[i] = ph
       tabOnline[i] = online
       let apply = { (src: UIImage) in
-        self.tabPhotoSrc[i] = src
+        self.tabPhotoSrc[i] = src; self.keptTabPhoto = nil
         // (kept on the phone, for both places your photo is — the Me tab and the top corner — so neither is ever empty
         //  while it's fetched again; Haris 2026-11-02)
         if let d = src.jpegData(compressionQuality: 0.85) { DiskPics.put("me-photo", d) }
@@ -1038,7 +1049,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       if let s = t["photoUrl"] as? String, let url = URL(string: s) {
         func ask(_ left: Int) { fetchPhoto(url) { img in
           guard self.tabPhoto[i] == ph else { return }
-          if let img = img { apply(img) } else if left > 0 { DispatchQueue.main.asyncAfter(deadline: .now() + 4) { ask(left - 1) } }
+          if let img = img { self.tabFetched = true; apply(img) } else if left > 0 { DispatchQueue.main.asyncAfter(deadline: .now() + 4) { ask(left - 1) } }
         } }
         ask(4)
       }
