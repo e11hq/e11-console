@@ -121,6 +121,8 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if uploads.count != n { built = ""; if let m = model { draw(m) } }
   }
   private let filesStrip = FileStrip(side: 100), descStrip = FileStrip(side: 100)
+  private lazy var descBox: DescBox = { let b = DescBox(); b.onExpand = { [weak self] in self?.relayAnimated() }; return b }()
+  private func relayAnimated() { UIView.animate(withDuration: 0.4, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) { self.layoutContent() } }
   func showFiles() {
     guard let b = filesBlock, tab == "details" else { return }
     // (the Files block's bottom just above the bottom edge; never past the end)
@@ -382,8 +384,11 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     guard viewOnly else { return m0 }
     var m = m0
     for k in ["creator", "parts", "tags", "channels", "review", "clientApproval", "activity", "complete", "review2", "kids"] { m[k] = nil }   // (Guardian and Task Update show — Haris)
-    for k in ["canTitle", "canAssign", "canPrio", "canTags", "canRemoveTag", "canChannels", "canGuardian", "canClient", "canDesc", "canAddSub", "canCheck", "canAddCheck", "canFields", "canDelete"] { m[k] = false }
-    if var st = m["status"] as? [String: Any] { st["canSet"] = false; st["next"] = nil; st["why"] = ""; m["status"] = st }
+    // (Haris, 2026-11-02: these can be changed from the phone again, each by whoever's role allows it — the server's
+    //  own can… say who: the title, Status, Task Update, Assignees, Priority, Client and the description; the rest stays
+    //  view only)
+    for k in ["canTags", "canRemoveTag", "canChannels", "canGuardian", "canAddSub", "canCheck", "canAddCheck", "canDelete"] { m[k] = false }
+    if var st = m["status"] as? [String: Any] { st["next"] = nil; m["status"] = st }
     if var d = m["dates"] as? [String: Any] { d["canEdit"] = false; m["dates"] = d }
     if var c = m["completed"] as? [String: Any] { c["canFrom"] = false; c["canReopen"] = false; m["completed"] = c }
     if var l = m["lock"] as? [String: Any] { l["from"] = false; m["lock"] = l }
@@ -457,7 +462,8 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if let gd = m["guardian"] as? String { g.append(row(sym: "star", key: "Guardian", value: personLine(gd, extra: ""), chevron: canGd, tap: canGd ? { [weak self] in self?.pickGuardian() } : nil)) }
     else if canGd { g.append(row(sym: "star", key: "Guardian", value: greyText("None"), chevron: true, tap: { [weak self] in self?.pickGuardian() })) }
     // (view only: the Task Update under Status)
-    if TaskPage.viewOnly, (m["sub"] as? Bool) != true, let u = m["update"] as? [String: Any] { g.insert(updateRow(u, all: [], can: false), at: min(g.count, 1)) }
+    let canUp = (m["canFields"] as? Bool) == true
+    if TaskPage.viewOnly, (m["sub"] as? Bool) != true, m["update"] is [String: Any] || canUp { g.insert(updateRow(m["update"] as? [String: Any], all: (m["updates"] as? [String]) ?? [], can: canUp), at: min(g.count, 1)) }
     blocks.append(group(g))
     // ---- Review ----
     var r: [UIView] = []
@@ -475,17 +481,25 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let canDesc = (m["canDesc"] as? Bool) == true
     // (no description, view only: "Add description…" for whoever may write one — tapped, written right there — and
     //  "No description" in grey for everyone else; Haris 2026-11-02)
-    let mayDesc = (model?["canDesc"] as? Bool) == true
+    // (and whoever may change it writes right in it — tapped, the keyboard; a long one shows its first lines with an
+    //  Expand button, once: expanded, it stays so — Haris 2026-11-02)
     let noDesc = desc.isEmpty && ((m["descFiles"] as? [[String: Any]]) ?? []).isEmpty
-    if TaskPage.viewOnly && (editingDesc || (noDesc && mayDesc)) {
+    let rich: NSAttributedString = {
+      let r = DescEditor.attributed((m["descRuns"] as? [[String: Any]]) ?? [], done: (m["done"] as? Bool) == true, size: TaskPage.T)
+      return r.length > 0 || !noDesc && desc.isEmpty ? r : NSAttributedString(string: desc, attributes: [.font: UIFont.systemFont(ofSize: TaskPage.T), .foregroundColor: UIColor.label])
+    }()
+    if TaskPage.viewOnly && (canDesc || editingDesc) {
       let tv = descView
-      if !editingDesc { tv.attributedText = NSAttributedString(string: "Add description…", attributes: [.font: UIFont.systemFont(ofSize: TaskPage.T), .foregroundColor: UIColor.tertiaryLabel]) }
+      if !editingDesc { tv.attributedText = desc.isEmpty ? NSAttributedString(string: "Add description…", attributes: [.font: UIFont.systemFont(ofSize: TaskPage.T), .foregroundColor: UIColor.tertiaryLabel]) : rich }
       descEmpty = desc.isEmpty
       tv.isEditable = true
-      blocks.append(tv)
+      descBox.hold(tv); blocks.append(descBox)
     } else if TaskPage.viewOnly && noDesc {
       descRead.attributedText = NSAttributedString(string: "No description", attributes: [.font: UIFont.systemFont(ofSize: TaskPage.T), .foregroundColor: UIColor.tertiaryLabel])
-      blocks.append(descRead)
+      descBox.hold(descRead); blocks.append(descBox)
+    } else if TaskPage.viewOnly && rich.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+      descRead.attributedText = rich
+      descBox.hold(descRead); blocks.append(descBox)
     }
     if !TaskPage.viewOnly && (!desc.isEmpty || canDesc || editingDesc) {
       blocks.append(header("Description", lock: m["lock"] != nil))
@@ -516,13 +530,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     }
     // ---- the description, view only: straight on the page like the title, in the body size, above Files — no box,
     //      no heading (Haris, 2026-11-01) ----
-    if TaskPage.viewOnly && !desc.isEmpty {
-      let rich = DescEditor.attributed((m["descRuns"] as? [[String: Any]]) ?? [], done: (m["done"] as? Bool) == true, size: TaskPage.T)
-      // (its plain words if the formatted ones didn't come)
-      let onlyFiles = !((m["descFiles"] as? [[String: Any]]) ?? []).isEmpty
-      descRead.attributedText = rich.length > 0 || onlyFiles ? rich : NSAttributedString(string: desc, attributes: [.font: UIFont.systemFont(ofSize: TaskPage.T), .foregroundColor: UIColor.label])
-      if descRead.attributedText.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false { blocks.append(descRead) }
-    }
+    // (shown above, in its box)
     // (files pasted into the description: the same cards as comments' — tapped, the preview with them)
     let dfiles = TaskPage.viewOnly ? ((m["descFiles"] as? [[String: Any]]) ?? []) : []
     descStrip.set(dfiles, open: { [weak self] i in self?.onOpenFiles?(dfiles, i) }, menu: { [weak self] i in self?.fileMenu(dfiles, i) })
@@ -608,7 +616,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     blocks.removeAll { $0 is PageBand }
     var out: [UIView] = [], used = 0
     for b in blocks {
-      let isDesc = b === descRead || b === descView
+      let isDesc = b is DescBox
       let heading = b is PageHeading
       if heading || isDesc, let prev = out.last, !(prev is PageBand), prev !== titleView {
         if used == bands.count { bands.append(PageBand()) }
@@ -772,34 +780,24 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }
 
   // ---------- the rows that change things ----------
+  // the sheets are iPhone's own, the same as the phone website's (Haris, 2026-11-02): a tap on the row opens it
   private func statusRow(_ s: [String: Any]) -> UIView {
     let can = (s["canSet"] as? Bool) == true
-    let v = UIStackView(); v.spacing = 8; v.alignment = .center
-    v.addArrangedSubview(pill(s["name"] as? String ?? "", fg: .white, bg: TaskPage.rgb(s["rgb"])))
-    var menu: UIMenu?
-    if can {
-      let opts = (s["options"] as? [[String: Any]]) ?? []
-      menu = UIMenu(title: "Status", children: opts.map { o in
-        let img = UIImage(systemName: "circle.fill")?.withTintColor(TaskPage.rgb(o["rgb"]), renderingMode: .alwaysOriginal)
-        let locked = (o["locked"] as? Bool) == true
-        return UIAction(title: o["name"] as? String ?? "", subtitle: locked ? "Waiting for CD approval" : nil, image: locked ? UIImage(systemName: "lock.fill") : img, attributes: locked ? .disabled : [], state: (o["on"] as? Bool) == true ? .on : .off) { [weak self] _ in
-          guard let self = self, let id = o["id"] as? String else { return }
-          self.setStatus(id)
-        }
-      })
-      if let next = s["next"] as? String {
-        var c: UIButton.Configuration = .gray(); c.cornerStyle = .capsule
-        c.attributedTitle = AttributedString("Next", attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 14, weight: .semibold)]))
-        c.image = UIImage(systemName: "chevron.right", withConfiguration: UIImage.SymbolConfiguration(pointSize: 11, weight: .bold)); c.imagePlacement = .trailing; c.imagePadding = 4
-        c.baseForegroundColor = .label
-        c.contentInsets = NSDirectionalEdgeInsets(top: 5, leading: 11, bottom: 5, trailing: 10)
-        let b = UIButton(configuration: c)
-        b.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.setStatus(next) }, for: .touchUpInside)
-        v.addArrangedSubview(b)
-      }
-    }
+    let v = pill(s["name"] as? String ?? "", fg: .white, bg: TaskPage.rgb(s["rgb"]))
     let why = s["why"] as? String ?? ""
-    return row(sym: "circle.lefthalf.filled", key: "Status", sub: why.isEmpty ? nil : why, value: v, chevron: false, menu: menu)
+    return row(sym: "circle.lefthalf.filled", key: "Status", sub: why.isEmpty ? nil : why, value: v, chevron: can, tap: can ? { [weak self] in self?.pickStatus(s) } : nil)
+  }
+  private func pickStatus(_ s: [String: Any]) {
+    let opts = (s["options"] as? [[String: Any]]) ?? []
+    let rows: [[String: Any]] = opts.enumerated().map { i, o in
+      let locked = (o["locked"] as? Bool) == true
+      return ["i": locked ? -1 : i, "label": o["name"] as? String ?? "", "dot": o["rgb"] ?? [135, 144, 158], "checked": (o["on"] as? Bool) == true, "locked": locked, "disabled": locked, "sub": locked ? "Waiting for CD approval" : ""]
+    }
+    onSheet?(["sections": [["header": "Status", "rows": rows]]], { _ in }, { [weak self] i, _ in
+      guard let self = self, i >= 0, i < opts.count, (opts[i]["on"] as? Bool) != true, let id = opts[i]["id"] as? String else { return }
+      UISelectionFeedbackGenerator().selectionChanged()
+      self.setStatus(id)
+    })
   }
   func setStatus(_ id: String, cdAgain: String? = nil) {
     var b: [String: Any] = ["act": "status", "id": taskId, "value": id]
@@ -902,9 +900,26 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       let key = p["key"] as? String ?? "_", lab = p["label"] as? String ?? ""
       let v: UIView = lab.isEmpty ? greyText(can ? "None" : "–") : lab == "Urgent" ? pill("Urgent", fg: .systemRed, bg: UIColor.systemRed.withAlphaComponent(0.15)) : pill(lab, fg: .label, bg: .tertiarySystemFill)
       let who = p["name"] as? String ?? ""
-      let menu: UIMenu? = can ? UIMenu(title: who.isEmpty ? "Priority" : (who == "You" ? "Your priority" : who + "’s priority"), children: prioItems(key, cur: p["v"] as? String ?? "")) : nil
-      return row(sym: "flag", key: who.isEmpty || list.count == 1 && key == (model?["me"] as? String) ? "Priority" : "Priority · " + who, value: v, chevron: can, menu: menu)
+      return row(sym: "flag", key: who.isEmpty || list.count == 1 && key == (model?["me"] as? String) ? "Priority" : "Priority · " + who, value: v, chevron: can, tap: can ? { [weak self] in self?.pickPrio(p) } : nil)
     }
+  }
+  // Priority, as the website's sheet: whose it is, Urgent (always on top), the numbers for that day (one each per
+  // person per day — the ones used on other tasks greyed), No priority
+  private func pickPrio(_ p: [String: Any]) {
+    let key = p["key"] as? String ?? "_", cur = p["v"] as? String ?? "", who = p["name"] as? String ?? ""
+    let taken = Set(((p["taken"] as? [Any]) ?? []).compactMap { ($0 as? NSNumber)?.intValue })
+    let me = key == (model?["me"] as? String)
+    let day = ((model?["dates"] as? [String: Any])?["dueLabel"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+    var secs: [[String: Any]] = []
+    var top: [String: Any] = ["rows": [["i": 1, "label": "Urgent", "sub": "always on top", "icon": "flag", "tint": [255, 69, 58], "checked": cur == "urgent"]]]
+    if !who.isEmpty || me { top["header"] = me ? "Your priority" : who + "’s priority"; if let pp = people[key] { top["person"] = personArg(pp.merging(["id": key]) { a, _ in a }) } }
+    secs.append(top)
+    secs.append(["header": "Priority for " + (day ?? "tasks with no due date"), "rows": [["i": -1, "label": "", "kind": "num", "chips": (1...10).map { n in ["i": 100 + n, "label": String(n), "on": cur == String(n), "disabled": taken.contains(n)] }]]])
+    secs.append(["rows": [["i": 2, "label": "No priority", "icon": "flag", "checked": cur.isEmpty]]])
+    onSheet?(["sections": secs], { _ in }, { [weak self] i, _ in
+      guard let self = self else { return }
+      if i == 1 { self.setPrio(key, "urgent") } else if i == 2 { self.setPrio(key, "none") } else if i > 100 && i <= 110 { self.setPrio(key, String(i - 100)) }
+    })
   }
   private func prioItems(_ key: String, cur: String) -> [UIMenuElement] {
     var out: [UIMenuElement] = []
@@ -938,13 +953,20 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private func updateRow(_ u: [String: Any]?, all: [String], can: Bool) -> UIView {
     let cur = u?["t"] as? String ?? ""
     let v: UIView = cur.isEmpty ? greyText(can ? "None" : "–") : pill(cur, fg: TaskPage.rgb(u?["rgb"]), bg: TaskPage.rgb(u?["rgb"]).withAlphaComponent(0.16))
-    var menu: UIMenu?
-    if can {
-      var items: [UIMenuElement] = all.map { x in UIAction(title: x, state: x == cur ? .on : .off) { [weak self] _ in guard let self = self else { return }; self.onAct?(["act": "update", "id": self.taskId, "value": x]) } }
-      if !cur.isEmpty { items.insert(UIMenu(options: .displayInline, children: [UIAction(title: "Clear", attributes: .destructive) { [weak self] _ in guard let self = self else { return }; self.onAct?(["act": "update", "id": self.taskId, "value": NSNull()]) }]), at: 0) }
-      menu = UIMenu(title: "Task Update", children: items)
-    }
-    return row(sym: "arrow.triangle.2.circlepath", key: "Task Update", value: v, chevron: can, menu: menu)
+    return row(sym: "arrow.triangle.2.circlepath", key: "Task Update", value: v, chevron: can, tap: can ? { [weak self] in self?.pickUpdate(all, cur: cur) } : nil)
+  }
+  // Task Update: the website's list, the one on it ticked; Clear at the end when there is one
+  private func pickUpdate(_ all: [String], cur: String) {
+    var rows: [[String: Any]] = all.enumerated().map { i, x in ["i": i, "label": x, "checked": x == cur] }
+    var secs: [[String: Any]] = [["header": "Task Update", "rows": rows]]
+    if !cur.isEmpty { rows = [["i": 999, "label": "Clear", "icon": "x"]]; secs.append(["rows": rows]) }
+    onSheet?(["sections": secs], { _ in }, { [weak self] i, _ in
+      guard let self = self, i >= 0 else { return }
+      if i == 999 { self.onAct?(["act": "update", "id": self.taskId, "value": NSNull()]); return }
+      guard i < all.count, all[i] != cur else { return }
+      UISelectionFeedbackGenerator().selectionChanged()
+      self.onAct?(["act": "update", "id": self.taskId, "value": all[i]])
+    })
   }
   private func subRow(_ s: [String: Any], ro: Bool) -> UIView {
     let id = s["id"] as? String ?? "", done = (s["done"] as? Bool) == true
@@ -1023,7 +1045,6 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }
   // Assignees: everyone who may be assigned, those on it ticked; each tick saves at once (as the website's sheet)
   func pickPeople() {
-    guard !TaskPage.viewOnly else { return }   // (Details is view only)
     guard let pool = model?["pool"] as? [[String: Any]], !pool.isEmpty else { return }
     var on = pool.map { ($0["on"] as? Bool) == true }
     let rows: [[String: Any]] = pool.enumerated().map { i, p in ["i": i, "label": (p["id"] as? String) == (model?["me"] as? String) ? "Me" : (p["name"] as? String ?? ""), "sub": p["role"] as? String ?? "", "person": personArg(p), "checked": on[i], "multi": true, "find": (p["name"] as? String ?? "") + " " + (p["role"] as? String ?? "")] }
@@ -1209,4 +1230,60 @@ final class PageHeading: UIStackView {}
 final class PageBand: UIView {
   override init(frame: CGRect) { super.init(frame: frame); backgroundColor = .secondarySystemBackground; isUserInteractionEnabled = false }
   required init?(coder: NSCoder) { fatalError() }
+}
+
+// the description on the page: all of it, or — a long one, until Expand is tapped (once) — its first lines fading out
+// with an Expand button on them, as ClickUp's. Writing in it opens it all.
+final class DescBox: UIView {
+  private(set) var expanded = false
+  var onExpand: (() -> Void)?
+  private weak var text: UITextView?
+  private let fade = CAGradientLayer(), button = UIButton(type: .system)
+  override init(frame: CGRect) {
+    super.init(frame: frame)
+    clipsToBounds = true
+    fade.colors = [UIColor.systemBackground.withAlphaComponent(0).cgColor, UIColor.systemBackground.cgColor]
+    var c = UIButton.Configuration.plain(); c.cornerStyle = .capsule
+    c.attributedTitle = AttributedString("Expand", attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 15, weight: .medium)]))
+    c.baseForegroundColor = .label; c.background.backgroundColor = .systemBackground
+    c.background.strokeColor = .separator; c.background.strokeWidth = 1
+    c.contentInsets = NSDirectionalEdgeInsets(top: 7, leading: 16, bottom: 7, trailing: 16)
+    button.configuration = c
+    button.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.expand() }, for: .touchUpInside)
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  func hold(_ tv: UITextView) {
+    if text !== tv {
+      text?.removeFromSuperview()
+      tv.removeFromSuperview(); tv.translatesAutoresizingMaskIntoConstraints = false; addSubview(tv)
+      // (its own full height; the box shows as much of it as it's given)
+      NSLayoutConstraint.activate([tv.topAnchor.constraint(equalTo: topAnchor), tv.leadingAnchor.constraint(equalTo: leadingAnchor), tv.trailingAnchor.constraint(equalTo: trailingAnchor)])
+      text = tv
+    }
+    layer.addSublayer(fade); addSubview(button)
+  }
+  func expand() { guard !expanded else { return }; expanded = true; onExpand?() }
+  // (a long one, not opened yet: the cap, the fade and the button; the box is measured after this)
+  override func layoutSubviews() {
+    let w = bounds.width
+    let full = text.map { $0.sizeThatFits(CGSize(width: w > 0 ? w : 300, height: .greatestFiniteMagnitude)).height } ?? 0
+    if text?.isFirstResponder == true { expanded = true }
+    let short = !expanded && full > 168 + 40
+    super.layoutSubviews()
+    fade.isHidden = !short; button.isHidden = !short
+    CATransaction.begin(); CATransaction.setDisableActions(true)
+    fade.frame = CGRect(x: 0, y: bounds.height - 72, width: w, height: 72)
+    fade.colors = [UIColor.systemBackground.withAlphaComponent(0).cgColor, UIColor.systemBackground.cgColor]
+    CATransaction.commit()
+    let s = button.sizeThatFits(CGSize(width: 200, height: 40))
+    button.frame = CGRect(x: (w - s.width) / 2, y: bounds.height - s.height - 6, width: s.width, height: s.height)
+    bringSubviewToFront(button)
+  }
+  // (the size the page gives it: capped while it's a long one not opened)
+  override func systemLayoutSizeFitting(_ t: CGSize, withHorizontalFittingPriority h: UILayoutPriority, verticalFittingPriority v: UILayoutPriority) -> CGSize {
+    let full = text.map { $0.sizeThatFits(CGSize(width: t.width, height: .greatestFiniteMagnitude)).height } ?? 0
+    if text?.isFirstResponder == true { expanded = true }
+    let short = !expanded && full > 168 + 40
+    return CGSize(width: t.width, height: ceil(short ? 168 : full))
+  }
 }

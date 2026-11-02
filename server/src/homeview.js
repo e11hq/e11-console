@@ -134,7 +134,7 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
       else if (a === 'client') { if (!rules.can('editProject', t) || t.parentId || rules.idLocked(t)) return fail(403, 'The client can’t be changed'); r = rules.setClient(t, body.value ? String(body.value) : null); }
       else if (a === 'react') r = rules.toggleReaction(t, String(body.key || ''), String(body.value || ''));
       else if (a === 'deleteComment') { const d = rules.deleteComment(t, String(body.value || '')); if (d.error) return fail(409, d.error); undo = d.undo; r = d.messages; }
-      else if (a === 'desc') { if (!rules.can('editDesc', t) || rules.idLocked(t)) return fail(403, 'The description can’t be changed'); r = rules.setDesc(t, body.html, body.text); }
+      else if (a === 'desc') { if (!rules.can('editDesc', t) || rules.idLocked(t)) return fail(403, 'The description can’t be changed'); r = rules.setDesc(t, body.html, body.text, true); }
       else if (a === 'submitReview') r = rules.submitReview(t, Array.isArray(body.files) ? body.files : []);
       else if (a === 'withdrawReview') r = rules.withdrawReview(t);
       else if (a === 'attach') r = rules.attachFilesTo(t, Array.isArray(body.files) ? body.files : []);

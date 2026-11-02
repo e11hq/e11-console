@@ -621,7 +621,8 @@ var E11Rules = (() => {
         prio: (ids.length > 1 || (ids.length === 1 && ids[0] !== meId) ? ids : [ids[0] || '_']).map((k) => {
           const v = k === '_' ? normPrio((t.prio || {})._) : prioOf(t, k);
           if (k !== '_') person(k);
-          return { key: k, name: k === '_' ? '' : firstName(k), v: v === 'none' ? '' : String(v), label: v === 'urgent' ? 'Urgent' : v === 'none' ? '' : String(v) };
+          // (taken: the numbers this person already has on other tasks that day — greyed in the app's sheet, as the website's)
+          return { key: k, name: k === '_' ? '' : firstName(k), v: v === 'none' ? '' : String(v), label: v === 'urgent' ? 'Urgent' : v === 'none' ? '' : String(v), taken: !ro && can('editPriority', t) ? prioTaken(t, k) : [] };
         }), canPrio: !ro && can('editPriority', t),
         tags: (t.tags || []).map((g) => ({ t: g, rgb: tagRgb(g) })), canTags: !ro && can('addTag', t), canRemoveTag: !ro && can('removeTag', t), allTags: !ro && can('addTag', t) ? allTags() : [],
         pool: !ro && can('assign', t) ? assignPool(t) : [], channelKeys: t.channels || [], canChannels: !ro && !t.parentId && !!u && (isAdm(u) || u.role === 'am' || u.role === 'social'), canGuardian: !ro && !t.parentId && can('assign', t),
@@ -895,8 +896,16 @@ var E11Rules = (() => {
         return '';
       });
     }
-    function setDesc(t, html, text) {
-      const clean = cleanHtml(html), plain = String(text == null ? '' : text).slice(0, 20000);
+    // keepFiles (the iPhone app, which writes the words only): the files pasted into it stay — the ones it had, at the end
+    function setDesc(t, html, text, keepFiles) {
+      let clean = cleanHtml(html);
+      const plain = String(text == null ? '' : text).slice(0, 20000);
+      if (keepFiles) {
+        const had = new Set(fileRefsOf(clean).map((f) => f.path));
+        const keep = [];
+        String(t.notesHtml || '').replace(/<span[^>]*data-fpath="([^"]+)"[^>]*>[\s\S]*?<\/span>/gi, (whole, p) => { if (!had.has(unent(p))) { had.add(unent(p)); keep.push(whole); } return whole; });
+        if (keep.length) clean = cleanHtml(clean + '<p>' + keep.join(' ') + '</p>');
+      }
       if (clean === (t.notesHtml || '') && plain === (t.notes || '')) return [];
       const before = mentionsIn(t.notesHtml);
       t.notesHtml = clean; t.notes = plain;
