@@ -284,8 +284,8 @@ final class ClientSheetVC: UITableViewController, UITextFieldDelegate {
       f.frame = CGRect(x: 0, y: 0, width: 300, height: 50); tableView.tableFooterView = f
     }
   }
-  override func viewDidLayoutSubviews() { super.viewDidLayoutSubviews(); if navigationController?.topViewController === self { (navigationController as? FitNav)?.fitTo(tableView) } }
-  override func viewWillAppear(_ a: Bool) { super.viewWillAppear(a); (navigationController as? FitNav)?.fitTo(tableView) }
+  override func viewDidLayoutSubviews() { super.viewDidLayoutSubviews(); if navigationController?.topViewController === self, navigationController?.transitionCoordinator == nil { (navigationController as? FitNav)?.fitTo(tableView) } }
+  override func viewDidAppear(_ a: Bool) { super.viewDidAppear(a); (navigationController as? FitNav)?.fitTo(tableView) }   // (back from a list: someone added — its size now)
   private func rgb() -> UIColor { UIColor(hex: color) ?? NativeSheetVC.color(row["rgb"]) ?? .systemGray }
   private func logoView(_ size: CGFloat) -> UIView {
     let v = UIImageView(); v.backgroundColor = rgb(); v.layer.cornerRadius = size * 0.27; v.layer.cornerCurve = .continuous; v.clipsToBounds = true; v.contentMode = .scaleAspectFill
@@ -480,8 +480,8 @@ final class PeoplePickVC: UITableViewController {
     return c
   }
   override func tableView(_ tv: UITableView, didSelectRowAt ip: IndexPath) { tv.deselectRow(at: ip, animated: true); if !ids.isEmpty { picked(ids[ip.row]) } }
-  override func viewDidLayoutSubviews() { super.viewDidLayoutSubviews(); (navigationController as? FitNav)?.fitTo(tableView) }
-  override func viewWillAppear(_ a: Bool) { super.viewWillAppear(a); (navigationController as? FitNav)?.fitTo(tableView) }
+  // (no resizing of the sheet for it: the sheet changing height while the pages slid cut the client's list off —
+  //  Haris 2026-11-02 23:00; it scrolls in the room the sheet has)
 }
 
 extension UIColor {

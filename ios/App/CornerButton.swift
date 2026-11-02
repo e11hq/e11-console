@@ -319,7 +319,7 @@ extension Main {
       // (a client's page: the task page's — ‹ on the left, ••• where your photo is, no 🔍)
       if h.pageBar { return (CornerButton.Spot(kind: "back", frame: h.convert(h.backFrame, to: view).offsetBy(dx: dx, dy: 0)), CornerButton.Spot(), CornerButton.Spot(kind: "more", frame: meF)) }
       // (All Client Assets opened over another screen: ‹ too, with 🔍 and your photo)
-      let left = h.backable ? CornerButton.Spot(kind: "back", frame: h.convert(h.backFrame, to: view).offsetBy(dx: dx, dy: 0)) : CornerButton.Spot()
+      let left = h.backable && !h.searching ? CornerButton.Spot(kind: "back", frame: h.convert(h.backFrame, to: view).offsetBy(dx: dx, dy: 0)) : CornerButton.Spot()
       return (left, CornerButton.Spot(kind: c.kind, text: c.text, frame: mf), cornerSpot)
     }
   }

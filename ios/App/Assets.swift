@@ -355,6 +355,7 @@ final class AssetsCtl {
   private var stack: [Screen] = []
   private var models: [String: [String: Any]] = [:]   // (a client's, by its id; "" — all of them)
   private var fromPage = false, rootTab = false
+  private weak var base: UIView?   // (what the first one was opened over — a client's page, the list; hidden under it meanwhile)
   var light = true
   private var me: String?
   private var pending: [String: ([String: Any]) -> Void] = [:]
@@ -458,8 +459,11 @@ final class AssetsCtl {
   private func under(_ i: Int) -> UIView? {
     if i > 0 { return stack[i - 1].h }
     if fromPage { return nil }
-    if let p = main.clientPageIfMade, !p.isHidden { return p }
-    if let l = main.clientsListIfMade, !l.isHidden { return l }
+    // (kept from when it opened: it's hidden under the screens since — asking whether it's shown found nothing, and
+    //  going back left a black page, Haris 2026-11-02 23:00)
+    if let b = base { return b }
+    if let p = main.clientPageIfMade, !p.isHidden { base = p; return p }
+    if let l = main.clientsListIfMade, !l.isHidden { base = l; return l }
     return nil
   }
   private func push(_ s: Screen, animated: Bool) {
@@ -493,6 +497,7 @@ final class AssetsCtl {
       // (closed meanwhile — another tab, the page moved on: nothing left to take off)
       if let i = self.stack.firstIndex(where: { $0.h === s.h }) { self.stack.remove(at: i) } else { self.leaving = false; return }
       self.leaving = false
+      if self.stack.isEmpty { self.base = nil }
       if self.stack.isEmpty && self.fromPage { self.fromPage = false; self.main.pageJS("window.__e11Assets && window.__e11Assets({ev:'back'})") }
       else if let t = self.stack.last { self.refreshScreen(t) }
       self.main.edgePanOn(); self.main.updateCorner()
@@ -508,7 +513,7 @@ final class AssetsCtl {
   // all of them gone (another tab, the page moved on)
   func close(animated: Bool) {
     stack.forEach { $0.h.removeFromSuperview() }
-    stack = []; leaving = false; fromPage = false
+    stack = []; leaving = false; fromPage = false; base = nil
     main.edgePanOn(); main.updateCorner()
   }
   // the edge swipe on the top one: it follows the finger, the one under it coming back, the top buttons between them

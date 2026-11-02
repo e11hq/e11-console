@@ -1643,6 +1643,14 @@ extension TaskPage {
     let seen = scroll.bounds.insetBy(dx: 0, dy: -200)
     var made = false
     var keys = Set<String>()
+    // (only when something really came, went or changed its height do the others slide: the same rows at the same sizes
+    //  are drawn where they are — read part way through being laid out, a row looked moved and slid up and back, a jump
+    //  at every change and on coming back to the app, Haris 2026-11-02 22:54)
+    let nowKeys = Set(now.map { $0.0 })
+    let structural = nowKeys != Set(before.keys) || now.contains { k, v in
+      guard let o = before[k] else { return true }
+      return abs(o.frame.height - v.bounds.height) > 0.5
+    }
     for (k, v) in now {
       keys.insert(k)
       let nf = v.convert(v.bounds, to: content)
@@ -1655,7 +1663,7 @@ extension TaskPage {
         continue
       }
       let dy = o.frame.minY - nf.minY
-      let moved = abs(dy) > 0.5 && (nf.intersects(seen) || o.frame.intersects(seen))
+      let moved = structural && abs(dy) > 0.5 && (nf.intersects(seen) || o.frame.intersects(seen))
       let base = k.components(separatedBy: "#")[0]
       let changed = o.sig != TaskPage.sig(v) && !TaskPage.moveOnly.contains(base) && !base.hasPrefix("band") && !base.hasPrefix("sep")
       if moved {
