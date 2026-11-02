@@ -376,6 +376,8 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // Full screen, no cards (Haris, 2026-11-02, from ClickUp's page): everything on one line 20 from the screen's edge —
   // the title, the rows' icons, the section headings, the description, the files; sections split by a thin grey band
   static let M: CGFloat = 20
+  // the text: 16, as ClickUp's (rows, values, the description, section headings) — Haris 2026-11-02, side by side
+  static let T: CGFloat = 16
   static func basic(_ m0: [String: Any]) -> [String: Any] {
     guard viewOnly else { return m0 }
     var m = m0
@@ -440,7 +442,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       let c = m["client"] as? [String: Any]
       let v = UIStackView(); v.axis = .horizontal; v.spacing = 6; v.alignment = .center
       if let c = c { let d = UIView(); d.backgroundColor = TaskPage.rgb(c["rgb"]); d.layer.cornerRadius = 4; d.widthAnchor.constraint(equalToConstant: 9).isActive = true; d.heightAnchor.constraint(equalToConstant: 9).isActive = true; v.addArrangedSubview(d) }
-      v.addArrangedSubview(label(c?["name"] as? String ?? "No client", size: 17, color: .secondaryLabel))
+      v.addArrangedSubview(label(c?["name"] as? String ?? "No client", size: TaskPage.T, color: .secondaryLabel))
       if m["lock"] != nil { v.addArrangedSubview(symbol("lock.fill", 12, .secondaryLabel)) }
       let canCl = (m["canClient"] as? Bool) == true
       g.append(row(sym: "square.grid.2x2", key: "Client", value: v, chevron: canCl, tap: canCl ? { [weak self] in self?.pickClient() } : nil))
@@ -450,7 +452,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if !tags.isEmpty || canTags { g.append(row(sym: "tag", key: "Tags", value: tags.isEmpty ? greyText("Add") as UIView : chips(tags.map { ($0["t"] as? String ?? "", TaskPage.rgb($0["rgb"])) }), chevron: canTags, tap: canTags ? { [weak self] in self?.pickTags() } : nil)) }
     let ch = (m["channels"] as? [String]) ?? []
     let canCh = (m["canChannels"] as? Bool) == true
-    if !ch.isEmpty || canCh { g.append(row(sym: "paperplane", key: "Channels", value: label(ch.isEmpty ? "None" : ch.joined(separator: " · "), size: 17, color: .secondaryLabel), chevron: canCh, tap: canCh ? { [weak self] in self?.pickChannels() } : nil)) }
+    if !ch.isEmpty || canCh { g.append(row(sym: "paperplane", key: "Channels", value: label(ch.isEmpty ? "None" : ch.joined(separator: " · "), size: TaskPage.T, color: .secondaryLabel), chevron: canCh, tap: canCh ? { [weak self] in self?.pickChannels() } : nil)) }
     let canGd = (m["canGuardian"] as? Bool) == true
     if let gd = m["guardian"] as? String { g.append(row(sym: "star", key: "Guardian", value: personLine(gd, extra: ""), chevron: canGd, tap: canGd ? { [weak self] in self?.pickGuardian() } : nil)) }
     else if canGd { g.append(row(sym: "star", key: "Guardian", value: greyText("None"), chevron: true, tap: { [weak self] in self?.pickGuardian() })) }
@@ -477,19 +479,19 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let noDesc = desc.isEmpty && ((m["descFiles"] as? [[String: Any]]) ?? []).isEmpty
     if TaskPage.viewOnly && (editingDesc || (noDesc && mayDesc)) {
       let tv = descView
-      if !editingDesc { tv.attributedText = NSAttributedString(string: "Add description…", attributes: [.font: UIFont.systemFont(ofSize: 17), .foregroundColor: UIColor.tertiaryLabel]) }
+      if !editingDesc { tv.attributedText = NSAttributedString(string: "Add description…", attributes: [.font: UIFont.systemFont(ofSize: TaskPage.T), .foregroundColor: UIColor.tertiaryLabel]) }
       descEmpty = desc.isEmpty
       tv.isEditable = true
       blocks.append(tv)
     } else if TaskPage.viewOnly && noDesc {
-      descRead.attributedText = NSAttributedString(string: "No description", attributes: [.font: UIFont.systemFont(ofSize: 17), .foregroundColor: UIColor.tertiaryLabel])
+      descRead.attributedText = NSAttributedString(string: "No description", attributes: [.font: UIFont.systemFont(ofSize: TaskPage.T), .foregroundColor: UIColor.tertiaryLabel])
       blocks.append(descRead)
     }
     if !TaskPage.viewOnly && (!desc.isEmpty || canDesc || editingDesc) {
       blocks.append(header("Description", lock: m["lock"] != nil))
       // (edited right where it is, looking the same — DescEditor.swift)
       let tv = descView
-      if !editingDesc { tv.attributedText = desc.isEmpty ? NSAttributedString(string: "Add a description… Type @ to mention someone", attributes: [.font: UIFont.systemFont(ofSize: 17), .foregroundColor: UIColor.tertiaryLabel]) : DescEditor.attributed((m["descRuns"] as? [[String: Any]]) ?? [], done: (m["done"] as? Bool) == true) }
+      if !editingDesc { tv.attributedText = desc.isEmpty ? NSAttributedString(string: "Add a description… Type @ to mention someone", attributes: [.font: UIFont.systemFont(ofSize: TaskPage.T), .foregroundColor: UIColor.tertiaryLabel]) : DescEditor.attributed((m["descRuns"] as? [[String: Any]]) ?? [], done: (m["done"] as? Bool) == true, size: TaskPage.T) }
       descEmpty = desc.isEmpty
       tv.isEditable = canDesc
       blocks.append(group([pad(tv)]))
@@ -515,10 +517,10 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // ---- the description, view only: straight on the page like the title, in the body size, above Files — no box,
     //      no heading (Haris, 2026-11-01) ----
     if TaskPage.viewOnly && !desc.isEmpty {
-      let rich = DescEditor.attributed((m["descRuns"] as? [[String: Any]]) ?? [], done: (m["done"] as? Bool) == true)
+      let rich = DescEditor.attributed((m["descRuns"] as? [[String: Any]]) ?? [], done: (m["done"] as? Bool) == true, size: TaskPage.T)
       // (its plain words if the formatted ones didn't come)
       let onlyFiles = !((m["descFiles"] as? [[String: Any]]) ?? []).isEmpty
-      descRead.attributedText = rich.length > 0 || onlyFiles ? rich : NSAttributedString(string: desc, attributes: [.font: UIFont.systemFont(ofSize: 17), .foregroundColor: UIColor.label])
+      descRead.attributedText = rich.length > 0 || onlyFiles ? rich : NSAttributedString(string: desc, attributes: [.font: UIFont.systemFont(ofSize: TaskPage.T), .foregroundColor: UIColor.label])
       if descRead.attributedText.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false { blocks.append(descRead) }
     }
     // (files pasted into the description: the same cards as comments' — tapped, the preview with them)
@@ -555,9 +557,9 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       blocks.append(header("Activity"))
       let lines = act.prefix(12).map { a -> UIView in
         let who = (a["who"] as? String).map { name($0) } ?? "Someone"
-        let s = NSMutableAttributedString(string: who, attributes: [.font: UIFont.systemFont(ofSize: 15, weight: .semibold), .foregroundColor: UIColor.label])
-        s.append(NSAttributedString(string: " " + (a["text"] as? String ?? ""), attributes: [.font: UIFont.systemFont(ofSize: 15), .foregroundColor: UIColor.secondaryLabel]))
-        s.append(NSAttributedString(string: " · " + TaskPage.when(a["at"] as? String ?? ""), attributes: [.font: UIFont.systemFont(ofSize: 15), .foregroundColor: UIColor.tertiaryLabel]))
+        let s = NSMutableAttributedString(string: who, attributes: [.font: UIFont.systemFont(ofSize: 14, weight: .semibold), .foregroundColor: UIColor.label])
+        s.append(NSAttributedString(string: " " + (a["text"] as? String ?? ""), attributes: [.font: UIFont.systemFont(ofSize: 14), .foregroundColor: UIColor.secondaryLabel]))
+        s.append(NSAttributedString(string: " · " + TaskPage.when(a["at"] as? String ?? ""), attributes: [.font: UIFont.systemFont(ofSize: 14), .foregroundColor: UIColor.tertiaryLabel]))
         let l = UILabel(); l.attributedText = s; l.numberOfLines = 0
         return pad(l, v: 9)
       }
@@ -608,8 +610,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     for b in blocks {
       let isDesc = b === descRead || b === descView
       let heading = b is PageHeading
-      let filesAfterDesc = heading && (out.last === descRead || out.last === descStrip || out.last === descView)
-      if (heading && !filesAfterDesc) || isDesc, let prev = out.last, !(prev is PageBand), prev !== titleView {
+      if heading || isDesc, let prev = out.last, !(prev is PageBand), prev !== titleView {
         if used == bands.count { bands.append(PageBand()) }
         let band = bands[used]; used += 1
         if band.superview !== content { content.addSubview(band) }
@@ -625,13 +626,13 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private func label(_ t: String, size: CGFloat, color: UIColor, weight: UIFont.Weight = .regular) -> UILabel {
     let l = UILabel(); l.text = t; l.font = .systemFont(ofSize: size, weight: weight); l.textColor = color; return l
   }
-  private func greyText(_ t: String) -> UILabel { label(t, size: 17, color: .secondaryLabel) }
+  private func greyText(_ t: String) -> UILabel { label(t, size: TaskPage.T, color: .secondaryLabel) }
   private func symbol(_ s: String, _ size: CGFloat, _ c: UIColor, weight: UIImage.SymbolWeight = .regular) -> UIImageView {
     let i = UIImageView(image: UIImage(systemName: s, withConfiguration: UIImage.SymbolConfiguration(pointSize: size, weight: weight)))
     i.tintColor = c; i.contentMode = .center; i.setContentHuggingPriority(.required, for: .horizontal); return i
   }
   private func header(_ t: String, lock: Bool = false) -> UIView {
-    let l = label(t, size: 17, color: .secondaryLabel)
+    let l = label(t, size: TaskPage.T, color: .secondaryLabel)
     let s = PageHeading(arrangedSubviews: [l]); s.spacing = 5; s.alignment = .center
     if lock { s.addArrangedSubview(symbol("lock.fill", 10, .secondaryLabel)) }
     s.addArrangedSubview(UIView())
@@ -664,7 +665,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let r = TaskRow()
     let ic = symbol(sym, 16, .secondaryLabel)
     ic.translatesAutoresizingMaskIntoConstraints = false
-    let k = label(key, size: 17, color: .label); k.numberOfLines = keyLines
+    let k = label(key, size: TaskPage.T, color: .label); k.numberOfLines = keyLines
     k.setContentCompressionResistancePriority(.defaultHigh + 1, for: .horizontal)
     let left = UIStackView(arrangedSubviews: [k]); left.axis = .vertical; left.spacing = 2
     if let sub = sub { let s = label(sub, size: 13, color: .secondaryLabel); s.numberOfLines = 2; left.addArrangedSubview(s) }
@@ -873,9 +874,9 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let can = (d["canEdit"] as? Bool) == true
     let start = d["startLabel"] as? String ?? "", due = d["dueLabel"] as? String ?? ""
     func btn(_ t: String, empty: String, color: UIColor, which: String, value: String) -> UIView {
-      if !can { return label(t.isEmpty ? empty : t, size: 17, color: t.isEmpty ? .tertiaryLabel : color) }
+      if !can { return label(t.isEmpty ? empty : t, size: TaskPage.T, color: t.isEmpty ? .tertiaryLabel : color) }
       var c: UIButton.Configuration = .plain()
-      c.attributedTitle = AttributedString(t.isEmpty ? empty : t, attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 17)]))
+      c.attributedTitle = AttributedString(t.isEmpty ? empty : t, attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: TaskPage.T)]))
       c.baseForegroundColor = t.isEmpty ? .tertiaryLabel : color
       c.contentInsets = NSDirectionalEdgeInsets(top: 4, leading: 2, bottom: 4, trailing: 2)
       let b = UIButton(configuration: c)
@@ -957,8 +958,8 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       if !done { UINotificationFeedbackGenerator().notificationOccurred(.success) } else { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
       self.onAct?(["act": done ? "reopen" : "done", "id": id, "page": self.taskId])
     }, for: .touchUpInside)
-    let t = label(s["title"] as? String ?? "", size: 17, color: done ? .secondaryLabel : .label)
-    if done { t.attributedText = NSAttributedString(string: t.text ?? "", attributes: [.strikethroughStyle: NSUnderlineStyle.single.rawValue, .foregroundColor: UIColor.secondaryLabel, .font: UIFont.systemFont(ofSize: 17)]) }
+    let t = label(s["title"] as? String ?? "", size: TaskPage.T, color: done ? .secondaryLabel : .label)
+    if done { t.attributedText = NSAttributedString(string: t.text ?? "", attributes: [.strikethroughStyle: NSUnderlineStyle.single.rawValue, .foregroundColor: UIColor.secondaryLabel, .font: UIFont.systemFont(ofSize: TaskPage.T)]) }
     t.lineBreakMode = .byTruncatingTail
     let h = UIStackView(arrangedSubviews: [tick, t]); h.spacing = 12; h.alignment = .center
     // (the name starts right after the circle and takes the room; the circle, picture, date and › keep their size)
@@ -978,8 +979,8 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let id = c["id"] as? String ?? "", done = (c["done"] as? Bool) == true
     let r = TaskRow()
     let box = symbol(done ? "checkmark.square.fill" : "square", 20, done ? .systemBlue : .tertiaryLabel)
-    let t = label(c["text"] as? String ?? "", size: 17, color: done ? .secondaryLabel : .label); t.numberOfLines = 0
-    if done { t.attributedText = NSAttributedString(string: t.text ?? "", attributes: [.strikethroughStyle: NSUnderlineStyle.single.rawValue, .foregroundColor: UIColor.secondaryLabel, .font: UIFont.systemFont(ofSize: 17)]) }
+    let t = label(c["text"] as? String ?? "", size: TaskPage.T, color: done ? .secondaryLabel : .label); t.numberOfLines = 0
+    if done { t.attributedText = NSAttributedString(string: t.text ?? "", attributes: [.strikethroughStyle: NSUnderlineStyle.single.rawValue, .foregroundColor: UIColor.secondaryLabel, .font: UIFont.systemFont(ofSize: TaskPage.T)]) }
     let h = UIStackView(arrangedSubviews: [box, t]); h.spacing = 12; h.alignment = .center
     h.translatesAutoresizingMaskIntoConstraints = false; r.addSubview(h)
     NSLayoutConstraint.activate([h.leadingAnchor.constraint(equalTo: r.leadingAnchor, constant: TaskPage.M), h.trailingAnchor.constraint(equalTo: r.trailingAnchor, constant: -TaskPage.M), h.topAnchor.constraint(equalTo: r.topAnchor, constant: 13), h.bottomAnchor.constraint(equalTo: r.bottomAnchor, constant: -13)])
@@ -998,7 +999,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // ---------- the sheets: people, tags, channels; a line of text ----------
   private func addRow(_ t: String, tap: @escaping () -> Void) -> UIView {
     let r = TaskRow()
-    let h = UIStackView(arrangedSubviews: [symbol("plus.circle.fill", 20, .systemBlue), label(t, size: 17, color: .systemBlue)]); h.spacing = 12; h.alignment = .center
+    let h = UIStackView(arrangedSubviews: [symbol("plus.circle.fill", 20, .systemBlue), label(t, size: TaskPage.T, color: .systemBlue)]); h.spacing = 12; h.alignment = .center
     h.translatesAutoresizingMaskIntoConstraints = false; r.addSubview(h)
     NSLayoutConstraint.activate([h.leadingAnchor.constraint(equalTo: r.leadingAnchor, constant: TaskPage.M - 1), h.trailingAnchor.constraint(lessThanOrEqualTo: r.trailingAnchor, constant: -TaskPage.M), h.topAnchor.constraint(equalTo: r.topAnchor, constant: 13), h.bottomAnchor.constraint(equalTo: r.bottomAnchor, constant: -13)])
     r.onTap = tap

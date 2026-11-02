@@ -6,14 +6,14 @@ import UIKit
 let MENTION_KEY = NSAttributedString.Key("e11User")
 
 enum DescEditor {
-  static func attributed(_ runs: [[String: Any]], done: Bool) -> NSAttributedString {
+  static func attributed(_ runs: [[String: Any]], done: Bool, size: CGFloat = 17) -> NSAttributedString {
     let out = NSMutableAttributedString()
     for r in runs {
       var traits: UIFontDescriptor.SymbolicTraits = []
       if r["b"] != nil { traits.insert(.traitBold) }
       if r["i"] != nil { traits.insert(.traitItalic) }
-      let base = UIFont.systemFont(ofSize: 17)
-      let font = traits.isEmpty ? base : (base.fontDescriptor.withSymbolicTraits(traits).map { UIFont(descriptor: $0, size: 17) } ?? base)
+      let base = UIFont.systemFont(ofSize: size)
+      let font = traits.isEmpty ? base : (base.fontDescriptor.withSymbolicTraits(traits).map { UIFont(descriptor: $0, size: size) } ?? base)
       var a: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: done ? UIColor.secondaryLabel : UIColor.label]
       if r["u"] != nil { a[.underlineStyle] = NSUnderlineStyle.single.rawValue }
       if r["s"] != nil { a[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
@@ -64,7 +64,7 @@ extension TaskPage {
   func setUpDesc() {
     descView.isScrollEnabled = false; descView.backgroundColor = .clear
     descView.textContainerInset = .zero; descView.textContainer.lineFragmentPadding = 0
-    descView.font = .systemFont(ofSize: 17)
+    descView.font = .systemFont(ofSize: TaskPage.T)
     descView.dataDetectorTypes = []
     descView.delegate = self
     descView.inputAccessoryView = descBar()
@@ -93,8 +93,8 @@ extension TaskPage {
   func beginDesc() {
     guard !editingDesc, (model?["canDesc"] as? Bool) == true else { return }
     editingDesc = true
-    if descEmpty { descView.attributedText = NSAttributedString(string: "", attributes: [.font: UIFont.systemFont(ofSize: 17), .foregroundColor: UIColor.label]) }
-    descView.typingAttributes = [.font: UIFont.systemFont(ofSize: 17), .foregroundColor: UIColor.label]
+    if descEmpty { descView.attributedText = NSAttributedString(string: "", attributes: [.font: UIFont.systemFont(ofSize: TaskPage.T), .foregroundColor: UIColor.label]) }
+    descView.typingAttributes = [.font: UIFont.systemFont(ofSize: TaskPage.T), .foregroundColor: UIColor.label]
     onCornerChange?()
   }
   // Done: saved (only if it changed)
@@ -171,10 +171,10 @@ extension TaskPage {
     }
   }
   private func toggled(_ f: UIFont?, _ t: UIFontDescriptor.SymbolicTraits) -> UIFont {
-    let f = f ?? .systemFont(ofSize: 17)
+    let f = f ?? .systemFont(ofSize: TaskPage.T)
     var tr = f.fontDescriptor.symbolicTraits
     if tr.contains(t) { tr.remove(t) } else { tr.insert(t) }
-    return f.fontDescriptor.withSymbolicTraits(tr).map { UIFont(descriptor: $0, size: 17) } ?? f
+    return f.fontDescriptor.withSymbolicTraits(tr).map { UIFont(descriptor: $0, size: f.pointSize) } ?? f
   }
 
   // ---------- @: the people under the words; tapped → a blue mention ----------
