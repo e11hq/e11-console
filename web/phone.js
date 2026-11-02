@@ -436,6 +436,13 @@ const Phone = (() => {
 
   /* ---------- Hooks called from app.js ---------- */
   function renderContent(c) {
+    // (under the app's own Client Assets: nothing — shell 32)
+    if (st.on && !ui.search && (ui.view === 'clients' || ui.view === 'client') && typeof NativeAssets !== 'undefined' && NativeAssets.on) {
+      c.innerHTML = '<div class="ph-page ph-under-app"></div>';
+      unpin();
+      document.body.classList.remove('ph-fab-on'); document.body.classList.add('ph-strip');
+      return true;
+    }
     if (!st.on || ui.search || !OWN.has(ui.view)) return false;
     const v = ui.view;
     // (under the app's own My Day / My Tasks the page draws nothing — they were drawn unseen behind them; lighter, and
@@ -2764,4 +2771,174 @@ const NativeClients = (() => {
   window.__e11ClientsResend = () => { last = ''; shown = false; sync(); };
   window.__e11ClientsOwn = (v) => { const was = own; own = !!v; if (was !== own && (ui.view === 'projects' || ui.view === 'project') && !ui.taskId) renderContent(); };
   return { sync, get on() { return on; }, get shown() { return shown; }, get light() { return on && !own; } };
+})();
+
+/* ---------- Client Assets, the iPhone app's own (shell 32 — Haris 2026-11-02, from the approved mockup) ----------
+   The app draws All Client Assets, a client's assets and a folder itself; the page hands it what's in them (with who
+   may do what — the website's own rules) and does each change the website's own way (into the Trash, Inbox updates,
+   the logo from Logos…), so both stay the same. The app asks: __e11Assets({ ev, rid, … }); the page answers with
+   NativeMac.call('assets', { rid, ok, error, model }). Opened on the page itself (Me › Client Assets, an Inbox update,
+   the Client Assets tab), the page tells the app to show it: assets { show, start }. */
+const NATIVE_ASSETS = true;
+const NativeAssets = (() => {
+  let on = false, last = '', shown = false;
+  if (NATIVE_ASSETS && window.__e11CommentsOnly !== true && typeof Host !== 'undefined' && Host.isIOSApp) {
+    NativeMac.call('appInfo').then((r) => { on = Number(r && r.shell) >= 32; if (on) { setInterval(sync, 350); sync(); } }).catch(() => {});
+  }
+  const call = (a) => NativeMac.call('assets', a).catch(() => {});
+  const FOLDER_HEX = ['#0a84ff', '#af52de', '#ff9f0a', '#34c759', '#30b0c7', '#ff375f', '#5e5ce6'];
+  const THUMBED = ['mp4', 'mov', 'm4v', 'webm', 'avi', 'mkv', 'pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'odt', 'odp', 'ods', 'rtf'];
+  const rgb = (hex) => E11Rules.rgbOf(hex) || [135, 144, 158];
+  const logoOf = (c) => (c.logo ? '/__file/' + c.logo.split('/').map(encodeURIComponent).join('/') : null);
+  const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  function fileOf(c, f, a) {
+    const e = fileExt(a.name);
+    const pic = isImage(a) && !/\.svg$/i.test(String(a.path || ''));
+    return {
+      id: a.id, name: a.name, size: a.size || 0, file: a.path || null, url: a.path ? fileUrl(a) + '?view=1' : null,
+      thumbUrl: pic ? imgUrl(a, 320) : a.thumb ? '/__file/' + a.thumb.split('/').map(encodeURIComponent).join('/') + '?view=1'
+        : a.path && THUMBED.includes(e) ? '/api/fthumb?path=' + encodeURIComponent(a.path) + '&id=' + encodeURIComponent(a.id || '') : null,
+      ext: (e || 'file').slice(0, 5), kind: fileKind(a), label: OFFICE_LABEL[e] || (e ? e.toUpperCase() : 'File'),
+      folder: f.id, at: a.addedAt || '', by: a.addedBy ? fullName(userById(a.addedBy)) : '', where: `${c.name} › ${folderPath(c, f)}`,
+      canDel: !f.finalOf && canDelAsset(a),
+    };
+  }
+  function folderOf(c, f) {
+    const sibs = c.folders.filter((x) => (x.parentId || null) === (f.parentId || null));
+    return {
+      id: f.id, name: f.name, parent: f.parentId || null, final: !!f.finalOf, dir: f.dir, rgb: rgb(FOLDER_HEX[Math.max(0, sibs.indexOf(f)) % FOLDER_HEX.length]),
+      files: f.files.length, subs: subFolders(c, f).length, total: folderFileCount(c, f), path: folderPath(c, f),
+      by: isAutoFolder(c, f) && !f.finalOf ? 'Made with the client' : f.createdBy ? fullName(userById(f.createdBy)) : '', at: f.createdAt || c.createdAt || '',
+      size: [f, ...folderTree(c, f)].reduce((n, x) => n + x.files.reduce((m, a) => m + (a.size || 0), 0), 0),
+      canUpload: canUploadTo(c, f), canSub: canMakeSub(c, f), canRename: canEditFolder(c, f) && !f.finalOf, canDel: canDelFolder(c, f),
+      note: isFilesTop(c, f) ? 'Files holds folders — one per job. Make a folder here, then add the files in it.' : f.finalOf ? 'Final files are filed by the app when the task is completed.' : '',
+    };
+  }
+  function clientModel(c) {
+    const tops = topFolders(c);
+    const files = [];
+    c.folders.forEach((f) => f.files.forEach((a) => files.push(fileOf(c, f, a))));
+    const recent = files.filter((x) => x.at).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 5).map((x) => x.id);
+    return {
+      kind: 'client', id: c.id, name: c.name, logo: logoOf(c), rgb: rgb(avColor(c.id)), ini: initials(c.name),
+      sub: `${plural(tops.length, 'folder')} · ${plural(files.length, 'file')}`,
+      folders: c.folders.map((f) => folderOf(c, f)), files, recent,
+      canNewTop: canAssets(), canRename: canRenameCA(c), canDelete: isAdmin(),
+      by: c.createdBy ? fullName(userById(c.createdBy)) : '', at: c.createdAt || '',
+    };
+  }
+  function allModel() {
+    const list = clientsSorted();
+    const n = list.reduce((s, c) => s + clientFileCount(c), 0);
+    return {
+      kind: 'all', sub: `${plural(list.length, 'client')} · ${plural(n, 'file')}`, canAdd: canAssets(),
+      clients: list.map((c) => ({ id: c.id, name: c.name, logo: logoOf(c), rgb: rgb(avColor(c.id)), ini: initials(c.name), sub: `${plural(topFolders(c).length, 'folder')} · ${plural(clientFileCount(c), 'file')}` })),
+      // (for 🔍: every file of every client, small)
+      files: list.flatMap((c) => c.folders.flatMap((f) => f.files.map((a) => ({ ...fileOf(c, f, a), client: c.id })))),
+    };
+  }
+  // shown by the page itself (Me › Client Assets, the Client Assets tab, an Inbox update)
+  const visible = () => Phone.on && (ui.view === 'clients' || (ui.view === 'client' && !!clientById(ui.clientId))) && !ui.search && !ui.taskId && !document.querySelector('#detail.open');
+  function sync() {
+    if (!on) return;
+    let m = null;
+    try {
+      if (visible()) {
+        const tab = !!document.querySelector('#ph-tabs [data-ph-tab="clients"]');
+        m = { show: true, start: ui.view === 'client' ? { client: ui.clientId, folder: ui.folderId || null } : { all: true }, root: tab && ui.view === 'clients', me: currentUserId, light: document.documentElement.dataset.theme === 'light' };
+      }
+    } catch (e) { m = null; }
+    if (!m) { if (shown) { shown = false; last = ''; call({ show: false }); } return; }
+    const s = JSON.stringify(m);
+    if (s === last) return;
+    last = s; shown = true;
+    call(m);
+  }
+  const answer = (rid, r) => call({ rid, ...r });
+  const modelFor = (id) => (id ? (clientById(id) && caVisible(clientById(id)) ? clientModel(clientById(id)) : null) : allModel());
+  window.__e11Assets = (ev) => {
+    if (!ev) return;
+    const rid = ev.rid || null;
+    const done = (error, extra) => { if (!error) persist(0); try { renderContent(); } catch (e) { /* page under the app */ } answer(rid, { ok: !error, error: error || null, model: modelFor(ev.client || null), ...(extra || {}) }); };
+    try {
+      if (ev.ev === 'want') { const m = modelFor(ev.client || null); return answer(rid, m ? { ok: true, model: m } : { ok: false, error: ev.client ? 'That client’s assets are for the people working on it' : 'Not available' }); }
+      // the app's back from the first of its screens opened by the page: the page goes back too
+      if (ev.ev === 'back') { if (typeof PageHistory !== 'undefined' && PageHistory.canBack && PageHistory.canBack()) PageHistory.back(); else go('me'); sync(); return; }
+      if (ev.ev === 'me') { const b = document.querySelector('#ph-tabs [data-ph-tab="me"]'); if (b) b.click(); else go('me'); sync(); return; }
+      const c = ev.client ? clientById(ev.client) : null;
+      if (ev.ev === 'addClient') {
+        if (!canAssets()) return done('Your role doesn’t allow this — ask an Admin or Account Manager');
+        const name = String(ev.name || '').trim();
+        if (!name) return done('Enter the client’s name');
+        const d = dupClient(name); if (d) return done(dupMsg(d));
+        const nc = createClient(name, null);
+        persist(0);
+        return answer(rid, { ok: true, model: allModel(), id: nc.id });
+      }
+      if (!c) return done('That client has been removed');
+      const f = ev.folder ? c.folders.find((x) => x.id === ev.folder) : null;
+      switch (ev.ev) {
+        case 'uploaded': {
+          if (!f || !canUploadTo(c, f)) return done(f && isFilesTop(c, f) ? 'Files holds folders — open or make a folder first, then add the files there' : 'You can’t add files here');
+          const files = (ev.files || []).filter((x) => x && x.path).map((x) => ({ id: uid(), name: String(x.name || 'File'), path: String(x.path), size: +x.size || 0, addedAt: nowISO(), addedBy: currentUserId }));
+          if (!files.length) return done('Nothing was uploaded');
+          f.files.push(...files); assetNotify(c, f, 'added', files.map((x) => x.name));
+          persist(0); Promise.resolve(Sync.push()).catch(() => {}).then(() => autoLogo(c, f, files));
+          return done(null);
+        }
+        case 'newFolder': {
+          const parent = ev.parent ? c.folders.find((x) => x.id === ev.parent) : null;
+          if (!canAddAssets()) return done('Your role doesn’t allow this — ask an Admin or Account Manager');
+          if (parent && !canMakeSub(c, parent)) return done(parent.finalOf ? 'Final files hold no folders' : `Folders go up to ${FOLDER_DEPTH} levels deep inside Files`);
+          if (!parent && !canAssets()) return done('New folders here are made by Admins and Account Managers — add yours inside Files');
+          const name = String(ev.name || '').trim();
+          if (!name) return done('Enter a folder name');
+          const dup = folderDup(c, name, null, parent ? parent.id : null); if (dup) return done(`There is already a folder named “${dup.name}”.`);
+          const nf = newFolder(c, name, false, parent);
+          return done(null, { id: nf.id });
+        }
+        case 'renameFolder': {
+          if (!f || !canEditFolder(c, f) || f.finalOf) return done('Your role doesn’t allow this');
+          const name = String(ev.name || '').trim();
+          if (!name) return done('Enter a folder name');
+          const dup = folderDup(c, name, f.id, f.parentId); if (dup) return done(`There is already a folder named “${dup.name}”.`);
+          f.name = name; return done(null);
+        }
+        case 'deleteFolder': {
+          if (!f || !canDelFolder(c, f)) return done('Your role doesn’t allow this');
+          const inner = folderTree(c, f);
+          c.folders = c.folders.filter((x) => x !== f && !inner.includes(x));
+          toTrash('cafolder', { clientId: c.id, folder: JSON.parse(JSON.stringify(f)), inner: JSON.parse(JSON.stringify(inner)) }, { key: 'clients:' + c.id, where: inner.length || f.parentId ? `${c.name} › ${folderPath(c, f)}` : c.name });
+          if (f.files.length) assetNotify(c, f, 'removed', f.files.map((a) => a.name));
+          return done(null);
+        }
+        case 'deleteFile': {
+          const a = f && f.files.find((x) => x.id === ev.file);
+          if (!a || f.finalOf || !canDelAsset(a)) return done('Your role doesn’t allow this');
+          f.files = f.files.filter((x) => x.id !== a.id);
+          toTrash('cafile', { clientId: c.id, folderId: f.id, file: a }, { key: 'clients:' + c.id, where: `${c.name} › ${f.name}` });
+          assetNotify(c, f, 'removed', [a.name]);
+          return done(null);
+        }
+        case 'renameClient': {
+          if (!canRenameCA(c)) return done('Only an Admin, or whoever created it, can rename this');
+          const name = String(ev.name || '').trim().replace(/\s+/g, ' ');
+          if (!name) return done('Enter the client’s name');
+          const d = dupClient(name, c.id); if (d) return done(dupMsg(d));
+          c.name = name; return done(null);
+        }
+        case 'deleteClient': {
+          if (!isAdmin()) return done('Only an Admin can delete a client');
+          const paths = [c.logo, ...c.folders.flatMap((x) => x.files.flatMap((a) => [a.path, '.thumbs/' + a.id])), ...c.folders.map((x) => x.dir), c.dir].filter(Boolean);
+          db.clients = db.clients.filter((x) => x.id !== c.id);
+          db.projects.forEach((p) => { if (p.clientId === c.id) delete p.clientId; });
+          persist(0); safeTrash(paths);
+          return answer(rid, { ok: true, model: allModel(), gone: true });
+        }
+        default: return answer(rid, { ok: false, error: 'Not available' });
+      }
+    } catch (e) { answer(rid, { ok: false, error: e.message || 'That didn’t work — try again' }); }
+  };
+  window.__e11AssetsResend = () => { last = ''; shown = false; sync(); };
+  return { sync, get on() { return on; }, get shown() { return shown; } };
 })();

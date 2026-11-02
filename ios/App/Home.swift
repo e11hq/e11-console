@@ -171,7 +171,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     fc.baseForegroundColor = .label
     fab.configuration = fc
     fab.accessibilityLabel = "New task"
-    fab.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.send(["ev": "add"]) }, for: .touchUpInside)
+    fab.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); if let a = self?.fabRun { a() } else { self?.send(["ev": "add"]) } }, for: .touchUpInside)
     addSubview(fab)
     for i in 0..<3 {
       let v = UIView(); v.layer.cornerRadius = 18; v.layer.borderWidth = 1; let n = UILabel(), l = UILabel(); n.tag = 1; l.tag = 2; v.addSubview(n); v.addSubview(l); scroll.addSubview(v); stats.append(v)
@@ -204,7 +204,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     topLine.backgroundColor = L.light ? UIColor.black.withAlphaComponent(0.12) : UIColor.white.withAlphaComponent(0.12)
     [searchCircle, closeCircle, searchBar].forEach { $0.setLook(light: L.light, tint: L.roundIc) }
     lens.tintColor = L.sub; field.textColor = L.h1; field.tintColor = L.tag
-    field.attributedPlaceholder = NSAttributedString(string: "Search tasks, clients, people", attributes: [.foregroundColor: L.sub])
+    field.attributedPlaceholder = NSAttributedString(string: assets != nil ? "Search every client’s files" : "Search tasks, clients, people", attributes: [.foregroundColor: L.sub])
     field.keyboardAppearance = L.light ? .light : .dark
     hint.textColor = L.empty
     meId = model["me"] as? String ?? ""; meChanged()
@@ -220,6 +220,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     }
     if isInbox { drawInbox(model); setNeedsLayout(); layoutIfNeeded(); return }
     if isClients { drawClients(model); setNeedsLayout(); layoutIfNeeded(); return }
+    if assets != nil { drawAssets(model); setNeedsLayout(); layoutIfNeeded(); return }
     // the groups: their headers, cards (kept by task, so a change doesn't redraw the rest) and "nothing due" lines
     // A change on the same list (done, due, deleted, undone — by you or by anyone else) moves as the Inbox does (Haris,
     // 2026-11-02): what goes fades out where it is while the gap closes; what comes — a task moving from Overdue to
@@ -496,7 +497,33 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   var isInbox = false { didSet { if isInbox && !isList { isList = true } } }
   // the Clients tab (shell 31): the list of clients, or a client's page (‹ back: the shared top buttons' left one)
   var isClients = false, isClient = false
-  private var noStats: Bool { isList || isClients || isClient }
+  // Client Assets, the app's own (shell 32): "all", "client" or "folder" (Assets.swift)
+  var assets: String?
+  var assetsBack = false   // (pushed over another screen: ‹ goes back to it)
+  var fabRun: (() -> Void)?
+  // (the task page's bar — ‹ · logo and name · ••• — instead of the big title: a client's page, a client's assets, a folder)
+  var pageBar: Bool { isClient || assets == "client" || assets == "folder" }
+  private var noStats: Bool { isList || isClients || isClient || assets != nil }
+  // the assets screen's own pieces (Assets.swift), kept here so a change redraws only what changed
+  var assetsParts: [String: UIView] = [:]
+  func setFab(_ title: String, _ sym: String, _ run: (() -> Void)?) {
+    fabRun = run
+    guard var c = fab.configuration else { return }
+    c.image = UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold))
+    c.attributedTitle = AttributedString(title, attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 17, weight: .semibold)]))
+    fab.configuration = c; fab.accessibilityLabel = title
+    fab.isHidden = run == nil
+    setNeedsLayout()
+  }
+  func setContent(_ views: [UIView]) {
+    for v in content where !views.contains(where: { $0 === v }) { v.removeFromSuperview() }
+    for v in views where v.superview !== scroll { scroll.addSubview(v) }
+    content = views
+  }
+  var look: HomeLook { L }
+  var model: [String: Any] { m }
+  func assetsToast(_ t: String) { toast(["t": t]) }
+  var assetsMenu: (() -> [CornerMenuItem])?
   private lazy var clientsGroup: ClientsGroup = {
     let g = ClientsGroup(); g.onOpen = { [weak self] id in self?.send(["ev": "client", "id": id]) }
     g.onHold = { [weak self] id in self?.send(["ev": "clientHold", "id": id]) }; return g
@@ -510,10 +537,13 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // (its own name: "done" is a card's tick, which the app does itself — the toggle went nowhere, Haris 2026-11-02)
   private lazy var tasksHead: TasksHead = { let t = TasksHead(); t.onToggle = { [weak self] in self?.send(["ev": "showDone"]) }; return t }()
   // ‹ on a client's page: where it is (the shared top buttons' row, at the page's left edge) and its tap
-  var backable: Bool { isClient }
+  var backable: Bool { isClient || (assets != nil && assetsBack) }
   // a client's page has the task page's header (Haris 2026-11-02, "b"): ‹ · its logo and name in the middle · •••
   private lazy var barTitle: UIStackView = {
-    let s = UIStackView(arrangedSubviews: [barLogo, barName]); s.spacing = 8; s.alignment = .center
+    // (name, and a line under it on Client Assets: "6 folders · 48 files", a folder's client)
+    let words = UIStackView(arrangedSubviews: [barName, barSub]); words.axis = .vertical; words.alignment = .center; words.spacing = 0
+    barSub.font = .systemFont(ofSize: 12); barSub.textColor = .secondaryLabel; barSub.isHidden = true; barSub.lineBreakMode = .byTruncatingTail
+    let s = UIStackView(arrangedSubviews: [barLogo, words]); s.spacing = 8; s.alignment = .center
     barLogo.layer.cornerRadius = 7; barLogo.layer.cornerCurve = .continuous; barLogo.clipsToBounds = true; barLogo.contentMode = .scaleAspectFill
     barLogo.widthAnchor.constraint(equalToConstant: 26).isActive = true; barLogo.heightAnchor.constraint(equalToConstant: 26).isActive = true
     barIni.font = .systemFont(ofSize: 10, weight: .bold); barIni.textColor = .white; barIni.textAlignment = .center; barLogo.addSubview(barIni)
@@ -522,7 +552,15 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     topBar.addSubview(s)
     return s
   }()
-  private let barLogo = UIImageView(), barIni = UILabel(), barName = UILabel()
+  private let barLogo = UIImageView(), barIni = UILabel(), barName = UILabel(), barSub = UILabel()
+  // Client Assets' bar: its name (and logo, for a client) with the line under it
+  func drawAssetsBar(name: String, sub: String, logo: String?, rgb: Any?, ini: String?, showLogo: Bool) {
+    drawBarTitle(["title": name, "logo": logo as Any, "rgb": rgb as Any, "ini": ini as Any])
+    barLogo.isHidden = !showLogo
+    barSub.text = sub; barSub.isHidden = sub.isEmpty; barSub.textColor = .secondaryLabel
+    barName.font = .systemFont(ofSize: sub.isEmpty ? 17 : 16, weight: .semibold)
+    setNeedsLayout()
+  }
   private var barLogoPath: String?
   private func drawBarTitle(_ model: [String: Any]) {
     _ = barTitle
@@ -538,6 +576,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }
   // its ••• (the shared corner button's menu): Client Assets, Show / Hide completed, New task
   var menuItems: [CornerMenuItem] {
+    if assets != nil { return assetsMenu?() ?? [] }
     guard isClient, !m.isEmpty else { return [] }
     var out: [CornerMenuItem] = []
     if m["assets"] is [String: Any] { out.append(CornerMenuItem(title: "Client Assets", symbol: "folder", run: { [weak self] in self?.assetsStrip.onAll?() })) }
@@ -680,7 +719,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     var y: CGFloat = 4
     let bw = (W - 32 - 16) / 3, bh: CGFloat = 1 + 10 + 41 + 15 + 12 + 1
     if isList { listHeadH = layoutList(W); y = 4 + listHeadH - bh; layoutHeader() }
-    if isClients || isClient { y = 4 - bh }
+    if isClients || isClient || assets != nil { y = 4 - bh }
     for (i, v) in stats.enumerated() where !noStats {
       v.frame = CGRect(x: 16 + CGFloat(i) * (bw + 8), y: y, width: bw, height: bh)
       v.viewWithTag(1)?.frame = CGRect(x: 13, y: 11, width: bw - 26, height: 41)
@@ -768,7 +807,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
 
   // ---------- the header (as Mail): the big title scrolls with the list, under a frosted bar that comes as it goes ----------
   // (where the list's boxes start: under the big title and its line, 18 below them — as Mail's filters)
-  private var bigHead: CGFloat { isClient ? smallHead + 8 : safeAreaInsets.top + 66 + 41 + 1 + 19 + 18 - 4 }   // (a client's page: no big title — the task page's bar)
+  private var bigHead: CGFloat { pageBar ? smallHead + 8 : safeAreaInsets.top + 66 + 41 + 1 + 19 + 18 - 4 }   // (a client's page: no big title — the task page's bar)
   // (the bar's row: its middle 28 under the status bar, 14 of room under the 46 pt buttons — Haris: they sat on its edge)
   private var smallHead: CGFloat { safeAreaInsets.top + 54 }
   private func ease(_ a: CGFloat, _ b: CGFloat, _ t: CGFloat) -> CGFloat { let x = min(1, max(0, (t - a) / (b - a))); return x * x * (3 - 2 * x) }
@@ -946,12 +985,13 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // the small title and date on the bar: there once the big ones have gone under it (gone while searching, under its bar)
     let smallCY = top + 22
     let stw = W - 16 - R - BTN - 12 - BTN - 12
-    if isClient {
+    if pageBar {
       // (in the middle of the bar, between ‹ and •••)
       let sz = barTitle.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
       let maxW = W - 2 * (16 + BTN + 12)
       let w = min(sz.width, maxW)
-      barTitle.frame = CGRect(x: (W - w) / 2, y: top + 22 - 15, width: w, height: 30)
+      let bh: CGFloat = barSub.isHidden ? 30 : 38
+      barTitle.frame = CGRect(x: (W - w) / 2, y: top + 22 - bh / 2, width: w, height: bh)
     }
     let sx: CGFloat = backable ? 16 + BTN + 12 : 16   // (a client's page: right of ‹)
     place(smallTitle, CGRect(x: sx, y: top + 1, width: stw - (sx - 16), height: 21)); place(smallSub, CGRect(x: sx, y: top + 25, width: stw - (sx - 16), height: 15))
@@ -996,7 +1036,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     closeCircle.transform = CGAffineTransform(scaleX: 0.6, y: 0.6)
     searchCircle.alpha = 0
     results.isHidden = false
-    field.text = ""; showResults(nil)
+    field.text = ""; if assets != nil { onEvent?(["ev": "find", "q": ""]) } else { showResults(nil) }
     UIView.animate(withDuration: 0.55, delay: 0, usingSpringWithDamping: 0.8, initialSpringVelocity: 0.4, options: [.allowUserInteraction]) {
       self.layoutHeader()
       self.searchBar.layer.cornerRadius = self.BTN / 2
@@ -1047,6 +1087,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private func typed() {
     findTimer?.invalidate()
     let q = field.text ?? ""
+    // (All Client Assets: its own files, found on the phone — Assets.swift)
+    if assets != nil { onEvent?(["ev": "find", "q": q]); return }
     if q.trimmingCharacters(in: .whitespaces).isEmpty { showResults(nil); return }
     findTimer = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: false) { [weak self] _ in self?.onEvent?(["ev": "find", "q": q]) }
   }
@@ -1100,6 +1142,17 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     for (id, v) in resultCards where !seen.contains(id) { v.removeFromSuperview(); resultCards[id] = nil }
     setNeedsLayout()
   }
+  // what Client Assets found (its rows, as blocks), or what to say
+  func showFound(_ views: [UIView], hint t: String?) {
+    resultViews.forEach { $0.removeFromSuperview() }
+    resultViews = views
+    views.forEach { results.addSubview($0) }
+    hint.text = t; hint.textColor = L.empty
+    setNeedsLayout()
+  }
+  var findText: String { field.text ?? "" }
+  var onAssetsDraw: ((HomeView, [String: Any]) -> Void)?
+  private func drawAssets(_ model: [String: Any]) { fab.isHidden = true; onAssetsDraw?(self, model) }
   private func groupHead(_ name: String, _ n: Int) -> UILabel {
     let h = UILabel(); h.tag = 7
     let s = NSMutableAttributedString(string: name.uppercased(), attributes: [.font: UIFont.systemFont(ofSize: 12, weight: .bold), .kern: 0.72, .foregroundColor: L.gh])
@@ -1118,6 +1171,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       if i > 0 { y += 10 }
       if v.tag == 7 { y += i > 0 ? 12 : 4; v.frame = CGRect(x: 20, y: y, width: lw - 8, height: 15); y += 15 }
       else if let c = v as? HomeCard { let h = c.height(for: lw); c.bounds = CGRect(x: 0, y: 0, width: lw, height: h); c.center = CGPoint(x: 16 + lw / 2, y: y + h / 2); y += h }
+      else if let b = v as? HomeBlock { let h = b.blockHeight(W); b.frame = CGRect(x: 0, y: y, width: W, height: h); y += h }
       else { v.frame = CGRect(x: 16, y: y, width: lw, height: 70); y += 70 }
     }
     results.contentSize = CGSize(width: W, height: y + 20)

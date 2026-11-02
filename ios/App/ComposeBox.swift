@@ -10,7 +10,7 @@ import UniformTypeIdentifiers
    voice uploaded by the app itself. */
 enum Uploader {
   // a file on the phone → the server (2 MB at a time) → its path there
-  static func send(_ url: URL, name: String, task: String, cookies: @escaping (@escaping (String) -> Void) -> Void, progress: @escaping (Double) -> Void, done: @escaping (String?) -> Void) {
+  static func send(_ url: URL, name: String, task: String, dest: String? = nil, cookies: @escaping (@escaping (String) -> Void) -> Void, progress: @escaping (Double) -> Void, done: @escaping (String?) -> Void) {
     let size = ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.int64Value ?? 0
     func piece(_ offset: Int64, _ path: String?) {
       guard let fh = try? FileHandle(forReadingFrom: url) else { return done(nil) }
@@ -18,7 +18,8 @@ enum Uploader {
       let data = (try? fh.read(upToCount: 2 * 1024 * 1024)) ?? Data()
       try? fh.close()
       var q = URLComponents(string: serverURL() + "/api/host/writeChunkBin")!
-      var qi = [URLQueryItem(name: "taskId", value: task), URLQueryItem(name: "name", value: name), URLQueryItem(name: "offset", value: String(offset))]
+      // (into a Client Assets folder: its place on the server, dest — Client Assets on the phone, shell 32)
+      var qi = [URLQueryItem(name: dest == nil ? "taskId" : "dest", value: dest ?? task), URLQueryItem(name: "name", value: name), URLQueryItem(name: "offset", value: String(offset))]
       if let p = path { qi.append(URLQueryItem(name: "path", value: p)) }
       q.queryItems = qi
       cookies { c in

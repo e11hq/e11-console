@@ -959,7 +959,7 @@ const PageHistory = (() => {
     if (b) b.disabled = idx <= 0;
     if (f) f.disabled = idx >= stack.length - 1;
   }
-  return { mark, back: () => move(-1), forward: () => move(1), paint };
+  return { mark, back: () => move(-1), forward: () => move(1), paint, canBack: () => { mark(); return idx > 0; } };
 })();
 
 
