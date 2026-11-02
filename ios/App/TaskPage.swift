@@ -136,7 +136,21 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     change(&m)
     built = ""; draw(m)
   }
-  private lazy var descBox: DescBox = { let b = DescBox(); b.onExpand = { [weak self] in self?.relayAnimated() }; return b }()
+  private lazy var descBox: DescBox = {
+    let b = DescBox(); b.onExpand = { [weak self] in self?.relayAnimated() }
+    // (a tap on it, for whoever may write it: the cursor where the finger was — tapping a description with words in it
+    //  sometimes did nothing, Haris 2026-11-02)
+    let tap = UITapGestureRecognizer(target: self, action: #selector(tappedDesc(_:))); tap.cancelsTouchesInView = false
+    b.addGestureRecognizer(tap)
+    return b
+  }()
+  @objc private func tappedDesc(_ g: UITapGestureRecognizer) {
+    let tv = descView
+    guard tv.superview === descBox, tv.isEditable, !tv.isFirstResponder else { return }
+    let p = g.location(in: tv)
+    tv.becomeFirstResponder()
+    if let pos = tv.closestPosition(to: p), !descEmpty { tv.selectedTextRange = tv.textRange(from: pos, to: pos) }
+  }
   private func relayAnimated() { UIView.animate(withDuration: 0.4, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) { self.layoutContent() } }
   func showFiles() {
     guard let b = filesBlock, tab == "details" else { return }
@@ -1029,7 +1043,11 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       guard let self = self, i >= 0 else { return }
       if i == 999 { self.local { $0["update"] = NSNull() }; self.onAct?(["act": "update", "id": self.taskId, "value": NSNull()]); return }
       guard i < all.count, all[i] != cur else { return }
-      self.local { m in var u = (m["update"] as? [String: Any]) ?? [:]; u["t"] = all[i]; m["update"] = u }
+      self.local { m in
+        var u = (m["update"] as? [String: Any]) ?? [:]; u["t"] = all[i]
+        if let c = (m["updateRgbs"] as? [Any]), i < c.count { u["rgb"] = c[i] }   // (its colour too, from the server's list)
+        m["update"] = u
+      }
       self.onAct?(["act": "update", "id": self.taskId, "value": all[i]])
     }, { _, _ in })
   }

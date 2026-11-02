@@ -409,8 +409,29 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
       if let p = parentId ?? replyTo?.id { body["parentId"] = p }
     }
     UIImpactFeedbackGenerator(style: .light).impactOccurred()
-    right.isEnabled = false
     let key = draftKey   // (the box may be on another task by the time it's sent — sent from the "not sent" alert)
+    // a new comment shows in the list at once and the box empties — the server's answer only confirms it (it took a
+    // while: Haris, 2026-11-02); not sent: it goes from the list and the words come back into the box
+    if editing == nil, !files.contains(where: { $0.path == nil && !$0.failed }) {
+      let pendingId = "pending-" + UUID().uuidString
+      let thread = parentId ?? replyTo?.id
+      let cards: [[String: Any]] = files.filter { $0.path != nil }.map { f in
+        var c: [String: Any] = ["id": f.uid, "name": f.name, "size": f.size, "pending": false]
+        if let t = f.thumb { FeedLoader.shared.setLocal("local:" + f.uid, t); c["thumbUrl"] = "local:" + f.uid }
+        return c
+      }
+      let keep = (text: a, files: files, reply: replyTo)
+      onPendingFiles?(pendingId, thread, plain, cards)
+      if key == draftKey { clear() } else { ComposeBox.drafts[key] = nil; ComposeBox.acked[key] = nil; ComposeBox.saveDrafts() }
+      onSend?(body) { [weak self] ok in
+        guard let self = self else { return }
+        self.onPendingEnd?(pendingId, ok)
+        if ok { UINotificationFeedbackGenerator().notificationOccurred(.success); return }
+        if self.draftKey == key, (self.text.text ?? "").isEmpty { self.files = keep.files; self.paintTiles(); self.setText(keep.text); self.replyTo = keep.reply }
+      }
+      return
+    }
+    right.isEnabled = false
     onSend?(body) { [weak self] ok in
       guard let self = self else { return }
       self.right.isEnabled = true

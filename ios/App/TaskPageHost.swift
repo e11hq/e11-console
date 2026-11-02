@@ -570,7 +570,8 @@ extension Main {
     let src = serverURL() + (p["url"] as? String ?? "")
     // (a small picture for the strip and while the big one loads: a photo's own, at 240 wide — the server's sized copy —
     //  else the file's picture — a video's frame, a PDF's first page)
-    let small = (p["url"] as? String).map { serverURL() + $0.replacingOccurrences(of: "?view=1", with: "?w=240") } ?? ""
+    // (the same 480-wide copy the file cards ask for: the server makes it once — two sizes meant twice the work)
+    let small = (p["url"] as? String).map { serverURL() + $0.replacingOccurrences(of: "?view=1", with: "?w=480") } ?? ""
     let thumb = (p["thumbUrl"] as? String).map { serverURL() + $0 } ?? (CommentCell.isPic(n) ? small : "")
     let meta = [TaskPage.size(p["size"] as? Int ?? 0)].joined()
     var it: [String: Any] = ["id": p["id"] ?? "", "name": n, "ext": String(ext.prefix(5)), "meta": meta, "src": src, "thumb": thumb, "cover": thumb]

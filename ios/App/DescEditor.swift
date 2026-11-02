@@ -73,25 +73,21 @@ extension TaskPage {
     mentionBox.layer.cornerRadius = 16; mentionBox.layer.cornerCurve = .continuous; mentionBox.clipsToBounds = true
     mentionBox.isHidden = true
   }
+  // the format buttons above the keyboard: iPhone's own toolbar, so iPhone draws it its own way over the keyboard
+  // (on iOS 26, Liquid Glass floating above it) — a bar of our own was cut off by the keyboard's rounded corners
+  // (Haris, 2026-11-02)
   private func descBar() -> UIView {
-    let bar = UIInputView(frame: CGRect(x: 0, y: 0, width: 400, height: 46), inputViewStyle: .keyboard)
-    // (solid, with a hairline on top — over the page it was see-through and the text showed behind it: Haris 2026-11-02)
-    bar.backgroundColor = .secondarySystemBackground
-    let hair = UIView(); hair.backgroundColor = .separator; hair.translatesAutoresizingMaskIntoConstraints = false; bar.addSubview(hair)
-    NSLayoutConstraint.activate([hair.leadingAnchor.constraint(equalTo: bar.leadingAnchor), hair.trailingAnchor.constraint(equalTo: bar.trailingAnchor), hair.topAnchor.constraint(equalTo: bar.topAnchor), hair.heightAnchor.constraint(equalToConstant: 1 / UIScreen.main.scale)])
-    let s = UIStackView(); s.spacing = 4; s.alignment = .center
+    let bar = UIToolbar(frame: CGRect(x: 0, y: 0, width: 400, height: 44))
     let items: [(String, String)] = [("bold", "b"), ("italic", "i"), ("underline", "u"), ("list.bullet", "ul"), ("list.number", "ol"), ("at", "@"), ("link", "link")]
+    var out: [UIBarButtonItem] = []
     for (sym, k) in items {
-      let b = UIButton(type: .system)
-      b.setImage(UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .medium)), for: .normal)
+      let b = UIBarButtonItem(image: UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .medium)), primaryAction: UIAction { [weak self] _ in UISelectionFeedbackGenerator().selectionChanged(); self?.format(k) })
       b.tintColor = .label
-      b.widthAnchor.constraint(equalToConstant: 42).isActive = true; b.heightAnchor.constraint(equalToConstant: 36).isActive = true
-      b.addAction(UIAction { [weak self] _ in UISelectionFeedbackGenerator().selectionChanged(); self?.format(k) }, for: .touchUpInside)
-      s.addArrangedSubview(b)
+      out.append(b)
     }
-    s.addArrangedSubview(UIView())
-    s.translatesAutoresizingMaskIntoConstraints = false; bar.addSubview(s)
-    NSLayoutConstraint.activate([s.leadingAnchor.constraint(equalTo: bar.leadingAnchor, constant: 8), s.trailingAnchor.constraint(equalTo: bar.trailingAnchor, constant: -8), s.centerYAnchor.constraint(equalTo: bar.centerYAnchor)])
+    out.append(UIBarButtonItem.flexibleSpace())
+    bar.items = out
+    bar.sizeToFit()
     return bar
   }
   func beginDesc() {

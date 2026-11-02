@@ -629,7 +629,7 @@ var E11Rules = (() => {
         canClient: !ro && !t.parentId && can('editProject', t) && !lockedId, clients: !ro && !t.parentId && can('editProject', t) && !lockedId ? movable().map((p) => ({ id: p.id, name: p.name, rgb: rgbOf(p.color || '#87909e'), on: p.id === t.projectId })) : [], allChannels: Object.entries(CHANNEL_NAMES).map(([k, n]) => ({ k, n })),
         channels: (t.channels || []).map((c) => CHANNEL_NAMES[c] || c),
         guardian: t.guardian && userById(t.guardian) ? person(t.guardian) : null,
-        update: t.update ? { t: t.update, rgb: updateRgb(t.update) } : null, updates: UPDATES,
+        update: t.update ? { t: t.update, rgb: updateRgb(t.update) } : null, updates: UPDATES, updateRgbs: UPDATES.map(updateRgb),
         canFields: !ro && !t.parentId,
         review: !t.parentId && !t.done ? { on: !!t.needsCD, canSet: !ro && !!u && (isAdm(u) || u.role === 'am' || isCD(meId)) && !reviewPending(t), who: cdUserId() ? fullName(userById(cdUserId())) : '' } : null,
         clientApproval: cdApprovedNow(t) ? (() => { const ca = t.clientApproval, fresh = clientApprovalFresh(t);

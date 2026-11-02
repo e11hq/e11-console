@@ -173,6 +173,10 @@ final class CornerButton: UIView {
     // (after a swipe back the buttons are already part way, where the finger left them: they just carry on from there
     //  — the pull out of ••• below would start them all over again, Haris 2026-11-02)
     let fromSwipe = scrubbed; scrubbed = false
+    // (the same buttons, put a point or two off — worked out again once a screen had settled: in at once, not as a
+    //  creep after they'd settled; Haris 2026-11-02)
+    func near(_ a: CGRect, _ b: CGRect) -> Bool { abs(a.minX - b.minX) <= 2.5 && abs(a.minY - b.minY) <= 2.5 && abs(a.width - b.width) <= 2.5 }
+    let tiny = !fromSwipe && was.0.kind == l.kind && was.1.kind == m.kind && was.2.kind == c.kind && near(was.0.frame, l.frame) && near(was.1.frame, m.frame) && near(was.2.frame, c.frame)
     let iconWas = model.mid.icon
     // Search opening: Home's own bar starts exactly where 🔍 is and stretches out — 🔍 hands over to it at once; closing,
     // the bar shrinks back into that circle and 🔍 takes over there, in place
@@ -201,7 +205,7 @@ final class CornerButton: UIView {
         else { var s = self.b(m); if fromSwipe && m.kind == "search" { s.icon = iconWas }; s.fade = comes.mid; self.model.mid = s }
       }
     }
-    if !animated { now(apply); if m.kind == "none" { now { model.mid = b(m) } }; return }
+    if !animated || tiny { now(apply); if m.kind == "none" { now { model.mid = b(m) } }; return }
     // (a button marked to leave the native way is drawn so once before it goes: the change waits for the next frame)
     let spring = {
       if #available(iOS 17.0, *) { withAnimation(.spring(duration: CornerButton.duration, bounce: CornerButton.bounce)) { apply() } }

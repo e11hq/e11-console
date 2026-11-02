@@ -374,6 +374,11 @@ export function createFiles(root) {
   // Photos become JPEG; PNG/GIF/WebP keep transparency as PNG. Anything that fails falls back to the original.
   const SIZES = [160, 320, 640, 1280];
   const sizing = new Map();
+  // (at most two pictures made smaller at a time: a task with a dozen photos asked for all of them at once, and the
+  //  NAS was busy with them while everything else waited — Haris, 2026-11-02)
+  let sizingNow = 0; const sizingWait = [];
+  const sizingSlot = () => new Promise((ok) => { if (sizingNow < 2) { sizingNow++; ok(); } else sizingWait.push(ok); });
+  const sizingDone = () => { const next = sizingWait.shift(); if (next) next(); else sizingNow--; };
   async function serveSized(req, res, relPath, want) {
     let full, st;
     try { full = resolve(relPath); st = fs.statSync(full); } catch { return serve(req, res, relPath); }
@@ -387,9 +392,9 @@ export function createFiles(root) {
       if (!sizing.has(out)) {
         fs.mkdirSync(path.dirname(out), { recursive: true });
         const tmp = out + '.tmp.' + outExt;
-        sizing.set(out, run('ffmpeg', ['-y', '-v', 'error', '-i', full, '-frames:v', '1', '-vf', `scale='min(${w},iw)':-2`, ...(outExt === 'jpg' ? ['-q:v', '4'] : []), tmp])
+        sizing.set(out, sizingSlot().then(() => run('ffmpeg', ['-y', '-v', 'error', '-i', full, '-frames:v', '1', '-vf', `scale='min(${w},iw)':-2`, ...(outExt === 'jpg' ? ['-q:v', '4'] : []), tmp]))
           .then((ok) => { if (ok && fs.existsSync(tmp) && fs.statSync(tmp).size < st.size) fs.renameSync(tmp, out); else fs.rmSync(tmp, { force: true }); })
-          .finally(() => sizing.delete(out)));
+          .finally(() => { sizingDone(); sizing.delete(out); }));
       }
       await sizing.get(out);
     }
