@@ -67,9 +67,12 @@ struct CornerBar: View {
         }
       }
       .frame(width: b.frame.width, height: b.frame.height)
-      .modifier(GlassLook(id: id, ns: ns))
+      // (each kind its own glass shape — 🔍 and Mark all read, your photo, ✕ and ••• — so when one turns into another
+      //  iPhone morphs one glass into the other, the liquid drop way; one shape only changing size just stretched)
+      .modifier(GlassLook(id: id + "-" + b.kind, ns: ns))
       .opacity(b.opacity)
       .position(x: b.frame.midX, y: b.frame.midY)
+      .id(id + "-" + b.kind)
       .accessibilityLabel(["back": "Back", "search": "Search", "more": "More", "close": "Close search", "photo": "Me"][b.kind] ?? b.text)
     }
   }
@@ -122,7 +125,8 @@ final class CornerButton: UIView {
   // (what the self-test reads: the corner's ••• on a task page, else the middle one's kind)
   var kind: String { corner.kind == "more" ? "more" : mid.kind }
   // Mail's spring; inside it iPhone's glass morphs by itself
-  static let duration: TimeInterval = 0.42, bounce: CGFloat = 0.22
+  // (a little longer and livelier than Mail's 0.42 / 0.22 — Haris, 2026-11-02: going into a task it was too quick to see)
+  static let duration: TimeInterval = 0.6, bounce: CGFloat = 0.3
 
   override init(frame: CGRect) {
     super.init(frame: frame)
