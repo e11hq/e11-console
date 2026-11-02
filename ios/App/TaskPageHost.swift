@@ -476,7 +476,10 @@ extension Main {
         f?.load(); p.feed?.load()
       }
     }
-    f.onLoaded = { [weak self] m in if let ml = m["mentionable"] as? [[String: Any]] { self?.composeIfMade?.mentionable = ml } }
+    f.onLoaded = { [weak self, weak p] m in
+      if let ml = m["mentionable"] as? [[String: Any]] { self?.composeIfMade?.mentionable = ml }
+      self?.composeIfMade?.filesFor = { [weak p] in p?.taskFilesForPick ?? [] }
+    }
     f.onOpenFile = { [weak self] list, i in self?.openFiles(list, at: i) }
     f.onToast = { [weak p] t in p?.toast(t) }
     f.onSheet = { [weak self] args, answer in

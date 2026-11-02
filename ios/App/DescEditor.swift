@@ -44,6 +44,33 @@ enum DescEditor {
     s.addAttributes([FILEREF_KEY: f, .font: body], range: NSRange(location: 0, length: s.length))
     return s
   }
+  // # files: the task's files whose names match what's typed after # (the website's and Files' list)
+  static func fileHits(_ files: [[String: Any]], _ q: String) -> [[String: Any]] {
+    var seen = Set<String>(), out: [[String: Any]] = []
+    for f in files {
+      guard let p = f["file"] as? String, !seen.contains(p) else { continue }
+      seen.insert(p)
+      let n = (f["name"] as? String ?? "").lowercased()
+      if q.isEmpty || n.contains(q) { out.append(f) }
+    }
+    return Array(out.prefix(5))
+  }
+  // a row in the # list: its kind's coloured icon, its name, its size
+  static func fileRow(_ f: [String: Any], tap: @escaping () -> Void) -> UIView {
+    let row = TaskRow()
+    let name = f["name"] as? String ?? "File"
+    let (sym, col) = kind(name)
+    let ic = UIImageView(image: UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold))); ic.tintColor = col
+    ic.contentMode = .center; ic.widthAnchor.constraint(equalToConstant: 28).isActive = true
+    let l = UILabel(); l.text = name; l.font = .systemFont(ofSize: 16, weight: .medium); l.lineBreakMode = .byTruncatingMiddle
+    let sz = UILabel(); sz.text = TaskPage.size(f["size"] as? Int ?? 0); sz.font = .systemFont(ofSize: 13); sz.textColor = .secondaryLabel
+    sz.setContentCompressionResistancePriority(.required, for: .horizontal)
+    let h = UIStackView(arrangedSubviews: [ic, l, sz]); h.spacing = 10; h.alignment = .center
+    h.translatesAutoresizingMaskIntoConstraints = false; row.addSubview(h)
+    NSLayoutConstraint.activate([h.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 14), h.topAnchor.constraint(equalTo: row.topAnchor, constant: 8), h.bottomAnchor.constraint(equalTo: row.bottomAnchor, constant: -8), h.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -14)])
+    row.onTap = tap
+    return row
+  }
   // the words as plain text (each chip as "📎 name", as the website keeps it)
   static func plain(_ a: NSAttributedString) -> String {
     var out = ""
@@ -276,6 +303,18 @@ extension TaskPage {
     let tv = descView
     let r = tv.selectedRange
     let before = (tv.text as NSString).substring(to: r.location)
+    // (# and some letters: the task's files — picked, its chip in place of what was typed; Haris 2026-11-02)
+    if let m = before.range(of: "(^|\\s)#([^\\s#@]*)$", options: .regularExpression) {
+      let typed = String(before[m]).trimmingCharacters(in: .whitespacesAndNewlines)
+      let q = String(typed.dropFirst()).lowercased()
+      let hits = DescEditor.fileHits(taskFilesForPick, q)
+      if hits.isEmpty { hideMentions(); return }
+      mentionBox.arrangedSubviews.forEach { $0.removeFromSuperview() }
+      let at = (before as NSString).length - (typed as NSString).length
+      for f in hits { mentionBox.addArrangedSubview(DescEditor.fileRow(f) { [weak self] in self?.insertFileChip(f, from: at) }) }
+      showMentionBox(hits.count)
+      return
+    }
     guard let m = before.range(of: "@([A-Za-z]*)$", options: .regularExpression) else { hideMentions(); return }
     let q = String(before[m].dropFirst()).lowercased()
     let all = (model?["mentionable"] as? [[String: Any]]) ?? []
@@ -291,13 +330,37 @@ extension TaskPage {
       row.onTap = { [weak self] in self?.insertMention(p, from: at) }
       mentionBox.addArrangedSubview(row)
     }
+    showMentionBox(hits.count)
+  }
+  private func showMentionBox(_ n: Int) {
+    let tv = descView
     if mentionBox.superview == nil { addSubview(mentionBox) }
     // just under the line being written
     let caret = tv.caretRect(for: tv.selectedTextRange?.end ?? tv.endOfDocument)
     let y = tv.convert(caret, to: self).maxY + 10
-    mentionBox.frame = CGRect(x: 16, y: y, width: bounds.width - 32, height: CGFloat(hits.count) * 46)
+    mentionBox.frame = CGRect(x: 16, y: y, width: bounds.width - 32, height: CGFloat(n) * 46)
     mentionBox.isHidden = false
     bringSubviewToFront(mentionBox)
+  }
+  // the task's files for # (its own and its comments', as the Files row)
+  var taskFilesForPick: [[String: Any]] { ((model?["files"] as? [[String: Any]]) ?? []) + ((model?["commentFiles"] as? [[String: Any]]) ?? []) }
+  private func insertFileChip(_ f: [String: Any], from at: Int) {
+    guard let path = f["file"] as? String else { return }
+    let tv = descView
+    let r = tv.selectedRange
+    DescEditor.dark = !light
+    let plain: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: TaskPage.T), .foregroundColor: UIColor.label]
+    let add = NSMutableAttributedString(attributedString: DescEditor.chip(["path": path, "name": f["name"] as? String ?? "File", "size": f["size"] as? Int ?? 0], size: TaskPage.T))
+    add.append(NSAttributedString(string: " ", attributes: plain))
+    let m = NSMutableAttributedString(attributedString: tv.attributedText)
+    m.replaceCharacters(in: NSRange(location: at, length: r.location - at), with: add)
+    tv.attributedText = m
+    tv.selectedRange = NSRange(location: at + add.length, length: 0)
+    tv.typingAttributes = plain
+    if !descPending.contains(where: { ($0["file"] as? String) == path }) { descPending.append(f) }
+    UISelectionFeedbackGenerator().selectionChanged()
+    hideMentions()
+    setNeedsLayout()
   }
   private func insertMention(_ p: [String: Any], from at: Int) {
     let tv = descView

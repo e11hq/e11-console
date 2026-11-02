@@ -47,6 +47,7 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
   private let replyPill = UIButton(type: .custom)
   var editing: String? { didSet { paintSend() } }
   var mentionable: [[String: Any]] = []
+  var filesFor: (() -> [[String: Any]])?   // the task's files, for # (Haris 2026-11-02: picked, a card on the comment)
   var cookies: (@escaping (String) -> Void) -> Void = { $0("") }
   var onSend: (([String: Any], @escaping (Bool) -> Void) -> Void)?   // the act body → sent?
   var onAttach: ((@escaping (String) -> Void) -> Void)?             // the Attach Files sheet → camera / photos / files
@@ -249,6 +250,16 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
   private func lookForMention() {
     let r = text.selectedRange
     let before = (text.text as NSString).substring(to: min(r.location, (text.text as NSString).length))
+    if let m = before.range(of: "(^|\\s)#([^\\s#@]*)$", options: .regularExpression) {
+      let typed = String(before[m]).trimmingCharacters(in: .whitespacesAndNewlines)
+      let hits = DescEditor.fileHits(filesFor?() ?? [], String(typed.dropFirst()).lowercased())
+      mentions.arrangedSubviews.forEach { $0.removeFromSuperview() }
+      guard !hits.isEmpty else { mentions.isHidden = true; return }
+      let at = (before as NSString).length - (typed as NSString).length
+      for f in hits { mentions.addArrangedSubview(DescEditor.fileRow(f) { [weak self] in self?.pickFile(f, at: at) }) }
+      mentions.isHidden = false
+      return
+    }
     guard let m = before.range(of: "@([A-Za-z]*)$", options: .regularExpression) else { mentions.isHidden = true; return }
     let q = String(before[m].dropFirst()).lowercased()
     let hits = mentionable.filter { q.isEmpty || ($0["name"] as? String ?? "").lowercased().split(separator: " ").contains { $0.hasPrefix(q) } }.prefix(4)
@@ -279,6 +290,27 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     text.typingAttributes = base
     mentions.isHidden = true
     UISelectionFeedbackGenerator().selectionChanged()
+    textViewDidChange(text)
+  }
+
+  // a file picked from the # list: the #word goes, the file is added to this comment as a card (the same file)
+  private func pickFile(_ f: [String: Any], at: Int) {
+    let r = text.selectedRange
+    let m = NSMutableAttributedString(attributedString: text.attributedText)
+    m.deleteCharacters(in: NSRange(location: at, length: r.location - at))
+    text.attributedText = m
+    text.selectedRange = NSRange(location: at, length: 0)
+    text.typingAttributes = [.font: UIFont.systemFont(ofSize: 17), .foregroundColor: UIColor.label]
+    mentions.isHidden = true
+    UISelectionFeedbackGenerator().selectionChanged()
+    if let path = f["file"] as? String, !files.contains(where: { $0.path == path }) {
+      let uid = UUID().uuidString
+      files.append((uid: uid, name: f["name"] as? String ?? "File", size: Int64(f["size"] as? Int ?? 0), path: path, progress: 1, failed: false, thumb: nil))
+      upDone[uid] = path
+      paintTiles()
+      let pic = (f["thumbUrl"] as? String) ?? (CommentCell.isPic(f["name"] as? String ?? "") ? f["url"] as? String : nil)
+      if let p = pic { FeedLoader.shared.image(p) { [weak self] img in guard let self = self, let img = img, let i = self.files.firstIndex(where: { $0.uid == uid }) else { return }; self.files[i].thumb = img; self.paintTiles() } }
+    }
     textViewDidChange(text)
   }
 
