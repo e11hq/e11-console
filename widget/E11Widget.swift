@@ -471,11 +471,11 @@ struct E11Widget: Widget {
     base
     #endif
   }
-  var desc: LocalizedStringResource {
+  var desc: Text {
     #if os(iOS)
-    return "Your day at E11: tasks or content plans — whichever is yours."
+    return Text("Your day at E11: tasks or content plans — whichever is yours.")
     #else
-    return "Your day at E11: tasks, content plans or Finance — whichever is yours."
+    return Text("Your day at E11: tasks, content plans or Finance — whichever is yours.")
     #endif
   }
   #if os(iOS)
