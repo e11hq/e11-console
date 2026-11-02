@@ -1129,7 +1129,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     h.onEvent = { [weak self] ev in
       if self?.homeEventOnServer(ev) == true { return }
       // (a task opening: Home goes at once, so the task slides in over the page's own Home, scrolled the same)
-      if (ev["ev"] as? String) == "open" { self?.homeIfMade?.isHidden = true; self?.hiddenForOpen = (self?.homeIfMade, Date()) }
+      // (a task opening: Home only goes if the website's own task page is the one coming — the app's own slides over it;
+      //  hiding at once and showing again as the app's page came made Home flash blank, Haris 2026-11-02)
+      if (ev["ev"] as? String) == "open" { DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in if self?.taskPages.isEmpty == true { self?.homeIfMade?.isHidden = true } } }
       self?.pageJS("window.__e11Home && window.__e11Home(\(jsonString(ev)))")
     }
     h.present = { [weak self] vc in self?.topMost().present(vc, animated: true) }
@@ -1296,7 +1298,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     h.onEvent = { [weak self] ev in
       guard let self = self else { return }
       if self.eventOnServer(ev, self.serverMyTasks, pageMe: self.myTasksPageMe) { return }
-      if (ev["ev"] as? String) == "open" { self.myTasksIfMade?.isHidden = true; self.hiddenForOpen = (self.myTasksIfMade, Date()) }
+      if (ev["ev"] as? String) == "open" { DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in if self?.taskPages.isEmpty == true { self?.myTasksIfMade?.isHidden = true } } }
       self.pageJS("window.__e11MyTasks && window.__e11MyTasks(\(jsonString(ev)))")
     }
     h.present = { [weak self] vc in self?.topMost().present(vc, animated: true) }
