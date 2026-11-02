@@ -85,6 +85,7 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     NSLayoutConstraint.activate([glass.leadingAnchor.constraint(equalTo: box.leadingAnchor), glass.trailingAnchor.constraint(equalTo: box.trailingAnchor), glass.topAnchor.constraint(equalTo: box.topAnchor), glass.bottomAnchor.constraint(equalTo: box.bottomAnchor)])
     text.font = .systemFont(ofSize: 17); text.backgroundColor = .clear; text.delegate = self
     text.onPasteFiles = { [weak self] in self?.pasteFiles() ?? false }
+    text.onPasteRich = { [weak self] runs in self?.pasteRich(runs) ?? false }
     text.textContainerInset = UIEdgeInsets(top: 4, left: 0, bottom: 4, right: 0); text.textContainer.lineFragmentPadding = 0
     text.isScrollEnabled = false
     placeholder.text = "Comment"; placeholder.font = .systemFont(ofSize: 17); placeholder.textColor = .secondaryLabel
@@ -328,6 +329,32 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
         self?.text.becomeFirstResponder()
       }
     })
+  }
+  // copied words with mentions or chips: the words and mentions where the cursor is; each chip's file added to the
+  // comment, as # does here (Haris 2026-11-02 — a file from another task: the same file, nothing uploaded)
+  private func pasteRich(_ runs: [[String: Any]]) -> Bool {
+    let words = runs.filter { $0["ref"] == nil }
+    let ins = DescEditor.attributed(words, done: false, size: 17)
+    let r = text.selectedRange
+    let m = NSMutableAttributedString(attributedString: text.attributedText ?? NSAttributedString())
+    guard NSMaxRange(r) <= m.length else { return false }
+    m.replaceCharacters(in: r, with: ins)
+    text.attributedText = m
+    text.selectedRange = NSRange(location: r.location + ins.length, length: 0)
+    text.typingAttributes = [.font: UIFont.systemFont(ofSize: 17), .foregroundColor: UIColor.label]
+    let known = filesFor?() ?? []
+    for case let f as [String: Any] in runs.compactMap({ $0["ref"] }) {
+      guard let path = f["path"] as? String, !files.contains(where: { $0.path == path }) else { continue }
+      let uid = UUID().uuidString
+      files.append((uid: uid, name: f["name"] as? String ?? "File", size: Int64((f["size"] as? NSNumber)?.intValue ?? 0), path: path, progress: 1, failed: false, thumb: nil))
+      upDone[uid] = path
+      let k = known.first { ($0["file"] as? String) == path }
+      let pic = (k?["thumbUrl"] as? String) ?? (CommentCell.isPic(f["name"] as? String ?? "") ? k?["url"] as? String : nil)
+      if let p = pic { FeedLoader.shared.image(p) { [weak self] img in guard let self = self, let img = img, let i = self.files.firstIndex(where: { $0.uid == uid }) else { return }; self.files[i].thumb = img; self.paintTiles() } }
+    }
+    paintTiles()
+    textViewDidChange(text)
+    return true
   }
   // a file pasted (a picture, or one copied from a preview: its own name): added as if picked
   private func pasteFiles() -> Bool {
@@ -807,15 +834,33 @@ enum FileClip {
 // the comment box's text: a pasted picture or file goes in as an attachment; words paste as words
 final class PasteTextView: UITextView {
   var onPasteFiles: (() -> Bool)?
+  // copied words with mentions or file chips (in E11, anywhere): back as they were (Haris 2026-11-02)
+  var onPasteRich: (([[String: Any]]) -> Bool)?
+  private var selectedRich: NSAttributedString? {
+    let r = selectedRange
+    guard r.length > 0, let a = attributedText, NSMaxRange(r) <= a.length else { return nil }
+    return a.attributedSubstring(from: r)
+  }
+  override func copy(_ sender: Any?) {
+    let sub = selectedRich
+    super.copy(sender)
+    if let s = sub { RichClip.put(s) }
+  }
+  override func cut(_ sender: Any?) {
+    let sub = selectedRich
+    super.cut(sender)
+    if let s = sub { RichClip.put(s) }
+  }
   private var hasFiles: Bool {
     let pb = UIPasteboard.general
     return FileClip.current != nil || pb.hasImages || pb.types.contains { t in guard let u = UTType(t) else { return false }; return !u.conforms(to: .text) && (u.conforms(to: .data) || u.conforms(to: .content)) }
   }
   override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
-    if action == #selector(paste(_:)) && hasFiles { return true }
+    if action == #selector(paste(_:)) && hasFiles { return true }   // (copied words: Paste is iPhone's own already — and reading the clipboard here would ask "Allow Paste?")
     return super.canPerformAction(action, withSender: sender)
   }
   override func paste(_ sender: Any?) {
+    if let h = onPasteRich, let runs = RichClip.runs(), h(runs) { return }
     if hasFiles, onPasteFiles?() == true { return }
     super.paste(sender)
   }

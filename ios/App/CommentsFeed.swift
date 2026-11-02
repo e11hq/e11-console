@@ -438,7 +438,11 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
         self.onReply?(self.thread ?? id, (self.people[who]?["first"] as? String) ?? "them", self.people[who])
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { self.keepInView(id) }
       case 4: self.onEdit?(id, (it["runs"] as? [[String: Any]]) ?? [])
-      case 2: UIPasteboard.general.string = it["text"] as? String ?? ""; self.onToast?("Copied")
+      case 2:
+        UIPasteboard.general.string = it["text"] as? String ?? ""
+        // (its mentions and chips too, for pasting into a comment or description — Haris 2026-11-02)
+        RichClip.put(DescEditor.attributed((it["runs"] as? [[String: Any]]) ?? [], done: false))
+        self.onToast?("Copied")
       case 3: self.confirmDelete(id, replies: ((it["replies"] as? [String: Any])?["n"] as? Int) ?? 0)
       default: break
       }

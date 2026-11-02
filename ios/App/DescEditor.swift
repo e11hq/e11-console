@@ -150,6 +150,22 @@ extension TaskPage {
     descView.dataDetectorTypes = []
     descView.delegate = self
     descView.onPasteFiles = { [weak self] in self?.pasteIntoDesc() ?? false }
+    // (copied words with mentions or chips: back as they were; a chip from another task goes into this task's Files
+    //  when it's saved — the server's, as the website's — Haris 2026-11-02)
+    descView.onPasteRich = { [weak self] runs in
+      guard let self = self else { return false }
+      let tv = self.descView
+      let ins = DescEditor.attributed(runs, done: false, size: TaskPage.T, creator: ((self.model?["creator"] as? [String: Any])?["id"] as? String))
+      let r = tv.selectedRange
+      let m = NSMutableAttributedString(attributedString: tv.attributedText ?? NSAttributedString())
+      guard NSMaxRange(r) <= m.length else { return false }
+      m.replaceCharacters(in: r, with: ins)
+      tv.attributedText = m
+      tv.selectedRange = NSRange(location: r.location + ins.length, length: 0)
+      var a = tv.typingAttributes; a[MENTION_KEY] = nil; a[FILEREF_KEY] = nil; a[.link] = nil; a[.foregroundColor] = UIColor.label; a[.font] = UIFont.systemFont(ofSize: TaskPage.T); tv.typingAttributes = a
+      self.textViewDidChange(tv)
+      return true
+    }
     descView.inputAccessoryView = descBar()
     mentionBox.axis = .vertical
     mentionBox.backgroundColor = .secondarySystemGroupedBackground
@@ -383,4 +399,122 @@ extension TaskPage {
     hideMentions()
   }
   func hideMentions() { mentionBox.isHidden = true }
+}
+
+// Copied words with mentions or file chips paste back as they were — in a comment or the description, on the phone, the
+// Mac app or the website (Haris 2026-11-02). The clipboard carries the words (for other apps: "@Name", "📎 name") and the
+// same words as the website's HTML in a <div data-e11-clip>, which only E11 reads back.
+enum RichClip {
+  static let MARK = "data-e11-clip"
+  static func has(_ a: NSAttributedString) -> Bool {
+    var any = false
+    a.enumerateAttributes(in: NSRange(location: 0, length: a.length), options: []) { at, _, stop in
+      if at[MENTION_KEY] != nil || at[FILEREF_KEY] != nil { any = true; stop.pointee = true }
+    }
+    return any
+  }
+  // (on the clipboard; nothing to do when the words have no mention or chip — iPhone's own copy stays)
+  static func put(_ a: NSAttributedString) {
+    guard a.length > 0, has(a) else { return }
+    let html = "<div \(MARK)=\"1\">" + DescEditor.html(a) + "</div>"
+    UIPasteboard.general.items = [["public.html": html, "public.utf8-plain-text": DescEditor.plain(a)]]
+  }
+  // the copied words as runs (as the server sends them), when they're E11's
+  static func runs() -> [[String: Any]]? {
+    let pb = UIPasteboard.general
+    guard pb.contains(pasteboardTypes: ["public.html"]) else { return nil }
+    var html: String? = nil
+    if let d = pb.data(forPasteboardType: "public.html") { html = String(data: d, encoding: .utf8) }
+    if html == nil { html = pb.value(forPasteboardType: "public.html") as? String }
+    guard let h = html, let m = h.range(of: MARK) else { return nil }
+    // (from the marked div's end of tag on; what's after its close doesn't matter much — the web adds nothing there)
+    guard let open = h[m.upperBound...].range(of: ">") else { return nil }
+    var body = String(h[open.upperBound...])
+    if let close = body.range(of: "</div>", options: .backwards) { body = String(body[..<close.lowerBound]) }
+    let r = parse(body)
+    return r.isEmpty ? nil : r
+  }
+  // the website's HTML (b, i, u, s, a, br, div/p, ul/ol/li, mention and file chip spans) → runs
+  static func parse(_ html: String) -> [[String: Any]] {
+    var out: [[String: Any]] = []
+    var b = 0, i = 0, u = 0, s = 0
+    var links: [String?] = [], spans: [String] = [], lists: [(String, Int)] = []
+    var user: String? = nil, skip = 0
+    func text(_ t: String) {
+      guard !t.isEmpty else { return }
+      var r: [String: Any] = ["t": t]
+      if b > 0 { r["b"] = true }; if i > 0 { r["i"] = true }; if u > 0 { r["u"] = true }; if s > 0 { r["s"] = true }
+      if let l = links.last ?? nil { r["link"] = l }
+      if let us = user { r["user"] = us }
+      out.append(r)
+    }
+    func endsWithNewline() -> Bool { (out.last?["t"] as? String)?.hasSuffix("\n") ?? true }
+    func newline() { if !endsWithNewline() { text("\n") } }
+    func attr(_ tag: String, _ name: String) -> String? {
+      guard let r = tag.range(of: name + "=\"([^\"]*)\"", options: .regularExpression) else { return nil }
+      let v = tag[r].dropFirst(name.count + 2).dropLast()
+      return unescape(String(v))
+    }
+    var rest = Substring(html)
+    while !rest.isEmpty {
+      guard let lt = rest.firstIndex(of: "<") else {
+        if skip == 0 { text(unescape(collapse(String(rest)))) }
+        break
+      }
+      if lt > rest.startIndex, skip == 0 { text(unescape(collapse(String(rest[..<lt])))) }
+      guard let gt = rest[lt...].firstIndex(of: ">") else { break }
+      let tag = String(rest[rest.index(after: lt)..<gt])
+      rest = rest[rest.index(after: gt)...]
+      let closing = tag.hasPrefix("/")
+      let name = (closing ? String(tag.dropFirst()) : tag).split(whereSeparator: { $0 == " " || $0 == "/" || $0 == "\n" }).first.map { $0.lowercased() } ?? ""
+      if skip > 0 { if name == "span" { skip += closing ? -1 : 1 }; continue }
+      switch (name, closing) {
+      case ("b", false), ("strong", false): b += 1
+      case ("b", true), ("strong", true): b = max(0, b - 1)
+      case ("i", false), ("em", false): i += 1
+      case ("i", true), ("em", true): i = max(0, i - 1)
+      case ("u", false): u += 1
+      case ("u", true): u = max(0, u - 1)
+      case ("s", false), ("strike", false), ("del", false): s += 1
+      case ("s", true), ("strike", true), ("del", true): s = max(0, s - 1)
+      case ("a", false): let h = attr(tag, "href"); links.append(h.flatMap { $0.hasPrefix("http") ? $0 : nil })
+      case ("a", true): _ = links.popLast()
+      case ("br", _): text("\n")
+      case ("div", _), ("p", _), ("blockquote", _), ("pre", _): newline()
+      case ("ul", false): newline(); lists.append(("ul", 0))
+      case ("ol", false): newline(); lists.append(("ol", 0))
+      case ("ul", true), ("ol", true): _ = lists.popLast(); newline()
+      case ("li", false):
+        newline()
+        if var l = lists.popLast() { l.1 += 1; lists.append(l); text(l.0 == "ol" ? "\(l.1). " : "• ") } else { text("• ") }
+      case ("li", true): newline()
+      case ("span", false):
+        if tag.contains("fileref"), let path = attr(tag, "data-fpath") {
+          var f: [String: Any] = ["path": path, "name": attr(tag, "data-fname") ?? (path as NSString).lastPathComponent, "size": Int(attr(tag, "data-fsize") ?? "") ?? 0]
+          if let th = attr(tag, "data-fthumb") { f["thumb"] = th }
+          out.append(["t": "", "ref": f]); skip = 1   // (its inner words: its name, drawn by the chip)
+        } else if tag.contains("mention"), let id = attr(tag, "data-user") { user = id; spans.append("m") }
+        else { spans.append("") }
+      case ("span", true): if spans.popLast() == "m" { user = nil }
+      default: break
+      }
+    }
+    // (no newline left at the very end)
+    while let l = out.last, let t = l["t"] as? String, l["ref"] == nil, t.hasSuffix("\n") {
+      let k = String(t.dropLast()); if k.isEmpty { out.removeLast() } else { out[out.count - 1]["t"] = k }
+    }
+    return out
+  }
+  private static func collapse(_ s: String) -> String { s.replacingOccurrences(of: "[\\r\\n\\t ]+", with: " ", options: .regularExpression) }
+  static func unescape(_ s: String) -> String {
+    guard s.contains("&") else { return s }
+    var t = s.replacingOccurrences(of: "&nbsp;", with: " ").replacingOccurrences(of: "&lt;", with: "<").replacingOccurrences(of: "&gt;", with: ">")
+      .replacingOccurrences(of: "&quot;", with: "\"").replacingOccurrences(of: "&#39;", with: "'").replacingOccurrences(of: "&apos;", with: "'")
+    while let r = t.range(of: "&#(x?[0-9a-fA-F]+);", options: .regularExpression) {
+      let code = t[r].dropFirst(2).dropLast()
+      let n = code.hasPrefix("x") ? UInt32(code.dropFirst(), radix: 16) : UInt32(code)
+      t.replaceSubrange(r, with: n.flatMap { Unicode.Scalar($0) }.map { String(Character($0)) } ?? "")
+    }
+    return t.replacingOccurrences(of: "&amp;", with: "&")
+  }
 }

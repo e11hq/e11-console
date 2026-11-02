@@ -6648,10 +6648,79 @@ document.addEventListener('paste', (e) => {
   }
   const txt = (e.clipboardData || window.clipboardData).getData('text/plain');
   if (ui.fileClip && txt && txt.trim() === ui.fileClip.token) { pasteFileInto(ed); return; }
+  if (RichClip.paste(ed, (e.clipboardData || {}).getData ? e.clipboardData.getData('text/html') : '')) return;
   const html = textWithMentions(txt);
   if (html) { document.execCommand('insertHTML', false, html); ed.dispatchEvent(new Event('input', { bubbles: true })); }
   else document.execCommand('insertText', false, txt);
 });
+// Copied words with mentions or file chips paste back as they were — in a comment or the description, here, in the Mac
+// app or the iPhone app (Haris 2026-11-02). The clipboard carries the words (for other apps) and the same words as
+// marked-up HTML in a <div data-e11-clip>, which only E11 reads back. A chip pasted into the description goes into
+// this task's Files too (one from another task: the same file, no upload); into a comment, it's added to the comment's
+// files, as # does there. A mention pastes as a mention, whoever it is.
+const RichClip = (() => {
+  const MARK = 'data-e11-clip';
+  const plainOf = (root) => {
+    let out = '';
+    const walk = (node) => node.childNodes.forEach((n) => {
+      if (n.nodeType === 3) { out += n.nodeValue.replace(/\u00a0/g, ' '); return; }
+      if (n.nodeType !== 1) return;
+      if (n.matches('.fileref[data-fpath]')) { out += '📎 ' + (n.dataset.fname || ''); return; }
+      if (n.tagName === 'BR') { out += '\n'; return; }
+      const block = /^(DIV|P|LI|BLOCKQUOTE|PRE)$/.test(n.tagName);
+      if (block && out && !out.endsWith('\n')) out += '\n';
+      if (n.tagName === 'LI') out += '• ';
+      walk(n);
+      if (block && !out.endsWith('\n')) out += '\n';
+    });
+    walk(root);
+    return out.replace(/\n+$/, '');
+  };
+  function onCopy(e, cut) {
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount || sel.isCollapsed || !e.clipboardData) return;
+    const box = document.createElement('div');
+    for (let i = 0; i < sel.rangeCount; i++) box.appendChild(sel.getRangeAt(i).cloneContents());
+    if (!box.querySelector('.mention[data-user], .fileref[data-fpath]')) return;   // (plain words: the browser's own copy)
+    // (a shown link back to its address; a shown chip's name back in its data)
+    box.querySelectorAll('a[data-url]').forEach((a) => a.setAttribute('href', a.dataset.url));
+    const html = sanitizeHTML(box.innerHTML, false);
+    const clean = document.createElement('div'); clean.innerHTML = html;
+    e.clipboardData.setData('text/html', `<div ${MARK}="1">${html}</div>`);
+    e.clipboardData.setData('text/plain', plainOf(clean));
+    e.preventDefault();
+    if (cut) {
+      const ed = e.target.closest && e.target.closest('.rt-editor');
+      if (ed && ed.isContentEditable) { document.execCommand('delete'); ed.dispatchEvent(new Event('input', { bubbles: true })); }
+    }
+  }
+  document.addEventListener('copy', (e) => onCopy(e, false));
+  document.addEventListener('cut', (e) => onCopy(e, true));
+  function paste(ed, raw) {
+    if (!raw || raw.indexOf(MARK) < 0) return false;
+    const tpl = document.createElement('template'); tpl.innerHTML = raw;
+    const root = tpl.content.querySelector(`[${MARK}]`);
+    if (!root) return false;
+    const holder = document.createElement('div'); holder.innerHTML = sanitizeHTML(root.innerHTML, false);
+    const t = task(ui.taskId);
+    const chips = [...holder.querySelectorAll('.fileref[data-fpath]')].map((n) => ({ el: n, a: { path: n.dataset.fpath, name: n.dataset.fname || n.dataset.fpath.split('/').pop(), size: +n.dataset.fsize || 0, thumb: n.dataset.fthumb || null } }));
+    const key = ed.dataset.draftKey;
+    if (key) chips.forEach((c) => c.el.remove());   // (a comment's files go under it, as cards)
+    if (holder.innerHTML.replace(/&nbsp;|\s/g, '')) document.execCommand('insertHTML', false, holder.innerHTML);
+    ed.dispatchEvent(new Event('input', { bubbles: true }));
+    if (!t || !chips.length) return true;
+    if (!key) { chips.forEach((c) => linkToTask(t, c.a)); return true; }
+    ui.commentDraft[key] = editorEmpty(ed) ? '' : ed.innerHTML;
+    let added = 0;
+    chips.forEach((c) => { const list = ui.commentFiles[key] || []; if (!list.some((x) => x.path === c.a.path)) { ui.commentFiles[key] = list.concat({ ...c.a, id: uid(), linked: true, addedAt: nowISO() }); added++; } });
+    if (added) {
+      Unsent.save(); renderDetail();
+      setTimeout(() => { const b = $(`[data-draft-key="${key}"]`); if (b) { b.focus(); placeCaretAtEnd(b); } }, 0);
+    }
+    return true;
+  }
+  return { paste };
+})();
 // "@Full Name" (or @emailname) in pasted text → mention chip, when that person is on the team.
 // Returns null when nothing matched so a normal paste is used.
 function textWithMentions(txt) {
