@@ -114,6 +114,13 @@ final class PreviewCell: UICollectionViewCell, UIScrollViewDelegate {
       PreviewLoad.image(f["thumb"] as? String) { [weak self] img in guard let self, self.token == my, self.imageView.image == nil, let img else { return }; self.imageView.image = img; self.setNeedsLayout() }
       spinner.startAnimating()
       PreviewLoad.image(f["src"] as? String) { [weak self] img in guard let self, self.token == my else { return }; self.spinner.stopAnimating(); if let img { self.imageView.image = img; self.setNeedsLayout() } }
+    case "video" where !((f["cover"] as? String) ?? "").isEmpty:
+      // (its frame filling the page, as a photo, with ▶ on it — Haris, 2026-11-02)
+      mode = "image"
+      imageView.isHidden = false
+      spinner.startAnimating()
+      PreviewLoad.image(f["cover"] as? String) { [weak self] img in guard let self, self.token == my else { return }; self.spinner.stopAnimating(); if let img { self.imageView.image = img; self.setNeedsLayout() } }
+      play.isHidden = false
     case "video", "audio":
       mode = "card"
       card(f, note: nil)
@@ -140,12 +147,12 @@ final class PreviewCell: UICollectionViewCell, UIScrollViewDelegate {
     cardType.text = ((f["ext"] as? String) ?? "file").uppercased()
     cardNote.text = note; cardNote.isHidden = note == nil
     cardPic.image = nil; cardPic.isHidden = true
+    cardType.isHidden = false
     let my = token
     PreviewLoad.image(f["cover"] as? String) { [weak self] img in
       guard let self, self.token == my, let img else { return }
       self.cardPic.image = img; self.cardPic.isHidden = false; self.cardType.isHidden = true; self.setNeedsLayout()
     }
-    cardType.isHidden = false
   }
   // the server's page pictures arrived (PDF / Office)
   func setPages(_ urls: [String], note: String?) {
@@ -404,7 +411,7 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
       l.textColor = .secondaryLabel; l.textAlignment = .center; l.autoresizingMask = [.flexibleWidth, .flexibleHeight]
       c.contentView.addSubview(l)
       let id = f["id"] as? String
-      PreviewLoad.image((f["thumb"] as? String) ?? (f["cover"] as? String)) { [weak c, weak cv] img in
+      PreviewLoad.image([f["thumb"] as? String, f["cover"] as? String].compactMap { $0 }.first { !$0.isEmpty }) { [weak c, weak cv] img in
         guard let c, let cv, let img, let now = cv.indexPath(for: c), now.item < self.files.count, (self.files[now.item]["id"] as? String) == id else { return }
         iv.image = img; l.isHidden = true
       }

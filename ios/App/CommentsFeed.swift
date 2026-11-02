@@ -576,7 +576,8 @@ final class CommentCell: UIView {
     // the type, in the middle until a picture covers it
     let typeL = UILabel(); typeL.text = ext.isEmpty ? "FILE" : String(ext.prefix(4)); typeL.font = .systemFont(ofSize: 15, weight: .bold); typeL.textColor = .secondaryLabel; typeL.textAlignment = .center
     if !pic { pin(typeL, 0, 0, 0, 28) }
-    let picURL = (f["thumbUrl"] as? String) ?? (pic ? f["url"] as? String : nil)
+    // (a photo: the server's smaller copy, quicker to come — the card is a third of the screen wide)
+    let picURL = (f["thumbUrl"] as? String) ?? (pic ? (f["url"] as? String)?.replacingOccurrences(of: "?view=1", with: "?w=480") : nil)
     let shimmer = Shimmer()
     if picURL != nil { pin(shimmer, 0, 0, 0, 0) }
     // the name (not on pictures), on a soft shade when there's a picture under it
