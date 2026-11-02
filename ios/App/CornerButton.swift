@@ -162,21 +162,24 @@ final class CornerButton: UIView {
   func go(left l: Spot, mid m: Spot, corner c: Spot, menu: UIMenu?, animated: Bool) {
     let was = (left, mid, corner)
     left = l; mid = m; corner = c
+    // (after a swipe back the buttons are already part way, where the finger left them: they just carry on from there
+    //  — the pull out of ••• below would start them all over again, Haris 2026-11-02)
+    let fromSwipe = scrubbed; scrubbed = false
     // Search opening: Home's own bar starts exactly where 🔍 is and stretches out — 🔍 hands over to it at once; closing,
     // the bar shrinks back into that circle and 🔍 takes over there, in place
-    let handOver = was.1.kind == "search" && m.kind == "none" && c.kind == "close"
-    let takeOver = m.kind == "search" && was.1.kind == "none" && (was.2.kind == "close" || searchBack)
+    let handOver = !fromSwipe && was.1.kind == "search" && m.kind == "none" && c.kind == "close"
+    let takeOver = !fromSwipe && m.kind == "search" && was.1.kind == "none" && (was.2.kind == "close" || searchBack)
     if handOver || takeOver { now { model.mid = b(m) } }
     // coming back from a task: 🔍 starts inside the ••• drop (unseen there), is pulled out of it, and its icon only
     // fades in once it's out — so it never sits on top of ••• (Haris, 2026-11-02)
-    let outOfCorner = m.kind == "search" && was.1.kind == "none" && was.2.kind == "more" && animated
+    let outOfCorner = !fromSwipe && m.kind == "search" && was.1.kind == "none" && was.2.kind == "more" && animated
     if outOfCorner { now { var s = b(m); s.frame = was.2.frame; s.icon = 0; model.mid = s } }
     let apply = {
       self.model.left = self.b(l); self.model.corner = self.b(c)
       if !handOver && !takeOver {
         // into a task: 🔍 slides into your photo's glass and stays glass until the two have melted into one drop (then it
         // goes, out of sight inside it); its icon fades on the way; your photo fades into ••• on the same glass
-        if m.kind == "none" && was.1.kind == "search" && c.kind != "none" { var s = self.b(was.1); s.frame = c.frame; s.icon = 0; self.model.mid = s }
+        if !fromSwipe && m.kind == "none" && was.1.kind == "search" && c.kind != "none" { var s = self.b(was.1); s.frame = c.frame; s.icon = 0; self.model.mid = s }
         else if outOfCorner { var s = self.b(m); s.icon = 0; self.model.mid = s }
         else { self.model.mid = self.b(m) }
       }
@@ -190,8 +193,10 @@ final class CornerButton: UIView {
     }
   }
   // part way between two sets (the swipe back): t = 0 at `a`, 1 at `b` — straight from the finger, no animation
+  private var scrubbed = false
   func between(_ a: (Spot, Spot, Spot), _ z: (Spot, Spot, Spot), _ t: CGFloat) {
     let t = max(0, min(1, t))
+    scrubbed = true
     func lerp(_ x: CGRect, _ y: CGRect) -> CGRect { CGRect(x: x.minX + (y.minX - x.minX) * t, y: x.minY + (y.minY - x.minY) * t, width: x.width + (y.width - x.width) * t, height: x.height + (y.height - x.height) * t) }
     func mix(_ x: Spot, _ y: Spot, into: Spot?) -> CornerModel.B {
       if x.kind == "none" && y.kind == "none" { return CornerModel.B() }
