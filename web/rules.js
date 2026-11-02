@@ -575,6 +575,7 @@ var E11Rules = (() => {
     const SEC_REVIEW = /^(internal )?review$/i, SEC_CTR = /^ctr$/i;
     const lockRoot = (t) => (t && t.parentId ? task(t.parentId) || t : t);
     const idLocked = (t) => { const r = lockRoot(t); return !!r && (!!r.lockedAt || (r.reviews || []).length > 0); };
+    const peopleLocked = (t) => !!t && !t.parentId && idLocked(t);   // (Assignees and Guardian too — Haris 2026-11-02)
     const lockedSince = (t) => { const r = lockRoot(t); return (r && (r.lockedAt || (r.reviews || []).map((x) => x.at).filter(Boolean).sort()[0])) || null; };
     const iReview = (t) => needsCD(t) && isMine(t) && !isCD(meId);
     const statusLocked = (t) => reviewPending(t);
@@ -605,7 +606,7 @@ var E11Rules = (() => {
         client: p ? { id: p.id, name: p.name, rgb: rgbOf(p.color || '#87909e') } : null,
         readOnly: ro, why: doneLocked(t) ? 'Completed tasks are read only' : amReadOnly(t) ? 'View only — you can’t change this task' : '',
         canTitle: !ro && can('editTitle', t) && !lockedId,
-        lock: lockedId ? { text: `${t.parentId ? 'Its name is locked with its main task' : 'Name, description and client are locked'} — ${t.parentId ? 'it' : 'this task'} went for CD review${lockedSince(t) ? ` on ${fmtDay(String(lockedSince(t)).slice(0, 10))}` : ''}.`, from: !t.parentId && can('createTask', t) } : null,
+        lock: lockedId ? { text: `${t.parentId ? 'Its name is locked with its main task' : 'Name, description, client, assignees and guardian are locked'} — ${t.parentId ? 'it' : 'this task'} went for CD review${lockedSince(t) ? ` on ${fmtDay(String(lockedSince(t)).slice(0, 10))}` : ''}.`, from: !t.parentId && can('createTask', t) } : null,
         basedOn: t.basedOn && task(t.basedOn) ? { id: t.basedOn, title: task(t.basedOn).title || 'Untitled task' } : null,
         kids: db.tasks.filter((x) => x.basedOn === t.id).map((x) => ({ id: x.id, title: x.title || 'Untitled task' })),
         completed: t.done ? { at: t.completedAt ? dayOf(t.completedAt) : '', label: t.completedAt ? fmtDay(dayOf(t.completedAt)) : '', left: t.completedAt ? Math.max(0, 30 - Math.floor((nowMs() - Date.parse(t.completedAt)) / 86400000)) : null, canReopen: canReopen(t), canFrom: !t.parentId && can('createTask', t) } : null,
@@ -614,7 +615,7 @@ var E11Rules = (() => {
           options: list.map((x) => ({ id: x.id, name: x.name, rgb: rgbOf(x.color || '#87909e'), on: !t.done && x.id === t.sectionId, locked: cdWait && x.id !== t.sectionId && pastReview(t, x.id) })) },
         cd: !t.parentId && (needsCD(t) || t.cdStatus) && t.cdStatus && CD[t.cdStatus] ? { label: t.cdStatus === 'approved' ? 'CD Approved' : 'CD · Review', rgb: rgbOf(CD[t.cdStatus].color), check: t.cdStatus === 'approved' } : null,
         creator: t.createdBy && userById(t.createdBy) ? { id: person(t.createdBy), when: t.createdAt ? fmtDay(dayOf(t.createdAt)) : '' } : null,
-        assignees: ids.map((x) => ({ id: person(x), done: partDone(t, x) })), canAssign: !ro && can('assign', t),
+        assignees: ids.map((x) => ({ id: person(x), done: partDone(t, x) })), canAssign: !ro && can('assign', t) && !(lockedId && !t.parentId),
         parts: !t.parentId && !t.done && ids.length ? {
           n: ids.filter((x) => partDone(t, x)).length, of: ids.length,
           chips: ids.map((x) => ({ id: x, name: firstName(x), done: partDone(t, x), pending: !partDone(t, x) && needsCD(t) && reviewState(t, x) === 'pending' })),
@@ -628,7 +629,7 @@ var E11Rules = (() => {
           return { key: k, name: k === '_' ? '' : firstName(k), v: v === 'none' ? '' : String(v), label: v === 'urgent' ? 'Urgent' : v === 'none' ? '' : String(v), taken: !ro && can('editPriority', t) ? prioTaken(t, k) : [] };
         }), canPrio: !ro && can('editPriority', t),
         tags: (t.tags || []).map((g) => ({ t: g, rgb: tagRgb(g) })), canTags: !ro && can('addTag', t), canRemoveTag: !ro && can('removeTag', t), allTags: !ro && can('addTag', t) ? allTags() : [],
-        pool: !ro && can('assign', t) ? assignPool(t) : [], channelKeys: t.channels || [], canChannels: !ro && !t.parentId && !!u && (isAdm(u) || u.role === 'am' || u.role === 'social'), canGuardian: !ro && !t.parentId && can('assign', t),
+        pool: !ro && can('assign', t) && !(lockedId && !t.parentId) ? assignPool(t) : [], channelKeys: t.channels || [], canChannels: !ro && !t.parentId && !!u && (isAdm(u) || u.role === 'am' || u.role === 'social'), canGuardian: !ro && !t.parentId && can('assign', t) && !lockedId,
         canClient: !ro && !t.parentId && can('editProject', t) && !lockedId, clients: !ro && !t.parentId && can('editProject', t) && !lockedId ? movable().map((p) => ({ id: p.id, name: p.name, rgb: rgbOf(p.color || '#87909e'), on: p.id === t.projectId })) : [], allChannels: Object.entries(CHANNEL_NAMES).map(([k, n]) => ({ k, n })),
         channels: (t.channels || []).map((c) => CHANNEL_NAMES[c] || c),
         guardian: t.guardian && userById(t.guardian) ? person(t.guardian) : null,
@@ -1217,7 +1218,7 @@ var E11Rules = (() => {
       };
     }
 
-    return { home, myTasks, myTasksFilters, inbox, inboxRow, clientsList, clientPage, setFinance, canFinance, myDayData, cardOf, can, amReadOnly, canComplete, completeBlocked, dayTitle, statusInfo, sectionOf,
+    return { peopleLocked, home, myTasks, myTasksFilters, inbox, inboxRow, clientsList, clientPage, setFinance, canFinance, myDayData, cardOf, can, amReadOnly, canComplete, completeBlocked, dayTitle, statusInfo, sectionOf,
       notifGroups: NOTIF_GROUPS, doneLocked, canReopen, finish, finishBlocked, canFinish, moveToStatus, logActivity, logChange, pushNotif, notifyWatchers, checkPrioConflict, setDone, setDue, setClientApproval, asksClientApproval, deleteTask, watchersOf, creatorOf, clientAmsOf, fmtDue,
       taskPage, setTitle, setStart, setStatus, setMyPart, setPrio, prioTaken, toggleCheck, setNeedsCD, setUpdate, idLocked,
       setAssignee, setGuardian, addTag, removeTag, setChannels, addCheck, addSubtask, setClient, commentsFeed, toggleReaction, deleteComment, setDesc, submitReview, withdrawReview, postComment, editComment, mentionable, attachFilesTo };

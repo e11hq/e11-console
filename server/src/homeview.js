@@ -151,6 +151,7 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
       else if (a === 'needsCD') r = rules.setNeedsCD(t, !!body.value);
       else if (a === 'update') { if (t.parentId) return fail(400, 'Not on a subtask'); r = rules.setUpdate(t, body.value ? String(body.value) : null); }
       else if (a === 'finance') { if (t.parentId || !rules.canFinance(t)) return fail(403, 'Your role doesn’t allow changing the Finance status'); r = rules.setFinance(t, body.value ? String(body.value) : null); }
+      else if ((a === 'assign' || a === 'guardian') && rules.peopleLocked(t)) return fail(403, `${a === 'assign' ? 'Assignees are' : 'Guardian is'} locked since this task went for CD review`);
       else if (a === 'assign') { if (!rules.can('assign', t)) return fail(403, 'Your role doesn’t allow assigning'); r = rules.setAssignee(t, String(body.key || ''), !!body.value); }
       else if (a === 'guardian') { if (!rules.can('assign', t) || t.parentId) return fail(403, 'Your role doesn’t allow this'); r = rules.setGuardian(t, body.value ? String(body.value) : null); }
       else if (a === 'addTag') { if (!rules.can('addTag', t)) return fail(403, 'Your role doesn’t allow adding tags'); r = rules.addTag(t, body.value); }

@@ -1848,7 +1848,7 @@ function updatesByUse() {
 const fieldPill = (v, color) => `<span class="fl-pill" style="--c:${color}">${esc(v)}${icon('chev')}</span>`;
 function fieldsHTML(t) {
   const mgr = isManager() && amScope(t);
-  const canGuard = can('assign');
+  const canGuard = canAssignHere(t);
   const rows = [
     { k: 'update', ic: 'select', l: 'Task Update', v: t.update, html: t.update ? fieldPill(t.update, UPDATE_COLOR(t.update)) : '', edit: true },
     ...(mgr ? [{ k: 'finance', ic: 'coin', l: 'Finance', v: t.finance, html: t.finance ? fieldPill(t.finance, FINANCE[t.finance] || '#9aa4b2') : '', edit: true }] : []),
@@ -1882,6 +1882,7 @@ function fieldMenu(anchor, k) {
     if (!(isManager() && amScope(task(ui.taskId)))) return denied();
     items = Object.entries(FINANCE).map(([v, c]) => ({ html: `<div class="mi">${fieldPill(v, c).replace(icon('chev'), '')}${ck(cur === v)}</div>`, run: () => set(v) }));
   } else if (k === 'guardian') {
+    if (peopleLocked(task(ui.taskId))) { toast('Guardian is locked since this task went for CD review'); return; }
     if (!can('assign')) return denied();
     [['production', 'Production'], ['social', 'Social'], ['freelancer', 'Freelancers']].forEach(([r, label]) => {
       const us = activeUsers().filter((u) => u.role === r);
@@ -3789,8 +3790,8 @@ function renderDetail() {
             ${t.done || canComplete(t) ? `<button class="done-btn ${t.done ? 'on' : ''}" data-action="toggle" data-id="${t.id}" title="${t.done ? 'Reopen' : 'Mark complete'}">${icon('check')}</button>` : ''}
           </div></div>
           <div class="prop prop-asg"><label>${icon('user')}Assignees</label><div class="pv">${(t.assignees || []).length
-            ? `<div class="asg-stack ${can('assign') ? '' : 'ro'}">${t.assignees.map((id) => `<span class="asg-av ${partDone(t, id) ? 'pdone' : ''}" ${can('assign') ? 'data-action="assign-menu"' : ''} title="${esc(fullName(userById(id)))}${partDone(t, id) ? ' — part done' : ''}">${avatarHTML(id, 28)}${partDone(t, id) ? `<i class="pd-tick">${icon('check')}</i>` : ''}${can('assign') ? `<button class="asg-x" data-action="unassign" data-id="${id}" title="Remove ${esc(fullName(userById(id)))}">${icon('x')}</button>` : ''}</span>`).join('')}</div>`
-            : (can('assign') ? `<button class="pv-empty" data-action="assign-menu">Empty</button>` : '<span class="pv-empty">Empty</span>')}${can('assign') && (t.assignees || []).length ? `<button class="asg-add" data-action="assign-menu" title="Assign people">${icon('plus')}</button>` : ''}</div></div>
+            ? `<div class="asg-stack ${canAssignHere(t) ? '' : 'ro'}">${t.assignees.map((id) => `<span class="asg-av ${partDone(t, id) ? 'pdone' : ''}" ${canAssignHere(t) ? 'data-action="assign-menu"' : ''} title="${esc(fullName(userById(id)))}${partDone(t, id) ? ' — part done' : ''}">${avatarHTML(id, 28)}${partDone(t, id) ? `<i class="pd-tick">${icon('check')}</i>` : ''}${canAssignHere(t) ? `<button class="asg-x" data-action="unassign" data-id="${id}" title="Remove ${esc(fullName(userById(id)))}">${icon('x')}</button>` : ''}</span>`).join('')}</div>`
+            : (canAssignHere(t) ? `<button class="pv-empty" data-action="assign-menu">Empty</button>` : '<span class="pv-empty">Empty</span>')}${canAssignHere(t) && (t.assignees || []).length ? `<button class="asg-add" data-action="assign-menu" title="Assign people">${icon('plus')}</button>` : ''}</div></div>
           ${partsRow(t)}
           ${cdReviewRow(t)}
           ${clientApprovalRow(t)}
@@ -5682,6 +5683,7 @@ function cdMenu(anchor) {
 
 /* ---- Assignees ---- */
 function setAssignee(t, userId, on) {
+  if (peopleLocked(t)) { toast('Assignees are locked since this task went for CD review'); return; }
   if (!can('assign')) return denied();
   if (on && !assignable(userById(userId))) { toast('Only Production, Social, Freelancers and the Creative Director can be assigned'); return; }
   if (on && userId === cdUserId() && t.cdRule && needsCD(t)) { toast('This task needs CD review, so the Creative Director can’t be assigned to it. Turn off “Needs CD review” first.'); return; }
@@ -5711,6 +5713,7 @@ function setAssignee(t, userId, on) {
 }
 // Floating people picker: search, current assignees (× to remove) and everyone else
 function assignMenu(anchor) {
+  if (peopleLocked(task(ui.taskId))) { toast('Assignees are locked since this task went for CD review'); return; }
   if (!can('assign')) return denied();
   closeMenus();
   const t = task(ui.taskId);
@@ -7719,6 +7722,9 @@ const hasApproved = (t) => (t.reviews || []).some((r) => r.state === 'approved')
    so a task can't be turned into another job and carried on. The server refuses the same changes (access.js).
    Brief changes go in comments (Pin to brief); a similar job is a new task (New task from this). */
 const lockRoot = (t) => (t && t.parentId ? task(t.parentId) || t : t);
+// (a main task gone for CD review: its Assignees and Guardian lock too — Haris 2026-11-02)
+const peopleLocked = (t) => !!t && !t.parentId && idLocked(t);
+const canAssignHere = (t) => can('assign') && !peopleLocked(t);
 const idLocked = (t) => { const r = lockRoot(t); return !!r && (!!r.lockedAt || (r.reviews || []).length > 0); };
 const lockedSince = (t) => { const r = lockRoot(t); return (r && (r.lockedAt || (r.reviews || []).map((x) => x.at).filter(Boolean).sort()[0])) || null; };
 function lockNoteHTML(t) {
@@ -7726,7 +7732,7 @@ function lockNoteHTML(t) {
   const at = lockedSince(t);
   const kids = db.tasks.filter((x) => x.basedOn === t.id);
   const from = t.basedOn && task(t.basedOn);
-  return `<div class="id-lock">${icon('lock')}<span>${t.parentId ? 'Its name is locked with its main task' : 'Name, description and client are locked'} — ${t.parentId ? 'it' : 'this task'} went for CD review${at ? ` on ${esc(fmtDay(at.slice(0, 10)))}` : ''}.${kids.length ? ` <span class="id-kids">New tasks from this: ${kids.map((k) => `<a href="#" data-action="open-task" data-id="${k.id}">${esc(k.title || 'Untitled task')}</a>`).join(', ')}</span>` : ''}</span>
+  return `<div class="id-lock">${icon('lock')}<span>${t.parentId ? 'Its name is locked with its main task' : 'Name, description, client, assignees and guardian are locked'} — ${t.parentId ? 'it' : 'this task'} went for CD review${at ? ` on ${esc(fmtDay(at.slice(0, 10)))}` : ''}.${kids.length ? ` <span class="id-kids">New tasks from this: ${kids.map((k) => `<a href="#" data-action="open-task" data-id="${k.id}">${esc(k.title || 'Untitled task')}</a>`).join(', ')}</span>` : ''}</span>
     ${!t.parentId && can('createTask') ? `<button class="btn xs" data-action="task-from">${icon('plus')}New task from this</button>` : ''}</div>${from ? '' : ''}`;
 }
 const basedOnHTML = (t) => { const f = t.basedOn && task(t.basedOn); return f ? `<div class="id-from">${icon('link')}<span>New task from <a href="#" data-action="open-task" data-id="${f.id}">${esc(f.title || 'Untitled task')}</a></span></div>` : ''; };

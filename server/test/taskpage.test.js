@@ -263,3 +263,17 @@ test('Finance status: the client\'s Account Manager and Admins see and change it
   r = await act('am@e11-digital.com', { act: 'finance', id: 't1', value: 'Nope' });
   assert.equal(r.ok, false);
 });
+
+test('a task gone for CD review: its Assignees and Guardian lock too (Haris 2026-11-02)', async () => {
+  const orig = T('t1');
+  app.store.apply([{ kind: 'tasks', id: 't1', data: { ...orig, lockedAt: '2026-11-01T10:00:00Z' } }], 'u-am');
+  try {
+    const m = (await page('am@e11-digital.com', 't1')).task;
+    assert.equal(m.canAssign, false); assert.equal(m.canGuardian, false); assert.deepEqual(m.pool, []);
+    assert.match(m.lock.text, /assignees and guardian are locked/);
+    let r = await act('am@e11-digital.com', { act: 'assign', id: 't1', key: 'u-prod', value: true });
+    assert.equal(r.ok, false);
+    r = await act('am@e11-digital.com', { act: 'guardian', id: 't1', value: 'u-prod' });
+    assert.equal(r.ok, false);
+  } finally { app.store.apply([{ kind: 'tasks', id: 't1', data: orig }], 'u-am'); }
+});
