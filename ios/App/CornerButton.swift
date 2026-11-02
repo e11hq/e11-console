@@ -71,7 +71,7 @@ struct CornerBar: View {
       .frame(width: b.frame.width, height: b.frame.height)
       // (the middle one: each kind its own glass shape — 🔍 and Mark all read — so iPhone morphs one glass into the other,
       //  the liquid drop way. The corner — your photo, ••• and ✕ — is one glass that stays: what's on it cross-fades.)
-      .modifier(GlassLook(id: id == "mid" ? id + "-" + b.kind : id, ns: ns, fade: b.fade))
+      .modifier(GlassLook(id: id == "mid" ? id + "-" + b.kind : id, ns: ns, fade: b.fade, blue: b.kind == "done"))
       .opacity(b.opacity)
       .position(x: b.frame.midX, y: b.frame.midY)
       .id(id == "mid" ? id + "-" + b.kind : id)
@@ -87,7 +87,7 @@ struct CornerBar: View {
       if let img = b.image { Image(uiImage: img).resizable().scaledToFill().frame(width: b.frame.width, height: b.frame.height).clipShape(Circle()) }
       else { Circle().fill(Color.gray.opacity(0.3)) }
     case "read", "unread", "done":
-      Text(b.text).font(.system(size: 15, weight: .semibold)).foregroundStyle(b.kind == "done" ? Color.blue : Color.primary)
+      Text(b.text).font(.system(size: 15, weight: .semibold)).foregroundStyle(b.kind == "done" ? Color.white : Color.primary)
         .frame(width: b.frame.width, height: b.frame.height).contentShape(Capsule())
     default:
       let sym = ["back": "chevron.left", "search": "magnifyingglass", "more": "ellipsis", "close": "xmark"][b.kind] ?? "circle"
@@ -109,10 +109,12 @@ struct CornerBar: View {
 // the glass, with its id, so iPhone morphs it (before iOS 26: a soft material)
 private struct GlassLook: ViewModifier {
   let id: String; let ns: Namespace.ID; var fade = false
+  var blue = false   // (Done while writing the description: blue glass with white words, so it's seen — Haris 2026-11-02)
   func body(content: Content) -> some View {
     // (a button that comes or goes on its own — ‹ into a task, 🔍 or Mark all read appearing, ✕ in search — forms out of
     //  a blur and settles, iPhone's own Liquid Glass "materialize"; one that turns into another still morphs into it)
-    if #available(iOS 26.0, *) { content.glassEffect(.regular.interactive(), in: Capsule()).glassEffectID(id, in: ns).glassEffectTransition(fade ? .materialize : .matchedGeometry) }
+    if #available(iOS 26.0, *) { content.glassEffect(blue ? .regular.tint(.blue).interactive() : .regular.interactive(), in: Capsule()).glassEffectID(id, in: ns).glassEffectTransition(fade ? .materialize : .matchedGeometry) }
+    else if blue { content.background(Color.blue, in: Capsule()) }
     else { content.background(.ultraThinMaterial, in: Capsule()) }
   }
 }
@@ -239,7 +241,14 @@ final class CornerButton: UIView {
 // ---------- on the app's screen ----------
 extension Main {
   // the three spots now: the top task page's, else the shown screen's
+  // (whole points: worked out mid-slide and again once settled, the same place came out a fraction apart, and the
+  //  buttons crept by it after they had settled — Haris, 2026-11-02)
   func cornerTarget(skipTop: Bool = false) -> (CornerButton.Spot, CornerButton.Spot, CornerButton.Spot) {
+    let t = cornerTargetRaw(skipTop: skipTop)
+    func r(_ s: CornerButton.Spot) -> CornerButton.Spot { var x = s; x.frame = CGRect(x: x.frame.minX.rounded(), y: x.frame.minY.rounded(), width: x.frame.width.rounded(), height: x.frame.height.rounded()); return x }
+    return (r(t.0), r(t.1), r(t.2))
+  }
+  private func cornerTargetRaw(skipTop: Bool) -> (CornerButton.Spot, CornerButton.Spot, CornerButton.Spot) {
     let pages = skipTop ? Array(taskPages.dropLast()) : taskPages
     if let p = pages.last {
       if p.cornerFrame.width == 0 { p.setNeedsLayout(); p.layoutIfNeeded() }   // (never aim at a page not laid out yet)

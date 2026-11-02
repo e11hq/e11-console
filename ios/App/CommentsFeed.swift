@@ -261,7 +261,8 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
     onLoaded?(m)
     if let pp = m["people"] as? [String: [String: Any]] { people.merge(pp) { _, b in b } }
     let items = ((m["items"] as? [[String: Any]]) ?? []) + pending.map { $0.item }
-    let atEnd = mine || isAtEnd()   // (your own voice message: down to it)
+    let atEnd = mine || wantEnd || isAtEnd()   // (your own voice message, or a comment you've just sent: down to it)
+    wantEnd = false
     let keepTopId = order.first { (cells[$0]?.frame.maxY ?? 0) > scroll.contentOffset.y + scroll.contentInset.top }
     let keepTopY = keepTopId.flatMap { cells[$0] }.map { $0.frame.minY - scroll.contentOffset.y }
     // (Haris, 2026-11-02: a comment arriving while you're here — anyone's, with files or not — gets its room first, then
@@ -320,6 +321,7 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
     tellSeen()
   }
   private var pendingNew = 0
+  var wantEnd = false   // (the next drawing goes down to the latest)
   private var schedViews: [ScheduledCard] = []
 
   // ---------- layout ----------

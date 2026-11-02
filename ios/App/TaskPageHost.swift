@@ -362,6 +362,8 @@ extension Main {
         if !ok { p.toast(err ?? "Not sent — try again") }
         done(ok)
         if let m = m { p.draw(m) }
+        // (sent: down to the latest, where it is — Haris, 2026-11-02)
+        if ok { p.feed?.wantEnd = true; p.threadFeed?.wantEnd = true }
         p.feed?.load(); p.threadFeed?.load()
       }
     }

@@ -357,7 +357,8 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
   static func paintPick(_ c: UICollectionViewCell, _ on: Bool, animated: Bool) {
     c.contentView.layer.borderWidth = 0
     c.layer.cornerRadius = 10; c.layer.borderColor = UIColor.label.cgColor
-    let go = { c.layer.borderWidth = on ? 2 : 0; c.contentView.transform = on ? CGAffineTransform(scaleX: 0.8, y: 0.8) : .identity }
+    let inner = c.contentView.viewWithTag(77)
+    let go = { c.layer.borderWidth = on ? 2 : 0; inner?.transform = on ? CGAffineTransform(scaleX: 0.8, y: 0.8) : .identity; inner?.layer.cornerRadius = on ? 6 : 8 }
     if animated { UIView.animate(withDuration: 0.25, delay: 0, usingSpringWithDamping: 0.8, initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState], animations: go) } else { go() }
   }
   private func refreshBars() {
@@ -416,12 +417,18 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
       c.contentView.subviews.forEach { $0.removeFromSuperview() }
       c.contentView.layer.cornerRadius = 8; c.contentView.clipsToBounds = true
       c.contentView.backgroundColor = .tertiarySystemFill
-      PreviewVC.paintPick(c, ip.item == at, animated: false)
-      let iv = UIImageView(frame: c.contentView.bounds); iv.contentMode = .scaleAspectFill; iv.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-      c.contentView.addSubview(iv)
-      let l = UILabel(frame: c.contentView.bounds); l.text = ((f["ext"] as? String) ?? "").uppercased(); l.font = .systemFont(ofSize: 10, weight: .bold)
+      // (the picture in a box of its own inside the cell: that box shrinks for the one showing — the cell's own content
+      //  view is placed by the strip, and shrinking it made the pictures jump: Haris 2026-11-02)
+      c.contentView.clipsToBounds = false; c.contentView.backgroundColor = .clear; c.contentView.layer.cornerRadius = 0
+      let inner = UIView(frame: c.contentView.bounds); inner.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+      inner.backgroundColor = .tertiarySystemFill; inner.layer.cornerRadius = 8; inner.clipsToBounds = true; inner.tag = 77
+      c.contentView.addSubview(inner)
+      let iv = UIImageView(frame: inner.bounds); iv.contentMode = .scaleAspectFill; iv.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+      inner.addSubview(iv)
+      let l = UILabel(frame: inner.bounds); l.text = ((f["ext"] as? String) ?? "").uppercased(); l.font = .systemFont(ofSize: 10, weight: .bold)
       l.textColor = .secondaryLabel; l.textAlignment = .center; l.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-      c.contentView.addSubview(l)
+      inner.addSubview(l)
+      PreviewVC.paintPick(c, ip.item == at, animated: false)
       // (the cell remembers which file it's showing now: a picture already loaded comes back before the cell is on the
       //  screen — asking the strip where the cell was then gave nothing, so photos never showed)
       let key = (f["id"] as? String ?? "") + "#\(ip.item)"

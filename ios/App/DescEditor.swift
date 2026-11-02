@@ -75,6 +75,10 @@ extension TaskPage {
   }
   private func descBar() -> UIView {
     let bar = UIInputView(frame: CGRect(x: 0, y: 0, width: 400, height: 46), inputViewStyle: .keyboard)
+    // (solid, with a hairline on top — over the page it was see-through and the text showed behind it: Haris 2026-11-02)
+    bar.backgroundColor = .secondarySystemBackground
+    let hair = UIView(); hair.backgroundColor = .separator; hair.translatesAutoresizingMaskIntoConstraints = false; bar.addSubview(hair)
+    NSLayoutConstraint.activate([hair.leadingAnchor.constraint(equalTo: bar.leadingAnchor), hair.trailingAnchor.constraint(equalTo: bar.trailingAnchor), hair.topAnchor.constraint(equalTo: bar.topAnchor), hair.heightAnchor.constraint(equalToConstant: 1 / UIScreen.main.scale)])
     let s = UIStackView(); s.spacing = 4; s.alignment = .center
     let items: [(String, String)] = [("bold", "b"), ("italic", "i"), ("underline", "u"), ("list.bullet", "ul"), ("list.number", "ol"), ("at", "@"), ("link", "link")]
     for (sym, k) in items {

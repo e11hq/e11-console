@@ -653,7 +653,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if lock { s.addArrangedSubview(symbol("lock.fill", 10, .secondaryLabel)) }
     s.addArrangedSubview(UIView())
     s.isLayoutMarginsRelativeArrangement = true
-    s.layoutMargins = UIEdgeInsets(top: 14, left: 0, bottom: 0, right: 0)
+    s.layoutMargins = UIEdgeInsets(top: 4, left: 0, bottom: 0, right: 0)
     s.tag = 7   // (closer to its group)
     return s
   }
@@ -1145,11 +1145,18 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
 
   // ---------- the title, edited in place ----------
   func textView(_ tv: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
-    if tv === descView { return true }
+    if tv === descView {
+      // (typing after a mention, or where one was deleted: plain words again, not the mention's blue — Haris 2026-11-02)
+      if !text.isEmpty, tv.typingAttributes[MENTION_KEY] != nil {
+        var a = tv.typingAttributes; a[MENTION_KEY] = nil; a[.foregroundColor] = UIColor.label; a[.link] = nil; tv.typingAttributes = a
+      }
+      return true
+    }
     if text == "\n" { tv.resignFirstResponder(); return false }
     return true
   }
-  func textViewDidBeginEditing(_ tv: UITextView) { if tv === descView { beginDesc() } }
+  // (writing in the description opens it all, as Expand does)
+  func textViewDidBeginEditing(_ tv: UITextView) { if tv === descView { descBox.expand(); beginDesc() } }
   func textViewDidChange(_ tv: UITextView) { setNeedsLayout(); if tv === descView { descChanged() } }
   func textViewDidEndEditing(_ tv: UITextView) {
     if tv === descView { return }

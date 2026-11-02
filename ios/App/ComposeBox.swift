@@ -236,6 +236,13 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     paintSend()
     lookForMention()
   }
+  // (typing after a mention, or where one was deleted: plain words again, not the mention's blue — Haris 2026-11-02)
+  func textView(_ tv: UITextView, shouldChangeTextIn range: NSRange, replacementText t: String) -> Bool {
+    if !t.isEmpty, tv.typingAttributes[MENTION_KEY] != nil || (tv.typingAttributes[.foregroundColor] as? UIColor) == .systemBlue {
+      tv.typingAttributes = [.font: UIFont.systemFont(ofSize: 17), .foregroundColor: UIColor.label]
+    }
+    return true
+  }
   func setText(_ a: NSAttributedString) { text.attributedText = a; textViewDidChange(text) }
 
   // ---------- @ people (above the box) ----------
