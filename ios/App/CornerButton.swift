@@ -30,6 +30,7 @@ final class CornerModel: ObservableObject {
     var image: UIImage? = nil
     var opacity: Double = 1
     var icon: Double = 1       // (what's on the glass: 🔍 fades as it melts into •••, and in again once it's out)
+    var fade = false           // (coming from nothing or going to nothing: iPhone's own "materialize" — not a morph)
   }
   @Published var left = B()
   @Published var mid = B()
@@ -70,7 +71,7 @@ struct CornerBar: View {
       .frame(width: b.frame.width, height: b.frame.height)
       // (the middle one: each kind its own glass shape — 🔍 and Mark all read — so iPhone morphs one glass into the other,
       //  the liquid drop way. The corner — your photo, ••• and ✕ — is one glass that stays: what's on it cross-fades.)
-      .modifier(GlassLook(id: id == "mid" ? id + "-" + b.kind : id, ns: ns))
+      .modifier(GlassLook(id: id == "mid" ? id + "-" + b.kind : id, ns: ns, fade: b.fade))
       .opacity(b.opacity)
       .position(x: b.frame.midX, y: b.frame.midY)
       .id(id == "mid" ? id + "-" + b.kind : id)
@@ -107,9 +108,11 @@ struct CornerBar: View {
 }
 // the glass, with its id, so iPhone morphs it (before iOS 26: a soft material)
 private struct GlassLook: ViewModifier {
-  let id: String; let ns: Namespace.ID
+  let id: String; let ns: Namespace.ID; var fade = false
   func body(content: Content) -> some View {
-    if #available(iOS 26.0, *) { content.glassEffect(.regular.interactive(), in: Capsule()).glassEffectID(id, in: ns) }
+    // (a button that comes or goes on its own — ‹ into a task, 🔍 or Mark all read appearing, ✕ in search — forms out of
+    //  a blur and settles, iPhone's own Liquid Glass "materialize"; one that turns into another still morphs into it)
+    if #available(iOS 26.0, *) { content.glassEffect(.regular.interactive(), in: Capsule()).glassEffectID(id, in: ns).glassEffectTransition(fade ? .materialize : .matchedGeometry) }
     else { content.background(.ultraThinMaterial, in: Capsule()) }
   }
 }
@@ -175,19 +178,31 @@ final class CornerButton: UIView {
     // fades in once it's out — so it never sits on top of ••• (Haris, 2026-11-02)
     let outOfCorner = !fromSwipe && m.kind == "search" && was.1.kind == "none" && was.2.kind == "more" && animated
     if outOfCorner { now { var s = b(m); s.frame = was.2.frame; s.icon = 0; model.mid = s } }
+    // (a button going to nothing — not melting into another: marked first, so it leaves the native way; one coming from
+    //  nothing is marked as it comes)
+    let midMelt = m.kind == "none" && was.1.kind == "search" && c.kind != "none"
+    let goes = (left: was.0.kind != "none" && l.kind == "none", mid: was.1.kind != "none" && m.kind == "none" && !midMelt && !handOver && !fromSwipe, corner: was.2.kind != "none" && c.kind == "none")
+    let comes = (left: was.0.kind == "none" && l.kind != "none", mid: was.1.kind == "none" && m.kind != "none" && !outOfCorner && !takeOver && !fromSwipe, corner: was.2.kind == "none" && c.kind != "none")
+    let marked = animated && (goes.left || goes.mid || goes.corner)
+    if marked { now { if goes.left { model.left.fade = true }; if goes.mid { model.mid.fade = true }; if goes.corner { model.corner.fade = true } } }
     let apply = {
-      self.model.left = self.b(l); self.model.corner = self.b(c)
+      var nl = self.b(l); nl.fade = comes.left; self.model.left = nl
+      var nc = self.b(c); nc.fade = comes.corner; self.model.corner = nc
       if !handOver && !takeOver {
         // into a task: 🔍 slides into your photo's glass and stays glass until the two have melted into one drop (then it
         // goes, out of sight inside it); its icon fades on the way; your photo fades into ••• on the same glass
         if !fromSwipe && m.kind == "none" && was.1.kind == "search" && c.kind != "none" { var s = self.b(was.1); s.frame = c.frame; s.icon = 0; self.model.mid = s }
         else if outOfCorner { var s = self.b(m); s.icon = 0; self.model.mid = s }
-        else { var s = self.b(m); if fromSwipe && m.kind == "search" { s.icon = iconWas }; self.model.mid = s }
+        else { var s = self.b(m); if fromSwipe && m.kind == "search" { s.icon = iconWas }; s.fade = comes.mid; self.model.mid = s }
       }
     }
     if !animated { now(apply); if m.kind == "none" { now { model.mid = b(m) } }; return }
-    if #available(iOS 17.0, *) { withAnimation(.spring(duration: CornerButton.duration, bounce: CornerButton.bounce)) { apply() } }
-    else { withAnimation(.spring(response: CornerButton.duration, dampingFraction: 0.78)) { apply() } }
+    // (a button marked to leave the native way is drawn so once before it goes: the change waits for the next frame)
+    let spring = {
+      if #available(iOS 17.0, *) { withAnimation(.spring(duration: CornerButton.duration, bounce: CornerButton.bounce)) { apply() } }
+      else { withAnimation(.spring(response: CornerButton.duration, dampingFraction: 0.78)) { apply() } }
+    }
+    if marked { DispatchQueue.main.async(execute: spring) } else { spring() }
     if outOfCorner { withAnimation(.easeOut(duration: 0.22).delay(0.2)) { model.mid.icon = 1 } }
     // (after a swipe: the icon finishes fading in on its own, after the glass — not at once with the spring)
     if fromSwipe && m.kind == "search" && iconWas < 1 { withAnimation(.easeOut(duration: 0.25).delay(0.08)) { model.mid.icon = 1 } }
