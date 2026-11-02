@@ -498,7 +498,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // (Haris, 2026-11-02: these can be changed from the phone again, each by whoever's role allows it — the server's
     //  own can… say who: the title, Status, Task Update, Assignees, Priority, Client and the description; the rest stays
     //  view only)
-    for k in ["canTags", "canRemoveTag", "canChannels", "canGuardian", "canAddSub", "canCheck", "canAddCheck", "canDelete"] { m[k] = false }
+    for k in ["canTags", "canRemoveTag", "canChannels", "canAddSub", "canCheck", "canAddCheck", "canDelete"] { m[k] = false }   // (Guardian and Finance: by role — Haris 2026-11-02)
     if var st = m["status"] as? [String: Any] { st["next"] = nil; m["status"] = st }
     if var c = m["completed"] as? [String: Any] { c["canFrom"] = false; c["canReopen"] = false; m["completed"] = c }
     if var l = m["lock"] as? [String: Any] { l["from"] = false; m["lock"] = l }
@@ -560,6 +560,16 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if let p = m["parts"] as? [String: Any] { g.append(partsRow(p)) }
     if let d = m["dates"] as? [String: Any] { g.append(datesRow(d)) }
     if let pr = m["prio"] as? [[String: Any]] { g.append(contentsOf: prioRows(pr, can: (m["canPrio"] as? Bool) == true)) }
+    // Guardian and Finance, above Client (Haris 2026-11-02): each changed by whoever's role allows it
+    let canGd = (m["canGuardian"] as? Bool) == true
+    if let gd = m["guardian"] as? String { g.append(row(sym: "star", key: "Guardian", value: personLine(gd, extra: ""), chevron: canGd, tap: canGd ? { [weak self] in self?.pickGuardian() } : nil)) }
+    else if canGd { g.append(row(sym: "star", key: "Guardian", value: greyText("None"), chevron: true, tap: { [weak self] in self?.pickGuardian() })) }
+    if let fin = m["finance"] as? [String: Any] {
+      let cur = fin["v"] as? String ?? ""
+      let canFin = (m["canFinance"] as? Bool) == true
+      let v: UIView = cur.isEmpty ? greyText(canFin ? "None" : "–") : pill(cur, fg: TaskPage.rgb(fin["rgb"]), bg: TaskPage.rgb(fin["rgb"]).withAlphaComponent(0.16))
+      g.append(row(sym: "dollarsign.circle", key: "Finance", value: v, chevron: canFin, tap: canFin ? { [weak self] in self?.pickFinance(cur) } : nil))
+    }
     if (m["sub"] as? Bool) != true {
       let c = m["client"] as? [String: Any]
       let v = UIStackView(); v.axis = .horizontal; v.spacing = 6; v.alignment = .center
@@ -575,9 +585,6 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let ch = (m["channels"] as? [String]) ?? []
     let canCh = (m["canChannels"] as? Bool) == true
     if !ch.isEmpty || canCh { g.append(row(sym: "paperplane", key: "Channels", value: label(ch.isEmpty ? "None" : ch.joined(separator: " · "), size: TaskPage.T, color: .secondaryLabel), chevron: canCh, tap: canCh ? { [weak self] in self?.pickChannels() } : nil)) }
-    let canGd = (m["canGuardian"] as? Bool) == true
-    if let gd = m["guardian"] as? String { g.append(row(sym: "star", key: "Guardian", value: personLine(gd, extra: ""), chevron: canGd, tap: canGd ? { [weak self] in self?.pickGuardian() } : nil)) }
-    else if canGd { g.append(row(sym: "star", key: "Guardian", value: greyText("None"), chevron: true, tap: { [weak self] in self?.pickGuardian() })) }
     // (view only: the Task Update under Status)
     let canUp = (m["canFields"] as? Bool) == true
     if TaskPage.viewOnly, (m["sub"] as? Bool) != true, m["update"] is [String: Any] || canUp { g.insert(updateRow(m["update"] as? [String: Any], all: (m["updates"] as? [String]) ?? [], can: canUp), at: min(g.count, 1)) }
@@ -1258,12 +1265,37 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let cur = model?["guardian"] as? String
     var rows: [[String: Any]] = pool.enumerated().map { i, p in ["i": i, "label": p["name"] as? String ?? "", "sub": p["role"] as? String ?? "", "person": personArg(p), "checked": (p["id"] as? String) == cur, "find": p["name"] as? String ?? ""] }
     if cur != nil { rows.append(["i": 999, "label": "No Guardian", "icon": "x"]) }
-    onSheet?(["sections": [["header": "Guardian", "rows": rows]], "search": "Search people"], { _ in }, { [weak self] i, _ in
+    // (as the other sheets: felt and shown at the tap — Haris 2026-11-02)
+    onSheet?(["sections": [["header": "Guardian", "rows": rows]], "search": "Search people", "instant": true], { [weak self] i in
       guard let self = self, i >= 0 else { return }
       var v: Any = NSNull()
-      if i != 999, i < pool.count, let id = pool[i]["id"] as? String { v = id }
+      if i != 999, i < pool.count, let id = pool[i]["id"] as? String {
+        if id == cur { return }
+        v = id
+        let p = pool[i]
+        self.local { m in
+          m["guardian"] = id
+          var pp = (m["people"] as? [String: [String: Any]]) ?? [:]
+          if pp[id] == nil { let n = p["name"] as? String ?? ""; pp[id] = ["name": n, "first": n.split(separator: " ").first.map(String.init) ?? n, "initials": p["initials"] ?? "?", "color": p["color"] ?? [128, 128, 128]] }
+          m["people"] = pp
+        }
+      } else { self.local { $0["guardian"] = NSNull() } }
       self.onAct?(["act": "guardian", "id": self.taskId, "value": v])
-    })
+    }, { _, _ in })
+  }
+  // Finance: the website's five, the one on it ticked; Clear at the end when there is one
+  private func pickFinance(_ cur: String) {
+    let opts = (model?["financeOpts"] as? [[String: Any]]) ?? []
+    guard !opts.isEmpty else { return }
+    var secs: [[String: Any]] = [["header": "Finance", "rows": opts.enumerated().map { i, o in ["i": i, "label": o["t"] as? String ?? "", "dot": o["rgb"] ?? [128, 128, 128], "checked": (o["t"] as? String) == cur] }]]
+    if !cur.isEmpty { secs.append(["rows": [["i": 999, "label": "Clear", "icon": "x"]]]) }
+    onSheet?(["sections": secs, "instant": true], { [weak self] i in
+      guard let self = self, i >= 0 else { return }
+      if i == 999 { self.local { m in var f = (m["finance"] as? [String: Any]) ?? [:]; f["v"] = ""; f["rgb"] = NSNull(); m["finance"] = f }; self.onAct?(["act": "finance", "id": self.taskId, "value": NSNull()]); return }
+      guard i < opts.count, let t = opts[i]["t"] as? String, t != cur else { return }
+      self.local { m in var f = (m["finance"] as? [String: Any]) ?? [:]; f["v"] = t; f["rgb"] = opts[i]["rgb"]; m["finance"] = f }
+      self.onAct?(["act": "finance", "id": self.taskId, "value": t])
+    }, { _, _ in })
   }
   // Tags: this task's (ticked — untick to remove), then the ones used most; type to add a new one
   func pickTags() {

@@ -251,3 +251,15 @@ test('copy: an action answers with the changed records only', async () => {
   assert.ok(Array.isArray(r.changes) && r.changes.some((c) => c.kind === 'tasks' && c.id === 't1' && c.data && c.data.update === 'Shoot'), JSON.stringify(r.changes).slice(0, 300));
   assert.ok(r.rev > 0);
 });
+
+test('Finance status: the client\'s Account Manager and Admins see and change it, others don\'t see it', async () => {
+  const m = (await page('am@e11-digital.com', 't1')).task;
+  assert.ok(m.finance); assert.equal(m.canFinance, true); assert.ok(m.financeOpts.some((o) => o.t === 'Invoiced'));
+  assert.equal((await page('prod@e11-digital.com', 't1')).task.finance, null);
+  let r = await act('prod@e11-digital.com', { act: 'finance', id: 't1', value: 'Invoiced' });
+  assert.equal(r.ok, false);
+  r = await act('am@e11-digital.com', { act: 'finance', id: 't1', value: 'Invoiced' });
+  assert.equal(r.ok, true, JSON.stringify(r)); assert.equal(T('t1').finance, 'Invoiced'); assert.equal(T('t1').financeBy, 'u-am');
+  r = await act('am@e11-digital.com', { act: 'finance', id: 't1', value: 'Nope' });
+  assert.equal(r.ok, false);
+});

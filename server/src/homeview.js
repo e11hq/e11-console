@@ -133,7 +133,7 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
       const r = rules.deleteTask(t);
       undo = r.item.id;
       messages = ['Moved to the Trash'];
-    } else if (['title', 'start', 'status', 'myPart', 'prio', 'check', 'needsCD', 'update', 'clientApproval', 'assign', 'guardian', 'addTag', 'removeTag', 'channels', 'addCheck', 'addSub', 'client', 'react', 'deleteComment', 'desc', 'submitReview', 'withdrawReview', 'comment', 'editComment', 'attach'].includes(a)) {
+    } else if (['title', 'start', 'status', 'myPart', 'prio', 'check', 'needsCD', 'update', 'clientApproval', 'assign', 'guardian', 'addTag', 'removeTag', 'channels', 'addCheck', 'addSub', 'client', 'react', 'deleteComment', 'desc', 'submitReview', 'withdrawReview', 'comment', 'editComment', 'attach', 'finance'].includes(a)) {
       // the native task page's (shell 30+) — each checked as the website checks it
       if ((!['react', 'deleteComment', 'comment', 'editComment', 'attach'].includes(a) && rules.amReadOnly(t)) || rules.doneLocked(t)) return view();   // (a view-only task: comments still)
       let r = [];
@@ -150,6 +150,7 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
       else if (a === 'check') r = rules.toggleCheck(t, String(body.value || ''));
       else if (a === 'needsCD') r = rules.setNeedsCD(t, !!body.value);
       else if (a === 'update') { if (t.parentId) return fail(400, 'Not on a subtask'); r = rules.setUpdate(t, body.value ? String(body.value) : null); }
+      else if (a === 'finance') { if (t.parentId || !rules.canFinance(t)) return fail(403, 'Your role doesn’t allow changing the Finance status'); r = rules.setFinance(t, body.value ? String(body.value) : null); }
       else if (a === 'assign') { if (!rules.can('assign', t)) return fail(403, 'Your role doesn’t allow assigning'); r = rules.setAssignee(t, String(body.key || ''), !!body.value); }
       else if (a === 'guardian') { if (!rules.can('assign', t) || t.parentId) return fail(403, 'Your role doesn’t allow this'); r = rules.setGuardian(t, body.value ? String(body.value) : null); }
       else if (a === 'addTag') { if (!rules.can('addTag', t)) return fail(403, 'Your role doesn’t allow adding tags'); r = rules.addTag(t, body.value); }

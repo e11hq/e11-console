@@ -565,6 +565,9 @@ var E11Rules = (() => {
     // Everything the Details tab shows, worked out here (the website's own rules), with what this person may change.
     const TAG_HUES = ['#5b8cff', '#3ddc97', '#ffb547', '#ff6b6b', '#c27cff', '#4fd1c5', '#ff8fc7', '#9aa0ab'];
     const tagRgb = (name) => { let h = 0; for (const c of String(name).toLowerCase()) h = (h * 31 + c.charCodeAt(0)) >>> 0; return rgbOf(TAG_HUES[h % TAG_HUES.length]); };
+    // the Finance status (app.js FINANCE): seen and changed by Account Managers (their clients' tasks) and Admins
+    const FINANCE = { 'Quote to be sent': '#9aa4b2', 'LPO Pending': '#f9be33', 'Invoiced': '#3ddc97', 'Retainer': '#a875ff', 'To be invoiced': '#ff8a4c' };
+    const canFinance = (t) => isManager(me()) && amScope(t);
     const UPDATES = ['WIP', 'Brief to come', 'Amendments', 'Minor Amendments', 'Shoot', 'Edit Video', 'Adaptations', 'On hold', 'Oversee', 'Followup', 'Meeting', 'Reel Cover', 'Ready to Post', 'Ongoing', 'Redesign', 'Awaiting client assets', 'Storyboard', 'Open files', 'Brainstorm', 'Briefing', 'Out of scope', 'Dispatch', 'Copy Writing', 'Edit images', 'HTML', 'Mockup'];
     const FIELD_COLORS = ['#f9be33', '#4c9aff', '#ff6b70', '#3ddc97', '#a875ff', '#ff8a4c', '#4fd1c5', '#ff8fc7', '#9aa4b2', '#7b68ee'];
     const updateRgb = (v) => rgbOf(FIELD_COLORS[Math.max(0, UPDATES.indexOf(v)) % FIELD_COLORS.length]);
@@ -629,6 +632,9 @@ var E11Rules = (() => {
         canClient: !ro && !t.parentId && can('editProject', t) && !lockedId, clients: !ro && !t.parentId && can('editProject', t) && !lockedId ? movable().map((p) => ({ id: p.id, name: p.name, rgb: rgbOf(p.color || '#87909e'), on: p.id === t.projectId })) : [], allChannels: Object.entries(CHANNEL_NAMES).map(([k, n]) => ({ k, n })),
         channels: (t.channels || []).map((c) => CHANNEL_NAMES[c] || c),
         guardian: t.guardian && userById(t.guardian) ? person(t.guardian) : null,
+        // (the Finance status: only for whoever may see and change it — Haris 2026-11-02, above Client on the app's page)
+        finance: !t.parentId && canFinance(t) ? { v: t.finance || '', rgb: t.finance ? rgbOf(FINANCE[t.finance] || '#9aa4b2') : null } : null,
+        financeOpts: !t.parentId && canFinance(t) && !ro ? Object.keys(FINANCE).map((k) => ({ t: k, rgb: rgbOf(FINANCE[k]) })) : [], canFinance: !t.parentId && canFinance(t) && !ro,
         update: t.update ? { t: t.update, rgb: updateRgb(t.update) } : null, updates: UPDATES, updateRgbs: UPDATES.map(updateRgb),
         canFields: !ro && !t.parentId,
         review: !t.parentId && !t.done ? { on: !!t.needsCD, canSet: !ro && !!u && (isAdm(u) || u.role === 'am' || isCD(meId)) && !reviewPending(t), who: cdUserId() ? fullName(userById(cdUserId())) : '' } : null,
@@ -1125,6 +1131,16 @@ var E11Rules = (() => {
       t.updatedAt = nowISO();
       return [];
     }
+    function setFinance(t, v) {
+      v = v || null;
+      if (v && !FINANCE[v]) return { error: 'Not a Finance status' };
+      const old = t.finance || null;
+      if (old === v) return [];
+      t.finance = v; t.financeAt = nowISO(); t.financeBy = meId;
+      logChange(t, 'the <b>Finance</b> status', old, v);
+      t.updatedAt = nowISO();
+      return [];
+    }
     function setUpdate(t, v) {
       const old = t.update || null; v = v || null;
       if (old === v) return [];
@@ -1201,7 +1217,7 @@ var E11Rules = (() => {
       };
     }
 
-    return { home, myTasks, myTasksFilters, inbox, inboxRow, clientsList, clientPage, myDayData, cardOf, can, amReadOnly, canComplete, completeBlocked, dayTitle, statusInfo, sectionOf,
+    return { home, myTasks, myTasksFilters, inbox, inboxRow, clientsList, clientPage, setFinance, canFinance, myDayData, cardOf, can, amReadOnly, canComplete, completeBlocked, dayTitle, statusInfo, sectionOf,
       notifGroups: NOTIF_GROUPS, doneLocked, canReopen, finish, finishBlocked, canFinish, moveToStatus, logActivity, logChange, pushNotif, notifyWatchers, checkPrioConflict, setDone, setDue, setClientApproval, asksClientApproval, deleteTask, watchersOf, creatorOf, clientAmsOf, fmtDue,
       taskPage, setTitle, setStart, setStatus, setMyPart, setPrio, prioTaken, toggleCheck, setNeedsCD, setUpdate, idLocked,
       setAssignee, setGuardian, addTag, removeTag, setChannels, addCheck, addSubtask, setClient, commentsFeed, toggleReaction, deleteComment, setDesc, submitReview, withdrawReview, postComment, editComment, mentionable, attachFilesTo };
