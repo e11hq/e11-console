@@ -165,6 +165,9 @@ final class CornerButton: UIView {
   func go(left l: Spot, mid m: Spot, corner c: Spot, menu: UIMenu?, animated: Bool) {
     let was = (left, mid, corner)
     left = l; mid = m; corner = c
+    // (your photo, the same button, only its picture new: put in without any animation — inside the spring iPhone
+    //  cross-faded the two pictures, a blink)
+    if c.kind == "photo", was.2.kind == "photo", c.image !== was.2.image { now { model.corner.image = c.image } }
     // (after a swipe back the buttons are already part way, where the finger left them: they just carry on from there
     //  — the pull out of ••• below would start them all over again, Haris 2026-11-02)
     let fromSwipe = scrubbed; scrubbed = false

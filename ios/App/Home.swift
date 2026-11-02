@@ -340,8 +340,17 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // coming: once its gap is there
     UIView.animate(withDuration: 0.22, delay: 0.26, options: [.curveEaseOut, .allowUserInteraction]) { arrivals.forEach { $0.alpha = 1 } }
   }
+  // (your photo only made again when it really changed — a new picture each drawing made the top button's photo blink a
+  //  moment after it settled, and on coming back to the app: Haris 2026-11-02. A photo that's there isn't swapped for
+  //  your initials while it's being fetched again.)
+  private var meKey = ""
   private func meChanged() {
     let p = people[meId]
+    let photo = p?["photo"] as? String
+    if photo == nil, meKey.hasPrefix(meId + "|photo:"), me.image(for: .normal) != nil { return }
+    let key = meId + (photo.map { "|photo:\($0.count):\($0.suffix(24))" } ?? "|i:\(p?["initials"] as? String ?? "")")
+    if key == meKey, me.image(for: .normal) != nil { return }
+    meKey = key
     let img = roundPic(NativeSheetVC.photo(p), initials: p?["initials"] as? String, color: NativeSheetVC.color(p?["color"]), size: 44)
     me.setImage(img, for: .normal)
   }
