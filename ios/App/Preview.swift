@@ -355,7 +355,9 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
     count.text = files.count > 1 ? "\(at + 1) of \(files.count)" : ""
     name.text = f["name"] as? String
     details.text = f["meta"] as? String
-    strip.reloadData()
+    // (only the frame moves to the one showing — the strip isn't drawn again: that emptied its pictures, Haris 2026-11-02)
+    if strip.numberOfItems(inSection: 0) != files.count { strip.reloadData() }
+    for c in strip.visibleCells { if let ip = strip.indexPath(for: c) { c.contentView.layer.borderWidth = ip.item == at ? 2 : 0 } }
     if files.count > 1 { strip.scrollToItem(at: IndexPath(item: at, section: 0), at: .centeredHorizontally, animated: true) }
     event(["ev": "at", "id": f["id"] as? String ?? ""])
   }
@@ -410,9 +412,12 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
       let l = UILabel(frame: c.contentView.bounds); l.text = ((f["ext"] as? String) ?? "").uppercased(); l.font = .systemFont(ofSize: 10, weight: .bold)
       l.textColor = .secondaryLabel; l.textAlignment = .center; l.autoresizingMask = [.flexibleWidth, .flexibleHeight]
       c.contentView.addSubview(l)
-      let id = f["id"] as? String
-      PreviewLoad.image([f["thumb"] as? String, f["cover"] as? String].compactMap { $0 }.first { !$0.isEmpty }) { [weak c, weak cv] img in
-        guard let c, let cv, let img, let now = cv.indexPath(for: c), now.item < self.files.count, (self.files[now.item]["id"] as? String) == id else { return }
+      // (the cell remembers which file it's showing now: a picture already loaded comes back before the cell is on the
+      //  screen — asking the strip where the cell was then gave nothing, so photos never showed)
+      let key = (f["id"] as? String ?? "") + "#\(ip.item)"
+      c.accessibilityIdentifier = key
+      PreviewLoad.image([f["thumb"] as? String, f["cover"] as? String].compactMap { $0 }.first { !$0.isEmpty }) { [weak c] img in
+        guard let c, let img, c.accessibilityIdentifier == key else { return }
         iv.image = img; l.isHidden = true
       }
       return c
