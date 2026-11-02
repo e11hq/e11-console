@@ -103,7 +103,7 @@ extension Main {
     let W = view.bounds.width
     let last = taskPages.isEmpty
     updateCornerNow()
-    if last { tabBar.isHidden = taskTabHidden; taskPan?.isEnabled = false }
+    if last { tabBar.isHidden = tabsHidden; taskPan?.isEnabled = false; view.setNeedsLayout() }
     let finish = {
       p.removeFromSuperview()
       back.forEach { $0.transform = .identity }
@@ -115,11 +115,12 @@ extension Main {
       if last { self.pageJS("window.__e11Task && window.__e11Task({ev:'closed'})") }
       else if let top = self.taskPages.last, top.tab == "comments" { self.taskShowComments(top, focus: "") }
     }
-    if !animated { finish(); if last { tabBar.alpha = 1 }; return }
+    let barTo: CGFloat = tabsHidden || formTucked ? 0 : 1
+    if !animated { finish(); if last { tabBar.alpha = barTo }; return }
     UIView.animate(withDuration: 0.36, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState]) {
       p.transform = CGAffineTransform(translationX: W, y: 0)
       back.forEach { $0.transform = .identity }
-      if last { self.tabBar.alpha = 1 }
+      if last { self.tabBar.alpha = barTo }
     } completion: { _ in finish() }
   }
 
@@ -186,7 +187,7 @@ extension Main {
     case .changed:
       p.transform = CGAffineTransform(translationX: x, y: 0)
       back.forEach { $0.transform = CGAffineTransform(translationX: -W * 0.3 * (1 - x / W), y: 0) }
-      if taskPages.count == 1 && !taskTabHidden { tabBar.isHidden = false; tabBar.alpha = x / W }
+      if taskPages.count == 1 && !tabsHidden { tabBar.isHidden = false; tabBar.alpha = x / W }
       corner.between(cornerTarget(), cornerTarget(skipTop: true), x / W)
     case .ended, .cancelled, .failed:
       let v = g.velocity(in: view).x
@@ -601,7 +602,7 @@ extension Main {
     let name = f["name"] as? String ?? "File"
     UIPasteboard.general.string = "📎 " + name
     FileClip.file = f; FileClip.name = name; FileClip.change = UIPasteboard.general.changeCount
-    toast("Copied — paste it into a comment")
+    toast("Copied — paste it into a comment or description")
   }
   // Download: fetched with its progress shown, then iPhone's own Save / Share sheet (Save Image, Save to Files…)
   func downloadFile(_ f: [String: Any], from vc: UIViewController, _ toast: @escaping (String) -> Void) {

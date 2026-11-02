@@ -209,7 +209,8 @@ test('files pasted into a description or a comment (the website\'s 📎 chips) c
   assert.equal(r.ok, true, JSON.stringify(r));
   const m = (await page('am@e11-digital.com', 't3')).task;
   assert.deepEqual(m.descFiles.map((f) => f.name), ['deck.pdf']); assert.equal(m.descFiles[0].file, 'attachments/t1/deck.pdf');
-  assert.ok(!m.descRuns.some((x) => /deck\.pdf/.test(x.t)), JSON.stringify(m.descRuns));
+  // (the description keeps where it was pasted: a run of its own the app shows as a link to it — Haris 2026-11-02)
+  assert.deepEqual(m.descRuns.filter((x) => /deck\.pdf/.test(x.t)).map((x) => [x.t, x.ref && x.ref.path]), [['📎 deck.pdf', 'attachments/t1/deck.pdf']], JSON.stringify(m.descRuns));
 });
 
 test('writing a comment, a reply with a mention, a voice message; editing', async () => {

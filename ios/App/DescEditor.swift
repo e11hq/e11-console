@@ -4,6 +4,8 @@ import UIKit
    where it is, looking the same; above the keyboard B · I · U · bullets · numbers · @ · link; typing @ lists the people
    under it; Done (the corner button) saves it as the website keeps it (HTML with mentions) — /api/home/act desc. */
 let MENTION_KEY = NSAttributedString.Key("e11User")
+// a file pasted into the description: where it is in the words ("📎 name", blue; tapped, its preview) — its card under it
+let FILEREF_KEY = NSAttributedString.Key("e11File")
 
 enum DescEditor {
   static func attributed(_ runs: [[String: Any]], done: Bool, size: CGFloat = 17, creator: String? = nil) -> NSAttributedString {
@@ -19,6 +21,7 @@ enum DescEditor {
       if r["s"] != nil { a[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
       if let u = r["user"] as? String { a[MENTION_KEY] = u; a[.foregroundColor] = u == creator ? UIColor.systemOrange : UIColor.systemBlue }   // (the creator: orange)
       if let l = r["link"] as? String, let url = URL(string: l) { a[.link] = url }
+      if let f = r["ref"] as? [String: Any] { a[FILEREF_KEY] = f; a[.foregroundColor] = UIColor.systemBlue }
       out.append(NSAttributedString(string: r["t"] as? String ?? "", attributes: a))
     }
     return out
@@ -41,6 +44,13 @@ enum DescEditor {
       var inner = ""
       a.enumerateAttributes(in: r, options: []) { at, rr, _ in
         var t = esc(ns.substring(with: rr))
+        // (a pasted file, as the website writes it: its 📎 chip)
+        if let f = at[FILEREF_KEY] as? [String: Any], let path = f["path"] as? String {
+          let name = f["name"] as? String ?? (path as NSString).lastPathComponent
+          let thumb = (f["thumb"] as? String).map { " data-fthumb=\"\(esc($0))\"" } ?? ""
+          inner += "<span class=\"fileref\" contenteditable=\"false\" data-fpath=\"\(esc(path))\" data-fname=\"\(esc(name))\" data-fsize=\"\((f["size"] as? NSNumber)?.intValue ?? 0)\"\(thumb)>📎 \(esc(name))</span>"
+          return
+        }
         if let u = at[MENTION_KEY] as? String { t = "<span class=\"mention\" data-user=\"\(esc(u))\">\(t)</span>"; inner += t; return }
         if let f = at[.font] as? UIFont {
           if f.fontDescriptor.symbolicTraits.contains(.traitItalic) { t = "<i>\(t)</i>" }
@@ -67,6 +77,7 @@ extension TaskPage {
     descView.font = .systemFont(ofSize: TaskPage.T)
     descView.dataDetectorTypes = []
     descView.delegate = self
+    descView.onPasteFiles = { [weak self] in self?.pasteIntoDesc() ?? false }
     descView.inputAccessoryView = descBar()
     mentionBox.axis = .vertical
     mentionBox.backgroundColor = .secondarySystemGroupedBackground
@@ -123,6 +134,10 @@ extension TaskPage {
     descView.resignFirstResponder()
     let html = DescEditor.html(descView.attributedText)
     let text = descView.text ?? ""
+    // (a pasted file whose 📎 was deleted again before Done: its card goes too)
+    var kept = Set<String>()
+    descView.attributedText.enumerateAttribute(FILEREF_KEY, in: NSRange(location: 0, length: descView.attributedText.length)) { v, _, _ in if let p = (v as? [String: Any])?["path"] as? String { kept.insert(p) } }
+    descPending.removeAll { !kept.contains($0["file"] as? String ?? "") }
     let was = DescEditor.html(DescEditor.attributed((model?["descRuns"] as? [[String: Any]]) ?? [], done: false))
     if html != was && !(descEmpty && text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) { onAct?(["act": "desc", "id": taskId, "html": html, "text": text]) }
     built = ""

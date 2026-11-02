@@ -634,7 +634,7 @@ var E11Rules = (() => {
         review: !t.parentId && !t.done ? { on: !!t.needsCD, canSet: !ro && !!u && (isAdm(u) || u.role === 'am' || isCD(meId)) && !reviewPending(t), who: cdUserId() ? fullName(userById(cdUserId())) : '' } : null,
         clientApproval: cdApprovedNow(t) ? (() => { const ca = t.clientApproval, fresh = clientApprovalFresh(t);
           return { state: ca && fresh ? (ca.none ? 'none' : 'yes') : ca ? 'old' : 'missing', text: ca && fresh ? (ca.none ? 'Not needed' : `Approved · ${firstName(ca.by)} · ${fmtDay(dayOf(ca.at))}`) : ca ? 'Out of date' : 'Missing', canSet: !ro && !t.done && !!u && (isAdm(u) || u.role === 'am' || t.createdBy === meId) }; })() : null,
-        desc: t.notesHtml ? plainOfHtml(t.notesHtml) : String(t.notes || '').trim(), descRuns: runsOf({ html: t.notesHtml || '', text: t.notes || '' }), descFiles: fileRefsOf(t.notesHtml), canDesc: !ro && can('editDesc', t) && !lockedId, mentionable: !ro && can('editDesc', t) && !lockedId ? mentionable() : [],
+        desc: t.notesHtml ? plainOfHtml(t.notesHtml) : String(t.notes || '').trim(), descRuns: runsOf({ html: t.notesHtml || '', text: t.notes || '' }, true), descFiles: fileRefsOf(t.notesHtml), canDesc: !ro && can('editDesc', t) && !lockedId, mentionable: !ro && can('editDesc', t) && !lockedId ? mentionable() : [],
         review2: !t.parentId && needsCD(t) && isMine(t) && !isCD(meId) && !ro ? { state: reviewState(t, meId), canSubmit: !t.done && !(sectionOf(t) && isToDoName(sectionOf(t).name)), cd: cdUserId() ? fullName(userById(cdUserId())) : '', since: (lastReview(t, meId) || {}).at || '' } : null,
         subtasks: subtasksOf(t.id).map((x) => { (x.assignees || []).slice(0, 1).forEach(person); return { id: x.id, title: x.title || 'Untitled', done: !!x.done, due: x.due ? fmtDay(x.due) : '', late: !x.done && !!x.due && dayDiff(x.due) < 0, av: (x.assignees || [])[0] || null, canTick: !ro && !amReadOnly(x) }; }),
         canAddSub: !ro && !t.parentId && can('createTask', t),
@@ -783,7 +783,9 @@ var E11Rules = (() => {
       });
       return out;
     }
-    function runsOf(c) {
+    // refs: a pasted file's chip kept in its place as a run of its own ({ t: '📎 name', ref: { path, name, size, thumb } })
+    //  — the description's, so the app shows where it is and opens it (Haris 2026-11-02); a comment's stay out of the words
+    function runsOf(c, refs) {
       if (!c.html) return [{ t: String(c.text || '') }];
       const out = [], st = { b: 0, i: 0, u: 0, s: 0, link: null, user: null, li: 0, ref: 0 };
       const push = (t) => { if (!t) return; const r = { t }; if (st.b) r.b = 1; if (st.i) r.i = 1; if (st.u) r.u = 1; if (st.s) r.s = 1; if (st.link) r.link = st.link; if (st.user) r.user = st.user; out.push(r); };
@@ -801,7 +803,14 @@ var E11Rules = (() => {
         else if (tag === 'a') { if (close) st.link = null; else { const h = /href="([^"]+)"/i.exec(attrs); st.link = h ? unent(h[1]) : null; } }
         else if (tag === 'span') {
           // (a file pasted in — the website's 📎 chip: shown as a file card, not as words)
-          if (!close && /data-fpath=/i.test(attrs)) { st.ref++; return ''; }
+          if (!close && /data-fpath=/i.test(attrs)) {
+            if (refs) {
+              const at = (k) => { const m2 = new RegExp(k + '="([^"]*)"', 'i').exec(attrs); return m2 ? unent(m2[1]) : ''; };
+              const path = at('data-fpath'), name = at('data-fname') || path.split('/').pop();
+              out.push({ t: '📎 ' + name, ref: { path, name, size: Number(at('data-fsize')) || 0, thumb: at('data-fthumb') || null } });
+            }
+            st.ref++; return '';
+          }
           if (close && st.ref) { st.ref--; return ''; }
           const u = /data-user="([^"]+)"/i.exec(attrs); if (u && !close) st.user = u[1]; else if (close) st.user = null;
         }

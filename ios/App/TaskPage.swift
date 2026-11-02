@@ -89,7 +89,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   var onMenu: (() -> Void)?
   var feed: CommentsFeed?, threadFeed: CommentsFeed?
   // the description's editor (DescEditor.swift)
-  let descView = UITextView()
+  let descView = PasteTextView()   // (a file copied in the app pastes in as its 📎, its card under the description)
   // (the description as it's read — view only — links tappable)
   private lazy var descRead: UITextView = {
     let t = UITextView(); t.isEditable = false; t.isScrollEnabled = false; t.backgroundColor = .clear
@@ -132,6 +132,8 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if uploads.count != n { built = ""; if let m = model { draw(m) } }
   }
   private let filesStrip = FileStrip(side: 100), descStrip = FileStrip(side: 100)
+  var descPending: [[String: Any]] = []
+  private var descTouch: (CGPoint, Date)?
   var waiting = 0   // (changes sent, not answered yet)
   // a change shown at once, before the server's answer (Haris, 2026-11-02: changes came with a delay); the answer
   // redraws it as it is — a refused one goes back
@@ -144,12 +146,76 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let b = DescBox(); b.onExpand = { [weak self] in self?.relayAnimated() }
     // (a tap on it, for whoever may write it: the cursor where the finger was — tapping a description with words in it
     //  sometimes did nothing, Haris 2026-11-02)
-    let tap = UITapGestureRecognizer(target: self, action: #selector(tappedDesc(_:))); tap.cancelsTouchesInView = false
+    let tap = UITapGestureRecognizer(target: self, action: #selector(tappedDesc(_:))); tap.cancelsTouchesInView = false; tap.delegate = self
     b.addGestureRecognizer(tap)
     return b
   }()
+  // the description's file cards, straight under it: the server's, and any pasted in while writing (until saved)
+  var descShown: [[String: Any]] {
+    let saved = (model?["descFiles"] as? [[String: Any]]) ?? []
+    let have = Set(saved.compactMap { $0["file"] as? String })
+    return saved + descPending.filter { !have.contains($0["file"] as? String ?? "") }
+  }
+  private func descStripAfter(_ m: [String: Any]) {
+    let saved = Set(((m["descFiles"] as? [[String: Any]]) ?? []).compactMap { $0["file"] as? String })
+    descPending.removeAll { saved.contains($0["file"] as? String ?? "") }
+    let files = descShown
+    descStrip.set(files, open: { [weak self] i in self?.onOpenFiles?(files, i) }, menu: { [weak self] i in self?.fileMenu(files, i) })
+    if !files.isEmpty { blocks.append(descStrip) }
+  }
+  // a file copied in the app (a preview's Copy), pasted while writing the description: its 📎 where the cursor is, its
+  // card under the description at once — saved with Done, as the website keeps it (Haris 2026-11-02)
+  func pasteIntoDesc() -> Bool {
+    guard descView.isFirstResponder, let f = FileClip.current, let path = f["file"] as? String else { return false }
+    let name = f["name"] as? String ?? "File"
+    let tv = descView, r = tv.selectedRange
+    let plain: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: TaskPage.T), .foregroundColor: UIColor.label]
+    var chip = plain; chip[FILEREF_KEY] = ["path": path, "name": name, "size": f["size"] as? Int ?? 0] as [String: Any]; chip[.foregroundColor] = UIColor.systemBlue
+    let add = NSMutableAttributedString(string: "📎 " + name, attributes: chip)
+    add.append(NSAttributedString(string: " ", attributes: plain))
+    let m = NSMutableAttributedString(attributedString: tv.attributedText); m.replaceCharacters(in: r, with: add)
+    tv.attributedText = m
+    tv.selectedRange = NSRange(location: r.location + add.length, length: 0)
+    tv.typingAttributes = plain
+    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    if !descShown.contains(where: { ($0["file"] as? String) == path }) { descPending.append(f) }
+    let files = descShown
+    descStrip.set(files, open: { [weak self] i in self?.onOpenFiles?(files, i) }, menu: { [weak self] i in self?.fileMenu(files, i) })
+    if !blocks.contains(where: { $0 === descStrip }), let i = blocks.firstIndex(where: { $0 === descBox }) {
+      blocks.insert(descStrip, at: i + 1); content.addSubview(descStrip); descStrip.alpha = 0
+      UIView.animate(withDuration: 0.3) { self.descStrip.alpha = 1 }
+    }
+    setNeedsLayout(); relayAnimated()
+    return true
+  }
+  // a tap on a pasted file's 📎 in the description: its preview (with the description's other files)
+  private func fileRef(in tv: UITextView, at p: CGPoint) -> [String: Any]? {
+    guard tv.attributedText.length > 0, let pos = tv.closestPosition(to: p) else { return nil }
+    let i = tv.offset(from: tv.beginningOfDocument, to: pos)
+    for k in [i, i - 1] where k >= 0 && k < tv.attributedText.length {
+      // (only on the chip itself, not anywhere on its line)
+      guard let f = tv.attributedText.attribute(FILEREF_KEY, at: k, effectiveRange: nil) as? [String: Any] else { continue }
+      if let r = tv.textRange(from: tv.position(from: tv.beginningOfDocument, offset: k) ?? pos, to: tv.position(from: tv.beginningOfDocument, offset: k + 1) ?? pos), tv.firstRect(for: r).insetBy(dx: -8, dy: -6).contains(p) { return f }
+    }
+    return nil
+  }
+  private func openRef(_ f: [String: Any]) {
+    let files = descShown
+    if let i = files.firstIndex(where: { ($0["file"] as? String) == (f["path"] as? String) }) { onOpenFiles?(files, i) }
+  }
+  func gestureRecognizer(_ g: UIGestureRecognizer, shouldReceive t: UITouch) -> Bool {
+    if g.view === descBox { descTouch = (t.location(in: descView), Date()) }
+    return true
+  }
+  func textViewShouldBeginEditing(_ tv: UITextView) -> Bool {
+    // (a tap on a 📎 opens it, it doesn't start writing)
+    if tv === descView, let dt = descTouch, Date().timeIntervalSince(dt.1) < 0.6, let f = fileRef(in: tv, at: dt.0) { descTouch = nil; openRef(f); return false }
+    return true
+  }
   @objc private func tappedDesc(_ g: UITapGestureRecognizer) {
+    if descRead.superview === descBox, let f = fileRef(in: descRead, at: g.location(in: descRead)) { openRef(f); return }
     let tv = descView
+    if !tv.isFirstResponder, fileRef(in: tv, at: g.location(in: tv)) != nil { return }
     guard tv.superview === descBox, tv.isEditable, !tv.isFirstResponder else { return }
     let p = g.location(in: tv)
     tv.becomeFirstResponder()
@@ -184,6 +250,11 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     scroll.delegate = self
     addSubview(scroll)
     scroll.addSubview(content)
+    // (the keyboard: the page scrolls up past it, so where you're writing in the description stays in sight — Haris
+    //  2026-11-02)
+    NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: .main) { [weak self] n in self?.keyboardMoved(n) }
+    NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { [weak self] _ in self?.kbCover = 0; self?.setNeedsLayout() }
+    NotificationCenter.default.addObserver(forName: UIResponder.keyboardDidShowNotification, object: nil, queue: .main) { [weak self] _ in self?.caretIntoView() }
     commentsHost.isHidden = true
     commentsHost.clipsToBounds = true
     addSubview(commentsHost)
@@ -525,13 +596,13 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       if !editingDesc { tv.attributedText = desc.isEmpty ? NSAttributedString(string: "Add description…", attributes: [.font: UIFont.systemFont(ofSize: TaskPage.T), .foregroundColor: UIColor.tertiaryLabel]) : rich }
       descEmpty = desc.isEmpty
       tv.isEditable = true
-      descBox.hold(tv); blocks.append(descBox)
+      descBox.hold(tv); blocks.append(descBox); descStripAfter(m)
     } else if TaskPage.viewOnly && noDesc {
       descRead.attributedText = NSAttributedString(string: "No description", attributes: [.font: UIFont.systemFont(ofSize: TaskPage.T), .foregroundColor: UIColor.tertiaryLabel])
       descBox.hold(descRead); blocks.append(descBox)
     } else if TaskPage.viewOnly && rich.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
       descRead.attributedText = rich
-      descBox.hold(descRead); blocks.append(descBox)
+      descBox.hold(descRead); blocks.append(descBox); descStripAfter(m)
     }
     if !TaskPage.viewOnly && (!desc.isEmpty || canDesc || editingDesc) {
       blocks.append(header("Description", lock: m["lock"] is [String: Any]))
@@ -564,9 +635,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     //      no heading (Haris, 2026-11-01) ----
     // (shown above, in its box)
     // (files pasted into the description: the same cards as comments' — tapped, the preview with them)
-    let dfiles = TaskPage.viewOnly ? ((m["descFiles"] as? [[String: Any]]) ?? []) : []
-    descStrip.set(dfiles, open: { [weak self] i in self?.onOpenFiles?(dfiles, i) }, menu: { [weak self] i in self?.fileMenu(dfiles, i) })
-    if !dfiles.isEmpty { blocks.append(descStrip) }
+    // (now straight under the description — Haris 2026-11-02 — set up there)
     // ---- Files ---- the task's and the comments' together, one row of cards that scrolls sideways (Haris, 2026-11-02)
     //      Yours uploading: in the row at once (after the task's own), then the real one in its place, no jump.
     let own = (m["files"] as? [[String: Any]]) ?? [], fromComments = (m["commentFiles"] as? [[String: Any]]) ?? []
@@ -640,7 +709,21 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let bottom = max(safeAreaInsets.bottom, 20) + (fab.isHidden ? 16 : 72)
     content.frame = CGRect(x: 0, y: 0, width: W, height: y)
     scroll.contentSize = CGSize(width: W, height: y)
-    scroll.contentInset.bottom = bottom
+    scroll.contentInset.bottom = max(bottom, kbCover + 16)
+  }
+  private var kbCover: CGFloat = 0
+  private func keyboardMoved(_ n: Notification) {
+    guard let f = (n.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue, window != nil else { return }
+    let mine = convert(bounds, to: nil)
+    kbCover = max(0, mine.maxY - f.minY)
+    setNeedsLayout()
+  }
+  // the description's cursor in sight, above the keyboard and its format bar
+  func caretIntoView() {
+    guard descView.isFirstResponder, let r = descView.selectedTextRange else { return }
+    layoutIfNeeded()
+    let c = descView.convert(descView.caretRect(for: r.end), to: scroll).insetBy(dx: 0, dy: -28)
+    scroll.scrollRectToVisible(c, animated: true)
   }
 
   // a thin grey band before each section (a heading), and before the description — none at the top, never two together
@@ -776,9 +859,14 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       let isNew = live && !(before ?? []).contains(id), isGoing = going.contains(id)
       if isNew || isGoing {
         let cell = v
-        if isNew { cell.alpha = 0; cell.transform = CGAffineTransform(scaleX: 0.4, y: 0.4) }
+        // (coming in the way one goes out, in reverse and as long: room made first, then it grows in — Haris 2026-11-02)
+        if isNew { cell.alpha = 0; cell.transform = CGAffineTransform(scaleX: 0.4, y: 0.4); cell.isHidden = true }
         DispatchQueue.main.async {
-          if isNew { UIView.animate(withDuration: 0.45, delay: 0, usingSpringWithDamping: 0.7, initialSpringVelocity: 0, options: [.allowUserInteraction]) { cell.alpha = 1; cell.transform = .identity } }
+          if isNew {
+            UIView.animate(withDuration: 0.25, delay: 0, options: [.curveEaseOut, .allowUserInteraction], animations: { cell.isHidden = false; s.layoutIfNeeded() }) { _ in
+              UIView.animate(withDuration: 0.3, delay: 0, options: [.curveEaseOut, .allowUserInteraction]) { cell.alpha = 1; cell.transform = .identity }
+            }
+          }
           else { UIView.animate(withDuration: 0.3, delay: 0, options: [.curveEaseIn, .allowUserInteraction], animations: { cell.alpha = 0; cell.transform = CGAffineTransform(scaleX: 0.4, y: 0.4) }) { _ in UIView.animate(withDuration: 0.25) { cell.isHidden = true; s.layoutIfNeeded() } } }
         }
       }
@@ -1215,6 +1303,23 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       if !text.isEmpty, tv.typingAttributes[MENTION_KEY] != nil {
         var a = tv.typingAttributes; a[MENTION_KEY] = nil; a[.foregroundColor] = UIColor.label; a[.link] = nil; tv.typingAttributes = a
       }
+      // (a pasted file's 📎 is one piece: words typed next to it are plain, and deleting into it takes it all)
+      if !text.isEmpty, tv.typingAttributes[FILEREF_KEY] != nil {
+        var a = tv.typingAttributes; a[FILEREF_KEY] = nil; a[.foregroundColor] = UIColor.label; tv.typingAttributes = a
+      }
+      if text.isEmpty, range.length > 0, range.location < tv.attributedText.length {
+        var whole = range
+        for k in [range.location, NSMaxRange(range) - 1] where k >= 0 && k < tv.attributedText.length {
+          var er = NSRange(location: 0, length: 0)
+          if tv.attributedText.attribute(FILEREF_KEY, at: k, effectiveRange: &er) != nil { whole = NSUnionRange(whole, er) }
+        }
+        if whole != range {
+          let m = NSMutableAttributedString(attributedString: tv.attributedText); m.deleteCharacters(in: whole)
+          tv.attributedText = m; tv.selectedRange = NSRange(location: whole.location, length: 0)
+          textViewDidChange(tv)
+          return false
+        }
+      }
       return true
     }
     if text == "\n" { tv.resignFirstResponder(); return false }
@@ -1222,7 +1327,8 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }
   // (writing in the description opens it all, as Expand does)
   func textViewDidBeginEditing(_ tv: UITextView) { if tv === descView { descBox.expand(); beginDesc() } }
-  func textViewDidChange(_ tv: UITextView) { setNeedsLayout(); if tv === descView { descChanged() } }
+  func textViewDidChangeSelection(_ tv: UITextView) { if tv === descView, tv.isFirstResponder, kbCover > 0 { DispatchQueue.main.async { self.caretIntoView() } } }
+  func textViewDidChange(_ tv: UITextView) { setNeedsLayout(); if tv === descView { descChanged(); DispatchQueue.main.async { self.caretIntoView() } } }
   func textViewDidEndEditing(_ tv: UITextView) {
     if tv === descView { return }
     let v = tv.text.trimmingCharacters(in: .whitespacesAndNewlines)

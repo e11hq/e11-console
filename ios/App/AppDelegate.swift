@@ -243,8 +243,35 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     homeHadModel = true
     AppData.shared.start(me: me, cookies: serverHome.cookies)
     watchCopy()
-    // (the startup screen goes once Home is drawn from the copy — or, if that doesn't come, when the page says so)
-    DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in if self?.quickBooted == true, self?.pageReady == false { self?.splashGone() } }
+    // (the startup screen plays all the way through all the same, on its own — Haris 2026-11-02; a tap closes it)
+    quickSplash()
+  }
+  // the startup screen's checklist ticked here, as the website does (the icon first, then a row every 0.22 s, 3 s in all):
+  // what each row said last time, the Inbox's count from the copy
+  func quickSplash() {
+    guard let s = splash else { return }
+    splashHeard = true
+    s.onSkip = { [weak self] in self?.splashGone() }
+    let last = (defaults.data(forKey: "e11_splash_last").flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }) ?? [:]
+    var vals = (last["vals"] as? [String]) ?? []
+    while vals.count < 4 { vals.append("") }
+    let icon: Double = UIAccessibility.isReduceMotionEnabled ? 0.3 : 2.15
+    let age = CACurrentMediaTime() - s.t0
+    var t = max(0, icon - age)
+    DispatchQueue.main.asyncAfter(deadline: .now() + t) { [weak self] in
+      guard let self = self, self.splash === s, !s.leaving else { return }
+      if let l4 = last["label4"] as? String { s.command(["label4": l4]) }
+      // (the Inbox's row: as it is now, from the copy)
+      if let m = AppData.shared.screen("inbox", "all").model, let n = m["unread"] as? Int { vals[2] = n > 0 ? "\(n > 99 ? "99+" : String(n)) new" : "all read" }
+      for i in 0..<4 {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12 + 0.22 * Double(i)) { [weak self] in
+          guard let self = self, self.splash === s, !s.leaving else { return }
+          s.command(["tick": i, "value": vals[i], "n": i + 1])
+        }
+      }
+    }
+    t += 0.12 + 0.22 * 3
+    DispatchQueue.main.asyncAfter(deadline: .now() + max(t + 0.42, 3.0 - age)) { [weak self] in if self?.splash === s { self?.splashGone() } }
   }
   // for the website behind: now, or as soon as it's there (a quick start's early taps)
   func pageJSSoon(_ js: String) { if pageReady || !quickBooted { pageJS(js) } else { earlyJS.append(js) } }
@@ -280,9 +307,18 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     s.leave(fast: fast) { [weak self] in if self?.splash === s { self?.splash = nil } }
   }
   func splashCommand(_ a: [String: Any]) -> [String: Any] {
+    // (what each row said, and the fourth's name — for a quick start's own checklist next time)
+    if a["tick"] != nil || a["label4"] != nil {
+      var last = (defaults.data(forKey: "e11_splash_last").flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }) ?? [:]
+      if let l4 = a["label4"] as? String { last["label4"] = l4 }
+      if let i = a["tick"] as? Int, (0..<4).contains(i) { var v = (last["vals"] as? [String]) ?? ["", "", "", ""]; while v.count < 4 { v.append("") }; v[i] = a["value"] as? String ?? ""; last["vals"] = v }
+      if let d = try? JSONSerialization.data(withJSONObject: last) { defaults.set(d, forKey: "e11_splash_last") }
+      if quickBooted { return ["ok": true, "shown": splash != nil] }   // (the app ticks its own)
+    }
     if a["hello"] != nil {
       splashHeard = true
-      guard let s = splash, !s.leaving else { return ["ok": true, "shown": false] }
+      // (a quick start: the app's own startup screen is, or was, up — the page doesn't put up its own behind Home)
+      guard let s = splash, !s.leaving else { return ["ok": true, "shown": quickBooted, "age": quickBooted ? 60000 : 0] }
       return ["ok": true, "shown": true, "age": Int((CACurrentMediaTime() - s.t0) * 1000)]
     }
     if let m = a["memo"] as? [String: Any] {
@@ -291,7 +327,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     }
     guard let s = splash, !s.leaving else { return ["ok": true, "shown": false] }
     splashHeard = true
-    if a["out"] != nil { splashGone(); return ["ok": true] }
+    if a["out"] != nil { if !quickBooted { splashGone() }; return ["ok": true] }   // (a quick start: it goes when its own run ends)
     s.command(a)
     if !SELFTEST.isEmpty, (a["tick"] as? Int) == 3 { selfResult["splashTickedGeo"] = s.geo(); writeSelf("splashTicked") }
     return ["ok": true, "shown": true]
@@ -1012,6 +1048,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       if (t["on"] as? Bool) == true { tabBar.selectedItem = item }
     }
     let hide = (a["hidden"] as? Bool) == true || list.isEmpty
+    // (a task page of the app's own is over everything: the bar stays as the page has it, and comes back to what the
+    //  website wants now when the page closes — it came and went by itself, Haris 2026-11-02)
+    if hide != tabsHidden && !taskPages.isEmpty { tabsHidden = hide; return }
     if hide != tabsHidden {
       tabsHidden = hide
       // in place first (never flying in from the corner), then a fade
@@ -1268,7 +1307,6 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     }
     mm["people"] = nil
     h.update(mm)
-    if quickBooted, !pageReady, splash != nil { splashGone() }
   }
   // Home's own taps the server does itself (false: the page does it, as before)
   func homeEventOnServer(_ ev: [String: Any]) -> Bool { eventOnServer(ev, serverHome, pageMe: homePageMe) }
