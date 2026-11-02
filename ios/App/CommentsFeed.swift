@@ -186,7 +186,8 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
   func addPending(id: String, parent: String?, dur: Double) {
     guard parent == thread, let m = model else { return }
     let at = ISO8601DateFormatter().string(from: Date())
-    let it: [String: Any] = ["id": id, "who": m["me"] as? String ?? "", "at": at, "runs": [[String: Any]](), "files": [["id": id, "name": "Voice message.m4a", "voice": true, "dur": Int(dur.rounded()), "pending": true]]]
+    // (shaped as the server's one — "replies": null makes it a card like every comment — so nothing moves when it's swapped)
+    let it: [String: Any] = ["id": id, "who": m["me"] as? String ?? "", "at": at, "runs": [[String: Any]](), "replies": NSNull(), "files": [["id": id, "name": "Voice message.m4a", "voice": true, "dur": Int(dur.rounded()), "pending": true]]]
     pending.append((id, it, false))
     draw(m, mine: true)
   }

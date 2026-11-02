@@ -478,9 +478,9 @@ final class VoiceBubble: UIView, AVAudioPlayerDelegate {
     self.path = path; self.dur = dur
     super.init(frame: .zero)
     defer {
-      // uploading: the pill pulses softly and can't play yet; its length shows once it's there (the server's one)
+      // uploading: the same pill (blue ▶, its length) pulsing softly; it can't be played until it's there
       if pending {
-        play.isEnabled = false; time.text = ""
+        play.isUserInteractionEnabled = false
         let a = CABasicAnimation(keyPath: "opacity"); a.fromValue = 1; a.toValue = 0.45; a.duration = 0.75
         a.autoreverses = true; a.repeatCount = .infinity; a.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
         layer.add(a, forKey: "uploading")
