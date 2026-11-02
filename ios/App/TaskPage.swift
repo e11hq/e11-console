@@ -492,23 +492,19 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // (files pasted into the description: the same cards as comments' — tapped, the preview with them)
     let dfiles = TaskPage.viewOnly ? ((m["descFiles"] as? [[String: Any]]) ?? []) : []
     if !dfiles.isEmpty {
-      blocks.append(CommentCell.tiles(dfiles, open: { [weak self] i in self?.onOpenFiles?(dfiles, i) }, menu: { [weak self] i in self?.fileMenu(dfiles, i) }))
+      blocks.append(CommentCell.strip(dfiles, open: { [weak self] i in self?.onOpenFiles?(dfiles, i) }, menu: { [weak self] i in self?.fileMenu(dfiles, i) }))
     }
-    // ---- Files ---- (the task's; the comments' own under them, Haris 2026-11-01)
-    let files = (m["files"] as? [[String: Any]]) ?? []
+    // ---- Files ---- the task's and the comments' together, one row of cards that scrolls sideways (Haris, 2026-11-02)
+    let files = ((m["files"] as? [[String: Any]]) ?? []) + ((m["commentFiles"] as? [[String: Any]]) ?? [])
     let canAttach = (m["readOnly"] as? Bool) != true
     if !files.isEmpty || canAttach || !uploads.isEmpty {
       blocks.append(header(files.isEmpty ? "Files" : "Files · \(files.count)"))
-      var fr = fileViews(files)
+      var fr: [UIView] = []
+      if !files.isEmpty { fr.append(pad(CommentCell.strip(files, open: { [weak self] i in self?.onOpenFiles?(files, i) }, menu: { [weak self] i in self?.fileMenu(files, i) }))) }
       for (n, pr) in uploads { fr.append(progressRow(n, pr)) }
       if canAttach { fr.append(addRow("Attach Files") { [weak self] in self?.attachSheet() }) }
       let fg = group(fr); filesBlock = fg
       blocks.append(fg)
-    }
-    let cfiles = (m["commentFiles"] as? [[String: Any]]) ?? []
-    if !cfiles.isEmpty {
-      blocks.append(header("From comments · \(cfiles.count)"))
-      blocks.append(group(fileViews(cfiles, who: true)))
     }
     // ---- Activity ----
     let act = (m["activity"] as? [[String: Any]]) ?? []
@@ -529,23 +525,6 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if let c = m["complete"] as? [String: Any], (c["show"] as? Bool) == true { fab.isHidden = false } else { fab.isHidden = true }
     layoutContent()
     scroll.contentOffset.y = min(max(-scroll.contentInset.top, keepY), max(-scroll.contentInset.top, scroll.contentSize.height - scroll.bounds.height + scroll.contentInset.bottom))
-  }
-  // a list's files: pictures as tiles, others as rows — tapped, the preview (all of the list's files to swipe
-  // through); touched and held, Open / Copy / Download
-  private func fileViews(_ files: [[String: Any]], who: Bool = false) -> [UIView] {
-    var out: [UIView] = []
-    let picsF = files.filter { CommentCell.isPic($0["name"] as? String ?? "") }
-    let at: ([String: Any]) -> Int = { f in files.firstIndex { ($0["id"] as? String) == (f["id"] as? String) } ?? 0 }
-    if !picsF.isEmpty {
-      out.append(pad(CommentCell.tiles(picsF, open: { [weak self] i in self?.onOpenFiles?(files, at(picsF[i])) }, menu: { [weak self] i in self?.fileMenu(files, at(picsF[i])) })))
-    }
-    for (k, f) in files.enumerated() where !CommentCell.isPic(f["name"] as? String ?? "") {
-      let sub: String? = who ? [(f["by"] as? String).map { name($0) }, (f["at"] as? String).map { TaskPage.when($0) }].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ") : nil
-      let r = row(sym: TaskPage.fileSym(f["name"] as? String ?? ""), key: f["name"] as? String ?? "File", sub: sub, value: greyText(TaskPage.size(f["size"] as? Int ?? 0)), chevron: true, keyLines: 1, tap: { [weak self] in self?.onOpenFiles?(files, k) })
-      (r as? TaskRow)?.holdMenu = { [weak self] in self?.fileMenu(files, k) }
-      out.append(r)
-    }
-    return out
   }
   private func fileMenu(_ files: [[String: Any]], _ i: Int) -> UIMenu? {
     guard i < files.count else { return nil }

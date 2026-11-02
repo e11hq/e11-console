@@ -557,6 +557,11 @@ final class CommentCell: UIView {
     }
     return grid
   }
+  // the same cards in one row that scrolls sideways, fading out at the right edge while there's more (a task's files —
+  // Haris, 2026-11-02)
+  static func strip(_ files: [[String: Any]], side: CGFloat = 100, open: @escaping (Int) -> Void = { _ in }, menu: ((Int) -> UIMenu?)? = nil) -> UIView {
+    FileStrip(files.enumerated().map { k, f in tile(f, open: { open(k) }, menu: menu.map { m in { () -> UIMenu? in m(k) } }) }, side: side)
+  }
   static func tile(_ f: [String: Any], open: @escaping () -> Void, menu: (() -> UIMenu?)?) -> UIView {
     let n = f["name"] as? String ?? "File"
     let pic = isPic(n), video = isVideo(n)
@@ -762,5 +767,45 @@ final class ScheduledCard: UIView {
     box.frame = CGRect(x: 16, y: 6, width: bounds.width - 32, height: bounds.height - 12)
     label.frame = box.bounds.insetBy(dx: 14, dy: 12)
     dash?.frame = box.bounds; dash?.path = UIBezierPath(roundedRect: box.bounds, cornerRadius: 16).cgPath
+  }
+}
+
+// a row of file cards that scrolls sideways; the right edge fades while more is to come
+final class FileStrip: UIView, UIScrollViewDelegate {
+  private let scroll = UIScrollView(), row = UIStackView(), fade = CAGradientLayer()
+  init(_ cards: [UIView], side: CGFloat) {
+    super.init(frame: .zero)
+    scroll.showsHorizontalScrollIndicator = false; scroll.alwaysBounceHorizontal = false; scroll.clipsToBounds = false
+    scroll.delegate = self
+    row.spacing = 8; row.alignment = .fill
+    for c in cards { c.widthAnchor.constraint(equalToConstant: side).isActive = true; row.addArrangedSubview(c) }
+    row.translatesAutoresizingMaskIntoConstraints = false; scroll.translatesAutoresizingMaskIntoConstraints = false
+    scroll.addSubview(row); addSubview(scroll)
+    NSLayoutConstraint.activate([
+      scroll.leadingAnchor.constraint(equalTo: leadingAnchor), scroll.trailingAnchor.constraint(equalTo: trailingAnchor),
+      scroll.topAnchor.constraint(equalTo: topAnchor), scroll.bottomAnchor.constraint(equalTo: bottomAnchor),
+      scroll.heightAnchor.constraint(equalToConstant: side),
+      row.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor), row.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor),
+      row.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor), row.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor),
+      row.heightAnchor.constraint(equalTo: scroll.frameLayoutGuide.heightAnchor),
+    ])
+    fade.startPoint = CGPoint(x: 0, y: 0.5); fade.endPoint = CGPoint(x: 1, y: 0.5)
+    fade.colors = [UIColor.black.cgColor, UIColor.black.cgColor, UIColor.clear.cgColor]
+    layer.mask = fade
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  override func layoutSubviews() { super.layoutSubviews(); paintFade() }
+  func scrollViewDidScroll(_ s: UIScrollView) { paintFade() }
+  // (the fade: 36 pt at the right edge, gone once the end is reached — or when everything fits)
+  private func paintFade() {
+    CATransaction.begin(); CATransaction.setDisableActions(true)
+    fade.frame = bounds.insetBy(dx: -40, dy: -20)   // (room for the press-shrink and the left bounce)
+    let w = max(fade.frame.width, 1), left = scroll.contentOffset.x + scroll.bounds.width
+    let more = scroll.contentSize.width - left
+    let edge: CGFloat = min(36, max(0, more))
+    let end = (40 + bounds.width) / w
+    fade.locations = [0, NSNumber(value: Double(end - edge / w)), NSNumber(value: Double(end))]
+    fade.colors = [UIColor.black.cgColor, UIColor.black.cgColor, (edge > 0 ? UIColor.clear : UIColor.black).cgColor]
+    CATransaction.commit()
   }
 }
