@@ -1,4 +1,5 @@
 import UIKit
+import AVFoundation
 import CryptoKit
 
 /* A task's Comments, the app's own (step 2, Haris 2026-11-01): drawn from the server (/api/comments), newest at the
@@ -11,12 +12,18 @@ final class FeedLoader {
   static let shared = FeedLoader()
   var cookies: (@escaping (String) -> Void) -> Void = { $0("") }
   private let cache = NSCache<NSString, UIImage>()
+  // pictures made on the phone (a file being uploaded: "local:<its id>"), and handing one to the server's address so
+  // the real card shows it at once
+  private var locals: [String: UIImage] = [:]
+  func setLocal(_ key: String, _ img: UIImage) { locals[key] = img }
+  func seed(_ path: String, _ img: UIImage) { cache.setObject(img, forKey: path as NSString) }
   private var links: [String: [String: Any]] = [:]
   // pictures are kept on the phone too (Haris, 2026-11-02: coming back to the app, the pictures flashed as if it had
   // reloaded — iPhone empties the memory of an app that's away, or closes it): from the phone's copy they're there at
   // once, no shimmer, no request
   func image(_ path: String, _ done: @escaping (UIImage?) -> Void) {
-    if let i = cache.object(forKey: path as NSString) { return done(i) }
+    if let i = cache.object(forKey: path as NSString) ?? locals[path] { return done(i) }
+    if path.hasPrefix("local:") { return done(nil) }
     if let d = DiskPics.get(path), let i = UIImage(data: d) { cache.setObject(i, forKey: path as NSString); return done(i) }
     cookies { c in
       guard let url = URL(string: path.hasPrefix("http") ? path : serverURL() + path) else { return done(nil) }
@@ -197,6 +204,16 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
     pending.append((id, it, false))
     draw(m, mine: true)
   }
+  // a comment with files sent before they finished uploading (Haris, 2026-11-02): in the feed at once, its cards
+  // pulsing with their upload rings, then the real one takes its place (its pictures already there)
+  func addPending(id: String, parent: String?, text: String, files: [[String: Any]]) {
+    guard parent == thread, let m = model else { return }
+    let at = ISO8601DateFormatter().string(from: Date())
+    let runs: [[String: Any]] = text.isEmpty ? [] : [["t": text]]
+    let it: [String: Any] = ["id": id, "who": m["me"] as? String ?? "", "at": at, "runs": runs, "replies": NSNull(), "files": files]
+    pending.append((id, it, false))
+    draw(m, mine: true)
+  }
   // (a sent one goes once the real one is in the comments: your own voice message, from about then)
   private func dropArrived(_ f: [String: Any]) {
     let items = (f["items"] as? [[String: Any]]) ?? []
@@ -204,13 +221,20 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
     let when: (String) -> Date? = { iso.date(from: $0) ?? ISO8601DateFormatter().date(from: $0) }
     pending.removeAll { p in
       guard p.done, let pa = when(p.item["at"] as? String ?? "") else { return false }
+      let pf = (p.item["files"] as? [[String: Any]]) ?? []
+      let voice = pf.contains { ($0["voice"] as? Bool) == true }
+      let names = pf.map { $0["name"] as? String ?? "" }.sorted()
       let real = items.first { it in
-        (it["who"] as? String) == (p.item["who"] as? String) && (when(it["at"] as? String ?? "") ?? .distantPast) >= pa.addingTimeInterval(-20)
-          && ((it["files"] as? [[String: Any]]) ?? []).contains { ($0["voice"] as? Bool) == true }
+        let rf = (it["files"] as? [[String: Any]]) ?? []
+        return (it["who"] as? String) == (p.item["who"] as? String) && (when(it["at"] as? String ?? "") ?? .distantPast) >= pa.addingTimeInterval(-20)
+          && (voice ? rf.contains { ($0["voice"] as? Bool) == true } : rf.map { $0["name"] as? String ?? "" }.sorted() == names)
           && cells[it["id"] as? String ?? ""] == nil
       }
-      // (the real one takes its place, its ••• turning into ▶)
-      if let id = real?["id"] as? String { arriving.insert(id) }
+      // (the real one takes its place: a voice message's ••• turning into ▶; files' cards with the pictures they had)
+      if let r = real, let id = r["id"] as? String {
+        arriving.insert(id)
+        if !voice { CommentCell.handOver(from: pf, to: (r["files"] as? [[String: Any]]) ?? []) }
+      }
       return real != nil
     }
   }
@@ -228,6 +252,13 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
     let atEnd = mine || isAtEnd()   // (your own voice message: down to it)
     let keepTopId = order.first { (cells[$0]?.frame.maxY ?? 0) > scroll.contentOffset.y + scroll.contentInset.top }
     let keepTopY = keepTopId.flatMap { cells[$0] }.map { $0.frame.minY - scroll.contentOffset.y }
+    // (Haris, 2026-11-02: a comment arriving while you're here — anyone's, with files or not — gets its room first, then
+    //  fades in; one going fades out while the others close up. Not on the first drawing.)
+    let animate = !first && window != nil
+    let before = Set(cells.keys)
+    var oldFrames: [String: CGRect] = [:]
+    if animate { for (id, c) in cells { oldFrames[id] = c.frame } }
+    var fresh: [CommentCell] = [], settled: [CommentCell] = []
     var next: [String] = [], seen = Set<String>()
     for (k, it) in items.enumerated() {
       guard let id = it["id"] as? String else { continue }
@@ -242,10 +273,16 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
       c.onReplies = { [weak self] in self?.onThread?(id) }
       c.onOpen = { [weak self] list, i in self?.onOpenFile?(list, i) }
       c.onReact = { [weak self] e in guard let self = self else { return }; self.onAct?(["act": "react", "id": self.taskId, "key": id, "value": e]) }
-      if arriving.remove(id) != nil { c.voiceArrived() }
+      if arriving.remove(id) != nil { c.voiceArrived(); settled.append(c) }
+      else if animate && !before.contains(id) { fresh.append(c) }
       content.addSubview(c); cells[id] = c
     }
-    for (id, c) in cells where !seen.contains(id) { c.removeFromSuperview(); cells[id] = nil }
+    var going: [CommentCell] = []
+    for (id, c) in cells where !seen.contains(id) {
+      cells[id] = nil
+      // (your own on its way, replaced by the real one: it just goes — the real one is where it was)
+      if animate && !id.hasPrefix("pending-") { going.append(c) } else { c.removeFromSuperview() }
+    }
     // your scheduled comments, last (dashed: "Scheduled · 4:00 PM")
     schedViews.forEach { $0.removeFromSuperview() }
     schedViews = ((m["scheduled"] as? [[String: Any]]) ?? []).map { ScheduledCard($0) }
@@ -253,6 +290,14 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
     let newOnes = next.filter { !seenIds.contains($0) }
     order = next
     layoutCells()
+    if animate {
+      // staying ones slide from where they were (the gap closing or opening); new ones fade in once it's open
+      for id in order { if let c = cells[id], let f = oldFrames[id], f.minY != c.frame.minY { let to = c.frame; c.frame = f
+        UIView.animate(withDuration: 0.44, delay: going.isEmpty ? 0 : 0.06, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState]) { c.frame = to } } }
+      for c in going { UIView.animate(withDuration: 0.2, animations: { c.alpha = 0 }) { _ in c.removeFromSuperview() } }
+      for c in fresh { c.alpha = 0; UIView.animate(withDuration: 0.3, delay: 0.26, options: [.allowUserInteraction, .curveEaseOut]) { c.alpha = 1 } }
+      for c in settled where !c.isVoice { c.alpha = 0.75; UIView.animate(withDuration: 0.35, delay: 0.1, options: [.allowUserInteraction, .curveEaseOut]) { c.alpha = 1 } }
+    }
     if first { first = false; seenIds = Set(next); toEnd(animated: false); tellSeen(); return }
     // at the latest: new comments stay in view (rule 3); higher up nothing moves — the pill counts them
     if atEnd { seenIds = Set(next); toEnd(animated: true) }
@@ -501,6 +546,10 @@ final class CommentCell: UIView {
     func find(_ v: UIView) -> VoiceBubble? { (v as? VoiceBubble) ?? v.subviews.lazy.compactMap { find($0) }.first }
     find(card)?.arrived()
   }
+  var isVoice: Bool {
+    func find(_ v: UIView) -> Bool { v is VoiceBubble || v.subviews.contains { find($0) } }
+    return find(card)
+  }
   // touch and hold: the shared PressShrink (shrinks from the moment the finger is down); held long enough — the
   // haptic, the menu, and it springs back
   private var pressShrink: PressShrink?
@@ -554,6 +603,32 @@ final class CommentCell: UIView {
     out.addAttribute(.paragraphStyle, value: ps, range: NSRange(location: 0, length: out.length))
     return out
   }
+  // the picture a card shows: the server's small one (a video's frame, a document's first page), a photo's smaller copy
+  static func picURL(_ f: [String: Any]) -> String? {
+    let n = f["name"] as? String ?? ""
+    return (f["thumbUrl"] as? String) ?? (isPic(n) ? (f["url"] as? String)?.replacingOccurrences(of: "?view=1", with: "?w=480") : nil)
+  }
+  // an upload's pictures (made on the phone) handed to the server's cards for the same files, by name
+  static func handOver(from pending: [[String: Any]], to real: [[String: Any]]) {
+    var used = Set<Int>()
+    for p in pending {
+      guard let key = p["thumbUrl"] as? String, key.hasPrefix("local:") else { continue }
+      FeedLoader.shared.image(key) { img in
+        guard let img = img, let i = real.indices.first(where: { !used.contains($0) && (real[$0]["name"] as? String) == (p["name"] as? String) }) else { return }
+        used.insert(i)
+        if let u = picURL(real[i]) { FeedLoader.shared.seed(u, img) }
+      }
+    }
+  }
+  // a file on the phone, as its card shows it: a picture itself, a video its first frame
+  static func localThumb(_ url: URL, _ name: String) -> UIImage? {
+    if isPic(name), let img = UIImage(contentsOfFile: url.path) { return img.preparingThumbnail(of: CGSize(width: 480, height: 480)) ?? img }
+    if isVideo(name) {
+      let g = AVAssetImageGenerator(asset: AVURLAsset(url: url)); g.appliesPreferredTrackTransform = true; g.maximumSize = CGSize(width: 480, height: 480)
+      if let cg = try? g.copyCGImage(at: CMTime(seconds: 0.5, preferredTimescale: 600), actualTime: nil) { return UIImage(cgImage: cg) }
+    }
+    return nil
+  }
   static func isPic(_ n: String) -> Bool { ["jpg", "jpeg", "png", "heic", "gif", "webp"].contains((n as NSString).pathExtension.lowercased()) }
   static let videoExt = ["mp4", "mov", "m4v", "webm", "avi", "mkv"]
   static func isVideo(_ n: String) -> Bool { videoExt.contains((n as NSString).pathExtension.lowercased()) }
@@ -573,11 +648,6 @@ final class CommentCell: UIView {
       i += 3
     }
     return grid
-  }
-  // the same cards in one row that scrolls sideways, fading out at the right edge while there's more (a task's files —
-  // Haris, 2026-11-02)
-  static func strip(_ files: [[String: Any]], side: CGFloat = 100, open: @escaping (Int) -> Void = { _ in }, menu: ((Int) -> UIMenu?)? = nil) -> UIView {
-    FileStrip(files.enumerated().map { k, f in tile(f, open: { open(k) }, menu: menu.map { m in { () -> UIMenu? in m(k) } }) }, side: side)
   }
   static func tile(_ f: [String: Any], open: @escaping () -> Void, menu: (() -> UIMenu?)?) -> UIView {
     let n = f["name"] as? String ?? "File"
@@ -600,7 +670,7 @@ final class CommentCell: UIView {
     let typeL = UILabel(); typeL.text = ext.isEmpty ? "FILE" : String(ext.prefix(4)); typeL.font = .systemFont(ofSize: 15, weight: .bold); typeL.textColor = .secondaryLabel; typeL.textAlignment = .center
     if !pic { pin(typeL, 0, 0, 0, 28) }
     // (a photo: the server's smaller copy, quicker to come — the card is a third of the screen wide)
-    let picURL = (f["thumbUrl"] as? String) ?? (pic ? (f["url"] as? String)?.replacingOccurrences(of: "?view=1", with: "?w=480") : nil)
+    let picURL = CommentCell.picURL(f)
     let shimmer = Shimmer()
     if picURL != nil { pin(shimmer, 0, 0, 0, 0) }
     // the name (not on pictures), on a soft shade when there's a picture under it
@@ -612,12 +682,24 @@ final class CommentCell: UIView {
     play.tintColor = .white; play.contentMode = .center; play.backgroundColor = UIColor.black.withAlphaComponent(0.45); play.layer.cornerRadius = 15
     if video { pin(play, nil, nil, nil, nil); play.widthAnchor.constraint(equalToConstant: 30).isActive = true; play.heightAnchor.constraint(equalToConstant: 30).isActive = true; play.centerXAnchor.constraint(equalTo: v.centerXAnchor).isActive = true; play.centerYAnchor.constraint(equalTo: v.centerYAnchor, constant: -6).isActive = true }
     if let p = picURL {
+      var now = true   // (there at once — kept: no fade; arriving later: it fades in over the shimmer)
       FeedLoader.shared.image(p) { [weak v, weak shimmer, weak typeL, weak name, weak shadeView] img in
-        shimmer?.removeFromSuperview()
-        guard let img = img else { return }
-        v?.image = img; typeL?.isHidden = true
-        if !pic { shadeView?.isHidden = false; name?.textColor = .white }
+        guard let img = img, let v = v else { shimmer?.removeFromSuperview(); return }
+        let show = { v.image = img; typeL?.isHidden = true; if !pic { shadeView?.isHidden = false; name?.textColor = .white } }
+        if now { shimmer?.removeFromSuperview(); show() }
+        else { UIView.transition(with: v, duration: 0.3, options: [.transitionCrossDissolve, .allowUserInteraction], animations: show) { _ in shimmer?.removeFromSuperview() } }
       }
+      now = false
+    }
+    // uploading (yours): it pulses softly with its ring filling, and can't be opened yet
+    if (f["pending"] as? Bool) == true {
+      v.onTap = nil; v.menu = nil; v.isUserInteractionEnabled = false
+      let a = CABasicAnimation(keyPath: "opacity"); a.fromValue = 1; a.toValue = 0.55; a.duration = 0.75
+      a.autoreverses = true; a.repeatCount = .infinity; a.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+      v.layer.add(a, forKey: "uploading")
+      let ring = UploadRing(id: f["id"] as? String ?? "")
+      ring.translatesAutoresizingMaskIntoConstraints = false; v.addSubview(ring)
+      NSLayoutConstraint.activate([ring.centerXAnchor.constraint(equalTo: v.centerXAnchor), ring.centerYAnchor.constraint(equalTo: v.centerYAnchor, constant: pic ? 0 : -8), ring.widthAnchor.constraint(equalToConstant: 30), ring.heightAnchor.constraint(equalToConstant: 30)])
     }
     return v
   }
@@ -787,15 +869,20 @@ final class ScheduledCard: UIView {
   }
 }
 
-// a row of file cards that scrolls sideways; the right edge fades while more is to come
+// a row of file cards that scrolls sideways; the right edge fades while more is to come. Kept by file: a card arriving
+// gets its room (the others sliding along), then fades in; one going fades out and its room closes (Haris, 2026-11-02)
 final class FileStrip: UIView, UIScrollViewDelegate {
   private let scroll = UIScrollView(), row = UIStackView(), fade = CAGradientLayer()
-  init(_ cards: [UIView], side: CGFloat) {
+  private let side: CGFloat
+  private var cards: [String: (view: UIView, sig: String)] = [:]
+  private var files: [[String: Any]] = []
+  private var open: (Int) -> Void = { _ in }, menu: ((Int) -> UIMenu?)?
+  init(side: CGFloat) {
+    self.side = side
     super.init(frame: .zero)
     scroll.showsHorizontalScrollIndicator = false; scroll.alwaysBounceHorizontal = false; scroll.clipsToBounds = false
     scroll.delegate = self
     row.spacing = 8; row.alignment = .fill
-    for c in cards { c.widthAnchor.constraint(equalToConstant: side).isActive = true; row.addArrangedSubview(c) }
     row.translatesAutoresizingMaskIntoConstraints = false; scroll.translatesAutoresizingMaskIntoConstraints = false
     scroll.addSubview(row); addSubview(scroll)
     NSLayoutConstraint.activate([
@@ -811,6 +898,47 @@ final class FileStrip: UIView, UIScrollViewDelegate {
     layer.mask = fade
   }
   required init?(coder: NSCoder) { fatalError() }
+  var isEmpty: Bool { files.isEmpty }
+  // the files now (each with its "id"); settle: ids that take the place of an upload (no gap, no fade — just there)
+  func set(_ list: [[String: Any]], settle: Set<String> = [], open: @escaping (Int) -> Void, menu: ((Int) -> UIMenu?)?) {
+    let animate = window != nil && !cards.isEmpty
+    files = list; self.open = open; self.menu = menu
+    let ids = list.map { $0["id"] as? String ?? "" }
+    let oldOrder = row.arrangedSubviews
+    var going: [UIView] = []
+    for (id, c) in cards where !ids.contains(id) { cards[id] = nil; going.append(c.view) }
+    var fresh: [UIView] = [], settled: [UIView] = []
+    var want: [UIView] = []
+    for (k, f) in list.enumerated() {
+      let id = ids[k]
+      let sig = (try? JSONSerialization.data(withJSONObject: f, options: [.sortedKeys])).map { String(decoding: $0, as: UTF8.self) } ?? ""
+      if let c = cards[id], c.sig == sig { want.append(c.view); continue }
+      let replaced = cards[id]?.view
+      let v = CommentCell.tile(f, open: { [weak self] in self?.tapped(id) }, menu: { [weak self] in self?.menuFor(id) })
+      v.widthAnchor.constraint(equalToConstant: side).isActive = true
+      if let r = replaced, let i = row.arrangedSubviews.firstIndex(of: r) { row.insertArrangedSubview(v, at: i); r.removeFromSuperview() }
+      else if animate && !settle.contains(id) { fresh.append(v) }
+      else if settle.contains(id) { settled.append(v) }
+      cards[id] = (v, sig); want.append(v)
+    }
+    // (the ones going stay where they were while they fade)
+    for g in going { if let i = oldOrder.firstIndex(of: g) { want.insert(g, at: min(i, want.count)) } }
+    for (i, v) in want.enumerated() where row.arrangedSubviews.firstIndex(of: v) != i { row.insertArrangedSubview(v, at: i) }
+    if !animate { going.forEach { $0.removeFromSuperview() }; fresh.forEach { $0.isHidden = false }; setNeedsLayout(); return }
+    func spring(_ b: @escaping () -> Void, _ delay: Double) {
+      UIView.animate(withDuration: 0.44, delay: delay, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState], animations: { b(); self.row.layoutIfNeeded() })
+    }
+    for g in going { UIView.animate(withDuration: 0.2, animations: { g.alpha = 0 }) { _ in spring({ g.isHidden = true }, 0); DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { g.removeFromSuperview() } } }
+    for v in fresh { v.isHidden = true; v.alpha = 0 }
+    row.layoutIfNeeded()
+    if !fresh.isEmpty {
+      spring({ fresh.forEach { $0.isHidden = false } }, going.isEmpty ? 0 : 0.06)
+      UIView.animate(withDuration: 0.3, delay: 0.26, options: [.allowUserInteraction, .curveEaseOut]) { fresh.forEach { $0.alpha = 1 } }
+    }
+    for v in settled { v.alpha = 0.75; UIView.animate(withDuration: 0.35, delay: 0.1, options: [.allowUserInteraction, .curveEaseOut]) { v.alpha = 1 } }
+  }
+  private func tapped(_ id: String) { if let i = files.firstIndex(where: { ($0["id"] as? String) == id }) { open(i) } }
+  private func menuFor(_ id: String) -> UIMenu? { files.firstIndex(where: { ($0["id"] as? String) == id }).flatMap { menu?($0) } }
   override func layoutSubviews() { super.layoutSubviews(); paintFade() }
   func scrollViewDidScroll(_ s: UIScrollView) { paintFade() }
   // (the fade: 36 pt at the right edge, gone once the end is reached — or when everything fits)
@@ -824,6 +952,36 @@ final class FileStrip: UIView, UIScrollViewDelegate {
     fade.locations = [0, NSNumber(value: Double(end - edge / w)), NSNumber(value: Double(end))]
     fade.colors = [UIColor.black.cgColor, UIColor.black.cgColor, (edge > 0 ? UIColor.clear : UIColor.black).cgColor]
     CATransaction.commit()
+  }
+}
+
+// an upload's ring on its card: fills as it goes up (the uploads say how far: UploadRing.post)
+final class UploadRing: UIView {
+  private let track = CAShapeLayer(), bar = CAShapeLayer()
+  private var token: NSObjectProtocol?
+  static let note = Notification.Name("e11.upload")
+  static var last: [String: Double] = [:]
+  static func post(_ id: String, _ p: Double) {
+    DispatchQueue.main.async { last[id] = p; NotificationCenter.default.post(name: note, object: nil, userInfo: ["id": id, "p": p]) }
+  }
+  init(id: String) {
+    super.init(frame: .zero)
+    isUserInteractionEnabled = false
+    backgroundColor = UIColor.black.withAlphaComponent(0.4); layer.cornerRadius = 15
+    for l in [track, bar] { l.fillColor = UIColor.clear.cgColor; l.lineWidth = 2.5; l.lineCap = .round; layer.addSublayer(l) }
+    track.strokeColor = UIColor.white.withAlphaComponent(0.3).cgColor; bar.strokeColor = UIColor.white.cgColor
+    bar.strokeEnd = CGFloat(UploadRing.last[id] ?? 0)
+    token = NotificationCenter.default.addObserver(forName: UploadRing.note, object: nil, queue: .main) { [weak self] n in
+      guard (n.userInfo?["id"] as? String) == id, let p = n.userInfo?["p"] as? Double else { return }
+      self?.bar.strokeEnd = CGFloat(max(0.03, min(1, p)))   // (the layer's own short animation: it fills smoothly)
+    }
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  deinit { if let t = token { NotificationCenter.default.removeObserver(t) } }
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    let path = UIBezierPath(arcCenter: CGPoint(x: bounds.midX, y: bounds.midY), radius: 9, startAngle: -.pi / 2, endAngle: 1.5 * .pi, clockwise: true).cgPath
+    track.path = path; bar.path = path; track.frame = bounds; bar.frame = bounds
   }
 }
 

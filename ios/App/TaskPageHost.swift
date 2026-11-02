@@ -330,6 +330,10 @@ extension Main {
       guard let p = self?.taskPages.last else { return }
       if let t = p.threadFeed, thread != nil { t.addPending(id: id, parent: thread, dur: dur) } else { p.feed?.addPending(id: id, parent: thread, dur: dur) }
     }
+    c.onPendingFiles = { [weak self] id, thread, words, cards in
+      guard let self = self, let p = self.taskPages.last else { return }
+      if let t = p.threadFeed, thread != nil { t.addPending(id: id, parent: thread, text: words, files: cards) } else { p.feed?.addPending(id: id, parent: thread, text: words, files: cards) }
+    }
     c.onPendingEnd = { [weak self] id, ok in
       guard let p = self?.taskPages.last else { return }
       p.feed?.endPending(id: id, ok: ok); p.threadFeed?.endPending(id: id, ok: ok)
@@ -590,26 +594,33 @@ extension Main {
 }
 
 extension Main {
-  // files from the phone onto the task: each uploads with its bar under Files, then all are added at once
+  // files from the phone onto the task: each one's card in the Files row at once, pulsing with its upload ring; all are
+  // added together once they're up, and the real cards take their places (Haris, 2026-11-02)
   func uploadToTask(_ p: TaskPage, _ picked: [(URL, String)]) {
     guard !picked.isEmpty else { return }
-    p.uploads = picked.map { ($0.1, 0) }
-    var done: [[String: Any]] = [], left = picked.count
+    let ids = picked.map { _ in "up-" + UUID().uuidString }
+    p.addUploads(zip(ids, picked).map { id, f in
+      var c: [String: Any] = ["id": id, "name": f.1, "pending": true]
+      if let t = CommentCell.localThumb(f.0, f.1) { FeedLoader.shared.setLocal("local:" + id, t); c["thumbUrl"] = "local:" + id }
+      return c
+    })
+    var done: [[String: Any]] = [], sent = Set<String>(), left = picked.count
     for (i, (url, name)) in picked.enumerated() {
+      let id = ids[i]
       let size = ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.int64Value ?? 0
-      Uploader.send(url, name: name, task: p.taskId, cookies: serverHome.cookies, progress: { [weak p] f in
-        guard let p = p, i < p.uploads.count else { return }
-        p.uploads[i].1 = f
-      }) { [weak self, weak p] path in
+      Uploader.send(url, name: name, task: p.taskId, cookies: serverHome.cookies, progress: { f in UploadRing.post(id, f) }) { [weak self, weak p] path in
         guard let self = self, let p = p else { return }
-        if let path = path { done.append(["name": name, "size": size, "path": path]) }
+        if let path = path { done.append(["name": name, "size": size, "path": path]); sent.insert(id); UploadRing.post(id, 1) }
+        else { p.dropUploads([id]) }
         left -= 1
         if left == 0 {
-          p.uploads = []
           if done.isEmpty { p.toast("Upload failed — try again"); return }
           UINotificationFeedbackGenerator().notificationOccurred(.success)
           Main.playUploaded()
+          p.uploadsSent(sent)
           self.taskAct(p, ["act": "attach", "id": p.taskId, "files": done])
+          // (never came: they go after a while)
+          DispatchQueue.main.asyncAfter(deadline: .now() + 20) { [weak p] in p?.dropUploads(sent) }
         }
       }
     }

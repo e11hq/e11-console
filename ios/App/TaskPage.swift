@@ -101,13 +101,26 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   var onAttachFrom: ((String) -> Void)?
   var onFileAction: (([String: Any], String) -> Void)?   // a file's "open" / "copy" / "download" (its touch-and-hold menu)   // (••• → Attach Files → Camera / Photos / Files)
   private var filesBlock: UIView?
-  // files uploading from the phone: name → 0…1 (shown under Files with a bar)
-  var uploads: [(String, Double)] = [] { didSet {
-    let started = oldValue.isEmpty && !uploads.isEmpty
+  // files uploading from the phone (Haris, 2026-11-02): cards in the Files row straight away, pulsing with their rings
+  // ({ id, name, pending, thumbUrl: "local:…", sent }); each gives its place to the real one once the server has it
+  private(set) var uploads: [[String: Any]] = []
+  private var knownFiles = Set<String>()
+  func addUploads(_ u: [[String: Any]]) {
+    let started = uploads.isEmpty
+    if started { knownFiles = Set(((model?["files"] as? [[String: Any]]) ?? []).compactMap { $0["id"] as? String }) }
+    uploads += u
     built = ""; if let m = model { draw(m) }
-    // (attaching: down to Files, where their bars are)
+    // (attaching: down to Files, where they are)
     if started { DispatchQueue.main.async { self.showFiles() } }
-  } }
+  }
+  // sent to the task (waiting for the real ones), or gone (didn't upload / never came)
+  func uploadsSent(_ ids: Set<String>) { for i in uploads.indices where ids.contains(uploads[i]["id"] as? String ?? "") { uploads[i]["sent"] = true } }
+  func dropUploads(_ ids: Set<String>) {
+    let n = uploads.count
+    uploads.removeAll { ids.contains($0["id"] as? String ?? "") }
+    if uploads.count != n { built = ""; if let m = model { draw(m) } }
+  }
+  private let filesStrip = FileStrip(side: 100), descStrip = FileStrip(side: 100)
   func showFiles() {
     guard let b = filesBlock, tab == "details" else { return }
     // (the Files block's bottom just above the bottom edge; never past the end)
@@ -491,17 +504,28 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     }
     // (files pasted into the description: the same cards as comments' — tapped, the preview with them)
     let dfiles = TaskPage.viewOnly ? ((m["descFiles"] as? [[String: Any]]) ?? []) : []
-    if !dfiles.isEmpty {
-      blocks.append(CommentCell.strip(dfiles, open: { [weak self] i in self?.onOpenFiles?(dfiles, i) }, menu: { [weak self] i in self?.fileMenu(dfiles, i) }))
-    }
+    descStrip.set(dfiles, open: { [weak self] i in self?.onOpenFiles?(dfiles, i) }, menu: { [weak self] i in self?.fileMenu(dfiles, i) })
+    if !dfiles.isEmpty { blocks.append(descStrip) }
     // ---- Files ---- the task's and the comments' together, one row of cards that scrolls sideways (Haris, 2026-11-02)
-    let files = ((m["files"] as? [[String: Any]]) ?? []) + ((m["commentFiles"] as? [[String: Any]]) ?? [])
+    //      Yours uploading: in the row at once (after the task's own), then the real one in its place, no jump.
+    let own = (m["files"] as? [[String: Any]]) ?? [], fromComments = (m["commentFiles"] as? [[String: Any]]) ?? []
+    var settle = Set<String>()
+    uploads.removeAll { u in
+      guard (u["sent"] as? Bool) == true, let r = own.first(where: { f in let id = f["id"] as? String ?? ""
+        return (f["name"] as? String) == (u["name"] as? String) && !knownFiles.contains(id) && !settle.contains(id) }), let rid = r["id"] as? String else { return false }
+      settle.insert(rid); CommentCell.handOver(from: [u], to: [r])
+      return true
+    }
+    let files = own + fromComments
+    let shown = own + uploads + fromComments
     let canAttach = (m["readOnly"] as? Bool) != true
     if !files.isEmpty || canAttach || !uploads.isEmpty {
       blocks.append(header(files.isEmpty ? "Files" : "Files · \(files.count)"))
       var fr: [UIView] = []
-      if !files.isEmpty { fr.append(pad(CommentCell.strip(files, open: { [weak self] i in self?.onOpenFiles?(files, i) }, menu: { [weak self] i in self?.fileMenu(files, i) }))) }
-      for (n, pr) in uploads { fr.append(progressRow(n, pr)) }
+      let real = shown.filter { ($0["pending"] as? Bool) != true }
+      let at: (Int) -> Int = { i in real.firstIndex { ($0["id"] as? String) == (shown[i]["id"] as? String) } ?? 0 }
+      filesStrip.set(shown, settle: settle, open: { [weak self] i in self?.onOpenFiles?(real, at(i)) }, menu: { [weak self] i in self?.fileMenu(real, at(i)) })
+      if !shown.isEmpty { fr.append(pad(filesStrip)) }
       if canAttach { fr.append(addRow("Attach Files") { [weak self] in self?.attachSheet() }) }
       let fg = group(fr); filesBlock = fg
       blocks.append(fg)
@@ -935,19 +959,6 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     h.translatesAutoresizingMaskIntoConstraints = false; r.addSubview(h)
     NSLayoutConstraint.activate([h.leadingAnchor.constraint(equalTo: r.leadingAnchor, constant: 15), h.trailingAnchor.constraint(lessThanOrEqualTo: r.trailingAnchor, constant: -16), h.topAnchor.constraint(equalTo: r.topAnchor, constant: 13), h.bottomAnchor.constraint(equalTo: r.bottomAnchor, constant: -13)])
     r.onTap = tap
-    return r
-  }
-  private func progressRow(_ name: String, _ p: Double) -> UIView {
-    let r = UIView()
-    let l = label(name, size: 15, color: .label); l.lineBreakMode = .byTruncatingMiddle
-    let pct = label("\(Int(p * 100))%", size: 13, color: .secondaryLabel)
-    let bar = UIProgressView(progressViewStyle: .default); bar.progress = Float(p)
-    let top = UIStackView(arrangedSubviews: [l, pct]); top.spacing = 8
-    let v = UIStackView(arrangedSubviews: [top, bar]); v.axis = .vertical; v.spacing = 6
-    v.translatesAutoresizingMaskIntoConstraints = false; r.addSubview(v)
-    NSLayoutConstraint.activate([v.leadingAnchor.constraint(equalTo: r.leadingAnchor, constant: 52), v.trailingAnchor.constraint(equalTo: r.trailingAnchor, constant: -16), v.topAnchor.constraint(equalTo: r.topAnchor, constant: 12), v.bottomAnchor.constraint(equalTo: r.bottomAnchor, constant: -12)])
-    let ic = symbol("arrow.up.circle", 16, .systemBlue); ic.translatesAutoresizingMaskIntoConstraints = false; r.addSubview(ic)
-    NSLayoutConstraint.activate([ic.leadingAnchor.constraint(equalTo: r.leadingAnchor, constant: 16), ic.widthAnchor.constraint(equalToConstant: 24), ic.centerYAnchor.constraint(equalTo: r.centerYAnchor)])
     return r
   }
   // the one Attach Files sheet (Camera · Photos · Files); the app uploads them itself, with their bars

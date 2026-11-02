@@ -62,7 +62,11 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
   private let replyLine = UIStackView(), replyLabel = UILabel()
   private let tiles = UIStackView()
   private let mentions = UIStackView()
-  private var files: [(name: String, size: Int64, path: String?, progress: Double, failed: Bool, thumb: UIImage?)] = []
+  private var files: [(uid: String, name: String, size: Int64, path: String?, progress: Double, failed: Bool, thumb: UIImage?)] = []
+  // uploads finished or failed (by their id) — kept even once the box is cleared, for comments sent before they were up
+  private var upDone: [String: String] = [:], upFailed = Set<String>()
+  private var outbox: [(pendingId: String, body: [String: Any], files: [(uid: String, name: String, size: Int64)])] = []
+  var onPendingFiles: ((String, String?, String, [[String: Any]]) -> Void)?   // a comment sent while its files upload: (id, thread, words, its cards)
   private var textH: NSLayoutConstraint!
   private var tilesH: NSLayoutConstraint!
 
@@ -251,12 +255,13 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     if let f = FileClip.current, let path = f["file"] as? String {
       if files.contains(where: { $0.path == path }) { return true }
       let size = Int64(f["size"] as? Int ?? 0)
-      files.append((name: f["name"] as? String ?? "File", size: size, path: path, progress: 1, failed: false, thumb: nil))
-      let i = files.count - 1
+      let uid = UUID().uuidString
+      files.append((uid: uid, name: f["name"] as? String ?? "File", size: size, path: path, progress: 1, failed: false, thumb: nil))
+      upDone[uid] = path
       paintTiles()
       UIImpactFeedbackGenerator(style: .light).impactOccurred()
       let pic = (f["thumbUrl"] as? String) ?? (CommentCell.isPic(f["name"] as? String ?? "") ? f["url"] as? String : nil)
-      if let p = pic { FeedLoader.shared.image(p) { [weak self] img in guard let self = self, let img = img, i < self.files.count, self.files[i].path == path else { return }; self.files[i].thumb = img; self.paintTiles() } }
+      if let p = pic { FeedLoader.shared.image(p) { [weak self] img in guard let self = self, let img = img, let i = self.files.firstIndex(where: { $0.uid == uid }) else { return }; self.files[i].thumb = img; self.paintTiles() } }
       return true
     }
     var added = false
@@ -288,18 +293,31 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
       let g = AVAssetImageGenerator(asset: AVURLAsset(url: url)); g.appliesPreferredTrackTransform = true; g.maximumSize = CGSize(width: 240, height: 240)
       if let cg = try? g.copyCGImage(at: CMTime(seconds: 0.5, preferredTimescale: 600), actualTime: nil) { thumb = UIImage(cgImage: cg) }
     }
-    files.append((name: name, size: size, path: nil, progress: 0, failed: false, thumb: thumb))
-    let i = files.count - 1
+    let uid = UUID().uuidString
+    files.append((uid: uid, name: name, size: size, path: nil, progress: 0, failed: false, thumb: thumb))
+    if let t = thumb { FeedLoader.shared.setLocal("local:" + uid, t) }   // (its card in the comments, if sent before it's up)
     paintTiles()
-    Uploader.send(url, name: name, task: taskId, cookies: cookies, progress: { [weak self] p in guard let self = self, i < self.files.count else { return }; self.files[i].progress = p; self.paintTiles() }) { [weak self] path in
-      guard let self = self, i < self.files.count else { return }
-      if let p = path { self.files[i].path = p; self.files[i].progress = 1; Main.playUploaded(); UINotificationFeedbackGenerator().notificationOccurred(.success) } else { self.files[i].failed = true; self.onToast?("Upload failed — try again") }
-      self.paintTiles()
+    Uploader.send(url, name: name, task: taskId, cookies: cookies, progress: { [weak self] p in
+      UploadRing.post(uid, p)
+      guard let self = self, let i = self.files.firstIndex(where: { $0.uid == uid }) else { return }
+      self.files[i].progress = p; self.paintTiles()
+    }) { [weak self] path in
+      guard let self = self else { return }
+      if let p = path { self.upDone[uid] = p; UploadRing.post(uid, 1) } else { self.upFailed.insert(uid) }
+      let waiting = self.outbox.contains { $0.files.contains { $0.uid == uid } }
+      if let i = self.files.firstIndex(where: { $0.uid == uid }) {
+        if let p = path { self.files[i].path = p; self.files[i].progress = 1 } else { self.files[i].failed = true }
+        self.paintTiles()
+      }
+      if path != nil, !waiting { Main.playUploaded(); UINotificationFeedbackGenerator().notificationOccurred(.success) }
+      if path == nil, !waiting { self.onToast?("Upload failed — try again") }
+      self.flushOutbox()
     }
   }
   private func paintTiles() {
     tiles.arrangedSubviews.forEach { $0.removeFromSuperview() }
-    for (i, f) in files.enumerated() {
+    for f in files {
+      let uid = f.uid
       let t = UIView(); t.backgroundColor = .tertiarySystemFill; t.layer.cornerRadius = 12
       t.translatesAutoresizingMaskIntoConstraints = false
       t.widthAnchor.constraint(equalToConstant: 56).isActive = true; t.heightAnchor.constraint(equalToConstant: 56).isActive = true
@@ -313,9 +331,15 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
       t.addSubview(l)
       if f.progress < 1 && !f.failed { l.text = "\(Int(f.progress * 100))%"; if f.thumb == nil { l.textColor = .label }; let bar = UIProgressView(progressViewStyle: .bar); bar.progress = Float(f.progress); bar.frame = CGRect(x: 8, y: 46, width: 40, height: 3); t.addSubview(bar) }
       if f.failed { l.textColor = .systemRed }
-      let x = UIButton(type: .system); x.setImage(UIImage(systemName: "xmark.circle.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 16)), for: .normal); x.tintColor = .label
+      // the ✕: a dark circle with a thin white edge and a white ✕ — clear on any picture, dark or light (as Photos' and
+      // Messages' own remove buttons; Haris, 2026-11-02)
+      let x = UIButton(type: .custom)
+      x.setImage(UIImage(systemName: "xmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: 9, weight: .bold)), for: .normal); x.tintColor = .white
+      x.backgroundColor = UIColor.black.withAlphaComponent(0.62); x.layer.cornerRadius = 11
+      x.layer.borderWidth = 1.5; x.layer.borderColor = UIColor.white.withAlphaComponent(0.9).cgColor
+      x.layer.shadowColor = UIColor.black.cgColor; x.layer.shadowOpacity = 0.25; x.layer.shadowRadius = 2; x.layer.shadowOffset = .zero
       x.frame = CGRect(x: 38, y: -4, width: 22, height: 22)
-      x.addAction(UIAction { [weak self] _ in self?.files.remove(at: i); self?.paintTiles() }, for: .touchUpInside)
+      x.addAction(UIAction { [weak self] _ in self?.files.removeAll { $0.uid == uid }; self?.paintTiles() }, for: .touchUpInside)
       t.addSubview(x)
       tiles.addArrangedSubview(t)
     }
@@ -327,7 +351,7 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
   // ---------- send ----------
   private func sendTapped() {
     guard hasSomething else { return }
-    if files.contains(where: { $0.path == nil && !$0.failed }) { onToast?("Wait for the files to finish uploading"); return }
+    if editing == nil, files.contains(where: { $0.path == nil && !$0.failed }) { sendEarly(); return }
     let a = text.attributedText ?? NSAttributedString()
     let html = DescEditor.html(a), plain = (text.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     var body: [String: Any] = ["act": editing != nil ? "editComment" : "comment", "id": taskId, "html": html, "text": plain]
@@ -341,6 +365,44 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
       guard let self = self else { return }
       self.right.isEnabled = true
       if ok { UINotificationFeedbackGenerator().notificationOccurred(.success); self.clear() }
+    }
+  }
+  // sent while files are still uploading (Haris, 2026-11-02): the comment goes into the feed at once, its cards pulsing
+  // with their rings; it's sent to the server the moment the last one is up (one that fails: the comment doesn't go)
+  private func sendEarly() {
+    let a = text.attributedText ?? NSAttributedString()
+    let html = DescEditor.html(a), plain = (text.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    let keep = files.filter { !$0.failed }
+    var body: [String: Any] = ["act": "comment", "id": taskId, "html": html, "text": plain]
+    let thread = parentId ?? replyTo?.id
+    if let p = thread { body["parentId"] = p }
+    let pendingId = "pending-" + UUID().uuidString
+    let cards: [[String: Any]] = keep.map { f in
+      var c: [String: Any] = ["id": f.uid, "name": f.name, "size": f.size, "pending": f.path == nil]
+      if f.thumb != nil { FeedLoader.shared.setLocal("local:" + f.uid, f.thumb!); c["thumbUrl"] = "local:" + f.uid }
+      return c
+    }
+    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    outbox.append((pendingId: pendingId, body: body, files: keep.map { (uid: $0.uid, name: $0.name, size: $0.size) }))
+    onPendingFiles?(pendingId, thread, plain, cards)
+    clear()
+    flushOutbox()
+  }
+  private func flushOutbox() {
+    for o in outbox {
+      if o.files.contains(where: { upFailed.contains($0.uid) }) {
+        outbox.removeAll { $0.pendingId == o.pendingId }
+        onPendingEnd?(o.pendingId, false); onToast?("A file didn’t upload, so the comment wasn’t sent — try again")
+        continue
+      }
+      guard o.files.allSatisfy({ upDone[$0.uid] != nil }) else { continue }
+      outbox.removeAll { $0.pendingId == o.pendingId }
+      var body = o.body
+      body["files"] = o.files.map { ["name": $0.name, "size": $0.size, "path": upDone[$0.uid]!] as [String: Any] }
+      onSend?(body) { [weak self] ok in
+        self?.onPendingEnd?(o.pendingId, ok)
+        if ok { Main.playUploaded(); UINotificationFeedbackGenerator().notificationOccurred(.success) }
+      }
     }
   }
   // what's written but not sent stays with its task (and thread) while the app is open
