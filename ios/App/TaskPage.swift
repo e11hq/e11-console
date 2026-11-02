@@ -549,7 +549,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let shown = own + uploads + fromComments
     let canAttach = (m["readOnly"] as? Bool) != true
     if !files.isEmpty || canAttach || !uploads.isEmpty {
-      blocks.append(header(files.isEmpty ? "Files" : "Files · \(files.count)", sym: "paperclip"))
+      blocks.append(header(files.isEmpty ? "Files" : "Files · \(files.count)", sym: UIImage(systemName: "photo.stack") != nil ? "photo.stack" : "photo.on.rectangle"))   // (Haris chose photo.stack, 2026-11-02)
       var fr: [UIView] = []
       let real = shown.filter { ($0["pending"] as? Bool) != true }
       let at: (Int) -> Int = { i in real.firstIndex { ($0["id"] as? String) == (shown[i]["id"] as? String) } ?? 0 }
