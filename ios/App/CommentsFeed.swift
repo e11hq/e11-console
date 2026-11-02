@@ -262,6 +262,7 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
     if let pp = m["people"] as? [String: [String: Any]] { people.merge(pp) { _, b in b } }
     let items = ((m["items"] as? [[String: Any]]) ?? []) + pending.map { $0.item }
     let atEnd = mine || wantEnd || isAtEnd()   // (your own voice message, or a comment you've just sent: down to it)
+    if wantEnd { keepId = nil }   // (sent: the latest from now on, not the comment it replied to)
     wantEnd = false
     let keepTopId = order.first { (cells[$0]?.frame.maxY ?? 0) > scroll.contentOffset.y + scroll.contentInset.top }
     let keepTopY = keepTopId.flatMap { cells[$0] }.map { $0.frame.minY - scroll.contentOffset.y }
