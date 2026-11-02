@@ -1154,6 +1154,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       sheet.onLiftedGone = { [weak card] in card?.alpha = 1 }
     }
     present?(sheet)
+    // (never left hidden if the sheet didn't come up)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak card, weak sheet] in if sheet?.view.window == nil { card?.alpha = 1 } }
   }
 
   // ---------- a toast over Home (the page's own would be under it): "Link copied", "2 files added to …", Undo ----------
