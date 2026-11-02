@@ -907,6 +907,7 @@ final class FileStrip: UIView, UIScrollViewDelegate {
   }
   required init?(coder: NSCoder) { fatalError() }
   var isEmpty: Bool { files.isEmpty }
+  var scrolls: Bool { scroll.contentSize.width > scroll.bounds.width + 1 }
   // the files now (each with its "id"); settle: ids that take the place of an upload (no gap, no fade — just there)
   func set(_ list: [[String: Any]], settle: Set<String> = [], open: @escaping (Int) -> Void, menu: ((Int) -> UIMenu?)?) {
     let animate = window != nil && !cards.isEmpty

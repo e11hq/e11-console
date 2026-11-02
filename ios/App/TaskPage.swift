@@ -298,6 +298,8 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let v = p.velocity(in: self), x = p.location(in: self).x
     if x < 24 { return false }   // (the edge: iPhone's back swipe)
     if editingDesc || titleView.isFirstResponder { return false }
+    // (on a row of files that scrolls sideways: the row scrolls, the page stays on Details — Haris, 2026-11-02)
+    for st in [filesStrip, descStrip] where st.window != nil && st.scrolls && st.bounds.contains(p.location(in: st)) { return false }
     return abs(v.x) > abs(v.y) * 1.2
   }
   func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith o: UIGestureRecognizer) -> Bool { g === tabSwipe }
