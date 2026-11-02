@@ -218,10 +218,29 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     }
     if isInbox { drawInbox(model); setNeedsLayout(); layoutIfNeeded(); return }
     // the groups: their headers, cards (kept by task, so a change doesn't redraw the rest) and "nothing due" lines
-    content.forEach { if !($0 is HomeCard) { $0.removeFromSuperview() } }
+    // A change on the same list (done, due, deleted, undone — by you or by anyone else) moves as the Inbox does (Haris,
+    // 2026-11-02): what goes fades out where it is while the gap closes; what comes — a task moving from Overdue to
+    // Today, one completed elsewhere arriving on Done — gets its gap opened, then fades in. Nothing jumps.
+    let key = "\(isList)|\(listTab)|\(filtersKey)"
+    let animate = window != nil && !isHidden && key == drawnKey && !content.isEmpty && !searching
+    drawnKey = key
+    var oldCenter: [String: CGPoint] = [:]
+    let oldGroup = groupOf
+    var oldHeads: [String: UIView] = [:]
+    if animate {
+      for (id, v) in cards { oldCenter[id] = v.center }
+      for v in content where !(v is HomeCard) { if let k = v.accessibilityIdentifier { oldHeads[k] = v } }
+    }
+    let leavingHeads = content.filter { !($0 is HomeCard) }
+    if !animate { leavingHeads.forEach { $0.removeFromSuperview() } }
     content = []
+    groupOf = [:]
     var seen = Set<String>()
+    var runs: [String: Int] = [:]
     for g in model["groups"] as? [[String: Any]] ?? [] {
+      let gname = g["name"] as? String ?? ""
+      runs[gname, default: 0] += 1
+      let gkey = gname + "#" + String(runs[gname]!)
       let h = UILabel()
       let name = (g["name"] as? String ?? "").uppercased()
       let s = NSMutableAttributedString()
@@ -236,7 +255,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
         s.append(NSAttributedString(string: " ", attributes: [.font: UIFont.systemFont(ofSize: 12), .kern: 3.6]))
         s.append(NSAttributedString(string: "\(n)", attributes: [.font: UIFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: L.gh.withAlphaComponent(0.8)]))
       }
-      h.attributedText = s; h.tag = 7; h.accessibilityIdentifier = g["name"] as? String
+      h.attributedText = s; h.tag = 7; h.accessibilityIdentifier = gkey
       // (Today: no heading on screen — only the mark the Due today box scrolls to)
       if (g["anchor"] as? Bool) == true { h.isHidden = true }
       scroll.addSubview(h); content.append(h)
@@ -260,13 +279,19 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
         v.people = people
         v.set(c, look: L)
         content.append(v)
+        groupOf[id] = gkey
       }
       if let e = g["empty"] as? String, !e.isEmpty {
-        let l = UILabel(); l.text = e; l.font = .systemFont(ofSize: 14); l.textColor = L.empty; l.tag = 8; l.numberOfLines = 0
+        let l = UILabel(); l.text = e; l.font = .systemFont(ofSize: 14); l.textColor = L.empty; l.tag = 8; l.numberOfLines = 0; l.accessibilityIdentifier = "empty|" + gkey
         scroll.addSubview(l); content.append(l)
       }
     }
-    for (id, v) in cards where !seen.contains(id) { if v === openCard { actions?.removeFromSuperview(); actions = nil; openCard = nil }; v.removeFromSuperview(); cards[id] = nil }
+    var gone: [UIView] = []
+    for (id, v) in cards where !seen.contains(id) {
+      if v === openCard { actions?.removeFromSuperview(); actions = nil; openCard = nil }
+      if animate { gone.append(v) } else { v.removeFromSuperview() }
+      cards[id] = nil
+    }
     canDelete = (model["canDelete"] as? Bool) == true
     if let t = model["toast"] as? [String: Any] { toast(t) }
     fab.isHidden = (model["add"] as? Bool) != true
@@ -274,6 +299,44 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if isList, let f = lastFilters { setFilters(f) }
 
     setNeedsLayout(); layoutIfNeeded()
+    if animate { moveList(oldCenter: oldCenter, oldGroup: oldGroup, oldHeads: oldHeads, leavingHeads: leavingHeads, gone: gone) }
+  }
+  private var drawnKey = ""
+  private var groupOf: [String: String] = [:]
+  // the list from how it was to how it is now: going — fades out where it is; staying — slides to its place (the gap
+  // closing or opening, Mail's spring); coming (or moved to another group) — fades in once its gap has opened
+  private func moveList(oldCenter: [String: CGPoint], oldGroup: [String: String], oldHeads: [String: UIView], leavingHeads: [UIView], gone: [UIView]) {
+    let fadeOut = 0.2, settle = 0.44
+    func fade(_ v: UIView) {
+      scroll.bringSubviewToFront(v)
+      UIView.animate(withDuration: fadeOut, delay: 0, options: [.curveEaseOut, .allowUserInteraction]) { v.alpha = 0 } completion: { _ in v.removeFromSuperview() }
+    }
+    // going: the removed cards, and the old headings that aren't there any more (the rest are swapped for the new ones)
+    gone.forEach(fade)
+    var arrivals: [UIView] = [], moves: [(UIView, CGPoint)] = []
+    for v in content {
+      if let c = v as? HomeCard {
+        guard let was = oldCenter[c.id] else { arrivals.append(c); continue }
+        if oldGroup[c.id] != groupOf[c.id] {
+          // (moved to another group — Overdue → Today: a copy fades out where it was, the card fades in at its new place)
+          if let ghost = c.snapshotView(afterScreenUpdates: false) { ghost.center = was; scroll.addSubview(ghost); fade(ghost) }
+          arrivals.append(c)
+        } else if abs(was.y - c.center.y) > 0.5 { moves.append((c, c.center)); c.center = was }
+      } else if let k = v.accessibilityIdentifier, let old = oldHeads[k] {
+        let now = v.center
+        if abs(old.center.y - now.y) > 0.5 { v.center = old.center; moves.append((v, now)) }
+      } else { arrivals.append(v) }
+    }
+    for h in leavingHeads {
+      if let k = h.accessibilityIdentifier, content.contains(where: { $0.accessibilityIdentifier == k }) { h.removeFromSuperview() } else { fade(h) }
+    }
+    arrivals.forEach { $0.alpha = 0 }
+    // the gaps close and open together (Mail's spring: about 0.44 s, no bounce), a moment after the fading starts
+    let run = { for (v, to) in moves { v.center = to } }
+    if #available(iOS 17.0, *) { UIView.animate(springDuration: settle, bounce: 0, initialSpringVelocity: 0, delay: 0.06, options: [.allowUserInteraction, .beginFromCurrentState], animations: run) }
+    else { UIView.animate(withDuration: settle, delay: 0.06, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState], animations: run) }
+    // coming: once its gap is there
+    UIView.animate(withDuration: 0.22, delay: 0.26, options: [.curveEaseOut, .allowUserInteraction]) { arrivals.forEach { $0.alpha = 1 } }
   }
   private func meChanged() {
     let p = people[meId]
