@@ -43,8 +43,18 @@ struct CornerBar: View {
   @ObservedObject var m: CornerModel
   @Namespace private var ns
   var body: some View {
-    Group {
-      if #available(iOS 26.0, *) { GlassEffectContainer(spacing: 6) { spots } } else { spots }
+    ZStack {
+      Group {
+        if #available(iOS 26.0, *) { GlassEffectContainer(spacing: 6) { spots } } else { spots }
+      }
+      // (your photo: a layer of its own above the glass container — inside it, even as an overlay, iPhone drew the glass
+      //  over the picture: tinted and blurred, Haris 2026-11-02 22:53)
+      if m.corner.kind != "none" {
+        photoOver(m.corner)
+          .frame(width: m.corner.frame.width, height: m.corner.frame.height)
+          .opacity(m.corner.opacity)
+          .position(x: m.corner.frame.midX, y: m.corner.frame.midY)
+      }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .ignoresSafeArea()
@@ -72,7 +82,6 @@ struct CornerBar: View {
       // (the middle one: each kind its own glass shape — 🔍 and Mark all read — so iPhone morphs one glass into the other,
       //  the liquid drop way. The corner — your photo, ••• and ✕ — is one glass that stays: what's on it cross-fades.)
       .modifier(GlassLook(id: id == "mid" ? id + "-" + b.kind : id, ns: ns, fade: b.fade, blue: b.kind == "done"))
-      .overlay { photoOver(b) }
       .opacity(b.opacity)
       .position(x: b.frame.midX, y: b.frame.midY)
       .id(id == "mid" ? id + "-" + b.kind : id)
