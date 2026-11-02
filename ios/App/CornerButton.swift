@@ -166,6 +166,10 @@ final class CornerButton: UIView {
   // to these three spots: changed inside Mail's spring — iPhone's glass morphs from one to the next by itself
   func go(left l: Spot, mid m: Spot, corner c: Spot, menu: UIMenu?, animated: Bool) {
     let was = (left, mid, corner)
+    // (the very same three again — asked once more as a screen settles: nothing touched; setting them again without
+    //  animation cut a spring still running short, a jump at its end — Haris's film, 2026-11-02 18:42)
+    func same(_ a: Spot, _ b: Spot) -> Bool { a.kind == b.kind && a.text == b.text && a.frame == b.frame && a.image === b.image }
+    if !scrubbed && same(was.0, l) && same(was.1, m) && same(was.2, c) { return }   // (after a swipe the drawing is part way: always set)
     left = l; mid = m; corner = c
     // (your photo, the same button, only its picture new: put in without any animation — inside the spring iPhone
     //  cross-faded the two pictures, a blink)
@@ -205,7 +209,14 @@ final class CornerButton: UIView {
         else { var s = self.b(m); if fromSwipe && m.kind == "search" { s.icon = iconWas }; s.fade = comes.mid; self.model.mid = s }
       }
     }
+    // (a point or two off while the last spring still runs: it carries on to the new place, no jump; once it has
+    //  settled: put in at once, no creep)
+    if tiny && animated && CACurrentMediaTime() - lastSpring < CornerButton.duration {
+      if #available(iOS 17.0, *) { withAnimation(.spring(duration: CornerButton.duration * 0.6, bounce: 0)) { apply() } } else { withAnimation(.easeOut(duration: 0.3)) { apply() } }
+      return
+    }
     if !animated || tiny { now(apply); if m.kind == "none" { now { model.mid = b(m) } }; return }
+    lastSpring = CACurrentMediaTime()
     // (a button marked to leave the native way is drawn so once before it goes: the change waits for the next frame)
     // (coming back — out of the task page's •••, or finishing a swipe back — no bounce: with it 🔍 went a point past its
     //  place and crept back after it seemed to have settled; Haris's film, 2026-11-02 16:46)
@@ -226,6 +237,7 @@ final class CornerButton: UIView {
   }
   // part way between two sets (the swipe back): t = 0 at `a`, 1 at `b` — straight from the finger, no animation
   private var scrubbed = false
+  private var lastSpring: CFTimeInterval = 0
   func between(_ a: (Spot, Spot, Spot), _ z: (Spot, Spot, Spot), _ t: CGFloat) {
     let t = max(0, min(1, t))
     scrubbed = true

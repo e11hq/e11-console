@@ -102,8 +102,10 @@ extension Main {
     let back = underViews(below: p, under: under)
     let W = view.bounds.width
     let last = taskPages.isEmpty
+    // (the screen under it laid out as it will be first — the buttons aimed at a place it then changed, and jumped)
+    if last { tabBar.isHidden = tabsHidden; taskPan?.isEnabled = false; view.setNeedsLayout(); view.layoutIfNeeded() }
+    back.forEach { $0.layoutIfNeeded() }
     updateCornerNow()
-    if last { tabBar.isHidden = tabsHidden; taskPan?.isEnabled = false; view.setNeedsLayout() }
     let finish = {
       p.removeFromSuperview()
       back.forEach { $0.transform = .identity }
@@ -660,7 +662,7 @@ extension Main {
     guard !picked.isEmpty else { return }
     let ids = picked.map { _ in "up-" + UUID().uuidString }
     if toDesc { p.descUploadsStarted(zip(ids, picked.map { $0.1 }).map { ($0, $1) }) }
-    p.addUploads(zip(ids, picked).map { id, f in
+    p.addUploads(scroll: !toDesc, zip(ids, picked).map { id, f in
       var c: [String: Any] = ["id": id, "name": f.1, "pending": true]
       if let t = CommentCell.localThumb(f.0, f.1) { FeedLoader.shared.setLocal("local:" + id, t); c["thumbUrl"] = "local:" + id }
       return c

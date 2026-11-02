@@ -336,9 +336,14 @@ extension TaskPage {
     let tv = descView
     if mentionBox.superview == nil { addSubview(mentionBox) }
     // just under the line being written
-    let caret = tv.caretRect(for: tv.selectedTextRange?.end ?? tv.endOfDocument)
-    let y = tv.convert(caret, to: self).maxY + 10
-    mentionBox.frame = CGRect(x: 16, y: y, width: bounds.width - 32, height: CGFloat(n) * 46)
+    let caret = tv.convert(tv.caretRect(for: tv.selectedTextRange?.end ?? tv.endOfDocument), to: self)
+    let h = CGFloat(n) * 46
+    // (under the line being written — or above it when that would run under the keyboard's format bar: the @ and #
+    //  lists sat over B · I · U, Haris 2026-11-02)
+    let room = bounds.height - (kbCover > 0 ? kbCover + 8 : safeAreaInsets.bottom + 16)   // (the keyboard's frame holds its format bar)
+    var y = caret.maxY + 10
+    if y + h > room { y = caret.minY - 10 - h }
+    mentionBox.frame = CGRect(x: 16, y: max(barBottom + 4, y), width: bounds.width - 32, height: h)
     mentionBox.isHidden = false
     bringSubviewToFront(mentionBox)
   }

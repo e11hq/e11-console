@@ -117,13 +117,14 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // ({ id, name, pending, thumbUrl: "local:…", sent }); each gives its place to the real one once the server has it
   private(set) var uploads: [[String: Any]] = []
   private var knownFiles = Set<String>()
-  func addUploads(_ u: [[String: Any]]) {
+  func addUploads(scroll: Bool = true, _ u: [[String: Any]]) {
     let started = uploads.isEmpty
     if started { knownFiles = Set(((model?["files"] as? [[String: Any]]) ?? []).compactMap { $0["id"] as? String }) }
     uploads += u
     built = ""; if let m = model { draw(m) }
     // (attaching: down to Files, where they are)
-    if started { DispatchQueue.main.async { self.showFiles() } }
+    // (from the description's 📎: the page stays where the cursor is — Haris 2026-11-02)
+    if started && scroll && !editingDesc { DispatchQueue.main.async { self.showFiles() } }
   }
   // sent to the task (waiting for the real ones), or gone (didn't upload / never came)
   func uploadsSent(_ ids: Set<String>) { for i in uploads.indices where ids.contains(uploads[i]["id"] as? String ?? "") { uploads[i]["sent"] = true } }
@@ -721,7 +722,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     scroll.contentSize = CGSize(width: W, height: y)
     scroll.contentInset.bottom = max(bottom, kbCover + 16)
   }
-  private var kbCover: CGFloat = 0
+  var kbCover: CGFloat = 0
   private func keyboardMoved(_ n: Notification) {
     guard let f = (n.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue, window != nil else { return }
     let mine = convert(bounds, to: nil)
