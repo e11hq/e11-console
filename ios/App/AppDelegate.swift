@@ -208,8 +208,46 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     view.addSubview(tabBar)
     view.addSubview(reviewLink)
     showSplash()
+    quickStart()
     loadHome()
   }
+  /* ---------- the quick start (iOS app data plan, step 3 — Haris, 2026-11-02): with this person's copy saved on the
+     phone, the app opens on its own Home and tab bar at once, drawn from that copy; the website loads quietly behind,
+     only for the screens that are still its own. Taps meant for it before it's there wait, and go once it is. ---------- */
+  var quickBooted = false
+  var earlyJS: [String] = []
+  func saveQuick(_ add: [String: Any]) {
+    var q = (defaults.data(forKey: "e11_quick").flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }) ?? [:]
+    if (q["server"] as? String) != serverURL() { q = ["server": serverURL()] }
+    add.forEach { q[$0.key] = $0.value }
+    if JSONSerialization.isValidJSONObject(q), let d = try? JSONSerialization.data(withJSONObject: q) { defaults.set(d, forKey: "e11_quick") }
+  }
+  func quickStart() {
+    guard SELFTEST.isEmpty, splash != nil,
+          let q = defaults.data(forKey: "e11_quick").flatMap({ try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }),
+          (q["server"] as? String) == serverURL(), let me = q["me"] as? String, AppData.shared.hasSaved(me),
+          var tabs = q["tabs"] as? [String: Any], var list = tabs["tabs"] as? [[String: Any]], !list.isEmpty,
+          list.contains(where: { ($0["v"] as? String) == "today" }) else { return }
+    quickBooted = true
+    // (Home's tab on, whichever was on last time: the website opens on Home too)
+    for i in list.indices { list[i]["on"] = (list[i]["v"] as? String) == "today" }
+    tabs["tabs"] = list; tabs["hidden"] = false
+    setTabs(tabs)
+    view.layoutIfNeeded()
+    homeLook = q["look"]; homePageMe = me
+    let h = homeView
+    if h.superview == nil { return }
+    h.bottomRoom = (tabBar.isHidden ? 40 : view.bounds.height - tabBar.frame.minY) + 96
+    h.tabTop = tabBar.isHidden ? nil : tabPillTop
+    h.isHidden = false
+    homeHadModel = true
+    AppData.shared.start(me: me, cookies: serverHome.cookies)
+    watchCopy()
+    // (the startup screen goes once Home is drawn from the copy — or, if that doesn't come, when the page says so)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in if self?.quickBooted == true, self?.pageReady == false { self?.splashGone() } }
+  }
+  // for the website behind: now, or as soon as it's there (a quick start's early taps)
+  func pageJSSoon(_ js: String) { if pageReady || !quickBooted { pageJS(js) } else { earlyJS.append(js) } }
   // the app's own light / dark (from the page; at launch the last one, or the startup screen's)
   var appStyle: UIUserInterfaceStyle = LAST_LIGHT ? .light : .dark
   override func viewWillAppear(_ animated: Bool) {
@@ -790,6 +828,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     webView.hideKeyboardBar()
     if onServer { DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.syncBackground() } }
     if onServer { shareSignIn() }
+    if onServer, !earlyJS.isEmpty { let js = earlyJS; earlyJS = []; DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { js.forEach { self.pageJS($0) } } }
     if onServer { tabCover = -1; view.setNeedsLayout(); flushPending(); if !SELFTEST.isEmpty && !started { started = true; DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.selfTest() } } }
     else { tabBar.isHidden = true; tabsHidden = true; view.setNeedsLayout(); splashGone(fast: true) }   // (the sign-in page: no tabs, no startup screen)
   }
@@ -953,6 +992,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     // counts sit on the icon's top-right corner, overlapping it a little (like an app icon's badge), drawn into the
     // icon itself: iOS's own tab badge sits further out
     lastTabs = a
+    saveQuick(["tabs": a])
     for (i, t) in list.enumerated() {
       guard let item = tabBar.items?[i] else { continue }
       let b = t["badge"] as? String ?? ""
@@ -1089,7 +1129,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       } else if !h.isHidden {
         h.endEditing(true)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
-          guard let self = self, let sel = self.tabBar.selectedItem, sel.tag < self.tabKeys.count, self.tabKeys[sel.tag] != "today" else { return }
+          guard let self = self, self.pageReady, let sel = self.tabBar.selectedItem, sel.tag < self.tabKeys.count, self.tabKeys[sel.tag] != "today" else { return }
           self.homeIfMade?.isHidden = true
         }
       }
@@ -1117,7 +1157,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         }
       }
     }
-    pageJS("window.__e11Tab && window.__e11Tab(\(jsonString([tabKeys[item.tag]]).dropFirst().dropLast()))")
+    // (a quick start, the website not there yet: only the last tab asked for goes, once it is)
+    if !pageReady && quickBooted { earlyJS.removeAll { $0.hasPrefix("window.__e11Tab ") } }
+    pageJSSoon("window.__e11Tab && window.__e11Tab(\(jsonString([tabKeys[item.tag]]).dropFirst().dropLast()))")
   }
   /* ---------- Home (23+): the app's own, under the tab bar; the page says what's on it (NativeHome in phone.js) ---------- */
   var homeIfMade: HomeView?
@@ -1131,8 +1173,12 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       // (a task opening: Home goes at once, so the task slides in over the page's own Home, scrolled the same)
       // (a task opening: Home only goes if the website's own task page is the one coming — the app's own slides over it;
       //  hiding at once and showing again as the app's page came made Home flash blank, Haris 2026-11-02)
+      // (a quick start, the website not there yet: the app's own task page at once)
+      if let self = self, !self.pageReady, self.quickBooted, (ev["ev"] as? String) == "open", let id = ev["id"] as? String, !id.isEmpty, AppData.shared.ready {
+        self.openTaskPage(id, tab: "details", focus: ""); return
+      }
       if (ev["ev"] as? String) == "open" { DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in if self?.taskPages.isEmpty == true { self?.homeIfMade?.isHidden = true } } }
-      self?.pageJS("window.__e11Home && window.__e11Home(\(jsonString(ev)))")
+      self?.pageJSSoon("window.__e11Home && window.__e11Home(\(jsonString(ev)))")
     }
     h.present = { [weak self] vc in self?.topMost().present(vc, animated: true) }
     view.insertSubview(h, belowSubview: tabBar)
@@ -1222,6 +1268,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     }
     mm["people"] = nil
     h.update(mm)
+    if quickBooted, !pageReady, splash != nil { splashGone() }
   }
   // Home's own taps the server does itself (false: the page does it, as before)
   func homeEventOnServer(_ ev: [String: Any]) -> Bool { eventOnServer(ev, serverHome, pageMe: homePageMe) }
@@ -1275,6 +1322,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     h.tabTop = tabBar.isHidden ? nil : tabPillTop
     homeLook = a["look"]
     homePageMe = a["me"] as? String
+    if let me = homePageMe { saveQuick(["me": me, "look": homeLook ?? NSNull()]) }
     // (the server's Home when it's on — the page's model is only a sign something changed: the server asked again)
     if serverHome.on, let m = serverHome.shown, (m["me"] as? String) == (a["me"] as? String) {
       h.isHidden = false

@@ -233,3 +233,12 @@ test('the switch: off → the page asks the website again', async () => {
   assert.equal((await act('am@e11-digital.com', { act: 'title', id: 't1', value: 'y' })).off, true);
   app.store.kv.set('task-server', 'on');
 });
+
+// iOS app data plan, step 3: the app with its own copy gets the changed records, not the page worked out again
+test('copy: an action answers with the changed records only', async () => {
+  const r = await act('am@e11-digital.com', { act: 'update', id: 't1', value: 'Shoot', copy: true });
+  assert.equal(r.ok, true);
+  assert.equal(r.task, undefined, 'no task page worked out');
+  assert.ok(Array.isArray(r.changes) && r.changes.some((c) => c.kind === 'tasks' && c.id === 't1' && c.data && c.data.update === 'Shoot'), JSON.stringify(r.changes).slice(0, 300));
+  assert.ok(r.rev > 0);
+});

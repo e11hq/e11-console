@@ -160,6 +160,10 @@ final class ServerHome {
     if let v = o.due { b["due"] = v } else if o.act == "due" { b["due"] = NSNull() }
     if let v = o.clientApproval { b["clientApproval"] = v }
     if let v = o.trashId { b["trashId"] = v }
+    // (with the app's own copy: the server sends back what changed, the copy takes it, the screens are drawn from it —
+    //  iOS app data plan step 3; the server no longer works the whole Home out again for every tap)
+    let copy = AppData.shared.ready && !off
+    if copy { b["copy"] = true }
     request("/api/home/act", body: b) { [weak self] j in
       guard let self = self else { return }
       self.sending = false
@@ -193,7 +197,8 @@ final class ServerHome {
         msgs.dropFirst().forEach { self.onToast?($0, nil, nil) }
       }
       // (the answer carries the fresh Home; My Tasks asks for its own)
-      if self.kind == "home", let h = j["home"] as? [String: Any] { self.take(h, rev: j["rev"] as? Int ?? 0) }
+      if copy, let ch = j["changes"] as? [[String: Any]] { AppData.shared.applyLocal(ch); self.refresh() }
+      else if self.kind == "home", let h = j["home"] as? [String: Any] { self.take(h, rev: j["rev"] as? Int ?? 0) }
       else if self.kind != "home" { self.refresh() }
       else if let m = self.model { self.onModel?(self.overlay(m)) }
       self.send()

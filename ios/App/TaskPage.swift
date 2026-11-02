@@ -43,10 +43,14 @@ final class ServerTask {
   // a change → (ok, the task as it is now, error, need)
   func act(_ body: [String: Any], _ done: @escaping (Bool, [String: Any]?, String?, String?, [String]) -> Void) {
     var b = body; b["from"] = "task"; b["op"] = UUID().uuidString
+    // (with the app's own copy: just what changed comes back, into the copy — the page is drawn from it: step 3)
+    let copy = AppData.shared.ready
+    if copy { b["copy"] = true }
     request("/api/home/act", body: b) { [weak self] j in
       guard let j = j else { return done(false, nil, "No connection — try again", nil, []) }
       if (j["off"] as? Bool) == true { return done(false, nil, "Try again in a moment", nil, []) }
-      if let rev = j["rev"] as? Int { self?.lastRev = max(self?.lastRev ?? 0, rev) }
+      if copy, let ch = j["changes"] as? [[String: Any]] { AppData.shared.applyLocal(ch) }
+      else if let rev = j["rev"] as? Int { self?.lastRev = max(self?.lastRev ?? 0, rev) }
       self?.lastUndo = j["undo"] as? String
       done((j["ok"] as? Bool) == true, j["task"] as? [String: Any], j["error"] as? String, j["need"] as? String, j["messages"] as? [String] ?? [])
     }

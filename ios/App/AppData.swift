@@ -34,10 +34,12 @@ final class AppData: NSObject, URLSessionDataDelegate {
     let switching = self.me != nil && self.me != me
     self.me = me; started = true
     if switching { DispatchQueue.main.async { self.copyReady = false }; stopStream() }
+    // (the saved copy at once — step 3: the app opens on it, before any answer from the server; switched off on the
+    //  server, it's put away again)
+    q.async { self.boot(me: me) }
     request("/api/appcopy") { [weak self] j in
       guard let self = self else { return }
-      if (j?["on"] as? Bool) == false { self.started = false; return }   // (switched off on the server)
-      self.q.async { self.boot(me: me) }
+      if (j?["on"] as? Bool) == false { self.started = false; self.stopStream(); DispatchQueue.main.async { self.copyReady = false } }
     }
     if !watching {
       watching = true
@@ -58,7 +60,7 @@ final class AppData: NSObject, URLSessionDataDelegate {
     let file = dir.appendingPathComponent("copy-\(me).json")
     if ctx != nil, let raw = try? String(contentsOf: file, encoding: .utf8), !raw.isEmpty {
       if call("E11AppView.load", [raw]) != nil {
-        markReady()
+        markReady(); changed()   // (the screens waiting on it — a quick start — drawn from it now)
         let age = ((try? FileManager.default.attributesOfItem(atPath: file.path)[.modificationDate]) as? Date).map { Date().timeIntervalSince($0) } ?? .infinity
         fromSaved = age < 7 * 24 * 3600 && accessMark != nil
       }
@@ -224,6 +226,19 @@ final class AppData: NSObject, URLSessionDataDelegate {
   @discardableResult func listen(_ f: @escaping () -> Void) -> UUID { let id = UUID(); listeners[id] = f; return id }
   func stopListening(_ id: UUID) { listeners[id] = nil }
   private var changePending = false
+  // a copy saved on this phone for this person (step 3: then the app can open on its own screens at once)
+  func hasSaved(_ me: String) -> Bool {
+    FileManager.default.fileExists(atPath: dir.appendingPathComponent("copy-\(me).json").path) && FileManager.default.fileExists(atPath: dir.appendingPathComponent("appview.js").path)
+  }
+  // what the server said an action of ours changed: into the copy at once, every screen redrawn (step 3). Its place
+  // in the history (rev) isn't moved on — the stream still brings everything in order.
+  func applyLocal(_ changes: [[String: Any]]) {
+    guard copyReady, !changes.isEmpty, let d = try? JSONSerialization.data(withJSONObject: changes) else { return }
+    let raw = String(decoding: d, as: UTF8.self)
+    q.async {
+      if self.callFn("(function(raw){ return E11AppView.apply(JSON.parse(raw), 0); })", [raw]) != nil { self.saveSoon(); self.changed() }
+    }
+  }
   private func changed() {
     DispatchQueue.main.async {
       if self.changePending { return }

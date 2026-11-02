@@ -694,8 +694,12 @@ export function createServer(cfg) {
       if (store.kv.get(body && body.from === 'mytasks' ? 'mytasks-server' : body && body.from === 'inbox' ? 'inbox-server' : body && body.from === 'task' ? 'task-server' : 'home-server') === 'off') return json(res, 200, { ok: false, off: true, error: 'Try again in a moment' });
       const op = body && body.op ? String(body.op).slice(0, 80) : null;
       const freshHome = () => { try { return homeView.home(u, visibleSnapshot(u).data); } catch { return null; } };
+      // (the iPhone app with its own copy of the data — iOS app data plan, step 3: it gets the records that changed and
+      //  draws every screen from its copy; Home or the task page aren't worked out again here, which was the slow part)
+      const copy = !!(body && body.copy);
       // (a retry of an action already done: its answer again, with Home as it is now)
       const seen = op && homeOps.get(u.id + ':' + op);
+      if (seen && copy) return json(res, 200, { ...seen, rev: store.rev() });
       if (seen) return json(res, 200, { ...seen, rev: store.rev(), ...(body.from === 'task' ? { task: (() => { try { return homeView.taskPage(u, visibleSnapshot(u).data, body.page || body.id); } catch { return null; } })() } : { home: freshHome() }) });
       let r;
       try { r = homeView.act(u, visibleSnapshot(u).data, body || {}, store); } catch (e) { console.error('home act:', e.message); return json(res, 200, { ok: false, error: 'That didn’t work — try again' }); }
@@ -708,13 +712,16 @@ export function createServer(cfg) {
         const allowed = r.changes.filter((ch) => ch.kind === 'tasks' || ch.kind === 'trash').every((ch) => access.canWrite(u, ch, store.get(ch.kind, String(ch.id)), { restoring }));
         if (!allowed) out = { ok: false, error: 'Your role doesn’t allow this', status: 403 };
         else {
-          if (r.changes.length) pushAs(u, r.changes, body.client || null);
+          let pushed = null;
+          if (r.changes.length) pushed = pushAs(u, r.changes, body.client || null);
           // (Undo: the Trash entry of what this person just deleted goes too — whoever may delete may undo it)
           if (r.sysChanges && r.sysChanges.length) { const out2 = store.apply(r.sysChanges, u.id); broadcast(out2.rev, out2.results, null, u.id); }
           out = { ok: true, messages: r.messages, undo: r.undo || null };
+          if (copy) out.changes = pushed ? pushed.results.filter((x) => !x.refused).map((x) => forUser(u, x)).filter((x) => !(x.hidden && x.kind === 'notifications')) : [];
         }
       }
       if (op) { homeOps.set(u.id + ':' + op, out); if (homeOps.size > 1000) homeOps.delete(homeOps.keys().next().value); }
+      if (copy) return json(res, 200, { ...out, rev: store.rev() });
       // (the native task page: that task as it is now)
       if (body && body.from === 'task') { let tk = null; try { tk = homeView.taskPage(u, visibleSnapshot(u).data, body.page || body.id); } catch (e) { console.error('task page:', e.message); } return json(res, 200, { ...out, rev: store.rev(), task: tk }); }
       return json(res, 200, { ...out, rev: store.rev(), home: freshHome() });
