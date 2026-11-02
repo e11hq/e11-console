@@ -137,6 +137,9 @@ final class ClientRow: UIControl {
 final class AssetsStrip: UIView, HomeBlock {
   var onFolder: ((String) -> Void)?, onAll: (() -> Void)?
   private let head = UILabel(), all = UIButton(type: .system), scroll = UIScrollView(), fade = CAGradientLayer()
+  // (the fade on a frame that doesn't scroll: on the row itself it moved away with it and hid every folder after the
+  //  third, Haris 2026-11-02)
+  private let clip = UIView()
   private var tiles: [UIControl] = []
   private var key = ""
   override init(frame: CGRect) {
@@ -151,7 +154,8 @@ final class AssetsStrip: UIView, HomeBlock {
     all.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.onAll?() }, for: .touchUpInside)
     scroll.showsHorizontalScrollIndicator = false; scroll.alwaysBounceHorizontal = true; scroll.clipsToBounds = false
     fade.startPoint = CGPoint(x: 0, y: 0.5); fade.endPoint = CGPoint(x: 1, y: 0.5)
-    [head, all, scroll].forEach { addSubview($0) }
+    clip.addSubview(scroll)
+    [head, all, clip].forEach { addSubview($0) }
   }
   required init?(coder: NSCoder) { fatalError() }
   func set(_ folders: [[String: Any]], look L: HomeLook) {
@@ -184,7 +188,8 @@ final class AssetsStrip: UIView, HomeBlock {
     head.frame = CGRect(x: 20, y: 6, width: W - 140, height: 28)
     let aw = ceil(all.sizeThatFits(CGSize(width: 200, height: 28)).width)
     all.frame = CGRect(x: W - 20 - aw, y: 6, width: aw, height: 28)
-    scroll.frame = CGRect(x: 0, y: 40, width: W, height: 96)
+    clip.frame = CGRect(x: 0, y: 40, width: W, height: 96)
+    scroll.frame = clip.bounds
     var x: CGFloat = 20
     for t in tiles { t.frame = CGRect(x: x, y: 0, width: 112, height: 96); x += 112 + 10 }
     scroll.contentSize = CGSize(width: x - 10 + 20, height: 96)
@@ -193,8 +198,8 @@ final class AssetsStrip: UIView, HomeBlock {
     CATransaction.begin(); CATransaction.setDisableActions(true)
     if scroll.contentSize.width > W + 1 {
       fade.colors = [UIColor.black.cgColor, UIColor.black.cgColor, UIColor.clear.cgColor]; fade.locations = [0, 0.86, 1]
-      fade.frame = CGRect(x: 0, y: 0, width: W, height: 96); scroll.layer.mask = fade
-    } else { scroll.layer.mask = nil }
+      fade.frame = CGRect(x: 0, y: 0, width: W, height: 96); clip.layer.mask = fade
+    } else { clip.layer.mask = nil }
     CATransaction.commit()
   }
 }

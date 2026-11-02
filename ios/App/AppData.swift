@@ -235,12 +235,17 @@ final class AppData: NSObject, URLSessionDataDelegate {
   func applyLocal(_ changes: [[String: Any]]) {
     guard copyReady, !changes.isEmpty, let d = try? JSONSerialization.data(withJSONObject: changes) else { return }
     let raw = String(decoding: d, as: UTF8.self)
+    gen += 1   // (at once: a screen asked for right after is worked out again, with these in)
     q.async {
       if self.callFn("(function(raw){ return E11AppView.apply(JSON.parse(raw), 0); })", [raw]) != nil { self.saveSoon(); self.changed() }
     }
   }
+  // (one more each time the copy changes — a screen worked out from an unchanged copy isn't worked out again: that
+  //  took the main thread a moment and stalled the top buttons' animation coming back from a task, Haris's film 19:36)
+  private(set) var gen = 0
   private func changed() {
     DispatchQueue.main.async {
+      self.gen += 1
       if self.changePending { return }
       self.changePending = true
       // (a burst of changes: one redraw)

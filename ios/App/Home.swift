@@ -493,7 +493,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     a.onAll = { [weak self] in guard let self = self, let c = (self.m["assets"] as? [String: Any])?["id"] as? String else { return }; self.send(["ev": "assets", "client": c]) }
     return a
   }()
-  private lazy var tasksHead: TasksHead = { let t = TasksHead(); t.onToggle = { [weak self] in self?.send(["ev": "done"]) }; return t }()
+  // (its own name: "done" is a card's tick, which the app does itself — the toggle went nowhere, Haris 2026-11-02)
+  private lazy var tasksHead: TasksHead = { let t = TasksHead(); t.onToggle = { [weak self] in self?.send(["ev": "showDone"]) }; return t }()
   // ‹ on a client's page: where it is (the shared top buttons' row, at the page's left edge) and its tap
   var backable: Bool { isClient }
   // a client's page has the task page's header (Haris 2026-11-02, "b"): ‹ · its logo and name in the middle · •••
@@ -527,7 +528,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     var out: [CornerMenuItem] = []
     if m["assets"] is [String: Any] { out.append(CornerMenuItem(title: "Client Assets", symbol: "folder", run: { [weak self] in self?.assetsStrip.onAll?() })) }
     let done = (m["showDone"] as? Bool) == true
-    out.append(CornerMenuItem(title: done ? "Hide completed" : "Show completed", symbol: done ? "checkmark.circle.badge.xmark" : "checkmark.circle", run: { [weak self] in self?.send(["ev": "done"]) }))
+    out.append(CornerMenuItem(title: done ? "Hide completed" : "Show completed", symbol: done ? "checkmark.circle.badge.xmark" : "checkmark.circle", run: { [weak self] in self?.send(["ev": "showDone"]) }))
     if (m["add"] as? Bool) == true { out.append(CornerMenuItem(title: "New task", symbol: "plus", run: { [weak self] in self?.send(["ev": "add"]) })) }
     return out
   }

@@ -78,18 +78,22 @@ final class ServerHome {
     }
   }
   private var lastNoAnswer = false
+  private var copyGen = -1, copyQuery = ""
   // a fresh Home (when the app opens or comes back, and whenever the page hears of a change)
   func refresh() {
     checkServer()
     // the app's own copy of the data (iOS app data plan, step 2): the screen worked out on the phone, no request — once
     // the copy has caught up with the server's last answer here (an action's), so nothing just done comes back
     if AppData.shared.ready, !off, AppData.shared.rev >= lastRev {
+      // (nothing changed in the copy since this screen was last worked out from it: as it was, no work at all)
+      if AppData.shared.gen == copyGen, query == copyQuery, model != nil { if !queue.isEmpty { send() }; return }
       let c: (ready: Bool, model: [String: Any]?)
       if kind == "home" { c = AppData.shared.screen("home") }
       else if kind == "inbox" { c = AppData.shared.screen("inbox", ServerHome.param(query, "tab") ?? "all") }
       else if kind == "clients" { c = AppData.shared.screen("clients", ServerHome.clientsJSON(query)) }   // (Part B: the Clients tab)
       else { c = AppData.shared.screen("mytasks", ServerHome.filtersJSON(query)) }
       if c.ready, let h = c.model {
+        copyGen = AppData.shared.gen; copyQuery = query
         confirmedMe = h["me"] as? String ?? confirmedMe
         take(h, rev: lastRev)
         if !queue.isEmpty { send() }
@@ -115,6 +119,7 @@ final class ServerHome {
         } else if let h = j["home"] as? [String: Any] {
           self.off = false
           self.confirmedMe = h["me"] as? String
+          self.copyGen = -1   // (the server's, not the copy's)
           self.take(h, rev: j["rev"] as? Int ?? 0)
         }
       }
@@ -204,7 +209,7 @@ final class ServerHome {
       }
       // (the answer carries the fresh Home; My Tasks asks for its own)
       if copy, let ch = j["changes"] as? [[String: Any]] { AppData.shared.applyLocal(ch); self.refresh() }
-      else if self.kind == "home", let h = j["home"] as? [String: Any] { self.take(h, rev: j["rev"] as? Int ?? 0) }
+      else if self.kind == "home", let h = j["home"] as? [String: Any] { self.copyGen = -1; self.take(h, rev: j["rev"] as? Int ?? 0) }
       else if self.kind != "home" { self.refresh() }
       else if let m = self.model { self.onModel?(self.overlay(m)) }
       self.send()

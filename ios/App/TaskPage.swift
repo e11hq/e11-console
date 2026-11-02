@@ -136,6 +136,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private let filesStrip = FileStrip(side: 100), descStrip = FileStrip(side: 100)
   var descPending: [[String: Any]] = []
   var drawnOnce = false
+  let openedAt = Date()
   // files uploaded from the description's 📎 Attach (or pasted from outside the app): to the task's files, a chip
   // where the cursor was, greyed with an arrow until it's up
   var onDescAttach: ((String) -> Void)?
@@ -508,7 +509,9 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     guard let m = model.map({ TaskPage.basic($0) }) else { return }
     DescEditor.dark = !light   // (the description's file chips drawn in the page's look)
     // (on screen already: what changes comes in, goes out and moves smoothly — Haris 2026-11-02)
-    let live = window != nil && drawnOnce && !isHidden
+    // (not while it's still coming in: its first drawings — from what was kept, then the copy — are put in as they are;
+    //  animating them slid the rows down as the page opened, Haris 2026-11-02)
+    let live = window != nil && drawnOnce && !isHidden && Date().timeIntervalSince(openedAt) > 0.8
     let before = live ? pageSnapshot() : [:]
     defer { drawnOnce = true; if live { animateFrom(before) } }
     let keepY = scroll.contentOffset.y

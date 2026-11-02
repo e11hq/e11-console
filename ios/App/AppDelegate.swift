@@ -1553,6 +1553,13 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       // (Done / Due / Delete on a card: as Home's, straight to the server)
       if page, self.eventOnServer(ev, self.serverClients, pageMe: self.clientsPageMe) { return }
       if page, (ev["ev"] as? String) == "back" { self.clientPageOut() }
+      // (a client tapped: its page comes in at once, from the copy — the website is only told; waiting for it made the
+      //  page slow to come, Haris 2026-11-02)
+      if !page, (ev["ev"] as? String) == "client", let id = ev["id"] as? String, AppData.shared.ready, self.serverClients.on {
+        self.clientsOn = "client"
+        self.serverClients.query = "view=client&id=\(id.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "")&done=0"
+        self.serverClients.refresh()
+      }
       self.pageJS("window.__e11Clients && window.__e11Clients(\(jsonString(ev)))")
     }
     h.present = { [weak self] vc in self?.topMost().present(vc, animated: true) }

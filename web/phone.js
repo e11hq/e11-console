@@ -2755,7 +2755,7 @@ const NativeClients = (() => {
     if (!ev) return;
     if (ev.ev === 'client' && ev.id) { go('project', ev.id); sync(); return; }
     if (ev.ev === 'back') { go('projects'); sync(); return; }
-    if (ev.ev === 'done') { ui.showDone[ui.projectId] = !ui.showDone[ui.projectId]; renderContent(); sync(); return; }
+    if (ev.ev === 'showDone') { ui.showDone[ui.projectId] = !ui.showDone[ui.projectId]; renderContent(); sync(); return; }
     if (ev.ev === 'folder' && ev.client) { openClient(ev.client, ev.folder || null); sync(); return; }
     if (ev.ev === 'assets' && ev.client) { openClient(ev.client); sync(); return; }
     if (ev.ev === 'add') { Phone.quickAdd(); return; }
