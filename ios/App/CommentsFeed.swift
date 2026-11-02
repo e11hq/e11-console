@@ -480,20 +480,14 @@ final class CommentCell: UIView {
     NSLayoutConstraint.activate([row.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: pad), row.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -pad), row.topAnchor.constraint(equalTo: card.topAnchor, constant: pad), row.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -pad)])
     let lp = UILongPressGestureRecognizer(target: self, action: #selector(held(_:))); lp.minimumPressDuration = 0.45
     addGestureRecognizer(lp)
+    pressShrink = PressShrink.add(to: card)
   }
   required init?(coder: NSCoder) { fatalError() }
-  // touch and hold, as iPhone's own: the card shrinks from the moment the finger is down, all through the hold; let go
-  // early or scroll and it springs back; held long enough — the haptic, the menu, and it springs back
-  private func press(_ down: Bool) {
-    if down { UIView.animate(withDuration: 0.45, delay: 0, options: [.curveEaseOut, .allowUserInteraction, .beginFromCurrentState]) { self.card.transform = CGAffineTransform(scaleX: 0.965, y: 0.965) } }
-    else { UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 0.7, initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState]) { self.card.transform = .identity } }
-  }
-  override func touchesBegan(_ t: Set<UITouch>, with e: UIEvent?) { super.touchesBegan(t, with: e); press(true) }
-  override func touchesEnded(_ t: Set<UITouch>, with e: UIEvent?) { super.touchesEnded(t, with: e); press(false) }
-  override func touchesCancelled(_ t: Set<UITouch>, with e: UIEvent?) { super.touchesCancelled(t, with: e); press(false) }
+  // touch and hold: the shared PressShrink (shrinks from the moment the finger is down); held long enough — the
+  // haptic, the menu, and it springs back
+  private var pressShrink: PressShrink?
   @objc private func held(_ g: UILongPressGestureRecognizer) {
-    if g.state == .began { onHold?(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in self?.press(false) } }
-    else if g.state == .ended || g.state == .cancelled || g.state == .failed { press(false) }
+    if g.state == .began { onHold?(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in self?.pressShrink?.release() } }
   }
   func height(for W: CGFloat) -> CGFloat {
     if let m = measured, m.0 == W { return m.1 }
@@ -681,6 +675,53 @@ final class TapView: UIView, UIContextMenuInteractionDelegate {
   func contextMenuInteraction(_ i: UIContextMenuInteraction, configurationForMenuAtLocation l: CGPoint) -> UIContextMenuConfiguration? {
     guard let m = menu?() else { return nil }
     return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in m }
+  }
+}
+/* Touch and hold, app-wide (Haris, 2026-11-02: "this long press behaviour will be app wide"): the view shrinks from the
+   moment the finger is down — as iPhone's own press — all through the hold; let go early, move, or scroll and it springs
+   back; the hold's own action (its haptic and menu) then calls release(). It never takes the touch from anything else.
+   iPhone's own menus (UIContextMenuInteraction) already do this themselves. Shared: comments, Home / My Tasks cards. */
+final class PressShrink: UIGestureRecognizer {
+  private weak var target: UIView?
+  private var start = CGPoint.zero
+  private var pending: DispatchWorkItem?
+  static func add(to v: UIView) -> PressShrink {
+    let g = PressShrink(target: nil, action: nil)
+    g.target = v; g.cancelsTouchesInView = false; g.delaysTouchesBegan = false; g.delaysTouchesEnded = false
+    v.addGestureRecognizer(g)
+    return g
+  }
+  override func canPrevent(_ g: UIGestureRecognizer) -> Bool { false }
+  override func canBePrevented(by g: UIGestureRecognizer) -> Bool { false }
+  override func touchesBegan(_ t: Set<UITouch>, with e: UIEvent) {
+    super.touchesBegan(t, with: e)
+    guard let v = target, let touch = t.first else { return }
+    start = touch.location(in: v)
+    // (a moment's wait, as iPhone's: a quick flick to scroll doesn't shrink anything)
+    let w = DispatchWorkItem { [weak self] in self?.shrink(true) }
+    pending = w; DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: w)
+  }
+  override func touchesMoved(_ t: Set<UITouch>, with e: UIEvent) {
+    super.touchesMoved(t, with: e)
+    guard let v = target, let p = t.first?.location(in: v) else { return }
+    if hypot(p.x - start.x, p.y - start.y) > 10 { release() }
+  }
+  override func touchesEnded(_ t: Set<UITouch>, with e: UIEvent) { super.touchesEnded(t, with: e); release(); state = .failed }
+  override func touchesCancelled(_ t: Set<UITouch>, with e: UIEvent) { super.touchesCancelled(t, with: e); release(); state = .failed }
+  func release() { pending?.cancel(); pending = nil; shrink(false) }
+  private var shrunk = false
+  // (only its own scale: a card being swiped sideways keeps its shift)
+  private func shrink(_ down: Bool) {
+    guard let v = target else { return }
+    if down {
+      shrunk = true
+      let t = v.transform
+      UIView.animate(withDuration: 0.4, delay: 0, options: [.curveEaseOut, .allowUserInteraction, .beginFromCurrentState]) { v.transform = CGAffineTransform(translationX: t.tx, y: t.ty).scaledBy(x: 0.965, y: 0.965) }
+    } else if shrunk {
+      shrunk = false
+      let t = v.transform
+      UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 0.7, initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState]) { v.transform = CGAffineTransform(translationX: t.tx, y: t.ty) }
+    }
   }
 }
 // a gradient that keeps to its view's size

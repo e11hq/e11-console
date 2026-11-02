@@ -254,6 +254,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
           }
           let pan = UIPanGestureRecognizer(target: self, action: #selector(self.swipe(_:))); pan.delegate = self; v.addGestureRecognizer(pan)
           let lp = UILongPressGestureRecognizer(target: self, action: #selector(self.press(_:))); lp.minimumPressDuration = 0.45; v.addGestureRecognizer(lp)
+          _ = PressShrink.add(to: v)   // (touch and hold, app-wide: it shrinks from the moment the finger is down)
           self.scroll.addSubview(v); self.cards[id] = v
         }
         v.people = people
@@ -1053,6 +1054,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     guard g.state == .began, let card = g.view as? HomeCard, !(isList && listTab == "done") else { return }   // (Done tab: read only)
     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     attach(card)
+    (card.gestureRecognizers?.first { $0 is PressShrink } as? PressShrink)?.release()
   }
   private func attach(_ card: HomeCard) {
     if let o = openCard { setOpen(o, false) }

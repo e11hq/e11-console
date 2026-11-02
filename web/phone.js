@@ -2550,7 +2550,8 @@ const NativeHome = (() => {
     else if (ev.ev === 'client' && ev.id) go('project', ev.id);
     else if (ev.ev === 'search') click('#content [data-ph="search"]');
     else if (ev.ev === 'me') click('#content [data-ph-tab="me"], [data-ph-tab="me"]');
-    else if (ev.ev === 'add') click('.ph-fab');
+    // (New task: straight to it — under the app's own screens the page draws nothing, so its button to press isn't there)
+    else if (ev.ev === 'add') { if (typeof Phone !== 'undefined' && Phone.quickAdd) Phone.quickAdd(); else click('.ph-fab'); }
     setTimeout(sync, 0);
   };
   // a toast while the app's Home is showing (the page's own would be under it)
