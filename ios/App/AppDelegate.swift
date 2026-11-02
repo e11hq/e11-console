@@ -1569,10 +1569,20 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if let l = l, clientsWanted { l.isHidden = false; l.transform = CGAffineTransform(translationX: -W * 0.3, y: 0) }
     UIView.animate(withDuration: 0.36, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
       p.transform = CGAffineTransform(translationX: W, y: 0); l?.transform = .identity
-    } completion: { _ in p.isHidden = true; p.transform = .identity; self.clientLeaving = false; self.updateCorner() }
+    } completion: { _ in p.isHidden = true; p.transform = .identity; self.clientLeaving = false; self.edgePanOn(); self.updateCorner() }
     updateCorner()
   }
   private var clientLeaving = false
+  var clientPanFrom: ((CornerButton.Spot, CornerButton.Spot, CornerButton.Spot), (CornerButton.Spot, CornerButton.Spot, CornerButton.Spot))?
+  // (let go part way through the edge swipe: the rest of the way out, from where the finger left it)
+  func clientLeavingBySwipe(_ p: HomeView, _ l: HomeView) {
+    clientLeaving = true
+    let W = view.bounds.width
+    UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState]) {
+      p.transform = CGAffineTransform(translationX: W, y: 0); l.transform = .identity
+    } completion: { _ in p.isHidden = true; p.transform = .identity; self.clientLeaving = false; self.edgePanOn(); self.updateCorner() }
+    updateCorner()
+  }
   func drawServerClients(_ m: [String: Any]) {
     defer { updateCorner() }
     guard clientsPageMe != nil, (m["me"] as? String) == clientsPageMe else { return }
@@ -1604,6 +1614,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       } completion: { _ in if !h.isHidden { l.isHidden = true; l.transform = .identity }; self.updateCorner() }
     } else { h.transform = .identity; h.isHidden = false }
     if !page { clientPageIfMade?.isHidden = true }
+    edgePanOn()
   }
   func clientsOwn(_ v: Bool) {
     guard v != clientsPageOwn else { return }
@@ -1613,7 +1624,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   func clientsCommand(_ a: [String: Any]) {
     defer { updateCorner() }
     guard let show = a["show"] as? Bool else { return }
-    if !show { clientsWanted = false; clientsListIfMade?.isHidden = true; clientPageIfMade?.isHidden = true; return }
+    if !show { clientsWanted = false; clientsListIfMade?.isHidden = true; clientPageIfMade?.isHidden = true; edgePanOn(); return }
     clientsWanted = true
     clientsPageMe = a["me"] as? String
     clientsLight = (a["light"] as? Bool) ?? (appStyle == .light)

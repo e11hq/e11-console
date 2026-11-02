@@ -276,7 +276,17 @@ extension Main {
       let mid = p.editingDesc ? CornerButton.Spot(kind: "done", text: "Done", frame: corner.place("done", "Done", circle: f.offsetBy(dx: -56, dy: 0))) : CornerButton.Spot()
       return (CornerButton.Spot(kind: "back", frame: bf), mid, CornerButton.Spot(kind: "more", frame: f))
     }
-    if let h = shownScreen {
+    if let h = shownScreen { return screenSpots(h) }
+    return (CornerButton.Spot(), CornerButton.Spot(), CornerButton.Spot())
+  }
+  // (one screen's three, wherever it is now — a client's page's and the list's under it, for the edge swipe between them)
+  func cornerTargetFor(_ h: HomeView) -> (CornerButton.Spot, CornerButton.Spot, CornerButton.Spot) {
+    let t = screenSpots(h)
+    func r(_ s: CornerButton.Spot) -> CornerButton.Spot { var x = s; x.frame = CGRect(x: x.frame.minX.rounded(), y: x.frame.minY.rounded(), width: x.frame.width.rounded(), height: x.frame.height.rounded()); return x }
+    return (r(t.0), r(t.1), r(t.2))
+  }
+  private func screenSpots(_ h: HomeView) -> (CornerButton.Spot, CornerButton.Spot, CornerButton.Spot) {
+    do {
       let dx = -h.transform.tx
       let c = h.corner()
       let mf = corner.place(c.kind, c.text, circle: h.convert(c.frame, to: view).offsetBy(dx: dx, dy: 0))
@@ -286,7 +296,6 @@ extension Main {
       let left = h.backable && !h.searching ? CornerButton.Spot(kind: "back", frame: h.convert(h.backFrame, to: view).offsetBy(dx: dx, dy: 0)) : CornerButton.Spot()
       return (left, CornerButton.Spot(kind: c.kind, text: c.text, frame: mf), cornerSpot)
     }
-    return (CornerButton.Spot(), CornerButton.Spot(), CornerButton.Spot())
   }
   // (a tab change hides one screen and shows the next a moment apart: settled together, so it changes in place
   //  rather than going and coming back)

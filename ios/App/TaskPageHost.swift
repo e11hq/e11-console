@@ -103,7 +103,7 @@ extension Main {
     let W = view.bounds.width
     let last = taskPages.isEmpty
     // (the screen under it laid out as it will be first — the buttons aimed at a place it then changed, and jumped)
-    if last { tabBar.isHidden = tabsHidden; taskPan?.isEnabled = false; view.setNeedsLayout(); view.layoutIfNeeded() }
+    if last { tabBar.isHidden = tabsHidden; taskPan?.isEnabled = clientPageIfMade?.isHidden == false; view.setNeedsLayout(); view.layoutIfNeeded() }
     back.forEach { $0.layoutIfNeeded() }
     updateCornerNow()
     let finish = {
@@ -163,7 +163,8 @@ extension Main {
 
   // iPhone's swipe back from the left edge: the page follows the finger; let go, it goes the way it was going
   @objc func taskEdgePan(_ g: UIScreenEdgePanGestureRecognizer) {
-    guard let p = taskPages.last else { return }
+    // (no task page: a client's page goes back to the list the same way — Haris 2026-11-02)
+    guard let p = taskPages.last else { clientEdgePan(g); return }
     let W = view.bounds.width
     let x = max(0, g.translation(in: view).x)
     let under: UIView? = taskPages.count > 1 ? taskPages[taskPages.count - 2] : nil
@@ -206,6 +207,50 @@ extension Main {
           back.forEach { $0.transform = CGAffineTransform(translationX: -W * 0.3, y: 0) }
           if self.taskPages.count == 1 { self.tabBar.alpha = 0 }
         } completion: { _ in if !self.taskPages.isEmpty { self.tabBar.isHidden = true } }
+        updateCorner()
+      }
+    default: break
+    }
+  }
+
+  // the edge swipe on a client's page: it follows the finger, the list coming back under it, the top buttons between
+  // the two (‹ fading as it goes); let go far or fast enough and it's back on the list, else it slides back
+  func edgePanOn() {
+    if taskPan == nil {
+      let g = UIScreenEdgePanGestureRecognizer(target: self, action: #selector(taskEdgePan(_:)))
+      g.edges = .left
+      view.addGestureRecognizer(g)
+      taskPan = g
+    }
+    taskPan?.isEnabled = !taskPages.isEmpty || clientPageIfMade?.isHidden == false
+  }
+  func clientEdgePan(_ g: UIScreenEdgePanGestureRecognizer) {
+    guard let p = clientPageIfMade, !p.isHidden, let l = clientsListIfMade, clientsWanted else { return }
+    let W = view.bounds.width
+    let x = max(0, g.translation(in: view).x)
+    switch g.state {
+    case .began:
+      p.endEditing(true)
+      l.isHidden = false; l.transform = .identity   // (shown, in place, to see where its buttons are)
+      clientPanFrom = (cornerTargetFor(p), cornerTargetFor(l))
+      l.transform = CGAffineTransform(translationX: -W * 0.3, y: 0)
+    case .changed:
+      p.transform = CGAffineTransform(translationX: x, y: 0)
+      l.transform = CGAffineTransform(translationX: -W * 0.3 * (1 - x / W), y: 0)
+      if let f = clientPanFrom { corner.between(f.0, f.1, x / W) }
+    case .ended, .cancelled, .failed:
+      let v = g.velocity(in: view).x
+      let go = g.state == .ended && (v > 300 || (x > W * 0.4 && v > -200))
+      clientPanFrom = nil
+      if go {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        clientsOn = "list"
+        clientLeavingBySwipe(p, l)
+        pageJS("window.__e11Clients && window.__e11Clients({ev:'back'})")
+      } else {
+        UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState]) {
+          p.transform = .identity; l.transform = CGAffineTransform(translationX: -W * 0.3, y: 0)
+        } completion: { _ in if !p.isHidden && p.transform == .identity { l.isHidden = true; l.transform = .identity } }
         updateCorner()
       }
     default: break
