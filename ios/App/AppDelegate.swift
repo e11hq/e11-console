@@ -1000,7 +1000,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   private var keptTabPhoto: UIImage?, tabFetched = false
   func setTabs(_ a: [String: Any]) {
-    if Home.onMePhoto == nil { Home.onMePhoto = { [weak self] img in self?.mePhotoFromHome(img) } }
+    if HomeView.onMePhoto == nil { HomeView.onMePhoto = { [weak self] img in self?.mePhotoFromHome(img) } }
     let list = a["tabs"] as? [[String: Any]] ?? []
     let keys = list.map { $0["v"] as? String ?? "" }
     if keys != tabKeys || (tabBar.items?.count ?? 0) != keys.count {
