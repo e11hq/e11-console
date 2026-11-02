@@ -282,7 +282,9 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
   private func roomChanged(_ old: CGFloat) {
     let wasEnd = scroll.contentOffset.y + scroll.bounds.height >= scroll.contentSize.height + old - 60
     scroll.contentInset.bottom = bottomRoom; scroll.verticalScrollIndicatorInsets.bottom = bottomRoom
-    if wasEnd { toEnd(animated: false) }
+    // (the keyboard dragged down with the list: the list follows the finger, nothing else moves it — keeping it at the
+    //  latest at the same time made it jump about, Haris 2026-11-02)
+    if wasEnd && !scroll.isTracking && !scroll.isDragging && !scroll.isDecelerating { toEnd(animated: false) }
     placeJump()
   }
   func isAtEnd() -> Bool { scroll.contentOffset.y + scroll.bounds.height >= scroll.contentSize.height + scroll.contentInset.bottom - 80 }
@@ -480,11 +482,18 @@ final class CommentCell: UIView {
     addGestureRecognizer(lp)
   }
   required init?(coder: NSCoder) { fatalError() }
+  // touch and hold, as iPhone's own: the card shrinks from the moment the finger is down, all through the hold; let go
+  // early or scroll and it springs back; held long enough — the haptic, the menu, and it springs back
+  private func press(_ down: Bool) {
+    if down { UIView.animate(withDuration: 0.45, delay: 0, options: [.curveEaseOut, .allowUserInteraction, .beginFromCurrentState]) { self.card.transform = CGAffineTransform(scaleX: 0.965, y: 0.965) } }
+    else { UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 0.7, initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState]) { self.card.transform = .identity } }
+  }
+  override func touchesBegan(_ t: Set<UITouch>, with e: UIEvent?) { super.touchesBegan(t, with: e); press(true) }
+  override func touchesEnded(_ t: Set<UITouch>, with e: UIEvent?) { super.touchesEnded(t, with: e); press(false) }
+  override func touchesCancelled(_ t: Set<UITouch>, with e: UIEvent?) { super.touchesCancelled(t, with: e); press(false) }
   @objc private func held(_ g: UILongPressGestureRecognizer) {
-    if g.state == .began {
-      UIView.animate(withDuration: 0.12, animations: { self.card.transform = CGAffineTransform(scaleX: 0.985, y: 0.985) }) { _ in UIView.animate(withDuration: 0.2) { self.card.transform = .identity } }
-      onHold?()
-    }
+    if g.state == .began { onHold?(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in self?.press(false) } }
+    else if g.state == .ended || g.state == .cancelled || g.state == .failed { press(false) }
   }
   func height(for W: CGFloat) -> CGFloat {
     if let m = measured, m.0 == W { return m.1 }
