@@ -303,9 +303,12 @@ final class ServerHome {
         guard let url = URL(string: serverURL() + u) else { return }
         var r = URLRequest(url: url); if !cookie.isEmpty { r.setValue(cookie, forHTTPHeaderField: "Cookie") }
         URLSession.shared.dataTask(with: r) { [weak self] d, _, _ in
-          guard let d = d, let img = UIImage(data: d) else { DispatchQueue.main.async { self?.asking.remove(u) }; return }   // (tried again next time)
+          guard let d = d, let img = UIImage(data: d), img.size.width > 0, img.size.height > 0 else { DispatchQueue.main.async { self?.asking.remove(u) }; return }   // (tried again next time)
           let side: CGFloat = 72, k = min(img.size.width, img.size.height)
-          let small = UIGraphicsImageRenderer(size: CGSize(width: side, height: side)).image { _ in
+          // (white under it: a see-through picture kept as JPEG was black)
+          let fmt = UIGraphicsImageRendererFormat.preferred(); fmt.opaque = true
+          let small = UIGraphicsImageRenderer(size: CGSize(width: side, height: side), format: fmt).image { _ in
+            UIColor.white.setFill(); UIRectFill(CGRect(x: 0, y: 0, width: side, height: side))
             img.draw(in: CGRect(x: -(img.size.width - k) / 2 * side / k, y: -(img.size.height - k) / 2 * side / k, width: img.size.width * side / k, height: img.size.height * side / k))
           }
           guard let jpg = small.jpegData(compressionQuality: 0.85) else { return }

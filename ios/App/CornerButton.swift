@@ -72,11 +72,26 @@ struct CornerBar: View {
       // (the middle one: each kind its own glass shape — 🔍 and Mark all read — so iPhone morphs one glass into the other,
       //  the liquid drop way. The corner — your photo, ••• and ✕ — is one glass that stays: what's on it cross-fades.)
       .modifier(GlassLook(id: id == "mid" ? id + "-" + b.kind : id, ns: ns, fade: b.fade, blue: b.kind == "done"))
+      .overlay { photoOver(b) }
       .opacity(b.opacity)
       .position(x: b.frame.midX, y: b.frame.midY)
       .id(id == "mid" ? id + "-" + b.kind : id)
       .accessibilityLabel(["back": "Back", "search": "Search", "more": "More", "close": "Close search", "photo": "Me"][b.kind] ?? b.text)
     }
+  }
+  // your photo: laid over the glass rather than inside it — inside, iPhone's glass treats it as glass content and it
+  // was often drawn black until the app was opened again (Haris 2026-11-02); it cross-fades with ••• / ✕ as before
+  @ViewBuilder private func photoOver(_ b: CornerModel.B) -> some View {
+    ZStack {
+      if b.kind == "photo" {
+        Group {
+          if let img = b.image { Image(uiImage: img).resizable().scaledToFill() } else { Circle().fill(Color.gray.opacity(0.3)) }
+        }
+        .frame(width: b.frame.width, height: b.frame.height).clipShape(Circle())
+        .opacity(b.icon).transition(.opacity)
+      }
+    }
+    .allowsHitTesting(false)
   }
   private func face(_ b: CornerModel.B) -> some View {
     ZStack { faceOf(b).id(b.kind).transition(.opacity) }.opacity(b.icon)
@@ -84,8 +99,8 @@ struct CornerBar: View {
   @ViewBuilder private func faceOf(_ b: CornerModel.B) -> some View {
     switch b.kind {
     case "photo":
-      if let img = b.image { Image(uiImage: img).resizable().scaledToFill().frame(width: b.frame.width, height: b.frame.height).clipShape(Circle()) }
-      else { Circle().fill(Color.gray.opacity(0.3)) }
+      // (the picture itself is on top of the glass, not in it — see photoOver)
+      Color.clear.frame(width: b.frame.width, height: b.frame.height).contentShape(Circle())
     case "read", "unread", "done":
       Text(b.text).font(.system(size: 15, weight: .semibold)).foregroundStyle(b.kind == "done" ? Color.white : Color.primary)
         .frame(width: b.frame.width, height: b.frame.height).contentShape(Capsule())

@@ -2884,8 +2884,8 @@ func roundPic(_ pic: UIImage?, initials: String?, color: UIColor?, size: CGFloat
   return UIGraphicsImageRenderer(size: s).image { _ in
     let rect = CGRect(origin: .zero, size: s)
     UIBezierPath(ovalIn: rect).addClip()
-    if let p = pic { p.draw(in: rect); return }
     (color ?? .systemGray).setFill(); UIRectFill(rect)
+    if let p = pic, p.size.width > 0, p.size.height > 0 { p.draw(in: rect); return }
     let t = (initials ?? "") as NSString
     let attrs: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: size * 0.4, weight: .bold), .foregroundColor: UIColor.white]
     let ts = t.size(withAttributes: attrs)
