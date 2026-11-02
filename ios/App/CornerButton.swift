@@ -292,9 +292,9 @@ extension Main {
       let mf = corner.place(c.kind, c.text, circle: h.convert(c.frame, to: view).offsetBy(dx: dx, dy: 0))
       let meF = h.convert(h.meFrame, to: view).offsetBy(dx: dx, dy: 0)
       let cornerSpot = h.searching ? CornerButton.Spot(kind: "close", frame: meF) : CornerButton.Spot(kind: "photo", frame: meF, image: h.meImage)
-      // (a client's page: ‹ on the left, as on a task page)
-      let left = h.backable && !h.searching ? CornerButton.Spot(kind: "back", frame: h.convert(h.backFrame, to: view).offsetBy(dx: dx, dy: 0)) : CornerButton.Spot()
-      return (left, CornerButton.Spot(kind: c.kind, text: c.text, frame: mf), cornerSpot)
+      // (a client's page: the task page's — ‹ on the left, ••• where your photo is, no 🔍)
+      if h.isClient { return (CornerButton.Spot(kind: "back", frame: h.convert(h.backFrame, to: view).offsetBy(dx: dx, dy: 0)), CornerButton.Spot(), CornerButton.Spot(kind: "more", frame: meF)) }
+      return (CornerButton.Spot(), CornerButton.Spot(kind: c.kind, text: c.text, frame: mf), cornerSpot)
     }
   }
   // (a tab change hides one screen and shows the next a moment apart: settled together, so it changes in place
@@ -344,7 +344,7 @@ extension Main {
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.cornerWaited = false; self?.updateCornerNow(animated: animated) }
       return
     }
-    corner.items = taskPages.last?.cornerItems ?? []
+    corner.items = taskPages.last?.cornerItems ?? shownScreen?.menuItems ?? []
     corner.go(left: t.0, mid: t.1, corner: t.2, menu: taskPages.last?.cornerMenu, animated: animated && corner.window != nil)
   }
 }

@@ -239,6 +239,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     content = []
     groupOf = [:]
     if isClient {
+      drawBarTitle(model)
       // (its Client Assets folders on top, then "Tasks · N open" with Show completed — kept, not made again)
       if let a = model["assets"] as? [String: Any] {
         assetsStrip.set((a["folders"] as? [[String: Any]]) ?? [], look: L)
@@ -495,6 +496,41 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private lazy var tasksHead: TasksHead = { let t = TasksHead(); t.onToggle = { [weak self] in self?.send(["ev": "done"]) }; return t }()
   // ‹ on a client's page: where it is (the shared top buttons' row, at the page's left edge) and its tap
   var backable: Bool { isClient }
+  // a client's page has the task page's header (Haris 2026-11-02, "b"): ‹ · its logo and name in the middle · •••
+  private lazy var barTitle: UIStackView = {
+    let s = UIStackView(arrangedSubviews: [barLogo, barName]); s.spacing = 8; s.alignment = .center
+    barLogo.layer.cornerRadius = 7; barLogo.layer.cornerCurve = .continuous; barLogo.clipsToBounds = true; barLogo.contentMode = .scaleAspectFill
+    barLogo.widthAnchor.constraint(equalToConstant: 26).isActive = true; barLogo.heightAnchor.constraint(equalToConstant: 26).isActive = true
+    barIni.font = .systemFont(ofSize: 10, weight: .bold); barIni.textColor = .white; barIni.textAlignment = .center; barLogo.addSubview(barIni)
+    barName.font = .systemFont(ofSize: 17, weight: .semibold); barName.lineBreakMode = .byTruncatingTail
+    s.isUserInteractionEnabled = false
+    topBar.addSubview(s)
+    return s
+  }()
+  private let barLogo = UIImageView(), barIni = UILabel(), barName = UILabel()
+  private var barLogoPath: String?
+  private func drawBarTitle(_ model: [String: Any]) {
+    _ = barTitle
+    barName.text = model["title"] as? String; barName.textColor = .label
+    barIni.text = model["ini"] as? String
+    let rgb = NativeSheetVC.color(model["rgb"]) ?? .systemGray
+    let lp = model["logo"] as? String
+    if lp != barLogoPath {
+      barLogoPath = lp; barLogo.image = nil; barLogo.backgroundColor = rgb; barIni.isHidden = false
+      if let p = lp { FeedLoader.shared.image(p) { [weak self] img in guard let self = self, self.barLogoPath == p, let img = img else { return }; self.barLogo.image = img; self.barLogo.backgroundColor = .white; self.barIni.isHidden = true } }
+    } else if barLogo.image == nil { barLogo.backgroundColor = rgb }
+    [title, sub, smallTitle, smallSub].forEach { $0.isHidden = true }
+  }
+  // its ••• (the shared corner button's menu): Client Assets, Show / Hide completed, New task
+  var menuItems: [CornerMenuItem] {
+    guard isClient, !m.isEmpty else { return [] }
+    var out: [CornerMenuItem] = []
+    if m["assets"] is [String: Any] { out.append(CornerMenuItem(title: "Client Assets", symbol: "folder", run: { [weak self] in self?.assetsStrip.onAll?() })) }
+    let done = (m["showDone"] as? Bool) == true
+    out.append(CornerMenuItem(title: done ? "Hide completed" : "Show completed", symbol: done ? "checkmark.circle.badge.xmark" : "checkmark.circle", run: { [weak self] in self?.send(["ev": "done"]) }))
+    if (m["add"] as? Bool) == true { out.append(CornerMenuItem(title: "New task", symbol: "plus", run: { [weak self] in self?.send(["ev": "add"]) })) }
+    return out
+  }
   var backFrame: CGRect { CGRect(x: 16, y: safeAreaInsets.top + 22 - BTN / 2, width: BTN, height: BTN) }
   func backTap() { send(["ev": "back"]) }
   func relayout() { UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) { self.setNeedsLayout(); self.layoutIfNeeded() } }
@@ -717,7 +753,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
 
   // ---------- the header (as Mail): the big title scrolls with the list, under a frosted bar that comes as it goes ----------
   // (where the list's boxes start: under the big title and its line, 18 below them — as Mail's filters)
-  private var bigHead: CGFloat { safeAreaInsets.top + 66 + 41 + 1 + 19 + 18 - 4 }
+  private var bigHead: CGFloat { isClient ? smallHead + 8 : safeAreaInsets.top + 66 + 41 + 1 + 19 + 18 - 4 }   // (a client's page: no big title — the task page's bar)
   // (the bar's row: its middle 28 under the status bar, 14 of room under the 46 pt buttons — Haris: they sat on its edge)
   private var smallHead: CGFloat { safeAreaInsets.top + 54 }
   private func ease(_ a: CGFloat, _ b: CGFloat, _ t: CGFloat) -> CGFloat { let x = min(1, max(0, (t - a) / (b - a))); return x * x * (3 - 2 * x) }
@@ -895,6 +931,13 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // the small title and date on the bar: there once the big ones have gone under it (gone while searching, under its bar)
     let smallCY = top + 22
     let stw = W - 16 - R - BTN - 12 - BTN - 12
+    if isClient {
+      // (in the middle of the bar, between ‹ and •••)
+      let sz = barTitle.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
+      let maxW = W - 2 * (16 + BTN + 12)
+      let w = min(sz.width, maxW)
+      barTitle.frame = CGRect(x: (W - w) / 2, y: top + 22 - 15, width: w, height: 30)
+    }
     let sx: CGFloat = backable ? 16 + BTN + 12 : 16   // (a client's page: right of ‹)
     place(smallTitle, CGRect(x: sx, y: top + 1, width: stw - (sx - 16), height: 21)); place(smallSub, CGRect(x: sx, y: top + 25, width: stw - (sx - 16), height: 15))
     applyBar()
