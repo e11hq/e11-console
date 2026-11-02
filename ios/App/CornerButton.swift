@@ -29,6 +29,7 @@ final class CornerModel: ObservableObject {
     var kind = "none", text = "", frame = CGRect.zero
     var image: UIImage? = nil
     var opacity: Double = 1
+    var icon: Double = 1       // (what's on the glass: 🔍 fades as it melts into •••, and in again once it's out)
   }
   @Published var left = B()
   @Published var mid = B()
@@ -67,16 +68,19 @@ struct CornerBar: View {
         }
       }
       .frame(width: b.frame.width, height: b.frame.height)
-      // (each kind its own glass shape — 🔍 and Mark all read, your photo, ✕ and ••• — so when one turns into another
-      //  iPhone morphs one glass into the other, the liquid drop way; one shape only changing size just stretched)
-      .modifier(GlassLook(id: id + "-" + b.kind, ns: ns))
+      // (the middle one: each kind its own glass shape — 🔍 and Mark all read — so iPhone morphs one glass into the other,
+      //  the liquid drop way. The corner — your photo, ••• and ✕ — is one glass that stays: what's on it cross-fades.)
+      .modifier(GlassLook(id: id == "mid" ? id + "-" + b.kind : id, ns: ns))
       .opacity(b.opacity)
       .position(x: b.frame.midX, y: b.frame.midY)
-      .id(id + "-" + b.kind)
+      .id(id == "mid" ? id + "-" + b.kind : id)
       .accessibilityLabel(["back": "Back", "search": "Search", "more": "More", "close": "Close search", "photo": "Me"][b.kind] ?? b.text)
     }
   }
-  @ViewBuilder private func face(_ b: CornerModel.B) -> some View {
+  private func face(_ b: CornerModel.B) -> some View {
+    ZStack { faceOf(b).id(b.kind).transition(.opacity) }.opacity(b.icon)
+  }
+  @ViewBuilder private func faceOf(_ b: CornerModel.B) -> some View {
     switch b.kind {
     case "photo":
       if let img = b.image { Image(uiImage: img).resizable().scaledToFill().frame(width: b.frame.width, height: b.frame.height).clipShape(Circle()) }
@@ -163,17 +167,24 @@ final class CornerButton: UIView {
     let handOver = was.1.kind == "search" && m.kind == "none" && c.kind == "close"
     let takeOver = m.kind == "search" && was.1.kind == "none" && (was.2.kind == "close" || searchBack)
     if handOver || takeOver { now { model.mid = b(m) } }
+    // coming back from a task: 🔍 starts inside the ••• drop (unseen there), is pulled out of it, and its icon only
+    // fades in once it's out — so it never sits on top of ••• (Haris, 2026-11-02)
+    let outOfCorner = m.kind == "search" && was.1.kind == "none" && was.2.kind == "more" && animated
+    if outOfCorner { now { var s = b(m); s.frame = was.2.frame; s.icon = 0; model.mid = s } }
     let apply = {
       self.model.left = self.b(l); self.model.corner = self.b(c)
       if !handOver && !takeOver {
-        // 🔍 opening a task: onto your photo as it goes, so the two glasses melt into one (the •••)
-        if m.kind == "none" && was.1.kind == "search" && c.kind != "none" { self.model.mid = CornerModel.B(kind: "search", frame: c.frame, opacity: 0) }
+        // into a task: 🔍 slides into your photo's glass and stays glass until the two have melted into one drop (then it
+        // goes, out of sight inside it); its icon fades on the way; your photo fades into ••• on the same glass
+        if m.kind == "none" && was.1.kind == "search" && c.kind != "none" { var s = self.b(was.1); s.frame = c.frame; s.icon = 0; self.model.mid = s }
+        else if outOfCorner { var s = self.b(m); s.icon = 0; self.model.mid = s }
         else { self.model.mid = self.b(m) }
       }
     }
     if !animated { now(apply); if m.kind == "none" { now { model.mid = b(m) } }; return }
     if #available(iOS 17.0, *) { withAnimation(.spring(duration: CornerButton.duration, bounce: CornerButton.bounce)) { apply() } }
     else { withAnimation(.spring(response: CornerButton.duration, dampingFraction: 0.78)) { apply() } }
+    if outOfCorner { withAnimation(.easeOut(duration: 0.22).delay(0.2)) { model.mid.icon = 1 } }
     if m.kind == "none" && was.1.kind == "search" && c.kind != "none" {
       DispatchQueue.main.asyncAfter(deadline: .now() + CornerButton.duration) { [weak self] in guard let self = self, self.mid.kind == "none" else { return }; self.now { self.model.mid = self.b(self.mid) } }
     }
