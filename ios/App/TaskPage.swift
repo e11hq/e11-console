@@ -193,7 +193,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     titleView.delegate = self
     titleView.isScrollEnabled = false
     titleView.backgroundColor = .clear
-    titleView.font = .systemFont(ofSize: 22, weight: .bold)
+    titleView.font = .systemFont(ofSize: 22, weight: .semibold)   // (less heavy, as ClickUp's — Haris 2026-11-02)
     titleView.textContainerInset = .zero
     titleView.textContainer.lineFragmentPadding = 0
     titleView.returnKeyType = .done
