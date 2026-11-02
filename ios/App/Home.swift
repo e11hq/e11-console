@@ -950,7 +950,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       if !clients.isEmpty {
         resultViews.append(groupHead("Clients", clients.count))
         for c in clients {
-          let row = HomeClientRow(); row.set(c, look: L)
+          let row = HomeClientRow(); row.set(c, look: L); _ = PressShrink.add(to: row)
           let id = c["id"] as? String ?? ""
           row.addAction(UIAction { [weak self] _ in self?.field.resignFirstResponder(); self?.send(["ev": "client", "id": id]) }, for: .touchUpInside)
           results.addSubview(row); resultViews.append(row)
@@ -1255,10 +1255,11 @@ final class HomeCard: UIControl {
   var info: [String: Any] { c }
   private var inline = false   // (a Today card: one line, comments and the CD chip on it)
   var swipeStart: CGFloat = 0
-  // (sideways when swiped open; pressed in a little while touched — both at once)
+  // (sideways when swiped open. Pressed: only the shared PressShrink shrinks it — its own small press-in as well made
+  //  the card shrink twice, Haris 2026-11-02)
   var swipeX: CGFloat = 0 { didSet { applyTransform() } }
   private func applyTransform() {
-    let s: CGFloat = isHighlighted ? 0.985 : 1
+    let s = sqrt(transform.a * transform.a + transform.c * transform.c)   // (keeps a press-shrink in progress)
     transform = CGAffineTransform(translationX: swipeX, y: 0).scaledBy(x: s, y: s)
   }
   var people: [String: [String: Any]] = [:] { didSet { if picsKey(oldValue) != picsKey(people) { drawPeople() } } }
@@ -1277,7 +1278,6 @@ final class HomeCard: UIControl {
   }
   required init?(coder: NSCoder) { fatalError() }
   // (.pc:active: pressed in a little)
-  override var isHighlighted: Bool { didSet { if oldValue != isHighlighted { UIView.animate(withDuration: 0.08) { self.applyTransform() } } } }
 
   func set(_ d: [String: Any], look: HomeLook) {
     c = d; L = look
@@ -1654,7 +1654,7 @@ final class HomeClientRow: UIControl {
     [sq, name, meta].forEach { $0.isUserInteractionEnabled = false; addSubview($0) }
   }
   required init?(coder: NSCoder) { fatalError() }
-  override var isHighlighted: Bool { didSet { UIView.animate(withDuration: 0.08) { self.transform = self.isHighlighted ? CGAffineTransform(scaleX: 0.985, y: 0.985) : .identity } } }
+  // (pressed: the shared PressShrink, as every card — added where it's made)
   func set(_ c: [String: Any], look L: HomeLook) {
     backgroundColor = L.card; layer.borderColor = L.cardLine.cgColor
     sq.text = c["ini"] as? String; sq.backgroundColor = NativeSheetVC.color(c["rgb"]) ?? .systemIndigo
