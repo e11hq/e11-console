@@ -385,10 +385,10 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
     layoutIfNeeded()
     let y = max(-scroll.contentInset.top, min(c.frame.midY - scroll.bounds.height * 0.4, scroll.contentSize.height + scroll.contentInset.bottom - scroll.bounds.height))
     scroll.setContentOffset(CGPoint(x: 0, y: y), animated: false)
-    let band = UIView(frame: c.bounds)
+    // (on the comment's own card, its rounded shape — not a band across the whole row: Haris, 2026-11-02)
+    let band = c.highlightView()
     band.backgroundColor = traitCollection.userInterfaceStyle == .dark ? UIColor.white.withAlphaComponent(0.13) : UIColor.black.withAlphaComponent(0.08)
     band.alpha = 0; band.isUserInteractionEnabled = false
-    c.insertSubview(band, at: 0)
     UIView.animate(withDuration: 0.2, delay: 0.15, options: [.curveEaseOut]) { band.alpha = 1 } completion: { _ in
       UIView.animate(withDuration: 0.6, delay: 0.5, options: [.curveEaseInOut]) { band.alpha = 0 } completion: { _ in band.removeFromSuperview() }
     }
@@ -554,6 +554,13 @@ final class CommentCell: UIView {
   func voiceArrived() {
     func find(_ v: UIView) -> VoiceBubble? { (v as? VoiceBubble) ?? v.subviews.lazy.compactMap { find($0) }.first }
     find(card)?.arrived()
+  }
+  // a see-through layer the shape of the card, under its contents (the pulse from the Inbox or back from a thread)
+  func highlightView() -> UIView {
+    let v = UIView(frame: card.bounds); v.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    v.layer.cornerRadius = card.layer.cornerRadius; v.layer.cornerCurve = .continuous
+    card.insertSubview(v, at: 0)
+    return v
   }
   var isVoice: Bool {
     func find(_ v: UIView) -> Bool { v is VoiceBubble || v.subviews.contains { find($0) } }
