@@ -470,7 +470,7 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
 
 // a voice message in the feed: ▶ · waveform filling blue as it plays · 0:14 / 0:38
 final class VoiceBubble: UIView, AVAudioPlayerDelegate {
-  private let play = UIButton(type: .system), time = UILabel(), wave = UIStackView()
+  private let play = UIButton(type: .system), time = UILabel(), wave = UIStackView(), icon = UIImageView()
   private var player: AVAudioPlayer?, timer: Timer?
   private let path: String, dur: Int
   private var bars: [UIView] = []
@@ -481,6 +481,8 @@ final class VoiceBubble: UIView, AVAudioPlayerDelegate {
       // uploading: the same pill (blue ▶, its length) pulsing softly; it can't be played until it's there
       if pending {
         play.isUserInteractionEnabled = false
+        icon.image = VoiceBubble.sym("ellipsis")
+        icon.addSymbolEffect(.variableColor.iterative.dimInactiveLayers, options: .repeating)
         let a = CABasicAnimation(keyPath: "opacity"); a.fromValue = 1; a.toValue = 0.45; a.duration = 0.75
         a.autoreverses = true; a.repeatCount = .infinity; a.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
         layer.add(a, forKey: "uploading")
@@ -489,8 +491,11 @@ final class VoiceBubble: UIView, AVAudioPlayerDelegate {
     backgroundColor = .tertiarySystemFill; layer.cornerRadius = 22
     heightAnchor.constraint(equalToConstant: 46).isActive = true
     widthAnchor.constraint(equalToConstant: 260).isActive = true
-    play.setImage(UIImage(systemName: "play.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .bold)), for: .normal)
-    play.tintColor = .white; play.backgroundColor = .systemBlue; play.layer.cornerRadius = 17
+    // (the ▶ is a picture of its own in the circle, so it can change smoothly: ••• → ▶, ▶ ⇄ ❙❙)
+    icon.image = VoiceBubble.sym("play.fill"); icon.tintColor = .white; icon.contentMode = .center; icon.isUserInteractionEnabled = false
+    icon.translatesAutoresizingMaskIntoConstraints = false; play.addSubview(icon)
+    NSLayoutConstraint.activate([icon.centerXAnchor.constraint(equalTo: play.centerXAnchor), icon.centerYAnchor.constraint(equalTo: play.centerYAnchor)])
+    play.backgroundColor = .systemBlue; play.layer.cornerRadius = 17
     play.addAction(UIAction { [weak self] _ in self?.toggle() }, for: .touchUpInside)
     wave.spacing = 2; wave.alignment = .center
     for i in 0..<28 {
@@ -505,6 +510,22 @@ final class VoiceBubble: UIView, AVAudioPlayerDelegate {
     NSLayoutConstraint.activate([play.widthAnchor.constraint(equalToConstant: 34), play.heightAnchor.constraint(equalToConstant: 34), h.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6), h.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12), h.centerYAnchor.constraint(equalTo: centerYAnchor)])
   }
   required init?(coder: NSCoder) { fatalError() }
+  static func sym(_ n: String) -> UIImage? { UIImage(systemName: n, withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .bold)) }
+  // sent (Haris, 2026-11-02): it starts as the pulsing one was — dimmer, ••• — and settles: the pulse eases out and the
+  // ••• turns into ▶ (iPhone's own symbol change)
+  func arrived() {
+    alpha = 0.7
+    icon.image = VoiceBubble.sym("ellipsis")
+    icon.addSymbolEffect(.variableColor.iterative.dimInactiveLayers, options: .repeating)
+    play.isUserInteractionEnabled = false
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+      guard let self = self else { return }
+      UIView.animate(withDuration: 0.35, delay: 0, options: [.curveEaseOut, .allowUserInteraction]) { self.alpha = 1 }
+      self.icon.removeAllSymbolEffects()
+      self.icon.setSymbolImage(VoiceBubble.sym("play.fill")!, contentTransition: .replace.downUp)
+      self.play.isUserInteractionEnabled = true
+    }
+  }
   static func fmt(_ s: Int) -> String { String(format: "%d:%02d", s / 60, s % 60) }
   private func toggle() {
     if let p = player, p.isPlaying { p.pause(); paint(false); return }
@@ -519,7 +540,7 @@ final class VoiceBubble: UIView, AVAudioPlayerDelegate {
     }
   }
   private func paint(_ playing: Bool) {
-    play.setImage(UIImage(systemName: playing ? "pause.fill" : "play.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .bold)), for: .normal)
+    if let i = VoiceBubble.sym(playing ? "pause.fill" : "play.fill") { icon.setSymbolImage(i, contentTransition: .replace.downUp) }
     timer?.invalidate()
     if playing { timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in self?.progress() } }
   }

@@ -176,7 +176,7 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
     FeedLoader.shared.get(p) { [weak self] j in
       guard let self = self, let f = j?["feed"] as? [String: Any] else { done?(); return }
       CommentsFeed.cache[p] = f
-      self.pending.removeAll { $0.done }   // (the real ones are in this one)
+      self.dropArrived(f); self.pending.removeAll { $0.done }   // (the real ones are in this one)
       self.draw(f); done?()
     }
   }
@@ -198,12 +198,17 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
     let when: (String) -> Date? = { iso.date(from: $0) ?? ISO8601DateFormatter().date(from: $0) }
     pending.removeAll { p in
       guard p.done, let pa = when(p.item["at"] as? String ?? "") else { return false }
-      return items.contains { it in
+      let real = items.first { it in
         (it["who"] as? String) == (p.item["who"] as? String) && (when(it["at"] as? String ?? "") ?? .distantPast) >= pa.addingTimeInterval(-20)
           && ((it["files"] as? [[String: Any]]) ?? []).contains { ($0["voice"] as? Bool) == true }
+          && cells[it["id"] as? String ?? ""] == nil
       }
+      // (the real one takes its place, its ••• turning into ▶)
+      if let id = real?["id"] as? String { arriving.insert(id) }
+      return real != nil
     }
   }
+  private var arriving = Set<String>()
   // sent: it stays until the feed that has the real one arrives; not sent: it goes now
   func endPending(id: String, ok: Bool) {
     guard let i = pending.firstIndex(where: { $0.id == id }) else { return }
@@ -231,6 +236,7 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
       c.onReplies = { [weak self] in self?.onThread?(id) }
       c.onOpen = { [weak self] list, i in self?.onOpenFile?(list, i) }
       c.onReact = { [weak self] e in guard let self = self else { return }; self.onAct?(["act": "react", "id": self.taskId, "key": id, "value": e]) }
+      if arriving.remove(id) != nil { c.voiceArrived() }
       content.addSubview(c); cells[id] = c
     }
     for (id, c) in cells where !seen.contains(id) { c.removeFromSuperview(); cells[id] = nil }
@@ -484,6 +490,11 @@ final class CommentCell: UIView {
     pressShrink = PressShrink.add(to: card)
   }
   required init?(coder: NSCoder) { fatalError() }
+  // your voice message, just sent: its pill goes on from the pulsing one (••• then ▶)
+  func voiceArrived() {
+    func find(_ v: UIView) -> VoiceBubble? { (v as? VoiceBubble) ?? v.subviews.lazy.compactMap { find($0) }.first }
+    find(card)?.arrived()
+  }
   // touch and hold: the shared PressShrink (shrinks from the moment the finger is down); held long enough — the
   // haptic, the menu, and it springs back
   private var pressShrink: PressShrink?
