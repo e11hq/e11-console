@@ -996,8 +996,15 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       tabKeys = keys
       tabPhoto = [:]
       tabBadgeKey = [:]
+      let kept = DiskPics.get("me-photo").flatMap { UIImage(data: $0) }
       tabBar.items = list.enumerated().map { i, t in
         let v = t["v"] as? String ?? ""
+        // (the Me tab: your photo kept on the phone at once, not the plain icon, until it's fetched again)
+        if t["photo"] != nil || t["photoUrl"] != nil, let k = kept {
+          tabPhotoSrc[i] = k
+          let it = UITabBarItem(title: t["label"] as? String ?? "", image: roundPhoto(k, ring: nil, online: netUp), selectedImage: roundPhoto(k, ring: tabBar.tintColor ?? .systemBlue, online: netUp))
+          it.tag = i; return it
+        }
         return UITabBarItem(title: t["label"] as? String ?? "", image: UIImage(systemName: symbol(v)), tag: i)
       }
     } else {
@@ -1017,13 +1024,24 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       tabOnline[i] = online
       let apply = { (src: UIImage) in
         self.tabPhotoSrc[i] = src
+        // (kept on the phone, for both places your photo is — the Me tab and the top corner — so neither is ever empty
+        //  while it's fetched again; Haris 2026-11-02)
+        if let d = src.jpegData(compressionQuality: 0.85) { DiskPics.put("me-photo", d) }
+        for h in [self.homeIfMade, self.myTasksIfMade, self.inboxIfMade, self.clientsListIfMade].compactMap({ $0 }) { h.mePhotoKept(src) }
         let on = self.tabOnline[i] ?? true
         item.image = self.roundPhoto(src, ring: nil, online: on)
         item.selectedImage = self.roundPhoto(src, ring: self.tabBar.tintColor ?? .systemBlue, online: on)
       }
       // the page's own drawing first (initials, or the picture), then the picture itself fetched here when there is one
       if let comma = ph.firstIndex(of: ","), let data = Data(base64Encoded: String(ph[ph.index(after: comma)...])), let src = UIImage(data: data) { apply(src) }
-      if let s = t["photoUrl"] as? String, let url = URL(string: s) { fetchPhoto(url) { img in if self.tabPhoto[i] == ph, let img = img { apply(img) } } }
+      // (not there — not signed in yet as the app starts, or no network: asked again a few times, rather than left empty)
+      if let s = t["photoUrl"] as? String, let url = URL(string: s) {
+        func ask(_ left: Int) { fetchPhoto(url) { img in
+          guard self.tabPhoto[i] == ph else { return }
+          if let img = img { apply(img) } else if left > 0 { DispatchQueue.main.asyncAfter(deadline: .now() + 4) { ask(left - 1) } }
+        } }
+        ask(4)
+      }
     }
     // counts sit on the icon's top-right corner, overlapping it a little (like an app icon's badge), drawn into the
     // icon itself: iOS's own tab badge sits further out

@@ -365,8 +365,18 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let key = meId + (photo.map { "|photo:\($0.count):\($0.suffix(24))" } ?? "|i:\(p?["initials"] as? String ?? "")")
     if key == meKey, me.image(for: .normal) != nil { return }
     meKey = key
-    let img = roundPic(NativeSheetVC.photo(p), initials: p?["initials"] as? String, color: NativeSheetVC.color(p?["color"]), size: 44)
+    // (no picture of yours here yet: the one kept on the phone from the Me tab — never an empty circle; Haris 2026-11-02)
+    let pic = NativeSheetVC.photo(p) ?? (keptMe ?? DiskPics.get("me-photo").flatMap { UIImage(data: $0) })
+    if photo == nil, pic != nil { meKey = meId + "|photo:kept" }
+    let img = roundPic(pic, initials: p?["initials"] as? String, color: NativeSheetVC.color(p?["color"]), size: 44)
     me.setImage(img, for: .normal)
+    onCorner?()
+  }
+  private var keptMe: UIImage?
+  // your photo fetched for the Me tab: here too, when there's none of yours yet
+  func mePhotoKept(_ img: UIImage) {
+    keptMe = img
+    if NativeSheetVC.photo(people[meId]) == nil { meKey = ""; meChanged() }
   }
 
   // ---------- My Tasks (26+): the same screen as a list — All / Done, the filter buttons and the filters that are on ----------
