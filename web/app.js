@@ -3813,7 +3813,7 @@ function renderDetail() {
           const ro = !can('editDesc') || idLocked(t);
           if (ro && !view) return '' + Brief.pinsHTML(t);
           const body = open && !ro
-            ? `<div class="composer desc"><div class="rt-editor d-notes" contenteditable="true" id="d-notes" data-placeholder="Add a description, links or notes… Type @ to mention someone">${t.notesHtml ? sanitizeHTML(t.notesHtml) : esc(t.notes).replace(/\n/g, '<br>')}</div><div class="cb-foot">${fmtToolbar()}<span class="spacer"></span>${clipPasteBtn('desc')}</div></div>`
+            ? `<div class="composer desc"><div class="rt-editor d-notes" contenteditable="true" id="d-notes" data-placeholder="Add a description, links or notes… Type @ to mention someone">${t.notesHtml ? sanitizeHTML(t.notesHtml) : esc(t.notes).replace(/\n/g, '<br>')}</div><div class="cb-foot">${fmtToolbar()}<button class="rt-btn" data-action="desc-attach" title="Attach a file here — it goes to the task’s Files too (or type # for one already there)" tabindex="-1">${icon('clip')}</button><span class="spacer"></span>${clipPasteBtn('desc')}</div></div>`
             : `<div class="desc-view ${open ? 'full' : ''} ${view ? '' : 'blank'} ${ro ? 'ro' : ''}" ${ro ? '' : 'data-action="desc-open"'}>${view || `<span class="ph">${can('editDesc') ? 'Add description… Type @ to mention someone' : 'No description'}</span>`}</div>`;
           return `<div class="d-section desc-sec ${open ? 'open' : ''} ${view ? '' : 'is-empty'}">${body}
             <div class="desc-toggle-wrap"><button class="desc-toggle" data-action="desc-toggle">${icon(open ? 'chev-up' : 'chev')}${open ? 'Collapse' : 'Expand'}</button></div></div>${Brief.pinsHTML(t)}`;
@@ -4304,12 +4304,78 @@ function copyAttachment(a) {
   toast(`Copied “${a.name}” — paste it into any comment or description (⌘V)`);
   if (ui.taskId) renderDetail();
 }
-// Inline file chip used inside descriptions and edited comments
+// Inline file chip used inside descriptions and edited comments: a light grey pill, its kind's coloured icon (pictures
+// green, PDFs red, videos purple, the rest blue — as the iPhone app's), its name (Haris 2026-11-02)
+const chipKind = (name) => { const e = fileExt(name); return IMG_EXT.includes(e) ? 'img' : e === 'pdf' ? 'pdf' : VID_EXT.includes(e) ? 'vid' : 'doc'; };
 function fileRefHTML(a, display) {
   const attrs = `data-fpath="${esc(a.path)}" data-fname="${esc(a.name)}" data-fsize="${+a.size || 0}"${a.thumb ? ` data-fthumb="${esc(a.thumb)}"` : ''}`;
-  if (!display) return `<span class="fileref" contenteditable="false" ${attrs}>📎 ${esc(a.name)}</span>`;
-  const img = isImage(a) && Host.isNative ? `<img src="${imgUrl(a, 160)}" alt="">` : `<i class="fr-ext">${esc((fileExt(a.name) || 'file').slice(0, 4))}</i>`;
-  return `<span class="fileref show" data-action="fileref-open" ${attrs} title="Preview ${esc(a.name)}">${img}<span class="fr-name">${esc(a.name)}</span>${a.size ? `<small>${fmtSize(a.size)}</small>` : ''}</span>`;
+  const k = chipKind(a.name);
+  if (!display) return `<span class="fileref fk-${k}" contenteditable="false" ${attrs} title="${esc(a.name)}">${esc(a.name)}</span>`;
+  return `<span class="fileref fk-${k} show" data-action="fileref-open" ${attrs} title="Preview ${esc(a.name)}"><span class="fr-name">${esc(a.name)}</span></span>`;
+}
+// the task's files, for # (its own and its comments', once each)
+function taskFilesList(t) {
+  const seen = new Set(), out = [];
+  (t.attachments || []).concat(...(t.comments || []).map((c) => c.attachments || [])).forEach((a) => { if (a && a.path && !a.voice && !seen.has(a.path)) { seen.add(a.path); out.push(attCore(a)); } });
+  return out;
+}
+// a file added to the comment being written (no upload: the same file)
+function addFileToComment(key, a) {
+  const list = ui.commentFiles[key] || [];
+  if (list.some((x) => x.path === a.path)) { toast('That file is already added'); return false; }
+  ui.commentFiles[key] = list.concat({ ...a, id: uid(), linked: true, addedAt: nowISO() });
+  Unsent.save();
+  return true;
+}
+// a file of another task (or Client Assets) put into this task's description: into its Files too, the same file
+function linkToTask(t, a) {
+  if (!t || (t.attachments || []).some((x) => x.path === a.path)) return;
+  t.attachments = (t.attachments || []).concat({ ...attCore(a), id: uid(), linked: true, addedAt: nowISO(), addedBy: currentUserId });
+  logActivity(t, `attached <b>${esc(a.name)}</b>`);
+}
+// files from the computer (📎 in the description's bar, or pasted there): uploaded to the task's Files, each one's chip
+// where the cursor was — greyed and pulsing until it's up (as the iPhone app)
+let descUpN = 0;
+async function attachIntoDesc(dropped) {
+  const t = task(ui.taskId), ed = $('#d-notes');
+  if (!t || !ed) return;
+  const sel = window.getSelection();
+  const at = sel.rangeCount && ed.contains(sel.anchorNode) ? sel.getRangeAt(0).cloneRange() : null;
+  const tag = 'up' + (++descUpN);
+  let placed = false;
+  const place = (fs) => {
+    placed = true;
+    const e2 = $('#d-notes'); if (!e2) return;
+    const r = at && e2.contains(at.startContainer) ? at : (() => { const x = document.createRange(); x.selectNodeContents(e2); x.collapse(false); return x; })();
+    const frag = document.createDocumentFragment();
+    [...fs].forEach((f, i) => {
+      const s = document.createElement('span'); s.className = 'fileref fk-up pending'; s.contentEditable = 'false'; s.dataset.up = tag + '-' + i; s.textContent = f.name || 'File';
+      frag.appendChild(s); frag.appendChild(document.createTextNode('\u00a0'));
+    });
+    r.deleteContents(); r.insertNode(frag);
+  };
+  try {
+    const res = dropped && dropped.length && Host.isServer
+      ? { files: await ServerHost.uploadMany([...dropped], { taskId: t.id }, { onStart: place }) }
+      : await Host.call('pickAttachments', { taskId: t.id, onStart: place });
+    const files = (res.files || []);
+    const ed2 = $('#d-notes');
+    if (!ed2) return;
+    if (!placed && files.some(Boolean)) place(files.map((f) => f || { name: '' }));
+    files.forEach((f, i) => {
+      const s = ed2.querySelector(`[data-up="${tag}-${i}"]`);
+      if (!f) { if (s) s.remove(); return; }
+      const a = { ...f, addedAt: nowISO() };
+      if (!(t.attachments || []).some((x) => x.path === a.path)) t.attachments.push(a);
+      if (s) s.outerHTML = fileRefHTML(attCore(a));
+    });
+    const ok = files.filter(Boolean);
+    ed2.querySelectorAll(`[data-up^="${tag}-"]`).forEach((x) => x.remove());
+    if (!ok.length) { toast('Upload failed — try again'); return; }
+    Haptic.uploaded();
+    logActivity(t, `attached ${ok.length === 1 ? `<b>${esc(ok[0].name)}</b>` : ok.length + ' files'}`);
+    ed2.dispatchEvent(new Event('input', { bubbles: true }));
+  } catch (e) { const ed2 = $('#d-notes'); if (ed2) ed2.querySelectorAll(`[data-up^="${tag}-"]`).forEach((x) => x.remove()); toast('Could not attach: ' + e.message); }
 }
 function fileRefAtt(el) {
   const path = el.dataset.fpath;
@@ -4323,10 +4389,7 @@ function pasteFileInto(ed) {
   if (ed.dataset.draftKey && t) {
     const key = ed.dataset.draftKey;
     ui.commentDraft[key] = editorEmpty(ed) ? '' : ed.innerHTML;
-    const list = ui.commentFiles[key] || [];
-    if (list.some((x) => x.path === a.path)) { toast('That file is already added'); return; }
-    ui.commentFiles[key] = list.concat({ ...a, id: uid(), linked: true, addedAt: nowISO() });
-    Unsent.save();
+    if (!addFileToComment(key, a)) return;
     renderDetail();
     setTimeout(() => { const b = $(`[data-draft-key="${key}"]`); if (b) { b.focus(); placeCaretAtEnd(b); } }, 0);
     return;
@@ -4335,6 +4398,7 @@ function pasteFileInto(ed) {
   const sel = window.getSelection();
   if (!sel.rangeCount || !ed.contains(sel.anchorNode)) placeCaretAtEnd(ed);
   document.execCommand('insertHTML', false, fileRefHTML(a) + '&nbsp;');
+  if (ed.id === 'd-notes') linkToTask(t, a);
   ed.dispatchEvent(new Event('input', { bubbles: true }));
 }
 function clipPasteBtn(target) {
@@ -6060,6 +6124,7 @@ document.addEventListener('click', async (e) => {
         pasteFileInto(ed); return;
       }
       case 'fileref-open': { e.stopPropagation(); e.preventDefault(); previewFile(fileRefAtt(actEl)); return; }
+      case 'desc-attach': { e.preventDefault(); if (idLocked(task(ui.taskId))) return; attachIntoDesc(null); return; }
       case 'quicklook': previewFile(findAttachment(task(ui.taskId), id)); return;
       case 'close-preview': if (e.target === actEl || actEl.tagName === 'BUTTON') $('#overlay-root').innerHTML = ''; return;
       case 'lightbox': lightbox(actEl.dataset.src, actEl.dataset.name); return;
@@ -6574,6 +6639,13 @@ document.addEventListener('paste', (e) => {
   const ed = e.target.closest && e.target.closest('.rt-editor');
   if (!ed) return;
   e.preventDefault();
+  // (a picture or file from outside: the description's — uploaded, its chip here; a comment's — added to it)
+  const pf = [...(((e.clipboardData || {}).files) || [])];
+  if (pf.length && !(ui.fileClip && (e.clipboardData.getData('text/plain') || '').trim() === ui.fileClip.token)) {
+    if (ed.id === 'd-notes') attachIntoDesc(pf);
+    else if (ed.dataset.draftKey) attachFiles('comment', ed.dataset.replyTo || null, pf);
+    return;
+  }
   const txt = (e.clipboardData || window.clipboardData).getData('text/plain');
   if (ui.fileClip && txt && txt.trim() === ui.fileClip.token) { pasteFileInto(ed); return; }
   const html = textWithMentions(txt);
@@ -9022,14 +9094,16 @@ function mentionQuery() {
   const node = r.startContainer;
   if (node.nodeType !== 3) return null;
   const before = node.nodeValue.slice(0, r.startOffset);
-  const m = before.match(/(?:^|[\s (])@([^\s@]{0,30})$/);
+  // (@ people · # the task's files — Haris 2026-11-02)
+  const m = before.match(/(?:^|[\s (])([@#])([^\s@#]{0,30})$/);
   if (!m) return null;
-  return { node, end: r.startOffset, start: r.startOffset - m[1].length - 1, q: m[1].toLowerCase() };
+  return { node, end: r.startOffset, start: r.startOffset - m[2].length - 1, q: m[2].toLowerCase(), kind: m[1] };
 }
 function closeMention() { if (Mention.el) Mention.el.remove(); Mention.el = null; Mention.editor = null; }
 function updateMention(editor) {
   const q = mentionQuery();
   if (!q) return closeMention();
+  if (q.kind === '#') return updateFilePick(editor, q);
   const list = activeUsers().filter((u) => fullName(u).toLowerCase().includes(q.q) || u.email.toLowerCase().includes(q.q)).slice(0, 8);
   if (!list.length) return closeMention();
   Mention.editor = editor; Mention.items = list; Mention.q = q;
@@ -9043,6 +9117,40 @@ function updateMention(editor) {
   Mention.el.style.left = Math.max(8, Math.min(rect.left, innerWidth - w - 8)) + 'px';
   Mention.el.style.top = Math.max(8, y) + 'px';
 }
+// # : the task's files whose names match — picked: in the description its chip, in a comment added to it as a card
+function updateFilePick(editor, q) {
+  const t = task(ui.taskId);
+  const list = t ? taskFilesList(t).filter((a) => (a.name || '').toLowerCase().includes(q.q)).slice(0, 8) : [];
+  if (!list.length) return closeMention();
+  Mention.editor = editor; Mention.items = list.map((a) => ({ file: a })); Mention.q = q;
+  if (Mention.idx >= list.length) Mention.idx = 0;
+  if (!Mention.el) { Mention.el = document.createElement('div'); Mention.el.className = 'menu mention-pop'; document.body.appendChild(Mention.el); Mention.idx = 0; }
+  Mention.el.innerHTML = `<div class="menu-label">Add a file of this task</div>` + list.map((a, i) => `<div class="mi asg-mi ${i === Mention.idx ? 'hl' : ''}" data-fpick="${i}"><i class="fr-ic fk-${chipKind(a.name)}"></i><span class="asg-n">${esc(a.name)}<small>${a.size ? fmtSize(a.size) : ''}</small></span></div>`).join('');
+  const rr = document.createRange(); rr.setStart(q.node, q.start); rr.setEnd(q.node, q.end);
+  const rect = rr.getBoundingClientRect();
+  const h = Mention.el.offsetHeight, w = Mention.el.offsetWidth;
+  let y = rect.bottom + 6; if (y + h > innerHeight - 8) y = rect.top - h - 6;
+  Mention.el.style.left = Math.max(8, Math.min(rect.left, innerWidth - w - 8)) + 'px';
+  Mention.el.style.top = Math.max(8, y) + 'px';
+}
+function pickFile(i) {
+  const q = Mention.q, ed = Mention.editor, it = Mention.items[i];
+  closeMention();
+  if (!q || !ed || !it || !it.file) return;
+  ed.focus();
+  const r = document.createRange(); r.setStart(q.node, q.start); r.setEnd(q.node, q.end);
+  const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+  if (ed.dataset.draftKey) {
+    document.execCommand('delete');
+    const key = ed.dataset.draftKey;
+    ui.commentDraft[key] = editorEmpty(ed) ? '' : ed.innerHTML;
+    if (addFileToComment(key, it.file) && !refreshComposerFiles(key)) { renderDetail(); setTimeout(() => { const b = $(`[data-draft-key="${key}"]`); if (b) { b.focus(); placeCaretAtEnd(b); } }, 0); }
+    return;
+  }
+  document.execCommand('insertHTML', false, fileRefHTML(it.file) + '&nbsp;');
+  ed.dispatchEvent(new Event('input', { bubbles: true }));
+}
+const pickItem = (i) => { const it = Mention.items[i]; if (it && it.file) pickFile(i); else if (it) pickMention(it.id); };
 function pickMention(userId) {
   const q = Mention.q, ed = Mention.editor;
   const u = userById(userId);
@@ -9058,12 +9166,17 @@ document.addEventListener('input', (e) => { const ed = e.target.closest && e.tar
 document.addEventListener('keydown', (e) => {
   if (!Mention.el) return;
   if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); e.stopPropagation(); Mention.idx = (Mention.idx + (e.key === 'ArrowDown' ? 1 : -1) + Mention.items.length) % Mention.items.length; updateMention(Mention.editor); }
-  else if ((e.key === 'Enter' || e.key === 'Tab') && !e.metaKey && !e.ctrlKey) { e.preventDefault(); e.stopPropagation(); pickMention(Mention.items[Mention.idx].id); }
+  else if ((e.key === 'Enter' || e.key === 'Tab') && !e.metaKey && !e.ctrlKey) { e.preventDefault(); e.stopPropagation(); pickItem(Mention.idx); }
   else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeMention(); }
 }, true);
 document.addEventListener('mousedown', (e) => {
   const it = e.target.closest && e.target.closest('[data-mention]');
   if (it) { e.preventDefault(); pickMention(it.dataset.mention); return; }
+  const fp = e.target.closest && e.target.closest('[data-fpick]');
+  if (fp) { e.preventDefault(); pickFile(+fp.dataset.fpick); return; }
+  // (a file's chip in the description being written: its preview)
+  const ch = e.target.closest && e.target.closest('.rt-editor .fileref[data-fpath]');
+  if (ch && e.button === 0) { e.preventDefault(); previewFile(fileRefAtt(ch)); return; }
   if (Mention.el && !e.target.closest('.mention-pop')) closeMention();
 }, true);
 document.addEventListener('focusout', (e) => { if (Mention.editor && e.target === Mention.editor) setTimeout(() => { if (document.activeElement !== Mention.editor) closeMention(); }, 150); });

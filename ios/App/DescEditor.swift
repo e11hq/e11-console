@@ -227,7 +227,7 @@ extension TaskPage {
     let extra = descPending.filter { f in guard let p = f["file"] as? String else { return false }; return !own.contains(p) && !p.hasPrefix("attachments/\(taskId)/") }
     if !extra.isEmpty { onAct?(["act": "attach", "id": taskId, "files": extra.map { ["name": $0["name"] as? String ?? "File", "size": $0["size"] as? Int ?? 0, "path": $0["file"] as? String ?? ""] }]) }
     let was = DescEditor.html(DescEditor.attributed((model?["descRuns"] as? [[String: Any]]) ?? [], done: false))
-    if html != was && !(descEmpty && text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) { onAct?(["act": "desc", "id": taskId, "html": html, "text": text]) }
+    if html != was && !(descEmpty && text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) { onAct?(["act": "desc", "id": taskId, "html": html, "text": text, "chips": true]) }
     built = ""
     if let m = model { draw(m) }
     onCornerChange?()
