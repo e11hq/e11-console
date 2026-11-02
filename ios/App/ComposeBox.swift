@@ -536,7 +536,13 @@ final class VoiceBubble: UIView, AVAudioPlayerDelegate {
 enum FileClip {
   static var name: String?, change = -1
   static var file: [String: Any]?   // the server's file (Copy in a preview / a file's menu): pasted, that same file
-  static var current: [String: Any]? { change == UIPasteboard.general.changeCount ? file : nil }
+  // (the copy's own: by the clipboard's count, or — when iPhone has moved that on, e.g. syncing the clipboard to your other
+  //  devices — by what's on it: "📎 name"; it pasted as those words — Haris, 2026-11-02)
+  static var current: [String: Any]? {
+    guard let f = file, let n = name else { return nil }
+    if change == UIPasteboard.general.changeCount { return f }
+    return UIPasteboard.general.hasStrings && UIPasteboard.general.string == "📎 " + n ? f : nil
+  }
 }
 // the comment box's text: a pasted picture or file goes in as an attachment; words paste as words
 final class PasteTextView: UITextView {
