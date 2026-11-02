@@ -182,7 +182,7 @@ const Phone = (() => {
   }
   // (then the app's own Home is told at once whether it's on: it stays up while the page draws the other tab, and goes
   //  the moment that tab is there — the page's own Home never shows in between)
-  window.__e11Tab = (v) => { const b = document.querySelector(`#ph-tabs [data-ph-tab="${v}"]`); if (b) b.click(); if (typeof NativeHome !== 'undefined') NativeHome.sync(); if (typeof NativeMyTasks !== 'undefined') NativeMyTasks.sync(); if (typeof NativeInbox !== 'undefined') NativeInbox.sync(); };
+  window.__e11Tab = (v) => { const b = document.querySelector(`#ph-tabs [data-ph-tab="${v}"]`); if (b) b.click(); if (typeof NativeHome !== 'undefined') NativeHome.sync(); if (typeof NativeMyTasks !== 'undefined') NativeMyTasks.sync(); if (typeof NativeInbox !== 'undefined') NativeInbox.sync(); if (typeof NativeClients !== 'undefined') NativeClients.sync(); };
 
   /* ---------- Pieces ---------- */
   function card(t, o = {}) {
@@ -441,7 +441,8 @@ const Phone = (() => {
     // (under the app's own My Day / My Tasks the page draws nothing — they were drawn unseen behind them; lighter, and
     //  anything that shows through for a moment is empty — Haris, 2026-11-01)
     if (((v === 'home' || v === 'today') && typeof NativeHome !== 'undefined' && NativeHome.light) || (v === 'mytasks' && typeof NativeMyTasks !== 'undefined' && NativeMyTasks.light)
-      || (v === 'inbox' && typeof NativeInbox !== 'undefined' && NativeInbox.light)) {
+      || (v === 'inbox' && typeof NativeInbox !== 'undefined' && NativeInbox.light)
+      || ((v === 'projects' || v === 'project') && typeof NativeClients !== 'undefined' && NativeClients.light)) {
       c.innerHTML = '<div class="ph-page ph-under-app"></div>';
       unpin();
       document.body.classList.remove('ph-fab-on'); document.body.classList.add('ph-strip');
@@ -2716,5 +2717,51 @@ const NativeInbox = (() => {
   window.__e11InboxResend = () => { last = ''; shown = false; sync(); };
   // the app can't show its own (switched off on the server, or nothing yet with no signal): the page's own list
   window.__e11InboxOwn = (v) => { const was = own; own = !!v; if (was !== own && ui.view === 'inbox' && !ui.taskId) renderContent(); };
+  return { sync, get on() { return on; }, get shown() { return shown; }, get light() { return on && !own; } };
+})();
+
+/* ---------- the Clients tab, the iPhone app's own (shell 31+, Part B — Haris 2026-11-02): the list of clients and a
+   client's page (its Client Assets folders on top, its tasks by status as Home's cards) drawn by the app from its own
+   copy; the page says which is on screen and does what's tapped — a client (its page), back, a folder (the website's
+   Client Assets), Show completed, + (New task in this client), and Home's card taps. NATIVE_CLIENTS = false: the
+   page's own again (no app build needed). ---------- */
+const NATIVE_CLIENTS = true;
+const NativeClients = (() => {
+  let on = false, last = '', shown = false, own = false;
+  if (NATIVE_CLIENTS && window.__e11CommentsOnly !== true && typeof Host !== 'undefined' && Host.isIOSApp) {
+    NativeMac.call('appInfo').then((r) => { on = Number(r && r.shell) >= 31; if (on) { setInterval(sync, 350); sync(); } }).catch(() => {});
+  }
+  const call = (a) => NativeMac.call('clients', a).catch(() => {});
+  const visible = () => {
+    if (!Phone.on || (ui.view !== 'projects' && ui.view !== 'project') || ui.search) return false;
+    if (ui.view === 'project' && !proj(ui.projectId)) return false;
+    if (ui.taskId || document.querySelector('#detail.open')) return false;
+    if (document.querySelector('#ph-sheet-root .ph-scrim:not(.docked), #overlay-root .scrim, #tv-root .scrim, .menu, .lightbox, .fv')) return false;
+    return true;
+  };
+  function sync() {
+    if (!on) return;
+    let m = null;
+    try {
+      m = visible() ? { show: true, view: ui.view === 'project' ? 'client' : 'list', id: ui.view === 'project' ? ui.projectId : '', done: ui.view === 'project' && !!ui.showDone[ui.projectId], me: currentUserId, light: document.documentElement.dataset.theme === 'light' } : null;
+    } catch (e) { m = null; }
+    if (!m) { if (shown) { shown = false; last = ''; call({ show: false }); } return; }
+    const s = JSON.stringify(m);
+    if (s === last) return;
+    last = s; shown = true;
+    call(m);
+  }
+  window.__e11Clients = (ev) => {
+    if (!ev) return;
+    if (ev.ev === 'client' && ev.id) { go('project', ev.id); sync(); return; }
+    if (ev.ev === 'back') { go('projects'); sync(); return; }
+    if (ev.ev === 'done') { ui.showDone[ui.projectId] = !ui.showDone[ui.projectId]; renderContent(); sync(); return; }
+    if (ev.ev === 'folder' && ev.client) { openClient(ev.client, ev.folder || null); sync(); return; }
+    if (ev.ev === 'assets' && ev.client) { openClient(ev.client); sync(); return; }
+    if (ev.ev === 'add') { Phone.quickAdd(); return; }
+    if (window.__e11Home) window.__e11Home(ev);
+  };
+  window.__e11ClientsResend = () => { last = ''; shown = false; sync(); };
+  window.__e11ClientsOwn = (v) => { const was = own; own = !!v; if (was !== own && (ui.view === 'projects' || ui.view === 'project') && !ui.taskId) renderContent(); };
   return { sync, get on() { return on; }, get shown() { return shown; }, get light() { return on && !own; } };
 })();

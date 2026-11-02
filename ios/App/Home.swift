@@ -86,7 +86,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private var cards: [String: HomeCard] = [:]
   private var m: [String: Any] = [:]
   private var L = HomeLook(nil)
-  var people: [String: [String: Any]] = [:] { didSet { if picsKey(oldValue) != picsKey(people) { cards.values.forEach { $0.people = people }; meChanged(); if isInbox && !m.isEmpty { drawInbox(m) } } } }
+  var people: [String: [String: Any]] = [:] { didSet { if picsKey(oldValue) != picsKey(people) { cards.values.forEach { $0.people = people }; meChanged(); if isInbox && !m.isEmpty { drawInbox(m) }; if isClients { clientsGroup.people = people } } } }
   private var meId = ""
   var bottomRoom: CGFloat = 120 { didSet { if oldValue != bottomRoom { setNeedsLayout() } } }
   // the top of the app's tab bar: the + sits 14 above it, 18 from the right (phone.css .ph-fab), so it's in place from
@@ -208,7 +208,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     field.keyboardAppearance = L.light ? .light : .dark
     hint.textColor = L.empty
     meId = model["me"] as? String ?? ""; meChanged()
-    stats.forEach { $0.isHidden = isList }
+    stats.forEach { $0.isHidden = noStats }
     let st = model["stats"] as? [Int] ?? [0, 0, 0]
     let names = ["Due today", "Overdue", "In review"], cols = [L.statG, L.statR, L.statA]
     for (i, v) in stats.enumerated() {
@@ -219,11 +219,12 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       l?.text = names[i]; l?.font = .systemFont(ofSize: 12); l?.textColor = L.statLabel
     }
     if isInbox { drawInbox(model); setNeedsLayout(); layoutIfNeeded(); return }
+    if isClients { drawClients(model); setNeedsLayout(); layoutIfNeeded(); return }
     // the groups: their headers, cards (kept by task, so a change doesn't redraw the rest) and "nothing due" lines
     // A change on the same list (done, due, deleted, undone — by you or by anyone else) moves as the Inbox does (Haris,
     // 2026-11-02): what goes fades out where it is while the gap closes; what comes — a task moving from Overdue to
     // Today, one completed elsewhere arriving on Done — gets its gap opened, then fades in. Nothing jumps.
-    let key = "\(isList)|\(listTab)|\(filtersKey)"
+    let key = "\(isList)|\(listTab)|\(filtersKey)|\(model["id"] as? String ?? "")"   // (another client's page: drawn afresh)
     let animate = window != nil && !isHidden && key == drawnKey && !content.isEmpty && !searching
     drawnKey = key
     var oldCenter: [String: CGPoint] = [:]
@@ -234,9 +235,20 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       for v in content where !(v is HomeCard) { if let k = v.accessibilityIdentifier { oldHeads[k] = v } }
     }
     let leavingHeads = content.filter { !($0 is HomeCard) }
-    if !animate { leavingHeads.forEach { $0.removeFromSuperview() } }
+    if !animate { leavingHeads.forEach { if !($0 is HomeBlock) { $0.removeFromSuperview() } } }
     content = []
     groupOf = [:]
+    if isClient {
+      // (its Client Assets folders on top, then "Tasks · N open" with Show completed — kept, not made again)
+      if let a = model["assets"] as? [String: Any] {
+        assetsStrip.set((a["folders"] as? [[String: Any]]) ?? [], look: L)
+        if assetsStrip.superview !== scroll { scroll.addSubview(assetsStrip) }
+        content.append(assetsStrip)
+      } else { assetsStrip.removeFromSuperview() }
+      tasksHead.set(open: model["open"] as? Int ?? 0, showDone: (model["showDone"] as? Bool) == true)
+      if tasksHead.superview !== scroll { scroll.addSubview(tasksHead) }
+      content.append(tasksHead)
+    }
     var seen = Set<String>()
     var runs: [String: Int] = [:]
     for g in model["groups"] as? [[String: Any]] ?? [] {
@@ -330,6 +342,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       } else { arrivals.append(v) }
     }
     for h in leavingHeads {
+      if content.contains(where: { $0 === h }) { continue }   // (the client page's folders and tasks line: kept, not swapped)
       if let k = h.accessibilityIdentifier, content.contains(where: { $0.accessibilityIdentifier == k }) { h.removeFromSuperview() } else { fade(h) }
     }
     arrivals.forEach { $0.alpha = 0 }
@@ -467,6 +480,32 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // are picked here, so switching is instant: the rows that don't belong fade out where they are and the others close
   // up — and back the other way (Haris, 2026-11-01, from Mail) ----------
   var isInbox = false { didSet { if isInbox && !isList { isList = true } } }
+  // the Clients tab (shell 31): the list of clients, or a client's page (‹ back: the shared top buttons' left one)
+  var isClients = false, isClient = false
+  private var noStats: Bool { isList || isClients || isClient }
+  private lazy var clientsGroup: ClientsGroup = {
+    let g = ClientsGroup(); g.onOpen = { [weak self] id in self?.send(["ev": "client", "id": id]) }; return g
+  }()
+  private lazy var assetsStrip: AssetsStrip = {
+    let a = AssetsStrip()
+    a.onFolder = { [weak self] f in guard let self = self, let c = (self.m["assets"] as? [String: Any])?["id"] as? String else { return }; self.send(["ev": "folder", "client": c, "folder": f]) }
+    a.onAll = { [weak self] in guard let self = self, let c = (self.m["assets"] as? [String: Any])?["id"] as? String else { return }; self.send(["ev": "assets", "client": c]) }
+    return a
+  }()
+  private lazy var tasksHead: TasksHead = { let t = TasksHead(); t.onToggle = { [weak self] in self?.send(["ev": "done"]) }; return t }()
+  // ‹ on a client's page: where it is (the shared top buttons' row, at the page's left edge) and its tap
+  var backable: Bool { isClient }
+  var backFrame: CGRect { CGRect(x: 16, y: safeAreaInsets.top + 22 - BTN / 2, width: BTN, height: BTN) }
+  func backTap() { send(["ev": "back"]) }
+  func relayout() { UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) { self.setNeedsLayout(); self.layoutIfNeeded() } }
+  private func drawClients(_ model: [String: Any]) {
+    content.filter { $0 !== clientsGroup }.forEach { $0.removeFromSuperview() }
+    clientsGroup.people = people
+    clientsGroup.set((model["rows"] as? [[String: Any]]) ?? [], (model["inactive"] as? [[String: Any]]) ?? [], look: L)
+    if clientsGroup.superview !== scroll { scroll.addSubview(clientsGroup) }
+    content = [clientsGroup]
+    fab.isHidden = true
+  }
   private let catsView = MailCats(items: [
     .init(key: "all", sym: "tray", name: "All", fill: MailCats.neutral),
     .init(key: "unread", sym: "envelope", name: "Unread", fill: MailCats.blue),
@@ -590,7 +629,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     var y: CGFloat = 4
     let bw = (W - 32 - 16) / 3, bh: CGFloat = 1 + 10 + 41 + 15 + 12 + 1
     if isList { listHeadH = layoutList(W); y = 4 + listHeadH - bh; layoutHeader() }
-    for (i, v) in stats.enumerated() where !isList {
+    if isClients || isClient { y = 4 - bh }
+    for (i, v) in stats.enumerated() where !noStats {
       v.frame = CGRect(x: 16 + CGFloat(i) * (bw + 8), y: y, width: bw, height: bh)
       v.viewWithTag(1)?.frame = CGRect(x: 13, y: 11, width: bw - 26, height: 41)
       v.viewWithTag(2)?.frame = CGRect(x: 13, y: 11 + 41, width: bw - 26, height: 15)
@@ -599,6 +639,13 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // the list (.ph-list: 16 from the sides, 10 between things; a group's title 12 lower than that)
     let lw = W - 32
     for (i, v) in content.enumerated() {
+      if let b = v as? HomeBlock {
+        // (the Clients tab's own blocks: the whole width, their own height)
+        let h = b.blockHeight(W)
+        b.bounds = CGRect(x: 0, y: 0, width: W, height: h); b.center = CGPoint(x: W / 2, y: y + h / 2)
+        y += h
+        continue
+      }
       if let r = v as? InboxRow {
         // (Inbox rows: edge to edge, one under the other, as Mail's)
         r.bounds = CGRect(x: 0, y: 0, width: W, height: InboxRow.H); r.center = CGPoint(x: W / 2, y: y + InboxRow.H / 2)
@@ -848,7 +895,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // the small title and date on the bar: there once the big ones have gone under it (gone while searching, under its bar)
     let smallCY = top + 22
     let stw = W - 16 - R - BTN - 12 - BTN - 12
-    place(smallTitle, CGRect(x: 16, y: top + 1, width: stw, height: 21)); place(smallSub, CGRect(x: 16, y: top + 25, width: stw, height: 15))
+    let sx: CGFloat = backable ? 16 + BTN + 12 : 16   // (a client's page: right of ‹)
+    place(smallTitle, CGRect(x: sx, y: top + 1, width: stw - (sx - 16), height: 21)); place(smallSub, CGRect(x: sx, y: top + 25, width: stw - (sx - 16), height: 15))
     applyBar()
     // Search and your photo: with the title until they reach the bar, then they stay on it
     // (Search and your photo stay on the bar's row from the start — they don't move with the list — Haris, 2026-10-31)

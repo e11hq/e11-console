@@ -87,6 +87,7 @@ final class ServerHome {
       let c: (ready: Bool, model: [String: Any]?)
       if kind == "home" { c = AppData.shared.screen("home") }
       else if kind == "inbox" { c = AppData.shared.screen("inbox", ServerHome.param(query, "tab") ?? "all") }
+      else if kind == "clients" { c = AppData.shared.screen("clients", ServerHome.clientsJSON(query)) }   // (Part B: the Clients tab)
       else { c = AppData.shared.screen("mytasks", ServerHome.filtersJSON(query)) }
       if c.ready, let h = c.model {
         confirmedMe = h["me"] as? String ?? confirmedMe
@@ -129,6 +130,11 @@ final class ServerHome {
   static func filtersJSON(_ q: String) -> String {
     let f: [String: Any] = ["tab": param(q, "tab") ?? "all", "due": param(q, "due") ?? "", "people": param(q, "people") ?? "", "ams": param(q, "ams") ?? "",
                             "team": param(q, "team") == "1", "assigned": param(q, "assigned") == "1", "cd": param(q, "cd") == "1"]
+    return (try? JSONSerialization.data(withJSONObject: f)).map { String(decoding: $0, as: UTF8.self) } ?? "{}"
+  }
+  // (the Clients tab: view=list, or view=client&id=…&done=1)
+  static func clientsJSON(_ q: String) -> String {
+    let f: [String: Any] = ["view": param(q, "view") ?? "list", "id": param(q, "id") ?? "", "done": param(q, "done") == "1"]
     return (try? JSONSerialization.data(withJSONObject: f)).map { String(decoding: $0, as: UTF8.self) } ?? "{}"
   }
   private func take(_ h: [String: Any], rev: Int) {

@@ -32,6 +32,8 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
   }
   // the app's Inbox (GET /api/inbox?tab=all|unread|mentions)
   function inbox(u, data, q) { return V().inbox(load(), data, u.id, now, q.get('tab'), u); }
+  // the app's Clients tab (GET /api/clients?view=list|client&id=&done=1)
+  function clients(u, data, q) { return V().clients(load(), data, u.id, now, { view: q.get('view') === 'client' ? 'client' : 'list', id: q.get('id') || '', done: q.get('done') === '1' }); }
   // ---------- the app's Home actions (POST /api/home/act) ----------
   // Done / reopen, the due date, to the Trash and back — done here with the same shared rules the website uses, on the
   // same data this person's own app has (what they may see), so the activity lines, notifications and checks are
@@ -174,5 +176,5 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
   function taskPage(u, data, id) { return V().taskPage(load(), data, u.id, now, id); }
   // the app's native Comments (GET /api/comments?id=&thread=)
   function commentsFeed(u, data, id, thread) { return V().commentsFeed(load(), data, u.id, now, id, thread); }
-  return { home, myTasks, inbox, act, taskPage, commentsFeed };
+  return { home, myTasks, inbox, clients, act, taskPage, commentsFeed };
 }

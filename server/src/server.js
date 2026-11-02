@@ -680,6 +680,12 @@ export function createServer(cfg) {
       try { list = homeView.inbox(u, visibleSnapshot(u).data, url.searchParams); } catch (e) { console.error('inbox:', e.message); return json(res, 500, { ok: false, error: 'The Inbox could not be worked out' }); }
       return json(res, 200, { ok: true, rev: store.rev(), home: list });
     }
+    if (p === '/api/clients' && req.method === 'GET') {
+      if (store.kv.get('clients-server') === 'off') return json(res, 200, { ok: true, off: true, rev: store.rev() });
+      let m = null;
+      try { m = homeView.clients(u, visibleSnapshot(u).data, url.searchParams); } catch (e) { console.error('clients:', e.message); return json(res, 500, { ok: false, error: 'Clients could not be worked out' }); }
+      return json(res, 200, { ok: true, rev: store.rev(), home: m });
+    }
     if (p === '/api/mytasks' && req.method === 'GET') {
       if (store.kv.get('mytasks-server') === 'off') return json(res, 200, { ok: true, off: true, rev: store.rev() });
       let list = null;

@@ -282,7 +282,9 @@ extension Main {
       let mf = corner.place(c.kind, c.text, circle: h.convert(c.frame, to: view).offsetBy(dx: dx, dy: 0))
       let meF = h.convert(h.meFrame, to: view).offsetBy(dx: dx, dy: 0)
       let cornerSpot = h.searching ? CornerButton.Spot(kind: "close", frame: meF) : CornerButton.Spot(kind: "photo", frame: meF, image: h.meImage)
-      return (CornerButton.Spot(), CornerButton.Spot(kind: c.kind, text: c.text, frame: mf), cornerSpot)
+      // (a client's page: ‹ on the left, as on a task page)
+      let left = h.backable && !h.searching ? CornerButton.Spot(kind: "back", frame: h.convert(h.backFrame, to: view).offsetBy(dx: dx, dy: 0)) : CornerButton.Spot()
+      return (left, CornerButton.Spot(kind: c.kind, text: c.text, frame: mf), cornerSpot)
     }
     return (CornerButton.Spot(), CornerButton.Spot(), CornerButton.Spot())
   }
@@ -295,13 +297,17 @@ extension Main {
   }
   func updateCornerNow(animated: Bool = true) {
     // (only once there's a screen of the app's own to show it on)
-    guard homeIfMade != nil || myTasksIfMade != nil || inboxIfMade != nil || !taskPages.isEmpty else { return }
-    for h in [homeIfMade, myTasksIfMade, inboxIfMade].compactMap({ $0 }) where !h.cornerShared { h.cornerShared = true; h.onCorner = { [weak self] in self?.updateCorner() } }
+    guard homeIfMade != nil || myTasksIfMade != nil || inboxIfMade != nil || clientsListIfMade != nil || clientPageIfMade != nil || !taskPages.isEmpty else { return }
+    for h in [homeIfMade, myTasksIfMade, inboxIfMade, clientsListIfMade, clientPageIfMade].compactMap({ $0 }) where !h.cornerShared { h.cornerShared = true; h.onCorner = { [weak self] in self?.updateCorner() } }
     // (the page's ••• menu ready or changed: only the menu — moving the buttons again here, without the spring, cut
     //  the melt into ••• short as a task opened: build 1275's film)
     for p in taskPages where !p.cornerShared { p.cornerShared = true; p.onMenu = { [weak self, weak p] in if let p = p, p === self?.taskPages.last { self?.corner.items = p.cornerItems } } }
     if corner.superview == nil {
-      corner.onLeft = { [weak self] in guard let self = self, let p = self.taskPages.last else { return }; if p.editingDesc { p.finishDesc() }; self.closeTaskPage(p) }
+      corner.onLeft = { [weak self] in
+        guard let self = self else { return }
+        guard let p = self.taskPages.last else { if let h = self.shownScreen, h.backable { UIImpactFeedbackGenerator(style: .light).impactOccurred(); h.backTap() }; return }
+        if p.editingDesc { p.finishDesc() }; self.closeTaskPage(p)
+      }
       corner.onMid = { [weak self] k in if k == "done" { self?.taskPages.last?.finishDesc(); return }; self?.shownScreen?.cornerTap(k) }
       corner.onCorner = { [weak self] k in guard let h = self?.shownScreen else { return }; if k == "close" { h.closeSearch() } else { h.meTap() } }
     }

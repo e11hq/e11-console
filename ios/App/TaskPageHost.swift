@@ -113,7 +113,7 @@ extension Main {
       //  meanwhile too; one left aside showed a blank page, Haris 2026-11-01)
       if last { self.view.subviews.forEach { v in if v !== self.tabBar && !(v is TaskPage) && v.transform.tx != 0 { v.transform = .identity } } }
       // (and the screen under it drawn again as it is now: the page says what's showing — Home, My Tasks, the Inbox)
-      if last { self.pageJS("window.__e11HomeResend && __e11HomeResend(); window.__e11MyTasksResend && __e11MyTasksResend(); window.__e11InboxResend && __e11InboxResend()"); self.updateCorner() }
+      if last { self.pageJS("window.__e11HomeResend && __e11HomeResend(); window.__e11MyTasksResend && __e11MyTasksResend(); window.__e11InboxResend && __e11InboxResend(); window.__e11ClientsResend && __e11ClientsResend()"); self.updateCorner() }
       if last { self.pageJS("window.__e11Task && window.__e11Task({ev:'closed'})") }
       else if let top = self.taskPages.last, top.tab == "comments" { self.taskShowComments(top, focus: "") }
     }
@@ -764,7 +764,7 @@ extension Main {
         p.feed?.load(); p.threadFeed?.load()
       }
       // (Home, My Tasks and the Inbox too — step 2: from the copy, no request)
-      self.serverHome.refresh(); self.serverMyTasksIfMade?.refresh(); self.serverInboxIfMade?.refresh()
+      self.serverHome.refresh(); self.serverMyTasksIfMade?.refresh(); self.serverInboxIfMade?.refresh(); if self.clientsWanted { self.serverClientsIfMade?.refresh() }
     }
   }
 }

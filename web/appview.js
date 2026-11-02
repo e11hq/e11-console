@@ -49,6 +49,17 @@ var E11AppView = (function () {
     photos(m);
     return Object.assign({}, m, { today });
   }
+  // the Clients tab (Part B): q = { view: 'list' | 'client', id, done }
+  function clients(R, data, me, nowMs, q) {
+    const today = R.dubaiDay(nowMs());
+    const r = R.withEnv(envOf(nowMs), Object.assign(base(data), { clients: data.clients || [] }), me, today);
+    const m = q && q.view === 'client' ? r.clientPage(String(q.id || ''), !!q.done) : r.clientsList();
+    if (!m) return null;
+    photos(m);
+    const logo = (x) => { if (x && x.logo) x.logo = fileUrl(x.logo) + '?view=1'; };
+    logo(m); (m.rows || []).concat(m.inactive || []).forEach(logo);
+    return Object.assign({}, m, { today });
+  }
   // a task's page — null: not there, or not for this person
   function taskPage(R, data, me, nowMs, id) {
     const today = R.dubaiDay(nowMs());
@@ -104,10 +115,11 @@ var E11AppView = (function () {
       else if (kind === 'home') m = home(R(), copy.data, copy.me, now);
       else if (kind === 'inbox') m = inbox(R(), copy.data, copy.me, now, a);
       else if (kind === 'mytasks') m = myTasks(R(), copy.data, copy.me, now, a ? JSON.parse(a) : {});
+      else if (kind === 'clients') m = clients(R(), copy.data, copy.me, now, a ? JSON.parse(a) : {});
     } catch (e) { return JSON.stringify({ error: String(e && e.message || e) }); }
     return JSON.stringify({ model: m, rev: copy.rev });
   }
 
-  return { fileUrl, appFile, home, myTasks, inbox, taskPage, commentsFeed, load, apply, save, ready, rev, screen };
+  return { fileUrl, appFile, home, myTasks, inbox, clients, taskPage, commentsFeed, load, apply, save, ready, rev, screen };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = E11AppView;

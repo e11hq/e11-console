@@ -1137,7 +1137,61 @@ var E11Rules = (() => {
       return [];
     }
 
-    return { home, myTasks, myTasksFilters, inbox, inboxRow, myDayData, cardOf, can, amReadOnly, canComplete, completeBlocked, dayTitle, statusInfo, sectionOf,
+    // ---------- the app's Clients tab (iPhone, Part B — Haris 2026-11-02): the list, and a client's page ----------
+    // who sees which client: as the website's phone list (amSidebarOk): Production / Freelancers the clients they work on,
+    // an Account Manager theirs (while not on leave), everyone else all; inactive ones apart
+    const clientSeen = (p, u = me()) => {
+      if (!u) return false;
+      if (ownSearchOnly(u) && !tasks.some((t) => t.projectId === p.id && partOfTask(t, u.id, false)) && !(u.role === 'freelancer' && (u.projectIds || []).includes(p.id))) return false;
+      return u.role !== 'am' || isAdm(u) || isCD(u.id) || !projects.some((x) => (x.ams || []).some((a) => a.id === u.id)) || (p.ams || []).some((a) => a.id === u.id && !a.onLeave);
+    };
+    const byOrderP = (a, b) => (a.order || 0) - (b.order || 0);
+    const clientRec = (p) => (p && p.clientId ? (db.clients || []).find((c) => c.id === p.clientId) || null : null);
+    const peopleOf = (ids) => Object.fromEntries([...ids].map((id) => { const p = userById(id); return [id, { initials: initials(fullName(p)), color: rgbOf(avColor(id || 'x')), photo: p && p.avatar ? p.avatar : null }]; }));
+    function clientRow(p) {
+      const open = tasks.filter((t) => t.projectId === p.id && !t.parentId && !t.done);
+      const late = open.filter((t) => t.due && dayDiff(t.due) < 0).length;
+      const c = clientRec(p);
+      const ams = (p.ams || []).filter((a) => !a.onLeave).map((a) => a.id).filter((id) => userById(id)).slice(0, 3);
+      return { id: p.id, name: p.name || 'Client', ini: initials(p.name), rgb: rgbOf(p.color), logo: c && c.logo ? c.logo : null, open: open.length, late, ams };
+    }
+    function clientsList() {
+      const u = me();
+      if (!u || isOffice(u) || isFinUser(u)) return null;
+      const seen = projects.filter((p) => clientSeen(p, u)).sort(byOrderP);
+      const rows = seen.filter((p) => !p.inactive).map(clientRow), inactive = seen.filter((p) => p.inactive).map(clientRow);
+      const ppl = new Set([meId]); rows.concat(inactive).forEach((r) => r.ams.forEach((id) => ppl.add(id)));
+      const nOpen = rows.reduce((n, r) => n + r.open, 0);
+      return { show: true, kind: 'clients', title: 'Clients', date: `${rows.length} client${rows.length === 1 ? '' : 's'} · ${nOpen} open task${nOpen === 1 ? '' : 's'}`, me: meId, rows, inactive, people: peopleOf(ppl) };
+    }
+    // a client's page: its Client Assets folders on top, then its tasks by status (open ones, or all with showDone) —
+    // the same cards as Home (Haris: "the task cards will be consistent")
+    const FOLDER_RGB = ['#0a84ff', '#af52de', '#ff9f0a', '#34c759', '#30b0c7', '#ff375f', '#5e5ce6'];
+    function clientPage(pid, showDone) {
+      const u = me();
+      const p = proj(pid);
+      if (!u || !p || !clientSeen(p, u)) return null;
+      const c = clientRec(p);
+      const count = (f, all) => (f.files || []).length + all.filter((x) => x.parentId === f.id).reduce((n, x) => n + count(x, all), 0);
+      const fl = c ? (c.folders || []) : [];
+      const folders = fl.filter((f) => !f.parentId).map((f, i) => ({ id: f.id, name: f.name || 'Folder', files: count(f, fl), rgb: rgbOf(FOLDER_RGB[i % FOLDER_RGB.length]) }));
+      let open = 0;
+      const groups = (p.sections || []).map((s) => {
+        const all = tasks.filter((t) => t.projectId === p.id && t.sectionId === s.id && !t.parentId).sort((a, b) => (isUrgent(b) ? 1 : 0) - (isUrgent(a) ? 1 : 0) || byOrderP(a, b));
+        const ts = showDone ? all : all.filter((t) => !t.done);
+        open += all.filter((t) => !t.done).length;
+        return ts.length ? { name: s.name, dot: rgbOf(s.color), n: ts.length, empty: '', cards: ts.map((t) => cardOf(t, { status: false })) } : null;
+      }).filter(Boolean);
+      if (!groups.length) groups.push({ name: 'Tasks', n: 0, empty: showDone ? 'No tasks yet.' : 'No open tasks — tap Show completed to see the done ones.', cards: [] });
+      peopleOn.add(meId);
+      return {
+        show: true, kind: 'client', id: p.id, title: p.name || 'Client', date: `${open} open task${open === 1 ? '' : 's'}`, me: meId, rgb: rgbOf(p.color), ini: initials(p.name),
+        logo: c && c.logo ? c.logo : null, assets: c ? { id: c.id, name: c.name, folders } : null, showDone: !!showDone, open, groups,
+        add: can('createTask'), canDelete: can('deleteTask'), people: peopleOf(peopleOn),
+      };
+    }
+
+    return { home, myTasks, myTasksFilters, inbox, inboxRow, clientsList, clientPage, myDayData, cardOf, can, amReadOnly, canComplete, completeBlocked, dayTitle, statusInfo, sectionOf,
       notifGroups: NOTIF_GROUPS, doneLocked, canReopen, finish, finishBlocked, canFinish, moveToStatus, logActivity, logChange, pushNotif, notifyWatchers, checkPrioConflict, setDone, setDue, setClientApproval, asksClientApproval, deleteTask, watchersOf, creatorOf, clientAmsOf, fmtDue,
       taskPage, setTitle, setStart, setStatus, setMyPart, setPrio, prioTaken, toggleCheck, setNeedsCD, setUpdate, idLocked,
       setAssignee, setGuardian, addTag, removeTag, setChannels, addCheck, addSubtask, setClient, commentsFeed, toggleReaction, deleteComment, setDesc, submitReview, withdrawReview, postComment, editComment, mentionable, attachFilesTo };
