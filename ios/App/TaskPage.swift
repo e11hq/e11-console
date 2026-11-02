@@ -140,7 +140,8 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   var onDescAttach: ((String) -> Void)?
   var onDescUpload: (([(URL, String)]) -> Void)?
   var descAutoFinish = false
-  private var descInsertAt: NSRange?   // (drawn before: a later drawing animates what changed)
+  private var descInsertAt: NSRange?
+  var pulses: [String: UIView] = [:]   // (drawn before: a later drawing animates what changed)
   private var descTouch: (CGPoint, Date)?
   var waiting = 0   // (changes sent, not answered yet)
   // a change shown at once, before the server's answer (Haris, 2026-11-02: changes came with a delay); the answer
@@ -1345,7 +1346,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // (writing in the description opens it all, as Expand does)
   func textViewDidBeginEditing(_ tv: UITextView) { if tv === descView { descBox.expand(); beginDesc() } }
   func textViewDidChangeSelection(_ tv: UITextView) { if tv === descView, tv.isFirstResponder, kbCover > 0 { DispatchQueue.main.async { self.caretIntoView() } } }
-  func textViewDidChange(_ tv: UITextView) { setNeedsLayout(); if tv === descView { descChanged(); DispatchQueue.main.async { self.caretIntoView() } } }
+  func textViewDidChange(_ tv: UITextView) { setNeedsLayout(); if tv === descView { descChanged(); DispatchQueue.main.async { self.caretIntoView(); if !self.pulses.isEmpty || self.descUploading { self.placePulses() } } } }
   func textViewDidEndEditing(_ tv: UITextView) {
     if tv === descView { return }
     let v = tv.text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1686,6 +1687,30 @@ extension TaskPage {
     tv.typingAttributes = plain
     if !tv.isFirstResponder { tv.becomeFirstResponder() }
     setNeedsLayout(); relayAnimated()
+    DispatchQueue.main.async { self.placePulses() }
+  }
+  // a chip still uploading pulses, as the upload cards in Files do: a soft veil over it fading in and out, kept on the
+  // chip as the words around it change (Haris 2026-11-02)
+  func placePulses() {
+    let tv = descView
+    let a = tv.attributedText ?? NSAttributedString()
+    var want: [String: CGRect] = [:]
+    a.enumerateAttribute(FILEREF_KEY, in: NSRange(location: 0, length: a.length)) { v, r, _ in
+      guard let id = (v as? [String: Any])?["pending"] as? String,
+            let s = tv.position(from: tv.beginningOfDocument, offset: r.location), let e = tv.position(from: s, offset: r.length),
+            let tr = tv.textRange(from: s, to: e) else { return }
+      want[id] = tv.firstRect(for: tr)
+    }
+    for (id, v) in pulses where want[id] == nil { v.removeFromSuperview(); pulses[id] = nil }
+    for (id, f) in want where !f.isNull && !f.isInfinite {
+      let v: UIView
+      if let x = pulses[id] { v = x } else {
+        v = UIView(); v.isUserInteractionEnabled = false; v.backgroundColor = .systemBackground; v.alpha = 0
+        tv.addSubview(v); pulses[id] = v
+        UIView.animate(withDuration: 0.8, delay: 0, options: [.autoreverse, .repeat, .curveEaseInOut, .allowUserInteraction]) { v.alpha = 0.55 }
+      }
+      v.frame = f; v.layer.cornerRadius = f.height / 2
+    }
   }
   // one is up (path) or failed (nil): its real chip in place of the greyed one, its card under the description
   func descUploaded(_ id: String, path: String?, size: Int) {
@@ -1702,20 +1727,14 @@ extension TaskPage {
     DescEditor.dark = !light
     if let path = path {
       a.replaceCharacters(in: r, with: DescEditor.chip(["path": path, "name": name, "size": size], size: TaskPage.T))
-      let url = "/__file/" + path.split(separator: "/").map { String($0).addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? String($0) }.joined(separator: "/") + "?view=1"
-      descPending.append(["id": "desc-" + id, "file": path, "name": name, "size": size, "url": url])
+      // (no card under the description for it: it's in the task's Files already — Haris 2026-11-02)
     } else {
       a.deleteCharacters(in: r)
       toast("Upload failed — try again")
     }
     tv.attributedText = a
     tv.selectedRange = NSRange(location: min(sel.location, a.length), length: 0)
-    let files = descShown
-    descStrip.set(files, open: { [weak self] i in self?.onOpenFiles?(files, i) }, menu: { [weak self] i in self?.fileMenu(files, i) })
-    if path != nil, !blocks.contains(where: { $0 === descStrip }), let i = blocks.firstIndex(where: { $0 === descBox }) {
-      blocks.insert(descStrip, at: i + 1); content.addSubview(descStrip); descStrip.alpha = 0
-      UIView.animate(withDuration: 0.3) { self.descStrip.alpha = 1 }
-    }
+    placePulses()
     setNeedsLayout(); relayAnimated()
     if descAutoFinish && !descUploading { finishDesc() }
   }
