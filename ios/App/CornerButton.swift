@@ -165,6 +165,7 @@ final class CornerButton: UIView {
     // (after a swipe back the buttons are already part way, where the finger left them: they just carry on from there
     //  — the pull out of ••• below would start them all over again, Haris 2026-11-02)
     let fromSwipe = scrubbed; scrubbed = false
+    let iconWas = model.mid.icon
     // Search opening: Home's own bar starts exactly where 🔍 is and stretches out — 🔍 hands over to it at once; closing,
     // the bar shrinks back into that circle and 🔍 takes over there, in place
     let handOver = !fromSwipe && was.1.kind == "search" && m.kind == "none" && c.kind == "close"
@@ -181,13 +182,15 @@ final class CornerButton: UIView {
         // goes, out of sight inside it); its icon fades on the way; your photo fades into ••• on the same glass
         if !fromSwipe && m.kind == "none" && was.1.kind == "search" && c.kind != "none" { var s = self.b(was.1); s.frame = c.frame; s.icon = 0; self.model.mid = s }
         else if outOfCorner { var s = self.b(m); s.icon = 0; self.model.mid = s }
-        else { self.model.mid = self.b(m) }
+        else { var s = self.b(m); if fromSwipe && m.kind == "search" { s.icon = iconWas }; self.model.mid = s }
       }
     }
     if !animated { now(apply); if m.kind == "none" { now { model.mid = b(m) } }; return }
     if #available(iOS 17.0, *) { withAnimation(.spring(duration: CornerButton.duration, bounce: CornerButton.bounce)) { apply() } }
     else { withAnimation(.spring(response: CornerButton.duration, dampingFraction: 0.78)) { apply() } }
     if outOfCorner { withAnimation(.easeOut(duration: 0.22).delay(0.2)) { model.mid.icon = 1 } }
+    // (after a swipe: the icon finishes fading in on its own, after the glass — not at once with the spring)
+    if fromSwipe && m.kind == "search" && iconWas < 1 { withAnimation(.easeOut(duration: 0.25).delay(0.08)) { model.mid.icon = 1 } }
     if m.kind == "none" && was.1.kind == "search" && c.kind != "none" {
       DispatchQueue.main.asyncAfter(deadline: .now() + CornerButton.duration) { [weak self] in guard let self = self, self.mid.kind == "none" else { return }; self.now { self.model.mid = self.b(self.mid) } }
     }
@@ -200,8 +203,9 @@ final class CornerButton: UIView {
     func lerp(_ x: CGRect, _ y: CGRect) -> CGRect { CGRect(x: x.minX + (y.minX - x.minX) * t, y: x.minY + (y.minY - x.minY) * t, width: x.width + (y.width - x.width) * t, height: x.height + (y.height - x.height) * t) }
     func mix(_ x: Spot, _ y: Spot, into: Spot?) -> CornerModel.B {
       if x.kind == "none" && y.kind == "none" { return CornerModel.B() }
-      if x.kind == "none" { var r = b(y, opacity: Double(t)); if let i = into { r.frame = lerp(i.frame, y.frame) }; return r }
-      if y.kind == "none" { var r = b(x, opacity: Double(1 - t)); if let i = into { r.frame = lerp(x.frame, i.frame) }; return r }
+      // (its icon only shows once it's well out of the drop, and fades with the finger — no snap, Haris 2026-11-02)
+      if x.kind == "none" { var r = b(y, opacity: Double(t)); r.icon = Double(max(0, (t - 0.45) / 0.55)); if let i = into { r.frame = lerp(i.frame, y.frame) }; return r }
+      if y.kind == "none" { var r = b(x, opacity: Double(1 - t)); r.icon = Double(max(0, 1 - t / 0.55)); if let i = into { r.frame = lerp(x.frame, i.frame) }; return r }
       var r = b(t < 0.5 ? x : y); r.frame = lerp(x.frame, y.frame); return r
     }
     now {
