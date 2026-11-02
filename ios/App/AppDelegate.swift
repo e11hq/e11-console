@@ -1247,7 +1247,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   // the screen a server's things show on (Home's or My Tasks'), when it's up
   func screenOf(_ kind: String) -> HomeView? {
     if kind == "clients" { return screenOf("client") ?? (clientsListIfMade?.isHidden == false ? clientsListIfMade : nil) }
-    if kind == "client" { return clientPageIfMade?.isHidden == false ? clientPageIfMade : nil }
+    if kind == "client" { return clientPageIfMade?.isHidden == false && !clientLeaving ? clientPageIfMade : nil }   // (going: the buttons are already the list's)
     let h = kind == "home" ? homeIfMade : kind == "inbox" ? inboxIfMade : myTasksIfMade; return h?.isHidden == false ? h : nil
   }
   var shownScreen: HomeView? { screenOf("clients") ?? screenOf("inbox") ?? screenOf("mytasks") ?? screenOf("home") }
@@ -1572,7 +1572,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     } completion: { _ in p.isHidden = true; p.transform = .identity; self.clientLeaving = false; self.edgePanOn(); self.updateCorner() }
     updateCorner()
   }
-  private var clientLeaving = false
+  var clientLeaving = false
   var clientPanFrom: ((CornerButton.Spot, CornerButton.Spot, CornerButton.Spot), (CornerButton.Spot, CornerButton.Spot, CornerButton.Spot))?
   // (let go part way through the edge swipe: the rest of the way out, from where the finger left it)
   func clientLeavingBySwipe(_ p: HomeView, _ l: HomeView) {
