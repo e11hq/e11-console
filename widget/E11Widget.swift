@@ -37,7 +37,7 @@ struct WCategory: AppEntity {
 }
 struct WCategoryQuery: EntityQuery {
   // only the categories this person may see (from the last summary)
-  func allowed() -> [String] { ["auto"] + (WStore.cached()?.categories ?? []) }
+  func allowed() -> [String] { ["auto"] + phoneCats(WStore.cached()?.categories ?? []) }
   func entities(for identifiers: [String]) async throws -> [WCategory] { identifiers.filter { allowed().contains($0) }.map { WCategory(id: $0) } }
   func suggestedEntities() async throws -> [WCategory] { allowed().map { WCategory(id: $0) } }
   func defaultResult() async -> WCategory? { WCategory(id: "auto") }
@@ -78,11 +78,20 @@ struct WEntry: TimelineEntry {
   let stale: Bool         // the last numbers (signed out or offline)
   let signedOut: Bool
 }
+// (Finance isn't in the iPhone app, so the iPhone's widget doesn't offer it either — Haris, 2026-11-02; the Mac's does)
+func phoneCats(_ c: [String]) -> [String] {
+  #if os(iOS)
+  return c.filter { $0 != "finance" }
+  #else
+  return c
+  #endif
+}
 func resolve(_ s: WSummary?, _ want: String?) -> String? {
   guard let s = s else { return nil }
-  let cats = s.categories ?? []
+  let cats = phoneCats(s.categories ?? [])
   if let w = want, w != "auto" { return cats.contains(w) ? w : nil }
-  return s.main ?? cats.first
+  if let m = s.main, cats.contains(m) { return m }
+  return cats.first
 }
 
 struct WProvider: AppIntentTimelineProvider {
@@ -189,7 +198,12 @@ struct WView: View {
     } else { empty }
   }
   @ViewBuilder var empty: some View {
-    let msg = e.summary == nil ? "Open E11 Console and sign in to see your day here." : "Not available for your role."
+    #if os(iOS)
+    let finOnly = (e.summary?.categories ?? []) == ["finance"]
+    #else
+    let finOnly = false
+    #endif
+    let msg = e.summary == nil ? "Open E11 Console and sign in to see your day here." : finOnly ? "Finance is on the computer." : "Not available for your role."
     switch family {
     #if os(iOS)
     case .accessoryInline: Text("E11 Console")
@@ -446,7 +460,7 @@ struct E11Widget: Widget {
   var base: some WidgetConfiguration {
     AppIntentConfiguration(kind: "E11ConsoleWidget", intent: WConfig.self, provider: WProvider()) { e in WView(e: e) }
       .configurationDisplayName("E11 Console")
-      .description("Your day at E11: tasks, content plans or Finance — whichever is yours.")
+      .description(desc)
       .supportedFamilies(families)
   }
   var body: some WidgetConfiguration {
@@ -455,6 +469,13 @@ struct E11Widget: Widget {
     base.disfavoredLocations(hidden, for: [.systemSmall])
     #else
     base
+    #endif
+  }
+  var desc: LocalizedStringResource {
+    #if os(iOS)
+    return "Your day at E11: tasks or content plans — whichever is yours."
+    #else
+    return "Your day at E11: tasks, content plans or Finance — whichever is yours."
     #endif
   }
   #if os(iOS)
