@@ -433,7 +433,8 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
   }
   private func keepCurrent() {
     let empty = (text.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && files.isEmpty
-    ComposeBox.drafts[draftKey] = empty ? nil : (text.attributedText ?? NSAttributedString(), files)
+    if empty { ComposeBox.drafts[draftKey] = nil }
+    else { let t: NSAttributedString = text.attributedText ?? NSAttributedString(); ComposeBox.drafts[draftKey] = (text: t, files: files) }
     ComposeBox.saveDrafts()
   }
   func clear() {
@@ -615,7 +616,7 @@ final class VoiceBubble: UIView, AVAudioPlayerDelegate {
       if pending {
         play.isUserInteractionEnabled = false
         icon.image = VoiceBubble.sym("ellipsis")
-        icon.addSymbolEffect(.variableColor.iterative.dimInactiveLayers, options: .repeating)
+        VoiceBubble.loading(icon)
         let a = CABasicAnimation(keyPath: "opacity"); a.fromValue = 1; a.toValue = 0.45; a.duration = 0.75
         a.autoreverses = true; a.repeatCount = .infinity; a.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
         layer.add(a, forKey: "uploading")
@@ -643,19 +644,26 @@ final class VoiceBubble: UIView, AVAudioPlayerDelegate {
     NSLayoutConstraint.activate([play.widthAnchor.constraint(equalToConstant: 34), play.heightAnchor.constraint(equalToConstant: 34), h.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6), h.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12), h.centerYAnchor.constraint(equalTo: centerYAnchor)])
   }
   required init?(coder: NSCoder) { fatalError() }
+  // (iPhone's own symbol animations, iOS 17 and later; before that, the symbol simply changes)
+  static func loading(_ v: UIImageView) { if #available(iOS 17.0, *) { indefinite(v, .variableColor.iterative.dimInactiveLayers) } }
+  @available(iOS 17.0, *)
+  private static func indefinite<T: IndefiniteSymbolEffect & SymbolEffect>(_ v: UIImageView, _ e: T) { v.addSymbolEffect(e, options: .repeating) }
+  static func change(_ v: UIImageView, to name: String) {
+    guard let i = sym(name) else { return }
+    if #available(iOS 17.0, *) { v.removeAllSymbolEffects(); v.setSymbolImage(i, contentTransition: .replace.downUp) } else { v.image = i }
+  }
   static func sym(_ n: String) -> UIImage? { UIImage(systemName: n, withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .bold)) }
   // sent (Haris, 2026-11-02): it starts as the pulsing one was — dimmer, ••• — and settles: the pulse eases out and the
   // ••• turns into ▶ (iPhone's own symbol change)
   func arrived() {
     alpha = 0.7
     icon.image = VoiceBubble.sym("ellipsis")
-    icon.addSymbolEffect(.variableColor.iterative.dimInactiveLayers, options: .repeating)
+    VoiceBubble.loading(icon)
     play.isUserInteractionEnabled = false
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
       guard let self = self else { return }
       UIView.animate(withDuration: 0.35, delay: 0, options: [.curveEaseOut, .allowUserInteraction]) { self.alpha = 1 }
-      self.icon.removeAllSymbolEffects()
-      self.icon.setSymbolImage(VoiceBubble.sym("play.fill")!, contentTransition: .replace.downUp)
+      VoiceBubble.change(self.icon, to: "play.fill")
       self.play.isUserInteractionEnabled = true
     }
   }
@@ -673,7 +681,7 @@ final class VoiceBubble: UIView, AVAudioPlayerDelegate {
     }
   }
   private func paint(_ playing: Bool) {
-    if let i = VoiceBubble.sym(playing ? "pause.fill" : "play.fill") { icon.setSymbolImage(i, contentTransition: .replace.downUp) }
+    VoiceBubble.change(icon, to: playing ? "pause.fill" : "play.fill")
     timer?.invalidate()
     if playing { timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in self?.progress() } }
   }
