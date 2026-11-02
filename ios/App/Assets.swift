@@ -104,17 +104,17 @@ final class AssetThumb: UIView {
 }
 
 // a tile that can be tapped and held for its menu (iPhone's own context menu)
-class AssetTile: UIControl, UIContextMenuInteractionDelegate {
+class AssetTile: UIControl {
   var onTap: (() -> Void)?
-  var menu: (() -> UIMenu?)? { didSet { if menu != nil && !held { held = true; addInteraction(UIContextMenuInteraction(delegate: self)) } } }
-  private var held = false
+  // (the control's own context menu interaction — UIControl has one)
+  var menu: (() -> UIMenu?)? { didSet { isContextMenuInteractionEnabled = menu != nil } }
   override init(frame: CGRect) {
     super.init(frame: frame)
     addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.onTap?() }, for: .touchUpInside)
     isAccessibilityElement = true; accessibilityTraits = .button
   }
   required init?(coder: NSCoder) { fatalError() }
-  func contextMenuInteraction(_ i: UIContextMenuInteraction, configurationForMenuAtLocation l: CGPoint) -> UIContextMenuConfiguration? {
+  override func contextMenuInteraction(_ i: UIContextMenuInteraction, configurationForMenuAtLocation l: CGPoint) -> UIContextMenuConfiguration? {
     guard let m = menu?() else { return nil }
     return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in m }
   }
@@ -490,7 +490,8 @@ final class AssetsCtl {
     main.updateCorner()
     let finish = {
       s.h.removeFromSuperview()
-      self.stack.removeLast()
+      // (closed meanwhile — another tab, the page moved on: nothing left to take off)
+      if let i = self.stack.firstIndex(where: { $0.h === s.h }) { self.stack.remove(at: i) } else { self.leaving = false; return }
       self.leaving = false
       if self.stack.isEmpty && self.fromPage { self.fromPage = false; self.main.pageJS("window.__e11Assets && window.__e11Assets({ev:'back'})") }
       else if let t = self.stack.last { self.refreshScreen(t) }
@@ -863,7 +864,7 @@ final class AssetsCtl {
           }
           let (url, name) = picked[i]
           let size = ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.intValue ?? 0
-          ComposeBox.send(url, name: name, task: "", dest: dir, cookies: self.main.serverHome.cookies, progress: { p in
+          Uploader.send(url, name: name, task: "", dest: dir, cookies: self.main.serverHome.cookies, progress: { p in
             h?.assetsToast("Uploading \(total > 1 ? "\(i + 1) of \(total)" : name)… \(Int(p * 100))%")
           }) { path in
             if let p = path { sent.append(["name": name, "path": p, "size": size]) }
