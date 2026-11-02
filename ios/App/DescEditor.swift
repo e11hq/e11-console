@@ -97,7 +97,16 @@ extension TaskPage {
     }
     bar.items = out
     bar.sizeToFit()
-    return bar
+    // (a small gap under it, so the glass doesn't sit on the keyboard — Haris 2026-11-02: "keep the iPhone look, with a
+    //  small gap"; the gap is see-through)
+    let gap: CGFloat = 8
+    let box = UIView(frame: CGRect(x: 0, y: 0, width: bar.bounds.width, height: bar.bounds.height + gap))
+    box.backgroundColor = .clear
+    box.autoresizingMask = [.flexibleWidth]
+    bar.frame = CGRect(x: 0, y: 0, width: box.bounds.width, height: bar.bounds.height)
+    bar.autoresizingMask = [.flexibleWidth, .flexibleBottomMargin]
+    box.addSubview(bar)
+    return box
   }
   func beginDesc() {
     guard !editingDesc, (model?["canDesc"] as? Bool) == true else { return }
