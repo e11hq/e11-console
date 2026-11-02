@@ -133,6 +133,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }
   private let filesStrip = FileStrip(side: 100), descStrip = FileStrip(side: 100)
   var descPending: [[String: Any]] = []
+  var drawnOnce = false   // (drawn before: a later drawing animates what changed)
   private var descTouch: (CGPoint, Date)?
   var waiting = 0   // (changes sent, not answered yet)
   // a change shown at once, before the server's answer (Haris, 2026-11-02: changes came with a delay); the answer
@@ -500,6 +501,10 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }
   private func rebuild() {
     guard let m = model.map({ TaskPage.basic($0) }) else { return }
+    // (on screen already: what changes comes in, goes out and moves smoothly — Haris 2026-11-02)
+    let live = window != nil && drawnOnce && !isHidden
+    let before = live ? pageSnapshot() : [:]
+    defer { drawnOnce = true; if live { animateFrom(before) } }
     let keepY = scroll.contentOffset.y
     let typing = titleView.isFirstResponder
     blocks.forEach { if $0 !== titleView { $0.removeFromSuperview() } }
@@ -776,7 +781,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     for (i, r) in rows.enumerated() {
       if i > 0 {
         let line = UIView(); line.backgroundColor = .separator
-        let wrap = UIView(); wrap.addSubview(line); line.translatesAutoresizingMaskIntoConstraints = false
+        let wrap = UIView(); wrap.addSubview(line); line.translatesAutoresizingMaskIntoConstraints = false; wrap.layer.name = "k:sep"
         NSLayoutConstraint.activate([line.leadingAnchor.constraint(equalTo: wrap.leadingAnchor, constant: TaskPage.M + 36), line.trailingAnchor.constraint(equalTo: wrap.trailingAnchor), line.topAnchor.constraint(equalTo: wrap.topAnchor), line.heightAnchor.constraint(equalToConstant: 1 / UIScreen.main.scale), wrap.heightAnchor.constraint(equalToConstant: 1 / UIScreen.main.scale)])
         g.addArrangedSubview(wrap)
       }
@@ -885,6 +890,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }
   private func note(sym: String, tint: UIColor, text: String, buttons: [(String, () -> Void)]) -> UIView {
     let box = UIView(); box.backgroundColor = tint.withAlphaComponent(light ? 0.12 : 0.18); box.layer.cornerRadius = 18; box.layer.cornerCurve = .continuous
+    box.layer.name = "k:note:" + sym
     let ic = symbol(sym, 15, tint, weight: .semibold)
     let l = label(text, size: 15, color: .label); l.numberOfLines = 0
     let v = UIStackView(arrangedSubviews: [l]); v.axis = .vertical; v.spacing = 10; v.alignment = .leading
@@ -1145,7 +1151,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }
   private func subRow(_ s: [String: Any], ro: Bool) -> UIView {
     let id = s["id"] as? String ?? "", done = (s["done"] as? Bool) == true
-    let r = TaskRow()
+    let r = TaskRow(); r.layer.name = "k:sub:" + id
     let tick = UIButton(type: .custom)
     tick.setImage(UIImage(systemName: done ? "checkmark.circle.fill" : "circle", withConfiguration: UIImage.SymbolConfiguration(pointSize: 21, weight: .regular)), for: .normal)
     tick.tintColor = done ? .systemGreen : .tertiaryLabel
@@ -1174,7 +1180,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }
   private func checkRow(_ c: [String: Any], can: Bool) -> UIView {
     let id = c["id"] as? String ?? "", done = (c["done"] as? Bool) == true
-    let r = TaskRow()
+    let r = TaskRow(); r.layer.name = "k:chk:" + id
     let box = symbol(done ? "checkmark.square.fill" : "square", 20, done ? .systemBlue : .tertiaryLabel)
     let t = label(c["text"] as? String ?? "", size: TaskPage.T, color: done ? .secondaryLabel : .label); t.numberOfLines = 0
     if done { t.attributedText = NSAttributedString(string: t.text ?? "", attributes: [.strikethroughStyle: NSUnderlineStyle.single.rawValue, .foregroundColor: UIColor.secondaryLabel, .font: UIFont.systemFont(ofSize: TaskPage.T)]) }
@@ -1497,5 +1503,119 @@ final class DescBox: UIView {
     if text?.isFirstResponder == true { expanded = true }
     let short = !expanded && full > 168 + 40
     return CGSize(width: t.width, height: ceil(short ? 168 : full))
+  }
+}
+
+
+// ---------- changes on the page, smooth (Haris, 2026-11-02: "everything added by another person while the page is open
+//  comes in or goes out smoothly") ----------
+// Every row, heading, note and the rest has a key (layer.name "k:…": the row's name, a subtask's or checklist item's
+// id, a heading's words…). Before the page is drawn again each one's place and look is kept; after, one that's new
+// fades in once the others have made room, one that's gone fades out where it was, one that moved slides there, and one
+// whose words or colours changed cross-fades to the new look. Your own taps get the same.
+extension TaskPage {
+  struct Kept { let frame: CGRect; let sig: String; let snap: UIView? }
+  private static let moveOnly: Set<String> = ["fstrip", "dstrip", "row:Assignees"]   // (these animate their own insides)
+  // the keyed views now (the outermost ones: a key's insides are its own)
+  func keyedViews() -> [(String, UIView)] {
+    var out: [(String, UIView)] = [], seen: [String: Int] = [:]
+    func give(_ v: UIView, _ k: String) -> String { let n = seen[k, default: 0]; seen[k] = n + 1; return n == 0 ? k : k + "#\(n)" }
+    func walk(_ v: UIView) {
+      if v.isHidden && !(v is UIStackView) { return }
+      var key: String?
+      if let n = v.layer.name, n.hasPrefix("k:") { key = String(n.dropFirst(2)) }
+      else if v === titleView { key = "title" } else if v is DescBox { key = "desc" }
+      else if v is FileStrip { key = v.superview is PageGroup || v.superview?.superview is PageGroup ? "fstrip" : "dstrip" }
+      else if v is PageHeading { key = "hdr:" + (TaskPage.firstText(v) ?? "").components(separatedBy: " · ")[0] }
+      else if v is TaskRow { key = "row:" + (TaskPage.firstText(v) ?? "") }
+      else if v is PageBand { key = "band" }
+      if let k = key { out.append((give(v, k), v)); return }
+      v.subviews.forEach(walk)
+    }
+    content.subviews.forEach(walk)
+    // (a separator line or band: keyed by what comes after it, so it moves with it)
+    var fixed: [(String, UIView)] = []
+    for (i, kv) in out.enumerated() {
+      if kv.0.hasPrefix("band") || kv.0.hasPrefix("sep") { fixed.append((kv.0.components(separatedBy: "#")[0] + ">" + (i + 1 < out.count ? out[i + 1].0 : "end"), kv.1)) } else { fixed.append(kv) }
+    }
+    return fixed
+  }
+  static func firstText(_ v: UIView) -> String? {
+    if let l = v as? UILabel, let t = l.text, !t.isEmpty { return t }
+    for s in v.subviews { if let t = firstText(s) { return t } }
+    return nil
+  }
+  // what a view shows, in words: its texts, pictures and colours (changed → cross-faded)
+  static func sig(_ v: UIView) -> String {
+    var out = ""
+    func walk(_ v: UIView) {
+      if v.isHidden { return }
+      if let l = v as? UILabel { out += "L" + (l.attributedText?.string ?? l.text ?? "") + (l.textColor?.description ?? "") }
+      if let t = v as? UITextView { out += "T" + (t.text ?? "") }
+      if let i = v as? UIImageView { out += "I" + (i.image.map { "\($0.description.prefix(160))" } ?? "") + (i.tintColor?.description ?? "") }
+      if let b = v as? UIButton { out += "B" + (b.currentImage.map { "\($0.description.prefix(160))" } ?? "") + (b.currentTitle ?? "") + (b.tintColor?.description ?? "") }
+      if let c = v.backgroundColor { out += "C" + c.description }
+      v.subviews.forEach(walk)
+    }
+    walk(v)
+    return out
+  }
+  func pageSnapshot() -> [String: Kept] {
+    var out: [String: Kept] = [:]
+    let seen = scroll.bounds.insetBy(dx: 0, dy: -200)
+    for (k, v) in keyedViews() {
+      let f = v.convert(v.bounds, to: content)
+      // (only what's in sight, or nearly: pictures of the rest aren't needed)
+      out[k] = Kept(frame: f, sig: TaskPage.sig(v), snap: f.intersects(seen) ? v.snapshotView(afterScreenUpdates: false) : nil)
+    }
+    return out
+  }
+  func animateFrom(_ before: [String: Kept]) {
+    guard !before.isEmpty else { return }
+    layoutIfNeeded()
+    let now = keyedViews()
+    let seen = scroll.bounds.insetBy(dx: 0, dy: -200)
+    var made = false
+    var keys = Set<String>()
+    for (k, v) in now {
+      keys.insert(k)
+      let nf = v.convert(v.bounds, to: content)
+      guard let o = before[k] else {
+        // new: once the others have made room, it fades in
+        guard nf.intersects(seen) else { continue }
+        made = true
+        v.alpha = 0
+        UIView.animate(withDuration: 0.3, delay: 0.22, options: [.curveEaseOut, .allowUserInteraction]) { v.alpha = 1 }
+        continue
+      }
+      let dy = o.frame.minY - nf.minY
+      let moved = abs(dy) > 0.5 && (nf.intersects(seen) || o.frame.intersects(seen))
+      let base = k.components(separatedBy: "#")[0]
+      let changed = o.sig != TaskPage.sig(v) && !TaskPage.moveOnly.contains(base) && !base.hasPrefix("band") && !base.hasPrefix("sep")
+      if moved {
+        made = true
+        v.transform = CGAffineTransform(translationX: 0, y: dy)
+        UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) { v.transform = .identity }
+      }
+      if changed, let snap = o.snap, nf.intersects(seen) {
+        made = true
+        // (the old look over the new, fading away, moving with it)
+        snap.frame = CGRect(x: nf.minX, y: o.frame.minY, width: o.frame.width, height: o.frame.height)
+        snap.isUserInteractionEnabled = false
+        content.addSubview(snap)
+        v.alpha = 0
+        UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) { snap.frame.origin.y = nf.minY }
+        UIView.animate(withDuration: 0.25, delay: 0, options: [.curveEaseInOut, .allowUserInteraction], animations: { snap.alpha = 0; v.alpha = 1 }) { _ in snap.removeFromSuperview() }
+      }
+    }
+    // gone: fades out where it was
+    for (k, o) in before where !keys.contains(k) {
+      guard let snap = o.snap, o.frame.intersects(seen) else { continue }
+      made = true
+      snap.frame = o.frame; snap.isUserInteractionEnabled = false
+      content.addSubview(snap)
+      UIView.animate(withDuration: 0.25, delay: 0, options: [.curveEaseIn, .allowUserInteraction], animations: { snap.alpha = 0 }) { _ in snap.removeFromSuperview() }
+    }
+    _ = made
   }
 }
