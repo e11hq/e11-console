@@ -311,8 +311,10 @@ extension Main {
   func taskAct(_ p: TaskPage, _ body: [String: Any]) {
     var b = body
     if (b["id"] as? String) != p.taskId { b["page"] = p.taskId }
+    p.waiting += 1   // (the page shows the change already; the copy isn't drawn over it until the answer is in)
     serverTask.act(b) { [weak self, weak p] ok, m, err, need, messages in
       guard let self = self, let p = p else { return }
+      p.waiting = max(0, p.waiting - 1)
       if !ok {
         if need == "clientApproval" {
           let al = UIAlertController(title: "Did the client approve?", message: "Saved with the final files in Client Assets.", preferredStyle: .actionSheet)
@@ -734,7 +736,7 @@ extension Main {
     copyWatch = AppData.shared.listen { [weak self] in
       guard let self = self else { return }
       for p in self.taskPages {
-        self.refreshTaskPage(p)
+        if p.waiting == 0 { self.refreshTaskPage(p) }
         p.feed?.load(); p.threadFeed?.load()
       }
       // (Home, My Tasks and the Inbox too — step 2: from the copy, no request)

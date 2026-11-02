@@ -121,6 +121,14 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if uploads.count != n { built = ""; if let m = model { draw(m) } }
   }
   private let filesStrip = FileStrip(side: 100), descStrip = FileStrip(side: 100)
+  var waiting = 0   // (changes sent, not answered yet)
+  // a change shown at once, before the server's answer (Haris, 2026-11-02: changes came with a delay); the answer
+  // redraws it as it is — a refused one goes back
+  private func local(_ change: (inout [String: Any]) -> Void) {
+    guard var m = model else { return }
+    change(&m)
+    built = ""; draw(m)
+  }
   private lazy var descBox: DescBox = { let b = DescBox(); b.onExpand = { [weak self] in self?.relayAnimated() }; return b }()
   private func relayAnimated() { UIView.animate(withDuration: 0.4, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) { self.layoutContent() } }
   func showFiles() {
@@ -448,7 +456,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       let v = UIStackView(); v.axis = .horizontal; v.spacing = 6; v.alignment = .center
       if let c = c { let d = UIView(); d.backgroundColor = TaskPage.rgb(c["rgb"]); d.layer.cornerRadius = 4; d.widthAnchor.constraint(equalToConstant: 9).isActive = true; d.heightAnchor.constraint(equalToConstant: 9).isActive = true; v.addArrangedSubview(d) }
       v.addArrangedSubview(label(c?["name"] as? String ?? "No client", size: TaskPage.T, color: .secondaryLabel))
-      if m["lock"] != nil { v.addArrangedSubview(symbol("lock.fill", 12, .secondaryLabel)) }
+      if m["lock"] is [String: Any] { v.addArrangedSubview(symbol("lock.fill", 12, .secondaryLabel)) }
       let canCl = (m["canClient"] as? Bool) == true
       g.append(row(sym: "square.grid.2x2", key: "Client", value: v, chevron: canCl, tap: canCl ? { [weak self] in self?.pickClient() } : nil))
     }
@@ -502,7 +510,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       descBox.hold(descRead); blocks.append(descBox)
     }
     if !TaskPage.viewOnly && (!desc.isEmpty || canDesc || editingDesc) {
-      blocks.append(header("Description", lock: m["lock"] != nil))
+      blocks.append(header("Description", lock: m["lock"] is [String: Any]))
       // (edited right where it is, looking the same — DescEditor.swift)
       let tv = descView
       if !editingDesc { tv.attributedText = desc.isEmpty ? NSAttributedString(string: "Add a description… Type @ to mention someone", attributes: [.font: UIFont.systemFont(ofSize: TaskPage.T), .foregroundColor: UIColor.tertiaryLabel]) : DescEditor.attributed((m["descRuns"] as? [[String: Any]]) ?? [], done: (m["done"] as? Bool) == true, size: TaskPage.T, creator: ((model?["creator"] as? [String: Any])?["id"] as? String)) }
@@ -796,6 +804,12 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     onSheet?(["sections": [["header": "Status", "rows": rows]]], { _ in }, { [weak self] i, _ in
       guard let self = self, i >= 0, i < opts.count, (opts[i]["on"] as? Bool) != true, let id = opts[i]["id"] as? String else { return }
       UISelectionFeedbackGenerator().selectionChanged()
+      self.local { m in
+        guard var st = m["status"] as? [String: Any] else { return }
+        st["name"] = opts[i]["name"]; st["rgb"] = opts[i]["rgb"]
+        st["options"] = opts.map { var o = $0; o["on"] = ($0["id"] as? String) == id; return o }
+        m["status"] = st
+      }
       self.setStatus(id)
     })
   }
@@ -932,6 +946,12 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }
   private func setPrio(_ key: String, _ v: String) {
     UISelectionFeedbackGenerator().selectionChanged()
+    local { m in
+      m["prio"] = ((m["prio"] as? [[String: Any]]) ?? []).map { p in
+        guard (p["key"] as? String) == key else { return p }
+        var x = p; x["v"] = v == "none" ? "" : v; x["label"] = v == "urgent" ? "Urgent" : v == "none" ? "" : v; return x
+      }
+    }
     let value: Any = Int(v).map { $0 as Any } ?? v
     onAct?(["act": "prio", "id": taskId, "key": key, "value": value])
   }
@@ -962,9 +982,10 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if !cur.isEmpty { rows = [["i": 999, "label": "Clear", "icon": "x"]]; secs.append(["rows": rows]) }
     onSheet?(["sections": secs], { _ in }, { [weak self] i, _ in
       guard let self = self, i >= 0 else { return }
-      if i == 999 { self.onAct?(["act": "update", "id": self.taskId, "value": NSNull()]); return }
+      if i == 999 { self.local { $0["update"] = NSNull() }; self.onAct?(["act": "update", "id": self.taskId, "value": NSNull()]); return }
       guard i < all.count, all[i] != cur else { return }
       UISelectionFeedbackGenerator().selectionChanged()
+      self.local { m in var u = (m["update"] as? [String: Any]) ?? [:]; u["t"] = all[i]; m["update"] = u }
       self.onAct?(["act": "update", "id": self.taskId, "value": all[i]])
     })
   }
@@ -1052,6 +1073,14 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       guard let self = self, i >= 0, i < pool.count, let id = pool[i]["id"] as? String else { return }
       on[i].toggle()
       UISelectionFeedbackGenerator().selectionChanged()
+      let now = on[i]
+      self.local { m in
+        var a = (m["assignees"] as? [[String: Any]]) ?? []
+        if now { if !a.contains(where: { ($0["id"] as? String) == id }) { a.append(["id": id, "done": false]) } } else { a.removeAll { ($0["id"] as? String) == id } }
+        m["assignees"] = a
+        let ticks = on
+        m["pool"] = pool.enumerated().map { k, p in var x = p; x["on"] = k < ticks.count ? ticks[k] : false; return x }
+      }
       self.onAct?(["act": "assign", "id": self.taskId, "key": id, "value": on[i]])
     }, { _, _ in })
   }
@@ -1094,6 +1123,11 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let rows: [[String: Any]] = list.enumerated().map { i, c in ["i": i, "label": c["name"] as? String ?? "", "dot": c["rgb"] ?? [128, 128, 128], "checked": (c["on"] as? Bool) == true, "find": c["name"] as? String ?? ""] }
     onSheet?(["sections": [["header": "Move to client", "rows": rows]], "search": "Search clients"], { _ in }, { [weak self] i, _ in
       guard let self = self, i >= 0, i < list.count, (list[i]["on"] as? Bool) != true, let id = list[i]["id"] as? String else { return }
+      UISelectionFeedbackGenerator().selectionChanged()
+      self.local { m in
+        m["client"] = ["id": id, "name": list[i]["name"] ?? "", "rgb": list[i]["rgb"] ?? [128, 128, 128]]
+        m["clients"] = list.map { var c = $0; c["on"] = ($0["id"] as? String) == id; return c }
+      }
       self.onAct?(["act": "client", "id": self.taskId, "value": id])
     })
   }
