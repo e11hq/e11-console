@@ -124,6 +124,7 @@ final class CornerButton: UIView {
   var items: [CornerMenuItem] { get { model.items } set { model.items = newValue } }
   // (what the self-test reads: the corner's ••• on a task page, else the middle one's kind)
   var kind: String { corner.kind == "more" ? "more" : mid.kind }
+  var searchBack = false   // (set just before a change: Home's search bar has just shrunk back into 🔍's circle)
   // Mail's spring; inside it iPhone's glass morphs by itself
   // (a little longer and livelier than Mail's 0.42 / 0.22 — Haris, 2026-11-02: going into a task it was too quick to see)
   static let duration: TimeInterval = 0.6, bounce: CGFloat = 0.3
@@ -159,11 +160,12 @@ final class CornerButton: UIView {
     left = l; mid = m; corner = c
     // Search opening: Home's own bar starts exactly where 🔍 is and stretches out — 🔍 hands over to it at once; closing,
     // the bar shrinks back into that circle and 🔍 takes over there, in place
-    if was.1.kind == "search" && m.kind == "none" && c.kind == "close" { now { model.mid = b(m) } }
-    if m.kind == "search" && was.2.kind == "close" && was.1.kind == "none" { now { model.mid = b(m) } }
+    let handOver = was.1.kind == "search" && m.kind == "none" && c.kind == "close"
+    let takeOver = m.kind == "search" && was.1.kind == "none" && (was.2.kind == "close" || searchBack)
+    if handOver || takeOver { now { model.mid = b(m) } }
     let apply = {
       self.model.left = self.b(l); self.model.corner = self.b(c)
-      if !(was.1.kind == "search" && m.kind == "none" && c.kind == "close") && !(m.kind == "search" && was.2.kind == "close" && was.1.kind == "none") {
+      if !handOver && !takeOver {
         // 🔍 opening a task: onto your photo as it goes, so the two glasses melt into one (the •••)
         if m.kind == "none" && was.1.kind == "search" && c.kind != "none" { self.model.mid = CornerModel.B(kind: "search", frame: c.frame, opacity: 0) }
         else { self.model.mid = self.b(m) }
@@ -250,7 +252,10 @@ extension Main {
     let t = cornerTarget()
     // (between two screens — a tab change hides one a moment before the next shows — nothing is there for an instant:
     //  the buttons wait for the next screen instead of vanishing and coming back; seen in build 1271's film)
-    let between = (t.0.kind == "none" && t.1.kind == "none" && t.2.kind == "none") || (t.1.kind == "none" && corner.kind != "none" && !(shownScreen?.searching ?? false))
+    let searchBusy = (shownScreen?.searching ?? false) || (shownScreen?.closingSearch ?? false)
+    let between = (t.0.kind == "none" && t.1.kind == "none" && t.2.kind == "none") || (t.1.kind == "none" && corner.kind != "none" && !searchBusy)
+    // (the search bar just shrank back into its circle: 🔍 takes over right there)
+    corner.searchBack = Date().timeIntervalSince(shownScreen?.searchClosedAt ?? .distantPast) < 0.4
     if between && taskPages.isEmpty && corner.kind != "none" && !cornerWaited {
       cornerWaited = true
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.cornerWaited = false; self?.updateCornerNow(animated: animated) }

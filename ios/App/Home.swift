@@ -35,6 +35,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private let results = UIScrollView(), hint = UILabel()
   private var resultViews: [UIView] = [], resultCards: [String: HomeCard] = [:]
   private(set) var searching = false
+  private(set) var closingSearch = false        // (✕ tapped: the bar shrinking back into 🔍 — your photo is already coming back)
+  private(set) var searchClosedAt: Date?
   /* The corner button (shell 30, Haris 2026-11-01): Search here, Mark all read / unread on the Inbox and ••• on a
      task page are one glass button of the app's (CornerButton, Main): this screen's own ones then stay invisible and
      only say where the button goes and what it is. */
@@ -50,7 +52,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // what the corner is here: "search", "read", "unread" or "none", and where (its right edge left of your photo)
   func corner() -> (kind: String, text: String, frame: CGRect) {
     let f = searchCircle.frame
-    if searching || isHidden { return ("none", "", f) }
+    if searching || closingSearch || isHidden { return ("none", "", f) }
     guard isInbox else { return ("search", "", f) }
     if !markAll.isHidden { return ("read", "Mark all read", f) }
     let rows = content.compactMap { $0 as? InboxRow }
@@ -896,6 +898,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     field.resignFirstResponder()
     findTimer?.invalidate()
     searching = false
+    // (your photo comes back at once, as the bar starts shrinking — it used to wait for the bar: Haris, 2026-11-02)
+    closingSearch = true
+    onCorner?()
     showMotto()
     setNeedsLayout(); layoutIfNeeded()
     let back = searchCircle.frame
@@ -910,7 +915,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       self.layoutHeader()
       self.searchBar.frame = back; self.searchBar.layoutIfNeeded()   // (its glass shrinks back into 🔍 with it)
     } completion: { _ in
+      self.closingSearch = false
       if self.searching { return }
+      self.searchClosedAt = Date()
       self.searchBar.isHidden = true; self.closeCircle.isHidden = true; self.field.alpha = 1
       self.searchCircle.alpha = self.cornerShared ? 0 : 1; self.results.isHidden = true
       self.onCorner?()
