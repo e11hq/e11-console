@@ -6,7 +6,7 @@ import UIKit
 let MENTION_KEY = NSAttributedString.Key("e11User")
 
 enum DescEditor {
-  static func attributed(_ runs: [[String: Any]], done: Bool, size: CGFloat = 17) -> NSAttributedString {
+  static func attributed(_ runs: [[String: Any]], done: Bool, size: CGFloat = 17, creator: String? = nil) -> NSAttributedString {
     let out = NSMutableAttributedString()
     for r in runs {
       var traits: UIFontDescriptor.SymbolicTraits = []
@@ -17,7 +17,7 @@ enum DescEditor {
       var a: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: done ? UIColor.secondaryLabel : UIColor.label]
       if r["u"] != nil { a[.underlineStyle] = NSUnderlineStyle.single.rawValue }
       if r["s"] != nil { a[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
-      if let u = r["user"] as? String { a[MENTION_KEY] = u; a[.foregroundColor] = UIColor.systemBlue }
+      if let u = r["user"] as? String { a[MENTION_KEY] = u; a[.foregroundColor] = u == creator ? UIColor.systemOrange : UIColor.systemBlue }   // (the creator: orange)
       if let l = r["link"] as? String, let url = URL(string: l) { a[.link] = url }
       out.append(NSAttributedString(string: r["t"] as? String ?? "", attributes: a))
     }

@@ -253,6 +253,7 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
   }
   private func draw(_ m: [String: Any], mine: Bool = false) {
     dropArrived(m)
+    if let c = m["creator"] as? String { CommentCell.creator = c }
     model = m
     onLoaded?(m)
     if let pp = m["people"] as? [String: [String: Any]] { people.merge(pp) { _, b in b } }
@@ -602,8 +603,10 @@ final class CommentCell: UIView {
       if r["u"] != nil { a[.underlineStyle] = NSUnderlineStyle.single.rawValue }
       if r["s"] != nil { a[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
       if let u = r["user"] as? String {
-        a[.foregroundColor] = UIColor.systemBlue; a[.font] = UIFont.systemFont(ofSize: 16, weight: .medium)
-        if u == me { a[.backgroundColor] = UIColor.systemBlue.withAlphaComponent(0.14) }
+        // (the task's creator mentioned: the orange of their Creator chip — Haris, 2026-11-02)
+        let tint: UIColor = u == CommentCell.creator ? .systemOrange : .systemBlue
+        a[.foregroundColor] = tint; a[.font] = UIFont.systemFont(ofSize: 16, weight: .medium)
+        if u == me { a[.backgroundColor] = tint.withAlphaComponent(0.14) }
       } else if let l = r["link"] as? String, let url = URL(string: l) { a[.link] = url; a[.foregroundColor] = UIColor.systemBlue }
       out.append(NSAttributedString(string: r["t"] as? String ?? "", attributes: a))
     }
@@ -637,6 +640,7 @@ final class CommentCell: UIView {
     }
     return nil
   }
+  static var creator: String?   // (the open task's creator: their mentions are orange)
   static func isPic(_ n: String) -> Bool { ["jpg", "jpeg", "png", "heic", "gif", "webp"].contains((n as NSString).pathExtension.lowercased()) }
   static let videoExt = ["mp4", "mov", "m4v", "webm", "avi", "mkv"]
   static func isVideo(_ n: String) -> Bool { videoExt.contains((n as NSString).pathExtension.lowercased()) }

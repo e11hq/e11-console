@@ -485,7 +485,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     //  Expand button, once: expanded, it stays so — Haris 2026-11-02)
     let noDesc = desc.isEmpty && ((m["descFiles"] as? [[String: Any]]) ?? []).isEmpty
     let rich: NSAttributedString = {
-      let r = DescEditor.attributed((m["descRuns"] as? [[String: Any]]) ?? [], done: (m["done"] as? Bool) == true, size: TaskPage.T)
+      let r = DescEditor.attributed((m["descRuns"] as? [[String: Any]]) ?? [], done: (m["done"] as? Bool) == true, size: TaskPage.T, creator: ((model?["creator"] as? [String: Any])?["id"] as? String))
       return r.length > 0 || !noDesc && desc.isEmpty ? r : NSAttributedString(string: desc, attributes: [.font: UIFont.systemFont(ofSize: TaskPage.T), .foregroundColor: UIColor.label])
     }()
     if TaskPage.viewOnly && (canDesc || editingDesc) {
@@ -505,7 +505,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       blocks.append(header("Description", lock: m["lock"] != nil))
       // (edited right where it is, looking the same — DescEditor.swift)
       let tv = descView
-      if !editingDesc { tv.attributedText = desc.isEmpty ? NSAttributedString(string: "Add a description… Type @ to mention someone", attributes: [.font: UIFont.systemFont(ofSize: TaskPage.T), .foregroundColor: UIColor.tertiaryLabel]) : DescEditor.attributed((m["descRuns"] as? [[String: Any]]) ?? [], done: (m["done"] as? Bool) == true, size: TaskPage.T) }
+      if !editingDesc { tv.attributedText = desc.isEmpty ? NSAttributedString(string: "Add a description… Type @ to mention someone", attributes: [.font: UIFont.systemFont(ofSize: TaskPage.T), .foregroundColor: UIColor.tertiaryLabel]) : DescEditor.attributed((m["descRuns"] as? [[String: Any]]) ?? [], done: (m["done"] as? Bool) == true, size: TaskPage.T, creator: ((model?["creator"] as? [String: Any])?["id"] as? String)) }
       descEmpty = desc.isEmpty
       tv.isEditable = canDesc
       blocks.append(group([pad(tv)]))
@@ -549,7 +549,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let shown = own + uploads + fromComments
     let canAttach = (m["readOnly"] as? Bool) != true
     if !files.isEmpty || canAttach || !uploads.isEmpty {
-      blocks.append(header(files.isEmpty ? "Files" : "Files · \(files.count)"))
+      blocks.append(header(files.isEmpty ? "Files" : "Files · \(files.count)", sym: "paperclip"))
       var fr: [UIView] = []
       let real = shown.filter { ($0["pending"] as? Bool) != true }
       let at: (Int) -> Int = { i in real.firstIndex { ($0["id"] as? String) == (shown[i]["id"] as? String) } ?? 0 }
@@ -639,9 +639,9 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let i = UIImageView(image: UIImage(systemName: s, withConfiguration: UIImage.SymbolConfiguration(pointSize: size, weight: weight)))
     i.tintColor = c; i.contentMode = .center; i.setContentHuggingPriority(.required, for: .horizontal); return i
   }
-  private func header(_ t: String, lock: Bool = false) -> UIView {
+  private func header(_ t: String, lock: Bool = false, sym: String? = nil) -> UIView {
     let l = label(t, size: TaskPage.T, color: .secondaryLabel)
-    let s = PageHeading(arrangedSubviews: [l]); s.spacing = 5; s.alignment = .center
+    let s = PageHeading(arrangedSubviews: sym.map { [symbol($0, 14, .secondaryLabel), l] } ?? [l]); s.spacing = 5; s.alignment = .center
     if lock { s.addArrangedSubview(symbol("lock.fill", 10, .secondaryLabel)) }
     s.addArrangedSubview(UIView())
     s.isLayoutMarginsRelativeArrangement = true
@@ -673,7 +673,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let r = TaskRow()
     let ic = symbol(sym, 16, .secondaryLabel)
     ic.translatesAutoresizingMaskIntoConstraints = false
-    let k = label(key, size: TaskPage.T, color: .label); k.numberOfLines = keyLines
+    let k = label(key, size: TaskPage.T, color: .secondaryLabel); k.numberOfLines = keyLines   // (the names in their icons' grey — Haris, 2026-11-02)
     k.setContentCompressionResistancePriority(.defaultHigh + 1, for: .horizontal)
     let left = UIStackView(arrangedSubviews: [k]); left.axis = .vertical; left.spacing = 2
     if let sub = sub { let s = label(sub, size: 13, color: .secondaryLabel); s.numberOfLines = 2; left.addArrangedSubview(s) }

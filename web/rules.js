@@ -848,7 +848,7 @@ var E11Rules = (() => {
       const list = threadId ? (root ? [root, ...kids(root.id)] : []) : all.filter((c) => !c.parentId);
       // your own scheduled comments on it, at the end (as the website's)
       const sched = (db.scheduled || []).filter((x) => x.taskId === t.id && x.authorId === meId && x.state === 'waiting' && (!root || x.replyTo === root.id)).sort((a, b) => String(a.sendAt).localeCompare(String(b.sendAt))).map((x) => ({ id: x.id, at: x.sendAt, text: plainOfHtml(x.html || '') || String(x.text || ''), files: (x.attachments || []).length }));
-      const out = { id: t.id, me: meId, thread: root ? root.id : null, readOnly: ro, canWrite: !doneLocked(t), scheduled: sched, mentionable: doneLocked(t) ? [] : mentionable(), items: list.map(item), n: all.length, parents: Object.fromEntries(all.filter((c) => c.parentId).map((c) => [c.id, c.parentId])) };
+      const out = { id: t.id, me: meId, creator: t.createdBy || null, thread: root ? root.id : null, readOnly: ro, canWrite: !doneLocked(t), scheduled: sched, mentionable: doneLocked(t) ? [] : mentionable(), items: list.map(item), n: all.length, parents: Object.fromEntries(all.filter((c) => c.parentId).map((c) => [c.id, c.parentId])) };
       out.people = Object.fromEntries([...pp].filter(Boolean).map((pid) => { const x = userById(pid); return [pid, { name: fullName(x) || 'Someone', first: firstName(pid), initials: initials(fullName(x) || '?'), color: rgbOf(avColor(pid || 'x')), photo: x && x.avatar ? x.avatar : null }]; }));
       return out;
     }

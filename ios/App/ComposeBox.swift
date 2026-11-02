@@ -87,7 +87,7 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     text.textContainerInset = UIEdgeInsets(top: 4, left: 0, bottom: 4, right: 0); text.textContainer.lineFragmentPadding = 0
     text.isScrollEnabled = false
     placeholder.text = "Comment"; placeholder.font = .systemFont(ofSize: 17); placeholder.textColor = .secondaryLabel
-    for (b, sym) in [(plus, "plus"), (right, "mic.fill")] {
+    for (b, sym) in [(plus, "plus"), (right, "mic")] {
       b.setImage(UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold)), for: .normal)
       b.tintColor = .label; b.backgroundColor = .tertiarySystemFill; b.layer.cornerRadius = 18
     }
@@ -152,13 +152,14 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     if showingSend != send {
       let first = showingSend == nil
       showingSend = send
-      let img = UIImage(systemName: send ? "arrow.up" : "mic.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: send ? 14 : 13.5, weight: send ? .bold : .semibold))
+      // (the mic as a line icon — Haris 2026-11-02; the change a little quicker than iPhone's default)
+      let img = UIImage(systemName: send ? "arrow.up" : "mic", withConfiguration: UIImage.SymbolConfiguration(pointSize: send ? 14 : 15, weight: send ? .bold : .medium))
       if #available(iOS 17.0, *), !first, let iv = right.imageView, let img = img {
-        iv.setSymbolImage(img, contentTransition: .replace.downUp)
+        iv.setSymbolImage(img, contentTransition: .replace.downUp, options: .speed(1.6))
         right.setImage(img, for: .normal)
       } else { right.setImage(img, for: .normal) }
       let paint = { self.right.backgroundColor = send ? .label : .tertiarySystemFill; self.right.tintColor = send ? .systemBackground : .label }
-      if first { paint() } else { UIView.animate(withDuration: 0.22, delay: 0, options: [.curveEaseInOut, .allowUserInteraction], animations: paint) }
+      if first { paint() } else { UIView.animate(withDuration: 0.15, delay: 0, options: [.curveEaseInOut, .allowUserInteraction], animations: paint) }
     }
     holdG?.isEnabled = !send
     placeholder.isHidden = !(text.text ?? "").isEmpty
