@@ -67,3 +67,19 @@ test('a client\'s page: folders on top, tasks by status as Home\'s cards, comple
   assert.deepEqual(m.groups.map((g) => g.name), ['To do', 'In progress', 'Done']);
   assert.equal((await get('prod@e11-digital.com', 'view=client&id=p2')).home, null, 'not their client');
 });
+
+const act = async (who, body) => (await (await fetch(base + '/api/home/act', { method: 'POST', headers: { 'X-Dev-Email': who, 'Content-Type': 'application/json' }, body: JSON.stringify({ from: 'clients', copy: true, ...body }) })).json());
+test('the long press: Admins change a client (name, colour, Account Managers, Social Executives) — others can\'t', async () => {
+  let m = (await get('adm@e11-digital.com', 'view=list')).home;
+  assert.equal(m.canEdit, true); assert.deepEqual(m.amPool, ['u-am']);
+  assert.equal((await get('am@e11-digital.com', 'view=list')).home.canEdit, false);
+  let r = await act('am@e11-digital.com', { act: 'editClient', id: 'p2', name: 'X' });
+  assert.equal(r.ok, false);
+  r = await act('adm@e11-digital.com', { act: 'editClient', id: 'p2', name: '  Southgate  Co ', color: '#123456', ams: [{ id: 'u-am', onLeave: true }, { id: 'u-prod' }] });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  const p = app.store.get('projects', 'p2');
+  assert.equal(p.name, 'Southgate Co'); assert.equal(p.color, '#123456'); assert.deepEqual(p.ams, [{ id: 'u-am', onLeave: true }]);
+  assert.ok(r.changes.some((c) => c.kind === 'projects' && c.id === 'p2'));
+  r = await act('adm@e11-digital.com', { act: 'editClient', id: 'p2', name: 'northline' });
+  assert.equal(r.ok, false); assert.match(r.error, /already/);
+});

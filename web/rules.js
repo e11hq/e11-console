@@ -1153,16 +1153,26 @@ var E11Rules = (() => {
       const late = open.filter((t) => t.due && dayDiff(t.due) < 0).length;
       const c = clientRec(p);
       const ams = (p.ams || []).filter((a) => !a.onLeave).map((a) => a.id).filter((id) => userById(id)).slice(0, 3);
-      return { id: p.id, name: p.name || 'Client', ini: initials(p.name), rgb: rgbOf(p.color), logo: c && c.logo ? c.logo : null, open: open.length, late, ams };
+      // (the long press's sheet: every Account Manager with "on leave", the Social Executives, the colour)
+      const amsAll = (p.ams || []).filter((a) => userById(a.id)).map((a) => ({ id: a.id, onLeave: !!a.onLeave }));
+      const socials = (p.socials || []).filter((id) => userById(id));
+      return { id: p.id, name: p.name || 'Client', ini: initials(p.name), rgb: rgbOf(p.color), color: p.color || '', logo: c && c.logo ? c.logo : null, open: open.length, late, ams, amsAll, socials };
     }
     function clientsList() {
       const u = me();
       if (!u || isOffice(u) || isFinUser(u)) return null;
       const seen = projects.filter((p) => clientSeen(p, u)).sort(byOrderP);
       const rows = seen.filter((p) => !p.inactive).map(clientRow), inactive = seen.filter((p) => p.inactive).map(clientRow);
-      const ppl = new Set([meId]); rows.concat(inactive).forEach((r) => r.ams.forEach((id) => ppl.add(id)));
+      const ppl = new Set([meId]); rows.concat(inactive).forEach((r) => { r.amsAll.forEach((a) => ppl.add(a.id)); r.socials.forEach((id) => ppl.add(id)); });
+      // (Admins change a client from the list's long press — everyone else sees it read only; Haris 2026-11-02)
+      const canEdit = isAdm(u) && !isOffice(u);
+      const pool = (role) => users.filter((x) => x.active !== false && x.role === role).sort((a, b) => fullName(a).localeCompare(fullName(b))).map((x) => x.id);
+      const amPool = canEdit ? pool('am') : [], sePool = canEdit ? pool('social') : [];
+      amPool.concat(sePool).forEach((id) => ppl.add(id));
+      const names = Object.fromEntries([...ppl].map((id) => [id, fullName(userById(id))]));
       const nOpen = rows.reduce((n, r) => n + r.open, 0);
-      return { show: true, kind: 'clients', title: 'Clients', date: `${rows.length} client${rows.length === 1 ? '' : 's'} · ${nOpen} open task${nOpen === 1 ? '' : 's'}`, me: meId, rows, inactive, people: peopleOf(ppl) };
+      return { show: true, kind: 'clients', title: 'Clients', date: `${rows.length} client${rows.length === 1 ? '' : 's'} · ${nOpen} open task${nOpen === 1 ? '' : 's'}`, me: meId, rows, inactive, people: peopleOf(ppl),
+        canEdit, amPool, sePool, smIds: socialMgrIds(), names };
     }
     // a client's page: its Client Assets folders on top, then its tasks by status (open ones, or all with showDone) —
     // the same cards as Home (Haris: "the task cards will be consistent")

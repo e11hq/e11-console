@@ -1552,6 +1552,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       guard let self = self else { return }
       // (Done / Due / Delete on a card: as Home's, straight to the server)
       if page, self.eventOnServer(ev, self.serverClients, pageMe: self.clientsPageMe) { return }
+      // (a client held: its sheet, the app's own — nothing for the website)
+      if !page, (ev["ev"] as? String) == "clientHold", let id = ev["id"] as? String { self.clientSheet(id); return }
       if page, (ev["ev"] as? String) == "back" { self.clientPageOut() }
       // (a client tapped: its page comes in at once, from the copy — the website is only told; waiting for it made the
       //  page slow to come, Haris 2026-11-02)
@@ -1580,6 +1582,28 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     updateCorner()
   }
   var clientLeaving = false
+  // a client's sheet (held in the list): from the list as the copy has it; Admins' changes to the server, into the copy
+  func clientSheet(_ id: String) {
+    guard let list = serverClients.shown, (list["kind"] as? String) == "clients" else { return }
+    let rows = ((list["rows"] as? [[String: Any]]) ?? []) + ((list["inactive"] as? [[String: Any]]) ?? [])
+    guard let row = rows.first(where: { ($0["id"] as? String) == id }) else { return }
+    let ppl = (clientsListIfMade?.people ?? [:]).merging((list["people"] as? [String: [String: Any]]) ?? [:]) { a, _ in a }
+    let vc = ClientSheetVC(row: row, list: list, people: ppl, dark: !clientsLight)
+    vc.onSave = { [weak self] body, done in
+      guard let self = self else { return }
+      var b = body; b["act"] = "editClient"; b["id"] = id; b["from"] = "clients"; b["copy"] = true; b["op"] = UUID().uuidString
+      self.serverTask.request("/api/home/act", body: b) { j in
+        guard let j = j else { return done("No connection — try again") }
+        if (j["ok"] as? Bool) != true { return done(j["error"] as? String ?? "That didn’t work — try again") }
+        if let ch = j["changes"] as? [[String: Any]] { AppData.shared.applyLocal(ch) }
+        done(nil)
+      }
+    }
+    let nav = UINavigationController(rootViewController: vc)
+    nav.overrideUserInterfaceStyle = clientsLight ? .light : .dark
+    if let sh = nav.sheetPresentationController { sh.detents = [.large()]; sh.prefersGrabberVisible = true }
+    topMost().present(nav, animated: true)
+  }
   var clientPanFrom: ((CornerButton.Spot, CornerButton.Spot, CornerButton.Spot), (CornerButton.Spot, CornerButton.Spot, CornerButton.Spot))?
   // (let go part way through the edge swipe: the rest of the way out, from where the finger left it)
   func clientLeavingBySwipe(_ p: HomeView, _ l: HomeView) {

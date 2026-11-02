@@ -485,7 +485,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   var isClients = false, isClient = false
   private var noStats: Bool { isList || isClients || isClient }
   private lazy var clientsGroup: ClientsGroup = {
-    let g = ClientsGroup(); g.onOpen = { [weak self] id in self?.send(["ev": "client", "id": id]) }; return g
+    let g = ClientsGroup(); g.onOpen = { [weak self] id in self?.send(["ev": "client", "id": id]) }
+    g.onHold = { [weak self] id in self?.send(["ev": "clientHold", "id": id]) }; return g
   }()
   private lazy var assetsStrip: AssetsStrip = {
     let a = AssetsStrip()

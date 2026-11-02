@@ -79,6 +79,29 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
       for (const x of (it.data && it.data.tasks) || []) if (!store.get('tasks', String(x.id))) changes.push({ kind: 'tasks', id: x.id, data: x });
       return { ok: true, changes, sysChanges: [{ kind: 'trash', id: it.id, del: true }], messages: [] };
     }
+    // a client changed from the app's Clients list (its long press): Admins only — name, colour, Account Managers (on
+    // leave), Social Executives; as the website's Edit client saves it
+    if (a === 'editClient') {
+      const me0 = (data.users || []).find((x) => x.id === u.id);
+      if (!me0 || !(me0.role === 'admin' || me0.admin === true)) return fail(403, 'Only Admins change clients');
+      const p = (data.projects || []).find((x) => x.id === String(body.id || ''));
+      if (!p) return fail(404, 'This client is no longer here');
+      const name = String(body.name || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+      if (!name) return fail(400, 'A client needs a name');
+      const key = (n) => String(n || '').toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9\u0600-\u06ff]+/g, '');
+      const dup = (data.projects || []).find((x) => x.id !== p.id && key(x.name) === key(name));
+      if (dup) return fail(409, `There is already a client named “${dup.name}”.`);
+      const users = data.users || [];
+      const ok = (id, role) => users.some((x) => x.id === id && x.active !== false && x.role === role);
+      const seen = new Set();
+      const ams = (Array.isArray(body.ams) ? body.ams : []).filter((x) => x && ok(String(x.id), 'am') && !seen.has(String(x.id)) && seen.add(String(x.id))).map((x) => (x.onLeave ? { id: String(x.id), onLeave: true } : { id: String(x.id) }));
+      const socials = [...new Set((Array.isArray(body.socials) ? body.socials : []).map(String))].filter((id) => ok(id, 'social'));
+      const base = clone(p), next = clone(p);
+      next.name = name; next.ams = ams;
+      if (typeof body.color === 'string' && /^#[0-9a-f]{6}$/i.test(body.color)) next.color = body.color;
+      if (socials.length) next.socials = socials; else delete next.socials;
+      return { ok: true, changes: [{ kind: 'projects', id: p.id, base, data: next }], messages: ['Client saved'] };
+    }
     if (!t) return fail(404, 'This task is no longer here');
     // (no Home, no Home actions: Office Admins and Finance-only people)
     if (u.role === 'finance_admin' || u.role === 'finance_viewer' || (u.role === 'office_admin' && u.admin !== true)) return fail(403, 'Your role doesn’t allow this');
