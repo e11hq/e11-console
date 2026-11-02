@@ -62,7 +62,7 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
   private let replyLine = UIStackView(), replyLabel = UILabel()
   private let tiles = UIStackView()
   private let mentions = UIStackView()
-  private var files: [(uid: String, name: String, size: Int64, path: String?, progress: Double, failed: Bool, thumb: UIImage?)] = []
+  private var files: [DraftFile] = []
   // uploads finished or failed (by their id) — kept even once the box is cleared, for comments sent before they were up
   private var upDone: [String: String] = [:], upFailed = Set<String>()
   private var outbox: [(pendingId: String, body: [String: Any], files: [(uid: String, name: String, size: Int64)])] = []
@@ -191,6 +191,10 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     let h = min(max(30, tv.sizeThatFits(CGSize(width: tv.bounds.width, height: .greatestFiniteMagnitude)).height), 130)
     tv.isScrollEnabled = h >= 130
     if textH.constant != h { textH.constant = h; superview?.layoutIfNeeded() }
+    // (what's written kept on the phone a moment after typing stops)
+    draftSave?.cancel()
+    let w = DispatchWorkItem { [weak self] in guard let self = self, !self.draftKey.isEmpty, self.editing == nil else { return }; self.keepCurrent() }
+    draftSave = w; DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: w)
     paintSend()
     lookForMention()
   }
@@ -308,7 +312,7 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
       if let i = self.files.firstIndex(where: { $0.uid == uid }) {
         if let p = path { self.files[i].path = p; self.files[i].progress = 1 } else { self.files[i].failed = true }
         self.paintTiles()
-      }
+      } else { self.updateDraftFile(uid, path: path) }
       if path != nil, !waiting { Main.playUploaded(); UINotificationFeedbackGenerator().notificationOccurred(.success) }
       if path == nil, !waiting { self.onToast?("Upload failed — try again") }
       self.flushOutbox()
@@ -361,10 +365,13 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     }
     UIImpactFeedbackGenerator(style: .light).impactOccurred()
     right.isEnabled = false
+    let key = draftKey   // (the box may be on another task by the time it's sent — sent from the "not sent" alert)
     onSend?(body) { [weak self] ok in
       guard let self = self else { return }
       self.right.isEnabled = true
-      if ok { UINotificationFeedbackGenerator().notificationOccurred(.success); self.clear() }
+      guard ok else { return }
+      UINotificationFeedbackGenerator().notificationOccurred(.success)
+      if key == self.draftKey { self.clear() } else { ComposeBox.drafts[key] = nil; ComposeBox.acked[key] = nil; ComposeBox.saveDrafts() }
     }
   }
   // sent while files are still uploading (Haris, 2026-11-02): the comment goes into the feed at once, its cards pulsing
@@ -405,18 +412,82 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
       }
     }
   }
-  // what's written but not sent stays with its task (and thread) while the app is open
-  private static var drafts: [String: NSAttributedString] = [:]
+  // what's written but not sent stays with its task (and thread) — its words and its files — kept on the phone, so it's
+  // still there after the app is closed (as the website keeps its drafts)
+  typealias DraftFile = (uid: String, name: String, size: Int64, path: String?, progress: Double, failed: Bool, thumb: UIImage?)
+  private static var drafts: [String: (text: NSAttributedString, files: [DraftFile])] = [:]
+  private static var acked: [String: String] = [:]   // "Keep as draft": not asked again until it changes
+  private static var draftsLoaded = false
   private var draftKey = ""
+  private var draftSave: DispatchWorkItem?
   func switchTo(task: String, parent: String?) {
-    if !draftKey.isEmpty, editing == nil { ComposeBox.drafts[draftKey] = text.attributedText }
+    ComposeBox.loadDrafts()
+    if !draftKey.isEmpty, editing == nil { keepCurrent() }
     taskId = task; parentId = parent
     draftKey = task + "|" + (parent ?? "")
-    if editing == nil { setText(ComposeBox.drafts[draftKey] ?? NSAttributedString(string: "")) }
+    if editing == nil {
+      let d = ComposeBox.drafts[draftKey]
+      files = d?.files ?? []; paintTiles()
+      setText(d?.text ?? NSAttributedString(string: ""))
+    }
+  }
+  private func keepCurrent() {
+    let empty = (text.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && files.isEmpty
+    ComposeBox.drafts[draftKey] = empty ? nil : (text.attributedText ?? NSAttributedString(), files)
+    ComposeBox.saveDrafts()
   }
   func clear() {
-    if !draftKey.isEmpty { ComposeBox.drafts[draftKey] = nil }
-    text.attributedText = NSAttributedString(string: ""); files = []; replyTo = nil; editing = nil; paintTiles(); textViewDidChange(text) }
+    if !draftKey.isEmpty { ComposeBox.drafts[draftKey] = nil; ComposeBox.acked[draftKey] = nil }
+    text.attributedText = NSAttributedString(string: ""); files = []; replyTo = nil; editing = nil; paintTiles(); textViewDidChange(text)
+    ComposeBox.saveDrafts()
+  }
+  // ---------- an unsent comment, on leaving its task (Haris, 2026-11-02 — as the website's "Your comment hasn't been sent")
+  struct Unsent { let key: String; let words: String; let files: [String]; let uploading: Int; let reply: Bool; let current: Bool }
+  private static func sig(_ words: String, _ files: [DraftFile]) -> String { words + "|" + files.map { $0.uid }.joined(separator: ",") }
+  // what's written for this task and not sent (the box's own first), unless kept as a draft as it is now
+  func unsent(task: String) -> Unsent? {
+    guard editing == nil else { return nil }
+    if !draftKey.isEmpty { keepCurrent() }
+    let keys = ComposeBox.drafts.keys.filter { $0.hasPrefix(task + "|") }.sorted { a, b in (a == draftKey ? 0 : 1, a) < (b == draftKey ? 0 : 1, b) }
+    for k in keys {
+      guard let d = ComposeBox.drafts[k] else { continue }
+      let words = d.text.string.trimmingCharacters(in: .whitespacesAndNewlines)
+      if words.isEmpty && d.files.isEmpty { continue }
+      if ComposeBox.acked[k] == ComposeBox.sig(words, d.files) { continue }
+      let parent = String(k.dropFirst(task.count + 1))
+      return Unsent(key: k, words: words, files: d.files.map { $0.name }, uploading: d.files.filter { $0.path == nil && !$0.failed }.count, reply: !parent.isEmpty || (k == draftKey && replyTo != nil), current: k == draftKey)
+    }
+    return nil
+  }
+  func keepDraft(_ u: Unsent) { ComposeBox.acked[u.key] = ComposeBox.sig(u.words, ComposeBox.drafts[u.key]?.files ?? []); ComposeBox.saveDrafts() }
+  func sendDraft(_ u: Unsent) { if u.current { sendTapped() } }
+  // kept on the phone: the words (with their look) and the files already uploaded
+  private static func saveDrafts() {
+    var out: [String: Any] = [:]
+    for (k, d) in drafts {
+      let words = (try? NSKeyedArchiver.archivedData(withRootObject: d.text, requiringSecureCoding: false))?.base64EncodedString() ?? ""
+      out[k] = ["w": words, "f": d.files.compactMap { f in f.path.map { ["n": f.name, "s": f.size, "p": $0] as [String: Any] } }, "a": acked[k] ?? ""]
+    }
+    UserDefaults.standard.set(out, forKey: "e11-comment-drafts")
+  }
+  private static func loadDrafts() {
+    guard !draftsLoaded else { return }
+    draftsLoaded = true
+    for (k, v) in (UserDefaults.standard.dictionary(forKey: "e11-comment-drafts") ?? [:]) {
+      guard let d = v as? [String: Any] else { continue }
+      let t = (d["w"] as? String).flatMap { Data(base64Encoded: $0) }.flatMap { try? NSKeyedUnarchiver.unarchivedObject(ofClass: NSAttributedString.self, from: $0) } ?? NSAttributedString()
+      let fs: [DraftFile] = ((d["f"] as? [[String: Any]]) ?? []).map { f in (uid: UUID().uuidString, name: f["n"] as? String ?? "File", size: (f["s"] as? NSNumber)?.int64Value ?? 0, path: f["p"] as? String, progress: 1, failed: false, thumb: nil) }
+      drafts[k] = (t, fs)
+      if let a = d["a"] as? String, !a.isEmpty { acked[k] = a }
+    }
+  }
+  // an upload finishing for a file that's in a kept draft now (the box moved on to another task)
+  private func updateDraftFile(_ uid: String, path: String?) {
+    for (k, d) in ComposeBox.drafts { if let i = d.files.firstIndex(where: { $0.uid == uid }) {
+      var fs = d.files; if let p = path { fs[i].path = p; fs[i].progress = 1 } else { fs[i].failed = true }
+      ComposeBox.drafts[k] = (d.text, fs); ComposeBox.saveDrafts()
+    } }
+  }
 
   // ---------- voice: hold to record, slide left to cancel, up to lock ----------
   private var holdG: UILongPressGestureRecognizer?

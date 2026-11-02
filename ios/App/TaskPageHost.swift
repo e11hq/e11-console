@@ -123,6 +123,41 @@ extension Main {
     } completion: { _ in finish() }
   }
 
+  // leaving a task (‹ or the swipe back) with a comment or reply written and not sent: iPhone's own alert — Send / Keep
+  // as Draft / Go Back (Haris, 2026-11-02, as the website's). Keep as Draft isn't asked again until it changes.
+  func leaveTaskPage(_ p: TaskPage) {
+    if let u = composeIfMade?.unsent(task: p.taskId) { askUnsent(p, u) } else { closeTaskPage(p) }
+  }
+  func askUnsent(_ p: TaskPage, _ u: ComposeBox.Unsent) {
+    guard let c = composeIfMade else { return }
+    let what = u.reply ? "reply" : "comment"
+    var lines: [String] = []
+    if !u.words.isEmpty { lines.append(u.words.count > 140 ? String(u.words.prefix(140)) + "…" : u.words) }
+    if let f = u.files.first { lines.append("📎 " + f + (u.files.count > 1 ? " +\(u.files.count - 1) more" : "")) }
+    if u.uploading > 0 { lines.append("Uploading \(u.uploading) file\(u.uploading == 1 ? "" : "s")… it sends by itself once they're up.") }
+    UINotificationFeedbackGenerator().notificationOccurred(.warning)
+    let a = UIAlertController(title: "Your \(what) hasn’t been sent", message: lines.joined(separator: "\n\n"), preferredStyle: .alert)
+    if u.current {
+      let send = UIAlertAction(title: "Send \(what.capitalized)", style: .default) { [weak self, weak p] _ in
+        guard let self = self, let p = p else { return }
+        c.sendDraft(u); self.closeTaskPage(p)
+      }
+      a.addAction(send); a.preferredAction = send
+    }
+    a.addAction(UIAlertAction(title: "Keep as Draft", style: .default) { [weak self, weak p] _ in
+      guard let self = self, let p = p else { return }
+      c.keepDraft(u); self.closeTaskPage(p)
+    })
+    a.addAction(UIAlertAction(title: "Go Back", style: .cancel) { [weak p] _ in
+      // (back to it: Comments, the box ready)
+      guard let p = p else { return }
+      if p.tab != "comments" { p.setTab("comments", tell: true, slide: true) }
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { c.text.becomeFirstResponder() }
+    })
+    var top: UIViewController = self; while let n = top.presentedViewController { top = n }
+    top.present(a, animated: true)
+  }
+
   // iPhone's swipe back from the left edge: the page follows the finger; let go, it goes the way it was going
   @objc func taskEdgePan(_ g: UIScreenEdgePanGestureRecognizer) {
     guard let p = taskPages.last else { return }
@@ -156,10 +191,13 @@ extension Main {
     case .ended, .cancelled, .failed:
       let v = g.velocity(in: view).x
       let go = g.state == .ended && (v > 300 || (x > W * 0.4 && v > -200))
-      if go {
+      // (a comment written here and not sent: the page comes back and asks first)
+      let ask = go ? composeIfMade?.unsent(task: p.taskId) : nil
+      if go && ask == nil {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         closeTaskPage(p)
       } else {
+        if let u = ask { DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { self.askUnsent(p, u) } }
         UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState]) {
           p.transform = .identity
           back.forEach { $0.transform = CGAffineTransform(translationX: -W * 0.3, y: 0) }
@@ -172,7 +210,7 @@ extension Main {
   }
 
   private func wire(_ p: TaskPage) {
-    p.onBack = { [weak self, weak p] in guard let self = self, let p = p else { return }; if p.editingDesc { p.finishDesc() }; self.closeTaskPage(p) }
+    p.onBack = { [weak self, weak p] in guard let self = self, let p = p else { return }; if p.editingDesc { p.finishDesc() }; self.leaveTaskPage(p) }
     p.onCornerChange = { [weak self] in self?.updateCornerNow() }
     p.onSwipeToDetails = { [weak self, weak p] in guard let self = self, let p = p else { return }; self.toDetailsFromComments(p) }
     p.onOpenFiles = { [weak self] list, i in self?.openFiles(list, at: i) }
