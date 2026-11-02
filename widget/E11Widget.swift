@@ -245,7 +245,7 @@ struct ProdView: View {
         } else { Lbl(t: "Nothing open — a clear day") }
         Stale(on: stale)
       }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    default:   // medium, large (Mac)
+    default:   // medium, large
       VStack(alignment: .leading, spacing: 6) {
         Head(title: p.title ?? "My day", right: dayTitle)
         HStack(alignment: .top, spacing: 12) {
@@ -462,7 +462,8 @@ struct E11Widget: Widget {
   #endif
   var families: [WidgetFamily] {
     #if os(iOS)
-    return [.systemSmall, .systemMedium, .accessoryInline, .accessoryCircular, .accessoryRectangular]
+    // (the large one too, as the Mac's: its rows and the week chart — Haris, 2026-11-02)
+    return [.systemSmall, .systemMedium, .systemLarge, .accessoryInline, .accessoryCircular, .accessoryRectangular]
     #else
     return [.systemSmall, .systemMedium, .systemLarge]
     #endif
