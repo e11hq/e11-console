@@ -438,7 +438,15 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     rebuild()
     setNeedsLayout()
   }
-  func peopleChanged(_ p: [String: [String: Any]]) { people.merge(p) { _, b in b }; built = ""; if let m = model { draw(m) } }
+  // (only drawn again when someone's picture or name really changed — photos arriving again and again redrew the whole
+  //  page each time, the Files row and the lock note jumping by themselves; Haris 2026-11-02)
+  func peopleChanged(_ p: [String: [String: Any]]) {
+    let was = people
+    people.merge(p) { _, b in b }
+    let sig = { (d: [String: [String: Any]]) -> String? in JSONSerialization.isValidJSONObject(d) ? (try? JSONSerialization.data(withJSONObject: d, options: [.sortedKeys])).map { String(decoding: $0, as: UTF8.self) } : nil }
+    if let a = sig(was), a == sig(people) { return }
+    built = ""; if let m = model { draw(m) }
+  }
 
   private func makeMenu() {
     guard let m = model else { return }
@@ -724,6 +732,10 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       else if b is PageBand { h = 8 }
       else { b.frame.size.width = w; b.setNeedsLayout(); b.layoutIfNeeded(); h = b.systemLayoutSizeFitting(CGSize(width: w, height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height }
       b.frame = CGRect(x: x, y: y, width: w, height: h)
+      // (its insides laid out again at its real height: a new block had been laid out at no height — read at that moment,
+      //  the Files row looked lower than it is, so it was "moved" up and slid back down, a jump at every change —
+      //  Haris's film 2026-11-02 21:56)
+      if !(b === titleView) && !(b is PageBand) { b.setNeedsLayout(); b.layoutIfNeeded() }
       let next = k + 1 < blocks.count ? blocks[k + 1] : nil
       y += h + (b is PageBand || next is PageBand ? (b is PageBand ? 10 : 6) : b.tag == 7 ? 4 : b is PageGroup ? 4 : 10)
     }
@@ -1587,15 +1599,28 @@ extension TaskPage {
     return nil
   }
   // what a view shows, in words: its texts, pictures and colours (changed → cross-faded)
+  // (a colour by its values and a picture by what it is — their descriptions carry a memory address, new at every drawing,
+  //  so an unchanged card looked changed and flashed: the CD lock card, the Files block — Haris 2026-11-02)
+  private static func cs(_ c: UIColor?, _ tc: UITraitCollection) -> String {
+    guard let c = c else { return "-" }
+    var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+    c.resolvedColor(with: tc).getRed(&r, green: &g, blue: &b, alpha: &a)
+    return String(format: "%.3f,%.3f,%.3f,%.3f", r, g, b, a)
+  }
+  private static func ims(_ i: UIImage?) -> String {
+    guard let i = i else { return "-" }
+    return String(i.description.replacingOccurrences(of: "0x[0-9a-fA-F]+", with: "", options: .regularExpression).prefix(200)) + "\(i.size.width)x\(i.size.height)"
+  }
   static func sig(_ v: UIView) -> String {
     var out = ""
+    let tc = v.traitCollection
     func walk(_ v: UIView) {
       if v.isHidden { return }
-      if let l = v as? UILabel { out += "L" + (l.attributedText?.string ?? l.text ?? "") + (l.textColor?.description ?? "") }
+      if let l = v as? UILabel { out += "L" + (l.attributedText?.string ?? l.text ?? "") + cs(l.textColor, tc) }
       if let t = v as? UITextView { out += "T" + (t.text ?? "") }
-      if let i = v as? UIImageView { out += "I" + (i.image.map { "\($0.description.prefix(160))" } ?? "") + (i.tintColor?.description ?? "") }
-      if let b = v as? UIButton { out += "B" + (b.currentImage.map { "\($0.description.prefix(160))" } ?? "") + (b.currentTitle ?? "") + (b.tintColor?.description ?? "") }
-      if let c = v.backgroundColor { out += "C" + c.description }
+      if let i = v as? UIImageView { out += "I" + ims(i.image) + cs(i.tintColor, tc) }
+      if let b = v as? UIButton { out += "B" + ims(b.currentImage) + (b.currentTitle ?? b.configuration?.title ?? "") + cs(b.tintColor, tc) }
+      if let c = v.backgroundColor { out += "C" + cs(c, tc) }
       v.subviews.forEach(walk)
     }
     walk(v)

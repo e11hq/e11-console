@@ -284,6 +284,8 @@ final class ClientSheetVC: UITableViewController, UITextFieldDelegate {
       f.frame = CGRect(x: 0, y: 0, width: 300, height: 50); tableView.tableFooterView = f
     }
   }
+  override func viewDidLayoutSubviews() { super.viewDidLayoutSubviews(); if navigationController?.topViewController === self { (navigationController as? FitNav)?.fitTo(tableView) } }
+  override func viewWillAppear(_ a: Bool) { super.viewWillAppear(a); (navigationController as? FitNav)?.fitTo(tableView) }
   private func rgb() -> UIColor { UIColor(hex: color) ?? NativeSheetVC.color(row["rgb"]) ?? .systemGray }
   private func logoView(_ size: CGFloat) -> UIView {
     let v = UIImageView(); v.backgroundColor = rgb(); v.layer.cornerRadius = size * 0.27; v.layer.cornerCurve = .continuous; v.clipsToBounds = true; v.contentMode = .scaleAspectFill
@@ -438,6 +440,30 @@ final class ClientSheetVC: UITableViewController, UITextFieldDelegate {
   private func alert(_ t: String) { let a = UIAlertController(title: t, message: nil, preferredStyle: .alert); a.addAction(UIAlertAction(title: "OK", style: .default)); present(a, animated: true) }
 }
 
+// a sheet of lists that's as tall as what's on it (as the morning round-up), up to nearly the whole screen; a list
+// pushed onto it (Add Account Manager…) grows or shrinks it to fit too, with the sheet's own animation (Haris 2026-11-02)
+final class FitNav: UINavigationController {
+  private var fit: CGFloat = 360, measured = false
+  override func viewDidLoad() {
+    super.viewDidLoad()
+    sheetPresentationController?.detents = [.custom(identifier: .init("fitList")) { [weak self] ctx in min(ctx.maximumDetentValue, self?.fit ?? 360) }]
+  }
+  func fitTo(_ table: UITableView) {
+    table.layoutIfNeeded()
+    let floating: Bool; if #available(iOS 26, *) { floating = true } else { floating = false }
+    let h = ceil(navigationBar.frame.maxY + table.contentSize.height + table.adjustedContentInset.bottom - view.safeAreaInsets.bottom + 8 + (floating ? 0 : view.safeAreaInsets.bottom))
+    guard abs(h - fit) > 0.5 else { return }
+    fit = h
+    table.isScrollEnabled = h > view.window.map { $0.bounds.height * 0.9 } ?? 700
+    let first = !measured; measured = true
+    // (outside the layout pass; the first time with no animation — the sheet comes up already its size)
+    DispatchQueue.main.async { [weak self] in
+      guard let sh = self?.sheetPresentationController else { return }
+      if first { sh.invalidateDetents() } else { sh.animateChanges { sh.invalidateDetents() } }
+    }
+  }
+}
+
 final class PeoplePickVC: UITableViewController {
   private let ids: [String], names: [String: String], sub: [String: String], avatar: (String) -> UIImage?, picked: (String) -> Void
   init(ids: [String], names: [String: String], sub: [String: String], avatar: @escaping (String) -> UIImage?, picked: @escaping (String) -> Void) {
@@ -454,6 +480,8 @@ final class PeoplePickVC: UITableViewController {
     return c
   }
   override func tableView(_ tv: UITableView, didSelectRowAt ip: IndexPath) { tv.deselectRow(at: ip, animated: true); if !ids.isEmpty { picked(ids[ip.row]) } }
+  override func viewDidLayoutSubviews() { super.viewDidLayoutSubviews(); (navigationController as? FitNav)?.fitTo(tableView) }
+  override func viewWillAppear(_ a: Bool) { super.viewWillAppear(a); (navigationController as? FitNav)?.fitTo(tableView) }
 }
 
 extension UIColor {

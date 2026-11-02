@@ -1628,9 +1628,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         done(nil)
       }
     }
-    let nav = UINavigationController(rootViewController: vc)
+    let nav = FitNav(rootViewController: vc)
     nav.overrideUserInterfaceStyle = clientsLight ? .light : .dark
-    if let sh = nav.sheetPresentationController { sh.detents = [.large()]; sh.prefersGrabberVisible = true }
+    if let sh = nav.sheetPresentationController { sh.prefersGrabberVisible = true }   // (its height: what's on it — FitNav)
     topMost().present(nav, animated: true)
   }
   var clientPanFrom: ((CornerButton.Spot, CornerButton.Spot, CornerButton.Spot), (CornerButton.Spot, CornerButton.Spot, CornerButton.Spot))?
@@ -1691,8 +1691,15 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let page = (a["view"] as? String) == "client"
     let was = clientsOn
     clientsOn = page ? "client" : "list"
-    if !page && was == "client" { clientPageOut() }
     let s = serverClients
+    // (back to the list: it's on screen already as it was — brought up to date once the page has gone, not while the
+    //  list and the top buttons are moving: working it out then made 🔍 hesitate on the way, Haris 2026-11-02)
+    if !page && was == "client" {
+      clientPageOut()
+      s.query = "view=list"
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in guard let self = self, self.clientsOn == "list" else { return }; self.serverClients.refresh() }
+      return
+    }
     s.query = page ? "view=client&id=\((a["id"] as? String ?? "").addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "")&done=\((a["done"] as? Bool) == true ? 1 : 0)" : "view=list"
     if s.on, let m = s.shown, (m["kind"] as? String) == (page ? "client" : "clients"), !page || (m["id"] as? String) == (a["id"] as? String) { drawServerClients(m) }
     else if (page ? clientPageIfMade : clientsListIfMade)?.isHidden == false {
