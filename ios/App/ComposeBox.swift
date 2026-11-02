@@ -175,12 +175,15 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     replyPill.subviews.forEach { $0.removeFromSuperview() }
     replyPill.isHidden = replyTo == nil
     if let r = replyTo {
+      // two lines (Haris, 2026-11-02): "Replying to Carine" a little smaller, and under it, smaller and grey, "Tap to cancel"
       let l = UILabel(); l.isUserInteractionEnabled = false
-      let s = NSMutableAttributedString(string: "Replying to ", attributes: [.font: UIFont.systemFont(ofSize: 15), .foregroundColor: UIColor.secondaryLabel])
-      s.append(NSAttributedString(string: r.name, attributes: [.font: UIFont.systemFont(ofSize: 15, weight: .medium), .foregroundColor: UIColor.label]))
-      l.attributedText = s; l.lineBreakMode = .byTruncatingTail
-      let av = CommentCell.avatar(replyPerson ?? ["initials": String(r.name.prefix(1)).uppercased()], 24); av.isUserInteractionEnabled = false
-      let row = UIStackView(arrangedSubviews: [l, av]); row.spacing = 8; row.alignment = .center; row.isUserInteractionEnabled = false
+      let a = NSMutableAttributedString(string: "Replying to ", attributes: [.font: UIFont.systemFont(ofSize: 13), .foregroundColor: UIColor.secondaryLabel])
+      a.append(NSAttributedString(string: r.name, attributes: [.font: UIFont.systemFont(ofSize: 13, weight: .semibold), .foregroundColor: UIColor.label]))
+      l.attributedText = a; l.lineBreakMode = .byTruncatingTail
+      let hint = UILabel(); hint.text = "Tap to cancel"; hint.font = .systemFont(ofSize: 11); hint.textColor = .secondaryLabel; hint.isUserInteractionEnabled = false
+      let words = UIStackView(arrangedSubviews: [l, hint]); words.axis = .vertical; words.spacing = 0; words.alignment = .leading; words.isUserInteractionEnabled = false
+      let av = CommentCell.avatar(replyPerson ?? ["initials": String(r.name.prefix(1)).uppercased()], 22); av.isUserInteractionEnabled = false
+      let row = UIStackView(arrangedSubviews: [words, av]); row.spacing = 8; row.alignment = .center; row.isUserInteractionEnabled = false
       row.translatesAutoresizingMaskIntoConstraints = false; replyPill.addSubview(row)
       NSLayoutConstraint.activate([row.leadingAnchor.constraint(equalTo: replyPill.leadingAnchor, constant: 14), row.trailingAnchor.constraint(equalTo: replyPill.trailingAnchor, constant: -6), row.centerYAnchor.constraint(equalTo: replyPill.centerYAnchor)])
       replyPill.accessibilityLabel = "Replying to \(r.name). Tap to stop replying"
