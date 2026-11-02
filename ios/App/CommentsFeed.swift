@@ -1,4 +1,5 @@
 import UIKit
+import CryptoKit
 
 /* A task's Comments, the app's own (step 2, Haris 2026-11-01): drawn from the server (/api/comments), newest at the
    bottom. Pictures and link cards keep their size from the start (a loading shimmer inside), so nothing moves while
@@ -11,14 +12,19 @@ final class FeedLoader {
   var cookies: (@escaping (String) -> Void) -> Void = { $0("") }
   private let cache = NSCache<NSString, UIImage>()
   private var links: [String: [String: Any]] = [:]
+  // pictures are kept on the phone too (Haris, 2026-11-02: coming back to the app, the pictures flashed as if it had
+  // reloaded — iPhone empties the memory of an app that's away, or closes it): from the phone's copy they're there at
+  // once, no shimmer, no request
   func image(_ path: String, _ done: @escaping (UIImage?) -> Void) {
     if let i = cache.object(forKey: path as NSString) { return done(i) }
+    if let d = DiskPics.get(path), let i = UIImage(data: d) { cache.setObject(i, forKey: path as NSString); return done(i) }
     cookies { c in
       guard let url = URL(string: path.hasPrefix("http") ? path : serverURL() + path) else { return done(nil) }
       var r = URLRequest(url: url); if !c.isEmpty { r.setValue(c, forHTTPHeaderField: "Cookie") }
-      URLSession.shared.dataTask(with: r) { d, _, _ in
+      URLSession.shared.dataTask(with: r) { d, res, _ in
         let img = d.flatMap { UIImage(data: $0) }
         if let img = img { self.cache.setObject(img, forKey: path as NSString) }
+        if img != nil, let d = d, ((res as? HTTPURLResponse)?.statusCode ?? 200) == 200 { DiskPics.put(path, d) }
         DispatchQueue.main.async { done(img) }
       }.resume()
     }
@@ -819,4 +825,20 @@ final class FileStrip: UIView, UIScrollViewDelegate {
     fade.colors = [UIColor.black.cgColor, UIColor.black.cgColor, (edge > 0 ? UIColor.clear : UIColor.black).cgColor]
     CATransaction.commit()
   }
+}
+
+// the pictures kept on the phone (in its caches folder, which iPhone may clear when it needs room — then they're
+// fetched again): one file each, named by its address
+enum DiskPics {
+  private static let dir: URL = {
+    let d = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("pics", isDirectory: true)
+    try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+    return d
+  }()
+  private static let io = DispatchQueue(label: "pics.disk", qos: .utility)
+  private static func file(_ key: String) -> URL {
+    dir.appendingPathComponent(SHA256.hash(data: Data(key.utf8)).map { String(format: "%02x", $0) }.joined())
+  }
+  static func get(_ key: String) -> Data? { try? Data(contentsOf: file(key)) }
+  static func put(_ key: String, _ d: Data) { io.async { try? d.write(to: file(key), options: .atomic) } }
 }

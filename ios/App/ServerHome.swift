@@ -278,6 +278,7 @@ final class ServerHome {
     var out = people
     for (id, p) in people {
       guard let u = p["photo"] as? String, u.hasPrefix("/") else { continue }
+      if pics[u] == nil, let d = DiskPics.get("photo72:" + u) { pics[u] = "data:image/jpeg;base64," + d.base64EncodedString() }   // (kept on the phone)
       if let d = pics[u] { out[id]?["photo"] = d; continue }
       out[id]?["photo"] = nil
       guard !asking.contains(u) else { continue }
@@ -295,6 +296,7 @@ final class ServerHome {
           DispatchQueue.main.async {
             guard let self = self else { return }
             self.pics[u] = "data:image/jpeg;base64," + jpg.base64EncodedString()
+            DiskPics.put("photo72:" + u, jpg)
             var again = people; for (i, q) in people where (q["photo"] as? String) == u { again[i]?["photo"] = self.pics[u] }
             done(again.mapValues { q in var q = q; if let s = q["photo"] as? String, s.hasPrefix("/") { q["photo"] = self.pics[s] }; return q })
           }
