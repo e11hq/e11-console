@@ -231,6 +231,18 @@ extension Main {
         self.uploadToTask(p, picked)
       }
     }
+    p.onDescAttach = { [weak self, weak p] src in
+      guard let self = self, let p = p else { return }
+      Picker.shared.pick(from: self.topMost(), single: false, source: src) { [weak self, weak p] r in
+        guard let self = self, let p = p else { return }
+        let picked = ((r["files"] as? [[String: Any]]) ?? []).compactMap { f -> (URL, String)? in
+          guard let tok = f["token"] as? String, let u = Picker.shared.url(tok) else { return nil }
+          return (u, f["name"] as? String ?? "File")
+        }
+        self.uploadToTask(p, picked, toDesc: true)
+      }
+    }
+    p.onDescUpload = { [weak self, weak p] picked in guard let self = self, let p = p else { return }; self.uploadToTask(p, picked, toDesc: true) }
     p.onAttachFiles = { [weak self, weak p] in
       guard let self = self, let p = p, let host = self.sheetHost() else { return }
       host.present(AttachSheetVC(light: self.statusStyle == .darkContent) { [weak self, weak p] src in
@@ -640,9 +652,11 @@ extension Main {
 extension Main {
   // files from the phone onto the task: each one's card in the Files row at once, pulsing with its upload ring; all are
   // added together once they're up, and the real cards take their places (Haris, 2026-11-02)
-  func uploadToTask(_ p: TaskPage, _ picked: [(URL, String)]) {
+  // toDesc: from the description's Attach (or pasted there) — a chip where the cursor was, made real as each is up
+  func uploadToTask(_ p: TaskPage, _ picked: [(URL, String)], toDesc: Bool = false) {
     guard !picked.isEmpty else { return }
     let ids = picked.map { _ in "up-" + UUID().uuidString }
+    if toDesc { p.descUploadsStarted(zip(ids, picked.map { $0.1 }).map { ($0, $1) }) }
     p.addUploads(zip(ids, picked).map { id, f in
       var c: [String: Any] = ["id": id, "name": f.1, "pending": true]
       if let t = CommentCell.localThumb(f.0, f.1) { FeedLoader.shared.setLocal("local:" + id, t); c["thumbUrl"] = "local:" + id }
@@ -656,6 +670,7 @@ extension Main {
         guard let self = self, let p = p else { return }
         if let path = path { done.append(["name": name, "size": size, "path": path]); sent.insert(id); UploadRing.post(id, 1) }
         else { p.dropUploads([id]) }
+        if toDesc { p.descUploaded(id, path: path, size: Int(size)) }
         left -= 1
         if left == 0 {
           if done.isEmpty { p.toast("Upload failed — try again"); return }

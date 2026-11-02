@@ -1,4 +1,5 @@
 import UIKit
+import UniformTypeIdentifiers
 
 /* The task page, the app's own (shell 30, Haris 2026-11-01): it slides in from the right like any iPhone page and goes
    back with ‹ or iPhone's swipe from the left edge, following the finger. The Details tab is drawn here from the
@@ -133,7 +134,13 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }
   private let filesStrip = FileStrip(side: 100), descStrip = FileStrip(side: 100)
   var descPending: [[String: Any]] = []
-  var drawnOnce = false   // (drawn before: a later drawing animates what changed)
+  var drawnOnce = false
+  // files uploaded from the description's 📎 Attach (or pasted from outside the app): to the task's files, a chip
+  // where the cursor was, greyed with an arrow until it's up
+  var onDescAttach: ((String) -> Void)?
+  var onDescUpload: (([(URL, String)]) -> Void)?
+  var descAutoFinish = false
+  private var descInsertAt: NSRange?   // (drawn before: a later drawing animates what changed)
   private var descTouch: (CGPoint, Date)?
   var waiting = 0   // (changes sent, not answered yet)
   // a change shown at once, before the server's answer (Haris, 2026-11-02: changes came with a delay); the answer
@@ -167,7 +174,8 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // a file copied in the app (a preview's Copy), pasted while writing the description: its 📎 where the cursor is, its
   // card under the description at once — saved with Done, as the website keeps it (Haris 2026-11-02)
   func pasteIntoDesc() -> Bool {
-    guard descView.isFirstResponder, let f = FileClip.current, let path = f["file"] as? String else { return false }
+    guard descView.isFirstResponder else { return false }
+    guard let f = FileClip.current, let path = f["file"] as? String else { return pasteUpload() }
     let name = f["name"] as? String ?? "File"
     let tv = descView, r = tv.selectedRange
     let plain: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: TaskPage.T), .foregroundColor: UIColor.label]
@@ -1620,5 +1628,95 @@ extension TaskPage {
       UIView.animate(withDuration: 0.25, delay: 0, options: [.curveEaseIn, .allowUserInteraction], animations: { snap.alpha = 0 }) { _ in snap.removeFromSuperview() }
     }
     _ = made
+  }
+}
+
+
+// ---------- files from the phone into the description ----------
+extension TaskPage {
+  func descAttach(_ src: String) {
+    descInsertAt = descView.selectedRange
+    onDescAttach?(src)
+  }
+  // a picture or file pasted from outside the app (Photos, Files…): uploaded, its chip where the cursor is
+  func pasteUpload() -> Bool {
+    let pb = UIPasteboard.general
+    var picked: [(URL, String)] = []
+    for item in pb.items {
+      guard let type = item.keys.first(where: { t in guard let u = UTType(t) else { return false }; return !u.conforms(to: .text) }) else { continue }
+      var data: Data? = item[type] as? Data
+      if data == nil, let img = item[type] as? UIImage { data = img.jpegData(compressionQuality: 0.9) }
+      guard let d = data else { continue }
+      let ext = (item[type] is UIImage) ? "jpg" : (UTType(type)?.preferredFilenameExtension ?? "dat")
+      let name = (UTType(type)?.conforms(to: .image) == true || item[type] is UIImage ? "Pasted image." : "Pasted file.") + ext
+      let dir = FileManager.default.temporaryDirectory.appendingPathComponent("paste-\(UUID().uuidString)", isDirectory: true)
+      try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+      let u = dir.appendingPathComponent(name)
+      guard (try? d.write(to: u)) != nil else { continue }
+      picked.append((u, name))
+    }
+    if picked.isEmpty { return false }
+    descInsertAt = descView.selectedRange
+    onDescUpload?(picked)
+    return true
+  }
+  var descUploading: Bool {
+    var any = false
+    let a = descView.attributedText ?? NSAttributedString()
+    a.enumerateAttribute(FILEREF_KEY, in: NSRange(location: 0, length: a.length)) { v, _, stop in if (v as? [String: Any])?["pending"] != nil { any = true; stop.pointee = true } }
+    return any
+  }
+  // the uploads have started: a greyed chip for each where the cursor was
+  func descUploadsStarted(_ items: [(String, String)]) {
+    guard editingDesc else { return }
+    DescEditor.dark = !light
+    let tv = descView
+    let at = descInsertAt ?? tv.selectedRange; descInsertAt = nil
+    let plain: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: TaskPage.T), .foregroundColor: UIColor.label]
+    let add = NSMutableAttributedString()
+    for (id, name) in items {
+      add.append(DescEditor.chip(["pending": id, "name": name], size: TaskPage.T))
+      add.append(NSAttributedString(string: " ", attributes: plain))
+    }
+    let m = NSMutableAttributedString(attributedString: tv.attributedText)
+    let r = NSRange(location: min(at.location, m.length), length: min(at.length, max(0, m.length - at.location)))
+    m.replaceCharacters(in: r, with: add)
+    tv.attributedText = m
+    tv.selectedRange = NSRange(location: r.location + add.length, length: 0)
+    tv.typingAttributes = plain
+    if !tv.isFirstResponder { tv.becomeFirstResponder() }
+    setNeedsLayout(); relayAnimated()
+  }
+  // one is up (path) or failed (nil): its real chip in place of the greyed one, its card under the description
+  func descUploaded(_ id: String, path: String?, size: Int) {
+    let tv = descView
+    let a = NSMutableAttributedString(attributedString: tv.attributedText)
+    var found: (NSRange, [String: Any])?
+    a.enumerateAttribute(FILEREF_KEY, in: NSRange(location: 0, length: a.length)) { v, r, stop in
+      if let f = v as? [String: Any], (f["pending"] as? String) == id { found = (r, f); stop.pointee = true }
+    }
+    guard let hit = found else { return }
+    let r = hit.0, f = hit.1
+    let sel = tv.selectedRange
+    let name = f["name"] as? String ?? "File"
+    DescEditor.dark = !light
+    if let path = path {
+      a.replaceCharacters(in: r, with: DescEditor.chip(["path": path, "name": name, "size": size], size: TaskPage.T))
+      let url = "/__file/" + path.split(separator: "/").map { String($0).addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? String($0) }.joined(separator: "/") + "?view=1"
+      descPending.append(["id": "desc-" + id, "file": path, "name": name, "size": size, "url": url])
+    } else {
+      a.deleteCharacters(in: r)
+      toast("Upload failed — try again")
+    }
+    tv.attributedText = a
+    tv.selectedRange = NSRange(location: min(sel.location, a.length), length: 0)
+    let files = descShown
+    descStrip.set(files, open: { [weak self] i in self?.onOpenFiles?(files, i) }, menu: { [weak self] i in self?.fileMenu(files, i) })
+    if path != nil, !blocks.contains(where: { $0 === descStrip }), let i = blocks.firstIndex(where: { $0 === descBox }) {
+      blocks.insert(descStrip, at: i + 1); content.addSubview(descStrip); descStrip.alpha = 0
+      UIView.animate(withDuration: 0.3) { self.descStrip.alpha = 1 }
+    }
+    setNeedsLayout(); relayAnimated()
+    if descAutoFinish && !descUploading { finishDesc() }
   }
 }

@@ -22,10 +22,12 @@ enum DescEditor {
     let name = f["name"] as? String ?? ((f["path"] as? String).map { ($0 as NSString).lastPathComponent } ?? "File")
     let tc = UITraitCollection(userInterfaceStyle: dark ? .dark : .light)
     let font = UIFont.systemFont(ofSize: size - 1, weight: .medium)
-    let (sym, col) = kind(name)
+    // (still uploading: an upload arrow in grey, the name greyed — the real chip takes its place once it's up)
+    let up = f["pending"] != nil
+    let (sym, col) = up ? ("arrow.up.circle", UIColor.secondaryLabel) : kind(name)
     let icon = UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: size - 3, weight: .semibold))?.withTintColor(col.resolvedColor(with: tc), renderingMode: .alwaysOriginal)
     let para = NSMutableParagraphStyle(); para.lineBreakMode = .byTruncatingMiddle
-    let ta: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.label.resolvedColor(with: tc), .paragraphStyle: para]
+    let ta: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: (up ? UIColor.secondaryLabel : UIColor.label).resolvedColor(with: tc), .paragraphStyle: para]
     let tw = min(ceil((name as NSString).size(withAttributes: ta).width), 210)
     let iw = icon?.size.width ?? 0, h = ceil(font.lineHeight) + 6
     let w = 8 + iw + 5 + tw + 10
@@ -142,6 +144,15 @@ extension TaskPage {
     var out: [UIBarButtonItem] = []
     for (gi, g) in groups.enumerated() {
       if gi > 0 { out.append(UIBarButtonItem.flexibleSpace()) }
+      if gi == groups.count - 1 {
+        // (a file from the phone, into the task's files, its chip where the cursor is — Haris 2026-11-02)
+        let menu = UIMenu(children: [("Camera", "camera", "camera"), ("Photos", "photo.on.rectangle", "photos"), ("Files", "folder", "files")].map { t, sym, src in
+          UIAction(title: t, image: UIImage(systemName: sym)) { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.descAttach(src) }
+        })
+        let b = UIBarButtonItem(title: "Attach", image: UIImage(systemName: "paperclip", withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .medium)), menu: menu)
+        b.tintColor = .label; b.accessibilityLabel = "Attach"
+        out.append(b)
+      }
       for (sym, k, name) in g {
         let b = UIBarButtonItem(title: name, image: UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .medium)), primaryAction: UIAction(title: name, image: UIImage(systemName: sym)) { [weak self] _ in UISelectionFeedbackGenerator().selectionChanged(); self?.format(k) })
         b.tintColor = .label
@@ -172,6 +183,9 @@ extension TaskPage {
   // Done: saved (only if it changed)
   func finishDesc() {
     guard editingDesc else { return }
+    // (a file still going up: saved as soon as it's there — until then it stays as it is)
+    if descUploading { descAutoFinish = true; toast("Saving once the upload is finished"); descView.resignFirstResponder(); return }
+    descAutoFinish = false
     editingDesc = false
     hideMentions()
     descView.resignFirstResponder()
