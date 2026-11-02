@@ -171,8 +171,8 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let name = f["name"] as? String ?? "File"
     let tv = descView, r = tv.selectedRange
     let plain: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: TaskPage.T), .foregroundColor: UIColor.label]
-    var chip = plain; chip[FILEREF_KEY] = ["path": path, "name": name, "size": f["size"] as? Int ?? 0] as [String: Any]; chip[.foregroundColor] = UIColor.systemBlue
-    let add = NSMutableAttributedString(string: "📎 " + name, attributes: chip)
+    DescEditor.dark = !light
+    let add = NSMutableAttributedString(attributedString: DescEditor.chip(["path": path, "name": name, "size": f["size"] as? Int ?? 0], size: TaskPage.T))
     add.append(NSAttributedString(string: " ", attributes: plain))
     let m = NSMutableAttributedString(attributedString: tv.attributedText); m.replaceCharacters(in: r, with: add)
     tv.attributedText = m
@@ -316,6 +316,8 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     commentsHost.backgroundColor = .systemGroupedBackground
     back.setLook(light: light, tint: .label); more.setLook(light: light, tint: .label)
     client.textColor = .label
+    // (the description's file chips are pictures: drawn again in the new look)
+    if drawnOnce, !editingDesc, let m = model { built = ""; draw(m) }
   }
 
   // ---------- layout ----------
@@ -501,6 +503,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }
   private func rebuild() {
     guard let m = model.map({ TaskPage.basic($0) }) else { return }
+    DescEditor.dark = !light   // (the description's file chips drawn in the page's look)
     // (on screen already: what changes comes in, goes out and moves smoothly — Haris 2026-11-02)
     let live = window != nil && drawnOnce && !isHidden
     let before = live ? pageSnapshot() : [:]

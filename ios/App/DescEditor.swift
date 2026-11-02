@@ -8,6 +8,49 @@ let MENTION_KEY = NSAttributedString.Key("e11User")
 let FILEREF_KEY = NSAttributedString.Key("e11File")
 
 enum DescEditor {
+  // a pasted file in the description: a light grey chip — its icon in its kind's colour (pictures green, PDFs red,
+  // videos purple, the rest blue, as the Files app), its name — one piece in the words (Haris 2026-11-02)
+  static var dark = false   // (the page's look, set before drawing)
+  static func kind(_ name: String) -> (String, UIColor) {
+    let ext = (name as NSString).pathExtension.lowercased()
+    if ["jpg", "jpeg", "png", "heic", "heif", "gif", "webp", "tif", "tiff", "bmp"].contains(ext) { return ("photo", .systemGreen) }
+    if ext == "pdf" { return ("doc.richtext", .systemRed) }
+    if ["mp4", "mov", "m4v", "webm", "avi", "mkv"].contains(ext) { return ("film", .systemPurple) }
+    return ("doc", .systemBlue)
+  }
+  static func chip(_ f: [String: Any], size: CGFloat) -> NSAttributedString {
+    let name = f["name"] as? String ?? ((f["path"] as? String).map { ($0 as NSString).lastPathComponent } ?? "File")
+    let tc = UITraitCollection(userInterfaceStyle: dark ? .dark : .light)
+    let font = UIFont.systemFont(ofSize: size - 1, weight: .medium)
+    let (sym, col) = kind(name)
+    let icon = UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: size - 3, weight: .semibold))?.withTintColor(col.resolvedColor(with: tc), renderingMode: .alwaysOriginal)
+    let para = NSMutableParagraphStyle(); para.lineBreakMode = .byTruncatingMiddle
+    let ta: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.label.resolvedColor(with: tc), .paragraphStyle: para]
+    let tw = min(ceil((name as NSString).size(withAttributes: ta).width), 210)
+    let iw = icon?.size.width ?? 0, h = ceil(font.lineHeight) + 6
+    let w = 8 + iw + 5 + tw + 10
+    let img = UIGraphicsImageRenderer(size: CGSize(width: w, height: h)).image { _ in
+      UIColor.tertiarySystemFill.resolvedColor(with: tc).setFill()
+      UIBezierPath(roundedRect: CGRect(x: 0, y: 0, width: w, height: h), cornerRadius: h / 2).fill()
+      if let i = icon { i.draw(at: CGPoint(x: 8, y: (h - i.size.height) / 2)) }
+      (name as NSString).draw(with: CGRect(x: 8 + iw + 5, y: (h - font.lineHeight) / 2, width: tw, height: font.lineHeight), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine], attributes: ta, context: nil)
+    }
+    let at = NSTextAttachment(); at.image = img
+    let body = UIFont.systemFont(ofSize: size)
+    at.bounds = CGRect(x: 0, y: (body.capHeight - h) / 2, width: w, height: h)
+    let s = NSMutableAttributedString(attachment: at)
+    s.addAttributes([FILEREF_KEY: f, .font: body], range: NSRange(location: 0, length: s.length))
+    return s
+  }
+  // the words as plain text (each chip as "📎 name", as the website keeps it)
+  static func plain(_ a: NSAttributedString) -> String {
+    var out = ""
+    a.enumerateAttributes(in: NSRange(location: 0, length: a.length), options: []) { at, r, _ in
+      if let f = at[FILEREF_KEY] as? [String: Any] { out += "📎 " + (f["name"] as? String ?? "File"); return }
+      out += (a.string as NSString).substring(with: r)
+    }
+    return out
+  }
   static func attributed(_ runs: [[String: Any]], done: Bool, size: CGFloat = 17, creator: String? = nil) -> NSAttributedString {
     let out = NSMutableAttributedString()
     for r in runs {
@@ -21,7 +64,7 @@ enum DescEditor {
       if r["s"] != nil { a[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
       if let u = r["user"] as? String { a[MENTION_KEY] = u; a[.foregroundColor] = u == creator ? UIColor.systemOrange : UIColor.systemBlue }   // (the creator: orange)
       if let l = r["link"] as? String, let url = URL(string: l) { a[.link] = url }
-      if let f = r["ref"] as? [String: Any] { a[FILEREF_KEY] = f; a[.foregroundColor] = UIColor.systemBlue }
+      if let f = r["ref"] as? [String: Any] { out.append(chip(f, size: size)); continue }
       out.append(NSAttributedString(string: r["t"] as? String ?? "", attributes: a))
     }
     return out
@@ -133,7 +176,7 @@ extension TaskPage {
     hideMentions()
     descView.resignFirstResponder()
     let html = DescEditor.html(descView.attributedText)
-    let text = descView.text ?? ""
+    let text = DescEditor.plain(descView.attributedText)
     // (a pasted file whose 📎 was deleted again before Done: its card goes too)
     var kept = Set<String>()
     descView.attributedText.enumerateAttribute(FILEREF_KEY, in: NSRange(location: 0, length: descView.attributedText.length)) { v, _, _ in if let p = (v as? [String: Any])?["path"] as? String { kept.insert(p) } }
