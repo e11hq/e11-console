@@ -125,6 +125,9 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
     scroll.contentInsetAdjustmentBehavior = .never
     scroll.keyboardDismissMode = .interactive   // (dragging down takes the keyboard with the finger — rule 5)
     scroll.delegate = self
+    // (a tap on the comments while the keyboard is up closes it, as Messages does — what was tapped still works)
+    let tapAway = UITapGestureRecognizer(target: self, action: #selector(tappedList)); tapAway.cancelsTouchesInView = false
+    scroll.addGestureRecognizer(tapAway)
     addSubview(scroll); scroll.addSubview(content)
     if #available(iOS 26.0, *) { scroll.topEdgeEffect.style = .soft }
     // the ↓ button / "N new comments" pill: glass, just above the comment box
@@ -394,6 +397,7 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
     }
   }
   func has(_ id: String) -> Bool { cells[id] != nil }
+  @objc private func tappedList() { window?.endEditing(true) }
   // Reply (rule 7): the list stays where it is; the replied comment is kept in view above the box
   func keepInView(_ id: String) {
     guard let c = cells[id] else { return }
