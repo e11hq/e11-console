@@ -194,8 +194,11 @@ final class PreviewCell: UICollectionViewCell, UIScrollViewDelegate {
     } else if mode == "pages" {
       let w = b.width - 24
       let h = pagesStack.systemLayoutSizeFitting(CGSize(width: w, height: UIView.layoutFittingCompressedSize.height), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height
-      content.frame = CGRect(x: 0, y: 0, width: b.width, height: h + 220)
-      pagesStack.frame = CGRect(x: 12, y: 110, width: w, height: h)
+      // (pages that fit on the screen sit in its middle, as a photo does — a wide banner was stuck at the top: Haris
+      //  2026-11-02; longer ones scroll from under the top bar)
+      let fits = h + 220 <= b.height
+      content.frame = CGRect(x: 0, y: 0, width: b.width, height: fits ? b.height : h + 220)
+      pagesStack.frame = CGRect(x: 12, y: fits ? (b.height - h) / 2 : 110, width: w, height: h)
       zoomer.contentSize = content.frame.size
     }
   }
