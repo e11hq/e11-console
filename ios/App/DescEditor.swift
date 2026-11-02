@@ -78,14 +78,23 @@ extension TaskPage {
   // (Haris, 2026-11-02)
   private func descBar() -> UIView {
     let bar = UIToolbar(frame: CGRect(x: 0, y: 0, width: 400, height: 44))
-    let items: [(String, String)] = [("bold", "b"), ("italic", "i"), ("underline", "u"), ("list.bullet", "ul"), ("list.number", "ol"), ("at", "@"), ("link", "link")]
+    // (three groups — text, lists, mention and link — each its own glass on iOS 26, so all seven fit with no ••• to
+    //  open; and each has its name, so if iPhone ever does fold some into •••, the list there reads, not bare icons —
+    //  Haris 2026-11-02)
+    let groups: [[(String, String, String)]] = [
+      [("bold", "b", "Bold"), ("italic", "i", "Italic"), ("underline", "u", "Underline")],
+      [("list.bullet", "ul", "Bulleted List"), ("list.number", "ol", "Numbered List")],
+      [("at", "@", "Mention"), ("link", "link", "Link")]]
     var out: [UIBarButtonItem] = []
-    for (sym, k) in items {
-      let b = UIBarButtonItem(image: UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .medium)), primaryAction: UIAction { [weak self] _ in UISelectionFeedbackGenerator().selectionChanged(); self?.format(k) })
-      b.tintColor = .label
-      out.append(b)
+    for (gi, g) in groups.enumerated() {
+      if gi > 0 { out.append(UIBarButtonItem.flexibleSpace()) }
+      for (sym, k, name) in g {
+        let b = UIBarButtonItem(title: name, image: UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .medium)), primaryAction: UIAction(title: name, image: UIImage(systemName: sym)) { [weak self] _ in UISelectionFeedbackGenerator().selectionChanged(); self?.format(k) })
+        b.tintColor = .label
+        b.accessibilityLabel = name
+        out.append(b)
+      }
     }
-    out.append(UIBarButtonItem.flexibleSpace())
     bar.items = out
     bar.sizeToFit()
     return bar

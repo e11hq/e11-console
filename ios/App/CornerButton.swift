@@ -207,8 +207,11 @@ final class CornerButton: UIView {
     }
     if !animated || tiny { now(apply); if m.kind == "none" { now { model.mid = b(m) } }; return }
     // (a button marked to leave the native way is drawn so once before it goes: the change waits for the next frame)
+    // (coming back — out of the task page's •••, or finishing a swipe back — no bounce: with it 🔍 went a point past its
+    //  place and crept back after it seemed to have settled; Haris's film, 2026-11-02 16:46)
+    let bounce: CGFloat = (outOfCorner || fromSwipe) ? 0 : CornerButton.bounce
     let spring = {
-      if #available(iOS 17.0, *) { withAnimation(.spring(duration: CornerButton.duration, bounce: CornerButton.bounce)) { apply() } }
+      if #available(iOS 17.0, *) { withAnimation(.spring(duration: CornerButton.duration, bounce: bounce)) { apply() } }
       else { withAnimation(.spring(response: CornerButton.duration, dampingFraction: 0.78)) { apply() } }
       // (the icon's own fade starts after the change itself — started before a change that waits a frame, it was undone
       //  by it, and 🔍 stayed empty until something else drew it: very late, Haris 2026-11-02)
