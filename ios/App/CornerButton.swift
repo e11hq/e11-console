@@ -204,11 +204,13 @@ final class CornerButton: UIView {
     let spring = {
       if #available(iOS 17.0, *) { withAnimation(.spring(duration: CornerButton.duration, bounce: CornerButton.bounce)) { apply() } }
       else { withAnimation(.spring(response: CornerButton.duration, dampingFraction: 0.78)) { apply() } }
+      // (the icon's own fade starts after the change itself — started before a change that waits a frame, it was undone
+      //  by it, and 🔍 stayed empty until something else drew it: very late, Haris 2026-11-02)
+      if outOfCorner { withAnimation(.easeOut(duration: 0.22).delay(0.16)) { self.model.mid.icon = 1 } }
+      // (after a swipe: the icon finishes fading in on its own, after the glass — not at once with the spring)
+      if fromSwipe && m.kind == "search" && iconWas < 1 { withAnimation(.easeOut(duration: 0.25).delay(0.08)) { self.model.mid.icon = 1 } }
     }
     if marked { DispatchQueue.main.async(execute: spring) } else { spring() }
-    if outOfCorner { withAnimation(.easeOut(duration: 0.22).delay(0.2)) { model.mid.icon = 1 } }
-    // (after a swipe: the icon finishes fading in on its own, after the glass — not at once with the spring)
-    if fromSwipe && m.kind == "search" && iconWas < 1 { withAnimation(.easeOut(duration: 0.25).delay(0.08)) { model.mid.icon = 1 } }
     if m.kind == "none" && was.1.kind == "search" && c.kind != "none" {
       DispatchQueue.main.asyncAfter(deadline: .now() + CornerButton.duration) { [weak self] in guard let self = self, self.mid.kind == "none" else { return }; self.now { self.model.mid = self.b(self.mid) } }
     }
