@@ -213,6 +213,14 @@ test('files pasted into a description or a comment (the website\'s 📎 chips) c
   assert.deepEqual(m.descRuns.filter((x) => /deck\.pdf/.test(x.t)).map((x) => [x.t, x.ref && x.ref.path]), [['📎 deck.pdf', 'attachments/t1/deck.pdf']], JSON.stringify(m.descRuns));
 });
 
+test('a file of another task, pasted into a description, is added to this task\'s files too (the same file)', async () => {
+  const r = await act('am@e11-digital.com', { act: 'attach', id: 't3', files: [{ name: 'deck.pdf', path: 'attachments/t1/deck.pdf' }, { name: 'x', path: 'attachments/nope/secret.pdf' }] });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  const got = T('t3').attachments.filter((a) => a.path === 'attachments/t1/deck.pdf');
+  assert.equal(got.length, 1); assert.equal(got[0].size, 500);
+  assert.ok(!T('t3').attachments.some((a) => a.path === 'attachments/nope/secret.pdf'), 'only files this person can already see');
+});
+
 test('writing a comment, a reply with a mention, a voice message; editing', async () => {
   let r = await act('prod@e11-digital.com', { act: 'comment', id: 't3', html: 'Done <b>now</b>', text: 'Done now' });
   assert.equal(r.ok, true); const c = T('t3').comments.at(-1); assert.equal(c.html, 'Done <b>now</b>'); assert.equal(c.authorId, 'u-prod');

@@ -1004,8 +1004,12 @@ var E11Rules = (() => {
     }
     // files attached on the phone (app.js attachFiles): on the task, logged, the people on it told
     function attachFilesTo(t, files) {
-      const list = (files || []).filter((f) => f && f.path && String(f.path).startsWith(`attachments/${t.id}/`)).slice(0, 30)
-        .map((f) => ({ id: newId(), name: String(f.name || 'File').slice(0, 200), size: Number(f.size) || 0, path: String(f.path), type: String(f.type || ''), addedAt: nowISO(), addedBy: meId }));
+      // (a file of another task's, or from Client Assets, that this person can already see — pasted into the description:
+      //  added here too, the same file, nothing copied; Haris 2026-11-02 — as a comment does)
+      const have = new Set((t.attachments || []).map((a) => a.path));
+      const list = (files || []).filter((f) => f && f.path && !have.has(String(f.path)) && (String(f.path).startsWith(`attachments/${t.id}/`) || knownFile(String(f.path)))).slice(0, 30)
+        .map((f) => { const k = String(f.path).startsWith(`attachments/${t.id}/`) ? null : knownFile(String(f.path));
+          return { id: newId(), name: String(f.name || (k && k.name) || 'File').slice(0, 200), size: Number(f.size) || (k && k.size) || 0, path: String(f.path), type: String(f.type || (k && k.type) || ''), ...(k && k.thumb ? { thumb: k.thumb } : {}), addedAt: nowISO(), addedBy: meId }; });
       if (!list.length) return { error: 'No files' };
       t.attachments = (t.attachments || []).concat(list);
       const what = list.length === 1 ? `<b>${esc(list[0].name)}</b>` : list.length + ' files';
