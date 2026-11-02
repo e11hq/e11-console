@@ -92,7 +92,14 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     t.textContainerInset = .zero; t.textContainer.lineFragmentPadding = 0; t.dataDetectorTypes = [.link]
     return t
   }()
-  var editingDesc = false, descEmpty = true
+  // (while the description is being written, nothing else on the page answers a tap — only Done ends it: Haris,
+  //  2026-11-02)
+  var editingDesc = false { didSet { if oldValue != editingDesc { holdForDesc() } } }
+  var descEmpty = true
+  private func holdForDesc() {
+    for b in blocks { b.isUserInteractionEnabled = !editingDesc || b === descBox }
+    seg.isEnabled = !editingDesc
+  }
   let mentionBox = UIStackView()
   var onCornerChange: (() -> Void)?
   var onSubmitFiles: ((String) -> Void)?
@@ -598,6 +605,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private func layoutContent() {
     let W = bounds.width, M = TaskPage.M
     placeBands()
+    holdForDesc()
     var y: CGFloat = 4
     for (k, b) in blocks.enumerated() {
       // (rows and bands go right across; the files row from the page edge to the screen's; the rest on the page edge)
