@@ -654,6 +654,47 @@ final class MemberHead: UIView, HomeBlock {
   }
 }
 
+// My profile's top: your photo (or initials), Change photo (blue) and Remove (red), as iPhone's own
+final class ProfileHead: UIView, HomeBlock {
+  private let pic = UIImageView(), change = UIButton(type: .system), remove = UIButton(type: .system)
+  private var photoPath: String?, ini = "", hasPhoto = false
+  var onChange: (() -> Void)?, onRemove: (() -> Void)?
+  override init(frame: CGRect) {
+    super.init(frame: frame)
+    pic.layer.cornerRadius = 48; pic.clipsToBounds = true
+    change.titleLabel?.font = .systemFont(ofSize: 16); remove.titleLabel?.font = .systemFont(ofSize: 16)
+    remove.setTitle("Remove", for: .normal); remove.tintColor = .systemRed
+    change.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.onChange?() }, for: .touchUpInside)
+    remove.addAction(UIAction { [weak self] _ in self?.onRemove?() }, for: .touchUpInside)
+    [pic, change, remove].forEach { addSubview($0) }
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  func set(_ p: [String: Any], look L: HomeLook) {
+    hasPhoto = (p["hasPhoto"] as? Bool) == true
+    UIView.performWithoutAnimation { change.setTitle(hasPhoto ? "Change photo" : "Add photo", for: .normal); change.layoutIfNeeded() }
+    change.tintColor = .systemBlue
+    remove.isHidden = !hasPhoto
+    let i = p["ini"] as? String ?? "", rgb = NativeSheetVC.color(p["rgb"]) ?? .systemGray
+    let ph = p["photo"] as? String
+    if ph != photoPath || i != ini || pic.image == nil {
+      photoPath = ph; ini = i
+      pic.image = roundPic(nil, initials: i, color: rgb, size: 96)
+      if let path = ph { FeedLoader.shared.image(path) { [weak self] img in guard let self = self, self.photoPath == path, let img = img else { return }; self.pic.image = roundPic(img, initials: nil, color: nil, size: 96) } }
+    }
+    setNeedsLayout()
+  }
+  func blockHeight(_ W: CGFloat) -> CGFloat { 8 + 96 + 6 + 34 + 4 }
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    let W = bounds.width
+    pic.frame = CGRect(x: (W - 96) / 2, y: 8, width: 96, height: 96)
+    let cw = ceil(change.sizeThatFits(CGSize(width: 200, height: 34)).width), rw = remove.isHidden ? 0 : ceil(remove.sizeThatFits(CGSize(width: 200, height: 34)).width)
+    let gap: CGFloat = remove.isHidden ? 0 : 24, x = (W - cw - gap - rw) / 2
+    change.frame = CGRect(x: x, y: 110, width: cw, height: 34)
+    remove.frame = CGRect(x: x + cw + gap, y: 110, width: rw, height: 34)
+  }
+}
+
 // ---------- the screens ----------
 
 // (a tap anywhere but in a text box puts the keyboard away)
@@ -789,6 +830,7 @@ final class MeCtl {
     guard !leaving else { return }
     if kind == "team" { teamTab = 0; teamQ = ""; send(["ev": "team", "on": true]) }
     if kind == "about" { send(["ev": "about"]) }
+    if kind == "profile" { send(["ev": "pf", "on": true]) }
     push(screen(kind, id), animated: true)
   }
   private func push(_ s: Screen, animated: Bool) {
@@ -817,6 +859,7 @@ final class MeCtl {
       if let i = self.stack.firstIndex(where: { $0.h === s.h }) { self.stack.remove(at: i) }
       self.leaving = false
       if s.kind == "team", !self.stack.contains(where: { $0.kind == "team" }) { self.send(["ev": "team", "on": false]) }
+      if s.kind == "profile" { self.send(["ev": "pf", "on": false]) }
       if let t = self.stack.last { self.draw(t) }
       self.main.edgePanOn(); self.main.updateCorner()
     }
@@ -835,6 +878,7 @@ final class MeCtl {
     let root = stack[0]
     let gone = stack.dropFirst()
     if gone.contains(where: { $0.kind == "team" }) { send(["ev": "team", "on": false]) }
+    if gone.contains(where: { $0.kind == "profile" }) { send(["ev": "pf", "on": false]) }
     gone.forEach { $0.h.removeFromSuperview() }
     stack = [root]
     root.h.isHidden = false; root.h.transform = CGAffineTransform(translationX: -W * 0.3, y: 0)
@@ -848,6 +892,7 @@ final class MeCtl {
   func rootUnder() -> UIView? {
     guard let root = stack.first else { return nil }
     if stack.dropFirst().contains(where: { $0.kind == "team" }) { send(["ev": "team", "on": false]) }
+    if stack.dropFirst().contains(where: { $0.kind == "profile" }) { send(["ev": "pf", "on": false]) }
     stack.dropFirst().forEach { $0.h.removeFromSuperview() }
     stack = [root]
     root.h.transform = .identity
@@ -899,7 +944,8 @@ final class MeCtl {
     if let h = h { for v in h.assetsParts.values { if let g = v as? SetGroup, !g.isEmpty { rows += 1 } } }
     let parts: Int = h?.assetsParts.count ?? 0
     let card: Bool = model["card"] != nil
-    return ["open": isOpen, "screens": stack.count, "kind": kind, "parts": parts, "shown": shown != nil, "corner": corner, "people": people, "rows": rows, "card": card]
+    let profile: Bool = model["profile"] is [String: Any]
+    return ["open": isOpen, "screens": stack.count, "kind": kind, "parts": parts, "shown": shown != nil, "corner": corner, "people": people, "rows": rows, "card": card, "profile": profile]
   }
   func refresh() { if isOpen { main.pageJS("window.__e11MeResend && window.__e11MeResend()"); if stack.contains(where: { $0.kind == "about" }) { send(["ev": "about"]) } } }
 
@@ -933,7 +979,7 @@ final class MeCtl {
       if let c = model["card"] as? [String: Any] {
         let card = part(h, "card") { MeCardBlock() }
         card.set(c, look: L)
-        card.onTap = { [weak self] in self?.send(["ev": "profile"]) }
+        card.onTap = { [weak self] in self?.open("profile") }   // (the app's own My profile, 2026-11-03)
         out.append(card)
       } else { let n = part(h, "wait") { AssetsNote() }; n.label.text = "Loading…"; out.append(n) }
       let work = ((model["work"] as? [[String: Any]]) ?? []).map { w -> SetItem in
@@ -1047,6 +1093,8 @@ final class MeCtl {
         out.append(group(h, "s\(i)", sec.2.enumerated().map { j, r in SetItem(key: "\(i).\(j)", title: r.0, sub: r.1, sym: r.3, col: r.4, chevron: false, pill: r.2) }))
       }
       out.append(foot(h, "end", "Only in the iPhone app."))
+    case "profile":
+      profileBlocks(h, &out)
     case "team":
       teamBlocks(h, &out)
     case "member":
@@ -1118,6 +1166,64 @@ final class MeCtl {
     guide.set((t["guide"] as? [[Any]]) ?? [], look: h.look)
     out.append(guide)
     if admin { h.setFab("Add member", "plus", { [weak self] in self?.send(["ev": "addMember"]) }) }
+  }
+  // My profile (the locked mockup, Haris 2026-11-03): the photo, ABOUT YOU, ROLE, NOTIFICATIONS, NOTIFY ME ABOUT, the
+  // CD's own, Owner view (the owner, live site). Everything is saved as it changes — no Save button.
+  private func profileBlocks(_ h: HomeView, _ out: inout [UIView]) {
+    h.drawAssetsBar(name: "My profile", sub: "", logo: nil, rgb: nil, ini: nil, showLogo: false)
+    guard let p = model["profile"] as? [String: Any] else { let n = part(h, "wait") { AssetsNote() }; n.label.text = "Loading…"; out.append(n); return }
+    let top = part(h, "photo") { ProfileHead() }
+    top.set(p, look: h.look)
+    top.onChange = { [weak self] in self?.send(["ev": "pfPhoto"]) }
+    top.onRemove = { [weak self] in self?.send(["ev": "pfPhotoOff"]) }
+    out.append(top)
+    let v: (String) -> String = { k in p[k] as? String ?? "" }
+    let none = "Not set"
+    var mail = SetItem(key: "email", title: "Email", value: v("email"), chevron: false)
+    mail.tap = { [weak h] in UIPasteboard.general.string = v("email"); h?.toast(["t": "Email copied"]) }
+    out.append(head(h, "you", "About you"))
+    out.append(group(h, "you", [
+      SetItem(key: "name", title: "Name", value: v("name").isEmpty ? none : v("name"), tap: { [weak self] in self?.send(["ev": "pfName"]) }),
+      mail,
+      SetItem(key: "country", title: "Country", value: v("country").isEmpty ? none : v("country"), tap: { [weak self] in self?.send(["ev": "pfCountry"]) }),
+      SetItem(key: "city", title: "City", value: v("city").isEmpty ? none : v("city"), tap: { [weak self] in self?.send(["ev": "pfCity"]) }),
+      SetItem(key: "bday", title: "Birthday", value: v("bday").isEmpty ? "Optional" : v("bday"), tap: { [weak self] in self?.send(["ev": "pfBday"]) }),
+    ]))
+    out.append(foot(h, "you", "Your email can’t be changed here. People see your role and city when they look at your name. Your birthday stays private: on the day, the team is told it’s your birthday."))
+    let pills: [(String, UIColor)] = ((p["pills"] as? [[String: Any]]) ?? []).map { ($0["t"] as? String ?? "", NativeSheetVC.color($0["c"]) ?? .systemGray) }
+    out.append(head(h, "role", "Role"))
+    out.append(group(h, "role", [SetItem(key: "role", title: "Your role", chevron: false, pills: pills)]))
+    out.append(foot(h, "role", "Only Admins change roles and rights, in Team members."))
+    out.append(head(h, "nt", "Notifications"))
+    out.append(group(h, "nt", [
+      SetItem(key: "sound", title: "Sound", sub: "Play a sound with new notifications", sym: "speaker.wave.2.fill", col: .systemPink, toggle: (p["sound"] as? Bool) != false, flip: { [weak self] _ in self?.send(["ev": "pfSound"]) }),
+      SetItem(key: "test", title: "Send a test notification", sub: "See and hear what one looks like", sym: "bell.badge.fill", col: .systemRed, tap: { [weak self] in self?.send(["ev": "pfTest"]) }),
+    ]))
+    let kinds: ([[String: Any]], String) -> [SetItem] = { list, tag in list.map { x -> SetItem in
+      let k = x["k"] as? String ?? ""
+      return SetItem(key: tag + k, title: x["t"] as? String ?? "", sub: x["s"] as? String ?? "", toggle: (x["on"] as? Bool) == true, flip: { [weak self] _ in self?.send(["ev": "pfNotif", "k": k]) })
+    } }
+    out.append(head(h, "about", "Notify me about"))
+    out.append(group(h, "about", kinds((p["notify"] as? [[String: Any]]) ?? [], "n.")))
+    out.append(foot(h, "about", "You’re notified about tasks you’re assigned to or created. Remove yourself from a task to stop getting its updates."))
+    if let cd = p["cd"] as? [String: Any] {
+      out.append(head(h, "cd", "As " + (cd["title"] as? String ?? "Creative Director")))
+      out.append(group(h, "cd", kinds((cd["types"] as? [[String: Any]]) ?? [], "c.")))
+    }
+    if let ov = p["owner"] as? [String: Any] {
+      let on = (ov["on"] as? Bool) == true, look = (ov["look"] as? Bool) == true
+      var rows: [SetItem] = []
+      if !on { rows.append(SetItem(key: "ovIn", title: "Step in as Admin", sub: "Look only to start", sym: "shield.lefthalf.filled", col: .systemIndigo, tap: { [weak self] in self?.send(["ev": "pfOwner", "mode": "look"]) })) }
+      else {
+        rows.append(SetItem(key: "ovNow", title: "Owner view is on", value: look ? "Look only" : "Changes allowed", sym: "shield.lefthalf.filled", col: .systemIndigo, chevron: false))
+        rows.append(look ? SetItem(key: "ovEdit", title: "Allow changes", sym: "pencil", col: .systemOrange, tap: { [weak self] in self?.send(["ev": "pfOwner", "mode": "edit"]) })
+                         : SetItem(key: "ovLook", title: "Look only", sym: "eye.fill", col: .systemTeal, tap: { [weak self] in self?.send(["ev": "pfOwner", "mode": "look"]) }))
+        rows.append(SetItem(key: "ovOff", title: "Back to Production", chevron: false, danger: true, tap: { [weak self] in self?.send(["ev": "pfOwner", "mode": "off"]) }))
+      }
+      out.append(head(h, "ov", "Owner view"))
+      out.append(group(h, "ov", rows))
+      out.append(foot(h, "ov", on ? "On this device only. It ends after 15 minutes without use, or when the app reloads." : "Admin rights and Finance Admin on this device only. Nobody is told and your role stays the same for everyone. It starts look only — nothing can be changed until you choose Allow changes."))
+    }
   }
   private func person(_ id: String) -> [String: Any]? {
     let t = team

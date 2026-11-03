@@ -2981,7 +2981,7 @@ const NativeAssets = (() => {
    whenever what's on Me changes. NATIVE_ME = false: the page's own Me again (no app build needed). */
 const NATIVE_ME = true;
 const NativeMe = (() => {
-  let on = false, last = '', shown = false, wantTeam = false, toastAction = null;
+  let on = false, last = '', shown = false, wantTeam = false, wantProfile = false, toastAction = null;
   if (NATIVE_ME && window.__e11CommentsOnly !== true && typeof Host !== 'undefined' && Host.isIOSApp) {
     NativeMac.call('appInfo').then((r) => { on = Number(r && r.shell) >= 33; if (on) { setInterval(sync, 350); sync(); } }).catch(() => {});
   }
@@ -3018,7 +3018,53 @@ const NativeMe = (() => {
       test: viewAs || (isTestCopy() && AppIcon.isOwner()) ? { viewAs, viewing: ViewAs.viewing() ? (fullName(userById(currentUserId)) || 'someone') : null, sample: isTestCopy() && AppIcon.isOwner() && !ViewAs.viewing() } : null,
       version: Host.isServer && Sync.version ? `E11 Console ${Sync.version}` : '',
       team: wantTeam ? teamModel() : null,
+      profile: wantProfile ? profileModel() : null,
     };
+  }
+  // My profile (the app's own, 2026-11-03 — the locked mockup): what the website's My profile shows on the phone —
+  // photo, name, email (locked), country, city, birthday, the role's pills, Sound, Send test, what to be notified about,
+  // the CD's own, and Owner view (the owner, live site only). Not here: the Mac app icon, seasonal decorations,
+  // Appearance (its own page), Announcement and My reimbursements (website), the morning summary's test (Me's row).
+  function profileModel() {
+    const u = me(), off = (u.prefs || {}).notifOff || {};
+    const pills = [{ t: roleOf(u), c: u.role === 'admin' || u.role === 'office_admin' ? [255, 149, 0] : [10, 132, 255] }];
+    if (u.admin && u.role !== 'admin') pills.push({ t: '+ Admin', c: [255, 149, 0] });
+    if (u.fin && !isFinUser(u)) pills.push({ t: '+ ' + FIN_ACCESS[u.fin], c: [52, 199, 89] });
+    if (u.id === cdUserId()) pills.push({ t: cdTitle(), c: [175, 82, 222] });
+    const types = (cd) => NOTIF_TYPES.filter((x) => !!x.cd === cd && (!x.lead || Daily.wants(u))).map((x) => ({ k: x.k, t: x.l, s: x.d, on: !off[x.k] }));
+    const ov = typeof OwnerView !== 'undefined' && OwnerView.canUse() ? { on: OwnerView.on(), look: OwnerView.lookOnly() } : null;
+    return {
+      photo: photoOf(u), ini: initials(fullName(u)), rgb: rgb(avColor(u.id)), hasPhoto: !!u.avatar,
+      name: u.name || '', email: u.email || '', country: u.country || '', city: u.city || '', bday: u.bday ? fmtMD(u.bday) : '',
+      pills, sound: (u.prefs || {}).sound !== false, notify: types(false), cd: u.id === cdUserId() ? { title: cdTitle(), types: types(true) } : null, owner: ov,
+    };
+  }
+  const saveMe = (fn) => { const u = me(); fn(u); persist(0); sync(); };
+  // a list in iPhone's own sheet with a search box (the website's own pickPlace / the birthday picker, without the page's fields)
+  function sheet(items, opts) { const a = document.createElement('span'); a.style.cssText = 'position:fixed;left:50%;top:40%'; document.body.appendChild(a); try { showMenu(a, items, { native: 14, ...opts }); } finally { setTimeout(() => a.remove(), 0); } }
+  function pickPlace(kind) {
+    const u = me(), cur = (kind === 'country' ? u.country : u.city) || '';
+    const all = kind === 'country' ? E11_PLACES.COUNTRIES : E11_PLACES.cities(u.country || '');
+    const set = (v) => saveMe((x) => { if (kind === 'country') { if (v !== (x.country || '')) x.city = ''; x.country = v; } else x.city = v; });
+    sheet([...(cur ? [{ label: 'Not set', icon: 'x', run: () => set('') }, '-'] : []), ...all.map((x) => ({ label: x, checked: x === cur, find: x, run: () => set(x) }))],
+      { search: kind === 'country' ? 'Search countries' : all.length ? 'Search or type your city' : 'Type your city', custom: kind === 'city' ? 'Use “%@”' : null,
+        empty: kind === 'country' ? 'No country matches “%@”' : 'Type the name of your city', onCustom: (v) => set(v) });
+  }
+  function pickBday() {
+    const u = me(), cur = /^(\d{2})-(\d{2})$/.exec(u.bday || '');
+    const day = (m) => { const n = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1];
+      sheet(Array.from({ length: n }, (_, i) => ({ label: `${i + 1} ${MONTH_NAMES[m - 1]}`, checked: !!cur && +cur[1] === m && +cur[2] === i + 1, run: () => saveMe((x) => { x.bday = `${String(m).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`; }) })), { title: MONTH_NAMES[m - 1] }); };
+    sheet([...(cur ? [{ label: 'Not set', icon: 'x', run: () => saveMe((x) => { x.bday = null; }) }, '-'] : []), ...MONTH_NAMES.map((n, i) => ({ label: n, checked: !!cur && +cur[1] === i + 1, run: () => setTimeout(() => day(i + 1), 350) }))], { title: 'Your birthday · day and month' });
+  }
+  async function editName() {
+    const v = await formDialog({ title: 'Full name', fields: [{ key: 'name', label: 'Full name', value: me().name || '', placeholder: 'Your full name' }], okText: 'Save', validate: (x) => (x.name ? null : 'Please enter your name') });
+    if (v && v.name) { saveMe((u) => { u.name = v.name; }); toast('Name saved'); }
+  }
+  async function removePhoto() {
+    const ok = await dialog({ title: 'Remove your photo?', body: 'Your initials show instead.', okText: 'Remove', danger: true });
+    if (!ok) return;
+    const u = me(); if (u.avatar) Host.call('trashPath', { path: u.avatar }).catch(() => {});
+    saveMe((x) => { x.avatar = null; });
   }
   // Team members: as the website's Team page — by role, Active / Past, the extras as small pills
   const GROUPS = [['admin', 'Super Admins'], ['office_admin', 'Office Admins'], ['am', 'Account Managers'], ['production', 'Production'], ['social', 'Social'], ['freelancer', 'Freelancers'], ['finance', 'Finance only']];
@@ -3146,6 +3192,17 @@ const NativeMe = (() => {
         case 'sample': resetSampleData(); return;
         case 'signOut': dialog({ title: 'Sign out?', body: window.E11_REVIEW ? 'You’ll need the App Review password to sign in again.' : 'You’ll need the code from your email to sign in again.', okText: 'Sign out', danger: true }).then((ok) => { if (ok) signOut(); }); return;
         case 'team': wantTeam = !!ev.on; sync(); return;
+        case 'pf': wantProfile = !!ev.on; sync(); return;
+        case 'pfPhoto': changePhoto().then(() => sync()); return;
+        case 'pfPhotoOff': removePhoto(); return;
+        case 'pfName': editName(); return;
+        case 'pfCountry': pickPlace('country'); return;
+        case 'pfCity': pickPlace('city'); return;
+        case 'pfBday': pickBday(); return;
+        case 'pfSound': saveMe((u) => { u.prefs = u.prefs || {}; u.prefs.sound = u.prefs.sound === false; }); return;
+        case 'pfNotif': press({ 'data-action': 'toggle-notif-type', 'data-k': String(ev.k || '') }); sync(); return;
+        case 'pfTest': press({ 'data-action': 'test-notif' }); return;
+        case 'pfOwner': press({ 'data-ov': ev.mode === 'off' ? 'off' : ev.mode === 'edit' ? 'edit' : 'look' }); setTimeout(sync, 600); return;
         case 'about': loadAbout(!!ev.fresh); return;
         case 'update': updateNow(); return;
         case 'videoCheck': loadVideo(true); return;

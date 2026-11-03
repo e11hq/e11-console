@@ -69,5 +69,5 @@ const OwnerView = (() => {
     if (Date.now() - last > IDLE) { set(null).then(() => toast('Owner view ended (15 min idle)')); return; }
     if (Date.now() - lastPing > 4 * 60000 && Date.now() - last < 4 * 60000) { lastPing = Date.now(); api('POST', '/api/owner-view', { mode }).catch(() => {}); }
   }, 20000);
-  return { init, on, lookOnly, blocked, card, set };
+  return { init, on, lookOnly, blocked, card, set, canUse: () => can };
 })();

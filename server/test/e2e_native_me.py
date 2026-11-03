@@ -43,6 +43,19 @@ async def main():
         check(len(you) == 1 and you[0]['email'] == ADMIN, 'you are marked')
         cd = [p for p in everyone if any(x['t'] in ('Creative Director', 'Acting CD') for x in p['pills'])]
         check(len(cd) <= 1 and all(p['cd'] for p in everyone), f"the Creative Director's pill, and the CD switch for an Admin {[p['name'] for p in cd]}")
+        # My profile (the app's own): its model only while its page is open; the switches save at once
+        check((await E("NativeMe.peek()"))['profile'] is None, 'no profile until its page is open')
+        await E("window.__e11Me({ ev: 'pf', on: true })")
+        pf = (await E("NativeMe.peek()"))['profile']
+        check(pf and pf['email'] and pf['pills'] and len(pf['notify']) >= 8 and 'sound' in pf and 'owner' in pf, f"My profile: email, role pills, Sound, what to be notified about {pf and {k: pf[k] for k in ('email', 'pills', 'sound')}}")
+        k0 = pf['notify'][0]['k']; on0 = pf['notify'][0]['on']
+        await E(f"window.__e11Me({{ ev: 'pfNotif', k: '{k0}' }})")
+        pf2 = (await E("NativeMe.peek()"))['profile']
+        check(pf2['notify'][0]['on'] is (not on0), f"a notification kind switched, saved at once ({k0})")
+        await E(f"window.__e11Me({{ ev: 'pfNotif', k: '{k0}' }})")
+        s0 = pf['sound']; await E("window.__e11Me({ ev: 'pfSound' })")
+        check((await E("NativeMe.peek()"))['profile']['sound'] is (not s0), 'Sound switched'); await E("window.__e11Me({ ev: 'pfSound' })")
+        await E("window.__e11Me({ ev: 'pf', on: false })")
         # theme
         await E("window.__e11Me({ ev: 'theme', mode: 'light' })")
         check((await E("Theme.mode()")) == 'light', 'Appearance: Light chosen')
