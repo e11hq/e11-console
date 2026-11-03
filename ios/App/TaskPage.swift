@@ -435,9 +435,19 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // (while the description is being written nothing is redrawn under the finger: done, it catches up)
     if editingDesc || titleView.isFirstResponder { return }
     built = sig
-    rebuild()
-    setNeedsLayout()
+    // (built and laid out with no animation at all — drawn while something else animates (a sheet going, the app coming
+    //  back), every new row was carried along and grew from nothing: the rows sliding. Haris's reading, 2026-11-03.
+    //  Then only the page's own change animation, from where things were.)
+    pendingBefore = nil
+    UIView.performWithoutAnimation {
+      CATransaction.begin(); CATransaction.setDisableActions(true)
+      rebuild()
+      setNeedsLayout(); layoutIfNeeded()
+      CATransaction.commit()
+    }
+    if let b = pendingBefore { pendingBefore = nil; animateFrom(b) }
   }
+  private var pendingBefore: [String: Kept]?
   // (only drawn again when someone's picture or name really changed — photos arriving again and again redrew the whole
   //  page each time, the Files row and the lock note jumping by themselves; Haris 2026-11-02)
   func peopleChanged(_ p: [String: [String: Any]]) {
@@ -521,7 +531,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     //  animating them slid the rows down as the page opened, Haris 2026-11-02)
     let live = window != nil && drawnOnce && !isHidden && Date().timeIntervalSince(openedAt) > 0.8
     let before = live ? pageSnapshot() : [:]
-    defer { drawnOnce = true; if live { animateFrom(before) } }
+    defer { drawnOnce = true; if live { pendingBefore = before } }
     let keepY = scroll.contentOffset.y
     let typing = titleView.isFirstResponder
     blocks.forEach { if $0 !== titleView { $0.removeFromSuperview() } }
