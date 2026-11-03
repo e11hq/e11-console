@@ -149,8 +149,7 @@ final class AssetsStrip: UIView, HomeBlock {
   // (the fade on a frame that doesn't scroll: on the row itself it moved away with it and hid every folder after the
   //  third, Haris 2026-11-02)
   private let clip = UIView()
-  private var tiles: [UIControl] = []
-  private var key = ""
+  private var tiles: [UIControl] = [], made: [String: (UIControl, String)] = [:]
   override init(frame: CGRect) {
     super.init(frame: frame)
     accessibilityIdentifier = "assets"
@@ -167,12 +166,16 @@ final class AssetsStrip: UIView, HomeBlock {
     [head, all, clip].forEach { addSubview($0) }
   }
   required init?(coder: NSCoder) { fatalError() }
+  // (each folder kept while it shows the same — only a changed one is made again: the rule for every screen of the app's)
   func set(_ folders: [[String: Any]], look L: HomeLook) {
-    let k = folders.map { "\($0["id"] ?? "")|\($0["name"] ?? "")|\($0["files"] ?? 0)" }.joined(separator: ",") + "|\(L.light)"
-    if k == key { return }
-    key = k
-    tiles.forEach { $0.removeFromSuperview() }
+    var keep = made; made = [:]
     tiles = folders.map { f in
+      let fid = f["id"] as? String ?? ""
+      let sig = "\(f["name"] ?? "")|\(f["files"] ?? 0)|\(f["rgb"] ?? "")|\(L.light)"
+      if let k = keep.removeValue(forKey: fid) {
+        if k.1 == sig { made[fid] = k; return k.0 }
+        k.0.removeFromSuperview()
+      }
       let t = UIControl(); t.backgroundColor = L.card; t.layer.cornerRadius = 20; t.layer.cornerCurve = .continuous
       let col = NativeSheetVC.color(f["rgb"]) ?? .systemBlue
       let ic = UIImageView(image: UIImage(systemName: "folder.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 26, weight: .regular))); ic.tintColor = col; ic.contentMode = .left
@@ -186,8 +189,10 @@ final class AssetsStrip: UIView, HomeBlock {
       _ = PressShrink.add(to: t)
       t.isAccessibilityElement = true; t.accessibilityLabel = "\(f["name"] as? String ?? "Folder"), \(c) files"; t.accessibilityTraits = .button
       scroll.addSubview(t)
+      made[fid] = (t, sig)
       return t
     }
+    keep.values.forEach { $0.0.removeFromSuperview() }
     setNeedsLayout()
   }
   func blockHeight(_ W: CGFloat) -> CGFloat { tiles.isEmpty ? 40 : 40 + 96 + 4 }

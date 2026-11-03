@@ -123,13 +123,17 @@ class AssetTile: UIControl {
 // the clients: two columns of cards — a big logo area (its logo, or its colour with initials), name, "6 folders · 48 files"
 final class ClientCards: UIView, HomeBlock {
   var onOpen: ((String) -> Void)?
-  private var tiles: [AssetTile] = [], key = ""
+  private var tiles: [AssetTile] = [], made: [String: (AssetTile, String)] = [:]
+  // (each card kept while it shows the same — only a changed one is made again: the rule for every screen of the app's)
   func set(_ list: [[String: Any]], look L: HomeLook) {
-    let k = list.map { "\($0["id"] ?? "")|\($0["name"] ?? "")|\($0["sub"] ?? "")|\($0["logo"] ?? "")" }.joined(separator: ",") + "\(L.light)"
-    if k == key { return }
-    key = k
-    tiles.forEach { $0.removeFromSuperview() }
+    var keep = made; made = [:]
     tiles = list.map { c in
+      let id = c["id"] as? String ?? ""
+      let sig = "\(c["name"] ?? "")|\(c["sub"] ?? "")|\(c["logo"] ?? "")|\(c["rgb"] ?? "")|\(L.light)"
+      if let k = keep.removeValue(forKey: id) {
+        if k.1 == sig { made[id] = k; return k.0 }
+        k.0.removeFromSuperview()
+      }
       let t = AssetTile(); t.backgroundColor = L.card; t.layer.cornerRadius = 24; t.layer.cornerCurve = .continuous
       let logo = UIImageView(); logo.layer.cornerRadius = 16; logo.layer.cornerCurve = .continuous; logo.clipsToBounds = true; logo.contentMode = .scaleAspectFit
       logo.backgroundColor = NativeSheetVC.color(c["rgb"]) ?? .systemBlue; logo.tag = 1
@@ -139,13 +143,14 @@ final class ClientCards: UIView, HomeBlock {
       let s = UILabel(); s.text = c["sub"] as? String; s.font = .systemFont(ofSize: 13); s.textColor = .secondaryLabel; s.tag = 4
       [logo, n, s].forEach { $0.isUserInteractionEnabled = false; t.addSubview($0) }
       if let p = c["logo"] as? String { FeedLoader.shared.image(p) { [weak logo, weak ini] i in guard let i = i else { return }; logo?.image = i; logo?.backgroundColor = .white; ini?.isHidden = true } }
-      let id = c["id"] as? String ?? ""
       t.onTap = { [weak self] in self?.onOpen?(id) }
       t.accessibilityLabel = "\(c["name"] as? String ?? ""), \(c["sub"] as? String ?? "")"
       _ = PressShrink.add(to: t)
       addSubview(t)
+      made[id] = (t, sig)
       return t
     }
+    keep.values.forEach { $0.0.removeFromSuperview() }
     setNeedsLayout()
   }
   private func side(_ W: CGFloat) -> CGFloat { (W - 32 - 12) / 2 }
@@ -169,18 +174,22 @@ final class ClientCards: UIView, HomeBlock {
 final class FolderTiles: UIView, HomeBlock {
   var onOpen: ((String) -> Void)?
   var menu: (([String: Any]) -> UIMenu?)?
-  private var tiles: [AssetTile] = [], key = ""
+  private var tiles: [AssetTile] = [], made: [String: (AssetTile, String)] = [:]
   static func meta(_ f: [String: Any]) -> String {
     let s = f["subs"] as? Int ?? 0, n = f["files"] as? Int ?? 0
     let bits = [s > 0 ? "\(s) folder\(s == 1 ? "" : "s")" : "", n > 0 ? "\(n) file\(n == 1 ? "" : "s")" : ""].filter { !$0.isEmpty }
     return bits.isEmpty ? "Empty" : bits.joined(separator: " · ")
   }
+  // (each folder kept while it shows the same — only a changed one is made again)
   func set(_ list: [[String: Any]], look L: HomeLook) {
-    let k = list.map { "\($0["id"] ?? "")|\($0["name"] ?? "")|\(FolderTiles.meta($0))" }.joined(separator: ",") + "\(L.light)"
-    if k == key { return }
-    key = k
-    tiles.forEach { $0.removeFromSuperview() }
+    var keep = made; made = [:]
     tiles = list.map { f in
+      let id = f["id"] as? String ?? ""
+      let sig = "\(f["name"] ?? "")|\(FolderTiles.meta(f))|\(f["final"] ?? "")|\(f["rgb"] ?? "")|\(L.light)"
+      if let k = keep.removeValue(forKey: id) {
+        if k.1 == sig { made[id] = k; k.0.menu = { [weak self] in self?.menu?(f) }; return k.0 }
+        k.0.removeFromSuperview()
+      }
       let t = AssetTile(); t.backgroundColor = L.card; t.layer.cornerRadius = 20; t.layer.cornerCurve = .continuous
       let fin = (f["final"] as? Bool) == true
       let ic = UIImageView(image: UIImage(systemName: fin ? "checkmark.seal" : "folder", withConfiguration: UIImage.SymbolConfiguration(pointSize: 24, weight: .regular)))
@@ -188,14 +197,15 @@ final class FolderTiles: UIView, HomeBlock {
       let n = UILabel(); n.text = f["name"] as? String; n.font = .systemFont(ofSize: 15, weight: .semibold); n.textColor = L.title; n.lineBreakMode = .byTruncatingTail; n.tag = 2
       let s = UILabel(); s.text = (fin ? "Final · " : "") + FolderTiles.meta(f); s.font = .systemFont(ofSize: 13); s.textColor = .secondaryLabel; s.tag = 3
       [ic, n, s].forEach { $0.isUserInteractionEnabled = false; t.addSubview($0) }
-      let id = f["id"] as? String ?? ""
       t.onTap = { [weak self] in self?.onOpen?(id) }
       t.menu = { [weak self] in self?.menu?(f) }
       t.accessibilityLabel = "\(f["name"] as? String ?? "Folder"), \(s.text ?? "")"
       _ = PressShrink.add(to: t)
       addSubview(t)
+      made[id] = (t, sig)
       return t
     }
+    keep.values.forEach { $0.0.removeFromSuperview() }
     setNeedsLayout()
   }
   func blockHeight(_ W: CGFloat) -> CGFloat { let r = CGFloat((tiles.count + 1) / 2); return r == 0 ? 0 : r * 96 + (r - 1) * 10 + 6 }
@@ -216,14 +226,21 @@ final class FileRows: UIView, HomeBlock {
   var onOpen: (([String: Any]) -> Void)?
   var menu: (([String: Any]) -> UIMenu?)?
   private let box = UIView()
-  private var rows: [AssetTile] = [], lines: [UIView] = []
+  private var rows: [AssetTile] = [], lines: [UIView] = [], made: [String: (AssetTile, String)] = [:]
   static let H: CGFloat = 64
   override init(frame: CGRect) { super.init(frame: frame); box.layer.cornerRadius = 22; box.layer.cornerCurve = .continuous; box.clipsToBounds = true; addSubview(box) }
   required init?(coder: NSCoder) { fatalError() }
   func set(_ list: [[String: Any]], look L: HomeLook, showWhere: Bool = false) {
     box.backgroundColor = L.card
-    rows.forEach { $0.removeFromSuperview() }; lines.forEach { $0.removeFromSuperview() }
+    // (each row kept while it shows the same — only a changed one is made again)
+    var keep = made; made = [:]
     rows = list.map { f in
+      let id = f["id"] as? String ?? ""
+      let sig = "\(f["name"] ?? "")|\(f["size"] ?? "")|\(f["thumbUrl"] ?? "")|\(f["where"] ?? "")|\(f["canDel"] ?? "")|\(showWhere)|\(L.light)"
+      if let k = keep.removeValue(forKey: id) {
+        if k.1 == sig { made[id] = k; k.0.onTap = { [weak self] in self?.onOpen?(f) }; k.0.menu = { [weak self] in self?.menu?(f) }; return k.0 }
+        k.0.removeFromSuperview()
+      }
       let r = AssetTile()
       let th = AssetThumb(); th.layer.cornerRadius = 10; th.set(f); th.tag = 1
       let n = UILabel(); n.text = f["name"] as? String; n.font = .systemFont(ofSize: 16); n.textColor = L.title; n.lineBreakMode = .byTruncatingMiddle; n.tag = 2
@@ -240,8 +257,11 @@ final class FileRows: UIView, HomeBlock {
       r.menu = { [weak self] in self?.menu?(f) }
       r.accessibilityLabel = "\(f["name"] as? String ?? "File"), \(s.text ?? "")"
       box.addSubview(r)
+      made[id] = (r, sig)
       return r
     }
+    keep.values.forEach { $0.0.removeFromSuperview() }
+    lines.forEach { $0.removeFromSuperview() }
     lines = rows.dropFirst().map { _ in let l = UIView(); l.backgroundColor = .separator; box.addSubview(l); return l }
     setNeedsLayout()
   }
@@ -270,22 +290,25 @@ final class FileTiles: UIView, HomeBlock {
   var onPick: (() -> Void)?
   var selecting = false { didSet { if oldValue != selecting { if !selecting { picked = [] }; paintPicks() } } }
   private(set) var picked = Set<String>()
-  private var tiles: [AssetTile] = [], files: [[String: Any]] = [], key = ""
+  private var tiles: [AssetTile] = [], files: [[String: Any]] = [], made: [String: (AssetTile, String)] = [:]
+  // (each file kept while it shows the same — only a changed one is made again)
   func set(_ list: [[String: Any]], look L: HomeLook) {
     files = list
-    let k = list.map { "\($0["id"] ?? "")|\($0["name"] ?? "")|\($0["thumbUrl"] ?? "")" }.joined(separator: ",") + "\(L.light)"
-    if k == key { return }
-    key = k
     picked = picked.filter { id in list.contains { ($0["id"] as? String) == id } }
-    tiles.forEach { $0.removeFromSuperview() }
+    var keep = made; made = [:]
     tiles = list.map { f in
+      let id = f["id"] as? String ?? ""
+      let sig = "\(f["name"] ?? "")|\(f["size"] ?? "")|\(f["thumbUrl"] ?? "")|\(f["canDel"] ?? "")|\(L.light)"
+      if let k = keep.removeValue(forKey: id) {
+        if k.1 == sig { made[id] = k; return k.0 }
+        k.0.removeFromSuperview()
+      }
       let t = AssetTile()
       let th = AssetThumb(); th.layer.cornerRadius = 18; th.set(f); th.tag = 1
       let n = UILabel(); n.text = f["name"] as? String; n.font = .systemFont(ofSize: 13, weight: .medium); n.textColor = L.title; n.lineBreakMode = .byTruncatingMiddle; n.tag = 2
       let s = UILabel(); s.text = TaskPage.size(f["size"] as? Int ?? 0); s.font = .systemFont(ofSize: 12); s.textColor = .secondaryLabel; s.tag = 3
       let tick = UIImageView(); tick.tag = 5; tick.isHidden = true
       [th, n, s, tick].forEach { $0.isUserInteractionEnabled = false; t.addSubview($0) }
-      let id = f["id"] as? String ?? ""
       t.onTap = { [weak self] in
         guard let self = self else { return }
         if self.selecting { if self.picked.contains(id) { self.picked.remove(id) } else { self.picked.insert(id) }; self.paintPicks(); self.onPick?() }
@@ -295,8 +318,10 @@ final class FileTiles: UIView, HomeBlock {
       t.accessibilityLabel = "\(f["name"] as? String ?? "File"), \(s.text ?? "")"
       _ = PressShrink.add(to: t)
       addSubview(t)
+      made[id] = (t, sig)
       return t
     }
+    keep.values.forEach { $0.0.removeFromSuperview() }
     paintPicks()
     setNeedsLayout()
   }
