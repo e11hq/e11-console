@@ -43,18 +43,8 @@ struct CornerBar: View {
   @ObservedObject var m: CornerModel
   @Namespace private var ns
   var body: some View {
-    ZStack {
-      Group {
-        if #available(iOS 26.0, *) { GlassEffectContainer(spacing: 6) { spots } } else { spots }
-      }
-      // (your photo: a layer of its own above the glass container — inside it, even as an overlay, iPhone drew the glass
-      //  over the picture: tinted and blurred, Haris 2026-11-02 22:53)
-      if m.corner.kind != "none" {
-        photoOver(m.corner)
-          .frame(width: m.corner.frame.width, height: m.corner.frame.height)
-          .opacity(m.corner.opacity)
-          .position(x: m.corner.frame.midX, y: m.corner.frame.midY)
-      }
+    Group {
+      if #available(iOS 26.0, *) { GlassEffectContainer(spacing: 6) { spots } } else { spots }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .ignoresSafeArea()
@@ -88,28 +78,16 @@ struct CornerBar: View {
       .accessibilityLabel(["back": "Back", "search": "Search", "more": "More", "close": "Close search", "photo": "Me"][b.kind] ?? b.text)
     }
   }
-  // your photo: laid over the glass rather than inside it — inside, iPhone's glass treats it as glass content and it
-  // was often drawn black until the app was opened again (Haris 2026-11-02); it cross-fades with ••• / ✕ as before
-  @ViewBuilder private func photoOver(_ b: CornerModel.B) -> some View {
-    ZStack {
-      if b.kind == "photo" {
-        Group {
-          if let img = b.image { Image(uiImage: img).resizable().scaledToFill() } else { Circle().fill(Color.gray.opacity(0.3)) }
-        }
-        .frame(width: b.frame.width, height: b.frame.height).clipShape(Circle())
-        .opacity(b.icon).transition(.opacity)
-      }
-    }
-    .allowsHitTesting(false)
-  }
   private func face(_ b: CornerModel.B) -> some View {
     ZStack { faceOf(b).id(b.kind).transition(.opacity) }.opacity(b.icon)
   }
   @ViewBuilder private func faceOf(_ b: CornerModel.B) -> some View {
     switch b.kind {
     case "photo":
-      // (the picture itself is on top of the glass, not in it — see photoOver)
-      Color.clear.frame(width: b.frame.width, height: b.frame.height).contentShape(Circle())
+      // (on the glass, as it was — the drops melt around it; on top of the glass the melting went behind the picture,
+      //  Haris 2026-11-03. The black picture was a missing photo: now kept on the phone and never see-through)
+      if let img = b.image { Image(uiImage: img).resizable().scaledToFill().frame(width: b.frame.width, height: b.frame.height).clipShape(Circle()) }
+      else { Circle().fill(Color.gray.opacity(0.3)) }
     case "read", "unread", "done":
       Text(b.text).font(.system(size: 15, weight: .semibold)).foregroundStyle(b.kind == "done" ? Color.white : Color.primary)
         .frame(width: b.frame.width, height: b.frame.height).contentShape(Capsule())
