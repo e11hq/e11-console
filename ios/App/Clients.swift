@@ -453,6 +453,17 @@ final class FitNav: UINavigationController {
     super.viewDidLoad()
     sheetPresentationController?.detents = [.custom(identifier: .init("fitList")) { [weak self] ctx in min(ctx.maximumDetentValue, self?.fit ?? 360) }]
   }
+  // measured before it comes up — it came up at a guess and then grew to its size, half first and then full (Haris
+  // 2026-11-03 07:38): its list laid out at the screen's width, its bar's height on top
+  func prepare(width: CGFloat, bottom: CGFloat) {
+    guard let t = (viewControllers.first as? UITableViewController)?.tableView else { return }
+    loadViewIfNeeded(); _ = viewControllers.first?.view
+    t.frame = CGRect(x: 0, y: 0, width: width, height: 3000)
+    t.reloadData(); t.layoutIfNeeded()
+    let floating: Bool; if #available(iOS 26, *) { floating = true } else { floating = false }
+    fit = ceil(56 + t.contentSize.height + 8 + (floating ? 0 : bottom))
+    measured = true
+  }
   func fitTo(_ table: UITableView) {
     table.layoutIfNeeded()
     let floating: Bool; if #available(iOS 26, *) { floating = true } else { floating = false }

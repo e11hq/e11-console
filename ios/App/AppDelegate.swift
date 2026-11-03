@@ -1636,6 +1636,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let nav = FitNav(rootViewController: vc)
     nav.overrideUserInterfaceStyle = clientsLight ? .light : .dark
     if let sh = nav.sheetPresentationController { sh.prefersGrabberVisible = true }   // (its height: what's on it — FitNav)
+    nav.prepare(width: view.bounds.width, bottom: view.safeAreaInsets.bottom)
     topMost().present(nav, animated: true)
   }
   var clientPanFrom: ((CornerButton.Spot, CornerButton.Spot, CornerButton.Spot), (CornerButton.Spot, CornerButton.Spot, CornerButton.Spot))?
