@@ -936,7 +936,7 @@ var E11Rules = (() => {
     const secNamedOf = (t, re) => (statusList(t) || []).find((x) => re.test(String(x.name).trim()));
     function submitReview(t, files) {
       if (!(needsCD(t) && isMine(t) && !isCD(meId))) return { error: 'This task doesn’t need your files for CD review' };
-      if (t.done || (sectionOf(t) && isToDoName(sectionOf(t).name))) return { error: 'Move the task to In Progress first' };
+      if (t.done || (sectionOf(t) && isToDoName(sectionOf(t).name))) return { error: 'Set it to In Progress first' };
       const list = (files || []).filter((f) => f && f.path && String(f.path).startsWith(`attachments/${t.id}/`)).slice(0, 30);
       if (!list.length) return { error: 'No files' };
       t.reviews = t.reviews || []; t.attachments = t.attachments || [];

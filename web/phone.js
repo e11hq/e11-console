@@ -662,7 +662,7 @@ const Phone = (() => {
         const title = ti.value.trim();
         if (!title) { ti.focus(); toast('Give the task a name'); return; }
         const who = $('#qa-who', scrim) ? $('#qa-who', scrim).value : assignable(me()) ? currentUserId : '';
-        if (cd && cd.checked && who && who === cdUserId()) { toast('A task that needs CD review can’t be assigned to the Creative Director. Turn off CD review or choose someone else.'); return; }
+        if (cd && cd.checked && who && who === cdUserId()) { toast('Turn off CD review first'); return; }
         const desc = $('#qa-desc', scrim).value.trim();
         const t = createTask({ title, projectId: pj.value || null, due: $('#qa-due', scrim).value || null, notes: desc, ...(desc ? { notesHtml: linkify(esc(desc)).replace(/\n/g, '<br>') } : {}) });
         if (cd) t.needsCD = !!(cd.checked && t.projectId);
@@ -720,7 +720,7 @@ const Phone = (() => {
         const title = ev.title;
         const who = can('assign') ? st.who : assignable(me()) ? [currentUserId] : [];
         const cdOn = mgr && ev.cd;
-        if (cdOn && who.includes(cdUserId())) { NativeForm.set(key, { alert: 'A task that needs CD review can’t be assigned to the Creative Director. Turn off CD review or choose someone else.' }); return; }
+        if (cdOn && who.includes(cdUserId())) { NativeForm.set(key, { alert: 'Turn off CD review first' }); return; }
         const desc = ev.desc || '';
         const t = createTask({ title, projectId: st.client || null, due: ev.due || null, notes: desc, ...(desc ? { notesHtml: linkify(esc(desc)).replace(/\n/g, '<br>') } : {}) });
         if (mgr) t.needsCD = !!(cdOn && t.projectId);
@@ -748,7 +748,7 @@ const Phone = (() => {
           NativeForm.close(key);
           if (!g) return;
           decideReview(g.t, g.r, 'amend', esc(ev.desc).replace(/\n/g, '<br>'));
-          toast(`Sent back to ${firstName(g.r.by)} with your notes`);
+          toast(`Sent back to ${firstName(g.r.by)}`);
           nextReview();
         },
         closed: (r) => { if (r.closed === 'discard') toast('Amendment notes discarded'); },
@@ -766,7 +766,7 @@ const Phone = (() => {
         if (!v) { ta.focus(); toast('Describe the changes required'); return; }
         close();
         decideReview(f.t, f.r, 'amend', esc(v).replace(/\n/g, '<br>'));
-        toast(`Sent back to ${firstName(f.r.by)} with your notes`);
+        toast(`Sent back to ${firstName(f.r.by)}`);
         nextReview();
       });
     }, { kind: 'amend-' + id, dockLabel: 'Amendments for ' + firstName(f.r.by), discardedMsg: 'Amendment notes discarded' });
@@ -819,7 +819,7 @@ const Phone = (() => {
         const f = findReview(id);
         if (!f) return;
         decideReview(f.t, f.r, 'approve');
-        toast(`Approved — ${firstName(f.r.by)} has been notified`);
+        toast(`Approved — ${firstName(f.r.by)} told`);
         nextReview();
         break;
       }
@@ -954,8 +954,8 @@ const Push = (() => {
       try {
         const r = await NativeMac.call('pushEnable');
         st.state = r.state === 'on' ? 'on' : r.state === 'denied' ? 'denied' : 'off';
-        if (st.state === 'on') toast('Notifications are on for this phone');
-      } catch (e) { toast('Couldn’t turn on notifications: ' + e.message); } finally { st.busy = false; paint(); }
+        if (st.state === 'on') toast('Notifications on');
+      } catch (e) { toast('Notifications failed: ' + e.message); } finally { st.busy = false; paint(); }
       return;
     }
     try {
@@ -966,8 +966,8 @@ const Push = (() => {
       const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(key) });
       await api('POST', '/api/push/subscribe', { subscription: sub.toJSON() });
       st.state = 'on';
-      toast(`Notifications are on for this ${Phone.on ? 'phone' : 'computer'}`);
-    } catch (e) { toast('Couldn’t turn on notifications: ' + e.message); } finally { st.busy = false; paint(); }
+      toast(`Notifications on`);
+    } catch (e) { toast('Notifications failed: ' + e.message); } finally { st.busy = false; paint(); }
   }
   async function turnOff() {
     if (iosApp()) {
@@ -975,7 +975,7 @@ const Push = (() => {
         const r = await NativeMac.call('pushDisable');
         const tk = r.token || lastToken;
         if (tk) await api('POST', '/api/apns/unregister', { token: tk }).catch(() => {});
-        st.state = 'off'; paint(); toast('Notifications are off for this phone');
+        st.state = 'off'; paint(); toast('Notifications off');
       } catch (e) { toast(e.message); }
       return;
     }
@@ -984,7 +984,7 @@ const Push = (() => {
       const sub = await reg.pushManager.getSubscription();
       if (sub) { await api('POST', '/api/push/unsubscribe', { endpoint: sub.endpoint }).catch(() => {}); await sub.unsubscribe(); }
       st.state = 'off'; paint();
-      toast(`Notifications are off for this ${Phone.on ? 'phone' : 'computer'}`);
+      toast(`Notifications off`);
     } catch (e) { toast(e.message); }
   }
   function installHelp() {
@@ -2888,13 +2888,13 @@ const NativeAssets = (() => {
     const rid = ev.rid || null;
     const done = (error, extra) => { if (!error) persist(0); try { renderContent(); } catch (e) { /* page under the app */ } answer(rid, { ok: !error, error: error || null, model: modelFor(ev.client || null), ...(extra || {}) }); };
     try {
-      if (ev.ev === 'want') { const m = modelFor(ev.client || null); return answer(rid, m ? { ok: true, model: m } : { ok: false, error: ev.client ? 'That client’s assets are for the people working on it' : 'Not available' }); }
+      if (ev.ev === 'want') { const m = modelFor(ev.client || null); return answer(rid, m ? { ok: true, model: m } : { ok: false, error: ev.client ? 'Not shared with you' : 'Not available' }); }
       // the app's back from the first of its screens opened by the page: the page goes back too
       if (ev.ev === 'back') { if (typeof PageHistory !== 'undefined' && PageHistory.canBack && PageHistory.canBack()) PageHistory.back(); else go('me'); sync(); return; }
       if (ev.ev === 'me') { const b = document.querySelector('#ph-tabs [data-ph-tab="me"]'); if (b) b.click(); else go('me'); sync(); return; }
       const c = ev.client ? clientById(ev.client) : null;
       if (ev.ev === 'addClient') {
-        if (!canAssets()) return done('Your role doesn’t allow this — ask an Admin or Account Manager');
+        if (!canAssets()) return done('Your role can’t do this');
         const name = String(ev.name || '').trim();
         if (!name) return done('Enter the client’s name');
         const d = dupClient(name); if (d) return done(dupMsg(d));
@@ -2906,7 +2906,7 @@ const NativeAssets = (() => {
       const f = ev.folder ? c.folders.find((x) => x.id === ev.folder) : null;
       switch (ev.ev) {
         case 'uploaded': {
-          if (!f || !canUploadTo(c, f)) return done(f && isFilesTop(c, f) ? 'Files holds folders — open or make a folder first, then add the files there' : 'You can’t add files here');
+          if (!f || !canUploadTo(c, f)) return done(f && isFilesTop(c, f) ? 'Open a folder first' : 'You can’t add files here');
           const files = (ev.files || []).filter((x) => x && x.path).map((x) => ({ id: uid(), name: String(x.name || 'File'), path: String(x.path), size: +x.size || 0, addedAt: nowISO(), addedBy: currentUserId }));
           if (!files.length) return done('Nothing was uploaded');
           f.files.push(...files); assetNotify(c, f, 'added', files.map((x) => x.name));
@@ -2915,9 +2915,9 @@ const NativeAssets = (() => {
         }
         case 'newFolder': {
           const parent = ev.parent ? c.folders.find((x) => x.id === ev.parent) : null;
-          if (!canAddAssets()) return done('Your role doesn’t allow this — ask an Admin or Account Manager');
+          if (!canAddAssets()) return done('Your role can’t do this');
           if (parent && !canMakeSub(c, parent)) return done(parent.finalOf ? 'Final files hold no folders' : `Folders go up to ${FOLDER_DEPTH} levels deep inside Files`);
-          if (!parent && !canAssets()) return done('New folders here are made by Admins and Account Managers — add yours inside Files');
+          if (!parent && !canAssets()) return done('Add your folder inside Files');
           const name = String(ev.name || '').trim();
           if (!name) return done('Enter a folder name');
           const dup = folderDup(c, name, null, parent ? parent.id : null); if (dup) return done(`There is already a folder named “${dup.name}”.`);
@@ -2948,14 +2948,14 @@ const NativeAssets = (() => {
           return done(null);
         }
         case 'renameClient': {
-          if (!canRenameCA(c)) return done('Only an Admin, or whoever created it, can rename this');
+          if (!canRenameCA(c)) return done('You can’t rename this');
           const name = String(ev.name || '').trim().replace(/\s+/g, ' ');
           if (!name) return done('Enter the client’s name');
           const d = dupClient(name, c.id); if (d) return done(dupMsg(d));
           c.name = name; return done(null);
         }
         case 'deleteClient': {
-          if (!isAdmin()) return done('Only an Admin can delete a client');
+          if (!isAdmin()) return done('Only Admins delete clients');
           const paths = [c.logo, ...c.folders.flatMap((x) => x.files.flatMap((a) => [a.path, '.thumbs/' + a.id])), ...c.folders.map((x) => x.dir), c.dir].filter(Boolean);
           db.clients = db.clients.filter((x) => x.id !== c.id);
           db.projects.forEach((p) => { if (p.clientId === c.id) delete p.clientId; });

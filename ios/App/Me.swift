@@ -45,27 +45,28 @@ final class SetFoot: UIView, HomeBlock {
 // shadows"): a soft fall of the colour from a little lighter at the top to a little deeper at the bottom, a thin light
 // rim along its top edge fading down, and a faint darker one along the bottom
 final class SettingsIcon: UIView {
-  private let fill = CAGradientLayer(), rim = CAGradientLayer(), rimMask = CAShapeLayer(), low = CAGradientLayer(), lowMask = CAShapeLayer()
+  // (as iPhone's own Settings icons, iOS 26 — measured from Haris's screenshot, 2026-11-03: the colour only a little
+  //  lighter at the top than at the bottom, and a thin light glass edge inside, brightest along the top, fainter down
+  //  the sides, light again along the bottom; no dark shading; corners ~27 % of the size, continuous)
+  private let fill = CAGradientLayer(), rim = CAGradientLayer(), rimMask = CAShapeLayer()
   var color: UIColor = .systemGray { didSet { paint() } }
   override init(frame: CGRect) {
     super.init(frame: frame)
-    layer.masksToBounds = true
-    rim.colors = [UIColor.white.withAlphaComponent(0.55).cgColor, UIColor.white.withAlphaComponent(0.0).cgColor]
-    rim.locations = [0, 0.55]
-    low.colors = [UIColor.black.withAlphaComponent(0).cgColor, UIColor.black.withAlphaComponent(0.18).cgColor]
-    low.locations = [0.5, 1]
-    rimMask.fillColor = UIColor.clear.cgColor; rimMask.strokeColor = UIColor.black.cgColor; rimMask.lineWidth = 1.2
-    lowMask.fillColor = UIColor.clear.cgColor; lowMask.strokeColor = UIColor.black.cgColor; lowMask.lineWidth = 1
-    rim.mask = rimMask; low.mask = lowMask
-    [fill, low, rim].forEach { layer.addSublayer($0) }
+    layer.masksToBounds = true; layer.cornerCurve = .continuous
+    rim.colors = [UIColor.white.withAlphaComponent(0.42).cgColor, UIColor.white.withAlphaComponent(0.10).cgColor,
+                  UIColor.white.withAlphaComponent(0.10).cgColor, UIColor.white.withAlphaComponent(0.30).cgColor]
+    rim.locations = [0, 0.3, 0.7, 1]
+    rimMask.fillColor = UIColor.clear.cgColor; rimMask.strokeColor = UIColor.black.cgColor; rimMask.lineWidth = 1
+    rim.mask = rimMask
+    [fill, rim].forEach { layer.addSublayer($0) }
   }
   required init?(coder: NSCoder) { fatalError() }
   private func paint() {
     var h: CGFloat = 0, sat: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
     let c = color.resolvedColor(with: traitCollection)
     if c.getHue(&h, saturation: &sat, brightness: &b, alpha: &a) {
-      let top = UIColor(hue: h, saturation: max(0, sat * 0.86), brightness: min(1, b * 1.1 + 0.04), alpha: a)
-      let bottom = UIColor(hue: h, saturation: min(1, sat * 1.06), brightness: b * 0.9, alpha: a)
+      let top = UIColor(hue: h, saturation: max(0, sat * 0.95), brightness: min(1, b * 1.03 + 0.01), alpha: a)
+      let bottom = UIColor(hue: h, saturation: min(1, sat * 1.03), brightness: b * 0.97, alpha: a)
       fill.colors = [top.cgColor, bottom.cgColor]
     } else { fill.colors = [c.cgColor, c.cgColor] }
   }
@@ -73,9 +74,9 @@ final class SettingsIcon: UIView {
   override func layoutSubviews() {
     super.layoutSubviews()
     CATransaction.begin(); CATransaction.setDisableActions(true)
-    [fill, rim, low].forEach { $0.frame = bounds }
-    let path = UIBezierPath(roundedRect: bounds.insetBy(dx: 0.6, dy: 0.6), cornerRadius: max(0, layer.cornerRadius - 0.6)).cgPath
-    rimMask.path = path; lowMask.path = path
+    layer.cornerRadius = bounds.width * 0.27
+    [fill, rim].forEach { $0.frame = bounds }
+    rimMask.path = UIBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), cornerRadius: max(0, layer.cornerRadius - 0.5)).cgPath
     CATransaction.commit()
   }
 }
@@ -111,7 +112,6 @@ final class SetRow: AssetTile {
   private var photoPath: String?
   override init(frame: CGRect) {
     super.init(frame: frame)
-    icon.layer.cornerRadius = 7; icon.layer.cornerCurve = .continuous
     sym.tintColor = .white; sym.contentMode = .center; icon.addSubview(sym)
     pic.layer.cornerRadius = 18; pic.clipsToBounds = true; pic.contentMode = .scaleAspectFill
     name.font = .systemFont(ofSize: 17); sub.font = .systemFont(ofSize: 13); sub.textColor = .secondaryLabel; sub.numberOfLines = 2
@@ -127,7 +127,7 @@ final class SetRow: AssetTile {
   func set(_ it: SetItem, look L: HomeLook) {
     item = it
     icon.isHidden = it.sym == nil; icon.color = it.col ?? .systemGray
-    sym.image = it.sym.flatMap { UIImage(systemName: $0, withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)) }
+    sym.image = it.sym.flatMap { UIImage(systemName: $0, withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold)) }   // (as big in its square as Settings' own)
     name.text = it.title; name.textColor = it.danger ? .systemRed : L.title
     sub.text = it.sub; sub.isHidden = it.sub.isEmpty; sub.textColor = it.warn ? .systemOrange : .secondaryLabel
     value.text = it.value; value.isHidden = it.value.isEmpty
@@ -657,15 +657,35 @@ final class MemberHead: UIView, HomeBlock {
 // ---------- the screens ----------
 
 // (a tap anywhere but in a text box puts the keyboard away)
-final class KeyboardAway: NSObject, UIGestureRecognizerDelegate {
-  static let shared = KeyboardAway()
-  @objc func tapped(_ g: UITapGestureRecognizer) { g.view?.endEditing(true) }
-  func gestureRecognizer(_ g: UIGestureRecognizer, shouldReceive t: UITouch) -> Bool {
-    var v = t.view
-    while let x = v { if x is UITextField || x is UITextView { return false }; v = x.superview }
-    return true
+// (Haris 2026-11-03: while the keyboard is up, a touch anywhere else on the page only puts it down — it never also
+//  taps the row, switch or button under the finger. A see-through cover over the page while the keyboard is up, with a
+//  hole where the box being typed in is; gone with the keyboard.)
+final class KeyboardShield: UIView {
+  private weak var page: UIView?
+  static func attach(_ page: UIView) {
+    let k = KeyboardShield(); k.page = page; k.isHidden = true; k.backgroundColor = .clear
+    page.addSubview(k)
+    NotificationCenter.default.addObserver(k, selector: #selector(k.up), name: UIResponder.keyboardWillShowNotification, object: nil)
+    NotificationCenter.default.addObserver(k, selector: #selector(k.down), name: UIResponder.keyboardWillHideNotification, object: nil)
   }
-  func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith o: UIGestureRecognizer) -> Bool { true }
+  private func field(_ v: UIView) -> UIView? {
+    if (v is UITextField || v is UITextView) && v.isFirstResponder { return v }
+    for x in v.subviews where x !== self { if let f = field(x) { return f } }
+    return nil
+  }
+  @objc private func up() {
+    guard let p = page, field(p) != nil else { return }
+    frame = p.bounds; p.bringSubviewToFront(self); isHidden = false
+  }
+  @objc private func down() { isHidden = true }
+  override func hitTest(_ pt: CGPoint, with e: UIEvent?) -> UIView? {
+    guard !isHidden, let p = page else { return nil }
+    guard let f = field(p) else { isHidden = true; return nil }
+    // (the box being typed in — and its clear button — still works)
+    if f.convert(f.bounds, to: self).insetBy(dx: -6, dy: -6).contains(pt) { return nil }
+    return self
+  }
+  override func touchesBegan(_ t: Set<UITouch>, with e: UIEvent?) { page?.endEditing(true); isHidden = true }
 }
 
 final class MeCtl {
@@ -761,8 +781,7 @@ final class MeCtl {
     h.cornerShared = true
     h.onCorner = { [weak self] in self?.main.updateCorner() }
     // (a tap anywhere puts the keyboard away — Team members' search; taps still reach what's under the finger)
-    let tap = UITapGestureRecognizer(target: KeyboardAway.shared, action: #selector(KeyboardAway.tapped(_:))); tap.cancelsTouchesInView = false; tap.delegate = KeyboardAway.shared
-    h.addGestureRecognizer(tap)
+    KeyboardShield.attach(h)
     main.view.insertSubview(h, belowSubview: main.tabBar)
     return Screen(h: h, kind: kind, id: id)
   }

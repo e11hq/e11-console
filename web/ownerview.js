@@ -33,7 +33,7 @@ const OwnerView = (() => {
   }
   // the app tried to save something while looking: put it back (the server would refuse it anyway)
   function blocked() {
-    if (Date.now() - warned > 4000) { warned = Date.now(); toast('Owner view is look only — choose Allow changes to change anything'); }
+    if (Date.now() - warned > 4000) { warned = Date.now(); toast('Owner view is look only'); }
   }
   function card() {
     if (!can) return '';
@@ -66,7 +66,7 @@ const OwnerView = (() => {
   ['pointerdown', 'keydown', 'wheel', 'touchstart', 'scroll'].forEach((t) => document.addEventListener(t, () => { last = Date.now(); }, { capture: true, passive: true }));
   setInterval(() => {
     if (!on()) return;
-    if (Date.now() - last > IDLE) { set(null).then(() => toast('Owner view ended after 15 minutes without use')); return; }
+    if (Date.now() - last > IDLE) { set(null).then(() => toast('Owner view ended (15 min idle)')); return; }
     if (Date.now() - lastPing > 4 * 60000 && Date.now() - last < 4 * 60000) { lastPing = Date.now(); api('POST', '/api/owner-view', { mode }).catch(() => {}); }
   }, 20000);
   return { init, on, lookOnly, blocked, card, set };

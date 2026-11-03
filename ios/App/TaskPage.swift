@@ -1069,7 +1069,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
           a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
           a.addAction(UIAlertAction(title: "Withdraw", style: .destructive) { _ in self.onAct?(["act": "withdrawReview", "id": self.taskId]) })
           self.present(a)
-        } else if (rv["canSubmit"] as? Bool) != true { self.toast("Move the task to In Progress first") }
+        } else if (rv["canSubmit"] as? Bool) != true { self.toast("Set it to In Progress first") }
         else { self.onSubmitFiles?(rv["cd"] as? String ?? "") }
       }, for: .touchUpInside)
       let bw = UIView(); b.translatesAutoresizingMaskIntoConstraints = false; bw.addSubview(b)

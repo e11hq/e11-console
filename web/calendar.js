@@ -397,7 +397,7 @@ const Cal = (() => {
           n++;
         });
         commit(); close(); render($('#content'));
-        toast(`Created ${n} task${n === 1 ? '' : 's'} for ${o.name}`);
+        toast(`Created ${n} task${n === 1 ? '' : 's'}`);
       }
     });
   }
@@ -432,7 +432,7 @@ const Cal = (() => {
       if (b.dataset.r !== '1') return;
       const date = $('#occ-date', root).value, end = $('#occ-end', root).value || null;
       if (!date) { toast('Pick a date'); return; }
-      if (end && end < date) { toast('The end date is before the start'); return; }
+      if (end && end < date) { toast('End is before start'); return; }
       const greet = $('#occ-greet', root) ? $('#occ-greet', root).value.trim() || null : undefined;
       if (isNew) {
         const name = $('#occ-name', root).value.trim();

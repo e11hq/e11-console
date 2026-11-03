@@ -613,7 +613,7 @@ final class QuickFile: NSObject, QLPreviewControllerDataSource {
     guard let path = f["url"] as? String else { return toast("This file isn’t available") }
     toast("Opening…")
     PreviewLoad.data(serverURL() + path) { d in
-      guard let d = d else { return toast("Couldn’t open the file — try again") }
+      guard let d = d else { return toast("Couldn’t open — try again") }
       let name = (f["name"] as? String ?? "File").replacingOccurrences(of: "/", with: "-")
       let dir = FileManager.default.temporaryDirectory.appendingPathComponent("open-\(UUID().uuidString)", isDirectory: true)
       try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -682,17 +682,17 @@ extension Main {
       UIPasteboard.general.string = link ?? "📎 " + name
       FileClip.file = f; FileClip.name = name; FileClip.change = UIPasteboard.general.changeCount
     }
-    if let u = Main.fileLinks[path] { put(u); return toast("Link copied — paste it in a comment, or send it to anyone") }
+    if let u = Main.fileLinks[path] { put(u); return toast("Link copied") }
     serverTask.request("/api/flink", body: ["path": path]) { j in
-      if (j?["ok"] as? Bool) == true, let u = j?["url"] as? String { Main.fileLinks[path] = u; put(u); toast("Link copied — paste it in a comment, or send it to anyone") }
-      else { put(nil); toast((j?["error"] as? String).map { "No link: \($0) — copied for pasting here" } ?? "Copied — paste it into a comment or description") }
+      if (j?["ok"] as? Bool) == true, let u = j?["url"] as? String { Main.fileLinks[path] = u; put(u); toast("Link copied") }
+      else { put(nil); toast((j?["error"] as? String).map { "No link — copied as text" } ?? "Copied") }
     }
   }
   // a Client Assets folder's link (not "Files" itself): the folder as it is now, for anyone (Haris 2026-11-03)
   static var folderLinks: [String: String] = [:]
   func copyFolderLink(client: String, folder: String, _ toast: @escaping (String) -> Void) {
     let key = client + "/" + folder
-    let said = "Folder link copied — send it to anyone; it shows the folder as it is now"
+    let said = "Folder link copied"
     if let u = Main.folderLinks[key] { UIPasteboard.general.string = u; return toast(said) }
     serverTask.request("/api/flink", body: ["client": client, "folder": folder]) { j in
       if (j?["ok"] as? Bool) == true, let u = j?["url"] as? String { Main.folderLinks[key] = u; UIPasteboard.general.string = u; toast(said) }

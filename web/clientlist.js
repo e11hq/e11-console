@@ -14,7 +14,7 @@ const ClientList = (() => {
 
   /* ---------- the pop-up: new client, or edit one ---------- */
   function dialog(p) {
-    if (!isAdmin()) { toast('Only Admins add or change clients'); return; }
+    if (!isAdmin()) { toast('Only Admins change clients'); return; }
     const isNew = !p;
     const used = new Set(db.projects.map((x) => x.color));
     const st = {
@@ -153,7 +153,7 @@ const ClientList = (() => {
     const c = clientOfProject(p);
     if (c && was !== p.name) {
       const clash = dupClient(p.name, c.id);
-      if (clash) toast(`Renamed. Client Assets already has “${clash.name}”, so its folder keeps the name “${c.name}”.`);
+      if (clash) toast(`Renamed — folder name kept`);
       else c.name = p.name;
     }
     persist(0);

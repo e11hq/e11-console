@@ -142,7 +142,7 @@ const Host = (() => {
     switch (cmd) {
       case 'load': return Promise.resolve({ ok: true, data: localStorage.getItem('e11-data'), dataDir: 'Browser preview storage' });
       case 'save': localStorage.setItem('e11-data', args.data); return Promise.resolve({ ok: true });
-      case 'pickAttachments': toast('Attachments work in the Mac app'); return Promise.resolve({ ok: true, files: [] });
+      case 'pickAttachments': toast('Attachments: use the Mac app'); return Promise.resolve({ ok: true, files: [] });
       default: return Promise.resolve({ ok: true });
     }
   }
@@ -1010,7 +1010,7 @@ const MacUpdate = (() => {
       const b64 = btoa(unescape(encodeURIComponent(terminalFile())));
       await NativeMac.call('saveFile', { token: 'upd-' + Date.now(), name: 'Update E11 Console.terminal', b64, open: true, done: true });
       if (el) el.querySelector('.mu-txt span').textContent = 'Terminal is updating the app — it will close and reopen by itself in a few seconds.';
-      else toast('Terminal is updating the app — it will close and reopen by itself in a few seconds', null, 8000);
+      else toast('Updating — the app reopens itself', null, 8000);
       setTimeout(() => { if (btn) { btn.disabled = false; btn.textContent = 'Try again'; } }, 30000);
     } catch (e) {
       if (btn) { btn.disabled = false; btn.textContent = 'Try again'; }
@@ -1058,8 +1058,8 @@ function macAppDialog() {
   const close = () => { root.innerHTML = ''; };
   $('[data-r="1"]', root).addEventListener('click', close);
   $('[data-copy-cmd]', root).addEventListener('click', (e) => {
-    try { navigator.clipboard.writeText(cmd).then(() => toast('Copied — paste it into Terminal')); }
-    catch (err) { const ta = document.createElement('textarea'); ta.value = cmd; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); toast('Copied — paste it into Terminal'); }
+    try { navigator.clipboard.writeText(cmd).then(() => toast('Copied — paste in Terminal')); }
+    catch (err) { const ta = document.createElement('textarea'); ta.value = cmd; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); toast('Copied — paste in Terminal'); }
     e.currentTarget.innerHTML = `${icon('check')}Copied`;
   });
   $('.scrim', root).addEventListener('click', (e) => { if (e.target.classList.contains('scrim')) close(); });
@@ -1148,8 +1148,8 @@ async function importFromMac() {
   const files = await ServerHost.pickFiles({ multiple: false, accept: '.json,application/json' });
   if (!files.length) return;
   let data;
-  try { data = JSON.parse(await files[0].text()); } catch (e) { toast('That file isn’t an E11 Console data file'); return; }
-  if (!data || !Array.isArray(data.tasks) || !Array.isArray(data.users)) { toast('That file isn’t an E11 Console data file'); return; }
+  try { data = JSON.parse(await files[0].text()); } catch (e) { toast('Not an E11 Console data file'); return; }
+  if (!data || !Array.isArray(data.tasks) || !Array.isArray(data.users)) { toast('Not an E11 Console data file'); return; }
   const ok = await dialog({ title: 'Import from the Mac app?', body: `${data.tasks.length} tasks, ${(data.projects || []).length} clients, ${data.users.length} people and ${(data.clients || []).length} Client Assets folders will be added to the server. Items that already exist are replaced by the Mac’s version.`, okText: 'Import' });
   if (!ok) return;
   if (data.meta) { delete data.meta.prefs; }
@@ -1580,7 +1580,7 @@ const ServerHost = (() => {
         const i = next++;
         if (ui1.sigs[i].cancelled) { parts[i] = 1; report(); continue; }
         try { out[i] = await uploadFile(files[i], target, (p) => { ui1.set(i, p); parts[i] = p; report(); }, ui1.sigs[i]); ui1.set(i, 1, 'Done'); parts[i] = 1; report(); }
-        catch (e) { parts[i] = 1; report(); if (e.cancelled) ui1.set(i, 0, 'Cancelled'); else { ui1.set(i, 0, 'Failed'); toast(`Could not upload ${files[i].name}: ${e.message}`); } }
+        catch (e) { parts[i] = 1; report(); if (e.cancelled) ui1.set(i, 0, 'Cancelled'); else { ui1.set(i, 0, 'Failed'); toast(`Upload failed: ${files[i].name}`); } }
       }
     }));
     ui1.done();
@@ -1822,7 +1822,7 @@ const roMsg = () => (ui.taskId && doneLocked(task(ui.taskId)) ? DONE_LOCK_MSG : 
 const amSidebarOk = (p, u = me()) => searchClientOk(p, u) && (!u || u.role !== 'am' || isAdm(u) || isCD(u.id) || !db.projects.some((x) => (x.ams || []).some((a) => a.id === u.id)) || (p.ams || []).some((a) => a.id === u.id && !a.onLeave));
 // The clients an AM may move a task into, or start one in
 const amClientOk = (p, u = me()) => amScope({ projectId: p.id, createdBy: null }, u);
-function denied() { toast('Your role doesn’t allow this — ask an Admin or Account Manager'); }
+function denied() { toast('Your role can’t do this'); }
 const isMine = (t) => (t.assignees || []).includes(currentUserId);
 // Each assignee can finish their own part of a shared task: t.partsDone = { userId: isoTime }
 const partDone = (t, u = currentUserId) => !!(t.partsDone || {})[u];
@@ -1882,7 +1882,7 @@ function fieldMenu(anchor, k) {
     if (!(isManager() && amScope(task(ui.taskId)))) return denied();
     items = Object.entries(FINANCE).map(([v, c]) => ({ html: `<div class="mi">${fieldPill(v, c).replace(icon('chev'), '')}${ck(cur === v)}</div>`, run: () => set(v) }));
   } else if (k === 'guardian') {
-    if (peopleLocked(task(ui.taskId))) { toast('Guardian is locked since this task went for CD review'); return; }
+    if (peopleLocked(task(ui.taskId))) { toast('Locked during CD review'); return; }
     if (!can('assign')) return denied();
     [['production', 'Production'], ['social', 'Social'], ['freelancer', 'Freelancers']].forEach(([r, label]) => {
       const us = activeUsers().filter((u) => u.role === r);
@@ -2657,7 +2657,7 @@ const Sync = (() => {
         if (!deepEqual(local && JSON.parse(JSON.stringify(local)), next)) { setLocal(res.kind, res.id, next); touched = true; }
       });
       setOnline(true);
-      if (refused) toast('Some changes weren’t saved — your role doesn’t allow them');
+      if (refused) toast('Some changes weren’t allowed');
       if (touched) refresh();
       setSaveState('saved');
     } catch (e) {
@@ -4311,7 +4311,7 @@ const FileLinks = (() => {
     }
     ui.fileClip = { att: attCore(a), token: `📎 ${a.name}`, url: urls.get(a.path) || null };
     const clip = ui.fileClip;
-    const said = () => toast(`Link copied — paste it in a comment here, or send it to anyone`);
+    const said = () => toast(`Link copied`);
     // (known already: copied there and then; else the clipboard waits for it — still the tap that asked)
     if (urls.has(a.path)) { const u = urls.get(a.path); clip.url = u; try { await navigator.clipboard.writeText(u); said(); } catch (e) { if (plain(u)) said(); else toast('Couldn’t copy the link'); } return; }
     const wait = get(a);
@@ -4358,7 +4358,7 @@ const FileLinks = (() => {
   async function copyFolder(c, f) {
     if (!c || !f) return;
     const key = c.id + '/' + f.id;
-    const said = () => toast('Folder link copied — send it to anyone; it shows the folder as it is now');
+    const said = () => toast('Folder link copied');
     const get = () => (furls.has(key) ? Promise.resolve(furls.get(key)) : api('POST', '/api/flink', { client: c.id, folder: f.id }).then((r) => { if (!r || !r.ok) throw new Error((r && r.error) || 'No link'); furls.set(key, r.url); return r.url; }));
     // (iPhone app 33+: the app puts it on the clipboard)
     if (typeof Host !== 'undefined' && Host.isIOSApp && typeof NativeMe !== 'undefined' && NativeMe.on) {
@@ -4404,7 +4404,7 @@ const FileLinks = (() => {
       setTimeout(() => { const a = findAttachment(task(w.task), w.file); if (a) previewFile(a); }, 600);
       return;
     }
-    toast('That file is for the people working on it');
+    toast('File not shared with you');
   }
   window.__e11FileLink = (t) => { if (t) open(String(t)); };
   // (one of our links tapped inside E11 — a comment, the description: it opens here, where it is)
@@ -4559,7 +4559,7 @@ function autosize(el) {
 }
 
 // An Office Admin has no task pages (with Finance access they get only the tasks' Finance view): links to a task stay on Home
-function officeNoTasks() { if (ui.view !== 'home' && !Fin.owns(ui.view)) go('home'); toast('Tasks aren’t part of the Office Admin view'); }
+function officeNoTasks() { if (ui.view !== 'home' && !Fin.owns(ui.view)) go('home'); toast('Not in the Office Admin view'); }
 function openTask(id, focusTitle) {
   if (isOffice()) { officeNoTasks(); return; }
   // (iPhone app 30+: the app's own task page — phone.js NativeTask)
@@ -4719,7 +4719,7 @@ const Unsent = (() => {
       if (shown === k) { if (want) close(); else refresh(); }
       if (!want) return false;
       const { tid, replyTo } = parts(k);
-      if (!ok) { toast('The files didn’t upload, so your comment was kept as a draft'); return false; }
+      if (!ok) { toast('Upload failed — kept as draft'); return false; }
       const t = task(tid);
       if (addComment(replyTo, tid)) { toast(`${replyTo ? 'Reply' : 'Comment'} sent on “${trunc(t ? t.title : '', 50)}”`); return true; }
       return false;
@@ -5152,7 +5152,7 @@ async function newProjectFlow() {
   p.clientId = c.id;
   persist(0);
   go('project', p.id);
-  toast(`Added ${p.name} — its Client Assets folder is ready`);
+  toast(`Added ${p.name}`);
 }
 
 function newTaskInContext() {
@@ -5256,7 +5256,7 @@ const Announce = (() => {
     if (!ok) return;
     db.meta.announcement = { id: uid(), title: t.trim(), body: b.trim(), by: currentUserId, at: nowISO() };
     persist(0); renderContent();
-    toast('Sent — everyone sees it the next time they use the app');
+    toast('Announcement sent');
   }
   document.addEventListener('input', (e) => {
     if (e.target.id === 'an-title') { const x = $('#an-pt'); if (x) x.textContent = e.target.value || 'Your title'; }
@@ -5378,7 +5378,7 @@ const TRASH_ICON = { task: 'check-circle', project: 'folder', comment: 'chat', a
 
 /* ---- Putting things back ---- */
 function restoreTrash(id) {
-  { const it0 = (db.trash || []).find((x) => x.id === id); if (it0 && it0.type === 'project' && !isAdmin()) { toast('Only Admins can restore clients'); return; } }
+  { const it0 = (db.trash || []).find((x) => x.id === id); if (it0 && it0.type === 'project' && !isAdmin()) { toast('Only Admins restore clients'); return; } }
   const it = trashList().find((x) => x.id === id);
   if (!it || !isManager()) return;
   const d = it.data || {};
@@ -5406,7 +5406,7 @@ function restoreTrash(id) {
     } else msg = `Restored the client “${d.project.name}” with ${tasks.filter((t) => !t.parentId).length} tasks`;
   } else if (it.type === 'comment' || it.type === 'attachment') {
     const t = task(d.taskId);
-    if (!t) { toast('Restore its task first — it’s in the Trash too'); return; }
+    if (!t) { toast('Restore its task first'); return; }
     if (it.type === 'comment') {
       (d.comments || []).forEach((c) => { if (!t.comments.some((x) => x.id === c.id)) t.comments.push(c); });
       t.comments.sort((a, b) => a.at.localeCompare(b.at));
@@ -5419,12 +5419,12 @@ function restoreTrash(id) {
     msg = `Restored to “${t.title || 'Untitled task'}”`; open = t.id;
   } else if (it.type === 'cafile') {
     const c = clientById(d.clientId); const f = c && c.folders.find((x) => x.id === d.folderId);
-    if (!f) { toast('Its client folder no longer exists'); return; }
+    if (!f) { toast('Its folder is gone'); return; }
     if (!f.files.some((x) => x.id === d.file.id)) f.files.push(d.file);
-    msg = `Restored “${d.file.name}” to ${c.name} › ${f.name}`;
+    msg = `Restored “${d.file.name}”`;
   } else if (it.type === 'cafolder') {
     const c = clientById(d.clientId);
-    if (!c) { toast('Its client’s Client Assets no longer exist'); return; }
+    if (!c) { toast('Its Client Assets are gone'); return; }
     const f = { ...d.folder };
     if (!c.folders.some((x) => x.id === f.id)) {
       // (the folder it was in is gone: back into Files, or onto the client's main page)
@@ -5664,7 +5664,7 @@ async function renameProject(id) {
 
 async function deleteProjectFlow(id) {
   const p = proj(id);
-  if (p && p.inactive) { toast('Switch the client back on before deleting it (its tasks are hidden while it’s inactive)'); return; }
+  if (p && p.inactive) { toast('Make the client active first'); return; }
   const n = db.tasks.filter((t) => t.projectId === id).length;
   const ok = await dialog({ title: `Delete “${p.name}”?`, body: `The client and its ${n} task${n === 1 ? '' : 's'} move to the Trash. An Admin can restore them within ${TRASH_DAYS} days. Its Client Assets folder stays.`, okText: 'Move to Trash', danger: true });
   if (!ok) return;
@@ -5715,7 +5715,7 @@ function renameSectionInline(sid) {
 
 async function deleteSectionFlow(sid) {
   const p = proj(ui.projectId);
-  if (p.sections.length === 1) { toast('A client needs at least one section'); return; }
+  if (p.sections.length === 1) { toast('Keep at least one section'); return; }
   const s = p.sections.find((x) => x.id === sid);
   const tasks = db.tasks.filter((t) => t.projectId === p.id && t.sectionId === sid);
   const target = p.sections.find((x) => x.id !== sid);
@@ -5805,10 +5805,10 @@ function cdMenu(anchor) {
 
 /* ---- Assignees ---- */
 function setAssignee(t, userId, on) {
-  if (peopleLocked(t)) { toast('Assignees are locked since this task went for CD review'); return; }
+  if (peopleLocked(t)) { toast('Locked during CD review'); return; }
   if (!can('assign')) return denied();
-  if (on && !assignable(userById(userId))) { toast('Only Production, Social, Freelancers and the Creative Director can be assigned'); return; }
-  if (on && userId === cdUserId() && t.cdRule && needsCD(t)) { toast('This task needs CD review, so the Creative Director can’t be assigned to it. Turn off “Needs CD review” first.'); return; }
+  if (on && !assignable(userById(userId))) { toast('This person can’t be assigned'); return; }
+  if (on && userId === cdUserId() && t.cdRule && needsCD(t)) { toast('Turn off CD review first'); return; }
   const has = (t.assignees || []).includes(userId);
   if (on === has) return;
   if (on) {
@@ -5835,7 +5835,7 @@ function setAssignee(t, userId, on) {
 }
 // Floating people picker: search, current assignees (× to remove) and everyone else
 function assignMenu(anchor) {
-  if (peopleLocked(task(ui.taskId))) { toast('Assignees are locked since this task went for CD review'); return; }
+  if (peopleLocked(task(ui.taskId))) { toast('Locked during CD review'); return; }
   if (!can('assign')) return denied();
   closeMenus();
   const t = task(ui.taskId);
@@ -5916,7 +5916,7 @@ function assignMenu(anchor) {
 /* ---- "My part done" for shared tasks ---- */
 function setMyPart(t, done) {
   if (!isMine(t)) return;
-  if (iReview(t)) { toast('Your part is marked done when the Creative Director approves your files'); return; }
+  if (iReview(t)) { toast('Done once the CD approves'); return; }
   t.partsDone = t.partsDone || {};
   if (done) {
     t.partsDone[currentUserId] = nowISO();
@@ -5927,7 +5927,7 @@ function setMyPart(t, done) {
       const to = new Set(creatorAndAms(t));
       to.forEach((u) => pushNotif(u, t, 'allparts', 'marked the last part done — all parts are done, ready for review:'));
     }
-    toast(`Your part is done — “${t.title || 'Untitled task'}” moved to your Done list`, { label: 'Undo', run: () => setMyPart(t, false) });
+    toast(`Your part is done`, { label: 'Undo', run: () => setMyPart(t, false) });
   } else {
     delete t.partsDone[currentUserId];
     logActivity(t, 'reopened their part');
@@ -6032,7 +6032,7 @@ const canEditComment = (c) => !!c && editLeft(c) > 0;
 const editLeftText = (c) => { const m = Math.ceil(editLeft(c) / 60000); return m <= 1 ? 'under 1 min left' : `${m} min left`; };
 function editCommentItem(t, c) {
   if (Brief.isPinned(t, c.id) || !canEditComment(c)) return [];
-  return [{ label: 'Edit comment', hint: editLeftText(c), icon: 'edit', run: () => { if (!canEditComment(c)) { toast('The 10 minutes to edit this comment have passed'); return; } ui.editingComment = c.id; renderDetail(); setTimeout(() => { const el = $('#edit-comment'); if (el) { el.focus(); placeCaretAtEnd(el); } }, 0); } }];
+  return [{ label: 'Edit comment', hint: editLeftText(c), icon: 'edit', run: () => { if (!canEditComment(c)) { toast('Too late to edit'); return; } ui.editingComment = c.id; renderDetail(); setTimeout(() => { const el = $('#edit-comment'); if (el) { el.focus(); placeCaretAtEnd(el); } }, 0); } }];
 }
 function commentMenu(anchor, cid) {
   const t = task(ui.taskId);
@@ -6357,7 +6357,7 @@ document.addEventListener('click', async (e) => {
       case 'my-part': { const t = task(ui.taskId); setMyPart(t, actEl.dataset.v === '1'); return; }
       case 'reopen-part': { e.stopPropagation(); const t = task(ui.taskId); const u = id; showMenu(actEl, [{ label: `Reopen ${fullName(userById(u)).split(' ')[0]}’s part`, icon: 'reply', run: () => reopenPart(t, u) }], { native: true }); return; }
       case 'focus-search': { const sr = $('#search'); sr.focus(); sr.select(); return; }
-      case 'cd-menu': e.stopPropagation(); toast('CD Status is set automatically when files are submitted and reviewed'); return;
+      case 'cd-menu': e.stopPropagation(); toast('CD Status sets itself'); return;
       case 'submit-review': e.stopPropagation(); submitDialog(task(ui.taskId)); return;
       case 'withdraw-review': e.stopPropagation(); withdrawReview(task(ui.taskId)); return;
       case 'client-approved': e.stopPropagation(); { const t = task(ui.taskId); if (t && canClientApprove(t)) { setClientApproval(t, {}); commit(); renderDetail(); } } return;
@@ -6617,7 +6617,7 @@ function saveEdit(cid) {
   if (!c || !el) return;
   const v = editorEmpty(el) ? '' : el.innerText.trim();
   if (!v && !(c.attachments || []).length) return;
-  if (Date.now() - Date.parse(c.at) > EDIT_WINDOW + 60000) { ui.editingComment = null; renderDetail(); toast('The 10 minutes to edit this comment have passed — it wasn’t changed'); return; }
+  if (Date.now() - Date.parse(c.at) > EDIT_WINDOW + 60000) { ui.editingComment = null; renderDetail(); toast('Too late to edit'); return; }
   const html = v ? sanitizeHTML(el.innerHTML) : '';
   if (v !== c.text || html !== (c.html || '')) {
     const before = mentionsIn(c.html);
@@ -6674,7 +6674,7 @@ document.addEventListener('change', (e) => {
   else if (el.id === 'd-golive') Cal.setGolive(t, el.value || null);
   else if (el.id === 'd-start' && !can('editDates', t)) { denied(); renderDetail(); }
   else if (el.id === 'd-start') { const o = t.start; t.start = el.value || null; logChange(t, 'the <b>start date</b>', fmtDay(o), fmtDay(t.start)); t.updatedAt = nowISO(); commit(); }
-  else if (el.id === 'd-project') { if (!can('editProject') || idLocked(t)) { if (idLocked(t)) toast('The client is locked since this task went for CD review'); else denied(); renderDetail(); return; } setTaskProject(t, el.value || null); commit(); }
+  else if (el.id === 'd-project') { if (!can('editProject') || idLocked(t)) { if (idLocked(t)) toast('Locked during CD review'); else denied(); renderDetail(); return; } setTaskProject(t, el.value || null); commit(); }
   else if (el.id === 'd-section') { moveTask(t.id, el.value, null, false); commit(); }
 });
 
@@ -7007,7 +7007,7 @@ function clientFileById(id) {
 const clientOfProject = (p) => (p && p.clientId ? clientById(p.clientId) : null);
 function openClient(id, folderId = null) {
   if (!clientById(id)) { toast('That client has been removed'); return; }
-  if (!caVisible(clientById(id))) { toast('That client’s assets are for the people working on it'); return; }
+  if (!caVisible(clientById(id))) { toast('Not shared with you'); return; }
   ui.caQ = ''; ui.caScope = null;
   if (ui.taskId) closeDetail();
   ui.clientId = id; ui.folderId = folderId;
@@ -7245,7 +7245,7 @@ function addClientDialog() {
   $('[data-r="0"]', root).addEventListener('click', cancel);
   inp.addEventListener('input', check);
   $('#ac-logo', root).addEventListener('click', async () => {
-    if (!Host.isNative) { toast('Logos can be added in the Mac app'); return; }
+    if (!Host.isNative) { toast('Add logos in the Mac app'); return; }
     try {
       const r = await Host.call('pickImage', { kind: 'logo', userId: 'client-sq' });
       if (!r.path) return;
@@ -7274,7 +7274,7 @@ function addClientDialog() {
 }
 
 async function renameClient(c) {
-  if (!canRenameCA(c)) { toast('Only an Admin, or whoever created it, can rename this'); return; }
+  if (!canRenameCA(c)) { toast('You can’t rename this'); return; }
   const v = await formDialog({ title: 'Rename client', fields: [{ key: 'name', label: 'Client name', value: c.name }], okText: 'Save',
     validate: (x) => (!x.name ? 'Enter the client’s name' : dupClient(x.name, c.id) ? dupMsg(dupClient(x.name, c.id)) : null) });
   if (!v) return;
@@ -7289,7 +7289,7 @@ async function saveLogoOriginal(c, file) {
   // the new file is saved first; only once it's safely there is a file of the same name taken away
   let up = [];
   try { up = await ServerHost.uploadMany([file], { dest: f.dir }); } catch (e) { up = []; }
-  if (!up.length) { toast('The logo is set, but it couldn’t be added to the Logos folder — upload it there by hand'); return; }
+  if (!up.length) { toast('Logo set, not in Logos folder'); return; }
   const same = f.files.filter((a) => a.name.toLowerCase() === file.name.toLowerCase());
   f.files = f.files.filter((a) => !same.includes(a));
   f.files.push(...up.map((x) => ({ ...x, name: file.name, addedAt: nowISO(), addedBy: currentUserId })));
@@ -7301,7 +7301,7 @@ async function saveLogoOriginal(c, file) {
   }
 }
 async function changeClientLogo(c) {
-  if (!Host.isNative) { toast('Logos can be added in the Mac app'); return; }
+  if (!Host.isNative) { toast('Add logos in the Mac app'); return; }
   try {
     const r = await Host.call('pickImage', { kind: 'logo', userId: 'client-sq' });
     if (!r.path) return;
@@ -7311,7 +7311,7 @@ async function changeClientLogo(c) {
   } catch (e) { toast('Could not use that logo: ' + e.message); }
 }
 async function deleteClient(c) {
-  if (!isAdmin()) { toast('Only an Admin can delete a client'); return; }
+  if (!isAdmin()) { toast('Only Admins delete clients'); return; }
   const n = clientFileCount(c);
   const ok = await dialog({ title: `Delete ${c.name}?`, body: `This removes the client and its ${c.folders.length} folders${n ? ` and ${n} file${n === 1 ? '' : 's'} (moved to the Trash)` : ''}. Files already pasted into tasks stay in those tasks.`, okText: 'Delete client', danger: true });
   if (!ok) return;
@@ -7337,7 +7337,7 @@ const folderDup = (c, name, exceptId, parentId) => c.folders.find((f) => f.id !=
 async function addFolderFlow(c, parent = null) {
   if (!canAddAssets()) return denied();
   if (parent && !canMakeSub(c, parent)) return toast(parent.finalOf ? 'Final files hold no folders' : `Folders go up to ${FOLDER_DEPTH} levels deep inside Files`);
-  if (!parent && !canAssets()) return toast('New folders here are made by Admins and Account Managers — add yours inside Files');
+  if (!parent && !canAssets()) return toast('Add your folder inside Files');
   const pid = parent ? parent.id : null;
   const v = await formDialog({ title: `New folder in ${parent ? c.name + ' › ' + folderPath(c, parent) : c.name}`, fields: [{ key: 'name', label: 'Folder name', placeholder: parent ? 'e.g. Summer campaign shoot' : 'e.g. Social templates' }], okText: 'Create folder',
     validate: (x) => (!x.name ? 'Enter a folder name' : folderDup(c, x.name, null, pid) ? `There is already a folder named “${folderDup(c, x.name, null, pid).name}”.` : null) });
@@ -7465,13 +7465,13 @@ async function pickIntoFolder() {
     if (!files.length) return;
     f.files.push(...files); assetNotify(c, f, 'added', files.map((x) => x.name)); persist(0); render();
     autoLogo(c, f, files);
-    toast(`Added ${files.length} file${files.length === 1 ? '' : 's'} to ${c.name} › ${f.name}`);
+    toast(`Added ${files.length} file${files.length === 1 ? '' : 's'}`);
   } catch (e) { toast('Could not add files: ' + e.message); }
 }
 // Drag-and-drop upload in 2 MB pieces with a progress row per file
 async function uploadIntoFolder(fileList) {
   const { c, f } = curFolder();
-  if (!f || !canUploadTo(c, f)) { if (f && isFilesTop(c, f)) toast('Files holds folders — open or make a folder first, then add the files there'); else if (f && f.finalOf) toast('Final files are filed by the app when the task is completed'); return; }
+  if (!f || !canUploadTo(c, f)) { if (f && isFilesTop(c, f)) toast('Open a folder first'); else if (f && f.finalOf) toast('Filed when the task is done'); return; }
   const box = $('#ca-uploads');
   const rows = [...fileList].map((file) => {
     const el = document.createElement('div'); el.className = 'sr-item';
@@ -7505,7 +7505,7 @@ async function uploadIntoFolder(fileList) {
     } catch (e) { el.classList.add('err'); note.textContent = 'Upload failed — ' + e.message; { const x = el.querySelector('.up-cx'); if (x) x.remove(); } }
   }
   if (added) { assetNotify(c, f, 'added', f.files.slice(-added).map((x) => x.name)); persist(0); Promise.resolve(Sync.push()).catch(() => {}).then(() => autoLogo(c, f, f.files.slice(-added))); }
-  if (added && ui.view === 'client' && ui.folderId === f.id) { render(); toast(`Added ${added} file${added === 1 ? '' : 's'} to ${c.name} › ${f.name}`); }
+  if (added && ui.view === 'client' && ui.folderId === f.id) { render(); toast(`Added ${added} file${added === 1 ? '' : 's'}`); }
 }
 async function removeClientFile(id) {
   const { f } = curFolder();
@@ -7522,7 +7522,7 @@ async function removeClientFile(id) {
 function downloadClientFiles(list, folderName) {
   if (!list.length) return;
   Host.call('exportFiles', { folder: folderName, paths: list.map((a) => a.path) })
-    .then((r) => toast(`Saved ${r.count} file${r.count === 1 ? '' : 's'} to Downloads › ${r.dir.split('/').pop()}`))
+    .then((r) => toast(`Saved ${r.count} file${r.count === 1 ? '' : 's'} to Downloads`))
     .catch((e) => toast('Could not download: ' + e.message));
 }
 function projectClientMenu(anchor, p) {
@@ -7782,7 +7782,7 @@ async function changeStatus(t, sectionId, targetId = null, after = false) {
   const backFromClient = !t.parentId && fromS && toS && to < from && (SEC_CTR.test(fromS.name.trim()) || isDoneName(fromS.name)) && !(SEC_CTR.test(toS.name.trim()) || isDoneName(toS.name));
   if (backFromClient) {
     const allowed = (me() && (isAdm(me()) || me().role === 'am')) || t.createdBy === currentUserId;
-    if (!allowed) { toast('Only an Account Manager or the person who created this task can send it back'); return false; }
+    if (!allowed) { toast('You can’t send this back'); return false; }
     const cdOnIt = t.cdRule && cdUserId() && (t.assignees || []).includes(cdUserId());   // (the CD works on it: no CD review)
     const ans = cdOnIt ? 'no' : await choiceDialog({
       title: 'Does this need CD review again?',
@@ -7809,8 +7809,8 @@ async function changeStatus(t, sectionId, targetId = null, after = false) {
 
 function setNeedsCD(t, on) {
   if (!(me() && (isAdm(me()) || me().role === 'am' || isCD()))) return denied();
-  if (on && t.cdRule && cdUserId() && (t.assignees || []).includes(cdUserId())) { toast('The Creative Director is assigned to this task, so it doesn’t need CD review'); renderDetail(); return; }
-  if (reviewPending(t)) { toast('Files are waiting for CD review — this can be changed after the CD decides'); return; }
+  if (on && t.cdRule && cdUserId() && (t.assignees || []).includes(cdUserId())) { toast('The CD is on it — no review'); renderDetail(); return; }
+  if (reviewPending(t)) { toast('Wait for the CD’s review'); return; }
   if (!!t.needsCD === !!on) return;
   t.needsCD = !!on;
   logActivity(t, on ? 'turned on <b>CD review</b> for this task' : 'turned off <b>CD review</b> for this task');
@@ -7887,7 +7887,7 @@ function taskFrom(t) {
   Draft.start(n);   // (closed without any change, it goes away again, like an empty new task)
   commit();
   openTask(n.id, true);
-  toast('New task — give it its own name');
+  toast('New task — give it a name');
 }
 const lastCDApprovalAt = (t) => (t.reviews || []).filter((r) => r.state === 'approved').map((r) => r.decidedAt || r.at || '').sort().pop() || '';
 const clientApprovalFresh = (t) => !!t.clientApproval && String(t.clientApproval.at || '') >= lastCDApprovalAt(t);
@@ -8112,7 +8112,7 @@ function decisionDialog(id) {
     const b = e.target.closest('[data-d]');
     if (!b) return;
     const d = b.dataset.d;
-    if (d === 'approve') { close(); decideReview(t, r, 'approve'); toast(`Approved — ${firstName(r.by)} has been notified`); }
+    if (d === 'approve') { close(); decideReview(t, r, 'approve'); toast(`Approved — ${firstName(r.by)} told`); }
     else if (d === 'amend') { $('.rd-choices', root).hidden = true; $('.rd-amend', root).hidden = false; setTimeout(() => $('#rd-note', root).focus(), 20); }
     else if (d === 'back') { $('.rd-choices', root).hidden = false; $('.rd-amend', root).hidden = true; }
     else if (d === 'send') {
@@ -8121,7 +8121,7 @@ function decisionDialog(id) {
       const html = sanitizeHTML(ed.innerHTML);
       close();
       decideReview(t, r, 'amend', html);
-      toast(`Sent back to ${firstName(r.by)} with your notes`);
+      toast(`Sent back to ${firstName(r.by)}`);
     }
   });
 }
@@ -8131,7 +8131,7 @@ async function downloadReviewFiles(id) {
   const files = (f.r.files || []).map((x) => f.t.attachments.find((a) => a.id === x)).filter(Boolean);
   try {
     await Host.call('exportFiles', { paths: files.map((a) => a.path), folder: `${f.t.title || 'Task'} — ${fullName(userById(f.r.by))}${f.r.round > 1 ? ' — Round ' + f.r.round : ''}` });
-    toast(`Saved ${files.length} file${files.length === 1 ? '' : 's'} to your Downloads folder`);
+    toast(`Saved ${files.length} file${files.length === 1 ? '' : 's'} to Downloads`);
   } catch (e) { toast('Could not download: ' + e.message); }
 }
 
@@ -8151,8 +8151,8 @@ async function cdToggleFlow(id) {
   if (cur === id) {
     const ok = await dialog({ title: `Remove ${fullName(u)} as ${cdTitle()}?`, body: db.meta.cdHomeId && cdActing() ? `${fullName(userById(db.meta.cdHomeId))} will be Creative Director again.` : 'Review requests will wait until someone else is made Creative Director.', okText: 'Remove', danger: true });
     if (!ok) { renderContent(); return; }
-    if (cdActing() && db.meta.cdHomeId && userById(db.meta.cdHomeId)) { db.meta.cdUserId = db.meta.cdHomeId; db.meta.cdHomeId = null; db.meta.cdActing = false; toast(`${fullName(userById(db.meta.cdUserId))} is Creative Director again`); }
-    else { db.meta.cdUserId = null; db.meta.cdActing = false; db.meta.cdHomeId = null; toast('There is no Creative Director now'); }
+    if (cdActing() && db.meta.cdHomeId && userById(db.meta.cdHomeId)) { db.meta.cdUserId = db.meta.cdHomeId; db.meta.cdHomeId = null; db.meta.cdActing = false; toast(`${fullName(userById(db.meta.cdUserId))} is CD again`); }
+    else { db.meta.cdUserId = null; db.meta.cdActing = false; db.meta.cdHomeId = null; toast('No Creative Director now'); }
     persist(0); render(); return;
   }
   if (cur) {
@@ -8336,13 +8336,13 @@ function openNotif(id) {
   if (/^claim/.test(n.kind)) { myNotifs().forEach((x) => { if (x.claimId && x.claimId === n.claimId) x.read = true; }); persist(); renderSidebar(); return Claims.openNotif(n); }
   if (n.planId) {
     myNotifs().forEach((x) => { if (notifKey(x) === notifKey(n)) x.read = true; }); persist(); renderSidebar();
-    if (!Plans.canSee() || !Plans.planById(n.planId)) { toast('That content skeleton isn’t available'); return renderContent(); }
+    if (!Plans.canSee() || !Plans.planById(n.planId)) { toast('Content skeleton not found'); return renderContent(); }
     if (ui.taskId) closeDetail();
     return Plans.open(n.planId);
   }
   if (n.kind === 'asset') {
     myNotifs().forEach((x) => { if (notifKey(x) === notifKey(n)) x.read = true; }); persist(); renderSidebar();
-    if (!clientById(n.clientId)) { toast('That client’s assets aren’t available'); return; }
+    if (!clientById(n.clientId)) { toast('Client Assets not found'); return; }
     const c = clientById(n.clientId);
     return openClient(c.id, c.folders.some((x) => x.id === n.folderId) ? n.folderId : null);
   }
@@ -8351,7 +8351,7 @@ function openNotif(id) {
   const t = task(n.taskId);
   if (!t) {
     const inTrash = trashList().find((x) => (x.type === 'task' || x.type === 'project') && (x.key === 'tasks:' + n.taskId || ((x.data || {}).tasks || []).some((t) => t.id === n.taskId)));
-    if (inTrash && isManager()) { ui.trashQ = trashTitle(inTrash); ui.trashFilter = 'all'; closeDetail(); go('trash'); toast('That task is in the Trash — restore it from here'); }
+    if (inTrash && isManager()) { ui.trashQ = trashTitle(inTrash); ui.trashFilter = 'all'; closeDetail(); go('trash'); toast('That task is in the Trash'); }
     else toast(isManager() ? 'That task has been deleted' : 'That task is in the Trash — ask an Account Manager if it should come back');
     return;
   }
@@ -8723,7 +8723,7 @@ function memberMenu(anchor, id, head) {
       Object.entries(ROLES).forEach(([k, l]) => own.push({ html: `<div class="mi ${u.role === k ? 'cur' : ''}"><span class="role-pill r-${k}">${esc(l)}</span></div>`, run: async () => {
         if (u.role === k) return;
         const others = db.users.filter((x) => x.id !== u.id && isSuper(x) && x.active !== false);
-        if (k !== 'admin' && !others.length) return toast('Make someone else a Super Admin first');
+        if (k !== 'admin' && !others.length) return toast('Make another Super Admin first');
         if (k !== 'admin' && !(await dialog({ title: `Work as ${l}?`, body: `You’ll use the app as ${l}${u.admin ? ' — Admin rights stay switched on until you take them off' : ''}. As the owner, nobody else can change your role or access${Host.isServer && !isTestCopy() ? ', and you can step back in from Owner view at the bottom of My profile' : ''}.`, okText: `Work as ${l}` }))) return;
         u.role = k; persist(0); renderContent(); renderSidebar(); toast(`You now work as ${l}`);
       } }));
@@ -8738,14 +8738,14 @@ function memberMenu(anchor, id, head) {
   }
   const items = [...top, { html: '<div class="menu-label">Change role</div>' }];
   Object.entries(ROLES).forEach(([k, l]) => items.push({ html: `<div class="mi ${u.role === k ? 'cur' : ''}"><span class="role-pill r-${k}">${esc(l)}</span></div>`, run: () => {
-    if (isSuper(u) && k !== 'admin' && !u.admin && db.users.filter((x) => isSuper(x) && x.active !== false).length < 2) return toast('There must be at least one Super Admin');
+    if (isSuper(u) && k !== 'admin' && !u.admin && db.users.filter((x) => isSuper(x) && x.active !== false).length < 2) return toast('Keep at least one Super Admin');
     u.role = k; persist(); renderContent(); toast(`${fullName(u)} is now ${l}`);
     if (k === 'freelancer') setTimeout(() => projectAccessDialog(u), 0);
   } }));
   items.push('-');
   const finOnly = isFinUser(u);
   if (u.role !== 'admin' && !finOnly) items.push({ html: `<div class="mi">${icon('shield')}Super Admin rights${u.admin ? `<span class="wf-ck">${icon('check')}</span>` : ''}</div>`, run: () => {
-    if (u.admin && db.users.filter((x) => isSuper(x) && x.active !== false).length < 2) return toast('There must be at least one Super Admin');
+    if (u.admin && db.users.filter((x) => isSuper(x) && x.active !== false).length < 2) return toast('Keep at least one Super Admin');
     u.admin = u.admin ? undefined : true; persist(); renderContent(); toast(u.admin ? `${fullName(u)} now also has Admin rights` : `${fullName(u)} no longer has Admin rights`);
   } });
   if (!finOnly) Object.entries(FIN_ACCESS).forEach(([k, l]) => items.push({ html: `<div class="mi">${icon('coin')}${esc(l)}${(u.fin || '') === k ? `<span class="wf-ck">${icon('check')}</span>` : ''}</div>`, run: () => {
@@ -8772,10 +8772,10 @@ async function resetPasswordFlow(u) {
     fields: [{ key: 'pw', label: 'Temporary password', value: tempPassword() }], validate: (x) => (x.pw.length < 6 ? 'At least 6 characters' : null) });
   if (!v) return;
   setPassword(u, v.pw); u.setup = false; persist(0); renderContent();
-  toast('Password reset — share the temporary password with them privately');
+  toast('Reset — share it privately');
 }
 async function removeMemberFlow(u) {
-  if (isSuper(u) && db.users.filter((x) => isSuper(x) && x.active !== false).length < 2) return toast('There must be at least one Super Admin');
+  if (isSuper(u) && db.users.filter((x) => isSuper(x) && x.active !== false).length < 2) return toast('Keep at least one Super Admin');
   const n = db.tasks.filter((t) => (t.assignees || []).includes(u.id)).length;
   const ok = await dialog({ title: `Remove ${fullName(u)}?`, body: `They won’t be able to sign in${n ? ` and will be unassigned from ${n} task${n === 1 ? '' : 's'}` : ''}. Their comments stay. You can restore access later.`, okText: 'Remove', danger: true });
   if (!ok) return;
@@ -8853,7 +8853,7 @@ async function pickIconImage() {
     const r = await NativeMac.call('pickLocalFiles', { multiple: false, images: true, prompt: 'Use as icon', message: 'Choose a square image for the Mac app icon' });
     const f = (r.files || [])[0];
     if (!f) return null;
-    if (f.size > 15 * 1024 * 1024) { toast('That image is too large (15 MB at most)'); return null; }
+    if (f.size > 15 * 1024 * 1024) { toast('Image too large (15 MB max)'); return null; }
     const c = await NativeMac.call('readLocalChunk', { token: f.token, offset: 0, length: f.size, last: true });
     const bin = atob(c.b64 || ''); const arr = new Uint8Array(bin.length);
     for (let k = 0; k < bin.length; k++) arr[k] = bin.charCodeAt(k);
@@ -8983,7 +8983,7 @@ async function appIconUploadFlow() {
   let im;
   try { im = await loadImage(blob); } catch (e) { toast(e.message); return; }
   const side = Math.min(im.naturalWidth, im.naturalHeight);
-  if (side < 256) { toast(`That image is ${im.naturalWidth} × ${im.naturalHeight} — use at least 512 × 512`); return; }
+  if (side < 256) { toast(`Too small — at least 512 × 512`); return; }
   const squareNote = im.naturalWidth !== im.naturalHeight ? '<p class="ai-warn">This image isn’t square, so the middle of it will be used.</p>' : '';
   let rounded = true, glass = true;
   const root = $('#overlay-root');
@@ -9021,7 +9021,7 @@ async function appIconUploadFlow() {
       const r = await api('POST', '/api/app-icon', { png: await AppIcon.toB64(out) });
       done();
       AppIcon.sync(r);
-      toast('New icon set — every open Mac app updates now');
+      toast('New icon set');
       renderContent();
     } catch (err) { b.disabled = false; b.textContent = 'Use this icon for everyone'; toast('Couldn’t change the icon: ' + err.message); }
   });
@@ -9059,7 +9059,7 @@ function notifToggles(u, cdOnly) {
   return NOTIF_TYPES.filter((x) => !!x.cd === cdOnly && (!x.lead || Daily.wants(u))).map((x) => `<div class="pf-opt nt-opt"><div><b>${esc(x.l)}</b><span>${esc(x.d)}${x.k === 'daily' ? ' <a href="#" class="nt-try" data-action="daily-try">Send me one now</a>' : ''}</span></div><button class="switch ${off[x.k] ? '' : 'on'}" data-action="toggle-notif-type" data-k="${x.k}" title="${off[x.k] ? 'Off' : 'On'}"><i></i></button></div>`).join('');
 }
 async function pickAvatar() {
-  if (!Host.isNative) { toast('Photos can be added in the Mac app'); return null; }
+  if (!Host.isNative) { toast('Add photos in the Mac app'); return null; }
   try { const r = await Host.call('pickImage', { userId: currentUserId }); return r.path || null; }
   catch (e) { toast('Could not use that photo: ' + e.message); return null; }
 }

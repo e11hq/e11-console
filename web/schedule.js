@@ -227,7 +227,7 @@ const Sched = (() => {
     if (!t) return close();
     if (!(ms > Date.now() + 30000)) { toast('Pick a time in the future'); return; }
     const replyTo = st.replyTo, key = draftKey(t, replyTo);
-    if (ui.commentUp && ui.commentUp[key]) { toast('Wait for your files to finish uploading'); return; }
+    if (ui.commentUp && ui.commentUp[key]) { toast('Wait for the upload'); return; }
     const box = ui.taskId === t.id ? $(`#detail [data-draft-key="${key}"]`) : null;
     const empty = !box || editorEmpty(box);
     const text = empty ? '' : box.innerText.trim(), html = empty ? '' : sanitizeHTML(box.innerHTML);
@@ -294,7 +294,7 @@ const Sched = (() => {
       const k = toDraft(s);
       drop(s); commit();
       focusDraft(t, k, s.replyTo && k !== t.id ? s.replyTo : null);
-      toast('Back in the comment box — send or schedule it again');
+      toast('Back in the comment box');
     } else if (b.dataset.scAct === 'now') {
       drop(s);
       const replyTo = s.replyTo && (t.comments || []).some((c) => c.id === s.replyTo) ? s.replyTo : null;
@@ -323,7 +323,7 @@ const Sched = (() => {
   }
   function openCancelled(n) {
     const s = byId(n.schedId);
-    if (!s) { toast('That comment is no longer kept (after 30 days)'); return; }
+    if (!s) { toast('Gone after 30 days'); return; }
     const t = task(s.taskId);
     if (t) {
       let key = draftKey(t, s.replyTo && (t.comments || []).some((c) => c.id === s.replyTo) ? s.replyTo : null);
@@ -335,7 +335,7 @@ const Sched = (() => {
     }
     // deleted: Admins and Account Managers find it in the Trash; everyone else gets its text and files
     const inTrash = trashList().find((it) => ((it.data || {}).tasks || []).some((x) => x && x.id === s.taskId));
-    if (inTrash && isManager()) { if (ui.taskId) closeDetail(); ui.trashQ = trashTitle(inTrash); ui.trashFilter = 'all'; go('trash'); toast('The task is in the Trash — restore it and your comment comes back as a draft'); return; }
+    if (inTrash && isManager()) { if (ui.taskId) closeDetail(); ui.trashQ = trashTitle(inTrash); ui.trashFilter = 'all'; go('trash'); toast('The task is in the Trash'); return; }
     lost(s);
   }
   function lost(s) {
@@ -353,7 +353,7 @@ const Sched = (() => {
       if (e.target === w) return done();
       const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.sl === 'close') return done();
-      if (b.dataset.sl === 'copy') { try { await navigator.clipboard.writeText(s.text || plain(s.html)); toast('Copied'); } catch (err) { toast('Couldn’t copy — select the text instead'); } return; }
+      if (b.dataset.sl === 'copy') { try { await navigator.clipboard.writeText(s.text || plain(s.html)); toast('Copied'); } catch (err) { toast('Couldn’t copy'); } return; }
       if (b.dataset.lf != null) { const a = (s.attachments || [])[+b.dataset.lf]; if (a) Host.call('revealPath', { path: a.path }).catch((err) => toast('Couldn’t download: ' + err.message)); }
     });
     document.body.appendChild(w);
@@ -380,7 +380,7 @@ const Brief = (() => {
       t.briefPins = pins(t).concat({ cid: c.id, by: currentUserId, at: nowISO() });
       logActivity(t, 'pinned a comment to the brief');
       t.updatedAt = nowISO(); commit();
-      toast('Pinned under the description as a brief update');
+      toast('Pinned as a brief update');
     } }, '-'];
   }
   function pinsHTML(t) {

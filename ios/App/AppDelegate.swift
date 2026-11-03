@@ -915,7 +915,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let from = d.originalRequest?.url?.absoluteString ?? ""
     if !from.isEmpty, downloadFrom.values.contains(from) {
       d.cancel { _ in }
-      pageJS("window.toast && toast('Already downloading — it opens when it’s done')")
+      pageJS("window.toast && toast('Already downloading')")
       return
     }
     let k = ObjectIdentifier(d)
@@ -975,7 +975,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let wasLive = downloadFrom[ObjectIdentifier(download)] != nil
     downloads.removeValue(forKey: ObjectIdentifier(download))
     endDownload(download)
-    if wasLive, (error as NSError).code != NSURLErrorCancelled { pageJS("window.toast && toast('Download failed — check your connection and try again')") }
+    if wasLive, (error as NSError).code != NSURLErrorCancelled { pageJS("window.toast && toast('Download failed — try again')") }
   }
 
   /* ---------- the native tab bar (the page's own tabs; tapping one taps the page's button) ---------- */
@@ -1782,7 +1782,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   func tokenFailed(_ msg: String) {
     let w = pushWaiters; pushWaiters = []
-    w.forEach { $0(["ok": false, "error": "Couldn’t turn on notifications: " + msg]) }
+    w.forEach { $0(["ok": false, "error": "Notifications failed: " + msg]) }
   }
   func sendToken(_ hex: String) {
     // (the Notification Service Extension confirms each notification with this address — ack: the server sends again

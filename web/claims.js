@@ -481,7 +481,7 @@ const Claims = (() => {
 
   /* ---------- Inbox ---------- */
   function openNotif(n) {
-    if (phone()) { toast('Expense claims open on the computer'); return; }
+    if (phone()) { toast('Claims are on the computer'); return; }
     if (n.kind === 'claim') {
       if (!finLevel()) return;
       st.finMonth = n.month || claimMonth(); st.flash = n.claimId;

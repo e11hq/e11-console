@@ -308,7 +308,7 @@ const Plans = (() => {
     const p = proj(pl.projectId);
     const cd = cdUserId(), sms = socialMgrIds().filter((id) => id !== pl.createdBy);
     const opts = [sms.length && ['sm', `Social Manager${sms.length === 1 ? ` (${firstName(sms[0])})` : ''}`], cd && ['cd', `${fullName(userById(cd))} (CD)`], sms.length && cd && ['both', 'Both']].filter(Boolean);
-    if (!opts.length) { toast('There’s no Social Manager or Creative Director to send it to'); return; }
+    if (!opts.length) { toast('No one to send it to'); return; }
     const missing = Occasions.between(firstDay(pl.month), lastDay(pl.month)).filter((o) => !(pl.posts || []).some((x) => x.occasion === o.id) && !skipped(p, o));
     let to = (pl.review && opts.some(([k]) => k === pl.review.to) && pl.review.to) || opts[0][0];
     const root = $('#overlay-root');
@@ -343,7 +343,7 @@ const Plans = (() => {
     if (!isEditor(pl) || pl.status !== 'review') return denied();
     pl.status = 'draft';
     logIt(pl, 'withdrawn');
-    persist(0); render2(); toast('Taken back — you can change it and send it again');
+    persist(0); render2(); toast('Taken back — edit and resend');
   }
   async function approve(pl) {
     if (!canApprove(pl) || pl.status !== 'review') return denied();
@@ -412,7 +412,7 @@ const Plans = (() => {
   function makeTasksDialog(pl) {
     if (!canMakeTasks(pl)) return denied();
     const posts = postsSorted(pl).filter((x) => !x.taskId || !task(x.taskId));   // (a task deleted since can be made again)
-    if (!posts.length) { toast('Every post already has its task'); return; }
+    if (!posts.length) { toast('Every post has its task'); return; }
     const today = todayStr();
     const defDue = (d) => { const x = addDays(d, -3); return x < today ? today : x; };
     const rows = posts.map((x) => ({ x, on: true, who: [], due: defDue(x.day) }));
@@ -499,7 +499,7 @@ const Plans = (() => {
       const ams = ((p && p.ams) || []).filter((a) => !a.onLeave).map((a) => a.id);
       notify(ams, pl, 'plan-tasks', `created ${made.length} task${made.length === 1 ? '' : 's'} from the content skeleton for <b>${esc(nameOf(pl))}</b>`);
       close(); persist(0); render2();
-      toast(`Created ${made.length} task${made.length === 1 ? '' : 's'} in ${p ? p.name : 'the client'}`);
+      toast(`Created ${made.length} task${made.length === 1 ? '' : 's'}`);
     });
     draw();
   }
@@ -572,7 +572,7 @@ const Plans = (() => {
       if (b.dataset.x === 'upload-logo') {
         const c = clientOfProject(p); let f = logosFolder(p);
         if (!c) return;
-        if (!f) { toast('This client has no Logos folder in Client Assets'); return; }
+        if (!f) { toast('No Logos folder yet'); return; }
         const picked = await ServerHost.pickFiles({ multiple: false, accept: 'image/*,.svg' });
         if (!picked.length) return;
         const up = await ServerHost.uploadMany(picked, { dest: f.dir });
@@ -614,7 +614,7 @@ const Plans = (() => {
     if (!ex || !canMakeTasks(pl)) return;
     pl.sent = { round: ex.round, at: nowISO(), by: currentUserId };
     logIt(pl, 'client-sent', { round: ex.round });
-    persist(0); render2(); toast(`Round ${ex.round} marked as sent to the client`);
+    persist(0); render2(); toast(`Round ${ex.round} marked sent`);
   }
   // the client asked for changes on a post: its task goes back to In progress, with the client's words as a comment, and
   // the new version needs the CD's approval again
@@ -732,10 +732,10 @@ const Plans = (() => {
         return paint();
       }
       if (b.dataset.r !== '1') return;
-      if (asking()) { toast('Answer the posts in yellow first'); return; }
+      if (asking()) { toast('Answer the yellow posts first'); return; }
       const todo = rows.filter((r) => !r.locked && r.state);
       if (!todo.length) { toast('Mark at least one post'); return; }
-      if (todo.some((r) => r.state === 'changes' && !r.note.trim() && !r.links.length)) { toast('Say what the client wants changed'); return; }
+      if (todo.some((r) => r.state === 'changes' && !r.note.trim() && !r.links.length)) { toast('Add the client’s changes'); return; }
       let ok = 0, ch = 0, skipped = 0;
       const now = nowISO();
       todo.forEach((r) => {
@@ -753,7 +753,7 @@ const Plans = (() => {
       }
       logIt(pl, 'client', { round: ex.round, approved: ok, changes: ch });
       close(); persist(0); render2();
-      toast(`Saved: ${ok} approved${ch ? `, ${ch} sent back for changes` : ''}${skipped ? ` · ${skipped} not finished yet` : ''}`);
+      toast(`Saved: ${ok} approved${ch ? `, ${ch} sent back` : ''}${skipped ? ` · ${skipped} left` : ''}`);
     };
   }
   async function clientApproveAll(pl) {
@@ -768,7 +768,7 @@ const Plans = (() => {
     logIt(pl, 'client-approved');
     notify([pl.createdBy, ...socialsOf(p), ...socialMgrIds(), ...((p.ams || []).filter((x) => !x.onLeave).map((x) => x.id))], pl, 'plan-client', `recorded the client’s approval of the content plan for <b>${esc(nameOf(pl))}</b>`);
     persist(0); render2();
-    toast(`Client approved — ${n} task${n === 1 ? '' : 's'} completed`);
+    toast(`Approved — ${n} task${n === 1 ? '' : 's'} completed`);
   }
 
   /* ---------- making and changing ---------- */

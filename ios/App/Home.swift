@@ -2123,7 +2123,7 @@ final class ToastCapsule: UIView {
     start.attributedText = a; start.textAlignment = .center
     tick.image = UIImage(systemName: "checkmark.circle.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .regular))
     tick.tintColor = .systemGreen; tick.contentMode = .center
-    msg.font = .systemFont(ofSize: 15); msg.textColor = .label; msg.lineBreakMode = .byTruncatingTail
+    msg.font = .systemFont(ofSize: 15); msg.textColor = .label; msg.lineBreakMode = .byTruncatingTail; msg.adjustsFontSizeToFitWidth = true; msg.minimumScaleFactor = 0.82   // (a message a little too long shrinks a touch rather than being cut)
     undo.titleLabel?.font = .systemFont(ofSize: 15, weight: .semibold)
     undo.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.onUndo?() }, for: .touchUpInside)
     plusB.setImage(UIImage(systemName: "plus", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)), for: .normal)

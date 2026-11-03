@@ -227,7 +227,7 @@ extension TaskPage {
   func finishDesc() {
     guard editingDesc else { return }
     // (a file still going up: saved as soon as it's there — until then it stays as it is)
-    if descUploading { descAutoFinish = true; toast("Saving once the upload is finished"); descView.resignFirstResponder(); return }
+    if descUploading { descAutoFinish = true; toast("Saves after the upload"); descView.resignFirstResponder(); return }
     descAutoFinish = false
     editingDesc = false
     hideMentions()
