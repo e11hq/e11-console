@@ -787,7 +787,7 @@ final class AssetsCtl {
       ("Info", "info", false, { [weak self] in self?.fileInfo(f) }),
     ]
     let flipFile: () -> Void = { [weak self, weak h] in self?.main.fileLinkToggle(f) { t in h?.assetsToast(t) } }
-    if Main.linksOff.contains(f["file"] as? String ?? "") { items.append(("Turn on link", "unlock", false, flipFile)) } else { items.append(("Turn off link", "lock", false, flipFile)) }
+    if Main.isAdmin { if Main.linksOff.contains(f["file"] as? String ?? "") { items.append(("Turn on link", "unlock", false, flipFile)) } else { items.append(("Turn off link", "lock", false, flipFile)) } }
     if (f["canDel"] as? Bool) == true, let fid = f["folder"] as? String {
       items.append(("Delete", "trash", true, { [weak self, weak h] in
         guard let self = self, let h = h else { return }
@@ -807,7 +807,7 @@ final class AssetsCtl {
     if (f["canLink"] as? Bool) == true {
       items.append(("Copy link", "link", false, { [weak self, weak h] in self?.main.copyFolderLink(client: client, folder: id) { t in h?.assetsToast(t) } }))
       let flip: () -> Void = { [weak self, weak h] in self?.main.folderLinkToggle(client: client, folder: id) { t in h?.assetsToast(t) } }
-      if Main.linksOff.contains("d:\(client)/\(id)") { items.append(("Turn on link", "unlock", false, flip)) } else { items.append(("Turn off link", "lock", false, flip)) }
+      if Main.isAdmin { if Main.linksOff.contains("d:\(client)/\(id)") { items.append(("Turn on link", "unlock", false, flip)) } else { items.append(("Turn off link", "lock", false, flip)) } }
     }
     if (f["canRename"] as? Bool) == true { items.append(("Rename folder", "edit", false, { [weak self, weak h] in if let h = h { self?.renameFolder(h, f, client: client) } })) }
     if (f["canDel"] as? Bool) == true { items.append(("Delete folder", "trash", true, { [weak self, weak h] in if let h = h { self?.deleteFolder(h, f, client: client) } })) }
@@ -838,7 +838,7 @@ final class AssetsCtl {
       if (f["canLink"] as? Bool) == true {
         out.append(CornerMenuItem(title: "Copy link", symbol: "link", run: { [weak self, weak h] in self?.main.copyFolderLink(client: cid, folder: fid) { t in h?.assetsToast(t) } }))
         let off = Main.linksOff.contains("d:\(cid)/\(fid)")
-        out.append(CornerMenuItem(title: off ? "Turn on link" : "Turn off link", symbol: off ? "lock.open" : "lock", run: { [weak self, weak h] in self?.main.folderLinkToggle(client: cid, folder: fid) { t in h?.assetsToast(t) } }))
+        if Main.isAdmin { out.append(CornerMenuItem(title: off ? "Turn on link" : "Turn off link", symbol: off ? "lock.open" : "lock", run: { [weak self, weak h] in self?.main.folderLinkToggle(client: cid, folder: fid) { t in h?.assetsToast(t) } })) }
       }
       out.append(CornerMenuItem(title: "Info", symbol: "info.circle", run: { [weak self] in self?.folderInfoSheet(f, client: cid) }))
       var edit: [CornerMenuItem] = []

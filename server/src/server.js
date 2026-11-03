@@ -691,13 +691,14 @@ export function createServer(cfg) {
         const c = store.get('clients', String(body.client)); const f = c && (c.folders || []).find((x) => x.id === String(body.folder));
         if (!c || !f) return json(res, 200, { ok: false, error: 'That folder isn’t in Client Assets any more' });
         if (!access.canReadFile(u, (f.dir || c.dir || 'Clients/x') + '/_')) return json(res, 403, { ok: false, error: 'Not allowed' });
-        if (typeof body.off === 'boolean') return json(res, 200, fileLinks.folderSetOff(u, c.id, f.id, body.off, origin));
+        if (typeof body.off === 'boolean') { if (!access.isAdm(u)) return json(res, 403, { ok: false, error: 'Only Admins can turn a link off or on' }); return json(res, 200, fileLinks.folderSetOff(u, c.id, f.id, body.off, origin)); }
         if (body.state) { const r = fileLinks.folderLink(u, c.id, f.id, origin); return json(res, 200, r); }
         return json(res, 200, fileLinks.folderLink(u, c.id, f.id, origin));
       }
       const fp = String((body && body.path) || '');
       if (!fp || !access.canReadFile(u, fp)) return json(res, 403, { ok: false, error: 'Not allowed' });
-      if (body && typeof body.off === 'boolean') return json(res, 200, fileLinks.setOff(u, fp, body.off, origin));
+      // (turning a link off or on: Admins only — Haris 2026-11-03)
+      if (body && typeof body.off === 'boolean') { if (!access.isAdm(u)) return json(res, 403, { ok: false, error: 'Only Admins can turn a link off or on' }); return json(res, 200, fileLinks.setOff(u, fp, body.off, origin)); }
       return json(res, 200, fileLinks.linkFor(u, fp, origin));
     }
     if (p === '/api/fthumb' && req.method === 'GET') {

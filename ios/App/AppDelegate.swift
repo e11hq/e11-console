@@ -2094,6 +2094,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     case "assets": assetsCtl.command(a); done(["ok": true])
     case "me": meCtl.command(a); done(["ok": true])
     // (33: Copy link from the page — a preview it opened, its own lists: the link put on the clipboard here)
+    case "role": Main.isAdmin = (a["admin"] as? Bool) == true; done(["ok": true])   // (Admins turn links off and on)
     case "copyText": UIPasteboard.general.string = a["text"] as? String ?? ""; done(["ok": true])
     case "copyLink":
       let f: [String: Any] = ["file": a["path"] as? String ?? "", "name": a["name"] as? String ?? "File", "id": a["id"] as? String ?? "", "size": a["size"] as? Int ?? 0, "thumb": a["thumb"] as? String ?? ""]

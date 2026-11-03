@@ -6468,7 +6468,7 @@ document.addEventListener('click', async (e) => {
           { label: 'Preview', icon: 'search', run: tap('[data-action="quicklook"]') },
           { label: 'Download', icon: 'download', run: tap('[data-action="ca-download"]') },
           { label: 'Info', icon: 'info', run: tap('[data-action="ca-info"]') },
-          { label: 'Turn off link', icon: 'lock', run: () => FileLinks.toggle(clientFileById(id)) },
+          ...(isAdm(me()) ? [{ label: 'Turn off link', icon: 'lock', run: () => FileLinks.toggle(clientFileById(id)) }] : []),
           ...(has('[data-action="ca-remove"]') ? ['-', { label: 'Delete', icon: 'trash', danger: true, run: tap('[data-action="ca-remove"]') }] : []),
         ], { native: true });
         return;
@@ -6482,7 +6482,7 @@ document.addEventListener('click', async (e) => {
           { label: 'Copy link', icon: 'link', hint: 'Paste it in a comment, or send it to anyone', run: tap('[data-action="copy-att"]') },
           { label: 'Preview', icon: 'search', run: tap('[data-action="quicklook"]') },
           { label: FINDER_LABEL, icon: Host.isServer ? 'download' : 'folder', run: tap('[data-action="reveal-att"]') },
-          { label: 'Turn off link', icon: 'lock', run: () => { const b = tile.querySelector('[data-action="copy-att"]'); FileLinks.toggle(b && findAttachment(task(b.dataset.taskId || ui.taskId), b.dataset.id)); } },
+          ...(isAdm(me()) ? [{ label: 'Turn off link', icon: 'lock', run: () => { const b = tile.querySelector('[data-action="copy-att"]'); FileLinks.toggle(b && findAttachment(task(b.dataset.taskId || ui.taskId), b.dataset.id)); } }] : []),
         ], { native: true });
         return;
       }
@@ -7352,7 +7352,7 @@ const folderLead = (f) => [
 // a folder's link (Haris 2026-11-03): Copy link, Turn off link — every folder but "Files" itself
 const folderLinkItems = (c, f) => (isFilesTop(c, f) ? [] : [
   { label: 'Copy link', icon: 'link', hint: 'Send it to anyone — the folder as it is now', run: () => FileLinks.copyFolder(c, f) },
-  { label: 'Turn off link', icon: 'lock', run: () => FileLinks.toggleFolder(c, f) },
+  ...(isAdm(me()) ? [{ label: 'Turn off link', icon: 'lock', run: () => FileLinks.toggleFolder(c, f) }] : []),   // (Admins only)
 ]);
 function folderMenu(anchor, c, f, lead = []) {
   // (lead: Open / Info first, on the phone's sheet)

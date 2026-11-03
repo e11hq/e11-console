@@ -760,12 +760,13 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private func fileMenu(_ files: [[String: Any]], _ i: Int) -> UIMenu? {
     guard i < files.count else { return nil }
     let f = files[i]
-    return UIMenu(title: f["name"] as? String ?? "", children: [
+    var items: [UIMenuElement] = [
       UIAction(title: "Open", image: UIImage(systemName: "eye")) { [weak self] _ in self?.onOpenFiles?(files, i) },
       UIAction(title: "Copy link", image: UIImage(systemName: "link")) { [weak self] _ in self?.onFileAction?(f, "copy") },
       UIAction(title: "Download", image: UIImage(systemName: "arrow.down.circle")) { [weak self] _ in self?.onFileAction?(f, "download") },
-      linkAction(f),
-    ])
+    ]
+    if Main.isAdmin { items.append(linkAction(f)) }   // (Admins turn links off and on)
+    return UIMenu(title: f["name"] as? String ?? "", children: items)
   }
   private func layoutContent() {
     let W = bounds.width, M = TaskPage.M

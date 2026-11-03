@@ -75,6 +75,10 @@ async def main():
         check(st == 404, f"the files address shows nothing else {st}")
         st, body, _ = req('/api/flink', {'path': 'Claims/u-1/receipt.pdf'})
         check(st in (200, 403) and not (json.loads(body) or {}).get('ok'), 'never for claims')
+        prod = await E("(db.users.find((u) => u.role === 'production' && u.active !== false) || {}).email")
+        if prod:
+            st, body, _ = req('/api/flink', {'path': path, 'off': True}, who=prod)
+            check(st == 403, f"only Admins turn a link off {st}")
         # turned off: the page says so, the file doesn't come
         st, body, _ = req('/api/flink', {'path': path, 'off': True})
         check(json.loads(body).get('off') is True, 'turned off')

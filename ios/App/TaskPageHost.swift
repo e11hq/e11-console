@@ -664,6 +664,7 @@ extension Main {
   // the description here it's still the file (FileClip, as before); anywhere else, the link: staff open it in the app,
   // anyone else gets the E11 page with the file and Download. The same link every time (asked of the server once).
   static var fileLinks: [String: String] = [:]
+  static var isAdmin = false   // (from the page: only Admins turn file and folder links off and on — Haris 2026-11-03)
   // (the links turned off, as the server has them — asked for the files on screen, so a file's sheet says Turn on link)
   static var linksOff = Set<String>()
   func loadLinkStates(_ paths: [String]) {

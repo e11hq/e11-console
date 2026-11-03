@@ -3061,8 +3061,11 @@ const NativeMe = (() => {
       ],
     };
   }
+  let lastAdm = null;
   function sync() {
     if (!on) return;
+    // (who may turn file / folder links off and on — Admins: the app's sheets show it only to them)
+    try { const adm = !!(currentUserId && isAdm(me())); if (adm !== lastAdm) { lastAdm = adm; NativeMac.call('role', { admin: adm }).catch(() => {}); } } catch (e) { /* not signed in yet */ }
     let m = null;
     try { m = visible() ? { show: true, me: currentUserId, light: document.documentElement.dataset.theme === 'light', model: model() } : null; } catch (e) { m = null; }
     if (!m) { if (shown) { shown = false; last = ''; call({ show: false }); } return; }
