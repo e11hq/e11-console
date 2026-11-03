@@ -346,8 +346,10 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     more.frame = CGRect(x: W - 60, y: top, width: 44, height: 44)
     moreBtn.frame = more.frame
     let cw = min(client.sizeThatFits(CGSize(width: 400, height: 30)).width, W - 76 - 76 - 18)
-    dot.frame = CGRect(x: 76, y: top + 22 - 5, width: 10, height: 10)
-    client.frame = CGRect(x: dot.isHidden ? 76 : 94, y: top, width: cw, height: 44)
+    // (the client's dot and name in the middle of the bar, as a client's page — Haris 2026-11-03)
+    let gw = (dot.isHidden ? 0 : 18) + cw, gx = (W - gw) / 2
+    dot.frame = CGRect(x: gx, y: top + 22 - 5, width: 10, height: 10)
+    client.frame = CGRect(x: dot.isHidden ? gx : gx + 18, y: top, width: cw, height: 44)
     seg.frame = CGRect(x: 16, y: top + 54 + 8, width: W - 32, height: 32)
     place(commentsHost)
     let fs = fab.sizeThatFits(CGSize(width: 300, height: 48))
