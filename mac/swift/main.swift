@@ -130,6 +130,15 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     openLink(event.paramDescriptor(forKeyword: AEKeyword(keyDirectObject))?.stringValue ?? "")
   }
   func openLink(_ url: String) {
+    // a file / folder link from its page's "Open in E11 Console" (Chrome never hands web links to an app):
+    // e11console://f/<tok> or e11console://d/<tok>[/…] — opened as the universal link is (Haris 2026-11-03)
+    if let r = url.range(of: "^e11console(?:-test)?://[fd]/[A-Za-z0-9]{6,16}", options: .regularExpression) {
+      let tok = String(url[r]).components(separatedBy: "/").last ?? ""
+      if web == nil || web.isLoading || web.url?.host != URL(string: SERVER)?.host { pendingFileLink = tok }
+      else { pageJS("window.__e11FileLink && window.__e11FileLink(\(jsString(tok)))") }
+      if window != nil { showWindow() }
+      return
+    }
     // from the widget: e11console://open?plan=<id> or ?view=home|plans|fin-dash
     if let q = URLComponents(string: url)?.queryItems, q.first(where: { $0.name == "task" }) == nil,
        let item = q.first(where: { ["plan", "view"].contains($0.name) }), let v = item.value, v.range(of: "^[A-Za-z0-9_-]{1,80}$", options: .regularExpression) != nil {

@@ -1,10 +1,15 @@
 # The Mac App Store app (mac/appstore/, the same Swift code with APPSTORE on): built on the Mac runner (Haris's own
-# Mac), checked (sandbox, icon, privacy manifest), signed and sent to TestFlight with the App Store Connect key in
+# Mac), checked (sandbox, icon, privacy manifest), signed, and kept on the Mac until Haris says to send it to TestFlight (testflight.yml), with the App Store Connect key in
 # GitHub's secrets. Started by hand ("publish mac store build") or by pushing a mac-store branch. Its logs go on the
 # release "ios-selftest" as mac-store-*.log (for checking from Claude's workspace).
 name: Mac App Store app
 on:
   workflow_dispatch:
+    inputs:
+      send:
+        description: "yes = straight to TestFlight; ask = keep it on this Mac until Haris says yes (Send to TestFlight)"
+        required: false
+        default: ask
   push:
     branches: ['mac-store']
 permissions:
@@ -46,6 +51,12 @@ jobs:
           codesign -d --entitlements - --xml "$APP" 2>/dev/null | grep -q "com.apple.security.app-sandbox" && echo "sandbox: yes" || { echo "sandbox: MISSING"; exit 1; }
           test -d "$APP/Contents/PlugIns/E11ConsoleWidget.appex" && echo "widget: yes" || { echo "widget: MISSING"; exit 1; }
           lipo -info "$APP/Contents/MacOS/E11 Console"
+          # (Haris 2026-11-03: every build waits for his yes before it goes to TestFlight — kept on this Mac, sent by
+          #  testflight.yml with its number)
+          if [ "${{ github.event.inputs.send || 'ask' }}" != "yes" ]; then
+            mkdir -p "$HOME/e11-archives"; rm -rf "$HOME/e11-archives/mac-$BUILD"; mv build/mac-store/E11ConsoleMac.xcarchive "$HOME/e11-archives/mac-$BUILD"
+            rm -f "$KEY"; echo "Mac build $BUILD signed and kept — waiting for Haris before TestFlight"; exit 0
+          fi
           sed "s/__TEAM__/$APPLE_TEAM_ID/" mac/appstore/ExportOptions.plist > "$RUNNER_TEMP/ExportOptions.plist"
           xcodebuild -exportArchive -archivePath build/mac-store/E11ConsoleMac.xcarchive -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath build/mac-store/export $AUTH 2>&1 | tee "$RUNNER_TEMP/mac-store-export-full.log" | tail -40
           rm -f "$KEY"

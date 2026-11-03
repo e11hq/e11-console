@@ -1846,6 +1846,13 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       pageJSSoon("window.__e11FileLink && window.__e11FileLink(\(jsonString([tok]).dropFirst().dropLast()))")
       return
     }
+    // (… or the link page's "Open in E11 Console": e11console://f/<token>)
+    if u.scheme?.hasPrefix("e11console") == true, u.host == "f" || u.host == "d",
+       let r = u.path.range(of: "^/[A-Za-z0-9]{6,16}", options: .regularExpression) {
+      let tok = String(String(u.path[r]).dropFirst())
+      pageJSSoon("window.__e11FileLink && window.__e11FileLink(\(jsonString([tok]).dropFirst().dropLast()))")
+      return
+    }
     let q = URLComponents(url: u, resolvingAgainstBaseURL: false)?.queryItems ?? []
     let v = { (k: String) in q.first { $0.name == k }?.value }
     var d: [String: Any] = [:]
