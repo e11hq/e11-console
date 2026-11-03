@@ -1192,6 +1192,17 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let again = item.tag == shownTab
     shownTab = item.tag
     if again, tabKeys[item.tag] == "projects", clientsWanted, clientsBackToList() { return }
+    // (the page's own tabs — Me, Plans, Reviews, Client Assets: from a deeper page, back to the tab's first with the back
+    //  slide; Haris 2026-11-03)
+    let key = tabKeys[item.tag]
+    if again, !["today", "mytasks", "inbox", "projects"].contains(key), pageReady {
+      web.evaluateJavaScript("window.__e11TabDeep ? window.__e11TabDeep(\(jsonString([key]).dropFirst().dropLast())) : false") { [weak self] r, _ in
+        guard let self = self else { return }
+        if (r as? Bool) == true || self.assetsCtl.isOpen { self.tabBackSlide(key) }
+        else { self.pageJSSoon("window.__e11Tab && window.__e11Tab(\(jsonString([key]).dropFirst().dropLast()))") }
+      }
+      return
+    }
     // (23+: Home is the app's own — another tab: it goes at once; Home again while on it: back to the top)
     // (the page's own Home must never show in between — Haris, 2026-10-31: leaving Home, it stays until the page has
     //  drawn the other tab and says so (show: false), at most 1.2 s; coming back, it's there at once with what it had,
@@ -1573,6 +1584,24 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
      which is on screen (NativeClients in phone.js) and does what's tapped. ---------- */
   var clientsListIfMade: HomeView?, clientPageIfMade: HomeView?
   var shownTab: Int?
+  // back to a page tab's first screen as iPhone goes back: a picture of what's on screen slides away to the right while
+  // the first screen (drawn by the page under it) comes in from the left
+  func tabBackSlide(_ key: String) {
+    let W = view.bounds.width
+    let top: UIView = assetsCtl.top ?? web
+    let snap = top.snapshotView(afterScreenUpdates: false)
+    if let s = snap { s.frame = top.frame; view.insertSubview(s, belowSubview: tabBar) }
+    if assetsCtl.isOpen { assetsCtl.close(animated: false) }
+    pageJS("window.__e11Tab && window.__e11Tab(\(jsonString([key]).dropFirst().dropLast()))")
+    web.transform = CGAffineTransform(translationX: -W * 0.3, y: 0)
+    updateCorner()
+    // (a moment for the page to draw its first screen, then the slide)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+      UIView.animate(withDuration: 0.36, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
+        snap?.transform = CGAffineTransform(translationX: W, y: 0); self.web.transform = .identity
+      } completion: { _ in snap?.removeFromSuperview(); self.web.transform = .identity }
+    }
+  }
   // the Clients tab tapped again from a client's page or Client Assets: what's on top slides away to the right, the list
   // comes back under it; everything between goes at once (false: already on the list)
   func clientsBackToList() -> Bool {

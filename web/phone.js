@@ -182,6 +182,9 @@ const Phone = (() => {
   }
   // (then the app's own Home is told at once whether it's on: it stays up while the page draws the other tab, and goes
   //  the moment that tab is there — the page's own Home never shows in between)
+  // (the app: is the page on something deeper inside this tab — another page than the tab's first? then tapping the tab
+  //  again goes back to it with the back slide, iPhone 32+)
+  window.__e11TabDeep = (v) => { try { const root = v === 'today' ? ['today', 'home'] : [v]; return !!ui.view && !root.includes(ui.view) || !!ui.search; } catch (e) { return false; } };
   window.__e11Tab = (v) => { const b = document.querySelector(`#ph-tabs [data-ph-tab="${v}"]`); if (b) b.click(); if (typeof NativeHome !== 'undefined') NativeHome.sync(); if (typeof NativeMyTasks !== 'undefined') NativeMyTasks.sync(); if (typeof NativeInbox !== 'undefined') NativeInbox.sync(); if (typeof NativeClients !== 'undefined') NativeClients.sync(); };
 
   /* ---------- Pieces ---------- */
