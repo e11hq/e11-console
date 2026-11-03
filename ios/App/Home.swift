@@ -2154,7 +2154,10 @@ final class ToastCapsule: UIView {
   private let start = UILabel(), tick = UIImageView(), msg = UILabel(), undo = UIButton(type: .system), plusB = UIButton(type: .system)
   private let hasPlus: Bool
   private var timer: Timer?, touching = false, closing = false
-  private let glass = UIVisualEffectView(effect: nil)
+  // (iOS 26: iPhone's own glass in a glass container — the button's glass and the toast's are one liquid piece, so the
+  //  toast squashes and stretches out of "+ New task" and back into it, as the top buttons do; Haris 2026-11-03)
+  private let bed = UIVisualEffectView(effect: nil), body = UIVisualEffectView(effect: nil), nub = UIVisualEffectView(effect: nil)
+  private var glassy: Bool { if #available(iOS 26.0, *) { return true }; return false }
   init(light: Bool, title: String?, sym: String?, plus: Bool) {
     hasPlus = plus
     super.init(frame: .zero)
@@ -2162,8 +2165,10 @@ final class ToastCapsule: UIView {
     let ink: UIColor = light ? .black : .white   // (its words: black on light, white on dark — Haris 2026-11-03)
     if #available(iOS 26.0, *) {
       // (iPhone's own Liquid Glass, as "+ New task" it stretches out of)
-      glass.effect = UIGlassEffect(style: .regular); glass.clipsToBounds = true; glass.isUserInteractionEnabled = false
-      addSubview(glass)
+      let ce = UIGlassContainerEffect(); ce.spacing = 24; bed.effect = ce
+      body.effect = UIGlassEffect(style: .regular); nub.effect = UIGlassEffect(style: .regular)
+      [body, nub].forEach { $0.clipsToBounds = true; $0.layer.cornerCurve = .continuous; bed.contentView.addSubview($0) }
+      bed.isUserInteractionEnabled = false; addSubview(bed)
     } else {
       backgroundColor = ToastCapsule.fill(light)
       layer.borderWidth = 1; layer.borderColor = ToastCapsule.line(light).cgColor
@@ -2200,7 +2205,13 @@ final class ToastCapsule: UIView {
     super.layoutSubviews()
     let W = bounds.width, H = bounds.height
     layer.cornerRadius = H / 2
-    glass.frame = bounds; glass.layer.cornerRadius = H / 2
+    if glassy {
+      bed.frame = bounds
+      // (the button's own place, at the right end; the toast's glass grows out of it)
+      let n = CGRect(x: W - from.width, y: 0, width: from.width, height: H)
+      if !moving { nub.frame = n; body.frame = out ? bounds : n }
+      nub.layer.cornerRadius = H / 2; body.layer.cornerRadius = H / 2
+    }
     // (laid out for its stretched size; the start words over the right end, where the button was)
     start.frame = CGRect(x: W - from.width, y: 0, width: from.width, height: H)
     let p: CGFloat = hasPlus ? 34 : 0
@@ -2211,11 +2222,26 @@ final class ToastCapsule: UIView {
     undo.frame = CGRect(x: right - uw, y: 0, width: uw, height: H)
     msg.frame = CGRect(x: 42, y: 0, width: max(0, undo.frame.minX - 42 - 4), height: H)
   }
+  private var moving = false
   func open() {
     out = true
     UIView.animate(withDuration: 0.15, delay: 0, options: [.curveEaseOut]) { self.start.alpha = 0 }
-    UIView.animate(withDuration: 0.4, delay: 0.05, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
-      self.frame = self.to; self.layoutIfNeeded(); self.plusB.alpha = 1
+    if glassy {
+      // (the toast at its full size at once, its glass still the button's; then the glass stretches out — Mail's spring,
+      //  a little bounce so it squashes and settles, iPhone's own liquid glass doing the rest)
+      moving = true
+      UIView.performWithoutAnimation {
+        frame = to; layoutIfNeeded()
+        let n = CGRect(x: bounds.width - from.width, y: 0, width: from.width, height: bounds.height)
+        bed.frame = bounds; nub.frame = n; body.frame = n
+      }
+      UIView.animate(withDuration: 0.5, delay: 0.03, usingSpringWithDamping: 0.78, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
+        self.body.frame = self.bounds; self.plusB.alpha = 1
+      } completion: { _ in self.moving = false }
+    } else {
+      UIView.animate(withDuration: 0.4, delay: 0.05, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
+        self.frame = self.to; self.layoutIfNeeded(); self.plusB.alpha = 1
+      }
     }
     UIView.animate(withDuration: 0.22, delay: 0.3, options: [.curveEaseOut, .allowUserInteraction]) { [self.tick, self.msg, self.undo].forEach { $0.alpha = 1 } }
   }
@@ -2231,9 +2257,18 @@ final class ToastCapsule: UIView {
     guard !closing else { return }
     closing = true; out = false; timer?.invalidate()
     UIView.animate(withDuration: 0.15, delay: 0, options: [.curveEaseIn, .allowUserInteraction]) { [self.tick, self.msg, self.undo].forEach { $0.alpha = 0 } }
-    UIView.animate(withDuration: 0.4, delay: 0.1, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
-      self.frame = self.from; self.layoutIfNeeded(); self.plusB.alpha = 0
-    } completion: { _ in self.onGone?() }
+    if glassy {
+      // (the glass squashes back into the button's place)
+      moving = true
+      let n = CGRect(x: bounds.width - from.width, y: 0, width: from.width, height: bounds.height)
+      UIView.animate(withDuration: 0.45, delay: 0.1, usingSpringWithDamping: 0.82, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
+        self.body.frame = n; self.plusB.alpha = 0
+      } completion: { _ in self.moving = false; UIView.performWithoutAnimation { self.frame = self.from; self.layoutIfNeeded() }; self.onGone?() }
+    } else {
+      UIView.animate(withDuration: 0.4, delay: 0.1, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
+        self.frame = self.from; self.layoutIfNeeded(); self.plusB.alpha = 0
+      } completion: { _ in self.onGone?() }
+    }
     UIView.animate(withDuration: 0.2, delay: 0.32, options: [.curveEaseOut]) { self.start.alpha = self.hasPlus ? 1 : 0; if !self.hasPlus { self.alpha = 0 } }
   }
 }
