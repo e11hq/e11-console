@@ -499,7 +499,15 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   var assetsBack = false   // (pushed over another screen: ‹ goes back to it)
   var fabRun: (() -> Void)?
   // (the task page's bar — ‹ · logo and name · ••• — instead of the big title: a client's page, a client's assets, a folder)
-  var pageBar: Bool { isClient || assets == "client" || assets == "folder" }
+  var pageBar: Bool { isClient || assets == "client" || assets == "folder" || isMeSub }
+  // the app's own Me (shell 33, Me.swift): "me" — the tab's first page, Home's big title, no 🔍 or photo; "me.<page>" —
+  // a page under it (Appearance, About, Shortcuts, Team members, a member): the task page's bar, ‹ and its name
+  var isMe: Bool { assets == "me" || isMeSub }
+  var isMeSub: Bool { assets?.hasPrefix("me.") == true }
+  // where the list starts and the room above "+ New task", on screen with the list at its top (a box that fills the
+  // page — About's What's new — ends there)
+  var listTop: CGFloat { bigHead + 10 }
+  var listBottom: CGFloat { (tabTop ?? bounds.height - 100) - 14 - BTN - 10 }
   private var noStats: Bool { isList || isClients || isClient || assets != nil }
   // the assets screen's own pieces (Assets.swift), kept here so a change redraws only what changed
   var assetsParts: [String: UIView] = [:]

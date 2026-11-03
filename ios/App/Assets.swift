@@ -110,9 +110,11 @@ class AssetTile: UIControl {
   var onTap: (() -> Void)?
   var onHold: (() -> Void)?
   private var shrink: PressShrink?
+  // (a tile that does nothing when tapped — a row of words: no shrink under the finger, no tap)
+  var pressable = true { didSet { shrink?.isEnabled = pressable } }
   override init(frame: CGRect) {
     super.init(frame: frame)
-    addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.onTap?() }, for: .touchUpInside)
+    addAction(UIAction { [weak self] _ in guard let self = self, self.pressable, let t = self.onTap else { return }; UIImpactFeedbackGenerator(style: .light).impactOccurred(); t() }, for: .touchUpInside)
     shrink = PressShrink.add(to: self)
     let lp = UILongPressGestureRecognizer(target: self, action: #selector(held(_:))); lp.minimumPressDuration = 0.45
     addGestureRecognizer(lp)
@@ -515,7 +517,8 @@ final class AssetsCtl {
   }
   private func under(_ i: Int) -> UIView? {
     if i > 0 { return stack[i - 1].h }
-    if fromPage { return nil }
+    // (opened from the app's own Me — Me › Client Assets: Me comes back under it, as it was)
+    if fromPage { return main.meCtl.borrow() }
     // (kept from when it opened: it's hidden under the screens since — asking whether it's shown found nothing, and
     //  going back left a black page, Haris 2026-11-02 23:00)
     if let b = base { return b }

@@ -4892,6 +4892,10 @@ function assignGroups(pool) {
 }
 
 function dialog({ title, body = '', bodyHtml = '', input = null, okText = 'OK', cancelText = 'Cancel', danger = false, colors = null }) {
+  // (iPhone app 33+, over the app's own Me: iPhone's own question — the page under it can't be seen)
+  if (!colors && !bodyHtml && typeof NativeMe !== 'undefined' && NativeMe.asking()) {
+    return NativeMe.ask({ kind: 'alert', title, body, okText, cancelText, danger, input }).then((r) => (!r || !r.ok ? null : input ? { value: String(r.text || '').trim(), color: null } : true)).catch(() => null);
+  }
   return new Promise((resolve) => {
     const root = $('#overlay-root');
     let color = colors ? colors.value : null;
@@ -4943,6 +4947,7 @@ function busyToast(msg) {
 }
 function toast(msg, action, ms) {
   if (/^(Could ?n[’']?t|Could not|Something went wrong|Not sent)/i.test(String(msg))) Haptic.warn();   // (iPhone app: a warning tap)
+  if (typeof NativeMe !== 'undefined' && NativeMe.shown) NativeMe.toast(msg, action, ms);   // (over the app's own Me, 33+)
   // (iPhone app 23+: over the app's own Home the page's toasts can't be seen — the app shows it there)
   if (typeof NativeHome !== 'undefined' && NativeHome.shown) NativeHome.toast(msg, action, ms);
   const root = $('#toast-root');
@@ -7612,6 +7617,10 @@ function notifPlainHTML(html) { const d = document.createElement('div'); d.inner
 
 // A small dialog with several choices; resolves with the chosen value (null = cancelled)
 function choiceDialog({ title, body = '', choices }) {
+  if (typeof NativeMe !== 'undefined' && NativeMe.asking()) {
+    return NativeMe.ask({ kind: 'choice', title, body, choices: choices.map((c) => ({ label: c.label, primary: !!c.primary, danger: !!c.danger, cancel: c.value == null })) })
+      .then((r) => { const c = r && r.ok ? choices[Number(r.index)] : null; return c && c.value != null ? c.value : null; }).catch(() => null);
+  }
   return new Promise((resolve) => {
     const root = $('#overlay-root');
     root.innerHTML = `<div class="scrim"><div class="dialog choice-dlg" role="dialog">
@@ -8452,6 +8461,17 @@ function viewTeam() {
 
 // Small form dialog: fields = [{ key, label, type, value, options, readonly, placeholder }]
 function formDialog({ title, intro = '', fields, okText = 'Save', validate }) {
+  // (iPhone app 33+, over the app's own Me: iPhone's own form — the same fields; a problem shows on it, as here)
+  if (typeof NativeMe !== 'undefined' && NativeMe.asking()) {
+    const once = (vals, error) => NativeMe.ask({ kind: 'form', title, intro, okText, error: error || '', fields: fields.map((f) => ({ key: f.key, label: f.label, type: f.type || 'text', value: vals ? vals[f.key] : f.value || '', placeholder: f.placeholder || '', hint: f.hint || '', readonly: !!f.readonly, options: f.options || null })) })
+      .then((r) => {
+        if (!r || !r.ok || !r.values) return null;
+        const v = {}; fields.forEach((f) => { v[f.key] = String(r.values[f.key] == null ? '' : r.values[f.key]).trim(); });
+        const problem = validate ? validate(v) : null;
+        return problem ? once(v, problem) : v;
+      }).catch(() => null);
+    return once(null, '');
+  }
   return new Promise((resolve) => {
     const root = $('#overlay-root');
     root.innerHTML = `<div class="scrim"><form class="dialog form-dlg" autocomplete="off">
@@ -8515,6 +8535,18 @@ function tempPassword() { const c = 'abcdefghjkmnpqrstuvwxyz23456789'; let s = '
 // Freelancers only see the projects ticked here (and the Client Assets of those projects' clients)
 function projectAccessDialog(u) {
   if (!can('manageUsers')) return denied();
+  // (iPhone app 33+, over the app's own Team page: iPhone's own sheet — each tick saved at once)
+  if (typeof NativeMe !== 'undefined' && NativeMe.asking() && NativeSheet.fits(14)) {
+    const list = db.projects.slice().sort(byOrder);
+    u.projectIds = Array.isArray(u.projectIds) ? u.projectIds : [];
+    const items = [{ html: `<div class="menu-label">Clients ${esc(fullName(u))} can see</div>` }, ...list.map((p) => ({ label: p.name, hint: clientOfProject(p) ? clientOfProject(p).name : '', checked: u.projectIds.includes(p.id), multi: true, find: p.name, run: () => {
+      const on = u.projectIds.includes(p.id);
+      u.projectIds = on ? u.projectIds.filter((x) => x !== p.id) : u.projectIds.concat(p.id);
+      persist(0); renderContent();
+    } }))];
+    showMenu(document.body, items, { native: 14, ...(list.length > 8 ? { search: 'Search clients', empty: 'No client matches “%@”' } : {}) });
+    return;
+  }
   const chosen = new Set(Array.isArray(u.projectIds) ? u.projectIds : []);
   const root = $('#overlay-root');
   const list = db.projects.slice().sort(byOrder);
@@ -8537,18 +8569,20 @@ function projectAccessDialog(u) {
 }
 
 let ownerId = null;   // the app's owner (Admins are told, so their Team page shows that account locked)
-function memberMenu(anchor, id) {
+function memberMenu(anchor, id, head) {
   const u = userById(id);
   if (!u) return;
+  // (from the iPhone app's Team page: who it's for on top of the sheet — their picture, name and role)
+  const top = head ? [{ html: `<div class="pm-who">${avatarHTML(u.id, 30)}${esc(fullName(u))} · ${esc(roleOf(u))}</div>` }] : [];
   // The owner's account: only the owner changes its role, rights or access (the server refuses anyone else)
   if (u.id === ownerId && u.id !== currentUserId) {
     const lock = (l, ic) => ({ html: `<div class="mi disabled" aria-disabled="true">${icon(ic)}${esc(l)}</div>` });
-    showMenu(anchor, [{ html: `<div class="menu-label">${icon('lock')} Only the owner can change this account</div>` }, lock('Change role', 'users'), lock('Admin rights', 'shield'), lock('Finance access', 'coin'), lock('Remove from team', 'trash')], { native: true });
+    showMenu(anchor, [...top, { html: `<div class="menu-label">${icon('lock')} Only the owner can change this account</div>` }, lock('Change role', 'users'), lock('Admin rights', 'shield'), lock('Finance access', 'coin'), lock('Remove from team', 'trash')], { native: true });
     return;
   }
   // Your own row: only the extras (Finance access) — you can't change your own role or remove yourself
   if (u.id === currentUserId) {
-    const own = [];
+    const own = [...top];
     // the owner (and only the owner) may change their own role — e.g. work as Production while another Admin runs things;
     // they step back in with Owner view (live site) — as long as someone else is an Admin
     if (AppIcon.isOwner() && isAdm(u)) {
@@ -8569,7 +8603,7 @@ function memberMenu(anchor, id) {
     showMenu(anchor, own.map((it, i) => (it !== '-' && it.run ? { ...it, html: it.html.replace('<div class="mi', `<div data-mi="${i}" class="mi`) } : it)), { native: true });
     return;
   }
-  const items = [{ html: '<div class="menu-label">Change role</div>' }];
+  const items = [...top, { html: '<div class="menu-label">Change role</div>' }];
   Object.entries(ROLES).forEach(([k, l]) => items.push({ html: `<div class="mi ${u.role === k ? 'cur' : ''}"><span class="role-pill r-${k}">${esc(l)}</span></div>`, run: () => {
     if (isSuper(u) && k !== 'admin' && !u.admin && db.users.filter((x) => isSuper(x) && x.active !== false).length < 2) return toast('There must be at least one Super Admin');
     u.role = k; persist(); renderContent(); toast(`${fullName(u)} is now ${l}`);

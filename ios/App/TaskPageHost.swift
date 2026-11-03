@@ -164,7 +164,7 @@ extension Main {
   // iPhone's swipe back from the left edge: the page follows the finger; let go, it goes the way it was going
   @objc func taskEdgePan(_ g: UIScreenEdgePanGestureRecognizer) {
     // (no task page: a client's page goes back to the list the same way — Haris 2026-11-02)
-    guard let p = taskPages.last else { if assetsCtl.isOpen { if assetsCtl.top?.backable == true { assetsCtl.edgePan(g) } } else { clientEdgePan(g) }; return }
+    guard let p = taskPages.last else { if assetsCtl.isOpen { if assetsCtl.top?.backable == true { assetsCtl.edgePan(g) } } else if meCtl.isOpen { if meCtl.depth > 1 { meCtl.edgePan(g) } } else { clientEdgePan(g) }; return }
     let W = view.bounds.width
     let x = max(0, g.translation(in: view).x)
     let under: UIView? = taskPages.count > 1 ? taskPages[taskPages.count - 2] : nil
@@ -222,7 +222,7 @@ extension Main {
       view.addGestureRecognizer(g)
       taskPan = g
     }
-    taskPan?.isEnabled = !taskPages.isEmpty || clientPageIfMade?.isHidden == false || (assetsCtl.isOpen && assetsCtl.top?.backable == true)
+    taskPan?.isEnabled = !taskPages.isEmpty || clientPageIfMade?.isHidden == false || (assetsCtl.isOpen && assetsCtl.top?.backable == true) || (meCtl.isOpen && meCtl.depth > 1)
   }
   func clientEdgePan(_ g: UIScreenEdgePanGestureRecognizer) {
     guard let p = clientPageIfMade, !p.isHidden, let l = clientsListIfMade, clientsWanted else { return }

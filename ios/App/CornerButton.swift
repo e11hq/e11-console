@@ -294,6 +294,10 @@ extension Main {
       let mf = corner.place(c.kind, c.text, circle: h.convert(c.frame, to: view).offsetBy(dx: dx, dy: 0))
       let meF = h.convert(h.meFrame, to: view).offsetBy(dx: dx, dy: 0)
       let cornerSpot = h.searching ? CornerButton.Spot(kind: "close", frame: meF) : CornerButton.Spot(kind: "photo", frame: meF, image: h.meImage)
+      // (the app's own Me: its first page has none of them — your photo is on it; a page under it ‹, and ••• only when it
+      //  has something in it)
+      if h.assets == "me" { return (CornerButton.Spot(), CornerButton.Spot(), CornerButton.Spot()) }
+      if h.isMeSub { return (CornerButton.Spot(kind: "back", frame: h.convert(h.backFrame, to: view).offsetBy(dx: dx, dy: 0)), CornerButton.Spot(), h.menuItems.isEmpty ? CornerButton.Spot() : CornerButton.Spot(kind: "more", frame: meF)) }
       // (a client's page: the task page's — ‹ on the left, ••• where your photo is, no 🔍)
       if h.pageBar { return (CornerButton.Spot(kind: "back", frame: h.convert(h.backFrame, to: view).offsetBy(dx: dx, dy: 0)), CornerButton.Spot(), CornerButton.Spot(kind: "more", frame: meF)) }
       // (All Client Assets opened over another screen: ‹ too, with 🔍 and your photo)
@@ -310,7 +314,7 @@ extension Main {
   }
   func updateCornerNow(animated: Bool = true) {
     // (only once there's a screen of the app's own to show it on)
-    guard homeIfMade != nil || myTasksIfMade != nil || inboxIfMade != nil || clientsListIfMade != nil || clientPageIfMade != nil || !taskPages.isEmpty || assetsCtl.isOpen else { return }
+    guard homeIfMade != nil || myTasksIfMade != nil || inboxIfMade != nil || clientsListIfMade != nil || clientPageIfMade != nil || !taskPages.isEmpty || assetsCtl.isOpen || meCtl.isOpen else { return }
     for h in [homeIfMade, myTasksIfMade, inboxIfMade, clientsListIfMade, clientPageIfMade].compactMap({ $0 }) where !h.cornerShared { h.cornerShared = true; h.onCorner = { [weak self] in self?.updateCorner() } }
     // (the page's ••• menu ready or changed: only the menu — moving the buttons again here, without the spring, cut
     //  the melt into ••• short as a task opened: build 1275's film)

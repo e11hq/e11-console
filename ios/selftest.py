@@ -128,12 +128,17 @@ try:
     check((res.get('inboxMyTasks') or {}).get('shown') is not True, f"My Tasks isn't over the Inbox {res.get('inboxMyTasks')}")
     check((res.get('inboxNative') or {}).get('shown') is False, f"the app's Home goes on another tab {res.get('inboxNative')}")
     check(res.get('splashGone') is True, f"the startup screen went before Home {res.get('splashGone')}")
-    check(set(seen) >= {'home', 'inbox', 'me', 'client', 'task', 'sheet', 'back', 'nsheet', 'nsheetEnd', 'nsheetChannel', 'nsheetTitled'}, f'all stages ran {sorted(seen)}')
+    check(set(seen) >= {'home', 'inbox', 'me', 'meTeam', 'meAbout', 'meBack', 'client', 'task', 'sheet', 'back', 'nsheet', 'nsheetEnd', 'nsheetChannel', 'nsheetTitled'}, f'all stages ran {sorted(seen)}')
     hf = res.get('homeFrame') or {}
     check(hf.get('web') == hf.get('screen') and hf.get('tabBar') is True, f'the page fills the screen under the floating tab bar {hf}')
     check(int(float(str((p.get('geo') or {}).get('tabsH') or '0').replace('px','') or 0)) > 40, f"the page knows the tab bar's height {p.get('geo')}")
     me = res.get('me') or {}
-    check(me.get('lockRows') == 1 and me.get('pushRows') == 1, f'one Face ID row after repaints {me}')
+    mn, mt, ma, mb = res.get('meNative') or {}, res.get('meTeamNative') or {}, res.get('meAboutNative') or {}, res.get('meBackNative') or {}
+    check(me.get('native') is True and me.get('blank') is True and me.get('lockRows') == 0, f"Me is the app's own, nothing drawn under it {me}")
+    check(mn.get('open') is True and mn.get('kind') == 'me' and mn.get('card') is True and (mn.get('rows') or 0) >= 2 and mn.get('corner') == 'none,none,none', f"the app's Me: your card and its groups, no top buttons {mn}")
+    check(mt.get('kind') == 'team' and mt.get('screens') == 2 and (mt.get('people') or 0) >= 1 and str(mt.get('corner')).startswith('back,'), f"Team members slides in over Me, the people in it, ‹ at the top {mt}")
+    check(ma.get('kind') == 'about' and (ma.get('parts') or 0) >= 2, f"About: its cards and What's new {ma}")
+    check(mb.get('kind') == 'me' and mb.get('screens') == 1, f"‹ back to Me {mb}")
     check((res.get('client') or {}).get('wide') is False, f"Client Assets folder fits the screen {res.get('client')}")
     ca = res.get('clientAssets') or {}
     check(ca.get('open') is True and ca.get('kind') == 'folder' and (ca.get('screens') or 0) >= 2 and (ca.get('parts') or 0) >= 1 and ca.get('shown') is True, f"a Client Assets folder opens as the app's own screens (the client's, then the folder) {ca}")

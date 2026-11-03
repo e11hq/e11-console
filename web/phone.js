@@ -452,7 +452,9 @@ const Phone = (() => {
     //  anything that shows through for a moment is empty — Haris, 2026-11-01)
     if (((v === 'home' || v === 'today') && typeof NativeHome !== 'undefined' && NativeHome.light) || (v === 'mytasks' && typeof NativeMyTasks !== 'undefined' && NativeMyTasks.light)
       || (v === 'inbox' && typeof NativeInbox !== 'undefined' && NativeInbox.light)
-      || ((v === 'projects' || v === 'project') && typeof NativeClients !== 'undefined' && NativeClients.light)) {
+      || ((v === 'projects' || v === 'project') && typeof NativeClients !== 'undefined' && NativeClients.light)
+      || (v === 'me' && typeof NativeMe !== 'undefined' && NativeMe.light)) {
+      if (v === 'me') setTimeout(() => NativeMe.sync(), 0);   // (the app's Me at once, not at the next look)
       c.innerHTML = '<div class="ph-page ph-under-app"></div>';
       unpin();
       document.body.classList.remove('ph-fab-on'); document.body.classList.add('ph-strip');
@@ -1060,7 +1062,7 @@ const Push = (() => {
 
   // Send test (My profile): to every device, and the iPhone app hears what Apple said for this phone
   const test = () => api('POST', '/api/push/test', { token: lastToken || '' }).then((r) => toast(testSaid(r, 'phone'))).catch((err) => toast(err.message));
-  return { row, refresh, profileRow, test };
+  return { row, refresh, profileRow, test, info: () => ({ state: st.state, busy: st.busy, lock: st.lock }) };
 })();
 
 /* Swipe from the left edge to go back, like a native iPhone app (only in the Home Screen app —
@@ -2965,4 +2967,199 @@ const NativeAssets = (() => {
   };
   window.__e11AssetsResend = () => { last = ''; shown = false; sync(); };
   return { sync, get on() { return on; }, get shown() { return shown; } };
+})();
+
+/* ---------- the Me tab, the iPhone app's own (shell 33 — Haris 2026-11-03, from the approved mockups) ----------
+   The app draws Me (your card; Work; This iPhone; About; Test site; Sign out), and the pages under it — Appearance,
+   About (App updates, Video hardware, Move data from the Mac app, What's new), Shortcuts, Team members and a member's
+   page — itself. What's on them, and who may do what, comes from here (the website's own rules), and each change is
+   done here, the website's way: the page's own flows (memberMenu, addMemberFlow, cdToggleFlow…), with their questions
+   asked as iPhone's own (NativeMe.ask / form, below) while the app's Me is showing. Rows that open a page that's
+   still the website's (My profile, Content plans, Trash, Client Assets…) go there as before. The app asks:
+   __e11Me({ ev, rid, … }); the page answers NativeMac.call('me', { rid, ok, error, … }), and sends { show, model }
+   whenever what's on Me changes. NATIVE_ME = false: the page's own Me again (no app build needed). */
+const NATIVE_ME = true;
+const NativeMe = (() => {
+  let on = false, last = '', shown = false, wantTeam = false, toastAction = null;
+  if (NATIVE_ME && window.__e11CommentsOnly !== true && typeof Host !== 'undefined' && Host.isIOSApp) {
+    NativeMac.call('appInfo').then((r) => { on = Number(r && r.shell) >= 33; if (on) { setInterval(sync, 350); sync(); } }).catch(() => {});
+  }
+  const call = (a) => NativeMac.call('me', a).catch(() => {});
+  const rgb = (hex) => E11Rules.rgbOf(hex) || [135, 144, 158];
+  const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  const photoOf = (u) => (u && u.avatar ? fileUrl({ path: u.avatar }) : null);
+  const visible = () => {
+    if (!Phone.on || ui.view !== 'me' || ui.search || ui.taskId || document.querySelector('#detail.open')) return false;
+    // (a page question that isn't iPhone's own yet — View as… — shows on the page meanwhile)
+    if (document.querySelector('#overlay-root .scrim, #tv-root .scrim, .lightbox, .fv')) return false;
+    return true;
+  };
+  // Me: what the website's Me page shows, in the same order and for the same people (phone.js meScreen)
+  function model() {
+    const u = me();
+    const work = [];
+    if (isCD()) work.push({ k: 'projects', t: 'Clients', s: 'Every client’s tasks', sym: 'folder.fill', col: [10, 132, 255] });
+    if (Cal.canSee() && !calendarRetired()) work.push({ k: 'calendar', t: 'Content calendar', s: 'Posts by day, channel and occasion', sym: 'calendar', col: [255, 59, 48] });
+    if (Plans.canSee()) work.push({ k: 'plans', t: 'Content plans', s: 'Each client’s month', sym: 'calendar.badge.clock', col: [255, 149, 0] });
+    work.push({ k: 'clients', t: 'Client Assets', s: 'Logos, guidelines and fonts', sym: 'folder.fill', col: [48, 176, 199] });
+    work.push({ k: 'team', t: 'Team members', s: '', sym: 'person.2.fill', col: [88, 86, 214] });
+    if (isManager()) { const n = trashList().length; work.push({ k: 'trash', t: 'Trash', s: n ? `${plural(n, 'item')} · restore within ${TRASH_DAYS} days` : `Deleted items wait here ${TRASH_DAYS} days`, sym: 'trash.fill', col: [142, 142, 147] }); }
+    const p = typeof Push !== 'undefined' && Push.info ? Push.info() : null;
+    const push = p && p.state !== 'none' && p.state !== 'unknown' ? { state: p.state, busy: !!p.busy, label: { on: 'On', off: 'Off', denied: 'Blocked', install: 'Set up', unsupported: 'Not available' }[p.state] || '', sub: { on: 'A banner for every Inbox update', off: 'Get a banner even when the app is closed', denied: 'Allow them in iPhone Settings → Notifications → E11 Console' }[p.state] || '' } : null;
+    const viewAs = typeof ViewAs !== 'undefined' && ViewAs.available();
+    return {
+      card: { id: u.id, name: fullName(u), role: designationOf(u), email: u.email, photo: photoOf(u), ini: initials(fullName(u)), rgb: rgb(avColor(u.id)) },
+      work,
+      push, lock: p && p.lock ? { kind: p.lock.kind || 'Face ID', on: !!p.lock.on } : null,
+      digest: Host.isServer && Digest.wants({ ...u, prefs: {} }) ? { on: !(u.prefs || {}).digestOff } : null,
+      theme: Theme.mode(), themeNow: document.documentElement.dataset.theme === 'light' ? 'light' : 'dark', times: Theme.times(),
+      about: Host.isServer, canUpdate: AppIcon.isOwner() && Host.isServer, owner: AppIcon.isOwner(),
+      test: viewAs || (isTestCopy() && AppIcon.isOwner()) ? { viewAs, viewing: ViewAs.viewing() ? (fullName(userById(currentUserId)) || 'someone') : null, sample: isTestCopy() && AppIcon.isOwner() && !ViewAs.viewing() } : null,
+      version: Host.isServer && Sync.version ? `E11 Console ${Sync.version}` : '',
+      team: wantTeam ? teamModel() : null,
+    };
+  }
+  // Team members: as the website's Team page — by role, Active / Past, the extras as small pills
+  const GROUPS = [['admin', 'Super Admins'], ['office_admin', 'Office Admins'], ['am', 'Account Managers'], ['production', 'Production'], ['social', 'Social'], ['freelancer', 'Freelancers'], ['finance', 'Finance only']];
+  function person(u, admin) {
+    const pills = [];
+    if (u.id === cdUserId()) pills.push({ t: cdActing() ? 'Acting CD' : 'Creative Director', c: [175, 82, 222] });
+    else if (db.meta.cdHomeId === u.id && cdActing()) pills.push({ t: 'CD · away', c: [142, 142, 147] });
+    if (isSocialMgr(u.id)) pills.push({ t: 'Social Manager', c: [255, 45, 85] });
+    if (u.admin && u.role !== 'admin') pills.push({ t: '+ Admin', c: [255, 149, 0] });
+    if (u.fin && !isFinUser(u)) pills.push({ t: '+ ' + FIN_ACCESS[u.fin], c: [52, 199, 89] });
+    if (u.role === 'freelancer') pills.push({ t: plural((u.projectIds || []).length, 'client'), c: [10, 132, 255] });
+    const open = isManager() ? db.tasks.filter((t) => !t.done && !t.parentId && (t.assignees || []).includes(u.id)).length : null;
+    return {
+      id: u.id, name: fullName(u), you: u.id === currentUserId, email: u.email, photo: photoOf(u), ini: initials(fullName(u)), rgb: rgb(avColor(u.id)),
+      role: roleOf(u), designation: designationOf(u), place: placeOf(u), pending: u.active !== false && !u.setup, past: u.active === false, pills,
+      open, cd: admin && u.active !== false ? { on: isCD(u.id), label: isCD(u.id) ? (cdActing() ? 'Acting CD' : 'Creative Director') : db.meta.cdHomeId === u.id && cdActing() ? 'CD · away' : 'Make Creative Director' } : null,
+      locked: u.id === ownerId && u.id !== currentUserId,
+    };
+  }
+  function teamModel() {
+    const admin = can('manageUsers');
+    const all = db.users.slice().sort((a, b) => fullName(a).localeCompare(fullName(b)));
+    const cur = all.filter((u) => u.active !== false), past = all.filter((u) => u.active === false);
+    const groupOf = (u) => (isFinUser(u) ? 'finance' : u.role);
+    return {
+      admin, active: cur.length, pastN: past.length,
+      groups: GROUPS.map(([k, l]) => ({ k, name: l, people: cur.filter((u) => groupOf(u) === k).map((u) => person(u, admin)) })).filter((g) => g.people.length),
+      past: past.map((u) => person(u, admin)),
+      note: admin ? (Host.isServer ? `Only Admins can add people. New members sign in at ${location.host} with their email — no password needed.` : 'Only Admins can add people.') : 'Only Admins can add or change team members.',
+      // (the role guide: the website's, word for word)
+      guide: [
+        ['Super Admin', [255, 149, 0], 'Full access, and can add or manage team members.'],
+        ['Office Admin', [255, 149, 0], 'Admin rights without the task app: manages team members and Client Assets (full rights), with Finance if given. Doesn’t see tasks or add/edit clients; in the Trash sees and restores Client Assets items only.'],
+        ['Account Manager', [10, 132, 255], 'Can do everything except add or manage team members.'],
+        ['Freelancer', [48, 176, 199], 'Same as Production, but only sees the clients an Admin chooses for them, plus those clients’ Client Assets. Can sign in with a personal email (Gmail, Outlook…).'],
+        ['Production · Social', [52, 199, 89], 'Can update status, submit files for CD review, tick checklist items, add tags, files and comments. Social can also write and change the description, add checklist items, and set a post’s Channel, Go-live and Occasion. Can’t create or delete tasks/subtasks, change dates, rename or remove checklist items (Production can’t add them either), change title, client or priority, assign people or remove tags.'],
+        ...(Plans.on() ? [['Social Manager', [255, 45, 85], 'A Social person picked in the ••• menu. Can start and edit any client’s content plan (Social Executives: the clients they’re set on in the client pop-up). Trial on the test site.']] : []),
+        ['Finance only', [52, 199, 89], 'Only sees the Finance pages (Dashboard, Clients, Expenses) — no tasks app. As Admin they add subscriptions, reimbursements and expenses; as Viewer they only look.'],
+        ['+ Super Admin · + Finance', [142, 142, 147], 'Extras anyone can have on top of their role (••• menu): full Super Admin rights, or the Finance pages. A task’s Finance status is set by Account Managers and Admins.'],
+      ],
+    };
+  }
+  function sync() {
+    if (!on) return;
+    let m = null;
+    try { m = visible() ? { show: true, me: currentUserId, light: document.documentElement.dataset.theme === 'light', model: model() } : null; } catch (e) { m = null; }
+    if (!m) { if (shown) { shown = false; last = ''; call({ show: false }); } return; }
+    // (coming on screen: the notifications' and Face ID's state as they are now — the page's Me row used to ask)
+    if (!shown && typeof Push !== 'undefined') Promise.resolve(Push.refresh()).catch(() => {});
+    const s = JSON.stringify(m);
+    if (s === last) return;
+    last = s; shown = true;
+    call(m);
+  }
+  const answer = (rid, r) => call({ rid, ...r });
+  // a website button pressed for the app: its own handler does it, exactly as a tap on the page
+  const press = (attrs) => { const b = document.createElement('button'); Object.entries(attrs).forEach(([k, v]) => b.setAttribute(k, v)); b.style.cssText = 'position:fixed;left:-9999px;top:0'; document.body.appendChild(b); try { b.click(); } finally { setTimeout(() => b.remove(), 0); } };
+  // About: App updates, Video hardware (owner), What's new
+  let about = { updates: null, video: null, notes: null, busy: '' };
+  const sendAbout = () => call({ about });
+  async function loadAbout(fresh) {
+    const jobs = [api('GET', '/api/whatsnew').then((r) => { about.notes = { name: r.name || r.version, version: r.version, at: r.publishedAt ? fmtDateTime(r.publishedAt) : '', notes: r.notes || '' }; }).catch(() => { about.notes = about.notes || { name: Sync.version || '', notes: '' }; })];
+    if (AppIcon.isOwner() && Host.isServer) {
+      jobs.push(api(fresh ? 'POST' : 'GET', '/api/updates', fresh ? { action: 'check' } : undefined).then((s) => { about.updates = updatesOf(s); }).catch((e) => { about.updates = { error: e.message }; }));
+      jobs.push(loadVideo(false));
+    }
+    sendAbout();
+    await Promise.all(jobs);
+    sendAbout();
+  }
+  function updatesOf(s) {
+    const st = s.status || s;
+    if (!st.managed && s.managed === false) return { unmanaged: true, running: s.running || '' };
+    const hour = st.updateHour == null || st.updateHour === 'now' ? null : `${String(st.updateHour).padStart(2, '0')}:00`;
+    return { running: st.running || st.current || '—', test: st.channel === 'staging', checked: st.lastCheck ? timeAgo(st.lastCheck) : 'Never', error: st.lastError || '', busy: !!st.busy,
+      available: st.available ? { name: st.available.name || st.available.version, notes: st.available.notes || '', hour } : null };
+  }
+  async function loadVideo(fresh) {
+    about.video = { ...(about.video || {}), checking: fresh ? 'Checking the NAS… (a short test conversion)' : (about.video && about.video.title ? '' : 'Checking the NAS…') };
+    sendAbout();
+    try {
+      const r = await api('GET', '/api/system/video' + (fresh ? '?fresh=1' : ''), null, { timeout: 45000 });
+      const v = r.video, lc = r.lightCopies || null;
+      about.video = { state: v.state, title: v.title, detail: v.detail || '', checked: v.checkedAt ? timeAgo(v.checkedAt) : '',
+        light: lc ? `${lc.made} made since the last restart${lc.waiting ? ` · ${lc.waiting} waiting${lc.working ? ` (now: ${lc.working})` : ''}` : ' · none waiting'}` : '' };
+    } catch (e) { about.video = { error: 'Couldn’t check: ' + e.message }; }
+    sendAbout();
+  }
+  async function updateNow() {
+    const ok = await dialog({ title: 'Update E11 Console now?', body: 'A copy of the database is made first, and it takes about 10 seconds. Open apps show a “Reload” button.', okText: 'Update now' });
+    if (!ok) return;
+    let s;
+    try { s = await api('POST', '/api/updates', { action: 'update' }); } catch (e) { toast(e.message); return; }
+    if (!s.ok) { toast(s.error || 'Something went wrong'); return; }
+    if (!s.started) { about.updates = updatesOf(s); sendAbout(); return; }
+    about.busy = 'Updating E11 Console… This takes about 10 seconds. The app reconnects by itself.'; sendAbout();
+    const t0 = Date.now();
+    const poll = async () => {
+      let st2 = null;
+      try { st2 = await api('GET', '/api/updates'); } catch (e) { /* restarting */ }
+      if (st2 && !st2.busy && st2.lastResult && st2.lastResult.action === 'update' && Date.parse(st2.lastResult.at) >= t0 - 1000) {
+        toast(st2.lastResult.ok ? (st2.lastResult.upToDate ? 'Already up to date' : `Updated to ${st2.lastResult.version}`) : st2.lastResult.error || 'Something went wrong');
+        about.busy = ''; about.updates = updatesOf(st2); sendAbout(); return;
+      }
+      if (Date.now() - t0 < 120000) setTimeout(poll, 2000); else { about.busy = ''; loadAbout(false); }
+    };
+    setTimeout(poll, 2500);
+  }
+  window.__e11Me = (ev) => {
+    if (!ev) return;
+    const rid = ev.rid || null;
+    try {
+      switch (ev.ev) {
+        case 'nav': if (ev.to === 'projects') go('projects'); else go(ev.to); sync(); return;
+        case 'profile': go('profile'); sync(); return;
+        case 'push': press({ 'data-ph-push': '' }); return;
+        case 'lock': press({ 'data-ph-lock': '' }); return;
+        case 'digest': press({ 'data-action': 'toggle-digest' }); sync(); return;
+        case 'theme': Theme.setMode(ev.mode); renderContent(); sync(); return;
+        case 'viewAs': ViewAs.pick(); return;
+        case 'backToMe': ViewAs.back(); return;
+        case 'sample': resetSampleData(); return;
+        case 'signOut': dialog({ title: 'Sign out?', body: window.E11_REVIEW ? 'You’ll need the App Review password to sign in again.' : 'You’ll need the code from your email to sign in again.', okText: 'Sign out', danger: true }).then((ok) => { if (ok) signOut(); }); return;
+        case 'team': wantTeam = !!ev.on; sync(); return;
+        case 'about': loadAbout(!!ev.fresh); return;
+        case 'update': updateNow(); return;
+        case 'videoCheck': loadVideo(true); return;
+        case 'import': importFromMac(); return;
+        case 'addMember': addMemberFlow(); return;
+        // (touch and hold someone: the website's own menu for them — iPhone's own sheet, with them on top)
+        case 'member': { if (!can('manageUsers') || !userById(ev.id)) return; const a = document.createElement('span'); a.style.cssText = 'position:fixed;left:50%;top:50%'; document.body.appendChild(a); try { memberMenu(a, ev.id, true); } finally { setTimeout(() => a.remove(), 0); } return; }
+        case 'cd': if (can('manageUsers')) cdToggleFlow(ev.id); return;
+        case 'toast': { const a = toastAction; toastAction = null; if (a && a.run) a.run(); return; }
+        case 'back': go('me'); sync(); return;
+        default: if (rid) answer(rid, { ok: false, error: 'Not available' });
+      }
+    } catch (e) { if (rid) answer(rid, { ok: false, error: e.message }); else toast(e.message || 'That didn’t work — try again'); }
+  };
+  window.__e11MeResend = () => { last = ''; shown = false; sync(); };
+  // the page's questions, as iPhone's own while the app's Me is up (dialog, choiceDialog, formDialog in app.js)
+  const asking = () => on && shown;
+  const ask = (a) => NativeMac.call('meAsk', a);
+  function toastOut(msg, action, ms) { toastAction = action || null; call({ toast: { t: String(msg || ''), a: action ? action.label : '', ms: ms || (action ? 6000 : 3000) } }); }
+  return { sync, ask, asking, toast: toastOut, peek: () => model(), get on() { return on; }, get shown() { return shown; }, get light() { return on; } };
 })();
