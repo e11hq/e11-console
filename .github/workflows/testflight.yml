@@ -1,0 +1,41 @@
+# Send an iPhone app build that was built, signed and kept on Haris's Mac (ios.yml with send: ask) to TestFlight — only
+# when Haris says so (Haris 2026-11-03: "every time build is finished before sending to TestFlight, ask me").
+name: Send to TestFlight
+on:
+  workflow_dispatch:
+    inputs:
+      build:
+        description: "The build number (e.g. 1338)"
+        required: true
+permissions:
+  contents: write
+jobs:
+  send:
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Send the kept build to TestFlight
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          BUILD: ${{ github.event.inputs.build }}
+        run: |
+          set -o pipefail
+          case "$BUILD" in ''|*[!0-9]*) echo "Not a build number: $BUILD"; exit 1;; esac
+          ARCH="$HOME/e11-archives/$BUILD"
+          [ -d "$ARCH" ] || { echo "Build $BUILD isn't kept on this Mac"; exit 1; }
+          KEY="$RUNNER_TEMP/asc.p8"; printf '%s\n' "$ASC_KEY_P8" > "$KEY"
+          AUTH="-allowProvisioningUpdates -authenticationKeyPath $KEY -authenticationKeyID $ASC_KEY_ID -authenticationKeyIssuerID $ASC_ISSUER_ID"
+          sed "s/__TEAM__/$APPLE_TEAM_ID/" ios/ExportOptions.plist > "$RUNNER_TEMP/ExportOptions.plist"
+          xcodebuild -exportArchive -archivePath "$ARCH" -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath "$RUNNER_TEMP/export" $AUTH 2>&1 | tee "$RUNNER_TEMP/ios-export-full.log" | tail -40
+          rm -f "$KEY"; rm -rf "$ARCH"
+          echo "Build $BUILD sent to TestFlight"
+      - name: Its log for checking from Claude's workspace
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -s "$RUNNER_TEMP/ios-export-full.log" ]; then { grep -E "error|Error|ERROR|failed|Failed" "$RUNNER_TEMP/ios-export-full.log" | head -60; echo ---; tail -60 "$RUNNER_TEMP/ios-export-full.log"; } > "$RUNNER_TEMP/ios-export.log"; gh release upload ios-selftest "$RUNNER_TEMP/ios-export.log" --clobber || true; fi; true
