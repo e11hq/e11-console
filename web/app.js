@@ -1619,6 +1619,16 @@ const ServerHost = (() => {
         return { ok: true, file: await uploadFile(f, { dest: args.dest }) };
       }
       case 'pickImage': {
+        // (the iPhone app's own Camera / Photos / Files sheet chose where from: straight there — My profile, 2026-11-03)
+        if (args.source && Host.isIOSApp) {
+          const ios = await iosPicks({ single: true, source: args.source });
+          if (ios) {
+            if (!ios.length) return { ok: true, path: null };
+            const up = (await uploadMany(ios, { taskId: '_uploads' }))[0];
+            if (!up) return { ok: true, path: null };
+            return await api('POST', '/api/host/processImage', { path: up.path, kind: args.kind || 'avatar', userId: args.userId });
+          }
+        }
         const files = await pickFiles({ multiple: false, accept: args.kind === 'logo' ? 'image/*,.svg' : 'image/*' });
         if (!files.length) return { ok: true, path: null };
         const picked = args.kind === 'logo' ? await realFile(files[0]) : files[0];

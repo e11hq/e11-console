@@ -3063,19 +3063,17 @@ const NativeMe = (() => {
       none: r.items.length ? '' : ui.trashQ ? `Nothing in the Trash matches “${ui.trashQ}”` : `The Trash is empty — deleted tasks, clients, comments and files wait here for ${TRASH_DAYS} days.`,
       note: `Deleted items stay here for ${TRASH_DAYS} days, then they and their files are removed for good. Finished tasks arrive here ${AUTO_DELETE_DAYS} days after they’re completed.` };
   }
+  // touch and hold: the app's own sheet (as the other holds), its name and line on top
   function trashHold(id) {
     const it = trashList().find((x) => x.id === id); if (!it) return;
-    const m = trashModel(), row = m.groups.flatMap((g) => g.items).find((x) => x.id === id) || {};
+    const row = trashModel().groups.flatMap((g) => g.items).find((x) => x.id === id) || {};
     const files = trashFiles(it);
-    const choices = [{ label: 'Cancel' }];
-    if (it.type === 'task') choices.push({ label: 'Open (view only)', value: 'view' });
-    else if (files.length) choices.push({ label: 'Preview', value: 'preview' });
-    if (row.restore) choices.push({ label: 'Restore', value: 'restore', primary: true });
-    if (row.forever) choices.push({ label: 'Delete forever', value: 'forever', danger: true });
-    choiceDialog({ title: trashTitle(it), body: row.s ? `${row.s} · ${row.left}` : '', choices }).then((v) => {
-      if (v === 'view') trashTaskView(id); else if (v === 'preview' && files[0]) previewFile(files[0]);
-      else if (v === 'restore') { restoreTrash(id); sync(); } else if (v === 'forever') eraseTrashFlow(id).then(() => sync());
-    });
+    const items = [{ html: `<div class="menu-label">${esc(trashTitle(it))} · ${esc(row.left || '')}</div>` }];
+    if (it.type === 'task') items.push({ label: 'Open (view only)', icon: 'eye', run: () => trashTaskView(id) });
+    else if (files.length) items.push({ label: 'Preview', icon: 'eye', run: () => previewFile(files[0]) });
+    if (row.restore) items.push({ label: 'Restore', icon: 'reply', run: () => { restoreTrash(id); sync(); } });
+    if (row.forever) items.push({ label: 'Delete forever', icon: 'trash', danger: true, run: () => eraseTrashFlow(id).then(() => sync()) });
+    sheet(items, {});
   }
   const saveMe = (fn) => { const u = me(); fn(u); persist(0); sync(); };
   // a list in iPhone's own sheet with a search box (the website's own pickPlace / the birthday picker, without the page's fields)
@@ -3088,11 +3086,14 @@ const NativeMe = (() => {
       { search: kind === 'country' ? 'Search countries' : all.length ? 'Search or type your city' : 'Type your city', custom: kind === 'city' ? 'Use “%@”' : null,
         empty: kind === 'country' ? 'No country matches “%@”' : 'Type the name of your city', onCustom: (v) => set(v) });
   }
+  // the birthday: the app's own calendar sheet (as a task's dates), day and month only
   function pickBday() {
-    const u = me(), cur = /^(\d{2})-(\d{2})$/.exec(u.bday || '');
-    const day = (m) => { const n = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1];
-      sheet(Array.from({ length: n }, (_, i) => ({ label: `${i + 1} ${MONTH_NAMES[m - 1]}`, checked: !!cur && +cur[1] === m && +cur[2] === i + 1, run: () => saveMe((x) => { x.bday = `${String(m).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`; }) })), { title: MONTH_NAMES[m - 1] }); };
-    sheet([...(cur ? [{ label: 'Not set', icon: 'x', run: () => saveMe((x) => { x.bday = null; }) }, '-'] : []), ...MONTH_NAMES.map((n, i) => ({ label: n, checked: !!cur && +cur[1] === i + 1, run: () => setTimeout(() => day(i + 1), 350) }))], { title: 'Your birthday · day and month' });
+    const u = me();
+    NativeMac.call('pickDate', { value: u.bday ? `${new Date().getFullYear()}-${u.bday}` : '', clearable: !!u.bday, md: true }).then((r) => {
+      if (!r || r.ok === false || r.cancel) return;
+      const v = r.clear ? null : String(r.date || '').slice(5) || null;
+      if (v !== (u.bday || null)) saveMe((x) => { x.bday = v; });
+    }).catch(() => {});
   }
   async function editName() {
     const v = await formDialog({ title: 'Full name', fields: [{ key: 'name', label: 'Full name', value: me().name || '', placeholder: 'Your full name' }], okText: 'Save', validate: (x) => (x.name ? null : 'Please enter your name') });
@@ -3240,7 +3241,7 @@ const NativeMe = (() => {
         case 'trRestore': restoreTrash(ev.id); sync(); return;
         case 'trForever': eraseTrashFlow(ev.id).then(() => sync()); return;
         case 'trEmpty': emptyTrashFlow().then(() => sync()); return;
-        case 'pfPhoto': changePhoto().then(() => sync()); return;
+        case 'pfPhoto': (async () => { try { const r = await Host.call('pickImage', { userId: currentUserId, source: ev.source || null }); if (!r || !r.path) return; const u = me(); if (u.avatar) Host.call('trashPath', { path: u.avatar }).catch(() => {}); saveMe((x) => { x.avatar = r.path; }); render(); } catch (e) { toast('Couldn’t use that photo'); } })(); return;
         case 'pfPhotoOff': removePhoto(); return;
         case 'pfName': editName(); return;
         case 'pfCountry': pickPlace('country'); return;

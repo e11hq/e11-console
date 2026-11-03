@@ -742,7 +742,14 @@ final class TrashRow: AssetTile, UIGestureRecognizerDelegate {
   private var it: [String: Any] = [:]
   var onEvent: (([String: Any]) -> Void)?
   private var canR = false, canF = false
-  private var shift: CGFloat = 0 { didSet { body.transform = CGAffineTransform(translationX: shift, y: 0); restoreB.alpha = min(1, max(0, shift / 80)); foreverB.alpha = min(1, max(0, -shift / 80)) } }
+  private var shift: CGFloat = 0 { didSet {
+    body.transform = CGAffineTransform(translationX: shift, y: 0)
+    restoreB.alpha = shift > 0.5 ? 1 : 0; foreverB.alpha = shift < -0.5 ? 1 : 0
+    // (each button fills what the row has uncovered, as Mail's)
+    let H = bounds.height
+    restoreB.frame = CGRect(x: 0, y: 0, width: max(0, shift), height: H)
+    foreverB.frame = CGRect(x: bounds.width + min(0, shift), y: 0, width: max(0, -shift), height: H)
+  } }
   override init(frame: CGRect) {
     super.init(frame: frame)
     clipsToBounds = true
@@ -770,6 +777,7 @@ final class TrashRow: AssetTile, UIGestureRecognizerDelegate {
   private func act(_ ev: String) { UIImpactFeedbackGenerator(style: .medium).impactOccurred(); onEvent?(["ev": ev, "id": it["id"] ?? ""]); close() }
   func set(_ x: [String: Any], look L: HomeLook) {
     it = x
+    body.backgroundColor = L.card   // (the row itself covers the buttons under it until swiped)
     canR = (x["restore"] as? Bool) == true; canF = (x["forever"] as? Bool) == true
     icon.color = NativeSheetVC.color(x["col"]) ?? .systemGray
     sym.image = UIImage(systemName: x["sym"] as? String ?? "trash.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold))
@@ -801,7 +809,7 @@ final class TrashRow: AssetTile, UIGestureRecognizerDelegate {
     super.layoutSubviews()
     let W = bounds.width, H = bounds.height
     body.bounds = CGRect(origin: .zero, size: bounds.size); body.center = CGPoint(x: W / 2, y: H / 2)
-    restoreB.frame = CGRect(x: 0, y: 0, width: 96, height: H); foreverB.frame = CGRect(x: W - 110, y: 0, width: 110, height: H)
+    restoreB.frame = CGRect(x: 0, y: 0, width: max(0, shift), height: H); foreverB.frame = CGRect(x: W + min(0, shift), y: 0, width: max(0, -shift), height: H)
     icon.frame = CGRect(x: 16, y: 13, width: 30, height: 30); sym.frame = icon.bounds
     let tw = textW(W)
     let nh = min(42, ceil(name.sizeThatFits(CGSize(width: tw, height: 100)).height))
@@ -1380,7 +1388,10 @@ final class MeCtl {
     guard let p = model["profile"] as? [String: Any] else { let n = part(h, "wait") { AssetsNote() }; n.label.text = "Loading…"; out.append(n); return }
     let top = part(h, "photo") { ProfileHead() }
     top.set(p, look: h.look)
-    top.onChange = { [weak self] in self?.send(["ev": "pfPhoto"]) }
+    top.onChange = { [weak self] in
+      guard let self = self else { return }
+      self.main.topMost().present(AttachSheetVC(light: self.light, title: "Your photo") { [weak self] src in self?.send(["ev": "pfPhoto", "source": src]) }, animated: true)
+    }
     top.onRemove = { [weak self] in self?.send(["ev": "pfPhotoOff"]) }
     out.append(top)
     let v: (String) -> String = { k in p[k] as? String ?? "" }
@@ -1513,7 +1524,14 @@ final class MeCtl {
   func ask(_ a: [String: Any], _ done: @escaping ([String: Any]) -> Void) {
     let kind = a["kind"] as? String ?? "alert"
     let dark = !light
-    if kind == "form" { let vc = MeFormVC(a, dark: dark, done: done); let nav = UINavigationController(rootViewController: vc); nav.overrideUserInterfaceStyle = dark ? .dark : .light; main.topMost().present(nav, animated: true); return }
+    if kind == "form" {
+      let vc = MeFormVC(a, dark: dark, done: done); let nav = UINavigationController(rootViewController: vc); nav.overrideUserInterfaceStyle = dark ? .dark : .light
+      // (as tall as its fields — one name isn't a whole page: Haris 2026-11-03)
+      let n = CGFloat(((a["fields"] as? [Any]) ?? []).count)
+      let h: CGFloat = 110 + n * 96 + ((a["intro"] as? String ?? "").isEmpty ? 0 : 44) + ((a["error"] as? String ?? "").isEmpty ? 0 : 28)
+      if let sp = nav.sheetPresentationController { sp.detents = [.custom { _ in h }, .large()]; sp.prefersGrabberVisible = true }
+      main.topMost().present(nav, animated: true); return
+    }
     let title = a["title"] as? String, body = a["body"] as? String
     let ac = UIAlertController(title: title, message: (body ?? "").isEmpty ? nil : body, preferredStyle: kind == "choice" ? .actionSheet : .alert)
     ac.overrideUserInterfaceStyle = dark ? .dark : .light

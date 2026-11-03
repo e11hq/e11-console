@@ -3008,7 +3008,11 @@ func roundPic(_ pic: UIImage?, initials: String?, color: UIColor?, size: CGFloat
     let rect = CGRect(origin: .zero, size: s)
     UIBezierPath(ovalIn: rect).addClip()
     (color ?? .systemGray).setFill(); UIRectFill(rect)
-    if let p = pic, p.size.width > 0, p.size.height > 0 { p.draw(in: rect); return }
+    // (filled and cropped to the circle, never stretched)
+    if let p = pic, p.size.width > 0, p.size.height > 0 {
+      let k = max(size / p.size.width, size / p.size.height), w = p.size.width * k, hh = p.size.height * k
+      p.draw(in: CGRect(x: (size - w) / 2, y: (size - hh) / 2, width: w, height: hh)); return
+    }
     let t = (initials ?? "") as NSString
     let attrs: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: size * 0.4, weight: .bold), .foregroundColor: UIColor.white]
     let ts = t.size(withAttributes: attrs)
