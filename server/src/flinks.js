@@ -91,11 +91,8 @@ export function createFileLinks({ store, files, views, base, teamId, bundleId = 
       : IMAGES.includes(ext) ? `<img src="${me}/view" alt="${esc(name)}">`
         : hasPic(a) ? `<img src="${me}/thumb" alt="${esc(name)}" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'tile',textContent:'${esc((ext || 'file').toUpperCase())}'}))">`
           : `<span class="tile">${esc((ext || 'file').toUpperCase())}</span>`;
-    return `<div class="card"><div class="prev">${preview}</div><div class="fn">${esc(name)}</div><div class="meta">${esc(meta)}</div><a class="btn" href="${me}/file" download><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Download</a>${appBtn}</div>`;
+    return `<div class="card"><div class="prev">${preview}</div><div class="fn">${esc(name)}</div><div class="meta">${esc(meta)}</div><a class="btn" href="${me}/file" download><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Download</a></div>`;
   }
-  // (Haris 2026-11-03: "Open in E11 Console" — the Mac / iPhone app's own link, e11console://f/<tok> (the test site's
-  //  app: e11console-test://); for Chrome, which never hands web links to an app. Someone without the app: nothing.)
-  const appBtn = `<a class="app" href="#" onclick="location.href=(location.host.indexOf('-test')>=0?'e11console-test':'e11console')+'://'+location.pathname.replace(/^\\//,'');return false"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>Open in E11 Console</a>`;
   const ogFor = (title, desc, url, img) => `<meta property="og:title" content="${esc(title)}"><meta property="og:description" content="${esc(desc)}"><meta property="og:site_name" content="E11 Agency"><meta property="og:url" content="${esc(url)}">${img ? `<meta property="og:image" content="${esc(img)}"><meta name="twitter:card" content="summary_large_image">` : ''}`;
   // the branded page around it: the E11 word mark, E11 AGENCY, …, © E11 AGENCY
   function shell(title, og, body) {
@@ -118,7 +115,6 @@ a{color:inherit;text-decoration:none}
 .prev video{width:100%;background:#000}
 .tile{font-size:34px;font-weight:800;color:var(--sub);letter-spacing:1px}
 .fn{font-size:18px;font-weight:650;margin:14px 4px 0;word-break:break-word}.meta{font-size:13.5px;color:var(--sub);margin:3px 4px 0}
-.app{margin-top:12px;height:36px;display:flex;align-items:center;justify-content:center;gap:6px;font-size:14px;font-weight:550;color:var(--sub)}.app:hover{color:inherit}
 .btn{margin-top:16px;height:48px;border-radius:14px;background:var(--btn);color:var(--btnt);font-weight:600;font-size:16px;display:flex;align-items:center;justify-content:center;gap:8px}
 .off{display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;padding:34px 18px}
 .off .ic{width:54px;height:54px;border-radius:27px;background:var(--prev);display:flex;align-items:center;justify-content:center;color:var(--sub)}
@@ -213,7 +209,7 @@ ${body}
     const folders = subs.map((x, i) => `<a class="sf" href="${me}/s/${x.id}"><i style="background:${COLORS[i % COLORS.length]}"></i><span><b>${esc(x.name)}</b><small>${allFiles(c, x).length} file${allFiles(c, x).length === 1 ? '' : 's'}</small></span></a>`).join('');
     const body = `${back}<div class="wide"><div class="fh"><span class="fic"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M3 6.5A2.5 2.5 0 0 1 5.5 4h4l2 2.2h7A2.5 2.5 0 0 1 21 8.7v8.8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/></svg></span><div><b>${esc(f.name)}</b><small>${esc(line)}</small></div></div>
       ${folders ? `<div class="sec">Folders</div><div class="subs">${folders}</div>` : ''}
-      ${tiles ? `<div class="sec">Files</div><div class="grid">${tiles}</div>` : `<div class="none">No files here yet</div>`}${appBtn}</div>`;
+      ${tiles ? `<div class="sec">Files</div><div class="grid">${tiles}</div>` : `<div class="none">No files here yet</div>`}</div>`;
     const cover = all.find((a) => hasPic(a) && extOf(a.name) !== 'svg');
     return shell(f.name, ogFor(f.name, line, furlOf(tok), cover ? `${furlOf(tok)}/f/${cover.id}/thumb` : null), body);
   }
