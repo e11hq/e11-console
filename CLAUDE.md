@@ -23,3 +23,9 @@ others slide only when something really came, went or changed height). Every new
 `PressShrink`) from the moment the finger is down, nothing inside it moves (cards are placed with bounds + center, never
 `frame`, so a shrunk card isn't re-laid out); held long enough: a medium haptic, iPhone's own sheet slides up, and the
 card springs back. No grey highlight, no iOS context menu with a lifted preview.
+
+**The shared top buttons, everywhere (Haris, 2026-11-03):** they always belong to exactly one screen — the one on top, or,
+while it's going (‹, the edge swipe, a tab change), already the one it's going back to, which is shown in place before
+the slide starts. Never a moment with no screen (the buttons fade out and in) or a screen hidden under others. Each new
+native screen tells the shared buttons where its ‹ / 🔍 / photo / ••• are (`screenSpots`), and its going-back passes
+them on the same way as the task page, the client's page and Client Assets do.
