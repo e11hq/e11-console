@@ -420,7 +420,8 @@ const Claims = (() => {
   /* ---------- Reminder pop-up (20th–27th, from 11:30 AM, once a day) ---------- */
   function reminderDue() {
     const u = me();
-    if (!canClaim(u) || phone() || !Host.isServer) return false;
+    // (phones: only in the iPhone app, as its own sheet — claims themselves are filled in on the computer)
+    if (!canClaim(u) || (phone() && !(typeof NativePop !== 'undefined' && NativePop.on)) || !Host.isServer) return false;
     // automated browser tests don't get the pop-up unless they ask for it
     try { if (navigator.webdriver && localStorage.getItem('e11-claim-remind') !== '1') return false; } catch (e) { /* storage blocked */ }
     const now = new Date(), d = now.getDate();
@@ -434,7 +435,22 @@ const Claims = (() => {
     if (!db || !currentUserId || !reminderDue() || $('#overlay-root').children.length || $('.ec-remind') || $('.an-pop')) return;
     const u = me(), m = todayStr().slice(0, 7), left = 27 - new Date().getDate();
     u.prefs = u.prefs || {}; u.prefs.claimNag = todayStr(); persist(0);
-    if (!document.hasFocus()) Host.call('notify', { title: 'Expense claims', body: `Your ${monthName(m, true)} claim is due by the 27th`, sound: 'Glass' }).catch(() => {});
+    if (!document.hasFocus() && !Host.isIOSApp) Host.call('notify', { title: 'Expense claims', body: `Your ${monthName(m, true)} claim is due by the 27th`, sound: 'Glass' }).catch(() => {});
+    const answer = (r) => {
+      if (r === 'submit') return newClaim(m);
+      if (r === 'later' || !r) return;
+      const c = mineFor(m) || { id: idFor(currentUserId, m), userId: currentUserId, month: m, groups: [], total: 0, signature: null, createdAt: nowISO() };
+      c.state = r === 'none' ? 'none' : 'offline';
+      save(c);
+      if (r === 'none') toast(`Got it — no claims for ${monthName(m, true)}. No more reminders this month.`);
+      else toast('Got it — no more reminders this month.');
+      if (ui.view === 'claims') renderContent();
+    };
+    // (the iPhone app: its own sheet — I don't have claims · Submitted offline · Remind me tomorrow; pulled down: tomorrow)
+    if (typeof NativePop !== 'undefined' && NativePop.on) {
+      NativePop.show({ kind: 'claims', month: monthName(m, true), today: new Date().getDate() }).then((r) => answer(r && r.a === 'none' ? 'none' : r && r.a === 'offline' ? 'offline' : 'later'));
+      return;
+    }
     const el = document.createElement('div');
     el.className = 'ec-remind';
     el.innerHTML = `<div class="ec-rbox" role="dialog" aria-labelledby="ec-rt">
@@ -448,15 +464,7 @@ const Claims = (() => {
     el.addEventListener('click', (e) => {
       const b = e.target.closest('[data-r]'); if (!b) return;
       el.remove();
-      const r = b.dataset.r;
-      if (r === 'submit') return newClaim(m);
-      if (r === 'later') return;
-      const c = mineFor(m) || { id: idFor(currentUserId, m), userId: currentUserId, month: m, groups: [], total: 0, signature: null, createdAt: nowISO() };
-      c.state = r === 'none' ? 'none' : 'offline';
-      save(c);
-      if (r === 'none') toast(`Got it — no claims for ${monthName(m, true)}. No more reminders this month.`);
-      else toast('Got it — no more reminders this month.');
-      if (ui.view === 'claims') renderContent();
+      answer(b.dataset.r);
     });
   }
 

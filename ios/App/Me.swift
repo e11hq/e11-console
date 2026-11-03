@@ -943,71 +943,15 @@ final class MeCtl {
     while let x = r, x !== v { if x.bounds.width >= W - 60 && x.bounds.height <= 120 { return x.convert(x.bounds, to: v) }; r = x.superview }
     return CGRect(x: 16, y: p.y - 22, width: W - 32, height: 44)
   }
-  private weak var meCard: MeCardBlock?
-  // TEMPORARY (Haris 2026-11-03): each approved pop-up with made-up data, from Me's "Pop-up tests" rows
-  private func popTest(_ k: String) {
-    let dark = !light, vc = main.topMost()
-    switch k {
-    case "ann":
-      AnnouncementSheet(dark: dark, title: "Office closed on Monday", body: "The office is closed on Monday 2 December for National Day. Deadlines due that day move to Tuesday. Enjoy the long weekend!",
-                        ask: "If you have any questions, please contact the Office Admin.", from: "Sara", fromIni: "SA", fromColor: .systemIndigo, when: "Today, 9:14 AM").show(from: vc)
-    case "claims":
-      let cal = Calendar.current, now = Date(), d = cal.component(.day, from: now)
-      let month = DateFormatter().monthSymbols[cal.component(.month, from: now) - 1]
-      ClaimsSheet(dark: dark, month: month, today: (20...27).contains(d) ? d : 23).show(from: vc)
-    case "bday", "eid":
-      let c = model["card"] as? [String: Any] ?? [:]
-      let first = (c["name"] as? String ?? "Sara").split(separator: " ").first.map(String.init) ?? "Sara"
-      let top: UIView = k == "eid" ? GreetingView.occasionTile("🌙")
-        : GreetingView.photoRing(meCard?.photo ?? roundPic(nil, initials: c["ini"] as? String ?? "SA", color: NativeSheetVC.color(c["rgb"]) ?? .systemOrange, size: 112))
-      let g = k == "eid" ? GreetingView(dark: dark, top: top, title: "Eid Mubarak", sub: "Eid al-Fitr · from all of us at E11")
-        : GreetingView(dark: dark, top: top, title: "Happy birthday, \(first)", sub: "Wishing you a wonderful year · from all of us at E11")
-      g.show(in: main.view.window ?? main.view)
-    case "ask":
-      let card = ProfileAskCard(dark: dark, missing: "both")
-      card.onProfile = { [weak self] in self?.open("profile") }
-      card.show(in: main.view, bottom: main.tabPillTop)
-    case "new":
-      let s = WhatsNewSheet(dark: dark, version: "E11 Console 1.9.24", when: "Today, 2:00 AM", sections: [
-        ("New", ["File and folder links: a branded page with a preview and Download.", "My profile and the Trash are the iPhone app’s own."]),
-        ("Better", ["Liquid Glass buttons, and the toast stretches out of them.", "The frost bar matches Mail’s.", "Assignees in their groups."]),
-      ])
-      s.onAllNotes = { [weak self] in self?.open("about") }
-      s.show(from: vc)
-    case "viewas":
-      let ppl: [ViewAsSheet.Person] = [
-        .init(id: "ar", name: "Ali Raza", role: "Production", ini: "AR", color: .systemIndigo),
-        .init(id: "aa", name: "Amelia Aouidat", role: "Social", ini: "AA", color: .systemOrange),
-        .init(id: "as", name: "Aishwarya Sanjay", role: "Social", ini: "AS", color: .systemGreen),
-        .init(id: "ca", name: "Carine Abou Jaoude", role: "Creative Director", ini: "CA", color: .systemPurple),
-        .init(id: "jh", name: "Joe Hajj", role: "Account Manager", ini: "JH", color: .systemRed),
-        .init(id: "ya", name: "Yousef Al Hwij", role: "Production", ini: "YA", color: .systemPink),
-      ]
-      ViewAsSheet(dark: dark, people: ppl, viewing: "aa").show(from: vc)
-    case "bar":
-      if let b = ViewAsBar.current { b.go(); redrawRoot(); return }
-      let ppl: [ViewAsSheet.Person] = [
-        .init(id: "ar", name: "Ali Raza", role: "Production", ini: "AR", color: .systemIndigo),
-        .init(id: "aa", name: "Amelia Aouidat", role: "Social", ini: "AA", color: .systemOrange),
-        .init(id: "ca", name: "Carine Abou Jaoude", role: "Creative Director", ini: "CA", color: .systemPurple),
-        .init(id: "jh", name: "Joe Hajj", role: "Account Manager", ini: "JH", color: .systemRed),
-      ]
-      let bar = ViewAsBar(dark: dark); bar.set(name: "Amelia Aouidat", role: "Social")
-      bar.bottomFor = { [weak self] in self?.main.viewAsBottom() ?? 0 }
-      bar.onBackToMe = { [weak self, weak bar] in bar?.go(); self?.redrawRoot() }
-      bar.onSwitch = { [weak self, weak bar] in
-        guard let self = self else { return }
-        let s = ViewAsSheet(dark: !self.light, people: ppl, viewing: nil)
-        s.onPick = { [weak self, weak bar, weak s] id in
-          if let p = ppl.first(where: { $0.id == id }) { bar?.set(name: p.name, role: p.role); s?.dismiss(animated: true) }
-          else { bar?.go(); s?.dismiss(animated: true); self?.redrawRoot() }
-        }
-        s.show(from: self.main.topMost())
-      }
-      bar.show(in: main.view)
-      redrawRoot()
-    default: break
+  // (a page of Me opened from elsewhere — the birthday / city card's Go to My profile, What's new's All notes: Me's tab,
+  //  then that page over it)
+  private var wantOpen: String?
+  func openSoon(_ kind: String) {
+    if main.selectedTabKey == "me", !hidden, !stack.isEmpty {
+      if stack.count > 1 { backToRoot(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.open(kind) } } else { open(kind) }
+      return
     }
+    wantOpen = kind
   }
   private struct Screen { let h: HomeView; let kind: String; let id: String? }
   private var stack: [Screen] = []
@@ -1050,6 +994,7 @@ final class MeCtl {
     reveal()
     stack.forEach { draw($0) }
     main.updateCorner()
+    if let k = wantOpen { wantOpen = nil; if stack.count > 1 { backToRoot() }; DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.open(k) } }
   }
   // out of sight, kept as it is (Me comes back where it was, as iPhone's own tabs)
   func hide() {
@@ -1263,7 +1208,6 @@ final class MeCtl {
         let card = part(h, "card") { MeCardBlock() }
         card.set(c, look: L)
         card.onTap = { [weak self] in self?.open("profile") }   // (the app's own My profile, 2026-11-03)
-        meCard = card
         out.append(card)
       } else { let n = part(h, "wait") { AssetsNote() }; n.label.text = "Loading…"; out.append(n) }
       let work = ((model["work"] as? [[String: Any]]) ?? []).map { w -> SetItem in
@@ -1300,24 +1244,6 @@ final class MeCtl {
       }
       out.append(head(h, "out", ""))
       out.append(group(h, "out", [SetItem(key: "signOut", title: "Sign out", chevron: false, danger: true, tap: { [weak self] in self?.send(["ev": "signOut"]) })]))
-      // TEMPORARY (Haris 2026-11-03): the six approved pop-ups to try, test site only — removed once approved, each pop-up
-      // then going to its own place
-      if model["test"] != nil {
-        let t: (String, String, String, String, UIColor) -> SetItem = { k, title, sub, sym, col in
-          SetItem(key: "pt." + k, title: title, sub: sub, sym: sym, col: col, tap: { [weak self] in self?.popTest(k) })
-        }
-        out.append(head(h, "poptest", "Pop-up tests (temporary)"))
-        out.append(group(h, "poptest", [
-          t("ann", "Announcement", "Sent from the website, seen once", "megaphone.fill", .systemOrange),
-          t("claims", "Expense claims reminder", "20th–27th, once a day", "doc.text.fill", .systemGray),
-          t("bday", "Greeting — birthday", "Your photo, confetti", "birthday.cake.fill", .systemPurple),
-          t("eid", "Greeting — an occasion", "Eid, National Day…", "moon.stars.fill", .systemGreen),
-          t("ask", "Birthday / city card", "Above the tab bar, goes after 20 s", "gift.fill", .systemPink),
-          t("new", "What’s new", "Once, after an update", "arrow.down.circle.fill", .systemBlue),
-          t("viewas", "View as… (new sheet)", "Made-up team — doesn’t switch", "person.2.fill", .systemTeal),
-          t("bar", ViewAsBar.current == nil ? "View as… bar — show" : "View as… bar — hide", "Floats on every page until hidden", "rectangle.bottomthird.inset.filled", .systemOrange),
-        ]))
-      }
       // (the sync status in the version's place — Haris 2026-11-03; the version is on About)
       if let st = model["sync"] as? String, !st.isEmpty {
         let (t, c): (String, UIColor) = {

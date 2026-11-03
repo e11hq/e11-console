@@ -10,6 +10,18 @@ const ViewAs = (() => {
   function init(v) {
     info = v || null;
     document.documentElement.classList.toggle('viewas-on', viewing());
+    // (the iPhone app: its own floating bar over every page — Switch / Back to me come back here)
+    if (Host.isIOSApp) {
+      NativePop.ready.then(() => {
+        if (!NativePop.on) return init2();
+        const old = document.getElementById('viewas-bar'); if (old) old.remove();
+        NativePop.show(viewing() ? { kind: 'viewAsBar', on: true, name: info.as.name, role: roleOf(userById(info.as.id)) || ROLES[info.as.role] || info.as.role } : { kind: 'viewAsBar', on: false });
+      });
+      return;
+    }
+    init2();
+  }
+  function init2() {
     let bar = document.getElementById('viewas-bar');
     if (!viewing()) { if (bar) bar.remove(); return; }
     if (!bar) { bar = document.createElement('div'); bar.id = 'viewas-bar'; document.body.appendChild(bar); }
@@ -24,8 +36,14 @@ const ViewAs = (() => {
   // the team, with a search on top; pick one to use the app as them
   function pick() {
     if (!available()) return;
-    const root = $('#overlay-root');
     const people = db.users.filter((u) => u.active !== false && u.id !== info.real.id).sort((a, b) => fullName(a).localeCompare(fullName(b)));
+    // (the iPhone app: its own tall sheet — a tap switches; Back to me while viewing as someone)
+    if (NativePop.on) {
+      NativePop.show({ kind: 'viewAs', viewing: info.as ? info.as.id : null, people: people.map((u) => ({ ...NativePop.person(u.id), role: roleOf(u) || '' })) })
+        .then((r) => { if (r && r.id) set(r.id); else if (r && r.me) set(null); });
+      return;
+    }
+    const root = $('#overlay-root');
     root.innerHTML = `<div class="scrim"><div class="dialog va-dlg" role="dialog" aria-label="View as">
       <div class="cd-top"><h2>View as…</h2><button class="icon-btn" data-va="close" title="Close">${icon('x')}</button></div>
       <p class="va-note">Test site only. Use the app as this person, with their role — what they see and what they can do. It stays until you choose <b>Back to me</b>.</p>

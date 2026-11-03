@@ -264,6 +264,32 @@ function autoSeason(day) {
 // Automatic: on the occasion's day itself. When Haris picks an icon himself, that replaces it: a seasonal one brings its
 // own greeting (once, the next time each device starts); Everyday or his own picture brings none.
 // Confetti in the season's colours and the greeting over the app, then back to work (click, a key, or 5 s).
+/* The iPhone app's own pop-ups (shell 34+, Haris 2026-11-03: "popups approved … put them in their original place"):
+   Announcement, the claims reminder, greetings, the birthday / city card, What's new, View as… and its bar are drawn by the
+   app (Popups.swift); the page says what's in them and does what's answered. `known`: the app has said which shell it is. */
+const NativePop = (() => {
+  let shell = 0, known = !(typeof Host !== 'undefined' && Host.isIOSApp);
+  const ready = known ? Promise.resolve() : NativeMac.call('appInfo').then((r) => { shell = Number(r && r.shell) || 0; }).catch(() => {}).then(() => { known = true; });
+  const on = () => known && shell >= 34 && window.__e11CommentsOnly !== true;
+  const show = (a) => NativeMac.call('pop', a).catch(() => ({ ok: false }));
+  // (the notes' lines in sections — headings, then their points — for the app's What's new)
+  const sections = (md) => {
+    const out = []; let cur = null;
+    const plain = (t) => String(t).replace(/\*\*(.+?)\*\*/g, '$1').replace(/`(.+?)`/g, '$1').trim();
+    String(md || '').split(/\r?\n/).forEach((l) => {
+      const h = /^#{1,3}\s+(.*)/.exec(l), li = /^\s*[-*]\s+(.*)/.exec(l);
+      if (h) { cur = { h: plain(h[1]), items: [] }; out.push(cur); return; }
+      const t = li ? plain(li[1]) : plain(l);
+      if (!t) return;
+      if (!cur) { cur = { h: '', items: [] }; out.push(cur); }
+      cur.items.push(t);
+    });
+    return out.length ? out : [{ h: '', items: ['Improvements and fixes.'] }];
+  };
+  const person = (id) => { const u = userById(id); return { id, name: fullName(u), ini: initials(fullName(u)), color: avColor(id || 'x'), photo: u && u.avatar ? fileUrl({ path: u.avatar }) : null }; };
+  return { get on() { return on(); }, get known() { return known; }, ready, show, sections, person };
+})();
+
 const OccasionHello = (() => {
   const GREET = {
     'new-year': 'Happy New Year', syria: 'Happy Evacuation Day, Syria', 'south-africa': 'Happy Freedom Day, South Africa',
@@ -318,6 +344,12 @@ const OccasionHello = (() => {
   function show(sid, opts) {
     const S0 = sid && window.E11_SEASONS && E11_SEASONS[sid];
     if (!S0 && !opts) return Promise.resolve();
+    // (the iPhone app: its own greeting — your photo in a ring, or the occasion's picture)
+    if (NativePop.on) {
+      const u = opts ? me() : null;
+      return NativePop.show(opts ? { kind: 'greet', title: opts.title, sub: opts.sub, person: NativePop.person(u.id) }
+        : { kind: 'greet', title: GREET[sid] || S0.name, sub: S0.name + ' · from all of us at E11', pic: `icons/seasonal/${sid}.png`, tile: S0.tile }).then(() => {});
+    }
     const S = S0 || { name: '', tile: opts.tile, left: opts.colors[0], right: opts.colors[1], check: opts.colors[4] };
     let done = null; const closedP = new Promise((r) => { done = r; });
     const still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -377,6 +409,8 @@ const ProfileAsk = (() => {
     if ((u.prefs || {}).profileAsked || (u.bday && u.country && u.city)) return;
     u.prefs = { ...(u.prefs || {}), profileAsked: todayStr() }; persist(0);
     const missing = [!u.bday && 'your birthday', !(u.country && u.city) && 'where you’re based'].filter(Boolean).join(' and ');
+    // (the iPhone app: its own card just above the tab bar; Go to My profile opens the app's own My profile)
+    if (NativePop.on) { NativePop.show({ kind: 'profileAsk', missing: !u.bday && !(u.country && u.city) ? 'both' : !u.bday ? 'birthday' : 'city' }); return; }
     // a small card in the corner (it doesn't stop you working): Go to My profile or Not now
     const el = document.createElement('div');
     el.className = 'pa-card';
@@ -1104,6 +1138,8 @@ async function whatsNewDialog(auto) {
   let r;
   try { r = await api('GET', '/api/whatsnew'); } catch (e) { if (!auto) toast(e.message); return; }
   if (auto && !r.notes) return;
+  // (the iPhone app: its own sheet; "All notes in Me › About" opens the app's own About)
+  if (NativePop.on) { NativePop.show({ kind: 'whatsNew', version: r.name || r.version, when: r.publishedAt ? fmtDateTime(r.publishedAt) : '', sections: NativePop.sections(r.notes) }); return; }
   const root = $('#overlay-root');
   root.innerHTML = `<div class="scrim"><div class="dialog wn-dlg"><div class="wn-kick">${icon('download')}What’s new</div><h2>${esc(r.name || r.version)}</h2>${r.publishedAt ? `<div class="wn-date">${esc(fmtDateTime(r.publishedAt))}</div>` : ''}<div class="wn-notes">${notesHTML(r.notes)}</div><div class="actions"><button class="btn primary" data-r="1">Got it</button></div></div></div>`;
   const close = () => { root.innerHTML = ''; };
@@ -5219,13 +5255,22 @@ const Announce = (() => {
   const MEGAPHONE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1zM15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg>';
   const current = () => (db && db.meta && db.meta.announcement && db.meta.announcement.id ? db.meta.announcement : null);
   const FOOT = 'If you have any questions, please contact Muhammad Arsal.';
+  let annOpen = null;
   function check() {
     const a = current(), u = me();
     if (!a || !u || a.by === u.id || (u.prefs || {}).annSeen === a.id) return;
     if ($('.an-pop') || $('#overlay-root').children.length || $('.ec-remind')) return;
+    const from = userById(a.by);
+    // (the iPhone app: its own sheet, seen once — closed with Got it or pulled down)
+    if (Host.isIOSApp && !NativePop.known) return;   // (asked again in a moment)
+    if (NativePop.on) {
+      if (annOpen === a.id) return; annOpen = a.id;
+      NativePop.show({ kind: 'announce', title: a.title, body: a.body || '', ask: FOOT, from: from ? NativePop.person(from.id) : { name: 'E11', ini: 'E11', color: '#5b8cff' }, fromName: from ? fullName(from).split(' ')[0] : 'E11', when: fmtDateTime(a.at) })
+        .then(() => { const me1 = me(); if (me1) { me1.prefs = me1.prefs || {}; me1.prefs.annSeen = a.id; persist(0); } });
+      return;
+    }
     const el = document.createElement('div');
     el.className = 'an-pop';
-    const from = userById(a.by);
     el.innerHTML = `<section class="an-box" role="dialog" aria-labelledby="an-t">
       <button class="an-x" data-an="close" aria-label="Close">${icon('x')}</button>
       <div class="an-top"><span class="an-ic">${MEGAPHONE}</span><div>

@@ -3,8 +3,8 @@ import UIKit
 /* The six pop-ups as the app's own (Haris 2026-11-03 — the approved mockups, project doc claude/ios-popups-plan.md):
    1 Announcement · 2 Expense claims reminder · 3 Greetings (birthday / an occasion) · 4 the birthday / city card ·
    5 What's new · 6 View as…
-   For now they open only from Me's temporary "Pop-up tests" rows (the test site), with made-up data; once Haris approves
-   them the rows go and each pop-up goes to its own place. */
+   Approved 2026-11-03 and in their own places: the page says when and what (NativePop in app.js — `pop` with a kind:
+   announce, claims, greet, profileAsk, whatsNew, viewAs, viewAsBar — Main.popCommand) and does what's answered. */
 
 enum Pop {
   // (the big capsule: blue with white words, or grey with the page's ink — as the mockups)
@@ -108,7 +108,7 @@ class PopSheetVC: UIViewController {
 
 // 1 · Announcement
 final class AnnouncementSheet: PopSheetVC {
-  init(dark: Bool, title: String, body: String, ask: String, from: String, fromIni: String, fromColor: UIColor, when: String) {
+  init(dark: Bool, title: String, body: String, ask: String, from: String, fromIni: String, fromColor: UIColor, when: String, fromPhoto: String? = nil) {
     super.init(dark: dark)
     loadViewIfNeeded()
     let tile = Pop.tile(44, bg: .systemOrange, sym: "megaphone.fill", radius: 12)
@@ -117,6 +117,7 @@ final class AnnouncementSheet: PopSheetVC {
     stack.addArrangedSubview(Pop.label(body, 17))
     stack.addArrangedSubview(Pop.label(ask, 14, .regular, .secondaryLabel))
     let who = Pop.image(roundPic(nil, initials: fromIni, color: fromColor, size: 22), 22)
+    if let ph = fromPhoto { FeedLoader.shared.image(ph) { [weak who] img in if let img = img { who?.image = roundPic(img, initials: nil, color: nil, size: 22) } } }
     stack.addArrangedSubview(Pop.row([who, Pop.label("From \(from) · \(when)", 14, .regular, .secondaryLabel)], spacing: 8))
     stack.setCustomSpacing(20, after: stack.arrangedSubviews.last!)
     stack.addArrangedSubview(Pop.capsule("Got it", filled: true) { [weak self] in self?.close() })
@@ -225,7 +226,11 @@ final class PopNotesBox: UIView {
 
 /* ---------- 6 · View as… (test site, the owner): a tall glass sheet ---------- */
 final class ViewAsSheet: UIViewController, UITableViewDataSource, UITableViewDelegate, UISearchBarDelegate {
-  struct Person { let id: String; let name: String; let role: String; let ini: String; let color: UIColor }
+  struct Person { let id: String; let name: String; let role: String; let ini: String; let color: UIColor; var photo: String? = nil }
+  private var pics: [String: UIImage] = [:]
+  var closesOnPick = false   // (the real one: a tap switches — the app reloads as that person)
+  var onClose: (() -> Void)?
+  override func viewDidDisappear(_ animated: Bool) { super.viewDidDisappear(animated); if isBeingDismissed || presentingViewController == nil { onClose?(); onClose = nil } }
   private let people: [Person]
   private var shown: [Person]
   private var viewing: String?
@@ -280,6 +285,7 @@ final class ViewAsSheet: UIViewController, UITableViewDataSource, UITableViewDel
   }
   private func pick(_ id: String?) {
     UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    if closesOnPick { onClose = nil; let go = onPick; dismiss(animated: true) { go?(id) }; return }
     viewing = id; onPick?(id); paintViewing(); table.reloadData()
   }
   func numberOfSections(in tableView: UITableView) -> Int { 1 }
@@ -291,7 +297,14 @@ final class ViewAsSheet: UIViewController, UITableViewDataSource, UITableViewDel
     var cf = c.defaultContentConfiguration()
     cf.text = p.name; cf.textProperties.font = .systemFont(ofSize: 17)
     cf.secondaryText = p.role; cf.secondaryTextProperties.color = .secondaryLabel; cf.secondaryTextProperties.font = .systemFont(ofSize: 14)
-    cf.image = roundPic(nil, initials: p.ini, color: p.color, size: 40); cf.imageProperties.maximumSize = CGSize(width: 40, height: 40)
+    cf.image = pics[p.id] ?? roundPic(nil, initials: p.ini, color: p.color, size: 40); cf.imageProperties.maximumSize = CGSize(width: 40, height: 40)
+    if pics[p.id] == nil, let ph = p.photo {
+      FeedLoader.shared.image(ph) { [weak self] img in
+        guard let self = self, let img = img else { return }
+        self.pics[p.id] = roundPic(img, initials: nil, color: nil, size: 40)
+        if let i = self.shown.firstIndex(where: { $0.id == p.id }) { self.table.reloadRows(at: [IndexPath(row: i, section: 0)], with: .none) }
+      }
+    }
     cf.imageToTextPadding = 14
     c.contentConfiguration = cf
     c.accessoryType = p.id == viewing ? .checkmark : .none
@@ -337,6 +350,11 @@ final class GreetingView: UIView {
     NSLayoutConstraint.activate([i.centerXAnchor.constraint(equalTo: ring.centerXAnchor), i.centerYAnchor.constraint(equalTo: ring.centerYAnchor)])
     return ring
   }
+  // (the occasion's own picture — the seasonal icon the website shows)
+  static func picTile(_ img: UIImage) -> UIView {
+    let i = Pop.image(img, 112); i.layer.cornerRadius = 26; i.layer.cornerCurve = .continuous; i.clipsToBounds = true; i.contentMode = .scaleAspectFill
+    return i
+  }
   static func occasionTile(_ emoji: String) -> UIView {
     let v = Pop.tile(112, bg: UIColor(red: 0.05, green: 0.42, blue: 0.30, alpha: 1), text: nil, radius: 28)
     let l = UILabel(); l.text = emoji; l.font = .systemFont(ofSize: 60); l.translatesAutoresizingMaskIntoConstraints = false; v.addSubview(l)
@@ -353,9 +371,12 @@ final class GreetingView: UIView {
     UIView.animate(withDuration: 0.35) { self.blur.effect = UIBlurEffect(style: .systemUltraThinMaterial) }
     UIView.animate(withDuration: 0.55, delay: 0.05, usingSpringWithDamping: 0.72, initialSpringVelocity: 0, options: [.allowUserInteraction]) { self.card.alpha = 1; self.card.transform = .identity }
   }
+  var onGone: (() -> Void)?
+  private var gone = false
   @objc func go() {
+    guard !gone else { return }; gone = true
     confetti.birthRate = 0
-    UIView.animate(withDuration: 0.3, animations: { self.alpha = 0; self.card.transform = CGAffineTransform(scaleX: 0.94, y: 0.94) }) { _ in self.removeFromSuperview() }
+    UIView.animate(withDuration: 0.3, animations: { self.alpha = 0; self.card.transform = CGAffineTransform(scaleX: 0.94, y: 0.94) }) { _ in self.removeFromSuperview(); self.onGone?(); self.onGone = nil }
   }
   override func layoutSubviews() {
     super.layoutSubviews()

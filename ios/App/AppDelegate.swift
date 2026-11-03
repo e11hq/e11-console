@@ -15,7 +15,7 @@ import UniformTypeIdentifiers
 import AudioToolbox
 
 // Version of this iPhone app's native part (raise it with changes the web app needs to know about)
-let SHELL_VERSION = 33   // 33: the Me tab is the app's own (Me.swift: Me, Appearance, About, Shortcuts, Team members, a member — from the page: me show / me / light / model, about, toast; every change through window.__e11Me — nav, profile, push, lock, digest, theme, viewAs, backToMe, sample, signOut, team, about, update, videoCheck, import, addMember, member, cd, toast; the page's questions as iPhone's own: meAsk — alert / choice / form) · 32: Client Assets is the app's own (Assets.swift: All Client Assets, a client's assets, a folder — from the page: assets show / start / root / me / light; each screen's contents and every change through window.__e11Assets — want, uploaded, newFolder, renameFolder, deleteFolder, deleteFile, addClient, renameClient, deleteClient, back, me — answered with assets rid / ok / error / model; a client's page's folders open them) · 31: the Clients tab is the app's own (Clients.swift: the list, and a client's page with its Client Assets folders on top and its tasks by status as Home's cards; the page sends clients show / view / id / done / me / light; taps back: window.__e11Clients — client, back, folder, assets, done, add, and Home's; window.__e11ClientsOwn / __e11ClientsResend) · 30: the task page is the app's own (TaskPage.swift): it slides in from the right, ‹ / the edge swipe goes back; Details from /api/task, its changes to /api/home/act (from: task); the page sends taskPage open / changed and hears window.__e11Task — closed, copy, attach, from, web; its Comments tab shows the comments screen inside it · 29: 29: the morning round-up as iPhone's own sheet (dailySheet; taps back: window.__e11Daily — open, all) · 28: the Inbox is the app's own (each notification a row as Mail's, from /api/inbox; All / Unread / Mentions, swipe right: Read / Unread, Mark all read — read / unread / readAll to /api/home/act; the page sends inbox show / me / light; taps back: window.__e11Inbox — open, me; window.__e11InboxOwn) · 27: the page draws nothing under the app's My Tasks; the app says when it can't show its own (window.__e11MyTasksOwn) · 26: My Tasks is the app's own too (Home's screen as a list — All / Done, the filter buttons, what's on — from /api/mytasks?<filters>; the page sends mytasks show / tab / q / buttons / chips; taps back: window.__e11MyTasks — tab, filter, chip, reset, and Home's) · 25: Home straight from the server (/api/home; Done / reopen / Due / Delete / Undo to /api/home/act, kept on the phone until sent — ServerHome.swift); the page still says when Home shows · 24: a Home card swiped right: Done · Due (taps back: window.__e11Home — done, due; the page opens its date sheet) · 23: Home (E11 Day / My Day) is the app's own (Home.swift; the page sends it: home show / people / toast; taps back: window.__e11Home — open, search, me, add, copy, delete, attach, toast); a card swiped left: Copy link · Delete; held: Attach Files · 22: the startup screen is the app's own, there the moment it opens (Splash.swift; the page drives it: splash hello / memo / greet / tick / status / out; window.__e11SplashSkip / __e11SplashRetry) · 21: the comments screen tells its page how far it's slid up for the keyboard (--cm-top: a thread's bar stays in sight); its swipe right also takes iPhone's slow back drag from the edge; it starts at the latest comment only when the task opens and when the keyboard comes up, and keeps its place across Details / Comments · 20: a task's Comments on a screen of their own (a second web view showing only the comments, scrolled by iOS itself; window.__e11ShowComments, cmReady / cmEnd) · 19: on a task's Comments, iOS itself moves the comments list with the keyboard (its own scroll view, in the keyboard's own animation; window.__e11FeedKb) · 18: the file preview is iOS's own (preview / previewSet / window.__e11Preview; Preview.swift) · 17: the comment box on a task's Comments is iPhone's own, on the keyboard (commentBar / window.__e11CBar; CommentBar.swift) · 16: iPhone's own banners also while the app is open (the page draws no cards), each notification confirmed by the Notification Service Extension so the server sends again the ones an offline phone missed (register ack) · 15: New task / Request amendments as native sheets with iPhone's own fields that tuck into a bar like a Mail draft (formSheet / formSet / formClose; the page: window.__e11Form), a Trash task as a native sheet (trashSheet); native sheets and dates also open on top of those · 14: native sheets with people (round photos / initials) and a search box (+ a typed entry, "Use …") · 13: also dates picked in a native sheet (pickDate: closing it never sets a date) · a native sheet can stay open for ticking several (multi; each tick: window.__e11SheetPick) · 12: native sheets also with colour dots, a row of colours / emoji / numbers (chips), tinted icons, locked rows · 11: plain menus as iOS's own sheets (nativeSheet; the page: NativeSheet in app.js, showMenu(…, { native: true })) · 10: My Tasks, Inbox and Team lists swiped by iOS itself (Pager.syncLists in phone.js) · 9: a task’s Details / Comments swiped by iOS itself (the page: Pager in phone.js) · 8: iOS haptics for the page (haptic kind: light / medium / selection / success / warning / error) · 7: the comment box rides down / up with the keyboard frame by frame (__e11KbStep) · 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
+let SHELL_VERSION = 34   // 34: the pop-ups are the app's own (Popups.swift: pop — announce, claims, greet, profileAsk, whatsNew, viewAs, viewAsBar; the page's NativePop) · 33: the Me tab is the app's own (Me.swift: Me, Appearance, About, Shortcuts, Team members, a member — from the page: me show / me / light / model, about, toast; every change through window.__e11Me — nav, profile, push, lock, digest, theme, viewAs, backToMe, sample, signOut, team, about, update, videoCheck, import, addMember, member, cd, toast; the page's questions as iPhone's own: meAsk — alert / choice / form) · 32: Client Assets is the app's own (Assets.swift: All Client Assets, a client's assets, a folder — from the page: assets show / start / root / me / light; each screen's contents and every change through window.__e11Assets — want, uploaded, newFolder, renameFolder, deleteFolder, deleteFile, addClient, renameClient, deleteClient, back, me — answered with assets rid / ok / error / model; a client's page's folders open them) · 31: the Clients tab is the app's own (Clients.swift: the list, and a client's page with its Client Assets folders on top and its tasks by status as Home's cards; the page sends clients show / view / id / done / me / light; taps back: window.__e11Clients — client, back, folder, assets, done, add, and Home's; window.__e11ClientsOwn / __e11ClientsResend) · 30: the task page is the app's own (TaskPage.swift): it slides in from the right, ‹ / the edge swipe goes back; Details from /api/task, its changes to /api/home/act (from: task); the page sends taskPage open / changed and hears window.__e11Task — closed, copy, attach, from, web; its Comments tab shows the comments screen inside it · 29: 29: the morning round-up as iPhone's own sheet (dailySheet; taps back: window.__e11Daily — open, all) · 28: the Inbox is the app's own (each notification a row as Mail's, from /api/inbox; All / Unread / Mentions, swipe right: Read / Unread, Mark all read — read / unread / readAll to /api/home/act; the page sends inbox show / me / light; taps back: window.__e11Inbox — open, me; window.__e11InboxOwn) · 27: the page draws nothing under the app's My Tasks; the app says when it can't show its own (window.__e11MyTasksOwn) · 26: My Tasks is the app's own too (Home's screen as a list — All / Done, the filter buttons, what's on — from /api/mytasks?<filters>; the page sends mytasks show / tab / q / buttons / chips; taps back: window.__e11MyTasks — tab, filter, chip, reset, and Home's) · 25: Home straight from the server (/api/home; Done / reopen / Due / Delete / Undo to /api/home/act, kept on the phone until sent — ServerHome.swift); the page still says when Home shows · 24: a Home card swiped right: Done · Due (taps back: window.__e11Home — done, due; the page opens its date sheet) · 23: Home (E11 Day / My Day) is the app's own (Home.swift; the page sends it: home show / people / toast; taps back: window.__e11Home — open, search, me, add, copy, delete, attach, toast); a card swiped left: Copy link · Delete; held: Attach Files · 22: the startup screen is the app's own, there the moment it opens (Splash.swift; the page drives it: splash hello / memo / greet / tick / status / out; window.__e11SplashSkip / __e11SplashRetry) · 21: the comments screen tells its page how far it's slid up for the keyboard (--cm-top: a thread's bar stays in sight); its swipe right also takes iPhone's slow back drag from the edge; it starts at the latest comment only when the task opens and when the keyboard comes up, and keeps its place across Details / Comments · 20: a task's Comments on a screen of their own (a second web view showing only the comments, scrolled by iOS itself; window.__e11ShowComments, cmReady / cmEnd) · 19: on a task's Comments, iOS itself moves the comments list with the keyboard (its own scroll view, in the keyboard's own animation; window.__e11FeedKb) · 18: the file preview is iOS's own (preview / previewSet / window.__e11Preview; Preview.swift) · 17: the comment box on a task's Comments is iPhone's own, on the keyboard (commentBar / window.__e11CBar; CommentBar.swift) · 16: iPhone's own banners also while the app is open (the page draws no cards), each notification confirmed by the Notification Service Extension so the server sends again the ones an offline phone missed (register ack) · 15: New task / Request amendments as native sheets with iPhone's own fields that tuck into a bar like a Mail draft (formSheet / formSet / formClose; the page: window.__e11Form), a Trash task as a native sheet (trashSheet); native sheets and dates also open on top of those · 14: native sheets with people (round photos / initials) and a search box (+ a typed entry, "Use …") · 13: also dates picked in a native sheet (pickDate: closing it never sets a date) · a native sheet can stay open for ticking several (multi; each tick: window.__e11SheetPick) · 12: native sheets also with colour dots, a row of colours / emoji / numbers (chips), tinted icons, locked rows · 11: plain menus as iOS's own sheets (nativeSheet; the page: NativeSheet in app.js, showMenu(…, { native: true })) · 10: My Tasks, Inbox and Team lists swiped by iOS itself (Pager.syncLists in phone.js) · 9: a task’s Details / Comments swiped by iOS itself (the page: Pager in phone.js) · 8: iOS haptics for the page (haptic kind: light / medium / selection / success / warning / error) · 7: the comment box rides down / up with the keyboard frame by frame (__e11KbStep) · 6: the comment box gets the keyboard back after Photos / Camera / Files · 5: the page stays full height under the keyboard (the page makes room itself, --ios-kb) · 3: its own sheet for attaching files · 4: straight to Photos / Camera / Files (the page's attach bar), keyboard kept
 let procEnv = ProcessInfo.processInfo.environment
 let SELFTEST = procEnv["E11_SELFTEST"] ?? ""           // the build machine's self-test in the simulator
 let info = Bundle.main.infoDictionary ?? [:]
@@ -1251,6 +1251,83 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   /* the top of the tab bar as it's seen: iOS 26's floating bar is a pill inside a taller UITabBar view, so the view's
      own top is well above it (the + and the toasts sat ~35 pt too high — Haris, 2026-10-31). The pill: 61 tall, its
      bottom 11 pt into the home-indicator room (8 from the edge on a phone without one). */
+  /* ---------- the pop-ups as the app's own (shell 34, Popups.swift — Haris 2026-11-03): the page says when and what
+     (NativePop in app.js); the answer goes back to it ---------- */
+  func popCommand(_ a: [String: Any], _ done: @escaping ([String: Any]) -> Void) {
+    let dark = statusStyle != .darkContent
+    let person = a["person"] as? [String: Any] ?? a["from"] as? [String: Any] ?? [:]
+    let pIni = person["ini"] as? String ?? "", pCol = UIColor(hex: person["color"] as? String ?? "") ?? .systemIndigo, pPhoto = person["photo"] as? String
+    var once = false
+    let reply: ([String: Any]) -> Void = { r in if !once { once = true; done(r) } }
+    switch a["kind"] as? String ?? "" {
+    case "announce":
+      let s = AnnouncementSheet(dark: dark, title: a["title"] as? String ?? "", body: a["body"] as? String ?? "", ask: a["ask"] as? String ?? "",
+                                from: a["fromName"] as? String ?? "E11", fromIni: pIni, fromColor: pCol, when: a["when"] as? String ?? "", fromPhoto: pPhoto)
+      s.onGone = { reply(["ok": true]) }
+      s.show(from: topMost())
+    case "claims":
+      let s = ClaimsSheet(dark: dark, month: a["month"] as? String ?? "", today: a["today"] as? Int ?? 23)
+      s.onAnswer = { x in reply(["a": x]) }
+      s.onGone = { reply(["a": "tomorrow"]) }   // (pulled down: closed for today)
+      s.show(from: topMost())
+    case "greet":
+      let show: (UIView) -> Void = { [weak self] top in
+        guard let self = self else { return reply(["ok": false]) }
+        let g = GreetingView(dark: dark, top: top, title: a["title"] as? String ?? "", sub: a["sub"] as? String ?? "")
+        g.onGone = { reply(["ok": true]) }
+        g.show(in: self.view.window ?? self.view)
+      }
+      // (its picture first — your photo or the occasion's — at most a moment's wait, else your initials / the tile)
+      var shown = false
+      let fallback: () -> UIView = { a["pic"] != nil ? GreetingView.occasionTile("🎉") : GreetingView.photoRing(roundPic(nil, initials: pIni, color: pCol, size: 112)) }
+      let path = (a["pic"] as? String).map { "/" + $0 } ?? pPhoto
+      if let p = path {
+        FeedLoader.shared.image(p) { img in
+          DispatchQueue.main.async {
+            guard !shown else { return }; shown = true
+            show(img.map { a["pic"] != nil ? GreetingView.picTile($0) : GreetingView.photoRing($0) } ?? fallback())
+          }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { guard !shown else { return }; shown = true; show(fallback()) }
+      } else { show(fallback()) }
+    case "profileAsk":
+      let c = ProfileAskCard(dark: dark, missing: a["missing"] as? String ?? "both")
+      c.onProfile = { [weak self] in self?.openMePage("profile") }
+      c.show(in: view, bottom: tabBar.isHidden ? view.bounds.height - view.safeAreaInsets.bottom : tabPillTop)
+      reply(["ok": true])
+    case "whatsNew":
+      let secs = ((a["sections"] as? [[String: Any]]) ?? []).map { ($0["h"] as? String ?? "", ($0["items"] as? [String]) ?? []) }
+      let s = WhatsNewSheet(dark: dark, version: a["version"] as? String ?? "", when: a["when"] as? String ?? "", sections: secs)
+      s.onAllNotes = { [weak self] in self?.openMePage("about") }
+      s.onGone = { reply(["ok": true]) }
+      s.show(from: topMost())
+    case "viewAs":
+      let ppl: [ViewAsSheet.Person] = ((a["people"] as? [[String: Any]]) ?? []).compactMap { p in
+        guard let id = p["id"] as? String else { return nil }
+        return .init(id: id, name: p["name"] as? String ?? "", role: p["role"] as? String ?? "", ini: p["ini"] as? String ?? "", color: UIColor(hex: p["color"] as? String ?? "") ?? .systemGray, photo: p["photo"] as? String)
+      }
+      let s = ViewAsSheet(dark: dark, people: ppl, viewing: a["viewing"] as? String)
+      s.closesOnPick = true
+      s.onPick = { id in reply(id.map { ["id": $0] } ?? ["me": true]) }
+      s.onClose = { reply([:]) }
+      s.show(from: topMost())
+    case "viewAsBar":
+      if (a["on"] as? Bool) != true { ViewAsBar.current?.go(); return reply(["ok": true]) }
+      let bar = ViewAsBar.current ?? ViewAsBar(dark: dark)
+      bar.set(name: a["name"] as? String ?? "", role: a["role"] as? String ?? "")
+      bar.bottomFor = { [weak self] in self?.viewAsBottom() ?? 0 }
+      bar.onSwitch = { [weak self] in self?.pageJS("typeof ViewAs !== 'undefined' && ViewAs.pick()") }
+      bar.onBackToMe = { [weak self] in self?.pageJS("typeof ViewAs !== 'undefined' && ViewAs.back()") }
+      if bar.superview == nil { bar.show(in: view) }
+      reply(["ok": true])
+    default: reply(["ok": false])
+    }
+  }
+  // a page of Me from elsewhere: Me's tab, then that page
+  func openMePage(_ kind: String) {
+    meCtl.openSoon(kind)
+    if selectedTabKey != "me", let i = tabKeys.firstIndex(of: "me"), let item = self.tabBar.items?.first(where: { $0.tag == i }) { self.tabBar.selectedItem = item; self.tabBar(self.tabBar, didSelect: item) }
+  }
   // (the View as… bar's lower edge: above the comment box, else above the tab bar, else at the bottom edge)
   func viewAsBottom() -> CGFloat {
     if let b = cbarIfMade, !b.isHidden, b.alpha > 0.01 { return b.frame.minY - 8 }
@@ -2177,6 +2254,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       let f: [String: Any] = ["file": a["path"] as? String ?? "", "name": a["name"] as? String ?? "File", "id": a["id"] as? String ?? "", "size": a["size"] as? Int ?? 0, "thumb": a["thumb"] as? String ?? ""]
       copyFile(f) { [weak self] t in self?.previewVC?.set(["toast": t]); done(["ok": true, "toast": t]) }
     case "meAsk": meCtl.ask(a) { r in done(r) }
+    case "pop": popCommand(a) { r in done(r) }
     case "taskPage": taskPageCommand(a); done(["ok": true])
     case "dailySheet":
       // the morning round-up (DailySheet.swift): what's tapped goes back to the page
