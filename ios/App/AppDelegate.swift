@@ -1074,7 +1074,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
           }
         }
       }
-      if (t["on"] as? Bool) == true { tabBar.selectedItem = item }
+      if (t["on"] as? Bool) == true { tabBar.selectedItem = item; shownTab = item.tag }
     }
     let hide = (a["hidden"] as? Bool) == true || list.isEmpty
     // (a task page of the app's own is over everything: the bar stays as the page has it, and comes back to what the
@@ -1187,6 +1187,11 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
     guard item.tag < tabKeys.count else { return }
     UISelectionFeedbackGenerator().selectionChanged()
+    // (the tab you're on, tapped again — from a page inside it: back to the tab's first screen, as iPhone's own apps;
+    //  Haris 2026-11-03. On its first screen: back to the top, as before.)
+    let again = item.tag == shownTab
+    shownTab = item.tag
+    if again, tabKeys[item.tag] == "projects", clientsWanted, clientsBackToList() { return }
     // (23+: Home is the app's own — another tab: it goes at once; Home again while on it: back to the top)
     // (the page's own Home must never show in between — Haris, 2026-10-31: leaving Home, it stays until the page has
     //  drawn the other tab and says so (show: false), at most 1.2 s; coming back, it's there at once with what it had,
@@ -1567,6 +1572,28 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
      cards) pushed in over it from the right; both from the app's own copy (/api/clients as the fallback). The page says
      which is on screen (NativeClients in phone.js) and does what's tapped. ---------- */
   var clientsListIfMade: HomeView?, clientPageIfMade: HomeView?
+  var shownTab: Int?
+  // the Clients tab tapped again from a client's page or Client Assets: what's on top slides away to the right, the list
+  // comes back under it; everything between goes at once (false: already on the list)
+  func clientsBackToList() -> Bool {
+    guard let l = clientsListIfMade else { return false }
+    let page = clientPageIfMade.flatMap { $0.isHidden ? nil : $0 }
+    guard let top: UIView = assetsCtl.top ?? page else { if !l.isHidden { l.scrollToTop() }; return true }
+    let W = view.bounds.width
+    let snap = top.snapshotView(afterScreenUpdates: false)
+    if let s = snap { s.frame = top.frame; view.insertSubview(s, belowSubview: tabBar) }
+    assetsCtl.close(animated: false)
+    if let p = clientPageIfMade, !p.isHidden { p.isHidden = true; p.transform = .identity }
+    let wasPage = clientsOn == "client"
+    clientsOn = "list"
+    l.isHidden = false; l.transform = CGAffineTransform(translationX: -W * 0.3, y: 0)
+    edgePanOn(); updateCorner()
+    UIView.animate(withDuration: 0.36, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
+      snap?.transform = CGAffineTransform(translationX: W, y: 0); l.transform = .identity
+    } completion: { _ in snap?.removeFromSuperview() }
+    if wasPage { pageJS("window.__e11Clients && window.__e11Clients({ev:'back'})") }
+    return true
+  }
   lazy var assetsCtl = AssetsCtl(self)   // (Client Assets, the app's own — Assets.swift, shell 32)
   var clientsWanted = false, clientsPageMe: String?, clientsLight = true, clientsPageOwn = false, clientsOn = "list"
   var serverClientsIfMade: ServerHome?
