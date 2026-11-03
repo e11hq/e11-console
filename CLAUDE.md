@@ -38,7 +38,8 @@ when the list reaches its end and out on scrolling back. Every new native list s
 the bar's frost is iPhone's own **soft** scroll-edge frost (`topEdgeEffect.style = .soft`), as up to build 1331; only
 My Tasks' tabs and filters stuck under the bar use the firm one (`.hard`) while stuck. (Tried and dropped the same day: the
 firm frost everywhere, builds 1339 and 1343.) Its strength matches Mail's (Haris 2026-11-03, measured from his screenshots): an invisible `FrostReach`
-view joins the frost and reaches 20 pt below the bar as the line comes in, so the strong part covers the whole bar. The switch-over (big title → small title, Mail's timings) is unchanged and
+view joins the frost and reaches 20 pt below the bar as the line comes in, so the strong part covers the whole bar. **Kept and locked as it is (Haris 2026-11-03, build 1345):** a light frost shows ~20 pt below the line —
+iPhone's soft frost can't be cut at the line; don't shorten it or switch to the firm one without Haris. The switch-over (big title → small title, Mail's timings) is unchanged and
 locked too. Don't change either without Haris. Every new native screen uses HomeView's bar.
 
 **TestFlight only on Haris's yes (Haris, 2026-11-03):** "publish, publish app build" builds, self-tests and signs the
