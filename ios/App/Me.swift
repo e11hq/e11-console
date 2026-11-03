@@ -1,4 +1,5 @@
 import UIKit
+import UIKit.UIGestureRecognizerSubclass
 
 /* The Me tab, the app's own (shell 33 — Haris 2026-11-03, from the approved mockups; "one build"):
    1. Me — Home's big title; your card (photo, name, role, email › My profile); WORK (Clients for the CD, Content
@@ -930,6 +931,17 @@ final class KeyboardShield: UIView {
 final class MeCtl {
   private unowned let main: Main
   init(_ m: Main) { main = m }
+  // (where the finger last came down — a question with choices opens right above the row that asked it: Haris 2026-11-03)
+  private let spot = TouchSpot()
+  private func watchTouches() { if spot.view == nil { main.view.addGestureRecognizer(spot) } }
+  private func askAnchor() -> CGRect {
+    let v = main.view!, W = v.bounds.width
+    guard let p = spot.at else { return CGRect(x: v.bounds.midX, y: v.bounds.maxY - 120, width: 1, height: 1) }
+    // (the row under the finger: the first view up from it that is a whole row wide)
+    var r = v.hitTest(p, with: nil)
+    while let x = r, x !== v { if x.bounds.width >= W - 60 && x.bounds.height <= 120 { return x.convert(x.bounds, to: v) }; r = x.superview }
+    return CGRect(x: 16, y: p.y - 22, width: W - 32, height: 44)
+  }
   private struct Screen { let h: HomeView; let kind: String; let id: String? }
   private var stack: [Screen] = []
   private var model: [String: Any] = [:]
@@ -1035,7 +1047,7 @@ final class MeCtl {
   private func push(_ s: Screen, animated: Bool) {
     let W = main.view.bounds.width
     let u = stack.last?.h
-    stack.append(s)
+    stack.append(s); watchTouches()
     draw(s)
     s.h.isHidden = false
     if animated && main.view.window != nil && u != nil {
@@ -1546,7 +1558,7 @@ final class MeCtl {
         if cancel { hadCancel = true }
         ac.addAction(UIAlertAction(title: c["label"] as? String ?? "", style: cancel ? .cancel : (c["danger"] as? Bool) == true ? .destructive : .default) { _ in done(["ok": !cancel, "index": i]) })
       }
-      if let pop = ac.popoverPresentationController { pop.sourceView = main.view; pop.sourceRect = CGRect(x: main.view.bounds.midX, y: main.view.bounds.midY, width: 1, height: 1) }
+      if let pop = ac.popoverPresentationController { pop.sourceView = main.view; pop.sourceRect = askAnchor(); pop.permittedArrowDirections = [.down, .up] }
     } else {
       if let inp = a["input"] as? [String: Any] { ac.addTextField { t in t.text = inp["value"] as? String; t.placeholder = inp["placeholder"] as? String; t.clearButtonMode = .whileEditing } }
       if let c = a["cancelText"] as? String, !c.isEmpty { ac.addAction(UIAlertAction(title: c, style: .cancel) { _ in done(["ok": false]) }) }
@@ -1683,4 +1695,12 @@ final class MeFormVC: UITableViewController, UITextFieldDelegate {
     }
     t.resignFirstResponder(); return true
   }
+}
+
+// (only notes where a finger comes down — never takes a touch from anything)
+final class TouchSpot: UIGestureRecognizer, UIGestureRecognizerDelegate {
+  private(set) var at: CGPoint?
+  init() { super.init(target: nil, action: nil); cancelsTouchesInView = false; delaysTouchesBegan = false; delaysTouchesEnded = false; delegate = self }
+  override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) { if let v = view, let t = touches.first { at = t.location(in: v) }; state = .failed }
+  func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith o: UIGestureRecognizer) -> Bool { true }
 }

@@ -35,13 +35,16 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   //  Both: nothing at the top of a page; they come in once something is under the bar (the firm one fades in where iPhone
   //  lets it).
   var softFrost: Bool { pageBar && pinHead == nil }
-  private var underBar: Bool { pinned || dLine > 0.001 || (pageBar && scroll.contentOffset.y > -scroll.contentInset.top + 0.5) }
+  // (never while the page is at its top or bouncing above it — Haris 2026-11-03: the frost flashed on the bounce)
+  private var underBar: Bool { pinned || scroll.contentOffset.y > -scroll.contentInset.top + 0.5 && (dLine > 0.001 || pageBar) }
   private func applyFrost() {
     guard #available(iOS 26.0, *) else { return }
     let style: UIScrollEdgeEffect.Style = softFrost ? .soft : .hard
     if scroll.topEdgeEffect.style != style { scroll.topEdgeEffect.style = style }
     if softFrost { if scroll.topEdgeEffect.isHidden { scroll.topEdgeEffect.isHidden = false } } else { Frost.show(scroll, underBar || searching) }
-    topLine.alpha = searching || softFrost ? 0 : pageBar ? (underBar ? 1 : 0) : dLine
+    // (the line under the bar is iPhone's own, the firm frost's — ours is gone: two lines, ours moving into iPhone's —
+    //  Haris 2026-11-03)
+    topLine.alpha = 0
     reachK = softFrost ? (underBar ? 1 : 0) : 0
     placeReach()
   }
@@ -149,7 +152,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       blur.isHidden = true
       let i = UIScrollEdgeElementContainerInteraction()
       i.scrollView = scroll; i.edge = .top
-      topBar.addInteraction(i)
+      // (the frost's area is FrostReach's alone — exactly the bar, and its reach on the soft pages: the bar's own titles,
+      //  rising into place, no longer drag the firm frost's line down with them — Haris 2026-11-03)
       edgeHook = i
       frostReach.attach(scroll, in: self, below: topBar)
       // (iPhone's soft frost — Haris 2026-11-03: back to it, and locked)
@@ -1038,7 +1042,11 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // (the scroll bar on the right runs from the bar's lower edge down, never up beside it — as Mail's; set here, not by iPhone)
     if scroll.automaticallyAdjustsScrollIndicatorInsets { scroll.automaticallyAdjustsScrollIndicatorInsets = false }
     // (… down to just above the tab bar, as Mail's)
-    scroll.verticalScrollIndicatorInsets = UIEdgeInsets(top: barH, left: 0, bottom: tabTop.map { bounds.height - $0 + 8 } ?? bottomRoom - 20, right: 0)
+    // (… and from under the stuck search / filters from the very first moment, so it never jumps as they stick —
+    //  Haris 2026-11-03)
+    var barTop = smallH
+    if searching {} else if isList && listHead.superview != nil { barTop = smallH + 8 + listHeadH + 8 } else if pinHead != nil, !isList { barTop = smallH + 4 + pinHeadH + 4 }
+    scroll.verticalScrollIndicatorInsets = UIEdgeInsets(top: barTop, left: 0, bottom: tabTop.map { bounds.height - $0 + 8 } ?? bottomRoom - 20, right: 0)
     // the big date and title: the list's own first lines (above its top, in the room it keeps for them)
     let tw = W - 16 - R
     // (bounds and centre, not frame: the blur fade moves them with a transform)
