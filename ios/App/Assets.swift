@@ -770,6 +770,7 @@ final class AssetsCtl {
     for (i, it) in items.enumerated() {
       var row: [String: Any] = ["i": i, "label": it.0, "icon": it.1, "danger": it.2]
       if it.1 == "unlock" { row["accent"] = true }   // (Turn on link: blue)
+      if it.0 == "Turn off link" { row["red"] = true }   // (Turn off link: red — Haris 2026-11-03)
       if it.2 { danger.append(row) } else { main.append(row) }
     }
     var secs: [[String: Any]] = [["header": title, "rows": main]]
@@ -838,7 +839,7 @@ final class AssetsCtl {
       if (f["canLink"] as? Bool) == true {
         out.append(CornerMenuItem(title: "Copy link", symbol: "link", run: { [weak self, weak h] in self?.main.copyFolderLink(client: cid, folder: fid) { t in h?.assetsToast(t) } }))
         let off = Main.linksOff.contains("d:\(cid)/\(fid)")
-        if Main.isAdmin { out.append(CornerMenuItem(title: off ? "Turn on link" : "Turn off link", symbol: off ? "lock.open" : "lock", run: { [weak self, weak h] in self?.main.folderLinkToggle(client: cid, folder: fid) { t in h?.assetsToast(t) } })) }
+        if Main.isAdmin { out.append(CornerMenuItem(title: off ? "Turn on link" : "Turn off link", symbol: off ? "lock.open" : "lock", destructive: !off, run: { [weak self, weak h] in self?.main.folderLinkToggle(client: cid, folder: fid) { t in h?.assetsToast(t) } })) }
       }
       out.append(CornerMenuItem(title: "Info", symbol: "info.circle", run: { [weak self] in self?.folderInfoSheet(f, client: cid) }))
       var edit: [CornerMenuItem] = []

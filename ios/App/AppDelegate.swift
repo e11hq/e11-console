@@ -2528,7 +2528,7 @@ enum FocusAfterPicker {
 final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewDelegate, UISheetPresentationControllerDelegate, UISearchBarDelegate {
   struct Chip { let i: Int; let swatch: String?; let label: String?; let color: UIColor?; let on: Bool; let disabled: Bool }
   struct Row { let i: Int; let label: String; let sub: String?; let icon: String?; let danger: Bool; let checked: Bool; let disabled: Bool; let dot: UIColor?; let tint: UIColor?; let locked: Bool; let chips: [Chip]?; let chipKind: String; var multi: Bool = false
-    var pic: UIImage? = nil; var initials: String? = nil; var picColor: UIColor? = nil; var find: String = ""; var accent: Bool = false }
+    var pic: UIImage? = nil; var initials: String? = nil; var picColor: UIColor? = nil; var find: String = ""; var accent: Bool = false; var red: Bool = false }
   struct Section { let header: String?; let rows: [Row]; var photo: UIImage? = nil; var initials: String? = nil; var color: UIColor? = nil }
   private var sections: [Section] = []
   // (a sheet with a search box: everything, what the search shows, the ticks flipped here, the typed entry option)
@@ -2588,7 +2588,7 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
                    locked: (r["locked"] as? Bool) == true, chips: chips, chipKind: r["kind"] as? String ?? "", multi: (r["multi"] as? Bool) == true,
                    pic: NativeSheetVC.photo(r["person"]), initials: (r["person"] as? [String: Any])?["initials"] as? String,
                    picColor: NativeSheetVC.color((r["person"] as? [String: Any])?["color"]), find: ((r["find"] as? String) ?? (r["label"] as? String) ?? "").lowercased(),
-                   accent: (r["accent"] as? Bool) == true)
+                   accent: (r["accent"] as? Bool) == true, red: (r["red"] as? Bool) == true)
       }
       if !rows.isEmpty {
         var sc = Section(header: (sec["header"] as? String).flatMap { $0.isEmpty ? nil : $0 }, rows: rows)
@@ -2851,8 +2851,9 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     c.secondaryText = r.sub
     c.secondaryTextProperties.color = .secondaryLabel
     // (accent: the words and the icon in blue — Turn on link)
-    let tint: UIColor = r.disabled ? .tertiaryLabel : r.danger ? .systemRed : r.accent ? .systemBlue : .label
-    c.textProperties.color = r.disabled ? .secondaryLabel : r.danger ? .systemRed : r.accent ? .systemBlue : .label
+    // (red: in red where it is, not moved down with Delete — Turn off link)
+    let tint: UIColor = r.disabled ? .tertiaryLabel : r.danger || r.red ? .systemRed : r.accent ? .systemBlue : .label
+    c.textProperties.color = r.disabled ? .secondaryLabel : r.danger || r.red ? .systemRed : r.accent ? .systemBlue : .label
     if let av = NativeSheetVC.avatar(r) {
       c.image = av
       c.imageProperties.maximumSize = CGSize(width: 30, height: 30)

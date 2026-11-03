@@ -755,7 +755,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private func linkAction(_ f: [String: Any]) -> UIAction {
     let off = Main.linksOff.contains(f["file"] as? String ?? "")
     let img = off ? UIImage(systemName: "lock.open")?.withTintColor(.systemBlue, renderingMode: .alwaysOriginal) : UIImage(systemName: "lock")
-    return UIAction(title: off ? "Turn on link" : "Turn off link", image: img) { [weak self] _ in self?.onFileAction?(f, "linkOff") }
+    return UIAction(title: off ? "Turn on link" : "Turn off link", image: img, attributes: off ? [] : .destructive) { [weak self] _ in self?.onFileAction?(f, "linkOff") }   // (Turn off link: red)
   }
   private func fileMenu(_ files: [[String: Any]], _ i: Int) -> UIMenu? {
     guard i < files.count else { return nil }
