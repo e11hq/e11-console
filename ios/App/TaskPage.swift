@@ -254,6 +254,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     scroll.contentInsetAdjustmentBehavior = .never
     scroll.keyboardDismissMode = .interactive
     scroll.delegate = self
+    scroll.automaticallyAdjustsScrollIndicatorInsets = false   // (the scroll bar starts under the bar from the start — the standard)
     addSubview(scroll)
     scroll.addSubview(content)
     // (the keyboard: the page scrolls up past it, so where you're writing in the description stays in sight — Haris
@@ -354,6 +355,8 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     fab.frame = CGRect(x: W - 16 - fs.width, y: bounds.height - bottom - 8 - 48, width: fs.width, height: 48)
     spinner.center = CGPoint(x: W / 2, y: barBottom + 60)
     if scroll.contentInset.top != barBottom { scroll.contentInset.top = barBottom; scroll.verticalScrollIndicatorInsets.top = barBottom; scroll.contentOffset.y = -barBottom }
+    if scroll.verticalScrollIndicatorInsets.top != barBottom { scroll.verticalScrollIndicatorInsets.top = barBottom }
+    scroll.verticalScrollIndicatorInsets.bottom = bottom + 8   // (down to just above the bottom edge)
     layoutContent()
   }
 

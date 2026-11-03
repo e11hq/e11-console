@@ -38,6 +38,10 @@ when the list reaches its end and out on scrolling back. Every new native list s
 screen with a search bar or filters (My Tasks, the Trash, …) they sit at the top of the list and, once they reach the bar,
 stay stuck under it with the frost behind them (`HomeView.pinHead` for a page's own; My Tasks' listHead). Every new one too.
 
+**The scroll bar, everywhere (Haris, 2026-11-03):** on every native page its track starts right under the frost bar's
+line — under stuck search / filters too — from the very first moment, and ends just above the tab bar (or the bottom
+edge). Never iPhone's own safe-area adjusting (`automaticallyAdjustsScrollIndicatorInsets = false`). Every new page too.
+
 **The frost bar — LOCKED (Haris, 2026-11-03: "revert the frost bar to how it was and lock it"):** on every native screen
 the bar's frost is iPhone's own **soft** scroll-edge frost (`topEdgeEffect.style = .soft`), as up to build 1331; only
 My Tasks' tabs and filters stuck under the bar use the firm one (`.hard`) while stuck. (Tried and dropped the same day: the

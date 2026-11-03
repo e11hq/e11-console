@@ -138,6 +138,7 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
     scroll.contentInsetAdjustmentBehavior = .never
     scroll.keyboardDismissMode = .interactive   // (dragging down takes the keyboard with the finger — rule 5)
     scroll.delegate = self
+    scroll.automaticallyAdjustsScrollIndicatorInsets = false   // (the scroll bar starts under the bar from the start — the standard)
     // (a tap on the comments while the keyboard is up closes it, as Messages does — what was tapped still works)
     let tapAway = UITapGestureRecognizer(target: self, action: #selector(tappedList)); tapAway.cancelsTouchesInView = false
     scroll.addGestureRecognizer(tapAway)

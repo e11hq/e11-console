@@ -108,10 +108,13 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     super.init(frame: frame)
     scroll.alwaysBounceVertical = true
     scroll.contentInsetAdjustmentBehavior = .never
+    // (the scroll bar: from the bar's line down to just above the tab bar, from the very first moment — the standard,
+    //  Haris 2026-11-03; iPhone's own adding of the safe area would start it up by the status bar)
+    scroll.automaticallyAdjustsScrollIndicatorInsets = false; scroll.verticalScrollIndicatorInsets.top = 98
     scroll.delegate = self
     addSubview(scroll)
     // the search results (in place of the list while searching)
-    results.alwaysBounceVertical = true; results.contentInsetAdjustmentBehavior = .never; results.keyboardDismissMode = .onDrag
+    results.alwaysBounceVertical = true; results.contentInsetAdjustmentBehavior = .never; results.automaticallyAdjustsScrollIndicatorInsets = false; results.keyboardDismissMode = .onDrag
     results.alpha = 0; results.isHidden = true
     hint.font = .systemFont(ofSize: 15); hint.numberOfLines = 0; hint.textAlignment = .center; results.addSubview(hint)
     addSubview(results)
