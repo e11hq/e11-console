@@ -44,7 +44,8 @@ export function createFileLinks({ store, files, views, base, teamId, bundleId = 
   // the link page's pictures made ahead (Haris 2026-11-03: "the page with the picture missing"): when a link is made, and
   // for every link already out there once the server has started — a photo's two smaller copies (the soft background
   // 640, the big one 1280), else its thumbnail (PDF page, video frame, Office). One at a time, after the rest of the
-  // NAS's work; each file once.
+  // NAS's work; each file once. (The page shows only that one small copy — a preview, as the website's and the app's; the
+  // big 1280 one only when it's opened full screen — Haris 2026-11-03.)
   const warmed = new Set();
   let warmChain = Promise.resolve();
   function warm(a, rel) {
@@ -55,7 +56,7 @@ export function createFileLinks({ store, files, views, base, teamId, bundleId = 
     warmChain = warmChain.then(async () => {
       try {
         if (!onDisk(rel)) return;
-        if (IMAGES.includes(ext) && ext !== 'svg') { await files.makeSized(rel, 640); await files.makeSized(rel, 1280); }
+        if (IMAGES.includes(ext) && ext !== 'svg') await files.makeSized(rel, 640);
         else if (!(a.thumb && onDisk(a.thumb))) await files.commands.thumb({ id: a.id, path: rel });
       } catch { /* the page makes it when asked, as before */ }
     });
@@ -150,7 +151,7 @@ a{color:inherit;text-decoration:none}button{font:inherit;color:inherit;backgroun
 .brand{display:flex;align-items:center;gap:12px}.brand svg{height:26px;width:auto}.brand svg path{fill:#fff}.brand span{font-size:10px;font-weight:700;letter-spacing:3px;opacity:.8}
 .pill{height:38px;padding:0 16px;border-radius:19px;background:rgba(255,255,255,.16);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);color:#fff;font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px;transition:background .2s}.pill:hover{background:rgba(255,255,255,.26)}
 .stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:84px 56px 56px 520px}
-.art img.lo{filter:blur(6px)}.art img{transition:filter .25s}.art{position:relative;display:flex;align-items:center;justify-content:center;max-width:100%;max-height:100%;width:100%;height:100%}
+.art{position:relative;display:flex;align-items:center;justify-content:center;max-width:100%;max-height:100%;width:100%;height:100%}
 .art>img,.art>video{max-width:100%;max-height:100%;border-radius:18px;box-shadow:0 30px 80px rgba(0,0,0,.45);display:block;background:#000}
 .art>img{cursor:zoom-in;background:transparent}.art.doc>img{background:#fff;cursor:zoom-in}
 .nt{display:flex;flex-direction:column;align-items:center;gap:10px;color:#fff;text-align:center;padding:48px 40px;border-radius:24px;background:rgba(255,255,255,.1);-webkit-backdrop-filter:blur(30px);backdrop-filter:blur(30px);border:1px solid rgba(255,255,255,.15);max-width:520px}
@@ -203,10 +204,9 @@ a{color:inherit;text-decoration:none}button{font:inherit;color:inherit;backgroun
 function e(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
 function toast(t){var x=$('toast');x.textContent=t;x.classList.add('show');clearTimeout(x._t);x._t=setTimeout(function(){x.classList.remove('show')},1700)}
 function show(i){cur=i;var f=F[i];if(!f)return;var a=$('art');a.className='art '+f.k;
- a.innerHTML=f.k==='video'?'<video controls playsinline preload="metadata" poster="'+e(f.u)+'/thumb" src="'+e(f.u)+'/view"></video>':f.k==='img'?'<img class="lo" src="'+e(f.u)+'/thumb" alt="">':f.k==='doc'?'<img src="'+e(f.u)+'/thumb" alt="" onerror="this.parentNode.innerHTML=\\'<div class=nt><b>'+e(f.t)+'</b><span>'+e(f.n)+'</span><small>'+e(f.z)+'</small></div>\\'">':'<div class="nt"><b>'+e(f.t)+'</b><span>'+e(f.n)+'</span><small>'+e(f.z)+' · no preview — download to open</small></div>';
+ a.innerHTML=f.k==='video'?'<video controls playsinline preload="metadata" poster="'+e(f.u)+'/thumb" src="'+e(f.u)+'/view"></video>':f.k==='img'?'<img src="'+e(f.u)+'/thumb" alt="">':f.k==='doc'?'<img src="'+e(f.u)+'/thumb" alt="" onerror="this.parentNode.innerHTML=\\'<div class=nt><b>'+e(f.t)+'</b><span>'+e(f.n)+'</span><small>'+e(f.z)+'</small></div>\\'">':'<div class="nt"><b>'+e(f.t)+'</b><span>'+e(f.n)+'</span><small>'+e(f.z)+' · no preview — download to open</small></div>';
  var g=$('bgi');g.classList.remove('on');if(f.k!=='none'){g.onload=function(){g.classList.add('on')};g.src=f.u+'/thumb'}
  var im=a.querySelector('img');if(im&&(f.k==='img'||f.k==='doc'))im.onclick=open;
- if(f.k==='img'&&im){var hi=new Image();hi.onload=function(){if(cur===i&&im.isConnected){im.src=hi.src;im.classList.remove('lo')}};hi.src=f.u+'/view'}
  document.querySelectorAll('.f[data-i]').forEach(function(r){r.classList.toggle('on',+r.dataset.i===i)});
  var b=$('big');if(b&&!b.classList.contains('going')){b.href=f.u+'/file'}}
 // a download that shows how far it's come (small enough files; bigger ones go straight to the browser's download)
