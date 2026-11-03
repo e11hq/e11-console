@@ -246,9 +246,14 @@ final class FileRows: UIView, HomeBlock {
       let n = UILabel(); n.text = f["name"] as? String; n.font = .systemFont(ofSize: 16); n.textColor = L.title; n.lineBreakMode = .byTruncatingMiddle; n.tag = 2
       let s = UILabel(); s.font = .systemFont(ofSize: 13); s.textColor = .secondaryLabel; s.tag = 3; s.lineBreakMode = .byTruncatingTail
       s.text = showWhere ? (f["where"] as? String ?? "") : "\((f["ext"] as? String ?? "").uppercased()) · \(TaskPage.size(f["size"] as? Int ?? 0))"
-      let more = UIButton(type: .system); more.tag = 4
-      more.setImage(UIImage(systemName: "ellipsis", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)), for: .normal)
-      more.tintColor = .tertiaryLabel; more.showsMenuAsPrimaryAction = true
+      // (its own fixed look in every state — a system button redrew its ••• as the menu came and went and it moved a
+      //  few points, Haris 2026-11-03 07:59)
+      var mc = UIButton.Configuration.plain()
+      mc.image = UIImage(systemName: "ellipsis", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold))
+      mc.baseForegroundColor = .tertiaryLabel; mc.contentInsets = .zero
+      let more = UIButton(configuration: mc); more.tag = 4
+      more.automaticallyUpdatesConfiguration = false
+      more.showsMenuAsPrimaryAction = true
       more.menu = UIMenu(children: [UIDeferredMenuElement.uncached { [weak self] give in give(self?.menu?(f)?.children ?? []) }])
       more.accessibilityLabel = "More"
       [th, n, s].forEach { $0.isUserInteractionEnabled = false; r.addSubview($0) }
