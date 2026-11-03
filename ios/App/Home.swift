@@ -947,8 +947,10 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       let rise = l.bounds.height / 2
       fade(l).set(blur: 8 * (1 - easeOut(p)), alpha: easeOut(min(1, p / 0.7)), dy: rise * (1 - p * p), trait: tr)
     }
-    show(smallTitle, dT)
-    show(smallSub, dS)
+    // (a page with its name in the middle of the bar — a client's, Client Assets, Me's pages: only that name; Home's small
+    //  title never comes in over it — Haris 2026-11-03)
+    if pageBar { fade(smallTitle).set(blur: 0, alpha: 0, dy: 0, trait: tr); fade(smallSub).set(blur: 0, alpha: 0, dy: 0, trait: tr) }
+    else { show(smallTitle, dT); show(smallSub, dS) }
     // the big title: blurs and fades where it is; the big line under it with it
     // (as Mail's: no blur of its own — it just fades away behind the frost; Haris, 2026-11-01)
     fade(title).set(blur: 0, alpha: 1 - ease(0, 1, dBig), dy: 0, trait: tr)
