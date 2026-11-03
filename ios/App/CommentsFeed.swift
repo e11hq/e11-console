@@ -532,7 +532,13 @@ final class CommentCell: UIView {
       for x in rx {
         let e = x["e"] as? String ?? ""
         var c = UIButton.Configuration.filled(); c.cornerStyle = .capsule; c.baseBackgroundColor = .tertiarySystemFill; c.baseForegroundColor = .label
-        c.attributedTitle = AttributedString("\(e) \(x["n"] as? Int ?? 1)", attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 14, weight: .medium)]))
+        // (the six as SF Symbols in iPhone's colours, Haris 2026-11-04; any other emoji as itself)
+        if let img = ReactionSym.image(e, size: 14) {
+          c.image = img; c.imagePadding = 5
+          c.attributedTitle = AttributedString("\(x["n"] as? Int ?? 1)", attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 14, weight: .semibold)]))
+        } else {
+          c.attributedTitle = AttributedString("\(e) \(x["n"] as? Int ?? 1)", attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 14, weight: .medium)]))
+        }
         c.contentInsets = NSDirectionalEdgeInsets(top: 4, leading: 10, bottom: 4, trailing: 10)
         let b = UIButton(configuration: c); b.addAction(UIAction { [weak self] _ in UISelectionFeedbackGenerator().selectionChanged(); self?.onReact?(e) }, for: .touchUpInside)
         r.addArrangedSubview(b)
@@ -1051,4 +1057,20 @@ enum DiskPics {
   }
   static func get(_ key: String) -> Data? { try? Data(contentsOf: file(key)) }
   static func put(_ key: String, _ d: Data) { io.async { try? d.write(to: file(key), options: .atomic) } }
+}
+
+// The comment reactions as SF Symbols (Haris 2026-11-04 — mockup symbols-mockup.png): each emoji kept as it is in the data
+// (the website and the Mac app show the emoji), drawn in the app as its symbol in iPhone's own colour.
+enum ReactionSym {
+  static let map: [String: (String, UIColor)] = [
+    "👍": ("hand.thumbsup.fill", .systemBlue), "✅": ("checkmark.circle.fill", .systemGreen), "🎉": ("party.popper.fill", .systemOrange),
+    "❤️": ("heart.fill", .systemRed), "👀": ("eyes", .systemPurple), "🙏": ("hands.clap.fill", .systemYellow),
+  ]
+  static func image(_ emoji: String, size: CGFloat) -> UIImage? {
+    guard let v = map[emoji] else { return nil }
+    let name = v.0, c = v.1
+    let two = name == "checkmark.circle.fill"   // (the tick white on green)
+    let cfg = UIImage.SymbolConfiguration(pointSize: size, weight: .semibold).applying(UIImage.SymbolConfiguration(paletteColors: two ? [.white, c] : [c]))
+    return UIImage(systemName: name, withConfiguration: cfg)?.withRenderingMode(.alwaysOriginal)
+  }
 }
