@@ -31,7 +31,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   //  Tasks' filters are stuck: that firm frost ends at the line)
   private func placeReach() {
     CATransaction.begin(); CATransaction.setDisableActions(true)
-    frostReach.frame = CGRect(x: 0, y: 0, width: bounds.width, height: topBar.frame.height + (pinned || searching ? 0 : FrostReach.extra * reachK))
+    frostReach.frame = CGRect(x: 0, y: 0, width: bounds.width, height: topBar.frame.height + ((pinned && pinHead == nil) || searching ? 0 : FrostReach.extra * reachK))
     CATransaction.commit()
   }
   /* Mail's own measures (Haris, 2026-10-31, from his Mail screenshots): the bar's buttons 44 pt, 16 from the right
@@ -1003,7 +1003,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       // (My Tasks' tabs and filters stuck under the bar: iPhone's firmer frost, so the cards don't show through between
       //  them — the soft one fades out half way down them; Apple's own advice for things pinned under a bar)
       if scroll.topEdgeEffect.isHidden { scroll.topEdgeEffect.isHidden = false }
-      let style: UIScrollEdgeEffect.Style = pinned ? .hard : .soft
+      // (only My Tasks' own tabs and filters: a page's stuck search / filters keep the soft frost — one style, Haris 2026-11-03)
+      let style: UIScrollEdgeEffect.Style = pinned && pinHead == nil ? .hard : .soft
       if scroll.topEdgeEffect.style != style { scroll.topEdgeEffect.style = style }
       // (one pixel, as Mail's)
       let px = 1 / max(1, traitCollection.displayScale)
