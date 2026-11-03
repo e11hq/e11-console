@@ -757,7 +757,9 @@ final class TrashRow: AssetTile, UIGestureRecognizerDelegate {
       var cf = UIButton.Configuration.plain(); cf.title = t; cf.image = UIImage(systemName: sy, withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold))
       cf.imagePlacement = .top; cf.imagePadding = 5; cf.baseForegroundColor = .white
       cf.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { var a = $0; a.font = UIFont.systemFont(ofSize: 12, weight: .semibold); return a }
-      b.configuration = cf; b.backgroundColor = c; b.alpha = 0; addSubview(b)
+      // (square — only the group's own corners round it: the first row's top, the last row's bottom; Haris 2026-11-03)
+      cf.background.backgroundColor = c; cf.background.cornerRadius = 0; cf.cornerStyle = .fixed
+      b.configuration = cf; b.layer.cornerRadius = 0; b.alpha = 0; addSubview(b)
     }
     restoreB.addAction(UIAction { [weak self] _ in self?.act("trRestore") }, for: .touchUpInside)
     foreverB.addAction(UIAction { [weak self] _ in self?.act("trForever") }, for: .touchUpInside)
