@@ -179,7 +179,7 @@ final class WhatsNewSheet: PopSheetVC {
     cap.attributedText = a
     stack.addArrangedSubview(Pop.col([cap, Pop.label(version, 26, .bold), Pop.label(when, 14, .regular, .secondaryLabel)], spacing: 3))
     // (the notes in their own rounded box that scrolls, a soft fade at its end)
-    let box = NotesBox(sections)
+    let box = PopNotesBox(sections)
     box.translatesAutoresizingMaskIntoConstraints = false
     box.heightAnchor.constraint(equalToConstant: min(300, box.wanted(width: UIScreen.main.bounds.width - 48))).isActive = true
     stack.addArrangedSubview(box)
@@ -190,7 +190,7 @@ final class WhatsNewSheet: PopSheetVC {
   }
   required init?(coder: NSCoder) { fatalError() }
 }
-final class NotesBox: UIView {
+final class PopNotesBox: UIView {
   private let text = UITextView(), fade = CAGradientLayer()
   init(_ sections: [(String, [String])]) {
     super.init(frame: .zero)
