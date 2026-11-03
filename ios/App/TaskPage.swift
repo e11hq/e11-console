@@ -1310,7 +1310,14 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     guard let pool = model?["pool"] as? [[String: Any]], !pool.isEmpty else { return }
     var on = pool.map { ($0["on"] as? Bool) == true }
     let rows: [[String: Any]] = pool.enumerated().map { i, p in ["i": i, "label": (p["id"] as? String) == (model?["me"] as? String) ? "Me" : (p["name"] as? String ?? ""), "sub": p["role"] as? String ?? "", "person": personArg(p), "checked": on[i], "multi": true, "find": (p["name"] as? String ?? "") + " " + (p["role"] as? String ?? "")] }
-    onSheet?(["sections": [["header": "Assignees", "rows": rows]], "multi": true, "search": "Search people"], { [weak self] i in
+    // (in their groups, as the website's sheet: Production, Social, Freelancers, Creative Director — whoever is on it ticked)
+    let order: [(String, String)] = [("Production", "Production"), ("Social", "Social"), ("Freelancer", "Freelancers"), ("Creative Director", "Creative Director"), ("", "Others")]
+    let sections: [[String: Any]] = order.compactMap { key, head in
+      let rs = rows.enumerated().filter { (pool[$0.offset]["role"] as? String ?? "") == key || (key == "" && !order.dropLast().contains { $0.0 == (pool[$0.offset]["role"] as? String ?? "") }) }
+        .map { $0.element }.sorted { ($0["label"] as? String ?? "") == "Me" ? true : ($1["label"] as? String ?? "") == "Me" ? false : ($0["label"] as? String ?? "").localizedCompare($1["label"] as? String ?? "") == .orderedAscending }
+      return rs.isEmpty ? nil : ["header": head, "rows": rs]
+    }
+    onSheet?(["sections": sections, "multi": true, "search": "Search people"], { [weak self] i in
       guard let self = self, i >= 0, i < pool.count, let id = pool[i]["id"] as? String else { return }
       on[i].toggle()
       UISelectionFeedbackGenerator().selectionChanged()
