@@ -24,7 +24,9 @@ final class FeedLoader {
   func image(_ path: String, _ done: @escaping (UIImage?) -> Void) {
     if let i = cache.object(forKey: path as NSString) ?? locals[path] { return done(i) }
     if path.hasPrefix("local:") { return done(nil) }
-    if let d = DiskPics.get(path), let i = UIImage(data: d) { cache.setObject(i, forKey: path as NSString); return done(i) }
+    // (an SVG's PNG is kept under its own name: the first ones were drawn shifted down — Haris 2026-11-03 — and are left unused)
+    let disk = SVGRaster.looksLikeSVG(Data(), path: path) ? path + "#svg2" : path
+    if let d = DiskPics.get(disk), let i = UIImage(data: d) { cache.setObject(i, forKey: path as NSString); return done(i) }
     cookies { c in
       guard let url = URL(string: path.hasPrefix("http") ? path : serverURL() + path) else { return done(nil) }
       var r = URLRequest(url: url); if !c.isEmpty { r.setValue(c, forHTTPHeaderField: "Cookie") }
@@ -34,7 +36,7 @@ final class FeedLoader {
         if ok, let d = d, UIImage(data: d) == nil, SVGRaster.looksLikeSVG(d, path: path) {
           DispatchQueue.main.async {
             SVGRaster.shared.image(d) { img in
-              if let img = img { self.cache.setObject(img, forKey: path as NSString); if let png = img.pngData() { DiskPics.put(path, png) } }
+              if let img = img { self.cache.setObject(img, forKey: path as NSString); if let png = img.pngData() { DiskPics.put(disk, png) } }
               done(img)
             }
           }

@@ -54,25 +54,42 @@ final class ClientsGroup: UIView, HomeBlock {
   // (closed again — the Clients tab coming back: it always starts closed)
   func closeInactive() { guard showInactive else { return }; showInactive = false; chev.transform = .identity; set(data.0, data.1, look: L) }
   // (each row kept by its client while it's there — only what changed is drawn again)
-  private func row(_ r: [String: Any], inactive: Bool, into b: UIView) -> ClientRow {
+  // (Haris 2026-11-03: opening Inactive clients, the whole list flew in a second time — every row was made anew, as the
+  // rows kept were looked for in the emptied list, and the new ones grew from the corner inside the list's slide. Now
+  // the rows there stay as they are; a new one is made and put in its place with no animation, then only it fades.)
+  private var fresh: [ClientRow] = []
+  private func row(_ r: [String: Any], inactive: Bool, into b: UIView, from kept: [String: ClientRow]) -> ClientRow {
     let id = r["id"] as? String ?? ""
-    let v = made[id] ?? { let x = ClientRow(); x.id = id; x.onTap = { [weak self] in self?.onOpen?(id) }; x.onHold = { [weak self] in self?.onHold?(id) }; _ = PressShrink.add(to: x); return x }()
-    v.set(r, look: L, inactive: inactive); v.paintAms(people)
-    if v.superview !== b { b.addSubview(v) }
+    let v = kept[id] ?? { let x = ClientRow(); x.id = id; x.onTap = { [weak self] in self?.onOpen?(id) }; x.onHold = { [weak self] in self?.onHold?(id) }; _ = PressShrink.add(to: x); self.fresh.append(x); return x }()
+    v.set(r, look: L, inactive: inactive)
+    if v.superview !== b { if v.superview != nil { fresh.append(v) }; b.addSubview(v) }
+    v.paintAms(people)   // (in its group already: the faces' rims take its colour)
     return v
   }
+  private func makeLines(_ n: Int, _ old: [UIView], in b: UIView) -> [UIView] {
+    old.dropFirst(n).forEach { $0.removeFromSuperview() }
+    var ls = Array(old.prefix(n))
+    while ls.count < n { let l = UIView(); l.backgroundColor = .separator; b.addSubview(l); ls.append(l); lineFresh.append(l) }
+    return ls
+  }
+  private var lineFresh: [UIView] = []
   func set(_ active: [[String: Any]], _ inactive: [[String: Any]], look: HomeLook) {
     data = (active, inactive); L = look
     box.backgroundColor = L.card; offBox.backgroundColor = L.card
-    var keep = made; made = [:]
-    rows = active.map { r in let v = row(r, inactive: false, into: box); made[v.id] = v; keep[v.id] = nil; return v }
-    // (the inactive ones are made while open; closing, they stay in their group as it shrinks away)
-    offRows = (showInactive ? inactive : []).map { r in let v = row(r, inactive: true, into: offBox); made[v.id] = v; keep[v.id] = nil; return v }
-    if !showInactive { for v in keep.values where v.superview === offBox { made[v.id] = v; keep[v.id] = nil } }
-    keep.values.forEach { $0.removeFromSuperview() }
-    lines.forEach { $0.removeFromSuperview() }; offLines.forEach { $0.removeFromSuperview() }
-    lines = rows.dropFirst().map { _ in let l = UIView(); l.backgroundColor = .separator; box.addSubview(l); return l }
-    offLines = offRows.dropFirst().map { _ in let l = UIView(); l.backgroundColor = .separator; offBox.addSubview(l); return l }
+    let kept = made
+    var gone = made; made = [:]
+    fresh = []; lineFresh = []
+    UIView.performWithoutAnimation {
+      rows = active.map { r in let v = row(r, inactive: false, into: box, from: kept); made[v.id] = v; gone[v.id] = nil; return v }
+      // (the inactive ones are made while open; closing, they stay in their group as it shrinks away)
+      offRows = (showInactive ? inactive : []).map { r in let v = row(r, inactive: true, into: offBox, from: kept); made[v.id] = v; gone[v.id] = nil; return v }
+      if !showInactive { for v in gone.values where v.superview === offBox { made[v.id] = v; gone[v.id] = nil } }
+      gone.values.forEach { $0.removeFromSuperview() }
+      lines = makeLines(max(0, rows.count - 1), lines, in: box)
+      offLines = makeLines(max(0, offRows.count - 1), offLines, in: offBox)
+      // (what's new stands in its place at once, laid out — never grown from the corner)
+      if !fresh.isEmpty || !lineFresh.isEmpty { placeAll(); fresh.forEach { $0.layoutIfNeeded() } }
+    }
     more.isHidden = inactive.isEmpty; chev.isHidden = inactive.isEmpty
     more.setAttributedTitle(NSAttributedString(string: "Inactive clients · \(inactive.count)", attributes: [.font: UIFont.systemFont(ofSize: 15), .foregroundColor: UIColor.secondaryLabel]), for: .normal)
     more.accessibilityLabel = "Inactive clients, \(inactive.count), \(showInactive ? "open" : "closed")"
@@ -80,20 +97,26 @@ final class ClientsGroup: UIView, HomeBlock {
   }
   private var offH: CGFloat { showInactive ? CGFloat(offRows.count) * ClientRow.H + 6 : 0 }
   func blockHeight(_ W: CGFloat) -> CGFloat { CGFloat(rows.count) * ClientRow.H + (more.isHidden ? 0 : 50 + offH) }
+  // (the rows and lines inside each group, at the group's width)
+  private func placeAll() {
+    let px = 1 / max(1, traitCollection.displayScale)
+    let w = max(0, bounds.width - 32)
+    for (rs, ls) in [(rows, lines), (offRows, offLines)] {
+      // (size and place without touching its shrink: a frame set on a shrunk row moved its insides)
+      for (i, r) in rs.enumerated() { r.bounds = CGRect(x: 0, y: 0, width: w, height: ClientRow.H); r.center = CGPoint(x: w / 2, y: (CGFloat(i) + 0.5) * ClientRow.H) }
+      for (i, l) in ls.enumerated() { l.frame = CGRect(x: 69, y: CGFloat(i + 1) * ClientRow.H - px / 2, width: w - 69, height: px) }
+    }
+  }
   override func layoutSubviews() {
     super.layoutSubviews()
-    let W = bounds.width, px = 1 / max(1, traitCollection.displayScale)
+    let W = bounds.width
     box.frame = CGRect(x: 16, y: 0, width: W - 32, height: CGFloat(rows.count) * ClientRow.H)
     box.isHidden = rows.isEmpty
-    // (size and place without touching its shrink: a frame set on a shrunk row moved its insides)
-    for (i, r) in rows.enumerated() { r.bounds = CGRect(x: 0, y: 0, width: box.bounds.width, height: ClientRow.H); r.center = CGPoint(x: box.bounds.width / 2, y: (CGFloat(i) + 0.5) * ClientRow.H) }
-    for (i, l) in lines.enumerated() { l.frame = CGRect(x: 69, y: CGFloat(i + 1) * ClientRow.H - px / 2, width: box.bounds.width - 69, height: px) }
+    placeAll()
     more.frame = CGRect(x: 36, y: box.frame.maxY + 6, width: W - 72, height: 44)
     let tw = ceil(more.attributedTitle(for: .normal)?.size().width ?? 0)
     chev.bounds = CGRect(x: 0, y: 0, width: 16, height: 16); chev.center = CGPoint(x: more.frame.minX + tw + 12, y: more.frame.midY)
     offBox.frame = CGRect(x: 16, y: more.frame.maxY, width: W - 32, height: max(0, offH - 6))
-    for (i, r) in offRows.enumerated() { r.bounds = CGRect(x: 0, y: 0, width: offBox.bounds.width, height: ClientRow.H); r.center = CGPoint(x: offBox.bounds.width / 2, y: (CGFloat(i) + 0.5) * ClientRow.H) }
-    for (i, l) in offLines.enumerated() { l.frame = CGRect(x: 69, y: CGFloat(i + 1) * ClientRow.H - px / 2, width: offBox.bounds.width - 69, height: px) }
   }
 }
 
@@ -145,7 +168,15 @@ final class ClientRow: UIControl {
     alpha = inactive ? 0.75 : 1
     setNeedsLayout()
   }
+  private var amsSig = ""
   func paintAms(_ people: [String: [String: Any]]) {
+    // (the same faces: left as they are — made again, they flew in from the corner inside the list's slide)
+    let sig = amIds.map { id in id + (people[id]?["photo"] != nil ? "+" : "") + ((people[id]?["initials"] as? String) ?? "") }.joined(separator: ",") + "|\(traitCollection.userInterfaceStyle.rawValue)|" + ((superview?.backgroundColor).map { "\($0.cgColor.components ?? [])" } ?? "")
+    guard sig != amsSig else { return }
+    amsSig = sig
+    UIView.performWithoutAnimation { paintFaces(people); layoutIfNeeded() }
+  }
+  private func paintFaces(_ people: [String: [String: Any]]) {
     ams.arrangedSubviews.forEach { $0.removeFromSuperview() }
     for id in amIds {
       let p = people[id]

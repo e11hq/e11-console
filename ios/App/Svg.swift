@@ -33,6 +33,10 @@ final class SVGRaster: NSObject, WKNavigationDelegate {
       let v = WKWebView(frame: CGRect(x: -4000, y: 0, width: m, height: m), configuration: c)
       v.isOpaque = false; v.backgroundColor = .clear; v.scrollView.backgroundColor = .clear
       v.navigationDelegate = self; v.isUserInteractionEnabled = false
+      // (no room left for the notch and the home bar: in the window it took the window's safe area, the picture drawn
+      // pushed down by it — a grey band on top and its bottom cut off. Haris 2026-11-03)
+      v.scrollView.contentInsetAdjustmentBehavior = .never; v.scrollView.contentInset = .zero
+      v.insetsLayoutMarginsFromSafeArea = false; v.scrollView.isScrollEnabled = false
       // (in a window, out of sight: a web view has to be on screen somewhere to draw)
       (UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.windows.first }.first)?.addSubview(v)
       web = v
