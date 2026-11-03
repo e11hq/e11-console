@@ -162,8 +162,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     }
     nc.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { [weak self] _ in self?.keyboardH = 0; self?.setNeedsLayout() }
     // "+ New task": a Liquid Glass capsule the size of Mail's "Select" (iOS 26's own glass button; before: a grey capsule)
-    var fc: UIButton.Configuration
-    if #available(iOS 26.0, *) { fc = .glass() } else { fc = .gray(); fc.cornerStyle = .capsule }
+    // (a plain capsule, light and dark — no glass, the same as the toast it stretches into: Haris 2026-11-03)
+    var fc = UIButton.Configuration.filled(); fc.cornerStyle = .capsule
     fc.image = UIImage(systemName: "plus", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold))
     fc.imagePadding = 6
     fc.attributedTitle = AttributedString("New task", attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 17, weight: .semibold)]))
@@ -208,6 +208,11 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     field.keyboardAppearance = L.light ? .light : .dark
     hint.textColor = L.empty
     meId = model["me"] as? String ?? ""; meChanged()
+    if var fc = fab.configuration {
+      fc.background.backgroundColor = ToastCapsule.fill(L.light); fc.background.strokeColor = ToastCapsule.line(L.light); fc.background.strokeWidth = 1
+      fc.baseForegroundColor = .label; fab.configuration = fc
+      fab.layer.shadowColor = UIColor.black.cgColor; fab.layer.shadowOpacity = L.light ? 0.08 : 0; fab.layer.shadowRadius = 10; fab.layer.shadowOffset = CGSize(width: 0, height: 3)
+    }
     stats.forEach { $0.isHidden = noStats }
     let st = model["stats"] as? [Int] ?? [0, 0, 0]
     let names = ["Due today", "Overdue", "In review"], cols = [L.statG, L.statR, L.statA]
@@ -509,6 +514,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   func setFab(_ title: String, _ sym: String, _ run: (() -> Void)?) {
     fabRun = run
     guard var c = fab.configuration else { return }
+    fabSym = sym
     c.image = UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold))
     c.attributedTitle = AttributedString(title, attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 17, weight: .semibold)]))
     fab.configuration = c; fab.accessibilityLabel = title
@@ -1332,41 +1338,38 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }
 
   // ---------- a toast over Home (the page's own would be under it): "Link copied", "2 files added to …", Undo ----------
+  // a toast (Haris 2026-11-03, option C): "+ New task" stretches into it — "New task" fades, the capsule stretches to
+  // the left with the + at its right end as a small round button, the tick, the words and Undo fade in; about 3 s later
+  // (longer while a finger is on it) it shrinks back into "+ New task". A plain capsule, light and dark — no glass. A new
+  // message while it's out (an upload's progress): only the words change.
   func toast(_ t: [String: Any]) {
-    toastView?.removeFromSuperview()
     let text = t["t"] as? String ?? "", act = t["a"] as? String ?? ""
-    let v = UIView(); v.backgroundColor = L.light ? .white : SplashView.hex(0x2b2c31); v.layer.cornerRadius = 10
-    v.layer.borderWidth = 1; v.layer.borderColor = (L.light ? UIColor.black.withAlphaComponent(0.1) : UIColor.white.withAlphaComponent(0.12)).cgColor
-    v.layer.shadowColor = UIColor.black.cgColor; v.layer.shadowOpacity = 0.3; v.layer.shadowRadius = 12; v.layer.shadowOffset = CGSize(width: 0, height: 6)
-    let l = UILabel(); l.text = text; l.font = .systemFont(ofSize: 14); l.textColor = L.title; l.numberOfLines = 2
-    v.addSubview(l)
-    var bw: CGFloat = 0
-    var b: UIButton?
-    if !act.isEmpty {
-      let btn = UIButton(type: .system); btn.setTitle(act, for: .normal); btn.titleLabel?.font = .systemFont(ofSize: 14, weight: .semibold); btn.tintColor = L.tag
-      btn.addAction(UIAction { [weak self, weak v] _ in v?.removeFromSuperview(); if self?.toastView === v { self?.toastView = nil }; self?.showMotto(); self?.onEvent?(["ev": "toast"]) }, for: .touchUpInside)
-      v.addSubview(btn); b = btn; bw = btn.sizeThatFits(CGSize(width: 200, height: 40)).width + 14
-    }
-    // (low, just above the tab bar: beside the +, its bottom level with the +'s — Haris: it sat far too high)
-    let W = bounds.width
-    let room = fab.isHidden ? W - 32 : fab.frame.minX - 12 - 16
-    let maxL = room - 28 - bw
-    let ls = l.sizeThatFits(CGSize(width: maxL, height: 60))
-    let w = min(room, ls.width + 28 + bw), h = max(44, ls.height + 18)
-    let bottom = fab.isHidden ? (tabTop ?? bounds.height - 40) - 12 : fab.frame.maxY
-    v.frame = CGRect(x: 16, y: bottom - h, width: w, height: h)
-    l.frame = CGRect(x: 14, y: (h - ls.height) / 2, width: ls.width, height: ls.height)
-    b?.frame = CGRect(x: w - bw, y: 0, width: bw - 4, height: h)
-    v.alpha = 0; v.transform = CGAffineTransform(translationX: 0, y: 8)
-    addSubview(v); toastView = v
-    showMotto()
-    UIView.animate(withDuration: 0.16) { v.alpha = 1; v.transform = .identity }
     let ms = (t["ms"] as? Double) ?? 3000
-    DispatchQueue.main.asyncAfter(deadline: .now() + ms / 1000) { [weak v] in
-      guard let v = v else { return }
-      UIView.animate(withDuration: 0.2, animations: { v.alpha = 0 }) { [weak self] _ in v.removeFromSuperview(); if self?.toastView === v { self?.toastView = nil }; self?.showMotto() }
+    if let c = toastCap, c.out { c.say(text, act); c.hold(ms); return }
+    toastCap?.removeFromSuperview(); toastCap = nil
+    layoutIfNeeded()
+    let W = bounds.width
+    let withFab = !fab.isHidden && fab.frame.width > 0
+    let bottom = withFab ? fab.frame.maxY : (tabTop ?? bounds.height - 40) - 12
+    let from = withFab ? fab.frame : CGRect(x: W - R - BTN, y: bottom - BTN, width: BTN, height: BTN)
+    let to = CGRect(x: 16, y: from.minY, width: from.maxX - 16, height: from.height)
+    let c = ToastCapsule(light: L.light, title: withFab ? (fab.accessibilityLabel ?? "New task") : nil, sym: withFab ? fabSym : nil, plus: withFab)
+    c.say(text, act)
+    c.onUndo = { [weak self, weak c] in c?.close(); self?.onEvent?(["ev": "toast"]) }
+    c.onPlus = { [weak self] in UIImpactFeedbackGenerator(style: .light).impactOccurred(); if let a = self?.fabRun { a() } else { self?.send(["ev": "add"]) } }
+    c.onGone = { [weak self, weak c] in
+      guard let self = self, let c = c else { return }
+      c.removeFromSuperview(); if self.toastCap === c { self.toastCap = nil; self.toastView = nil }
+      self.fab.alpha = 1; self.showMotto()
     }
+    c.from = from; c.to = to; c.frame = from
+    addSubview(c); toastCap = c; toastView = c
+    fab.alpha = 0
+    showMotto()
+    c.open(); c.hold(ms)
   }
+  private var toastCap: ToastCapsule?
+  private var fabSym = "plus"
   // (for the self-test: the first card swiped open, held, closed)
   private var firstCard: HomeCard? { content.compactMap { $0 as? HomeCard }.first }
   func selfSwipe() { if let c = firstCard { setOpen(c, true) } }
@@ -2084,5 +2087,91 @@ enum SwipeSpring {
     a.addAnimations(change)
     if let c = completion { a.addCompletion { _ in c() } }
     a.startAnimation()
+  }
+}
+
+
+// the toast capsule "+ New task" stretches into (HomeView.toast)
+final class ToastCapsule: UIView {
+  static func fill(_ light: Bool) -> UIColor { light ? .white : SplashView.hex(0x2b2c31) }
+  static func line(_ light: Bool) -> UIColor { light ? UIColor.black.withAlphaComponent(0.08) : UIColor.white.withAlphaComponent(0.1) }
+  var onUndo: (() -> Void)?, onPlus: (() -> Void)?, onGone: (() -> Void)?
+  var from = CGRect.zero, to = CGRect.zero
+  private(set) var out = false
+  private let start = UILabel(), tick = UIImageView(), msg = UILabel(), undo = UIButton(type: .system), plusB = UIButton(type: .system)
+  private let hasPlus: Bool
+  private var timer: Timer?, touching = false, closing = false
+  init(light: Bool, title: String?, sym: String?, plus: Bool) {
+    hasPlus = plus
+    super.init(frame: .zero)
+    backgroundColor = ToastCapsule.fill(light)
+    layer.borderWidth = 1; layer.borderColor = ToastCapsule.line(light).cgColor
+    layer.shadowColor = UIColor.black.cgColor; layer.shadowOpacity = light ? 0.08 : 0; layer.shadowRadius = 10; layer.shadowOffset = CGSize(width: 0, height: 3)
+    overrideUserInterfaceStyle = light ? .light : .dark
+    // ("+ New task" as the button has it — fading away as it stretches, back as it shrinks)
+    let a = NSMutableAttributedString()
+    if let s = sym, let img = UIImage(systemName: s, withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold))?.withTintColor(.label, renderingMode: .alwaysOriginal) {
+      let at = NSTextAttachment(); at.image = img; at.bounds = CGRect(x: 0, y: -2, width: img.size.width, height: img.size.height)
+      a.append(NSAttributedString(attachment: at)); a.append(NSAttributedString(string: "  "))
+    }
+    if let t = title { a.append(NSAttributedString(string: t, attributes: [.font: UIFont.systemFont(ofSize: 17, weight: .semibold), .foregroundColor: UIColor.label])) }
+    start.attributedText = a; start.textAlignment = .center
+    tick.image = UIImage(systemName: "checkmark.circle.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .regular))
+    tick.tintColor = .systemGreen; tick.contentMode = .center
+    msg.font = .systemFont(ofSize: 15); msg.textColor = .label; msg.lineBreakMode = .byTruncatingTail
+    undo.titleLabel?.font = .systemFont(ofSize: 15, weight: .semibold)
+    undo.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.onUndo?() }, for: .touchUpInside)
+    plusB.setImage(UIImage(systemName: "plus", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)), for: .normal)
+    plusB.tintColor = .label; plusB.backgroundColor = UIColor.label.withAlphaComponent(0.07)
+    plusB.addAction(UIAction { [weak self] _ in self?.onPlus?() }, for: .touchUpInside)
+    plusB.isHidden = !plus
+    [tick, msg, undo, plusB].forEach { $0.alpha = 0; addSubview($0) }
+    start.isUserInteractionEnabled = false; addSubview(start)
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  func say(_ text: String, _ act: String) {
+    msg.text = text
+    UIView.performWithoutAnimation { undo.setTitle(act.isEmpty ? nil : act, for: .normal); undo.layoutIfNeeded() }
+    undo.isHidden = act.isEmpty
+    setNeedsLayout()
+  }
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    let W = bounds.width, H = bounds.height
+    layer.cornerRadius = H / 2
+    // (laid out for its stretched size; the start words over the right end, where the button was)
+    start.frame = CGRect(x: W - from.width, y: 0, width: from.width, height: H)
+    let p: CGFloat = hasPlus ? 34 : 0
+    plusB.frame = CGRect(x: W - 5 - p, y: (H - 34) / 2, width: p, height: 34); plusB.layer.cornerRadius = 17
+    tick.frame = CGRect(x: 10, y: 0, width: 26, height: H)
+    let uw = undo.isHidden ? 0 : ceil(undo.sizeThatFits(CGSize(width: 120, height: H)).width) + 12
+    let right = (hasPlus ? plusB.frame.minX : W - 8) - 4
+    undo.frame = CGRect(x: right - uw, y: 0, width: uw, height: H)
+    msg.frame = CGRect(x: 42, y: 0, width: max(0, undo.frame.minX - 42 - 4), height: H)
+  }
+  func open() {
+    out = true
+    UIView.animate(withDuration: 0.15, delay: 0, options: [.curveEaseOut]) { self.start.alpha = 0 }
+    UIView.animate(withDuration: 0.4, delay: 0.05, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
+      self.frame = self.to; self.layoutIfNeeded(); self.plusB.alpha = 1
+    }
+    UIView.animate(withDuration: 0.22, delay: 0.3, options: [.curveEaseOut, .allowUserInteraction]) { [self.tick, self.msg, self.undo].forEach { $0.alpha = 1 } }
+  }
+  // how long it stays out (a finger on it keeps it)
+  func hold(_ ms: Double) {
+    timer?.invalidate()
+    timer = Timer.scheduledTimer(withTimeInterval: ms / 1000, repeats: false) { [weak self] _ in guard let self = self, !self.touching else { return }; self.close() }
+  }
+  override func touchesBegan(_ t: Set<UITouch>, with e: UIEvent?) { touching = true; super.touchesBegan(t, with: e) }
+  override func touchesEnded(_ t: Set<UITouch>, with e: UIEvent?) { touching = false; hold(1500); super.touchesEnded(t, with: e) }
+  override func touchesCancelled(_ t: Set<UITouch>, with e: UIEvent?) { touching = false; hold(1500); super.touchesCancelled(t, with: e) }
+  func close() {
+    guard !closing else { return }
+    closing = true; out = false; timer?.invalidate()
+    UIView.animate(withDuration: 0.15, delay: 0, options: [.curveEaseIn, .allowUserInteraction]) { [self.tick, self.msg, self.undo].forEach { $0.alpha = 0 } }
+    UIView.animate(withDuration: 0.4, delay: 0.1, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
+      self.frame = self.from; self.layoutIfNeeded(); self.plusB.alpha = 0
+    } completion: { _ in self.onGone?() }
+    UIView.animate(withDuration: 0.2, delay: 0.32, options: [.curveEaseOut]) { self.start.alpha = self.hasPlus ? 1 : 0; if !self.hasPlus { self.alpha = 0 } }
   }
 }
