@@ -36,7 +36,9 @@ when the list reaches its end and out on scrolling back. Every new native list s
 
 **The frost bar — LOCKED (Haris, 2026-11-03: "lock it again so it will be consistent"):** on every native screen the
 bar's frost is iPhone's own **firm** scroll-edge frost (`topEdgeEffect.style = .hard`), the whole bar frosted evenly down
-to the one-pixel line under it — never the soft one that fades out. The switch-over (big title → small title, Mail's
+to the one-pixel line under it — never the soft one that fades out. **It shows only once something is under the bar**
+(Haris 2026-11-03): at the top of a page no frost and no line; they come in together with the small title (pages with a
+big title) or the moment the page scrolls under the bar (others) — the shared `Frost.show` / `FrostWatch`. The switch-over (big title → small title, Mail's
 timings) is unchanged and locked too. Don't change either without Haris. Every new native screen uses HomeView's bar.
 
 **TestFlight only on Haris's yes (Haris, 2026-11-03):** "publish, publish app build" builds, self-tests and signs the

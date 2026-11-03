@@ -59,6 +59,7 @@ final class ServerTask {
 }
 
 final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate, UITextViewDelegate {
+  private var frostWatch: FrostWatch?
   let taskId: String
   var model: [String: Any]?
   var people: [String: [String: Any]] = [:]
@@ -270,6 +271,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       barBox.addInteraction(i)
       edgeHook = i
       scroll.topEdgeEffect.style = .hard   // (the whole bar frosted, down to its line — Haris 2026-11-03)
+      frostWatch = FrostWatch(scroll)      // (… only once the page is under the bar)
     }
     back.setIcon("chevron.left", 19)
     back.accessibilityLabel = "Back"

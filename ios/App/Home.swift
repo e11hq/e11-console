@@ -124,6 +124,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       // (Haris 2026-11-03: the frost whole down to the line under the bar, as Settings' — not fading out: iPhone's firm one)
       scroll.topEdgeEffect.style = .hard
       results.topEdgeEffect.style = .hard
+      scroll.topEdgeEffect.isHidden = true   // (nothing under the bar yet: no frost — it comes with the line; Haris 2026-11-03)
     }
     sub.font = .systemFont(ofSize: 15)
     title.font = .systemFont(ofSize: 34, weight: .bold)
@@ -933,7 +934,11 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // (as Mail's: no blur of its own — it just fades away behind the frost; Haris, 2026-11-01)
     fade(title).set(blur: 0, alpha: 1 - ease(0, 1, dBig), dy: 0, trait: tr)
     fade(sub).set(blur: 0, alpha: 1 - ease(0, 0.8, dBig), dy: 0, trait: tr)
-    if #available(iOS 26.0, *) { topLine.alpha = dLine } else { blur.alpha = dT }
+    if #available(iOS 26.0, *) {
+      topLine.alpha = dLine
+      // (the firm frost comes and goes with the line: none at the top, the whole bar evenly once the big title is under it)
+      Frost.show(scroll, dLine > 0.001)
+    } else { blur.alpha = dT }
   }
   // (Search's end, a self-test, a new layout: everything where the scroll says, at once)
   private func setBar(_ on: Bool, now: Bool = false) {
@@ -966,7 +971,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if !searching { followScroll() }
     if #available(iOS 26.0, *) {
       if let i = edgeHook as? UIScrollEdgeElementContainerInteraction { let want: UIScrollView = searching ? results : scroll; if i.scrollView !== want { i.scrollView = want } }
-      if scroll.topEdgeEffect.isHidden { scroll.topEdgeEffect.isHidden = false }
       // (My Tasks' tabs and filters stuck under the bar: iPhone's firmer frost, so the cards don't show through between
       //  them — the soft one fades out half way down them; Apple's own advice for things pinned under a bar)
       // (always the firm frost now — the whole bar, down to its line; Haris 2026-11-03)
@@ -2174,5 +2178,26 @@ final class ToastCapsule: UIView {
       self.frame = self.from; self.layoutIfNeeded(); self.plusB.alpha = 0
     } completion: { _ in self.onGone?() }
     UIView.animate(withDuration: 0.2, delay: 0.32, options: [.curveEaseOut]) { self.start.alpha = self.hasPlus ? 1 : 0; if !self.hasPlus { self.alpha = 0 } }
+  }
+}
+
+// The frost bar (LOCKED — Haris 2026-11-03): iPhone's firm frost, the whole bar evenly down to its line — and only once
+// something is under the bar; at the top of a page, nothing (the firm one alone would show all the time).
+enum Frost {
+  @available(iOS 26.0, *)
+  static func show(_ s: UIScrollView, _ on: Bool) {
+    if s.topEdgeEffect.isHidden == !on { return }
+    UIView.animate(withDuration: 0.12, delay: 0, options: [.allowUserInteraction, .beginFromCurrentState]) { s.topEdgeEffect.isHidden = !on }
+  }
+}
+// (for a page with no big title: the frost the moment the page has scrolled under its bar)
+final class FrostWatch: NSObject {
+  private var kv: [NSKeyValueObservation] = []
+  init(_ scroll: UIScrollView) {
+    super.init()
+    guard #available(iOS 26.0, *) else { return }
+    let f: (UIScrollView) -> Void = { s in Frost.show(s, s.contentOffset.y > -s.adjustedContentInset.top + 0.5) }
+    kv = [scroll.observe(\.contentOffset, options: [.initial, .new]) { s, _ in f(s) },
+          scroll.observe(\.contentInset, options: [.new]) { s, _ in f(s) }]
   }
 }
