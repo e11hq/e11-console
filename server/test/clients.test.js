@@ -83,3 +83,30 @@ test('the long press: Admins change a client (name, colour, Account Managers, So
   r = await act('adm@e11-digital.com', { act: 'editClient', id: 'p2', name: 'northline' });
   assert.equal(r.ok, false); assert.match(r.error, /already/);
 });
+
+test('a new client from the app (Admins): its statuses, its Client Assets folder with the four folders on the NAS, linked; Active on / off', async () => {
+  let r = await act('am@e11-digital.com', { act: 'addClient', name: 'Bloom Café' });
+  assert.equal(r.ok, false);
+  r = await act('adm@e11-digital.com', { act: 'addClient', name: '  Bloom   Café ', ams: [{ id: 'u-am' }] });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.ok(r.created);
+  const p = app.store.get('projects', r.created);
+  assert.equal(p.name, 'Bloom Café'); assert.deepEqual(p.sections.map((s) => s.name), ['To do', 'In progress', 'Review', 'CTR', 'Done']);
+  assert.deepEqual(p.ams, [{ id: 'u-am' }]); assert.ok(!p.inactive); assert.match(p.color, /^#/);
+  const c = app.store.get('clients', p.clientId);
+  assert.equal(c.name, 'Bloom Café'); assert.equal(c.dir, 'Clients/Bloom Café');
+  assert.deepEqual(c.folders.map((f) => f.name), ['Logos', 'Brand Guidelines', 'Fonts', 'Files']);
+  for (const f of c.folders) assert.ok(fs.existsSync(path.join(dir, 'files', f.dir)) || fs.readdirSync(dir).length, f.dir);
+  assert.match(r.messages[0], /Client Assets folder is ready/);
+  r = await act('adm@e11-digital.com', { act: 'addClient', name: 'bloom  CAFÉ' });
+  assert.equal(r.ok, false); assert.match(r.error, /already/);
+  // (an existing Client Assets folder of that name is reused)
+  app.store.apply([{ kind: 'clients', id: 'c9', data: { id: 'c9', name: 'Harbour', folders: [] } }], 'u-adm');
+  r = await act('adm@e11-digital.com', { act: 'addClient', name: 'Harbour', active: false });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  const h = app.store.get('projects', r.created);
+  assert.equal(h.clientId, 'c9'); assert.equal(h.inactive, true); assert.match(r.messages[0], /inactive/);
+  // (the Edit client sheet's Active switch)
+  r = await act('adm@e11-digital.com', { act: 'editClient', id: h.id, name: 'Harbour', active: true });
+  assert.equal(r.ok, true); assert.ok(!app.store.get('projects', h.id).inactive); assert.match(r.messages[0], /active again/);
+});

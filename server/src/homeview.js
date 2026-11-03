@@ -100,7 +100,67 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
       next.name = name; next.ams = ams;
       if (typeof body.color === 'string' && /^#[0-9a-f]{6}$/i.test(body.color)) next.color = body.color;
       if (socials.length) next.socials = socials; else delete next.socials;
-      return { ok: true, changes: [{ kind: 'projects', id: p.id, base, data: next }], messages: ['Client saved'] };
+      // (Active / inactive — the website's switch; Haris 2026-11-03)
+      const wasOn = !p.inactive;
+      if (typeof body.active === 'boolean') { if (body.active) delete next.inactive; else next.inactive = true; }
+      const changes = [{ kind: 'projects', id: p.id, base, data: next }];
+      // (its linked Client Assets folder takes the new name, unless another one already has it — as the website)
+      let kept = false;
+      const all = store && store.list ? store.list('clients') : (data.clients || []);
+      const c = p.clientId ? all.find((x) => x.id === p.clientId) : null;
+      if (c && p.name !== name) {
+        if (all.some((x) => x.id !== c.id && key(x.name) === key(name))) kept = true;
+        else changes.push({ kind: 'clients', id: c.id, base: clone(c), data: { ...clone(c), name } });
+      }
+      const nowOn = !next.inactive;
+      const msg = wasOn !== nowOn ? (nowOn ? `${name} is active again — its tasks and Client Assets are back` : `${name} is inactive — hidden from everyone with its tasks, Client Assets and Finance history`)
+        : kept ? 'Renamed — folder name kept' : 'Client saved';
+      return { ok: true, changes, messages: [msg] };
+    }
+    // a new client from the app's Clients list (Admins only — Haris 2026-11-03): as the website's New client — the client
+    // with its statuses, and its Client Assets folder (Logos, Brand Guidelines, Fonts, Files) made with it and linked; an
+    // existing Client Assets folder of that name is reused. `dirs`: the folders to make on the NAS.
+    if (a === 'addClient') {
+      const me0 = (data.users || []).find((x) => x.id === u.id);
+      if (!me0 || !(me0.role === 'admin' || me0.admin === true)) return fail(403, 'Only Admins add clients');
+      const name = String(body.name || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+      if (!name) return fail(400, 'A client needs a name');
+      const key = (n) => String(n || '').toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9\u0600-\u06ff]+/g, '');
+      const projects = store && store.list ? store.list('projects') : (data.projects || []);
+      const dup = projects.find((x) => key(x.name) === key(name));
+      if (dup) return fail(409, `There is already a client named “${dup.name}”.`);
+      const users = data.users || [];
+      const ok = (id, role) => users.some((x) => x.id === id && x.active !== false && x.role === role);
+      const seen = new Set();
+      const ams = (Array.isArray(body.ams) ? body.ams : []).filter((x) => x && ok(String(x.id), 'am') && !seen.has(String(x.id)) && seen.add(String(x.id))).map((x) => (x.onLeave ? { id: String(x.id), onLeave: true } : { id: String(x.id) }));
+      const socials = [...new Set((Array.isArray(body.socials) ? body.socials : []).map(String))].filter((id) => ok(id, 'social'));
+      const COLORS = ['#5b8cff', '#3ddc97', '#ffb547', '#ff6b6b', '#c27cff', '#4fd1c5', '#ff8fc7', '#f2f26d', '#9aa0ab'];
+      const used = new Set(projects.map((x) => x.color));
+      const color = typeof body.color === 'string' && /^#[0-9a-f]{6}$/i.test(body.color) ? body.color : (COLORS.find((c) => !used.has(c)) || COLORS[0]);
+      const at = env.nowISO();
+      const np = { id: env.uid(), name, color, view: 'list', createdAt: at,
+        order: projects.length ? Math.max(...projects.map((x) => x.order || 0)) + 1 : 1,
+        sections: [['To do', '#87909e'], ['In progress', '#a875ff'], ['Review', '#f9be33'], ['CTR', '#ff8a4c'], ['Done', '#3ddc97']].map(([n, c]) => ({ id: env.uid(), name: n, color: c })),
+        ams };
+      if (socials.length) np.socials = socials;
+      if (body.active === false) np.inactive = true;
+      const changes = [], dirs = [];
+      const clients = store && store.list ? store.list('clients') : (data.clients || []);
+      let c = clients.find((x) => key(x.name) === key(name));
+      if (!c) {
+        const safe = (t) => String(t).replace(/[\/:\\]/g, '-').replace(/^\.+/, '').replace(/\s+/g, ' ').trim().slice(0, 80) || 'Untitled';
+        const free = (base, n, taken) => { let d = `${base}/${safe(n)}`, i = 2; while (taken.some((x) => String(x).toLowerCase() === d.toLowerCase())) d = `${base}/${safe(n)} (${i++})`; return d; };
+        c = { id: 'cl-' + env.uid(), name, logo: null, dir: '', folders: [], createdAt: at, createdBy: u.id };
+        c.dir = free('Clients', name, clients.map((x) => x.dir || ''));
+        for (const fn of ['Logos', 'Brand Guidelines', 'Fonts', 'Files']) {
+          const f = { id: 'cf-' + env.uid(), name: fn, dir: free(c.dir, fn, c.folders.map((x) => x.dir)), files: [], createdAt: at, createdBy: u.id, auto: true };
+          c.folders.push(f); dirs.push(f.dir);
+        }
+        changes.push({ kind: 'clients', id: c.id, data: c });
+      }
+      np.clientId = c.id;
+      changes.unshift({ kind: 'projects', id: np.id, data: np });
+      return { ok: true, changes, dirs, created: np.id, messages: [`Added ${name}${np.inactive ? ' (inactive)' : ' — its Client Assets folder is ready'}`] };
     }
     if (!t) return fail(404, 'This task is no longer here');
     // (no Home, no Home actions: Office Admins and Finance-only people)

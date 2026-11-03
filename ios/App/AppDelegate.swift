@@ -1633,6 +1633,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       if page, self.eventOnServer(ev, self.serverClients, pageMe: self.clientsPageMe) { return }
       // (a client held: its sheet, the app's own — nothing for the website)
       if !page, (ev["ev"] as? String) == "clientHold", let id = ev["id"] as? String { self.clientSheet(id); return }
+      if !page, (ev["ev"] as? String) == "addClient" { self.addClientSheet(); return }
       if page, (ev["ev"] as? String) == "back" { self.clientPageOut() }
       // (a client's Client Assets — a folder, or See all: the app's own screens over its page, shell 32)
       if page, let k = ev["ev"] as? String, k == "folder" || k == "assets", let c = ev["client"] as? String {
@@ -1687,7 +1688,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let rows = ((list["rows"] as? [[String: Any]]) ?? []) + ((list["inactive"] as? [[String: Any]]) ?? [])
     guard let row = rows.first(where: { ($0["id"] as? String) == id }) else { return }
     let ppl = (clientsListIfMade?.people ?? [:]).merging((list["people"] as? [String: [String: Any]]) ?? [:]) { a, _ in a }
-    let vc = ClientSheetVC(row: row, list: list, people: ppl, dark: !clientsLight)
+    let inactive = ((list["inactive"] as? [[String: Any]]) ?? []).contains { ($0["id"] as? String) == id }
+    let vc = ClientSheetVC(row: row, list: list, people: ppl, dark: !clientsLight, active: !inactive)
     vc.onSave = { [weak self] body, done in
       guard let self = self else { return }
       var b = body; b["act"] = "editClient"; b["id"] = id; b["from"] = "clients"; b["copy"] = true; b["op"] = UUID().uuidString
@@ -1696,11 +1698,43 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         if (j["ok"] as? Bool) != true { return done(j["error"] as? String ?? "That didn’t work — try again") }
         if let ch = j["changes"] as? [[String: Any]] { AppData.shared.applyLocal(ch) }
         done(nil)
+        if let m = (j["messages"] as? [String])?.first, m != "Client saved" { self.clientsListIfMade?.toast(["t": m]) }
       }
     }
     let nav = FitNav(rootViewController: vc)
     nav.overrideUserInterfaceStyle = clientsLight ? .light : .dark
     if let sh = nav.sheetPresentationController { sh.prefersGrabberVisible = true }   // (its height: what's on it — FitNav)
+    nav.prepare(width: view.bounds.width, bottom: view.safeAreaInsets.bottom)
+    topMost().present(nav, animated: true)
+  }
+  // + Add client (Admins, the Clients list — Haris 2026-11-03): the client sheet as New client; the server makes the
+  // client and its Client Assets folder (Logos, Brand Guidelines, Fonts, Files) and links them; an active one's page opens
+  func addClientSheet() {
+    guard let list = serverClients.shown, (list["kind"] as? String) == "clients", (list["canEdit"] as? Bool) == true else { return }
+    let ppl = (clientsListIfMade?.people ?? [:]).merging((list["people"] as? [String: [String: Any]]) ?? [:]) { a, _ in a }
+    let vc = ClientSheetVC(row: [:], list: list, people: ppl, dark: !clientsLight, isNew: true, active: true)
+    vc.onSave = { [weak self] body, done in
+      guard let self = self else { return }
+      var b = body; b["act"] = "addClient"; b["from"] = "clients"; b["copy"] = true; b["op"] = UUID().uuidString
+      self.serverTask.request("/api/home/act", body: b) { j in
+        guard let j = j else { return done("No connection — try again") }
+        if (j["ok"] as? Bool) != true { return done(j["error"] as? String ?? "That didn’t work — try again") }
+        if let ch = j["changes"] as? [[String: Any]] { AppData.shared.applyLocal(ch) }
+        done(nil)
+        let msg = (j["messages"] as? [String])?.first
+        if (body["active"] as? Bool) != false, let id = j["created"] as? String {
+          // (its page slides in, as a tap on it — once the sheet has gone)
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+            guard let self = self, let l = self.clientsListIfMade else { return }
+            l.onEvent?(["ev": "client", "id": id])
+            if let m = msg { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.clientPageIfMade?.toast(["t": m]) } }
+          }
+        } else if let m = msg { self.serverClients.refresh(); self.clientsListIfMade?.toast(["t": m]) }
+      }
+    }
+    let nav = FitNav(rootViewController: vc)
+    nav.overrideUserInterfaceStyle = clientsLight ? .light : .dark
+    if let sh = nav.sheetPresentationController { sh.prefersGrabberVisible = true }
     nav.prepare(width: view.bounds.width, bottom: view.safeAreaInsets.bottom)
     topMost().present(nav, animated: true)
   }

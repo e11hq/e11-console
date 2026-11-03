@@ -647,7 +647,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     clientsGroup.set((model["rows"] as? [[String: Any]]) ?? [], (model["inactive"] as? [[String: Any]]) ?? [], look: L)
     if clientsGroup.superview !== scroll { scroll.addSubview(clientsGroup) }
     content = [clientsGroup]
-    fab.isHidden = true
+    // (+ Add client for Admins — Haris 2026-11-03; the app's own New client sheet)
+    if (model["canEdit"] as? Bool) == true { setFab("Add client", "plus") { [weak self] in self?.send(["ev": "addClient"]) } } else { fab.isHidden = true }
   }
   private let catsView = MailCats(items: [
     .init(key: "all", sym: "tray", name: "All", fill: MailCats.neutral),

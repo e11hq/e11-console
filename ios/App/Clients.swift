@@ -313,10 +313,14 @@ final class ClientSheetVC: UITableViewController, UITextFieldDelegate {
   private let amPool: [String], sePool: [String], smIds: Set<String>
   private var name: String, color: String
   private var ams: [(id: String, onLeave: Bool)], socials: [String]
+  // (a new client from the list's + Add client — Haris 2026-11-03; and Active / inactive, as the website's switch)
+  private let isNew: Bool
+  private var active: Bool
   var onSave: (([String: Any], @escaping (String?) -> Void) -> Void)?
   private static let COLORS = ["#0a84ff", "#30b0c7", "#34c759", "#ff9f0a", "#ff375f", "#af52de", "#5e5ce6", "#8e8e93"]
-  init(row: [String: Any], list: [String: Any], people: [String: [String: Any]], dark: Bool) {
+  init(row: [String: Any], list: [String: Any], people: [String: [String: Any]], dark: Bool, isNew: Bool = false, active: Bool = true) {
     self.row = row
+    self.isNew = isNew; self.active = active
     canEdit = (list["canEdit"] as? Bool) == true
     self.people = people
     names = (list["names"] as? [String: String]) ?? [:]
@@ -325,18 +329,24 @@ final class ClientSheetVC: UITableViewController, UITextFieldDelegate {
     name = row["name"] as? String ?? ""; color = row["color"] as? String ?? ""
     ams = ((row["amsAll"] as? [[String: Any]]) ?? []).compactMap { a in (a["id"] as? String).map { ($0, (a["onLeave"] as? Bool) == true) } }
     socials = (row["socials"] as? [String]) ?? []
+    // (a new one: the first colour no client has yet)
+    if isNew {
+      let used = Set((((list["rows"] as? [[String: Any]]) ?? []) + ((list["inactive"] as? [[String: Any]]) ?? [])).compactMap { ($0["color"] as? String)?.lowercased() })
+      color = ClientSheetVC.COLORS.first { !used.contains($0.lowercased()) } ?? ClientSheetVC.COLORS[0]
+    }
     super.init(style: .insetGrouped)
     overrideUserInterfaceStyle = dark ? .dark : .light
   }
   required init?(coder: NSCoder) { fatalError() }
   override func viewDidLoad() {
     super.viewDidLoad()
-    title = canEdit ? "Edit client" : "Client"
+    title = isNew ? "New client" : canEdit ? "Edit client" : "Client"
     tableView.register(UITableViewCell.self, forCellReuseIdentifier: "c")
     if canEdit {
       navigationItem.leftBarButtonItem = UIBarButtonItem(systemItem: .close, primaryAction: UIAction { [weak self] _ in self?.dismiss(animated: true) })
-      let done = UIBarButtonItem(title: "Done", primaryAction: UIAction { [weak self] _ in self?.save() })
+      let done = UIBarButtonItem(title: isNew ? "Add" : "Done", primaryAction: UIAction { [weak self] _ in self?.save() })
       done.style = .done
+      done.isEnabled = !isNew || !name.trimmingCharacters(in: .whitespaces).isEmpty
       if #available(iOS 26.0, *) { done.tintColor = .systemBlue }
       navigationItem.rightBarButtonItem = done
       tableView.isEditing = true
@@ -371,9 +381,9 @@ final class ClientSheetVC: UITableViewController, UITextFieldDelegate {
     lg.center.x = h.bounds.midX
     return h
   }
-  // sections: (edit) 0 name · 1 colour · 2 Account Managers · 3 Social Executives — (read only) 0 AMs · 1 SEs
-  private func kind(_ s: Int) -> String { canEdit ? ["name", "color", "ams", "ses"][s] : ["ams", "ses"][s] }
-  override func numberOfSections(in tv: UITableView) -> Int { canEdit ? 4 : 2 }
+  // sections: (edit) 0 name · 1 colour · 2 Account Managers · 3 Social Executives · 4 Active — (read only) 0 AMs · 1 SEs
+  private func kind(_ s: Int) -> String { canEdit ? ["name", "color", "ams", "ses", "active"][s] : ["ams", "ses"][s] }
+  override func numberOfSections(in tv: UITableView) -> Int { canEdit ? 5 : 2 }
   override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int {
     switch kind(s) {
     case "ams": return ams.count + (canEdit ? 1 : 0) + (!canEdit && ams.isEmpty ? 1 : 0)
@@ -385,6 +395,7 @@ final class ClientSheetVC: UITableViewController, UITextFieldDelegate {
     ["name": nil, "color": "Colour", "ams": "Account Managers", "ses": "Social Executives"][kind(s)] ?? nil
   }
   override func tableView(_ tv: UITableView, titleForFooterInSection s: Int) -> String? {
+    if kind(s) == "active" { return active ? "Shows in the client lists." : "Hidden from everyone with its tasks, Client Assets and Finance history until switched back on. Nothing is deleted." }
     guard kind(s) == "ams", !canEdit else { return nil }
     let away = ams.filter { $0.onLeave }.map { first($0.id) }, here = ams.filter { !$0.onLeave }.map { first($0.id) }
     guard let a = away.first, let c = here.first else { return nil }
@@ -402,7 +413,13 @@ final class ClientSheetVC: UITableViewController, UITextFieldDelegate {
     case "name":
       let lg = logoView(34)
       let f = UITextField(); f.text = name; f.font = .systemFont(ofSize: 17); f.clearButtonMode = .whileEditing; f.returnKeyType = .done; f.delegate = self
-      f.addAction(UIAction { [weak self, weak f] _ in self?.name = f?.text ?? "" }, for: .editingChanged)
+      f.addAction(UIAction { [weak self, weak f] _ in
+        guard let self = self else { return }
+        self.name = f?.text ?? ""
+        if self.isNew { self.navigationItem.rightBarButtonItem?.isEnabled = !self.name.trimmingCharacters(in: .whitespaces).isEmpty }
+      }, for: .editingChanged)
+      f.placeholder = "Client name"
+      if isNew { DispatchQueue.main.async { [weak f] in f?.becomeFirstResponder() } }
       let s = UIStackView(arrangedSubviews: [lg, f]); s.spacing = 12; s.alignment = .center
       lg.widthAnchor.constraint(equalToConstant: 34).isActive = true; lg.heightAnchor.constraint(equalToConstant: 34).isActive = true
       s.translatesAutoresizingMaskIntoConstraints = false; c.contentView.addSubview(s)
@@ -419,6 +436,17 @@ final class ClientSheetVC: UITableViewController, UITextFieldDelegate {
       }
       s.translatesAutoresizingMaskIntoConstraints = false; c.contentView.addSubview(s)
       NSLayoutConstraint.activate([s.leadingAnchor.constraint(equalTo: c.contentView.layoutMarginsGuide.leadingAnchor), s.topAnchor.constraint(equalTo: c.contentView.topAnchor, constant: 10), s.bottomAnchor.constraint(equalTo: c.contentView.bottomAnchor, constant: -10)])
+    case "active":
+      c.textLabel?.text = "Active client"
+      let sw = UISwitch(); sw.isOn = active
+      sw.addAction(UIAction { [weak self, weak sw] _ in
+        guard let self = self, let sw = sw else { return }
+        UISelectionFeedbackGenerator().selectionChanged()
+        self.active = sw.isOn
+        UIView.performWithoutAnimation { self.tableView.reloadSections(IndexSet([ip.section]), with: .none) }   // (its line under)
+        (self.navigationController as? FitNav)?.fitTo(self.tableView)
+      }, for: .valueChanged)
+      c.editingAccessoryView = sw
     case "ams", "ses":
       let isAm = kind(ip.section) == "ams"
       let n = isAm ? ams.count : socials.count
@@ -493,7 +521,7 @@ final class ClientSheetVC: UITableViewController, UITextFieldDelegate {
     let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !n.isEmpty else { alert("A client needs a name"); return }
     navigationItem.rightBarButtonItem?.isEnabled = false
-    let body: [String: Any] = ["name": n, "color": color, "ams": ams.map { $0.onLeave ? ["id": $0.id, "onLeave": true] : ["id": $0.id] }, "socials": socials]
+    let body: [String: Any] = ["name": n, "color": color, "ams": ams.map { $0.onLeave ? ["id": $0.id, "onLeave": true] : ["id": $0.id] }, "socials": socials, "active": active]
     onSave?(body) { [weak self] err in
       guard let self = self else { return }
       if let e = err { self.navigationItem.rightBarButtonItem?.isEnabled = true; UINotificationFeedbackGenerator().notificationOccurred(.error); self.alert(e); return }

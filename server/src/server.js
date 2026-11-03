@@ -757,7 +757,9 @@ export function createServer(cfg) {
           if (r.changes.length) pushed = pushAs(u, r.changes, body.client || null);
           // (Undo: the Trash entry of what this person just deleted goes too — whoever may delete may undo it)
           if (r.sysChanges && r.sysChanges.length) { const out2 = store.apply(r.sysChanges, u.id); broadcast(out2.rev, out2.results, null, u.id); }
-          out = { ok: true, messages: r.messages, undo: r.undo || null };
+          // (a new client's Client Assets folders, made on the NAS as the website does)
+          for (const d of r.dirs || []) { try { files.commands.makeDir({ path: d }); } catch (e) { console.error('makeDir:', e.message); } }
+          out = { ok: true, messages: r.messages, undo: r.undo || null, ...(r.created ? { created: r.created } : {}) };
           if (copy) out.changes = pushed ? pushed.results.filter((x) => !x.refused).map((x) => forUser(u, x)).filter((x) => !(x.hidden && x.kind === 'notifications')) : [];
         }
       }
