@@ -42,6 +42,10 @@ stay stuck under it with the frost behind them (`HomeView.pinHead` for a page's 
 line — under stuck search / filters too — from the very first moment, and ends just above the tab bar (or the bottom
 edge). Never iPhone's own safe-area adjusting (`automaticallyAdjustsScrollIndicatorInsets = false`). Every new page too.
 
+**A page with its name in the middle of the bar (a client's, Client Assets, Me's pages…), everywhere (Haris, 2026-11-03):**
+only that centred name — Home's small title never comes in over it — and **no line under the bar** (the frost alone).
+Home, My Tasks and the Inbox keep their big → small title and the line. Every new such page too.
+
 **The frost bar — LOCKED (Haris, 2026-11-03: "revert the frost bar to how it was and lock it"):** on every native screen
 the bar's frost is iPhone's own **soft** scroll-edge frost (`topEdgeEffect.style = .soft`), as up to build 1331; only
 My Tasks' tabs and filters stuck under the bar use the firm one (`.hard`) while stuck. (Tried and dropped the same day: the

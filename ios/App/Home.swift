@@ -956,7 +956,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     fade(title).set(blur: 0, alpha: 1 - ease(0, 1, dBig), dy: 0, trait: tr)
     fade(sub).set(blur: 0, alpha: 1 - ease(0, 0.8, dBig), dy: 0, trait: tr)
     if #available(iOS 26.0, *) {
-      topLine.alpha = dLine
+      // (no line under the bar on a page with its name in the middle — the standard, Haris 2026-11-03)
+      topLine.alpha = pageBar ? 0 : dLine
       reachK = dLine; placeReach()
     } else { blur.alpha = dT }
   }
