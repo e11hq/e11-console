@@ -58,6 +58,9 @@ async def main():
         f1 = [f for f in r['model']['files'] if f['folder'] == fid]
         check(r['ok'] and len(f1) == 1 and f1[0]['name'] == 'hero.jpg' and f1[0]['canDel'] and f1[0]['url'] and f1[0]['where'].endswith('Summer shoot 2026'), f"an uploaded file filed in the folder {f1}")
         check(f1 and f1[0]['id'] in r['model']['recent'], 'and it is under Recently added')
+        check(f1 and [x[0] for x in f1[0]['info']['rows']] == ['Added by', 'Date added', 'Size', 'Type', 'Folder'] and f1[0]['info']['rows'][3][1] == 'JPG', f"a file's Info: the website's own rows {f1 and f1[0]['info']}")
+        fo = next(x for x in r['model']['folders'] if x['id'] == fid)
+        check([x[0] for x in fo['info']['rows']] == ['Created by', 'Date', 'Location', 'Files', 'Size'] and fo['info']['rows'][3][1] == '1', f"a folder's Info: the website's own rows {fo['info']}")
         r = await ask({'ev': 'uploaded', 'client': cid, 'folder': files_top['id'], 'files': [{'name': 'x.jpg', 'path': 'p', 'size': 1}]})
         check(not r['ok'] and 'Files holds folders' in (r['error'] or ''), 'not into Files itself')
         r = await ask({'ev': 'deleteFile', 'client': cid, 'folder': fid, 'file': f1[0]['id']})

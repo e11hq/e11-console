@@ -2791,6 +2791,26 @@ const NativeAssets = (() => {
   const rgb = (hex) => E11Rules.rgbOf(hex) || [135, 144, 158];
   const logoOf = (c) => (c.logo ? '/__file/' + c.logo.split('/').map(encodeURIComponent).join('/') : null);
   const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  // Info: the website's own rows — the same titles, values and order as its Info pop-up (caInfo in app.js)
+  function infoOf(c, f, a) {
+    const who = (id) => (id && userById(id) ? fullName(userById(id)) : id ? 'Former team member' : '—');
+    const when = (iso) => (iso ? fmtDateTime(iso) : '—');
+    if (a && a.final) {
+      const m = a.final, t = task(m.taskId);
+      const client = m.clientNone ? 'not needed' : m.clientBy ? `recorded by ${who(m.clientBy)}` : 'not recorded';
+      return { rows: [['Completed', when(m.completedAt)], ['Task', m.taskTitle || f.name], ['Task created by', who(m.createdBy)], ['Assignee', who(m.assignee)],
+        ['Approved by', `${who(m.cdBy)} (CD)${m.clientBy ? ' & the client' : ''}`], ['CD approved', when(m.cdAt)], ['Client approval', m.clientBy ? when(m.clientAt) + ' · ' + client : client],
+        ['Size', fmtSize(a.size)], ['Type', (fileExt(a.name) || 'file').toUpperCase()]],
+        task: t && !t.deleted && db.tasks.includes(t) ? t.id : null };
+    }
+    if (a) return { rows: [['Added by', who(a.addedBy)], ['Date added', when(a.addedAt)], ['Size', fmtSize(a.size)], ['Type', (fileExt(a.name) || 'file').toUpperCase()], ['Folder', `${c.name} › ${folderPath(c, f)}`]] };
+    const tree = folderTree(c, f), all = f.files.concat(...tree.map((x) => x.files));
+    const rows = [['Created by', isAutoFolder(c, f) && !f.finalOf ? 'Made with the client' : who(f.createdBy)], ['Date', when(f.createdAt || c.createdAt)],
+      ...(isFilesTop(c, f) || tree.length ? [['Folders', String(tree.length)]] : []), ...(f.parentId ? [['Location', `${c.name} › ${folderAncestors(c, f).map((x) => x.name).join(' › ')}`]] : []),
+      ['Files', String(all.length)], ['Size', fmtSize(all.reduce((n, x) => n + (x.size || 0), 0))]];
+    if (f.finalOf) rows.unshift(['Kind', 'Final files of a completed task']);
+    return { rows };
+  }
   function fileOf(c, f, a) {
     const e = fileExt(a.name);
     const pic = isImage(a) && !/\.svg$/i.test(String(a.path || ''));
@@ -2800,7 +2820,7 @@ const NativeAssets = (() => {
         : a.path && THUMBED.includes(e) ? '/api/fthumb?path=' + encodeURIComponent(a.path) + '&id=' + encodeURIComponent(a.id || '') : null,
       ext: (e || 'file').slice(0, 5), kind: fileKind(a), label: OFFICE_LABEL[e] || (e ? e.toUpperCase() : 'File'),
       folder: f.id, at: a.addedAt || '', by: a.addedBy ? fullName(userById(a.addedBy)) : '', where: `${c.name} › ${folderPath(c, f)}`,
-      canDel: !f.finalOf && canDelAsset(a),
+      canDel: !f.finalOf && canDelAsset(a), info: infoOf(c, f, a),
     };
   }
   function folderOf(c, f) {
@@ -2810,7 +2830,7 @@ const NativeAssets = (() => {
       files: f.files.length, subs: subFolders(c, f).length, total: folderFileCount(c, f), path: folderPath(c, f),
       by: isAutoFolder(c, f) && !f.finalOf ? 'Made with the client' : f.createdBy ? fullName(userById(f.createdBy)) : '', at: f.createdAt || c.createdAt || '',
       size: [f, ...folderTree(c, f)].reduce((n, x) => n + x.files.reduce((m, a) => m + (a.size || 0), 0), 0),
-      canUpload: canUploadTo(c, f), canSub: canMakeSub(c, f), canRename: canEditFolder(c, f) && !f.finalOf, canDel: canDelFolder(c, f),
+      canUpload: canUploadTo(c, f), canSub: canMakeSub(c, f), canRename: canEditFolder(c, f) && !f.finalOf, canDel: canDelFolder(c, f), info: infoOf(c, f, null),
       note: isFilesTop(c, f) ? 'Files holds folders — one per job. Make a folder here, then add the files in it.' : f.finalOf ? 'Final files are filed by the app when the task is completed.' : '',
     };
   }

@@ -355,18 +355,31 @@ final class FileTiles: UIView, HomeBlock {
 // Info: iPhone's own grouped list of what it is
 final class AssetsInfoVC: UITableViewController {
   private let rows: [(String, String)]
+  var openTask: (() -> Void)?   // (a final file whose task is still there: Open task, as the website's)
   init(title: String, rows: [(String, String)]) { self.rows = rows; super.init(style: .insetGrouped); self.title = title }
   required init?(coder: NSCoder) { fatalError() }
   override func viewDidLoad() {
     super.viewDidLoad()
     navigationItem.rightBarButtonItem = UIBarButtonItem(systemItem: .close, primaryAction: UIAction { [weak self] _ in self?.dismiss(animated: true) })
   }
-  override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int { rows.count }
+  override func numberOfSections(in tv: UITableView) -> Int { openTask == nil ? 1 : 2 }
+  override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int { s == 0 ? rows.count : 1 }
   override func tableView(_ tv: UITableView, cellForRowAt ip: IndexPath) -> UITableViewCell {
+    if ip.section == 1 {
+      let c = UITableViewCell(style: .default, reuseIdentifier: nil)
+      c.textLabel?.text = "Open task"; c.textLabel?.textColor = .systemBlue
+      c.imageView?.image = UIImage(systemName: "arrow.up.forward.square"); c.imageView?.tintColor = .systemBlue
+      return c
+    }
     let c = UITableViewCell(style: .value1, reuseIdentifier: nil)
     c.textLabel?.text = rows[ip.row].0; c.detailTextLabel?.text = rows[ip.row].1
     c.detailTextLabel?.numberOfLines = 2; c.selectionStyle = .none
     return c
+  }
+  override func tableView(_ tv: UITableView, didSelectRowAt ip: IndexPath) {
+    tv.deselectRow(at: ip, animated: true)
+    guard ip.section == 1, let run = openTask else { return }
+    dismiss(animated: true) { run() }
   }
   override func viewDidLayoutSubviews() { super.viewDidLayoutSubviews(); (navigationController as? FitNav)?.fitTo(tableView) }
   override func viewWillAppear(_ a: Bool) { super.viewWillAppear(a); (navigationController as? FitNav)?.fitTo(tableView) }
@@ -925,18 +938,27 @@ final class AssetsCtl {
     let o = DateFormatter(); o.dateStyle = .medium; o.timeStyle = .short
     return o.string(from: d)
   }
-  private func info(_ title: String, _ rows: [(String, String)]) {
-    let nav = FitNav(rootViewController: AssetsInfoVC(title: title, rows: rows.filter { !$0.1.isEmpty }))
+  private func info(_ title: String, _ rows: [(String, String)], task: String? = nil) {
+    let vc = AssetsInfoVC(title: title, rows: rows.filter { !$0.1.isEmpty })
+    if let t = task { vc.openTask = { [weak self] in self?.main.openTaskPage(t, tab: "details", focus: "") } }
+    let nav = FitNav(rootViewController: vc)
     nav.overrideUserInterfaceStyle = light ? .light : .dark
     nav.sheetPresentationController?.prefersGrabberVisible = true
     nav.prepare(width: main.view.bounds.width, bottom: main.view.safeAreaInsets.bottom)
     main.topMost().present(nav, animated: true)
   }
+  // (the website's own rows — the same titles and values as its Info, Haris 2026-11-03)
+  private func pageRows(_ x: [String: Any]) -> [(String, String)]? {
+    guard let r = (x["info"] as? [String: Any])?["rows"] as? [[Any]], !r.isEmpty else { return nil }
+    return r.compactMap { p in p.count >= 2 ? ("\(p[0])", "\(p[1])") : nil }
+  }
   private func fileInfo(_ f: [String: Any]) {
+    if let rows = pageRows(f) { info(f["name"] as? String ?? "File", rows, task: (f["info"] as? [String: Any])?["task"] as? String); return }
     info(f["name"] as? String ?? "File", [("Kind", f["label"] as? String ?? ""), ("Size", TaskPage.size(f["size"] as? Int ?? 0)), ("Where", f["where"] as? String ?? ""),
                                          ("Added by", f["by"] as? String ?? ""), ("Added", AssetsCtl.when(f["at"] as? String ?? ""))])
   }
   private func folderInfoSheet(_ f: [String: Any], client: String) {
+    if let rows = pageRows(f) { info(f["name"] as? String ?? "Folder", rows); return }
     let m = models[client] ?? [:]
     let subs = f["subs"] as? Int ?? 0
     info(f["name"] as? String ?? "Folder", [("Kind", (f["final"] as? Bool) == true ? "Final files of a completed task" : "Folder"), ("Where", "\(m["name"] as? String ?? "") › \(f["path"] as? String ?? "")"),
