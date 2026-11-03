@@ -954,19 +954,21 @@ final class KeyboardShield: UIView {
     for x in v.subviews where x !== self { if let f = field(x) { return f } }
     return nil
   }
+  // (what's being typed in: on the page, or the app's comment box over it — Haris 2026-11-04: comments too)
+  private func typing(_ p: UIView) -> UIView? { field(p) ?? (p.window.flatMap { w in w.subviews.lazy.compactMap { self.field($0) }.first }) }
   @objc private func up() {
-    guard let p = page, field(p) != nil else { return }
+    guard let p = page, typing(p) != nil else { return }
     frame = p.bounds; p.bringSubviewToFront(self); isHidden = false
   }
   @objc private func down() { isHidden = true }
   override func hitTest(_ pt: CGPoint, with e: UIEvent?) -> UIView? {
-    guard !isHidden, let p = page else { return nil }
-    guard let f = field(p) else { isHidden = true; return nil }
+    guard !isHidden, let p = page, !p.isHidden else { return nil }
+    guard let f = typing(p) else { isHidden = true; return nil }
     // (the box being typed in — and its clear button — still works)
     if f.convert(f.bounds, to: self).insetBy(dx: -6, dy: -6).contains(pt) { return nil }
     return self
   }
-  override func touchesBegan(_ t: Set<UITouch>, with e: UIEvent?) { page?.endEditing(true); isHidden = true }
+  override func touchesBegan(_ t: Set<UITouch>, with e: UIEvent?) { if let w = page?.window { w.endEditing(true) } else { page?.endEditing(true) }; isHidden = true }
 }
 
 final class MeCtl {

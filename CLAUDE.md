@@ -49,6 +49,11 @@ Clients), or sent again by the page when what it shows changes (Me and its pages
 a client gone takes its screens away with a toast). Something deleted while it's open goes away with a toast. Every new
 native page too.
 
+**A tap away from typing only puts the keyboard away, everywhere (Haris, 2026-11-04):** on every native page where you
+type (comments, a task's description, Team members' search, My profile…), a tap anywhere else while the keyboard is up
+closes the keyboard and nothing else — it never taps the row, card or button under the finger (`KeyboardShield.attach`).
+The box being typed in, and the comment box's own buttons, keep working. Every new native page too.
+
 **‹ goes back the way you came, everywhere (Haris, 2026-11-03):** on every native page, ‹ and the edge swipe go back to
 where you were before (history) — not up the page's own path. A client's page opened from Home's search goes back to
 Home's search, not the Clients list (`clientFrom`, the page's `PageHistory.prev`). Tapping a tab again still goes to that

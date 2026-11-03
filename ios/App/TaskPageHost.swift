@@ -25,6 +25,9 @@ extension Main {
     ProfileAskCard.current?.go()   // (a task opened: the birthday / city card slips away)
     FeedLoader.shared.cookies = serverHome.cookies   // (before anything is drawn: its pictures are fetched with it)
     let p = TaskPage(id: id, frame: view.bounds)
+    // (typing a comment or the description, a tap anywhere else only puts the keyboard away — it never taps what's under
+    //  it: Haris 2026-11-04, a standard)
+    KeyboardShield.attach(p)
     p.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     p.light = statusStyle == .darkContent
     let under: UIView? = taskPages.last
