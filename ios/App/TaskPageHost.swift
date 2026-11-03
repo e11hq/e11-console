@@ -685,7 +685,7 @@ extension Main {
     if let u = Main.fileLinks[path] { put(u); return toast("Link copied") }
     serverTask.request("/api/flink", body: ["path": path]) { j in
       if (j?["ok"] as? Bool) == true, let u = j?["url"] as? String { Main.fileLinks[path] = u; put(u); toast("Link copied") }
-      else { put(nil); toast((j?["error"] as? String).map { "No link — copied as text" } ?? "Copied") }
+      else { put(nil); toast((j?["error"] as? String).map { _ in "No link — copied as text" } ?? "Copied") }
     }
   }
   // a Client Assets folder's link (not "Files" itself): the folder as it is now, for anyone (Haris 2026-11-03)
