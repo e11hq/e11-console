@@ -799,7 +799,10 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // the list at its end (or too short to scroll), Home not searching, no toast beside the + — the motto shows
   private func showMotto() {
     let end = max(-scroll.contentInset.top, scroll.contentSize.height + scroll.contentInset.bottom - scroll.bounds.height)
-    let want = !searching && toastView == nil && scroll.contentOffset.y >= end - 2
+    // (a list that fits on the screen — half a page, nothing to scroll for: it shows at once, not only after a
+    //  scroll; Haris 2026-11-03)
+    let fits = scroll.contentSize.height + scroll.contentInset.top <= scroll.bounds.height + 1
+    let want = !searching && toastView == nil && (fits || scroll.contentOffset.y >= end - 2)
     guard want != mottoOn else { return }
     mottoOn = want
     UIView.animate(withDuration: 0.2, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) { self.motto.alpha = want ? 1 : 0 }
