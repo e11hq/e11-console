@@ -383,10 +383,21 @@ export function createFiles(root) {
   // photo). Haris 2026-11-03 ("the bg was there but the large preview was coming cut, growing down — maybe it's made every
   // time"): it was, for some — a copy that came out no smaller than the photo was thrown away and made again on every
   // open while the whole photo was sent. Now:
-  //  • JPEG unless the picture has see-through parts (then PNG) — a PNG design export made a PNG copy as heavy as itself;
+  //  • always JPEG — a preview is only to look at (Haris 2026-11-03); a see-through picture (a logo) is filled behind with
+  //    white, or with dark grey when what's on it is light (a white logo), so it still shows;
   //  • a copy no smaller is remembered as such (<key>.same), never made again — the photo itself is sent;
   //  • HEIC (iPhone photos) always gets its JPEG copy: browsers can't show HEIC (the empty previews).
-  const alphaOf = new Map();
+  const alphaOf = new Map(), fillOf = new Map();
+  // (one number from a picture: ffmpeg scales it down to a single grey pixel)
+  const grey = (args) => new Promise((ok) => execFile('ffmpeg', ['-v', 'error', ...args, '-frames:v', '1', '-f', 'rawvideo', '-'], { timeout: 15000, encoding: 'buffer' }, (err, out) => ok(err || !out || !out.length ? null : out[0])));
+  // (what to fill behind a see-through picture: how light is what's on it — its colour over black, over how much of it
+  //  is there)
+  async function fillFor(full) {
+    const a = await grey(['-i', full, '-vf', 'format=rgba,alphaextract,scale=1:1:flags=area,format=gray']);
+    const b = await grey(['-i', full, '-filter_complex', 'color=c=black:s=16x16[c];[0:v]format=rgba[fg];[c][fg]scale2ref[bg][f2];[bg][f2]overlay=shortest=1:format=auto,scale=1:1:flags=area,format=gray']);
+    if (!a || b == null) return '0xffffff';
+    return (b / a) * 255 > 150 ? '0x1c1c1e' : '0xffffff';
+  }
   const hasAlpha = (full) => new Promise((ok) => execFile('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=pix_fmt', '-of', 'csv=p=0', full], { timeout: 10000 },
     (err, out) => ok(!err && /^(rgba|bgra|argb|abgr|ya|yuva|gbrap|pal8)/.test(String(out).trim()))));
   async function makeSized(relPath, want) {
@@ -395,27 +406,38 @@ export function createFiles(root) {
     const ext = full.split('.').pop().toLowerCase();
     const w = SIZES.find((x) => x >= Number(want)) || 1280;
     const heic = ext === 'heic' || ext === 'heif';
-    if (!IMAGES.includes(ext) || ext === 'svg' || (st.size < 60000 && !heic)) return null;
+    // (a small JPEG is its own preview; a small PNG / GIF too unless it's see-through — then it gets its filled JPEG)
+    if (!IMAGES.includes(ext) || ext === 'svg') return null;
+    if (st.size < 60000 && !heic) {
+      if (!['png', 'gif', 'webp'].includes(ext)) return null;
+      if (!alphaOf.has(relPath)) alphaOf.set(relPath, await hasAlpha(full));
+      if (!alphaOf.get(relPath)) return null;
+    }
     const key = crypto.createHash('sha1').update(relPath + '|' + st.size + '|' + st.mtimeMs).digest('hex').slice(0, 20);
     const dir = resolve('.thumbs/_sized');
     const same = path.join(dir, `${key}-${w}.same`);
     if (fs.existsSync(same)) return null;
-    for (const e of ['jpg', 'png']) { const o = path.join(dir, `${key}-${w}.${e}`); if (fs.existsSync(o)) return o; }
+    { const o = path.join(dir, `${key}-${w}.jpg`); if (fs.existsSync(o)) return o; }   // (an older PNG copy: made again as JPEG)
     const job = `${key}-${w}`;
     if (!sizing.has(job)) {
       fs.mkdirSync(dir, { recursive: true });
       sizing.set(job, sizingSlot().then(async () => {
         let alpha = false;
         if (['png', 'gif', 'webp'].includes(ext)) { if (!alphaOf.has(relPath)) alphaOf.set(relPath, await hasAlpha(full)); alpha = alphaOf.get(relPath); }
-        const outExt = alpha ? 'png' : 'jpg';
-        const out = path.join(dir, `${job}.${outExt}`), tmp = out + '.tmp.' + outExt;
-        const ok = await run('ffmpeg', ['-y', '-v', 'error', '-i', full, '-frames:v', '1', '-vf', `scale='min(${w},iw)':-2`, ...(outExt === 'jpg' ? ['-q:v', '4'] : []), tmp], 30000);
-        if (ok && fs.existsSync(tmp) && (heic || fs.statSync(tmp).size < st.size)) fs.renameSync(tmp, out);
+        if (alpha && !fillOf.has(relPath)) fillOf.set(relPath, await fillFor(full));
+        const out = path.join(dir, `${job}.jpg`), tmp = out + '.tmp.jpg';
+        const sc = `scale='min(${w},iw)':-2`;
+        const draw = alpha
+          ? ['-filter_complex', `[0:v]${sc},format=rgba[fg];color=c=${fillOf.get(relPath)}:s=16x16[c];[c][fg]scale2ref[bg][f2];[bg][f2]overlay=shortest=1:format=auto,format=yuvj420p`]
+          : ['-vf', sc];
+        let ok = await run('ffmpeg', ['-y', '-v', 'error', '-i', full, '-frames:v', '1', ...draw, '-q:v', '4', tmp], 30000);
+        if (!ok && alpha) ok = await run('ffmpeg', ['-y', '-v', 'error', '-i', full, '-frames:v', '1', '-vf', sc, '-q:v', '4', tmp], 30000);
+        if (ok && fs.existsSync(tmp) && (heic || alpha || fs.statSync(tmp).size < st.size)) fs.renameSync(tmp, out);
         else { fs.rmSync(tmp, { force: true }); if (ok) fs.writeFileSync(same, ''); }
       }).catch(() => {}).finally(() => { sizingDone(); sizing.delete(job); }));
     }
     await sizing.get(job);
-    for (const e of ['jpg', 'png']) { const o = path.join(dir, `${job}.${e}`); if (fs.existsSync(o)) return o; }
+    { const o = path.join(dir, `${job}.jpg`); if (fs.existsSync(o)) return o; }
     return null;
   }
   async function serveSized(req, res, relPath, want) {
