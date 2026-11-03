@@ -22,10 +22,11 @@ import UIKit
 // a section's title above its group (iPhone Settings': small capitals, grey)
 final class SetHead: UIView, HomeBlock {
   let label = UILabel()
+  var first = false   // (the first thing on a page under Me: just under the bar — Haris 2026-11-03, too much room on top)
   override init(frame: CGRect) { super.init(frame: frame); label.font = .systemFont(ofSize: 13); label.textColor = .secondaryLabel; addSubview(label) }
   required init?(coder: NSCoder) { fatalError() }
   func set(_ t: String) { label.text = t.uppercased() }
-  func blockHeight(_ W: CGFloat) -> CGFloat { 44 }
+  func blockHeight(_ W: CGFloat) -> CGFloat { first ? 24 : (label.text ?? "").isEmpty ? 20 : 44 }
   override func layoutSubviews() { super.layoutSubviews(); label.frame = CGRect(x: 36, y: bounds.height - 25, width: bounds.width - 72, height: 18) }
 }
 
@@ -305,7 +306,8 @@ final class ThemeBlock: UIView, HomeBlock {
     times.isHidden = !showTimes; timesSub.isHidden = !showTimes; sep2.isHidden = !showTimes
     setNeedsLayout()
   }
-  func blockHeight(_ W: CGFloat) -> CGFloat { 236 + 52 + (mode == "auto" ? 62 : 0) }
+  func blockHeight(_ W: CGFloat) -> CGFloat { 236 + 52 + (mode == "auto" ? 12 + 22 + 2 + subH(W) + 12 : 0) }
+  private func subH(_ W: CGFloat) -> CGFloat { ceil(timesSub.sizeThatFits(CGSize(width: W - 64, height: 200)).height) }
   override func layoutSubviews() {
     super.layoutSubviews()
     let W = bounds.width, px = 1 / max(1, traitCollection.displayScale)
@@ -324,8 +326,9 @@ final class ThemeBlock: UIView, HomeBlock {
     autoName.frame = CGRect(x: 16, y: 236, width: cw - 32 - s.width, height: 52)
     sw.frame = CGRect(x: cw - 16 - s.width, y: 236 + (52 - s.height) / 2, width: s.width, height: s.height)
     sep2.frame = CGRect(x: 16, y: 288 - px / 2, width: cw - 16, height: px)
-    times.frame = CGRect(x: 16, y: 296, width: cw - 32, height: 22)
-    timesSub.frame = CGRect(x: 16, y: 318, width: cw - 32, height: 34)
+    // (the line and the grey one under it close together, as a Settings row's two lines — Haris 2026-11-03)
+    times.frame = CGRect(x: 16, y: 288 + 12, width: cw - 32, height: 22)
+    timesSub.frame = CGRect(x: 16, y: times.frame.maxY + 2, width: cw - 32, height: subH(W))
   }
 }
 
@@ -378,10 +381,13 @@ final class InfoCard: UIView, HomeBlock {
     setNeedsLayout()
   }
   private func heightOf(_ v: (UIView, CGFloat), _ w: CGFloat) -> CGFloat { v.1 >= 0 ? v.1 : ceil((v.0 as? UILabel)?.sizeThatFits(CGSize(width: w, height: 800)).height ?? 0) + 8 }
-  func blockHeight(_ W: CGFloat) -> CGFloat { views.isEmpty ? 0 : views.reduce(28) { $0 + heightOf($1, W - 64) } }
+  // (the room under it, as between Settings' groups — cards one after another were stuck together, Haris 2026-11-03)
+  static let gap: CGFloat = 20
+  private func cardH(_ W: CGFloat) -> CGFloat { views.isEmpty ? 0 : views.reduce(28) { $0 + heightOf($1, W - 64) } }
+  func blockHeight(_ W: CGFloat) -> CGFloat { views.isEmpty ? 0 : cardH(W) + InfoCard.gap }
   private func layoutCard() {
     let W = bounds.width, w = W - 64
-    card.frame = CGRect(x: 16, y: 0, width: W - 32, height: blockHeight(W))
+    card.frame = CGRect(x: 16, y: 0, width: W - 32, height: cardH(W))
     var y: CGFloat = 14
     let px = 1 / max(1, traitCollection.displayScale)
     for (i, v) in views.enumerated() {
@@ -611,6 +617,18 @@ final class MemberHead: UIView, HomeBlock {
 
 // ---------- the screens ----------
 
+// (a tap anywhere but in a text box puts the keyboard away)
+final class KeyboardAway: NSObject, UIGestureRecognizerDelegate {
+  static let shared = KeyboardAway()
+  @objc func tapped(_ g: UITapGestureRecognizer) { g.view?.endEditing(true) }
+  func gestureRecognizer(_ g: UIGestureRecognizer, shouldReceive t: UITouch) -> Bool {
+    var v = t.view
+    while let x = v { if x is UITextField || x is UITextView { return false }; v = x.superview }
+    return true
+  }
+  func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith o: UIGestureRecognizer) -> Bool { true }
+}
+
 final class MeCtl {
   private unowned let main: Main
   init(_ m: Main) { main = m }
@@ -703,6 +721,9 @@ final class MeCtl {
     h.assetsMenu = { [] }
     h.cornerShared = true
     h.onCorner = { [weak self] in self?.main.updateCorner() }
+    // (a tap anywhere puts the keyboard away — Team members' search; taps still reach what's under the finger)
+    let tap = UITapGestureRecognizer(target: KeyboardAway.shared, action: #selector(KeyboardAway.tapped(_:))); tap.cancelsTouchesInView = false; tap.delegate = KeyboardAway.shared
+    h.addGestureRecognizer(tap)
     main.view.insertSubview(h, belowSubview: main.tabBar)
     return Screen(h: h, kind: kind, id: id)
   }
@@ -894,7 +915,6 @@ final class MeCtl {
       if let v = model["version"] as? String, !v.isEmpty { out.append(foot(h, "ver", v, centered: true)) }
     case "appearance":
       h.drawAssetsBar(name: "Appearance", sub: "", logo: nil, rgb: nil, ini: nil, showLogo: false)
-      out.append(head(h, "ap", "Appearance"))
       let tb = part(h, "theme") { ThemeBlock() }
       tb.onPick = { [weak self] m in self?.send(["ev": "theme", "mode": m]) }
       tb.set(mode: model["theme"] as? String ?? "auto", now: model["themeNow"] as? String ?? "light", times: model["times"] as? String ?? "", look: L)
@@ -951,8 +971,9 @@ final class MeCtl {
         imp.set([.title("square.and.arrow.down", "Move data from the Mac app"),
                   .note("Choose e11-data.json from the “E11 Console Data” folder on the Mac. Tasks, clients, comments, people, notifications and client assets are added to the server."),
                   .button("Choose e11-data.json…", false, true, { [weak self] in self?.send(["ev": "import"]) })], sig: "imp", look: L)
-        out.append(head(h, "imp", "")); out.append(imp)
+        out.append(imp)
       }
+      // (What's new right under the cards' own gap)
       out.append(head(h, "wn", "What’s new"))
       let notes = part(h, "notes") { NotesBox() }
       let n = (about["notes"] as? [String: Any]) ?? [:]
@@ -974,6 +995,8 @@ final class MeCtl {
       memberBlocks(h, s.id ?? "", &out)
     default: break
     }
+    // (a section title first on the page, or right after a card's own gap: the short one)
+    for (i, v) in out.enumerated() { if let sh = v as? SetHead { sh.first = s.kind != "me" && (i == 0 || out[i - 1] is InfoCard) } }
     h.setContent(out)
   }
   // a switch the page may not change (Face ID asked and cancelled): back as the page has it, a moment later
