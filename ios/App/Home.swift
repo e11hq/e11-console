@@ -50,9 +50,31 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }
   // (it reaches below the bar only as the line comes in — at the top of a page the big title stays clear; not while My
   //  Tasks' filters are stuck: that firm frost ends at the line)
+  // THE FROST'S HEIGHT, SMOOTH (Haris 2026-11-04, to try — "if it won't work we revert"): iPhone measures only FrostReach
+  // (not the bar's own row, whose small title sliding in pulled the frost's edge with it), and its height glides to where
+  // it should be — the bar; under stuck search / filters too — in about a quarter of a second, never a jump.
+  private var reachH: CGFloat = -1, reachTo: CGFloat = 0, reachLink: CADisplayLink?, reachLast: CFTimeInterval = 0
   private func placeReach() {
+    let to = topBar.frame.height + (!softFrost || searching ? 0 : FrostReach.extra * reachK)
+    reachTo = to
+    if reachH < 0 || bounds.width != frostReach.frame.width || window == nil { reachH = to; setReach(to); return }
+    if abs(to - reachH) < 0.5 { if reachLink == nil { setReach(to) }; return }
+    if reachLink == nil {
+      reachLast = CACurrentMediaTime()
+      let l = CADisplayLink(target: self, selector: #selector(reachTick))
+      if #available(iOS 15.0, *) { l.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120) }
+      l.add(to: .main, forMode: .common); reachLink = l
+    }
+  }
+  @objc private func reachTick() {
+    let now = CACurrentMediaTime(), dt = CGFloat(min(now - reachLast, 1.0 / 30)); reachLast = now
+    reachH += (reachTo - reachH) * (1 - exp(-dt / 0.06))   // (≈ 0.25 s to settle, eased out)
+    if abs(reachTo - reachH) < 0.5 { reachH = reachTo; reachLink?.invalidate(); reachLink = nil }
+    setReach(reachH)
+  }
+  private func setReach(_ h: CGFloat) {
     CATransaction.begin(); CATransaction.setDisableActions(true)
-    frostReach.frame = CGRect(x: 0, y: 0, width: bounds.width, height: topBar.frame.height + (!softFrost || searching ? 0 : FrostReach.extra * reachK))
+    frostReach.frame = CGRect(x: 0, y: 0, width: bounds.width, height: h)
     CATransaction.commit()
   }
   /* Mail's own measures (Haris, 2026-10-31, from his Mail screenshots): the bar's buttons 44 pt, 16 from the right
@@ -152,9 +174,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       blur.isHidden = true
       let i = UIScrollEdgeElementContainerInteraction()
       i.scrollView = scroll; i.edge = .top
-      // (the bar's own row tells iPhone how far down the frost goes — FrostReach alone left it only as tall as the status
-      //  bar: Haris 2026-11-03, build 1361)
-      topBar.addInteraction(i)
+      // (iPhone measures FrostReach alone — with something inside it this time: empty, in 1361, it left the frost only as
+      //  tall as the status bar. Back: topBar.addInteraction(i) here, as in 1363.)
       edgeHook = i
       frostReach.attach(scroll, in: self, below: topBar)
       // (iPhone's soft frost — Haris 2026-11-03: back to it, and locked)
@@ -2315,7 +2336,11 @@ final class FrostReach: UIView {
       let i = UIScrollEdgeElementContainerInteraction(); i.scrollView = scroll; i.edge = .top
       addInteraction(i); hook = i
     }
+    // (something for iPhone to measure: the frost reaches as far as what's in it)
+    fill.backgroundColor = UIColor.white.withAlphaComponent(0.001); fill.isUserInteractionEnabled = false
+    fill.autoresizingMask = [.flexibleWidth, .flexibleHeight]; fill.frame = bounds; addSubview(fill)
   }
+  private let fill = UIView()
   func follow(_ scroll: UIScrollView) {
     if #available(iOS 26.0, *), let i = hook as? UIScrollEdgeElementContainerInteraction, i.scrollView !== scroll { i.scrollView = scroll }
   }
