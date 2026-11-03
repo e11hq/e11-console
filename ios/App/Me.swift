@@ -1348,11 +1348,13 @@ final class MeCtl {
     // (Active ↔ Past: the other list there at once, as iPhone's own segmented lists — nothing slides into place;
     //  the note under it slid down, Haris 2026-11-03)
     seg.onPick = { [weak self, weak h] i in guard let self = self, let h = h else { return }; self.teamTab = i; UIView.performWithoutAnimation { self.blocks(h); h.setNeedsLayout(); h.layoutIfNeeded() } }
-    out.append(seg)
     let find = part(h, "find") { AssetsFind() }
     find.field.placeholder = "Search people"
     find.onChange = { [weak self, weak h] q in guard let self = self, let h = h else { return }; self.teamQ = q; self.blocks(h); h.setNeedsLayout() }
-    out.append(find)
+    // (Active / Past and the search stuck under the bar once they reach it — the standard)
+    let stack = part(h, "pin") { PinStack() }
+    stack.set([seg, find])
+    if h.pinHead !== stack { h.pinHead = stack }
     let norm = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
     let q = norm(teamQ.trimmingCharacters(in: .whitespaces))
     let fits = { (p: [String: Any]) -> Bool in q.isEmpty || norm("\(p["name"] ?? "") \(p["email"] ?? "") \(p["role"] ?? "")").contains(q) }

@@ -90,6 +90,7 @@ final class FeedLoader {
 }
 
 final class CommentsFeed: UIView, UIScrollViewDelegate {
+  private var frostWatch: FrostWatch?
   let taskId: String
   let thread: String?
   var onAct: (([String: Any]) -> Void)?             // react / deleteComment (the server's)
@@ -143,7 +144,7 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
     let tapAway = UITapGestureRecognizer(target: self, action: #selector(tappedList)); tapAway.cancelsTouchesInView = false
     scroll.addGestureRecognizer(tapAway)
     addSubview(scroll); scroll.addSubview(content)
-    if #available(iOS 26.0, *) { scroll.topEdgeEffect.style = .soft }
+    if #available(iOS 26.0, *) { scroll.topEdgeEffect.style = .hard; frostWatch = FrostWatch(scroll) }   // (the Inbox's frost, under the task page's stuck Details · Comments)
     // the ↓ button / "N new comments" pill: glass, just above the comment box
     jumpFx.isUserInteractionEnabled = false; jumpFx.clipsToBounds = true
     if #available(iOS 26.0, *) { jumpFx.effect = UIGlassEffect(style: .regular) } else { jumpFx.effect = UIBlurEffect(style: .systemThinMaterial) }

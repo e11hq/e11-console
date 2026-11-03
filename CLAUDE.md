@@ -43,16 +43,20 @@ line — under stuck search / filters too — from the very first moment, and en
 edge). Never iPhone's own safe-area adjusting (`automaticallyAdjustsScrollIndicatorInsets = false`). Every new page too.
 
 **A page with its name in the middle of the bar (a client's, Client Assets, Me's pages…), everywhere (Haris, 2026-11-03):**
-only that centred name — Home's small title never comes in over it — and **no line under the bar** (the frost alone).
-Home, My Tasks and the Inbox keep their big → small title and the line. Every new such page too.
+only that centred name — Home's small title never comes in over it.
 
-**The frost bar — LOCKED (Haris, 2026-11-03: "revert the frost bar to how it was and lock it"):** on every native screen
-the bar's frost is iPhone's own **soft** scroll-edge frost (`topEdgeEffect.style = .soft`), as up to build 1331; only
-My Tasks' tabs and filters stuck under the bar use the firm one (`.hard`) while stuck. (Tried and dropped the same day: the
-firm frost everywhere, builds 1339 and 1343.) Its strength matches Mail's (Haris 2026-11-03, measured from his screenshots): an invisible `FrostReach`
-view joins the frost and reaches 20 pt below the bar as the line comes in, so the strong part covers the whole bar. **Kept and locked as it is (Haris 2026-11-03, build 1345):** a light frost shows ~20 pt below the line —
-iPhone's soft frost can't be cut at the line; don't shorten it or switch to the firm one without Haris. The switch-over (big title → small title, Mail's timings) is unchanged and
-locked too. Don't change either without Haris. Every new native screen uses HomeView's bar.
+**The frost bar — LOCKED (Haris, 2026-11-03: "all pages get the Inbox frost bar except…"):** two kinds, on every native page
+now and later (`HomeView.applyFrost`, `Frost`, `FrostWatch` in Home.swift):
+- **The Inbox's frost** — iPhone's **firm** scroll-edge frost (`.hard`), even down to the line, **with the line** — on big-title
+  pages (Home, My Tasks, Inbox, Clients, Me) and on every page with something stuck under the bar (Trash, Team members, the
+  task page with Details · Comments, comments).
+- **The soft frost, as Home had it up to 2026-11-03** — iPhone's **soft** frost as strong as Mail's (`FrostReach`, ~20 pt
+  below the bar), **no line** — on pages with their name in the middle and nothing stuck (a client's page, Client Assets
+  and its folders, My profile, About, Appearance, Shortcuts, a team member).
+- Both: **nothing at the top of a page**; they come in once something is under the bar (the firm one fades in where iPhone
+  lets it, else it just comes on). A list placed again without scrolling (a category switched back) asks the frost again at
+  once (`Frost.nudge`). The switch-over (big title → small title, Mail's timings) is unchanged and locked too.
+- Don't change any of it without Haris. Every new native screen uses HomeView's bar.
 
 **TestFlight only on Haris's yes (Haris, 2026-11-03):** "publish, publish app build" builds, self-tests and signs the
 iPhone app, then keeps it on his Mac (ios.yml `send: ask`, the default). When a build has finished, ask Haris; only on

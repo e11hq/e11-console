@@ -27,11 +27,29 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private var edgeHook: AnyObject?
   private let frostReach = FrostReach()   // (the soft frost's area reaching a little below the bar, as Mail's)
   private var reachK: CGFloat = 0
+  // THE FROST BAR — LOCKED (Haris 2026-11-03): two kinds of page.
+  //  • the soft one (iPhone's soft frost as strong as Mail's — FrostReach — and no line): a page with its name in the middle
+  //    of the bar and nothing stuck under it (a client's page, Client Assets, My profile, About…);
+  //  • the Inbox's (iPhone's firm frost, even down to the line, and the line): every other page — big titles (Home, My Tasks,
+  //    Inbox, Clients, Me) and pages with search / filters stuck under the bar (Trash, Team members, the task page).
+  //  Both: nothing at the top of a page; they come in once something is under the bar (the firm one fades in where iPhone
+  //  lets it).
+  var softFrost: Bool { pageBar && pinHead == nil }
+  private var underBar: Bool { pinned || dLine > 0.001 || (pageBar && scroll.contentOffset.y > -scroll.contentInset.top + 0.5) }
+  private func applyFrost() {
+    guard #available(iOS 26.0, *) else { return }
+    let style: UIScrollEdgeEffect.Style = softFrost ? .soft : .hard
+    if scroll.topEdgeEffect.style != style { scroll.topEdgeEffect.style = style }
+    if softFrost { if scroll.topEdgeEffect.isHidden { scroll.topEdgeEffect.isHidden = false } } else { Frost.show(scroll, underBar || searching) }
+    topLine.alpha = searching || softFrost ? 0 : pageBar ? (underBar ? 1 : 0) : dLine
+    reachK = softFrost ? (underBar ? 1 : 0) : 0
+    placeReach()
+  }
   // (it reaches below the bar only as the line comes in — at the top of a page the big title stays clear; not while My
   //  Tasks' filters are stuck: that firm frost ends at the line)
   private func placeReach() {
     CATransaction.begin(); CATransaction.setDisableActions(true)
-    frostReach.frame = CGRect(x: 0, y: 0, width: bounds.width, height: topBar.frame.height + ((pinned && pinHead == nil) || searching ? 0 : FrostReach.extra * reachK))
+    frostReach.frame = CGRect(x: 0, y: 0, width: bounds.width, height: topBar.frame.height + (!softFrost || searching ? 0 : FrostReach.extra * reachK))
     CATransaction.commit()
   }
   /* Mail's own measures (Haris, 2026-10-31, from his Mail screenshots): the bar's buttons 44 pt, 16 from the right
@@ -669,6 +687,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     switching = true
     drawInbox(m)
     switching = false
+    if #available(iOS 26.0, *) { DispatchQueue.main.async { [weak self] in guard let self = self else { return }; Frost.nudge(self.scroll); self.applyFrost() } }
     send(["ev": "tab", "tab": k])
   }
   private func drawInbox(_ model: [String: Any]) {
@@ -957,8 +976,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     fade(sub).set(blur: 0, alpha: 1 - ease(0, 0.8, dBig), dy: 0, trait: tr)
     if #available(iOS 26.0, *) {
       // (no line under the bar on a page with its name in the middle — the standard, Haris 2026-11-03)
-      topLine.alpha = pageBar ? 0 : dLine
-      reachK = dLine; placeReach()
+      applyFrost()
     } else { blur.alpha = dT }
   }
   // (Search's end, a self-test, a new layout: everything where the scroll says, at once)
@@ -1001,18 +1019,10 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if !searching { followScroll() }
     if #available(iOS 26.0, *) {
       if let i = edgeHook as? UIScrollEdgeElementContainerInteraction { let want: UIScrollView = searching ? results : scroll; if i.scrollView !== want { i.scrollView = want }; frostReach.follow(want) }
-      // (not while My Tasks' filters are stuck: that firm frost ends at the line)
-      placeReach()
-      // (My Tasks' tabs and filters stuck under the bar: iPhone's firmer frost, so the cards don't show through between
-      //  them — the soft one fades out half way down them; Apple's own advice for things pinned under a bar)
-      if scroll.topEdgeEffect.isHidden { scroll.topEdgeEffect.isHidden = false }
-      // (only My Tasks' own tabs and filters: a page's stuck search / filters keep the soft frost — one style, Haris 2026-11-03)
-      let style: UIScrollEdgeEffect.Style = pinned && pinHead == nil ? .hard : .soft
-      if scroll.topEdgeEffect.style != style { scroll.topEdgeEffect.style = style }
+      applyFrost()
       // (one pixel, as Mail's)
       let px = 1 / max(1, traitCollection.displayScale)
       topLine.frame = CGRect(x: 0, y: barH - px, width: W, height: px)
-      if searching { topLine.alpha = 0 }
     } else {
       blur.frame = CGRect(x: 0, y: 0, width: W, height: barH + 14)
       CATransaction.begin(); CATransaction.setDisableActions(true)
@@ -2232,5 +2242,29 @@ final class FrostReach: UIView {
   }
   func follow(_ scroll: UIScrollView) {
     if #available(iOS 26.0, *), let i = hook as? UIScrollEdgeElementContainerInteraction, i.scrollView !== scroll { i.scrollView = scroll }
+  }
+}
+
+// The firm frost (the Inbox's) only once something is under the bar — at the top of a page, nothing; fading in and out
+// where iPhone lets it (Haris 2026-11-03)
+enum Frost {
+  @available(iOS 26.0, *)
+  static func show(_ s: UIScrollView, _ on: Bool) {
+    if s.topEdgeEffect.isHidden == !on { return }
+    UIView.animate(withDuration: 0.2, delay: 0, options: [.allowUserInteraction, .beginFromCurrentState, .curveEaseOut]) { s.topEdgeEffect.isHidden = !on }
+  }
+  // (a list placed again without scrolling — a category switched back — the frost asked again at once)
+  @available(iOS 26.0, *)
+  static func nudge(_ s: UIScrollView) { let o = s.contentOffset; s.contentOffset = CGPoint(x: o.x, y: o.y + 0.5); s.contentOffset = o }
+}
+// (for a page whose bar has no big title: the frost the moment the page has scrolled under its bar)
+final class FrostWatch: NSObject {
+  private var kv: [NSKeyValueObservation] = []
+  init(_ scroll: UIScrollView) {
+    super.init()
+    guard #available(iOS 26.0, *) else { return }
+    let f: (UIScrollView) -> Void = { s in Frost.show(s, s.contentOffset.y > -s.adjustedContentInset.top + 0.5) }
+    kv = [scroll.observe(\.contentOffset, options: [.initial, .new]) { s, _ in f(s) },
+          scroll.observe(\.contentInset, options: [.new]) { s, _ in f(s) }]
   }
 }

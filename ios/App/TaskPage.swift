@@ -59,6 +59,7 @@ final class ServerTask {
 }
 
 final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate, UITextViewDelegate {
+  private var frostWatch: FrostWatch?
   let taskId: String
   var model: [String: Any]?
   var people: [String: [String: Any]] = [:]
@@ -272,7 +273,8 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       barBox.addInteraction(i)
       edgeHook = i
       frostReach.attach(scroll, in: self, below: barBox)
-      scroll.topEdgeEffect.style = .soft
+      scroll.topEdgeEffect.style = .hard   // (the Inbox's frost: Details · Comments are stuck under the bar — Haris 2026-11-03)
+      frostWatch = FrostWatch(scroll)
     }
     back.setIcon("chevron.left", 19)
     back.accessibilityLabel = "Back"
@@ -341,7 +343,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let W = bounds.width, top = safeTop
     place(scroll)
     barBox.frame = CGRect(x: 0, y: 0, width: W, height: barBottom)
-    frostReach.frame = CGRect(x: 0, y: 0, width: W, height: barBottom + FrostReach.extra)
+    frostReach.frame = CGRect(x: 0, y: 0, width: W, height: barBottom)   // (the firm frost: no reach below the line)
     back.frame = CGRect(x: 16, y: top, width: 44, height: 44)
     more.frame = CGRect(x: W - 60, y: top, width: 44, height: 44)
     moreBtn.frame = more.frame
