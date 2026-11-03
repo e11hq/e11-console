@@ -115,7 +115,7 @@ a{color:inherit;text-decoration:none}button{font:inherit;color:inherit;backgroun
 .bg{position:fixed;inset:0;background:var(--wash);overflow:hidden}
 .bg img{position:absolute;inset:-8%;width:116%;height:116%;object-fit:cover;filter:blur(40px) saturate(1.3);opacity:0;transition:opacity .6s}.bg img.on{opacity:.95}
 .bg::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.22),rgba(0,0,0,.45))}
-.top{position:fixed;top:22px;left:28px;right:28px;display:flex;justify-content:space-between;align-items:center;color:#fff;z-index:3}
+.top{position:fixed;top:22px;left:40px;right:40px;display:flex;justify-content:space-between;align-items:center;color:#fff;z-index:3}
 .brand{display:flex;align-items:center;gap:12px}.brand svg{height:26px;width:auto}.brand svg path{fill:#fff}.brand span{font-size:10px;font-weight:700;letter-spacing:3px;opacity:.8}
 .pill{height:38px;padding:0 16px;border-radius:19px;background:rgba(255,255,255,.16);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);color:#fff;font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px;transition:background .2s}.pill:hover{background:rgba(255,255,255,.26)}
 .stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:84px 56px 56px 520px}
@@ -157,7 +157,7 @@ a{color:inherit;text-decoration:none}button{font:inherit;color:inherit;backgroun
 .toast{position:fixed;left:50%;bottom:34px;transform:translate(-50%,20px);opacity:0;background:rgba(20,20,22,.9);color:#fff;font-size:14px;font-weight:600;padding:11px 18px;border-radius:22px;transition:.3s;z-index:9;pointer-events:none}.toast.show{opacity:1;transform:translate(-50%,0)}
 @media (max-width:760px){html,body{overflow:auto}
  .stage{position:relative;padding:84px 16px 0;height:auto;min-height:0}.art{height:38vh}.art>img,.art>video{max-height:38vh}.nt{padding:26px 20px}.nt b{width:84px;height:96px;font-size:22px}
- .card{position:relative;left:auto;top:auto;transform:none;width:auto;margin:16px 12px calc(16px + env(safe-area-inset-bottom));max-height:none;animation:none}
+ .card{position:relative;left:auto;top:auto;transform:none;width:auto;margin:16px 16px calc(16px + env(safe-area-inset-bottom));max-height:none;animation:none}
  .top{position:absolute;top:16px;left:16px;right:16px}.pill .w{display:none}.pill{padding:0 11px}
  .list{overflow:visible}}
 </style></head><body>
