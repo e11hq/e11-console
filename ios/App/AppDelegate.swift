@@ -989,71 +989,41 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     default: return "circle"
     }
   }
-  // your photo found by the top corner while the Me tab has none of its own yet: the Me tab shows it too
-  func mePhotoFromHome(_ img: UIImage) {
-    guard let i = tabKeys.firstIndex(of: "me"), let item = tabBar.items?[i], !tabFetched else { return }   // (until the tab's own fetch has worked)
-    tabPhotoSrc[i] = img; keptTabPhoto = nil
+  // the Me tab: your photo (MePhoto — the same one as the top corner), with a ring when it's the open tab and the dot at its
+  // bottom right (green online, red offline); the plain icon only before anything of you is known
+  func paintMeTab() {
+    guard let i = tabKeys.firstIndex(of: "me"), let item = tabBar.items?[i] else { return }
+    guard let src = MePhoto.shared.picture(56) else { item.image = UIImage(systemName: symbol("me")); item.selectedImage = nil; return }
     let on = tabOnline[i] ?? netUp
-    item.image = roundPhoto(img, ring: nil, online: on)
-    item.selectedImage = roundPhoto(img, ring: tabBar.tintColor ?? .systemBlue, online: on)
-    if let d = img.jpegData(compressionQuality: 0.85) { DiskPics.put("me-photo", d) }
+    item.image = roundPhoto(src, ring: nil, online: on)
+    item.selectedImage = roundPhoto(src, ring: tabBar.tintColor ?? .systemBlue, online: on)
   }
-  private var keptTabPhoto: UIImage?, tabFetched = false
+  private var meWatched = false
   func setTabs(_ a: [String: Any]) {
-    if HomeView.onMePhoto == nil { HomeView.onMePhoto = { [weak self] img in self?.mePhotoFromHome(img) } }
+    if !meWatched {
+      meWatched = true
+      MePhoto.shared.fetch = { [weak self] u, done in self?.fetchPhoto(u, done) }
+      MePhoto.shared.watch { [weak self] in self?.paintMeTab() }
+    }
     let list = a["tabs"] as? [[String: Any]] ?? []
     let keys = list.map { $0["v"] as? String ?? "" }
     if keys != tabKeys || (tabBar.items?.count ?? 0) != keys.count {
       tabKeys = keys
       tabPhoto = [:]
       tabBadgeKey = [:]
-      let kept = DiskPics.get("me-photo").flatMap { UIImage(data: $0) }
       tabBar.items = list.enumerated().map { i, t in
-        let v = t["v"] as? String ?? ""
-        // (the Me tab: your photo kept on the phone at once, not the plain icon, until it's fetched again)
-        if t["photo"] != nil || t["photoUrl"] != nil, let k = kept {
-          tabPhotoSrc[i] = k; keptTabPhoto = k
-          let it = UITabBarItem(title: t["label"] as? String ?? "", image: roundPhoto(k, ring: nil, online: netUp), selectedImage: roundPhoto(k, ring: tabBar.tintColor ?? .systemBlue, online: netUp))
-          it.tag = i; return it
-        }
-        return UITabBarItem(title: t["label"] as? String ?? "", image: UIImage(systemName: symbol(v)), tag: i)
+        UITabBarItem(title: t["label"] as? String ?? "", image: UIImage(systemName: symbol(t["v"] as? String ?? "")), tag: i)
       }
     } else {
       for (i, t) in list.enumerated() { tabBar.items?[i].title = t["label"] as? String ?? "" }
     }
-    // the Me tab: the person's own picture (round, as drawn by the page), with a ring when it's the open tab
-    // (and a small dot at its bottom right: green online, red offline — Haris, 2026-10-31)
-    for (i, t) in list.enumerated() {
-      let online = (t["online"] as? Bool ?? true) && netUp
-      if let item = tabBar.items?[i], let src = tabPhotoSrc[i], tabOnline[i] != online, t["photo"] as? String == tabPhoto[i] {
-        tabOnline[i] = online
-        item.image = roundPhoto(src, ring: nil, online: online)
-        item.selectedImage = roundPhoto(src, ring: tabBar.tintColor ?? .systemBlue, online: online)
-      }
-      guard let ph = t["photo"] as? String, ph != tabPhoto[i], let item = tabBar.items?[i] else { continue }
-      tabPhoto[i] = ph
-      tabOnline[i] = online
-      let apply = { (src: UIImage) in
-        self.tabPhotoSrc[i] = src; self.keptTabPhoto = nil
-        // (kept on the phone, for both places your photo is — the Me tab and the top corner — so neither is ever empty
-        //  while it's fetched again; Haris 2026-11-02)
-        if let d = src.jpegData(compressionQuality: 0.85) { DiskPics.put("me-photo", d) }
-        for h in [self.homeIfMade, self.myTasksIfMade, self.inboxIfMade, self.clientsListIfMade].compactMap({ $0 }) { h.mePhotoKept(src) }
-        let on = self.tabOnline[i] ?? true
-        item.image = self.roundPhoto(src, ring: nil, online: on)
-        item.selectedImage = self.roundPhoto(src, ring: self.tabBar.tintColor ?? .systemBlue, online: on)
-      }
-      // the page's own drawing first (initials, or the picture), then the picture itself fetched here when there is one
-      if let comma = ph.firstIndex(of: ","), let data = Data(base64Encoded: String(ph[ph.index(after: comma)...])), let src = UIImage(data: data) { apply(src) }
-      // (not there — not signed in yet as the app starts, or no network: asked again a few times, rather than left empty)
-      if let s = t["photoUrl"] as? String, let url = URL(string: s) {
-        func ask(_ left: Int) { fetchPhoto(url) { img in
-          guard self.tabPhoto[i] == ph else { return }
-          if let img = img { self.tabFetched = true; apply(img) } else if left > 0 { DispatchQueue.main.asyncAfter(deadline: .now() + 4) { ask(left - 1) } }
-        } }
-        ask(4)
-      }
+    // the Me tab: your photo — the app's own (MePhoto), never the page's drawing of it (black when drawn before it had
+    // loaded — Haris 2026-11-03); the page only says where it is on the server and whether you're online
+    for (i, t) in list.enumerated() where (t["v"] as? String) == "me" {
+      tabOnline[i] = (t["online"] as? Bool ?? true) && netUp
+      MePhoto.shared.source(t["photoUrl"] as? String)
     }
+    paintMeTab()
     // counts sit on the icon's top-right corner, overlapping it a little (like an app icon's badge), drawn into the
     // icon itself: iOS's own tab badge sits further out
     lastTabs = a

@@ -207,7 +207,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     field.attributedPlaceholder = NSAttributedString(string: assets != nil ? "Search every client’s files" : "Search tasks, clients, people", attributes: [.foregroundColor: L.sub])
     field.keyboardAppearance = L.light ? .light : .dark
     hint.textColor = L.empty
-    meId = model["me"] as? String ?? ""; meChanged()
+    meId = model["me"] as? String ?? ""; watchMe(); meChanged()
     if var fc = fab.configuration {
       fc.background.backgroundColor = ToastCapsule.fill(L.light); fc.background.strokeColor = ToastCapsule.line(L.light); fc.background.strokeWidth = 1
       fc.baseForegroundColor = .label; fab.configuration = fc
@@ -364,29 +364,21 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   //  moment after it settled, and on coming back to the app: Haris 2026-11-02. A photo that's there isn't swapped for
   //  your initials while it's being fetched again.)
   private var meKey = ""
+  // your photo in the corner: MePhoto (the same one as the Me tab); the one Home's people have is offered to it
   private func meChanged() {
     let p = people[meId]
-    let photo = p?["photo"] as? String
-    if photo == nil, meKey.hasPrefix(meId + "|photo:"), me.image(for: .normal) != nil { return }
-    let key = meId + (photo.map { "|photo:\($0.count):\($0.suffix(24))" } ?? "|i:\(p?["initials"] as? String ?? "")")
+    if let own = NativeSheetVC.photo(p) { MePhoto.shared.offer(own) }
+    MePhoto.shared.who(p?["initials"] as? String, NativeSheetVC.color(p?["color"]))
+    let pic = MePhoto.shared.image
+    let key = "\(meId)|\(pic.map { "\(ObjectIdentifier($0).hashValue)" } ?? "-")|\(MePhoto.shared.initials ?? "")"
     if key == meKey, me.image(for: .normal) != nil { return }
     meKey = key
-    // (no picture of yours here yet: the one kept on the phone from the Me tab — never an empty circle; Haris 2026-11-02)
-    let own = NativeSheetVC.photo(p)
-    if let o = own { HomeView.onMePhoto?(o) }   // (the Me tab gets it too, when it has none — Haris 2026-11-02)
-    let pic = own ?? (keptMe ?? DiskPics.get("me-photo").flatMap { UIImage(data: $0) })
-    if photo == nil, pic != nil { meKey = meId + "|photo:kept" }
-    let img = roundPic(pic, initials: p?["initials"] as? String, color: NativeSheetVC.color(p?["color"]), size: 44)
+    guard let img = MePhoto.shared.picture(44) else { return }
     me.setImage(img, for: .normal)
     onCorner?()
   }
-  private var keptMe: UIImage?
-  static var onMePhoto: ((UIImage) -> Void)?
-  // your photo fetched for the Me tab: here too, when there's none of yours yet
-  func mePhotoKept(_ img: UIImage) {
-    keptMe = img
-    if NativeSheetVC.photo(people[meId]) == nil { meKey = ""; meChanged() }
-  }
+  private var meWatching = false
+  func watchMe() { guard !meWatching else { return }; meWatching = true; MePhoto.shared.watch { [weak self] in self?.meChanged() } }
 
   // ---------- My Tasks (26+): the same screen as a list — All / Done, the filter buttons and the filters that are on ----------
   // (the page says which buttons this person has and what's on: setFilters; taps go back as tab / filter / chip / reset)
