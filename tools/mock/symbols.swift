@@ -14,7 +14,9 @@ func rr(_ r: NSRect, _ rad: CGFloat, _ c: NSColor) { c.setFill(); NSBezierPath(r
 func sym(_ name: String, _ c: NSColor, _ size: CGFloat, center: NSPoint) {
   guard let base = NSImage(systemSymbolName: name, accessibilityDescription: nil) else { text("?", center.x - 6, center.y - 10, 18, .red); return }
   var cfg = NSImage.SymbolConfiguration(pointSize: size, weight: .semibold)
-  cfg = cfg.applying(NSImage.SymbolConfiguration(paletteColors: [c]))
+  // (two-tone where the symbol has two parts: the tick and the eyes' pupils in white)
+  let two = name == "checkmark.circle.fill"
+  cfg = cfg.applying(NSImage.SymbolConfiguration(paletteColors: two ? [.white, c] : [c]))
   let s = base.withSymbolConfiguration(cfg) ?? base
   let sz = s.size
   s.draw(in: NSRect(x: center.x - sz.width / 2, y: H - center.y - sz.height / 2, width: sz.width, height: sz.height))
