@@ -414,7 +414,13 @@ final class AssetsCtl {
   private var upBusy = false
 
   var top: HomeView? { stack.last.map { $0.h } }
-  var shown: HomeView? { guard let s = stack.last, !s.h.isHidden, !leaving else { return nil }; return s.h }
+  // the one the top buttons belong to: going back, already the one under it (it was nil then — for a moment the buttons
+  // were the Clients tab's under all of them, then this one's again: they faded out and in, Haris 2026-11-03 08:20)
+  var shown: HomeView? {
+    guard let s = stack.last, !s.h.isHidden else { return nil }
+    if leaving { return stack.count >= 2 ? stack[stack.count - 2].h : nil }
+    return s.h
+  }
   var isOpen: Bool { !stack.isEmpty }
   var screens: [HomeView] { stack.map { $0.h } }
 
