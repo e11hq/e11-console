@@ -1,0 +1,12 @@
+name: Symbols mockup (one-off)
+on:
+  push:
+    branches: [symbols-mockup]
+jobs:
+  draw:
+    runs-on: [self-hosted, macOS, ARM64]
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift tools/mock/symbols.swift "$RUNNER_TEMP/symbols.png"
+      - uses: actions/upload-artifact@v4
+        with: { name: symbols, path: "${{ runner.temp }}/symbols.png" }
