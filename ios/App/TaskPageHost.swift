@@ -225,12 +225,13 @@ extension Main {
     taskPan?.isEnabled = !taskPages.isEmpty || clientPageIfMade?.isHidden == false || (assetsCtl.isOpen && assetsCtl.top?.backable == true) || (meCtl.isOpen && meCtl.depth > 1)
   }
   func clientEdgePan(_ g: UIScreenEdgePanGestureRecognizer) {
-    guard let p = clientPageIfMade, !p.isHidden, let l = clientsListIfMade, clientsWanted else { return }
+    guard let p = clientPageIfMade, !p.isHidden, let l = clientUnder(), clientsWanted else { return }
     let W = view.bounds.width
     let x = max(0, g.translation(in: view).x)
     switch g.state {
     case .began:
       p.endEditing(true)
+      if clientFrom != nil { view.insertSubview(l, belowSubview: p) }   // (opened from another tab: that tab's screen under it)
       l.isHidden = false; l.transform = .identity   // (shown, in place, to see where its buttons are)
       clientPanFrom = (cornerTargetFor(p), cornerTargetFor(l))
       l.transform = CGAffineTransform(translationX: -W * 0.3, y: 0)
@@ -245,6 +246,7 @@ extension Main {
       if go {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         clientsOn = "list"
+        fromTabSelected()
         clientLeavingBySwipe(p, l)
         pageJS("window.__e11Clients && window.__e11Clients({ev:'back'})")
       } else {

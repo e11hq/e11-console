@@ -1604,7 +1604,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     UIView.animate(withDuration: 0.36, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
       snap?.transform = CGAffineTransform(translationX: W, y: 0); l.transform = .identity
     } completion: { _ in snap?.removeFromSuperview() }
-    if wasPage { pageJS("window.__e11Clients && window.__e11Clients({ev:'back'})") }
+    if wasPage { pageJS("window.__e11Clients && window.__e11Clients({ev:'list'})") }
     return true
   }
   lazy var assetsCtl = AssetsCtl(self)   // (Client Assets, the app's own — Assets.swift, shell 32)
@@ -1650,14 +1650,30 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     guard let p = clientPageIfMade, !p.isHidden, !clientLeaving else { return }
     clientLeaving = true
     let W = view.bounds.width
-    let l = clientsListIfMade
-    if let l = l, clientsWanted { l.isHidden = false; l.transform = CGAffineTransform(translationX: -W * 0.3, y: 0) }
+    let l = clientUnder()
+    if let l = l, clientsWanted || clientFrom != nil {
+      if clientFrom != nil { view.insertSubview(l, belowSubview: p); fromTabSelected() }
+      l.isHidden = false; l.transform = CGAffineTransform(translationX: -W * 0.3, y: 0)
+    }
     UIView.animate(withDuration: 0.36, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
       p.transform = CGAffineTransform(translationX: W, y: 0); l?.transform = .identity
     } completion: { _ in p.isHidden = true; p.transform = .identity; self.clientLeaving = false; self.edgePanOn(); self.updateCorner() }
     updateCorner()
   }
   var clientLeaving = false
+  // (a client's page opened from another tab — Home's search, …: what its ‹ and the edge swipe go back to, as history —
+  //  Haris 2026-11-03; nil: the list)
+  var clientFrom: String?
+  func clientUnder() -> HomeView? {
+    guard let f = clientFrom else { return clientsListIfMade }
+    return f == "home" || f == "today" ? homeIfMade : f == "mytasks" ? myTasksIfMade : f == "inbox" ? inboxIfMade : nil
+  }
+  // (that tab lit in the tab bar at once — the page says so too a moment later)
+  func fromTabSelected() {
+    guard let f = clientFrom else { return }
+    let key = f == "home" ? "today" : f
+    if let i = tabKeys.firstIndex(of: key), let item = tabBar.items?.first(where: { $0.tag == i }) { tabBar.selectedItem = item }
+  }
   // a client's sheet (held in the list): from the list as the copy has it; Admins' changes to the server, into the copy
   func clientSheet(_ id: String) {
     guard let list = serverClients.shown, (list["kind"] as? String) == "clients" else { return }
@@ -1732,7 +1748,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   func clientsCommand(_ a: [String: Any]) {
     defer { updateCorner() }
     guard let show = a["show"] as? Bool else { return }
-    if !show { clientsWanted = false; clientsListIfMade?.isHidden = true; clientPageIfMade?.isHidden = true; assetsCtl.closeIfFromClients(); edgePanOn(); return }
+    if !show { clientsWanted = false; clientsListIfMade?.isHidden = true; if !clientLeaving { clientPageIfMade?.isHidden = true }; assetsCtl.closeIfFromClients(); edgePanOn(); return }
     if !clientsWanted { clientsListIfMade?.clientsFresh() }   // (the tab coming back: Inactive clients closed again)
     clientsWanted = true
     clientsPageMe = a["me"] as? String
@@ -1746,9 +1762,11 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if !page && was == "client" {
       clientPageOut()
       s.query = "view=list"
+      clientFrom = nil
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in guard let self = self, self.clientsOn == "list" else { return }; self.serverClients.refresh() }
       return
     }
+    if page, !clientLeaving { clientFrom = (a["from"] as? String).flatMap { $0.isEmpty ? nil : $0 } } else if !page { clientFrom = nil }
     s.query = page ? "view=client&id=\((a["id"] as? String ?? "").addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "")&done=\((a["done"] as? Bool) == true ? 1 : 0)" : "view=list"
     if s.on, let m = s.shown, (m["kind"] as? String) == (page ? "client" : "clients"), !page || (m["id"] as? String) == (a["id"] as? String) { drawServerClients(m) }
     else if (page ? clientPageIfMade : clientsListIfMade)?.isHidden == false {

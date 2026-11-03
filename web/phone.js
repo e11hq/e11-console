@@ -2755,7 +2755,10 @@ const NativeClients = (() => {
     if (!on) return;
     let m = null;
     try {
-      m = visible() ? { show: true, view: ui.view === 'project' ? 'client' : 'list', id: ui.view === 'project' ? ui.projectId : '', done: ui.view === 'project' && !!ui.showDone[ui.projectId], me: currentUserId, light: document.documentElement.dataset.theme === 'light' } : null;
+      // (a client's page opened from somewhere else — Home's search, …: its ‹ goes back there, as history — Haris 2026-11-03)
+      const pv = ui.view === 'project' && typeof PageHistory !== 'undefined' && PageHistory.prev ? PageHistory.prev() : null;
+      const from = pv && pv.view !== 'projects' && pv.view !== 'project' ? pv.view : '';
+      m = visible() ? { show: true, view: ui.view === 'project' ? 'client' : 'list', id: ui.view === 'project' ? ui.projectId : '', from, done: ui.view === 'project' && !!ui.showDone[ui.projectId], me: currentUserId, light: document.documentElement.dataset.theme === 'light' } : null;
     } catch (e) { m = null; }
     if (!m) { if (shown) { shown = false; last = ''; call({ show: false }); } return; }
     const s = JSON.stringify(m);
@@ -2766,7 +2769,9 @@ const NativeClients = (() => {
   window.__e11Clients = (ev) => {
     if (!ev) return;
     if (ev.ev === 'client' && ev.id) { go('project', ev.id); sync(); return; }
-    if (ev.ev === 'back') { go('projects'); sync(); return; }
+    // (‹ / the edge swipe: back the way it came — the list, or Home's search, … ; the Clients tab again: the list)
+    if (ev.ev === 'back') { const pv = typeof PageHistory !== 'undefined' && PageHistory.prev ? PageHistory.prev() : null; if (pv && pv.view !== 'projects' && pv.view !== 'project') PageHistory.back(); else go('projects'); sync(); return; }
+    if (ev.ev === 'list') { go('projects'); sync(); return; }
     if (ev.ev === 'showDone') { ui.showDone[ui.projectId] = !ui.showDone[ui.projectId]; renderContent(); sync(); return; }
     if (ev.ev === 'folder' && ev.client) { openClient(ev.client, ev.folder || null); sync(); return; }
     if (ev.ev === 'assets' && ev.client) { openClient(ev.client); sync(); return; }
