@@ -16,59 +16,84 @@ protocol HomeBlock: UIView { func blockHeight(_ W: CGFloat) -> CGFloat }
 final class ClientsGroup: UIView, HomeBlock {
   var onOpen: ((String) -> Void)?
   var onHold: ((String) -> Void)?   // (touch and hold: its sheet — Admins change it, everyone else sees it)
-  var people: [String: [String: Any]] = [:] { didSet { if picsKey(oldValue) != picsKey(people) { rows.forEach { $0.paintAms(people) } } } }
-  private let box = UIView(), more = UIButton(type: .system)
-  private var rows: [ClientRow] = [], lines: [UIView] = []
+  var people: [String: [String: Any]] = [:] { didSet { if picsKey(oldValue) != picsKey(people) { (rows + offRows).forEach { $0.paintAms(people) } } } }
+  // the active clients in one rounded group; under it "Inactive clients · N" with a chevron — tapped, the inactive ones
+  // open in a rounded group of their own, the chevron turning (Haris 2026-11-03: closed whenever the list is made, the
+  // heading as it was)
+  private let box = UIView(), offBox = UIView(), more = UIButton(type: .system), chev = UIImageView()
+  private var rows: [ClientRow] = [], offRows: [ClientRow] = [], lines: [UIView] = [], offLines: [UIView] = []
   private var showInactive = false
   private var data: ([[String: Any]], [[String: Any]]) = ([], [])
   private var L = HomeLook(nil)
+  private var made: [String: ClientRow] = [:]
   override init(frame: CGRect) {
     super.init(frame: frame)
     accessibilityIdentifier = "clients"
-    box.layer.cornerRadius = 26; box.layer.cornerCurve = .continuous; box.clipsToBounds = true
-    addSubview(box)
+    for b in [box, offBox] { b.layer.cornerRadius = 26; b.layer.cornerCurve = .continuous; b.clipsToBounds = true; addSubview(b) }
     more.contentHorizontalAlignment = .leading
+    chev.image = UIImage(systemName: "chevron.right", withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .semibold))
+    chev.tintColor = .secondaryLabel; chev.contentMode = .center; chev.isUserInteractionEnabled = false
     more.addAction(UIAction { [weak self] _ in
       guard let self = self else { return }
       UISelectionFeedbackGenerator().selectionChanged()
-      self.showInactive.toggle(); self.set(self.data.0, self.data.1, look: self.L)
+      self.showInactive.toggle()
+      let opening = self.showInactive
+      self.set(self.data.0, self.data.1, look: self.L)
+      if opening { self.offRows.forEach { $0.alpha = 0 } }
+      UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
+        self.chev.transform = opening ? CGAffineTransform(rotationAngle: .pi / 2) : .identity
+      }
       (self.superview?.superview as? HomeView)?.relayout()
+      UIView.animate(withDuration: 0.25, delay: opening ? 0.1 : 0, options: [.curveEaseOut, .allowUserInteraction]) {
+        self.offRows.forEach { $0.alpha = opening ? 0.75 : 0 }
+      }
     }, for: .touchUpInside)
-    addSubview(more)
+    addSubview(more); addSubview(chev)
   }
   required init?(coder: NSCoder) { fatalError() }
+  // (closed again — the Clients tab coming back: it always starts closed)
+  func closeInactive() { guard showInactive else { return }; showInactive = false; chev.transform = .identity; set(data.0, data.1, look: L) }
+  // (each row kept by its client while it's there — only what changed is drawn again)
+  private func row(_ r: [String: Any], inactive: Bool, into b: UIView) -> ClientRow {
+    let id = r["id"] as? String ?? ""
+    let v = made[id] ?? { let x = ClientRow(); x.id = id; x.onTap = { [weak self] in self?.onOpen?(id) }; x.onHold = { [weak self] in self?.onHold?(id) }; _ = PressShrink.add(to: x); return x }()
+    v.set(r, look: L, inactive: inactive); v.paintAms(people)
+    if v.superview !== b { b.addSubview(v) }
+    return v
+  }
   func set(_ active: [[String: Any]], _ inactive: [[String: Any]], look: HomeLook) {
     data = (active, inactive); L = look
-    box.backgroundColor = L.card
-    let list = active + (showInactive ? inactive : [])
-    // (rows kept by client: a change redraws only what changed)
-    var keep: [String: ClientRow] = [:]; rows.forEach { keep[$0.id] = $0 }
-    rows = list.map { r in
-      let id = r["id"] as? String ?? ""
-      let v = keep.removeValue(forKey: id) ?? { let x = ClientRow(); x.id = id; x.onTap = { [weak self] in self?.onOpen?(id) }; x.onHold = { [weak self] in self?.onHold?(id) }; _ = PressShrink.add(to: x); return x }()
-      v.set(r, look: L, inactive: !active.contains { ($0["id"] as? String) == id }); v.paintAms(people)
-      if v.superview !== box { box.addSubview(v) }
-      return v
-    }
+    box.backgroundColor = L.card; offBox.backgroundColor = L.card
+    var keep = made; made = [:]
+    rows = active.map { r in let v = row(r, inactive: false, into: box); made[v.id] = v; keep[v.id] = nil; return v }
+    // (the inactive ones are made while open; closing, they stay in their group as it shrinks away)
+    offRows = (showInactive ? inactive : []).map { r in let v = row(r, inactive: true, into: offBox); made[v.id] = v; keep[v.id] = nil; return v }
+    if !showInactive { for v in keep.values where v.superview === offBox { made[v.id] = v; keep[v.id] = nil } }
     keep.values.forEach { $0.removeFromSuperview() }
-    lines.forEach { $0.removeFromSuperview() }
+    lines.forEach { $0.removeFromSuperview() }; offLines.forEach { $0.removeFromSuperview() }
     lines = rows.dropFirst().map { _ in let l = UIView(); l.backgroundColor = .separator; box.addSubview(l); return l }
-    more.isHidden = inactive.isEmpty
-    let t = (showInactive ? "Hide inactive clients" : "Inactive clients · \(inactive.count)")
-    more.setAttributedTitle(NSAttributedString(string: t, attributes: [.font: UIFont.systemFont(ofSize: 15), .foregroundColor: UIColor.secondaryLabel]), for: .normal)
+    offLines = offRows.dropFirst().map { _ in let l = UIView(); l.backgroundColor = .separator; offBox.addSubview(l); return l }
+    more.isHidden = inactive.isEmpty; chev.isHidden = inactive.isEmpty
+    more.setAttributedTitle(NSAttributedString(string: "Inactive clients · \(inactive.count)", attributes: [.font: UIFont.systemFont(ofSize: 15), .foregroundColor: UIColor.secondaryLabel]), for: .normal)
+    more.accessibilityLabel = "Inactive clients, \(inactive.count), \(showInactive ? "open" : "closed")"
     setNeedsLayout()
   }
-  func blockHeight(_ W: CGFloat) -> CGFloat { CGFloat(rows.count) * ClientRow.H + (more.isHidden ? 0 : 50) }
+  private var offH: CGFloat { showInactive ? CGFloat(offRows.count) * ClientRow.H + 6 : 0 }
+  func blockHeight(_ W: CGFloat) -> CGFloat { CGFloat(rows.count) * ClientRow.H + (more.isHidden ? 0 : 50 + offH) }
   override func layoutSubviews() {
     super.layoutSubviews()
-    let W = bounds.width
+    let W = bounds.width, px = 1 / max(1, traitCollection.displayScale)
     box.frame = CGRect(x: 16, y: 0, width: W - 32, height: CGFloat(rows.count) * ClientRow.H)
     box.isHidden = rows.isEmpty
     // (size and place without touching its shrink: a frame set on a shrunk row moved its insides)
     for (i, r) in rows.enumerated() { r.bounds = CGRect(x: 0, y: 0, width: box.bounds.width, height: ClientRow.H); r.center = CGPoint(x: box.bounds.width / 2, y: (CGFloat(i) + 0.5) * ClientRow.H) }
-    let px = 1 / max(1, traitCollection.displayScale)
     for (i, l) in lines.enumerated() { l.frame = CGRect(x: 69, y: CGFloat(i + 1) * ClientRow.H - px / 2, width: box.bounds.width - 69, height: px) }
     more.frame = CGRect(x: 36, y: box.frame.maxY + 6, width: W - 72, height: 44)
+    let tw = ceil(more.attributedTitle(for: .normal)?.size().width ?? 0)
+    chev.bounds = CGRect(x: 0, y: 0, width: 16, height: 16); chev.center = CGPoint(x: more.frame.minX + tw + 12, y: more.frame.midY)
+    offBox.frame = CGRect(x: 16, y: more.frame.maxY, width: W - 32, height: max(0, offH - 6))
+    for (i, r) in offRows.enumerated() { r.bounds = CGRect(x: 0, y: 0, width: offBox.bounds.width, height: ClientRow.H); r.center = CGPoint(x: offBox.bounds.width / 2, y: (CGFloat(i) + 0.5) * ClientRow.H) }
+    for (i, l) in offLines.enumerated() { l.frame = CGRect(x: 69, y: CGFloat(i + 1) * ClientRow.H - px / 2, width: offBox.bounds.width - 69, height: px) }
   }
 }
 

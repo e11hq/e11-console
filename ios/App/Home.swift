@@ -588,6 +588,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   var backFrame: CGRect { CGRect(x: 16, y: safeAreaInsets.top + 22 - BTN / 2, width: BTN, height: BTN) }
   func backTap() { send(["ev": "back"]) }
   func relayout() { UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) { self.setNeedsLayout(); self.layoutIfNeeded() } }
+  func clientsFresh() { clientsGroup.closeInactive(); setNeedsLayout() }
   private func drawClients(_ model: [String: Any]) {
     content.filter { $0 !== clientsGroup }.forEach { $0.removeFromSuperview() }
     clientsGroup.people = people

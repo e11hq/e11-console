@@ -1747,6 +1747,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     defer { updateCorner() }
     guard let show = a["show"] as? Bool else { return }
     if !show { clientsWanted = false; clientsListIfMade?.isHidden = true; clientPageIfMade?.isHidden = true; assetsCtl.closeIfFromClients(); edgePanOn(); return }
+    if !clientsWanted { clientsListIfMade?.clientsFresh() }   // (the tab coming back: Inactive clients closed again)
     clientsWanted = true
     clientsPageMe = a["me"] as? String
     clientsLight = (a["light"] as? Bool) ?? (appStyle == .light)
