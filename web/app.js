@@ -2801,6 +2801,7 @@ const Sync = (() => {
 let saveTimer = null, saving = false, saveAgain = false, readOnly = false;
 
 function setSaveState(state, detail) {
+  window.__e11SyncState = state;   // (the app's Me shows it: Synced to E11 Server, Syncing…, Offline…)
   const dot = $('#save-dot'), label = $('#save-label');
   if (!dot) return;
   dot.className = 'save-dot ' + (state === 'saved' ? 'ok' : state === 'saving' ? 'busy' : state === 'error' || state === 'offline' ? 'err' : '');

@@ -3017,6 +3017,7 @@ const NativeMe = (() => {
       about: Host.isServer, canUpdate: AppIcon.isOwner() && Host.isServer, owner: AppIcon.isOwner(),
       test: viewAs || (isTestCopy() && AppIcon.isOwner()) ? { viewAs, viewing: ViewAs.viewing() ? (fullName(userById(currentUserId)) || 'someone') : null, sample: isTestCopy() && AppIcon.isOwner() && !ViewAs.viewing() } : null,
       version: Host.isServer && Sync.version ? `E11 Console ${Sync.version}` : '',
+      sync: Host.isServer ? window.__e11SyncState || 'saved' : '',
       team: wantTeam ? teamModel() : null,
       profile: wantProfile ? profileModel() : null,
     };

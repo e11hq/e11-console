@@ -37,6 +37,13 @@ final class SetFoot: UIView, HomeBlock {
   override init(frame: CGRect) { super.init(frame: frame); label.font = .systemFont(ofSize: 13); label.textColor = .secondaryLabel; label.numberOfLines = 0; addSubview(label) }
   required init?(coder: NSCoder) { fatalError() }
   func set(_ t: String, centered: Bool = false) { label.text = t; label.textAlignment = centered ? .center : .natural; center_ = centered; setNeedsLayout() }
+  // (a coloured dot before it, centred — Me's sync status)
+  func setDot(_ t: String, _ c: UIColor) {
+    let a = NSMutableAttributedString(string: "● ", attributes: [.foregroundColor: c, .font: UIFont.systemFont(ofSize: 11)])
+    a.append(NSAttributedString(string: t, attributes: [.foregroundColor: UIColor.secondaryLabel, .font: UIFont.systemFont(ofSize: 13)]))
+    if label.attributedText?.isEqual(to: a) != true { label.attributedText = a }
+    label.textAlignment = .center; center_ = true; setNeedsLayout()
+  }
   func blockHeight(_ W: CGFloat) -> CGFloat { (label.text ?? "").isEmpty ? 0 : ceil(label.sizeThatFits(CGSize(width: W - 72, height: 600)).height) + 14 }
   override func layoutSubviews() { super.layoutSubviews(); label.frame = CGRect(x: 36, y: 7, width: bounds.width - 72, height: max(0, bounds.height - 14)) }
 }
@@ -1016,7 +1023,19 @@ final class MeCtl {
       }
       out.append(head(h, "out", ""))
       out.append(group(h, "out", [SetItem(key: "signOut", title: "Sign out", chevron: false, danger: true, tap: { [weak self] in self?.send(["ev": "signOut"]) })]))
-      if let v = model["version"] as? String, !v.isEmpty { out.append(foot(h, "ver", v, centered: true)) }
+      // (the sync status in the version's place — Haris 2026-11-03; the version is on About)
+      if let st = model["sync"] as? String, !st.isEmpty {
+        let (t, c): (String, UIColor) = {
+          switch st {
+          case "saving": return ("Syncing…", .systemYellow)
+          case "reconnecting": return ("Reconnecting…", .systemYellow)
+          case "offline": return ("Offline — changes will sync", .systemRed)
+          case "error": return ("Not synced to E11 Server", .systemRed)
+          default: return ("Synced to E11 Server", .systemGreen)
+          }
+        }()
+        let f = part(h, "f.ver") { SetFoot() }; f.setDot(t, c); out.append(f)
+      }
     case "appearance":
       h.drawAssetsBar(name: "Appearance", sub: "", logo: nil, rgb: nil, ini: nil, showLogo: false)
       let tb = part(h, "theme") { ThemeBlock() }
