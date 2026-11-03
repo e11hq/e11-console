@@ -468,7 +468,9 @@ final class AssetsCtl {
     if fromPage, let s = stack.last, s.client == client, s.folder == folder, s.kind == (client == nil ? "all" : folder == nil ? "client" : "folder") { return }
     close(animated: false)
     fromPage = true; rootTab = (a["root"] as? Bool) == true
-    if let c = client { open(client: c, folder: folder, animated: false) } else { openAll(animated: false) }
+    // (from Me › Client Assets: it slides in over Me, as Me's other pages — Haris 2026-11-04)
+    let slide = main.selectedTabKey == "me"
+    if let c = client { open(client: c, folder: folder, animated: slide) } else { openAll(animated: slide) }
   }
   private func take(_ m: [String: Any]) {
     let kind = m["kind"] as? String

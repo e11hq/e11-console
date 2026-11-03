@@ -352,6 +352,9 @@ const Plans = (() => {
     const n = (pl.posts || []).length;
     const ok = await dialog({ title: 'Approve this content skeleton?', body: `${nameOf(pl)} · ${n} post${n === 1 ? '' : 's'}. After this, tasks can be created from it.`, okText: 'Approve skeleton' });
     if (!ok) return;
+    doApprove(pl);
+  }
+  function doApprove(pl) {
     const now = nowISO();
     (pl.posts || []).forEach((x) => { if (!x.check || x.check.state !== 'ok') x.check = { state: 'ok', by: currentUserId, at: now }; });
     pl.status = 'approved';
@@ -380,11 +383,15 @@ const Plans = (() => {
       const note = $('#sb-note', root).value.trim();
       if (!note && !flagged.length) { $('#sb-note', root).focus(); toast('Say what should change'); return; }
       close();
-      pl.status = 'changes';
-      logIt(pl, 'changes', { note });
-      notify([pl.createdBy, pl.review && pl.review.by], pl, 'plan-changes', `asked for changes on the content skeleton for <b>${esc(nameOf(pl))}</b>`, note || flagged.map((x) => `${x.title}: ${x.check.note || 'changes'}`).join(' · '));
-      persist(0); render2(); toast('Sent back to Social');
+      doSendBack(pl, note);
     });
+  }
+  function doSendBack(pl, note) {
+    const flagged = (pl.posts || []).filter((x) => x.check && x.check.state === 'changes');
+    pl.status = 'changes';
+    logIt(pl, 'changes', { note });
+    notify([pl.createdBy, pl.review && pl.review.by], pl, 'plan-changes', `asked for changes on the content skeleton for <b>${esc(nameOf(pl))}</b>`, note || flagged.map((x) => `${x.title}: ${x.check.note || 'changes'}`).join(' · '));
+    persist(0); render2(); toast('Sent back to Social');
   }
   async function reopen(pl) {
     if (!(isEditor(pl) || canApprove(pl)) || pl.status !== 'approved') return denied();
@@ -997,5 +1004,104 @@ const Plans = (() => {
   // skeletons waiting for this person's approval (the sidebar count)
   const waiting = () => (canSee() ? list().filter((pl) => pl.status === 'review' && canApprove(pl) && proj(pl.projectId) && !proj(pl.projectId).inactive).length : 0);
   const nameOf = (pl) => { const p = proj(pl.projectId); return `${p ? p.name : 'A client'} · ${monthLabel(pl.month)}`; };
-  return { on, owns, canSee, render, title, isMgr, socialsOf, planById, monthLabel, FORMATS, waiting, nameOf, open, socialManages, progress };
+  /* ---------- the iPhone app's own (shell 35 — Haris 2026-11-04, the mockups content-plans-mockup / -se-mockup): view
+     only; the Social Manager and the CD approve or ask for changes — per post and for the whole skeleton. The models
+     here, drawn by the app (Me.swift: plans, plan, PlanPostVC); its answers through native() ---------- */
+  const N = (() => {
+    const who = (id) => (id === currentUserId ? 'You' : userById(id) ? firstName(id) : 'Someone');
+    const rgb = (h) => (typeof E11Rules !== 'undefined' && E11Rules.rgbOf(h)) || [135, 144, 158];
+    const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+    function stOf(pl) {
+      if (!pl) return { t: 'Not started', k: 'none' };
+      if (pl.status === 'approved' && pl.clientApproved) return { t: 'Client approved', k: 'ok' };
+      if (pl.status === 'approved' && pl.sent && (pl.exports || []).length && pl.sent.round === pl.exports[pl.exports.length - 1].round) return { t: `With the client · R${pl.sent.round}`, k: 'sent' };
+      if (pl.status === 'approved' && hasTasks(pl)) { const n = (pl.posts || []).length, r = (pl.posts || []).filter((x) => ['ready', 'done'].includes(progress(x).k)).length; return { t: `In production · ${r}/${n}`, k: 'prod' }; }
+      if (pl.status === 'review') return { t: canApprove(pl) ? 'Waiting for you' : 'Waiting', k: 'wait' };
+      if (pl.status === 'changes') return { t: `Changes${(pl.round || 1) > 1 ? ' · R' + pl.round : ''}`, k: 'chg' };
+      if (pl.status === 'approved') return { t: 'Approved', k: 'ok' };
+      return { t: 'Draft', k: 'draft' };
+    }
+    function list(month) {
+      const m = month && /^\d{4}-\d{2}$/.test(month) ? month : st().month;
+      const rows = clientsInScope().map((p) => {
+        const pl = planOf(p.id, m), ppl = socialsOf(p).map((id) => (id === currentUserId ? 'you' : firstName(id)));
+        return { pid: p.id, name: p.name || 'Client', ini: initials(p.name || 'C'), rgb: rgb(p.color), st: stOf(pl), sub: [pl ? plural((pl.posts || []).length, 'post') : '', ppl.join(', ')].filter(Boolean).join(' · ') || '—', mine: !!pl && (pl.status === 'review' ? canApprove(pl) : pl.status === 'changes' && isEditor(pl)) };
+      });
+      rows.sort((a, b) => (b.mine ? 1 : 0) - (a.mine ? 1 : 0));
+      const wait = rows.filter((r) => r.mine && r.st.k === 'wait').length, back = rows.filter((r) => r.mine && r.st.k === 'chg').length;
+      const mine = me().role === 'social' && !isMgr(me());
+      return { month: m, label: monthLabel(m), canPrev: m > thisMonth(), rows,
+        note: wait ? `${plural(wait, 'skeleton')} waiting for your approval` : back ? `${plural(back, 'skeleton')} sent back for changes` : '',
+        foot: `${mine ? 'Your clients. ' : ''}View only on the iPhone — skeletons are made, changed and sent on the computer.` };
+    }
+    const chName = (ks) => { const ch = CH(); return (ks || []).filter((k) => ch[k]).map((k) => ch[k].name).join(' · '); };
+    function plan(pid, month) {
+      const p = proj(pid); if (!p || !canSee() || !clientsInScope().some((x) => x.id === pid)) return null;
+      const m = month && /^\d{4}-\d{2}$/.test(month) ? month : st().month;
+      const pl = planOf(pid, m);
+      const head = { pid, month: m, name: p.name || 'Client', sub: monthLabel(m) + (pl && (pl.round || 1) > 1 ? ` · Round ${pl.round}` : ''), st: stOf(pl) };
+      if (!pl) return { ...head, empty: 'Not started yet — content skeletons are made on the computer.' };
+      const last = (act) => (pl.log || []).filter((x) => x.act === act).pop();
+      let banner = null;
+      if (pl.status === 'review' && pl.review) banner = { t: `Sent by ${who(pl.review.by)} · ${timeAgo(pl.review.at)}`, s: `To ${toLabel(pl.review.to)}${canApprove(pl) ? ' — open each post to mark it, then approve the skeleton or send it back.' : ''}` };
+      else if (pl.status === 'changes') { const l = last('changes'), n = (pl.posts || []).filter((x) => x.check && x.check.state === 'changes').length; banner = { t: `By ${l ? who(l.by) : 'the approver'}${l ? ' · ' + timeAgo(l.at) : ''}${n ? ` — ${plural(n, 'post')} to change` : ''}`, note: l && l.note ? l.note : '' }; }
+      else if (pl.status === 'approved' && pl.approval) { const made = (pl.posts || []).filter((x) => x.taskId).length; banner = { t: `By ${who(pl.approval.by)} · ${fmtDay(String(pl.approval.at).slice(0, 10))}`, s: made ? `${plural(made, 'task')} made` : 'Next: the tasks are made on the computer' }; }
+      else banner = { t: 'Being made on the computer', s: '' };
+      const posts = postsSorted(pl);
+      const occs = Occasions.between(firstDay(m), lastDay(m)).map((o) => { const n = posts.filter((x) => x.occasion === o.id).length; return { t: o.name, k: n ? 'ok' : skipped(p, o) ? 'skip' : 'miss' }; });
+      const days = [...new Set(posts.map((x) => x.day))].map((d) => ({ d, label: dayLong(d), occ: Occasions.on(d).map((o) => o.name).join(' · '),
+        posts: posts.filter((x) => x.day === d).map((x) => postRow(pl, x)) }));
+      const flagged = (pl.posts || []).filter((x) => x.check && x.check.state === 'changes').length;
+      return { ...head, id: pl.id, banner, occs, days, approve: pl.status === 'review' && canApprove(pl) ? { flagged } : null,
+        foot: pl.status === 'changes' && isEditor(pl) ? 'Change it on the computer, then send it again.' : pl.status === 'approved' ? 'Each post’s progress, from its task. The client export is on the computer.' : '' };
+    }
+    function postRow(pl, x) {
+      const g = progress(x), ck = showChecks(pl) && x.check ? x.check : null;
+      return { id: x.id, title: x.title || 'Untitled post', fmt: fmtOf(x.format).name, fcol: rgb(fmtOf(x.format).color), ch: chName(x.channels),
+        check: ck ? { k: ck.state === 'ok' ? 'ok' : 'chg', t: ck.state === 'ok' ? `Looks good — ${who(ck.by)}` : `${who(ck.by)}: “${ck.note || 'changes'}”` } : null,
+        prog: pl.status === 'approved' && x.taskId ? { t: PROG[g.k][0], k: g.k } : null };
+    }
+    function post(planId, postId) {
+      const pl = planById(planId), x = pl && (pl.posts || []).find((y) => y.id === postId);
+      if (!pl || !x || !plan(pl.projectId, pl.month)) return null;
+      const o = x.occasion && Occasions.byId(x.occasion), g = progress(x);
+      const ref = (r) => (r.url ? { link: r.url, name: r.label || r.url } : { name: r.name || 'File', path: r.path, url: fileUrl(r), img: fileKind(r) === 'image', size: r.size || 0 });
+      const ck = showChecks(pl) && x.check ? x.check : null;
+      return { id: x.id, plan: pl.id, title: x.title || 'Untitled post', fmt: fmtOf(x.format).name, day: dayLong(x.day), occ: o ? o.name : '', ch: chName(x.channels),
+        desc: x.desc || '', shots: x.shots || '', copyEn: x.copyEn || '', copyAr: x.copyAr || '', refs: (x.refs || []).map(ref), made: g.files.map(ref),
+        check: ck ? { k: ck.state === 'ok' ? 'ok' : 'chg', t: ck.state === 'ok' ? `Looks good — ${who(ck.by)}` : `Changes asked by ${who(ck.by).replace(/^You$/, 'you')}: “${ck.note || 'changes'}”`, note: ck.note || '' } : null,
+        prog: pl.status === 'approved' && x.taskId ? { t: PROG[g.k][0], k: g.k } : null,
+        review: pl.status === 'review' && canApprove(pl) };
+    }
+    // the app's answers: a post marked, the skeleton approved or sent back — as the website's own (its rules, its
+    // notifications); the error, if any, to say
+    function act(ev) {
+      const pl = planById(String(ev.plan || ''));
+      if (!pl) return 'This plan is no longer here';
+      if (!canApprove(pl)) return 'Only the Social Manager or the Creative Director can do this';
+      if (pl.status !== 'review') return 'It isn’t waiting for approval any more';
+      if (ev.ev === 'plReview') {
+        const x = (pl.posts || []).find((y) => y.id === ev.post); if (!x) return 'This post is no longer here';
+        const note = String(ev.note || '').trim();
+        if (ev.state === 'changes' && !note) return 'Say what should change';
+        if (ev.state === 'ok' || ev.state === 'changes') x.check = { state: ev.state, note: ev.state === 'changes' ? note : '', by: currentUserId, at: nowISO() }; else delete x.check;
+        pl.updatedAt = nowISO(); persist(0); renderContent();
+        toast(ev.state === 'ok' ? 'Marked Looks good' : 'Marked Ask for changes');
+        return null;
+      }
+      if (ev.ev === 'plApprove') {
+        const flagged = (pl.posts || []).filter((x) => x.check && x.check.state === 'changes').length;
+        if (flagged) return `${plural(flagged, 'post')} ${flagged === 1 ? 'is' : 'are'} marked Ask for changes — send it back instead`;
+        doApprove(pl); return null;
+      }
+      if (ev.ev === 'plBack') {
+        const note = String(ev.note || '').trim(), flagged = (pl.posts || []).filter((x) => x.check && x.check.state === 'changes').length;
+        if (!note && !flagged) return 'Say what should change';
+        doSendBack(pl, note); return null;
+      }
+      return 'Not available';
+    }
+    return { list, plan, post, act, shift: (m, n) => shiftMonth(m, n) };
+  })();
+  return { on, owns, canSee, render, title, isMgr, socialsOf, planById, monthLabel, FORMATS, waiting, nameOf, open, socialManages, progress, native: N };
 })();

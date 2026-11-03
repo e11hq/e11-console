@@ -3004,8 +3004,11 @@ const NativeAssets = (() => {
 const NATIVE_ME = true;
 const NativeMe = (() => {
   let on = false, last = '', shown = false, wantTeam = false, wantProfile = false, wantTrash = false, toastAction = null;
+  // (Content plans, the app's own from shell 35: the list's month, the plan open)
+  let shell = 0, wantPlans = false, plMonth = '', plOpen = null;
+  const plansOwn = () => shell >= 35 && typeof Plans !== 'undefined' && Plans.canSee() && !!Plans.native;
   if (NATIVE_ME && window.__e11CommentsOnly !== true && typeof Host !== 'undefined' && Host.isIOSApp) {
-    NativeMac.call('appInfo').then((r) => { on = Number(r && r.shell) >= 33; if (on) { setInterval(sync, 350); sync(); } }).catch(() => {});
+    NativeMac.call('appInfo').then((r) => { shell = Number(r && r.shell) || 0; on = shell >= 33; if (on) { setInterval(sync, 350); sync(); } }).catch(() => {});
   }
   const call = (a) => NativeMac.call('me', a).catch(() => {});
   const rgb = (hex) => E11Rules.rgbOf(hex) || [135, 144, 158];
@@ -3043,6 +3046,8 @@ const NativeMe = (() => {
       team: wantTeam ? teamModel() : null,
       profile: wantProfile ? profileModel() : null,
       trash: wantTrash ? trashModel() : null,
+      plans: wantPlans && plansOwn() ? Plans.native.list(plMonth) : null,
+      plan: plOpen && plansOwn() ? Plans.native.plan(plOpen.pid, plOpen.month) : null,
     };
   }
   // My profile (the app's own, 2026-11-03 — the locked mockup): what the website's My profile shows on the phone —
@@ -3172,6 +3177,12 @@ const NativeMe = (() => {
   let lastAdm = null;
   function sync() {
     if (!on) return;
+    // (a Content plan opened on the page — an Inbox update, a notification: Me, and the app's own page for it)
+    if (plansOwn() && Phone.on && (ui.view === 'plan' || ui.view === 'plans') && !ui.taskId) {
+      const pl = ui.view === 'plan' && ui.planId ? Plans.planById(ui.planId) : null;
+      go('me');
+      if (pl) call({ open: { kind: 'plan', pid: pl.projectId, month: pl.month } });
+    }
     // (who may turn file / folder links off and on — Admins: the app's sheets show it only to them)
     try { const adm = !!(currentUserId && isAdm(me())); if (adm !== lastAdm) { lastAdm = adm; NativeMac.call('role', { admin: adm }).catch(() => {}); } } catch (e) { /* not signed in yet */ }
     let m = null;
@@ -3257,6 +3268,12 @@ const NativeMe = (() => {
         case 'pf': wantProfile = !!ev.on; sync(); return;
         case 'tr': wantTrash = !!ev.on; if (!ev.on) { ui.trashQ = ''; ui.trashFilter = 'all'; } sync(); return;
         case 'trQ': ui.trashQ = String(ev.q || ''); sync(); return;
+        // Content plans (the app's own, shell 35)
+        case 'pl': wantPlans = !!ev.on; if (ev.on) { const m = /^\d{4}-\d{2}$/.test(ev.month || '') ? ev.month : (plMonth || ''); plMonth = ev.shift ? Plans.native.shift(m || Plans.native.list('').month, Number(ev.shift)) : m; } sync(); return;
+        case 'plOpen': plOpen = ev.pid ? { pid: String(ev.pid), month: String(ev.month || '') } : null; sync(); return;
+        case 'plPost': { const p = Plans.native.post(ev.plan, ev.post); answer(rid, p ? { ok: true, post: p } : { ok: false, error: 'This post is no longer here' }); return; }
+        case 'plReview': case 'plApprove': case 'plBack': { const err = Plans.native.act(ev); answer(rid, err ? { ok: false, error: err } : { ok: true }); sync(); return; }
+        case 'plFile': if (ev.path) previewFile({ path: String(ev.path), name: String(ev.name || 'File') }); return;
         case 'trCat': ui.trashFilter = String(ev.k || 'all'); sync(); return;
         case 'trTap': { const it = trashList().find((x) => x.id === ev.id); if (!it) return; if (it.type === 'task') trashTaskView(ev.id); else { const f = trashFiles(it)[0]; if (f) previewFile(f); else trashHold(ev.id); } return; }
         case 'trFile': { const it = trashList().find((x) => x.id === ev.id); const a = it && trashFiles(it).find((x) => x.id === ev.file); if (a) previewFile(a); return; }

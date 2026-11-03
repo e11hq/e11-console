@@ -992,7 +992,16 @@ final class MeCtl {
   }
   // (a page of Me opened from elsewhere — the birthday / city card's Go to My profile, What's new's All notes: Me's tab,
   //  then that page over it)
-  private var wantOpen: String?
+  private var wantOpen: String?, wantOpenId: String?
+  private var plMonth: String?
+  // (a question to the page, its answer back — Content plans' post, approve, send back)
+  private func request(_ ev: [String: Any], _ done: @escaping ([String: Any]) -> Void) {
+    let rid = UUID().uuidString
+    var e = ev; e["rid"] = rid
+    asks[rid] = done
+    send(e)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 15) { [weak self] in self?.asks.removeValue(forKey: rid)?(["ok": false, "error": "No answer — try again"]) }
+  }
   func openSoon(_ kind: String) {
     if main.selectedTabKey == "me", !hidden, !stack.isEmpty {
       if stack.count > 1 { backToRoot(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.open(kind) } } else { open(kind) }
@@ -1026,6 +1035,13 @@ final class MeCtl {
 
   // ---------- from the page ----------
   func command(_ a: [String: Any]) {
+    if let rid = a["rid"] as? String { asks.removeValue(forKey: rid)?(a); return }
+    // (a Content plan opened on the page — an Inbox update, a notification: the app's own page for it)
+    if let o = a["open"] as? [String: Any], (o["kind"] as? String) == "plan", let pid = o["pid"] as? String {
+      wantOpenId = "\(pid)|\(o["month"] as? String ?? "")"; wantOpen = "plan"
+      if main.selectedTabKey == "me", !hidden, !stack.isEmpty, let k = wantOpen { wantOpen = nil; let id = wantOpenId; if stack.count > 1 { backToRoot() }; DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.open(k, id) } }
+      return
+    }
     if let t = a["toast"] as? [String: Any] { (shown ?? top)?.toast(t); return }
     if let ab = a["about"] as? [String: Any] { about = ab; stack.filter { $0.kind == "about" }.forEach { draw($0) }; return }
     guard let show = a["show"] as? Bool else { return }
@@ -1041,7 +1057,7 @@ final class MeCtl {
     reveal()
     stack.forEach { draw($0) }
     main.updateCorner()
-    if let k = wantOpen { wantOpen = nil; if stack.count > 1 { backToRoot() }; DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.open(k) } }
+    if let k = wantOpen { wantOpen = nil; let id = wantOpenId; wantOpenId = nil; if stack.count > 1 { backToRoot() }; DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.open(k, id) } }
   }
   // out of sight, kept as it is (Me comes back where it was, as iPhone's own tabs)
   func hide() {
@@ -1102,6 +1118,8 @@ final class MeCtl {
     if kind == "about" { send(["ev": "about"]) }
     if kind == "profile" { send(["ev": "pf", "on": true]) }
     if kind == "trash" { send(["ev": "tr", "on": true]) }
+    if kind == "plans" { plMonth = plMonth ?? ""; send(["ev": "pl", "on": true, "month": plMonth ?? ""]) }
+    if kind == "plan", let id = id { let p = id.split(separator: "|").map(String.init); send(["ev": "plOpen", "pid": p.first ?? "", "month": p.count > 1 ? p[1] : ""]) }
     push(screen(kind, id), animated: true)
   }
   private func push(_ s: Screen, animated: Bool) {
@@ -1131,6 +1149,8 @@ final class MeCtl {
       self.leaving = false
       if s.kind == "team", !self.stack.contains(where: { $0.kind == "team" }) { self.send(["ev": "team", "on": false]) }
       if s.kind == "profile" { self.send(["ev": "pf", "on": false]) }
+      if s.kind == "plans" { self.send(["ev": "pl", "on": false]) }
+      if s.kind == "plan" { self.send(["ev": "plOpen", "pid": ""]) }
       if s.kind == "trash" { self.send(["ev": "tr", "on": false]) }
       if let t = self.stack.last { self.draw(t) }
       self.main.edgePanOn(); self.main.updateCorner()
@@ -1260,7 +1280,7 @@ final class MeCtl {
       let work = ((model["work"] as? [[String: Any]]) ?? []).map { w -> SetItem in
         let k = w["k"] as? String ?? ""
         return SetItem(key: k, title: w["t"] as? String ?? "", sub: w["s"] as? String ?? "", sym: w["sym"] as? String, col: NativeSheetVC.color(w["col"]),
-                       tap: { [weak self] in guard let self = self else { return }; if k == "team" || k == "trash" { self.open(k) } else { self.send(["ev": "nav", "to": k]) } })
+                       tap: { [weak self] in guard let self = self else { return }; if k == "team" || k == "trash" || k == "plans" { self.open(k) } else { self.send(["ev": "nav", "to": k]) } })
       }
       if !work.isEmpty { out.append(head(h, "work", "Work")); out.append(group(h, "work", work)) }
       var phone: [SetItem] = [SetItem(key: "shortcuts", title: "Shortcuts", sub: "Quicker ways to do things", sym: "command", col: .systemBlue, badge: "New", tap: { [weak self] in self?.open("shortcuts") })]
@@ -1388,6 +1408,10 @@ final class MeCtl {
       teamBlocks(h, &out)
     case "member":
       memberBlocks(h, s.id ?? "", &out)
+    case "plans":
+      plansBlocks(h, &out)
+    case "plan":
+      planBlocks(h, s.id ?? "", &out)
     default: break
     }
     // (a section title first on the page, or right after a card's own gap: the short one)
@@ -1556,6 +1580,128 @@ final class MeCtl {
     let t = team
     let all = (((t["groups"] as? [[String: Any]]) ?? []).flatMap { ($0["people"] as? [[String: Any]]) ?? [] }) + ((t["past"] as? [[String: Any]]) ?? [])
     return all.first { ($0["id"] as? String) == id }
+  }
+  // ---------- Content plans (shell 35 — Haris 2026-11-04, the mockups): view only; the Social Manager and Carine approve or
+  // ask for changes. Everything from the page's own rules (Plans.native in plans.js), live as the page's data changes ----------
+  private static func stCol(_ k: String) -> UIColor {
+    switch k { case "wait": return .systemOrange; case "chg": return .systemRed; case "ok": return .systemGreen; case "sent": return .systemBlue; case "prod": return .systemPurple; default: return .systemGray }
+  }
+  private static func progCol(_ k: String) -> UIColor {
+    switch k { case "done": return .systemBlue; case "ready": return .systemGreen; case "cd": return .systemOrange; case "changes": return .systemRed; case "prod": return .systemPurple; default: return .systemGray }
+  }
+  private func plansBlocks(_ h: HomeView, _ out: inout [UIView]) {
+    let m = (model["plans"] as? [String: Any]) ?? [:]
+    h.drawAssetsBar(name: "Content plans", sub: m["label"] as? String ?? "", logo: nil, rgb: nil, ini: nil, showLogo: false)
+    guard let rows = m["rows"] as? [[String: Any]] else { let n = part(h, "wait") { AssetsNote() }; n.label.text = "Loading…"; out.append(n); return }
+    let month = m["month"] as? String ?? ""
+    let mb = part(h, "month") { PlanMonthBar() }
+    mb.set(m["label"] as? String ?? "", canPrev: (m["canPrev"] as? Bool) == true)
+    mb.onShift = { [weak self] d in guard let self = self else { return }; UISelectionFeedbackGenerator().selectionChanged(); self.send(["ev": "pl", "on": true, "month": month, "shift": d]) }
+    out.append(mb)
+    if let n = m["note"] as? String, !n.isEmpty { let f = foot(h, "plnote", n); f.label.textColor = .systemOrange; out.append(f) }
+    let items = rows.map { r -> SetItem in
+      let pid = r["pid"] as? String ?? "", st = r["st"] as? [String: Any] ?? [:]
+      var it = SetItem(key: "p." + pid, title: r["name"] as? String ?? "", sub: r["sub"] as? String ?? "", tap: { [weak self] in self?.open("plan", "\(pid)|\(month)") })
+      it.person = (photo: nil, ini: r["ini"] as? String ?? "", rgb: NativeSheetVC.color(r["rgb"]) ?? .systemGray)
+      it.pills = [(st["t"] as? String ?? "", MeCtl.stCol(st["k"] as? String ?? ""))]
+      return it
+    }
+    if items.isEmpty { let n = part(h, "none") { AssetsNote() }; n.label.text = "No clients to show."; out.append(n) }
+    else { out.append(head(h, "pl", "")); out.append(group(h, "pl", items)) }
+    out.append(foot(h, "plfoot", m["foot"] as? String ?? "", centered: true))
+  }
+  private func planBlocks(_ h: HomeView, _ id: String, _ out: inout [UIView]) {
+    let parts = id.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+    let pid = parts.first ?? "", month = parts.count > 1 ? parts[1] : ""
+    guard let m = model["plan"] as? [String: Any], (m["pid"] as? String) == pid, month.isEmpty || (m["month"] as? String) == month else {
+      h.drawAssetsBar(name: "Content plan", sub: "", logo: nil, rgb: nil, ini: nil, showLogo: false)
+      let n = part(h, "wait") { AssetsNote() }; n.label.text = model["plan"] is NSNull ? "This plan is no longer here." : "Loading…"; out.append(n); return
+    }
+    h.drawAssetsBar(name: m["name"] as? String ?? "", sub: m["sub"] as? String ?? "", logo: nil, rgb: nil, ini: nil, showLogo: false)
+    let st = m["st"] as? [String: Any] ?? [:]
+    let top = part(h, "top") { PlanHead() }
+    let b = m["banner"] as? [String: Any] ?? [:]
+    top.set(st["t"] as? String ?? "", col: MeCtl.stCol(st["k"] as? String ?? ""), line: [b["t"] as? String, b["s"] as? String].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " — "), note: b["note"] as? String ?? "")
+    out.append(top)
+    if let e = m["empty"] as? String { out.append(foot(h, "empty", e, centered: true)); return }
+    let occs = (m["occs"] as? [[String: Any]]) ?? []
+    if !occs.isEmpty {
+      out.append(head(h, "occ", "Occasions this month"))
+      out.append(group(h, "occ", occs.enumerated().map { i, o in
+        let k = o["k"] as? String ?? ""
+        return SetItem(key: "o.\(i)", title: o["t"] as? String ?? "", value: k == "ok" ? "Planned" : k == "skip" ? "Skipped" : "Not planned", sym: k == "ok" ? "checkmark" : k == "skip" ? "minus" : "exclamationmark", col: k == "ok" ? .systemGreen : k == "skip" ? .systemGray : .systemOrange, chevron: false)
+      }))
+    }
+    let planId = m["id"] as? String ?? ""
+    for d in (m["days"] as? [[String: Any]]) ?? [] {
+      let dk = d["d"] as? String ?? ""
+      let occ = d["occ"] as? String ?? ""
+      out.append(head(h, "d." + dk, (d["label"] as? String ?? "") + (occ.isEmpty ? "" : " · " + occ)))
+      out.append(group(h, "d." + dk, ((d["posts"] as? [[String: Any]]) ?? []).map { x in
+        let xid = x["id"] as? String ?? ""
+        var sub = [x["fmt"] as? String ?? "", x["ch"] as? String ?? ""].filter { !$0.isEmpty }.joined(separator: " · ")
+        var it = SetItem(key: "x." + xid, title: x["title"] as? String ?? "", sub: "", sym: "photo.on.rectangle", col: NativeSheetVC.color(x["fcol"]) ?? .systemGray, tap: { [weak self] in self?.openPost(planId, xid) })
+        if let c = x["check"] as? [String: Any] {
+          sub += "\n" + (c["t"] as? String ?? "")
+          it.pills = [((c["k"] as? String) == "ok" ? "✓" : "!", (c["k"] as? String) == "ok" ? .systemGreen : .systemOrange)]
+        } else if let p = x["prog"] as? [String: Any] { it.pills = [(p["t"] as? String ?? "", MeCtl.progCol(p["k"] as? String ?? ""))] }
+        it.sub = sub
+        return it
+      }))
+    }
+    if let ap = m["approve"] as? [String: Any] {
+      let flagged = ap["flagged"] as? Int ?? 0
+      let acts = part(h, "acts") { PlanActs() }
+      acts.set(left: "Send back", right: "Approve skeleton")
+      acts.onLeft = { [weak self] in self?.askNote(title: "Send back for changes", hint: flagged > 0 ? "A note for the whole skeleton (optional) — the posts you marked go with it." : "What should change?", optional: flagged > 0) { note, done in
+        self?.request(["ev": "plBack", "plan": planId, "note": note]) { r in done((r["ok"] as? Bool) == true ? nil : r["error"] as? String ?? "That didn’t work — try again") } } }
+      acts.onRight = { [weak self] in
+        guard let self = self else { return }
+        let a = UIAlertController(title: "Approve this content skeleton?", message: "After this, tasks can be made from it on the computer.", preferredStyle: .alert)
+        a.overrideUserInterfaceStyle = self.light ? .light : .dark
+        a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        a.addAction(UIAlertAction(title: "Approve skeleton", style: .default) { [weak self] _ in
+          self?.request(["ev": "plApprove", "plan": planId]) { [weak h] r in if (r["ok"] as? Bool) != true { h?.toast(["t": r["error"] as? String ?? "That didn’t work — try again"]) } else { UINotificationFeedbackGenerator().notificationOccurred(.success) } }
+        })
+        self.main.topMost().present(a, animated: true)
+      }
+      out.append(acts)
+    }
+    if let f = m["foot"] as? String, !f.isEmpty { out.append(foot(h, "pfoot", f, centered: true)) }
+  }
+  private func openPost(_ plan: String, _ post: String) {
+    request(["ev": "plPost", "plan": plan, "post": post]) { [weak self] r in
+      guard let self = self else { return }
+      guard let p = r["post"] as? [String: Any] else { (self.top)?.toast(["t": r["error"] as? String ?? "This post is no longer here"]); return }
+      let vc = PlanPostVC(p, dark: !self.light)
+      vc.onReview = { [weak self, weak vc] state in
+        guard let self = self else { return }
+        if state == "changes" {
+          self.askNote(title: "Ask for changes", hint: "\(p["title"] as? String ?? "") — what should change?", optional: false, from: vc) { note, done in
+            self.request(["ev": "plReview", "plan": plan, "post": post, "state": "changes", "note": note]) { r in
+              if (r["ok"] as? Bool) == true { done(nil); vc?.dismiss(animated: true) } else { done(r["error"] as? String ?? "That didn’t work — try again") }
+            }
+          }
+        } else {
+          self.request(["ev": "plReview", "plan": plan, "post": post, "state": "ok"]) { r in
+            if (r["ok"] as? Bool) == true { UINotificationFeedbackGenerator().notificationOccurred(.success); vc?.dismiss(animated: true) } else { vc?.alert(r["error"] as? String ?? "That didn’t work — try again") }
+          }
+        }
+      }
+      vc.onOpenFile = { [weak self] f in self?.send(["ev": "plFile", "path": f["path"] as? String ?? "", "name": f["name"] as? String ?? ""]) }
+      let nav = UINavigationController(rootViewController: vc)
+      nav.overrideUserInterfaceStyle = self.light ? .light : .dark
+      if let sp = nav.sheetPresentationController { sp.detents = [.large()]; sp.prefersGrabberVisible = true }
+      self.main.topMost().present(nav, animated: true)
+    }
+  }
+  // a note, iPhone's own sheet: ✕ · the title · Send
+  private func askNote(title: String, hint: String, optional: Bool, from: UIViewController? = nil, _ send: @escaping (String, @escaping (String?) -> Void) -> Void) {
+    let vc = NoteVC(title: title, hint: hint, optional: optional, send: send)
+    let nav = UINavigationController(rootViewController: vc)
+    nav.overrideUserInterfaceStyle = light ? .light : .dark
+    if let sp = nav.sheetPresentationController { sp.detents = [.custom { _ in 260 }, .large()]; sp.prefersGrabberVisible = true }
+    (from ?? main.topMost()).present(nav, animated: true)
   }
   private func memberBlocks(_ h: HomeView, _ id: String, _ out: inout [UIView]) {
     let admin = (team["admin"] as? Bool) == true
@@ -1764,4 +1910,199 @@ final class TouchSpot: UIGestureRecognizer, UIGestureRecognizerDelegate {
   init() { super.init(target: nil, action: nil); cancelsTouchesInView = false; delaysTouchesBegan = false; delaysTouchesEnded = false; delegate = self }
   override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) { if let v = view, let t = touches.first { at = t.location(in: v) }; state = .failed }
   func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith o: UIGestureRecognizer) -> Bool { true }
+}
+
+// ---------- Content plans' pieces ----------
+// ‹ December 2026 › (any month, from this one on)
+final class PlanMonthBar: UIView, HomeBlock {
+  private let prev = UIButton(type: .system), next = UIButton(type: .system), label = UILabel()
+  var onShift: ((Int) -> Void)?
+  override init(frame: CGRect) {
+    super.init(frame: frame)
+    for (b, s, d) in [(prev, "chevron.left", -1), (next, "chevron.right", 1)] {
+      if #available(iOS 26.0, *) { var c = UIButton.Configuration.glass(); c.image = UIImage(systemName: s, withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .semibold)); c.baseForegroundColor = .label; b.configuration = c }
+      else { b.setImage(UIImage(systemName: s), for: .normal); b.tintColor = .label; b.backgroundColor = .tertiarySystemFill; b.layer.cornerRadius = 18 }
+      b.addAction(UIAction { [weak self] _ in self?.onShift?(d) }, for: .touchUpInside)
+      addSubview(b)
+    }
+    label.font = .systemFont(ofSize: 17, weight: .semibold); label.textAlignment = .center; addSubview(label)
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  func set(_ t: String, canPrev: Bool) { label.text = t; prev.isEnabled = canPrev; prev.alpha = canPrev ? 1 : 0.35 }
+  func blockHeight(_ W: CGFloat) -> CGFloat { 56 }
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    let W = bounds.width
+    prev.frame = CGRect(x: 16, y: 8, width: 40, height: 40); next.frame = CGRect(x: W - 56, y: 8, width: 40, height: 40)
+    label.frame = CGRect(x: 64, y: 8, width: W - 128, height: 40)
+  }
+}
+// the skeleton's status: its pill, who / when, and the approver's note
+final class PlanHead: UIView, HomeBlock {
+  private let pill = PaddedLabel(), line = UILabel(), note = PaddedLabel()
+  override init(frame: CGRect) {
+    super.init(frame: frame)
+    pill.font = .systemFont(ofSize: 13, weight: .semibold); pill.layer.cornerRadius = 9; pill.clipsToBounds = true; pill.insets = UIEdgeInsets(top: 4, left: 10, bottom: 4, right: 10)
+    line.font = .systemFont(ofSize: 13); line.textColor = .secondaryLabel; line.numberOfLines = 0
+    note.font = .systemFont(ofSize: 14); note.numberOfLines = 0; note.layer.cornerRadius = 14; note.clipsToBounds = true; note.insets = UIEdgeInsets(top: 10, left: 12, bottom: 10, right: 12)
+    note.backgroundColor = UIColor.systemOrange.withAlphaComponent(0.14); note.textColor = .label
+    [pill, line, note].forEach { addSubview($0) }
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  func set(_ t: String, col: UIColor, line l: String, note n: String) {
+    pill.text = t; pill.textColor = col; pill.backgroundColor = col.withAlphaComponent(0.15)
+    line.text = l; note.text = n.isEmpty ? nil : "“\(n)”"; note.isHidden = n.isEmpty
+    setNeedsLayout()
+  }
+  func blockHeight(_ W: CGFloat) -> CGFloat {
+    let lh = (line.text ?? "").isEmpty ? 0 : ceil(line.sizeThatFits(CGSize(width: W - 40, height: 200)).height) + 6
+    let nh = note.isHidden ? 0 : ceil(note.sizeThatFits(CGSize(width: W - 32, height: 400)).height) + 12
+    return 8 + 26 + lh + nh + 10
+  }
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    let W = bounds.width
+    let ps = pill.sizeThatFits(CGSize(width: W - 40, height: 26))
+    pill.frame = CGRect(x: 20, y: 8, width: ps.width, height: 26)
+    let lh = (line.text ?? "").isEmpty ? 0 : ceil(line.sizeThatFits(CGSize(width: W - 40, height: 200)).height)
+    line.frame = CGRect(x: 20, y: pill.frame.maxY + 6, width: W - 40, height: lh)
+    let nh = ceil(note.sizeThatFits(CGSize(width: W - 32, height: 400)).height)
+    note.frame = CGRect(x: 16, y: line.frame.maxY + 12, width: W - 32, height: nh)
+  }
+}
+// two capsules side by side: Send back · Approve skeleton
+final class PlanActs: UIView, HomeBlock {
+  private var l: UIButton!, r: UIButton!
+  var onLeft: (() -> Void)?, onRight: (() -> Void)?
+  func set(left: String, right: String) {
+    guard l == nil else { return }
+    l = Pop.capsule(left, filled: false) { [weak self] in self?.onLeft?() }; r = Pop.capsule(right, filled: true) { [weak self] in self?.onRight?() }
+    [l!, r!].forEach { b in NSLayoutConstraint.deactivate(b.constraints); b.translatesAutoresizingMaskIntoConstraints = true; addSubview(b) }
+  }
+  func blockHeight(_ W: CGFloat) -> CGFloat { 76 }
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    let W = bounds.width, w = (W - 32 - 10) / 2
+    l?.frame = CGRect(x: 16, y: 12, width: w, height: 52); r?.frame = CGRect(x: 16 + w + 10, y: 12, width: w, height: 52)
+  }
+}
+// a post, read only: what's in it; Looks good / Ask for changes for the approver
+final class PlanPostVC: UIViewController {
+  private let p: [String: Any], dark: Bool
+  var onReview: ((String) -> Void)?, onOpenFile: (([String: Any]) -> Void)?
+  init(_ p: [String: Any], dark: Bool) { self.p = p; self.dark = dark; super.init(nibName: nil, bundle: nil); overrideUserInterfaceStyle = dark ? .dark : .light }
+  required init?(coder: NSCoder) { fatalError() }
+  override func viewDidLoad() {
+    super.viewDidLoad()
+    view.backgroundColor = .systemGroupedBackground
+    title = "Post"
+    navigationItem.leftBarButtonItem = UIBarButtonItem(systemItem: .close, primaryAction: UIAction { [weak self] _ in self?.dismiss(animated: true) })
+    let scroll = UIScrollView(); scroll.alwaysBounceVertical = true
+    let st = UIStackView(); st.axis = .vertical; st.spacing = 6; st.alignment = .fill
+    scroll.translatesAutoresizingMaskIntoConstraints = false; st.translatesAutoresizingMaskIntoConstraints = false
+    view.addSubview(scroll); scroll.addSubview(st)
+    let review = (p["review"] as? Bool) == true
+    NSLayoutConstraint.activate([
+      scroll.topAnchor.constraint(equalTo: view.topAnchor), scroll.leadingAnchor.constraint(equalTo: view.leadingAnchor), scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+      scroll.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+      st.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: 8), st.leadingAnchor.constraint(equalTo: scroll.frameLayoutGuide.leadingAnchor, constant: 20),
+      st.trailingAnchor.constraint(equalTo: scroll.frameLayoutGuide.trailingAnchor, constant: -20), st.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: review ? -100 : -30),
+    ])
+    st.addArrangedSubview(Pop.label(p["title"] as? String ?? "", 24, .bold))
+    let meta = [p["fmt"] as? String, p["day"] as? String, p["occ"] as? String, p["ch"] as? String].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "  ·  ")
+    st.addArrangedSubview(Pop.label(meta, 14, .regular, .secondaryLabel))
+    if let pr = p["prog"] as? [String: Any] { st.addArrangedSubview(Pop.label(pr["t"] as? String ?? "", 14, .semibold, .systemPurple)) }
+    if let c = p["check"] as? [String: Any] { sec(st, "Review"); st.addArrangedSubview(box(c["t"] as? String ?? "", tint: (c["k"] as? String) == "ok" ? .systemGreen : .systemOrange)) }
+    let made = (p["made"] as? [[String: Any]]) ?? []
+    if !made.isEmpty { sec(st, "The finished work"); st.addArrangedSubview(files(made)) }
+    for (k, t) in [("desc", "Description"), ("shots", "Shots"), ("copyEn", "Copy · English"), ("copyAr", "Copy · Arabic")] {
+      guard let v = p[k] as? String, !v.isEmpty else { continue }
+      sec(st, t); let b = box(v, tint: nil); if k == "copyAr" { (b.subviews.first as? UILabel)?.textAlignment = .right; b.semanticContentAttribute = .forceRightToLeft }; st.addArrangedSubview(b)
+    }
+    let refs = (p["refs"] as? [[String: Any]]) ?? []
+    if !refs.isEmpty { sec(st, "References"); st.addArrangedSubview(files(refs)) }
+    if review {
+      let l = Pop.capsule("Ask for changes", filled: false) { [weak self] in self?.onReview?("changes") }
+      let r = Pop.capsule("Looks good", filled: true) { [weak self] in self?.onReview?("ok") }
+      let row = UIStackView(arrangedSubviews: [l, r]); row.axis = .horizontal; row.spacing = 10; row.distribution = .fillEqually
+      row.translatesAutoresizingMaskIntoConstraints = false; view.addSubview(row)
+      NSLayoutConstraint.activate([row.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16), row.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16), row.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -10)])
+    }
+  }
+  private func sec(_ st: UIStackView, _ t: String) {
+    let l = Pop.label(t.uppercased(), 12, .semibold, .secondaryLabel)
+    st.setCustomSpacing(16, after: st.arrangedSubviews.last ?? l); st.addArrangedSubview(l)
+  }
+  private func box(_ t: String, tint: UIColor?) -> UIView {
+    let v = UIView(); v.backgroundColor = tint?.withAlphaComponent(0.14) ?? .secondarySystemGroupedBackground; v.layer.cornerRadius = 14; v.layer.cornerCurve = .continuous
+    let l = Pop.label(t, 15, .regular, tint == nil ? .label : .label); l.translatesAutoresizingMaskIntoConstraints = false; v.addSubview(l)
+    NSLayoutConstraint.activate([l.topAnchor.constraint(equalTo: v.topAnchor, constant: 10), l.bottomAnchor.constraint(equalTo: v.bottomAnchor, constant: -10), l.leadingAnchor.constraint(equalTo: v.leadingAnchor, constant: 12), l.trailingAnchor.constraint(equalTo: v.trailingAnchor, constant: -12)])
+    return v
+  }
+  // pictures as small tiles, other files and links as their names; a tap opens the file
+  private func files(_ list: [[String: Any]]) -> UIView {
+    let col = UIStackView(); col.axis = .vertical; col.spacing = 8
+    let pics = UIStackView(); pics.axis = .horizontal; pics.spacing = 8
+    for f in list {
+      if (f["img"] as? Bool) == true, let u = f["url"] as? String {
+        let i = UIImageView(); i.backgroundColor = .tertiarySystemFill; i.layer.cornerRadius = 12; i.clipsToBounds = true; i.contentMode = .scaleAspectFill; i.isUserInteractionEnabled = true
+        i.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([i.widthAnchor.constraint(equalToConstant: 72), i.heightAnchor.constraint(equalToConstant: 72)])
+        FeedLoader.shared.image(u + (u.contains("?") ? "&" : "?") + "w=320") { [weak i] img in i?.image = img }
+        i.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapFile(_:)))); i.accessibilityValue = jsonString(f)
+        pics.addArrangedSubview(i)
+      } else {
+        let b = UIButton(type: .system); b.contentHorizontalAlignment = .leading
+        b.setTitle((f["link"] != nil ? "🔗 " : "📎 ") + (f["name"] as? String ?? ""), for: .normal); b.titleLabel?.font = .systemFont(ofSize: 15); b.titleLabel?.lineBreakMode = .byTruncatingMiddle
+        b.addAction(UIAction { [weak self] _ in
+          if let l = f["link"] as? String, let u = URL(string: l) { UIApplication.shared.open(u) } else { self?.onOpenFile?(f) }
+        }, for: .touchUpInside)
+        col.addArrangedSubview(b)
+      }
+    }
+    if !pics.arrangedSubviews.isEmpty { pics.addArrangedSubview(UIView()); col.insertArrangedSubview(pics, at: 0) }
+    return col
+  }
+  @objc private func tapFile(_ g: UITapGestureRecognizer) {
+    guard let s = g.view?.accessibilityValue, let d = s.data(using: .utf8), let f = (try? JSONSerialization.jsonObject(with: d)) as? [String: Any] else { return }
+    onOpenFile?(f)
+  }
+  func alert(_ t: String) { let a = UIAlertController(title: t, message: nil, preferredStyle: .alert); a.addAction(UIAlertAction(title: "OK", style: .default)); present(a, animated: true) }
+}
+// a note to send: ✕ · title · Send (Send waits for something written unless it's optional)
+final class NoteVC: UIViewController, UITextViewDelegate {
+  private let text = UITextView(), hint = UILabel(), optional: Bool
+  private let sendFn: (String, @escaping (String?) -> Void) -> Void
+  init(title: String, hint h: String, optional: Bool, send: @escaping (String, @escaping (String?) -> Void) -> Void) {
+    self.optional = optional; sendFn = send
+    super.init(nibName: nil, bundle: nil); self.title = title; hint.text = h
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  override func viewDidLoad() {
+    super.viewDidLoad()
+    view.backgroundColor = .systemGroupedBackground
+    navigationItem.leftBarButtonItem = UIBarButtonItem(systemItem: .close, primaryAction: UIAction { [weak self] _ in self?.dismiss(animated: true) })
+    let s = UIBarButtonItem(title: "Send", primaryAction: UIAction { [weak self] _ in self?.go() }); s.style = .done
+    if #available(iOS 26.0, *) { s.tintColor = .systemBlue }
+    s.isEnabled = optional; navigationItem.rightBarButtonItem = s
+    hint.font = .systemFont(ofSize: 13); hint.textColor = .secondaryLabel; hint.numberOfLines = 0
+    text.font = .systemFont(ofSize: 16); text.backgroundColor = .secondarySystemGroupedBackground; text.layer.cornerRadius = 14; text.textContainerInset = UIEdgeInsets(top: 10, left: 8, bottom: 10, right: 8); text.delegate = self
+    [hint, text].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; view.addSubview($0) }
+    NSLayoutConstraint.activate([
+      hint.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8), hint.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20), hint.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+      text.topAnchor.constraint(equalTo: hint.bottomAnchor, constant: 8), text.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16), text.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+      text.heightAnchor.constraint(equalToConstant: 110),
+    ])
+  }
+  override func viewDidAppear(_ a: Bool) { super.viewDidAppear(a); text.becomeFirstResponder() }
+  func textViewDidChange(_ tv: UITextView) { navigationItem.rightBarButtonItem?.isEnabled = optional || !tv.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+  private func go() {
+    navigationItem.rightBarButtonItem?.isEnabled = false
+    sendFn(text.text.trimmingCharacters(in: .whitespacesAndNewlines)) { [weak self] err in
+      guard let self = self else { return }
+      if let e = err { self.navigationItem.rightBarButtonItem?.isEnabled = true; let a = UIAlertController(title: e, message: nil, preferredStyle: .alert); a.addAction(UIAlertAction(title: "OK", style: .default)); self.present(a, animated: true); return }
+      UINotificationFeedbackGenerator().notificationOccurred(.success)
+      self.dismiss(animated: true)
+    }
+  }
 }
