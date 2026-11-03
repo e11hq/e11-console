@@ -1660,6 +1660,7 @@ const ServerHost = (() => {
           const ios = await iosPicks({ single: true, source: args.source });
           if (ios) {
             if (!ios.length) return { ok: true, path: null };
+            if (args.onPicked) args.onPicked();   // (chosen: now it uploads — My profile shows it's busy)
             const up = (await uploadMany(ios, { taskId: '_uploads' }))[0];
             if (!up) return { ok: true, path: null };
             return await api('POST', '/api/host/processImage', { path: up.path, kind: args.kind || 'avatar', userId: args.userId });
@@ -1667,6 +1668,7 @@ const ServerHost = (() => {
         }
         const files = await pickFiles({ multiple: false, accept: args.kind === 'logo' ? 'image/*,.svg' : 'image/*' });
         if (!files.length) return { ok: true, path: null };
+        if (args.onPicked) args.onPicked();
         const picked = args.kind === 'logo' ? await realFile(files[0]) : files[0];
         const up = await uploadFile(args.kind === 'logo' ? await logoFile(picked) : picked, { taskId: '_uploads' });
         return { ...(await api('POST', '/api/host/processImage', { path: up.path, kind: args.kind || 'avatar', userId: args.userId })), original: picked };

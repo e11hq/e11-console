@@ -858,6 +858,9 @@ final class TrashRow: AssetTile, UIGestureRecognizerDelegate {
 final class ProfileHead: UIView, HomeBlock {
   private let pic = UIImageView(), change = UIButton(type: .system), remove = UIButton(type: .system)
   private var photoPath: String?, ini = "", hasPhoto = false
+  // (uploading: the photo dimmed with iPhone's spinner on it, until the new photo has come — Haris 2026-11-03)
+  private let dim = UIView(), spin = UIActivityIndicatorView(style: .medium)
+  private var busy = false, waitingNew = false
   var onChange: (() -> Void)?, onRemove: (() -> Void)?
   override init(frame: CGRect) {
     super.init(frame: frame)
@@ -867,11 +870,24 @@ final class ProfileHead: UIView, HomeBlock {
     change.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.onChange?() }, for: .touchUpInside)
     remove.addAction(UIAction { [weak self] _ in self?.onRemove?() }, for: .touchUpInside)
     [pic, change, remove].forEach { addSubview($0) }
+    dim.backgroundColor = UIColor.black.withAlphaComponent(0.4); dim.layer.cornerRadius = 48; dim.alpha = 0; dim.isUserInteractionEnabled = false
+    spin.color = .white; spin.hidesWhenStopped = true
+    addSubview(dim); addSubview(spin)
+  }
+  private func setBusy(_ on: Bool) {
+    if on { spin.startAnimating() } else { spin.stopAnimating() }
+    UIView.animate(withDuration: 0.2) { self.dim.alpha = on ? 1 : 0 }
+    change.isEnabled = !on; remove.isEnabled = !on
+    UIView.performWithoutAnimation { change.setTitle(on ? "Uploading…" : hasPhoto ? "Change photo" : "Add photo", for: .normal); change.layoutIfNeeded() }
+    setNeedsLayout()
   }
   required init?(coder: NSCoder) { fatalError() }
   func set(_ p: [String: Any], look L: HomeLook) {
     hasPhoto = (p["hasPhoto"] as? Bool) == true
-    UIView.performWithoutAnimation { change.setTitle(hasPhoto ? "Change photo" : "Add photo", for: .normal); change.layoutIfNeeded() }
+    let nowBusy = (p["photoBusy"] as? Bool) == true
+    if nowBusy && !busy { busy = true; waitingNew = true; setBusy(true) }
+    else if !nowBusy && busy { busy = false; if (p["photo"] as? String) == photoPath || p["photo"] == nil { waitingNew = false; setBusy(false) } }
+    if !busy && !waitingNew { UIView.performWithoutAnimation { change.setTitle(hasPhoto ? "Change photo" : "Add photo", for: .normal); change.layoutIfNeeded() } }
     change.tintColor = .systemBlue
     remove.isHidden = !hasPhoto
     let i = p["ini"] as? String ?? "", rgb = NativeSheetVC.color(p["rgb"]) ?? .systemGray
@@ -879,7 +895,11 @@ final class ProfileHead: UIView, HomeBlock {
     if ph != photoPath || i != ini || pic.image == nil {
       photoPath = ph; ini = i
       pic.image = roundPic(nil, initials: i, color: rgb, size: 96)
-      if let path = ph { FeedLoader.shared.image(path) { [weak self] img in guard let self = self, self.photoPath == path, let img = img else { return }; self.pic.image = roundPic(img, initials: nil, color: nil, size: 96) } }
+      if let path = ph { FeedLoader.shared.image(path) { [weak self] img in
+        guard let self = self, self.photoPath == path else { return }
+        if let img = img { self.pic.image = roundPic(img, initials: nil, color: nil, size: 96) }
+        if self.waitingNew && !self.busy { self.waitingNew = false; self.setBusy(false) }   // (the new one is there)
+      } } else if waitingNew && !busy { waitingNew = false; setBusy(false) }
     }
     setNeedsLayout()
   }
@@ -888,6 +908,7 @@ final class ProfileHead: UIView, HomeBlock {
     super.layoutSubviews()
     let W = bounds.width
     pic.frame = CGRect(x: (W - 96) / 2, y: 8, width: 96, height: 96)
+    dim.frame = pic.frame; spin.center = CGPoint(x: pic.frame.midX, y: pic.frame.midY)
     let cw = ceil(change.sizeThatFits(CGSize(width: 200, height: 34)).width), rw = remove.isHidden ? 0 : ceil(remove.sizeThatFits(CGSize(width: 200, height: 34)).width)
     let gap: CGFloat = remove.isHidden ? 0 : 24, x = (W - cw - gap - rw) / 2
     change.frame = CGRect(x: x, y: 110, width: cw, height: 34)

@@ -3032,6 +3032,7 @@ const NativeMe = (() => {
   // photo, name, email (locked), country, city, birthday, the role's pills, Sound, Send test, what to be notified about,
   // the CD's own, and Owner view (the owner, live site only). Not here: the Mac app icon, seasonal decorations,
   // Appearance (its own page), Announcement and My reimbursements (website), the morning summary's test (Me's row).
+  let pfBusy = false;
   function profileModel() {
     const u = me(), off = (u.prefs || {}).notifOff || {};
     const pills = [{ t: roleOf(u), c: u.role === 'admin' || u.role === 'office_admin' ? [255, 149, 0] : [10, 132, 255] }];
@@ -3041,7 +3042,7 @@ const NativeMe = (() => {
     const types = (cd) => NOTIF_TYPES.filter((x) => !!x.cd === cd && (!x.lead || Daily.wants(u))).map((x) => ({ k: x.k, t: x.l, s: x.d, on: !off[x.k] }));
     const ov = typeof OwnerView !== 'undefined' && OwnerView.canUse() ? { on: OwnerView.on(), look: OwnerView.lookOnly() } : null;
     return {
-      photo: photoOf(u), ini: initials(fullName(u)), rgb: rgb(avColor(u.id)), hasPhoto: !!u.avatar,
+      photo: photoOf(u), ini: initials(fullName(u)), rgb: rgb(avColor(u.id)), hasPhoto: !!u.avatar, photoBusy: pfBusy,
       name: u.name || '', email: u.email || '', country: u.country || '', city: u.city || '', bday: u.bday ? fmtMD(u.bday) : '',
       pills, sound: (u.prefs || {}).sound !== false, notify: types(false), cd: u.id === cdUserId() ? { title: cdTitle(), types: types(true) } : null, owner: ov,
     };
@@ -3246,7 +3247,8 @@ const NativeMe = (() => {
         case 'trRestore': restoreTrash(ev.id); sync(); return;
         case 'trForever': eraseTrashFlow(ev.id).then(() => sync()); return;
         case 'trEmpty': emptyTrashFlow().then(() => sync()); return;
-        case 'pfPhoto': (async () => { try { const r = await Host.call('pickImage', { userId: currentUserId, source: ev.source || null }); if (!r || !r.path) return; const u = me(); if (u.avatar) Host.call('trashPath', { path: u.avatar }).catch(() => {}); saveMe((x) => { x.avatar = r.path; }); render(); } catch (e) { toast('Couldn’t use that photo'); } })(); return;
+        // (while it uploads, the app shows it on the photo — Haris 2026-11-03)
+        case 'pfPhoto': (async () => { try { const r = await Host.call('pickImage', { userId: currentUserId, source: ev.source || null, onPicked: () => { pfBusy = true; } }); if (!r || !r.path) return; const u = me(); if (u.avatar) Host.call('trashPath', { path: u.avatar }).catch(() => {}); saveMe((x) => { x.avatar = r.path; }); render(); } catch (e) { toast('Couldn’t use that photo'); } finally { pfBusy = false; } })(); return;
         case 'pfPhotoOff': removePhoto(); return;
         case 'pfName': editName(); return;
         case 'pfCountry': pickPlace('country'); return;
