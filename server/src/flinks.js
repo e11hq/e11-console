@@ -80,75 +80,134 @@ export function createFileLinks({ store, files, views, base, teamId, bundleId = 
 
   const THUMBED = ['pdf', 'mp4', 'mov', 'm4v', 'webm', 'avi', 'mkv', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'];
   const hasPic = (a) => { const e = extOf(a.name || a.path); return IMAGES.includes(e) || !!a.thumb || THUMBED.includes(e); };
-  const offCard = `<div class="card off"><div class="ic"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M6 18 18 6"/></svg></div><b>This link isn’t available</b><small>It was turned off, or it was removed. Ask the person who sent it for a new one.</small></div>`;
-  // a file's card: its preview, name, type · size, Download (me: where its /file, /view, /thumb are)
-  function fileCard(me, a) {
-    const name = a.name || path.basename(a.path || '');
-    const ext = extOf(name);
-    const meta = `${(ext || 'file').toUpperCase()} · ${size(a.size || 0)}`;
-    const preview = VIDEOS.includes(ext)
-      ? `<video controls playsinline preload="metadata" poster="${me}/thumb" src="${me}/view"></video>`
-      : IMAGES.includes(ext) ? `<img src="${me}/view" alt="${esc(name)}">`
-        : hasPic(a) ? `<img src="${me}/thumb" alt="${esc(name)}" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'tile',textContent:'${esc((ext || 'file').toUpperCase())}'}))">`
-          : `<span class="tile">${esc((ext || 'file').toUpperCase())}</span>`;
-    return `<div class="card"><div class="prev">${preview}</div><div class="fn">${esc(name)}</div><div class="meta">${esc(meta)}</div><a class="btn" href="${me}/file" download><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Download</a></div>`;
-  }
+  // ---------- the page (Haris 2026-11-03: "a bit more interactive like WeTransfer"): the file's own picture big and soft
+  // behind everything; the chosen file large on the right (a picture, a video that plays there, a PDF / Office first
+  // page, or a tile with its type); a card on the left (at the bottom on a phone) with the name, type · size, who shared
+  // it, and Download that fills as the file comes in, then ticks. A folder: its files in the card, each with its own
+  // download ring; a tap shows that one. Copy link at the top right. Turned off: the card alone on E11's colour wash.
+  const kindOf = (a) => { const e = extOf(a.name || a.path); return VIDEOS.includes(e) ? 'video' : IMAGES.includes(e) ? 'img' : hasPic(a) ? 'doc' : 'none'; };
+  const sharer = (l) => { const u = l && l.by ? store.get('users', String(l.by)) : null; return u ? (u.name || String(u.email || '').split('@')[0]) : ''; };
+  const ini = (n) => String(n || 'E').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('');
+  const item = (me, a) => ({ id: a.id || '', n: a.name || path.basename(a.path || '') || 'File', t: (extOf(a.name || a.path) || 'file').toUpperCase(), s: a.size || 0, z: size(a.size || 0), k: kindOf(a), u: me });
+  const offCard = `<div class="offc"><span class="oi"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M6 18 18 6"/></svg></span><b>This link isn’t available</b><small>It was turned off, or it was removed. Ask the person who sent it for a new one.</small></div>`;
   const ogFor = (title, desc, url, img) => `<meta property="og:title" content="${esc(title)}"><meta property="og:description" content="${esc(desc)}"><meta property="og:site_name" content="E11 Agency"><meta property="og:url" content="${esc(url)}">${img ? `<meta property="og:image" content="${esc(img)}"><meta name="twitter:card" content="summary_large_image">` : ''}`;
-  // the branded page around it: the E11 word mark, E11 AGENCY, …, © E11 AGENCY
-  function shell(title, og, body) {
+  const DL = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>';
+  // v: { title, og, kind ('File' / 'Folder · …'), name, meta, by, back: {href, label}, folders: [{href, name, line}], items, pick, note } — or off
+  function shell(title, og, v) {
+    const off = !v;
+    const data = off ? '[]' : JSON.stringify(v.items).replace(/</g, '\\u003c');
+    const list = off ? '' : [
+      ...(v.folders || []).map((x) => `<a class="f fo" href="${esc(x.href)}"><span class="th fold"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M3 6.5A2.5 2.5 0 0 1 5.5 4h4l2 2.2h7A2.5 2.5 0 0 1 21 8.7v8.8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/></svg></span><span class="nm"><b>${esc(x.name)}</b><small>${esc(x.line)}</small></span><span class="chev">›</span></a>`),
+      ...(v.folder ? v.items.map((it, i) => `<div class="f" data-i="${i}"><span class="th">${it.k === 'none' ? `<i>${esc(it.t)}</i>` : `<img src="${esc(it.u)}/thumb" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('i'),{textContent:'${esc(it.t)}'}))">`}${it.k === 'video' ? '<span class="pl">▶</span>' : ''}</span><span class="nm"><b>${esc(it.n)}</b><small>${esc(it.t)} · ${esc(it.z)}</small></span><a class="dl" href="${esc(it.u)}/file" data-i="${i}" title="Download" download><svg class="ring" viewBox="0 0 36 36"><circle class="tr" cx="18" cy="18" r="15"/><circle class="pg" cx="18" cy="18" r="15"/></svg>${DL}</a></div>`) : []),
+    ].join('');
+    const card = off ? offCard : `${v.back ? `<a class="back" href="${esc(v.back.href)}">‹ ${esc(v.back.label)}</a>` : ''}<div class="head"><div class="kind">${esc(v.kind)}</div><h1>${esc(v.name)}</h1><div class="meta">${esc(v.meta)}</div>${v.by ? `<div class="from"><i>${esc(ini(v.by))}</i><span>Shared by <b>${esc(v.by)}</b> · E11 Agency</span></div>` : ''}</div>
+${list ? `<div class="list">${list}</div>` : ''}${v.items.length ? `<div class="foot"><a class="big" id="big" href="${esc(v.items[v.pick || 0].u)}/file" download><span class="fill" id="fill"></span>${DL}<span id="bigt">${v.folder ? 'Download this file' : 'Download'}</span></a><div class="note">${esc(v.note)}</div></div>` : '<div class="none">No files here yet</div>'}`;
     return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>${title ? esc(title) + ' · E11 Agency' : 'E11 Agency'}</title>${og || '<meta property="og:title" content="E11 Agency">'}<meta name="robots" content="noindex">
 <meta name="color-scheme" content="light dark"><link rel="icon" href="data:,">
 <style>
-:root{--bg:#f5f5f7;--card:#fff;--prev:#eef0f4;--t:#17181b;--sub:#8a8a8e;--btn:#17181b;--btnt:#fff;--link:#0a84ff}
-@media (prefers-color-scheme:dark){:root{--bg:#0c0d0f;--card:#17181c;--prev:#202127;--t:#e9eaee;--sub:#8e8e93;--btn:#fff;--btnt:#111;--link:#409cff}}
+:root{--card:rgba(255,255,255,.94);--t:#17181b;--sub:#8a8a8e;--line:rgba(0,0,0,.08);--hov:rgba(0,0,0,.045);--btn:#17181b;--btnt:#fff;--blue:#0a84ff;--green:#30d158;
+--wash:radial-gradient(circle at 25% 25%,#3d3a8f,transparent 55%),radial-gradient(circle at 80% 75%,#7b2d6b,transparent 55%),linear-gradient(135deg,#1b1c3a,#0b0b10)}
+@media (prefers-color-scheme:dark){:root{--card:rgba(24,25,29,.92);--t:#eceef2;--sub:#8e8e93;--line:rgba(255,255,255,.09);--hov:rgba(255,255,255,.055);--btn:#fff;--btnt:#111}}
 *{box-sizing:border-box;margin:0}
-html,body{background:var(--bg);color:var(--t);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Inter",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
-body{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;align-items:center;padding:44px 16px calc(22px + env(safe-area-inset-bottom))}
-a{color:inherit;text-decoration:none}
-.brand{display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:28px;color:var(--t)}
-.brand svg{height:34px;width:auto}.brand svg path{fill:currentColor}
-.brand span{font-size:10.5px;font-weight:700;letter-spacing:3.2px;color:var(--sub)}
-.card{background:var(--card);border-radius:24px;padding:16px;width:100%;max-width:460px}
-.prev{border-radius:16px;background:var(--prev);display:flex;align-items:center;justify-content:center;overflow:hidden;min-height:220px;max-height:62vh}
-.prev img,.prev video{display:block;max-width:100%;max-height:62vh;object-fit:contain}
-.prev video{width:100%;background:#000}
-.tile{font-size:34px;font-weight:800;color:var(--sub);letter-spacing:1px}
-.fn{font-size:18px;font-weight:650;margin:14px 4px 0;word-break:break-word}.meta{font-size:13.5px;color:var(--sub);margin:3px 4px 0}
-.btn{margin-top:16px;height:48px;border-radius:14px;background:var(--btn);color:var(--btnt);font-weight:600;font-size:16px;display:flex;align-items:center;justify-content:center;gap:8px}
-.off{display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;padding:34px 18px}
-.off .ic{width:54px;height:54px;border-radius:27px;background:var(--prev);display:flex;align-items:center;justify-content:center;color:var(--sub)}
-.off b{font-size:18px}.off small{font-size:14px;color:var(--sub);line-height:1.4}
-.back{align-self:center;width:100%;max-width:460px;font-size:15px;color:var(--link);margin:0 0 12px 8px}
-.wide{width:100%;max-width:760px}.wide.back,.back.w{max-width:760px}
-.fh{display:flex;align-items:center;gap:12px;margin:0 4px 16px}
-.fic{width:44px;height:44px;border-radius:12px;background:#0a84ff;display:flex;align-items:center;justify-content:center;color:#fff;flex:none}
-.fh b{font-size:20px;display:block;word-break:break-word}.fh small{font-size:13px;color:var(--sub)}
-.sec{font-size:12px;font-weight:600;letter-spacing:.4px;color:var(--sub);text-transform:uppercase;margin:6px 6px 8px}
-.subs{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:16px}
-.sf{background:var(--card);border-radius:16px;padding:12px;display:flex;align-items:center;gap:10px}
-.sf i{width:30px;height:24px;border-radius:6px;flex:none}
-.sf b{font-size:14px;display:block}.sf small{font-size:12px;color:var(--sub)}
-.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
-@media (max-width:560px){.grid{grid-template-columns:repeat(3,1fr);gap:8px}.subs{grid-template-columns:repeat(2,1fr)}}
-.gt{background:var(--card);border-radius:14px;padding:6px 6px 8px;display:block}
-.th{aspect-ratio:1;border-radius:10px;background:var(--prev);display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;font-weight:800;font-size:14px;color:var(--sub)}
-.th img{width:100%;height:100%;object-fit:cover;display:block}
-.th .pl{position:absolute;width:30px;height:30px;border-radius:15px;background:rgba(0,0,0,.45);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px}
-.tn{font-size:12px;margin:6px 2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ts{font-size:11px;color:var(--sub);margin:1px 2px 0}
-.none{color:var(--sub);font-size:14px;text-align:center;padding:30px}
-.foot{margin-top:auto;padding-top:28px;font-size:11px;color:var(--sub);letter-spacing:1.6px;font-weight:600}
+html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Inter",system-ui,sans-serif;-webkit-font-smoothing:antialiased;color:var(--t);background:#111;overflow:hidden}
+a{color:inherit;text-decoration:none}button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.bg{position:fixed;inset:0;background:var(--wash);overflow:hidden}
+.bg img{position:absolute;inset:-8%;width:116%;height:116%;object-fit:cover;filter:blur(40px) saturate(1.3);opacity:0;transition:opacity .6s}.bg img.on{opacity:.95}
+.bg::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.22),rgba(0,0,0,.45))}
+.top{position:fixed;top:22px;left:28px;right:28px;display:flex;justify-content:space-between;align-items:center;color:#fff;z-index:3}
+.brand{display:flex;align-items:center;gap:12px}.brand svg{height:26px;width:auto}.brand svg path{fill:#fff}.brand span{font-size:10px;font-weight:700;letter-spacing:3px;opacity:.8}
+.pill{height:38px;padding:0 16px;border-radius:19px;background:rgba(255,255,255,.16);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);color:#fff;font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px;transition:background .2s}.pill:hover{background:rgba(255,255,255,.26)}
+.stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:84px 56px 56px 520px}
+.art{position:relative;display:flex;align-items:center;justify-content:center;max-width:100%;max-height:100%;width:100%;height:100%}
+.art>img,.art>video{max-width:100%;max-height:100%;border-radius:18px;box-shadow:0 30px 80px rgba(0,0,0,.45);display:block;background:#000}
+.art>img{cursor:zoom-in;background:transparent}.art.doc>img{background:#fff;cursor:zoom-in}
+.nt{display:flex;flex-direction:column;align-items:center;gap:10px;color:#fff;text-align:center;padding:48px 40px;border-radius:24px;background:rgba(255,255,255,.1);-webkit-backdrop-filter:blur(30px);backdrop-filter:blur(30px);border:1px solid rgba(255,255,255,.15);max-width:520px}
+.nt b{width:120px;height:140px;border-radius:18px;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;font-size:28px;letter-spacing:1px}
+.nt span{font-size:18px;font-weight:600;margin-top:8px;word-break:break-word}.nt small{font-size:13.5px;opacity:.75}
+.card{position:fixed;left:40px;top:50%;transform:translateY(-50%);width:420px;max-height:calc(100vh - 150px);display:flex;flex-direction:column;background:var(--card);-webkit-backdrop-filter:blur(30px);backdrop-filter:blur(30px);border-radius:28px;box-shadow:0 24px 70px rgba(0,0,0,.35);overflow:hidden;z-index:2;animation:rise .6s cubic-bezier(.2,.8,.2,1)}
+@keyframes rise{from{opacity:0;transform:translateY(calc(-50% + 24px))}}
+.back{display:block;padding:18px 24px 0;font-size:14.5px;color:var(--blue);font-weight:500}
+.head{padding:22px 24px 16px}.back+.head{padding-top:10px}
+.kind{font-size:12px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--sub)}
+.head h1{font-size:24px;font-weight:700;margin-top:6px;word-break:break-word;line-height:1.15}.head .meta{font-size:14px;color:var(--sub);margin-top:6px}
+.from{display:flex;align-items:center;gap:10px;margin-top:14px;font-size:13.5px;color:var(--sub)}.from b{color:var(--t);font-weight:600}
+.from i{width:28px;height:28px;border-radius:14px;background:linear-gradient(135deg,#7b68ee,#4ea2ff);display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-style:normal;font-weight:700;flex:none}
+.list{overflow:auto;border-top:1px solid var(--line);padding:6px}
+.f{display:flex;align-items:center;gap:12px;padding:8px 10px;border-radius:14px;cursor:pointer;transition:background .15s}.f:hover,.f.on{background:var(--hov)}
+.th{width:46px;height:46px;border-radius:10px;background:var(--line);flex:none;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.th img{width:100%;height:100%;object-fit:cover;display:block}.th i{font-style:normal;font-size:10px;font-weight:800;color:var(--sub)}
+.th.fold{background:#0a84ff;color:#fff}.th .pl{position:absolute;width:20px;height:20px;border-radius:10px;background:rgba(0,0,0,.5);color:#fff;display:flex;align-items:center;justify-content:center;font-size:8px}
+.nm{flex:1;min-width:0}.nm b{display:block;font-size:14.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.nm small{font-size:12.5px;color:var(--sub)}
+.chev{color:var(--sub);font-size:20px;padding:0 8px}
+.dl{width:36px;height:36px;border-radius:18px;display:flex;align-items:center;justify-content:center;flex:none;position:relative;transition:background .15s}.dl:hover{background:var(--line)}
+.dl .ring{position:absolute;inset:0;transform:rotate(-90deg)}.ring circle{fill:none;stroke-width:2.5}.ring .tr{stroke:var(--line)}.ring .pg{stroke:var(--blue);stroke-linecap:round;stroke-dasharray:94.2;stroke-dashoffset:94.2;transition:stroke-dashoffset .12s linear}
+.dl.done{color:var(--green)}
+.foot{padding:16px 20px 20px;border-top:1px solid var(--line)}
+.big{position:relative;width:100%;height:54px;border-radius:16px;background:var(--btn);color:var(--btnt);font-weight:650;font-size:16.5px;overflow:hidden;display:flex;align-items:center;justify-content:center;gap:9px;transition:transform .15s,background .2s}
+.big:hover{transform:translateY(-1px)}.big:active{transform:scale(.98)}.big .fill{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--blue);transition:width .12s linear}
+.big span,.big svg{position:relative}.big.going{background:color-mix(in srgb,var(--blue) 30%,var(--btn));color:#fff}.big.done{background:var(--green);color:#fff}
+.note{font-size:12.5px;color:var(--sub);text-align:center;margin-top:10px}.none{color:var(--sub);font-size:14px;text-align:center;padding:24px}
+.offc{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;padding:40px 30px}.offc .oi{width:56px;height:56px;border-radius:28px;background:var(--line);display:flex;align-items:center;justify-content:center;color:var(--sub)}
+.offc b{font-size:19px}.offc small{font-size:14px;color:var(--sub);line-height:1.45}
+.lb{position:fixed;inset:0;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .25s;z-index:8}.lb.show{opacity:1;pointer-events:auto}
+.lb img{max-width:90vw;max-height:86vh;border-radius:10px;transform:scale(.96);transition:transform .3s}.lb.show img{transform:none}
+.lb .x,.lb .nv{position:absolute;width:44px;height:44px;border-radius:22px;background:rgba(255,255,255,.14);color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center}
+.lb .x{top:22px;right:22px}.lb .pv{left:22px;top:50%}.lb .nx{right:22px;top:50%}.lb .cap{position:absolute;bottom:22px;left:0;right:0;text-align:center;color:#fff;font-size:14px;opacity:.85}
+.toast{position:fixed;left:50%;bottom:34px;transform:translate(-50%,20px);opacity:0;background:rgba(20,20,22,.9);color:#fff;font-size:14px;font-weight:600;padding:11px 18px;border-radius:22px;transition:.3s;z-index:9;pointer-events:none}.toast.show{opacity:1;transform:translate(-50%,0)}
+@media (max-width:760px){html,body{overflow:auto}
+ .stage{position:relative;padding:84px 16px 0;height:auto;min-height:0}.art{height:38vh}.art>img,.art>video{max-height:38vh}.nt{padding:26px 20px}.nt b{width:84px;height:96px;font-size:22px}
+ .card{position:relative;left:auto;top:auto;transform:none;width:auto;margin:16px 12px calc(16px + env(safe-area-inset-bottom));max-height:none;animation:none}
+ .top{position:absolute;top:16px;left:16px;right:16px}.pill .w{display:none}.pill{padding:0 11px}
+ .list{overflow:visible}}
 </style></head><body>
-<div class="brand">${brandSvg}<span>E11 AGENCY</span></div>
-${body}
-<div class="foot">© ${year()} E11 AGENCY</div>
-</body></html>`;
+<div class="bg"><img id="bgi" alt=""></div>
+<div class="top"><div class="brand">${brandSvg}<span>E11 AGENCY</span></div>${off ? '' : '<button class="pill" id="copy"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg><span class="w">Copy link</span></button>'}</div>
+<div class="stage"><div class="art" id="art"></div></div>
+<div class="card">${card}</div>
+<div class="lb" id="lb"><img id="lbi" alt=""><button class="x" id="lbx" aria-label="Close">✕</button><button class="nv pv" id="pv" aria-label="Previous">‹</button><button class="nv nx" id="nx" aria-label="Next">›</button><div class="cap" id="cap"></div></div>
+<div class="toast" id="toast"></div>
+<script>
+(function(){var F=${data},cur=${off ? 0 : (v.pick || 0)},$=function(i){return document.getElementById(i)};
+function e(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function toast(t){var x=$('toast');x.textContent=t;x.classList.add('show');clearTimeout(x._t);x._t=setTimeout(function(){x.classList.remove('show')},1700)}
+function show(i){cur=i;var f=F[i];if(!f)return;var a=$('art');a.className='art '+f.k;
+ a.innerHTML=f.k==='video'?'<video controls playsinline preload="metadata" poster="'+e(f.u)+'/thumb" src="'+e(f.u)+'/view"></video>':f.k==='img'?'<img src="'+e(f.u)+'/view" alt="">':f.k==='doc'?'<img src="'+e(f.u)+'/thumb" alt="" onerror="this.parentNode.innerHTML=\\'<div class=nt><b>'+e(f.t)+'</b><span>'+e(f.n)+'</span><small>'+e(f.z)+'</small></div>\\'">':'<div class="nt"><b>'+e(f.t)+'</b><span>'+e(f.n)+'</span><small>'+e(f.z)+' · no preview — download to open</small></div>';
+ var g=$('bgi');g.classList.remove('on');if(f.k!=='none'){g.onload=function(){g.classList.add('on')};g.src=f.u+'/thumb'}
+ var im=a.querySelector('img');if(im&&(f.k==='img'||f.k==='doc'))im.onclick=open;
+ document.querySelectorAll('.f[data-i]').forEach(function(r){r.classList.toggle('on',+r.dataset.i===i)});
+ var b=$('big');if(b&&!b.classList.contains('going')){b.href=f.u+'/file'}}
+// a download that shows how far it's come (small enough files; bigger ones go straight to the browser's download)
+function get(f,step,end,fail){if(!window.fetch||!window.ReadableStream||f.s>400e6){location.href=f.u+'/file';end();return}
+ fetch(f.u+'/file').then(function(r){if(!r.ok)throw 0;var t=+r.headers.get('content-length')||f.s||1,n=0,rd=r.body.getReader(),parts=[];
+  function pump(){return rd.read().then(function(x){if(x.done){var u=URL.createObjectURL(new Blob(parts)),a=document.createElement('a');a.href=u;a.download=f.n;document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(u)},4e4);end();return}
+   parts.push(x.value);n+=x.value.length;step(Math.min(1,n/t),n);return pump()})}return pump()}).catch(function(){fail()})}
+function mb(n){return n>=1e9?(n/1e9).toFixed(1)+' GB':(n/1e6).toFixed(1)+' MB'}
+function mark(i){var d=document.querySelector('.dl[data-i="'+i+'"]');if(!d)return;d.classList.add('done');d.querySelector('.pg').style.strokeDashoffset=0;var s=d.querySelector('svg:not(.ring)');if(s)s.innerHTML='<path d="M5 12.5l4.5 4.5L19 7.5"/>'}
+var b=$('big');if(b)b.onclick=function(ev){ev.preventDefault();var f=F[cur],i=cur;if(!f||b.classList.contains('going'))return;b.classList.remove('done');b.classList.add('going');
+ get(f,function(p,n){$('fill').style.width=(p*100)+'%';$('bigt').textContent=mb(n)+' of '+mb(f.s)},
+ function(){b.classList.remove('going');b.classList.add('done');$('fill').style.width='0';$('bigt').textContent='Downloaded';mark(i);setTimeout(function(){b.classList.remove('done');$('bigt').textContent=F.length>1||document.querySelector('.f[data-i]')?'Download this file':'Download'},2600)},
+ function(){b.classList.remove('going');$('fill').style.width='0';$('bigt').textContent='Download';toast('Download failed — try again')})};
+document.querySelectorAll('.dl').forEach(function(d){d.onclick=function(ev){ev.preventDefault();ev.stopPropagation();var i=+d.dataset.i;if(d._go)return;d._go=1;var pg=d.querySelector('.pg');
+ get(F[i],function(p){pg.style.strokeDashoffset=94.2*(1-p)},function(){d._go=0;mark(i)},function(){d._go=0;pg.style.strokeDashoffset=94.2;toast('Download failed — try again')})}});
+document.querySelectorAll('.f[data-i]').forEach(function(r){r.onclick=function(){show(+r.dataset.i)}});
+var lb=$('lb'),pics=function(){return F.map(function(f,i){return i}).filter(function(i){return F[i].k==='img'||F[i].k==='doc'})};
+function open(){var f=F[cur];$('lbi').src=f.u+(f.k==='img'?'/view':'/thumb');$('cap').textContent=f.n;lb.classList.add('show');var p=pics();$('pv').style.display=$('nx').style.display=p.length>1?'':'none'}
+function step(d){var p=pics(),k=p.indexOf(cur);if(k<0||p.length<2)return;show(p[(k+d+p.length)%p.length]);open()}
+$('lbx').onclick=function(){lb.classList.remove('show')};lb.onclick=function(ev){if(ev.target===lb)lb.classList.remove('show')};
+$('pv').onclick=function(ev){ev.stopPropagation();step(-1)};$('nx').onclick=function(ev){ev.stopPropagation();step(1)};
+addEventListener('keydown',function(ev){if(!lb.classList.contains('show'))return;if(ev.key==='Escape')lb.classList.remove('show');if(ev.key==='ArrowRight')step(1);if(ev.key==='ArrowLeft')step(-1)});
+var c=$('copy');if(c)c.onclick=function(){var u=location.href.replace(/\\/(file|view|thumb)$/,'');(navigator.clipboard?navigator.clipboard.writeText(u):Promise.reject()).then(function(){toast('Link copied')},function(){toast(u)})};
+if(F.length)show(cur);})();
+</script></body></html>`;
   }
   // the file page (a file link)
   function page(tok, r) {
-    if (!r || !r.live) return shell('', '', offCard);
+    if (!r || !r.live) return shell('', '', null);
     const a = r.hit.att, name = a.name || path.basename(r.path), ext = extOf(name);
-    return shell(name, ogFor(name, `${(ext || 'file').toUpperCase()} · ${size(a.size || 0)}`, urlOf(tok), hasPic(a) && ext !== 'svg' ? urlOf(tok) + '/thumb' : null), fileCard(`/f/${tok}`, a));
+    const it = item(`/f/${tok}`, a);
+    return shell(name, ogFor(name, `${it.t} · ${it.z}`, urlOf(tok), hasPic(a) && ext !== 'svg' ? urlOf(tok) + '/thumb' : null),
+      { kind: 'File', name, meta: `${it.t} · ${it.z}`, by: sharer(r), items: [it], pick: 0, note: 'Free to download · no sign-in' });
   }
 
   // ---------- folders (Haris 2026-11-03): a Client Assets folder's link — the folder as it is now, its folders and
@@ -189,29 +248,26 @@ ${body}
     return { ...l, hit, live: !!hit && !l.off && !isFilesTop(hit.f) };
   }
   const COLORS = ['#ff9f0a', '#af52de', '#0a84ff', '#34c759', '#30b0c7', '#ff375f', '#5e5ce6'];
-  function folderPage(tok, r, subId) {
-    if (!r || !r.live) return shell('', '', offCard);
+  function folderPage(tok, r, subId, pickId) {
+    if (!r || !r.live) return shell('', '', null);
     const { c, f: root } = r.hit;
     const inside = [root, ...tree(c, root)];
     const f = subId ? inside.find((x) => x.id === subId) : root;
-    if (!f) return shell('', '', offCard);
+    if (!f) return shell('', '', null);
     const me = `/d/${tok}`;
-    const subs = kids(c, f), fs_ = f.files || [];
+    const subs = kids(c, f), fs_ = (f.files || []).filter((a) => a.path && onDisk(a.path));
     const all = allFiles(c, f);
     const line = [subs.length ? `${subs.length} folder${subs.length === 1 ? '' : 's'}` : '', `${all.length} file${all.length === 1 ? '' : 's'}`, size(all.reduce((n, a) => n + (a.size || 0), 0))].filter(Boolean).join(' · ');
     const parent = f !== root ? inside.find((x) => x.id === f.parentId) || root : null;
-    const back = parent ? `<a class="back w" href="${parent === root ? me : `${me}/s/${parent.id}`}">‹ ${esc(parent.name)}</a>` : '';
-    const tiles = fs_.map((a) => {
-      const e = extOf(a.name);
-      const pic = hasPic(a) && e !== 'svg' ? `<img src="${me}/f/${a.id}/thumb" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${esc((e || 'file').toUpperCase())}'}))">` : e === 'svg' ? `<img src="${me}/f/${a.id}/view" alt="" loading="lazy">` : `<span>${esc((e || 'file').toUpperCase())}</span>`;
-      return `<a class="gt" href="${me}/f/${a.id}"><span class="th">${pic}${VIDEOS.includes(e) ? '<span class="pl">▶</span>' : ''}</span><div class="tn">${esc(a.name || 'File')}</div><div class="ts">${esc(size(a.size || 0))}</div></a>`;
-    }).join('');
-    const folders = subs.map((x, i) => `<a class="sf" href="${me}/s/${x.id}"><i style="background:${COLORS[i % COLORS.length]}"></i><span><b>${esc(x.name)}</b><small>${allFiles(c, x).length} file${allFiles(c, x).length === 1 ? '' : 's'}</small></span></a>`).join('');
-    const body = `${back}<div class="wide"><div class="fh"><span class="fic"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M3 6.5A2.5 2.5 0 0 1 5.5 4h4l2 2.2h7A2.5 2.5 0 0 1 21 8.7v8.8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/></svg></span><div><b>${esc(f.name)}</b><small>${esc(line)}</small></div></div>
-      ${folders ? `<div class="sec">Folders</div><div class="subs">${folders}</div>` : ''}
-      ${tiles ? `<div class="sec">Files</div><div class="grid">${tiles}</div>` : `<div class="none">No files here yet</div>`}</div>`;
+    const items = fs_.map((a) => item(`${me}/f/${a.id}`, a));
+    const pick = Math.max(0, pickId ? fs_.findIndex((a) => a.id === pickId) : 0);
     const cover = all.find((a) => hasPic(a) && extOf(a.name) !== 'svg');
-    return shell(f.name, ogFor(f.name, line, furlOf(tok), cover ? `${furlOf(tok)}/f/${cover.id}/thumb` : null), body);
+    return shell(f.name, ogFor(f.name, line, furlOf(tok), cover ? `${furlOf(tok)}/f/${cover.id}/thumb` : null), {
+      kind: parent ? `Folder · ${root.name}` : `Folder · ${c.name || 'E11 Agency'}`, name: f.name, meta: line, by: sharer(r), folder: true,
+      back: parent ? { href: parent === root ? me : `${me}/s/${parent.id}`, label: parent.name } : null,
+      folders: subs.map((x) => ({ href: `${me}/s/${x.id}`, name: x.name, line: `${allFiles(c, x).length} file${allFiles(c, x).length === 1 ? '' : 's'}` })),
+      items, pick, note: items.length ? 'Files download one by one — tap a file to look at it' : '',
+    });
   }
   // a file inside a shared folder (any depth)
   function folderFile(r, fileId) {
@@ -222,7 +278,7 @@ ${body}
   }
 
   const HEAD = { 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'X-Robots-Tag': 'noindex' };
-  const CSP = "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; frame-ancestors 'none'";
+  const CSP = "default-src 'none'; img-src 'self'; media-src 'self'; connect-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; frame-ancestors 'none'";
   const html = (req, res, ok, body) => { res.writeHead(ok ? 200 : 404, { ...HEAD, 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache', 'Content-Security-Policy': CSP }); res.end(req.method === 'HEAD' ? undefined : body); return true; };
   // a file's bytes: the download, its view (pictures, videos — ranges) or its picture
   async function sendAtt(req, res, what, a, rel) {
@@ -270,10 +326,9 @@ ${body}
       const [, tok, fid, what] = m;
       const r = resolveFolder(tok), hit = folderFile(r, fid);
       if (!what) {
-        if (!hit) return html(req, res, false, shell('', '', offCard));
-        const { a } = hit, name = a.name || 'File', ext = extOf(name);
-        const back = `<a class="back" href="/d/${tok}${hit.in.id === r.hit.f.id ? '' : '/s/' + hit.in.id}">‹ ${esc(hit.in.name)}</a>`;
-        return html(req, res, true, shell(name, ogFor(name, `${(ext || 'file').toUpperCase()} · ${size(a.size || 0)}`, `${furlOf(tok)}/f/${fid}`, hasPic(a) && ext !== 'svg' ? `${furlOf(tok)}/f/${fid}/thumb` : null), back + fileCard(`/d/${tok}/f/${fid}`, a)));
+        if (!hit) return html(req, res, false, shell('', '', null));
+        // (the folder it's in, with this file chosen)
+        return html(req, res, true, folderPage(tok, r, hit.in.id === r.hit.f.id ? null : hit.in.id, fid));
       }
       if (!hit) { res.writeHead(404, HEAD); res.end('Not available'); return true; }
       return sendAtt(req, res, what, hit.a, hit.a.path);

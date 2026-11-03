@@ -105,7 +105,7 @@ async def main():
             await sp.goto(BASE + f'/d/{ftok}'); await sp.wait_for_timeout(400)
             await sp.screenshot(path=os.environ.get('SHOT_DIR', tempfile.gettempdir()) + f'/folder-{sch}.png'); await sp.close()
         st, body, _ = req(f'/d/{ftok}/f/fl-1', who=None)
-        check(st == 200 and '‹ ' in body.decode('utf8') and '/file' in body.decode('utf8'), 'a file opened from it, with ‹ back to the folder')
+        check(st == 200 and 'Northwind logo.png' in body.decode('utf8') and f'/d/{ftok}/f/fl-1/file' in body.decode('utf8'), 'a file opened from it: the folder, with that file chosen')
         st, _, h = req(f'/d/{ftok}/f/fl-1/file', who=None)
         check(st == 200 and 'attachment' in h.get('Content-Disposition', ''), 'its Download')
         st, _, _ = req(f'/d/{ftok}/f/not-in-it/file', who=None)
