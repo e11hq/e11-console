@@ -33,3 +33,8 @@ them on the same way as the task page, the client's page and Client Assets do.
 **NOT JUST ANY AGENCY, everywhere (Haris, 2026-11-03):** at the end of every native list screen, beside "+ New task"
 (or in the middle when there's none). It shows at once when the whole list fits on the screen, and otherwise fades in
 when the list reaches its end and out on scrolling back. Every new native list screen has it.
+
+**The frost bar — LOCKED (Haris, 2026-11-03: "lock it again so it will be consistent"):** on every native screen the
+bar's frost is iPhone's own **firm** scroll-edge frost (`topEdgeEffect.style = .hard`), the whole bar frosted evenly down
+to the one-pixel line under it — never the soft one that fades out. The switch-over (big title → small title, Mail's
+timings) is unchanged and locked too. Don't change either without Haris. Every new native screen uses HomeView's bar.
