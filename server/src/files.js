@@ -379,6 +379,28 @@ export function createFiles(root) {
   let sizingNow = 0; const sizingWait = [];
   const sizingSlot = () => new Promise((ok) => { if (sizingNow < 2) { sizingNow++; ok(); } else sizingWait.push(ok); });
   const sizingDone = () => { const next = sizingWait.shift(); if (next) next(); else sizingNow--; };
+  // a photo's smaller copy, made once and kept (null: the photo itself is used — small already, or not a photo)
+  async function makeSized(relPath, want) {
+    let full, st;
+    try { full = resolve(relPath); st = fs.statSync(full); } catch { return null; }
+    const ext = full.split('.').pop().toLowerCase();
+    const w = SIZES.find((x) => x >= Number(want)) || 1280;
+    if (!IMAGES.includes(ext) || st.size < 60000) return null;
+    const key = crypto.createHash('sha1').update(relPath + '|' + st.size + '|' + st.mtimeMs).digest('hex').slice(0, 20);
+    const outExt = ['png', 'gif', 'webp'].includes(ext) ? 'png' : 'jpg';
+    const out = path.join(resolve('.thumbs/_sized'), `${key}-${w}.${outExt}`);
+    if (!fs.existsSync(out)) {
+      if (!sizing.has(out)) {
+        fs.mkdirSync(path.dirname(out), { recursive: true });
+        const tmp = out + '.tmp.' + outExt;
+        sizing.set(out, sizingSlot().then(() => run('ffmpeg', ['-y', '-v', 'error', '-i', full, '-frames:v', '1', '-vf', `scale='min(${w},iw)':-2`, ...(outExt === 'jpg' ? ['-q:v', '4'] : []), tmp]))
+          .then((ok) => { if (ok && fs.existsSync(tmp) && fs.statSync(tmp).size < st.size) fs.renameSync(tmp, out); else fs.rmSync(tmp, { force: true }); })
+          .finally(() => { sizingDone(); sizing.delete(out); }));
+      }
+      await sizing.get(out);
+    }
+    return fs.existsSync(out) ? out : null;
+  }
   async function serveSized(req, res, relPath, want) {
     let full, st;
     try { full = resolve(relPath); st = fs.statSync(full); } catch { return serve(req, res, relPath); }
@@ -449,7 +471,7 @@ export function createFiles(root) {
     fs.writeFileSync(full, Buffer.alloc(0), { flag: 'wx' });
     return { full, rel: rel(full) };
   }
-  return { commands, serve, serveSized, serveZip, resolve, purgeTrash, linkInto, linkToTask, newUploadFile, rel, root: FILES };
+  return { commands, serve, serveSized, makeSized, serveZip, resolve, purgeTrash, linkInto, linkToTask, newUploadFile, rel, root: FILES };
 }
 
 export function httpError(status, message) { const e = new Error(message); e.status = status; return e; }
