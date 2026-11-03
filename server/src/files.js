@@ -379,49 +379,48 @@ export function createFiles(root) {
   let sizingNow = 0; const sizingWait = [];
   const sizingSlot = () => new Promise((ok) => { if (sizingNow < 2) { sizingNow++; ok(); } else sizingWait.push(ok); });
   const sizingDone = () => { const next = sizingWait.shift(); if (next) next(); else sizingNow--; };
-  // a photo's smaller copy, made once and kept (null: the photo itself is used — small already, or not a photo)
+  // a photo's smaller copy, made once and kept for every device (null: the photo itself is used — small already, or not a
+  // photo). Haris 2026-11-03 ("the bg was there but the large preview was coming cut, growing down — maybe it's made every
+  // time"): it was, for some — a copy that came out no smaller than the photo was thrown away and made again on every
+  // open while the whole photo was sent. Now:
+  //  • JPEG unless the picture has see-through parts (then PNG) — a PNG design export made a PNG copy as heavy as itself;
+  //  • a copy no smaller is remembered as such (<key>.same), never made again — the photo itself is sent;
+  //  • HEIC (iPhone photos) always gets its JPEG copy: browsers can't show HEIC (the empty previews).
+  const alphaOf = new Map();
+  const hasAlpha = (full) => new Promise((ok) => execFile('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=pix_fmt', '-of', 'csv=p=0', full], { timeout: 10000 },
+    (err, out) => ok(!err && /^(rgba|bgra|argb|abgr|ya|yuva|gbrap|pal8)/.test(String(out).trim()))));
   async function makeSized(relPath, want) {
     let full, st;
     try { full = resolve(relPath); st = fs.statSync(full); } catch { return null; }
     const ext = full.split('.').pop().toLowerCase();
     const w = SIZES.find((x) => x >= Number(want)) || 1280;
-    if (!IMAGES.includes(ext) || st.size < 60000) return null;
+    const heic = ext === 'heic' || ext === 'heif';
+    if (!IMAGES.includes(ext) || ext === 'svg' || (st.size < 60000 && !heic)) return null;
     const key = crypto.createHash('sha1').update(relPath + '|' + st.size + '|' + st.mtimeMs).digest('hex').slice(0, 20);
-    const outExt = ['png', 'gif', 'webp'].includes(ext) ? 'png' : 'jpg';
-    const out = path.join(resolve('.thumbs/_sized'), `${key}-${w}.${outExt}`);
-    if (!fs.existsSync(out)) {
-      if (!sizing.has(out)) {
-        fs.mkdirSync(path.dirname(out), { recursive: true });
-        const tmp = out + '.tmp.' + outExt;
-        sizing.set(out, sizingSlot().then(() => run('ffmpeg', ['-y', '-v', 'error', '-i', full, '-frames:v', '1', '-vf', `scale='min(${w},iw)':-2`, ...(outExt === 'jpg' ? ['-q:v', '4'] : []), tmp]))
-          .then((ok) => { if (ok && fs.existsSync(tmp) && fs.statSync(tmp).size < st.size) fs.renameSync(tmp, out); else fs.rmSync(tmp, { force: true }); })
-          .finally(() => { sizingDone(); sizing.delete(out); }));
-      }
-      await sizing.get(out);
+    const dir = resolve('.thumbs/_sized');
+    const same = path.join(dir, `${key}-${w}.same`);
+    if (fs.existsSync(same)) return null;
+    for (const e of ['jpg', 'png']) { const o = path.join(dir, `${key}-${w}.${e}`); if (fs.existsSync(o)) return o; }
+    const job = `${key}-${w}`;
+    if (!sizing.has(job)) {
+      fs.mkdirSync(dir, { recursive: true });
+      sizing.set(job, sizingSlot().then(async () => {
+        let alpha = false;
+        if (['png', 'gif', 'webp'].includes(ext)) { if (!alphaOf.has(relPath)) alphaOf.set(relPath, await hasAlpha(full)); alpha = alphaOf.get(relPath); }
+        const outExt = alpha ? 'png' : 'jpg';
+        const out = path.join(dir, `${job}.${outExt}`), tmp = out + '.tmp.' + outExt;
+        const ok = await run('ffmpeg', ['-y', '-v', 'error', '-i', full, '-frames:v', '1', '-vf', `scale='min(${w},iw)':-2`, ...(outExt === 'jpg' ? ['-q:v', '4'] : []), tmp], 30000);
+        if (ok && fs.existsSync(tmp) && (heic || fs.statSync(tmp).size < st.size)) fs.renameSync(tmp, out);
+        else { fs.rmSync(tmp, { force: true }); if (ok) fs.writeFileSync(same, ''); }
+      }).catch(() => {}).finally(() => { sizingDone(); sizing.delete(job); }));
     }
-    return fs.existsSync(out) ? out : null;
+    await sizing.get(job);
+    for (const e of ['jpg', 'png']) { const o = path.join(dir, `${job}.${e}`); if (fs.existsSync(o)) return o; }
+    return null;
   }
   async function serveSized(req, res, relPath, want) {
-    let full, st;
-    try { full = resolve(relPath); st = fs.statSync(full); } catch { return serve(req, res, relPath); }
-    const ext = full.split('.').pop().toLowerCase();
-    const w = SIZES.find((x) => x >= Number(want)) || 1280;
-    if (!IMAGES.includes(ext) || st.size < 60000) return serve(req, res, relPath);
-    const key = crypto.createHash('sha1').update(relPath + '|' + st.size + '|' + st.mtimeMs).digest('hex').slice(0, 20);
-    const outExt = ['png', 'gif', 'webp'].includes(ext) ? 'png' : 'jpg';
-    const out = path.join(resolve('.thumbs/_sized'), `${key}-${w}.${outExt}`);
-    if (!fs.existsSync(out)) {
-      if (!sizing.has(out)) {
-        fs.mkdirSync(path.dirname(out), { recursive: true });
-        const tmp = out + '.tmp.' + outExt;
-        sizing.set(out, sizingSlot().then(() => run('ffmpeg', ['-y', '-v', 'error', '-i', full, '-frames:v', '1', '-vf', `scale='min(${w},iw)':-2`, ...(outExt === 'jpg' ? ['-q:v', '4'] : []), tmp]))
-          .then((ok) => { if (ok && fs.existsSync(tmp) && fs.statSync(tmp).size < st.size) fs.renameSync(tmp, out); else fs.rmSync(tmp, { force: true }); })
-          .finally(() => { sizingDone(); sizing.delete(out); }));
-      }
-      await sizing.get(out);
-    }
-    if (!fs.existsSync(out)) return serve(req, res, relPath);
-    return serve(req, res, rel(out));
+    const out = await makeSized(relPath, want);
+    return out ? serve(req, res, rel(out)) : serve(req, res, relPath);
   }
 
   // Simple uncompressed zip (design files are already compressed), streamed piece by piece so
