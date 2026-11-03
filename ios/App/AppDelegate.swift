@@ -1251,6 +1251,12 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   /* the top of the tab bar as it's seen: iOS 26's floating bar is a pill inside a taller UITabBar view, so the view's
      own top is well above it (the + and the toasts sat ~35 pt too high — Haris, 2026-10-31). The pill: 61 tall, its
      bottom 11 pt into the home-indicator room (8 from the edge on a phone without one). */
+  // (the View as… bar's lower edge: above the comment box, else above the tab bar, else at the bottom edge)
+  func viewAsBottom() -> CGFloat {
+    if let b = cbarIfMade, !b.isHidden, b.alpha > 0.01 { return b.frame.minY - 8 }
+    if tabBar.isHidden || !taskPages.isEmpty { return view.bounds.height - max(view.safeAreaInsets.bottom, 12) - 2 }
+    return tabPillTop - 10
+  }
   var tabPillTop: CGFloat {
     let H = view.bounds.height, safe = view.safeAreaInsets.bottom
     let pillBottom = H - (safe > 0 ? max(8, safe - 11) : 8)

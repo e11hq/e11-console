@@ -984,6 +984,28 @@ final class MeCtl {
         .init(id: "ya", name: "Yousef Al Hwij", role: "Production", ini: "YA", color: .systemPink),
       ]
       ViewAsSheet(dark: dark, people: ppl, viewing: "aa").show(from: vc)
+    case "bar":
+      if let b = ViewAsBar.current { b.go(); redrawRoot(); return }
+      let ppl: [ViewAsSheet.Person] = [
+        .init(id: "ar", name: "Ali Raza", role: "Production", ini: "AR", color: .systemIndigo),
+        .init(id: "aa", name: "Amelia Aouidat", role: "Social", ini: "AA", color: .systemOrange),
+        .init(id: "ca", name: "Carine Abou Jaoude", role: "Creative Director", ini: "CA", color: .systemPurple),
+        .init(id: "jh", name: "Joe Hajj", role: "Account Manager", ini: "JH", color: .systemRed),
+      ]
+      let bar = ViewAsBar(dark: dark); bar.set(name: "Amelia Aouidat", role: "Social")
+      bar.bottomFor = { [weak self] in self?.main.viewAsBottom() ?? 0 }
+      bar.onBackToMe = { [weak self, weak bar] in bar?.go(); self?.redrawRoot() }
+      bar.onSwitch = { [weak self, weak bar] in
+        guard let self = self else { return }
+        let s = ViewAsSheet(dark: !self.light, people: ppl, viewing: nil)
+        s.onPick = { [weak self, weak bar, weak s] id in
+          if let p = ppl.first(where: { $0.id == id }) { bar?.set(name: p.name, role: p.role); s?.dismiss(animated: true) }
+          else { bar?.go(); s?.dismiss(animated: true); self?.redrawRoot() }
+        }
+        s.show(from: self.main.topMost())
+      }
+      bar.show(in: main.view)
+      redrawRoot()
     default: break
     }
   }
@@ -1210,6 +1232,7 @@ final class MeCtl {
   func refresh() { if isOpen { main.pageJS("window.__e11MeResend && window.__e11MeResend()"); if stack.contains(where: { $0.kind == "about" }) { send(["ev": "about"]) } } }
 
   // ---------- what's on each ----------
+  private func redrawRoot() { if let s = stack.first(where: { $0.kind == "me" }) { draw(s) } }
   private func draw(_ s: Screen) {
     var mm: [String: Any] = ["show": true, "me": me ?? "", "look": ["light": light]]
     if let l = main.homeLook as? [String: Any], (l["light"] as? Bool) == light { mm["look"] = l }
@@ -1292,6 +1315,7 @@ final class MeCtl {
           t("ask", "Birthday / city card", "Above the tab bar, goes after 20 s", "gift.fill", .systemPink),
           t("new", "What’s new", "Once, after an update", "arrow.down.circle.fill", .systemBlue),
           t("viewas", "View as… (new sheet)", "Made-up team — doesn’t switch", "person.2.fill", .systemTeal),
+          t("bar", ViewAsBar.current == nil ? "View as… bar — show" : "View as… bar — hide", "Floats on every page until hidden", "rectangle.bottomthird.inset.filled", .systemOrange),
         ]))
       }
       // (the sync status in the version's place — Haris 2026-11-03; the version is on About)

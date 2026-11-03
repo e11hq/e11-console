@@ -436,3 +436,77 @@ final class ProfileAskCard: UIView {
     UIView.animate(withDuration: 0.3, animations: { self.alpha = 0; self.transform = CGAffineTransform(translationX: 0, y: 20) }) { _ in self.removeFromSuperview() }
   }
 }
+
+/* ---------- 7 · the View as… bar (approved 2026-11-03, mockup viewas-bar-mockup.png): test site only, while viewing as
+   someone — a small amber Liquid Glass capsule on every page: just above the tab bar; on a task page at the bottom edge;
+   on Comments just above the comment box (and up with the keyboard). Sheets and pop-ups open over it. ---------- */
+final class ViewAsBar: UIView {
+  static weak var current: ViewAsBar?
+  private let glass = UIVisualEffectView(effect: nil), icon = UIView(), cap = UILabel(), name = UILabel()
+  private var sw: UIButton!, me: UIButton!
+  var onSwitch: (() -> Void)?, onBackToMe: (() -> Void)?
+  /// where its lower edge goes, asked every frame (the page under it: tab bar, task page, comment box, keyboard)
+  var bottomFor: (() -> CGFloat)?
+  private var link: CADisplayLink?
+  init(dark: Bool) {
+    super.init(frame: .zero)
+    overrideUserInterfaceStyle = dark ? .dark : .light
+    if #available(iOS 26.0, *) { let g = UIGlassEffect(style: .regular); g.tintColor = UIColor.systemOrange.withAlphaComponent(dark ? 0.22 : 0.18); glass.effect = g }
+    else { glass.effect = UIBlurEffect(style: .systemThickMaterial); glass.contentView.backgroundColor = UIColor.systemOrange.withAlphaComponent(0.16) }
+    glass.layer.cornerRadius = 26; glass.layer.cornerCurve = .continuous; glass.clipsToBounds = true
+    addSubview(glass)
+    layer.shadowColor = UIColor.black.cgColor; layer.shadowOpacity = dark ? 0 : 0.1; layer.shadowRadius = 14; layer.shadowOffset = CGSize(width: 0, height: 4)
+    icon.backgroundColor = .systemOrange; icon.layer.cornerRadius = 14
+    let i = UIImageView(image: UIImage(systemName: "person.2.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 11, weight: .bold)))
+    i.tintColor = .white; i.frame = CGRect(x: 0, y: 0, width: 28, height: 28); i.contentMode = .center; icon.addSubview(i)
+    cap.font = .systemFont(ofSize: 10.5, weight: .bold)
+    cap.textColor = dark ? UIColor(red: 1, green: 0.70, blue: 0.25, alpha: 1) : UIColor(red: 0.69, green: 0.43, blue: 0, alpha: 1)
+    name.font = .systemFont(ofSize: 15, weight: .semibold); name.textColor = .label
+    sw = Pop.capsule("Switch", filled: false, small: true) { [weak self] in self?.onSwitch?() }
+    me = Pop.capsule("Back to me", filled: true, small: true) { [weak self] in self?.onBackToMe?() }
+    [icon, cap, name, sw, me].forEach { glass.contentView.addSubview($0) }
+    sw.translatesAutoresizingMaskIntoConstraints = true; me.translatesAutoresizingMaskIntoConstraints = true
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  func set(name n: String, role: String) {
+    cap.text = "VIEWING AS · \(role.uppercased())"
+    name.text = n.split(separator: " ").first.map(String.init) ?? n
+    accessibilityLabel = "Viewing as \(n), \(role)"
+    setNeedsLayout()
+  }
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    glass.frame = bounds
+    let H = bounds.height, W = bounds.width
+    let mw = me.sizeThatFits(CGSize(width: 200, height: 34)).width, sww = sw.sizeThatFits(CGSize(width: 200, height: 34)).width
+    me.frame = CGRect(x: W - 7 - mw, y: (H - 36) / 2, width: mw, height: 36)
+    sw.frame = CGRect(x: me.frame.minX - 6 - sww, y: (H - 36) / 2, width: sww, height: 36)
+    icon.frame = CGRect(x: 12, y: (H - 28) / 2, width: 28, height: 28)
+    let tx = icon.frame.maxX + 9, tw = max(0, sw.frame.minX - 8 - tx)
+    cap.frame = CGRect(x: tx, y: H / 2 - 16, width: tw, height: 14)
+    name.frame = CGRect(x: tx, y: H / 2 - 2, width: tw, height: 19)
+  }
+  func show(in host: UIView) {
+    ViewAsBar.current?.go(animated: false)
+    host.addSubview(self); ViewAsBar.current = self
+    place(host)
+    alpha = 0; transform = CGAffineTransform(translationX: 0, y: 16)
+    UIView.animate(withDuration: 0.4, delay: 0, usingSpringWithDamping: 0.85, initialSpringVelocity: 0, options: [.allowUserInteraction]) { self.alpha = 1; self.transform = .identity }
+    let l = CADisplayLink(target: self, selector: #selector(tick)); l.add(to: .main, forMode: .common); link = l
+  }
+  @objc private func tick() { if let h = superview { place(h) } }
+  private func place(_ host: UIView) {
+    // (always over the pages — the app's sheets are above it anyway)
+    if host.subviews.last !== self { host.bringSubviewToFront(self) }
+    let b = bottomFor?() ?? (host.bounds.height - host.safeAreaInsets.bottom - 8)
+    let f = CGRect(x: 14, y: (b - 52).rounded(), width: host.bounds.width - 28, height: 52)
+    if f != frame && transform == .identity { if abs(f.minY - frame.minY) > 30 && frame.width > 0 { UIView.animate(withDuration: 0.3, delay: 0, options: [.allowUserInteraction, .beginFromCurrentState]) { self.frame = f } } else { frame = f } }
+    else if frame.width == 0 { frame = f }
+  }
+  func go(animated: Bool = true) {
+    link?.invalidate(); link = nil
+    if ViewAsBar.current === self { ViewAsBar.current = nil }
+    if !animated { removeFromSuperview(); return }
+    UIView.animate(withDuration: 0.25, animations: { self.alpha = 0; self.transform = CGAffineTransform(translationX: 0, y: 12) }) { _ in self.removeFromSuperview() }
+  }
+}
