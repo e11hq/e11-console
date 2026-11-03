@@ -740,6 +740,10 @@ final class TrashGroup: UIView, HomeBlock {
 final class TrashRow: AssetTile, UIGestureRecognizerDelegate {
   private let body = UIView(), icon = SettingsIcon(), sym = UIImageView(), name = UILabel(), sub = UILabel(), left = UILabel()
   private let restoreB = UIButton(type: .system), foreverB = UIButton(type: .system)
+  // (each button's icon and word at their own width, never squeezed — clipped by the button while it opens, and faded in;
+  //  Haris 2026-11-03: "Delete forever" wrapped letter by letter on a slow swipe)
+  private let restoreC = UIView(), foreverC = UIView()
+  private static let RW: CGFloat = 96, FW: CGFloat = 110
   private var chips: [UIImageView] = [], more = UILabel()
   private var it: [String: Any] = [:]
   var onEvent: (([String: Any]) -> Void)?
@@ -751,17 +755,31 @@ final class TrashRow: AssetTile, UIGestureRecognizerDelegate {
     let H = bounds.height
     restoreB.frame = CGRect(x: 0, y: 0, width: max(0, shift), height: H)
     foreverB.frame = CGRect(x: bounds.width + min(0, shift), y: 0, width: max(0, -shift), height: H)
+    placeContent()
   } }
+  // (the icon and word sit by the row's edge as it goes, at their own width; beyond the button's full width they stay
+  //  centred in what's uncovered)
+  private func placeContent() {
+    let H = bounds.height, rw = restoreB.bounds.width, fw = foreverB.bounds.width
+    let RW = TrashRow.RW, FW = TrashRow.FW
+    restoreC.frame = CGRect(x: rw <= RW ? rw - RW : (rw - RW) / 2, y: 0, width: RW, height: H)
+    foreverC.frame = CGRect(x: fw <= FW ? 0 : (fw - FW) / 2, y: 0, width: FW, height: H)
+    restoreC.alpha = min(1, max(0, (rw - 24) / (RW * 0.6))); foreverC.alpha = min(1, max(0, (fw - 24) / (FW * 0.6)))
+  }
   override init(frame: CGRect) {
     super.init(frame: frame)
     clipsToBounds = true
-    for (b, t, c, sy) in [(restoreB, "Restore", UIColor.systemGreen, "arrow.uturn.backward"), (foreverB, "Delete forever", UIColor.systemRed, "trash.fill")] {
-      var cf = UIButton.Configuration.plain(); cf.title = t; cf.image = UIImage(systemName: sy, withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold))
-      cf.imagePlacement = .top; cf.imagePadding = 5; cf.baseForegroundColor = .white
-      cf.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { var a = $0; a.font = UIFont.systemFont(ofSize: 12, weight: .semibold); return a }
+    for (b, cv, t, c, sy) in [(restoreB, restoreC, "Restore", UIColor.systemGreen, "arrow.uturn.backward"), (foreverB, foreverC, "Delete forever", UIColor.systemRed, "trash.fill")] {
+      var cf = UIButton.Configuration.plain()
       // (square — only the group's own corners round it: the first row's top, the last row's bottom; Haris 2026-11-03)
       cf.background.backgroundColor = c; cf.background.cornerRadius = 0; cf.cornerStyle = .fixed
-      b.configuration = cf; b.layer.cornerRadius = 0; b.alpha = 0; addSubview(b)
+      b.configuration = cf; b.layer.cornerRadius = 0; b.alpha = 0; b.clipsToBounds = true; b.accessibilityLabel = t; addSubview(b)
+      let iv = UIImageView(image: UIImage(systemName: sy, withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold))); iv.tintColor = .white; iv.contentMode = .center
+      let l = UILabel(); l.text = t; l.font = .systemFont(ofSize: 12, weight: .semibold); l.textColor = .white; l.textAlignment = .center; l.numberOfLines = 1
+      iv.translatesAutoresizingMaskIntoConstraints = false; l.translatesAutoresizingMaskIntoConstraints = false
+      cv.isUserInteractionEnabled = false; cv.addSubview(iv); cv.addSubview(l); b.addSubview(cv)
+      NSLayoutConstraint.activate([iv.centerXAnchor.constraint(equalTo: cv.centerXAnchor), iv.bottomAnchor.constraint(equalTo: cv.centerYAnchor, constant: 1),
+                                   l.centerXAnchor.constraint(equalTo: cv.centerXAnchor), l.topAnchor.constraint(equalTo: iv.bottomAnchor, constant: 5)])
     }
     restoreB.addAction(UIAction { [weak self] _ in self?.act("trRestore") }, for: .touchUpInside)
     foreverB.addAction(UIAction { [weak self] _ in self?.act("trForever") }, for: .touchUpInside)
@@ -814,6 +832,7 @@ final class TrashRow: AssetTile, UIGestureRecognizerDelegate {
     let W = bounds.width, H = bounds.height
     body.bounds = CGRect(origin: .zero, size: bounds.size); body.center = CGPoint(x: W / 2, y: H / 2)
     restoreB.frame = CGRect(x: 0, y: 0, width: max(0, shift), height: H); foreverB.frame = CGRect(x: W + min(0, shift), y: 0, width: max(0, -shift), height: H)
+    placeContent()
     icon.frame = CGRect(x: 16, y: 13, width: 30, height: 30); sym.frame = icon.bounds
     let tw = textW(W)
     let nh = min(42, ceil(name.sizeThatFits(CGSize(width: tw, height: 100)).height))
