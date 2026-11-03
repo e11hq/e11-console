@@ -195,7 +195,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     nc.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { [weak self] _ in self?.keyboardH = 0; self?.setNeedsLayout() }
     // "+ New task": a Liquid Glass capsule the size of Mail's "Select" (iOS 26's own glass button; before: a grey capsule)
     // (a plain capsule, light and dark — no glass, the same as the toast it stretches into: Haris 2026-11-03)
-    var fc = UIButton.Configuration.filled(); fc.cornerStyle = .capsule
+    // (glass again — iPhone's own Liquid Glass, and the toast it stretches into is glass too: Haris 2026-11-03, "1")
+    var fc: UIButton.Configuration
+    if #available(iOS 26.0, *) { fc = .glass() } else { fc = .filled(); fc.cornerStyle = .capsule }
     fc.image = UIImage(systemName: "plus", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold))
     fc.imagePadding = 6
     fc.attributedTitle = AttributedString("New task", attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 17, weight: .semibold)]))
@@ -241,9 +243,11 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     hint.textColor = L.empty
     meId = model["me"] as? String ?? ""; watchMe(); meChanged()
     if var fc = fab.configuration {
-      fc.background.backgroundColor = ToastCapsule.fill(L.light); fc.background.strokeColor = ToastCapsule.line(L.light); fc.background.strokeWidth = 1
-      fc.baseForegroundColor = .label; fab.configuration = fc
-      fab.layer.shadowColor = UIColor.black.cgColor; fab.layer.shadowOpacity = L.light ? 0.08 : 0; fab.layer.shadowRadius = 10; fab.layer.shadowOffset = CGSize(width: 0, height: 3)
+      if #available(iOS 26.0, *) { fab.overrideUserInterfaceStyle = L.light ? .light : .dark; fab.layer.shadowOpacity = 0 } else {
+        fc.background.backgroundColor = ToastCapsule.fill(L.light); fc.background.strokeColor = ToastCapsule.line(L.light); fc.background.strokeWidth = 1
+        fab.layer.shadowColor = UIColor.black.cgColor; fab.layer.shadowOpacity = L.light ? 0.08 : 0; fab.layer.shadowRadius = 10; fab.layer.shadowOffset = CGSize(width: 0, height: 3)
+      }
+      fc.baseForegroundColor = L.light ? .black : .white; fab.configuration = fc
     }
     stats.forEach { $0.isHidden = noStats }
     let st = model["stats"] as? [Int] ?? [0, 0, 0]
@@ -2150,28 +2154,36 @@ final class ToastCapsule: UIView {
   private let start = UILabel(), tick = UIImageView(), msg = UILabel(), undo = UIButton(type: .system), plusB = UIButton(type: .system)
   private let hasPlus: Bool
   private var timer: Timer?, touching = false, closing = false
+  private let glass = UIVisualEffectView(effect: nil)
   init(light: Bool, title: String?, sym: String?, plus: Bool) {
     hasPlus = plus
     super.init(frame: .zero)
-    backgroundColor = ToastCapsule.fill(light)
-    layer.borderWidth = 1; layer.borderColor = ToastCapsule.line(light).cgColor
-    layer.shadowColor = UIColor.black.cgColor; layer.shadowOpacity = light ? 0.08 : 0; layer.shadowRadius = 10; layer.shadowOffset = CGSize(width: 0, height: 3)
     overrideUserInterfaceStyle = light ? .light : .dark
+    let ink: UIColor = light ? .black : .white   // (its words: black on light, white on dark — Haris 2026-11-03)
+    if #available(iOS 26.0, *) {
+      // (iPhone's own Liquid Glass, as "+ New task" it stretches out of)
+      glass.effect = UIGlassEffect(style: .regular); glass.clipsToBounds = true; glass.isUserInteractionEnabled = false
+      addSubview(glass)
+    } else {
+      backgroundColor = ToastCapsule.fill(light)
+      layer.borderWidth = 1; layer.borderColor = ToastCapsule.line(light).cgColor
+      layer.shadowColor = UIColor.black.cgColor; layer.shadowOpacity = light ? 0.08 : 0; layer.shadowRadius = 10; layer.shadowOffset = CGSize(width: 0, height: 3)
+    }
     // ("+ New task" as the button has it — fading away as it stretches, back as it shrinks)
     let a = NSMutableAttributedString()
-    if let s = sym, let img = UIImage(systemName: s, withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold))?.withTintColor(.label, renderingMode: .alwaysOriginal) {
+    if let s = sym, let img = UIImage(systemName: s, withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold))?.withTintColor(ink, renderingMode: .alwaysOriginal) {
       let at = NSTextAttachment(); at.image = img; at.bounds = CGRect(x: 0, y: -2, width: img.size.width, height: img.size.height)
       a.append(NSAttributedString(attachment: at)); a.append(NSAttributedString(string: "  "))
     }
-    if let t = title { a.append(NSAttributedString(string: t, attributes: [.font: UIFont.systemFont(ofSize: 17, weight: .semibold), .foregroundColor: UIColor.label])) }
+    if let t = title { a.append(NSAttributedString(string: t, attributes: [.font: UIFont.systemFont(ofSize: 17, weight: .semibold), .foregroundColor: ink])) }
     start.attributedText = a; start.textAlignment = .center
     tick.image = UIImage(systemName: "checkmark.circle.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .regular))
     tick.tintColor = .systemGreen; tick.contentMode = .center
-    msg.font = .systemFont(ofSize: 15); msg.textColor = .label; msg.lineBreakMode = .byTruncatingTail; msg.adjustsFontSizeToFitWidth = true; msg.minimumScaleFactor = 0.82   // (a message a little too long shrinks a touch rather than being cut)
+    msg.font = .systemFont(ofSize: 15); msg.textColor = ink; msg.lineBreakMode = .byTruncatingTail; msg.adjustsFontSizeToFitWidth = true; msg.minimumScaleFactor = 0.82   // (a message a little too long shrinks a touch rather than being cut)
     undo.titleLabel?.font = .systemFont(ofSize: 15, weight: .semibold)
     undo.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.onUndo?() }, for: .touchUpInside)
     plusB.setImage(UIImage(systemName: "plus", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)), for: .normal)
-    plusB.tintColor = .label; plusB.backgroundColor = UIColor.label.withAlphaComponent(0.07)
+    plusB.tintColor = ink; plusB.backgroundColor = ink.withAlphaComponent(0.07)
     plusB.addAction(UIAction { [weak self] _ in self?.onPlus?() }, for: .touchUpInside)
     plusB.isHidden = !plus
     [tick, msg, undo, plusB].forEach { $0.alpha = 0; addSubview($0) }
@@ -2188,6 +2200,7 @@ final class ToastCapsule: UIView {
     super.layoutSubviews()
     let W = bounds.width, H = bounds.height
     layer.cornerRadius = H / 2
+    glass.frame = bounds; glass.layer.cornerRadius = H / 2
     // (laid out for its stretched size; the start words over the right end, where the button was)
     start.frame = CGRect(x: W - from.width, y: 0, width: from.width, height: H)
     let p: CGFloat = hasPlus ? 34 : 0
