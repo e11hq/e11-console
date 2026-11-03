@@ -2886,8 +2886,25 @@ const NativeAssets = (() => {
     last = s; shown = true;
     call(m);
   }
-  const answer = (rid, r) => call({ rid, ...r });
+  const answer = (rid, r) => { if (r && r.model) asked.set(r.model.kind === 'client' ? r.model.id : '', JSON.stringify(r.model)); return call({ rid, ...r }); };
   const modelFor = (id) => (id ? (clientById(id) && caVisible(clientById(id)) ? clientModel(clientById(id)) : null) : allModel());
+  // live (Haris 2026-11-03: a client deleted on the Mac and the phone's Client Assets didn't change): what the app has
+  // asked for ('' = All Client Assets, else a client) is sent again whenever it changes — checked once a second, only
+  // after the data has moved on; a client gone: { gone }
+  const asked = new Map();
+  let seenRev = null;
+  setInterval(() => {
+    if (!on || !asked.size || typeof Sync === 'undefined') return;
+    const r = Sync.rev + ':' + (db && db.clients ? db.clients.length : 0);
+    if (r === seenRev) return;
+    seenRev = r;
+    for (const [key, was] of [...asked]) {
+      let m = null; try { m = modelFor(key || null); } catch (e) { continue; }
+      if (!m) { asked.delete(key); call({ push: true, key, gone: true }); continue; }
+      const s = JSON.stringify(m);
+      if (s !== was) { asked.set(key, s); call({ push: true, key, model: m }); }
+    }
+  }, 1000);
   window.__e11Assets = (ev) => {
     if (!ev) return;
     const rid = ev.rid || null;

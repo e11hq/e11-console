@@ -2842,7 +2842,7 @@ const Sync = (() => {
     if (e.expired) { location.reload(); return; }
     document.body.innerHTML = `<div class="fatal" style="margin:20vh auto;max-width:420px;text-align:center"><h2>${esc(e.status === 403 ? 'No access' : 'Signed out')}</h2><p>${esc(e.message)}</p><button class="btn primary" onclick="location.reload()">Sign in again</button></div>`;
   }
-  return { start, push, resync, reconnect, savePrefs, get online() { return online; }, get offline() { return isOffline(); }, get version() { return version; }, clientId };
+  return { start, push, resync, reconnect, savePrefs, get rev() { return rev; }, get online() { return online; }, get offline() { return isOffline(); }, get version() { return version; }, clientId };
 })();
 
 /* ================= Persistence ================= */

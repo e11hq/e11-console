@@ -444,6 +444,20 @@ final class AssetsCtl {
       pending.removeValue(forKey: rid)?(a)
       return
     }
+    // (live: what's shown changed on the page — someone else's change, another device's)
+    if (a["push"] as? Bool) == true {
+      if let m = a["model"] as? [String: Any] { take(m); return }
+      if (a["gone"] as? Bool) == true, let id = a["key"] as? String, !id.isEmpty {
+        models[id] = nil
+        if let i = stack.firstIndex(where: { $0.client == id }) {
+          let h = i > 0 ? stack[i - 1].h : nil
+          while stack.count > i + 1 { stack.removeLast().h.removeFromSuperview() }
+          pop()
+          if let h = h { DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { h.assetsToast("That client has been removed") } }
+        }
+      }
+      return
+    }
     guard let show = a["show"] as? Bool else { return }
     if !show { if fromPage { close(animated: false) }; return }
     light = (a["light"] as? Bool) ?? light
