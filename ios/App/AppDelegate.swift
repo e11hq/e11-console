@@ -2097,7 +2097,6 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     case "copyLink":
       let f: [String: Any] = ["file": a["path"] as? String ?? "", "name": a["name"] as? String ?? "File", "id": a["id"] as? String ?? "", "size": a["size"] as? Int ?? 0, "thumb": a["thumb"] as? String ?? ""]
       copyFile(f) { [weak self] t in self?.previewVC?.set(["toast": t]); done(["ok": true, "toast": t]) }
-    // (a file link opened — files.e11hq.com/f/<token>: the page opens the file where it is)
     case "meAsk": meCtl.ask(a) { r in done(r) }
     case "taskPage": taskPageCommand(a); done(["ok": true])
     case "dailySheet":

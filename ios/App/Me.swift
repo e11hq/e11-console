@@ -912,7 +912,6 @@ final class MeCtl {
         else if u.isEmpty { parts = [.note("Checking for updates…")] }
         else if (u["unmanaged"] as? Bool) == true { parts = [.note("This copy (\(u["running"] as? String ?? "")) isn’t managed by the updater.")] }
         else {
-          if let a = u["available"] as? [String: Any] {
           let running: String = (u["running"] as? String ?? "") + ((u["test"] as? Bool) == true ? " · Test copy" : "")
           let checked: String = u["checked"] as? String ?? ""
           if let a = u["available"] as? [String: Any] {
