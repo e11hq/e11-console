@@ -885,6 +885,18 @@ extension Main {
       }
       // (Home, My Tasks and the Inbox too — step 2: from the copy, no request)
       self.serverHome.refresh(); self.serverMyTasksIfMade?.refresh(); self.serverInboxIfMade?.refresh(); if self.clientsWanted { self.serverClientsIfMade?.refresh() }
+      // (live, everywhere — Haris 2026-11-03: a client's page whose client was deleted, or made inactive, elsewhere goes back to
+      //  the list with a toast)
+      if self.clientsWanted, self.clientsOn == "client", let p = self.clientPageIfMade, !p.isHidden, !self.clientLeaving, let s = self.serverClientsIfMade,
+         AppData.shared.ready, ServerHome.param(s.query, "view") == "client" {
+        let c = AppData.shared.screen("clients", ServerHome.clientsJSON(s.query))
+        if c.ready && c.model == nil {
+          self.clientFrom = nil; self.clientsOn = "list"
+          self.clientPageOut()
+          self.pageJS("window.__e11Clients && window.__e11Clients({ev:'list'})")
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.clientsListIfMade?.toast(["t": "That client has been removed"]) }
+        }
+      }
     }
   }
 }
