@@ -2158,7 +2158,7 @@ final class ToastCapsule: UIView {
   //  toast squashes and stretches out of "+ New task" and back into it, as the top buttons do; Haris 2026-11-03)
   private let bed = UIVisualEffectView(effect: nil), body = UIVisualEffectView(effect: nil), nub = UIVisualEffectView(effect: nil)
   private var glassy: Bool { if #available(iOS 26.0, *) { return true }; return false }
-  // (as the pill forms into the toast: its glass tinted 70 % — light on light, dark on dark — and its corners a little less
+  // (as the pill forms into the toast: its glass tinted 50 % — light on light, dark on dark — and its corners a little less
   //  round; back to clear glass and a full pill as it goes: Haris 2026-11-03)
   private var isLight = true
   static let toastRadius: CGFloat = 18
@@ -2174,7 +2174,7 @@ final class ToastCapsule: UIView {
   private func glass(tinted: Bool) -> UIVisualEffect? {
     guard #available(iOS 26.0, *) else { return nil }
     let g = UIGlassEffect(style: .regular)
-    if tinted { g.tintColor = isLight ? UIColor.white.withAlphaComponent(0.7) : UIColor(red: 28 / 255, green: 28 / 255, blue: 30 / 255, alpha: 0.7) }
+    if tinted { g.tintColor = isLight ? UIColor.white.withAlphaComponent(0.5) : UIColor(red: 28 / 255, green: 28 / 255, blue: 30 / 255, alpha: 0.5) }
     return g
   }
   init(light: Bool, title: String?, sym: String?, plus: Bool) {
