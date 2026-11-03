@@ -34,6 +34,10 @@ them on the same way as the task page, the client's page and Client Assets do.
 (or in the middle when there's none). It shows at once when the whole list fits on the screen, and otherwise fades in
 when the list reaches its end and out on scrolling back. Every new native list screen has it.
 
+**Search and filters stick under the bar, everywhere (Haris, 2026-11-03: "that's a standard"):** on every native list
+screen with a search bar or filters (My Tasks, the Trash, …) they sit at the top of the list and, once they reach the bar,
+stay stuck under it with the frost behind them (`HomeView.pinHead` for a page's own; My Tasks' listHead). Every new one too.
+
 **The frost bar — LOCKED (Haris, 2026-11-03: "revert the frost bar to how it was and lock it"):** on every native screen
 the bar's frost is iPhone's own **soft** scroll-edge frost (`topEdgeEffect.style = .soft`), as up to build 1331; only
 My Tasks' tabs and filters stuck under the bar use the firm one (`.hard`) while stuck. (Tried and dropped the same day: the
