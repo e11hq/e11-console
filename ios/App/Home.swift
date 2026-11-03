@@ -25,6 +25,15 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // the bar's own row (the small title on it): on iOS 26+ iPhone's own scroll edge effect frosts the list under it, as in Mail
   private let topBar = HomePassThrough(), topLine = UIView()
   private var edgeHook: AnyObject?
+  private let frostReach = FrostReach()   // (the soft frost's area reaching a little below the bar, as Mail's)
+  private var reachK: CGFloat = 0
+  // (it reaches below the bar only as the line comes in — at the top of a page the big title stays clear; not while My
+  //  Tasks' filters are stuck: that firm frost ends at the line)
+  private func placeReach() {
+    CATransaction.begin(); CATransaction.setDisableActions(true)
+    frostReach.frame = CGRect(x: 0, y: 0, width: bounds.width, height: topBar.frame.height + (pinned || searching ? 0 : FrostReach.extra * reachK))
+    CATransaction.commit()
+  }
   /* Mail's own measures (Haris, 2026-10-31, from his Mail screenshots): the bar's buttons 44 pt, 16 from the right
      edge, 12 apart, their middle 22 under the status bar; the bar 54 under it; the small title 17 semibold with the
      line under it 12 regular; the big title 34 bold, 16 from the left, the line under it 15 regular; system colours */
@@ -121,6 +130,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       i.scrollView = scroll; i.edge = .top
       topBar.addInteraction(i)
       edgeHook = i
+      frostReach.attach(scroll, in: self, below: topBar)
       // (iPhone's soft frost — Haris 2026-11-03: back to it, and locked)
       scroll.topEdgeEffect.style = .soft
       results.topEdgeEffect.style = .soft
@@ -935,6 +945,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     fade(sub).set(blur: 0, alpha: 1 - ease(0, 0.8, dBig), dy: 0, trait: tr)
     if #available(iOS 26.0, *) {
       topLine.alpha = dLine
+      reachK = dLine; placeReach()
     } else { blur.alpha = dT }
   }
   // (Search's end, a self-test, a new layout: everything where the scroll says, at once)
@@ -967,7 +978,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // (it comes the moment the big title has gone under the bar, as Mail's — Haris, 2026-10-31)
     if !searching { followScroll() }
     if #available(iOS 26.0, *) {
-      if let i = edgeHook as? UIScrollEdgeElementContainerInteraction { let want: UIScrollView = searching ? results : scroll; if i.scrollView !== want { i.scrollView = want } }
+      if let i = edgeHook as? UIScrollEdgeElementContainerInteraction { let want: UIScrollView = searching ? results : scroll; if i.scrollView !== want { i.scrollView = want }; frostReach.follow(want) }
+      // (not while My Tasks' filters are stuck: that firm frost ends at the line)
+      placeReach()
       // (My Tasks' tabs and filters stuck under the bar: iPhone's firmer frost, so the cards don't show through between
       //  them — the soft one fades out half way down them; Apple's own advice for things pinned under a bar)
       if scroll.topEdgeEffect.isHidden { scroll.topEdgeEffect.isHidden = false }
@@ -2179,3 +2192,22 @@ final class ToastCapsule: UIView {
   }
 }
 
+// The soft frost as strong as Mail's (Haris 2026-11-03, measured against his Mail screenshot): iPhone's own soft frost
+// covers the area of the views that join it, strongest at the top and fading out over it. Over the bar alone it fades
+// too early (what's under the big title showed through ~5× more than in Mail), so an invisible view a little taller than
+// the bar joins it too: the strong part covers the whole bar, and it fades out mostly near and just below the line.
+final class FrostReach: UIView {
+  static let extra: CGFloat = 20
+  private var hook: AnyObject?
+  func attach(_ scroll: UIScrollView, in parent: UIView, below: UIView) {
+    isUserInteractionEnabled = false; backgroundColor = .clear
+    parent.insertSubview(self, belowSubview: below)
+    if #available(iOS 26.0, *) {
+      let i = UIScrollEdgeElementContainerInteraction(); i.scrollView = scroll; i.edge = .top
+      addInteraction(i); hook = i
+    }
+  }
+  func follow(_ scroll: UIScrollView) {
+    if #available(iOS 26.0, *), let i = hook as? UIScrollEdgeElementContainerInteraction, i.scrollView !== scroll { i.scrollView = scroll }
+  }
+}

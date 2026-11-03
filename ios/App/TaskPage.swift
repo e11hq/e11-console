@@ -79,8 +79,9 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private let barBox = UIView()                        // what the frost edge sits under (the buttons and the switch)
   var barBoxView: UIView { barBox }
   private var edgeHook: AnyObject?
+  private let frostReach = FrostReach()   // (as Home's: the soft frost as strong as Mail's)
   // the frost under the bar follows whichever list is showing (Details, the comments, a thread)
-  func edgeScroll(_ sv: UIScrollView) { if #available(iOS 26.0, *) { (edgeHook as? UIScrollEdgeElementContainerInteraction)?.scrollView = sv } }
+  func edgeScroll(_ sv: UIScrollView) { if #available(iOS 26.0, *) { (edgeHook as? UIScrollEdgeElementContainerInteraction)?.scrollView = sv }; frostReach.follow(sv) }
   // the corner button (Main's CornerButton) stands in for ••• — this page's own stays invisible; its menu is lent
   var cornerShared = false { didSet { more.alpha = cornerShared ? 0 : 1; moreBtn.isHidden = cornerShared; back.alpha = cornerShared ? 0 : 1; back.isUserInteractionEnabled = !cornerShared } }
   var backFrame: CGRect { back.frame }
@@ -269,6 +270,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       i.scrollView = scroll; i.edge = .top
       barBox.addInteraction(i)
       edgeHook = i
+      frostReach.attach(scroll, in: self, below: barBox)
       scroll.topEdgeEffect.style = .soft
     }
     back.setIcon("chevron.left", 19)
@@ -338,6 +340,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let W = bounds.width, top = safeTop
     place(scroll)
     barBox.frame = CGRect(x: 0, y: 0, width: W, height: barBottom)
+    frostReach.frame = CGRect(x: 0, y: 0, width: W, height: barBottom + FrostReach.extra)
     back.frame = CGRect(x: 16, y: top, width: 44, height: 44)
     more.frame = CGRect(x: W - 60, y: top, width: 44, height: 44)
     moreBtn.frame = more.frame
