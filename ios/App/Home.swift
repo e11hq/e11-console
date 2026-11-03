@@ -152,8 +152,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       blur.isHidden = true
       let i = UIScrollEdgeElementContainerInteraction()
       i.scrollView = scroll; i.edge = .top
-      // (the frost's area is FrostReach's alone — exactly the bar, and its reach on the soft pages: the bar's own titles,
-      //  rising into place, no longer drag the firm frost's line down with them — Haris 2026-11-03)
+      // (the bar's own row tells iPhone how far down the frost goes — FrostReach alone left it only as tall as the status
+      //  bar: Haris 2026-11-03, build 1361)
+      topBar.addInteraction(i)
       edgeHook = i
       frostReach.attach(scroll, in: self, below: topBar)
       // (iPhone's soft frost — Haris 2026-11-03: back to it, and locked)

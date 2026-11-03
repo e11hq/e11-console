@@ -1723,11 +1723,12 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         done(nil)
         let msg = (j["messages"] as? [String])?.first
         if (body["active"] as? Bool) != false, let id = j["created"] as? String {
-          // (its page slides in, as a tap on it — once the sheet has gone)
-          DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+          // (its page slides in, as a tap on it — once the sheet has gone and the page behind has the new client too: it
+          //  went half way, stopped and jumped when the page didn't know it yet — Haris 2026-11-03)
+          self.whenPageHasClient(id, tries: 30) { [weak self] in
             guard let self = self, let l = self.clientsListIfMade else { return }
             l.onEvent?(["ev": "client", "id": id])
-            if let m = msg { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.clientPageIfMade?.toast(["t": m]) } }
+            if let m = msg { DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { self.clientPageIfMade?.toast(["t": m]) } }
           }
         } else if let m = msg { self.serverClients.refresh(); self.clientsListIfMade?.toast(["t": m]) }
       }
@@ -1737,6 +1738,16 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if let sh = nav.sheetPresentationController { sh.prefersGrabberVisible = true }
     nav.prepare(width: view.bounds.width, bottom: view.safeAreaInsets.bottom)
     topMost().present(nav, animated: true)
+  }
+  // (the page behind knows this client — asked every 0.1 s, at most `tries` times — and no sheet is up)
+  func whenPageHasClient(_ id: String, tries: Int, _ then: @escaping () -> Void) {
+    let q = jsonString([id]).dropFirst().dropLast()
+    web?.evaluateJavaScript("!!(typeof proj === 'function' && proj(\(q)))") { [weak self] r, _ in
+      guard let self = self else { return }
+      if (r as? Bool) == true, self.presentedViewController == nil { then(); return }
+      if tries <= 0 { if (r as? Bool) == true || self.presentedViewController == nil { then() }; return }
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { self.whenPageHasClient(id, tries: tries - 1, then) }
+    }
   }
   var clientPanFrom: ((CornerButton.Spot, CornerButton.Spot, CornerButton.Spot), (CornerButton.Spot, CornerButton.Spot, CornerButton.Spot))?
   // (let go part way through the edge swipe: the rest of the way out, from where the finger left it)
