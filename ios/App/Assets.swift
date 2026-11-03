@@ -103,21 +103,32 @@ final class AssetThumb: UIView {
   }
 }
 
-// a tile that can be tapped and held for its menu (iPhone's own context menu)
+// a tile that's tapped, or touched and held as the comment cards are (Haris 2026-11-03): the whole card shrinks as one
+// from the moment the finger is down (the shared PressShrink); held long enough — the haptic, its sheet slides up, and
+// it springs back
 class AssetTile: UIControl {
   var onTap: (() -> Void)?
-  // (the control's own context menu interaction — UIControl has one)
-  var menu: (() -> UIMenu?)? { didSet { isContextMenuInteractionEnabled = menu != nil } }
+  var onHold: (() -> Void)?
+  private var shrink: PressShrink?
   override init(frame: CGRect) {
     super.init(frame: frame)
     addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.onTap?() }, for: .touchUpInside)
+    shrink = PressShrink.add(to: self)
+    let lp = UILongPressGestureRecognizer(target: self, action: #selector(held(_:))); lp.minimumPressDuration = 0.45
+    addGestureRecognizer(lp)
     isAccessibilityElement = true; accessibilityTraits = .button
   }
   required init?(coder: NSCoder) { fatalError() }
-  override func contextMenuInteraction(_ i: UIContextMenuInteraction, configurationForMenuAtLocation l: CGPoint) -> UIContextMenuConfiguration? {
-    guard let m = menu?() else { return nil }
-    return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in m }
+  @objc private func held(_ g: UILongPressGestureRecognizer) {
+    guard g.state == .began, let h = onHold else { return }
+    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+    cancelTracking(with: nil)   // (no tap after the hold)
+    h()
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in self?.shrink?.release() }
   }
+  // (its size and place set without touching its shrink — setting the frame of a card shrunk while held re-laid its
+  //  insides: they moved, as the comment cards' once did)
+  func place(_ r: CGRect) { bounds = CGRect(origin: .zero, size: r.size); center = CGPoint(x: r.midX, y: r.midY) }
 }
 
 // the clients: two columns of cards — a big logo area (its logo, or its colour with initials), name, "6 folders · 48 files"
@@ -145,7 +156,6 @@ final class ClientCards: UIView, HomeBlock {
       if let p = c["logo"] as? String { FeedLoader.shared.image(p) { [weak logo, weak ini] i in guard let i = i else { return }; logo?.image = i; logo?.backgroundColor = .white; ini?.isHidden = true } }
       t.onTap = { [weak self] in self?.onOpen?(id) }
       t.accessibilityLabel = "\(c["name"] as? String ?? ""), \(c["sub"] as? String ?? "")"
-      _ = PressShrink.add(to: t)
       addSubview(t)
       made[id] = (t, sig)
       return t
@@ -160,7 +170,7 @@ final class ClientCards: UIView, HomeBlock {
     super.layoutSubviews()
     let W = bounds.width, s = side(W), h = tileH(W)
     for (i, t) in tiles.enumerated() {
-      t.frame = CGRect(x: 16 + CGFloat(i % 2) * (s + 12), y: CGFloat(i / 2) * (h + 12), width: s, height: h)
+      t.place(CGRect(x: 16 + CGFloat(i % 2) * (s + 12), y: CGFloat(i / 2) * (h + 12), width: s, height: h))
       let lh = (s - 24) * 0.62
       t.viewWithTag(1)?.frame = CGRect(x: 12, y: 12, width: s - 24, height: lh)
       if let lv = t.viewWithTag(1) { lv.viewWithTag(2)?.frame = lv.bounds }
@@ -173,7 +183,7 @@ final class ClientCards: UIView, HomeBlock {
 // folders: two columns of tiles — the folder in its colour, its name, "14 files" (held: its menu)
 final class FolderTiles: UIView, HomeBlock {
   var onOpen: ((String) -> Void)?
-  var menu: (([String: Any]) -> UIMenu?)?
+  var menu: (([String: Any]) -> Void)?   // (held: its sheet)
   private var tiles: [AssetTile] = [], made: [String: (AssetTile, String)] = [:]
   static func meta(_ f: [String: Any]) -> String {
     let s = f["subs"] as? Int ?? 0, n = f["files"] as? Int ?? 0
@@ -187,7 +197,7 @@ final class FolderTiles: UIView, HomeBlock {
       let id = f["id"] as? String ?? ""
       let sig = "\(f["name"] ?? "")|\(FolderTiles.meta(f))|\(f["final"] ?? "")|\(f["rgb"] ?? "")|\(L.light)"
       if let k = keep.removeValue(forKey: id) {
-        if k.1 == sig { made[id] = k; k.0.menu = { [weak self] in self?.menu?(f) }; return k.0 }
+        if k.1 == sig { made[id] = k; k.0.onHold = { [weak self] in self?.menu?(f) }; return k.0 }
         k.0.removeFromSuperview()
       }
       let t = AssetTile(); t.backgroundColor = L.card; t.layer.cornerRadius = 20; t.layer.cornerCurve = .continuous
@@ -198,9 +208,8 @@ final class FolderTiles: UIView, HomeBlock {
       let s = UILabel(); s.text = (fin ? "Final · " : "") + FolderTiles.meta(f); s.font = .systemFont(ofSize: 13); s.textColor = .secondaryLabel; s.tag = 3
       [ic, n, s].forEach { $0.isUserInteractionEnabled = false; t.addSubview($0) }
       t.onTap = { [weak self] in self?.onOpen?(id) }
-      t.menu = { [weak self] in self?.menu?(f) }
+      t.onHold = { [weak self] in self?.menu?(f) }
       t.accessibilityLabel = "\(f["name"] as? String ?? "Folder"), \(s.text ?? "")"
-      _ = PressShrink.add(to: t)
       addSubview(t)
       made[id] = (t, sig)
       return t
@@ -213,7 +222,7 @@ final class FolderTiles: UIView, HomeBlock {
     super.layoutSubviews()
     let W = bounds.width, s = (W - 32 - 10) / 2
     for (i, t) in tiles.enumerated() {
-      t.frame = CGRect(x: 16 + CGFloat(i % 2) * (s + 10), y: CGFloat(i / 2) * 106, width: s, height: 96)
+      t.place(CGRect(x: 16 + CGFloat(i % 2) * (s + 10), y: CGFloat(i / 2) * 106, width: s, height: 96))
       t.viewWithTag(1)?.frame = CGRect(x: 14, y: 14, width: 40, height: 28)
       t.viewWithTag(2)?.frame = CGRect(x: 14, y: 50, width: s - 28, height: 20)
       t.viewWithTag(3)?.frame = CGRect(x: 14, y: 70, width: s - 28, height: 17)
@@ -224,7 +233,7 @@ final class FolderTiles: UIView, HomeBlock {
 // files in one inset group, a row each: thumbnail, name, "PNG · 48 KB" (or where it is, when found), •••
 final class FileRows: UIView, HomeBlock {
   var onOpen: (([String: Any]) -> Void)?
-  var menu: (([String: Any]) -> UIMenu?)?
+  var menu: (([String: Any]) -> Void)?   // (held: its sheet)
   private let box = UIView()
   private var rows: [AssetTile] = [], lines: [UIView] = [], made: [String: (AssetTile, String)] = [:]
   static let H: CGFloat = 64
@@ -238,7 +247,7 @@ final class FileRows: UIView, HomeBlock {
       let id = f["id"] as? String ?? ""
       let sig = "\(f["name"] ?? "")|\(f["size"] ?? "")|\(f["thumbUrl"] ?? "")|\(f["where"] ?? "")|\(f["canDel"] ?? "")|\(showWhere)|\(L.light)"
       if let k = keep.removeValue(forKey: id) {
-        if k.1 == sig { made[id] = k; k.0.onTap = { [weak self] in self?.onOpen?(f) }; k.0.menu = { [weak self] in self?.menu?(f) }; return k.0 }
+        if k.1 == sig { made[id] = k; k.0.onTap = { [weak self] in self?.onOpen?(f) }; k.0.onHold = { [weak self] in self?.menu?(f) }; return k.0 }
         k.0.removeFromSuperview()
       }
       let r = AssetTile()
@@ -253,13 +262,13 @@ final class FileRows: UIView, HomeBlock {
       mc.baseForegroundColor = .tertiaryLabel; mc.contentInsets = .zero
       let more = UIButton(configuration: mc); more.tag = 4
       more.automaticallyUpdatesConfiguration = false
-      more.showsMenuAsPrimaryAction = true
-      more.menu = UIMenu(children: [UIDeferredMenuElement.uncached { [weak self] give in give(self?.menu?(f)?.children ?? []) }])
+      // (its sheet, as holding the row — the same as the comments' •••)
+      more.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.menu?(f) }, for: .touchUpInside)
       more.accessibilityLabel = "More"
       [th, n, s].forEach { $0.isUserInteractionEnabled = false; r.addSubview($0) }
       r.addSubview(more)
       r.onTap = { [weak self] in self?.onOpen?(f) }
-      r.menu = { [weak self] in self?.menu?(f) }
+      r.onHold = { [weak self] in self?.menu?(f) }
       r.accessibilityLabel = "\(f["name"] as? String ?? "File"), \(s.text ?? "")"
       box.addSubview(r)
       made[id] = (r, sig)
@@ -277,7 +286,7 @@ final class FileRows: UIView, HomeBlock {
     box.frame = CGRect(x: 16, y: 0, width: W - 32, height: CGFloat(rows.count) * FileRows.H)
     let bw = box.bounds.width, H = FileRows.H
     for (i, r) in rows.enumerated() {
-      r.frame = CGRect(x: 0, y: CGFloat(i) * H, width: bw, height: H)
+      r.place(CGRect(x: 0, y: CGFloat(i) * H, width: bw, height: H))
       r.viewWithTag(1)?.frame = CGRect(x: 14, y: (H - 44) / 2, width: 44, height: 44)
       r.viewWithTag(4)?.frame = CGRect(x: bw - 50, y: 0, width: 44, height: H)
       r.viewWithTag(2)?.frame = CGRect(x: 70, y: H / 2 - 21, width: bw - 70 - 54, height: 22)
@@ -291,7 +300,7 @@ final class FileRows: UIView, HomeBlock {
 // a folder's files: three columns of square thumbnails, the name and size under each; Select ticks several
 final class FileTiles: UIView, HomeBlock {
   var onOpen: (([String: Any]) -> Void)?
-  var menu: (([String: Any]) -> UIMenu?)?
+  var menu: (([String: Any]) -> Void)?   // (held: its sheet)
   var onPick: (() -> Void)?
   var selecting = false { didSet { if oldValue != selecting { if !selecting { picked = [] }; paintPicks() } } }
   private(set) var picked = Set<String>()
@@ -319,9 +328,8 @@ final class FileTiles: UIView, HomeBlock {
         if self.selecting { if self.picked.contains(id) { self.picked.remove(id) } else { self.picked.insert(id) }; self.paintPicks(); self.onPick?() }
         else { self.onOpen?(f) }
       }
-      t.menu = { [weak self] in self?.selecting == true ? nil : self?.menu?(f) }
+      t.onHold = { [weak self] in if self?.selecting != true { self?.menu?(f) } }
       t.accessibilityLabel = "\(f["name"] as? String ?? "File"), \(s.text ?? "")"
-      _ = PressShrink.add(to: t)
       addSubview(t)
       made[id] = (t, sig)
       return t
@@ -348,7 +356,7 @@ final class FileTiles: UIView, HomeBlock {
     super.layoutSubviews()
     let W = bounds.width, s = side(W)
     for (i, t) in tiles.enumerated() {
-      t.frame = CGRect(x: 16 + CGFloat(i % 3) * (s + 10), y: CGFloat(i / 3) * (s + 42 + 12), width: s, height: s + 42)
+      t.place(CGRect(x: 16 + CGFloat(i % 3) * (s + 10), y: CGFloat(i / 3) * (s + 42 + 12), width: s, height: s + 42))
       t.viewWithTag(1)?.frame = CGRect(x: 0, y: 0, width: s, height: s)
       t.viewWithTag(2)?.frame = CGRect(x: 2, y: s + 6, width: s - 4, height: 17)
       t.viewWithTag(3)?.frame = CGRect(x: 2, y: s + 23, width: s - 4, height: 15)
@@ -649,14 +657,14 @@ final class AssetsCtl {
         let head = part(h, "foundHead") { AssetsHead() }; head.set(found.isEmpty ? "No files found" : "\(found.count) file\(found.count == 1 ? "" : "s") found"); out.append(head)
         let rows = part(h, "found") { FileRows() }
         rows.onOpen = { [weak self] f in self?.preview(f, among: found) }
-        rows.menu = { [weak self, weak h] f in guard let h = h else { return nil }; return self?.fileMenu(h, f, client: cid) }
+        rows.menu = { [weak self, weak h] f in if let h = h { self?.fileMenu(h, f, client: cid) } }
         rows.set(found, look: L, showWhere: true); out.append(rows)
       } else {
         let tops = ((m["folders"] as? [[String: Any]]) ?? []).filter { $0["parent"] == nil || $0["parent"] is NSNull }
         let head = part(h, "foldersHead") { AssetsHead() }; head.set("Folders"); out.append(head)
         let tiles = part(h, "folders") { FolderTiles() }
         tiles.onOpen = { [weak self] id in guard let self = self else { return }; self.push(self.screen("folder", cid, id), animated: true) }
-        tiles.menu = { [weak self, weak h] f in guard let h = h else { return nil }; return self?.folderMenu(h, f, client: cid) }
+        tiles.menu = { [weak self, weak h] f in if let h = h { self?.folderMenu(h, f, client: cid) } }
         tiles.set(tops, look: L); out.append(tiles)
         if m.isEmpty { let n = part(h, "wait") { AssetsNote() }; n.label.text = "Loading…"; out.append(n) }
         let recent = ((m["recent"] as? [String]) ?? []).compactMap { id in all.first { ($0["id"] as? String) == id } }
@@ -664,7 +672,7 @@ final class AssetsCtl {
           let rh = part(h, "recentHead") { AssetsHead() }; rh.set("Recently added"); out.append(rh)
           let rows = part(h, "recent") { FileRows() }
           rows.onOpen = { [weak self] f in self?.preview(f, among: recent) }
-          rows.menu = { [weak self, weak h] f in guard let h = h else { return nil }; return self?.fileMenu(h, f, client: cid) }
+          rows.menu = { [weak self, weak h] f in if let h = h { self?.fileMenu(h, f, client: cid) } }
           rows.set(recent, look: L); out.append(rows)
         }
       }
@@ -679,7 +687,7 @@ final class AssetsCtl {
         let head = part(h, "foldersHead") { AssetsHead() }; head.set("Folders"); out.append(head)
         let tiles = part(h, "folders") { FolderTiles() }
         tiles.onOpen = { [weak self] id in guard let self = self else { return }; self.push(self.screen("folder", cid, id), animated: true) }
-        tiles.menu = { [weak self, weak h] x in guard let h = h else { return nil }; return self?.folderMenu(h, x, client: cid) }
+        tiles.menu = { [weak self, weak h] x in if let h = h { self?.folderMenu(h, x, client: cid) } }
         tiles.set(subs, look: L); out.append(tiles)
       }
       let files = filesIn(m, fid)
@@ -689,7 +697,7 @@ final class AssetsCtl {
       head.onButton = { [weak self, weak h, weak grid] in guard let h = h, let g = grid else { return }; g.selecting.toggle(); self?.blocks(h); h.setNeedsLayout() }
       if !files.isEmpty || f == nil || subs.isEmpty { out.append(head) }
       grid.onOpen = { [weak self] x in self?.preview(x, among: files) }
-      grid.menu = { [weak self, weak h] x in guard let h = h else { return nil }; return self?.fileMenu(h, x, client: cid) }
+      grid.menu = { [weak self, weak h] x in if let h = h { self?.fileMenu(h, x, client: cid) } }
       grid.onPick = { [weak self, weak h] in if let h = h { self?.blocks(h) } }
       grid.set(files, look: L)
       if !files.isEmpty { out.append(grid) }
@@ -731,7 +739,7 @@ final class AssetsCtl {
       let found = AssetsCtl.find(all, q)
       let rows = FileRows()
       rows.onOpen = { [weak self] f in self?.preview(f, among: found) }
-      rows.menu = { [weak self, weak h] f in guard let h = h else { return nil }; return self?.fileMenu(h, f, client: f["client"] as? String ?? "") }
+      rows.menu = { [weak self, weak h] f in if let h = h { self?.fileMenu(h, f, client: f["client"] as? String ?? "") } }
       rows.set(found, look: h.look, showWhere: true)
       h.showFound(found.isEmpty ? [] : [rows], hint: found.isEmpty ? "No files found." : nil)
     default: break
@@ -743,37 +751,46 @@ final class AssetsCtl {
   }
   private func toast(_ h: HomeView?, _ t: String) { (h ?? top)?.assetsToast(t) }
 
-  // ---------- menus ----------
-  private func act(_ t: String, _ sym: String, destructive: Bool = false, _ run: @escaping () -> Void) -> UIAction {
-    UIAction(title: t, image: UIImage(systemName: sym), attributes: destructive ? .destructive : []) { _ in run() }
+  // ---------- a file's and a folder's sheet (held, or •••): iPhone's own sheet, as the comments' ----------
+  private func sheet(_ title: String, _ items: [(String, String, Bool, () -> Void)]) {
+    var main: [[String: Any]] = [], danger: [[String: Any]] = []
+    for (i, it) in items.enumerated() {
+      let row: [String: Any] = ["i": i, "label": it.0, "icon": it.1, "danger": it.2]
+      if it.2 { danger.append(row) } else { main.append(row) }
+    }
+    var secs: [[String: Any]] = [["header": title, "rows": main]]
+    if !danger.isEmpty { secs.append(["rows": danger]) }
+    let vc = NativeSheetVC(["sections": secs], dark: !light, pick: nil) { i, _ in
+      guard i >= 0, i < items.count else { return }
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { items[i].3() }   // (once the sheet has gone)
+    }
+    self.main.topMost().present(vc, animated: true)
   }
-  func fileMenu(_ h: HomeView, _ f: [String: Any], client: String) -> UIMenu {
-    var a: [UIMenuElement] = [
-      act("Copy", "doc.on.doc") { [weak self, weak h] in self?.main.copyFile(f) { t in h?.assetsToast(t) } },
-      act("Download", "arrow.down.circle") { [weak self, weak h] in guard let self = self else { return }; self.main.downloadFile(f, from: self.main.topMost()) { t in h?.assetsToast(t) } },
-      act("Info", "info.circle") { [weak self] in self?.fileInfo(f) },
+  func fileMenu(_ h: HomeView, _ f: [String: Any], client: String) {
+    var items: [(String, String, Bool, () -> Void)] = [
+      ("Copy", "copy", false, { [weak self, weak h] in self?.main.copyFile(f) { t in h?.assetsToast(t) } }),
+      ("Download", "download", false, { [weak self, weak h] in guard let self = self else { return }; self.main.downloadFile(f, from: self.main.topMost()) { t in h?.assetsToast(t) } }),
+      ("Info", "info", false, { [weak self] in self?.fileInfo(f) }),
     ]
     if (f["canDel"] as? Bool) == true, let fid = f["folder"] as? String {
-      a.append(UIMenu(options: .displayInline, children: [act("Delete", "trash", destructive: true) { [weak self, weak h] in
+      items.append(("Delete", "trash", true, { [weak self, weak h] in
         guard let self = self, let h = h else { return }
         self.confirm(h, "Delete “\(f["name"] as? String ?? "this file")”?", "It moves to the Trash, where it can be restored within 30 days. Copies already pasted into tasks stay.", "Delete") {
           self.change(h, ["ev": "deleteFile", "client": client, "folder": fid, "file": f["id"] as? String ?? ""], done: "Deleted")
         }
-      }]))
+      }))
     }
-    return UIMenu(children: a)
+    sheet(f["name"] as? String ?? "File", items)
   }
-  func folderMenu(_ h: HomeView, _ f: [String: Any], client: String) -> UIMenu {
+  func folderMenu(_ h: HomeView, _ f: [String: Any], client: String) {
     let id = f["id"] as? String ?? ""
-    var a: [UIMenuElement] = [
-      act("Open", "folder") { [weak self] in guard let self = self else { return }; self.push(self.screen("folder", client, id), animated: true) },
-      act("Info", "info.circle") { [weak self] in self?.folderInfoSheet(f, client: client) },
+    var items: [(String, String, Bool, () -> Void)] = [
+      ("Open", "folder", false, { [weak self] in guard let self = self else { return }; self.push(self.screen("folder", client, id), animated: true) }),
+      ("Info", "info", false, { [weak self] in self?.folderInfoSheet(f, client: client) }),
     ]
-    var edit: [UIMenuElement] = []
-    if (f["canRename"] as? Bool) == true { edit.append(act("Rename folder", "pencil") { [weak self, weak h] in if let h = h { self?.renameFolder(h, f, client: client) } }) }
-    if (f["canDel"] as? Bool) == true { edit.append(act("Delete folder", "trash", destructive: true) { [weak self, weak h] in if let h = h { self?.deleteFolder(h, f, client: client) } }) }
-    if !edit.isEmpty { a.append(UIMenu(options: .displayInline, children: edit)) }
-    return UIMenu(children: a)
+    if (f["canRename"] as? Bool) == true { items.append(("Rename folder", "edit", false, { [weak self, weak h] in if let h = h { self?.renameFolder(h, f, client: client) } })) }
+    if (f["canDel"] as? Bool) == true { items.append(("Delete folder", "trash", true, { [weak self, weak h] in if let h = h { self?.deleteFolder(h, f, client: client) } })) }
+    sheet(f["name"] as? String ?? "Folder", items)
   }
   // the ••• at the top
   private func menuItems(_ h: HomeView) -> [CornerMenuItem] {
