@@ -420,9 +420,15 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
 
   // ---------- drawing the model ----------
   func loading() { if model == nil { spinner.startAnimating() } }
+  // (its files' paths, new ones: the host asks the server which links are off — the hold menu says Turn on link)
+  var onFilesShown: (([String]) -> Void)?
+  private var askedLinks = Set<String>()
   func draw(_ m: [String: Any]) {
     spinner.stopAnimating()
     model = m
+    let paths = (((m["files"] as? [[String: Any]]) ?? []) + ((m["commentFiles"] as? [[String: Any]]) ?? [])).compactMap { $0["file"] as? String }
+    let fresh = paths.filter { !askedLinks.contains($0) }
+    if !fresh.isEmpty { askedLinks.formUnion(fresh); onFilesShown?(fresh) }
     if let pp = m["people"] as? [String: [String: Any]] { people.merge(pp) { a, b in b["photo"] != nil ? b : a } }
     if let c = m["client"] as? [String: Any] {
       client.text = c["name"] as? String ?? ""; dot.backgroundColor = TaskPage.rgb(c["rgb"]); dot.isHidden = false

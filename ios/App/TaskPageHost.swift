@@ -262,6 +262,7 @@ extension Main {
     p.onCornerChange = { [weak self] in self?.updateCornerNow() }
     p.onSwipeToDetails = { [weak self, weak p] in guard let self = self, let p = p else { return }; self.toDetailsFromComments(p) }
     p.onOpenFiles = { [weak self] list, i in self?.openFiles(list, at: i) }
+    p.onFilesShown = { [weak self] paths in self?.loadLinkStates(paths) }
     p.onFileAction = { [weak self, weak p] f, what in
       guard let self = self, let p = p else { return }
       let toast: (String) -> Void = { [weak p] t in p?.toast(t) }
