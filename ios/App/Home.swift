@@ -2158,18 +2158,13 @@ final class ToastCapsule: UIView {
   //  toast squashes and stretches out of "+ New task" and back into it, as the top buttons do; Haris 2026-11-03)
   private let bed = UIVisualEffectView(effect: nil), body = UIVisualEffectView(effect: nil), nub = UIVisualEffectView(effect: nil)
   private var glassy: Bool { if #available(iOS 26.0, *) { return true }; return false }
-  // (as the pill forms into the toast: its glass tinted 50 % — light on light, dark on dark — and its corners a little less
-  //  round; back to clear glass and a full pill as it goes: Haris 2026-11-03)
+  // (as the pill forms into the toast: its glass tinted 50 % — light on light, dark on dark; back to clear glass as it goes:
+  //  Haris 2026-11-03)
   private var isLight = true
-  static let toastRadius: CGFloat = 18
-  // (its corners: as a toast, 18 pt — but the right side stays a pill around the + when it has one, as the button was;
-  //  a full pill as the button. iOS 26's per-corner shape, which the glass follows)
+  // (its corners: always a full pill, as the button — Haris 2026-11-03)
   private func shape(_ toast: Bool) {
     let H = body.bounds.height > 0 ? body.bounds.height : bounds.height
-    if #available(iOS 26.0, *) {
-      let r = min(H / 2, ToastCapsule.toastRadius), right: CGFloat = toast && !hasPlus ? r : H / 2, left: CGFloat = toast ? r : H / 2
-      body.cornerConfiguration = .corners(topLeftRadius: .fixed(left), topRightRadius: .fixed(right), bottomLeftRadius: .fixed(left), bottomRightRadius: .fixed(right))
-    } else { body.layer.cornerRadius = H / 2 }
+    body.layer.cornerRadius = H / 2
   }
   private func glass(tinted: Bool) -> UIVisualEffect? {
     guard #available(iOS 26.0, *) else { return nil }
