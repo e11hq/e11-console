@@ -126,14 +126,21 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
       tilesScroll.topAnchor.constraint(equalTo: box.topAnchor, constant: 10), tilesScroll.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 12), tilesScroll.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -12), tilesH,
       tiles.leadingAnchor.constraint(equalTo: tilesScroll.contentLayoutGuide.leadingAnchor), tiles.trailingAnchor.constraint(equalTo: tilesScroll.contentLayoutGuide.trailingAnchor), tiles.topAnchor.constraint(equalTo: tilesScroll.contentLayoutGuide.topAnchor), tiles.bottomAnchor.constraint(equalTo: tilesScroll.contentLayoutGuide.bottomAnchor), tiles.heightAnchor.constraint(equalTo: tilesScroll.heightAnchor),
       text.topAnchor.constraint(equalTo: tilesScroll.bottomAnchor, constant: 4), text.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 14), text.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -14), textH,
-      placeholder.leadingAnchor.constraint(equalTo: text.leadingAnchor), placeholder.topAnchor.constraint(equalTo: text.topAnchor, constant: 4),
       plus.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 8), plus.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -8), plus.widthAnchor.constraint(equalToConstant: 36), plus.heightAnchor.constraint(equalToConstant: 36),
       right.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -8), right.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -8), right.widthAnchor.constraint(equalToConstant: 36), right.heightAnchor.constraint(equalToConstant: 36),
-      plus.topAnchor.constraint(equalTo: text.bottomAnchor, constant: 6),
       // "Replying to Carine (picture)": a grey pill in the buttons' row, where the Claude app has its model's
       replyPill.leadingAnchor.constraint(equalTo: plus.trailingAnchor, constant: 8), replyPill.centerYAnchor.constraint(equalTo: plus.centerYAnchor),
       replyPill.heightAnchor.constraint(equalToConstant: 36), replyPill.trailingAnchor.constraint(lessThanOrEqualTo: right.leadingAnchor, constant: -8),
     ])
+    // the two shapes (Haris 2026-11-04): compact — one pill, + · "Comment or hold to talk" · mic — unless the keyboard is up,
+    // something is typed, files are attached or a voice message is recording; then the full box, as before
+    fullCons = [plus.topAnchor.constraint(equalTo: text.bottomAnchor, constant: 6),
+                placeholder.leadingAnchor.constraint(equalTo: text.leadingAnchor), placeholder.topAnchor.constraint(equalTo: text.topAnchor, constant: 4)]
+    compactCons = [plus.topAnchor.constraint(equalTo: box.topAnchor, constant: 8),
+                   placeholder.leadingAnchor.constraint(equalTo: plus.trailingAnchor, constant: 12), placeholder.centerYAnchor.constraint(equalTo: plus.centerYAnchor),
+                   placeholder.trailingAnchor.constraint(lessThanOrEqualTo: right.leadingAnchor, constant: -8)]
+    NSLayoutConstraint.activate(compactCons); text.alpha = 0; tilesScroll.alpha = 0; replyPill.alpha = 0
+    self.tilesScroll = tilesScroll
     replyPill.backgroundColor = .tertiarySystemFill; replyPill.layer.cornerRadius = 18; replyPill.layer.cornerCurve = .continuous
     replyPill.isHidden = true
     // (tapped: no longer a reply — an ordinary comment)
@@ -144,6 +151,23 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     paintSend()
   }
   required init?(coder: NSCoder) { fatalError() }
+  private var fullCons: [NSLayoutConstraint] = [], compactCons: [NSLayoutConstraint] = []
+  private(set) var compact = true
+  private weak var tilesScroll: UIScrollView?
+  private var wantsCompact: Bool { !text.isFirstResponder && (text.text ?? "").isEmpty && files.isEmpty && recorder == nil }
+  // (from one shape to the other with the box's own spring, as the keyboard moves it)
+  func paintShape(animated: Bool = true) {
+    let c = wantsCompact
+    guard c != compact else { return }
+    compact = c
+    if c { NSLayoutConstraint.deactivate(fullCons); NSLayoutConstraint.activate(compactCons) } else { NSLayoutConstraint.deactivate(compactCons); NSLayoutConstraint.activate(fullCons) }
+    let fade = { self.text.alpha = c ? 0 : 1; self.tilesScroll?.alpha = c ? 0 : 1; self.replyPill.alpha = c ? 0 : 1 }
+    if animated && window != nil {
+      UIView.animate(withDuration: 0.38, delay: 0, usingSpringWithDamping: 0.9, initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState]) { fade(); self.superview?.layoutIfNeeded() }
+    } else { fade(); superview?.layoutIfNeeded() }
+  }
+  func textViewDidBeginEditing(_ tv: UITextView) { paintShape() }
+  func textViewDidEndEditing(_ tv: UITextView) { DispatchQueue.main.async { [weak self] in self?.paintShape() } }
   override func hitTest(_ p: CGPoint, with e: UIEvent?) -> UIView? { let v = super.hitTest(p, with: e); return v === self ? nil : v }
 
   // ---------- typing ----------
@@ -166,7 +190,8 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     }
     holdG?.isEnabled = !send
     placeholder.isHidden = !(text.text ?? "").isEmpty
-    placeholder.text = parentId != nil || replyTo != nil ? "Reply" : "Comment"
+    placeholder.text = parentId != nil || replyTo != nil ? "Reply or hold to talk" : "Comment or hold to talk"
+    paintShape()
   }
   @objc private func tappedBox() { if !text.isFirstResponder { text.becomeFirstResponder() } }
   func gestureRecognizer(_ g: UIGestureRecognizer, shouldReceive t: UITouch) -> Bool {
@@ -651,6 +676,7 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
           r.record()
           self.recorder = r; self.recURL = url; self.recStart = Date(); self.locked = false; self.cancelled = false
           UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+          self.paintShape(animated: false)   // (the full box first: the recording fills it)
           self.showRecording()
         } catch { self.onToast?("Couldn’t start recording") }
       }
@@ -705,6 +731,7 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     guard let r = recorder, let url = recURL else { return }
     let dur = r.currentTime
     r.stop(); recorder = nil; recTimer?.invalidate(); recTimer = nil
+    defer { DispatchQueue.main.async { [weak self] in self?.paintShape() } }
     recDot.layer.removeAllAnimations()
     recView.removeFromSuperview(); lockTrash.removeFromSuperview(); lockSend.removeFromSuperview(); recHint.isHidden = false
     try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
