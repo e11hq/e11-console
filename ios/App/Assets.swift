@@ -785,10 +785,9 @@ final class AssetsCtl {
       ("Copy link", "link", false, { [weak self, weak h] in self?.main.copyFile(f) { t in h?.assetsToast(t) } }),
       ("Download", "download", false, { [weak self, weak h] in guard let self = self else { return }; self.main.downloadFile(f, from: self.main.topMost()) { t in h?.assetsToast(t) } }),
       ("Info", "info", false, { [weak self] in self?.fileInfo(f) }),
-      Main.linksOff.contains(f["file"] as? String ?? "")
-        ? ("Turn on link", "unlock", false, { [weak self, weak h] in self?.main.fileLinkToggle(f) { t in h?.assetsToast(t) } })
-        : ("Turn off link", "lock", false, { [weak self, weak h] in self?.main.fileLinkToggle(f) { t in h?.assetsToast(t) } }),
     ]
+    let flipFile: () -> Void = { [weak self, weak h] in self?.main.fileLinkToggle(f) { t in h?.assetsToast(t) } }
+    if Main.linksOff.contains(f["file"] as? String ?? "") { items.append(("Turn on link", "unlock", false, flipFile)) } else { items.append(("Turn off link", "lock", false, flipFile)) }
     if (f["canDel"] as? Bool) == true, let fid = f["folder"] as? String {
       items.append(("Delete", "trash", true, { [weak self, weak h] in
         guard let self = self, let h = h else { return }
@@ -807,9 +806,8 @@ final class AssetsCtl {
     ]
     if (f["canLink"] as? Bool) == true {
       items.append(("Copy link", "link", false, { [weak self, weak h] in self?.main.copyFolderLink(client: client, folder: id) { t in h?.assetsToast(t) } }))
-      items.append(Main.linksOff.contains("d:\(client)/\(id)")
-        ? ("Turn on link", "unlock", false, { [weak self, weak h] in self?.main.folderLinkToggle(client: client, folder: id) { t in h?.assetsToast(t) } })
-        : ("Turn off link", "lock", false, { [weak self, weak h] in self?.main.folderLinkToggle(client: client, folder: id) { t in h?.assetsToast(t) } }))
+      let flip: () -> Void = { [weak self, weak h] in self?.main.folderLinkToggle(client: client, folder: id) { t in h?.assetsToast(t) } }
+      if Main.linksOff.contains("d:\(client)/\(id)") { items.append(("Turn on link", "unlock", false, flip)) } else { items.append(("Turn off link", "lock", false, flip)) }
     }
     if (f["canRename"] as? Bool) == true { items.append(("Rename folder", "edit", false, { [weak self, weak h] in if let h = h { self?.renameFolder(h, f, client: client) } })) }
     if (f["canDel"] as? Bool) == true { items.append(("Delete folder", "trash", true, { [weak self, weak h] in if let h = h { self?.deleteFolder(h, f, client: client) } })) }
