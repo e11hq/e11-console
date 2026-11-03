@@ -29,9 +29,20 @@ final class FeedLoader {
       guard let url = URL(string: path.hasPrefix("http") ? path : serverURL() + path) else { return done(nil) }
       var r = URLRequest(url: url); if !c.isEmpty { r.setValue(c, forHTTPHeaderField: "Cookie") }
       URLSession.shared.dataTask(with: r) { d, res, _ in
+        let ok = ((res as? HTTPURLResponse)?.statusCode ?? 200) == 200
+        // (an SVG: drawn on the phone and kept as a PNG — SVGRaster)
+        if ok, let d = d, UIImage(data: d) == nil, SVGRaster.looksLikeSVG(d, path: path) {
+          DispatchQueue.main.async {
+            SVGRaster.shared.image(d) { img in
+              if let img = img { self.cache.setObject(img, forKey: path as NSString); if let png = img.pngData() { DiskPics.put(path, png) } }
+              done(img)
+            }
+          }
+          return
+        }
         let img = d.flatMap { UIImage(data: $0) }
         if let img = img { self.cache.setObject(img, forKey: path as NSString) }
-        if img != nil, let d = d, ((res as? HTTPURLResponse)?.statusCode ?? 200) == 200 { DiskPics.put(path, d) }
+        if img != nil, let d = d, ok { DiskPics.put(path, d) }
         DispatchQueue.main.async { done(img) }
       }.resume()
     }
@@ -665,7 +676,7 @@ final class CommentCell: UIView {
     return nil
   }
   static var creator: String?   // (the open task's creator: their mentions are orange)
-  static func isPic(_ n: String) -> Bool { ["jpg", "jpeg", "png", "heic", "gif", "webp"].contains((n as NSString).pathExtension.lowercased()) }
+  static func isPic(_ n: String) -> Bool { ["jpg", "jpeg", "png", "heic", "gif", "webp", "svg"].contains((n as NSString).pathExtension.lowercased()) }   // (svg: drawn by SVGRaster)
   static let videoExt = ["mp4", "mov", "m4v", "webm", "avi", "mkv"]
   static func isVideo(_ n: String) -> Bool { videoExt.contains((n as NSString).pathExtension.lowercased()) }
   // every file the same card (Haris, 2026-11-01): squares, three a row, a third of the width each — a picture shows

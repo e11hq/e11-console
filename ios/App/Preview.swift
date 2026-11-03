@@ -34,7 +34,10 @@ enum PreviewLoad {
   }
   static func image(_ s: String?, _ done: @escaping (UIImage?) -> Void) {
     guard let s, !s.isEmpty else { return done(nil) }
-    data(s) { d in done(d.flatMap { UIImage(data: $0) }) }
+    data(s) { d in
+      if let d = d, UIImage(data: d) == nil, SVGRaster.looksLikeSVG(d, path: s) { SVGRaster.shared.image(d, max: 1400) { done($0) }; return }   // (an SVG, drawn on the phone)
+      done(d.flatMap { UIImage(data: $0) })
+    }
   }
 }
 

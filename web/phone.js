@@ -2816,7 +2816,8 @@ const NativeAssets = (() => {
     const pic = isImage(a) && !/\.svg$/i.test(String(a.path || ''));
     return {
       id: a.id, name: a.name, size: a.size || 0, file: a.path || null, url: a.path ? fileUrl(a) + '?view=1' : null,
-      thumbUrl: pic ? imgUrl(a, 320) : a.thumb ? '/__file/' + a.thumb.split('/').map(encodeURIComponent).join('/') + '?view=1'
+      // (an SVG is its own picture: the app draws it — iPhone 32+)
+      thumbUrl: pic ? imgUrl(a, 320) : e === 'svg' && a.path ? fileUrl(a) + '?view=1' : a.thumb ? '/__file/' + a.thumb.split('/').map(encodeURIComponent).join('/') + '?view=1'
         : a.path && THUMBED.includes(e) ? '/api/fthumb?path=' + encodeURIComponent(a.path) + '&id=' + encodeURIComponent(a.id || '') : null,
       ext: (e || 'file').slice(0, 5), kind: fileKind(a), label: OFFICE_LABEL[e] || (e ? e.toUpperCase() : 'File'),
       folder: f.id, at: a.addedAt || '', by: a.addedBy ? fullName(userById(a.addedBy)) : '', where: `${c.name} › ${folderPath(c, f)}`,

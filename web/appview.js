@@ -13,7 +13,7 @@ var E11AppView = (function () {
     const ext = String(f.name || '').split('.').pop().toLowerCase();
     f.file = f.path || null;
     f.url = f.path ? fileUrl(f.path) + '?view=1' : null;
-    f.thumbUrl = f.thumb ? fileUrl(f.thumb) + '?view=1' : f.path && THUMBED.includes(ext) ? '/api/fthumb?path=' + encodeURIComponent(f.path) + '&id=' + encodeURIComponent(f.id || '') : null;
+    f.thumbUrl = f.thumb ? fileUrl(f.thumb) + '?view=1' : f.path && ext === 'svg' ? fileUrl(f.path) + '?view=1' : f.path && THUMBED.includes(ext) ? '/api/fthumb?path=' + encodeURIComponent(f.path) + '&id=' + encodeURIComponent(f.id || '') : null;
     delete f.path; delete f.thumb;
   }
   const photos = (m) => { for (const p of Object.values(m.people || {})) { if (p.photo) p.photo = fileUrl(p.photo) + '?view=1'; } };
