@@ -28,6 +28,7 @@ import { sampleData } from './sample.js';
 import { freshSample } from './sample-fresh.js';
 import { createAppIcon } from './appicon.js';
 import { createFinals } from './finals.js';
+import { createFileLinks } from './flinks.js';
 import { createPlans } from './plans.js';
 import { createReview, resetDue, REVIEW_USER_ID } from './review.js';
 import { demoData, DEMO_REVIEWER } from './demo.js';
@@ -111,6 +112,12 @@ export function createServer(cfg) {
   // Light viewing copies of videos (viewcopy.js): every video in tasks, comments, Client Assets and plans, in the
   // background; checked a minute after start, every 3 minutes, and a few seconds after changes arrive
   const views = createViewCopies({ files, dri: cfg.driDir || '/dev/dri', minSize: cfg.viewMinSize });
+  // File links (flinks.js): one short public link per file, files.e11hq.com/f/<token> (the test copy: its own)
+  const testCopy = /-test\./.test(version);
+  const filesUrl = cfg.filesUrl || (cfg.dev ? '' : testCopy ? 'https://files-test.e11hq.com' : 'https://files.e11hq.com');
+  const filesHost = filesUrl ? new URL(filesUrl).host : '';
+  const brandSvg = (() => { try { return fs.readFileSync(path.join(webDir || '', 'brand', 'e11-mark.svg'), 'utf8').replace(/<\?xml[^>]*>/, '').replace(/<title>.*?<\/title>/, '').replace(/fill="#000000"/g, 'fill="currentColor"').replace(/ width="\d+" height="\d+"/, ' role="img" aria-label="E11"'); } catch { return '<b style="font-size:30px">E11</b>'; } })();
+  const fileLinks = createFileLinks({ store, files, views, base: filesUrl, teamId: cfg.appleTeamId || cfg.apnsTeamId || '', brandSvg });
   function scanVideos() {
     try {
       const add = (a) => { if (a && a.path) views.want(a.path); };
@@ -466,6 +473,12 @@ export function createServer(cfg) {
       return fs.createReadStream(full).pipe(res);
     }
 
+    // File links (flinks.js): the public page, its file and picture — no sign-in; the files address shows nothing else
+    if ((p.startsWith('/f/') || p.endsWith('apple-app-site-association')) && (req.method === 'GET' || req.method === 'HEAD')) {
+      if (await fileLinks.serve(req, res, p)) return;
+    }
+    if (filesHost && String(req.headers['x-forwarded-host'] || req.headers.host || '') === filesHost) { res.writeHead(404, { 'Content-Type': 'text/plain' }); return res.end('Not found'); }
+
     const u = await who(req, res);
     if (!u) return;
 
@@ -666,6 +679,16 @@ export function createServer(cfg) {
       return json(res, 200, { ok: true, rev: store.rev(), task: tk });
     }
     // a file's picture for the app (a video's frame, a PDF's / Office file's first page), made the first time it's asked for
+    // a file's link: made (or the same one again), turned off / on, or where a link's file is (to open it in the app)
+    if (p === '/api/flink') {
+      const origin = `${/^(localhost|127\.)/.test(String(req.headers.host || '')) ? 'http' : 'https'}://${String(req.headers['x-forwarded-host'] || req.headers.host || '').replace(/[^\w.:-]/g, '')}`;
+      if (req.method === 'GET' && url.searchParams.get('token')) return json(res, 200, fileLinks.where(u, url.searchParams.get('token'), access.canReadFile));
+      const body = req.method === 'POST' ? await readBody(req).catch(() => ({})) : { path: url.searchParams.get('path') };
+      const fp = String((body && body.path) || '');
+      if (!fp || !access.canReadFile(u, fp)) return json(res, 403, { ok: false, error: 'Not allowed' });
+      if (body && typeof body.off === 'boolean') return json(res, 200, fileLinks.setOff(u, fp, body.off, origin));
+      return json(res, 200, fileLinks.linkFor(u, fp, origin));
+    }
     if (p === '/api/fthumb' && req.method === 'GET') {
       const fp = String(url.searchParams.get('path') || '');
       if (!fp || !access.canReadFile(u, fp)) return json(res, 403, { ok: false, error: 'Not allowed' });

@@ -18,6 +18,9 @@ const cfg = {
   cfApiToken: env.CF_API_TOKEN || '',
   cfGroupId: env.CF_FREELANCER_GROUP_ID || '',
   launcherUrl: env.LAUNCHER_URL || '',
+  // File links' public address (flinks.js); unset: files.e11hq.com (the test copy files-test.e11hq.com)
+  filesUrl: env.FILES_URL || '',
+  appleTeamId: env.APPLE_TEAM_ID || '',
   holidaysUrl: env.HOLIDAYS_ICS_URL || '',
   viewMinSize: env.VIEW_MIN_SIZE ? Number(env.VIEW_MIN_SIZE) : undefined,
   // Fast office use (office.js): the NAS shared folder mounted read-only, and the office-network port

@@ -777,9 +777,10 @@ final class AssetsCtl {
   }
   func fileMenu(_ h: HomeView, _ f: [String: Any], client: String) {
     var items: [(String, String, Bool, () -> Void)] = [
-      ("Copy", "copy", false, { [weak self, weak h] in self?.main.copyFile(f) { t in h?.assetsToast(t) } }),
+      ("Copy link", "link", false, { [weak self, weak h] in self?.main.copyFile(f) { t in h?.assetsToast(t) } }),
       ("Download", "download", false, { [weak self, weak h] in guard let self = self else { return }; self.main.downloadFile(f, from: self.main.topMost()) { t in h?.assetsToast(t) } }),
       ("Info", "info", false, { [weak self] in self?.fileInfo(f) }),
+      ("Turn off link", "lock", false, { [weak self, weak h] in self?.main.fileLinkToggle(f) { t in h?.assetsToast(t) } }),
     ]
     if (f["canDel"] as? Bool) == true, let fid = f["folder"] as? String {
       items.append(("Delete", "trash", true, { [weak self, weak h] in

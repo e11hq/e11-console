@@ -265,7 +265,7 @@ extension Main {
     p.onFileAction = { [weak self, weak p] f, what in
       guard let self = self, let p = p else { return }
       let toast: (String) -> Void = { [weak p] t in p?.toast(t) }
-      if what == "copy" { self.copyFile(f, toast) } else if what == "download" { self.downloadFile(f, from: self.topMost(), toast) }
+      if what == "copy" { self.copyFile(f, toast) } else if what == "download" { self.downloadFile(f, from: self.topMost(), toast) } else if what == "linkOff" { self.fileLinkToggle(f, toast) }
     }
     p.onAttachFrom = { [weak self, weak p] src in
       guard let self = self, let p = p else { return }
@@ -659,12 +659,41 @@ extension Main {
   }
   // Copy, as the website's: the file itself isn't copied — the app remembers which file it is, and pasting it into a
   // comment adds that same file (no upload, no second copy on the server; Haris, 2026-11-01)
+  // Copy link (Haris 2026-11-03): the file's short link on the clipboard (files.e11hq.com/f/…) — pasted in a comment or
+  // the description here it's still the file (FileClip, as before); anywhere else, the link: staff open it in the app,
+  // anyone else gets the E11 page with the file and Download. The same link every time (asked of the server once).
+  static var fileLinks: [String: String] = [:]
   func copyFile(_ f: [String: Any], _ toast: @escaping (String) -> Void) {
-    guard f["file"] is String else { return toast("This file isn’t available") }
+    guard let path = f["file"] as? String else { return toast("This file isn’t available") }
     let name = f["name"] as? String ?? "File"
-    UIPasteboard.general.string = "📎 " + name
-    FileClip.file = f; FileClip.name = name; FileClip.change = UIPasteboard.general.changeCount
-    toast("Copied — paste it into a comment or description")
+    let put = { (link: String?) in
+      UIPasteboard.general.string = link ?? "📎 " + name
+      FileClip.file = f; FileClip.name = name; FileClip.change = UIPasteboard.general.changeCount
+    }
+    if let u = Main.fileLinks[path] { put(u); return toast("Link copied — paste it in a comment, or send it to anyone") }
+    serverTask.request("/api/flink", body: ["path": path]) { j in
+      if (j?["ok"] as? Bool) == true, let u = j?["url"] as? String { Main.fileLinks[path] = u; put(u); toast("Link copied — paste it in a comment, or send it to anyone") }
+      else { put(nil); toast((j?["error"] as? String).map { "No link: \($0) — copied for pasting here" } ?? "Copied — paste it into a comment or description") }
+    }
+  }
+  // Turn off link / Turn on link: asked first, as iPhone's own question
+  func fileLinkToggle(_ f: [String: Any], _ toast: @escaping (String) -> Void) {
+    guard let path = f["file"] as? String, let q = path.addingPercentEncoding(withAllowedCharacters: .alphanumerics) else { return toast("This file can’t have a link") }
+    serverTask.request("/api/flink?path=\(q)", body: nil) { [weak self] j in
+      guard let self = self else { return }
+      guard (j?["ok"] as? Bool) == true else { return toast(j?["error"] as? String ?? "No connection — try again") }
+      let off = (j?["off"] as? Bool) != true
+      let ac = UIAlertController(title: off ? "Turn off this file’s link?" : "This link is off", message: off ? "Anyone who has the link won’t be able to open or download the file. You can turn it on again — the link stays the same." : "Turn it on again? The same link opens the file again.", preferredStyle: .alert)
+      ac.overrideUserInterfaceStyle = self.statusStyle == .darkContent ? .light : .dark
+      ac.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+      let ok = UIAlertAction(title: off ? "Turn off" : "Turn on", style: off ? .destructive : .default) { _ in
+        self.serverTask.request("/api/flink", body: ["path": path, "off": off]) { r in
+          toast((r?["ok"] as? Bool) == true ? (off ? "Link turned off" : "The link works again") : r?["error"] as? String ?? "That didn’t work — try again")
+        }
+      }
+      ac.addAction(ok); ac.preferredAction = ok
+      self.topMost().present(ac, animated: true)
+    }
   }
   // Download: fetched with its progress shown, then iPhone's own Save / Share sheet (Save Image, Save to Files…)
   func downloadFile(_ f: [String: Any], from vc: UIViewController, _ toast: @escaping (String) -> Void) {

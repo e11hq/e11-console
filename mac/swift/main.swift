@@ -318,7 +318,22 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   @objc func pickServer(_ sender: NSMenuItem) { setServer(sender.representedObject as? String ?? "live") }
   func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
     reviewLink.isHidden = !(webView.url?.host ?? "").hasSuffix(".cloudflareaccess.com")
-    if webView.url?.host == URL(string: SERVER)?.host { shareSignIn(); sendApnsToken(tries: 0) }
+    if webView.url?.host == URL(string: SERVER)?.host {
+      shareSignIn(); sendApnsToken(tries: 0)
+      if let t = pendingFileLink { pendingFileLink = nil; pageJS("window.__e11FileLink && window.__e11FileLink(\(jsString(t)))") }
+    }
+  }
+  /* ---------- file links: files.e11hq.com/f/<token> (Haris 2026-11-03) — tapped anywhere on this Mac, the App Store
+     app opens (universal links) and the page opens the file where it is ---------- */
+  var pendingFileLink: String?
+  func application(_ application: NSApplication, continue userActivity: NSUserActivity, restorationHandler: @escaping ([NSUserActivityRestoring]) -> Void) -> Bool {
+    guard userActivity.activityType == NSUserActivityTypeBrowsingWeb, let u = userActivity.webpageURL,
+          let r = u.path.range(of: "^/f/[A-Za-z0-9]{6,16}/?$", options: .regularExpression) else { return false }
+    let tok = String(u.path[r]).replacingOccurrences(of: "/f/", with: "").replacingOccurrences(of: "/", with: "")
+    if web == nil || web.isLoading || web.url?.host != URL(string: SERVER)?.host { pendingFileLink = tok }
+    else { pageJS("window.__e11FileLink && window.__e11FileLink(\(jsString(tok)))") }
+    if window != nil { showWindow() }
+    return true
   }
   /* Apple's notifications (APNs) for the Mac App Store app (Haris, 2026-10-30): every notification comes as the
      Mac's own, also when the app is closed or in front; the page draws none of its own (AppPush in app.js). The

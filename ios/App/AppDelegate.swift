@@ -91,8 +91,11 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     w.makeKeyAndVisible()
     window = w
     if let u = connectionOptions.urlContexts.first?.url { Main.shared.openLink(u) }   // (started by a widget tap)
+    // (started by a file link tapped elsewhere — files.e11hq.com/f/…, iPhone's universal links)
+    if let a = connectionOptions.userActivities.first(where: { $0.activityType == NSUserActivityTypeBrowsingWeb }), let u = a.webpageURL { Main.shared.openLink(u) }
   }
   func scene(_ scene: UIScene, openURLContexts contexts: Set<UIOpenURLContext>) { if let u = contexts.first?.url { Main.shared.openLink(u) } }
+  func scene(_ scene: UIScene, continue userActivity: NSUserActivity) { if userActivity.activityType == NSUserActivityTypeBrowsingWeb, let u = userActivity.webpageURL { Main.shared.openLink(u) } }
   func sceneDidBecomeActive(_ scene: UIScene) { Main.shared.becameActive() }
   func sceneDidEnterBackground(_ scene: UIScene) { Main.shared.wentAway() }
 }
@@ -1837,6 +1840,12 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   // e11console://open?task=<id> | ?plan=<id> | ?view=home|plans|fin-dash — a tap on the widget
   func openLink(_ u: URL) {
+    // a file link (files.e11hq.com/f/<token>, the test copy's files-test…): the page opens the file where it is
+    if let r = u.path.range(of: "^/f/([A-Za-z0-9]{6,16})/?$", options: .regularExpression) {
+      let tok = String(u.path[r]).replacingOccurrences(of: "/f/", with: "").replacingOccurrences(of: "/", with: "")
+      pageJSSoon("window.__e11FileLink && window.__e11FileLink(\(jsonString([tok]).dropFirst().dropLast()))")
+      return
+    }
     let q = URLComponents(url: u, resolvingAgainstBaseURL: false)?.queryItems ?? []
     let v = { (k: String) in q.first { $0.name == k }?.value }
     var d: [String: Any] = [:]
@@ -2084,6 +2093,11 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     case "clients": clientsCommand(a); done(["ok": true])
     case "assets": assetsCtl.command(a); done(["ok": true])
     case "me": meCtl.command(a); done(["ok": true])
+    // (33: Copy link from the page — a preview it opened, its own lists: the link put on the clipboard here)
+    case "copyLink":
+      let f: [String: Any] = ["file": a["path"] as? String ?? "", "name": a["name"] as? String ?? "File", "id": a["id"] as? String ?? "", "size": a["size"] as? Int ?? 0, "thumb": a["thumb"] as? String ?? ""]
+      copyFile(f) { [weak self] t in self?.previewVC?.set(["toast": t]); done(["ok": true, "toast": t]) }
+    // (a file link opened — files.e11hq.com/f/<token>: the page opens the file where it is)
     case "meAsk": meCtl.ask(a) { r in done(r) }
     case "taskPage": taskPageCommand(a); done(["ok": true])
     case "dailySheet":

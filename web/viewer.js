@@ -65,6 +65,7 @@ const Viewer = (() => {
         set({ info: rows });
       } }];
       const closeThen = (f) => { set({ close: true }); setTimeout(f, 350); };
+      if (a.path) items.push({ label: 'Turn off link', icon: 'lock', run: () => closeThen(() => FileLinks.toggle(a)) });
       if (client && canDelAsset(a)) items.push('-', { label: 'Delete', icon: 'trash', danger: true, run: () => closeThen(() => removeClientFile(a.id)) });
       if (onTask) items.push('-', { label: 'Remove from task', icon: 'trash', danger: true, run: () => closeThen(() => act('remove-att', a.id)) });
       showMenu(document.body, items, { native: true });
@@ -134,14 +135,14 @@ const Viewer = (() => {
       <div class="fpv-top">
         ${phone() ? `<button class="fpv-rb" data-pv="close" aria-label="Close">${icon('x')}</button>` : ''}
         <div class="fpv-count"></div>
-        <div class="fpv-acts">${phone() ? '' : `<button class="fpv-btn" data-pv="copy" title="Paste it into any comment or description">${icon('copy')}Copy</button><button class="fpv-btn" data-pv="dl">${icon('download')}Download</button>`}<button class="fpv-rb" data-pv="more" aria-label="More">${icon('more')}</button>${phone() ? '' : `<button class="fpv-rb" data-pv="close" aria-label="Close" title="Close (esc)">${icon('x')}</button>`}</div>
+        <div class="fpv-acts">${phone() ? '' : `<button class="fpv-btn" data-pv="copy" title="Paste it in a comment, or send it to anyone">${icon('link')}Copy link</button><button class="fpv-btn" data-pv="dl">${icon('download')}Download</button>`}<button class="fpv-rb" data-pv="more" aria-label="More">${icon('more')}</button>${phone() ? '' : `<button class="fpv-rb" data-pv="close" aria-label="Close" title="Close (esc)">${icon('x')}</button>`}</div>
       </div>
       <div class="fpv-stage"><div class="fpv-track"></div></div>
       ${!phone() && many ? `<button class="fpv-arr prev" data-pv="prev" aria-label="Previous">${icon('chev-left')}</button><button class="fpv-arr next" data-pv="next" aria-label="Next">${icon('chev-right')}</button>` : ''}
       <div class="fpv-bot">
         <div class="fpv-meta"></div>
         ${many ? `<div class="fpv-strip">${list.map(thumbOf).join('')}</div>` : ''}
-        ${phone() ? `<div class="fpv-btns"><button class="fpv-bb" data-pv="copy">${icon('copy')}<span>Copy</span></button><button class="fpv-bb" data-pv="dl">${icon('download')}<span>Download</span></button></div>` : ''}
+        ${phone() ? `<div class="fpv-btns"><button class="fpv-bb" data-pv="copy">${icon('link')}<span>Copy link</span></button><button class="fpv-bb" data-pv="dl">${icon('download')}<span>Download</span></button></div>` : ''}
         ${!phone() && many ? '<div class="fpv-keys"><kbd>←</kbd><kbd>→</kbd> next · <kbd>esc</kbd> close</div>' : ''}
       </div>
     </div>`;
@@ -265,6 +266,7 @@ const Viewer = (() => {
     const t = ui.taskId && task(ui.taskId);
     const onTask = !client && t && (t.attachments || []).some((x) => x.id === a.id);
     const items = [{ label: 'Info', icon: 'info', run: () => (client ? caInfo('file', a.id) : info(a)) }];
+    if (a.path) items.push({ label: 'Turn off link', icon: 'lock', run: () => FileLinks.toggle(a) });
     if (client && canDelAsset(a)) items.push('-', { label: 'Delete', icon: 'trash', danger: true, run: async () => { const was = list.length; await removeClientFile(a.id); if (!clientFileById(a.id)) afterGone(a, was); } });
     if (onTask) items.push('-', { label: 'Remove from task', icon: 'trash', danger: true, run: () => act('remove-att', a.id, () => { if (!(task(ui.taskId).attachments || []).some((x) => x.id === a.id)) afterGone(a); }) });
     const m = showMenu(anchor, items, { native: true });

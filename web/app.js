@@ -4122,7 +4122,7 @@ function attTile(a) {
     <div class="tile-img">${inner}${kind === 'video' ? `<span class="tile-play">${icon('play')}</span>` : ''}</div>
     <div class="tile-meta"><span>${esc(a.name)}</span><small>${fmtSize(a.size)}</small></div>
     <div class="tile-actions">
-      <button class="icon-btn sm" data-action="copy-att" data-id="${a.id}" title="Copy — paste into a comment or description">${icon('copy')}</button>
+      <button class="icon-btn sm" data-action="copy-att" data-id="${a.id}" title="Copy link — paste it in a comment, or send it to anyone">${icon('link')}</button>
       <button class="icon-btn sm" data-action="quicklook" data-id="${a.id}" title="Preview">${icon('search')}</button>
       <button class="icon-btn sm" data-action="reveal-att" data-id="${a.id}" title="${FINDER_LABEL}">${icon(Host.isServer ? 'download' : 'folder')}</button>
       <button class="icon-btn sm" data-action="remove-att" data-id="${a.id}" title="Remove">${icon('trash')}</button>
@@ -4219,7 +4219,7 @@ function attPreview(a, scope) {
     <div class="ap-bar">
       ${fileIcon(a)}
       <div class="fname"><div>${esc(a.name)}</div><small>${fmtSize(a.size)}${a.addedAt ? ' · ' + timeAgo(a.addedAt) : ''}</small></div>
-      <button class="icon-btn sm" data-action="copy-att" data-id="${a.id}" title="Copy — paste into a comment or description">${icon('copy')}</button>
+      <button class="icon-btn sm" data-action="copy-att" data-id="${a.id}" title="Copy link — paste it in a comment, or send it to anyone">${icon('link')}</button>
       <button class="icon-btn sm" data-action="quicklook" data-id="${a.id}" title="Preview">${icon('search')}</button>
       <button class="icon-btn sm" data-action="reveal-att" data-id="${a.id}" title="${FINDER_LABEL}">${icon(Host.isServer ? 'download' : 'folder')}</button>
       ${scope === 'task' ? `<button class="icon-btn sm" data-action="remove-att" data-id="${a.id}" title="Remove">${icon('trash')}</button>` : ''}
@@ -4273,7 +4273,7 @@ function attRow(a, scope) {
   return `<div class="att" data-action="quicklook" data-id="${a.id}" data-scope="${scope}" title="Preview">
     ${fileIcon(a)}
     <div class="fname"><div>${esc(a.name)}</div><small>${fmtSize(a.size)}${a.addedAt ? ' · added ' + timeAgo(a.addedAt) : ''}</small></div>
-    <button class="icon-btn sm" data-action="copy-att" data-id="${a.id}" title="Copy — paste into a comment or description">${icon('copy')}</button>
+    <button class="icon-btn sm" data-action="copy-att" data-id="${a.id}" title="Copy link — paste it in a comment, or send it to anyone">${icon('link')}</button>
     <button class="icon-btn sm" data-action="reveal-att" data-id="${a.id}" data-scope="${scope}" title="${FINDER_LABEL}">${icon(Host.isServer ? 'download' : 'folder')}</button>
     ${scope === 'task' ? `<button class="icon-btn sm" data-action="remove-att" data-id="${a.id}" title="Remove">${icon('trash')}</button>` : ''}
   </div>`;
@@ -4293,17 +4293,90 @@ function findAttachment(t, id) {
 const unesc = (s) => String(s).replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 const fileRefsIn = (html) => { const out = []; String(html || '').replace(/data-fpath="([^"]*)"/g, (_, p) => { out.push(unesc(p)); return ''; }); return out; };
 const attCore = (a) => ({ name: a.name, path: a.path, size: a.size || 0, ...(a.thumb ? { thumb: a.thumb } : {}) });
+// Copy link (Haris 2026-11-03): one copy — pasted in a comment or the description here it's the file (a chip, as
+// before); pasted anywhere else it's the file's short link (files.e11hq.com/f/…): E11 staff open it in the app, anyone
+// else gets the E11 page with the file and Download. The same link every time (flinks.js on the server).
+const FileLinks = (() => {
+  const urls = new Map();   // path → its link (asked once)
+  const LINK = /^https?:\/\/[^\s/]+\/f\/([A-Za-z0-9]{6,16})\/?$/;
+  const get = (a) => (urls.has(a.path) ? Promise.resolve(urls.get(a.path)) : api('POST', '/api/flink', { path: a.path }).then((r) => { if (!r || !r.ok) throw new Error((r && r.error) || 'No link'); urls.set(a.path, r.url); return r.url; }));
+  const plain = (txt) => { const ta = document.createElement('textarea'); ta.value = txt; ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0'; document.body.appendChild(ta); ta.select(); let ok = false; try { ok = document.execCommand('copy'); } catch (e) { ok = false; } ta.remove(); return ok; };
+  async function copy(a) {
+    if (!a || !a.path) return;
+    // (iPhone app 33+: the app puts it on the clipboard — a tap in its own preview isn't the page's to copy with)
+    if (typeof Host !== 'undefined' && Host.isIOSApp && typeof NativeMe !== 'undefined' && NativeMe.on) {
+      NativeMac.call('copyLink', { path: a.path, name: a.name, id: a.id, size: a.size || 0, thumb: a.thumb || '' }).then((r) => { if (r && r.toast) toast(r.toast); }).catch(() => {});
+      ui.fileClip = { att: attCore(a), token: `📎 ${a.name}`, url: null };
+      return;
+    }
+    ui.fileClip = { att: attCore(a), token: `📎 ${a.name}`, url: urls.get(a.path) || null };
+    const clip = ui.fileClip;
+    const said = () => toast(`Link copied — paste it in a comment here, or send it to anyone`);
+    // (known already: copied there and then; else the clipboard waits for it — still the tap that asked)
+    if (urls.has(a.path)) { const u = urls.get(a.path); clip.url = u; try { await navigator.clipboard.writeText(u); said(); } catch (e) { if (plain(u)) said(); else toast('Couldn’t copy the link'); } return; }
+    const wait = get(a);
+    let done = false;
+    try {
+      if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+        await navigator.clipboard.write([new ClipboardItem({ 'text/plain': wait.then((u) => new Blob([u], { type: 'text/plain' })) })]);
+        done = true;
+      }
+    } catch (e) { done = false; }
+    let u;
+    try { u = await wait; } catch (e) { toast('Couldn’t make a link: ' + e.message); return; }
+    clip.url = u;
+    if (!done) { try { await navigator.clipboard.writeText(u); done = true; } catch (e) { done = plain(u); } }
+    if (done) said();
+    else dialog({ title: 'Your link', body: u, okText: 'Copy' }).then((ok) => { if (ok && plain(u)) said(); });
+  }
+  // a pasted link of ours: the file it's for (to paste as a chip)
+  async function fileOf(txt) {
+    const m = LINK.exec(String(txt || '').trim());
+    if (!m) return null;
+    if (ui.fileClip && ui.fileClip.url && ui.fileClip.url === txt.trim()) return ui.fileClip.att;
+    try { const r = await api('GET', '/api/flink?token=' + encodeURIComponent(m[1])); return r && r.ok ? r.att : null; } catch (e) { return null; }
+  }
+  // Turn off link / Turn on link: asked first
+  async function toggle(a) {
+    if (!a || !a.path) return;
+    let r;
+    try { r = await api('GET', '/api/flink?path=' + encodeURIComponent(a.path)); } catch (e) { toast(e.message); return; }
+    if (!r || !r.ok) { toast((r && r.error) || 'This file can’t have a link'); return; }
+    const off = !r.off;
+    // (iPhone app 33+: iPhone's own question — the page may be under the app's own screens)
+    const ask = typeof Host !== 'undefined' && Host.isIOSApp && typeof NativeMe !== 'undefined' && NativeMe.on ? (o) => NativeMe.ask({ kind: 'alert', cancelText: 'Cancel', ...o }).then((x) => !!(x && x.ok)) : dialog;
+    const ok = await ask(off
+      ? { title: 'Turn off this file’s link?', body: 'Anyone who has the link won’t be able to open or download the file. You can turn it on again — the link stays the same.', okText: 'Turn off', danger: true }
+      : { title: 'This link is off', body: 'Turn it on again? The same link opens the file again.', okText: 'Turn on' });
+    if (!ok) return;
+    try { r = await api('POST', '/api/flink', { path: a.path, off }); } catch (e) { toast(e.message); return; }
+    toast(r && r.ok ? (off ? 'Link turned off' : 'The link works again') : (r && r.error) || 'That didn’t work — try again');
+  }
+  const isLink = (txt) => LINK.test(String(txt || '').trim());
+  // (an E11 staff member's app opened a link: the file where it is — a client's folder or a task — and its preview)
+  async function open(token, tries = 0) {
+    // (the app just opened: its data first)
+    if ((!db || !currentUserId) && tries < 30) { setTimeout(() => open(token, tries + 1), 500); return; }
+    let r;
+    try { r = await api('GET', '/api/flink?token=' + encodeURIComponent(token)); } catch (e) { toast(e.message); return; }
+    if (!r || !r.ok) { toast((r && r.error) || 'That file isn’t available'); return; }
+    const w = r.where || {};
+    if (w.kind === 'asset' && clientById(w.client)) { openClient(w.client, w.folder); setTimeout(() => { const a = clientFileById(w.file); if (a) previewFile(a); }, 450); return; }
+    if ((w.kind === 'task' || w.kind === 'comment') && task(w.task)) {
+      if (w.kind === 'comment') ui.sideTab = ui.forceTab = 'comments';
+      openTask(w.task);
+      setTimeout(() => { const a = findAttachment(task(w.task), w.file); if (a) previewFile(a); }, 600);
+      return;
+    }
+    toast('That file is for the people working on it');
+  }
+  window.__e11FileLink = (t) => { if (t) open(String(t)); };
+  return { copy, fileOf, toggle, isLink, open };
+})();
 function copyAttachment(a) {
   if (!a) return;
-  const token = `📎 ${a.name}`;
-  ui.fileClip = { att: attCore(a), token };
-  try {
-    const ta = document.createElement('textarea');
-    ta.value = token; ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
-    document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
-  } catch (e) { /* the in-app Paste button still works */ }
-  toast(`Copied “${a.name}” — paste it into any comment or description (⌘V)`);
-  if (ui.taskId) renderDetail();
+  FileLinks.copy(a);
+  if (ui.taskId) setTimeout(() => renderDetail(), 0);
 }
 // Inline file chip used inside descriptions and edited comments: a light grey pill, its kind's coloured icon (pictures
 // green, PDFs red, videos purple, the rest blue — as the iPhone app's), its name (Haris 2026-11-02)
@@ -6347,10 +6420,11 @@ document.addEventListener('click', async (e) => {
         const tap = (sel) => () => { const b = tile.querySelector(sel); if (b) b.click(); };
         const has = (sel) => !!tile.querySelector(sel);
         showMenu(actEl, [
-          { label: 'Copy', icon: 'copy', hint: 'Paste into a task comment or description', run: tap('[data-action="copy-att"]') },
+          { label: 'Copy link', icon: 'link', hint: 'Paste it in a comment, or send it to anyone', run: tap('[data-action="copy-att"]') },
           { label: 'Preview', icon: 'search', run: tap('[data-action="quicklook"]') },
           { label: 'Download', icon: 'download', run: tap('[data-action="ca-download"]') },
           { label: 'Info', icon: 'info', run: tap('[data-action="ca-info"]') },
+          { label: 'Turn off link', icon: 'lock', run: () => FileLinks.toggle(clientFileById(id)) },
           ...(has('[data-action="ca-remove"]') ? ['-', { label: 'Delete', icon: 'trash', danger: true, run: tap('[data-action="ca-remove"]') }] : []),
         ], { native: true });
         return;
@@ -6361,9 +6435,10 @@ document.addEventListener('click', async (e) => {
         const tile = actEl.closest('.ct'); if (!tile) return;
         const tap = (sel) => () => { const b = tile.querySelector(sel); if (b) b.click(); };
         showMenu(actEl, [
-          { label: 'Copy', icon: 'copy', hint: 'Paste into a comment or description', run: tap('[data-action="copy-att"]') },
+          { label: 'Copy link', icon: 'link', hint: 'Paste it in a comment, or send it to anyone', run: tap('[data-action="copy-att"]') },
           { label: 'Preview', icon: 'search', run: tap('[data-action="quicklook"]') },
           { label: FINDER_LABEL, icon: Host.isServer ? 'download' : 'folder', run: tap('[data-action="reveal-att"]') },
+          { label: 'Turn off link', icon: 'lock', run: () => { const b = tile.querySelector('[data-action="copy-att"]'); FileLinks.toggle(b && findAttachment(task(b.dataset.taskId || ui.taskId), b.dataset.id)); } },
         ], { native: true });
         return;
       }
@@ -6649,13 +6724,21 @@ document.addEventListener('paste', (e) => {
   e.preventDefault();
   // (a picture or file from outside: the description's — uploaded, its chip here; a comment's — added to it)
   const pf = [...(((e.clipboardData || {}).files) || [])];
-  if (pf.length && !(ui.fileClip && (e.clipboardData.getData('text/plain') || '').trim() === ui.fileClip.token)) {
+  if (pf.length && !(ui.fileClip && [ui.fileClip.token, ui.fileClip.url].includes((e.clipboardData.getData('text/plain') || '').trim()))) {
     if (ed.id === 'd-notes') attachIntoDesc(pf);
     else if (ed.dataset.draftKey) attachFiles('comment', ed.dataset.replyTo || null, pf);
     return;
   }
   const txt = (e.clipboardData || window.clipboardData).getData('text/plain');
-  if (ui.fileClip && txt && txt.trim() === ui.fileClip.token) { pasteFileInto(ed); return; }
+  if (ui.fileClip && txt && (txt.trim() === ui.fileClip.token || (ui.fileClip.url && txt.trim() === ui.fileClip.url))) { pasteFileInto(ed); return; }
+  // (one of our file links, copied anywhere: the file itself, as a chip)
+  if (FileLinks.isLink(txt)) {
+    FileLinks.fileOf(txt).then((a) => {
+      if (a) { ui.fileClip = { att: attCore(a), token: `📎 ${a.name}`, url: txt.trim() }; pasteFileInto(ed); }
+      else { ed.focus(); document.execCommand('insertText', false, txt); }
+    });
+    return;
+  }
   if (RichClip.paste(ed, (e.clipboardData || {}).getData ? e.clipboardData.getData('text/html') : '')) return;
   const html = textWithMentions(txt);
   if (html) { document.execCommand('insertHTML', false, html); ed.dispatchEvent(new Event('input', { bubbles: true })); }
@@ -6907,7 +6990,7 @@ function viewClients() {
     ${list.length ? '' : `<div class="empty"><div class="big">No clients yet</div>${canAssets() ? 'Add your first client to start collecting their brand assets.' : 'An Admin or Account Manager will add clients here.'}</div>`}`;
   return `<div class="ca-page">
     <div class="ca-intro">
-      <div><h2>Brand guidelines, logos and fonts for every client</h2><p>Open a client to find what you need, then use <b>${icon('copy')}Copy</b> on any file to paste it straight into a task — no downloading or re-uploading.</p></div>
+      <div><h2>Brand guidelines, logos and fonts for every client</h2><p>Open a client to find what you need, then use <b>${icon('link')}Copy link</b> on any file to paste it straight into a task — no downloading or re-uploading — or to send it to anyone.</p></div>
     </div>
     ${caSearchBar(null)}
     <div id="ca-body" data-scope="">${ui.caQ && !ui.caScope ? caResultsHTML(ui.caQ, null) : grid}</div>
@@ -6961,7 +7044,7 @@ function caTile(f, a, loc = null) {
   return `<div class="tile ca-tile" data-action="tile-open" data-id="${a.id}" title="${esc(a.name)}">
     <div class="tile-img ${isFont(a) ? 'is-font' : ''}">${inner}${kind === 'video' ? `<span class="tile-play">${icon('play')}</span>` : ''}</div>
     <div class="tile-meta"><span>${loc ? caMark(a.name, loc.q) : esc(a.name)}</span>${loc ? `<a class="ca-loc" data-action="open-cfolder-of" data-client="${loc.c.id}" data-id="${f.id}" title="Open this folder">${clientLogoHTML(loc.c, 14)}${esc(loc.c.name)} › ${esc(folderPath(loc.c, f))}</a>` : ''}<small>${fmtSize(a.size)}${a.addedBy ? ` · ${esc(firstName(a.addedBy))}` : ''}</small></div>
-    <button class="ca-copy" data-action="copy-att" data-id="${a.id}" title="Copy — paste into any task comment or description">${icon('copy')}Copy</button>
+    <button class="ca-copy" data-action="copy-att" data-id="${a.id}" title="Copy link — paste it in a comment, or send it to anyone">${icon('link')}Copy link</button>
     <button class="icon-btn ca-more" data-action="ca-tile-menu" data-id="${a.id}" title="File options" aria-label="File options">${icon('more')}</button>
     <div class="tile-actions">
       <button class="icon-btn sm" data-action="quicklook" data-id="${a.id}" title="Preview">${icon('search')}</button>

@@ -750,8 +750,9 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let f = files[i]
     return UIMenu(title: f["name"] as? String ?? "", children: [
       UIAction(title: "Open", image: UIImage(systemName: "eye")) { [weak self] _ in self?.onOpenFiles?(files, i) },
-      UIAction(title: "Copy", image: UIImage(systemName: "doc.on.doc")) { [weak self] _ in self?.onFileAction?(f, "copy") },
+      UIAction(title: "Copy link", image: UIImage(systemName: "link")) { [weak self] _ in self?.onFileAction?(f, "copy") },
       UIAction(title: "Download", image: UIImage(systemName: "arrow.down.circle")) { [weak self] _ in self?.onFileAction?(f, "download") },
+      UIAction(title: "Turn off link", image: UIImage(systemName: "lock")) { [weak self] _ in self?.onFileAction?(f, "linkOff") },
     ])
   }
   private func layoutContent() {

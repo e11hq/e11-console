@@ -300,8 +300,8 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
       b.configuration = c
       b.heightAnchor.constraint(equalToConstant: 44).isActive = true
     }
-    pill(copyB, "doc.on.doc", "Copy"); pill(dlB, "arrow.down.circle", "Download")
-    copyB.addAction(UIAction { [weak self] _ in self?.send("copy"); self?.flash("Copied — paste it into a comment or description") }, for: .touchUpInside)
+    pill(copyB, "link", "Copy link"); pill(dlB, "arrow.down.circle", "Download")
+    copyB.addAction(UIAction { [weak self] _ in self?.send("copy") }, for: .touchUpInside)   // (its words when the link is on the clipboard)
     dlB.addAction(UIAction { [weak self] _ in self?.send("dl") }, for: .touchUpInside)
     let btns = UIStackView(arrangedSubviews: [copyB, dlB]); btns.axis = .horizontal; btns.spacing = 10; btns.distribution = .fillEqually
     let meta = UIStackView(arrangedSubviews: [name, details]); meta.axis = .vertical; meta.spacing = 2

@@ -46,6 +46,7 @@ targets:
         com.apple.security.files.user-selected.read-write: true
         com.apple.security.files.downloads.read-write: true
         keychain-access-groups: [$(AppIdentifierPrefix)ae.e11.console.shared]   # (shared with the widget: WidgetShare)
+        com.apple.developer.associated-domains: [applinks:files.e11hq.com, applinks:files-test.e11hq.com]   # (file links open in the app — flinks.js)
     info:
       path: Info.plist
       properties:

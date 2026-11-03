@@ -1727,7 +1727,7 @@ const SheetMotion = (() => {
 (() => {
   const HOLD = 450, SEL = '.ca-tile[data-id], .cf-card[data-id]:not(.add), #detail .tile[data-id]';
   // a task's attachments: the sheet is made from the tile's own buttons
-  const NAMES = { 'copy-att': ['Copy', 'copy', 'Paste into a comment or description'], quicklook: ['Preview', 'search'], 'reveal-att': ['Download', 'download'], 'remove-att': ['Remove', 'trash'] };
+  const NAMES = { 'copy-att': ['Copy link', 'link', 'Paste it in a comment, or send it to anyone'], quicklook: ['Preview', 'search'], 'reveal-att': ['Download', 'download'], 'remove-att': ['Remove', 'trash'] };
   function tileSheet(card) {
     const btns = [...card.querySelectorAll('.tile-actions [data-action]')].filter((b) => NAMES[b.dataset.action]);
     if (!btns.length) return false;
