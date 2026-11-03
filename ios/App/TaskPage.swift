@@ -448,6 +448,30 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if let b = pendingBefore { pendingBefore = nil; animateFrom(b) }
   }
   private var pendingBefore: [String: Kept]?
+  // Only the sections that changed are new (Haris 2026-11-03): each new section is matched with the one before it by
+  // what it is (its key) — when it shows just the same, the one already on the page stays and the new one is dropped.
+  // The ones holding the page's own pieces (the title, the description, the file rows) are always the new ones: those
+  // pieces move into them as they're built.
+  private func blockKey(_ b: UIView) -> String {
+    if let n = b.layer.name, n.hasPrefix("k:") { return n }
+    return String(describing: type(of: b)) + ":" + (TaskPage.firstText(b) ?? "")
+  }
+  private func holdsOwnPieces(_ b: UIView) -> Bool {
+    let own: [UIView] = [titleView, descBox, descView, descRead, filesStrip, descStrip, mentionBox]
+    return own.contains { $0 === b || $0.isDescendant(of: b) }
+  }
+  private func keepUnchanged(_ old: [UIView]) {
+    var pool: [String: [UIView]] = [:]
+    for b in old where !holdsOwnPieces(b) && b.superview === content { pool[blockKey(b), default: []].append(b) }
+    var kept = Set<ObjectIdentifier>()
+    for (i, b) in blocks.enumerated() where !holdsOwnPieces(b) {
+      let k = blockKey(b)
+      guard var list = pool[k], let j = list.firstIndex(where: { type(of: $0) == type(of: b) && TaskPage.sig($0) == TaskPage.sig(b) && $0.tag == b.tag }) else { continue }
+      let o = list.remove(at: j); pool[k] = list
+      blocks[i] = o; kept.insert(ObjectIdentifier(o))
+    }
+    for b in old where b !== titleView && !kept.contains(ObjectIdentifier(b)) && !blocks.contains(where: { $0 === b }) { b.removeFromSuperview() }
+  }
   // (only drawn again when someone's picture or name really changed — photos arriving again and again redrew the whole
   //  page each time, the Files row and the lock note jumping by themselves; Haris 2026-11-02)
   func peopleChanged(_ p: [String: [String: Any]]) {
@@ -534,7 +558,8 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     defer { drawnOnce = true; if live { pendingBefore = before } }
     let keepY = scroll.contentOffset.y
     let typing = titleView.isFirstResponder
-    blocks.forEach { if $0 !== titleView { $0.removeFromSuperview() } }
+    // (the sections as they are now — the ones that come out the same are kept as they are, Haris 2026-11-03)
+    let oldBlocks = blocks
     blocks = []
     let ro = (m["readOnly"] as? Bool) == true
     // the head: subtask of… / the title (edited in place, looks the same)
@@ -713,6 +738,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       }
       blocks.append(group(lines))
     }
+    keepUnchanged(oldBlocks)
     blocks.forEach { if $0.superview !== content { content.addSubview($0) } }
     // Mark complete: only when this person may complete it
     if let c = m["complete"] as? [String: Any], (c["show"] as? Bool) == true { fab.isHidden = false } else { fab.isHidden = true }
@@ -1631,6 +1657,17 @@ extension TaskPage {
       if let i = v as? UIImageView { out += "I" + ims(i.image) + cs(i.tintColor, tc) }
       if let b = v as? UIButton { out += "B" + ims(b.currentImage) + (b.currentTitle ?? b.configuration?.title ?? "") + cs(b.tintColor, tc) }
       if let c = v.backgroundColor { out += "C" + cs(c, tc) }
+      // (what a control is set to, and how see-through things are: a kept section must show just the same)
+      if let sw = v as? UISwitch { out += "S\(sw.isOn)" }
+      if let c = v as? UIControl { out += "E\(c.isEnabled)" }
+      if v.alpha < 1 { out += "A" + String(format: "%.2f", v.alpha) }
+      if let l = v as? UILabel, let a = l.attributedText, a.length > 0 {
+        a.enumerateAttributes(in: NSRange(location: 0, length: a.length)) { at, r, _ in
+          if at[.strikethroughStyle] != nil { out += "~\(r.location)" }
+          if let c = at[.foregroundColor] as? UIColor { out += "f" + cs(c, tc) }
+          if let f = at[.font] as? UIFont { out += "w\(f.fontDescriptor.symbolicTraits.rawValue)\(f.pointSize)" }
+        }
+      }
       v.subviews.forEach(walk)
     }
     walk(v)
