@@ -34,12 +34,11 @@ them on the same way as the task page, the client's page and Client Assets do.
 (or in the middle when there's none). It shows at once when the whole list fits on the screen, and otherwise fades in
 when the list reaches its end and out on scrolling back. Every new native list screen has it.
 
-**The frost bar — LOCKED (Haris, 2026-11-03: "lock it again so it will be consistent"):** on every native screen the
-bar's frost is iPhone's own **firm** scroll-edge frost (`topEdgeEffect.style = .hard`), the whole bar frosted evenly down
-to the one-pixel line under it — never the soft one that fades out. **It shows only once something is under the bar**
-(Haris 2026-11-03): at the top of a page no frost and no line; they come in together with the small title (pages with a
-big title) or the moment the page scrolls under the bar (others) — the shared `Frost.show` / `FrostWatch`. The switch-over (big title → small title, Mail's
-timings) is unchanged and locked too. Don't change either without Haris. Every new native screen uses HomeView's bar.
+**The frost bar — LOCKED (Haris, 2026-11-03: "revert the frost bar to how it was and lock it"):** on every native screen
+the bar's frost is iPhone's own **soft** scroll-edge frost (`topEdgeEffect.style = .soft`), as up to build 1331; only
+My Tasks' tabs and filters stuck under the bar use the firm one (`.hard`) while stuck. (Tried and dropped the same day: the
+firm frost everywhere, builds 1339 and 1343.) The switch-over (big title → small title, Mail's timings) is unchanged and
+locked too. Don't change either without Haris. Every new native screen uses HomeView's bar.
 
 **TestFlight only on Haris's yes (Haris, 2026-11-03):** "publish, publish app build" builds, self-tests and signs the
 iPhone app, then keeps it on his Mac (ios.yml `send: ask`, the default). When a build has finished, ask Haris; only on
