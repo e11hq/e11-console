@@ -1159,6 +1159,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
     guard item.tag < tabKeys.count else { return }
+    ProfileAskCard.current?.go()   // (another page: the birthday / city card slips away)
     UISelectionFeedbackGenerator().selectionChanged()
     // (the tab you're on, tapped again — from a page inside it: back to the tab's first screen, as iPhone's own apps;
     //  Haris 2026-11-03. On its first screen: back to the top, as before.)

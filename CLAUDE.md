@@ -42,6 +42,11 @@ stay stuck under it with the frost behind them (`HomeView.pinHead` for a page's 
 line — under stuck search / filters too — from the very first moment, and ends just above the tab bar (or the bottom
 edge). Never iPhone's own safe-area adjusting (`automaticallyAdjustsScrollIndicatorInsets = false`). Every new page too.
 
+**‹ goes back the way you came, everywhere (Haris, 2026-11-03):** on every native page, ‹ and the edge swipe go back to
+where you were before (history) — not up the page's own path. A client's page opened from Home's search goes back to
+Home's search, not the Clients list (`clientFrom`, the page's `PageHistory.prev`). Tapping a tab again still goes to that
+tab's first screen. Every new native page too.
+
 **A page with its name in the middle of the bar (a client's, Client Assets, Me's pages…), everywhere (Haris, 2026-11-03):**
 only that centred name — Home's small title never comes in over it.
 

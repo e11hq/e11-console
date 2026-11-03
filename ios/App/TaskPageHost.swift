@@ -22,6 +22,7 @@ extension Main {
 
   func openTaskPage(_ id: String, tab: String, focus: String) {
     endEditing()
+    ProfileAskCard.current?.go()   // (a task opened: the birthday / city card slips away)
     FeedLoader.shared.cookies = serverHome.cookies   // (before anything is drawn: its pictures are fetched with it)
     let p = TaskPage(id: id, frame: view.bounds)
     p.autoresizingMask = [.flexibleWidth, .flexibleHeight]
