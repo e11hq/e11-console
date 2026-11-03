@@ -684,6 +684,8 @@ export function createServer(cfg) {
       const origin = `${/^(localhost|127\.)/.test(String(req.headers.host || '')) ? 'http' : 'https'}://${String(req.headers['x-forwarded-host'] || req.headers.host || '').replace(/[^\w.:-]/g, '')}`;
       if (req.method === 'GET' && url.searchParams.get('token')) return json(res, 200, fileLinks.where(u, url.searchParams.get('token'), access.canReadFile));
       const body = req.method === 'POST' ? await readBody(req).catch(() => ({})) : { path: url.searchParams.get('path') };
+      // (which of these files' links are turned off — the app's file sheets say Turn on link)
+      if (body && Array.isArray(body.paths)) return json(res, 200, { ok: true, off: fileLinks.offOf(body.paths.slice(0, 500).map(String).filter((x) => access.canReadFile(u, x))) });
       const fp = String((body && body.path) || '');
       if (!fp || !access.canReadFile(u, fp)) return json(res, 403, { ok: false, error: 'Not allowed' });
       if (body && typeof body.off === 'boolean') return json(res, 200, fileLinks.setOff(u, fp, body.off, origin));

@@ -41,6 +41,45 @@ final class SetFoot: UIView, HomeBlock {
   override func layoutSubviews() { super.layoutSubviews(); label.frame = CGRect(x: 36, y: 7, width: bounds.width - 72, height: max(0, bounds.height - 14)) }
 }
 
+// the coloured square behind a row's symbol, as iPhone's Settings draws it (Haris 2026-11-03: "it has bevel / inner
+// shadows"): a soft fall of the colour from a little lighter at the top to a little deeper at the bottom, a thin light
+// rim along its top edge fading down, and a faint darker one along the bottom
+final class SettingsIcon: UIView {
+  private let fill = CAGradientLayer(), rim = CAGradientLayer(), rimMask = CAShapeLayer(), low = CAGradientLayer(), lowMask = CAShapeLayer()
+  var color: UIColor = .systemGray { didSet { paint() } }
+  override init(frame: CGRect) {
+    super.init(frame: frame)
+    layer.masksToBounds = true
+    rim.colors = [UIColor.white.withAlphaComponent(0.55).cgColor, UIColor.white.withAlphaComponent(0.0).cgColor]
+    rim.locations = [0, 0.55]
+    low.colors = [UIColor.black.withAlphaComponent(0).cgColor, UIColor.black.withAlphaComponent(0.18).cgColor]
+    low.locations = [0.5, 1]
+    rimMask.fillColor = UIColor.clear.cgColor; rimMask.strokeColor = UIColor.black.cgColor; rimMask.lineWidth = 1.2
+    lowMask.fillColor = UIColor.clear.cgColor; lowMask.strokeColor = UIColor.black.cgColor; lowMask.lineWidth = 1
+    rim.mask = rimMask; low.mask = lowMask
+    [fill, low, rim].forEach { layer.addSublayer($0) }
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  private func paint() {
+    var h: CGFloat = 0, sat: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+    let c = color.resolvedColor(with: traitCollection)
+    if c.getHue(&h, saturation: &sat, brightness: &b, alpha: &a) {
+      let top = UIColor(hue: h, saturation: max(0, sat * 0.86), brightness: min(1, b * 1.1 + 0.04), alpha: a)
+      let bottom = UIColor(hue: h, saturation: min(1, sat * 1.06), brightness: b * 0.9, alpha: a)
+      fill.colors = [top.cgColor, bottom.cgColor]
+    } else { fill.colors = [c.cgColor, c.cgColor] }
+  }
+  override func traitCollectionDidChange(_ p: UITraitCollection?) { super.traitCollectionDidChange(p); paint() }
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    CATransaction.begin(); CATransaction.setDisableActions(true)
+    [fill, rim, low].forEach { $0.frame = bounds }
+    let path = UIBezierPath(roundedRect: bounds.insetBy(dx: 0.6, dy: 0.6), cornerRadius: max(0, layer.cornerRadius - 0.6)).cgPath
+    rimMask.path = path; lowMask.path = path
+    CATransaction.commit()
+  }
+}
+
 // one row of a group, as iPhone's Settings: coloured icon (or a person's picture), name, a line under it, what's on
 // at the right, ›, a switch, a small pill
 struct SetItem {
@@ -66,7 +105,7 @@ struct SetItem {
 }
 
 final class SetRow: AssetTile {
-  let icon = UIView(), sym = UIImageView(), pic = UIImageView(), name = UILabel(), sub = UILabel(), value = UILabel(), chev = UIImageView(), sw = UISwitch(), pill = UILabel(), badge = UILabel()
+  let icon = SettingsIcon(), sym = UIImageView(), pic = UIImageView(), name = UILabel(), sub = UILabel(), value = UILabel(), chev = UIImageView(), sw = UISwitch(), pill = UILabel(), badge = UILabel()
   private var pillViews: [UILabel] = []
   var item: SetItem!
   private var photoPath: String?
@@ -87,7 +126,7 @@ final class SetRow: AssetTile {
   required init?(coder: NSCoder) { fatalError() }
   func set(_ it: SetItem, look L: HomeLook) {
     item = it
-    icon.isHidden = it.sym == nil; icon.backgroundColor = it.col ?? .systemGray
+    icon.isHidden = it.sym == nil; icon.color = it.col ?? .systemGray
     sym.image = it.sym.flatMap { UIImage(systemName: $0, withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)) }
     name.text = it.title; name.textColor = it.danger ? .systemRed : L.title
     sub.text = it.sub; sub.isHidden = it.sub.isEmpty; sub.textColor = it.warn ? .systemOrange : .secondaryLabel
@@ -849,7 +888,7 @@ final class MeCtl {
   private func draw(_ s: Screen) {
     var mm: [String: Any] = ["show": true, "me": me ?? "", "look": ["light": light]]
     if let l = main.homeLook as? [String: Any], (l["light"] as? Bool) == light { mm["look"] = l }
-    if s.kind == "me" { mm["title"] = "Me"; mm["date"] = "" }
+    if s.kind == "me" { mm["title"] = "Me"; mm["date"] = "E11 Console App" }   // (the line under the big title, as the other tabs have — Haris 2026-11-03)
     s.h.bottomRoom = (main.tabBar.isHidden ? 40 : main.view.bounds.height - main.tabBar.frame.minY) + 96
     s.h.tabTop = main.tabBar.isHidden ? nil : main.tabPillTop
     s.h.update(mm)
@@ -1023,7 +1062,9 @@ final class MeCtl {
     if t.isEmpty { let n = part(h, "wait") { AssetsNote() }; n.label.text = "Loading…"; out.append(n); return }
     let seg = part(h, "seg") { SegBlock() }
     seg.set("Active · \(t["active"] as? Int ?? 0)", "Past · \(t["pastN"] as? Int ?? 0)", teamTab)
-    seg.onPick = { [weak self, weak h] i in guard let self = self, let h = h else { return }; self.teamTab = i; self.blocks(h); h.relayout() }
+    // (Active ↔ Past: the other list there at once, as iPhone's own segmented lists — nothing slides into place;
+    //  the note under it slid down, Haris 2026-11-03)
+    seg.onPick = { [weak self, weak h] i in guard let self = self, let h = h else { return }; self.teamTab = i; UIView.performWithoutAnimation { self.blocks(h); h.setNeedsLayout(); h.layoutIfNeeded() } }
     out.append(seg)
     let find = part(h, "find") { AssetsFind() }
     find.field.placeholder = "Search people"

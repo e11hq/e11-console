@@ -121,8 +121,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       i.scrollView = scroll; i.edge = .top
       topBar.addInteraction(i)
       edgeHook = i
-      scroll.topEdgeEffect.style = .soft
-      results.topEdgeEffect.style = .soft
+      // (Haris 2026-11-03: the frost whole down to the line under the bar, as Settings' — not fading out: iPhone's firm one)
+      scroll.topEdgeEffect.style = .hard
+      results.topEdgeEffect.style = .hard
     }
     sub.font = .systemFont(ofSize: 15)
     title.font = .systemFont(ofSize: 34, weight: .bold)
@@ -968,8 +969,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       if scroll.topEdgeEffect.isHidden { scroll.topEdgeEffect.isHidden = false }
       // (My Tasks' tabs and filters stuck under the bar: iPhone's firmer frost, so the cards don't show through between
       //  them — the soft one fades out half way down them; Apple's own advice for things pinned under a bar)
-      let style: UIScrollEdgeEffect.Style = pinned ? .hard : .soft
-      if scroll.topEdgeEffect.style != style { scroll.topEdgeEffect.style = style }
+      // (always the firm frost now — the whole bar, down to its line; Haris 2026-11-03)
+      if scroll.topEdgeEffect.style != .hard { scroll.topEdgeEffect.style = .hard }
       // (one pixel, as Mail's)
       let px = 1 / max(1, traitCollection.displayScale)
       topLine.frame = CGRect(x: 0, y: barH - px, width: W, height: px)

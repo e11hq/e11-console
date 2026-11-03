@@ -142,7 +142,7 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
     let tapAway = UITapGestureRecognizer(target: self, action: #selector(tappedList)); tapAway.cancelsTouchesInView = false
     scroll.addGestureRecognizer(tapAway)
     addSubview(scroll); scroll.addSubview(content)
-    if #available(iOS 26.0, *) { scroll.topEdgeEffect.style = .soft }
+    if #available(iOS 26.0, *) { scroll.topEdgeEffect.style = .hard }   // (the whole bar frosted, down to its line — Haris 2026-11-03)
     // the ↓ button / "N new comments" pill: glass, just above the comment box
     jumpFx.isUserInteractionEnabled = false; jumpFx.clipsToBounds = true
     if #available(iOS 26.0, *) { jumpFx.effect = UIGlassEffect(style: .regular) } else { jumpFx.effect = UIBlurEffect(style: .systemThinMaterial) }

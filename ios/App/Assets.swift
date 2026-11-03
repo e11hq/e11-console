@@ -458,6 +458,7 @@ final class AssetsCtl {
   }
   private func take(_ m: [String: Any]) {
     let kind = m["kind"] as? String
+    if kind == "client" { main.loadLinkStates(((m["files"] as? [[String: Any]]) ?? []).compactMap { $0["file"] as? String }) }
     if kind == "all" { models[""] = m } else if kind == "client", let id = m["id"] as? String { models[id] = m }
     for s in stack where (kind == "all" && s.kind == "all") || (kind == "client" && s.client == (m["id"] as? String)) { draw(s) }
     main.updateCorner()   // (its ••• as it is now)
@@ -764,7 +765,8 @@ final class AssetsCtl {
   private func sheet(_ title: String, _ items: [(String, String, Bool, () -> Void)]) {
     var main: [[String: Any]] = [], danger: [[String: Any]] = []
     for (i, it) in items.enumerated() {
-      let row: [String: Any] = ["i": i, "label": it.0, "icon": it.1, "danger": it.2]
+      var row: [String: Any] = ["i": i, "label": it.0, "icon": it.1, "danger": it.2]
+      if it.1 == "unlock" { row["accent"] = true }   // (Turn on link: blue)
       if it.2 { danger.append(row) } else { main.append(row) }
     }
     var secs: [[String: Any]] = [["header": title, "rows": main]]
@@ -780,7 +782,9 @@ final class AssetsCtl {
       ("Copy link", "link", false, { [weak self, weak h] in self?.main.copyFile(f) { t in h?.assetsToast(t) } }),
       ("Download", "download", false, { [weak self, weak h] in guard let self = self else { return }; self.main.downloadFile(f, from: self.main.topMost()) { t in h?.assetsToast(t) } }),
       ("Info", "info", false, { [weak self] in self?.fileInfo(f) }),
-      ("Turn off link", "lock", false, { [weak self, weak h] in self?.main.fileLinkToggle(f) { t in h?.assetsToast(t) } }),
+      Main.linksOff.contains(f["file"] as? String ?? "")
+        ? ("Turn on link", "unlock", false, { [weak self, weak h] in self?.main.fileLinkToggle(f) { t in h?.assetsToast(t) } })
+        : ("Turn off link", "lock", false, { [weak self, weak h] in self?.main.fileLinkToggle(f) { t in h?.assetsToast(t) } }),
     ]
     if (f["canDel"] as? Bool) == true, let fid = f["folder"] as? String {
       items.append(("Delete", "trash", true, { [weak self, weak h] in

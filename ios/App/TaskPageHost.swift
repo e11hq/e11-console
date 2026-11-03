@@ -663,6 +663,16 @@ extension Main {
   // the description here it's still the file (FileClip, as before); anywhere else, the link: staff open it in the app,
   // anyone else gets the E11 page with the file and Download. The same link every time (asked of the server once).
   static var fileLinks: [String: String] = [:]
+  // (the links turned off, as the server has them — asked for the files on screen, so a file's sheet says Turn on link)
+  static var linksOff = Set<String>()
+  func loadLinkStates(_ paths: [String]) {
+    let ps = Array(Set(paths.filter { !$0.isEmpty })).prefix(400)
+    guard !ps.isEmpty else { return }
+    serverTask.request("/api/flink", body: ["paths": Array(ps)]) { j in
+      guard (j?["ok"] as? Bool) == true, let off = j?["off"] as? [String] else { return }
+      for p in ps { if off.contains(p) { Main.linksOff.insert(p) } else { Main.linksOff.remove(p) } }
+    }
+  }
   func copyFile(_ f: [String: Any], _ toast: @escaping (String) -> Void) {
     guard let path = f["file"] as? String else { return toast("This file isn’t available") }
     let name = f["name"] as? String ?? "File"
@@ -688,6 +698,7 @@ extension Main {
       ac.addAction(UIAlertAction(title: "Cancel", style: .cancel))
       let ok = UIAlertAction(title: off ? "Turn off" : "Turn on", style: off ? .destructive : .default) { _ in
         self.serverTask.request("/api/flink", body: ["path": path, "off": off]) { r in
+          if (r?["ok"] as? Bool) == true { if off { Main.linksOff.insert(path) } else { Main.linksOff.remove(path) } }
           toast((r?["ok"] as? Bool) == true ? (off ? "Link turned off" : "The link works again") : r?["error"] as? String ?? "That didn’t work — try again")
         }
       }

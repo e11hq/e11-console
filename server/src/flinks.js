@@ -174,5 +174,6 @@ ${body}
     const a = r.hit.att;
     return { ok: true, path: r.path, off: !!r.off, where: r.hit.where, att: { id: a.id, name: a.name, path: a.path, size: a.size || 0, ...(a.thumb ? { thumb: a.thumb } : {}), ...(a.type ? { type: a.type } : {}) } };
   }
-  return { linkFor, setOff, resolveToken, serve, where, urlOf, find };
+  const offOf = (paths) => { const m = load(); return paths.filter((x) => { const t = (m.byPath || {})[x]; return t && m.links[t] && m.links[t].off; }); };
+  return { linkFor, setOff, resolveToken, serve, where, urlOf, find, offOf };
 }

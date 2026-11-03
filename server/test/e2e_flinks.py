@@ -78,6 +78,8 @@ async def main():
         # turned off: the page says so, the file doesn't come
         st, body, _ = req('/api/flink', {'path': path, 'off': True})
         check(json.loads(body).get('off') is True, 'turned off')
+        st, body, _ = req('/api/flink', {'paths': [path, 'Clients/x/none.png']})
+        check(json.loads(body).get('off') == [path], f"the files whose links are off (the app's sheets) {body[:120]}")
         st, body, _ = req(f'/f/{tok}', who=None)
         check(st == 404 and 'isn’t available' in body.decode('utf8'), 'the page: not available')
         st, _, _ = req(f'/f/{tok}/file', who=None)

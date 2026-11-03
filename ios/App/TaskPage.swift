@@ -269,7 +269,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       i.scrollView = scroll; i.edge = .top
       barBox.addInteraction(i)
       edgeHook = i
-      scroll.topEdgeEffect.style = .soft
+      scroll.topEdgeEffect.style = .hard   // (the whole bar frosted, down to its line — Haris 2026-11-03)
     }
     back.setIcon("chevron.left", 19)
     back.accessibilityLabel = "Back"
@@ -752,7 +752,9 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       UIAction(title: "Open", image: UIImage(systemName: "eye")) { [weak self] _ in self?.onOpenFiles?(files, i) },
       UIAction(title: "Copy link", image: UIImage(systemName: "link")) { [weak self] _ in self?.onFileAction?(f, "copy") },
       UIAction(title: "Download", image: UIImage(systemName: "arrow.down.circle")) { [weak self] _ in self?.onFileAction?(f, "download") },
-      UIAction(title: "Turn off link", image: UIImage(systemName: "lock")) { [weak self] _ in self?.onFileAction?(f, "linkOff") },
+      Main.linksOff.contains(f["file"] as? String ?? "")
+        ? UIAction(title: "Turn on link", image: UIImage(systemName: "lock.open")?.withTintColor(.systemBlue, renderingMode: .alwaysOriginal)) { [weak self] _ in self?.onFileAction?(f, "linkOff") }
+        : UIAction(title: "Turn off link", image: UIImage(systemName: "lock")) { [weak self] _ in self?.onFileAction?(f, "linkOff") },
     ])
   }
   private func layoutContent() {
