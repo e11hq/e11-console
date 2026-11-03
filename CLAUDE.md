@@ -38,3 +38,7 @@ when the list reaches its end and out on scrolling back. Every new native list s
 bar's frost is iPhone's own **firm** scroll-edge frost (`topEdgeEffect.style = .hard`), the whole bar frosted evenly down
 to the one-pixel line under it — never the soft one that fades out. The switch-over (big title → small title, Mail's
 timings) is unchanged and locked too. Don't change either without Haris. Every new native screen uses HomeView's bar.
+
+**TestFlight only on Haris's yes (Haris, 2026-11-03):** "publish, publish app build" builds, self-tests and signs the
+iPhone app, then keeps it on his Mac (ios.yml `send: ask`, the default). When a build has finished, ask Haris; only on
+his yes send it with the "Send to TestFlight" workflow (testflight.yml, its build number).
