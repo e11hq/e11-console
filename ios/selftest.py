@@ -128,7 +128,7 @@ try:
     check((res.get('inboxMyTasks') or {}).get('shown') is not True, f"My Tasks isn't over the Inbox {res.get('inboxMyTasks')}")
     check((res.get('inboxNative') or {}).get('shown') is False, f"the app's Home goes on another tab {res.get('inboxNative')}")
     check(res.get('splashGone') is True, f"the startup screen went before Home {res.get('splashGone')}")
-    check(set(seen) >= {'home', 'inbox', 'me', 'meTeam', 'meAbout', 'meProfile', 'meBack', 'client', 'task', 'sheet', 'back', 'nsheet', 'nsheetEnd', 'nsheetChannel', 'nsheetTitled'}, f'all stages ran {sorted(seen)}')
+    check(set(seen) >= {'home', 'inbox', 'me', 'meTeam', 'meAbout', 'meProfile', 'meTrash', 'meBack', 'client', 'task', 'sheet', 'back', 'nsheet', 'nsheetEnd', 'nsheetChannel', 'nsheetTitled'}, f'all stages ran {sorted(seen)}')
     hf = res.get('homeFrame') or {}
     check(hf.get('web') == hf.get('screen') and hf.get('tabBar') is True, f'the page fills the screen under the floating tab bar {hf}')
     check(int(float(str((p.get('geo') or {}).get('tabsH') or '0').replace('px','') or 0)) > 40, f"the page knows the tab bar's height {p.get('geo')}")
@@ -140,6 +140,8 @@ try:
     check(ma.get('kind') == 'about' and (ma.get('parts') or 0) >= 2, f"About: its cards and What's new {ma}")
     mp = res.get('meProfileNative') or {}
     check(mp.get('kind') == 'profile' and mp.get('profile') is True and (mp.get('rows') or 0) >= 4 and str(mp.get('corner')).startswith('back,'), f"My profile: the app's own, its groups, ‹ at the top {mp}")
+    mtr = res.get('meTrashNative') or {}
+    check(mtr.get('kind') == 'trash' and (mtr.get('parts') or 0) >= 3 and str(mtr.get('corner')).startswith('back,'), f"Trash: the app's own, its search and categories, ‹ at the top {mtr}")
     check(mb.get('kind') == 'me' and mb.get('screens') == 1, f"‹ back to Me {mb}")
     check((res.get('client') or {}).get('wide') is False, f"Client Assets folder fits the screen {res.get('client')}")
     ca = res.get('clientAssets') or {}

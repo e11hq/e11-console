@@ -56,6 +56,15 @@ async def main():
         s0 = pf['sound']; await E("window.__e11Me({ ev: 'pfSound' })")
         check((await E("NativeMe.peek()"))['profile']['sound'] is (not s0), 'Sound switched'); await E("window.__e11Me({ ev: 'pfSound' })")
         await E("window.__e11Me({ ev: 'pf', on: false })")
+        # Trash (the app's own): its model only while open; search and categories from the app
+        await E("window.__e11Me({ ev: 'tr', on: true })")
+        tr = (await E("NativeMe.peek()"))['trash']
+        check(tr is not None and 'groups' in tr and tr['cat'] == 'all' and tr['note'], f"Trash: its model {tr and {k: tr[k] for k in ('n', 'cat', 'empty')}}")
+        await E("window.__e11Me({ ev: 'trCat', k: 'task' })"); await E("window.__e11Me({ ev: 'trQ', q: 'zzzz-nothing' })")
+        tr = (await E("NativeMe.peek()"))['trash']
+        check(tr['cat'] == 'task' and tr['q'] == 'zzzz-nothing' and not tr['groups'] and 'matches' in tr['none'], f"Trash: a category and a search from the app {tr['none']}")
+        await E("window.__e11Me({ ev: 'tr', on: false })")
+        check((await E("[ui.trashQ, ui.trashFilter]")) == ['', 'all'], 'leaving the Trash clears its search')
         # theme
         await E("window.__e11Me({ ev: 'theme', mode: 'light' })")
         check((await E("Theme.mode()")) == 'light', 'Appearance: Light chosen')

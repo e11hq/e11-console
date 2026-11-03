@@ -399,6 +399,12 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private let listHead = HomePassThrough()
   private var listHeadH: CGFloat = 0
   private var pinned = false   // (the tabs and filters stuck under the bar)
+  // a page's own search and filters (the Trash's): at the top of its list, stuck under the bar once they reach it, as
+  // My Tasks' — the standard (Haris 2026-11-03)
+  var pinHead: UIView? { didSet {
+    if oldValue !== pinHead { oldValue?.removeFromSuperview(); if let p = pinHead { insertSubview(p, belowSubview: topBar) }; pinned = false; setNeedsLayout() }
+  } }
+  private var pinHeadY: CGFloat = 0, pinHeadH: CGFloat = 0
   private var filterBtns: [UIButton] = [], chipBtns: [UIButton] = []
   private(set) var listTab = "all"
   private var filtersKey = ""
@@ -744,6 +750,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       v.viewWithTag(2)?.frame = CGRect(x: 13, y: 11 + 41, width: bw - 26, height: 15)
     }
     y += bh + 6
+    if let p = pinHead, !isList { pinHeadY = y; pinHeadH = (p as? HomeBlock)?.blockHeight(W) ?? 0; y += pinHeadH }
     // the list (.ph-list: 16 from the sides, 10 between things; a group's title 12 lower than that)
     let lw = W - 32
     for (i, v) in content.enumerated() {
@@ -973,6 +980,15 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       }
       listHead.isHidden = searching
       if pin { barH = pinY + listHeadH + 8 }
+    } else if let p = pinHead, !isList {
+      let atY = pinHeadY - scroll.contentOffset.y, pinY = smallH + 4
+      let pin = !searching && atY < pinY
+      if pin != pinned {
+        pinned = pin
+        if pin { topBar.addSubview(p) } else { insertSubview(p, belowSubview: topBar) }
+      }
+      p.bounds = CGRect(x: 0, y: 0, width: W, height: pinHeadH); p.center = CGPoint(x: W / 2, y: max(atY, pin ? pinY : atY) + pinHeadH / 2)
+      if pin { barH = pinY + pinHeadH + 4 }
     }
     topBar.frame = CGRect(x: 0, y: 0, width: W, height: barH)
     // (it comes the moment the big title has gone under the bar, as Mail's — Haris, 2026-10-31)

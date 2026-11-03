@@ -661,6 +661,187 @@ final class MemberHead: UIView, HomeBlock {
   }
 }
 
+// a page's search and filters as one, stuck under the bar once they reach it (HomeView.pinHead)
+final class PinStack: UIView, HomeBlock {
+  private var parts: [UIView] = []
+  func set(_ v: [UIView]) { if v.count != parts.count || zip(v, parts).contains(where: { $0 !== $1 }) { parts.forEach { $0.removeFromSuperview() }; parts = v; v.forEach { addSubview($0) } }; setNeedsLayout() }
+  func blockHeight(_ W: CGFloat) -> CGFloat { parts.reduce(0) { $0 + (($1 as? HomeBlock)?.blockHeight(W) ?? 0) } }
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    var y: CGFloat = 0
+    for v in parts { let h = (v as? HomeBlock)?.blockHeight(bounds.width) ?? 0; v.frame = CGRect(x: 0, y: y, width: bounds.width, height: h); y += h }
+  }
+}
+
+// Mail's category buttons in a row that scrolls sideways when they don't all fit (the Trash has six)
+final class CatsBlock: UIView, HomeBlock {
+  let cats: MailCats
+  private let sc = UIScrollView()
+  var onPick: ((Int) -> Void)?
+  init(items: [MailCats.Item]) {
+    cats = MailCats(items: items)
+    super.init(frame: .zero)
+    sc.showsHorizontalScrollIndicator = false; sc.alwaysBounceHorizontal = false
+    cats.gestureRecognizers?.forEach { if $0 is UISwipeGestureRecognizer { $0.isEnabled = false } }   // (the row scrolls instead)
+    cats.onPick = { [weak self] i in UISelectionFeedbackGenerator().selectionChanged(); self?.cats.choose(i, animated: true); self?.fit(); self?.onPick?(i) }
+    sc.addSubview(cats); addSubview(sc)
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  func choose(_ i: Int) { if i != cats.selected { cats.choose(i, animated: false); setNeedsLayout() } }
+  func blockHeight(_ W: CGFloat) -> CGFloat { MailCats.H + 14 }
+  private func fit() {
+    let w = cats.widths.reduce(0, +) + CGFloat(max(0, cats.widths.count - 1)) * 9 + 32 + 120
+    cats.frame = CGRect(x: 0, y: 0, width: max(bounds.width, w), height: MailCats.H)
+    sc.contentSize = CGSize(width: max(bounds.width, cats.widths.reduce(0, +) + CGFloat(max(0, cats.widths.count - 1)) * 9 + 32), height: MailCats.H)
+  }
+  override func layoutSubviews() { super.layoutSubviews(); sc.frame = CGRect(x: 0, y: 4, width: bounds.width, height: MailCats.H); fit() }
+}
+
+// one rounded group of the Trash's rows, each kept by its id while it shows the same
+final class TrashGroup: UIView, HomeBlock {
+  private let box = UIView()
+  private var rows: [TrashRow] = [], made: [String: (TrashRow, String)] = [:], lines: [UIView] = []
+  var onEvent: (([String: Any]) -> Void)?
+  override init(frame: CGRect) { super.init(frame: frame); box.layer.cornerRadius = 26; box.layer.cornerCurve = .continuous; box.clipsToBounds = true; addSubview(box) }
+  required init?(coder: NSCoder) { fatalError() }
+  func set(_ items: [[String: Any]], look L: HomeLook) {
+    box.backgroundColor = L.card
+    var keep = made; made = [:]
+    var fresh: [TrashRow] = []
+    UIView.performWithoutAnimation {
+      rows = items.map { it in
+        let id = it["id"] as? String ?? UUID().uuidString, sig = jsonString(it) + "|\(L.light)"
+        if let k = keep.removeValue(forKey: id) { if k.1 == sig { made[id] = k; k.0.onEvent = { [weak self] e in self?.onEvent?(e) }; return k.0 }; k.0.removeFromSuperview() }
+        let r = TrashRow(); r.set(it, look: L); r.onEvent = { [weak self] e in self?.onEvent?(e) }; box.addSubview(r); made[id] = (r, sig); fresh.append(r); return r
+      }
+      keep.values.forEach { $0.0.removeFromSuperview() }
+      while lines.count > max(0, rows.count - 1) { lines.removeLast().removeFromSuperview() }
+      while lines.count < max(0, rows.count - 1) { let l = UIView(); l.backgroundColor = .separator; box.addSubview(l); lines.append(l) }
+      if !fresh.isEmpty { place(); fresh.forEach { $0.layoutIfNeeded() } }
+    }
+    setNeedsLayout()
+  }
+  func blockHeight(_ W: CGFloat) -> CGFloat { rows.reduce(0) { $0 + $1.height(W - 32) } }
+  private func place() {
+    let w = max(0, bounds.width - 32), px = 1 / max(1, traitCollection.displayScale)
+    var y: CGFloat = 0
+    for (i, r) in rows.enumerated() {
+      let h = r.height(w); r.place(CGRect(x: 0, y: y, width: w, height: h)); y += h
+      if i < lines.count { box.bringSubviewToFront(lines[i]); lines[i].frame = CGRect(x: 58, y: y - px / 2, width: w - 58, height: px) }
+    }
+  }
+  override func layoutSubviews() { super.layoutSubviews(); box.frame = CGRect(x: 16, y: 0, width: bounds.width - 32, height: blockHeight(bounds.width)); place() }
+}
+
+// a row in the Trash: its kind's icon, name, kind · where · who · when, its files' pictures, days left; Mail's swipes —
+// right: Restore (green), left: Delete forever (red, Super Admins); touch and hold: its sheet
+final class TrashRow: AssetTile, UIGestureRecognizerDelegate {
+  private let body = UIView(), icon = SettingsIcon(), sym = UIImageView(), name = UILabel(), sub = UILabel(), left = UILabel()
+  private let restoreB = UIButton(type: .system), foreverB = UIButton(type: .system)
+  private var chips: [UIImageView] = [], more = UILabel()
+  private var it: [String: Any] = [:]
+  var onEvent: (([String: Any]) -> Void)?
+  private var canR = false, canF = false
+  private var shift: CGFloat = 0 { didSet { body.transform = CGAffineTransform(translationX: shift, y: 0); restoreB.alpha = min(1, max(0, shift / 80)); foreverB.alpha = min(1, max(0, -shift / 80)) } }
+  override init(frame: CGRect) {
+    super.init(frame: frame)
+    clipsToBounds = true
+    for (b, t, c, sy) in [(restoreB, "Restore", UIColor.systemGreen, "arrow.uturn.backward"), (foreverB, "Delete forever", UIColor.systemRed, "trash.fill")] {
+      var cf = UIButton.Configuration.plain(); cf.title = t; cf.image = UIImage(systemName: sy, withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold))
+      cf.imagePlacement = .top; cf.imagePadding = 5; cf.baseForegroundColor = .white
+      cf.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { var a = $0; a.font = UIFont.systemFont(ofSize: 12, weight: .semibold); return a }
+      b.configuration = cf; b.backgroundColor = c; b.alpha = 0; addSubview(b)
+    }
+    restoreB.addAction(UIAction { [weak self] _ in self?.act("trRestore") }, for: .touchUpInside)
+    foreverB.addAction(UIAction { [weak self] _ in self?.act("trForever") }, for: .touchUpInside)
+    sym.tintColor = .white; sym.contentMode = .center; icon.addSubview(sym)
+    name.font = .systemFont(ofSize: 17); name.numberOfLines = 2
+    sub.font = .systemFont(ofSize: 13); sub.textColor = .secondaryLabel; sub.numberOfLines = 2
+    left.font = .systemFont(ofSize: 13); left.textAlignment = .right
+    more.font = .systemFont(ofSize: 12, weight: .semibold); more.textColor = .secondaryLabel
+    [icon, name, sub, left, more].forEach { $0.isUserInteractionEnabled = false; body.addSubview($0) }
+    body.isUserInteractionEnabled = false
+    addSubview(body)
+    let pan = UIPanGestureRecognizer(target: self, action: #selector(pan(_:))); pan.delegate = self; addGestureRecognizer(pan)
+    onTap = { [weak self] in guard let self = self else { return }; if abs(self.shift) > 1 { self.close() } else { self.onEvent?(["ev": "trTap", "id": self.it["id"] ?? ""]) } }
+    onHold = { [weak self] in guard let self = self else { return }; self.close(); self.onEvent?(["ev": "trHold", "id": self.it["id"] ?? ""]) }
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  private func act(_ ev: String) { UIImpactFeedbackGenerator(style: .medium).impactOccurred(); onEvent?(["ev": ev, "id": it["id"] ?? ""]); close() }
+  func set(_ x: [String: Any], look L: HomeLook) {
+    it = x
+    canR = (x["restore"] as? Bool) == true; canF = (x["forever"] as? Bool) == true
+    icon.color = NativeSheetVC.color(x["col"]) ?? .systemGray
+    sym.image = UIImage(systemName: x["sym"] as? String ?? "trash.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold))
+    name.text = x["t"] as? String; name.textColor = L.title
+    sub.text = x["s"] as? String
+    left.text = x["left"] as? String
+    let soon = (x["soon"] as? Bool) == true
+    left.textColor = soon ? .systemRed : .secondaryLabel; left.font = .systemFont(ofSize: 13, weight: soon ? .semibold : .regular)
+    chips.forEach { $0.removeFromSuperview() }
+    chips = ((x["files"] as? [[String: Any]]) ?? []).map { f in
+      let v = UIImageView(); v.layer.cornerRadius = 7; v.clipsToBounds = true; v.contentMode = .scaleAspectFill; v.backgroundColor = .tertiarySystemFill
+      let ext = f["ext"] as? String ?? "FILE"
+      let lab = UILabel(); lab.text = ext; lab.font = .systemFont(ofSize: 8.5, weight: .heavy); lab.textColor = .secondaryLabel; lab.textAlignment = .center; lab.frame = CGRect(x: 0, y: 0, width: 36, height: 36); v.addSubview(lab)
+      if let pic = f["pic"] as? String { FeedLoader.shared.image(pic) { [weak v, weak lab] img in guard let img = img else { return }; v?.image = img; lab?.isHidden = true } }
+      body.addSubview(v); return v
+    }
+    let m = x["more"] as? Int ?? 0
+    more.text = m > 0 ? "+\(m) more" : nil; more.isHidden = m == 0
+    accessibilityLabel = [name.text, sub.text, left.text].compactMap { $0 }.joined(separator: ", ")
+    setNeedsLayout()
+  }
+  private func textW(_ w: CGFloat) -> CGFloat { w - 58 - 16 - 92 }
+  func height(_ w: CGFloat) -> CGFloat {
+    let tw = textW(w)
+    let nh = min(42, ceil(name.sizeThatFits(CGSize(width: tw, height: 100)).height)), sh = min(32, ceil(sub.sizeThatFits(CGSize(width: tw + 92, height: 100)).height))
+    return 11 + nh + 2 + sh + (chips.isEmpty ? 0 : 42) + 11
+  }
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    let W = bounds.width, H = bounds.height
+    body.bounds = CGRect(origin: .zero, size: bounds.size); body.center = CGPoint(x: W / 2, y: H / 2)
+    restoreB.frame = CGRect(x: 0, y: 0, width: 96, height: H); foreverB.frame = CGRect(x: W - 110, y: 0, width: 110, height: H)
+    icon.frame = CGRect(x: 16, y: 13, width: 30, height: 30); sym.frame = icon.bounds
+    let tw = textW(W)
+    let nh = min(42, ceil(name.sizeThatFits(CGSize(width: tw, height: 100)).height))
+    name.frame = CGRect(x: 58, y: 11, width: tw, height: nh)
+    let lw: CGFloat = 84
+    left.frame = CGRect(x: W - 16 - lw, y: 11, width: lw, height: 20)
+    let sh = min(32, ceil(sub.sizeThatFits(CGSize(width: tw + 92, height: 100)).height))
+    sub.frame = CGRect(x: 58, y: name.frame.maxY + 2, width: W - 58 - 16, height: sh)
+    var x: CGFloat = 58
+    for c in chips { c.frame = CGRect(x: x, y: sub.frame.maxY + 6, width: 36, height: 36); x += 41 }
+    more.frame = CGRect(x: x + 2, y: sub.frame.maxY + 6, width: 80, height: 36)
+  }
+  // (sideways only: the list still scrolls)
+  override func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
+    guard g.view === self, let p = g as? UIPanGestureRecognizer else { return super.gestureRecognizerShouldBegin(g) }
+    let v = p.velocity(in: self)
+    return abs(v.x) > abs(v.y) * 1.2 && ((v.x > 0 && (canR || shift < 0)) || (v.x < 0 && (canF || shift > 0)))
+  }
+  private var start: CGFloat = 0
+  @objc private func pan(_ g: UIPanGestureRecognizer) {
+    let W = bounds.width
+    switch g.state {
+    case .began: start = shift; cancelTracking(with: nil)
+    case .changed:
+      var x = start + g.translation(in: self).x
+      if !canR { x = min(0, x) }; if !canF { x = max(0, x) }
+      shift = x
+    default:
+      let v = g.velocity(in: self).x
+      // (far enough — more than half the row — it does it, as Mail's full swipe; else it opens to its button or closes)
+      if shift > W * 0.55 && canR { act("trRestore"); return }
+      if shift < -W * 0.55 && canF { act("trForever"); return }
+      let to: CGFloat = shift > 44 || (shift > 10 && v > 400) ? 96 : shift < -44 || (shift < -10 && v < -400) ? -110 : 0
+      if to != 0 && abs(start) < 1 { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
+      SwipeSpring.run(from: shift, to: to, velocity: v) { self.shift = to }
+    }
+  }
+  func close() { SwipeSpring.run(from: shift, to: 0, velocity: 0) { self.shift = 0 } }
+}
+
 // My profile's top: your photo (or initials), Change photo (blue) and Remove (red), as iPhone's own
 final class ProfileHead: UIView, HomeBlock {
   private let pic = UIImageView(), change = UIButton(type: .system), remove = UIButton(type: .system)
@@ -838,6 +1019,7 @@ final class MeCtl {
     if kind == "team" { teamTab = 0; teamQ = ""; send(["ev": "team", "on": true]) }
     if kind == "about" { send(["ev": "about"]) }
     if kind == "profile" { send(["ev": "pf", "on": true]) }
+    if kind == "trash" { send(["ev": "tr", "on": true]) }
     push(screen(kind, id), animated: true)
   }
   private func push(_ s: Screen, animated: Bool) {
@@ -867,6 +1049,7 @@ final class MeCtl {
       self.leaving = false
       if s.kind == "team", !self.stack.contains(where: { $0.kind == "team" }) { self.send(["ev": "team", "on": false]) }
       if s.kind == "profile" { self.send(["ev": "pf", "on": false]) }
+      if s.kind == "trash" { self.send(["ev": "tr", "on": false]) }
       if let t = self.stack.last { self.draw(t) }
       self.main.edgePanOn(); self.main.updateCorner()
     }
@@ -886,6 +1069,7 @@ final class MeCtl {
     let gone = stack.dropFirst()
     if gone.contains(where: { $0.kind == "team" }) { send(["ev": "team", "on": false]) }
     if gone.contains(where: { $0.kind == "profile" }) { send(["ev": "pf", "on": false]) }
+    if gone.contains(where: { $0.kind == "trash" }) { send(["ev": "tr", "on": false]) }
     gone.forEach { $0.h.removeFromSuperview() }
     stack = [root]
     root.h.isHidden = false; root.h.transform = CGAffineTransform(translationX: -W * 0.3, y: 0)
@@ -900,6 +1084,7 @@ final class MeCtl {
     guard let root = stack.first else { return nil }
     if stack.dropFirst().contains(where: { $0.kind == "team" }) { send(["ev": "team", "on": false]) }
     if stack.dropFirst().contains(where: { $0.kind == "profile" }) { send(["ev": "pf", "on": false]) }
+    if stack.dropFirst().contains(where: { $0.kind == "trash" }) { send(["ev": "tr", "on": false]) }
     stack.dropFirst().forEach { $0.h.removeFromSuperview() }
     stack = [root]
     root.h.transform = .identity
@@ -992,7 +1177,7 @@ final class MeCtl {
       let work = ((model["work"] as? [[String: Any]]) ?? []).map { w -> SetItem in
         let k = w["k"] as? String ?? ""
         return SetItem(key: k, title: w["t"] as? String ?? "", sub: w["s"] as? String ?? "", sym: w["sym"] as? String, col: NativeSheetVC.color(w["col"]),
-                       tap: { [weak self] in guard let self = self else { return }; if k == "team" { self.open("team") } else { self.send(["ev": "nav", "to": k]) } })
+                       tap: { [weak self] in guard let self = self else { return }; if k == "team" || k == "trash" { self.open(k) } else { self.send(["ev": "nav", "to": k]) } })
       }
       if !work.isEmpty { out.append(head(h, "work", "Work")); out.append(group(h, "work", work)) }
       var phone: [SetItem] = [SetItem(key: "shortcuts", title: "Shortcuts", sub: "Quicker ways to do things", sym: "command", col: .systemBlue, badge: "New", tap: { [weak self] in self?.open("shortcuts") })]
@@ -1114,6 +1299,8 @@ final class MeCtl {
       out.append(foot(h, "end", "Only in the iPhone app."))
     case "profile":
       profileBlocks(h, &out)
+    case "trash":
+      trashBlocks(h, &out)
     case "team":
       teamBlocks(h, &out)
     case "member":
@@ -1243,6 +1430,39 @@ final class MeCtl {
       out.append(group(h, "ov", rows))
       out.append(foot(h, "ov", on ? "On this device only. It ends after 15 minutes without use, or when the app reloads." : "Admin rights and Finance Admin on this device only. Nobody is told and your role stays the same for everyone. It starts look only — nothing can be changed until you choose Allow changes."))
     }
+  }
+  // Trash (the mockup, Haris 2026-11-03): search, Mail's categories, Today / This week / Earlier; swipe right Restore,
+  // left Delete forever (Super Admins); a tap opens it (a task view only, a file its preview); touch and hold: its sheet
+  private static let trashCats: [(String, String, String)] = [("all", "tray.full.fill", "All"), ("task", "checkmark.circle.fill", "Tasks"), ("project", "folder.fill", "Clients"), ("file", "doc.fill", "Files"), ("comment", "quote.bubble.fill", "Comments"), ("mine", "person.fill", "Deleted by me")]
+  private func trashBlocks(_ h: HomeView, _ out: inout [UIView]) {
+    let t = (model["trash"] as? [String: Any]) ?? [:]
+    let n = t["n"] as? Int ?? 0
+    h.drawAssetsBar(name: "Trash", sub: t.isEmpty ? "" : n == 0 ? "Empty" : "\(n) item\(n == 1 ? "" : "s") · restore within 30 days", logo: nil, rgb: nil, ini: nil, showLogo: false)
+    h.assetsMenu = (t["empty"] as? Bool) == true ? { [weak self] in [CornerMenuItem(title: "Empty Trash", symbol: "trash", destructive: true, run: { self?.send(["ev": "trEmpty"]) })] } : { [] }
+    if t.isEmpty { let w = part(h, "wait") { AssetsNote() }; w.label.text = "Loading…"; out.append(w); return }
+    let find = part(h, "find") { AssetsFind() }
+    find.field.placeholder = "Search the Trash"
+    if !find.field.isFirstResponder, (find.field.text ?? "") != (t["q"] as? String ?? "") { find.field.text = t["q"] as? String }
+    find.onChange = { [weak self] q in self?.send(["ev": "trQ", "q": q]) }
+    let cats = part(h, "cats") { CatsBlock(items: MeCtl.trashCats.map { c in MailCats.Item(key: c.0, sym: c.1, name: c.2, fill: c.0 == "all" ? MailCats.neutral : c.0 == "mine" ? MailCats.purple : MailCats.blue) }) }
+    cats.cats.light = h.look.light
+    cats.choose((MeCtl.trashCats.firstIndex { $0.0 == (t["cat"] as? String ?? "all") }) ?? 0)
+    cats.onPick = { [weak self] i in self?.send(["ev": "trCat", "k": MeCtl.trashCats[i].0]) }
+    let stack = part(h, "pin") { PinStack() }
+    stack.set([find, cats])
+    if h.pinHead !== stack { h.pinHead = stack }
+    let groups = (t["groups"] as? [[String: Any]]) ?? []
+    for g in groups {
+      let items = (g["items"] as? [[String: Any]]) ?? []
+      let k = g["name"] as? String ?? ""
+      out.append(head(h, "tr." + k, "\(k) · \(items.count)"))
+      let tg = part(h, "trg." + k) { TrashGroup() }
+      tg.onEvent = { [weak self] ev in self?.send(ev) }
+      tg.set(items, look: h.look)
+      out.append(tg)
+    }
+    if let none = t["none"] as? String, !none.isEmpty { let w = part(h, "none") { AssetsNote() }; w.label.text = none; out.append(w) }
+    out.append(foot(h, "trnote", t["note"] as? String ?? ""))
   }
   private func person(_ id: String) -> [String: Any]? {
     let t = team

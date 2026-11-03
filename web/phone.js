@@ -2981,7 +2981,7 @@ const NativeAssets = (() => {
    whenever what's on Me changes. NATIVE_ME = false: the page's own Me again (no app build needed). */
 const NATIVE_ME = true;
 const NativeMe = (() => {
-  let on = false, last = '', shown = false, wantTeam = false, wantProfile = false, toastAction = null;
+  let on = false, last = '', shown = false, wantTeam = false, wantProfile = false, wantTrash = false, toastAction = null;
   if (NATIVE_ME && window.__e11CommentsOnly !== true && typeof Host !== 'undefined' && Host.isIOSApp) {
     NativeMac.call('appInfo').then((r) => { on = Number(r && r.shell) >= 33; if (on) { setInterval(sync, 350); sync(); } }).catch(() => {});
   }
@@ -3020,6 +3020,7 @@ const NativeMe = (() => {
       sync: Host.isServer ? window.__e11SyncState || 'saved' : '',
       team: wantTeam ? teamModel() : null,
       profile: wantProfile ? profileModel() : null,
+      trash: wantTrash ? trashModel() : null,
     };
   }
   // My profile (the app's own, 2026-11-03 — the locked mockup): what the website's My profile shows on the phone —
@@ -3039,6 +3040,42 @@ const NativeMe = (() => {
       name: u.name || '', email: u.email || '', country: u.country || '', city: u.city || '', bday: u.bday ? fmtMD(u.bday) : '',
       pills, sound: (u.prefs || {}).sound !== false, notify: types(false), cd: u.id === cdUserId() ? { title: cdTitle(), types: types(true) } : null, owner: ov,
     };
+  }
+  // Trash (the app's own, 2026-11-03 — the mockup): the website's Trash — search, its categories, Today / This week /
+  // Earlier, each item's kind, where, who deleted it, when, its files' pictures, the days left; Restore / Delete forever
+  const TR_SYM = { task: ['checkmark.circle.fill', [10, 132, 255]], project: ['folder.fill', [255, 149, 0]], comment: ['quote.bubble.fill', [175, 82, 222]], attachment: ['paperclip', [48, 176, 199]], cafile: ['doc.fill', [48, 176, 199]], cafolder: ['folder.fill', [48, 176, 199]] };
+  function trashModel() {
+    const r = trashSearch(ui.trashQ || '', trashFiltered()), all = trashList();
+    const groups = [];
+    r.items.forEach((it) => {
+      const days = -dayDiff(ymd(new Date(it.deletedAt)));
+      const name = ui.trashQ ? 'Results' : days <= 0 ? 'Today' : days < 7 ? 'This week' : 'Earlier';
+      let g = groups.find((x) => x.name === name); if (!g) { g = { name, items: [] }; groups.push(g); }
+      const left = trashDaysLeft(it), files = trashFiles(it);
+      const who = it.auto ? 'Cleaned up automatically' : `Deleted by ${it.deletedBy === currentUserId ? 'you' : fullName(userById(it.deletedBy))}`;
+      const [sym, col] = TR_SYM[it.type] || ['trash.fill', [142, 142, 147]];
+      g.items.push({ id: it.id, type: it.type, t: trashTitle(it), s: [TRASH_TYPE[it.type] || '', trashWhere(it), who, timeAgo(it.deletedAt)].filter(Boolean).join(' · '), sym, col,
+        left: `${left} day${left === 1 ? '' : 's'} left`, soon: left <= 3, task: it.type === 'task',
+        restore: it.type !== 'project' || isAdm(me()), forever: isSuper(),
+        files: files.slice(0, 4).map((a) => ({ id: a.id, pic: isImage(a) && Host.isNative ? imgUrl(a, 160) : null, ext: (fileExt(a.name) || 'file').slice(0, 4).toUpperCase() })), more: Math.max(0, files.length - 4) });
+    });
+    return { n: all.length, q: ui.trashQ || '', cat: ui.trashFilter || 'all', groups, empty: isSuper() && all.length > 0,
+      none: r.items.length ? '' : ui.trashQ ? `Nothing in the Trash matches “${ui.trashQ}”` : `The Trash is empty — deleted tasks, clients, comments and files wait here for ${TRASH_DAYS} days.`,
+      note: `Deleted items stay here for ${TRASH_DAYS} days, then they and their files are removed for good. Finished tasks arrive here ${AUTO_DELETE_DAYS} days after they’re completed.` };
+  }
+  function trashHold(id) {
+    const it = trashList().find((x) => x.id === id); if (!it) return;
+    const m = trashModel(), row = m.groups.flatMap((g) => g.items).find((x) => x.id === id) || {};
+    const files = trashFiles(it);
+    const choices = [{ label: 'Cancel' }];
+    if (it.type === 'task') choices.push({ label: 'Open (view only)', value: 'view' });
+    else if (files.length) choices.push({ label: 'Preview', value: 'preview' });
+    if (row.restore) choices.push({ label: 'Restore', value: 'restore', primary: true });
+    if (row.forever) choices.push({ label: 'Delete forever', value: 'forever', danger: true });
+    choiceDialog({ title: trashTitle(it), body: row.s ? `${row.s} · ${row.left}` : '', choices }).then((v) => {
+      if (v === 'view') trashTaskView(id); else if (v === 'preview' && files[0]) previewFile(files[0]);
+      else if (v === 'restore') { restoreTrash(id); sync(); } else if (v === 'forever') eraseTrashFlow(id).then(() => sync());
+    });
   }
   const saveMe = (fn) => { const u = me(); fn(u); persist(0); sync(); };
   // a list in iPhone's own sheet with a search box (the website's own pickPlace / the birthday picker, without the page's fields)
@@ -3194,6 +3231,15 @@ const NativeMe = (() => {
         case 'signOut': dialog({ title: 'Sign out?', body: window.E11_REVIEW ? 'You’ll need the App Review password to sign in again.' : 'You’ll need the code from your email to sign in again.', okText: 'Sign out', danger: true }).then((ok) => { if (ok) signOut(); }); return;
         case 'team': wantTeam = !!ev.on; sync(); return;
         case 'pf': wantProfile = !!ev.on; sync(); return;
+        case 'tr': wantTrash = !!ev.on; if (!ev.on) { ui.trashQ = ''; ui.trashFilter = 'all'; } sync(); return;
+        case 'trQ': ui.trashQ = String(ev.q || ''); sync(); return;
+        case 'trCat': ui.trashFilter = String(ev.k || 'all'); sync(); return;
+        case 'trTap': { const it = trashList().find((x) => x.id === ev.id); if (!it) return; if (it.type === 'task') trashTaskView(ev.id); else { const f = trashFiles(it)[0]; if (f) previewFile(f); else trashHold(ev.id); } return; }
+        case 'trFile': { const it = trashList().find((x) => x.id === ev.id); const a = it && trashFiles(it).find((x) => x.id === ev.file); if (a) previewFile(a); return; }
+        case 'trHold': trashHold(ev.id); return;
+        case 'trRestore': restoreTrash(ev.id); sync(); return;
+        case 'trForever': eraseTrashFlow(ev.id).then(() => sync()); return;
+        case 'trEmpty': emptyTrashFlow().then(() => sync()); return;
         case 'pfPhoto': changePhoto().then(() => sync()); return;
         case 'pfPhotoOff': removePhoto(); return;
         case 'pfName': editName(); return;
