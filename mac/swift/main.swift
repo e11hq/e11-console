@@ -328,8 +328,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   var pendingFileLink: String?
   func application(_ application: NSApplication, continue userActivity: NSUserActivity, restorationHandler: @escaping ([NSUserActivityRestoring]) -> Void) -> Bool {
     guard userActivity.activityType == NSUserActivityTypeBrowsingWeb, let u = userActivity.webpageURL,
-          let r = u.path.range(of: "^/f/[A-Za-z0-9]{6,16}/?$", options: .regularExpression) else { return false }
-    let tok = String(u.path[r]).replacingOccurrences(of: "/f/", with: "").replacingOccurrences(of: "/", with: "")
+          let r = u.path.range(of: "^/[fd]/[A-Za-z0-9]{6,16}", options: .regularExpression) else { return false }
+    let tok = String(String(u.path[r]).dropFirst(3))
     if web == nil || web.isLoading || web.url?.host != URL(string: SERVER)?.host { pendingFileLink = tok }
     else { pageJS("window.__e11FileLink && window.__e11FileLink(\(jsString(tok)))") }
     if window != nil { showWindow() }

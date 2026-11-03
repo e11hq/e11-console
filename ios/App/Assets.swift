@@ -458,7 +458,10 @@ final class AssetsCtl {
   }
   private func take(_ m: [String: Any]) {
     let kind = m["kind"] as? String
-    if kind == "client" { main.loadLinkStates(((m["files"] as? [[String: Any]]) ?? []).compactMap { $0["file"] as? String }) }
+    if kind == "client", let cid = m["id"] as? String {
+      // (which links are off: the client's files, and its folders as "d:<client>/<folder>")
+      main.loadLinkStates(((m["files"] as? [[String: Any]]) ?? []).compactMap { $0["file"] as? String } + ((m["folders"] as? [[String: Any]]) ?? []).compactMap { ($0["id"] as? String).map { "d:\(cid)/\($0)" } })
+    }
     if kind == "all" { models[""] = m } else if kind == "client", let id = m["id"] as? String { models[id] = m }
     for s in stack where (kind == "all" && s.kind == "all") || (kind == "client" && s.client == (m["id"] as? String)) { draw(s) }
     main.updateCorner()   // (its ••• as it is now)
@@ -802,6 +805,12 @@ final class AssetsCtl {
       ("Open", "folder", false, { [weak self] in guard let self = self else { return }; self.push(self.screen("folder", client, id), animated: true) }),
       ("Info", "info", false, { [weak self] in self?.folderInfoSheet(f, client: client) }),
     ]
+    if (f["canLink"] as? Bool) == true {
+      items.append(("Copy link", "link", false, { [weak self, weak h] in self?.main.copyFolderLink(client: client, folder: id) { t in h?.assetsToast(t) } }))
+      items.append(Main.linksOff.contains("d:\(client)/\(id)")
+        ? ("Turn on link", "unlock", false, { [weak self, weak h] in self?.main.folderLinkToggle(client: client, folder: id) { t in h?.assetsToast(t) } })
+        : ("Turn off link", "lock", false, { [weak self, weak h] in self?.main.folderLinkToggle(client: client, folder: id) { t in h?.assetsToast(t) } }))
+    }
     if (f["canRename"] as? Bool) == true { items.append(("Rename folder", "edit", false, { [weak self, weak h] in if let h = h { self?.renameFolder(h, f, client: client) } })) }
     if (f["canDel"] as? Bool) == true { items.append(("Delete folder", "trash", true, { [weak self, weak h] in if let h = h { self?.deleteFolder(h, f, client: client) } })) }
     sheet(f["name"] as? String ?? "Folder", items)
@@ -827,6 +836,11 @@ final class AssetsCtl {
       if !files.isEmpty {
         out.append(CornerMenuItem(title: "Select", symbol: "checkmark.circle", run: { [weak self, weak h] in guard let self = self, let h = h, let g = h.assetsParts["files"] as? FileTiles else { return }; g.selecting = true; self.blocks(h); h.setNeedsLayout() }))
         out.append(CornerMenuItem(title: "Download all", symbol: "arrow.down.circle", run: { [weak self, weak h] in if let h = h { self?.downloadMany(h, files, name: f["name"] as? String ?? "Files") } }))
+      }
+      if (f["canLink"] as? Bool) == true {
+        out.append(CornerMenuItem(title: "Copy link", symbol: "link", run: { [weak self, weak h] in self?.main.copyFolderLink(client: cid, folder: fid) { t in h?.assetsToast(t) } }))
+        let off = Main.linksOff.contains("d:\(cid)/\(fid)")
+        out.append(CornerMenuItem(title: off ? "Turn on link" : "Turn off link", symbol: off ? "lock.open" : "lock", run: { [weak self, weak h] in self?.main.folderLinkToggle(client: cid, folder: fid) { t in h?.assetsToast(t) } }))
       }
       out.append(CornerMenuItem(title: "Info", symbol: "info.circle", run: { [weak self] in self?.folderInfoSheet(f, client: cid) }))
       var edit: [CornerMenuItem] = []

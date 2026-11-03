@@ -474,7 +474,7 @@ export function createServer(cfg) {
     }
 
     // File links (flinks.js): the public page, its file and picture — no sign-in; the files address shows nothing else
-    if ((p.startsWith('/f/') || p.endsWith('apple-app-site-association')) && (req.method === 'GET' || req.method === 'HEAD')) {
+    if ((p.startsWith('/f/') || p.startsWith('/d/') || p.endsWith('apple-app-site-association')) && (req.method === 'GET' || req.method === 'HEAD')) {
       if (await fileLinks.serve(req, res, p)) return;
     }
     if (filesHost && String(req.headers['x-forwarded-host'] || req.headers.host || '') === filesHost) { res.writeHead(404, { 'Content-Type': 'text/plain' }); return res.end('Not found'); }
@@ -685,7 +685,16 @@ export function createServer(cfg) {
       if (req.method === 'GET' && url.searchParams.get('token')) return json(res, 200, fileLinks.where(u, url.searchParams.get('token'), access.canReadFile));
       const body = req.method === 'POST' ? await readBody(req).catch(() => ({})) : { path: url.searchParams.get('path') };
       // (which of these files' links are turned off — the app's file sheets say Turn on link)
-      if (body && Array.isArray(body.paths)) return json(res, 200, { ok: true, off: fileLinks.offOf(body.paths.slice(0, 500).map(String).filter((x) => access.canReadFile(u, x))) });
+      if (body && Array.isArray(body.paths)) return json(res, 200, { ok: true, off: fileLinks.offOf(body.paths.slice(0, 500).map(String).filter((x) => /^d:/.test(x) || access.canReadFile(u, x))) });
+      // a Client Assets folder's link (made, or off / on)
+      if (body && body.client && body.folder) {
+        const c = store.get('clients', String(body.client)); const f = c && (c.folders || []).find((x) => x.id === String(body.folder));
+        if (!c || !f) return json(res, 200, { ok: false, error: 'That folder isn’t in Client Assets any more' });
+        if (!access.canReadFile(u, (f.dir || c.dir || 'Clients/x') + '/_')) return json(res, 403, { ok: false, error: 'Not allowed' });
+        if (typeof body.off === 'boolean') return json(res, 200, fileLinks.folderSetOff(u, c.id, f.id, body.off, origin));
+        if (body.state) { const r = fileLinks.folderLink(u, c.id, f.id, origin); return json(res, 200, r); }
+        return json(res, 200, fileLinks.folderLink(u, c.id, f.id, origin));
+      }
       const fp = String((body && body.path) || '');
       if (!fp || !access.canReadFile(u, fp)) return json(res, 403, { ok: false, error: 'Not allowed' });
       if (body && typeof body.off === 'boolean') return json(res, 200, fileLinks.setOff(u, fp, body.off, origin));

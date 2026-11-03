@@ -2837,6 +2837,7 @@ const NativeAssets = (() => {
       by: isAutoFolder(c, f) && !f.finalOf ? 'Made with the client' : f.createdBy ? fullName(userById(f.createdBy)) : '', at: f.createdAt || c.createdAt || '',
       size: [f, ...folderTree(c, f)].reduce((n, x) => n + x.files.reduce((m, a) => m + (a.size || 0), 0), 0),
       canUpload: canUploadTo(c, f), canSub: canMakeSub(c, f), canRename: canEditFolder(c, f) && !f.finalOf, canDel: canDelFolder(c, f), info: infoOf(c, f, null),
+      canLink: !isFilesTop(c, f),   // (a folder's link: every folder but "Files" itself — 33)
       note: isFilesTop(c, f) ? 'Files holds folders — one per job. Make a folder here, then add the files in it.' : f.finalOf ? 'Final files are filed by the app when the task is completed.' : '',
     };
   }

@@ -687,6 +687,36 @@ extension Main {
       else { put(nil); toast((j?["error"] as? String).map { "No link: \($0) — copied for pasting here" } ?? "Copied — paste it into a comment or description") }
     }
   }
+  // a Client Assets folder's link (not "Files" itself): the folder as it is now, for anyone (Haris 2026-11-03)
+  static var folderLinks: [String: String] = [:]
+  func copyFolderLink(client: String, folder: String, _ toast: @escaping (String) -> Void) {
+    let key = client + "/" + folder
+    let said = "Folder link copied — send it to anyone; it shows the folder as it is now"
+    if let u = Main.folderLinks[key] { UIPasteboard.general.string = u; return toast(said) }
+    serverTask.request("/api/flink", body: ["client": client, "folder": folder]) { j in
+      if (j?["ok"] as? Bool) == true, let u = j?["url"] as? String { Main.folderLinks[key] = u; UIPasteboard.general.string = u; toast(said) }
+      else { toast(j?["error"] as? String ?? "No connection — try again") }
+    }
+  }
+  func folderLinkToggle(client: String, folder: String, _ toast: @escaping (String) -> Void) {
+    serverTask.request("/api/flink", body: ["client": client, "folder": folder, "state": true]) { [weak self] j in
+      guard let self = self else { return }
+      guard (j?["ok"] as? Bool) == true else { return toast(j?["error"] as? String ?? "No connection — try again") }
+      let off = (j?["off"] as? Bool) != true
+      let ac = UIAlertController(title: off ? "Turn off this folder’s link?" : "This folder’s link is off", message: off ? "Anyone who has the link won’t be able to open the folder or its files. The files’ own links stay as they are. You can turn it on again — the link stays the same." : "Turn it on again? The same link shows the folder again.", preferredStyle: .alert)
+      ac.overrideUserInterfaceStyle = self.statusStyle == .darkContent ? .light : .dark
+      ac.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+      let ok = UIAlertAction(title: off ? "Turn off" : "Turn on", style: off ? .destructive : .default) { _ in
+        self.serverTask.request("/api/flink", body: ["client": client, "folder": folder, "off": off]) { r in
+          let k = "d:" + client + "/" + folder
+          if (r?["ok"] as? Bool) == true { if off { Main.linksOff.insert(k) } else { Main.linksOff.remove(k) } }
+          toast((r?["ok"] as? Bool) == true ? (off ? "Folder link turned off" : "The folder link works again") : r?["error"] as? String ?? "That didn’t work — try again")
+        }
+      }
+      ac.addAction(ok); ac.preferredAction = ok
+      self.topMost().present(ac, animated: true)
+    }
+  }
   // Turn off link / Turn on link: asked first, as iPhone's own question
   func fileLinkToggle(_ f: [String: Any], _ toast: @escaping (String) -> Void) {
     guard let path = f["file"] as? String, let q = path.addingPercentEncoding(withAllowedCharacters: .alphanumerics) else { return toast("This file can’t have a link") }

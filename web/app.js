@@ -4353,6 +4353,41 @@ const FileLinks = (() => {
     toast(r && r.ok ? (off ? 'Link turned off' : 'The link works again') : (r && r.error) || 'That didn’t work — try again');
   }
   const isLink = (txt) => LINK.test(String(txt || '').trim());
+  // a Client Assets folder's link (not "Files" itself): copied, and turned off / on, as a file's
+  const furls = new Map();
+  async function copyFolder(c, f) {
+    if (!c || !f) return;
+    const key = c.id + '/' + f.id;
+    const said = () => toast('Folder link copied — send it to anyone; it shows the folder as it is now');
+    const get = () => (furls.has(key) ? Promise.resolve(furls.get(key)) : api('POST', '/api/flink', { client: c.id, folder: f.id }).then((r) => { if (!r || !r.ok) throw new Error((r && r.error) || 'No link'); furls.set(key, r.url); return r.url; }));
+    // (iPhone app 33+: the app puts it on the clipboard)
+    if (typeof Host !== 'undefined' && Host.isIOSApp && typeof NativeMe !== 'undefined' && NativeMe.on) {
+      try { const u = await get(); NativeMac.call('copyText', { text: u }).catch(() => {}); try { await navigator.clipboard.writeText(u); } catch (e) { plain(u); } said(); } catch (e) { toast('Couldn’t make a link: ' + e.message); }
+      return;
+    }
+    if (furls.has(key)) { const u = furls.get(key); try { await navigator.clipboard.writeText(u); said(); } catch (e) { if (plain(u)) said(); } return; }
+    const wait = get();
+    let done = false;
+    try { if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) { await navigator.clipboard.write([new ClipboardItem({ 'text/plain': wait.then((u) => new Blob([u], { type: 'text/plain' })) })]); done = true; } } catch (e) { done = false; }
+    let u; try { u = await wait; } catch (e) { toast('Couldn’t make a link: ' + e.message); return; }
+    if (!done) { try { await navigator.clipboard.writeText(u); done = true; } catch (e) { done = plain(u); } }
+    if (done) said(); else dialog({ title: 'The folder’s link', body: u, okText: 'Copy' }).then((ok) => { if (ok && plain(u)) said(); });
+  }
+  async function toggleFolder(c, f) {
+    if (!c || !f) return;
+    let r;
+    try { r = await api('POST', '/api/flink', { client: c.id, folder: f.id, state: true }); } catch (e) { toast(e.message); return; }
+    if (!r || !r.ok) { toast((r && r.error) || 'This folder can’t have a link'); return; }
+    const off = !r.off;
+    const ask = typeof Host !== 'undefined' && Host.isIOSApp && typeof NativeMe !== 'undefined' && NativeMe.on ? (o) => NativeMe.ask({ kind: 'alert', cancelText: 'Cancel', ...o }).then((x) => !!(x && x.ok)) : dialog;
+    const ok = await ask(off
+      ? { title: 'Turn off this folder’s link?', body: 'Anyone who has the link won’t be able to open the folder or its files. The files’ own links stay as they are. You can turn it on again — the link stays the same.', okText: 'Turn off', danger: true }
+      : { title: 'This folder’s link is off', body: 'Turn it on again? The same link shows the folder again.', okText: 'Turn on' });
+    if (!ok) return;
+    try { r = await api('POST', '/api/flink', { client: c.id, folder: f.id, off }); } catch (e) { toast(e.message); return; }
+    toast(r && r.ok ? (off ? 'Folder link turned off' : 'The folder link works again') : (r && r.error) || 'That didn’t work — try again');
+  }
+  const ANY = /^https?:\/\/[^\s/]+\/(f|d)\/([A-Za-z0-9]{6,16})(?:[/?#].*)?$/;
   // (an E11 staff member's app opened a link: the file where it is — a client's folder or a task — and its preview)
   async function open(token, tries = 0) {
     // (the app just opened: its data first)
@@ -4361,6 +4396,7 @@ const FileLinks = (() => {
     try { r = await api('GET', '/api/flink?token=' + encodeURIComponent(token)); } catch (e) { toast(e.message); return; }
     if (!r || !r.ok) { toast((r && r.error) || 'That file isn’t available'); return; }
     const w = r.where || {};
+    if (w.kind === 'folder' && clientById(w.client)) { openClient(w.client, w.folder); return; }
     if (w.kind === 'asset' && clientById(w.client)) { openClient(w.client, w.folder); setTimeout(() => { const a = clientFileById(w.file); if (a) previewFile(a); }, 450); return; }
     if ((w.kind === 'task' || w.kind === 'comment') && task(w.task)) {
       if (w.kind === 'comment') ui.sideTab = ui.forceTab = 'comments';
@@ -4371,7 +4407,15 @@ const FileLinks = (() => {
     toast('That file is for the people working on it');
   }
   window.__e11FileLink = (t) => { if (t) open(String(t)); };
-  return { copy, fileOf, toggle, isLink, open };
+  // (one of our links tapped inside E11 — a comment, the description: it opens here, where it is)
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest && e.target.closest('a[href]');
+    const m = a && ANY.exec(a.href);
+    if (!m || !currentUserId) return;
+    e.preventDefault(); e.stopPropagation();
+    open(m[2]);
+  }, true);
+  return { copy, fileOf, toggle, isLink, open, copyFolder, toggleFolder };
 })();
 function copyAttachment(a) {
   if (!a) return;
@@ -7305,14 +7349,20 @@ const folderLead = (f) => [
   { label: 'Open', icon: 'folder', run: () => { PageHistory.mark(); ui.folderId = f.id; $('#content').scrollTop = 0; render(); PageHistory.mark(); } },
   { label: 'Info', icon: 'info', run: () => caInfo('folder', f.id) },
 ];
+// a folder's link (Haris 2026-11-03): Copy link, Turn off link — every folder but "Files" itself
+const folderLinkItems = (c, f) => (isFilesTop(c, f) ? [] : [
+  { label: 'Copy link', icon: 'link', hint: 'Send it to anyone — the folder as it is now', run: () => FileLinks.copyFolder(c, f) },
+  { label: 'Turn off link', icon: 'lock', run: () => FileLinks.toggleFolder(c, f) },
+]);
 function folderMenu(anchor, c, f, lead = []) {
   // (lead: Open / Info first, on the phone's sheet)
-  if (!canEditFolder(c, f) || (f.finalOf && !canDelFolder(c, f))) { if (lead.length) showMenu(anchor, lead, { native: true }); return; }
+  if (!canEditFolder(c, f) || (f.finalOf && !canDelFolder(c, f))) { const items = [...lead, ...(lead.length && folderLinkItems(c, f).length ? ['-'] : []), ...folderLinkItems(c, f)]; if (items.length) showMenu(anchor, items, { native: true }); return; }
   // (moves among the folders next to it: the client's folders, or the folders inside Files)
   const sibs = () => c.folders.filter((x) => (x.parentId || null) === (f.parentId || null));
   const swap = (d) => { const s = sibs(), j = s.indexOf(f) + d; if (j < 0 || j >= s.length) return; const a = c.folders.indexOf(f), b = c.folders.indexOf(s[j]); c.folders[a] = s[j]; c.folders[b] = f; persist(0); render(); };
   showMenu(anchor, [
     ...lead, ...(lead.length ? ['-'] : []),
+    ...folderLinkItems(c, f), '-',
     ...(f.finalOf ? [] : [{ label: 'Rename folder', icon: 'edit', run: async () => {
       const v = await formDialog({ title: 'Rename folder', fields: [{ key: 'name', label: 'Folder name', value: f.name }], okText: 'Save',
         validate: (x) => (!x.name ? 'Enter a folder name' : folderDup(c, x.name, f.id, f.parentId) ? `There is already a folder named “${folderDup(c, x.name, f.id, f.parentId).name}”.` : null) });

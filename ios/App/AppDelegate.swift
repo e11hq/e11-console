@@ -1841,8 +1841,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   // e11console://open?task=<id> | ?plan=<id> | ?view=home|plans|fin-dash — a tap on the widget
   func openLink(_ u: URL) {
     // a file link (files.e11hq.com/f/<token>, the test copy's files-test…): the page opens the file where it is
-    if let r = u.path.range(of: "^/f/([A-Za-z0-9]{6,16})/?$", options: .regularExpression) {
-      let tok = String(u.path[r]).replacingOccurrences(of: "/f/", with: "").replacingOccurrences(of: "/", with: "")
+    if let r = u.path.range(of: "^/[fd]/[A-Za-z0-9]{6,16}", options: .regularExpression) {
+      let tok = String(String(u.path[r]).dropFirst(3))
       pageJSSoon("window.__e11FileLink && window.__e11FileLink(\(jsonString([tok]).dropFirst().dropLast()))")
       return
     }
@@ -2094,6 +2094,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     case "assets": assetsCtl.command(a); done(["ok": true])
     case "me": meCtl.command(a); done(["ok": true])
     // (33: Copy link from the page — a preview it opened, its own lists: the link put on the clipboard here)
+    case "copyText": UIPasteboard.general.string = a["text"] as? String ?? ""; done(["ok": true])
     case "copyLink":
       let f: [String: Any] = ["file": a["path"] as? String ?? "", "name": a["name"] as? String ?? "File", "id": a["id"] as? String ?? "", "size": a["size"] as? Int ?? 0, "thumb": a["thumb"] as? String ?? ""]
       copyFile(f) { [weak self] t in self?.previewVC?.set(["toast": t]); done(["ok": true, "toast": t]) }
