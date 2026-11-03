@@ -955,7 +955,12 @@ final class KeyboardShield: UIView {
     return nil
   }
   // (what's being typed in: on the page, or the app's comment box over it — Haris 2026-11-04: comments too)
-  private func typing(_ p: UIView) -> UIView? { field(p) ?? (p.window.flatMap { w in w.subviews.lazy.compactMap { self.field($0) }.first }) }
+  private func typing(_ p: UIView) -> UIView? {
+    let f = field(p) ?? (p.window.flatMap { w in w.subviews.lazy.compactMap { self.field($0) }.first })
+    // (not a task's description: it locks the page itself and ends only with Done — Haris 2026-11-04)
+    var v = f?.superview; while let x = v { if x is DescBox { return nil }; v = x.superview }
+    return f
+  }
   @objc private func up() {
     guard let p = page, typing(p) != nil else { return }
     frame = p.bounds; p.bringSubviewToFront(self); isHidden = false

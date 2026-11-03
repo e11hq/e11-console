@@ -50,9 +50,10 @@ a client gone takes its screens away with a toast). Something deleted while it's
 native page too.
 
 **A tap away from typing only puts the keyboard away, everywhere (Haris, 2026-11-04):** on every native page where you
-type (comments, a task's description, Team members' search, My profile…), a tap anywhere else while the keyboard is up
+type (comments, Team members' search, My profile…), a tap anywhere else while the keyboard is up
 closes the keyboard and nothing else — it never taps the row, card or button under the finger (`KeyboardShield.attach`).
-The box being typed in, and the comment box's own buttons, keep working. Every new native page too.
+The box being typed in, and the comment box's own buttons, keep working. A task's description is apart: it locks the page
+while it's edited and ends only with Done. Every new native page too.
 
 **‹ goes back the way you came, everywhere (Haris, 2026-11-03):** on every native page, ‹ and the edge swipe go back to
 where you were before (history) — not up the page's own path. A client's page opened from Home's search goes back to
