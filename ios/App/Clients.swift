@@ -64,7 +64,8 @@ final class ClientsGroup: UIView, HomeBlock {
     let W = bounds.width
     box.frame = CGRect(x: 16, y: 0, width: W - 32, height: CGFloat(rows.count) * ClientRow.H)
     box.isHidden = rows.isEmpty
-    for (i, r) in rows.enumerated() { r.frame = CGRect(x: 0, y: CGFloat(i) * ClientRow.H, width: box.bounds.width, height: ClientRow.H) }
+    // (size and place without touching its shrink: a frame set on a shrunk row moved its insides)
+    for (i, r) in rows.enumerated() { r.bounds = CGRect(x: 0, y: 0, width: box.bounds.width, height: ClientRow.H); r.center = CGPoint(x: box.bounds.width / 2, y: (CGFloat(i) + 0.5) * ClientRow.H) }
     let px = 1 / max(1, traitCollection.displayScale)
     for (i, l) in lines.enumerated() { l.frame = CGRect(x: 69, y: CGFloat(i + 1) * ClientRow.H - px / 2, width: box.bounds.width - 69, height: px) }
     more.frame = CGRect(x: 36, y: box.frame.maxY + 6, width: W - 72, height: 44)
@@ -82,6 +83,8 @@ final class ClientRow: UIControl {
     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     cancelTracking(with: nil)   // (no tap after the hold)
     onHold?()
+    // (springs back as its sheet comes, as the comment cards — Haris 2026-11-03)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in (self?.gestureRecognizers?.first { $0 is PressShrink } as? PressShrink)?.release() }
   }
   private let logo = UIImageView(), ini = UILabel(), name = UILabel(), meta = UILabel(), ams = UIStackView(), chev = UIImageView()
   private var amIds: [String] = [], logoPath: String?
@@ -139,7 +142,7 @@ final class ClientRow: UIControl {
     name.frame = CGRect(x: tx, y: H / 2 - 21, width: tw, height: 22)
     meta.frame = CGRect(x: tx, y: H / 2 + 2, width: tw, height: 18)
   }
-  override var isHighlighted: Bool { didSet { backgroundColor = isHighlighted ? UIColor.label.withAlphaComponent(0.06) : .clear } }
+  // (no grey while touched: it shrinks as one, as the comment cards — Haris 2026-11-03)
 }
 
 // a client's Client Assets: "Client Assets · See all ›", then its folders in a row that scrolls sideways
@@ -205,7 +208,7 @@ final class AssetsStrip: UIView, HomeBlock {
     clip.frame = CGRect(x: 0, y: 40, width: W, height: 96)
     scroll.frame = clip.bounds
     var x: CGFloat = 20
-    for t in tiles { t.frame = CGRect(x: x, y: 0, width: 112, height: 96); x += 112 + 10 }
+    for t in tiles { t.bounds = CGRect(x: 0, y: 0, width: 112, height: 96); t.center = CGPoint(x: x + 56, y: 48); x += 112 + 10 }
     scroll.contentSize = CGSize(width: x - 10 + 20, height: 96)
     scroll.isHidden = tiles.isEmpty
     // (a soft fade at the right edge when there's more to see, as the file rows)
@@ -461,14 +464,19 @@ final class FitNav: UINavigationController {
     t.frame = CGRect(x: 0, y: 0, width: width, height: 3000)
     t.reloadData(); t.layoutIfNeeded()
     let floating: Bool; if #available(iOS 26, *) { floating = true } else { floating = false }
-    fit = ceil(56 + t.contentSize.height + 8 + (floating ? 0 : bottom))
-    measured = true
+    // (a little room to spare: measured again once it's up, a few points more made it grow a little after coming —
+    //  Haris 2026-11-03 08:10; now it only changes size for a real change, such as a row added)
+    fit = ceil(64 + t.contentSize.height + 16 + (floating ? 0 : bottom))
+    measured = true; settled = false
   }
+  private var settled = true
   func fitTo(_ table: UITableView) {
     table.layoutIfNeeded()
     let floating: Bool; if #available(iOS 26, *) { floating = true } else { floating = false }
     let h = ceil(navigationBar.frame.maxY + table.contentSize.height + table.adjustedContentInset.bottom - view.safeAreaInsets.bottom + 8 + (floating ? 0 : view.safeAreaInsets.bottom))
     guard abs(h - fit) > 0.5 else { return }
+    // (its first measure once up: only if it's really off — no growing or shrinking by a few points as it settles)
+    if !settled { settled = true; if h <= fit && fit - h < 48 { table.isScrollEnabled = false; return } }
     fit = h
     table.isScrollEnabled = h > view.window.map { $0.bounds.height * 0.9 } ?? 700
     let first = !measured; measured = true

@@ -18,3 +18,8 @@ gone — never rebuild a whole list or page for one change. Build new views with
 (`UIView.performWithoutAnimation`), then run only the screen's own change animation (new fades in, gone fades out,
 others slide only when something really came, went or changed height). Every new native screen is built this way.
 (Details: project doc `claude/ios-native-polish.md`.)
+
+**Touch and hold, everywhere (Haris, 2026-11-03):** as the comment cards — the whole card shrinks as one (the shared
+`PressShrink`) from the moment the finger is down, nothing inside it moves (cards are placed with bounds + center, never
+`frame`, so a shrunk card isn't re-laid out); held long enough: a medium haptic, iPhone's own sheet slides up, and the
+card springs back. No grey highlight, no iOS context menu with a lifted preview.
