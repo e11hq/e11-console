@@ -2606,7 +2606,7 @@ const Sync = (() => {
   const clientId = 'c-' + uid() + uid();
   const synced = {};               // kind -> Map(id -> JSON the server has)
   KINDS.forEach((k) => { synced[k] = new Map(); });
-  let rev = 0, es = null, pushing = false, again = false, online = true, retryTimer = null, version = null;
+  let rev = 0, es = null, pushing = false, again = false, online = true, retryTimer = null, version = null, wipedAt = 0;
   const prefKey = (id) => 'e11-prefs-' + id;
   const loadPrefs = (id) => { try { return JSON.parse(localStorage.getItem(prefKey(id)) || '{}') || {}; } catch (e) { return {}; } };
   // (the iPhone app keeps them too, at once: the page's own storage can lose its last change when the app is closed soon
@@ -2711,7 +2711,8 @@ const Sync = (() => {
         if (!deepEqual(local && JSON.parse(JSON.stringify(local)), next)) { setLocal(res.kind, res.id, next); touched = true; }
       });
       setOnline(true);
-      if (refused) toast('Some changes weren’t allowed');
+      // (right after "Start fresh" the old copy's changes are dropped on purpose — not a refusal worth telling)
+      if (refused && Date.now() - wipedAt > 15000) toast('Some changes weren’t allowed');
       if (touched) refresh();
       setSaveState('saved');
     } catch (e) {
@@ -2789,13 +2790,14 @@ const Sync = (() => {
     });
     es.addEventListener('version', (e) => checkVersion(JSON.parse(e.data).version));
     es.addEventListener('occasion', (e) => { try { Cal.confirmed(JSON.parse(e.data).changed || []); } catch (err) { /* ignore */ } });
-    es.addEventListener('resync', () => resync());
+    es.addEventListener('resync', (e) => { let m = {}; try { m = JSON.parse(e.data || '{}'); } catch (err) { /* ignore */ } resync(!!m.wiped); });
     es.onerror = () => { setOnline(false); reconnect(3000); };
   }
   // What this person may see has changed (e.g. a freelancer was given another project): reload everything
-  async function resync() {
+  // wiped: the test site was started fresh — this copy's unsaved changes belong to the old data, so they're dropped
+  async function resync(wiped) {
     try {
-      await push();
+      if (wiped) wipedAt = Date.now(); else await push();
       const snap = await api('GET', '/api/snapshot');
       rev = snap.rev;
       KINDS.forEach((k) => { synced[k].clear(); });
@@ -2848,7 +2850,7 @@ const Sync = (() => {
     if (e.expired) { location.reload(); return; }
     document.body.innerHTML = `<div class="fatal" style="margin:20vh auto;max-width:420px;text-align:center"><h2>${esc(e.status === 403 ? 'No access' : 'Signed out')}</h2><p>${esc(e.message)}</p><button class="btn primary" onclick="location.reload()">Sign in again</button></div>`;
   }
-  return { start, push, resync, reconnect, savePrefs, get rev() { return rev; }, get online() { return online; }, get offline() { return isOffline(); }, get version() { return version; }, clientId };
+  return { start, push, resync, reconnect, wiped() { wipedAt = Date.now(); }, savePrefs, get rev() { return rev; }, get online() { return online; }, get offline() { return isOffline(); }, get version() { return version; }, clientId };
 })();
 
 /* ================= Persistence ================= */
@@ -9371,6 +9373,7 @@ async function resetSampleData() {
   if (!ok) return;
   try {
     toast('Starting fresh…');
+    Sync.wiped();
     const r = await api('POST', '/api/sample/reset', {});
     toast(`Fresh sample: ${r.clients} clients, ${r.tasks} tasks, ${r.people} people`);
     setTimeout(() => location.reload(), 900);

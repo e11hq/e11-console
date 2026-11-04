@@ -849,7 +849,7 @@ export function createServer(cfg) {
       // 3. the fresh sample
       const data = freshSample(store, owner.id, filesRoot);
       const { rev } = store.importAll(data, owner.id);
-      for (const st of streams) send(st, 'resync', { rev });    // every open app reloads its data
+      for (const st of streams) send(st, 'resync', { rev, wiped: true });    // every open app reloads its data (its unsaved old changes dropped)
       return json(res, 200, { ok: true, rev, tasks: data.tasks.length, people: data.users.length, clients: data.projects.length });
     }
 
