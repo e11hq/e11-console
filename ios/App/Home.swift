@@ -567,6 +567,10 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // a page under it (Appearance, About, Shortcuts, Team members, a member): the task page's bar, ‹ and its name
   var isMe: Bool { assets == "me" || isMeSub }
   var isMeSub: Bool { assets?.hasPrefix("me.") == true }
+  // (where 🔍 is on this page: left of your photo — or, on a page opened from somewhere (no photo), in the photo's own
+  //  place; search grows out of it and shrinks back into it there — a second 🔍 showed on closing: Haris 2026-11-04)
+  var searchInPhotoSpot: Bool { assets == "plansPage" || assets == "me.plan" || (backable && !pageBar) }
+  var searchHome: CGRect { searchInPhotoSpot ? meFrame : searchCircle.frame }
   // where the list starts and the room above "+ New task", on screen with the list at its top (a box that fills the
   // page — About's What's new — ends there)
   var listTop: CGFloat { bigHead + 10 }
@@ -1118,7 +1122,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   func openSearch() {
     if searching { field.becomeFirstResponder(); return }
     if let o = openCard { setOpen(o, false) }
-    let start = searchCircle.frame, meF = me.frame
+    let start = searchHome, meF = me.frame
     searching = true
     onCorner?()
     showMotto()
@@ -1155,7 +1159,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     onCorner?()
     showMotto()
     setNeedsLayout(); layoutIfNeeded()
-    let back = searchCircle.frame
+    let back = searchHome
     if searchBar.transform != .identity { searchBar.transform = .identity }   // (closed while still settling)
     UIView.animate(withDuration: 0.5, delay: 0, usingSpringWithDamping: 0.85, initialSpringVelocity: 0.3, options: [.allowUserInteraction]) {
       self.searchBar.frame = back; self.searchBar.layer.cornerRadius = back.height / 2
