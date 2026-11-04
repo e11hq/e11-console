@@ -103,6 +103,7 @@ struct SetItem {
   var danger = false
   var pill: String? = nil          // (a key on the right — Shortcuts: @, #, Hold…)
   var badge: String? = nil         // (a small blue "New")
+  var count = 0                    // (a red count before the ›, as iPhone's Settings — waiting for you; Haris 2026-11-04)
   var pills: [(String, UIColor)] = []
   var person: (photo: String?, ini: String, rgb: UIColor)? = nil
   var warn = false                 // (the line under it in orange — "Hasn't signed in yet")
@@ -110,11 +111,11 @@ struct SetItem {
   var tap: (() -> Void)? = nil
   var hold: (() -> Void)? = nil
   var flip: ((Bool) -> Void)? = nil
-  var sig: String { "\(title)|\(sub)|\(value)|\(sym ?? "")|\(col?.description ?? "")|\(chevron)|\(toggle != nil)|\(danger)|\(pill ?? "")|\(badge ?? "")|\(pills.map { $0.0 }.joined(separator: ","))|\(person?.photo ?? "")|\(person?.ini ?? "")|\(warn)|\(dim)|\(tap != nil)|\(hold != nil)" }
+  var sig: String { "\(title)|\(sub)|\(value)|\(sym ?? "")|\(col?.description ?? "")|\(chevron)|\(toggle != nil)|\(danger)|\(pill ?? "")|\(badge ?? "")|\(count)|\(pills.map { $0.0 }.joined(separator: ","))|\(person?.photo ?? "")|\(person?.ini ?? "")|\(warn)|\(dim)|\(tap != nil)|\(hold != nil)" }
 }
 
 final class SetRow: AssetTile {
-  let icon = SettingsIcon(), sym = UIImageView(), pic = UIImageView(), name = UILabel(), sub = UILabel(), value = UILabel(), chev = UIImageView(), sw = UISwitch(), pill = UILabel(), badge = UILabel()
+  let icon = SettingsIcon(), sym = UIImageView(), pic = UIImageView(), name = UILabel(), sub = UILabel(), value = UILabel(), chev = UIImageView(), sw = UISwitch(), pill = UILabel(), badge = UILabel(), countL = UILabel()
   private var pillViews: [UILabel] = []
   var item: SetItem!
   private var photoPath: String?
@@ -128,7 +129,8 @@ final class SetRow: AssetTile {
     pill.font = .monospacedSystemFont(ofSize: 13, weight: .semibold); pill.textColor = .secondaryLabel; pill.textAlignment = .center; pill.backgroundColor = .tertiarySystemFill; pill.layer.cornerRadius = 7; pill.clipsToBounds = true
     badge.font = .systemFont(ofSize: 11, weight: .bold); badge.textColor = .white; badge.textAlignment = .center; badge.backgroundColor = .systemBlue; badge.layer.cornerRadius = 9; badge.clipsToBounds = true
     sw.addAction(UIAction { [weak self] _ in guard let self = self else { return }; UISelectionFeedbackGenerator().selectionChanged(); self.item.flip?(self.sw.isOn) }, for: .valueChanged)
-    [icon, pic, name, sub, value, chev, pill, badge].forEach { $0.isUserInteractionEnabled = false; addSubview($0) }
+    countL.font = .systemFont(ofSize: 15, weight: .regular); countL.textColor = .white; countL.textAlignment = .center; countL.backgroundColor = .systemRed; countL.layer.cornerRadius = 12; countL.clipsToBounds = true
+    [icon, pic, name, sub, value, chev, pill, badge, countL].forEach { $0.isUserInteractionEnabled = false; addSubview($0) }
     addSubview(sw)
   }
   required init?(coder: NSCoder) { fatalError() }
@@ -143,6 +145,7 @@ final class SetRow: AssetTile {
     sw.isHidden = it.toggle == nil; if let on = it.toggle { sw.setOn(on, animated: false) }
     pill.text = it.pill.map { " \($0) " }; pill.isHidden = it.pill == nil
     badge.text = it.badge; badge.isHidden = it.badge == nil
+    countL.text = it.count > 99 ? "99+" : "\(it.count)"; countL.isHidden = it.count <= 0
     pillViews.forEach { $0.removeFromSuperview() }
     pillViews = it.pills.map { p in
       let l = UILabel(); l.text = p.0; l.font = .systemFont(ofSize: 11, weight: .semibold); l.textColor = p.1; l.backgroundColor = p.1.withAlphaComponent(0.14)
@@ -178,6 +181,7 @@ final class SetRow: AssetTile {
     var right = W - 16
     if !sw.isHidden { let s = sw.intrinsicContentSize; sw.frame = CGRect(x: right - s.width, y: (H - s.height) / 2, width: s.width, height: s.height); right = sw.frame.minX - 10 }
     if !chev.isHidden { chev.frame = CGRect(x: right - 12, y: 0, width: 12, height: H); right -= 20 }
+    if !countL.isHidden { let cw = max(24, ceil(countL.sizeThatFits(CGSize(width: 60, height: 24)).width) + 14); countL.frame = CGRect(x: right - cw, y: (H - 24) / 2, width: cw, height: 24); right = countL.frame.minX - 8 }
     if !pill.isHidden { let pw = ceil(pill.sizeThatFits(CGSize(width: 140, height: 24)).width) + 8; pill.frame = CGRect(x: right - pw, y: (H - 24) / 2, width: pw, height: 24); right = pill.frame.minX - 10 }
     if !value.isHidden { let vw = min(ceil(value.sizeThatFits(CGSize(width: 200, height: 24)).width), W * 0.4); value.frame = CGRect(x: right - vw, y: 0, width: vw, height: H); right = value.frame.minX - 8 }
     let x = leftInset
@@ -1304,8 +1308,10 @@ final class MeCtl {
       } else { let n = part(h, "wait") { AssetsNote() }; n.label.text = "Loading…"; out.append(n) }
       let work = ((model["work"] as? [[String: Any]]) ?? []).map { w -> SetItem in
         let k = w["k"] as? String ?? ""
-        return SetItem(key: k, title: w["t"] as? String ?? "", sub: w["s"] as? String ?? "", sym: w["sym"] as? String, col: NativeSheetVC.color(w["col"]),
+        var it = SetItem(key: k, title: w["t"] as? String ?? "", sub: w["s"] as? String ?? "", sym: w["sym"] as? String, col: NativeSheetVC.color(w["col"]),
                        tap: { [weak self] in guard let self = self else { return }; if k == "team" || k == "trash" || k == "plans" { self.open(k) } else { if k == "clients" { self.coverWait = Date() }; self.send(["ev": "nav", "to": k]) } })
+        it.count = w["n"] as? Int ?? 0
+        return it
       }
       if !work.isEmpty { out.append(head(h, "work", "Work")); out.append(group(h, "work", work)) }
       var phone: [SetItem] = [SetItem(key: "shortcuts", title: "Shortcuts", sub: "Quicker ways to do things", sym: "command", col: .systemBlue, badge: "New", tap: { [weak self] in self?.open("shortcuts") })]

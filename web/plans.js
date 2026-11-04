@@ -37,7 +37,9 @@ const Plans = (() => {
   const canEdit = (pl) => !!pl && canEditClient(pl.projectId) && editable(pl);      // the posts: while a draft, or sent back
   const isEditor = (pl) => !!pl && canEditClient(pl.projectId);                       // (the client's Social people + SM)
   // who approves: the Social Manager (not a skeleton they made) and the Creative Director
-  const canApprove = (pl, u = me()) => !!pl && on() && !!u && ((u.id === cdUserId()) || (isMgr(u) && pl.createdBy !== u.id));
+  // (only who it was sent to — the SM, the CD, or both: as its Inbox update; nothing said (older ones): both — Haris 2026-11-04)
+  const sentTo = (pl, k) => { const t = pl && pl.review && pl.review.to; return !t || t === 'both' || t === k; };
+  const canApprove = (pl, u = me()) => !!pl && on() && !!u && ((u.id === cdUserId() && sentTo(pl, 'cd')) || (isMgr(u) && pl.createdBy !== u.id && sentTo(pl, 'sm')));
   const approverIds = (pl, to) => {
     const cd = cdUserId(), sm = socialMgrIds().filter((id) => id !== pl.createdBy);
     return [...new Set(to === 'cd' ? [cd] : to === 'sm' ? sm : [cd, ...sm])].filter(Boolean);
@@ -362,7 +364,8 @@ const Plans = (() => {
     pl.status = 'approved';
     pl.approval = { by: currentUserId, at: now, round: pl.round || 1 };
     logIt(pl, 'approved');
-    notify([pl.createdBy, pl.review && pl.review.by, ...approverIds(pl, 'both')], pl, 'plan-ok', `approved the content skeleton for <b>${esc(nameOf(pl))}</b>`);
+    // (and the other approver it was sent to — sent to both, whoever acts first: the other is told; Haris 2026-11-04)
+    notify([pl.createdBy, pl.review && pl.review.by, ...approverIds(pl, (pl.review && pl.review.to) || 'both')], pl, 'plan-ok', `approved the content skeleton for <b>${esc(nameOf(pl))}</b>`);
     persist(0); render2(); toast('Content skeleton approved');
   }
   function sendBack(pl) {
@@ -392,7 +395,7 @@ const Plans = (() => {
     const flagged = (pl.posts || []).filter((x) => x.check && x.check.state === 'changes');
     pl.status = 'changes';
     logIt(pl, 'changes', { note });
-    notify([pl.createdBy, pl.review && pl.review.by], pl, 'plan-changes', `asked for changes on the content skeleton for <b>${esc(nameOf(pl))}</b>`, note || flagged.map((x) => `${x.title}: ${x.check.note || 'changes'}`).join(' · '));
+    notify([pl.createdBy, pl.review && pl.review.by, ...approverIds(pl, (pl.review && pl.review.to) || 'both')], pl, 'plan-changes', `asked for changes on the content skeleton for <b>${esc(nameOf(pl))}</b>`, note || flagged.map((x) => `${x.title}: ${x.check.note || 'changes'}`).join(' · '));
     persist(0); render2(); toast('Sent back to Social');
   }
   async function reopen(pl) {
@@ -1004,7 +1007,8 @@ const Plans = (() => {
   });
 
   // skeletons waiting for this person's approval (the sidebar count)
-  const waiting = () => (canSee() ? list().filter((pl) => pl.status === 'review' && canApprove(pl) && proj(pl.projectId) && !proj(pl.projectId).inactive).length : 0);
+  // (waiting for you: sent to you for approval — and, for the client's Social people, theirs sent back for changes)
+  const waiting = () => (canSee() ? list().filter((pl) => proj(pl.projectId) && !proj(pl.projectId).inactive && ((pl.status === 'review' && canApprove(pl)) || (pl.status === 'changes' && isEditor(pl) && me() && me().role === 'social' && (pl.createdBy === me().id || socialsOf(proj(pl.projectId)).includes(me().id))))).length : 0);
   const nameOf = (pl) => { const p = proj(pl.projectId); return `${p ? p.name : 'A client'} · ${monthLabel(pl.month)}`; };
   /* ---------- the iPhone app's own (shell 35 — Haris 2026-11-04, the mockups content-plans-mockup / -se-mockup): view
      only; the Social Manager and the CD approve or ask for changes — per post and for the whole skeleton. The models

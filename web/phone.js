@@ -3041,7 +3041,7 @@ const NativeMe = (() => {
     const work = [];
     if (isCD()) work.push({ k: 'projects', t: 'Clients', s: 'Every client’s tasks', sym: 'folder.fill', col: [10, 132, 255] });
     if (Cal.canSee() && !calendarRetired()) work.push({ k: 'calendar', t: 'Content calendar', s: 'Posts by day, channel and occasion', sym: 'calendar', col: [255, 59, 48] });
-    if (Plans.canSee() && !socialPlans()) work.push({ k: 'plans', t: 'Content plans', s: 'Each client’s month', sym: 'calendar.badge.clock', col: [255, 149, 0] });
+    if (Plans.canSee() && !socialPlans()) work.push({ n: Plans.waiting(), k: 'plans', t: 'Content plans', s: 'Each client’s month', sym: 'calendar.badge.clock', col: [255, 149, 0] });
     work.push({ k: 'clients', t: 'Client Assets', s: 'Logos, guidelines and fonts', sym: 'folder.fill', col: [48, 176, 199] });
     work.push({ k: 'team', t: 'Team members', s: '', sym: 'person.2.fill', col: [88, 86, 214] });
     if (isManager()) { const n = trashList().length; work.push({ k: 'trash', t: 'Trash', s: n ? `${plural(n, 'item')} · restore within ${TRASH_DAYS} days` : `Deleted items wait here ${TRASH_DAYS} days`, sym: 'trash.fill', col: [142, 142, 147] }); }
