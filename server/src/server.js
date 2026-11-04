@@ -481,10 +481,10 @@ export function createServer(cfg) {
       res.writeHead(302, { Location: `${testCopy ? 'https://test.e11hq.com' : 'https://console.e11hq.com'}/?task=${encodeURIComponent(id)}`, 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' });
       return res.end();
     }
-    if ((p.startsWith('/f/') || p.startsWith('/d/') || p.endsWith('apple-app-site-association')) && (req.method === 'GET' || req.method === 'HEAD')) {
+    if ((p.startsWith('/f/') || p.startsWith('/d/') || p.endsWith('apple-app-site-association') || (p === '/robots.txt' && filesHost && String(req.headers['x-forwarded-host'] || req.headers.host || '') === filesHost)) && (req.method === 'GET' || req.method === 'HEAD')) {
       if (await fileLinks.serve(req, res, p)) return;
     }
-    if (filesHost && String(req.headers['x-forwarded-host'] || req.headers.host || '') === filesHost) { res.writeHead(404, { 'Content-Type': 'text/plain' }); return res.end('Not found'); }
+    if (filesHost && String(req.headers['x-forwarded-host'] || req.headers.host || '') === filesHost) { res.writeHead(404, { 'Content-Type': 'text/plain', 'X-Robots-Tag': 'noindex, nofollow' }); return res.end('Not found'); }
 
     const u = await who(req, res);
     if (!u) return;

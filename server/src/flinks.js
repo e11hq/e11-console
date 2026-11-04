@@ -154,7 +154,7 @@ export function createFileLinks({ store, files, views, base, teamId, bundleId = 
     const card = off ? offCard : `${v.back ? `<a class="back" href="${esc(v.back.href)}">‹ ${esc(v.back.label)}</a>` : ''}<div class="head"><div class="kind">${esc(v.kind)}</div><h1>${esc(v.name)}</h1><div class="meta">${esc(v.meta)}</div>${v.by ? `<div class="from"><i>${esc(ini(v.by))}</i><span>Shared by <b>${esc(v.by)}</b><small>E11 Agency</small></span></div>` : ''}</div>
 ${list ? `<div class="list">${list}</div>` : ''}${v.items.length ? `<div class="foot"><a class="big" id="big" href="${esc(v.items[v.pick || 0].u)}/file" download><span class="fill" id="fill"></span>${DL}<span id="bigt">${v.folder ? 'Download this file' : 'Download'}</span></a><div class="note">${esc(v.note)}</div></div>` : '<div class="none">No files here yet</div>'}`;
     return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>${title ? esc(title) + ' · E11 Agency' : 'E11 Agency'}</title>${og || '<meta property="og:title" content="E11 Agency">'}<meta name="robots" content="noindex">
+<title>${title ? esc(title) + ' · E11 Agency' : 'E11 Agency'}</title>${og || '<meta property="og:title" content="E11 Agency">'}<meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
 <meta name="color-scheme" content="light dark"><link rel="icon" href="data:,">
 <style>
 :root{--card:rgba(255,255,255,.94);--t:#17181b;--sub:#8a8a8e;--line:rgba(0,0,0,.08);--hov:rgba(0,0,0,.045);--btn:#17181b;--btnt:#fff;--blue:#0a84ff;--green:#30d158;
@@ -335,7 +335,9 @@ document.addEventListener('scroll',fr,true);fr();})();
     return null;
   }
 
-  const HEAD = { 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'X-Robots-Tag': 'noindex' };
+  // (private links — never in Google or any search: Haris 2026-11-04)
+  const ROBOTS = 'noindex, nofollow, noarchive, nosnippet, noimageindex';
+  const HEAD = { 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'X-Robots-Tag': ROBOTS };
   const CSP = "default-src 'none'; img-src 'self'; media-src 'self'; connect-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; frame-ancestors 'none'";
   const html = (req, res, ok, body) => { res.writeHead(ok ? 200 : 404, { ...HEAD, 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache', 'Content-Security-Policy': CSP }); res.end(req.method === 'HEAD' ? undefined : body); return true; };
   // a file's bytes: the download, its view (pictures, videos — ranges) or its picture
@@ -363,6 +365,14 @@ document.addEventListener('scroll',fr,true);fr();})();
   // the public part (no sign-in): file links /f/<token>[/file|view|thumb]; folder links /d/<token>, its folders
   // /d/<token>/s/<folder>, its files /d/<token>/f/<file>[/file|view|thumb]
   async function serve(req, res, p) {
+    // (every answer on the files address says "not for search engines" — pages, files, pictures, videos)
+    res.setHeader('X-Robots-Tag', ROBOTS);
+    // robots.txt: search engines may read the pages only to see they're not to be listed; everything else stays out
+    if (p === '/robots.txt' && (req.method === 'GET' || req.method === 'HEAD')) {
+      res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=86400' });
+      res.end(req.method === 'HEAD' ? undefined : 'User-agent: Googlebot\nAllow: /\n\nUser-agent: Bingbot\nAllow: /\n\nUser-agent: *\nDisallow: /\n');
+      return true;
+    }
     if (p === '/.well-known/apple-app-site-association' || p === '/apple-app-site-association') {
       const ids = teamId ? [`${teamId}.${bundleId}`] : [];
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600' });
