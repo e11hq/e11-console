@@ -3021,6 +3021,8 @@ const NativeMe = (() => {
   let shell = 0, wantPlans = false, plMonth = '', plOpen = null;
   const plansOwn = () => shell >= 35 && typeof Plans !== 'undefined' && Plans.canSee() && !!Plans.native;
   // (Social Managers and Executives: Content plans is their own tab — its page, as Client Assets; Haris 2026-11-04)
+  // (Phone's own socialPlans is inside Phone — this one is NativeMe's; using Phone's left Me blank: not defined here)
+  const socialPlans = () => { const u = typeof me === 'function' ? me() : null; return !!u && u.role === 'social' && typeof Plans !== 'undefined' && Plans.canSee(u); };
   const plansTab = () => plansOwn() && socialPlans() && (ui.view === 'plans' || ui.view === 'plan');
   if (NATIVE_ME && window.__e11CommentsOnly !== true && typeof Host !== 'undefined' && Host.isIOSApp) {
     NativeMac.call('appInfo').then((r) => { shell = Number(r && r.shell) || 0; on = shell >= 33; if (on) { setInterval(sync, 350); sync(); } }).catch(() => {});
