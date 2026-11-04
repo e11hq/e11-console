@@ -29,9 +29,12 @@ async def main():
             b=await pw.chromium.launch()
             # --- the owner deletes a Client Assets folder: it goes to the Trash
             c0, op, e0 = await page_for(b, OWNER)
-            fid = await op.evaluate("""(async () => { const c = db.clients[0]; const f = c.folders.find(x => !x.auto) || c.folders[c.folders.length - 1]; openClient(c.id); return [c.id, f.id, f.name, f.files.length]; })()""")
+            fid = await op.evaluate("""(async () => { const c = db.clients[0]; const f = c.folders.find(x => !x.auto) || c.folders[c.folders.length - 1]; openClient(c.id); return [c.id, f.id, f.name, f.files.length, f.parentId || null]; })()""")
             await op.wait_for_timeout(500)
-            await op.evaluate(f"folderMenu(document.body, clientById('{fid[0]}'), clientById('{fid[0]}').folders.find(x => x.id === '{fid[1]}'))"); await op.wait_for_timeout(300)
+            if fid[4]: await op.locator(f'.cf-card[data-id="{fid[4]}"]').click(); await op.wait_for_timeout(500)   # (it sits in a folder: open that first)
+            # (the folder card's own ••• button: a menu anchored to the whole page would open below the window)
+            card = op.locator(f'.cf-card[data-id="{fid[1]}"]')
+            await card.hover(); await card.locator('[data-action="cfolder-menu"]').click(); await op.wait_for_timeout(300)
             await op.locator('.menu .mi', has_text='Delete folder').click(); await op.wait_for_timeout(300)
             await op.click('.dialog [data-r="1"]'); await op.wait_for_timeout(1500)
             check(await op.evaluate(f"!clientById('{fid[0]}').folders.some(x => x.id === '{fid[1]}') && trashList().some(t => t.type === 'cafolder' && t.data.folder.id === '{fid[1]}')"), f'a deleted folder ({fid[2]}, {fid[3]} files) goes to the Trash')
@@ -84,12 +87,16 @@ async def main():
             snap = api(OWNER,'/api/snapshot')['data']
             back = [c for c in snap['clients'] if c['id']==fid[0]][0]
             check(any(f['id']==fid[1] and len(f['files'])==fid[3] for f in back['folders']) and not any(t['id']==tid for t in snap['trash']), 'the Office Admin restores the folder with its files')
-            check(await E("db.tasks.every(t => t.comments === undefined)"), 'no task detail in their app')
+            # (the app fills in empty lists on every task it loads, so: nothing in them — and the server sends none of it)
+            check(await E("db.tasks.every(t => !t.notes && !(t.comments || []).length && !(t.attachments || []).length && !(t.activity || []).length)"), 'no task detail in their app')
+            slim = api(ARSAL,'/api/snapshot')['data']['tasks']
+            check(slim and not any(k in t for t in slim for k in ('comments', 'notes', 'notesHtml', 'attachments', 'activity', 'assignees')), 'the server sends them only the slim job list')
             check(not errs, f'no page errors (Office Admin) {errs[:2]}')
             # --- phone
             c2, ph, e2 = await page_for(b, ARSAL, 390, 844)
             tabs = await ph.evaluate("[...document.querySelectorAll('#ph-tabs .ph-tab > span:last-child')].map(s => s.textContent)")
-            check(tabs == ['Home', 'Inbox', 'Client Assets', 'Me'], f'phone tabs {tabs}')
+            # (Haris 2026-11-04: an Office Admin with Finance access gets Overview · Inbox · Claims · Expenses · Me)
+            check(tabs == ['Overview', 'Inbox', 'Claims', 'Expenses', 'Me'], f'phone tabs {tabs}')
             check(await ph.locator('.oh').count() == 1, 'phone Home')
             check(not e2, f'no page errors (phone) {e2[:2]}')
             await b.close()

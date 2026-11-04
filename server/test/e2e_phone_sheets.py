@@ -32,11 +32,17 @@ async def main():
         await E("ui.sideTab='comments'; renderDetail()"); await pg.wait_for_timeout(600)
         check(await E("getComputedStyle(document.querySelector('.cm .cm-tools')).display") == 'none', 'the small buttons on each comment are hidden on the phone')
         # hold my comment
-        await E("document.querySelector('.cm[data-comment=\"c-mine\"]').scrollIntoView({block:'center'})"); await pg.wait_for_timeout(300)
-        bb = await pg.locator('.cm[data-comment="c-mine"] .cm-text').bounding_box()
-        x, y = bb['x'] + 40, bb['y'] + bb['height'] / 2
+        # (where the comment is is measured right before each touch, once the pictures above it have loaded —
+        #  a picture still loading moves it, and a touch measured earlier can miss it)
+        async def spot(sel):
+            await pg.wait_for_function("[...document.querySelectorAll('#detail img')].every(i => i.complete)", timeout=10000)
+            await E(f"document.querySelector('{sel}').scrollIntoView({{block:'center'}})"); await pg.wait_for_timeout(300)
+            bb = await pg.locator(sel).bounding_box()
+            return bb['x'] + 40, bb['y'] + bb['height'] / 2
+        x, y = await spot('.cm[data-comment="c-mine"] .cm-text')
         await touch('touchStart', x, y); await pg.wait_for_timeout(250); await touch('touchEnd', x, y); await pg.wait_for_timeout(300)
         check(await pg.locator('.menu.cm-sheet').count() == 0, 'a short tap does not open the sheet')
+        x, y = await spot('.cm[data-comment="c-mine"] .cm-text')
         await touch('touchStart', x, y); await pg.wait_for_timeout(650)
         check(await pg.locator('.menu.cm-sheet').count() == 1, 'touch and hold opens the comment sheet')
         await touch('touchEnd', x, y); await pg.wait_for_timeout(400)
@@ -98,13 +104,18 @@ async def main():
         check(await pg.locator('.menu').count() == 0 and 'urgent' in json.dumps(await E("task(ui.taskId).prio || {}")), 'a tap on an item still picks it')
         await E("closeMenus()")
         # assignee list: search on top, list scrolls, sheet sits on the bottom
+        # (this task went for CD review, so its people are locked and it has no + — the list is tried on one that hasn't)
+        check(await pg.locator('#detail .asg-add').count() == 0 and await E("idLocked(task(ui.taskId))"), 'no adding people while a task is locked for CD review')
+        free = await E("db.tasks.find(t=>!t.parentId && !t.done && !idLocked(t) && (t.assignees||[]).length).id")
+        await E(f"openTask('{free}')"); await pg.wait_for_timeout(600)
         await pg.locator('.asg-add').first.tap(); await pg.wait_for_timeout(600)
         box = await pg.locator('.menu.asg-pop').bounding_box()
         check(box and abs(box['y'] + box['height'] - 844) < 2, f'the assignee list is a bottom sheet {box}')
         check(await E("document.activeElement.tagName") != 'INPUT', 'the keyboard does not open by itself')
         await pg.screenshot(path=os.path.join(OUT, 'asg-sheet.png'), clip={'x': 0, 'y': 150, 'width': 390, 'height': 120})
         # the comment box: slim bar, opens while writing, sends, tucks away by its handle
-        await E("closeMenus(); ui.sideTab='comments'; renderDetail()"); await pg.wait_for_timeout(500)
+        await E(f"closeMenus(); openTask('{tid}')"); await pg.wait_for_timeout(600)
+        await E("ui.sideTab='comments'; renderDetail()"); await pg.wait_for_timeout(500)
         c = pg.locator('#detail .tm-composer')
         check('ph-open' not in (await c.get_attribute('class')), 'comment box starts as a slim bar')
         h0 = (await c.bounding_box())['height']
@@ -112,7 +123,9 @@ async def main():
         check('ph-open' in (await c.get_attribute('class')), 'tapping it opens the box')
         await E("document.execCommand('insertText', false, 'Sent from the phone sheet')"); await pg.wait_for_timeout(200)
         h1 = (await c.bounding_box())['height']
-        check(h1 > h0 + 40, f'open box is taller with the formatting row ({h0:.0f} → {h1:.0f})')
+        # (since 2026-10-29 the phone's box is one row — + · the text · send — with no formatting buttons; open, it gains its handle)
+        row = await E("(()=>{const c=document.querySelector('#detail .tm-composer'); const vis=(s)=>{const e=c.querySelector(s); return !!e && getComputedStyle(e).display!=='none' && e.getBoundingClientRect().height>0}; return [vis('.rt-tools'), vis('[data-action=\"attach-comment\"]'), vis('[data-action=\"add-comment\"]')]})()")
+        check(h1 > h0 and row == [False, True, True], f'open box: one row with + and send, no formatting buttons, room for its handle ({h0:.0f} → {h1:.0f}, {row})')
         await pg.screenshot(path=os.path.join(OUT, 'composer.png'))
         await pg.locator('#detail .tm-composer [data-action="add-comment"]').tap(); await pg.wait_for_timeout(600)
         check(await E("task(ui.taskId).comments.some(c=>c.text==='Sent from the phone sheet')"), 'the round send button posts the comment')

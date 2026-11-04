@@ -81,7 +81,10 @@ async def main():
         await (await fc.value).set_files(inv); await pg.wait_for_timeout(1500)
         check(bool(await E(f"(db.finance.find(x=>x.id==='{tid}')||{{}}).invoice")), 'invoice added to an office expense afterwards')
         # Office expenses page: this month's items without an invoice get Add invoice
-        await E("const r=db.finance.find(x=>x.type==='expense'&&x.date.slice(0,7)===todayStr().slice(0,7)); if(r){r.invoice=null; persist(0)}"); await E("go('fin-extra')"); await pg.wait_for_timeout(400)
+        # (the sample's office expenses fall on random earlier days, so in a month's first days there may be none yet: add one)
+        await E("""(()=>{ const r=db.finance.find(x=>x.type==='expense'&&x.date.slice(0,7)===todayStr().slice(0,7));
+          if (r) r.invoice=null; else db.finance.push({ id: 'e2e-ex-now', type: 'expense', name: 'Printer paper', amount: 75, date: todayStr(), invoice: null, createdAt: nowISO(), createdBy: currentUserId });
+          persist(0); })()"""); await E("go('fin-extra')"); await pg.wait_for_timeout(400)
         add = pg.locator('.fin-add [data-fin-txadd]').first
         check(await add.count() == 1 and 'Add invoice' in await add.inner_text(), 'Office expenses page offers Add invoice')
         rid = await add.get_attribute('data-fin-txadd')

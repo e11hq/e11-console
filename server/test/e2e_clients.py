@@ -182,14 +182,17 @@ async def main():
         })()""")
         check(r == {'before': [1, 0], 'after': [1, 1]}, f'the replaced AM stops, the new AM gets them {r}')
         # only Production, Social, Freelancers and the Creative Director can be assigned
-        roles = await E("(() => { const t = topTasks()[0]; openTask(t.id); return null; })()"); await pg.wait_for_timeout(500)
+        # (a task that went for CD review has its people locked — most sample tasks have — so these use one that hasn't)
+        roles = await E("(() => { const t = topTasks().find(t => !t.done && !idLocked(t)); openTask(t.id); return null; })()"); await pg.wait_for_timeout(500)
         await E("assignMenu(document.querySelector('#detail [data-action=\"assign\"]') || document.body)"); await pg.wait_for_timeout(300)
         shown = await E("[...document.querySelectorAll('.asg-pop .ap-item')].map(el => (userById(el.dataset.ap) || {}).role)")
         cd = await E("cdUserId()")
-        ok = await E("[...document.querySelectorAll('.asg-pop .ap-item')].every(el => { const u = userById(el.dataset.ap); return ['production', 'social', 'freelancer'].includes(u.role) || u.id === cdUserId(); })")
+        # (people already on the task are listed too, ticked, whatever their role — the rule is about whom you can add)
+        ok = await E("[...document.querySelectorAll('.asg-pop .ap-item')].every(el => { const u = userById(el.dataset.ap); return (task(ui.taskId).assignees || []).includes(u.id) || ['production', 'social', 'freelancer'].includes(u.role) || u.id === cdUserId(); })")
+        shown = await E("[...document.querySelectorAll('.asg-pop .ap-item')].filter(el => !(task(ui.taskId).assignees || []).includes(el.dataset.ap)).map(el => (userById(el.dataset.ap) || {}).role)")
         cd_listed = await E("!cdUserId() || [...document.querySelectorAll('.asg-pop .ap-item')].some(el => el.dataset.ap === cdUserId()) || (task(ui.taskId).assignees || []).includes(cdUserId())")
         check(ok and cd_listed, f'only Production, Social, Freelancers and the Creative Director (whatever their role) {sorted(set(shown))}')
-        refused = await E("(() => { const t = topTasks()[0]; const am = db.users.find(u => u.role === 'am'); const n = (t.assignees || []).length; setAssignee(t, am.id, true); return (t.assignees || []).includes(am.id); })()")
+        refused = await E("(() => { const t = topTasks().find(t => !t.done && !idLocked(t)); const am = db.users.find(u => u.role === 'am'); const n = (t.assignees || []).length; setAssignee(t, am.id, true); return (t.assignees || []).includes(am.id); })()")
         check(refused is False, 'an Account Manager cannot be assigned')
         await pg.keyboard.press('Escape'); await E("closeDetail()")
         # the Creative Director: the Admin's views and rights; notified only about their own tasks and reviews;
@@ -205,10 +208,10 @@ async def main():
             check(await cdp.locator('.hm-lead').count() == 1, 'the CD’s Home is the Admin’s')
             await ctxc.close()
             r = await E("""(() => {
-              const cd = cdUserId(); const t0 = topTasks().find(t => t.projectId && t.createdBy !== cd && !(t.assignees || []).includes(cd));
+              const cd = cdUserId(); const t0 = topTasks().find(t => t.projectId && !t.done && !idLocked(t) && t.createdBy !== cd && !(t.assignees || []).includes(cd));
               const fresh = createTask({ projectId: t0.projectId, sectionId: proj(t0.projectId).sections[0].id, title: 'CD rule test' }); fresh.needsCD = true;
               setAssignee(fresh, cd, true); const blocked = !(fresh.assignees || []).includes(cd);
-              const old = { ...t0 }; delete old.cdRule; old.id = 'old-x'; old.assignees = []; old.needsCD = true; db.tasks.push(old);
+              const old = { ...t0 }; delete old.cdRule; delete old.lockedAt; old.id = 'old-x'; old.assignees = []; old.reviews = []; old.needsCD = true; db.tasks.push(old);
               setAssignee(old, cd, true); const oldOk = (old.assignees || []).includes(cd);
               const n = (k) => db.notifications.filter(x => x.to === cd && x.taskId === t0.id && x.kind === k).length;
               const a = n('status'), b = n('review');

@@ -87,6 +87,8 @@ async def main():
         # fields on a new post: channel, go-live, suggested occasion
         await pg.locator('.cal-bar [data-cal="new"]').click(); await pg.wait_for_timeout(700)
         tid = await E("ui.taskId")
+        # (empty fields now wait behind "Show N empty fields" — a new post's are all empty)
+        await pg.locator('#detail [data-action="fields-empty"]').click(); await pg.wait_for_timeout(300)
         await pg.locator('[data-action="field-pick"][data-k="channels"]').click(); await pg.wait_for_timeout(200)
         await pg.locator('.menu .mi', has_text='LinkedIn').click(); await pg.wait_for_timeout(300)
         check(await E(f"task('{tid}').channels") == ['li'], 'pick a channel')

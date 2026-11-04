@@ -35,7 +35,8 @@ async def main():
                     check(await pg.locator('.oh .oh-card h2', has_text='Finance').count() == 0, 'Office Admin without + Finance: no Finance box on Home')
                 # give themselves Finance Admin from their own row on the Team page
                 await pg.evaluate("go('team')"); await pg.wait_for_timeout(600)
-                await pg.evaluate("memberMenu(document.body, currentUserId)"); await pg.wait_for_timeout(300)
+                # (their own row's ••• button: a menu anchored to the whole page would open below the window)
+                await pg.locator('[data-action="member-menu"][data-id="%s"]' % await pg.evaluate("currentUserId")).click(); await pg.wait_for_timeout(300)
                 await pg.locator('.menu .mi', has_text='Finance Admin').first.click(); await pg.wait_for_timeout(2500)
                 nav = await seen()
                 want = ['fin-dash'] if tag == 'Super Admin' else ['fin-dash', 'fin-projects', 'fin-reimb', 'fin-expenses']
