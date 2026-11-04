@@ -15,7 +15,9 @@ const ViewAs = (() => {
       NativePop.ready.then(() => {
         if (!NativePop.on) return init2();
         const old = document.getElementById('viewas-bar'); if (old) old.remove();
-        NativePop.show(viewing() ? { kind: 'viewAsBar', on: true, name: info.as.name, role: roleOf(userById(info.as.id)) || ROLES[info.as.role] || info.as.role } : { kind: 'viewAsBar', on: false });
+        // (the team's photos with it, so the app has them before Switch is tapped)
+        const photos = viewing() && typeof db !== 'undefined' && db ? db.users.filter((u) => u.active !== false && u.avatar).map((u) => NativePop.person(u.id).photo).filter(Boolean) : [];
+        NativePop.show(viewing() ? { kind: 'viewAsBar', on: true, name: info.as.name, role: roleOf(userById(info.as.id)) || ROLES[info.as.role] || info.as.role, photos } : { kind: 'viewAsBar', on: false });
       });
       return;
     }

@@ -241,7 +241,11 @@ final class ViewAsSheet: UIViewController, UITableViewDataSource, UITableViewDel
     self.people = people; shown = people; self.viewing = viewing
     super.init(nibName: nil, bundle: nil)
     overrideUserInterfaceStyle = dark ? .dark : .light
+    // (the photos already on the phone straight away, so the list opens with them — not initials first: Haris 2026-11-04)
+    for p in people { if let ph = p.photo { FeedLoader.shared.image(ph) { [weak self] img in if let img = img, self?.pics[p.id] == nil { self?.pics[p.id] = roundPic(img, initials: nil, color: nil, size: 40) } } } }
   }
+  // (fetched ahead, while the View as… bar is up — Switch then opens with every photo there)
+  static func warm(_ photos: [String]) { for ph in photos.prefix(80) { FeedLoader.shared.image(ph) { _ in } } }
   required init?(coder: NSCoder) { fatalError() }
   override func viewDidLoad() {
     super.viewDidLoad()

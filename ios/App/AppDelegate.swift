@@ -1335,6 +1335,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       if (a["on"] as? Bool) != true { ViewAsBar.current?.go(); return reply(["ok": true]) }
       let bar = ViewAsBar.current ?? ViewAsBar(dark: dark)
       bar.look(dark: appStyle == .dark)
+      if let ph = a["photos"] as? [String] { ViewAsSheet.warm(ph) }
       bar.set(name: a["name"] as? String ?? "", role: a["role"] as? String ?? "")
       bar.bottomFor = { [weak self] in self?.viewAsBottom() ?? 0 }
       bar.onSwitch = { [weak self] in self?.pageJS("typeof ViewAs !== 'undefined' && ViewAs.pick()") }
