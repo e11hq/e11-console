@@ -301,7 +301,7 @@ extension Main {
       //  client's page) or deeper: ‹ and 🔍 alone, in the photo's place — your photo is on the page it came from)
       let lone = h.searching ? CornerButton.Spot(kind: "close", frame: meF) : CornerButton.Spot(kind: "search", frame: corner.place("search", "", circle: meF))
       let backSpot = CornerButton.Spot(kind: "back", frame: h.convert(h.backFrame, to: view).offsetBy(dx: dx, dy: 0))
-      if h.assets == "me.plans" || h.assets == "me.plan" { return (h.searching ? CornerButton.Spot() : backSpot, CornerButton.Spot(), lone) }
+      if h.assets == "plansPage" || h.assets == "me.plan" { return (h.searching ? CornerButton.Spot() : backSpot, CornerButton.Spot(), lone) }
       if h.isMeSub { return (CornerButton.Spot(kind: "back", frame: h.convert(h.backFrame, to: view).offsetBy(dx: dx, dy: 0)), CornerButton.Spot(), h.menuItems.isEmpty ? CornerButton.Spot() : CornerButton.Spot(kind: "more", frame: meF)) }
       // (a client's page: the task page's — ‹ on the left, ••• where your photo is, no 🔍)
       if h.pageBar { return (CornerButton.Spot(kind: "back", frame: h.convert(h.backFrame, to: view).offsetBy(dx: dx, dy: 0)), CornerButton.Spot(), CornerButton.Spot(kind: "more", frame: meF)) }

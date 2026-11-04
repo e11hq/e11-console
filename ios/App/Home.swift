@@ -253,7 +253,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     topLine.backgroundColor = L.light ? UIColor.black.withAlphaComponent(0.12) : UIColor.white.withAlphaComponent(0.12)
     [searchCircle, closeCircle, searchBar].forEach { $0.setLook(light: L.light, tint: L.roundIc) }
     lens.tintColor = L.sub; field.textColor = L.h1; field.tintColor = L.tag
-    field.attributedPlaceholder = NSAttributedString(string: assets == "plansTab" || assets?.hasPrefix("me.plan") == true ? "Search plans — a client or a post" : assets != nil ? "Search every client’s files" : "Search tasks, clients, people", attributes: [.foregroundColor: L.sub])
+    field.attributedPlaceholder = NSAttributedString(string: assets == "plansTab" || assets == "plansPage" || assets == "me.plan" ? "Search plans — a client or a post" : assets != nil ? "Search every client’s files" : "Search tasks, clients, people", attributes: [.foregroundColor: L.sub])
     field.keyboardAppearance = L.light ? .light : .dark
     hint.textColor = L.empty
     meId = model["me"] as? String ?? ""; watchMe(); meChanged()

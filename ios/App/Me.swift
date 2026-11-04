@@ -1127,7 +1127,8 @@ final class MeCtl {
   private func screen(_ kind: String, _ id: String?) -> Screen {
     let h = HomeView(frame: main.view.bounds)
     // (Content plans as a Social's own tab: a main page — the big title, as Home and the Inbox: Haris 2026-11-04)
-    h.assets = kind == "me" ? "me" : (stack.isEmpty && kind == "plans" && tab == "plans") ? "plansTab" : "me." + kind
+    // (opened from Me: the same big title, with ‹ — Haris 2026-11-04: both Content plans pages, no name in the middle)
+    h.assets = kind == "me" ? "me" : (stack.isEmpty && kind == "plans" && tab == "plans") ? "plansTab" : kind == "plans" ? "plansPage" : "me." + kind
     h.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     h.isHidden = true
     h.assetsBack = !(stack.isEmpty && kind == rootKind)
@@ -1281,7 +1282,7 @@ final class MeCtl {
     var mm: [String: Any] = ["show": true, "me": me ?? "", "look": ["light": light]]
     if let l = main.homeLook as? [String: Any], (l["light"] as? Bool) == light { mm["look"] = l }
     if s.kind == "me" { mm["title"] = "Me"; mm["date"] = "E11 Console App" }
-    if s.h.assets == "plansTab" { mm["title"] = "Content plans"; mm["date"] = (model["plans"] as? [String: Any])?["label"] as? String ?? "" }   // (the line under the big title, as the other tabs have — Haris 2026-11-03)
+    if s.h.assets == "plansTab" || s.h.assets == "plansPage" { mm["title"] = "Content plans"; mm["date"] = (model["plans"] as? [String: Any])?["label"] as? String ?? "" }   // (the line under the big title, as the other tabs have — Haris 2026-11-03)
     s.h.bottomRoom = (main.tabBar.isHidden ? 40 : main.view.bounds.height - main.tabBar.frame.minY) + 96
     s.h.tabTop = main.tabBar.isHidden ? nil : main.tabPillTop
     s.h.update(mm)
@@ -1626,7 +1627,7 @@ final class MeCtl {
   }
   private func plansBlocks(_ h: HomeView, _ out: inout [UIView]) {
     let m = (model["plans"] as? [String: Any]) ?? [:]
-    if h.assets != "plansTab" { h.drawAssetsBar(name: "Content plans", sub: m["label"] as? String ?? "", logo: nil, rgb: nil, ini: nil, showLogo: false) }
+    if h.assets != "plansTab" && h.assets != "plansPage" { h.drawAssetsBar(name: "Content plans", sub: m["label"] as? String ?? "", logo: nil, rgb: nil, ini: nil, showLogo: false) }
     guard let rows = m["rows"] as? [[String: Any]] else { let n = part(h, "wait") { AssetsNote() }; n.label.text = "Loading…"; out.append(n); return }
     let month = m["month"] as? String ?? ""
     let mb = part(h, "month") { PlanMonthChips() }
@@ -1807,7 +1808,7 @@ final class MeCtl {
     switch ev["ev"] as? String ?? "" {
     case "back": if h === stack.last?.h { pop() }
     case "toast": send(["ev": "toast"])
-    case "find" where h.assets == "me.plans" || h.assets == "me.plan" || h.assets == "plansTab": planFind(h, ev["q"] as? String ?? "")
+    case "find" where h.assets == "plansPage" || h.assets == "me.plan" || h.assets == "plansTab": planFind(h, ev["q"] as? String ?? "")
     default: break
     }
   }
