@@ -1236,6 +1236,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       var mm = h.model; mm["look"] = look; h.update(mm)
     }
     meCtl.relight(light); assetsCtl.relight(light)
+    ViewAsBar.current?.look(dark: !light)
   }
   var homeHadModel = false
   lazy var homeView: HomeView = {
@@ -1325,6 +1326,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     case "viewAsBar":
       if (a["on"] as? Bool) != true { ViewAsBar.current?.go(); return reply(["ok": true]) }
       let bar = ViewAsBar.current ?? ViewAsBar(dark: dark)
+      bar.look(dark: appStyle == .dark)
       bar.set(name: a["name"] as? String ?? "", role: a["role"] as? String ?? "")
       bar.bottomFor = { [weak self] in self?.viewAsBottom() ?? 0 }
       bar.onSwitch = { [weak self] in self?.pageJS("typeof ViewAs !== 'undefined' && ViewAs.pick()") }

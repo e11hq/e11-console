@@ -471,22 +471,32 @@ final class ViewAsBar: UIView {
   private var link: CADisplayLink?
   init(dark: Bool) {
     super.init(frame: .zero)
-    overrideUserInterfaceStyle = dark ? .dark : .light
-    if #available(iOS 26.0, *) { let g = UIGlassEffect(style: .regular); g.tintColor = UIColor.systemOrange.withAlphaComponent(dark ? 0.22 : 0.18); glass.effect = g }
-    else { glass.effect = UIBlurEffect(style: .systemThickMaterial); glass.contentView.backgroundColor = UIColor.systemOrange.withAlphaComponent(0.16) }
     glass.layer.cornerRadius = 26; glass.layer.cornerCurve = .continuous; glass.clipsToBounds = true
     addSubview(glass)
-    layer.shadowColor = UIColor.black.cgColor; layer.shadowOpacity = dark ? 0 : 0.1; layer.shadowRadius = 14; layer.shadowOffset = CGSize(width: 0, height: 4)
+    layer.shadowColor = UIColor.black.cgColor; layer.shadowRadius = 14; layer.shadowOffset = CGSize(width: 0, height: 4)
     icon.backgroundColor = .systemOrange; icon.layer.cornerRadius = 14
     let i = UIImageView(image: UIImage(systemName: "person.2.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 11, weight: .bold)))
     i.tintColor = .white; i.frame = CGRect(x: 0, y: 0, width: 28, height: 28); i.contentMode = .center; icon.addSubview(i)
     cap.font = .systemFont(ofSize: 10.5, weight: .bold)
-    cap.textColor = dark ? UIColor(red: 1, green: 0.70, blue: 0.25, alpha: 1) : UIColor(red: 0.69, green: 0.43, blue: 0, alpha: 1)
     name.font = .systemFont(ofSize: 15, weight: .semibold); name.textColor = .label
     sw = Pop.capsule("Switch", filled: false, small: true) { [weak self] in self?.onSwitch?() }
     me = Pop.capsule("Back to me", filled: true, small: true) { [weak self] in self?.onBackToMe?() }
     [icon, cap, name, sw, me].forEach { glass.contentView.addSubview($0) }
     sw.translatesAutoresizingMaskIntoConstraints = true; me.translatesAutoresizingMaskIntoConstraints = true
+    look(dark: dark)
+  }
+  // (the app's own light / dark, again whenever it changes — it was made in the look the app had before the person you
+  //  view as had theirs, and kept it: black text on dark, Haris 2026-11-04)
+  private var isDark: Bool?
+  func look(dark: Bool) {
+    guard dark != isDark else { return }
+    isDark = dark
+    overrideUserInterfaceStyle = dark ? .dark : .light
+    if #available(iOS 26.0, *) { let g = UIGlassEffect(style: .regular); g.tintColor = UIColor.systemOrange.withAlphaComponent(dark ? 0.22 : 0.18); glass.effect = g }
+    else { glass.effect = UIBlurEffect(style: .systemThickMaterial); glass.contentView.backgroundColor = UIColor.systemOrange.withAlphaComponent(0.16) }
+    layer.shadowOpacity = dark ? 0 : 0.1
+    cap.textColor = dark ? UIColor(red: 1, green: 0.70, blue: 0.25, alpha: 1) : UIColor(red: 0.69, green: 0.43, blue: 0, alpha: 1)
+    [sw, me].forEach { $0?.overrideUserInterfaceStyle = dark ? .dark : .light }
   }
   required init?(coder: NSCoder) { fatalError() }
   func set(name n: String, role: String) {
