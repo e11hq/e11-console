@@ -1227,6 +1227,13 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   /* ---------- Home (23+): the app's own, under the tab bar; the page says what's on it (NativeHome in phone.js) ---------- */
   var homeIfMade: HomeView?
+  // (who the page says you are: someone else than the app's own copy is for — View as…, Back to me, signed in as
+  //  another — the copy for them, at once; until it's in, each screen asks the server. The lists stayed blank: they were
+  //  worked out from the last person's copy, so they never matched who the page said — Haris 2026-11-04)
+  func pageIs(_ me: String?) {
+    guard let me = me, !me.isEmpty, let had = AppData.shared.me, had != me else { return }
+    AppData.shared.start(me: me, cookies: serverHome.cookies)
+  }
   // (light / dark changed while the app is open — View as… someone with another look, Me › Appearance: every native
   //  screen drawn again in it at once, the hidden ones too, so none waits for the page or a restart — Haris 2026-11-04)
   func relight(_ light: Bool) {
@@ -1389,7 +1396,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       if kind == "home" { self?.drawServerHome(m) } else if kind == "inbox" { self?.drawServerInbox(m) } else if kind == "clients" { self?.drawServerClients(m) } else { self?.drawServerMyTasks(m) }
       // (the app's own copy of the data — iOS app data plan: started once we know who's signed in; until it's ready,
       //  the tasks on screen are fetched ahead as before)
-      if let self = self, let me = m["me"] as? String { AppData.shared.start(me: me, cookies: self.serverHome.cookies); self.watchCopy() }
+      // (only the first time: who you are after that is the page's to say — pageIs; a screen kept from before must not
+      //  switch the copy back to the last person)
+      if let self = self, let me = m["me"] as? String { if AppData.shared.me == nil { AppData.shared.start(me: me, cookies: self.serverHome.cookies) }; self.watchCopy() }
       if kind != "inbox", kind != "clients", AppData.shared.ready == false { self?.prefetchTasks(m) }
     }
     // switched off on the server (or no Home for this person): the page's Home again, drawn at once
@@ -1486,6 +1495,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     h.tabTop = tabBar.isHidden ? nil : tabPillTop
     homeLook = a["look"]
     homePageMe = a["me"] as? String
+    pageIs(a["me"] as? String)
     if let me = homePageMe { saveQuick(["me": me, "look": homeLook ?? NSNull()]) }
     // (the server's Home when it's on — the page's model is only a sign something changed: the server asked again)
     if serverHome.on, let m = serverHome.shown, (m["me"] as? String) == (a["me"] as? String) {
@@ -1557,6 +1567,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     h.bottomRoom = (tabBar.isHidden ? 40 : view.bounds.height - tabBar.frame.minY) + 96
     h.tabTop = tabBar.isHidden ? nil : tabPillTop
     myTasksPageMe = a["me"] as? String
+    pageIs(a["me"] as? String)
     myTasksLight = (a["light"] as? Bool) ?? (appStyle == .light)
     let s = serverMyTasks
     s.query = "tab=" + ((a["tab"] as? String) == "done" ? "done" : "all") + ((a["q"] as? String).map { $0.isEmpty ? "" : "&" + $0 } ?? "")
@@ -1642,6 +1653,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     h.bottomRoom = (tabBar.isHidden ? 40 : view.bounds.height - tabBar.frame.minY) + 96
     h.tabTop = tabBar.isHidden ? nil : tabPillTop
     inboxPageMe = a["me"] as? String
+    pageIs(a["me"] as? String)
     inboxLight = (a["light"] as? Bool) ?? (appStyle == .light)
     let s = serverInbox
     if s.on, let m = s.shown { drawServerInbox(m) } else {
@@ -1895,6 +1907,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if !clientsWanted { clientsListIfMade?.clientsFresh() }   // (the tab coming back: Inactive clients closed again)
     clientsWanted = true
     clientsPageMe = a["me"] as? String
+    pageIs(a["me"] as? String)
     clientsLight = (a["light"] as? Bool) ?? (appStyle == .light)
     let page = (a["view"] as? String) == "client"
     let was = clientsOn

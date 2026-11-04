@@ -33,7 +33,7 @@ final class AppData: NSObject, URLSessionDataDelegate {
     if started && self.me == me { return }
     let switching = self.me != nil && self.me != me
     self.me = me; started = true
-    if switching { DispatchQueue.main.async { self.copyReady = false }; stopStream() }
+    if switching { if Thread.isMainThread { copyReady = false } else { DispatchQueue.main.async { self.copyReady = false } }; stopStream() }
     // (the saved copy at once — step 3: the app opens on it, before any answer from the server; switched off on the
     //  server, it's put away again)
     q.async { self.boot(me: me) }
