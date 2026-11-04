@@ -1197,7 +1197,10 @@ final class MeCtl {
     old.frame = cover.bounds; new.frame = cover.bounds.offsetBy(dx: CGFloat(-dir) * W, dy: 0)
     cover.addSubview(old); cover.addSubview(new)
     // (under the switch when it's stuck under the bar — a direct part of the page; else over the list, under the bar)
-    if let pin = segV?.superview, pin.superview === h { h.insertSubview(cover, belowSubview: pin) } else if let bar = h.subviews.last { h.insertSubview(cover, belowSubview: bar) } else { h.addSubview(cover) }
+    // (it must be over the page's list — under it, the list itself showed through beside the slide: twice, Haris 2026-11-04)
+    if let pin = segV?.superview, pin.superview === h { h.insertSubview(cover, belowSubview: pin) }
+    else if let sc = h.subviews.first(where: { $0 is UIScrollView }) { h.insertSubview(cover, aboveSubview: sc) }
+    else { h.addSubview(cover) }
     UIView.animate(withDuration: 0.34, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
       old.frame = cover.bounds.offsetBy(dx: CGFloat(dir) * W, dy: 0); new.frame = cover.bounds
     } completion: { _ in cover.removeFromSuperview() }
