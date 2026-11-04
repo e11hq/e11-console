@@ -1107,7 +1107,28 @@ const Plans = (() => {
       }
       return 'Not available';
     }
-    return { list, plan, post, act, shift: (m, n) => shiftMonth(m, n) };
+    // 🔍 (Haris 2026-11-04): the months the app reaches (the running one to 6 after the one being planned) — clients by
+    // name and posts by title, every word counting; the month on screen first, then the others in order
+    function search(q, cur) {
+      const norm = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const words = norm(q).split(/\s+/).filter(Boolean);
+      if (!words.length) return [];
+      const hit = (t) => { const n = norm(t); return words.every((w) => n.includes(w)); };
+      const months = []; for (let m = thisMonth(); m <= shiftMonth(nextMonth(), 6); m = shiftMonth(m, 1)) months.push(m);
+      if (cur && months.includes(cur)) months.sort((a, b) => (a === cur ? -1 : b === cur ? 1 : a.localeCompare(b)));
+      const out = [];
+      months.forEach((m) => {
+        const items = [];
+        clientsInScope().forEach((p) => {
+          const pl = planOf(p.id, m);
+          if (hit(p.name)) items.push({ pid: p.id, title: p.name || 'Client', sub: pl ? `${stOf(pl).t} · ${plural((pl.posts || []).length, 'post')}` : 'Not started', ini: initials(p.name || 'C'), rgb: rgb(p.color) });
+          if (pl) postsSorted(pl).forEach((x) => { if (hit(x.title) || hit(`${p.name} ${x.title}`)) items.push({ pid: p.id, post: x.id, plan: pl.id, title: x.title || 'Untitled post', sub: `${p.name} · ${dayLong(x.day)}`, ini: initials(p.name || 'C'), rgb: rgb(p.color) }); });
+        });
+        if (items.length) out.push({ month: m, label: monthLabel(m), items: items.slice(0, 40) });
+      });
+      return out;
+    }
+    return { list, plan, post, act, search, shift: (m, n) => shiftMonth(m, n) };
   })();
   return { on, owns, canSee, render, title, isMgr, socialsOf, planById, monthLabel, FORMATS, waiting, nameOf, open, socialManages, progress, native: N };
 })();

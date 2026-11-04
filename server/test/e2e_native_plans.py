@@ -40,6 +40,11 @@ async def main():
         check(isinstance(r, str) and r, f"an Admin can't approve: {r}")
         L2 = await E(f"Plans.native.list(Plans.native.shift('{L['month']}', 1))")
         check(L2['label'] != L['label'], f"another month {L2['label']}")
+        S = await E(f"Plans.native.search('test post', '{mo}')")
+        check(S and S[0]['month'] == mo and any(i.get('post') == 'pp1' for i in S[0]['items']), f"🔍 finds a post by its title, its month first {S and [(g['month'], len(g['items'])) for g in S]}")
+        S2 = await E("Plans.native.search('korea', '')")
+        check(S2 and all(any(not i.get('post') for i in g['items']) for g in S2[:1]), f"🔍 finds a client by its name {S2 and len(S2)}")
+        check(await E("Plans.native.search('', '')") == [], 'nothing typed: nothing found')
         check(not errs, f"no page errors {errs}")
         await b.close()
     finally:

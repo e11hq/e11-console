@@ -297,12 +297,20 @@ extension Main {
       // (the app's own Me: its first page has none of them — your photo is on it; a page under it ‹, and ••• only when it
       //  has something in it)
       if h.assets == "me" { return (CornerButton.Spot(), CornerButton.Spot(), CornerButton.Spot()) }
+      // (Haris 2026-11-04 — one rule: a tab's own first page: 🔍 and your photo, no ‹; opened from somewhere (Me, a
+      //  client's page) or deeper: ‹ and 🔍 alone, in the photo's place — your photo is on the page it came from)
+      let lone = h.searching ? CornerButton.Spot(kind: "close", frame: meF) : CornerButton.Spot(kind: "search", frame: corner.place("search", "", circle: meF))
+      let backSpot = CornerButton.Spot(kind: "back", frame: h.convert(h.backFrame, to: view).offsetBy(dx: dx, dy: 0))
+      if h.assets == "me.plans" || h.assets == "me.plan" {
+        if !h.assetsBack { return (CornerButton.Spot(), CornerButton.Spot(kind: c.kind, text: c.text, frame: mf), cornerSpot) }
+        return (h.searching ? CornerButton.Spot() : backSpot, CornerButton.Spot(), lone)
+      }
       if h.isMeSub { return (CornerButton.Spot(kind: "back", frame: h.convert(h.backFrame, to: view).offsetBy(dx: dx, dy: 0)), CornerButton.Spot(), h.menuItems.isEmpty ? CornerButton.Spot() : CornerButton.Spot(kind: "more", frame: meF)) }
       // (a client's page: the task page's — ‹ on the left, ••• where your photo is, no 🔍)
       if h.pageBar { return (CornerButton.Spot(kind: "back", frame: h.convert(h.backFrame, to: view).offsetBy(dx: dx, dy: 0)), CornerButton.Spot(), CornerButton.Spot(kind: "more", frame: meF)) }
       // (All Client Assets opened over another screen: ‹ too, with 🔍 and your photo)
-      let left = h.backable && !h.searching ? CornerButton.Spot(kind: "back", frame: h.convert(h.backFrame, to: view).offsetBy(dx: dx, dy: 0)) : CornerButton.Spot()
-      return (left, CornerButton.Spot(kind: c.kind, text: c.text, frame: mf), cornerSpot)
+      if h.backable { return (h.searching ? CornerButton.Spot() : backSpot, CornerButton.Spot(), lone) }
+      return (CornerButton.Spot(), CornerButton.Spot(kind: c.kind, text: c.text, frame: mf), cornerSpot)
     }
   }
   // (a tab change hides one screen and shows the next a moment apart: settled together, so it changes in place

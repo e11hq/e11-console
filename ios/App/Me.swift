@@ -1703,6 +1703,36 @@ final class MeCtl {
     }
     if let f = m["foot"] as? String, !f.isEmpty { out.append(foot(h, "pfoot", f, centered: true)) }
   }
+  // 🔍 on Content plans (Haris 2026-11-04): the months the app reaches — the one on screen first — clients and posts
+  private func planFind(_ h: HomeView, _ raw: String) {
+    let q = raw.trimmingCharacters(in: .whitespaces)
+    guard !q.isEmpty else { h.showFound([], hint: "Search the plans — a client, or a post’s title, in every month you can open."); return }
+    request(["ev": "plFind", "q": q, "month": plMonth ?? ""]) { [weak self, weak h] r in
+      guard let self = self, let h = h, h.searching else { return }
+      let groups = (r["found"] as? [[String: Any]]) ?? []
+      var views: [UIView] = []
+      for g in groups {
+        let month = g["month"] as? String ?? ""
+        let head = SetHead(); head.set(g["label"] as? String ?? ""); views.append(head)
+        let items = ((g["items"] as? [[String: Any]]) ?? []).enumerated().map { i, x -> SetItem in
+          let pid = x["pid"] as? String ?? "", post = x["post"] as? String, plan = x["plan"] as? String
+          var it = SetItem(key: "\(month).\(i)", title: x["title"] as? String ?? "", sub: x["sub"] as? String ?? "", sym: post == nil ? nil : "photo.on.rectangle", col: post == nil ? nil : .systemOrange, tap: { [weak self, weak h] in
+            guard let self = self else { return }
+            h?.closeSearch()
+            self.plMonth = month; self.send(["ev": "pl", "on": true, "month": month])
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+              self?.open("plan", "\(pid)|\(month)")
+              if let post = post, let plan = plan { DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { self?.openPost(plan, post) } }
+            }
+          })
+          if post == nil { it.person = (photo: nil, ini: x["ini"] as? String ?? "", rgb: NativeSheetVC.color(x["rgb"]) ?? .systemGray) }
+          return it
+        }
+        let grp = SetGroup(); grp.set(items, look: h.look); views.append(grp)
+      }
+      h.showFound(views, hint: views.isEmpty ? "Nothing found." : nil)
+    }
+  }
   private func openPost(_ plan: String, _ post: String) {
     request(["ev": "plPost", "plan": plan, "post": post]) { [weak self] r in
       guard let self = self else { return }
@@ -1773,6 +1803,7 @@ final class MeCtl {
     switch ev["ev"] as? String ?? "" {
     case "back": if h === stack.last?.h { pop() }
     case "toast": send(["ev": "toast"])
+    case "find" where h.assets == "me.plans" || h.assets == "me.plan": planFind(h, ev["q"] as? String ?? "")
     default: break
     }
   }

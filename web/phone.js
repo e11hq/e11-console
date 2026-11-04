@@ -3292,6 +3292,7 @@ const NativeMe = (() => {
         case 'plOpen': plOpen = ev.pid ? { pid: String(ev.pid), month: String(ev.month || '') } : null; sync(); return;
         case 'plPost': { const p = Plans.native.post(ev.plan, ev.post); answer(rid, p ? { ok: true, post: p } : { ok: false, error: 'This post is no longer here' }); return; }
         case 'plReview': case 'plApprove': case 'plBack': { const err = Plans.native.act(ev); answer(rid, err ? { ok: false, error: err } : { ok: true }); sync(); return; }
+        case 'plFind': answer(rid, { ok: true, q: String(ev.q || ''), found: Plans.native.search(String(ev.q || ''), String(ev.month || '')) }); return;
         case 'plFile': if (ev.path) previewFile({ path: String(ev.path), name: String(ev.name || 'File') }); return;
         case 'trCat': ui.trashFilter = String(ev.k || 'all'); sync(); return;
         case 'trTap': { const it = trashList().find((x) => x.id === ev.id); if (!it) return; if (it.type === 'task') trashTaskView(ev.id); else { const f = trashFiles(it)[0]; if (f) previewFile(f); else trashHold(ev.id); } return; }
