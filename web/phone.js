@@ -3008,7 +3008,7 @@ const NativeAssets = (() => {
     } catch (e) { answer(rid, { ok: false, error: e.message || 'That didn’t work — try again' }); }
   };
   window.__e11AssetsResend = () => { last = ''; shown = false; sync(); };
-  return { sync, get on() { return on; }, get shown() { return shown; } };
+  return { sync, modelFor, get on() { return on; }, get shown() { return shown; } };
 })();
 
 /* ---------- the Me tab, the iPhone app's own (shell 33 — Haris 2026-11-03, from the approved mockups) ----------
@@ -3165,6 +3165,8 @@ const NativeMe = (() => {
       test: viewAs || (isTestCopy() && AppIcon.isOwner()) ? { viewAs, viewing: ViewAs.viewing() ? (fullName(userById(currentUserId)) || 'someone') : null, sample: isTestCopy() && AppIcon.isOwner() && !ViewAs.viewing() } : null,
       version: Host.isServer && Sync.version ? `E11 Console ${Sync.version}` : '',
       sync: Host.isServer ? window.__e11SyncState || 'saved' : '',
+      // (what the app's own copy can't say, for its pages from the copy — Part B step 2)
+      env: { ownerId: typeof ownerId !== 'undefined' ? ownerId : null, host: Host.isServer ? location.host : null, shell },
       team: wantTeam ? teamModel() : null,
       profile: wantProfile ? profileModel() : null,
       trash: wantTrash ? trashModel() : null,
@@ -3523,5 +3525,5 @@ const NativeMe = (() => {
   const asking = () => on && shown;
   const ask = (a) => NativeMac.call('meAsk', a);
   function toastOut(msg, action, ms) { toastAction = action || null; call({ toast: { t: String(msg || ''), a: action ? action.label : '', ms: ms || (action ? 6000 : 3000) } }); }
-  return { sync, ask, asking, toast: toastOut, peek: () => model(), overview, claimsModel, expensesModel, reviewsModel, get on() { return on; }, get shown() { return shown; }, get light() { return on; } };
+  return { sync, ask, asking, toast: toastOut, peek: () => model(), overview, claimsModel, expensesModel, reviewsModel, teamModel, trashModel, profileModel, get on() { return on; }, get shown() { return shown; }, get light() { return on; } };
 })();

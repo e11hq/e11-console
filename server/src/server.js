@@ -678,7 +678,9 @@ export function createServer(cfg) {
     // the iPhone app's own copy of the data (iOS app data plan): on unless the kv 'app-copy' is 'off' — then the app asks
     // for each screen again, as before (no app build needed)
     // (Part B step 1: the app's own tab bar — kv 'app-tabs' = 'off' turns it back to the page's, without an app build)
-    if (p === '/api/appcopy' && req.method === 'GET') return json(res, 200, { ok: true, on: store.kv.get('app-copy') !== 'off', tabs: store.kv.get('app-tabs') !== 'off' });
+    if (p === '/api/appcopy' && req.method === 'GET') return json(res, 200, { ok: true, on: store.kv.get('app-copy') !== 'off', tabs: store.kv.get('app-tabs') !== 'off',
+      // (Part B step 2: each page group from the app's own copy — kv 'app-me-<group>' = 'off' gives it back to the page)
+      me: Object.fromEntries(['me', 'profile', 'team', 'trash', 'claims', 'expenses', 'overview', 'reviews', 'plans', 'assets'].map((g) => [g, store.kv.get('app-me-' + g) !== 'off'])) });
     // the iPhone app's native task page (shell 30+): the task as this person sees it, with what they may change
     if (p === '/api/task' && req.method === 'GET') {
       if (store.kv.get('task-server') === 'off') return json(res, 200, { ok: true, off: true, rev: store.rev() });

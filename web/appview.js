@@ -103,8 +103,10 @@ var E11AppView = (function () {
     // the CD's requests waiting (app.js activeReviews)
     const rv = cd ? (data.tasks || []).filter((t) => !t.done && !t.parentId && t.needsCD).reduce((n, t) => n + (t.reviews || []).filter((x) => x.state === 'pending' && (x.epoch || 0) === (t.reviewEpoch || 0)).length, 0) : 0;
     const social = u.role === 'social' && !finUser && !office;
-    const third = cd ? T('reviews', 'Reviews', rv) : social ? T('plans', 'Plans') : T('projects', 'Clients');
-    return { tabs: [T('today', r.dayTitle(), due), T('mytasks', 'My Tasks'), T('inbox', 'Inbox', unread), third, T('me', 'Me')], plans: social, admin: isAdm };
+    // (Plans' count from web/appme-plans.js when the app has it — step 2; else the page's)
+    const pw = social && typeof E11AppMe !== 'undefined' && typeof E11AppMe.plansWaiting === 'function' ? (() => { try { return E11AppMe.plansWaiting(R, data, me, nowMs); } catch (e) { return null; } })() : null;
+    const third = cd ? T('reviews', 'Reviews', rv) : social ? T('plans', 'Plans', pw || 0) : T('projects', 'Clients');
+    return { tabs: [T('today', r.dayTitle(), due), T('mytasks', 'My Tasks'), T('inbox', 'Inbox', unread), third, T('me', 'Me')], plans: social && pw == null, admin: isAdm };
   }
 
   // ---------- the app's own copy (iPhone): kept here, in the engine, as the website keeps its own ----------
@@ -146,6 +148,8 @@ var E11AppView = (function () {
       else if (kind === 'mytasks') m = myTasks(R(), copy.data, copy.me, now, a ? JSON.parse(a) : {});
       else if (kind === 'clients') m = clients(R(), copy.data, copy.me, now, a ? JSON.parse(a) : {});
       else if (kind === 'tabs') m = tabs(R(), copy.data, copy.me, now);
+      // (Part B step 2: Me's pages, Claims, Expenses, Overview, Reviews, Team, Trash, Plans, Client Assets — web/appme-*.js)
+      else if (kind === 'me') { const f = typeof E11AppMe !== 'undefined' && E11AppMe[a]; if (typeof f !== 'function') return ''; m = f.apply(null, [R(), copy.data, copy.me, now].concat(b ? JSON.parse(b) : [])); }
     } catch (e) { return JSON.stringify({ error: String(e && e.message || e) }); }
     return JSON.stringify({ model: m, rev: copy.rev });
   }

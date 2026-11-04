@@ -1060,7 +1060,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     for i in list.indices {
       let v = list[i]["v"] as? String ?? ""
       let p = page.first(where: { ($0["v"] as? String) == v })
-      if v == "plans" { list[i]["badge"] = p?["badge"] as? String ?? "" }
+      if v == "plans", (m["plans"] as? Bool) == true { list[i]["badge"] = p?["badge"] as? String ?? "" }
       if v == "me" {
         for k in ["photo", "photoUrl", "who", "online"] { if let x = p?[k] { list[i][k] = x } }
         if list[i]["who"] == nil, let me = AppData.shared.me { list[i]["who"] = me }

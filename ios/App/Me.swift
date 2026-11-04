@@ -1018,6 +1018,33 @@ final class MeCtl {
   static let tabRoots: Set<String> = ["plansTab", "overviewTab", "teamTab", "claimsTab", "expensesTab", "reviewsTab"]
   // (Claims: Need approval · All; Expenses: Subscriptions · Office expenses — Haris 2026-11-04)
   private var clSeg = 0, exSeg = 0, rvSeg = 0, rvFocusN = 0
+  // ---------- Part B step 2: the pages' contents from the app's own copy (web/appme-*.js), the page's only where the copy
+  // can't say (the device's own state: notifications, Face ID, theme, the sync line…) — each group on its own server
+  // switch (kv app-me-<group>); until the copy is this person's, the page's as before ----------
+  private var pageModel: [String: Any] = [:]
+  private var copyWatch: UUID?
+  private var trQv = "", trCatv = "all"
+  private func own(_ p: [String: Any]) -> [String: Any] {
+    guard AppData.shared.ready, let me = me, AppData.shared.me == me else { return p }
+    var m = p
+    let has = { (k: String) in p[k] != nil && !(p[k] is NSNull) }
+    let kinds = Set(stack.map { $0.kind })
+    let env: Any = p["env"] ?? (["shell": SHELL_VERSION] as [String: Any])
+    if let x = AppData.shared.meModel("me", "me", [env]) { for k in ["card", "work"] { if let v = x[k] { m[k] = v } } }
+    if has("profile") || kinds.contains("profile"), let x = AppData.shared.meModel("profile", "profile", [env]) { var v = x; if let pv = p["profile"] as? [String: Any] { for k in ["photoBusy", "owner"] { v[k] = pv[k] } }; m["profile"] = v }
+    if has("team") || kinds.contains("team"), let x = AppData.shared.meModel("team", "team", [env]) { m["team"] = x }
+    if has("trash") || kinds.contains("trash"), let x = AppData.shared.meModel("trash", "trash", [trQv, trCatv, env]) { m["trash"] = x }
+    if tab == "fin-reimb" || has("claims"), let x = AppData.shared.meModel("claims", "claims") { m["claims"] = x }
+    if tab == "fin-expenses" || has("expenses"), let x = AppData.shared.meModel("expenses", "expenses") { m["expenses"] = x }
+    if tab == "today" || has("overview"), let x = AppData.shared.meModel("overview", "overview") { m["overview"] = x }
+    if tab == "reviews" || has("reviews"), let x = AppData.shared.meModel("reviews", "reviews") { var v = x; v["focus"] = (p["reviews"] as? [String: Any])?["focus"]; m["reviews"] = v }
+    if has("plans") || kinds.contains("plans"), let x = AppData.shared.meModel("plans", "plansList", [plMonth ?? ""]) { m["plans"] = x }
+    if let s = stack.last(where: { $0.kind == "plan" }), let id = s.id {
+      let pr = id.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+      if let x = AppData.shared.meModel("plans", "plan", [pr.first ?? "", pr.count > 1 ? pr[1] : ""]) { m["plan"] = x }
+    }
+    return m
+  }
   // (a question to the page, its answer back — Content plans' post, approve, send back)
   private func request(_ ev: [String: Any], _ done: @escaping ([String: Any]) -> Void) {
     let rid = UUID().uuidString
@@ -1082,7 +1109,8 @@ final class MeCtl {
       if let was = me, was != m { stack.forEach { $0.h.removeFromSuperview() }; stack = [] }
       me = m
     }
-    if let m = a["model"] as? [String: Any] { model = m }
+    if let m = a["model"] as? [String: Any] { pageModel = m; model = own(m) }
+    if copyWatch == nil { copyWatch = AppData.shared.listen { [weak self] in guard let self = self, !self.pageModel.isEmpty, !self.stack.isEmpty else { return }; self.model = self.own(self.pageModel); if !self.hidden { self.stack.forEach { self.draw($0) } } } }
     // (the other tab now — Me ↔ Content plans: its own first page)
     let want = ["plans", "today", "team", "fin-reimb", "fin-expenses", "reviews"].contains(a["tab"] as? String ?? "") ? (a["tab"] as! String) : "me"
     if want != tab {
@@ -1943,11 +1971,11 @@ final class MeCtl {
     let find = part(h, "find") { AssetsFind() }
     find.field.placeholder = "Search the Trash"
     if !find.field.isFirstResponder, (find.field.text ?? "") != (t["q"] as? String ?? "") { find.field.text = t["q"] as? String }
-    find.onChange = { [weak self] q in self?.send(["ev": "trQ", "q": q]) }
+    find.onChange = { [weak self] q in self?.trQv = q; self?.send(["ev": "trQ", "q": q]) }
     let cats = part(h, "cats") { CatsBlock(items: MeCtl.trashCats.map { c in MailCats.Item(key: c.0, sym: c.1, name: c.2, fill: c.0 == "all" ? MailCats.neutral : c.0 == "mine" ? MailCats.purple : MailCats.blue) }) }
     cats.cats.light = h.look.light
     cats.choose((MeCtl.trashCats.firstIndex { $0.0 == (t["cat"] as? String ?? "all") }) ?? 0)
-    cats.onPick = { [weak self] i in self?.send(["ev": "trCat", "k": MeCtl.trashCats[i].0]) }
+    cats.onPick = { [weak self] i in self?.trCatv = MeCtl.trashCats[i].0; self?.send(["ev": "trCat", "k": MeCtl.trashCats[i].0]) }
     let stack = part(h, "pin") { PinStack() }
     stack.set([find, cats])
     if h.pinHead !== stack { h.pinHead = stack }

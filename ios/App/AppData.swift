@@ -21,6 +21,15 @@ final class AppData: NSObject, URLSessionDataDelegate {
   var ready: Bool { copyReady }
   // the app draws its own tab bar from the copy (Part B step 1) — on unless the server says off
   var tabsOn: Bool { (UserDefaults.standard.object(forKey: "app-tabs") as? Bool) ?? true }
+  // Part B step 2: a page group drawn from the copy (Me, profile, team, trash, claims, expenses, overview, reviews,
+  // plans, assets) — each on unless the server says off
+  func meOn(_ g: String) -> Bool { ((UserDefaults.standard.dictionary(forKey: "app-me") as? [String: Bool])?[g]) ?? true }
+  // that page group's model from the copy (nil: not ready / off / not worked out — the page's then)
+  func meModel(_ g: String, _ fn: String, _ args: [Any] = []) -> [String: Any]? {
+    guard tabsOn, meOn(g), JSONSerialization.isValidJSONObject(args), let d = try? JSONSerialization.data(withJSONObject: args) else { return nil }
+    let r = screen("me", fn, String(decoding: d, as: UTF8.self))
+    return r.ready ? r.model : nil
+  }
   private var listeners: [UUID: () -> Void] = [:]
 
   private var dir: URL {
@@ -44,6 +53,7 @@ final class AppData: NSObject, URLSessionDataDelegate {
       if (j?["on"] as? Bool) == false { self.started = false; self.stopStream(); DispatchQueue.main.async { self.copyReady = false } }
       // (the app's own tab bar — Part B step 1; off on the server: the page's again)
       let t = (j?["tabs"] as? Bool) != false
+      if let me = j?["me"] as? [String: Bool] { DispatchQueue.main.async { UserDefaults.standard.set(me, forKey: "app-me") } }
       DispatchQueue.main.async { if UserDefaults.standard.object(forKey: "app-tabs") as? Bool != t { UserDefaults.standard.set(t, forKey: "app-tabs") }; self.changed() }
     }
     if !watching {
@@ -55,8 +65,8 @@ final class AppData: NSObject, URLSessionDataDelegate {
   private var watching = false
   private func boot(me: String) {
     // the engine with the website's files: the saved ones at once, then the server's (a new version comes in by itself)
-    let saved = ["rules.js", "appview.js"].map { (try? String(contentsOf: dir.appendingPathComponent($0), encoding: .utf8)) ?? "" }
-    if saved.allSatisfy({ !$0.isEmpty }) { makeEngine(saved[0], saved[1]) }
+    let saved = AppData.files.map { (try? String(contentsOf: dir.appendingPathComponent($0), encoding: .utf8)) ?? "" }
+    if !saved[0].isEmpty && !saved[1].isEmpty { makeEngine(saved) }
     // the saved copy (if it's this person's)
     // Kept between launches (Haris, 2026-11-02: "only update what changed, without re-downloading all"): with a saved
     // copy, the app asks only for what changed since it (the stream's "since"); the server sends a fresh download only
@@ -76,11 +86,14 @@ final class AppData: NSObject, URLSessionDataDelegate {
       if fromSaved && ((self.call("E11AppView.rev", []) as? NSNumber)?.intValue ?? 0) > 0 { self.openStream() } else { self.download() }
     }
   }
-  private func makeEngine(_ rules: String, _ view: String) {
+  // the website's files the app runs: the rules, the app's screens, and (Part B step 2) Me's pages, Claims, Expenses,
+  // Overview, Reviews, Team, Trash, Content plans and Client Assets — the first two needed, the rest when there
+  static let files = ["rules.js", "appview.js", "appme-money.js", "appme-people.js", "appme-plans.js"]
+  private func makeEngine(_ scripts: [String]) {
     let keep = ctx.flatMap { _ in call("E11AppView.save", []) as? String } ?? ""
     let c = JSContext()!
     c.exceptionHandler = { _, e in NSLog("app copy: %@", e?.toString() ?? "") }
-    c.evaluateScript(rules); c.evaluateScript(view)
+    for sc in scripts where !sc.isEmpty { c.evaluateScript(sc) }
     guard c.objectForKeyedSubscript("E11AppView")?.isUndefined == false, c.objectForKeyedSubscript("E11Rules")?.isUndefined == false else { return }
     ctx = c
     if !keep.isEmpty { _ = call("E11AppView.load", [keep]) }
@@ -89,18 +102,18 @@ final class AppData: NSObject, URLSessionDataDelegate {
   private func fetchScripts(_ then: @escaping () -> Void) {
     var got: [String: String] = [:]
     let group = DispatchGroup()
-    for f in ["rules.js", "appview.js"] {
+    for f in AppData.files {
       group.enter()
       raw("/\(f)?v=\(Int(Date().timeIntervalSince1970 / 3600))") { s in if let s = s, s.contains("E11") { got[f] = s }; group.leave() }
     }
     group.notify(queue: q) { [weak self] in
       guard let self = self else { return }
-      if let r = got["rules.js"], let v = got["appview.js"] {
-        let old = ["rules.js", "appview.js"].map { (try? String(contentsOf: self.dir.appendingPathComponent($0), encoding: .utf8)) ?? "" }
-        if old != [r, v] || self.ctx == nil {
-          try? r.write(to: self.dir.appendingPathComponent("rules.js"), atomically: true, encoding: .utf8)
-          try? v.write(to: self.dir.appendingPathComponent("appview.js"), atomically: true, encoding: .utf8)
-          self.makeEngine(r, v)
+      if got["rules.js"] != nil, got["appview.js"] != nil {
+        let now = AppData.files.map { got[$0] ?? "" }
+        let old = AppData.files.map { (try? String(contentsOf: self.dir.appendingPathComponent($0), encoding: .utf8)) ?? "" }
+        if old != now || self.ctx == nil {
+          for (f, t) in zip(AppData.files, now) where !t.isEmpty { try? t.write(to: self.dir.appendingPathComponent(f), atomically: true, encoding: .utf8) }
+          self.makeEngine(now)
         }
       }
       then()
