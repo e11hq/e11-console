@@ -1560,7 +1560,7 @@ final class MeCtl {
     let people = ((m["people"] as? [[String: Any]]) ?? []).map { ($0["id"] as? String ?? "", $0["name"] as? String ?? "") }
     let months = ((m["months"] as? [[String: Any]]) ?? []).map { ($0["m"] as? String ?? "", $0["t"] as? String ?? "") }
     let vc = MoneyFormVC(kind: .claim, people: people, months: months, dark: !light, cookies: main.serverHome.cookies)
-    vc.onPerson = { [weak self] name, done in self?.request(["ev": "clPerson", "name": name]) { r in done((r["ok"] as? Bool) == true ? (r["id"] as? String, r["name"] as? String) : (nil, nil)) } }
+    vc.onPerson = { [weak self] name, done in self?.request(["ev": "clPerson", "name": name]) { r in if (r["ok"] as? Bool) == true { done(r["id"] as? String, r["name"] as? String) } else { done(nil, nil) } } }
     vc.onSave = { [weak self, weak h] f, done in
       self?.request(["ev": "clAdd", "who": f["who"] ?? "", "amount": f["amount"] ?? "", "month": f["month"] ?? "", "pdf": f["file"] ?? NSNull()]) { r in
         if (r["ok"] as? Bool) == true { done(nil); h?.toast(["t": "Added — it waits for HR approval"]) } else { done(r["error"] as? String ?? "That didn’t work — try again") } }
