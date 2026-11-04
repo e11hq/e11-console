@@ -107,7 +107,7 @@ extension Main {
     let W = view.bounds.width
     let last = taskPages.isEmpty
     // (the screen under it laid out as it will be first — the buttons aimed at a place it then changed, and jumped)
-    if last { tabBar.isHidden = tabsHidden; taskPan?.isEnabled = clientPageIfMade?.isHidden == false; view.setNeedsLayout(); view.layoutIfNeeded() }
+    if last { tabBar.isHidden = tabsHidden; edgePanOn(); view.setNeedsLayout(); view.layoutIfNeeded() }   // (the swipe back for what's under it — a review request, a Me page, Client Assets: it was off until the app came back from the background, Haris 2026-11-04)
     back.forEach { $0.layoutIfNeeded() }
     updateCornerNow()
     let finish = {

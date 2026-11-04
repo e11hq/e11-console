@@ -3078,10 +3078,14 @@ final class ReviewHero: UIView, HomeBlock, UIScrollViewDelegate {
         _ = i; pager.addSubview(v); return v
       }
       chips = fl.enumerated().map { (i, f) -> UIImageView in
-        let v = UIImageView(); v.contentMode = .scaleAspectFill; v.clipsToBounds = true; v.layer.cornerRadius = 10; v.layer.cornerCurve = .continuous; v.backgroundColor = .tertiarySystemFill; v.isUserInteractionEnabled = true; v.tag = i
-        if let p = f["pic"] as? String { FeedLoader.shared.image(p) { [weak v] img in v?.image = img } }
+        // (the picture in a box of its own that clips it — the ✓ sits outside that box: a picture went out of its
+        //  square, Haris 2026-11-04)
+        let v = UIImageView(); v.isUserInteractionEnabled = true; v.tag = i; v.clipsToBounds = false
+        let pic = UIImageView(); pic.contentMode = .scaleAspectFill; pic.clipsToBounds = true; pic.layer.cornerRadius = 10; pic.layer.cornerCurve = .continuous; pic.backgroundColor = .tertiarySystemFill; pic.tag = 8
+        pic.layer.borderColor = UIColor.systemBlue.cgColor; v.addSubview(pic)
+        if let p = f["pic"] as? String { FeedLoader.shared.image(p) { [weak pic] img in pic?.image = img } }
         v.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tappedChip(_:))))
-        if (f["mark"] as? String) == "ok" { let ck = UIImageView(image: UIImage(systemName: "checkmark.circle.fill")); ck.tintColor = .systemGreen; ck.backgroundColor = .systemBackground; ck.layer.cornerRadius = 9; ck.tag = 9; ck.frame = CGRect(x: 0, y: 0, width: 18, height: 18); v.addSubview(ck); v.clipsToBounds = false }
+        if (f["mark"] as? String) == "ok" { let ck = UIImageView(image: UIImage(systemName: "checkmark.circle.fill")); ck.tintColor = .systemGreen; ck.backgroundColor = .systemBackground; ck.layer.cornerRadius = 9; ck.clipsToBounds = true; ck.tag = 9; ck.frame = CGRect(x: 0, y: 0, width: 18, height: 18); v.addSubview(ck) }
         strip.addSubview(v); return v
       }
       page = min(page, max(0, fl.count - 1))
@@ -3116,13 +3120,14 @@ final class ReviewHero: UIView, HomeBlock, UIScrollViewDelegate {
     let x0 = max(16, (W - total) / 2)
     for (i, v) in chips.enumerated() {
       v.frame = CGRect(x: x0 + CGFloat(i) * (cw + gap), y: 3, width: cw, height: cw)
+      v.viewWithTag(8)?.frame = v.bounds
       v.viewWithTag(9)?.frame = CGRect(x: cw - 12, y: -6, width: 18, height: 18)
-      v.layer.borderWidth = i == page ? 2.5 : 0; v.layer.borderColor = UIColor.systemBlue.cgColor; v.alpha = i == page ? 1 : 0.6
+      v.viewWithTag(8)?.layer.borderWidth = i == page ? 2.5 : 0; v.alpha = i == page ? 1 : 0.6
     }
     strip.contentSize = CGSize(width: x0 * 2 + total, height: 56)
   }
   func scrollViewDidEndDecelerating(_ s: UIScrollView) { let w = max(1, s.bounds.width); let p = Int(round(s.contentOffset.x / w)); if p != page { page = p; UISelectionFeedbackGenerator().selectionChanged(); paintChips() } }
-  private func paintChips() { for (i, v) in chips.enumerated() { UIView.animate(withDuration: 0.2) { v.alpha = i == self.page ? 1 : 0.6 }; v.layer.borderWidth = i == page ? 2.5 : 0 } }
+  private func paintChips() { for (i, v) in chips.enumerated() { UIView.animate(withDuration: 0.2) { v.alpha = i == self.page ? 1 : 0.6 }; v.viewWithTag(8)?.layer.borderWidth = i == page ? 2.5 : 0 } }
   @objc private func tappedChip(_ g: UITapGestureRecognizer) { guard let i = g.view?.tag, i < pages.count else { return }; page = i; UISelectionFeedbackGenerator().selectionChanged(); UIView.animate(withDuration: 0.3) { self.pager.contentOffset.x = CGFloat(i) * self.pager.bounds.width }; paintChips() }
   @objc private func tappedPage(_ g: UITapGestureRecognizer) { guard let v = g.view, let i = pages.firstIndex(of: v), i < files.count, let id = files[i]["id"] as? String else { return }; onFile?(id) }
 }
