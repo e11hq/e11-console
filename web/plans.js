@@ -256,7 +256,9 @@ const Plans = (() => {
       if ((pl.posts || []).some((x) => progress(x).fin && !progress(x).t.done)) out.push(`<button class="btn ${(pl.exports || []).length ? '' : 'primary '}sm" data-pl="export">${icon('download')}<span class="l-long">Export for client</span><span class="l-short">Export</span></button>`);
       if (allFinished(pl) && (pl.exports || []).length) out.push(`<button class="btn primary sm" data-pl="client-all">${icon('check')}<span class="l-long">Client approved</span><span class="l-short">Approved</span></button>`);
     }
-    if (pl.status === 'review' && appr) out.push(`<button class="btn sm" data-pl="send-back">${icon('edit')}<span class="l-long">Send back for changes</span><span class="l-short">Send back</span></button>`, `<button class="btn primary sm" data-pl="approve">${icon('check')}<span class="l-long">Approve skeleton</span><span class="l-short">Approve</span></button>`);
+    // (posts with changes asked: Approve faded — a tap still says why; Haris 2026-11-04)
+    const chgAsked = (pl.posts || []).some((x) => x.check && x.check.state === 'changes');
+    if (pl.status === 'review' && appr) out.push(`<button class="btn sm" data-pl="send-back">${icon('edit')}<span class="l-long">Send back for changes</span><span class="l-short">Send back</span></button>`, `<button class="btn primary sm"${chgAsked ? ' style="opacity:.45" aria-disabled="true"' : ''} data-pl="approve">${icon('check')}<span class="l-long">Approve skeleton</span><span class="l-short">Approve</span></button>`);
     if (editor || appr) out.push(`<button class="icon-btn" data-pl="plan-menu" title="Skeleton options">${icon('more')}</button>`);
     return out.length ? out.join('') : '<span class="pl-ro">View only</span>';
   }

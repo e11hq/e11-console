@@ -1666,10 +1666,12 @@ final class MeCtl {
       let flagged = ap["flagged"] as? Int ?? 0
       let acts = part(h, "acts") { PlanActs() }
       acts.set(left: "Send back", right: "Approve skeleton")
+      acts.fadeRight(flagged > 0)   // (changes asked on some posts: faded — a tap says why; Haris 2026-11-04)
       acts.onLeft = { [weak self] in self?.askNote(title: "Send back for changes", hint: flagged > 0 ? "A note for the whole skeleton (optional) — the posts you marked go with it." : "What should change?", optional: flagged > 0) { note, done in
         self?.request(["ev": "plBack", "plan": planId, "note": note]) { r in done((r["ok"] as? Bool) == true ? nil : r["error"] as? String ?? "That didn’t work — try again") } } }
-      acts.onRight = { [weak self] in
+      acts.onRight = { [weak self, weak h] in
         guard let self = self else { return }
+        if flagged > 0 { UINotificationFeedbackGenerator().notificationOccurred(.warning); h?.toast(["t": "\(flagged) post\(flagged == 1 ? " is" : "s are") marked Ask for changes — send it back instead"]); return }
         let a = UIAlertController(title: "Approve this content skeleton?", message: "After this, tasks can be made from it on the computer.", preferredStyle: .alert)
         a.overrideUserInterfaceStyle = self.light ? .light : .dark
         a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
@@ -2109,6 +2111,7 @@ final class PlanActs: UIView, HomeBlock {
     l = Pop.capsule(left, filled: false) { [weak self] in self?.onLeft?() }; r = Pop.capsule(right, filled: true) { [weak self] in self?.onRight?() }
     [l!, r!].forEach { b in NSLayoutConstraint.deactivate(b.constraints); b.translatesAutoresizingMaskIntoConstraints = true; addSubview(b) }
   }
+  func fadeRight(_ on: Bool) { r?.alpha = on ? 0.45 : 1; r?.accessibilityHint = on ? "Some posts have changes asked" : nil }
   func blockHeight(_ W: CGFloat) -> CGFloat { 76 }
   override func layoutSubviews() {
     super.layoutSubviews()
