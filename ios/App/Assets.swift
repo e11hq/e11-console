@@ -470,7 +470,9 @@ final class AssetsCtl {
     fromPage = true; rootTab = (a["root"] as? Bool) == true
     // (from Me › Client Assets: it slides in over Me, as Me's other pages — Haris 2026-11-04)
     let slide = main.selectedTabKey == "me"
-    if let c = client { open(client: c, folder: folder, animated: slide) } else { openAll(animated: slide) }
+    // (opened from somewhere — an Inbox update, a link, a client's page: just that screen, so ‹ goes back where you came
+    //  from, not up through the client's folders — Haris 2026-11-04)
+    if let c = client { open(client: c, folder: folder, animated: slide, direct: !rootTab) } else { openAll(animated: slide) }
   }
   private func take(_ m: [String: Any]) {
     let kind = m["kind"] as? String
@@ -495,13 +497,18 @@ final class AssetsCtl {
     push(screen("all", nil, nil), animated: animated)
     ask(["ev": "want"]) { [weak self] r in if (r["ok"] as? Bool) != true { self?.top?.assetsToast(r["error"] as? String ?? "Not available") } }
   }
-  private func open(client: String, folder: String?, animated: Bool) {
+  private func open(client: String, folder: String?, animated: Bool, direct: Bool = false) {
     // (the client's screen, then the folders down to the one asked for — only the last slides in)
     var chain: [String] = []
     if let f = folder, let m = models[client] {
       var cur: String? = f
       while let id = cur, chain.count < 8 { chain.insert(id, at: 0); cur = folderInfo(m, id)?["parent"] as? String }
     } else if let f = folder { chain = [f] }
+    if direct, let f = folder {
+      push(screen("folder", client, f), animated: animated)
+      ask(["ev": "want", "client": client]) { [weak self] r in if (r["ok"] as? Bool) != true { self?.top?.assetsToast(r["error"] as? String ?? "Not available") } }
+      return
+    }
     let first = screen("client", client, nil)
     push(first, animated: animated && chain.isEmpty)
     for (i, f) in chain.enumerated() { push(screen("folder", client, f), animated: animated && i == chain.count - 1) }
