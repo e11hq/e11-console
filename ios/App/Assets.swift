@@ -148,7 +148,7 @@ final class ClientCards: UIView, HomeBlock {
         k.0.removeFromSuperview()
       }
       let t = AssetTile(); t.backgroundColor = L.card; t.layer.cornerRadius = 24; t.layer.cornerCurve = .continuous
-      let logo = UIImageView(); logo.layer.cornerRadius = 16; logo.layer.cornerCurve = .continuous; logo.clipsToBounds = true; logo.contentMode = .scaleAspectFit
+      let logo = UIImageView(); logo.layer.cornerRadius = 16; logo.layer.cornerCurve = .continuous; logo.clipsToBounds = true; logo.contentMode = .scaleAspectFill   // (the logo filling its whole tile, edge to edge — Haris 2026-11-04)
       logo.backgroundColor = NativeSheetVC.color(c["rgb"]) ?? .systemBlue; logo.tag = 1
       let ini = UILabel(); ini.text = c["ini"] as? String; ini.font = .systemFont(ofSize: 34, weight: .heavy); ini.textColor = .white; ini.textAlignment = .center; ini.tag = 2
       logo.addSubview(ini)
