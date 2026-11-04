@@ -694,6 +694,7 @@ const Fin = (() => {
           : `<label class="dlg-label">Name</label><input class="field" name="name" placeholder="${kind === 'sub' ? 'e.g. Adobe Creative Cloud' : 'e.g. Studio lights'}">`}
         <label class="dlg-label">Amount (AED)</label><input class="field" name="amount" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00">
         ${kind === 'sub' ? `<label class="dlg-label">Billing day each month</label><select class="field" name="day">${Array.from({ length: 31 }, (_, i) => `<option value="${i + 1}" ${i + 1 === new Date().getDate() ? 'selected' : ''}>${ordinal(i + 1)}</option>`).join('')}</select><div class="dlg-hint">Months shorter than this use their last day.</div>`
+          : kind === 'reimb' ? `<label class="dlg-label">Month</label><div class="seg fin-hand-month">${[addMonths(thisMonth(), -1), thisMonth()].map((m, i) => `<label class="seg-opt"><input type="radio" name="month" value="${m}" ${i ? 'checked' : ''}><span>${esc(monthName(m, true))}</span></label>`).join('')}</div><div class="dlg-hint">It joins that month’s claims as Submitted — then HR approved and Paid on, as every claim.</div>`
           : `<label class="dlg-label">Payment date</label><span class="date-chip set fin-date">${icon('cal')}<span class="date-lbl">${esc(fmtDay(todayStr()))}</span><input type="date" class="date-in" name="date" value="${todayStr()}"></span>`}
         <label class="dlg-label">Invoice</label><div class="fin-inv-field"><button type="button" class="btn" data-pick>${icon('clip')}Attach invoice</button><span class="fin-inv-name"></span></div>
         <div class="dlg-err"></div>
@@ -740,11 +741,12 @@ const Fin = (() => {
         if (kind === 'reimb' && !el.who.value) { err.textContent = 'Choose who is being reimbursed'; return; }
         if (kind !== 'reimb' && !(el.name.value || '').trim()) { err.textContent = 'Enter a name'; el.name.focus(); return; }
         if (!(amount > 0)) { err.textContent = 'Enter the amount in AED (numbers only)'; el.amount.focus(); return; }
-        if (dateIn && !dateIn.value) { err.textContent = 'Choose the payment date'; return; }
+        if (kind !== 'reimb' && dateIn && !dateIn.value) { err.textContent = 'Choose the payment date'; return; }
         const rec = { id: uid(), type: kind, amount, createdAt: nowISO(), createdBy: currentUserId };
         if (kind === 'sub') { rec.name = el.name.value.trim(); rec.day = Number(el.day.value); rec.startMonth = thisMonth(); rec.invoices = st2.invoice ? { [thisMonth()]: st2.invoice } : {}; rec.endedAt = null; }
         else {
-          rec.date = dateIn.value; rec.invoice = st2.invoice;
+          if (kind === 'reimb') { rec.month = (formEl.querySelector('input[name="month"]:checked') || {}).value || thisMonth(); rec.invoice = st2.invoice; }
+          else { rec.date = dateIn.value; rec.invoice = st2.invoice; }
           if (kind === 'expense') rec.name = el.name.value.trim();
           else { const [t, id] = el.who.value.split(':'); if (t === 'u') rec.userId = id; else { rec.personId = id; rec.personName = (recs('person').find((p) => p.id === id) || {}).name || ''; } }
         }
@@ -757,6 +759,8 @@ const Fin = (() => {
     if (!isFinAdmin()) return;
     const rec = await form(kind);
     if (!rec) return;
+    // (by hand: a claim of its own, Submitted — HR approved, then Paid on, as every claim: Haris 2026-11-04)
+    if (kind === 'reimb') { Claims.addByHand({ userId: rec.userId, personId: rec.personId, personName: rec.personName, month: rec.month, amount: rec.amount, pdf: rec.invoice }); renderContent(); toast('Added — it waits for HR approval in Expense claims'); return; }
     db.finance.push(rec); persist(0); renderContent();
     toast(kind === 'sub' ? `${rec.name} added — recorded every month on the ${ordinal(rec.day)}` : 'Saved');
   }

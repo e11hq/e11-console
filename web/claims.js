@@ -49,6 +49,21 @@ const Claims = (() => {
     if (i >= 0) db.claims[i] = c; else db.claims.push(c);
     persist(0);
   }
+  // whose claim: a team member's name, or — added by hand for someone who isn't one — the name typed (Haris 2026-11-04)
+  const ownerName = (c) => (c.userId ? fullName(userById(c.userId)) : c.personName || 'Someone');
+  /* Added by hand (Finance › Reimbursements, the iPhone's + Add claim — Haris 2026-11-04): one PDF for a person and a month
+     (this month or last), as a claim of its own — Submitted, then HR approved and Paid on like every claim; a team
+     member's shows in their My reimbursements. id clh-…, byHand: true; the PDF is its one receipt. */
+  function addByHand(o) {
+    const now = nowISO();
+    const day = `${o.month}-01`;
+    const c = { id: 'clh-' + uid(), byHand: true, userId: o.userId || null, personId: o.personId || null, personName: o.personName || '', month: o.month, state: 'submitted',
+      groups: [{ id: uid(), date: day, title: 'Added by hand', items: [{ id: uid(), desc: o.desc || 'Claim (PDF)', amount: Math.round(num(o.amount) * 100) / 100, receipt: o.pdf || null }] }],
+      submittedAt: now, createdAt: now, createdBy: currentUserId };
+    save(c);
+    if (c.userId) notify(c.userId, c, 'claim-hand', `added an expense claim for you for <b>${monthName(c.month, true)}</b> by hand`);
+    return c;
+  }
   function notify(to, c, kind, text) {
     if (!to || to === currentUserId) return;
     db.notifications.push({ id: uid(), to, from: currentUserId, taskId: null, claimId: c.id, month: c.month, kind, text, snippet: c.total ? 'AED ' + money(c.total) : '', commentId: null, at: nowISO(), read: false });
@@ -173,7 +188,9 @@ const Claims = (() => {
     const admin = finLevel() === 'admin';
     const list = all().filter((c) => c.month === m && ['submitted', 'approved', 'paid'].includes(c.state)).sort((a, b) => String(b.submittedAt || '').localeCompare(String(a.submittedAt || '')));
     const none = all().filter((c) => c.month === m && c.state === 'none');
-    const answered = new Set(all().filter((c) => c.month === m).map((c) => c.userId));
+    const answered = new Set(all().filter((c) => c.month === m && !c.byHand).map((c) => c.userId));
+    // (the ones added by hand before they were claims — already paid: shown as Paid claims)
+    const legacy = (db.finance || []).filter((r) => r.type === 'reimb' && !r.claimId && String(r.date || '').slice(0, 7) === m);
     const waiting = db.users.filter((u) => canClaim(u) && !answered.has(u.id)).sort((a, b) => fullName(a).localeCompare(fullName(b)));
     const total = list.reduce((a, c) => a + (c.total || totalOf(c)), 0);
     const months = Array.from({ length: 12 }, (_, i) => addMonth(claimMonth(), -i));
@@ -182,14 +199,19 @@ const Claims = (() => {
       <h3>Expense claims — <span class="ec-selw"><select class="ec-sel" data-cl-finmonth>${months.map((x) => `<option value="${x}" ${x === m ? 'selected' : ''}>${esc(monthName(x))}</option>`).join('')}</select>${icon('chev')}</span><span class="spacer"></span>
         ${admin && open.length ? `<button class="btn" data-cl="approve-all">${icon('check')}Mark all HR approved</button><button class="btn primary" data-cl="paid-all">${icon('coin')}Set all paid on…</button>` : ''}</h3>
       <p class="fin-note">${list.length ? `${plural(list.length, 'claim')} · <b>AED ${money(total)}</b>. ` : ''}Submitted from the app by the 27th. ${closed(m) ? 'This month is closed.' : `Open until 27 ${esc(monthName(m, true))}.`}</p>
-      ${list.map((c) => { const u = userById(c.userId); return `<div class="fa-row ec-frow" data-claim="${c.id}">
-          <span class="fa-name ec-who">${avatarHTML(c.userId, 28)}<span><b>${esc(fullName(u))}</b><small>${plural(itemsOf(c), 'item')} · ${plural(receiptsOf(c).length, 'receipt')} · submitted ${esc(fmtDay(ymd(new Date(c.submittedAt || c.updatedAt))))}</small></span>${c.state === 'submitted' ? `<i class="ec-new" data-tip="Submitted by @${esc(fullName(u))}"></i>` : ''}</span>
+      ${list.map((c) => { const nm = ownerName(c); return `<div class="fa-row ec-frow" data-claim="${c.id}">
+          <span class="fa-name ec-who">${avatarHTML(c.userId, 28)}<span><b>${esc(nm)}</b><small>${c.byHand ? 'Added by hand (PDF)' : `${plural(itemsOf(c), 'item')} · ${plural(receiptsOf(c).length, 'receipt')}`} · ${c.byHand ? 'added' : 'submitted'} ${esc(fmtDay(ymd(new Date(c.submittedAt || c.updatedAt))))}</small></span>${c.state === 'submitted' ? `<i class="ec-new" data-tip="Submitted by @${esc(nm)}"></i>` : ''}</span>
           <span class="fx-amt">AED ${money(c.total || totalOf(c))}</span>
           ${pill(c)}
           <span class="ec-acts"><button class="btn ghost xs" data-cl="open" data-id="${c.id}">Open</button><button class="icon-btn sm" data-cl="pdf" data-id="${c.id}" title="Download PDF">${icon('download')}</button>
             ${admin && c.state === 'submitted' ? `<button class="btn xs" data-cl="approve" data-id="${c.id}">HR approved</button>` : ''}
             ${admin && c.state !== 'paid' ? `<button class="btn xs" data-cl="paid" data-id="${c.id}">Paid on…</button>` : ''}</span>
-        </div>`; }).join('') || '<div class="fin-empty">No claims submitted for this month yet.</div>'}
+        </div>`; }).join('')}${legacy.map((r) => `<div class="fa-row ec-frow">
+          <span class="fa-name ec-who">${avatarHTML(r.userId, 28)}<span><b>${esc(r.userId ? fullName(userById(r.userId)) : r.personName || 'Someone')}</b><small>Added by hand (PDF)</small></span></span>
+          <span class="fx-amt">AED ${money(r.amount)}</span>
+          <span class="ec-pill" style="background:${STATE.paid[1]};color:${STATE.paid[2]}">Paid · ${esc(fmtDay(r.date))}</span>
+          <span class="ec-acts">${r.invoice ? `<button class="btn ghost xs" data-cl="inv" data-id="${r.id}">Open</button>` : ''}</span>
+        </div>`).join('')}${list.length || legacy.length ? '' : '<div class="fin-empty">No claims submitted for this month yet.</div>'}
       ${none.length ? `<div class="ec-fgroup"><span>No claims</span>${none.map((c) => `<span class="ec-chip">${avatarHTML(c.userId, 18)}${esc(fullName(userById(c.userId)))}</span>`).join('')}</div>` : ''}
       ${waiting.length && !closed(m) ? `<div class="ec-fgroup"><span>Not answered yet</span>${waiting.map((u) => `<span class="ec-chip dim">${avatarHTML(u.id, 18)}${esc(fullName(u))}</span>`).join('')}</div>` : ''}
     </div>`;
@@ -215,14 +237,14 @@ const Claims = (() => {
   async function markPaid(ids) {
     const list = ids.map(byId).filter((c) => c && ['submitted', 'approved'].includes(c.state));
     if (!list.length || finLevel() !== 'admin') return;
-    const date = await pickDate(list.length === 1 ? `Paid on — ${fullName(userById(list[0].userId))}` : `Paid on — ${list.length} claims`);
+    const date = await pickDate(list.length === 1 ? `Paid on — ${ownerName(list[0])}` : `Paid on — ${list.length} claims`);
     if (!date) return;
     list.forEach((c) => {
       if (!c.approvedAt) { c.approvedAt = nowISO(); c.approvedBy = currentUserId; }
       c.state = 'paid'; c.paidOn = date; c.paidBy = currentUserId;
       // the payment counts in Finance → Expenses as a staff reimbursement
       let r = (db.finance || []).find((x) => x.id === c.reimbId);
-      if (!r) { r = { id: uid(), type: 'reimb', userId: c.userId, claimId: c.id, createdAt: nowISO(), createdBy: currentUserId, invoice: null }; db.finance.push(r); c.reimbId = r.id; }
+      if (!r) { r = { id: uid(), type: 'reimb', userId: c.userId, claimId: c.id, createdAt: nowISO(), createdBy: currentUserId, invoice: null }; if (!c.userId) { r.personId = c.personId; r.personName = c.personName; } db.finance.push(r); c.reimbId = r.id; }
       r.amount = Math.round(totalOf(c) * 100) / 100; r.date = date;
       save(c);
       notify(c.userId, c, 'claim-paid', `marked your ${monthName(c.month, true)} expense claim <b>paid</b> on ${fmtDay(date)}`);
@@ -336,7 +358,7 @@ const Claims = (() => {
     toast('Preparing the PDF…');
     try {
       const { pages, receipts } = await sheetPages(c);
-      const name = `Expense claim — ${fullName(userById(c.userId))} — ${monthName(c.month)}.pdf`.replace(/[\\/:*?"<>|]/g, '-');
+      const name = `Expense claim — ${ownerName(c)} — ${monthName(c.month)}.pdf`.replace(/[\\/:*?"<>|]/g, '-');
       const r = await Host.call('claimPdf', { userId: c.userId, month: c.month, name, pages, receipts });
       await Host.call('revealPath', { path: r.path });
     } catch (e) { toast('Could not make the PDF: ' + e.message); }
@@ -568,5 +590,5 @@ const Claims = (() => {
     }
   });
 
-  return { owns, render, title, financeSection, afterFinanceRender, openNotif, tick, claimMonth, newClaim, st, byId, sheetPages, all, totalOf, itemsOf, markApproved, markPaid, open: openClaim };
+  return { addByHand, ownerName, owns, render, title, financeSection, afterFinanceRender, openNotif, tick, claimMonth, newClaim, st, byId, sheetPages, all, totalOf, itemsOf, markApproved, markPaid, open: openClaim };
 })();

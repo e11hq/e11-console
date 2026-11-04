@@ -157,3 +157,18 @@ test('a Finance Admin marks their own claim HR approved and paid, like anyone el
   if (!app.store.get('claims', p)) await push(PROD, p, { id: p, userId: 'u-prod', month: OPEN, state: 'submitted', groups: [], total: 0 });
   assert.equal(await push(PROD, p, { ...app.store.get('claims', p), state: 'approved' }), true);
 });
+
+test('a Finance Admin adds a claim by hand — this month or last, Submitted — then HR approves and pays it as any claim (Haris 2026-11-04)', async () => {
+  const cm = ym(now), pm = ym(new Date(now.getFullYear(), now.getMonth() - 1, 1)), old = ym(new Date(now.getFullYear(), now.getMonth() - 2, 1));
+  const mk = (id, m, extra = {}) => ({ id, byHand: true, userId: 'u-prod', month: m, state: 'submitted', groups: [{ id: 'g', date: `${m}-01`, title: 'Added by hand', items: [{ id: 'i', desc: 'Claim (PDF)', amount: 300, receipt: null }] }], total: 300, submittedAt: now.toISOString(), ...extra });
+  assert.equal(await push(FA, 'clh-a', mk('clh-a', cm)), false, 'this month');
+  assert.equal(await push(FA, 'clh-b', { ...mk('clh-b', pm), userId: null, personId: 'p-1', personName: 'Driver' }), false, 'last month, someone who isn’t a team member');
+  assert.equal(await push(FA, 'clh-c', mk('clh-c', old)), true, 'not two months back');
+  assert.equal(await push(FA, 'clh-d', mk('clh-d', cm, { state: 'paid', paidOn: `${cm}-02` })), true, 'it starts as Submitted');
+  assert.equal(await push(FV, 'clh-e', mk('clh-e', cm)), true, 'not a Finance Viewer');
+  assert.equal(await push(AM, 'clh-f', mk('clh-f', cm)), true, 'not anyone else');
+  assert.ok((await snap(PROD)).includes('clh-a'), 'the person sees it (My reimbursements)');
+  const c = cur('clh-a');
+  assert.equal(await push(FA, 'clh-a', { ...c, state: 'approved', approvedAt: now.toISOString(), approvedBy: 'u-fa' }), false, 'HR approved');
+  assert.equal(await push(FA, 'clh-a', { ...cur('clh-a'), state: 'paid', paidOn: `${cm}-04`, paidBy: 'u-fa' }), false, 'then paid');
+});

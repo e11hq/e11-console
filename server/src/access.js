@@ -550,6 +550,14 @@ export function createAccess(store, opts = {}) {
       if (monthClosed(next.month) && !(current && deepEqual(next, current))) return false;
       return CLAIM_FINANCE.every((k) => deepEqual(next[k] ?? null, current ? current[k] ?? null : null));
     }
+    // a claim added by hand by a Finance Admin (Haris 2026-11-04): new, Submitted, for this month or last, by hand
+    if (finLevel(u) === 'admin' && !ch.del && !current && next && next.byHand === true && /^clh-/.test(String(next.id || ch.id || '')) && next.state === 'submitted'
+      && /^\d{4}-\d{2}$/.test(String(next.month || '')) && CLAIM_FINANCE.every((k) => next[k] == null)) {
+      const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Dubai' }));
+      const cur = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const prev = (() => { const d = new Date(now.getFullYear(), now.getMonth() - 1, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; })();
+      return next.month === cur || next.month === prev;
+    }
     // Finance Admins mark claims HR approved / paid; nothing else changes
     if (finLevel(u) !== 'admin' || ch.del || !current || !next) return false;
     if (!['submitted', 'approved', 'paid'].includes(next.state) || ['draft', 'offline', 'none'].includes(current.state)) return false;
