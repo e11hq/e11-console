@@ -62,6 +62,7 @@ export function demoData(store, me, filesRoot) {
   const stage = filesRoot ? fs.mkdtempSync(path.join(os.tmpdir(), 'e11-demo-')) : null;
   try {
     const out = freshSample(store, me, stage, { story, media: DIR, src: DIR, photo: (id) => (hasFace(id) ? FACE(id) : null) });
+    delete out._flinks;   // (no file links in the App Review demo)
     // finance people and the freelancer get portraits too; the reviewer as well
     for (const u of out.users) if (!u.avatar && stage && hasFace(u.id)) { const rel = `attachments/_avatars/smp-${u.id}.jpg`; put(stage, rel, FACE(u.id)); u.avatar = rel; }
     const meUser = store.get('users', me);

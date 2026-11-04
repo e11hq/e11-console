@@ -2660,7 +2660,10 @@ const Sync = (() => {
     const kept = await appPrefs(me.user.id);
     data.meta = { ...(data.meta || {}), prefs: kept || loadPrefs(me.user.id) };
     db = normalize(JSON.parse(JSON.stringify(data)));
-    if (me.user && (me.user.role === 'finance_admin' || me.user.role === 'finance_viewer')) db.tasks.forEach((t) => remember('tasks', String(t.id), t));
+    // (people who get tasks trimmed to what they may see — Finance, Office Admins: the app's filled-in defaults are no
+    //  change of theirs, else every open sends them and the server refuses: "Some changes weren't allowed", Haris 2026-11-04)
+    const trimmed = (u) => !!u && ['finance_admin', 'finance_viewer', 'office_admin'].includes(u.role);
+    if (trimmed(me.user)) db.tasks.forEach((t) => remember('tasks', String(t.id), t));
     connect();
     window.addEventListener('online', () => { push(); reconnect(0); });
     return me.user;
@@ -2818,6 +2821,7 @@ const Sync = (() => {
       const prefs = db.meta.prefs;
       const next = normalize(JSON.parse(JSON.stringify({ ...data, meta: { ...(data.meta || {}), prefs } })));
       Object.keys(next).forEach((k) => { db[k] = next[k]; });
+      { const u = typeof me === 'function' ? me() : null; if (u && ['finance_admin', 'finance_viewer', 'office_admin'].includes(u.role)) db.tasks.forEach((t) => remember('tasks', String(t.id), t)); }
       if (ui.projectId && !proj(ui.projectId)) { ui.view = 'home'; ui.projectId = null; }
       if (ui.taskId && !task(ui.taskId)) ui.taskId = null;
       refresh();

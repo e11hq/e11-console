@@ -848,6 +848,8 @@ export function createServer(cfg) {
       if (fs.existsSync(att)) for (const d of fs.readdirSync(att)) if (d !== '_avatars') fs.renameSync(path.join(att, d), path.join(bin, 'attachments-' + d));
       // 3. the fresh sample
       const data = freshSample(store, owner.id, filesRoot);
+      // (the sample's file links — the old ones pointed at files now in the trash folder)
+      store.kv.set('flinks', JSON.stringify(data._flinks || {})); delete data._flinks;
       const { rev } = store.importAll(data, owner.id);
       for (const st of streams) send(st, 'resync', { rev, wiped: true });    // every open app reloads its data (its unsaved old changes dropped)
       return json(res, 200, { ok: true, rev, tasks: data.tasks.length, people: data.users.length, clients: data.projects.length });

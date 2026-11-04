@@ -114,6 +114,7 @@ export function freshSample(store, me, filesRoot, opts = {}) {
 
   // ---------- tasks from ClickUp ----------
   const tasks = [];
+  let round2 = false;   // (one waiting request is a round 2 — per-file decisions)
   const notifs = out.notifications.filter((n) => !n.taskId && /^claim/.test(String(n.kind || '')));   // (expense claim updates stay)
   const notify = (to, from, t, kind, text, extra = {}) => { to = ME(to); from = ME(from); if (!has(to) || to === from) return; notifs.push({ id: `smp-n${notifs.length}`, to, from, taskId: t.id, kind, text, snippet: '', commentId: null, at: extra.at || ago(2), read: !!extra.read, ...extra }); };
   const nameOf = (id) => (id === me ? (store.get('users', me) || {}).name || 'Haris' : (users.get(id) || {}).name || '');
@@ -213,7 +214,19 @@ export function freshSample(store, me, filesRoot, opts = {}) {
         const ph = { ...att(m, 'r', by, at), reviewId: `${id}-rv1` };
         t.attachments.push(ph); t.reviews[0].files = [ph.id];
       }
-      notify(cd, by, t, 'review', `submitted ${t.reviews[0].files.length === 1 ? '1 file' : t.reviews[0].files.length + ' files'} for your review on`, { at, read: reviewN > 1 });
+      // (per-file decisions, 2026-11-04) one request is round 2: in round 1 the CD approved all but the last file and
+      // asked for changes on it — its new version (same name) is what's waiting now; the approved ones are carried
+      if (!round2 && reviewN >= 1 && sub.length >= 2) {
+        round2 = true;
+        const last = sub[sub.length - 1], note = CD_NOTES[1];
+        const r1 = review('amend', 1, ago(30), sub, { decidedAt: ago(26), noteHtml: `<b>${esc(last.name)}</b><br>${esc(note)}<br><span class="rv-okline">✓ Approved: ${sub.slice(0, -1).map((f) => esc(f.name)).join(', ')}</span>` });
+        r1.ok = sub.slice(0, -1).map((f) => f.id); r1.need = { [last.id]: esc(note) };
+        const v2 = { ...last, id: `${last.id}-v2`, reviewId: `${id}-rv2`, addedAt: at };
+        const r2 = review('pending', 2, at, [v2]);
+        t.reviews = [r1, r2]; t.attachments.push(v2);
+        t.comments.push({ id: `${id}-am1`, text: `Amendments required: ${last.name} ${note}`, html: `<b>Amendments required</b> for <span class="mention" data-user="${by}" contenteditable="false">@${esc(nameOf(by))}</span><br>${r1.noteHtml}`, at: ago(26), attachments: [{ ...last, id: `${id}-amf`, linked: true }], parentId: null, reactions: {}, authorId: cd });
+      }
+      notify(cd, by, t, 'review', `submitted ${t.reviews[t.reviews.length - 1].files.length === 1 ? '1 file' : t.reviews[t.reviews.length - 1].files.length + ' files'} for your review on${t.reviews.length > 1 ? ' (round 2)' : ''}`, { at, read: reviewN > 1 });
       reviewN++;
     } else if (stage === 'amend') {
       t.needsCD = true;
@@ -222,10 +235,16 @@ export function freshSample(store, me, filesRoot, opts = {}) {
         const sub = files.slice(0, half).map((f) => withReview(f, `${id}-rv1`));
         const at = ago(30 + amendN * 5), dec = ago(20 + amendN * 4);
         const note = CD_NOTES[amendN % CD_NOTES.length];
-        t.reviews = [review('amend', 1, at, sub, { decidedAt: dec, noteHtml: esc(note) })];
+        const mixed = amendN === 0 && sub.length >= 2;   // (per-file: the first file approved, the rest need changes)
+        const rv = review('amend', 1, at, sub, { decidedAt: dec, noteHtml: esc(note) });
+        if (mixed) {
+          rv.ok = [sub[0].id]; rv.need = Object.fromEntries(sub.slice(1).map((f) => [f.id, esc(note)]));
+          rv.noteHtml = sub.slice(1).map((f) => `<b>${esc(f.name)}</b><br>${esc(note)}`).join('<br><br>') + `<br><span class="rv-okline">✓ Approved: ${esc(sub[0].name)}</span>`;
+        }
+        t.reviews = [rv];
         t.attachments = files.map((f) => sub.find((x) => x.id === f.id) || f);
         const cid = `${id}-am`;
-        t.comments.push({ id: cid, text: 'Amendments required: ' + note, html: `<b>Amendments required</b> for <span class="mention" data-user="${by}" contenteditable="false">@${esc(nameOf(by))}</span><br>${esc(note)}`, at: dec, attachments: [], parentId: null, reactions: {}, authorId: cd });
+        t.comments.push({ id: cid, text: 'Amendments required: ' + note, html: `<b>Amendments required</b> for <span class="mention" data-user="${by}" contenteditable="false">@${esc(nameOf(by))}</span><br>${rv.noteHtml}`, at: dec, attachments: mixed ? sub.slice(1).map((f, j) => ({ ...f, id: `${id}-amf${j}`, linked: true })) : [], parentId: null, reactions: {}, authorId: cd });
         notify(by, cd, t, 'review-amend', 'requested amendments on your submission for', { at: dec, commentId: cid, snippet: note });
         t.update = 'Amendments';
       } else {
@@ -386,6 +405,103 @@ export function freshSample(store, me, filesRoot, opts = {}) {
       { day: day(21), title: 'Customer stories', format: 'video', ch: ['ig', 'yt'], desc: 'Two short interviews with customers.' },
     ].concat(occ1 ? [{ day: occ1.day, title: occ1.name, format: 'post', ch: ['ig', 'fb'], occ: occ1.id }] : []), 30);
   }
+  // ---------- more of the app as it is now (Haris 2026-11-04: "the sample data as per the new website") ----------
+  {
+    const dub = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Dubai' }));
+    const ym = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const cm = dub.getDate() >= 28 ? ym(new Date(dub.getFullYear(), dub.getMonth() + 1, 1)) : ym(dub);
+    const thisM = ym(dub);
+    const copyPdf = (name, rel) => { if (!filesRoot) return null; try { const size = putFile(rel, new URL(name, SRC)); return { path: rel, name, size }; } catch (e) { return null; } };
+    out.claims = out.claims || [];
+    // a claim added by hand by the Office Admin (a team member's PDF), waiting for HR approval
+    const handFor = ['u-moon', 'u-joe'].find((x) => has(x) && !out.claims.some((c) => c.userId === x && c.month === cm));
+    if (handFor) {
+      const pdf = copyPdf('receipt-reimbursement.pdf', `Finance/Reimbursements/${cm}/claim-${handFor}.pdf`);
+      out.claims.push({ id: `clh-smp-${handFor}`, byHand: true, userId: handFor, personId: null, personName: '', month: cm, state: 'submitted',
+        groups: [{ id: `g-hand-${handFor}`, date: `${cm}-01`, title: 'Added by hand', items: [{ id: `i-hand-${handFor}`, desc: 'Claim (PDF)', amount: 412.75, receipt: pdf ? { id: `smp-crh-${handFor}`, ...pdf, addedAt: ago(5) } : null }] }],
+        total: 412.75, submittedAt: ago(5), createdAt: ago(5), updatedAt: ago(5), createdBy: 'u-arsal' });
+    }
+    // someone who isn't a team member (a driver), by hand, already HR approved
+    { const pdf = copyPdf('invoice-expense.pdf', `Finance/Reimbursements/${cm}/claim-driver.pdf`);
+      out.claims.push({ id: 'clh-smp-driver', byHand: true, userId: null, personId: 'smp-fin-p0', personName: 'Omar (driver)', month: cm, state: 'approved', approvedAt: ago(20), approvedBy: 'u-arsal',
+        groups: [{ id: 'g-hand-driver', date: `${cm}-01`, title: 'Added by hand', items: [{ id: 'i-hand-driver', desc: 'Claim (PDF)', amount: 260, receipt: pdf ? { id: 'smp-crh-driver', ...pdf, addedAt: ago(30) } : null }] }],
+        total: 260, submittedAt: ago(30), createdAt: ago(30), updatedAt: ago(20), createdBy: 'u-arsal' }); }
+    // office expenses this month (Overview's card and the Expenses tab aren't empty), one with its invoice
+    out.finance = out.finance || [];
+    [['Studio lights (2 softboxes)', 865, 2], ['Coffee beans & milk', 214.5, 5], ['Printer toner', 389, 9]].forEach(([name, amount, d], i) => {
+      const day = Math.max(1, Math.min(dub.getDate(), d));
+      const inv = i === 0 ? copyPdf('invoice-expense.pdf', `Finance/Expenses/${thisM}/invoice-lights.pdf`) : null;
+      out.finance.push({ id: `smp-fin-ex-now${i}`, type: 'expense', name, amount, date: `${thisM}-${String(day).padStart(2, '0')}`, invoice: inv ? { id: `smp-inv-now${i}`, ...inv, addedAt: ago(10), addedBy: 'u-arsal' } : null, createdAt: ago(10 + i), createdBy: 'u-arsal' });
+    });
+    // a subscription that was cancelled (it isn't counted from next month)
+    out.finance.push({ id: 'smp-fin-s-ended', type: 'sub', name: 'Stock footage library', amount: 199, day: 12, startMonth: ym(new Date(dub.getFullYear(), dub.getMonth() - 5, 1)), endedAt: ago(24 * 3), invoices: {}, createdAt: ago(24 * 160), createdBy: 'u-arsal' });
+
+    // content plans at every stage: KOREA 360 waiting for the Social Manager, CPT a draft (above) — and ASV sent to both
+    // the CD and the Social Manager with changes asked on two posts, Gebriel Motors approved
+    const nm = new Date(dub.getFullYear(), dub.getMonth() + 1, 1);
+    const month = ym(nm), mday = (n) => `${month}-${String(Math.min(n, new Date(nm.getFullYear(), nm.getMonth() + 1, 0).getDate())).padStart(2, '0')}`;
+    const mLabel = nm.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+    const plan = (pid, by, status, posts, extra = {}) => {
+      const pl = { id: `pl-smp-${pid}`, projectId: pid, month, status, createdBy: by, createdAt: ago(80), updatedAt: ago(4), ...extra,
+        posts: posts.map((x, i) => ({ id: `pp-pl-smp-${pid}-${i}`, day: mday(x[0]), title: x[1], desc: x[2], format: x[3], channels: x[4], occasion: null, shots: '', copyEn: x[5] || '', copyAr: '', refs: [], createdBy: by, createdAt: ago(80 - i), updatedAt: ago(80 - i), ...(x[6] ? { check: x[6] } : {}) })) };
+      out.plans = (out.plans || []).filter((p) => p.id !== pl.id); out.plans.push(pl); return pl;
+    };
+    if (has('u-aish') && has(cd) && has(mgr)) {
+      const p = out.projects.find((x) => x.id === 'p-asv'); if (p) p.socials = ['u-aish'];
+      plan('p-asv', 'u-aish', 'review', [
+        [2, 'New month, new drops', 'Carousel of the new arrivals, one per slide.', 'carousel', ['ig', 'fb'], 'New month, new drops. Swipe to see what’s in.'],
+        [6, 'Store tour reel', 'Walk-through of the flagship store, handheld.', 'reel', ['ig', 'tt'], '', { state: 'changes', note: 'Make it a 15s cut — the first 3 seconds need the logo.', by: cd, at: ago(6) }],
+        [11, 'Customer of the week', 'Photo and a short quote from a customer.', 'post', ['ig'], ''],
+        [17, 'Weekend offer', 'Story with a countdown sticker for the weekend offer.', 'story', ['ig'], '', { state: 'changes', note: 'Use the new offer artwork, not last month’s.', by: cd, at: ago(5) }],
+        [24, 'Behind the counter', 'The team getting the store ready in the morning.', 'reel', ['ig', 'tt'], '', { state: 'ok', by: cd, at: ago(5) }],
+      ], { round: 1, review: { to: 'both', by: 'u-aish', at: ago(9), round: 1 }, log: [{ act: 'sent', by: 'u-aish', at: ago(9), to: 'both', round: 1 }] });
+      [cd, mgr].forEach((to, k) => notifs.push({ id: `smp-npl-p-asv-${k}`, to, from: 'u-aish', kind: 'plan', planId: 'pl-smp-p-asv', text: `sent the content skeleton for <b>${esc((proj.get('p-asv') || {}).name || 'ASV')} · ${mLabel}</b> for your approval`, snippet: '', at: ago(9), read: k === 0 }));
+    }
+    if (has('u-new')) {
+      const p = out.projects.find((x) => x.id === 'p-gm'); if (p) p.socials = ['u-new'];
+      const ok = (h) => ({ state: 'ok', by: mgr, at: ago(h) });
+      plan('p-gm', 'u-new', 'approved', [
+        [4, 'The new SUV range', 'Hero shot of the three new models, one carousel.', 'carousel', ['ig', 'li'], 'Three new ways to go further.', ok(30)],
+        [9, 'Test drive day', 'Reel from the test drive event.', 'reel', ['ig', 'tt'], '', ok(30)],
+        [15, 'Service centre tips', 'Five quick tips from the service team.', 'carousel', ['ig', 'fb'], '', ok(30)],
+        [22, 'Owner stories', 'A short interview with a long-time owner.', 'video', ['ig', 'yt'], '', ok(30)],
+      ], { round: 1, approvedAt: ago(28), approvedBy: has(mgr) ? mgr : cd, review: { to: 'sm', by: 'u-new', at: ago(40), round: 1 }, log: [{ act: 'sent', by: 'u-new', at: ago(40), to: 'sm', round: 1 }, { act: 'approved', by: has(mgr) ? mgr : cd, at: ago(28) }] });
+    }
+
+    // the Trash: a deleted task, a deleted comment and a Client Assets file — to try Restore
+    out.trash = (out.trash || []).filter((x) => !String(x.id).startsWith('tr-smp-'));
+    const open = tasks.filter((t) => !t.done && !t.parentId && t.projectId && t.projectId !== 'p-nakheel' && !(t.reviews || []).length);
+    const gone = open[open.length - 1];
+    if (gone) {
+      out.tasks = out.tasks.filter((t) => t.id !== gone.id && t.parentId !== gone.id);
+      out.notifications = (out.notifications || []); for (let k = notifs.length - 1; k >= 0; k--) if (notifs[k].taskId === gone.id) notifs.splice(k, 1);
+      out.trash.push({ id: 'tr-smp-task', type: 'task', deletedAt: ago(26), deletedBy: (proj.get(gone.projectId) || {}).ams && proj.get(gone.projectId).ams[0] ? proj.get(gone.projectId).ams[0].id : me, key: 'tasks:' + gone.id, projectId: gone.projectId, projectName: (proj.get(gone.projectId) || {}).name || '', data: { tasks: [gone] } });
+    }
+    const withC = out.tasks.find((t) => !t.done && (t.comments || []).length >= 3 && t.id !== (gone || {}).id);
+    if (withC) {
+      const c = withC.comments.find((x) => !x.parentId && !x.auto && x.authorId !== cd);
+      if (c) { withC.comments = withC.comments.filter((x) => x.id !== c.id && x.parentId !== c.id); out.trash.push({ id: 'tr-smp-comment', type: 'comment', deletedAt: ago(5), deletedBy: c.authorId, key: 'tasks:' + withC.id, taskTitle: withC.title, data: { taskId: withC.id, comments: [c] } }); }
+    }
+    const kia = (out.clients || []).find((c) => c.id === 'p-kia' || (c.name || '') === 'KIA');
+    const fonts = kia && kia.folders.find((f) => f.name === 'Fonts');
+    if (fonts && filesRoot) { try {
+      const nm2 = `${kia.name} old wordmark.pdf`.replace(/[\/:\\]/g, '-');
+      const a = { id: 'smp-tr-file', name: nm2, path: `${fonts.dir}/${nm2}`, size: putFile(`${fonts.dir}/${nm2}`, new URL('creative-brief.pdf', SRC)), addedAt: ago(24 * 30), addedBy: 'u-lina' };
+      out.trash.push({ id: 'tr-smp-file', type: 'cafile', deletedAt: ago(48), deletedBy: 'u-lina', key: 'clients:' + kia.id, where: `${kia.name} › ${fonts.name}`, data: { clientId: kia.id, folderId: fonts.id, file: a } });
+    } catch (e) { /* no such sample file (the App Review demo) */ } }
+
+    // file links switched on: a logo and a job folder (and one turned off) — the server keeps them (flinks)
+    const links = { byPath: {}, byFolder: {}, links: {} };
+    let tk = 0; const tok = () => `smpLk${(++tk).toString(36)}x${(seed = (seed * 9301 + 49297) % 233280).toString(36)}`.slice(0, 12);
+    (out.clients || []).slice(0, 3).forEach((c, i) => {
+      const logo = c.folders.find((f) => f.name === 'Logos'); const a = logo && logo.files[0];
+      if (a) { const t = tok(); links.byPath[a.path] = t; links.links[t] = { path: a.path, by: ((proj.get(c.id) || {}).ams || [])[0] ? proj.get(c.id).ams[0].id : me, at: ago(24 * (i + 1)), off: i === 2, ...(i === 2 ? { offBy: me, offAt: ago(3) } : {}) }; }
+    });
+    const job = (out.clients || []).map((c) => [c, c.folders.find((f) => f.parentId && f.files && f.files.length)]).find(([, f]) => f);
+    if (job) { const [c, f] = job; const t = tok(); links.byFolder[`${c.id}/${f.id}`] = t; links.links[t] = { kind: 'folder', client: c.id, folder: f.id, by: me, at: ago(20), off: false }; }
+    out._flinks = links;
+  }
+
   // the Creative Director is Carine; Amelia is Social Manager (content plans trial)
   out.meta = { ...(out.meta || {}), cdUserId: has(cd) ? cd : (out.meta || {}).cdUserId || null, ...(has(mgr) ? { socialMgrIds: [mgr] } : {}) };
   const ids = new Set([me, ...out.users.map((u) => u.id), ...store.list('users').map((u) => u.id)]);
