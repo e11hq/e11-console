@@ -488,6 +488,34 @@ final class ViewAsBar: UIView {
     [icon, cap, name, sw, me].forEach { glass.contentView.addSubview($0) }
     sw.translatesAutoresizingMaskIntoConstraints = true; me.translatesAutoresizingMaskIntoConstraints = true
     look(dark: dark)
+    // it can be dragged up or down (Haris 2026-11-04: "so I can press something underneath it") — let go, it settles at
+    // the top (under the top buttons) or back at the bottom, whichever is nearer, and stays there on every page
+    addGestureRecognizer(UIPanGestureRecognizer(target: self, action: #selector(dragged(_:))))
+  }
+  private static var atTop: Bool = UserDefaults.standard.bool(forKey: "viewAsBarTop")
+  private var drag: CGFloat?   // (the bar's top while a finger moves it)
+  private func spot(_ host: UIView, top: Bool) -> CGFloat {
+    if top { return (host.safeAreaInsets.top + 60).rounded() }
+    let b = bottomFor?() ?? (host.bounds.height - host.safeAreaInsets.bottom - 8)
+    return (b - 52).rounded()
+  }
+  @objc private func dragged(_ g: UIPanGestureRecognizer) {
+    guard let host = superview else { return }
+    let lo = spot(host, top: true) - 20, hi = spot(host, top: false) + 20
+    switch g.state {
+    case .began: drag = frame.minY; UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    case .changed:
+      guard let d = drag else { return }
+      frame.origin.y = min(hi, max(lo, d + g.translation(in: host).y))
+    default:
+      let y = frame.minY + g.velocity(in: host).y * 0.15
+      let top = abs(y - spot(host, top: true)) < abs(y - spot(host, top: false))
+      if top != ViewAsBar.atTop { UISelectionFeedbackGenerator().selectionChanged() }
+      ViewAsBar.atTop = top; UserDefaults.standard.set(top, forKey: "viewAsBarTop")
+      drag = nil
+      var f = frame; f.origin.y = spot(host, top: top)
+      UIView.animate(withDuration: 0.4, delay: 0, usingSpringWithDamping: 0.82, initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState]) { self.frame = f }
+    }
   }
   // (the app's own light / dark, again whenever it changes — it was made in the look the app had before the person you
   //  view as had theirs, and kept it: black text on dark, Haris 2026-11-04)
@@ -533,8 +561,8 @@ final class ViewAsBar: UIView {
   private func place(_ host: UIView) {
     // (always over the pages — the app's sheets are above it anyway)
     if host.subviews.last !== self { host.bringSubviewToFront(self) }
-    let b = bottomFor?() ?? (host.bounds.height - host.safeAreaInsets.bottom - 8)
-    let f = CGRect(x: 14, y: (b - 52).rounded(), width: host.bounds.width - 28, height: 52)
+    if drag != nil { return }   // (a finger is moving it)
+    let f = CGRect(x: 14, y: spot(host, top: ViewAsBar.atTop), width: host.bounds.width - 28, height: 52)
     if f != frame && transform == .identity { if abs(f.minY - frame.minY) > 30 && frame.width > 0 { UIView.animate(withDuration: 0.3, delay: 0, options: [.allowUserInteraction, .beginFromCurrentState]) { self.frame = f } } else { frame = f } }
     else if frame.width == 0 { frame = f }
   }
