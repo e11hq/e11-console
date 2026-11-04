@@ -3035,6 +3035,9 @@ const NativeMe = (() => {
   const ovTab = () => shell >= 36 && typeof isOffice === 'function' && isOffice() && (ui.view === 'home' || ui.view === 'today');
   const teamTab = () => shell >= 36 && typeof isOffice === 'function' && isOffice() && !offFin() && ui.view === 'team';
   const tabNow = () => (plansTab() ? 'plans' : ovTab() ? 'today' : teamTab() ? 'team' : 'me');
+  // (a file's small picture — photos, videos' frames, PDFs' pages — Haris 2026-11-04: a video showed only "MP4")
+  const ovPic = (a) => { const e = fileExt(a.name); return isImage(a) && e !== 'svg' ? imgUrl(a, 160) : a.thumb ? '/__file/' + a.thumb.split('/').map(encodeURIComponent).join('/') + '?view=1' : a.path && /^(pdf|mp4|mov|m4v|webm|avi|mkv|doc|docx|ppt|pptx|xls|xlsx)$/.test(e) ? '/api/fthumb?path=' + encodeURIComponent(a.path) + '&id=' + encodeURIComponent(a.id || '') : null; };
+  const ovAtt = (id) => { for (const c of db.clients || []) for (const f of c.folders || []) { const a = (f.files || []).find((x) => x.id === id); if (a) return a; } return null; };
   function overview() {
     const fin = offFin();
     const money = (n) => (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -3044,7 +3047,7 @@ const NativeMe = (() => {
     const files = [];
     clientsSorted().forEach((c) => (c.folders || []).forEach((f) => (f.files || []).forEach((a) => files.push({ c, f, a }))));
     files.sort((x, y) => String(y.a.addedAt || '').localeCompare(String(x.a.addedAt || '')));
-    const assets = files.slice(0, fin ? 3 : 10).map(({ c, f, a }) => { const e = ext(a.name); return { id: a.id, name: a.name, path: a.path, where: `${c.name} › ${folderPath(c, f)}${a.addedBy ? ' · ' + firstName(a.addedBy) : ''}`, when: a.addedAt ? short(a.addedAt) : '', ext: e, rgb: colOf(e) }; });
+    const assets = files.slice(0, fin ? 3 : 10).map(({ c, f, a }) => { const e = ext(a.name); return { id: a.id, pic: ovPic(a), name: a.name, path: a.path, where: `${c.name} › ${folderPath(c, f)}${a.addedBy ? ' · ' + firstName(a.addedBy) : ''}`, when: a.addedAt ? short(a.addedAt) : '', ext: e, rgb: colOf(e) }; });
     const out = { fin, assets };
     if (!fin) return out;
     const m = Claims.claimMonth();
@@ -3331,10 +3334,11 @@ const NativeMe = (() => {
           const q = String(ev.q || '').trim();
           const r = q && typeof caSearch === 'function' ? caSearch(q, null) : { files: [] };
           const ext = (n) => (String(n).split('.').pop() || 'file').slice(0, 4).toUpperCase();
-          const found = (r.files || []).slice(0, 60).map(({ c, f, a }) => ({ id: a.id, name: a.name, path: a.path, where: `${c.name} › ${folderPath(c, f)}`, ext: ext(a.name) }));
+          const found = (r.files || []).slice(0, 60).map(({ c, f, a }) => ({ id: a.id, pic: ovPic(a), name: a.name, path: a.path, where: `${c.name} › ${folderPath(c, f)}`, ext: ext(a.name) }));
           answer(rid, { ok: true, q, found, loose: !!r.loose }); return;
         }
-        case 'ovFile': if (ev.path) previewFile({ path: String(ev.path), name: String(ev.name || 'File') }); return;
+        // (the file itself — its picture, a video's frame and player — not just its address)
+        case 'ovFile': { const a = ev.id ? ovAtt(String(ev.id)) : null; if (a) previewFile(a); else if (ev.path) previewFile({ path: String(ev.path), name: String(ev.name || 'File') }); return; }
         case 'ovGo': go({ assets: 'clients', claims: 'fin-reimb', expenses: 'fin-expenses' }[ev.to] || 'home'); return;
         case 'ovClaim': if (typeof Claims !== 'undefined' && Claims.byId(ev.id)) Claims.open(ev.id); return;
         case 'pf': wantProfile = !!ev.on; sync(); return;

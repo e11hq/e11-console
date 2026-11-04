@@ -1497,8 +1497,8 @@ final class MeCtl {
     let sec = { (k: String, t: String, to: String?) -> SetHead in
       let v = self.head(h, k, t); v.link(to == nil ? nil : "All"); v.onLink = { [weak self] in if let to = to { self?.send(["ev": "ovGo", "to": to]) } }; return v }
     let files = ((o["assets"] as? [[String: Any]]) ?? []).map { f -> SetItem in
-      var it = SetItem(key: "f." + (f["id"] as? String ?? ""), title: f["name"] as? String ?? "", sub: f["where"] as? String ?? "", value: f["when"] as? String ?? "", chevron: false, tap: { [weak self] in self?.send(["ev": "ovFile", "path": f["path"] as? String ?? "", "name": f["name"] as? String ?? ""]) })
-      it.person = (photo: nil, ini: f["ext"] as? String ?? "", rgb: NativeSheetVC.color(f["rgb"]) ?? .systemGray)
+      var it = SetItem(key: "f." + (f["id"] as? String ?? ""), title: f["name"] as? String ?? "", sub: f["where"] as? String ?? "", value: f["when"] as? String ?? "", chevron: false, tap: { [weak self] in self?.send(["ev": "ovFile", "id": f["id"] as? String ?? "", "path": f["path"] as? String ?? "", "name": f["name"] as? String ?? ""]) })
+      it.person = (photo: f["pic"] as? String, ini: f["ext"] as? String ?? "", rgb: NativeSheetVC.color(f["rgb"]) ?? .systemGray)
       return it
     }
     out.append(sec("ova", "Client Assets · latest", "assets"))
@@ -1524,8 +1524,8 @@ final class MeCtl {
       guard let self = self, let h = h, h.searching else { return }
       let found = (r["found"] as? [[String: Any]]) ?? []
       let items = found.map { f -> SetItem in
-        var it = SetItem(key: "s." + (f["id"] as? String ?? ""), title: f["name"] as? String ?? "", sub: f["where"] as? String ?? "", chevron: false, tap: { [weak self] in self?.send(["ev": "ovFile", "path": f["path"] as? String ?? "", "name": f["name"] as? String ?? ""]) })
-        it.person = (photo: nil, ini: f["ext"] as? String ?? "", rgb: .systemGray)
+        var it = SetItem(key: "s." + (f["id"] as? String ?? ""), title: f["name"] as? String ?? "", sub: f["where"] as? String ?? "", chevron: false, tap: { [weak self] in self?.send(["ev": "ovFile", "id": f["id"] as? String ?? "", "path": f["path"] as? String ?? "", "name": f["name"] as? String ?? ""]) })
+        it.person = (photo: f["pic"] as? String, ini: f["ext"] as? String ?? "", rgb: .systemGray)
         return it
       }
       if items.isEmpty { h.showFound([], hint: "No files found."); return }
