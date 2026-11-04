@@ -3417,7 +3417,9 @@ const NativeMe = (() => {
         case 'exInv': { const x = (db.finance || []).find((y) => y.id === ev.id); const f = x && (x.invoice || Object.values(x.invoices || {}).slice(-1)[0]); if (f) previewFile(f); return; }
         case 'ovFile': { const a = ev.id ? ovAtt(String(ev.id)) : null; if (a) previewFile(a); else if (ev.path) previewFile({ path: String(ev.path), name: String(ev.name || 'File') }); return; }
         case 'ovGo': go({ assets: 'clients', claims: 'fin-reimb', expenses: 'fin-expenses' }[ev.to] || 'home'); return;
-        case 'ovClaim': if (typeof Claims !== 'undefined' && Claims.byId(ev.id)) Claims.open(ev.id); return;
+        // (the claim as its PDF, as the Claims tab's Open claim — not the website's claim page, which isn't the app's: it
+        //  showed E11 Day, Haris 2026-11-04)
+        case 'ovClaim': if (typeof Claims !== 'undefined' && Claims.byId(ev.id)) Claims.previewPdf(String(ev.id)); return;
         case 'pf': wantProfile = !!ev.on; sync(); return;
         case 'tr': wantTrash = !!ev.on; if (!ev.on) { ui.trashQ = ''; ui.trashFilter = 'all'; } sync(); return;
         case 'trQ': ui.trashQ = String(ev.q || ''); sync(); return;
