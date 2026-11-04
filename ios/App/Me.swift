@@ -1503,7 +1503,7 @@ final class MeCtl {
     guard let o = model["overview"] as? [String: Any] else { let n = part(h, "wait") { AssetsNote() }; n.label.text = "Loading…"; out.append(n); return }
     if let cards = o["cards"] as? [[String: Any]] { let c = part(h, "cards") { OvCards() }; c.set(cards, look: h.look); out.append(c) }
     let sec = { (k: String, t: String, to: String?) -> SetHead in
-      let v = self.head(h, k, t); v.link(to == nil ? nil : "All"); v.onLink = { [weak self] in if let to = to { self?.send(["ev": "ovGo", "to": to]) } }; return v }
+      let v = self.head(h, k, t); v.link(to == nil ? nil : "All"); v.onLink = { [weak self] in if let to = to { self?.ovGo(to) } }; return v }
     let files = ((o["assets"] as? [[String: Any]]) ?? []).map { f -> SetItem in
       var it = SetItem(key: "f." + (f["id"] as? String ?? ""), title: f["name"] as? String ?? "", sub: f["where"] as? String ?? "", value: f["when"] as? String ?? "", chevron: false, tap: { [weak self] in self?.send(["ev": "ovFile", "id": f["id"] as? String ?? "", "path": f["path"] as? String ?? "", "name": f["name"] as? String ?? ""]) })
       it.person = (photo: f["pic"] as? String, ini: f["ext"] as? String ?? "", rgb: NativeSheetVC.color(f["rgb"]) ?? .systemGray)
@@ -1523,6 +1523,13 @@ final class MeCtl {
       out.append(sec("ovx", "Office expenses · latest", "expenses"))
       if ex.isEmpty { out.append(foot(h, "ovx0", "None this month yet.")) } else { out.append(group(h, "ovx", ex)) }
     }
+  }
+  // Overview's "All": that tab, as if tapped (Claims, Expenses, Client Assets) — never the website's Home underneath
+  // (Haris 2026-11-04: it went to "E11 Day"); Client Assets with Finance is Me's page
+  private func ovGo(_ to: String) {
+    let key = ["assets": "clients", "claims": "fin-reimb", "expenses": "fin-expenses"][to] ?? ""
+    if main.tabKeys.contains(key) { main.selectTab(key); return }
+    if key == "clients" { coverWait = Date(); send(["ev": "nav", "to": "clients"]) }
   }
   // ---------- an Office Admin's Claims (Haris 2026-11-04) ----------
   private func claimsBlocks(_ h: HomeView, _ out: inout [UIView]) {
