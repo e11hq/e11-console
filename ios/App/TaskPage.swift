@@ -411,7 +411,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       guard far, abs(t.x) > abs(t.y) * 1.4 else { return }
       swipeDone = true
       if t.x < 0, tab == "details" { UISelectionFeedbackGenerator().selectionChanged(); setTab("comments", tell: true, slide: true) }
-      else if t.x > 0, tab == "comments" { UISelectionFeedbackGenerator().selectionChanged(); onSwipeToDetails?() }
+      else if t.x > 0, tab == "comments", threadFeed == nil { UISelectionFeedbackGenerator().selectionChanged(); onSwipeToDetails?() }   // (a thread: only the edge swipe)
     default: break
     }
   }

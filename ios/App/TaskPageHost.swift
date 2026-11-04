@@ -273,7 +273,8 @@ extension Main {
   private func wire(_ p: TaskPage) {
     p.onBack = { [weak self, weak p] in guard let self = self, let p = p else { return }; if p.editingDesc { p.finishDesc() }; self.taskBackStep(p) }
     p.onCornerChange = { [weak self] in self?.updateCornerNow() }
-    p.onSwipeToDetails = { [weak self, weak p] in guard let self = self, let p = p else { return }; self.toDetailsFromComments(p) }
+    // (in a reply thread, only the swipe from the edge goes back — not a swipe across the page: Haris 2026-11-04)
+    p.onSwipeToDetails = { [weak self, weak p] in guard let self = self, let p = p, p.threadFeed == nil else { return }; self.toDetailsFromComments(p) }
     p.onOpenFiles = { [weak self] list, i in self?.openFiles(list, at: i) }
     p.onFilesShown = { [weak self] paths in self?.loadLinkStates(paths) }
     p.onFileAction = { [weak self, weak p] f, what in
