@@ -341,7 +341,7 @@ if(F.length)show(cur);})();
     if (p === '/.well-known/apple-app-site-association' || p === '/apple-app-site-association') {
       const ids = teamId ? [`${teamId}.${bundleId}`] : [];
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600' });
-      res.end(JSON.stringify({ applinks: { details: [{ appIDs: ids, components: [{ '/': '/f/*', comment: 'File links open in the E11 Console app' }, { '/': '/d/*', comment: 'Folder links open in the E11 Console app' }] }] } }));
+      res.end(JSON.stringify({ applinks: { details: [{ appIDs: ids, components: [{ '/': '/f/*', comment: 'File links open in the E11 Console app' }, { '/': '/d/*', comment: 'Folder links open in the E11 Console app' }, { '/': '/t/*', comment: 'Task links open in the E11 Console app' }] }] } }));
       return true;
     }
     let m = /^\/f\/([A-Za-z0-9]{6,16})(?:\/(file|view|thumb))?\/?$/.exec(p);

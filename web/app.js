@@ -870,7 +870,12 @@ const DatePicker = (() => {
 // The link is <server>/?task=<id>. Opened in a browser by someone who uses the Mac app, it is handed
 // to the app (e11console://task/<id>); if the app doesn't answer, the task simply opens in the browser.
 const TaskLink = (() => {
-  const url = (id) => location.origin + '/?task=' + encodeURIComponent(id);
+  // (the files address on the live and test sites — files…/t/<id>: the iPhone and Mac apps open it themselves; the
+  //  website's ?task= link elsewhere, and as before on any other address — Haris 2026-11-04)
+  const url = (id) => {
+    const h = location.hostname, f = h === 'console.e11hq.com' ? 'https://files.e11hq.com' : h === 'test.e11hq.com' ? 'https://files-test.e11hq.com' : null;
+    return f ? `${f}/t/${encodeURIComponent(id)}` : location.origin + '/?task=' + encodeURIComponent(id);
+  };
   const scheme = () => window.__forceScheme || (/^test\./.test(location.hostname) ? 'e11console-test' : /(^|\.)e11hq\.com$/.test(location.hostname) ? 'e11console' : null);
   async function copy(id) {
     const link = url(id);

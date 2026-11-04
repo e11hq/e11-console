@@ -474,6 +474,13 @@ export function createServer(cfg) {
     }
 
     // File links (flinks.js): the public page, its file and picture — no sign-in; the files address shows nothing else
+    // Task links (Haris 2026-11-04): files…/t/<task> — the iPhone and Mac apps open the task (universal links); anywhere
+    // else it goes on to the website's own ?task= link (its sign-in, and the Mac app's own hand-off from the browser)
+    if (filesHost && /^\/t\/[A-Za-z0-9_-]{1,80}\/?$/.test(p) && (req.method === 'GET' || req.method === 'HEAD') && String(req.headers['x-forwarded-host'] || req.headers.host || '') === filesHost) {
+      const id = p.slice(3).replace(/\/$/, '');
+      res.writeHead(302, { Location: `${testCopy ? 'https://test.e11hq.com' : 'https://console.e11hq.com'}/?task=${encodeURIComponent(id)}`, 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' });
+      return res.end();
+    }
     if ((p.startsWith('/f/') || p.startsWith('/d/') || p.endsWith('apple-app-site-association')) && (req.method === 'GET' || req.method === 'HEAD')) {
       if (await fileLinks.serve(req, res, p)) return;
     }

@@ -1987,6 +1987,11 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   // e11console://open?task=<id> | ?plan=<id> | ?view=home|plans|fin-dash — a tap on the widget
   func openLink(_ u: URL) {
+    // a task link (files…/t/<id>, Haris 2026-11-04): the task, in the app
+    if u.path.range(of: "^/t/[A-Za-z0-9_-]{1,80}/?$", options: .regularExpression) != nil {
+      let id = u.path.dropFirst(3).replacingOccurrences(of: "/", with: "")
+      openPush(["e11": ["taskId": id]]); return
+    }
     // a file link (files.e11hq.com/f/<token>, the test copy's files-test…): the page opens the file where it is
     if let r = u.path.range(of: "^/[fd]/[A-Za-z0-9]{6,16}", options: .regularExpression) {
       let tok = String(String(u.path[r]).dropFirst(3))

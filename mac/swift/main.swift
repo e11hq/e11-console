@@ -336,8 +336,17 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
      app opens (universal links) and the page opens the file where it is ---------- */
   var pendingFileLink: String?
   func application(_ application: NSApplication, continue userActivity: NSUserActivity, restorationHandler: @escaping ([NSUserActivityRestoring]) -> Void) -> Bool {
-    guard userActivity.activityType == NSUserActivityTypeBrowsingWeb, let u = userActivity.webpageURL,
-          let r = u.path.range(of: "^/[fd]/[A-Za-z0-9]{6,16}", options: .regularExpression) else { return false }
+    guard userActivity.activityType == NSUserActivityTypeBrowsingWeb, let u = userActivity.webpageURL else { return false }
+    // a task link (files…/t/<id>, Haris 2026-11-04): the task, as e11console://task/<id> opens it
+    if u.path.range(of: "^/t/[A-Za-z0-9_-]{1,80}/?$", options: .regularExpression) != nil {
+      let id = u.path.dropFirst(3).replacingOccurrences(of: "/", with: "")
+      if web == nil { pendingTask = id; return true }
+      let ready = !web.isLoading && (web.url?.host == URL(string: SERVER)?.host)
+      if !ready { pendingTask = id; loadHome(); showWindow(); return true }
+      pageJS("window.__e11OpenTask ? window.__e11OpenTask(\(jsString(id))) : (location.href = '/?task=' + \(jsString(id)))")
+      showWindow(); return true
+    }
+    guard let r = u.path.range(of: "^/[fd]/[A-Za-z0-9]{6,16}", options: .regularExpression) else { return false }
     let tok = String(String(u.path[r]).dropFirst(3))
     if web == nil || web.isLoading || web.url?.host != URL(string: SERVER)?.host { pendingFileLink = tok }
     else { pageJS("window.__e11FileLink && window.__e11FileLink(\(jsString(tok)))") }
