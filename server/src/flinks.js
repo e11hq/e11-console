@@ -65,14 +65,31 @@ export function createFileLinks({ store, files, views, base, teamId, bundleId = 
   function warmAll() {
     const m = load();
     for (const [, l] of Object.entries(m.links || {})) {
-      if (!l || l.off) continue;
+      if (!l || l.of || l.off) continue;      // (each item once — its own link)
       if (l.kind === 'folder') { const hit = folderOf(l.client, l.folder); if (hit && !isFilesTop(hit.f)) warmFolder(hit.c, hit.f); }
       else { const hit = find(l.path); if (hit) warm(hit.att, l.path); }
     }
   }
   setTimeout(() => { try { warmAll(); } catch (e) { console.error('link pictures:', e.message); } }, 60_000).unref?.();
 
-  // the link for a file (made once, then always the same)
+  // (Haris 2026-11-04: each person their own link, so its page says who shared it — the first person's is the item's
+  //  own link (byPath / byFolder) and carries the on / off switch; everyone else's (byPathUser / byFolderUser, `of` the
+  //  item's link) follows that switch, so turning a file or folder off turns all its links off)
+  function ownLink(m, first, key, idx, u, base) {
+    const l = m.links[first];
+    if (!l || String(l.by) === String(u.id)) return first;
+    m[idx] = m[idx] || {};
+    let tok = m[idx][key];
+    if (tok && m.links[tok]) return tok;
+    do { tok = newToken(); } while (m.links[tok]);
+    m[idx][key] = tok; m.links[tok] = { ...base, by: u.id, at: new Date().toISOString(), of: first };
+    save(m);
+    return tok;
+  }
+  const offNow = (m, l) => !!(l && (l.of && m.links[l.of] ? m.links[l.of].off : l.off));
+  const switchOf = (m, tok) => (m.links[tok] && m.links[tok].of && m.links[m.links[tok].of] ? m.links[tok].of : tok);
+
+  // the link for a file (made once per person, then always the same)
   function linkFor(u, rel, origin) {
     if (origin) lastOrigin = origin;
     rel = String(rel || '');
@@ -86,24 +103,26 @@ export function createFileLinks({ store, files, views, base, teamId, bundleId = 
       m.byPath[rel] = tok; m.links[tok] = { path: rel, by: u.id, at: new Date().toISOString(), off: false };
       save(m);
     }
+    tok = ownLink(m, tok, `${u.id}|${rel}`, 'byPathUser', u, { path: rel });
     { const h = find(rel); if (h) warm(h.att, rel); }
-    return { ok: true, token: tok, url: urlOf(tok, origin), off: !!m.links[tok].off };
+    return { ok: true, token: tok, url: urlOf(tok, origin), off: offNow(m, m.links[tok]) };
   }
   function setOff(u, rel, off, origin) {
     const r = linkFor(u, rel, origin);
     if (!r.ok) return r;
     const m = load();
-    m.links[r.token].off = !!off; m.links[r.token].offBy = u.id; m.links[r.token].offAt = new Date().toISOString();
+    const t = switchOf(m, r.token);
+    m.links[t].off = !!off; m.links[t].offBy = u.id; m.links[t].offAt = new Date().toISOString();
     save(m);
     return { ...r, off: !!off };
   }
   // what a link is (staff: where its file is, to open it in the app)
   function resolveToken(tok) {
     if (!TOKEN.test(String(tok || ''))) return null;
-    const l = (load().links || {})[tok];
-    if (!l) return null;
-    const hit = find(l.path);
-    return { ...l, hit, live: !!hit && !l.off && onDisk(l.path) };
+    const m = load(), l = (m.links || {})[tok];
+    if (!l || l.kind === 'folder') return null;
+    const hit = find(l.path), off = offNow(m, l);
+    return { ...l, off, hit, live: !!hit && !off && onDisk(l.path) };
   }
   const extOf = (n) => String(n || '').split('.').pop().toLowerCase();
   const size = (n) => (n >= 1e9 ? (n / 1e9).toFixed(1) + ' GB' : n >= 1e6 ? (n / 1e6).toFixed(1) + ' MB' : n >= 1e3 ? Math.round(n / 1e3) + ' KB' : (n || 0) + ' B');
@@ -269,21 +288,22 @@ document.addEventListener('scroll',fr,true);fr();})();
       m.byFolder[key] = tok; m.links[tok] = { kind: 'folder', client: cid, folder: fid, by: u.id, at: new Date().toISOString(), off: false };
       save(m);
     }
+    tok = ownLink(m, tok, `${u.id}|${key}`, 'byFolderUser', u, { kind: 'folder', client: cid, folder: fid });
     warmFolder(hit.c, hit.f);
-    return { ok: true, token: tok, url: furlOf(tok, origin), off: !!m.links[tok].off };
+    return { ok: true, token: tok, url: furlOf(tok, origin), off: offNow(m, m.links[tok]) };
   }
   function folderSetOff(u, cid, fid, off, origin) {
     const r = folderLink(u, cid, fid, origin);
     if (!r.ok) return r;
-    const m = load(); Object.assign(m.links[r.token], { off: !!off, offBy: u.id, offAt: new Date().toISOString() }); save(m);
+    const m = load(); Object.assign(m.links[switchOf(m, r.token)], { off: !!off, offBy: u.id, offAt: new Date().toISOString() }); save(m);
     return { ...r, off: !!off };
   }
   function resolveFolder(tok) {
     if (!TOKEN.test(String(tok || ''))) return null;
-    const l = (load().links || {})[tok];
+    const m = load(), l = (m.links || {})[tok];
     if (!l || l.kind !== 'folder') return null;
-    const hit = folderOf(l.client, l.folder);
-    return { ...l, hit, live: !!hit && !l.off && !isFilesTop(hit.f) };
+    const hit = folderOf(l.client, l.folder), off = offNow(m, l);
+    return { ...l, off, hit, live: !!hit && !off && !isFilesTop(hit.f) };
   }
   const COLORS = ['#ff9f0a', '#af52de', '#0a84ff', '#34c759', '#30b0c7', '#ff375f', '#5e5ce6'];
   function folderPage(tok, r, subId, pickId) {
