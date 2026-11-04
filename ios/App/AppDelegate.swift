@@ -3726,7 +3726,8 @@ final class TrashSheetVC: UIViewController, UISheetPresentationControllerDelegat
   private func peopleText(_ list: [[String: Any]]) -> NSAttributedString {
     let s = NSMutableAttributedString(), font = UIFont.systemFont(ofSize: 16)
     for (i, p) in list.enumerated() {
-      if i > 0 { s.append(NSAttributedString(string: "    ", attributes: [.font: font])) }
+      // (each person on a line of their own — Haris 2026-11-04: they ran into each other)
+      if i > 0 { s.append(NSAttributedString(string: "\n", attributes: [.font: font, .paragraphStyle: { let ps = NSMutableParagraphStyle(); ps.paragraphSpacingBefore = 6; return ps }()])) }
       let att = NSTextAttachment(); att.image = person(p["person"], 22)
       att.bounds = CGRect(x: 0, y: (font.capHeight - 22) / 2, width: 22, height: 22)
       s.append(NSAttributedString(attachment: att))
