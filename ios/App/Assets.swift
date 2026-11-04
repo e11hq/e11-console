@@ -491,7 +491,7 @@ final class AssetsCtl {
     if !stack.isEmpty, fromPage { close(animated: false) }
     fromPage = false; rootTab = false
     light = main.clientsLight
-    open(client: client, folder: folder, animated: true)
+    open(client: client, folder: folder, animated: true, direct: true)   // (‹ back to the client's page, the way you came)
   }
   func openAll(animated: Bool) {
     push(screen("all", nil, nil), animated: animated)
