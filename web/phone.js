@@ -3098,7 +3098,7 @@ const NativeMe = (() => {
   }
   function reviewsModel() {
     const wait = activeReviews(), done = reviewedRecent();
-    return { waiting: wait.map(({ t, r }) => reviewItem(t, r, false)), reviewed: done.map(({ t, r }) => reviewItem(t, r, true)) };
+    return { waiting: wait.map(({ t, r }) => reviewItem(t, r, false)), reviewed: done.map(({ t, r }) => reviewItem(t, r, true)), focus: ui.rvFocus || null };
   }
   function overview() {
     const fin = offFin();

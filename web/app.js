@@ -8526,6 +8526,7 @@ function openNotif(id) {
     const r = rs.filter((x) => x.at <= n.at).pop() || rs[rs.length - 1] || null;
     ui.rrTab = r && r.state !== 'pending' && reviewedRecent().some((x) => x.r.id === r.id) ? 'reviewed' : 'active';
     closeDetail(); go('reviews');
+    if (r) ui.rvFocus = { id: r.id, n: Date.now() % 1e9 };   // (the iPhone's own Reviews: scrolled to it, and it pulses)
     if (r) flashReview(r.id);
     return;
   }

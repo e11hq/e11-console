@@ -879,6 +879,13 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     showMotto()
   }
   func scrollToTop() { scroll.setContentOffset(CGPoint(x: 0, y: -scroll.contentInset.top), animated: true) }
+  // a block's row brought to about 40% down the screen (an Inbox update opening the Reviews on its request)
+  func scrollToShow(_ v: UIView, animated: Bool = true) {
+    layoutIfNeeded()
+    let r = v.convert(v.bounds, to: scroll)
+    let y = max(-scroll.contentInset.top, min(r.midY - scroll.bounds.height * 0.4, scroll.contentSize.height + scroll.contentInset.bottom - scroll.bounds.height))
+    scroll.setContentOffset(CGPoint(x: 0, y: y), animated: animated)
+  }
   func scrollViewDidScroll(_ scrollView: UIScrollView) { if scrollView === scroll { layoutHeader(); showMotto() } }
   // the list at its end (or too short to scroll), Home not searching, no toast beside the + — the motto shows
   private func showMotto() {

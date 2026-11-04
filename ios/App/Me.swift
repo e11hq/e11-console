@@ -1017,7 +1017,7 @@ final class MeCtl {
   // (a tab's own first page — big title, 🔍 / your photo, no ‹: Content plans for Social, an Office Admin's Overview and Team)
   static let tabRoots: Set<String> = ["plansTab", "overviewTab", "teamTab", "claimsTab", "expensesTab", "reviewsTab"]
   // (Claims: Need approval · All; Expenses: Subscriptions · Office expenses — Haris 2026-11-04)
-  private var clSeg = 0, exSeg = 0, rvSeg = 0
+  private var clSeg = 0, exSeg = 0, rvSeg = 0, rvFocusN = 0
   // (a question to the page, its answer back — Content plans' post, approve, send back)
   private func request(_ ev: [String: Any], _ done: @escaping ([String: Any]) -> Void) {
     let rid = UUID().uuidString
@@ -1544,6 +1544,12 @@ final class MeCtl {
   private func reviewsBlocks(_ h: HomeView, _ out: inout [UIView]) {
     guard let m = model["reviews"] as? [String: Any] else { let n = part(h, "wait") { AssetsNote() }; n.label.text = "Loading…"; out.append(n); return }
     let wait = (m["waiting"] as? [[String: Any]]) ?? [], done = (m["reviewed"] as? [[String: Any]]) ?? []
+    // (an Inbox update about a request: Waiting or Reviewed, scrolled to it, and it pulses — Haris 2026-11-04)
+    var focus: String? = nil
+    if let f = m["focus"] as? [String: Any], let n = f["n"] as? Int, n != rvFocusN, let fid = f["id"] as? String {
+      rvFocusN = n; focus = fid
+      rvSeg = done.contains(where: { ($0["id"] as? String) == fid }) ? 1 : 0
+    }
     let seg = part(h, "seg") { SegBlock() }
     seg.set("Waiting · \(wait.count)", "Reviewed · \(done.count)", rvSeg)
     seg.onPick = { [weak self, weak h] i in guard let self = self, let h = h else { return }; self.rvSeg = i; UIView.performWithoutAnimation { self.blocks(h); h.setNeedsLayout(); h.layoutIfNeeded() } }
@@ -1558,6 +1564,10 @@ final class MeCtl {
     list.set(rows, look: h.look, decided: rvSeg == 1)
     list.onOpen = { [weak self] id in self?.open("review", id) }
     out.append(list)
+    if let fid = focus {
+      if stack.count > 1, stack.first?.h === h { DispatchQueue.main.async { [weak self] in self?.backToRoot() } }   // (a request open on top: back to the list first)
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak h, weak list] in guard let h = h, let list = list, let row = list.row(fid) else { return }; h.scrollToShow(row); list.pulse(fid) }
+    }
   }
   private func reviewItem(_ id: String) -> ([String: Any], Bool, Int, Int)? {
     guard let m = model["reviews"] as? [String: Any] else { return nil }
@@ -2932,6 +2942,17 @@ final class ReviewList: UIView, HomeBlock {
     setNeedsLayout()
   }
   private func hOf(_ id: String, _ w: CGFloat) -> CGFloat { rows[id]?.height(w) ?? 64 }
+  func row(_ id: String) -> UIView? { rows[id] }
+  // the WhatsApp pulse on one row: a see-through grey over it, once
+  func pulse(_ id: String) {
+    guard let r = rows[id] else { return }
+    let band = UIView(frame: r.bounds); band.isUserInteractionEnabled = false; band.alpha = 0
+    band.backgroundColor = traitCollection.userInterfaceStyle == .dark ? UIColor.white.withAlphaComponent(0.13) : UIColor.black.withAlphaComponent(0.08)
+    r.addSubview(band)
+    UIView.animate(withDuration: 0.2, delay: 0.35, options: [.curveEaseOut]) { band.alpha = 1 } completion: { _ in
+      UIView.animate(withDuration: 0.6, delay: 0.6, options: [.curveEaseInOut]) { band.alpha = 0 } completion: { _ in band.removeFromSuperview() }
+    }
+  }
   func blockHeight(_ W: CGFloat) -> CGFloat { order.reduce(0) { $0 + hOf($1, W - 32) } + 8 }
   override func layoutSubviews() {
     super.layoutSubviews()
