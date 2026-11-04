@@ -2936,7 +2936,7 @@ final class ReviewList: UIView, HomeBlock {
         r.set(x, look: L, decided: decided)
       }
       while seps.count < max(0, ids.count - 1) { let v = UIView(); box.addSubview(v); seps.append(v) }
-      for (i, v) in seps.enumerated() { v.isHidden = i >= ids.count - 1; v.backgroundColor = L.sep }
+      for (i, v) in seps.enumerated() { v.isHidden = i >= ids.count - 1; v.backgroundColor = .separator }   // (iPhone's own line, as the app's other lists — Haris 2026-11-04)
     }
     order = ids
     setNeedsLayout()
@@ -2964,7 +2964,8 @@ final class ReviewList: UIView, HomeBlock {
       let h = hOf(id, w)
       r.bounds = CGRect(x: 0, y: 0, width: box.bounds.width, height: h); r.center = CGPoint(x: box.bounds.width / 2, y: y + h / 2)
       y += h
-      if i < seps.count, !seps[i].isHidden { seps[i].frame = CGRect(x: 62, y: y - 0.5, width: box.bounds.width - 62, height: 0.5); box.bringSubviewToFront(seps[i]) }
+      let px = 1 / max(1, window?.screen.scale ?? UIScreen.main.scale)
+      if i < seps.count, !seps[i].isHidden { seps[i].frame = CGRect(x: 62, y: y - px / 2, width: box.bounds.width - 62, height: px); box.bringSubviewToFront(seps[i]) }
     }
   }
 }
