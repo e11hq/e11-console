@@ -1574,6 +1574,9 @@ final class MeCtl {
   // (Haris 2026-11-04: it went to "E11 Day"); Client Assets with Finance is Me's page
   private func ovGo(_ to: String) {
     let key = ["assets": "clients", "claims": "fin-reimb", "expenses": "fin-expenses"][to] ?? ""
+    // (on the list the section was about: Need approval; Office expenses — Haris 2026-11-04)
+    if to == "claims" { clSeg = 0 }
+    if to == "expenses" { exSeg = 1 }
     if main.tabKeys.contains(key) { main.selectTab(key); return }
     if key == "clients" { coverWait = Date(); send(["ev": "nav", "to": "clients"]) }
   }
