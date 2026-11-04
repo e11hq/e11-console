@@ -533,9 +533,9 @@ final class CommentCell: UIView {
         let e = x["e"] as? String ?? ""
         var c = UIButton.Configuration.filled(); c.cornerStyle = .capsule; c.baseBackgroundColor = .tertiarySystemFill; c.baseForegroundColor = .label
         // (the six as SF Symbols in iPhone's colours, Haris 2026-11-04; any other emoji as itself)
-        if let img = ReactionSym.image(e, size: 14) {
-          c.image = img; c.imagePadding = 5
-          c.attributedTitle = AttributedString("\(x["n"] as? Int ?? 1)", attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 14, weight: .semibold)]))
+        if let img = ReactionSym.image(e, size: 11.5) {
+          c.image = img; c.imagePadding = 4
+          c.attributedTitle = AttributedString("\(x["n"] as? Int ?? 1)", attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 13.5, weight: .semibold)]))
         } else {
           c.attributedTitle = AttributedString("\(e) \(x["n"] as? Int ?? 1)", attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 14, weight: .medium)]))
         }
@@ -1069,8 +1069,18 @@ enum ReactionSym {
   static func image(_ emoji: String, size: CGFloat) -> UIImage? {
     guard let v = map[emoji] else { return nil }
     let name = v.0, c = v.1
-    let two = name == "checkmark.circle.fill"   // (the tick white on green)
-    let cfg = UIImage.SymbolConfiguration(pointSize: size, weight: .semibold).applying(UIImage.SymbolConfiguration(paletteColors: two ? [.white, c] : [c]))
-    return UIImage(systemName: name, withConfiguration: cfg)?.withRenderingMode(.alwaysOriginal)
+    // (drawn into a picture of its own, so its colours stay whatever a button or a sheet tints — Haris 2026-11-04: they
+    //  came out black on the cards and all blue in the sheet)
+    let cfg = UIImage.SymbolConfiguration(pointSize: size, weight: .semibold)
+    if name == "checkmark.circle.fill" {   // (the tick white on green)
+      guard let disc = UIImage(systemName: "circle.fill", withConfiguration: cfg)?.withTintColor(c, renderingMode: .alwaysOriginal),
+            let tick = UIImage(systemName: "checkmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: size * 0.5, weight: .heavy))?.withTintColor(.white, renderingMode: .alwaysOriginal) else { return nil }
+      return UIGraphicsImageRenderer(size: disc.size).image { _ in
+        disc.draw(at: .zero)
+        tick.draw(at: CGPoint(x: (disc.size.width - tick.size.width) / 2, y: (disc.size.height - tick.size.height) / 2))
+      }.withRenderingMode(.alwaysOriginal)
+    }
+    guard let img = UIImage(systemName: name, withConfiguration: cfg)?.withTintColor(c, renderingMode: .alwaysOriginal) else { return nil }
+    return UIGraphicsImageRenderer(size: img.size).image { _ in img.draw(at: .zero) }.withRenderingMode(.alwaysOriginal)
   }
 }

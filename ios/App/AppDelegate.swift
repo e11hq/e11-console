@@ -3124,7 +3124,7 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
         if ch.on { b.layer.borderWidth = 3; b.layer.borderColor = UIColor.label.cgColor }
       } else {
         // (the reactions as SF Symbols in iPhone's colours — Haris 2026-11-04; still saved as their emoji)
-        if kind == "emoji", let img = ReactionSym.image(ch.label ?? "", size: 22) { b.setImage(img, for: .normal) }
+        if kind == "emoji", let img = ReactionSym.image(ch.label ?? "", size: 17) { b.setImage(img, for: .normal) }
         else { b.setTitle(ch.label ?? "", for: .normal) }
         b.titleLabel?.font = kind == "emoji" ? .systemFont(ofSize: 26) : .systemFont(ofSize: 16, weight: .semibold)
         b.backgroundColor = ch.on ? .systemBlue : .tertiarySystemFill
