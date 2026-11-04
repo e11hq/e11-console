@@ -354,7 +354,7 @@ const Home = (() => {
   }
 
   document.addEventListener('click', (e) => {
-    if (ui.view !== 'home') return;
+    if (typeof ui === 'undefined' || ui.view !== 'home') return;   // (a click before app.js has loaded)
     const el = e.target.closest('[data-hm]');
     if (!el) return;
     // home.js loads before app.js: stop the app's own click handler (it would close the task just opened)

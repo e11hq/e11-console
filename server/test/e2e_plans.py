@@ -35,7 +35,7 @@ async def main():
             check(await pg.locator('#nav-plans').is_visible(), 'Content plans in the sidebar (test site)')
             await pg.locator('#nav-plans').click(); await pg.wait_for_timeout(500)
             rows = await pg.locator('.pl-row:not(.tt-head)').count()
-            check(rows == 2, f'Aishwarya sees the 2 clients she is Social for ({rows})')
+            check(rows == 3, f'Aishwarya sees the 3 clients she is Social for — KOREA 360, ASV and HRE (the sample) ({rows})')
             check('Trial' not in await pg.locator('#title-area').inner_text(), 'no longer marked as a trial')
             kr = pg.locator('.pl-row', has_text='KOREA 360')
             check('Open' in await kr.inner_text() and await kr.locator('.pl-st.review').count() == 1, 'KOREA 360 has a skeleton, waiting for approval')
@@ -107,7 +107,7 @@ async def main():
             # ---------- Stage 2: the Social Manager looks at KOREA 360 ----------
             ctx, pg, errs = await login(MGR)
             E = pg.evaluate
-            check(await pg.locator('#plans-count').inner_text() == '2', f'the sidebar shows 2 skeletons waiting ({await pg.locator("#plans-count").inner_text()})')
+            check(await pg.locator('#plans-count').inner_text() == '3', f'the sidebar shows 3 skeletons waiting (with the sample’s HRE) ({await pg.locator("#plans-count").inner_text()})')
             await E("go('inbox')"); await pg.wait_for_timeout(400)
             row = pg.locator('.ib-row', has_text='KOREA 360')
             full = (await row.inner_text()) + ' ' + ((await row.locator('.ib-mi').get_attribute('title')) or '') if await row.count() == 1 else ''
@@ -424,7 +424,7 @@ async def main():
             ctx, pg, errs = await login(EXEC, (390, 844))
             await pg.click('[data-ph-tab="me"]'); await pg.wait_for_timeout(400)
             await pg.locator('.ph-row[data-nav="plans"]').click(); await pg.wait_for_timeout(500)
-            check(await pg.locator('.pl-row:not(.tt-head)').count() == 3, 'phone: the list (CPT was just added for her)')
+            check(await pg.locator('.pl-row:not(.tt-head)').count() == 4, 'phone: the list (CPT was just added for her)')
             await pg.screenshot(path=os.path.join(OUT, 'plans-phone-list.png'))
             await pg.locator('.pl-row', has_text='KOREA 360').click(); await pg.wait_for_timeout(500)
             check(await pg.locator('.pl-post').count() >= 6, 'phone: the plan as a list by day')

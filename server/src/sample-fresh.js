@@ -436,7 +436,7 @@ export function freshSample(store, me, filesRoot, opts = {}) {
     // a subscription that was cancelled (it isn't counted from next month)
     out.finance.push({ id: 'smp-fin-s-ended', type: 'sub', name: 'Stock footage library', amount: 199, day: 12, startMonth: ym(new Date(dub.getFullYear(), dub.getMonth() - 5, 1)), endedAt: ago(24 * 3), invoices: {}, createdAt: ago(24 * 160), createdBy: 'u-arsal' });
 
-    // content plans at every stage: KOREA 360 waiting for the Social Manager, CPT a draft (above) — and ASV sent to both
+    // content plans at every stage: KOREA 360 waiting for the Social Manager, CPT a draft (above) — and HRE sent to both
     // the CD and the Social Manager with changes asked on two posts, Gebriel Motors approved
     const nm = new Date(dub.getFullYear(), dub.getMonth() + 1, 1);
     const month = ym(nm), mday = (n) => `${month}-${String(Math.min(n, new Date(nm.getFullYear(), nm.getMonth() + 1, 0).getDate())).padStart(2, '0')}`;
@@ -447,15 +447,15 @@ export function freshSample(store, me, filesRoot, opts = {}) {
       out.plans = (out.plans || []).filter((p) => p.id !== pl.id); out.plans.push(pl); return pl;
     };
     if (has('u-aish') && has(cd) && has(mgr)) {
-      const p = out.projects.find((x) => x.id === 'p-asv'); if (p) p.socials = ['u-aish'];
-      plan('p-asv', 'u-aish', 'review', [
+      const p = out.projects.find((x) => x.id === 'p-hre'); if (p) p.socials = ['u-aish'];
+      plan('p-hre', 'u-aish', 'review', [
         [2, 'New month, new drops', 'Carousel of the new arrivals, one per slide.', 'carousel', ['ig', 'fb'], 'New month, new drops. Swipe to see what’s in.'],
         [6, 'Store tour reel', 'Walk-through of the flagship store, handheld.', 'reel', ['ig', 'tt'], '', { state: 'changes', note: 'Make it a 15s cut — the first 3 seconds need the logo.', by: cd, at: ago(6) }],
         [11, 'Customer of the week', 'Photo and a short quote from a customer.', 'post', ['ig'], ''],
         [17, 'Weekend offer', 'Story with a countdown sticker for the weekend offer.', 'story', ['ig'], '', { state: 'changes', note: 'Use the new offer artwork, not last month’s.', by: cd, at: ago(5) }],
         [24, 'Behind the counter', 'The team getting the store ready in the morning.', 'reel', ['ig', 'tt'], '', { state: 'ok', by: cd, at: ago(5) }],
       ], { round: 1, review: { to: 'both', by: 'u-aish', at: ago(9), round: 1 }, log: [{ act: 'sent', by: 'u-aish', at: ago(9), to: 'both', round: 1 }] });
-      [cd, mgr].forEach((to, k) => notifs.push({ id: `smp-npl-p-asv-${k}`, to, from: 'u-aish', kind: 'plan', planId: 'pl-smp-p-asv', text: `sent the content skeleton for <b>${esc((proj.get('p-asv') || {}).name || 'ASV')} · ${mLabel}</b> for your approval`, snippet: '', at: ago(9), read: k === 0 }));
+      [cd, mgr].forEach((to, k) => notifs.push({ id: `smp-npl-p-hre-${k}`, to, from: 'u-aish', kind: 'plan', planId: 'pl-smp-p-hre', text: `sent the content skeleton for <b>${esc((proj.get('p-hre') || {}).name || 'HRE')} · ${mLabel}</b> for your approval`, snippet: '', at: ago(9), read: k === 0 }));
     }
     if (has('u-new')) {
       const p = out.projects.find((x) => x.id === 'p-gm'); if (p) p.socials = ['u-new'];
