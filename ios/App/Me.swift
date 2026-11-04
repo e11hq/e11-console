@@ -2556,7 +2556,9 @@ final class SwipeRow: UIView, UIGestureRecognizerDelegate {
     for (b, t, s, c) in [(left, "HR approved", "checkmark", UIColor.systemGreen), (right, "Open claim", "doc.text", UIColor.systemBlue)] {
       var cfg = UIButton.Configuration.plain(); cfg.image = UIImage(systemName: s, withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold)); cfg.imagePlacement = .top; cfg.imagePadding = 4
       cfg.attributedTitle = AttributedString(t, attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 12, weight: .semibold)])); cfg.baseForegroundColor = .white
-      b.configuration = cfg; b.backgroundColor = c; addSubview(b)
+      // square, as Mail's swipe buttons — no rounded corners (Haris 2026-11-04)
+      cfg.cornerStyle = .fixed; cfg.background.cornerRadius = 0; cfg.background.backgroundColor = c
+      b.configuration = cfg; b.backgroundColor = c; b.layer.cornerRadius = 0; b.alpha = 0; addSubview(b)
     }
     left.addAction(UIAction { [weak self] _ in UINotificationFeedbackGenerator().notificationOccurred(.success); self?.close(); self?.onApprove?() }, for: .touchUpInside)
     right.addAction(UIAction { [weak self] _ in self?.close(); self?.onOpen?() }, for: .touchUpInside)
@@ -2597,13 +2599,16 @@ final class SwipeRow: UIView, UIGestureRecognizerDelegate {
     let W = bounds.width, H = bounds.height
     left.frame = CGRect(x: 0, y: 0, width: SwipeRow.W, height: H); right.frame = CGRect(x: W - SwipeRow.W, y: 0, width: SwipeRow.W, height: H)
     front.bounds = CGRect(x: 0, y: 0, width: W, height: H); front.center = CGPoint(x: W / 2 + offset, y: H / 2)
+    // the buttons only while the row is swiped — a touch and hold shrinks the row, and nothing may show behind it
+    if offset > 0 { left.alpha = 1 } else if offset < 0 { right.alpha = 1 }
     pic.frame = CGRect(x: 14, y: (H - 36) / 2, width: 36, height: 36)
     let aw = max(ceil(amt.sizeThatFits(CGSize(width: 160, height: 20)).width), ceil(pill.sizeThatFits(CGSize(width: 160, height: 20)).width))
     amt.frame = CGRect(x: W - 14 - aw, y: H / 2 - 20, width: aw, height: 20)
     let pw = ceil(pill.sizeThatFits(CGSize(width: 160, height: 20)).width); pill.frame = CGRect(x: W - 14 - pw, y: H / 2 + 3, width: pw, height: 18)
     name.frame = CGRect(x: 62, y: H / 2 - 20, width: W - 62 - aw - 24, height: 20); sub.frame = CGRect(x: 62, y: H / 2 + 2, width: W - 62 - aw - 24, height: 18)
   }
-  func close() { guard offset != 0 else { return }; offset = 0; UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0) { self.layoutSubviews() } }
+  func close() { guard offset != 0 else { return }; offset = 0; UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, animations: { self.layoutSubviews() }) { _ in self.hideButtons() } }
+  private func hideButtons() { if offset == 0 { left.alpha = 0; right.alpha = 0 } }
   @objc private func tapped() { if offset != 0 { close(); return }; onOpen?() }
   @objc private func held(_ g: UILongPressGestureRecognizer) { if g.state == .began { close(); onHold?() } }
   private var startOffset: CGFloat = 0
@@ -2620,7 +2625,7 @@ final class SwipeRow: UIView, UIGestureRecognizerDelegate {
       let to: CGFloat = (offset > 36 || (v > 400 && offset > 0)) && canApprove ? SwipeRow.W : (offset < -36 || (v < -400 && offset < 0)) ? -SwipeRow.W : 0
       if to != 0 && to != startOffset { UISelectionFeedbackGenerator().selectionChanged() }
       offset = to
-      UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0) { self.layoutSubviews() }
+      UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, animations: { self.layoutSubviews() }) { _ in self.hideButtons() }
     }
   }
   override func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
