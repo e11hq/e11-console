@@ -675,7 +675,7 @@ final class AssetsCtl {
     case "client":
       guard let cid = s.client else { break }
       let m = models[cid] ?? [:]
-      h.drawAssetsBar(name: m["name"] as? String ?? main.clientPageIfMade?.model["title"] as? String ?? "Client Assets", sub: m["sub"] as? String ?? "", logo: m["logo"] as? String, rgb: m["rgb"], ini: m["ini"] as? String, showLogo: true)
+      h.drawAssetsBar(name: m["name"] as? String ?? main.clientPageIfMade?.model["title"] as? String ?? "Client Assets", sub: m["sub"] as? String ?? "", logo: m["logo"] as? String, rgb: m["rgb"], ini: m["ini"] as? String, showLogo: false)   // (just the name — no colour box or logo: Haris 2026-11-04)
       let find = part(h, "find") { AssetsFind() }
       find.field.placeholder = "Search \(m["name"] as? String ?? "this client")’s files"
       find.onChange = { [weak self, weak h] q in guard let self = self, let h = h, let i = self.stack.firstIndex(where: { $0.h === h }) else { return }; self.stack[i].q = q; self.blocks(h); h.setNeedsLayout() }
