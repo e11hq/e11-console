@@ -210,7 +210,8 @@ export function createAccess(store, opts = {}) {
     // Expense claims (receipts, signatures, claim PDFs): the person who claims, and Finance
     if (parts[0] === 'Claims') return parts[1] === u.id || !!finLevel(u);
     // Invoices and other finance records: Finance people and Admins only
-    if (parts[0] === 'Finance') return !!finLevel(u);
+    // (and a claim added by hand for you: its PDF — your My reimbursements: Haris 2026-11-04)
+    if (parts[0] === 'Finance') return !!finLevel(u) || store.list('claims').some((c) => c.byHand && c.userId === u.id && (c.groups || []).some((g) => (g.items || []).some((i) => i.receipt && i.receipt.path === rel)));
     if (isFinance(u)) return (parts[0] === 'attachments' && parts[1] === '_avatars') || (parts[0] === 'Clients' && parts[1] === '_logos') || parts[0] === '.thumbs';
     // files of an inactive client: its tasks' attachments and its Client Assets
     if (parts[0] === 'attachments' && parts[1] && parts[1][0] !== '_') { const t = store.get('tasks', parts[1]); if (t && inInactive(t)) return false; }

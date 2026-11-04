@@ -3034,7 +3034,40 @@ const NativeMe = (() => {
   const offFin = () => typeof isOffice === 'function' && isOffice() && typeof finLevel === 'function' && !!finLevel(me());
   const ovTab = () => shell >= 36 && typeof isOffice === 'function' && isOffice() && (ui.view === 'home' || ui.view === 'today');
   const teamTab = () => shell >= 36 && typeof isOffice === 'function' && isOffice() && !offFin() && ui.view === 'team';
-  const tabNow = () => (plansTab() ? 'plans' : ovTab() ? 'today' : teamTab() ? 'team' : 'me');
+  // (steps 2–3: Claims and Expenses the app's own too — Haris 2026-11-04)
+  const clTab = () => shell >= 37 && offFin() && ui.view === 'fin-reimb';
+  const exTab = () => shell >= 37 && offFin() && ui.view === 'fin-expenses';
+  const tabNow = () => (plansTab() ? 'plans' : ovTab() ? 'today' : teamTab() ? 'team' : clTab() ? 'fin-reimb' : exTab() ? 'fin-expenses' : 'me');
+  const finAdm = () => typeof finLevel === 'function' && finLevel(me()) === 'admin';
+  const aedOf = (n) => (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const ordN = (n) => n + (n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th');
+  const monthLong = (m) => { const [y, mo] = m.split('-').map(Number); return new Date(y, mo - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }); };
+  // Claims: this claim month's reimbursement claims — the person, items or "Added by hand", the amount, the state
+  function claimsModel() {
+    const m = Claims.claimMonth();
+    const PILL = { submitted: ['Submitted', 'sub'], approved: ['HR approved', 'ok'], paid: ['Paid', 'paid'] };
+    const row = (c) => { const nm = Claims.ownerName(c); const rc = Claims.receiptsOf(c).length; return { id: c.id, name: nm, ini: initials(nm), rgb: rgb(avColor(c.userId || c.personId || c.id)), photo: c.userId ? photoOf(userById(c.userId)) : null,
+      sub: `${c.byHand ? 'Added by hand' : `${plural(Claims.itemsOf(c), 'item')} · ${plural(rc, 'receipt')}`} · ${fmtDay(ymd(new Date(c.submittedAt || c.updatedAt || nowISO())))}`,
+      amt: 'AED ' + aedOf(c.total || Claims.totalOf(c)), st: c.state, pill: (PILL[c.state] || ['', ''])[0] + (c.state === 'paid' && c.paidOn ? ' · ' + fmtDay(c.paidOn) : ''), pk: (PILL[c.state] || ['', ''])[1] }; };
+    const list = Claims.all().filter((c) => c.month === m && ['submitted', 'approved', 'paid'].includes(c.state)).sort((a, b) => String(b.submittedAt || '').localeCompare(String(a.submittedAt || '')));
+    const total = list.reduce((a, c) => a + (c.total || Claims.totalOf(c)), 0);
+    const people = db.users.filter((u) => u.active !== false && !isFinUser(u)).sort((a, b) => fullName(a).localeCompare(fullName(b))).map((u) => ({ id: 'u:' + u.id, name: fullName(u) }))
+      .concat((db.finance || []).filter((x) => x.type === 'person').map((p) => ({ id: 'p:' + p.id, name: p.name, other: true })));
+    const now = todayStr().slice(0, 7), [y, mo] = now.split('-').map(Number), prev = `${new Date(y, mo - 2, 1).getFullYear()}-${String(new Date(y, mo - 2, 1).getMonth() + 1).padStart(2, '0')}`;
+    return { month: m, label: monthLong(m), sub: `${plural(list.length, 'claim')} · AED ${aedOf(total)}`, admin: finAdm(),
+      need: list.filter((c) => c.state === 'submitted').map(row), all: list.map(row), people, months: [{ m: prev, t: monthLong(prev) }, { m: now, t: monthLong(now) }] };
+  }
+  // Expenses: every monthly subscription that's on, and this month's office expenses
+  function expensesModel() {
+    const now = todayStr().slice(0, 7);
+    const subs = (db.finance || []).filter((x) => x.type === 'sub' && !x.endedAt).sort((a, b) => (Number(a.day) || 0) - (Number(b.day) || 0));
+    const office = Fin.transactions().filter((x) => x.kind === 'expense' && String(x.date).startsWith(now)).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    return { admin: finAdm(), month: monthLong(now),
+      subs: subs.map((x) => ({ id: x.id, name: x.name, amt: 'AED ' + aedOf(x.amount), sub: `Billed on the ${ordN(Number(x.day) || 1)} · monthly`, inv: !!Object.keys(x.invoices || {}).length })),
+      subsTotal: 'AED ' + aedOf(subs.reduce((a, x) => a + (Number(x.amount) || 0), 0)),
+      office: office.map((x) => ({ id: x.id, name: x.name, amt: 'AED ' + aedOf(x.amount), sub: fmtDay(x.date) + (x.invoice ? ' · invoice' : ''), inv: !!x.invoice })),
+      officeTotal: 'AED ' + aedOf(office.reduce((a, x) => a + (Number(x.amount) || 0), 0)) };
+  }
   // (a file's small picture — photos, videos' frames, PDFs' pages — Haris 2026-11-04: a video showed only "MP4")
   const ovPic = (a) => { const e = fileExt(a.name); return isImage(a) && e !== 'svg' ? imgUrl(a, 160) : a.thumb ? '/__file/' + a.thumb.split('/').map(encodeURIComponent).join('/') + '?view=1' : a.path && /^(pdf|mp4|mov|m4v|webm|avi|mkv|doc|docx|ppt|pptx|xls|xlsx)$/.test(e) ? '/api/fthumb?path=' + encodeURIComponent(a.path) + '&id=' + encodeURIComponent(a.id || '') : null; };
   const ovAtt = (id) => { for (const c of db.clients || []) for (const f of c.folders || []) { const a = (f.files || []).find((x) => x.id === id); if (a) return a; } return null; };
@@ -3073,7 +3106,7 @@ const NativeMe = (() => {
   const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
   const photoOf = (u) => (u && u.avatar ? fileUrl({ path: u.avatar }) : null);
   const visible = () => {
-    if (!Phone.on || !(ui.view === 'me' || plansTab() || ovTab() || teamTab()) || ui.search || ui.taskId || document.querySelector('#detail.open')) return false;
+    if (!Phone.on || !(ui.view === 'me' || plansTab() || ovTab() || teamTab() || clTab() || exTab()) || ui.search || ui.taskId || document.querySelector('#detail.open')) return false;
     // (a page question that isn't iPhone's own yet — View as… — shows on the page meanwhile)
     if (document.querySelector('#overlay-root .scrim, #tv-root .scrim, .lightbox, .fv')) return false;
     return true;
@@ -3108,6 +3141,8 @@ const NativeMe = (() => {
       trash: wantTrash ? trashModel() : null,
       plans: wantPlans && plansOwn() ? Plans.native.list(plMonth) : null,
       overview: ovTab() ? overview() : null,
+      claims: clTab() ? claimsModel() : null,
+      expenses: exTab() ? expensesModel() : null,
       plan: plOpen && plansOwn() ? Plans.native.plan(plOpen.pid, plOpen.month) : null,
     };
   }
@@ -3338,6 +3373,48 @@ const NativeMe = (() => {
           answer(rid, { ok: true, q, found, loose: !!r.loose }); return;
         }
         // (the file itself — its picture, a video's frame and player — not just its address)
+        // Claims (Finance Admins): HR approved, paid on a date, the claim's PDF, one added by hand
+        case 'clApprove': { if (!finAdm()) return answer(rid, { ok: false, error: 'Only a Finance Admin can do this' }); Claims.markApproved([String(ev.id)]); answer(rid, { ok: true }); sync(); return; }
+        case 'clPaid': { if (!finAdm()) return answer(rid, { ok: false, error: 'Only a Finance Admin can do this' }); const ok = Claims.paidOn([String(ev.id)], String(ev.date || '')); answer(rid, ok ? { ok: true } : { ok: false, error: 'That claim can’t be marked paid' }); sync(); return; }
+        case 'clOpen': Claims.previewPdf(String(ev.id)); return;
+        case 'clAdd': {
+          if (!finAdm()) return answer(rid, { ok: false, error: 'Only a Finance Admin can do this' });
+          const [t, id] = String(ev.who || '').split(':');
+          const amount = Math.round(parseFloat(ev.amount) * 100) / 100;
+          if (!id) return answer(rid, { ok: false, error: 'Choose who is being reimbursed' });
+          if (!(amount > 0)) return answer(rid, { ok: false, error: 'Enter the amount in AED (numbers only)' });
+          if (!ev.pdf || !ev.pdf.path) return answer(rid, { ok: false, error: 'Attach the claim’s PDF' });
+          const pr = t === 'p' ? (db.finance || []).find((x) => x.id === id) : null;
+          Claims.addByHand({ userId: t === 'u' ? id : null, personId: t === 'p' ? id : null, personName: pr ? pr.name : '', month: /^\d{4}-\d{2}$/.test(ev.month || '') ? ev.month : todayStr().slice(0, 7), amount, pdf: { path: String(ev.pdf.path), name: String(ev.pdf.name || 'Claim.pdf'), size: Number(ev.pdf.size) || 0 } });
+          answer(rid, { ok: true }); sync(); return;
+        }
+        case 'clPerson': {   // someone who isn't a team member, for a claim by hand
+          if (!finAdm()) return answer(rid, { ok: false, error: 'Only a Finance Admin can do this' });
+          const n = String(ev.name || '').trim(); if (!n) return answer(rid, { ok: false, error: 'Enter a name' });
+          const pr = { id: uid(), type: 'person', name: n, createdAt: nowISO(), createdBy: currentUserId }; db.finance.push(pr); persist(0);
+          answer(rid, { ok: true, id: 'p:' + pr.id, name: n }); sync(); return;
+        }
+        // Expenses (Finance Admins): a subscription or an office expense added; a subscription ended today
+        case 'exAdd': {
+          if (!finAdm()) return answer(rid, { ok: false, error: 'Only a Finance Admin can do this' });
+          const name = String(ev.name || '').trim(), amount = Math.round(parseFloat(ev.amount) * 100) / 100;
+          if (!name) return answer(rid, { ok: false, error: 'Enter a name' });
+          if (!(amount > 0)) return answer(rid, { ok: false, error: 'Enter the amount in AED (numbers only)' });
+          const inv = ev.invoice && ev.invoice.path ? { path: String(ev.invoice.path), name: String(ev.invoice.name || 'Invoice'), size: Number(ev.invoice.size) || 0 } : null;
+          const rec = { id: uid(), type: ev.kind === 'sub' ? 'sub' : 'expense', name, amount, createdAt: nowISO(), createdBy: currentUserId };
+          const now = todayStr().slice(0, 7);
+          if (rec.type === 'sub') { rec.day = Math.min(31, Math.max(1, Number(ev.day) || 1)); rec.startMonth = now; rec.invoices = inv ? { [now]: inv } : {}; rec.endedAt = null; }
+          else { rec.date = /^\d{4}-\d{2}-\d{2}$/.test(ev.date || '') ? ev.date : todayStr(); rec.invoice = inv; }
+          db.finance.push(rec); persist(0); renderContent();
+          answer(rid, { ok: true }); sync(); return;
+        }
+        case 'exEnd': {
+          if (!finAdm()) return answer(rid, { ok: false, error: 'Only a Finance Admin can do this' });
+          const x = (db.finance || []).find((y) => y.id === ev.id && y.type === 'sub');
+          if (!x) return answer(rid, { ok: false, error: 'That subscription isn’t here any more' });
+          x.endedAt = nowISO(); persist(0); renderContent(); answer(rid, { ok: true }); sync(); return;
+        }
+        case 'exInv': { const x = (db.finance || []).find((y) => y.id === ev.id); const f = x && (x.invoice || Object.values(x.invoices || {}).slice(-1)[0]); if (f) previewFile(f); return; }
         case 'ovFile': { const a = ev.id ? ovAtt(String(ev.id)) : null; if (a) previewFile(a); else if (ev.path) previewFile({ path: String(ev.path), name: String(ev.name || 'File') }); return; }
         case 'ovGo': go({ assets: 'clients', claims: 'fin-reimb', expenses: 'fin-expenses' }[ev.to] || 'home'); return;
         case 'ovClaim': if (typeof Claims !== 'undefined' && Claims.byId(ev.id)) Claims.open(ev.id); return;
@@ -3388,5 +3465,5 @@ const NativeMe = (() => {
   const asking = () => on && shown;
   const ask = (a) => NativeMac.call('meAsk', a);
   function toastOut(msg, action, ms) { toastAction = action || null; call({ toast: { t: String(msg || ''), a: action ? action.label : '', ms: ms || (action ? 6000 : 3000) } }); }
-  return { sync, ask, asking, toast: toastOut, peek: () => model(), overview, get on() { return on; }, get shown() { return shown; }, get light() { return on; } };
+  return { sync, ask, asking, toast: toastOut, peek: () => model(), overview, claimsModel, expensesModel, get on() { return on; }, get shown() { return shown; }, get light() { return on; } };
 })();

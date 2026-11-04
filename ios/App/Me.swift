@@ -1013,9 +1013,11 @@ final class MeCtl {
   // (which tab it serves: Me — or, for Social Managers and Executives, their Content plans tab, whose first page is the
   //  plans list itself, as Client Assets' — Haris 2026-11-04)
   private(set) var tab = "me"
-  private var rootKind: String { tab == "plans" ? "plans" : tab == "today" ? "overview" : tab == "team" ? "team" : "me" }
+  private var rootKind: String { tab == "plans" ? "plans" : tab == "today" ? "overview" : tab == "team" ? "team" : tab == "fin-reimb" ? "claims" : tab == "fin-expenses" ? "expenses" : "me" }
   // (a tab's own first page — big title, 🔍 / your photo, no ‹: Content plans for Social, an Office Admin's Overview and Team)
-  static let tabRoots: Set<String> = ["plansTab", "overviewTab", "teamTab"]
+  static let tabRoots: Set<String> = ["plansTab", "overviewTab", "teamTab", "claimsTab", "expensesTab"]
+  // (Claims: Need approval · All; Expenses: Subscriptions · Office expenses — Haris 2026-11-04)
+  private var clSeg = 0, exSeg = 0
   // (a question to the page, its answer back — Content plans' post, approve, send back)
   private func request(_ ev: [String: Any], _ done: @escaping ([String: Any]) -> Void) {
     let rid = UUID().uuidString
@@ -1076,7 +1078,7 @@ final class MeCtl {
     }
     if let m = a["model"] as? [String: Any] { model = m }
     // (the other tab now — Me ↔ Content plans: its own first page)
-    let want = ["plans", "today", "team"].contains(a["tab"] as? String ?? "") ? (a["tab"] as! String) : "me"
+    let want = ["plans", "today", "team", "fin-reimb", "fin-expenses"].contains(a["tab"] as? String ?? "") ? (a["tab"] as! String) : "me"
     if want != tab {
       if stack.contains(where: { $0.kind == "plans" }) { send(["ev": "pl", "on": false]) }
       stack.forEach { $0.h.removeFromSuperview() }; stack = []; tab = want
@@ -1142,7 +1144,7 @@ final class MeCtl {
     // (Content plans as a Social's own tab: a main page — the big title, as Home and the Inbox: Haris 2026-11-04)
     // (opened from Me: the same big title, with ‹ — Haris 2026-11-04: both Content plans pages, no name in the middle)
     let root = stack.isEmpty && kind == rootKind
-    h.assets = kind == "me" ? "me" : (root && kind == "plans") ? "plansTab" : (root && kind == "overview") ? "overviewTab" : (root && kind == "team") ? "teamTab" : kind == "plans" ? "plansPage" : "me." + kind
+    h.assets = kind == "me" ? "me" : (root && kind == "plans") ? "plansTab" : (root && kind == "overview") ? "overviewTab" : (root && kind == "team") ? "teamTab" : (root && kind == "claims") ? "claimsTab" : (root && kind == "expenses") ? "expensesTab" : kind == "plans" ? "plansPage" : "me." + kind
     h.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     h.isHidden = true
     h.assetsBack = !(stack.isEmpty && kind == rootKind)
@@ -1297,6 +1299,8 @@ final class MeCtl {
     if let l = main.homeLook as? [String: Any], (l["light"] as? Bool) == light { mm["look"] = l }
     if s.kind == "me" { mm["title"] = "Me"; mm["date"] = "E11 Console App" }
     if s.h.assets == "overviewTab" { mm["title"] = "Overview"; mm["date"] = Date().formatted(.dateTime.weekday(.wide).month(.wide).day()) }
+    if s.h.assets == "claimsTab" { mm["title"] = "Claims"; mm["date"] = "Reimbursements" }
+    if s.h.assets == "expensesTab" { mm["title"] = "Expenses"; mm["date"] = exSeg == 0 ? "Subscriptions" : "Office expenses" }
     if s.h.assets == "teamTab" { mm["title"] = "Team members"; mm["date"] = team.isEmpty ? "" : "\(team["active"] as? Int ?? 0) active · \(team["pastN"] as? Int ?? 0) past" }
     if s.h.assets == "plansTab" || s.h.assets == "plansPage" { mm["title"] = "Content plans"; mm["date"] = (model["plans"] as? [String: Any])?["label"] as? String ?? "" }   // (the line under the big title, as the other tabs have — Haris 2026-11-03)
     s.h.bottomRoom = (main.tabBar.isHidden ? 40 : main.view.bounds.height - main.tabBar.frame.minY) + 96
@@ -1460,6 +1464,10 @@ final class MeCtl {
       teamBlocks(h, &out)
     case "overview":
       overviewBlocks(h, &out)
+    case "claims":
+      claimsBlocks(h, &out)
+    case "expenses":
+      expensesBlocks(h, &out)
     case "member":
       memberBlocks(h, s.id ?? "", &out)
     case "plans":
@@ -1514,6 +1522,116 @@ final class MeCtl {
       let ex = ((o["expenses"] as? [[String: Any]]) ?? []).map { x in SetItem(key: "x." + (x["id"] as? String ?? ""), title: x["name"] as? String ?? "", sub: x["sub"] as? String ?? "", value: x["amt"] as? String ?? "", sym: "doc.text.fill", col: .systemGray, chevron: false) }
       out.append(sec("ovx", "Office expenses · latest", "expenses"))
       if ex.isEmpty { out.append(foot(h, "ovx0", "None this month yet.")) } else { out.append(group(h, "ovx", ex)) }
+    }
+  }
+  // ---------- an Office Admin's Claims (Haris 2026-11-04) ----------
+  private func claimsBlocks(_ h: HomeView, _ out: inout [UIView]) {
+    guard let m = model["claims"] as? [String: Any] else { let n = part(h, "wait") { AssetsNote() }; n.label.text = "Loading…"; out.append(n); return }
+    let need = (m["need"] as? [[String: Any]]) ?? [], all = (m["all"] as? [[String: Any]]) ?? []
+    let admin = (m["admin"] as? Bool) == true
+    let seg = part(h, "seg") { SegBlock() }
+    seg.set("Need approval · \(need.count)", "All · \(all.count)", clSeg)
+    seg.onPick = { [weak self, weak h] i in guard let self = self, let h = h else { return }; self.clSeg = i; UIView.performWithoutAnimation { self.blocks(h); h.setNeedsLayout(); h.layoutIfNeeded() } }
+    out.append(seg)
+    out.append(foot(h, "clsub", "\(m["label"] as? String ?? "") · \(m["sub"] as? String ?? "")"))
+    let rows = clSeg == 0 ? need : all
+    if rows.isEmpty { out.append(foot(h, "cl0", clSeg == 0 ? "Nothing waiting for HR approval." : "No claims this month yet.", centered: true)) }
+    else {
+      let list = part(h, "claims") { SwipeRows() }
+      list.set(rows, look: h.look, admin: admin)
+      list.onApprove = { [weak self, weak h] id in self?.request(["ev": "clApprove", "id": id]) { r in if (r["ok"] as? Bool) == true { UINotificationFeedbackGenerator().notificationOccurred(.success); h?.toast(["t": "Marked HR approved"]) } else { h?.toast(["t": r["error"] as? String ?? "That didn’t work — try again"]) } } }
+      list.onOpen = { [weak self] id in self?.send(["ev": "clOpen", "id": id]) }
+      list.onHold = { [weak self, weak h] id in guard let self = self, admin, let row = rows.first(where: { ($0["id"] as? String) == id }), (row["st"] as? String) != "paid" else { return }; self.paidOn(h, id) }
+      out.append(list)
+    }
+    h.setFab("Add claim", "plus", admin ? { [weak self, weak h] in if let h = h { self?.addClaim(h, m) } } : nil)
+  }
+  // hold a claim → Paid on: iPhone's own calendar (as the website, a submitted one is HR approved with it)
+  private func paidOn(_ h: HomeView?, _ id: String) {
+    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+    let fmt = DateFormatter(); fmt.calendar = Calendar(identifier: .gregorian); fmt.locale = Locale(identifier: "en_US_POSIX"); fmt.dateFormat = "yyyy-MM-dd"
+    main.topMost().present(DateSheetVC(["value": fmt.string(from: Date()), "min": "", "max": "", "clearable": false, "md": false], dark: !light) { [weak self, weak h] r in
+      if (r["cancel"] as? Bool) == true || (r["ok"] as? Bool) == false { return }
+      guard let d = r["date"] as? String, !d.isEmpty else { return }
+      self?.request(["ev": "clPaid", "id": id, "date": d]) { r in if (r["ok"] as? Bool) == true { UINotificationFeedbackGenerator().notificationOccurred(.success); h?.toast(["t": "Marked paid"]) } else { h?.toast(["t": r["error"] as? String ?? "That didn’t work — try again"]) } }
+    }, animated: true)
+  }
+  private func addClaim(_ h: HomeView, _ m: [String: Any]) {
+    let people = ((m["people"] as? [[String: Any]]) ?? []).map { ($0["id"] as? String ?? "", $0["name"] as? String ?? "") }
+    let months = ((m["months"] as? [[String: Any]]) ?? []).map { ($0["m"] as? String ?? "", $0["t"] as? String ?? "") }
+    let vc = MoneyFormVC(kind: .claim, people: people, months: months, dark: !light, cookies: main.serverHome.cookies)
+    vc.onPerson = { [weak self] name, done in self?.request(["ev": "clPerson", "name": name]) { r in done((r["ok"] as? Bool) == true ? (r["id"] as? String, r["name"] as? String) : (nil, nil)) } }
+    vc.onSave = { [weak self, weak h] f, done in
+      self?.request(["ev": "clAdd", "who": f["who"] ?? "", "amount": f["amount"] ?? "", "month": f["month"] ?? "", "pdf": f["file"] ?? NSNull()]) { r in
+        if (r["ok"] as? Bool) == true { done(nil); h?.toast(["t": "Added — it waits for HR approval"]) } else { done(r["error"] as? String ?? "That didn’t work — try again") } }
+    }
+    main.topMost().present(vc.inNav(), animated: true)
+  }
+  // ---------- an Office Admin's Expenses ----------
+  private func expensesBlocks(_ h: HomeView, _ out: inout [UIView]) {
+    guard let m = model["expenses"] as? [String: Any] else { let n = part(h, "wait") { AssetsNote() }; n.label.text = "Loading…"; out.append(n); return }
+    let subs = (m["subs"] as? [[String: Any]]) ?? [], office = (m["office"] as? [[String: Any]]) ?? []
+    let admin = (m["admin"] as? Bool) == true
+    let seg = part(h, "seg") { SegBlock() }
+    seg.set("Subscriptions · \(subs.count)", "Office expenses · \(office.count)", exSeg)
+    seg.onPick = { [weak self, weak h] i in guard let self = self, let h = h else { return }; self.exSeg = i; if let s = self.stack.first(where: { $0.h === h }) { self.draw(s) }; UIView.performWithoutAnimation { h.setNeedsLayout(); h.layoutIfNeeded() } }
+    out.append(seg)
+    out.append(foot(h, "exsub", exSeg == 0 ? "\(subs.count) subscription\(subs.count == 1 ? "" : "s") · \(m["subsTotal"] as? String ?? "") a month" : "\(m["month"] as? String ?? "") · \(m["officeTotal"] as? String ?? "")"))
+    let rows = exSeg == 0 ? subs : office
+    if rows.isEmpty { out.append(foot(h, "ex0", exSeg == 0 ? "No monthly subscriptions." : "No office expenses this month yet.", centered: true)) }
+    else {
+      let items = rows.map { x -> SetItem in
+        let id = x["id"] as? String ?? ""
+        var it = SetItem(key: "e." + id, title: x["name"] as? String ?? "", sub: x["sub"] as? String ?? "", value: x["amt"] as? String ?? "", sym: exSeg == 0 ? "arrow.triangle.2.circlepath" : "doc.text.fill", col: exSeg == 0 ? .systemIndigo : .systemGray, chevron: (x["inv"] as? Bool) == true,
+                         tap: (x["inv"] as? Bool) == true ? { [weak self] in self?.send(["ev": "exInv", "id": id]) } : nil)
+        // (hold a subscription → Delete subscription, ending today — Haris 2026-11-04)
+        if exSeg == 0, admin { it.hold = { [weak self, weak h] in self?.endSub(h, id, x["name"] as? String ?? "this subscription") } }
+        return it
+      }
+      out.append(group(h, exSeg == 0 ? "exs" : "exo", items))
+    }
+    h.setFab(exSeg == 0 ? "Add subscription" : "Add office expense", "plus", admin ? { [weak self, weak h] in if let h = h { self?.addExpense(h, sub: self?.exSeg == 0) } } : nil)
+  }
+  private func endSub(_ h: HomeView?, _ id: String, _ name: String) {
+    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+    let today = Date().formatted(.dateTime.month(.abbreviated).day())
+    let a = UIAlertController(title: "Delete \(name)?", message: "It ends today, \(today). It won’t be counted from next month — this month only if its billing day has passed. Months already recorded stay.", preferredStyle: .actionSheet)
+    a.overrideUserInterfaceStyle = light ? .light : .dark
+    a.addAction(UIAlertAction(title: "Delete subscription", style: .destructive) { [weak self, weak h] _ in
+      self?.request(["ev": "exEnd", "id": id]) { r in if (r["ok"] as? Bool) == true { UINotificationFeedbackGenerator().notificationOccurred(.success); h?.toast(["t": "Subscription deleted"]) } else { h?.toast(["t": r["error"] as? String ?? "That didn’t work — try again"]) } }
+    })
+    a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+    main.topMost().present(a, animated: true)
+  }
+  private func addExpense(_ h: HomeView, sub: Bool?) {
+    let isSub = sub == true
+    let vc = MoneyFormVC(kind: isSub ? .sub : .expense, people: [], months: [], dark: !light, cookies: main.serverHome.cookies)
+    vc.onSave = { [weak self, weak h] f, done in
+      var ev: [String: Any] = ["ev": "exAdd", "kind": isSub ? "sub" : "expense", "name": f["name"] ?? "", "amount": f["amount"] ?? "", "invoice": f["file"] ?? NSNull()]
+      if isSub { ev["day"] = f["day"] ?? 1 } else { ev["date"] = f["date"] ?? "" }
+      self?.request(ev) { r in if (r["ok"] as? Bool) == true { done(nil); h?.toast(["t": isSub ? "Subscription added" : "Office expense added"]) } else { done(r["error"] as? String ?? "That didn’t work — try again") } }
+    }
+    main.topMost().present(vc.inNav(), animated: true)
+  }
+  // 🔍 on Claims (by name) and Expenses (by name): the list's own rows, found here
+  private func listFind(_ h: HomeView, _ raw: String) {
+    let q = raw.trimmingCharacters(in: .whitespaces).lowercased()
+    guard !q.isEmpty else { h.showFound([], hint: h.assets == "claimsTab" ? "Search claims by name." : "Search subscriptions and office expenses."); return }
+    let words = q.split(separator: " ").map(String.init)
+    let match = { (s: String) in let n = s.lowercased(); return words.allSatisfy { n.contains($0) } }
+    if h.assets == "claimsTab" {
+      let m = model["claims"] as? [String: Any] ?? [:]
+      let rows = ((m["all"] as? [[String: Any]]) ?? []).filter { match($0["name"] as? String ?? "") }
+      if rows.isEmpty { h.showFound([], hint: "No claims found."); return }
+      let list = SwipeRows(); list.set(rows, look: h.look, admin: false)
+      list.onOpen = { [weak self] id in self?.send(["ev": "clOpen", "id": id]) }
+      h.showFound([list], hint: nil)
+    } else {
+      let m = model["expenses"] as? [String: Any] ?? [:]
+      let rows = (((m["subs"] as? [[String: Any]]) ?? []) + ((m["office"] as? [[String: Any]]) ?? [])).filter { match($0["name"] as? String ?? "") }
+      if rows.isEmpty { h.showFound([], hint: "Nothing found."); return }
+      let g = SetGroup(); g.set(rows.map { x in let id = x["id"] as? String ?? ""; return SetItem(key: "f." + id, title: x["name"] as? String ?? "", sub: x["sub"] as? String ?? "", value: x["amt"] as? String ?? "", chevron: (x["inv"] as? Bool) == true, tap: (x["inv"] as? Bool) == true ? { [weak self] in self?.send(["ev": "exInv", "id": id]) } : nil) }, look: h.look)
+      h.showFound([g], hint: nil)
     }
   }
   // 🔍 on Overview: every client's files (Client Assets' search), a tap previews it — Haris 2026-11-04
@@ -1873,6 +1991,7 @@ final class MeCtl {
     // (your photo on the Content plans tab: the Me tab, as from every other tab — Haris 2026-11-04)
     case "me" where MeCtl.tabRoots.contains(h.assets ?? ""): main.selectTab("me")
     case "find" where h.assets == "overviewTab": overviewFind(h, ev["q"] as? String ?? "")
+    case "find" where h.assets == "claimsTab" || h.assets == "expensesTab": listFind(h, ev["q"] as? String ?? "")
     case "find" where h.assets == "plansPage" || h.assets == "me.plan" || h.assets == "plansTab": planFind(h, ev["q"] as? String ?? "")
     default: break
     }
@@ -2384,6 +2503,277 @@ final class NoteVC: UIViewController, UITextViewDelegate {
       if let e = err { self.navigationItem.rightBarButtonItem?.isEnabled = true; let a = UIAlertController(title: e, message: nil, preferredStyle: .alert); a.addAction(UIAlertAction(title: "OK", style: .default)); self.present(a, animated: true); return }
       UINotificationFeedbackGenerator().notificationOccurred(.success)
       self.dismiss(animated: true)
+    }
+  }
+}
+
+// ---------- an Office Admin's claim rows (Haris 2026-11-04): a short swipe shows a button, then it's tapped —
+// right: HR approved (a submitted claim, Finance Admins); left: Open claim (its PDF). Held: Paid on. A tap opens it too.
+// Each row kept by its id and only drawn again when what it shows changed. ----------
+final class SwipeRows: UIView, HomeBlock {
+  var onApprove: ((String) -> Void)?, onOpen: ((String) -> Void)?, onHold: ((String) -> Void)?
+  private let box = UIView()
+  private var rows: [String: SwipeRow] = [:], order: [String] = [], seps: [UIView] = []
+  private static let H: CGFloat = 70
+  override init(frame: CGRect) { super.init(frame: frame); box.layer.cornerRadius = 16; box.layer.cornerCurve = .continuous; box.clipsToBounds = true; addSubview(box) }
+  required init?(coder: NSCoder) { fatalError() }
+  func set(_ list: [[String: Any]], look L: HomeLook, admin: Bool) {
+    box.backgroundColor = L.card
+    let ids = list.compactMap { $0["id"] as? String }
+    for (id, r) in rows where !ids.contains(id) { r.removeFromSuperview(); rows[id] = nil }
+    UIView.performWithoutAnimation {
+      for x in list {
+        guard let id = x["id"] as? String else { continue }
+        let r = rows[id] ?? { let r = SwipeRow(); r.owner = self; box.addSubview(r); rows[id] = r; return r }()
+        r.set(x, look: L, canApprove: admin && (x["st"] as? String) == "submitted")
+        r.onApprove = { [weak self] in self?.onApprove?(id) }; r.onOpen = { [weak self] in self?.onOpen?(id) }; r.onHold = { [weak self] in self?.onHold?(id) }
+      }
+    }
+    order = ids
+    while seps.count < max(0, ids.count - 1) { let v = UIView(); v.backgroundColor = UIColor.separator; box.addSubview(v); seps.append(v) }
+    seps.enumerated().forEach { $0.element.isHidden = $0.offset >= ids.count - 1 }
+    setNeedsLayout()
+  }
+  func closeOthers(_ keep: SwipeRow) { rows.values.filter { $0 !== keep }.forEach { $0.close() } }
+  func blockHeight(_ W: CGFloat) -> CGFloat { CGFloat(order.count) * SwipeRows.H + 8 }
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    box.frame = CGRect(x: 16, y: 4, width: bounds.width - 32, height: CGFloat(order.count) * SwipeRows.H)
+    for (i, id) in order.enumerated() { if let r = rows[id] { r.bounds = CGRect(x: 0, y: 0, width: box.bounds.width, height: SwipeRows.H); r.center = CGPoint(x: box.bounds.width / 2, y: CGFloat(i) * SwipeRows.H + SwipeRows.H / 2) } }
+    for (i, v) in seps.enumerated() where !v.isHidden { v.frame = CGRect(x: 62, y: CGFloat(i + 1) * SwipeRows.H - 0.5, width: box.bounds.width - 62, height: 0.5); box.bringSubviewToFront(v) }
+  }
+}
+final class SwipeRow: UIView, UIGestureRecognizerDelegate {
+  weak var owner: SwipeRows?
+  var onApprove: (() -> Void)?, onOpen: (() -> Void)?, onHold: (() -> Void)?
+  private let front = UIView(), pic = UIImageView(), name = UILabel(), sub = UILabel(), amt = UILabel(), pill = PaddedLabel()
+  private let left = UIButton(type: .system), right = UIButton(type: .system)
+  private var canApprove = false, offset: CGFloat = 0, photoPath: String?
+  private static let W: CGFloat = 84
+  override init(frame: CGRect) {
+    super.init(frame: frame)
+    clipsToBounds = true
+    for (b, t, s, c) in [(left, "HR approved", "checkmark", UIColor.systemGreen), (right, "Open claim", "doc.text", UIColor.systemBlue)] {
+      var cfg = UIButton.Configuration.plain(); cfg.image = UIImage(systemName: s, withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold)); cfg.imagePlacement = .top; cfg.imagePadding = 4
+      cfg.attributedTitle = AttributedString(t, attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 12, weight: .semibold)])); cfg.baseForegroundColor = .white
+      b.configuration = cfg; b.backgroundColor = c; addSubview(b)
+    }
+    left.addAction(UIAction { [weak self] _ in UINotificationFeedbackGenerator().notificationOccurred(.success); self?.close(); self?.onApprove?() }, for: .touchUpInside)
+    right.addAction(UIAction { [weak self] _ in self?.close(); self?.onOpen?() }, for: .touchUpInside)
+    pic.layer.cornerRadius = 18; pic.clipsToBounds = true; pic.contentMode = .scaleAspectFill
+    name.font = .systemFont(ofSize: 16, weight: .medium); sub.font = .systemFont(ofSize: 13); sub.textColor = .secondaryLabel
+    amt.font = .systemFont(ofSize: 15, weight: .semibold); amt.textAlignment = .right
+    pill.font = .systemFont(ofSize: 11.5, weight: .semibold); pill.layer.cornerRadius = 7; pill.clipsToBounds = true; pill.insets = UIEdgeInsets(top: 2, left: 7, bottom: 2, right: 7)
+    [pic, name, sub, amt, pill].forEach { front.addSubview($0) }
+    addSubview(front)
+    let pan = UIPanGestureRecognizer(target: self, action: #selector(panned(_:))); pan.delegate = self; front.addGestureRecognizer(pan)
+    front.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapped)))
+    let hold = UILongPressGestureRecognizer(target: self, action: #selector(held(_:))); hold.minimumPressDuration = 0.45; front.addGestureRecognizer(hold)
+    _ = PressShrink.add(to: front)
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  private var sig = ""
+  func set(_ x: [String: Any], look L: HomeLook, canApprove ok: Bool) {
+    canApprove = ok
+    front.backgroundColor = L.card
+    let s = "\(x["name"] ?? "")|\(x["sub"] ?? "")|\(x["amt"] ?? "")|\(x["pill"] ?? "")|\(x["pk"] ?? "")|\(x["photo"] ?? "")|\(ok)|\(L.light)"
+    guard s != sig else { return }
+    sig = s
+    name.text = x["name"] as? String; sub.text = x["sub"] as? String; amt.text = x["amt"] as? String
+    pill.text = x["pill"] as? String
+    let col: UIColor = (x["pk"] as? String) == "sub" ? .systemOrange : (x["pk"] as? String) == "ok" ? .systemGreen : .secondaryLabel
+    pill.textColor = col; pill.backgroundColor = (x["pk"] as? String) == "paid" ? UIColor.tertiarySystemFill : col.withAlphaComponent(0.16)
+    let ini = x["ini"] as? String ?? "", rgb = NativeSheetVC.color(x["rgb"]) ?? .systemGray
+    let ph = x["photo"] as? String
+    if ph != photoPath || pic.image == nil {
+      photoPath = ph; pic.image = roundPic(nil, initials: ini, color: rgb, size: 36)
+      if let p = ph { FeedLoader.shared.image(p) { [weak self] i in guard let self = self, self.photoPath == p, let i = i else { return }; self.pic.image = roundPic(i, initials: nil, color: nil, size: 36) } }
+    }
+    left.isHidden = !ok
+    setNeedsLayout()
+  }
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    let W = bounds.width, H = bounds.height
+    left.frame = CGRect(x: 0, y: 0, width: SwipeRow.W, height: H); right.frame = CGRect(x: W - SwipeRow.W, y: 0, width: SwipeRow.W, height: H)
+    front.bounds = CGRect(x: 0, y: 0, width: W, height: H); front.center = CGPoint(x: W / 2 + offset, y: H / 2)
+    pic.frame = CGRect(x: 14, y: (H - 36) / 2, width: 36, height: 36)
+    let aw = max(ceil(amt.sizeThatFits(CGSize(width: 160, height: 20)).width), ceil(pill.sizeThatFits(CGSize(width: 160, height: 20)).width))
+    amt.frame = CGRect(x: W - 14 - aw, y: H / 2 - 20, width: aw, height: 20)
+    let pw = ceil(pill.sizeThatFits(CGSize(width: 160, height: 20)).width); pill.frame = CGRect(x: W - 14 - pw, y: H / 2 + 3, width: pw, height: 18)
+    name.frame = CGRect(x: 62, y: H / 2 - 20, width: W - 62 - aw - 24, height: 20); sub.frame = CGRect(x: 62, y: H / 2 + 2, width: W - 62 - aw - 24, height: 18)
+  }
+  func close() { guard offset != 0 else { return }; offset = 0; UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0) { self.layoutSubviews() } }
+  @objc private func tapped() { if offset != 0 { close(); return }; onOpen?() }
+  @objc private func held(_ g: UILongPressGestureRecognizer) { if g.state == .began { close(); onHold?() } }
+  private var startOffset: CGFloat = 0
+  @objc private func panned(_ g: UIPanGestureRecognizer) {
+    let dx = g.translation(in: self).x
+    switch g.state {
+    case .began: startOffset = offset; owner?.closeOthers(self)
+    case .changed:
+      var o = startOffset + dx
+      o = min(canApprove ? SwipeRow.W + 20 : 0, max(-SwipeRow.W - 20, o))
+      offset = o; layoutSubviews()
+    default:
+      let v = g.velocity(in: self).x
+      let to: CGFloat = (offset > 36 || (v > 400 && offset > 0)) && canApprove ? SwipeRow.W : (offset < -36 || (v < -400 && offset < 0)) ? -SwipeRow.W : 0
+      if to != 0 && to != startOffset { UISelectionFeedbackGenerator().selectionChanged() }
+      offset = to
+      UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0) { self.layoutSubviews() }
+    }
+  }
+  override func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
+    guard let p = g as? UIPanGestureRecognizer else { return true }
+    let v = p.velocity(in: self); return abs(v.x) > abs(v.y) * 1.2
+  }
+}
+
+// ---------- the add sheets (Haris 2026-11-04): a claim by hand (Person, Amount, last / this month, its PDF), a subscription
+// (Name, Amount, Billing day, Invoice), an office expense (Name, Amount, Payment date, Invoice) ----------
+final class MoneyFormVC: UIViewController {
+  enum Kind { case claim, sub, expense }
+  let kind: Kind
+  var onSave: (([String: Any], @escaping (String?) -> Void) -> Void)?
+  var onPerson: ((String, @escaping (String?, String?) -> Void) -> Void)?
+  private let people: [(String, String)], months: [(String, String)], dark: Bool
+  private let cookies: (@escaping (String) -> Void) -> Void
+  private let stack = UIStackView(), nameF = UITextField(), amountF = UITextField(), personB = UIButton(type: .system), dayB = UIButton(type: .system), fileB = UIButton(type: .system)
+  private let monthSeg = UISegmentedControl(), datePick = UIDatePicker(), err = UILabel()
+  private var who: String?, day = Calendar.current.component(.day, from: Date()), file: [String: Any]?, busy = false
+  private var peopleList: [(String, String)]
+  init(kind: Kind, people: [(String, String)], months: [(String, String)], dark: Bool, cookies: @escaping (@escaping (String) -> Void) -> Void) {
+    self.kind = kind; self.people = people; self.peopleList = people; self.months = months; self.dark = dark; self.cookies = cookies
+    super.init(nibName: nil, bundle: nil); overrideUserInterfaceStyle = dark ? .dark : .light
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  func inNav() -> UIViewController {
+    let n = UINavigationController(rootViewController: self); n.overrideUserInterfaceStyle = overrideUserInterfaceStyle
+    if let s = n.sheetPresentationController { s.detents = [.large()]; s.prefersGrabberVisible = true }
+    return n
+  }
+  private func label(_ t: String) -> UILabel { let l = UILabel(); l.text = t.uppercased(); l.font = .systemFont(ofSize: 13); l.textColor = .secondaryLabel; return l }
+  private func boxed(_ v: UIView) -> UIView {
+    let b = UIView(); b.backgroundColor = .secondarySystemGroupedBackground; b.layer.cornerRadius = 12; b.layer.cornerCurve = .continuous
+    v.translatesAutoresizingMaskIntoConstraints = false; b.addSubview(v)
+    NSLayoutConstraint.activate([v.leadingAnchor.constraint(equalTo: b.leadingAnchor, constant: 14), v.trailingAnchor.constraint(equalTo: b.trailingAnchor, constant: -14), v.topAnchor.constraint(equalTo: b.topAnchor, constant: 6), v.bottomAnchor.constraint(equalTo: b.bottomAnchor, constant: -6), b.heightAnchor.constraint(greaterThanOrEqualToConstant: 48)])
+    return b
+  }
+  override func viewDidLoad() {
+    super.viewDidLoad()
+    view.backgroundColor = .systemGroupedBackground
+    title = kind == .claim ? "Add claim by hand" : kind == .sub ? "Add subscription" : "Add office expense"
+    navigationItem.leftBarButtonItem = UIBarButtonItem(systemItem: .cancel, primaryAction: UIAction { [weak self] _ in self?.dismiss(animated: true) })
+    navigationItem.rightBarButtonItem = UIBarButtonItem(title: "Save", primaryAction: UIAction { [weak self] _ in self?.save() })
+    let scroll = UIScrollView(); scroll.keyboardDismissMode = .interactive
+    stack.axis = .vertical; stack.spacing = 8
+    scroll.translatesAutoresizingMaskIntoConstraints = false; stack.translatesAutoresizingMaskIntoConstraints = false
+    view.addSubview(scroll); scroll.addSubview(stack)
+    NSLayoutConstraint.activate([scroll.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor), scroll.leadingAnchor.constraint(equalTo: view.leadingAnchor), scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor), scroll.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+      stack.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: 12), stack.leadingAnchor.constraint(equalTo: scroll.frameLayoutGuide.leadingAnchor, constant: 18), stack.trailingAnchor.constraint(equalTo: scroll.frameLayoutGuide.trailingAnchor, constant: -18), stack.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -24)])
+    if kind == .claim {
+      stack.addArrangedSubview(label("Person"))
+      personB.contentHorizontalAlignment = .leading; personB.showsMenuAsPrimaryAction = true; personB.titleLabel?.font = .systemFont(ofSize: 17)
+      paintPerson(); stack.addArrangedSubview(boxed(personB))
+    } else {
+      stack.addArrangedSubview(label("Name"))
+      nameF.placeholder = kind == .sub ? "e.g. Adobe Creative Cloud" : "e.g. Studio lights"; nameF.font = .systemFont(ofSize: 17); nameF.autocapitalizationType = .words
+      stack.addArrangedSubview(boxed(nameF))
+    }
+    stack.addArrangedSubview(label("Amount (AED)"))
+    amountF.placeholder = "0.00"; amountF.keyboardType = .decimalPad; amountF.font = .systemFont(ofSize: 17)
+    stack.addArrangedSubview(boxed(amountF))
+    switch kind {
+    case .claim:
+      stack.addArrangedSubview(label("Month"))
+      for (i, m) in months.enumerated() { monthSeg.insertSegment(withTitle: m.1, at: i, animated: false) }
+      monthSeg.selectedSegmentIndex = max(0, months.count - 1)
+      stack.addArrangedSubview(monthSeg)
+      let hint = UILabel(); hint.text = "It joins that month’s claims as Submitted — then HR approved and Paid on, as every claim."; hint.font = .systemFont(ofSize: 12.5); hint.textColor = .secondaryLabel; hint.numberOfLines = 0
+      stack.addArrangedSubview(hint)
+    case .sub:
+      stack.addArrangedSubview(label("Billing day each month"))
+      dayB.contentHorizontalAlignment = .leading; dayB.showsMenuAsPrimaryAction = true; dayB.titleLabel?.font = .systemFont(ofSize: 17)
+      paintDay(); stack.addArrangedSubview(boxed(dayB))
+    case .expense:
+      stack.addArrangedSubview(label("Payment date"))
+      datePick.datePickerMode = .date; datePick.preferredDatePickerStyle = .compact; datePick.maximumDate = Date()
+      let row = UIStackView(arrangedSubviews: [datePick, UIView()]); stack.addArrangedSubview(boxed(row))
+    }
+    stack.addArrangedSubview(label(kind == .claim ? "PDF" : "Invoice"))
+    fileB.contentHorizontalAlignment = .leading; fileB.showsMenuAsPrimaryAction = true; fileB.titleLabel?.font = .systemFont(ofSize: 17, weight: .semibold)
+    paintFile(); stack.addArrangedSubview(boxed(fileB))
+    err.font = .systemFont(ofSize: 14); err.textColor = .systemRed; err.numberOfLines = 0
+    stack.addArrangedSubview(err)
+    for v in stack.arrangedSubviews where v is UILabel && (v as! UILabel).font.pointSize == 13 { stack.setCustomSpacing(6, after: v) }
+  }
+  override func viewDidAppear(_ animated: Bool) { super.viewDidAppear(animated); if kind == .claim { amountF.becomeFirstResponder() } else { nameF.becomeFirstResponder() } }
+  private func paintPerson() {
+    personB.setTitle(peopleList.first(where: { $0.0 == who })?.1 ?? "Choose a person…", for: .normal)
+    personB.setTitleColor(who == nil ? .secondaryLabel : .label, for: .normal)
+    let team = peopleList.filter { $0.0.hasPrefix("u:") }.map { p in UIAction(title: p.1, state: p.0 == who ? .on : .off) { [weak self] _ in self?.who = p.0; self?.paintPerson() } }
+    let other = peopleList.filter { $0.0.hasPrefix("p:") }.map { p in UIAction(title: p.1, state: p.0 == who ? .on : .off) { [weak self] _ in self?.who = p.0; self?.paintPerson() } }
+    let add = UIAction(title: "Someone who isn’t a team member…", image: UIImage(systemName: "plus")) { [weak self] _ in self?.askPerson() }
+    personB.menu = UIMenu(children: [UIMenu(title: "Team members", options: .displayInline, children: team)] + (other.isEmpty ? [] : [UIMenu(title: "Other people", options: .displayInline, children: other)]) + [UIMenu(options: .displayInline, children: [add])])
+  }
+  private func askPerson() {
+    let a = UIAlertController(title: "Someone who isn’t a team member", message: nil, preferredStyle: .alert)
+    a.addTextField { $0.placeholder = "Name"; $0.autocapitalizationType = .words }
+    a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+    a.addAction(UIAlertAction(title: "Add", style: .default) { [weak self, weak a] _ in
+      let n = (a?.textFields?.first?.text ?? "").trimmingCharacters(in: .whitespaces); guard !n.isEmpty else { return }
+      self?.onPerson?(n) { id, name in guard let self = self, let id = id else { self?.err.text = "Couldn’t add that person — try again"; return }; self.peopleList.append((id, name ?? n)); self.who = id; self.paintPerson() }
+    })
+    present(a, animated: true)
+  }
+  private func paintDay() {
+    let ord = { (n: Int) -> String in n % 10 == 1 && n != 11 ? "\(n)st" : n % 10 == 2 && n != 12 ? "\(n)nd" : n % 10 == 3 && n != 13 ? "\(n)rd" : "\(n)th" }
+    dayB.setTitle(ord(day), for: .normal); dayB.setTitleColor(.label, for: .normal)
+    dayB.menu = UIMenu(children: (1...31).map { n in UIAction(title: ord(n), state: n == day ? .on : .off) { [weak self] _ in self?.day = n; self?.paintDay() } })
+  }
+  private func paintFile() {
+    let has = file != nil
+    fileB.setTitle(busy ? "Uploading…" : has ? "📎 \(file?["name"] as? String ?? "File")" : (kind == .claim ? "📎 Attach the claim (PDF)" : "📎 Attach invoice"), for: .normal)
+    fileB.setTitleColor(.systemBlue, for: .normal)
+    var acts = [("Files", "folder", "files"), ("Photos", "photo.on.rectangle", "photos"), ("Camera", "camera", "camera")].map { t in UIAction(title: t.0, image: UIImage(systemName: t.1)) { [weak self] _ in self?.pick(t.2) } }
+    if has { acts.append(UIAction(title: "Remove", image: UIImage(systemName: "xmark"), attributes: .destructive) { [weak self] _ in self?.file = nil; self?.paintFile() }) }
+    fileB.menu = UIMenu(children: acts)
+  }
+  private func monthNow() -> String { let f = DateFormatter(); f.calendar = Calendar(identifier: .gregorian); f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "yyyy-MM"; return f.string(from: Date()) }
+  private func pick(_ src: String) {
+    Picker.shared.pick(from: self, single: true, source: src) { [weak self] r in
+      guard let self = self, let x = ((r["files"] as? [[String: Any]]) ?? []).first, let tok = x["token"] as? String, let url = Picker.shared.url(tok) else { return }
+      let name = x["name"] as? String ?? "File"
+      let size = ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.intValue ?? 0
+      let month = self.kind == .claim && self.monthSeg.selectedSegmentIndex >= 0 && self.monthSeg.selectedSegmentIndex < self.months.count ? self.months[self.monthSeg.selectedSegmentIndex].0 : self.monthNow()
+      let dest = "Finance/" + (self.kind == .claim ? "Reimbursements" : self.kind == .sub ? "Subscriptions" : "Expenses") + "/" + month
+      self.busy = true; self.paintFile()
+      Uploader.send(url, name: name, task: "", dest: dest, cookies: self.cookies, progress: { _ in }) { [weak self] path in
+        guard let self = self else { return }
+        self.busy = false
+        if let p = path { self.file = ["path": p, "name": name, "size": size]; self.err.text = nil } else { self.err.text = "Couldn’t upload — try again" }
+        self.paintFile()
+      }
+    }
+  }
+  private func save() {
+    guard !busy else { err.text = "Still uploading — one moment"; return }
+    var f: [String: Any] = ["amount": (amountF.text ?? "").replacingOccurrences(of: ",", with: "")]
+    switch kind {
+    case .claim:
+      f["who"] = who ?? ""
+      f["month"] = monthSeg.selectedSegmentIndex >= 0 && monthSeg.selectedSegmentIndex < months.count ? months[monthSeg.selectedSegmentIndex].0 : monthNow()
+    case .sub: f["name"] = nameF.text ?? ""; f["day"] = day
+    case .expense:
+      f["name"] = nameF.text ?? ""
+      let d = DateFormatter(); d.calendar = Calendar(identifier: .gregorian); d.locale = Locale(identifier: "en_US_POSIX"); d.dateFormat = "yyyy-MM-dd"; f["date"] = d.string(from: datePick.date)
+    }
+    if let x = file { f["file"] = x }
+    navigationItem.rightBarButtonItem?.isEnabled = false
+    onSave?(f) { [weak self] e in
+      guard let self = self else { return }
+      self.navigationItem.rightBarButtonItem?.isEnabled = true
+      if let e = e { UINotificationFeedbackGenerator().notificationOccurred(.error); self.err.text = e } else { UINotificationFeedbackGenerator().notificationOccurred(.success); self.dismiss(animated: true) }
     }
   }
 }
