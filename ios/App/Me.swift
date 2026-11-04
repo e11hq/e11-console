@@ -1516,6 +1516,23 @@ final class MeCtl {
       if ex.isEmpty { out.append(foot(h, "ovx0", "None this month yet.")) } else { out.append(group(h, "ovx", ex)) }
     }
   }
+  // 🔍 on Overview: every client's files (Client Assets' search), a tap previews it — Haris 2026-11-04
+  private func overviewFind(_ h: HomeView, _ raw: String) {
+    let q = raw.trimmingCharacters(in: .whitespaces)
+    guard !q.isEmpty else { h.showFound([], hint: "Search the files of every client — logos, guidelines, fonts…"); return }
+    request(["ev": "ovFind", "q": q]) { [weak self, weak h] r in
+      guard let self = self, let h = h, h.searching else { return }
+      let found = (r["found"] as? [[String: Any]]) ?? []
+      let items = found.map { f -> SetItem in
+        var it = SetItem(key: "s." + (f["id"] as? String ?? ""), title: f["name"] as? String ?? "", sub: f["where"] as? String ?? "", chevron: false, tap: { [weak self] in self?.send(["ev": "ovFile", "path": f["path"] as? String ?? "", "name": f["name"] as? String ?? ""]) })
+        it.person = (photo: nil, ini: f["ext"] as? String ?? "", rgb: .systemGray)
+        return it
+      }
+      if items.isEmpty { h.showFound([], hint: "No files found."); return }
+      let g = SetGroup(); g.set(items, look: h.look)
+      h.showFound([g], hint: (r["loose"] as? Bool) == true ? "Nothing matched exactly — close matches:" : nil)
+    }
+  }
   private func teamBlocks(_ h: HomeView, _ out: inout [UIView]) {
     let t = team
     let admin = (t["admin"] as? Bool) == true
@@ -1855,6 +1872,7 @@ final class MeCtl {
     case "toast": send(["ev": "toast"])
     // (your photo on the Content plans tab: the Me tab, as from every other tab — Haris 2026-11-04)
     case "me" where MeCtl.tabRoots.contains(h.assets ?? ""): main.selectTab("me")
+    case "find" where h.assets == "overviewTab": overviewFind(h, ev["q"] as? String ?? "")
     case "find" where h.assets == "plansPage" || h.assets == "me.plan" || h.assets == "plansTab": planFind(h, ev["q"] as? String ?? "")
     default: break
     }

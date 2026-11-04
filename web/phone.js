@@ -3326,6 +3326,14 @@ const NativeMe = (() => {
         case 'signOut': dialog({ title: 'Sign out?', body: window.E11_REVIEW ? 'You’ll need the App Review password to sign in again.' : 'You’ll need the code from your email to sign in again.', okText: 'Sign out', danger: true }).then((ok) => { if (ok) signOut(); }); return;
         case 'team': wantTeam = !!ev.on; sync(); return;
         // Overview's taps: a file's preview; "All" — Client Assets, Claims, Expenses
+        // Overview's 🔍: every client's files, the same search as Client Assets (Haris 2026-11-04)
+        case 'ovFind': {
+          const q = String(ev.q || '').trim();
+          const r = q && typeof caSearch === 'function' ? caSearch(q, null) : { files: [] };
+          const ext = (n) => (String(n).split('.').pop() || 'file').slice(0, 4).toUpperCase();
+          const found = (r.files || []).slice(0, 60).map(({ c, f, a }) => ({ id: a.id, name: a.name, path: a.path, where: `${c.name} › ${folderPath(c, f)}`, ext: ext(a.name) }));
+          answer(rid, { ok: true, q, found, loose: !!r.loose }); return;
+        }
         case 'ovFile': if (ev.path) previewFile({ path: String(ev.path), name: String(ev.name || 'File') }); return;
         case 'ovGo': go({ assets: 'clients', claims: 'fin-reimb', expenses: 'fin-expenses' }[ev.to] || 'home'); return;
         case 'ovClaim': if (typeof Claims !== 'undefined' && Claims.byId(ev.id)) Claims.open(ev.id); return;

@@ -301,8 +301,8 @@ extension Main {
       //  client's page) or deeper: ‹ and 🔍 alone, in the photo's place — your photo is on the page it came from)
       let lone = h.searching ? CornerButton.Spot(kind: "close", frame: meF) : CornerButton.Spot(kind: "search", frame: corner.place("search", "", circle: meF))
       let backSpot = CornerButton.Spot(kind: "back", frame: h.convert(h.backFrame, to: view).offsetBy(dx: dx, dy: 0))
-      // (an Office Admin's Overview and Team tabs: your photo; no 🔍 yet — Haris 2026-11-04, step 1)
-      if h.assets == "overviewTab" || h.assets == "teamTab" { return (CornerButton.Spot(), CornerButton.Spot(), cornerSpot) }
+      // (an Office Admin's Team tab: your photo — its own search is on the page; Overview: 🔍 every client's files + photo)
+      if h.assets == "teamTab" { return (CornerButton.Spot(), CornerButton.Spot(), cornerSpot) }
       if h.assets == "plansPage" || h.assets == "me.plan" { return (h.searching ? CornerButton.Spot() : backSpot, CornerButton.Spot(), lone) }
       if h.isMeSub { return (CornerButton.Spot(kind: "back", frame: h.convert(h.backFrame, to: view).offsetBy(dx: dx, dy: 0)), CornerButton.Spot(), h.menuItems.isEmpty ? CornerButton.Spot() : CornerButton.Spot(kind: "more", frame: meF)) }
       // (a client's page: the task page's — ‹ on the left, ••• where your photo is, no 🔍)
