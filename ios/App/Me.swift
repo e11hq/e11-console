@@ -1060,14 +1060,25 @@ final class MeCtl {
     if let k = wantOpen { wantOpen = nil; let id = wantOpenId; wantOpenId = nil; if stack.count > 1 { backToRoot() }; DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.open(k, id) } }
   }
   // out of sight, kept as it is (Me comes back where it was, as iPhone's own tabs)
+  // (Me › Client Assets: the page says "Me off" a moment before Client Assets comes — Me stays where it is until Client
+  //  Assets has slid in over it, so there's never a moment with nothing — Haris 2026-11-04)
+  var coverWait: Date?
+  private var reveals = 0
   func hide() {
     guard !stack.isEmpty, !hidden else { return }
+    if let w = coverWait, Date().timeIntervalSince(w) < 2 {
+      coverWait = nil; let t = reveals
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { [weak self] in guard let self = self, self.reveals == t else { return }; self.hide() }
+      return
+    }
+    coverWait = nil
     hidden = true; borrowTimer?.invalidate()
     stack.forEach { $0.h.endEditing(true); $0.h.isHidden = true; $0.h.transform = .identity }
     main.edgePanOn(); main.updateCorner()
   }
   func reveal() {
     guard let s = stack.last else { return }
+    reveals += 1
     hidden = false; borrowTimer?.invalidate()
     if s.h.isHidden || s.h.transform != .identity { s.h.transform = .identity; s.h.isHidden = false }
     front()
@@ -1280,7 +1291,7 @@ final class MeCtl {
       let work = ((model["work"] as? [[String: Any]]) ?? []).map { w -> SetItem in
         let k = w["k"] as? String ?? ""
         return SetItem(key: k, title: w["t"] as? String ?? "", sub: w["s"] as? String ?? "", sym: w["sym"] as? String, col: NativeSheetVC.color(w["col"]),
-                       tap: { [weak self] in guard let self = self else { return }; if k == "team" || k == "trash" || k == "plans" { self.open(k) } else { self.send(["ev": "nav", "to": k]) } })
+                       tap: { [weak self] in guard let self = self else { return }; if k == "team" || k == "trash" || k == "plans" { self.open(k) } else { if k == "clients" { self.coverWait = Date() }; self.send(["ev": "nav", "to": k]) } })
       }
       if !work.isEmpty { out.append(head(h, "work", "Work")); out.append(group(h, "work", work)) }
       var phone: [SetItem] = [SetItem(key: "shortcuts", title: "Shortcuts", sub: "Quicker ways to do things", sym: "command", col: .systemBlue, badge: "New", tap: { [weak self] in self?.open("shortcuts") })]
