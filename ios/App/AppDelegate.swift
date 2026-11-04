@@ -1168,10 +1168,12 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     shownTab = item.tag
     if again, tabKeys[item.tag] == "projects", clientsWanted, clientsBackToList() { return }
     // (Me, the app's own: again from a page under it — back to Me with the back slide; on Me — to the top)
-    if again, tabKeys[item.tag] == "me", meCtl.isOpen { if meCtl.depth > 1 { meCtl.backToRoot() } else { meCtl.top?.scrollToTop() }; return }
+    // (Content plans, a Social's own tab, is the same app's own pages — Haris 2026-11-04)
+    let meLike = tabKeys[item.tag] == "me" || (tabKeys[item.tag] == "plans" && meCtl.tab == "plans")
+    if again, meLike, meCtl.isOpen { if meCtl.depth > 1 { meCtl.backToRoot() } else { meCtl.top?.scrollToTop() }; return }
     // (another tab: the app's own Me goes at once for the app's own tabs; back on Me, it's there at once as it was)
-    if tabKeys[item.tag] == "me" { if !meCtl.screens.isEmpty, pageReady { meCtl.reveal() } }
-    else if ["today", "mytasks", "inbox", "projects"].contains(tabKeys[item.tag]) { meCtl.hide() }
+    if meLike { if !meCtl.screens.isEmpty, pageReady { meCtl.reveal() } }
+    else if ["today", "mytasks", "inbox", "projects", "me", "plans"].contains(tabKeys[item.tag]) { meCtl.hide() }   // (Me ↔ Content plans: the page then sends the other one's first page)
     // (the page's own tabs — Me, Plans, Reviews, Client Assets: from a deeper page, back to the tab's first with the back
     //  slide; Haris 2026-11-03)
     let key = tabKeys[item.tag]
@@ -1681,7 +1683,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let snap = top.snapshotView(afterScreenUpdates: false)
     if assetsCtl.isOpen { assetsCtl.close(animated: false) }
     // (back to Me from a page deeper than it — My profile, Client Assets: the app's own Me comes in under the slide)
-    let meRoot = key == "me" ? meCtl.rootUnder() : nil
+    let meRoot = key == meCtl.tab ? meCtl.rootUnder() : nil
     if let s = snap { s.frame = top.frame; view.insertSubview(s, belowSubview: tabBar) }
     if let r = meRoot {
       r.transform = CGAffineTransform(translationX: -W * 0.3, y: 0)

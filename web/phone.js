@@ -3020,6 +3020,8 @@ const NativeMe = (() => {
   // (Content plans, the app's own from shell 35: the list's month, the plan open)
   let shell = 0, wantPlans = false, plMonth = '', plOpen = null;
   const plansOwn = () => shell >= 35 && typeof Plans !== 'undefined' && Plans.canSee() && !!Plans.native;
+  // (Social Managers and Executives: Content plans is their own tab — its page, as Client Assets; Haris 2026-11-04)
+  const plansTab = () => plansOwn() && socialPlans() && (ui.view === 'plans' || ui.view === 'plan');
   if (NATIVE_ME && window.__e11CommentsOnly !== true && typeof Host !== 'undefined' && Host.isIOSApp) {
     NativeMac.call('appInfo').then((r) => { shell = Number(r && r.shell) || 0; on = shell >= 33; if (on) { setInterval(sync, 350); sync(); } }).catch(() => {});
   }
@@ -3028,7 +3030,7 @@ const NativeMe = (() => {
   const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
   const photoOf = (u) => (u && u.avatar ? fileUrl({ path: u.avatar }) : null);
   const visible = () => {
-    if (!Phone.on || ui.view !== 'me' || ui.search || ui.taskId || document.querySelector('#detail.open')) return false;
+    if (!Phone.on || !(ui.view === 'me' || plansTab()) || ui.search || ui.taskId || document.querySelector('#detail.open')) return false;
     // (a page question that isn't iPhone's own yet — View as… — shows on the page meanwhile)
     if (document.querySelector('#overlay-root .scrim, #tv-root .scrim, .lightbox, .fv')) return false;
     return true;
@@ -3039,7 +3041,7 @@ const NativeMe = (() => {
     const work = [];
     if (isCD()) work.push({ k: 'projects', t: 'Clients', s: 'Every client’s tasks', sym: 'folder.fill', col: [10, 132, 255] });
     if (Cal.canSee() && !calendarRetired()) work.push({ k: 'calendar', t: 'Content calendar', s: 'Posts by day, channel and occasion', sym: 'calendar', col: [255, 59, 48] });
-    if (Plans.canSee()) work.push({ k: 'plans', t: 'Content plans', s: 'Each client’s month', sym: 'calendar.badge.clock', col: [255, 149, 0] });
+    if (Plans.canSee() && !socialPlans()) work.push({ k: 'plans', t: 'Content plans', s: 'Each client’s month', sym: 'calendar.badge.clock', col: [255, 149, 0] });
     work.push({ k: 'clients', t: 'Client Assets', s: 'Logos, guidelines and fonts', sym: 'folder.fill', col: [48, 176, 199] });
     work.push({ k: 'team', t: 'Team members', s: '', sym: 'person.2.fill', col: [88, 86, 214] });
     if (isManager()) { const n = trashList().length; work.push({ k: 'trash', t: 'Trash', s: n ? `${plural(n, 'item')} · restore within ${TRASH_DAYS} days` : `Deleted items wait here ${TRASH_DAYS} days`, sym: 'trash.fill', col: [142, 142, 147] }); }
@@ -3193,13 +3195,15 @@ const NativeMe = (() => {
     // (a Content plan opened on the page — an Inbox update, a notification: Me, and the app's own page for it)
     if (plansOwn() && Phone.on && (ui.view === 'plan' || ui.view === 'plans') && !ui.taskId) {
       const pl = ui.view === 'plan' && ui.planId ? Plans.planById(ui.planId) : null;
-      go('me');
+      // (their own tab: it stays there — a plan opened on the page is the tab's list, then that plan)
+      if (socialPlans()) { if (ui.view === 'plan') { ui.view = 'plans'; ui.planId = null; } }
+      else go('me');
       if (pl) call({ open: { kind: 'plan', pid: pl.projectId, month: pl.month } });
     }
     // (who may turn file / folder links off and on — Admins: the app's sheets show it only to them)
     try { const adm = !!(currentUserId && isAdm(me())); if (adm !== lastAdm) { lastAdm = adm; NativeMac.call('role', { admin: adm }).catch(() => {}); } } catch (e) { /* not signed in yet */ }
     let m = null;
-    try { m = visible() ? { show: true, me: currentUserId, light: document.documentElement.dataset.theme === 'light', model: model() } : null; } catch (e) { m = null; }
+    try { m = visible() ? { show: true, tab: plansTab() ? 'plans' : 'me', me: currentUserId, light: document.documentElement.dataset.theme === 'light', model: model() } : null; } catch (e) { m = null; }
     if (!m) { if (shown) { shown = false; last = ''; call({ show: false }); } return; }
     // (coming on screen: the notifications' and Face ID's state as they are now — the page's Me row used to ask)
     if (!shown && typeof Push !== 'undefined') Promise.resolve(Push.refresh()).catch(() => {});

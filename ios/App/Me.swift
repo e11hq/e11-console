@@ -994,6 +994,10 @@ final class MeCtl {
   //  then that page over it)
   private var wantOpen: String?, wantOpenId: String?
   private var plMonth: String?
+  // (which tab it serves: Me — or, for Social Managers and Executives, their Content plans tab, whose first page is the
+  //  plans list itself, as Client Assets' — Haris 2026-11-04)
+  private(set) var tab = "me"
+  private var rootKind: String { tab == "plans" ? "plans" : "me" }
   // (a question to the page, its answer back — Content plans' post, approve, send back)
   private func request(_ ev: [String: Any], _ done: @escaping ([String: Any]) -> Void) {
     let rid = UUID().uuidString
@@ -1003,7 +1007,7 @@ final class MeCtl {
     DispatchQueue.main.asyncAfter(deadline: .now() + 15) { [weak self] in self?.asks.removeValue(forKey: rid)?(["ok": false, "error": "No answer — try again"]) }
   }
   func openSoon(_ kind: String) {
-    if main.selectedTabKey == "me", !hidden, !stack.isEmpty {
+    if main.selectedTabKey == tab, !hidden, !stack.isEmpty {
       if stack.count > 1 { backToRoot(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.open(kind) } } else { open(kind) }
       return
     }
@@ -1039,7 +1043,7 @@ final class MeCtl {
     // (a Content plan opened on the page — an Inbox update, a notification: the app's own page for it)
     if let o = a["open"] as? [String: Any], (o["kind"] as? String) == "plan", let pid = o["pid"] as? String {
       wantOpenId = "\(pid)|\(o["month"] as? String ?? "")"; wantOpen = "plan"
-      if main.selectedTabKey == "me", !hidden, !stack.isEmpty, let k = wantOpen { wantOpen = nil; let id = wantOpenId; if stack.count > 1 { backToRoot() }; DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.open(k, id) } }
+      if main.selectedTabKey == tab, !hidden, !stack.isEmpty, let k = wantOpen { wantOpen = nil; let id = wantOpenId; if stack.count > 1 { backToRoot() }; DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.open(k, id) } }
       return
     }
     if let t = a["toast"] as? [String: Any] { (shown ?? top)?.toast(t); return }
@@ -1053,7 +1057,16 @@ final class MeCtl {
       me = m
     }
     if let m = a["model"] as? [String: Any] { model = m }
-    if stack.isEmpty { push(screen("me", nil), animated: false) }
+    // (the other tab now — Me ↔ Content plans: its own first page)
+    let want = (a["tab"] as? String) == "plans" ? "plans" : "me"
+    if want != tab {
+      if stack.contains(where: { $0.kind == "plans" }) { send(["ev": "pl", "on": false]) }
+      stack.forEach { $0.h.removeFromSuperview() }; stack = []; tab = want
+    }
+    if stack.isEmpty {
+      if rootKind == "plans" { plMonth = plMonth ?? ""; send(["ev": "pl", "on": true, "month": plMonth ?? ""]) }
+      push(screen(rootKind, nil), animated: false)
+    }
     reveal()
     stack.forEach { draw($0) }
     main.updateCorner()
@@ -1097,7 +1110,7 @@ final class MeCtl {
   // out of sight again
   private var borrowTimer: Timer?
   func borrow() -> UIView? {
-    guard let s = stack.last, main.selectedTabKey == "me" else { return nil }
+    guard let s = stack.last, main.selectedTabKey == tab else { return nil }
     s.h.isHidden = false
     borrowTimer?.invalidate()
     borrowTimer = Timer.scheduledTimer(withTimeInterval: 1.2, repeats: false) { [weak self] _ in guard let self = self, self.hidden else { return }; self.stack.forEach { $0.h.isHidden = true } }
@@ -1110,7 +1123,7 @@ final class MeCtl {
     h.assets = kind == "me" ? "me" : "me." + kind
     h.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     h.isHidden = true
-    h.assetsBack = kind != "me"
+    h.assetsBack = !(stack.isEmpty && kind == rootKind)
     h.present = { [weak self] vc in self?.main.topMost().present(vc, animated: true) }
     h.onEvent = { [weak self, weak h] ev in guard let self = self, let h = h else { return }; self.event(h, ev) }
     h.onAssetsDraw = { [weak self] h, _ in self?.blocks(h) }
