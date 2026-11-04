@@ -253,7 +253,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     topLine.backgroundColor = L.light ? UIColor.black.withAlphaComponent(0.12) : UIColor.white.withAlphaComponent(0.12)
     [searchCircle, closeCircle, searchBar].forEach { $0.setLook(light: L.light, tint: L.roundIc) }
     lens.tintColor = L.sub; field.textColor = L.h1; field.tintColor = L.tag
-    field.attributedPlaceholder = NSAttributedString(string: assets != nil ? "Search every client’s files" : "Search tasks, clients, people", attributes: [.foregroundColor: L.sub])
+    field.attributedPlaceholder = NSAttributedString(string: assets == "plansTab" || assets?.hasPrefix("me.plan") == true ? "Search plans — a client or a post" : assets != nil ? "Search every client’s files" : "Search tasks, clients, people", attributes: [.foregroundColor: L.sub])
     field.keyboardAppearance = L.light ? .light : .dark
     hint.textColor = L.empty
     meId = model["me"] as? String ?? ""; watchMe(); meChanged()
@@ -1138,6 +1138,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       self.searchBar.layer.cornerRadius = self.BTN / 2
       self.searchBar.layoutIfNeeded()
       self.me.alpha = 0; self.me.transform = CGAffineTransform(scaleX: 0.6, y: 0.6)
+      self.barTitle.alpha = 0   // (a page's name in the middle goes while you search — Haris 2026-11-04: it showed through)
       self.closeCircle.alpha = 1; self.closeCircle.transform = .identity
       self.scroll.alpha = 0; self.results.alpha = 1; self.fab.alpha = 0
       self.results.frame.origin.y = self.searchBar.frame.maxY + 8
@@ -1162,6 +1163,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       self.field.alpha = 0
       self.closeCircle.alpha = 0; self.closeCircle.transform = CGAffineTransform(scaleX: 0.6, y: 0.6)
       self.me.alpha = 1; self.me.transform = .identity
+      self.barTitle.alpha = 1
       self.scroll.alpha = 1; self.results.alpha = 0; self.fab.alpha = 1
       self.layoutHeader()
       self.searchBar.frame = back; self.searchBar.layoutIfNeeded()   // (its glass shrinks back into 🔍 with it)

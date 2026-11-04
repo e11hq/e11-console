@@ -973,6 +973,8 @@ final class KeyboardShield: UIView {
   override func hitTest(_ pt: CGPoint, with e: UIEvent?) -> UIView? {
     guard !isHidden, let p = page, !p.isHidden else { return nil }
     guard let f = typing(p) else { isHidden = true; return nil }
+    // (🔍's results: a tap opens what's tapped at once, as iPhone's own search — Haris 2026-11-04)
+    if let h = p as? HomeView, h.searching { return nil }
     // (the box being typed in — and its clear button — still works)
     if f.convert(f.bounds, to: self).insetBy(dx: -6, dy: -6).contains(pt) { return nil }
     return self
@@ -1124,7 +1126,8 @@ final class MeCtl {
   // ---------- opening ----------
   private func screen(_ kind: String, _ id: String?) -> Screen {
     let h = HomeView(frame: main.view.bounds)
-    h.assets = kind == "me" ? "me" : "me." + kind
+    // (Content plans as a Social's own tab: a main page — the big title, as Home and the Inbox: Haris 2026-11-04)
+    h.assets = kind == "me" ? "me" : (stack.isEmpty && kind == "plans" && tab == "plans") ? "plansTab" : "me." + kind
     h.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     h.isHidden = true
     h.assetsBack = !(stack.isEmpty && kind == rootKind)
@@ -1277,7 +1280,8 @@ final class MeCtl {
   private func draw(_ s: Screen) {
     var mm: [String: Any] = ["show": true, "me": me ?? "", "look": ["light": light]]
     if let l = main.homeLook as? [String: Any], (l["light"] as? Bool) == light { mm["look"] = l }
-    if s.kind == "me" { mm["title"] = "Me"; mm["date"] = "E11 Console App" }   // (the line under the big title, as the other tabs have — Haris 2026-11-03)
+    if s.kind == "me" { mm["title"] = "Me"; mm["date"] = "E11 Console App" }
+    if s.h.assets == "plansTab" { mm["title"] = "Content plans"; mm["date"] = (model["plans"] as? [String: Any])?["label"] as? String ?? "" }   // (the line under the big title, as the other tabs have — Haris 2026-11-03)
     s.h.bottomRoom = (main.tabBar.isHidden ? 40 : main.view.bounds.height - main.tabBar.frame.minY) + 96
     s.h.tabTop = main.tabBar.isHidden ? nil : main.tabPillTop
     s.h.update(mm)
@@ -1622,7 +1626,7 @@ final class MeCtl {
   }
   private func plansBlocks(_ h: HomeView, _ out: inout [UIView]) {
     let m = (model["plans"] as? [String: Any]) ?? [:]
-    h.drawAssetsBar(name: "Content plans", sub: m["label"] as? String ?? "", logo: nil, rgb: nil, ini: nil, showLogo: false)
+    if h.assets != "plansTab" { h.drawAssetsBar(name: "Content plans", sub: m["label"] as? String ?? "", logo: nil, rgb: nil, ini: nil, showLogo: false) }
     guard let rows = m["rows"] as? [[String: Any]] else { let n = part(h, "wait") { AssetsNote() }; n.label.text = "Loading…"; out.append(n); return }
     let month = m["month"] as? String ?? ""
     let mb = part(h, "month") { PlanMonthChips() }
@@ -1803,7 +1807,7 @@ final class MeCtl {
     switch ev["ev"] as? String ?? "" {
     case "back": if h === stack.last?.h { pop() }
     case "toast": send(["ev": "toast"])
-    case "find" where h.assets == "me.plans" || h.assets == "me.plan": planFind(h, ev["q"] as? String ?? "")
+    case "find" where h.assets == "me.plans" || h.assets == "me.plan" || h.assets == "plansTab": planFind(h, ev["q"] as? String ?? "")
     default: break
     }
   }

@@ -23,9 +23,8 @@ final class MePhoto {
   private var who = UserDefaults.standard.string(forKey: "e11_me_photo_who")
   func person(_ id: String) {
     guard id != who else { return }
-    let had = who != nil
     who = id; UserDefaults.standard.set(id, forKey: "e11_me_photo_who")
-    guard had else { return }
+    // (also the first time it's told — the kept photo can't be known to be this person's: fetched again for them)
     image = nil; url = nil; fetched = false; asking = false
     DiskPics.put("me-photo", Data())
     changed()
