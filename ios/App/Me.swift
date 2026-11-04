@@ -1605,9 +1605,10 @@ final class MeCtl {
     h.drawAssetsBar(name: "Content plans", sub: m["label"] as? String ?? "", logo: nil, rgb: nil, ini: nil, showLogo: false)
     guard let rows = m["rows"] as? [[String: Any]] else { let n = part(h, "wait") { AssetsNote() }; n.label.text = "Loading…"; out.append(n); return }
     let month = m["month"] as? String ?? ""
-    let mb = part(h, "month") { PlanMonthBar() }
-    mb.set(m["label"] as? String ?? "", canPrev: (m["canPrev"] as? Bool) == true)
-    mb.onShift = { [weak self] d in guard let self = self else { return }; UISelectionFeedbackGenerator().selectionChanged(); self.send(["ev": "pl", "on": true, "month": month, "shift": d]) }
+    let mb = part(h, "month") { PlanMonthChips() }
+    mb.light = h.look.light
+    mb.set(month: month, first: m["first"] as? String ?? month, last: m["last"] as? String ?? month)
+    mb.onPick = { [weak self] to in guard let self = self else { return }; UISelectionFeedbackGenerator().selectionChanged(); self.plMonth = to; self.send(["ev": "pl", "on": true, "month": to]) }
     out.append(mb)
     if let n = m["note"] as? String, !n.isEmpty { let f = foot(h, "plnote", n); f.label.textColor = .systemOrange; out.append(f) }
     let items = rows.map { r -> SetItem in
@@ -1925,6 +1926,123 @@ final class TouchSpot: UIGestureRecognizer, UIGestureRecognizerDelegate {
 
 // ---------- Content plans' pieces ----------
 // ‹ December 2026 › (any month, from this one on)
+// Content plans' months (Haris 2026-11-04, "C"): pills as the Inbox's (MailCats' colours — not glass), the chosen one
+// always in the middle, wide, blue with white, its full name; the others grey with their short name. The running month
+// to 6 months after the one being planned can be tapped or swiped to (swipe the row, as the Inbox's); the months either
+// side show faded and can't be. A tap or swipe slides the row and grows / shrinks the pills in the Inbox's timing.
+final class PlanMonthChips: UIView, HomeBlock {
+  static let H: CGFloat = 38
+  var onPick: ((String) -> Void)?
+  var light = true { didSet { if oldValue != light { paint() } } }
+  private var months: [String] = [], first = "", last = "", selected = ""
+  private var pills: [String: (bg: UIView, label: UILabel)] = [:]
+  private static let short = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+  private static let full = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+  static func add(_ m: String, _ n: Int) -> String {
+    let p = m.split(separator: "-").compactMap { Int($0) }; guard p.count == 2 else { return m }
+    let t = p[0] * 12 + (p[1] - 1) + n
+    return String(format: "%04d-%02d", t / 12, t % 12 + 1)
+  }
+  private static func name(_ m: String, on: Bool) -> String {
+    let p = m.split(separator: "-").compactMap { Int($0) }; guard p.count == 2, (1...12).contains(p[1]) else { return m }
+    return on ? "\(full[p[1] - 1]) \(p[0])" : short[p[1] - 1]
+  }
+  private func usable(_ m: String) -> Bool { m >= first && m <= last }
+  override init(frame: CGRect) {
+    super.init(frame: frame)
+    clipsToBounds = false
+    for d in [UISwipeGestureRecognizer.Direction.left, .right] {
+      let sw = UISwipeGestureRecognizer(target: self, action: #selector(swiped(_:))); sw.direction = d; addGestureRecognizer(sw)
+    }
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  func set(month: String, first f: String, last l: String) {
+    let changedRange = f != first || l != last
+    first = f; last = l
+    // (three faded months either side of what can be picked)
+    let want = (-3...(monthsBetween(f, l) + 3)).map { PlanMonthChips.add(f, $0) }
+    if want != months || changedRange {
+      months = want
+      for (k, p) in pills where !want.contains(k) { p.bg.removeFromSuperview(); pills[k] = nil }
+      UIView.performWithoutAnimation {
+        for m in want where pills[m] == nil {
+          let bg = UIView(); bg.layer.cornerRadius = PlanMonthChips.H / 2; bg.layer.cornerCurve = .continuous; bg.clipsToBounds = true
+          let lb = UILabel(); lb.font = .systemFont(ofSize: 17, weight: .semibold); lb.textAlignment = .center
+          bg.addSubview(lb); addSubview(bg)
+          bg.isAccessibilityElement = true; bg.accessibilityIdentifier = "plm-" + m
+          bg.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapped(_:))))
+          pills[m] = (bg, lb)
+        }
+        if month == selected { paint(); place() }
+      }
+    }
+    if month != selected {
+      let was = selected; selected = month
+      if was.isEmpty || bounds.width == 0 { UIView.performWithoutAnimation { paint(); place() } } else { slide() }
+    }
+  }
+  private func monthsBetween(_ a: String, _ b: String) -> Int {
+    let x = a.split(separator: "-").compactMap { Int($0) }, y = b.split(separator: "-").compactMap { Int($0) }
+    guard x.count == 2, y.count == 2 else { return 0 }
+    return max(0, (y[0] * 12 + y[1]) - (x[0] * 12 + x[1]))
+  }
+  @objc private func tapped(_ g: UITapGestureRecognizer) {
+    guard let v = g.view, let m = pills.first(where: { $0.value.bg === v })?.key else { return }
+    pick(m)
+  }
+  @objc private func swiped(_ g: UISwipeGestureRecognizer) { pick(PlanMonthChips.add(selected, g.direction == .left ? 1 : -1)) }
+  private func pick(_ m: String) {
+    guard m != selected else { return }
+    guard usable(m) else { bounce(m > selected ? -1 : 1); return }
+    selected = m; slide(); onPick?(m)
+  }
+  // (at an end: the row gives a little and comes back, as iPhone's lists)
+  private func bounce(_ dir: CGFloat) {
+    UIView.animate(withDuration: 0.12, delay: 0, options: [.curveEaseOut, .allowUserInteraction]) { self.pills.values.forEach { $0.bg.center.x += 14 * dir } } completion: { _ in
+      UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 0.7, initialSpringVelocity: 0, options: [.allowUserInteraction]) { self.place() }
+    }
+  }
+  private func slide() {
+    UIView.animate(withDuration: 0.3, delay: 0, options: [.curveEaseInOut, .beginFromCurrentState, .allowUserInteraction]) { self.paint(); self.place() }
+  }
+  private func paint() {
+    let idle = light ? UIColor(red: 234 / 255, green: 234 / 255, blue: 236 / 255, alpha: 1) : UIColor(red: 39 / 255, green: 39 / 255, blue: 41 / 255, alpha: 1)
+    let idleInk = light ? UIColor(red: 134 / 255, green: 134 / 255, blue: 137 / 255, alpha: 1) : UIColor(red: 157 / 255, green: 156 / 255, blue: 164 / 255, alpha: 1)
+    for (m, p) in pills {
+      let on = m == selected, ok = usable(m)
+      p.bg.backgroundColor = on ? MailCats.blue(light) : idle
+      p.label.textColor = on ? .white : idleInk
+      p.label.text = PlanMonthChips.name(m, on: on)
+      p.bg.alpha = ok ? 1 : 0.4
+      p.bg.isUserInteractionEnabled = ok
+      p.bg.accessibilityLabel = PlanMonthChips.name(m, on: true)
+      p.bg.accessibilityTraits = on ? [.button, .selected] : ok ? .button : .notEnabled
+    }
+  }
+  private func width(_ m: String) -> CGFloat {
+    let f = UIFont.systemFont(ofSize: 17, weight: .semibold)
+    return ceil((PlanMonthChips.name(m, on: m == selected) as NSString).size(withAttributes: [.font: f]).width) + 32
+  }
+  private func place() {
+    guard let i = months.firstIndex(of: selected), bounds.width > 0 else { return }
+    let gap: CGFloat = 9, y: CGFloat = 9
+    // (the chosen one's middle in the page's middle; the rest laid out either side of it)
+    let ws = months.map { width($0) }
+    var x = bounds.width / 2 - ws[i] / 2
+    for k in stride(from: i - 1, through: 0, by: -1) { x -= ws[k] + gap }
+    for (k, m) in months.enumerated() {
+      guard let p = pills[m] else { continue }
+      p.bg.bounds = CGRect(x: 0, y: 0, width: ws[k], height: PlanMonthChips.H)
+      p.bg.center = CGPoint(x: x + ws[k] / 2, y: y + PlanMonthChips.H / 2)
+      p.label.frame = p.bg.bounds
+      x += ws[k] + gap
+    }
+  }
+  func blockHeight(_ W: CGFloat) -> CGFloat { PlanMonthChips.H + 18 }
+  // (placed again only when the page's width changes — a redraw mid-slide mustn't snap it)
+  private var placedW: CGFloat = 0
+  override func layoutSubviews() { super.layoutSubviews(); if bounds.width != placedW { placedW = bounds.width; UIView.performWithoutAnimation { place() } } }
+}
 final class PlanMonthBar: UIView, HomeBlock {
   private let prevB = UIButton(type: .system), nextB = UIButton(type: .system), label = UILabel()
   var onShift: ((Int) -> Void)?

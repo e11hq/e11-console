@@ -1030,7 +1030,7 @@ const Plans = (() => {
       rows.sort((a, b) => (b.mine ? 1 : 0) - (a.mine ? 1 : 0));
       const wait = rows.filter((r) => r.mine && r.st.k === 'wait').length, back = rows.filter((r) => r.mine && r.st.k === 'chg').length;
       const mine = me().role === 'social' && !isMgr(me());
-      return { month: m, label: monthLabel(m), canPrev: m > thisMonth(), rows,
+      return { month: m, label: monthLabel(m), canPrev: m > thisMonth(), first: thisMonth(), now: nextMonth(), last: shiftMonth(nextMonth(), 6), rows,
         note: wait ? `${plural(wait, 'skeleton')} waiting for your approval` : back ? `${plural(back, 'skeleton')} sent back for changes` : '',
         foot: `${mine ? 'Your clients. ' : ''}View only on the iPhone — skeletons are made, changed and sent on the computer.` };
     }
