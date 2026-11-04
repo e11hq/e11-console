@@ -2680,6 +2680,18 @@ const Sync = (() => {
     return out;
   }
 
+  // (which change, and what in it — kept with the app errors the owner reads, so a refusal that keeps coming back can be
+  //  traced: Haris 2026-11-04, "Some changes weren't allowed" on every open)
+  function noteRefused(res, mine) {
+    try {
+      const a = (mine && mine.data) || {}, b = res.data || {};
+      const keys = mine && mine.del ? ['(delete)'] : [...new Set([...Object.keys(a), ...Object.keys(b)])].filter((k) => JSON.stringify(a[k]) !== JSON.stringify(b[k])).slice(0, 12);
+      const name = String(a.title || a.name || b.title || b.name || '').slice(0, 60);
+      fetch('/api/client-error', { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ where: 'refused', message: `${res.kind}:${res.id}${name ? ' “' + name + '”' : ''} ${res.deleted ? '(gone on the server) ' : ''}fields: ${keys.join(', ') || '—'}`, version: String(version || ''), ua: navigator.userAgent, page: String(ui.view || '') }) }).catch(() => {});
+    } catch (e) { /* only a note */ }
+  }
+
   async function push() {
     savePrefs();
     if (pushing) { again = true; return; }
@@ -2700,7 +2712,7 @@ const Sync = (() => {
       let touched = false, refused = 0;
       (r.results || []).forEach((res) => {
         const key = res.kind + ':' + res.id, mine = sent.get(key);
-        if (res.refused && res.kind !== 'meta') refused++;
+        if (res.refused && res.kind !== 'meta') { refused++; noteRefused(res, mine); }
         if (res.deleted) { remember(res.kind, res.id, null); if (localOf(res.kind, res.id) && (res.refused || res.hidden || !(mine && mine.del))) { setLocal(res.kind, res.id, null); touched = true; } return; }
         remember(res.kind, res.id, res.data);
         // Keep anything typed while this save was on its way, on top of the server's merged version
