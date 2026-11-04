@@ -79,3 +79,5 @@ now and later (`HomeView.applyFrost`, `Frost`, `FrostWatch` in Home.swift):
 **TestFlight only on Haris's yes (Haris, 2026-11-03):** "publish, publish app build" builds, self-tests and signs the
 iPhone app, then keeps it on his Mac (ios.yml `send: ask`, the default). When a build has finished, ask Haris; only on
 his yes send it with the "Send to TestFlight" workflow (testflight.yml, its build number).
+Every time Haris says yes and it's sent, tell him in the same reply what changed since the last TestFlight build, as
+short points (new / better / fixed — from the commits between the two builds) — Haris 2026-11-04.
