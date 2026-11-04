@@ -54,7 +54,7 @@ const Plans = (() => {
     const latest = new Map();
     (t.reviews || []).forEach((r) => { if (r.state !== 'approved') return; const p = latest.get(r.by); if (!p || String(r.decidedAt || r.at) >= String(p.decidedAt || p.at)) latest.set(r.by, r); });
     const files = [];
-    latest.forEach((r) => (r.files || []).forEach((id) => { const a = (t.attachments || []).find((x) => x.id === id); if (a) files.push(a); }));
+    latest.forEach((r) => (r.set || r.files || []).forEach((id) => { const a = (t.attachments || []).find((x) => x.id === id); if (a) files.push(a); }));
     return files;
   }
   const PROG = { none: ['Not created', '#8b8b96'], prod: ['In production', '#a875ff'], cd: ['With the CD', '#f2b23e'], ready: ['Finished', '#3ddc97'], changes: ['Client changes', '#ff8a4c'], done: ['Client approved', '#5b9bff'] };

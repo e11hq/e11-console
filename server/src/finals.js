@@ -28,7 +28,8 @@ export function createFinals({ store, files, access }) {
     if (t.parentId) return projectOf(store.get('tasks', String(t.parentId)));
     return null;
   };
-  // each person's latest approved submission (any round, any review cycle); the CD's decision with it
+  // each person's latest approved submission (any round, any review cycle); the CD's decision with it — its whole
+  // approved set (r.set: files approved in earlier rounds too, per-file decisions)
   function approvedSets(t) {
     const latest = new Map();
     for (const r of t.reviews || []) {
@@ -52,7 +53,7 @@ export function createFinals({ store, files, access }) {
     const sets = approvedSets(t);
     const atts = new Map((t.attachments || []).map((a) => [a.id, a]));
     const picked = [];
-    for (const r of sets) for (const id of r.files || []) { const a = atts.get(id); if (a && a.path) picked.push({ a, r }); }
+    for (const r of sets) for (const id of r.set || r.files || []) { const a = atts.get(id); if (a && a.path) picked.push({ a, r }); }
     if (!picked.length) return [];
     const now = new Date().toISOString();
     const client = JSON.parse(JSON.stringify(c));

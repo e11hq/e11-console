@@ -23,7 +23,7 @@ export function createPlans({ store, files, access }) {
     const latest = new Map();
     for (const r of t.reviews || []) { if (r.state !== 'approved') continue; const p = latest.get(r.by); if (!p || String(r.decidedAt || r.at) >= String(p.decidedAt || p.at)) latest.set(r.by, r); }
     const out = [];
-    latest.forEach((r) => (r.files || []).forEach((id) => { const a = (t.attachments || []).find((x) => x.id === id); if (a && a.path && okPath(a.path, `attachments/${t.id}/`)) out.push(a); }));
+    latest.forEach((r) => (r.set || r.files || []).forEach((id) => { const a = (t.attachments || []).find((x) => x.id === id); if (a && a.path && okPath(a.path, `attachments/${t.id}/`)) out.push(a); }));
     return out;
   }
   // a post is finished when its task's work is CD approved (or the task is complete)

@@ -7714,6 +7714,42 @@ function allReviews() {
 function findReview(id) { for (const t of db.tasks) { const r = (t.reviews || []).find((x) => x.id === id); if (r) return { t, r }; } return null; }
 const activeReviews = () => allReviews().filter(({ t, r }) => r.state === 'pending' && needsCD(t) && (r.epoch || 0) === epochOf(t) && !t.done).sort((a, b) => a.r.at.localeCompare(b.r.at));
 const REVIEWED_DAYS = 15;
+/* Per-file decisions (Haris 2026-11-02, built 2026-11-04): one decision per request, the result kept per file.
+   Approve = every file approved. Request amendments = the ticked files need changes (each its own note, r.need);
+   the rest are approved at that moment (r.ok). A person's approved files are kept across rounds (a later file with the
+   same name replaces an earlier one); their part is done when a round is approved — r.set is then their whole approved
+   set, which everything downstream uses (the final files comment, Client Assets, content plans). */
+const okIdsOf = (r) => (r.state === 'approved' ? r.ok || r.files || [] : r.state === 'amend' && Array.isArray(r.ok) ? r.ok : []);
+const attOf = (t, id) => (t.attachments || []).find((a) => a.id === id) || null;
+// the person's approved files so far in this review cycle, before `upto` (name → id)
+function keptOk(t, u, upto = null) {
+  const m = new Map();
+  for (const r of t.reviews || []) {
+    if (r === upto) break;
+    if (r.by !== u || (r.epoch || 0) !== epochOf(t) || !['approved', 'amend'].includes(r.state)) continue;
+    okIdsOf(r).forEach((id) => { const a = attOf(t, id); if (a) m.set(String(a.name || id).toLowerCase(), id); });
+  }
+  return m;
+}
+// the files approved from earlier rounds that a request carries (not decided again)
+function carriedOf(t, r) {
+  const kept = keptOk(t, r.by, r);
+  (r.files || []).forEach((id) => { const a = attOf(t, id); if (a) kept.delete(String(a.name || id).toLowerCase()); });
+  return [...kept.values()].map((id) => attOf(t, id)).filter(Boolean);
+}
+// the files still needed from a person: those the CD ticked in their last sent-back round
+function stillNeeded(t, u) {
+  const r = lastReview(t, u);
+  if (!r || r.state !== 'amend' || !r.need) return [];
+  return Object.keys(r.need).map((id) => ({ a: attOf(t, id), note: r.need[id] })).filter((x) => x.a);
+}
+// a decided request's result in words: Approved · Amendments · 2 approved · 1 needs changes
+function resultOf(r) {
+  if (r.state === 'approved') return { k: 'ok', label: 'Approved', long: `Approved · ${(r.files || []).length} file${(r.files || []).length === 1 ? '' : 's'}` };
+  const ok = (r.ok || []).length, need = r.need ? Object.keys(r.need).length : (r.files || []).length;
+  if (r.state === 'amend' && ok) return { k: 'mix', label: `${ok} ✓ · ${need} ✎`, long: `${ok} approved · ${need} need${need === 1 ? 's' : ''} changes` };
+  return { k: 'amend', label: 'Amendments', long: `Amendments · ${need} file${need === 1 ? '' : 's'}` };
+}
 const reviewedRecent = () => allReviews().filter(({ r }) => (r.state === 'approved' || r.state === 'amend') && r.decidedAt && (Date.now() - new Date(r.decidedAt)) < REVIEWED_DAYS * 864e5).sort((a, b) => b.r.decidedAt.localeCompare(a.r.decidedAt));
 
 // Work out the task's CD Status from everyone's latest submission
@@ -7770,13 +7806,18 @@ async function withdrawReview(t) {
   commit();
 }
 
-function decideReview(t, r, decision, noteHtml) {
+// need: { fileId: noteHtml } — the files ticked for changes (none given: every file needs changes, as before)
+function decideReview(t, r, decision, noteHtml, need = null) {
   if (!isCD() || r.state !== 'pending') return;
+  const files = r.files || [];
+  if (decision === 'amend' && need && !Object.keys(need).some((id) => files.includes(id))) decision = 'approve';   // (nothing ticked: all approved)
   r.decidedAt = nowISO(); r.decidedBy = currentUserId;
   const who = fullName(userById(r.by));
   if (decision === 'approve') {
     Haptic.success();
     r.state = 'approved';
+    r.ok = files.slice();
+    r.set = [...carriedOf(t, r).map((a) => a.id), ...files];
     t.partsDone = t.partsDone || {};
     t.partsDone[r.by] = nowISO();
     logActivity(t, `approved <b>${esc(who)}</b>’s files`);
@@ -7791,11 +7832,20 @@ function decideReview(t, r, decision, noteHtml) {
     } else if (!reviewPending(t)) moveToSection(t, SEC_PROGRESS);
   } else {
     r.state = 'amend';
+    const picked = need ? files.filter((id) => Object.prototype.hasOwnProperty.call(need, id)) : files.slice();
+    r.ok = files.filter((id) => !picked.includes(id));
+    r.need = Object.fromEntries(picked.map((id) => [id, need ? String(need[id] || '') : '']));
+    // one comment mentioning the person, grouped by file (each file's note under its name, the file itself attached)
+    const parts = need ? picked.map((id) => { const a = attOf(t, id); return `<b>${esc((a && a.name) || 'File')}</b>${r.need[id] ? '<br>' + r.need[id] : ''}`; }) : [];
+    const general = String(noteHtml || '').trim();
+    const okLine = r.ok.length ? `<br><span class="rv-okline">✓ Approved: ${r.ok.map((id) => esc((attOf(t, id) || {}).name || 'File')).join(', ')}</span>` : '';
+    noteHtml = [general, ...parts].filter(Boolean).join('<br><br>') + okLine;
     r.noteHtml = noteHtml;
     if (t.partsDone) delete t.partsDone[r.by];
-    const c = { id: uid(), text: 'Amendments required: ' + notifPlainHTML(noteHtml), html: `<b>Amendments required</b> for <span class="mention" data-user="${esc(r.by)}" contenteditable="false">@${esc(who)}</span><br>${noteHtml}`, at: nowISO(), attachments: [], parentId: null, reactions: {}, authorId: currentUserId };
+    const c = { id: uid(), text: 'Amendments required: ' + notifPlainHTML(noteHtml), html: `<b>Amendments required</b> for <span class="mention" data-user="${esc(r.by)}" contenteditable="false">@${esc(who)}</span><br>${noteHtml}`, at: nowISO(),
+      attachments: need ? picked.map((id) => attOf(t, id)).filter(Boolean).map((a) => ({ ...a, id: uid(), linked: true })) : [], parentId: null, reactions: {}, authorId: currentUserId };
     t.comments.push(c);
-    logActivity(t, `asked <b>${esc(who)}</b> for amendments`);
+    logActivity(t, r.ok.length ? `approved ${r.ok.length} of <b>${esc(who)}</b>’s files and asked for changes on ${picked.length}` : `asked <b>${esc(who)}</b> for amendments`);
     pushNotif(r.by, t, 'review-amend', 'requested amendments on your submission for', { snippet: notifPlainHTML(noteHtml).slice(0, 160), commentId: c.id });
     creatorAndAms(t).forEach((u) => { if (u !== r.by) pushNotif(u, t, 'review-amend', `requested amendments from <b>${esc(who)}</b> on`, { commentId: c.id }); });
     if (!reviewPending(t)) moveToSection(t, SEC_PROGRESS);
@@ -7809,10 +7859,11 @@ function decideReview(t, r, decision, noteHtml) {
 // (they're still in the review request, and the submitter's review panel)
 function shownAtts(t) {
   const ok = new Set((t.reviews || []).filter((r) => r.state === 'approved').map((r) => r.id));
-  return (t.attachments || []).filter((a) => !a.reviewId || ok.has(a.reviewId));
+  const okFiles = new Set((t.reviews || []).flatMap((r) => (r.state === 'amend' && Array.isArray(r.ok) ? r.ok : [])));
+  return (t.attachments || []).filter((a) => !a.reviewId || ok.has(a.reviewId) || okFiles.has(a.id));
 }
 function postApprovedFiles(t, r) {
-  const files = (r.files || []).map((id) => t.attachments.find((a) => a.id === id)).filter(Boolean);
+  const files = (r.set || r.files || []).map((id) => t.attachments.find((a) => a.id === id)).filter(Boolean);
   if (!files.length) return;
   const cr = t.createdBy && userById(t.createdBy) ? t.createdBy : null;
   const hello = cr ? `Hello <span class="mention" data-user="${esc(cr)}" contenteditable="false">@${esc(fullName(userById(cr)))}</span>, ` : 'Hello, ';
@@ -8028,6 +8079,13 @@ function submitDialog(t) {
   root.innerHTML = `<div class="scrim"><div class="dialog sr-dlg" role="dialog">
     <h2>Submit files for review</h2>
     <p>${cd ? `Your files go to <b>${esc(fullName(userById(cd)))}</b> (${cdTitle()}) for approval.` : 'No Creative Director is set yet — an Admin needs to choose one on the Team page.'}</p>
+    ${(() => {
+      // (per-file decisions: what's still needed, with the CD's note; the files already approved stay approved)
+      const need = stillNeeded(t, currentUserId), ok = [...keptOk(t, currentUserId).values()].map((id) => attOf(t, id)).filter(Boolean);
+      if (!need.length && !ok.length) return '';
+      return `<div class="sr-need">${need.length ? `<div class="sr-nh">Still needed</div>${need.map((x) => `<div class="sr-nf"><span class="ficon">${esc((fileExt(x.a.name) || 'file').slice(0, 4))}</span><div><b>${esc(x.a.name)}</b>${x.note ? `<small>${sanitizeHTML(x.note, true)}</small>` : ''}</div></div>`).join('')}` : ''}
+        ${ok.length ? `<div class="sr-nh ok">${icon('check')}Already approved</div><div class="sr-ok">${ok.map((a) => esc(a.name)).join(' · ')}</div><small class="sr-hint">A new version of an approved file (same name) replaces it.</small>` : ''}</div>`;
+    })()}
     <div class="sr-drop" id="sr-drop">${icon('upload')}<b>Drag and drop files here</b><span>or</span><button class="btn" id="sr-pick">Select files from your computer</button></div>
     <div class="sr-list" id="sr-list"></div>
     <div class="actions"><button class="btn" id="sr-cancel">Cancel</button><button class="btn primary" id="sr-submit" disabled>Submit</button></div>
@@ -8114,14 +8172,15 @@ function submitDialog(t) {
 }
 
 /* ---- Review Requests page (Creative Director only) ---- */
-function rrTile(t, a) {
+// mark: 'ok' (approved — also one carried from an earlier round), 'need' (changes asked), or none
+function rrTile(t, a, mark = '') {
   const kind = fileKind(a);
   let inner;
   if (kind === 'image' && Host.isNative) inner = `<img src="${imgUrl(a, 640)}" alt="" loading="lazy">`;
   else if (Host.isNative) inner = thumbImg(a, 'tile').replace('data-thumb-for="', `data-thumb-task="${t.id}" data-thumb-for="`);
   else inner = `<div class="thumb-ph"><span class="ext">${esc(fileExt(a.name) || 'file')}</span></div>`;
-  return `<div class="tile rr-tile" data-action="rr-file" data-task-id="${t.id}" data-id="${a.id}" title="${esc(a.name)} — click to preview">
-    <div class="tile-img">${inner}${kind === 'video' ? `<span class="tile-play">${icon('play')}</span>` : ''}</div>
+  return `<div class="tile rr-tile ${mark ? 'rr-' + mark : ''}" data-action="rr-file" data-task-id="${t.id}" data-id="${a.id}" title="${esc(a.name)} — click to preview">
+    <div class="tile-img">${inner}${kind === 'video' ? `<span class="tile-play">${icon('play')}</span>` : ''}${mark === 'ok' ? `<span class="rr-mk ok" title="Approved">${icon('check')}</span>` : mark === 'need' ? `<span class="rr-mk need" title="Needs changes">${icon('edit')}</span>` : ''}</div>
     <div class="tile-meta"><span>${esc(a.name)}</span><small>${fmtSize(a.size)}</small></div>
   </div>`;
 }
@@ -8129,24 +8188,25 @@ function reviewCard(t, r, reviewed) {
   const p = proj(t.projectId);
   const files = (r.files || []).map((id) => t.attachments.find((a) => a.id === id)).filter(Boolean);
   const desc = t.notesHtml ? notifPlainHTML(t.notesHtml) : t.notes;
-  const decision = reviewed ? (r.state === 'approved'
-    ? `<span class="rr-dec ok">${icon('check')}Approved</span>`
-    : `<span class="rr-dec amend">${icon('edit')}Amendments</span>`) : '';
+  const res = reviewed ? resultOf(r) : null;
+  const decision = res ? `<span class="rr-dec ${res.k}">${icon(res.k === 'ok' ? 'check' : 'edit')}${esc(res.long)}</span>` : '';
+  const carried = carriedOf(t, r);
+  const markOf = (a) => (!reviewed ? '' : r.state === 'approved' || (r.ok || []).includes(a.id) ? 'ok' : 'need');
   return `<div class="rr-card ${reviewed ? 'done' : ''}" data-review="${r.id}">
     <div class="rr-head">
       <div class="rr-info">
         <div class="rr-top"><a class="rr-title" data-action="rr-open" data-id="${t.id}">${esc(t.title || 'Untitled task')}</a>${p ? `<span class="rr-proj"><i style="background:${p.color}"></i>${esc(p.name)}</span>` : ''}</div>
         ${desc ? `<a class="rr-desc" data-action="rr-open" data-id="${t.id}">${esc(desc)}</a>` : '<div class="rr-desc ph">No description</div>'}
-        <div class="rr-by">${avatarHTML(r.by, 20)}<span><b>${esc(fullName(userById(r.by)))}</b> submitted ${files.length} file${files.length === 1 ? '' : 's'} · ${esc(timeAgo(r.at))}${r.round > 1 ? ` · Round ${r.round}` : ''}</span></div>
+        <div class="rr-by">${avatarHTML(r.by, 20)}<span><b>${esc(fullName(userById(r.by)))}</b> submitted ${files.length} file${files.length === 1 ? '' : 's'} · ${esc(timeAgo(r.at))}${r.round > 1 ? ` · Round ${r.round}` : ''}${carried.length ? ` · ${carried.length} already approved` : ''}</span></div>
       </div>
       <div class="rr-acts">
         ${files.length ? `<button class="icon-btn" data-action="rr-download" data-id="${r.id}" title="Download all files">${icon('download')}</button>` : ''}
         ${reviewed ? decision : `<button class="btn primary" data-action="rr-decide" data-id="${r.id}">Review decision</button>`}
       </div>
     </div>
-    ${files.length ? `<div class="rr-files">${files.map((a) => rrTile(t, a)).join('')}</div>` : ''}
+    ${files.length || carried.length ? `<div class="rr-files">${files.map((a) => rrTile(t, a, markOf(a))).join('')}${carried.map((a) => rrTile(t, a, 'ok').replace('class="tile rr-tile', 'class="tile rr-tile rr-carried')).join('')}</div>` : ''}
     ${reviewed && r.state === 'amend' && r.noteHtml ? `<div class="rr-note"><b>Changes requested</b>${sanitizeHTML(r.noteHtml, true)}</div>` : ''}
-    ${reviewed ? `<div class="rr-when">${r.state === 'approved' ? 'Approved' : 'Sent back'} ${esc(timeAgo(r.decidedAt))}${r.decidedBy && r.decidedBy !== currentUserId ? ' by ' + esc(fullName(userById(r.decidedBy))) : ''} · leaves this list after ${REVIEWED_DAYS} days</div>` : ''}
+    ${reviewed ? `<div class="rr-when">${r.state === 'approved' ? 'Approved' : (r.ok || []).length ? 'Decided' : 'Sent back'} ${esc(timeAgo(r.decidedAt))}${r.decidedBy && r.decidedBy !== currentUserId ? ' by ' + esc(fullName(userById(r.decidedBy))) : ''} · leaves this list after ${REVIEWED_DAYS} days</div>` : ''}
   </div>`;
 }
 function viewReviews() {
@@ -8176,7 +8236,11 @@ function decisionDialog(id) {
       <button class="rd-btn amend" data-d="amend">${icon('edit')}<b>Amendments</b><small>Send it back with the changes needed</small></button>
     </div>
     <div class="rd-amend" hidden>
-      <label class="dlg-label">Describe the changes required</label>
+      ${(r.files || []).length > 1 ? `<label class="dlg-label">Tick the files that need changes — the rest are approved</label>
+      <div class="rd-files">${(r.files || []).map((id) => attOf(t, id)).filter(Boolean).map((a) => `<div class="rd-file" data-f="${a.id}">
+        <label class="rd-tick"><input type="checkbox" data-tick="${a.id}"><span class="ficon">${esc((fileExt(a.name) || 'file').slice(0, 4))}</span><b>${esc(a.name)}</b><small class="rd-will">✓ Will be approved</small></label>
+        <textarea class="rd-fnote" data-fnote="${a.id}" rows="2" placeholder="What needs changing in ${esc(a.name)}?" hidden></textarea></div>`).join('')}</div>
+      <label class="dlg-label">General note (optional)</label>` : '<label class="dlg-label">Describe the changes required</label>'}
       <div class="composer rd-comp"><div class="rt-editor" contenteditable="true" id="rd-note" data-placeholder="e.g. 0:10 remove the text, use the new end frame…"></div><div class="cb-foot">${fmtToolbar()}</div></div>
       <div class="actions"><button class="btn" data-d="back">Back</button><button class="btn primary" data-d="send">Submit</button></div>
     </div>
@@ -8186,6 +8250,12 @@ function decisionDialog(id) {
   const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); } };
   document.addEventListener('keydown', onKey, true);
   scrim.addEventListener('mousedown', (e) => { if (e.target === scrim) close(); });
+  const multi = (r.files || []).length > 1;
+  scrim.addEventListener('change', (e) => {
+    const c = e.target.closest('[data-tick]'); if (!c) return;
+    const row = c.closest('.rd-file'), n = $('[data-fnote]', row);
+    row.classList.toggle('on', c.checked); n.hidden = !c.checked; if (c.checked) n.focus();
+  });
   scrim.addEventListener('click', (e) => {
     const b = e.target.closest('[data-d]');
     if (!b) return;
@@ -8195,6 +8265,19 @@ function decisionDialog(id) {
     else if (d === 'back') { $('.rd-choices', root).hidden = false; $('.rd-amend', root).hidden = true; }
     else if (d === 'send') {
       const ed = $('#rd-note', root);
+      if (multi) {
+        const need = {};
+        $$('[data-tick]', root).forEach((c) => { if (c.checked) need[c.dataset.tick] = esc($(`[data-fnote="${c.dataset.tick}"]`, root).value.trim()).replace(/\n/g, '<br>'); });
+        const ids = Object.keys(need);
+        if (!ids.length) { toast('Tick the files that need changes'); return; }
+        const blank = ids.find((id) => !need[id]);
+        if (blank && editorEmpty(ed)) { $(`[data-fnote="${blank}"]`, root).focus(); toast('Say what needs changing'); return; }
+        close();
+        decideReview(t, r, 'amend', editorEmpty(ed) ? '' : sanitizeHTML(ed.innerHTML), need);
+        const okN = (r.files || []).length - ids.length;
+        toast(okN ? `${okN} approved · ${ids.length} sent back to ${firstName(r.by)}` : `Sent back to ${firstName(r.by)}`);
+        return;
+      }
       if (editorEmpty(ed)) { ed.focus(); toast('Describe the changes required'); return; }
       const html = sanitizeHTML(ed.innerHTML);
       close();

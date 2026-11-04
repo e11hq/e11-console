@@ -1854,6 +1854,22 @@ button.pv-empty:hover { background: var(--hover); color: var(--text-2); }
 .rr-empty { padding: 60px 10px; }
 /* decision dialog */
 .rd-dlg { width: 520px; }
+/* per-file decisions: tick the files that need changes, a note under each */
+.rd-files { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 12px; max-height: 320px; overflow: auto; }
+.rd-file { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+.rd-file.on { border-color: rgba(255,138,76,.55); background: rgba(255,138,76,.06); }
+.rd-tick { display: flex; align-items: center; gap: 9px; cursor: pointer; font-size: 13.5px; }
+.rd-tick input { accent-color: #ff8a4c; width: 16px; height: 16px; }
+.rd-tick b { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rd-will { color: var(--green); font-size: 12px; }
+.rd-file.on .rd-will { display: none; }
+.rd-fnote { width: 100%; margin-top: 7px; resize: vertical; border-radius: 8px; border: 1px solid var(--line); background: var(--bg-2, transparent); color: inherit; font: inherit; font-size: 13px; padding: 7px 9px; }
+.rr-dec.mix { background: rgba(175,82,222,.15); color: #c88be6; }
+.rr-mk { position: absolute; top: 6px; right: 6px; width: 20px; height: 20px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: #fff; }
+.rr-mk .ic { width: 12px; height: 12px; }
+.rr-mk.ok { background: var(--green); } .rr-mk.need { background: #ff8a4c; }
+.rr-carried { opacity: .6; }
+.rv-okline { color: var(--green); }
 .rd-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
 .rd-btn { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; padding: 16px; border-radius: 12px; border: 1px solid var(--border-strong); background: var(--panel); color: var(--text); }
 .rd-btn .ic { width: 22px; height: 22px; margin-bottom: 4px; }
@@ -2993,3 +3009,10 @@ body.phone .l-short { display: inline; }
 .fileref.pending { animation: frPulse 1.6s ease-in-out infinite; cursor: default; }
 @keyframes frPulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
 .mention-pop .fr-ic { width: 18px; height: 18px; margin: 0 2px; }
+
+/* Submit files for review: what's still needed, and what's already approved (per-file decisions) */
+.sr-need { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 0 0 12px; display: flex; flex-direction: column; gap: 7px; }
+.sr-nh { font-size: 11.5px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: #ff8a4c; display: flex; align-items: center; gap: 5px; }
+.sr-nh.ok { color: var(--green); } .sr-nh .ic { width: 12px; height: 12px; }
+.sr-nf { display: flex; gap: 9px; align-items: flex-start; font-size: 13px; } .sr-nf small { display: block; color: var(--text-2); margin-top: 2px; }
+.sr-ok { font-size: 13px; color: var(--text-2); } .sr-hint { color: var(--text-3); font-size: 11.5px; }
