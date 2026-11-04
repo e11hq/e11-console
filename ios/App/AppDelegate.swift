@@ -1022,8 +1022,12 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       if let t = lastTabTap, Date().timeIntervalSince(t.at) < 1.5, on != t.key { moved = nil } else { moved = on }
     }
     pageTabs = a
+    // (the person the page is now — View as… someone, back to me: the app's copy follows at once, and until it is that
+    //  person's, the page's tabs are shown — an Office Admin got the owner's tabs, Haris 2026-11-04)
+    pageIs(pagePerson)
     if let own = ownTabs(moved) { setTabs(own) } else { setTabs(a) }
   }
+  private var pagePerson: String? { ((pageTabs?["tabs"] as? [[String: Any]]) ?? []).first(where: { ($0["v"] as? String) == "me" })?["who"] as? String }
   // Automatic light / dark by the app's own clock: every minute (and on coming back), light from sunrise to sunset
   // (the day's times the page gave, moved to today), told to everything as the page's setAppearance would
   private var lookTimer: Timer?
@@ -1047,7 +1051,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   func refreshOwnTabs() { if let own = ownTabs(nil) { setTabs(own) } }
   private func ownTabs(_ moved: String?) -> [String: Any]? {
-    guard AppData.shared.tabsOn, AppData.shared.ready, let m = AppData.shared.screen("tabs").model,
+    guard AppData.shared.tabsOn, AppData.shared.ready, pagePerson == nil || pagePerson == AppData.shared.me, let m = AppData.shared.screen("tabs").model,
           var list = m["tabs"] as? [[String: Any]], !list.isEmpty else { return nil }
     let page = (pageTabs?["tabs"] as? [[String: Any]]) ?? (lastTabs?["tabs"] as? [[String: Any]]) ?? []
     let keys = list.map { $0["v"] as? String ?? "" }
