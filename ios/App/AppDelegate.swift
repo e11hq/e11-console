@@ -1179,6 +1179,16 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if again, meLike, meCtl.isOpen { if meCtl.depth > 1 { meCtl.backToRoot() } else { meCtl.top?.scrollToTop() }; return }
     // (another tab: the app's own Me goes at once for the app's own tabs; back on Me, it's there at once as it was)
     if meLike { if !meCtl.screens.isEmpty, pageReady { meCtl.reveal() } }
+    // (another of the app's own Me-made tabs — an Office Admin's Overview / Claims / Expenses / Team / Me, Social's Plans:
+    //  the screen on now stays until the page sends the other one's first page, so the website's Home ("E11 Day") never
+    //  shows in between — Haris 2026-11-04; at most 1.5 s)
+    else if meServes(tabKeys[item.tag]), meCtl.isOpen {
+      let key = tabKeys[item.tag]
+      DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+        guard let self = self, self.selectedTabKey == key, self.meCtl.tab != key else { return }
+        self.meCtl.hide()
+      }
+    }
     else if ["today", "mytasks", "inbox", "projects", "me", "plans", "team", "clients", "fin-reimb", "fin-expenses"].contains(tabKeys[item.tag]) { meCtl.hide() }   // (Me ↔ Content plans: the page then sends the other one's first page)
     // (the page's own tabs — Me, Plans, Reviews, Client Assets: from a deeper page, back to the tab's first with the back
     //  slide; Haris 2026-11-03)
@@ -1352,6 +1362,11 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       reply(["ok": true])
     default: reply(["ok": false])
     }
+  }
+  // (the tabs the app's own Me screens draw: Me, Plans, an Office Admin's Overview, Team, Claims, Expenses)
+  func meServes(_ key: String) -> Bool {
+    if ["me", "plans", "team", "fin-reimb", "fin-expenses"].contains(key) { return true }
+    return key == "today" && (tabKeys.contains("fin-reimb") || tabKeys.contains("team"))
   }
   // (a tab as if tapped — your photo on a tab's page: the Me tab)
   func selectTab(_ key: String) {
