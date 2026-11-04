@@ -1541,16 +1541,16 @@ final class MeCtl {
       list.set(rows, look: h.look, admin: admin)
       list.onApprove = { [weak self, weak h] id in self?.request(["ev": "clApprove", "id": id]) { r in if (r["ok"] as? Bool) == true { UINotificationFeedbackGenerator().notificationOccurred(.success); h?.toast(["t": "Marked HR approved"]) } else { h?.toast(["t": r["error"] as? String ?? "That didn’t work — try again"]) } } }
       list.onOpen = { [weak self] id in self?.send(["ev": "clOpen", "id": id]) }
-      list.onHold = { [weak self, weak h] id in guard let self = self, admin, let row = rows.first(where: { ($0["id"] as? String) == id }), (row["st"] as? String) != "paid" else { return }; self.paidOn(h, id) }
+      list.onHold = { [weak self, weak h] id in guard let self = self, admin, let row = rows.first(where: { ($0["id"] as? String) == id }), (row["st"] as? String) != "paid" else { return }; self.paidOn(h, id, sub: "\(row["name"] as? String ?? "") · \(row["amt"] as? String ?? "")") }
       out.append(list)
     }
     h.setFab("Add claim", "plus", admin ? { [weak self, weak h] in if let h = h { self?.addClaim(h, m) } } : nil)
   }
   // hold a claim → Paid on: iPhone's own calendar (as the website, a submitted one is HR approved with it)
-  private func paidOn(_ h: HomeView?, _ id: String) {
+  private func paidOn(_ h: HomeView?, _ id: String, sub: String = "") {
     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     let fmt = DateFormatter(); fmt.calendar = Calendar(identifier: .gregorian); fmt.locale = Locale(identifier: "en_US_POSIX"); fmt.dateFormat = "yyyy-MM-dd"
-    main.topMost().present(DateSheetVC(["value": fmt.string(from: Date()), "min": "", "max": "", "clearable": false, "md": false], dark: !light) { [weak self, weak h] r in
+    main.topMost().present(DateSheetVC(["value": fmt.string(from: Date()), "min": "", "max": "", "clearable": false, "md": false, "title": "Paid on", "sub": sub], dark: !light) { [weak self, weak h] r in
       if (r["cancel"] as? Bool) == true || (r["ok"] as? Bool) == false { return }
       guard let d = r["date"] as? String, !d.isEmpty else { return }
       self?.request(["ev": "clPaid", "id": id, "date": d]) { r in if (r["ok"] as? Bool) == true { UINotificationFeedbackGenerator().notificationOccurred(.success); h?.toast(["t": "Marked paid"]) } else { h?.toast(["t": r["error"] as? String ?? "That didn’t work — try again"]) } }

@@ -3866,10 +3866,12 @@ final class DateSheetVC: UIViewController, UISheetPresentationControllerDelegate
   private let fmt: DateFormatter = { let f = DateFormatter(); f.calendar = Calendar(identifier: .gregorian); f.locale = Locale(identifier: "en_US_POSIX"); f.timeZone = .current; f.dateFormat = "yyyy-MM-dd"; return f }()
   private let clearable: Bool
   private let md: Bool
+  private var titleText: String?, subText: String?
   init(_ a: [String: Any], dark: Bool, answer: @escaping ([String: Any]) -> Void) {
     self.answer = answer
     clearable = (a["clearable"] as? Bool) == true
     md = (a["md"] as? Bool) == true
+    titleText = a["title"] as? String; subText = a["sub"] as? String
     super.init(nibName: nil, bundle: nil)
     overrideUserInterfaceStyle = dark ? .dark : .light
     cal.calendar = gregorian
@@ -3914,11 +3916,18 @@ final class DateSheetVC: UIViewController, UISheetPresentationControllerDelegate
     let clear = UIButton(type: .system); clear.setTitle("Clear", for: .normal); clear.titleLabel?.font = .systemFont(ofSize: 17); clear.tintColor = .systemRed
     clear.isHidden = !clearable
     clear.addAction(UIAction { [weak self] _ in self?.finish(["ok": true, "clear": true]) }, for: .touchUpInside)
-    [today, clear, cal].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; view.addSubview($0) }
+    // (a title in the middle, and a line under it — Paid on · the person and the amount: Haris 2026-11-04)
+    let head = UIStackView(); head.axis = .vertical; head.alignment = .center; head.spacing = 1
+    if let t = titleText, !t.isEmpty { let l = UILabel(); l.text = t; l.font = .systemFont(ofSize: 17, weight: .semibold); head.addArrangedSubview(l) }
+    if let t = subText, !t.isEmpty { let l = UILabel(); l.text = t; l.font = .systemFont(ofSize: 13); l.textColor = .secondaryLabel; head.addArrangedSubview(l) }
+    [today, clear, cal, head].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; view.addSubview($0) }
+    let calTop = cal.topAnchor.constraint(equalTo: today.bottomAnchor, constant: 4); calTop.priority = .defaultHigh
     NSLayoutConstraint.activate([
       clear.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 22), clear.topAnchor.constraint(equalTo: view.topAnchor, constant: 22),
       today.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -22), today.centerYAnchor.constraint(equalTo: clear.centerYAnchor),
-      cal.topAnchor.constraint(equalTo: today.bottomAnchor, constant: 4),
+      head.centerXAnchor.constraint(equalTo: view.centerXAnchor), head.centerYAnchor.constraint(equalTo: clear.centerYAnchor),
+      head.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 90), head.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -90),
+      calTop, cal.topAnchor.constraint(greaterThanOrEqualTo: head.bottomAnchor, constant: 8),
       cal.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 12), cal.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -12),
     ])
   }
