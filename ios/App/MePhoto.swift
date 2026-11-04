@@ -13,7 +13,10 @@ final class MePhoto {
   var fetch: ((URL, @escaping (UIImage?) -> Void) -> Void)?
 
   func watch(_ f: @escaping () -> Void) { watchers.append(f) }
-  private func changed() { watchers.forEach { $0() } }
+  // (never from inside itself: a screen that's told and answers by offering a picture would tell it again — two screens
+  //  with different photos of you, after View as…, sent it round and round until the app crashed: 1375, 2026-11-04)
+  private var telling = false
+  private func changed() { guard !telling else { return }; telling = true; watchers.forEach { $0() }; telling = false }
 
   // where it is on the server (as the page says; nothing said: the kept one stays)
   func source(_ s: String?) {
@@ -34,7 +37,8 @@ final class MePhoto {
     }
   }
   // the photo a screen fetched for you already (Home's people): taken while ours hasn't come
-  func offer(_ img: UIImage) { if !fetched, image == nil || image?.size != img.size { set(img) } }
+  // (only while there's none at all — never swapped for another screen's offer)
+  func offer(_ img: UIImage) { if !fetched, image == nil { set(img) } }
   private func set(_ img: UIImage) {
     image = img
     if let d = img.jpegData(compressionQuality: 0.9) { DiskPics.put("me-photo", d) }
