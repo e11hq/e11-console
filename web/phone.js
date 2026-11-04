@@ -2918,7 +2918,7 @@ const NativeAssets = (() => {
     const rid = ev.rid || null;
     const done = (error, extra) => { if (!error) persist(0); try { renderContent(); } catch (e) { /* page under the app */ } answer(rid, { ok: !error, error: error || null, model: modelFor(ev.client || null), ...(extra || {}) }); };
     try {
-      if (ev.ev === 'want') { const m = modelFor(ev.client || null); return answer(rid, m ? { ok: true, model: m } : { ok: false, error: ev.client ? 'Not shared with you' : 'Not available' }); }
+      if (ev.ev === 'want') { if (typeof autoLogosAll === 'function') setTimeout(() => autoLogosAll(), 0); const m = modelFor(ev.client || null); return answer(rid, m ? { ok: true, model: m } : { ok: false, error: ev.client ? 'Not shared with you' : 'Not available' }); }
       // the app's back from the first of its screens opened by the page: the page goes back too
       if (ev.ev === 'back') { if (typeof PageHistory !== 'undefined' && PageHistory.canBack && PageHistory.canBack()) PageHistory.back(); else go('me'); sync(); return; }
       if (ev.ev === 'me') { const b = document.querySelector('#ph-tabs [data-ph-tab="me"]'); if (b) b.click(); else go('me'); sync(); return; }

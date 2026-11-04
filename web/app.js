@@ -3096,7 +3096,7 @@ function renderContentNow() {
   else if (ui.view === 'profile') c.innerHTML = viewProfile();
   else if (ui.view === 'updates') c.innerHTML = AppIcon.isOwner() ? viewUpdates() : '<div class="empty"><div class="big">App updates are managed by the owner</div></div>';
   else if (ui.view === 'trash') c.innerHTML = viewTrash();
-  else if (ui.view === 'clients') { c.innerHTML = viewClients(); migrateClientLogos(); }
+  else if (ui.view === 'clients') { c.innerHTML = viewClients(); migrateClientLogos(); autoLogosAll(); }
   else if (ui.view === 'client') {
     const cl = clientById(ui.clientId);
     const f = cl && cl.folders.find((x) => x.id === ui.folderId);
@@ -9083,6 +9083,20 @@ async function autoLogo(c, f, files) {
     const cur = clientById(c.id);
     if (r.path && cur && !cur.logo) { cur.logo = r.path; cur.logoAuto = true; persist(0); renderSidebar(); if (ui.view === 'client' || ui.view === 'clients') render(); }
   } catch (e) { /* no logo then; the colour stays */ } finally { autoLogoBusy = false; }
+}
+// every client without a logo whose Logos folder has an image gets it, one after another (not only when its page is
+// opened on the website — the iPhone's Client Assets showed initials, Haris 2026-11-04)
+let autoLogosRan = false;
+async function autoLogosAll() {
+  if (autoLogosRan || !Host.isServer || !canAddAssets()) return;
+  autoLogosRan = true;
+  for (const c of (db.clients || []).slice()) {
+    if (c.logo) continue;
+    const lf = (c.folders || []).find((f) => f.name === 'Logos');
+    if (!lf || !(lf.files || []).some((x) => LOGO_EXT.test(x.name || ''))) continue;
+    while (autoLogoBusy) await new Promise((r) => setTimeout(r, 300));
+    await autoLogo(c, lf);
+  }
 }
 function migrateClientLogos() {
   if (logoMigration || !Host.isServer || !canAssets()) return;

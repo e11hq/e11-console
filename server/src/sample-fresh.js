@@ -355,6 +355,8 @@ export function freshSample(store, me, filesRoot, opts = {}) {
     // one Inbox update for the team about it
     [...new Set([...t.assignees, t.createdBy, me])].forEach((u) => { if (has(u) && u !== t.createdBy) notifs.push({ id: `smp-nf-${t.id}-${u}`, to: u, from: t.createdBy, kind: 'asset', clientId: c.id, folderId: folder.id, text: `filed the final files for “${t.title}” in ${c.name} › Files`, snippet: `${folder.files.length} file${folder.files.length === 1 ? '' : 's'}`, at: t.completedAt, read: false }); });
   });
+  // every client shows its drawn logo (as the App Review demo does)
+  for (const c of out.clients || []) { const lf = (c.folders || []).find((f) => f.name === 'Logos'); const svg = lf && lf.files.find((f) => /\.svg$/i.test(f.name)); if (svg && !c.logo) c.logo = svg.path; }
   // a Client Assets update
   { const c = clientOf('p-kia'); const f = c && c.folders.find((x) => x.name === 'Logos'); if (f) [me, 'u-sara', 'u-ali'].filter(has).forEach((to, i) => notifs.push({ id: `smp-nas-${i}`, to, from: 'u-lina', kind: 'asset', clientId: c.id, folderId: f.id, text: `added a file to ${c.name} › Logos`, snippet: f.files[0] ? f.files[0].name : '', at: ago(5 + i), read: false })); }
 
