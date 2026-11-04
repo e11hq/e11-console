@@ -43,7 +43,7 @@ final class MePhoto {
     f(u) { [weak self] img in
       guard let self = self else { return }
       self.asking = false
-      guard s == self.url else { return }
+      guard s == self.url else { self.ask(4); return }   // (a newer one was asked for while this one was on its way: that one now)
       if let img = img, img.size.width > 0 { self.fetched = true; self.set(img) }
       else if left > 0 { DispatchQueue.main.asyncAfter(deadline: .now() + 4) { self.ask(left - 1) } }
     }
