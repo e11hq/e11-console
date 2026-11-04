@@ -1226,6 +1226,17 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   /* ---------- Home (23+): the app's own, under the tab bar; the page says what's on it (NativeHome in phone.js) ---------- */
   var homeIfMade: HomeView?
+  // (light / dark changed while the app is open — View as… someone with another look, Me › Appearance: every native
+  //  screen drawn again in it at once, the hidden ones too, so none waits for the page or a restart — Haris 2026-11-04)
+  func relight(_ light: Bool) {
+    if let l = homeLook as? [String: Any], (l["light"] as? Bool) != light { homeLook = nil }
+    let look: Any = homeLook ?? ["light": light]
+    myTasksLight = light; inboxLight = light; clientsLight = light
+    for h in view.subviews.compactMap({ $0 as? HomeView }) where !h.model.isEmpty && !h.isAssetsScreen {
+      var mm = h.model; mm["look"] = look; h.update(mm)
+    }
+    meCtl.relight(light); assetsCtl.relight(light)
+  }
   var homeHadModel = false
   lazy var homeView: HomeView = {
     let h = HomeView(frame: view.bounds)
@@ -2115,7 +2126,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       let style: UIUserInterfaceStyle = (a["mode"] as? String) == "light" ? .light : .dark
       // (everything the app draws itself follows the app's own light / dark, never the phone's — Haris, 2026-10-31:
       //  set on the whole window, so every native screen, sheet, alert, picker and keyboard takes it, now and later)
+      let turned = appStyle != style
       appStyle = style; view.window?.overrideUserInterfaceStyle = style
+      if turned { relight(style == .light) }
       cbarIfMade?.setLook(light: style == .light)
       taskPages.forEach { $0.light = style == .light }
       if tabBar.overrideUserInterfaceStyle != style || tabBar.tintColor != (style == .dark ? UIColor.white : UIColor.black) {

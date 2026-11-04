@@ -1248,6 +1248,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }
   var findText: String { field.text ?? "" }
   var onAssetsDraw: ((HomeView, [String: Any]) -> Void)?
+  // (Client Assets' and Me's screens — drawn again by their own controllers, never through update)
+  var isAssetsScreen: Bool { onAssetsDraw != nil }
   private func drawAssets(_ model: [String: Any]) { fab.isHidden = true; onAssetsDraw?(self, model) }
   private func groupHead(_ name: String, _ n: Int) -> UILabel {
     let h = UILabel(); h.tag = 7

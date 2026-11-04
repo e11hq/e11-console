@@ -1255,6 +1255,7 @@ final class MeCtl {
   func refresh() { if isOpen { main.pageJS("window.__e11MeResend && window.__e11MeResend()"); if stack.contains(where: { $0.kind == "about" }) { send(["ev": "about"]) } } }
 
   // ---------- what's on each ----------
+  func relight(_ l: Bool) { guard l != light else { return }; light = l; stack.forEach { draw($0) } }
   private func redrawRoot() { if let s = stack.first(where: { $0.kind == "me" }) { draw(s) } }
   private func draw(_ s: Screen) {
     var mm: [String: Any] = ["show": true, "me": me ?? "", "look": ["light": light]]

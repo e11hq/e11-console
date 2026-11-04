@@ -641,6 +641,7 @@ final class AssetsCtl {
   private func folderInfo(_ m: [String: Any], _ id: String) -> [String: Any]? { ((m["folders"] as? [[String: Any]]) ?? []).first { ($0["id"] as? String) == id } }
   private func filesIn(_ m: [String: Any], _ fid: String) -> [[String: Any]] { ((m["files"] as? [[String: Any]]) ?? []).filter { ($0["folder"] as? String) == fid } }
   private func screenOf(_ h: HomeView) -> Screen? { stack.first { $0.h === h } }
+  func relight(_ l: Bool) { guard l != light else { return }; light = l; stack.forEach { draw($0) } }
   private func draw(_ s: Screen) {
     var mm: [String: Any] = ["show": true, "me": me ?? main.clientsPageMe ?? "", "look": ["light": light]]
     if let l = main.homeLook as? [String: Any], (l["light"] as? Bool) == light { mm["look"] = l }
