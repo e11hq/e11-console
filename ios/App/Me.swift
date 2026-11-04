@@ -1915,11 +1915,11 @@ final class TouchSpot: UIGestureRecognizer, UIGestureRecognizerDelegate {
 // ---------- Content plans' pieces ----------
 // ‹ December 2026 › (any month, from this one on)
 final class PlanMonthBar: UIView, HomeBlock {
-  private let prev = UIButton(type: .system), next = UIButton(type: .system), label = UILabel()
+  private let prevB = UIButton(type: .system), nextB = UIButton(type: .system), label = UILabel()
   var onShift: ((Int) -> Void)?
   override init(frame: CGRect) {
     super.init(frame: frame)
-    for (b, s, d) in [(prev, "chevron.left", -1), (next, "chevron.right", 1)] {
+    for (b, s, d) in [(prevB, "chevron.left", -1), (nextB, "chevron.right", 1)] {
       if #available(iOS 26.0, *) { var c = UIButton.Configuration.glass(); c.image = UIImage(systemName: s, withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .semibold)); c.baseForegroundColor = .label; b.configuration = c }
       else { b.setImage(UIImage(systemName: s), for: .normal); b.tintColor = .label; b.backgroundColor = .tertiarySystemFill; b.layer.cornerRadius = 18 }
       b.addAction(UIAction { [weak self] _ in self?.onShift?(d) }, for: .touchUpInside)
@@ -1928,12 +1928,12 @@ final class PlanMonthBar: UIView, HomeBlock {
     label.font = .systemFont(ofSize: 17, weight: .semibold); label.textAlignment = .center; addSubview(label)
   }
   required init?(coder: NSCoder) { fatalError() }
-  func set(_ t: String, canPrev: Bool) { label.text = t; prev.isEnabled = canPrev; prev.alpha = canPrev ? 1 : 0.35 }
+  func set(_ t: String, canPrev: Bool) { label.text = t; prevB.isEnabled = canPrev; prevB.alpha = canPrev ? 1 : 0.35 }
   func blockHeight(_ W: CGFloat) -> CGFloat { 56 }
   override func layoutSubviews() {
     super.layoutSubviews()
     let W = bounds.width
-    prev.frame = CGRect(x: 16, y: 8, width: 40, height: 40); next.frame = CGRect(x: W - 56, y: 8, width: 40, height: 40)
+    prevB.frame = CGRect(x: 16, y: 8, width: 40, height: 40); nextB.frame = CGRect(x: W - 56, y: 8, width: 40, height: 40)
     label.frame = CGRect(x: 64, y: 8, width: W - 128, height: 40)
   }
 }
