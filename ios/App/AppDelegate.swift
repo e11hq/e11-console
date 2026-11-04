@@ -1024,6 +1024,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     // loaded — Haris 2026-11-03); the page only says where it is on the server and whether you're online
     for (i, t) in list.enumerated() where (t["v"] as? String) == "me" {
       tabOnline[i] = (t["online"] as? Bool ?? true) && netUp
+      if let w = t["who"] as? String, !w.isEmpty { MePhoto.shared.person(w) }
       MePhoto.shared.source(t["photoUrl"] as? String)
     }
     paintMeTab()

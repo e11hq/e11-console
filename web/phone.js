@@ -124,6 +124,8 @@ const Phone = (() => {
     const ph = mePhoto();
     const u0 = typeof me === 'function' ? me() : null;
     if (ph) tabs.forEach((t) => { if (t.v === 'me') { t.photo = ph; if (u0 && u0.avatar) t.photoUrl = new URL(fileUrl({ path: u0.avatar }), location.href).href; } });
+    // (who it is — another person (View as…, signed in again): the app forgets the last one's photo)
+    if (u0) tabs.forEach((t) => { if (t.v === 'me') t.who = String(u0.id); });
     // the Home tab: how many tasks are due today (the Due today box's number) — the app's tab bar only (Haris, 2026-11-01)
     if (!(typeof isOffice === 'function' && isOffice())) try { const n = R().myDayData().due.length; tabs.forEach((t) => { if (t.v === 'today' && !t.badge && n > 0) t.badge = String(n); }); } catch (e) { /* data not in yet */ }
     // (online or not: a small green or red dot on the Me tab's picture)

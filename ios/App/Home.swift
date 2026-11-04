@@ -424,7 +424,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // your photo in the corner: MePhoto (the same one as the Me tab); the one Home's people have is offered to it
   private func meChanged() {
     let p = people[meId]
-    if let own = NativeSheetVC.photo(p) { MePhoto.shared.offer(own) }
+    if let own = NativeSheetVC.photo(p) { MePhoto.shared.offer(own, for: meId) }
     MePhoto.shared.who(p?["initials"] as? String, NativeSheetVC.color(p?["color"]))
     let pic = MePhoto.shared.image
     let key = "\(meId)|\(pic.map { "\(ObjectIdentifier($0).hashValue)" } ?? "-")|\(MePhoto.shared.initials ?? "")"

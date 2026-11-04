@@ -18,6 +18,18 @@ final class MePhoto {
   private var telling = false
   private func changed() { guard !telling else { return }; telling = true; watchers.forEach { $0() }; telling = false }
 
+  // whose it is: another person (View as…, signed in as someone else) — the last one's photo goes, theirs is fetched (or
+  // their initials) — Haris 2026-11-04: Amelia's tab kept Haris's photo
+  private var who = UserDefaults.standard.string(forKey: "e11_me_photo_who")
+  func person(_ id: String) {
+    guard id != who else { return }
+    let had = who != nil
+    who = id; UserDefaults.standard.set(id, forKey: "e11_me_photo_who")
+    guard had else { return }
+    image = nil; url = nil; fetched = false; asking = false
+    DiskPics.put("me-photo", Data())
+    changed()
+  }
   // where it is on the server (as the page says; nothing said: the kept one stays)
   func source(_ s: String?) {
     guard let s = s, !s.isEmpty else { return }
@@ -38,7 +50,7 @@ final class MePhoto {
   }
   // the photo a screen fetched for you already (Home's people): taken while ours hasn't come
   // (only while there's none at all — never swapped for another screen's offer)
-  func offer(_ img: UIImage) { if !fetched, image == nil { set(img) } }
+  func offer(_ img: UIImage, for id: String) { if !fetched, image == nil, who == nil || id == who { set(img) } }
   private func set(_ img: UIImage) {
     image = img
     if let d = img.jpegData(compressionQuality: 0.9) { DiskPics.put("me-photo", d) }
