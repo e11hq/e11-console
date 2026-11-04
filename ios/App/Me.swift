@@ -1808,6 +1808,8 @@ final class MeCtl {
     switch ev["ev"] as? String ?? "" {
     case "back": if h === stack.last?.h { pop() }
     case "toast": send(["ev": "toast"])
+    // (your photo on the Content plans tab: the Me tab, as from every other tab — Haris 2026-11-04)
+    case "me" where h.assets == "plansTab": main.selectTab("me")
     case "find" where h.assets == "plansPage" || h.assets == "me.plan" || h.assets == "plansTab": planFind(h, ev["q"] as? String ?? "")
     default: break
     }

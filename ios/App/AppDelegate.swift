@@ -1347,6 +1347,10 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     default: reply(["ok": false])
     }
   }
+  // (a tab as if tapped — your photo on a tab's page: the Me tab)
+  func selectTab(_ key: String) {
+    if let i = tabKeys.firstIndex(of: key), let item = self.tabBar.items?.first(where: { $0.tag == i }) { self.tabBar.selectedItem = item; self.tabBar(self.tabBar, didSelect: item) }
+  }
   // a page of Me from elsewhere: Me's tab, then that page
   func openMePage(_ kind: String) {
     meCtl.openSoon(kind)
