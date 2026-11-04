@@ -173,7 +173,8 @@ extension Main {
     let x = max(0, g.translation(in: view).x)
     let under: UIView? = taskPages.count > 1 ? taskPages[taskPages.count - 2] : nil
     let back = underViews(below: p, under: under)
-    // on Comments the swipe from the edge goes to Details (out of a thread first), not back to the list — and the
+    // on Comments the swipe from the edge goes back a step — a thread to the comments, the comments to Details — not back
+    // to the list — and the
     // rest of that swipe is used up: its "cancelled" (the page now on Details) mustn't run the slide back below,
     // which moved the comment box aside and left it cut off (Haris, 2026-11-01)
     if g.state == .began { taskPanSpent = false }
@@ -842,14 +843,11 @@ extension Main {
 extension Main {
   // a swipe right on Comments — or on a reply thread — goes to Details (Haris, 2026-11-01); from Details the edge
   // swipe then goes back to the page before
+  // — back a step at a time (Haris 2026-11-04, again): from a reply thread, first back to the comments; from the comments,
+  // to Details; from Details, the page before
   func toDetailsFromComments(_ p: TaskPage) {
     composeIfMade?.text.resignFirstResponder()
-    if let t = p.threadFeed {
-      p.threadFeed = nil
-      composeIfMade?.switchTo(task: p.taskId, parent: nil)
-      t.removeFromSuperview()
-      if let f = p.feed { p.edgeScroll(f.scroll) }
-    }
+    if p.threadFeed != nil { closeThread(p); return }
     p.setTab("details", tell: true, slide: true)
   }
 }
