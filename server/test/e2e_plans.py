@@ -337,7 +337,8 @@ async def main():
             E = pg.evaluate
             await E("go('inbox')"); await pg.wait_for_timeout(400)
             check(await E("myNotifs().filter(n => n.kind === 'plan-tasks').length") >= 1, 'the AM was told about the tasks made from the skeleton')
-            row = pg.locator('.ib-row', has_text='KOREA 360 · November 2026')
+            mlabel = await E("(() => { const pl = Plans.planById('pl-smp-p-korea'); const [y, m] = pl.month.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long' }) + ' ' + y; })()")
+            row = pg.locator('.ib-row', has_text='KOREA 360 · ' + mlabel)
             check(await row.count() == 1, 'one Inbox row for the plan’s updates')
             await row.first.click(); await pg.wait_for_timeout(500)
             check(await E("ui.view") == 'plan' and await E("ui.planId") == 'pl-smp-p-korea', 'it opens the plan')
