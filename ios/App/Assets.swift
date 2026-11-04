@@ -741,7 +741,22 @@ final class AssetsCtl {
           guard let self = self, let h = h, let g = grid else { return }
           self.downloadMany(h, g.pickedFiles, name: f?["name"] as? String ?? "Files"); g.selecting = false; self.blocks(h)
         })
+        // (and Delete, when you may delete every file picked — Haris 2026-11-04)
+        let pk = grid.pickedFiles
+        let canDel = !pk.isEmpty && pk.allSatisfy { ($0["canDel"] as? Bool) == true }
+        h.setFab2("Delete \(n)", canDel ? { [weak self, weak h, weak grid] in
+          guard let self = self, let h = h, let g = grid else { return }
+          let list = g.pickedFiles; let ids = list.compactMap { $0["id"] as? String }
+          let one = list.count == 1 ? "“\(list[0]["name"] as? String ?? "this file")”" : "\(list.count) files"
+          self.confirm(h, "Delete \(one)?", "\(list.count == 1 ? "It moves" : "They move") to the Trash, where \(list.count == 1 ? "it" : "they") can be restored within 30 days. Copies already pasted into tasks stay.", "Delete") { [weak self, weak h, weak g] in
+            guard let self = self, let h = h else { return }
+            self.change(h, ["ev": "deleteFiles", "client": cid, "folder": fid, "files": ids], done: list.count == 1 ? "Deleted" : "\(list.count) files deleted") { [weak self, weak h] _ in
+              g?.selecting = false; if let h = h { self?.blocks(h) }
+            }
+          }
+        } : nil)
       } else {
+        h.setFab2("", nil)
         h.setFab("Upload", "arrow.up", (f?["canUpload"] as? Bool) == true ? { [weak self, weak h] in if let h = h { self?.upload(h, client: cid, folder: fid) } } : nil)
       }
     default: break

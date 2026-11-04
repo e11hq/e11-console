@@ -107,6 +107,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private var findTimer: Timer?, keyboardH: CGFloat = 0
   private let scroll = UIScrollView()
   private let fab = UIButton(type: .system)
+  // (a second, round button left of it — Client Assets' Delete while files are selected: Haris 2026-11-04)
+  private let fab2 = UIButton(type: .system)
+  private var fab2Run: (() -> Void)?
   // at the end of the list, beside "+ New task": "NOT JUST ANY AGENCY" (Haris, 2026-10-31) — it fades in (0.2 s — Haris) once
   // the list has reached its end, and out again on scrolling back (Haris, 2026-10-31)
   private let motto = UILabel()
@@ -212,6 +215,13 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     fab.accessibilityLabel = "New task"
     fab.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); if let a = self?.fabRun { a() } else { self?.send(["ev": "add"]) } }, for: .touchUpInside)
     addSubview(fab)
+    var f2: UIButton.Configuration
+    if #available(iOS 26.0, *) { f2 = .glass() } else { f2 = .filled(); f2.cornerStyle = .capsule }
+    f2.image = UIImage(systemName: "trash", withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold))
+    f2.baseForegroundColor = .systemRed; f2.contentInsets = .zero
+    fab2.configuration = f2; fab2.isHidden = true
+    fab2.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.fab2Run?() }, for: .touchUpInside)
+    addSubview(fab2)
     for i in 0..<3 {
       let v = UIView(); v.layer.cornerRadius = 18; v.layer.borderWidth = 1; let n = UILabel(), l = UILabel(); n.tag = 1; l.tag = 2; v.addSubview(n); v.addSubview(l); scroll.addSubview(v); stats.append(v)
       // (tapped: Due today / Overdue bring their group up to where the big title is; In review opens My Tasks waiting
@@ -253,6 +263,12 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
         fab.layer.shadowColor = UIColor.black.cgColor; fab.layer.shadowOpacity = L.light ? 0.08 : 0; fab.layer.shadowRadius = 10; fab.layer.shadowOffset = CGSize(width: 0, height: 3)
       }
       fc.baseForegroundColor = L.light ? .black : .white; fab.configuration = fc
+    }
+    if var f2 = fab2.configuration {
+      if #available(iOS 26.0, *) { fab2.overrideUserInterfaceStyle = L.light ? .light : .dark } else {
+        f2.background.backgroundColor = ToastCapsule.fill(L.light); f2.background.strokeColor = ToastCapsule.line(L.light); f2.background.strokeWidth = 1
+      }
+      fab2.configuration = f2
     }
     stats.forEach { $0.isHidden = noStats }
     let st = model["stats"] as? [Int] ?? [0, 0, 0]
@@ -568,6 +584,11 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     fab.isHidden = run == nil
     setNeedsLayout()
   }
+  func setFab2(_ label: String, _ run: (() -> Void)?) {
+    fab2Run = run; fab2.accessibilityLabel = label
+    fab2.isHidden = run == nil
+    setNeedsLayout()
+  }
   func setContent(_ views: [UIView]) {
     for v in content where !views.contains(where: { $0 === v }) { v.removeFromSuperview() }
     for v in views where v.superview !== scroll { scroll.addSubview(v) }
@@ -830,6 +851,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // "+ New task": 44 tall like Mail's buttons, 16 from the right, 14 above the tab bar
     let fw = ceil(fab.sizeThatFits(CGSize(width: 300, height: BTN)).width)
     fab.frame = CGRect(x: W - R - fw, y: (tabTop ?? H - 100) - 14 - BTN, width: fw, height: BTN)
+    fab2.frame = CGRect(x: fab.frame.minX - 10 - BTN, y: fab.frame.minY, width: BTN, height: BTN)
+    let leftEdge = fab2.isHidden || fab.isHidden ? fab.frame.minX : fab2.frame.minX
     // (from the page's left edge, its middle level with the +'s)
     if motto.superview == nil {
       // (Haris, 2026-10-31: in capitals, 9 pt medium, letter spacing 2.4, the frost bar date's grey)
@@ -847,7 +870,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       motto.frame = CGRect(x: 16, y: fab.frame.midY - 16, width: W - 32, height: 32)
     } else {
       motto.textAlignment = .left
-      motto.frame = CGRect(x: 16 + nW, y: fab.frame.midY - 16, width: max(0, fab.frame.minX - 12 - 16 - nW), height: 32)
+      motto.frame = CGRect(x: 16 + nW, y: fab.frame.midY - 16, width: max(0, leftEdge - 12 - 16 - nW), height: 32)
     }
     showMotto()
   }

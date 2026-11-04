@@ -2969,6 +2969,17 @@ const NativeAssets = (() => {
           assetNotify(c, f, 'removed', [a.name]);
           return done(null);
         }
+        // (several at once — the app's Select › Delete: Haris 2026-11-04; each to the Trash on its own, one update)
+        case 'deleteFiles': {
+          const ids = new Set((Array.isArray(ev.files) ? ev.files : []).map(String));
+          const list = f ? f.files.filter((x) => ids.has(x.id)) : [];
+          if (!list.length) return done('Those files aren’t here any more');
+          if (f.finalOf || list.some((a) => !canDelAsset(a))) return done('Your role doesn’t allow this');
+          f.files = f.files.filter((x) => !ids.has(x.id));
+          list.forEach((a) => toTrash('cafile', { clientId: c.id, folderId: f.id, file: a }, { key: 'clients:' + c.id, where: `${c.name} › ${f.name}` }));
+          assetNotify(c, f, 'removed', list.map((a) => a.name));
+          return done(null);
+        }
         case 'renameClient': {
           if (!canRenameCA(c)) return done('You can’t rename this');
           const name = String(ev.name || '').trim().replace(/\s+/g, ' ');
