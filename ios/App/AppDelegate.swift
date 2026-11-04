@@ -236,6 +236,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     for i in list.indices { list[i]["on"] = (list[i]["v"] as? String) == "today" }
     tabs["tabs"] = list; tabs["hidden"] = false
     setTabs(tabs)
+    ownAppearanceWatch(); ownAppearanceTick()   // (Automatic light / dark by the app's own clock, from the start)
     view.layoutIfNeeded()
     homeLook = q["look"]; homePageMe = me
     let h = homeView
@@ -1005,6 +1006,65 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     item.selectedImage = roundPhoto(src, ring: tabBar.tintColor ?? .systemBlue, online: on)
   }
   private var meWatched = false
+  // ---------- the app's own tab bar (Part B step 1, Haris 2026-11-04) ----------
+  // The tabs, their names and counts come from the app's own copy (web/appview.js tabs — the page's rules, in the app),
+  // at launch and with every change, not from the website. The page still says: whether the bar hides (a page of its own
+  // over everything), the Plans tab's count (still its rules), your photo's place; and where it went by itself (an Inbox
+  // update opening Reviews) — taken only when it changes. Off on the server (kv app-tabs): the page's tab bar, as before.
+  private var pageTabs: [String: Any]?, pageOn: String?
+  var lastTabTap: (key: String, at: Date)?
+  func pageTabsIn(_ a: [String: Any]) {
+    let on = (a["tabs"] as? [[String: Any]] ?? []).first(where: { ($0["on"] as? Bool) == true })?["v"] as? String
+    var moved: String? = nil
+    if on != pageOn {
+      pageOn = on
+      // (a tab tapped a moment ago: the page catching up with an earlier one isn't a move of its own)
+      if let t = lastTabTap, Date().timeIntervalSince(t.at) < 1.5, on != t.key { moved = nil } else { moved = on }
+    }
+    pageTabs = a
+    if let own = ownTabs(moved) { setTabs(own) } else { setTabs(a) }
+  }
+  // Automatic light / dark by the app's own clock: every minute (and on coming back), light from sunrise to sunset
+  // (the day's times the page gave, moved to today), told to everything as the page's setAppearance would
+  private var lookTimer: Timer?
+  func ownAppearanceWatch() {
+    guard lookTimer == nil else { return }
+    lookTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.ownAppearanceTick() }
+    NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in self?.ownAppearanceTick() }
+  }
+  func ownAppearanceTick() {
+    guard AppData.shared.tabsOn, defaults.string(forKey: "e11_theme_mode") == "auto",
+          let r = defaults.string(forKey: "e11_sun_rise").flatMap({ isoDate($0) }),
+          let st = defaults.string(forKey: "e11_sun_set").flatMap({ isoDate($0) }) else { return }
+    let cal = Calendar.current, now = Date()
+    let today = { (d: Date) -> Date in cal.date(bySettingHour: cal.component(.hour, from: d), minute: cal.component(.minute, from: d), second: 0, of: now) ?? d }
+    let want = now >= today(r) && now < today(st) ? "light" : "dark"
+    if defaults.string(forKey: "e11_look") != want { run("setAppearance", ["mode": want]) { _ in } }
+  }
+  private func isoDate(_ s: String) -> Date? {
+    let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return f.date(from: s) ?? ISO8601DateFormatter().date(from: s)
+  }
+  func refreshOwnTabs() { if let own = ownTabs(nil) { setTabs(own) } }
+  private func ownTabs(_ moved: String?) -> [String: Any]? {
+    guard AppData.shared.tabsOn, AppData.shared.ready, let m = AppData.shared.screen("tabs").model,
+          var list = m["tabs"] as? [[String: Any]], !list.isEmpty else { return nil }
+    let page = (pageTabs?["tabs"] as? [[String: Any]]) ?? (lastTabs?["tabs"] as? [[String: Any]]) ?? []
+    let keys = list.map { $0["v"] as? String ?? "" }
+    let cur = selectedTabKey
+    let on = moved.flatMap { keys.contains($0) ? $0 : nil } ?? (keys.contains(cur) ? cur : (pageOn.flatMap { keys.contains($0) ? $0 : nil } ?? "today"))
+    for i in list.indices {
+      let v = list[i]["v"] as? String ?? ""
+      let p = page.first(where: { ($0["v"] as? String) == v })
+      if v == "plans" { list[i]["badge"] = p?["badge"] as? String ?? "" }
+      if v == "me" {
+        for k in ["photo", "photoUrl", "who", "online"] { if let x = p?[k] { list[i][k] = x } }
+        if list[i]["who"] == nil, let me = AppData.shared.me { list[i]["who"] = me }
+      }
+      list[i]["on"] = v == on
+    }
+    return ["tabs": list, "hidden": (pageTabs?["hidden"] as? Bool) ?? false]
+  }
   func setTabs(_ a: [String: Any]) {
     if !meWatched {
       meWatched = true
@@ -1170,6 +1230,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     //  Haris 2026-11-03. On its first screen: back to the top, as before.)
     let again = item.tag == shownTab
     shownTab = item.tag
+    lastTabTap = (tabKeys[item.tag], Date())
     if again, tabKeys[item.tag] == "projects", clientsWanted, clientsBackToList() { return }
     // (Me, the app's own: again from a page under it — back to Me with the back slide; on Me — to the top)
     // (Content plans, a Social's own tab, is the same app's own pages — Haris 2026-11-04)
@@ -2146,7 +2207,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       r["faceID"] = biometry() ?? NSNull()
       r["refocus"] = FocusAfterPicker.installed
       done(r)
-    case "setTabs": setTabs(a); done(["ok": true])
+    case "setTabs": pageTabsIn(a); done(["ok": true])
     case "badge":
       let n = (a["n"] as? NSNumber)?.intValue ?? Int(a["n"] as? String ?? "") ?? 0
       UNUserNotificationCenter.current().setBadgeCount(max(0, n)) { _ in }
@@ -2162,6 +2223,11 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       if let d = defaults.data(forKey: key), let p = try? JSONSerialization.jsonObject(with: d) as? [String: Any] { return done(["ok": true, "prefs": p]) }
       done(["ok": true])
     case "setAppearance":
+      // (Automatic kept by the app itself — Part B step 1: the setting and the day's sunrise / sunset, for when the page
+      //  isn't there to say it's light now)
+      if let tm = a["themeMode"] as? String { defaults.set(tm, forKey: "e11_theme_mode") }
+      if let r = a["rise"] as? String, let st = a["set"] as? String { defaults.set(r, forKey: "e11_sun_rise"); defaults.set(st, forKey: "e11_sun_set") }
+      ownAppearanceWatch()
       statusStyle = (a["mode"] as? String) == "light" ? .darkContent : .lightContent
       defaults.set((a["mode"] as? String) == "light" ? "light" : "dark", forKey: "e11_look")
       setNeedsStatusBarAppearanceUpdate()

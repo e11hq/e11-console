@@ -891,6 +891,8 @@ extension Main {
         if p.waiting == 0 { self.refreshTaskPage(p) }
         p.feed?.load(); p.threadFeed?.load()
       }
+      // (the tab bar: its counts from the copy — Part B step 1)
+      self.refreshOwnTabs()
       // (Home, My Tasks and the Inbox too — step 2: from the copy, no request)
       self.serverHome.refresh(); self.serverMyTasksIfMade?.refresh(); self.serverInboxIfMade?.refresh(); if self.clientsWanted { self.serverClientsIfMade?.refresh() }
       // (live, everywhere — Haris 2026-11-03: a client's page whose client was deleted, or made inactive, elsewhere goes back to

@@ -9925,7 +9925,10 @@ function setTheme(mode) {
   paintThemeButtons();
   savePref('theme', mode);
   Splash.remember({ theme: mode });
-  Host.call('setAppearance', { mode }).catch(() => {});
+  // (the iPhone app keeps Automatic going by itself — Part B step 1: the setting and today's sunrise / sunset with it)
+  let extra = {};
+  try { const pm = ((db && db.meta && db.meta.prefs) || {}).themeMode; const t = Theme.sun(new Date()); extra = { themeMode: pm === 'light' || pm === 'auto' ? pm : 'dark', rise: t.rise.toISOString(), set: t.set.toISOString() }; } catch (e) { /* not ready yet */ }
+  Host.call('setAppearance', { mode, ...extra }).catch(() => {});
 }
 // The sun/moon button shows the current appearance: sun = light, moon = dark, half circle = Automatic
 function paintThemeButtons() {

@@ -78,6 +78,35 @@ var E11AppView = (function () {
     return m;
   }
 
+  // the tab bar (Part B step 1, Haris 2026-11-04): the same tabs, labels and counts as the page's (phone.js chrome), from
+  // the person's data — the app draws its tab bar from this at once, without the website. `plans`: the Plans tab's
+  // count isn't worked out here yet (its rules are still the website's) — null: the app keeps the page's.
+  function tabs(R, data, me, nowMs) {
+    const users = data.users || [], meta = data.meta || {};
+    const u = users.find((x) => x.id === me);
+    if (!u || u.active === false) return null;
+    const isAdm = u.role === 'admin' || u.role === 'office_admin' || u.admin === true;
+    const office = u.role === 'office_admin' && u.admin !== true;
+    const fin = u.role === 'finance_admin' ? 'admin' : u.role === 'finance_viewer' ? 'viewer' : u.fin === 'admin' || u.fin === 'viewer' ? u.fin : null;
+    const cdU = meta.cdUserId && users.find((x) => x.id === meta.cdUserId && x.active !== false);
+    const cd = !!cdU && cdU.id === me;
+    const finUser = u.role === 'finance_admin' || u.role === 'finance_viewer';
+    const unread = (data.notifications || []).filter((n) => n.to === me && !n.read && !/^claim/.test(n.kind || '')).length;
+    const T = (v, label, badge) => ({ v, label, badge: badge ? (badge > 99 ? '99+' : String(badge)) : '' });
+    if (office) {
+      const hr = fin ? (data.claims || []).filter((c) => c.state === 'submitted').length : 0;
+      return { tabs: [T('today', 'Overview'), T('inbox', 'Inbox', unread), ...(fin ? [T('fin-reimb', 'Claims', hr), T('fin-expenses', 'Expenses')] : [T('team', 'Team'), T('clients', 'Client Assets')]), T('me', 'Me')], plans: false };
+    }
+    const today = R.dubaiDay(nowMs());
+    const r = R.withEnv(envOf(nowMs), base(data), me, today);
+    let due = 0; try { const d = r.myDayData(); due = d && d.due ? d.due.length : 0; } catch (e) { due = 0; }
+    // the CD's requests waiting (app.js activeReviews)
+    const rv = cd ? (data.tasks || []).filter((t) => !t.done && !t.parentId && t.needsCD).reduce((n, t) => n + (t.reviews || []).filter((x) => x.state === 'pending' && (x.epoch || 0) === (t.reviewEpoch || 0)).length, 0) : 0;
+    const social = u.role === 'social' && !finUser && !office;
+    const third = cd ? T('reviews', 'Reviews', rv) : social ? T('plans', 'Plans') : T('projects', 'Clients');
+    return { tabs: [T('today', r.dayTitle(), due), T('mytasks', 'My Tasks'), T('inbox', 'Inbox', unread), third, T('me', 'Me')], plans: social, admin: isAdm };
+  }
+
   // ---------- the app's own copy (iPhone): kept here, in the engine, as the website keeps its own ----------
   // load(json): the download (/api/snapshot) or the saved copy · apply(changes): the live stream's · save(): to keep
   let copy = null;   // { rev, me, data }
@@ -116,10 +145,11 @@ var E11AppView = (function () {
       else if (kind === 'inbox') m = inbox(R(), copy.data, copy.me, now, a);
       else if (kind === 'mytasks') m = myTasks(R(), copy.data, copy.me, now, a ? JSON.parse(a) : {});
       else if (kind === 'clients') m = clients(R(), copy.data, copy.me, now, a ? JSON.parse(a) : {});
+      else if (kind === 'tabs') m = tabs(R(), copy.data, copy.me, now);
     } catch (e) { return JSON.stringify({ error: String(e && e.message || e) }); }
     return JSON.stringify({ model: m, rev: copy.rev });
   }
 
-  return { fileUrl, appFile, home, myTasks, inbox, clients, taskPage, commentsFeed, load, apply, save, ready, rev, screen };
+  return { fileUrl, appFile, home, myTasks, inbox, clients, taskPage, commentsFeed, tabs, load, apply, save, ready, rev, screen };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = E11AppView;

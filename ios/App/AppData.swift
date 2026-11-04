@@ -19,6 +19,8 @@ final class AppData: NSObject, URLSessionDataDelegate {
   private var started = false, loading = false
   private var copyReady = false                             // (read on the main thread: set there)
   var ready: Bool { copyReady }
+  // the app draws its own tab bar from the copy (Part B step 1) — on unless the server says off
+  var tabsOn: Bool { (UserDefaults.standard.object(forKey: "app-tabs") as? Bool) ?? true }
   private var listeners: [UUID: () -> Void] = [:]
 
   private var dir: URL {
@@ -40,6 +42,9 @@ final class AppData: NSObject, URLSessionDataDelegate {
     request("/api/appcopy") { [weak self] j in
       guard let self = self else { return }
       if (j?["on"] as? Bool) == false { self.started = false; self.stopStream(); DispatchQueue.main.async { self.copyReady = false } }
+      // (the app's own tab bar — Part B step 1; off on the server: the page's again)
+      let t = (j?["tabs"] as? Bool) != false
+      DispatchQueue.main.async { if UserDefaults.standard.object(forKey: "app-tabs") as? Bool != t { UserDefaults.standard.set(t, forKey: "app-tabs") }; self.changed() }
     }
     if !watching {
       watching = true
@@ -119,7 +124,7 @@ final class AppData: NSObject, URLSessionDataDelegate {
     }
   }
   private func retryLater() { q.asyncAfter(deadline: .now() + 20) { [weak self] in if self?.started == true { self?.download() } } }
-  private func markReady() { DispatchQueue.main.async { self.copyReady = true } }
+  private func markReady() { DispatchQueue.main.async { let was = self.copyReady; self.copyReady = true; if !was { self.changed() } } }
 
   // ---------- the live stream: the changes as they happen (the website's own) ----------
   private var stream: URLSessionDataTask?
