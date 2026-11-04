@@ -190,7 +190,9 @@ a{color:inherit;text-decoration:none}button{font:inherit;color:inherit;backgroun
 @media (max-width:760px){html,body{overflow:auto}
  .stage{position:relative;padding:84px 16px 0;height:auto;min-height:0}.art{height:38vh}.art>img,.art>video{max-height:38vh}.nt{padding:26px 20px}.nt b{width:84px;height:96px;font-size:22px}
  .card{position:relative;left:auto;top:auto;transform:none;width:auto;margin:16px 16px calc(16px + env(safe-area-inset-bottom));max-height:none;animation:none}
- .top{position:absolute;top:16px;left:16px;right:16px}.pill .w{display:none}.pill{padding:0 11px}
+ .top{position:fixed;top:0;left:0;right:0;padding:calc(12px + env(safe-area-inset-top)) 16px 12px;z-index:5;transition:background .25s,-webkit-backdrop-filter .25s,backdrop-filter .25s}
+ .top.frost{background:rgba(16,16,22,.55);-webkit-backdrop-filter:blur(30px) saturate(1.6);backdrop-filter:blur(30px) saturate(1.6)}
+ .pill .w{display:none}.pill{padding:0 11px}
  .list{overflow:visible}}
 </style></head><body>
 <div class="bg"><img id="bgi" alt=""></div>
@@ -230,7 +232,10 @@ $('lbx').onclick=function(){lb.classList.remove('show')};lb.onclick=function(ev)
 $('pv').onclick=function(ev){ev.stopPropagation();step(-1)};$('nx').onclick=function(ev){ev.stopPropagation();step(1)};
 addEventListener('keydown',function(ev){if(!lb.classList.contains('show'))return;if(ev.key==='Escape')lb.classList.remove('show');if(ev.key==='ArrowRight')step(1);if(ev.key==='ArrowLeft')step(-1)});
 var c=$('copy');if(c)c.onclick=function(){var u=location.href.replace(/\\/(file|view|thumb)$/,'');(navigator.clipboard?navigator.clipboard.writeText(u):Promise.reject()).then(function(){toast('Link copied')},function(){toast(u)})};
-if(F.length)show(cur);})();
+if(F.length)show(cur);
+// (phone: the logo bar stays at the top; a frost comes in behind it once the page has scrolled — Haris 2026-11-04)
+var tp=document.querySelector('.top'),fr=function(){var y=Math.max(window.scrollY||0,document.documentElement.scrollTop||0,document.body.scrollTop||0);tp.classList.toggle('frost',y>4)};
+document.addEventListener('scroll',fr,true);fr();})();
 </script></body></html>`;
   }
   // the file page (a file link)
