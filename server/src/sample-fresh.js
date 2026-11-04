@@ -286,6 +286,7 @@ export function freshSample(store, me, filesRoot, opts = {}) {
   ['Palm Jebel Ali | Teaser 30s', 'Nakheel Mall | Ramadan Key Visual', 'Dragon City | Social Pack'].forEach((title, i) => tasks.push({
     id: `smp-nk-${i}`, title, projectId: nak.id, sectionId: sec(nak.id, i === 2 ? 4 : 0), parentId: null, assignees: ['u-ali'].filter(has), createdBy: 'u-lana', createdAt: ago(24 * (200 - i * 10)), updatedAt: ago(24 * 120),
     due: dayStr(-110 + i * 5), done: i === 2, completedAt: i === 2 ? ago(24 * 115) : null, notes: '', notesHtml: '', tags: [], comments: [], attachments: [], activity: [], checklist: [], prio: {}, order: i,
+    start: null, cdStatus: '', reviews: [], needsCD: false,   // (complete, as the app would make it — frozen, so it can't fill them in)
   }));
   out.tasks = tasks.concat(keepFinance);
 

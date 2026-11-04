@@ -291,6 +291,19 @@ export function createAccess(store, opts = {}) {
     const was = base || current;
     return Object.keys({ ...current, ...next }).every((k) => DONE_FREE.has(k) || deepEqual(next[k] ?? null, current[k] ?? null) || deepEqual(next[k] ?? null, was[k] ?? null));
   }
+  // a task's change that only adds the app's empty defaults for fields it lacked (normalize in app.js)
+  const FILL = { tags: [], comments: [], attachments: [], activity: [], checklist: [], reviews: [], start: null, notes: '', title: '', cdStatus: '', prio: {} };
+  function fillsOnly(current, next) {
+    const keys = new Set([...Object.keys(current), ...Object.keys(next)]);
+    for (const k of keys) {
+      if (deepEqual(current[k], next[k])) continue;
+      if (current[k] !== undefined) { if (k === 'priority' && next[k] === undefined) continue; return false; }
+      if (k === 'needsCD' && typeof next[k] === 'boolean') continue;
+      if (Object.prototype.hasOwnProperty.call(FILL, k) && deepEqual(next[k], FILL[k])) continue;
+      return false;
+    }
+    return true;
+  }
   function canWrite(u, ch, current, ctx = {}) {
     const admin = isAdm(u);
     const manager = admin || u.role === 'am';
@@ -344,6 +357,9 @@ export function createAccess(store, opts = {}) {
         // Office Admins: only a job's Finance status (with Finance access), nothing else on tasks
         if (isOffice(u)) return !ch.del && !!current && !!next && finLevel(u) === 'admin' && Object.keys({ ...current, ...next }).every((k) => ['finance', 'financeAt', 'financeBy', 'updatedAt'].includes(k) || deepEqual(next[k] ?? null, (was || {})[k] ?? null) || deepEqual(next[k] ?? null, current[k] ?? null));
         if (!manager && next && !deepEqual(next.finance ?? null, (was && was.finance) ?? null)) return false;
+        // (the app filling in a field an older or sample task doesn't have yet — its empty default — is no real change:
+        //  allowed even where the task is frozen or locked, else it's refused on every open — Haris 2026-11-04)
+        if (current && next && !ch.del && fillsOnly(current, next) && (!ownOnly(u) || taskVisible(u, current))) return true;
         if ((current && inInactive(current)) || (next && inInactive(next))) return false;   // an inactive client's tasks are frozen
         if (current && next && !cdGateOk(current, next)) return false;
         if (current && next && !identityOk(current, next, ch.base)) return false;
