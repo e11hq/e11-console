@@ -27,8 +27,18 @@ final class SetHead: UIView, HomeBlock {
   override init(frame: CGRect) { super.init(frame: frame); label.font = .systemFont(ofSize: 13); label.textColor = .secondaryLabel; addSubview(label) }
   required init?(coder: NSCoder) { fatalError() }
   func set(_ t: String) { label.text = t.uppercased() }
+  // (a link on its right — Overview's "All": Haris 2026-11-04)
+  private var linkB: UIButton?
+  var onLink: (() -> Void)?
+  func link(_ t: String?) {
+    if let t = t {
+      let b = linkB ?? { let b = UIButton(type: .system); b.titleLabel?.font = .systemFont(ofSize: 15); b.addAction(UIAction { [weak self] _ in self?.onLink?() }, for: .touchUpInside); addSubview(b); linkB = b; return b }()
+      b.setTitle(t, for: .normal); b.isHidden = false
+    } else { linkB?.isHidden = true }
+    setNeedsLayout()
+  }
   func blockHeight(_ W: CGFloat) -> CGFloat { first ? 24 : (label.text ?? "").isEmpty ? 20 : 44 }
-  override func layoutSubviews() { super.layoutSubviews(); label.frame = CGRect(x: 36, y: bounds.height - 25, width: bounds.width - 72, height: 18) }
+  override func layoutSubviews() { super.layoutSubviews(); label.frame = CGRect(x: 36, y: bounds.height - 25, width: bounds.width - 72, height: 18); linkB?.frame = CGRect(x: bounds.width - 120, y: bounds.height - 32, width: 100, height: 30); linkB?.contentHorizontalAlignment = .right }
 }
 
 // the small grey words under a group
@@ -1003,7 +1013,9 @@ final class MeCtl {
   // (which tab it serves: Me — or, for Social Managers and Executives, their Content plans tab, whose first page is the
   //  plans list itself, as Client Assets' — Haris 2026-11-04)
   private(set) var tab = "me"
-  private var rootKind: String { tab == "plans" ? "plans" : "me" }
+  private var rootKind: String { tab == "plans" ? "plans" : tab == "today" ? "overview" : tab == "team" ? "team" : "me" }
+  // (a tab's own first page — big title, 🔍 / your photo, no ‹: Content plans for Social, an Office Admin's Overview and Team)
+  static let tabRoots: Set<String> = ["plansTab", "overviewTab", "teamTab"]
   // (a question to the page, its answer back — Content plans' post, approve, send back)
   private func request(_ ev: [String: Any], _ done: @escaping ([String: Any]) -> Void) {
     let rid = UUID().uuidString
@@ -1064,13 +1076,14 @@ final class MeCtl {
     }
     if let m = a["model"] as? [String: Any] { model = m }
     // (the other tab now — Me ↔ Content plans: its own first page)
-    let want = (a["tab"] as? String) == "plans" ? "plans" : "me"
+    let want = ["plans", "today", "team"].contains(a["tab"] as? String ?? "") ? (a["tab"] as! String) : "me"
     if want != tab {
       if stack.contains(where: { $0.kind == "plans" }) { send(["ev": "pl", "on": false]) }
       stack.forEach { $0.h.removeFromSuperview() }; stack = []; tab = want
     }
     if stack.isEmpty {
       if rootKind == "plans" { plMonth = plMonth ?? ""; send(["ev": "pl", "on": true, "month": plMonth ?? ""]) }
+      if rootKind == "team" { teamTab = 0; teamQ = ""; send(["ev": "team", "on": true]) }
       push(screen(rootKind, nil), animated: false)
     }
     reveal()
@@ -1128,7 +1141,8 @@ final class MeCtl {
     let h = HomeView(frame: main.view.bounds)
     // (Content plans as a Social's own tab: a main page — the big title, as Home and the Inbox: Haris 2026-11-04)
     // (opened from Me: the same big title, with ‹ — Haris 2026-11-04: both Content plans pages, no name in the middle)
-    h.assets = kind == "me" ? "me" : (stack.isEmpty && kind == "plans" && tab == "plans") ? "plansTab" : kind == "plans" ? "plansPage" : "me." + kind
+    let root = stack.isEmpty && kind == rootKind
+    h.assets = kind == "me" ? "me" : (root && kind == "plans") ? "plansTab" : (root && kind == "overview") ? "overviewTab" : (root && kind == "team") ? "teamTab" : kind == "plans" ? "plansPage" : "me." + kind
     h.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     h.isHidden = true
     h.assetsBack = !(stack.isEmpty && kind == rootKind)
@@ -1282,6 +1296,8 @@ final class MeCtl {
     var mm: [String: Any] = ["show": true, "me": me ?? "", "look": ["light": light]]
     if let l = main.homeLook as? [String: Any], (l["light"] as? Bool) == light { mm["look"] = l }
     if s.kind == "me" { mm["title"] = "Me"; mm["date"] = "E11 Console App" }
+    if s.h.assets == "overviewTab" { mm["title"] = "Overview"; mm["date"] = Date().formatted(.dateTime.weekday(.wide).month(.wide).day()) }
+    if s.h.assets == "teamTab" { mm["title"] = "Team members"; mm["date"] = team.isEmpty ? "" : "\(team["active"] as? Int ?? 0) active · \(team["pastN"] as? Int ?? 0) past" }
     if s.h.assets == "plansTab" || s.h.assets == "plansPage" { mm["title"] = "Content plans"; mm["date"] = (model["plans"] as? [String: Any])?["label"] as? String ?? "" }   // (the line under the big title, as the other tabs have — Haris 2026-11-03)
     s.h.bottomRoom = (main.tabBar.isHidden ? 40 : main.view.bounds.height - main.tabBar.frame.minY) + 96
     s.h.tabTop = main.tabBar.isHidden ? nil : main.tabPillTop
@@ -1442,6 +1458,8 @@ final class MeCtl {
       trashBlocks(h, &out)
     case "team":
       teamBlocks(h, &out)
+    case "overview":
+      overviewBlocks(h, &out)
     case "member":
       memberBlocks(h, s.id ?? "", &out)
     case "plans":
@@ -1471,10 +1489,37 @@ final class MeCtl {
       return SetItem(key: id, title: title, sub: sub, pills: pills, person: pic, warn: pending, dim: past, tap: { [weak self] in self?.open("member", id) }, hold: held)
     }
   }
+  // an Office Admin's Overview (Haris 2026-11-04): with Finance — the three cards, then the latest 3 in Client Assets, the 3
+  // claims waiting for HR approval and the latest 3 office expenses; without — the latest 10 in Client Assets
+  private func overviewBlocks(_ h: HomeView, _ out: inout [UIView]) {
+    guard let o = model["overview"] as? [String: Any] else { let n = part(h, "wait") { AssetsNote() }; n.label.text = "Loading…"; out.append(n); return }
+    if let cards = o["cards"] as? [[String: Any]] { let c = part(h, "cards") { OvCards() }; c.set(cards, look: h.look); out.append(c) }
+    let sec = { (k: String, t: String, to: String?) -> SetHead in
+      let v = self.head(h, k, t); v.link(to == nil ? nil : "All"); v.onLink = { [weak self] in if let to = to { self?.send(["ev": "ovGo", "to": to]) } }; return v }
+    let files = ((o["assets"] as? [[String: Any]]) ?? []).map { f -> SetItem in
+      var it = SetItem(key: "f." + (f["id"] as? String ?? ""), title: f["name"] as? String ?? "", sub: f["where"] as? String ?? "", value: f["when"] as? String ?? "", chevron: false, tap: { [weak self] in self?.send(["ev": "ovFile", "path": f["path"] as? String ?? "", "name": f["name"] as? String ?? ""]) })
+      it.person = (photo: nil, ini: f["ext"] as? String ?? "", rgb: NativeSheetVC.color(f["rgb"]) ?? .systemGray)
+      return it
+    }
+    out.append(sec("ova", "Client Assets · latest", "assets"))
+    if files.isEmpty { out.append(foot(h, "ova0", "No files yet.")) } else { out.append(group(h, "ova", files)) }
+    if (o["fin"] as? Bool) == true {
+      let cl = ((o["claims"] as? [[String: Any]]) ?? []).map { c -> SetItem in
+        var it = SetItem(key: "c." + (c["id"] as? String ?? ""), title: c["name"] as? String ?? "", sub: c["sub"] as? String ?? "", value: c["amt"] as? String ?? "", tap: { [weak self] in self?.send(["ev": "ovClaim", "id": c["id"] as? String ?? ""]) })
+        it.person = (photo: nil, ini: c["ini"] as? String ?? "", rgb: NativeSheetVC.color(c["rgb"]) ?? .systemGray)
+        return it
+      }
+      out.append(sec("ovc", "Need HR approval", "claims"))
+      if cl.isEmpty { out.append(foot(h, "ovc0", "No claims waiting.")) } else { out.append(group(h, "ovc", cl)) }
+      let ex = ((o["expenses"] as? [[String: Any]]) ?? []).map { x in SetItem(key: "x." + (x["id"] as? String ?? ""), title: x["name"] as? String ?? "", sub: x["sub"] as? String ?? "", value: x["amt"] as? String ?? "", sym: "doc.text.fill", col: .systemGray, chevron: false) }
+      out.append(sec("ovx", "Office expenses · latest", "expenses"))
+      if ex.isEmpty { out.append(foot(h, "ovx0", "None this month yet.")) } else { out.append(group(h, "ovx", ex)) }
+    }
+  }
   private func teamBlocks(_ h: HomeView, _ out: inout [UIView]) {
     let t = team
     let admin = (t["admin"] as? Bool) == true
-    h.drawAssetsBar(name: "Team members", sub: t.isEmpty ? "" : "\(t["active"] as? Int ?? 0) active · \(t["pastN"] as? Int ?? 0) past", logo: nil, rgb: nil, ini: nil, showLogo: false)
+    if h.assets != "teamTab" { h.drawAssetsBar(name: "Team members", sub: t.isEmpty ? "" : "\(t["active"] as? Int ?? 0) active · \(t["pastN"] as? Int ?? 0) past", logo: nil, rgb: nil, ini: nil, showLogo: false) }
     if t.isEmpty { let n = part(h, "wait") { AssetsNote() }; n.label.text = "Loading…"; out.append(n); return }
     let seg = part(h, "seg") { SegBlock() }
     seg.set("Active · \(t["active"] as? Int ?? 0)", "Past · \(t["pastN"] as? Int ?? 0)", teamTab)
@@ -1809,7 +1854,7 @@ final class MeCtl {
     case "back": if h === stack.last?.h { pop() }
     case "toast": send(["ev": "toast"])
     // (your photo on the Content plans tab: the Me tab, as from every other tab — Haris 2026-11-04)
-    case "me" where h.assets == "plansTab": main.selectTab("me")
+    case "me" where MeCtl.tabRoots.contains(h.assets ?? ""): main.selectTab("me")
     case "find" where h.assets == "plansPage" || h.assets == "me.plan" || h.assets == "plansTab": planFind(h, ev["q"] as? String ?? "")
     default: break
     }
@@ -1990,6 +2035,34 @@ final class TouchSpot: UIGestureRecognizer, UIGestureRecognizerDelegate {
 // always in the middle, wide, blue with white, its full name; the others grey with their short name. The running month
 // to 6 months after the one being planned can be tapped or swiped to (swipe the row, as the Inbox's); the months either
 // side show faded and can't be. A tap or swipe slides the row and grows / shrinks the pills in the Inbox's timing.
+// Overview's three cards (Haris 2026-11-04): a big number, a small "/ 18" beside it, a line under
+final class OvCards: UIView, HomeBlock {
+  private var tiles: [(box: UIView, n: UILabel, t: UILabel)] = []
+  func set(_ cards: [[String: Any]], look L: HomeLook) {
+    while tiles.count < cards.count {
+      let b = UIView(); b.layer.cornerRadius = 16; b.layer.cornerCurve = .continuous
+      let n = UILabel(); n.adjustsFontSizeToFitWidth = true; n.minimumScaleFactor = 0.6
+      let t = UILabel(); t.font = .systemFont(ofSize: 12); t.textColor = .secondaryLabel; t.numberOfLines = 3
+      b.addSubview(n); b.addSubview(t); addSubview(b); tiles.append((b, n, t))
+    }
+    for (i, c) in cards.enumerated() {
+      let x = tiles[i]; x.box.backgroundColor = L.card
+      let s = NSMutableAttributedString(string: c["n"] as? String ?? "", attributes: [.font: UIFont.systemFont(ofSize: 24, weight: .bold), .foregroundColor: UIColor.label])
+      if let of = c["of"] as? String { s.append(NSAttributedString(string: " " + of, attributes: [.font: UIFont.systemFont(ofSize: 14, weight: .semibold), .foregroundColor: UIColor.secondaryLabel])) }
+      x.n.attributedText = s; x.t.text = c["t"] as? String
+    }
+    setNeedsLayout()
+  }
+  func blockHeight(_ W: CGFloat) -> CGFloat { 104 }
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    let gap: CGFloat = 9, w = (bounds.width - 32 - gap * 2) / 3
+    for (i, x) in tiles.enumerated() {
+      x.box.frame = CGRect(x: 16 + CGFloat(i) * (w + gap), y: 6, width: w, height: 92)
+      x.n.frame = CGRect(x: 12, y: 10, width: w - 24, height: 30); x.t.frame = CGRect(x: 12, y: 42, width: w - 24, height: 44)
+    }
+  }
+}
 final class PlanMonthChips: UIView, HomeBlock {
   static let H: CGFloat = 38
   var onPick: ((String) -> Void)?

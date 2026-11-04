@@ -83,8 +83,14 @@ const Phone = (() => {
     const rv = cd ? activeReviews().length : 0;
     const cur = tabOf(ui.view);
     const tab = (v, ic, label, badge) => `<button class="ph-tab ${cur === v ? 'on' : ''}" data-ph-tab="${v}">${icon(ic)}${badge ? `<i class="ph-badge">${badge > 99 ? '99+' : badge}</i>` : ''}<span>${label}</span></button>`;
-    bar.innerHTML = isOffice()      // an Office Admin: no task pages
-      ? tab('today', 'home', 'Home') + tab('inbox', 'inbox', 'Inbox', unread) + tab('clients', 'assets', 'Client Assets') + tab('me', 'user', 'Me')
+    // an Office Admin: no task pages (Haris 2026-11-04) — with Finance: Overview · Inbox · Claims · Expenses · Me;
+    // without: Overview · Inbox · Team · Client Assets · Me
+    const offFin = isOffice() && typeof finLevel === 'function' && !!finLevel(me());
+    const hr = offFin && typeof Claims !== 'undefined' ? Claims.all().filter((c) => c.state === 'submitted').length : 0;
+    bar.innerHTML = isOffice()
+      ? tab('today', 'home', 'Overview') + tab('inbox', 'inbox', 'Inbox', unread)
+        + (offFin ? tab('fin-reimb', 'users', 'Claims', hr) + tab('fin-expenses', 'coin', 'Expenses') : tab('team', 'users', 'Team') + tab('clients', 'assets', 'Client Assets'))
+        + tab('me', 'user', 'Me')
       : tab('today', 'sun', Work.dayTitle())
       + tab('mytasks', 'check-circle', 'My Tasks')
       + tab('inbox', 'inbox', 'Inbox', unread)
@@ -3024,6 +3030,38 @@ const NativeMe = (() => {
   // (Phone's own socialPlans is inside Phone — this one is NativeMe's; using Phone's left Me blank: not defined here)
   const socialPlans = () => { const u = typeof me === 'function' ? me() : null; return !!u && u.role === 'social' && typeof Plans !== 'undefined' && Plans.canSee(u); };
   const plansTab = () => plansOwn() && socialPlans() && (ui.view === 'plans' || ui.view === 'plan');
+  // (Office Admins, Haris 2026-11-04: Overview is the app's own, and Team its own tab without Finance access)
+  const offFin = () => typeof isOffice === 'function' && isOffice() && typeof finLevel === 'function' && !!finLevel(me());
+  const ovTab = () => shell >= 36 && typeof isOffice === 'function' && isOffice() && (ui.view === 'home' || ui.view === 'today');
+  const teamTab = () => shell >= 36 && typeof isOffice === 'function' && isOffice() && !offFin() && ui.view === 'team';
+  const tabNow = () => (plansTab() ? 'plans' : ovTab() ? 'today' : teamTab() ? 'team' : 'me');
+  function overview() {
+    const fin = offFin();
+    const money = (n) => (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const short = (iso) => { const d = new Date(iso); const days = Math.floor((Date.now() - d) / 86400000); return days < 1 ? d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : days < 2 ? 'Yesterday' : days < 7 ? d.toLocaleDateString(undefined, { weekday: 'short' }) : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); };
+    const ext = (n) => (String(n).split('.').pop() || 'file').slice(0, 4).toUpperCase();
+    const colOf = (e) => ({ PNG: [48, 209, 88], JPG: [48, 209, 88], JPEG: [48, 209, 88], PDF: [255, 59, 48], AI: [255, 149, 0], PSD: [10, 132, 255], OTF: [94, 92, 230], TTF: [94, 92, 230], MP4: [175, 82, 222], MOV: [175, 82, 222] }[e] || [142, 142, 147]);
+    const files = [];
+    clientsSorted().forEach((c) => (c.folders || []).forEach((f) => (f.files || []).forEach((a) => files.push({ c, f, a }))));
+    files.sort((x, y) => String(y.a.addedAt || '').localeCompare(String(x.a.addedAt || '')));
+    const assets = files.slice(0, fin ? 3 : 10).map(({ c, f, a }) => { const e = ext(a.name); return { id: a.id, name: a.name, path: a.path, where: `${c.name} › ${folderPath(c, f)}${a.addedBy ? ' · ' + firstName(a.addedBy) : ''}`, when: a.addedAt ? short(a.addedAt) : '', ext: e, rgb: colOf(e) }; });
+    const out = { fin, assets };
+    if (!fin) return out;
+    const m = Claims.claimMonth();
+    const month = Claims.all().filter((c) => c.month === m);
+    const sent = month.filter((c) => !c.byHand && ['submitted', 'approved', 'paid'].includes(c.state)).length;
+    const team = db.users.filter((u) => u.active !== false && !isFinUser(u)).length;
+    const now = todayStr().slice(0, 7);
+    const tx = Fin.transactions();
+    const exp = tx.filter((x) => x.kind === 'expense' && String(x.date).startsWith(now)).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    const subs = (db.finance || []).filter((x) => x.type === 'sub' && !x.endedAt).length;
+    const need = Claims.all().filter((c) => c.state === 'submitted').sort((a, b) => String(b.submittedAt || '').localeCompare(String(a.submittedAt || '')));
+    out.cards = [{ n: `${sent}`, of: `/ ${team}`, t: 'claims submitted this month' }, { n: money(exp.reduce((a, x) => a + (Number(x.amount) || 0), 0)), t: 'AED office expenses so far' }, { n: `${subs}`, t: 'monthly subscriptions' }];
+    out.claims = need.slice(0, 3).map((c) => ({ id: c.id, name: Claims.ownerName(c), ini: initials(Claims.ownerName(c)), rgb: rgb(avColor(c.userId || c.personId || c.id)), sub: `${c.byHand ? 'Added by hand' : plural(Claims.itemsOf(c), 'item')} · ${fmtDay(ymd(new Date(c.submittedAt || c.updatedAt)))}`, amt: 'AED ' + money(c.total || Claims.totalOf(c)) }));
+    out.needN = need.length;
+    out.expenses = exp.slice(0, 3).map((x) => ({ id: x.id, name: x.name, sub: fmtDay(x.date), amt: 'AED ' + money(x.amount) }));
+    return out;
+  }
   if (NATIVE_ME && window.__e11CommentsOnly !== true && typeof Host !== 'undefined' && Host.isIOSApp) {
     NativeMac.call('appInfo').then((r) => { shell = Number(r && r.shell) || 0; on = shell >= 33; if (on) { setInterval(sync, 350); sync(); } }).catch(() => {});
   }
@@ -3032,7 +3070,7 @@ const NativeMe = (() => {
   const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
   const photoOf = (u) => (u && u.avatar ? fileUrl({ path: u.avatar }) : null);
   const visible = () => {
-    if (!Phone.on || !(ui.view === 'me' || plansTab()) || ui.search || ui.taskId || document.querySelector('#detail.open')) return false;
+    if (!Phone.on || !(ui.view === 'me' || plansTab() || ovTab() || teamTab()) || ui.search || ui.taskId || document.querySelector('#detail.open')) return false;
     // (a page question that isn't iPhone's own yet — View as… — shows on the page meanwhile)
     if (document.querySelector('#overlay-root .scrim, #tv-root .scrim, .lightbox, .fv')) return false;
     return true;
@@ -3044,8 +3082,10 @@ const NativeMe = (() => {
     if (isCD()) work.push({ k: 'projects', t: 'Clients', s: 'Every client’s tasks', sym: 'folder.fill', col: [10, 132, 255] });
     if (Cal.canSee() && !calendarRetired()) work.push({ k: 'calendar', t: 'Content calendar', s: 'Posts by day, channel and occasion', sym: 'calendar', col: [255, 59, 48] });
     if (Plans.canSee() && !socialPlans()) work.push({ n: Plans.waiting(), k: 'plans', t: 'Content plans', s: 'Each client’s month', sym: 'calendar.badge.clock', col: [255, 149, 0] });
-    work.push({ k: 'clients', t: 'Client Assets', s: 'Logos, guidelines and fonts', sym: 'folder.fill', col: [48, 176, 199] });
-    work.push({ k: 'team', t: 'Team members', s: '', sym: 'person.2.fill', col: [88, 86, 214] });
+    // (an Office Admin without Finance has both as tabs; with Finance, Client Assets is here — Haris 2026-11-04)
+    const offTabs = shell >= 36 && typeof isOffice === 'function' && isOffice() && !offFin();
+    if (!offTabs) work.push({ k: 'clients', t: 'Client Assets', s: 'Logos, guidelines and fonts', sym: 'folder.fill', col: [48, 176, 199] });
+    if (!offTabs) work.push({ k: 'team', t: 'Team members', s: '', sym: 'person.2.fill', col: [88, 86, 214] });
     if (isManager()) { const n = trashList().length; work.push({ k: 'trash', t: 'Trash', s: n ? `${plural(n, 'item')} · restore within ${TRASH_DAYS} days` : `Deleted items wait here ${TRASH_DAYS} days`, sym: 'trash.fill', col: [142, 142, 147] }); }
     const p = typeof Push !== 'undefined' && Push.info ? Push.info() : null;
     const push = p && p.state !== 'none' && p.state !== 'unknown' ? { state: p.state, busy: !!p.busy, label: { on: 'On', off: 'Off', denied: 'Blocked', install: 'Set up', unsupported: 'Not available' }[p.state] || '', sub: { on: 'A banner for every Inbox update', off: 'Get a banner even when the app is closed', denied: 'Allow them in iPhone Settings → Notifications → E11 Console' }[p.state] || '' } : null;
@@ -3064,6 +3104,7 @@ const NativeMe = (() => {
       profile: wantProfile ? profileModel() : null,
       trash: wantTrash ? trashModel() : null,
       plans: wantPlans && plansOwn() ? Plans.native.list(plMonth) : null,
+      overview: ovTab() ? overview() : null,
       plan: plOpen && plansOwn() ? Plans.native.plan(plOpen.pid, plOpen.month) : null,
     };
   }
@@ -3205,7 +3246,7 @@ const NativeMe = (() => {
     // (who may turn file / folder links off and on — Admins: the app's sheets show it only to them)
     try { const adm = !!(currentUserId && isAdm(me())); if (adm !== lastAdm) { lastAdm = adm; NativeMac.call('role', { admin: adm }).catch(() => {}); } } catch (e) { /* not signed in yet */ }
     let m = null;
-    try { m = visible() ? { show: true, tab: plansTab() ? 'plans' : 'me', me: currentUserId, light: document.documentElement.dataset.theme === 'light', model: model() } : null; } catch (e) { m = null; }
+    try { m = visible() ? { show: true, tab: tabNow(), me: currentUserId, light: document.documentElement.dataset.theme === 'light', model: model() } : null; } catch (e) { m = null; }
     if (!m) { if (shown) { shown = false; last = ''; call({ show: false }); } return; }
     // (coming on screen: the notifications' and Face ID's state as they are now — the page's Me row used to ask)
     if (!shown && typeof Push !== 'undefined') Promise.resolve(Push.refresh()).catch(() => {});
@@ -3284,6 +3325,10 @@ const NativeMe = (() => {
         case 'sample': resetSampleData(); return;
         case 'signOut': dialog({ title: 'Sign out?', body: window.E11_REVIEW ? 'You’ll need the App Review password to sign in again.' : 'You’ll need the code from your email to sign in again.', okText: 'Sign out', danger: true }).then((ok) => { if (ok) signOut(); }); return;
         case 'team': wantTeam = !!ev.on; sync(); return;
+        // Overview's taps: a file's preview; "All" — Client Assets, Claims, Expenses
+        case 'ovFile': if (ev.path) previewFile({ path: String(ev.path), name: String(ev.name || 'File') }); return;
+        case 'ovGo': go({ assets: 'clients', claims: 'fin-reimb', expenses: 'fin-expenses' }[ev.to] || 'home'); return;
+        case 'ovClaim': if (typeof Claims !== 'undefined' && Claims.byId(ev.id)) Claims.open(ev.id); return;
         case 'pf': wantProfile = !!ev.on; sync(); return;
         case 'tr': wantTrash = !!ev.on; if (!ev.on) { ui.trashQ = ''; ui.trashFilter = 'all'; } sync(); return;
         case 'trQ': ui.trashQ = String(ev.q || ''); sync(); return;
@@ -3331,5 +3376,5 @@ const NativeMe = (() => {
   const asking = () => on && shown;
   const ask = (a) => NativeMac.call('meAsk', a);
   function toastOut(msg, action, ms) { toastAction = action || null; call({ toast: { t: String(msg || ''), a: action ? action.label : '', ms: ms || (action ? 6000 : 3000) } }); }
-  return { sync, ask, asking, toast: toastOut, peek: () => model(), get on() { return on; }, get shown() { return shown; }, get light() { return on; } };
+  return { sync, ask, asking, toast: toastOut, peek: () => model(), overview, get on() { return on; }, get shown() { return shown; }, get light() { return on; } };
 })();
