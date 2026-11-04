@@ -1173,7 +1173,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if again, tabKeys[item.tag] == "projects", clientsWanted, clientsBackToList() { return }
     // (Me, the app's own: again from a page under it — back to Me with the back slide; on Me — to the top)
     // (Content plans, a Social's own tab, is the same app's own pages — Haris 2026-11-04)
-    let meLike = tabKeys[item.tag] == "me" || (tabKeys[item.tag] == meCtl.tab)   // (Content plans, an Office Admin's Overview / Team)
+    // (the tab the app's own Me pages are showing now — Me, Content plans, an Office Admin's Overview / Team; another of
+    //  them: hidden, and the page sends that one's first page — Me showed Overview, Haris 2026-11-04)
+    let meLike = tabKeys[item.tag] == meCtl.tab
     if again, meLike, meCtl.isOpen { if meCtl.depth > 1 { meCtl.backToRoot() } else { meCtl.top?.scrollToTop() }; return }
     // (another tab: the app's own Me goes at once for the app's own tabs; back on Me, it's there at once as it was)
     if meLike { if !meCtl.screens.isEmpty, pageReady { meCtl.reveal() } }

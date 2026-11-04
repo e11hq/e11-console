@@ -1797,7 +1797,8 @@ const isAdm = (u) => !!u && (u.role === 'admin' || u.role === 'office_admin' || 
 const isOffice = (u = me()) => !!u && u.role === 'office_admin' && u.admin !== true;
 const isSuper = (u = me()) => isAdm(u) && !isOffice(u);
 // the pages an Office Admin uses
-const OFFICE_VIEWS = new Set(['home', 'inbox', 'clients', 'client', 'trash', 'profile', 'team', 'updates', 'claims', 'claim']);
+// (and Me — the iPhone's Me tab: it went to Home, Haris 2026-11-04)
+const OFFICE_VIEWS = new Set(['home', 'inbox', 'clients', 'client', 'trash', 'profile', 'team', 'updates', 'claims', 'claim', 'me']);
 // "Finance only" people (roles finance_admin / finance_viewer) only use the Finance pages.
 // Anyone else can also be given Finance access on top of their role: u.fin = 'admin' | 'viewer'.
 const isFinUser = (u = me()) => !!u && (u.role === 'finance_admin' || u.role === 'finance_viewer');
