@@ -323,7 +323,7 @@ extension Main {
       corner.onLeft = { [weak self] in
         guard let self = self else { return }
         guard let p = self.taskPages.last else { if let h = self.shownScreen, h.backable { UIImpactFeedbackGenerator(style: .light).impactOccurred(); h.backTap() }; return }
-        if p.editingDesc { p.finishDesc() }; self.closeTaskPage(p)
+        if p.editingDesc { p.finishDesc() }; self.taskBackStep(p)
       }
       corner.onMid = { [weak self] k in if k == "done" { self?.taskPages.last?.finishDesc(); return }; self?.shownScreen?.cornerTap(k) }
       corner.onCorner = { [weak self] k in guard let h = self?.shownScreen else { return }; if k == "close" { h.closeSearch() } else { h.meTap() } }

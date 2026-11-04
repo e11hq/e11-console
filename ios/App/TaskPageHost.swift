@@ -132,6 +132,12 @@ extension Main {
 
   // leaving a task (‹ or the swipe back) with a comment or reply written and not sent: iPhone's own alert — Send / Keep
   // as Draft / Go Back (Haris, 2026-11-02, as the website's). Keep as Draft isn't asked again until it changes.
+  // ‹ (the glass button) as the swipe back: a step at a time — a thread to the comments, the comments to Details, Details
+  // to the page before (Haris 2026-11-04)
+  func taskBackStep(_ p: TaskPage) {
+    if p.threadFeed != nil || p.tab == "comments" { UIImpactFeedbackGenerator(style: .light).impactOccurred(); toDetailsFromComments(p); return }
+    leaveTaskPage(p)
+  }
   func leaveTaskPage(_ p: TaskPage) {
     if let u = composeIfMade?.unsent(task: p.taskId) { askUnsent(p, u) } else { closeTaskPage(p) }
   }
@@ -265,7 +271,7 @@ extension Main {
   }
 
   private func wire(_ p: TaskPage) {
-    p.onBack = { [weak self, weak p] in guard let self = self, let p = p else { return }; if p.editingDesc { p.finishDesc() }; self.leaveTaskPage(p) }
+    p.onBack = { [weak self, weak p] in guard let self = self, let p = p else { return }; if p.editingDesc { p.finishDesc() }; self.taskBackStep(p) }
     p.onCornerChange = { [weak self] in self?.updateCornerNow() }
     p.onSwipeToDetails = { [weak self, weak p] in guard let self = self, let p = p else { return }; self.toDetailsFromComments(p) }
     p.onOpenFiles = { [weak self] list, i in self?.openFiles(list, at: i) }
