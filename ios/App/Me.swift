@@ -1013,11 +1013,11 @@ final class MeCtl {
   // (which tab it serves: Me — or, for Social Managers and Executives, their Content plans tab, whose first page is the
   //  plans list itself, as Client Assets' — Haris 2026-11-04)
   private(set) var tab = "me"
-  private var rootKind: String { tab == "plans" ? "plans" : tab == "today" ? "overview" : tab == "team" ? "team" : tab == "fin-reimb" ? "claims" : tab == "fin-expenses" ? "expenses" : "me" }
+  private var rootKind: String { tab == "plans" ? "plans" : tab == "today" ? "overview" : tab == "team" ? "team" : tab == "fin-reimb" ? "claims" : tab == "fin-expenses" ? "expenses" : tab == "reviews" ? "reviews" : "me" }
   // (a tab's own first page — big title, 🔍 / your photo, no ‹: Content plans for Social, an Office Admin's Overview and Team)
-  static let tabRoots: Set<String> = ["plansTab", "overviewTab", "teamTab", "claimsTab", "expensesTab"]
+  static let tabRoots: Set<String> = ["plansTab", "overviewTab", "teamTab", "claimsTab", "expensesTab", "reviewsTab"]
   // (Claims: Need approval · All; Expenses: Subscriptions · Office expenses — Haris 2026-11-04)
-  private var clSeg = 0, exSeg = 0
+  private var clSeg = 0, exSeg = 0, rvSeg = 0
   // (a question to the page, its answer back — Content plans' post, approve, send back)
   private func request(_ ev: [String: Any], _ done: @escaping ([String: Any]) -> Void) {
     let rid = UUID().uuidString
@@ -1061,6 +1061,12 @@ final class MeCtl {
   func command(_ a: [String: Any]) {
     if let rid = a["rid"] as? String { asks.removeValue(forKey: rid)?(a); return }
     // (a Content plan opened on the page — an Inbox update, a notification: the app's own page for it)
+    // (a review request opened on the page — an Inbox update: the Reviews tab's own page for it)
+    if let o = a["open"] as? [String: Any], (o["kind"] as? String) == "review", let rid = o["id"] as? String {
+      wantOpenId = rid; wantOpen = "review"
+      if main.selectedTabKey == tab, tab == "reviews", !hidden, !stack.isEmpty, let k = wantOpen { wantOpen = nil; let id = wantOpenId; wantOpenId = nil; if stack.count > 1 { backToRoot() }; DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.open(k, id) } }
+      return
+    }
     if let o = a["open"] as? [String: Any], (o["kind"] as? String) == "plan", let pid = o["pid"] as? String {
       wantOpenId = "\(pid)|\(o["month"] as? String ?? "")"; wantOpen = "plan"
       if main.selectedTabKey == tab, !hidden, !stack.isEmpty, let k = wantOpen { wantOpen = nil; let id = wantOpenId; if stack.count > 1 { backToRoot() }; DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.open(k, id) } }
@@ -1078,7 +1084,7 @@ final class MeCtl {
     }
     if let m = a["model"] as? [String: Any] { model = m }
     // (the other tab now — Me ↔ Content plans: its own first page)
-    let want = ["plans", "today", "team", "fin-reimb", "fin-expenses"].contains(a["tab"] as? String ?? "") ? (a["tab"] as! String) : "me"
+    let want = ["plans", "today", "team", "fin-reimb", "fin-expenses", "reviews"].contains(a["tab"] as? String ?? "") ? (a["tab"] as! String) : "me"
     if want != tab {
       if stack.contains(where: { $0.kind == "plans" }) { send(["ev": "pl", "on": false]) }
       stack.forEach { $0.h.removeFromSuperview() }; stack = []; tab = want
@@ -1144,7 +1150,7 @@ final class MeCtl {
     // (Content plans as a Social's own tab: a main page — the big title, as Home and the Inbox: Haris 2026-11-04)
     // (opened from Me: the same big title, with ‹ — Haris 2026-11-04: both Content plans pages, no name in the middle)
     let root = stack.isEmpty && kind == rootKind
-    h.assets = kind == "me" ? "me" : (root && kind == "plans") ? "plansTab" : (root && kind == "overview") ? "overviewTab" : (root && kind == "team") ? "teamTab" : (root && kind == "claims") ? "claimsTab" : (root && kind == "expenses") ? "expensesTab" : kind == "plans" ? "plansPage" : "me." + kind
+    h.assets = kind == "me" ? "me" : (root && kind == "plans") ? "plansTab" : (root && kind == "overview") ? "overviewTab" : (root && kind == "team") ? "teamTab" : (root && kind == "claims") ? "claimsTab" : (root && kind == "expenses") ? "expensesTab" : (root && kind == "reviews") ? "reviewsTab" : kind == "plans" ? "plansPage" : "me." + kind
     h.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     h.isHidden = true
     h.assetsBack = !(stack.isEmpty && kind == rootKind)
@@ -1300,6 +1306,7 @@ final class MeCtl {
     if s.kind == "me" { mm["title"] = "Me"; mm["date"] = "E11 Console App" }
     if s.h.assets == "overviewTab" { mm["title"] = "Overview"; mm["date"] = Date().formatted(.dateTime.weekday(.wide).month(.wide).day()) }
     if s.h.assets == "claimsTab" { mm["title"] = "Claims"; mm["date"] = "Reimbursements" }
+    if s.h.assets == "reviewsTab" { let n = ((model["reviews"] as? [String: Any])?["waiting"] as? [Any])?.count ?? 0; mm["title"] = "Reviews"; mm["date"] = model["reviews"] == nil ? "" : n == 0 ? "Nothing waiting" : n == 1 ? "1 request waiting" : "\(n) requests waiting" }
     if s.h.assets == "expensesTab" { mm["title"] = "Expenses"; mm["date"] = exSeg == 0 ? "Subscriptions" : "Office expenses" }
     if s.h.assets == "teamTab" { mm["title"] = "Team members"; mm["date"] = team.isEmpty ? "" : "\(team["active"] as? Int ?? 0) active · \(team["pastN"] as? Int ?? 0) past" }
     if s.h.assets == "plansTab" || s.h.assets == "plansPage" { mm["title"] = "Content plans"; mm["date"] = (model["plans"] as? [String: Any])?["label"] as? String ?? "" }   // (the line under the big title, as the other tabs have — Haris 2026-11-03)
@@ -1464,6 +1471,8 @@ final class MeCtl {
       teamBlocks(h, &out)
     case "overview":
       overviewBlocks(h, &out)
+    case "reviews": reviewsBlocks(h, &out)
+    case "review": reviewBlocks(h, s.id ?? "", &out)
     case "claims":
       claimsBlocks(h, &out)
     case "expenses":
@@ -1530,6 +1539,95 @@ final class MeCtl {
     let key = ["assets": "clients", "claims": "fin-reimb", "expenses": "fin-expenses"][to] ?? ""
     if main.tabKeys.contains(key) { main.selectTab(key); return }
     if key == "clients" { coverWait = Date(); send(["ev": "nav", "to": "clients"]) }
+  }
+  // ---------- the CD's Reviews (Haris 2026-11-04) ----------
+  private func reviewsBlocks(_ h: HomeView, _ out: inout [UIView]) {
+    guard let m = model["reviews"] as? [String: Any] else { let n = part(h, "wait") { AssetsNote() }; n.label.text = "Loading…"; out.append(n); return }
+    let wait = (m["waiting"] as? [[String: Any]]) ?? [], done = (m["reviewed"] as? [[String: Any]]) ?? []
+    let seg = part(h, "seg") { SegBlock() }
+    seg.set("Waiting · \(wait.count)", "Reviewed · \(done.count)", rvSeg)
+    seg.onPick = { [weak self, weak h] i in guard let self = self, let h = h else { return }; self.rvSeg = i; UIView.performWithoutAnimation { self.blocks(h); h.setNeedsLayout(); h.layoutIfNeeded() } }
+    // (Waiting · Reviewed stuck under the bar once it reaches it — the standard)
+    let pin = part(h, "pin") { PinStack() }
+    pin.set([seg])
+    if h.pinHead !== pin { h.pinHead = pin }
+    let rows = rvSeg == 0 ? wait : done
+    if rows.isEmpty { out.append(foot(h, "rv0", rvSeg == 0 ? "All caught up — new requests appear here, and you get a notification." : "Decisions from the last 15 days appear here.", centered: true)); return }
+    if rvSeg == 1 { out.append(foot(h, "rvsub", "Last 15 days")) }
+    let list = part(h, rvSeg == 0 ? "rvw" : "rvd") { ReviewList() }
+    list.set(rows, look: h.look, decided: rvSeg == 1)
+    list.onOpen = { [weak self] id in self?.open("review", id) }
+    out.append(list)
+  }
+  private func reviewItem(_ id: String) -> ([String: Any], Bool, Int, Int)? {
+    guard let m = model["reviews"] as? [String: Any] else { return nil }
+    let wait = (m["waiting"] as? [[String: Any]]) ?? [], done = (m["reviewed"] as? [[String: Any]]) ?? []
+    if let i = wait.firstIndex(where: { ($0["id"] as? String) == id }) { return (wait[i], false, i + 1, wait.count) }
+    if let x = done.first(where: { ($0["id"] as? String) == id }) { return (x, true, 0, 0) }
+    return nil
+  }
+  private func reviewBlocks(_ h: HomeView, _ id: String, _ out: inout [UIView]) {
+    guard let it = reviewItem(id) else {
+      h.drawAssetsBar(name: "Review request", sub: "", logo: nil, rgb: nil, ini: nil, showLogo: false)
+      let w = part(h, "wait") { AssetsNote() }; w.label.text = model["reviews"] == nil ? "Loading…" : "This request isn’t waiting any more."; out.append(w); return
+    }
+    let (x, decided, n, of) = it
+    h.drawAssetsBar(name: decided ? "Review request" : "Review request · \(n) of \(of)", sub: x["task"] as? String ?? "", logo: nil, rgb: nil, ini: nil, showLogo: false)
+    let tid = x["tid"] as? String ?? ""
+    let hero = part(h, "hero") { ReviewHero() }
+    hero.set(x, look: h.look)
+    hero.onFile = { [weak self] fid in self?.send(["ev": "rvFile", "id": id, "fid": fid]) }
+    out.append(hero)
+    if decided, let r = x["res"] as? [String: Any] {
+      out.append(foot(h, "rvres", (r["long"] as? String ?? "") + " · " + (x["sub"] as? String ?? "").components(separatedBy: " · ").last!, centered: true))
+      if let note = x["note"] as? String, !note.isEmpty { let v = part(h, "rvnote") { ReviewNote() }; v.set("Your note", note, look: h.look); out.append(v) }
+    }
+    if !decided, let last = x["last"] as? String, !last.isEmpty { let v = part(h, "rvlast") { ReviewNote() }; v.set("Your note last round", last, look: h.look); out.append(v) }
+    if let b = x["brief"] as? String, !b.isEmpty { let v = part(h, "rvbrief") { ReviewNote() }; v.set("Brief", b, look: h.look); out.append(v) }
+    out.append(group(h, "rvtask", [SetItem(key: "task", title: "Open task", sub: "", sym: "checklist", col: .systemBlue, tap: { [weak self] in self?.send(["ev": "rvTask", "tid": tid]) })]))
+    guard !decided else { return }
+    let acts = part(h, "acts") { ReviewActs() }
+    acts.onApprove = { [weak self, weak h] in
+      guard let self = self else { return }
+      self.request(["ev": "rvApprove", "id": id]) { [weak h] r in
+        if (r["ok"] as? Bool) == true { UINotificationFeedbackGenerator().notificationOccurred(.success); h?.toast(["t": "Approved — \(x["first"] as? String ?? "") told"]); self.afterDecision(r["next"] as? String) }
+        else { h?.toast(["t": r["error"] as? String ?? "That didn’t work — try again"]) }
+      }
+    }
+    acts.onAmend = { [weak self, weak h] in
+      guard let self = self else { return }
+      let vc = AmendSheetVC(files: (x["files"] as? [[String: Any]]) ?? [], first: x["first"] as? String ?? "", dark: !self.light)
+      vc.onFile = { [weak self] fid in self?.send(["ev": "rvFile", "id": id, "fid": fid]) }
+      vc.onSend = { [weak self, weak h] need, note, done in
+        var ev: [String: Any] = ["ev": "rvAmend", "id": id, "note": note]
+        if let n = need { ev["need"] = n }
+        self?.request(ev) { r in
+          if (r["ok"] as? Bool) == true {
+            done(nil)
+            let okN = ((x["files"] as? [Any])?.count ?? 0) - (need?.count ?? ((x["files"] as? [Any])?.count ?? 0))
+            h?.toast(["t": okN > 0 ? "\(okN) approved · \(need?.count ?? 0) sent back" : "Sent back to \(x["first"] as? String ?? "")"])
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { self?.afterDecision(r["next"] as? String) }
+          } else { done(r["error"] as? String ?? "That didn’t work — try again") }
+        }
+      }
+      self.main.topMost().present(vc.inNav(), animated: true)
+    }
+    out.append(acts)
+  }
+  // decided: on to the next request waiting (it slides in), or back to the list when there's none
+  private func afterDecision(_ next: String?) {
+    guard let s = stack.last, s.kind == "review" else { return }
+    if let n = next, !n.isEmpty, n != s.id {
+      let W = main.view.bounds.width
+      let old = s.h
+      let ns = screen("review", n)
+      stack[stack.count - 1] = ns
+      draw(ns); ns.h.isHidden = false; ns.h.transform = CGAffineTransform(translationX: W, y: 0)
+      UIView.animate(withDuration: 0.42, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
+        ns.h.transform = .identity; old.transform = CGAffineTransform(translationX: -W * 0.3, y: 0); old.alpha = 0
+      } completion: { _ in old.removeFromSuperview(); self.main.updateCorner() }
+      main.edgePanOn(); main.updateCorner()
+    } else { pop() }
   }
   // ---------- an Office Admin's Claims (Haris 2026-11-04) ----------
   private func claimsBlocks(_ h: HomeView, _ out: inout [UIView]) {
@@ -1640,6 +1738,20 @@ final class MeCtl {
       let g = SetGroup(); g.set(rows.map { x in let id = x["id"] as? String ?? ""; return SetItem(key: "f." + id, title: x["name"] as? String ?? "", sub: x["sub"] as? String ?? "", value: x["amt"] as? String ?? "", chevron: (x["inv"] as? Bool) == true, tap: (x["inv"] as? Bool) == true ? { [weak self] in self?.send(["ev": "exInv", "id": id]) } : nil) }, look: h.look)
       h.showFound([g], hint: nil)
     }
+  }
+  // 🔍 on Reviews: the waiting and reviewed requests — by task, client or who sent it
+  private func reviewFind(_ h: HomeView, _ raw: String) {
+    let q = raw.trimmingCharacters(in: .whitespaces).lowercased()
+    guard !q.isEmpty else { h.showFound([], hint: "Search requests by task, client or person."); return }
+    let words = q.split(separator: " ").map(String.init)
+    let m = model["reviews"] as? [String: Any] ?? [:]
+    let fits = { (x: [String: Any]) -> Bool in let n = "\(x["task"] ?? "") \(x["client"] ?? "") \(x["who"] ?? "")".lowercased(); return words.allSatisfy { n.contains($0) } }
+    let w = ((m["waiting"] as? [[String: Any]]) ?? []).filter(fits), d = ((m["reviewed"] as? [[String: Any]]) ?? []).filter(fits)
+    if w.isEmpty && d.isEmpty { h.showFound([], hint: "No requests found."); return }
+    var out: [UIView] = []
+    if !w.isEmpty { let hd = SetHead(); hd.set("Waiting"); let l = ReviewList(); l.set(w, look: h.look, decided: false); l.onOpen = { [weak self] id in self?.open("review", id) }; out += [hd, l] }
+    if !d.isEmpty { let hd = SetHead(); hd.set("Reviewed"); let l = ReviewList(); l.set(d, look: h.look, decided: true); l.onOpen = { [weak self] id in self?.open("review", id) }; out += [hd, l] }
+    h.showFound(out, hint: nil)
   }
   // 🔍 on Overview: every client's files (Client Assets' search), a tap previews it — Haris 2026-11-04
   private func overviewFind(_ h: HomeView, _ raw: String) {
@@ -1999,6 +2111,7 @@ final class MeCtl {
     case "me" where MeCtl.tabRoots.contains(h.assets ?? ""): main.selectTab("me")
     case "find" where h.assets == "overviewTab": overviewFind(h, ev["q"] as? String ?? "")
     case "find" where h.assets == "claimsTab" || h.assets == "expensesTab": listFind(h, ev["q"] as? String ?? "")
+    case "find" where h.assets == "reviewsTab": reviewFind(h, ev["q"] as? String ?? "")
     case "find" where h.assets == "plansPage" || h.assets == "me.plan" || h.assets == "plansTab": planFind(h, ev["q"] as? String ?? "")
     default: break
     }
@@ -2786,6 +2899,386 @@ final class MoneyFormVC: UIViewController {
       guard let self = self else { return }
       self.navigationItem.rightBarButtonItem?.isEnabled = true
       if let e = e { UINotificationFeedbackGenerator().notificationOccurred(.error); self.err.text = e } else { UINotificationFeedbackGenerator().notificationOccurred(.success); self.dismiss(animated: true) }
+    }
+  }
+}
+
+// ---------- the CD's Reviews (Haris 2026-11-04, the approved mockup): Waiting · Reviewed, a request, Request amendments.
+// Tap only — no swipes, no hold: she opens a request to decide. ----------
+
+// the requests: one rounded group, a row each — the sender's photo, the task, the client, who sent what and when, the
+// files' pictures (waiting) or the result (reviewed), the Round tag. Rows kept by id, only what changed is drawn again.
+final class ReviewList: UIView, HomeBlock {
+  var onOpen: ((String) -> Void)?
+  private let box = UIView()
+  private var rows: [String: ReviewRow] = [:], order: [String] = [], seps: [UIView] = []
+  override init(frame: CGRect) { super.init(frame: frame); box.layer.cornerRadius = 16; box.layer.cornerCurve = .continuous; box.clipsToBounds = true; addSubview(box) }
+  required init?(coder: NSCoder) { fatalError() }
+  func set(_ items: [[String: Any]], look L: HomeLook, decided: Bool) {
+    box.backgroundColor = L.card
+    let ids = items.map { $0["id"] as? String ?? "" }
+    UIView.performWithoutAnimation {
+      for (id, r) in rows where !ids.contains(id) { r.removeFromSuperview(); rows[id] = nil }
+      for x in items {
+        let id = x["id"] as? String ?? ""
+        let r = rows[id] ?? { let r = ReviewRow(); box.addSubview(r); rows[id] = r; return r }()
+        r.onTap = { [weak self] in self?.onOpen?(id) }
+        r.set(x, look: L, decided: decided)
+      }
+      while seps.count < max(0, ids.count - 1) { let v = UIView(); box.addSubview(v); seps.append(v) }
+      for (i, v) in seps.enumerated() { v.isHidden = i >= ids.count - 1; v.backgroundColor = L.sep }
+    }
+    order = ids
+    setNeedsLayout()
+  }
+  private func hOf(_ id: String, _ w: CGFloat) -> CGFloat { rows[id]?.height(w) ?? 64 }
+  func blockHeight(_ W: CGFloat) -> CGFloat { order.reduce(0) { $0 + hOf($1, W - 32) } + 8 }
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    let w = bounds.width - 32
+    box.frame = CGRect(x: 16, y: 4, width: w, height: order.reduce(0) { $0 + hOf($1, w) })
+    var y: CGFloat = 0
+    for (i, id) in order.enumerated() {
+      guard let r = rows[id] else { continue }
+      let h = hOf(id, w)
+      r.bounds = CGRect(x: 0, y: 0, width: box.bounds.width, height: h); r.center = CGPoint(x: box.bounds.width / 2, y: y + h / 2)
+      y += h
+      if i < seps.count, !seps[i].isHidden { seps[i].frame = CGRect(x: 62, y: y - 0.5, width: box.bounds.width - 62, height: 0.5); box.bringSubviewToFront(seps[i]) }
+    }
+  }
+}
+final class ReviewRow: UIView {
+  var onTap: (() -> Void)?
+  private let pic = UIImageView(), title = UILabel(), client = UILabel(), dot = UIView(), sub = UILabel(), rtag = PaddedLabel()
+  private var thumbs: [UIImageView] = []
+  private var sig = "", photoPath: String?, decided = false
+  override init(frame: CGRect) {
+    super.init(frame: frame)
+    pic.layer.cornerRadius = 18; pic.clipsToBounds = true; pic.contentMode = .scaleAspectFill
+    title.font = .systemFont(ofSize: 16, weight: .medium); title.numberOfLines = 2
+    client.font = .systemFont(ofSize: 13); client.textColor = .secondaryLabel
+    sub.font = .systemFont(ofSize: 13); sub.textColor = .secondaryLabel
+    dot.layer.cornerRadius = 4
+    rtag.font = .systemFont(ofSize: 11.5, weight: .semibold); rtag.layer.cornerRadius = 7; rtag.clipsToBounds = true; rtag.insets = UIEdgeInsets(top: 2, left: 7, bottom: 2, right: 7)
+    [pic, title, client, dot, sub, rtag].forEach { addSubview($0) }
+    addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapped)))
+    _ = PressShrink.add(to: self)
+    accessibilityTraits = .button; isAccessibilityElement = true
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  @objc private func tapped() { UISelectionFeedbackGenerator().selectionChanged(); onTap?() }
+  func set(_ x: [String: Any], look L: HomeLook, decided d: Bool) {
+    decided = d
+    let files = (x["files"] as? [[String: Any]]) ?? []
+    let res = x["res"] as? [String: Any]
+    let s = "\(x["task"] ?? "")|\(x["client"] ?? "")|\(x["sub"] ?? "")|\(x["round"] ?? "")|\(x["carried"] ?? "")|\(res?["t"] ?? "")|\(files.map { "\($0["id"] ?? "")" })|\(x["photo"] ?? "")|\(L.light)|\(d)"
+    guard s != sig else { return }
+    sig = s
+    title.text = x["task"] as? String; client.text = x["client"] as? String; sub.text = x["sub"] as? String
+    dot.backgroundColor = NativeSheetVC.color(x["crgb"]) ?? .systemGray
+    let round = x["round"] as? Int ?? 1, carried = x["carried"] as? Int ?? 0
+    if let r = res {
+      let k = r["k"] as? String ?? ""
+      let c: UIColor = k == "ok" ? .systemGreen : k == "mix" ? .systemPurple : .systemOrange
+      rtag.text = r["t"] as? String; rtag.textColor = c; rtag.backgroundColor = c.withAlphaComponent(0.15)
+    } else {
+      rtag.text = "Round \(round)" + (carried > 0 ? " · \(carried) ✓" : ""); rtag.textColor = .systemBlue; rtag.backgroundColor = UIColor.systemBlue.withAlphaComponent(0.14)
+    }
+    let ini = x["ini"] as? String ?? "", rgb = NativeSheetVC.color(x["rgb"]) ?? .systemGray
+    let ph = x["photo"] as? String
+    if ph != photoPath || pic.image == nil {
+      photoPath = ph; pic.image = roundPic(nil, initials: ini, color: rgb, size: 36)
+      if let p = ph { FeedLoader.shared.image(p) { [weak self] i in guard let self = self, self.photoPath == p, let i = i else { return }; self.pic.image = roundPic(i, initials: nil, color: nil, size: 36) } }
+    }
+    // (waiting: up to 4 of the files' pictures)
+    let show = d ? [] : Array(files.prefix(4))
+    while thumbs.count < show.count { let v = UIImageView(); v.layer.cornerRadius = 8; v.layer.cornerCurve = .continuous; v.clipsToBounds = true; v.contentMode = .scaleAspectFill; addSubview(v); thumbs.append(v) }
+    for (i, v) in thumbs.enumerated() {
+      v.isHidden = i >= show.count
+      guard i < show.count else { continue }
+      let f = show[i]; v.backgroundColor = UIColor.tertiarySystemFill; v.image = nil
+      if let p = f["pic"] as? String { FeedLoader.shared.image(p) { [weak v] img in v?.image = img } }
+    }
+    accessibilityLabel = "\(x["task"] ?? ""), \(x["client"] ?? ""), \(x["sub"] ?? ""), \(rtag.text ?? "")"
+    setNeedsLayout()
+  }
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    let W = bounds.width
+    let tw = ceil(rtag.sizeThatFits(CGSize(width: 160, height: 20)).width)
+    rtag.frame = CGRect(x: W - 14 - tw, y: 13, width: tw, height: 18)
+    pic.frame = CGRect(x: 14, y: 12, width: 36, height: 36)
+    let x: CGFloat = 62, w = W - x - tw - 26
+    let th = min(40, ceil(title.sizeThatFits(CGSize(width: w, height: 60)).height))
+    title.frame = CGRect(x: x, y: 11, width: w, height: th)
+    dot.frame = CGRect(x: x, y: title.frame.maxY + 7, width: 8, height: 8)
+    client.frame = CGRect(x: x + 13, y: title.frame.maxY + 2, width: W - x - 27, height: 17)
+    sub.frame = CGRect(x: x, y: client.frame.maxY + 1, width: W - x - 14, height: 17)
+    var y = sub.frame.maxY
+    if thumbs.contains(where: { !$0.isHidden }) {
+      for (i, v) in thumbs.enumerated() where !v.isHidden { v.frame = CGRect(x: x + CGFloat(i) * 50, y: y + 8, width: 44, height: 44) }
+      y += 52
+    }
+  }
+  // (its height for a width: the title's lines, the client, who sent what, the pictures)
+  func height(_ W: CGFloat) -> CGFloat {
+    let tw = ceil(rtag.sizeThatFits(CGSize(width: 160, height: 20)).width)
+    let th = min(40, ceil(title.sizeThatFits(CGSize(width: W - 62 - tw - 26, height: 60)).height))
+    return max(64, 11 + th + 2 + 17 + 1 + 17 + (thumbs.contains(where: { !$0.isHidden }) ? 52 : 0) + 12)
+  }
+}
+
+// a request's top: who sent it (photo, "Yousef sent 3 files", the client, the Round tag), the files large — swiped
+// sideways, a tap opens it in the preview (videos play there) — and the strip of all of them under it (✓ = approved)
+final class ReviewHero: UIView, HomeBlock, UIScrollViewDelegate {
+  var onFile: ((String) -> Void)?
+  private let pic = UIImageView(), who = UILabel(), meta = UILabel(), dot = UIView(), rtag = PaddedLabel()
+  private let pager = UIScrollView(), strip = UIScrollView()
+  private var pages: [UIView] = [], chips: [UIImageView] = [], files: [[String: Any]] = []
+  private var sig = "", page = 0, photoPath: String?
+  override init(frame: CGRect) {
+    super.init(frame: frame)
+    pic.layer.cornerRadius = 18; pic.clipsToBounds = true
+    who.font = .systemFont(ofSize: 15, weight: .semibold); meta.font = .systemFont(ofSize: 13); meta.textColor = .secondaryLabel
+    dot.layer.cornerRadius = 4
+    rtag.font = .systemFont(ofSize: 11.5, weight: .semibold); rtag.layer.cornerRadius = 7; rtag.clipsToBounds = true; rtag.insets = UIEdgeInsets(top: 2, left: 7, bottom: 2, right: 7)
+    rtag.textColor = .systemBlue; rtag.backgroundColor = UIColor.systemBlue.withAlphaComponent(0.14)
+    pager.isPagingEnabled = true; pager.showsHorizontalScrollIndicator = false; pager.delegate = self; pager.clipsToBounds = true
+    strip.showsHorizontalScrollIndicator = false; strip.clipsToBounds = false
+    [pic, who, meta, dot, rtag, pager, strip].forEach { addSubview($0) }
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  func set(_ x: [String: Any], look L: HomeLook) {
+    let fl = ((x["files"] as? [[String: Any]]) ?? []) + ((x["carriedFiles"] as? [[String: Any]]) ?? []).map { var f = $0; f["carried"] = true; return f }
+    let s = "\(fl.map { "\($0["id"] ?? "")\($0["mark"] ?? "")" })|\(x["sub"] ?? "")|\(x["round"] ?? "")|\(x["photo"] ?? "")|\(L.light)"
+    guard s != sig else { return }
+    sig = s; files = fl
+    who.text = "\(x["first"] as? String ?? "") sent \((x["files"] as? [Any])?.count ?? 0) file\(((x["files"] as? [Any])?.count ?? 0) == 1 ? "" : "s")"
+    let carried = x["carried"] as? Int ?? 0
+    meta.text = [x["client"] as? String ?? "", carried > 0 ? "\(carried) already approved" : (x["sub"] as? String ?? "").components(separatedBy: " · ").last ?? ""].filter { !$0.isEmpty }.joined(separator: " · ")
+    dot.backgroundColor = NativeSheetVC.color(x["crgb"]) ?? .systemGray
+    rtag.text = "Round \(x["round"] as? Int ?? 1)"
+    let ini = x["ini"] as? String ?? "", rgb = NativeSheetVC.color(x["rgb"]) ?? .systemGray, ph = x["photo"] as? String
+    if ph != photoPath || pic.image == nil { photoPath = ph; pic.image = roundPic(nil, initials: ini, color: rgb, size: 36); if let p = ph { FeedLoader.shared.image(p) { [weak self] i in guard let self = self, self.photoPath == p, let i = i else { return }; self.pic.image = roundPic(i, initials: nil, color: nil, size: 36) } } }
+    UIView.performWithoutAnimation {
+      pages.forEach { $0.removeFromSuperview() }; chips.forEach { $0.removeFromSuperview() }
+      pages = fl.enumerated().map { (i, f) -> UIView in
+        let v = UIView(); v.backgroundColor = .tertiarySystemFill; v.layer.cornerRadius = 18; v.layer.cornerCurve = .continuous; v.clipsToBounds = true
+        let im = UIImageView(); im.contentMode = .scaleAspectFit; im.tag = 1; v.addSubview(im)
+        let ext = UILabel(); ext.text = f["ext"] as? String; ext.font = .systemFont(ofSize: 28, weight: .bold); ext.textColor = .secondaryLabel; ext.textAlignment = .center; ext.tag = 2; v.addSubview(ext)
+        let name = PaddedLabel(); name.text = ((f["video"] as? Bool) == true ? "▶ " : "") + (f["name"] as? String ?? ""); name.font = .systemFont(ofSize: 12.5, weight: .semibold); name.textColor = .white
+        name.backgroundColor = UIColor.black.withAlphaComponent(0.45); name.layer.cornerRadius = 9; name.clipsToBounds = true; name.insets = UIEdgeInsets(top: 4, left: 9, bottom: 4, right: 9); name.tag = 3; v.addSubview(name)
+        let mk = (f["mark"] as? String) ?? ""
+        if mk == "ok" || mk == "need" {
+          let b = PaddedLabel(); b.text = (f["carried"] as? Bool) == true ? "✓ Approved earlier" : mk == "ok" ? "✓ Approved" : "✎ Changes"; b.font = .systemFont(ofSize: 12, weight: .bold); b.textColor = .white
+          b.backgroundColor = mk == "ok" ? UIColor.systemGreen.withAlphaComponent(0.9) : UIColor.systemOrange.withAlphaComponent(0.92); b.layer.cornerRadius = 9; b.clipsToBounds = true; b.insets = UIEdgeInsets(top: 4, left: 9, bottom: 4, right: 9); b.tag = 4; v.addSubview(b)
+        }
+        if let p = f["big"] as? String { FeedLoader.shared.image(p) { [weak im, weak ext] img in im?.image = img; ext?.isHidden = img != nil } }
+        let t = UITapGestureRecognizer(target: self, action: #selector(tappedPage(_:))); v.addGestureRecognizer(t); v.accessibilityLabel = f["name"] as? String; v.isAccessibilityElement = true; v.accessibilityTraits = .button
+        _ = i; pager.addSubview(v); return v
+      }
+      chips = fl.enumerated().map { (i, f) -> UIImageView in
+        let v = UIImageView(); v.contentMode = .scaleAspectFill; v.clipsToBounds = true; v.layer.cornerRadius = 10; v.layer.cornerCurve = .continuous; v.backgroundColor = .tertiarySystemFill; v.isUserInteractionEnabled = true; v.tag = i
+        if let p = f["pic"] as? String { FeedLoader.shared.image(p) { [weak v] img in v?.image = img } }
+        v.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tappedChip(_:))))
+        if (f["mark"] as? String) == "ok" { let ck = UIImageView(image: UIImage(systemName: "checkmark.circle.fill")); ck.tintColor = .systemGreen; ck.backgroundColor = .systemBackground; ck.layer.cornerRadius = 9; ck.tag = 9; ck.frame = CGRect(x: 0, y: 0, width: 18, height: 18); v.addSubview(ck); v.clipsToBounds = false }
+        strip.addSubview(v); return v
+      }
+      page = min(page, max(0, fl.count - 1))
+    }
+    strip.isHidden = fl.count < 2
+    setNeedsLayout()
+  }
+  private var bigH: CGFloat { let W = bounds.width > 0 ? bounds.width : 390; return min(440, (W - 32) * 1.05) }
+  func blockHeight(_ W: CGFloat) -> CGFloat { 60 + min(440, (W - 32) * 1.05) + (files.count < 2 ? 12 : 78) }
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    let W = bounds.width
+    pic.frame = CGRect(x: 18, y: 10, width: 36, height: 36)
+    let tw = ceil(rtag.sizeThatFits(CGSize(width: 120, height: 20)).width)
+    rtag.frame = CGRect(x: W - 18 - tw, y: 19, width: tw, height: 18)
+    who.frame = CGRect(x: 64, y: 9, width: W - 64 - tw - 30, height: 20)
+    dot.frame = CGRect(x: 64, y: 35, width: 8, height: 8)
+    meta.frame = CGRect(x: 77, y: 30, width: W - 77 - tw - 30, height: 17)
+    let H = bigH
+    pager.frame = CGRect(x: 16, y: 60, width: W - 32, height: H)
+    pager.contentSize = CGSize(width: (W - 32) * CGFloat(pages.count), height: H)
+    for (i, v) in pages.enumerated() {
+      v.frame = CGRect(x: CGFloat(i) * (W - 32), y: 0, width: W - 32, height: H).insetBy(dx: 0, dy: 0)
+      v.viewWithTag(1)?.frame = v.bounds
+      v.viewWithTag(2)?.frame = v.bounds
+      if let n = v.viewWithTag(3) as? UILabel { let s = n.sizeThatFits(CGSize(width: v.bounds.width - 24, height: 30)); n.frame = CGRect(x: 12, y: v.bounds.height - 12 - s.height, width: min(s.width, v.bounds.width - 24), height: s.height) }
+      if let b = v.viewWithTag(4) as? UILabel { let s = b.sizeThatFits(CGSize(width: 200, height: 30)); b.frame = CGRect(x: v.bounds.width - 12 - s.width, y: 12, width: s.width, height: s.height) }
+    }
+    if !pager.isDragging && !pager.isDecelerating { pager.contentOffset.x = CGFloat(page) * (W - 32) }
+    strip.frame = CGRect(x: 0, y: 60 + H + 12, width: W, height: 56)
+    let cw: CGFloat = 50, gap: CGFloat = 8, total = CGFloat(chips.count) * cw + CGFloat(max(0, chips.count - 1)) * gap
+    let x0 = max(16, (W - total) / 2)
+    for (i, v) in chips.enumerated() {
+      v.frame = CGRect(x: x0 + CGFloat(i) * (cw + gap), y: 3, width: cw, height: cw)
+      v.viewWithTag(9)?.frame = CGRect(x: cw - 12, y: -6, width: 18, height: 18)
+      v.layer.borderWidth = i == page ? 2.5 : 0; v.layer.borderColor = UIColor.systemBlue.cgColor; v.alpha = i == page ? 1 : 0.6
+    }
+    strip.contentSize = CGSize(width: x0 * 2 + total, height: 56)
+  }
+  func scrollViewDidEndDecelerating(_ s: UIScrollView) { let w = max(1, s.bounds.width); let p = Int(round(s.contentOffset.x / w)); if p != page { page = p; UISelectionFeedbackGenerator().selectionChanged(); paintChips() } }
+  private func paintChips() { for (i, v) in chips.enumerated() { UIView.animate(withDuration: 0.2) { v.alpha = i == self.page ? 1 : 0.6 }; v.layer.borderWidth = i == page ? 2.5 : 0 } }
+  @objc private func tappedChip(_ g: UITapGestureRecognizer) { guard let i = g.view?.tag, i < pages.count else { return }; page = i; UISelectionFeedbackGenerator().selectionChanged(); UIView.animate(withDuration: 0.3) { self.pager.contentOffset.x = CGFloat(i) * self.pager.bounds.width }; paintChips() }
+  @objc private func tappedPage(_ g: UITapGestureRecognizer) { guard let v = g.view, let i = pages.firstIndex(of: v), i < files.count, let id = files[i]["id"] as? String else { return }; onFile?(id) }
+}
+
+// a card of words with a small caption (the brief; your note last round; the decision's note)
+final class ReviewNote: UIView, HomeBlock {
+  private let box = UIView(), cap = UILabel(), body = UILabel()
+  override init(frame: CGRect) {
+    super.init(frame: frame)
+    box.layer.cornerRadius = 14; box.layer.cornerCurve = .continuous
+    cap.font = .systemFont(ofSize: 12, weight: .semibold); cap.textColor = .secondaryLabel
+    body.font = .systemFont(ofSize: 15); body.numberOfLines = 0
+    addSubview(box); box.addSubview(cap); box.addSubview(body)
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  func set(_ c: String, _ t: String, look L: HomeLook) { cap.text = c.uppercased(); if body.text != t { body.text = t; setNeedsLayout() }; box.backgroundColor = L.card }
+  func blockHeight(_ W: CGFloat) -> CGFloat { 12 + 12 + 18 + ceil(body.sizeThatFits(CGSize(width: W - 32 - 26, height: 600)).height) + 12 }
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    box.frame = CGRect(x: 16, y: 12, width: bounds.width - 32, height: bounds.height - 12)
+    cap.frame = CGRect(x: 13, y: 11, width: box.bounds.width - 26, height: 15)
+    body.frame = CGRect(x: 13, y: 29, width: box.bounds.width - 26, height: box.bounds.height - 29 - 11)
+  }
+}
+
+// Request amendments (orange) and Approve (green), side by side
+final class ReviewActs: UIView, HomeBlock {
+  var onAmend: (() -> Void)?, onApprove: (() -> Void)?
+  private let a = UIButton(type: .system), b = UIButton(type: .system)
+  override init(frame: CGRect) {
+    super.init(frame: frame)
+    for (btn, t, c) in [(a, "Request amendments", UIColor.systemOrange), (b, "Approve", UIColor.systemGreen)] {
+      var cfg = UIButton.Configuration.filled(); cfg.cornerStyle = .capsule; cfg.baseBackgroundColor = c; cfg.baseForegroundColor = .white
+      var s = AttributedString(t); s.font = .systemFont(ofSize: 16, weight: .semibold); cfg.attributedTitle = s
+      cfg.titleLineBreakMode = .byTruncatingTail; btn.configuration = cfg; addSubview(btn)
+    }
+    a.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.onAmend?() }, for: .touchUpInside)
+    b.addAction(UIAction { [weak self] _ in self?.onApprove?() }, for: .touchUpInside)
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  func blockHeight(_ W: CGFloat) -> CGFloat { 80 }
+  override func layoutSubviews() { super.layoutSubviews(); let W = bounds.width, w = (W - 32 - 10); a.frame = CGRect(x: 16, y: 16, width: w * 0.56, height: 52); b.frame = CGRect(x: 16 + w * 0.56 + 10, y: 16, width: w * 0.44, height: 52) }
+}
+
+// iPhone's own sheet: tick the files that need changes (each its own note), the rest are approved; a general note on
+// top (optional — or the only note, for a single file). ✕ and the blue ↑ to send. "Yousef is notified on the task."
+final class AmendSheetVC: UIViewController, UITextViewDelegate {
+  var onSend: ((_ need: [String: String]?, _ note: String, _ done: @escaping (String?) -> Void) -> Void)?
+  private let files: [[String: Any]], first: String, dark: Bool
+  private var ticked: Set<String> = [], notes: [String: UITextView] = [:], wills: [String: UILabel] = [:], ticks: [String: UIButton] = [:]
+  private let general = UITextView(), err = UILabel(), stack = UIStackView()
+  private var sending = false
+  init(files: [[String: Any]], first: String, dark: Bool) { self.files = files; self.first = first; self.dark = dark; super.init(nibName: nil, bundle: nil); overrideUserInterfaceStyle = dark ? .dark : .light }
+  required init?(coder: NSCoder) { fatalError() }
+  func inNav() -> UIViewController {
+    let n = UINavigationController(rootViewController: self); n.overrideUserInterfaceStyle = overrideUserInterfaceStyle
+    if let s = n.sheetPresentationController { s.detents = [.large()]; s.prefersGrabberVisible = true }
+    n.isModalInPresentation = true
+    return n
+  }
+  private var multi: Bool { files.count > 1 }
+  private func box(_ v: UITextView, _ hint: String) -> UIView {
+    v.font = .systemFont(ofSize: 16); v.backgroundColor = .clear; v.isScrollEnabled = false; v.textContainerInset = UIEdgeInsets(top: 10, left: 8, bottom: 10, right: 8); v.delegate = self
+    let b = UIView(); b.backgroundColor = .secondarySystemGroupedBackground; b.layer.cornerRadius = 12; b.layer.cornerCurve = .continuous
+    let ph = UILabel(); ph.text = hint; ph.font = .systemFont(ofSize: 16); ph.textColor = .tertiaryLabel; ph.tag = 77
+    [v, ph].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; b.addSubview($0) }
+    NSLayoutConstraint.activate([v.leadingAnchor.constraint(equalTo: b.leadingAnchor, constant: 4), v.trailingAnchor.constraint(equalTo: b.trailingAnchor, constant: -4), v.topAnchor.constraint(equalTo: b.topAnchor), v.bottomAnchor.constraint(equalTo: b.bottomAnchor),
+      v.heightAnchor.constraint(greaterThanOrEqualToConstant: 44), ph.leadingAnchor.constraint(equalTo: b.leadingAnchor, constant: 17), ph.topAnchor.constraint(equalTo: b.topAnchor, constant: 11), ph.trailingAnchor.constraint(lessThanOrEqualTo: b.trailingAnchor, constant: -12)])
+    return b
+  }
+  func textViewDidChange(_ v: UITextView) { v.superview?.viewWithTag(77)?.isHidden = !v.text.isEmpty; err.text = nil }
+  override func viewDidLoad() {
+    super.viewDidLoad()
+    view.backgroundColor = .systemGroupedBackground
+    title = "Request amendments"
+    navigationItem.leftBarButtonItem = UIBarButtonItem(systemItem: .close, primaryAction: UIAction { [weak self] _ in self?.close() })
+    let send = UIBarButtonItem(image: UIImage(systemName: "arrow.up"), primaryAction: UIAction { [weak self] _ in self?.send() })
+    send.style = .done
+    send.tintColor = .systemBlue; send.accessibilityLabel = "Send back"
+    navigationItem.rightBarButtonItem = send
+    let scroll = UIScrollView(); scroll.keyboardDismissMode = .interactive; scroll.alwaysBounceVertical = true
+    stack.axis = .vertical; stack.spacing = 10
+    scroll.translatesAutoresizingMaskIntoConstraints = false; stack.translatesAutoresizingMaskIntoConstraints = false
+    view.addSubview(scroll); scroll.addSubview(stack)
+    NSLayoutConstraint.activate([scroll.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor), scroll.leadingAnchor.constraint(equalTo: view.leadingAnchor), scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor), scroll.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor),
+      stack.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: 8), stack.leadingAnchor.constraint(equalTo: scroll.frameLayoutGuide.leadingAnchor, constant: 18), stack.trailingAnchor.constraint(equalTo: scroll.frameLayoutGuide.trailingAnchor, constant: -18), stack.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -24)])
+    let hint = UILabel(); hint.font = .systemFont(ofSize: 13); hint.textColor = .secondaryLabel; hint.numberOfLines = 0; hint.textAlignment = .center
+    hint.text = multi ? "Tick the files that need changes — the rest are approved" : "Tell \(first) what to change"
+    stack.addArrangedSubview(hint)
+    stack.addArrangedSubview(box(general, multi ? "General note (optional)" : "What needs changing?"))
+    if multi {
+      for f in files {
+        let id = f["id"] as? String ?? ""
+        let row = UIStackView(); row.axis = .horizontal; row.spacing = 12; row.alignment = .top
+        let tick = UIButton(type: .system); tick.setImage(UIImage(systemName: "circle", withConfiguration: UIImage.SymbolConfiguration(pointSize: 22)), for: .normal); tick.tintColor = .tertiaryLabel
+        tick.addAction(UIAction { [weak self] _ in self?.toggle(id) }, for: .touchUpInside); tick.accessibilityLabel = "Needs changes: \(f["name"] as? String ?? "")"
+        ticks[id] = tick
+        let th = UIImageView(); th.contentMode = .scaleAspectFill; th.clipsToBounds = true; th.layer.cornerRadius = 10; th.backgroundColor = .tertiarySystemFill
+        if let p = f["pic"] as? String { FeedLoader.shared.image(p) { [weak th] i in th?.image = i } }
+        th.isUserInteractionEnabled = true; th.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(thumbTap(_:)))); th.accessibilityIdentifier = id
+        let col = UIStackView(); col.axis = .vertical; col.spacing = 5
+        let name = UILabel(); name.text = f["name"] as? String; name.font = .systemFont(ofSize: 15, weight: .semibold); name.lineBreakMode = .byTruncatingMiddle
+        let will = UILabel(); will.text = "✓ Will be approved"; will.font = .systemFont(ofSize: 13); will.textColor = .systemGreen; wills[id] = will
+        let n = UITextView(); let nb = box(n, "What needs changing?"); nb.isHidden = true; notes[id] = n
+        [name, will, nb].forEach { col.addArrangedSubview($0) }
+        [tick, th, col].forEach { row.addArrangedSubview($0) }
+        tick.translatesAutoresizingMaskIntoConstraints = false; th.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([tick.widthAnchor.constraint(equalToConstant: 30), tick.heightAnchor.constraint(equalToConstant: 58), th.widthAnchor.constraint(equalToConstant: 58), th.heightAnchor.constraint(equalToConstant: 58)])
+        stack.addArrangedSubview(row)
+      }
+    }
+    let foot = UILabel(); foot.text = "\(first) is notified on the task — one comment\(multi ? ", grouped by file" : "")."; foot.font = .systemFont(ofSize: 13); foot.textColor = .secondaryLabel; foot.numberOfLines = 0
+    err.font = .systemFont(ofSize: 14); err.textColor = .systemRed; err.numberOfLines = 0
+    stack.addArrangedSubview(foot); stack.addArrangedSubview(err)
+  }
+  var onFile: ((String) -> Void)?
+  @objc private func thumbTap(_ g: UITapGestureRecognizer) { if let id = g.view?.accessibilityIdentifier { onFile?(id) } }
+  override func viewDidAppear(_ animated: Bool) { super.viewDidAppear(animated); if !multi { general.becomeFirstResponder() } }
+  private func toggle(_ id: String) {
+    UISelectionFeedbackGenerator().selectionChanged(); err.text = nil
+    let on = !ticked.contains(id)
+    if on { ticked.insert(id) } else { ticked.remove(id) }
+    ticks[id]?.setImage(UIImage(systemName: on ? "checkmark.circle.fill" : "circle", withConfiguration: UIImage.SymbolConfiguration(pointSize: 22)), for: .normal)
+    ticks[id]?.tintColor = on ? .systemOrange : .tertiaryLabel
+    UIView.animate(withDuration: 0.25) {
+      self.wills[id]?.isHidden = on
+      self.notes[id]?.superview?.isHidden = !on
+      self.stack.layoutIfNeeded()
+    }
+    if on { notes[id]?.becomeFirstResponder() }
+  }
+  private var dirty: Bool { !general.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !ticked.isEmpty }
+  private func close() {
+    guard dirty else { dismiss(animated: true); return }
+    let a = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
+    a.addAction(UIAlertAction(title: "Discard", style: .destructive) { [weak self] _ in self?.dismiss(animated: true) })
+    a.addAction(UIAlertAction(title: "Keep editing", style: .cancel))
+    a.popoverPresentationController?.barButtonItem = navigationItem.leftBarButtonItem
+    present(a, animated: true)
+  }
+  private func send() {
+    guard !sending else { return }
+    let g = general.text.trimmingCharacters(in: .whitespacesAndNewlines)
+    var need: [String: String]? = nil
+    if multi {
+      if ticked.isEmpty { err.text = "Tick the files that need changes — or go back and Approve"; UINotificationFeedbackGenerator().notificationOccurred(.warning); return }
+      var m: [String: String] = [:]
+      for id in ticked { m[id] = (notes[id]?.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
+      if g.isEmpty, let blank = m.first(where: { $0.value.isEmpty })?.key { err.text = "Say what needs changing"; notes[blank]?.becomeFirstResponder(); UINotificationFeedbackGenerator().notificationOccurred(.warning); return }
+      need = m
+    } else if g.isEmpty { err.text = "Say what needs changing"; general.becomeFirstResponder(); UINotificationFeedbackGenerator().notificationOccurred(.warning); return }
+    sending = true; navigationItem.rightBarButtonItem?.isEnabled = false
+    onSend?(need, g) { [weak self] e in
+      guard let self = self else { return }
+      self.sending = false; self.navigationItem.rightBarButtonItem?.isEnabled = true
+      if let e = e { self.err.text = e; UINotificationFeedbackGenerator().notificationOccurred(.error) } else { UINotificationFeedbackGenerator().notificationOccurred(.success); self.dismiss(animated: true) }
     }
   }
 }

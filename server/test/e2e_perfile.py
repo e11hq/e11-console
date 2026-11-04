@@ -80,6 +80,18 @@ async def main():
             await pg.locator('.rd-file.on textarea').fill('Shorter intro'); await pg.click('[data-d="send"]'); await pg.wait_for_timeout(600)
             r3 = await pg.evaluate(f"{T}.reviews[2]")
             check(r3['state'] == 'amend' and len(r3['ok']) == 1 and list(r3['need'].values()) == ['Shorter intro'], 'dialog: X approved, Y sent back with its note', r3)
+            # the iPhone's Reviews (shell 38): the model the app draws, and its decisions
+            await pg.evaluate(f"""(() => {{ const t = {T}; const f = (n) => ({{ id: uid(), name: n, path: `attachments/${{t.id}}/${{n}}`, size: 10, addedAt: nowISO() }}); const P = f('P.png'), Q = f('Q.png');
+              const r = {{ id: uid(), by: __ids.pr, at: nowISO(), files: [P.id, Q.id], state: 'pending', epoch: 1, round: 2 }}; t.reviews.push(r); [P, Q].forEach(a => t.attachments.push({{ ...a, reviewId: r.id }})); syncCD(t); __ids.r4 = r.id; __ids.Q = Q.id; persist(0); }})()""")
+            m = await pg.evaluate("NativeMe.reviewsModel()")
+            w = next((x for x in m['waiting'] if x['id'] == ids_r4), None) if (ids_r4 := await pg.evaluate("__ids.r4")) else None
+            check(w and w['round'] == 2 and w['carried'] == 1 and len(w['files']) == 2 and w['last'] and 'Shorter intro' in w['last'] and w['task'] == 'Per-file check', 'app model: the request with round 2, 1 carried (X), last round\'s note', w)
+            d = next((x for x in m['reviewed'] if x['id'] == r3['id']), None)
+            check(d and d['res']['k'] == 'mix' and [f['mark'] for f in d['files']].count('ok') == 1, 'app model: the decided one shows its mixed result and marks', d)
+            await pg.evaluate("window.NativeMac = window.NativeMac || { call: () => Promise.resolve() }")
+            await pg.evaluate("__e11Me({ ev: 'rvAmend', id: __ids.r4, rid: 'x1', note: '', need: { [__ids.Q]: 'Crop tighter' } })"); await pg.wait_for_timeout(500)
+            r4 = await pg.evaluate(f"{T}.reviews[3]")
+            check(r4['state'] == 'amend' and len(r4['ok']) == 1 and list(r4['need'].values()) == ['Crop tighter'], 'app: Request amendments with one file ticked', r4)
             check(not errs, 'no page errors', errs)
             await b.close()
     finally:

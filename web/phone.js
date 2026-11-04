@@ -3037,7 +3037,9 @@ const NativeMe = (() => {
   // (steps 2–3: Claims and Expenses the app's own too — Haris 2026-11-04)
   const clTab = () => shell >= 37 && offFin() && ui.view === 'fin-reimb';
   const exTab = () => shell >= 37 && offFin() && ui.view === 'fin-expenses';
-  const tabNow = () => (plansTab() ? 'plans' : ovTab() ? 'today' : teamTab() ? 'team' : clTab() ? 'fin-reimb' : exTab() ? 'fin-expenses' : 'me');
+  // (the CD's Reviews, the app's own — shell 38, Haris 2026-11-04: Waiting · Reviewed, a request, Request amendments)
+  const rvTab = () => shell >= 38 && isCD() && (ui.view === 'reviews' || ui.view === 'review');
+  const tabNow = () => (plansTab() ? 'plans' : ovTab() ? 'today' : teamTab() ? 'team' : clTab() ? 'fin-reimb' : exTab() ? 'fin-expenses' : rvTab() ? 'reviews' : 'me');
   const finAdm = () => typeof finLevel === 'function' && finLevel(me()) === 'admin';
   const aedOf = (n) => (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const ordN = (n) => n + (n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th');
@@ -3071,6 +3073,33 @@ const NativeMe = (() => {
   // (a file's small picture — photos, videos' frames, PDFs' pages — Haris 2026-11-04: a video showed only "MP4")
   const ovPic = (a) => { const e = fileExt(a.name); return isImage(a) && e !== 'svg' ? imgUrl(a, 160) : a.thumb ? '/__file/' + a.thumb.split('/').map(encodeURIComponent).join('/') + '?view=1' : a.path && /^(pdf|mp4|mov|m4v|webm|avi|mkv|doc|docx|ppt|pptx|xls|xlsx)$/.test(e) ? '/api/fthumb?path=' + encodeURIComponent(a.path) + '&id=' + encodeURIComponent(a.id || '') : null; };
   const ovAtt = (id) => { for (const c of db.clients || []) for (const f of c.folders || []) { const a = (f.files || []).find((x) => x.id === id); if (a) return a; } return null; };
+  // ---------- the CD's Reviews (shell 38) ----------
+  const rvPic = (a, n) => { const e = fileExt(a.name); return isImage(a) && e !== 'svg' ? imgUrl(a, n) : a.thumb ? '/__file/' + a.thumb.split('/').map(encodeURIComponent).join('/') + '?view=1' : a.path && /^(pdf|mp4|mov|m4v|webm|avi|mkv|doc|docx|ppt|pptx|xls|xlsx)$/.test(e) ? '/api/fthumb?path=' + encodeURIComponent(a.path) + '&id=' + encodeURIComponent(a.id || '') : null; };
+  const rvFile = (a, mark) => ({ id: a.id, name: a.name || 'File', pic: rvPic(a, 160), big: rvPic(a, 1000), video: fileKind(a) === 'video', ext: (fileExt(a.name) || 'file').slice(0, 4).toUpperCase(), mark: mark || '' });
+  function reviewItem(t, r, decided) {
+    const p = proj(t.projectId), u = userById(r.by);
+    const files = (r.files || []).map((id) => attOf(t, id)).filter(Boolean);
+    const carried = carriedOf(t, r);
+    const mark = (a) => (!decided ? '' : r.state === 'approved' || (r.ok || []).includes(a.id) ? 'ok' : 'need');
+    // the note from the round before (round 2 onwards): what the CD asked for last time
+    const before = (t.reviews || []).filter((x) => x.by === r.by && (x.epoch || 0) === (r.epoch || 0) && x.state === 'amend' && x !== r && String(x.at) < String(r.at)).pop();
+    const res = decided ? resultOf(r) : null;
+    return {
+      id: r.id, tid: t.id, task: t.title || 'Untitled task', client: p ? p.name : '', crgb: rgb(p ? p.color : '#87909e'),
+      who: fullName(u), first: firstName(r.by), ini: initials(fullName(u)), rgb: rgb(avColor(r.by)), photo: photoOf(u),
+      sub: `${firstName(r.by)} sent ${plural(files.length, 'file')} · ${timeAgo(decided ? r.decidedAt : r.at)}`,
+      round: r.round || 1, carried: carried.length,
+      files: files.map((a) => rvFile(a, mark(a))), carriedFiles: carried.map((a) => rvFile(a, 'ok')),
+      brief: t.notesHtml ? notifPlainHTML(t.notesHtml) : String(t.notes || '').trim(),
+      last: before && before.noteHtml ? notifPlainHTML(before.noteHtml) : '',
+      res: res ? { k: res.k, t: res.label, long: res.long } : null,
+      note: decided && r.noteHtml ? notifPlainHTML(r.noteHtml) : '',
+    };
+  }
+  function reviewsModel() {
+    const wait = activeReviews(), done = reviewedRecent();
+    return { waiting: wait.map(({ t, r }) => reviewItem(t, r, false)), reviewed: done.map(({ t, r }) => reviewItem(t, r, true)) };
+  }
   function overview() {
     const fin = offFin();
     const money = (n) => (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -3106,7 +3135,7 @@ const NativeMe = (() => {
   const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
   const photoOf = (u) => (u && u.avatar ? fileUrl({ path: u.avatar }) : null);
   const visible = () => {
-    if (!Phone.on || !(ui.view === 'me' || plansTab() || ovTab() || teamTab() || clTab() || exTab()) || ui.search || ui.taskId || document.querySelector('#detail.open')) return false;
+    if (!Phone.on || !(ui.view === 'me' || plansTab() || ovTab() || teamTab() || clTab() || exTab() || rvTab()) || ui.search || ui.taskId || document.querySelector('#detail.open')) return false;
     // (a page question that isn't iPhone's own yet — View as… — shows on the page meanwhile)
     if (document.querySelector('#overlay-root .scrim, #tv-root .scrim, .lightbox, .fv')) return false;
     return true;
@@ -3143,6 +3172,7 @@ const NativeMe = (() => {
       overview: ovTab() ? overview() : null,
       claims: clTab() ? claimsModel() : null,
       expenses: exTab() ? expensesModel() : null,
+      reviews: rvTab() ? reviewsModel() : null,
       plan: plOpen && plansOwn() ? Plans.native.plan(plOpen.pid, plOpen.month) : null,
     };
   }
@@ -3280,6 +3310,11 @@ const NativeMe = (() => {
       if (socialPlans()) { if (ui.view === 'plan') { ui.view = 'plans'; ui.planId = null; } }
       else go('me');
       if (pl) call({ open: { kind: 'plan', pid: pl.projectId, month: pl.month } });
+    }
+    // (a review request opened on the page — an Inbox update, a notification: the Reviews tab, then the app's own page)
+    if (shell >= 38 && isCD() && Phone.on && ui.view === 'review' && !ui.taskId) {
+      const id = ui.reviewId; ui.view = 'reviews'; ui.reviewId = null;
+      if (id && findReview(id)) call({ open: { kind: 'review', id } });
     }
     // (who may turn file / folder links off and on — Admins: the app's sheets show it only to them)
     try { const adm = !!(currentUserId && isAdm(me())); if (adm !== lastAdm) { lastAdm = adm; NativeMac.call('role', { admin: adm }).catch(() => {}); } } catch (e) { /* not signed in yet */ }
@@ -3419,6 +3454,27 @@ const NativeMe = (() => {
         case 'ovGo': go({ assets: 'clients', claims: 'fin-reimb', expenses: 'fin-expenses' }[ev.to] || 'home'); return;
         // (the claim as its PDF, as the Claims tab's Open claim — not the website's claim page, which isn't the app's: it
         //  showed E11 Day, Haris 2026-11-04)
+        // Reviews: a request's file in the preview (its files as the group), its task, the decisions
+        case 'rvFile': { const f = findReview(String(ev.id)); if (!f) return; const list = [...(f.r.files || []), ...carriedOf(f.t, f.r).map((a) => a.id)].map((id) => attOf(f.t, id)).filter(Boolean); const a = attOf(f.t, String(ev.fid)); if (a) previewFile(a, list); return; }
+        case 'rvTask': if (task(ev.tid)) openTask(String(ev.tid)); return;
+        case 'rvApprove': {
+          const f = findReview(String(ev.id));
+          if (!f || !isCD()) return answer(rid, { ok: false, error: 'Only the Creative Director can decide' });
+          if (f.r.state !== 'pending') return answer(rid, { ok: false, error: 'This request was already decided' });
+          decideReview(f.t, f.r, 'approve'); answer(rid, { ok: true, next: (activeReviews()[0] || {}).r ? activeReviews()[0].r.id : null }); sync(); return;
+        }
+        case 'rvAmend': {
+          const f = findReview(String(ev.id));
+          if (!f || !isCD()) return answer(rid, { ok: false, error: 'Only the Creative Director can decide' });
+          if (f.r.state !== 'pending') return answer(rid, { ok: false, error: 'This request was already decided' });
+          const enc = (v) => esc(String(v || '').trim()).replace(/\n/g, '<br>');
+          const raw = ev.need && typeof ev.need === 'object' ? ev.need : null;
+          const need = raw ? Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, enc(v)])) : null;
+          if (need && !Object.keys(need).length) return answer(rid, { ok: false, error: 'Tick the files that need changes' });
+          if (!need && !String(ev.note || '').trim()) return answer(rid, { ok: false, error: 'Say what needs changing' });
+          decideReview(f.t, f.r, 'amend', enc(ev.note), need);
+          answer(rid, { ok: true, next: activeReviews()[0] ? activeReviews()[0].r.id : null }); sync(); return;
+        }
         case 'ovClaim': if (typeof Claims !== 'undefined' && Claims.byId(ev.id)) Claims.previewPdf(String(ev.id)); return;
         case 'pf': wantProfile = !!ev.on; sync(); return;
         case 'tr': wantTrash = !!ev.on; if (!ev.on) { ui.trashQ = ''; ui.trashFilter = 'all'; } sync(); return;
@@ -3467,5 +3523,5 @@ const NativeMe = (() => {
   const asking = () => on && shown;
   const ask = (a) => NativeMac.call('meAsk', a);
   function toastOut(msg, action, ms) { toastAction = action || null; call({ toast: { t: String(msg || ''), a: action ? action.label : '', ms: ms || (action ? 6000 : 3000) } }); }
-  return { sync, ask, asking, toast: toastOut, peek: () => model(), overview, claimsModel, expensesModel, get on() { return on; }, get shown() { return shown; }, get light() { return on; } };
+  return { sync, ask, asking, toast: toastOut, peek: () => model(), overview, claimsModel, expensesModel, reviewsModel, get on() { return on; }, get shown() { return shown; }, get light() { return on; } };
 })();
