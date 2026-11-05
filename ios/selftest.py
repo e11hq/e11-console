@@ -73,7 +73,7 @@ try:
     # 22: the startup screen is the app's own — there at once (icon, greeting, four rows), ticked by the page, gone before Home
     sg = res.get('splashGeo') or {}; stg = res.get('splashTickedGeo') or {}
     check('splash' in seen and sg.get('greet') and len(sg.get('rows') or []) == 4 and sg.get('iconLayers') == 14, f'the startup screen shows at once: icon, greeting, four rows {sg}')
-    check(stg.get('ticked') == 4 and stg.get('n') == '4/4' and all(v not in ('', '…') for v in (stg.get('values') or [''])), f'the page ticked all four rows with real numbers {stg}')
+    check(stg.get('ticked') == 4 and stg.get('n') == '4/4' and all(v not in ('', '…') for v in (stg.get('values') or [''])), f'all four rows ticked with real numbers (by the app from its copy — step 8 — or the page) {stg}')
     hn = res.get('homeNative') or {}
     check(hn.get('shown') is True and (hn.get('cards') or 0) > 0 and len(hn.get('stats') or []) == 3 and hn.get('title') in ('E11 Day', 'My Day'), f'Home is the app\'s own, with its boxes and task cards {hn}')
     hsc0 = res.get('homeScrolledNative') or {}

@@ -23,6 +23,7 @@ import { createViewCopies } from './viewcopy.js';
 import { createOffice } from './office.js';
 import { createApns } from './apns.js';
 import { createHolidaySync, DEFAULT_HOLIDAYS_URL } from './holidays.js';
+import { createAppStart } from './appstart.js';
 import zlib from 'node:zlib';
 import { sampleData } from './sample.js';
 import { freshSample } from './sample-fresh.js';
@@ -101,6 +102,7 @@ export function createServer(cfg) {
   if (cfg.occRemind !== false && webDir) occRemind.start();
   const widget = createWidget({ store, access, occRemind: webDir ? occRemind : null, now: cfg.now || (() => Date.now()) });
   const homeView = createHomeView({ webDir, now: cfg.now || (() => Date.now()) });
+  const appStart = createAppStart({ webDir: webDir || path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../web') });
   const homeOps = new Map();   // (the app's Home actions already done: their answers, for a retry)
   // Part B step 3: the iPhone app's actions on its own pages, straight to the server (no website in between) — each
   // group on its own switch: kv 'app-act-<group>' = 'off' sends the app back to the page for it
@@ -587,6 +589,12 @@ export function createServer(cfg) {
       // (Admins: whose account only its owner may change, so the Team page shows it locked)
       ownerId: access.isAdm(u) && cfg.adminEmail ? (access.userByEmail(cfg.adminEmail) || {}).id || null : null,
       viewAs: isTestSite && isOwner(req.realUser) ? { real: { id: req.realUser.id, name: req.realUser.name || req.realUser.email }, as: req.viewingAs ? { id: u.id, name: u.name || u.email, role: u.role } : null } : null });
+
+    // The iPhone app starting on its own (Part B step 8): signed in — who, and the startup screen's memo
+    if (p === '/api/app/start') {
+      try { return json(res, 200, { ok: true, ...appStart.start(u, store.get('meta', 'main') || {}, (cfg.now || Date.now)()), version, review: !!review }); }
+      catch (e) { return json(res, 500, { ok: false, error: e.message }); }
+    }
 
     // Test site, owner only: choose whom to view the app as (userId), or null to be yourself again
     if (p === '/api/view-as' && req.method === 'POST') {

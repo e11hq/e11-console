@@ -215,6 +215,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     showSplash()
     quickStart()
     loadHome()
+    // (Part B step 8: who's signed in, asked by the app itself — Boot.swift; the self-test's sign-in is set as the page
+    //  loads: asked once it has)
+    if SELFTEST.isEmpty { bootCheck() }
   }
   /* ---------- the quick start (iOS app data plan, step 3 — Haris, 2026-11-02): with this person's copy saved on the
      phone, the app opens on its own Home and tab bar at once, drawn from that copy; the website loads quietly behind,
@@ -270,13 +273,21 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     var t = max(0, icon - age)
     DispatchQueue.main.asyncAfter(deadline: .now() + t) { [weak self] in
       guard let self = self, self.splash === s, !s.leaving else { return }
-      if let l4 = last["label4"] as? String { s.command(["label4": l4]) }
+      var l4 = last["label4"] as? String
+      // (all four rows as they are now, from the copy — Part B step 8, app.js Splash values(); kept for next time)
+      if let r = AppData.shared.meModel("tasks", "startRows"), let l = r["list"] as? [String], l.count == 4 {
+        vals = l; l4 = r["label4"] as? String ?? l4
+        var keep = last; keep["vals"] = l; keep["label4"] = l4
+        if let d = try? JSONSerialization.data(withJSONObject: keep) { defaults.set(d, forKey: "e11_splash_last") }
+      }
       // (the Inbox's row: as it is now, from the copy)
-      if let m = AppData.shared.screen("inbox", "all").model, let n = m["unread"] as? Int { vals[2] = n > 0 ? "\(n > 99 ? "99+" : String(n)) new" : "all read" }
+      else if let m = AppData.shared.screen("inbox", "all").model, let n = m["unread"] as? Int { vals[2] = n > 0 ? "\(n > 99 ? "99+" : String(n)) new" : "all read" }
+      if let l4 = l4 { s.command(["label4": l4]) }
       for i in 0..<4 {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12 + 0.22 * Double(i)) { [weak self] in
           guard let self = self, self.splash === s, !s.leaving else { return }
           s.command(["tick": i, "value": vals[i], "n": i + 1])
+          if !SELFTEST.isEmpty, i == 3 { self.selfResult["splashTickedGeo"] = s.geo(); self.writeSelf("splashTicked") }
         }
       }
     }
@@ -301,7 +312,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     appStyle = s.light ? .light : .dark
     s.frame = view.bounds; s.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     s.onSkip = { [weak self] in self?.pageJS("window.__e11SplashSkip && window.__e11SplashSkip()") }
-    s.onRetry = { [weak self] in self?.pageJS("window.__e11SplashRetry && window.__e11SplashRetry()") }
+    s.onRetry = { [weak self] in self?.bootRetry() }
     view.addSubview(s)
     splash = s
     statusStyle = s.light ? .darkContent : .lightContent
@@ -873,7 +884,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     reviewLink.isHidden = !(webView.url?.host ?? "").hasSuffix(".cloudflareaccess.com")
     webView.hideKeyboardBar()
     if onServer { DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.syncBackground() } }
-    if onServer { shareSignIn() }
+    if onServer { shareSignIn(); bootPageArrived() }
     if onServer, !earlyJS.isEmpty { let js = earlyJS; earlyJS = []; DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { js.forEach { self.pageJS($0) } } }
     if onServer { tabCover = -1; view.setNeedsLayout(); flushPending(); if !SELFTEST.isEmpty && !started { started = true; DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.selfTest() } } }
     else { tabBar.isHidden = true; tabsHidden = true; view.setNeedsLayout(); splashGone(fast: true) }   // (the sign-in page: no tabs, no startup screen)
@@ -887,7 +898,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if e.domain == NSURLErrorDomain, offline.contains(e.code) { showOffline() }
   }
   func showOffline() {
-    splashGone(fast: true)
+    // (the startup screen up: it says so itself, with Try again — Part B step 8; the page underneath tries again)
+    if let s = splash, !s.leaving, !quickBooted { splashHeard = true; s.command(["status": "Can’t reach E11 Console — check your internet connection", "retry": true]) }
+    else { splashGone(fast: true) }
     if retrying { return }
     retrying = true
     pageReady = false
@@ -2517,7 +2530,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       ("ibxMentions", pause(2000) + "return '{}'", { self.inboxIfMade?.selfInboxTab("mentions") }),
       ("ibxAll", pause(2000) + "return '{}'", { self.inboxIfMade?.selfInboxTab("all") }),
       // 29: the morning round-up as iPhone's own sheet (the page's own sections, as the Inbox's round-up opens it)
-      ("daily", "if (typeof Daily !== 'undefined' && Daily.wants()) Daily.show(); " + pause(1500) + "return '{}'", nil),
+      ("daily", pause(1500) + "return '{}'", { _ = self.dailyNative() }),   // (the app's own round-up — step 8)
       ("dailyDone", "return '{}'", { self.presentedViewController?.dismiss(animated: false) }),
       ("inbox", pause(1500) + "return JSON.stringify({ view: ui.view })", {
         if let i = self.tabKeys.firstIndex(of: "inbox"), let item = self.tabBar.items?[i] { self.tabBar.selectedItem = item; self.tabBar(self.tabBar, didSelect: item) } }),

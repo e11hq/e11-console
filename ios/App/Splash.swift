@@ -17,6 +17,15 @@ final class SplashView: UIView {
   static func save(_ m: [String: Any]) {
     if let d = try? JSONSerialization.data(withJSONObject: m) { defaults.set(d, forKey: KEY) }
   }
+  // the greeting: the day's occasion, or the time of day; with the first name (an occasion that stands alone: without)
+  static func greeting(_ m: [String: Any]) -> String {
+    let today = (m["days"] as? [String: Any])?[SplashView.dayKey()] as? [String: Any]
+    let h = Calendar.current.component(.hour, from: Date())
+    let occ = (today?["g"] as? String) ?? ""
+    let part = !occ.isEmpty ? occ : h < 5 ? "Working late" : h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening"
+    let name = m["name"] as? String ?? ""
+    return !name.isEmpty && (today?["alone"] as? Bool) != true ? "\(part), \(name)" : part
+  }
   static func dayKey(_ d: Date = Date()) -> String {
     let f = DateFormatter(); f.calendar = Calendar(identifier: .gregorian); f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "yyyy-MM-dd"
     return f.string(from: d)
@@ -69,12 +78,7 @@ final class SplashView: UIView {
     L = light ? SplashView.lightLook : SplashView.dark
     super.init(frame: .zero)
     backgroundColor = L.bg
-    // the greeting: the day's occasion, or the time of day; with the first name (an occasion that stands alone: without)
-    let h = Calendar.current.component(.hour, from: Date())
-    let occ = (today?["g"] as? String) ?? ""
-    let part = !occ.isEmpty ? occ : h < 5 ? "Working late" : h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening"
-    let name = m["name"] as? String ?? ""
-    setGreeting(!name.isEmpty && (today?["alone"] as? Bool) != true ? "\(part), \(name)" : part)
+    setGreeting(SplashView.greeting(m))
     greet.textColor = L.text; greet.textAlignment = .center; greet.numberOfLines = 1; greet.adjustsFontSizeToFitWidth = true; greet.minimumScaleFactor = 0.7
     let df = DateFormatter(); df.setLocalizedDateFormatFromTemplate("EEEEMMMd")
     date.text = df.string(from: Date()); date.font = .systemFont(ofSize: 13.5); date.textColor = L.dim; date.textAlignment = .center
