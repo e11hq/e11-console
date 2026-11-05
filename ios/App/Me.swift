@@ -1198,7 +1198,7 @@ final class MeCtl {
   private func memberAct(_ id: String, _ act: [String: Any]) {
     if (act["open"] as? String) == "clients" { clientsMenu(id); return }
     var b = act; b["ev"] = "member"; b["id"] = id; b.removeValue(forKey: "ask")
-    let go = { [weak self] in self?.direct(b, or: ["ev": "member", "id": id]) { j in if (j["clients"] as? Bool) == true { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self?.clientsMenu(id) } } } }
+    let go: () -> Void = { [weak self] in self?.direct(b, or: ["ev": "member", "id": id]) { j in if (j["clients"] as? Bool) == true { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self?.clientsMenu(id) } } } }
     if let q = act["ask"] as? [String: Any] { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.confirm(q, go) } } else { go() }
   }
   // the clients a freelancer can see: each tick saved at once (the sheet stays open)
