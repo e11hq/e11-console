@@ -616,7 +616,7 @@ export function createServer(cfg) {
         viewAs: isTestSite && owner ? { real: { id: real.id, name: real.name || real.email }, as: req.viewingAs ? { id: u.id, name: u.name || u.email } : null } : null,
         sample: isTestSite && owner && !req.viewingAs,
       };
-      try { return json(res, 200, { ok: true, ...appStart.start(u, store.get('meta', 'main') || {}, (cfg.now || Date.now)()), ...me9, version, review: !!review }); }
+      try { return json(res, 200, { ok: true, ...appStart.start(u, store.get('meta', 'main') || {}, (cfg.now || Date.now)(), appIcon.info()), ...me9, version, review: !!review }); }
       catch (e) { return json(res, 500, { ok: false, error: e.message }); }
     }
 

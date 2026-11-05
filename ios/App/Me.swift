@@ -1857,7 +1857,7 @@ final class MeCtl {
       let work = ((model["work"] as? [[String: Any]]) ?? []).map { w -> SetItem in
         let k = w["k"] as? String ?? ""
         var it = SetItem(key: k, title: w["t"] as? String ?? "", sub: w["s"] as? String ?? "", sym: w["sym"] as? String, col: NativeSheetVC.color(w["col"]),
-                       tap: { [weak self] in guard let self = self else { return }; if k == "team" || k == "trash" || k == "plans" { self.open(k) } else { if k == "clients" { self.coverWait = Date() }; self.send(["ev": "nav", "to": k]) } })
+                       tap: { [weak self] in guard let self = self else { return }; if k == "team" || k == "trash" || k == "plans" { self.open(k) } else if k == "projects" { self.main.openClientsFromMe() } else { if k == "clients" { self.coverWait = Date() }; self.send(["ev": "nav", "to": k]) } })
         it.count = w["n"] as? Int ?? 0
         return it
       }

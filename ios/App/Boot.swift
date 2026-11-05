@@ -276,6 +276,12 @@ extension Main {
       popCommand(["kind": "greet", "title": b["title"] ?? "", "sub": b["sub"] ?? "", "person": b["person"] ?? [:]]) { _ in next() }
       return
     }
+    // (the season's greeting — Eid, National Day…: as the server worked it out at the start, once each on this phone)
+    if let g = startInfo["greet"] as? [String: Any], let key = g["key"] as? String, (startInfo["me"] as? String) == AppData.shared.me, defaults.string(forKey: "e11-hello") != key {
+      defaults.set(key, forKey: "e11-hello"); popBusy = true
+      popCommand(["kind": "greet", "title": g["title"] ?? "", "sub": g["sub"] ?? "", "pic": g["pic"] ?? "", "tile": g["tile"] ?? []]) { _ in next() }
+      return
+    }
     if let k = p["profileAsk"] as? String {
       popBusy = true; seen("profileAsked", today)
       popCommand(["kind": "profileAsk", "missing": k]) { _ in next() }

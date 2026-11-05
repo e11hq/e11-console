@@ -182,7 +182,7 @@ extension Main {
   // iPhone's swipe back from the left edge: the page follows the finger; let go, it goes the way it was going
   @objc func taskEdgePan(_ g: UIScreenEdgePanGestureRecognizer) {
     // (no task page: a client's page goes back to the list the same way — Haris 2026-11-02)
-    guard let p = taskPages.last else { if assetsCtl.isOpen { if assetsCtl.top?.backable == true { assetsCtl.edgePan(g) } } else if meCtl.isOpen { if meCtl.depth > 1 { meCtl.edgePan(g) } } else { clientEdgePan(g) }; return }
+    guard let p = taskPages.last else { if clientsListIfMade?.backFromMe == true, clientsListIfMade?.isHidden == false, clientPageIfMade?.isHidden != false { clientEdgePan(g) } else if assetsCtl.isOpen { if assetsCtl.top?.backable == true { assetsCtl.edgePan(g) } } else if meCtl.isOpen { if meCtl.depth > 1 { meCtl.edgePan(g) } } else { clientEdgePan(g) }; return }
     let W = view.bounds.width
     let x = max(0, g.translation(in: view).x)
     let under: UIView? = taskPages.count > 1 ? taskPages[taskPages.count - 2] : nil
@@ -241,9 +241,28 @@ extension Main {
       view.addGestureRecognizer(g)
       taskPan = g
     }
-    taskPan?.isEnabled = !taskPages.isEmpty || clientPageIfMade?.isHidden == false || (assetsCtl.isOpen && assetsCtl.top?.backable == true) || (meCtl.isOpen && meCtl.depth > 1)
+    taskPan?.isEnabled = !taskPages.isEmpty || clientPageIfMade?.isHidden == false || (clientsListIfMade?.backFromMe == true && clientsListIfMade?.isHidden == false) || (assetsCtl.isOpen && assetsCtl.top?.backable == true) || (meCtl.isOpen && meCtl.depth > 1)
+  }
+  private func clientsListPan(_ g: UIScreenEdgePanGestureRecognizer, _ l: HomeView) {
+    let W = view.bounds.width, x = max(0, g.translation(in: view).x)
+    switch g.state {
+    case .began: meCtl.reveal(); if let r = meCtl.top { view.insertSubview(l, aboveSubview: r); r.transform = CGAffineTransform(translationX: -W * 0.3, y: 0) }
+    case .changed: l.transform = CGAffineTransform(translationX: x, y: 0); meCtl.top?.transform = CGAffineTransform(translationX: -W * 0.3 * (1 - x / W), y: 0)
+    case .ended, .cancelled, .failed:
+      let v = g.velocity(in: view).x
+      if g.state == .ended && (v > 300 || (x > W * 0.4 && v > -200)) { UIImpactFeedbackGenerator(style: .light).impactOccurred(); clientsBackToMe(fromX: x) }
+      else {
+        let r = meCtl.top
+        UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState]) {
+          l.transform = .identity; r?.transform = CGAffineTransform(translationX: -W * 0.3, y: 0)
+        } completion: { _ in r?.transform = .identity; if l.backFromMe { self.meCtl.hide() } }
+      }
+    default: break
+    }
   }
   func clientEdgePan(_ g: UIScreenEdgePanGestureRecognizer) {
+    // (the Clients list over Me — the CD's: the swipe takes it back to Me)
+    if clientPageIfMade?.isHidden != false, let l = clientsListIfMade, l.backFromMe, !l.isHidden { clientsListPan(g, l); return }
     guard let p = clientPageIfMade, !p.isHidden, let l = clientUnder(), clientsWanted else { return }
     let W = view.bounds.width
     let x = max(0, g.translation(in: view).x)

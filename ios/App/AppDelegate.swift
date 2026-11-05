@@ -1273,6 +1273,12 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     shownTab = item.tag
     lastTabTap = (tabKeys[item.tag], Date())
     if again, tabKeys[item.tag] == "projects", clientsWanted, clientsBackToList() { return }
+    // (the Clients list over Me: Me again — back to Me; another tab — it goes, as Me's pages do)
+    if clientsListIfMade?.backFromMe == true {
+      if tabKeys[item.tag] == "me" { clientsBackToMe(); return }
+      if clientPageIfMade?.isHidden == false { clientPageIfMade?.isHidden = true }
+      clientsCommand(["show": false])
+    }
     // (offline — the website not there: the app's own lists from its copy; the page told the tab once it's there)
     if !again, offlineTab(tabKeys[item.tag]) {
       earlyJS.removeAll { $0.hasPrefix("window.__e11Tab ") }
@@ -1899,6 +1905,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       // (a client held: its sheet, the app's own — nothing for the website)
       if !page, (ev["ev"] as? String) == "clientHold", let id = ev["id"] as? String { self.clientSheet(id); return }
       if !page, (ev["ev"] as? String) == "addClient" { self.addClientSheet(); return }
+      if !page, (ev["ev"] as? String) == "back", self.clientsListIfMade?.backFromMe == true { self.clientsBackToMe(); return }
       if page, (ev["ev"] as? String) == "back" { self.clientPageOut() }
       // (a client's Client Assets — a folder, or See all: the app's own screens over its page, shell 32)
       if page, let k = ev["ev"] as? String, k == "folder" || k == "assets", let c = ev["client"] as? String {
@@ -1917,6 +1924,35 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if page, let l = clientsListIfMade { view.insertSubview(h, aboveSubview: l) } else { view.insertSubview(h, belowSubview: tabBar) }
     if page { clientPageIfMade = h } else { clientsListIfMade = h }
     return h
+  }
+  // the Clients list over Me (Me › Work › Clients — the CD has Reviews in its place in the tab bar; Haris 2026-11-05: the
+  // app's own list, sliding in over Me, ‹ and the edge swipe back to Me)
+  func openClientsFromMe() {
+    guard let me = AppData.shared.me ?? homePageMe else { return }
+    let l = clientsScreen(false)
+    let under = meCtl.top
+    l.backFromMe = true
+    clientsCommand(["show": true, "view": "list", "me": me, "light": appStyle == .light])
+    if let u = under { view.insertSubview(l, aboveSubview: u) }
+    let W = view.bounds.width
+    l.isHidden = false
+    l.transform = CGAffineTransform(translationX: W, y: 0)
+    UIView.animate(withDuration: 0.42, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
+      l.transform = .identity; under?.transform = CGAffineTransform(translationX: -W * 0.3, y: 0)
+    } completion: { _ in under?.transform = .identity; if l.backFromMe { self.meCtl.hide() }; self.edgePanOn(); self.updateCorner() }
+    updateCorner()
+  }
+  // ‹ / the edge swipe: back to Me, the list sliding out to the right
+  func clientsBackToMe(fromX: CGFloat = 0) {
+    guard let l = clientsListIfMade, l.backFromMe else { return }
+    let W = view.bounds.width
+    meCtl.reveal()
+    if let r = meCtl.top { view.insertSubview(l, aboveSubview: r); r.transform = CGAffineTransform(translationX: -W * 0.3 * (1 - fromX / W), y: 0) }
+    let r = meCtl.top
+    UIView.animate(withDuration: 0.36, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
+      l.transform = CGAffineTransform(translationX: W, y: 0); r?.transform = .identity
+    } completion: { _ in l.backFromMe = false; self.clientsCommand(["show": false]); l.transform = .identity; self.edgePanOn(); self.updateCorner() }
+    updateCorner()
   }
   // a client's page going (‹, or the list asked for): it slides back out to the right, the list coming back under it
   func clientPageOut() {
@@ -2065,7 +2101,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   func clientsCommand(_ a: [String: Any]) {
     defer { updateCorner() }
     guard let show = a["show"] as? Bool else { return }
-    if !show { clientsWanted = false; clientsListIfMade?.isHidden = true; if !clientLeaving { clientPageIfMade?.isHidden = true }; assetsCtl.closeIfFromClients(); edgePanOn(); return }
+    if !show { clientsWanted = false; clientsListIfMade?.backFromMe = false; clientsListIfMade?.isHidden = true; if !clientLeaving { clientPageIfMade?.isHidden = true }; assetsCtl.closeIfFromClients(); edgePanOn(); return }
     if !clientsWanted { clientsListIfMade?.clientsFresh() }   // (the tab coming back: Inactive clients closed again)
     clientsWanted = true
     clientsPageMe = a["me"] as? String

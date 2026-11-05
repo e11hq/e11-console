@@ -663,7 +663,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // (its own name: "done" is a card's tick, which the app does itself — the toggle went nowhere, Haris 2026-11-02)
   private lazy var tasksHead: TasksHead = { let t = TasksHead(); t.onToggle = { [weak self] in self?.send(["ev": "showDone"]) }; return t }()
   // ‹ on a client's page: where it is (the shared top buttons' row, at the page's left edge) and its tap
-  var backable: Bool { isClient || (assets != nil && assetsBack) }
+  var backable: Bool { isClient || (assets != nil && assetsBack) || (isClients && backFromMe) }
+  var backFromMe = false   // (the Clients list opened from Me › Work — the CD's: ‹ back to Me, Haris 2026-11-05)
   // a client's page has the task page's header (Haris 2026-11-02, "b"): ‹ · its logo and name in the middle · •••
   private lazy var barTitle: UIStackView = {
     // (name, and a line under it on Client Assets: "6 folders · 48 files", a folder's client)

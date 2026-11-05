@@ -17,7 +17,7 @@ const hm = (d) => { const x = new Date(d.getTime() + 4 * 3600000); return `${pad
 
 export function createAppStart({ webDir }) {
   // the page's own code for both, read from its files (as server/src/holidays.js does with Occasions)
-  let occSrc = null, sunFn = null, at = '';
+  let occSrc = null, sunFn = null, at = '', seasons = null, when = null, greetOf = null;
   function load() {
     const cal = path.join(webDir, 'calendar.js'), app = path.join(webDir, 'app.js');
     const stamp = `${fs.statSync(cal).mtimeMs}|${fs.statSync(app).mtimeMs}`;
@@ -27,12 +27,40 @@ export function createAppStart({ webDir }) {
     const i = a.indexOf('function sunTimesDubai('), j = a.indexOf('function sunTheme(', i);
     if (i < 0 || j < 0) throw new Error('sunTimesDubai not found in app.js');
     sunFn = vm.runInNewContext(`${a.slice(i, j)}; sunTimesDubai`, { Date, Math });
+    // (the season greeting, step 9: app.js SEASON_WHEN and OccasionHello's GREET, web/icon-seasons.js E11_SEASONS)
+    try {
+      const w0 = a.indexOf('const SEASON_WHEN = {'), w1 = a.indexOf('};', w0);
+      when = vm.runInNewContext(`(${a.slice(w0 + 'const SEASON_WHEN = '.length, w1 + 1)})`, {});
+      const g0 = a.indexOf('const GREET = {', a.indexOf('const OccasionHello')), g1 = a.indexOf('};', g0);
+      greetOf = vm.runInNewContext(`(${a.slice(g0 + 'const GREET = '.length, g1 + 1)})`, {});
+      const win = {}; vm.runInNewContext(fs.readFileSync(path.join(webDir, 'icon-seasons.js'), 'utf8'), { window: win });
+      seasons = win.E11_SEASONS || null;
+    } catch { when = greetOf = seasons = null; }
     at = stamp;
   }
   const occasions = (meta) => vm.runInNewContext(`${occSrc}; Occasions`, { db: { meta }, Intl, Date, Math, Number, String, Object, Array, JSON, parseInt });
 
   // u: the person signed in (as the app sees them — View as… included); meta: the shared settings; now: ms
-  function start(u, meta, now = Date.now()) {
+  // the season greeting this start shows (app.js OccasionHello.due): the icon on Automatic — the season whose day is
+  // today; a picked seasonal icon — that one (once a pick). key: the app shows each once.
+  function greetFor(O, today, icon) {
+    if (!seasons || !when) return null;
+    let sid = null, key = null;
+    if (!icon || icon.auto) {
+      const y = Number(today.slice(0, 4));
+      const occ = O.between(`${y}-01-01`, `${y}-12-31`);
+      for (const [s, w] of Object.entries(when)) {
+        if (!seasons[s]) continue;
+        if (w[0] === 'md' ? today.slice(5) === w[1] : occ.some((o) => o.key === w[1] && o.date === today)) { sid = s; break; }
+      }
+      if (sid) key = today + ':' + sid;
+    } else if (icon.preset && seasons[icon.preset]) { sid = icon.preset; key = 'pick:' + icon.v; }
+    if (!sid) return null;
+    const S = seasons[sid];
+    return { sid, key, title: (greetOf && greetOf[sid]) || S.name, sub: S.name + ' · from all of us at E11', pic: `icons/seasonal/${sid}.png`, tile: S.tile };
+  }
+
+  function start(u, meta, now = Date.now(), icon = null) {
     load();
     const O = occasions(meta || {});
     const today = dubaiDay(now);
@@ -47,7 +75,8 @@ export function createAppStart({ webDir }) {
     const cdU = meta && meta.cdUserId;
     const cd = !!cdU && cdU === u.id;
     const name = String(u.name || String(u.email || '').split('@')[0] || '').trim().split(/\s+/)[0] || '';
-    return { me: u.id, name, cd, label4: cd ? 'Review requests' : 'Client Assets', days };
+    let greet = null; try { greet = greetFor(O, today, icon); } catch { greet = null; }
+    return { me: u.id, name, cd, label4: cd ? 'Review requests' : 'Client Assets', days, greet };
   }
   return { start };
 }
