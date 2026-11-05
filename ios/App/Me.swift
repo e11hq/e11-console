@@ -1550,9 +1550,13 @@ final class MeCtl {
     let r = CGRect(x: 0, y: y0, width: W, height: H - y0)
     // (each side drawn into a picture there and then — iPhone's snapshot views are only filled in at the next screen
     //  update, by which time the list had already changed: the new list slid in over itself, twice — Haris 2026-11-05)
+    // (only the list itself — the page's floating buttons (+ Add…, search, NOT JUST ANY AGENCY) stay where they are, over
+    //  the slide: drawn into the pictures too, they slid as copies beside the real ones — Haris 2026-11-05)
+    let list: UIView = h.subviews.first(where: { $0 is UIScrollView }) ?? h
     let shot = { (after: Bool) -> UIImageView in
       let f = UIGraphicsImageRendererFormat.preferred(); f.opaque = false
-      let img = UIGraphicsImageRenderer(size: r.size, format: f).image { _ in h.drawHierarchy(in: CGRect(x: -r.minX, y: -r.minY, width: W, height: H), afterScreenUpdates: after) }
+      let at = list === h ? CGRect(x: -r.minX, y: -r.minY, width: W, height: H) : CGRect(x: list.frame.minX - r.minX, y: list.frame.minY - r.minY, width: list.bounds.width, height: list.bounds.height)
+      let img = UIGraphicsImageRenderer(size: r.size, format: f).image { _ in list.drawHierarchy(in: at, afterScreenUpdates: after) }
       return UIImageView(image: img)
     }
     guard h.window != nil, r.height > 0, r.width > 0 else {
