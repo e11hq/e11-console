@@ -105,7 +105,8 @@ final class AppData: NSObject, URLSessionDataDelegate {
     let group = DispatchGroup()
     for f in AppData.files {
       group.enter()
-      raw("/\(f)?n=\(Int(Date().timeIntervalSince1970))")   // (never a copy kept on the way for the hour — the hour's first one could be from before a server update: Overview kept "AED", Haris 2026-11-05) { s in if let s = s, s.contains("E11") { got[f] = s }; group.leave() }
+      // (never a copy kept on the way for the hour — the hour's first one could be from before a server update: Overview kept "AED", Haris 2026-11-05)
+      raw("/\(f)?n=\(Int(Date().timeIntervalSince1970))") { s in if let s = s, s.contains("E11") { got[f] = s }; group.leave() }
     }
     group.notify(queue: q) { [weak self] in
       guard let self = self else { return }
