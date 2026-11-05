@@ -149,6 +149,15 @@ final class CornerButton: UIView {
   }
   required init?(coder: NSCoder) { fatalError() }
   override func layoutSubviews() { super.layoutSubviews(); host.view.frame = bounds }
+  /* the app's own light / dark (Haris 2026-11-05: Inbox's Mark all read stayed in the look it was made in): the glass
+     is SwiftUI in a hosting controller that isn't a child of any screen, so it never heard the window's look change —
+     this strip (a plain view in the window) hears it and hands it on */
+  private func followLook() {
+    let s = traitCollection.userInterfaceStyle
+    if s != .unspecified, host.overrideUserInterfaceStyle != s { host.overrideUserInterfaceStyle = s }
+  }
+  override func didMoveToWindow() { super.didMoveToWindow(); followLook() }
+  override func traitCollectionDidChange(_ previous: UITraitCollection?) { super.traitCollectionDidChange(previous); followLook() }
   // only the buttons take touches; the rest of the strip lets them through to the screen
   override func hitTest(_ p: CGPoint, with e: UIEvent?) -> UIView? {
     for s in [corner, mid, left] where s.kind != "none" && s.frame.insetBy(dx: -4, dy: -4).contains(p) { return super.hitTest(p, with: e) }

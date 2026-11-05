@@ -67,13 +67,27 @@ extension Main {
     taskPan?.isEnabled = true
     // (opened straight on Comments — a comment's notification or Inbox row: the comments drawn now, from the app's copy,
     //  so they slide in with the page — they came only once it had arrived, a black page meanwhile: Haris 2026-11-05)
-    if p.tab == "comments", !defaults.bool(forKey: "e11_feed_off") { prepFeed(p) }
-    // in from the right, the screen under it moving a little to the left and darkening (as iPhone's own push)
     let W = view.bounds.width
+    // (and the comment box with them: it slides in with the page, ready at once — it only came once the page had
+    //  arrived, so from the Inbox the box and its keyboard felt slow: Haris 2026-11-05)
+    var boxWith: UIView? = nil
+    if p.tab == "comments", !defaults.bool(forKey: "e11_feed_off") {
+      prepFeed(p)
+      let c = compose
+      UIView.performWithoutAnimation {
+        c.switchTo(task: p.taskId, parent: nil)
+        self.view.insertSubview(c, aboveSubview: p)
+        c.alpha = 1; c.isHidden = false
+        c.transform = CGAffineTransform(translationX: W, y: 0)
+      }
+      boxWith = c
+    }
+    // in from the right, the screen under it moving a little to the left and darkening (as iPhone's own push)
     p.transform = CGAffineTransform(translationX: W, y: 0)
     shadow(p, on: true)
     UIView.animate(withDuration: 0.42, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
       p.transform = .identity
+      boxWith?.transform = .identity
       self.underViews(below: p, under: under).forEach { $0.transform = CGAffineTransform(translationX: -W * 0.3, y: 0) }
       self.tabBar.alpha = 0
     } completion: { _ in
@@ -551,6 +565,7 @@ extension Main {
     p.commentsHost.addSubview(f)
     f.frame = p.commentsHost.bounds
     p.bringSubviewToFront(p.commentsHost); p.bringSubviewToFront(p.barBoxView)
+    p.edgeScroll(f.scroll)   // (the bar's frost asks this list at once, not once the page has arrived)
     f.load()
   }
   private func makeFeed(_ p: TaskPage, thread: String?) -> CommentsFeed {

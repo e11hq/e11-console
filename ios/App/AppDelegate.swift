@@ -1080,6 +1080,17 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     return f.date(from: s) ?? ISO8601DateFormatter().date(from: s)
   }
+  // the bar drawn again as it is — on the tab that's showing now, never the one the last drawing had on (coming back
+  // from another app it went to Home: Haris 2026-11-05)
+  func redrawTabs() {
+    guard var a = lastTabs else { return }
+    let cur = selectedTabKey
+    if !cur.isEmpty, var list = a["tabs"] as? [[String: Any]], list.contains(where: { ($0["v"] as? String) == cur }) {
+      for i in list.indices { list[i]["on"] = (list[i]["v"] as? String) == cur }
+      a["tabs"] = list
+    }
+    setTabs(a)
+  }
   func refreshOwnTabs() { if let own = ownTabs(nil) { setTabs(own) } }
   private func ownTabs(_ moved: String?) -> [String: Any]? {
     guard AppData.shared.tabsOn, AppData.shared.ready, pagePerson == nil || pagePerson == AppData.shared.me, let m = AppData.shared.screen("tabs").model,
@@ -1105,6 +1116,13 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       meWatched = true
       MePhoto.shared.fetch = { [weak self] u, done in self?.fetchPhoto(u, done) }
       MePhoto.shared.watch { [weak self] in self?.paintMeTab() }
+    }
+    // (the bar in the app's own look before anything is drawn: without the website nobody said it at the start, so the
+    //  bar kept iPhone's blue and its badged icons were baked in the phone's look — dark on dark after coming back from
+    //  another app, Haris 2026-11-05)
+    let ink: UIColor = appStyle == .dark ? .white : .black
+    if tabBar.overrideUserInterfaceStyle != appStyle || tabBar.tintColor != ink || tabBar.unselectedItemTintColor != ink {
+      tabBar.overrideUserInterfaceStyle = appStyle; tabBar.tintColor = ink; tabBar.unselectedItemTintColor = ink; tabBadgeKey = [:]
     }
     let list = a["tabs"] as? [[String: Any]] ?? []
     let keys = list.map { $0["v"] as? String ?? "" }
@@ -1142,7 +1160,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
           tabBadgeKey[i] = key
           if b.isEmpty { item.image = UIImage(systemName: symbol(v)); item.selectedImage = nil }
           else {
-            item.image = badged(symbol(v), b, color: tabBar.unselectedItemTintColor ?? .label)
+            item.image = badged(symbol(v), b, color: tabBar.unselectedItemTintColor ?? ink)
             item.selectedImage = badged(symbol(v), b, color: tabBar.tintColor ?? .systemBlue)
           }
         }
@@ -1180,7 +1198,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       DispatchQueue.main.async {
         guard let self = self else { return }
         let up = path.status == .satisfied
-        if up != self.netUp { self.netUp = up; if let t = self.lastTabs { self.setTabs(t) } }
+        if up != self.netUp { self.netUp = up; self.redrawTabs() }
         if up { self.serverHome.send(); self.myTasksWaiting()?.send(); self.inboxWaiting()?.send() }   // (anything waiting goes now)
       }
     }
@@ -1211,7 +1229,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   override func traitCollectionDidChange(_ previous: UITraitCollection?) {
     super.traitCollectionDidChange(previous)
-    if previous?.userInterfaceStyle != traitCollection.userInterfaceStyle, let a = lastTabs { tabBadgeKey = [:]; setTabs(a) }
+    if previous?.userInterfaceStyle != traitCollection.userInterfaceStyle, lastTabs != nil { tabBadgeKey = [:]; redrawTabs() }
   }
   // a picture from our server, with the page's sign-in (its cookies)
   func fetchPhoto(_ url: URL, _ done: @escaping (UIImage?) -> Void) {
@@ -2378,7 +2396,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         tabBar.tintColor = ink
         tabBar.unselectedItemTintColor = ink
         tabBadgeKey = [:]
-        if let t = lastTabs { setTabs(t) }
+        redrawTabs()
       }
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { self.syncBackground() }
       done(["ok": true])
