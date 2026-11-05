@@ -213,7 +213,15 @@ final class AppData: NSObject, URLSessionDataDelegate {
     get { me.flatMap { UserDefaults.standard.string(forKey: "app-copy-access-\($0)") } }
     set { if let me = me { UserDefaults.standard.set(newValue, forKey: "app-copy-access-\(me)") } }
   }
-  private func wake() { q.async { self.inBackground = false; if self.started && self.stream == nil { self.backoff = 2; self.openStream() } } }
+  private func wake() {
+    q.async { self.inBackground = false; if self.started && self.stream == nil { self.backoff = 2; self.openStream() } }
+    // (back in the app: the website's files again — a server update since, and the screens worked out by the new ones at
+    //  once, not only after the app is closed and opened again: Overview still said "AED" — Haris 2026-11-05)
+    guard started, ctx != nil, Date().timeIntervalSince(scriptsAt) > 60 else { return }
+    scriptsAt = Date()
+    fetchScripts { [weak self] in self?.changed() }
+  }
+  private var scriptsAt = Date()
   private func sleep() { q.async { self.inBackground = true }; saveNow(); stopStream() }
 
   // ---------- keeping it ----------
