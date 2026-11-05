@@ -4166,64 +4166,28 @@ final class DateSheetVC: UIViewController, UISheetPresentationControllerDelegate
     super.viewDidAppear(animated)
     if let m = startMonth { startMonth = nil; cal.setVisibleDateComponents(m, animated: false) }
   }
+  /* one height for every month (Haris 2026-11-05: the sheet grew and shrank with each month's 5 or 6 week rows, and
+     resizing it under the calendar threw it a month or two on — January → March, March → June). Sized once to the
+     calendar as iPhone lays it out, with room for six rows like iPhone's own; then never changed while it's open. */
   private var fitHeight: CGFloat = 470, sized = false
-  private var fullH: CGFloat = 0, rowH: CGFloat = 0
-  // how many week rows a month takes (5 or 6, sometimes 4): the sheet fits them, so no empty row under a short month
-  // (iPhone's calendar keeps room for six — Haris, 2026-11-01)
-  private func rows(_ dc: DateComponents) -> Int {
-    guard let y = dc.year, let m = dc.month, let first = gregorian.date(from: DateComponents(year: y, month: m, day: 1)),
-          let days = gregorian.range(of: .day, in: .month, for: first)?.count else { return 6 }
-    let lead = (gregorian.component(.weekday, from: first) - gregorian.firstWeekday + 7) % 7
-    return Int(ceil(Double(lead + days) / 7))
-  }
-  // one week row's height, as the calendar draws it (from its day cells); nil → an estimate
-  private func measuredRow() -> CGFloat? {
-    func find(_ v: UIView) -> UICollectionView? { if let c = v as? UICollectionView { return c }; for s in v.subviews { if let c = find(s) { return c } }; return nil }
-    guard let cv = find(cal) else { return nil }
-    let ys = Set(cv.visibleCells.filter { $0.bounds.height > 20 }.map { round(cv.convert($0.frame, to: cal).minY) }).sorted()
-    guard ys.count >= 3 else { return nil }
-    let steps = zip(ys.dropFirst(), ys).map { $0 - $1 }.filter { $0 > 20 }.sorted()
-    return steps.isEmpty ? nil : steps[steps.count / 2]
-  }
-  private func fit(animated: Bool) {
-    guard fullH > 0 else { return }
+  private func fit() {
     let floating: Bool; if #available(iOS 26, *) { floating = true } else { floating = false }
     let strip = presentingViewController?.view.window?.safeAreaInsets.bottom ?? view.window?.safeAreaInsets.bottom ?? 0
-    let calH = fullH - CGFloat(max(0, 6 - rows(cal.visibleDateComponents))) * rowH
-    let h = max(320, cal.frame.minY + calH + NativeSheetVC.END + 18 - (floating ? strip : 0) + (floating ? 0 : view.safeAreaInsets.bottom))
+    let h = max(320, cal.frame.maxY + NativeSheetVC.END + 18 - (floating ? strip : 0) + (floating ? 0 : view.safeAreaInsets.bottom))
     guard abs(h - fitHeight) > 0.5 else { return }
     fitHeight = h
     DispatchQueue.main.async { [weak self] in
       guard let sh = self?.sheetPresentationController else { return }
-      if animated { sh.animateChanges { sh.invalidateDetents() } } else { sh.invalidateDetents() }
+      sh.animateChanges { sh.invalidateDetents() }
     }
   }
-  // another month: the sheet grows or shrinks to its rows
-  // (only once the swipe has settled: the sheet resizing while the months still slide threw the calendar a month on)
-  func calendarView(_ calendarView: UICalendarView, didChangeVisibleDateComponentsFrom previousDateComponents: DateComponents) { fitWhenStill(0) }
-  private func fitWhenStill(_ n: Int) {
-    func find(_ v: UIView) -> UIScrollView? { if let c = v as? UIScrollView, c.isScrollEnabled { return c }; for s in v.subviews { if let c = find(s) { return c } }; return nil }
-    if n < 40, let sv = find(cal), sv.isDragging || sv.isDecelerating || sv.isTracking {
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.fitWhenStill(n + 1) }
-      return
-    }
-    fit(animated: true)
-  }
-  // sized to the calendar once, from where it was laid out — measuring it again inside the layout (and resizing the sheet
-  // from there) sent iOS 27's calendar round in circles until the app crashed (TestFlight report, build 1195: the date
-  // sheet from Home's Due)
+  // (sized from where it was first laid out — measuring it again inside the layout and resizing from there sent iOS 27's
+  //  calendar round in circles until the app crashed: TestFlight report, build 1195)
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
     guard !sized, view.bounds.width > 0, cal.frame.minY > 0, cal.frame.height > 100 else { return }
     sized = true
-    fullH = cal.frame.height
-    // (the row is read a moment later, once the calendar has drawn its days; until then an estimate)
-    rowH = cal.frame.width / 5
-    fit(animated: true)
-    DispatchQueue.main.async { [weak self] in
-      guard let self = self, let r = self.measuredRow(), r > 20, r < 140 else { return }
-      self.rowH = r; self.fit(animated: true)
-    }
+    fit()
   }
   private func finish(_ r: [String: Any]) {
     guard let a = answer else { return }
