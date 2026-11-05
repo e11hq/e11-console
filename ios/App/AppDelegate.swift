@@ -1214,6 +1214,10 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   // a picture from our server, with the page's sign-in (its cookies)
   func fetchPhoto(_ url: URL, _ done: @escaping (UIImage?) -> Void) {
+    // (people's photos kept on the phone too — after the app restarts or updates they're there at once: Haris 2026-11-05;
+    //  a new photo has a new address, so an old one is never shown for it)
+    let key = "ph:" + url.absoluteString
+    if let d = DiskPics.get(key), let img = UIImage(data: d) { return done(img) }
     web.configuration.websiteDataStore.httpCookieStore.getAllCookies { cookies in
       var req = URLRequest(url: url)
       let mine = cookies.filter { url.host?.hasSuffix($0.domain.hasPrefix(".") ? String($0.domain.dropFirst()) : $0.domain) == true }
@@ -1221,6 +1225,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       URLSession.shared.dataTask(with: req) { data, resp, _ in
         let ok = (resp as? HTTPURLResponse)?.statusCode == 200
         let img = ok ? data.flatMap { UIImage(data: $0) } : nil
+        if img != nil, let d = data { DiskPics.put(key, d) }
         DispatchQueue.main.async { done(img) }
       }.resume()
     }

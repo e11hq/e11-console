@@ -23,12 +23,15 @@ enum PreviewLoad {
   static func data(_ s: String, _ done: @escaping (Data?) -> Void) {
     guard let url = URL(string: s) else { return done(nil) }
     if let d = cache.object(forKey: s as NSString) { return done(d as Data) }
+    // (kept on the phone too, up to 25 MB a file — opened again after the app restarts or updates, it's there at once:
+    //  Haris 2026-11-05)
+    if let d = DiskPics.get("pv:" + s) { cache.setObject(d as NSData, forKey: s as NSString); return done(d) }
     var r = URLRequest(url: url)
     r.allHTTPHeaderFields = headers(url)
     URLSession.shared.dataTask(with: r) { data, resp, _ in
       let ok = ((resp as? HTTPURLResponse)?.statusCode ?? 0) / 100 == 2
       let d = ok ? data : nil
-      if let d { cache.setObject(d as NSData, forKey: s as NSString) }
+      if let d { cache.setObject(d as NSData, forKey: s as NSString); if d.count <= 25_000_000 { DiskPics.put("pv:" + s, d) } }
       DispatchQueue.main.async { done(d) }
     }.resume()
   }
