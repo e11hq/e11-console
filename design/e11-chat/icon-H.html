@@ -1,0 +1,10 @@
+<!doctype html><html><body style="margin:0;background:transparent">
+<svg id="s" viewBox="0 0 1024 1024" width="1024" height="1024" xmlns="http://www.w3.org/2000/svg"></svg>
+<script>
+const BUB='M512 170 C 760 170 900 320 900 495 C 900 670 760 820 512 820 C 452 820 396 811 346 795 L 196 860 C 182 866 168 852 175 838 L 230 726 C 160 666 124 584 124 495 C 124 320 264 170 512 170 Z';
+document.getElementById('s').innerHTML=`<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e9eef8"/></linearGradient>
+<linearGradient id="bb" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4fa8ff"/><stop offset="1" stop-color="#2347e0"/></linearGradient>
+<filter id="sh" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#1f3fa0" flood-opacity=".28"/></filter></defs>
+<rect width="1024" height="1024" fill="url(#bg)"/><path d="${BUB}" fill="url(#bb)" filter="url(#sh)"/>
+<image href="e11-letters-white.png" x="307" y="395" width="410" height="214" preserveAspectRatio="none"/>`;
+</script></body></html>
