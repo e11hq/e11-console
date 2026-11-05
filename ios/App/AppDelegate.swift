@@ -1947,6 +1947,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         self.clientsOn = "client"
         self.serverClients.query = "view=client&id=\(id.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "")&done=0"
         self.serverClients.refresh()
+        if !self.pageReady { return }   // (no website to tell)
       }
       self.pageJS("window.__e11Clients && window.__e11Clients(\(jsonString(ev)))")
     }

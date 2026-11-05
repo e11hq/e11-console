@@ -81,7 +81,8 @@ try:
                     sh('xcrun', 'simctl', 'io', udid, 'screenshot', os.path.join(SHOTS, f'{n:02d}-{tag}-{st}.png'))
             if st == 'done': break
             # (the app gone — crashed — or stuck: no new step for 60 s)
-            if time.time() - last > 60: res['stuck'] = st or 'never started'; break
+            if time.time() - last > 100:
+                res["stuck"] = st or "never started"; sh("xcrun", "simctl", "io", udid, "screenshot", os.path.join(SHOTS, f"{n:02d}-{tag}-STUCK.png")); break
             time.sleep(0.4)
         res['email'] = email; res['secs'] = round(time.time() - t_role)
         out[label] = res

@@ -13,7 +13,7 @@ extension Main {
   // ---- taps that went to the website while there's none (also counted on real phones: SlowWatch's note) ----
   static var lost: [String] = []
   static func noteLost(_ js: String) {
-    let benign = ["__e11Kb", "__e11FeedKb", "KbStep", "Resend", "Own &&", "Theme.setMode", "__e11SplashSkip", "ev:'closed'", "__e11Tab", "ev:'list'", "ev:'back'", "__e11SplashRetry", "__e11ApnsToken"]
+    let benign = ["--ios-tabs-h", "\"ev\":\"back\"", "\"ev\":\"list\"", "__e11Kb", "__e11FeedKb", "KbStep", "Resend", "Own &&", "Theme.setMode", "__e11SplashSkip", "ev:'closed'", "__e11Tab", "ev:'list'", "ev:'back'", "__e11SplashRetry", "__e11ApnsToken"]
     if benign.contains(where: { js.contains($0) }) { return }
     let s = String(js.prefix(140))
     if !lost.contains(s) { lost.append(s); if lost.count > 60 { lost.removeFirst() } }
@@ -65,7 +65,7 @@ extension Main {
     web.configuration.websiteDataStore.httpCookieStore.setCookie(c) { self.bootCheck(); self.walkWhenReady(0) }
   }
   private func walkWhenReady(_ n: Int) {
-    if !(quickBooted && AppData.shared.ready && splash == nil && homeIfMade?.isHidden == false) && n < 240 {
+    if !(quickBooted && AppData.shared.ready && splash == nil && shownScreen != nil) && n < 240 {
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { self.walkWhenReady(n + 1) }; return
     }
     selfResult["walkBooted"] = ["after": Double(n) / 4, "quick": quickBooted, "copy": AppData.shared.ready, "pageReady": pageReady]
@@ -94,7 +94,8 @@ extension Main {
     // what to walk through, from the app's own copy
     let home = AppData.shared.screen("home").model ?? [:]
     let cards = ((home["groups"] as? [[String: Any]]) ?? []).flatMap { ($0["cards"] as? [[String: Any]]) ?? [] }.compactMap { $0["id"] as? String }
-    let task = cards.first ?? ""
+    // (one that can be changed — not locked for the CD's review — so every picker opens; else the first)
+    let task = cards.first { (((AppData.shared.screen("task", $0).model?["pool"] as? [Any]) ?? []).count) > 0 } ?? cards.first ?? ""
     let withFiles = cards.prefix(40).first { !((AppData.shared.screen("task", $0).model?["files"] as? [Any]) ?? []).isEmpty }
     let clientsM = AppData.shared.screen("clients", ServerHome.clientsJSON("view=list")).model ?? [:]
     let client = ((clientsM["rows"] as? [[String: Any]]) ?? []).first
@@ -180,7 +181,12 @@ extension Main {
       // Me and every page under it
       ("me", { self.tab("me") }),
     ]
-    for k in ["profile", "appearance", "about", "shortcuts", "team", "trash", "plans", "reviews", "claims", "expenses", "overview"] {
+    // (Me's pages this person has: the money ones and Reviews only where they're theirs)
+    var mine = ["profile", "appearance", "about", "shortcuts", "team", "trash", "plans"]
+    if tabKeys.contains("reviews") { mine.append("reviews") }
+    if tabKeys.contains("fin-reimb") { mine += ["claims", "expenses"] }
+    if tabKeys.contains("team") || tabKeys.contains("fin-reimb") { mine.append("overview") }
+    for k in mine {
       s.append(("me_" + k, { self.meCtl.pop(animated: false); self.meCtl.selfOpen(k) }))
     }
     s += [

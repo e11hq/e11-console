@@ -213,6 +213,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     fc.baseForegroundColor = .label
     fab.configuration = fc
     fab.accessibilityLabel = "New task"
+    fab.isHidden = true   // (until the screen's model says this person may add — it showed for a freelancer, who can't: the walk-through)
     fab.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); if let a = self?.fabRun { a() } else { self?.send(["ev": "add"]) } }, for: .touchUpInside)
     addSubview(fab)
     var f2: UIButton.Configuration

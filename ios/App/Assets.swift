@@ -463,6 +463,13 @@ final class AssetsCtl {
         done(["ok": true]); return
       }
     }
+    // (no website and nothing in the copy for it — a client whose Client Assets aren't there for this person: said, and
+    //  its empty screen taken away, not left on Loading… — the walk-through, 2026-11-05)
+    if !main.pageReady, (ev["ev"] as? String) == "want" {
+      done(["ok": false, "error": "These files aren’t here"])
+      if let c = ev["client"] as? String, models[c] == nil, top != nil, stack.last?.client == c { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.pop() } }
+      return
+    }
     let rid = UUID().uuidString
     var e = ev; e["rid"] = rid
     pending[rid] = done
@@ -622,10 +629,11 @@ final class AssetsCtl {
       if self.stack.isEmpty { self.base = nil }
       if self.stack.isEmpty && self.fromPage {
         self.fromPage = false; self.main.pageJS("window.__e11Assets && window.__e11Assets({ev:'back'})")
-        // (without the website — step 9: back to Me, as the page would have shown it)
-        if !self.main.pageReady, self.main.selectedTabKey == "me" { self.main.meCtl.reveal() }
       }
       else if let t = self.stack.last { self.refreshScreen(t) }
+      // (without the website — step 9: emptied on the Me tab, Me again — however it was opened; the walk-through found a
+      //  black screen after Client Assets opened from Me went back to nothing, 2026-11-05)
+      if self.stack.isEmpty, !self.main.pageReady, self.main.selectedTabKey == "me" { self.main.meCtl.reveal() }
       self.main.edgePanOn(); self.main.updateCorner()
     }
     if animated {
