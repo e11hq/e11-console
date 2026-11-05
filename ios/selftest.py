@@ -145,7 +145,9 @@ try:
     check(mb.get('kind') == 'me' and mb.get('screens') == 1, f"‹ back to Me {mb}")
     check((res.get('client') or {}).get('wide') is False, f"Client Assets folder fits the screen {res.get('client')}")
     ca = res.get('clientAssets') or {}
-    check(ca.get('open') is True and ca.get('kind') == 'folder' and (ca.get('screens') or 0) >= 2 and (ca.get('parts') or 0) >= 1 and ca.get('shown') is True, f"a Client Assets folder opens as the app's own screens (the client's, then the folder) {ca}")
+    # (opened from the page — a link, an Inbox update, a client's page — just that folder, so ‹ goes back where you came from:
+    #  Haris 2026-11-04; it was the client's screen, then the folder, before)
+    check(ca.get('open') is True and ca.get('kind') == 'folder' and (ca.get('screens') or 0) >= 1 and (ca.get('parts') or 0) >= 1 and ca.get('shown') is True, f"a Client Assets folder opens as the app's own screen, just the folder {ca}")
     sh_ = res.get('sheet') or {}; g = sh_.get('geo') or {}
     check(sh_.get('menuBottom') is not None and sh_['menuBottom'] <= (g.get('innerH') or 0) + 1 and sh_['menuBottom'] - sh_.get('menuTop', 0) > 300, f'the comment sheet is fully on screen, all of it showing {sh_}')
     # native sheets: the same room above (TOP, 30) and below (as on the Channel sheet) everywhere; a long list's last
