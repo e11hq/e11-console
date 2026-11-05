@@ -1406,11 +1406,19 @@ final class MeCtl {
     let segV = h.assetsParts["seg"] as? UIView
     let y0 = max(0, min(H, segV.map { $0.convert($0.bounds, to: h).maxY } ?? 0))
     let r = CGRect(x: 0, y: y0, width: W, height: H - y0)
-    guard h.window != nil, r.height > 0, let old = h.resizableSnapshotView(from: r, afterScreenUpdates: false, withCapInsets: .zero) else {
+    // (each side drawn into a picture there and then — iPhone's snapshot views are only filled in at the next screen
+    //  update, by which time the list had already changed: the new list slid in over itself, twice — Haris 2026-11-05)
+    let shot = { (after: Bool) -> UIImageView in
+      let f = UIGraphicsImageRendererFormat.preferred(); f.opaque = false
+      let img = UIGraphicsImageRenderer(size: r.size, format: f).image { _ in h.drawHierarchy(in: CGRect(x: -r.minX, y: -r.minY, width: W, height: H), afterScreenUpdates: after) }
+      return UIImageView(image: img)
+    }
+    guard h.window != nil, r.height > 0, r.width > 0 else {
       UIView.performWithoutAnimation { change(); h.setNeedsLayout(); h.layoutIfNeeded() }; return
     }
+    let old = shot(false)
     UIView.performWithoutAnimation { change(); h.setNeedsLayout(); h.layoutIfNeeded() }
-    guard let new = h.resizableSnapshotView(from: r, afterScreenUpdates: true, withCapInsets: .zero) else { return }
+    let new = shot(true)
     let cover = UIView(frame: r); cover.backgroundColor = h.look.bg; cover.isUserInteractionEnabled = false; cover.clipsToBounds = true
     old.frame = cover.bounds; new.frame = cover.bounds.offsetBy(dx: CGFloat(-dir) * W, dy: 0)
     cover.addSubview(old); cover.addSubview(new)
