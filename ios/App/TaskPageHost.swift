@@ -38,6 +38,9 @@ extension Main {
     if taskPages.isEmpty { taskTabHidden = tabBar.isHidden }
     // (under the shared top buttons, which stay where they are)
     if corner.superview === view { view.insertSubview(p, belowSubview: corner) } else { view.insertSubview(p, belowSubview: tabBar) }
+    // (opened while the startup screen shows — a task link, a notification: the startup screen stays on top and fades
+    //  out, so the task is there under it; Haris 2026-11-05)
+    if let s = splash { view.bringSubviewToFront(s); splashGone() }
     // (the comment box and its jump spot stay above the page)
     if let b = cbarIfMade { view.insertSubview(b, aboveSubview: p) }
     if jumpHitMade { view.insertSubview(jumpHit, aboveSubview: cbarIfMade ?? p) }
@@ -62,6 +65,9 @@ extension Main {
       taskPan = g
     }
     taskPan?.isEnabled = true
+    // (opened straight on Comments — a comment's notification or Inbox row: the comments drawn now, from the app's copy,
+    //  so they slide in with the page — they came only once it had arrived, a black page meanwhile: Haris 2026-11-05)
+    if p.tab == "comments", !defaults.bool(forKey: "e11_feed_off") { prepFeed(p) }
     // in from the right, the screen under it moving a little to the left and darkening (as iPhone's own push)
     let W = view.bounds.width
     p.transform = CGAffineTransform(translationX: W, y: 0)
@@ -84,7 +90,9 @@ extension Main {
     return view.subviews.filter { v in
       // (the app's comment box belongs to the page above, not to the screen under it: it never moves aside)
       // (nor do the shared top buttons: they change in place — 🔍 melting into your photo, ••• — not slide off with the screen)
-      if v === p || v === tabBar || v === cbarIfMade || v === cbox || (composeIfMade != nil && v === composeIfMade) || v is CornerButton || v.isHidden || v.frame.width < W - 1 { return false }
+      // (nor the startup screen: a task opened from a link while it shows — it fades out where it is, never slides half off:
+      //  Haris 2026-11-05)
+      if v === p || v === tabBar || v === cbarIfMade || v === cbox || (composeIfMade != nil && v === composeIfMade) || v is CornerButton || v is SplashView || v.isHidden || v.frame.width < W - 1 { return false }
       if jumpHitMade && v === jumpHit { return false }
       return !taskPages.contains { $0 === v }
     }
@@ -510,6 +518,17 @@ extension Main {
       if f.has(cid) { f.pulse(cid) }
       else if let parent = (f.model?["parents"] as? [String: String])?[cid] { self.openThread(p, parent, pulse: cid) }
     }
+  }
+  private func prepFeed(_ p: TaskPage) {
+    guard p.feed == nil else { return }
+    FeedLoader.shared.cookies = serverHome.cookies
+    p.layoutIfNeeded()
+    let f = makeFeed(p, thread: nil)
+    p.feed = f
+    p.commentsHost.addSubview(f)
+    f.frame = p.commentsHost.bounds
+    p.bringSubviewToFront(p.commentsHost); p.bringSubviewToFront(p.barBoxView)
+    f.load()
   }
   private func makeFeed(_ p: TaskPage, thread: String?) -> CommentsFeed {
     let f = CommentsFeed(task: p.taskId, thread: thread)
