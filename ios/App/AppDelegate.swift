@@ -237,6 +237,10 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     tabs["tabs"] = list; tabs["hidden"] = false
     setTabs(tabs)
     ownAppearanceWatch(); ownAppearanceTick()   // (Automatic light / dark by the app's own clock, from the start)
+    // (an Office Admin: their first tab is Overview, not Home — no Home drawn under the startup screen for them)
+    if list.contains(where: { ["fin-reimb", "fin-expenses", "team"].contains($0["v"] as? String ?? "") }) {
+      AppData.shared.start(me: me, cookies: serverHome.cookies); watchCopy(); quickSplash(); return
+    }
     view.layoutIfNeeded()
     homeLook = q["look"]; homePageMe = me
     let h = homeView
@@ -1011,7 +1015,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   // at launch and with every change, not from the website. The page still says: whether the bar hides (a page of its own
   // over everything), the Plans tab's count (still its rules), your photo's place; and where it went by itself (an Inbox
   // update opening Reviews) — taken only when it changes. Off on the server (kv app-tabs): the page's tab bar, as before.
-  private var pageTabs: [String: Any]?, pageOn: String?
+  private var pageTabs: [String: Any]?, pageOn: String?, quickMe: String?
   var lastTabTap: (key: String, at: Date)?
   func pageTabsIn(_ a: [String: Any]) {
     let on = (a["tabs"] as? [[String: Any]] ?? []).first(where: { ($0["on"] as? Bool) == true })?["v"] as? String
@@ -1022,6 +1026,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       if let t = lastTabTap, Date().timeIntervalSince(t.at) < 1.5, on != t.key { moved = nil } else { moved = on }
     }
     pageTabs = a
+    // (the person to open as next time: the page's now — an Office Admin has no Home to say it, so after View as… the
+    //  app came back as the person before, with their photo — Haris 2026-11-05)
+    if let w = pagePerson, !w.isEmpty, quickMe != w { quickMe = w; saveQuick(["me": w]) }
     // (the person the page is now — View as… someone, back to me: the app's copy follows at once, and until it is that
     //  person's, the page's tabs are shown — an Office Admin got the owner's tabs, Haris 2026-11-04)
     pageIs(pagePerson)
