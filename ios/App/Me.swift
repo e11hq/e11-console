@@ -1046,7 +1046,25 @@ final class MeCtl {
     return m
   }
   // (a question to the page, its answer back — Content plans' post, approve, send back)
+  // (Part B step 3: these go straight to the server — /api/app/act, done there as the website would; the changed records
+  //  into the app's copy at once. The server switched off for one (kv app-act-<group>), or no answer: the page, as before)
+  private static let serverActs: Set<String> = ["rvApprove", "rvAmend", "clApprove", "clPaid", "clAdd", "clPerson", "exAdd", "exEnd", "plApprove", "plBack", "plReview", "trRestore"]
   private func request(_ ev: [String: Any], _ done: @escaping ([String: Any]) -> Void) {
+    if let name = ev["ev"] as? String, MeCtl.serverActs.contains(name), AppData.shared.tabsOn, JSONSerialization.isValidJSONObject(ev) {
+      var b = ev; b["op"] = UUID().uuidString
+      main.serverTask.request("/api/app/act", body: b) { [weak self] j in
+        guard let self = self else { return }
+        guard let j = j, (j["off"] as? Bool) != true else { self.requestPage(ev, done); return }
+        if let ch = j["changes"] as? [[String: Any]], !ch.isEmpty { AppData.shared.applyLocal(ch) }
+        done(j)
+      }
+      return
+    }
+    requestPage(ev, done)
+  }
+  private func requestPage(_ ev: [String: Any], _ done: @escaping ([String: Any]) -> Void) {
+    // (the page doesn't answer this one — it says so with its own toast)
+    if (ev["ev"] as? String) == "trRestore" { send(ev); return }
     let rid = UUID().uuidString
     var e = ev; e["rid"] = rid
     asks[rid] = done
@@ -1985,7 +2003,11 @@ final class MeCtl {
       let k = g["name"] as? String ?? ""
       out.append(head(h, "tr." + k, "\(k) · \(items.count)"))
       let tg = part(h, "trg." + k) { TrashGroup() }
-      tg.onEvent = { [weak self] ev in self?.send(ev) }
+      tg.onEvent = { [weak self, weak h] ev in
+        // (Restore: straight to the server — step 3 — with the page's own toast; the rest as before)
+        if (ev["ev"] as? String) == "trRestore" { self?.request(ev) { r in h?.toast(["t": (r["ok"] as? Bool) == true ? (r["toast"] as? String ?? "Restored") : (r["error"] as? String ?? "That didn’t work — try again")]) }; return }
+        self?.send(ev)
+      }
       tg.set(items, look: h.look)
       out.append(tg)
     }

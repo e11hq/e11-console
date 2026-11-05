@@ -102,6 +102,20 @@ export function createServer(cfg) {
   const widget = createWidget({ store, access, occRemind: webDir ? occRemind : null, now: cfg.now || (() => Date.now()) });
   const homeView = createHomeView({ webDir, now: cfg.now || (() => Date.now()) });
   const homeOps = new Map();   // (the app's Home actions already done: their answers, for a retry)
+  // Part B step 3: the iPhone app's actions on its own pages, straight to the server (no website in between) — each
+  // group on its own switch: kv 'app-act-<group>' = 'off' sends the app back to the page for it
+  const ACT_GROUP = { rvApprove: 'reviews', rvAmend: 'reviews', clApprove: 'claims', clPaid: 'claims', clAdd: 'claims', clPerson: 'claims', exAdd: 'expenses', exEnd: 'expenses' };
+  let appActs = null;
+  async function loadAppActs() {
+    if (appActs) return appActs;
+    const all = {};
+    const now = cfg.now || (() => Date.now());
+    for (const [file, fn] of [['./appact-reviews.js', 'createReviewActs'], ['./appact-money.js', 'createMoneyActs'], ['./appact-other.js', 'createOtherActs']]) {
+      try { const m = await import(file); Object.assign(all, m[fn]({ store, now })); } catch (e) { if (e.code !== 'ERR_MODULE_NOT_FOUND') console.error('app actions', file, e.message); }
+    }
+    return (appActs = all);
+  }
+  const actGroup = (ev) => ACT_GROUP[ev] || (/^pl/.test(ev) ? 'plans' : /^tr/.test(ev) ? 'trash' : 'team');
   // Birthdays: the rest of the staff are told in the morning (Inbox + phone)
   const birthdays = createBirthdays({ store, webPush, notifMessage, deliver: (out) => broadcast(out.rev, out.results, null, null), now: cfg.now || (() => Date.now()) });
   if (cfg.birthdays !== false) birthdays.start();
@@ -778,6 +792,36 @@ export function createServer(cfg) {
       // (the native task page: that task as it is now)
       if (body && body.from === 'task') { let tk = null; try { tk = homeView.taskPage(u, visibleSnapshot(u).data, body.page || body.id); } catch (e) { console.error('task page:', e.message); } return json(res, 200, { ...out, rev: store.rev(), task: tk }); }
       return json(res, 200, { ...out, rev: store.rev(), home: freshHome() });
+    }
+    // (Part B step 3) one of the app's actions: done here as the website would, every change checked against the person's
+    // rights, all or nothing; answers with what the page answered plus the changed records for the app's copy
+    if (p === '/api/app/act' && req.method === 'POST') {
+      const body = await readBody(req);
+      const ev = String((body && body.ev) || '').slice(0, 40);
+      const acts = await loadAppActs();
+      if (!acts[ev] || store.kv.get('app-act-' + actGroup(ev)) === 'off') return json(res, 200, { ok: false, off: true });
+      const op = body.op ? String(body.op).slice(0, 80) : null;
+      const seen = op && homeOps.get(u.id + ':act:' + op);
+      if (seen) return json(res, 200, { ...seen, rev: store.rev() });
+      let r;
+      try { r = acts[ev](u, body); } catch (e) { console.error('app act', ev, e.message); return json(res, 200, { ok: false, error: 'That didn’t work — try again' }); }
+      let out;
+      if (!r || !r.ok) out = { ok: false, error: (r && r.error) || 'That didn’t work — try again', status: r && r.status };
+      else {
+        const changes = r.changes || [];
+        const restoring = new Set(changes.filter((ch) => !ch.del && ch.kind !== 'trash').map((ch) => `${ch.kind}:${ch.id}`));
+        const allowed = changes.every((ch) => access.canWrite(u, ch, store.get(ch.kind, String(ch.id)), { restoring }));
+        if (!allowed) out = { ok: false, error: 'Your role doesn’t allow this', status: 403 };
+        else {
+          const pushed = changes.length ? pushAs(u, changes, null) : null;
+          if (r.sysChanges && r.sysChanges.length) { const o2 = store.apply(r.sysChanges, u.id); broadcast(o2.rev, o2.results, null, u.id); }
+          if (r.filesGone && r.filesGone.length) { try { files.commands.trashMany({ paths: r.filesGone }); } catch (e) { console.error('app act files:', e.message); } }
+          out = { ok: true, ...(r.answer || {}), messages: r.messages || [],
+            changes: pushed ? pushed.results.filter((x) => !x.refused).map((x) => forUser(u, x)).filter((x) => !(x.hidden && x.kind === 'notifications')) : [] };
+        }
+      }
+      if (op) { homeOps.set(u.id + ':act:' + op, out); if (homeOps.size > 1000) homeOps.delete(homeOps.keys().next().value); }
+      return json(res, 200, { ...out, rev: store.rev() });
     }
     if (p === '/api/occ-reminders') return json(res, 200, { ok: true, ...occRemind.forUser(u) });
     // Occasion dates: when the holiday calendar was last read (Admins and Account Managers can check now)
