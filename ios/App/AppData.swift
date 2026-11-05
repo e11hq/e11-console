@@ -38,6 +38,13 @@ final class AppData: NSObject, URLSessionDataDelegate {
     return d
   }
 
+  // View as… switched: this copy is the person before's — not used for any screen until the page says who it is now
+  // (start again then, even if it's the same person)
+  var isStarted: Bool { started }
+  func suspend() {
+    if Thread.isMainThread { copyReady = false } else { DispatchQueue.main.async { self.copyReady = false } }
+    started = false; stopStream()
+  }
   // ---------- starting: the saved copy at once, then up to date from the server ----------
   func start(me: String, cookies: @escaping (@escaping (String) -> Void) -> Void) {
     self.cookies = cookies

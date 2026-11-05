@@ -1323,7 +1323,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   //  another — the copy for them, at once; until it's in, each screen asks the server. The lists stayed blank: they were
   //  worked out from the last person's copy, so they never matched who the page said — Haris 2026-11-04)
   func pageIs(_ me: String?) {
-    guard let me = me, !me.isEmpty, let had = AppData.shared.me, had != me else { return }
+    guard let me = me, !me.isEmpty, let had = AppData.shared.me, had != me || !AppData.shared.isStarted else { return }
     AppData.shared.start(me: me, cookies: serverHome.cookies)
   }
   // (light / dark changed while the app is open — View as… someone with another look, Me › Appearance: every native
@@ -1451,6 +1451,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     meCtl.hide()
     [myTasksIfMade, inboxIfMade, clientsListIfMade, clientPageIfMade].forEach { $0?.isHidden = true }
     homeIfMade?.isHidden = true
+    AppData.shared.suspend()
     serverHome.forget(); [serverMyTasksIfMade, serverInboxIfMade, serverClientsIfMade].forEach { $0?.forget() }
   }
   func selectTab(_ key: String) {
