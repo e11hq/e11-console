@@ -1488,7 +1488,9 @@ final class MeCtl {
     guard !stack.isEmpty, !hidden else { return }
     if let w = coverWait, Date().timeIntervalSince(w) < 2 {
       coverWait = nil; let t = reveals
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { [weak self] in guard let self = self, self.reveals == t else { return }; self.hide() }
+      // (and not when Client Assets has already gone again — back to Me quickly, before this: Me went for a moment, a
+      //  black flash between Client Assets and Me — Haris 2026-11-05)
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { [weak self] in guard let self = self, self.reveals == t, self.main.assetsCtl.isOpen, !self.main.assetsCtl.leaving else { return }; self.hide() }
       return
     }
     coverWait = nil
