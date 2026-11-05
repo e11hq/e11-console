@@ -407,3 +407,14 @@ test('app error reports: kept for the owner, capped per person', async () => {
   const n = (await call(ADMIN, '/api/client-errors')).body.errors.filter((e) => e.user === PROD).length;
   assert.ok(n <= 20, `capped (${n})`);
 });
+
+// A page still holding the person before (View as… just switched): its save isn't this person's — nothing saved, the page
+// told it's stale (it was refused: "Some changes weren't allowed" — Haris 2026-11-05)
+test('a save from a page holding another person is dropped as stale', async () => {
+  const r = await call(AM, '/api/push', { method: 'POST', body: { client: 'c-x', me: 'u-prod', changes: [{ kind: 'users', id: 'u-prod', data: { ...users[2], lastAlertAt: '2026-11-05T00:00:00Z' } }] } });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.stale, true);
+  assert.deepEqual(r.body.results, []);
+  const ok = await call(AM, '/api/push', { method: 'POST', body: { client: 'c-x', me: 'u-am', changes: [] } });
+  assert.equal(ok.body.stale, undefined);
+});

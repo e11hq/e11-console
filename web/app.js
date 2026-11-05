@@ -2709,7 +2709,9 @@ const Sync = (() => {
     pushing = true;
     if (online) setSaveState('saving'); else paintOffline();
     try {
-      const r = await api('POST', '/api/push', { client: clientId, changes: list });
+      const r = await api('POST', '/api/push', { client: clientId, changes: list, me: currentUserId || undefined });
+      // (the server is someone else's now — View as… switched: these were the person before's; the page starts again as the new one)
+      if (r.stale) { again = false; setSaveState('saved'); setTimeout(() => location.reload(), 300); return; }
       rev = Math.max(rev, r.rev || 0);
       const sent = new Map(list.map((c) => [c.kind + ':' + c.id, c]));
       let touched = false, refused = 0;

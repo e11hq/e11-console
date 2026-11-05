@@ -955,6 +955,9 @@ export function createServer(cfg) {
     if (p === '/api/push' && req.method === 'POST') {
       const body = await readBody(req);
       const changes = Array.isArray(body.changes) ? body.changes : [];
+      // (a page still holding the person before — View as… just switched, its last save on the way: not this person's
+      //  changes; nothing saved, the page told — it was refused, "Some changes weren't allowed": Haris 2026-11-05)
+      if (body.me && String(body.me) !== String(u.id)) return json(res, 200, { ok: true, rev: store.rev(), results: [], stale: true });
       const { rev, results } = pushAs(u, changes, body.client);
       return json(res, 200, { ok: true, rev, results: results.map((r) => ({ ...forUser(u, r), refused: !!r.refused })) });
     }
