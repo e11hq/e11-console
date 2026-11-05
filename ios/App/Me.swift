@@ -2628,9 +2628,10 @@ final class MeCtl {
       }
     case "off": pushOn()
     default:
-      ask(["kind": "choice", "choices": [["label": "Send a test notification"], ["label": "Turn off on this phone", "danger": true], ["label": "Cancel", "cancel": true]]]) { [weak self] r in
-        guard (r["ok"] as? Bool) == true, let i = r["index"] as? Int else { return }
-        if i == 0 { self?.pushTest() } else if i == 1 { self?.pushOff() }
+      // (the app's own sheet, as the page's menu was — not iPhone's pop-up bubble: Haris 2026-11-05)
+      sheet(["sheet": ["sections": [["rows": [["i": 0, "label": "Send a test notification", "icon": "bell"], ["i": 1, "label": "Turn off on this phone", "icon": "x", "danger": true]]]]],
+             "acts": [["do": "test"], ["do": "off"]]]) { [weak self] act in
+        if (act["do"] as? String) == "test" { self?.pushTest() } else { self?.pushOff() }
       }
     }
   }
