@@ -353,4 +353,50 @@ extension Main {
     let o = DateFormatter(); o.locale = Locale(identifier: "en_US"); o.dateFormat = "MMM d, yyyy, h:mm a"
     return o.string(from: d)
   }
+
+  // ---------- Step 9: the list screens' and the task page's taps the page did — done by the app when it isn't there
+  // (Home's, My Tasks', a client's page's cards: open, copy, attach, me, review; the task page's copy, from) ----------
+  func pagelessEvent(_ ev: [String: Any]) -> Bool {
+    let id = ev["id"] as? String ?? ""
+    switch ev["ev"] as? String ?? "" {
+    case "copy": guard !id.isEmpty else { return false }; copyTaskLink(id); return true
+    case "open", "attach":
+      guard !pageReady, !id.isEmpty, AppData.shared.ready else { return false }
+      openTaskPage(id, tab: "details", focus: ""); return true
+    case "me": guard !pageReady else { return false }; selectTab("me"); return true
+    case "review":
+      // (Home's In review box: My Tasks, waiting for the CD's review — the whole team's for those who see everyone's)
+      guard !pageReady else { return false }
+      var to = (AppData.shared.meModel("tasks", "myTasksDefault")?["filters"] as? [String: Any]) ?? [:]
+      to["cd"] = true
+      if (AppData.shared.screen("home").model?["title"] as? String) == "E11 Day" { to["team"] = true }
+      myTasksF = to; myTasksTab = "all"
+      selectTab("mytasks"); return true
+    case "from":
+      guard !pageReady, !id.isEmpty else { return false }
+      let name = (AppData.shared.screen("task", id).model?["title"] as? String) ?? ""
+      meCtl.ask(["kind": "alert", "title": "New task from this", "body": "The same client, people, tags and description.", "input": ["value": name, "placeholder": "Task name"], "okText": "Create", "cancelText": "Cancel"]) { [weak self] r in
+        guard let self = self, (r["ok"] as? Bool) == true else { return }
+        let title = (r["text"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { self.shownScreen?.toast(["t": "Give the task a name"]); return }
+        self.serverTask.request("/api/app/act", body: ["ev": "tkFrom", "id": id, "title": title, "op": UUID().uuidString]) { j in
+          guard let j = j, (j["ok"] as? Bool) == true, let nid = (j["answer"] as? [String: Any])?["id"] as? String else { self.taskPages.last?.toast(j?["error"] as? String ?? "That didn’t work — try again"); return }
+          if let ch = j["changes"] as? [[String: Any]] { AppData.shared.applyLocal(ch) }
+          for p in self.taskPages { self.closeTaskPage(p, animated: false) }
+          self.openTaskPage(nid, tab: "details", focus: "")
+        }
+      }
+      return true
+    default: return false
+    }
+  }
+  // a task's link on the clipboard (app.js TaskLink.url: files.e11hq.com/t/… on the office's sites)
+  func copyTaskLink(_ id: String) {
+    let host = URL(string: serverURL())?.host ?? ""
+    let enc = id.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? id
+    let link = host == "console.e11hq.com" ? "https://files.e11hq.com/t/\(enc)" : host == "test.e11hq.com" ? "https://files-test.e11hq.com/t/\(enc)" : serverURL() + "/?task=" + enc
+    UIPasteboard.general.string = link
+    UINotificationFeedbackGenerator().notificationOccurred(.success)
+    if let p = taskPages.last { p.toast("Link copied") } else { shownScreen?.toast(["t": "Link copied"]) }
+  }
 }

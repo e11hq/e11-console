@@ -1379,6 +1379,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     h.isHidden = true
     h.onEvent = { [weak self] ev in
       if self?.homeEventOnServer(ev) == true { return }
+      if self?.pagelessEvent(ev) == true { return }   // (step 9: without the website, or its copy link)
       // (a task opening: Home goes at once, so the task slides in over the page's own Home, scrolled the same)
       // (a task opening: Home only goes if the website's own task page is the one coming — the app's own slides over it;
       //  hiding at once and showing again as the app's page came made Home flash blank, Haris 2026-11-02)
@@ -1672,6 +1673,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       guard let self = self else { return }
       if self.eventOnServer(ev, self.serverMyTasks, pageMe: self.myTasksPageMe) { return }
       if self.myTasksFilterEvent(ev) { return }   // (Part B step 6: the filters are the app's own)
+      if self.pagelessEvent(ev) { return }   // (step 9)
       if (ev["ev"] as? String) == "open" { DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in if self?.taskPages.isEmpty == true { self?.myTasksIfMade?.isHidden = true } } }
       self.pageJS("window.__e11MyTasks && window.__e11MyTasks(\(jsonString(ev)))")
     }
@@ -1893,6 +1895,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       guard let self = self else { return }
       // (Done / Due / Delete on a card: as Home's, straight to the server)
       if page, self.eventOnServer(ev, self.serverClients, pageMe: self.clientsPageMe) { return }
+      if page, self.pagelessEvent(ev) { return }   // (step 9)
       // (a client held: its sheet, the app's own — nothing for the website)
       if !page, (ev["ev"] as? String) == "clientHold", let id = ev["id"] as? String { self.clientSheet(id); return }
       if !page, (ev["ev"] as? String) == "addClient" { self.addClientSheet(); return }

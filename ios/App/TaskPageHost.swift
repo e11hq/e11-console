@@ -338,7 +338,11 @@ extension Main {
     }
     p.onOpen = { [weak self] id in self?.openTaskPage(id, tab: "details", focus: "") }
     p.onTab = { [weak self, weak p] t in guard let self = self, let p = p else { return }; if t == "comments" { self.taskShowComments(p, focus: "") } else { self.taskHideComments() } }
-    p.onEvent = { [weak self] ev in self?.pageJS("window.__e11Task && window.__e11Task(\(jsonString(ev)))") }
+    p.onEvent = { [weak self] ev in
+      // (step 9: Copy link always the app's own; New task from this without the website)
+      if let k = ev["ev"] as? String, k == "copy" || k == "from", self?.pagelessEvent(ev) == true { return }
+      self?.pageJS("window.__e11Task && window.__e11Task(\(jsonString(ev)))")
+    }
     p.onAct = { [weak self, weak p] body in guard let self = self, let p = p else { return }; self.taskAct(p, body) }
     p.onComplete = { [weak self, weak p] in
       guard let self = self, let p = p, let c = p.model?["complete"] as? [String: Any] else { return }

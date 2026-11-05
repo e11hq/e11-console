@@ -108,5 +108,38 @@ export function createTaskActs({ store, now = () => Date.now(), webDir, access }
     return { ok: true, changes, messages: [`Created “${title}”`], answer: { id: t.id } };
   }
 
-  return { tkNew };
+  // "New task from this" (app.js taskFrom — step 9): a new task in the same client with the same people, tags,
+  // description, channels and guardian, based on it; the iPhone asks its name first (the page made it blank and asked)
+  function tkFrom(u, body = {}) {
+    const db = view(u);
+    const L = rulesLib();
+    const rules = L.withEnv({ nowISO, nowMs: () => now(), uid }, db, u.id, L.dubaiDay(now()));
+    const src = db.tasks.find((t) => t.id === String(body.id || ''));
+    if (!src || src.parentId) return fail(404, 'That task is not available');
+    const tctx = src.projectId ? { projectId: src.projectId } : null;
+    if (!rules.can('createTask', tctx)) return fail(403, DENIED);
+    const title = String(body.title == null ? '' : body.title).trim();
+    if (!title) return fail(400, 'Give the task a name');
+    const at = nowISO();
+    const p = src.projectId ? db.projects.find((x) => x.id === src.projectId) : null;
+    const t = {
+      id: uid(), projectId: src.projectId || null, sectionId: null, parentId: null,
+      title, notes: src.notes || '', notesHtml: src.notesHtml || '', done: false, completedAt: null, due: null, prio: {},
+      tags: (src.tags || []).slice(), attachments: [], comments: [], checklist: [], activity: [], start: null, createdAt: at, updatedAt: at,
+      cdRule: 2, cdStatus: '', assignees: (src.assignees || []).slice(), createdBy: u.id, reviews: [], needsCD: !!src.projectId,
+      channels: (src.channels || []).slice(), basedOn: src.id, ...(src.guardian ? { guardian: src.guardian } : {}),
+    };
+    t.activity.push({ id: uid(), at, text: 'created this task', actor: u.id });
+    rules.logActivity(t, `started this from <b>${esc(src.title || 'Untitled task')}</b>`);
+    t.sectionId = p ? (p.sections && p.sections[0] ? p.sections[0].id : null) : db.statuses[0].id;
+    const sibs = db.tasks.filter((x) => !x.parentId && x.projectId === t.projectId && x.sectionId === t.sectionId);
+    t.order = sibs.length ? Math.max(...sibs.map((x) => x.order || 0)) + 1 : 1;
+    db.tasks.push(t);
+    t.assignees.filter((x) => x !== u.id).forEach((x) => rules.pushNotif(x, t, 'assigned', 'assigned you to'));
+    const changes = [{ kind: 'tasks', id: String(t.id), data: clone(t) }];
+    db.notifications.forEach((n) => changes.push({ kind: 'notifications', id: String(n.id), data: clone(n) }));
+    return { ok: true, changes, messages: [`Created “${title}”`], answer: { id: t.id } };
+  }
+
+  return { tkNew, tkFrom };
 }
