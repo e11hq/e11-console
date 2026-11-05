@@ -3089,7 +3089,7 @@ final class MoneyFormVC: UIViewController {
       nameF.placeholder = kind == .sub ? "e.g. Adobe Creative Cloud" : "e.g. Studio lights"; nameF.font = .systemFont(ofSize: 17); nameF.autocapitalizationType = .words
       stack.addArrangedSubview(boxed(nameF))
     }
-    stack.addArrangedSubview(label("Amount (AED)"))
+    stack.addArrangedSubview(label("Amount (\u{20C3})"))
     amountF.placeholder = "0.00"; amountF.keyboardType = .decimalPad; amountF.font = .systemFont(ofSize: 17)
     stack.addArrangedSubview(boxed(amountF))
     switch kind {

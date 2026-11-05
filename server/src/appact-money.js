@@ -97,7 +97,7 @@ export function createMoneyActs({ store, now } = {}) {
     const [t, id] = String(body.who || '').split(':');
     const amount = Math.round(parseFloat(body.amount) * 100) / 100;
     if (!id) return fail(400, 'Choose who is being reimbursed');
-    if (!(amount > 0)) return fail(400, 'Enter the amount in AED (numbers only)');
+    if (!(amount > 0)) return fail(400, 'Enter the amount (numbers only)');
     if (!body.pdf || !body.pdf.path) return fail(400, 'Attach the claim’s PDF');
     const person = t === 'p' ? store.get('finance', id) : null;
     const month = /^\d{4}-\d{2}$/.test(body.month || '') ? String(body.month) : todayStr().slice(0, 7);
@@ -131,7 +131,7 @@ export function createMoneyActs({ store, now } = {}) {
     if (!isFinAdm(u)) return fail(403, ONLY_ADMIN);
     const name = String(body.name || '').trim(), amount = Math.round(parseFloat(body.amount) * 100) / 100;
     if (!name) return fail(400, 'Enter a name');
-    if (!(amount > 0)) return fail(400, 'Enter the amount in AED (numbers only)');
+    if (!(amount > 0)) return fail(400, 'Enter the amount (numbers only)');
     const inv = body.invoice && body.invoice.path ? { path: String(body.invoice.path), name: String(body.invoice.name || 'Invoice'), size: Number(body.invoice.size) || 0 } : null;
     const rec = { id: uid(), type: body.kind === 'sub' ? 'sub' : 'expense', name, amount, createdAt: nowISO(), createdBy: u.id };
     const m = todayStr().slice(0, 7);

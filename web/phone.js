@@ -3419,7 +3419,7 @@ const NativeMe = (() => {
           const [t, id] = String(ev.who || '').split(':');
           const amount = Math.round(parseFloat(ev.amount) * 100) / 100;
           if (!id) return answer(rid, { ok: false, error: 'Choose who is being reimbursed' });
-          if (!(amount > 0)) return answer(rid, { ok: false, error: 'Enter the amount in AED (numbers only)' });
+          if (!(amount > 0)) return answer(rid, { ok: false, error: 'Enter the amount (numbers only)' });
           if (!ev.pdf || !ev.pdf.path) return answer(rid, { ok: false, error: 'Attach the claim’s PDF' });
           const pr = t === 'p' ? (db.finance || []).find((x) => x.id === id) : null;
           Claims.addByHand({ userId: t === 'u' ? id : null, personId: t === 'p' ? id : null, personName: pr ? pr.name : '', month: /^\d{4}-\d{2}$/.test(ev.month || '') ? ev.month : todayStr().slice(0, 7), amount, pdf: { id: uid(), path: String(ev.pdf.path), name: String(ev.pdf.name || 'Claim.pdf'), size: Number(ev.pdf.size) || 0 } });
@@ -3436,7 +3436,7 @@ const NativeMe = (() => {
           if (!finAdm()) return answer(rid, { ok: false, error: 'Only a Finance Admin can do this' });
           const name = String(ev.name || '').trim(), amount = Math.round(parseFloat(ev.amount) * 100) / 100;
           if (!name) return answer(rid, { ok: false, error: 'Enter a name' });
-          if (!(amount > 0)) return answer(rid, { ok: false, error: 'Enter the amount in AED (numbers only)' });
+          if (!(amount > 0)) return answer(rid, { ok: false, error: 'Enter the amount (numbers only)' });
           const inv = ev.invoice && ev.invoice.path ? { path: String(ev.invoice.path), name: String(ev.invoice.name || 'Invoice'), size: Number(ev.invoice.size) || 0 } : null;
           const rec = { id: uid(), type: ev.kind === 'sub' ? 'sub' : 'expense', name, amount, createdAt: nowISO(), createdBy: currentUserId };
           const now = todayStr().slice(0, 7);

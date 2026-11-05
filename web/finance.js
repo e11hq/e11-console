@@ -10,7 +10,7 @@
      { type: 'reimb', userId | personId, amount, date, invoice }
      { type: 'expense', name, amount, date, invoice }
      { type: 'person', name }   — people outside the team who can be reimbursed
-   Amounts are AED. Subscriptions are recorded automatically on their billing day each month. */
+   Amounts are in dirhams (AED), shown with the dirham sign. Subscriptions are recorded automatically on their billing day each month. */
 const Fin = (() => {
   const VIEWS = ['fin-dash', 'fin-projects', 'fin-expenses', 'fin-list', 'fin-subs', 'fin-reimb', 'fin-extra'];
   const ADMIN_ONLY = ['fin-subs', 'fin-extra'];   // Staff reimbursements: Viewers see the claims too (read only)
@@ -199,7 +199,7 @@ const Fin = (() => {
     const pct = (v, t) => (t ? Math.round((v / t) * 100) : 0);
     const plural = (n, one, many) => `${n} ${n === 1 ? one : many || one + 's'}`;
     function monthTables(mo, label) {
-      const c3 = [{ l: 'Name', w: 0.33 }, { l: 'Paid on', w: 0.11 }, { l: withFiles ? 'Invoice file' : 'Invoice', w: 0.40 }, { l: 'AED', w: 0.16, r: true, mono: true }];
+      const c3 = [{ l: 'Name', w: 0.33 }, { l: 'Paid on', w: 0.11 }, { l: withFiles ? 'Invoice file' : 'Invoice', w: 0.40 }, { l: 'Amount (\u20C3)', w: 0.16, r: true, mono: true }];
       table(`${label}SUBSCRIPTIONS`, c3.map((c, i) => (i === 1 ? { ...c, l: 'Billed on' } : c)), mo.subs.map((x) => [x.name, day(x.date), fileCell(x), money(x.amount)]), ['Subscriptions total', '', '', money(mo.s)]);
       table(`${label}STAFF REIMBURSEMENTS`, c3.map((c, i) => (i === 0 ? { ...c, l: 'Person' } : i === 2 ? { ...c, l: withFiles ? 'Receipt file' : 'Receipts' } : c)), mo.reimbs.map((x) => [x.name, day(x.date), fileCell(x), money(x.amount)]), ['Reimbursements total', '', '', money(mo.r)]);
       table(`${label}OFFICE EXPENSES`, c3, mo.extras.map((x) => [x.name, day(x.date), fileCell(x), money(x.amount)]), ['Office expenses total', '', '', money(mo.e)]);
@@ -220,10 +220,10 @@ const Fin = (() => {
     if (!multi) monthTables(model[0], '');
     else {
       const missing = model.flatMap((mo) => mo.missing.map((x) => ({ ...x, mo: mo.m })));
-      table('MONTH BY MONTH', [{ l: 'Month', w: 0.2 }, { l: 'Subscriptions', w: 0.16, r: true, mono: true }, { l: 'Reimbursements', w: 0.17, r: true, mono: true }, { l: 'Extra', w: 0.15, r: true, mono: true }, { l: 'Total AED', w: 0.16, r: true, mono: true }, { l: 'Missing files', w: 0.16 }],
+      table('MONTH BY MONTH', [{ l: 'Month', w: 0.2 }, { l: 'Subscriptions', w: 0.16, r: true, mono: true }, { l: 'Reimbursements', w: 0.17, r: true, mono: true }, { l: 'Extra', w: 0.15, r: true, mono: true }, { l: 'Total (\u20C3)', w: 0.16, r: true, mono: true }, { l: 'Missing files', w: 0.16 }],
         model.map((mo) => [monthName(mo.m, true), money(mo.s), money(mo.r), money(mo.e), { t: money(mo.t), b: true }, mo.missing.length ? { t: `${mo.missing.length} missing`, c: '#c2410c' } : { t: 'All attached', c: '#15803d' }]),
         [plural(model.length, 'month'), money(S3), money(R3), money(E3), money(T), String(missing.length)]);
-      if (missing.length) table('MISSING INVOICES AND RECEIPTS', [{ l: 'Month', w: 0.18 }, { l: 'Name', w: 0.44 }, { l: 'Type', w: 0.22 }, { l: 'AED', w: 0.16, r: true, mono: true }],
+      if (missing.length) table('MISSING INVOICES AND RECEIPTS', [{ l: 'Month', w: 0.18 }, { l: 'Name', w: 0.44 }, { l: 'Type', w: 0.22 }, { l: 'Amount (\u20C3)', w: 0.16, r: true, mono: true }],
         missing.map((x) => [monthName(x.mo, true), x.name, { sub: 'Subscription', reimb: 'Reimbursement', expense: 'Office expense' }[x.kind], money(x.amount)]));
       model.forEach((mo) => {
         if (y + 160 * S > bottom) newPage();
@@ -694,7 +694,7 @@ const Fin = (() => {
         ${kind === 'reimb' ? `<label class="dlg-label">Person</label><select class="field" name="who">${peopleOpts()}</select>
           <div class="fin-extra-people"><div class="fep-list">${extraList()}</div><div class="fep-add"><input class="field" name="newPerson" placeholder="Add someone who isn’t a team member"><button type="button" class="btn" data-addp>Add</button></div></div>`
           : `<label class="dlg-label">Name</label><input class="field" name="name" placeholder="${kind === 'sub' ? 'e.g. Adobe Creative Cloud' : 'e.g. Studio lights'}">`}
-        <label class="dlg-label">Amount (AED)</label><input class="field" name="amount" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00">
+        <label class="dlg-label">Amount (\u20C3)</label><input class="field" name="amount" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00">
         ${kind === 'sub' ? `<label class="dlg-label">Billing day each month</label><select class="field" name="day">${Array.from({ length: 31 }, (_, i) => `<option value="${i + 1}" ${i + 1 === new Date().getDate() ? 'selected' : ''}>${ordinal(i + 1)}</option>`).join('')}</select><div class="dlg-hint">Months shorter than this use their last day.</div>`
           : kind === 'reimb' ? `<label class="dlg-label">Month</label><div class="seg fin-hand-month">${[addMonths(thisMonth(), -1), thisMonth()].map((m, i) => `<label class="seg-opt"><input type="radio" name="month" value="${m}" ${i ? 'checked' : ''}><span>${esc(monthName(m, true))}</span></label>`).join('')}</div><div class="dlg-hint">It joins that month’s claims as Submitted — then HR approved and Paid on, as every claim.</div>`
           : `<label class="dlg-label">Payment date</label><span class="date-chip set fin-date">${icon('cal')}<span class="date-lbl">${esc(fmtDay(todayStr()))}</span><input type="date" class="date-in" name="date" value="${todayStr()}"></span>`}
@@ -742,7 +742,7 @@ const Fin = (() => {
         const amount = Math.round(parseFloat(el.amount.value) * 100) / 100;
         if (kind === 'reimb' && !el.who.value) { err.textContent = 'Choose who is being reimbursed'; return; }
         if (kind !== 'reimb' && !(el.name.value || '').trim()) { err.textContent = 'Enter a name'; el.name.focus(); return; }
-        if (!(amount > 0)) { err.textContent = 'Enter the amount in AED (numbers only)'; el.amount.focus(); return; }
+        if (!(amount > 0)) { err.textContent = 'Enter the amount (numbers only)'; el.amount.focus(); return; }
         if (kind !== 'reimb' && dateIn && !dateIn.value) { err.textContent = 'Choose the payment date'; return; }
         const rec = { id: uid(), type: kind, amount, createdAt: nowISO(), createdBy: currentUserId };
         if (kind === 'sub') { rec.name = el.name.value.trim(); rec.day = Number(el.day.value); rec.startMonth = thisMonth(); rec.invoices = st2.invoice ? { [thisMonth()]: st2.invoice } : {}; rec.endedAt = null; }

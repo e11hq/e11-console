@@ -6,6 +6,7 @@
 // Not on CarPlay (the car's widget screen): taps there can't open anything.
 import WidgetKit
 import SwiftUI
+import CoreText
 import AppIntents
 
 /* ---------- what the server sends (/api/widget) ---------- */
@@ -405,7 +406,7 @@ struct FinanceView: View {
     case .accessoryRectangular:
       VStack(alignment: .leading, spacing: 1) {
         Text("To be invoiced · \(inv)").font(.headline).widgetAccentable().lineLimit(1)
-        Text("Spent AED \(W.aed(f.spent))").font(.caption).privacySensitive().lineLimit(1)
+        (Text("Spent ") + Dh.sign(12) + Text(W.aed(f.spent))).font(.caption).privacySensitive().lineLimit(1)
         Text("\(count("LPO Pending")) LPO · \(count("Quote to be sent")) quotes").font(.caption).lineLimit(1)
       }.frame(maxWidth: .infinity, alignment: .leading)
     #endif
@@ -429,10 +430,7 @@ struct FinanceView: View {
             Lbl(t: "task\(inv == 1 ? "" : "s")")
             Spacer(minLength: 6)
             Lbl(t: "Spent this month")
-            HStack(alignment: .firstTextBaseline, spacing: 3) {
-              Text(W.aed(f.spent)).font(.system(size: 17, weight: .bold)).foregroundStyle(.white).privacySensitive()
-              Text("AED").font(.system(size: 10, weight: .semibold)).foregroundStyle(W.dim)
-            }
+            (Dh.sign(17) + Text(W.aed(f.spent))).font(.system(size: 17, weight: .bold)).foregroundStyle(.white).privacySensitive()
           }.frame(width: family == .systemLarge ? 150 : 112, alignment: .leading)
           VStack(alignment: .leading, spacing: 4) {
             ForEach(f.statuses ?? [], id: \.status) { x in
@@ -444,7 +442,7 @@ struct FinanceView: View {
           Spacer(minLength: 2)
           Lbl(t: "SUBSCRIPTIONS · NEXT 7 DAYS")
           ForEach(Array((f.subsSoon ?? []).enumerated()), id: \.offset) { _, x in
-            HStack { Text(x.name ?? "").font(.system(size: 12)).foregroundStyle(.white).lineLimit(1); Spacer(); Text("\(W.when(x.date, today: day)) · \(W.aed(x.amount)) AED").font(.system(size: 11)).foregroundStyle(W.dim).privacySensitive() }
+            HStack { Text(x.name ?? "").font(.system(size: 12)).foregroundStyle(.white).lineLimit(1); Spacer(); (Text("\(W.when(x.date, today: day)) · ") + Dh.sign(11) + Text(W.aed(x.amount))).font(.system(size: 11)).foregroundStyle(W.dim).privacySensitive() }
           }
           if (f.subsSoon ?? []).isEmpty { Note(text: "None due this week.") }
         }
@@ -511,4 +509,19 @@ enum Sample {
       todayCount: 3, todayClients: 3, sentBack: [WBack(planId: "r", client: "Kestrel", note: "", by: "CD")], nextOccasion: WOcc(name: "National Day", date: "2026-12-02", days: 34)),
     finance: WFin(month: "2026-10", statuses: [WStat(status: "To be invoiced", color: "#ff8a4c", count: 7), WStat(status: "LPO Pending", color: "#f9be33", count: 4), WStat(status: "Quote to be sent", color: "#9aa4b2", count: 3), WStat(status: "Invoiced", color: "#3ddc97", count: 21), WStat(status: "Retainer", color: "#a875ff", count: 9)],
       spent: 12340, subsSoon: [WSub(name: "Adobe CC", date: "2026-10-31", amount: 1240), WSub(name: "Figma", date: "2026-11-02", amount: 410)], subsSoonCount: 2))
+}
+
+// The UAE dirham sign (U+20C3) before an amount, the Central Bank's way (Haris 2026-11-05): from the app's one-character
+// font (web/fonts/e11-dirham.ttf, carried here too — the widget runs on its own) until Apple's fonts have it
+enum Dh {
+  private static let name: String? = {
+    let ttf = "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"
+    guard let data = Data(base64Encoded: ttf), let prov = CGDataProvider(data: data as CFData), let cg = CGFont(prov) else { return nil }
+    CTFontManagerRegisterGraphicsFont(cg, nil)
+    return cg.postScriptName as String?
+  }()
+  static func sign(_ size: CGFloat) -> Text {
+    guard let n = name else { return Text("\u{20C3}\u{00A0}") }
+    return Text("\u{20C3}").font(.custom(n, fixedSize: size)) + Text("\u{00A0}")
+  }
 }

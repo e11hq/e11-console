@@ -137,7 +137,7 @@ const Claims = (() => {
           </div>
         </header>
         <div class="ec-table">
-          <div class="ec-th"><span>Date</span><span>Description</span><span class="r">AED</span><span></span></div>
+          <div class="ec-th"><span>Date</span><span>Description</span><span class="r">Amount (\u20C3)</span><span></span></div>
           ${groups.map((g, gi) => `<div class="ec-group">
             <div class="ec-tr title">
               <span>${edit ? `<span class="date-chip set ec-date">${icon('cal')}<span class="date-lbl">${g.date ? esc(fmtDay(g.date)) : 'Pick a date'}</span><input type="date" class="date-in" value="${esc(g.date || '')}" data-k="date" data-g="${g.id}"></span>` : `<b class="ec-d">${g.date ? esc(fmtDay(g.date)) : ''}</b>`}</span>
@@ -149,13 +149,13 @@ const Claims = (() => {
               <span></span>
               <span class="ec-desc">${edit ? `<input class="ec-in" value="${esc(it.desc || '')}" placeholder="Item, e.g. Salik" data-k="desc" data-g="${g.id}" data-i="${it.id}" aria-label="Item">` : `<span>${esc(it.desc || '')}</span>`}
                 ${it.receipt ? `<button type="button" class="ec-rc" data-cl="receipt-open" data-g="${g.id}" data-i="${it.id}" title="${esc(it.receipt.name)}">${icon('clip')}<span>${esc(it.receipt.name)}</span></button>` : ''}</span>
-              <span class="r">${edit ? `<input class="ec-in num" value="${esc(it.amount == null ? '' : String(it.amount))}" placeholder="0.00" inputmode="decimal" data-k="amount" data-g="${g.id}" data-i="${it.id}" aria-label="Amount in AED">` : `<span class="ec-num">${it.amount !== '' && it.amount != null ? money(num(it.amount)) : ''}</span>`}</span>
+              <span class="r">${edit ? `<input class="ec-in num" value="${esc(it.amount == null ? '' : String(it.amount))}" placeholder="0.00" inputmode="decimal" data-k="amount" data-g="${g.id}" data-i="${it.id}" aria-label="Amount in dirhams">` : `<span class="ec-num">${it.amount !== '' && it.amount != null ? money(num(it.amount)) : ''}</span>`}</span>
               <span class="ec-x">${edit ? `<button class="icon-btn sm ${it.receipt ? 'on' : ''}" data-cl="${it.receipt ? 'receipt-del' : 'receipt'}" data-g="${g.id}" data-i="${it.id}" title="${it.receipt ? 'Remove receipt' : 'Attach receipt (optional)'}">${icon('clip')}</button>${(g.items || []).length > 1 ? `<button class="icon-btn sm" data-cl="del-item" data-g="${g.id}" data-i="${it.id}" title="Remove item">${icon('x')}</button>` : ''}` : ''}</span>
             </div>`).join('')}
             ${edit ? `<div class="ec-tr add"><span></span><span><button class="btn ghost sm" data-cl="add-item" data-g="${g.id}">${icon('plus')}Add item</button></span></div>` : ''}
           </div>`).join('')}
           ${edit ? `<div class="ec-addg"><button class="btn" data-cl="add-group">${icon('plus')}Add title (new date)</button></div>` : ''}
-          <div class="ec-total"><b>TOTAL</b><span class="ec-count">${plural(itemsOf(c), 'item')} · ${plural(receiptsOf(c).length, 'receipt')}</span><b class="r" id="ec-total">${money(totalOf(c))}</b><span>AED</span></div>
+          <div class="ec-total"><b>TOTAL</b><span class="ec-count">${plural(itemsOf(c), 'item')} · ${plural(receiptsOf(c).length, 'receipt')}</span><b class="r" id="ec-total">\u20C3\u00A0${money(totalOf(c))}</b><span></span></div>
         </div>
         <div class="ec-claimer">
           <div><small>CLAIMER DETAILS</small><b>${esc(fullName(u))}</b><span>${esc(roleOf(u))}${c.submittedAt ? ' · submitted ' + esc(fmtDay(ymd(new Date(c.submittedAt)))) : ''}</span></div>
@@ -318,7 +318,7 @@ const Claims = (() => {
       }
       ctx.fillStyle = '#17181b'; ctx.fillRect(P, y, W - 2 * P, 34 * S);
       font(600, 10.5); ctx.fillStyle = '#fff';
-      text('DATE', colX[0] + 12 * S, y + 22 * S); text('DESCRIPTION', colX[1], y + 22 * S); text('AED', colX[2], y + 22 * S, 'right');
+      text('DATE', colX[0] + 12 * S, y + 22 * S); text('DESCRIPTION', colX[1], y + 22 * S); text('AMOUNT (\u20C3)', colX[2], y + 22 * S, 'right');
       y += 34 * S;
       pages.push(page);
     }
@@ -549,7 +549,7 @@ const Claims = (() => {
   function item(gid, iid) { const g = group(gid); return g && (g.items || []).find((i) => i.id === iid); }
   function updateTotals() {
     const d = st.draft; if (!d) return;
-    const t = $('#ec-total'); if (t) t.textContent = money(totalOf(d));
+    const t = $('#ec-total'); if (t) t.textContent = '\u20C3\u00A0' + money(totalOf(d));
     (d.groups || []).forEach((g) => { const s = document.querySelector(`[data-sub="${g.id}"]`); if (s) s.textContent = (g.items || []).length > 1 ? money((g.items || []).reduce((a, i) => a + num(i.amount), 0)) : ''; });
     const n = $('.ec-count'); if (n) n.textContent = `${plural(itemsOf(d), 'item')} · ${plural(receiptsOf(d).length, 'receipt')}`;
   }

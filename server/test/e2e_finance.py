@@ -121,7 +121,7 @@ async def main():
         await pg.click('[data-fin-new="expense"]'); await pg.wait_for_timeout(200)
         await pg.fill('.fin-form [name="name"]', 'Studio lights'); await pg.fill('.fin-form [name="amount"]', '')
         await pg.click('.fin-form button[type="submit"]'); await pg.wait_for_timeout(200)
-        check('AED' in await pg.locator('.fin-form .dlg-err').inner_text(), 'amount must be a number')
+        check('amount' in await pg.locator('.fin-form .dlg-err').inner_text(), 'amount must be a number')
         await pg.fill('.fin-form [name="amount"]', '3000'); await pg.click('.fin-form button[type="submit"]'); await pg.wait_for_timeout(300)
         await E(f"""(()=>{{ for(let i=0;i<60;i++) db.finance.push({{id:'x'+i,type:'expense',name:'Item '+i,amount:10,date:'{lm}-0'+(1+i%9),createdAt:nowISO()}}); persist(0); }})()""")
         await pg.wait_for_timeout(1200)
