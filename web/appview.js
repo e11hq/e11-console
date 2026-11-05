@@ -22,8 +22,13 @@ var E11AppView = (function () {
   const userOf = (data, id) => (data.users || []).find((x) => x.id === id) || { id };
 
   // R: E11Rules · data: this person's data (what their app downloads) · me: their id · nowMs: the clock
+  // Finance only people (finance_admin / finance_viewer): Finance is on the computer (Haris 2026-11-05) — the iPhone app
+  // shows them just that, and Me
+  const finOnly = (data, me) => { const u = (data.users || []).find((x) => x.id === me); return !!u && (u.role === 'finance_admin' || u.role === 'finance_viewer'); };
   function home(R, data, me, nowMs) {
     const today = R.dubaiDay(nowMs());
+    if (finOnly(data, me)) return { show: true, plain: true, title: 'Finance', date: 'On the computer', me, today, stats: [0, 0, 0], add: false, canDelete: false, people: {},
+      groups: [{ name: '', n: 0, empty: 'Finance is on the computer — open E11 Console on your Mac or at console.e11hq.com.', cards: [] }] };
     const m = R.home(base(data), me, today);
     if (!m) return null;
     photos(m);   // (the app fetches them itself, a small copy, signed in as it is)
@@ -93,6 +98,7 @@ var E11AppView = (function () {
     const finUser = u.role === 'finance_admin' || u.role === 'finance_viewer';
     const unread = (data.notifications || []).filter((n) => n.to === me && !n.read && !/^claim/.test(n.kind || '')).length;
     const T = (v, label, badge) => ({ v, label, badge: badge ? (badge > 99 ? '99+' : String(badge)) : '' });
+    if (finOnly(data, me)) return { tabs: [T('today', 'Finance'), T('me', 'Me')], plans: false };
     if (office) {
       const hr = fin ? (data.claims || []).filter((c) => c.state === 'submitted').length : 0;
       return { tabs: [T('today', 'Overview'), T('inbox', 'Inbox', unread), ...(fin ? [T('fin-reimb', 'Claims', hr), T('fin-expenses', 'Expenses')] : [T('team', 'Team'), T('clients', 'Client Assets')]), T('me', 'Me')], plans: false };

@@ -584,7 +584,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // page — About's What's new — ends there)
   var listTop: CGFloat { bigHead + 10 }
   var listBottom: CGFloat { (tabTop ?? bounds.height - 100) - 14 - BTN - 10 }
-  private var noStats: Bool { isList || isClients || isClient || assets != nil }
+  private var noStats: Bool { isList || isClients || isClient || assets != nil || (m["plain"] as? Bool) == true }   // (plain: Finance only's "on the computer")
   // the assets screen's own pieces (Assets.swift), kept here so a change redraws only what changed
   var assetsParts: [String: UIView] = [:]
   func setFab(_ title: String, _ sym: String, _ run: (() -> Void)?) {
