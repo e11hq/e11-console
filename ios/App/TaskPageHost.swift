@@ -1180,7 +1180,10 @@ extension Main {
     switch to {
     case "task":
       guard let id = go["id"] as? String else { return false }
-      openTaskPage(id, tab: go["tab"] as? String ?? "details", focus: go["focus"] as? String ?? "")
+      // (the brain names the comment alone; the comments screen takes "task~comment", as the website's Inbox gave it —
+      //  with the comment's id alone nothing pulsed: Haris 2026-11-05)
+      let fc = go["focus"] as? String ?? ""
+      openTaskPage(id, tab: go["tab"] as? String ?? "details", focus: fc.isEmpty || fc.contains("~") ? fc : "\(id)~\(fc)")
     case "review":
       if let rid = go["id"] as? String { meCtl.command(["open": ["kind": "review", "id": rid]]) }
       selectTab("reviews")
