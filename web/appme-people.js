@@ -281,7 +281,7 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
     const types = (cd) => NOTIF_TYPES.filter((x) => !!x.cd === cd && (!x.lead || dailyWants)).map((x) => ({ k: x.k, t: x.l, s: x.d, on: !off[x.k] }));
     return {
       photo: W.photoOf(u), ini: initials(W.fullName(u)), rgb: W.rgb(avColor(u.id)), hasPhoto: !!u.avatar,
-      name: u.name || '', email: u.email || '', country: u.country || '', city: u.city || '', bday: u.bday ? fmtMD(u.bday) : '',
+      name: u.name || '', email: u.email || '', country: u.country || '', city: u.city || '', bday: u.bday ? fmtMD(u.bday) : '', md: u.bday || '',
       pills, sound: (u.prefs || {}).sound !== false, notify: types(false), cd: u.id === W.cdUserId() ? { title: W.cdTitle(), types: types(true) } : null,
     };
   };
@@ -352,6 +352,135 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
         ['+ Super Admin · + Finance', [142, 142, 147], 'Extras anyone can have on top of their role (••• menu): full Super Admin rights, or the Finance pages. A task’s Finance status is set by Account Managers and Admins.'],
       ],
     };
+  };
+
+  /* ---------- Part B step 4: the questions and sheets the page used to show for Me's own pages ----------
+     Each worked out here, read-only, for the app's own sheets and alerts; the change itself goes to the server
+     (POST /api/app/act: pfSet, member, cd, addMember, trForever, trEmpty). Each answers an object (or null). */
+
+  // My profile's country / city lists (web/places.js, loaded into the same engine): { list: [...] }
+  M.places = function (R, data, meId, nowMs, kind, country) {
+    const P = typeof E11_PLACES !== 'undefined' ? E11_PLACES : typeof window !== 'undefined' && window.E11_PLACES ? window.E11_PLACES : null;   // eslint-disable-line no-undef
+    if (!P) return { list: [] };
+    return { list: (kind === 'country' ? P.COUNTRIES : P.cities(String(country || ''))).slice() };
+  };
+
+  // a role pill's colour in a native sheet: the pill's tint, as the page's sheet sends it (styles.css, office.css,
+  // finance.css .r-*; the same in both themes — only the pill's text colour changes)
+  const ROLE_DOT = { admin: [123, 104, 238], office_admin: [123, 104, 238], am: [76, 154, 255], production: [255, 138, 76], social: [255, 143, 199], freelancer: [79, 209, 197], finance_admin: [61, 220, 151], finance_viewer: [79, 209, 197] };
+  const sheetPerson = (W, u) => Object.assign({ initials: initials(W.fullName(u)), color: W.rgb(avColor(u.id)) }, u.avatar ? { photo: u.avatar } : {});
+
+  // A person's menu on Team members (touch and hold): app.js memberMenu, every variant —
+  //   { sheet: { sections: [{ header?, person?, rows: [{ i, label, icon?, dot?, checked?, danger?, disabled?, locked? }] }] },
+  //     acts: [{ ev: 'member', act, role?, fin?, ask? } | { open: 'clients' }] }   (row i → acts[i]; -1: nothing to do)
+  // The first section is the person (name · role, their picture) with no rows. env: as at the top (ownerId; testCopy:
+  // the test site, where Owner view isn't offered).
+  M.memberMenu = function (R, data, meId, nowMs, id, env) {
+    const W = world(R, data, meId, nowMs, env), u = W.userById(id);
+    if (!u || !W.canManageUsers()) return null;
+    const acts = [], sections = [{ header: `${W.fullName(u)} · ${W.roleOf(u)}`, person: sheetPerson(W, u), rows: [] }];
+    let sec = null;
+    const head = (h) => { sec = { header: h, rows: [] }; sections.push(sec); };
+    const plain = () => { sec = { rows: [] }; sections.push(sec); };
+    const row = (r, act) => { if (act) { acts.push(act); r.i = acts.length - 1; } else r.i = -1; sec.rows.push(r); };
+    const roleRow = (k, l, act) => row({ label: l, dot: ROLE_DOT[k] || null, checked: u.role === k }, act);
+    const finRows = () => Object.keys(FIN_ACCESS).forEach((k) => row({ label: FIN_ACCESS[k], icon: 'coin', checked: (u.fin || '') === k }, { ev: 'member', act: 'fin', fin: k }));
+    const supers = () => W.users.filter((x) => W.isSuper(x) && x.active !== false);
+    const ownerId = W.env.ownerId || null;
+    // the owner's account: only the owner changes it (locked rows)
+    if (u.id === ownerId && u.id !== meId) {
+      head('Only the owner can change this account');
+      [['Change role', 'users'], ['Admin rights', 'shield'], ['Finance access', 'coin'], ['Remove from team', 'trash']].forEach(([l, ic]) => row({ label: l, icon: ic, disabled: true }));
+      return { sheet: { sections: sections.filter((x) => x.rows.length || x.person) }, acts };
+    }
+    // your own row: the owner may work as another role (asked first); everyone their Finance access
+    if (u.id === meId) {
+      if (ownerId && meId === ownerId && W.isAdm(u)) {
+        head('Your role (owner)');
+        const others = W.users.filter((x) => x.id !== u.id && W.isSuper(x) && x.active !== false).length;
+        Object.keys(ROLES).forEach((k) => {
+          const l = ROLES[k];
+          const ask = k !== 'admin' && others && u.role !== k ? { title: `Work as ${l}?`, body: `You’ll use the app as ${l}${u.admin ? ' — Admin rights stay switched on until you take them off' : ''}. As the owner, nobody else can change your role or access${W.env.server !== false && !W.env.testCopy ? ', and you can step back in from Owner view at the bottom of My profile' : ''}.`, okText: `Work as ${l}`, danger: false } : null;
+          roleRow(k, l, Object.assign({ ev: 'member', act: 'role', role: k }, ask ? { ask } : {}));
+        });
+      }
+      head('Your Finance access');
+      finRows();
+      return { sheet: { sections: sections.filter((x) => x.rows.length || x.person) }, acts };
+    }
+    // anyone else
+    head('Change role');
+    Object.keys(ROLES).forEach((k) => roleRow(k, ROLES[k], { ev: 'member', act: 'role', role: k }));
+    const finOnly = W.isFinUser(u);
+    plain();
+    if (u.role !== 'admin' && !finOnly) row({ label: 'Super Admin rights', icon: 'shield', checked: !!u.admin }, { ev: 'member', act: 'admin' });
+    if (!finOnly) finRows();
+    plain();
+    if (u.role === 'freelancer') row({ label: 'Clients they can see…', icon: 'folder' }, { open: 'clients' });
+    if (u.role === 'social' && u.active !== false && PLANS_ON) row({ label: 'Social Manager', icon: 'users', checked: W.isSocialMgr(u.id) }, { ev: 'member', act: 'socialMgr' });
+    if (u.active === false) row({ label: 'Restore access', icon: 'user' }, { ev: 'member', act: 'restore' });
+    else {
+      // (removeMemberFlow: the last Super Admin isn't asked — the server says why not)
+      const n = W.tasks.filter((t) => (t.assignees || []).includes(u.id)).length;
+      const ask = W.isSuper(u) && supers().length < 2 ? null : { title: `Remove ${W.fullName(u)}?`, body: `They won’t be able to sign in${n ? ` and will be unassigned from ${n} task${n === 1 ? '' : 's'}` : ''}. Their comments stay. You can restore access later.`, okText: 'Remove', danger: true };
+      row({ label: 'Remove from team', icon: 'trash', danger: true }, Object.assign({ ev: 'member', act: 'remove' }, ask ? { ask } : {}));
+    }
+    return { sheet: { sections: sections.filter((x) => x.rows.length || x.person) }, acts };
+  };
+
+  // The clients a freelancer can see (projectAccessDialog, the app's sheet): each tick sent at once
+  M.clientsMenu = function (R, data, meId, nowMs, id, env) {
+    const W = world(R, data, meId, nowMs, env), u = W.userById(id);
+    if (!u || !W.canManageUsers()) return null;
+    const list = W.projects.slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+    const mine = Array.isArray(u.projectIds) ? u.projectIds : [];
+    const acts = [];
+    const rows = list.map((p) => { const c = p.clientId ? W.clientById(p.clientId) : null; acts.push({ ev: 'member', act: 'clients', project: p.id }); return { i: acts.length - 1, label: p.name, sub: c ? c.name : '', checked: mine.includes(p.id), multi: true, find: p.name }; });
+    const sheet = { sections: rows.length ? [{ header: `Clients ${W.fullName(u)} can see`, rows }] : [] };
+    if (list.length > 8) { sheet.search = 'Search clients'; sheet.empty = 'No client matches “%@”'; }
+    return { sheet, acts };
+  };
+
+  // The Creative Director switch's first question (cdToggleFlow): removing the CD, or making someone CD when there's
+  // none; { choice: true } when someone else is CD (the server's 409 brings that question); null: not allowed
+  M.cdAsk = function (R, data, meId, nowMs, id, env) {
+    const W = world(R, data, meId, nowMs, env), u = W.userById(id);
+    if (!u || !W.canManageUsers()) return null;
+    const cur = W.cdUserId();
+    if (cur === id) return { title: `Remove ${W.fullName(u)} as ${W.cdTitle()}?`, body: W.meta.cdHomeId && W.cdActing() ? `${W.fullName(W.userById(W.meta.cdHomeId))} will be Creative Director again.` : 'Review requests will wait until someone else is made Creative Director.', okText: 'Remove', danger: true };
+    if (cur) return { choice: true };
+    return { title: 'Are you sure?', body: `Make ${W.fullName(u)} the Creative Director? They will review every file submitted for CD review.`, okText: 'Make Creative Director', danger: false };
+  };
+
+  // Add team member's form (addMemberFlow on the server: no password) — env.host: where they sign in
+  M.addMemberForm = function (R, data, meId, nowMs, env) {
+    const W = world(R, data, meId, nowMs, env);
+    if (!W.canManageUsers()) return null;
+    const entries = (o) => Object.keys(o).map((k) => [k, o[k]]);
+    return {
+      title: 'Add team member', okText: 'Add member',
+      intro: `They sign in at ${W.env.host || ''} with this email — a one-time code is emailed to them. No password needed.`,
+      fields: [
+        { key: 'name', label: 'Full name (optional — they can set it themselves)', placeholder: 'e.g. Sara Khan' },
+        { key: 'email', label: 'Email', type: 'email', placeholder: 'name@e11-digital.com' },
+        { key: 'role', label: 'Role', type: 'select', value: 'production', options: entries(ROLES) },
+        { key: 'admin', label: 'Admin rights on top of their role', type: 'select', value: '', options: [['', 'No'], ['yes', 'Yes — they can also do everything an Admin can']], hint: 'Not needed for the Admin role or Finance-only people.' },
+        { key: 'fin', label: 'Finance access', type: 'select', value: '', options: entries(FIN_ACCESS), hint: 'Finance Admin adds subscriptions, reimbursements and expenses; Finance Viewer only looks. Finance-only people already have it.' },
+      ],
+    };
+  };
+
+  // Delete forever / Empty the Trash: the questions (eraseTrashFlow, emptyTrashFlow) — Super Admins only, as the
+  // server (an Office Admin's are only restored)
+  M.trashAsk = function (R, data, meId, nowMs, id, env) {
+    const W = world(R, data, meId, nowMs, env), it = W.trash.find((x) => x.id === id);
+    if (!it || !W.isSuper(W.me())) return null;
+    return { title: `Delete “${W.trashTitle(it)}” forever?`, body: 'It can’t be restored after this, and its files are removed too.', okText: 'Delete forever', danger: true };
+  };
+  M.trashEmptyAsk = function (R, data, meId, nowMs, env) {
+    const W = world(R, data, meId, nowMs, env), n = W.trash.length;
+    if (!n || !W.isSuper(W.me())) return null;
+    return { title: 'Empty the Trash?', body: `All ${n} item${n === 1 ? '' : 's'} and their files are deleted for good. This can’t be undone.`, okText: 'Empty Trash', danger: true };
   };
 })(E11AppMe);
 if (typeof module !== 'undefined' && module.exports) module.exports = E11AppMe;

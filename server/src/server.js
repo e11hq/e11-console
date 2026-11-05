@@ -104,13 +104,13 @@ export function createServer(cfg) {
   const homeOps = new Map();   // (the app's Home actions already done: their answers, for a retry)
   // Part B step 3: the iPhone app's actions on its own pages, straight to the server (no website in between) — each
   // group on its own switch: kv 'app-act-<group>' = 'off' sends the app back to the page for it
-  const ACT_GROUP = { rvApprove: 'reviews', rvAmend: 'reviews', clApprove: 'claims', clPaid: 'claims', clAdd: 'claims', clPerson: 'claims', exAdd: 'expenses', exEnd: 'expenses' };
+  const ACT_GROUP = { rvApprove: 'reviews', rvAmend: 'reviews', clApprove: 'claims', clPaid: 'claims', clAdd: 'claims', clPerson: 'claims', exAdd: 'expenses', exEnd: 'expenses', pfSet: 'profile' };
   let appActs = null;
   async function loadAppActs() {
     if (appActs) return appActs;
     const all = {};
     const now = cfg.now || (() => Date.now());
-    for (const [file, fn] of [['./appact-reviews.js', 'createReviewActs'], ['./appact-money.js', 'createMoneyActs'], ['./appact-other.js', 'createOtherActs']]) {
+    for (const [file, fn] of [['./appact-reviews.js', 'createReviewActs'], ['./appact-money.js', 'createMoneyActs'], ['./appact-other.js', 'createOtherActs'], ['./appact-me.js', 'createMeActs']]) {
       try { const m = await import(file); Object.assign(all, m[fn]({ store, now })); } catch (e) { if (e.code !== 'ERR_MODULE_NOT_FOUND') console.error('app actions', file, e.message); }
     }
     return (appActs = all);
@@ -806,7 +806,7 @@ export function createServer(cfg) {
       let r;
       try { r = acts[ev](u, body); } catch (e) { console.error('app act', ev, e.message); return json(res, 200, { ok: false, error: 'That didn’t work — try again' }); }
       let out;
-      if (!r || !r.ok) out = { ok: false, error: (r && r.error) || 'That didn’t work — try again', status: r && r.status };
+      if (!r || !r.ok) out = { ok: false, error: (r && r.error) || 'That didn’t work — try again', status: r && r.status, ...(r && r.need ? { need: r.need, ask: r.ask } : {}) };   // (need/ask: the question to put first — the CD switch's choice)
       else {
         const changes = r.changes || [];
         const restoring = new Set(changes.filter((ch) => !ch.del && ch.kind !== 'trash').map((ch) => `${ch.kind}:${ch.id}`));

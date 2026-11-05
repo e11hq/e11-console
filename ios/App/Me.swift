@@ -1031,7 +1031,7 @@ final class MeCtl {
     let kinds = Set(stack.map { $0.kind })
     let env: Any = p["env"] ?? (["shell": SHELL_VERSION] as [String: Any])
     if let x = AppData.shared.meModel("me", "me", [env]) { for k in ["card", "work"] { if let v = x[k] { m[k] = v } } }
-    if has("profile") || kinds.contains("profile"), let x = AppData.shared.meModel("profile", "profile", [env]) { var v = x; if let pv = p["profile"] as? [String: Any] { for k in ["photoBusy", "owner"] { v[k] = pv[k] } }; m["profile"] = v }
+    if has("profile") || kinds.contains("profile"), let x = AppData.shared.meModel("profile", "profile", [env]) { var v = x; if let pv = p["profile"] as? [String: Any] { for k in ["photoBusy", "owner"] { v[k] = pv[k] } }; if pfBusy { v["photoBusy"] = true }; m["profile"] = v }
     if has("team") || kinds.contains("team"), let x = AppData.shared.meModel("team", "team", [env]) { m["team"] = x }
     if has("trash") || kinds.contains("trash"), let x = AppData.shared.meModel("trash", "trash", [trQv, trCatv, env]) { m["trash"] = x }
     if tab == "fin-reimb" || has("claims"), let x = AppData.shared.meModel("claims", "claims") { m["claims"] = x }
@@ -1070,6 +1070,178 @@ final class MeCtl {
     asks[rid] = done
     send(e)
     DispatchQueue.main.asyncAfter(deadline: .now() + 15) { [weak self] in self?.asks.removeValue(forKey: rid)?(["ok": false, "error": "No answer — try again"]) }
+  }
+  // ---------- Part B step 4: Me's own edits straight to the server — My profile, Trash, Team members (/api/app/act:
+  // pfSet, trForever, trEmpty, cd, member, addMember; the questions from the shared brain, web/appme-people.js, asked
+  // with iPhone's own alerts / sheets / forms). The server switched off for one (kv app-act-<group>), the copy not this
+  // person's yet, or no answer: the page's way, as before ----------
+  private var pfBusy = false
+  private var mineNow: Bool { AppData.shared.tabsOn && AppData.shared.ready && me != nil && AppData.shared.me == me }
+  // (testCopy: "Work as …?" leaves out Owner view on the test site, as the website does)
+  private var envNow: Any { var e = (pageModel["env"] as? [String: Any]) ?? ["shell": SHELL_VERSION]; if serverURL().contains("-test.") { e["testCopy"] = true }; return e }
+  private func brain(_ g: String, _ fn: String, _ args: [Any] = []) -> [String: Any]? { mineNow ? AppData.shared.meModel(g, fn, args) : nil }
+  // one edit: done → its toast (the server's message), the changed records into the copy at once; refused → its reason
+  private func direct(_ b: [String: Any], or page: [String: Any]?, quiet: Bool = false, _ then: (([String: Any]) -> Void)? = nil) {
+    let h = top
+    guard mineNow, JSONSerialization.isValidJSONObject(b) else { if let p = page { send(p) }; return }
+    var body = b; body["op"] = UUID().uuidString
+    main.serverTask.request("/api/app/act", body: body) { [weak self, weak h] j in
+      guard let self = self else { return }
+      guard let j = j else { h?.toast(["t": "No connection — try again"]); self.redraw(); return }
+      if (j["off"] as? Bool) == true { if let p = page { self.send(p) }; return }
+      if let ch = j["changes"] as? [[String: Any]], !ch.isEmpty { AppData.shared.applyLocal(ch) }
+      if (j["ok"] as? Bool) == true { if let m = (j["messages"] as? [String])?.first(where: { !$0.isEmpty }) { h?.toast(["t": m]) } }
+      else if j["need"] == nil && !quiet { UINotificationFeedbackGenerator().notificationOccurred(.error); h?.toast(["t": j["error"] as? String ?? "That didn’t work — try again"]); self.redraw() }
+      then?(j)
+    }
+  }
+  private func redraw() { guard !pageModel.isEmpty, !stack.isEmpty else { return }; model = own(pageModel); if !hidden { stack.forEach { draw($0) } } }
+  // an alert from the brain ({ title, body, okText, danger }); yes → go
+  private func confirm(_ q: [String: Any], _ go: @escaping () -> Void) {
+    var a = q; a["kind"] = "alert"; a["cancelText"] = "Cancel"
+    ask(a) { r in if (r["ok"] as? Bool) == true { go() } }
+  }
+  // a sheet from the brain ({ sheet, acts }): a row tapped → its act (asked first when it says so)
+  private func sheet(_ m: [String: Any], multi: Bool = false, _ run: @escaping ([String: Any]) -> Void) {
+    guard let a = m["sheet"] as? [String: Any], let acts = m["acts"] as? [[String: Any]] else { return }
+    let pickOne: (Int) -> Void = { i in guard i >= 0, i < acts.count else { return }; run(acts[i]) }
+    let vc = NativeSheetVC(a, dark: !light, pick: multi ? pickOne : nil) { i, _ in if !multi { pickOne(i) } }
+    main.topMost().present(vc, animated: true)
+  }
+  // My profile
+  private func pfSet(_ field: String, _ extra: [String: Any], page: [String: Any]?) {
+    var b: [String: Any] = ["ev": "pfSet", "field": field]; for (k, v) in extra { b[k] = v }
+    direct(b, or: page)
+  }
+  private func pfName() {
+    guard mineNow else { send(["ev": "pfName"]); return }
+    let cur = (model["profile"] as? [String: Any])?["name"] as? String ?? ""
+    func once(_ v: String, _ err: String) {
+      ask(["kind": "form", "title": "Full name", "okText": "Save", "error": err, "fields": [["key": "name", "label": "Full name", "type": "text", "value": v, "placeholder": "Your full name"]]]) { [weak self] r in
+        guard (r["ok"] as? Bool) == true else { return }
+        let n = ((r["values"] as? [String: Any])?["name"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if n.isEmpty { DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { once(n, "Please enter your name") }; return }
+        if n != cur { self?.pfSet("name", ["value": n], page: ["ev": "pfName"]) }
+      }
+    }
+    once(cur, "")
+  }
+  private func pfPlace(_ kind: String) {
+    let p = (model["profile"] as? [String: Any]) ?? [:]
+    guard mineNow, let list = brain("profile", "places", [kind, p["country"] as? String ?? ""])?["list"] as? [String] else { send(["ev": kind == "country" ? "pfCountry" : "pfCity"]); return }
+    let cur = p[kind] as? String ?? ""
+    var rows: [[String: Any]] = [], vals: [String] = []
+    if !cur.isEmpty { rows.append(["i": 0, "label": "Not set", "icon": "x"]); vals.append("") }
+    let top = rows
+    var listRows: [[String: Any]] = []
+    for x in list { listRows.append(["i": vals.count, "label": x, "checked": x == cur, "find": x]); vals.append(x) }
+    var sections: [[String: Any]] = []
+    if !top.isEmpty { sections.append(["rows": top]) }
+    sections.append(["rows": listRows])
+    var a: [String: Any] = ["sections": sections, "search": kind == "country" ? "Search countries" : list.isEmpty ? "Type your city" : "Search or type your city",
+                            "empty": kind == "country" ? "No country matches “%@”" : "Type the name of your city"]
+    if kind == "city" { a["custom"] = "Use “%@”" }   // (a city that isn't listed can be typed)
+    let vc = NativeSheetVC(a, dark: !light) { [weak self] i, typed in
+      let v: String? = i == -2 ? typed?.trimmingCharacters(in: .whitespacesAndNewlines) : (i >= 0 && i < vals.count ? vals[i] : nil)
+      guard let v = v, v != cur else { return }
+      self?.pfSet(kind, ["value": v], page: nil)
+    }
+    main.topMost().present(vc, animated: true)
+  }
+  private func pfBday() {
+    let p = (model["profile"] as? [String: Any]) ?? [:]
+    guard mineNow, let md = p["md"] as? String else { send(["ev": "pfBday"]); return }
+    let year = Calendar(identifier: .gregorian).component(.year, from: Date())
+    main.topMost().present(DateSheetVC(["value": md.isEmpty ? "" : "\(year)-\(md)", "min": "", "max": "", "clearable": !md.isEmpty, "md": true], dark: !light) { [weak self] r in
+      if (r["ok"] as? Bool) == false || (r["cancel"] as? Bool) == true { return }
+      let v: String = (r["clear"] as? Bool) == true ? "" : String((r["date"] as? String ?? "").dropFirst(5))
+      if (r["clear"] as? Bool) != true && v.isEmpty { return }
+      if v != md { self?.pfSet("bday", ["value": v.isEmpty ? NSNull() : v], page: nil) }
+    }, animated: true)
+  }
+  // your photo: picked here, sent up by the app, made round and small on the server, then saved on you (the old one to
+  // the trash folder)
+  private func pfPhoto(_ src: String) {
+    guard mineNow, let me = me else { send(["ev": "pfPhoto", "source": src]); return }
+    Picker.shared.pick(from: main.topMost(), single: true, source: src) { [weak self] r in
+      guard let self = self, let x = ((r["files"] as? [[String: Any]]) ?? []).first, let tok = x["token"] as? String, let url = Picker.shared.url(tok) else { return }
+      self.pfBusy = true; self.redraw()
+      let fail = { [weak self] in guard let self = self else { return }; self.pfBusy = false; self.redraw(); self.top?.toast(["t": "Couldn’t use that photo"]) }
+      Uploader.send(url, name: x["name"] as? String ?? "photo.jpg", task: "_uploads", cookies: self.main.serverHome.cookies, progress: { _ in }) { [weak self] path in
+        guard let self = self, let path = path else { fail(); return }
+        self.main.serverTask.request("/api/host/processImage", body: ["path": path, "kind": "avatar", "userId": me]) { [weak self] j in
+          guard let self = self, let pic = j?["path"] as? String, !pic.isEmpty else { fail(); return }
+          self.direct(["ev": "pfSet", "field": "avatar", "value": pic], or: nil) { [weak self] _ in self?.pfBusy = false; self?.redraw() }
+        }
+      }
+    }
+  }
+  private func pfPhotoOff() {
+    guard mineNow else { send(["ev": "pfPhotoOff"]); return }
+    confirm(["title": "Remove your photo?", "body": "Your initials show instead.", "okText": "Remove", "danger": true]) { [weak self] in self?.pfSet("avatar", ["value": NSNull()], page: ["ev": "pfPhotoOff"]) }
+  }
+  // Trash: Delete forever, Empty Trash — asked first, as the website does
+  private func trForever(_ id: String) {
+    guard let q = brain("trash", "trashAsk", [id]), q["title"] != nil else { send(["ev": "trForever", "id": id]); return }
+    confirm(q) { [weak self] in self?.direct(["ev": "trForever", "id": id], or: ["ev": "trForever", "id": id]) }
+  }
+  private func trEmpty() {
+    guard let q = brain("trash", "trashEmptyAsk"), q["title"] != nil else { send(["ev": "trEmpty"]); return }
+    confirm(q) { [weak self] in self?.direct(["ev": "trEmpty"], or: ["ev": "trEmpty"]) }
+  }
+  // Team members: someone's menu (role, rights, Finance access, clients, Social Manager, restore / remove), the
+  // Creative Director switch, Add member
+  private func memberMenu(_ id: String) {
+    guard let m = brain("team", "memberMenu", [id, envNow]), m["sheet"] != nil else { send(["ev": "member", "id": id]); return }
+    sheet(m) { [weak self] act in self?.memberAct(id, act) }
+  }
+  private func memberAct(_ id: String, _ act: [String: Any]) {
+    if (act["open"] as? String) == "clients" { clientsMenu(id); return }
+    var b = act; b["ev"] = "member"; b["id"] = id; b.removeValue(forKey: "ask")
+    let go = { [weak self] in self?.direct(b, or: ["ev": "member", "id": id]) { j in if (j["clients"] as? Bool) == true { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self?.clientsMenu(id) } } } }
+    if let q = act["ask"] as? [String: Any] { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.confirm(q, go) } } else { go() }
+  }
+  // the clients a freelancer can see: each tick saved at once (the sheet stays open)
+  private func clientsMenu(_ id: String) {
+    guard let m = brain("team", "clientsMenu", [id]), m["sheet"] != nil else { return }
+    sheet(m, multi: true) { [weak self] act in var b = act; b["ev"] = "member"; b["id"] = id; self?.direct(b, or: nil) }
+  }
+  private func cdFlow(_ id: String) {
+    guard let q = brain("team", "cdAsk", [id]) else { send(["ev": "cd", "id": id]); return }
+    let send2: ([String: Any]) -> Void = { [weak self] extra in
+      var b: [String: Any] = ["ev": "cd", "id": id]; for (k, v) in extra { b[k] = v }
+      self?.direct(b, or: ["ev": "cd", "id": id]) { j in
+        // (someone else is CD: the server's question — take over, or Acting CD while they're away)
+        guard (j["need"] as? String) == "choice", let a = j["ask"] as? [String: Any] else { return }
+        let choices = (a["choices"] as? [[String: Any]]) ?? []
+        var c2: [[String: Any]] = choices.map { ["label": $0["label"] as? String ?? "", "primary": ($0["primary"] as? Bool) == true] }
+        c2.append(["label": "Cancel", "cancel": true])
+        self?.ask(["kind": "choice", "title": a["title"] ?? "", "body": a["body"] ?? "", "choices": c2]) { r in
+          guard (r["ok"] as? Bool) == true, let i = r["index"] as? Int, i < choices.count, let v = choices[i]["value"] as? String else { self?.redraw(); return }
+          self?.direct(["ev": "cd", "id": id, "choice": v], or: nil)
+        }
+      }
+    }
+    if (q["choice"] as? Bool) == true { send2([:]); return }
+    if q["title"] == nil { redraw(); return }
+    var a = q; a["kind"] = "alert"; a["cancelText"] = "Cancel"
+    ask(a) { [weak self] r in if (r["ok"] as? Bool) == true { send2([:]) } else { self?.redraw() } }
+  }
+  private func addMember() {
+    guard let form = brain("team", "addMemberForm", [envNow]), form["fields"] != nil else { send(["ev": "addMember"]); return }
+    func once(_ vals: [String: Any]?, _ err: String) {
+      var a = form; a["kind"] = "form"; a["error"] = err
+      if let vals = vals { a["fields"] = ((form["fields"] as? [[String: Any]]) ?? []).map { f -> [String: Any] in var g = f; if let k = f["key"] as? String, let v = vals[k] { g["value"] = v }; return g } }
+      ask(a) { [weak self] r in
+        guard (r["ok"] as? Bool) == true, let v = r["values"] as? [String: Any] else { return }
+        var b: [String: Any] = ["ev": "addMember"]; for (k, x) in v { b[k] = x }
+        self?.direct(b, or: ["ev": "addMember"], quiet: true) { j in
+          if (j["ok"] as? Bool) != true, j["off"] == nil { DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { once(v, j["error"] as? String ?? "That didn’t work — try again") }; return }
+          if (j["clients"] as? Bool) == true, let nid = j["id"] as? String { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self?.clientsMenu(nid) } }
+        }
+      }
+    }
+    once(nil, "")
   }
   func openSoon(_ kind: String) {
     if main.selectedTabKey == tab, !hidden, !stack.isEmpty {
@@ -1441,7 +1613,7 @@ final class MeCtl {
         phone.append(SetItem(key: "lock", title: "\(kindW) lock", sub: "Asks for your face when E11 Console opens", sym: kindW == "Touch ID" ? "touchid" : "faceid", col: .systemGreen, toggle: (lk["on"] as? Bool) == true, flip: { [weak self, weak h] _ in self?.send(["ev": "lock"]); if let h = h { self?.settle(h) } }))
       }
       if let d = model["digest"] as? [String: Any] {
-        phone.append(SetItem(key: "digest", title: "Morning summary", sub: "10:30 am, Monday to Friday", sym: "sun.max.fill", col: .systemYellow, toggle: (d["on"] as? Bool) == true, flip: { [weak self, weak h] _ in self?.send(["ev": "digest"]); if let h = h { self?.settle(h) } }))
+        phone.append(SetItem(key: "digest", title: "Morning summary", sub: "10:30 am, Monday to Friday", sym: "sun.max.fill", col: .systemYellow, toggle: (d["on"] as? Bool) == true, flip: { [weak self, weak h] on in self?.pfSet("digest", ["on": on], page: ["ev": "digest"]); if let h = h { self?.settle(h) } }))
       }
       phone.append(SetItem(key: "appearance", title: "Appearance", value: themeWord, sym: "circle.lefthalf.filled", col: .systemIndigo, tap: { [weak self] in self?.open("appearance") }))
       out.append(head(h, "phone", "This iPhone")); out.append(group(h, "phone", phone))
@@ -1588,7 +1760,7 @@ final class MeCtl {
       let title: String = (p["name"] as? String ?? "") + ((p["you"] as? Bool) == true ? " (you)" : "")
       let pic: (photo: String?, ini: String, rgb: UIColor) = (p["photo"] as? String, p["ini"] as? String ?? "", NativeSheetVC.color(p["rgb"]) ?? .systemGray)
       let past: Bool = (p["past"] as? Bool) == true
-      let held: (() -> Void)? = hold ? { [weak self] in self?.send(["ev": "member", "id": id]) } : nil
+      let held: (() -> Void)? = hold ? { [weak self] in self?.memberMenu(id) } : nil
       return SetItem(key: id, title: title, sub: sub, pills: pills, person: pic, warn: pending, dim: past, tap: { [weak self] in self?.open("member", id) }, hold: held)
     }
   }
@@ -1914,7 +2086,7 @@ final class MeCtl {
     let guide = part(h, "guide") { RoleGuide() }
     guide.set((t["guide"] as? [[Any]]) ?? [], look: h.look)
     out.append(guide)
-    if admin { h.setFab("Add member", "plus", { [weak self] in self?.send(["ev": "addMember"]) }) }
+    if admin { h.setFab("Add member", "plus", { [weak self] in self?.addMember() }) }
   }
   // My profile (the locked mockup, Haris 2026-11-03): the photo, ABOUT YOU, ROLE, NOTIFICATIONS, NOTIFY ME ABOUT, the
   // CD's own, Owner view (the owner, live site). Everything is saved as it changes — no Save button.
@@ -1925,9 +2097,9 @@ final class MeCtl {
     top.set(p, look: h.look)
     top.onChange = { [weak self] in
       guard let self = self else { return }
-      self.main.topMost().present(AttachSheetVC(light: self.light, title: "Your photo") { [weak self] src in self?.send(["ev": "pfPhoto", "source": src]) }, animated: true)
+      self.main.topMost().present(AttachSheetVC(light: self.light, title: "Your photo") { [weak self] src in self?.pfPhoto(src) }, animated: true)
     }
-    top.onRemove = { [weak self] in self?.send(["ev": "pfPhotoOff"]) }
+    top.onRemove = { [weak self] in self?.pfPhotoOff() }
     out.append(top)
     let v: (String) -> String = { k in p[k] as? String ?? "" }
     let none = "Not set"
@@ -1935,11 +2107,11 @@ final class MeCtl {
     mail.tap = { [weak h] in UIPasteboard.general.string = v("email"); h?.toast(["t": "Email copied"]) }
     out.append(head(h, "you", "About you"))
     out.append(group(h, "you", [
-      SetItem(key: "name", title: "Name", value: v("name").isEmpty ? none : v("name"), tap: { [weak self] in self?.send(["ev": "pfName"]) }),
+      SetItem(key: "name", title: "Name", value: v("name").isEmpty ? none : v("name"), tap: { [weak self] in self?.pfName() }),
       mail,
-      SetItem(key: "country", title: "Country", value: v("country").isEmpty ? none : v("country"), tap: { [weak self] in self?.send(["ev": "pfCountry"]) }),
-      SetItem(key: "city", title: "City", value: v("city").isEmpty ? none : v("city"), tap: { [weak self] in self?.send(["ev": "pfCity"]) }),
-      SetItem(key: "bday", title: "Birthday", value: v("bday").isEmpty ? "Optional" : v("bday"), tap: { [weak self] in self?.send(["ev": "pfBday"]) }),
+      SetItem(key: "country", title: "Country", value: v("country").isEmpty ? none : v("country"), tap: { [weak self] in self?.pfPlace("country") }),
+      SetItem(key: "city", title: "City", value: v("city").isEmpty ? none : v("city"), tap: { [weak self] in self?.pfPlace("city") }),
+      SetItem(key: "bday", title: "Birthday", value: v("bday").isEmpty ? "Optional" : v("bday"), tap: { [weak self] in self?.pfBday() }),
     ]))
     out.append(foot(h, "you", "Your email can’t be changed here. People see your role and city when they look at your name. Your birthday stays private: on the day, the team is told it’s your birthday."))
     let pills: [(String, UIColor)] = ((p["pills"] as? [[String: Any]]) ?? []).map { ($0["t"] as? String ?? "", NativeSheetVC.color($0["c"]) ?? .systemGray) }
@@ -1948,12 +2120,12 @@ final class MeCtl {
     out.append(foot(h, "role", "Only Admins change roles and rights, in Team members."))
     out.append(head(h, "nt", "Notifications"))
     out.append(group(h, "nt", [
-      SetItem(key: "sound", title: "Sound", sub: "Play a sound with new notifications", sym: "speaker.wave.2.fill", col: .systemPink, toggle: (p["sound"] as? Bool) != false, flip: { [weak self] _ in self?.send(["ev": "pfSound"]) }),
+      SetItem(key: "sound", title: "Sound", sub: "Play a sound with new notifications", sym: "speaker.wave.2.fill", col: .systemPink, toggle: (p["sound"] as? Bool) != false, flip: { [weak self] on in self?.pfSet("sound", ["value": on], page: ["ev": "pfSound"]) }),
       SetItem(key: "test", title: "Send a test notification", sub: "See and hear what one looks like", sym: "bell.badge.fill", col: .systemRed, tap: { [weak self] in self?.send(["ev": "pfTest"]) }),
     ]))
     let kinds: ([[String: Any]], String) -> [SetItem] = { list, tag in list.map { x -> SetItem in
       let k = x["k"] as? String ?? ""
-      return SetItem(key: tag + k, title: x["t"] as? String ?? "", sub: x["s"] as? String ?? "", toggle: (x["on"] as? Bool) == true, flip: { [weak self] _ in self?.send(["ev": "pfNotif", "k": k]) })
+      return SetItem(key: tag + k, title: x["t"] as? String ?? "", sub: x["s"] as? String ?? "", toggle: (x["on"] as? Bool) == true, flip: { [weak self] on in self?.pfSet("notif", ["k": k, "on": on], page: ["ev": "pfNotif", "k": k]) })
     } }
     out.append(head(h, "about", "Notify me about"))
     out.append(group(h, "about", kinds((p["notify"] as? [[String: Any]]) ?? [], "n.")))
@@ -1984,7 +2156,7 @@ final class MeCtl {
     let t = (model["trash"] as? [String: Any]) ?? [:]
     let n = t["n"] as? Int ?? 0
     h.drawAssetsBar(name: "Trash", sub: t.isEmpty ? "" : n == 0 ? "Empty" : "\(n) item\(n == 1 ? "" : "s") · restore within 30 days", logo: nil, rgb: nil, ini: nil, showLogo: false)
-    h.assetsMenu = (t["empty"] as? Bool) == true ? { [weak self] in [CornerMenuItem(title: "Empty Trash", symbol: "trash", destructive: true, run: { self?.send(["ev": "trEmpty"]) })] } : { [] }
+    h.assetsMenu = (t["empty"] as? Bool) == true ? { [weak self] in [CornerMenuItem(title: "Empty Trash", symbol: "trash", destructive: true, run: { self?.trEmpty() })] } : { [] }
     if t.isEmpty { let w = part(h, "wait") { AssetsNote() }; w.label.text = "Loading…"; out.append(w); return }
     let find = part(h, "find") { AssetsFind() }
     find.field.placeholder = "Search the Trash"
@@ -2006,6 +2178,7 @@ final class MeCtl {
       tg.onEvent = { [weak self, weak h] ev in
         // (Restore: straight to the server — step 3 — with the page's own toast; the rest as before)
         if (ev["ev"] as? String) == "trRestore" { self?.request(ev) { r in h?.toast(["t": (r["ok"] as? Bool) == true ? (r["toast"] as? String ?? "Restored") : (r["error"] as? String ?? "That didn’t work — try again")]) }; return }
+        if (ev["ev"] as? String) == "trForever", let id = ev["id"] as? String { self?.trForever(id); return }
         self?.send(ev)
       }
       tg.set(items, look: h.look)
@@ -2196,9 +2369,9 @@ final class MeCtl {
       var manage: [SetItem] = []
       if (p["locked"] as? Bool) == true { manage.append(SetItem(key: "locked", title: "Only the owner can change this account", sym: "lock.fill", col: .systemGray, chevron: false)) }
       else {
-        manage.append(SetItem(key: "manage", title: "Role, rights and access", sub: "Change role, Super Admin rights, Finance access…", sym: "slider.horizontal.3", col: .systemBlue, tap: { [weak self] in self?.send(["ev": "member", "id": id]) }))
+        manage.append(SetItem(key: "manage", title: "Role, rights and access", sub: "Change role, Super Admin rights, Finance access…", sym: "slider.horizontal.3", col: .systemBlue, tap: { [weak self] in self?.memberMenu(id) }))
         if let cd = p["cd"] as? [String: Any] {
-          manage.append(SetItem(key: "cd", title: "Creative Director", sub: cd["label"] as? String ?? "", sym: "star.fill", col: .systemPurple, toggle: (cd["on"] as? Bool) == true, flip: { [weak self, weak h] _ in self?.send(["ev": "cd", "id": id]); if let h = h { self?.settle(h) } }))
+          manage.append(SetItem(key: "cd", title: "Creative Director", sub: cd["label"] as? String ?? "", sym: "star.fill", col: .systemPurple, toggle: (cd["on"] as? Bool) == true, flip: { [weak self, weak h] _ in self?.cdFlow(id); if let h = h { self?.settle(h) } }))
         }
       }
       out.append(head(h, "manage", "Admin")); out.append(group(h, "manage", manage))

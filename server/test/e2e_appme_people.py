@@ -24,6 +24,8 @@ COMPARE = """(async () => {
   const pf = clean(NativeMe.profileModel()); delete pf.photoBusy; delete pf.owner;
   out.page.profile = pf;
   out.app.profile = clean(E11AppMe.profile(E11Rules, data, me, now, env));
+  // (md: the raw 'MM-DD' birthday, the app's date picker's — the page's model has only the day as shown)
+  if (!('md' in pf) && out.app.profile) { out.mdOk = out.app.profile.md === (userById(me).bday || ''); delete out.app.profile.md; } else out.mdOk = true;
   // the Trash: every category, a word from an item's title, a typo of it, and nothing found
   const t0 = (trashList()[0] || null);
   const word = t0 ? (sWords(trashTitle(t0))[0] || '') : '';
@@ -63,6 +65,7 @@ async def main():
     def check(good, what, extra=''):
         ok.append(bool(good)); print(('ok  ' if good else 'FAIL'), what, '' if good else extra)
     def same(r, who):
+        check(r.get('mdOk'), f'{who}: profile md is the raw birthday')
         for k in ('me', 'team', 'profile', 'trash'):
             d = diff(r['app'][k], r['page'][k], k)
             check(not d, f'{who}: {k} the same' + (f' ({r["nTrash"]} in the Trash, word “{r["word"]}”)' if k == 'trash' else ''), '\n   ' + '\n   '.join(d))
