@@ -451,6 +451,7 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
       if ((k === 'review' || k === 'review-wd') && W.isCD()) go = { to: 'review', id: null, tab: null };
       else if (k === 'asset' && hint.clientId && W.clients.some((c) => c.id === hint.clientId)) go = O.assets(hint.clientId, hint.folderId);
       else if (/^claim/.test(k)) go = O.claim({ kind: k });
+      else if (k === 'daily') go = { to: 'daily' };   // (the round-up is worked out afresh: it needn't wait for the update)
       else if (/^plan/.test(k) && hint.planId && O.planById(hint.planId)) go = { to: 'plan', id: hint.planId };
       else if (taskId && O.task(taskId)) go = O.openTask(taskId, ['comment', 'mention', 'review-amend'].includes(hint.kind) && hint.commentId ? 'comments' : 'details');
       return Object.assign({ read: [], go }, nid ? { wait: true } : {});
@@ -503,6 +504,75 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
     if (c) return out(O.openTask(t.id, 'comments', Object.assign({ focus: c.id }, c.parentId ? { thread: c.parentId } : {})));
     if (n.kind === 'mention') return out(O.openTask(t.id, 'details', { desc: true }));
     return out(O.openTask(t.id, 'details'));
+  };
+  // ---------- The morning round-up (Part B step 8): web/daily.js nativeShow, worked out without the page ----------
+  // daily() → the app's own sheet (dailySheet): { title, sub, foot, open: the first section with something | '',
+  //   sections: [{ k, l, sym, rgb, n, rows: [{ id, t, m, d, late }], more: { t } | null, filter: My Tasks' filter | null }],
+  //   team: the whole team's (a Super Admin — My Tasks gets team: true too) } · null: not one who gets it (AMs, Super Admins)
+  const D_SYM = { overdue: 'flag.fill', today: 'calendar', cd: 'checkmark.shield.fill', amend: 'pencil', client: 'checkmark', sched: 'clock.fill' };
+  const D_RGB = { red: [255, 59, 48], amber: [255, 159, 10], accent: [10, 132, 255], sched: [142, 92, 247] };
+  M.daily = function (R, data, meId, nowMs) {
+    const W = world(R, data, meId, nowMs), u = W.me(), r = W.r;
+    data = data || {};
+    const isOffice = !!u && u.role === 'office_admin' && u.admin !== true;
+    const team = !!u && W.isAdm(u) && !isOffice;
+    if (!u || !(u.role === 'am' || team)) return null;
+    const today = W.today;
+    const ids = team ? W.users.filter((x) => x.active !== false && (x.role === 'am' || W.isAdm(x))).map((x) => x.id) : [u.id];
+    const open = r.leadSet(ids).filter((t) => !t.done && !(W.proj(t.projectId) || {}).inactive);
+    const byDue = (a, b) => (a.due || '9999').localeCompare(b.due || '9999');
+    const hasApproved = (t) => (t.reviews || []).some((x) => x.state === 'approved');
+    const amend = (t) => r.needsCD(t) && r.reviewersOf(t).some((x) => r.reviewState(t, x) === 'amend');
+    const dubaiDay = (iso) => new Date(Date.parse(iso) + 4 * 3600000).toISOString().slice(0, 10);
+    const sched = (Array.isArray(data.scheduled) ? data.scheduled : []).filter((s) => s.authorId === u.id && s.state === 'waiting' && dubaiDay(s.sendAt) === today)
+      .sort((a, b) => String(a.sendAt).localeCompare(String(b.sendAt)));
+    const S = [
+      { k: 'overdue', l: 'Overdue', tone: 'red', tasks: open.filter((t) => t.due && t.due < today).sort(byDue), filter: { due: 'late' } },
+      { k: 'today', l: 'Due today', tone: 'amber', tasks: open.filter((t) => t.due === today), filter: { due: 'today' } },
+      { k: 'cd', l: 'Waiting for CD review', tone: 'accent', tasks: open.filter(r.reviewPending), filter: { cd: true } },
+      { k: 'amend', l: 'Amendments sent back', tone: 'red', tasks: open.filter(amend) },
+      { k: 'client', l: 'Client approval missing', tone: 'amber', tasks: open.filter((t) => hasApproved(t) && !r.clientApprovalFresh(t)) },
+      { k: 'sched', l: 'Your comments scheduled today', tone: 'accent', sched },
+    ];
+    const n = (s) => (s.sched ? s.sched.length : s.tasks.length);
+    const now = new Date(W.now);
+    const clock = (d) => d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Dubai' });
+    const first = S.find((s) => n(s));
+    const sections = S.map((s) => {
+      const c = n(s);
+      // (7 lines at most — "See … in My Tasks" is one of them)
+      const room = s.filter ? 6 : 7;
+      const rows = s.sched
+        ? s.sched.slice(0, 7).map((x) => { const t = W.task(x.taskId); return { id: x.taskId, t: r.trunc(x.text || 'Files', 70), m: t ? (t.title || 'Untitled task') : '', d: clock(new Date(x.sendAt)), late: false }; })
+        : s.tasks.slice(0, room).map((t) => { const p = W.proj(t.projectId); return { id: t.id, t: t.title || 'Untitled task', m: p ? p.name : '', d: t.due ? r.fmtDay(t.due) : '', late: !!(t.due && t.due < today) }; });
+      return { k: s.k, l: s.l, sym: D_SYM[s.k] || 'circle', rgb: s.k === 'sched' ? D_RGB.sched : D_RGB[s.tone] || D_RGB.accent, n: c, rows,
+        more: s.filter && c ? { t: c > 6 ? `See all ${c} in My Tasks` : 'See them in My Tasks' } : null, filter: s.filter || null };
+    });
+    const when = now.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Asia/Dubai' });
+    const first1 = (W.fullName(u) || '').split(' ')[0];
+    return {
+      title: `Good morning, ${first1}`, sub: `${when} · ${team ? 'the whole team’s tasks' : r.hasClients(u.id) ? 'your clients’ tasks' : 'your tasks'}`,
+      foot: `Up to date as of ${clock(now)}`, open: first ? first.k : '', sections, team,
+    };
+  };
+  // ---------- The startup screen's four rows (Part B step 8): app.js Splash values(), worked out without the page ----------
+  // startRows() → { list: [Clients, Your tasks, Inbox, the fourth], label4, cd } · null: not a member
+  M.startRows = function (R, data, meId, nowMs) {
+    const W = world(R, data, meId, nowMs), u = W.me();
+    if (!u) return null;
+    data = data || {};
+    const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+    let open = 0, today = 0;
+    try { const D = W.r.day(); const o = D.tasks.filter(D.open); open = o.length; today = o.filter((t) => t.due && t.due === W.today).length; } catch (e) { /* none */ }
+    const unread = (Array.isArray(data.notifications) ? data.notifications : []).filter((n) => n.to === meId && !n.read).length;
+    const cd = W.isCD();
+    // (app.js activeReviews: the CD's requests waiting)
+    const waiting = cd ? W.tasks.filter((t) => !t.done && !t.parentId && t.needsCD).reduce((n, t) => n + (t.reviews || []).filter((x) => x.state === 'pending' && (x.epoch || 0) === (t.reviewEpoch || 0)).length, 0) : 0;
+    return {
+      cd, label4: cd ? 'Review requests' : 'Client Assets',
+      list: [`${W.projects.filter((p) => !p.archived).length} synced`, `${open} open · ${today} today`, unread ? `${unread > 99 ? '99+' : unread} new` : 'all read',
+        cd ? (waiting ? `${waiting} waiting` : 'none waiting') : plural(W.clients.length, 'client', 'clients')],
+    };
   };
   // A shared task link in the iPhone app (TaskLink.open → show): { go } —
   //   { to: 'task', id, tab: 'details', focus: '' } · { toast, home: true } (an Office Admin)

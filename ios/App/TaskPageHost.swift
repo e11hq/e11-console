@@ -1047,7 +1047,7 @@ extension Main {
 // My Tasks' filters, the app's own (Part B step 6): the page's Work.f() kept here for each person; their buttons, chips and
 // the server's query from the copy (myTasksSignal); the filter sheets too (myTasksFilterMenu)
 extension Main {
-  private var mtKey: String { "e11_mytasks_" + (myTasksPageMe ?? "") }
+  private var mtKey: String { "e11_mytasks_" + (myTasksPageMe ?? AppData.shared.me ?? "") }
   var myTasksF: [String: Any] {
     get {
       if let d = defaults.data(forKey: mtKey), let f = try? JSONSerialization.jsonObject(with: d) as? [String: Any], let x = f["f"] as? [String: Any] { return x }
@@ -1160,7 +1160,7 @@ extension Main {
     else { r = AppData.shared.meModel("tasks", "notifOpen", [nid ?? NSNull(), hint]) }
     guard let res = r, let go = res["go"] as? [String: Any] else { return r != nil }
     let to = go["to"] as? String ?? ""
-    if ["plan", "claim", "daily", "schedCancel", "trash"].contains(to) { return false }
+    if ["plan", "claim", "schedCancel", "trash"].contains(to) { return false }
     let read = (res["read"] as? [String]) ?? []
     if !read.isEmpty { serverTask.request("/api/home/act", body: ["act": "readList", "ids": read, "op": UUID().uuidString]) { _ in } }
     if let t = go["toast"] as? String, to.isEmpty {
@@ -1191,6 +1191,7 @@ extension Main {
       guard let c = go["client"] as? String else { return false }
       assetsCtl.openFromClients(client: c, folder: go["folder"] as? String)
     case "birthday": break
+    case "daily": if !dailyNative() { return false }
     default: return false
     }
     // (tapped before the update itself reached the app: marked read once it's there)
@@ -1203,6 +1204,37 @@ extension Main {
       if (again["wait"] as? Bool) == true { if tries < 8 { self.waitReadNotif(n, hint, tries + 1) }; return }
       let ids = (again["read"] as? [String]) ?? []
       if !ids.isEmpty { self.serverTask.request("/api/home/act", body: ["act": "readList", "ids": ids, "op": UUID().uuidString]) { _ in } }
+    }
+  }
+}
+
+// Part B step 8: the morning round-up — worked out by the shared brain (web/appme-tasks.js daily, as daily.js) and shown
+// as the app's own sheet; a task opens the app's own task page, "See … in My Tasks" opens My Tasks with that filter
+extension Main {
+  @discardableResult func dailyNative() -> Bool {
+    guard AppData.shared.tabsOn, AppData.shared.ready, AppData.shared.isStarted, var m = AppData.shared.meModel("tasks", "daily"), let host = sheetHost() else { return false }
+    m["light"] = statusStyle == .darkContent
+    host.present(DailySheetVC(m) { [weak self] ev in self?.dailyTap(ev) }, animated: true)
+    return true
+  }
+  private func dailyTap(_ ev: [String: Any]) {
+    switch ev["ev"] as? String ?? "" {
+    case "open":
+      guard let id = ev["id"] as? String, !id.isEmpty else { return }
+      if AppData.shared.screen("task", id).model != nil { openTaskPage(id, tab: "details", focus: "") }
+      else { shownScreen?.toast(["t": "That task isn’t there anymore"]) }
+    case "all":
+      // (the page's way: My Tasks' filters cleared, then the section's, the whole team's for a Super Admin; All)
+      guard let m = AppData.shared.meModel("tasks", "daily"), let s = (m["sections"] as? [[String: Any]])?.first(where: { ($0["k"] as? String) == (ev["k"] as? String) }),
+            let f = s["filter"] as? [String: Any] else { return }
+      var to = (AppData.shared.meModel("tasks", "myTasksDefault")?["filters"] as? [String: Any]) ?? [:]
+      if (m["team"] as? Bool) == true { to["team"] = true }
+      f.forEach { to[$0.key] = $0.value }
+      myTasksF = to; myTasksTab = "all"
+      // (from a task page: back to the tabs first)
+      for p in taskPages { closeTaskPage(p, animated: false) }
+      if selectedTabKey == "mytasks" { myTasksAgain() } else { selectTab("mytasks") }
+    default: break
     }
   }
 }

@@ -1221,7 +1221,9 @@ var E11Rules = (() => {
     return { peopleLocked, home, myTasks, myTasksFilters, inbox, inboxRow, clientsList, clientPage, setFinance, canFinance, myDayData, cardOf, can, amReadOnly, canComplete, completeBlocked, dayTitle, statusInfo, sectionOf,
       notifGroups: NOTIF_GROUPS, doneLocked, canReopen, finish, finishBlocked, canFinish, moveToStatus, logActivity, logChange, pushNotif, notifyWatchers, checkPrioConflict, setDone, setDue, setClientApproval, asksClientApproval, deleteTask, watchersOf, creatorOf, clientAmsOf, fmtDue,
       taskPage, setTitle, setStart, setStatus, setMyPart, setPrio, prioTaken, toggleCheck, setNeedsCD, setUpdate, idLocked,
-      setAssignee, setGuardian, addTag, removeTag, setChannels, addCheck, addSubtask, setClient, commentsFeed, toggleReaction, deleteComment, setDesc, submitReview, withdrawReview, postComment, editComment, mentionable, attachFilesTo };
+      setAssignee, setGuardian, addTag, removeTag, setChannels, addCheck, addSubtask, setClient, commentsFeed, toggleReaction, deleteComment, setDesc, submitReview, withdrawReview, postComment, editComment, mentionable, attachFilesTo,
+      // (the morning round-up and the startup screen, worked out by the app — Part B step 8)
+      day, leadSet, hasClients, needsCD, reviewersOf, reviewState, reviewPending, clientApprovalFresh, fmtDay, trunc };
   }
 
   // (the clock and new ids for the actions: the website's own, or the server's)

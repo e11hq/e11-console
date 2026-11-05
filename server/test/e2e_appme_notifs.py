@@ -230,6 +230,7 @@ async def main():
                     want_go = app.get('go')
                     if want_go and want_go.get('to') == 'birthday': want_go = None   # (the page: just read)
                     if want_go and want_go.get('peek'): want_go = {'toast': want_go['toast']}   # (no peek for a task that isn't anywhere)
+                    if want_go and want_go.get('to') == 'daily' and c.get('hint'): want_go = None   # (the app shows the round-up at once — step 8; the page waited for the update)
                     same(want_go, r['page']['go'], lbl + ': where it goes')
                     same(sorted(app.get('read') or []), sorted(r['page']['read']), lbl + f": read ({len(r['page']['read'])})")
                     if os.environ.get('SHOW'): print('   ', role, c.get('nid') or c.get('link'), json.dumps(r['page']['go'])[:150], len(r['page']['read']))
