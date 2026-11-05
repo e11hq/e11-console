@@ -997,7 +997,8 @@ extension Main {
     }
     if paths.isEmpty { done(swap(obj) as? [String: Any] ?? obj); return }
     var left = paths.count, sent = false
-    let finish = { if !sent { sent = true; done(swap(obj) as? [String: Any] ?? obj) } }
+    let t0 = CACurrentMediaTime()
+    let finish = { if !sent { sent = true; SlowWatch.note("sheet photos", wait: CACurrentMediaTime() - t0, run: 0); done(swap(obj) as? [String: Any] ?? obj) } }
     for p in paths {
       let enc = p.split(separator: "/").map { String($0).addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? String($0) }.joined(separator: "/")
       guard let url = URL(string: serverURL() + (p.hasPrefix("/") ? p : "/__file/" + enc)) else { left -= 1; continue }

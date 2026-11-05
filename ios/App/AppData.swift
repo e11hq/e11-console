@@ -251,7 +251,9 @@ final class AppData: NSObject, URLSessionDataDelegate {
   // → (ready, the model): not ready — ask the server as before; ready with nil — not there / not for this person
   func screen(_ kind: String, _ a: String? = nil, _ b: String? = nil) -> (ready: Bool, model: [String: Any]?) {
     guard copyReady else { return (false, nil) }
-    let out: String? = q.sync { call("E11AppView.screen", [kind, a ?? NSNull(), b ?? NSNull()]) as? String }
+    let t0 = CACurrentMediaTime(); var t1 = t0
+    let out: String? = q.sync { t1 = CACurrentMediaTime(); return call("E11AppView.screen", [kind, a ?? NSNull(), b ?? NSNull()]) as? String }
+    SlowWatch.note(kind == "me" ? "me." + (a ?? "") : kind, wait: t1 - t0, run: CACurrentMediaTime() - t1)
     guard let s = out, !s.isEmpty, let d = s.data(using: .utf8), let j = (try? JSONSerialization.jsonObject(with: d)) as? [String: Any] else { return (false, nil) }
     if j["error"] != nil { return (false, nil) }   // (something it couldn't work out: the server's instead)
     return (true, j["model"] as? [String: Any])
@@ -319,11 +321,69 @@ final class AppData: NSObject, URLSessionDataDelegate {
       }.resume()
     } }
   }
+  func withCookie(_ f: @escaping (String) -> Void) { onMain { self.cookies(f) } }
   private func onMain(_ f: @escaping () -> Void) { if Thread.isMainThread { f() } else { DispatchQueue.main.async(execute: f) } }
   private func request(_ path: String, _ done: @escaping ([String: Any]?) -> Void) {
     raw(path) { s in
       let j = s.flatMap { $0.data(using: .utf8) }.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
       DispatchQueue.main.async { done(j) }
+    }
+  }
+}
+
+/* Where the time goes (Haris 2026-11-05: "all feels slower" without the website). Each screen worked out from the copy
+   is timed — waiting for the engine and working it out — and a watchdog notes every moment the screen froze (the main
+   thread not answering for over 0.15 s) with the last screens worked out before it. Once a minute, when something was
+   slow, one note goes to the server's app-error list (where: "slow") for us to read. Nothing is shown to anyone. */
+enum SlowWatch {
+  private static var calls: [String: (n: Int, wait: Double, run: Double, max: Double)] = [:]
+  private static var recent: [String] = []
+  private static var freezes: [String] = []
+  private static var started = false
+  private static let lock = NSLock()
+  static func note(_ name: String, wait: Double, run: Double) {
+    lock.lock(); defer { lock.unlock() }
+    var c = calls[name] ?? (0, 0, 0, 0)
+    c.n += 1; c.wait += wait; c.run += run; c.max = max(c.max, wait + run)
+    calls[name] = c
+    recent.append("\(name) \(Int((wait + run) * 1000))ms"); if recent.count > 6 { recent.removeFirst() }
+    start()
+  }
+  private static func start() {
+    guard !started else { return }; started = true
+    // the watchdog: pings the main thread every 0.1 s from its own thread
+    let t = Thread {
+      while true {
+        let sent = CACurrentMediaTime(); let done = DispatchSemaphore(value: 0)
+        DispatchQueue.main.async { done.signal() }
+        if done.wait(timeout: .now() + 0.15) == .timedOut {
+          done.wait()
+          let ms = Int((CACurrentMediaTime() - sent) * 1000)
+          do {
+            lock.lock(); freezes.append("\(ms)ms after [\(recent.joined(separator: ", "))]"); if freezes.count > 15 { freezes.removeFirst() }; lock.unlock()
+          }
+        }
+        Thread.sleep(forTimeInterval: 0.1)
+      }
+    }
+    t.qualityOfService = .userInteractive; t.start()
+    Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in send() }
+  }
+  private static func send() {
+    lock.lock()
+    let slow = calls.filter { $0.value.max >= 0.05 }.sorted { $0.value.max > $1.value.max }.prefix(12)
+      .map { "\($0.key) ×\($0.value.n) max \(Int($0.value.max * 1000)) avg \(Int(($0.value.run / Double($0.value.n)) * 1000))+wait \(Int(($0.value.wait / Double($0.value.n)) * 1000))" }
+    let fz = freezes
+    calls = [:]; freezes = []
+    lock.unlock()
+    guard !slow.isEmpty || !fz.isEmpty, let url = URL(string: serverURL() + "/api/client-error") else { return }
+    let body: [String: Any] = ["where": "slow", "message": "screens: " + slow.joined(separator: " | "), "stack": "freezes: " + fz.joined(separator: " | "),
+                               "version": "ios \(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "") nopage=\(UserDefaults.standard.bool(forKey: "e11_nopage"))", "standalone": true]
+    AppData.shared.withCookie { cookie in
+      var r = URLRequest(url: url); r.httpMethod = "POST"; r.setValue("application/json", forHTTPHeaderField: "Content-Type")
+      if !cookie.isEmpty { r.setValue(cookie, forHTTPHeaderField: "Cookie") }
+      r.httpBody = try? JSONSerialization.data(withJSONObject: body)
+      URLSession.shared.dataTask(with: r).resume()
     }
   }
 }

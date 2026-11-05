@@ -552,7 +552,7 @@ export function createServer(cfg) {
       if (mine.length >= 20) return json(res, 200, { ok: true, dropped: true });
       mine.push(now); errorCounts.set(u.id, mine);
       const clip = (v, n) => String(v == null ? '' : v).slice(0, n);
-      const entry = { at: new Date(now).toISOString(), user: u.email, where: clip(body.where, 20), message: clip(body.message, 500), stack: clip(body.stack, 2000),
+      const entry = { at: new Date(now).toISOString(), user: u.email, where: clip(body.where, 20), message: clip(body.message, body.where === 'slow' ? 2000 : 500), stack: clip(body.stack, body.where === 'slow' ? 3000 : 2000),
         version: clip(body.version, 40), ua: clip(body.ua, 300), standalone: !!body.standalone, width: Number(body.width) || 0, page: clip(body.page, 200) };
       let list = []; try { list = JSON.parse(store.kv.get('client-errors') || '[]'); } catch { list = []; }
       list.push(entry); store.kv.set('client-errors', JSON.stringify(list.slice(-100)));
