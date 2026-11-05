@@ -244,10 +244,10 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     backgroundColor = L.bg
     // (the system's own text colours, as Mail: label for the titles, secondary label for the lines under them)
     overrideUserInterfaceStyle = L.light ? .light : .dark
-    sub.text = model["date"] as? String; sub.textColor = .secondaryLabel
+    HomeView.fadeText(sub, model["date"] as? String); sub.textColor = .secondaryLabel
     title.attributedText = NSAttributedString(string: model["title"] as? String ?? "", attributes: [.font: UIFont.systemFont(ofSize: 34, weight: .bold), .foregroundColor: UIColor.label])
     smallTitle.text = model["title"] as? String; smallTitle.textColor = .label
-    smallSub.text = model["date"] as? String; smallSub.textColor = .secondaryLabel
+    HomeView.fadeText(smallSub, model["date"] as? String); smallSub.textColor = .secondaryLabel
     blur.effect = UIBlurEffect(style: L.light ? .systemUltraThinMaterialLight : .systemUltraThinMaterialDark)
     hairline.backgroundColor = L.light ? UIColor.black.withAlphaComponent(0.08) : UIColor.white.withAlphaComponent(0.08)
     topLine.backgroundColor = L.light ? UIColor.black.withAlphaComponent(0.12) : UIColor.white.withAlphaComponent(0.12)
@@ -581,12 +581,41 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   func setFab(_ title: String, _ sym: String, _ run: (() -> Void)?) {
     fabRun = run
     guard var c = fab.configuration else { return }
+    // (another label on a button that's showing — a tab switched: Add subscription ↔ Add office expense — it squashes
+    //  and stretches into its new width, the words crossfading: the standard for every such button, Haris 2026-11-05)
+    let morph = !fab.isHidden && run != nil && fab.window != nil && fab.bounds.width > 0 && fab.accessibilityLabel != nil && fab.accessibilityLabel != title
     fabSym = sym
     c.image = UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold))
     c.attributedTitle = AttributedString(title, attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 17, weight: .semibold)]))
+    let was = fab.frame
+    if morph { let t = CATransition(); t.type = .fade; t.duration = 0.22; fab.layer.add(t, forKey: "label") }
     fab.configuration = c; fab.accessibilityLabel = title
     fab.isHidden = run == nil
     setNeedsLayout()
+    if morph { DispatchQueue.main.async { [weak self] in self?.squashFab(from: was) } }
+  }
+  // the button from its old size to its new one with a little squash and stretch (iPhone's own spring, as its own
+  // buttons do when they change)
+  private func squashFab(from was: CGRect) {
+    layoutIfNeeded()
+    let to = fab.frame
+    guard to.width > 0, abs(to.width - was.width) > 0.5 || to.minY != was.minY else { return }
+    UIView.performWithoutAnimation { fab.frame = was }
+    UIView.animate(withDuration: 0.5, delay: 0, usingSpringWithDamping: 0.62, initialSpringVelocity: 0.4, options: [.allowUserInteraction, .beginFromCurrentState]) { self.fab.frame = to }
+    let k = CAKeyframeAnimation(keyPath: "transform.scale.y")
+    k.values = [1, 0.9, 1.05, 0.98, 1]; k.keyTimes = [0, 0.25, 0.55, 0.8, 1]; k.duration = 0.45
+    k.timingFunction = CAMediaTimingFunction(name: .easeOut)
+    fab.layer.add(k, forKey: "squash")
+  }
+  // a line's words changing while it shows (the grey line under a title — Subscriptions ↔ Office expenses): a short
+  // crossfade, not a jump; first shown or emptied: at once (the standard, Haris 2026-11-05)
+  static func fadeText(_ l: UILabel, _ text: String?) {
+    let old = l.text ?? "", new = text ?? ""
+    if old != new, !old.isEmpty, !new.isEmpty, l.window != nil, !l.isHidden {
+      let t = CATransition(); t.type = .fade; t.duration = 0.22; t.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+      l.layer.add(t, forKey: "text")
+    }
+    l.text = text
   }
   func setFab2(_ label: String, _ run: (() -> Void)?) {
     fab2Run = run; fab2.accessibilityLabel = label
@@ -635,7 +664,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   func drawAssetsBar(name: String, sub: String, logo: String?, rgb: Any?, ini: String?, showLogo: Bool) {
     drawBarTitle(["title": name, "logo": logo as Any, "rgb": rgb as Any, "ini": ini as Any])
     barLogo.isHidden = !showLogo
-    barSub.text = sub; barSub.isHidden = sub.isEmpty; barSub.textColor = .secondaryLabel
+    HomeView.fadeText(barSub, sub); barSub.isHidden = sub.isEmpty; barSub.textColor = .secondaryLabel
     barName.font = .systemFont(ofSize: sub.isEmpty ? 17 : 16, weight: .semibold)
     setNeedsLayout()
   }

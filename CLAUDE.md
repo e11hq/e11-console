@@ -76,6 +76,12 @@ now and later (`HomeView.applyFrost`, `Frost`, `FrostWatch` in Home.swift):
   once (`Frost.nudge`). The switch-over (big title → small title, Mail's timings) is unchanged and locked too.
 - Don't change any of it without Haris. Every new native screen uses HomeView's bar.
 
+**Words that change on a showing screen, everywhere (Haris, 2026-11-05: "make it a standard"):** a floating button whose
+label changes while it shows (+ Add subscription ↔ + Add office expense, as a tab switches) squashes and stretches into
+its new width with the words crossfading (`HomeView.setFab` → `squashFab`); the grey line under a title, or under a page's
+centred name, crossfades to its new words instead of jumping (`HomeView.fadeText`). Every new native button and title
+line does the same.
+
 **TestFlight only on Haris's yes (Haris, 2026-11-03):** "publish, publish app build" builds, self-tests and signs the
 iPhone app, then keeps it on his Mac (ios.yml `send: ask`, the default). When a build has finished, ask Haris; only on
 his yes send it with the "Send to TestFlight" workflow (testflight.yml, its build number).

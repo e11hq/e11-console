@@ -111,12 +111,12 @@ export function createServer(cfg) {
     const all = {};
     const now = cfg.now || (() => Date.now());
     // (Client Assets — step 5 — also gets the server's own access rules and files: the person's visible data, the logo)
-    for (const [file, fn] of [['./appact-reviews.js', 'createReviewActs'], ['./appact-money.js', 'createMoneyActs'], ['./appact-other.js', 'createOtherActs'], ['./appact-me.js', 'createMeActs'], ['./appact-assets.js', 'createAssetActs']]) {
+    for (const [file, fn] of [['./appact-reviews.js', 'createReviewActs'], ['./appact-money.js', 'createMoneyActs'], ['./appact-other.js', 'createOtherActs'], ['./appact-me.js', 'createMeActs'], ['./appact-assets.js', 'createAssetActs'], ['./appact-tasks.js', 'createTaskActs']]) {
       try { const m = await import(file); Object.assign(all, m[fn]({ store, now, webDir, access, files })); } catch (e) { if (e.code !== 'ERR_MODULE_NOT_FOUND') console.error('app actions', file, e.message); }
     }
     return (appActs = all);
   }
-  const actGroup = (ev) => ACT_GROUP[ev] || (/^pl/.test(ev) ? 'plans' : /^tr/.test(ev) ? 'trash' : /^ca/.test(ev) ? 'assets' : 'team');
+  const actGroup = (ev) => ACT_GROUP[ev] || (/^pl/.test(ev) ? 'plans' : /^tr/.test(ev) ? 'trash' : /^ca/.test(ev) ? 'assets' : /^tk/.test(ev) ? 'tasks' : 'team');
   // Birthdays: the rest of the staff are told in the morning (Inbox + phone)
   const birthdays = createBirthdays({ store, webPush, notifMessage, deliver: (out) => broadcast(out.rev, out.results, null, null), now: cfg.now || (() => Date.now()) });
   if (cfg.birthdays !== false) birthdays.start();
