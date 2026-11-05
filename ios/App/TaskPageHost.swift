@@ -301,6 +301,7 @@ extension Main {
         fromTabSelected()
         clientLeavingBySwipe(p, l)
         pageJS("window.__e11Clients && window.__e11Clients({ev:'back'})")
+        clientBackPageless()
       } else {
         UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState]) {
           p.transform = .identity; l.transform = CGAffineTransform(translationX: -W * 0.3, y: 0)

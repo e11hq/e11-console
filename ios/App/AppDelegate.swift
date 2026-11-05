@@ -1800,6 +1800,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       // (+ New task: the app's own — without the website it went nowhere, Haris 2026-11-05)
       case "add" where self.newTaskNative(view: "inbox", project: nil):
         break
+      case "me" where !self.pageReady:
+        self.selectTab("me")
       default:
         // (not hidden here: the page hides it the moment what's tapped opens a page — a round-up or a sheet opens over
         //  the Inbox, which stays; hiding it first flashed the page behind — Haris, 2026-11-01)
@@ -1929,7 +1931,12 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       // (the list's search: the app's own, as Home's — without the website it found nothing, Haris 2026-11-05)
       if !page, (ev["ev"] as? String) == "find", self.searchNative(ev["q"] as? String ?? "") { return }
       if !page, (ev["ev"] as? String) == "back", self.clientsListIfMade?.backFromMe == true { self.clientsBackToMe(); return }
-      if page, (ev["ev"] as? String) == "back" { self.clientPageOut() }
+      if page, (ev["ev"] as? String) == "back" { self.clientPageOut(); self.clientBackPageless() }
+      // (Show completed on a client's page — without the website it went nowhere)
+      if page, !self.pageReady, (ev["ev"] as? String) == "showDone", let id = self.clientsShownId, let me = AppData.shared.me {
+        let done = ServerHome.param(self.serverClients.query, "done") == "1"
+        self.clientsCommand(["show": true, "view": "client", "id": id, "done": !done, "me": me, "light": self.appStyle == .light, "from": self.clientFrom ?? ""]); return
+      }
       // (a client's Client Assets — a folder, or See all: the app's own screens over its page, shell 32)
       if page, let k = ev["ev"] as? String, k == "folder" || k == "assets", let c = ev["client"] as? String {
         self.assetsCtl.openFromClients(client: c, folder: k == "folder" ? ev["folder"] as? String : nil); return
@@ -1993,6 +2000,19 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     updateCorner()
   }
   var clientLeaving = false
+  // (without the website — step 9: what the page said after a client's page went back: the list, or the screen it came
+  //  from with Clients no longer showing)
+  func clientBackPageless() {
+    guard !pageReady else { return }
+    clientsOn = "list"; serverClients.query = "view=list"
+    if clientFrom != nil { clientsWanted = false }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
+      guard let self = self, self.clientsOn == "list" else { return }
+      self.clientFrom = nil
+      if self.clientsWanted { self.serverClients.refresh() }
+      self.updateCorner()
+    }
+  }
   // (a client's page opened from another tab — Home's search, …: what its ‹ and the edge swipe go back to, as history —
   //  Haris 2026-11-03; nil: the list)
   var clientFrom: String?

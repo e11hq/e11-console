@@ -821,7 +821,7 @@ final class AssetsCtl {
   private func event(_ h: HomeView, _ ev: [String: Any]) {
     switch ev["ev"] as? String ?? "" {
     case "back": if h === top { pop() }
-    case "me": close(animated: false); main.pageJS("window.__e11Assets && window.__e11Assets({ev:'me'})")
+    case "me": close(animated: false); main.pageJS("window.__e11Assets && window.__e11Assets({ev:'me'})"); if !main.pageReady { main.selectTab("me") }
     case "find":
       // 🔍 on All Client Assets: every client's files, found here
       let q = (ev["q"] as? String ?? "").trimmingCharacters(in: .whitespaces)
