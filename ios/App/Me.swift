@@ -1355,9 +1355,17 @@ final class MeCtl {
     var p = (d.data(forKey: key).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }) ?? [:]
     p["themeMode"] = v
     if let data = try? JSONSerialization.data(withJSONObject: p) { d.set(data, forKey: key) }
-    if v == "auto" { main.ownAppearanceTick() } else { main.run("setAppearance", ["mode": v, "themeMode": v]) { _ in } }
-    main.pageJS("typeof Theme !== 'undefined' && Theme.setMode('\(v)')")
-    redraw()
+    // (the switch finishes its own slide first, then the whole app crossfades into its new look and the page's new rows —
+    //  at once, the switch jumped mid-slide as everything changed under it: Haris 2026-11-05)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+      guard let self = self else { return }
+      let apply = {
+        if v == "auto" { self.main.ownAppearanceTick() } else { self.main.run("setAppearance", ["mode": v, "themeMode": v]) { _ in } }
+        self.redraw()
+      }
+      if let w = self.main.view.window { UIView.transition(with: w, duration: 0.35, options: [.transitionCrossDissolve, .allowUserInteraction], animations: { UIView.performWithoutAnimation(apply) }) } else { apply() }
+      self.main.pageJS("typeof Theme !== 'undefined' && Theme.setMode('\(v)')")
+    }
   }
   // View as (test site only): the team in the app's own sheet; a tap switches — the server remembers it, and the app
   // starts again as them
