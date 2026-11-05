@@ -1158,7 +1158,7 @@ extension Main {
     let r: [String: Any]?
     if nid == nil || nid?.isEmpty == true, let t = hint["taskId"] as? String, !t.isEmpty { r = AppData.shared.meModel("tasks", "taskLinkOpen", [t, peeked]) }
     else { r = AppData.shared.meModel("tasks", "notifOpen", [nid ?? NSNull(), hint]) }
-    guard let res = r, let go = res["go"] as? [String: Any] else { return res != nil }
+    guard let res = r, let go = res["go"] as? [String: Any] else { return r != nil }
     let to = go["to"] as? String ?? ""
     if ["plan", "claim", "daily", "schedCancel", "trash"].contains(to) { return false }
     let read = (res["read"] as? [String]) ?? []
