@@ -593,10 +593,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     //  and stretches into its new width, the words crossfading: the standard for every such button, Haris 2026-11-05.
     //  Judged by what showed when this redraw began: a page clears the button first (setFab("", …, nil)) and then sets
     //  its own, and judged by that cleared one it never morphed — it snapped: Haris 2026-11-05)
-    if fabBefore == nil {
-      fabBefore = (!fab.isHidden && fab.window != nil && fab.bounds.width > 0 ? fab.accessibilityLabel : nil, fab.frame)
-      DispatchQueue.main.async { [weak self] in self?.fabBefore = nil }
-    }
+    noteFab()
     let shown = fabBefore?.label, was = fabBefore?.frame ?? fab.frame
     let morph = run != nil && !title.isEmpty && shown != nil && shown != "" && shown != title
     fabSym = sym
@@ -609,6 +606,13 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if morph { DispatchQueue.main.async { [weak self] in self?.squashFab(from: was) } }
   }
   private var fabBefore: (label: String?, frame: CGRect)?
+  // what the button showed as this redraw began — before anything in it hides it (drawAssets hides it first: Me's pages,
+  // Client Assets — the + still snapped, Haris 2026-11-05)
+  private func noteFab() {
+    guard fabBefore == nil else { return }
+    fabBefore = (!fab.isHidden && fab.window != nil && fab.bounds.width > 0 ? fab.accessibilityLabel : nil, fab.frame)
+    DispatchQueue.main.async { [weak self] in self?.fabBefore = nil }
+  }
   // the button from its old size to its new one with a little squash and stretch (iPhone's own spring, as its own
   // buttons do when they change)
   private func squashFab(from was: CGRect) {
@@ -1307,7 +1311,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   var onAssetsDraw: ((HomeView, [String: Any]) -> Void)?
   // (Client Assets' and Me's screens — drawn again by their own controllers, never through update)
   var isAssetsScreen: Bool { onAssetsDraw != nil }
-  private func drawAssets(_ model: [String: Any]) { fab.isHidden = true; onAssetsDraw?(self, model) }
+  private func drawAssets(_ model: [String: Any]) { noteFab(); fab.isHidden = true; onAssetsDraw?(self, model) }
   private func groupHead(_ name: String, _ n: Int) -> UILabel {
     let h = UILabel(); h.tag = 7
     let s = NSMutableAttributedString(string: name.uppercased(), attributes: [.font: UIFont.systemFont(ofSize: 12, weight: .bold), .kern: 0.72, .foregroundColor: L.gh])
