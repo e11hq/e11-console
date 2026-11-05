@@ -1791,12 +1791,15 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       case "read", "unread":
         if s.on, s.me == self.inboxPageMe, let id = ev["id"] as? String { s.act(ev["ev"] as! String, id) }
       case "readAll":
-        if s.on, s.me == self.inboxPageMe { s.act("readAll", "") } else { self.pageJS("window.__e11Inbox && window.__e11Inbox({ev:'readAll'})") }
+        if s.on, s.me == self.inboxPageMe || !self.pageReady { s.act("readAll", "") } else { self.pageJS("window.__e11Inbox && window.__e11Inbox({ev:'readAll'})") }
       case "unreadList":
         let ids = (ev["ids"] as? [String]) ?? []
         if s.on, s.me == self.inboxPageMe, !ids.isEmpty { s.act("unreadList", ids.joined(separator: ",")) }
       case "open" where (ev["id"] as? String).map({ self.openNotifNative($0, hint: [:]) }) == true:
         break   // (Part B step 7: the app's own — the brain says where, the app's screens open it)
+      // (+ New task: the app's own — without the website it went nowhere, Haris 2026-11-05)
+      case "add" where self.newTaskNative(view: "inbox", project: nil):
+        break
       default:
         // (not hidden here: the page hides it the moment what's tapped opens a page — a round-up or a sheet opens over
         //  the Inbox, which stays; hiding it first flashed the page behind — Haris, 2026-11-01)
