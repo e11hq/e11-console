@@ -108,7 +108,7 @@ export function createMoneyActs({ store, now } = {}) {
     const at = nowISO();
     const c = { id: 'clh-' + uid(), byHand: true, userId, personId: t === 'p' ? id : null, personName: person ? person.name : '', month, state: 'submitted',
       groups: [{ id: uid(), date: `${month}-01`, title: 'Added by hand', items: [{ id: uid(), desc: 'Claim (PDF)', amount: Math.round(num(amount) * 100) / 100,
-        receipt: { path: String(body.pdf.path), name: String(body.pdf.name || 'Claim.pdf'), size: Number(body.pdf.size) || 0 } }] }],
+        receipt: { id: uid(), path: String(body.pdf.path), name: String(body.pdf.name || 'Claim.pdf'), size: Number(body.pdf.size) || 0 } }] }],
       submittedAt: at, createdAt: at, createdBy: u.id };
     saved(c);
     const changes = [{ kind: 'claims', id: c.id, data: c }];

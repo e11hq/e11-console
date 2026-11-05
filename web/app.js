@@ -4335,7 +4335,10 @@ function hydratePreviews(root) {
   });
 }
 // Full-screen preview of a file, with its folder / task / comment files to swipe through (web/viewer.js)
-function previewFile(a, group) { if (a) Viewer.open(a, group); }
+// (a file with no id of its own — a claim's PDF added by hand from the iPhone, an invoice: one made from its place, else
+//  the iPhone's preview didn't open it, Haris 2026-11-05)
+const withFileId = (a) => (a && !a.id && a.path ? { ...a, id: 'p-' + String(a.path).replace(/[^A-Za-z0-9]+/g, '-').slice(-60) } : a);
+function previewFile(a, group) { if (a) Viewer.open(withFileId(a), Array.isArray(group) ? group.map(withFileId) : group); }
 
 function lightbox(src, name) {
   const root = $('#overlay-root');

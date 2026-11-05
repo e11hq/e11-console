@@ -3422,7 +3422,7 @@ const NativeMe = (() => {
           if (!(amount > 0)) return answer(rid, { ok: false, error: 'Enter the amount in AED (numbers only)' });
           if (!ev.pdf || !ev.pdf.path) return answer(rid, { ok: false, error: 'Attach the claim’s PDF' });
           const pr = t === 'p' ? (db.finance || []).find((x) => x.id === id) : null;
-          Claims.addByHand({ userId: t === 'u' ? id : null, personId: t === 'p' ? id : null, personName: pr ? pr.name : '', month: /^\d{4}-\d{2}$/.test(ev.month || '') ? ev.month : todayStr().slice(0, 7), amount, pdf: { path: String(ev.pdf.path), name: String(ev.pdf.name || 'Claim.pdf'), size: Number(ev.pdf.size) || 0 } });
+          Claims.addByHand({ userId: t === 'u' ? id : null, personId: t === 'p' ? id : null, personName: pr ? pr.name : '', month: /^\d{4}-\d{2}$/.test(ev.month || '') ? ev.month : todayStr().slice(0, 7), amount, pdf: { id: uid(), path: String(ev.pdf.path), name: String(ev.pdf.name || 'Claim.pdf'), size: Number(ev.pdf.size) || 0 } });
           answer(rid, { ok: true }); sync(); return;
         }
         case 'clPerson': {   // someone who isn't a team member, for a claim by hand
