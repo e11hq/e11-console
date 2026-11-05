@@ -115,7 +115,8 @@ final class CrawlTests: XCTestCase {
       .prefix(perScreen)
     for c in cands {
       if Date() > deadline || Date() > tabDeadline { return }
-      let key = "\(baseState)#\(c.type.rawValue)#\(c.label)"
+      // (the same page reached from another tab is the same page: tried once)
+      let key = "\(baseState.components(separatedBy: "|").filter { !$0.hasPrefix("tab=") }.joined(separator: "|"))#\(c.type.rawValue)#\(c.label)"
       if done.contains(key) { continue }
       done.insert(key)
       let now = snap()
@@ -155,7 +156,9 @@ final class CrawlTests: XCTestCase {
     let res = snap().filter { visible($0) && !$0.inKeyboard && !$0.inTabBar && $0.type == .staticText && !$0.label.isEmpty }
     note(["kind": "search", "path": path, "query": q, "results": res.prefix(8).map { String($0.label.prefix(40)) }, "count": res.count])
     // (the first few results: each tapped, what it opened noted, back to the results)
-    for r in res.prefix(4) where !(r.label.uppercased() == r.label && r.label.count < 14) {
+    // (the first client and the first tasks: not the group headings, initials or the grey lines under them)
+    let picks = res.filter { !($0.label.uppercased() == $0.label) && $0.label.count >= 4 && !$0.label.contains("·") && !$0.label.hasPrefix("Search") }.prefix(3)
+    for r in picks {
       if keyboardUp() { app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: screenSize.width / 2, dy: 70)).tap(); Thread.sleep(forTimeInterval: 0.5) }
       guard let t = snap().first(where: { $0.label == r.label && visible($0) && !$0.inKeyboard }) else { continue }
       tap(t.frame); Thread.sleep(forTimeInterval: 1.2)
