@@ -1897,7 +1897,7 @@ final class MeCtl {
           if t["viewing"] is String { test.append(SetItem(key: "backToMe", title: "Back to me", sym: "arrow.uturn.backward", col: .systemTeal, chevron: false, tap: { [weak self] in self?.viewAsSet(nil) })) }
         }
         // (the step 9 trial: the app without the website — Haris checks it before the website goes for good)
-        test.append(SetItem(key: "noPage", title: "Without the website", sub: "Step 9 trial — the app on its own", sym: "bolt.horizontal.fill", col: .systemOrange, toggle: Main.noPage, flip: { [weak self] on in self?.main.setNoPage(on) }))
+        test.append(SetItem(key: "noPage", title: "Without the website", sub: "On for everyone now — off only to compare with the website behind", sym: "bolt.horizontal.fill", col: .systemOrange, toggle: Main.noPage, flip: { [weak self] on in self?.main.setNoPage(on) }))
         if (t["sample"] as? Bool) == true { test.append(SetItem(key: "sample", title: "Start fresh with sample data", sub: "Test site only: wipes everything except you", chevron: false, danger: true, tap: { [weak self] in self?.send(["ev": "sample"]) })) }
         if !test.isEmpty { out.append(head(h, "test", "Test site")); out.append(group(h, "test", test)) }
       }

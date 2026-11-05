@@ -2166,7 +2166,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   func gotToken(_ hex: String) {
     lastToken = hex
-    if pageReady { sendToken(hex) } else { pendingToken = hex }
+    if pageReady || Main.boot.state == .signedIn { sendToken(hex) } else { pendingToken = hex }
     let w = pushWaiters; pushWaiters = []
     w.forEach { $0(["ok": true, "state": "on"]) }
   }
@@ -2193,7 +2193,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     // (Part B step 7: the app's own — where it goes and what's marked read from the copy; a view (the widget): its tab)
     if let v = d["view"] as? String, AppData.shared.ready { if tabKeys.contains(v) { selectTab(v); return } }
     else if d["view"] == nil, openNotifNative(d["nid"] as? String, hint: d) { return }
-    if pageReady { pageJS(waitForApp("window.__e11PushTap && window.__e11PushTap(\(jsonString(d)))")) } else { pendingPush = d }
+    if pageReady { pageJS(waitForApp("window.__e11PushTap && window.__e11PushTap(\(jsonString(d)))")) } else { pendingPush = d; if Main.noPage, !(AppData.shared.ready && quickBooted) { pagelessFlush(1) } }
   }
   func flushPending() {
     // (well after the app's own page has started — loading both at once slowed the start)
@@ -2225,9 +2225,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if pageReady, clientsWanted { serverClientsIfMade?.refresh() }
     if pageReady, assetsCtl.isOpen { assetsCtl.refresh() }
     if pageReady, meCtl.isOpen { meCtl.refresh() }
-    if pageReady { pushState { st in if st == "on" { UIApplication.shared.registerForRemoteNotifications() } } }
+    if pageReady || Main.boot.state == .signedIn { pushState { st in if st == "on" { UIApplication.shared.registerForRemoteNotifications() } } }
   }
-  func wentAway() { if !authing { awayAt = Date() }; if pageReady { shareSignIn() } }
+  func wentAway() { if !authing { awayAt = Date() }; if pageReady || Main.boot.state == .signedIn { shareSignIn() } }
 
   /* ---------- the widget (widget/E11Widget.swift) ---------- */
   // it asks the server with this app's own sign-in: the server and its cookies go to the shared Keychain

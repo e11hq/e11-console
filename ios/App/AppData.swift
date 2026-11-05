@@ -378,7 +378,7 @@ enum SlowWatch {
     lock.unlock()
     guard !slow.isEmpty || !fz.isEmpty, let url = URL(string: serverURL() + "/api/client-error") else { return }
     let body: [String: Any] = ["where": "slow", "message": "screens: " + slow.joined(separator: " | "), "stack": "freezes: " + fz.joined(separator: " | "),
-                               "version": "ios \(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "") nopage=\(UserDefaults.standard.bool(forKey: "e11_nopage"))", "standalone": true]
+                               "version": "ios \(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "") nopage=\(Main.noPage)", "standalone": true]
     AppData.shared.withCookie { cookie in
       var r = URLRequest(url: url); r.httpMethod = "POST"; r.setValue("application/json", forHTTPHeaderField: "Content-Type")
       if !cookie.isEmpty { r.setValue(cookie, forHTTPHeaderField: "Cookie") }

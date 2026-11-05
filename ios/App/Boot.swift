@@ -31,7 +31,9 @@ final class BootState {
 extension Main {
   static let boot = BootState()
   // the step 9 trial (test site, Me › Test site): the app on its own — the website isn't loaded at all (only to sign in)
-  static var noPage: Bool { defaults.bool(forKey: "e11_nopage") }
+  // (step 9 part 2: on for everyone — the test site's Me › Test site switch can still turn the website back on; the
+  //  build machine's self-test still runs with it, as it drives the page)
+  static var noPage: Bool { SELFTEST.isEmpty && ((defaults.object(forKey: "e11_nopage") as? Bool) ?? true) }
   func setNoPage(_ on: Bool) {
     defaults.set(on, forKey: "e11_nopage")
     if on { pageReady = false; web.loadHTMLString("<html><body style='background:#0c0d0f'></body></html>", baseURL: nil) }
@@ -88,6 +90,7 @@ extension Main {
     }
     if let s = splash, !s.leaving { s.command(["status": ""]); s.command(["greet": SplashView.greeting(memo)]) }
     saveQuick(["me": me])
+    if first { pagelessFlush() }
     if first && quickBooted { ownAfterStart() }   // (What's new, the View as… bar — without the website: step 9)
     guard first, !quickBooted else { return }
     // (a first start, or another person than the copy kept: their copy, then the app's own screens from it — the startup
@@ -210,6 +213,25 @@ extension Main {
     if defaults.string(forKey: "e11_server") == "review" { return }
     signingIn = true
     if splash == nil { showSplash(); splashHeard = true; if splash != nil { bootState.owned = true } }
+    // (without the website: signed in — the site isn't loaded behind the app; asked at once who it is)
+    if Main.noPage {
+      web.stopLoading(); pageReady = false
+      web.loadHTMLString("<html><body style='background:#0c0d0f'></body></html>", baseURL: nil)
+      bootCheck()
+    }
+  }
+  /* what the page did once it had loaded, done by the app itself without it (step 9 part 2): this phone's notification
+     address to the server, the widget's sign-in, a notification tapped before the app's screens were there */
+  func pagelessFlush(_ n: Int = 0) {
+    guard !pageReady, bootState.state == .signedIn else { return }
+    if n == 0 {
+      if let t = pendingToken { pendingToken = nil; sendToken(t) }
+      else { pushState { st in if st == "on" { UIApplication.shared.registerForRemoteNotifications() } } }
+      shareSignIn()
+    }
+    guard let d = pendingPush else { return }
+    if AppData.shared.ready && quickBooted { pendingPush = nil; openPush(["e11": d]); if !pageReady { pendingPush = nil } }
+    else if n < 80 { DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in self?.pagelessFlush(n + 1) } }
   }
   // the web view reached our site (after signing in, or the page loaded again): asked again if we weren't signed in
   func bootPageArrived() {
