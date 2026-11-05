@@ -888,7 +888,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if onServer { shareSignIn(); bootPageArrived() }
     if onServer, !earlyJS.isEmpty { let js = earlyJS; earlyJS = []; DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { js.forEach { self.pageJS($0) } } }
     if onServer { tabCover = -1; view.setNeedsLayout(); flushPending(); if !SELFTEST.isEmpty && !started { started = true; DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.selfTest() } } }
-    else { tabBar.isHidden = true; tabsHidden = true; view.setNeedsLayout(); splashGone(fast: true) }   // (the sign-in page: no tabs, no startup screen)
+    // (the sign-in page: no tabs, no startup screen — not the "can't reach" page under the app's own screens offline: the
+    //  tab bar went, Haris 2026-11-05)
+    else if !(quickBooted && webView.url?.scheme == "about") { tabBar.isHidden = true; tabsHidden = true; view.setNeedsLayout(); splashGone(fast: true) }
   }
   func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { failed(error) }
   func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { failed(error) }
@@ -909,6 +911,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     //  website behind tries again. They were taken away offline — the startup screen cut off mid-way, the tab bar gone
     //  after a few seconds: Haris 2026-11-05)
     if !quickBooted { tabBar.isHidden = true; tabsHidden = true; view.setNeedsLayout() }
+    // (the app's own screens up — a quick start: nothing to show behind them, only the trying again)
+    if quickBooted { DispatchQueue.main.asyncAfter(deadline: .now() + 5) { self.retrying = false; self.loadHome() }; return }
     let html = "<html><head><meta name=viewport content='width=device-width'></head><body style=\"background:#0c0d0f;color:#bbb;font:16px -apple-system;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center\"><div><b style=\"color:#fff\">Can’t reach E11 Console</b><br><br>Check your internet connection.<br>Trying again…</div></body></html>"
     web.loadHTMLString(html, baseURL: nil)
     DispatchQueue.main.asyncAfter(deadline: .now() + 5) { self.retrying = false; self.loadHome() }
@@ -2219,7 +2223,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     st.centerYAnchor.constraint(equalTo: v.centerYAnchor).isActive = true
     view.addSubview(v)
     lockView = v
-    if UIApplication.shared.applicationState == .active { DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.unlock() } }
+    // (Face ID asked by itself — once the app is really active: opening, it isn't yet when this runs, and the ask was
+    //  never made; only the button worked — Haris 2026-11-05)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.unlockTry(0) }
   }
   @objc func unlock() { unlockTry(0) }
   // (asked by itself as the app opens: iPhone can turn the first ask away while the app is still coming up — not
@@ -2227,6 +2233,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   //  Haris 2026-11-05. Cancelled by the person: the button, as before.)
   func unlockTry(_ n: Int) {
     if authing || lockView == nil { return }
+    if UIApplication.shared.applicationState != .active { if n < 10 { DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.unlockTry(n + 1) } }; return }
     let ctx = LAContext(); var err: NSError?
     guard ctx.canEvaluatePolicy(.deviceOwnerAuthentication, error: &err) else { return unlocked() }
     authing = true
@@ -2234,7 +2241,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       DispatchQueue.main.async {
         if ok { self.unlocked() }
         let code = (e as? LAError)?.code
-        let again = !ok && n < 3 && (code == .systemCancel || code == .appCancel || code == .notInteractive)
+        let again = !ok && n < 12 && (code == .systemCancel || code == .appCancel || code == .notInteractive)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {   // (after the app is active again)
           self.authing = false
           if again, UIApplication.shared.applicationState == .active { self.unlockTry(n + 1) }

@@ -196,18 +196,21 @@ extension Main {
   }
 
   // Offline (the website couldn't load): the app's own lists still open from its copy — Home, My Tasks, the Inbox,
-  // Clients (Haris 2026-11-05: offline only Home opened). The page is told the tab once it's there. Me and the pages
-  // still the website's open once it is (step 9).
+  // Clients and Me (Haris 2026-11-05: offline only Home opened, then Me took the tab bar away). The page is told the tab
+  // once it's there; the pages still the website's open once it is (step 9).
   func offlineTab(_ key: String) -> Bool {
     guard !pageReady, quickBooted, AppData.shared.ready, let me = AppData.shared.me else { return false }
-    guard ["today", "mytasks", "inbox", "projects"].contains(key) else { return false }
+    guard ["today", "mytasks", "inbox", "projects", "me"].contains(key) else { return false }
     let light = appStyle == .light
     if key != "today" { homeIfMade?.isHidden = true }
     if key != "mytasks" { myTasksCommand(["show": false]) }
     if key != "inbox" { inboxCommand(["show": false]) }
     if key != "projects" { clientsCommand(["show": false]) }
-    meCtl.hide()
+    if key != "me" { meCtl.hide() }
     switch key {
+    // (Me from the app's copy and this phone — your card, Work, Notifications, Face ID, Appearance, Sign out; the rest
+    //  comes with the connection)
+    case "me": meCtl.command(["show": true, "me": me, "tab": "me", "light": light, "model": ["env": ["shell": SHELL_VERSION]]])
     case "today": if homeHadModel { homeIfMade?.isHidden = false }; serverHome.refresh()
     case "mytasks": myTasksCommand(["show": true, "me": me, "light": light])
     case "inbox": inboxCommand(["show": true, "me": me, "light": light])
