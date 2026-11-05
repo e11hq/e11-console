@@ -24,6 +24,7 @@ import { createOffice } from './office.js';
 import { createApns } from './apns.js';
 import { createHolidaySync, DEFAULT_HOLIDAYS_URL } from './holidays.js';
 import { createAppStart } from './appstart.js';
+import { claimSheetFor } from './claimsheet.js';
 import zlib from 'node:zlib';
 import { sampleData } from './sample.js';
 import { freshSample } from './sample-fresh.js';
@@ -589,6 +590,20 @@ export function createServer(cfg) {
       // (Admins: whose account only its owner may change, so the Team page shows it locked)
       ownerId: access.isAdm(u) && cfg.adminEmail ? (access.userByEmail(cfg.adminEmail) || {}).id || null : null,
       viewAs: isTestSite && isOwner(req.realUser) ? { real: { id: req.realUser.id, name: req.realUser.name || req.realUser.email }, as: req.viewingAs ? { id: u.id, name: u.name || u.email, role: u.role } : null } : null });
+
+    // A claim's PDF, drawn by the server (Haris 2026-11-05: for the iPhone, the Mac app and the website alike): the sheet,
+    // then its receipts — your own claim, or anyone's with Finance access (as the page's claimPdf)
+    if (p === '/api/app/claimPdf' && req.method === 'POST') {
+      const body = await readBody(req);
+      const c = store.get('claims', String((body && body.id) || ''));
+      if (!c || !(c.userId === u.id || access.finLevel(u))) return json(res, 404, { ok: false, error: 'That claim isn’t available' });
+      if (c.byHand) { const r0 = (c.groups || []).flatMap((g) => g.items || []).find((i) => i.receipt); return r0 ? json(res, 200, { ok: true, path: r0.receipt.path, name: r0.receipt.name || 'Claim.pdf', size: r0.receipt.size || 0 }) : json(res, 404, { ok: false, error: 'This claim has no PDF' }); }
+      try {
+        const s = await claimSheetFor(c, c.userId ? store.get('users', c.userId) : null, store.get('meta', 'main') || {}, { resolve: files.resolve, webDir: webDir || path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../web') });
+        const r = await files.commands.claimPdf({ userId: c.userId || ('p-' + (c.personId || 'x')), month: c.month, name: s.name, sheet: s.pdf, receipts: s.receipts.filter((x) => String(x || '').startsWith('Claims/')) });
+        return json(res, 200, r);
+      } catch (e) { return json(res, 500, { ok: false, error: 'Could not make the PDF: ' + e.message }); }
+    }
 
     // The iPhone app starting on its own (Part B step 8): signed in — who, and the startup screen's memo
     if (p === '/api/app/start') {

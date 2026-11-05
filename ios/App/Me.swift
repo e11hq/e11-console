@@ -1488,7 +1488,13 @@ final class MeCtl {
       let want = (((it.0["files"] as? [[String: Any]]) ?? []) + ((it.0["carriedFiles"] as? [[String: Any]]) ?? [])).compactMap { $0["id"] as? String }
       let list = want.compactMap { id in all.first { ($0["id"] as? String) == id } }
       if let i = list.firstIndex(where: { ($0["id"] as? String) == (ev["fid"] as? String) }) { main.openFiles(list, at: i) }
-    case "clOpen", "ovClaim": say("Claim PDFs open on the computer for now")
+    case "clOpen", "ovClaim":
+      // (the claim's PDF, drawn by the server — the same everywhere: Haris 2026-11-05)
+      say("Preparing the PDF…")
+      main.serverTask.request("/api/app/claimPdf", body: ["id": ev["id"] as? String ?? ""]) { [weak self] r in
+        guard let r = r, (r["ok"] as? Bool) == true, let p = r["path"] as? String else { say(r?["error"] as? String ?? "Could not make the PDF"); return }
+        self?.main.openFiles([["id": p, "path": p, "name": r["name"] as? String ?? "Expense claim.pdf", "size": r["size"] ?? 0]], at: 0)
+      }
     case "pfTest":
       main.serverTask.request("/api/push/test", body: ["token": main.lastToken ?? ""]) { r in say(r.map { MeCtl.testSaid($0) } ?? "No connection — try again") }
     case "pfOwner":

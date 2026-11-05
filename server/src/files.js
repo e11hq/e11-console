@@ -227,7 +227,8 @@ export function createFiles(root) {
       try {
         const parts = [];
         const sheet = path.join(tmp, 'sheet.pdf');
-        fs.writeFileSync(sheet, jpegPdf((a.pages || []).map((b) => Buffer.from(String(b), 'base64')), true));
+        // (the sheet: the server's own PDF of it — server/src/claimsheet.js — or the pages a page drew)
+        fs.writeFileSync(sheet, Buffer.isBuffer(a.sheet) ? a.sheet : jpegPdf((a.pages || []).map((b) => Buffer.from(String(b), 'base64')), true));
         parts.push(sheet);
         let i = 0;
         for (const r of a.receipts || []) {

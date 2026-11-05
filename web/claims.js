@@ -368,11 +368,10 @@ const Claims = (() => {
     const rc = receiptsOf(c);
     if (c.byHand) { if (rc[0]) previewFile(rc[0]); else toast('This claim has no PDF'); return; }
     toast('Preparing the PDF…');
+    // (drawn by the server — the same PDF on the iPhone, the Mac app and here: Haris 2026-11-05)
     try {
-      const { pages, receipts } = await sheetPages(c);
-      const name = `Expense claim — ${ownerName(c)} — ${monthName(c.month)}.pdf`.replace(/[\\/:*?"<>|]/g, '-');
-      const r = await Host.call('claimPdf', { userId: c.userId, month: c.month, name, pages, receipts });
-      previewFile({ id: 'pdf-' + c.id, name, path: r.path, size: r.size || 0 });
+      const r = await api('POST', '/api/app/claimPdf', { id: c.id });
+      previewFile({ id: 'pdf-' + c.id, name: r.name, path: r.path, size: r.size || 0 });
     } catch (e) { toast('Could not make the PDF: ' + e.message); }
   }
   async function downloadPdf(id) {
@@ -380,9 +379,14 @@ const Claims = (() => {
     if (!c) return;
     toast('Preparing the PDF…');
     try {
-      const { pages, receipts } = await sheetPages(c);
-      const name = `Expense claim — ${ownerName(c)} — ${monthName(c.month)}.pdf`.replace(/[\\/:*?"<>|]/g, '-');
-      const r = await Host.call('claimPdf', { userId: c.userId, month: c.month, name, pages, receipts });
+      // (a saved claim: the server's PDF, as everywhere; a draft not saved yet: drawn here, as before)
+      let r;
+      if (byId(c.id) && c === byId(c.id)) r = await api('POST', '/api/app/claimPdf', { id: c.id });
+      else {
+        const { pages, receipts } = await sheetPages(c);
+        const name = `Expense claim — ${ownerName(c)} — ${monthName(c.month)}.pdf`.replace(/[\\/:*?"<>|]/g, '-');
+        r = await Host.call('claimPdf', { userId: c.userId, month: c.month, name, pages, receipts });
+      }
       await Host.call('revealPath', { path: r.path });
     } catch (e) { toast('Could not make the PDF: ' + e.message); }
   }
