@@ -89,6 +89,13 @@ try:
         steps = res.get('walk') or []
         lines = [f'== {label} ({email}) — {len(steps)} steps, {res["secs"]} s, booted {res.get("walkBooted")}, tabs {res.get("tabs")}']
         if res.get('stuck'): lines.append(f'   STUCK after {res["stuck"]} (crashed or frozen)')
+        # every search: results, and what a tap on the first task / client result opened
+        for w in steps:
+            st_ = w.get('step', '')
+            if st_.startswith('find_') or st_.startswith('findTask_') or st_.startswith('findClient_'):
+                k = st_.split('_', 1)[1]
+                tap = res.get(('walkTap_' if st_.startswith('findTask_') else 'walkTapC_') + k, '') if not st_.startswith('find_') else ''
+                lines.append(f"   search {st_:24} results={w.get('results')} screen={w.get('screen')} task={str(w.get('task', ''))[:30]} pages={w.get('pages')} {tap}")
         for w in steps:
             probs = []
             if w.get('lost'): probs.append('went to the website: ' + ' | '.join(w['lost']))

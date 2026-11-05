@@ -108,6 +108,17 @@ extension Main {
 
     var s: [(String, () -> Void)] = [("home", {})]
     // every tab, and its floating button (+ New task, Add client, Add subscription…) where it has one
+    // every tab's search (where it has one): words typed, the results counted, the first task result tapped (it must
+    // open), back, then the first client result (its page), back, search closed
+    let q4 = String(cname.prefix(4))
+    for k in tabKeys where k != "me" {
+      s.append(("find_" + k, { self.tab(k); DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { self.shownScreen?.selfFind(q4) } }))
+      s.append(("findTask_" + k, { self.selfResult["walkTap_" + k] = self.shownScreen?.selfTapResult(client: false) ?? "no screen" }))
+      s.append(("findTaskBack_" + k, { for p in self.taskPages { self.closeTaskPage(p, animated: false) } }))
+      s.append(("findClient_" + k, { self.selfResult["walkTapC_" + k] = self.shownScreen?.selfTapResult(client: true) ?? "no screen" }))
+      s.append(("findClientBack_" + k, { if self.clientPageIfMade?.isHidden == false { self.ev(self.clientPageIfMade, ["ev": "back"]) }; for p in self.taskPages { self.closeTaskPage(p, animated: false) } }))
+      s.append(("findClose_" + k, { self.shownScreen?.selfFindDone() }))
+    }
     for k in tabKeys {
       s.append(("tab_" + k, { self.tab(k) }))
       s.append(("tabFab_" + k, { self.selfResult["walkFab_" + k] = self.shownScreen?.selfFab() ?? false }))
@@ -192,6 +203,8 @@ extension Main {
     s += [
       ("meBack", { self.meCtl.pop(animated: false) }),
       ("meClientAssets", { self.assetsCtl.command(["show": true, "me": AppData.shared.me ?? "", "light": self.appStyle == .light, "start": [String: Any]()]) }),
+      ("meClientAssetsFind", { self.assetsCtl.top?.selfFind(q4) }),
+      ("meClientAssetsFindClose", { self.assetsCtl.top?.selfFindDone() }),
       ("meClientAssetsClient", { self.assetsCtl.openFromClients(client: cid, folder: nil) }),
       ("meClientAssetsBack", { self.ev(self.assetsCtl.top, ["ev": "back"]); DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { self.ev(self.assetsCtl.top, ["ev": "back"]) } }),
       ("homeAgain", { self.tab("today") }),

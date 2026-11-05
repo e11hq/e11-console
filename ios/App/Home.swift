@@ -1270,6 +1270,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let q = (field.text ?? "").trimmingCharacters(in: .whitespaces)
     if let r = r {
       let clients = r["clients"] as? [[String: Any]] ?? [], tasks = r["tasks"] as? [[String: Any]] ?? []
+      walkFirst = (tasks.first?["id"] as? String, clients.first?["id"] as? String)
       if !clients.isEmpty {
         resultViews.append(groupHead("Clients", clients.count))
         for c in clients {
@@ -1537,6 +1538,13 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   func selfScroll(_ y: CGFloat) { scroll.setContentOffset(CGPoint(x: 0, y: y - scroll.contentInset.top), animated: false); layoutHeader(); setBar(barIn, now: true) }
   func selfFind(_ q: String) { openSearch(); field.text = q; typed() }
   func selfFindDone() { closeSearch() }
+  // (the walk-through: the first task and client in the results, and a tap on one — as a finger would)
+  var walkFirst: (task: String?, client: String?) = (nil, nil)
+  func selfTapResult(client: Bool) -> String {
+    if client, let c = walkFirst.client { field.resignFirstResponder(); send(["ev": "client", "id": c]); return "client " + c }
+    if let t = walkFirst.task { field.resignFirstResponder(); send(["ev": "open", "id": t]); return "task " + t }
+    return "no result"
+  }
   // (the walk-through: the floating button tapped, when there is one)
   func selfFab() -> Bool { guard !fab.isHidden else { return false }; if let a = fabRun { a() } else { send(["ev": "add"]) }; return true }
   func geo() -> [String: Any] {
