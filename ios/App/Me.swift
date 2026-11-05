@@ -1,4 +1,6 @@
 import UIKit
+import LocalAuthentication
+import UserNotifications
 import UIKit.UIGestureRecognizerSubclass
 
 /* The Me tab, the app's own (shell 33 — Haris 2026-11-03, from the approved mockups; "one build"):
@@ -1031,6 +1033,10 @@ final class MeCtl {
     let kinds = Set(stack.map { $0.kind })
     let env: Any = p["env"] ?? (["shell": SHELL_VERSION] as [String: Any])
     if let x = AppData.shared.meModel("me", "me", [env]) { for k in ["card", "work"] { if let v = x[k] { m[k] = v } } }
+    // (Notifications and the Face ID lock: as this phone has them — step 8)
+    if let st = pushNow { m["push"] = pushModel(st) }
+    pushCheck()
+    if let bio = main.biometry() { m["lock"] = bio } else { m["lock"] = nil }
     // (Appearance: as this phone keeps it — step 4)
     if let tm = UserDefaults.standard.string(forKey: "e11_theme_mode") { m["theme"] = tm }
     if let look = UserDefaults.standard.string(forKey: "e11_look") { m["themeNow"] = look }
@@ -1416,6 +1422,8 @@ final class MeCtl {
   private var asks: [String: ([String: Any]) -> Void] = [:]
 
   var top: HomeView? { hidden ? nil : stack.last.map { $0.h } }
+  // (this phone's notifications: "on" / "off" / "denied", as last asked of iPhone; turning on or off — step 8)
+  var pushNow: String?, pushBusy = false, pushAsked: Date?
   var shown: HomeView? {
     guard !hidden, let s = stack.last, !s.h.isHidden else { return nil }
     if leaving { return stack.count >= 2 ? stack[stack.count - 2].h : nil }
@@ -1774,11 +1782,11 @@ final class MeCtl {
       if !work.isEmpty { out.append(head(h, "work", "Work")); out.append(group(h, "work", work)) }
       var phone: [SetItem] = [SetItem(key: "shortcuts", title: "Shortcuts", sub: "Quicker ways to do things", sym: "command", col: .systemBlue, badge: "New", tap: { [weak self] in self?.open("shortcuts") })]
       if let p = model["push"] as? [String: Any] {
-        phone.append(SetItem(key: "push", title: "Notifications", sub: p["sub"] as? String ?? "", value: (p["busy"] as? Bool) == true ? "…" : p["label"] as? String ?? "", sym: "bell.badge.fill", col: .systemRed, tap: { [weak self] in self?.send(["ev": "push"]) }))
+        phone.append(SetItem(key: "push", title: "Notifications", sub: p["sub"] as? String ?? "", value: (p["busy"] as? Bool) == true ? "…" : p["label"] as? String ?? "", sym: "bell.badge.fill", col: .systemRed, tap: { [weak self] in self?.pushTap() }))
       }
       if let lk = model["lock"] as? [String: Any] {
         let kindW = lk["kind"] as? String ?? "Face ID"
-        phone.append(SetItem(key: "lock", title: "\(kindW) lock", sub: "Asks for your face when E11 Console opens", sym: kindW == "Touch ID" ? "touchid" : "faceid", col: .systemGreen, toggle: (lk["on"] as? Bool) == true, flip: { [weak self, weak h] _ in self?.send(["ev": "lock"]); if let h = h { self?.settle(h) } }))
+        phone.append(SetItem(key: "lock", title: "\(kindW) lock", sub: "Asks for your face when E11 Console opens", sym: kindW == "Touch ID" ? "touchid" : "faceid", col: .systemGreen, toggle: (lk["on"] as? Bool) == true, flip: { [weak self] on in self?.lockFlip(on) }))
       }
       if let d = model["digest"] as? [String: Any] {
         phone.append(SetItem(key: "digest", title: "Morning summary", sub: "10:30 am, Monday to Friday", sym: "sun.max.fill", col: .systemYellow, toggle: (d["on"] as? Bool) == true, flip: { [weak self, weak h] on in self?.pfSet("digest", ["on": on], page: ["ev": "digest"]); if let h = h { self?.settle(h) } }))
@@ -1799,7 +1807,7 @@ final class MeCtl {
         if !test.isEmpty { out.append(head(h, "test", "Test site")); out.append(group(h, "test", test)) }
       }
       out.append(head(h, "out", ""))
-      out.append(group(h, "out", [SetItem(key: "signOut", title: "Sign out", chevron: false, danger: true, tap: { [weak self] in self?.send(["ev": "signOut"]) })]))
+      out.append(group(h, "out", [SetItem(key: "signOut", title: "Sign out", chevron: false, danger: true, tap: { [weak self] in self?.signOutAsk() })]))
       // (the sync status in the version's place — Haris 2026-11-03; the version is on About)
       if let st = model["sync"] as? String, !st.isEmpty {
         let (t, c): (String, UIColor) = {
@@ -2592,6 +2600,114 @@ final class MeCtl {
     }
     UIImpactFeedbackGenerator(style: .light).impactOccurred()
     main.topMost().present(ac, animated: true)
+  }
+
+  // ---------- This iPhone: Notifications, the Face ID lock, Sign out — the app's own (Part B step 8; the page's Push
+  // rows in phone.js and signOut in app.js, done here) ----------
+  private func pushModel(_ st: String) -> [String: Any] {
+    let label = ["on": "On", "off": "Off", "denied": "Blocked"][st] ?? ""
+    let sub = ["on": "A banner for every Inbox update", "off": "Get a banner even when the app is closed", "denied": "Allow them in iPhone Settings → Notifications → E11 Console"][st] ?? ""
+    return ["state": st, "busy": pushBusy, "label": label, "sub": sub]
+  }
+  // (asked of iPhone again at most every 2 s — coming back from Settings changes it; drawn again only when it changed)
+  private func pushCheck() {
+    if let t = pushAsked, Date().timeIntervalSince(t) < 2 { return }
+    pushAsked = Date()
+    main.pushState { [weak self] st in
+      guard let self = self, st != self.pushNow else { return }
+      self.pushNow = st; self.redraw()
+    }
+  }
+  private func pushTap() {
+    guard !pushBusy else { return }
+    guard let st = pushNow else { send(["ev": "push"]); return }   // (not asked of iPhone yet: the page's way, as before)
+    switch st {
+    case "denied":
+      ask(["kind": "alert", "title": "Notifications are off in Settings", "body": "Turn on Allow Notifications for E11 Console in the iPhone’s Settings.", "okText": "Open Settings", "cancelText": "Cancel"]) { r in
+        if (r["ok"] as? Bool) == true, let u = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(u) }
+      }
+    case "off": pushOn()
+    default:
+      ask(["kind": "choice", "choices": [["label": "Send a test notification"], ["label": "Turn off on this phone", "danger": true], ["label": "Cancel", "cancel": true]]]) { [weak self] r in
+        guard (r["ok"] as? Bool) == true, let i = r["index"] as? Int else { return }
+        if i == 0 { self?.pushTest() } else if i == 1 { self?.pushOff() }
+      }
+    }
+  }
+  private func pushOn() {
+    pushBusy = true; redraw()
+    let finish = { [weak self] (st: String, say: String?) in
+      guard let self = self else { return }
+      self.pushBusy = false; self.pushNow = st; self.pushAsked = Date(); self.redraw()
+      if let t = say { self.top?.toast(["t": t]) }
+    }
+    UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { [weak self] ok, _ in
+      DispatchQueue.main.async {
+        guard let self = self else { return }
+        if !ok { self.main.pushState { st in finish(st == "on" ? "off" : st, nil) }; return }
+        UserDefaults.standard.set(false, forKey: PUSH_OFF_KEY)
+        // (on once this phone's address is in — main.gotToken sends it to the server)
+        self.main.pushWaiters.append { r in
+          if (r["ok"] as? Bool) == true { finish("on", "Notifications on") } else { finish("off", r["error"] as? String ?? "Notifications failed") }
+        }
+        UIApplication.shared.registerForRemoteNotifications()
+      }
+    }
+  }
+  private func pushOff() {
+    UserDefaults.standard.set(true, forKey: PUSH_OFF_KEY)
+    if let tk = main.lastToken { main.serverTask.request("/api/apns/unregister", body: ["token": tk]) { _ in } }
+    pushNow = "off"; pushAsked = Date(); redraw()
+    top?.toast(["t": "Notifications off"])
+  }
+  private func pushTest() {
+    main.serverTask.request("/api/push/test", body: ["token": main.lastToken ?? ""]) { [weak self] r in
+      self?.top?.toast(["t": r.map { MeCtl.testSaid($0) } ?? "No connection — try again"])
+    }
+  }
+  // what a test notification did, in words — this phone's own answer from Apple (phone.js testSaid)
+  static func testSaid(_ r: [String: Any]) -> String {
+    if let e = r["error"] as? String, (r["ok"] as? Bool) == false { return e }
+    if let me = r["thisPhone"] as? [String: Any] {
+      let status = me["status"] as? Int, reason = me["reason"] as? String
+      if status == 200 { return "Sent to this phone — Apple accepted it. Nothing showing? Check Focus and Settings → Notifications → E11 Console" }
+      if (r["apnsWhy"] as? String) == "no-key" { return "This site can’t send Apple notifications yet (its Apple push key isn’t set up)" }
+      if reason == "not registered on this site" { return "This phone isn’t registered on this site — turn notifications off and on here" }
+      return "Apple didn’t accept it for this phone (\(status.map { String($0) } ?? "no answer")\(reason.map { " · " + $0 } ?? ""))"
+    }
+    let ds = (r["devices"] as? [[String: Any]]) ?? []
+    if !ds.isEmpty {
+      return "Apple devices on this site: " + ds.map { d in
+        let name = (d["platform"] as? String) == "mac" ? "Mac" : "iPhone", st = d["status"] as? Int
+        return st == 200 ? "\(name) ✓ accepted" : "\(name) ✗ \(st.map { String($0) } ?? "no answer")\((d["reason"] as? String).map { " " + $0 } ?? "")"
+      }.joined(separator: " · ")
+    }
+    switch r["apnsWhy"] as? String {
+    case "no-key": return "This site can’t send Apple notifications (its Apple push key isn’t set up)"
+    case "no-devices": return "No iPhone is registered on this site — turn notifications off and on on the phone"
+    default: return (r["sent"] as? Bool) == true ? "Sent — it may take a few seconds" : "Couldn’t reach this phone — switch it off and on again"
+    }
+  }
+  // the Face ID lock: on asks for your face first (as the page's setLock); off at once
+  private func lockFlip(_ on: Bool) {
+    if !on { UserDefaults.standard.set(false, forKey: LOCK_KEY); redraw(); return }
+    let ctx = LAContext(); var err: NSError?
+    guard ctx.canEvaluatePolicy(.deviceOwnerAuthentication, error: &err) else { top?.toast(["t": "This iPhone has no Face ID or passcode set up"]); redraw(); return }
+    main.authing = true
+    ctx.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "Lock E11 Console with Face ID") { [weak self] ok, _ in
+      DispatchQueue.main.async {
+        guard let self = self else { return }
+        if ok { UserDefaults.standard.set(true, forKey: LOCK_KEY) }
+        self.redraw()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in self?.main.authing = false }
+      }
+    }
+  }
+  private func signOutAsk() {
+    let review = UserDefaults.standard.string(forKey: "e11_server") == "review"
+    ask(["kind": "alert", "title": "Sign out?", "body": review ? "You’ll need the App Review password to sign in again." : "You’ll need the code from your email to sign in again.", "okText": "Sign out", "danger": true, "cancelText": "Cancel"]) { [weak self] r in
+      if (r["ok"] as? Bool) == true { self?.main.signOutNative() }
+    }
   }
 
   // ---------- Shortcuts (all real today — checked in the code; a new gesture → a row here) ----------
