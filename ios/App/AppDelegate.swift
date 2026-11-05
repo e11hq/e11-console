@@ -1554,7 +1554,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       }
     }
     mm["people"] = nil
-    h.update(mm)
+    h.drawFor(mm)   // (another person's list in it — after View as…: drawn afresh, never animated from theirs)
   }
   // Home's own taps the server does itself (false: the page does it, as before)
   func homeEventOnServer(_ ev: [String: Any]) -> Bool { eventOnServer(ev, serverHome, pageMe: homePageMe) }
@@ -1660,7 +1660,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       }
     }
     mm["people"] = nil
-    h.update(mm)
+    h.drawFor(mm)   // (another person's list in it — after View as…: drawn afresh, never animated from theirs)
     myTasksHadModel = true
     // (shown once there's a list for these filters — until then the page's own, under it)
     if myTasksWanted && h.isHidden { h.isHidden = false; myTasksOwn(false) }
@@ -1758,7 +1758,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       }
     }
     mm["people"] = nil
-    h.update(mm)
+    h.drawFor(mm)   // (another person's list in it — after View as…: drawn afresh, never animated from theirs)
     inboxHadModel = true
     if inboxWanted && h.isHidden { h.isHidden = false; inboxOwn(false) }
   }
@@ -2003,7 +2003,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     mm["people"] = nil
     h.bottomRoom = (tabBar.isHidden ? 40 : view.bounds.height - tabBar.frame.minY) + 96
     h.tabTop = tabBar.isHidden ? nil : tabPillTop
-    h.update(mm)
+    h.drawFor(mm)   // (another person's list in it — after View as…: drawn afresh, never animated from theirs)
     if clientsWanted && h.isHidden { reveal(h, page: page); clientsOwn(false) }
   }
   // shown: the list in place; a client's page pushed in from the right over the list (as iPhone's own pages)

@@ -237,6 +237,14 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     onEvent?(e)
   }
 
+  // a screen's model, from the server or the copy: for the same person as what's in it, the screen's own change
+  // animation; for someone else (View as…), the old rows and cards simply go and theirs are there at once — the Inbox
+  // faded the other person's rows into these, Haris 2026-11-05
+  func drawFor(_ model: [String: Any]) {
+    let was = m["me"] as? String, now = model["me"] as? String
+    if let was = was, let now = now, was != now { UIView.performWithoutAnimation { update(model); setNeedsLayout(); layoutIfNeeded() }; layer.removeAllAnimations(); subviews.forEach { $0.layer.removeAllAnimations() } }
+    else { update(model) }
+  }
   // ---------- what the page sent ----------
   func update(_ model: [String: Any]) {
     m = model
