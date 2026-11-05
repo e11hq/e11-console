@@ -244,7 +244,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     ownAppearanceWatch(); ownAppearanceTick()   // (Automatic light / dark by the app's own clock, from the start)
     // (an Office Admin: their first tab is Overview, not Home — no Home drawn under the startup screen for them)
     if list.contains(where: { ["fin-reimb", "fin-expenses", "team"].contains($0["v"] as? String ?? "") }) {
-      AppData.shared.start(me: me, cookies: serverHome.cookies); watchCopy(); quickSplash(); return
+      AppData.shared.start(me: me, cookies: serverHome.cookies); watchCopy(); quickSplash(); ownPopsWatch(); return
     }
     view.layoutIfNeeded()
     homeLook = q["look"]; homePageMe = me
@@ -258,6 +258,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     watchCopy()
     // (the startup screen plays all the way through all the same, on its own — Haris 2026-11-02; a tap closes it)
     quickSplash()
+    ownPopsWatch()   // (the pop-ups — only while the website isn't there: step 9)
   }
   // the startup screen's checklist ticked here, as the website does (the icon first, then a row every 0.22 s, 3 s in all):
   // what each row said last time, the Inbox's count from the copy

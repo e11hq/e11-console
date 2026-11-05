@@ -106,7 +106,7 @@ export function createServer(cfg) {
   const homeOps = new Map();   // (the app's Home actions already done: their answers, for a retry)
   // Part B step 3: the iPhone app's actions on its own pages, straight to the server (no website in between) — each
   // group on its own switch: kv 'app-act-<group>' = 'off' sends the app back to the page for it
-  const ACT_GROUP = { rvApprove: 'reviews', rvAmend: 'reviews', clApprove: 'claims', clPaid: 'claims', clAdd: 'claims', clPerson: 'claims', exAdd: 'expenses', exEnd: 'expenses', pfSet: 'profile' };
+  const ACT_GROUP = { rvApprove: 'reviews', rvAmend: 'reviews', clApprove: 'claims', clPaid: 'claims', clAdd: 'claims', clPerson: 'claims', clMark: 'claims', exAdd: 'expenses', exEnd: 'expenses', pfSet: 'profile' };
   let appActs = null;
   async function loadAppActs() {
     if (appActs) return appActs;

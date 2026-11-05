@@ -19,6 +19,7 @@ final class BootState {
   var retry: DispatchWorkItem?
   var owned = false          // (the app runs the startup screen itself this time — the page's ticks and "out" ignored)
   var signingIn = false      // (back from the sign-in page: the startup screen is the app's until its screens are there)
+  var popBusy = false, popTimer: Timer?   // (the app's own pop-ups — step 9)
   lazy var session: URLSession = {
     let c = URLSessionConfiguration.ephemeral
     c.httpShouldSetCookies = false; c.httpCookieAcceptPolicy = .never
@@ -87,6 +88,7 @@ extension Main {
     }
     if let s = splash, !s.leaving { s.command(["status": ""]); s.command(["greet": SplashView.greeting(memo)]) }
     saveQuick(["me": me])
+    if first && quickBooted { ownAfterStart() }   // (What's new, the View as… bar — without the website: step 9)
     guard first, !quickBooted else { return }
     // (a first start, or another person than the copy kept: their copy, then the app's own screens from it — the startup
     //  screen stays up until they're all there (the tab bar too), then plays out; the page's own ticks and "out" aren't
@@ -132,6 +134,8 @@ extension Main {
       }
     }
     quickSplash()
+    ownPopsWatch()
+    ownAfterStart()
   }
   private func ownTabsNow() -> [String: Any]? {
     guard AppData.shared.tabsOn, let m = AppData.shared.screen("tabs").model, let list = m["tabs"] as? [[String: Any]], !list.isEmpty else { return nil }
@@ -252,5 +256,101 @@ extension Main {
     if splash == nil { showSplash(); splashHeard = true }
     bootCheck()
     if pageReady { web.reload() }
+  }
+
+  // ---------- Step 9: the pop-ups, decided by the app (the brain's pops — as the page did after the startup screen and
+  // every 30 s): your birthday, the birthday / city nudge, an announcement, the claims reminder. Only without the website
+  // (it decides them itself while it's there), one at a time, never over something open. ----------
+  func ownPops() {
+    guard !pageReady, quickBooted, splash == nil, lockView == nil, AppData.shared.ready, !popBusy, presentedViewController == nil,
+          let p = AppData.shared.meModel("tasks", "pops") else { return }
+    let seen = { [weak self] (k: String, v: String) in
+      self?.serverTask.request("/api/app/act", body: ["ev": "pfSet", "field": "seen", "k": k, "value": v, "op": UUID().uuidString]) { j in
+        if let ch = j?["changes"] as? [[String: Any]], !ch.isEmpty { AppData.shared.applyLocal(ch) }
+      }
+    }
+    let next = { [weak self] in self?.popBusy = false; DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { self?.ownPops() } }
+    let today = p["today"] as? String ?? ""
+    if let b = p["birthday"] as? [String: Any], let key = b["key"] as? String, defaults.string(forKey: "e11-hello-bday") != key {
+      defaults.set(key, forKey: "e11-hello-bday"); popBusy = true
+      popCommand(["kind": "greet", "title": b["title"] ?? "", "sub": b["sub"] ?? "", "person": b["person"] ?? [:]]) { _ in next() }
+      return
+    }
+    if let k = p["profileAsk"] as? String {
+      popBusy = true; seen("profileAsked", today)
+      popCommand(["kind": "profileAsk", "missing": k]) { _ in next() }
+      return
+    }
+    if var a = p["announce"] as? [String: Any], let id = a["id"] as? String {
+      popBusy = true; a["kind"] = "announce"
+      popCommand(a) { _ in seen("annSeen", id); next() }
+      return
+    }
+    if let c = p["claims"] as? [String: Any] {
+      popBusy = true; seen("claimNag", today)
+      popCommand(["kind": "claims", "month": c["month"] ?? "", "today": c["today"] ?? 0]) { [weak self] r in
+        let a = r["a"] as? String ?? ""
+        if a == "none" || a == "offline" {
+          self?.serverTask.request("/api/app/act", body: ["ev": "clMark", "state": a, "op": UUID().uuidString]) { j in
+            if let ch = j?["changes"] as? [[String: Any]], !ch.isEmpty { AppData.shared.applyLocal(ch) }
+            if let m = (j?["messages"] as? [String])?.first { self?.shownScreen?.toast(["t": m]) }
+          }
+        }
+        next()
+      }
+      return
+    }
+  }
+  var popBusy: Bool { get { Main.boot.popBusy } set { Main.boot.popBusy = newValue } }
+  // (after the startup screen, and every 30 s — as the page's own timer)
+  func ownPopsWatch() {
+    guard Main.boot.popTimer == nil else { return }
+    Main.boot.popTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in self?.ownPops() }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 4.2) { [weak self] in self?.ownPops() }
+  }
+
+  // What's new after an update (app.js maybeShowWhatsNew), and the View as… bar (viewas.js) — the app's own, without
+  // the website
+  func ownAfterStart() {
+    guard !pageReady else { return }
+    let st = startInfo
+    if let v = st["version"] as? String, !v.isEmpty {
+      let seen = defaults.string(forKey: "e11-seen-version")
+      defaults.set(v, forKey: "e11-seen-version")
+      if let s = seen, s != v {
+        serverTask.request("/api/whatsnew", body: nil) { [weak self] r in
+          guard let self = self, !self.pageReady, let r = r, let notes = r["notes"] as? String, !notes.isEmpty else { return }
+          DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            self.popCommand(["kind": "whatsNew", "version": r["name"] ?? r["version"] ?? v, "when": (r["publishedAt"] as? String).map { Main.dateTimeText($0) } ?? "", "sections": Main.noteSections(notes)]) { _ in }
+          }
+        }
+      }
+    }
+    if let va = st["viewAs"] as? [String: Any], let who = va["as"] as? [String: Any] {
+      let role = ((AppData.shared.meModel("me", "me", [["shell": SHELL_VERSION]])?["card"] as? [String: Any])?["role"] as? String) ?? ""
+      popCommand(["kind": "viewAsBar", "on": true, "name": who["name"] ?? "", "role": role]) { _ in }
+    } else { ViewAsBar.current?.go() }
+  }
+  // (app.js NativePop.sections: the notes' lines in sections — headings, then their points)
+  static func noteSections(_ md: String) -> [[String: Any]] {
+    var out: [[String: Any]] = []
+    let plain = { (t: String) -> String in t.replacingOccurrences(of: "\\*\\*(.+?)\\*\\*", with: "$1", options: .regularExpression).replacingOccurrences(of: "`(.+?)`", with: "$1", options: .regularExpression).trimmingCharacters(in: .whitespaces) }
+    for l in md.components(separatedBy: .newlines) {
+      if let r = l.range(of: "^#{1,3}\\s+", options: .regularExpression) { out.append(["h": plain(String(l[r.upperBound...])), "items": [String]()]); continue }
+      var t = l
+      if let r = l.range(of: "^\\s*[-*]\\s+", options: .regularExpression) { t = String(l[r.upperBound...]) }
+      t = plain(t)
+      if t.isEmpty { continue }
+      if out.isEmpty { out.append(["h": "", "items": [String]()]) }
+      var last = out.removeLast(); var items = last["items"] as? [String] ?? []; items.append(t); last["items"] = items; out.append(last)
+    }
+    return out.isEmpty ? [["h": "", "items": ["Improvements and fixes."]]] : out
+  }
+  // (app.js fmtDateTime: "Nov 5, 2026, 7:15 PM")
+  static func dateTimeText(_ iso: String) -> String {
+    let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    guard let d = f.date(from: iso) ?? ISO8601DateFormatter().date(from: iso) else { return "" }
+    let o = DateFormatter(); o.locale = Locale(identifier: "en_US"); o.dateFormat = "MMM d, yyyy, h:mm a"
+    return o.string(from: d)
   }
 }

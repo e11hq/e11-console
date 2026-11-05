@@ -8,6 +8,7 @@
 //   'sound'   body.value          true / false
 //   'notif'   body.k, body.on     a notification type on / off (prefs.notifOff)
 //   'digest'  body.on             the morning summary on / off (prefs.digestOff)
+//   'seen'    body.k, body.value  a pop-up seen (prefs.annSeen / profileAsked / claimNag) — step 9
 //   'avatar'  body.value          the new photo's path (from the upload), or null = no photo; the old photo's file goes
 //                                 to the server's trash folder (filesGone) when nothing else uses it
 // It only ever edits the acting person's own record (u.id) — someone else's can't be named. Answers as the other acts:
@@ -68,6 +69,13 @@ export function createMeActs({ store } = {}) {
       if (!NOTIF_KEYS.includes(k) || typeof body.on !== 'boolean') return fail(400, 'Not available');
       const p = prefs(); p.notifOff = p.notifOff || {};
       if (body.on) delete p.notifOff[k]; else p.notifOff[k] = true;
+    } else if (field === 'seen') {
+      // (step 9: what the app's pop-ups remember on you, as the page did — the announcement closed, the birthday / city
+      //  nudge shown, the claims reminder today)
+      const k = String(body.k || ''), v = text(body.value, 60);
+      if (!['annSeen', 'profileAsked', 'claimNag'].includes(k) || !v) return fail(400, 'Not available');
+      if (prefs()[k] === v) return done([], []);
+      prefs()[k] = v;
     } else if (field === 'digest') {
       if (typeof body.on !== 'boolean') return fail(400, 'Not available');
       if (!!prefs().digestOff === !body.on) return done([], []);

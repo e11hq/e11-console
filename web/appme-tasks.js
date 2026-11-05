@@ -575,6 +575,45 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
     if (inTrash && O.isManager()) return { trash: O.trashTitle(inTrash), toast: 'The task is in the Trash' };
     return { toast: 'Its task has been deleted' };
   };
+  // ---------- The pop-ups (step 9): when each is due, as the page decided (app.js Announce.check, ProfileAsk.maybe,
+  // OccasionHello.birthday; claims.js reminderDue) — the app shows them as its own and says what was seen (pfSet 'seen')
+  // pops() → { announce: { id, title, body, ask, from, fromName, when } | null, profileAsk: 'both' | 'birthday' | 'city' |
+  //   null, birthday: { key, title, sub, person } | null, claims: { month, today } | null } — "today" and the clock are
+  //   Dubai's
+  M.pops = function (R, data, meId, nowMs) {
+    const W = world(R, data, meId, nowMs), u = W.me();
+    if (!u) return null;
+    data = data || {};
+    const prefs = u.prefs || {};
+    const dub = new Date(W.now + 4 * 3600000), today = W.today;
+    const personOf = (id) => { const x = W.userById(id); return { id, name: W.fullName(x), ini: initials(W.fullName(x)), color: avColor(id || 'x'), photo: x && x.avatar ? '/__file/' + String(x.avatar).split('/').map(encodeURIComponent).join('/') : null }; };
+    // the announcement (once — closed with Got it)
+    const a = W.meta.announcement && W.meta.announcement.id ? W.meta.announcement : null;
+    const fmtWhen = (iso) => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Dubai' });
+    const announce = a && a.by !== u.id && prefs.annSeen !== a.id ? (() => {
+      const from = W.userById(a.by);
+      return { id: a.id, title: a.title || '', body: a.body || '', ask: 'If you have any questions, please contact Muhammad Arsal.', from: from ? personOf(from.id) : { name: 'E11', ini: 'E11', color: '#5b8cff' },
+        fromName: from ? W.fullName(from).split(' ')[0] : 'E11', when: a.at ? fmtWhen(a.at) : '' };
+    })() : null;
+    // the birthday / city nudge (staff, once per person)
+    const profileAsk = u.role !== 'freelancer' && !prefs.profileAsked && !(u.bday && u.country && u.city)
+      ? (!u.bday && !(u.country && u.city) ? 'both' : !u.bday ? 'birthday' : 'city') : null;
+    // your own birthday (29 Feb on 28 Feb in other years) — once that day (the app remembers on this phone)
+    const isBday = (md) => {
+      if (!/^\d{2}-\d{2}$/.test(String(md || ''))) return false;
+      if (md === today.slice(5)) return true;
+      const y = Number(today.slice(0, 4)), leap = (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+      return md === '02-29' && !leap && today.slice(5) === '02-28';
+    };
+    const birthday = isBday(u.bday) ? { key: today + ':' + u.id, title: `Happy birthday, ${W.fullName(u).split(' ')[0]}`, sub: 'Wishing you a wonderful year · from all of us at E11', person: personOf(u.id) } : null;
+    // the claims reminder: the 20th to the 27th, from 11:30, while this month's own claim is missing or a draft, once a day
+    const isFinUser = u.role === 'finance_admin' || u.role === 'finance_viewer';
+    const d = dub.getUTCDate(), mins = dub.getUTCHours() * 60 + dub.getUTCMinutes(), m = today.slice(0, 7);
+    const own = (Array.isArray(data.claims) ? data.claims : []).find((c) => c.id === `cl-${u.id}-${m}`);
+    const claims = !isFinUser && u.active !== false && d >= 20 && d <= 27 && mins >= 11 * 60 + 30 && !(own && own.state !== 'draft') && prefs.claimNag !== today
+      ? { month: new Date(Date.UTC(Number(m.slice(0, 4)), Number(m.slice(5, 7)) - 1, 1)).toLocaleDateString('en-US', { month: 'long', timeZone: 'UTC' }), today: d } : null;
+    return { announce, profileAsk, birthday, claims, today };
+  };
   // ---------- The startup screen's four rows (Part B step 8): app.js Splash values(), worked out without the page ----------
   // startRows() → { list: [Clients, Your tasks, Inbox, the fourth], label4, cd } · null: not a member
   M.startRows = function (R, data, meId, nowMs) {

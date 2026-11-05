@@ -116,6 +116,23 @@ export function createMoneyActs({ store, now } = {}) {
     return done(changes);
   }
 
+  // The claims reminder answered on the iPhone (step 9 — claims.js tick's answer): "I don't have claims" / "Submitted
+  // offline" for this month's own claim — made if there's none, only while it's still a draft (no more reminders)
+  function clMark(u, body = {}) {
+    const state = body.state === 'none' ? 'none' : body.state === 'offline' ? 'offline' : null;
+    if (!state) return fail(400, 'Not available');
+    const month = todayStr().slice(0, 7);
+    if (monthClosed(month)) return fail(403, `${monthName(month)} claims closed on the 28th`);
+    const id = `cl-${u.id}-${month}`;
+    const was = store.get('claims', id);
+    if (was && was.state && was.state !== 'draft') return done([]);
+    const before = was ? clone(was) : undefined;
+    const c = was ? clone(was) : { id, userId: u.id, month, groups: [], total: 0, signature: null, createdAt: nowISO() };
+    c.state = state;
+    saved(c);
+    return { ok: true, changes: [{ kind: 'claims', id, base: before, data: c }], messages: [state === 'none' ? `Got it — no claims for ${monthName(month, true)}. No more reminders this month.` : 'Got it — no more reminders this month.'], answer: {} };
+  }
+
   // Someone who isn't a team member, to add a claim for by hand (answer: their "p:<id>" and name)
   function clPerson(u, body = {}) {
     if (!isFinAdm(u)) return fail(403, ONLY_ADMIN);
@@ -150,6 +167,6 @@ export function createMoneyActs({ store, now } = {}) {
     return done([{ kind: 'finance', id: x.id, base: before, data: x }]);
   }
 
-  return { clApprove, clPaid, clAdd, clPerson, exAdd, exEnd };
+  return { clApprove, clPaid, clAdd, clPerson, clMark, exAdd, exEnd };
 }
 
