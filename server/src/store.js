@@ -30,9 +30,11 @@ export function openStore(file) {
     get: db.prepare(`SELECT kind, id, data, deleted, rev FROM entities WHERE kind = ? AND id = ?`),
     put: db.prepare(`INSERT INTO entities(kind, id, data, deleted, rev, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(kind, id) DO UPDATE SET data = excluded.data, deleted = excluded.deleted, rev = excluded.rev, updated_at = excluded.updated_at, updated_by = excluded.updated_by`),
-    all: db.prepare(`SELECT kind, id, data FROM entities WHERE deleted = 0`),
+    // (in the order they were first saved — the page's own order, as statuses To do … Done; asked by kind alone, SQLite
+    //  walks the (kind, id) key and gave them by id: CTR first, and the app's new tasks landed in CTR — Haris 2026-11-05)
+    all: db.prepare(`SELECT kind, id, data FROM entities WHERE deleted = 0 ORDER BY rowid`),
     since: db.prepare(`SELECT kind, id, data, deleted, rev FROM entities WHERE rev > ? ORDER BY rev`),
-    kind: db.prepare(`SELECT id, data FROM entities WHERE kind = ? AND deleted = 0`),
+    kind: db.prepare(`SELECT id, data FROM entities WHERE kind = ? AND deleted = 0 ORDER BY rowid`),
     kvGet: db.prepare(`SELECT value FROM kv WHERE key = ?`),
     kvSet: db.prepare(`INSERT INTO kv(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`),
   };
