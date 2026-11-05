@@ -78,7 +78,7 @@ async def main():
             await pg.click('[data-cl="add-group"]'); await pg.wait_for_timeout(150)
             await pg.locator('input[data-k="title"]').nth(1).fill('Client meeting')
             await pg.locator('input[data-k="desc"]').nth(2).fill('Taxi'); await pg.locator('input[data-k="amount"]').nth(2).fill('68')
-            check((await pg.locator('#ec-total').inner_text()).strip() == '\u20c3\u00a0272.50', 'total adds up live')
+            check((await pg.locator('#ec-total').inner_text()).strip() == '\u20c3272.50', 'total adds up live')
             # submitting without a signature is refused
             await pg.click('[data-cl="submit"]'); await pg.wait_for_timeout(300)
             check(await E("ui.view") == 'claim', 'needs a signature first')

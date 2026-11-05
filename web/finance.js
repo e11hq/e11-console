@@ -20,8 +20,8 @@ const Fin = (() => {
   const canLook = () => !!finLevel();
   const owns = (v) => VIEWS.includes(v);
   const recs = (type) => (db.finance || []).filter((x) => x.type === type);
-  const aed = (n) => '\u20C3\u00A0' + (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const aedShort = (n) => { n = Number(n) || 0; return '\u20C3\u00A0' + (n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e4 ? Math.round(n / 1e3) + 'k' : n.toLocaleString('en-US', { maximumFractionDigits: 0 })); };
+  const aed = (n) => '\u20C3' + (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const aedShort = (n) => { n = Number(n) || 0; return '\u20C3' + (n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e4 ? Math.round(n / 1e3) + 'k' : n.toLocaleString('en-US', { maximumFractionDigits: 0 })); };
   const monthKey = (d) => ymd(d).slice(0, 7);
   const thisMonth = () => todayStr().slice(0, 7);
   const addMonths = (m, n) => { const [y, mo] = m.split('-').map(Number); const d = new Date(y, mo - 1 + n, 1); return monthKey(d); };
@@ -209,13 +209,13 @@ const Fin = (() => {
     const nS = model.reduce((a, x) => a + x.subs.length, 0), nE = model.reduce((a, x) => a + x.extras.length, 0);
     const people = new Set(model.flatMap((x) => x.reimbs.map((r) => r.name))).size, nR = model.reduce((a, x) => a + x.reimbs.length, 0);
     let note;
-    if (multi) note = `Avg \u20C3\u00A0${money(T / model.length)} a month`;
+    if (multi) note = `Avg \u20C3${money(T / model.length)} a month`;
     else {
       const pm = addMonths(first, -1), prev = transactions().filter((x) => x.date.slice(0, 7) === pm).reduce((a, x) => a + x.amount, 0);
       const p = pctChange(T, prev);
       note = `${p > 0 ? '↑' : p < 0 ? '↓' : '—'} ${Math.abs(p)}% vs ${monthName(pm, true).split(' ')[0]}`;
     }
-    cards([['Total paid out', '\u20C3\u00A0' + money(T), note, true], ['Subscriptions', money(S3), `${plural(nS, 'payment')} · ${pct(S3, T)}%`], ['Reimbursements', money(R3), `${multi ? plural(nR, 'payment') : plural(people, 'person', 'people')} · ${pct(R3, T)}%`], ['Office expenses', money(E3), `${plural(nE, 'purchase')} · ${pct(E3, T)}%`]]);
+    cards([['Total paid out', '\u20C3' + money(T), note, true], ['Subscriptions', money(S3), `${plural(nS, 'payment')} · ${pct(S3, T)}%`], ['Reimbursements', money(R3), `${multi ? plural(nR, 'payment') : plural(people, 'person', 'people')} · ${pct(R3, T)}%`], ['Office expenses', money(E3), `${plural(nE, 'purchase')} · ${pct(E3, T)}%`]]);
     split(S3, R3, E3);
     if (!multi) monthTables(model[0], '');
     else {
@@ -229,7 +229,7 @@ const Fin = (() => {
         if (y + 160 * S > bottom) newPage();
         ctx.fillStyle = '#efecff'; ctx.fillRect(P, y, CW, 34 * S); ctx.fillStyle = '#5b4bd6'; ctx.fillRect(P, y, 3 * S, 34 * S);
         font(700, 14); ctx.fillStyle = '#17181b'; text(monthName(mo.m, true), P + 14 * S, y + 22 * S);
-        font(600, 12, true); ctx.fillStyle = '#3b2fa0'; text('\u20C3\u00A0' + money(mo.t), W - P - 12 * S, y + 22 * S, 'right');
+        font(600, 12, true); ctx.fillStyle = '#3b2fa0'; text('\u20C3' + money(mo.t), W - P - 12 * S, y + 22 * S, 'right');
         y += 50 * S;
         monthTables(mo, '');
       });
@@ -574,14 +574,14 @@ const Fin = (() => {
               ${curves.map((c) => `<span class="fa-end ${c.cls}" style="left:${c.x1}%;top:${c.y}%;--c:${KIND_C[c.k]}"><i></i><span><small>${c.l}</small><b>${aed(c.v)}</b></span></span>`).join('')}
             </div>
             <div class="fa-ruler"></div>
-            <div class="fa-scale">${Array.from({ length: 7 }, (_, i) => `<span style="left:${(i / 6) * 100}%">${i ? nice(step * i) : '\u20C3\u00A00'}</span>`).join('')}</div>
+            <div class="fa-scale">${Array.from({ length: 7 }, (_, i) => `<span style="left:${(i / 6) * 100}%">${i ? nice(step * i) : '\u20C30'}</span>`).join('')}</div>
           </section>
           <div class="fa-two">
             <section class="fa-card">
               <div class="fa-ch"><h2>Compared with ${esc(mname(pm))}</h2><span class="fa-chip ${p > 0 ? 'bad' : 'good'}">${p > 0 ? '+' : ''}${p}%</span></div>
               <div class="fa-kv"><span>Spent</span><b>${aed(total)}</b></div>
               <div class="fa-slider"><i class="fill" style="width:${(total / barMax) * 100}%"></i><i class="knob" style="left:${(total / barMax) * 100}%"></i><i class="mark" style="left:${(prevTotal / barMax) * 100}%" title="${esc(mname(pm))}"></i></div>
-              <div class="fa-kv sm"><span>\u20C3\u00A00</span><span class="acc">${esc(mname(pm))}: ${aed(prevTotal)}</span></div>
+              <div class="fa-kv sm"><span>\u20C30</span><span class="acc">${esc(mname(pm))}: ${aed(prevTotal)}</span></div>
               ${biggest ? `<div class="fa-note"><div class="fa-kv"><span>Biggest item</span><b>${aed(biggest.amount)}</b></div><p>${esc(biggest.name)} · ${esc(KIND_L[biggest.kind])}, paid ${esc(fmtDay(biggest.date))}.</p></div>` : ''}
             </section>
             <section class="fa-card">

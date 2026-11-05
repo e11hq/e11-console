@@ -93,13 +93,13 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
     const PILL = { submitted: ['Submitted', 'sub'], approved: ['HR approved', 'ok'], paid: ['Paid', 'paid'] };
     const row = (c) => { const nm = W.ownerName(c); const rc = W.receiptsOf(c).length; return { id: c.id, name: nm, ini: initials(nm), rgb: W.rgb(W.avColor(c.userId || c.personId || c.id)), photo: c.userId ? photoOf(W.userById(c.userId)) : null,
       sub: `${c.byHand ? 'Added by hand' : `${plural(W.itemsOf(c), 'item')} · ${plural(rc, 'receipt')}`} · ${W.fmtDay(c.submittedAt || c.updatedAt ? W.isoDay(c.submittedAt || c.updatedAt) : W.today)}`,
-      amt: '\u20C3\u00A0' + aedOf(c.total || W.totalOf(c)), st: c.state, pill: (PILL[c.state] || ['', ''])[0] + (c.state === 'paid' && c.paidOn ? ' · ' + W.fmtDay(c.paidOn) : ''), pk: (PILL[c.state] || ['', ''])[1] }; };
+      amt: '\u20C3' + aedOf(c.total || W.totalOf(c)), st: c.state, pill: (PILL[c.state] || ['', ''])[0] + (c.state === 'paid' && c.paidOn ? ' · ' + W.fmtDay(c.paidOn) : ''), pk: (PILL[c.state] || ['', ''])[1] }; };
     const list = W.claims.filter((c) => c.month === m && ['submitted', 'approved', 'paid'].includes(c.state)).sort((a, b) => String(b.submittedAt || '').localeCompare(String(a.submittedAt || '')));
     const total = list.reduce((a, c) => a + (c.total || W.totalOf(c)), 0);
     const people = W.users.filter((x) => x.active !== false && !W.isFinUser(x)).sort((a, b) => fullName(a).localeCompare(fullName(b))).map((x) => ({ id: 'u:' + x.id, name: fullName(x) }))
       .concat(W.finance.filter((x) => x.type === 'person').map((p) => ({ id: 'p:' + p.id, name: p.name, other: true })));
     const now = W.today.slice(0, 7), prev = addMonth(now, -1);
-    return { month: m, label: monthLong(m), sub: `${plural(list.length, 'claim')} · \u20C3\u00A0${aedOf(total)}`, admin: W.finLevel(W.u) === 'admin',
+    return { month: m, label: monthLong(m), sub: `${plural(list.length, 'claim')} · \u20C3${aedOf(total)}`, admin: W.finLevel(W.u) === 'admin',
       need: list.filter((c) => c.state === 'submitted').map(row), all: list.map(row), people, months: [{ m: prev, t: monthLong(prev) }, { m: now, t: monthLong(now) }] };
   };
 
@@ -110,10 +110,10 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
     const subs = W.finance.filter((x) => x.type === 'sub' && !x.endedAt).sort((a, b) => (Number(a.day) || 0) - (Number(b.day) || 0));
     const office = W.expenses().filter((x) => String(x.date).startsWith(now)).sort((a, b) => String(b.date).localeCompare(String(a.date)));
     return { admin: W.finLevel(W.u) === 'admin', month: monthLong(now),
-      subs: subs.map((x) => ({ id: x.id, name: x.name, amt: '\u20C3\u00A0' + aedOf(x.amount), sub: `Billed on the ${ordN(Number(x.day) || 1)} · monthly`, inv: !!Object.keys(x.invoices || {}).length })),
-      subsTotal: '\u20C3\u00A0' + aedOf(subs.reduce((a, x) => a + (Number(x.amount) || 0), 0)),
-      office: office.map((x) => ({ id: x.id, name: x.name, amt: '\u20C3\u00A0' + aedOf(x.amount), sub: W.fmtDay(x.date) + (x.invoice ? ' · invoice' : ''), inv: !!x.invoice })),
-      officeTotal: '\u20C3\u00A0' + aedOf(office.reduce((a, x) => a + (Number(x.amount) || 0), 0)) };
+      subs: subs.map((x) => ({ id: x.id, name: x.name, amt: '\u20C3' + aedOf(x.amount), sub: `Billed on the ${ordN(Number(x.day) || 1)} · monthly`, inv: !!Object.keys(x.invoices || {}).length })),
+      subsTotal: '\u20C3' + aedOf(subs.reduce((a, x) => a + (Number(x.amount) || 0), 0)),
+      office: office.map((x) => ({ id: x.id, name: x.name, amt: '\u20C3' + aedOf(x.amount), sub: W.fmtDay(x.date) + (x.invoice ? ' · invoice' : ''), inv: !!x.invoice })),
+      officeTotal: '\u20C3' + aedOf(office.reduce((a, x) => a + (Number(x.amount) || 0), 0)) };
   };
 
   // a file's small picture (phone.js ovPic / rvPic)
@@ -151,10 +151,10 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
     const exp = W.expenses().filter((x) => String(x.date).startsWith(now)).sort((a, b) => String(b.date).localeCompare(String(a.date)));
     const subs = W.finance.filter((x) => x.type === 'sub' && !x.endedAt).length;
     const need = W.claims.filter((c) => c.state === 'submitted').sort((a, b) => String(b.submittedAt || '').localeCompare(String(a.submittedAt || '')));
-    out.cards = [{ n: `${sent}`, of: `/ ${team}`, t: 'claims submitted this month' }, { n: '\u20C3\u00A0' + money(exp.reduce((a, x) => a + (Number(x.amount) || 0), 0)), t: 'office expenses so far' }, { n: `${subs}`, t: 'monthly subscriptions' }];
-    out.claims = need.slice(0, 3).map((c) => ({ id: c.id, name: W.ownerName(c), ini: initials(W.ownerName(c)), rgb: W.rgb(W.avColor(c.userId || c.personId || c.id)), sub: `${c.byHand ? 'Added by hand' : plural(W.itemsOf(c), 'item')} · ${W.fmtDay(W.isoDay(c.submittedAt || c.updatedAt))}`, amt: '\u20C3\u00A0' + money(c.total || W.totalOf(c)) }));
+    out.cards = [{ n: `${sent}`, of: `/ ${team}`, t: 'claims submitted this month' }, { n: '\u20C3' + money(exp.reduce((a, x) => a + (Number(x.amount) || 0), 0)), t: 'office expenses so far' }, { n: `${subs}`, t: 'monthly subscriptions' }];
+    out.claims = need.slice(0, 3).map((c) => ({ id: c.id, name: W.ownerName(c), ini: initials(W.ownerName(c)), rgb: W.rgb(W.avColor(c.userId || c.personId || c.id)), sub: `${c.byHand ? 'Added by hand' : plural(W.itemsOf(c), 'item')} · ${W.fmtDay(W.isoDay(c.submittedAt || c.updatedAt))}`, amt: '\u20C3' + money(c.total || W.totalOf(c)) }));
     out.needN = need.length;
-    out.expenses = exp.slice(0, 3).map((x) => ({ id: x.id, name: x.name, sub: W.fmtDay(x.date), amt: '\u20C3\u00A0' + money(x.amount) }));
+    out.expenses = exp.slice(0, 3).map((x) => ({ id: x.id, name: x.name, sub: W.fmtDay(x.date), amt: '\u20C3' + money(x.amount) }));
     return out;
   };
 

@@ -2,7 +2,7 @@
 """The UAE dirham sign (U+20C3) as a one-character font — E11 Dirham — from the Central Bank of the UAE's symbol
 (its official shape, traced as SVG; path below). Used only for that character (the website: unicode-range; the iPhone
 app: for that character in any text), until iPhone's / Mac's own fonts have it. Sized as the bank asks: as tall as the
-digits (SF / Inter digits ≈ 0.705 em), on their baseline.
+digits (SF / Inter digits ≈ 0.705 em), on their baseline, with the gap before the number built in (0.27 em — a word space).
 Run: python3 tools/make-dirham-font.py  → web/fonts/e11-dirham.ttf, .woff"""
 import re, sys, pathlib
 from fontTools.fontBuilder import FontBuilder
@@ -15,9 +15,10 @@ root = pathlib.Path(__file__).resolve().parent.parent
 D = (root / 'tools' / 'dirham-cbuae.svg').read_text()
 d = re.search(r' d="([^"]+)"', D).group(1)
 VB_H, VB_W = 870.0, 1000.0
-UPM, H, LSB = 1000, 705.0, 30
+UPM, H, LSB, GAP = 1000, 705.0, 30, 270
 k = H / VB_H
-W = round(VB_W * k) + 2 * LSB
+# (the space after it is part of the sign — the same gap in every font, the bank's: no space character is written after it)
+W = round(VB_W * k) + LSB + GAP
 
 def glyph(path=True):
     pen = TTGlyphPen(None)

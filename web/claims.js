@@ -85,12 +85,12 @@ const Claims = (() => {
       <div class="ec-card">
         ${rows.length || manual.length ? rows.map((c) => `<div class="ec-row" data-cl-row="${c.id}">
             <span class="ec-rm"><b>${esc(monthName(c.month))}</b><small>${c.state === 'none' ? 'You told Finance you had no claims' : c.state === 'draft' ? 'Draft — not submitted yet' : `${plural(itemsOf(c), 'item')} · ${plural(receiptsOf(c).length, 'receipt')}${c.submittedAt ? ' · submitted ' + esc(fmtDay(ymd(new Date(c.submittedAt)))) : ''}`}</small></span>
-            <span class="ec-amt">${c.state === 'none' ? '' : '\u20C3\u00A0' + money(c.total || totalOf(c))}</span>
+            <span class="ec-amt">${c.state === 'none' ? '' : '\u20C3' + money(c.total || totalOf(c))}</span>
             ${pill(c)}
             <span class="ec-acts">${c.state === 'none' ? '' : `<button class="btn ghost sm" data-cl="open" data-id="${c.id}">Open</button><button class="icon-btn sm" data-cl="pdf" data-id="${c.id}" title="Download PDF">${icon('download')}</button>`}</span>
           </div>`).join('') + manual.map((r) => `<div class="ec-row">
             <span class="ec-rm"><b>${esc(monthName(r.date.slice(0, 7)))}</b><small>Added by Finance${r.invoice ? ' (PDF)' : ''}</small></span>
-            <span class="ec-amt">\u20C3\u00A0${money(r.amount)}</span>
+            <span class="ec-amt">\u20C3${money(r.amount)}</span>
             <span class="ec-pill" style="background:${STATE.paid[1]};color:${STATE.paid[2]}">Paid · ${esc(fmtDay(r.date))}</span>
             <span class="ec-acts">${r.invoice ? `<button class="btn ghost sm" data-cl="inv" data-id="${r.id}">Open</button>` : ''}</span>
           </div>`).join('') : `<div class="ec-empty">Your claims show up here, with their status: Submitted, HR approved and Paid.</div>`}
@@ -155,7 +155,7 @@ const Claims = (() => {
             ${edit ? `<div class="ec-tr add"><span></span><span><button class="btn ghost sm" data-cl="add-item" data-g="${g.id}">${icon('plus')}Add item</button></span></div>` : ''}
           </div>`).join('')}
           ${edit ? `<div class="ec-addg"><button class="btn" data-cl="add-group">${icon('plus')}Add title (new date)</button></div>` : ''}
-          <div class="ec-total"><b>TOTAL</b><span class="ec-count">${plural(itemsOf(c), 'item')} · ${plural(receiptsOf(c).length, 'receipt')}</span><b class="r" id="ec-total">\u20C3\u00A0${money(totalOf(c))}</b><span></span></div>
+          <div class="ec-total"><b>TOTAL</b><span class="ec-count">${plural(itemsOf(c), 'item')} · ${plural(receiptsOf(c).length, 'receipt')}</span><b class="r" id="ec-total">\u20C3${money(totalOf(c))}</b><span></span></div>
         </div>
         <div class="ec-claimer">
           <div><small>CLAIMER DETAILS</small><b>${esc(fullName(u))}</b><span>${esc(roleOf(u))}${c.submittedAt ? ' · submitted ' + esc(fmtDay(ymd(new Date(c.submittedAt)))) : ''}</span></div>
@@ -198,17 +198,17 @@ const Claims = (() => {
     return `<div class="widget fin-add ec-fin">
       <h3>Expense claims — <span class="ec-selw"><select class="ec-sel" data-cl-finmonth>${months.map((x) => `<option value="${x}" ${x === m ? 'selected' : ''}>${esc(monthName(x))}</option>`).join('')}</select>${icon('chev')}</span><span class="spacer"></span>
         ${admin && open.length ? `<button class="btn" data-cl="approve-all">${icon('check')}Mark all HR approved</button><button class="btn primary" data-cl="paid-all">${icon('coin')}Set all paid on…</button>` : ''}</h3>
-      <p class="fin-note">${list.length ? `${plural(list.length, 'claim')} · <b>\u20C3\u00A0${money(total)}</b>. ` : ''}Submitted from the app by the 27th. ${closed(m) ? 'This month is closed.' : `Open until 27 ${esc(monthName(m, true))}.`}</p>
+      <p class="fin-note">${list.length ? `${plural(list.length, 'claim')} · <b>\u20C3${money(total)}</b>. ` : ''}Submitted from the app by the 27th. ${closed(m) ? 'This month is closed.' : `Open until 27 ${esc(monthName(m, true))}.`}</p>
       ${list.map((c) => { const nm = ownerName(c); return `<div class="fa-row ec-frow" data-claim="${c.id}">
           <span class="fa-name ec-who">${avatarHTML(c.userId, 28)}<span><b>${esc(nm)}</b><small>${c.byHand ? 'Added by hand (PDF)' : `${plural(itemsOf(c), 'item')} · ${plural(receiptsOf(c).length, 'receipt')}`} · ${c.byHand ? 'added' : 'submitted'} ${esc(fmtDay(ymd(new Date(c.submittedAt || c.updatedAt))))}</small></span>${c.state === 'submitted' ? `<i class="ec-new" data-tip="Submitted by @${esc(nm)}"></i>` : ''}</span>
-          <span class="fx-amt">\u20C3\u00A0${money(c.total || totalOf(c))}</span>
+          <span class="fx-amt">\u20C3${money(c.total || totalOf(c))}</span>
           ${pill(c)}
           <span class="ec-acts"><button class="btn ghost xs" data-cl="open" data-id="${c.id}">Open</button><button class="icon-btn sm" data-cl="pdf" data-id="${c.id}" title="Download PDF">${icon('download')}</button>
             ${admin && c.state === 'submitted' ? `<button class="btn xs" data-cl="approve" data-id="${c.id}">HR approved</button>` : ''}
             ${admin && c.state !== 'paid' ? `<button class="btn xs" data-cl="paid" data-id="${c.id}">Paid on…</button>` : ''}</span>
         </div>`; }).join('')}${legacy.map((r) => `<div class="fa-row ec-frow">
           <span class="fa-name ec-who">${avatarHTML(r.userId, 28)}<span><b>${esc(r.userId ? fullName(userById(r.userId)) : r.personName || 'Someone')}</b><small>Added by hand (PDF)</small></span></span>
-          <span class="fx-amt">\u20C3\u00A0${money(r.amount)}</span>
+          <span class="fx-amt">\u20C3${money(r.amount)}</span>
           <span class="ec-pill" style="background:${STATE.paid[1]};color:${STATE.paid[2]}">Paid · ${esc(fmtDay(r.date))}</span>
           <span class="ec-acts">${r.invoice ? `<button class="btn ghost xs" data-cl="inv" data-id="${r.id}">Open</button>` : ''}</span>
         </div>`).join('')}${list.length || legacy.length ? '' : '<div class="fin-empty">No claims submitted for this month yet.</div>'}
@@ -342,7 +342,7 @@ const Claims = (() => {
     ctx.fillStyle = '#efecff'; ctx.fillRect(P, y, W - 2 * P, 44 * S); ctx.fillStyle = '#5b4bd6'; ctx.fillRect(P, y, W - 2 * P, 2.5 * S);
     font(700, 14); ctx.fillStyle = '#17181b'; text('TOTAL', colX[0] + 12 * S, y + 28 * S);
     font(500, 12); ctx.fillStyle = '#4e5159'; text(`${plural(itemsOf(c), 'item')} · ${plural(rcpt.length, 'receipt')} attached`, colX[1], y + 28 * S);
-    font(700, 15); ctx.fillStyle = '#3b2fa0'; text('\u20C3\u00A0' + money(totalOf(c)), colX[2], y + 28 * S, 'right');
+    font(700, 15); ctx.fillStyle = '#3b2fa0'; text('\u20C3' + money(totalOf(c)), colX[2], y + 28 * S, 'right');
     y += 80 * S;
     font(700, 10.5); ctx.fillStyle = '#6e717a'; text('CLAIMER DETAILS', P, y); text('SIGNATURE', W / 2, y);
     font(600, 14); ctx.fillStyle = '#17181b'; text(fullName(u), P, y + 26 * S);
@@ -396,7 +396,7 @@ const Claims = (() => {
       if (!g.date) return 'Pick a date for every title';
       if (!(g.title || '').trim()) return 'Give every date a title, e.g. Address Shoot';
       for (const i of g.items || []) {
-        if (!(i.desc || '').trim() && num(i.amount)) return `Describe the \u20C3\u00A0${money(num(i.amount))} item under “${g.title}”`;
+        if (!(i.desc || '').trim() && num(i.amount)) return `Describe the \u20C3${money(num(i.amount))} item under “${g.title}”`;
         if (String(i.amount || '').trim() && !(num(i.amount) >= 0)) return 'Amounts are numbers only';
       }
     }
@@ -425,7 +425,7 @@ const Claims = (() => {
     }
     st.draft = null; st.flash = c.id;
     go('claims');
-    toast(asDraft ? 'Draft saved — submit it by the 27th' : `Submitted — Finance has been told (\u20C3\u00A0${money(c.total)})`);
+    toast(asDraft ? 'Draft saved — submit it by the 27th' : `Submitted — Finance has been told (\u20C3${money(c.total)})`);
   }
 
   /* ---------- Signature ---------- */
@@ -549,7 +549,7 @@ const Claims = (() => {
   function item(gid, iid) { const g = group(gid); return g && (g.items || []).find((i) => i.id === iid); }
   function updateTotals() {
     const d = st.draft; if (!d) return;
-    const t = $('#ec-total'); if (t) t.textContent = '\u20C3\u00A0' + money(totalOf(d));
+    const t = $('#ec-total'); if (t) t.textContent = '\u20C3' + money(totalOf(d));
     (d.groups || []).forEach((g) => { const s = document.querySelector(`[data-sub="${g.id}"]`); if (s) s.textContent = (g.items || []).length > 1 ? money((g.items || []).reduce((a, i) => a + num(i.amount), 0)) : ''; });
     const n = $('.ec-count'); if (n) n.textContent = `${plural(itemsOf(d), 'item')} · ${plural(receiptsOf(d).length, 'receipt')}`;
   }
