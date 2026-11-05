@@ -590,18 +590,25 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     fabRun = run
     guard var c = fab.configuration else { return }
     // (another label on a button that's showing — a tab switched: Add subscription ↔ Add office expense — it squashes
-    //  and stretches into its new width, the words crossfading: the standard for every such button, Haris 2026-11-05)
-    let morph = !fab.isHidden && run != nil && fab.window != nil && fab.bounds.width > 0 && fab.accessibilityLabel != nil && fab.accessibilityLabel != title
+    //  and stretches into its new width, the words crossfading: the standard for every such button, Haris 2026-11-05.
+    //  Judged by what showed when this redraw began: a page clears the button first (setFab("", …, nil)) and then sets
+    //  its own, and judged by that cleared one it never morphed — it snapped: Haris 2026-11-05)
+    if fabBefore == nil {
+      fabBefore = (!fab.isHidden && fab.window != nil && fab.bounds.width > 0 ? fab.accessibilityLabel : nil, fab.frame)
+      DispatchQueue.main.async { [weak self] in self?.fabBefore = nil }
+    }
+    let shown = fabBefore?.label, was = fabBefore?.frame ?? fab.frame
+    let morph = run != nil && !title.isEmpty && shown != nil && shown != "" && shown != title
     fabSym = sym
     c.image = UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold))
     c.attributedTitle = AttributedString(title, attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 17, weight: .semibold)]))
-    let was = fab.frame
     if morph { let t = CATransition(); t.type = .fade; t.duration = 0.22; fab.layer.add(t, forKey: "label") }
     fab.configuration = c; fab.accessibilityLabel = title
     fab.isHidden = run == nil
     setNeedsLayout()
     if morph { DispatchQueue.main.async { [weak self] in self?.squashFab(from: was) } }
   }
+  private var fabBefore: (label: String?, frame: CGRect)?
   // the button from its old size to its new one with a little squash and stretch (iPhone's own spring, as its own
   // buttons do when they change)
   private func squashFab(from was: CGRect) {
