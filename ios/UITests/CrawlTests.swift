@@ -57,12 +57,15 @@ final class CrawlTests: XCTestCase {
   // ---------- what's on the screen ----------
   private struct Item { let type: XCUIElement.ElementType; let label: String; let frame: CGRect; let inTabBar: Bool; let inKeyboard: Bool }
   private var lastState = ""
+  private var tabTop: CGFloat = .greatestFiniteMagnitude
   private func snap() -> [Item] {
     guard let root = try? app.snapshot() else { return [] }
+    tabTop = .greatestFiniteMagnitude
     var out: [Item] = []
     func walk(_ s: XCUIElementSnapshot, tab: Bool, kb: Bool) {
       let t = tab || s.elementType == .tabBar, k = kb || s.elementType == .keyboard
       if s.identifier == "e11state" { lastState = s.label; return }
+      if t && s.elementType == .button && s.frame.height > 20 { tabTop = min(tabTop, s.frame.minY) }   // (the tab buttons' own top: the floating pill, not the bar view's taller frame)
       let lbl = s.label.isEmpty ? ((s.value as? String) ?? s.placeholderValue ?? s.identifier) : s.label
       if [.button, .cell, .switch, .link, .staticText, .textField, .searchField, .secureTextField, .image, .slider, .segmentedControl, .menuItem].contains(s.elementType) {
         out.append(Item(type: s.elementType, label: lbl, frame: s.frame, inTabBar: t, inKeyboard: k))
@@ -76,7 +79,8 @@ final class CrawlTests: XCTestCase {
   private var screenSize: CGSize { app.windows.firstMatch.frame.size }
   private func visible(_ i: Item) -> Bool {
     let b = CGRect(origin: .zero, size: screenSize)
-    return i.frame.width >= 6 && i.frame.height >= 6 && b.contains(CGPoint(x: i.frame.midX, y: i.frame.midY)) && i.frame.minY > 40
+    // (not under the tab bar: a tap there is the tab's)
+    return i.frame.width >= 6 && i.frame.height >= 6 && b.contains(CGPoint(x: i.frame.midX, y: i.frame.midY)) && i.frame.minY > 40 && (i.inTabBar || i.frame.midY < tabTop - 4)
   }
   private func sig(_ s: [Item]) -> Set<String> {
     Set(s.filter { visible($0) && !$0.inKeyboard && !$0.inTabBar && ($0.type == .button || $0.type == .staticText || $0.type == .switch || $0.type == .cell) }
@@ -102,6 +106,7 @@ final class CrawlTests: XCTestCase {
       .filter { i in
         let low = i.label.lowercased()
         if skip.contains(where: { low.contains($0) }) { note(["kind": "skipped", "path": path, "label": i.label]); return false }
+        if i.type == .button && ["back", "close search"].contains(low) { return false }   // (‹ is how every screen is left: tried each time)
         let k = "\(i.type.rawValue)|\(i.label)"
         if seen.contains(k) { return false }
         if i.type == .staticText { if words >= wordsPerScreen { return false }; words += 1 }
@@ -133,8 +138,31 @@ final class CrawlTests: XCTestCase {
       if outcome == "nothing" && [.button, .switch, .cell, .link, .menuItem].contains(c.type) { row["shot"] = shot("nothing-\(c.label)") }
       note(row)
       if outcome.hasPrefix("opened") && depth < maxDepth { crawl(path: path + [c.label], states: states + [baseState], depth: depth + 1) }
+      if outcome.hasPrefix("back") { replay(path); continue }
+      // (a search field: words typed, the results counted, the first ones tapped)
+      if outcome == "keyboard" && (c.type == .searchField || c.label.lowercased().contains("search")) { searchProbe(path: path, baseState: baseState) }
       back(to: baseState, sig: before, path: path)
     }
+  }
+  private func searchProbe(path: [String], baseState: String) {
+    let q = env["E11_QUERY"] ?? "ford"
+    app.typeText(q); Thread.sleep(forTimeInterval: 1.6)
+    let res = snap().filter { visible($0) && !$0.inKeyboard && !$0.inTabBar && $0.type == .staticText && !$0.label.isEmpty }
+    note(["kind": "search", "path": path, "query": q, "results": res.prefix(8).map { String($0.label.prefix(40)) }, "count": res.count])
+    // (the first few results: each tapped, what it opened noted, back to the results)
+    for r in res.prefix(4) where !(r.label.uppercased() == r.label && r.label.count < 14) {
+      if keyboardUp() { app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: screenSize.width / 2, dy: 70)).tap(); Thread.sleep(forTimeInterval: 0.5) }
+      guard let t = snap().first(where: { $0.label == r.label && visible($0) && !$0.inKeyboard }) else { continue }
+      tap(t.frame); Thread.sleep(forTimeInterval: 1.2)
+      let st = place(state())
+      note(["kind": "tap", "path": path + ["search " + q], "label": r.label, "type": "result", "outcome": st != baseState ? "opened: " + st + " — " + topWords(snap()).joined(separator: " | ") : "nothing", "state": baseState])
+      if st != baseState {
+        for _ in 0..<3 where place(state()) != baseState {
+          if let b = snap().first(where: { $0.type == .button && ($0.label == "Back" || $0.label == "Cancel" || $0.label == "Close") && visible($0) }) { tap(b.frame); Thread.sleep(forTimeInterval: 0.9) } else { break }
+        }
+      }
+    }
+    if let c = snap().first(where: { $0.type == .button && $0.label == "Close search" && visible($0) }) { tap(c.frame); Thread.sleep(forTimeInterval: 0.8) }
   }
   private func typeName(_ t: XCUIElement.ElementType) -> String {
     switch t { case .button: return "button"; case .staticText: return "text"; case .cell: return "row"; case .switch: return "switch"; case .textField, .searchField: return "field"; case .image: return "image"; default: return "\(t.rawValue)" }

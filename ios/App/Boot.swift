@@ -243,6 +243,9 @@ extension Main {
   // and with no website at all (step 9). The page, if it comes, is told the tab once it's there.
   func offlineTab(_ key: String) -> Bool {
     guard !pageReady, quickBooted, AppData.shared.ready, let me = AppData.shared.me else { return false }
+    // (the shared top buttons for the screen now on top, once the screens have changed — the Inbox's Mark all unread and
+    //  your photo stayed over Me after the photo was tapped there: the crawl, 2026-11-06)
+    defer { updateCorner(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.updateCorner() } }
     // (an Office Admin's first tab is Overview, the app's own Me-made one; the Me-made tabs — Me, Plans, Reviews, Team,
     //  Claims, Expenses — are all Me's; Client Assets as a tab is Client Assets' own)
     let office = tabKeys.contains("fin-reimb") || tabKeys.contains("team")
