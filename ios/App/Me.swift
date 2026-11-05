@@ -1031,6 +1031,9 @@ final class MeCtl {
     let kinds = Set(stack.map { $0.kind })
     let env: Any = p["env"] ?? (["shell": SHELL_VERSION] as [String: Any])
     if let x = AppData.shared.meModel("me", "me", [env]) { for k in ["card", "work"] { if let v = x[k] { m[k] = v } } }
+    // (Appearance: as this phone keeps it — step 4)
+    if let tm = UserDefaults.standard.string(forKey: "e11_theme_mode") { m["theme"] = tm }
+    if let look = UserDefaults.standard.string(forKey: "e11_look") { m["themeNow"] = look }
     if has("profile") || kinds.contains("profile"), let x = AppData.shared.meModel("profile", "profile", [env]) { var v = x; if let pv = p["profile"] as? [String: Any] { for k in ["photoBusy", "owner"] { v[k] = pv[k] } }; if pfBusy { v["photoBusy"] = true }; m["profile"] = v }
     if has("team") || kinds.contains("team"), let x = AppData.shared.meModel("team", "team", [env]) { m["team"] = x }
     if has("trash") || kinds.contains("trash"), let x = AppData.shared.meModel("trash", "trash", [trQv, trCatv, env]) { m["trash"] = x }
@@ -1243,6 +1246,145 @@ final class MeCtl {
     }
     once(nil, "")
   }
+  // ---------- Part B step 4 (the rest): About, Appearance and View as — the app's own, straight from the server (the
+  // page's way while the copy isn't this person's yet) ----------
+  private func drawAbout() { stack.filter { $0.kind == "about" }.forEach { draw($0) } }
+  private static func timeAgo(_ iso: String) -> String {
+    let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    guard let d = f.date(from: iso) ?? ISO8601DateFormatter().date(from: iso) else { return "" }
+    let s = Date().timeIntervalSince(d)
+    if s < 60 { return "just now" }
+    if s < 3600 { return "\(Int(s / 60))m ago" }
+    if s < 86400 { return "\(Int(s / 3600))h ago" }
+    if s < 86400 * 7 { return "\(Int(s / 86400))d ago" }
+    let o = DateFormatter(); o.locale = Locale(identifier: "en_US"); o.dateFormat = "MMM d, yyyy"; return o.string(from: d)
+  }
+  private static func isoDate(_ iso: String) -> Date? {
+    let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return f.date(from: iso) ?? ISO8601DateFormatter().date(from: iso)
+  }
+  private static func dateTime(_ iso: String) -> String {
+    let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    guard let d = f.date(from: iso) ?? ISO8601DateFormatter().date(from: iso) else { return "" }
+    let o = DateFormatter(); o.locale = Locale(identifier: "en_US"); o.dateFormat = "MMM d, yyyy, h:mm a"; return o.string(from: d)
+  }
+  // (the page's updatesOf: the updater's state as the About card shows it)
+  private static func updatesOf(_ s: [String: Any]) -> [String: Any] {
+    let st = (s["status"] as? [String: Any]) ?? s
+    if (st["managed"] as? Bool) != true && (s["managed"] as? Bool) == false { return ["unmanaged": true, "running": s["running"] as? String ?? ""] }
+    var hour: String?
+    if let n = st["updateHour"] as? NSNumber { hour = String(format: "%02d:00", n.intValue) } else if let t = st["updateHour"] as? String, t != "now", let n = Int(t) { hour = String(format: "%02d:00", n) }
+    var out: [String: Any] = ["running": (st["running"] as? String) ?? (st["current"] as? String) ?? "—", "test": (st["channel"] as? String) == "staging",
+                              "checked": (st["lastCheck"] as? String).map(MeCtl.timeAgo) ?? "Never", "error": st["lastError"] as? String ?? "", "busy": (st["busy"] as? Bool) == true]
+    if let a = st["available"] as? [String: Any] {
+      var av: [String: Any] = ["name": (a["name"] as? String) ?? (a["version"] as? String) ?? "", "notes": a["notes"] as? String ?? ""]
+      if let h = hour { av["hour"] = h }
+      out["available"] = av
+    }
+    return out
+  }
+  private func loadAbout(_ fresh: Bool) {
+    guard mineNow else { send(fresh ? ["ev": "about", "fresh": true] : ["ev": "about"]); return }
+    main.serverTask.request("/api/whatsnew", body: nil) { [weak self] j in
+      guard let self = self else { return }
+      if let j = j {
+        self.about["notes"] = ["name": (j["name"] as? String) ?? (j["version"] as? String) ?? "", "version": j["version"] as? String ?? "",
+                               "at": (j["publishedAt"] as? String).map(MeCtl.dateTime) ?? "", "notes": j["notes"] as? String ?? ""]
+      } else if self.about["notes"] == nil { self.about["notes"] = ["name": self.model["version"] as? String ?? "", "notes": ""] }
+      self.drawAbout()
+    }
+    guard (model["canUpdate"] as? Bool) == true else { return }
+    main.serverTask.request("/api/updates", body: fresh ? ["action": "check"] : nil, timeout: 60) { [weak self] j in
+      self?.about["updates"] = j.map(MeCtl.updatesOf) ?? ["error": "Couldn’t check for updates — try again"]; self?.drawAbout()
+    }
+    if (model["owner"] as? Bool) == true { loadVideo(false) }
+  }
+  private func loadVideo(_ fresh: Bool) {
+    guard mineNow else { send(["ev": "videoCheck"]); return }
+    var v = (about["video"] as? [String: Any]) ?? [:]
+    v["checking"] = fresh ? "Checking the NAS… (a short test conversion)" : (v["title"] != nil ? "" : "Checking the NAS…")
+    about["video"] = v; drawAbout()
+    main.serverTask.request("/api/system/video" + (fresh ? "?fresh=1" : ""), body: nil, timeout: 45) { [weak self] j in
+      guard let self = self else { return }
+      guard let v = j?["video"] as? [String: Any] else { self.about["video"] = ["error": "Couldn’t check — try again"]; self.drawAbout(); return }
+      var o: [String: Any] = ["state": v["state"] as? String ?? "", "title": v["title"] as? String ?? "", "detail": v["detail"] as? String ?? "",
+                              "checked": (v["checkedAt"] as? String).map(MeCtl.timeAgo) ?? ""]
+      if let lc = j?["lightCopies"] as? [String: Any] {
+        let made = (lc["made"] as? NSNumber)?.intValue ?? 0, waiting = (lc["waiting"] as? NSNumber)?.intValue ?? 0
+        let working = lc["working"] as? String
+        o["light"] = "\(made) made since the last restart" + (waiting > 0 ? " · \(waiting) waiting" + (working.map { " (now: \($0))" } ?? "") : " · none waiting")
+      }
+      self.about["video"] = o; self.drawAbout()
+    }
+  }
+  private func updateNow() {
+    guard mineNow else { send(["ev": "update"]); return }
+    confirm(["title": "Update E11 Console now?", "body": "A copy of the database is made first, and it takes about 10 seconds. Open apps show a “Reload” button.", "okText": "Update now"]) { [weak self] in
+      guard let self = self else { return }
+      self.main.serverTask.request("/api/updates", body: ["action": "update"], timeout: 60) { [weak self] j in
+        guard let self = self else { return }
+        guard let j = j, (j["ok"] as? Bool) != false else { self.top?.toast(["t": (j?["error"] as? String) ?? "Something went wrong"]); return }
+        if (j["started"] as? Bool) != true { self.about["updates"] = MeCtl.updatesOf(j); self.drawAbout(); return }
+        self.about["busy"] = "Updating E11 Console… This takes about 10 seconds. The app reconnects by itself."; self.drawAbout()
+        let t0 = Date()
+        func poll() {
+          self.main.serverTask.request("/api/updates", body: nil) { [weak self] st in
+            guard let self = self else { return }
+            let lr = st?["lastResult"] as? [String: Any]
+            if let st = st, (st["busy"] as? Bool) != true, let lr = lr, (lr["action"] as? String) == "update",
+               let at = (lr["at"] as? String).flatMap({ MeCtl.isoDate($0) }), at >= t0.addingTimeInterval(-1) {
+              let ok = (lr["ok"] as? Bool) == true
+              self.top?.toast(["t": ok ? ((lr["upToDate"] as? Bool) == true ? "Already up to date" : "Updated to \(lr["version"] as? String ?? "")") : (lr["error"] as? String ?? "Something went wrong")])
+              self.about["busy"] = nil; self.about["updates"] = MeCtl.updatesOf(st); self.drawAbout(); return
+            }
+            if Date().timeIntervalSince(t0) < 120 { DispatchQueue.main.asyncAfter(deadline: .now() + 2) { poll() } } else { self.about["busy"] = nil; self.loadAbout(false) }
+          }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { poll() }
+      }
+    }
+  }
+  // Appearance: Automatic / Light / Dark — kept by the app on this phone (this person's settings), the look changed at
+  // once; the website under the app told too while it's still there
+  private func setTheme(_ m: String) {
+    guard mineNow, let me = me else { send(["ev": "theme", "mode": m]); return }
+    let v = m == "light" || m == "dark" ? m : "auto"
+    let d = UserDefaults.standard
+    d.set(v, forKey: "e11_theme_mode")
+    let key = "e11_prefs_\(me)"
+    var p = (d.data(forKey: key).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }) ?? [:]
+    p["themeMode"] = v
+    if let data = try? JSONSerialization.data(withJSONObject: p) { d.set(data, forKey: key) }
+    if v == "auto" { main.ownAppearanceTick() } else { main.run("setAppearance", ["mode": v, "themeMode": v]) { _ in } }
+    main.pageJS("typeof Theme !== 'undefined' && Theme.setMode('\(v)')")
+    redraw()
+  }
+  // View as (test site only): the team in the app's own sheet; a tap switches — the server remembers it, and the app
+  // starts again as them
+  func viewAsPick() {
+    let pageWay = { [weak self] in self?.main.pageJS("typeof ViewAs !== 'undefined' && ViewAs.pick()"); return }
+    main.serverTask.request("/api/me", body: nil) { [weak self] j in
+      guard let self = self, let va = j?["viewAs"] as? [String: Any], let real = (va["real"] as? [String: Any])?["id"] as? String,
+            let list = self.brain("me", "viewAsPeople", [real, self.envNow])?["people"] as? [[String: Any]] else { pageWay(); return }
+      let ppl: [ViewAsSheet.Person] = list.compactMap { p in
+        guard let id = p["id"] as? String else { return nil }
+        return .init(id: id, name: p["name"] as? String ?? "", role: p["role"] as? String ?? "", ini: p["ini"] as? String ?? "", color: UIColor(hex: p["color"] as? String ?? "") ?? .systemGray, photo: p["photo"] as? String)
+      }
+      let s = ViewAsSheet(dark: !self.light, people: ppl, viewing: (va["as"] as? [String: Any])?["id"] as? String)
+      s.closesOnPick = true
+      s.onPick = { [weak self] id in self?.viewAsSet(id) }
+      s.show(from: self.main.topMost())
+    }
+  }
+  func viewAsSet(_ id: String?) {
+    let b: [String: Any] = ["userId": id.map { $0 as Any } ?? NSNull()]
+    main.serverTask.request("/api/view-as", body: b) { [weak self] j in
+      guard let self = self else { return }
+      guard j != nil else { self.main.pageJS("typeof ViewAs !== 'undefined' && " + (id == nil ? "ViewAs.back()" : "ViewAs.pick()")); return }
+      // (what the page hasn't sent yet first, then everything starts again as the chosen person)
+      self.main.pageJS("(typeof Sync !== 'undefined' ? Sync.push().catch(() => {}) : Promise.resolve()).then(() => location.reload())")
+    }
+  }
   func openSoon(_ kind: String) {
     if main.selectedTabKey == tab, !hidden, !stack.isEmpty {
       if stack.count > 1 { backToRoot(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.open(kind) } } else { open(kind) }
@@ -1437,7 +1579,7 @@ final class MeCtl {
     guard !leaving else { return }
     ProfileAskCard.current?.go()   // (another page: the birthday / city card slips away)
     if kind == "team" { teamTab = 0; teamQ = ""; send(["ev": "team", "on": true]) }
-    if kind == "about" { send(["ev": "about"]) }
+    if kind == "about" { loadAbout(false) }
     if kind == "profile" { send(["ev": "pf", "on": true]) }
     if kind == "trash" { send(["ev": "tr", "on": true]) }
     if kind == "plans" { plMonth = plMonth ?? ""; send(["ev": "pl", "on": true, "month": plMonth ?? ""]) }
@@ -1563,7 +1705,7 @@ final class MeCtl {
     let profile: Bool = model["profile"] is [String: Any]
     return ["open": isOpen, "screens": stack.count, "kind": kind, "parts": parts, "shown": shown != nil, "corner": corner, "people": people, "rows": rows, "card": card, "profile": profile]
   }
-  func refresh() { if isOpen { main.pageJS("window.__e11MeResend && window.__e11MeResend()"); if stack.contains(where: { $0.kind == "about" }) { send(["ev": "about"]) } } }
+  func refresh() { if isOpen { main.pageJS("window.__e11MeResend && window.__e11MeResend()"); if stack.contains(where: { $0.kind == "about" }) { loadAbout(false) } } }
 
   // ---------- what's on each ----------
   func relight(_ l: Bool) { guard l != light else { return }; light = l; stack.forEach { draw($0) } }
@@ -1634,8 +1776,8 @@ final class MeCtl {
       if let t = model["test"] as? [String: Any] {
         var test: [SetItem] = []
         if (t["viewAs"] as? Bool) == true {
-          test.append(SetItem(key: "viewAs", title: "View as…", sub: (t["viewing"] as? String).map { "Viewing as \($0)" } ?? "Test site only — use the app as a team member", sym: "person.2.fill", col: .systemTeal, tap: { [weak self] in self?.send(["ev": "viewAs"]) }))
-          if t["viewing"] is String { test.append(SetItem(key: "backToMe", title: "Back to me", sym: "arrow.uturn.backward", col: .systemTeal, chevron: false, tap: { [weak self] in self?.send(["ev": "backToMe"]) })) }
+          test.append(SetItem(key: "viewAs", title: "View as…", sub: (t["viewing"] as? String).map { "Viewing as \($0)" } ?? "Test site only — use the app as a team member", sym: "person.2.fill", col: .systemTeal, tap: { [weak self] in self?.viewAsPick() }))
+          if t["viewing"] is String { test.append(SetItem(key: "backToMe", title: "Back to me", sym: "arrow.uturn.backward", col: .systemTeal, chevron: false, tap: { [weak self] in self?.viewAsSet(nil) })) }
         }
         if (t["sample"] as? Bool) == true { test.append(SetItem(key: "sample", title: "Start fresh with sample data", sub: "Test site only: wipes everything except you", chevron: false, danger: true, tap: { [weak self] in self?.send(["ev": "sample"]) })) }
         if !test.isEmpty { out.append(head(h, "test", "Test site")); out.append(group(h, "test", test)) }
@@ -1658,7 +1800,7 @@ final class MeCtl {
     case "appearance":
       h.drawAssetsBar(name: "Appearance", sub: "", logo: nil, rgb: nil, ini: nil, showLogo: false)
       let tb = part(h, "theme") { ThemeBlock() }
-      tb.onPick = { [weak self] m in self?.send(["ev": "theme", "mode": m]) }
+      tb.onPick = { [weak self] m in self?.setTheme(m) }
       tb.set(mode: model["theme"] as? String ?? "auto", now: model["themeNow"] as? String ?? "light", times: model["times"] as? String ?? "", look: L)
       out.append(tb)
       out.append(foot(h, "ap", (model["theme"] as? String ?? "auto") == "auto" ? "With Automatic on, the app switches by itself — the ticked picture is what it is now. Choosing Light or Dark turns Automatic off." : "Light or Dark all the time. Turn on Automatic to follow sunrise and sunset in Dubai."))
@@ -1681,11 +1823,11 @@ final class MeCtl {
             let name: String = a["name"] as? String ?? ""
             let can: Bool = (u["busy"] as? Bool) != true
             parts = [.kicker("Update available"), .big(name), .kv("Running", running), .kv("Last checked", checked),
-                     .button("Update now", true, can, { [weak self] in self?.send(["ev": "update"]) }),
+                     .button("Update now", true, can, { [weak self] in self?.updateNow() }),
                      .note(tonight + "A copy of the data is made first; it takes about 10 seconds.")]
           } else {
             parts = [.status("✓ You’re up to date", .systemGreen), .kv("Running", running), .kv("Last checked", checked),
-                     .button("Check again", false, true, { [weak self] in self?.send(["ev": "about", "fresh": true]) })]
+                     .button("Check again", false, true, { [weak self] in self?.loadAbout(true) })]
           }
           if let e = u["error"] as? String, !e.isEmpty { parts.insert(.note(e), at: 0) }
         }
@@ -1706,7 +1848,7 @@ final class MeCtl {
           if let l = v["light"] as? String, !l.isEmpty { parts.append(.note("Light copies of videos (720p, for viewing): " + l)) }
           if let c = v["checking"] as? String, !c.isEmpty { parts.append(.note(c)) }
         } else { parts.append(.note("Checking the NAS…")) }
-        parts.append(.button("Check again", false, true, { [weak self] in self?.send(["ev": "videoCheck"]) }))
+        parts.append(.button("Check again", false, true, { [weak self] in self?.loadVideo(true) }))
         card.set(parts, sig: jsonString(v), look: L)
         out.append(card)
         let imp = part(h, "imp") { InfoCard() }

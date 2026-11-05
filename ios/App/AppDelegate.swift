@@ -1430,8 +1430,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       if let ph = a["photos"] as? [String] { ViewAsSheet.warm(ph) }
       bar.set(name: a["name"] as? String ?? "", role: a["role"] as? String ?? "")
       bar.bottomFor = { [weak self] in self?.viewAsBottom() ?? 0 }
-      bar.onSwitch = { [weak self] in self?.pageJS("typeof ViewAs !== 'undefined' && ViewAs.pick()") }
-      bar.onBackToMe = { [weak self] in self?.pageJS("typeof ViewAs !== 'undefined' && ViewAs.back()") }
+      bar.onSwitch = { [weak self] in self?.meCtl.viewAsPick() }
+      bar.onBackToMe = { [weak self] in self?.meCtl.viewAsSet(nil) }
       if bar.superview == nil { bar.show(in: view) }
       reply(["ok": true])
     default: reply(["ok": false])

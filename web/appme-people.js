@@ -477,6 +477,13 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
     if (!it || !W.isSuper(W.me())) return null;
     return { title: `Delete “${W.trashTitle(it)}” forever?`, body: 'It can’t be restored after this, and its files are removed too.', okText: 'Delete forever', danger: true };
   };
+  // View as (test site only): the team to choose from, as the page's ViewAs.pick gives the app's sheet — everyone still on
+  // the team but the real you (realId), by name; their photo, initials and colour, their role
+  M.viewAsPeople = function (R, data, meId, nowMs, realId, env) {
+    const W = world(R, data, meId, nowMs, env);
+    const list = W.users.filter((u) => u.active !== false && u.id !== realId).sort((a, b) => W.fullName(a).localeCompare(W.fullName(b)));
+    return { people: list.map((u) => ({ id: u.id, name: W.fullName(u), role: W.roleOf(u) || '', ini: initials(W.fullName(u)), color: avColor(u.id || 'x'), photo: W.photoOf(u) })) };
+  };
   M.trashEmptyAsk = function (R, data, meId, nowMs, env) {
     const W = world(R, data, meId, nowMs, env), n = W.trash.length;
     if (!n || !W.isSuper(W.me())) return null;
