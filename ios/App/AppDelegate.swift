@@ -1565,6 +1565,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     // (the card on this screen — or, for a search result that isn't on it, the card that sent it)
     let card = ((serverHome.shown?["groups"] as? [[String: Any]]) ?? []).flatMap { $0["cards"] as? [[String: Any]] ?? [] }.first { ($0["id"] as? String) == id } ?? (ev["card"] as? [String: Any])
     switch kind {
+    // (Part B step 6: search and New task — the app's own)
+    case "find": return searchNative(ev["q"] as? String ?? "")
+    case "add": return newTaskNative(view: serverHome.kind == "clients" ? "project" : serverHome.kind == "home" ? "home" : serverHome.kind, project: serverHome.kind == "clients" ? clientsShownId : nil)
     case "toast":
       guard let run = homeToastRun else { return false }
       homeToastRun = nil; run(); return true
@@ -1634,6 +1637,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     h.onEvent = { [weak self] ev in
       guard let self = self else { return }
       if self.eventOnServer(ev, self.serverMyTasks, pageMe: self.myTasksPageMe) { return }
+      if self.myTasksFilterEvent(ev) { return }   // (Part B step 6: the filters are the app's own)
       if (ev["ev"] as? String) == "open" { DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in if self?.taskPages.isEmpty == true { self?.myTasksIfMade?.isHidden = true } } }
       self.pageJS("window.__e11MyTasks && window.__e11MyTasks(\(jsonString(ev)))")
     }
@@ -1669,11 +1673,17 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     pageJS("window.__e11MyTasksOwn && window.__e11MyTasksOwn(\(v))")
   }
   var myTasksWanted = false
+  var myTasksPageSignal: [String: Any]?   // (the page's last "My Tasks shows" — who, light / dark)
   // (My Tasks' actions still waiting from before the app was closed go even if My Tasks isn't opened)
   func myTasksWaiting() -> ServerHome? { serverMyTasksIfMade ?? (defaults.data(forKey: "e11HomeQueue-mytasks").map { $0.count > 2 } == true ? serverMyTasks : nil) }
-  func myTasksCommand(_ a: [String: Any]) {
+  func myTasksCommand(_ a0: [String: Any]) {
     defer { updateCorner() }
-    guard let show = a["show"] as? Bool else { return }
+    guard let show = a0["show"] as? Bool else { return }
+    if show { myTasksPageSignal = a0 }
+    // (Part B step 6: the tab, the filters, their buttons and chips — the app's own, kept for this person; the page only
+    //  says when My Tasks shows)
+    var a = a0
+    if show, let sig = myTasksOwnSignal(me: a0["me"] as? String) { for k in ["tab", "q", "buttons", "chips"] { a[k] = sig[k] } }
     if !show { myTasksWanted = false; myTasksIfMade?.endEditing(true); myTasksIfMade?.isHidden = true; return }
     let h = myTasksView
     myTasksWanted = true

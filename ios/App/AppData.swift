@@ -95,7 +95,7 @@ final class AppData: NSObject, URLSessionDataDelegate {
   }
   // the website's files the app runs: the rules, the app's screens, and (Part B step 2) Me's pages, Claims, Expenses,
   // Overview, Reviews, Team, Trash, Content plans and Client Assets — the first two needed, the rest when there
-  static let files = ["rules.js", "appview.js", "appme-money.js", "appme-people.js", "appme-plans.js", "places.js"]   // (places.js: My profile's countries and cities — step 4)
+  static let files = ["rules.js", "appview.js", "appme-money.js", "appme-people.js", "appme-plans.js", "appme-tasks.js", "places.js"]   // (places.js: My profile's countries and cities — step 4)
   private func makeEngine(_ scripts: [String]) {
     let keep = ctx.flatMap { _ in call("E11AppView.save", []) as? String } ?? ""
     let c = JSContext()!

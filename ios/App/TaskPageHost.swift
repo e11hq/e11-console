@@ -910,3 +910,193 @@ extension Main {
     }
   }
 }
+
+/* ---------- Part B step 6: New task, Home search and My Tasks' filters — the app's own (web/appme-tasks.js on the app's
+   copy; a new task straight to the server, /api/app/act tkNew). The copy not ready / not this person's: the page's way,
+   as before ---------- */
+final class NewTaskState { var s: [String: Any]; init(_ s: [String: Any]) { self.s = s } }
+extension Main {
+  private static var photoData: [String: String] = [:]   // (a picture's path → it as a data address, for the sheets)
+  // people's pictures for a native sheet: the copy gives their paths; the sheets want the pictures themselves
+  func withPhotos(_ obj: [String: Any], _ done: @escaping ([String: Any]) -> Void) {
+    var paths = Set<String>()
+    func walk(_ v: Any) {
+      if let d = v as? [String: Any] {
+        if let p = d["person"] as? [String: Any], let ph = p["photo"] as? String, !ph.hasPrefix("data:"), Main.photoData[ph] == nil { paths.insert(ph) }
+        d.values.forEach(walk)
+      } else if let a = v as? [Any] { a.forEach(walk) }
+    }
+    walk(obj)
+    func swap(_ v: Any) -> Any {
+      if var d = v as? [String: Any] {
+        for (k, x) in d { d[k] = swap(x) }
+        if var p = d["person"] as? [String: Any], let ph = p["photo"] as? String, !ph.hasPrefix("data:") { if let u = Main.photoData[ph] { p["photo"] = u } else { p["photo"] = nil }; d["person"] = p }
+        return d
+      }
+      if let a = v as? [Any] { return a.map(swap) }
+      return v
+    }
+    if paths.isEmpty { done(swap(obj) as? [String: Any] ?? obj); return }
+    var left = paths.count, sent = false
+    let finish = { if !sent { sent = true; done(swap(obj) as? [String: Any] ?? obj) } }
+    for p in paths {
+      let enc = p.split(separator: "/").map { String($0).addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? String($0) }.joined(separator: "/")
+      guard let url = URL(string: serverURL() + (p.hasPrefix("/") ? p : "/__file/" + enc)) else { left -= 1; continue }
+      fetchPhoto(url) { img in
+        if let img = img, let d = img.jpegData(compressionQuality: 0.8) { Main.photoData[p] = "data:image/jpeg;base64," + d.base64EncodedString() }
+        left -= 1; if left <= 0 { finish() }
+      }
+    }
+    if left <= 0 { finish() }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { finish() }   // (a slow picture: its initials meanwhile)
+  }
+  private var ownCopy: Bool { AppData.shared.tabsOn && AppData.shared.ready && AppData.shared.isStarted }
+  // a sheet from the brain ({ sheet, acts }); a row picked → its act
+  func brainSheet(_ m: [String: Any], multi: Bool = false, _ run: @escaping ([String: Any]) -> Void) {
+    guard let sheet = m["sheet"] as? [String: Any], let acts = m["acts"] as? [[String: Any]] else { return }
+    withPhotos(sheet) { [weak self] a0 in
+      guard let self = self else { return }
+      var a = a0; if multi { a["multi"] = true }
+      let one: (Int) -> Void = { i in guard i >= 0, i < acts.count else { return }; run(acts[i]) }
+      // (in a sheet with ticks, a tick is told at once; a plain row in it — "Nobody yet" — when it's tapped)
+      let ticks = Set(((a["sections"] as? [[String: Any]]) ?? []).flatMap { ($0["rows"] as? [[String: Any]]) ?? [] }.filter { ($0["multi"] as? Bool) == true }.compactMap { ($0["i"] as? NSNumber)?.intValue })
+      let vc = NativeSheetVC(a, dark: self.statusStyle != .darkContent, pick: multi ? one : nil) { i, _ in if !multi || !ticks.contains(i) { one(i) } }
+      self.topMost().present(vc, animated: true)
+    }
+  }
+
+  // ---- New task ----
+  func newTaskNative(view: String, project: String?) -> Bool {
+    guard ownCopy else { return false }
+    let ctx: [String: Any] = ["view": view, "projectId": project ?? NSNull()]
+    guard let r = AppData.shared.meModel("tasks", "newTaskForm", [ctx]), let args = r["args"] as? [String: Any], let st = r["state"] as? [String: Any] else { return false }
+    let key = args["key"] as? String ?? "new-task"
+    if let open = FormSheetVC.current, open.isOpen {
+      if open.key == key { open.expand(); return true }
+      open.finish("replaced") { [weak self] in _ = self?.newTaskNative(view: view, project: project) }
+      return true
+    }
+    let state = NewTaskState(st)
+    withPhotos(args) { [weak self] a in
+      guard let self = self, let host = self.sheetHost() else { return }
+      let vc = FormSheetVC(a, dark: self.statusStyle != .darkContent, event: { [weak self] ev in self?.newTaskEvent(ev, key, state) }) { [weak self] r in
+        if (r["closed"] as? String) == "discard" { self?.shownScreen?.toast(["t": "New task discarded"]) }
+      }
+      vc.onTuck = { [weak self] t in
+        guard let self, self.formTucked != t else { return }
+        self.formTucked = t
+        self.tabBar.isUserInteractionEnabled = !t
+        UIView.animate(withDuration: 0.2) { self.tabBar.alpha = t || self.tabsHidden ? 0 : 1 }
+      }
+      UIImpactFeedbackGenerator(style: .light).impactOccurred()
+      host.present(vc, animated: true)
+    }
+    return true
+  }
+  private func newTaskEvent(_ ev: [String: Any], _ key: String, _ state: NewTaskState) {
+    let set = { (v: [String: Any]) in var x = v; x["key"] = key; if let f = FormSheetVC.current, f.isOpen, f.key == key { f.set(x) } }
+    switch ev["ev"] as? String ?? "" {
+    case "pick" where (ev["field"] as? String) == "client":
+      guard let m = AppData.shared.meModel("tasks", "newTaskClients", [state.s]) else { return }
+      brainSheet(m) { act in
+        state.s["client"] = act["client"] ?? ""
+        if let f = act["form"] as? [String: Any] { set(f) }
+      }
+    case "pick":
+      guard let m = AppData.shared.meModel("tasks", "newTaskPeople", [state.s]) else { return }
+      brainSheet(m, multi: true) { [weak self] act in
+        var who = (state.s["who"] as? [String]) ?? []
+        if (act["none"] as? Bool) == true { who = [] }
+        else if let u = act["toggle"] as? String { who = who.contains(u) ? who.filter { $0 != u } : who + [u] }
+        state.s["who"] = who
+        guard let w = AppData.shared.meModel("tasks", "newTaskWho", [state.s]) else { return }
+        self?.withPhotos(["assign": ["label": w["label"] ?? "", "person": w["person"] ?? NSNull()]]) { a in set(a) }
+      }
+    case "submit":
+      let title = (ev["title"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+      var b: [String: Any] = ["ev": "tkNew", "title": title, "projectId": state.s["client"] ?? "", "due": ev["due"] ?? "", "desc": ev["desc"] ?? "",
+                              "who": state.s["who"] ?? [], "cd": (ev["cd"] as? Bool) == true, "ctxProjectId": state.s["project"] ?? NSNull(), "op": UUID().uuidString]
+      if let v = state.s["view"] { b["view"] = v }
+      serverTask.request("/api/app/act", body: b) { [weak self] j in
+        guard let self = self else { return }
+        guard let j = j, (j["off"] as? Bool) != true else { set(["alert": j == nil ? "No connection — try again" : "That didn’t work — try again"]); return }
+        guard (j["ok"] as? Bool) == true, let id = (j["id"] as? String) ?? ((j["answer"] as? [String: Any])?["id"] as? String) else { set(["alert": j["error"] as? String ?? "That didn’t work — try again"]); return }
+        if let ch = j["changes"] as? [[String: Any]], !ch.isEmpty { AppData.shared.applyLocal(ch) }
+        if let f = FormSheetVC.current, f.isOpen, f.key == key { f.finish("submit") }
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        self.homeToastRun = { [weak self] in self?.openTaskPage(id, tab: "details", focus: "") }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.shownScreen?.toast(["t": "Created “\(title)”", "a": "Open", "ms": 6000]) }
+      }
+    default: break
+    }
+  }
+
+  // ---- Home search (and My Tasks', the Inbox's): found on the phone ----
+  func searchNative(_ q: String) -> Bool {
+    guard ownCopy, let m = AppData.shared.meModel("tasks", "search", [q]) else { return false }
+    (shownScreen ?? homeIfMade)?.searchResults(m)
+    return true
+  }
+}
+extension Main {
+  // (the client whose page shows on the Clients tab — New task there starts in it)
+  var clientsShownId: String? { clientsOn == "client" ? ServerHome.param(serverClients.query, "id") : nil }
+}
+// My Tasks' filters, the app's own (Part B step 6): the page's Work.f() kept here for each person; their buttons, chips and
+// the server's query from the copy (myTasksSignal); the filter sheets too (myTasksFilterMenu)
+extension Main {
+  private var mtKey: String { "e11_mytasks_" + (myTasksPageMe ?? "") }
+  var myTasksF: [String: Any] {
+    get {
+      if let d = defaults.data(forKey: mtKey), let f = try? JSONSerialization.jsonObject(with: d) as? [String: Any], let x = f["f"] as? [String: Any] { return x }
+      return (AppData.shared.meModel("tasks", "myTasksDefault")?["filters"] as? [String: Any]) ?? [:]
+    }
+    set { if let d = try? JSONSerialization.data(withJSONObject: ["f": newValue, "tab": myTasksTab]) { defaults.set(d, forKey: mtKey) } }
+  }
+  var myTasksTab: String {
+    get { ((defaults.data(forKey: mtKey).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] })?["tab"] as? String) ?? "all" }
+    set { if let d = try? JSONSerialization.data(withJSONObject: ["f": myTasksF, "tab": newValue]) { defaults.set(d, forKey: mtKey) } }
+  }
+  func myTasksOwnSignal(me: String?) -> [String: Any]? {
+    guard AppData.shared.tabsOn, AppData.shared.ready, AppData.shared.isStarted, let me = me, AppData.shared.me == me else { return nil }
+    return AppData.shared.meModel("tasks", "myTasksSignal", [myTasksF, myTasksTab])
+  }
+  // a change made here: My Tasks drawn again with it (as if the page had said so)
+  private func myTasksAgain() { if var a = myTasksPageSignal { a["show"] = true; myTasksCommand(a) } }
+  func myTasksFilterEvent(_ ev: [String: Any]) -> Bool {
+    guard let a = myTasksPageSignal, myTasksOwnSignal(me: a["me"] as? String) != nil else { return false }
+    switch ev["ev"] as? String ?? "" {
+    case "tab": myTasksTab = (ev["tab"] as? String) == "done" ? "done" : "all"; myTasksAgain(); return true
+    case "reset", "chip":
+      let op: [String: Any] = (ev["ev"] as? String) == "reset" ? ["reset": true] : ["chip": ["act": ev["act"] ?? "", "id": ev["id"] ?? NSNull()]]
+      if let f = AppData.shared.meModel("tasks", "myTasksFilters", [myTasksF, op])?["filters"] as? [String: Any] { myTasksF = f; myTasksAgain() }
+      return true
+    case "filter":
+      let k = ev["k"] as? String ?? ""
+      if k == "assigned" {
+        if let f = AppData.shared.meModel("tasks", "myTasksFilters", [myTasksF, ["assigned": true]])?["filters"] as? [String: Any] { myTasksF = f; myTasksAgain() }
+        return true
+      }
+      guard ["due", "people", "ams"].contains(k), let m = AppData.shared.meModel("tasks", "myTasksFilterMenu", [k, myTasksF]) else { return false }
+      let base = myTasksF
+      let multi = (((m["sheet"] as? [String: Any])?["sections"] as? [[String: Any]]) ?? []).contains { (($0["rows"] as? [[String: Any]]) ?? []).contains { ($0["multi"] as? Bool) == true } }
+      brainSheet(m, multi: multi) { [weak self] act in
+        guard let self = self, let to = act["set"] as? [String: Any] else { return }
+        // (several ticks in one sheet: each tick's own change, on the filters as they are now)
+        var now = self.myTasksF
+        for (key, v) in to {
+          let was = base[key]
+          if let arr = v as? [String], let old = was as? [String] {
+            let flip = Set(arr).symmetricDifference(Set(old))
+            var cur = (now[key] as? [String]) ?? []
+            for x in flip { cur = cur.contains(x) ? cur.filter { $0 != x } : cur + [x] }
+            now[key] = cur
+          } else if jsonString(["v": v]) != jsonString(["v": was ?? NSNull()]) { now[key] = v }
+        }
+        self.myTasksF = now; self.myTasksAgain()
+      }
+      return true
+    default: return false
+    }
+  }
+}
