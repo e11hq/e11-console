@@ -1,6 +1,6 @@
 /* The UAE dirham sign (U+20C3) — the Central Bank's symbol, as tall as the digits — from our one-character font, only for
    that character, until the devices' own fonts have it (tools/make-dirham-font.py; Haris 2026-11-05) */
-@font-face { font-family: "E11 Dirham"; src: url("fonts/e11-dirham.woff") format("woff"), url("fonts/e11-dirham.ttf") format("truetype"); unicode-range: U+20C3; font-display: block; }
+@font-face { font-family: "E11 Dirham"; src: url("fonts/e11-dirham.woff?v=2") format("woff"), url("fonts/e11-dirham.ttf?v=2") format("truetype"); unicode-range: U+20C3; font-display: block; }
 :root {
   --bg: #1c1c20;
   --sidebar: #141417;

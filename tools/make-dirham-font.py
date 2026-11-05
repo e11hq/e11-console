@@ -3,7 +3,7 @@
 (its official shape, traced as SVG; path below). Used only for that character (the website: unicode-range; the iPhone
 app: for that character in any text), until iPhone's / Mac's own fonts have it. Sized as the bank asks: as tall as the
 digits (SF / Inter digits ≈ 0.705 em), on their baseline, with the gap before the number built in (0.27 em — a word space).
-Run: python3 tools/make-dirham-font.py  → web/fonts/e11-dirham.ttf, .woff"""
+Run: python3 tools/make-dirham-font.py  → web/fonts/e11-dirham.ttf, .woff (then raise ?v= in web/styles.css, and paste the new base64 into ios/App/AppDelegate.swift and widget/E11Widget.swift)"""
 import re, sys, pathlib
 from fontTools.fontBuilder import FontBuilder
 from fontTools.pens.ttGlyphPen import TTGlyphPen
