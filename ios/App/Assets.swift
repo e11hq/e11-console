@@ -433,6 +433,7 @@ final class AssetsCtl {
   private static let serverActs: [String: String] = ["addClient": "caAddClient", "uploaded": "caUploaded", "newFolder": "caNewFolder",
     "renameFolder": "caRenameFolder", "deleteFolder": "caDeleteFolder", "deleteFile": "caDeleteFile", "deleteFiles": "caDeleteFiles",
     "renameClient": "caRenameClient", "deleteClient": "caDeleteClient"]
+  static var logosAsked = false
   func ask(_ ev: [String: Any], _ done: @escaping ([String: Any]) -> Void) {
     if let name = ev["ev"] as? String, let act = AssetsCtl.serverActs[name], AppData.shared.tabsOn, AppData.shared.ready, AppData.shared.me == me, me != nil,
        JSONSerialization.isValidJSONObject(ev) {
@@ -455,8 +456,12 @@ final class AssetsCtl {
     // (Part B step 2: what's in it from the app's own copy at once — the page's answer still follows and wins)
     if (ev["ev"] as? String) == "want", AppData.shared.ready, let m = AppData.shared.meModel("assets", "assets", [ev["client"] ?? NSNull()]) {
       take(m)
-      // (no website — step 9, offline: the copy's is the answer)
-      if !main.pageReady { done(["ok": true]); return }
+      // (no website — step 9, offline: the copy's is the answer; and the logo catch-up asked of the server, once a run,
+      //  as the page's autoLogosAll did when Client Assets opened)
+      if !main.pageReady {
+        if !AssetsCtl.logosAsked { AssetsCtl.logosAsked = true; main.serverTask.request("/api/app/act", body: ["ev": "caLogosAll", "op": UUID().uuidString]) { _ in } }
+        done(["ok": true]); return
+      }
     }
     let rid = UUID().uuidString
     var e = ev; e["rid"] = rid

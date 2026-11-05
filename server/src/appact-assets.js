@@ -338,5 +338,18 @@ export function createAssetActs({ store, now = () => Date.now(), access, files }
     } catch (e) { return []; /* no logo then; the colour stays */ } finally { logoBusy.delete(u.id); }
   }
 
-  return { caAddClient, caUploaded, caNewFolder, caRenameFolder, caDeleteFolder, caDeleteFile, caDeleteFiles, caRenameClient, caDeleteClient };
+  // The logo catch-up (app.js autoLogosAll — step 9: the iPhone app asks when Client Assets opens, as the page did):
+  // every client without a logo whose Logos folder has an image gets it, one after another, after answering
+  function caLogosAll(u) {
+    if (!canAddAssets(u)) return done([]);
+    const todo = store.list('clients').filter((c) => !c.logo && (c.folders || []).some((f) => f.name === 'Logos' && (f.files || []).some((x) => LOGO_EXT.test(x.name || ''))));
+    if (!todo.length) return done([]);
+    return done([], {}, { later: async () => {
+      const out = [];
+      for (const c of todo) { const f = (c.folders || []).find((x) => x.name === 'Logos'); out.push(...await autoLogo(u, c.id, f.id)); }
+      return out;
+    } });
+  }
+
+  return { caAddClient, caUploaded, caNewFolder, caRenameFolder, caDeleteFolder, caDeleteFile, caDeleteFiles, caRenameClient, caDeleteClient, caLogosAll };
 }
