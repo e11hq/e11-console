@@ -146,7 +146,12 @@ final class CrawlTests: XCTestCase {
   }
   private func searchProbe(path: [String], baseState: String) {
     let q = env["E11_QUERY"] ?? "ford"
-    app.typeText(q); Thread.sleep(forTimeInterval: 1.6)
+    // (typed on the keyboard's own keys — the app's search field isn't one UI testing can type into directly)
+    for ch in q {
+      let lo = app.keys[String(ch).lowercased()], up = app.keys[String(ch).uppercased()]
+      if lo.exists { lo.tap() } else if up.exists { up.tap() }
+    }
+    Thread.sleep(forTimeInterval: 1.6)
     let res = snap().filter { visible($0) && !$0.inKeyboard && !$0.inTabBar && $0.type == .staticText && !$0.label.isEmpty }
     note(["kind": "search", "path": path, "query": q, "results": res.prefix(8).map { String($0.label.prefix(40)) }, "count": res.count])
     // (the first few results: each tapped, what it opened noted, back to the results)
