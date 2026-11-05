@@ -605,6 +605,13 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     setNeedsLayout()
     if morph { DispatchQueue.main.async { [weak self] in self?.squashFab(from: was) } }
   }
+  // ---- the shared + (SharedFab.swift): the + as it shows now, and its drawing veiled while the shared one moves ----
+  // (a screen just hidden by a tab change still says what it showed — that's where the shared + comes from)
+  var fabNow: (shown: Bool, frame: CGRect, config: UIButton.Configuration?, light: Bool, label: String) {
+    let a = CGFloat(fab.layer.presentation()?.opacity ?? fab.layer.opacity)
+    return (!fab.isHidden && fab.superview != nil && a > 0.01 && fab.bounds.width > 0, fab.frame, fab.configuration, L.light, fab.accessibilityLabel ?? "")
+  }
+  var fabVeiled = false { didSet { if fabVeiled != oldValue { fab.layer.mask = fabVeiled ? CALayer() : nil } } }   // (taps still reach it)
   private var fabBefore: (label: String?, frame: CGRect)?
   // what the button showed as this redraw began — before anything in it hides it (drawAssets hides it first: Me's pages,
   // Client Assets — the + still snapped, Haris 2026-11-05)

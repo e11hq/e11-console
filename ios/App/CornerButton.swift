@@ -354,7 +354,7 @@ extension Main {
       // (a screen made later went on top of it — My Tasks or the Inbox the first time: only then is it moved back up)
       view.bringSubviewToFront(corner); view.bringSubviewToFront(tabBar)
     }
-    if lockView != nil { corner.alpha = 0; return }
+    if lockView != nil { corner.alpha = 0; fabFollow(); return }
     corner.alpha = 1
     let t = cornerTarget()
     // (between two screens — a tab change hides one a moment before the next shows — nothing is there for an instant:
@@ -370,5 +370,6 @@ extension Main {
     }
     corner.items = taskPages.last?.cornerItems ?? shownScreen?.menuItems ?? []
     corner.go(left: t.0, mid: t.1, corner: t.2, menu: taskPages.last?.cornerMenu, animated: animated && corner.window != nil)
+    fabFollow()   // (the shared +: SharedFab.swift)
   }
 }
