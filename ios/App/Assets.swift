@@ -427,7 +427,31 @@ final class AssetsCtl {
   var screens: [HomeView] { stack.map { $0.h } }
 
   // ---------- talking to the page ----------
+  // (Part B step 5: the changes go straight to the server — /api/app/act, done there as the website would; the changed
+  //  records into the app's copy at once, and the screen's contents worked out from it. Switched off on the server
+  //  (kv app-act-assets), the copy not this person's yet, or no answer: the page, as before)
+  private static let serverActs: [String: String] = ["addClient": "caAddClient", "uploaded": "caUploaded", "newFolder": "caNewFolder",
+    "renameFolder": "caRenameFolder", "deleteFolder": "caDeleteFolder", "deleteFile": "caDeleteFile", "deleteFiles": "caDeleteFiles",
+    "renameClient": "caRenameClient", "deleteClient": "caDeleteClient"]
   func ask(_ ev: [String: Any], _ done: @escaping ([String: Any]) -> Void) {
+    if let name = ev["ev"] as? String, let act = AssetsCtl.serverActs[name], AppData.shared.tabsOn, AppData.shared.ready, AppData.shared.me == me, me != nil,
+       JSONSerialization.isValidJSONObject(ev) {
+      var b = ev; b["ev"] = act; b["op"] = UUID().uuidString
+      main.serverTask.request("/api/app/act", body: b) { [weak self] j in
+        guard let self = self else { return }
+        guard let j = j, (j["off"] as? Bool) != true else { self.askPage(ev, done); return }
+        if let ch = j["changes"] as? [[String: Any]], !ch.isEmpty { AppData.shared.applyLocal(ch) }
+        var r = j
+        // (the screen's contents as the page answered them: all of them after adding / deleting a client, else that client's)
+        let whose: Any = name == "addClient" || name == "deleteClient" ? NSNull() : (ev["client"] ?? NSNull())
+        if let m = AppData.shared.meModel("assets", "assets", [whose]) { r["model"] = m; self.take(m) }
+        done(r)
+      }
+      return
+    }
+    askPage(ev, done)
+  }
+  private func askPage(_ ev: [String: Any], _ done: @escaping ([String: Any]) -> Void) {
     // (Part B step 2: what's in it from the app's own copy at once — the page's answer still follows and wins)
     if (ev["ev"] as? String) == "want", AppData.shared.ready, let m = AppData.shared.meModel("assets", "assets", [ev["client"] ?? NSNull()]) { take(m) }
     let rid = UUID().uuidString

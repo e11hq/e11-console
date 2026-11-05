@@ -110,12 +110,13 @@ export function createServer(cfg) {
     if (appActs) return appActs;
     const all = {};
     const now = cfg.now || (() => Date.now());
-    for (const [file, fn] of [['./appact-reviews.js', 'createReviewActs'], ['./appact-money.js', 'createMoneyActs'], ['./appact-other.js', 'createOtherActs'], ['./appact-me.js', 'createMeActs']]) {
-      try { const m = await import(file); Object.assign(all, m[fn]({ store, now })); } catch (e) { if (e.code !== 'ERR_MODULE_NOT_FOUND') console.error('app actions', file, e.message); }
+    // (Client Assets — step 5 — also gets the server's own access rules and files: the person's visible data, the logo)
+    for (const [file, fn] of [['./appact-reviews.js', 'createReviewActs'], ['./appact-money.js', 'createMoneyActs'], ['./appact-other.js', 'createOtherActs'], ['./appact-me.js', 'createMeActs'], ['./appact-assets.js', 'createAssetActs']]) {
+      try { const m = await import(file); Object.assign(all, m[fn]({ store, now, webDir, access, files })); } catch (e) { if (e.code !== 'ERR_MODULE_NOT_FOUND') console.error('app actions', file, e.message); }
     }
     return (appActs = all);
   }
-  const actGroup = (ev) => ACT_GROUP[ev] || (/^pl/.test(ev) ? 'plans' : /^tr/.test(ev) ? 'trash' : 'team');
+  const actGroup = (ev) => ACT_GROUP[ev] || (/^pl/.test(ev) ? 'plans' : /^tr/.test(ev) ? 'trash' : /^ca/.test(ev) ? 'assets' : 'team');
   // Birthdays: the rest of the staff are told in the morning (Inbox + phone)
   const birthdays = createBirthdays({ store, webPush, notifMessage, deliver: (out) => broadcast(out.rev, out.results, null, null), now: cfg.now || (() => Date.now()) });
   if (cfg.birthdays !== false) birthdays.start();
@@ -330,6 +331,13 @@ export function createServer(cfg) {
       data[kind] = kind === 'meta' ? val : val.filter((x) => access.canSee(u, kind, x)).map((x) => access.shape(u, kind, x));
     }
     return { rev: snap.rev, data };
+  }
+  // files nothing on the server uses any more (deleting is for good): checked against every record as text — plain, as
+  // JSON and HTML-escaped — so a path another task, comment, client, claim, plan… still holds is kept
+  function unusedPaths(paths) {
+    const hay = ['users', 'projects', 'tasks', 'clients', 'meta', 'finance', 'claims', 'plans', 'scheduled'].map((k) => JSON.stringify(store.list(k))).join('\n');
+    const forms = (x) => [x, JSON.stringify(x).slice(1, -1), x.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;')];
+    return (paths || []).map((x) => String(x || '')).filter((x) => x && !forms(x).some((f) => hay.includes(f)));
   }
   const forUser = (u, r) => {
     if (r.deleted) return { kind: r.kind, id: r.id, deleted: true, rev: r.rev };
@@ -815,7 +823,13 @@ export function createServer(cfg) {
         else {
           const pushed = changes.length ? pushAs(u, changes, null) : null;
           if (r.sysChanges && r.sysChanges.length) { const o2 = store.apply(r.sysChanges, u.id); broadcast(o2.rev, o2.results, null, u.id); }
-          if (r.filesGone && r.filesGone.length) { try { files.commands.trashMany({ paths: r.filesGone }); } catch (e) { console.error('app act files:', e.message); } }
+          // (files deleted for good: as the website's trashMany through /api/host — never one something else still uses)
+          if (r.filesGone && r.filesGone.length) { try { const gone = unusedPaths(r.filesGone); gone.forEach((x) => views.remove(x)); files.commands.trashMany({ paths: gone }); } catch (e) { console.error('app act files:', e.message); } }
+          // (Client Assets folders made on the NAS, as the website's Host makeDir)
+          for (const d of r.dirs || []) { try { files.commands.makeDir({ path: d }); } catch (e) { console.error('makeDir:', e.message); } }
+          // (after answering: what the website does once its save is in — a new client logo from the Logos folder —
+          //  saved as this person, sent to every open app)
+          if (typeof r.later === 'function') setImmediate(() => Promise.resolve().then(r.later).then((more) => { if (more && more.length) pushAs(u, more, null); }).catch((e) => console.error('app act later', ev, e.message)));
           out = { ok: true, ...(r.answer || {}), messages: r.messages || [],
             changes: pushed ? pushed.results.filter((x) => !x.refused).map((x) => forUser(u, x)).filter((x) => !(x.hidden && x.kind === 'notifications')) : [] };
         }
@@ -1069,9 +1083,7 @@ export function createServer(cfg) {
         // deleting is for good now: never a file something else still uses (another task, a comment, Client Assets, a
         // claim, Finance, a plan, a scheduled comment, a profile photo…), checked against everything on the server —
         // the app's own check only sees what that person sees. (Items still in the app's Trash are checked by the app.)
-        const hay = ['users', 'projects', 'tasks', 'clients', 'meta', 'finance', 'claims', 'plans', 'scheduled'].map((k) => JSON.stringify(store.list(k))).join('\n');
-        const forms = (x) => [x, JSON.stringify(x).slice(1, -1), x.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;')];
-        body = { paths: paths.map((x) => String(x || '')).filter((x) => x && !forms(x).some((f) => hay.includes(f))) };
+        body = { paths: unusedPaths(paths) };
         body.paths.forEach((x) => views.remove(x));   // (its light copy goes too)
       }
       if (cmd === 'claimPdf' && (body.receipts || []).some((x) => !access.canReadFile(u, String(x || '')) || !String(x || '').startsWith('Claims/'))) return deny();
