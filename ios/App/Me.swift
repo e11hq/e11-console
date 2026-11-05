@@ -1032,7 +1032,22 @@ final class MeCtl {
     let has = { (k: String) in p[k] != nil && !(p[k] is NSNull) }
     let kinds = Set(stack.map { $0.kind })
     let env: Any = p["env"] ?? (["shell": SHELL_VERSION] as [String: Any])
-    if let x = AppData.shared.meModel("me", "me", [env]) { for k in ["card", "work"] { if let v = x[k] { m[k] = v } } }
+    if let x = AppData.shared.meModel("me", "me", [env]) { for k in ["card", "work"] { if let v = x[k] { m[k] = v } }; if !has("digest") { m["digest"] = x["digest"] } }
+    // (step 9: Me's own rows the page gave, when it hasn't — no website, or offline: About, the owner, the version, the Test
+    //  site rows, the sync line — from what the server said at the start and the app's own state)
+    let st = main.startInfo
+    if (st["me"] as? String) == me {
+      if !has("about") { m["about"] = true }
+      if !has("owner") { m["owner"] = st["owner"] }
+      if !has("canUpdate") { m["canUpdate"] = st["owner"] }
+      if !has("version"), let v = st["version"] as? String { m["version"] = "E11 Console \(v)" }
+      if !has("test") {
+        let va = st["viewAs"] as? [String: Any]
+        if va != nil || (st["sample"] as? Bool) == true { m["test"] = ["viewAs": va != nil, "viewing": (va?["as"] as? [String: Any])?["name"] ?? NSNull(), "sample": st["sample"] ?? false] as [String: Any] }
+      }
+      if (p["env"] as? [String: Any])?["host"] == nil { m["env"] = ["ownerId": st["ownerId"] ?? NSNull(), "host": URL(string: serverURL())?.host ?? "", "shell": SHELL_VERSION] as [String: Any] }
+    }
+    if !has("sync") { m["sync"] = AppData.shared.streamUp ? "saved" : main.netUp ? "reconnecting" : "offline" }
     // (Notifications and the Face ID lock: as this phone has them — step 8)
     if let st = pushNow { m["push"] = pushModel(st) }
     pushCheck()
@@ -1403,6 +1418,11 @@ final class MeCtl {
       self.main.pageJS("(typeof Sync !== 'undefined' ? Sync.push().catch(() => {}) : Promise.resolve()).then(() => location.reload())")
     }
   }
+  // the Trash, searched for something (a deleted task's update tapped — step 9)
+  func openTrash(q: String) {
+    trQv = q; trCatv = "all"
+    if main.selectedTabKey == "me", tab == "me", !hidden, !stack.isEmpty { openSoon("trash") } else { wantOpen = "trash"; main.selectTab("me") }
+  }
   func openSoon(_ kind: String) {
     if main.selectedTabKey == tab, !hidden, !stack.isEmpty {
       if stack.count > 1 { backToRoot(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.open(kind) } } else { open(kind) }
@@ -1434,7 +1454,61 @@ final class MeCtl {
   var screens: [HomeView] { stack.map { $0.h } }
   var kind: String { stack.last?.kind ?? "" }
 
-  private func send(_ ev: [String: Any]) { main.pageJS("window.__e11Me && window.__e11Me(\(jsonString(ev)))") }
+  private func send(_ ev: [String: Any]) {
+    // (no website — step 9, or offline: the app does it itself)
+    if !main.pageReady { nativeEv(ev); return }
+    main.pageJS("window.__e11Me && window.__e11Me(\(jsonString(ev)))")
+  }
+  // ---------- Step 9: what the page did for Me, done by the app (phone.js NativeMe __e11Me) ----------
+  private func nativeEv(_ ev: [String: Any]) {
+    let say = { [weak self] (t: String) in (self?.top ?? self?.shown)?.toast(["t": t]) }
+    let file = { [weak self] (path: String, name: String) in
+      guard !path.isEmpty else { return }
+      self?.main.openFiles([["id": path, "path": path, "name": name]], at: 0)
+    }
+    switch ev["ev"] as? String ?? "" {
+    case "nav":
+      switch ev["to"] as? String ?? "" {
+      case "clients": main.assetsCtl.openAll(animated: true)
+      case "calendar": say("The content calendar is on the computer")
+      case "projects": say("Every client’s tasks are on the computer for now")
+      default: break
+      }
+    case "ovFile", "plFile": file(ev["path"] as? String ?? "", ev["name"] as? String ?? "File")
+    case "exInv":
+      let id = ev["id"] as? String ?? ""
+      let ex = (model["expenses"] as? [String: Any]) ?? [:]
+      let rows = ((ex["subs"] as? [[String: Any]]) ?? []) + ((ex["office"] as? [[String: Any]]) ?? [])
+      if let f = rows.first(where: { ($0["id"] as? String) == id })?["invFile"] as? [String: Any] { file(f["path"] as? String ?? "", f["name"] as? String ?? "Invoice") }
+    case "rvTask": if let t = ev["tid"] as? String, !t.isEmpty { main.openTaskPage(t, tab: "details", focus: "") }
+    case "rvFile":
+      // (the request's files, from its task's own page model — they carry where each file is)
+      guard let it = reviewItem(ev["id"] as? String ?? ""), let tid = it.0["tid"] as? String,
+            let all = AppData.shared.screen("task", tid).model?["files"] as? [[String: Any]] else { return }
+      let want = (((it.0["files"] as? [[String: Any]]) ?? []) + ((it.0["carriedFiles"] as? [[String: Any]]) ?? [])).compactMap { $0["id"] as? String }
+      let list = want.compactMap { id in all.first { ($0["id"] as? String) == id } }
+      if let i = list.firstIndex(where: { ($0["id"] as? String) == (ev["fid"] as? String) }) { main.openFiles(list, at: i) }
+    case "clOpen", "ovClaim": say("Claim PDFs open on the computer for now")
+    case "pfTest":
+      main.serverTask.request("/api/push/test", body: ["token": main.lastToken ?? ""]) { r in say(r.map { MeCtl.testSaid($0) } ?? "No connection — try again") }
+    case "pfOwner":
+      main.serverTask.request("/api/owner-view", body: ["mode": ev["mode"] as? String ?? "off"]) { [weak self] r in
+        if (r?["ok"] as? Bool) == true { self?.main.restartApp() } else { say(r?["error"] as? String ?? "That didn’t work — try again") }
+      }
+    case "sample":
+      ask(["kind": "alert", "title": "Start fresh with sample data?", "body": "This wipes everything on the TEST site — every task, client, Client Assets file, Finance record, claim, Inbox update and person except you — and adds a new sample set. A backup of the old data is kept on the server. The live site is never touched.", "okText": "Start fresh", "danger": true, "cancelText": "Cancel"]) { [weak self] r in
+        guard (r["ok"] as? Bool) == true else { return }
+        self?.main.serverTask.request("/api/sample/reset", body: [:]) { j in
+          guard let j = j, (j["ok"] as? Bool) != false else { say(j?["error"] as? String ?? "Could not start fresh"); return }
+          say("Fresh sample: \(j["clients"] as? Int ?? 0) clients, \(j["tasks"] as? Int ?? 0) tasks, \(j["people"] as? Int ?? 0) people")
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { self?.main.restartApp() }
+        }
+      }
+    case "import": say("Moving data from the Mac app is done on the Mac")
+    case "update", "videoCheck": say("Not available here right now — try again in a moment")
+    default: break   // (pf / team / tr / pl on and off, toasts: only the page needed to hear them)
+    }
+  }
 
   // ---------- from the page ----------
   func command(_ a: [String: Any]) {
@@ -1805,6 +1879,8 @@ final class MeCtl {
           test.append(SetItem(key: "viewAs", title: "View as…", sub: (t["viewing"] as? String).map { "Viewing as \($0)" } ?? "Test site only — use the app as a team member", sym: "person.2.fill", col: .systemTeal, tap: { [weak self] in self?.viewAsPick() }))
           if t["viewing"] is String { test.append(SetItem(key: "backToMe", title: "Back to me", sym: "arrow.uturn.backward", col: .systemTeal, chevron: false, tap: { [weak self] in self?.viewAsSet(nil) })) }
         }
+        // (the step 9 trial: the app without the website — Haris checks it before the website goes for good)
+        test.append(SetItem(key: "noPage", title: "Without the website", sub: "Step 9 trial — the app on its own", sym: "bolt.horizontal.fill", col: .systemOrange, toggle: Main.noPage, flip: { [weak self] on in self?.main.setNoPage(on) }))
         if (t["sample"] as? Bool) == true { test.append(SetItem(key: "sample", title: "Start fresh with sample data", sub: "Test site only: wipes everything except you", chevron: false, danger: true, tap: { [weak self] in self?.send(["ev": "sample"]) })) }
         if !test.isEmpty { out.append(head(h, "test", "Test site")); out.append(group(h, "test", test)) }
       }

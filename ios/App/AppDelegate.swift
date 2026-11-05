@@ -214,7 +214,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     view.addSubview(reviewLink)
     showSplash()
     quickStart()
-    loadHome()
+    if !Main.noPage { loadHome() }
     // (Part B step 8: who's signed in, asked by the app itself — Boot.swift; the self-test's sign-in is set as the page
     //  loads: asked once it has)
     if SELFTEST.isEmpty { bootCheck() }
@@ -890,7 +890,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if onServer { tabCover = -1; view.setNeedsLayout(); flushPending(); if !SELFTEST.isEmpty && !started { started = true; DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.selfTest() } } }
     // (the sign-in page: no tabs, no startup screen — not the "can't reach" page under the app's own screens offline: the
     //  tab bar went, Haris 2026-11-05)
-    else if !(quickBooted && webView.url?.scheme == "about") { tabBar.isHidden = true; tabsHidden = true; view.setNeedsLayout(); splashGone(fast: true) }
+    else if !((quickBooted || Main.noPage) && webView.url?.scheme == "about") { tabBar.isHidden = true; tabsHidden = true; view.setNeedsLayout(); splashGone(fast: true) }
   }
   func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { failed(error) }
   func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { failed(error) }

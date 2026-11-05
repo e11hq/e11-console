@@ -592,7 +592,16 @@ export function createServer(cfg) {
 
     // The iPhone app starting on its own (Part B step 8): signed in — who, and the startup screen's memo
     if (p === '/api/app/start') {
-      try { return json(res, 200, { ok: true, ...appStart.start(u, store.get('meta', 'main') || {}, (cfg.now || Date.now)()), version, review: !!review }); }
+      // (and Me's own rows that only the server can say — step 9: the owner (About › App updates), whose account is locked,
+      //  the Test site rows — View as… and Start fresh — as the page's NativeMe model had them)
+      const real = req.realUser || u, owner = isOwner(real);
+      const me9 = {
+        owner, ownerId: access.isAdm(u) && cfg.adminEmail ? (access.userByEmail(cfg.adminEmail) || {}).id || null : null,
+        testSite: isTestSite,
+        viewAs: isTestSite && owner ? { real: { id: real.id, name: real.name || real.email }, as: req.viewingAs ? { id: u.id, name: u.name || u.email } : null } : null,
+        sample: isTestSite && owner && !req.viewingAs,
+      };
+      try { return json(res, 200, { ok: true, ...appStart.start(u, store.get('meta', 'main') || {}, (cfg.now || Date.now)()), ...me9, version, review: !!review }); }
       catch (e) { return json(res, 500, { ok: false, error: e.message }); }
     }
 

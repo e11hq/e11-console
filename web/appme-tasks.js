@@ -555,6 +555,26 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
       foot: `Up to date as of ${clock(now)}`, open: first ? first.k : '', sections, team,
     };
   };
+  // ---------- A scheduled comment that wasn't sent, tapped (step 9): schedule.js openCancelled, worked out here ----------
+  // schedOpen(id) → { task, thread, text } (back into the comment box on the task's Comments) · { trash: q } (a manager:
+  // the task is in the Trash) · { toast }
+  M.schedOpen = function (R, data, meId, nowMs, id) {
+    const W = world(R, data, meId, nowMs);
+    if (!W.me()) return null;
+    data = data || {};
+    const s = (Array.isArray(data.scheduled) ? data.scheduled : []).find((x) => x.id === id);
+    if (!s) return { toast: 'Gone after 30 days' };
+    const t = W.task(s.taskId);
+    if (t) {
+      const thread = s.replyTo && (t.comments || []).some((c) => c.id === s.replyTo) ? s.replyTo : null;
+      return { task: t.id, thread, text: s.text || plainHTML(s.html || ''), files: (s.attachments || []).length };
+    }
+    const O = opener(W, data);
+    const trash = Array.isArray(data.trash) ? data.trash : [];
+    const inTrash = trash.find((it) => ((it.data || {}).tasks || []).some((x) => x && x.id === s.taskId));
+    if (inTrash && O.isManager()) return { trash: O.trashTitle(inTrash), toast: 'The task is in the Trash' };
+    return { toast: 'Its task has been deleted' };
+  };
   // ---------- The startup screen's four rows (Part B step 8): app.js Splash values(), worked out without the page ----------
   // startRows() → { list: [Clients, Your tasks, Inbox, the fourth], label4, cd } · null: not a member
   M.startRows = function (R, data, meId, nowMs) {

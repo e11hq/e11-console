@@ -17,7 +17,7 @@ COMPARE = """(async () => {
   const clean = (x) => JSON.parse(JSON.stringify(x));
   const out = { page: {}, app: {} };
   const pm = NativeMe.peek();
-  out.page.me = clean({ card: pm.card, work: pm.work });
+  out.page.me = clean({ card: pm.card, work: pm.work, digest: pm.digest === undefined ? null : pm.digest });   // (digest: the app's own too since step 9)
   out.app.me = clean(E11AppMe.me(E11Rules, data, me, now, env));
   out.page.team = clean(NativeMe.teamModel());
   out.app.team = clean(E11AppMe.team(E11Rules, data, me, now, env));

@@ -110,9 +110,9 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
     const subs = W.finance.filter((x) => x.type === 'sub' && !x.endedAt).sort((a, b) => (Number(a.day) || 0) - (Number(b.day) || 0));
     const office = W.expenses().filter((x) => String(x.date).startsWith(now)).sort((a, b) => String(b.date).localeCompare(String(a.date)));
     return { admin: W.finLevel(W.u) === 'admin', month: monthLong(now),
-      subs: subs.map((x) => ({ id: x.id, name: x.name, amt: '\u20C3' + aedOf(x.amount), sub: `Billed on the ${ordN(Number(x.day) || 1)} · monthly`, inv: !!Object.keys(x.invoices || {}).length })),
+      subs: subs.map((x) => ({ id: x.id, name: x.name, amt: '\u20C3' + aedOf(x.amount), sub: `Billed on the ${ordN(Number(x.day) || 1)} · monthly`, inv: !!Object.keys(x.invoices || {}).length, invFile: Object.values(x.invoices || {}).slice(-1)[0] || null })),
       subsTotal: '\u20C3' + aedOf(subs.reduce((a, x) => a + (Number(x.amount) || 0), 0)),
-      office: office.map((x) => ({ id: x.id, name: x.name, amt: '\u20C3' + aedOf(x.amount), sub: W.fmtDay(x.date) + (x.invoice ? ' · invoice' : ''), inv: !!x.invoice })),
+      office: office.map((x) => ({ id: x.id, name: x.name, amt: '\u20C3' + aedOf(x.amount), sub: W.fmtDay(x.date) + (x.invoice ? ' · invoice' : ''), inv: !!x.invoice, invFile: x.invoice || null })),
       officeTotal: '\u20C3' + aedOf(office.reduce((a, x) => a + (Number(x.amount) || 0), 0)) };
   };
 

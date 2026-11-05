@@ -150,6 +150,7 @@ final class AppData: NSObject, URLSessionDataDelegate {
 
   // ---------- the live stream: the changes as they happen (the website's own) ----------
   private var stream: URLSessionDataTask?
+  private(set) var streamUp = false   // (the live stream answering — Me's "Synced to E11 Server": step 9)
   private var session: URLSession?
   private var buffer = ""
   private var backoff: Double = 2
@@ -177,7 +178,7 @@ final class AppData: NSObject, URLSessionDataDelegate {
   func urlSession(_ s: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
     q.async {
       guard dataTask === self.stream else { return }
-      self.backoff = 2
+      self.backoff = 2; self.streamUp = true
       self.buffer += String(decoding: data, as: UTF8.self)
       while let r = self.buffer.range(of: "\n\n") {
         let block = String(self.buffer[..<r.lowerBound]); self.buffer.removeSubrange(..<r.upperBound)
@@ -193,7 +194,7 @@ final class AppData: NSObject, URLSessionDataDelegate {
   func urlSession(_ s: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
     q.async {
       guard task === self.stream else { return }
-      self.stream = nil
+      self.stream = nil; self.streamUp = false
       // (gone: back again in a moment — longer each time, up to half a minute)
       let wait = self.backoff; self.backoff = min(30, self.backoff * 2)
       self.q.asyncAfter(deadline: .now() + wait) { [weak self] in if self?.inBackground == false { self?.openStream() } }

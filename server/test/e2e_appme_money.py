@@ -15,7 +15,9 @@ COMPARE = """(async () => {
   const app = { claims: E11AppMe.claims(E11Rules, snap.data, currentUserId, now), expenses: E11AppMe.expenses(E11Rules, snap.data, currentUserId, now),
     overview: E11AppMe.overview(E11Rules, snap.data, currentUserId, now), reviews: E11AppMe.reviews(E11Rules, snap.data, currentUserId, now) };
   const out = {};
-  for (const k of Object.keys(page)) out[k] = { page: JSON.stringify(page[k]), app: JSON.stringify(app[k]) };
+  // (invFile: the app's own, for opening an invoice without the page — step 9)
+  const noInv = (k, v) => (k === 'invFile' ? undefined : v);
+  for (const k of Object.keys(page)) out[k] = { page: JSON.stringify(page[k]), app: JSON.stringify(app[k], noInv) };
   out.sizes = { claims: page.claims.all.length, need: page.claims.need.length, office: page.expenses.office.length, subs: page.expenses.subs.length,
     assets: page.overview.assets.length, ovClaims: (page.overview.claims || []).length, waiting: page.reviews.waiting.length, reviewed: page.reviews.reviewed.length };
   return out;

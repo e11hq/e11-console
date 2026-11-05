@@ -29,6 +29,16 @@ final class BootState {
 
 extension Main {
   static let boot = BootState()
+  // the step 9 trial (test site, Me › Test site): the app on its own — the website isn't loaded at all (only to sign in)
+  static var noPage: Bool { defaults.bool(forKey: "e11_nopage") }
+  func setNoPage(_ on: Bool) {
+    defaults.set(on, forKey: "e11_nopage")
+    if on { pageReady = false; web.loadHTMLString("<html><body style='background:#0c0d0f'></body></html>", baseURL: nil) }
+    restartApp()
+    if !on { loadHome() }
+  }
+  // what the server said at the last start (/api/app/start), for this person
+  var startInfo: [String: Any] { (defaults.data(forKey: "e11_start").flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }) ?? [:] }
   var bootState: BootState { Main.boot }
 
   func bootCheck() {
@@ -62,6 +72,9 @@ extension Main {
     let b = bootState
     let first = b.state != .signedIn || b.me != me
     b.state = .signedIn; b.me = me
+    // (kept for Me's own rows — the owner, the Test site rows, the version — also offline: step 9)
+    var keep = j; keep["days"] = nil
+    if JSONSerialization.isValidJSONObject(keep), let d = try? JSONSerialization.data(withJSONObject: keep) { defaults.set(d, forKey: "e11_start") }
     // the startup screen's memo for next time (the look is this phone's own)
     var memo = SplashView.memo()
     for k in ["name", "cd", "days"] { if let v = j[k] { memo[k] = v } }
@@ -104,6 +117,8 @@ extension Main {
     else { for i in list.indices { list[i]["on"] = i == 0 }; t["tabs"] = list; t["hidden"] = false; setTabs(t) }
     ownAppearanceWatch(); ownAppearanceTick()
     let office = list.contains(where: { ["fin-reimb", "fin-expenses", "team"].contains($0["v"] as? String ?? "") })
+    // (no website — step 9: an Office Admin's Overview drawn by the app itself)
+    if office, !pageReady, let k = list.first?["v"] as? String { _ = offlineTab(k) }
     if !office, (list.first?["v"] as? String) == "today", !pageReady || selectedTabKey == "today" {
       view.layoutIfNeeded()
       homePageMe = me
@@ -137,7 +152,9 @@ extension Main {
     var q = (defaults.data(forKey: "e11_quick").flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }) ?? [:]
     q["me"] = nil
     if let d = try? JSONSerialization.data(withJSONObject: q) { defaults.set(d, forKey: "e11_quick") }
-    // (the sign-in page: the web view is on its way there already — Cloudflare's answer to our address)
+    // (the sign-in page: the web view is on its way there already — Cloudflare's answer to our address; without the
+    //  website (the step 9 trial) it's loaded now, for signing in only)
+    if Main.noPage, web.url == nil || web.url?.scheme == "about" { loadHome() }
   }
 
   private func unreachable() {
@@ -196,26 +213,44 @@ extension Main {
   }
 
   // Offline (the website couldn't load): the app's own lists still open from its copy — Home, My Tasks, the Inbox,
-  // Clients and Me (Haris 2026-11-05: offline only Home opened, then Me took the tab bar away). The page is told the tab
-  // once it's there; the pages still the website's open once it is (step 9).
+  // Clients, Me and every Me-made tab (Haris 2026-11-05: offline only Home opened, then Me took the tab bar away) —
+  // and with no website at all (step 9). The page, if it comes, is told the tab once it's there.
   func offlineTab(_ key: String) -> Bool {
     guard !pageReady, quickBooted, AppData.shared.ready, let me = AppData.shared.me else { return false }
-    guard ["today", "mytasks", "inbox", "projects", "me"].contains(key) else { return false }
+    // (an Office Admin's first tab is Overview, the app's own Me-made one; the Me-made tabs — Me, Plans, Reviews, Team,
+    //  Claims, Expenses — are all Me's; Client Assets as a tab is Client Assets' own)
+    let office = tabKeys.contains("fin-reimb") || tabKeys.contains("team")
+    let meMade = ["me", "plans", "team", "fin-reimb", "fin-expenses", "reviews"].contains(key) || (key == "today" && office)
+    guard meMade || ["today", "mytasks", "inbox", "projects", "clients"].contains(key) else { return false }
     let light = appStyle == .light
-    if key != "today" { homeIfMade?.isHidden = true }
+    if key != "today" || office { homeIfMade?.isHidden = true }
     if key != "mytasks" { myTasksCommand(["show": false]) }
     if key != "inbox" { inboxCommand(["show": false]) }
     if key != "projects" { clientsCommand(["show": false]) }
-    if key != "me" { meCtl.hide() }
+    if key != "clients", assetsCtl.isOpen { assetsCtl.close(animated: false) }
+    if !meMade { meCtl.hide() }
+    if meMade {
+      // (Me's own rows from the app's copy and this phone; the rest — the server's — from the last start)
+      meCtl.command(["show": true, "me": me, "tab": key, "light": light, "model": ["env": ["shell": SHELL_VERSION]]])
+      return true
+    }
     switch key {
-    // (Me from the app's copy and this phone — your card, Work, Notifications, Face ID, Appearance, Sign out; the rest
-    //  comes with the connection)
-    case "me": meCtl.command(["show": true, "me": me, "tab": "me", "light": light, "model": ["env": ["shell": SHELL_VERSION]]])
     case "today": if homeHadModel { homeIfMade?.isHidden = false }; serverHome.refresh()
     case "mytasks": myTasksCommand(["show": true, "me": me, "light": light])
     case "inbox": inboxCommand(["show": true, "me": me, "light": light])
+    case "clients": assetsCtl.command(["show": true, "root": true, "me": me, "light": light, "start": [String: Any]()])
     default: clientsCommand(["show": true, "view": "list", "me": me, "light": light])
     }
     return true
+  }
+  // everything again from the start — after Start fresh, Owner view switched (the page reloaded itself for these): this
+  // person's screens put away, asked again who's signed in, the copy and the screens drawn again from it
+  func restartApp() {
+    putAwayForSwitch()
+    quickBooted = false
+    bootState.state = .unknown; bootState.me = nil; bootState.owned = false
+    if splash == nil { showSplash(); splashHeard = true }
+    bootCheck()
+    if pageReady { web.reload() }
   }
 }

@@ -1179,7 +1179,7 @@ extension Main {
     else { r = AppData.shared.meModel("tasks", "notifOpen", [nid ?? NSNull(), hint]) }
     guard let res = r, let go = res["go"] as? [String: Any] else { return r != nil }
     let to = go["to"] as? String ?? ""
-    if ["plan", "claim", "schedCancel", "trash"].contains(to) { return false }
+    // (step 9: these four too — a content plan, a claim, a scheduled comment that wasn't sent, the Trash)
     let read = (res["read"] as? [String]) ?? []
     if !read.isEmpty { serverTask.request("/api/home/act", body: ["act": "readList", "ids": read, "op": UUID().uuidString]) { _ in } }
     if let t = go["toast"] as? String, to.isEmpty {
@@ -1211,6 +1211,31 @@ extension Main {
       assetsCtl.openFromClients(client: c, folder: go["folder"] as? String)
     case "birthday": break
     case "daily": if !dailyNative() { return false }
+    case "plan":
+      guard let pid = go["id"] as? String else { return false }
+      meCtl.command(["open": ["kind": "plan", "pid": pid, "month": ""]])
+      selectTab(tabKeys.contains("plans") ? "plans" : "me")
+    case "claim":
+      if (go["page"] as? String) == "fin-reimb", tabKeys.contains("fin-reimb") { selectTab("fin-reimb") }
+      else { shownScreen?.toast(["t": "Expense claims are on the computer"]) }
+    case "trash":
+      meCtl.openTrash(q: go["q"] as? String ?? "")
+      if let t = go["toast"] as? String { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.shownScreen?.toast(["t": t]) } }
+    case "schedCancel":
+      guard let sid = go["id"] as? String, let s = AppData.shared.meModel("tasks", "schedOpen", [sid]) else { shownScreen?.toast(["t": "Gone after 30 days"]); break }
+      if let tid = s["task"] as? String {
+        openTaskPage(tid, tab: "comments", focus: "")
+        // (its words back in the comment box, as the website put them in the draft — files: attached again by hand)
+        let text = s["text"] as? String ?? "", files = s["files"] as? Int ?? 0
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { [weak self] in
+          guard let self = self, !text.isEmpty else { return }
+          self.compose.setText(NSAttributedString(string: text))
+          if files > 0 { self.taskPages.last?.toast("Its files weren’t kept — attach them again") }
+        }
+      } else if let q = s["trash"] as? String {
+        meCtl.openTrash(q: q)
+        if let t = s["toast"] as? String { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.shownScreen?.toast(["t": t]) } }
+      } else { shownScreen?.toast(["t": s["toast"] as? String ?? "Gone after 30 days"]) }
     default: return false
     }
     // (tapped before the update itself reached the app: marked read once it's there)

@@ -453,7 +453,11 @@ final class AssetsCtl {
   }
   private func askPage(_ ev: [String: Any], _ done: @escaping ([String: Any]) -> Void) {
     // (Part B step 2: what's in it from the app's own copy at once — the page's answer still follows and wins)
-    if (ev["ev"] as? String) == "want", AppData.shared.ready, let m = AppData.shared.meModel("assets", "assets", [ev["client"] ?? NSNull()]) { take(m) }
+    if (ev["ev"] as? String) == "want", AppData.shared.ready, let m = AppData.shared.meModel("assets", "assets", [ev["client"] ?? NSNull()]) {
+      take(m)
+      // (no website — step 9, offline: the copy's is the answer)
+      if !main.pageReady { done(["ok": true]); return }
+    }
     let rid = UUID().uuidString
     var e = ev; e["rid"] = rid
     pending[rid] = done

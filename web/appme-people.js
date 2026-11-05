@@ -265,6 +265,8 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
     return {
       card: { id: u.id, name: W.fullName(u), role: W.designationOf(u), email: u.email, photo: W.photoOf(u), ini: initials(W.fullName(u)), rgb: W.rgb(avColor(u.id)) },
       work,
+      // (the morning summary row: Production and Social — app.js Digest.wants; step 9)
+      digest: u.role === 'production' || u.role === 'social' ? { on: !((u.prefs || {}).digestOff) } : null,
     };
   };
 
