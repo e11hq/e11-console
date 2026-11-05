@@ -1146,6 +1146,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       }
     }
   }
+  var lastOwnBadge = -1   // (the icon's count last set from the copy)
   var formTucked = false   // (a New task / amendments draft tucked at the bottom: the tab bar stays faded)
   var tabPhoto: [Int: String] = [:]
   var tabPhotoSrc: [Int: UIImage] = [:], tabOnline: [Int: Bool] = [:]
@@ -2085,7 +2086,11 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     // (the Notification Service Extension confirms each notification with this address — ack: the server sends again
     //  the ones that didn't arrive)
     WidgetShare.write("apnsToken", Data(hex.utf8))
-    pageJS(waitForApp("window.__e11ApnsToken && window.__e11ApnsToken(\(jsonString(["token": hex, "env": APNS_ENV, "ack": true, "platform": "ios"])))"))
+    // (straight to the server — Part B step 7; the page only if that didn't work)
+    let body: [String: Any] = ["token": hex, "env": APNS_ENV, "ack": true, "platform": "ios"]
+    serverTask.request("/api/apns/register", body: body) { [weak self] j in
+      if (j?["ok"] as? Bool) != true { self?.pageJS(self?.waitForApp("window.__e11ApnsToken && window.__e11ApnsToken(\(jsonString(body)))") ?? "") }
+    }
   }
   // run something once the web app has its data (it may still be starting when the app opens from a notification)
   func waitForApp(_ js: String) -> String {
@@ -2145,6 +2150,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     // a file link (files.e11hq.com/f/<token>, the test copy's files-test…): the page opens the file where it is
     if let r = u.path.range(of: "^/[fd]/[A-Za-z0-9]{6,16}", options: .regularExpression) {
       let tok = String(String(u.path[r]).dropFirst(3))
+      if fileLinkNative(tok) { return }
       pageJSSoon("window.__e11FileLink && window.__e11FileLink(\(jsonString([tok]).dropFirst().dropLast()))")
       return
     }
@@ -2152,6 +2158,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if u.scheme?.hasPrefix("e11console") == true, u.host == "f" || u.host == "d",
        let r = u.path.range(of: "^/[A-Za-z0-9]{6,16}", options: .regularExpression) {
       let tok = String(String(u.path[r]).dropFirst())
+      if fileLinkNative(tok) { return }
       pageJSSoon("window.__e11FileLink && window.__e11FileLink(\(jsonString([tok]).dropFirst().dropLast()))")
       return
     }
@@ -2243,6 +2250,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       done(r)
     case "setTabs": pageTabsIn(a); done(["ok": true])
     case "badge":
+      if ownsBadge { ownBadge(); return done(["ok": true]) }   // (the app's own count — step 7)
       let n = (a["n"] as? NSNumber)?.intValue ?? Int(a["n"] as? String ?? "") ?? 0
       UNUserNotificationCenter.current().setBadgeCount(max(0, n)) { _ in }
       done(["ok": true])

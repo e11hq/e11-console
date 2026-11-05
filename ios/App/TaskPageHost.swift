@@ -893,6 +893,8 @@ extension Main {
       }
       // (the tab bar: its counts from the copy — Part B step 1)
       self.refreshOwnTabs()
+      // (the app icon's count: unread updates, from the copy — Part B step 7; the page's no longer needed)
+      self.ownBadge()
       // (Home, My Tasks and the Inbox too — step 2: from the copy, no request)
       self.serverHome.refresh(); self.serverMyTasksIfMade?.refresh(); self.serverInboxIfMade?.refresh(); if self.clientsWanted { self.serverClientsIfMade?.refresh() }
       // (live, everywhere — Haris 2026-11-03: a client's page whose client was deleted, or made inactive, elsewhere goes back to
@@ -1098,5 +1100,51 @@ extension Main {
       return true
     default: return false
     }
+  }
+}
+
+// Part B step 7: the app icon's count and this phone's notification address — the app's own (the page's way while the
+// copy isn't ready)
+extension Main {
+  func ownBadge() {
+    guard AppData.shared.tabsOn, AppData.shared.ready, AppData.shared.isStarted, let n = AppData.shared.screen("inbox", "all").model?["unread"] as? Int else { return }
+    if n == lastOwnBadge { return }
+    lastOwnBadge = n
+    UNUserNotificationCenter.current().setBadgeCount(max(0, n)) { _ in }
+  }
+  var ownsBadge: Bool { AppData.shared.tabsOn && AppData.shared.ready && AppData.shared.isStarted }
+}
+// Part B step 7: a file link (files.e11hq.com/f/…, "Open in E11 Console") opened by the app itself — where the file is
+// (a client's folder, a task, a comment), then its preview — as the page's FileLinks.open does
+extension Main {
+  func fileLinkNative(_ tok: String) -> Bool {
+    guard AppData.shared.tabsOn, AppData.shared.ready, AppData.shared.isStarted else { return false }
+    serverTask.request("/api/flink?token=" + (tok.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? tok), body: nil) { [weak self] j in
+      guard let self = self else { return }
+      let say = { (t: String) in self.shownScreen?.toast(["t": t]) }
+      guard let j = j, (j["ok"] as? Bool) == true, let w = j["where"] as? [String: Any] else { say(j?["error"] as? String ?? "That file isn’t available"); return }
+      let kind = w["kind"] as? String ?? "", file = w["file"] as? String
+      switch kind {
+      case "folder", "asset":
+        guard let c = w["client"] as? String, AppData.shared.meModel("assets", "assets", [c]) != nil else { say("File not shared with you"); return }
+        self.assetsCtl.openFromClients(client: c, folder: w["folder"] as? String)
+        guard kind == "asset", let fid = file else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+          guard let m = AppData.shared.meModel("assets", "assets", [c]), let all = m["files"] as? [[String: Any]] else { return }
+          let list = all.filter { ($0["folder"] as? String) == (w["folder"] as? String) }
+          if let i = list.firstIndex(where: { ($0["id"] as? String) == fid }) { self?.openFiles(list, at: i) }
+        }
+      case "task", "comment":
+        guard let t = w["task"] as? String, AppData.shared.screen("task", t).model != nil else { say("File not shared with you"); return }
+        self.openTaskPage(t, tab: kind == "comment" ? "comments" : "details", focus: "")
+        guard let fid = file else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { [weak self] in
+          guard let files = AppData.shared.screen("task", t).model?["files"] as? [[String: Any]], let i = files.firstIndex(where: { ($0["id"] as? String) == fid }) else { return }
+          self?.openFiles(files, at: i)
+        }
+      default: say("File not shared with you")
+      }
+    }
+    return true
   }
 }
