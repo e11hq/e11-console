@@ -1922,10 +1922,12 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       guard let self = self else { return }
       // (Done / Due / Delete on a card: as Home's, straight to the server)
       if page, self.eventOnServer(ev, self.serverClients, pageMe: self.clientsPageMe) { return }
-      if page, self.pagelessEvent(ev) { return }   // (step 9)
+      if page || (ev["ev"] as? String) != "client", self.pagelessEvent(ev) { return }   // (step 9 — the list's search results' tasks too)
       // (a client held: its sheet, the app's own — nothing for the website)
       if !page, (ev["ev"] as? String) == "clientHold", let id = ev["id"] as? String { self.clientSheet(id); return }
       if !page, (ev["ev"] as? String) == "addClient" { self.addClientSheet(); return }
+      // (the list's search: the app's own, as Home's — without the website it found nothing, Haris 2026-11-05)
+      if !page, (ev["ev"] as? String) == "find", self.searchNative(ev["q"] as? String ?? "") { return }
       if !page, (ev["ev"] as? String) == "back", self.clientsListIfMade?.backFromMe == true { self.clientsBackToMe(); return }
       if page, (ev["ev"] as? String) == "back" { self.clientPageOut() }
       // (a client's Client Assets — a folder, or See all: the app's own screens over its page, shell 32)

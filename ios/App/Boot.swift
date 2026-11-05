@@ -392,6 +392,13 @@ extension Main {
       guard !pageReady, !id.isEmpty, AppData.shared.ready else { return false }
       openTaskPage(id, tab: "details", focus: ""); return true
     case "me": guard !pageReady else { return false }; selectTab("me"); return true
+    // (a client in search results: its page comes in over this screen, ‹ back to the search — Haris 2026-11-05: without
+    //  the website the tap did nothing)
+    case "client":
+      guard !pageReady, !id.isEmpty, AppData.shared.ready, let me = AppData.shared.me else { return false }
+      let k = selectedTabKey
+      clientsCommand(["show": true, "view": "client", "id": id, "me": me, "light": appStyle == .light, "from": k == "today" ? "home" : k == "projects" ? "" : k])
+      return true
     case "review":
       // (Home's In review box: My Tasks, waiting for the CD's review — the whole team's for those who see everyone's)
       guard !pageReady else { return false }
