@@ -16,6 +16,9 @@ targets:
   E11Console:
     type: application
     platform: iOS
+    # (the scheme with the crawl — Apple's UI testing tapping every control, ios/UITests, .github/workflows/ios-crawl.yml)
+    scheme:
+      testTargets: [E11ConsoleUITests]
     sources:
       - path: App
       - path: ../widget/WidgetShare.swift
@@ -127,3 +130,17 @@ targets:
         NSExtension:
           NSExtensionPointIdentifier: com.apple.usernotifications.service
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).NotificationService
+  # The crawl (Haris 2026-11-05: "every single thing"): Apple's UI testing taps every control on every screen, as each role
+  E11ConsoleUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: E11Console
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ae.e11.console.ios.uitests
+        TEST_TARGET_NAME: E11Console
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1"

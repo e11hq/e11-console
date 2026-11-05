@@ -1,0 +1,48 @@
+# The crawl (Haris 2026-11-05: "every single thing"): the iPhone app built for testing on the Mac runner, then Apple's UI
+# testing taps every control on every screen as each role, the website off (ios/UITests/CrawlTests.swift, ios/crawl.py).
+# Results on the release "ios-selftest": ios-crawl.txt, ios-crawl.json, ios-crawl-shots.zip.
+name: iPhone app crawl
+on:
+  workflow_dispatch:
+    inputs:
+      secs:
+        description: "Seconds per role"
+        default: "900"
+      roles:
+        description: "Only these roles (comma separated, part of the name), or empty for all"
+        default: ""
+permissions:
+  contents: write
+jobs:
+  crawl:
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+      - name: Homebrew's tools on this Mac
+        run: for d in /opt/homebrew/bin /usr/local/bin; do [ -d "$d" ] && echo "$d" >> "$GITHUB_PATH"; done; true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Xcode project
+        run: |
+          brew install xcodegen >/dev/null
+          cd ios && xcodegen generate
+      - name: Build for testing
+        run: |
+          set +e
+          xcodebuild -project ios/E11Console.xcodeproj -scheme E11Console -configuration Debug -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build-for-testing 2>&1 | tee "$RUNNER_TEMP/ios-crawl-build-full.log" | tail -40; status=${PIPESTATUS[0]}
+          grep -E "error:" "$RUNNER_TEMP/ios-crawl-build-full.log" | head -60 > "$RUNNER_TEMP/ios-crawl-build.log"; exit $status
+      - name: Crawl every role
+        continue-on-error: true
+        env:
+          CRAWL_ROLES: ${{ github.event.inputs.roles }}
+        run: python3 ios/crawl.py build "${{ github.event.inputs.secs || '900' }}" 2>&1 | tee "$RUNNER_TEMP/ios-crawl.log"; true
+      - name: Results for checking from Claude's workspace
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view ios-selftest >/dev/null 2>&1 || gh release create ios-selftest --prerelease --title "iPhone app self-test" --notes "Latest iPhone app self-test results." --target "$GITHUB_SHA"
+          for f in ios-crawl.txt ios-crawl.json ios-crawl.log ios-crawl-shots.zip ios-crawl-build.log; do if [ -s "$RUNNER_TEMP/$f" ]; then gh release upload ios-selftest "$RUNNER_TEMP/$f" --clobber || echo "upload failed: $f"; fi; done; true

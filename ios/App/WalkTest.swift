@@ -62,7 +62,7 @@ extension Main {
     // (signed in as the build machine's test person — the dev sign-in's cookie — and started the app's own way)
     guard let host = URL(string: serverURL())?.host, let email = procEnv["E11_SELFTEST_EMAIL"],
           let c = HTTPCookie(properties: [.domain: host, .path: "/", .name: "e11_dev_email", .value: email]) else { return }
-    web.configuration.websiteDataStore.httpCookieStore.setCookie(c) { self.bootCheck(); self.walkWhenReady(0) }
+    web.configuration.websiteDataStore.httpCookieStore.setCookie(c) { self.bootCheck(); if SELFTEST == "walk" { self.walkWhenReady(0) } }   // (crawl: Apple's UI testing taps it — ios/UITests)
   }
   private func walkWhenReady(_ n: Int) {
     if !(quickBooted && AppData.shared.ready && splash == nil && shownScreen != nil) && n < 240 {

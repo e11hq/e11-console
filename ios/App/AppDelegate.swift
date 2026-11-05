@@ -217,7 +217,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if !Main.noPage { loadHome() }
     // (Part B step 8: who's signed in, asked by the app itself — Boot.swift; the self-test's sign-in is set as the page
     //  loads: asked once it has)
-    if SELFTEST.isEmpty { bootCheck() } else if SELFTEST == "walk" { walkTest() }   // (the walk-through: WalkTest.swift)
+    if SELFTEST.isEmpty { bootCheck() } else if SELFTEST == "walk" || SELFTEST == "crawl" { walkTest() }   // (the walk-through: WalkTest.swift)
   }
   /* ---------- the quick start (iOS app data plan, step 3 — Haris, 2026-11-02): with this person's copy saved on the
      phone, the app opens on its own Home and tab bar at once, drawn from that copy; the website loads quietly behind,
