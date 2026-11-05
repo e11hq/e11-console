@@ -1451,6 +1451,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     meCtl.hide()
     [myTasksIfMade, inboxIfMade, clientsListIfMade, clientPageIfMade].forEach { $0?.isHidden = true }
     homeIfMade?.isHidden = true
+    serverHome.forget(); [serverMyTasksIfMade, serverInboxIfMade, serverClientsIfMade].forEach { $0?.forget() }
   }
   func selectTab(_ key: String) {
     if let i = tabKeys.firstIndex(of: key), let item = self.tabBar.items?.first(where: { $0.tag == i }) { self.tabBar.selectedItem = item; self.tabBar(self.tabBar, didSelect: item) }

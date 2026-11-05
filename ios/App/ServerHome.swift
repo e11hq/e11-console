@@ -44,6 +44,12 @@ final class ServerHome {
     server = serverURL(); model = loadCache(); confirmedMe = nil; lastRev = 0; off = false
   }
   var shown: [String: Any]? { model.map { overlay($0) } }
+  // View as… switched: what's kept is the person before's — gone, so their list never shows under the new person's tab
+  // (the Inbox showed the other person's for a moment, Haris 2026-11-05); the new one comes from the copy / the server
+  func forget() {
+    model = nil; confirmedMe = nil; lastRev = 0; copyGen = -1; copyQuery = ""
+    if let f = cacheFile { try? FileManager.default.removeItem(at: f) }
+  }
 
   // ---------- the last Home, kept on the phone ----------
   private var cacheFile: URL? { FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent((kind == "home" ? "home-" : kind + "-") + serverURL().replacingOccurrences(of: "[^A-Za-z0-9]+", with: "-", options: .regularExpression) + ".json") }
