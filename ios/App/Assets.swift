@@ -620,7 +620,11 @@ final class AssetsCtl {
       if let i = self.stack.firstIndex(where: { $0.h === s.h }) { self.stack.remove(at: i) } else { self.leaving = false; return }
       self.leaving = false
       if self.stack.isEmpty { self.base = nil }
-      if self.stack.isEmpty && self.fromPage { self.fromPage = false; self.main.pageJS("window.__e11Assets && window.__e11Assets({ev:'back'})") }
+      if self.stack.isEmpty && self.fromPage {
+        self.fromPage = false; self.main.pageJS("window.__e11Assets && window.__e11Assets({ev:'back'})")
+        // (without the website — step 9: back to Me, as the page would have shown it)
+        if !self.main.pageReady, self.main.selectedTabKey == "me" { self.main.meCtl.reveal() }
+      }
       else if let t = self.stack.last { self.refreshScreen(t) }
       self.main.edgePanOn(); self.main.updateCorner()
     }

@@ -1378,6 +1378,8 @@ final class MeCtl {
     if let data = try? JSONSerialization.data(withJSONObject: p) { d.set(data, forKey: key) }
     // (the switch finishes its own slide first, then the whole app crossfades into its new look and the page's new rows —
     //  at once, the switch jumped mid-slide as everything changed under it: Haris 2026-11-05)
+    // (the tick moves to it at once — it waited for the crossfade, so Appearance felt slow to answer: Haris 2026-11-05)
+    redraw()
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
       guard let self = self else { return }
       let apply = {
@@ -1414,6 +1416,8 @@ final class MeCtl {
       //  lists — so the new person's first tab shows, never the old one's page under their tab: Back to me left an
       //  Office Admin's page showing under Home's tab, Haris 2026-11-05)
       self.main.putAwayForSwitch()
+      // (without the website — step 9: the app starts again itself as the chosen person; only the bar changed before)
+      if !self.main.pageReady { self.main.restartApp(); return }
       // (what the page hasn't sent yet first, then everything starts again as the chosen person)
       self.main.pageJS("(typeof Sync !== 'undefined' ? Sync.push().catch(() => {}) : Promise.resolve()).then(() => location.reload())")
     }
@@ -1469,7 +1473,11 @@ final class MeCtl {
     switch ev["ev"] as? String ?? "" {
     case "nav":
       switch ev["to"] as? String ?? "" {
-      case "clients": main.assetsCtl.openAll(animated: true)
+      case "clients":
+        // (as the page opened it: in this look, for this person — it showed in the wrong look and without its top buttons;
+        //  then Me goes once it has slid in over it, and comes back when Client Assets is left — Haris 2026-11-05)
+        main.assetsCtl.command(["show": true, "me": me ?? "", "light": light, "start": [String: Any]()])
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in if self?.main.assetsCtl.isOpen == true { self?.hide() } }
       case "calendar": say("The content calendar is on the computer")
       case "projects": say("Every client’s tasks are on the computer for now")
       default: break
@@ -1696,6 +1704,9 @@ final class MeCtl {
     let W = main.view.bounds.width
     let u = stack.last?.h
     stack.append(s); watchTouches()
+    // (its contents from the app's copy now that it's in the stack — My profile, Team, Trash, Content plans: without the
+    //  website nothing else sends them, and they stayed on "Loading…" — Haris 2026-11-05)
+    if !pageModel.isEmpty { model = own(pageModel) }
     draw(s)
     s.h.isHidden = false
     if animated && main.view.window != nil && u != nil {
