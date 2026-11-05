@@ -334,12 +334,12 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       if let l4 = a["label4"] as? String { last["label4"] = l4 }
       if let i = a["tick"] as? Int, (0..<4).contains(i) { var v = (last["vals"] as? [String]) ?? ["", "", "", ""]; while v.count < 4 { v.append("") }; v[i] = a["value"] as? String ?? ""; last["vals"] = v }
       if let d = try? JSONSerialization.data(withJSONObject: last) { defaults.set(d, forKey: "e11_splash_last") }
-      if quickBooted { return ["ok": true, "shown": splash != nil] }   // (the app ticks its own)
+      if quickBooted || Main.boot.owned { return ["ok": true, "shown": splash != nil] }   // (the app ticks its own)
     }
     if a["hello"] != nil {
       splashHeard = true
       // (a quick start: the app's own startup screen is, or was, up — the page doesn't put up its own behind Home)
-      guard let s = splash, !s.leaving else { return ["ok": true, "shown": quickBooted, "age": quickBooted ? 60000 : 0] }
+      guard let s = splash, !s.leaving else { return ["ok": true, "shown": quickBooted || Main.boot.owned, "age": quickBooted ? 60000 : 0] }
       return ["ok": true, "shown": true, "age": Int((CACurrentMediaTime() - s.t0) * 1000)]
     }
     if let m = a["memo"] as? [String: Any] {
@@ -348,7 +348,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     }
     guard let s = splash, !s.leaving else { return ["ok": true, "shown": false] }
     splashHeard = true
-    if a["out"] != nil { if !quickBooted { splashGone() }; return ["ok": true] }   // (a quick start: it goes when its own run ends)
+    if a["out"] != nil { if !quickBooted && !Main.boot.owned { splashGone() }; return ["ok": true] }   // (a quick start: it goes when its own run ends)
     s.command(a)
     if !SELFTEST.isEmpty, (a["tick"] as? Int) == 3 { selfResult["splashTickedGeo"] = s.geo(); writeSelf("splashTicked") }
     return ["ok": true, "shown": true]
@@ -877,6 +877,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let ours = webView.url?.host == serverHost || webView.url?.scheme == "about"
     webView.scrollView.contentInsetAdjustmentBehavior = ours ? .never : .always
     if ours { tabCover = -1; view.setNeedsLayout() }
+    if webView.url?.host == serverHost { bootCommitted() }   // (back from signing in: the startup screen — Boot.swift)
   }
   func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
     let onServer = webView.url?.host == serverHost
@@ -900,11 +901,14 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   func showOffline() {
     // (the startup screen up: it says so itself, with Try again — Part B step 8; the page underneath tries again)
     if let s = splash, !s.leaving, !quickBooted { splashHeard = true; s.command(["status": "Can’t reach E11 Console — check your internet connection", "retry": true]) }
-    else { splashGone(fast: true) }
+    else if !quickBooted { splashGone(fast: true) }
     if retrying { return }
     retrying = true
     pageReady = false
-    tabBar.isHidden = true; tabsHidden = true; view.setNeedsLayout()
+    // (a quick start — the app's own screens from its copy: its tab bar and startup screen stay as they are; only the
+    //  website behind tries again. They were taken away offline — the startup screen cut off mid-way, the tab bar gone
+    //  after a few seconds: Haris 2026-11-05)
+    if !quickBooted { tabBar.isHidden = true; tabsHidden = true; view.setNeedsLayout() }
     let html = "<html><head><meta name=viewport content='width=device-width'></head><body style=\"background:#0c0d0f;color:#bbb;font:16px -apple-system;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center\"><div><b style=\"color:#fff\">Can’t reach E11 Console</b><br><br>Check your internet connection.<br>Trying again…</div></body></html>"
     web.loadHTMLString(html, baseURL: nil)
     DispatchQueue.main.asyncAfter(deadline: .now() + 5) { self.retrying = false; self.loadHome() }
@@ -1259,6 +1263,12 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     shownTab = item.tag
     lastTabTap = (tabKeys[item.tag], Date())
     if again, tabKeys[item.tag] == "projects", clientsWanted, clientsBackToList() { return }
+    // (offline — the website not there: the app's own lists from its copy; the page told the tab once it's there)
+    if !again, offlineTab(tabKeys[item.tag]) {
+      earlyJS.removeAll { $0.hasPrefix("window.__e11Tab ") }
+      pageJSSoon("window.__e11Tab && window.__e11Tab(\(jsonString([tabKeys[item.tag]]).dropFirst().dropLast()))")
+      return
+    }
     // (Me, the app's own: again from a page under it — back to Me with the back slide; on Me — to the top)
     // (Content plans, a Social's own tab, is the same app's own pages — Haris 2026-11-04)
     // (the tab the app's own Me pages are showing now — Me, Content plans, an Office Admin's Overview / Team; another of
@@ -2211,15 +2221,24 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     lockView = v
     if UIApplication.shared.applicationState == .active { DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.unlock() } }
   }
-  @objc func unlock() {
+  @objc func unlock() { unlockTry(0) }
+  // (asked by itself as the app opens: iPhone can turn the first ask away while the app is still coming up — not
+  //  interactive yet, or cancelled by the system — and then only the button worked; asked again, up to 3 times —
+  //  Haris 2026-11-05. Cancelled by the person: the button, as before.)
+  func unlockTry(_ n: Int) {
     if authing || lockView == nil { return }
     let ctx = LAContext(); var err: NSError?
     guard ctx.canEvaluatePolicy(.deviceOwnerAuthentication, error: &err) else { return unlocked() }
     authing = true
-    ctx.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "Unlock E11 Console") { ok, _ in
+    ctx.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "Unlock E11 Console") { ok, e in
       DispatchQueue.main.async {
         if ok { self.unlocked() }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { self.authing = false }   // (after the app is active again)
+        let code = (e as? LAError)?.code
+        let again = !ok && n < 3 && (code == .systemCancel || code == .appCancel || code == .notInteractive)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {   // (after the app is active again)
+          self.authing = false
+          if again, UIApplication.shared.applicationState == .active { self.unlockTry(n + 1) }
+        }
       }
     }
   }

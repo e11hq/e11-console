@@ -18,6 +18,7 @@ final class BootState {
   var me: String?
   var retry: DispatchWorkItem?
   var owned = false          // (the app runs the startup screen itself this time — the page's ticks and "out" ignored)
+  var signingIn = false      // (back from the sign-in page: the startup screen is the app's until its screens are there)
   lazy var session: URLSession = {
     let c = URLSessionConfiguration.ephemeral
     c.httpShouldSetCookies = false; c.httpCookieAcceptPolicy = .never
@@ -74,7 +75,12 @@ extension Main {
     if let s = splash, !s.leaving { s.command(["status": ""]); s.command(["greet": SplashView.greeting(memo)]) }
     saveQuick(["me": me])
     guard first, !quickBooted else { return }
-    // (a first start, or another person than the copy kept: their copy, then the app's own screens from it)
+    // (a first start, or another person than the copy kept: their copy, then the app's own screens from it — the startup
+    //  screen stays up until they're all there (the tab bar too), then plays out; the page's own ticks and "out" aren't
+    //  waited for. Signed in again, the tab bar came a moment after Home: Haris 2026-11-05)
+    if splash == nil, Main.boot.state == .signedIn, view.window != nil, signingIn { showSplash() }
+    signingIn = false
+    if splash != nil { bootState.owned = true }
     if AppData.shared.me != me || !AppData.shared.isStarted { AppData.shared.start(me: me, cookies: serverHome.cookies) }
     watchCopy()
     bootWhenReady(me, 0)
@@ -86,6 +92,7 @@ extension Main {
     guard bootState.me == me, !quickBooted else { return }
     guard AppData.shared.ready, AppData.shared.me == me, let tabs = ownTabsNow() else {
       if n < 100 { DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.bootWhenReady(me, n + 1) } }
+      else { bootState.owned = false; splashGone() }   // (the copy never came: the page's way, as before)
       return
     }
     quickBooted = true
@@ -170,8 +177,42 @@ extension Main {
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.loadHome(review ? "/review/sign-out" : "/cdn-cgi/access/logout") }
   }
 
+  // signing in: the web view has just come back to our site from the sign-in page — the startup screen at once, as the app
+  // opening does, until the app's own screens are there
+  var signingIn: Bool { get { Main.boot.signingIn } set { Main.boot.signingIn = newValue } }
+  func bootCommitted() {
+    guard bootState.state == .signedOut || (bootState.state == .asking && signingIn) else { return }
+    // (not the sign-out itself — Cloudflare's /cdn-cgi/… and the App Review copy's sign-out page are on our site too)
+    let path = web.url?.path ?? ""
+    if path.hasPrefix("/cdn-cgi/") || path.hasPrefix("/review/") { return }
+    // (the App Review copy signs in on a page of our own site: no startup screen over it)
+    if defaults.string(forKey: "e11_server") == "review" { return }
+    signingIn = true
+    if splash == nil { showSplash(); splashHeard = true; if splash != nil { bootState.owned = true } }
+  }
   // the web view reached our site (after signing in, or the page loaded again): asked again if we weren't signed in
   func bootPageArrived() {
     if bootState.state == .signedOut || bootState.state == .unreachable || bootState.state == .unknown { bootCheck() }
+  }
+
+  // Offline (the website couldn't load): the app's own lists still open from its copy — Home, My Tasks, the Inbox,
+  // Clients (Haris 2026-11-05: offline only Home opened). The page is told the tab once it's there. Me and the pages
+  // still the website's open once it is (step 9).
+  func offlineTab(_ key: String) -> Bool {
+    guard !pageReady, quickBooted, AppData.shared.ready, let me = AppData.shared.me else { return false }
+    guard ["today", "mytasks", "inbox", "projects"].contains(key) else { return false }
+    let light = appStyle == .light
+    if key != "today" { homeIfMade?.isHidden = true }
+    if key != "mytasks" { myTasksCommand(["show": false]) }
+    if key != "inbox" { inboxCommand(["show": false]) }
+    if key != "projects" { clientsCommand(["show": false]) }
+    meCtl.hide()
+    switch key {
+    case "today": if homeHadModel { homeIfMade?.isHidden = false }; serverHome.refresh()
+    case "mytasks": myTasksCommand(["show": true, "me": me, "light": light])
+    case "inbox": inboxCommand(["show": true, "me": me, "light": light])
+    default: clientsCommand(["show": true, "view": "list", "me": me, "light": light])
+    }
+    return true
   }
 }
