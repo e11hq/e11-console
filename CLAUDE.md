@@ -82,9 +82,9 @@ its new width with the words crossfading (`HomeView.setFab` → `squashFab`); th
 centred name, crossfades to its new words instead of jumping (`HomeView.fadeText`). Every new native button and title
 line does the same.
 
-**E11 Chat is never part of the E11 Console iPhone app (Haris, 2026-11-05: "Remember that"):** on the iPhone, chat is only
-ever its own app, E11 Chat — no chat screen, tab or section in E11 Console's iPhone app. On the Mac app and the website it's
-a separate Chat section of E11 Console. (Plan: project doc `claude/client-groups-app-idea.md`.)
+**E11 Talk (the chat app, named 2026-11-05 20:11 — was "E11 Chat") is never part of the E11 Console iPhone app (Haris, 2026-11-05: "Remember that"):** on the iPhone, chat is only
+ever its own app, E11 Talk — no chat screen, tab or section in E11 Console's iPhone app. On the Mac app it's a separate
+Chat section of E11 Console (not on the website — Haris, 2026-11-05). (Plan: project doc `claude/client-groups-app-idea.md`.)
 
 **TestFlight only on Haris's yes (Haris, 2026-11-03):** "publish, publish app build" builds, self-tests and signs the
 iPhone app, then keeps it on his Mac (ios.yml `send: ask`, the default). When a build has finished, ask Haris; only on
