@@ -1536,6 +1536,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   func selfScroll(_ y: CGFloat) { scroll.setContentOffset(CGPoint(x: 0, y: y - scroll.contentInset.top), animated: false); layoutHeader(); setBar(barIn, now: true) }
   func selfFind(_ q: String) { openSearch(); field.text = q; typed() }
   func selfFindDone() { closeSearch() }
+  // (the walk-through: the floating button tapped, when there is one)
+  func selfFab() -> Bool { guard !fab.isHidden else { return false }; if let a = fabRun { a() } else { send(["ev": "add"]) }; return true }
   func geo() -> [String: Any] {
     ["open": openCard != nil, "openShift": openCard?.swipeX ?? 0, "actions": actions?.subviews.count ?? 0, "lead": actions?.leading ?? false,
      "title": title.text ?? "", "date": sub.text ?? "", "stats": stats.map { ($0.viewWithTag(1) as? UILabel)?.text ?? "" },

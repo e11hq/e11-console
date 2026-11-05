@@ -217,7 +217,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if !Main.noPage { loadHome() }
     // (Part B step 8: who's signed in, asked by the app itself — Boot.swift; the self-test's sign-in is set as the page
     //  loads: asked once it has)
-    if SELFTEST.isEmpty { bootCheck() }
+    if SELFTEST.isEmpty { bootCheck() } else if SELFTEST == "walk" { walkTest() }   // (the walk-through: WalkTest.swift)
   }
   /* ---------- the quick start (iOS app data plan, step 3 — Haris, 2026-11-02): with this person's copy saved on the
      phone, the app opens on its own Home and tab bar at once, drawn from that copy; the website loads quietly behind,
@@ -296,7 +296,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     DispatchQueue.main.asyncAfter(deadline: .now() + max(t + 0.42, 3.0 - age)) { [weak self] in if self?.splash === s { self?.splashGone() } }
   }
   // for the website behind: now, or as soon as it's there (a quick start's early taps)
-  func pageJSSoon(_ js: String) { if pageReady || !quickBooted { pageJS(js) } else { earlyJS.append(js) } }
+  func pageJSSoon(_ js: String) { if pageReady || !quickBooted { pageJS(js) } else { if Main.noPage { Main.noteLost(js) }; earlyJS.append(js) } }
   // the app's own light / dark (from the page; at launch the last one, or the startup screen's)
   var appStyle: UIUserInterfaceStyle = LAST_LIGHT ? .light : .dark
   override func viewWillAppear(_ animated: Bool) {
@@ -837,7 +837,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   var offsetWatch: NSKeyValueObservation?
   var resetting = false
-  func pageJS(_ js: String) { web?.evaluateJavaScript(js, completionHandler: nil) }
+  func pageJS(_ js: String) { if Main.noPage && !pageReady { Main.noteLost(js); return }; web?.evaluateJavaScript(js, completionHandler: nil) }
   var serverHost: String { URL(string: serverURL())?.host ?? "" }
 
   /* ---------- navigation: our server and its sign-in stay here; other sites open in Safari ---------- */

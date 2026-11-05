@@ -33,7 +33,7 @@ extension Main {
   // the step 9 trial (test site, Me › Test site): the app on its own — the website isn't loaded at all (only to sign in)
   // (step 9 part 2: on for everyone — the test site's Me › Test site switch can still turn the website back on; the
   //  build machine's self-test still runs with it, as it drives the page)
-  static var noPage: Bool { SELFTEST.isEmpty && ((defaults.object(forKey: "e11_nopage") as? Bool) ?? true) }
+  static var noPage: Bool { (SELFTEST.isEmpty || SELFTEST == "walk") && ((defaults.object(forKey: "e11_nopage") as? Bool) ?? true) }
   func setNoPage(_ on: Bool) {
     defaults.set(on, forKey: "e11_nopage")
     if on { pageReady = false; web.loadHTMLString("<html><body style='background:#0c0d0f'></body></html>", baseURL: nil) }

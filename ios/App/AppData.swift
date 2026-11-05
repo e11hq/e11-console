@@ -374,10 +374,11 @@ enum SlowWatch {
     let slow = calls.filter { $0.value.max >= 0.05 }.sorted { $0.value.max > $1.value.max }.prefix(12)
       .map { "\($0.key) ×\($0.value.n) max \(Int($0.value.max * 1000)) avg \(Int(($0.value.run / Double($0.value.n)) * 1000))+wait \(Int(($0.value.wait / Double($0.value.n)) * 1000))" }
     let fz = freezes
+    let lost = Main.lost; Main.lost = []
     calls = [:]; freezes = []
     lock.unlock()
-    guard !slow.isEmpty || !fz.isEmpty, let url = URL(string: serverURL() + "/api/client-error") else { return }
-    let body: [String: Any] = ["where": "slow", "message": "screens: " + slow.joined(separator: " | "), "stack": "freezes: " + fz.joined(separator: " | "),
+    guard !slow.isEmpty || !fz.isEmpty || !lost.isEmpty, let url = URL(string: serverURL() + "/api/client-error") else { return }
+    let body: [String: Any] = ["where": "slow", "message": "screens: " + slow.joined(separator: " | "), "stack": "freezes: " + fz.joined(separator: " | ") + (lost.isEmpty ? "" : " || taps for the website (none there): " + lost.joined(separator: " | ")),
                                "version": "ios \(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "") nopage=\(Main.noPage)", "standalone": true]
     AppData.shared.withCookie { cookie in
       var r = URLRequest(url: url); r.httpMethod = "POST"; r.setValue("application/json", forHTTPHeaderField: "Content-Type")
