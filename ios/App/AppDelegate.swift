@@ -1443,6 +1443,15 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     return key == "today" && (tabKeys.contains("fin-reimb") || tabKeys.contains("team"))
   }
   // (a tab as if tapped — your photo on a tab's page: the Me tab)
+  // View as… switched: the screens on show belong to the person before — all put away (the page starts again and sends
+  // the new person's tabs and first page)
+  func putAwayForSwitch() {
+    for p in taskPages { closeTaskPage(p, animated: false) }
+    if assetsCtl.isOpen { assetsCtl.close(animated: false) }
+    meCtl.hide()
+    [myTasksIfMade, inboxIfMade, clientsListIfMade, clientPageIfMade].forEach { $0?.isHidden = true }
+    homeIfMade?.isHidden = true
+  }
   func selectTab(_ key: String) {
     if let i = tabKeys.firstIndex(of: key), let item = self.tabBar.items?.first(where: { $0.tag == i }) { self.tabBar.selectedItem = item; self.tabBar(self.tabBar, didSelect: item) }
   }

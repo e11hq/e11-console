@@ -1389,6 +1389,10 @@ final class MeCtl {
     main.serverTask.request("/api/view-as", body: b) { [weak self] j in
       guard let self = self else { return }
       guard j != nil else { self.main.pageJS("typeof ViewAs !== 'undefined' && " + (id == nil ? "ViewAs.back()" : "ViewAs.pick()")); return }
+      // (what's on screen now is the other person's: put away at once — task pages, Client Assets, Me's screens, the other
+      //  lists — so the new person's first tab shows, never the old one's page under their tab: Back to me left an
+      //  Office Admin's page showing under Home's tab, Haris 2026-11-05)
+      self.main.putAwayForSwitch()
       // (what the page hasn't sent yet first, then everything starts again as the chosen person)
       self.main.pageJS("(typeof Sync !== 'undefined' ? Sync.push().catch(() => {}) : Promise.resolve()).then(() => location.reload())")
     }
