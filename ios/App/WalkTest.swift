@@ -20,6 +20,7 @@ extension Main {
   }
 
   // ---- what's showing now ----
+  func walkKindPublic(_ h: HomeView) -> String { walkKind(h) }
   private func walkKind(_ h: HomeView) -> String {
     if h.isInbox { return "inbox" }
     if h.isClient { return "client" }
@@ -62,7 +63,7 @@ extension Main {
     // (signed in as the build machine's test person — the dev sign-in's cookie — and started the app's own way)
     guard let host = URL(string: serverURL())?.host, let email = procEnv["E11_SELFTEST_EMAIL"],
           let c = HTTPCookie(properties: [.domain: host, .path: "/", .name: "e11_dev_email", .value: email]) else { return }
-    web.configuration.websiteDataStore.httpCookieStore.setCookie(c) { self.bootCheck(); if SELFTEST == "walk" { self.walkWhenReady(0) } }   // (crawl: Apple's UI testing taps it — ios/UITests)
+    web.configuration.websiteDataStore.httpCookieStore.setCookie(c) { self.bootCheck(); if SELFTEST == "walk" { self.walkWhenReady(0) } else { self.crawlAid() } }   // (crawl: Apple's UI testing taps it — ios/UITests)
   }
   private func walkWhenReady(_ n: Int) {
     if !(quickBooted && AppData.shared.ready && splash == nil && shownScreen != nil) && n < 240 {
@@ -210,5 +211,27 @@ extension Main {
       ("homeAgain", { self.tab("today") }),
     ]
     return s
+  }
+
+  // ---- for the crawl (ios/UITests): only the screen on top is seen by UI testing (the ones under it hidden from it, as
+  //      from VoiceOver), and a label saying where the app is (screen, task pages, sheet) for it to read ----
+  func crawlAid() {
+    let tag = UILabel(frame: CGRect(x: 0, y: 0, width: 2, height: 2))
+    tag.alpha = 0.02; tag.isAccessibilityElement = true; tag.accessibilityIdentifier = "e11state"; tag.isUserInteractionEnabled = false
+    Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
+      guard let self = self, let w = self.view.window else { return }
+      if tag.superview !== w { w.addSubview(tag) } else { w.bringSubviewToFront(tag) }
+      // (light: read four times a second — not the whole screen's words, as the walk's state does)
+      var vcs: [String] = []; var vc: UIViewController = self
+      while let p = vc.presentedViewController { vcs.append(String(describing: type(of: p))); vc = p }
+      let scr = self.shownScreen.map { self.walkKindPublic($0) } ?? "none"
+      tag.accessibilityLabel = "\(scr)|pages=\(self.taskPages.count)|ttab=\(self.taskPages.last?.tab ?? "")|tab=\(self.selectedTabKey)|sheet=\(vcs.joined(separator: ">"))|me=\(self.meCtl.isOpen ? self.meCtl.kind : "")|assets=\(self.assetsCtl.isOpen ? (self.assetsCtl.top?.assets ?? "") : "")|search=\(self.shownScreen?.searching ?? false)"
+      let presented = self.presentedViewController != nil
+      let top: UIView? = self.taskPages.last ?? self.shownScreen
+      for v in self.view.subviews {
+        let keep = !presented && (v === top || v === self.tabBar || v === self.corner || v === self.composeIfMade || v === self.cbarIfMade || v is CornerButton)
+        if v.accessibilityElementsHidden == keep { v.accessibilityElementsHidden = !keep }
+      }
+    }
   }
 }
