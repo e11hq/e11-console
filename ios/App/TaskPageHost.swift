@@ -1148,3 +1148,58 @@ extension Main {
     return true
   }
 }
+// Part B step 7: a notification tapped (a banner, an Inbox row, a task link) — where it goes and what's marked read, from
+// the shared brain (web/appme-tasks.js notifOpen / taskLinkOpen), opened with the app's own screens. The few the page still
+// does itself (a content plan, a claim, the morning round-up, a scheduled comment that wasn't sent, the Trash): the page's
+// way, as before
+extension Main {
+  func openNotifNative(_ nid: String?, hint: [String: Any], tries: Int = 0, peeked: Bool = false) -> Bool {
+    guard AppData.shared.tabsOn, AppData.shared.ready, AppData.shared.isStarted else { return false }
+    let r: [String: Any]?
+    if nid == nil || nid?.isEmpty == true, let t = hint["taskId"] as? String, !t.isEmpty { r = AppData.shared.meModel("tasks", "taskLinkOpen", [t, peeked]) }
+    else { r = AppData.shared.meModel("tasks", "notifOpen", [nid ?? NSNull(), hint]) }
+    guard let res = r, let go = res["go"] as? [String: Any] else { return res != nil }
+    let to = go["to"] as? String ?? ""
+    if ["plan", "claim", "daily", "schedCancel", "trash"].contains(to) { return false }
+    let read = (res["read"] as? [String]) ?? []
+    if !read.isEmpty { serverTask.request("/api/home/act", body: ["act": "readList", "ids": read, "op": UUID().uuidString]) { _ in } }
+    if let t = go["toast"] as? String, to.isEmpty {
+      if (go["home"] as? Bool) == true, let first = tabKeys.first { selectTab(first) }
+      if (go["peek"] as? Bool) == true, let id = go["id"] as? String, !peeked {
+        // (Production / a freelancer: the server may show them this task — asked, then tried again)
+        serverTask.request("/api/peek", body: ["taskId": id]) { [weak self] _ in
+          DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+            guard let self = self else { return }
+            if !self.openNotifNative(nid, hint: hint, peeked: true) { self.shownScreen?.toast(["t": t]) }
+          }
+        }
+        return true
+      }
+      shownScreen?.toast(["t": t]); return true
+    }
+    switch to {
+    case "task":
+      guard let id = go["id"] as? String else { return false }
+      openTaskPage(id, tab: go["tab"] as? String ?? "details", focus: go["focus"] as? String ?? "")
+    case "review":
+      if let rid = go["id"] as? String { meCtl.command(["open": ["kind": "review", "id": rid]]) }
+      selectTab("reviews")
+    case "assets":
+      guard let c = go["client"] as? String else { return false }
+      assetsCtl.openFromClients(client: c, folder: go["folder"] as? String)
+    case "birthday": break
+    default: return false
+    }
+    // (tapped before the update itself reached the app: marked read once it's there)
+    if (res["wait"] as? Bool) == true, let n = nid { waitReadNotif(n, hint, 0) }
+    return true
+  }
+  private func waitReadNotif(_ n: String, _ hint: [String: Any], _ tries: Int) {
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+      guard let self = self, let again = AppData.shared.meModel("tasks", "notifOpen", [n, hint]) else { return }
+      if (again["wait"] as? Bool) == true { if tries < 8 { self.waitReadNotif(n, hint, tries + 1) }; return }
+      let ids = (again["read"] as? [String]) ?? []
+      if !ids.isEmpty { self.serverTask.request("/api/home/act", body: ["act": "readList", "ids": ids, "op": UUID().uuidString]) { _ in } }
+    }
+  }
+}

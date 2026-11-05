@@ -52,11 +52,14 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
     const t = db.tasks.find((x) => x.id === String(body.id || ''));
     const a = String(body.act || '');
     // the Inbox's: one read / unread, or all read (only this person's own)
-    if (a === 'read' || a === 'unread' || a === 'readAll' || a === 'unreadList') {
-      const mine = db.notifications.filter((n) => n.to === u.id && !/^claim/.test(n.kind || ''));   // (claims: on the computer)
+    if (a === 'read' || a === 'unread' || a === 'readAll' || a === 'unreadList' || a === 'readList') {
+      // (readList: what opening an update marks read — E11AppMe.notifOpen's `read`, claims included as the website's
+      //  openNotif marks them)
+      const mine = db.notifications.filter((n) => n.to === u.id && (a === 'readList' || !/^claim/.test(n.kind || '')));   // (claims: on the computer)
       const changes = [];
       const set = (n, v) => { if (!!n.read !== v) { const base = JSON.parse(JSON.stringify(n)); n.read = v; changes.push({ kind: 'notifications', id: n.id, base, data: n }); } };
       if (a === 'readAll') mine.forEach((n) => set(n, true));
+      else if (a === 'readList') { const ids = new Set((Array.isArray(body.ids) ? body.ids : String(body.id || '').split(',')).map(String).filter(Boolean).slice(0, 500)); mine.filter((n) => ids.has(n.id)).forEach((n) => set(n, true)); }
       // (the Inbox's Mark all unread: only the ones in the list on screen — Haris, 2026-11-01)
       else if (a === 'unreadList') { const ids = new Set(String(body.id || '').split(',').filter(Boolean).slice(0, 500)); mine.filter((n) => ids.has(n.id)).forEach((n) => set(n, false)); }
       else { const n = mine.find((x) => x.id === String(body.id || '')); if (!n) return fail(404, 'This update is no longer here'); set(n, a === 'read'); }

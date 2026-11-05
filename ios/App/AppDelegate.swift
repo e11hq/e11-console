@@ -1736,6 +1736,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       case "unreadList":
         let ids = (ev["ids"] as? [String]) ?? []
         if s.on, s.me == self.inboxPageMe, !ids.isEmpty { s.act("unreadList", ids.joined(separator: ",")) }
+      case "open" where (ev["id"] as? String).map({ self.openNotifNative($0, hint: [:]) }) == true:
+        break   // (Part B step 7: the app's own — the brain says where, the app's screens open it)
       default:
         // (not hidden here: the page hides it the moment what's tapped opens a page — a round-up or a sheet opens over
         //  the Inbox, which stays; hiding it first flashed the page behind — Haris, 2026-11-01)
@@ -2098,6 +2100,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   func openPush(_ userInfo: [AnyHashable: Any]) {
     let d = userInfo["e11"] as? [String: Any] ?? [:]
+    // (Part B step 7: the app's own — where it goes and what's marked read from the copy; a view (the widget): its tab)
+    if let v = d["view"] as? String, AppData.shared.ready { if tabKeys.contains(v) { selectTab(v); return } }
+    else if d["view"] == nil, openNotifNative(d["nid"] as? String, hint: d) { return }
     if pageReady { pageJS(waitForApp("window.__e11PushTap && window.__e11PushTap(\(jsonString(d)))")) } else { pendingPush = d }
   }
   func flushPending() {

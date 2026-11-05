@@ -377,5 +377,146 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
     }
     return { filters: F };
   };
+
+  // ---------- Opening an update: a notification tapped, an Inbox row (Part B step 7) ----------
+  // app.js openNotif(id) and phone.js openFrom(taskId, nid, hint) / TaskLink.open(id), worked out without the page.
+  // notifOpen(nid, hint) → { read: [ids], go, wait? }
+  //   read: this person's unread notifications that openNotif marks read (the app sends them to /api/home/act readList)
+  //   go: null (nothing happens) or one of
+  //     { to: 'task', id, tab: 'details' | 'comments', focus: commentId | '', thread?: the comment's thread, desc?: true }
+  //        (desc: an @mention in the description — the website opens it; the page's native task page shows Details)
+  //     { to: 'review', id: reviewId | null, tab: 'active' | 'reviewed' | null }   (the CD; null tab: as it was)
+  //     { to: 'plan', id } · { to: 'assets', client, folder | null } · { to: 'daily' } · { to: 'birthday' }
+  //     { to: 'schedCancel', id: schedId }
+  //     { to: 'claim', page: 'fin-reimb' | 'claims', claimId | null, month? }   (Claims.openNotif; on the phone the page
+  //        itself only says "Claims are on the computer")
+  //     { to: 'trash', q, toast }   (a manager: the Trash, searched for the task)
+  //     { toast, home?: true }      (home: an Office Admin — Home, unless a Finance page is showing)
+  //   wait: the notification isn't in the copy yet — go is where openFrom goes meanwhile; ask again when it arrives
+  // hint: the push's own { taskId, kind, commentId, clientId, folderId, planId }
+  const notifKeyOf = (n) => (n.kind === 'sched-cancel' ? 'sched:' + n.schedId : n.kind === 'daily' ? 'daily:' + n.id : null) || n.taskId || (n.kind === 'birthday' ? 'bday:' + n.from + ':' + String(n.at).slice(0, 10) : n.kind === 'asset' ? 'asset:' + n.clientId : n.planId ? 'plan:' + n.planId : n.id);
+  M.notifKey = notifKeyOf;
+  function opener(W, data) {
+    const u = W.me();
+    const isOffice = (x = u) => !!x && x.role === 'office_admin' && x.admin !== true;
+    const isFinUser = (x = u) => !!x && (x.role === 'finance_admin' || x.role === 'finance_viewer');
+    const finLevel = (x = u) => (!x ? null : x.role === 'finance_admin' ? 'admin' : x.role === 'finance_viewer' ? 'viewer' : x.fin === 'admin' || x.fin === 'viewer' ? x.fin : null);
+    const isManager = (x = u) => !!x && (W.isAdm(x) || x.role === 'am');
+    const tasks = Array.isArray(data.tasks) ? data.tasks : [];
+    const task = (id) => tasks.find((t) => t.id === id);
+    const notifs = Array.isArray(data.notifications) ? data.notifications : [];
+    const myNotifs = () => notifs.filter((n) => n.to === W.meId);
+    const plans = Array.isArray(data.plans) ? data.plans : [];
+    const planById = (id) => plans.find((p) => p.id === id) || null;
+    const canSeePlans = (x = u) => !!x && x.active !== false && !isFinUser(x) && !isOffice(x) && (W.isAdm(x) || x.role === 'am' || x.role === 'social' || W.isCD(x.id));
+    const clientById = (id) => W.clients.find((c) => c.id === id) || null;
+    // (app.js partOfTask / searchClientOk / amSidebarOk / caVisible)
+    const partOfTask = (t, id) => !!t && ((t.assignees || []).includes(id) || t.createdBy === id || t.guardian === id || (t.comments || []).some((c) => mentionsIn(c.html).has(id)) || mentionsIn(t.notesHtml).has(id));
+    const ownSearchOnly = (x = u) => !!x && ['production', 'freelancer'].includes(x.role) && !W.isAdm(x) && !W.isCD(x.id);
+    const searchClientOk = (p) => !ownSearchOnly(u) || tasks.some((t) => t.projectId === p.id && partOfTask(t, u.id)) || (u.role === 'freelancer' && (u.projectIds || []).includes(p.id));
+    const amSidebarOk = (p) => searchClientOk(p) && (!u || u.role !== 'am' || W.isAdm(u) || W.isCD(u.id) || !W.projects.some((x) => (x.ams || []).some((a) => a.id === u.id)) || (p.ams || []).some((a) => a.id === u.id && !a.onLeave));
+    const caVisible = (c) => { const linked = W.projects.filter((p) => p.clientId === c.id); return !linked.length || linked.some((p) => amSidebarOk(p)); };
+    // openClient(id, folder)
+    const assets = (cid, fid) => {
+      const c = clientById(cid);
+      if (!c) return { toast: 'That client has been removed' };
+      if (!caVisible(c)) return { toast: 'Not shared with you' };
+      return { to: 'assets', client: c.id, folder: (c.folders || []).some((x) => x.id === fid) ? fid : null };
+    };
+    // Claims.openNotif(n) (as off the phone)
+    const claimMonth = () => { const d = W.today; if (Number(d.slice(8, 10)) < 28) return d.slice(0, 7); const [y, m] = d.slice(0, 7).split('-').map(Number); const n = new Date(Date.UTC(y, m, 1)); return n.toISOString().slice(0, 7); };
+    const claim = (n) => (n.kind === 'claim' ? (finLevel() ? { to: 'claim', page: 'fin-reimb', claimId: n.claimId || null, month: n.month || claimMonth() } : null) : { to: 'claim', page: 'claims', claimId: n.claimId || null });
+    // openTask(id): an Office Admin has no task pages
+    const openTask = (id, tab, extra) => (isOffice() ? { toast: 'Not in the Office Admin view', home: true } : Object.assign({ to: 'task', id, tab: tab || 'details', focus: '' }, extra || {}));
+    const trashTitle = (it) => {
+      const d = it.data || {};
+      if (it.type === 'task') return (d.tasks && (d.tasks.find((t) => !t.parentId || !d.tasks.some((x) => x.id === t.parentId)) || d.tasks[0]) || {}).title || 'Untitled task';
+      return d.project ? d.project.name : 'Client';
+    };
+    return { u, isOffice, finLevel, isManager, task, notifs, myNotifs, planById, canSeePlans, assets, claim, openTask, trashTitle, ownSearchOnly };
+  }
+  M.notifOpen = function (R, data, meId, nowMs, nid, hint) {
+    const W = world(R, data, meId, nowMs);
+    if (!W.me()) return null;
+    data = data || {};
+    const O = opener(W, data);
+    hint = hint || {};
+    const n = nid ? O.notifs.find((x) => x.id === nid) : null;
+    // ---- not in the copy (yet): phone.js openFrom ----
+    if (!n) {
+      const taskId = hint.taskId || null;
+      if (taskId && !nid) return { read: [], go: M.taskLinkOpen(R, data, meId, nowMs, taskId).go };
+      const k = hint.kind || '';
+      let go = null;
+      if ((k === 'review' || k === 'review-wd') && W.isCD()) go = { to: 'review', id: null, tab: null };
+      else if (k === 'asset' && hint.clientId && W.clients.some((c) => c.id === hint.clientId)) go = O.assets(hint.clientId, hint.folderId);
+      else if (/^claim/.test(k)) go = O.claim({ kind: k });
+      else if (/^plan/.test(k) && hint.planId && O.planById(hint.planId)) go = { to: 'plan', id: hint.planId };
+      else if (taskId && O.task(taskId)) go = O.openTask(taskId, ['comment', 'mention', 'review-amend'].includes(hint.kind) && hint.commentId ? 'comments' : 'details');
+      return Object.assign({ read: [], go }, nid ? { wait: true } : {});
+    }
+    // ---- app.js openNotif ----
+    const marked = [];
+    const mark = (x) => { if (!x.read && !marked.includes(x.id)) marked.push(x.id); };
+    const out = (go) => ({ read: marked, go });
+    if (n.kind === 'birthday') { mark(n); return out({ to: 'birthday' }); }
+    if (n.kind === 'daily') { mark(n); return out({ to: 'daily' }); }
+    if (n.kind === 'sched-cancel') { mark(n); return out({ to: 'schedCancel', id: n.schedId || null }); }
+    if (/^claim/.test(n.kind)) { O.myNotifs().forEach((x) => { if (x.claimId && x.claimId === n.claimId) mark(x); }); return out(O.claim(n)); }
+    if (n.planId) {
+      O.myNotifs().forEach((x) => { if (notifKeyOf(x) === notifKeyOf(n)) mark(x); });
+      if (!O.canSeePlans() || !O.planById(n.planId)) return out({ toast: 'Content skeleton not found' });
+      return out({ to: 'plan', id: n.planId });
+    }
+    if (n.kind === 'asset') {
+      O.myNotifs().forEach((x) => { if (notifKeyOf(x) === notifKeyOf(n)) mark(x); });
+      if (!W.clients.some((c) => c.id === n.clientId)) return out({ toast: 'Client Assets not found' });
+      return out(O.assets(n.clientId, n.folderId));
+    }
+    O.myNotifs().forEach((x) => { if (x.taskId === n.taskId) mark(x); });
+    const t = O.task(n.taskId);
+    if (!t) {
+      const trash = Array.isArray(data.trash) ? data.trash : [];
+      const inTrash = trash.find((x) => (x.type === 'task' || x.type === 'project') && (x.key === 'tasks:' + n.taskId || ((x.data || {}).tasks || []).some((y) => y.id === n.taskId)));
+      if (inTrash && O.isManager()) return out({ to: 'trash', q: O.trashTitle(inTrash), toast: 'That task is in the Trash' });
+      return out({ toast: O.isManager() ? 'That task has been deleted' : 'That task is in the Trash — ask an Account Manager if it should come back' });
+    }
+    if ((n.kind === 'review' || n.kind === 'review-wd') && W.isCD()) {
+      // the submission this update is about, on Review Requests
+      const rs = (t.reviews || []).filter((r) => r.by === n.from && r.state !== 'withdrawn');
+      const r = rs.filter((x) => x.at <= n.at).pop() || rs[rs.length - 1] || null;
+      let tab = 'active';
+      if (r && r.state !== 'pending') {
+        const recent = (x) => (x.state === 'approved' || x.state === 'amend') && x.decidedAt && (W.now - new Date(x.decidedAt)) < 15 * 864e5;
+        if ((Array.isArray(data.tasks) ? data.tasks : []).some((tk) => (tk.reviews || []).some((x) => x.id === r.id && recent(x)))) tab = 'reviewed';   // (app.js reviewedRecent)
+      }
+      return out({ to: 'review', id: r ? r.id : null, tab });
+    }
+    const comments = t.comments || [];
+    let c = null;
+    if (n.kind === 'review-amend' && n.commentId) c = comments.find((x) => x.id === n.commentId) || null;
+    if (n.kind === 'comment' || n.kind === 'mention') {
+      // older notifications have no comment id: the author's comment closest in time
+      c = (n.commentId && comments.find((x) => x.id === n.commentId))
+        || comments.filter((x) => x.authorId === n.from).sort((a, b) => Math.abs(new Date(a.at) - new Date(n.at)) - Math.abs(new Date(b.at) - new Date(n.at)))[0] || null;
+    }
+    if (c) return out(O.openTask(t.id, 'comments', Object.assign({ focus: c.id }, c.parentId ? { thread: c.parentId } : {})));
+    if (n.kind === 'mention') return out(O.openTask(t.id, 'details', { desc: true }));
+    return out(O.openTask(t.id, 'details'));
+  };
+  // A shared task link in the iPhone app (TaskLink.open → show): { go } —
+  //   { to: 'task', id, tab: 'details', focus: '' } · { toast, home: true } (an Office Admin)
+  //   { peek: true, id, toast } — Production / Freelancers: not one of theirs; ask the server (POST /api/peek { taskId }),
+  //     take the new copy, then ask again with peeked = true (toast if it still isn't there)
+  //   { toast: 'That task is not available' }
+  M.taskLinkOpen = function (R, data, meId, nowMs, taskId, peeked) {
+    const W = world(R, data, meId, nowMs);
+    if (!W.me()) return null;
+    const O = opener(W, data || {});
+    if (O.isOffice()) return { go: { toast: 'Not in the Office Admin view', home: true } };
+    if (O.task(taskId)) return { go: O.openTask(taskId, 'details') };
+    if (!peeked && O.ownSearchOnly()) return { go: { peek: true, id: taskId, toast: 'That task is not available' } };
+    return { go: { toast: 'That task is not available' } };
+  };
 })(E11AppMe);
 if (typeof module !== 'undefined' && module.exports) module.exports = E11AppMe;

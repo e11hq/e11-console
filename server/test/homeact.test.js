@@ -224,6 +224,15 @@ test('Inbox: each notification its own row (who did what, the task, one line), r
   assert.equal(app.store.get('notifications', 'nx1').read, false);
   r = await act('prod@e11-digital.com', { act: 'read', id: 'nx3', from: 'inbox' });
   assert.equal(r.ok, false, 'not someone else\'s'); assert.equal(app.store.get('notifications', 'nx3').read, false);
+  // readList (opening an update: E11AppMe.notifOpen's `read`): only the ids given, only their own, claims too
+  put({ id: 'nx4', to: 'u-prod', from: 'u-am', taskId: 't1', kind: 'comment', text: 'commented on', at: '2026-10-29T07:10:00Z', read: false });
+  put({ id: 'nx5', to: 'u-prod', from: 'u-am', taskId: null, claimId: 'c1', kind: 'claim-ok', text: 'approved your claim', at: '2026-10-29T07:20:00Z', read: false });
+  put({ id: 'nx6', to: 'u-prod', from: 'u-am', taskId: 't4', kind: 'status', text: 'changed', at: '2026-10-29T07:30:00Z', read: false });
+  r = await act('prod@e11-digital.com', { act: 'readList', ids: ['nx1', 'nx4', 'nx5', 'nx3', 'nope'], from: 'inbox' });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.deepEqual(['nx1', 'nx4', 'nx5', 'nx6', 'nx3'].map((id) => app.store.get('notifications', id).read), [true, true, true, false, false]);
+  r = await act('prod@e11-digital.com', { act: 'readList', id: 'nx6', from: 'inbox' });
+  assert.equal(app.store.get('notifications', 'nx6').read, true, 'a comma list in id works too');
   r = await act('prod@e11-digital.com', { act: 'readAll', from: 'inbox' });
   assert.equal(r.ok, true);
   assert.ok(app.store.list('notifications').filter((n) => n.to === 'u-prod').every((n) => n.read));
