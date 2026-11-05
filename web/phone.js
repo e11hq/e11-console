@@ -3050,13 +3050,13 @@ const NativeMe = (() => {
     const PILL = { submitted: ['Submitted', 'sub'], approved: ['HR approved', 'ok'], paid: ['Paid', 'paid'] };
     const row = (c) => { const nm = Claims.ownerName(c); const rc = Claims.receiptsOf(c).length; return { id: c.id, name: nm, ini: initials(nm), rgb: rgb(avColor(c.userId || c.personId || c.id)), photo: c.userId ? photoOf(userById(c.userId)) : null,
       sub: `${c.byHand ? 'Added by hand' : `${plural(Claims.itemsOf(c), 'item')} · ${plural(rc, 'receipt')}`} · ${fmtDay(ymd(new Date(c.submittedAt || c.updatedAt || nowISO())))}`,
-      amt: 'AED ' + aedOf(c.total || Claims.totalOf(c)), st: c.state, pill: (PILL[c.state] || ['', ''])[0] + (c.state === 'paid' && c.paidOn ? ' · ' + fmtDay(c.paidOn) : ''), pk: (PILL[c.state] || ['', ''])[1] }; };
+      amt: '\u20C3\u00A0' + aedOf(c.total || Claims.totalOf(c)), st: c.state, pill: (PILL[c.state] || ['', ''])[0] + (c.state === 'paid' && c.paidOn ? ' · ' + fmtDay(c.paidOn) : ''), pk: (PILL[c.state] || ['', ''])[1] }; };
     const list = Claims.all().filter((c) => c.month === m && ['submitted', 'approved', 'paid'].includes(c.state)).sort((a, b) => String(b.submittedAt || '').localeCompare(String(a.submittedAt || '')));
     const total = list.reduce((a, c) => a + (c.total || Claims.totalOf(c)), 0);
     const people = db.users.filter((u) => u.active !== false && !isFinUser(u)).sort((a, b) => fullName(a).localeCompare(fullName(b))).map((u) => ({ id: 'u:' + u.id, name: fullName(u) }))
       .concat((db.finance || []).filter((x) => x.type === 'person').map((p) => ({ id: 'p:' + p.id, name: p.name, other: true })));
     const now = todayStr().slice(0, 7), [y, mo] = now.split('-').map(Number), prev = `${new Date(y, mo - 2, 1).getFullYear()}-${String(new Date(y, mo - 2, 1).getMonth() + 1).padStart(2, '0')}`;
-    return { month: m, label: monthLong(m), sub: `${plural(list.length, 'claim')} · AED ${aedOf(total)}`, admin: finAdm(),
+    return { month: m, label: monthLong(m), sub: `${plural(list.length, 'claim')} · \u20C3\u00A0${aedOf(total)}`, admin: finAdm(),
       need: list.filter((c) => c.state === 'submitted').map(row), all: list.map(row), people, months: [{ m: prev, t: monthLong(prev) }, { m: now, t: monthLong(now) }] };
   }
   // Expenses: every monthly subscription that's on, and this month's office expenses
@@ -3065,10 +3065,10 @@ const NativeMe = (() => {
     const subs = (db.finance || []).filter((x) => x.type === 'sub' && !x.endedAt).sort((a, b) => (Number(a.day) || 0) - (Number(b.day) || 0));
     const office = Fin.transactions().filter((x) => x.kind === 'expense' && String(x.date).startsWith(now)).sort((a, b) => String(b.date).localeCompare(String(a.date)));
     return { admin: finAdm(), month: monthLong(now),
-      subs: subs.map((x) => ({ id: x.id, name: x.name, amt: 'AED ' + aedOf(x.amount), sub: `Billed on the ${ordN(Number(x.day) || 1)} · monthly`, inv: !!Object.keys(x.invoices || {}).length })),
-      subsTotal: 'AED ' + aedOf(subs.reduce((a, x) => a + (Number(x.amount) || 0), 0)),
-      office: office.map((x) => ({ id: x.id, name: x.name, amt: 'AED ' + aedOf(x.amount), sub: fmtDay(x.date) + (x.invoice ? ' · invoice' : ''), inv: !!x.invoice })),
-      officeTotal: 'AED ' + aedOf(office.reduce((a, x) => a + (Number(x.amount) || 0), 0)) };
+      subs: subs.map((x) => ({ id: x.id, name: x.name, amt: '\u20C3\u00A0' + aedOf(x.amount), sub: `Billed on the ${ordN(Number(x.day) || 1)} · monthly`, inv: !!Object.keys(x.invoices || {}).length })),
+      subsTotal: '\u20C3\u00A0' + aedOf(subs.reduce((a, x) => a + (Number(x.amount) || 0), 0)),
+      office: office.map((x) => ({ id: x.id, name: x.name, amt: '\u20C3\u00A0' + aedOf(x.amount), sub: fmtDay(x.date) + (x.invoice ? ' · invoice' : ''), inv: !!x.invoice })),
+      officeTotal: '\u20C3\u00A0' + aedOf(office.reduce((a, x) => a + (Number(x.amount) || 0), 0)) };
   }
   // (a file's small picture — photos, videos' frames, PDFs' pages — Haris 2026-11-04: a video showed only "MP4")
   const ovPic = (a) => { const e = fileExt(a.name); return isImage(a) && e !== 'svg' ? imgUrl(a, 160) : a.thumb ? '/__file/' + a.thumb.split('/').map(encodeURIComponent).join('/') + '?view=1' : a.path && /^(pdf|mp4|mov|m4v|webm|avi|mkv|doc|docx|ppt|pptx|xls|xlsx)$/.test(e) ? '/api/fthumb?path=' + encodeURIComponent(a.path) + '&id=' + encodeURIComponent(a.id || '') : null; };
@@ -3121,10 +3121,10 @@ const NativeMe = (() => {
     const exp = tx.filter((x) => x.kind === 'expense' && String(x.date).startsWith(now)).sort((a, b) => String(b.date).localeCompare(String(a.date)));
     const subs = (db.finance || []).filter((x) => x.type === 'sub' && !x.endedAt).length;
     const need = Claims.all().filter((c) => c.state === 'submitted').sort((a, b) => String(b.submittedAt || '').localeCompare(String(a.submittedAt || '')));
-    out.cards = [{ n: `${sent}`, of: `/ ${team}`, t: 'claims submitted this month' }, { n: money(exp.reduce((a, x) => a + (Number(x.amount) || 0), 0)), t: 'AED office expenses so far' }, { n: `${subs}`, t: 'monthly subscriptions' }];
-    out.claims = need.slice(0, 3).map((c) => ({ id: c.id, name: Claims.ownerName(c), ini: initials(Claims.ownerName(c)), rgb: rgb(avColor(c.userId || c.personId || c.id)), sub: `${c.byHand ? 'Added by hand' : plural(Claims.itemsOf(c), 'item')} · ${fmtDay(ymd(new Date(c.submittedAt || c.updatedAt)))}`, amt: 'AED ' + money(c.total || Claims.totalOf(c)) }));
+    out.cards = [{ n: `${sent}`, of: `/ ${team}`, t: 'claims submitted this month' }, { n: '\u20C3\u00A0' + money(exp.reduce((a, x) => a + (Number(x.amount) || 0), 0)), t: 'office expenses so far' }, { n: `${subs}`, t: 'monthly subscriptions' }];
+    out.claims = need.slice(0, 3).map((c) => ({ id: c.id, name: Claims.ownerName(c), ini: initials(Claims.ownerName(c)), rgb: rgb(avColor(c.userId || c.personId || c.id)), sub: `${c.byHand ? 'Added by hand' : plural(Claims.itemsOf(c), 'item')} · ${fmtDay(ymd(new Date(c.submittedAt || c.updatedAt)))}`, amt: '\u20C3\u00A0' + money(c.total || Claims.totalOf(c)) }));
     out.needN = need.length;
-    out.expenses = exp.slice(0, 3).map((x) => ({ id: x.id, name: x.name, sub: fmtDay(x.date), amt: 'AED ' + money(x.amount) }));
+    out.expenses = exp.slice(0, 3).map((x) => ({ id: x.id, name: x.name, sub: fmtDay(x.date), amt: '\u20C3\u00A0' + money(x.amount) }));
     return out;
   }
   if (NATIVE_ME && window.__e11CommentsOnly !== true && typeof Host !== 'undefined' && Host.isIOSApp) {

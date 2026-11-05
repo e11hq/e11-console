@@ -104,14 +104,14 @@ const OfficeHome = (() => {
           <div class="oh-card-h"><h2>Finance · ${esc(monthName(m))}</h2>${seg(st.finTab, [['claims', 'Claims'], ['expenses', 'Expenses']], 'finTab')}</div>
           ${st.finTab === 'claims' ? `<div class="oh-fin-top">
               <div class="oh-bar"><span class="sub" style="width:${pct('submitted')}"></span><span class="ok" style="width:${pct('approved')}"></span><span class="paid" style="width:${pct('paid')}"></span></div>
-              <div class="oh-legend"><span><b class="sub">${cnt('submitted')}</b> submitted</span><span><b class="ok">${cnt('approved')}</b> HR approved</span><span><b class="paid">${cnt('paid')}</b> paid</span><span class="oh-amt">AED ${money(claims.reduce((a, c) => a + Claims.totalOf(c), 0))}</span></div></div>
+              <div class="oh-legend"><span><b class="sub">${cnt('submitted')}</b> submitted</span><span><b class="ok">${cnt('approved')}</b> HR approved</span><span><b class="paid">${cnt('paid')}</b> paid</span><span class="oh-amt">\u20C3\u00A0${money(claims.reduce((a, c) => a + Claims.totalOf(c), 0))}</span></div></div>
             <div class="oh-scroll">${claims.length ? claims.map((c) => { const [l, cls] = CLAIM_PILL[c.state]; return `<div class="oh-row static">
-                ${avatarHTML(c.userId, 28)}<button class="oh-t oh-plain" data-oh="claim" data-id="${c.id}"><b>${esc(fullName(userById(c.userId)))}</b><small>${Claims.itemsOf(c)} item${Claims.itemsOf(c) === 1 ? '' : 's'} · AED ${money(Claims.totalOf(c))}</small></button>
+                ${avatarHTML(c.userId, 28)}<button class="oh-t oh-plain" data-oh="claim" data-id="${c.id}"><b>${esc(fullName(userById(c.userId)))}</b><small>${Claims.itemsOf(c)} item${Claims.itemsOf(c) === 1 ? '' : 's'} · \u20C3\u00A0${money(Claims.totalOf(c))}</small></button>
                 <span class="oh-pill ${cls}">${l}</span>
                 ${finAdmin() && c.state !== 'paid' ? `<button class="oh-mini" data-oh="${c.state === 'submitted' ? 'approve' : 'paid'}" data-id="${c.id}">${c.state === 'submitted' ? 'HR approve' : 'Mark paid'}</button>` : ''}</div>`; }).join('') : '<div class="oh-empty center">No claims submitted yet this month</div>'}</div>`
-          : `<div class="oh-fin-top"><b class="oh-big">AED ${money(exp.reduce((a, x) => a + x.amount, 0))}</b><span class="oh-dim">spent this month · ${exp.length} record${exp.length === 1 ? '' : 's'}</span></div>
+          : `<div class="oh-fin-top"><b class="oh-big">\u20C3\u00A0${money(exp.reduce((a, x) => a + x.amount, 0))}</b><span class="oh-dim">spent this month · ${exp.length} record${exp.length === 1 ? '' : 's'}</span></div>
             <div class="oh-scroll">${exp.length ? exp.map((x) => `<div class="oh-row static"><span class="oh-ext soft">${x.kind === 'sub' ? 'SUB' : x.kind === 'reimb' ? 'REIM' : 'EXP'}</span>
-                <span class="oh-t"><b>${esc(x.name)}</b><small>${KIND[x.kind] || ''} · ${esc(fmtDay(x.date))}</small></span><span class="oh-amt">AED ${money(x.amount)}</span></div>`).join('') : '<div class="oh-empty center">No expenses this month yet</div>'}</div>`}
+                <span class="oh-t"><b>${esc(x.name)}</b><small>${KIND[x.kind] || ''} · ${esc(fmtDay(x.date))}</small></span><span class="oh-amt">\u20C3\u00A0${money(x.amount)}</span></div>`).join('') : '<div class="oh-empty center">No expenses this month yet</div>'}</div>`}
           <div class="oh-foot"><button class="btn sm" data-nav="fin-dash">Open Dashboard</button><button class="btn sm" data-nav="fin-reimb">All reimbursements</button></div>
         </section>` : ''}
       </div>

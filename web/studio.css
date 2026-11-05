@@ -23,7 +23,7 @@
   --shadow: 0 20px 60px rgba(20,20,40,.16), 0 2px 8px rgba(20,20,40,.08);
   --menu-shadow: 0 12px 32px rgba(20,20,40,.14);
 }
-:root { --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace; --radius: 7px; }
+:root { --mono: "E11 Dirham", ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace; --radius: 7px; }
 :root:not(.phone) body { background: var(--app); font-size: 13.5px; }
 :root[data-theme="dark"]:not(.phone) ::-webkit-scrollbar-thumb { background: #2a2c33; background-clip: padding-box; }
 :root[data-theme="light"]:not(.phone) ::-webkit-scrollbar-thumb { background: #d4d4da; background-clip: padding-box; }

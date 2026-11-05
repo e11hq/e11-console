@@ -1,3 +1,6 @@
+/* The UAE dirham sign (U+20C3) — the Central Bank's symbol, as tall as the digits — from our one-character font, only for
+   that character, until the devices' own fonts have it (tools/make-dirham-font.py; Haris 2026-11-05) */
+@font-face { font-family: "E11 Dirham"; src: url("fonts/e11-dirham.woff") format("woff"), url("fonts/e11-dirham.ttf") format("truetype"); unicode-range: U+20C3; font-display: block; }
 :root {
   --bg: #1c1c20;
   --sidebar: #141417;
@@ -1035,7 +1038,7 @@ button[disabled], .pn.taken { cursor: not-allowed; }
   --sp-file: #1b1c21; --sp-file-edge: #2c2e35; --sp-file-fold: #24262c; --sp-file-line: #2e3038;
   position: fixed; inset: 0; z-index: 10000; background: var(--sp-bg); color: var(--sp-text);
   display: flex; align-items: center; justify-content: center; overflow: hidden; cursor: pointer;
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Helvetica Neue", Arial, sans-serif;
+  font-family: "E11 Dirham", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Helvetica Neue", Arial, sans-serif;
   transition: opacity .45s ease, transform .45s ease;
 }
 /* iPhone Home Screen app: a fixed screen can stop short of the true bottom edge; reach it like the tab bar does
@@ -1052,7 +1055,7 @@ button[disabled], .pn.taken { cursor: not-allowed; }
 #splash.light .sp-logo { filter: invert(1); }
 /* The app icon assembles: files fly in from all sides and become the stacked cards, the purple tile grows in behind,
    then E11, the two lines and the check (about 2 s). The greeting and checklist follow. */
-.sp-mark { width: 132px; height: auto; display: block; overflow: visible; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif; }
+.sp-mark { width: 132px; height: auto; display: block; overflow: visible; font-family: "E11 Dirham", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif; }
 .sp-mark .spa, .sp-mark .spf { transform-box: view-box; transform-origin: 512px 512px; }
 .sp-mark .spf { transform-origin: 512px 505px; animation: spFile .82s cubic-bezier(.2,.8,.2,1) both; }
 .sp-mark .spf-b { fill: var(--sp-file); stroke: var(--sp-file-edge); stroke-width: 2; }
@@ -1085,7 +1088,7 @@ button[disabled], .pn.taken { cursor: not-allowed; }
 .sp-card { width: 100%; margin-top: 30px; border: 1px solid var(--sp-line); border-radius: 10px; background: var(--sp-card); overflow: hidden; opacity: 0; animation: spUp .5s ease 1.9s forwards; }
 .sp-head { display: flex; align-items: center; height: 38px; padding: 0 16px; border-bottom: 1px solid var(--sp-line); font-size: 12px; color: var(--sp-dim); }
 .sp-head span:first-child { flex: 1; }
-.sp-n, .sp-val { font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace; }
+.sp-n, .sp-val { font-family: "E11 Dirham", ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace; }
 .sp-row { display: flex; align-items: center; gap: 12px; height: 46px; padding: 0 16px; border-top: 1px solid var(--sp-row); font-size: 14px; transition: background .25s, box-shadow .25s; }
 .sp-row:first-child { border-top: 0; }
 .sp-val { font-size: 12px; color: var(--sp-dim); white-space: nowrap; }
@@ -1373,7 +1376,7 @@ select.field:disabled { opacity: .6; }
   --border: #e4e4e8; --border-strong: #d4d4da; --line: #ececf0;
   --text: #1d1d22; --text-2: #5e5e68; --text-3: #8d8d97; --btn: #6c5ce7; --mention-bg: #ebe7ff; --mention-fg: #5a46d6;
 }
-body { font-size: 14px; line-height: 1.45; letter-spacing: -.003em; background: var(--app); font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Helvetica Neue", Arial, sans-serif; }
+body { font-size: 14px; line-height: 1.45; letter-spacing: -.003em; background: var(--app); font-family: "E11 Dirham", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Helvetica Neue", Arial, sans-serif; }
 ::-webkit-scrollbar-thumb { background: #2f2f2f; background-clip: padding-box; }
 ::-webkit-scrollbar-thumb:hover { background: #3c3c3c; background-clip: padding-box; }
 .ic { width: 17px; height: 17px; }

@@ -6,6 +6,7 @@
 // It talks to the page through the same kind of bridge as the Mac app (handler "e11ios"; replies via
 // window.__e11NativeReply), so the web app (web/app.js Host.isIOSApp, web/phone.js) knows it's here.
 import UIKit
+import CoreText
 import Network
 import WebKit
 import UserNotifications
@@ -56,6 +57,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationC
   //  iOS stops the app at launch)
   func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
     UNUserNotificationCenter.current().delegate = self
+    Dirham.setup()
     return true
   }
   func application(_ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession, options: UIScene.ConnectionOptions) -> UISceneConfiguration {
@@ -4093,4 +4095,42 @@ final class DateSheetVC: UIViewController, UISheetPresentationControllerDelegate
     dismiss(animated: true) { a(r) }
   }
   func presentationControllerDidDismiss(_ presentationController: UIPresentationController) { let a = answer; answer = nil; a?(["ok": true, "cancel": true]) }
+}
+
+/* The UAE dirham sign (U+20C3), shown as the Central Bank's symbol wherever the app writes an amount — "⃃ 1,250.00",
+   as tall as the digits (Haris 2026-11-05). iPhone's own font doesn't have it yet, so the app carries a one-character
+   font (web/fonts/e11-dirham.ttf, made by tools/make-dirham-font.py) and every system font it makes falls back to it
+   for that character only (a cascade list). Once iOS has the sign itself, nothing is changed. */
+enum Dirham {
+  static let ch = "\u{20C3}"
+  private static var desc: UIFontDescriptor?
+  private static let ttf = "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"
+  static func setup() {
+    guard desc == nil else { return }
+    // (iOS already has it: nothing to do)
+    var g: CGGlyph = 0, u: UniChar = 0x20C3
+    if CTFontGetGlyphsForCharacters(UIFont.systemFont(ofSize: 17) as CTFont, &u, &g, 1), g != 0 { return }
+    guard let data = Data(base64Encoded: ttf), let prov = CGDataProvider(data: data as CFData), let cg = CGFont(prov) else { return }
+    var err: Unmanaged<CFError>?
+    CTFontManagerRegisterGraphicsFont(cg, &err)
+    guard let name = cg.postScriptName as String?, UIFont(name: name, size: 12) != nil else { return }
+    desc = UIFontDescriptor(name: name, size: 0)
+    for (a, b) in [(#selector(UIFont.systemFont(ofSize:weight:)), #selector(UIFont.e11_systemFont(ofSize:weight:))),
+                   (#selector(UIFont.systemFont(ofSize:)), #selector(UIFont.e11_systemFont(ofSize:))),
+                   (#selector(UIFont.boldSystemFont(ofSize:)), #selector(UIFont.e11_boldSystemFont(ofSize:))),
+                   (#selector(UIFont.monospacedDigitSystemFont(ofSize:weight:)), #selector(UIFont.e11_monospacedDigitSystemFont(ofSize:weight:)))] {
+      if let m1 = class_getClassMethod(UIFont.self, a), let m2 = class_getClassMethod(UIFont.self, b) { method_exchangeImplementations(m1, m2) }
+    }
+  }
+  static func cascade(_ f: UIFont) -> UIFont {
+    guard let d = desc else { return f }
+    return UIFont(descriptor: f.fontDescriptor.addingAttributes([.cascadeList: [d]]), size: f.pointSize)
+  }
+}
+extension UIFont {
+  // (swapped with the system's own at start: these call the originals)
+  @objc class func e11_systemFont(ofSize s: CGFloat, weight w: UIFont.Weight) -> UIFont { Dirham.cascade(e11_systemFont(ofSize: s, weight: w)) }
+  @objc class func e11_systemFont(ofSize s: CGFloat) -> UIFont { Dirham.cascade(e11_systemFont(ofSize: s)) }
+  @objc class func e11_boldSystemFont(ofSize s: CGFloat) -> UIFont { Dirham.cascade(e11_boldSystemFont(ofSize: s)) }
+  @objc class func e11_monospacedDigitSystemFont(ofSize s: CGFloat, weight w: UIFont.Weight) -> UIFont { Dirham.cascade(e11_monospacedDigitSystemFont(ofSize: s, weight: w)) }
 }
