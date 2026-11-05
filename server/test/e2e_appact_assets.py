@@ -84,6 +84,10 @@ def applied(pre, changes):
             if j is not None: lst.pop(j)
         elif j is None: lst.append(ch['data'])
         else: lst[j] = ch['data']
+    # (the server's own rule after any save: a deleted client's Clients-list entries unlinked — server.js unlinkGoneClients)
+    gone = {str(ch['id']) for ch in changes if ch['kind'] == 'clients' and ch.get('del')}
+    for pr in post.get('projects', []):
+        if str(pr.get('clientId') or '') in gone: pr.pop('clientId', None)
     return post
 
 # logo sources: a dark logo on a transparent background, a photo-like JPEG with its own background, an SVG
@@ -270,7 +274,7 @@ async def main():
             await case(OA, {'ev': 'renameFolder', 'client': 'cl-p-hre', 'folder': 'cf-p-hre-brandguidelines', 'name': 'Brand book'}, 'Office Admin: a folder made with the client renamed')
             await case(OA, {'ev': 'renameClient', 'client': 'cl-p-hre', 'name': 'HRE Wheels'}, 'Office Admin: a client renamed')
             await case(OA, {'ev': 'deleteFolder', 'client': 'cl-p-hre', 'folder': 'cf-p-hre-logos'}, 'Office Admin: Logos deleted')
-            await case(OA, {'ev': 'deleteClient', 'client': 'cl-p-bizreh'}, 'Office Admin: a client deleted (its project can\'t be changed — stays linked)')
+            await case(OA, {'ev': 'deleteClient', 'client': 'cl-p-bizreh'}, 'Office Admin: a client deleted (its project unlinked by the server)')
             await close_all()
 
             # ---------- the logo from Logos: the website's canvas and the server, from the same file ----------
@@ -338,7 +342,7 @@ async def main():
         check(r.get('ok') is True and len(r.get('changes', [])) == 1, 'route: Production uploads (the client back; others\' Inbox updates not sent to them)', json.dumps(r)[:400])
         r = act(SAM, {'ev': 'caDeleteClient', 'client': 'cl-p-ford'}); check(r.get('ok') is False and r.get('error') == 'Only Admins delete clients', 'route: a freelancer can\'t delete a client', json.dumps(r)[:300])
         r = act(OA, {'ev': 'caDeleteClient', 'client': 'cl-p-forta'})
-        check(r.get('ok') is True and r.get('gone') is True and not any(c['id'] == 'cl-p-forta' for c in dump()['clients']) and next(p for p in dump()['projects'] if p['id'] == 'p-forta').get('clientId') == 'cl-p-forta', 'route: an Office Admin deletes a client (gone; the project they can\'t change stays as it was)', json.dumps(r)[:300])
+        check(r.get('ok') is True and r.get('gone') is True and not any(c['id'] == 'cl-p-forta' for c in dump()['clients']) and 'clientId' not in next(p for p in dump()['projects'] if p['id'] == 'p-forta'), 'route: an Office Admin deletes a client (gone; its project unlinked by the server)', json.dumps(r)[:300])
         os.makedirs(os.path.join(FILES, 'Clients/CPT/Logos'), exist_ok=True); open(os.path.join(FILES, 'Clients/CPT/Logos/CPT logo.svg'), 'w').write('<svg/>')
         r = act(ADMIN, {'ev': 'caDeleteClient', 'client': 'cl-p-cpt'})
         check(r.get('ok') is True and not os.path.exists(os.path.join(FILES, 'Clients/CPT')) and next(p for p in dump()['projects'] if p['id'] == 'p-cpt').get('clientId') is None, 'route: the owner deletes a client (its NAS folder gone, its project unlinked)', json.dumps(r)[:300])

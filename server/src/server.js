@@ -120,6 +120,8 @@ export function createServer(cfg) {
   // Birthdays: the rest of the staff are told in the morning (Inbox + phone)
   const birthdays = createBirthdays({ store, webPush, notifMessage, deliver: (out) => broadcast(out.rev, out.results, null, null), now: cfg.now || (() => Date.now()) });
   if (cfg.birthdays !== false) birthdays.start();
+  // (links to clients deleted before the server unlinked them itself — once, at start)
+  setTimeout(() => { try { unlinkGoneClients(null); } catch (e) { console.error('unlink clients:', e.message); } }, 1500);
   // Scheduled comments: posted by the server at their time (or cancelled when the task is completed or deleted first)
   const scheduled = createScheduled({ store, access, webPush, notifMessage, deliver: (out) => broadcast(out.rev, out.results, null, null), now: cfg.now || (() => Date.now()) });
   if (cfg.scheduled !== false) scheduled.start();
@@ -367,6 +369,19 @@ export function createServer(cfg) {
   // A client renamed by an Admin: its Client Assets folder takes the new name too (also while the client is inactive,
   // when the app can't see the folder), unless it was named differently already or another folder has the new name
   const keyOf = (n) => String(n || '').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/&/g, 'and').replace(/[^a-z0-9\u0600-\u06ff]+/g, '');
+  // A Client Assets client deleted: the Clients list entries linked to it are unlinked by the server itself — part of a
+  // delete that was allowed, whoever did it (an Office Admin may delete a client but not change those entries: the
+  // link was left pointing at nothing, an inactive entry showed "Hidden" — Haris 2026-11-05). Also once at start, for
+  // links left by deletes before this (none: nothing to do).
+  function unlinkGoneClients(results) {
+    const gone = new Set((results || []).filter((r) => r.kind === 'clients' && r.deleted && !r.refused).map((r) => String(r.id)));
+    if (results && !gone.size) return;
+    const ops = store.list('projects').filter((p) => p.clientId && (results ? gone.has(String(p.clientId)) : !store.get('clients', String(p.clientId))))
+      .map((p) => { const d = { ...p }; delete d.clientId; return { kind: 'projects', id: String(p.id), data: d }; });
+    if (!ops.length) return;
+    const out = store.apply(ops, 'unlink');
+    broadcast(out.rev, out.results, null, null);
+  }
   function renameLinkedAssets(results, before) {
     const ops = [];
     for (const r of results) {
@@ -413,6 +428,7 @@ export function createServer(cfg) {
       const { rev, results } = store.apply(changes, u.id, (ch, current) => access.canWrite(u, ch, current, { restoring }));
       broadcast(rev, results, client, u.id);
       renameLinkedAssets(results, namesBefore);
+      unlinkGoneClients(results);
       // a CD-reviewed task just completed: its final files go into Client Assets › Files
       let filed = null;
       try { filed = finals.afterPush(results, tasksBefore, u.id); } catch (e) { console.error('final files:', e.message); }
