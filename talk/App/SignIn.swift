@@ -54,6 +54,21 @@ final class SignInVC: UIViewController, WKNavigationDelegate {
       }
     }
   }
+  // (only Cloudflare's sign-in and E11 Talk's own address in here: after the code, Cloudflare sends you back to where
+  //  its sign-in belongs — the E11 Console website (test.e11hq.com, or "/" of this server) — so that's turned back to
+  //  E11 Talk; the Cloudflare session just made signs it in at once, no second code. Haris 2026-11-06: "taking me to
+  //  website after logging in")
+  private var turnedBack = 0
+  func webView(_ w: WKWebView, decidePolicyFor a: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+    guard a.targetFrame?.isMainFrame != false, let u = a.request.url, let host = u.host else { decisionHandler(.allow); return }
+    let cloudflare = host.hasSuffix("cloudflareaccess.com") || u.path.hasPrefix("/cdn-cgi/")
+    let ours = host == Server.host && u.path.hasPrefix("/api/talk/")
+    if cloudflare || ours || turnedBack >= 3 { decisionHandler(.allow); return }
+    decisionHandler(.cancel)
+    turnedBack += 1
+    spin.startAnimating()
+    w.load(URLRequest(url: URL(string: Server.url + "/api/talk/state")!))
+  }
   func webView(_ w: WKWebView, didFail n: WKNavigation!, withError e: Error) { failed(e) }
   func webView(_ w: WKWebView, didFailProvisionalNavigation n: WKNavigation!, withError e: Error) { failed(e) }
   private func failed(_ e: Error) {
