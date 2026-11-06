@@ -850,14 +850,14 @@ final class AssetsCtl {
     let norm = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
     let terms = norm(q).split(whereSeparator: { $0 == " " || $0 == "," }).map { String($0).trimmingCharacters(in: CharacterSet(charactersIn: ".")) }.filter { !$0.isEmpty }
     let hay = { (f: [String: Any]) in norm((f["name"] as? String ?? "") + " " + (f["where"] as? String ?? "")) }
-    let exact = files.filter { f in let n = hay(f), sq = Find.squash(n); return terms.allSatisfy { n.contains($0) || sq.contains($0) } }
+    let exact = files.filter { f in let n = hay(f); return terms.allSatisfy { n.contains($0) } }
     lastLoose = false
     if !exact.isEmpty || terms.isEmpty { return Array(exact.prefix(80)) }
     let limit = { (t: String) -> Int in t.count >= 8 ? 2 : t.count >= 4 ? 1 : 0 }
     let near = { (t: String, n: String) -> Bool in
-      if n.contains(t) || Find.squash(n).contains(t) { return true }
+      if n.contains(t) { return true }
       let lim = limit(t); guard lim > 0 else { return false }
-      let w0 = n.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init), words = w0 + zip(w0, w0.dropFirst()).map { $0 + $1 }
+      let words = n.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
       return words.contains { w in typoDist(t, w, lim) <= lim || (w.count > t.count && typoDist(t, String(w.prefix(t.count)), lim) <= lim) }
     }
     let loose = files.filter { f in let n = hay(f); return terms.allSatisfy { near($0, n) } }

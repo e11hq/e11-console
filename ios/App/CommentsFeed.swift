@@ -693,26 +693,26 @@ final class CommentCell: UIView {
   // every file the same card (Haris, 2026-11-01): squares, three a row, a third of the width each — a picture shows
   // itself, a video its frame with ▶, a PDF / Office file its first page, anything else its type; the name under
   // all but pictures. A grey shimmer until the picture arrives (the room kept from the start, so nothing jumps).
-  static func tiles(_ files: [[String: Any]], open: @escaping (Int) -> Void = { _ in }, menu: ((Int) -> [HoldItem])? = nil) -> UIView {
+  static func tiles(_ files: [[String: Any]], open: @escaping (Int) -> Void = { _ in }, menu: ((Int) -> UIMenu?)? = nil) -> UIView {
     let grid = UIStackView(); grid.axis = .vertical; grid.spacing = 6
     var i = 0
     while i < files.count {
       let row = UIStackView(); row.spacing = 6; row.distribution = .fillEqually
       for k in i..<(i + 3) {
         guard k < files.count else { row.addArrangedSubview(UIView()); continue }   // (an empty place keeps the size)
-        row.addArrangedSubview(tile(files[k], open: { open(k) }, menu: menu.map { m in { () -> [HoldItem] in m(k) } }))
+        row.addArrangedSubview(tile(files[k], open: { open(k) }, menu: menu.map { m in { () -> UIMenu? in m(k) } }))
       }
       grid.addArrangedSubview(row)
       i += 3
     }
     return grid
   }
-  static func tile(_ f: [String: Any], open: @escaping () -> Void, menu: (() -> [HoldItem])?) -> UIView {
+  static func tile(_ f: [String: Any], open: @escaping () -> Void, menu: (() -> UIMenu?)?) -> UIView {
     let n = f["name"] as? String ?? "File"
     let pic = isPic(n), video = isVideo(n)
     let v = TapImage(); v.contentMode = .scaleAspectFill; v.clipsToBounds = true; v.layer.cornerRadius = 12; v.layer.cornerCurve = .continuous
     v.onTap = open
-    v.hold = menu; v.holdTitle = n
+    v.menu = menu
     v.backgroundColor = .tertiarySystemFill
     v.translatesAutoresizingMaskIntoConstraints = false
     v.heightAnchor.constraint(equalTo: v.widthAnchor).isActive = true
@@ -751,7 +751,7 @@ final class CommentCell: UIView {
     }
     // uploading (yours): it pulses softly with its ring filling, and can't be opened yet
     if (f["pending"] as? Bool) == true {
-      v.onTap = nil; v.hold = nil; v.isUserInteractionEnabled = false
+      v.onTap = nil; v.menu = nil; v.isUserInteractionEnabled = false
       let a = CABasicAnimation(keyPath: "opacity"); a.fromValue = 1; a.toValue = 0.55; a.duration = 0.75
       a.autoreverses = true; a.repeatCount = .infinity; a.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
       v.layer.add(a, forKey: "uploading")
@@ -822,40 +822,16 @@ final class Shimmer: UIView {
 }
 
 // a picture / file box that can be tapped
-final class TapImage: UIImageView {
+final class TapImage: UIImageView, UIContextMenuInteractionDelegate {
   var onTap: (() -> Void)? { didSet { isUserInteractionEnabled = onTap != nil; if gestureRecognizers?.isEmpty ?? true { addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(t))) } } }
-  // touch and hold: as the cards (Haris 2026-11-06: "the files … not same as cards") — the tile shrinks from the moment the
-  // finger is down, held long enough: a medium haptic, iPhone's own sheet with its choices slides up, it springs back
-  var hold: (() -> [HoldItem])? { didSet { if hold != nil && shrink == nil { isUserInteractionEnabled = true; shrink = PressShrink.add(to: self); let g = UILongPressGestureRecognizer(target: self, action: #selector(held(_:))); g.minimumPressDuration = 0.45; addGestureRecognizer(g) } } }
-  var holdTitle: String?
-  private var shrink: PressShrink?
+  // touch and hold: iPhone's own menu (Open, Copy, Download…), the tile lifted as its preview
+  var menu: (() -> UIMenu?)? { didSet { if menu != nil && interactions.isEmpty { isUserInteractionEnabled = true; addInteraction(UIContextMenuInteraction(delegate: self)) } } }
   @objc private func t() { UIImpactFeedbackGenerator(style: .light).impactOccurred(); onTap?() }
-  @objc private func held(_ g: UILongPressGestureRecognizer) {
-    guard g.state == .began, let items = hold?(), !items.isEmpty else { return }
-    HoldSheet.show(items, title: holdTitle, from: self)
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in self?.shrink?.release() }
+  func contextMenuInteraction(_ i: UIContextMenuInteraction, configurationForMenuAtLocation l: CGPoint) -> UIContextMenuConfiguration? {
+    guard let m = menu?() else { return nil }
+    return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in m }
   }
-}
-// one choice in a touch-and-hold sheet (its words, the sheet's icon name, red, a line above it, what it does)
-struct HoldItem {
-  let title: String, icon: String
-  var danger = false, apart = false
-  let run: () -> Void
-}
-// iPhone's own sheet for a held thing, as the cards' and comments' (NativeSheetVC: the medium haptic comes with it)
-enum HoldSheet {
-  static func show(_ items: [HoldItem], title: String?, from v: UIView) {
-    var secs: [[String: Any]] = [], cur: [[String: Any]] = []
-    for (i, it) in items.enumerated() {
-      if it.apart, !cur.isEmpty { secs.append(["rows": cur]); cur = [] }
-      cur.append(["i": i, "label": it.title, "icon": it.icon, "danger": it.danger])
-    }
-    if !cur.isEmpty { secs.append(["rows": cur]) }
-    if let t = title, !t.isEmpty, !secs.isEmpty { secs[0]["header"] = t }
-    var top = v.window?.rootViewController; while let p = top?.presentedViewController, !p.isBeingDismissed { top = p }
-    let vc = NativeSheetVC(["sections": secs], dark: v.traitCollection.userInterfaceStyle == .dark, pick: nil) { i, _ in if items.indices.contains(i) { items[i].run() } }
-    top?.present(vc, animated: true)
-  }
+  func contextMenuInteraction(_ i: UIContextMenuInteraction, previewForHighlightingMenuWithConfiguration c: UIContextMenuConfiguration) -> UITargetedPreview? { PressPreview.make(self) }
 }
 final class TapView: UIView, UIContextMenuInteractionDelegate {
   var onTap: (() -> Void)? { didSet { if onTap != nil && (gestureRecognizers?.isEmpty ?? true) { addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(t))) } } }
@@ -973,7 +949,7 @@ final class FileStrip: UIView, UIScrollViewDelegate {
   private let side: CGFloat
   private var cards: [String: (view: UIView, sig: String)] = [:]
   private var files: [[String: Any]] = []
-  private var open: (Int) -> Void = { _ in }, menu: ((Int) -> [HoldItem])?
+  private var open: (Int) -> Void = { _ in }, menu: ((Int) -> UIMenu?)?
   init(side: CGFloat) {
     self.side = side
     super.init(frame: .zero)
@@ -998,7 +974,7 @@ final class FileStrip: UIView, UIScrollViewDelegate {
   var isEmpty: Bool { files.isEmpty }
   var scrolls: Bool { scroll.contentSize.width > scroll.bounds.width + 1 }
   // the files now (each with its "id"); settle: ids that take the place of an upload (no gap, no fade — just there)
-  func set(_ list: [[String: Any]], settle: Set<String> = [], open: @escaping (Int) -> Void, menu: ((Int) -> [HoldItem])?) {
+  func set(_ list: [[String: Any]], settle: Set<String> = [], open: @escaping (Int) -> Void, menu: ((Int) -> UIMenu?)?) {
     let animate = window != nil && !cards.isEmpty
     files = list; self.open = open; self.menu = menu
     let ids = list.map { $0["id"] as? String ?? "" }
@@ -1012,7 +988,7 @@ final class FileStrip: UIView, UIScrollViewDelegate {
       let sig = (try? JSONSerialization.data(withJSONObject: f, options: [.sortedKeys])).map { String(decoding: $0, as: UTF8.self) } ?? ""
       if let c = cards[id], c.sig == sig { want.append(c.view); continue }
       let replaced = cards[id]?.view
-      let v = CommentCell.tile(f, open: { [weak self] in self?.tapped(id) }, menu: { [weak self] in self?.menuFor(id) ?? [] })
+      let v = CommentCell.tile(f, open: { [weak self] in self?.tapped(id) }, menu: { [weak self] in self?.menuFor(id) })
       v.widthAnchor.constraint(equalToConstant: side).isActive = true
       if let r = replaced, let i = row.arrangedSubviews.firstIndex(of: r) { row.insertArrangedSubview(v, at: i); r.removeFromSuperview() }
       else if animate && !settle.contains(id) { fresh.append(v) }
@@ -1036,7 +1012,7 @@ final class FileStrip: UIView, UIScrollViewDelegate {
     for v in settled { v.alpha = 0.75; UIView.animate(withDuration: 0.35, delay: 0.1, options: [.allowUserInteraction, .curveEaseOut]) { v.alpha = 1 } }
   }
   private func tapped(_ id: String) { if let i = files.firstIndex(where: { ($0["id"] as? String) == id }) { open(i) } }
-  private func menuFor(_ id: String) -> [HoldItem] { files.firstIndex(where: { ($0["id"] as? String) == id }).flatMap { menu?($0) } ?? [] }
+  private func menuFor(_ id: String) -> UIMenu? { files.firstIndex(where: { ($0["id"] as? String) == id }).flatMap { menu?($0) } }
   override func layoutSubviews() { super.layoutSubviews(); paintFade() }
   func scrollViewDidScroll(_ s: UIScrollView) { paintFade() }
   // (the fade: 36 pt at the right edge, gone once the end is reached — or when everything fits)

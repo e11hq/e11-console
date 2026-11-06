@@ -8,6 +8,7 @@ import UIKit
 import AVKit
 import WebKit
 import CryptoKit
+import PDFKit
 
 /* ---------- fetching from the server with the app's sign-in ---------- */
 enum PreviewLoad {
@@ -136,7 +137,15 @@ final class PreviewCell: UICollectionViewCell, UIScrollViewDelegate {
       mode = "pages"
       pagesStack.isHidden = false
       spinner.startAnimating()
-      if let id = f["id"] as? String { onPages?(id) }
+      // (a PDF: drawn on the phone from the file itself — kept on the phone after the first time — instead of waiting for
+      //  the server to make pictures of its pages; they stayed on the spinner, Haris 2026-11-06. Office files: the server's)
+      if (f["ext"] as? String) == "pdf", let src = f["src"] as? String, !src.isEmpty {
+        PreviewLoad.data(src) { [weak self] d in
+          guard let self, self.token == my else { return }
+          guard let d = d, let doc = PDFDocument(data: d), doc.pageCount > 0 else { if let id = f["id"] as? String { self.onPages?(id) }; return }
+          self.showPDF(doc, my)
+        }
+      } else if let id = f["id"] as? String { onPages?(id) }
     case "text":
       mode = "text"
       zoomer.isHidden = true; textView.isHidden = false; textView.text = ""
@@ -162,6 +171,28 @@ final class PreviewCell: UICollectionViewCell, UIScrollViewDelegate {
     }
   }
   // the server's page pictures arrived (PDF / Office)
+  // a PDF's pages, drawn here (the first 40, as the server's), each one as it's ready
+  private func showPDF(_ doc: PDFDocument, _ my: Int) {
+    spinner.stopAnimating()
+    pagesStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
+    let n = min(doc.pageCount, 40)
+    let W: CGFloat = 1240
+    for i in 0..<n {
+      guard let pg = doc.page(at: i) else { continue }
+      let b = pg.bounds(for: .mediaBox)
+      let iv = UIImageView(); iv.contentMode = .scaleAspectFit; iv.backgroundColor = .white
+      iv.translatesAutoresizingMaskIntoConstraints = false
+      iv.heightAnchor.constraint(equalTo: iv.widthAnchor, multiplier: b.width > 0 ? b.height / b.width : 1.414).isActive = true
+      pagesStack.addArrangedSubview(iv)
+      DispatchQueue.global(qos: .userInitiated).async { [weak self, weak iv] in
+        let scale = b.width > 0 ? W / b.width : 1
+        let img = pg.thumbnail(of: CGSize(width: b.width * scale, height: b.height * scale), for: .mediaBox)
+        DispatchQueue.main.async { guard let self, self.token == my else { return }; iv?.image = img }
+      }
+    }
+    if doc.pageCount > n { let l = UILabel(); l.text = "Showing the first \(n) of \(doc.pageCount) pages — download it for the rest."; l.font = .systemFont(ofSize: 13); l.textColor = .secondaryLabel; l.numberOfLines = 0; l.textAlignment = .center; pagesStack.addArrangedSubview(l) }
+    setNeedsLayout()
+  }
   func setPages(_ urls: [String], note: String?) {
     let my = token
     spinner.stopAnimating()

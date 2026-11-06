@@ -762,7 +762,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       let real = shown.filter { ($0["pending"] as? Bool) != true }
       let at: (Int) -> Int = { i in real.firstIndex { ($0["id"] as? String) == (shown[i]["id"] as? String) } ?? 0 }
       ownFileIds = canAttach ? Set(own.compactMap { $0["id"] as? String }) : []
-      filesStrip.set(shown, settle: settle, open: { [weak self] i in self?.onOpenFiles?(real, at(i)) }, menu: { [weak self] i in self?.fileMenu(real, at(i)) ?? [] })
+      filesStrip.set(shown, settle: settle, open: { [weak self] i in self?.onOpenFiles?(real, at(i)) }, menu: { [weak self] i in self?.fileMenu(real, at(i)) })
       if !shown.isEmpty { fr.append(pad(filesStrip, right: 0)) }
       if canAttach { fr.append(addRow("Attach Files") { [weak self] in self?.attachSheet() }) }
       let fg = group(fr); filesBlock = fg
@@ -790,25 +790,25 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     scroll.contentOffset.y = min(max(-scroll.contentInset.top, keepY), max(-scroll.contentInset.top, scroll.contentSize.height - scroll.bounds.height + scroll.contentInset.bottom))
   }
   // Turn off link, or Turn on link (blue, open lock) when it's off
-  // a file held: iPhone's own sheet, as the cards' (Haris 2026-11-06) — Open, Copy link, Download, Turn off / on link
-  // (Admins), Remove (the task's own files)
-  private func fileMenu(_ files: [[String: Any]], _ i: Int) -> [HoldItem] {
-    guard i < files.count else { return [] }
+  private func linkAction(_ f: [String: Any]) -> UIAction {
+    let off = Main.linksOff.contains(f["file"] as? String ?? "")
+    let img = off ? UIImage(systemName: "lock.open")?.withTintColor(.systemBlue, renderingMode: .alwaysOriginal) : UIImage(systemName: "lock")
+    return UIAction(title: off ? "Turn on link" : "Turn off link", image: img, attributes: off ? [] : .destructive) { [weak self] _ in self?.onFileAction?(f, "linkOff") }   // (Turn off link: red)
+  }
+  private func fileMenu(_ files: [[String: Any]], _ i: Int) -> UIMenu? {
+    guard i < files.count else { return nil }
     let f = files[i]
-    var items: [HoldItem] = [
-      HoldItem(title: "Open", icon: "eye") { [weak self] in self?.onOpenFiles?(files, i) },
-      HoldItem(title: "Copy link", icon: "link") { [weak self] in self?.onFileAction?(f, "copy") },
-      HoldItem(title: "Download", icon: "download") { [weak self] in self?.onFileAction?(f, "download") },
+    var items: [UIMenuElement] = [
+      UIAction(title: "Open", image: UIImage(systemName: "eye")) { [weak self] _ in self?.onOpenFiles?(files, i) },
+      UIAction(title: "Copy link", image: UIImage(systemName: "link")) { [weak self] _ in self?.onFileAction?(f, "copy") },
+      UIAction(title: "Download", image: UIImage(systemName: "arrow.down.circle")) { [weak self] _ in self?.onFileAction?(f, "download") },
     ]
-    if Main.isAdmin {   // (Admins turn links off and on; Turn off link in red)
-      let off = Main.linksOff.contains(f["file"] as? String ?? "")
-      items.append(HoldItem(title: off ? "Turn on link" : "Turn off link", icon: off ? "unlock" : "lock", danger: !off) { [weak self] in self?.onFileAction?(f, "linkOff") })
-    }
+    if Main.isAdmin { items.append(linkAction(f)) }   // (Admins turn links off and on)
     // (the task's own files: Remove — to the Trash, with Undo; a comment's files go with their comment — Haris 2026-11-06)
     if let fid = f["id"] as? String, ownFileIds.contains(fid) {
-      items.append(HoldItem(title: "Remove", icon: "trash", danger: true, apart: true) { [weak self] in self?.confirmRemove(f) })
+      items.append(UIMenu(options: .displayInline, children: [UIAction(title: "Remove", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in self?.confirmRemove(f) }]))
     }
-    return items
+    return UIMenu(title: f["name"] as? String ?? "", children: items)
   }
   private func layoutContent() {
     let W = bounds.width, M = TaskPage.M

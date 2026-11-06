@@ -1137,12 +1137,10 @@ extension Main {
     Main.searchSeq += 1
     let my = Main.searchSeq
     let screen = shownScreen ?? homeIfMade
-    DispatchQueue.main.asyncAfter(deadline: .now() + (q.count <= 1 ? 0.25 : 0.12)) {
-      guard my == Main.searchSeq else { return }
-      DispatchQueue.global(qos: .userInitiated).async {
-        let m = AppData.shared.meModel("tasks", "search", [q])
-        DispatchQueue.main.async { guard my == Main.searchSeq, let m = m else { return }; screen?.searchResults(m) }
-      }
+    // (at once — no wait after the key: Haris 2026-11-06 — just not on the screen's own thread)
+    DispatchQueue.global(qos: .userInteractive).async {
+      let m = AppData.shared.meModel("tasks", "search", [q])
+      DispatchQueue.main.async { guard my == Main.searchSeq, let m = m else { return }; screen?.searchResults(m) }
     }
     return true
   }

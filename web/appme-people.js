@@ -228,8 +228,7 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
           { w: 3, text: d.project ? d.project.name : '' },
         ];
         const words = new Map();
-        // (two neighbouring words also as one — "altayer" finds AL TAYER)
-        fields.forEach((f) => { const ws = sWords(f.text); ws.concat(ws.slice(1).map((x, i) => ws[i] + x)).forEach((w) => { if (!words.has(w) || words.get(w) < f.w) words.set(w, f.w); }); });
+        fields.forEach((f) => sWords(f.text).forEach((w) => { if (!words.has(w) || words.get(w) < f.w) words.set(w, f.w); }));
         return { it, words };
       });
       const vocab = new Set(); docs.forEach((x) => x.words.forEach((_, w) => vocab.add(w)));

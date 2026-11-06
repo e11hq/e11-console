@@ -394,7 +394,7 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
       if (!words.length) return [];
       // (exact first; nothing found — small typos forgiven, as every search: Haris 2026-11-06)
       const lim = (w) => (w.length >= 8 ? 2 : w.length >= 4 ? 1 : 0);
-      const near = (w, n) => n.includes(w) || n.replace(/[^\p{L}\p{N}]+/gu, '').includes(w) || (loose && lim(w) > 0 && n.split(/[^\p{L}\p{N}]+/u).some((x) => typoDist(w, x, lim(w)) <= lim(w) || (x.length > w.length && typoDist(w, x.slice(0, w.length), lim(w)) <= lim(w))));
+      const near = (w, n) => n.includes(w) || (loose && lim(w) > 0 && n.split(/[^\p{L}\p{N}]+/u).some((x) => typoDist(w, x, lim(w)) <= lim(w) || (x.length > w.length && typoDist(w, x.slice(0, w.length), lim(w)) <= lim(w))));
       const hit = (t) => { const n = norm(t); return words.every((w) => near(w, n)); };
       const months = []; for (let m = W.thisMonth(); m <= shiftMonth(W.nextMonth(), 6); m = shiftMonth(m, 1)) months.push(m);
       if (cur && months.includes(cur)) months.sort((a, b) => (a === cur ? -1 : b === cur ? 1 : a.localeCompare(b)));

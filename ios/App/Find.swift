@@ -10,7 +10,7 @@ enum Find {
     norm(q).split(whereSeparator: { !$0.isLetter && !$0.isNumber && $0 != "@" && $0 != "." }).map { String($0).trimmingCharacters(in: CharacterSet(charactersIn: ".")) }.filter { !$0.isEmpty }
   }
   // (the words, and each two neighbours as one)
-  private static func words(_ s: String) -> [String] { let w = norm(s).split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init); return w + zip(w, w.dropFirst()).map { $0 + $1 } }
+  private static func words(_ s: String) -> [String] { norm(s).split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init) }
   static func squash(_ s: String) -> String { String(s.unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) }.map(Character.init)) }
   private static func limit(_ t: String) -> Int { t.count >= 8 ? 2 : t.count >= 4 ? 1 : 0 }
   // a word of the text close enough to the term (or starting close enough to it)
@@ -23,14 +23,13 @@ enum Find {
   static func filter<T>(_ items: [T], _ q: String, text: (T) -> String) -> Result<T> {
     let ts = terms(q)
     guard !ts.isEmpty else { return Result(items: items, loose: false, marks: []) }
-    // ("altayer" finds AL TAYER: the text also with its spaces taken out — Haris 2026-11-06)
-    let exact = items.filter { x in let n = norm(text(x)), sq = squash(n); return ts.allSatisfy { n.contains($0) || sq.contains($0) } }
+    let exact = items.filter { x in let n = norm(text(x)); return ts.allSatisfy { n.contains($0) } }
     if !exact.isEmpty { return Result(items: exact, loose: false, marks: ts) }
     var marks = Set<String>()
     let loose = items.filter { x in
-      let n = norm(text(x)), ws = words(text(x)), sq = squash(n)
+      let n = norm(text(x)), ws = words(text(x))
       var found: [String] = []
-      for t in ts { if n.contains(t) || sq.contains(t) { found.append(t) } else if let w = near(t, ws) { found.append(w) } else { return false } }
+      for t in ts { if n.contains(t) { found.append(t) } else if let w = near(t, ws) { found.append(w) } else { return false } }
       found.forEach { marks.insert($0) }
       return true
     }
@@ -60,11 +59,6 @@ enum Find {
       guard r.location != NSNotFound else { break }
       if startsWord(r.location) { out.append(r) }
       from = r.location + max(1, r.length)
-    }
-    if out.isEmpty, w.count >= 4 {
-      if let re = joinedRe(w) {
-        for m in re.matches(in: ns as String, range: NSRange(location: 0, length: ns.length)) where startsWord(m.range.location) { out.append(m.range) }
-      }
     }
     return out
   }
