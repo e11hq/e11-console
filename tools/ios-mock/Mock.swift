@@ -246,10 +246,11 @@ final class TaskVC: UIViewController, UICollectionViewDelegate {
     seg.selectedSegmentIndex = page
     navigationItem.titleView = seg
     let more = UIMenu(children: [UIAction(title: "Copy link", image: UIImage(systemName: "link")) { _ in },
-                                 UIAction(title: "Duplicate", image: UIImage(systemName: "plus.square.on.square")) { _ in },
-                                 UIAction(title: "Delete", image: UIImage(systemName: "trash"), attributes: .destructive) { _ in }])
-    navigationItem.rightBarButtonItems = [UIBarButtonItem(title: nil, image: UIImage(systemName: "ellipsis"), primaryAction: nil, menu: more),
-                                          UIBarButtonItem(title: nil, image: UIImage(systemName: "checkmark"), primaryAction: UIAction { _ in }, menu: nil)]
+                                 UIMenu(title: "Attach Files", image: UIImage(systemName: "paperclip"), children: [
+                                   UIAction(title: "Camera", image: UIImage(systemName: "camera")) { _ in }, UIAction(title: "Photos", image: UIImage(systemName: "photo.on.rectangle")) { _ in },
+                                   UIAction(title: "Files", image: UIImage(systemName: "folder")) { _ in }]),
+                                 UIMenu(options: .displayInline, children: [UIAction(title: "Delete task", image: UIImage(systemName: "trash"), attributes: .destructive) { _ in }])])
+    navigationItem.rightBarButtonItem = UIBarButtonItem(title: nil, image: UIImage(systemName: "ellipsis"), primaryAction: nil, menu: more)
     var cfg = UICollectionLayoutListConfiguration(appearance: page == 0 ? .insetGrouped : .plain)
     cfg.headerMode = page == 0 ? .supplementary : .none
     cfg.showsSeparators = page == 0
@@ -259,6 +260,7 @@ final class TaskVC: UIViewController, UICollectionViewDelegate {
     view.addSubview(cv)
     page == 0 ? details() : comments()
   }
+  override func viewWillAppear(_ a: Bool) { super.viewWillAppear(a); if #available(iOS 26.0, *) { tabBarController?.bottomAccessory = nil } }
   override func viewDidAppear(_ a: Bool) { super.viewDidAppear(a); if page == 1 { becomeFirstResponder() } }
 
   // Details: the title, its facts as Apple's rows (each opens its sheet / menu), description, files, subtasks
@@ -270,11 +272,11 @@ final class TaskVC: UIViewController, UICollectionViewDelegate {
       c.accessories = []
       switch id {
       case "title":
-        var sc = UIListContentConfiguration.subtitleCell(); sc.text = t.title; sc.textProperties.font = .preferredFont(forTextStyle: .title3).withWeight(.bold)
+        var sc = UIListContentConfiguration.subtitleCell(); sc.text = t.title; sc.textProperties.font = .preferredFont(forTextStyle: .title2).withWeight(.bold)
         let m = NSMutableAttributedString(string: "Northline · Winter campaign", attributes: [.font: UIFont.preferredFont(forTextStyle: .footnote), .foregroundColor: UIColor.secondaryLabel])
         sc.secondaryAttributedText = m; sc.textToSecondaryTextVerticalPadding = 6
-        sc.image = statusIcon(t); sc.directionalLayoutMargins = .init(top: 14, leading: 16, bottom: 14, trailing: 16)
-        c.contentConfiguration = sc; return
+        sc.image = statusIcon(t); sc.directionalLayoutMargins = .init(top: 4, leading: 4, bottom: 8, trailing: 4)
+        c.contentConfiguration = sc; c.backgroundConfiguration = .clear(); return
       case "Status": cfg.text = "Status"; cfg.secondaryText = "In progress"; cfg.image = statusIcon(t)
       case "Assignees":
         cfg.text = "Assignees"; cfg.image = UIImage(systemName: "person.2")
@@ -286,8 +288,9 @@ final class TaskVC: UIViewController, UICollectionViewDelegate {
       case "Client": cfg.text = "Client"; cfg.secondaryText = "Northline"; cfg.image = UIImage(systemName: "building.2")
       case "desc":
         cfg = .cell(); cfg.text = "Final key visual for the winter campaign. Use the snow-forest shot, logo top left, headline “Warmth, wherever you go”. Deliver 1:1, 4:5 and 9:16."
-        cfg.textProperties.font = .preferredFont(forTextStyle: .subheadline)
-        c.contentConfiguration = cfg; return
+        cfg.textProperties.font = .preferredFont(forTextStyle: .body)
+        cfg.directionalLayoutMargins = .init(top: 4, leading: 4, bottom: 4, trailing: 4)
+        c.contentConfiguration = cfg; c.backgroundConfiguration = .clear(); return
       case "f1", "f2":
         cfg = .subtitleCell(); cfg.text = id == "f1" ? "key-visual-v4.jpg" : "brief-winter.pdf"; cfg.secondaryText = id == "f1" ? "2.4 MB · Leila · Yesterday" : "380 KB · Haris · 3 Nov"
         cfg.image = UIImage(systemName: id == "f1" ? "photo" : "doc.richtext"); cfg.imageProperties.tintColor = id == "f1" ? .systemBlue : .systemRed
