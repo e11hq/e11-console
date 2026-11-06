@@ -880,6 +880,9 @@ extension Main {
     guard !picked.isEmpty else { return }
     let ids = picked.map { _ in "up-" + UUID().uuidString }
     if toDesc { p.descUploadsStarted(zip(ids, picked.map { $0.1 }).map { ($0, $1) }) }
+    // (attached from the Comments tab — the ••• menu: over to Details, where the cards fill up; on Comments nothing
+    //  showed the upload — Haris 2026-11-06)
+    if !toDesc && p.tab == "comments" { p.setTab("details", tell: true, slide: true) }
     p.addUploads(scroll: !toDesc, zip(ids, picked).map { id, f in
       var c: [String: Any] = ["id": id, "name": f.1, "pending": true]
       if let t = CommentCell.localThumb(f.0, f.1) { FeedLoader.shared.setLocal("local:" + id, t); c["thumbUrl"] = "local:" + id }
