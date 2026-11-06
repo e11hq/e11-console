@@ -1,6 +1,7 @@
 import UIKit
 
 // Scenes (launch argument -scene N): 1 My Tasks at the top · 2 scrolled · 3 the status line after sending a comment
+// (A: iOS 26's bar above the tab bar) · 4 B: compose in the top bar
 let SCENE = max(1, UserDefaults.standard.integer(forKey: "scene"))
 
 @main final class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -22,6 +23,21 @@ final class Scene: UIResponder, UIWindowSceneDelegate {
     tabs.viewControllers = [nav(blank("Home"), "Home", "house"), nav(MyTasks(), "My Tasks", "checkmark.circle"), nav(blank("Inbox"), "Inbox", "tray"),
                             nav(blank("Clients"), "Clients", "person.2"), nav(blank("Me"), "Me", "person.crop.circle")]
     tabs.selectedIndex = 1
+    // A: iOS 26's own accessory bar above the tab bar (as Music's Now Playing): the status line and compose
+    if SCENE != 4, #available(iOS 26.0, *) {
+      let v = UIView()
+      let status = UILabel(), sub = UILabel()
+      status.font = .systemFont(ofSize: 13, weight: .semibold); sub.font = .systemFont(ofSize: 11.5); sub.textColor = .secondaryLabel
+      if SCENE == 3 { status.text = "Comment sent"; sub.text = "Winter campaign — final key visual" } else { status.text = "Updated Just Now"; sub.text = "12 open tasks" }
+      let st = UIStackView(arrangedSubviews: [status, sub]); st.axis = .vertical; st.translatesAutoresizingMaskIntoConstraints = false
+      let b = UIButton(type: .system); b.setImage(UIImage(systemName: "square.and.pencil", withConfiguration: UIImage.SymbolConfiguration(pointSize: 18, weight: .medium)), for: .normal)
+      b.translatesAutoresizingMaskIntoConstraints = false
+      v.addSubview(st); v.addSubview(b)
+      NSLayoutConstraint.activate([st.leadingAnchor.constraint(equalTo: v.leadingAnchor, constant: 20), st.centerYAnchor.constraint(equalTo: v.centerYAnchor),
+                                   b.trailingAnchor.constraint(equalTo: v.trailingAnchor, constant: -16), b.centerYAnchor.constraint(equalTo: v.centerYAnchor)])
+      tabs.bottomAccessory = UITabAccessory(contentView: v)
+      tabs.tabBarMinimizeBehavior = .onScrollDown
+    }
     w.rootViewController = tabs; window = w; w.makeKeyAndVisible()
   }
 }
@@ -82,7 +98,11 @@ final class MyTasks: UICollectionViewController {
     if #available(iOS 26.0, *) { mid.hidesSharedBackground = true }
     toolbarItems = [.flexibleSpace(), mid, .flexibleSpace(),
                     UIBarButtonItem(title: nil, image: UIImage(systemName: "square.and.pencil"), primaryAction: UIAction { _ in }, menu: nil)]
-    navigationController?.isToolbarHidden = false
+    toolbarItems = nil
+    if SCENE == 4 {
+      navigationItem.rightBarButtonItems = [UIBarButtonItem(title: nil, image: UIImage(systemName: "square.and.pencil"), primaryAction: UIAction { _ in }, menu: nil),
+                                            UIBarButtonItem(title: nil, image: UIImage(systemName: "line.3.horizontal.decrease"), primaryAction: nil, menu: filters)]
+    }
 
     let cell = UICollectionView.CellRegistration<UICollectionViewListCell, String> { c, ip, id in
       let t = SECTIONS[ip.section].1[ip.item]
