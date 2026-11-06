@@ -1,0 +1,19 @@
+# A throwaway mock (Haris 2026-11-06: "show me mockups first") — only Apple's own parts, run in the simulator for
+# screenshots of how E11 Console looks on iPhone's own navigation. Never shipped.
+name: Mock
+options:
+  bundleIdPrefix: ae.e11.mock
+  deploymentTarget: { iOS: "18.0" }
+targets:
+  Mock:
+    type: application
+    platform: iOS
+    sources: [Mock.swift]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ae.e11.mock
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_VERSION: "5.0"
