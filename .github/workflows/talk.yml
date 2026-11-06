@@ -32,13 +32,20 @@ jobs:
         continue-on-error: true
         run: |
           APP=build-talk/Build/Products/Debug-iphonesimulator/E11Talk.app
-          DEV=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k,v in d.items() if 'iOS' in k for x in v if 'iPhone' in x['name']))")
+          DEV=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k,v in sorted(d.items(), reverse=True) if 'iOS' in k for x in v if 'iPhone' in x['name']))")
+          echo "device $DEV"
           xcrun simctl boot "$DEV" 2>/dev/null; xcrun simctl bootstatus "$DEV" -b >/dev/null
+          xcrun simctl ui "$DEV" appearance light
+          xcrun simctl uninstall "$DEV" ae.e11.talk.ios 2>/dev/null
           xcrun simctl install "$DEV" "$APP"
-          xcrun simctl launch "$DEV" ae.e11.talk.ios; sleep 6
-          xcrun simctl io "$DEV" screenshot "$RUNNER_TEMP/talk-start.png"
-          sleep 8; xcrun simctl io "$DEV" screenshot "$RUNNER_TEMP/talk-signin.png"
-          xcrun simctl spawn "$DEV" launchctl list | grep -q ae.e11.talk.ios && echo "TALK RUNNING" || echo "TALK NOT RUNNING"
+          START=$(date '+%Y-%m-%d %H:%M:%S')
+          xcrun simctl launch "$DEV" ae.e11.talk.ios
+          sleep 10; xcrun simctl io "$DEV" screenshot "$RUNNER_TEMP/talk-start.png"
+          sleep 10; xcrun simctl io "$DEV" screenshot "$RUNNER_TEMP/talk-signin.png"
+          { if xcrun simctl spawn "$DEV" launchctl list | grep -q "ae.e11.talk.ios"; then echo "state: E11 Talk is running"; else echo "state: E11 Talk is NOT running"; fi
+            echo "--- its log"; xcrun simctl spawn "$DEV" log show --style compact --start "$START" --predicate 'process == "E11Talk"' 2>/dev/null | grep -viE "BoringSSL|nw_|CoreAnalytics" | tail -60
+            echo "--- crash reports"; ls -t ~/Library/Logs/DiagnosticReports/E11Talk* 2>/dev/null | head -1 | xargs -I{} head -80 {}; } > "$RUNNER_TEMP/talk-check.log" 2>&1
+          cat "$RUNNER_TEMP/talk-check.log" | head -20
           xcrun simctl terminate "$DEV" ae.e11.talk.ios; xcrun simctl shutdown "$DEV"; true
       - name: Sign and keep on this Mac
         env:
@@ -62,4 +69,4 @@ jobs:
         run: |
           gh release view talk-selftest >/dev/null 2>&1 || gh release create talk-selftest --prerelease --title "E11 Talk self-check" --notes "Latest E11 Talk build results." --target "$GITHUB_SHA"
           if [ -s "$RUNNER_TEMP/talk-archive-full.log" ]; then { grep -E "error|Error|failed" "$RUNNER_TEMP/talk-archive-full.log" | head -60; echo ---; tail -40 "$RUNNER_TEMP/talk-archive-full.log"; } > "$RUNNER_TEMP/talk-archive.log"; fi
-          for f in talk-build.log talk-archive.log talk-start.png talk-signin.png; do [ -s "$RUNNER_TEMP/$f" ] && gh release upload talk-selftest "$RUNNER_TEMP/$f" --clobber; done; true
+          for f in talk-build.log talk-archive.log talk-start.png talk-signin.png talk-check.log; do [ -s "$RUNNER_TEMP/$f" ] && gh release upload talk-selftest "$RUNNER_TEMP/$f" --clobber; done; true
