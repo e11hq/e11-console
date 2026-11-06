@@ -32,7 +32,13 @@ jobs:
         continue-on-error: true
         run: |
           APP=build-talk/Build/Products/Debug-iphonesimulator/E11Talk.app
-          DEV=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k,v in sorted(d.items(), reverse=True) if 'iOS' in k for x in v if 'iPhone' in x['name']))")
+          # (an ordinary numbered iPhone on the newest iOS, as Console's self-test picks — not the iPhone Duo)
+          DEV=$(xcrun simctl list devices available -j | python3 -c "
+          import json,sys,re
+          d=json.load(sys.stdin)['devices']
+          v=lambda rt:[int(x) for x in re.findall(r'(\\d+)', rt.split('iOS')[-1])[:2]]
+          p=[(v(k),x) for k,xs in d.items() if 'iOS' in k for x in xs if re.match(r'iPhone \\d', x['name']) and 'Pro Max' not in x['name']]
+          p.sort(key=lambda t:(t[0],t[1]['name'])); print(p[-1][1]['udid'])")
           echo "device $DEV"
           xcrun simctl boot "$DEV" 2>/dev/null; xcrun simctl bootstatus "$DEV" -b >/dev/null
           xcrun simctl ui "$DEV" appearance light
