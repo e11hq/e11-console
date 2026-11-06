@@ -627,7 +627,7 @@ const NativeSide = (() => {
     const dotEl = document.getElementById('save-dot'), lab = document.getElementById('save-label');
     const create = document.querySelector('#sidebar .create-btn');
     return {
-      on: true, items, collapsed: app.classList.contains('sb-collapsed'), light,
+      on: true, items, collapsed: app.classList.contains('sb-collapsed'), light, talk: !!window.E11_TALK,
       themeIc: auto ? 'theme-auto' : light ? 'sun' : 'moon', themeTip: theme ? theme.title : '',
       create: !!create && create.style.display !== 'none',
       me: { name: (chip.querySelector('b') || {}).textContent || '', role: (chip.querySelector('small') || {}).textContent || '',
@@ -2645,7 +2645,8 @@ const Sync = (() => {
     let me = await api('GET', '/api/me', null, { timeout: 12000 });
     // Owner view (live site) ends on every reload: back to the owner's own role before loading anything
     if (me.ownerView) { try { await api('POST', '/api/owner-view', { mode: 'off' }, { timeout: 12000 }); } catch (e) { /* fine */ } me = await api('GET', '/api/me', null, { timeout: 12000 }); }
-    window.E11_REVIEW = !!me.review;   // the App Review copy (its own sign-in instead of Cloudflare's)
+    window.E11_REVIEW = !!me.review;
+    window.E11_TALK = !!me.talk;   // (the Mac app's E11 Talk button — test site for now)   // the App Review copy (its own sign-in instead of Cloudflare's)
     if (typeof ViewAs !== 'undefined') ViewAs.init(me.viewAs);   // test site only: the owner using the app as someone else
     AppIcon.setOwner(me.owner); if (me.appIcon) AppIcon.sync(me.appIcon);
     ownerId = me.ownerId || null;

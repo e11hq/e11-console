@@ -683,6 +683,8 @@ export function createServer(cfg) {
     }
 
     if (p === '/api/me') return json(res, 200, { ok: true, user: access.shape(u, 'users', u), owner: isOwner(u), review: !!review, appIcon: appIcon.info(), macShell, version, rev: store.rev(), office: office.info(req),
+      // (E11 Talk in the Mac app's sidebar: on the test site while it's built — Haris 2026-11-06; live when E11 Talk goes live)
+      talk: isTestSite && !review,
       ownerView: req.ownerView || null, canOwnerView: ownerViewOk(req.realUser || u),
       // (Admins: whose account only its owner may change, so the Team page shows it locked)
       ownerId: access.isAdm(u) && cfg.adminEmail ? (access.userByEmail(cfg.adminEmail) || {}).id || null : null,
