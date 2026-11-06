@@ -31,8 +31,8 @@ targets:
       properties:
         aps-environment: development
         # (the chat backup: E11 Talk's own hidden folder in the person's iCloud Drive)
-        com.apple.developer.icloud-container-identifiers: [iCloud.ae.e11.talk.ios]
-        com.apple.developer.ubiquity-container-identifiers: [iCloud.ae.e11.talk.ios]
+        com.apple.developer.icloud-container-identifiers: [iCloud.ae.e11.talk]
+        com.apple.developer.ubiquity-container-identifiers: [iCloud.ae.e11.talk]
         com.apple.developer.icloud-services: [CloudDocuments]
     info:
       path: App/Info.plist

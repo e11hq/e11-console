@@ -15,7 +15,7 @@ struct BackupMeta { let at: Date; let seq: Int; let size: Int; let groups: Int }
 
 final class Backup {
   static let shared = Backup()
-  static let container = "iCloud.ae.e11.talk.ios"
+  static let container = "iCloud.ae.e11.talk"
   enum Every: String, CaseIterable {
     case daily, weekly, monthly, off
     var title: String { ["daily": "Daily", "weekly": "Weekly", "monthly": "Monthly", "off": "Off"][rawValue]! }
