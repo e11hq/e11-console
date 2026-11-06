@@ -102,3 +102,7 @@ commits before stay as they are — published history is never rewritten.
 **Which app a change is for (Haris, 2026-11-06):** once E11 Talk is being built, when a request doesn't say clearly
 which app it's for (E11 Console iPhone, E11 Console Mac / website, or E11 Talk), ask Haris first — one short question —
 before changing anything.
+
+**Tell Haris first when a change can reach anything else (Haris, 2026-11-06):** before making a change, check what else
+in the app uses the code it touches. If it can change anything beyond what he asked for, tell him first, plainly (which
+screens or behaviour, and how), and change it only on his yes. Say so too when it touches nothing else.
