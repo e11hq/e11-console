@@ -363,7 +363,10 @@ extension Main {
     let between = (t.0.kind == "none" && t.1.kind == "none" && t.2.kind == "none") || (t.1.kind == "none" && corner.kind != "none" && !searchBusy)
     // (the search bar just shrank back into its circle: 🔍 takes over right there)
     corner.searchBack = Date().timeIntervalSince(shownScreen?.searchClosedAt ?? .distantPast) < 0.4
-    if between && taskPages.isEmpty && corner.kind != "none" && !cornerWaited {
+    // (not Me's first page: it has none of them on purpose and is already there — waiting kept 🔍 and your photo over Me
+    //  for a moment and the + of the screen left came back to shrink away late: Haris 2026-11-06)
+    let meRoot = taskPages.isEmpty && shownScreen?.assets == "me"
+    if between && !meRoot && taskPages.isEmpty && corner.kind != "none" && !cornerWaited {
       cornerWaited = true
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.cornerWaited = false; self?.updateCornerNow(animated: animated) }
       return
