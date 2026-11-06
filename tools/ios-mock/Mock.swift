@@ -201,7 +201,7 @@ final class MyTasks: UICollectionViewController {
   private var pushed = false
   override func viewDidAppear(_ a: Bool) {
     super.viewDidAppear(a)
-    if (SCENE == 5 || SCENE == 6) && !pushed { pushed = true; navigationController?.pushViewController(TaskVC(tab: SCENE == 6 ? 1 : 0), animated: false); return }
+    if (SCENE == 5 || SCENE == 6) && !pushed { pushed = true; navigationController?.pushViewController(TaskVC(page: SCENE == 6 ? 1 : 0), animated: false); return }
     if SCENE == 2 { collectionView.setContentOffset(CGPoint(x: 0, y: 420 - collectionView.adjustedContentInset.top), animated: false) }
   }
 }
@@ -212,14 +212,14 @@ extension UIContextualAction { func then(_ f: (UIContextualAction) -> Void) -> U
 // ---------- the task page: pushed (Apple's push, ‹ My Tasks, the edge swipe), Details · Comments ----------
 final class TaskVC: UIViewController, UICollectionViewDelegate {
   let t = SECTIONS[0].1[0]
-  private var tab: Int
+  private var page: Int
   private var cv: UICollectionView!
   private var data: UICollectionViewDiffableDataSource<Int, String>!
   private var cds: AnyObject?
   private let seg = UISegmentedControl(items: ["Details", "Comments  3"])
-  init(tab: Int) { self.tab = tab; super.init(nibName: nil, bundle: nil); hidesBottomBarWhenPushed = true }
+  init(page: Int) { self.page = page; super.init(nibName: nil, bundle: nil); hidesBottomBarWhenPushed = true }
   required init?(coder: NSCoder) { fatalError() }
-  override var canBecomeFirstResponder: Bool { tab == 1 }
+  override var canBecomeFirstResponder: Bool { page == 1 }
   private lazy var bar: UIView = {
     // the comment box (as E11 Talk's): Apple's text view in a rounded box, attach on the left, send on the right
     let v = UIView(frame: CGRect(x: 0, y: 0, width: 400, height: 60)); v.backgroundColor = .clear
@@ -238,28 +238,28 @@ final class TaskVC: UIViewController, UICollectionViewDelegate {
       send.trailingAnchor.constraint(equalTo: v.trailingAnchor, constant: -10), send.centerYAnchor.constraint(equalTo: box.centerYAnchor)])
     return v
   }()
-  override var inputAccessoryView: UIView? { tab == 1 ? bar : nil }
+  override var inputAccessoryView: UIView? { page == 1 ? bar : nil }
   override func viewDidLoad() {
     super.viewDidLoad()
     view.backgroundColor = .systemGroupedBackground
     navigationItem.largeTitleDisplayMode = .never
-    seg.selectedSegmentIndex = tab
+    seg.selectedSegmentIndex = page
     navigationItem.titleView = seg
     let more = UIMenu(children: [UIAction(title: "Copy link", image: UIImage(systemName: "link")) { _ in },
                                  UIAction(title: "Duplicate", image: UIImage(systemName: "plus.square.on.square")) { _ in },
                                  UIAction(title: "Delete", image: UIImage(systemName: "trash"), attributes: .destructive) { _ in }])
     navigationItem.rightBarButtonItems = [UIBarButtonItem(title: nil, image: UIImage(systemName: "ellipsis"), primaryAction: nil, menu: more),
                                           UIBarButtonItem(title: nil, image: UIImage(systemName: "checkmark"), primaryAction: UIAction { _ in }, menu: nil)]
-    var cfg = UICollectionLayoutListConfiguration(appearance: tab == 0 ? .insetGrouped : .plain)
-    cfg.headerMode = tab == 0 ? .supplementary : .none
-    cfg.showsSeparators = tab == 0
-    cfg.backgroundColor = tab == 0 ? .systemGroupedBackground : .systemBackground
+    var cfg = UICollectionLayoutListConfiguration(appearance: page == 0 ? .insetGrouped : .plain)
+    cfg.headerMode = page == 0 ? .supplementary : .none
+    cfg.showsSeparators = page == 0
+    cfg.backgroundColor = page == 0 ? .systemGroupedBackground : .systemBackground
     cv = UICollectionView(frame: view.bounds, collectionViewLayout: UICollectionViewCompositionalLayout.list(using: cfg))
     cv.autoresizingMask = [.flexibleWidth, .flexibleHeight]; cv.keyboardDismissMode = .interactive
     view.addSubview(cv)
-    tab == 0 ? details() : comments()
+    page == 0 ? details() : comments()
   }
-  override func viewDidAppear(_ a: Bool) { super.viewDidAppear(a); if tab == 1 { becomeFirstResponder() } }
+  override func viewDidAppear(_ a: Bool) { super.viewDidAppear(a); if page == 1 { becomeFirstResponder() } }
 
   // Details: the title, its facts as Apple's rows (each opens its sheet / menu), description, files, subtasks
   private func details() {
