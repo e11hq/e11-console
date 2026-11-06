@@ -23,6 +23,9 @@ others slide only when something really came, went or changed height). Every new
 `PressShrink`) from the moment the finger is down, nothing inside it moves (cards are placed with bounds + center, never
 `frame`, so a shrunk card isn't re-laid out); held long enough: a medium haptic, iPhone's own sheet slides up, and the
 card springs back. No grey highlight, no iOS context menu with a lifted preview.
+Where iPhone's own small popup menu is used instead (file thumbnails and file rows, rows with a menu — Haris 2026-11-06):
+it shrinks while pressed, then shows **at its own size and place** while the menu is open — no lift, no shrink
+(`PressPreview.make`: asks 0.87, iPhone's ~15% lift lands it at 1). Every new popup-menu hold does the same.
 
 **The shared top buttons, everywhere (Haris, 2026-11-03):** they always belong to exactly one screen — the one on top, or,
 while it's going (‹, the edge swipe, a tab change), already the one it's going back to, which is shown in place before
