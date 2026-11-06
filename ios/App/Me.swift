@@ -766,7 +766,9 @@ final class TrashRow: AssetTile, UIGestureRecognizerDelegate {
   private var canR = false, canF = false
   private var shift: CGFloat = 0 { didSet {
     body.transform = CGAffineTransform(translationX: shift, y: 0)
-    restoreB.alpha = shift > 0.5 ? 1 : 0; foreverB.alpha = shift < -0.5 ? 1 : 0
+    // (always fully there — no width, nothing shows: fading them with the spring let the page show through the red as it
+    //  closed, Haris 2026-11-06)
+    restoreB.alpha = 1; foreverB.alpha = 1
     // (each button fills what the row has uncovered, as Mail's)
     let H = bounds.height
     restoreB.frame = CGRect(x: 0, y: 0, width: max(0, shift), height: H)
@@ -788,8 +790,11 @@ final class TrashRow: AssetTile, UIGestureRecognizerDelegate {
     for (b, cv, t, c, sy) in [(restoreB, restoreC, "Restore", UIColor.systemGreen, "arrow.uturn.backward"), (foreverB, foreverC, "Delete forever", UIColor.systemRed, "trash.fill")] {
       var cf = UIButton.Configuration.plain()
       // (square — only the group's own corners round it: the first row's top, the last row's bottom; Haris 2026-11-03)
-      cf.background.backgroundColor = c; cf.background.cornerRadius = 0; cf.cornerStyle = .fixed
-      b.configuration = cf; b.layer.cornerRadius = 0; b.alpha = 0; b.clipsToBounds = true; b.accessibilityLabel = t; addSubview(b)
+      // (the colour on the button itself, not its configuration's background: that one followed the button's size a step
+      //  behind while the spring moved it, and the page showed through between the row and the red / green — Haris
+      //  2026-11-06)
+      cf.background.backgroundColor = .clear; cf.background.cornerRadius = 0; cf.cornerStyle = .fixed
+      b.configuration = cf; b.backgroundColor = c; b.layer.cornerRadius = 0; b.alpha = 0; b.clipsToBounds = true; b.accessibilityLabel = t; addSubview(b)
       let iv = UIImageView(image: UIImage(systemName: sy, withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold))); iv.tintColor = .white; iv.contentMode = .center
       let l = UILabel(); l.text = t; l.font = .systemFont(ofSize: 12, weight: .semibold); l.textColor = .white; l.textAlignment = .center; l.numberOfLines = 1
       iv.translatesAutoresizingMaskIntoConstraints = false; l.translatesAutoresizingMaskIntoConstraints = false
@@ -1209,6 +1214,27 @@ final class MeCtl {
   private func pfPhotoOff() {
     guard mineNow else { send(["ev": "pfPhotoOff"]); return }
     confirm(["title": "Remove your photo?", "body": "Your initials show instead.", "okText": "Remove", "danger": true]) { [weak self] in self?.pfSet("avatar", ["value": NSNull()], page: ["ev": "pfPhotoOff"]) }
+  }
+  // a Trash item tapped (a file: its preview; else its sheet) or held (its sheet: Preview, Restore, Delete forever) —
+  // phone.js trTap / trashHold, from the copy (web/appme-people.js trashItem)
+  private func trashOwn(_ h: HomeView, _ id: String, tap: Bool) -> Bool {
+    guard let it = brain("trash", "trashItem", [id]) else { return false }
+    let files = (it["files"] as? [[String: Any]]) ?? []
+    let preview = { [weak self] in self?.main.openFiles(files.map { ["id": $0["id"] ?? "", "path": $0["path"] ?? "", "name": $0["name"] ?? "File", "size": $0["size"] ?? 0] }, at: 0) }
+    if tap, (it["type"] as? String) != "task", !files.isEmpty { preview(); return true }
+    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+    let a = UIAlertController(title: it["title"] as? String, message: it["left"] as? String, preferredStyle: .actionSheet)
+    a.overrideUserInterfaceStyle = light ? .light : .dark
+    if !files.isEmpty { a.addAction(UIAlertAction(title: files.count == 1 ? "Preview" : "Preview files", style: .default) { _ in preview() }) }
+    if (it["restore"] as? Bool) == true {
+      a.addAction(UIAlertAction(title: "Restore", style: .default) { [weak self, weak h] _ in
+        self?.request(["ev": "trRestore", "id": id]) { r in h?.toast(["t": (r["ok"] as? Bool) == true ? (r["toast"] as? String ?? "Restored") : (r["error"] as? String ?? "That didn’t work — try again")]) }
+      })
+    }
+    if (it["forever"] as? Bool) == true { a.addAction(UIAlertAction(title: "Delete forever", style: .destructive) { [weak self] _ in self?.trForever(id) }) }
+    a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+    main.topMost().present(a, animated: true)
+    return true
   }
   // Trash: Delete forever, Empty Trash — asked first, as the website does
   private func trForever(_ id: String) {
@@ -2460,6 +2486,8 @@ final class MeCtl {
         // (Restore: straight to the server — step 3 — with the page's own toast; the rest as before)
         if (ev["ev"] as? String) == "trRestore" { self?.request(ev) { r in h?.toast(["t": (r["ok"] as? Bool) == true ? (r["toast"] as? String ?? "Restored") : (r["error"] as? String ?? "That didn’t work — try again")]) }; return }
         if (ev["ev"] as? String) == "trForever", let id = ev["id"] as? String { self?.trForever(id); return }
+        // (a tap and touch and hold, the app's own — without the website they did nothing: Haris 2026-11-06)
+        if let k = ev["ev"] as? String, k == "trTap" || k == "trHold", let id = ev["id"] as? String, let self = self, let h = h, self.trashOwn(h, id, tap: k == "trTap") { return }
         self?.send(ev)
       }
       tg.set(items, look: h.look)

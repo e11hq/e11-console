@@ -474,6 +474,16 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
 
   // Delete forever / Empty the Trash: the questions (eraseTrashFlow, emptyTrashFlow) — Super Admins only, as the
   // server (an Office Admin's are only restored)
+  // one Trash item, for its tap and touch and hold without the website (phone.js trTap / trashHold): its name, days left,
+  // its files (to preview), and what you may do with it — Haris 2026-11-06
+  M.trashItem = function (R, data, meId, nowMs, id, env) {
+    const W = world(R, data, meId, nowMs, env), it = W.trash.find((x) => x.id === id), u = W.me();
+    if (!it || !u) return null;
+    const left = W.trashDaysLeft(it);
+    return { id: it.id, type: it.type, title: W.trashTitle(it), left: `${left} day${left === 1 ? '' : 's'} left`,
+      files: W.trashFiles(it).filter((a) => a && a.path).map((a) => ({ id: a.id || a.path, name: a.name || 'File', path: a.path, size: a.size || 0 })),
+      restore: it.type !== 'project' || W.isAdm(u), forever: W.isSuper(u) };
+  };
   M.trashAsk = function (R, data, meId, nowMs, id, env) {
     const W = world(R, data, meId, nowMs, env), it = W.trash.find((x) => x.id === id);
     if (!it || !W.isSuper(W.me())) return null;
