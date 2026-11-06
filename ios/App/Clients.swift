@@ -254,6 +254,8 @@ final class AssetsStrip: UIView, HomeBlock {
     keep.values.forEach { $0.0.removeFromSuperview() }
     setNeedsLayout()
   }
+  // (another client's page, or one opened again: its folders from the first — Haris 2026-11-06)
+  func toStart() { scroll.setContentOffset(CGPoint(x: -scroll.adjustedContentInset.left, y: 0), animated: false) }
   func blockHeight(_ W: CGFloat) -> CGFloat { tiles.isEmpty ? 40 : 40 + 96 + 4 }
   override func layoutSubviews() {
     super.layoutSubviews()

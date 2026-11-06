@@ -1140,13 +1140,19 @@ final class MeCtl {
   private func pfName() {
     guard mineNow else { send(["ev": "pfName"]); return }
     let cur = (model["profile"] as? [String: Any])?["name"] as? String ?? ""
+    // (iPhone's own small pop-up with the name in it, not a sheet sliding up — Haris 2026-11-06)
     func once(_ v: String, _ err: String) {
-      ask(["kind": "form", "title": "Full name", "okText": "Save", "error": err, "fields": [["key": "name", "label": "Full name", "type": "text", "value": v, "placeholder": "Your full name"]]]) { [weak self] r in
-        guard (r["ok"] as? Bool) == true else { return }
-        let n = ((r["values"] as? [String: Any])?["name"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        if n.isEmpty { DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { once(n, "Please enter your name") }; return }
+      let a = UIAlertController(title: "Full name", message: err.isEmpty ? nil : err, preferredStyle: .alert)
+      a.overrideUserInterfaceStyle = light ? .light : .dark
+      a.addTextField { t in t.text = v; t.placeholder = "Your full name"; t.autocapitalizationType = .words; t.textContentType = .name; t.clearButtonMode = .whileEditing; t.returnKeyType = .done }
+      a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+      let save = UIAlertAction(title: "Save", style: .default) { [weak self, weak a] _ in
+        let n = (a?.textFields?.first?.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if n.isEmpty { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { once(n, "Please enter your name") }; return }
         if n != cur { self?.pfSet("name", ["value": n], page: ["ev": "pfName"]) }
       }
+      a.addAction(save); a.preferredAction = save
+      main.topMost().present(a, animated: true)
     }
     once(cur, "")
   }

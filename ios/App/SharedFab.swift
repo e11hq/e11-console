@@ -12,7 +12,9 @@ final class FabMorph {
   var known = false
   var ghost: UIButton?
   weak var veilA: HomeView?, veilB: HomeView?
-  func unveil() { veilA?.fabVeiled = false; veilB?.fabVeiled = false; veilA = nil; veilB = nil }
+  // (the screen it left stays veiled while it's no longer the one on top — it was still sliding out when the stand-in had
+  //  gone, and its Upload came back for a moment: Haris 2026-11-06; it's unveiled when it's the one on top again)
+  func unveil() { if veilA === screen { veilA?.fabVeiled = false }; veilB?.fabVeiled = false; veilA = nil; veilB = nil }
 }
 
 extension Main {
@@ -34,7 +36,7 @@ extension Main {
     if start == nil, case let (h, f)? = a { start = place(h, f.frame); startCfg = f.config; startLight = f.light }
     if start == nil && b == nil { from?.fabVeiled = false; return }
     // (the same button in the same place: nothing to show)
-    if case let (ha, fa)? = a, case let (hb, fb)? = b, fa.label == fb.label, place(ha, fa.frame) == place(hb, fb.frame) { return }
+    if case let (ha, fa)? = a, case let (hb, fb)? = b, fa.label == fb.label, place(ha, fa.frame) == place(hb, fb.frame) { hb.fabVeiled = false; return }
 
     let g = UIButton(type: .system)
     g.isUserInteractionEnabled = false

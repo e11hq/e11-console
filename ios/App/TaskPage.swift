@@ -526,6 +526,14 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     cornerItems = ci
     onMenu?()
   }
+  private var ownFileIds = Set<String>()
+  private func confirmRemove(_ f: [String: Any]) {
+    guard let fid = f["id"] as? String else { return }
+    let a = UIAlertController(title: "Remove “\(f["name"] as? String ?? "this file")”?", message: "It goes to the Trash.", preferredStyle: .alert)
+    a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+    a.addAction(UIAlertAction(title: "Remove", style: .destructive) { [weak self] _ in guard let self = self else { return }; self.onAct?(["act": "removeFile", "id": self.taskId, "value": fid]) })
+    present(a)
+  }
   private func confirmDelete() {
     let a = UIAlertController(title: "Delete this task?", message: "It goes to the Trash.", preferredStyle: .alert)
     a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
@@ -553,7 +561,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   static func basic(_ m0: [String: Any]) -> [String: Any] {
     guard viewOnly else { return m0 }
     var m = m0
-    for k in ["creator", "parts", "tags", "channels", "review", "clientApproval", "activity", "complete", "review2", "kids"] { m[k] = nil }   // (Guardian and Task Update show — Haris)
+    for k in ["creator", "parts", "tags", "channels", "clientApproval", "activity", "complete", "review2", "kids"] { m[k] = nil }   // (Guardian and Task Update show — Haris; and Needs CD review, switched by whoever's role allows it — Haris 2026-11-06)
     // (Haris, 2026-11-02: these can be changed from the phone again, each by whoever's role allows it — the server's
     //  own can… say who: the title, Status, Task Update, Assignees, Priority, Client and the description; the rest stays
     //  view only)
@@ -722,7 +730,9 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let own = (m["files"] as? [[String: Any]]) ?? [], fromComments = (m["commentFiles"] as? [[String: Any]]) ?? []
     var settle = Set<String>()
     uploads.removeAll { u in
-      guard (u["sent"] as? Bool) == true, let r = own.first(where: { f in let id = f["id"] as? String ?? ""
+      // (as soon as the real one is in — also before the upload's own answer: the live copy often brings it first, and
+      //  both showed for a moment, Haris 2026-11-06)
+      guard let r = own.first(where: { f in let id = f["id"] as? String ?? ""
         return (f["name"] as? String) == (u["name"] as? String) && !knownFiles.contains(id) && !settle.contains(id) }), let rid = r["id"] as? String else { return false }
       settle.insert(rid); CommentCell.handOver(from: [u], to: [r])
       return true
@@ -735,6 +745,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       var fr: [UIView] = []
       let real = shown.filter { ($0["pending"] as? Bool) != true }
       let at: (Int) -> Int = { i in real.firstIndex { ($0["id"] as? String) == (shown[i]["id"] as? String) } ?? 0 }
+      ownFileIds = canAttach ? Set(own.compactMap { $0["id"] as? String }) : []
       filesStrip.set(shown, settle: settle, open: { [weak self] i in self?.onOpenFiles?(real, at(i)) }, menu: { [weak self] i in self?.fileMenu(real, at(i)) })
       if !shown.isEmpty { fr.append(pad(filesStrip, right: 0)) }
       if canAttach { fr.append(addRow("Attach Files") { [weak self] in self?.attachSheet() }) }
@@ -777,6 +788,10 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       UIAction(title: "Download", image: UIImage(systemName: "arrow.down.circle")) { [weak self] _ in self?.onFileAction?(f, "download") },
     ]
     if Main.isAdmin { items.append(linkAction(f)) }   // (Admins turn links off and on)
+    // (the task's own files: Remove — to the Trash, with Undo; a comment's files go with their comment — Haris 2026-11-06)
+    if let fid = f["id"] as? String, ownFileIds.contains(fid) {
+      items.append(UIMenu(options: .displayInline, children: [UIAction(title: "Remove", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in self?.confirmRemove(f) }]))
+    }
     return UIMenu(title: f["name"] as? String ?? "", children: items)
   }
   private func layoutContent() {

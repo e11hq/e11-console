@@ -455,7 +455,16 @@ extension Main {
         return
       }
       if (b["act"] as? String) == "done", b["page"] == nil { UINotificationFeedbackGenerator().notificationOccurred(.success) }
-      if let first = messages.first, !first.isEmpty { p.toast(first) }
+      if (b["act"] as? String) == "removeFile", let u = self.serverTask.lastUndo {
+        // (a file removed: Undo puts it back — Haris 2026-11-06)
+        p.toast("File removed", action: ("Undo", { [weak self, weak p] in
+          guard let self = self, let p = p else { return }
+          self.serverTask.act(["act": "undoDelete", "trashId": u, "id": p.taskId, "page": p.taskId]) { ok, _, err, _, _ in
+            if !ok { p.toast(err ?? "Couldn’t bring it back") }
+            self.refreshTaskPage(p)
+          }
+        }))
+      } else if let first = messages.first, !first.isEmpty { p.toast(first) }
       if let m = m { self.drawTask(p, m) } else { self.refreshTaskPage(p) }
       // (Home, My Tasks and the Inbox under it: as they are now)
       self.serverHome.refresh()

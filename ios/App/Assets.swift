@@ -410,7 +410,14 @@ final class AssetsCtl {
   private var fromPage = false, rootTab = false
   private weak var base: UIView?   // (what the first one was opened over — a client's page, the list; hidden under it meanwhile)
   var light = true
-  private var me: String?
+  // (who's signed in: as the page or Me said, else the app's own copy's — opened from a client's page without the
+  //  website, it wasn't known, so a new folder or an upload went to a page that isn't there and never showed: Haris
+  //  2026-11-06)
+  private var meSaid: String?
+  private var me: String? {
+    get { (meSaid?.isEmpty == false ? meSaid : nil) ?? AppData.shared.me }
+    set { meSaid = newValue }
+  }
   private var pending: [String: ([String: Any]) -> Void] = [:]
   private(set) var leaving = false
   private var upBusy = false
@@ -470,6 +477,8 @@ final class AssetsCtl {
       if let c = ev["client"] as? String, models[c] == nil, top != nil, stack.last?.client == c { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.pop() } }
       return
     }
+    // (no website, and the server didn't take it: said at once — not 20 s of nothing)
+    if !main.pageReady { done(["ok": false, "error": "Couldn’t reach the server — try again"]); return }
     let rid = UUID().uuidString
     var e = ev; e["rid"] = rid
     pending[rid] = done
@@ -595,9 +604,23 @@ final class AssetsCtl {
     if let l = main.clientsListIfMade, !l.isHidden { base = l; return l }
     return nil
   }
+  // live without the website (the page used to send changes again): when the copy changes — another phone, the Mac,
+  // the website — the open screens are worked out again from it (Haris 2026-11-06)
+  private var copyWatch: UUID?
+  private func watchCopyLive() {
+    guard copyWatch == nil else { return }
+    copyWatch = AppData.shared.listen { [weak self] in
+      guard let self = self, !self.stack.isEmpty, !self.main.pageReady else { return }
+      var whose: [Any] = []
+      if self.stack.contains(where: { $0.kind == "all" }) { whose.append(NSNull()) }
+      for c in Set(self.stack.compactMap { $0.client }) { whose.append(c) }
+      for w in whose { if let m = AppData.shared.meModel("assets", "assets", [w]) { self.take(m) } }
+    }
+  }
   private func push(_ s: Screen, animated: Bool) {
     let W = main.view.bounds.width
     let u = under(stack.count)
+    watchCopyLive()
     stack.append(s)
     draw(s)
     s.h.isHidden = false

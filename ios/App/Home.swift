@@ -315,6 +315,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       // (its Client Assets folders on top, then "Tasks · N open" with Show completed — kept, not made again)
       if let a = model["assets"] as? [String: Any] {
         assetsStrip.set((a["folders"] as? [[String: Any]]) ?? [], look: L)
+        let cid = model["id"] as? String ?? ""
+        if cid != stripClient || isHidden { stripClient = cid; assetsStrip.toStart() }
         if assetsStrip.superview !== scroll { scroll.addSubview(assetsStrip) }
         content.append(assetsStrip)
       } else { assetsStrip.removeFromSuperview() }
@@ -662,6 +664,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let g = ClientsGroup(); g.onOpen = { [weak self] id in self?.send(["ev": "client", "id": id]) }
     g.onHold = { [weak self] id in self?.send(["ev": "clientHold", "id": id]) }; return g
   }()
+  private var stripClient = ""
   private lazy var assetsStrip: AssetsStrip = {
     let a = AssetsStrip()
     a.onFolder = { [weak self] f in guard let self = self, let c = (self.m["assets"] as? [String: Any])?["id"] as? String else { return }; self.send(["ev": "folder", "client": c, "folder": f]) }

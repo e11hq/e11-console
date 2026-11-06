@@ -882,6 +882,18 @@ var E11Rules = (() => {
       t.updatedAt = nowISO();
       return { messages: ['Comment deleted'], undo: item.id };
     }
+    // a task's own file removed on the phone (app.js remove-att): to the Trash, Undo for a few seconds — Haris 2026-11-06
+    function removeAttachment(t, aid) {
+      const a = (t.attachments || []).find((x) => x.id === aid);
+      if (!a) return { error: 'That file is no longer here' };
+      t.attachments = t.attachments.filter((x) => x.id !== aid);
+      logActivity(t, `removed attachment ${struck(a.name)}`);
+      db.trash = db.trash || [];
+      const item = { id: 'tr-' + newId(), type: 'attachment', deletedAt: nowISO(), deletedBy: meId, key: 'tasks:' + t.id, taskTitle: t.title, data: { taskId: t.id, att: a } };
+      db.trash.push(item);
+      t.updatedAt = nowISO();
+      return { messages: ['File removed'], undo: item.id };
+    }
     function toggleReaction(t, cid, emoji) {
       const c = (t.comments || []).find((x) => x.id === cid);
       if (!c) return { error: 'That comment is no longer here' };
@@ -1221,7 +1233,7 @@ var E11Rules = (() => {
     return { peopleLocked, home, myTasks, myTasksFilters, inbox, inboxRow, clientsList, clientPage, setFinance, canFinance, myDayData, cardOf, can, amReadOnly, canComplete, completeBlocked, dayTitle, statusInfo, sectionOf,
       notifGroups: NOTIF_GROUPS, doneLocked, canReopen, finish, finishBlocked, canFinish, moveToStatus, logActivity, logChange, pushNotif, notifyWatchers, checkPrioConflict, setDone, setDue, setClientApproval, asksClientApproval, deleteTask, watchersOf, creatorOf, clientAmsOf, fmtDue,
       taskPage, setTitle, setStart, setStatus, setMyPart, setPrio, prioTaken, toggleCheck, setNeedsCD, setUpdate, idLocked,
-      setAssignee, setGuardian, addTag, removeTag, setChannels, addCheck, addSubtask, setClient, commentsFeed, toggleReaction, deleteComment, setDesc, submitReview, withdrawReview, postComment, editComment, mentionable, attachFilesTo,
+      setAssignee, setGuardian, addTag, removeTag, setChannels, addCheck, addSubtask, setClient, commentsFeed, toggleReaction, deleteComment, removeAttachment, setDesc, submitReview, withdrawReview, postComment, editComment, mentionable, attachFilesTo,
       // (the morning round-up and the startup screen, worked out by the app — Part B step 8)
       day, leadSet, hasClients, needsCD, reviewersOf, reviewState, reviewPending, clientApprovalFresh, fmtDay, trunc };
   }

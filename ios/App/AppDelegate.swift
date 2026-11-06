@@ -247,7 +247,10 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       AppData.shared.start(me: me, cookies: serverHome.cookies); watchCopy(); quickSplash(); ownPopsWatch(); return
     }
     view.layoutIfNeeded()
-    homeLook = q["look"]; homePageMe = me
+    // (the look kept from last time only when it's the same light / dark as now — Automatic may have turned it since:
+    //  a morning start kept last night's dark Home, Haris 2026-11-06)
+    if let l = q["look"] as? [String: Any], (l["light"] as? Bool) == (appStyle == .light) { homeLook = l } else { homeLook = nil }
+    homePageMe = me
     let h = homeView
     if h.superview == nil { return }
     h.bottomRoom = (tabBar.isHidden ? 40 : view.bounds.height - tabBar.frame.minY) + 96
@@ -1068,10 +1071,12 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in self?.ownAppearanceTick() }
   }
   func ownAppearanceTick() {
-    guard AppData.shared.tabsOn, defaults.string(forKey: "e11_theme_mode") == "auto",
-          let r = defaults.string(forKey: "e11_sun_rise").flatMap({ isoDate($0) }),
-          let st = defaults.string(forKey: "e11_sun_set").flatMap({ isoDate($0) }) else { return }
+    // (Automatic: also with no setting kept yet — a phone that never had the website; and no sunrise / sunset kept: 6 am
+    //  to 6 pm)
+    guard AppData.shared.tabsOn, (defaults.string(forKey: "e11_theme_mode") ?? "auto") == "auto" else { return }
     let cal = Calendar.current, now = Date()
+    let r = defaults.string(forKey: "e11_sun_rise").flatMap({ isoDate($0) }) ?? cal.date(bySettingHour: 6, minute: 0, second: 0, of: now) ?? now
+    let st = defaults.string(forKey: "e11_sun_set").flatMap({ isoDate($0) }) ?? cal.date(bySettingHour: 18, minute: 0, second: 0, of: now) ?? now
     let today = { (d: Date) -> Date in cal.date(bySettingHour: cal.component(.hour, from: d), minute: cal.component(.minute, from: d), second: 0, of: now) ?? d }
     let want = now >= today(r) && now < today(st) ? "light" : "dark"
     if defaults.string(forKey: "e11_look") != want { run("setAppearance", ["mode": want]) { _ in } }
@@ -1308,6 +1313,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     // (the tab the app's own Me pages are showing now — Me, Content plans, an Office Admin's Overview / Team; another of
     //  them: hidden, and the page sends that one's first page — Me showed Overview, Haris 2026-11-04)
     let meLike = tabKeys[item.tag] == meCtl.tab
+    // (Me again from Client Assets opened over it, without the website: back to Me — Haris 2026-11-06: nothing happened)
+    if again, !pageReady, assetsCtl.isOpen, selectedTabKey == "me" { assetsBackToMe(); return }
     if again, meLike, meCtl.isOpen { if meCtl.depth > 1 { meCtl.backToRoot() } else { meCtl.top?.scrollToTop() }; return }
     // (another tab: the app's own Me goes at once for the app's own tabs; back on Me, it's there at once as it was)
     if meLike { if !meCtl.screens.isEmpty, pageReady { meCtl.reveal() } }
@@ -1604,6 +1611,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     defer { updateCorner() }
     guard let h = homeIfMade, !h.isHidden else { return }
     var mm = m; mm["show"] = true
+    if let l = homeLook as? [String: Any], (l["light"] as? Bool) != (appStyle == .light) { homeLook = nil }
     mm["look"] = homeLook ?? ["light": appStyle == .light]
     if let p = m["people"] as? [String: [String: Any]] {
       serverHome.photos(p) { [weak self] got in
@@ -1886,6 +1894,23 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       } completion: { _ in snap?.removeFromSuperview(); self.web.transform = .identity }
     }
   }
+  // Me tapped again over Client Assets: what's on top slides away to the right, Me (its first page) comes back under it
+  func assetsBackToMe() {
+    guard let top = assetsCtl.top else { return }
+    let W = view.bounds.width
+    let snap = top.snapshotView(afterScreenUpdates: false)
+    if let s = snap { s.frame = top.frame; view.insertSubview(s, belowSubview: tabBar) }
+    assetsCtl.close(animated: false)
+    meCtl.reveal()
+    if meCtl.depth > 1 { meCtl.backToRoot() }
+    let r = meCtl.top
+    if let r = r, let s = snap { view.insertSubview(s, aboveSubview: r) }
+    r?.transform = CGAffineTransform(translationX: -W * 0.3, y: 0)
+    edgePanOn(); updateCorner()
+    UIView.animate(withDuration: 0.36, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
+      snap?.transform = CGAffineTransform(translationX: W, y: 0); r?.transform = .identity
+    } completion: { _ in snap?.removeFromSuperview(); r?.transform = .identity }
+  }
   // the Clients tab tapped again from a client's page or Client Assets: what's on top slides away to the right, the list
   // comes back under it; everything between goes at once (false: already on the list)
   func clientsBackToList() -> Bool {
@@ -2128,11 +2153,15 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   // shown: the list in place; a client's page pushed in from the right over the list (as iPhone's own pages)
   private func reveal(_ h: HomeView, page: Bool) {
     let W = view.bounds.width
-    if page, let l = clientsListIfMade, !l.isHidden, view.window != nil {
+    // (over the list — or over the screen it was opened from, Home's search…: slid in like a task's page, not just
+    //  there — Haris 2026-11-06)
+    if page, let l = clientUnder() ?? clientsListIfMade, !l.isHidden, view.window != nil {
+      if l !== clientsListIfMade { view.insertSubview(h, aboveSubview: l) }
       h.transform = CGAffineTransform(translationX: W, y: 0); h.isHidden = false
+      updateCorner()
       UIView.animate(withDuration: 0.42, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
         h.transform = .identity; l.transform = CGAffineTransform(translationX: -W * 0.3, y: 0)
-      } completion: { _ in if !h.isHidden { l.isHidden = true; l.transform = .identity }; self.updateCorner() }
+      } completion: { _ in if !h.isHidden { if l === self.clientsListIfMade { l.isHidden = true }; l.transform = .identity }; self.updateCorner() }
     } else { h.transform = .identity; h.isHidden = false }
     if !page { clientPageIfMade?.isHidden = true }
     edgePanOn()
@@ -4213,6 +4242,16 @@ final class DateSheetVC: UIViewController, UISheetPresentationControllerDelegate
     super.viewDidLayoutSubviews()
     guard !sized, view.bounds.width > 0, cal.frame.minY > 0, cal.frame.height > 100 else { return }
     sized = true
+    // (the calendar itself one height too — room for six week rows, as iPhone's own: left to its own height it grew and
+    //  shrank with each month's 5 or 6 rows while it slid, and one swipe went two months on — November → January,
+    //  Haris 2026-11-06)
+    let vis = cal.visibleDateComponents
+    let first = gregorian.date(from: DateComponents(year: vis.year, month: vis.month, day: 1)) ?? Date()
+    let weeks = CGFloat(gregorian.range(of: .weekOfMonth, in: .month, for: first)?.count ?? 5)
+    let h0 = cal.frame.height
+    let calH = h0 + max(0, 6 - weeks) * (h0 / (weeks + 1.6))
+    let hc = cal.heightAnchor.constraint(equalToConstant: ceil(calH)); hc.isActive = true
+    view.layoutIfNeeded()
     fit()
   }
   private func finish(_ r: [String: Any]) {

@@ -502,7 +502,8 @@ final class CommentCell: UIView {
     let p = people[who] ?? [:]
     let hasReplies = it["replies"] != nil && !thread
     // a comment with replies is a card of its own (as on the website); the task owner's comments have an orange bar
-    card.backgroundColor = hasReplies || root ? .secondarySystemGroupedBackground : .clear
+    // (in a thread every reply is a card too, as the first — Haris 2026-11-06)
+    card.backgroundColor = hasReplies || root || thread ? .secondarySystemGroupedBackground : .clear
     card.layer.cornerRadius = 18; card.layer.cornerCurve = .continuous
     addSubview(card)
     let av = CommentCell.avatar(p, 32)
@@ -581,7 +582,7 @@ final class CommentCell: UIView {
     let row = UIStackView(arrangedSubviews: [av, right]); row.spacing = 10; row.alignment = .top
     row.translatesAutoresizingMaskIntoConstraints = false
     card.addSubview(row)
-    let pad: CGFloat = hasReplies || root ? 12 : 4
+    let pad: CGFloat = hasReplies || root || thread ? 12 : 4
     NSLayoutConstraint.activate([row.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: pad), row.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -pad), row.topAnchor.constraint(equalTo: card.topAnchor, constant: pad), row.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -pad)])
     let lp = UILongPressGestureRecognizer(target: self, action: #selector(held(_:))); lp.minimumPressDuration = 0.45
     addGestureRecognizer(lp)

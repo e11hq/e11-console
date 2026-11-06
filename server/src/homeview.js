@@ -68,7 +68,7 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
     let messages = [], undo = null;
     if (a === 'undoDelete') {
       const it = store.get('trash', String(body.trashId || ''));
-      if (!it || !['task', 'comment'].includes(it.type) || it.deletedBy !== u.id) return fail(404, 'Already restored or no longer in the Trash');
+      if (!it || !['task', 'comment', 'attachment'].includes(it.type) || it.deletedBy !== u.id) return fail(404, 'Already restored or no longer in the Trash');
       const changes = [];
       // a comment (and its replies) back into its task
       if (it.type === 'comment') {
@@ -77,6 +77,15 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
         const base = JSON.parse(JSON.stringify(tk)), next = JSON.parse(JSON.stringify(tk));
         for (const c of (it.data.comments || [])) if (!next.comments.some((x) => x.id === c.id)) next.comments.push(c);
         next.comments.sort((a, b) => String(a.at).localeCompare(String(b.at)));
+        return { ok: true, changes: [{ kind: 'tasks', id: tk.id, base, data: next }], sysChanges: [{ kind: 'trash', id: it.id, del: true }], messages: [] };
+      }
+      // a task's file back on its task
+      if (it.type === 'attachment') {
+        const tk = (data.tasks || []).find((x) => x.id === (it.data || {}).taskId);
+        if (!tk) return fail(404, 'Its task is no longer here');
+        const base = JSON.parse(JSON.stringify(tk)), next = JSON.parse(JSON.stringify(tk));
+        next.attachments = next.attachments || [];
+        if (it.data.att && !next.attachments.some((x) => x.id === it.data.att.id)) next.attachments.push(it.data.att);
         return { ok: true, changes: [{ kind: 'tasks', id: tk.id, base, data: next }], sysChanges: [{ kind: 'trash', id: it.id, del: true }], messages: [] };
       }
       for (const x of (it.data && it.data.tasks) || []) if (!store.get('tasks', String(x.id))) changes.push({ kind: 'tasks', id: x.id, data: x });
@@ -196,7 +205,7 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
       const r = rules.deleteTask(t);
       undo = r.item.id;
       messages = ['Moved to the Trash'];
-    } else if (['title', 'start', 'status', 'myPart', 'prio', 'check', 'needsCD', 'update', 'clientApproval', 'assign', 'guardian', 'addTag', 'removeTag', 'channels', 'addCheck', 'addSub', 'client', 'react', 'deleteComment', 'desc', 'submitReview', 'withdrawReview', 'comment', 'editComment', 'attach', 'finance'].includes(a)) {
+    } else if (['title', 'start', 'status', 'myPart', 'prio', 'check', 'needsCD', 'update', 'clientApproval', 'assign', 'guardian', 'addTag', 'removeTag', 'channels', 'addCheck', 'addSub', 'client', 'react', 'deleteComment', 'desc', 'submitReview', 'withdrawReview', 'comment', 'editComment', 'attach', 'finance', 'removeFile'].includes(a)) {
       // the native task page's (shell 30+) — each checked as the website checks it
       if ((!['react', 'deleteComment', 'comment', 'editComment', 'attach'].includes(a) && rules.amReadOnly(t)) || rules.doneLocked(t)) return view();   // (a view-only task: comments still)
       let r = [];
@@ -227,6 +236,7 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
       else if (a === 'desc') { if (!rules.can('editDesc', t) || rules.idLocked(t)) return fail(403, 'The description can’t be changed'); r = rules.setDesc(t, body.html, body.text, !body.chips); }   // (apps that keep the 📎 chips themselves — 2026-11-02 on — can delete one)
       else if (a === 'submitReview') r = rules.submitReview(t, Array.isArray(body.files) ? body.files : []);
       else if (a === 'withdrawReview') r = rules.withdrawReview(t);
+      else if (a === 'removeFile') { const d = rules.removeAttachment(t, String(body.value || '')); if (d.error) return fail(409, d.error); undo = d.undo; r = d.messages; }
       else if (a === 'attach') r = rules.attachFilesTo(t, Array.isArray(body.files) ? body.files : []);
       else if (a === 'comment') r = rules.postComment(t, body.parentId ? String(body.parentId) : null, body.html, body.text, Array.isArray(body.files) ? body.files : []);
       else if (a === 'editComment') r = rules.editComment(t, String(body.value || ''), body.html, body.text);
