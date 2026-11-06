@@ -22,6 +22,7 @@ import { createLinks } from './links.js';
 import { createViewCopies } from './viewcopy.js';
 import { createOffice } from './office.js';
 import { createApns } from './apns.js';
+import { createTalk } from './talk.js';
 import { createHolidaySync, DEFAULT_HOLIDAYS_URL } from './holidays.js';
 import { createAppStart } from './appstart.js';
 import { claimSheetFor } from './claimsheet.js';
@@ -55,6 +56,10 @@ export function createServer(cfg) {
   const webPush = createWebPush({ store, fetchImpl: cfg.pushFetch || fetch, subject: cfg.pushSubject || 'mailto:admin@e11hq.com' });
   // the native iPhone app's notifications (apns.js) go out with every phone/browser notification
   const apns = createApns({ store, keyFile: cfg.apnsKeyFile, keyId: cfg.apnsKeyId, teamId: cfg.apnsTeamId, topic: cfg.apnsTopic || 'ae.e11.console.ios', hosts: cfg.apnsHosts, connectOpts: cfg.apnsConnectOpts });
+  // E11 Talk (talk.js): its own database, its own phones for notifications (the same Apple key, its own app)
+  const talkApns = createApns({ store, keyFile: cfg.apnsKeyFile, keyId: cfg.apnsKeyId, teamId: cfg.apnsTeamId, topic: cfg.talkTopic || 'ae.e11.talk.ios', kvPrefix: 'talk-apns', hosts: cfg.apnsHosts, connectOpts: cfg.apnsConnectOpts });
+  let talk = null;
+  const talkNow = () => talk || (talk = createTalk({ dataDir, store, access, apns: talkApns, dbFile: cfg.talkDbFile, now: cfg.now || (() => Date.now()) }));
   { const webSend = webPush.sendTo;
     webPush.sendTo = async (userId, msg, opts) => {
       // (the iPhone app: no expense claims — they're on the computer — and its badge counts without them; Haris, 2026-11-01)
@@ -461,6 +466,57 @@ export function createServer(cfg) {
     return { rev, results };
   }
 
+  // ---------- E11 Talk ----------
+  async function talkRoute(req, res, p, url, u) {
+    const t = talkNow();
+    const out = (r) => json(res, r.status || (r.ok === false ? 400 : 200), r);
+    try {
+      if (p === '/api/talk/state' && req.method === 'GET') return out(t.state(u));
+      if (p === '/api/talk/act' && req.method === 'POST') return out(t.act(u, await readBody(req, 256 * 1024)));
+      if (p === '/api/talk/sync' && req.method === 'GET') return out(t.sync(u, url.searchParams.get('after'), url.searchParams.get('limit')));
+      if (p === '/api/talk/ack' && req.method === 'POST') { const b = await readBody(req, 16 * 1024); return out(t.ack(u, b.upto)); }
+      if (p === '/api/talk/stream' && req.method === 'GET') {
+        res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
+        res.write('retry: 3000\n\n');
+        const stop = t.listen(u.id, res);
+        const ping = setInterval(() => { try { res.write(': ping\n\n'); } catch { /* closed */ } }, 25000);
+        req.on('close', () => { clearInterval(ping); stop(); });
+        return;
+      }
+      // a file piece (raw bytes, up to 8 MB): ?id= (none for the first) &name= &offset= &last=1
+      if (p === '/api/talk/upload' && req.method === 'POST') {
+        const bytes = await readRaw(req, 8 * 1024 * 1024 + 1024);
+        const q = url.searchParams;
+        return out(t.upload(u, q.get('id') || '', q.get('name') || '', q.get('offset') || '0', bytes, q.get('last') === '1'));
+      }
+      if (p.startsWith('/api/talk/file/') && (req.method === 'GET' || req.method === 'HEAD')) {
+        const f = t.fileFor(u, p.slice('/api/talk/file/'.length));
+        if (!f) return json(res, 404, { ok: false, error: 'That file has gone' });
+        const full = t.filePath(f), size = fs.statSync(full).size;
+        const m = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range || ''));
+        const type = mimeOf(f.name);
+        if (m && (m[1] || m[2])) {
+          const start = m[1] ? Number(m[1]) : Math.max(0, size - Number(m[2])), end = m[1] && m[2] ? Math.min(size - 1, Number(m[2])) : size - 1;
+          if (start >= size || start > end) { res.writeHead(416, { 'Content-Range': `bytes */${size}` }); return res.end(); }
+          res.writeHead(206, { 'Content-Type': type, 'Content-Length': end - start + 1, 'Content-Range': `bytes ${start}-${end}/${size}`, 'Accept-Ranges': 'bytes', 'Cache-Control': 'private, max-age=86400' });
+          return req.method === 'HEAD' ? res.end() : fs.createReadStream(full, { start, end }).pipe(res);
+        }
+        res.writeHead(200, { 'Content-Type': type, 'Content-Length': size, 'Accept-Ranges': 'bytes', 'Cache-Control': 'private, max-age=86400' });
+        return req.method === 'HEAD' ? res.end() : fs.createReadStream(full).pipe(res);
+      }
+      if (p === '/api/talk/push' && req.method === 'POST') {
+        const b = await readBody(req, 16 * 1024);
+        if (b.off) { talkApns.unregister(b.token); return out({ ok: true }); }
+        return out(talkApns.register(u.id, b.token, b.env, { ack: b.ack === true }) ? { ok: true, push: talkApns.enabled() } : { ok: false, error: 'Bad token' });
+      }
+      if (p === '/api/talk/push/ack' && req.method === 'POST') { const b = await readBody(req, 16 * 1024); return out(await talkApns.ack(u.id, b.token, b.pid)); }
+      return json(res, 404, { ok: false, error: 'Not found' });
+    } catch (e) {
+      console.error('talk:', e.message);
+      return json(res, e.status || 500, { ok: false, error: e.status ? e.message : 'Something went wrong' });
+    }
+  }
+
   /* ---------- routes ---------- */
   async function handle(req, res) {
     const url = new URL(req.url, 'http://local');
@@ -529,6 +585,9 @@ export function createServer(cfg) {
 
     const u = await who(req, res);
     if (!u) return;
+
+    // E11 Talk (talk.js) — the chat app's own addresses; nothing of E11 Console's changes
+    if (p.startsWith('/api/talk/')) return talkRoute(req, res, p, url, u);
 
     // Owner view, look only: nothing changes (reading, files, previews and this device's notifications still work)
     if (req.ownerView === 'look' && req.method !== 'GET' && req.method !== 'HEAD') {
@@ -1264,7 +1323,7 @@ export function createServer(cfg) {
     office, apns,
     digest, holidays, occRemind, birthdays, scheduled, daily, views, scanVideos, pruneNotifications,
     loadDemo,
-    close: () => new Promise((ok) => { clearInterval(demoTimer); digest.stop(); holidays.stop(); occRemind.stop(); birthdays.stop(); scheduled.stop(); daily.stop(); apns.close(); scanTimers.forEach((x) => { clearTimeout(x); clearInterval(x); }); office.close(); for (const s of streams) try { s.res.end(); } catch { /* ignore */ } server.close(() => { store.close(); ok(); }); }),
+    close: () => new Promise((ok) => { clearInterval(demoTimer); digest.stop(); holidays.stop(); occRemind.stop(); birthdays.stop(); scheduled.stop(); daily.stop(); apns.close(); talkApns.close(); if (talk) talk.close(); scanTimers.forEach((x) => { clearTimeout(x); clearInterval(x); }); office.close(); for (const s of streams) try { s.res.end(); } catch { /* ignore */ } server.close(() => { store.close(); ok(); }); }),
     broadcastVersion: (v) => { for (const s of streams) send(s, 'version', { version: v }); },
   };
 }

@@ -10,7 +10,7 @@ import fs from 'node:fs';
 const b64u = (b) => Buffer.from(b).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const HOSTS = { production: 'https://api.push.apple.com', sandbox: 'https://api.sandbox.push.apple.com' };
 
-export function createApns({ store, keyFile = '', keyId = '', teamId = '', topic = 'ae.e11.console.ios', hosts = HOSTS, connectOpts = {}, now = () => Date.now(), log = console }) {
+export function createApns({ store, keyFile = '', keyId = '', teamId = '', topic = 'ae.e11.console.ios', kvPrefix = 'apns', hosts = HOSTS, connectOpts = {}, now = () => Date.now(), log = console }) {
   let key = null;
   function signingKey() {
     if (key) return key;
@@ -30,8 +30,9 @@ export function createApns({ store, keyFile = '', keyId = '', teamId = '', topic
     return jwt;
   }
   // the iPhones signed in, per person: kv apns-subs = { userId: [{ token, env, at }] }
-  const load = () => { try { return JSON.parse(store.kv.get('apns-subs') || '{}'); } catch { return {}; } };
-  const save = (v) => store.kv.set('apns-subs', JSON.stringify(v));
+  // (E11 Talk keeps its own list — kvPrefix 'talk-apns' — its phones aren't E11 Console's)
+  const load = () => { try { return JSON.parse(store.kv.get(`${kvPrefix}-subs`) || '{}'); } catch { return {}; } };
+  const save = (v) => store.kv.set(`${kvPrefix}-subs`, JSON.stringify(v));
   // ack: the app confirms each notification it gets (its Notification Service Extension: iPhone app 16+, Mac App
   // Store app) — then the ones it didn't get are sent again (see ack below)
   function register(userId, token, env, opts = {}) {
@@ -52,8 +53,8 @@ export function createApns({ store, keyFile = '', keyId = '', teamId = '', topic
   // older one still unconfirmed is sent again — up to 3 times, for up to 4 days. Nothing is kept for apps that don't
   // confirm (older iPhone apps).
   const KEEP = 4 * 86400000, MAX = 60;
-  const loadP = () => { try { return JSON.parse(store.kv.get('apns-pending') || '{}'); } catch { return {}; } };
-  const saveP = (v) => store.kv.set('apns-pending', JSON.stringify(v));
+  const loadP = () => { try { return JSON.parse(store.kv.get(`${kvPrefix}-pending`) || '{}'); } catch { return {}; } };
+  const saveP = (v) => store.kv.set(`${kvPrefix}-pending`, JSON.stringify(v));
   function dropPending(token) { const p = loadP(); if (p[token]) { delete p[token]; saveP(p); } }
   function ownerOf(token) { const all = load(); for (const [uid, list] of Object.entries(all)) { const s = (list || []).find((x) => x.token === token); if (s) return { uid, s }; } return null; }
   // the app says notification pid arrived on this device: forget it, and send again the older ones that didn't
@@ -120,10 +121,10 @@ export function createApns({ store, keyFile = '', keyId = '', teamId = '', topic
   // msg: { title, body, taskId, nid, tag, badge, kind, clientId, folderId, commentId, planId, view } (webpush.js notifMessage)
   function payloadOf(msg, pid) {
     const data = {};
-    for (const k of ['taskId', 'nid', 'kind', 'clientId', 'folderId', 'commentId', 'planId', 'view']) if (msg[k] != null) data[k] = msg[k];
+    for (const k of ['taskId', 'nid', 'kind', 'clientId', 'folderId', 'commentId', 'planId', 'view', 'groupId', 'msgId']) if (msg[k] != null) data[k] = msg[k];
     if (pid) data.pid = pid;
     // (mutable-content: the app's Notification Service Extension sees each one first — it confirms it arrived)
-    return { aps: { alert: { title: String(msg.title || 'E11 Console'), body: String(msg.body || '') }, sound: 'default', 'thread-id': String(msg.taskId || msg.tag || msg.kind || 'e11'),
+    return { aps: { alert: { title: String(msg.title || (kvPrefix === 'apns' ? 'E11 Console' : 'E11 Talk')), body: String(msg.body || '') }, sound: 'default', 'thread-id': String(msg.taskId || msg.tag || msg.kind || 'e11'),
       ...(Number.isInteger(msg.badge) ? { badge: msg.badge } : {}), ...(pid ? { 'mutable-content': 1 } : {}) }, e11: data };
   }
   async function push1(s, msg, pid, ttl, tries) {

@@ -1,0 +1,417 @@
+/* E11 Talk (the chat app — project doc claude/client-groups-app-idea.md), the server's side. Stage 1 (Haris 2026-11-06):
+   staff, groups under clients, built on the test server first.
+
+   WhatsApp's way: messages live on the phones. The server keeps only the accounts' groups (who's in which, admins,
+   pins, mutes) and passes everything else on — a message (and its photo / file) is held until every member's phone
+   has it, then deleted; one never picked up goes after 30 days. Everything that happens in a group is an "event"
+   (a message, an edit, a delete, a reaction, read up to here, the group changed) with a number (seq); each person
+   has the events addressed to them waiting until their phone says it has them (ack).
+
+   Its own database (db/talk.sqlite) — nothing of it goes into E11 Console's store or its live updates. */
+import { DatabaseSync } from 'node:sqlite';
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+
+const KEEP_MS = 30 * 86400000;          // never picked up: gone after 30 days
+const EDIT_MS = 15 * 60000;             // edit your own message: 15 minutes (as WhatsApp)
+const DEL_ALL_MS = 2 * 86400000;        // delete for everyone: about 2 days
+const MAX_PINS = 5;
+const FILE_MAX = 2 * 1024 * 1024 * 1024; // 2 GB a file (pieces of up to 8 MB)
+const rid = (p) => p + '-' + crypto.randomBytes(8).toString('hex');
+const clip = (s, n) => String(s == null ? '' : s).slice(0, n);
+
+export function createTalk({ dataDir, store, access, apns = null, now = () => Date.now(), dbFile }) {
+  const file = dbFile || path.join(dataDir, 'db', 'talk.sqlite');
+  if (file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true });
+  const relay = path.join(dataDir, 'talk-relay');
+  fs.mkdirSync(relay, { recursive: true });
+  const db = new DatabaseSync(file);
+  db.exec(`
+    PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 5000;
+    CREATE TABLE IF NOT EXISTS groups (id TEXT PRIMARY KEY, client TEXT NOT NULL, name TEXT NOT NULL, creator TEXT NOT NULL,
+      second TEXT, extra TEXT NOT NULL DEFAULT '[]', creator_off INTEGER NOT NULL DEFAULT 0, pic TEXT, created_at INTEGER NOT NULL, last_at INTEGER NOT NULL, gone INTEGER NOT NULL DEFAULT 0);
+    CREATE TABLE IF NOT EXISTS members (grp TEXT NOT NULL, uid TEXT NOT NULL, added_at INTEGER NOT NULL, added_by TEXT, PRIMARY KEY (grp, uid));
+    CREATE TABLE IF NOT EXISTS prefs (uid TEXT NOT NULL, kind TEXT NOT NULL, id TEXT NOT NULL, pinned_at INTEGER, muted_until INTEGER, PRIMARY KEY (uid, kind, id));
+    CREATE TABLE IF NOT EXISTS events (seq INTEGER PRIMARY KEY AUTOINCREMENT, grp TEXT NOT NULL, type TEXT NOT NULL, data TEXT NOT NULL, at INTEGER NOT NULL, by TEXT);
+    CREATE TABLE IF NOT EXISTS waiting (seq INTEGER NOT NULL, uid TEXT NOT NULL, PRIMARY KEY (seq, uid));
+    CREATE INDEX IF NOT EXISTS waiting_uid ON waiting(uid, seq);
+    CREATE TABLE IF NOT EXISTS sent (id TEXT PRIMARY KEY, grp TEXT NOT NULL, by TEXT NOT NULL, at INTEGER NOT NULL, files TEXT NOT NULL DEFAULT '[]');
+    CREATE TABLE IF NOT EXISTS files (id TEXT PRIMARY KEY, by TEXT NOT NULL, name TEXT NOT NULL, size INTEGER NOT NULL DEFAULT 0, done INTEGER NOT NULL DEFAULT 0, at INTEGER NOT NULL);
+  `);
+  const q = (sql) => db.prepare(sql);
+  const Q = {
+    group: q('SELECT * FROM groups WHERE id = ? AND gone = 0'),
+    groupsOf: q('SELECT g.* FROM groups g JOIN members m ON m.grp = g.id WHERE m.uid = ? AND g.gone = 0'),
+    members: q('SELECT uid, added_at FROM members WHERE grp = ?'),
+    isMember: q('SELECT 1 FROM members WHERE grp = ? AND uid = ?'),
+    addMember: q('INSERT OR IGNORE INTO members (grp, uid, added_at, added_by) VALUES (?, ?, ?, ?)'),
+    dropMember: q('DELETE FROM members WHERE grp = ? AND uid = ?'),
+    newGroup: q('INSERT INTO groups (id, client, name, creator, second, extra, pic, created_at, last_at) VALUES (?, ?, ?, ?, NULL, \'[]\', NULL, ?, ?)'),
+    setGroup: q('UPDATE groups SET name = ?, second = ?, extra = ?, pic = ?, creator = ?, last_at = ? WHERE id = ?'),
+    touch: q('UPDATE groups SET last_at = ? WHERE id = ?'),
+    goneGroup: q('UPDATE groups SET gone = 1 WHERE id = ?'),
+    prefs: q('SELECT kind, id, pinned_at, muted_until FROM prefs WHERE uid = ?'),
+    pref: q('SELECT pinned_at, muted_until FROM prefs WHERE uid = ? AND kind = ? AND id = ?'),
+    setPin: q('INSERT INTO prefs (uid, kind, id, pinned_at) VALUES (?, ?, ?, ?) ON CONFLICT(uid, kind, id) DO UPDATE SET pinned_at = excluded.pinned_at'),
+    setMute: q('INSERT INTO prefs (uid, kind, id, muted_until) VALUES (?, \'group\', ?, ?) ON CONFLICT(uid, kind, id) DO UPDATE SET muted_until = excluded.muted_until'),
+    pinsOf: q('SELECT id FROM prefs WHERE uid = ? AND kind = ? AND pinned_at IS NOT NULL ORDER BY pinned_at'),
+    addEvent: q('INSERT INTO events (grp, type, data, at, by) VALUES (?, ?, ?, ?, ?)'),
+    wait: q('INSERT OR IGNORE INTO waiting (seq, uid) VALUES (?, ?)'),
+    pending: q('SELECT e.seq, e.grp, e.type, e.data, e.at, e.by FROM waiting w JOIN events e ON e.seq = w.seq WHERE w.uid = ? AND w.seq > ? ORDER BY w.seq LIMIT ?'),
+    ack: q('DELETE FROM waiting WHERE uid = ? AND seq <= ?'),
+    lastSeq: q('SELECT MAX(seq) AS s FROM events'),
+    orphanEvents: q('SELECT seq FROM events WHERE seq NOT IN (SELECT seq FROM waiting)'),
+    dropEvent: q('DELETE FROM events WHERE seq = ?'),
+    oldEvents: q('SELECT seq FROM events WHERE at < ?'),
+    dropWaiting: q('DELETE FROM waiting WHERE seq = ?'),
+    putSent: q('INSERT OR REPLACE INTO sent (id, grp, by, at, files) VALUES (?, ?, ?, ?, ?)'),
+    getSent: q('SELECT * FROM sent WHERE id = ?'),
+    oldSent: q('SELECT id, files FROM sent WHERE at < ?'),
+    dropSent: q('DELETE FROM sent WHERE id = ?'),
+    newFile: q('INSERT INTO files (id, by, name, size, done, at) VALUES (?, ?, ?, 0, 0, ?)'),
+    getFile: q('SELECT * FROM files WHERE id = ?'),
+    growFile: q('UPDATE files SET size = ?, done = ? WHERE id = ?'),
+    dropFile: q('DELETE FROM files WHERE id = ?'),
+    oldFiles: q('SELECT id FROM files WHERE at < ?'),
+    fileInUse: q('SELECT 1 FROM events WHERE data LIKE ? LIMIT 1'),
+  };
+
+  // ---------- people and clients (from E11 Console) ----------
+  const userOf = (id) => store.get('users', String(id));
+  const active = (u) => !!u && u.active !== false;
+  const isFree = (u) => access.isFreelancer(u);
+  const isBoss = (u) => access.isSuper(u) || access.isOffice(u);   // Super Admins and Office Admins
+  const ROLE = { admin: 'Admin', office_admin: 'Office Admin', account_manager: 'Account Manager', production: 'Production', social: 'Social',
+    freelancer: 'Freelancer', finance_admin: 'Finance', finance_viewer: 'Finance' };
+  const cdId = () => (store.get('meta', 'main') || {}).cdUserId || null;
+  function roleOf(u) {
+    if (!u) return '';
+    if (u.id === cdId()) return 'Creative Director';
+    if (u.title) return String(u.title);
+    return access.isSuper(u) ? (u.role === 'admin' ? 'Super Admin' : ROLE[u.role] || 'Admin') : ROLE[u.role] || '';
+  }
+  const personOf = (u) => ({ id: u.id, name: u.name || u.email, role: roleOf(u), photo: u.avatar || null, color: u.color || null });
+  // a client = a client of E11 Console (its Clients list), with its Client Assets logo when it has one
+  function clientsFor(u) {
+    return store.list('projects').filter((p) => !p.inactive && access.canSee(u, 'projects', p)).map((p) => {
+      const c = p.clientId ? store.get('clients', String(p.clientId)) : null;
+      return { id: p.id, name: p.name, color: p.color || null, logo: (c && c.logo) || null };
+    });
+  }
+  const clientById = (id) => { const p = store.get('projects', String(id)); return p && !p.inactive ? p : null; };
+
+  // ---------- groups ----------
+  const extra = (g) => { try { return JSON.parse(g.extra || '[]'); } catch { return []; } };
+  // admins: the creator (unless a Super / Office Admin took it away), the one second admin, and Super / Office Admins who made themselves admin
+  const adminsOf = (g) => [...new Set([g.creator_off ? null : g.creator, g.second, ...extra(g)].filter(Boolean))];
+  const isAdmin = (u, g) => adminsOf(g).includes(u.id);
+  const member = (g, uid) => !!Q.isMember.get(g.id, uid);
+  const canManage = (u, g) => isAdmin(u, g) || isBoss(u);   // picture, name, add / remove people, delete
+  const memberIds = (g) => Q.members.all(g.id).map((m) => m.uid);
+  function groupView(g, uid) {
+    const ms = Q.members.all(g.id);
+    const pref = Q.pref.get(uid, 'group', g.id) || {};
+    return { id: g.id, client: g.client, name: g.name, creator: g.creator, creatorAdmin: !g.creator_off, second: g.second || null, admins: adminsOf(g), pic: g.pic || null,
+      createdAt: g.created_at, lastAt: g.last_at, members: ms.map((m) => m.uid), pinnedAt: pref.pinned_at || null, mutedUntil: pref.muted_until || null };
+  }
+  // everything the app needs to draw its lists (the messages themselves come by sync)
+  function state(u) {
+    const groups = Q.groupsOf.all(u.id).filter((g) => clientById(g.client)).map((g) => groupView(g, u.id));
+    const ids = new Set([u.id]);
+    groups.forEach((g) => g.members.forEach((m) => ids.add(m)));
+    // people who can be added (staff — freelancers too; not the client contacts of stage 3)
+    const people = store.list('users').filter(active).map(personOf);
+    const known = new Set(people.map((p) => p.id));
+    for (const id of ids) if (!known.has(id)) { const x = userOf(id); if (x) people.push({ ...personOf(x), gone: true }); }
+    return { ok: true, me: { ...personOf(u), canMake: !isFree(u), boss: isBoss(u) }, clients: clientsFor(u), groups, people,
+      pins: { groups: Q.pinsOf.all(u.id, 'group').map((r) => r.id), clients: Q.pinsOf.all(u.id, 'client').map((r) => r.id) }, seq: Q.lastSeq.get().s || 0 };
+  }
+
+  // ---------- events: addressed, kept until picked up ----------
+  const listeners = new Map();   // uid -> Set of live streams
+  function emit(g, type, data, by, to = memberIds(g)) {
+    const at = now();
+    const r = Q.addEvent.run(g.id, type, JSON.stringify(data), at, by || null);
+    const seq = Number(r.lastInsertRowid);
+    for (const uid of new Set(to)) Q.wait.run(seq, uid);
+    for (const uid of new Set(to)) for (const s of listeners.get(uid) || []) { try { s.write(`event: talk\ndata: ${JSON.stringify({ seq })}\n\n`); } catch { /* closed */ } }
+    return seq;
+  }
+  const evOut = (e) => ({ seq: e.seq, group: e.grp, type: e.type, at: e.at, by: e.by, ...JSON.parse(e.data) });
+  function sync(u, after, limit = 500) {
+    const rows = Q.pending.all(u.id, Number(after) || 0, Math.min(1000, Number(limit) || 500));
+    return { ok: true, events: rows.map(evOut), more: rows.length >= limit, last: rows.length ? rows[rows.length - 1].seq : Number(after) || 0 };
+  }
+  // the phone has everything up to here: those wait no more; an event nobody waits for is gone, with its files
+  function ack(u, upto) {
+    Q.ack.run(u.id, Number(upto) || 0);
+    sweep();
+    return { ok: true };
+  }
+  function filesIn(data) { const f = data && data.file; return f && f.id ? [f.id] : []; }
+  function dropFiles(ids) {
+    for (const id of ids) {
+      if (Q.fileInUse.get(`%"id":"${id}"%`)) continue;   // (still in an event someone hasn't picked up)
+      try { fs.rmSync(path.join(relay, id), { force: true }); } catch { /* fine */ }
+      Q.dropFile.run(id);
+    }
+  }
+  function sweep() {
+    const t = now();
+    for (const r of Q.oldEvents.all(t - KEEP_MS)) Q.dropWaiting.run(r.seq);
+    const gone = [];
+    for (const r of Q.orphanEvents.all()) {
+      const e = db.prepare('SELECT data FROM events WHERE seq = ?').get(r.seq);
+      try { gone.push(...filesIn(JSON.parse(e.data))); } catch { /* fine */ }
+      Q.dropEvent.run(r.seq);
+    }
+    dropFiles(gone);
+    for (const r of Q.oldSent.all(t - KEEP_MS)) Q.dropSent.run(r.id);
+    // uploads never sent in a message (or long gone)
+    const stale = Q.oldFiles.all(t - KEEP_MS).map((r) => r.id);
+    dropFiles(stale.filter((id) => !Q.fileInUse.get(`%"id":"${id}"%`)));
+  }
+  const sweepTimer = setInterval(() => { try { sweep(); } catch (e) { console.error('talk sweep:', e.message); } }, 3600_000);
+  if (sweepTimer.unref) sweepTimer.unref();
+
+  // ---------- notifications (E11 Talk's own phones) ----------
+  function notify(g, from, text, msgId, mentions = []) {
+    if (!apns || !apns.enabled()) return;
+    const t = now();
+    for (const uid of memberIds(g)) {
+      if (uid === from.id) continue;
+      const pref = Q.pref.get(uid, 'group', g.id) || {};
+      if (pref.muted_until && pref.muted_until > t && !mentions.includes(uid)) continue;   // (muted — but an @mention still comes)
+      const c = clientById(g.client);
+      apns.sendTo(uid, { title: g.name, body: `${from.name || from.email}: ${text}`, tag: g.id, kind: 'talk', groupId: g.id, msgId, clientId: c ? c.id : null }).catch(() => {});
+    }
+  }
+
+  // ---------- what people do ----------
+  const bad = (error, status = 400) => ({ ok: false, error, status });
+  function needGroup(u, id, { mustBeIn = true } = {}) {
+    const g = Q.group.get(String(id || ''));
+    if (!g || !clientById(g.client)) return [null, bad('This group isn’t there any more', 404)];
+    if (mustBeIn && !member(g, u.id)) return [null, bad('You’re not in this group', 403)];
+    return [g, null];
+  }
+  const sys = (g, by, text, extraData = {}) => { const id = rid('m'); emit(g, 'msg', { id, kind: 'sys', text, ...extraData }, by); Q.touch.run(now(), g.id); return id; };
+  const nameOf = (id) => { const x = userOf(id); return x ? (x.name || x.email) : 'Someone'; };
+  const changed = (g, by) => emit(g, 'group', { group: g.id }, by, memberIds(g));
+  const cleanIds = (ids) => [...new Set((Array.isArray(ids) ? ids : []).map(String))].filter((id) => active(userOf(id)));
+
+  function act(u, b) {
+    const t = now();
+    switch (String(b.act || '')) {
+      case 'newGroup': {
+        if (isFree(u)) return bad('Freelancers can’t make groups', 403);
+        const c = clientById(b.client);
+        if (!c || !access.canSee(u, 'projects', c)) return bad('Pick one of your clients');
+        const name = clip(b.name, 80).trim();
+        if (!name) return bad('Give the group a name');
+        const id = rid('g');
+        Q.newGroup.run(id, c.id, name, u.id, t, t);
+        Q.addMember.run(id, u.id, t, u.id);
+        for (const m of cleanIds(b.members)) if (m !== u.id) Q.addMember.run(id, m, t, u.id);
+        const g = Q.group.get(id);
+        changed(g, u.id);
+        sys(g, u.id, `${nameOf(u.id)} made the group “${name}”`);
+        return { ok: true, group: groupView(g, u.id) };
+      }
+      case 'addPeople': {
+        const [g, e] = needGroup(u, b.group, { mustBeIn: !isBoss(u) }); if (e) return e;
+        if (!canManage(u, g)) return bad('Only the group’s admins add people', 403);
+        const add = cleanIds(b.ids).filter((id) => !member(g, id));
+        if (!add.length) return { ok: true, group: groupView(g, u.id) };
+        for (const id of add) Q.addMember.run(g.id, id, t, u.id);
+        changed(g, u.id);
+        sys(g, u.id, `${nameOf(u.id)} added ${add.map(nameOf).join(', ')}`);
+        return { ok: true, group: groupView(g, u.id) };
+      }
+      case 'removePerson': {
+        const [g, e] = needGroup(u, b.group, { mustBeIn: !isBoss(u) }); if (e) return e;
+        const id = String(b.id || '');
+        if (!canManage(u, g)) return bad('Only the group’s admins remove people', 403);
+        if (id === g.creator && !isBoss(u)) return bad('Only Super Admins and Office Admins can remove the group’s creator', 403);
+        if (!member(g, id)) return { ok: true, group: groupView(g, u.id) };
+        const was = memberIds(g);
+        Q.dropMember.run(g.id, id);
+        dropAdmin(g, id);
+        sys(Q.group.get(g.id), u.id, `${nameOf(u.id)} removed ${nameOf(id)}`);
+        emit(g, 'group', { group: g.id }, u.id, was);
+        return { ok: true };
+      }
+      case 'leave': {
+        const [g, e] = needGroup(u, b.group); if (e) return e;
+        const was = memberIds(g);
+        Q.dropMember.run(g.id, u.id);
+        dropAdmin(g, u.id);
+        sys(Q.group.get(g.id), u.id, `${nameOf(u.id)} left`);
+        emit(g, 'group', { group: g.id }, u.id, was);
+        return { ok: true };
+      }
+      case 'rename': case 'setPic': {
+        const [g, e] = needGroup(u, b.group, { mustBeIn: !isBoss(u) }); if (e) return e;
+        if (!canManage(u, g)) return bad('Only the group’s admins change it', 403);
+        if (b.act === 'rename') {
+          const name = clip(b.name, 80).trim(); if (!name) return bad('Give the group a name');
+          Q.setGroup.run(name, g.second, g.extra, g.pic, g.creator, g.last_at, g.id);
+          sys(Q.group.get(g.id), u.id, `${nameOf(u.id)} renamed the group to “${name}”`);
+        } else {
+          const pic = b.file ? String(b.file) : null;
+          if (pic && !Q.getFile.get(pic)) return bad('That picture didn’t upload');
+          Q.setGroup.run(g.name, g.second, g.extra, pic, g.creator, g.last_at, g.id);
+          sys(Q.group.get(g.id), u.id, `${nameOf(u.id)} changed the group’s picture`);
+        }
+        changed(Q.group.get(g.id), u.id);
+        return { ok: true, group: groupView(Q.group.get(g.id), u.id) };
+      }
+      case 'deleteGroup': {
+        const [g, e] = needGroup(u, b.group, { mustBeIn: !isBoss(u) }); if (e) return e;
+        if (!canManage(u, g)) return bad('Only the group’s admins delete it', 403);
+        const was = memberIds(g);
+        Q.goneGroup.run(g.id);
+        emit(g, 'gone', { group: g.id, by: u.id }, u.id, was);
+        return { ok: true };
+      }
+      // the creator (or a Super / Office Admin) picks the one second admin — or none
+      case 'setSecond': {
+        const [g, e] = needGroup(u, b.group, { mustBeIn: !isBoss(u) }); if (e) return e;
+        if (!(u.id === g.creator && !g.creator_off) && !isBoss(u)) return bad('Only the group’s creator picks its second admin', 403);
+        const id = b.id ? String(b.id) : null;
+        if (id && !member(g, id)) return bad('Pick someone in the group');
+        Q.setGroup.run(g.name, id, g.extra, g.pic, g.creator, g.last_at, g.id);
+        if (id) sys(Q.group.get(g.id), u.id, `${nameOf(id)} is now an admin`);
+        changed(Q.group.get(g.id), u.id);
+        return { ok: true, group: groupView(Q.group.get(g.id), u.id) };
+      }
+      // Super Admins and Office Admins: admin of any group (added to it if they aren't in it)
+      case 'makeMeAdmin': {
+        if (!isBoss(u)) return bad('Only Super Admins and Office Admins', 403);
+        const [g, e] = needGroup(u, b.group, { mustBeIn: false }); if (e) return e;
+        if (!member(g, u.id)) Q.addMember.run(g.id, u.id, t, u.id);
+        const x = extra(g); if (!adminsOf(g).includes(u.id)) x.push(u.id);
+        Q.setGroup.run(g.name, g.second, JSON.stringify(x), g.pic, g.creator, g.last_at, g.id);
+        sys(Q.group.get(g.id), u.id, `${nameOf(u.id)} is now an admin`);
+        changed(Q.group.get(g.id), u.id);
+        return { ok: true, group: groupView(Q.group.get(g.id), u.id) };
+      }
+      // Super Admins and Office Admins take someone's admin away — the creator's too (the second admin can't)
+      case 'dropAdmin': {
+        const [g, e] = needGroup(u, b.group, { mustBeIn: !isBoss(u) }); if (e) return e;
+        const id = String(b.id || '');
+        const may = isBoss(u) || (u.id === g.creator && !g.creator_off && id === g.second);
+        if (!may) return bad('Not allowed', 403);
+        // (re-adding a creator's admin: makeMeAdmin's way — or setting creator_off back by a Super / Office Admin)
+        if (b.restore && isBoss(u) && id === g.creator) db.prepare('UPDATE groups SET creator_off = 0 WHERE id = ?').run(g.id); else dropAdmin(g, id);
+        changed(Q.group.get(g.id), u.id);
+        return { ok: true, group: groupView(Q.group.get(g.id), u.id) };
+      }
+      case 'pin': case 'pinClient': {
+        const kind = b.act === 'pin' ? 'group' : 'client', id = String(b.id || '');
+        if (kind === 'group') { const [, e] = needGroup(u, id); if (e) return e; } else if (!clientById(id)) return bad('That client isn’t there');
+        if (b.on) {
+          const pins = Q.pinsOf.all(u.id, kind).map((r) => r.id);
+          if (!pins.includes(id) && pins.length >= MAX_PINS) return { ok: false, full: true, pins, error: 'Pinned is full' };
+          Q.setPin.run(u.id, kind, id, t);
+        } else Q.setPin.run(u.id, kind, id, null);
+        return { ok: true, pins: Q.pinsOf.all(u.id, kind).map((r) => r.id) };
+      }
+      case 'mute': {
+        const [g, e] = needGroup(u, b.group); if (e) return e;
+        const until = b.until === 'always' ? 9e15 : Number(b.until) || null;
+        Q.setMute.run(u.id, g.id, until && until > t ? until : null);
+        return { ok: true, mutedUntil: until && until > t ? until : null };
+      }
+      case 'send': {
+        const [g, e] = needGroup(u, b.group); if (e) return e;
+        const text = clip(b.text, 8000);
+        let file = null;
+        if (b.file) {
+          const f = Q.getFile.get(String(b.file.id || ''));
+          if (!f || f.by !== u.id || !f.done) return bad('The file didn’t upload — try again');
+          file = { id: f.id, name: f.name, size: f.size, kind: ['photo', 'video', 'file', 'voice'].includes(b.file.kind) ? b.file.kind : 'file',
+            w: Number(b.file.w) || null, h: Number(b.file.h) || null, secs: Number(b.file.secs) || null };
+        }
+        if (!text.trim() && !file) return bad('Nothing to send');
+        const id = rid('m'), mentions = cleanIds(b.mentions).filter((m) => member(g, m));
+        const reply = b.reply && typeof b.reply === 'object' ? { id: clip(b.reply.id, 40), by: clip(b.reply.by, 40), text: clip(b.reply.text, 200), kind: clip(b.reply.kind, 10) } : null;
+        Q.putSent.run(id, g.id, u.id, t, JSON.stringify(file ? [file.id] : []));
+        const seq = emit(g, 'msg', { id, cid: clip(b.cid, 60), kind: file ? file.kind : 'text', text, file, reply, mentions }, u.id);
+        Q.touch.run(t, g.id);
+        notify(g, u, file && !text.trim() ? ({ photo: '📷 Photo', video: '🎥 Video', voice: '🎤 Voice message' }[file.kind] || `📄 ${file.name}`) : text, id, mentions);
+        return { ok: true, id, seq, at: t };
+      }
+      case 'edit': case 'del': case 'react': {
+        const s = Q.getSent.get(String(b.msg || ''));
+        if (!s) return bad('That message has gone', 404);
+        const [g, e] = needGroup(u, s.grp); if (e) return e;
+        if (b.act === 'edit') {
+          if (s.by !== u.id) return bad('Only your own messages', 403);
+          if (t - s.at > EDIT_MS) return bad('Messages can be edited for 15 minutes');
+          const text = clip(b.text, 8000); if (!text.trim()) return bad('Nothing to send');
+          emit(g, 'edit', { id: s.id, text }, u.id);
+        } else if (b.act === 'del') {
+          if (s.by !== u.id) return bad('Only your own messages', 403);
+          if (t - s.at > DEL_ALL_MS) return bad('Too late to delete it for everyone');
+          emit(g, 'del', { id: s.id }, u.id);
+          dropFiles(JSON.parse(s.files || '[]'));
+        } else {
+          const emoji = b.emoji ? clip(b.emoji, 16) : null;
+          emit(g, 'react', { id: s.id, emoji }, u.id);
+        }
+        return { ok: true };
+      }
+      // read up to this message — the others see "Seen by"
+      case 'read': {
+        const [g, e] = needGroup(u, b.group); if (e) return e;
+        emit(g, 'read', { upto: clip(b.upto, 40) }, u.id, memberIds(g).filter((id) => id !== u.id));
+        return { ok: true };
+      }
+      default: return bad('Unknown');
+    }
+  }
+  // (the creator stays the group's creator — only their admin goes)
+  function dropAdmin(g, id) {
+    const x = extra(g).filter((a) => a !== id);
+    Q.setGroup.run(g.name, g.second === id ? null : g.second, JSON.stringify(x), g.pic, g.creator, g.last_at, g.id);
+    if (g.creator === id) db.prepare('UPDATE groups SET creator_off = 1 WHERE id = ?').run(g.id);
+  }
+
+  // ---------- files: held until passed on ----------
+  function upload(u, id, name, offset, bytes, last) {
+    if (!id) {
+      id = rid('f');
+      Q.newFile.run(id, u.id, clip(name || 'File', 200).replace(/[\\/]/g, '-'), now());
+      fs.writeFileSync(path.join(relay, id), '');
+    }
+    const f = Q.getFile.get(String(id));
+    if (!f || f.by !== u.id) return bad('Upload not found — please try again', 404);
+    if (f.done) return bad('Already uploaded');
+    if (Number(offset) !== f.size) return { ok: false, error: 'Out of step', size: f.size, status: 409 };
+    if (f.size + bytes.length > FILE_MAX) return bad('That file is too big (2 GB at most)');
+    fs.appendFileSync(path.join(relay, f.id), bytes);
+    Q.growFile.run(f.size + bytes.length, last ? 1 : 0, f.id);
+    return { ok: true, id: f.id, size: f.size + bytes.length, done: !!last };
+  }
+  // a file is for the people of a group it was sent in (or a group's picture)
+  function fileFor(u, id) {
+    const f = Q.getFile.get(String(id || ''));
+    if (!f || !f.done) return null;
+    if (f.by === u.id) return f;
+    const ev = db.prepare('SELECT e.grp FROM events e JOIN waiting w ON w.seq = e.seq WHERE w.uid = ? AND e.data LIKE ? LIMIT 1').get(u.id, `%"id":"${f.id}"%`);
+    if (ev) return f;
+    const pic = db.prepare('SELECT g.id FROM groups g JOIN members m ON m.grp = g.id WHERE m.uid = ? AND g.pic = ? AND g.gone = 0 LIMIT 1').get(u.id, f.id);
+    return pic ? f : null;
+  }
+  const filePath = (f) => path.join(relay, f.id);
+
+  function listen(uid, res) {
+    if (!listeners.has(uid)) listeners.set(uid, new Set());
+    listeners.get(uid).add(res);
+    return () => { const s = listeners.get(uid); if (s) { s.delete(res); if (!s.size) listeners.delete(uid); } };
+  }
+  const isAdminOf = (u, gid) => { const g = Q.group.get(gid); return !!g && isAdmin(u, g); };
+  return { state, act, sync, ack, upload, fileFor, filePath, listen, sweep, isAdminOf, close: () => { clearInterval(sweepTimer); for (const set of listeners.values()) for (const r of set) try { r.end(); } catch { /* fine */ } db.close(); } };
+}
