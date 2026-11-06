@@ -473,6 +473,8 @@ export function createServer(cfg) {
     try {
       if (p === '/api/talk/state' && req.method === 'GET') return out(t.state(u));
       if (p === '/api/talk/act' && req.method === 'POST') return out(t.act(u, await readBody(req, 256 * 1024)));
+      // (test site only, the owner: sample groups and messages — talk.js sample)
+      if (p === '/api/talk/sample' && req.method === 'POST') { if (!testCopy || !isOwner(req.realUser || u)) return json(res, 403, { ok: false, error: 'Only the owner, on the test site' }); return out(t.sample(req.realUser || u)); }
       if (p === '/api/talk/sync' && req.method === 'GET') return out(t.sync(u, url.searchParams.get('after'), url.searchParams.get('limit')));
       if (p === '/api/talk/ack' && req.method === 'POST') { const b = await readBody(req, 16 * 1024); return out(t.ack(u, b.upto)); }
       if (p === '/api/talk/stream' && req.method === 'GET') {

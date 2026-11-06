@@ -422,6 +422,68 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     listeners.get(uid).add(res);
     return () => { const s = listeners.get(uid); if (s) { s.delete(res); if (!s.size) listeners.delete(uid); } };
   }
+  // ---------- sample groups (test site only, the owner asks — Haris 2026-11-06: "fill in some dummy data") ----------
+  // a few groups under real clients with you and some of the team, each with a short made-up conversation; every
+  // group's name ends "(sample)" so nobody takes them for real
+  function sample(u) {
+    const team = store.list('users').filter((x) => active(x) && x.id !== u.id && !isFree(x)).slice(0, 6);
+    const cl = clientsFor(u).slice(0, 3);
+    if (!cl.length) return bad('No clients to put sample groups under');
+    const P = (i) => team.length ? team[i % team.length] : u;
+    const first = (x) => String(x.name || x.email).split(' ')[0];
+    let t = now() - 3 * 3600_000;
+    const at = () => (t += 4 * 60_000 + Math.floor(Math.random() * 6 * 60_000));
+    const made = [];
+    const plans = [
+      { client: cl[0], name: 'Winter campaign (sample)', people: [0, 1, 2], talk: (g, a, b, c) => [
+        [a, 'Morning all — the winter campaign brief is final, sharing the key dates today.'],
+        [b, 'Great. Do we have the hero visual yet?'],
+        [u, 'Not yet, first drafts by Thursday.'],
+        [c, `@${u.name || u.email} can we move the shoot to Sunday? The studio is free then.`, [u.id]],
+        [u, 'Sunday works 👍', null, { reply: 3 }],
+        [a, 'Perfect, I’ll book it.', null, { react: [[b, '👍'], [c, '🙏']] }],
+      ] },
+      { client: cl[1] || cl[0], name: 'Shoot · 12 Nov (sample)', people: [1, 3], talk: (g, a, b) => [
+        [a, 'Call time is 8:30 at the café — bring the 35mm.'],
+        [b, 'On it, I’ll pick up the light kit tonight.'],
+        [u, 'Thanks both. Shot list is in the task.'],
+        [a, 'See you there!', null, { react: [[u, '❤️']] }],
+      ] },
+      { client: cl[2] || cl[0], name: 'General (sample)', people: [2, 4, 5], talk: (g, a, b, c) => [
+        [b, 'Reminder: client review moved to 3 pm.'],
+        [c, 'Noted, thanks.'],
+        [a, 'Can someone share the latest logo files?'],
+      ] },
+    ];
+    for (const pl of plans) {
+      const id = rid('g'), ppl = [...new Set(pl.people.map(P))].filter((x) => x.id !== u.id);
+      const creator = ppl[0] || u;
+      const t0 = at();
+      Q.newGroup.run(id, pl.client.id, pl.name, creator.id, t0, t0);
+      Q.addMember.run(id, u.id, t0, creator.id);
+      for (const x of ppl) Q.addMember.run(id, x.id, t0, creator.id);
+      const g = Q.group.get(id);
+      changed(g, creator.id);
+      emit(g, 'msg', { id: rid('m'), kind: 'sys', text: `${first(creator)} made the group “${pl.name}”` }, creator.id);
+      const lines = pl.talk(g, ...[0, 1, 2].map((i) => ppl[i] || creator));
+      const ids = [];
+      for (const [who, text, mentions, extra] of lines) {
+        const mid = rid('m'); ids.push(mid);
+        const tt = at();
+        Q.putSent.run(mid, id, who.id, tt, '[]');
+        const reply = extra && extra.reply != null ? { id: ids[extra.reply], by: lines[extra.reply][0].id, text: lines[extra.reply][1].slice(0, 200), kind: 'text' } : null;   // (reply: the line it answers, counted from 0)
+        const r = Q.addEvent.run(id, 'msg', JSON.stringify({ id: mid, kind: 'text', text, file: null, reply, mentions: mentions || [] }), tt, who.id);
+        for (const m of memberIds(g)) Q.wait.run(Number(r.lastInsertRowid), m);
+        for (const [rw, e] of (extra && extra.react) || []) emit(g, 'react', { id: mid, emoji: e }, rw.id);
+      }
+      // the others have seen up to the end (✓✓ on yours)
+      for (const x of ppl) emit(g, 'read', { upto: ids[ids.length - 1] }, x.id, memberIds(g).filter((m) => m !== x.id));
+      Q.touch.run(t, id);
+      made.push(pl.name);
+    }
+    for (const s2 of listeners.get(u.id) || []) { try { s2.write(`event: talk\ndata: {}\n\n`); } catch { /* closed */ } }
+    return { ok: true, made };
+  }
   const isAdminOf = (u, gid) => { const g = Q.group.get(gid); return !!g && isAdmin(u, g); };
-  return { state, act, sync, ack, upload, fileFor, filePath, listen, sweep, isAdminOf, close: () => { clearInterval(sweepTimer); for (const set of listeners.values()) for (const r of set) try { r.end(); } catch { /* fine */ } db.close(); } };
+  return { state, act, sync, ack, sample, upload, fileFor, filePath, listen, sweep, isAdminOf, close: () => { clearInterval(sweepTimer); for (const set of listeners.values()) for (const r of set) try { r.end(); } catch { /* fine */ } db.close(); } };
 }

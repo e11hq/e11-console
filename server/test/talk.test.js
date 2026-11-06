@@ -145,3 +145,17 @@ test('a group with no new messages for 90 days is deleted, its people told', asy
   assert.ok(!(await state('des')).groups.some((x) => x.id === g));
   assert.ok((await sync('des')).events.some((e) => e.type === 'gone' && e.group === g && e.why === 'inactive'));
 });
+
+test('sample groups (test site, the owner): three groups with a conversation, each marked (sample)', async () => {
+  const r = app.talk.sample(app.store.get('users', 'u-adm'));
+  assert.ok(r.ok); assert.equal(r.made.length, 3);
+  const s = await state('adm');
+  const mine = s.groups.filter((g) => g.name.endsWith('(sample)'));
+  assert.equal(mine.length, 3);
+  const ev = (await sync('adm')).events.filter((e) => mine.some((g) => g.id === e.group));
+  assert.ok(ev.filter((e) => e.type === 'msg').length >= 13);
+  assert.ok(ev.some((e) => e.type === 'msg' && (e.mentions || []).includes('u-adm')));
+  assert.ok(ev.some((e) => e.type === 'msg' && e.reply && e.reply.id));
+  assert.ok(ev.some((e) => e.type === 'react'));
+  assert.equal((await (await fetch(base + '/api/talk/sample', { method: 'POST', headers: H('adm'), body: '{}' })).json()).ok, false, 'not on the live site');
+});
