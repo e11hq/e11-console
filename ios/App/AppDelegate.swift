@@ -3542,6 +3542,16 @@ final class FormSheetVC: UIViewController, UITableViewDataSource, UITableViewDel
   private let desc = UITextView()
   private let descHint = UILabel()
   private let cdSwitch = UISwitch()
+  private var noCD = false
+  private func shakeNoCD() {
+    var v: UIView? = cdSwitch; while let x = v, !(x is UITableViewCell) { v = x.superview }
+    guard let cell = v as? UITableViewCell else { return }
+    func find(_ v: UIView) -> UILabel? { if let l = v as? UILabel, l.text == "No CD set" { return l }; return v.subviews.lazy.compactMap { find($0) }.first }
+    guard let l = find(cell.contentView) else { return }
+    let k = CAKeyframeAnimation(keyPath: "transform.translation.x")
+    k.values = [0, -7, 6, -4, 3, -1, 0]; k.duration = 0.4; k.timingFunction = CAMediaTimingFunction(name: .easeOut)
+    l.layer.add(k, forKey: "shake")
+  }
   private let topBar = UIView()
   private let bar = UIView()          // (the tucked draft)
   private let barText = UILabel()
@@ -3577,6 +3587,7 @@ final class FormSheetVC: UIViewController, UITableViewDataSource, UITableViewDel
     tint = (a["color"] as? String) == "amber" ? UIColor(red: 0.96, green: 0.62, blue: 0.11, alpha: 1) : .systemBlue
     showWho = a["assign"] is [String: Any]
     hasCD = a["cd"] is Bool
+    noCD = (a["noCD"] as? Bool) == true
     clientText = a["client"] as? String ?? ""
     due = a["due"] as? String ?? ""
     self.event = event
@@ -3622,7 +3633,18 @@ final class FormSheetVC: UIViewController, UITableViewDataSource, UITableViewDel
     desc.font = .systemFont(ofSize: 17); desc.backgroundColor = .clear; desc.delegate = self
     desc.textContainerInset = UIEdgeInsets(top: 15, left: 0, bottom: 12, right: 0); desc.textContainer.lineFragmentPadding = 0
     descHint.font = .systemFont(ofSize: 17); descHint.textColor = .placeholderText; descHint.numberOfLines = 0
-    cdSwitch.addAction(UIAction { _ in UISelectionFeedbackGenerator().selectionChanged() }, for: .valueChanged)
+    cdSwitch.addAction(UIAction { [weak self] _ in
+      guard let self = self else { return }
+      // (no CD set: it springs back, a double tap of haptics, and "No CD set" under it gives a small shake — Haris 2026-11-06)
+      if self.noCD && self.cdSwitch.isOn {
+        self.cdSwitch.setOn(false, animated: true)
+        let g = UIImpactFeedbackGenerator(style: .medium); g.impactOccurred()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { g.impactOccurred() }
+        self.shakeNoCD()
+        return
+      }
+      UISelectionFeedbackGenerator().selectionChanged()
+    }, for: .valueChanged)
     table.dataSource = self; table.delegate = self
     table.translatesAutoresizingMaskIntoConstraints = false
     table.contentInsetAdjustmentBehavior = .never
@@ -3802,6 +3824,7 @@ final class FormSheetVC: UIViewController, UITableViewDataSource, UITableViewDel
       if id != "due" { cell.accessoryView = pickerEnd(id == "who" ? whoPic : nil) }
     case "cd":
       var c = cell.defaultContentConfiguration(); c.text = "CD review"
+      if noCD { c.secondaryText = "No CD set"; c.secondaryTextProperties.color = .secondaryLabel }
       cell.contentConfiguration = c
       cell.accessoryView = cdSwitch
     case "go":

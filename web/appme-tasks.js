@@ -148,7 +148,7 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
     const state = { client: inProject, who: W.assignable(u) ? [meId] : [], mgr, canAssign, project: inProject };
     const due = ctx.view === 'today' || ctx.view === 'home' || ctx.view === 'mytasks' || ctx.view === 'inbox' ? W.today : '';   // (the Inbox's too — Haris 2026-11-06)
     const args = Object.assign({ kind: 'task', key: 'new-task', title: 'New task', titleHint: 'What needs doing?', descHint: 'Details, links or notes for the team', client: clientName(W, state.client) },
-      canAssign ? { assign: whoOf(W, state.who) } : {}, { due }, mgr && W.cdUserId() ? { cd: !!inProject } : {},
+      canAssign ? { assign: whoOf(W, state.who) } : {}, { due }, mgr ? { cd: !!inProject && !!W.cdUserId(), noCD: !W.cdUserId() } : {},
       { button: 'Create task', color: 'blue', dock: 'New task', required: 'title' });
     return { args, state };
   };
@@ -174,7 +174,7 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
     const cur = state.client || '', inProject = state.project || '';
     const list = W.projects.filter((p) => (!p.inactive && W.amClientOk(p)) || p.id === inProject).sort(W.byOrder);
     const acts = [];
-    const act = (id) => { acts.push({ client: id, form: Object.assign({ client: clientName(W, id) }, state.mgr && W.cdUserId() ? { cd: !!id } : {}) }); return acts.length - 1; };
+    const act = (id) => { acts.push({ client: id, form: Object.assign({ client: clientName(W, id) }, state.mgr ? { cd: !!id && !!W.cdUserId() } : {}) }); return acts.length - 1; };
     const sections = [{ rows: [{ i: act(''), label: 'No client (My Tasks)', checked: !cur }] }];
     if (list.length) sections.push({ rows: list.map((p) => ({ i: act(p.id), label: p.name, checked: cur === p.id, find: p.name })) });
     const sheet = { sections };
