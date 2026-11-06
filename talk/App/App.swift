@@ -102,17 +102,36 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     let groups = UINavigationController(rootViewController: GroupsVC())
     groups.navigationBar.prefersLargeTitles = true
     groups.tabBarItem = UITabBarItem(title: "Groups", image: UIImage(systemName: "bubble.left.and.bubble.right"), selectedImage: UIImage(systemName: "bubble.left.and.bubble.right.fill"))
+    // (staff: Groups · Clients · Settings — the Clients tab is groups with a client contact in them)
+    let clients = UINavigationController(rootViewController: GroupsVC(clientsTab: true))
+    clients.navigationBar.prefersLargeTitles = true
+    clients.tabBarItem = UITabBarItem(title: "Clients", image: UIImage(systemName: "person.2"), selectedImage: UIImage(systemName: "person.2.fill"))
     let settings = UINavigationController(rootViewController: SettingsVC())
     settings.navigationBar.prefersLargeTitles = true
     settings.tabBarItem = UITabBarItem(title: "Settings", image: UIImage(systemName: "gearshape"), selectedImage: UIImage(systemName: "gearshape.fill"))
-    t.viewControllers = [groups, settings]
+    t.viewControllers = [groups, clients, settings]
     tabs = t
     NotificationCenter.default.addObserver(self, selector: #selector(badge), name: .talkChanged, object: nil)
+    shape()
     return t
   }
+  // a client contact sees one list of their chats (no tab bar); staff see the three tabs
+  private var contactMode = false
+  @objc private func shape() {
+    guard let t = tabs else { return }
+    let c = Talk.shared.isContact
+    if c != contactMode || t.tabBar.isHidden != c {
+      contactMode = c
+      t.tabBar.isHidden = c
+      if c { t.selectedIndex = 0; (t.viewControllers?.first as? UINavigationController)?.popToRootViewController(animated: false) }
+      t.viewControllers?.compactMap { ($0 as? UINavigationController)?.viewControllers.first }.forEach { $0.additionalSafeAreaInsets.bottom = 0 }
+    }
+  }
   @objc private func badge() {
-    let n = Talk.shared.totalUnread
-    tabs?.viewControllers?.first?.tabBarItem.badgeValue = n > 0 ? "\(n)" : nil
+    shape()
+    let T = Talk.shared
+    tabs?.viewControllers?.first?.tabBarItem.badgeValue = T.totalUnread > 0 ? "\(T.totalUnread)" : nil
+    if (tabs?.viewControllers?.count ?? 0) > 1 { let n = T.groups.values.filter { $0.withClient }.reduce(0) { $0 + T.unread($1.id) }; tabs?.viewControllers?[1].tabBarItem.badgeValue = n > 0 && !T.isContact ? "\(n)" : nil }
   }
   private func showSignIn() {
     let s = SignInVC()
@@ -162,7 +181,9 @@ final class SettingsVC: UITableViewController {
     NotificationCenter.default.addObserver(tableView!, selector: #selector(UITableView.reloadData), name: .talkChanged, object: nil)
   }
   override func numberOfSections(in tv: UITableView) -> Int { 3 }
-  override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int { [1, 2, 1][s] }
+  // (Super Admins and Office Admins also get "Client contacts")
+  private var boss: Bool { Talk.shared.boss }
+  override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int { [1, boss ? 3 : 2, 1][s] }
   override func tableView(_ tv: UITableView, heightForRowAt ip: IndexPath) -> CGFloat { ip.section == 0 ? 76 : 48 }
   override func tableView(_ tv: UITableView, titleForFooterInSection s: Int) -> String? {
     s == 1 ? "Chats live on this phone. The server only passes each message on and lets it go once everyone has it." : s == 2 ? "E11 Talk \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") (\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "")) · \(Server.host)" : nil
@@ -174,11 +195,14 @@ final class SettingsVC: UITableViewController {
     case (0, _):
       let me = Talk.shared.me
       cfg.text = me?.name ?? "—"; cfg.textProperties.font = .systemFont(ofSize: 19, weight: .semibold)
-      cfg.secondaryText = me?.role; cfg.secondaryTextProperties.color = .secondaryLabel
+      cfg.secondaryText = Talk.shared.isContact ? "\(me?.role ?? "") · client" : me?.role; cfg.secondaryTextProperties.color = .secondaryLabel
       cfg.image = UIImage(systemName: "circle.fill"); cfg.imageProperties.tintColor = .clear; cfg.imageProperties.reservedLayoutSize = CGSize(width: 56, height: 56)
       let a = Avatar(frame: CGRect(x: 16, y: 10, width: 56, height: 56)); a.set(person: me); c.contentView.addSubview(a)
       c.selectionStyle = .none
     case (1, 0): cfg.text = "Notifications"; cfg.image = UIImage(systemName: "bell.badge"); c.accessoryType = .disclosureIndicator
+    case (1, 2):
+      cfg.text = "Client contacts"; cfg.secondaryText = "\(Talk.shared.contacts.count) · who from each client can be in groups"; cfg.secondaryTextProperties.color = .secondaryLabel
+      cfg.image = UIImage(systemName: "person.crop.rectangle.stack"); c.accessoryType = .disclosureIndicator
     case (1, 1):
       let n = (try? FileManager.default.contentsOfDirectory(at: Net.filesDir, includingPropertiesForKeys: [.fileSizeKey]))?.reduce(0) { $0 + ((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) } ?? 0
       cfg.text = "Storage"; cfg.secondaryText = ByteCountFormatter.string(fromByteCount: Int64(n), countStyle: .file) + " of photos and files on this phone"; cfg.image = UIImage(systemName: "internaldrive")
@@ -190,6 +214,7 @@ final class SettingsVC: UITableViewController {
   }
   override func tableView(_ tv: UITableView, didSelectRowAt ip: IndexPath) {
     tv.deselectRow(at: ip, animated: true)
+    if ip == IndexPath(row: 2, section: 1) { navigationController?.pushViewController(ContactsVC(), animated: true); return }
     if ip == IndexPath(row: 0, section: 1), let u = URL(string: UIApplication.openNotificationSettingsURLString) { UIApplication.shared.open(u) }
     if ip.section == 2 {
       let a = UIAlertController(title: "Sign out of E11 Talk?", message: "The chats on this phone are removed.", preferredStyle: .actionSheet)

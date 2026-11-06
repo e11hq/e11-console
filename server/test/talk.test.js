@@ -159,3 +159,40 @@ test('sample groups (test site, the owner): three groups with a conversation, ea
   assert.ok(ev.some((e) => e.type === 'react'));
   assert.equal((await (await fetch(base + '/api/talk/sample', { method: 'POST', headers: H('adm'), body: '{}' })).json()).ok, false, 'not on the live site');
 });
+
+test('client contacts: added by Super / Office Admins only; E11 Talk only; their own client’s groups; never "Seen by"', async () => {
+  assert.equal((await act('am', { act: 'addContact', name: 'Ahmed Karim', email: 'ahmed@harbor.ae', client: 'p1' })).ok, false, 'not an Account Manager');
+  assert.equal((await act('off', { act: 'addContact', name: 'X', email: 'am@x.com', client: 'p1' })).ok, false, 'not a team email');
+  const k = (await act('off', { act: 'addContact', name: 'Ahmed Karim', email: 'ahmed@harbor.ae', client: 'p1' })).contact;
+  assert.ok(k && k.id.startsWith('k-'));
+  const KH = { 'X-Dev-Email': 'ahmed@harbor.ae', 'Content-Type': 'application/json' };
+  // E11 Console refuses them; E11 Talk lets them in, with nothing but their own client
+  assert.equal((await fetch(base + '/api/me', { headers: KH })).status, 403);
+  let ks = await (await fetch(base + '/api/talk/state', { headers: KH })).json();
+  assert.ok(ks.ok && ks.me.contact && ks.groups.length === 0 && ks.clients.length === 1 && ks.clients[0].id === 'p1' && !ks.contacts);
+  // only admins put contacts in groups, and only their own client's
+  assert.equal((await act('am', { act: 'newGroup', client: 'p1', name: 'Approvals', members: ['u-des', k.id] })).ok, false);
+  assert.equal((await act('adm', { act: 'newGroup', client: 'p2', name: 'Wrong client', members: [k.id] })).ok, false);
+  const g = (await act('adm', { act: 'newGroup', client: 'p1', name: 'Approvals', members: ['u-des', k.id] })).group;
+  assert.ok(g.withClient);
+  const kact = async (b) => (await fetch(base + '/api/talk/act', { method: 'POST', headers: KH, body: JSON.stringify(b) })).json();
+  ks = await (await fetch(base + '/api/talk/state', { headers: KH })).json();
+  assert.deepEqual(ks.groups.map((x) => x.id), [g.id]);
+  assert.ok(ks.people.every((p) => g.members.includes(p.id)), 'a contact sees only the people of their groups');
+  // they write and read, but can't make or change groups
+  const m = await kact({ act: 'send', group: g.id, text: 'Looks great, go ahead with v3' });
+  assert.ok(m.ok);
+  assert.equal((await kact({ act: 'newGroup', client: 'p1', name: 'Mine' })).ok, false);
+  assert.equal((await kact({ act: 'addPeople', group: g.id, ids: ['u-am'] })).ok, false);
+  // "Seen by": staff see the client's; the client never gets anyone's
+  await act('des', { act: 'read', group: g.id, upto: m.id });
+  await kact({ act: 'read', group: g.id, upto: m.id });
+  const kev = await (await fetch(base + '/api/talk/sync?after=0', { headers: KH })).json();
+  assert.ok(!kev.events.some((e) => e.type === 'read'), 'no read receipts for clients');
+  assert.ok((await sync('des')).events.some((e) => e.type === 'read' && e.by === k.id), 'staff see the client has seen it');
+  // the boss's list; removed: out of every group, and E11 Talk refuses them at once
+  assert.ok((await state('off')).contacts.some((c) => c.id === k.id && c.groups === 1));
+  assert.ok((await act('adm', { act: 'removeContact', id: k.id })).ok);
+  assert.equal((await fetch(base + '/api/talk/state', { headers: KH })).status, 403);
+  assert.ok(!(await state('adm')).groups.find((x) => x.id === g.id).members.includes(k.id));
+});

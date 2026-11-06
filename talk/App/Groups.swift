@@ -13,7 +13,8 @@ final class NewGroupVC: UITableViewController, UITextFieldDelegate, UISearchBarD
   private let pic = Avatar(frame: CGRect(x: 0, y: 0, width: 56, height: 56))
   private var q = ""
   private let find = UISearchBar()
-  init(client: String?) { self.client = client; super.init(style: .insetGrouped) }
+  private let forClient: Bool
+  init(client: String?, forClient: Bool = false) { self.client = client; self.forClient = forClient; super.init(style: .insetGrouped) }
   required init?(coder: NSCoder) { fatalError() }
 
   override func viewDidLoad() {
@@ -36,15 +37,22 @@ final class NewGroupVC: UITableViewController, UITextFieldDelegate, UISearchBarD
   func textFieldShouldReturn(_ t: UITextField) -> Bool { t.resignFirstResponder(); return true }
   func searchBar(_ s: UISearchBar, textDidChange t: String) { q = t.lowercased(); tableView.reloadSections([2], with: .none) }
 
+  // the team, and — for Super / Office Admins — the picked client's contacts first (adding one makes it a client group)
   private var people: [Person] {
-    let me = Talk.shared.me?.id
-    return Talk.shared.people.values.filter { $0.id != me && !$0.gone && (q.isEmpty || $0.name.lowercased().contains(q) || $0.role.lowercased().contains(q)) }.sorted { $0.name < $1.name }
+    let T = Talk.shared, me = T.me?.id
+    let match: (String, String) -> Bool = { [q] n, r in q.isEmpty || n.lowercased().contains(q) || r.lowercased().contains(q) }
+    let team = T.people.values.filter { $0.id != me && !$0.gone && !$0.contact && match($0.name, $0.role) }.sorted { $0.name < $1.name }
+    guard T.boss, let c = client else { return team }
+    let cname = T.clients[c]?.name ?? "Client"
+    let ks = T.contacts.filter { $0.client == c && match($0.name, cname) }.map { Person(id: $0.id, name: $0.name, role: "\(cname) · client", photo: nil, color: nil, gone: false, contact: true, client: c) }
+    return ks + team
   }
   override func numberOfSections(in tv: UITableView) -> Int { 3 }
   override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int { s == 0 ? 1 : s == 1 ? 1 : people.count + 1 }
   override func tableView(_ tv: UITableView, titleForHeaderInSection s: Int) -> String? { s == 1 ? "Client" : s == 2 ? "People · \(picked.count)" : nil }
   override func tableView(_ tv: UITableView, titleForFooterInSection s: Int) -> String? {
-    s == 0 ? "The picture is the client’s logo from Client Assets — you can change it later." : s == 2 ? "Only the group’s admins add people. Nobody joins by themselves; anyone can leave." : nil
+    s == 0 ? "The picture is the client’s logo from Client Assets — you can change it later."
+      : s == 2 ? (Talk.shared.boss ? "Adding a client contact makes it a client group — the client can see it. Only Super Admins and Office Admins can." : "Only the group’s admins add people. Nobody joins by themselves; anyone can leave.") : nil
   }
   override func tableView(_ tv: UITableView, heightForRowAt ip: IndexPath) -> CGFloat { ip.section == 0 ? 76 : ip.section == 2 && ip.row > 0 ? 58 : 50 }
   override func tableView(_ tv: UITableView, cellForRowAt ip: IndexPath) -> UITableViewCell {
@@ -76,7 +84,12 @@ final class NewGroupVC: UITableViewController, UITextFieldDelegate, UISearchBarD
   override func tableView(_ tv: UITableView, didSelectRowAt ip: IndexPath) {
     tv.deselectRow(at: ip, animated: true)
     if ip.section == 1 {
-      let pick = ClientPickVC(selected: client) { [weak self] id in self?.client = id; self?.check(); self?.tableView.reloadSections([0, 1], with: .none) }
+      let pick = ClientPickVC(selected: client) { [weak self] id in
+        guard let self = self else { return }
+        self.client = id
+        self.picked = self.picked.filter { pid in !pid.hasPrefix("k-") || Talk.shared.contacts.first(where: { $0.id == pid })?.client == id }   // (another client's contacts leave the list)
+        self.check(); self.tableView.reloadData()
+      }
       navigationController?.pushViewController(pick, animated: true)
     } else if ip.section == 2, ip.row > 0 {
       let p = people[ip.row - 1]
@@ -332,8 +345,11 @@ final class AddPeopleVC: UITableViewController {
   init(group: String) { self.group = group; super.init(style: .insetGrouped) }
   required init?(coder: NSCoder) { fatalError() }
   private var list: [Person] {
-    let inIt = Set(Talk.shared.groups[group]?.members ?? [])
-    return Talk.shared.people.values.filter { !inIt.contains($0.id) && !$0.gone }.sorted { $0.name < $1.name }
+    let T = Talk.shared, inIt = Set(T.groups[group]?.members ?? [])
+    let team = T.people.values.filter { !inIt.contains($0.id) && !$0.gone && !$0.contact }.sorted { $0.name < $1.name }
+    guard T.boss, let g = T.groups[group] else { return team }
+    let cname = T.clients[g.client]?.name ?? "Client"
+    return T.contacts.filter { $0.client == g.client && !inIt.contains($0.id) }.map { Person(id: $0.id, name: $0.name, role: "\(cname) · client", photo: nil, color: nil, gone: false, contact: true, client: g.client) } + team
   }
   override func viewDidLoad() {
     super.viewDidLoad(); title = "Add people"
@@ -366,6 +382,127 @@ final class AddPeopleVC: UITableViewController {
     Net.shared.act(["act": "addPeople", "group": group, "ids": Array(picked)]) { [weak self] j in
       if (j?["ok"] as? Bool) == true { Talk.shared.refresh(); Talk.shared.sync(); self?.navigationController?.popViewController(animated: true) }
       else { toast(j?["error"] as? String ?? "Couldn’t add them — try again") }
+    }
+  }
+}
+
+// ---------- client contacts (Super Admins and Office Admins — Haris 2026-11-05): name, email and their client; several
+// per client. A contact signs in to E11 Talk only with that email's code; removing one takes them out of every group and
+// signs them out at once. ----------
+final class ContactsVC: UITableViewController {
+  init() { super.init(style: .insetGrouped) }
+  required init?(coder: NSCoder) { fatalError() }
+  private var byClient: [(Client, [Contact])] {
+    let T = Talk.shared
+    return T.clientOrder.compactMap { id in
+      guard let c = T.clients[id] else { return nil }
+      let ks = T.contacts.filter { $0.client == id }
+      return ks.isEmpty ? nil : (c, ks)
+    }
+  }
+  override func viewDidLoad() {
+    super.viewDidLoad()
+    title = "Client contacts"
+    navigationItem.rightBarButtonItem = UIBarButtonItem(title: nil, image: UIImage(systemName: "plus"), primaryAction: UIAction { [weak self] _ in
+      self?.present(UINavigationController(rootViewController: NewContactVC()), animated: true)
+    }, menu: nil)
+    NotificationCenter.default.addObserver(tableView!, selector: #selector(UITableView.reloadData), name: .talkChanged, object: nil)
+    Talk.shared.refresh()
+  }
+  override func numberOfSections(in tv: UITableView) -> Int { max(1, byClient.count) }
+  override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int { byClient.isEmpty ? 0 : byClient[s].1.count }
+  override func tableView(_ tv: UITableView, titleForHeaderInSection s: Int) -> String? { byClient.isEmpty ? nil : "\(byClient[s].0.name)’s contacts · \(byClient[s].1.count)" }
+  override func tableView(_ tv: UITableView, titleForFooterInSection s: Int) -> String? {
+    s == max(1, byClient.count) - 1 ? (byClient.isEmpty ? "No client contacts yet. Tap + to add one — " : "") + "A contact signs in to E11 Talk with a one-time code sent to their email — E11 Talk only, never E11 Console. They see only the groups you add them to." : nil
+  }
+  override func tableView(_ tv: UITableView, heightForRowAt ip: IndexPath) -> CGFloat { 58 }
+  override func tableView(_ tv: UITableView, cellForRowAt ip: IndexPath) -> UITableViewCell {
+    let k = byClient[ip.section].1[ip.row]
+    let c = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
+    var cfg = c.defaultContentConfiguration()
+    cfg.text = k.name; cfg.secondaryText = k.email; cfg.secondaryTextProperties.color = .secondaryLabel
+    cfg.image = UIImage(systemName: "circle.fill"); cfg.imageProperties.tintColor = .clear; cfg.imageProperties.reservedLayoutSize = CGSize(width: 40, height: 40)
+    c.contentConfiguration = cfg
+    let a = Avatar(frame: CGRect(x: 16, y: 9, width: 40, height: 40)); a.set(name: k.name, color: Look.color(for: k.id), picture: nil); c.contentView.addSubview(a)
+    let n = UILabel(); n.text = "\(k.groups) group\(k.groups == 1 ? "" : "s")"; n.font = .systemFont(ofSize: 14); n.textColor = .secondaryLabel; n.sizeToFit(); c.accessoryView = n
+    c.selectionStyle = .none
+    return c
+  }
+  override func tableView(_ tv: UITableView, trailingSwipeActionsConfigurationForRowAt ip: IndexPath) -> UISwipeActionsConfiguration? {
+    let k = byClient[ip.section].1[ip.row]
+    let a = UIContextualAction(style: .destructive, title: "Remove") { [weak self] _, _, done in
+      let al = UIAlertController(title: "Remove \(k.name)?", message: "They leave every group and can’t sign in to E11 Talk any more.", preferredStyle: .alert)
+      al.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in done(false) })
+      al.addAction(UIAlertAction(title: "Remove", style: .destructive) { _ in
+        Net.shared.act(["act": "removeContact", "id": k.id]) { j in
+          if (j?["ok"] as? Bool) == true { toast("\(k.name) removed"); Talk.shared.refresh(); Talk.shared.sync() } else { toast(j?["error"] as? String ?? "Couldn’t remove them") }
+          done(true)
+        }
+      })
+      self?.present(al, animated: true)
+    }
+    return UISwipeActionsConfiguration(actions: [a])
+  }
+}
+
+final class NewContactVC: UITableViewController, UITextFieldDelegate {
+  private let name = UITextField(), email = UITextField()
+  private var client: String?
+  init() { super.init(style: .insetGrouped) }
+  required init?(coder: NSCoder) { fatalError() }
+  override func viewDidLoad() {
+    super.viewDidLoad()
+    title = "New client contact"
+    navigationItem.leftBarButtonItem = UIBarButtonItem(systemItem: .cancel, primaryAction: UIAction { [weak self] _ in self?.dismiss(animated: true) })
+    navigationItem.rightBarButtonItem = UIBarButtonItem(title: "Add", primaryAction: UIAction { [weak self] _ in self?.add() })
+    navigationItem.rightBarButtonItem?.style = .done
+    name.placeholder = "Ahmed Karim"; name.autocapitalizationType = .words; name.returnKeyType = .next; name.delegate = self
+    email.placeholder = "ahmed@company.com"; email.keyboardType = .emailAddress; email.autocapitalizationType = .none; email.autocorrectionType = .no; email.returnKeyType = .done; email.delegate = self
+    [name, email].forEach { $0.addAction(UIAction { [weak self] _ in self?.check() }, for: .editingChanged); $0.clearButtonMode = .whileEditing }
+    check()
+  }
+  override func viewDidAppear(_ a: Bool) { super.viewDidAppear(a); name.becomeFirstResponder() }
+  func textFieldShouldReturn(_ t: UITextField) -> Bool { if t === name { email.becomeFirstResponder() } else { t.resignFirstResponder() }; return true }
+  private func check() {
+    let e = (email.text ?? "").trimmingCharacters(in: .whitespaces)
+    navigationItem.rightBarButtonItem?.isEnabled = !(name.text ?? "").trimmingCharacters(in: .whitespaces).isEmpty && e.contains("@") && e.contains(".") && client != nil
+  }
+  override func numberOfSections(in tv: UITableView) -> Int { 2 }
+  override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int { s == 0 ? 2 : 1 }
+  override func tableView(_ tv: UITableView, titleForHeaderInSection s: Int) -> String? { s == 0 ? "Contact" : "Client (from E11 Console)" }
+  override func tableView(_ tv: UITableView, titleForFooterInSection s: Int) -> String? {
+    s == 1 ? "They sign in to E11 Talk with a one-time code sent to this email — E11 Talk only, never E11 Console. Only Super Admins and Office Admins add client contacts and put them in groups." : nil
+  }
+  override func tableView(_ tv: UITableView, cellForRowAt ip: IndexPath) -> UITableViewCell {
+    let c = UITableViewCell(style: .value1, reuseIdentifier: nil)
+    if ip.section == 0 {
+      c.selectionStyle = .none
+      let l = UILabel(frame: CGRect(x: 20, y: 0, width: 70, height: 44)); l.text = ip.row == 0 ? "Name" : "Email"; l.textColor = .secondaryLabel
+      let f = ip.row == 0 ? name : email
+      f.frame = CGRect(x: 96, y: 0, width: tv.bounds.width - 96 - 52, height: 44)
+      c.contentView.addSubview(l); c.contentView.addSubview(f)
+    } else {
+      var cfg = c.defaultContentConfiguration()
+      if let cl = client.flatMap({ Talk.shared.clients[$0] }) { cfg.text = cl.name } else { cfg.text = "Pick their client"; cfg.textProperties.color = .secondaryLabel }
+      c.contentConfiguration = cfg; c.accessoryType = .disclosureIndicator
+    }
+    return c
+  }
+  override func tableView(_ tv: UITableView, didSelectRowAt ip: IndexPath) {
+    tv.deselectRow(at: ip, animated: true)
+    guard ip.section == 1 else { return }
+    navigationController?.pushViewController(ClientPickVC(selected: client) { [weak self] id in self?.client = id; self?.check(); self?.tableView.reloadSections([1], with: .none) }, animated: true)
+  }
+  private func add() {
+    guard let c = client else { return }
+    navigationItem.rightBarButtonItem?.isEnabled = false
+    let n = (name.text ?? "").trimmingCharacters(in: .whitespaces), e = (email.text ?? "").trimmingCharacters(in: .whitespaces)
+    Net.shared.act(["act": "addContact", "name": n, "email": e, "client": c]) { [weak self] j in
+      if (j?["ok"] as? Bool) == true {
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        Talk.shared.refresh()
+        self?.dismiss(animated: true) { toast("\(n) added — put them in a group to start") }
+      } else { toast(j?["error"] as? String ?? "Couldn’t add them — try again"); self?.check() }
     }
   }
 }

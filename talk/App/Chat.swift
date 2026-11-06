@@ -24,6 +24,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private var editingMsg: Msg?
   private var previewURL: URL?
   private let titleV = UIStackView(), titleL = UILabel(), subL = UILabel()
+  private let clientLine = UIVisualEffectView(effect: UIBlurEffect(style: .systemThinMaterial))
 
   private var focus: String?   // (opened from a search result: that message, highlighted)
   init(group: String, focus: String? = nil) { self.group = group; self.focus = focus; super.init(nibName: nil, bundle: nil); hidesBottomBarWhenPushed = true }
@@ -69,6 +70,17 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     NotificationCenter.default.addObserver(self, selector: #selector(head), name: .talkChanged, object: nil)
     NotificationCenter.default.addObserver(self, selector: #selector(gone(_:)), name: .talkGone, object: nil)
     NotificationCenter.default.addObserver(self, selector: #selector(kbMoved(_:)), name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
+    // ("Client can see this group" — a small pill under the bar)
+    let cl = UILabel(); cl.font = .systemFont(ofSize: 12.5, weight: .medium); cl.textColor = .secondaryLabel
+    let eye = NSMutableAttributedString(attachment: NSTextAttachment(image: UIImage(systemName: "eye", withConfiguration: UIImage.SymbolConfiguration(pointSize: 11, weight: .semibold))!.withTintColor(.secondaryLabel)))
+    eye.append(NSAttributedString(string: "  Client can see this group")); cl.attributedText = eye
+    clientLine.layer.cornerRadius = 13; clientLine.clipsToBounds = true; clientLine.isHidden = true
+    cl.translatesAutoresizingMaskIntoConstraints = false; clientLine.translatesAutoresizingMaskIntoConstraints = false
+    clientLine.contentView.addSubview(cl); view.addSubview(clientLine)
+    NSLayoutConstraint.activate([
+      cl.leadingAnchor.constraint(equalTo: clientLine.contentView.leadingAnchor, constant: 12), cl.trailingAnchor.constraint(equalTo: clientLine.contentView.trailingAnchor, constant: -12),
+      cl.topAnchor.constraint(equalTo: clientLine.contentView.topAnchor, constant: 5), cl.bottomAnchor.constraint(equalTo: clientLine.contentView.bottomAnchor, constant: -5),
+      clientLine.centerXAnchor.constraint(equalTo: view.centerXAnchor), clientLine.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 6)])
     head()
     reload(animated: false)
   }
@@ -94,6 +106,10 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     titleL.text = g.name
     let names = g.members.filter { $0 != Talk.shared.me?.id }.map { Talk.shared.people[$0]?.name.split(separator: " ").first.map(String.init) ?? "…" } + ["You"]
     subL.text = (Talk.shared.clients[g.client]?.name).map { "\($0) · " } .map { $0 + names.joined(separator: ", ") } ?? names.joined(separator: ", ")
+    // a client group, to staff: a thin line at the top and in the box — the client can see what's written here
+    let shared = g.withClient && !Talk.shared.isContact
+    bar.placeholder = shared ? "Message — client can see this" : "Message"
+    clientLine.isHidden = !shared
     // (@: the group's people)
     bar.people = g.members.filter { $0 != Talk.shared.me?.id }.compactMap { id in Talk.shared.people[id].map { (id, $0.name) } }
   }
@@ -329,7 +345,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
           }
         })
       }
-      if mine { items.append(UIAction(title: "Info", subtitle: "who has seen it", image: UIImage(systemName: "info.circle")) { [weak self] _ in self?.seenBy(m) }) }
+      if mine && !Talk.shared.isContact { items.append(UIAction(title: "Info", subtitle: "who has seen it", image: UIImage(systemName: "info.circle")) { [weak self] _ in self?.seenBy(m) }) }
     }
     var danger: [UIMenuElement] = []
     if mine && !m.deleted && !m.pending && now - m.at < 2 * 86400000 {
@@ -523,7 +539,9 @@ final class BubbleCell: UITableViewCell {
     if !mine {
       let p = T.people[m.by]
       let a = NSMutableAttributedString(string: p?.name ?? "Someone", attributes: [.foregroundColor: Look.color(for: m.by)])
-      if let r = p?.role, !r.isEmpty { a.append(NSAttributedString(string: " · " + r, attributes: [.foregroundColor: Look.color(for: m.by).withAlphaComponent(0.75), .font: UIFont.systemFont(ofSize: 12.5)])) }
+      // (a client contact, to staff: "Name · Company · Client")
+      let role = p.map { $0.contact && !T.isContact ? ($0.role.isEmpty ? "Client" : $0.role + " · Client") : $0.role }
+      if let r = role, !r.isEmpty { a.append(NSAttributedString(string: " · " + r, attributes: [.foregroundColor: Look.color(for: m.by).withAlphaComponent(0.75), .font: UIFont.systemFont(ofSize: 12.5)])) }
       nameL.attributedText = a
     }
     // a reply's quote
@@ -587,7 +605,7 @@ final class BubbleCell: UITableViewCell {
     if mine && !m.deleted {
       let others = g.members.filter { $0 != m.by }
       let idx = l.msgs.firstIndex { $0.id == m.id } ?? 0
-      let allSeen = !others.isEmpty && others.allSatisfy { p in l.readBy[p].flatMap { r in l.msgs.firstIndex { $0.id == r } }.map { $0 >= idx } ?? false }
+      let allSeen = !T.isContact && !others.isEmpty && others.allSatisfy { p in l.readBy[p].flatMap { r in l.msgs.firstIndex { $0.id == r } }.map { $0 >= idx } ?? false }
       let sym = m.pending ? (m.failed ? "exclamationmark.circle" : "clock") : allSeen ? "checkmark.circle.fill" : "checkmark"
       let tint: UIColor = allSeen ? UIColor(red: 0.62, green: 0.86, blue: 1, alpha: 1) : dim
       foot.append(NSAttributedString(string: " "))
@@ -627,6 +645,7 @@ final class MessageBar: UIView, UITextViewDelegate {
   let box = UITextView()
   private let plus = UIButton(type: .system), cam = UIButton(type: .system), mic = UIButton(type: .system), sendB = UIButton(type: .system)
   private let place = UILabel()
+  var placeholder = "Message" { didSet { place.text = placeholder } }
   private let replyV = UIView(), replyName = UILabel(), replyText = UILabel(), replyX = UIButton(type: .system), replyBar = UIView()
   private let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial))
   var onSend: ((String, [String]) -> Void)?

@@ -10,14 +10,16 @@ enum Row: Hashable { case group(String), client(String), found(String, String) }
 final class ChatRowCell: UITableViewCell {
   static let id = "row"
   let avatar = Avatar()
-  private let title = UILabel(), sub = UILabel(), time = UILabel(), badge = PaddedBadge(), icons = UIStackView()
+  private let title = UILabel(), sub = UILabel(), time = UILabel(), badge = PaddedBadge(), icons = UIStackView(), chipL = PaddedLabel()
   override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
     super.init(style: style, reuseIdentifier: reuseIdentifier)
     title.font = .systemFont(ofSize: 17, weight: .semibold)
     sub.font = .systemFont(ofSize: 15); sub.textColor = .secondaryLabel
     time.font = .systemFont(ofSize: 13); time.textAlignment = .right
     icons.axis = .horizontal; icons.spacing = 4; icons.alignment = .center
-    [avatar, title, sub, time, badge, icons].forEach { contentView.addSubview($0) }
+    chipL.font = .systemFont(ofSize: 11, weight: .semibold); chipL.textColor = .systemOrange; chipL.backgroundColor = UIColor.systemOrange.withAlphaComponent(0.14)
+    chipL.layer.cornerRadius = 7; chipL.layer.masksToBounds = true; chipL.isHidden = true
+    [avatar, title, sub, time, badge, icons, chipL].forEach { contentView.addSubview($0) }
     separatorInset = UIEdgeInsets(top: 0, left: 80, bottom: 0, right: 0)
   }
   required init?(coder: NSCoder) { fatalError() }
@@ -27,7 +29,11 @@ final class ChatRowCell: UITableViewCell {
     avatar.frame = CGRect(x: 16, y: (H - 52) / 2, width: 52, height: 52)
     let tw = time.sizeThatFits(CGSize(width: 120, height: 20)).width
     time.frame = CGRect(x: W - 16 - tw, y: 13, width: tw, height: 18)
-    title.frame = CGRect(x: 80, y: 11, width: W - 80 - tw - 24, height: 22)
+    let cw = chipL.isHidden ? 0 : chipL.sizeThatFits(CGSize(width: 140, height: 18)).width
+    let tmax = W - 80 - tw - 24 - (cw > 0 ? cw + 6 : 0)
+    let tfit = min(tmax, title.sizeThatFits(CGSize(width: tmax, height: 22)).width)
+    title.frame = CGRect(x: 80, y: 11, width: chipL.isHidden ? W - 80 - tw - 24 : tfit, height: 22)
+    if !chipL.isHidden { chipL.frame = CGRect(x: 80 + tfit + 6, y: 13, width: cw, height: 18) }
     var right = W - 16
     if !badge.isHidden { let bw = max(20, badge.sizeThatFits(.zero).width); badge.frame = CGRect(x: right - bw, y: 38, width: bw, height: 20); right -= bw + 6 }
     let iw = icons.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize).width
@@ -40,6 +46,7 @@ final class ChatRowCell: UITableViewCell {
   }
   func show(title t: String, sub s: String, time tm: String, unread: Int, pinned: Bool, muted: Bool, chip: String? = nil) {
     title.text = t; sub.text = s; time.text = tm
+    chipL.text = chip; chipL.isHidden = chip == nil
     time.textColor = unread > 0 ? Look.accent : .secondaryLabel
     badge.isHidden = unread == 0; badge.text = unread > 99 ? "99+" : "\(unread)"
     badge.backgroundColor = muted ? .systemGray3 : Look.accent
@@ -61,6 +68,7 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating {
   let search = UISearchController(searchResultsController: nil)
   var query: String { (search.searchBar.text ?? "").trimmingCharacters(in: .whitespaces).lowercased() }
   var sections: [String: String] = [:]   // section key → its heading
+  var clientsTab = false                  // (the Clients tab: groups with a client contact in them)
 
   override func viewDidLoad() {
     super.viewDidLoad()
@@ -102,7 +110,8 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating {
       c.avatar.set(group: g)
       let m = T.last(id)
       let line = m.map { ($0.kind == "sys" ? "" : "\(T.name($0.by)): ") + Talk.preview($0) } ?? "No messages yet"
-      c.show(title: g.name, sub: line, time: Look.time(T.activity(g)), unread: T.unread(id), pinned: T.pinnedGroups.contains(id), muted: g.muted)
+      let pinned = (g.withClient ? T.pinnedClientGroups : T.pinnedGroups).contains(id)
+      c.show(title: g.name, sub: line, time: Look.time(T.activity(g)), unread: T.unread(id), pinned: pinned, muted: g.muted, chip: g.withClient && !T.isContact ? "With Client" : nil)
     case .found(let gid, let mid):
       guard let g = T.groups[gid], let m = T.log(gid).msgs.first(where: { $0.id == mid }) else { return }
       c.avatar.set(group: g)
@@ -110,10 +119,11 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating {
     case .client(let id):
       guard let cl = T.clients[id] else { return }
       c.avatar.set(client: cl)
-      let gs = T.groups(of: id)
+      let gs = T.groups(of: id, withClient: clientsTab)
       let newest = gs.first.flatMap { g in T.last(g.id).map { (g, $0) } }
       let line = newest.map { (_, m) in (m.kind == "sys" ? "" : "\(T.name(m.by)): ") + Talk.preview(m) } ?? "\(gs.count) group\(gs.count == 1 ? "" : "s")"
-      c.show(title: cl.name, sub: line, time: Look.time(T.clientActivity(id)), unread: T.clientUnread(id), pinned: T.pinnedClients.contains(id), muted: false)
+      c.show(title: cl.name, sub: clientsTab && newest == nil ? "\(gs.count) group\(gs.count == 1 ? "" : "s") with the client" : line, time: Look.time(T.clientActivity(id, withClient: clientsTab)),
+             unread: T.clientUnread(id, withClient: clientsTab), pinned: !clientsTab && T.pinnedClients.contains(id), muted: false)
     }
   }
   func tableView(_ tv: UITableView, heightForHeaderInSection s: Int) -> CGFloat {
@@ -134,7 +144,7 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating {
     guard let row = data.itemIdentifier(for: ip) else { return }
     switch row {
     case .group(let id): navigationController?.pushViewController(ChatVC(group: id), animated: true)
-    case .client(let id): navigationController?.pushViewController(ClientGroupsVC(client: id), animated: true)
+    case .client(let id): navigationController?.pushViewController(ClientGroupsVC(client: id, clientsTab: clientsTab), animated: true)
     case .found(let gid, let mid): navigationController?.pushViewController(ChatVC(group: gid, focus: mid), animated: true)
     }
   }
@@ -156,7 +166,7 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating {
   func groupMenu(_ id: String) -> UIMenu? {
     let T = Talk.shared
     guard let g = T.groups[id] else { return nil }
-    let pinned = T.pinnedGroups.contains(id)
+    let pinned = (g.withClient ? T.pinnedClientGroups : T.pinnedGroups).contains(id)
     let mute: UIMenuElement = g.muted
       ? UIAction(title: "Unmute", image: UIImage(systemName: "bell")) { _ in GroupActions.mute(id, nil) }
       : UIMenu(title: "Mute", image: UIImage(systemName: "bell.slash"), children: [
@@ -172,16 +182,16 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating {
     ])
   }
   // up to 5: a 6th asks which one to unpin (Haris 2026-11-05)
-  func pin(group id: String, _ on: Bool) { pinThing("pin", id, on, name: Talk.shared.groups[id]?.name ?? "") }
+  func pin(group id: String, _ on: Bool) { pinThing("pin", id, on, name: Talk.shared.groups[id]?.name ?? "", tab: Talk.shared.groups[id]?.withClient == true ? "clients" : "groups") }
   func pin(client id: String, _ on: Bool) { pinThing("pinClient", id, on, name: Talk.shared.clients[id]?.name ?? "") }
-  private func pinThing(_ act: String, _ id: String, _ on: Bool, name: String) {
-    Net.shared.act(["act": act, "id": id, "on": on]) { [weak self] j in
+  private func pinThing(_ act: String, _ id: String, _ on: Bool, name: String, tab: String = "groups") {
+    Net.shared.act(["act": act, "id": id, "on": on, "tab": tab]) { [weak self] j in
       if (j?["full"] as? Bool) == true, let pins = j?["pins"] as? [String] {
         let a = UIAlertController(title: "Pinned is full", message: "Up to 5. Unpin one to pin “\(name)”. Your pins are yours — nobody else sees them.", preferredStyle: .actionSheet)
         for p in pins {
           let n = act == "pin" ? Talk.shared.groups[p]?.name : Talk.shared.clients[p]?.name
           a.addAction(UIAlertAction(title: "Unpin “\(n ?? "…")”", style: .default) { _ in
-            Net.shared.act(["act": act, "id": p, "on": false]) { _ in Net.shared.act(["act": act, "id": id, "on": true]) { _ in Talk.shared.refresh() } }
+            Net.shared.act(["act": act, "id": p, "on": false, "tab": tab]) { _ in Net.shared.act(["act": act, "id": id, "on": true, "tab": tab]) { _ in Talk.shared.refresh() } }
           })
         }
         a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
@@ -198,11 +208,14 @@ final class GroupsVC: ListVC {
   private var filter = 0   // All · Unread · @ Mentions
   private let pills = UISegmentedControl(items: ["All", "Unread", "@ Mentions"])
   private let empty = UILabel()
+  // (the Clients tab: the same screen with the groups that have a client contact in them — Haris 2026-11-05)
+  init(clientsTab: Bool = false) { super.init(nibName: nil, bundle: nil); self.clientsTab = clientsTab }
+  required init?(coder: NSCoder) { fatalError() }
   override func viewDidLoad() {
     super.viewDidLoad()
-    title = "Groups"
+    title = clientsTab ? "Clients" : "Groups"
     navigationItem.largeTitleDisplayMode = .always
-    search.searchBar.placeholder = "Search"
+    search.searchBar.placeholder = clientsTab ? "Search client groups" : "Search"
     pills.selectedSegmentIndex = 0
     pills.addAction(UIAction { [weak self] _ in guard let self = self else { return }; self.filter = self.pills.selectedSegmentIndex; UISelectionFeedbackGenerator().selectionChanged(); self.reload(animated: true) }, for: .valueChanged)
     let head = UIView(frame: CGRect(x: 0, y: 0, width: view.bounds.width, height: 46))
@@ -215,63 +228,83 @@ final class GroupsVC: ListVC {
     NotificationCenter.default.addObserver(self, selector: #selector(setMe), name: .talkChanged, object: nil)
   }
   @objc private func setMe() {
-    navigationItem.rightBarButtonItem?.isHidden = !Talk.shared.canMake
-    let a = Avatar(frame: CGRect(x: 0, y: 0, width: 32, height: 32)); a.set(person: Talk.shared.me)
+    let T = Talk.shared
+    // (a client contact: a plain list of their groups — no filters, no +; Haris 2026-11-05)
+    title = T.isContact ? "Chats" : clientsTab ? "Clients" : "Groups"
+    table.tableHeaderView?.isHidden = T.isContact
+    if T.isContact, table.tableHeaderView?.frame.height != 0 { table.tableHeaderView?.frame.size.height = 0; table.tableHeaderView = table.tableHeaderView }
+    navigationItem.rightBarButtonItem?.isHidden = !T.canMake || (clientsTab && !T.boss)
+    let a = Avatar(frame: CGRect(x: 0, y: 0, width: 32, height: 32)); a.set(person: T.me)
     a.widthAnchor.constraint(equalToConstant: 32).isActive = true; a.heightAnchor.constraint(equalToConstant: 32).isActive = true
     a.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(toSettings)))
     navigationItem.leftBarButtonItem = UIBarButtonItem(customView: a)
   }
-  @objc private func toSettings() { tabBarController?.selectedIndex = 1 }
+  @objc private func toSettings() {
+    if Talk.shared.isContact { navigationController?.pushViewController(SettingsVC(), animated: true); return }
+    tabBarController?.selectedIndex = (tabBarController?.viewControllers?.count ?? 2) - 1
+  }
   private func newGroup() {
-    let nav = UINavigationController(rootViewController: NewGroupVC(client: nil))
+    let nav = UINavigationController(rootViewController: NewGroupVC(client: nil, forClient: clientsTab))
     present(nav, animated: true)
   }
   override func build() -> [(String, String, [Row])] {
     let T = Talk.shared
+    // a client contact: their groups, newest first
+    if T.isContact {
+      let gs = T.groups.values.filter { query.isEmpty || $0.name.lowercased().contains(query) }.sorted { T.activity($0) > T.activity($1) }
+      return [("found", "", gs.map { .group($0.id) })]
+    }
+    let tabGroups = T.groups.values.filter { $0.withClient == clientsTab }
     let keep: (String) -> Bool = { [filter] id in filter == 0 || (filter == 1 && T.unread(id) > 0) || (filter == 2 && T.mentionsMe(id)) }
     if !query.isEmpty {
       // searching: the groups themselves (and clients by name)
-      let gs = T.groups.values.filter { $0.name.lowercased().contains(query) || (T.clients[$0.client]?.name.lowercased().contains(query) ?? false) }.filter { keep($0.id) }
+      let gs = tabGroups.filter { $0.name.lowercased().contains(query) || (T.clients[$0.client]?.name.lowercased().contains(query) ?? false) }.filter { keep($0.id) }
         .sorted { T.activity($0) > T.activity($1) }
       // (and the messages on this phone with those words — Haris 2026-11-06, stage 2)
-      let ms = T.search(query).prefix(50).map { Row.found($0.0, $0.1.id) }
+      let ms = T.search(query).filter { T.groups[$0.0]?.withClient == clientsTab }.prefix(50).map { Row.found($0.0, $0.1.id) }
       return [("found", gs.isEmpty ? "" : "Groups", gs.map { .group($0.id) }), ("msgs", "Messages", Array(ms))]
     }
-    let pins = T.pinnedGroups.filter { T.groups[$0] != nil && keep($0) }
+    let pinList = clientsTab ? T.pinnedClientGroups : T.pinnedGroups
+    let pins = pinList.filter { T.groups[$0]?.withClient == clientsTab && keep($0) }
     if filter != 0 {
-      let gs = T.groups.values.filter { keep($0.id) }.sorted { T.activity($0) > T.activity($1) }
+      let gs = tabGroups.filter { keep($0.id) }.sorted { T.activity($0) > T.activity($1) }
       return [("found", "", gs.map { .group($0.id) })]
     }
-    let pinnedC = T.pinnedClients.filter { T.myClients.contains($0) }
-    let cs = pinnedC + T.myClients.filter { !pinnedC.contains($0) }
+    let mine = T.myClients(withClient: clientsTab)
+    let pinnedC = clientsTab ? [] : T.pinnedClients.filter { mine.contains($0) }
+    let cs = pinnedC + mine.filter { !pinnedC.contains($0) }
     return [("pins", "Pinned", pins.map { .group($0) }), ("clients", "Clients", cs.map { .client($0) })]
   }
   override func emptyNote() {
     let none = data.snapshot().numberOfItems == 0
     empty.isHidden = !none
-    empty.text = !query.isEmpty ? "Nothing found" : filter == 1 ? "No unread messages" : filter == 2 ? "No mentions" : Talk.shared.canMake ? "No groups yet.\nTap + to make one under a client." : "No groups yet.\nYou’ll see a group here when you’re added to one."
+    let T = Talk.shared
+    empty.text = !query.isEmpty ? "Nothing found" : filter == 1 ? "No unread messages" : filter == 2 ? "No mentions"
+      : T.isContact ? "No chats yet.\nYou’ll see one here when E11 adds you to it."
+      : clientsTab ? (T.boss ? "No client groups yet.\nTap + to make a group with a client contact in it." : "Groups with a client contact in them show here.\nOnly Super Admins and Office Admins make them.")
+      : T.canMake ? "No groups yet.\nTap + to make one under a client." : "No groups yet.\nYou’ll see a group here when you’re added to one."
   }
 }
 
 // ---------- a client: its groups ----------
 final class ClientGroupsVC: ListVC {
   let client: String
-  init(client: String) { self.client = client; super.init(nibName: nil, bundle: nil) }
+  init(client: String, clientsTab: Bool = false) { self.client = client; super.init(nibName: nil, bundle: nil); self.clientsTab = clientsTab }
   required init?(coder: NSCoder) { fatalError() }
   override func viewDidLoad() {
     super.viewDidLoad()
     navigationItem.largeTitleDisplayMode = .always
     search.searchBar.placeholder = "Search \(Talk.shared.clients[client]?.name ?? "")’s groups"
-    if Talk.shared.canMake {
+    if Talk.shared.canMake && (!clientsTab || Talk.shared.boss) {
       navigationItem.rightBarButtonItem = UIBarButtonItem(title: nil, image: UIImage(systemName: "plus"), primaryAction: UIAction { [weak self] _ in
         guard let self = self else { return }
-        self.present(UINavigationController(rootViewController: NewGroupVC(client: self.client)), animated: true)
+        self.present(UINavigationController(rootViewController: NewGroupVC(client: self.client, forClient: self.clientsTab)), animated: true)
       }, menu: nil)
     }
   }
   override func reload(animated: Bool) {
     let T = Talk.shared
-    let gs = T.groups(of: client), un = gs.filter { T.unread($0.id) > 0 }.count
+    let gs = T.groups(of: client, withClient: clientsTab), un = gs.filter { T.unread($0.id) > 0 }.count
     title = T.clients[client]?.name
     navigationItem.backButtonDisplayMode = .minimal
     // (under the name: "7 groups · 3 unread")
@@ -286,7 +319,7 @@ final class ClientGroupsVC: ListVC {
     if gs.isEmpty, view.window != nil, navigationController?.topViewController === self { navigationController?.popViewController(animated: true) }
   }
   override func build() -> [(String, String, [Row])] {
-    let gs = Talk.shared.groups(of: client).filter { query.isEmpty || $0.name.lowercased().contains(query) }
+    let gs = Talk.shared.groups(of: client, withClient: clientsTab).filter { query.isEmpty || $0.name.lowercased().contains(query) }
     return [("groups", "", gs.map { .group($0.id) })]
   }
 }

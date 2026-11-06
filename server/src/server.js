@@ -467,6 +467,17 @@ export function createServer(cfg) {
   }
 
   // ---------- E11 Talk ----------
+  // who's asking: someone on the team (as every other address), or a client contact — who exists in E11 Talk only, so
+  // every E11 Console page and file (who() above) still refuses them
+  async function talkWho(req, res) {
+    let id;
+    try { id = review ? review.identify(req) : await auth.identify(req); } catch (e) { json(res, 401, { ok: false, error: e.message }); return null; }
+    if (review || access.userByEmail(id.email)) return who(req, res);
+    const k = talkNow().contactByEmail(id.email);
+    if (k) return k;
+    json(res, 403, { ok: false, error: 'No E11 Talk account for ' + id.email });
+    return null;
+  }
   async function talkRoute(req, res, p, url, u) {
     const t = talkNow();
     const out = (r) => json(res, r.status || (r.ok === false ? 400 : 200), r);
@@ -585,11 +596,11 @@ export function createServer(cfg) {
     }
     if (filesHost && String(req.headers['x-forwarded-host'] || req.headers.host || '') === filesHost) { res.writeHead(404, { 'Content-Type': 'text/plain', 'X-Robots-Tag': 'noindex, nofollow' }); return res.end('Not found'); }
 
+    // E11 Talk (talk.js) — the chat app's own addresses: the team as everywhere, and client contacts (E11 Talk only)
+    if (p.startsWith('/api/talk/')) { const tu = await talkWho(req, res); if (!tu) return; return talkRoute(req, res, p, url, tu); }
+
     const u = await who(req, res);
     if (!u) return;
-
-    // E11 Talk (talk.js) — the chat app's own addresses; nothing of E11 Console's changes
-    if (p.startsWith('/api/talk/')) return talkRoute(req, res, p, url, u);
 
     // Owner view, look only: nothing changes (reading, files, previews and this device's notifications still work)
     if (req.ownerView === 'look' && req.method !== 'GET' && req.method !== 'HEAD') {

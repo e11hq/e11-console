@@ -39,6 +39,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     CREATE INDEX IF NOT EXISTS waiting_uid ON waiting(uid, seq);
     CREATE TABLE IF NOT EXISTS sent (id TEXT PRIMARY KEY, grp TEXT NOT NULL, by TEXT NOT NULL, at INTEGER NOT NULL, files TEXT NOT NULL DEFAULT '[]');
     CREATE TABLE IF NOT EXISTS files (id TEXT PRIMARY KEY, by TEXT NOT NULL, name TEXT NOT NULL, size INTEGER NOT NULL DEFAULT 0, done INTEGER NOT NULL DEFAULT 0, at INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS contacts (id TEXT PRIMARY KEY, email TEXT NOT NULL, name TEXT NOT NULL, client TEXT NOT NULL, by TEXT, at INTEGER NOT NULL, gone INTEGER NOT NULL DEFAULT 0);
   `);
   const q = (sql) => db.prepare(sql);
   const Q = {
@@ -102,6 +103,29 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   }
   const clientById = (id) => { const p = store.get('projects', String(id)); return p && !p.inactive ? p : null; };
 
+  /* ---------- client contacts (stage 3, Haris 2026-11-05): added by Super Admins and Office Admins — a name, an email and
+     the client they belong to (several per client). A contact exists in E11 Talk only: signs in with that email's code,
+     sees only the groups they're added to (under their own client), never "Seen by"; every E11 Console page and file
+     refuses them. Removed: gone from every group and signed out at once. ---------- */
+  const isContactId = (id) => String(id || '').startsWith('k-');
+  const isContact = (u) => !!u && u.contact === true;
+  const contactRow = (id) => db.prepare('SELECT * FROM contacts WHERE id = ? AND gone = 0').get(String(id || ''));
+  function contactByEmail(email) {
+    const r = db.prepare('SELECT * FROM contacts WHERE lower(email) = lower(?) AND gone = 0').get(String(email || ''));
+    if (!r || !clientById(r.client)) return null;
+    return { id: r.id, email: r.email, name: r.name, contact: true, client: r.client, role: 'contact', active: true };
+  }
+  function personOfId(id) {
+    if (isContactId(id)) {
+      const r = db.prepare('SELECT * FROM contacts WHERE id = ?').get(String(id));
+      if (!r) return null;
+      const c = clientById(r.client);
+      return { id: r.id, name: r.name, role: c ? c.name : 'Client', photo: null, color: null, contact: true, client: r.client, ...(r.gone ? { gone: true } : {}) };
+    }
+    const x = userOf(id);
+    return x ? { ...personOf(x), ...(active(x) ? {} : { gone: true }) } : null;
+  }
+
   // ---------- groups ----------
   const extra = (g) => { try { return JSON.parse(g.extra || '[]'); } catch { return []; } };
   // admins: the creator (unless a Super / Office Admin took it away), the one second admin, and Super / Office Admins who made themselves admin
@@ -110,23 +134,41 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   const member = (g, uid) => !!Q.isMember.get(g.id, uid);
   const canManage = (u, g) => isAdmin(u, g) || isBoss(u);   // picture, name, add / remove people, delete
   const memberIds = (g) => Q.members.all(g.id).map((m) => m.uid);
+  const withClient = (g) => memberIds(g).some(isContactId);
+  const staffIds = (g) => memberIds(g).filter((id) => !isContactId(id));
   function groupView(g, uid) {
     const ms = Q.members.all(g.id);
     const pref = Q.pref.get(uid, 'group', g.id) || {};
     return { id: g.id, client: g.client, name: g.name, creator: g.creator, creatorAdmin: !g.creator_off, second: g.second || null, admins: adminsOf(g), pic: g.pic || null,
-      createdAt: g.created_at, lastAt: g.last_at, members: ms.map((m) => m.uid), pinnedAt: pref.pinned_at || null, mutedUntil: pref.muted_until || null };
+      createdAt: g.created_at, lastAt: g.last_at, members: ms.map((m) => m.uid), pinnedAt: pref.pinned_at || null, mutedUntil: pref.muted_until || null,
+      withClient: ms.some((m) => isContactId(m.uid)) };
   }
   // everything the app needs to draw its lists (the messages themselves come by sync)
   function state(u) {
-    const groups = Q.groupsOf.all(u.id).filter((g) => clientById(g.client)).map((g) => groupView(g, u.id));
+    const groups = Q.groupsOf.all(u.id).filter((g) => clientById(g.client)).map((g) => groupView(g, u.id))
+      .filter((g) => !isContact(u) || g.client === u.client);
     const ids = new Set([u.id]);
     groups.forEach((g) => g.members.forEach((m) => ids.add(m)));
-    // people who can be added (staff — freelancers too; not the client contacts of stage 3)
+    const pins = { groups: Q.pinsOf.all(u.id, 'group').map((r) => r.id), clients: Q.pinsOf.all(u.id, 'client').map((r) => r.id), clientGroups: Q.pinsOf.all(u.id, 'cgroup').map((r) => r.id) };
+    // a client contact: their own client, their groups and the people in them — nothing else
+    if (isContact(u)) {
+      const c = clientById(u.client);
+      const people = [...ids].map(personOfId).filter(Boolean);
+      return { ok: true, me: { id: u.id, name: u.name, role: c ? c.name : 'Client', photo: null, color: null, contact: true, client: u.client, canMake: false, boss: false },
+        clients: c ? [{ id: c.id, name: c.name, color: c.color || null, logo: ((c.clientId && store.get('clients', String(c.clientId))) || {}).logo || null }] : [], groups, people, pins, seq: Q.lastSeq.get().s || 0 };
+    }
+    // people who can be added (staff — freelancers too), and the client contacts in my groups
     const people = store.list('users').filter(active).map(personOf);
     const known = new Set(people.map((p) => p.id));
-    for (const id of ids) if (!known.has(id)) { const x = userOf(id); if (x) people.push({ ...personOf(x), gone: true }); }
-    return { ok: true, me: { ...personOf(u), canMake: !isFree(u), boss: isBoss(u) }, clients: clientsFor(u), groups, people,
-      pins: { groups: Q.pinsOf.all(u.id, 'group').map((r) => r.id), clients: Q.pinsOf.all(u.id, 'client').map((r) => r.id) }, seq: Q.lastSeq.get().s || 0 };
+    for (const id of ids) if (!known.has(id)) { const x = personOfId(id); if (x) people.push(isContactId(id) ? x : { ...x, gone: true }); }
+    const out = { ok: true, me: { ...personOf(u), canMake: !isFree(u), boss: isBoss(u) }, clients: clientsFor(u), groups, people, pins, seq: Q.lastSeq.get().s || 0 };
+    // Super Admins and Office Admins: every client contact (to add them, or to a group)
+    if (isBoss(u)) {
+      const count = db.prepare('SELECT COUNT(*) AS n FROM members m JOIN groups g ON g.id = m.grp WHERE m.uid = ? AND g.gone = 0');
+      out.contacts = db.prepare('SELECT * FROM contacts WHERE gone = 0 ORDER BY name').all().filter((r) => clientById(r.client))
+        .map((r) => ({ id: r.id, name: r.name, email: r.email, client: r.client, groups: count.get(r.id).n }));
+    }
+    return out;
   }
 
   // ---------- events: addressed, kept until picked up ----------
@@ -206,23 +248,61 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     return [g, null];
   }
   const sys = (g, by, text, extraData = {}) => { const id = rid('m'); emit(g, 'msg', { id, kind: 'sys', text, ...extraData }, by); Q.touch.run(now(), g.id); return id; };
-  const nameOf = (id) => { const x = userOf(id); return x ? (x.name || x.email) : 'Someone'; };
+  const nameOf = (id) => { const x = personOfId(id); return x ? x.name : 'Someone'; };
   const changed = (g, by) => emit(g, 'group', { group: g.id }, by, memberIds(g));
-  const cleanIds = (ids) => [...new Set((Array.isArray(ids) ? ids : []).map(String))].filter((id) => active(userOf(id)));
+  const cleanIds = (ids) => [...new Set((Array.isArray(ids) ? ids : []).map(String))].filter((id) => isContactId(id) ? !!contactRow(id) : active(userOf(id)));
+  // client contacts may be added only by Super / Office Admins, and only to a group of their own client
+  function contactsOK(u, g, ids) {
+    const ks = ids.filter(isContactId);
+    if (!ks.length) return null;
+    if (!isBoss(u)) return bad('Only Super Admins and Office Admins add client contacts', 403);
+    if (ks.some((k) => (contactRow(k) || {}).client !== g.client)) return bad('A client contact can only join their own client’s groups');
+    return null;
+  }
+  const CONTACT_ACTS = new Set(['send', 'edit', 'del', 'react', 'read', 'leave', 'pin', 'mute']);
 
   function act(u, b) {
     const t = now();
+    if (isContact(u) && !CONTACT_ACTS.has(String(b.act || ''))) return bad('Not allowed', 403);
     switch (String(b.act || '')) {
+      // ---- client contacts: Super Admins and Office Admins ----
+      case 'addContact': {
+        if (!isBoss(u)) return bad('Only Super Admins and Office Admins add client contacts', 403);
+        const name = clip(b.name, 80).trim(), email = clip(b.email, 200).trim().toLowerCase(), c = clientById(b.client);
+        if (!name) return bad('Their name, please');
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return bad('That email doesn’t look right');
+        if (!c) return bad('Pick their client');
+        if (access.userByEmail(email)) return bad('That email is on the team already');
+        if (db.prepare('SELECT 1 FROM contacts WHERE lower(email) = ? AND gone = 0').get(email)) return bad('That email is a client contact already');
+        const id = rid('k');
+        db.prepare('INSERT INTO contacts (id, email, name, client, by, at) VALUES (?, ?, ?, ?, ?, ?)').run(id, email, name, c.id, u.id, t);
+        return { ok: true, contact: { id, name, email, client: c.id, groups: 0 } };
+      }
+      case 'removeContact': {
+        if (!isBoss(u)) return bad('Only Super Admins and Office Admins remove client contacts', 403);
+        const r = contactRow(b.id); if (!r) return { ok: true };
+        db.prepare('UPDATE contacts SET gone = 1 WHERE id = ?').run(r.id);
+        for (const m of db.prepare('SELECT grp FROM members WHERE uid = ?').all(r.id)) {
+          const g = Q.group.get(m.grp); if (!g) continue;
+          const was = memberIds(g);
+          Q.dropMember.run(g.id, r.id);
+          sys(Q.group.get(g.id), u.id, `${r.name} was removed`);
+          emit(g, 'group', { group: g.id }, u.id, was);
+        }
+        return { ok: true };
+      }
       case 'newGroup': {
         if (isFree(u)) return bad('Freelancers can’t make groups', 403);
         const c = clientById(b.client);
         if (!c || !access.canSee(u, 'projects', c)) return bad('Pick one of your clients');
         const name = clip(b.name, 80).trim();
         if (!name) return bad('Give the group a name');
+        const ms = cleanIds(b.members);
+        { const e = contactsOK(u, { client: c.id }, ms); if (e) return e; }
         const id = rid('g');
         Q.newGroup.run(id, c.id, name, u.id, t, t);
         Q.addMember.run(id, u.id, t, u.id);
-        for (const m of cleanIds(b.members)) if (m !== u.id) Q.addMember.run(id, m, t, u.id);
+        for (const m of ms) if (m !== u.id) Q.addMember.run(id, m, t, u.id);
         const g = Q.group.get(id);
         changed(g, u.id);
         sys(g, u.id, `${nameOf(u.id)} made the group “${name}”`);
@@ -232,6 +312,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
         const [g, e] = needGroup(u, b.group, { mustBeIn: !isBoss(u) }); if (e) return e;
         if (!canManage(u, g)) return bad('Only the group’s admins add people', 403);
         const add = cleanIds(b.ids).filter((id) => !member(g, id));
+        { const e2 = contactsOK(u, g, add); if (e2) return e2; }
         if (!add.length) return { ok: true, group: groupView(g, u.id) };
         for (const id of add) Q.addMember.run(g.id, id, t, u.id);
         changed(g, u.id);
@@ -318,8 +399,9 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
         return { ok: true, group: groupView(Q.group.get(g.id), u.id) };
       }
       case 'pin': case 'pinClient': {
-        const kind = b.act === 'pin' ? 'group' : 'client', id = String(b.id || '');
-        if (kind === 'group') { const [, e] = needGroup(u, id); if (e) return e; } else if (!clientById(id)) return bad('That client isn’t there');
+        // (the Clients tab keeps its own pins — up to 5 there too: Haris 2026-11-05)
+        const kind = b.act === 'pin' ? (b.tab === 'clients' ? 'cgroup' : 'group') : 'client', id = String(b.id || '');
+        if (kind !== 'client') { const [, e] = needGroup(u, id); if (e) return e; } else if (!clientById(id)) return bad('That client isn’t there');
         if (b.on) {
           const pins = Q.pinsOf.all(u.id, kind).map((r) => r.id);
           if (!pins.includes(id) && pins.length >= MAX_PINS) return { ok: false, full: true, pins, error: 'Pinned is full' };
@@ -376,7 +458,8 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
       // read up to this message — the others see "Seen by"
       case 'read': {
         const [g, e] = needGroup(u, b.group); if (e) return e;
-        emit(g, 'read', { upto: clip(b.upto, 40) }, u.id, memberIds(g).filter((id) => id !== u.id));
+        // ("Seen by" is never shown to clients — staff see it, the client's too)
+        emit(g, 'read', { upto: clip(b.upto, 40) }, u.id, staffIds(g).filter((id) => id !== u.id));
         return { ok: true };
       }
       default: return bad('Unknown');
@@ -485,5 +568,5 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     return { ok: true, made };
   }
   const isAdminOf = (u, gid) => { const g = Q.group.get(gid); return !!g && isAdmin(u, g); };
-  return { state, act, sync, ack, sample, upload, fileFor, filePath, listen, sweep, isAdminOf, close: () => { clearInterval(sweepTimer); for (const set of listeners.values()) for (const r of set) try { r.end(); } catch { /* fine */ } db.close(); } };
+  return { state, act, sync, ack, sample, upload, contactByEmail, fileFor, filePath, listen, sweep, isAdminOf, close: () => { clearInterval(sweepTimer); for (const set of listeners.values()) for (const r of set) try { r.end(); } catch { /* fine */ } db.close(); } };
 }

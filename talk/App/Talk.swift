@@ -4,11 +4,13 @@ import UIKit
    phone only — WhatsApp's way: the server passes each one on and lets it go once every member's phone has it).
    Everything new comes as events (server/src/talk.js): applied here, kept on the phone, then the server is told
    (ack) so it can let them go. */
-struct Person { let id: String; let name: String; let role: String; let photo: String?; let color: String?; let gone: Bool }
+struct Person { let id: String; let name: String; let role: String; let photo: String?; let color: String?; let gone: Bool; var contact: Bool = false; var client: String? = nil }
+struct Contact { let id: String; let name: String; let email: String; let client: String; let groups: Int }
 struct Client { let id: String; let name: String; let color: String?; let logo: String? }
 struct Group {
   let id: String, client: String, name: String, creator: String, creatorAdmin: Bool, second: String?, admins: [String], pic: String?
   let createdAt: Double, lastAt: Double, members: [String], pinnedAt: Double?, mutedUntil: Double?
+  var withClient: Bool = false   // (a client contact is in it: the Clients tab)
   var muted: Bool { (mutedUntil ?? 0) > Date().timeIntervalSince1970 * 1000 }
 }
 
@@ -47,7 +49,9 @@ extension Notification.Name {
 final class Talk {
   static let shared = Talk()
   private(set) var me: Person?
-  private(set) var canMake = false, boss = false
+  private(set) var canMake = false, boss = false, isContact = false
+  private(set) var contacts: [Contact] = []
+  private(set) var pinnedClientGroups: [String] = []
   private(set) var clients: [String: Client] = [:]
   private(set) var clientOrder: [String] = []
   private(set) var groups: [String: Group] = [:]
@@ -97,9 +101,14 @@ final class Talk {
   private func take(_ j: [String: Any], save: Bool) {
     func person(_ p: [String: Any]) -> Person? {
       guard let id = p["id"] as? String else { return nil }
-      return Person(id: id, name: p["name"] as? String ?? "", role: p["role"] as? String ?? "", photo: p["photo"] as? String, color: p["color"] as? String, gone: (p["gone"] as? Bool) == true)
+      return Person(id: id, name: p["name"] as? String ?? "", role: p["role"] as? String ?? "", photo: p["photo"] as? String, color: p["color"] as? String, gone: (p["gone"] as? Bool) == true,
+                    contact: (p["contact"] as? Bool) == true, client: p["client"] as? String)
     }
-    if let m = j["me"] as? [String: Any] { me = person(m); canMake = (m["canMake"] as? Bool) == true; boss = (m["boss"] as? Bool) == true }
+    if let m = j["me"] as? [String: Any] { me = person(m); canMake = (m["canMake"] as? Bool) == true; boss = (m["boss"] as? Bool) == true; isContact = (m["contact"] as? Bool) == true }
+    contacts = ((j["contacts"] as? [[String: Any]]) ?? []).compactMap { c in
+      guard let id = c["id"] as? String else { return nil }
+      return Contact(id: id, name: c["name"] as? String ?? "", email: c["email"] as? String ?? "", client: c["client"] as? String ?? "", groups: c["groups"] as? Int ?? 0)
+    }
     var cs: [String: Client] = [:], order: [String] = []
     for c in (j["clients"] as? [[String: Any]]) ?? [] { if let id = c["id"] as? String { cs[id] = Client(id: id, name: c["name"] as? String ?? "", color: c["color"] as? String, logo: c["logo"] as? String); order.append(id) } }
     clients = cs; clientOrder = order
@@ -112,10 +121,10 @@ final class Talk {
       gs[id] = Group(id: id, client: g["client"] as? String ?? "", name: g["name"] as? String ?? "", creator: g["creator"] as? String ?? "",
                      creatorAdmin: (g["creatorAdmin"] as? Bool) ?? true, second: g["second"] as? String, admins: g["admins"] as? [String] ?? [],
                      pic: g["pic"] as? String, createdAt: (g["createdAt"] as? Double) ?? 0, lastAt: (g["lastAt"] as? Double) ?? 0,
-                     members: g["members"] as? [String] ?? [], pinnedAt: g["pinnedAt"] as? Double, mutedUntil: g["mutedUntil"] as? Double)
+                     members: g["members"] as? [String] ?? [], pinnedAt: g["pinnedAt"] as? Double, mutedUntil: g["mutedUntil"] as? Double, withClient: (g["withClient"] as? Bool) == true)
     }
     groups = gs
-    if let p = j["pins"] as? [String: Any] { pinnedGroups = p["groups"] as? [String] ?? []; pinnedClients = p["clients"] as? [String] ?? [] }
+    if let p = j["pins"] as? [String: Any] { pinnedGroups = p["groups"] as? [String] ?? []; pinnedClients = p["clients"] as? [String] ?? []; pinnedClientGroups = p["clientGroups"] as? [String] ?? [] }
     if save, let d = try? JSONSerialization.data(withJSONObject: j) { try? d.write(to: stateFile, options: .atomic) }
     NotificationCenter.default.post(name: .talkChanged, object: nil)
   }
@@ -282,10 +291,12 @@ final class Talk {
   func last(_ g: String) -> Msg? { log(g).msgs.last }
   // newest activity first: the last message, or when the group was made / changed
   func activity(_ g: Group) -> Double { max(last(g.id)?.at ?? 0, g.createdAt) }
-  func groups(of client: String) -> [Group] { groups.values.filter { $0.client == client }.sorted { activity($0) > activity($1) } }
-  func clientActivity(_ c: String) -> Double { groups(of: c).map { activity($0) }.max() ?? 0 }
-  func clientUnread(_ c: String) -> Int { groups(of: c).reduce(0) { $0 + unread($1.id) } }
-  var myClients: [String] { Set(groups.values.map { $0.client }).filter { clients[$0] != nil }.sorted { clientActivity($0) > clientActivity($1) } }
+  // (tab: nil — every group; false — the Groups tab: groups without a client contact; true — the Clients tab)
+  func groups(of client: String, withClient: Bool? = nil) -> [Group] { groups.values.filter { $0.client == client && (withClient == nil || $0.withClient == withClient!) }.sorted { activity($0) > activity($1) } }
+  func clientActivity(_ c: String, withClient: Bool? = nil) -> Double { groups(of: c, withClient: withClient).map { activity($0) }.max() ?? 0 }
+  func clientUnread(_ c: String, withClient: Bool? = nil) -> Int { groups(of: c, withClient: withClient).reduce(0) { $0 + unread($1.id) } }
+  func myClients(withClient: Bool? = nil) -> [String] { Set(groups.values.filter { withClient == nil || $0.withClient == withClient! }.map { $0.client }).filter { clients[$0] != nil }.sorted { clientActivity($0, withClient: withClient) > clientActivity($1, withClient: withClient) } }
+  var myClients: [String] { myClients() }
   var totalUnread: Int { groups.keys.reduce(0) { $0 + unread($1) } }
   func badge() { UIApplication.shared.applicationIconBadgeNumber = totalUnread }
   func name(_ id: String) -> String { id == me?.id ? "You" : people[id]?.name ?? "Someone" }

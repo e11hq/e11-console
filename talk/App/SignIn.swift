@@ -46,8 +46,8 @@ final class SignInVC: UIViewController, WKNavigationDelegate {
       w.evaluateJavaScript("document.body.innerText") { r, _ in
         let txt = r as? String ?? ""
         if txt.contains("\"ok\":true") { self?.onDone?() }
-        else if txt.contains("No E11 Console account") {
-          let a = UIAlertController(title: "No account for this email", message: "E11 Talk uses your E11 Console account. Ask an Admin to add you on the Team page.", preferredStyle: .alert)
+        else if txt.contains("No E11 Console account") || txt.contains("No E11 Talk account") {
+          let a = UIAlertController(title: "No account for this email", message: "Sign in with the email E11 gave you — your E11 Console email, or, for a client, the email E11 added you with.", preferredStyle: .alert)
           a.addAction(UIAlertAction(title: "OK", style: .default) { _ in Net.shared.cookie = nil; w.load(URLRequest(url: URL(string: Server.url + "/api/talk/state")!)) })
           self?.present(a, animated: true)
         }
