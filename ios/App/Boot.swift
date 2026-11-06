@@ -142,6 +142,7 @@ extension Main {
   }
   private func ownTabsNow() -> [String: Any]? {
     guard AppData.shared.tabsOn, let m = AppData.shared.screen("tabs").model, let list = m["tabs"] as? [[String: Any]], !list.isEmpty else { return nil }
+    if !pageReady { Main.isAdmin = (m["admin"] as? Bool) == true }   // (Admins turn links off and on — without the website, from the copy: Haris 2026-11-06)
     return ["tabs": list, "hidden": false]
   }
 

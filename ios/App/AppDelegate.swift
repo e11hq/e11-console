@@ -1100,6 +1100,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   private func ownTabs(_ moved: String?) -> [String: Any]? {
     guard AppData.shared.tabsOn, AppData.shared.ready, pagePerson == nil || pagePerson == AppData.shared.me, let m = AppData.shared.screen("tabs").model,
           var list = m["tabs"] as? [[String: Any]], !list.isEmpty else { return nil }
+    if !pageReady { Main.isAdmin = (m["admin"] as? Bool) == true }   // (Admins turn links off and on — without the website, from the copy)
     let page = (pageTabs?["tabs"] as? [[String: Any]]) ?? (lastTabs?["tabs"] as? [[String: Any]]) ?? []
     let keys = list.map { $0["v"] as? String ?? "" }
     let cur = selectedTabKey
@@ -1808,6 +1809,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       // (+ New task: the app's own — without the website it went nowhere, Haris 2026-11-05)
       case "add" where self.newTaskNative(view: "inbox", project: nil):
         break
+      // (the "Created … · Open" message's Open: the new task — on the Inbox it went to the website, Haris 2026-11-06)
+      case "toast" where self.homeToastRun != nil:
+        let run = self.homeToastRun; self.homeToastRun = nil; run?()
       case "me" where !self.pageReady:
         self.selectTab("me")
       default:

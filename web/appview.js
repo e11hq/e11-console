@@ -101,7 +101,7 @@ var E11AppView = (function () {
     if (finOnly(data, me)) return { tabs: [T('today', 'Finance'), T('me', 'Me')], plans: false };
     if (office) {
       const hr = fin ? (data.claims || []).filter((c) => c.state === 'submitted').length : 0;
-      return { tabs: [T('today', 'Overview'), T('inbox', 'Inbox', unread), ...(fin ? [T('fin-reimb', 'Claims', hr), T('fin-expenses', 'Expenses')] : [T('team', 'Team'), T('clients', 'Client Assets')]), T('me', 'Me')], plans: false };
+      return { tabs: [T('today', 'Overview'), T('inbox', 'Inbox', unread), ...(fin ? [T('fin-reimb', 'Claims', hr), T('fin-expenses', 'Expenses')] : [T('team', 'Team'), T('clients', 'Client Assets')]), T('me', 'Me')], plans: false, admin: isAdm };
     }
     const today = R.dubaiDay(nowMs());
     const r = R.withEnv(envOf(nowMs), base(data), me, today);
