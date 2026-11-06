@@ -1544,7 +1544,8 @@ final class MeCtl {
     case "rvFile":
       // (the request's files, from its task's own page model — they carry where each file is)
       guard let it = reviewItem(ev["id"] as? String ?? ""), let tid = it.0["tid"] as? String,
-            let all = AppData.shared.screen("task", tid).model?["files"] as? [[String: Any]] else { return }
+            let tm = AppData.shared.screen("task", tid).model else { return }
+      let all = ((tm["files"] as? [[String: Any]]) ?? []) + ((tm["commentFiles"] as? [[String: Any]]) ?? [])
       let want = (((it.0["files"] as? [[String: Any]]) ?? []) + ((it.0["carriedFiles"] as? [[String: Any]]) ?? [])).compactMap { $0["id"] as? String }
       let list = want.compactMap { id in all.first { ($0["id"] as? String) == id } }
       if let i = list.firstIndex(where: { ($0["id"] as? String) == (ev["fid"] as? String) }) { main.openFiles(list, at: i) }

@@ -1223,7 +1223,10 @@ extension Main {
         self.openTaskPage(t, tab: kind == "comment" ? "comments" : "details", focus: "")
         guard let fid = file else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { [weak self] in
-          guard let files = AppData.shared.screen("task", t).model?["files"] as? [[String: Any]], let i = files.firstIndex(where: { ($0["id"] as? String) == fid }) else { return }
+          // (the task's own files and its comments' — a file shared from a comment opened nothing: Haris 2026-11-06)
+          let m = AppData.shared.screen("task", t).model
+          let files = ((m?["files"] as? [[String: Any]]) ?? []) + ((m?["commentFiles"] as? [[String: Any]]) ?? []) + ((m?["descFiles"] as? [[String: Any]]) ?? [])
+          guard let i = files.firstIndex(where: { ($0["id"] as? String) == fid }) else { return }
           self?.openFiles(files, at: i)
         }
       default: say("File not shared with you")
