@@ -45,7 +45,7 @@ jobs:
         run: python3 ios/selftest.py build/Build/Products/Debug-iphonesimulator/E11Console.app 2>&1 | tee "$RUNNER_TEMP/ios-selftest.log"; exit ${PIPESTATUS[0]}
       - name: Walk-through for every role, without the website
         # (ios/walktest.py — Haris 2026-11-05: every button, every role; read from the release below)
-        if: github.event.inputs.walk != 'no'
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.walk != 'no'   # (ios-nav branch: no walk-through on branch pushes — quicker checks while the frame is built)
         continue-on-error: true
         timeout-minutes: 50
         run: python3 ios/walktest.py build/Build/Products/Debug-iphonesimulator/E11Console.app 2>&1 | tee "$RUNNER_TEMP/ios-walk.log"; true

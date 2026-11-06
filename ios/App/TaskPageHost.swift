@@ -37,14 +37,23 @@ extension Main {
     if let h = hiddenForOpen, Date().timeIntervalSince(h.1) < 3, let v = h.0 { v.isHidden = false }
     hiddenForOpen = nil
     if taskPages.isEmpty { taskTabHidden = tabBar.isHidden }
+    // iPhone's own navigation (AppleNav.swift): the page in its own view controller, pushed — Apple's bar on top
+    var pushVC: TaskVC? = nil
+    if APPLE_NAV, navigationController != nil {
+      let vc = TaskVC(p); pushVC = vc
+      p.appleBar = true
+      vc.loadViewIfNeeded()
+      p.frame = vc.view.bounds
+      vc.view.addSubview(p)
+    }
     // (under the shared top buttons, which stay where they are)
-    if corner.superview === view { view.insertSubview(p, belowSubview: corner) } else { view.insertSubview(p, belowSubview: tabBar) }
+    else if corner.superview === view { view.insertSubview(p, belowSubview: corner) } else { view.insertSubview(p, belowSubview: tabBar) }
     // (opened while the startup screen shows — a task link, a notification: the startup screen stays on top and fades
     //  out, so the task is there under it; Haris 2026-11-05)
     if let s = splash { view.bringSubviewToFront(s); splashGone() }
     // (the comment box and its jump spot stay above the page)
-    if let b = cbarIfMade { view.insertSubview(b, aboveSubview: p) }
-    if jumpHitMade { view.insertSubview(jumpHit, aboveSubview: cbarIfMade ?? p) }
+    if let b = cbarIfMade { layerOf(p).insertSubview(b, aboveSubview: p) }
+    if jumpHitMade { layerOf(p).insertSubview(jumpHit, aboveSubview: cbarIfMade ?? p) }
     taskPages.append(p)
     wire(p)
     p.people = serverHome.shown.flatMap { $0["people"] as? [String: [String: Any]] } ?? [:]
@@ -77,11 +86,22 @@ extension Main {
       let c = compose
       UIView.performWithoutAnimation {
         c.switchTo(task: p.taskId, parent: nil)
-        self.view.insertSubview(c, aboveSubview: p)
+        self.placeCompose(c, above: p)
         c.alpha = 1; c.isHidden = false
-        c.transform = CGAffineTransform(translationX: W, y: 0)
+        if pushVC == nil { c.transform = CGAffineTransform(translationX: W, y: 0) }
       }
       boxWith = c
+    }
+    // iPhone's own push: Apple's slide, the screen under it moving aside, the swipe back — all Apple's
+    if let vc = pushVC, let nav = navigationController {
+      nav.pushViewController(vc, animated: true)
+      let done = { [weak self, weak p] in
+        guard let self = self, let p = p, self.taskPages.last === p else { return }
+        self.tabBar.isHidden = true
+        if p.tab == "comments" { self.taskShowComments(p, focus: focus) }
+      }
+      if let tc = nav.transitionCoordinator { tc.animate(alongsideTransition: nil) { _ in done() } } else { done() }
+      return
     }
     // in from the right, the screen under it moving a little to the left and darkening (as iPhone's own push)
     p.transform = CGAffineTransform(translationX: W, y: 0)
@@ -145,6 +165,16 @@ extension Main {
       else if let top = self.taskPages.last, top.tab == "comments" { self.taskShowComments(top, focus: "") }
     }
     let barTo: CGFloat = tabsHidden || formTucked ? 0 : 1
+    if APPLE_NAV, let nav = navigationController {
+      if last { tabBar.alpha = barTo }
+      if let vc = nav.viewControllers.first(where: { ($0 as? TaskVC)?.page === p }) {
+        if nav.topViewController === vc {
+          nav.popViewController(animated: animated)
+          if animated, let tc = nav.transitionCoordinator { tc.animate(alongsideTransition: nil) { c in if !c.isCancelled { finish() } }; return }
+        } else { nav.viewControllers.removeAll { $0 === vc } }
+      }
+      finish(); return
+    }
     if !animated { finish(); if last { tabBar.alpha = barTo }; return }
     UIView.animate(withDuration: 0.36, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState]) {
       p.transform = CGAffineTransform(translationX: W, y: 0)
@@ -160,6 +190,28 @@ extension Main {
   func taskBackStep(_ p: TaskPage) {
     if p.threadFeed != nil || p.tab == "comments" { UIImpactFeedbackGenerator(style: .light).impactOccurred(); toDetailsFromComments(p); return }
     leaveTaskPage(p)
+  }
+  // iPhone's own swipe back (AppleNav): may it start? (a comment written and not sent: asked first, the page stays)
+  func taskSwipeMayGo(_ p: TaskPage) -> Bool {
+    if let u = composeIfMade?.unsent(task: p.taskId) { DispatchQueue.main.async { self.askUnsent(p, u) }; return false }
+    p.endEditing(true)
+    composeIfMade?.text.resignFirstResponder()
+    return true
+  }
+  // pages no longer in iPhone's navigation (swiped away): the app lets go of them as when they close
+  func taskPagesGone(stack: [UIViewController]) {
+    let kept = Set(stack.compactMap { ($0 as? TaskVC).map { ObjectIdentifier($0.page) } })
+    for p in taskPages.reversed() where !kept.contains(ObjectIdentifier(p)) { closeTaskPage(p, animated: false) }
+  }
+  // where a page's comment box and its other pieces go: the page's own view controller (iPhone's navigation), or the app
+  func layerOf(_ p: UIView) -> UIView { p.superview ?? view }
+  func placeCompose(_ c: ComposeBox, above p: UIView) {
+    let host = layerOf(p)
+    if c.superview !== host {
+      c.removeFromSuperview()
+      host.insertSubview(c, aboveSubview: p)
+      NSLayoutConstraint.activate([c.leadingAnchor.constraint(equalTo: host.leadingAnchor), c.trailingAnchor.constraint(equalTo: host.trailingAnchor), c.bottomAnchor.constraint(equalTo: host.keyboardLayoutGuide.topAnchor)])
+    } else { host.insertSubview(c, aboveSubview: p) }
   }
   func leaveTaskPage(_ p: TaskPage) {
     if let u = composeIfMade?.unsent(task: p.taskId) { askUnsent(p, u) } else { closeTaskPage(p) }
@@ -256,7 +308,7 @@ extension Main {
       view.addGestureRecognizer(g)
       taskPan = g
     }
-    taskPan?.isEnabled = !taskPages.isEmpty || clientPageIfMade?.isHidden == false || (clientsListIfMade?.backFromMe == true && clientsListIfMade?.isHidden == false) || (assetsCtl.isOpen && assetsCtl.top?.backable == true) || (meCtl.isOpen && meCtl.depth > 1)
+    taskPan?.isEnabled = (!APPLE_NAV && !taskPages.isEmpty) || clientPageIfMade?.isHidden == false || (clientsListIfMade?.backFromMe == true && clientsListIfMade?.isHidden == false) || (assetsCtl.isOpen && assetsCtl.top?.backable == true) || (meCtl.isOpen && meCtl.depth > 1)
   }
   private func clientsListPan(_ g: UIScreenEdgePanGestureRecognizer, _ l: HomeView) {
     let W = view.bounds.width, x = max(0, g.translation(in: view).x)
@@ -527,7 +579,7 @@ extension Main {
       p.bringSubviewToFront(p.commentsHost); p.bringSubviewToFront(p.barBoxView)
       let c = compose
       c.switchTo(task: p.taskId, parent: p.threadFeed?.thread)
-      view.insertSubview(c, aboveSubview: p)
+      placeCompose(c, above: p)
       c.transform = .identity   // (never left moved aside by a swipe back)
       if c.isHidden { c.alpha = 0; c.isHidden = false; UIView.animate(withDuration: 0.12) { c.alpha = 1 } }
       showFeed(p, focus: focus)
@@ -538,7 +590,7 @@ extension Main {
     // (the comments screen goes inside the page, below its bar; the box and its jump spot above the page)
     if cbox.superview !== p.commentsHost { p.commentsHost.addSubview(cbox) }
     p.bringSubviewToFront(p.commentsHost); p.bringSubviewToFront(p.barBoxView)
-    if let b = cbarIfMade { view.insertSubview(b, aboveSubview: p) }
+    if let b = cbarIfMade { layerOf(p).insertSubview(b, aboveSubview: p) }
     cbarTask = taskComments
     cbarShow = true; cbarOnComments = true
     cbarFeed = CGRect(x: 0, y: p.barBottom, width: view.bounds.width, height: view.bounds.height - p.barBottom)

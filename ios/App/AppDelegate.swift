@@ -89,7 +89,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     guard let ws = scene as? UIWindowScene else { return }
     let w = UIWindow(windowScene: ws)
     w.backgroundColor = BG
-    w.rootViewController = Main.shared
+    // (iPhone's own navigation at the root — AppleNav.swift; its bar hidden over the app's own screens)
+    w.rootViewController = APPLE_NAV ? AppleNav(rootViewController: Main.shared) : Main.shared
     w.makeKeyAndVisible()
     window = w
     if let u = connectionOptions.urlContexts.first?.url { Main.shared.openLink(u) }   // (started by a widget tap)
@@ -305,6 +306,16 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   override func viewWillAppear(_ animated: Bool) {
     super.viewWillAppear(animated)
     view.window?.overrideUserInterfaceStyle = appStyle
+    // (iPhone's own navigation: no bar over the app's own screens; a page pushed on it shows only ‹)
+    navigationItem.backButtonDisplayMode = .minimal
+    navigationController?.setNavigationBarHidden(true, animated: animated)
+  }
+  // (iPhone's own navigation: a sheet from the app goes on whatever page is on top — the app itself may be under a page)
+  override func present(_ vc: UIViewController, animated: Bool, completion: (() -> Void)? = nil) {
+    if APPLE_NAV, presentedViewController == nil, let nav = navigationController, let top = nav.topViewController, top !== self {
+      top.present(vc, animated: animated, completion: completion); return
+    }
+    super.present(vc, animated: animated, completion: completion)
   }
   /* ---------- the startup screen (22+): the app's own, over everything until the page says it's done ---------- */
   var splash: SplashView?

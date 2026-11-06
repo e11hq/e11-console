@@ -338,7 +338,14 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
 
   // ---------- layout ----------
   var safeTop: CGFloat { max(safeAreaInsets.top, window?.safeAreaInsets.top ?? 0, 20) }
-  var barBottom: CGFloat { safeTop + 54 + 8 + 32 + 10 }
+  // iPhone's own navigation (AppleNav.swift, Haris 2026-11-07): Apple's bar is the top row — its ‹, the client and •••;
+  // this page's own row is hidden and Details · Comments sit just under Apple's bar
+  var appleRow: CGFloat? { didSet { if appleRow != oldValue { setNeedsLayout() } } }
+  var appleBar = false { didSet { dot.alpha = appleBar ? 0 : 1; client.alpha = appleBar ? 0 : 1; if appleBar { cornerShared = true } } }
+  var onBarTitle: ((String, UIColor?) -> Void)?
+  var onMenuMade: (() -> Void)?
+  private var rowBottom: CGFloat { appleRow ?? safeTop + 54 }
+  var barBottom: CGFloat { rowBottom + 8 + 32 + 10 }
   // (the two tabs placed by size and centre, never frame: while one slides (its transform moving) a layout pass that set
   //  its frame threw it back across the screen — Comments slid back in over Details, the flash Haris saw)
   private func place(_ v: UIView) {
@@ -359,7 +366,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let gw = (dot.isHidden ? 0 : 18) + cw, gx = (W - gw) / 2
     dot.frame = CGRect(x: gx, y: top + 22 - 5, width: 10, height: 10)
     client.frame = CGRect(x: dot.isHidden ? gx : gx + 18, y: top, width: cw, height: 44)
-    seg.frame = CGRect(x: 16, y: top + 54 + 8, width: W - 32, height: 32)
+    seg.frame = CGRect(x: 16, y: rowBottom + 8, width: W - 32, height: 32)
     place(commentsHost)
     let fs = fab.sizeThatFits(CGSize(width: 300, height: 48))
     let bottom = max(safeAreaInsets.bottom, window?.safeAreaInsets.bottom ?? 0)
@@ -452,6 +459,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if let c = m["client"] as? [String: Any] {
       client.text = c["name"] as? String ?? ""; dot.backgroundColor = TaskPage.rgb(c["rgb"]); dot.isHidden = false
     } else { client.text = (m["sub"] as? Bool) == true ? "Subtask" : "My Tasks"; dot.isHidden = true }
+    onBarTitle?(client.text ?? "", dot.isHidden ? nil : dot.backgroundColor)
     setComments(m["comments"] as? Int ?? 0)
     makeMenu()
     // (unchanged: nothing redrawn — a tick or a title being typed stays as it is)
@@ -522,6 +530,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       items.append(UIMenu(options: .displayInline, children: [UIAction(title: "Delete task", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in self?.confirmDelete() }]))
     }
     moreBtn.menu = UIMenu(children: items)
+    onMenuMade?()
     // (the same, for the shared top buttons' ••• — SwiftUI's menu, which grows out of the glass)
     var ci: [CornerMenuItem] = [CornerMenuItem(title: "Copy link", symbol: "link", run: { [weak self] in guard let self = self else { return }; self.onEvent?(["ev": "copy", "id": self.taskId]) })]
     if (m["readOnly"] as? Bool) != true {
