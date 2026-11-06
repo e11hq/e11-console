@@ -226,7 +226,7 @@ final class TalkButton: SideHit {
     let path = NSBezierPath(roundedRect: rect, xRadius: rad, yRadius: rad)
     let dim: CGFloat = open ? 0.86 : pressed ? 0.9 : hovering ? 1.04 : 1
     let shade = { (c: NSColor) -> NSColor in NSColor(srgbRed: min(1, c.redComponent * dim), green: min(1, c.greenComponent * dim), blue: min(1, c.blueComponent * dim), alpha: 1) }
-    NSGradient(starting: shade(TALK_TOP), ending: shade(TALK_BOTTOM))?.draw(in: path, angle: -90)
+    NSGradient(starting: shade(TALK_TOP), ending: shade(TALK_BOTTOM))?.draw(in: path, angle: 90)
     if open {
       NSColor(white: 1, alpha: 0.6).setStroke()
       let ring = NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), xRadius: rad - 1.5, yRadius: rad - 1.5); ring.lineWidth = 1.2; ring.stroke()
