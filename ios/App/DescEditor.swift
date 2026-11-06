@@ -364,7 +364,14 @@ extension TaskPage {
     bringSubviewToFront(mentionBox)
   }
   // the task's files for # (its own and its comments', as the Files row)
-  var taskFilesForPick: [[String: Any]] { ((model?["files"] as? [[String: Any]]) ?? []) + ((model?["commentFiles"] as? [[String: Any]]) ?? []) }
+  // (the task's files and its comments' — each file once, as the website's taskFilesList)
+  var taskFilesForPick: [[String: Any]] {
+    var seen = Set<String>()
+    return (((model?["files"] as? [[String: Any]]) ?? []) + ((model?["commentFiles"] as? [[String: Any]]) ?? [])).filter { f in
+      guard let k = (f["file"] as? String) ?? (f["id"] as? String) else { return true }
+      return seen.insert(k).inserted
+    }
+  }
   private func insertFileChip(_ f: [String: Any], from at: Int) {
     guard let path = f["file"] as? String else { return }
     let tv = descView

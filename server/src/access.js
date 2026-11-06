@@ -205,6 +205,12 @@ export function createAccess(store, opts = {}) {
     return new Set(store.list('projects').filter((p) => ids.has(p.id) && p.clientId).map((p) => p.clientId));
   }
   // Can this person open this file? Freelancers only get files from their tasks and their clients.
+  // a file used in a task this person can see: attached to it or to a comment, or chipped into its description or a comment
+  function usedInVisible(u, rel) {
+    const inHtml = (h) => !!h && (h.includes(rel) || h.includes(rel.replace(/&/g, '&amp;')));
+    return store.list('tasks').some((x) => taskVisible(u, x) && ((x.attachments || []).concat(...(x.comments || []).map((c) => c.attachments || [])).some((a) => a && (a.path === rel || a.thumb === rel))
+      || inHtml(x.notesHtml) || (x.comments || []).some((c) => inHtml(c.html))));
+  }
   function canReadFile(u, rel) {
     const parts = String(rel).split('/');
     // Expense claims (receipts, signatures, claim PDFs): the person who claims, and Finance
@@ -229,12 +235,14 @@ export function createAccess(store, opts = {}) {
       // (also the files of your own scheduled comment, e.g. after its task was deleted; and a file pasted from another
       //  task into one you can see — the same file, not a copy: it opens wherever it's used)
       return store.list('scheduled').some((s) => s.authorId === u.id && (s.attachments || []).some((a) => a.path === rel || a.thumb === rel))
-        || store.list('tasks').some((x) => taskVisible(u, x) && (x.attachments || []).concat(...(x.comments || []).map((c) => c.attachments || [])).some((a) => a && (a.path === rel || a.thumb === rel)));
+        || usedInVisible(u, rel);
     }
     if (parts[0] === 'Clients') {
       if (parts[1] === '_logos') return true;
       const dir = parts.slice(0, 2).join('/');
-      return store.list('clients').some((c) => clientVisible(u, c) && (c.dir === dir || String(c.dir || '').startsWith(dir + '/')));
+      // (or a Client Assets file put into a task you can see — pasted as a chip in its description or a comment, or
+      //  attached: it opens wherever it's used, as a task's own file does — Haris 2026-11-06)
+      return store.list('clients').some((c) => clientVisible(u, c) && (c.dir === dir || String(c.dir || '').startsWith(dir + '/'))) || usedInVisible(u, rel);
     }
     if (parts[0] === '.thumbs') return true; // previews are small and only reachable by id
     return false;
