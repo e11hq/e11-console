@@ -5,7 +5,7 @@ import UIKit
    unread of its groups), newest activity first (Haris 2026-11-06: "like WhatsApp"); a client → its groups, newest
    first, each with its own unread count. Holding a group: Pin · Mute · Mark as read · Group info · Leave.
    Each row is kept by its id and only redrawn when what it shows changes (iPhone's diffable lists). */
-enum Row: Hashable { case group(String), client(String) }
+enum Row: Hashable { case group(String), client(String), found(String, String) }   // (found: a message — its group, its id)
 
 final class ChatRowCell: UITableViewCell {
   static let id = "row"
@@ -103,6 +103,10 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating {
       let m = T.last(id)
       let line = m.map { ($0.kind == "sys" ? "" : "\(T.name($0.by)): ") + Talk.preview($0) } ?? "No messages yet"
       c.show(title: g.name, sub: line, time: Look.time(T.activity(g)), unread: T.unread(id), pinned: T.pinnedGroups.contains(id), muted: g.muted)
+    case .found(let gid, let mid):
+      guard let g = T.groups[gid], let m = T.log(gid).msgs.first(where: { $0.id == mid }) else { return }
+      c.avatar.set(group: g)
+      c.show(title: g.name, sub: "\(T.name(m.by)): " + Talk.preview(m), time: Look.time(m.at), unread: 0, pinned: false, muted: false)
     case .client(let id):
       guard let cl = T.clients[id] else { return }
       c.avatar.set(client: cl)
@@ -131,6 +135,7 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating {
     switch row {
     case .group(let id): navigationController?.pushViewController(ChatVC(group: id), animated: true)
     case .client(let id): navigationController?.pushViewController(ClientGroupsVC(client: id), animated: true)
+    case .found(let gid, let mid): navigationController?.pushViewController(ChatVC(group: gid, focus: mid), animated: true)
     }
   }
   // holding a group: Pin · Mute · Mark as read · Group info · Leave group; a client: Pin
@@ -139,7 +144,7 @@ class ListVC: UIViewController, UITableViewDelegate, UISearchResultsUpdating {
     return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] _ in
       guard let self = self else { return nil }
       switch row {
-      case .group(let id): return self.groupMenu(id)
+      case .group(let id), .found(let id, _): return self.groupMenu(id)
       case .client(let id):
         let on = Talk.shared.pinnedClients.contains(id)
         return UIMenu(children: [UIAction(title: on ? "Unpin" : "Pin", image: UIImage(systemName: on ? "pin.slash" : "pin")) { _ in self.pin(client: id, !on) }])
@@ -228,7 +233,9 @@ final class GroupsVC: ListVC {
       // searching: the groups themselves (and clients by name)
       let gs = T.groups.values.filter { $0.name.lowercased().contains(query) || (T.clients[$0.client]?.name.lowercased().contains(query) ?? false) }.filter { keep($0.id) }
         .sorted { T.activity($0) > T.activity($1) }
-      return [("found", gs.isEmpty ? "" : "Groups", gs.map { .group($0.id) })]
+      // (and the messages on this phone with those words — Haris 2026-11-06, stage 2)
+      let ms = T.search(query).prefix(50).map { Row.found($0.0, $0.1.id) }
+      return [("found", gs.isEmpty ? "" : "Groups", gs.map { .group($0.id) }), ("msgs", "Messages", Array(ms))]
     }
     let pins = T.pinnedGroups.filter { T.groups[$0] != nil && keep($0) }
     if filter != 0 {

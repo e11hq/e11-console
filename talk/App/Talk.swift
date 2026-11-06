@@ -28,7 +28,7 @@ struct Msg: Codable, Equatable {
   var reactions: [String: String] = [:]   // person → emoji
   var pending: Bool = false               // (sent from here, not through yet)
   var failed: Bool = false
-  struct FileRef: Codable, Equatable { var id: String; var name: String; var size: Int; var kind: String; var w: Double?; var h: Double?; var secs: Double? }
+  struct FileRef: Codable, Equatable { var id: String; var name: String; var size: Int; var kind: String; var w: Double?; var h: Double?; var secs: Double?; var wave: String? = nil }
   struct Reply: Codable, Equatable { var id: String; var by: String; var text: String; var kind: String }
 }
 
@@ -152,7 +152,7 @@ final class Talk {
     case "msg":
       let f = (e["file"] as? [String: Any]).flatMap { f -> Msg.FileRef? in
         guard let fid = f["id"] as? String else { return nil }
-        return Msg.FileRef(id: fid, name: f["name"] as? String ?? "File", size: f["size"] as? Int ?? 0, kind: f["kind"] as? String ?? "file", w: f["w"] as? Double, h: f["h"] as? Double, secs: f["secs"] as? Double)
+        return Msg.FileRef(id: fid, name: f["name"] as? String ?? "File", size: f["size"] as? Int ?? 0, kind: f["kind"] as? String ?? "file", w: f["w"] as? Double, h: f["h"] as? Double, secs: f["secs"] as? Double, wave: f["wave"] as? String)
       }
       let r = (e["reply"] as? [String: Any]).flatMap { r -> Msg.Reply? in
         guard let rid = r["id"] as? String, !rid.isEmpty else { return nil }
@@ -183,19 +183,19 @@ final class Talk {
   }
 
   // ---------- sending from here: shown at once, then the server's copy takes its place ----------
-  func send(_ g: String, text: String, reply: Msg? = nil, file: Msg.FileRef? = nil, localFile: URL? = nil, upload: Data? = nil, progress: ((Double) -> Void)? = nil) {
+  func send(_ g: String, text: String, reply: Msg? = nil, mentions: [String] = [], file: Msg.FileRef? = nil, localFile: URL? = nil, upload: Data? = nil, progress: ((Double) -> Void)? = nil) {
     guard let me = me else { return }
     let cid = UUID().uuidString
     var l = log(g)
     var m = Msg(id: "local-" + cid, cid: cid, seq: Int.max, by: me.id, at: Date().timeIntervalSince1970 * 1000, kind: file?.kind ?? "text", text: text, file: file,
-                reply: reply.map { Msg.Reply(id: $0.id, by: $0.by, text: Talk.preview($0), kind: $0.kind) }, mentions: [], pending: true)
+                reply: reply.map { Msg.Reply(id: $0.id, by: $0.by, text: Talk.preview($0), kind: $0.kind) }, mentions: mentions, pending: true)
     if let lf = localFile, let f = file { try? FileManager.default.copyItem(at: lf, to: Net.local(f.id)) }
     l.msgs.append(m); logs[g] = l; saveSoon(g)
     NotificationCenter.default.post(name: .talkGroup, object: g); NotificationCenter.default.post(name: .talkChanged, object: nil)
     let go = { (fileId: String?) in
-      var b: [String: Any] = ["act": "send", "group": g, "text": text, "cid": cid]
+      var b: [String: Any] = ["act": "send", "group": g, "text": text, "cid": cid, "mentions": mentions]
       if let r = m.reply { b["reply"] = ["id": r.id, "by": r.by, "text": r.text, "kind": r.kind] }
-      if let f = file, let fid = fileId { var fd: [String: Any] = ["id": fid, "kind": f.kind]; fd["w"] = f.w; fd["h"] = f.h; fd["secs"] = f.secs; b["file"] = fd }
+      if let f = file, let fid = fileId { var fd: [String: Any] = ["id": fid, "kind": f.kind]; fd["w"] = f.w; fd["h"] = f.h; fd["secs"] = f.secs; fd["wave"] = f.wave; b["file"] = fd }
       Net.shared.act(b) { [weak self] j in
         guard let self = self else { return }
         if (j?["ok"] as? Bool) == true { self.sync() } else { self.mark(g, cid, failed: true) }
@@ -230,6 +230,42 @@ final class Talk {
     l.myRead = last.id; logs[g] = l; saveSoon(g)
     if last.by != me?.id { Net.shared.act(["act": "read", "group": g, "upto": last.id]) }
     NotificationCenter.default.post(name: .talkChanged, object: nil); badge()
+  }
+
+  // ---------- 90 days (Haris 2026-11-05): every message deletes itself 90 days after it was sent, on every phone, with
+  // its photo / file / voice note — so phones don't fill up. Checked whenever the app opens. ----------
+  func prune() {
+    let cut = Date().timeIntervalSince1970 * 1000 - 90 * 86400000
+    for g in groups.keys {
+      var l = log(g)
+      let old = l.msgs.filter { $0.at < cut && !$0.pending }
+      guard !old.isEmpty else { continue }
+      for m in old { if let f = m.file { try? FileManager.default.removeItem(at: Net.local(f.id)) } }
+      let ids = Set(old.map { $0.id })
+      l.msgs.removeAll { ids.contains($0.id) }
+      logs[g] = l; saveSoon(g)
+    }
+    // (groups this phone no longer has — gone, left: their chats go too)
+    if let files = try? FileManager.default.contentsOfDirectory(atPath: dir.path) {
+      for f in files where f.hasPrefix("g-") && f.hasSuffix(".json") {
+        let g = String(f.dropFirst(2).dropLast(5))
+        if groups[g] == nil && !groups.isEmpty { logs[g] = nil; try? FileManager.default.removeItem(at: dir.appendingPathComponent(f)) }
+      }
+    }
+  }
+
+  // ---------- search: the messages on this phone ----------
+  func search(_ q: String, in only: String? = nil) -> [(String, Msg)] {
+    let n = q.trimmingCharacters(in: .whitespaces)
+    guard n.count >= 2 else { return [] }
+    var out: [(String, Msg)] = []
+    for g in (only.map { [$0] } ?? Array(groups.keys)) {
+      for m in log(g).msgs where !m.deleted && m.kind != "sys" {
+        let hay = m.text + " " + (m.file?.name ?? "")
+        if hay.range(of: n, options: [.caseInsensitive, .diacriticInsensitive]) != nil { out.append((g, m)) }
+      }
+    }
+    return out.sorted { $0.1.at > $1.1.at }
   }
 
   // ---------- for the lists ----------

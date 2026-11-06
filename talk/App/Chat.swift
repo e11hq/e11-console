@@ -2,6 +2,7 @@ import UIKit
 import PhotosUI
 import QuickLook
 import UniformTypeIdentifiers
+import AVFoundation
 
 /* A group's chat (the mockups — WhatsApp's way, in E11's colours with SF Symbols): bubbles with the time inside and
    ✓✓ (blue once everyone has seen it), names coloured with their role, a reply's quote (tap: up to the original), photos
@@ -24,7 +25,8 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private var previewURL: URL?
   private let titleV = UIStackView(), titleL = UILabel(), subL = UILabel()
 
-  init(group: String) { self.group = group; super.init(nibName: nil, bundle: nil); hidesBottomBarWhenPushed = true }
+  private var focus: String?   // (opened from a search result: that message, highlighted)
+  init(group: String, focus: String? = nil) { self.group = group; self.focus = focus; super.init(nibName: nil, bundle: nil); hidesBottomBarWhenPushed = true }
   required init?(coder: NSCoder) { fatalError() }
   override var canBecomeFirstResponder: Bool { true }
   override var inputAccessoryView: UIView? { bar }
@@ -58,11 +60,11 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     titleV.axis = .vertical; titleV.alignment = .center; titleV.addArrangedSubview(titleL); titleV.addArrangedSubview(subL)
     titleV.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(info)))
     navigationItem.titleView = titleV
-    navigationItem.rightBarButtonItem = UIBarButtonItem(title: nil, image: UIImage(systemName: "info.circle"), primaryAction: UIAction { [weak self] _ in self?.info() }, menu: nil)
-    bar.onSend = { [weak self] t in self?.send(t) }
+    setBarButtons()
+    bar.onSend = { [weak self] t, ms in self?.send(t, mentions: ms) }
     bar.onPlus = { [weak self] k in self?.attach(k) }
     bar.onCancelReply = { [weak self] in self?.editingMsg = nil; self?.replying = nil; self?.bar.setReply(nil, editing: false) }
-    bar.onMic = { toast("Voice messages come next") }
+    bar.onVoice = { [weak self] url, secs, wave in self?.sendVoice(url, secs: secs, wave: wave) }
     NotificationCenter.default.addObserver(self, selector: #selector(changed(_:)), name: .talkGroup, object: nil)
     NotificationCenter.default.addObserver(self, selector: #selector(head), name: .talkChanged, object: nil)
     NotificationCenter.default.addObserver(self, selector: #selector(gone(_:)), name: .talkGone, object: nil)
@@ -80,7 +82,10 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   static var open: String?
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
-    if !scrolledOnce, data.snapshot().numberOfItems > 0 { scrolledOnce = true; toBottom(false) }
+    if !scrolledOnce, data.snapshot().numberOfItems > 0 {
+      scrolledOnce = true; toBottom(false)
+      if let f = focus { focus = nil; DispatchQueue.main.async { self.jump(to: f) } }
+    }
   }
   private var scrolledOnce = false
 
@@ -89,6 +94,40 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     titleL.text = g.name
     let names = g.members.filter { $0 != Talk.shared.me?.id }.map { Talk.shared.people[$0]?.name.split(separator: " ").first.map(String.init) ?? "…" } + ["You"]
     subL.text = (Talk.shared.clients[g.client]?.name).map { "\($0) · " } .map { $0 + names.joined(separator: ", ") } ?? names.joined(separator: ", ")
+    // (@: the group's people)
+    bar.people = g.members.filter { $0 != Talk.shared.me?.id }.compactMap { id in Talk.shared.people[id].map { (id, $0.name) } }
+  }
+  // ---------- search inside the chat: 🔍 — the words, ⌃ ⌄ through the matches (newest first), each brought into view ----------
+  private let findBar = UISearchBar()
+  private var finds: [String] = [], findAt = 0
+  private func setBarButtons() {
+    let info = UIBarButtonItem(title: nil, image: UIImage(systemName: "info.circle"), primaryAction: UIAction { [weak self] _ in self?.info() }, menu: nil)
+    let find = UIBarButtonItem(title: nil, image: UIImage(systemName: "magnifyingglass"), primaryAction: UIAction { [weak self] _ in self?.startFind() }, menu: nil)
+    navigationItem.rightBarButtonItems = [info, find]
+    navigationItem.titleView = titleV
+    navigationItem.hidesBackButton = false
+  }
+  private func startFind() {
+    findBar.placeholder = "Search this chat"; findBar.delegate = self; findBar.searchBarStyle = .minimal; findBar.text = ""
+    navigationItem.titleView = findBar
+    navigationItem.hidesBackButton = true
+    let up = UIBarButtonItem(title: nil, image: UIImage(systemName: "chevron.up"), primaryAction: UIAction { [weak self] _ in self?.step(1) }, menu: nil)
+    let down = UIBarButtonItem(title: nil, image: UIImage(systemName: "chevron.down"), primaryAction: UIAction { [weak self] _ in self?.step(-1) }, menu: nil)
+    let done = UIBarButtonItem(systemItem: .done, primaryAction: UIAction { [weak self] _ in self?.endFind() })
+    navigationItem.rightBarButtonItems = [done, down, up]
+    findBar.becomeFirstResponder()
+  }
+  private func endFind() { finds = []; findBar.resignFirstResponder(); setBarButtons(); becomeFirstResponder() }
+  private func runFind() {
+    finds = Talk.shared.search(findBar.text ?? "", in: group).map { $0.1.id }
+    findAt = 0
+    if let f = finds.first { jump(to: f) }
+  }
+  private func step(_ d: Int) {
+    guard !finds.isEmpty else { toast(findBar.text?.isEmpty == false ? "Not found in this chat" : "Type something to find"); return }
+    findAt = (findAt + d + finds.count) % finds.count
+    jump(to: finds[findAt])
+    toast("\(findAt + 1) of \(finds.count)")
   }
   @objc private func info() { navigationController?.pushViewController(GroupInfoVC(group: group), animated: true) }
   @objc private func gone(_ n: Notification) {
@@ -147,13 +186,13 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   }
 
   // ---------- sending ----------
-  private func send(_ text: String) {
+  private func send(_ text: String, mentions: [String] = []) {
     if let e = editingMsg {
       editingMsg = nil; bar.setReply(nil, editing: false)
       Net.shared.act(["act": "edit", "msg": e.id, "text": text]) { j in if (j?["ok"] as? Bool) == true { Talk.shared.sync() } else { toast(j?["error"] as? String ?? "Couldn’t edit it") } }
       return
     }
-    Talk.shared.send(group, text: text, reply: replying)
+    Talk.shared.send(group, text: text, reply: replying, mentions: mentions)
     replying = nil
     UIImpactFeedbackGenerator(style: .light).impactOccurred()
     toBottom(true)
@@ -170,7 +209,41 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       let p = UIDocumentPickerViewController(forOpeningContentTypes: [.item], asCopy: true); p.allowsMultipleSelection = true; p.delegate = self; present(p, animated: true)
     }
   }
+  // a voice message: sent as it was recorded, with its length and waveform
+  private func sendVoice(_ url: URL, secs: Double, wave: String) {
+    guard let d = try? Data(contentsOf: url) else { return }
+    let tmpId = "local-" + UUID().uuidString
+    Talk.shared.send(group, text: "", reply: replying, file: Msg.FileRef(id: tmpId, name: "Voice message.m4a", size: d.count, kind: "voice", w: nil, h: nil, secs: secs, wave: wave), localFile: url, upload: d)
+    replying = nil
+    toBottom(true)
+  }
+  // a video from the camera or Photos: shrunk to 720p first (Haris 2026-11-05); one from Files goes as it is
+  fileprivate func sendVideo(_ url: URL, name: String) {
+    let asset = AVURLAsset(url: url)
+    guard let ex = AVAssetExportSession(asset: asset, presetName: AVAssetExportPreset1280x720) else { sendFile(url, kind: "file", name: name); return }
+    let out = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".mp4")
+    ex.outputURL = out; ex.outputFileType = .mp4; ex.shouldOptimizeForNetworkUse = true
+    toast("Getting the video ready…")
+    ex.exportAsynchronously { [weak self] in
+      DispatchQueue.main.async {
+        guard let self = self else { return }
+        let ok = ex.status == .completed
+        let src = ok ? out : url
+        let a2 = AVURLAsset(url: src)
+        var w: Double? = nil, h: Double? = nil
+        if let t = a2.tracks(withMediaType: .video).first { let sz = t.naturalSize.applying(t.preferredTransform); w = Double(abs(sz.width)); h = Double(abs(sz.height)) }
+        let secs = CMTimeGetSeconds(a2.duration)
+        guard let d = try? Data(contentsOf: src) else { toast("Couldn’t read that video"); return }
+        let tmpId = "local-" + UUID().uuidString
+        let fname = (name as NSString).deletingPathExtension + ".mp4"
+        Talk.shared.send(self.group, text: "", reply: self.replying, file: Msg.FileRef(id: tmpId, name: fname, size: d.count, kind: "video", w: w, h: h, secs: secs.isFinite ? secs : nil), localFile: src, upload: d)
+        self.replying = nil
+        self.toBottom(true)
+      }
+    }
+  }
   fileprivate func sendFile(_ url: URL, kind: String, name: String) {
+    if kind == "video" { sendVideo(url, name: name); return }
     guard let d = try? Data(contentsOf: url) else { toast("Couldn’t read that file"); return }
     var w: Double? = nil, h: Double? = nil, data = d
     var kind = kind
@@ -302,6 +375,11 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   }
 }
 
+extension ChatVC: UISearchBarDelegate {
+  func searchBar(_ b: UISearchBar, textDidChange t: String) { runFind() }
+  func searchBarSearchButtonClicked(_ b: UISearchBar) { b.resignFirstResponder(); runFind(); if finds.isEmpty { toast("Not found in this chat") } }
+}
+
 extension ChatVC: PHPickerViewControllerDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate, UIDocumentPickerDelegate {
   func picker(_ p: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
     p.dismiss(animated: true)
@@ -354,6 +432,9 @@ final class BubbleCell: UITableViewCell {
   private let nameL = UILabel(), textL = UILabel(), footL = UILabel()
   private let quote = UIView(), quoteBar = UIView(), quoteName = UILabel(), quoteText = UILabel()
   private let photo = UIImageView(), fileRow = UIStackView(), fileIcon = UIImageView(), fileName = UILabel(), fileSize = UILabel()
+  private let voice = VoiceView()
+  private let play = UIImageView(image: UIImage(systemName: "play.circle.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 44)))
+  private let vlen = PaddedLabel()
   private let reacts = PaddedLabel(), sysL = PaddedLabel(), retryB = UIButton(type: .system)
   private var lead: NSLayoutConstraint!, trail: NSLayoutConstraint!, photoH: NSLayoutConstraint!, photoW: NSLayoutConstraint!
   private var reactsLead: NSLayoutConstraint!, reactsTrail: NSLayoutConstraint!, bubbleBottom: NSLayoutConstraint!, reactsBottom: NSLayoutConstraint!
@@ -386,7 +467,13 @@ final class BubbleCell: UITableViewCell {
     fileRow.addArrangedSubview(fileIcon); fileRow.addArrangedSubview(fs); fileRow.spacing = 10; fileRow.alignment = .center
     fileRow.isLayoutMarginsRelativeArrangement = true; fileRow.layoutMargins = UIEdgeInsets(top: 8, left: 8, bottom: 8, right: 8); fileRow.layer.cornerRadius = 10
     fileRow.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(fileTap)))
-    [nameL, quote, photo, fileRow, textL, footL].forEach { stack.addArrangedSubview($0) }
+    // (a video: its first frame with ▶︎ and its length over it)
+    play.tintColor = .white; play.layer.shadowOpacity = 0.35; play.layer.shadowRadius = 6; play.layer.shadowOffset = .zero
+    vlen.font = .monospacedDigitSystemFont(ofSize: 11.5, weight: .semibold); vlen.textColor = .white; vlen.backgroundColor = UIColor.black.withAlphaComponent(0.45); vlen.layer.cornerRadius = 8; vlen.layer.masksToBounds = true
+    [play, vlen].forEach { photo.addSubview($0); $0.translatesAutoresizingMaskIntoConstraints = false }
+    NSLayoutConstraint.activate([play.centerXAnchor.constraint(equalTo: photo.centerXAnchor), play.centerYAnchor.constraint(equalTo: photo.centerYAnchor),
+                                 vlen.leadingAnchor.constraint(equalTo: photo.leadingAnchor, constant: 8), vlen.bottomAnchor.constraint(equalTo: photo.bottomAnchor, constant: -8), vlen.heightAnchor.constraint(equalToConstant: 20)])
+    [nameL, quote, photo, fileRow, voice, textL, footL].forEach { stack.addArrangedSubview($0) }
     bubble.addSubview(stack); contentView.addSubview(bubble)
     reacts.font = .systemFont(ofSize: 13); reacts.backgroundColor = .secondarySystemBackground; reacts.layer.cornerRadius = 11; reacts.layer.masksToBounds = true
     reacts.layer.borderWidth = 1.5; reacts.layer.borderColor = Look.chatBg.cgColor
@@ -448,15 +535,28 @@ final class BubbleCell: UITableViewCell {
       quoteText.text = r.text; quoteText.textColor = mine ? UIColor.white.withAlphaComponent(0.85) : .secondaryLabel
     }
     // a photo / a file
-    let isPhoto = !m.deleted && m.file != nil && m.kind == "photo"
+    let isVideo = !m.deleted && m.file != nil && m.kind == "video"
+    let isPhoto = !m.deleted && m.file != nil && (m.kind == "photo" || isVideo)
+    let isVoice = !m.deleted && m.file != nil && m.kind == "voice"
     photo.isHidden = !isPhoto; photoW.isActive = isPhoto; photoH.isActive = isPhoto
+    play.isHidden = !isVideo; vlen.isHidden = !isVideo || m.file?.secs == nil
     if isPhoto, let f = m.file {
       let w: CGFloat = 240, ratio = CGFloat((f.h ?? 3) / max(1, f.w ?? 4))
       photoW.constant = w; photoH.constant = min(320, max(120, w * ratio))
       photo.image = nil
-      Net.shared.file(f.id) { [weak self] url in guard let self = self, self.msg?.id == m.id, let url = url else { return }; self.photo.image = UIImage(contentsOfFile: url.path) }
+      if let s = f.secs { vlen.text = String(format: "%d:%02d", Int(s) / 60, Int(s) % 60) }
+      // (a video's frame: from the copy on this phone — fetched by itself when it's not too big)
+      if !isVideo || f.size <= 60 * 1024 * 1024 || FileManager.default.fileExists(atPath: Net.local(f.id).path) {
+        Net.shared.file(f.id) { [weak self] url in
+          guard let self = self, self.msg?.id == m.id, let url = url else { return }
+          if isVideo { BubbleCell.frame(url, f.id) { [weak self] img in if self?.msg?.id == m.id { self?.photo.image = img } } }
+          else { self.photo.image = UIImage(contentsOfFile: url.path) }
+        }
+      }
     }
-    fileRow.isHidden = m.deleted || m.file == nil || isPhoto
+    voice.isHidden = !isVoice
+    if isVoice, let f = m.file { voice.set(id: m.id, file: f, ink: ink, dim: dim) }
+    fileRow.isHidden = m.deleted || m.file == nil || isPhoto || isVoice
     if let f = m.file, !isPhoto {
       fileRow.backgroundColor = mine ? UIColor.white.withAlphaComponent(0.16) : .tertiarySystemFill
       fileIcon.image = UIImage(systemName: m.kind == "video" ? "play.rectangle.fill" : "doc.fill"); fileIcon.tintColor = ink
@@ -469,7 +569,17 @@ final class BubbleCell: UITableViewCell {
       a.append(NSAttributedString(string: " This message was deleted", attributes: [.font: UIFont.italicSystemFont(ofSize: 15), .foregroundColor: dim]))
       textL.attributedText = a; textL.isHidden = false
     } else {
-      textL.attributedText = nil; textL.text = m.text; textL.textColor = ink; textL.font = .systemFont(ofSize: 16.5)
+      // (@mentions in bold, in the accent — white on mine)
+      let a = NSMutableAttributedString(string: m.text, attributes: [.font: UIFont.systemFont(ofSize: 16.5), .foregroundColor: ink])
+      for id in m.mentions {
+        guard let n = T.people[id]?.name, !n.isEmpty else { continue }
+        var from = m.text.startIndex
+        while let r = m.text.range(of: "@" + n, range: from..<m.text.endIndex) {
+          a.addAttributes([.font: UIFont.systemFont(ofSize: 16.5, weight: .semibold), .foregroundColor: mine ? UIColor.white : Look.accent], range: NSRange(r, in: m.text))
+          from = r.upperBound
+        }
+      }
+      textL.attributedText = a
       textL.isHidden = m.text.isEmpty
     }
     // the time inside, "Edited", and ✓ / ✓✓ (blue once everyone has seen it) on mine
@@ -491,6 +601,19 @@ final class BubbleCell: UITableViewCell {
     reactsLead.isActive = !mine; reactsTrail.isActive = mine
     if reacts.isHidden { bubbleBottom.isActive = true } else { reactsBottom.isActive = true }
   }
+  // a video's first frame (kept)
+  private static let frames = NSCache<NSString, UIImage>()
+  static func frame(_ url: URL, _ id: String, _ done: @escaping (UIImage?) -> Void) {
+    if let i = frames.object(forKey: id as NSString) { done(i); return }
+    DispatchQueue.global(qos: .userInitiated).async {
+      let named = FileManager.default.temporaryDirectory.appendingPathComponent("v-\(Net.stableKey(id)).mp4")
+      if !FileManager.default.fileExists(atPath: named.path) { try? FileManager.default.copyItem(at: url, to: named) }
+      let g = AVAssetImageGenerator(asset: AVURLAsset(url: named)); g.appliesPreferredTrackTransform = true; g.maximumSize = CGSize(width: 720, height: 720)
+      let img = (try? g.copyCGImage(at: CMTime(seconds: 0.1, preferredTimescale: 600), actualTime: nil)).map { UIImage(cgImage: $0) }
+      if let i = img { frames.setObject(i, forKey: id as NSString) }
+      DispatchQueue.main.async { done(img) }
+    }
+  }
   @objc private func quoteTap() { if let r = msg?.reply { onReplyTap?(r.id) } }
   @objc private func fileTap() { if let m = msg { onFileTap?(m) } }
   func flash() {
@@ -506,10 +629,19 @@ final class MessageBar: UIView, UITextViewDelegate {
   private let place = UILabel()
   private let replyV = UIView(), replyName = UILabel(), replyText = UILabel(), replyX = UIButton(type: .system), replyBar = UIView()
   private let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial))
-  var onSend: ((String) -> Void)?
+  var onSend: ((String, [String]) -> Void)?
   var onPlus: ((String) -> Void)?
   var onCancelReply: (() -> Void)?
-  var onMic: (() -> Void)?
+  var onVoice: ((URL, Double, String) -> Void)?
+  // @: the group's people (id, name); the ones picked while typing
+  var people: [(String, String)] = []
+  private var picked: [String: String] = [:]   // id → name
+  private let mentionV = UIStackView()
+  private var mentionQ: (NSRange, String)?
+  // the voice message being recorded: red dot, time, "‹ Slide to cancel"
+  private let rec = VoiceRecorder()
+  private let recV = UIView(), recDot = UIView(), recTime = UILabel(), recHint = UILabel()
+  private var recCancelled = false
   private var boxH: CGFloat = 36
 
   override init(frame: CGRect) {
@@ -526,7 +658,19 @@ final class MessageBar: UIView, UITextViewDelegate {
       UIAction(title: "Camera", image: UIImage(systemName: "camera")) { [weak self] _ in self?.onPlus?("camera") },
       UIAction(title: "Files", image: UIImage(systemName: "folder")) { [weak self] _ in self?.onPlus?("files") }])
     cam.addAction(UIAction { [weak self] _ in self?.onPlus?("camera") }, for: .touchUpInside)
-    mic.addAction(UIAction { [weak self] _ in self?.onMic?() }, for: .touchUpInside)
+    // (hold the mic to record — let go to send, slide left to drop it; a tap says how)
+    let hold = UILongPressGestureRecognizer(target: self, action: #selector(micHold(_:))); hold.minimumPressDuration = 0.18
+    mic.addGestureRecognizer(hold)
+    mic.addAction(UIAction { _ in toast("Hold to record, let go to send") }, for: .touchUpInside)
+    recV.backgroundColor = .clear; recV.isHidden = true
+    recDot.backgroundColor = .systemRed; recDot.layer.cornerRadius = 5
+    recTime.font = .monospacedDigitSystemFont(ofSize: 16, weight: .regular)
+    recHint.text = "‹ Slide to cancel"; recHint.font = .systemFont(ofSize: 15); recHint.textColor = .secondaryLabel; recHint.textAlignment = .center
+    [recDot, recTime, recHint].forEach { recV.addSubview($0) }
+    addSubview(recV)
+    rec.onTick = { [weak self] t in self?.recTime.text = String(format: "%d:%02d", Int(t) / 60, Int(t) % 60) }
+    mentionV.axis = .vertical; mentionV.isHidden = true
+    addSubview(mentionV)
     sendB.addAction(UIAction { [weak self] _ in self?.sendNow() }, for: .touchUpInside)
     box.font = .systemFont(ofSize: 16.5); box.backgroundColor = .secondarySystemBackground; box.layer.cornerRadius = 18; box.layer.cornerCurve = .continuous
     box.textContainerInset = UIEdgeInsets(top: 8, left: 10, bottom: 8, right: 10); box.delegate = self; box.isScrollEnabled = false
@@ -544,13 +688,15 @@ final class MessageBar: UIView, UITextViewDelegate {
   }
   required init?(coder: NSCoder) { fatalError() }
   // (the bar stays above the home indicator when the keyboard is down)
-  override var intrinsicContentSize: CGSize { CGSize(width: UIView.noIntrinsicMetric, height: boxH + 16 + (replyV.isHidden ? 0 : 46) + safeAreaInsets.bottom) }
+  private var mentionH: CGFloat { mentionV.isHidden ? 0 : CGFloat(mentionV.arrangedSubviews.count) * 44 }
+  override var intrinsicContentSize: CGSize { CGSize(width: UIView.noIntrinsicMetric, height: boxH + 16 + (replyV.isHidden ? 0 : 46) + mentionH + safeAreaInsets.bottom) }
   override func safeAreaInsetsDidChange() { super.safeAreaInsetsDidChange(); invalidateIntrinsicContentSize() }
   override func layoutSubviews() {
     super.layoutSubviews()
-    let W = bounds.width, top: CGFloat = replyV.isHidden ? 0 : 46
+    let W = bounds.width, mh = mentionH, top: CGFloat = mh + (replyV.isHidden ? 0 : 46)
     blur.frame = CGRect(x: 0, y: 0, width: W, height: bounds.height + 200)
-    replyV.frame = CGRect(x: 0, y: 0, width: W, height: 46)
+    mentionV.frame = CGRect(x: 0, y: 0, width: W, height: mh)
+    replyV.frame = CGRect(x: 0, y: mh, width: W, height: 46)
     replyBar.frame = CGRect(x: 14, y: 8, width: 3, height: 32)
     replyName.frame = CGRect(x: 24, y: 7, width: W - 70, height: 17); replyText.frame = CGRect(x: 24, y: 24, width: W - 70, height: 17)
     replyX.frame = CGRect(x: W - 44, y: 6, width: 36, height: 36)
@@ -563,8 +709,80 @@ final class MessageBar: UIView, UITextViewDelegate {
     sendB.frame = CGRect(x: W - 46, y: by, width: 40, height: 36)
     cam.frame = CGRect(x: W - 84, y: by, width: 38, height: 36); mic.frame = CGRect(x: W - 46, y: by, width: 40, height: 36)
     sendB.isHidden = !typing; cam.isHidden = typing; mic.isHidden = typing
+    recV.frame = CGRect(x: 8, y: y, width: W - 60, height: 36)
+    recDot.frame = CGRect(x: 10, y: 13, width: 10, height: 10)
+    recTime.frame = CGRect(x: 28, y: 0, width: 60, height: 36)
+    recHint.frame = CGRect(x: 90, y: 0, width: recV.bounds.width - 100, height: 36)
   }
-  func textViewDidChange(_ t: UITextView) { textChanged() }
+  @objc private func micHold(_ g: UILongPressGestureRecognizer) {
+    switch g.state {
+    case .began:
+      recCancelled = false
+      UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+      rec.start { [weak self] ok in
+        guard let self = self else { return }
+        guard ok else { toast("Allow the microphone for E11 Talk in Settings to record"); return }
+        self.recTime.text = "0:00"
+        self.recV.isHidden = false; self.box.isHidden = true; self.plus.isHidden = true; self.cam.isHidden = true
+        self.recDot.alpha = 1
+        UIView.animate(withDuration: 0.6, delay: 0, options: [.repeat, .autoreverse]) { self.recDot.alpha = 0.2 }
+      }
+    case .changed:
+      let x = g.translation(in: self).x
+      recHint.alpha = max(0.2, 1 + x / 120)
+      if x < -110, !recCancelled { recCancelled = true; UINotificationFeedbackGenerator().notificationOccurred(.warning); endRecording(send: false) }
+    case .ended: if !recCancelled { endRecording(send: true) }
+    case .cancelled, .failed: if !recCancelled { endRecording(send: false) }
+    default: break
+    }
+  }
+  private func endRecording(send: Bool) {
+    recDot.layer.removeAllAnimations()
+    recV.isHidden = true; box.isHidden = false; plus.isHidden = false; recHint.alpha = 1
+    setNeedsLayout()
+    guard rec.isRecording else { return }
+    if let r = rec.stop(keep: send) { UIImpactFeedbackGenerator(style: .light).impactOccurred(); onVoice?(r.0, r.1, r.2) }
+    else if send { toast("Hold longer to record") }
+  }
+  func textViewDidChange(_ t: UITextView) { textChanged(); findMention() }
+  func textViewDidChangeSelection(_ t: UITextView) { findMention() }
+  // "@ki" just before the cursor: the people whose name starts so — tap one to put "@Kiran Rao " in
+  private func findMention() {
+    let ns = box.text as NSString, caret = box.selectedRange.location
+    guard caret <= ns.length, !people.isEmpty else { showMentions([]); return }
+    let before = ns.substring(to: caret)
+    guard let at = before.range(of: "@", options: .backwards) else { showMentions([]); return }
+    let word = String(before[at.upperBound...])
+    let startOK = at.lowerBound == before.startIndex || before[before.index(before: at.lowerBound)].isWhitespace
+    guard startOK, !word.contains("\n"), word.count <= 20 else { showMentions([]); return }
+    mentionQ = (NSRange(at.lowerBound..<before.endIndex, in: before), word)
+    let q = word.lowercased()
+    showMentions(people.filter { q.isEmpty || $0.1.lowercased().hasPrefix(q) || $0.1.lowercased().contains(" " + q) }.prefix(4).map { $0 })
+  }
+  private func showMentions(_ list: [(String, String)]) {
+    mentionV.arrangedSubviews.forEach { $0.removeFromSuperview() }
+    for (id, name) in list {
+      var c = UIButton.Configuration.plain()
+      c.title = name; c.baseForegroundColor = .label; c.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 56, bottom: 0, trailing: 16)
+      let b = UIButton(configuration: c); b.contentHorizontalAlignment = .leading
+      b.heightAnchor.constraint(equalToConstant: 44).isActive = true
+      let a = Avatar(frame: CGRect(x: 14, y: 6, width: 32, height: 32)); a.set(person: Talk.shared.people[id]); a.isUserInteractionEnabled = false; b.addSubview(a)
+      b.addAction(UIAction { [weak self] _ in self?.pick(id, name) }, for: .touchUpInside)
+      mentionV.addArrangedSubview(b)
+    }
+    let was = mentionV.isHidden
+    mentionV.isHidden = list.isEmpty
+    if was != mentionV.isHidden || !list.isEmpty { invalidateIntrinsicContentSize(); setNeedsLayout() }
+  }
+  private func pick(_ id: String, _ name: String) {
+    guard let r = mentionQ?.0 else { return }
+    let ns = box.text as NSString
+    box.text = ns.replacingCharacters(in: r, with: "@" + name + " ")
+    box.selectedRange = NSRange(location: r.location + name.utf16.count + 2, length: 0)
+    picked[id] = name
+    UISelectionFeedbackGenerator().selectionChanged()
+    showMentions([]); textChanged()
+  }
   func textChanged() {
     place.isHidden = !box.text.isEmpty
     let h = min(130, max(36, ceil(box.sizeThatFits(CGSize(width: max(100, box.bounds.width), height: 400)).height)))
@@ -575,8 +793,10 @@ final class MessageBar: UIView, UITextViewDelegate {
   private func sendNow() {
     let t = box.text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !t.isEmpty else { return }
-    box.text = ""; textChanged()
-    onSend?(t)
+    // (the people picked with @ whose name is still in the words)
+    let ms = picked.filter { t.contains("@" + $0.value) }.map { $0.key }
+    box.text = ""; picked = [:]; showMentions([]); textChanged()
+    onSend?(t, ms)
   }
   func setReply(_ r: (String, String)?, editing: Bool) {
     replyV.isHidden = r == nil

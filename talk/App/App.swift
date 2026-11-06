@@ -8,6 +8,10 @@ import UserNotifications
 final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate {
   func application(_ app: UIApplication, didFinishLaunchingWithOptions o: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
     UNUserNotificationCenter.current().delegate = self
+    // (reply straight from the banner, or mark it read — stage 2)
+    let reply = UNTextInputNotificationAction(identifier: "reply", title: "Reply", options: [], textInputButtonTitle: "Send", textInputPlaceholder: "Message")
+    let read = UNNotificationAction(identifier: "read", title: "Mark as read", options: [])
+    UNUserNotificationCenter.current().setNotificationCategories([UNNotificationCategory(identifier: "talk-msg", actions: [reply, read], intentIdentifiers: [], options: [])])
     return true
   }
   func application(_ app: UIApplication, configurationForConnecting s: UISceneSession, options: UIScene.ConnectionOptions) -> UISceneConfiguration {
@@ -29,9 +33,26 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationC
     let g = (n.request.content.userInfo["e11"] as? [String: Any])?["groupId"] as? String
     done(g != nil && g == ChatVC.open ? [] : [.banner, .sound, .list])
   }
-  // tapped: its group
+  // tapped: its group; replied from the banner: sent from there, without opening the app; Mark as read
   func userNotificationCenter(_ c: UNUserNotificationCenter, didReceive r: UNNotificationResponse, withCompletionHandler done: @escaping () -> Void) {
-    if let g = (r.notification.request.content.userInfo["e11"] as? [String: Any])?["groupId"] as? String { SceneDelegate.openGroup(g) }
+    let g = (r.notification.request.content.userInfo["e11"] as? [String: Any])?["groupId"] as? String
+    if r.actionIdentifier == "reply", let g = g, let t = (r as? UNTextInputNotificationResponse)?.userText.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty {
+      var bg = UIBackgroundTaskIdentifier.invalid
+      bg = UIApplication.shared.beginBackgroundTask { UIApplication.shared.endBackgroundTask(bg) }
+      Net.shared.act(["act": "send", "group": g, "text": t, "cid": UUID().uuidString]) { _ in
+        Talk.shared.loadLocal()
+        Talk.shared.sync { Talk.shared.markRead(g); Talk.shared.flush(); done(); UIApplication.shared.endBackgroundTask(bg) }
+      }
+      return
+    }
+    if r.actionIdentifier == "read", let g = g {
+      var bg = UIBackgroundTaskIdentifier.invalid
+      bg = UIApplication.shared.beginBackgroundTask { UIApplication.shared.endBackgroundTask(bg) }
+      Talk.shared.loadLocal()
+      Talk.shared.sync { Talk.shared.markRead(g); Talk.shared.flush(); done(); UIApplication.shared.endBackgroundTask(bg) }
+      return
+    }
+    if let g = g { SceneDelegate.openGroup(g) }
     done()
   }
 }
@@ -59,6 +80,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     guard let w = window else { return }
     guard Net.shared.signedIn else { showSignIn(); return }
     Talk.shared.loadLocal()
+    Talk.shared.prune()
     let main = mainTabs()
     w.rootViewController = main
     // the startup screen over it until the chats are ready
@@ -126,7 +148,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
   func sceneDidBecomeActive(_ s: UIScene) {
     guard Net.shared.signedIn, tabs != nil else { return }
     Net.shared.listen()
-    Talk.shared.refresh(); Talk.shared.sync()
+    Talk.shared.refresh { Talk.shared.prune() }; Talk.shared.sync()
   }
   func sceneDidEnterBackground(_ s: UIScene) { Net.shared.stopListening(); Talk.shared.flush(); Talk.shared.badge() }
 }

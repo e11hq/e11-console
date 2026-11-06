@@ -1314,7 +1314,7 @@ export function createServer(cfg) {
   server.keepAliveTimeout = 65000;
 
   return {
-    server, store, files, cfSync, webPush,
+    server, store, files, cfSync, webPush, get talk() { return talkNow(); },
     listen: (port, host) => new Promise((ok) => {
       // the office-network port (HTTPS, own certificate), when the NAS has it set up
       if (cfg.localPort) office.listen(cfg.localPort, office.localHandler({ readRaw, json, users: (id) => store.get('users', String(id)), uploads, canStill: (u, target, fp) => (fp ? access.canReadFile(u, fp) : !uploadDenied(u, target)) }));

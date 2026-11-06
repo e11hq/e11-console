@@ -125,7 +125,8 @@ export function createApns({ store, keyFile = '', keyId = '', teamId = '', topic
     if (pid) data.pid = pid;
     // (mutable-content: the app's Notification Service Extension sees each one first — it confirms it arrived)
     return { aps: { alert: { title: String(msg.title || (kvPrefix === 'apns' ? 'E11 Console' : 'E11 Talk')), body: String(msg.body || '') }, sound: 'default', 'thread-id': String(msg.taskId || msg.tag || msg.kind || 'e11'),
-      ...(Number.isInteger(msg.badge) ? { badge: msg.badge } : {}), ...(pid ? { 'mutable-content': 1 } : {}) }, e11: data };
+      ...(Number.isInteger(msg.badge) ? { badge: msg.badge } : {}), ...(pid ? { 'mutable-content': 1 } : {}),
+      ...(msg.category ? { category: String(msg.category) } : {}) }, e11: data };   // (E11 Talk's: reply from the banner)
   }
   async function push1(s, msg, pid, ttl, tries) {
     const r = await post(s.env, s.token, payloadOf(msg, s.ack ? pid : null), ttl);

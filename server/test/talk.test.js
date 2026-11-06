@@ -136,3 +136,12 @@ test('leaving, removing, deleting a group', async () => {
   assert.ok(!(await state('des')).groups.some((g) => g.id === G));
   assert.ok((await sync('des')).events.some((e) => e.type === 'gone' && e.group === G));
 });
+
+test('a group with no new messages for 90 days is deleted, its people told', async () => {
+  const g = (await act('am', { act: 'newGroup', client: 'p2', name: 'Quiet one', members: ['u-des'] })).group.id;
+  await act('am', { act: 'send', group: g, text: 'last words' });
+  clock += 91 * 86400000;
+  app.talk.sweep();
+  assert.ok(!(await state('des')).groups.some((x) => x.id === g));
+  assert.ok((await sync('des')).events.some((e) => e.type === 'gone' && e.group === g && e.why === 'inactive'));
+});

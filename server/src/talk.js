@@ -14,6 +14,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 
 const KEEP_MS = 30 * 86400000;          // never picked up: gone after 30 days
+const IDLE_MS = 90 * 86400000;          // a group with no new messages for 90 days is deleted (Haris 2026-11-05)
 const EDIT_MS = 15 * 60000;             // edit your own message: 15 minutes (as WhatsApp)
 const DEL_ALL_MS = 2 * 86400000;        // delete for everyone: about 2 days
 const MAX_PINS = 5;
@@ -171,9 +172,17 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     // uploads never sent in a message (or long gone)
     const stale = Q.oldFiles.all(t - KEEP_MS).map((r) => r.id);
     dropFiles(stale.filter((id) => !Q.fileInUse.get(`%"id":"${id}"%`)));
+    // groups with no new messages for 90 days: deleted, their people told (their phones clear it)
+    for (const g of db.prepare('SELECT * FROM groups WHERE gone = 0 AND last_at < ?').all(t - IDLE_MS)) {
+      const was = memberIds(g);
+      Q.goneGroup.run(g.id);
+      if (was.length) emit(g, 'gone', { group: g.id, why: 'inactive' }, null, was);
+    }
   }
   const sweepTimer = setInterval(() => { try { sweep(); } catch (e) { console.error('talk sweep:', e.message); } }, 3600_000);
   if (sweepTimer.unref) sweepTimer.unref();
+  const firstSweep = setTimeout(() => { try { sweep(); } catch { /* fine */ } }, 60_000);
+  if (firstSweep.unref) firstSweep.unref();
 
   // ---------- notifications (E11 Talk's own phones) ----------
   function notify(g, from, text, msgId, mentions = []) {
@@ -184,7 +193,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
       const pref = Q.pref.get(uid, 'group', g.id) || {};
       if (pref.muted_until && pref.muted_until > t && !mentions.includes(uid)) continue;   // (muted — but an @mention still comes)
       const c = clientById(g.client);
-      apns.sendTo(uid, { title: g.name, body: `${from.name || from.email}: ${text}`, tag: g.id, kind: 'talk', groupId: g.id, msgId, clientId: c ? c.id : null }).catch(() => {});
+      apns.sendTo(uid, { title: g.name, body: `${from.name || from.email}: ${text}`, tag: g.id, kind: 'talk', groupId: g.id, msgId, clientId: c ? c.id : null, category: 'talk-msg' }).catch(() => {});
     }
   }
 
@@ -332,7 +341,8 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
           const f = Q.getFile.get(String(b.file.id || ''));
           if (!f || f.by !== u.id || !f.done) return bad('The file didn’t upload — try again');
           file = { id: f.id, name: f.name, size: f.size, kind: ['photo', 'video', 'file', 'voice'].includes(b.file.kind) ? b.file.kind : 'file',
-            w: Number(b.file.w) || null, h: Number(b.file.h) || null, secs: Number(b.file.secs) || null };
+            w: Number(b.file.w) || null, h: Number(b.file.h) || null, secs: Number(b.file.secs) || null,
+            wave: typeof b.file.wave === 'string' ? clip(b.file.wave.replace(/[^A-Za-z0-9+/=]/g, ''), 400) : null };   // (a voice message's waveform, made on the phone that recorded it)
         }
         if (!text.trim() && !file) return bad('Nothing to send');
         const id = rid('m'), mentions = cleanIds(b.mentions).filter((m) => member(g, m));
