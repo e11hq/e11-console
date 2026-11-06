@@ -198,10 +198,143 @@ final class MyTasks: UICollectionViewController {
     for (i, s) in SECTIONS.enumerated() { snap.appendSections([i]); snap.appendItems(s.1.map { s.0 + $0.title }, toSection: i) }
     data.apply(snap, animatingDifferences: false)
   }
+  private var pushed = false
   override func viewDidAppear(_ a: Bool) {
     super.viewDidAppear(a)
+    if (SCENE == 5 || SCENE == 6) && !pushed { pushed = true; navigationController?.pushViewController(TaskVC(tab: SCENE == 6 ? 1 : 0), animated: false); return }
     if SCENE == 2 { collectionView.setContentOffset(CGPoint(x: 0, y: 420 - collectionView.adjustedContentInset.top), animated: false) }
   }
 }
 extension UIFont { func withWeight(_ w: UIFont.Weight) -> UIFont { UIFont.systemFont(ofSize: pointSize, weight: w) } }
 extension UIContextualAction { func then(_ f: (UIContextualAction) -> Void) -> UIContextualAction { f(self); return self } }
+
+
+// ---------- the task page: pushed (Apple's push, ‹ My Tasks, the edge swipe), Details · Comments ----------
+final class TaskVC: UIViewController, UICollectionViewDelegate {
+  let t = SECTIONS[0].1[0]
+  private var tab: Int
+  private var cv: UICollectionView!
+  private var data: UICollectionViewDiffableDataSource<Int, String>!
+  private var cds: AnyObject?
+  private let seg = UISegmentedControl(items: ["Details", "Comments  3"])
+  init(tab: Int) { self.tab = tab; super.init(nibName: nil, bundle: nil); hidesBottomBarWhenPushed = true }
+  required init?(coder: NSCoder) { fatalError() }
+  override var canBecomeFirstResponder: Bool { tab == 1 }
+  private lazy var bar: UIView = {
+    // the comment box (as E11 Talk's): Apple's text view in a rounded box, attach on the left, send on the right
+    let v = UIView(frame: CGRect(x: 0, y: 0, width: 400, height: 60)); v.backgroundColor = .clear
+    let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial)); blur.translatesAutoresizingMaskIntoConstraints = false; v.addSubview(blur)
+    let plus = UIButton(type: .system); plus.setImage(UIImage(systemName: "plus", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .medium)), for: .normal)
+    let box = UITextView(); box.font = .preferredFont(forTextStyle: .body); box.layer.cornerRadius = 18; box.layer.borderWidth = 0.5; box.layer.borderColor = UIColor.separator.cgColor
+    box.backgroundColor = .secondarySystemBackground; box.textContainerInset = UIEdgeInsets(top: 8, left: 10, bottom: 8, right: 10)
+    box.text = "Looks great — just push the logo a bit up"
+    let send = UIButton(type: .system); send.setImage(UIImage(systemName: "arrow.up.circle.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 30)), for: .normal)
+    [plus, box, send].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; v.addSubview($0) }
+    NSLayoutConstraint.activate([
+      blur.leadingAnchor.constraint(equalTo: v.leadingAnchor), blur.trailingAnchor.constraint(equalTo: v.trailingAnchor), blur.topAnchor.constraint(equalTo: v.topAnchor), blur.bottomAnchor.constraint(equalTo: v.bottomAnchor, constant: 40),
+      plus.leadingAnchor.constraint(equalTo: v.leadingAnchor, constant: 12), plus.centerYAnchor.constraint(equalTo: box.centerYAnchor), plus.widthAnchor.constraint(equalToConstant: 32),
+      box.leadingAnchor.constraint(equalTo: plus.trailingAnchor, constant: 8), box.trailingAnchor.constraint(equalTo: send.leadingAnchor, constant: -8),
+      box.topAnchor.constraint(equalTo: v.topAnchor, constant: 8), box.heightAnchor.constraint(equalToConstant: 38),
+      send.trailingAnchor.constraint(equalTo: v.trailingAnchor, constant: -10), send.centerYAnchor.constraint(equalTo: box.centerYAnchor)])
+    return v
+  }()
+  override var inputAccessoryView: UIView? { tab == 1 ? bar : nil }
+  override func viewDidLoad() {
+    super.viewDidLoad()
+    view.backgroundColor = .systemGroupedBackground
+    navigationItem.largeTitleDisplayMode = .never
+    seg.selectedSegmentIndex = tab
+    navigationItem.titleView = seg
+    let more = UIMenu(children: [UIAction(title: "Copy link", image: UIImage(systemName: "link")) { _ in },
+                                 UIAction(title: "Duplicate", image: UIImage(systemName: "plus.square.on.square")) { _ in },
+                                 UIAction(title: "Delete", image: UIImage(systemName: "trash"), attributes: .destructive) { _ in }])
+    navigationItem.rightBarButtonItems = [UIBarButtonItem(title: nil, image: UIImage(systemName: "ellipsis"), primaryAction: nil, menu: more),
+                                          UIBarButtonItem(title: nil, image: UIImage(systemName: "checkmark"), primaryAction: UIAction { _ in }, menu: nil)]
+    var cfg = UICollectionLayoutListConfiguration(appearance: tab == 0 ? .insetGrouped : .plain)
+    cfg.headerMode = tab == 0 ? .supplementary : .none
+    cfg.showsSeparators = tab == 0
+    cfg.backgroundColor = tab == 0 ? .systemGroupedBackground : .systemBackground
+    cv = UICollectionView(frame: view.bounds, collectionViewLayout: UICollectionViewCompositionalLayout.list(using: cfg))
+    cv.autoresizingMask = [.flexibleWidth, .flexibleHeight]; cv.keyboardDismissMode = .interactive
+    view.addSubview(cv)
+    tab == 0 ? details() : comments()
+  }
+  override func viewDidAppear(_ a: Bool) { super.viewDidAppear(a); if tab == 1 { becomeFirstResponder() } }
+
+  // Details: the title, its facts as Apple's rows (each opens its sheet / menu), description, files, subtasks
+  private func details() {
+    let rows: [(Int, [String])] = [(0, ["title"]), (1, ["Status", "Assignees", "Due", "Priority", "CD review", "Client"]), (2, ["desc"]), (3, ["f1", "f2"]), (4, ["s1", "s2", "add"])]
+    let heads = ["", "", "Description", "Files  2", "Subtasks  1 of 2"]
+    let cell = UICollectionView.CellRegistration<UICollectionViewListCell, String> { [t] c, ip, id in
+      var cfg = UIListContentConfiguration.valueCell()
+      c.accessories = []
+      switch id {
+      case "title":
+        var sc = UIListContentConfiguration.subtitleCell(); sc.text = t.title; sc.textProperties.font = .preferredFont(forTextStyle: .title3).withWeight(.bold)
+        let m = NSMutableAttributedString(string: "Northline · Winter campaign", attributes: [.font: UIFont.preferredFont(forTextStyle: .footnote), .foregroundColor: UIColor.secondaryLabel])
+        sc.secondaryAttributedText = m; sc.textToSecondaryTextVerticalPadding = 6
+        sc.image = statusIcon(t); sc.directionalLayoutMargins = .init(top: 14, leading: 16, bottom: 14, trailing: 16)
+        c.contentConfiguration = sc; return
+      case "Status": cfg.text = "Status"; cfg.secondaryText = "In progress"; cfg.image = statusIcon(t)
+      case "Assignees":
+        cfg.text = "Assignees"; cfg.image = UIImage(systemName: "person.2")
+        c.accessories = [.customView(configuration: .init(customView: people(t.people), placement: .trailing(displayed: .always), reservedLayoutWidth: .actual)), .disclosureIndicator()]
+        c.contentConfiguration = cfg; return
+      case "Due": cfg.text = "Due"; cfg.secondaryText = "Yesterday, 6:00 PM"; cfg.secondaryTextProperties.color = .systemRed; cfg.image = UIImage(systemName: "calendar")
+      case "Priority": cfg.text = "Priority"; cfg.secondaryText = "Urgent"; cfg.secondaryTextProperties.color = .systemRed; cfg.image = UIImage(systemName: "flag")
+      case "CD review": cfg.text = "CD review"; cfg.secondaryText = "Waiting"; cfg.secondaryTextProperties.color = .systemYellow; cfg.image = UIImage(systemName: "checkmark.shield")
+      case "Client": cfg.text = "Client"; cfg.secondaryText = "Northline"; cfg.image = UIImage(systemName: "building.2")
+      case "desc":
+        cfg = .cell(); cfg.text = "Final key visual for the winter campaign. Use the snow-forest shot, logo top left, headline “Warmth, wherever you go”. Deliver 1:1, 4:5 and 9:16."
+        cfg.textProperties.font = .preferredFont(forTextStyle: .subheadline)
+        c.contentConfiguration = cfg; return
+      case "f1", "f2":
+        cfg = .subtitleCell(); cfg.text = id == "f1" ? "key-visual-v4.jpg" : "brief-winter.pdf"; cfg.secondaryText = id == "f1" ? "2.4 MB · Leila · Yesterday" : "380 KB · Haris · 3 Nov"
+        cfg.image = UIImage(systemName: id == "f1" ? "photo" : "doc.richtext"); cfg.imageProperties.tintColor = id == "f1" ? .systemBlue : .systemRed
+        cfg.secondaryTextProperties.color = .secondaryLabel
+      case "s1", "s2":
+        cfg = .cell(); cfg.text = id == "s1" ? "Pick the hero photo" : "Write the headline options"
+        cfg.image = UIImage(systemName: id == "s1" ? "checkmark.circle.fill" : "circle"); cfg.imageProperties.tintColor = id == "s1" ? .systemGreen : .tertiaryLabel
+        if id == "s1" { cfg.textProperties.color = .secondaryLabel }
+      default: cfg = .cell(); cfg.text = "Add subtask"; cfg.textProperties.color = .tintColor; cfg.image = UIImage(systemName: "plus")
+      }
+      if ["Status", "Due", "Priority", "CD review", "Client", "f1", "f2"].contains(id) { c.accessories = [.disclosureIndicator()] }
+      c.contentConfiguration = cfg
+    }
+    let head = UICollectionView.SupplementaryRegistration<UICollectionViewListCell>(elementKind: UICollectionView.elementKindSectionHeader) { h, _, ip in
+      var cfg = UIListContentConfiguration.header(); cfg.text = heads[ip.section]; h.contentConfiguration = cfg
+    }
+    data = UICollectionViewDiffableDataSource(collectionView: cv) { cv, ip, id in cv.dequeueConfiguredReusableCell(using: cell, for: ip, item: id) }
+    data.supplementaryViewProvider = { cv, k, ip in cv.dequeueConfiguredReusableSupplementary(using: head, for: ip) }
+    var snap = NSDiffableDataSourceSnapshot<Int, String>()
+    for (sct, ids) in rows { snap.appendSections([sct]); snap.appendItems(ids, toSection: sct) }
+    data.apply(snap, animatingDifferences: false)
+  }
+  // Comments: each as Apple's list row — the picture, name and time, the words; the box at the bottom
+  private func comments() {
+    let cs: [(Person, String, String, String)] = [
+      (L, "Leila K", "Yesterday 4:12 PM", "Uploaded v4 — moved the headline lower and warmed up the colours."),
+      (H, "Haris", "Yesterday 5:03 PM", "Much better. Can we try the logo a little smaller?"),
+      (Y, "Yousef A", "Today 9:20 AM", "Sent for CD review ✓")]
+    let cell = UICollectionView.CellRegistration<UICollectionViewListCell, Int> { c, ip, i in
+      let (p, n, time, text) = cs[i]
+      var cfg = UIListContentConfiguration.subtitleCell()
+      let a = NSMutableAttributedString(string: n, attributes: [.font: UIFont.preferredFont(forTextStyle: .subheadline).withWeight(.semibold)])
+      a.append(NSAttributedString(string: "  " + time, attributes: [.font: UIFont.preferredFont(forTextStyle: .caption1), .foregroundColor: UIColor.secondaryLabel]))
+      cfg.attributedText = a; cfg.secondaryText = text
+      cfg.secondaryTextProperties.font = .preferredFont(forTextStyle: .subheadline); cfg.secondaryTextProperties.color = .label
+      cfg.textToSecondaryTextVerticalPadding = 4
+      cfg.image = UIGraphicsImageRenderer(size: CGSize(width: 34, height: 34)).image { _ in
+        p.color.setFill(); UIBezierPath(ovalIn: CGRect(x: 0, y: 0, width: 34, height: 34)).fill()
+        let at: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: UIColor.white]
+        let sz = (p.ini as NSString).size(withAttributes: at); (p.ini as NSString).draw(at: CGPoint(x: 17 - sz.width / 2, y: 17 - sz.height / 2), withAttributes: at)
+      }
+      cfg.imageProperties.reservedLayoutSize = CGSize(width: 34, height: 34)
+      cfg.directionalLayoutMargins = .init(top: 12, leading: 16, bottom: 12, trailing: 16)
+      c.contentConfiguration = cfg
+    }
+    let ds = UICollectionViewDiffableDataSource<Int, Int>(collectionView: cv) { cv, ip, id in cv.dequeueConfiguredReusableCell(using: cell, for: ip, item: id) }
+    var snap = NSDiffableDataSourceSnapshot<Int, Int>(); snap.appendSections([0]); snap.appendItems([0, 1, 2]); ds.apply(snap, animatingDifferences: false)
+    cds = ds
+  }
+}
