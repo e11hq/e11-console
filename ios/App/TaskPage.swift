@@ -1560,6 +1560,8 @@ final class TaskRow: UIView, UIContextMenuInteractionDelegate {
     guard let m = holdMenu?() else { return nil }
     return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in m }
   }
+  // (at its own size while its menu shows, as the files' — Haris 2026-11-06)
+  func contextMenuInteraction(_ i: UIContextMenuInteraction, previewForHighlightingMenuWithConfiguration c: UIContextMenuConfiguration) -> UITargetedPreview? { PressPreview.make(self) }
   var pressBg = true
   private var tapG: UITapGestureRecognizer?
   private var menuBtn: UIButton?
