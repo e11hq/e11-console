@@ -725,17 +725,21 @@ extension Main {
     }
     let n = p["name"] as? String ?? ""
     let ext = (n as NSString).pathExtension.lowercased()
-    let src = serverURL() + (p["url"] as? String ?? "")
+    // (the file's size and date in its address: what's kept on the phone is used only while the file is the same — one
+    //  replaced in the same place is fetched again; Haris 2026-11-06)
+    let ver = "\(p["size"] as? Int ?? 0)-\(p["at"] as? String ?? p["addedAt"] as? String ?? "")"
+    func v(_ u: String) -> String { u.isEmpty ? u : u + (u.contains("?") ? "&" : "?") + "v=" + (ver.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "") }
+    let src = v(serverURL() + (p["url"] as? String ?? ""))
     // (a small picture for the strip and while the big one loads: a photo's own, at 240 wide — the server's sized copy —
     //  else the file's picture — a video's frame, a PDF's first page)
     // (the same 480-wide copy the file cards ask for: the server makes it once — two sizes meant twice the work)
-    let small = (p["url"] as? String).map { serverURL() + $0.replacingOccurrences(of: "?view=1", with: "?w=480") } ?? ""
+    let small = (p["url"] as? String).map { v(serverURL() + $0.replacingOccurrences(of: "?view=1", with: "?w=480")) } ?? ""
     let thumb = (p["thumbUrl"] as? String).map { serverURL() + $0 } ?? (CommentCell.isPic(n) ? small : "")
     let meta = [TaskPage.size(p["size"] as? Int ?? 0)].joined()
     var it: [String: Any] = ["id": p["id"] ?? "", "name": n, "ext": String(ext.prefix(5)), "meta": meta, "src": src, "thumb": thumb, "cover": thumb]
     if CommentCell.isPic(n) { it["kind"] = "image" }
     else if CommentCell.isVideo(n) { it["kind"] = "video" }
-    else if ["m4a", "mp3", "wav", "aac", "caf"].contains(ext) { it["kind"] = "audio"; it["src"] = src.replacingOccurrences(of: "?view=1", with: "") }
+    else if ["m4a", "mp3", "wav", "aac", "caf"].contains(ext) { it["kind"] = "audio"; it["src"] = src.replacingOccurrences(of: "?view=1&", with: "?").replacingOccurrences(of: "?view=1", with: "") }
     else if ext == "pdf" || officeExt.contains(ext) { it["kind"] = "pages" }
     else if ["txt", "csv", "md", "json"].contains(ext) { it["kind"] = "text" }
     else { it["kind"] = "other"; it["note"] = "Download it to see the whole file." }

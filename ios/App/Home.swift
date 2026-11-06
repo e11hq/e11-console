@@ -1489,18 +1489,10 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     card.isHighlighted = false
     let id = card.id
     let sheet = AttachSheetVC(light: L.light, title: "Attach Files") { [weak self] src in self?.send(["ev": "attach", "id": id, "source": src]) }
-    // (the lifted picture is the card at its full size, and the card itself is hidden under it while the sheet is up —
-    //  the shrunk card showed its border round the picture: a double border, Haris 2026-11-02)
-    (card.gestureRecognizers?.first { $0 is PressShrink } as? PressShrink)?.release()
-    card.layer.removeAllAnimations(); card.transform = CGAffineTransform(translationX: card.swipeX, y: 0)
-    if let snap = card.snapshotView(afterScreenUpdates: true) {
-      sheet.lifted = snap; sheet.liftedFrame = card.convert(card.bounds, to: nil)
-      card.alpha = 0
-      sheet.onLiftedGone = { [weak card] in card?.alpha = 1 }
-    }
+    // (as the comment cards — the standard: the sheet slides up and the card springs back in its place under the dimming;
+    //  no lifted picture of it over the dimming any more — it flashed brighter and bigger, Haris 2026-11-06)
     present?(sheet)
-    // (never left hidden if the sheet didn't come up)
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak card, weak sheet] in if sheet?.view.window == nil { card?.alpha = 1 } }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak card] in (card?.gestureRecognizers?.first { $0 is PressShrink } as? PressShrink)?.release() }
   }
 
   // ---------- a toast over Home (the page's own would be under it): "Link copied", "2 files added to …", Undo ----------
