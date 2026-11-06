@@ -2409,7 +2409,7 @@ function createTask(fields = {}) {
     title: '', notes: '', done: false, completedAt: null, due: null, prio: {},
     tags: [], attachments: [], comments: [], checklist: [], activity: [], start: null, createdAt: nowISO(), updatedAt: nowISO(),
     cdRule: 2,   // (new tasks: the Creative Director can't be assigned while it needs CD review; older tasks keep the old way)
-    cdStatus: '', assignees: [], createdBy: currentUserId || SEED_ADMIN_ID, reviews: [], needsCD: !fields.parentId && !!fields.projectId,
+    cdStatus: '', assignees: [], createdBy: currentUserId || SEED_ADMIN_ID, reviews: [], needsCD: !fields.parentId && !!fields.projectId && !!cdUserId(),
     ...fields,
   };
   if (!fields.silent) t.activity.push({ id: uid(), at: t.createdAt, text: 'created this task', actor: t.createdBy });
@@ -7921,7 +7921,7 @@ async function changeStatus(t, sectionId, targetId = null, after = false) {
   if (backFromClient) {
     const allowed = (me() && (isAdm(me()) || me().role === 'am')) || t.createdBy === currentUserId;
     if (!allowed) { toast('You can’t send this back'); return false; }
-    const cdOnIt = t.cdRule && cdUserId() && (t.assignees || []).includes(cdUserId());   // (the CD works on it: no CD review)
+    const cdOnIt = (t.cdRule && cdUserId() && (t.assignees || []).includes(cdUserId())) || !cdUserId();   // (the CD works on it, or there's no CD: no CD review)
     const ans = cdOnIt ? 'no' : await choiceDialog({
       title: 'Does this need CD review again?',
       body: 'The task is going back for changes. Choose whether the updated work goes to the Creative Director before it returns to the client.',
@@ -7947,6 +7947,7 @@ async function changeStatus(t, sectionId, targetId = null, after = false) {
 
 function setNeedsCD(t, on) {
   if (!(me() && (isAdm(me()) || me().role === 'am' || isCD()))) return denied();
+  if (on && !cdUserId()) { toast('No CD set'); renderDetail(); return; }   // (Haris 2026-11-06)
   if (on && t.cdRule && cdUserId() && (t.assignees || []).includes(cdUserId())) { toast('The CD is on it — no review'); renderDetail(); return; }
   if (reviewPending(t)) { toast('Wait for the CD’s review'); return; }
   if (!!t.needsCD === !!on) return;

@@ -81,7 +81,7 @@ export function createTaskActs({ store, now = () => Date.now(), webDir, access }
       who = [...new Set((Array.isArray(body.who) ? body.who : []).map(String))];
       if (who.some((id) => !assignable(userById(id)))) return fail(400, 'Only Production, Social, Freelancers and the CD can be assigned');
     } else who = assignable(u) ? [u.id] : [];
-    const cdOn = mgr && !!body.cd;
+    const cdOn = mgr && !!body.cd && !!cdUserId;   // (no CD set: no CD review — Haris 2026-11-06)
     if (cdOn && cdUserId && who.includes(cdUserId)) return fail(409, 'Turn off CD review first');
     const desc = String(body.desc == null ? '' : body.desc);
     // app.js createTask
@@ -90,7 +90,7 @@ export function createTaskActs({ store, now = () => Date.now(), webDir, access }
       id: uid(), projectId: p ? p.id : null, sectionId: null, parentId: null,
       title, notes: desc, done: false, completedAt: null, due: due || null, prio: {},
       tags: [], attachments: [], comments: [], checklist: [], activity: [], start: null, createdAt: at, updatedAt: at,
-      cdRule: 2, cdStatus: '', assignees: [], createdBy: u.id, reviews: [], needsCD: !!p,
+      cdRule: 2, cdStatus: '', assignees: [], createdBy: u.id, reviews: [], needsCD: !!p && !!cdUserId,
       ...(desc ? { notesHtml: linkify(esc(desc)).replace(/\n/g, '<br>') } : {}),
     };
     t.activity.push({ id: uid(), at, text: 'created this task', actor: u.id });
@@ -126,7 +126,7 @@ export function createTaskActs({ store, now = () => Date.now(), webDir, access }
       id: uid(), projectId: src.projectId || null, sectionId: null, parentId: null,
       title, notes: src.notes || '', notesHtml: src.notesHtml || '', done: false, completedAt: null, due: null, prio: {},
       tags: (src.tags || []).slice(), attachments: [], comments: [], checklist: [], activity: [], start: null, createdAt: at, updatedAt: at,
-      cdRule: 2, cdStatus: '', assignees: (src.assignees || []).slice(), createdBy: u.id, reviews: [], needsCD: !!src.projectId,
+      cdRule: 2, cdStatus: '', assignees: (src.assignees || []).slice(), createdBy: u.id, reviews: [], needsCD: !!src.projectId && !!(db.meta.cdUserId && (db.users.find((x) => x.id === db.meta.cdUserId) || {}).active !== false && db.users.some((x) => x.id === db.meta.cdUserId)),
       channels: (src.channels || []).slice(), basedOn: src.id, ...(src.guardian ? { guardian: src.guardian } : {}),
     };
     t.activity.push({ id: uid(), at, text: 'created this task', actor: u.id });

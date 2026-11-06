@@ -661,7 +661,19 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     var r: [UIView] = []
     if let rv = m["review"] as? [String: Any] {
       let sw = UISwitch(); sw.isOn = (rv["on"] as? Bool) == true; sw.isEnabled = (rv["canSet"] as? Bool) == true
-      sw.addAction(UIAction { [weak self, weak sw] _ in guard let self = self, let sw = sw else { return }; self.onAct?(["act": "needsCD", "id": self.taskId, "value": sw.isOn]) }, for: .valueChanged)
+      let noCD = (rv["noCD"] as? Bool) == true
+      sw.addAction(UIAction { [weak self, weak sw] _ in
+        guard let self = self, let sw = sw else { return }
+        // (no CD set: it can't be turned on — it springs back, a double tap of haptics and a short message: Haris 2026-11-06)
+        if noCD && sw.isOn {
+          sw.setOn(false, animated: true)
+          let g = UIImpactFeedbackGenerator(style: .medium); g.impactOccurred()
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { g.impactOccurred() }
+          self.toast("No CD set")
+          return
+        }
+        self.onAct?(["act": "needsCD", "id": self.taskId, "value": sw.isOn])
+      }, for: .valueChanged)
       let who = rv["who"] as? String ?? ""   // (the CD's name — or the Acting CD's — on and off: Haris 2026-11-06)
       r.append(row(sym: "checkmark.shield", key: "Needs CD review", sub: who.isEmpty ? nil : who, value: sw))
     }

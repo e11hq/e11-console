@@ -638,7 +638,7 @@ var E11Rules = (() => {
         financeOpts: !t.parentId && canFinance(t) && !ro ? Object.keys(FINANCE).map((k) => ({ t: k, rgb: rgbOf(FINANCE[k]) })) : [], canFinance: !t.parentId && canFinance(t) && !ro,
         update: t.update ? { t: t.update, rgb: updateRgb(t.update) } : null, updates: UPDATES, updateRgbs: UPDATES.map(updateRgb),
         canFields: !ro && !t.parentId,
-        review: !t.parentId && !t.done ? { on: !!t.needsCD, canSet: !ro && !!u && (isAdm(u) || u.role === 'am' || isCD(meId)) && !reviewPending(t), who: cdUserId() ? fullName(userById(cdUserId())) + (db.meta && db.meta.cdActing ? ' (Acting CD)' : '') : 'No Creative Director set' } : null,
+        review: !t.parentId && !t.done ? { on: !!t.needsCD, noCD: !cdUserId(), canSet: !ro && !!u && (isAdm(u) || u.role === 'am' || isCD(meId)) && !reviewPending(t), who: cdUserId() ? fullName(userById(cdUserId())) + (db.meta && db.meta.cdActing ? ' (Acting CD)' : '') : 'No Creative Director set' } : null,
         clientApproval: cdApprovedNow(t) ? (() => { const ca = t.clientApproval, fresh = clientApprovalFresh(t);
           return { state: ca && fresh ? (ca.none ? 'none' : 'yes') : ca ? 'old' : 'missing', text: ca && fresh ? (ca.none ? 'Not needed' : `Approved · ${firstName(ca.by)} · ${fmtDay(dayOf(ca.at))}`) : ca ? 'Out of date' : 'Missing', canSet: !ro && !t.done && !!u && (isAdm(u) || u.role === 'am' || t.createdBy === meId) }; })() : null,
         desc: t.notesHtml ? plainOfHtml(t.notesHtml) : String(t.notes || '').trim(), descRuns: runsOf({ html: t.notesHtml || '', text: t.notes || '' }, true), descFiles: fileRefsOf(t.notesHtml), canDesc: !ro && can('editDesc', t) && !lockedId, mentionable: !ro && can('editDesc', t) && !lockedId ? mentionable() : [],
@@ -1064,7 +1064,7 @@ var E11Rules = (() => {
       if (back) {
         const u = me();
         if (!((u && (isAdm(u) || u.role === 'am')) || t.createdBy === meId)) return { error: 'Only an Account Manager or the task’s creator can send it back' };
-        const cdOnIt = t.cdRule && cdUserId() && (t.assignees || []).includes(cdUserId());
+        const cdOnIt = (t.cdRule && cdUserId() && (t.assignees || []).includes(cdUserId())) || !cdUserId();   // (no CD set: no CD review)
         const ans = cdOnIt ? 'no' : cdAgain;
         if (ans !== 'yes' && ans !== 'no') return { need: 'cdAgain' };
         t.partsDone = {};
@@ -1128,6 +1128,7 @@ var E11Rules = (() => {
     function setNeedsCD(t, on) {
       const u = me();
       if (!(u && (isAdm(u) || u.role === 'am' || isCD(meId)))) return { error: 'Your role doesn’t allow this' };
+      if (on && !cdUserId()) return { error: 'No CD set' };   // (Haris 2026-11-06: no CD, no CD review — it could never be approved)
       if (on && t.cdRule && cdUserId() && (t.assignees || []).includes(cdUserId())) return { error: 'The CD is assigned, so no CD review is needed' };
       if (reviewPending(t)) return { error: 'Files are with the CD — change this after they decide' };
       if (!!t.needsCD === !!on) return [];
