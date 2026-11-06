@@ -317,9 +317,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     navigationController?.setNavigationBarHidden(true, animated: animated)
   }
   // the phone switched light / dark: the app follows at once (the website in it follows the phone by itself too)
-  override func traitCollectionDidChange(_ previous: UITraitCollection?) {
-    super.traitCollectionDidChange(previous)
-    guard FOLLOW_DEVICE, previous?.userInterfaceStyle != traitCollection.userInterfaceStyle, traitCollection.userInterfaceStyle != .unspecified else { return }
+  func followPhoneLook() {
+    guard FOLLOW_DEVICE, traitCollection.userInterfaceStyle != .unspecified else { return }
     let light = traitCollection.userInterfaceStyle == .light
     if (appStyle == .light) != light { run("setAppearance", ["mode": light ? "light" : "dark"]) { _ in } }
   }
@@ -1266,6 +1265,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   override func traitCollectionDidChange(_ previous: UITraitCollection?) {
     super.traitCollectionDidChange(previous)
     if previous?.userInterfaceStyle != traitCollection.userInterfaceStyle, lastTabs != nil { tabBadgeKey = [:]; redrawTabs() }
+    if previous?.userInterfaceStyle != traitCollection.userInterfaceStyle { followPhoneLook() }
   }
   // a picture from our server, with the page's sign-in (its cookies)
   func fetchPhoto(_ url: URL, _ done: @escaping (UIImage?) -> Void) {

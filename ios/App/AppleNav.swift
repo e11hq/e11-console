@@ -46,6 +46,7 @@ final class TaskVC: UIViewController {
   override func viewDidLoad() {
     super.viewDidLoad()
     navigationItem.largeTitleDisplayMode = .never
+    navigationItem.backButtonDisplayMode = .minimal   // (a subtask over it: just ‹)
     // ‹: leaving the page (a comment not sent: asked first, as before)
     if #available(iOS 16.0, *) {
       navigationItem.backAction = UIAction { [weak self] _ in
