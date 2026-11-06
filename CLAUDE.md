@@ -88,6 +88,8 @@ line does the same.
 **E11 Talk (the chat app, named 2026-11-05 20:11 — was "E11 Chat") is never part of the E11 Console iPhone app (Haris, 2026-11-05: "Remember that"):** on the iPhone, chat is only
 ever its own app, E11 Talk — no chat screen, tab or section in E11 Console's iPhone app. On the Mac app it's a separate
 Chat section of E11 Console (not on the website — Haris, 2026-11-05). (Plan: project doc `claude/client-groups-app-idea.md`.)
+E11 Talk is built on the **test server** first (talk-test.e11hq.com), with its own sign-in for now; **before the App
+Store, the shared sign-in goes into both apps and both are sent for review together** (Haris, 2026-11-06).
 
 **TestFlight only on Haris's yes (Haris, 2026-11-03):** "publish, publish app build" builds, self-tests and signs the
 iPhone app, then keeps it on his Mac (ios.yml `send: ask`, the default). When a build has finished, ask Haris; only on
