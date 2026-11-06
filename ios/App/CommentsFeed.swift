@@ -843,15 +843,16 @@ final class TapView: UIView, UIContextMenuInteractionDelegate {
   }
   func contextMenuInteraction(_ i: UIContextMenuInteraction, previewForHighlightingMenuWithConfiguration c: UIContextMenuConfiguration) -> UITargetedPreview? { PressPreview.make(self) }
 }
-// touch and hold on a file (iPhone's own menu): the file shrinks a little while its menu shows, as a card does — it grew
-// instead, iPhone's lift, Haris 2026-11-06
+// touch and hold on a file (iPhone's own menu): while its menu shows, the file stays at its own size — no lift, no shrink
+// (Haris 2026-11-06). iPhone adds a lift of about 15% on top of the size asked for (measured from Haris's recording: asked
+// 0.94, shown 1.083), so 0.87 is asked for to land at 1.
 enum PressPreview {
   static func make(_ v: UIView) -> UITargetedPreview? {
     guard let sv = v.superview, v.window != nil else { return nil }
     let p = UIPreviewParameters()
     p.visiblePath = UIBezierPath(roundedRect: v.bounds, cornerRadius: v.layer.cornerRadius)
     p.backgroundColor = .clear
-    let t = UIPreviewTarget(container: sv, center: v.center, transform: CGAffineTransform(scaleX: 0.94, y: 0.94))
+    let t = UIPreviewTarget(container: sv, center: v.center, transform: CGAffineTransform(scaleX: 0.87, y: 0.87))
     return UITargetedPreview(view: v, parameters: p, target: t)
   }
 }
