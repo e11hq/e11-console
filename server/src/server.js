@@ -42,6 +42,11 @@ export function createServer(cfg) {
   const dataDir = cfg.dataDir;
   const store = cfg.store || openStore(cfg.dbFile || path.join(dataDir, 'db', 'e11.sqlite'));
   const auth = cfg.auth || createAuth({ team: cfg.cfTeam, aud: cfg.cfAud, dev: !!cfg.dev });
+  // E11 Talk's own Cloudflare sign-in (the "E11 Talk" Access application: talk.e11hq.com and talk-test.e11hq.com — Haris
+  // 2026-11-06). Its audience tag is public (it's in every sign-in token), so it lives here. Only /api/talk/ on those hosts.
+  const TALK_AUD = 'f254001f22f0f8099b13ef7e8d68f3fd465d498cbdbf3e21d316cbab644f2e7b';
+  const talkAuth = cfg.talkAuth || createAuth({ team: cfg.cfTeam, aud: TALK_AUD, dev: !!cfg.dev });
+  const talkHost = (req) => /^talk(-test)?\./.test(String(req.headers.host || ''));
   const access = createAccess(store, { ownerEmail: cfg.adminEmail, plans: true, now: cfg.now });   // (content plans: on everywhere since 2026-10-28)
   const files = createFiles(dataDir);
   // The App Review copy (review.js): only when REVIEW_PASSWORD is set — never on the live or test copy
@@ -219,9 +224,9 @@ export function createServer(cfg) {
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   // The person making this request (null + error page if they can't be identified)
-  async function who(req, res) {
-    let id;
-    try { id = review ? review.identify(req) : await auth.identify(req); } catch (e) {
+  async function who(req, res, known) {
+    let id = known;
+    try { if (!id) id = review ? review.identify(req) : await auth.identify(req); } catch (e) {
       if (review && wantsHtml(req)) { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(review.page()); }
       else if (wantsHtml(req)) page(res, 401, 'Please sign in', esc(e.message));
       else json(res, 401, { ok: false, error: e.message });
@@ -471,8 +476,8 @@ export function createServer(cfg) {
   // every E11 Console page and file (who() above) still refuses them
   async function talkWho(req, res) {
     let id;
-    try { id = review ? review.identify(req) : await auth.identify(req); } catch (e) { json(res, 401, { ok: false, error: e.message }); return null; }
-    if (review || access.userByEmail(id.email)) return who(req, res);
+    try { id = review ? review.identify(req) : talkHost(req) ? await talkAuth.identify(req) : await auth.identify(req); } catch (e) { json(res, 401, { ok: false, error: e.message }); return null; }
+    if (review || access.userByEmail(id.email)) return who(req, res, id);
     const k = talkNow().contactByEmail(id.email);
     if (k) return k;
     json(res, 403, { ok: false, error: 'No E11 Talk account for ' + id.email });
