@@ -7,6 +7,7 @@
 import UIKit
 import AVKit
 import WebKit
+import CryptoKit
 
 /* ---------- fetching from the server with the app's sign-in ---------- */
 enum PreviewLoad {
@@ -470,7 +471,12 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
 
   /* ---------- playing a video or a sound: Apple's own player ---------- */
   private func playMedia(_ f: [String: Any]) {
-    guard let s = f["src"] as? String, let url = URL(string: s) else { return }
+    guard let s = f["src"] as? String, let url0 = URL(string: s) else { return }
+    // (kept on the phone after the first time: played again — even after the app restarts — from the phone at once;
+    //  Haris 2026-11-06)
+    let kept = MediaKeep.local(s)
+    if kept == nil { MediaKeep.fetch(s) }
+    let url = kept ?? url0
     let asset = AVURLAsset(url: url, options: [AVURLAssetHTTPCookiesKey: PreviewLoad.cookies.filter { c in
       let d = c.domain.hasPrefix(".") ? String(c.domain.dropFirst()) : c.domain
       return (url.host ?? "") == d || (url.host ?? "").hasSuffix("." + d)
@@ -525,5 +531,54 @@ extension PreviewVC {
     let f2: [String: Any] = ["id": "s2", "name": "Logo lockup.ai", "kind": "other", "ext": "ai", "meta": "4.8 MB · Omar · yesterday"]
     let f3: [String: Any] = ["id": "s3", "name": "Moodboard.zip", "kind": "other", "ext": "zip", "meta": "22 MB · Areej · Oct 28"]
     return ["files": [f1, f2, f3], "at": 1]
+  }
+}
+
+/* Videos and sounds opened in the preview, kept on the phone (Haris 2026-11-06: "files opening on preview are being loaded
+   every time — they should stay in phone's data for fast preview"): the first play streams as before while the file is
+   saved in the background (its light copy for a video, up to 300 MB); after that it plays from the phone. Kept in the
+   app's caches (iPhone may clear them when it's short of space), at most 2 GB — the oldest go first. */
+enum MediaKeep {
+  private static let dir: URL = {
+    let d = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("media", isDirectory: true)
+    try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+    return d
+  }()
+  private static var busy = Set<String>()
+  private static func file(_ s: String) -> URL {
+    let ext = (URL(string: s)?.pathExtension.lowercased()).flatMap { $0.isEmpty ? nil : $0 } ?? "mp4"
+    return dir.appendingPathComponent(SHA256.hash(data: Data(s.utf8)).map { String(format: "%02x", $0) }.joined() + "." + ext)
+  }
+  static func local(_ s: String) -> URL? {
+    let f = file(s)
+    guard FileManager.default.fileExists(atPath: f.path) else { return nil }
+    try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: f.path)   // (recently played: kept longest)
+    return f
+  }
+  static func fetch(_ s: String) {
+    guard let url = URL(string: s), !busy.contains(s) else { return }
+    busy.insert(s)
+    var r = URLRequest(url: url); r.allHTTPHeaderFields = PreviewLoad.headers(url)
+    URLSession.shared.downloadTask(with: r) { tmp, resp, _ in
+      defer { DispatchQueue.main.async { busy.remove(s) } }
+      guard let tmp = tmp, ((resp as? HTTPURLResponse)?.statusCode ?? 0) / 100 == 2,
+            let size = (try? FileManager.default.attributesOfItem(atPath: tmp.path)[.size] as? NSNumber)?.intValue, size > 0, size <= 300_000_000 else { return }
+      let f = file(s)
+      try? FileManager.default.removeItem(at: f)
+      try? FileManager.default.moveItem(at: tmp, to: f)
+      trim()
+    }.resume()
+  }
+  // (at most 2 GB: the least recently played go first)
+  private static func trim() {
+    let fm = FileManager.default
+    guard let list = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey]) else { return }
+    var items = list.compactMap { u -> (URL, Int, Date)? in
+      guard let v = try? u.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey]) else { return nil }
+      return (u, v.fileSize ?? 0, v.contentModificationDate ?? .distantPast)
+    }
+    var total = items.reduce(0) { $0 + $1.1 }
+    items.sort { $0.2 < $1.2 }
+    while total > 2_000_000_000, let first = items.first { try? fm.removeItem(at: first.0); total -= first.1; items.removeFirst() }
   }
 }

@@ -916,7 +916,10 @@ extension Main {
       vc?.set(["info": [["Name", f["name"] as? String ?? ""], ["Size", TaskPage.size(f["size"] as? Int ?? 0)]]])
     case "pages":
       guard let fp = f["file"] as? String else { vc?.set(["id": id, "pages": [String](), "note": "This file couldn’t be previewed — download it to see it."]); return }
-      serverTask.request("/api/host/pdfPages", body: ["id": id, "path": fp], timeout: 150) { [weak vc] j in
+      // (a PDF's / Office file's pages kept on the phone: opened again, they're there at once — the page pictures
+      //  themselves are kept by PreviewLoad; Haris 2026-11-06: "they should stay in phone's data for fast preview")
+      let key = "pdfp:\(fp)|\(f["size"] as? Int ?? 0)"
+      let show = { [weak vc] (j: [String: Any]?) in
         let pages = (j?["pages"] as? [String]) ?? []
         let total = j?["total"] as? Int ?? 0
         let note: String? = pages.isEmpty ? ((j?["unavailable"] as? Bool) == true ? "This file can’t be previewed yet — download it to see it." : "This file couldn’t be previewed — download it to see it.")
@@ -924,6 +927,11 @@ extension Main {
         var out: [String: Any] = ["id": id, "pages": pages.map { pg in serverURL() + "/__file/" + pg.split(separator: "/").map { String($0).addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? String($0) }.joined(separator: "/") }]
         if let note { out["note"] = note }
         vc?.set(out)
+      }
+      if let d = DiskPics.get(key), let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any] { show(j); return }
+      serverTask.request("/api/host/pdfPages", body: ["id": id, "path": fp], timeout: 150) { j in
+        if let j = j, !((j["pages"] as? [String]) ?? []).isEmpty, let d = try? JSONSerialization.data(withJSONObject: ["pages": j["pages"] ?? [], "total": j["total"] ?? 0]) { DiskPics.put(key, d) }
+        show(j)
       }
     default: break
     }
