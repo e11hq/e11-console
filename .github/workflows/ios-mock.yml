@@ -15,6 +15,7 @@ jobs:
         run: for d in /opt/homebrew/bin /usr/local/bin; do [ -d "$d" ] && echo "$d" >> "$GITHUB_PATH"; done; true
       - name: Build and photograph
         run: |
+          set +e
           command -v xcodegen >/dev/null || brew install xcodegen >/dev/null
           cd tools/ios-mock && xcodegen generate && cd ../..
           xcodebuild -project tools/ios-mock/Mock.xcodeproj -scheme Mock -configuration Debug -sdk iphonesimulator \
@@ -26,15 +27,16 @@ jobs:
           v=lambda rt:[int(x) for x in re.findall(r'(\\d+)', rt.split('iOS')[-1])[:2]]
           p=[(v(k),x) for k,xs in d.items() if 'iOS' in k for x in xs if re.match(r'iPhone \\d', x['name']) and 'Pro Max' not in x['name']]
           p.sort(key=lambda t:(t[0],t[1]['name'])); print(p[-1][1]['udid'])")
-          xcrun simctl boot "$DEV" 2>/dev/null; xcrun simctl bootstatus "$DEV" -b >/dev/null
+          echo "device $DEV"
+          xcrun simctl boot "$DEV"; xcrun simctl bootstatus "$DEV" -b >/dev/null
           xcrun simctl status_bar "$DEV" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 2>/dev/null
-          xcrun simctl install "$DEV" "$APP"
+          xcrun simctl install "$DEV" "$APP"; echo "install $?"
           mkdir -p "$RUNNER_TEMP/shots"
           for look in light dark; do
             xcrun simctl ui "$DEV" appearance $look
             for s in 1 2 3; do
               xcrun simctl terminate "$DEV" ae.e11.mock 2>/dev/null
-              xcrun simctl launch "$DEV" ae.e11.mock -scene $s; sleep 6
+              xcrun simctl launch "$DEV" ae.e11.mock -scene $s; echo "launch $s $look $?"; sleep 6
               xcrun simctl io "$DEV" screenshot "$RUNNER_TEMP/shots/mock-$s-$look.png"
             done
           done
@@ -46,5 +48,5 @@ jobs:
         run: |
           gh release view ios-mock >/dev/null 2>&1 || gh release create ios-mock --prerelease --title "iPhone mockups" --notes "Throwaway mockup screenshots." --target "$GITHUB_SHA"
           grep -E "error:" "$RUNNER_TEMP/mock-build.log" | sort -u | head -40 > "$RUNNER_TEMP/mock-errors.log"
-          gh release upload ios-mock "$RUNNER_TEMP/mock-errors.log" --clobber
+          [ -s "$RUNNER_TEMP/mock-errors.log" ] && gh release upload ios-mock "$RUNNER_TEMP/mock-errors.log" --clobber
           for f in "$RUNNER_TEMP"/shots/*.png; do [ -s "$f" ] && gh release upload ios-mock "$f" --clobber; done; true
