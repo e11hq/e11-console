@@ -367,7 +367,12 @@ enum SlowWatch {
       }
     }
     t.qualityOfService = .userInteractive; t.start()
-    Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in send() }
+    // (the minute's timer on the main thread — started from another thread it never ran and nothing was ever sent:
+    //  Haris 2026-11-06, the log was empty); also sent as the app is left
+    DispatchQueue.main.async {
+      Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in send() }
+      NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { _ in send() }
+    }
   }
   private static func send() {
     lock.lock()
@@ -384,7 +389,10 @@ enum SlowWatch {
       var r = URLRequest(url: url); r.httpMethod = "POST"; r.setValue("application/json", forHTTPHeaderField: "Content-Type")
       if !cookie.isEmpty { r.setValue(cookie, forHTTPHeaderField: "Cookie") }
       r.httpBody = try? JSONSerialization.data(withJSONObject: body)
-      URLSession.shared.dataTask(with: r).resume()
+      // (given a moment to go out when the app is being left)
+      var bg = UIBackgroundTaskIdentifier.invalid
+      bg = UIApplication.shared.beginBackgroundTask { UIApplication.shared.endBackgroundTask(bg); bg = .invalid }
+      URLSession.shared.dataTask(with: r) { _, _, _ in DispatchQueue.main.async { if bg != .invalid { UIApplication.shared.endBackgroundTask(bg); bg = .invalid } } }.resume()
     }
   }
 }
