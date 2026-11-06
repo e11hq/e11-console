@@ -95,3 +95,7 @@ short points (new / better / fixed — from the commits between the two builds) 
 **Commits in Haris's name (Haris, 2026-11-06):** every commit from now on is authored as
 `Muhammad Haris Sharif <haris.insights@gmail.com>`, with Claude as co-author (the `Co-Authored-By: Claude …` line). The
 commits before stay as they are — published history is never rewritten.
+
+**Which app a change is for (Haris, 2026-11-06):** once E11 Talk is being built, when a request doesn't say clearly
+which app it's for (E11 Console iPhone, E11 Console Mac / website, or E11 Talk), ask Haris first — one short question —
+before changing anything.
