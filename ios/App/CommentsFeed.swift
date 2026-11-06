@@ -1012,7 +1012,7 @@ final class FileStrip: UIView, UIScrollViewDelegate {
       let sig = (try? JSONSerialization.data(withJSONObject: f, options: [.sortedKeys])).map { String(decoding: $0, as: UTF8.self) } ?? ""
       if let c = cards[id], c.sig == sig { want.append(c.view); continue }
       let replaced = cards[id]?.view
-      let v = CommentCell.tile(f, open: { [weak self] in self?.tapped(id) }, menu: { [weak self] in self?.menuFor(id) })
+      let v = CommentCell.tile(f, open: { [weak self] in self?.tapped(id) }, menu: { [weak self] in self?.menuFor(id) ?? [] })
       v.widthAnchor.constraint(equalToConstant: side).isActive = true
       if let r = replaced, let i = row.arrangedSubviews.firstIndex(of: r) { row.insertArrangedSubview(v, at: i); r.removeFromSuperview() }
       else if animate && !settle.contains(id) { fresh.append(v) }
