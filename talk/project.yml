@@ -1,0 +1,55 @@
+# E11 Talk — the chat app (project doc claude/client-groups-app-idea.md). Its own iPhone app, never part of E11
+# Console's. Built, self-checked and signed on Haris's Mac by .github/workflows/talk.yml; sent to TestFlight only on
+# Haris's yes (testflight.yml, as Console's builds).
+name: E11Talk
+options:
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Automatic
+targets:
+  E11Talk:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ae.e11.talk.ios
+        PRODUCT_NAME: E11Talk
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGN_ENTITLEMENTS: App/E11Talk.entitlements
+        GENERATE_INFOPLIST_FILE: NO
+    entitlements:
+      path: App/E11Talk.entitlements
+      properties:
+        aps-environment: development
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: E11 Talk
+        CFBundleName: E11 Talk
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSRequiresIPhoneOS: true
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIRequiresFullScreen: true
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+          UISceneConfigurations:
+            UIWindowSceneSessionRoleApplication:
+              - UISceneConfigurationName: Default
+                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).SceneDelegate
+        ITSAppUsesNonExemptEncryption: false
+        NSCameraUsageDescription: Take a photo or video to send in a group.
+        NSPhotoLibraryUsageDescription: Pick photos and videos to send in a group.
+        NSPhotoLibraryAddUsageDescription: Save photos and videos from your groups to Photos.
+        NSMicrophoneUsageDescription: Record voice messages and the sound of videos you send.
+        TalkServerURL: https://talk-test.e11hq.com

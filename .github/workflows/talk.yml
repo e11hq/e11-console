@@ -1,0 +1,65 @@
+# E11 Talk (talk/) — the chat app: built on Haris's Mac, checked in an iPhone simulator (it starts, and its sign-in
+# shows), signed and kept on the Mac until Haris says to send it ("Send E11 Talk to TestFlight", talk-testflight.yml).
+# Results go on the release "talk-selftest" for checking from Claude's workspace. Nothing of E11 Console's is built.
+name: E11 Talk app
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: talk
+  cancel-in-progress: false
+jobs:
+  talk:
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Homebrew's tools on this Mac
+        run: for d in /opt/homebrew/bin /usr/local/bin; do [ -d "$d" ] && echo "$d" >> "$GITHUB_PATH"; done; true
+      - name: Xcode project
+        run: |
+          command -v xcodegen >/dev/null || brew install xcodegen >/dev/null
+          cd talk && xcodegen generate
+      - name: Build for the simulator
+        run: |
+          set +e
+          xcodebuild -project talk/E11Talk.xcodeproj -scheme E11Talk -configuration Debug -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build-talk CODE_SIGNING_ALLOWED=NO build 2>&1 | tee "$RUNNER_TEMP/talk-build-full.log" | tail -30; status=${PIPESTATUS[0]}
+          grep -E "error:" "$RUNNER_TEMP/talk-build-full.log" | sort -u | head -80 > "$RUNNER_TEMP/talk-build.log"
+          [ $status -eq 0 ] || exit $status
+      - name: Check in the simulator
+        continue-on-error: true
+        run: |
+          APP=build-talk/Build/Products/Debug-iphonesimulator/E11Talk.app
+          DEV=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k,v in d.items() if 'iOS' in k for x in v if 'iPhone' in x['name']))")
+          xcrun simctl boot "$DEV" 2>/dev/null; xcrun simctl bootstatus "$DEV" -b >/dev/null
+          xcrun simctl install "$DEV" "$APP"
+          xcrun simctl launch "$DEV" ae.e11.talk.ios; sleep 6
+          xcrun simctl io "$DEV" screenshot "$RUNNER_TEMP/talk-start.png"
+          sleep 8; xcrun simctl io "$DEV" screenshot "$RUNNER_TEMP/talk-signin.png"
+          xcrun simctl spawn "$DEV" launchctl list | grep -q ae.e11.talk.ios && echo "TALK RUNNING" || echo "TALK NOT RUNNING"
+          xcrun simctl terminate "$DEV" ae.e11.talk.ios; xcrun simctl shutdown "$DEV"; true
+      - name: Sign and keep on this Mac
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -o pipefail
+          KEY="$RUNNER_TEMP/asc.p8"; printf '%s\n' "$ASC_KEY_P8" > "$KEY"
+          AUTH="-allowProvisioningUpdates -authenticationKeyPath $KEY -authenticationKeyID $ASC_KEY_ID -authenticationKeyIssuerID $ASC_ISSUER_ID"
+          BUILD=$GITHUB_RUN_NUMBER
+          xcodebuild -project talk/E11Talk.xcodeproj -scheme E11Talk -configuration Release -destination 'generic/platform=iOS' \
+            -archivePath build-talk/E11Talk.xcarchive DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CURRENT_PROJECT_VERSION="$BUILD" $AUTH archive 2>&1 | tee "$RUNNER_TEMP/talk-archive-full.log" | tail -30
+          mkdir -p "$HOME/e11-archives"; rm -rf "$HOME/e11-archives/talk-$BUILD"; mv build-talk/E11Talk.xcarchive "$HOME/e11-archives/talk-$BUILD"
+          rm -f "$KEY"; echo "E11 Talk build $BUILD signed and kept — waiting for Haris before TestFlight"
+      - name: Results for checking from Claude's workspace
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view talk-selftest >/dev/null 2>&1 || gh release create talk-selftest --prerelease --title "E11 Talk self-check" --notes "Latest E11 Talk build results." --target "$GITHUB_SHA"
+          if [ -s "$RUNNER_TEMP/talk-archive-full.log" ]; then { grep -E "error|Error|failed" "$RUNNER_TEMP/talk-archive-full.log" | head -60; echo ---; tail -40 "$RUNNER_TEMP/talk-archive-full.log"; } > "$RUNNER_TEMP/talk-archive.log"; fi
+          for f in talk-build.log talk-archive.log talk-start.png talk-signin.png; do [ -s "$RUNNER_TEMP/$f" ] && gh release upload talk-selftest "$RUNNER_TEMP/$f" --clobber; done; true
