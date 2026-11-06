@@ -73,7 +73,8 @@ final class SignInVC: UIViewController, WKNavigationDelegate {
   func webView(_ w: WKWebView, didFailProvisionalNavigation n: WKNavigation!, withError e: Error) { failed(e) }
   private func failed(_ e: Error) {
     spin.stopAnimating()
-    if (e as NSError).code == NSURLErrorCancelled { return }
+    let ne = e as NSError
+    if ne.code == NSURLErrorCancelled || (ne.domain == "WebKitErrorDomain" && ne.code == 102) { return }   // (a page turned back above)
     let a = UIAlertController(title: "Can’t reach E11 Talk", message: "Check your internet connection and try again.", preferredStyle: .alert)
     a.addAction(UIAlertAction(title: "Try again", style: .default) { [weak self] _ in self?.spin.startAnimating(); self?.web.load(URLRequest(url: URL(string: Server.url + "/api/talk/state")!)) })
     present(a, animated: true)
