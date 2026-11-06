@@ -1094,11 +1094,27 @@ final class MeCtl {
   private func requestPage(_ ev: [String: Any], _ done: @escaping ([String: Any]) -> Void) {
     // (the page doesn't answer this one — it says so with its own toast)
     if (ev["ev"] as? String) == "trRestore" { send(ev); return }
+    // (no website: the searches answered from the app's own copy — Overview's files, Content plans; they waited 15 s for a
+    //  page that isn't there: Haris 2026-11-06)
+    if !main.pageReady, let r = ownAnswer(ev) { done(r); return }
     let rid = UUID().uuidString
     var e = ev; e["rid"] = rid
     asks[rid] = done
     send(e)
     DispatchQueue.main.asyncAfter(deadline: .now() + 15) { [weak self] in self?.asks.removeValue(forKey: rid)?(["ok": false, "error": "No answer — try again"]) }
+  }
+  private func ownAnswer(_ ev: [String: Any]) -> [String: Any]? {
+    let q = (ev["q"] as? String ?? "").trimmingCharacters(in: .whitespaces)
+    switch ev["ev"] as? String ?? "" {
+    case "plFind": return AppData.shared.meModel("plans", "plansFind", [q, ev["month"] as? String ?? ""])
+    case "ovFind":
+      guard let all = (AppData.shared.meModel("assets", "assets", [NSNull()])?["files"] as? [[String: Any]]) else { return nil }
+      let found = AssetsCtl.find(all, q).prefix(60).map { f -> [String: Any] in
+        ["id": f["id"] ?? "", "name": f["name"] ?? "", "path": f["file"] ?? "", "where": f["where"] ?? "", "pic": f["thumbUrl"] ?? NSNull(), "ext": ((f["ext"] as? String) ?? "file").uppercased().prefix(4).description]
+      }
+      return ["ok": true, "q": q, "found": Array(found)]
+    default: return nil
+    }
   }
   // ---------- Part B step 4: Me's own edits straight to the server — My profile, Trash, Team members (/api/app/act:
   // pfSet, trForever, trEmpty, cd, member, addMember; the questions from the shared brain, web/appme-people.js, asked
@@ -1554,7 +1570,8 @@ final class MeCtl {
     case "update", "videoCheck": say("Not available here right now — try again in a moment")
     // (a page's own view changed — the content plans' month, a list's filter: drawn again from the copy with it; the month
     //  bar moved but the plans and the line under the title stayed on the old month — found by the crawl, 2026-11-06)
-    case "pl", "cl", "ex", "tr", "team", "pf":
+    // (and the Trash's search and categories — they kept the same list: Haris 2026-11-06)
+    case "pl", "cl", "ex", "tr", "team", "pf", "trQ", "trCat":
       DispatchQueue.main.async { [weak self] in guard let self = self, !self.stack.isEmpty else { return }; self.model = self.own(self.pageModel); if !self.hidden { self.stack.forEach { self.draw($0) } } }
     default: break   // (toasts: only the page needed to hear them)
     }

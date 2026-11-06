@@ -500,6 +500,7 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
   X.plan = (R, data, me, nowMs, pid, month) => plansOf(world(R, data, me, nowMs)).plan(String(pid || ''), month);
   X.plansPost = (R, data, me, nowMs, planId, postId) => plansOf(world(R, data, me, nowMs)).post(String(planId || ''), String(postId || ''));
   X.plansSearch = (R, data, me, nowMs, q, cur) => plansOf(world(R, data, me, nowMs)).search(q, cur);
+  X.plansFind = (R, data, me, nowMs, q, cur) => ({ ok: true, q, found: plansOf(world(R, data, me, nowMs)).search(String(q || ''), String(cur || '')) });   // (the app without the website — Haris 2026-11-06)
   X.plansWaiting = (R, data, me, nowMs) => plansOf(world(R, data, me, nowMs)).waiting();
   X.plansShift = (m, n) => shiftMonth(m, n);
   X.assets = (R, data, me, nowMs, clientId) => assetsOf(world(R, data, me, nowMs)).modelFor(clientId || null);
