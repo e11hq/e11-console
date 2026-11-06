@@ -19,6 +19,8 @@ const EDIT_MS = 15 * 60000;             // edit your own message: 15 minutes (as
 const DEL_ALL_MS = 2 * 86400000;        // delete for everyone: about 2 days
 const MAX_PINS = 5;
 const FILE_MAX = 2 * 1024 * 1024 * 1024; // 2 GB a file (pieces of up to 8 MB)
+const LINK_MS = 2 * 60000;               // a Mac's linking code: 2 minutes (Haris 2026-11-05)
+const PHONE_MS = 30 * 86400000;         // a linked Mac goes when its phone hasn't opened E11 Talk for 30 days
 const rid = (p) => p + '-' + crypto.randomBytes(8).toString('hex');
 const clip = (s, n) => String(s == null ? '' : s).slice(0, n);
 
@@ -40,6 +42,9 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     CREATE TABLE IF NOT EXISTS sent (id TEXT PRIMARY KEY, grp TEXT NOT NULL, by TEXT NOT NULL, at INTEGER NOT NULL, files TEXT NOT NULL DEFAULT '[]');
     CREATE TABLE IF NOT EXISTS files (id TEXT PRIMARY KEY, by TEXT NOT NULL, name TEXT NOT NULL, size INTEGER NOT NULL DEFAULT 0, done INTEGER NOT NULL DEFAULT 0, at INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS contacts (id TEXT PRIMARY KEY, email TEXT NOT NULL, name TEXT NOT NULL, client TEXT NOT NULL, by TEXT, at INTEGER NOT NULL, gone INTEGER NOT NULL DEFAULT 0);
+    CREATE TABLE IF NOT EXISTS macs (id TEXT PRIMARY KEY, uid TEXT NOT NULL, name TEXT NOT NULL, linked_at INTEGER NOT NULL, seen_at INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS link_codes (code TEXT PRIMARY KEY, uid TEXT NOT NULL, name TEXT NOT NULL, at INTEGER NOT NULL, mac TEXT);
+    CREATE TABLE IF NOT EXISTS phone_seen (uid TEXT PRIMARY KEY, at INTEGER NOT NULL);
   `);
   const q = (sql) => db.prepare(sql);
   const Q = {
@@ -161,7 +166,8 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     const people = store.list('users').filter(active).map(personOf);
     const known = new Set(people.map((p) => p.id));
     for (const id of ids) if (!known.has(id)) { const x = personOfId(id); if (x) people.push(isContactId(id) ? x : { ...x, gone: true }); }
-    const out = { ok: true, me: { ...personOf(u), canMake: !isFree(u), boss: isBoss(u) }, clients: clientsFor(u), groups, people, pins, seq: Q.lastSeq.get().s || 0 };
+    const out = { ok: true, me: { ...personOf(u), canMake: !isFree(u), boss: isBoss(u) }, clients: clientsFor(u), groups, people, pins, seq: Q.lastSeq.get().s || 0,
+      macs: macsOf(u.id).map((m) => ({ id: m.id, name: m.name, linkedAt: m.linked_at, seenAt: m.seen_at })) };
     // Super Admins and Office Admins: every client contact (to add them, or to a group)
     if (isBoss(u)) {
       const count = db.prepare('SELECT COUNT(*) AS n FROM members m JOIN groups g ON g.id = m.grp WHERE m.uid = ? AND g.gone = 0');
@@ -177,12 +183,85 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     const at = now();
     const r = Q.addEvent.run(g.id, type, JSON.stringify(data), at, by || null);
     const seq = Number(r.lastInsertRowid);
-    for (const uid of new Set(to)) Q.wait.run(seq, uid);
-    for (const uid of new Set(to)) for (const s of listeners.get(uid) || []) { try { s.write(`event: talk\ndata: ${JSON.stringify({ seq })}\n\n`); } catch { /* closed */ } }
+    for (const uid of devicesFor(to, by)) waitFor(seq, uid);
     return seq;
+  }
+  // ---------- linked Macs (Haris 2026-11-05: "as WhatsApp links a computer") ----------
+  // A linked Mac is a device of its person: it gets everything its person gets — and what its person does elsewhere —
+  // each kept until that Mac has it, like a phone. Its id ("mac-…") stands in the waiting list beside the people.
+  const macsOf = (uid) => db.prepare('SELECT * FROM macs WHERE uid = ?').all(String(uid));
+  const isMacId = (id) => String(id || '').startsWith('mac-');
+  function devicesFor(to, by) {
+    const out = new Set(to);
+    for (const uid of new Set([...to, ...(by ? [by] : [])])) if (!isMacId(uid)) for (const m of macsOf(uid)) out.add(m.id);
+    return out;
+  }
+  function waitFor(seq, id) {
+    Q.wait.run(seq, id);
+    for (const s of listeners.get(id) || []) { try { s.write(`event: talk\ndata: ${JSON.stringify({ seq })}\n\n`); } catch { /* closed */ } }
+  }
+  // the Mac asks for a code to show (as its signed-in person): one use, gone after 2 minutes
+  function linkCode(u, name) {
+    const t = now();
+    db.prepare('DELETE FROM link_codes WHERE at < ?').run(t - LINK_MS * 5);
+    const code = crypto.randomBytes(12).toString('base64url');
+    db.prepare('INSERT INTO link_codes (code, uid, name, at) VALUES (?, ?, ?, ?)').run(code, u.id, clip(name || 'Mac', 60), t);
+    return { ok: true, code, expiresAt: t + LINK_MS };
+  }
+  // the Mac waits for its phone: linked (its id), or the code ran out
+  function linkStatus(u, code) {
+    const r = db.prepare('SELECT * FROM link_codes WHERE code = ? AND uid = ?').get(String(code || ''), u.id);
+    if (!r) return { ok: true, expired: true };
+    if (r.mac) { db.prepare('DELETE FROM link_codes WHERE code = ?').run(r.code); return { ok: true, mac: r.mac }; }
+    return { ok: true, expired: now() - r.at > LINK_MS };
+  }
+  function unlinkMac(id, why = 'unlinked', tidy = true) {
+    const m = db.prepare('SELECT * FROM macs WHERE id = ?').get(String(id || ''));
+    if (!m) return false;
+    for (const s of listeners.get(m.id) || []) { try { s.write(`event: unlinked\ndata: ${JSON.stringify({ why })}\n\n`); s.end(); } catch { /* closed */ } }
+    db.prepare('DELETE FROM macs WHERE id = ?').run(m.id);
+    db.prepare('DELETE FROM waiting WHERE uid = ?').run(m.id);
+    if (tidy) sweep();
+    return true;
+  }
+  // a request from a linked Mac: its person must be the one signed in on that Mac — anyone else, and the link is gone
+  function macFor(u, id) {
+    const m = db.prepare('SELECT * FROM macs WHERE id = ?').get(String(id || ''));
+    if (!m) return null;
+    if (m.uid !== u.id) { unlinkMac(m.id, 'someone else signed in'); return null; }
+    db.prepare('UPDATE macs SET seen_at = ? WHERE id = ?').run(now(), m.id);
+    return { ...u, id: m.id, person: u.id };
+  }
+  // the phone was here (the 30-day rule)
+  const phoneSeen = (u) => { if (!isMacId(u.id)) db.prepare('INSERT INTO phone_seen (uid, at) VALUES (?, ?) ON CONFLICT(uid) DO UPDATE SET at = excluded.at').run(u.id, now()); };
+  // the phone hands its chats (the last 90 days) to a Mac it just linked: one event for that Mac only, kept (with the
+  // files it names) until the Mac has picked it up
+  function history(u, macId, groups, files) {
+    const m = db.prepare('SELECT * FROM macs WHERE id = ? AND uid = ?').get(String(macId || ''), u.id);
+    if (!m) return bad('That Mac isn’t linked any more', 404);
+    const mine = new Set(Q.groupsOf.all(u.id).map((g) => g.id));
+    const gs = (Array.isArray(groups) ? groups : []).filter((g) => g && mine.has(String(g.group)));
+    const fs2 = (Array.isArray(files) ? files : []).map(String).filter((id) => { const f = Q.getFile.get(id); return f && f.done; });
+    const r = Q.addEvent.run('-', 'history', JSON.stringify({ groups: gs, files: fs2 }), now(), u.id);
+    waitFor(Number(r.lastInsertRowid), m.id);
+    return { ok: true, groups: gs.length, files: fs2.length };
+  }
+  // which of the phone's files the server still has (the rest the phone sends again, under the same id)
+  function hasFiles(u, ids) {
+    return { ok: true, have: (Array.isArray(ids) ? ids : []).map(String).filter((id) => { const f = Q.getFile.get(id); return f && f.done; }) };
+  }
+  function resend(u, id, name, offset, bytes, last) {
+    id = String(id || '');
+    if (!/^f-[0-9a-f]{16}$/.test(id)) return bad('Not a file');
+    let f = Q.getFile.get(id);
+    if (!f) { Q.newFile.run(id, u.id, clip(name || 'File', 200).replace(/[\\/]/g, '-'), now()); fs.writeFileSync(path.join(relay, id), ''); f = Q.getFile.get(id); }
+    if (f.done) return { ok: true, id, size: f.size, done: true };
+    if (f.by !== u.id) return bad('Not yours', 403);
+    return upload(u, id, name, offset, bytes, last);
   }
   const evOut = (e) => ({ seq: e.seq, group: e.grp, type: e.type, at: e.at, by: e.by, ...JSON.parse(e.data) });
   function sync(u, after, limit = 500) {
+    phoneSeen(u);
     const rows = Q.pending.all(u.id, Number(after) || 0, Math.min(1000, Number(limit) || 500));
     return { ok: true, events: rows.map(evOut), more: rows.length >= limit, last: rows.length ? rows[rows.length - 1].seq : Number(after) || 0 };
   }
@@ -192,7 +271,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     sweep();
     return { ok: true };
   }
-  function filesIn(data) { const f = data && data.file; return f && f.id ? [f.id] : []; }
+  function filesIn(data) { const f = data && data.file; return [...(f && f.id ? [f.id] : []), ...(Array.isArray(data && data.files) ? data.files : [])]; }
   function dropFiles(ids) {
     for (const id of ids) {
       if (Q.fileInUse.get(`%"id":"${id}"%`)) continue;   // (still in an event someone hasn't picked up)
@@ -214,6 +293,11 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     // uploads never sent in a message (or long gone)
     const stale = Q.oldFiles.all(t - KEEP_MS).map((r) => r.id);
     dropFiles(stale.filter((id) => !Q.fileInUse.get(`%"id":"${id}"%`)));
+    // linked Macs: gone when their phone hasn't opened E11 Talk for 30 days, or their person has left the team
+    for (const m of db.prepare('SELECT * FROM macs').all()) {
+      const p = db.prepare('SELECT at FROM phone_seen WHERE uid = ?').get(m.uid);
+      if (!active(userOf(m.uid)) || (p && p.at < t - PHONE_MS) || (!p && m.linked_at < t - PHONE_MS)) unlinkMac(m.id, 'phone away', false);
+    }
     // groups with no new messages for 90 days: deleted, their people told (their phones clear it)
     for (const g of db.prepare('SELECT * FROM groups WHERE gone = 0 AND last_at < ?').all(t - IDLE_MS)) {
       const was = memberIds(g);
@@ -456,6 +540,24 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
         return { ok: true };
       }
       // read up to this message — the others see "Seen by"
+      // ---- linked Macs: from the phone ----
+      case 'linkMac': {
+        const r = db.prepare('SELECT * FROM link_codes WHERE code = ?').get(String(b.code || ''));
+        if (!r || r.mac || t - r.at > LINK_MS) return bad('That code has run out — show a new one on the Mac');
+        if (r.uid !== u.id) return bad('This Mac is signed in to E11 Console as someone else', 403);
+        if (macsOf(u.id).length >= 4) return bad('4 Macs at most — unlink one first');
+        phoneSeen(u);
+        const id = rid('mac');
+        db.prepare('INSERT INTO macs (id, uid, name, linked_at, seen_at) VALUES (?, ?, ?, ?, ?)').run(id, u.id, r.name, t, t);
+        db.prepare('UPDATE link_codes SET mac = ? WHERE code = ?').run(id, r.code);
+        return { ok: true, mac: { id, name: r.name, linkedAt: t, seenAt: t } };
+      }
+      case 'unlinkMac': {
+        const m = db.prepare('SELECT * FROM macs WHERE id = ? AND uid = ?').get(String(b.id || ''), u.id);
+        if (!m) return bad('That Mac isn’t linked', 404);
+        unlinkMac(m.id);
+        return { ok: true };
+      }
       case 'read': {
         const [g, e] = needGroup(u, b.group); if (e) return e;
         // ("Seen by" is never shown to clients — staff see it, the client's too)
@@ -492,10 +594,11 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
   function fileFor(u, id) {
     const f = Q.getFile.get(String(id || ''));
     if (!f || !f.done) return null;
-    if (f.by === u.id) return f;
+    const pid = u.person || u.id;   // (a linked Mac: its person's)
+    if (f.by === pid) return f;
     const ev = db.prepare('SELECT e.grp FROM events e JOIN waiting w ON w.seq = e.seq WHERE w.uid = ? AND e.data LIKE ? LIMIT 1').get(u.id, `%"id":"${f.id}"%`);
     if (ev) return f;
-    const pic = db.prepare('SELECT g.id FROM groups g JOIN members m ON m.grp = g.id WHERE m.uid = ? AND g.pic = ? AND g.gone = 0 LIMIT 1').get(u.id, f.id);
+    const pic = db.prepare('SELECT g.id FROM groups g JOIN members m ON m.grp = g.id WHERE m.uid = ? AND g.pic = ? AND g.gone = 0 LIMIT 1').get(pid, f.id);
     return pic ? f : null;
   }
   const filePath = (f) => path.join(relay, f.id);
@@ -556,7 +659,7 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
         Q.putSent.run(mid, id, who.id, tt, '[]');
         const reply = extra && extra.reply != null ? { id: ids[extra.reply], by: lines[extra.reply][0].id, text: lines[extra.reply][1].slice(0, 200), kind: 'text' } : null;   // (reply: the line it answers, counted from 0)
         const r = Q.addEvent.run(id, 'msg', JSON.stringify({ id: mid, kind: 'text', text, file: null, reply, mentions: mentions || [] }), tt, who.id);
-        for (const m of memberIds(g)) Q.wait.run(Number(r.lastInsertRowid), m);
+        for (const m of devicesFor(memberIds(g), who.id)) waitFor(Number(r.lastInsertRowid), m);
         for (const [rw, e] of (extra && extra.react) || []) emit(g, 'react', { id: mid, emoji: e }, rw.id);
       }
       // the others have seen up to the end (✓✓ on yours)
@@ -568,5 +671,6 @@ export function createTalk({ dataDir, store, access, apns = null, now = () => Da
     return { ok: true, made };
   }
   const isAdminOf = (u, gid) => { const g = Q.group.get(gid); return !!g && isAdmin(u, g); };
-  return { state, act, sync, ack, sample, upload, contactByEmail, fileFor, filePath, listen, sweep, isAdminOf, close: () => { clearInterval(sweepTimer); for (const set of listeners.values()) for (const r of set) try { r.end(); } catch { /* fine */ } db.close(); } };
+  return { state, act, sync, ack, sample, upload, contactByEmail, fileFor, filePath, listen, sweep, isAdminOf,
+    linkCode, linkStatus, macFor, unlinkMac, history, hasFiles, resend, close: () => { clearInterval(sweepTimer); for (const set of listeners.values()) for (const r of set) try { r.end(); } catch { /* fine */ } db.close(); } };
 }

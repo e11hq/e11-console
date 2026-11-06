@@ -195,7 +195,9 @@ final class SettingsVC: UITableViewController {
   override func numberOfSections(in tv: UITableView) -> Int { 3 }
   // (Super Admins and Office Admins also get "Client contacts")
   private var boss: Bool { Talk.shared.boss }
-  override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int { [1, boss ? 4 : 3, 1][s] }
+  private enum R1 { case notif, backup, linked, storage, contacts }
+  private var rows1: [R1] { [.notif, .backup] + (Talk.shared.isContact ? [] : [.linked]) + [.storage] + (boss ? [.contacts] : []) }
+  override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int { [1, rows1.count, 1][s] }
   override func tableView(_ tv: UITableView, heightForRowAt ip: IndexPath) -> CGFloat { ip.section == 0 ? 76 : 48 }
   override func tableView(_ tv: UITableView, titleForFooterInSection s: Int) -> String? {
     s == 1 ? "Chats live on this phone. The server only passes each message on and lets it go once everyone has it." : s == 2 ? "E11 Talk \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") (\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "")) · \(Server.host)" : nil
@@ -211,15 +213,19 @@ final class SettingsVC: UITableViewController {
       cfg.image = UIImage(systemName: "circle.fill"); cfg.imageProperties.tintColor = .clear; cfg.imageProperties.reservedLayoutSize = CGSize(width: 56, height: 56)
       let a = Avatar(frame: CGRect(x: 16, y: 10, width: 56, height: 56)); a.set(person: me); c.contentView.addSubview(a)
       c.selectionStyle = .none
-    case (1, 0): cfg.text = "Notifications"; cfg.image = UIImage(systemName: "bell.badge"); c.accessoryType = .disclosureIndicator
-    case (1, 1):
+    case (1, let r) where rows1[r] == .linked:
+      let n = Talk.shared.macs.count
+      cfg.text = "Linked devices"; cfg.secondaryText = n == 0 ? "Link a Mac" : "\(n) Mac\(n == 1 ? "" : "s")"
+      cfg.secondaryTextProperties.color = .secondaryLabel; cfg.image = UIImage(systemName: "laptopcomputer.and.iphone"); c.accessoryType = .disclosureIndicator
+    case (1, let r) where rows1[r] == .notif: cfg.text = "Notifications"; cfg.image = UIImage(systemName: "bell.badge"); c.accessoryType = .disclosureIndicator
+    case (1, let r) where rows1[r] == .backup:
       let B = Backup.shared, f = RelativeDateTimeFormatter(); f.unitsStyle = .short
       cfg.text = "Chat backup"; cfg.secondaryText = B.every == .off && B.lastAt == nil ? "Off" : B.lastAt.map { "Last: " + f.localizedString(for: $0, relativeTo: Date()) } ?? "Not backed up yet"
       cfg.secondaryTextProperties.color = .secondaryLabel; cfg.image = UIImage(systemName: "icloud"); c.accessoryType = .disclosureIndicator
-    case (1, 3):
+    case (1, let r) where rows1[r] == .contacts:
       cfg.text = "Client contacts"; cfg.secondaryText = "\(Talk.shared.contacts.count) · who from each client can be in groups"; cfg.secondaryTextProperties.color = .secondaryLabel
       cfg.image = UIImage(systemName: "person.crop.rectangle.stack"); c.accessoryType = .disclosureIndicator
-    case (1, 2):
+    case (1, let r) where rows1[r] == .storage:
       let n = (try? FileManager.default.contentsOfDirectory(at: Net.filesDir, includingPropertiesForKeys: [.fileSizeKey]))?.reduce(0) { $0 + ((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) } ?? 0
       cfg.text = "Storage"; cfg.secondaryText = ByteCountFormatter.string(fromByteCount: Int64(n), countStyle: .file) + " of photos and files on this phone"; cfg.image = UIImage(systemName: "internaldrive")
       c.selectionStyle = .none
@@ -230,9 +236,15 @@ final class SettingsVC: UITableViewController {
   }
   override func tableView(_ tv: UITableView, didSelectRowAt ip: IndexPath) {
     tv.deselectRow(at: ip, animated: true)
-    if ip == IndexPath(row: 1, section: 1) { navigationController?.pushViewController(BackupVC(), animated: true); return }
-    if ip == IndexPath(row: 3, section: 1) { navigationController?.pushViewController(ContactsVC(), animated: true); return }
-    if ip == IndexPath(row: 0, section: 1), let u = URL(string: UIApplication.openNotificationSettingsURLString) { UIApplication.shared.open(u) }
+    if ip.section == 1 {
+      switch rows1[ip.row] {
+      case .backup: navigationController?.pushViewController(BackupVC(), animated: true); return
+      case .linked: navigationController?.pushViewController(LinkedDevicesVC(), animated: true); return
+      case .contacts: navigationController?.pushViewController(ContactsVC(), animated: true); return
+      default: break
+      }
+    }
+    if ip.section == 1, rows1[ip.row] == .notif, let u = URL(string: UIApplication.openNotificationSettingsURLString) { UIApplication.shared.open(u) }
     if ip.section == 2 {
       let a = UIAlertController(title: "Sign out of E11 Talk?", message: "The chats on this phone are removed.", preferredStyle: .actionSheet)
       a.addAction(UIAlertAction(title: "Sign out", style: .destructive) { _ in SceneDelegate.current?.signOutNow() })

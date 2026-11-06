@@ -52,7 +52,7 @@ targets:
               - UISceneConfigurationName: Default
                 UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).SceneDelegate
         ITSAppUsesNonExemptEncryption: false
-        NSCameraUsageDescription: Take a photo or video to send in a group.
+        NSCameraUsageDescription: Take a photo or video to send in a group, or scan the code to link a Mac.
         NSPhotoLibraryUsageDescription: Pick photos and videos to send in a group.
         NSPhotoLibraryAddUsageDescription: Save photos and videos from your groups to Photos.
         NSMicrophoneUsageDescription: Record voice messages and the sound of videos you send.

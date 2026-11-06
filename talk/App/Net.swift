@@ -89,6 +89,24 @@ final class Net {
     next(nil, 0)
   }
 
+  // a file the phone still has but the server has let go: sent again under its own id (for a Mac being linked)
+  func resend(_ id: String, name: String, done: @escaping (Bool) -> Void) {
+    guard let data = try? Data(contentsOf: Net.local(id), options: .mappedIfSafe) else { done(false); return }
+    let piece = 4 * 1024 * 1024
+    func next(_ offset: Int) {
+      let end = min(data.count, offset + piece), last = end >= data.count
+      var q = "/api/talk/link/file?id=\(id)&offset=\(offset)&name=\(name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "file")"
+      if last { q += "&last=1" }
+      session.dataTask(with: request(q, method: "POST", body: data.subdata(in: offset..<end))) { d, _, _ in
+        let j = d.flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]
+        DispatchQueue.main.async {
+          guard (j?["ok"] as? Bool) == true else { done(false); return }
+          if last || (j?["done"] as? Bool) == true { done(true) } else { next(end) }
+        }
+      }.resume()
+    }
+    next(0)
+  }
   // a file of a message (or a picture): kept on the phone after the first time — the server lets it go once
   // everyone has it, so the phone's copy is the one that stays
   private let fileQ = DispatchQueue(label: "talk.files", attributes: .concurrent)

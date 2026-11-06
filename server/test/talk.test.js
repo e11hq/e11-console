@@ -196,3 +196,51 @@ test('client contacts: added by Super / Office Admins only; E11 Talk only; their
   assert.equal((await fetch(base + '/api/talk/state', { headers: KH })).status, 403);
   assert.ok(!(await state('adm')).groups.find((x) => x.id === g.id).members.includes(k.id));
 });
+
+test('a linked Mac: code from the Mac, scanned by the same person’s phone; gets what they get; history; unlink', async () => {
+  const req = async (who, p, b, mac) => (await fetch(base + p, { method: b ? 'POST' : 'GET', headers: { ...H(who), ...(mac ? { 'X-Talk-Mac': mac } : {}) }, body: b ? JSON.stringify(b) : undefined })).json();
+  const g = (await act('am', { act: 'newGroup', client: 'p1', name: 'Mac group', members: ['u-des'] })).group.id;
+  // the Mac (signed in as Leila) shows a code; Yousef's phone can't use it, Leila's can
+  const c = await req('am', '/api/talk/link/code', { name: 'Leila’s MacBook' });
+  assert.ok(c.ok && c.code);
+  assert.equal((await req('am', '/api/talk/link/status?code=' + c.code)).mac, undefined);
+  const wrong = await act('des', { act: 'linkMac', code: c.code });
+  assert.equal(wrong.ok, false); assert.match(wrong.error, /someone else/);
+  const l = await act('am', { act: 'linkMac', code: c.code });
+  assert.ok(l.ok); const mac = l.mac.id;
+  assert.equal((await req('am', '/api/talk/link/status?code=' + c.code)).mac, mac);
+  assert.equal((await act('am', { act: 'linkMac', code: c.code })).ok, false, 'one use');
+  assert.equal((await state('am')).macs[0].name, 'Leila’s MacBook');
+  // the phone hands over its chats; the Mac picks them up as its own
+  const h = await req('am', '/api/talk/link/history', { mac, groups: [{ group: g, msgs: [{ id: 'm-old', text: 'before' }] }, { group: 'not-mine', msgs: [] }], files: [] });
+  assert.ok(h.ok); assert.equal(h.groups, 1);
+  // a message to the group: Yousef's phone, Leila's phone and Leila's Mac — each kept until that device has it
+  const m = await act('des', { act: 'send', group: g, text: 'For the Mac too' });
+  const ms = await req('am', '/api/talk/sync?after=0', null, mac);
+  assert.ok(ms.events.some((e) => e.type === 'history' && e.groups[0].msgs[0].id === 'm-old'));
+  assert.ok(ms.events.some((e) => e.id === m.id));
+  await req('am', '/api/talk/ack', { upto: ms.last }, mac);
+  assert.ok((await sync('am')).events.some((e) => e.id === m.id), 'Leila’s phone still gets it');
+  // what Leila sends from her phone shows on her Mac too
+  const mine = await act('am', { act: 'send', group: g, text: 'From my phone' });
+  const s2 = await req('am', '/api/talk/sync?after=' + ms.last, null, mac); assert.ok(s2.events, JSON.stringify(s2)); assert.ok(s2.events.some((e) => e.id === mine.id));
+  // someone else signed in on that Mac: the link is gone
+  assert.equal((await fetch(base + '/api/talk/sync?after=0', { headers: { ...H('des'), 'X-Talk-Mac': mac } })).status, 410);
+  assert.equal((await state('am')).macs.length, 0);
+  // link again, then unlink from the phone
+  const c2 = await req('am', '/api/talk/link/code', { name: 'Mac' });
+  const l2 = await act('am', { act: 'linkMac', code: c2.code });
+  assert.ok((await act('am', { act: 'unlinkMac', id: l2.mac.id })).ok);
+  assert.equal((await fetch(base + '/api/talk/sync?after=0', { headers: { ...H('am'), 'X-Talk-Mac': l2.mac.id } })).status, 410);
+  // a code runs out after 2 minutes; a client contact can't link
+  const c3 = await req('am', '/api/talk/link/code', { name: 'Mac' });
+  clock += 3 * 60000;
+  assert.equal((await act('am', { act: 'linkMac', code: c3.code })).ok, false);
+  // the phone not opening E11 Talk for 30 days: the Mac is unlinked
+  const c4 = await req('am', '/api/talk/link/code', { name: 'Mac' });
+  const l4 = await act('am', { act: 'linkMac', code: c4.code });
+  await sync('am');
+  clock += 31 * 86400000;
+  app.talk.sweep();
+  assert.equal((await state('am')).macs.length, 0);
+});

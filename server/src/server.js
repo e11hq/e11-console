@@ -487,16 +487,36 @@ export function createServer(cfg) {
     const t = talkNow();
     const out = (r) => json(res, r.status || (r.ok === false ? 400 : 200), r);
     try {
+      // ---- a linked Mac (E11 Console's Mac app, as its signed-in person): its own messages to pick up ----
+      const macId = String(req.headers['x-talk-mac'] || '');
+      let dev = u;
+      if (macId) {
+        dev = t.macFor(u, macId);
+        if (!dev) return json(res, 410, { ok: false, unlinked: true, error: 'This Mac isn’t linked any more' });
+        if (p === '/api/talk/link/leave' && req.method === 'POST') { t.unlinkMac(macId, 'signed out'); return out({ ok: true }); }
+      }
+      if (p.startsWith('/api/talk/link/')) {
+        if (String(u.id).startsWith('k-')) return json(res, 403, { ok: false, error: 'Not for client contacts' });
+        if (p === '/api/talk/link/code' && req.method === 'POST') { const b = await readBody(req, 16 * 1024); return out(t.linkCode(u, b.name)); }
+        if (p === '/api/talk/link/status' && req.method === 'GET') return out(t.linkStatus(u, url.searchParams.get('code')));
+        if (p === '/api/talk/link/has' && req.method === 'POST') { const b = await readBody(req, 1024 * 1024); return out(t.hasFiles(u, b.ids)); }
+        if (p === '/api/talk/link/file' && req.method === 'POST') {
+          const bytes = await readRaw(req, 8 * 1024 * 1024 + 1024);
+          const q = url.searchParams;
+          return out(t.resend(u, q.get('id') || '', q.get('name') || '', q.get('offset') || '0', bytes, q.get('last') === '1'));
+        }
+        if (p === '/api/talk/link/history' && req.method === 'POST') { const b = await readBody(req, 64 * 1024 * 1024); return out(t.history(u, b.mac, b.groups, b.files)); }
+      }
       if (p === '/api/talk/state' && req.method === 'GET') return out(t.state(u));
       if (p === '/api/talk/act' && req.method === 'POST') return out(t.act(u, await readBody(req, 256 * 1024)));
       // (test site only, the owner: sample groups and messages — talk.js sample)
       if (p === '/api/talk/sample' && req.method === 'POST') { if (!testCopy || !isOwner(req.realUser || u)) return json(res, 403, { ok: false, error: 'Only the owner, on the test site' }); return out(t.sample(req.realUser || u)); }
-      if (p === '/api/talk/sync' && req.method === 'GET') return out(t.sync(u, url.searchParams.get('after'), url.searchParams.get('limit')));
-      if (p === '/api/talk/ack' && req.method === 'POST') { const b = await readBody(req, 16 * 1024); return out(t.ack(u, b.upto)); }
+      if (p === '/api/talk/sync' && req.method === 'GET') return out(t.sync(dev, url.searchParams.get('after'), url.searchParams.get('limit')));
+      if (p === '/api/talk/ack' && req.method === 'POST') { const b = await readBody(req, 16 * 1024); return out(t.ack(dev, b.upto)); }
       if (p === '/api/talk/stream' && req.method === 'GET') {
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
         res.write('retry: 3000\n\n');
-        const stop = t.listen(u.id, res);
+        const stop = t.listen(dev.id, res);
         const ping = setInterval(() => { try { res.write(': ping\n\n'); } catch { /* closed */ } }, 25000);
         req.on('close', () => { clearInterval(ping); stop(); });
         return;
@@ -508,7 +528,7 @@ export function createServer(cfg) {
         return out(t.upload(u, q.get('id') || '', q.get('name') || '', q.get('offset') || '0', bytes, q.get('last') === '1'));
       }
       if (p.startsWith('/api/talk/file/') && (req.method === 'GET' || req.method === 'HEAD')) {
-        const f = t.fileFor(u, p.slice('/api/talk/file/'.length));
+        const f = t.fileFor(dev, p.slice('/api/talk/file/'.length));
         if (!f) return json(res, 404, { ok: false, error: 'That file has gone' });
         const full = t.filePath(f), size = fs.statSync(full).size;
         const m = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range || ''));

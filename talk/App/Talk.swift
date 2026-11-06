@@ -6,6 +6,7 @@ import UIKit
    (ack) so it can let them go. */
 struct Person { let id: String; let name: String; let role: String; let photo: String?; let color: String?; let gone: Bool; var contact: Bool = false; var client: String? = nil }
 struct Contact { let id: String; let name: String; let email: String; let client: String; let groups: Int }
+struct LinkedMac { let id: String; let name: String; let linkedAt: Double; let seenAt: Double }
 struct Client { let id: String; let name: String; let color: String?; let logo: String? }
 struct Group {
   let id: String, client: String, name: String, creator: String, creatorAdmin: Bool, second: String?, admins: [String], pic: String?
@@ -53,6 +54,7 @@ final class Talk {
   private(set) var contacts: [Contact] = []
   private(set) var pinnedClientGroups: [String] = []
   private(set) var clients: [String: Client] = [:]
+  private(set) var macs: [LinkedMac] = []
   private(set) var clientOrder: [String] = []
   private(set) var groups: [String: Group] = [:]
   private(set) var people: [String: Person] = [:]
@@ -108,6 +110,10 @@ final class Talk {
     contacts = ((j["contacts"] as? [[String: Any]]) ?? []).compactMap { c in
       guard let id = c["id"] as? String else { return nil }
       return Contact(id: id, name: c["name"] as? String ?? "", email: c["email"] as? String ?? "", client: c["client"] as? String ?? "", groups: c["groups"] as? Int ?? 0)
+    }
+    macs = ((j["macs"] as? [[String: Any]]) ?? []).compactMap { m in
+      guard let id = m["id"] as? String else { return nil }
+      return LinkedMac(id: id, name: m["name"] as? String ?? "Mac", linkedAt: m["linkedAt"] as? Double ?? 0, seenAt: m["seenAt"] as? Double ?? 0)
     }
     var cs: [String: Client] = [:], order: [String] = []
     for c in (j["clients"] as? [[String: Any]]) ?? [] { if let id = c["id"] as? String { cs[id] = Client(id: id, name: c["name"] as? String ?? "", color: c["color"] as? String, logo: c["logo"] as? String); order.append(id) } }
@@ -330,6 +336,22 @@ final class Talk {
       for m in log(g).msgs where !m.deleted { if let r = m.file, videos || m.kind != "video" { out.insert(r.id) } }
     }
     return out
+  }
+  // ---------- a Mac just linked: the chats to hand it (each group's messages, who's seen what) and their files ----------
+  func handOver() -> (groups: [[String: Any]], files: [(id: String, name: String)]) {
+    flush()
+    var gs: [[String: Any]] = [], files: [(String, String)] = [], seen = Set<String>()
+    for g in groups.keys {
+      let l = log(g)
+      guard let d = try? JSONEncoder().encode(l), var j = (try? JSONSerialization.jsonObject(with: d)) as? [String: Any] else { continue }
+      j["msgs"] = ((j["msgs"] as? [[String: Any]]) ?? []).filter { ($0["pending"] as? Bool) != true }
+      j["group"] = g
+      gs.append(j)
+      for m in l.msgs where !m.deleted && !m.pending && m.kind != "video" {
+        if let f = m.file, !seen.contains(f.id), FileManager.default.fileExists(atPath: Net.local(f.id).path) { seen.insert(f.id); files.append((f.id, f.name)) }
+      }
+    }
+    return (gs, files)
   }
   func reloadFromDisk() {
     logs = [:]
