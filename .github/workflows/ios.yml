@@ -9,6 +9,9 @@ on:
       send:
         description: "Send to TestFlight now (yes), or keep the signed build on the Mac until Haris says so (ask)"
         default: ask
+      walk:
+        description: "Run the walk-through for every role before signing (yes / no)"
+        default: "yes"
   push:
     branches: ['ios-*']
 permissions:
@@ -42,6 +45,7 @@ jobs:
         run: python3 ios/selftest.py build/Build/Products/Debug-iphonesimulator/E11Console.app 2>&1 | tee "$RUNNER_TEMP/ios-selftest.log"; exit ${PIPESTATUS[0]}
       - name: Walk-through for every role, without the website
         # (ios/walktest.py — Haris 2026-11-05: every button, every role; read from the release below)
+        if: github.event.inputs.walk != 'no'
         continue-on-error: true
         timeout-minutes: 50
         run: python3 ios/walktest.py build/Build/Products/Debug-iphonesimulator/E11Console.app 2>&1 | tee "$RUNNER_TEMP/ios-walk.log"; true

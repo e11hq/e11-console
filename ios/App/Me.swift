@@ -1520,7 +1520,11 @@ final class MeCtl {
       }
     case "import": say("Moving data from the Mac app is done on the Mac")
     case "update", "videoCheck": say("Not available here right now — try again in a moment")
-    default: break   // (pf / team / tr / pl on and off, toasts: only the page needed to hear them)
+    // (a page's own view changed — the content plans' month, a list's filter: drawn again from the copy with it; the month
+    //  bar moved but the plans and the line under the title stayed on the old month — found by the crawl, 2026-11-06)
+    case "pl", "cl", "ex", "tr", "team", "pf":
+      DispatchQueue.main.async { [weak self] in guard let self = self, !self.stack.isEmpty else { return }; self.model = self.own(self.pageModel); if !self.hidden { self.stack.forEach { self.draw($0) } } }
+    default: break   // (toasts: only the page needed to hear them)
     }
   }
 
