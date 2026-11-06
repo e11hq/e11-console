@@ -7,7 +7,7 @@ import Security
 enum Server {
   static var url: String {
     if let s = UserDefaults.standard.string(forKey: "talk_server"), !s.isEmpty { return s }
-    return Bundle.main.object(forInfoDictionaryKey: "TalkServerURL") as? String ?? "https://talk-test.e11hq.com"
+    return Bundle.main.object(forInfoDictionaryKey: "TalkServerURL") as? String ?? "https://test.e11hq.com"
   }
   static var host: String { URL(string: url)?.host ?? "" }
 }
