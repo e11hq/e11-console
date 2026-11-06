@@ -486,6 +486,45 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
       restore: it.type !== 'project' || W.isAdm(u), forever: W.isSuper(u),
       taskId: it.type === 'task' && it.data && (it.data.tasks || [])[0] ? it.data.tasks[0].id : null };
   };
+  // a task in the Trash, tapped: the same tall sheet as the website's (app.js trashTaskView → the app's trashSheet) —
+  // its title, "In the Trash · deleted by … · N days left", Restore, its details, description, subtasks, checklist, files
+  // and comments (Haris 2026-11-06). Pictures come as addresses (photoUrl / thumbUrl); the app fetches them.
+  M.trashSheet = function (R, data, meId, nowMs, id, env) {
+    const W = world(R, data, meId, nowMs, env), it = W.trash.find((x) => x.id === id), u = W.me();
+    if (!it || it.type !== 'task' || !u) return null;
+    const list = (it.data && it.data.tasks) || [];
+    const t = list.find((x) => !x.parentId || !list.some((y) => y.id === x.parentId)) || list[0];
+    if (!t) return null;
+    const subs = list.filter((x) => x.parentId === t.id);
+    const left = W.trashDaysLeft(it);
+    const who = it.auto ? 'cleaned up automatically' : `deleted by ${it.deletedBy === meId ? 'you' : W.fullName(W.userById(it.deletedBy))}`;
+    const p = t.projectId ? W.projects.find((x) => x.id === t.projectId) : null;
+    const secs = (p && Array.isArray(p.sections) && p.sections.length ? p.sections : null) || (Array.isArray(data.statuses) ? data.statuses : []);
+    const st = secs.find((x) => x.id === t.sectionId) || secs[0] || { name: t.done ? 'Done' : 'To do', color: '#8e8e93' };
+    const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const day = (s) => { const [y, m, d] = String(s).split('-').map(Number); return `${MON[(m || 1) - 1]} ${d || ''}${y && y !== new Date(W.NOW).getUTCFullYear() ? ', ' + y : ''}`; };
+    const plain = (html) => decode(String(html || '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|li|h\d)>/gi, '\n').replace(/<[^>]*>/g, '')).replace(/\n{3,}/g, '\n\n').trim();
+    const person = (uid) => { const x = W.userById(uid); return { initials: initials(W.fullName(x)), color: avColor(uid || 'x'), photoUrl: W.photoOf(x) }; };
+    const fileOf = (a) => ({ id: a.id, name: a.name || 'File', ext: (fileExt(a.name) || 'file').slice(0, 4), thumbUrl: isImage(a) && a.path ? W.imgUrl(a, 160) : null });
+    return {
+      title: t.title || 'Untitled task',
+      bar: `In the Trash · ${who} ${W.timeAgo(it.deletedAt)} · ${left} day${left === 1 ? '' : 's'} left`,
+      canRestore: it.type !== 'project' || W.isAdm(u),
+      props: [
+        { label: 'Client', text: W.trashWhere(it) },
+        { label: 'Status', status: { name: st.name, color: W.rgb(st.color) } },
+        { label: 'Assignees', people: (t.assignees || []).map((x) => ({ name: W.fullName(W.userById(x)), person: person(x) })) },
+      ].concat(t.start || t.due ? [{ label: 'Dates', text: `${t.start ? 'Start ' + day(t.start) : ''}${t.start && t.due ? ' → ' : ''}${t.due ? 'Due ' + day(t.due) : ''}` }] : [])
+        .concat((t.tags || []).length ? [{ label: 'Tags', text: t.tags.join(', ') }] : []),
+      desc: t.notesHtml ? plain(t.notesHtml) : String(t.notes || '').trim(),
+      subtasks: subs.map((x) => ({ t: x.title || 'Untitled', done: !!x.done })),
+      checklist: (t.checklist || []).map((c) => ({ t: c.text || '', done: !!c.done })),
+      files: (t.attachments || []).map(fileOf),
+      comments: (t.comments || []).filter((c) => !c.deleted).map((c) => ({ name: W.fullName(W.userById(c.authorId)), when: W.timeAgo(c.at), person: person(c.authorId),
+        text: c.html ? plain(c.html) : c.text || '', files: (c.attachments || []).map(fileOf) })),
+      allFiles: W.trashFiles(it).filter((a) => a && a.path).map((a) => ({ id: a.id, name: a.name || 'File', path: a.path, size: a.size || 0 })),
+    };
+  };
   // a task in the Trash, view only (phone.js trashTaskView): its page worked out as if it were back, nothing can be changed
   M.trashTask = function (R, data, meId, nowMs, id, env) {
     const W = world(R, data, meId, nowMs, env), it = W.trash.find((x) => x.id === id);

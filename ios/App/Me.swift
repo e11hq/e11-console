@@ -1238,13 +1238,13 @@ final class MeCtl {
     guard let it = brain("trash", "trashItem", [id]) else { return false }
     let files = (it["files"] as? [[String: Any]]) ?? []
     let preview = { [weak self] in self?.main.openFiles(files.map { ["id": $0["id"] ?? "", "path": $0["path"] ?? "", "name": $0["name"] ?? "File", "size": $0["size"] ?? 0] }, at: 0) }
-    // (a task tapped: its page, view only, as before — Haris 2026-11-06; a file: its preview; else its sheet)
-    if tap, let tid = it["taskId"] as? String, (it["type"] as? String) == "task" { main.openTaskPage(tid, tab: "details", focus: "", trash: id); return true }
+    // (a task tapped: the same tall sheet as the website's — Haris 2026-11-06; a file: its preview; else its sheet)
+    if tap, (it["type"] as? String) == "task", trashSheet(h, id) { return true }
     if tap, (it["type"] as? String) != "task", !files.isEmpty { preview(); return true }
     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     let a = UIAlertController(title: it["title"] as? String, message: it["left"] as? String, preferredStyle: .actionSheet)
     a.overrideUserInterfaceStyle = light ? .light : .dark
-    if let tid = it["taskId"] as? String { a.addAction(UIAlertAction(title: "Open (view only)", style: .default) { [weak self] _ in self?.main.openTaskPage(tid, tab: "details", focus: "", trash: id) }) }
+    if (it["type"] as? String) == "task" { a.addAction(UIAlertAction(title: "Open (view only)", style: .default) { [weak self, weak h] _ in if let h = h { _ = self?.trashSheet(h, id) } }) }
     else if !files.isEmpty { a.addAction(UIAlertAction(title: files.count == 1 ? "Preview" : "Preview files", style: .default) { _ in preview() }) }
     if (it["restore"] as? Bool) == true {
       a.addAction(UIAlertAction(title: "Restore", style: .default) { [weak self, weak h] _ in
@@ -1254,6 +1254,53 @@ final class MeCtl {
     if (it["forever"] as? Bool) == true { a.addAction(UIAlertAction(title: "Delete forever", style: .destructive) { [weak self] _ in self?.trForever(id) }) }
     a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
     main.topMost().present(a, animated: true)
+    return true
+  }
+  // a task in the Trash: the website's tall sheet (TrashSheetVC) from the copy — the pictures fetched first (a moment at
+  // most), Restore and a file's preview answered here; back from the preview, the sheet again (app.js trashTaskView)
+  private func trashSheet(_ h: HomeView, _ id: String) -> Bool {
+    guard var a = brain("trash", "trashSheet", [id]) else { return false }
+    let all = (a["allFiles"] as? [[String: Any]]) ?? []; a["allFiles"] = nil
+    let g = DispatchGroup()
+    var pics: [String: String] = [:]
+    var urls = Set<String>()
+    func want(_ u: Any?) { if let s = u as? String, !s.isEmpty { urls.insert(s) } }
+    for p in (a["props"] as? [[String: Any]]) ?? [] { for x in (p["people"] as? [[String: Any]]) ?? [] { want((x["person"] as? [String: Any])?["photoUrl"]) } }
+    for f in (a["files"] as? [[String: Any]]) ?? [] { want(f["thumbUrl"]) }
+    for c in (a["comments"] as? [[String: Any]]) ?? [] { want((c["person"] as? [String: Any])?["photoUrl"]); for f in (c["files"] as? [[String: Any]]) ?? [] { want(f["thumbUrl"]) } }
+    for u in urls {
+      guard let url = URL(string: u.hasPrefix("http") ? u : serverURL() + u) else { continue }
+      g.enter()
+      main.fetchPhoto(url) { img in
+        if let d = img?.jpegData(compressionQuality: 0.85) { DispatchQueue.main.async { pics[u] = "data:image/jpeg;base64," + d.base64EncodedString() } }
+        g.leave()
+      }
+    }
+    let show = { [weak self, weak h] in
+      guard let self = self else { return }
+      let person = { (p: Any?) -> Any? in guard var x = p as? [String: Any] else { return p }; if let u = x["photoUrl"] as? String, let d = pics[u] { x["photo"] = d }; return x }
+      let file = { (f: [String: Any]) -> [String: Any] in var x = f; if let u = f["thumbUrl"] as? String, let d = pics[u] { x["thumb"] = d }; return x }
+      var b = a
+      b["props"] = ((a["props"] as? [[String: Any]]) ?? []).map { p -> [String: Any] in var x = p; if let ppl = p["people"] as? [[String: Any]] { x["people"] = ppl.map { var y = $0; y["person"] = person($0["person"]); return y } }; return x }
+      b["files"] = ((a["files"] as? [[String: Any]]) ?? []).map(file)
+      b["comments"] = ((a["comments"] as? [[String: Any]]) ?? []).map { c -> [String: Any] in var x = c; x["person"] = person(c["person"]); x["files"] = ((c["files"] as? [[String: Any]]) ?? []).map(file); return x }
+      guard let host = self.main.sheetHost() else { return }
+      UIImpactFeedbackGenerator(style: .light).impactOccurred()
+      host.present(TrashSheetVC(b, dark: !self.light) { [weak self, weak h] r in
+        guard let self = self else { return }
+        switch r["action"] as? String ?? "" {
+        case "restore":
+          self.request(["ev": "trRestore", "id": id]) { r in h?.toast(["t": (r["ok"] as? Bool) == true ? (r["toast"] as? String ?? "Restored") : (r["error"] as? String ?? "That didn’t work — try again")]) }
+        case "preview":
+          if let i = all.firstIndex(where: { ($0["id"] as? String) == (r["file"] as? String) }) { self.main.openFiles(all, at: i) }
+        default: break
+        }
+      }, animated: true)
+      _ = h
+    }
+    var shown = false
+    g.notify(queue: .main) { if !shown { shown = true; show() } }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { if !shown { shown = true; show() } }
     return true
   }
   // Trash: Delete forever, Empty Trash — asked first, as the website does
