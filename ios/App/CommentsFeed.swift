@@ -980,7 +980,11 @@ final class FileStrip: UIView, UIScrollViewDelegate {
     let ids = list.map { $0["id"] as? String ?? "" }
     let oldOrder = row.arrangedSubviews
     var going: [UIView] = []
-    for (id, c) in cards where !ids.contains(id) { cards[id] = nil; going.append(c.view) }
+    // (an uploading card whose real file has come — settle: gone at once, the real one in its place; faded out, both
+    //  showed side by side for a moment, three cards for two files — Haris 2026-11-06)
+    var swapped: [UIView] = []
+    for (id, c) in cards where !ids.contains(id) { cards[id] = nil; if !settle.isEmpty && id.hasPrefix("up-") { swapped.append(c.view) } else { going.append(c.view) } }
+    swapped.forEach { $0.removeFromSuperview() }
     var fresh: [UIView] = [], settled: [UIView] = []
     var want: [UIView] = []
     for (k, f) in list.enumerated() {
