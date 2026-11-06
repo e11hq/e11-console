@@ -1272,8 +1272,11 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     var seen = Set<String>()
     let q = (field.text ?? "").trimmingCharacters(in: .whitespaces)
     if let r = r {
-      let clients = r["clients"] as? [[String: Any]] ?? [], tasks = r["tasks"] as? [[String: Any]] ?? []
+      let marks = (r["marks"] as? [String]) ?? []
+      let clients = (r["clients"] as? [[String: Any]] ?? []).map { var x = $0; x["marks"] = marks; return x }, tasks = (r["tasks"] as? [[String: Any]] ?? []).map { var x = $0; x["marks"] = marks; return x }
       walkFirst = (tasks.first?["id"] as? String, clients.first?["id"] as? String)
+      // (a word that only matched as a typo: "Showing results for ford (you typed “frod”)" — app.js searchFixedNote)
+      if let fx = r["fixed"] as? [[String: Any]], !fx.isEmpty { let n = SearchFixedNote(); n.set(fx, light: L.light); results.addSubview(n); resultViews.append(n) }
       if !clients.isEmpty {
         resultViews.append(groupHead("Clients", clients.count))
         for c in clients {
@@ -1344,6 +1347,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       if v.tag == 7 { y += i > 0 ? 12 : 4; v.frame = CGRect(x: 20, y: y, width: lw - 8, height: 15); y += 15 }
       else if let c = v as? HomeCard { let h = c.height(for: lw); c.bounds = CGRect(x: 0, y: 0, width: lw, height: h); c.center = CGPoint(x: 16 + lw / 2, y: y + h / 2); y += h }
       else if let b = v as? HomeBlock { let h = b.blockHeight(W); b.frame = CGRect(x: 0, y: y, width: W, height: h); y += h }
+      else if let n = v as? SearchFixedNote { let h = n.height(for: lw); n.frame = CGRect(x: 16, y: y, width: lw, height: h); y += h }
       else { v.frame = CGRect(x: 16, y: y, width: lw, height: 70); y += 70 }
     }
     results.contentSize = CGSize(width: W, height: y + 20)
@@ -1618,6 +1622,9 @@ final class HomeCard: UIControl {
   }
   var people: [String: [String: Any]] = [:] { didSet { if picsKey(oldValue) != picsKey(people) { drawPeople() } } }
   private let icon = UIImageView(), titleL = UILabel(), metaL = UILabel(), chip = UIView(), chipL = UILabel(), badge = UILabel(), avs = UIView()
+  // (a search result found by something other than its title: where, with the words in blue — app.js searchWhy, Haris
+  //  2026-11-06)
+  private let foundBox = UIView(), foundL = UILabel()
   private var c: [String: Any] = [:]
   private var L = HomeLook(nil)
   private var stackW: CGFloat = 0
@@ -1628,6 +1635,8 @@ final class HomeCard: UIControl {
     chip.layer.cornerRadius = 4; chip.addSubview(chipL)
     badge.layer.cornerRadius = 6; badge.clipsToBounds = true; badge.textAlignment = .center
     [icon, titleL, metaL, chip, badge, avs].forEach { $0.isUserInteractionEnabled = false; addSubview($0) }
+    foundL.numberOfLines = 3; foundBox.layer.cornerRadius = 12; foundBox.layer.cornerCurve = .continuous; foundBox.isUserInteractionEnabled = false
+    foundBox.addSubview(foundL); foundBox.isHidden = true; addSubview(foundBox)
     addAction(UIAction { [weak self] _ in self?.onTap?() }, for: .touchUpInside)
   }
   required init?(coder: NSCoder) { fatalError() }
@@ -1644,7 +1653,17 @@ final class HomeCard: UIControl {
     var ta: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 15.5, weight: t.isEmpty ? .medium : .semibold), .foregroundColor: done || t.isEmpty ? L.doneTitle : L.title, .paragraphStyle: ps, .baselineOffset: 1.5]
     if t.isEmpty { ta[.font] = UIFont.italicSystemFont(ofSize: 15.5) }
     if done { ta[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
-    titleL.attributedText = NSAttributedString(string: t.isEmpty ? "Untitled task" : t, attributes: ta)
+    let marks = (d["marks"] as? [String]) ?? []
+    titleL.attributedText = t.isEmpty || marks.isEmpty ? NSAttributedString(string: t.isEmpty ? "Untitled task" : t, attributes: ta)
+      : HomeCard.marked(t, marks, base: ta, mark: [.backgroundColor: UIColor.systemBlue.withAlphaComponent(L.light ? 0.16 : 0.3)])
+    if let f = d["found"] as? [String: Any] {
+      foundBox.isHidden = false
+      foundBox.backgroundColor = L.light ? UIColor(white: 0.965, alpha: 1) : UIColor(white: 0.14, alpha: 1)
+      let base: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 13), .foregroundColor: L.meta]
+      let s = NSMutableAttributedString(string: (f["label"] as? String ?? "") + ": ", attributes: [.font: UIFont.systemFont(ofSize: 13, weight: .semibold), .foregroundColor: L.title])
+      s.append(HomeCard.marked(f["text"] as? String ?? "", marks, base: base, mark: [.foregroundColor: UIColor.systemBlue, .font: UIFont.systemFont(ofSize: 13, weight: .semibold)]))
+      foundL.attributedText = s
+    } else { foundBox.isHidden = true; foundL.attributedText = nil }
     // the CD chip (CD Review / ✓ CD Approved) at the end of the line under the title, on its last line when it fits
     // (Haris, 2026-10-31: "1 comment" and the chip together)
     inline = (d["inline"] as? Bool) == true
@@ -1672,6 +1691,22 @@ final class HomeCard: UIControl {
     } else { badge.isHidden = true }
     drawPeople()
     setNeedsLayout()
+  }
+  // the words searched for, marked wherever they start a word (accents and case don't matter)
+  static func marked(_ text: String, _ words: [String], base: [NSAttributedString.Key: Any], mark: [NSAttributedString.Key: Any]) -> NSAttributedString {
+    let s = NSMutableAttributedString(string: text, attributes: base)
+    let ns = text as NSString
+    for w in words where w.count >= 2 && !w.hasPrefix("#") {
+      var from = 0
+      while from < ns.length {
+        let r = ns.range(of: w, options: [.caseInsensitive, .diacriticInsensitive], range: NSRange(location: from, length: ns.length - from))
+        guard r.location != NSNotFound else { break }
+        let startsWord = r.location == 0 || !(CharacterSet.alphanumerics.contains(UnicodeScalar(ns.character(at: r.location - 1)) ?? " "))
+        if startsWord { s.addAttributes(mark, range: r) }
+        from = r.location + max(1, r.length)
+      }
+    }
+    return s
   }
   static func isComments(_ it: [String: Any]) -> Bool {
     if (it["cm"] as? Bool) == true { return true }
@@ -1761,7 +1796,7 @@ final class HomeCard: UIControl {
     let bw = w - 1 - 14 - 22 - 12 - (side.width > 0 ? side.width + 12 : 0) - 14 - 1
     let (th, mh, ch) = bodyHeight(bw)
     let body = th + 5 + mh + (ch > 0 ? 5 + ch : 0)
-    return 1 + 14 + max(23, body, side.height) + 14 + 1
+    return 1 + 14 + max(23, body, side.height) + foundH(w) + 14 + 1
   }
   override func layoutSubviews() {
     super.layoutSubviews()
@@ -1781,6 +1816,18 @@ final class HomeCard: UIControl {
     var y: CGFloat = 15
     if !badge.isHidden { let s = badge.attributedText?.size() ?? .zero; badge.frame = CGRect(x: w - 15 - ceil(s.width) - 14, y: y, width: ceil(s.width) + 14, height: ceil(s.height) + 6); y = badge.frame.maxY + 6 }
     if stackW > 0 { avs.frame = CGRect(x: w - 15 - stackW, y: y, width: stackW, height: 22) }
+    if !foundBox.isHidden {
+      let top = 15 + max(23, th + 5 + mh, side.height) + 10
+      let fw = w - bx - 15
+      foundBox.frame = CGRect(x: bx, y: top, width: fw, height: foundH(w) - 10)
+      foundL.frame = foundBox.bounds.insetBy(dx: 11, dy: 9)
+    }
+  }
+  // (the found box's room: its words at the body's width, 9 above and below, 10 above it)
+  private func foundH(_ w: CGFloat) -> CGFloat {
+    guard !foundBox.isHidden else { return 0 }
+    let fw = w - (15 + 22 + 12) - 15 - 22
+    return 10 + ceil(foundL.sizeThatFits(CGSize(width: fw, height: 200)).height) + 18
   }
   // the CD chip (app.css .cd-chip): 10.5 bold in the CD colour on a 16% wash, 4 round, a tick before "CD Approved" —
   // the tick and the words on one centre line
@@ -2013,6 +2060,7 @@ final class HomeClientRow: UIControl {
     backgroundColor = L.card; layer.borderColor = L.cardLine.cgColor
     sq.text = c["ini"] as? String; sq.backgroundColor = NativeSheetVC.color(c["rgb"]) ?? .systemIndigo
     name.text = c["name"] as? String; name.textColor = L.title
+    if let mk = c["marks"] as? [String], !mk.isEmpty { name.attributedText = HomeCard.marked(name.text ?? "", mk, base: [.font: name.font!, .foregroundColor: L.title], mark: [.backgroundColor: UIColor.systemBlue.withAlphaComponent(L.light ? 0.16 : 0.3)]) }
     let n = c["open"] as? Int ?? 0
     meta.text = "Client · \(n) open task\(n == 1 ? "" : "s")"; meta.textColor = L.meta
     accessibilityLabel = name.text
@@ -2451,4 +2499,28 @@ final class FrostWatch: NSObject {
     kv = [scroll.observe(\.contentOffset, options: [.initial, .new]) { s, _ in f(s) },
           scroll.observe(\.contentInset, options: [.new]) { s, _ in f(s) }]
   }
+}
+
+// the note on top of search results when a word was read as another (a typo): "Showing results for ford (you typed
+// “frod”)" — app.js searchFixedNote (Haris 2026-11-06)
+final class SearchFixedNote: UIView {
+  private let l = UILabel()
+  override init(frame: CGRect) { super.init(frame: frame); layer.cornerRadius = 14; layer.cornerCurve = .continuous; l.numberOfLines = 0; addSubview(l) }
+  required init?(coder: NSCoder) { fatalError() }
+  func set(_ fx: [[String: Any]], light: Bool) {
+    backgroundColor = light ? UIColor(red: 0.91, green: 0.93, blue: 0.98, alpha: 1) : UIColor(red: 0.09, green: 0.14, blue: 0.23, alpha: 1)
+    let ink = light ? UIColor(red: 0.17, green: 0.29, blue: 0.54, alpha: 1) : UIColor(red: 0.66, green: 0.76, blue: 1, alpha: 1)
+    let s = NSMutableAttributedString()
+    if let img = UIImage(systemName: "magnifyingglass", withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .semibold))?.withTintColor(ink, renderingMode: .alwaysOriginal) {
+      let a = NSTextAttachment(); a.image = img; a.bounds = CGRect(x: 0, y: -1, width: img.size.width, height: img.size.height); s.append(NSAttributedString(attachment: a)); s.append(NSAttributedString(string: "  "))
+    }
+    let f = UIFont.systemFont(ofSize: 14)
+    s.append(NSAttributedString(string: "Showing results for ", attributes: [.font: f, .foregroundColor: ink]))
+    s.append(NSAttributedString(string: fx.map { $0["to"] as? String ?? "" }.joined(separator: ", "), attributes: [.font: UIFont.systemFont(ofSize: 14, weight: .bold), .foregroundColor: ink]))
+    s.append(NSAttributedString(string: " (you typed " + fx.map { "“" + ($0["from"] as? String ?? "") + "”" }.joined(separator: ", ") + ")", attributes: [.font: f, .foregroundColor: ink.withAlphaComponent(0.75)]))
+    l.attributedText = s
+    setNeedsLayout()
+  }
+  func height(for w: CGFloat) -> CGFloat { ceil(l.sizeThatFits(CGSize(width: w - 28, height: 400)).height) + 22 }
+  override func layoutSubviews() { super.layoutSubviews(); l.frame = bounds.insetBy(dx: 14, dy: 11) }
 }

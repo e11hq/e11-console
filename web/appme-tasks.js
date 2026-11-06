@@ -208,6 +208,7 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
 
   // ---------- Home's search (NativeHome 'find': app.js taskSearch(q, { limit: 80 })) ----------
   // → { q, total, clients: [{ id, name, ini, rgb, open }], tasks: [cards as Home's (rules.js cardOf)] }
+  const FIELD_LABEL = { project: 'Client', client: 'Client Assets', tag: 'Tag', people: 'Assigned to', status: 'Status', creator: 'Created by', desc: 'Description', check: 'Checklist', sub: 'Subtask', parent: 'Part of' };
   M.search = function (R, data, meId, nowMs, q) {
     const W = world(R, data, meId, nowMs), u = W.me();
     if (!u) return null;
@@ -259,32 +260,38 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
         { k: 'creator', w: 2, text: people([t.createdBy]) }, { k: 'desc', w: 2.5, text: t.notesHtml ? plainHTML(t.notesHtml) : t.notes },
         { k: 'check', w: 1.5, text: (t.checklist || []).map((c) => c.text).join(' · ') }, { k: 'sub', w: 2, text: subtasksOf(t.id).map((s) => s.title).join(' · ') },
       ];
-      (t.comments || []).forEach((c) => f.push({ k: 'comment', w: 1.2, text: c.text || plainHTML(c.html) }));
+      (t.comments || []).forEach((c) => f.push({ k: 'comment', w: 1.2, text: c.text || plainHTML(c.html), who: c.authorId, reply: !!c.parentId }));
       if (t.parentId) { const par = W.task(t.parentId); if (par) f.push({ k: 'parent', w: 3, text: par.title }); }
       return f;
     }
+    // (each word's best field kept too: why a task was found — app.js searchWhy; Haris 2026-11-06)
     const docs = W.tasks.filter((t) => !r.amReadOnly(t) && searchOwnOk(t)).map((t) => {
-      const words = new Map();
-      taskFields(t).forEach((fl) => sWords(fl.text).forEach((w) => { if (!words.has(w) || words.get(w) < fl.w) words.set(w, fl.w); }));
-      Object.keys(FLAGS).forEach((k) => { if (FLAGS[k](t)) words.set('#' + k, 4); });
-      return { t, words };
+      const words = new Map(), fields = taskFields(t), at = new Map();
+      fields.forEach((fl, i) => sWords(fl.text).forEach((w) => { if (!words.has(w) || words.get(w) < fl.w) { words.set(w, fl.w); at.set(w, i); } }));
+      Object.keys(FLAGS).forEach((k) => { if (FLAGS[k](t)) { words.set('#' + k, 4); at.set('#' + k, -1); } });
+      return { t, words, fields, at };
     });
     const vocab = new Set();
     docs.forEach((d) => d.words.forEach((_, w) => { if (w[0] !== '#') vocab.add(w); }));
-    const per = terms.map((term) => ({ term, words: termMatches(term, vocab).words, flag: FLAGS[term] ? '#' + term : null }));
+    const fixed = [];
+    const per = terms.map((term) => {
+      const m = termMatches(term, vocab);
+      if (m.fuzzy && !m.words.has(term)) fixed.push({ from: term, to: m.fuzzy });
+      return { term, words: m.words, flag: FLAGS[term] ? '#' + term : null };
+    });
     const found = [];
     docs.forEach((d) => {
-      let score = 0;
+      let score = 0; const hits = [];
       for (const pt of per) {
-        let best = 0;
-        if (pt.flag && d.words.has(pt.flag)) best = 4;
-        pt.words.forEach((qq, w) => { const e = d.words.get(w); if (e && e * qq > best) best = e * qq; });
+        let best = 0, bestWord = null, bestField = -1;
+        if (pt.flag && d.words.has(pt.flag)) { best = 4; bestWord = pt.term; }
+        pt.words.forEach((qq, w) => { const e = d.words.get(w); if (e && e * qq > best) { best = e * qq; bestWord = w; bestField = d.at.get(w); } });
         if (!best) return;
-        score += best;
+        score += best; hits.push({ word: bestWord, field: bestField });
       }
       if (!d.t.done) score += 1.5;
       if (d.t.parentId) score -= 1;
-      found.push({ t: d.t, score });
+      found.push({ t: d.t, score, hits, fields: d.fields });
     });
     found.sort((a, b) => b.score - a.score || (a.t.done - b.t.done) || String(b.t.updatedAt || '').localeCompare(String(a.t.updatedAt || '')));
     const projs = W.projects.filter((p) => !p.inactive && amSidebarOk(p)).filter((p) => {
@@ -294,8 +301,23 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
     return {
       q, total: found.length,
       clients: projs.map((p) => ({ id: p.id, name: p.name, ini: initials(p.name), rgb: R.rgbOf(p.color), open: W.tasks.filter((t) => t.projectId === p.id && !t.parentId && !t.done).length })),
-      tasks: found.slice(0, 80).map((h) => r.cardOf(h.t)),
+      tasks: found.slice(0, 80).map((h) => Object.assign(r.cardOf(h.t), whyOf(h) ? { found: whyOf(h) } : {})),
+      fixed, marks: [...new Set(per.flatMap((pt) => [...pt.words.keys()]))].slice(0, 40),
     };
+    // where the words were found when it isn't the title (app.js searchWhy): { label, text } — a window of the text around
+    // the first word, as the website's
+    function whyOf(h) {
+      const fi = h.hits.map((x) => x.field).filter((i) => i > 0).sort((a, b) => h.fields[b].w - h.fields[a].w)[0];
+      if (fi == null) return null;
+      const fl = h.fields[fi];
+      const ws = h.hits.filter((x) => x.field === fi).map((x) => x.word);
+      let text = String(fl.text || '').replace(/\s+/g, ' ');
+      const at = Math.max(0, sNorm(text).indexOf(ws[0] || ''));
+      if (text.length > 90) { const st = Math.max(0, at - 30); text = (st ? '…' : '') + text.slice(st, st + 90) + (st + 90 < text.length ? '…' : ''); }
+      const who = fl.who === meId ? 'you' : String(W.fullName(W.userById(fl.who)) || '').split(' ')[0];
+      const label = fl.k === 'comment' ? `${fl.reply ? 'Reply' : 'Comment'} by ${who || 'someone'}` : FIELD_LABEL[fl.k] || '';
+      return { label, text };
+    }
   };
 
   // ---------- My Tasks' filters (NativeMyTasks, app.js Work.f / workMenu) ----------
