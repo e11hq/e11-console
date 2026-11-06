@@ -143,7 +143,13 @@ extension Main {
   private func ownTabsNow() -> [String: Any]? {
     guard AppData.shared.tabsOn, let m = AppData.shared.screen("tabs").model, let list = m["tabs"] as? [[String: Any]], !list.isEmpty else { return nil }
     if !pageReady { Main.isAdmin = (m["admin"] as? Bool) == true }   // (Admins turn links off and on — without the website, from the copy: Haris 2026-11-06)
-    return ["tabs": list, "hidden": false]
+    // (the Me tab: whose photo and where it is — from the copy, as the website said it: Haris 2026-11-06)
+    var l = list
+    for i in l.indices where (l[i]["v"] as? String) == "me" {
+      if let me = AppData.shared.me { l[i]["who"] = me }
+      if let ph = m["photo"] as? String, !ph.isEmpty { l[i]["photoUrl"] = serverURL().trimmingCharacters(in: CharacterSet(charactersIn: "/")) + ph }
+    }
+    return ["tabs": l, "hidden": false]
   }
 
   private func signedOut() {

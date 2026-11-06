@@ -28,7 +28,10 @@ extension Main {
     m.screen = to
     to?.layoutIfNeeded()
     let place = { (h: HomeView, f: CGRect) -> CGRect in h.convert(f, to: self.view).offsetBy(dx: -h.transform.tx, dy: 0) }
-    let a = from.map { ($0, $0.fabNow) }.flatMap { $0.1.shown ? $0 : nil }
+    // (the screen left already gone — slid out with its button by the edge swipe or ‹, or taken away: nothing starts from
+    //  where its button was; it came back there for a moment and faded, Haris 2026-11-06)
+    let fromGone = from.map { $0.superview == nil || abs($0.transform.tx) > 1 } ?? true
+    let a = fromGone ? nil : from.map { ($0, $0.fabNow) }.flatMap { $0.1.shown ? $0 : nil }
     let b = to.map { ($0, $0.fabNow) }.flatMap { $0.1.shown ? $0 : nil }
     // (one change at a time: a stand-in still moving is replaced from where it is)
     var start: CGRect? = nil, startCfg: UIButton.Configuration? = nil, startLight = true

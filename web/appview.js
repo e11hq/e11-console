@@ -98,10 +98,10 @@ var E11AppView = (function () {
     const finUser = u.role === 'finance_admin' || u.role === 'finance_viewer';
     const unread = (data.notifications || []).filter((n) => n.to === me && !n.read && !/^claim/.test(n.kind || '')).length;
     const T = (v, label, badge) => ({ v, label, badge: badge ? (badge > 99 ? '99+' : String(badge)) : '' });
-    if (finOnly(data, me)) return { tabs: [T('today', 'Finance'), T('me', 'Me')], plans: false };
+    if (finOnly(data, me)) return { tabs: [T('today', 'Finance'), T('me', 'Me')], plans: false, photo: u.avatar ? fileUrl(u.avatar) : null };
     if (office) {
       const hr = fin ? (data.claims || []).filter((c) => c.state === 'submitted').length : 0;
-      return { tabs: [T('today', 'Overview'), T('inbox', 'Inbox', unread), ...(fin ? [T('fin-reimb', 'Claims', hr), T('fin-expenses', 'Expenses')] : [T('team', 'Team'), T('clients', 'Client Assets')]), T('me', 'Me')], plans: false, admin: isAdm };
+      return { tabs: [T('today', 'Overview'), T('inbox', 'Inbox', unread), ...(fin ? [T('fin-reimb', 'Claims', hr), T('fin-expenses', 'Expenses')] : [T('team', 'Team'), T('clients', 'Client Assets')]), T('me', 'Me')], plans: false, admin: isAdm, photo: u.avatar ? fileUrl(u.avatar) : null };
     }
     const today = R.dubaiDay(nowMs());
     const r = R.withEnv(envOf(nowMs), base(data), me, today);
@@ -112,7 +112,7 @@ var E11AppView = (function () {
     // (Plans' count from web/appme-plans.js when the app has it — step 2; else the page's)
     const pw = social && typeof E11AppMe !== 'undefined' && typeof E11AppMe.plansWaiting === 'function' ? (() => { try { return E11AppMe.plansWaiting(R, data, me, nowMs); } catch (e) { return null; } })() : null;
     const third = cd ? T('reviews', 'Reviews', rv) : social ? T('plans', 'Plans', pw || 0) : T('projects', 'Clients');
-    return { tabs: [T('today', r.dayTitle(), due), T('mytasks', 'My Tasks'), T('inbox', 'Inbox', unread), third, T('me', 'Me')], plans: social && pw == null, admin: isAdm };
+    return { tabs: [T('today', r.dayTitle(), due), T('mytasks', 'My Tasks'), T('inbox', 'Inbox', unread), third, T('me', 'Me')], plans: social && pw == null, admin: isAdm, photo: u.avatar ? fileUrl(u.avatar) : null };
   }
 
   // ---------- the app's own copy (iPhone): kept here, in the engine, as the website keeps its own ----------

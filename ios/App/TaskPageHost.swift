@@ -709,7 +709,13 @@ final class QuickFile: NSObject, QLPreviewControllerDataSource {
 extension Main {
   static let officeExt = ["doc", "docx", "ppt", "pptx", "xls", "xlsx", "odt", "odp", "ods", "rtf"]
   // a file as the preview shows it: a picture, a video / sound (Apple's player), a PDF's / Office file's pages, text, or its card
-  static func previewItem(_ p: [String: Any]) -> [String: Any] {
+  static func previewItem(_ p0: [String: Any]) -> [String: Any] {
+    // (only its place on the server given — Me's pages: Overview's files, claims' and expenses' invoices — its address made
+    //  from it, as the website's fileUrl; without it the preview stayed on Loading, Haris 2026-11-06)
+    var p = p0
+    if p["url"] == nil, let path = p["path"] as? String, !path.isEmpty {
+      p["url"] = "/__file/" + path.split(separator: "/", omittingEmptySubsequences: false).map { String($0).addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-._~"))) ?? String($0) }.joined(separator: "/") + "?view=1"
+    }
     let n = p["name"] as? String ?? ""
     let ext = (n as NSString).pathExtension.lowercased()
     let src = serverURL() + (p["url"] as? String ?? "")

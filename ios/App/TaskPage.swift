@@ -662,7 +662,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if let rv = m["review"] as? [String: Any] {
       let sw = UISwitch(); sw.isOn = (rv["on"] as? Bool) == true; sw.isEnabled = (rv["canSet"] as? Bool) == true
       sw.addAction(UIAction { [weak self, weak sw] _ in guard let self = self, let sw = sw else { return }; self.onAct?(["act": "needsCD", "id": self.taskId, "value": sw.isOn]) }, for: .valueChanged)
-      let who = (rv["on"] as? Bool) == true ? (rv["who"] as? String ?? "") : ""
+      let who = rv["who"] as? String ?? ""   // (the CD's name — or the Acting CD's — on and off: Haris 2026-11-06)
       r.append(row(sym: "checkmark.shield", key: "Needs CD review", sub: who.isEmpty ? nil : who, value: sw))
     }
     if let ca = m["clientApproval"] as? [String: Any] { r.append(clientApprovalRow(ca)) }

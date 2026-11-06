@@ -831,6 +831,7 @@ final class TapImage: UIImageView, UIContextMenuInteractionDelegate {
     guard let m = menu?() else { return nil }
     return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in m }
   }
+  func contextMenuInteraction(_ i: UIContextMenuInteraction, previewForHighlightingMenuWithConfiguration c: UIContextMenuConfiguration) -> UITargetedPreview? { PressPreview.make(self) }
 }
 final class TapView: UIView, UIContextMenuInteractionDelegate {
   var onTap: (() -> Void)? { didSet { if onTap != nil && (gestureRecognizers?.isEmpty ?? true) { addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(t))) } } }
@@ -839,6 +840,19 @@ final class TapView: UIView, UIContextMenuInteractionDelegate {
   func contextMenuInteraction(_ i: UIContextMenuInteraction, configurationForMenuAtLocation l: CGPoint) -> UIContextMenuConfiguration? {
     guard let m = menu?() else { return nil }
     return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in m }
+  }
+  func contextMenuInteraction(_ i: UIContextMenuInteraction, previewForHighlightingMenuWithConfiguration c: UIContextMenuConfiguration) -> UITargetedPreview? { PressPreview.make(self) }
+}
+// touch and hold on a file (iPhone's own menu): the file shrinks a little while its menu shows, as a card does — it grew
+// instead, iPhone's lift, Haris 2026-11-06
+enum PressPreview {
+  static func make(_ v: UIView) -> UITargetedPreview? {
+    guard let sv = v.superview, v.window != nil else { return nil }
+    let p = UIPreviewParameters()
+    p.visiblePath = UIBezierPath(roundedRect: v.bounds, cornerRadius: v.layer.cornerRadius)
+    p.backgroundColor = .clear
+    let t = UIPreviewTarget(container: sv, center: v.center, transform: CGAffineTransform(scaleX: 0.94, y: 0.94))
+    return UITargetedPreview(view: v, parameters: p, target: t)
   }
 }
 /* Touch and hold, app-wide (Haris, 2026-11-02: "this long press behaviour will be app wide"): the view shrinks from the

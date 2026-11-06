@@ -1112,6 +1112,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       if v == "me" {
         for k in ["photo", "photoUrl", "who", "online"] { if let x = p?[k] { list[i][k] = x } }
         if list[i]["who"] == nil, let me = AppData.shared.me { list[i]["who"] = me }
+        // (your photo's address from the app's own copy — without the website nobody said it, and your photo went from
+        //  the top corner and the Me tab: Haris 2026-11-06)
+        if list[i]["photoUrl"] == nil, let ph = m["photo"] as? String, !ph.isEmpty { list[i]["photoUrl"] = serverURL().trimmingCharacters(in: CharacterSet(charactersIn: "/")) + ph }
       }
       list[i]["on"] = v == on
     }

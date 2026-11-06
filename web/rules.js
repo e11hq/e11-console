@@ -638,7 +638,7 @@ var E11Rules = (() => {
         financeOpts: !t.parentId && canFinance(t) && !ro ? Object.keys(FINANCE).map((k) => ({ t: k, rgb: rgbOf(FINANCE[k]) })) : [], canFinance: !t.parentId && canFinance(t) && !ro,
         update: t.update ? { t: t.update, rgb: updateRgb(t.update) } : null, updates: UPDATES, updateRgbs: UPDATES.map(updateRgb),
         canFields: !ro && !t.parentId,
-        review: !t.parentId && !t.done ? { on: !!t.needsCD, canSet: !ro && !!u && (isAdm(u) || u.role === 'am' || isCD(meId)) && !reviewPending(t), who: cdUserId() ? fullName(userById(cdUserId())) : '' } : null,
+        review: !t.parentId && !t.done ? { on: !!t.needsCD, canSet: !ro && !!u && (isAdm(u) || u.role === 'am' || isCD(meId)) && !reviewPending(t), who: cdUserId() ? fullName(userById(cdUserId())) + (db.meta && db.meta.cdActing ? ' (Acting CD)' : '') : 'No Creative Director set' } : null,
         clientApproval: cdApprovedNow(t) ? (() => { const ca = t.clientApproval, fresh = clientApprovalFresh(t);
           return { state: ca && fresh ? (ca.none ? 'none' : 'yes') : ca ? 'old' : 'missing', text: ca && fresh ? (ca.none ? 'Not needed' : `Approved · ${firstName(ca.by)} · ${fmtDay(dayOf(ca.at))}`) : ca ? 'Out of date' : 'Missing', canSet: !ro && !t.done && !!u && (isAdm(u) || u.role === 'am' || t.createdBy === meId) }; })() : null,
         desc: t.notesHtml ? plainOfHtml(t.notesHtml) : String(t.notes || '').trim(), descRuns: runsOf({ html: t.notesHtml || '', text: t.notes || '' }, true), descFiles: fileRefsOf(t.notesHtml), canDesc: !ro && can('editDesc', t) && !lockedId, mentionable: !ro && can('editDesc', t) && !lockedId ? mentionable() : [],
