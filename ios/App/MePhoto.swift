@@ -47,6 +47,14 @@ final class MePhoto {
       else if left > 0 { DispatchQueue.main.asyncAfter(deadline: .now() + 4) { self.ask(left - 1) } }
     }
   }
+  // you have no photo now (removed — on this phone or anywhere else): your initials, everywhere at once; a screen's old
+  // copy of the photo isn't taken up again (Haris 2026-11-06: the removed photo stayed on the tab bar and the top buttons)
+  func none() {
+    guard image != nil || url != nil || !fetched else { return }
+    image = nil; url = nil; fetched = true; asking = false
+    DiskPics.put("me-photo", Data())
+    changed()
+  }
   // the photo a screen fetched for you already (Home's people): taken while ours hasn't come
   // (only while there's none at all — never swapped for another screen's offer)
   func offer(_ img: UIImage, for id: String) { if !fetched, image == nil, who == nil || id == who { set(img) } }

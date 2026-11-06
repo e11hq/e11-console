@@ -1238,11 +1238,14 @@ final class MeCtl {
     guard let it = brain("trash", "trashItem", [id]) else { return false }
     let files = (it["files"] as? [[String: Any]]) ?? []
     let preview = { [weak self] in self?.main.openFiles(files.map { ["id": $0["id"] ?? "", "path": $0["path"] ?? "", "name": $0["name"] ?? "File", "size": $0["size"] ?? 0] }, at: 0) }
+    // (a task tapped: its page, view only, as before — Haris 2026-11-06; a file: its preview; else its sheet)
+    if tap, let tid = it["taskId"] as? String, (it["type"] as? String) == "task" { main.openTaskPage(tid, tab: "details", focus: "", trash: id); return true }
     if tap, (it["type"] as? String) != "task", !files.isEmpty { preview(); return true }
     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     let a = UIAlertController(title: it["title"] as? String, message: it["left"] as? String, preferredStyle: .actionSheet)
     a.overrideUserInterfaceStyle = light ? .light : .dark
-    if !files.isEmpty { a.addAction(UIAlertAction(title: files.count == 1 ? "Preview" : "Preview files", style: .default) { _ in preview() }) }
+    if let tid = it["taskId"] as? String { a.addAction(UIAlertAction(title: "Open (view only)", style: .default) { [weak self] _ in self?.main.openTaskPage(tid, tab: "details", focus: "", trash: id) }) }
+    else if !files.isEmpty { a.addAction(UIAlertAction(title: files.count == 1 ? "Preview" : "Preview files", style: .default) { _ in preview() }) }
     if (it["restore"] as? Bool) == true {
       a.addAction(UIAlertAction(title: "Restore", style: .default) { [weak self, weak h] _ in
         self?.request(["ev": "trRestore", "id": id]) { r in h?.toast(["t": (r["ok"] as? Bool) == true ? (r["toast"] as? String ?? "Restored") : (r["error"] as? String ?? "That didn’t work — try again")]) }

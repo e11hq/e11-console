@@ -20,11 +20,12 @@ extension Main {
     }
   }
 
-  func openTaskPage(_ id: String, tab: String, focus: String) {
+  func openTaskPage(_ id: String, tab: String, focus: String, trash: String? = nil) {
     endEditing()
     ProfileAskCard.current?.go()   // (a task opened: the birthday / city card slips away)
     FeedLoader.shared.cookies = serverHome.cookies   // (before anything is drawn: its pictures are fetched with it)
     let p = TaskPage(id: id, frame: view.bounds)
+    p.trashId = trash
     // (typing a comment, a tap anywhere else only puts the keyboard away — it never taps what's under it: Haris 2026-11-04,
     //  a standard; the description locks the page itself and ends with Done)
     KeyboardShield.attach(p)
@@ -398,6 +399,12 @@ extension Main {
   }
 
   func refreshTaskPage(_ p: TaskPage) {
+    // (a task in the Trash, view only: from the copy's Trash, never the server's task)
+    if let tid = p.trashId {
+      if let m = AppData.shared.meModel("trash", "trashTask", [tid]) { drawTask(p, m) }
+      else if p.model == nil { p.toast("This task is no longer in the Trash"); DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self, weak p] in if let p = p { self?.closeTaskPage(p) } } }
+      return
+    }
     // the app's own copy first: no request at all (iOS app data plan)
     let c = AppData.shared.screen("task", p.taskId)
     if c.ready {
@@ -735,7 +742,10 @@ extension Main {
     return it
   }
   // a file tapped: the app's preview, with all the files beside it (a comment's, the task's) to swipe through
-  func openFiles(_ files: [[String: Any]], at i: Int) {
+  func openFiles(_ files0: [[String: Any]], at i: Int) {
+    // (files given by their place only — Me's pages, claims, the Trash: "file" too, which the PDF pages, Download and Copy
+    //  link go by; a claim's PDF stayed on its spinner, Haris 2026-11-06)
+    let files = files0.map { f -> [String: Any] in var x = f; if x["file"] == nil, let p = x["path"] as? String, !p.isEmpty { x["file"] = p }; return x }
     guard i < files.count else { return }
     PreviewLoad.refreshCookies(web.configuration.websiteDataStore.httpCookieStore) { [weak self] in
       guard let self = self, let host = self.sheetHost() else { return }

@@ -148,6 +148,7 @@ extension Main {
     for i in l.indices where (l[i]["v"] as? String) == "me" {
       if let me = AppData.shared.me { l[i]["who"] = me }
       if let ph = m["photo"] as? String, !ph.isEmpty { l[i]["photoUrl"] = serverURL().trimmingCharacters(in: CharacterSet(charactersIn: "/")) + ph }
+      else if m.keys.contains("photo") { l[i]["photoNone"] = true }
     }
     return ["tabs": l, "hidden": false]
   }

@@ -1696,16 +1696,7 @@ final class HomeCard: UIControl {
   static func marked(_ text: String, _ words: [String], base: [NSAttributedString.Key: Any], mark: [NSAttributedString.Key: Any]) -> NSAttributedString {
     let s = NSMutableAttributedString(string: text, attributes: base)
     let ns = text as NSString
-    for w in words where w.count >= 2 && !w.hasPrefix("#") {
-      var from = 0
-      while from < ns.length {
-        let r = ns.range(of: w, options: [.caseInsensitive, .diacriticInsensitive], range: NSRange(location: from, length: ns.length - from))
-        guard r.location != NSNotFound else { break }
-        let startsWord = r.location == 0 || !(CharacterSet.alphanumerics.contains(UnicodeScalar(ns.character(at: r.location - 1)) ?? " "))
-        if startsWord { s.addAttributes(mark, range: r) }
-        from = r.location + max(1, r.length)
-      }
-    }
+    for w in words { for r in Find.ranges(w, ns) { s.addAttributes(mark, range: r) } }
     return s
   }
   static func isComments(_ it: [String: Any]) -> Bool {

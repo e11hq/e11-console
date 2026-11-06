@@ -228,7 +228,8 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
           { w: 3, text: d.project ? d.project.name : '' },
         ];
         const words = new Map();
-        fields.forEach((f) => sWords(f.text).forEach((w) => { if (!words.has(w) || words.get(w) < f.w) words.set(w, f.w); }));
+        // (two neighbouring words also as one — "altayer" finds AL TAYER)
+        fields.forEach((f) => { const ws = sWords(f.text); ws.concat(ws.slice(1).map((x, i) => ws[i] + x)).forEach((w) => { if (!words.has(w) || words.get(w) < f.w) words.set(w, f.w); }); });
         return { it, words };
       });
       const vocab = new Set(); docs.forEach((x) => x.words.forEach((_, w) => vocab.add(w)));
@@ -482,7 +483,20 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
     const left = W.trashDaysLeft(it);
     return { id: it.id, type: it.type, title: W.trashTitle(it), left: `${left} day${left === 1 ? '' : 's'} left`,
       files: W.trashFiles(it).filter((a) => a && a.path).map((a) => ({ id: a.id || a.path, name: a.name || 'File', path: a.path, size: a.size || 0 })),
-      restore: it.type !== 'project' || W.isAdm(u), forever: W.isSuper(u) };
+      restore: it.type !== 'project' || W.isAdm(u), forever: W.isSuper(u),
+      taskId: it.type === 'task' && it.data && (it.data.tasks || [])[0] ? it.data.tasks[0].id : null };
+  };
+  // a task in the Trash, view only (phone.js trashTaskView): its page worked out as if it were back, nothing can be changed
+  M.trashTask = function (R, data, meId, nowMs, id, env) {
+    const W = world(R, data, meId, nowMs, env), it = W.trash.find((x) => x.id === id);
+    if (!it || it.type !== 'task' || typeof E11AppView === 'undefined') return null;
+    const ts = (it.data && it.data.tasks) || [];
+    if (!ts[0]) return null;
+    const m = E11AppView.taskPage(R, Object.assign({}, data, { tasks: (data.tasks || []).concat(ts) }), meId, typeof nowMs === 'function' ? nowMs : () => (nowMs == null ? Date.now() : Number(nowMs)), ts[0].id);
+    if (!m) return null;
+    Object.keys(m).forEach((k) => { if (/^can[A-Z]/.test(k)) m[k] = false; });
+    const left = W.trashDaysLeft(it);
+    return Object.assign(m, { readOnly: true, complete: null, completed: null, lock: null, trashNote: `In the Trash — view only. ${left} day${left === 1 ? '' : 's'} left to restore it.` });
   };
   M.trashAsk = function (R, data, meId, nowMs, id, env) {
     const W = world(R, data, meId, nowMs, env), it = W.trash.find((x) => x.id === id);

@@ -241,6 +241,8 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private let moreBtn = UIButton(type: .custom)        // (over the ••• circle: iPhone's own menu)
   private let dot = UIView(), client = UILabel()
   let seg = UISegmentedControl(items: ["Details", "Comments"])
+  // (a task in the Trash, opened view only: its Details — Haris 2026-11-06)
+  var trashId: String? { didSet { seg.setEnabled(trashId == nil, forSegmentAt: 1) } }
   let commentsHost = UIView()                          // the comments screen goes in here
   private let fab = UIButton(type: .system)
   private let spinner = UIActivityIndicatorView(style: .medium)
@@ -366,6 +368,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
 
   // ---------- the tabs ----------
   func setTab(_ t: String, tell: Bool, slide: Bool = false) {
+    if trashId != nil && t == "comments" { return }
     let was = tab
     if slide && was == t { return }   // (a second swipe for the same change — the edge and the middle at once: nothing more)
     tab = t
@@ -603,6 +606,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       if (c["canReopen"] as? Bool) == true { btns.append(("Reopen", { [weak self] in guard let self = self else { return }; self.onAct?(["act": "reopen", "id": self.taskId]) })) }
       blocks.append(note(sym: "checkmark.circle.fill", tint: .systemGreen, text: t, buttons: btns))
     }
+    if let tn = m["trashNote"] as? String { blocks.append(note(sym: "trash", tint: .systemRed, text: tn, buttons: [])) }
     if let l = m["lock"] as? [String: Any] {
       var btns: [(String, () -> Void)] = []
       if (l["from"] as? Bool) == true { btns.append(("New task from this", { [weak self] in guard let self = self else { return }; self.onEvent?(["ev": "from", "id": self.taskId]) })) }

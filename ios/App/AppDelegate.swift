@@ -1115,6 +1115,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         // (your photo's address from the app's own copy — without the website nobody said it, and your photo went from
         //  the top corner and the Me tab: Haris 2026-11-06)
         if list[i]["photoUrl"] == nil, let ph = m["photo"] as? String, !ph.isEmpty { list[i]["photoUrl"] = serverURL().trimmingCharacters(in: CharacterSet(charactersIn: "/")) + ph }
+        if !pageReady, m.keys.contains("photo"), !(m["photo"] is String) { list[i]["photoNone"] = true }
       }
       list[i]["on"] = v == on
     }
@@ -1152,6 +1153,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       tabOnline[i] = (t["online"] as? Bool ?? true) && netUp
       if let w = t["who"] as? String, !w.isEmpty { MePhoto.shared.person(w) }
       MePhoto.shared.source(t["photoUrl"] as? String)
+      if (t["photoNone"] as? Bool) == true { MePhoto.shared.none() }
     }
     paintMeTab()
     // counts sit on the icon's top-right corner, overlapping it a little (like an app icon's badge), drawn into the

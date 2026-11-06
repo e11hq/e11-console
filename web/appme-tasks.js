@@ -48,6 +48,8 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
   // app.js smart search: whole words, starts, parts, then one or two letters off
   const sNorm = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[’'`]/g, '');
   const sWords = (s) => sNorm(s).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  // (two neighbouring words also as one — "altayer" finds AL TAYER, Haris 2026-11-06)
+  const sWordsJoined = (s) => { const w = sWords(s); return w.concat(w.slice(1).map((x, i) => w[i] + x)); };
   function editDist(a, b, max) {
     if (Math.abs(a.length - b.length) > max) return max + 1;
     const prev2 = new Array(b.length + 1), prev = new Array(b.length + 1), cur = new Array(b.length + 1);
@@ -267,7 +269,7 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
     // (each word's best field kept too: why a task was found — app.js searchWhy; Haris 2026-11-06)
     const docs = W.tasks.filter((t) => !r.amReadOnly(t) && searchOwnOk(t)).map((t) => {
       const words = new Map(), fields = taskFields(t), at = new Map();
-      fields.forEach((fl, i) => sWords(fl.text).forEach((w) => { if (!words.has(w) || words.get(w) < fl.w) { words.set(w, fl.w); at.set(w, i); } }));
+      fields.forEach((fl, i) => sWordsJoined(fl.text).forEach((w) => { if (!words.has(w) || words.get(w) < fl.w) { words.set(w, fl.w); at.set(w, i); } }));
       Object.keys(FLAGS).forEach((k) => { if (FLAGS[k](t)) { words.set('#' + k, 4); at.set('#' + k, -1); } });
       return { t, words, fields, at };
     });
@@ -295,14 +297,14 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
     });
     found.sort((a, b) => b.score - a.score || (a.t.done - b.t.done) || String(b.t.updatedAt || '').localeCompare(String(a.t.updatedAt || '')));
     const projs = W.projects.filter((p) => !p.inactive && amSidebarOk(p)).filter((p) => {
-      const ws = new Set(sWords(`${p.name} ${(clientOfProject(p) || {}).name || ''}`));
+      const ws = new Set(sWordsJoined(`${p.name} ${(clientOfProject(p) || {}).name || ''}`));
       return per.every((pt) => [...pt.words.keys()].some((w) => ws.has(w)));
     });
     return {
       q, total: found.length,
       clients: projs.map((p) => ({ id: p.id, name: p.name, ini: initials(p.name), rgb: R.rgbOf(p.color), open: W.tasks.filter((t) => t.projectId === p.id && !t.parentId && !t.done).length })),
       tasks: found.slice(0, 80).map((h) => Object.assign(r.cardOf(h.t), whyOf(h) ? { found: whyOf(h) } : {})),
-      fixed, marks: [...new Set(per.flatMap((pt) => [...pt.words.keys()]))].slice(0, 40),
+      fixed, marks: [...new Set(per.flatMap((pt) => [...pt.words.keys()].filter((w) => pt.words.get(w) !== 0.55)))].slice(0, 40),   // (not the words it's only inside of — "logo" in "alainlogo")
     };
     // where the words were found when it isn't the title (app.js searchWhy): { label, text } — a window of the text around
     // the first word, as the website's

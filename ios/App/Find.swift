@@ -9,7 +9,9 @@ enum Find {
   static func terms(_ q: String) -> [String] {
     norm(q).split(whereSeparator: { !$0.isLetter && !$0.isNumber && $0 != "@" && $0 != "." }).map { String($0).trimmingCharacters(in: CharacterSet(charactersIn: ".")) }.filter { !$0.isEmpty }
   }
-  private static func words(_ s: String) -> [String] { norm(s).split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init) }
+  // (the words, and each two neighbours as one)
+  private static func words(_ s: String) -> [String] { let w = norm(s).split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init); return w + zip(w, w.dropFirst()).map { $0 + $1 } }
+  static func squash(_ s: String) -> String { String(s.unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) }.map(Character.init)) }
   private static func limit(_ t: String) -> Int { t.count >= 8 ? 2 : t.count >= 4 ? 1 : 0 }
   // a word of the text close enough to the term (or starting close enough to it)
   private static func near(_ t: String, _ ws: [String]) -> String? {
@@ -21,19 +23,40 @@ enum Find {
   static func filter<T>(_ items: [T], _ q: String, text: (T) -> String) -> Result<T> {
     let ts = terms(q)
     guard !ts.isEmpty else { return Result(items: items, loose: false, marks: []) }
-    let exact = items.filter { x in let n = norm(text(x)); return ts.allSatisfy { n.contains($0) } }
+    // ("altayer" finds AL TAYER: the text also with its spaces taken out — Haris 2026-11-06)
+    let exact = items.filter { x in let n = norm(text(x)), sq = squash(n); return ts.allSatisfy { n.contains($0) || sq.contains($0) } }
     if !exact.isEmpty { return Result(items: exact, loose: false, marks: ts) }
     var marks = Set<String>()
     let loose = items.filter { x in
-      let n = norm(text(x)), ws = words(text(x))
+      let n = norm(text(x)), ws = words(text(x)), sq = squash(n)
       var found: [String] = []
-      for t in ts { if n.contains(t) { found.append(t) } else if let w = near(t, ws) { found.append(w) } else { return false } }
+      for t in ts { if n.contains(t) || sq.contains(t) { found.append(t) } else if let w = near(t, ws) { found.append(w) } else { return false } }
       found.forEach { marks.insert($0) }
       return true
     }
     return Result(items: loose, loose: !loose.isEmpty, marks: Array(marks))
   }
   // the words marked in every label inside these views (titles, names, lines under them)
+  // where a word is in a text, at the start of a word (accents and case don't matter); a word typed together found
+  // written apart too — "altayer" marks "AL TAYER"
+  static func ranges(_ w: String, _ ns: NSString) -> [NSRange] {
+    guard w.count >= 2, !w.hasPrefix("#") else { return [] }
+    var out: [NSRange] = [], from = 0
+    let startsWord = { (loc: Int) in loc == 0 || !(CharacterSet.alphanumerics.contains(UnicodeScalar(ns.character(at: loc - 1)) ?? " ")) }
+    while from < ns.length {
+      let r = ns.range(of: w, options: [.caseInsensitive, .diacriticInsensitive], range: NSRange(location: from, length: ns.length - from))
+      guard r.location != NSNotFound else { break }
+      if startsWord(r.location) { out.append(r) }
+      from = r.location + max(1, r.length)
+    }
+    if out.isEmpty, w.count >= 4 {
+      let pat = w.map { NSRegularExpression.escapedPattern(for: String($0)) }.joined(separator: "[^\\p{L}\\p{N}]?")
+      if let re = try? NSRegularExpression(pattern: pat, options: [.caseInsensitive]) {
+        for m in re.matches(in: ns as String, range: NSRange(location: 0, length: ns.length)) where startsWord(m.range.location) { out.append(m.range) }
+      }
+    }
+    return out
+  }
   // (the last search's marks taken off first — rows kept from one search to the next kept them)
   private static let markKey = NSAttributedString.Key("e11FindMark")
   static func mark(_ views: [UIView], _ marks: [String], light: Bool) {
@@ -46,16 +69,7 @@ enum Find {
         var old: [NSRange] = []
         t.enumerateAttribute(markKey, in: NSRange(location: 0, length: t.length)) { val, r, _ in if val != nil { old.append(r) } }
         for r in old { s.removeAttribute(.backgroundColor, range: r); s.removeAttribute(markKey, range: r); any = true }
-        for w in marks where w.count >= 2 {
-          var from = 0
-          while from < ns.length {
-            let r = ns.range(of: w, options: [.caseInsensitive, .diacriticInsensitive], range: NSRange(location: from, length: ns.length - from))
-            guard r.location != NSNotFound else { break }
-            let starts = r.location == 0 || !(CharacterSet.alphanumerics.contains(UnicodeScalar(ns.character(at: r.location - 1)) ?? " "))
-            if starts { s.addAttributes([.backgroundColor: wash, markKey: true], range: r); any = true }
-            from = r.location + max(1, r.length)
-          }
-        }
+        for w in marks { for r in ranges(w, ns) { s.addAttributes([.backgroundColor: wash, markKey: true], range: r); any = true } }
         if any { l.attributedText = s }
       }
       v.subviews.forEach(walk)
