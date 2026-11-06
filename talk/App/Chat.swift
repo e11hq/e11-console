@@ -641,7 +641,7 @@ final class MessageBar: UIView, UITextViewDelegate {
   // the voice message being recorded: red dot, time, "‹ Slide to cancel"
   private let rec = VoiceRecorder()
   private let recV = UIView(), recDot = UIView(), recTime = UILabel(), recHint = UILabel()
-  private var recCancelled = false
+  private var recCancelled = false, recStartX: CGFloat = 0
   private var boxH: CGFloat = 36
 
   override init(frame: CGRect) {
@@ -717,7 +717,7 @@ final class MessageBar: UIView, UITextViewDelegate {
   @objc private func micHold(_ g: UILongPressGestureRecognizer) {
     switch g.state {
     case .began:
-      recCancelled = false
+      recCancelled = false; recStartX = g.location(in: self).x
       UIImpactFeedbackGenerator(style: .medium).impactOccurred()
       rec.start { [weak self] ok in
         guard let self = self else { return }
@@ -728,7 +728,7 @@ final class MessageBar: UIView, UITextViewDelegate {
         UIView.animate(withDuration: 0.6, delay: 0, options: [.repeat, .autoreverse]) { self.recDot.alpha = 0.2 }
       }
     case .changed:
-      let x = g.translation(in: self).x
+      let x = g.location(in: self).x - recStartX
       recHint.alpha = max(0.2, 1 + x / 120)
       if x < -110, !recCancelled { recCancelled = true; UINotificationFeedbackGenerator().notificationOccurred(.warning); endRecording(send: false) }
     case .ended: if !recCancelled { endRecording(send: true) }
