@@ -1,0 +1,41 @@
+# Put an iPhone build up for App Review (Haris 2026-11-06) — only when Haris says so. "check" prepares the version
+# (build, What's New, automatic release) and reports what's missing; "submit" also sends it for review.
+# Runs on Haris's Mac with the App Store Connect key in GitHub's secrets. Doesn't touch the app's code.
+name: Submit to App Store
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "App Store version (e.g. 1.1.0)"
+        required: true
+      build:
+        description: "Build number (e.g. 1472)"
+        required: true
+      mode:
+        description: "check = prepare and report only; submit = also send for review"
+        required: true
+        default: check
+permissions:
+  contents: read
+jobs:
+  submit:
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare (and submit)
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          VERSION: ${{ github.event.inputs.version }}
+          BUILD: ${{ github.event.inputs.build }}
+          MODE: ${{ github.event.inputs.mode }}
+        run: |
+          set -o pipefail
+          case "$BUILD" in ''|*[!0-9]*) echo "Not a build number: $BUILD"; exit 1;; esac
+          KEY="$RUNNER_TEMP/asc.p8"; printf '%s\n' "$ASC_KEY_P8" > "$KEY"
+          NOTES="ios/whats-new/$VERSION.txt"
+          [ -f "$NOTES" ] || { echo "No What's New text at $NOTES"; rm -f "$KEY"; exit 1; }
+          swift ios/appstore-submit.swift "$KEY" "$ASC_KEY_ID" "$ASC_ISSUER_ID" "$VERSION" "$BUILD" "$NOTES" "$MODE"; r=$?
+          rm -f "$KEY"; exit $r
