@@ -103,6 +103,12 @@ commits before stay as they are — published history is never rewritten.
 which app it's for (E11 Console iPhone, E11 Console Mac / website, or E11 Talk), ask Haris first — one short question —
 before changing anything.
 
-**Tell Haris first when a change can reach anything else (Haris, 2026-11-06):** before making a change, check what else
-in the app uses the code it touches. If it can change anything beyond what he asked for, tell him first, plainly (which
-screens or behaviour, and how), and change it only on his yes. Say so too when it touches nothing else.
+**The App Store release — APPROVED (Haris, 2026-11-06):** the iPhone app 1.1.0, build 1472 (commit 9ca8c16, marked by
+the branch `approved/appstore-ios-1.1.0-build-1472` — never moved or deleted) is approved as it is for the App Store.
+From now on:
+- **Each change is only that change.** It touches only the code for what Haris asked, without disturbing any other code.
+- **Before any change, tell Haris what it can reach.** Check what else uses the code it touches. If it can change anything
+  beyond what he asked for — or it's a shared rule (a standard above, a shared piece like PressShrink, the top buttons, the
+  file row, the frost bar) — tell him first, plainly (which screens or behaviour, and how), and change it only on his yes.
+  Say so too when it touches nothing else.
+- Nothing is changed, built or sent without his word.
