@@ -1109,10 +1109,11 @@ final class MeCtl {
     case "plFind": return AppData.shared.meModel("plans", "plansFind", [q, ev["month"] as? String ?? ""])
     case "ovFind":
       guard let all = (AppData.shared.meModel("assets", "assets", [NSNull()])?["files"] as? [[String: Any]]) else { return nil }
-      let found = AssetsCtl.find(all, q).prefix(60).map { f -> [String: Any] in
+      let fd = Find.filter(all, q) { "\($0["name"] ?? "") \($0["where"] ?? "")" }
+      let found = fd.items.prefix(60).map { f -> [String: Any] in
         ["id": f["id"] ?? "", "name": f["name"] ?? "", "path": f["file"] ?? "", "where": f["where"] ?? "", "pic": f["thumbUrl"] ?? NSNull(), "ext": ((f["ext"] as? String) ?? "file").uppercased().prefix(4).description]
       }
-      return ["ok": true, "q": q, "found": Array(found)]
+      return ["ok": true, "q": q, "found": Array(found), "loose": fd.loose, "marks": fd.marks]
     default: return nil
     }
   }
@@ -1490,7 +1491,7 @@ final class MeCtl {
   private var me: String?
   private(set) var leaving = false
   private var hidden = false          // (the page went elsewhere — another tab, My profile…: kept, out of sight)
-  private var teamTab = 0, teamQ = ""
+  private var teamTab = 0, teamQ = "", teamMarks: [String] = []
   private var asks: [String: ([String: Any]) -> Void] = [:]
 
   var top: HomeView? { hidden ? nil : stack.last.map { $0.h } }
@@ -2317,36 +2318,39 @@ final class MeCtl {
   private func listFind(_ h: HomeView, _ raw: String) {
     let q = raw.trimmingCharacters(in: .whitespaces).lowercased()
     guard !q.isEmpty else { h.showFound([], hint: h.assets == "claimsTab" ? "Search claims by name." : "Search subscriptions and office expenses."); return }
-    let words = q.split(separator: " ").map(String.init)
-    let match = { (s: String) in let n = s.lowercased(); return words.allSatisfy { n.contains($0) } }
+    // (typos forgiven, the words marked — every search alike: Haris 2026-11-06)
     if h.assets == "claimsTab" {
       let m = model["claims"] as? [String: Any] ?? [:]
-      let rows = ((m["all"] as? [[String: Any]]) ?? []).filter { match($0["name"] as? String ?? "") }
-      if rows.isEmpty { h.showFound([], hint: "No claims found."); return }
-      let list = SwipeRows(); list.set(rows, look: h.look, admin: false)
+      let f = Find.filter((m["all"] as? [[String: Any]]) ?? [], q) { "\($0["name"] ?? "") \($0["sub"] ?? "")" }
+      if f.items.isEmpty { h.showFound([], hint: "No claims found."); return }
+      let list = SwipeRows(); list.set(f.items, look: h.look, admin: false)
       list.onOpen = { [weak self] id in self?.send(["ev": "clOpen", "id": id]) }
-      h.showFound([list], hint: nil)
+      h.showFound([list], hint: f.loose ? "Nothing matched exactly — close matches:" : nil)
+      Find.mark([list], f.marks, light: h.look.light)
     } else {
       let m = model["expenses"] as? [String: Any] ?? [:]
-      let rows = (((m["subs"] as? [[String: Any]]) ?? []) + ((m["office"] as? [[String: Any]]) ?? [])).filter { match($0["name"] as? String ?? "") }
-      if rows.isEmpty { h.showFound([], hint: "Nothing found."); return }
-      let g = SetGroup(); g.set(rows.map { x in let id = x["id"] as? String ?? ""; return SetItem(key: "f." + id, title: x["name"] as? String ?? "", sub: x["sub"] as? String ?? "", value: x["amt"] as? String ?? "", chevron: (x["inv"] as? Bool) == true, tap: (x["inv"] as? Bool) == true ? { [weak self] in self?.send(["ev": "exInv", "id": id]) } : nil) }, look: h.look)
-      h.showFound([g], hint: nil)
+      let f = Find.filter(((m["subs"] as? [[String: Any]]) ?? []) + ((m["office"] as? [[String: Any]]) ?? []), q) { "\($0["name"] ?? "") \($0["sub"] ?? "")" }
+      if f.items.isEmpty { h.showFound([], hint: "Nothing found."); return }
+      let g = SetGroup(); g.set(f.items.map { x in let id = x["id"] as? String ?? ""; return SetItem(key: "f." + id, title: x["name"] as? String ?? "", sub: x["sub"] as? String ?? "", value: x["amt"] as? String ?? "", chevron: (x["inv"] as? Bool) == true, tap: (x["inv"] as? Bool) == true ? { [weak self] in self?.send(["ev": "exInv", "id": id]) } : nil) }, look: h.look)
+      h.showFound([g], hint: f.loose ? "Nothing matched exactly — close matches:" : nil)
+      Find.mark([g], f.marks, light: h.look.light)
     }
   }
   // 🔍 on Reviews: the waiting and reviewed requests — by task, client or who sent it
   private func reviewFind(_ h: HomeView, _ raw: String) {
     let q = raw.trimmingCharacters(in: .whitespaces).lowercased()
     guard !q.isEmpty else { h.showFound([], hint: "Search requests by task, client or person."); return }
-    let words = q.split(separator: " ").map(String.init)
     let m = model["reviews"] as? [String: Any] ?? [:]
-    let fits = { (x: [String: Any]) -> Bool in let n = "\(x["task"] ?? "") \(x["client"] ?? "") \(x["who"] ?? "")".lowercased(); return words.allSatisfy { n.contains($0) } }
-    let w = ((m["waiting"] as? [[String: Any]]) ?? []).filter(fits), d = ((m["reviewed"] as? [[String: Any]]) ?? []).filter(fits)
+    let text = { (x: [String: Any]) in "\(x["task"] ?? "") \(x["client"] ?? "") \(x["who"] ?? "")" }
+    let all = ((m["waiting"] as? [[String: Any]]) ?? []).map { ($0, true) } + ((m["reviewed"] as? [[String: Any]]) ?? []).map { ($0, false) }
+    let f = Find.filter(all, q) { text($0.0) }
+    let w = f.items.filter { $0.1 }.map { $0.0 }, d = f.items.filter { !$0.1 }.map { $0.0 }
     if w.isEmpty && d.isEmpty { h.showFound([], hint: "No requests found."); return }
     var out: [UIView] = []
     if !w.isEmpty { let hd = SetHead(); hd.set("Waiting"); let l = ReviewList(); l.set(w, look: h.look, decided: false); l.onOpen = { [weak self] id in self?.open("review", id) }; out += [hd, l] }
     if !d.isEmpty { let hd = SetHead(); hd.set("Reviewed"); let l = ReviewList(); l.set(d, look: h.look, decided: true); l.onOpen = { [weak self] id in self?.open("review", id) }; out += [hd, l] }
-    h.showFound(out, hint: nil)
+    h.showFound(out, hint: f.loose ? "Nothing matched exactly — close matches:" : nil)
+    Find.mark(out, f.marks, light: h.look.light)
   }
   // 🔍 on Overview: every client's files (Client Assets' search), a tap previews it — Haris 2026-11-04
   private func overviewFind(_ h: HomeView, _ raw: String) {
@@ -2363,6 +2367,7 @@ final class MeCtl {
       if items.isEmpty { h.showFound([], hint: "No files found."); return }
       let g = SetGroup(); g.set(items, look: h.look)
       h.showFound([g], hint: (r["loose"] as? Bool) == true ? "Nothing matched exactly — close matches:" : nil)
+      Find.mark([g], (r["marks"] as? [String]) ?? Find.terms(q), light: h.look.light)
     }
   }
   private func teamBlocks(_ h: HomeView, _ out: inout [UIView]) {
@@ -2384,7 +2389,12 @@ final class MeCtl {
     if h.pinHead !== stack { h.pinHead = stack }
     let norm = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
     let q = norm(teamQ.trimmingCharacters(in: .whitespaces))
-    let fits = { (p: [String: Any]) -> Bool in q.isEmpty || norm("\(p["name"] ?? "") \(p["email"] ?? "") \(p["role"] ?? "")").contains(q) }
+    // (typos forgiven, the words marked — every search alike: Haris 2026-11-06)
+    let everyone = ((t["groups"] as? [[String: Any]]) ?? []).flatMap { ($0["people"] as? [[String: Any]]) ?? [] } + ((t["past"] as? [[String: Any]]) ?? [])
+    let tf = Find.filter(everyone, q) { "\($0["name"] ?? "") \($0["email"] ?? "") \($0["role"] ?? "")" }
+    let keep = Set(tf.items.compactMap { $0["id"] as? String })
+    teamMarks = q.isEmpty ? [] : tf.marks
+    let fits = { (p: [String: Any]) -> Bool in q.isEmpty || keep.contains(p["id"] as? String ?? "") }
     var any = false
     var shownKeys = Set<String>()
     if teamTab == 0 {
@@ -2395,11 +2405,12 @@ final class MeCtl {
         let k = g["k"] as? String ?? ""
         shownKeys.insert(k)
         out.append(head(h, "t." + k, "\(g["name"] as? String ?? "") · \(list.count)"))
-        out.append(group(h, "t." + k, people(list, hold: admin)))
+        let gv = group(h, "t." + k, people(list, hold: admin)); Find.mark([gv], teamMarks, light: h.look.light)
+        out.append(gv)
       }
     } else {
       let list = ((t["past"] as? [[String: Any]]) ?? []).filter(fits)
-      if !list.isEmpty { any = true; out.append(head(h, "t.past", "Past members · \(list.count)")); out.append(group(h, "t.past", people(list, hold: admin))) }
+      if !list.isEmpty { any = true; out.append(head(h, "t.past", "Past members · \(list.count)")); let gv = group(h, "t.past", people(list, hold: admin)); Find.mark([gv], teamMarks, light: h.look.light); out.append(gv) }
     }
     if !any {
       let n = part(h, "none") { AssetsNote() }
@@ -2508,6 +2519,9 @@ final class MeCtl {
         self?.send(ev)
       }
       tg.set(items, look: h.look)
+      // (the words searched for, marked — every search alike: Haris 2026-11-06)
+      let tq = t["q"] as? String ?? ""
+      Find.mark([tg], tq.isEmpty ? [] : Find.filter(items, tq) { "\($0["t"] ?? "") \($0["s"] ?? "")" }.marks, light: h.look.light)
       out.append(tg)
     }
     if let none = t["none"] as? String, !none.isEmpty { let w = part(h, "none") { AssetsNote() }; w.label.text = none; out.append(w) }
@@ -2636,7 +2650,9 @@ final class MeCtl {
         }
         let grp = SetGroup(); grp.set(items, look: h.look); views.append(grp)
       }
-      h.showFound(views, hint: views.isEmpty ? "Nothing found." : nil)
+      h.showFound(views, hint: views.isEmpty ? "Nothing found." : (r["loose"] as? Bool) == true ? "Nothing matched exactly — close matches:" : nil)
+      let titles = groups.flatMap { ($0["items"] as? [[String: Any]]) ?? [] }
+      Find.mark(views, (r["marks"] as? [String]) ?? Find.filter(titles, q) { "\($0["title"] ?? "") \($0["sub"] ?? "")" }.marks, light: h.look.light)
     }
   }
   private func openPost(_ plan: String, _ post: String) {

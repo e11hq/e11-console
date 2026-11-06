@@ -766,6 +766,7 @@ final class AssetsCtl {
         rows.onOpen = { [weak self] f in self?.preview(f, among: found) }
         rows.menu = { [weak self, weak h] f in if let h = h { self?.fileMenu(h, f, client: cid) } }
         rows.set(found, look: L, showWhere: true); out.append(rows)
+        Find.mark([rows], Find.filter(found, q) { "\($0["name"] ?? "") \($0["where"] ?? "")" }.marks, light: L.light)
       } else {
         let tops = ((m["folders"] as? [[String: Any]]) ?? []).filter { $0["parent"] == nil || $0["parent"] is NSNull }
         let head = part(h, "foldersHead") { AssetsHead() }; head.set("Folders"); out.append(head)
@@ -898,7 +899,8 @@ final class AssetsCtl {
       rows.onOpen = { [weak self] f in self?.preview(f, among: found) }
       rows.menu = { [weak self, weak h] f in if let h = h { self?.fileMenu(h, f, client: f["client"] as? String ?? "") } }
       rows.set(found, look: h.look, showWhere: true)
-      h.showFound(found.isEmpty ? [] : [rows], hint: found.isEmpty ? "No files found." : nil)
+      h.showFound(found.isEmpty ? [] : [rows], hint: found.isEmpty ? "No files found." : AssetsCtl.lastLoose ? "Nothing matched exactly — close matches:" : nil)
+      Find.mark([rows], Find.filter(found, q) { "\($0["name"] ?? "") \($0["where"] ?? "")" }.marks, light: h.look.light)
     default: break
     }
   }

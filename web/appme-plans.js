@@ -66,6 +66,23 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
   const initials = (name) => name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?';
   const avColor = (id) => { let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return AV_COLORS[h % AV_COLORS.length]; };
   const mentionsIn = (html) => { const out = new Set(); String(html || '').replace(/data-user="([^"]+)"/g, (_, id) => { out.add(id); return ''; }); return out; };
+  // (letters added, dropped, changed — two swapped count as one: app.js editDist)
+  function typoDist(a, b, max) {
+    if (Math.abs(a.length - b.length) > max) return max + 1;
+    let prev2 = [], prev = [], cur = [];
+    for (let j = 0; j <= b.length; j++) prev[j] = j;
+    for (let i = 1; i <= a.length; i++) {
+      cur = [i]; let best = i;
+      for (let j = 1; j <= b.length; j++) {
+        let v = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+        if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) v = Math.min(v, prev2[j - 2] + 1);
+        cur[j] = v; if (v < best) best = v;
+      }
+      if (best > max) return max + 1;
+      prev2 = prev; prev = cur;
+    }
+    return prev[b.length];
+  }
   const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 
   // ---------- Occasions (web/calendar.js), with this person's data's meta ----------
@@ -370,12 +387,15 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
         prog: pl.status === 'approved' && x.taskId ? { t: PROG[g.k][0], k: g.k } : null,
         review: pl.status === 'review' && canApprove(pl) };
     }
-    function search(q, cur) {
+    function search(q, cur, loose) {
       if (!me()) return [];
       const norm = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
       const words = norm(q).split(/\s+/).filter(Boolean);
       if (!words.length) return [];
-      const hit = (t) => { const n = norm(t); return words.every((w) => n.includes(w)); };
+      // (exact first; nothing found — small typos forgiven, as every search: Haris 2026-11-06)
+      const lim = (w) => (w.length >= 8 ? 2 : w.length >= 4 ? 1 : 0);
+      const near = (w, n) => n.includes(w) || (loose && lim(w) > 0 && n.split(/[^\p{L}\p{N}]+/u).some((x) => typoDist(w, x, lim(w)) <= lim(w) || (x.length > w.length && typoDist(w, x.slice(0, w.length), lim(w)) <= lim(w))));
+      const hit = (t) => { const n = norm(t); return words.every((w) => near(w, n)); };
       const months = []; for (let m = W.thisMonth(); m <= shiftMonth(W.nextMonth(), 6); m = shiftMonth(m, 1)) months.push(m);
       if (cur && months.includes(cur)) months.sort((a, b) => (a === cur ? -1 : b === cur ? 1 : a.localeCompare(b)));
       const out = [];
@@ -388,6 +408,7 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
         });
         if (items.length) out.push({ month: m, label: monthLabel(m), items: items.slice(0, 40) });
       });
+      if (!out.length && !loose) { const l = search(q, cur, true); if (l.length) l.loose = true; return l; }
       return out;
     }
     // skeletons waiting for this person (the Plans tab's count, Plans.waiting)
@@ -500,7 +521,7 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
   X.plan = (R, data, me, nowMs, pid, month) => plansOf(world(R, data, me, nowMs)).plan(String(pid || ''), month);
   X.plansPost = (R, data, me, nowMs, planId, postId) => plansOf(world(R, data, me, nowMs)).post(String(planId || ''), String(postId || ''));
   X.plansSearch = (R, data, me, nowMs, q, cur) => plansOf(world(R, data, me, nowMs)).search(q, cur);
-  X.plansFind = (R, data, me, nowMs, q, cur) => ({ ok: true, q, found: plansOf(world(R, data, me, nowMs)).search(String(q || ''), String(cur || '')) });   // (the app without the website — Haris 2026-11-06)
+  X.plansFind = (R, data, me, nowMs, q, cur) => { const f = plansOf(world(R, data, me, nowMs)).search(String(q || ''), String(cur || '')); return { ok: true, q, found: f, loose: !!f.loose }; };   // (the app without the website — Haris 2026-11-06)
   X.plansWaiting = (R, data, me, nowMs) => plansOf(world(R, data, me, nowMs)).waiting();
   X.plansShift = (m, n) => shiftMonth(m, n);
   X.assets = (R, data, me, nowMs, clientId) => assetsOf(world(R, data, me, nowMs)).modelFor(clientId || null);
