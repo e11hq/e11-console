@@ -131,7 +131,9 @@ final class Talk {
 
   // ---------- events ----------
   private var syncing = false, again = false
+  var holdSync = false   // (a new phone deciding whether to restore from iCloud: nothing comes in until it has)
   func sync(_ done: (() -> Void)? = nil) {
+    if holdSync { done?(); return }
     if syncing { again = true; done?(); return }
     syncing = true
     Net.shared.get("/api/talk/sync?after=\(lastSeq)") { [weak self] j in
@@ -312,6 +314,27 @@ final class Talk {
     case "file": return "📄 " + (m.file?.name ?? "File")
     default: return m.text
     }
+  }
+  // ---------- for the iCloud backup (Backup.swift) ----------
+  var localDir: URL { dir }
+  var syncedUpTo: Int { get { lastSeq } set { lastSeq = newValue } }
+  // nothing of this account on the phone yet (a new phone, or signed in again)
+  var isFresh: Bool { lastSeq == 0 && ((try? FileManager.default.contentsOfDirectory(atPath: dir.path))?.allSatisfy { !$0.hasPrefix("g-") } ?? true) }
+  // the files the chats point to (videos only when asked)
+  func fileIds(videos: Bool) -> Set<String> {
+    flush()
+    var out = Set<String>()
+    let fs = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
+    for f in fs where f.hasPrefix("g-") && f.hasSuffix(".json") {
+      let g = String(f.dropFirst(2).dropLast(5))
+      for m in log(g).msgs where !m.deleted { if let r = m.file, videos || m.kind != "video" { out.insert(r.id) } }
+    }
+    return out
+  }
+  func reloadFromDisk() {
+    logs = [:]
+    loadLocal()
+    NotificationCenter.default.post(name: .talkChanged, object: nil)
   }
   func signOut() {
     Net.shared.stopListening(); Net.shared.cookie = nil

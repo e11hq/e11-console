@@ -89,9 +89,20 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     w.addSubview(sp)
     sp.onDone = { [weak self] in self?.askNotifications(); if let g = self?.wantGroup { self?.wantGroup = nil; SceneDelegate.openGroup(g) } }
     if !Talk.shared.groups.isEmpty || Talk.shared.me != nil { sp.progress(0.7) }
-    Talk.shared.refresh { [weak sp] in
+    // a new phone (nothing of this account here yet): before anything comes in, look for an iCloud backup to restore
+    let fresh = Talk.shared.isFresh
+    if fresh { Talk.shared.holdSync = true }
+    Talk.shared.refresh { [weak self, weak sp] in
       sp?.setName(Talk.shared.me?.name); sp?.progress(0.85)
-      Talk.shared.sync { sp?.finish() }
+      guard fresh, let uid = Talk.shared.me?.id else { Talk.shared.holdSync = false; Talk.shared.sync { sp?.finish() }; return }
+      Backup.shared.find(uid) { meta in
+        guard let m = meta else { Talk.shared.holdSync = false; Talk.shared.sync { sp?.finish() }; return }
+        sp?.finish()
+        let r = RestoreVC(uid: uid, meta: m)
+        r.onDone = { Talk.shared.holdSync = false; Talk.shared.sync() }
+        r.modalPresentationStyle = .fullScreen
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self?.window?.rootViewController?.present(r, animated: true) }
+      }
     }
     // (slow or offline: the phone's own copy is enough to go on)
     DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak sp] in sp?.finish() }
@@ -169,7 +180,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     Net.shared.listen()
     Talk.shared.refresh { Talk.shared.prune() }; Talk.shared.sync()
   }
-  func sceneDidEnterBackground(_ s: UIScene) { Net.shared.stopListening(); Talk.shared.flush(); Talk.shared.badge() }
+  func sceneDidEnterBackground(_ s: UIScene) { Net.shared.stopListening(); Talk.shared.flush(); Talk.shared.badge(); Backup.shared.backUpIfDue() }
 }
 
 // ---------- Settings ----------
@@ -179,11 +190,12 @@ final class SettingsVC: UITableViewController {
   override func viewDidLoad() {
     super.viewDidLoad(); title = "Settings"
     NotificationCenter.default.addObserver(tableView!, selector: #selector(UITableView.reloadData), name: .talkChanged, object: nil)
+    NotificationCenter.default.addObserver(tableView!, selector: #selector(UITableView.reloadData), name: .talkBackup, object: nil)
   }
   override func numberOfSections(in tv: UITableView) -> Int { 3 }
   // (Super Admins and Office Admins also get "Client contacts")
   private var boss: Bool { Talk.shared.boss }
-  override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int { [1, boss ? 3 : 2, 1][s] }
+  override func tableView(_ tv: UITableView, numberOfRowsInSection s: Int) -> Int { [1, boss ? 4 : 3, 1][s] }
   override func tableView(_ tv: UITableView, heightForRowAt ip: IndexPath) -> CGFloat { ip.section == 0 ? 76 : 48 }
   override func tableView(_ tv: UITableView, titleForFooterInSection s: Int) -> String? {
     s == 1 ? "Chats live on this phone. The server only passes each message on and lets it go once everyone has it." : s == 2 ? "E11 Talk \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") (\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "")) · \(Server.host)" : nil
@@ -200,10 +212,14 @@ final class SettingsVC: UITableViewController {
       let a = Avatar(frame: CGRect(x: 16, y: 10, width: 56, height: 56)); a.set(person: me); c.contentView.addSubview(a)
       c.selectionStyle = .none
     case (1, 0): cfg.text = "Notifications"; cfg.image = UIImage(systemName: "bell.badge"); c.accessoryType = .disclosureIndicator
-    case (1, 2):
+    case (1, 1):
+      let B = Backup.shared, f = RelativeDateTimeFormatter(); f.unitsStyle = .short
+      cfg.text = "Chat backup"; cfg.secondaryText = B.every == .off && B.lastAt == nil ? "Off" : B.lastAt.map { "Last: " + f.localizedString(for: $0, relativeTo: Date()) } ?? "Not backed up yet"
+      cfg.secondaryTextProperties.color = .secondaryLabel; cfg.image = UIImage(systemName: "icloud"); c.accessoryType = .disclosureIndicator
+    case (1, 3):
       cfg.text = "Client contacts"; cfg.secondaryText = "\(Talk.shared.contacts.count) · who from each client can be in groups"; cfg.secondaryTextProperties.color = .secondaryLabel
       cfg.image = UIImage(systemName: "person.crop.rectangle.stack"); c.accessoryType = .disclosureIndicator
-    case (1, 1):
+    case (1, 2):
       let n = (try? FileManager.default.contentsOfDirectory(at: Net.filesDir, includingPropertiesForKeys: [.fileSizeKey]))?.reduce(0) { $0 + ((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) } ?? 0
       cfg.text = "Storage"; cfg.secondaryText = ByteCountFormatter.string(fromByteCount: Int64(n), countStyle: .file) + " of photos and files on this phone"; cfg.image = UIImage(systemName: "internaldrive")
       c.selectionStyle = .none
@@ -214,7 +230,8 @@ final class SettingsVC: UITableViewController {
   }
   override func tableView(_ tv: UITableView, didSelectRowAt ip: IndexPath) {
     tv.deselectRow(at: ip, animated: true)
-    if ip == IndexPath(row: 2, section: 1) { navigationController?.pushViewController(ContactsVC(), animated: true); return }
+    if ip == IndexPath(row: 1, section: 1) { navigationController?.pushViewController(BackupVC(), animated: true); return }
+    if ip == IndexPath(row: 3, section: 1) { navigationController?.pushViewController(ContactsVC(), animated: true); return }
     if ip == IndexPath(row: 0, section: 1), let u = URL(string: UIApplication.openNotificationSettingsURLString) { UIApplication.shared.open(u) }
     if ip.section == 2 {
       let a = UIAlertController(title: "Sign out of E11 Talk?", message: "The chats on this phone are removed.", preferredStyle: .actionSheet)
