@@ -127,6 +127,11 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // (attaching: down to Files, where they are)
     // (from the description's 📎: the page stays where the cursor is — Haris 2026-11-02)
     if started && scroll && !editingDesc { DispatchQueue.main.async { self.showFiles() } }
+    // (then sideways to the last one you're attaching, once the page is down at Files — only on your own phone, only
+    //  for these attaches; not the description's 📎)
+    if scroll && !editingDesc, let last = u.last?["id"] as? String {
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in self?.filesStrip.reveal(last) }
+    }
   }
   // sent to the task (waiting for the real ones), or gone (didn't upload / never came)
   func uploadsSent(_ ids: Set<String>) { for i in uploads.indices where ids.contains(uploads[i]["id"] as? String ?? "") { uploads[i]["sent"] = true } }
@@ -834,7 +839,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let bottom = max(safeAreaInsets.bottom, 20) + (fab.isHidden ? 16 : 72)
     content.frame = CGRect(x: 0, y: 0, width: W, height: y)
     scroll.contentSize = CGSize(width: W, height: y)
-    scroll.contentInset.bottom = max(bottom, kbCover + 16)
+    scroll.contentInset.bottom = max(bottom, coverNow() + 16)
   }
   var kbCover: CGFloat = 0
   private func keyboardMoved(_ n: Notification) {
@@ -847,8 +852,26 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   func caretIntoView() {
     guard descView.isFirstResponder, let r = descView.selectedTextRange else { return }
     layoutIfNeeded()
-    let c = descView.convert(descView.caretRect(for: r.end), to: scroll).insetBy(dx: 0, dy: -28)
-    scroll.scrollRectToVisible(c, animated: true)
+    // (above the format bar's own top — on iOS 26 the keyboard's height doesn't hold it, and the line tapped went behind
+    //  it: Haris 2026-11-06)
+    let limit = bounds.height - coverNow()
+    let caret = descView.convert(descView.caretRect(for: r.end), to: self)
+    let gap: CGFloat = 28
+    if caret.maxY + gap > limit {
+      let end = max(-scroll.adjustedContentInset.top, scroll.contentSize.height + scroll.adjustedContentInset.bottom - scroll.bounds.height)
+      scroll.setContentOffset(CGPoint(x: 0, y: min(end, scroll.contentOffset.y + caret.maxY + gap - limit)), animated: true)
+    } else {
+      let c = descView.convert(descView.caretRect(for: r.end), to: scroll).insetBy(dx: 0, dy: -gap)
+      scroll.scrollRectToVisible(c, animated: true)
+    }
+  }
+  // what covers the page's bottom now: the keyboard, or the description's format bar where it reaches higher
+  private func coverNow() -> CGFloat {
+    var c = kbCover
+    if kbCover > 0, descView.isFirstResponder, let bar = descView.inputAccessoryView, bar.window != nil, !bar.isHidden {
+      c = max(c, bounds.height - bar.convert(bar.bounds, to: self).minY)
+    }
+    return c
   }
 
   // a thin grey band before each section (a heading), and before the description — none at the top, never two together

@@ -973,6 +973,16 @@ final class FileStrip: UIView, UIScrollViewDelegate {
   required init?(coder: NSCoder) { fatalError() }
   var isEmpty: Bool { files.isEmpty }
   var scrolls: Bool { scroll.contentSize.width > scroll.bounds.width + 1 }
+  // (a file being attached by you: the row slides sideways until its card is in sight — when the row scrolls at all;
+  //  Haris 2026-11-06)
+  func reveal(_ id: String) {
+    layoutIfNeeded(); scroll.layoutIfNeeded()
+    guard scrolls, let v = cards[id]?.view, v.superview != nil else { return }
+    let f = v.convert(v.bounds, to: scroll)
+    let end = scroll.contentSize.width - scroll.bounds.width
+    let want = min(end, max(0, f.maxX + 16 - scroll.bounds.width))
+    if want > scroll.contentOffset.x + 0.5 { scroll.setContentOffset(CGPoint(x: want, y: 0), animated: true) }
+  }
   // the files now (each with its "id"); settle: ids that take the place of an upload (no gap, no fade — just there)
   func set(_ list: [[String: Any]], settle: Set<String> = [], open: @escaping (Int) -> Void, menu: ((Int) -> UIMenu?)?) {
     let animate = window != nil && !cards.isEmpty
