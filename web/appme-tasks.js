@@ -269,7 +269,8 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
     // (each word's best field kept too: why a task was found — app.js searchWhy; Haris 2026-11-06)
     const docs = W.tasks.filter((t) => !r.amReadOnly(t) && searchOwnOk(t)).map((t) => {
       const words = new Map(), fields = taskFields(t), at = new Map();
-      fields.forEach((fl, i) => sWordsJoined(fl.text).forEach((w) => { if (!words.has(w) || words.get(w) < fl.w) { words.set(w, fl.w); at.set(w, i); } }));
+      // (joined pairs only in the short fields — names, client, tags, people: in every comment they made the search slow)
+      fields.forEach((fl, i) => (fl.w >= 4 ? sWordsJoined(fl.text) : sWords(fl.text)).forEach((w) => { if (!words.has(w) || words.get(w) < fl.w) { words.set(w, fl.w); at.set(w, i); } }));
       Object.keys(FLAGS).forEach((k) => { if (FLAGS[k](t)) { words.set('#' + k, 4); at.set('#' + k, -1); } });
       return { t, words, fields, at };
     });
@@ -304,7 +305,7 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
       q, total: found.length,
       clients: projs.map((p) => ({ id: p.id, name: p.name, ini: initials(p.name), rgb: R.rgbOf(p.color), open: W.tasks.filter((t) => t.projectId === p.id && !t.parentId && !t.done).length })),
       tasks: found.slice(0, 80).map((h) => Object.assign(r.cardOf(h.t), whyOf(h) ? { found: whyOf(h) } : {})),
-      fixed, marks: [...new Set(per.flatMap((pt) => [...pt.words.keys()].filter((w) => pt.words.get(w) !== 0.55)))].slice(0, 40),   // (not the words it's only inside of — "logo" in "alainlogo")
+      fixed, marks: [...new Set(terms.concat(fixed.map((f) => f.to)))].slice(0, 12),   // (what was typed, and what a typo was read as — few, so marking stays quick)
     };
     // where the words were found when it isn't the title (app.js searchWhy): { label, text } — a window of the text around
     // the first word, as the website's

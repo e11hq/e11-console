@@ -1118,11 +1118,23 @@ extension Main {
   }
 
   // ---- Home search (and My Tasks', the Inbox's): found on the phone ----
+  // (worked out away from the screen, a moment after the last key — typing waited for every word's search and the app
+  //  hung: Haris 2026-11-06; an answer for older words is dropped by searchResults)
   func searchNative(_ q: String) -> Bool {
-    guard ownCopy, let m = AppData.shared.meModel("tasks", "search", [q]) else { return false }
-    (shownScreen ?? homeIfMade)?.searchResults(m)
+    guard ownCopy, AppData.shared.tabsOn, AppData.shared.meOn("tasks") else { return false }
+    Main.searchSeq += 1
+    let my = Main.searchSeq
+    let screen = shownScreen ?? homeIfMade
+    DispatchQueue.main.asyncAfter(deadline: .now() + (q.count <= 1 ? 0.25 : 0.12)) {
+      guard my == Main.searchSeq else { return }
+      DispatchQueue.global(qos: .userInitiated).async {
+        let m = AppData.shared.meModel("tasks", "search", [q])
+        DispatchQueue.main.async { guard my == Main.searchSeq, let m = m else { return }; screen?.searchResults(m) }
+      }
+    }
     return true
   }
+  static var searchSeq = 0
 }
 extension Main {
   // (the client whose page shows on the Clients tab — New task there starts in it)
