@@ -146,7 +146,7 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
     const mgr = W.isAdm(u) || u.role === 'am' || W.isCD();
     const canAssign = W.r.can('assign', tctx);
     const state = { client: inProject, who: W.assignable(u) ? [meId] : [], mgr, canAssign, project: inProject };
-    const due = ctx.view === 'today' || ctx.view === 'home' || ctx.view === 'mytasks' ? W.today : '';
+    const due = ctx.view === 'today' || ctx.view === 'home' || ctx.view === 'mytasks' || ctx.view === 'inbox' ? W.today : '';   // (the Inbox's too — Haris 2026-11-06)
     const args = Object.assign({ kind: 'task', key: 'new-task', title: 'New task', titleHint: 'What needs doing?', descHint: 'Details, links or notes for the team', client: clientName(W, state.client) },
       canAssign ? { assign: whoOf(W, state.who) } : {}, { due }, mgr ? { cd: !!inProject } : {},
       { button: 'Create task', color: 'blue', dock: 'New task', required: 'title' });
