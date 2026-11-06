@@ -761,7 +761,7 @@ final class AssetsCtl {
       let q = s.q.trimmingCharacters(in: .whitespaces)
       if !q.isEmpty {
         let found = AssetsCtl.find(all, q)
-        let head = part(h, "foundHead") { AssetsHead() }; head.set(found.isEmpty ? "No files found" : "\(found.count) file\(found.count == 1 ? "" : "s") found"); out.append(head)
+        let head = part(h, "foundHead") { AssetsHead() }; head.set(found.isEmpty ? "No files found" : "\(found.count) file\(found.count == 1 ? "" : "s") found" + (AssetsCtl.lastLoose ? " — close matches" : "")); out.append(head)
         let rows = part(h, "found") { FileRows() }
         rows.onOpen = { [weak self] f in self?.preview(f, among: found) }
         rows.menu = { [weak self, weak h] f in if let h = h { self?.fileMenu(h, f, client: cid) } }
@@ -842,10 +842,45 @@ final class AssetsCtl {
     h.setContent(out)
   }
   // a client's files whose names have every word typed (accents and case aside)
+  // (exact pieces first; nothing found — small typos allowed, as the website's caSearch: "frod" finds Ford, "gudelines"
+  //  guidelines; Haris 2026-11-06. lastLoose: the last search was the forgiving one — "close matches")
+  static var lastLoose = false
   static func find(_ files: [[String: Any]], _ q: String) -> [[String: Any]] {
     let norm = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
     let terms = norm(q).split(whereSeparator: { $0 == " " || $0 == "," }).map { String($0).trimmingCharacters(in: CharacterSet(charactersIn: ".")) }.filter { !$0.isEmpty }
-    return files.filter { f in let n = norm((f["name"] as? String ?? "") + " " + (f["where"] as? String ?? "")); return terms.allSatisfy { n.contains($0) } }.prefix(80).map { $0 }
+    let hay = { (f: [String: Any]) in norm((f["name"] as? String ?? "") + " " + (f["where"] as? String ?? "")) }
+    let exact = files.filter { f in let n = hay(f); return terms.allSatisfy { n.contains($0) } }
+    lastLoose = false
+    if !exact.isEmpty || terms.isEmpty { return Array(exact.prefix(80)) }
+    let limit = { (t: String) -> Int in t.count >= 8 ? 2 : t.count >= 4 ? 1 : 0 }
+    let near = { (t: String, n: String) -> Bool in
+      if n.contains(t) { return true }
+      let lim = limit(t); guard lim > 0 else { return false }
+      let words = n.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
+      return words.contains { w in typoDist(t, w, lim) <= lim || (w.count > t.count && typoDist(t, String(w.prefix(t.count)), lim) <= lim) }
+    }
+    let loose = files.filter { f in let n = hay(f); return terms.allSatisfy { near($0, n) } }
+    lastLoose = !loose.isEmpty
+    return Array(loose.prefix(80))
+  }
+  // (the website's editDist: letters added, dropped, changed — two swapped count as one)
+  static func typoDist(_ a0: String, _ b0: String, _ maxD: Int) -> Int {
+    let a = Array(a0), b = Array(b0)
+    if abs(a.count - b.count) > maxD { return maxD + 1 }
+    if a.isEmpty || b.isEmpty { return max(a.count, b.count) }
+    var prev2 = [Int](repeating: 0, count: b.count + 1), prev = Array(0...b.count), cur = [Int](repeating: 0, count: b.count + 1)
+    for i in 1...a.count {
+      cur[0] = i; var best = cur[0]
+      for j in 1...b.count {
+        let cost = a[i - 1] == b[j - 1] ? 0 : 1
+        var v = min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost)
+        if i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1] { v = min(v, prev2[j - 2] + 1) }
+        cur[j] = v; if v < best { best = v }
+      }
+      if best > maxD { return maxD + 1 }
+      prev2 = prev; prev = cur
+    }
+    return prev[b.count]
   }
 
   // ---------- taps ----------
