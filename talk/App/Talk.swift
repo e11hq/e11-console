@@ -77,10 +77,13 @@ final class Talk {
   private var dirty = Set<String>()
   private func saveSoon(_ g: String) {
     dirty.insert(g)
-    NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(flush), object: nil)
-    perform(#selector(flush), with: nil, afterDelay: 0.4)
+    saveJob?.cancel()
+    let w = DispatchWorkItem { [weak self] in self?.flush() }
+    saveJob = w
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: w)
   }
-  @objc func flush() {
+  private var saveJob: DispatchWorkItem?
+  func flush() {
     for g in dirty { if let l = logs[g], let d = try? JSONEncoder().encode(l) { try? d.write(to: logFile(g), options: .atomic) } }
     dirty.removeAll()
   }

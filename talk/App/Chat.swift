@@ -20,7 +20,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
   private let bar = MessageBar()
   private var kb: CGFloat = 0
   private var replying: Msg? { didSet { bar.setReply(replying.map { (Talk.shared.name($0.by), Talk.preview($0)) }, editing: false) } }
-  private var editing: Msg?
+  private var editingMsg: Msg?
   private var previewURL: URL?
   private let titleV = UIStackView(), titleL = UILabel(), subL = UILabel()
 
@@ -61,7 +61,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     navigationItem.rightBarButtonItem = UIBarButtonItem(title: nil, image: UIImage(systemName: "info.circle"), primaryAction: UIAction { [weak self] _ in self?.info() }, menu: nil)
     bar.onSend = { [weak self] t in self?.send(t) }
     bar.onPlus = { [weak self] k in self?.attach(k) }
-    bar.onCancelReply = { [weak self] in self?.editing = nil; self?.replying = nil; self?.bar.setReply(nil, editing: false) }
+    bar.onCancelReply = { [weak self] in self?.editingMsg = nil; self?.replying = nil; self?.bar.setReply(nil, editing: false) }
     bar.onMic = { toast("Voice messages come next") }
     NotificationCenter.default.addObserver(self, selector: #selector(changed(_:)), name: .talkGroup, object: nil)
     NotificationCenter.default.addObserver(self, selector: #selector(head), name: .talkChanged, object: nil)
@@ -148,8 +148,8 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
 
   // ---------- sending ----------
   private func send(_ text: String) {
-    if let e = editing {
-      editing = nil; bar.setReply(nil, editing: false)
+    if let e = editingMsg {
+      editingMsg = nil; bar.setReply(nil, editing: false)
       Net.shared.act(["act": "edit", "msg": e.id, "text": text]) { j in if (j?["ok"] as? Bool) == true { Talk.shared.sync() } else { toast(j?["error"] as? String ?? "Couldn’t edit it") } }
       return
     }
@@ -214,7 +214,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
     let c = UISwipeActionsConfiguration(actions: [a]); c.performsFirstActionWithFullSwipe = true
     return c
   }
-  private func startReply(_ m: Msg) { editing = nil; replying = m; UIImpactFeedbackGenerator(style: .light).impactOccurred(); bar.box.becomeFirstResponder() }
+  private func startReply(_ m: Msg) { editingMsg = nil; replying = m; UIImpactFeedbackGenerator(style: .light).impactOccurred(); bar.box.becomeFirstResponder() }
 
   // ---------- hold: reactions and the menu ----------
   func tableView(_ tv: UITableView, contextMenuConfigurationForRowAt ip: IndexPath, point: CGPoint) -> UIContextMenuConfiguration? {
@@ -243,7 +243,7 @@ final class ChatVC: UIViewController, UITableViewDelegate, QLPreviewControllerDa
       if !m.text.isEmpty { items.append(UIAction(title: "Copy", image: UIImage(systemName: "doc.on.doc")) { _ in UIPasteboard.general.string = m.text; toast("Copied") }) }
       if mine && m.file == nil && now - m.at < 15 * 60000 {
         items.append(UIAction(title: "Edit", subtitle: "15 minutes after sending", image: UIImage(systemName: "pencil")) { [weak self] _ in
-          self?.replying = nil; self?.editing = m; self?.bar.setReply(("Editing", m.text), editing: true); self?.bar.box.text = m.text; self?.bar.textChanged(); self?.bar.box.becomeFirstResponder()
+          self?.replying = nil; self?.editingMsg = m; self?.bar.setReply(("Editing", m.text), editing: true); self?.bar.box.text = m.text; self?.bar.textChanged(); self?.bar.box.becomeFirstResponder()
         })
       }
       if let f = m.file {
