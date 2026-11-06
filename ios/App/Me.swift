@@ -1989,7 +1989,7 @@ final class MeCtl {
       if let d = model["digest"] as? [String: Any] {
         phone.append(SetItem(key: "digest", title: "Morning summary", sub: "10:30 am, Monday to Friday", sym: "sun.max.fill", col: .systemYellow, toggle: (d["on"] as? Bool) == true, flip: { [weak self, weak h] on in self?.pfSet("digest", ["on": on], page: ["ev": "digest"]); if let h = h { self?.settle(h) } }))
       }
-      phone.append(SetItem(key: "appearance", title: "Appearance", value: themeWord, sym: "circle.lefthalf.filled", col: .systemIndigo, tap: { [weak self] in self?.open("appearance") }))
+      if !FOLLOW_DEVICE { phone.append(SetItem(key: "appearance", title: "Appearance", value: themeWord, sym: "circle.lefthalf.filled", col: .systemIndigo, tap: { [weak self] in self?.open("appearance") })) }
       out.append(head(h, "phone", "This iPhone")); out.append(group(h, "phone", phone))
       if (model["about"] as? Bool) == true {
         out.append(head(h, "about", "About"))

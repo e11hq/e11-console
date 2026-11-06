@@ -48,7 +48,11 @@ let DARK_BG = UIColor(red: 0.047, green: 0.051, blue: 0.059, alpha: 1)
 // The app's own light / dark from the last time it ran (the page says which with setAppearance): the app starts in it,
 // so a light app doesn't begin with a dark background and white status bar — that showed as a dark band across the
 // top of the light start-up screen (Haris, 2026-10-30)
-var LAST_LIGHT: Bool { defaults.string(forKey: "e11_look") == "light" }
+// (Haris 2026-11-07: the iPhone app follows the phone's own light / dark — no Appearance choice in it; the website keeps
+//  its own)
+let FOLLOW_DEVICE = true
+var DEVICE_LIGHT: Bool { UIScreen.main.traitCollection.userInterfaceStyle != .dark }
+var LAST_LIGHT: Bool { FOLLOW_DEVICE ? DEVICE_LIGHT : defaults.string(forKey: "e11_look") == "light" }
 var BG: UIColor { LAST_LIGHT ? UIColor(red: 0.957, green: 0.957, blue: 0.969, alpha: 1) : DARK_BG }
 
 @main
@@ -172,6 +176,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     config.allowsInlineMediaPlayback = true
     config.applicationNameForUserAgent = "E11ConsoleiOS/\(SHELL_VERSION)"
     config.userContentController.add(WeakHandler(self), name: "e11ios")
+    // (this app follows the phone's own light / dark — the page too; older apps keep the account's choice)
+    if FOLLOW_DEVICE { config.userContentController.addUserScript(WKUserScript(source: "window.__e11FollowPhone = true;", injectionTime: .atDocumentStart, forMainFrameOnly: true)) }
     web = WKWebView(frame: view.bounds, configuration: config)
     FocusAfterPicker.install()
     web.navigationDelegate = self
@@ -305,10 +311,17 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   var appStyle: UIUserInterfaceStyle = LAST_LIGHT ? .light : .dark
   override func viewWillAppear(_ animated: Bool) {
     super.viewWillAppear(animated)
-    view.window?.overrideUserInterfaceStyle = appStyle
+    view.window?.overrideUserInterfaceStyle = FOLLOW_DEVICE ? .unspecified : appStyle
     // (iPhone's own navigation: no bar over the app's own screens; a page pushed on it shows only ‹)
     navigationItem.backButtonDisplayMode = .minimal
     navigationController?.setNavigationBarHidden(true, animated: animated)
+  }
+  // the phone switched light / dark: the app follows at once (the website in it follows the phone by itself too)
+  override func traitCollectionDidChange(_ previous: UITraitCollection?) {
+    super.traitCollectionDidChange(previous)
+    guard FOLLOW_DEVICE, previous?.userInterfaceStyle != traitCollection.userInterfaceStyle, traitCollection.userInterfaceStyle != .unspecified else { return }
+    let light = traitCollection.userInterfaceStyle == .light
+    if (appStyle == .light) != light { run("setAppearance", ["mode": light ? "light" : "dark"]) { _ in } }
   }
   // (iPhone's own navigation: a sheet from the app goes on whatever page is on top — the app itself may be under a page)
   override func present(_ vc: UIViewController, animated: Bool, completion: (() -> Void)? = nil) {
@@ -1082,6 +1095,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in self?.ownAppearanceTick() }
   }
   func ownAppearanceTick() {
+    if FOLLOW_DEVICE { return }
     // (Automatic: also with no setting kept yet — a phone that never had the website; and no sunrise / sunset kept: 6 am
     //  to 6 pm)
     guard AppData.shared.tabsOn, (defaults.string(forKey: "e11_theme_mode") ?? "auto") == "auto" else { return }
@@ -2461,7 +2475,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       // (everything the app draws itself follows the app's own light / dark, never the phone's — Haris, 2026-10-31:
       //  set on the whole window, so every native screen, sheet, alert, picker and keyboard takes it, now and later)
       let turned = appStyle != style
-      appStyle = style; view.window?.overrideUserInterfaceStyle = style
+      appStyle = style; view.window?.overrideUserInterfaceStyle = FOLLOW_DEVICE ? .unspecified : style
       if turned { relight(style == .light) }
       cbarIfMade?.setLook(light: style == .light)
       taskPages.forEach { $0.light = style == .light }

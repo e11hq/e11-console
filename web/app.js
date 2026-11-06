@@ -9972,7 +9972,11 @@ const Theme = (() => {
   const sun = sunTimesDubai;
   const autoTheme = (now = new Date()) => { const t = sun(now); return now >= t.rise && now < t.set ? 'light' : 'dark'; };
   const mode = () => { const m = ((db && db.meta.prefs) || {}).themeMode; return m === 'light' || m === 'auto' ? m : 'dark'; };
-  const apply = () => setTheme(mode() === 'auto' ? autoTheme() : mode());
+  // (the iPhone app follows the phone's own light / dark — Haris 2026-11-07; the account's choice stays for the website)
+  const phoneLook = () => (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+  const followPhone = () => Host.isIOSApp && window.__e11FollowPhone === true;   // (only iPhone apps that ask for it)
+  const apply = () => setTheme(followPhone() ? phoneLook() : mode() === 'auto' ? autoTheme() : mode());
+  if (followPhone() && window.matchMedia) { try { window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => { if (db && currentUserId) apply(); }); } catch (e) { /* older WebKit */ } }
   function setMode(m) { const v = m === 'light' || m === 'dark' ? m : 'auto'; savePref('themeMode', v); Splash.remember({ themeMode: v }); apply(); }
   setInterval(() => { if (db && currentUserId && mode() === 'auto') apply(); }, 60000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden && db && currentUserId && mode() === 'auto') apply(); });

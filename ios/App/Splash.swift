@@ -63,7 +63,7 @@ final class SplashView: UIView {
 
   init(memo m: [String: Any]) {
     let today = (m["days"] as? [String: Any])?[SplashView.dayKey()] as? [String: Any]
-    let mode = m["themeMode"] as? String ?? "dark"
+    let mode = FOLLOW_DEVICE ? (DEVICE_LIGHT ? "light" : "dark") : m["themeMode"] as? String ?? "dark"
     if mode == "light" { light = true }
     else if mode == "auto" {
       // (the page's Automatic look: light from sunrise to sunset in Dubai; 6 to 18 when it hasn't said)
