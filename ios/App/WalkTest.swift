@@ -10,7 +10,7 @@ import UIKit
    takes a screenshot at each step and lists what failed. */
 
 extension Main {
-  // ---- taps that went to the website while there's none (also counted on real phones: SlowWatch's note) ----
+  // ---- taps that went to the website while there's none ----
   static var lost: [String] = []
   static func noteLost(_ js: String) {
     let benign = ["--ios-tabs-h", "\"ev\":\"back\"", "\"ev\":\"list\"", "__e11Kb", "__e11FeedKb", "KbStep", "Resend", "Own &&", "Theme.setMode", "__e11SplashSkip", "ev:'closed'", "__e11Tab", "ev:'list'", "ev:'back'", "__e11SplashRetry", "__e11ApnsToken"]
