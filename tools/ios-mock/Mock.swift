@@ -42,21 +42,78 @@ final class Scene: UIResponder, UIWindowSceneDelegate {
   }
 }
 
-struct Task { let title: String; let client: String; let due: String; let late: Bool }
+// (made-up tasks, the details today's My Tasks shows: status, client colour, status name, due, comments, CD chip,
+//  priority, assignees)
+struct Person { let ini: String; let color: UIColor; let done: Bool }
+struct Task { let title: String; let client: String; let cc: UIColor; let status: String; let kind: String; let sc: UIColor
+  let due: String; let when: String; let comments: Int; let cd: String?; let prio: String?; let people: [Person] }
+let NL = UIColor.systemBlue, SG = UIColor.systemRed, BB = UIColor.systemTeal, CH = UIColor.systemOrange
+let H = Person(ini: "HS", color: .systemPink, done: false), L = Person(ini: "LK", color: .systemPurple, done: false)
+let Y = Person(ini: "YA", color: .systemIndigo, done: true), S = Person(ini: "SM", color: .systemGreen, done: false)
 let SECTIONS: [(String, [Task])] = [
-  ("Overdue", [Task(title: "Winter campaign — final key visual", client: "Northline", due: "Yesterday", late: true),
-               Task(title: "Approve shoot call sheet", client: "Southgate", due: "Tue", late: true)]),
-  ("Today", [Task(title: "Instagram carousel: 5 frames", client: "Northline", due: "Today", late: false),
-             Task(title: "Reply to client on logo colours", client: "Bluebay", due: "Today", late: false),
-             Task(title: "Upload reel cut v3", client: "Southgate", due: "Today", late: false)]),
-  ("This week", [Task(title: "Monthly content plan — December", client: "Northline", due: "Thu", late: false),
-                 Task(title: "Storyboard for launch video", client: "Bluebay", due: "Fri", late: false),
-                 Task(title: "Website banner set (4 sizes)", client: "Cedar Homes", due: "Fri", late: false),
-                 Task(title: "Press kit photos selection", client: "Southgate", due: "Sat", late: false)]),
-  ("Later", [Task(title: "Quarterly report deck", client: "Northline", due: "18 Nov", late: false),
-             Task(title: "Brand guidelines update", client: "Cedar Homes", due: "21 Nov", late: false),
-             Task(title: "New year greetings post", client: "Bluebay", due: "28 Dec", late: false)]),
+  ("Overdue", [Task(title: "Winter campaign — final key visual", client: "Northline", cc: NL, status: "In progress", kind: "half", sc: .systemBlue, due: "Yesterday", when: "late", comments: 3, cd: "CD Review", prio: "Urgent", people: [H, Y]),
+               Task(title: "Approve shoot call sheet", client: "Southgate", cc: SG, status: "To do", kind: "todo", sc: .systemGray, due: "Tue", when: "late", comments: 0, cd: nil, prio: "P2", people: [L])]),
+  ("Today", [Task(title: "Instagram carousel: 5 frames", client: "Northline", cc: NL, status: "In progress", kind: "half", sc: .systemBlue, due: "Today", when: "today", comments: 1, cd: "✓ CD Approved", prio: nil, people: [S, H]),
+             Task(title: "Reply to client on logo colours", client: "Bluebay", cc: BB, status: "Waiting", kind: "near", sc: .systemOrange, due: "Today", when: "today", comments: 0, cd: nil, prio: nil, people: [H]),
+             Task(title: "Upload reel cut v3", client: "Southgate", cc: SG, status: "To do", kind: "todo", sc: .systemGray, due: "Today", when: "today", comments: 5, cd: nil, prio: "P1", people: [Y, L, S])]),
+  ("This week", [Task(title: "Monthly content plan — December", client: "Northline", cc: NL, status: "To do", kind: "todo", sc: .systemGray, due: "Thu", when: "", comments: 2, cd: nil, prio: nil, people: [H]),
+                 Task(title: "Storyboard for launch video", client: "Bluebay", cc: BB, status: "In progress", kind: "half", sc: .systemBlue, due: "Fri", when: "", comments: 0, cd: nil, prio: nil, people: [L, H]),
+                 Task(title: "Website banner set (4 sizes)", client: "Cedar Homes", cc: CH, status: "To do", kind: "todo", sc: .systemGray, due: "Fri", when: "", comments: 0, cd: nil, prio: nil, people: [S])]),
 ]
+func statusIcon(_ t: Task) -> UIImage? {
+  let name = t.kind == "todo" ? "circle.dashed" : t.kind == "half" ? "circle.lefthalf.filled" : "circle.inset.filled"
+  return UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: 19, weight: .medium))?.withTintColor(t.sc, renderingMode: .alwaysOriginal)
+}
+func meta(_ t: Task) -> NSAttributedString {
+  let f = UIFont.preferredFont(forTextStyle: .subheadline)
+  let s = NSMutableAttributedString()
+  let dot = NSTextAttachment(image: UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { _ in t.cc.setFill(); UIBezierPath(roundedRect: CGRect(x: 0, y: 0, width: 8, height: 8), cornerRadius: 2).fill() })
+  dot.bounds = CGRect(x: 0, y: 1, width: 8, height: 8)
+  s.append(NSAttributedString(attachment: dot))
+  s.append(NSAttributedString(string: " \(t.client) · \(t.status) · ", attributes: [.font: f, .foregroundColor: UIColor.secondaryLabel]))
+  s.append(NSAttributedString(string: t.due, attributes: [.font: t.when.isEmpty ? f : UIFont.systemFont(ofSize: f.pointSize, weight: .semibold),
+                                                          .foregroundColor: t.when == "late" ? UIColor.systemRed : t.when == "today" ? UIColor.systemOrange : UIColor.secondaryLabel]))
+  if t.comments > 0 || t.cd != nil {
+    s.append(NSAttributedString(string: "\n", attributes: [.font: f]))
+    if t.comments > 0 {
+      s.append(NSAttributedString(attachment: NSTextAttachment(image: UIImage(systemName: "bubble.left", withConfiguration: UIImage.SymbolConfiguration(pointSize: 11))!.withTintColor(.secondaryLabel, renderingMode: .alwaysOriginal))))
+      s.append(NSAttributedString(string: " \(t.comments)   ", attributes: [.font: f, .foregroundColor: UIColor.secondaryLabel]))
+    }
+    if let cd = t.cd {
+      let col: UIColor = cd.hasPrefix("✓") ? .systemGreen : .systemYellow
+      s.append(NSAttributedString(string: " \(cd) ", attributes: [.font: UIFont.systemFont(ofSize: f.pointSize - 2, weight: .bold), .foregroundColor: col, .backgroundColor: col.withAlphaComponent(0.16)]))
+    }
+  }
+  return s
+}
+// the assignees: Apple's own monogram-style circles, overlapping (a green tick: their part done)
+func people(_ ps: [Person]) -> UIView {
+  let v = UIView(frame: CGRect(x: 0, y: 0, width: 26 + CGFloat(min(ps.count, 2) - 1) * 16 + (ps.count > 2 ? 22 : 0), height: 26))
+  for (i, p) in ps.prefix(2).enumerated() {
+    let c = UILabel(frame: CGRect(x: CGFloat(i) * 16, y: 0, width: 26, height: 26))
+    c.text = p.ini; c.font = .systemFont(ofSize: 10, weight: .semibold); c.textColor = .white; c.textAlignment = .center
+    c.backgroundColor = p.color; c.layer.cornerRadius = 13; c.clipsToBounds = true
+    c.layer.borderWidth = 2; c.layer.borderColor = UIColor.secondarySystemGroupedBackground.cgColor
+    v.addSubview(c)
+    if p.done {
+      let t = UIImageView(image: UIImage(systemName: "checkmark.circle.fill")); t.tintColor = .systemGreen
+      t.backgroundColor = .secondarySystemGroupedBackground; t.layer.cornerRadius = 6
+      t.frame = CGRect(x: CGFloat(i) * 16 + 16, y: 15, width: 12, height: 12); v.addSubview(t)
+    }
+  }
+  if ps.count > 2 {
+    let m = UILabel(frame: CGRect(x: 16 + 26 - 2, y: 0, width: 22, height: 26)); m.text = "+\(ps.count - 2)"
+    m.font = .systemFont(ofSize: 11, weight: .semibold); m.textColor = .secondaryLabel; v.addSubview(m)
+  }
+  return v
+}
+func prioView(_ p: String) -> UIView {
+  let l = UILabel(); l.text = " \(p) "; l.font = .systemFont(ofSize: 11, weight: .bold)
+  let urgent = p == "Urgent"
+  l.textColor = urgent ? .systemRed : .secondaryLabel; l.backgroundColor = (urgent ? UIColor.systemRed : UIColor.systemGray).withAlphaComponent(0.15)
+  l.layer.cornerRadius = 5; l.clipsToBounds = true; l.sizeToFit(); l.frame.size.height = 18; l.frame.size.width += 4; l.textAlignment = .center
+  return l
+}
 
 final class MyTasks: UICollectionViewController {
   private var data: UICollectionViewDiffableDataSource<Int, String>!
@@ -108,11 +165,16 @@ final class MyTasks: UICollectionViewController {
       let t = SECTIONS[ip.section].1[ip.item]
       var cfg = UIListContentConfiguration.subtitleCell()
       cfg.text = t.title
-      cfg.secondaryText = "\(t.client) · \(t.due)"
-      cfg.secondaryTextProperties.color = t.late ? .systemRed : .secondaryLabel
-      cfg.image = UIImage(systemName: "circle"); cfg.imageProperties.tintColor = .tertiaryLabel
-      cfg.textToSecondaryTextVerticalPadding = 3
+      cfg.textProperties.font = .preferredFont(forTextStyle: .body).withWeight(.semibold)
+      cfg.secondaryAttributedText = meta(t)
+      cfg.image = statusIcon(t)
+      cfg.textToSecondaryTextVerticalPadding = 4
+      cfg.directionalLayoutMargins.top = 11; cfg.directionalLayoutMargins.bottom = 11
       c.contentConfiguration = cfg
+      var acc: [UICellAccessory] = []
+      if let p = t.prio { acc.append(.customView(configuration: .init(customView: prioView(p), placement: .trailing(displayed: .always), reservedLayoutWidth: .actual))) }
+      acc.append(.customView(configuration: .init(customView: people(t.people), placement: .trailing(displayed: .always), reservedLayoutWidth: .actual)))
+      c.accessories = acc
     }
     let head = UICollectionView.SupplementaryRegistration<UICollectionViewListCell>(elementKind: UICollectionView.elementKindSectionHeader) { h, _, ip in
       var cfg = UIListContentConfiguration.header()
@@ -130,4 +192,5 @@ final class MyTasks: UICollectionViewController {
     if SCENE == 2 { collectionView.setContentOffset(CGPoint(x: 0, y: 420 - collectionView.adjustedContentInset.top), animated: false) }
   }
 }
+extension UIFont { func withWeight(_ w: UIFont.Weight) -> UIFont { UIFont.systemFont(ofSize: pointSize, weight: w) } }
 extension UIContextualAction { func then(_ f: (UIContextualAction) -> Void) -> UIContextualAction { f(self); return self } }

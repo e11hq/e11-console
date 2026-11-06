@@ -34,7 +34,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/shots"
           for look in light dark; do
             xcrun simctl ui "$DEV" appearance $look
-            for s in 1 2 3 4; do
+            for s in 1 2; do
               xcrun simctl terminate "$DEV" ae.e11.mock 2>/dev/null
               xcrun simctl launch "$DEV" ae.e11.mock -scene $s; echo "launch $s $look $?"; sleep 6
               xcrun simctl io "$DEV" screenshot "$RUNNER_TEMP/shots/mock-$s-$look.png"
