@@ -20,6 +20,7 @@ targets:
     sources:
       - path: ../swift/main.swift
       - path: ../swift/Sidebar.swift
+      - path: ../swift/Talk.swift
       - path: ../../widget/WidgetShare.swift
       - path: PrivacyInfo.xcprivacy
         buildPhase: resources

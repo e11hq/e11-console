@@ -99,6 +99,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     activity = ProcessInfo.processInfo.beginActivity(options: [.userInitiatedAllowingIdleSystemSleep], reason: "Keeps E11 Console live and notifications arriving")
     buildMenu()
     buildWindow()
+    startTalk()
     if defaults.bool(forKey: LOCK_KEY) { lock() }
     // the lock also comes back when the screen sleeps or the Mac is locked
     NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(lockNow), name: NSWorkspace.screensDidSleepNotification, object: nil)
@@ -245,6 +246,10 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   /* ---------- the native sidebar (Sidebar.swift) ---------- */
   // something in it was clicked: the page does what its own sidebar would (a menu comes back as its options)
   func sideCall(_ args: [String: Any], _ done: ((Any?) -> Void)?) {
+    // E11 Talk's button opens (or closes) the chats; anything else in the sidebar goes back to the page
+    let kind = args["kind"] as? String ?? ""
+    if kind == "talk" { talkShown ? closeTalk() : openTalk(nil); done?(nil); return }
+    if talkShown && (kind == "go" || kind == "new") { closeTalk() }
     let js = "(function(){ var r = window.__e11Side ? window.__e11Side(\(jsonString(args))) : null; return typeof r === 'string' ? r : ''; })()"
     web?.evaluateJavaScript(js) { r, _ in done?(r) }
   }
@@ -255,6 +260,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     guard let cv = window?.contentView, let web = web else { return }
     let sf = NSRect(x: Sidebar.INSET, y: Sidebar.INSET, width: side.width, height: cv.bounds.height - Sidebar.INSET * 2)
     web.frame = cv.bounds
+    if talkShown { talkView.frame = NSRect(x: side.pageX, y: 0, width: cv.bounds.width - side.pageX, height: cv.bounds.height) }
+    if !side.on && talkShown { closeTalk() }
     placeLights()
     if animated {
       NSAnimationContext.runAnimationGroup { c in
@@ -265,6 +272,36 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
       }
     } else { side.frame = sf }
   }
+  /* ---------- E11 Talk (Talk.swift): its own screen over the page, beside the sidebar ---------- */
+  lazy var talkView = TalkView(frame: .zero)
+  var talkShown: Bool { talkView.superview != nil }
+  func openTalk(_ group: String?) {
+    guard let cv = window?.contentView, side.on, side.talkOn else { return }
+    if !talkShown {
+      talkView.frame = NSRect(x: side.pageX, y: 0, width: cv.bounds.width - side.pageX, height: cv.bounds.height)
+      talkView.autoresizingMask = [.width, .height]
+      cv.addSubview(talkView, positioned: .below, relativeTo: side)
+      talkView.alphaValue = 0
+      NSAnimationContext.runAnimationGroup { c in c.duration = 0.16; talkView.animator().alphaValue = 1 }
+    }
+    if MacTalk.shared.linked { MacTalk.shared.start() }
+    talkView.reload()
+    if let g = group { talkView.show(g) }
+    talkCount()
+  }
+  func closeTalk() {
+    guard talkShown else { return }
+    talkView.current = nil
+    talkView.removeFromSuperview()
+    talkCount()
+  }
+  @objc func talkCount() { side.setTalk(open: talkShown, count: MacTalk.shared.totalUnread) }
+  func startTalk() {
+    NotificationCenter.default.addObserver(self, selector: #selector(talkCount), name: .macTalk, object: nil)
+    MacTalk.shared.notify = { [weak self] title, body, g in self?.notify(["title": title, "body": body, "click": "talk:" + g]) }
+    if MacTalk.shared.linked { MacTalk.shared.start() }
+  }
+
   @objc func toggleSidebar(_ s: Any?) {
     if side.on { sideCall(["kind": "collapse"], nil) } else { pageJS("(function(){ var b = document.querySelector('[data-action=\"toggle-sidebar\"]'); if (b) b.click(); })()") }
   }
@@ -412,6 +449,9 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
       setServer("live"); return decisionHandler(.cancel)
     }
     #endif
+    if action.targetFrame?.isMainFrame != false, let u = action.request.url, u.path.hasSuffix("/cdn-cgi/access/logout") || u.path.hasSuffix("/review/sign-out") {
+      MacTalk.shared.signedOut(); closeTalk()
+    }
     if let u = action.request.url, let s = u.scheme?.lowercased(), !["http", "https", "about", "blob", "data"].contains(s) {
       if action.targetFrame?.isMainFrame != false {
         if s == "e11console" || s == "e11console-test" { openLink(u.absoluteString) }
@@ -716,6 +756,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   func clicked(_ key: String) {
     if window == nil { return }
     showWindow()
+    if key.hasPrefix("talk:") { openTalk(String(key.dropFirst(5))); return }
     if !key.isEmpty { pageJS("window.__e11NotifClick && window.__e11NotifClick(\(jsString(key)))") }
   }
 

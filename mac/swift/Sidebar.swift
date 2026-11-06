@@ -209,6 +209,54 @@ final class SideRow: SideHit {
   }
 }
 
+// E11 Talk (Haris 2026-11-06): its own button below Trash — full width, E11 Talk's blue (the app icon's bubble), a white
+// bubble and "E11 Talk" on the left where the rows' icons and names are, a little taller than a row. New messages: a
+// white count on the right. While the chat is open: a deeper blue with a thin white ring. Collapsed: the bubble only.
+let TALK_TOP = NSColor(srgbRed: 0.314, green: 0.620, blue: 1, alpha: 1), TALK_BOTTOM = NSColor(srgbRed: 0.165, green: 0.376, blue: 0.886, alpha: 1)
+let TALK_BLUE = NSColor(srgbRed: 0.184, green: 0.435, blue: 0.894, alpha: 1)
+final class TalkButton: SideHit {
+  var count = 0 { didSet { if count != oldValue { needsDisplay = true } } }
+  var open = false { didSet { if open != oldValue { needsDisplay = true } } }
+  var compact = false { didSet { if compact != oldValue { needsDisplay = true } } }
+  static let H: CGFloat = 38
+  override init(frame: NSRect) { super.init(frame: frame); toolTip = "E11 Talk" }
+  required init?(coder: NSCoder) { nil }
+  override func draw(_ r: NSRect) {
+    let rect = bounds.insetBy(dx: 0.5, dy: 0.5), rad: CGFloat = compact ? 10 : 9
+    let path = NSBezierPath(roundedRect: rect, xRadius: rad, yRadius: rad)
+    let dim: CGFloat = open ? 0.86 : pressed ? 0.9 : hovering ? 1.04 : 1
+    let shade = { (c: NSColor) -> NSColor in NSColor(srgbRed: min(1, c.redComponent * dim), green: min(1, c.greenComponent * dim), blue: min(1, c.blueComponent * dim), alpha: 1) }
+    NSGradient(starting: shade(TALK_TOP), ending: shade(TALK_BOTTOM))?.draw(in: path, angle: -90)
+    if open {
+      NSColor(white: 1, alpha: 0.6).setStroke()
+      let ring = NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), xRadius: rad - 1.5, yRadius: rad - 1.5); ring.lineWidth = 1.2; ring.stroke()
+    }
+    // the white bubble, where the rows' icons are
+    let cx: CGFloat = compact ? bounds.midX : 18
+    if #available(macOS 11.0, *), let b = NSImage(systemSymbolName: "bubble.left.fill", accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: compact ? 17 : 15.5, weight: .semibold)) {
+      let tinted = NSImage(size: b.size, flipped: false) { rr in b.draw(in: rr); NSColor.white.set(); rr.fill(using: .sourceAtop); return true }
+      tinted.draw(in: NSRect(x: cx - b.size.width / 2, y: bounds.midY - b.size.height / 2, width: b.size.width, height: b.size.height), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+    }
+    if !compact {
+      let t = NSAttributedString(string: "E11 Talk", attributes: [.font: NSFont.systemFont(ofSize: 14, weight: .semibold), .foregroundColor: NSColor.white])
+      let ts = t.size()
+      t.draw(at: NSPoint(x: 35, y: bounds.midY - ts.height / 2))
+    }
+    // new messages: a white count (collapsed: a small white dot)
+    if count > 0 {
+      if compact {
+        NSColor.white.setFill(); NSBezierPath(ovalIn: NSRect(x: bounds.width - 13, y: 5, width: 8, height: 8)).fill()
+      } else {
+        let n = NSAttributedString(string: count > 99 ? "99+" : "\(count)", attributes: [.font: NSFont.systemFont(ofSize: 11.5, weight: .bold), .foregroundColor: TALK_BLUE])
+        let ns = n.size(), w = max(20, ceil(ns.width) + 12)
+        let pill = NSRect(x: bounds.width - 9 - w, y: bounds.midY - 10, width: w, height: 20)
+        NSColor.white.setFill(); NSBezierPath(roundedRect: pill, xRadius: 10, yRadius: 10).fill()
+        n.draw(at: NSPoint(x: pill.midX - ns.width / 2, y: pill.midY - ns.height / 2))
+      }
+    }
+  }
+}
+
 // a heading ("Clients", "Library") with an optional + ; collapsed: a short line
 final class SideHead: FlippedView {
   let title = sideLabel(11, .semibold, .secondaryLabelColor)
@@ -306,6 +354,8 @@ final class Sidebar: NSView {
   let me = SideMe()
   let syncDot = FlippedView(), syncText = sideLabel(11.5, .regular, .secondaryLabelColor), copy = sideLabel(11, .regular, .tertiaryLabelColor)
   let sync = SideHit()
+  let talk = TalkButton()
+  var talkOn: Bool { (model["talk"] as? Bool) == true }
   private var rows: [NSView] = []
   var menuToken = 0
   // a row being dragged: it, the run of rows it can move among, where those sit, where it was grabbed
@@ -340,7 +390,9 @@ final class Sidebar: NSView {
     scroll.layer?.mask = fade
     scroll.contentView.postsBoundsChangedNotifications = true
     NotificationCenter.default.addObserver(self, selector: #selector(scrolled), name: NSView.boundsDidChangeNotification, object: scroll.contentView)
-    [scroll, themeBtn, newBtn, sideBtn, footLine, me, sync, copy].forEach { inner.addSubview($0) }
+    [scroll, themeBtn, newBtn, sideBtn, footLine, me, sync, copy, talk].forEach { inner.addSubview($0) }
+    talk.isHidden = true
+    talk.onClick = { [weak self] in self?.host?.sideCall(["kind": "talk"], nil) }
     sync.addSubview(syncDot); sync.addSubview(syncText)
     syncDot.wantsLayer = true; syncDot.layer?.cornerRadius = 3.5
     themeBtn.onClick = { [weak self] in self?.host?.sideCall(["kind": "theme"], nil) }
@@ -368,6 +420,12 @@ final class Sidebar: NSView {
   var pageX: CGFloat { on ? Sidebar.INSET * 2 + width : 0 }
 
   /* ---------- the page's model ---------- */
+  // E11 Talk open or closed, and its new messages (from the app)
+  func setTalk(open: Bool, count: Int) {
+    let was = talk.open
+    talk.open = open; talk.count = count
+    if was != open && on { buildRows(); needsLayout = true }
+  }
   func apply(_ m: [String: Any]) {
     if drag != nil { pendingModel = m; return }   // (after the drag)
     let wasOn = on, wasCompact = compact
@@ -380,6 +438,7 @@ final class Sidebar: NSView {
     themeBtn.set(m["themeIc"] as? String ?? "sun")
     themeBtn.toolTip = m["themeTip"] as? String
     newBtn.isHidden = (m["create"] as? Bool) == false
+    talk.isHidden = !talkOn; talk.compact = compact
     sideBtn.toolTip = compact ? "Expand sidebar" : "Collapse sidebar"
     buildRows()
     let me0 = m["me"] as? [String: Any] ?? [:]
@@ -416,6 +475,8 @@ final class Sidebar: NSView {
         rows.append(h)
       } else {
         let r = SideRow()
+        var e = e
+        if talk.open { e["sel"] = false }
         r.set(e, compact: compact)
         let k = e["k"] as? String ?? ""
         r.onClick = { [weak self] in self?.host?.sideCall(["kind": "go", "key": k], nil) }
@@ -487,6 +548,12 @@ final class Sidebar: NSView {
     let after = Array(rows[hi...])
     var bh: CGFloat = 0
     for v in after { bh += rowHeight(v, first: false) }
+    // (E11 Talk's button under them: the rows sit above it)
+    let talkH: CGFloat = talk.isHidden ? 0 : (compact ? 40 : TalkButton.H) + 10
+    if !talk.isHidden {
+      talk.frame = compact ? NSRect(x: (W - 44) / 2, y: footY - 8 - 40, width: 44, height: 40) : NSRect(x: 10, y: footY - 8 - TalkButton.H, width: W - 20, height: TalkButton.H)
+    }
+    bh += talkH
     var by = footY - 6 - bh
     for v in after {
       let hh = rowHeight(v, first: false)
