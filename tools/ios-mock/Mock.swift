@@ -65,7 +65,7 @@ func statusIcon(_ t: Task) -> UIImage? {
   return UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: 19, weight: .medium))?.withTintColor(t.sc, renderingMode: .alwaysOriginal)
 }
 func meta(_ t: Task) -> NSAttributedString {
-  let f = UIFont.preferredFont(forTextStyle: .subheadline)
+  let f = UIFont.preferredFont(forTextStyle: .footnote)
   let s = NSMutableAttributedString()
   let dot = NSTextAttachment(image: UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { _ in t.cc.setFill(); UIBezierPath(roundedRect: CGRect(x: 0, y: 0, width: 8, height: 8), cornerRadius: 2).fill() })
   dot.bounds = CGRect(x: 0, y: 1, width: 8, height: 8)
@@ -73,6 +73,10 @@ func meta(_ t: Task) -> NSAttributedString {
   s.append(NSAttributedString(string: " \(t.client) · \(t.status) · ", attributes: [.font: f, .foregroundColor: UIColor.secondaryLabel]))
   s.append(NSAttributedString(string: t.due, attributes: [.font: t.when.isEmpty ? f : UIFont.systemFont(ofSize: f.pointSize, weight: .semibold),
                                                           .foregroundColor: t.when == "late" ? UIColor.systemRed : t.when == "today" ? UIColor.systemOrange : UIColor.secondaryLabel]))
+  if let p = t.prio {
+    s.append(NSAttributedString(string: " · ", attributes: [.font: f, .foregroundColor: UIColor.secondaryLabel]))
+    s.append(NSAttributedString(string: p, attributes: [.font: UIFont.systemFont(ofSize: f.pointSize, weight: .bold), .foregroundColor: p == "Urgent" ? UIColor.systemRed : UIColor.secondaryLabel]))
+  }
   if t.comments > 0 || t.cd != nil {
     s.append(NSAttributedString(string: "\n", attributes: [.font: f]))
     if t.comments > 0 {
@@ -81,28 +85,37 @@ func meta(_ t: Task) -> NSAttributedString {
     }
     if let cd = t.cd {
       let col: UIColor = cd.hasPrefix("✓") ? .systemGreen : .systemYellow
-      s.append(NSAttributedString(string: " \(cd) ", attributes: [.font: UIFont.systemFont(ofSize: f.pointSize - 2, weight: .bold), .foregroundColor: col, .backgroundColor: col.withAlphaComponent(0.16)]))
+      let cf = UIFont.systemFont(ofSize: f.pointSize - 2.5, weight: .bold)
+      let ts = (cd as NSString).size(withAttributes: [.font: cf]), size = CGSize(width: ceil(ts.width) + 12, height: ceil(ts.height) + 4)
+      let pill = UIGraphicsImageRenderer(size: size).image { _ in
+        col.withAlphaComponent(0.16).setFill(); UIBezierPath(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: 5).fill()
+        (cd as NSString).draw(at: CGPoint(x: 6, y: 2), withAttributes: [.font: cf, .foregroundColor: col])
+      }
+      let a = NSTextAttachment(image: pill); a.bounds = CGRect(x: 0, y: (f.capHeight - size.height) / 2, width: size.width, height: size.height)
+      s.append(NSAttributedString(attachment: a))
     }
   }
   return s
 }
 // the assignees: Apple's own monogram-style circles, overlapping (a green tick: their part done)
 func people(_ ps: [Person]) -> UIView {
-  let v = UIView(frame: CGRect(x: 0, y: 0, width: 26 + CGFloat(min(ps.count, 2) - 1) * 16 + (ps.count > 2 ? 22 : 0), height: 26))
-  for (i, p) in ps.prefix(2).enumerated() {
-    let c = UILabel(frame: CGRect(x: CGFloat(i) * 16, y: 0, width: 26, height: 26))
-    c.text = p.ini; c.font = .systemFont(ofSize: 10, weight: .semibold); c.textColor = .white; c.textAlignment = .center
-    c.backgroundColor = p.color; c.layer.cornerRadius = 13; c.clipsToBounds = true
+  let d: CGFloat = 24, step: CGFloat = 17
+  let shown = Array(ps.prefix(2))
+  let v = UIView(frame: CGRect(x: 0, y: 0, width: d + CGFloat(shown.count - 1) * step + (ps.count > 2 ? 22 : 0) + 2, height: d + 2))
+  for (i, p) in shown.enumerated().reversed() {   // (the first one on top)
+    let c = UILabel(frame: CGRect(x: CGFloat(i) * step, y: 1, width: d, height: d))
+    c.text = p.ini; c.font = .systemFont(ofSize: 9.5, weight: .semibold); c.textColor = .white; c.textAlignment = .center
+    c.backgroundColor = p.color; c.layer.cornerRadius = d / 2; c.clipsToBounds = true
     c.layer.borderWidth = 2; c.layer.borderColor = UIColor.secondarySystemGroupedBackground.cgColor
     v.addSubview(c)
     if p.done {
       let t = UIImageView(image: UIImage(systemName: "checkmark.circle.fill")); t.tintColor = .systemGreen
       t.backgroundColor = .secondarySystemGroupedBackground; t.layer.cornerRadius = 6
-      t.frame = CGRect(x: CGFloat(i) * 16 + 16, y: 15, width: 12, height: 12); v.addSubview(t)
+      t.frame = CGRect(x: CGFloat(i) * step + d - 10, y: d - 9, width: 12, height: 12); v.addSubview(t)
     }
   }
   if ps.count > 2 {
-    let m = UILabel(frame: CGRect(x: 16 + 26 - 2, y: 0, width: 22, height: 26)); m.text = "+\(ps.count - 2)"
+    let m = UILabel(frame: CGRect(x: CGFloat(shown.count - 1) * step + d + 3, y: 1, width: 22, height: d)); m.text = "+\(ps.count - 2)"
     m.font = .systemFont(ofSize: 11, weight: .semibold); m.textColor = .secondaryLabel; v.addSubview(m)
   }
   return v
@@ -165,14 +178,13 @@ final class MyTasks: UICollectionViewController {
       let t = SECTIONS[ip.section].1[ip.item]
       var cfg = UIListContentConfiguration.subtitleCell()
       cfg.text = t.title
-      cfg.textProperties.font = .preferredFont(forTextStyle: .body).withWeight(.semibold)
+      cfg.textProperties.font = .preferredFont(forTextStyle: .callout).withWeight(.semibold)
       cfg.secondaryAttributedText = meta(t)
       cfg.image = statusIcon(t)
       cfg.textToSecondaryTextVerticalPadding = 4
-      cfg.directionalLayoutMargins.top = 11; cfg.directionalLayoutMargins.bottom = 11
+      cfg.directionalLayoutMargins.top = 10; cfg.directionalLayoutMargins.bottom = 10
       c.contentConfiguration = cfg
       var acc: [UICellAccessory] = []
-      if let p = t.prio { acc.append(.customView(configuration: .init(customView: prioView(p), placement: .trailing(displayed: .always), reservedLayoutWidth: .actual))) }
       acc.append(.customView(configuration: .init(customView: people(t.people), placement: .trailing(displayed: .always), reservedLayoutWidth: .actual)))
       c.accessories = acc
     }
