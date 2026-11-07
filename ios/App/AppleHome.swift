@@ -7,22 +7,25 @@ import UIKit
    Inbox and Clients keep their own headers until they're done the same way. */
 let APPLE_HOME = APPLE_NAV
 
-// your photo on the bar: a fixed 36 pt circle in the middle of whatever room the bar gives it — the bar can't stretch it
-// (it came out an oval: Haris 2026-11-07)
+// Me on the bar: a pill — your photo (a fixed 30 pt circle the bar can't stretch) and the word "Me", on Apple's own glass
+// (Haris 2026-11-07: "the word Me only in the top area, next to the profile picture, in a pill" — with it the bar's
+// right side is wide enough that iOS puts the small title on the left by its own rule)
 final class MePhotoControl: UIControl {
-  private let pic = UIImageView()
+  private let pic = UIImageView(), word = UILabel()
+  static let size = CGSize(width: 74, height: 40)
   override init(frame: CGRect) {
     super.init(frame: frame)
     pic.contentMode = .scaleAspectFill; pic.clipsToBounds = true; pic.isUserInteractionEnabled = false
-    pic.layer.cornerRadius = 18; pic.layer.cornerCurve = .circular
-    pic.translatesAutoresizingMaskIntoConstraints = false
-    addSubview(pic)
-    NSLayoutConstraint.activate([pic.widthAnchor.constraint(equalToConstant: 36), pic.heightAnchor.constraint(equalToConstant: 36),
-                                 pic.centerXAnchor.constraint(equalTo: centerXAnchor), pic.centerYAnchor.constraint(equalTo: centerYAnchor)])
+    pic.layer.cornerRadius = 15; pic.layer.cornerCurve = .circular
+    word.text = "Me"; word.font = .systemFont(ofSize: 15, weight: .semibold); word.textColor = .label; word.isUserInteractionEnabled = false
+    [pic, word].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; addSubview($0) }
+    NSLayoutConstraint.activate([pic.widthAnchor.constraint(equalToConstant: 30), pic.heightAnchor.constraint(equalToConstant: 30),
+                                 pic.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 5), pic.centerYAnchor.constraint(equalTo: centerYAnchor),
+                                 word.leadingAnchor.constraint(equalTo: pic.trailingAnchor, constant: 8), word.centerYAnchor.constraint(equalTo: centerYAnchor)])
   }
   required init?(coder: NSCoder) { fatalError() }
   func set(_ img: UIImage?) { pic.image = img }
-  override var intrinsicContentSize: CGSize { CGSize(width: 40, height: 40) }
+  override var intrinsicContentSize: CGSize { MePhotoControl.size }
 }
 
 final class AppleHomeBits {
@@ -57,15 +60,15 @@ extension Main: UISearchResultsUpdating, UISearchControllerDelegate {
     // your photo (Me) and 🔍, as Apple's bar buttons
     // (always a circle: its own size, its corners half its size whatever the bar does with it — it came out stretched,
     //  not round: Haris 2026-11-07)
-    let b = MePhotoControl(frame: CGRect(x: 0, y: 0, width: 40, height: 40))
+    let b = MePhotoControl(frame: CGRect(origin: .zero, size: MePhotoControl.size))
     b.translatesAutoresizingMaskIntoConstraints = false
-    NSLayoutConstraint.activate([b.widthAnchor.constraint(equalToConstant: 40), b.heightAnchor.constraint(equalToConstant: 40)])
+    NSLayoutConstraint.activate([b.widthAnchor.constraint(equalToConstant: MePhotoControl.size.width), b.heightAnchor.constraint(equalToConstant: MePhotoControl.size.height)])
     b.isAccessibilityElement = true; b.accessibilityTraits = .button
     b.accessibilityLabel = "Me"
     b.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.homeIfMade?.meTap() }, for: .touchUpInside)
     AppleHomeBits.shared.meButton = b
     let meItem = UIBarButtonItem(customView: b)
-    if #available(iOS 26.0, *) { meItem.hidesSharedBackground = true }
+    // (on Apple's own glass, as the 🔍 beside it)
     let find = UIBarButtonItem(image: UIImage(systemName: "magnifyingglass"), primaryAction: UIAction { [weak self] _ in
       UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.appleHomeSearch()
     })
