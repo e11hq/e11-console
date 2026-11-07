@@ -65,7 +65,6 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   let taskId: String
   var model: [String: Any]?
   var people: [String: [String: Any]] = [:]
-  var onBack: (() -> Void)?
   var onTab: ((String) -> Void)?                      // "details" | "comments"
   var onAct: (([String: Any]) -> Void)?               // a change for the server
   var onEvent: (([String: Any]) -> Void)?             // for the page behind: copy, attach, from…
@@ -99,13 +98,8 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   private var edgeHook: AnyObject?
   // the frost under the bar follows whichever list is showing (Details, the comments, a thread)
   func edgeScroll(_ sv: UIScrollView) { if #available(iOS 26.0, *) { (edgeHook as? UIScrollEdgeElementContainerInteraction)?.scrollView = sv } }
-  // the corner button (Main's CornerButton) stands in for ••• — this page's own stays invisible; its menu is lent
-  var cornerShared = false { didSet { more.alpha = cornerShared ? 0 : 1; moreBtn.isHidden = cornerShared; back.alpha = cornerShared ? 0 : 1; back.isUserInteractionEnabled = !cornerShared } }
-  var backFrame: CGRect { back.frame }
-  var cornerFrame: CGRect { more.frame }
-  var cornerMenu: UIMenu? { moreBtn.menu }
-  var cornerItems: [CornerMenuItem] = []
-  var onMenu: (() -> Void)?
+  // the page's ••• menu, for Apple's bar (TaskVC)
+  private(set) var cornerMenu: UIMenu?
   var feed: CommentsFeed?
   var threadFeed: CommentsFeed? { didSet { updatePager() } }
   // the description's editor (DescEditor.swift)
@@ -127,7 +121,6 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     updatePager()
   }
   let mentionBox = UIStackView()
-  var onCornerChange: (() -> Void)?
   var onSubmitFiles: ((String) -> Void)?
   var onOpenFiles: (([[String: Any]], Int) -> Void)?
   var onAttachFiles: (() -> Void)?
@@ -258,9 +251,6 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     // (the Files block's bottom just above the bottom edge — Apple's list scrolls it there)
     scroll.scrollToItem(at: ip, at: .bottom, animated: true)
   }
-  private let back = HomeGlass(), more = HomeGlass()
-  private let moreBtn = UIButton(type: .custom)        // (over the ••• circle: iPhone's own menu)
-  private let dot = UIView(), client = UILabel()
   let seg = UISegmentedControl(items: ["Details", "Comments"])
   // (a task in the Trash, opened view only: its Details — Haris 2026-11-06)
   var trashId: String? { didSet { seg.setEnabled(trashId == nil, forSegmentAt: 1); updatePager(); setNeedsLayout() } }
@@ -279,7 +269,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     scroll.keyboardDismissMode = .interactive
     scroll.delegate = self
     scroll.automaticallyAdjustsScrollIndicatorInsets = false   // (the scroll bar starts under the bar from the start — the standard)
-    if APPLE_NAV {
+    do {
       // iPhone's own paging scroller (Haris 2026-11-07): Details and Comments side by side — Apple's movement
       pager.isPagingEnabled = true
       pager.showsHorizontalScrollIndicator = false; pager.showsVerticalScrollIndicator = false
@@ -289,7 +279,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
       pager.delegate = self
       addSubview(pager)
       pager.addSubview(scroll)
-    } else { addSubview(scroll) }
+    }
     let reg = UICollectionView.CellRegistration<PageCell, String> { [weak self] cell, _, key in
       cell.host(self?.listViews[key], self?.listGeo[key] ?? PageCell.Geo(x: 0, w: 0, h: 1, gap: 0))
     }
@@ -301,7 +291,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     NotificationCenter.default.addObserver(forName: UIResponder.keyboardDidShowNotification, object: nil, queue: .main) { [weak self] _ in self?.caretIntoView() }
     commentsHost.isHidden = true
     commentsHost.clipsToBounds = true
-    if APPLE_NAV { pager.addSubview(commentsHost) } else { addSubview(commentsHost) }
+    pager.addSubview(commentsHost)
     addSubview(barBox)
     if #available(iOS 26.0, *) {
       let i = UIScrollEdgeElementContainerInteraction()
@@ -311,22 +301,12 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
       // (Apple's own frost behind Details · Comments and the bar, from the list under them — Apple's scroll edge, as it
       //  comes: our firmer frost and the code watching the list for it removed, Haris 2026-11-07)
     }
-    back.setIcon("chevron.left", 19)
-    back.accessibilityLabel = "Back"
-    back.onTap = { [weak self] in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.onBack?() }
-    more.setIcon("ellipsis", 18)
-    more.accessibilityLabel = "More"
-    moreBtn.showsMenuAsPrimaryAction = true
-    moreBtn.accessibilityLabel = "More"
-    dot.layer.cornerRadius = 3
-    client.font = .systemFont(ofSize: 17, weight: .semibold)
-    client.lineBreakMode = .byTruncatingTail
-    [back, more, moreBtn, dot, client, seg].forEach { barBox.addSubview($0) }
+    barBox.addSubview(seg)
     seg.selectedSegmentIndex = 0
     seg.addAction(UIAction { [weak self] _ in
       guard let self = self else { return }
       UISelectionFeedbackGenerator().selectionChanged()
-      self.setTab(self.seg.selectedSegmentIndex == 1 ? "comments" : "details", tell: true, slide: APPLE_NAV)
+      self.setTab(self.seg.selectedSegmentIndex == 1 ? "comments" : "details", tell: true, slide: true)
     }, for: .valueChanged)
     var fc: UIButton.Configuration
     if #available(iOS 26.0, *) { fc = .glass() } else { fc = .gray(); fc.cornerStyle = .capsule }
@@ -349,7 +329,6 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     titleView.textContainer.lineFragmentPadding = 0
     titleView.returnKeyType = .done
     setUpDesc()
-    if !APPLE_NAV { addTabSwipe() }
     applyLook()
   }
   required init?(coder: NSCoder) { fatalError() }
@@ -358,8 +337,6 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     // (the window already takes the app's own light / dark: everything here follows it)
     backgroundColor = .systemBackground
     commentsHost.backgroundColor = .systemGroupedBackground
-    back.setLook(light: light, tint: .label); more.setLook(light: light, tint: .label)
-    client.textColor = .label
     // (the description's file chips are pictures: drawn again in the new look)
     if drawnOnce, !editingDesc, let m = model { built = ""; draw(m) }
   }
@@ -369,21 +346,14 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   // iPhone's own navigation (AppleNav.swift, Haris 2026-11-07): Apple's bar is the top row — its ‹, the client and •••;
   // this page's own row is hidden and Details · Comments sit just under Apple's bar
   var appleRow: CGFloat? { didSet { if appleRow != oldValue { setNeedsLayout() } } }
-  var appleBar = false { didSet { dot.alpha = appleBar ? 0 : 1; client.alpha = appleBar ? 0 : 1; if appleBar { cornerShared = true } } }
   var onBarTitle: ((String, UIColor?) -> Void)?
   var onMenuMade: (() -> Void)?
   private var rowBottom: CGFloat { appleRow ?? safeTop + 54 }
   var barBottom: CGFloat { rowBottom + 8 + 32 + 10 }
-  // (the two tabs placed by size and centre, never frame: while one slides (its transform moving) a layout pass that set
-  //  its frame threw it back across the screen — Comments slid back in over Details, the flash Haris saw)
-  private func place(_ v: UIView) {
-    if v.bounds.size != bounds.size { v.bounds = CGRect(origin: .zero, size: bounds.size) }
-    v.center = CGPoint(x: bounds.midX, y: bounds.midY)
-  }
   override func layoutSubviews() {
     super.layoutSubviews()
-    let W = bounds.width, top = safeTop
-    if APPLE_NAV {
+    let W = bounds.width
+    do {
       let H = bounds.height
       if pager.frame != bounds { pager.frame = bounds }
       for (v, x) in [(scroll as UIView, CGFloat(0)), (commentsHost, W)] {
@@ -396,18 +366,9 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
         let x = tab == "comments" ? W : 0
         if pager.contentOffset != CGPoint(x: x, y: 0) { pager.contentOffset = CGPoint(x: x, y: 0) }
       }
-    } else { place(scroll) }
+    }
     barBox.frame = CGRect(x: 0, y: 0, width: W, height: barBottom)
-    back.frame = CGRect(x: 16, y: top, width: 44, height: 44)
-    more.frame = CGRect(x: W - 60, y: top, width: 44, height: 44)
-    moreBtn.frame = more.frame
-    let cw = min(client.sizeThatFits(CGSize(width: 400, height: 30)).width, W - 76 - 76 - 18)
-    // (the client's dot and name in the middle of the bar, as a client's page — Haris 2026-11-03)
-    let gw = (dot.isHidden ? 0 : 18) + cw, gx = (W - gw) / 2
-    dot.frame = CGRect(x: gx, y: top + 22 - 5, width: 10, height: 10)
-    client.frame = CGRect(x: dot.isHidden ? gx : gx + 18, y: top, width: cw, height: 44)
     seg.frame = CGRect(x: 16, y: rowBottom + 8, width: W - 32, height: 32)
-    if !APPLE_NAV { place(commentsHost) }
     let fs = fab.sizeThatFits(CGSize(width: 300, height: 48))
     let bottom = max(safeAreaInsets.bottom, window?.safeAreaInsets.bottom ?? 0)
     fab.frame = CGRect(x: W - 16 - fs.width, y: bounds.height - bottom - 8 - 48, width: fs.width, height: 48)
@@ -427,7 +388,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     seg.selectedSegmentIndex = t == "comments" ? 1 : 0
     let c = t == "comments"
     if c { endEditing(true) } else { edgeScroll(scroll) }
-    if APPLE_NAV {
+    do {
       let x = c ? bounds.width : 0
       if pager.isDragging || pager.isDecelerating { }   // (the swipe itself is taking it there)
       else if abs(pager.contentOffset.x - x) > 0.5 && slide && window != nil && bounds.width > 0 {
@@ -441,64 +402,9 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
       }
       if tell { onTab?(t) }
       onPageMove?(pagerFraction)
-      return
-    }
-    // (a swipe: the tabs slide sideways, Comments in from the right, Details back in from the left)
-    if slide && was != t {
-      let W = bounds.width, inV: UIView = c ? commentsHost : scroll, outV: UIView = c ? scroll : commentsHost
-      inV.isHidden = false
-      inV.transform = CGAffineTransform(translationX: c ? W : -W, y: 0)
-      UIView.animate(withDuration: 0.36, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
-        inV.transform = .identity
-        outV.transform = CGAffineTransform(translationX: c ? -W * 0.3 : W, y: 0)
-        self.fab.alpha = c ? 0 : 1
-      } completion: { _ in
-        outV.transform = .identity
-        if self.tab == t { outV.isHidden = true }
-      }
-    } else {
-      commentsHost.isHidden = !c
-      scroll.isHidden = c
-      fab.alpha = c ? 0 : 1
-    }
-    if tell { onTab?(t) }
-  }
-  // the swipe across the middle of the page: Details ← → Comments (Haris, 2026-11-01); from the edge on Details it's
-  // iPhone's back swipe (Main's), so a swipe starting at the very edge is left to that
-  private lazy var tabSwipe: UIPanGestureRecognizer = {
-    let g = UIPanGestureRecognizer(target: self, action: #selector(swiped(_:)))
-    g.delegate = self; g.cancelsTouchesInView = false
-    return g
-  }()
-  private var swipeDone = false
-  func addTabSwipe() { addGestureRecognizer(tabSwipe) }
-  @objc private func swiped(_ g: UIPanGestureRecognizer) {
-    let t = g.translation(in: self), v = g.velocity(in: self)
-    switch g.state {
-    case .began: swipeDone = false
-    case .changed, .ended:
-      if swipeDone { return }
-      let far = abs(t.x) > 56 || (g.state == .ended && abs(t.x) > 16 && abs(v.x) > 500)
-      guard far, abs(t.x) > abs(t.y) * 1.4 else { return }
-      swipeDone = true
-      if t.x < 0, tab == "details" { UISelectionFeedbackGenerator().selectionChanged(); setTab("comments", tell: true, slide: true) }
-      else if t.x > 0, tab == "comments", threadFeed == nil { UISelectionFeedbackGenerator().selectionChanged(); onSwipeToDetails?() }   // (a thread: only the edge swipe)
-    default: break
     }
   }
-  var onSwipeToDetails: (() -> Void)?
-  override func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
-    guard g === tabSwipe, let p = g as? UIPanGestureRecognizer else { return true }
-    let v = p.velocity(in: self), x = p.location(in: self).x
-    if x < 24 { return false }   // (the edge: iPhone's back swipe)
-    if editingDesc || titleView.isFirstResponder { return false }
-    if threadFeed != nil { return false }   // (in a reply thread: only the swipe from the edge goes back — Haris 2026-11-04)
-    // (on a row of files that scrolls sideways: the row scrolls, the page stays on Details — Haris, 2026-11-02)
-    for st in [filesStrip, descStrip] where st.window != nil && st.scrolls && st.bounds.contains(p.location(in: st)) { return false }
-    return abs(v.x) > abs(v.y) * 1.2
-  }
-  func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith o: UIGestureRecognizer) -> Bool { g === tabSwipe }
-  // ---------- Details ↔ Comments in iPhone's own paging scroller (APPLE_NAV) ----------
+  // ---------- Details ↔ Comments in iPhone's own paging scroller ----------
   // Apple moves the pages (the swipe, its speed, the bounce, a tap's scroll); Details · Comments follows. On Comments a
   // swipe right — from the edge too — goes to Details; on Details the edge swipe goes back (Haris 2026-11-07)
   let pager = UIScrollView()
@@ -507,8 +413,8 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   var onPeek: ((String) -> Void)?      // a swipe starting on this tab: the comments made ready, the keyboard put away
   var onPageMove: ((CGFloat) -> Void)? // 0 Details … 1 Comments, as it moves: the comment box goes with the comments
   private var pagerFraction: CGFloat { bounds.width > 0 ? max(0, min(1, pager.contentOffset.x / bounds.width)) : (tab == "comments" ? 1 : 0) }
-  func pagerWaits(for g: UIGestureRecognizer) { if APPLE_NAV { pager.panGestureRecognizer.require(toFail: g) } }
-  private func updatePager() { if APPLE_NAV { pager.isScrollEnabled = trashId == nil && threadFeed == nil && !editingDesc } }
+  func pagerWaits(for g: UIGestureRecognizer) { pager.panGestureRecognizer.require(toFail: g) }
+  private func updatePager() { pager.isScrollEnabled = trashId == nil && threadFeed == nil && !editingDesc }
   private func commentsList() -> UIScrollView { feed?.scroll ?? scroll }   // (a reply is its own Apple page now: ReplyVC)
   // at rest only the page showing is there (as before: hidden behind, out of taps and VoiceOver)
   private func settlePages() {
@@ -519,7 +425,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     edgeScroll(c ? commentsList() : scroll)
   }
   func scrollViewDidScroll(_ sv: UIScrollView) {
-    guard APPLE_NAV, sv === pager else { return }
+    guard sv === pager else { return }
     let f = pagerFraction
     fab.alpha = 1 - f
     onPageMove?(f)
@@ -529,7 +435,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     }
   }
   func scrollViewWillBeginDragging(_ sv: UIScrollView) {
-    guard APPLE_NAV, sv === pager else { return }
+    guard sv === pager else { return }
     pagerAuto = false
     dragFrom = tab
     endEditing(true)
@@ -538,10 +444,10 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     edgeScroll(tab == "comments" ? commentsList() : scroll)
     onPageMove?(pagerFraction)
   }
-  func scrollViewDidEndDragging(_ sv: UIScrollView, willDecelerate d: Bool) { if APPLE_NAV, sv === pager, !d { pagerSettled() } }
-  func scrollViewDidEndDecelerating(_ sv: UIScrollView) { if APPLE_NAV, sv === pager { pagerSettled() } }
+  func scrollViewDidEndDragging(_ sv: UIScrollView, willDecelerate d: Bool) { if sv === pager, !d { pagerSettled() } }
+  func scrollViewDidEndDecelerating(_ sv: UIScrollView) { if sv === pager { pagerSettled() } }
   func scrollViewDidEndScrollingAnimation(_ sv: UIScrollView) {
-    guard APPLE_NAV, sv === pager else { return }
+    guard sv === pager else { return }
     pagerAuto = false
     settlePages()
   }
@@ -574,9 +480,8 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
       people.merge(pp) { a, b in var x = a.merging(b) { _, n in n }; if b["photo"] == nil, let ph = a["photo"] { x["photo"] = ph }; return x }
     }
     if let c = m["client"] as? [String: Any] {
-      client.text = c["name"] as? String ?? ""; dot.backgroundColor = TaskPage.rgb(c["rgb"]); dot.isHidden = false
-    } else { client.text = (m["sub"] as? Bool) == true ? "Subtask" : "My Tasks"; dot.isHidden = true }
-    onBarTitle?(client.text ?? "", dot.isHidden ? nil : dot.backgroundColor)
+      onBarTitle?(c["name"] as? String ?? "", TaskPage.rgb(c["rgb"]))
+    } else { onBarTitle?((m["sub"] as? Bool) == true ? "Subtask" : "My Tasks", nil) }
     setComments(m["comments"] as? Int ?? 0)
     makeMenu()
     // (unchanged: nothing redrawn — a tick or a title being typed stays as it is)
@@ -647,19 +552,8 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     if (m["canDelete"] as? Bool) == true && !TaskPage.viewOnly {
       items.append(UIMenu(options: .displayInline, children: [UIAction(title: "Delete task", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in self?.confirmDelete() }]))
     }
-    moreBtn.menu = UIMenu(children: items)
+    cornerMenu = UIMenu(children: items)
     onMenuMade?()
-    // (the same, for the shared top buttons' ••• — SwiftUI's menu, which grows out of the glass)
-    var ci: [CornerMenuItem] = [CornerMenuItem(title: "Copy link", symbol: "link", run: { [weak self] in guard let self = self else { return }; self.onEvent?(["ev": "copy", "id": self.taskId]) })]
-    if (m["readOnly"] as? Bool) != true {
-      ci.append(CornerMenuItem(title: "Attach Files", symbol: "paperclip", children: [("Camera", "camera", "camera"), ("Photos", "photo.on.rectangle", "photos"), ("Files", "folder", "files")].map { x -> CornerMenuItem in
-        CornerMenuItem(title: x.0, symbol: x.1, run: { [weak self] in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.onAttachFrom?(x.2) }) }))
-    }
-    if (m["canDelete"] as? Bool) == true && !TaskPage.viewOnly {
-      ci.append(CornerMenuItem(title: "", inline: true, children: [CornerMenuItem(title: "Delete task", symbol: "trash", destructive: true, run: { [weak self] in self?.confirmDelete() })]))
-    }
-    cornerItems = ci
-    onMenu?()
   }
   private var ownFileIds = Set<String>()
   private func confirmRemove(_ f: [String: Any]) {

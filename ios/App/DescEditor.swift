@@ -221,7 +221,6 @@ extension TaskPage {
     editingDesc = true
     if descEmpty { descView.attributedText = NSAttributedString(string: "", attributes: [.font: UIFont.systemFont(ofSize: TaskPage.T), .foregroundColor: UIColor.label]) }
     descView.typingAttributes = [.font: UIFont.systemFont(ofSize: TaskPage.T), .foregroundColor: UIColor.label]
-    onCornerChange?()
   }
   // Done: saved (only if it changed)
   func finishDesc() {
@@ -246,7 +245,6 @@ extension TaskPage {
     if html != was && !(descEmpty && text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) { onAct?(["act": "desc", "id": taskId, "html": html, "text": text, "chips": true]) }
     built = ""
     if let m = model { draw(m) }
-    onCornerChange?()
   }
   private func format(_ k: String) {
     let tv = descView

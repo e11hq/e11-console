@@ -96,7 +96,6 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
   var onReply: ((String, String, [String: Any]?) -> Void)?   // Reply: the box replies to this comment (its writer's name, and them — their picture)
   var onEdit: ((String, [[String: Any]]) -> Void)?   // Edit (its first 10 minutes): the words back in the box
   var onThread: ((String) -> Void)?                  // "N replies" → the thread's page
-  var onBack: (() -> Void)?                          // (a thread page) back to the comments
   var onToast: ((String) -> Void)?
   var onLoaded: (([String: Any]) -> Void)?
   var onOpenFile: (([[String: Any]], Int) -> Void)?
@@ -114,7 +113,6 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
   private var first = true
   var topInset: CGFloat = 0 { didSet { setNeedsLayout() } }
   var bottomRoom: CGFloat = 100 { didSet { if oldValue != bottomRoom { roomChanged(oldValue) } } }
-  private let threadBar = UIView()
   // the room kept under the list: from the comment box's top down — the box rides Apple's keyboard guide, so this is
   // asked by its page's own layout as Apple moves it (the keyboard coming, going, dragged down, the box growing), inside
   // Apple's own animation; nothing of ours watches it frame by frame (Haris 2026-11-07, task page step 3)
@@ -148,34 +146,9 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
     jump.alpha = 0
     jump.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.toEnd(animated: true) }, for: .touchUpInside)
     addSubview(jump)
-    if thread != nil && !APPLE_NAV {   // (iPhone's own navigation: the thread is an Apple page of its own, its bar Apple's — ReplyVC)
-      // a thread's page: its own bar line under the task's ("‹ Thread")
-      threadBar.backgroundColor = .clear
-      let b = UIButton(type: .system)
-      var c = UIButton.Configuration.plain()
-      c.image = UIImage(systemName: "chevron.left", withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .semibold)); c.imagePadding = 6
-      c.attributedTitle = AttributedString("Thread", attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 17, weight: .semibold)]))
-      c.baseForegroundColor = .label
-      b.configuration = c
-      b.addAction(UIAction { [weak self] _ in self?.onBack?() }, for: .touchUpInside)
-      b.frame = CGRect(x: 8, y: 0, width: 140, height: 40)
-      threadBar.addSubview(b)
-      addSubview(threadBar)
-      // (iPhone's swipe from the left edge also goes back out of the thread)
-      let g = UIScreenEdgePanGestureRecognizer(target: self, action: #selector(edge(_:))); g.edges = .left; addGestureRecognizer(g)
-    }
   }
   required init?(coder: NSCoder) { fatalError() }
-  @objc private func edge(_ g: UIScreenEdgePanGestureRecognizer) {
-    let x = max(0, g.translation(in: superview).x), W = bounds.width
-    switch g.state {
-    case .changed: transform = CGAffineTransform(translationX: x, y: 0)
-    case .ended, .cancelled:
-      if g.velocity(in: superview).x > 300 || x > W * 0.4 { onBack?() }
-      else { UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0) { self.transform = .identity } }
-    default: break
-    }
-  }
+
 
   // ---------- data ----------
   // each task's comments (and threads) as last fetched: shown at once, then brought up to date — no empty wait
@@ -337,9 +310,7 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
   override func layoutSubviews() {
     super.layoutSubviews()
     scroll.frame = bounds
-    let ownBar = thread != nil && !APPLE_NAV
-    if ownBar { threadBar.frame = CGRect(x: 0, y: topInset, width: bounds.width, height: 40) }
-    let top = topInset + (ownBar ? 44 : 6)
+    let top = topInset + 6
     if scroll.contentInset.top != top { scroll.contentInset.top = top; scroll.verticalScrollIndicatorInsets.top = top }
     layoutCells()
     placeJump()

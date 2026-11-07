@@ -281,14 +281,6 @@ extension Main {
   private func cornerTargetRaw(skipTop: Bool) -> (CornerButton.Spot, CornerButton.Spot, CornerButton.Spot) {
     // (iPhone's own navigation: a task page has Apple's ‹ and ••• — the shared ones never stand in for them; they showed a
     //  moment at the top coming back to Home — Haris 2026-11-07)
-    let pages = APPLE_NAV ? [] : skipTop ? Array(taskPages.dropLast()) : taskPages
-    if let p = pages.last {
-      if p.cornerFrame.width == 0 { p.setNeedsLayout(); p.layoutIfNeeded() }   // (never aim at a page not laid out yet)
-      let f = p.convert(p.cornerFrame, to: view).offsetBy(dx: -p.transform.tx, dy: 0)
-      let bf = p.convert(p.backFrame, to: view).offsetBy(dx: -p.transform.tx, dy: 0)
-      let mid = p.editingDesc ? CornerButton.Spot(kind: "done", text: "Done", frame: corner.place("done", "Done", circle: f.offsetBy(dx: -56, dy: 0))) : CornerButton.Spot()
-      return (CornerButton.Spot(kind: "back", frame: bf), mid, CornerButton.Spot(kind: "more", frame: f))
-    }
     if let h = shownScreen { return screenSpots(h) }
     return (CornerButton.Spot(), CornerButton.Spot(), CornerButton.Spot())
   }
@@ -338,7 +330,6 @@ extension Main {
     for h in [homeIfMade, myTasksIfMade, inboxIfMade, clientsListIfMade, clientPageIfMade].compactMap({ $0 }) where !h.cornerShared { h.cornerShared = true; h.onCorner = { [weak self] in self?.updateCorner() } }
     // (the page's ••• menu ready or changed: only the menu — moving the buttons again here, without the spring, cut
     //  the melt into ••• short as a task opened: build 1275's film)
-    for p in taskPages where !p.cornerShared { p.cornerShared = true; p.onMenu = { [weak self, weak p] in if let p = p, p === self?.taskPages.last { self?.corner.items = p.cornerItems } } }
     if corner.superview == nil {
       corner.onLeft = { [weak self] in
         guard let self = self else { return }
@@ -375,8 +366,8 @@ extension Main {
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.cornerWaited = false; self?.updateCornerNow(animated: animated) }
       return
     }
-    corner.items = taskPages.last?.cornerItems ?? shownScreen?.menuItems ?? []
-    corner.go(left: t.0, mid: t.1, corner: t.2, menu: taskPages.last?.cornerMenu, animated: animated && corner.window != nil)
+    corner.items = shownScreen?.menuItems ?? []
+    corner.go(left: t.0, mid: t.1, corner: t.2, menu: nil, animated: animated && corner.window != nil)
     fabFollow()   // (the shared +: SharedFab.swift)
     appleHomeBar(animated: false)
     AppleTabs.shared?.mirrorShown()

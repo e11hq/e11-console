@@ -31,7 +31,6 @@ extension Main {
     KeyboardShield.attach(p)
     p.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     p.light = statusStyle == .darkContent
-    let under: UIView? = taskPages.last
     // (Home / My Tasks hid itself as the task was tapped — for the website's page, which slid over the page's own
     //  Home; the app's page slides over the screen itself, so it stays: no black under it, none on the way back)
     if let h = hiddenForOpen, Date().timeIntervalSince(h.1) < 3, let v = h.0 { v.isHidden = false }
@@ -41,7 +40,6 @@ extension Main {
     var pushVC: TaskVC? = nil
     if APPLE_NAV, stageNav != nil {
       let vc = TaskVC(p); pushVC = vc
-      p.appleBar = true
       vc.loadViewIfNeeded()
       p.frame = vc.view.bounds
       vc.view.addSubview(p)
@@ -77,10 +75,8 @@ extension Main {
     taskPan?.isEnabled = true
     // (opened straight on Comments — a comment's notification or Inbox row: the comments drawn now, from the app's copy,
     //  so they slide in with the page — they came only once it had arrived, a black page meanwhile: Haris 2026-11-05)
-    let W = view.bounds.width
     // (and the comment box with them: it slides in with the page, ready at once — it only came once the page had
     //  arrived, so from the Inbox the box and its keyboard felt slow: Haris 2026-11-05)
-    var boxWith: UIView? = nil
     if p.tab == "comments", !defaults.bool(forKey: "e11_feed_off") {
       prepFeed(p)
       let c = compose
@@ -88,9 +84,7 @@ extension Main {
         c.switchTo(task: p.taskId, parent: nil)
         self.placeCompose(c, above: p)
         c.alpha = 1; c.isHidden = false
-        if pushVC == nil { c.transform = CGAffineTransform(translationX: W, y: 0) }
       }
-      boxWith = c
     }
     // iPhone's own push: Apple's slide, the screen under it moving aside, the swipe back — all Apple's
     if let vc = pushVC, let nav = stageNav {
@@ -102,20 +96,6 @@ extension Main {
       }
       if let tc = nav.transitionCoordinator { tc.animate(alongsideTransition: nil) { _ in done() } } else { done() }
       return
-    }
-    // in from the right, the screen under it moving a little to the left and darkening (as iPhone's own push)
-    p.transform = CGAffineTransform(translationX: W, y: 0)
-    shadow(p, on: true)
-    UIView.animate(withDuration: 0.42, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
-      p.transform = .identity
-      boxWith?.transform = .identity
-      self.underViews(below: p, under: under).forEach { $0.transform = CGAffineTransform(translationX: -W * 0.3, y: 0) }
-      self.tabBar.alpha = 0
-    } completion: { _ in
-      if self.taskPages.last === p {
-        self.tabBar.isHidden = true
-        if p.tab == "comments" { self.taskShowComments(p, focus: focus) }
-      }
     }
   }
   // what's under a page: the page before it, or the app's screen (the page and its own screens)
@@ -132,13 +112,6 @@ extension Main {
       return !taskPages.contains { $0 === v }
     }
   }
-  private func shadow(_ p: UIView, on: Bool) {
-    p.layer.shadowColor = UIColor.black.cgColor
-    p.layer.shadowOpacity = on ? 0.18 : 0
-    p.layer.shadowRadius = 12
-    p.layer.shadowOffset = CGSize(width: -3, height: 0)
-    p.layer.shadowPath = UIBezierPath(rect: p.bounds).cgPath
-  }
 
   func closeTaskPage(_ p: TaskPage, animated: Bool = true) {
     guard let i = taskPages.firstIndex(where: { $0 === p }) else { return }
@@ -147,7 +120,6 @@ extension Main {
     taskPages.remove(at: i)
     let under: UIView? = taskPages.last
     let back = underViews(below: p, under: under)
-    let W = view.bounds.width
     let last = taskPages.isEmpty
     // (the screen under it laid out as it will be first — the buttons aimed at a place it then changed, and jumped)
     if last { tabBar.isHidden = tabsHidden; edgePanOn(); view.setNeedsLayout(); view.layoutIfNeeded() }   // (the swipe back for what's under it — a review request, a Me page, Client Assets: it was off until the app came back from the background, Haris 2026-11-04)
@@ -177,12 +149,7 @@ extension Main {
       }
       finish(); return
     }
-    if !animated { finish(); if last { tabBar.alpha = barTo }; return }
-    UIView.animate(withDuration: 0.36, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState]) {
-      p.transform = CGAffineTransform(translationX: W, y: 0)
-      back.forEach { $0.transform = .identity }
-      if last { self.tabBar.alpha = barTo }
-    } completion: { _ in finish() }
+    finish(); if last { tabBar.alpha = barTo }
   }
 
   // leaving a task (‹ or the swipe back) with a comment or reply written and not sent: iPhone's own alert — Send / Keep
@@ -375,10 +342,7 @@ extension Main {
   }
 
   private func wire(_ p: TaskPage) {
-    p.onBack = { [weak self, weak p] in guard let self = self, let p = p else { return }; if p.editingDesc { p.finishDesc() }; self.taskBackStep(p) }
-    p.onCornerChange = { [weak self] in self?.updateCornerNow() }
     // (in a reply thread, only the swipe from the edge goes back — not a swipe across the page: Haris 2026-11-04)
-    p.onSwipeToDetails = { [weak self, weak p] in guard let self = self, let p = p, p.threadFeed == nil else { return }; self.toDetailsFromComments(p) }
     // Details ↔ Comments in iPhone's paging scroller: a swipe from Details readies the comments and their box; the box
     // moves with the comments page
     p.onPeek = { [weak self, weak p] t in
@@ -703,7 +667,6 @@ extension Main {
       c.text.becomeFirstResponder()
     }
     f.onThread = { [weak self, weak p] cid in guard let self = self, let p = p else { return }; self.openThread(p, cid, pulse: nil) }
-    f.onBack = { [weak self, weak p] in guard let self = self, let p = p else { return }; self.closeThread(p) }
     return f
   }
   // a thread on a page of its own, sliding in from the right; the comments screen behind opens it too (for replying)
