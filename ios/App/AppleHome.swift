@@ -30,26 +30,6 @@ final class MePhotoControl: UIControl {
   override var intrinsicContentSize: CGSize { MePhotoControl.size }
 }
 
-// Apple's search results page: Home's own results (its cards) on it, Apple placing them under its bar and search field
-final class HomeResultsVC: UIViewController {
-  override func loadView() { let v = UIView(); v.backgroundColor = .systemGroupedBackground; view = v }
-  func take(_ h: HomeView) {
-    loadViewIfNeeded()
-    view.backgroundColor = h.backgroundColor ?? .systemGroupedBackground
-    let r = h.appleResults
-    guard r.superview !== view else { return }
-    r.removeFromSuperview()
-    r.translatesAutoresizingMaskIntoConstraints = false
-    r.isHidden = false; r.alpha = 1
-    view.addSubview(r)
-    // (the keyboard's top is the page's end: the last result can always be scrolled into sight)
-    NSLayoutConstraint.activate([r.topAnchor.constraint(equalTo: view.topAnchor), r.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-                                 r.trailingAnchor.constraint(equalTo: view.trailingAnchor), r.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor)])
-  }
-  override func viewWillAppear(_ a: Bool) { super.viewWillAppear(a); if let h = Main.shared.homeIfMade { take(h); view.backgroundColor = h.backgroundColor ?? view.backgroundColor } }
-  override func viewDidLayoutSubviews() { super.viewDidLayoutSubviews(); Main.shared.homeIfMade?.appleResultsLaidOut() }
-}
-
 final class AppleHomeBits {
   static let shared = AppleHomeBits()
   var meButton: MePhotoControl?
@@ -82,9 +62,8 @@ final class HomeVC: UIViewController, UISearchResultsUpdating, UISearchControlle
     b.addAction(UIAction { _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); Main.shared.homeIfMade?.meTap() }, for: .touchUpInside)
     AppleHomeBits.shared.meButton = b
     let meItem = UIBarButtonItem(customView: b)
-    // Apple's search: its own controller and results page; the results are Home's cards (HomeResultsVC)
-    let s = UISearchController(searchResultsController: HomeResultsVC())
-    s.showsSearchResultsController = true
+    // Apple's search: its own controller, the results in Home's own list (as E11 Talk's lists — no second page)
+    let s = UISearchController(searchResultsController: nil)
     s.obscuresBackgroundDuringPresentation = false
     s.searchResultsUpdater = self
     s.delegate = self
@@ -157,9 +136,7 @@ final class HomeVC: UIViewController, UISearchResultsUpdating, UISearchControlle
   // ---------- Apple's search: it opened, its words changed, it closed ----------
   func updateSearchResults(for s: UISearchController) { Main.shared.homeIfMade?.appleSearchText(s.searchBar.text ?? "") }
   func willPresentSearchController(_ s: UISearchController) {
-    guard let h = Main.shared.homeIfMade else { return }
-    (s.searchResultsController as? HomeResultsVC)?.take(h)
-    h.appleSearchBegin()
+    Main.shared.homeIfMade?.appleSearchBegin()
   }
   func didPresentSearchController(_ s: UISearchController) { DispatchQueue.main.async { s.searchBar.becomeFirstResponder() } }
   func willDismissSearchController(_ s: UISearchController) { Main.shared.homeIfMade?.appleSearchEnd() }

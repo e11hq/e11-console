@@ -113,7 +113,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   var onAppleTitle: ((String, String) -> Void)?
   var onAppleMe: ((UIImage?) -> Void)?
   var onAppleResign: (() -> Void)?
-  var appleScroll: UIScrollView { searching ? results : sv }
+  var appleScroll: UIScrollView { listOn ? sv : searching ? results : sv }
   // Home's list as Apple's own list (Haris 2026-11-07: "I like Apple's list"): the same cards, headings and boxes, each
   // in a cell of iPhone's list — Apple's swipe actions (Done · Due, Copy link · Delete) and Apple's animation when cards
   // come, go or move
@@ -176,6 +176,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private func itemHeight(_ key: String, _ v: UIView) -> CGFloat {
     let w = bounds.width - 32
     if key == "stats" { return 80 }
+    if v === hint { return (hint.sizeThatFits(CGSize(width: w, height: 400)).height) + 28 }
+    if v is HomeClientRow { return 70 }
+    if let n = v as? SearchFixedNote { return n.height(for: w) }
     if let c = v as? HomeCard { return c.height(for: w) }
     if v.tag == 8 { return 28 + ((v as? UILabel)?.sizeThatFits(CGSize(width: w - 8, height: 400)).height ?? 17) }
     return 27
@@ -184,6 +187,15 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private func applyList(animated: Bool) {
     guard let ds = listDS else { return }
     var views: [String: UIView] = [:], keys: [String] = []
+    if searching {
+      // (searching: the results are the list's rows — the hint, the groups' headings, clients, task cards)
+      if let t = hint.text, !t.isEmpty { keys.append("e:hint"); views["e:hint"] = hint }
+      for v in resultViews {
+        let k = (v as? HomeCard).map { "c:" + $0.id } ?? "r:\(ObjectIdentifier(v).hashValue)"
+        if views[k] != nil { continue }
+        keys.append(k); views[k] = v
+      }
+    } else {
     if !noStats { keys.append("stats"); views["stats"] = statsRow }
     for v in content {
       if let c = v as? HomeCard { let k = "c:" + c.id; keys.append(k); views[k] = c; continue }
@@ -191,6 +203,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       let k = (v.tag == 8 ? "e:" : "h:") + (v.accessibilityIdentifier ?? "\(ObjectIdentifier(v).hashValue)")
       if views[k] != nil { continue }
       keys.append(k); views[k] = v
+    }
     }
     listViews = views
     var snap = NSDiffableDataSourceSnapshot<Int, String>()
@@ -261,24 +274,14 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private var inTop: CGFloat { appleTop ? sv.adjustedContentInset.top : scroll.contentInset.top }
   private var inBottom: CGFloat { appleTop ? sv.adjustedContentInset.bottom : scroll.contentInset.bottom }
   private func resignSearch() { field.resignFirstResponder(); onAppleResign?() }
-  // Apple's search bar: it opened, its words changed, it closed
+  // Apple's search bar: it opened, its words changed, it closed — the results in Home's own list, on Home's own page (as
+  // E11 Talk's lists: one list, Apple's bar following it; a second results page kept the big title's room above them)
   func appleSearchBegin() {
     guard appleTop, !searching else { return }
     if let o = openCard { setOpen(o, false) }
     searching = true
     showMotto()
-    results.isHidden = false; results.alpha = 1
     field.text = ""; showResults(nil)
-    setNeedsLayout(); layoutIfNeeded()
-    // (the results are on Apple's own results page, over the list — the list and the bar aren't moved: Haris 2026-11-07,
-    //  the big title jumped about as search closed)
-  }
-  var appleResults: UIScrollView { results }
-  // (on Apple's results page: laid out there, under Apple's bar and search field — nothing of ours added)
-  func appleResultsLaidOut() {
-    guard appleTop, results.superview !== self else { return }
-    if results.contentInset != .zero { results.contentInset = .zero }
-    layoutResults()
   }
   func appleSearchText(_ q: String) {
     guard appleTop, searching, q != (field.text ?? "") else { return }
@@ -288,13 +291,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     guard appleTop, searching else { return }
     findTimer?.invalidate()
     searching = false
-    searchSettling = true
     showMotto()
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-      self.searchSettling = false
-      if self.searching { return }
-      self.field.text = ""; self.showResults(nil)
-    }
+    field.text = ""; showResults(nil)
   }
   private let fab = UIButton(type: .system)
   // (a second, round button left of it — Client Assets' Delete while files are selected: Haris 2026-11-04)
@@ -1054,17 +1052,14 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     layoutHeader()
     if appleTop {
       // (under Apple's bar and its search bar: iPhone keeps the results clear of them, and of the keyboard)
-      // (on Apple's search results page — HomeResultsVC — Apple places them; here only while they're Home's own)
-      if results.superview === self {
-        if results.frame != bounds { results.frame = bounds }
-        results.contentInset.top = 12; results.contentInset.bottom = max(0, keyboardH - safeAreaInsets.bottom, bottomRoom - 60 - safeAreaInsets.bottom)
-      }
+      if results.frame != bounds { results.frame = bounds }
+      results.contentInset.top = 12; results.contentInset.bottom = max(0, keyboardH - safeAreaInsets.bottom, bottomRoom - 60 - safeAreaInsets.bottom)
     } else {
     results.frame = CGRect(x: 0, y: searchBar.frame.maxY + 8, width: W, height: H - searchBar.frame.maxY - 8)
     results.contentInset.bottom = max(keyboardH, bottomRoom - 60)
     results.contentInset.top = 12   // (clear of the blur under the search bar)
     }
-    layoutResults()
+    if !listOn { layoutResults() }   // (Apple's list: the results are in it — applyList)
     if let cv = list {
       // (Apple's list: its cells place the boxes, headings and cards; the room under the last card kept as before)
       if cv.frame != bounds { cv.frame = bounds }
@@ -1176,7 +1171,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   //  tab bar or the startup screen give it; it opened scrolled under the small title, twice: Haris 2026-11-07)
   // (Home's list is placed by Apple — its big title, its top: nothing of ours moves it; HomeVC in AppleHome.swift)
   private var userScrolled = false
-  private var searchSettling = false
   var appleBarHeight: (() -> CGFloat)?
   var appleProbe: (() -> [String: Any])?
   // the list at its end (or too short to scroll), Home not searching, no toast beside the + — the motto shows
@@ -1534,8 +1528,10 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
             }
             // (a task card is the same card wherever it shows — Haris, 2026-11-02: swipe right Done · Due, left Copy link ·
             //  Delete, touch and hold Attach Files — in the search results too)
-            let pan = UIPanGestureRecognizer(target: self, action: #selector(self.swipe(_:))); pan.delegate = self; v.addGestureRecognizer(pan)
-            let lp = UILongPressGestureRecognizer(target: self, action: #selector(self.press(_:))); lp.minimumPressDuration = 0.45; v.addGestureRecognizer(lp)
+            if !self.listOn {   // (Apple's list: its own swipe and hold, as Home's cards)
+              let pan = UIPanGestureRecognizer(target: self, action: #selector(self.swipe(_:))); pan.delegate = self; v.addGestureRecognizer(pan)
+              let lp = UILongPressGestureRecognizer(target: self, action: #selector(self.press(_:))); lp.minimumPressDuration = 0.45; v.addGestureRecognizer(lp)
+            }
             _ = PressShrink.add(to: v)
             resultCards[id] = v
           }
@@ -1547,7 +1543,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     } else { hint.text = q.isEmpty ? "Search tasks, clients or people." : nil }
     for (id, v) in resultCards where !seen.contains(id) { v.removeFromSuperview(); resultCards[id] = nil }
     setNeedsLayout()
-    if appleTop, results.superview !== self { layoutResults() }
+    if listOn { applyList(animated: false) }   // (Apple's list: the results are its rows while searching)
   }
   // what Client Assets found (its rows, as blocks), or what to say
   func showFound(_ views: [UIView], hint t: String?) {
