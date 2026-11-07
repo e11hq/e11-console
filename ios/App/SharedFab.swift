@@ -21,10 +21,15 @@ extension Main {
   // the screen on top now (nil: a task page over everything, the lock, or nothing yet) — called with the top buttons
   func fabFollow() {
     let m = FabMorph.shared
-    let to: HomeView? = taskPages.isEmpty && lockView == nil ? shownScreen : nil
+    // (Home is its own Apple screen: its + New task is its own, moving with it as Apple slides pages over it — never
+    //  veiled for a stand-in drawn on the app's old shared screen, which isn't on show with Home's tab on: it was veiled
+    //  as a task opened and only came back, in a snap, once the task page had gone — Haris 2026-11-07)
+    if APPLE_HOME, let h = homeIfMade { if h.fabVeiled { h.fabVeiled = false }; if m.veilA === h { m.veilA = nil }; if m.veilB === h { m.veilB = nil } }
+    var to: HomeView? = taskPages.isEmpty && lockView == nil ? shownScreen : nil
+    if APPLE_HOME, to === homeIfMade { to = nil }
     guard m.known else { m.known = true; m.screen = to; return }
     guard to !== m.screen else { return }
-    let from = m.screen
+    let from = APPLE_HOME && m.screen === homeIfMade ? nil : m.screen
     m.screen = to
     to?.layoutIfNeeded()
     let place = { (h: HomeView, f: CGRect) -> CGRect in h.convert(f, to: self.view).offsetBy(dx: -h.transform.tx, dy: 0) }

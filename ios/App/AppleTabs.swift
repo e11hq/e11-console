@@ -137,6 +137,10 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
     if main.tabsHidden && homeShown, let j = slots.indices.first(where: { $0 != homeAt }), selectedIndex != j {
       host(in: slots[j]); selectedIndex = j
     }
+    // (Home's own navigation sliding a page in or out: Apple shows and hides the tab bar itself — told anything mid-slide
+    //  (the task page's closing told it "hidden" as Home slid back), the tab container laid itself out again under the
+    //  slide and Home's search box was drawn anew, its glass coming in at the end: Haris 2026-11-07. Told once it's done.)
+    if homeShown, homeNav.transitionCoordinator != nil { return }
     // (a page pushed over the tabs — a task, a reply: no tab bar, Apple's slide away)
     let shown = top ?? (homeShown ? homeNav.topViewController : nav.topViewController)
     // (on Home's own navigation Apple does it itself — the page hides the tab bar as it's pushed)
