@@ -7,14 +7,27 @@ import UIKit
    Inbox and Clients keep their own headers until they're done the same way. */
 let APPLE_HOME = APPLE_NAV
 
-final class RoundPhotoButton: UIButton {
-  override func layoutSubviews() { super.layoutSubviews(); layer.cornerRadius = min(bounds.width, bounds.height) / 2; imageView?.frame = bounds }
-  override var intrinsicContentSize: CGSize { CGSize(width: 38, height: 38) }
+// your photo on the bar: a fixed 36 pt circle in the middle of whatever room the bar gives it — the bar can't stretch it
+// (it came out an oval: Haris 2026-11-07)
+final class MePhotoControl: UIControl {
+  private let pic = UIImageView()
+  override init(frame: CGRect) {
+    super.init(frame: frame)
+    pic.contentMode = .scaleAspectFill; pic.clipsToBounds = true; pic.isUserInteractionEnabled = false
+    pic.layer.cornerRadius = 18; pic.layer.cornerCurve = .circular
+    pic.translatesAutoresizingMaskIntoConstraints = false
+    addSubview(pic)
+    NSLayoutConstraint.activate([pic.widthAnchor.constraint(equalToConstant: 36), pic.heightAnchor.constraint(equalToConstant: 36),
+                                 pic.centerXAnchor.constraint(equalTo: centerXAnchor), pic.centerYAnchor.constraint(equalTo: centerYAnchor)])
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  func set(_ img: UIImage?) { pic.image = img }
+  override var intrinsicContentSize: CGSize { CGSize(width: 40, height: 40) }
 }
 
 final class AppleHomeBits {
   static let shared = AppleHomeBits()
-  var meButton: UIButton?
+  var meButton: MePhotoControl?
   var search: UISearchController?
 }
 
@@ -38,19 +51,16 @@ extension Main: UISearchResultsUpdating, UISearchControllerDelegate {
     }
     h.onAppleMe = { img in
       guard let img = img else { return }
-      AppleHomeBits.shared.meButton?.setImage(img, for: .normal)
+      AppleHomeBits.shared.meButton?.set(img)
     }
     h.onAppleResign = { AppleHomeBits.shared.search?.searchBar.resignFirstResponder() }
     // your photo (Me) and 🔍, as Apple's bar buttons
     // (always a circle: its own size, its corners half its size whatever the bar does with it — it came out stretched,
     //  not round: Haris 2026-11-07)
-    let b = RoundPhotoButton(type: .custom)
-    b.frame = CGRect(x: 0, y: 0, width: 38, height: 38)
+    let b = MePhotoControl(frame: CGRect(x: 0, y: 0, width: 40, height: 40))
     b.translatesAutoresizingMaskIntoConstraints = false
-    NSLayoutConstraint.activate([b.widthAnchor.constraint(equalToConstant: 38), b.heightAnchor.constraint(equalToConstant: 38)])
-    b.clipsToBounds = true
-    b.imageView?.contentMode = .scaleAspectFill
-    b.contentHorizontalAlignment = .fill; b.contentVerticalAlignment = .fill
+    NSLayoutConstraint.activate([b.widthAnchor.constraint(equalToConstant: 40), b.heightAnchor.constraint(equalToConstant: 40)])
+    b.isAccessibilityElement = true; b.accessibilityTraits = .button
     b.accessibilityLabel = "Me"
     b.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.homeIfMade?.meTap() }, for: .touchUpInside)
     AppleHomeBits.shared.meButton = b
@@ -63,11 +73,13 @@ extension Main: UISearchResultsUpdating, UISearchControllerDelegate {
     // iOS 26: Apple's own search button in the bar — it opens into the search field there and closes back, all Apple's
     // (Haris 2026-11-07: the search bar went to the bottom, and a second search left it gone and the page stuck)
     if #available(iOS 26.0, *) {
-      navigationItem.rightBarButtonItems = [meItem]
       navigationItem.searchController = makeHomeSearch()
       navigationItem.hidesSearchBarWhenScrolling = false
       navigationItem.preferredSearchBarPlacement = .integratedButton
       navigationItem.searchBarPlacementAllowsToolbarIntegration = false
+      // (Apple's own item for where its search button goes: 🔍, then your photo at the right end, as before — Haris
+      //  2026-11-07)
+      navigationItem.rightBarButtonItems = [meItem, navigationItem.searchBarPlacementBarButtonItem]
     } else {
       navigationItem.rightBarButtonItems = [meItem, find]
     }
