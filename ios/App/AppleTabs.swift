@@ -69,8 +69,8 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
     nav.didMove(toParent: s)
     s.fit()
   }
-  private func hideBar(_ h: Bool) {
-    if #available(iOS 18.0, *) { if isTabBarHidden != h { setTabBarHidden(h, animated: false) } } else if tabBar.isHidden != h { tabBar.isHidden = h }
+  private func hideBar(_ h: Bool, animated: Bool = false) {
+    if #available(iOS 18.0, *) { if isTabBarHidden != h { setTabBarHidden(h, animated: animated) } } else if tabBar.isHidden != h { tabBar.isHidden = h }
   }
 
   // Main's tabs → Apple's: one tab each, the same names and icons (with their counts drawn in), your photo on Me
@@ -108,12 +108,15 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
   func mirrorSelected(_ tag: Int?) { guard !selecting, let t = tag else { return }; select(t) }
   // Main's bar shown / hidden / faded → Apple's; not over the startup screen or the lock; a page pushed over the tabs
   // (a task) hides it Apple's way
-  func mirrorShown() {
+  func mirrorShown(animated: Bool = false, top: UIViewController? = nil) {
     let main = Main.shared
-    guard nav.viewControllers.count <= 1 else { return }
+    // (a page pushed over the tabs — a task, a reply: no tab bar, Apple's slide away; the app's navigation isn't the
+    //  tab's own, so iPhone's "hide when pushed" never did it — it stayed over the task page, its comments and the
+    //  keyboard: Haris 2026-11-07)
+    if (top ?? nav.topViewController) !== main { hideBar(true, animated: animated); return }
     let b = main.tabBar
     let hide = b.isHidden || main.lockView != nil || (main.splash != nil && !main.splashLeaving)
-    hideBar(hide)
+    hideBar(hide, animated: animated)
     let a = b.alpha
     if tabBar.alpha != a { tabBar.alpha = a }
   }

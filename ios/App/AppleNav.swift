@@ -51,6 +51,10 @@ final class AppleNav: UINavigationController, UINavigationControllerDelegate, UI
   // (Apple's swipe back and the app's own gestures inside a page — the comments' swipes, the files row — together)
   func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith o: UIGestureRecognizer) -> Bool { false }
   // a page gone (popped by ‹, swiped away, or taken out): the app lets go of it as when it closes
+  // (Apple's tab bar slides away as a page comes over the tabs, and back as the app's screen comes back — AppleTabs.swift)
+  func navigationController(_ n: UINavigationController, willShow vc: UIViewController, animated: Bool) {
+    AppleTabs.shared?.mirrorShown(animated: animated, top: vc)
+  }
   func navigationController(_ n: UINavigationController, didShow vc: UIViewController, animated: Bool) {
     Main.shared.taskPagesGone(stack: n.viewControllers)
     AppleTabs.shared?.mirrorShown()   // (back on the app's screens: Apple's tab bar as Main has it)
