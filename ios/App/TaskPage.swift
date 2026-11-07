@@ -556,7 +556,12 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let paths = (((m["files"] as? [[String: Any]]) ?? []) + ((m["commentFiles"] as? [[String: Any]]) ?? [])).compactMap { $0["file"] as? String }
     let fresh = paths.filter { !askedLinks.contains($0) }
     if !fresh.isEmpty { askedLinks.formUnion(fresh); onFilesShown?(fresh) }
-    if let pp = m["people"] as? [String: [String: Any]] { people.merge(pp) { a, b in b["photo"] != nil ? b : a } }
+    // (each person's details joined, not one kept whole: what was known already — Home's, which has only initials, colour
+    //  and photo — kept the name out, so a Guardian just picked read "Someone" until the server's answer: Haris 2026-11-07.
+    //  A photo already fetched stays when the new one has none.)
+    if let pp = m["people"] as? [String: [String: Any]] {
+      people.merge(pp) { a, b in var x = a.merging(b) { _, n in n }; if b["photo"] == nil, let ph = a["photo"] { x["photo"] = ph }; return x }
+    }
     if let c = m["client"] as? [String: Any] {
       client.text = c["name"] as? String ?? ""; dot.backgroundColor = TaskPage.rgb(c["rgb"]); dot.isHidden = false
     } else { client.text = (m["sub"] as? Bool) == true ? "Subtask" : "My Tasks"; dot.isHidden = true }
