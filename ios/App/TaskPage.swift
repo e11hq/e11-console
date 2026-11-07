@@ -62,7 +62,6 @@ final class ServerTask {
 }
 
 final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate, UITextViewDelegate {
-  private var frostWatch: FrostWatch?
   let taskId: String
   var model: [String: Any]?
   var people: [String: [String: Any]] = [:]
@@ -83,9 +82,8 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private let barBox = UIView()                        // what the frost edge sits under (the buttons and the switch)
   var barBoxView: UIView { barBox }
   private var edgeHook: AnyObject?
-  private let frostReach = FrostReach()   // (as Home's: the soft frost as strong as Mail's)
   // the frost under the bar follows whichever list is showing (Details, the comments, a thread)
-  func edgeScroll(_ sv: UIScrollView) { if #available(iOS 26.0, *) { (edgeHook as? UIScrollEdgeElementContainerInteraction)?.scrollView = sv }; frostReach.follow(sv) }
+  func edgeScroll(_ sv: UIScrollView) { if #available(iOS 26.0, *) { (edgeHook as? UIScrollEdgeElementContainerInteraction)?.scrollView = sv } }
   // the corner button (Main's CornerButton) stands in for ••• — this page's own stays invisible; its menu is lent
   var cornerShared = false { didSet { more.alpha = cornerShared ? 0 : 1; moreBtn.isHidden = cornerShared; back.alpha = cornerShared ? 0 : 1; back.isUserInteractionEnabled = !cornerShared } }
   var backFrame: CGRect { back.frame }
@@ -295,9 +293,8 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       i.scrollView = scroll; i.edge = .top
       barBox.addInteraction(i)
       edgeHook = i
-      frostReach.attach(scroll, in: self, below: barBox)
-      scroll.topEdgeEffect.style = .hard   // (the Inbox's frost: Details · Comments are stuck under the bar — Haris 2026-11-03)
-      frostWatch = FrostWatch(scroll)
+      // (Apple's own frost behind Details · Comments and the bar, from the list under them — Apple's scroll edge, as it
+      //  comes: our firmer frost and the code watching the list for it removed, Haris 2026-11-07)
     }
     back.setIcon("chevron.left", 19)
     back.accessibilityLabel = "Back"
@@ -386,7 +383,6 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       }
     } else { place(scroll) }
     barBox.frame = CGRect(x: 0, y: 0, width: W, height: barBottom)
-    frostReach.frame = CGRect(x: 0, y: 0, width: W, height: barBottom)   // (the firm frost: no reach below the line)
     back.frame = CGRect(x: 16, y: top, width: 44, height: 44)
     more.frame = CGRect(x: W - 60, y: top, width: 44, height: 44)
     moreBtn.frame = more.frame
