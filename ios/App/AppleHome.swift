@@ -74,8 +74,10 @@ final class HomeVC: UIViewController, UISearchResultsUpdating, UISearchControlle
     s.searchBar.placeholder = "Search tasks, clients or people"
     s.searchBar.autocorrectionType = .no
     AppleHomeBits.shared.search = s
-    // (Apple's search is in the bar only while it's open: at rest the box is on Home's own page, on Apple's glass —
-    //  HomeView.appleSearchBox — so it slides in with Home, glass and all, as "+ New task": Haris 2026-11-07)
+    // (Apple's own search bar in Apple's bar, under the big title, always — as E11 Talk's lists; it stays stuck under the
+    //  bar as Home scrolls. Haris 2026-11-08: "apple's search looks more elegant" — our box on the page taken out; it
+    //  only flew with the bar while the old "hide the bottom bar when pushed" snapped the bar small, now gone)
+    navigationItem.searchController = s
     navigationItem.hidesSearchBarWhenScrolling = false
     // (Apple's search box under the big title, as E11 Talk's lists — nothing set for where it goes: tapped, Apple folds the
     //  big title away and the results start right under the box. Apple's 🔍 bar button kept the big title's room above
@@ -108,11 +110,10 @@ final class HomeVC: UIViewController, UISearchResultsUpdating, UISearchControlle
     }
     view.backgroundColor = h.backgroundColor ?? view.backgroundColor
     h.onAppleTitle = { [weak self] t, d in self?.setTitle(t, d) }
-    h.onAppleFind = { [weak self] q in
+    h.onAppleFind = { q in
       guard let s = AppleHomeBits.shared.search else { return }
-      if let q = q { self?.openSearch(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { s.searchBar.text = q; Main.shared.homeIfMade?.appleSearchText(q) } } else { s.isActive = false }
+      if let q = q { s.isActive = true; s.searchBar.text = q; Main.shared.homeIfMade?.appleSearchText(q) } else { s.isActive = false }
     }
-    h.onAppleSearchTap = { [weak self] in self?.openSearch() }
     h.onAppleMe = { [weak self] img in if let img = img { AppleHomeBits.shared.mePhoto = img; self?.paintMe() } }
     h.onAppleResign = { AppleHomeBits.shared.search?.searchBar.resignFirstResponder() }
     h.appleBarHeight = { [weak self] in
@@ -150,18 +151,6 @@ final class HomeVC: UIViewController, UISearchResultsUpdating, UISearchControlle
   }
   func didPresentSearchController(_ s: UISearchController) { DispatchQueue.main.async { s.searchBar.becomeFirstResponder() } }
   func willDismissSearchController(_ s: UISearchController) { Main.shared.homeIfMade?.appleSearchEnd() }
-  // (closed: out of the bar again — the box on the page is the way in)
-  func didDismissSearchController(_ s: UISearchController) {
-    if navigationItem.searchController === s { navigationItem.searchController = nil }
-    Main.shared.homeIfMade?.appleSearchGone()   // (Apple's search fully gone from the bar: the box on the page again)
-  }
-  // the box on the page tapped: Apple's search, in the bar, open and ready to type
-  func openSearch() {
-    guard let s = AppleHomeBits.shared.search, !s.isActive else { return }
-    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-    navigationItem.searchController = s
-    DispatchQueue.main.async { s.isActive = true }
-  }
 }
 
 extension Main {

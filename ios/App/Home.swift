@@ -150,17 +150,10 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     cfg.backgroundColor = .clear
     cfg.trailingSwipeActionsConfigurationProvider = { [weak self] ip in self?.swipeActions(ip, leading: false) }
     cfg.leadingSwipeActionsConfigurationProvider = { [weak self] ip in self?.swipeActions(ip, leading: true) }
-    let layout = UICollectionViewCompositionalLayout { [weak self] _, env in
+    let layout = UICollectionViewCompositionalLayout { _, env in
       let sec = NSCollectionLayoutSection.list(using: cfg, layoutEnvironment: env)
       sec.interGroupSpacing = 10
       sec.contentInsets = NSDirectionalEdgeInsets(top: 4, leading: 16, bottom: 0, trailing: 16)
-      // Home's search box: the list's own header, pinned — it sticks under Apple's bar as the list scrolls (Apple's pinned
-      // header); not there while Apple's search is open in the bar (one search box, never two — Haris 2026-11-08)
-      if self?.searchBoxShown == true {
-        let head = NSCollectionLayoutBoundarySupplementaryItem(layoutSize: NSCollectionLayoutSize(widthDimension: .fractionalWidth(1), heightDimension: .absolute(52)), elementKind: UICollectionView.elementKindSectionHeader, alignment: .top)
-        head.pinToVisibleBounds = true
-        sec.boundarySupplementaryItems = [head]
-      }
       return sec
     }
     let cv = UICollectionView(frame: bounds, collectionViewLayout: layout)
@@ -175,16 +168,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       cell.host(v, height: self.itemHeight(key, v))
     }
     listDS = UICollectionViewDiffableDataSource<Int, String>(collectionView: cv) { cv, ip, key in cv.dequeueConfiguredReusableCell(using: reg, for: ip, item: key) }
-    let headReg = UICollectionView.SupplementaryRegistration<UICollectionReusableView>(elementKind: UICollectionView.elementKindSectionHeader) { [weak self, weak cv] head, _, _ in
-      guard let self = self else { return }
-      let box = self.appleSearchBox
-      if box.superview !== head { box.removeFromSuperview(); box.frame = head.bounds; box.autoresizingMask = [.flexibleWidth, .flexibleHeight]; head.addSubview(box) }
-      // (Apple's frost under the bar reaches down behind the box while it's stuck there — Apple's own scroll edge)
-      if #available(iOS 26.0, *), let cv = cv, !head.interactions.contains(where: { $0 is UIScrollEdgeElementContainerInteraction }) {
-        let i = UIScrollEdgeElementContainerInteraction(); i.scrollView = cv; i.edge = .top; head.addInteraction(i)
-      }
-    }
-    listDS?.supplementaryViewProvider = { cv, kind, ip in cv.dequeueConfiguredReusableSupplementary(using: headReg, for: ip) }
     stats.forEach { statsRow.addSubview($0) }
     insertSubview(cv, aboveSubview: scroll)
     scroll.isHidden = true
@@ -224,8 +207,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     }
     }
     listViews = views
-    // (the search box's header comes and goes with Apple's search: the list told once, as it changes)
-    if headShown != searchBoxShown { headShown = searchBoxShown; list?.collectionViewLayout.invalidateLayout() }
     var snap = NSDiffableDataSourceSnapshot<Int, String>()
     snap.appendSections([0]); snap.appendItems(keys, toSection: 0)
     let had = Set(ds.snapshot().itemIdentifiers)
@@ -296,21 +277,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private func resignSearch() { field.resignFirstResponder(); onAppleResign?() }
   // Apple's search bar: it opened, its words changed, it closed — the results in Home's own list, on Home's own page (as
   // E11 Talk's lists: one list, Apple's bar following it; a second results page kept the big title's room above them)
-  // Home's search box on the page (the list's pinned header): shown unless Apple's search is open in the bar — from its
-  // opening until it has fully left the bar (Haris 2026-11-08: two search boxes on the way out)
-  private var appleSearchUp = false
-  private var headShown = false
-  private var searchBoxShown: Bool { onAppleSearchTap != nil && !appleSearchUp }
-  func appleSearchGone() {
-    guard appleSearchUp else { return }
-    appleSearchUp = false
-    appleSearchBox.alpha = 0
-    applyList(animated: true)
-    UIView.animate(withDuration: 0.2) { self.appleSearchBox.alpha = 1 }
-  }
   func appleSearchBegin() {
     guard appleTop, !searching else { return }
-    appleSearchUp = true
     if let o = openCard { setOpen(o, false) }
     searching = true
     showMotto()
@@ -1828,32 +1796,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   func selfScroll(_ y: CGFloat) { userScrolled = y > 0; sv.setContentOffset(CGPoint(x: 0, y: y - inTop), animated: false); layoutHeader(); if !appleTop { setBar(barIn, now: true) } }
   // (Apple's search on Home's own screen — HomeVC: the self-test types into it as a finger would)
   var onAppleFind: ((String?) -> Void)?
-  // the search box on Home's page (Apple's glass, its own magnifier and words), and what a tap on it does (HomeVC: Apple's
-  // search opens)
-  var onAppleSearchTap: (() -> Void)?
-  lazy var appleSearchBox: UIView = {
-    let holder = UIView()
-    let fx = UIVisualEffectView()
-    if #available(iOS 26.0, *) { fx.effect = UIGlassEffect(style: .regular) } else { fx.effect = UIBlurEffect(style: .systemThinMaterial) }
-    fx.layer.cornerRadius = 22; fx.layer.cornerCurve = .continuous; fx.clipsToBounds = true
-    fx.isUserInteractionEnabled = false
-    let icon = UIImageView(image: UIImage(systemName: "magnifyingglass")); icon.tintColor = .secondaryLabel
-    let words = UILabel(); words.text = "Search tasks, clients or people"; words.textColor = .secondaryLabel; words.font = .systemFont(ofSize: 17)
-    let b = UIControl()
-    b.isAccessibilityElement = true; b.accessibilityTraits = .searchField; b.accessibilityLabel = "Search tasks, clients or people"
-    b.addAction(UIAction { [weak self] _ in self?.onAppleSearchTap?() }, for: .touchUpInside)
-    [fx, b].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; holder.addSubview($0) }
-    [icon, words].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; fx.contentView.addSubview($0) }
-    NSLayoutConstraint.activate([
-      fx.leadingAnchor.constraint(equalTo: holder.leadingAnchor), fx.trailingAnchor.constraint(equalTo: holder.trailingAnchor),
-      fx.centerYAnchor.constraint(equalTo: holder.centerYAnchor), fx.heightAnchor.constraint(equalToConstant: 44),
-      b.leadingAnchor.constraint(equalTo: fx.leadingAnchor), b.trailingAnchor.constraint(equalTo: fx.trailingAnchor),
-      b.topAnchor.constraint(equalTo: fx.topAnchor), b.bottomAnchor.constraint(equalTo: fx.bottomAnchor),
-      icon.leadingAnchor.constraint(equalTo: fx.contentView.leadingAnchor, constant: 14), icon.centerYAnchor.constraint(equalTo: fx.contentView.centerYAnchor),
-      words.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 8), words.centerYAnchor.constraint(equalTo: fx.contentView.centerYAnchor),
-      words.trailingAnchor.constraint(lessThanOrEqualTo: fx.contentView.trailingAnchor, constant: -14)])
-    return holder
-  }()
   func selfFind(_ q: String) { if appleTop, let f = onAppleFind { f(q); return }; openSearch(); field.text = q; typed() }
   func selfFindDone() { if appleTop, let f = onAppleFind { f(nil); return }; closeSearch() }
   // (the walk-through: the first task and client in the results, and a tap on one — as a finger would)
