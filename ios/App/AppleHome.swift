@@ -77,9 +77,9 @@ final class HomeVC: UIViewController, UISearchResultsUpdating, UISearchControlle
     //  the results — measured on Apple's own screens, Haris 2026-11-07)
     // E11 Talk's bubble, an Apple bar button on its own glass beside the Me pill (Haris 2026-11-07): it will open E11 Talk,
     // or its App Store page when it isn't installed — the link comes later, with Talk's release; for now it does nothing
-    // (its shape only, in the bar's own ink: white on dark, black on light — Apple's template image, Haris 2026-11-07)
-    let talk = UIBarButtonItem(image: UIImage(named: "TalkBubble"), primaryAction: UIAction { _ in })
-    talk.tintColor = .label
+    // (in its own blue gradient, as E11 Talk's icon — the same in light and dark: Apple's original-colour image, Haris
+    //  2026-11-07)
+    let talk = UIBarButtonItem(image: UIImage(named: "TalkBubble")?.withRenderingMode(.alwaysOriginal), primaryAction: UIAction { _ in })
     talk.accessibilityLabel = "E11 Talk"
     navigationItem.rightBarButtonItems = [meItem, .fixedSpace(0), talk]
     if let h = Main.shared.homeIfMade { adopt(h) }
