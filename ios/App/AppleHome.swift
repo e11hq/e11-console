@@ -115,9 +115,14 @@ final class HomeVC: UIViewController, UISearchResultsUpdating, UISearchControlle
     h.useAppleTop()
     setContentScrollView(h.appleScroll, for: .top)
   }
+  private var shownDate: String?
   func setTitle(_ t: String, _ d: String) {
     guard !t.isEmpty else { return }
     if navigationItem.title != t { navigationItem.title = t; UserDefaults.standard.set(t, forKey: "e11_home_title") }
+    // (only when it changed: set again on every Home redraw — after a task closes, every live update — Apple's bar laid
+    //  itself out again and its search box's glass formed anew: Haris 2026-11-07)
+    guard d != shownDate else { return }
+    shownDate = d
     if #available(iOS 26.0, *) {
       navigationItem.subtitle = d.isEmpty ? nil : d
       // (under the big title: the date as our other pages have it — 15 regular, the secondary grey — Haris 2026-11-07)

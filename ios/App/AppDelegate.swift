@@ -1068,10 +1068,19 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     guard let i = tabKeys.firstIndex(of: "me"), let item = tabBar.items?[i] else { return }
     guard let src = MePhoto.shared.picture(56) else { item.image = UIImage(systemName: symbol("me")); item.selectedImage = nil; return }
     let on = tabOnline[i] ?? netUp
-    item.image = roundPhoto(src, ring: nil, online: on)
-    item.selectedImage = roundPhoto(src, ring: tabBar.tintColor ?? .systemBlue, online: on)
+    // (drawn again only when what it shows changed — your photo, online, the tab bar's colour: new pictures every time the
+    //  tabs were told anything made Apple's tab bar redraw its items, its glass forming again: Haris 2026-11-07)
+    let mp = MePhoto.shared
+    let key = "\(mp.image.map { ObjectIdentifier($0).hashValue } ?? 0)|\(mp.initials ?? "")|\(String(describing: mp.color))|\(on)|\(String(describing: tabBar.tintColor))|\(i)"
+    if key != meTabKey || item.image == nil {
+      meTabKey = key
+      item.image = roundPhoto(src, ring: nil, online: on)
+      item.selectedImage = roundPhoto(src, ring: tabBar.tintColor ?? .systemBlue, online: on)
+    }
     AppleTabs.shared?.sync(from: tabBar)
   }
+  private static var meTabKeyStore = ""
+  private var meTabKey: String { get { Main.meTabKeyStore } set { Main.meTabKeyStore = newValue } }
   private var meWatched = false
   // ---------- the app's own tab bar (Part B step 1, Haris 2026-11-04) ----------
   // The tabs, their names and counts come from the app's own copy (web/appview.js tabs — the page's rules, in the app),
@@ -1177,6 +1186,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       tabKeys = keys
       tabPhoto = [:]
       tabBadgeKey = [:]
+      meTabKey = ""   // (new tabs: your photo drawn on the new Me tab)
       tabBar.items = list.enumerated().map { i, t in
         // (an Office Admin's first tab is Overview: a grid — Haris 2026-11-04)
         UITabBarItem(title: t["label"] as? String ?? "", image: UIImage(systemName: (t["label"] as? String) == "Overview" ? "square.grid.2x2" : (t["label"] as? String) == "Client Assets" ? "folder" : symbol(t["v"] as? String ?? "")), tag: i)
