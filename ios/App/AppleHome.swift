@@ -45,6 +45,8 @@ final class HomeResultsVC: UIViewController {
     // (the keyboard's top is the page's end: the last result can always be scrolled into sight)
     NSLayoutConstraint.activate([r.topAnchor.constraint(equalTo: view.topAnchor), r.leadingAnchor.constraint(equalTo: view.leadingAnchor),
                                  r.trailingAnchor.constraint(equalTo: view.trailingAnchor), r.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor)])
+    // (this page's own list, told to Apple — as Home tells it its list: while search is open Apple follows this one)
+    setContentScrollView(r, for: .top)
   }
   override func viewWillAppear(_ a: Bool) { super.viewWillAppear(a); if let h = Main.shared.homeIfMade { take(h); view.backgroundColor = h.backgroundColor ?? view.backgroundColor } }
   override func viewDidLayoutSubviews() { super.viewDidLayoutSubviews(); Main.shared.homeIfMade?.appleResultsLaidOut() }
