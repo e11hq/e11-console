@@ -58,6 +58,10 @@ extension Main: UISearchResultsUpdating, UISearchControllerDelegate {
       AppleHomeBits.shared.meButton?.set(img)
     }
     h.onAppleResign = { AppleHomeBits.shared.search?.searchBar.resignFirstResponder() }
+    h.appleBarHeight = { [weak self] in
+      guard let nb = self?.navigationController?.navigationBar, !nb.isHidden, nb.window != nil else { return 0 }
+      return nb.frame.height
+    }
     // your photo (Me) and 🔍, as Apple's bar buttons
     // (always a circle: its own size, its corners half its size whatever the bar does with it — it came out stretched,
     //  not round: Haris 2026-11-07)

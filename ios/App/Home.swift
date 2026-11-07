@@ -1167,9 +1167,16 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     guard appleTop, sv === list else { return }
     if !userScrolled && !sv.isDragging && !sv.isDecelerating { sv.contentOffset.y = -sv.adjustedContentInset.top }
   }
+  var appleBarHeight: (() -> CGFloat)?
   func appleKeepTop() {
     guard appleTop, let cv = list, !userScrolled, !searching, !cv.isDragging, !cv.isDecelerating else { return }
     cv.layoutIfNeeded()
+    // (Apple's bar settled small — it came in as the startup screen faded and took the list for scrolled: the list is
+    //  pulled down as a finger would, so the bar opens to its big title by itself — Haris 2026-11-07)
+    if let h = appleBarHeight?(), h > 0, h < 70 {
+      cv.contentOffset.y = -cv.adjustedContentInset.top - 64
+      cv.superview?.layoutIfNeeded()
+    }
     let top = -cv.adjustedContentInset.top
     if abs(cv.contentOffset.y - top) > 0.5 { cv.contentOffset.y = top }
   }
@@ -1797,7 +1804,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
      "groups": content.filter { $0.tag == 7 }.map { ($0 as? UILabel)?.text ?? "" }, "cards": cards.count, "fab": !fab.isHidden,
      "headH": blur.frame.height, "shrink": shrink, "bar": blur.alpha, "smallTitle": smallTitle.alpha, "searching": searching,
      "searchBarW": searchBar.isHidden ? 0 : searchBar.frame.width, "results": resultViews.count, "light": L.light,
-     "apple": appleTop, "appleList": listOn, "listCells": list?.visibleCells.count ?? 0, "scrolledY": sv.contentOffset.y + inTop]
+     "apple": appleTop, "appleList": listOn, "appleBarH": appleBarHeight?() ?? 0, "listCells": list?.visibleCells.count ?? 0, "scrolledY": sv.contentOffset.y + inTop]
   }
 }
 
