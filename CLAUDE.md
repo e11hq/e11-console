@@ -105,6 +105,13 @@ commits before stay as they are — published history is never rewritten.
 which app it's for (E11 Console iPhone, E11 Console Mac / website, or E11 Talk), ask Haris first — one short question —
 before changing anything.
 
+**DON'TS — every app, now and later (Haris, 2026-11-07):**
+1. Never alter Apple's code to get something. Find the solution the Apple way — more efficient, never fighting Apple's own
+   animations and code.
+2. Never leave useless code on a page that doesn't belong to that page.
+3. Every app stays lightweight, efficient and super fast — now and in the future.
+4. A design change: done by setting Apple's own parts where possible — never our own code mimicking what isn't Apple's.
+
 **The App Store release — APPROVED (Haris, 2026-11-06):** the iPhone app 1.1.0, build 1472 (commit 9ca8c16, marked by
 the branch `approved/appstore-ios-1.1.0-build-1472` — never moved or deleted) is approved as it is for the App Store.
 From now on:
