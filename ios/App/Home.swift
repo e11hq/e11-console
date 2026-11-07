@@ -1779,7 +1779,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
      "title": title.text ?? "", "date": sub.text ?? "", "stats": stats.map { ($0.viewWithTag(1) as? UILabel)?.text ?? "" },
      "groups": content.filter { $0.tag == 7 }.map { ($0 as? UILabel)?.text ?? "" }, "cards": cards.count, "fab": !fab.isHidden,
      "headH": blur.frame.height, "shrink": shrink, "bar": blur.alpha, "smallTitle": smallTitle.alpha, "searching": searching,
-     "searchBarW": searchBar.isHidden ? 0 : searchBar.frame.width, "results": resultViews.count, "light": L.light]
+     "searchBarW": searchBar.isHidden ? 0 : searchBar.frame.width, "results": resultViews.count, "light": L.light,
+     "apple": appleTop, "appleList": listOn, "listCells": list?.visibleCells.count ?? 0, "scrolledY": sv.contentOffset.y + inTop]
   }
 }
 

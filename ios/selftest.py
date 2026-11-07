@@ -79,13 +79,22 @@ try:
     hsc0 = res.get('homeScrolledNative') or {}
     check(hsc0.get('server') is True, f'Home comes straight from the server (/api/home) {hsc0.get("server")}')
     hs = res.get('homeSwipeNative') or {}; hp = res.get('homePressNative') or {}
-    check(hs.get('open') is True and (hs.get('openShift') or 0) < -80 and (hs.get('actions') or 0) >= 1, f'a Home card swiped left shows Copy link / Delete {hs}')
     hl = res.get('homeLeadNative') or {}
-    check(hl.get('open') is True and hl.get('lead') is True and (hl.get('openShift') or 0) > 80 and (hl.get('actions') or 0) >= 1, f'a Home card swiped right shows Done / Due {hl}')
+    # (Home in Apple's list — ios-nav: its swipe actions are Apple's, not driven from here; the cards are in Apple's cells)
+    if hn.get('appleList'):
+      check((hn.get('listCells') or 0) > 0, f"Home's cards are in Apple's list {hn.get('listCells')}")
+    else:
+      check(hs.get('open') is True and (hs.get('openShift') or 0) < -80 and (hs.get('actions') or 0) >= 1, f'a Home card swiped left shows Copy link / Delete {hs}')
+      check(hl.get('open') is True and hl.get('lead') is True and (hl.get('openShift') or 0) > 80 and (hl.get('actions') or 0) >= 1, f'a Home card swiped right shows Done / Due {hl}')
     check(hp.get('sheet') == 'AttachSheetVC' and hp.get('open') is False, f'a Home card held opens Attach Files {hp}')
     hsc = res.get('homeScrolledNative') or {}; hf = res.get('homeFindNative') or {}; hfd = res.get('homeFindDoneNative') or {}
-    check((hsc.get('shrink') or 0) >= 0.99 and (hsc.get('smallTitle') or 0) > 0.9, f'scrolled, Home\'s title shrinks into the small bar {hsc}')
-    check(hf.get('searching') is True and (hf.get('searchBarW') or 0) > 250 and (hf.get('results') or 0) > 0, f'Search stretches into a bar with results for "Ford" {hf}')
+    if hsc.get('apple'):
+      # (Apple's bar: its big title shrinks by itself; the list has scrolled)
+      check((hsc.get('scrolledY') or 0) > 50, f"scrolled, under Apple's bar {hsc.get('scrolledY')}")
+      check(hf.get('searching') is True and (hf.get('results') or 0) > 0, f'Search finds "Ford" {hf}')
+    else:
+      check((hsc.get('shrink') or 0) >= 0.99 and (hsc.get('smallTitle') or 0) > 0.9, f'scrolled, Home\'s title shrinks into the small bar {hsc}')
+      check(hf.get('searching') is True and (hf.get('searchBarW') or 0) > 250 and (hf.get('results') or 0) > 0, f'Search stretches into a bar with results for "Ford" {hf}')
     check(hfd.get('searching') is False, f'the ✕ closes the search {hfd}')
     hd = res.get('homeDateNative') or {}
     check(hd.get('sheet') == 'DateSheetVC', f'the date sheet opens (and the app is still running) {hd.get("sheet")}')
@@ -94,7 +103,7 @@ try:
     tsd = res.get('tpageSwipeDetailsNative') or {}
     check(tsd.get('tab') == 'details' and tsd.get('compose') is False and tsd.get('pages') == 1, f"swiped from Comments: Details, no comment box {tsd}")
     check(tp.get('pages') == 1 and tp.get('drawn') is True and tp.get('x') == 0 and tp.get('tabBar') is False and (res.get('tpage') or {}).get('webTask') is False, f"a task opens as the app's own page, drawn from the server, nothing of the website's under it {tp} {res.get('tpage')}")
-    check((res.get('ibxInbox') or {}).get('corner') == 'read' and (res.get('ibxInbox') or {}).get('cornerA', 0) > 0.9 and (res.get('homeNative') or {}).get('corner') == 'search', f"the corner button: Search on Home, Mark all read on the Inbox {(res.get('homeNative') or {}).get('corner')} {res.get('ibxInbox')}")
+    check((res.get('ibxInbox') or {}).get('corner') == 'read' and (res.get('ibxInbox') or {}).get('cornerA', 0) > 0.9 and (res.get('homeNative') or {}).get('corner') == ('none' if (res.get('homeNative') or {}).get('apple') else 'search'), f"the corner button: Search on Home, Mark all read on the Inbox {(res.get('homeNative') or {}).get('corner')} {res.get('ibxInbox')}")
     check(tp.get('corner') == 'more' and tpb.get('corner') != 'more', f"the corner button is the task page's ••• and back again {tp.get('corner')} → {tpb.get('corner')}")
     check((res.get('tpageSheetNative') or {}).get('sheet') == 'NativeSheetVC', f"Assignees opens iPhone's own people sheet (changed by role again) {res.get('tpageSheetNative')}")
     check(tps.get('content', 0) > 300, f"the task page has its rows {tps}")
