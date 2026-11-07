@@ -264,7 +264,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let h = homeView
     if h.superview == nil { return }
     h.bottomRoom = (tabBar.isHidden ? 40 : view.bounds.height - tabBar.frame.minY) + 96
-    h.tabTop = tabBar.isHidden ? nil : tabPillTop
+    h.tabTop = homeTabTop
     h.isHidden = false
     homeHadModel = true
     AppData.shared.start(me: me, cookies: serverHome.cookies)
@@ -680,7 +680,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
-    defer { if let h = homeIfMade { h.tabTop = tabBar.isHidden ? nil : tabPillTop } }   // (23+: Home's + by the tab bar)
+    defer { if let h = homeIfMade { h.tabTop = homeTabTop } }   // (23+: Home's + by the tab bar)
     let b = view.bounds
     // the page always fills the screen (no black band under it); the tab bar floats over its bottom and the page
     // keeps that much room free (--ios-tabs-h, web/phone.css)
@@ -1599,6 +1599,10 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   //  Haris 2026-11-07)
   var screenWindow: UIWindow? { AppleTabs.shared?.view.window ?? view.window }
   var bottomSafe: CGFloat { APPLE_TABS ? (screenWindow?.safeAreaInsets.bottom ?? view.safeAreaInsets.bottom) : view.safeAreaInsets.bottom }
+  // where Home's "+ New task" and its list's end go by: the tab bar's top whenever the app has its tabs — a task pushed
+  // over Home (Apple hides the tab bar for it) doesn't move them, so nothing on Home snaps into place coming back
+  // (Haris 2026-11-07)
+  var homeTabTop: CGFloat? { APPLE_HOME ? (tabsHidden ? nil : tabPillTop) : (tabBar.isHidden ? nil : tabPillTop) }
   var tabPillTop: CGFloat {
     let H = APPLE_TABS ? (screenWindow?.bounds.height ?? view.bounds.height) : view.bounds.height, safe = bottomSafe
     let pillBottom = H - (safe > 0 ? max(8, safe - 11) : 8)

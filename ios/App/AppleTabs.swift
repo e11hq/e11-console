@@ -142,10 +142,11 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
     // (on Home's own navigation Apple does it itself — the page hides the tab bar as it's pushed)
     if shown !== main && !(shown is HomeVC) { if !homeShown { hideBar(true, animated: animated) }; return }
     let b = main.tabBar
-    let hide = b.isHidden || main.lockView != nil || (main.splash != nil && !main.splashLeaving)
-    hideBar(hide, animated: animated)
-    let a = b.alpha
-    if tabBar.alpha != a { tabBar.alpha = a }
+    // (faded by the app — a New task draft tucked over it: hidden Apple's way, never its alpha set by us; Apple put it
+    //  back as the list scrolled, in a snap — Haris 2026-11-07)
+    let hide = b.isHidden || b.alpha < 0.5 || main.lockView != nil || (main.splash != nil && !main.splashLeaving)
+    hideBar(hide, animated: animated || UIView.inheritedAnimationDuration > 0)
+    if tabBar.alpha != 1 { tabBar.alpha = 1 }
   }
 
   // ---------- a tab tapped on Apple's bar: the app's navigation moves into it (Home: its own), and Main does what a tap did ----------

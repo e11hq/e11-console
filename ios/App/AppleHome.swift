@@ -94,7 +94,7 @@ final class HomeVC: UIViewController, UISearchResultsUpdating, UISearchControlle
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
     let m = Main.shared
-    if let h = m.homeIfMade, h.superview === view { h.tabTop = m.tabBar.isHidden ? nil : m.tabPillTop }
+    if let h = m.homeIfMade, h.superview === view { h.tabTop = m.homeTabTop }
   }
   // Home's own view, filling this screen (its list under Apple's bar, as Apple wants it)
   func adopt(_ h: HomeView) {

@@ -130,7 +130,7 @@ extension Main {
       let h = homeView
       if h.superview != nil {
         h.bottomRoom = (tabBar.isHidden ? 40 : view.bounds.height - tabBar.frame.minY) + 96
-        h.tabTop = tabBar.isHidden ? nil : tabPillTop
+        h.tabTop = homeTabTop
         h.isHidden = false
         homeHadModel = true
         serverHome.refresh()
