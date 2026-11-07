@@ -128,6 +128,16 @@ final class HomeVC: UIViewController, UISearchResultsUpdating, UISearchControlle
       guard let nb = self?.navigationController?.navigationBar, !nb.isHidden, nb.window != nil else { return 0 }
       return nb.frame.height
     }
+    h.appleProbe = { [weak self] in
+      guard let self = self, let nb = self.navigationController?.navigationBar, let w = self.view.window else { return [:] }
+      let s = AppleHomeBits.shared.search
+      let rv = s?.searchResultsController?.view
+      return ["barFrameY": nb.frame.minY, "barH": nb.frame.height, "barMaxYWin": nb.convert(nb.bounds, to: w).maxY,
+              "searchActive": s?.isActive ?? false,
+              "fieldMaxYWin": s.map { $0.searchBar.convert($0.searchBar.bounds, to: w).maxY } ?? -1,
+              "resultsVCSafeTop": rv?.safeAreaInsets.top ?? -1, "resultsVCY": rv.map { $0.convert($0.bounds, to: w).minY } ?? -1,
+              "homeVCSafeTop": self.view.safeAreaInsets.top]
+    }
     h.useAppleTop()
     setContentScrollView(h.appleScroll, for: .top)
   }

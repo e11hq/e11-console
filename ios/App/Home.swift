@@ -1178,6 +1178,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private var userScrolled = false
   private var searchSettling = false
   var appleBarHeight: (() -> CGFloat)?
+  var appleProbe: (() -> [String: Any])?
   // the list at its end (or too short to scroll), Home not searching, no toast beside the + — the motto shows
   private func showMotto() {
     let end = max(-inTop, sv.contentSize.height + inBottom - sv.bounds.height)
@@ -1805,7 +1806,12 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
      "groups": content.filter { $0.tag == 7 }.map { ($0 as? UILabel)?.text ?? "" }, "cards": cards.count, "fab": !fab.isHidden,
      "headH": blur.frame.height, "shrink": shrink, "bar": blur.alpha, "smallTitle": smallTitle.alpha, "searching": searching,
      "searchBarW": searchBar.isHidden ? 0 : searchBar.frame.width, "results": resultViews.count, "light": L.light,
-     "apple": appleTop, "appleList": listOn, "appleBarH": appleBarHeight?() ?? 0, "listCells": list?.visibleCells.count ?? 0, "scrolledY": sv.contentOffset.y + inTop]
+     "apple": appleTop, "appleList": listOn, "appleBarH": appleBarHeight?() ?? 0, "listCells": list?.visibleCells.count ?? 0, "scrolledY": sv.contentOffset.y + inTop,
+     // (measuring only — where Apple puts the search results: their top room, their safe area, where they start, and
+     //  what Apple's bar and search field report — HomeVC.probe)
+     "resInsetTop": results.adjustedContentInset.top, "resSafeTop": results.safeAreaInsets.top, "resOwnInsetTop": results.contentInset.top,
+     "resY": results.window.map { results.convert(results.bounds, to: $0).minY } ?? -1, "resOffsetY": results.contentOffset.y,
+     "probe": appleProbe?() ?? [:]]
   }
 }
 
