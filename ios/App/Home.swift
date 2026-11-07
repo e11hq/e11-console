@@ -267,11 +267,13 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if let o = openCard { setOpen(o, false) }
     searching = true
     showMotto()
-    results.isHidden = false
+    results.isHidden = false; results.alpha = 1
     field.text = ""; showResults(nil)
     setNeedsLayout(); layoutIfNeeded()
-    UIView.animate(withDuration: 0.25) { self.sv.alpha = 0; self.results.alpha = 1; self.fab.alpha = 0 }
+    // (the results are on Apple's own results page, over the list — the list and the bar aren't moved: Haris 2026-11-07,
+    //  the big title jumped about as search closed)
   }
+  var appleResults: UIScrollView { results }
   func appleSearchText(_ q: String) {
     guard appleTop, searching, q != (field.text ?? "") else { return }
     field.text = q; typed()
@@ -280,10 +282,11 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     guard appleTop, searching else { return }
     findTimer?.invalidate()
     searching = false
+    searchSettling = true
     showMotto()
-    UIView.animate(withDuration: 0.25) { self.sv.alpha = 1; self.results.alpha = 0; self.fab.alpha = 1 } completion: { _ in
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+      self.searchSettling = false
       if self.searching { return }
-      self.results.isHidden = true
       self.field.text = ""; self.showResults(nil)
     }
   }
@@ -1163,13 +1166,14 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // (until you scroll it yourself, Home's list stays at its very top with the big title — whatever room the bars, the
   //  tab bar or the startup screen give it; it opened scrolled under the small title, twice: Haris 2026-11-07)
   private var userScrolled = false
+  private var searchSettling = false   // (Apple's search closing: its bar moves the list itself — left alone)
   func scrollViewDidChangeAdjustedContentInset(_ sv: UIScrollView) {
-    guard appleTop, sv === list else { return }
+    guard appleTop, sv === list, !searching, !searchSettling else { return }
     if !userScrolled && !sv.isDragging && !sv.isDecelerating { sv.contentOffset.y = -sv.adjustedContentInset.top }
   }
   var appleBarHeight: (() -> CGFloat)?
   func appleKeepTop() {
-    guard appleTop, let cv = list, !userScrolled, !searching, !cv.isDragging, !cv.isDecelerating else { return }
+    guard appleTop, let cv = list, !userScrolled, !searching, !searchSettling, !cv.isDragging, !cv.isDecelerating else { return }
     cv.layoutIfNeeded()
     // (Apple's bar settled small — it came in as the startup screen faded and took the list for scrolled: the list is
     //  pulled down as a finger would, so the bar opens to its big title by itself — Haris 2026-11-07)

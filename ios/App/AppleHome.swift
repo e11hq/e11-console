@@ -29,6 +29,21 @@ final class MePhotoControl: UIControl {
   override var intrinsicContentSize: CGSize { MePhotoControl.size }
 }
 
+// Apple's search results page: Home's own results list (its cards) moved onto it, filling it
+final class HomeResultsVC: UIViewController {
+  override func loadView() { let v = UIView(); v.backgroundColor = .systemGroupedBackground; view = v }
+  func take(_ h: HomeView) {
+    loadViewIfNeeded()
+    view.backgroundColor = h.backgroundColor ?? .systemGroupedBackground
+    let r = h.appleResults
+    r.removeFromSuperview()
+    r.frame = view.bounds; r.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    r.isHidden = false; r.alpha = 1
+    view.addSubview(r)
+  }
+  override func viewWillAppear(_ a: Bool) { super.viewWillAppear(a); if let h = Main.shared.homeIfMade { view.backgroundColor = h.backgroundColor ?? view.backgroundColor } }
+}
+
 final class AppleHomeBits {
   static let shared = AppleHomeBits()
   var meButton: MePhotoControl?
@@ -106,7 +121,12 @@ extension Main: UISearchResultsUpdating, UISearchControllerDelegate {
   // 🔍: Apple's search bar comes in under the bar, ready to type
   func makeHomeSearch() -> UISearchController {
     if let x = AppleHomeBits.shared.search { return x }
-    let s = UISearchController(searchResultsController: nil)
+    // (Apple's own results page over Home — the results are Home's own cards on it; the list and the big title under it
+    //  are left as they are: Haris 2026-11-07)
+    let rvc = HomeResultsVC()
+    if let h = homeIfMade { rvc.take(h) }
+    let s = UISearchController(searchResultsController: rvc)
+    s.showsSearchResultsController = true
     s.obscuresBackgroundDuringPresentation = false
     s.searchResultsUpdater = self
     s.delegate = self
@@ -132,10 +152,6 @@ extension Main: UISearchResultsUpdating, UISearchControllerDelegate {
   func willPresentSearchController(_ s: UISearchController) {
     guard s === AppleHomeBits.shared.search, let h = homeIfMade else { return }
     h.appleSearchBegin()
-    // (while searching, no big title under the search field — it showed there, cut at the left edge: Haris 2026-11-07;
-    //  as Mail, only the field and the results)
-    navigationItem.largeTitleDisplayMode = .never
-    setContentScrollView(h.appleScroll, for: .top)
   }
   func didPresentSearchController(_ s: UISearchController) {
     guard s === AppleHomeBits.shared.search else { return }
@@ -144,11 +160,9 @@ extension Main: UISearchResultsUpdating, UISearchControllerDelegate {
   func willDismissSearchController(_ s: UISearchController) {
     guard s === AppleHomeBits.shared.search else { return }
     homeIfMade?.appleSearchEnd()
-    navigationItem.largeTitleDisplayMode = .always
   }
   func didDismissSearchController(_ s: UISearchController) {
     guard s === AppleHomeBits.shared.search else { return }
     if #unavailable(iOS 26.0) { navigationItem.searchController = nil }   // (iOS 26: it stays, as Apple's button)
-    if let h = homeIfMade { setContentScrollView(h.appleScroll, for: .top) }
   }
 }
