@@ -2386,7 +2386,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     v.addSubview(st)
     st.centerXAnchor.constraint(equalTo: v.centerXAnchor).isActive = true
     st.centerYAnchor.constraint(equalTo: v.centerYAnchor).isActive = true
-    view.addSubview(v)
+    // (over everything — task pages, Apple's bars, sheets: on the app's own screen it was under a task page opened over
+    //  it, Haris 2026-11-07)
+    if APPLE_NAV, let w = view.window { v.frame = w.bounds; v.autoresizingMask = [.flexibleWidth, .flexibleHeight]; w.addSubview(v) } else { view.addSubview(v) }
     lockView = v
     // (Face ID asked by itself — once the app is really active: opening, it isn't yet when this runs, and the ask was
     //  never made; only the button worked — Haris 2026-11-05)
