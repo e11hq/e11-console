@@ -11,28 +11,28 @@ let APPLE_HOME = APPLE_NAV
 // Me on the bar: a pill — your photo (a fixed 30 pt circle the bar can't stretch) and the word "Me", on Apple's own glass
 // (Haris 2026-11-07: "the word Me only in the top area, next to the profile picture, in a pill" — with it the bar's
 // right side is wide enough that iOS puts the small title on the left by its own rule)
-final class MePhotoControl: UIControl {
-  private let pic = UIImageView(), word = UILabel()
-  static let size = CGSize(width: 74, height: 40)
-  override init(frame: CGRect) {
-    super.init(frame: frame)
-    pic.contentMode = .scaleAspectFill; pic.clipsToBounds = true; pic.isUserInteractionEnabled = false
-    pic.layer.cornerRadius = 15; pic.layer.cornerCurve = .circular
-    word.text = "Me"; word.font = .systemFont(ofSize: 15, weight: .semibold); word.textColor = .label; word.isUserInteractionEnabled = false
-    [pic, word].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; addSubview($0) }
-    NSLayoutConstraint.activate([pic.widthAnchor.constraint(equalToConstant: 30), pic.heightAnchor.constraint(equalToConstant: 30),
-                                 // ("Me", then your photo — Haris 2026-11-07)
-                                 word.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 13), word.centerYAnchor.constraint(equalTo: centerYAnchor),
-                                 pic.leadingAnchor.constraint(equalTo: word.trailingAnchor, constant: 8), pic.centerYAnchor.constraint(equalTo: centerYAnchor)])
+// your Me button in Home's bar: Apple's own bar button (its glass, its size, its press), showing "Me" and your photo
+// as one picture — Apple fits its own buttons beside the big title; our own pill view in the bar was the test's
+// suspect for the big title jumping into the bar as a task slides in (Haris 2026-11-07)
+enum MeBarImage {
+  static func make(_ photo: UIImage?, _ t: UITraitCollection) -> UIImage {
+    let word = NSAttributedString(string: "Me", attributes: [.font: UIFont.systemFont(ofSize: 15, weight: .semibold), .foregroundColor: UIColor.label.resolvedColor(with: t)])
+    let ws = word.size(), d: CGFloat = 30, gap: CGFloat = 8
+    let size = CGSize(width: ceil(ws.width) + gap + d, height: d)
+    let f = UIGraphicsImageRendererFormat(for: t)
+    return UIGraphicsImageRenderer(size: size, format: f).image { _ in
+      word.draw(at: CGPoint(x: 0, y: (d - ws.height) / 2))
+      let r = CGRect(x: size.width - d, y: 0, width: d, height: d)
+      UIBezierPath(ovalIn: r).addClip()
+      if let p = photo { p.draw(in: r) } else { UIColor.secondarySystemFill.resolvedColor(with: t).setFill(); UIRectFill(r) }
+    }.withRenderingMode(.alwaysOriginal)
   }
-  required init?(coder: NSCoder) { fatalError() }
-  func set(_ img: UIImage?) { pic.image = img }
-  override var intrinsicContentSize: CGSize { MePhotoControl.size }
 }
 
 final class AppleHomeBits {
   static let shared = AppleHomeBits()
-  var meButton: MePhotoControl?
+  var meItem: UIBarButtonItem?
+  var mePhoto: UIImage?
   var search: UISearchController?
 }
 
@@ -53,15 +53,12 @@ final class HomeVC: UIViewController, UISearchResultsUpdating, UISearchControlle
     let d = UserDefaults.standard
     let f = DateFormatter(); f.dateFormat = "EEEE, MMMM d"
     setTitle(d.string(forKey: "e11_home_title") ?? "E11 Day", f.string(from: Date()))
-    // your Me pill and 🔍, as Apple's bar items
-    let b = MePhotoControl(frame: CGRect(origin: .zero, size: MePhotoControl.size))
-    b.translatesAutoresizingMaskIntoConstraints = false
-    NSLayoutConstraint.activate([b.widthAnchor.constraint(equalToConstant: MePhotoControl.size.width), b.heightAnchor.constraint(equalToConstant: MePhotoControl.size.height)])
-    b.isAccessibilityElement = true; b.accessibilityTraits = .button
-    b.accessibilityLabel = "Me"
-    b.addAction(UIAction { _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); Main.shared.homeIfMade?.meTap() }, for: .touchUpInside)
-    AppleHomeBits.shared.meButton = b
-    let meItem = UIBarButtonItem(customView: b)
+    // your Me button, as Apple's own bar button
+    let meItem = UIBarButtonItem(image: MeBarImage.make(nil, traitCollection), primaryAction: UIAction { _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); Main.shared.homeIfMade?.meTap() })
+    meItem.accessibilityLabel = "Me"
+    AppleHomeBits.shared.meItem = meItem
+    // (its words drawn in the phone's look: drawn again when light / dark changes)
+    if #available(iOS 17.0, *) { registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (vc: HomeVC, _: UITraitCollection) in vc.paintMe() } }
     // Apple's search: its own controller, the results in Home's own list (as E11 Talk's lists — no second page)
     let s = UISearchController(searchResultsController: nil)
     s.obscuresBackgroundDuringPresentation = false
@@ -108,7 +105,7 @@ final class HomeVC: UIViewController, UISearchResultsUpdating, UISearchControlle
       if let q = q { self?.openSearch(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { s.searchBar.text = q; Main.shared.homeIfMade?.appleSearchText(q) } } else { s.isActive = false }
     }
     h.onAppleSearchTap = { [weak self] in self?.openSearch() }
-    h.onAppleMe = { img in if let img = img { AppleHomeBits.shared.meButton?.set(img) } }
+    h.onAppleMe = { [weak self] img in if let img = img { AppleHomeBits.shared.mePhoto = img; self?.paintMe() } }
     h.onAppleResign = { AppleHomeBits.shared.search?.searchBar.resignFirstResponder() }
     h.appleBarHeight = { [weak self] in
       guard let nb = self?.navigationController?.navigationBar, !nb.isHidden, nb.window != nil else { return 0 }
@@ -117,6 +114,7 @@ final class HomeVC: UIViewController, UISearchResultsUpdating, UISearchControlle
     h.useAppleTop()
     setContentScrollView(h.appleScroll, for: .top)
   }
+  func paintMe() { AppleHomeBits.shared.meItem?.image = MeBarImage.make(AppleHomeBits.shared.mePhoto, traitCollection) }
   private var shownDate: String?
   func setTitle(_ t: String, _ d: String) {
     guard !t.isEmpty else { return }
