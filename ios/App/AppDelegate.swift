@@ -558,7 +558,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     guard let w = cweb else { return }
     let sv = w.scrollView
     let kb = cover ?? keyboardCover
-    let safe = view.safeAreaInsets.bottom
+    let safe = bottomSafe
     let barH = cbarIfMade.map { $0.isHidden ? 0 : $0.bounds.height } ?? 0
     let top = cbarFeed?.minY ?? 172
     let box = CGRect(x: 0, y: top, width: view.bounds.width, height: view.bounds.height - top)
@@ -679,17 +679,17 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     // (the page stays full height when the keyboard comes up — it's told how much the keyboard covers and makes room
     //  for it itself, so the list behind an open task never changes size and never has to be redrawn afterwards)
     web.frame = CGRect(x: 0, y: 0, width: b.width, height: b.height)
-    let h = tabBar.sizeThatFits(b.size).height + view.safeAreaInsets.bottom
+    let h = tabBar.sizeThatFits(b.size).height + bottomSafe
     tabBar.frame = CGRect(x: 0, y: b.height - h, width: b.width, height: h)
     // (iOS 26's floating bar reports more height than the glass capsule it draws: the page keeps room for the
     //  capsule itself, so the + button sits just above it rather than floating higher)
     var seen = h
-    if #available(iOS 26, *) { seen = min(h, view.safeAreaInsets.bottom + 46) }
+    if #available(iOS 26, *) { seen = min(h, bottomSafe + 46) }
     let cover = tabBar.isHidden ? 0 : Int(seen.rounded())
     if cover != tabCover { tabCover = cover; pageJS("document.documentElement.style.setProperty('--ios-tabs-h','\(cover)px')") }
     lockView?.frame = b
-    reviewLink.frame = CGRect(x: 0, y: b.height - view.safeAreaInsets.bottom - 44, width: b.width, height: 44)
-    hud?.place(in: b, above: tabBar.isHidden ? view.safeAreaInsets.bottom : h)
+    reviewLink.frame = CGRect(x: 0, y: b.height - bottomSafe - 44, width: b.width, height: 44)
+    hud?.place(in: b, above: tabBar.isHidden ? bottomSafe : h)
   }
   func loadHome(_ path: String = "/") {
     guard let u = URL(string: serverURL() + path) else { return }
@@ -799,7 +799,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let opts = UIView.AnimationOptions(rawValue: curve << 16).union(.beginFromCurrentState)
     let H = sv.bounds.height, C = sv.contentSize.height, off = sv.contentOffset.y
     if cover > 0 && feedT == 0 {
-      let T = max(0, cover - view.safeAreaInsets.bottom)
+      let T = max(0, cover - bottomSafe)
       let shift = max(0, T - max(0, H + off - C))   // (a short list: only what the keyboard would cover of it)
       feedT = T
       feedGeo = ["found": true, "T": T, "shift": shift, "from": off]
@@ -1515,7 +1515,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     case "profileAsk":
       let c = ProfileAskCard(dark: dark, missing: a["missing"] as? String ?? "both")
       c.onProfile = { [weak self] in self?.openMePage("profile") }
-      c.show(in: view, bottom: tabBar.isHidden ? view.bounds.height - view.safeAreaInsets.bottom : tabPillTop)
+      c.show(in: view, bottom: tabBar.isHidden ? view.bounds.height - bottomSafe : tabPillTop)
       reply(["ok": true])
     case "whatsNew":
       let secs = ((a["sections"] as? [[String: Any]]) ?? []).map { ($0["h"] as? String ?? "", ($0["items"] as? [String]) ?? []) }
@@ -1575,11 +1575,15 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   // (the View as… bar's lower edge: above the comment box, else above the tab bar, else at the bottom edge)
   func viewAsBottom() -> CGFloat {
     if let b = cbarIfMade, !b.isHidden, b.alpha > 0.01 { return b.frame.minY - 8 }
-    if tabBar.isHidden || !taskPages.isEmpty { return view.bounds.height - max(view.safeAreaInsets.bottom, 12) - 2 }
+    if tabBar.isHidden || !taskPages.isEmpty { return view.bounds.height - max(bottomSafe, 12) - 2 }
     return tabPillTop - 10
   }
+  // the phone's own bottom edge room (the home bar) — in Apple's tab container the screen's safe area also takes in Apple's
+  // tab bar; the app's screens keep its room themselves ("+ New task", the lists' ends), as before (AppleTabs.swift — "+ New
+  // task" sat too high: Haris 2026-11-07)
+  var bottomSafe: CGFloat { APPLE_TABS ? (view.window?.safeAreaInsets.bottom ?? view.safeAreaInsets.bottom) : view.safeAreaInsets.bottom }
   var tabPillTop: CGFloat {
-    let H = view.bounds.height, safe = view.safeAreaInsets.bottom
+    let H = view.bounds.height, safe = bottomSafe
     let pillBottom = H - (safe > 0 ? max(8, safe - 11) : 8)
     if #available(iOS 26.0, *) { return pillBottom - 61 }
     return tabBar.frame.minY
@@ -2121,7 +2125,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let nav = FitNav(rootViewController: vc)
     nav.overrideUserInterfaceStyle = clientsLight ? .light : .dark
     if let sh = nav.sheetPresentationController { sh.prefersGrabberVisible = true }   // (its height: what's on it — FitNav)
-    nav.prepare(width: view.bounds.width, bottom: view.safeAreaInsets.bottom)
+    nav.prepare(width: view.bounds.width, bottom: bottomSafe)
     topMost().present(nav, animated: true)
   }
   // + Add client (Admins, the Clients list — Haris 2026-11-03): the client sheet as New client; the server makes the
@@ -2153,7 +2157,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let nav = FitNav(rootViewController: vc)
     nav.overrideUserInterfaceStyle = clientsLight ? .light : .dark
     if let sh = nav.sheetPresentationController { sh.prefersGrabberVisible = true }
-    nav.prepare(width: view.bounds.width, bottom: view.safeAreaInsets.bottom)
+    nav.prepare(width: view.bounds.width, bottom: bottomSafe)
     topMost().present(nav, animated: true)
   }
   // (the page behind knows this client — asked every 0.1 s, at most `tries` times — and no sheet is up)

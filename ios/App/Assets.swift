@@ -1139,7 +1139,7 @@ final class AssetsCtl {
     let nav = FitNav(rootViewController: vc)
     nav.overrideUserInterfaceStyle = light ? .light : .dark
     nav.sheetPresentationController?.prefersGrabberVisible = true
-    nav.prepare(width: main.view.bounds.width, bottom: main.view.safeAreaInsets.bottom)
+    nav.prepare(width: main.view.bounds.width, bottom: main.bottomSafe)
     main.topMost().present(nav, animated: true)
   }
   // (the website's own rows — the same titles and values as its Info, Haris 2026-11-03)
