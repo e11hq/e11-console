@@ -115,18 +115,12 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
   var topInset: CGFloat = 0 { didSet { setNeedsLayout() } }
   var bottomRoom: CGFloat = 100 { didSet { if oldValue != bottomRoom { roomChanged(oldValue) } } }
   private let threadBar = UIView()
-  // where the comment box's top is (on screen, following the keyboard frame by frame): the room kept under the list
-  var boxTop: (() -> CGFloat?)?
-  private var link: CADisplayLink?
-  override func didMoveToWindow() {
-    super.didMoveToWindow()
-    link?.invalidate(); link = nil
-    if window != nil { let l = CADisplayLink(target: self, selector: #selector(tick)); l.add(to: .main, forMode: .common); link = l }
-  }
-  @objc private func tick() {
-    guard let top = boxTop?(), let w = window else { return }
-    let mine = convert(bounds, to: w)
-    let room = max(0, mine.maxY - top) + 6
+  // the room kept under the list: from the comment box's top down — the box rides Apple's keyboard guide, so this is
+  // asked by its page's own layout as Apple moves it (the keyboard coming, going, dragged down, the box growing), inside
+  // Apple's own animation; nothing of ours watches it frame by frame (Haris 2026-11-07, task page step 3)
+  func follow(box: UIView?) {
+    guard let b = box, !b.isHidden, let host = b.superview, isDescendant(of: host) else { return }
+    let room = max(0, convert(bounds, to: host).maxY - b.frame.minY) + 6
     if abs(room - bottomRoom) > 0.5 { bottomRoom = room }
   }
 

@@ -660,13 +660,6 @@ extension Main {
     let f = CommentsFeed(task: p.taskId, thread: thread)
     f.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     f.topInset = p.barBottom
-    f.boxTop = { [weak self] in
-      // (measured on the box's own page — a task page is iPhone's own page now, and the app's screen under it is put away,
-      //  so measuring on that found nothing: the list didn't follow the keyboard or go to the latest — Haris 2026-11-07)
-      guard let self = self, let b = self.composeIfMade, !b.isHidden, let host = b.superview, let w = host.window else { return nil }
-      let fr = b.layer.presentation()?.frame ?? b.frame
-      return host.convert(fr, to: w).minY
-    }
     f.onAct = { [weak self, weak p, weak f] body in
       guard let self = self, let p = p else { return }
       self.serverTask.act(body.merging(["page": p.taskId]) { a, _ in a }) { ok, m, err, _, messages in

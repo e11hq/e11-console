@@ -99,6 +99,7 @@ final class ReplyVC: UIViewController {
     super.viewDidLayoutSubviews()
     let top = view.safeAreaInsets.top   // (its own bar's bottom — the bar's frame changes during a swipe back)
     if feed.topInset != top { feed.topInset = top }
+    feed.follow(box: Main.shared.composeIfMade)   // (the room under the thread: the box on Apple's keyboard guide)
   }
 }
 
@@ -177,5 +178,6 @@ final class TaskVC: UIViewController {
     //  already turning into Home's taller one with its big title and search box, and the page dropped down with it:
     //  Haris 2026-11-07)
     page.appleRow = view.safeAreaInsets.top
+    page.feed?.follow(box: Main.shared.composeIfMade)   // (the room under the comments: the box on Apple's keyboard guide)
   }
 }
