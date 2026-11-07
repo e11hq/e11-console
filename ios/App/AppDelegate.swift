@@ -4200,9 +4200,10 @@ final class TrashSheetVC: UIViewController, UISheetPresentationControllerDelegat
 /* A date picked in a native sheet (the page's date fields on the iPhone): iPhone's own calendar, with Today and —
    when the field can be emptied — Clear. Tapping a day picks it and closes; dragging it down or tapping outside
    changes nothing. */
-final class DateSheetVC: UIViewController, UISheetPresentationControllerDelegate, UICalendarViewDelegate, UICalendarSelectionSingleDateDelegate {
-  // iPhone's own calendar (the one inside its date picker): today as iPhone marks it, the date picked the filled circle
-  private let cal = UICalendarView()
+final class DateSheetVC: UIViewController, UISheetPresentationControllerDelegate {
+  // iPhone's own date picker, the calendar kind (as Reminders and Calendar — Haris 2026-11-07: "Apples own picker we will
+  // use"): Apple keeps its rows, its height and its month swipes; today as iPhone marks it, the date picked filled
+  private let pick = UIDatePicker()
   private let gregorian = Calendar(identifier: .gregorian)
   private var answer: (([String: Any]) -> Void)?
   private let fmt: DateFormatter = { let f = DateFormatter(); f.calendar = Calendar(identifier: .gregorian); f.locale = Locale(identifier: "en_US_POSIX"); f.timeZone = .current; f.dateFormat = "yyyy-MM-dd"; return f }()
@@ -4215,38 +4216,26 @@ final class DateSheetVC: UIViewController, UISheetPresentationControllerDelegate
     md = (a["md"] as? Bool) == true
     titleText = a["title"] as? String; subText = a["sub"] as? String
     super.init(nibName: nil, bundle: nil)
-    overrideUserInterfaceStyle = dark ? .dark : .light
-    cal.calendar = gregorian
-    cal.locale = Locale(identifier: "en_US")
-    let pick = UICalendarSelectionSingleDate(delegate: self)
-    if let v = a["value"] as? String, let d = fmt.date(from: v) {
-      let dc = gregorian.dateComponents([.year, .month, .day], from: d)
-      pick.selectedDate = dc
-      // (the month only, and set again once on screen — set with its day before the calendar was laid out, its first
-      //  swipe forward skipped a month: October → December, Haris 2026-11-01)
-      startMonth = DateComponents(calendar: gregorian, year: dc.year, month: dc.month)
-      cal.visibleDateComponents = startMonth!
-    }
-    cal.selectionBehavior = pick
-    let lo = (a["min"] as? String).flatMap { fmt.date(from: $0) }, hi = (a["max"] as? String).flatMap { fmt.date(from: $0) }
-    if lo != nil || hi != nil { cal.availableDateRange = DateInterval(start: lo ?? .distantPast, end: max(hi ?? .distantFuture, lo ?? .distantPast)) }
-    cal.delegate = self
+    if !FOLLOW_DEVICE { overrideUserInterfaceStyle = dark ? .dark : .light }
+    pick.datePickerMode = .date
+    pick.preferredDatePickerStyle = .inline
+    pick.calendar = gregorian
+    pick.locale = Locale(identifier: "en_US")
+    if let v = a["value"] as? String, let d = fmt.date(from: v) { pick.date = d }
+    if let lo = (a["min"] as? String).flatMap({ fmt.date(from: $0) }) { pick.minimumDate = lo }
+    if let hi = (a["max"] as? String).flatMap({ fmt.date(from: $0) }) { pick.maximumDate = hi }
+    // a day tapped: that date
+    pick.addAction(UIAction { [weak self] _ in
+      guard let self else { return }
+      self.finish(["ok": true, "date": self.fmt.string(from: self.pick.date)])
+    }, for: .valueChanged)
     modalPresentationStyle = .pageSheet
     if let sh = sheetPresentationController {
-      // (sized to the calendar, with the same gap under it as under a native list's last option — Channel: END + the
-      //  ~18 a list keeps after its last section)
+      // (the sheet as tall as Apple's picker asks for, under the Clear / Today row)
       sh.detents = [.custom(identifier: .init("date")) { [weak self] ctx in min(ctx.maximumDetentValue, self?.fitHeight ?? 470) }]
       sh.prefersGrabberVisible = true
       sh.delegate = self
     }
-  }
-  // today: only iPhone's own mark for it (no dot of ours — Haris, 2026-11-01)
-  func calendarView(_ calendarView: UICalendarView, decorationFor dateComponents: DateComponents) -> UICalendarView.Decoration? { nil }
-  // a day tapped: that date
-  func dateSelection(_ selection: UICalendarSelectionSingleDate, didSelectDate dateComponents: DateComponents?) {
-    guard let dc = dateComponents, let d = gregorian.date(from: dc) else { return }
-    UISelectionFeedbackGenerator().selectionChanged()
-    finish(["ok": true, "date": fmt.string(from: d)])
   }
   required init?(coder: NSCoder) { fatalError() }
   override func viewDidLoad() {
@@ -4262,54 +4251,32 @@ final class DateSheetVC: UIViewController, UISheetPresentationControllerDelegate
     let head = UIStackView(); head.axis = .vertical; head.alignment = .center; head.spacing = 1
     if let t = titleText, !t.isEmpty { let l = UILabel(); l.text = t; l.font = .systemFont(ofSize: 17, weight: .semibold); head.addArrangedSubview(l) }
     if let t = subText, !t.isEmpty { let l = UILabel(); l.text = t; l.font = .systemFont(ofSize: 13); l.textColor = .secondaryLabel; head.addArrangedSubview(l) }
-    [today, clear, cal, head].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; view.addSubview($0) }
-    let calTop = cal.topAnchor.constraint(equalTo: today.bottomAnchor, constant: 4); calTop.priority = .defaultHigh
+    [today, clear, pick, head].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; view.addSubview($0) }
+    let pTop = pick.topAnchor.constraint(equalTo: today.bottomAnchor, constant: 4); pTop.priority = .defaultHigh
     NSLayoutConstraint.activate([
       clear.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 22), clear.topAnchor.constraint(equalTo: view.topAnchor, constant: 22),
       today.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -22), today.centerYAnchor.constraint(equalTo: clear.centerYAnchor),
       head.centerXAnchor.constraint(equalTo: view.centerXAnchor), head.centerYAnchor.constraint(equalTo: clear.centerYAnchor),
       head.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 90), head.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -90),
-      calTop, cal.topAnchor.constraint(greaterThanOrEqualTo: head.bottomAnchor, constant: 8),
-      cal.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 12), cal.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -12),
+      pTop, pick.topAnchor.constraint(greaterThanOrEqualTo: head.bottomAnchor, constant: 8),
+      pick.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 12), pick.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -12),
     ])
   }
-  private var startMonth: DateComponents?
-  override func viewDidAppear(_ animated: Bool) {
-    super.viewDidAppear(animated)
-    if let m = startMonth { startMonth = nil; cal.setVisibleDateComponents(m, animated: false) }
-  }
-  /* one height for every month (Haris 2026-11-05: the sheet grew and shrank with each month's 5 or 6 week rows, and
-     resizing it under the calendar threw it a month or two on — January → March, March → June). Sized once to the
-     calendar as iPhone lays it out, with room for six rows like iPhone's own; then never changed while it's open. */
+  // the sheet's height: what Apple's picker needs (it keeps one height for every month itself)
   private var fitHeight: CGFloat = 470, sized = false
-  private func fit() {
+  override func viewDidLayoutSubviews() {
+    super.viewDidLayoutSubviews()
+    guard !sized, view.bounds.width > 0, pick.frame.minY > 0, pick.frame.height > 100 else { return }
+    sized = true
     let floating: Bool; if #available(iOS 26, *) { floating = true } else { floating = false }
     let strip = presentingViewController?.view.window?.safeAreaInsets.bottom ?? view.window?.safeAreaInsets.bottom ?? 0
-    let h = max(320, cal.frame.maxY + NativeSheetVC.END + 18 - (floating ? strip : 0) + (floating ? 0 : view.safeAreaInsets.bottom))
+    let h = max(320, pick.frame.maxY + 18 - (floating ? strip : 0) + (floating ? 0 : view.safeAreaInsets.bottom))
     guard abs(h - fitHeight) > 0.5 else { return }
     fitHeight = h
     DispatchQueue.main.async { [weak self] in
       guard let sh = self?.sheetPresentationController else { return }
       sh.animateChanges { sh.invalidateDetents() }
     }
-  }
-  // (sized from where it was first laid out — measuring it again inside the layout and resizing from there sent iOS 27's
-  //  calendar round in circles until the app crashed: TestFlight report, build 1195)
-  override func viewDidLayoutSubviews() {
-    super.viewDidLayoutSubviews()
-    guard !sized, view.bounds.width > 0, cal.frame.minY > 0, cal.frame.height > 100 else { return }
-    sized = true
-    // (the calendar itself one height too — room for six week rows, as iPhone's own: left to its own height it grew and
-    //  shrank with each month's 5 or 6 rows while it slid, and one swipe went two months on — November → January,
-    //  Haris 2026-11-06)
-    let vis = cal.visibleDateComponents
-    let first = gregorian.date(from: DateComponents(year: vis.year, month: vis.month, day: 1)) ?? Date()
-    let weeks = CGFloat(gregorian.range(of: .weekOfMonth, in: .month, for: first)?.count ?? 5)
-    let h0 = cal.frame.height
-    let calH = h0 + max(0, 6 - weeks) * (h0 / (weeks + 1.6))
-    let hc = cal.heightAnchor.constraint(equalToConstant: ceil(calH)); hc.isActive = true
-    view.layoutIfNeeded()
-    fit()
   }
   private func finish(_ r: [String: Any]) {
     guard let a = answer else { return }
