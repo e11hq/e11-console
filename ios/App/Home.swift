@@ -361,8 +361,14 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
             self.send(["ev": "open", "id": id])
           }
           let pan = UIPanGestureRecognizer(target: self, action: #selector(self.swipe(_:))); pan.delegate = self; v.addGestureRecognizer(pan)
-          let lp = UILongPressGestureRecognizer(target: self, action: #selector(self.press(_:))); lp.minimumPressDuration = 0.45; v.addGestureRecognizer(lp)
-          _ = PressShrink.add(to: v)   // (touch and hold, app-wide: it shrinks from the moment the finger is down)
+          if APPLE_NAV {
+            // (iPhone's own touch and hold, as E11 Talk: the card shrinks as it's held, lifts, and Apple's menu comes
+            //  beside it — the same choices the sheet had: Haris 2026-11-07)
+            v.addInteraction(UIContextMenuInteraction(delegate: self))
+          } else {
+            let lp = UILongPressGestureRecognizer(target: self, action: #selector(self.press(_:))); lp.minimumPressDuration = 0.45; v.addGestureRecognizer(lp)
+            _ = PressShrink.add(to: v)   // (touch and hold, app-wide: it shrinks from the moment the finger is down)
+          }
           self.scroll.addSubview(v); self.cards[id] = v
         }
         v.people = people
@@ -2514,4 +2520,26 @@ final class SearchFixedNote: UIView {
   }
   func height(for w: CGFloat) -> CGFloat { ceil(l.sizeThatFits(CGSize(width: w - 28, height: 400)).height) + 22 }
   override func layoutSubviews() { super.layoutSubviews(); l.frame = bounds.insetBy(dx: 14, dy: 11) }
+}
+
+
+// ---------- iPhone's own touch and hold on a task card (AppleNav.swift — Haris 2026-11-07: as in E11 Talk) ----------
+extension HomeView: UIContextMenuInteractionDelegate {
+  func contextMenuInteraction(_ i: UIContextMenuInteraction, configurationForMenuAtLocation p: CGPoint) -> UIContextMenuConfiguration? {
+    guard let card = i.view as? HomeCard, !(isList && listTab == "done") else { return nil }   // (Done tab: read only)
+    let id = card.id
+    if let o = openCard { setOpen(o, false) }
+    return UIContextMenuConfiguration(identifier: id as NSString, previewProvider: nil) { [weak self] _ in
+      let src = { (s: String, t: String, img: String) in UIAction(title: t, image: UIImage(systemName: img)) { _ in self?.send(["ev": "attach", "id": id, "source": s]) } }
+      return UIMenu(title: "Attach Files", children: [src("camera", "Camera", "camera"), src("photos", "Photos", "photo"), src("files", "Files", "doc.badge.arrow.up")])
+    }
+  }
+  // (the card itself lifts, with its own rounded corners)
+  func contextMenuInteraction(_ i: UIContextMenuInteraction, configuration c: UIContextMenuConfiguration, highlightPreviewForItemWithIdentifier id: NSCopying) -> UITargetedPreview? {
+    guard let v = i.view else { return nil }
+    let pp = UIPreviewParameters()
+    pp.visiblePath = UIBezierPath(roundedRect: v.bounds, cornerRadius: v.layer.cornerRadius > 0 ? v.layer.cornerRadius : 18)
+    pp.backgroundColor = .clear
+    return UITargetedPreview(view: v, parameters: pp)
+  }
 }
