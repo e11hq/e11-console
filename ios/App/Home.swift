@@ -1583,7 +1583,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }
   // a group's heading brought up to where the big title is (as far as the list goes)
   func showGroup(_ name: String) {
-    guard let h = content.first(where: { $0.tag == 7 && $0.accessibilityIdentifier == name }) else { return }
+    // (a heading's key is its name and its run — "Today#1": the box found nothing to go to — Haris 2026-11-07)
+    guard let h = content.first(where: { $0.tag == 7 && ($0.accessibilityIdentifier == name || ($0.accessibilityIdentifier ?? "").hasPrefix(name + "#")) }) else { return }
     if let cv = list, let ds = listDS {
       // (Apple's list: that group's heading — Today's first card, its heading being only a mark — to the top)
       guard let i = content.firstIndex(where: { $0 === h }) else { return }
