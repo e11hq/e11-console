@@ -52,7 +52,7 @@ try:
     data = sh('xcrun', 'simctl', 'get_app_container', udid, BUNDLE, 'data').stdout.strip()
     out = os.path.join(data, 'Documents', 'selftest.json')
     seen, res, t0 = set(), {}, time.time()
-    while time.time() - t0 < 600:   # (TEMPORARY 600: the slowed-down film stages — back to 480 after)
+    while time.time() - t0 < 480:
         try: res = json.load(open(out))
         except Exception: res = {}
         st = res.get('stage')

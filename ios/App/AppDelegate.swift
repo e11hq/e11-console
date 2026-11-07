@@ -2802,13 +2802,10 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       ("tpageBack", pause(1500) + "return JSON.stringify({ webTask: !!ui.taskId })", { if let p = self.taskPages.last { p.setTab("details", tell: true); self.closeTaskPage(p, animated: false) } }),
       // (for the film: from Home into a task and back — 🔍 and your photo melting into •••, ‹ growing in, and back)
       ("melt", pause(2500) + "return '{}'", { if let i = self.tabKeys.firstIndex(of: "today"), let item = self.tabBar.items?[i] { self.tabBar.selectedItem = item; self.tabBar(self.tabBar, didSelect: item) } }),
-      ("meltOpen", pause(6500) + "return '{}'", {
+      ("meltOpen", pause(2500) + "return '{}'", {
         let id = ((self.serverHome.shown?["groups"] as? [[String: Any]]) ?? []).flatMap { $0["cards"] as? [[String: Any]] ?? [] }.compactMap { $0["id"] as? String }.first
-        if let id = id { SlowLook.slow(AppleTabs.shared?.view.window, true); self.openTaskPage(id, tab: "details", focus: "") } }),
-      ("meltBack", pause(6500) + "return '{}'", { if let p = self.taskPages.last { self.closeTaskPage(p); DispatchQueue.main.asyncAfter(deadline: .now() + 6.5) { SlowLook.slow(AppleTabs.shared?.view.window, false) } } }),
-      // (TEMPORARY, check build: the same slowed down on Apple's parts alone — as E11 Talk's list, then with Home's date line and buttons)
-      ("slowTalk", pause(13000) + "return '{}'", { if let h = self.sheetHost() { SlowLook.run(full: false, on: h) {} } }),
-      ("slowFull", pause(13000) + "return '{}'", { if let h = self.sheetHost() { SlowLook.run(full: true, on: h) {} } }),
+        if let id = id { self.openTaskPage(id, tab: "details", focus: "") } }),
+      ("meltBack", pause(2500) + "return '{}'", { if let p = self.taskPages.last { self.closeTaskPage(p) } }),
       ("task", "window.__e11WebTask = true; const t = db.tasks.find((x) => !x.parentId && !x.done && (x.comments || []).length) || db.tasks.find((x) => !x.parentId && !x.done); openTask(t.id); " + pause(1500) + "return JSON.stringify({ taskOpen: !!ui.taskId })", nil),
       ("sheet", "const m = showMenu(document.body, [{ html: '<div class=\"react-pick\">' + REACTIONS.map((e) => '<button>' + e + '</button>').join('') + '</div>' }, { label: 'Reply', icon: 'reply', run() {} }, { label: 'Edit comment', icon: 'edit', run() {} }, { label: 'Copy text', icon: 'copy', run() {} }, '-', { label: 'Delete comment', icon: 'trash', danger: true, run() {} }]); m.classList.add('cm-sheet'); " + pause(900) + geo + " const r = m.getBoundingClientRect(); return JSON.stringify({ menuTop: r.top, menuBottom: r.bottom, geo })", nil),
       ("back", "document.querySelectorAll('.menu, #ph-menu-scrim').forEach((x) => x.remove()); closeDetail(); " + pause(800) + "return JSON.stringify({ taskOpen: !!ui.taskId })", nil),
