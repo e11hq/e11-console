@@ -52,3 +52,29 @@ test('appview patch: changed at once, the old one given back', () => {
   assert.equal(JSON.parse(V.save()).data.tasks[0].due, undefined);
   assert.equal(V.patch('tasks', 'nope', { due: 'x' }), null);
 });
+
+// the iPhone app does an action on its own copy first (localAct) — exactly what the server's homeAct does
+test('localAct: the same change on the phone as on the server, and the way back', () => {
+  const d0 = JSON.parse(JSON.stringify(data));
+  d0.tasks[0].checklist = [{ id: 'k1', text: 'Logo', done: false }];
+  d0.projects[0].sections = [{ id: 's1', name: 'To do', color: '#888' }, { id: 's2', name: 'Done', color: '#3d9' }]; d0.tasks[0].sectionId = 's1';
+  const strip = (t) => JSON.parse(JSON.stringify(t, (k, v) => (k === 'at' || k === 'id' && typeof v === 'string' && /^local-|^[a-z0-9]{12,}$/.test(v) || k === 'updatedAt' || k === 'doneAt' || k === 'completedAt' ? undefined : v)));
+  for (const body of [{ act: 'due', id: 't1', due: '2026-11-20' }, { act: 'check', id: 't1', value: 'k1' }, { act: 'done', id: 't1' }]) {
+    const { E11AppView: P, E11Rules: R } = engine();
+    P.load(JSON.stringify({ rev: 1, me: 'u1', data: d0 }));
+    const r = JSON.parse(P.localAct(body));
+    assert.equal(r.ok, true, body.act);
+    const phone = JSON.parse(P.save()).data.tasks.find((x) => x.id === 't1');
+    const env = { nowISO: () => new Date().toISOString(), nowMs: () => Date.now(), uid: () => Date.now().toString(36) + 'abcdef' };
+    const s = P.homeAct(R, JSON.parse(JSON.stringify(d0)), d0.users[0], body, env, null);
+    const server = s.changes.find((c) => c.kind === 'tasks' && c.id === 't1').data;
+    assert.deepEqual(strip(phone), strip(server), body.act);
+    // the way back: as it was
+    P.apply(r.undo, 0);
+    assert.deepEqual(strip(JSON.parse(P.save()).data.tasks.find((x) => x.id === 't1')), strip(d0.tasks[0]), body.act + ' undone');
+  }
+  // what only the server does: not done on the phone
+  const { E11AppView: P } = engine();
+  P.load(JSON.stringify({ rev: 1, me: 'u1', data: d0 }));
+  assert.equal(P.localAct({ act: 'comment', id: 't1', text: 'x' }), null);
+});
