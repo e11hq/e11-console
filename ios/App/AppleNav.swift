@@ -15,15 +15,18 @@ final class AppleNav: UINavigationController, UINavigationControllerDelegate, UI
     super.viewDidLoad()
     delegate = self
     interactivePopGestureRecognizer?.delegate = self
+    // (iOS 26: the swipe back from anywhere on the page — the same rules as the edge's)
+    if #available(iOS 26.0, *) { interactiveContentPopGestureRecognizer?.delegate = self }
     setNavigationBarHidden(true, animated: false)
   }
   // the swipe back: Apple's own; a comment written and not sent on the page asks first (as ‹ does)
   func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
-    guard g === interactivePopGestureRecognizer, viewControllers.count > 1 else { return false }
+    guard g === interactivePopGestureRecognizer || g === backAnywhere, viewControllers.count > 1 else { return false }
     if let t = topViewController as? TaskVC { return Main.shared.taskSwipeMayGo(t.page) }
     if topViewController is ReplyVC { Main.shared.composeIfMade?.text.resignFirstResponder() }
     return true
   }
+  var backAnywhere: UIGestureRecognizer? { if #available(iOS 26.0, *) { return interactiveContentPopGestureRecognizer } else { return nil } }
   // (Apple's swipe back and the app's own gestures inside a page — the comments' swipes, the files row — together)
   func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith o: UIGestureRecognizer) -> Bool { false }
   // a page gone (popped by ‹, swiped away, or taken out): the app lets go of it as when it closes
@@ -120,7 +123,9 @@ final class TaskVC: UIViewController {
     super.viewWillAppear(a)
     navigationController?.setNavigationBarHidden(false, animated: a)
     // (Details' edge swipe goes back; the paging scroller waits for it — on Comments it doesn't start, so the scroller takes it)
+    // (and on Details the swipe back from anywhere too, as before the paging — Haris 2026-11-07)
     if let g = navigationController?.interactivePopGestureRecognizer { page.pagerWaits(for: g) }
+    if let g = (navigationController as? AppleNav)?.backAnywhere { page.pagerWaits(for: g) }
   }
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
