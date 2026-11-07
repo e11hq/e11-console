@@ -853,8 +853,10 @@ enum PressPreview {
     let p = UIPreviewParameters()
     p.visiblePath = UIBezierPath(roundedRect: v.bounds, cornerRadius: v.layer.cornerRadius)
     p.backgroundColor = .clear
-    let t = UIPreviewTarget(container: sv, center: v.center, transform: CGAffineTransform(scaleX: 0.87, y: 0.87))
-    return UITargetedPreview(view: v, parameters: p, target: t)
+    // (Apple's own lift — it shrinks while held, then lifts with its menu: Haris 2026-11-07, "Remove it"; until then the
+    //  lift was cancelled so a file stayed at its own size — Haris 2026-11-06)
+    _ = sv
+    return UITargetedPreview(view: v, parameters: p)
   }
 }
 /* Touch and hold, app-wide (Haris, 2026-11-02: "this long press behaviour will be app wide"): the view shrinks from the
