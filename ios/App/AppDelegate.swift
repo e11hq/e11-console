@@ -139,7 +139,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   //  put below this — an empty, hidden mark, never seen or touched)
   let tabsMark: UIView = { let v = UIView(); v.isHidden = true; v.isUserInteractionEnabled = false; return v }()
   var tabKeys: [String] = []
-  var tabsHidden = true
+  var tabsHidden = true { didSet { if oldValue != tabsHidden { AppleTabs.shared?.mirrorShown() } } }
   var pageReady = false
   var pendingPush: [String: Any]?
   var pendingToken: String?
@@ -327,8 +327,10 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if (appStyle == .light) != light { run("setAppearance", ["mode": light ? "light" : "dark"]) { _ in } }
   }
   // (iPhone's own navigation: a sheet from the app goes on whatever page is on top — the app itself may be under a page)
+  // (Home's own screen asks the app for the status bar too — AppleHome.swift)
+  override func setNeedsStatusBarAppearanceUpdate() { super.setNeedsStatusBarAppearanceUpdate(); if APPLE_TABS { AppleTabs.shared?.setNeedsStatusBarAppearanceUpdate() } }
   override func present(_ vc: UIViewController, animated: Bool, completion: (() -> Void)? = nil) {
-    if APPLE_NAV, presentedViewController == nil, let nav = navigationController, let top = nav.topViewController, top !== self {
+    if APPLE_NAV, presentedViewController == nil, let nav = stageNav, let top = nav.topViewController, top !== self {
       top.present(vc, animated: animated, completion: completion); return
     }
     super.present(vc, animated: animated, completion: completion)
@@ -1445,7 +1447,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if let l = homeLook as? [String: Any], (l["light"] as? Bool) != light { homeLook = nil }
     let look: Any = homeLook ?? ["light": light]
     myTasksLight = light; inboxLight = light; clientsLight = light
-    for h in view.subviews.compactMap({ $0 as? HomeView }) where !h.model.isEmpty && !h.isAssetsScreen {
+    var screens = view.subviews.compactMap({ $0 as? HomeView })
+    if let h = homeIfMade, !screens.contains(where: { $0 === h }) { screens.append(h) }   // (Home: on its own screen)
+    for h in screens where !h.model.isEmpty && !h.isAssetsScreen {
       var mm = h.model; mm["look"] = look; h.update(mm)
     }
     meCtl.relight(light); assetsCtl.relight(light)
@@ -1470,9 +1474,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       self?.pageJSSoon("window.__e11Home && window.__e11Home(\(jsonString(ev)))")
     }
     h.present = { [weak self] vc in self?.topMost().present(vc, animated: true) }
-    view.insertSubview(h, belowSubview: tabsMark)
     homeIfMade = h
-    appleHomeSetup(h)
+    // (Home's own screen in its own tab — AppleHome.swift: Home goes there, under Apple's bar)
+    if APPLE_HOME, let vc = HomeVC.shared { vc.adopt(h) } else { view.insertSubview(h, belowSubview: tabsMark) }
     return h
   }()
   /* the top of the tab bar as it's seen: iOS 26's floating bar is a pill inside a taller UITabBar view, so the view's
@@ -1520,7 +1524,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     case "profileAsk":
       let c = ProfileAskCard(dark: dark, missing: a["missing"] as? String ?? "both")
       c.onProfile = { [weak self] in self?.openMePage("profile") }
-      c.show(in: view, bottom: tabBar.isHidden ? view.bounds.height - bottomSafe : tabPillTop)
+      c.show(in: stage, bottom: tabBar.isHidden ? view.bounds.height - bottomSafe : tabPillTop)
       reply(["ok": true])
     case "whatsNew":
       let secs = ((a["sections"] as? [[String: Any]]) ?? []).map { ($0["h"] as? String ?? "", ($0["items"] as? [String]) ?? []) }
@@ -1547,7 +1551,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       bar.bottomFor = { [weak self] in self?.viewAsBottom() ?? 0 }
       bar.onSwitch = { [weak self] in self?.meCtl.viewAsPick() }
       bar.onBackToMe = { [weak self] in self?.meCtl.viewAsSet(nil) }
-      if bar.superview == nil { bar.show(in: view) }
+      if bar.superview == nil { bar.show(in: stage) }
       reply(["ok": true])
     default: reply(["ok": false])
     }
@@ -2229,8 +2233,16 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     clientsPageOwn = v
     pageJS("window.__e11ClientsOwn && window.__e11ClientsOwn(\(v))")
   }
-  func clientsCommand(_ a: [String: Any]) {
+  func clientsCommand(_ a0: [String: Any]) {
     defer { updateCorner() }
+    var a = a0
+    // (a client's page asked for while Home's own screen is on — from Home's search: it opens on the Clients tab, where
+    //  the app draws clients' pages; Home is its own screen now — AppleHome.swift)
+    if APPLE_HOME, (a["show"] as? Bool) == true, (a["view"] as? String) == "client", AppleTabs.shared?.homeShown == true {
+      if (AppleHomeBits.shared.search?.isActive ?? false) { AppleHomeBits.shared.search?.isActive = false }
+      a["from"] = ""
+      selectTab("projects")
+    }
     guard let show = a["show"] as? Bool else { return }
     if !show { clientsWanted = false; clientsListIfMade?.backFromMe = false; clientsListIfMade?.isHidden = true; if !clientLeaving { clientPageIfMade?.isHidden = true }; assetsCtl.closeIfFromClients(); edgePanOn(); return }
     if !clientsWanted { clientsListIfMade?.clientsFresh() }   // (the tab coming back: Inactive clients closed again)

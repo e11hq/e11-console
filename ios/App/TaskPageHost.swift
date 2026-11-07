@@ -39,7 +39,7 @@ extension Main {
     if taskPages.isEmpty { taskTabHidden = tabBar.isHidden }
     // iPhone's own navigation (AppleNav.swift): the page in its own view controller, pushed — Apple's bar on top
     var pushVC: TaskVC? = nil
-    if APPLE_NAV, navigationController != nil {
+    if APPLE_NAV, stageNav != nil {
       let vc = TaskVC(p); pushVC = vc
       p.appleBar = true
       vc.loadViewIfNeeded()
@@ -50,7 +50,7 @@ extension Main {
     else if corner.superview === view { view.insertSubview(p, belowSubview: corner) } else { view.insertSubview(p, belowSubview: tabsMark) }
     // (opened while the startup screen shows — a task link, a notification: the startup screen stays on top and fades
     //  out, so the task is there under it; Haris 2026-11-05)
-    if let s = splash { view.bringSubviewToFront(s); splashGone() }
+    if let s = splash { s.superview?.bringSubviewToFront(s); splashGone() }
     // (the comment box and its jump spot stay above the page)
     if let b = cbarIfMade { layerOf(p).insertSubview(b, aboveSubview: p) }
     if jumpHitMade { layerOf(p).insertSubview(jumpHit, aboveSubview: cbarIfMade ?? p) }
@@ -93,7 +93,7 @@ extension Main {
       boxWith = c
     }
     // iPhone's own push: Apple's slide, the screen under it moving aside, the swipe back — all Apple's
-    if let vc = pushVC, let nav = navigationController {
+    if let vc = pushVC, let nav = stageNav {
       nav.pushViewController(vc, animated: true)
       let done = { [weak self, weak p] in
         guard let self = self, let p = p, self.taskPages.last === p else { return }
@@ -165,7 +165,7 @@ extension Main {
       else if let top = self.taskPages.last, top.tab == "comments" { self.taskShowComments(top, focus: "") }
     }
     let barTo: CGFloat = tabsHidden || formTucked ? 0 : 1
-    if APPLE_NAV, let nav = navigationController {
+    if APPLE_NAV, let nav = allNavs.first(where: { n in n.viewControllers.contains { ($0 as? TaskVC)?.page === p } }) ?? stageNav {
       if last { tabBar.alpha = barTo }
       if let vc = nav.viewControllers.first(where: { ($0 as? TaskVC)?.page === p }) {
         // (its reply page, if one is open over it, goes with it)
@@ -715,7 +715,7 @@ extension Main {
   }
   // a thread on a page of its own, sliding in from the right; the comments screen behind opens it too (for replying)
   func openThread(_ p: TaskPage, _ cid: String, pulse: String?) {
-    if APPLE_NAV, let nav = navigationController { openReplyPage(p, cid, pulse: pulse, nav: nav); return }
+    if APPLE_NAV, let nav = allNavs.first(where: { n in n.viewControllers.contains { ($0 as? TaskVC)?.page === p } }) ?? stageNav { openReplyPage(p, cid, pulse: pulse, nav: nav); return }
     p.threadFeed?.removeFromSuperview()
     let t = makeFeed(p, thread: cid)
     p.threadFeed = t
@@ -730,7 +730,7 @@ extension Main {
   func closeThread(_ p: TaskPage) {
     guard let t = p.threadFeed else { return }
     // (iPhone's own navigation: the reply page pops — Apple's — and the rest follows once it's gone, threadGone)
-    if APPLE_NAV, let nav = navigationController, let r = nav.viewControllers.first(where: { ($0 as? ReplyVC)?.feed === t }) {
+    if APPLE_NAV, let nav = allNavs.first(where: { n in n.viewControllers.contains { ($0 as? ReplyVC)?.feed === t } }), let r = nav.viewControllers.first(where: { ($0 as? ReplyVC)?.feed === t }) {
       if nav.topViewController === r { nav.popViewController(animated: true) } else { nav.viewControllers.removeAll { $0 === r }; threadGone(p) }
       return
     }

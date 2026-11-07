@@ -274,6 +274,12 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     //  the big title jumped about as search closed)
   }
   var appleResults: UIScrollView { results }
+  // (on Apple's results page: laid out there, under Apple's bar and search field — nothing of ours added)
+  func appleResultsLaidOut() {
+    guard appleTop, results.superview !== self else { return }
+    if results.contentInset != .zero { results.contentInset = .zero }
+    layoutResults()
+  }
   func appleSearchText(_ q: String) {
     guard appleTop, searching, q != (field.text ?? "") else { return }
     field.text = q; typed()
@@ -580,7 +586,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
 
     setNeedsLayout(); layoutIfNeeded()
     // (Apple's list: Apple's own animation for what came, went or moved)
-    if listOn { applyList(animated: animate); DispatchQueue.main.async { self.appleKeepTop() }; return }
+    if listOn { applyList(animated: animate); return }
     if animate { moveList(oldCenter: oldCenter, oldGroup: oldGroup, oldHeads: oldHeads, leavingHeads: leavingHeads, gone: gone) }
   }
   private var drawnKey = ""
@@ -1048,8 +1054,11 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     layoutHeader()
     if appleTop {
       // (under Apple's bar and its search bar: iPhone keeps the results clear of them, and of the keyboard)
-      if results.frame != bounds { results.frame = bounds }
-      results.contentInset.top = 12; results.contentInset.bottom = max(0, keyboardH - safeAreaInsets.bottom, bottomRoom - 60 - safeAreaInsets.bottom)
+      // (on Apple's search results page — HomeResultsVC — Apple places them; here only while they're Home's own)
+      if results.superview === self {
+        if results.frame != bounds { results.frame = bounds }
+        results.contentInset.top = 12; results.contentInset.bottom = max(0, keyboardH - safeAreaInsets.bottom, bottomRoom - 60 - safeAreaInsets.bottom)
+      }
     } else {
     results.frame = CGRect(x: 0, y: searchBar.frame.maxY + 8, width: W, height: H - searchBar.frame.maxY - 8)
     results.contentInset.bottom = max(keyboardH, bottomRoom - 60)
@@ -1165,25 +1174,10 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   //  was at its top stays at its top, the big title showing; it opened scrolled under the small title — Haris 2026-11-07)
   // (until you scroll it yourself, Home's list stays at its very top with the big title — whatever room the bars, the
   //  tab bar or the startup screen give it; it opened scrolled under the small title, twice: Haris 2026-11-07)
+  // (Home's list is placed by Apple — its big title, its top: nothing of ours moves it; HomeVC in AppleHome.swift)
   private var userScrolled = false
-  private var searchSettling = false   // (Apple's search closing: its bar moves the list itself — left alone)
-  func scrollViewDidChangeAdjustedContentInset(_ sv: UIScrollView) {
-    guard appleTop, sv === list, !searching, !searchSettling else { return }
-    if !userScrolled && !sv.isDragging && !sv.isDecelerating { sv.contentOffset.y = -sv.adjustedContentInset.top }
-  }
+  private var searchSettling = false
   var appleBarHeight: (() -> CGFloat)?
-  func appleKeepTop() {
-    guard appleTop, let cv = list, !userScrolled, !searching, !searchSettling, !cv.isDragging, !cv.isDecelerating else { return }
-    cv.layoutIfNeeded()
-    // (Apple's bar settled small — it came in as the startup screen faded and took the list for scrolled: the list is
-    //  pulled down as a finger would, so the bar opens to its big title by itself — Haris 2026-11-07)
-    if let h = appleBarHeight?(), h > 0, h < 70 {
-      cv.contentOffset.y = -cv.adjustedContentInset.top - 64
-      cv.superview?.layoutIfNeeded()
-    }
-    let top = -cv.adjustedContentInset.top
-    if abs(cv.contentOffset.y - top) > 0.5 { cv.contentOffset.y = top }
-  }
   // the list at its end (or too short to scroll), Home not searching, no toast beside the + — the motto shows
   private func showMotto() {
     let end = max(-inTop, sv.contentSize.height + inBottom - sv.bounds.height)
@@ -1552,6 +1546,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     } else { hint.text = q.isEmpty ? "Search tasks, clients or people." : nil }
     for (id, v) in resultCards where !seen.contains(id) { v.removeFromSuperview(); resultCards[id] = nil }
     setNeedsLayout()
+    if appleTop, results.superview !== self { layoutResults() }
   }
   // what Client Assets found (its rows, as blocks), or what to say
   func showFound(_ views: [UIView], hint t: String?) {

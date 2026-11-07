@@ -1,10 +1,11 @@
 import UIKit
 
-/* Home in iPhone's own navigation (Haris 2026-11-07: "the design will be ours, the behaviour Apple's"): on Home, Apple's
-   bar — the big title (E11 Day) with the date under it, shrinking into the bar as the list scrolls, its frost, 🔍 and your
-   photo as Apple's bar buttons, and Apple's search bar (the results are Home's own cards). Opening a task and coming back
-   is Apple's title change. The list, the cards, the boxes and "+ New task" are as they were. Only Home: My Tasks, the
-   Inbox and Clients keep their own headers until they're done the same way. */
+/* Home as its own screen in Apple's tab container (Haris 2026-11-07: "our design as it is, but opening Apple's way instead
+   of altering the code"): Home's tab is its own navigation (HomeNav) with Home's own view controller (HomeVC) at its root —
+   as Apple builds a tab. Apple's bar is there from the start: the big title (E11 Day) with the date under it, at the top of
+   Home's list, going small as it scrolls — all Apple's, nothing of ours moving the list; your Me pill and 🔍 as Apple's bar
+   items; Apple's search (the results are Home's own cards); a task pushed and popped by Apple. The list, the cards, the
+   boxes and "+ New task" are Home's own, as they were. My Tasks, the Inbox, Clients and Me: next, one by one. */
 let APPLE_HOME = APPLE_NAV
 
 // Me on the bar: a pill — your photo (a fixed 30 pt circle the bar can't stretch) and the word "Me", on Apple's own glass
@@ -29,19 +30,24 @@ final class MePhotoControl: UIControl {
   override var intrinsicContentSize: CGSize { MePhotoControl.size }
 }
 
-// Apple's search results page: Home's own results list (its cards) moved onto it, filling it
+// Apple's search results page: Home's own results (its cards) on it, Apple placing them under its bar and search field
 final class HomeResultsVC: UIViewController {
   override func loadView() { let v = UIView(); v.backgroundColor = .systemGroupedBackground; view = v }
   func take(_ h: HomeView) {
     loadViewIfNeeded()
     view.backgroundColor = h.backgroundColor ?? .systemGroupedBackground
     let r = h.appleResults
+    guard r.superview !== view else { return }
     r.removeFromSuperview()
-    r.frame = view.bounds; r.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    r.translatesAutoresizingMaskIntoConstraints = false
     r.isHidden = false; r.alpha = 1
     view.addSubview(r)
+    // (the keyboard's top is the page's end: the last result can always be scrolled into sight)
+    NSLayoutConstraint.activate([r.topAnchor.constraint(equalTo: view.topAnchor), r.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                                 r.trailingAnchor.constraint(equalTo: view.trailingAnchor), r.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor)])
   }
-  override func viewWillAppear(_ a: Bool) { super.viewWillAppear(a); if let h = Main.shared.homeIfMade { view.backgroundColor = h.backgroundColor ?? view.backgroundColor } }
+  override func viewWillAppear(_ a: Bool) { super.viewWillAppear(a); if let h = Main.shared.homeIfMade { take(h); view.backgroundColor = h.backgroundColor ?? view.backgroundColor } }
+  override func viewDidLayoutSubviews() { super.viewDidLayoutSubviews(); Main.shared.homeIfMade?.appleResultsLaidOut() }
 }
 
 final class AppleHomeBits {
@@ -50,82 +56,28 @@ final class AppleHomeBits {
   var search: UISearchController?
 }
 
-extension Main: UISearchResultsUpdating, UISearchControllerDelegate {
-  // once, as Home is made
-  func appleHomeSetup(_ h: HomeView) {
-    guard APPLE_HOME else { return }
+// Home's screen: Home's own view (HomeView, as it was) filling it, under Apple's bar
+final class HomeVC: UIViewController, UISearchResultsUpdating, UISearchControllerDelegate {
+  static weak var shared: HomeVC?
+  override init(nibName: String?, bundle: Bundle?) { super.init(nibName: nil, bundle: nil); HomeVC.shared = self }
+  required init?(coder: NSCoder) { fatalError() }
+  override var preferredStatusBarStyle: UIStatusBarStyle { Main.shared.statusStyle }
+  override func loadView() { let v = UIView(); v.backgroundColor = .systemGroupedBackground; view = v }
+  override func viewDidLoad() {
+    super.viewDidLoad()
     navigationItem.largeTitleDisplayMode = .always
-    // (the big title as our other pages' — 34 bold, the label colour — Haris 2026-11-07)
-    navigationController?.navigationBar.largeTitleTextAttributes = [.font: UIFont.systemFont(ofSize: 34, weight: .bold), .foregroundColor: UIColor.label]
-    h.onAppleTitle = { [weak self] t, d in
-      self?.navigationItem.title = t
-      if #available(iOS 26.0, *) {
-        self?.navigationItem.subtitle = d.isEmpty ? nil : d
-        // (under the big title: the date as our other pages have it — 15 regular, the secondary grey — Haris 2026-11-07)
-        if d.isEmpty { self?.navigationItem.largeAttributedSubtitle = nil } else {
-          var a = AttributedString(d); a.uiKit.font = .systemFont(ofSize: 15); a.uiKit.foregroundColor = .secondaryLabel
-          self?.navigationItem.largeAttributedSubtitle = a
-        }
-      }
-    }
-    h.onAppleMe = { img in
-      guard let img = img else { return }
-      AppleHomeBits.shared.meButton?.set(img)
-    }
-    h.onAppleResign = { AppleHomeBits.shared.search?.searchBar.resignFirstResponder() }
-    h.appleBarHeight = { [weak self] in
-      guard let nb = self?.navigationController?.navigationBar, !nb.isHidden, nb.window != nil else { return 0 }
-      return nb.frame.height
-    }
-    // your photo (Me) and 🔍, as Apple's bar buttons
-    // (always a circle: its own size, its corners half its size whatever the bar does with it — it came out stretched,
-    //  not round: Haris 2026-11-07)
+    navigationItem.backButtonDisplayMode = .minimal   // (a task over it: just ‹)
+    // your Me pill and 🔍, as Apple's bar items
     let b = MePhotoControl(frame: CGRect(origin: .zero, size: MePhotoControl.size))
     b.translatesAutoresizingMaskIntoConstraints = false
     NSLayoutConstraint.activate([b.widthAnchor.constraint(equalToConstant: MePhotoControl.size.width), b.heightAnchor.constraint(equalToConstant: MePhotoControl.size.height)])
     b.isAccessibilityElement = true; b.accessibilityTraits = .button
     b.accessibilityLabel = "Me"
-    b.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.homeIfMade?.meTap() }, for: .touchUpInside)
+    b.addAction(UIAction { _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); Main.shared.homeIfMade?.meTap() }, for: .touchUpInside)
     AppleHomeBits.shared.meButton = b
     let meItem = UIBarButtonItem(customView: b)
-    // (on Apple's own glass, as the 🔍 beside it)
-    let find = UIBarButtonItem(image: UIImage(systemName: "magnifyingglass"), primaryAction: UIAction { [weak self] _ in
-      UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.appleHomeSearch()
-    })
-    find.accessibilityLabel = "Search"
-    // iOS 26: Apple's own search button in the bar — it opens into the search field there and closes back, all Apple's
-    // (Haris 2026-11-07: the search bar went to the bottom, and a second search left it gone and the page stuck)
-    if #available(iOS 26.0, *) {
-      navigationItem.searchController = makeHomeSearch()
-      navigationItem.hidesSearchBarWhenScrolling = false
-      navigationItem.preferredSearchBarPlacement = .integratedButton
-      navigationItem.searchBarPlacementAllowsToolbarIntegration = false
-      // (Apple's own item for where its search button goes: 🔍, then your photo at the right end, as before — Haris
-      //  2026-11-07)
-      // (a fixed space between them: 🔍 on its own glass, apart from the Me pill — Apple's way of splitting bar items into
-      //  their own groups; Haris 2026-11-07)
-      navigationItem.rightBarButtonItems = [meItem, .fixedSpace(0), navigationItem.searchBarPlacementBarButtonItem]
-    } else {
-      navigationItem.rightBarButtonItems = [meItem, find]
-    }
-    h.useAppleTop()
-  }
-  // Apple's bar shows while Home is the screen on show (and Main is on top); hidden for every other screen of the app's
-  // (not over the startup screen: it comes as that fades out)
-  func appleHomeBar(animated: Bool, splashGoing: Bool = false) {
-    guard APPLE_HOME, let nav = navigationController, nav.topViewController === self else { return }
-    let want = homeIfMade?.appleTop == true && shownScreen === homeIfMade && lockView == nil && (splash == nil || splashGoing)
-    if nav.isNavigationBarHidden == want { nav.setNavigationBarHidden(!want, animated: animated) }
-    if want, let h = homeIfMade { setContentScrollView(h.appleScroll, for: .top); h.appleKeepTop(); DispatchQueue.main.async { h.appleKeepTop() } }
-  }
-  // 🔍: Apple's search bar comes in under the bar, ready to type
-  func makeHomeSearch() -> UISearchController {
-    if let x = AppleHomeBits.shared.search { return x }
-    // (Apple's own results page over Home — the results are Home's own cards on it; the list and the big title under it
-    //  are left as they are: Haris 2026-11-07)
-    let rvc = HomeResultsVC()
-    if let h = homeIfMade { rvc.take(h) }
-    let s = UISearchController(searchResultsController: rvc)
+    // Apple's search: its own controller and results page; the results are Home's cards (HomeResultsVC)
+    let s = UISearchController(searchResultsController: HomeResultsVC())
     s.showsSearchResultsController = true
     s.obscuresBackgroundDuringPresentation = false
     s.searchResultsUpdater = self
@@ -133,36 +85,81 @@ extension Main: UISearchResultsUpdating, UISearchControllerDelegate {
     s.searchBar.placeholder = "Search tasks, clients or people"
     s.searchBar.autocorrectionType = .no
     AppleHomeBits.shared.search = s
-    return s
-  }
-  // (before iOS 26: our 🔍 bar button brings Apple's search bar in under the bar)
-  func appleHomeSearch() {
-    let s = makeHomeSearch()
     navigationItem.searchController = s
     navigationItem.hidesSearchBarWhenScrolling = false
-    if #available(iOS 16.0, *) { navigationItem.preferredSearchBarPlacement = .stacked }
-    // (at the top, under the bar — iOS 26 put it at the bottom among the toolbar's things: Haris 2026-11-07)
-    if #available(iOS 26.0, *) { navigationItem.searchBarPlacementAllowsToolbarIntegration = false }
-    DispatchQueue.main.async { s.isActive = true }
+    if #available(iOS 26.0, *) {
+      // (iOS 26: Apple's own 🔍 in the bar, opening into its search field there; on its own glass apart from the Me pill —
+      //  a fixed space splits the groups, Apple's way)
+      navigationItem.preferredSearchBarPlacement = .integratedButton
+      navigationItem.searchBarPlacementAllowsToolbarIntegration = false
+      navigationItem.rightBarButtonItems = [meItem, .fixedSpace(0), navigationItem.searchBarPlacementBarButtonItem]
+    } else {
+      if #available(iOS 16.0, *) { navigationItem.preferredSearchBarPlacement = .stacked }
+      navigationItem.rightBarButtonItems = [meItem]
+    }
+    if let h = Main.shared.homeIfMade { adopt(h) }
   }
-  func updateSearchResults(for s: UISearchController) {
-    guard s === AppleHomeBits.shared.search else { return }
-    homeIfMade?.appleSearchText(s.searchBar.text ?? "")
+  override func viewWillAppear(_ a: Bool) {
+    super.viewWillAppear(a)
+    navigationController?.setNavigationBarHidden(false, animated: a)
   }
+  // Home's own view, filling this screen (its list under Apple's bar, as Apple wants it)
+  func adopt(_ h: HomeView) {
+    loadViewIfNeeded()
+    if h.superview !== view {
+      h.removeFromSuperview()
+      h.frame = view.bounds; h.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+      view.insertSubview(h, at: 0)
+    }
+    view.backgroundColor = h.backgroundColor ?? view.backgroundColor
+    h.onAppleTitle = { [weak self] t, d in
+      guard let self = self else { return }
+      self.navigationItem.title = t
+      if #available(iOS 26.0, *) {
+        self.navigationItem.subtitle = d.isEmpty ? nil : d
+        // (under the big title: the date as our other pages have it — 15 regular, the secondary grey — Haris 2026-11-07)
+        if d.isEmpty { self.navigationItem.largeAttributedSubtitle = nil } else {
+          var a = AttributedString(d); a.uiKit.font = .systemFont(ofSize: 15); a.uiKit.foregroundColor = .secondaryLabel
+          self.navigationItem.largeAttributedSubtitle = a
+        }
+      }
+    }
+    h.onAppleMe = { img in if let img = img { AppleHomeBits.shared.meButton?.set(img) } }
+    h.onAppleResign = { AppleHomeBits.shared.search?.searchBar.resignFirstResponder() }
+    h.appleBarHeight = { [weak self] in
+      guard let nb = self?.navigationController?.navigationBar, !nb.isHidden, nb.window != nil else { return 0 }
+      return nb.frame.height
+    }
+    h.useAppleTop()
+    setContentScrollView(h.appleScroll, for: .top)
+  }
+  // ---------- Apple's search: it opened, its words changed, it closed ----------
+  func updateSearchResults(for s: UISearchController) { Main.shared.homeIfMade?.appleSearchText(s.searchBar.text ?? "") }
   func willPresentSearchController(_ s: UISearchController) {
-    guard s === AppleHomeBits.shared.search, let h = homeIfMade else { return }
+    guard let h = Main.shared.homeIfMade else { return }
+    (s.searchResultsController as? HomeResultsVC)?.take(h)
     h.appleSearchBegin()
   }
-  func didPresentSearchController(_ s: UISearchController) {
-    guard s === AppleHomeBits.shared.search else { return }
-    DispatchQueue.main.async { s.searchBar.becomeFirstResponder() }
+  func didPresentSearchController(_ s: UISearchController) { DispatchQueue.main.async { s.searchBar.becomeFirstResponder() } }
+  func willDismissSearchController(_ s: UISearchController) { Main.shared.homeIfMade?.appleSearchEnd() }
+}
+
+extension Main {
+  // the app's own navigation has no bar of its own any more: Home's bar is Home's screen's (HomeVC); a page pushed over
+  // the app's other screens (a task) shows Apple's bar, and coming back it goes again
+  func appleHomeBar(animated: Bool, splashGoing: Bool = false) {
+    guard APPLE_HOME, let nav = navigationController, nav.topViewController === self, !nav.isNavigationBarHidden else { return }
+    nav.setNavigationBarHidden(true, animated: animated)
   }
-  func willDismissSearchController(_ s: UISearchController) {
-    guard s === AppleHomeBits.shared.search else { return }
-    homeIfMade?.appleSearchEnd()
-  }
-  func didDismissSearchController(_ s: UISearchController) {
-    guard s === AppleHomeBits.shared.search else { return }
-    if #unavailable(iOS 26.0) { navigationItem.searchController = nil }   // (iOS 26: it stays, as Apple's button)
+  // the navigation on show: Home's own when Home's tab is on, else the app's
+  var stageNav: UINavigationController? { (AppleTabs.shared?.homeShown == true ? AppleTabs.shared?.homeNav : nil) ?? navigationController }
+  // every navigation the app has (Home's and the app's), for what's open in any of them
+  var allNavs: [UINavigationController] { [AppleTabs.shared?.homeNav, navigationController].compactMap { $0 } }
+  // the app's top layer: the window — over every tab (the startup screen, a card over the tab bar, View as…)
+  var stage: UIView { AppleTabs.shared?.view.window ?? view.window ?? view }
+  // (the startup screen up to the window, before Home's own screen comes up under it)
+  func liftSplash() {
+    guard let s = splash, let w = AppleTabs.shared?.view.window ?? view.window, s.superview !== w else { return }
+    s.removeFromSuperview(); s.frame = w.bounds; s.autoresizingMask = [.flexibleWidth, .flexibleHeight]; w.addSubview(s)
   }
 }

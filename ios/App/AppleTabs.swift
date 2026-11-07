@@ -49,11 +49,16 @@ final class TabSlot: UIViewController {
 
 final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
   static weak var shared: AppleTabs?
-  let nav: UINavigationController
+  let nav: UINavigationController   // (the app's own navigation: every tab but Home — it moves into the tab that's on)
+  // Home's own tab: its own navigation with Home's screen at its root (AppleHome.swift) — the tab's view controller itself,
+  // as Apple builds a tab
+  let homeNav: AppleNav
   private var slots: [TabSlot] = []
+  private var homeAt: Int?
   private var selecting = false
   init(nav: UINavigationController) {
     self.nav = nav
+    homeNav = AppleNav(rootViewController: HomeVC())
     super.init(nibName: nil, bundle: nil)
     AppleTabs.shared = self
     delegate = self
@@ -65,6 +70,9 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
   required init?(coder: NSCoder) { fatalError() }
   override var childForStatusBarStyle: UIViewController? { selectedViewController }
   override var childForStatusBarHidden: UIViewController? { selectedViewController }
+  // Home's tab on show
+  var homeShown: Bool { selectedViewController === homeNav }
+  private func tabVC(_ i: Int) -> UIViewController { i == homeAt ? homeNav : slots[i] }
 
   private func host(in s: TabSlot) {
     guard nav.parent !== s else { return }
@@ -85,15 +93,18 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
   func sync(from bar: Tabs) {
     let items = bar.items ?? []
     guard !items.isEmpty else { return }
-    if slots.count != items.count {
+    let home = APPLE_HOME ? Main.shared.tabKeys.firstIndex(of: "today") : nil
+    if slots.count != items.count || home != homeAt {
       while slots.count < items.count { slots.append(TabSlot()) }
       if slots.count > items.count { slots = Array(slots.prefix(items.count)) }
+      homeAt = home.flatMap { $0 < items.count ? $0 : nil }
+      if homeAt != nil { Main.shared.liftSplash() }   // (the startup screen over every tab, Home's own too)
       let keep = nav.parent as? TabSlot
-      setViewControllers(slots, animated: false)
-      if let k = keep, !slots.contains(where: { $0 === k }) { host(in: slots[0]) }
+      setViewControllers(items.indices.map { tabVC($0) }, animated: false)
+      if let k = keep, !slots.enumerated().contains(where: { $0.element === k && $0.offset != homeAt }) { if let j = slots.indices.first(where: { $0 != homeAt }) { host(in: slots[j]) } }
     }
     for (i, it) in items.enumerated() {
-      let t = slots[i].tabBarItem!
+      let t = tabVC(i).tabBarItem!
       if t.title != it.title { t.title = it.title }
       if t.image !== it.image { t.image = it.image }
       if t.selectedImage !== it.selectedImage { t.selectedImage = it.selectedImage }
@@ -109,7 +120,7 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
   }
   private func select(_ i: Int) {
     guard slots.indices.contains(i) else { return }
-    host(in: slots[i])
+    if i != homeAt { host(in: slots[i]) }
     if selectedIndex != i { selectedIndex = i }
   }
   // Main put another tab on (the page moved it, a tab "as if tapped")
@@ -118,10 +129,14 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
   // (a task) hides it Apple's way
   func mirrorShown(animated: Bool = false, top: UIViewController? = nil) {
     let main = Main.shared
-    // (a page pushed over the tabs — a task, a reply: no tab bar, Apple's slide away; the app's navigation isn't the
-    //  tab's own, so iPhone's "hide when pushed" never did it — it stayed over the task page, its comments and the
-    //  keyboard: Haris 2026-11-07)
-    if (top ?? nav.topViewController) !== main { hideBar(true, animated: animated); return }
+    // (no tabs — the sign-in page, the website's own screens: the app's own navigation on show, not Home's)
+    if main.tabsHidden && homeShown, let j = slots.indices.first(where: { $0 != homeAt }), selectedIndex != j {
+      host(in: slots[j]); selectedIndex = j
+    }
+    // (a page pushed over the tabs — a task, a reply: no tab bar, Apple's slide away)
+    let shown = top ?? (homeShown ? homeNav.topViewController : nav.topViewController)
+    // (on Home's own navigation Apple does it itself — the page hides the tab bar as it's pushed)
+    if shown !== main && !(shown is HomeVC) { if !homeShown { hideBar(true, animated: animated) }; return }
     let b = main.tabBar
     let hide = b.isHidden || main.lockView != nil || (main.splash != nil && !main.splashLeaving)
     hideBar(hide, animated: animated)
@@ -129,17 +144,17 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
     if tabBar.alpha != a { tabBar.alpha = a }
   }
 
-  // ---------- a tab tapped on Apple's bar: the app's navigation moves into it, and Main does what a tap did ----------
+  // ---------- a tab tapped on Apple's bar: the app's navigation moves into it (Home: its own), and Main does what a tap did ----------
   func tabBarController(_ c: UITabBarController, shouldSelect vc: UIViewController) -> Bool {
-    guard let i = slots.firstIndex(where: { $0 === vc }) else { return false }
+    guard let i = (0..<slots.count).first(where: { tabVC($0) === vc }) else { return false }
     let main = Main.shared
     guard let item = main.tabBar.items?.first(where: { $0.tag == i }) else { return false }
-    host(in: slots[i])
+    if i != homeAt { host(in: slots[i]) }
     if main.tabBar.selectedItem !== item { selecting = true; main.tabBar.selectedItem = item; selecting = false }
     return true
   }
   func tabBarController(_ c: UITabBarController, didSelect vc: UIViewController) {
-    guard let i = slots.firstIndex(where: { $0 === vc }) else { return }
+    guard let i = (0..<slots.count).first(where: { tabVC($0) === vc }) else { return }
     let main = Main.shared
     guard let item = main.tabBar.items?.first(where: { $0.tag == i }) else { return }
     main.tabBar(main.tabBar, didSelect: item)

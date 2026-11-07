@@ -37,8 +37,11 @@ final class AppleNav: UINavigationController, UINavigationControllerDelegate, UI
       popGuard = guardian
       g.delegate = guardian
     }
-    setNavigationBarHidden(true, animated: false)
-    navigationBar.prefersLargeTitles = APPLE_HOME   // (Home's big title — AppleHome.swift)
+    // (Home's own navigation: Apple's bar there from the start, with its big title — AppleHome.swift; the app's: no bar
+    //  over its own screens)
+    let home = viewControllers.first is HomeVC
+    setNavigationBarHidden(!home, animated: false)
+    navigationBar.prefersLargeTitles = home
   }
   // the swipe back: Apple's own; a comment written and not sent on the page asks first (as ‹ does)
   func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
@@ -53,10 +56,12 @@ final class AppleNav: UINavigationController, UINavigationControllerDelegate, UI
   // a page gone (popped by ‹, swiped away, or taken out): the app lets go of it as when it closes
   // (Apple's tab bar slides away as a page comes over the tabs, and back as the app's screen comes back — AppleTabs.swift)
   func navigationController(_ n: UINavigationController, willShow vc: UIViewController, animated: Bool) {
+    // (Home's navigation is its tab's own: Apple hides and shows the tab bar itself as a page is pushed and popped)
+    if n === AppleTabs.shared?.homeNav { return }
     AppleTabs.shared?.mirrorShown(animated: animated, top: vc)
   }
   func navigationController(_ n: UINavigationController, didShow vc: UIViewController, animated: Bool) {
-    Main.shared.taskPagesGone(stack: n.viewControllers)
+    Main.shared.taskPagesGone(stack: Main.shared.allNavs.flatMap { $0.viewControllers })
     AppleTabs.shared?.mirrorShown()   // (back on the app's screens: Apple's tab bar as Main has it)
   }
 }
