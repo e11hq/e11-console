@@ -143,11 +143,6 @@ extension Main {
   var stageNav: UINavigationController? { (AppleTabs.shared?.homeShown == true ? AppleTabs.shared?.homeNav : nil) ?? navigationController }
   // every navigation the app has (Home's and the app's), for what's open in any of them
   var allNavs: [UINavigationController] { [AppleTabs.shared?.homeNav, navigationController].compactMap { $0 } }
-  // the app's top layer: the window — over every tab (the startup screen, a card over the tab bar, View as…)
+  // (a card over the tab bar, View as…: the window — over every tab)
   var stage: UIView { AppleTabs.shared?.view.window ?? view.window ?? view }
-  // (the startup screen up to the window, before Home's own screen comes up under it)
-  func liftSplash() {
-    guard let s = splash, let w = AppleTabs.shared?.view.window ?? view.window, s.superview !== w else { return }
-    s.removeFromSuperview(); s.frame = w.bounds; s.autoresizingMask = [.flexibleWidth, .flexibleHeight]; w.addSubview(s)
-  }
 }

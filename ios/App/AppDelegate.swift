@@ -344,10 +344,13 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if (m["native"] as? Bool) == false { return }   // (the website switched it off: the page's own startup screen)
     let s = SplashView(memo: m)
     appStyle = s.light ? .light : .dark
-    s.frame = view.bounds; s.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    // (over every tab from the start — Apple's tab container's own view, which never changes; it was moved there from
+    //  this screen once the tabs came, and the move cut its animation off half way: Haris 2026-11-07)
+    let host: UIView = APPLE_TABS ? (AppleTabs.shared?.view ?? view) : view
+    s.frame = host.bounds; s.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     s.onSkip = { [weak self] in self?.pageJS("window.__e11SplashSkip && window.__e11SplashSkip()") }
     s.onRetry = { [weak self] in self?.bootRetry() }
-    view.addSubview(s)
+    host.addSubview(s)
     splash = s
     statusStyle = s.light ? .darkContent : .lightContent
     setNeedsStatusBarAppearanceUpdate()
@@ -1474,6 +1477,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       self?.pageJSSoon("window.__e11Home && window.__e11Home(\(jsonString(ev)))")
     }
     h.present = { [weak self] vc in self?.topMost().present(vc, animated: true) }
+    h.onShown = { [weak self] in if let m = self?.homeMissed { self?.drawServerHome(m) } }
     homeIfMade = h
     // (Home's own screen in its own tab — AppleHome.swift: Home goes there, under Apple's bar)
     if APPLE_HOME, let vc = HomeVC.shared { vc.adopt(h) } else { view.insertSubview(h, belowSubview: tabsMark) }
@@ -1661,12 +1665,18 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     return s
   }
   var homeToastRun: (() -> Void)?
+  var homeMissed: [String: Any]?
   var homePageMe: String?
   var homeLook: Any?, homePagePeople: [String: [String: Any]] = [:], homeServerPeople: [String: [String: Any]] = [:]
   // the server's Home drawn (with the page's colours), when Home is on screen
   func drawServerHome(_ m: [String: Any]) {
     defer { updateCorner() }
-    guard let h = homeIfMade, !h.isHidden else { return }
+    guard let h = homeIfMade else { return }
+    // (Home hidden — another tab on: what changed (a task restored from the Trash, done elsewhere…) is kept and drawn the
+    //  moment Home shows again; it was dropped, and Home showed the old list until the app was opened again — Haris
+    //  2026-11-07)
+    if h.isHidden { homeMissed = m; return }
+    homeMissed = nil
     var mm = m; mm["show"] = true
     if let l = homeLook as? [String: Any], (l["light"] as? Bool) != (appStyle == .light) { homeLook = nil }
     mm["look"] = homeLook ?? ["light": appStyle == .light]

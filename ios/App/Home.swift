@@ -78,7 +78,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   func meTap() { send(["ev": "me"]) }
   var onCorner: (() -> Void)?
   // (shown or hidden — a tab changed: the corner button goes to this screen's, or away)
-  override var isHidden: Bool { didSet { if oldValue != isHidden { onCorner?() } } }
+  override var isHidden: Bool { didSet { if oldValue != isHidden { onCorner?(); if !isHidden { onShown?() } } } }
+  var onShown: (() -> Void)?   // (shown again: what changed while it was hidden is drawn — Main's Home)
   // what the corner is here: "search", "read", "unread" or "none", and where (its right edge left of your photo)
   func corner() -> (kind: String, text: String, frame: CGRect) {
     let f = searchCircle.frame

@@ -103,7 +103,6 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
       while slots.count < items.count { slots.append(TabSlot()) }
       if slots.count > items.count { slots = Array(slots.prefix(items.count)) }
       homeAt = home.flatMap { $0 < items.count ? $0 : nil }
-      if homeAt != nil { Main.shared.liftSplash() }   // (the startup screen over every tab, Home's own too)
       let keep = nav.parent as? TabSlot
       setViewControllers(items.indices.map { tabVC($0) }, animated: false)
       if let k = keep, !slots.enumerated().contains(where: { $0.element === k && $0.offset != homeAt }) { if let j = slots.indices.first(where: { $0 != homeAt }) { host(in: slots[j]) } }
