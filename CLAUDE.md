@@ -123,6 +123,19 @@ repo gets them in its CLAUDE.md from the start (Haris, 2026-11-07; project doc `
    design.
 10. Every iOS app from now on uses Apple's navigation, Apple's tab bar and Apple's top bar.
 
+**iPhone Home — LOCKED, the template for every page (Haris, 2026-11-08 01:13: "All fixed and approved, lock it"):** build
+**1550**, commit 81ec9dd, marked by the branch `locked/ios-home-1550` (never moved or deleted). Every big-title page
+follows it (Don't 9); don't change any of it without Haris. Project doc `claude/ios-apple-structure.md`. In short:
+- Its own Apple navigation as the tab's view controller in Apple's tab bar; Apple's big title with the date line under
+  it (our 34 bold / 15 grey, set on Apple's bar), shrinking to the small title as the list scrolls — all Apple's.
+- Search: Apple's own search bar under the big title, always in the bar (UISearchController, results in Home's own list),
+  stuck under the bar as it scrolls. No box of ours, no 🔍 button.
+- Bar buttons: Apple's own bar buttons with a picture of ours — your photo; E11 Talk's bubble + "Talk".
+- The list: our cards in Apple's list (UICollectionView list), Apple's swipe actions; Apple's own frost.
+- Opening a page from it: Apple's push; **the tab bar is hidden with Apple's tab bar call once the page has arrived**,
+  and comes back as the slide back begins — never "hide the bottom bar when pushed", and nothing told to the tab bar at
+  the slide's first moment: either makes Apple's bar snap small and the big title jump into it.
+
 **The App Store release — APPROVED (Haris, 2026-11-06):** the iPhone app 1.1.0, build 1472 (commit 9ca8c16, marked by
 the branch `approved/appstore-ios-1.1.0-build-1472` — never moved or deleted) is approved as it is for the App Store.
 From now on:
