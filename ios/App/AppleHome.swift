@@ -22,18 +22,23 @@ enum BarImage {
       if let p = photo { p.draw(in: r) } else { UIColor.secondarySystemFill.resolvedColor(with: t).setFill(); UIRectFill(r) }
     }.withRenderingMode(.alwaysOriginal)
   }
+  // (Haris 2026-11-08: the bubble and "Talk" in the bar's own ink — white in dark, black in light (Apple tints the
+  //  picture, no blue); the same room on the left and right of the two together as above and below them in Apple's button
+  //  — Apple keeps 6 pt at each side of a bar button's picture and ~12 pt above and below, so 6 pt more each side here)
   static func talk(_ t: UITraitCollection) -> UIImage? {
-    guard let bubble = UIImage(named: "TalkBubble") else { return nil }
-    let word = NSAttributedString(string: "Talk", attributes: [.font: UIFont.systemFont(ofSize: 15, weight: .semibold), .foregroundColor: UIColor.label.resolvedColor(with: t)])
-    let ws = word.size(), b = CGSize(width: 24, height: 24), gap: CGFloat = 6
+    guard let src = UIImage(named: "TalkBubble"), let cg = src.cgImage else { return nil }
+    // (the bubble without the empty margin its picture has around it)
+    let sc = src.scale, crop = CGRect(x: 6, y: 9, width: 60, height: 55).applying(CGAffineTransform(scaleX: sc / 3, y: sc / 3))
+    guard let cut = cg.cropping(to: crop) else { return nil }
+    let bubble = UIImage(cgImage: cut, scale: sc, orientation: .up)
+    let word = NSAttributedString(string: "Talk", attributes: [.font: UIFont.systemFont(ofSize: 15, weight: .semibold), .foregroundColor: UIColor.black])
+    let ws = word.size(), b = bubble.size, gap: CGFloat = 6, side: CGFloat = 6
     let h = max(b.height, ceil(ws.height))
-    // (room after "Talk" as the bubble has before it — its picture has its own margin inside: Haris 2026-11-08, the "k"
-    //  was touching the edge)
-    let size = CGSize(width: b.width + gap + ceil(ws.width) + 4, height: h)
+    let size = CGSize(width: side + b.width + gap + ceil(ws.width) + side, height: h)
     return UIGraphicsImageRenderer(size: size, format: UIGraphicsImageRendererFormat(for: t)).image { _ in
-      bubble.draw(in: CGRect(x: 0, y: (h - b.height) / 2, width: b.width, height: b.height))
-      word.draw(at: CGPoint(x: b.width + gap, y: (h - ws.height) / 2))
-    }.withRenderingMode(.alwaysOriginal)
+      bubble.draw(in: CGRect(x: side, y: (h - b.height) / 2, width: b.width, height: b.height))
+      word.draw(at: CGPoint(x: side + b.width + gap, y: (h - ws.height) / 2))
+    }.withRenderingMode(.alwaysTemplate)
   }
 }
 
@@ -84,11 +89,11 @@ final class HomeVC: UIViewController, UISearchResultsUpdating, UISearchControlle
     // (Apple's search box under the big title, as E11 Talk's lists — nothing set for where it goes: tapped, Apple folds the
     //  big title away and the results start right under the box. Apple's 🔍 bar button kept the big title's room above
     //  the results — measured on Apple's own screens, Haris 2026-11-07)
-    // E11 Talk's bubble, an Apple bar button on its own glass beside the Me pill (Haris 2026-11-07): it will open E11 Talk,
-    // or its App Store page when it isn't installed — the link comes later, with Talk's release; for now it does nothing
-    // (in its own blue gradient, as E11 Talk's icon — the same in light and dark: Apple's original-colour image, Haris
-    //  2026-11-07)
+    // E11 Talk's button, an Apple bar button beside your photo (Haris 2026-11-07): it will open E11 Talk, or its App
+    // Store page when it isn't installed — the link comes later, with Talk's release; for now it does nothing. The bubble
+    // and "Talk" in the bar's own ink, white in dark and black in light (Haris 2026-11-08)
     let talk = UIBarButtonItem(image: BarImage.talk(traitCollection), primaryAction: UIAction { _ in })
+    talk.tintColor = .label
     AppleHomeBits.shared.talkItem = talk
     talk.accessibilityLabel = "E11 Talk"
     navigationItem.rightBarButtonItems = [meItem, .fixedSpace(0), talk]
