@@ -572,7 +572,7 @@ final class AssetsCtl {
         while let id = cur, ups.count < 8 { ups.insert(id, at: 0); cur = self.folderInfo(m, id)?["parent"] as? String }
         for (k, id) in ups.enumerated() { let s = self.screen("folder", client, id); s.h.isHidden = true; self.stack.insert(s, at: i + k); self.draw(s) }
         self.stack.forEach { self.main.view.bringSubviewToFront($0.h) }
-        self.main.view.bringSubviewToFront(self.main.tabBar)
+        self.main.view.bringSubviewToFront(self.main.tabsMark)
       }
     }
   }
@@ -588,7 +588,7 @@ final class AssetsCtl {
     h.assetsMenu = { [weak self, weak h] in guard let self = self, let h = h else { return [] }; return self.menuItems(h) }
     h.cornerShared = true
     h.onCorner = { [weak self] in self?.main.updateCorner() }
-    main.view.insertSubview(h, belowSubview: main.tabBar)
+    main.view.insertSubview(h, belowSubview: main.tabsMark)
     let s = Screen(h: h, kind: kind, client: client, folder: folder)
     draw(s)
     return s

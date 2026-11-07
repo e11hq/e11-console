@@ -130,10 +130,14 @@ final class WeakHandler: NSObject, WKScriptMessageHandler {
   func userContentController(_ c: WKUserContentController, didReceive m: WKScriptMessage) { target?.userContentController(c, didReceive: m) }
 }
 
-final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate, UITabBarDelegate, WKDownloadDelegate, UIGestureRecognizerDelegate {
+final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate, UIGestureRecognizerDelegate {
   static let shared = Main()
   var web: WKWebView!
-  let tabBar: UITabBar = APPLE_TABS ? MirrorTabBar() : UITabBar()   // (iPhone's own tab container: this one unseen, Apple's shows what it's told — AppleTabs.swift)
+  // the tabs — what the app says about them goes straight to Apple's tab bar (AppleTabs.swift); no bar of the app's own
+  let tabBar = Tabs()
+  // (where the tab bar's layer was among the app's screens: what goes over the screens but under the tab bar's place is
+  //  put below this — an empty, hidden mark, never seen or touched)
+  let tabsMark: UIView = { let v = UIView(); v.isHidden = true; v.isUserInteractionEnabled = false; return v }()
   var tabKeys: [String] = []
   var tabsHidden = true
   var pageReady = false
@@ -215,9 +219,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let nc = NotificationCenter.default
     nc.addObserver(forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: .main) { [weak self] n in self?.keyboardMoves(n) }
     nc.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { [weak self] n in self?.keyboardMoves(n, gone: true) }
-    tabBar.delegate = self
     tabBar.isHidden = true
-    view.addSubview(tabBar)
+    view.addSubview(tabsMark)
     view.addSubview(reviewLink)
     showSplash()
     quickStart()
@@ -394,7 +397,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     b.translatesAutoresizingMaskIntoConstraints = false
     b.setLook(light: LAST_LIGHT)
     b.isHidden = true; b.alpha = 0
-    self.view.insertSubview(b, belowSubview: self.tabBar)
+    self.view.insertSubview(b, belowSubview: self.tabsMark)
     NSLayoutConstraint.activate([
       b.leadingAnchor.constraint(equalTo: self.view.leadingAnchor), b.trailingAnchor.constraint(equalTo: self.view.trailingAnchor),
       b.bottomAnchor.constraint(equalTo: self.view.keyboardLayoutGuide.topAnchor),
@@ -1325,7 +1328,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       }
     }.withRenderingMode(.alwaysOriginal)
   }
-  func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
+  func tabBar(_ tabBar: Tabs, didSelect item: UITabBarItem) {
     guard item.tag < tabKeys.count else { return }
     AppleTabs.shared?.mirrorSelected(item.tag)   // (Apple's tab bar on the same tab — AppleTabs.swift)
     // (another tab: Home's Apple bar goes at once, before that tab's screen shows — AppleHome.swift)
@@ -1467,7 +1470,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       self?.pageJSSoon("window.__e11Home && window.__e11Home(\(jsonString(ev)))")
     }
     h.present = { [weak self] vc in self?.topMost().present(vc, animated: true) }
-    view.insertSubview(h, belowSubview: tabBar)
+    view.insertSubview(h, belowSubview: tabsMark)
     homeIfMade = h
     appleHomeSetup(h)
     return h
@@ -1762,7 +1765,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       self.pageJS("window.__e11MyTasks && window.__e11MyTasks(\(jsonString(ev)))")
     }
     h.present = { [weak self] vc in self?.topMost().present(vc, animated: true) }
-    view.insertSubview(h, belowSubview: tabBar)
+    view.insertSubview(h, belowSubview: tabsMark)
     myTasksIfMade = h
     return h
   }()
@@ -1872,7 +1875,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       }
     }
     h.present = { [weak self] vc in self?.topMost().present(vc, animated: true) }
-    view.insertSubview(h, belowSubview: tabBar)
+    view.insertSubview(h, belowSubview: tabsMark)
     inboxIfMade = h
     return h
   }()
@@ -1934,7 +1937,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if assetsCtl.isOpen { assetsCtl.close(animated: false) }
     // (back to Me from a page deeper than it — My profile, Client Assets: the app's own Me comes in under the slide)
     let meRoot = key == meCtl.tab ? meCtl.rootUnder() : nil
-    if let s = snap { s.frame = top.frame; view.insertSubview(s, belowSubview: tabBar) }
+    if let s = snap { s.frame = top.frame; view.insertSubview(s, belowSubview: tabsMark) }
     if let r = meRoot {
       r.transform = CGAffineTransform(translationX: -W * 0.3, y: 0)
       UIView.animate(withDuration: 0.36, delay: 0.08, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) { r.transform = .identity }
@@ -1954,7 +1957,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     guard let top = assetsCtl.top else { return }
     let W = view.bounds.width
     let snap = top.snapshotView(afterScreenUpdates: false)
-    if let s = snap { s.frame = top.frame; view.insertSubview(s, belowSubview: tabBar) }
+    if let s = snap { s.frame = top.frame; view.insertSubview(s, belowSubview: tabsMark) }
     assetsCtl.close(animated: false)
     meCtl.reveal()
     if meCtl.depth > 1 { meCtl.backToRoot() }
@@ -1974,7 +1977,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     guard let top: UIView = assetsCtl.top ?? page else { if !l.isHidden { l.scrollToTop() }; return true }
     let W = view.bounds.width
     let snap = top.snapshotView(afterScreenUpdates: false)
-    if let s = snap { s.frame = top.frame; view.insertSubview(s, belowSubview: tabBar) }
+    if let s = snap { s.frame = top.frame; view.insertSubview(s, belowSubview: tabsMark) }
     assetsCtl.close(animated: false)
     if let p = clientPageIfMade, !p.isHidden { p.isHidden = true; p.transform = .identity }
     let wasPage = clientsOn == "client"
@@ -2032,7 +2035,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       self.pageJS("window.__e11Clients && window.__e11Clients(\(jsonString(ev)))")
     }
     h.present = { [weak self] vc in self?.topMost().present(vc, animated: true) }
-    if page, let l = clientsListIfMade { view.insertSubview(h, aboveSubview: l) } else { view.insertSubview(h, belowSubview: tabBar) }
+    if page, let l = clientsListIfMade { view.insertSubview(h, aboveSubview: l) } else { view.insertSubview(h, belowSubview: tabsMark) }
     if page { clientPageIfMade = h } else { clientsListIfMade = h }
     return h
   }

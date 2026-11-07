@@ -1706,7 +1706,7 @@ final class MeCtl {
     guard let s = stack.last, let i = v.subviews.firstIndex(of: s.h) else { return }
     let mine = Set(stack.map { ObjectIdentifier($0.h) })
     guard v.subviews[(i + 1)...].contains(where: { x in (x is HomeView || x is TaskPage) && !x.isHidden && !mine.contains(ObjectIdentifier(x)) }) else { return }
-    for x in stack { if main.corner.superview === v { v.insertSubview(x.h, belowSubview: main.corner) } else { v.insertSubview(x.h, belowSubview: main.tabBar) } }
+    for x in stack { if main.corner.superview === v { v.insertSubview(x.h, belowSubview: main.corner) } else { v.insertSubview(x.h, belowSubview: main.tabsMark) } }
   }
   // shown at once under a page going back to Me (Client Assets' ‹): the page says so a moment later — if it doesn't,
   // out of sight again
@@ -1753,7 +1753,7 @@ final class MeCtl {
         self.slideLists(h, dir: dir) { self.draw(s) }
       }
     }
-    main.view.insertSubview(h, belowSubview: main.tabBar)
+    main.view.insertSubview(h, belowSubview: main.tabsMark)
     return Screen(h: h, kind: kind, id: id)
   }
   // the two lists swapped with the task page's Details ↔ Comments slide: what's under the switch goes off to one side,
@@ -1852,7 +1852,7 @@ final class MeCtl {
     guard stack.count > 1, let topS = stack.last, !leaving else { stack.first?.h.scrollToTop(); return }
     let W = main.view.bounds.width
     let snap = topS.h.snapshotView(afterScreenUpdates: false)
-    if let sn = snap { sn.frame = topS.h.frame; main.view.insertSubview(sn, belowSubview: main.tabBar) }
+    if let sn = snap { sn.frame = topS.h.frame; main.view.insertSubview(sn, belowSubview: main.tabsMark) }
     let root = stack[0]
     let gone = stack.dropFirst()
     if gone.contains(where: { $0.kind == "team" }) { send(["ev": "team", "on": false]) }

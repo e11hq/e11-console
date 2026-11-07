@@ -4,35 +4,31 @@ import UIKit
    the app's root — its own tab bar, its glass, its switching, and the room it keeps (search, the keyboard and pages
    pushed over it know where it is). The app's screens are as they were: the one navigation (AppleNav, with Main and the
    task pages) sits in the tab that's selected, and Main still decides what each tab shows. Main's own tab bar stays as
-   the source of the tabs (names, icons and their counts, your photo, which one is on, hidden or faded) and is never
-   seen: everything it's told is passed to Apple's (MirrorTabBar). */
+   the source of the tabs (names, icons and their counts, your photo, which one is on, hidden or faded) — not a bar, only
+   what it says, passed to Apple's at once (Tabs). */
 let APPLE_TABS = APPLE_NAV
 
-// Main's tab bar, unseen: what it's told — shown, hidden, faded, the tab that's on — goes to Apple's
-final class MirrorTabBar: UITabBar {
-  private var vHidden = false, vAlpha: CGFloat = 1
-  override var isHidden: Bool {
-    get { vHidden }
-    set { vHidden = newValue; super.isHidden = true; AppleTabs.shared?.mirrorShown() }
+// The app's tabs (Haris 2026-11-07: no hidden bar of the app's own — it took taps above Apple's): what Main says about
+// them — the tabs, the one that's on, shown / hidden / faded, the colours — kept here and told to Apple's tab bar at once.
+// Not a view: nothing to see or touch.
+final class Tabs {
+  var items: [UITabBarItem]?
+  var selectedItem: UITabBarItem?
+  var isHidden = true { didSet { AppleTabs.shared?.mirrorShown() } }
+  var alpha: CGFloat = 1 { didSet { AppleTabs.shared?.mirrorShown() } }
+  var isUserInteractionEnabled: Bool {
+    get { AppleTabs.shared?.tabBar.isUserInteractionEnabled ?? true }
+    set { AppleTabs.shared?.tabBar.isUserInteractionEnabled = newValue }
   }
-  override var alpha: CGFloat {
-    get { vAlpha }
-    set { vAlpha = newValue; AppleTabs.shared?.mirrorShown() }
+  var tintColor: UIColor?
+  var unselectedItemTintColor: UIColor?
+  var overrideUserInterfaceStyle: UIUserInterfaceStyle = .unspecified
+  var traitCollection: UITraitCollection {
+    overrideUserInterfaceStyle == .unspecified ? Main.shared.traitCollection : UITraitCollection(userInterfaceStyle: overrideUserInterfaceStyle)
   }
-  override init(frame: CGRect) { super.init(frame: frame); super.isHidden = true }
-  required init?(coder: NSCoder) { fatalError() }
-}
-
-// Apple's tab bar, answering only on the glass pill it draws: iOS 26's bar is taller than its pill and took taps meant for
-// what sits just above it — the toast's Undo went to the Me tab (Haris 2026-11-07)
-final class PillTabBar: UITabBar {
-  override func point(inside p: CGPoint, with e: UIEvent?) -> Bool {
-    guard super.point(inside: p, with: e) else { return false }
-    guard #available(iOS 26.0, *) else { return true }
-    let safe = window?.safeAreaInsets.bottom ?? 0
-    let pillBottom = bounds.height - (safe > 0 ? max(8, safe - 11) : 8)
-    return p.y >= pillBottom - 61 - 2
-  }
+  // (where Apple's bar is, as the app's screens measure it — Main's layout)
+  var frame: CGRect = .zero
+  func sizeThatFits(_ s: CGSize) -> CGSize { AppleTabs.shared?.tabBar.sizeThatFits(s) ?? CGSize(width: s.width, height: 49) }
 }
 
 // one tab: it holds the app's navigation while it's the one selected
@@ -60,7 +56,6 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
     self.nav = nav
     super.init(nibName: nil, bundle: nil)
     AppleTabs.shared = self
-    setValue(PillTabBar(), forKey: "tabBar")   // (Apple's own bar, its touches kept to its pill)
     delegate = self
     let s = TabSlot(); slots = [s]
     setViewControllers(slots, animated: false)
@@ -87,7 +82,7 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
   }
 
   // Main's tabs → Apple's: one tab each, the same names and icons (with their counts drawn in), your photo on Me
-  func sync(from bar: UITabBar) {
+  func sync(from bar: Tabs) {
     let items = bar.items ?? []
     guard !items.isEmpty else { return }
     if slots.count != items.count {

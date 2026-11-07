@@ -47,7 +47,7 @@ extension Main {
       vc.view.addSubview(p)
     }
     // (under the shared top buttons, which stay where they are)
-    else if corner.superview === view { view.insertSubview(p, belowSubview: corner) } else { view.insertSubview(p, belowSubview: tabBar) }
+    else if corner.superview === view { view.insertSubview(p, belowSubview: corner) } else { view.insertSubview(p, belowSubview: tabsMark) }
     // (opened while the startup screen shows — a task link, a notification: the startup screen stays on top and fades
     //  out, so the task is there under it; Haris 2026-11-05)
     if let s = splash { view.bringSubviewToFront(s); splashGone() }
@@ -127,7 +127,7 @@ extension Main {
       // (nor do the shared top buttons: they change in place — 🔍 melting into your photo, ••• — not slide off with the screen)
       // (nor the startup screen: a task opened from a link while it shows — it fades out where it is, never slides half off:
       //  Haris 2026-11-05)
-      if v === p || v === tabBar || v === cbarIfMade || v === cbox || (composeIfMade != nil && v === composeIfMade) || v is CornerButton || v is SplashView || v.isHidden || v.frame.width < W - 1 { return false }
+      if v === p || v === tabsMark || v === cbarIfMade || v === cbox || (composeIfMade != nil && v === composeIfMade) || v is CornerButton || v is SplashView || v.isHidden || v.frame.width < W - 1 { return false }
       if jumpHitMade && v === jumpHit { return false }
       return !taskPages.contains { $0 === v }
     }
@@ -158,7 +158,7 @@ extension Main {
       back.forEach { $0.transform = .identity }
       // (the last page gone: whatever was moved aside when it came in is back in place — a screen hidden or shown
       //  meanwhile too; one left aside showed a blank page, Haris 2026-11-01)
-      if last { self.view.subviews.forEach { v in if v !== self.tabBar && !(v is TaskPage) && v.transform.tx != 0 { v.transform = .identity } } }
+      if last { self.view.subviews.forEach { v in if v !== self.tabsMark && !(v is TaskPage) && v.transform.tx != 0 { v.transform = .identity } } }
       // (and the screen under it drawn again as it is now: the page says what's showing — Home, My Tasks, the Inbox)
       if last { self.pageJS("window.__e11HomeResend && __e11HomeResend(); window.__e11MyTasksResend && __e11MyTasksResend(); window.__e11InboxResend && __e11InboxResend(); window.__e11ClientsResend && __e11ClientsResend()"); self.updateCorner() }
       if last { self.pageJS("window.__e11Task && window.__e11Task({ev:'closed'})") }
@@ -556,7 +556,7 @@ extension Main {
     let c = ComposeBox()
     c.translatesAutoresizingMaskIntoConstraints = false
     c.isHidden = true
-    view.insertSubview(c, belowSubview: tabBar)
+    view.insertSubview(c, belowSubview: tabsMark)
     NSLayoutConstraint.activate([c.leadingAnchor.constraint(equalTo: view.leadingAnchor), c.trailingAnchor.constraint(equalTo: view.trailingAnchor), c.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor)])
     c.cookies = serverHome.cookies
     c.onToast = { [weak self] t in self?.taskPages.last?.toast(t) }

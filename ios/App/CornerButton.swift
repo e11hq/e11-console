@@ -353,10 +353,10 @@ extension Main {
     if corner.frame != strip { corner.frame = strip }
     // (put in once, and never taken out again: re-inserting it took it off the screen and back, so iPhone drew the
     //  glass afresh — the buttons blurred out and in on every change (build 1273's film). Task pages go under it.)
-    if corner.superview !== view { view.insertSubview(corner, belowSubview: tabBar) }
+    if corner.superview !== view { view.insertSubview(corner, belowSubview: tabsMark) }
     else if let i = view.subviews.firstIndex(of: corner), view.subviews[(i + 1)...].contains(where: { $0 is HomeView || $0 is TaskPage }) {
       // (a screen made later went on top of it — My Tasks or the Inbox the first time: only then is it moved back up)
-      view.bringSubviewToFront(corner); view.bringSubviewToFront(tabBar)
+      view.bringSubviewToFront(corner); view.bringSubviewToFront(tabsMark)
     }
     if lockView != nil { corner.alpha = 0; fabFollow(); appleHomeBar(animated: false); return }
     corner.alpha = 1
