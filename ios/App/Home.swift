@@ -187,6 +187,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }
   // the list as it is now: the boxes, then each group's heading, cards and "nothing due" line
   private func applyList(animated: Bool) {
+    SelfTrace.note("applyList \(animated)")
     guard let ds = listDS else { return }
     var views: [String: UIView] = [:], keys: [String] = []
     if searching {
@@ -319,7 +320,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // the first frame — not where the page had it a moment before the tab bar came (it jumped up, Haris 2026-10-31)
   // (the room under the list's last card: up to 12 above "+ New task", which sits 14 above the tab bar)
   private var endRoom: CGFloat { tabTop.map { bounds.height - ($0 - 14 - BTN) + 12 } ?? bottomRoom }
-  var tabTop: CGFloat? { didSet { if oldValue != tabTop { setNeedsLayout() } } }
+  var tabTop: CGFloat? { didSet { if oldValue != tabTop { SelfTrace.note("tabTop \(oldValue.map { Int($0) } ?? -1)→\(tabTop.map { Int($0) } ?? -1)"); setNeedsLayout() } } }
 
   override init(frame: CGRect) {
     super.init(frame: frame)
@@ -1052,6 +1053,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // ---------- where things go ----------
   override func layoutSubviews() {
     super.layoutSubviews()
+    SelfTrace.note("HomeView.layout")
     let W = bounds.width, H = bounds.height
     let bigH = bigHead
     // the list runs the full height, under the header; it starts below the big header
