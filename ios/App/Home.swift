@@ -1786,8 +1786,10 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   func selfSwipeRight() { if let c = firstCard { setOpen(c, true, leading: true) } }
   func selfClose() { if let o = openCard { setOpen(o, false) } }
   func selfScroll(_ y: CGFloat) { userScrolled = y > 0; sv.setContentOffset(CGPoint(x: 0, y: y - inTop), animated: false); layoutHeader(); if !appleTop { setBar(barIn, now: true) } }
-  func selfFind(_ q: String) { openSearch(); field.text = q; typed() }
-  func selfFindDone() { closeSearch() }
+  // (Apple's search on Home's own screen — HomeVC: the self-test types into it as a finger would)
+  var onAppleFind: ((String?) -> Void)?
+  func selfFind(_ q: String) { if appleTop, let f = onAppleFind { f(q); return }; openSearch(); field.text = q; typed() }
+  func selfFindDone() { if appleTop, let f = onAppleFind { f(nil); return }; closeSearch() }
   // (the walk-through: the first task and client in the results, and a tap on one — as a finger would)
   var walkFirst: (task: String?, client: String?) = (nil, nil)
   func selfTapResult(client: Bool) -> String {

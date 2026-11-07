@@ -105,7 +105,8 @@ commits before stay as they are — published history is never rewritten.
 which app it's for (E11 Console iPhone, E11 Console Mac / website, or E11 Talk), ask Haris first — one short question —
 before changing anything.
 
-**DON'TS — every app, now and later (Haris, 2026-11-07):**
+**DON'TS — every app, now and in the future: E11 Console (iPhone, Mac, website), E11 Talk and any new one; each new app's
+repo gets them in its CLAUDE.md from the start (Haris, 2026-11-07; project doc `claude/00-DONTS-every-app.md`):**
 1. Never alter Apple's code to get something. Find the solution the Apple way — more efficient, never fighting Apple's own
    animations and code.
 2. Never leave useless code on a page that doesn't belong to that page.

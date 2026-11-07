@@ -67,6 +67,11 @@ final class HomeVC: UIViewController, UISearchResultsUpdating, UISearchControlle
     super.viewDidLoad()
     navigationItem.largeTitleDisplayMode = .always
     navigationItem.backButtonDisplayMode = .minimal   // (a task over it: just ‹)
+    // (the title and the date there before Home first shows — Apple sizes its bar for the big title from the start; with
+    //  no title yet it came up small and stayed small)
+    let d = UserDefaults.standard
+    let f = DateFormatter(); f.dateFormat = "EEEE, MMMM d"
+    setTitle(d.string(forKey: "e11_home_title") ?? "E11 Day", f.string(from: Date()))
     // your Me pill and 🔍, as Apple's bar items
     let b = MePhotoControl(frame: CGRect(origin: .zero, size: MePhotoControl.size))
     b.translatesAutoresizingMaskIntoConstraints = false
@@ -112,17 +117,10 @@ final class HomeVC: UIViewController, UISearchResultsUpdating, UISearchControlle
       view.insertSubview(h, at: 0)
     }
     view.backgroundColor = h.backgroundColor ?? view.backgroundColor
-    h.onAppleTitle = { [weak self] t, d in
-      guard let self = self else { return }
-      self.navigationItem.title = t
-      if #available(iOS 26.0, *) {
-        self.navigationItem.subtitle = d.isEmpty ? nil : d
-        // (under the big title: the date as our other pages have it — 15 regular, the secondary grey — Haris 2026-11-07)
-        if d.isEmpty { self.navigationItem.largeAttributedSubtitle = nil } else {
-          var a = AttributedString(d); a.uiKit.font = .systemFont(ofSize: 15); a.uiKit.foregroundColor = .secondaryLabel
-          self.navigationItem.largeAttributedSubtitle = a
-        }
-      }
+    h.onAppleTitle = { [weak self] t, d in self?.setTitle(t, d) }
+    h.onAppleFind = { q in
+      guard let s = AppleHomeBits.shared.search else { return }
+      if let q = q { s.isActive = true; s.searchBar.text = q; Main.shared.homeIfMade?.appleSearchText(q) } else { s.isActive = false }
     }
     h.onAppleMe = { img in if let img = img { AppleHomeBits.shared.meButton?.set(img) } }
     h.onAppleResign = { AppleHomeBits.shared.search?.searchBar.resignFirstResponder() }
@@ -132,6 +130,18 @@ final class HomeVC: UIViewController, UISearchResultsUpdating, UISearchControlle
     }
     h.useAppleTop()
     setContentScrollView(h.appleScroll, for: .top)
+  }
+  func setTitle(_ t: String, _ d: String) {
+    guard !t.isEmpty else { return }
+    if navigationItem.title != t { navigationItem.title = t; UserDefaults.standard.set(t, forKey: "e11_home_title") }
+    if #available(iOS 26.0, *) {
+      navigationItem.subtitle = d.isEmpty ? nil : d
+      // (under the big title: the date as our other pages have it — 15 regular, the secondary grey — Haris 2026-11-07)
+      if d.isEmpty { navigationItem.largeAttributedSubtitle = nil } else {
+        var a = AttributedString(d); a.uiKit.font = .systemFont(ofSize: 15); a.uiKit.foregroundColor = .secondaryLabel
+        navigationItem.largeAttributedSubtitle = a
+      }
+    }
   }
   // ---------- Apple's search: it opened, its words changed, it closed ----------
   func updateSearchResults(for s: UISearchController) { Main.shared.homeIfMade?.appleSearchText(s.searchBar.text ?? "") }
