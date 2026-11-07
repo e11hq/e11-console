@@ -21,6 +21,7 @@ final class AppleNav: UINavigationController, UINavigationControllerDelegate, UI
   func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
     guard g === interactivePopGestureRecognizer, viewControllers.count > 1 else { return false }
     if let t = topViewController as? TaskVC { return Main.shared.taskSwipeMayGo(t.page) }
+    if topViewController is ReplyVC { Main.shared.composeIfMade?.text.resignFirstResponder() }
     return true
   }
   // (Apple's swipe back and the app's own gestures inside a page — the comments' swipes, the files row — together)
@@ -28,6 +29,42 @@ final class AppleNav: UINavigationController, UINavigationControllerDelegate, UI
   // a page gone (popped by ‹, swiped away, or taken out): the app lets go of it as when it closes
   func navigationController(_ n: UINavigationController, didShow vc: UIViewController, animated: Bool) {
     Main.shared.taskPagesGone(stack: n.viewControllers)
+  }
+}
+
+// a reply thread, pushed over its task (Haris 2026-11-07): an Apple page of its own — Apple's bar ("Thread"), ‹ and the
+// swipe back to the comments; the thread's list and the comment box as they were
+final class ReplyVC: UIViewController {
+  let page: TaskPage, feed: CommentsFeed
+  init(page: TaskPage, feed: CommentsFeed) { self.page = page; self.feed = feed; super.init(nibName: nil, bundle: nil) }
+  required init?(coder: NSCoder) { fatalError() }
+  override var preferredStatusBarStyle: UIStatusBarStyle { Main.shared.statusStyle }
+  override func loadView() {
+    let v = UIView(frame: UIScreen.main.bounds)
+    v.backgroundColor = .systemGroupedBackground
+    view = v
+  }
+  override func viewDidLoad() {
+    super.viewDidLoad()
+    title = "Thread"
+    navigationItem.largeTitleDisplayMode = .never
+    feed.transform = .identity
+    feed.frame = view.bounds
+    feed.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    view.addSubview(feed)
+    setContentScrollView(feed.scroll, for: .top)   // (Apple's frost under its bar follows the thread's list)
+    if #available(iOS 16.0, *) {
+      navigationItem.backAction = UIAction { [weak self] _ in
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        Main.shared.composeIfMade?.text.resignFirstResponder()
+        self?.navigationController?.popViewController(animated: true)
+      }
+    }
+  }
+  override func viewDidLayoutSubviews() {
+    super.viewDidLayoutSubviews()
+    let top = navigationController?.navigationBar.frame.maxY ?? view.safeAreaInsets.top
+    if feed.topInset != top { feed.topInset = top }
   }
 }
 

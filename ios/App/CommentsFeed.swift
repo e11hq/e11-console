@@ -155,7 +155,7 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
     jump.alpha = 0
     jump.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.toEnd(animated: true) }, for: .touchUpInside)
     addSubview(jump)
-    if thread != nil {
+    if thread != nil && !APPLE_NAV {   // (iPhone's own navigation: the thread is an Apple page of its own, its bar Apple's — ReplyVC)
       // a thread's page: its own bar line under the task's ("‹ Thread")
       threadBar.backgroundColor = .clear
       let b = UIButton(type: .system)
@@ -344,8 +344,9 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
   override func layoutSubviews() {
     super.layoutSubviews()
     scroll.frame = bounds
-    if thread != nil { threadBar.frame = CGRect(x: 0, y: topInset, width: bounds.width, height: 40) }
-    let top = topInset + (thread != nil ? 44 : 6)
+    let ownBar = thread != nil && !APPLE_NAV
+    if ownBar { threadBar.frame = CGRect(x: 0, y: topInset, width: bounds.width, height: 40) }
+    let top = topInset + (ownBar ? 44 : 6)
     if scroll.contentInset.top != top { scroll.contentInset.top = top; scroll.verticalScrollIndicatorInsets.top = top }
     layoutCells()
     placeJump()

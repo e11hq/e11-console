@@ -168,10 +168,12 @@ extension Main {
     if APPLE_NAV, let nav = navigationController {
       if last { tabBar.alpha = barTo }
       if let vc = nav.viewControllers.first(where: { ($0 as? TaskVC)?.page === p }) {
-        if nav.topViewController === vc {
-          nav.popViewController(animated: animated)
+        // (its reply page, if one is open over it, goes with it)
+        let reply = nav.viewControllers.first(where: { ($0 as? ReplyVC)?.page === p })
+        if nav.topViewController === vc || (reply != nil && nav.topViewController === reply), let k = nav.viewControllers.firstIndex(of: vc), k > 0 {
+          nav.popToViewController(nav.viewControllers[k - 1], animated: animated)
           if animated, let tc = nav.transitionCoordinator { tc.animate(alongsideTransition: nil) { c in if !c.isCancelled { finish() } }; return }
-        } else { nav.viewControllers.removeAll { $0 === vc } }
+        } else { nav.viewControllers.removeAll { $0 === vc || (reply != nil && $0 === reply) } }
       }
       finish(); return
     }
@@ -195,16 +197,6 @@ extension Main {
   func taskSwipeMayGo(_ p: TaskPage) -> Bool {
     // (on Comments, a swipe from the edge goes to Details — the page's own paging scroller takes it: Haris 2026-11-07)
     if p.tab == "comments" && p.threadFeed == nil { return false }
-    // (in a reply: the swipe from the edge goes back to the comments, as ‹ does — Haris 2026-11-07)
-    if p.threadFeed != nil {
-      DispatchQueue.main.async { [weak self, weak p] in
-        guard let self = self, let p = p, p.threadFeed != nil else { return }
-        self.composeIfMade?.text.resignFirstResponder()
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        self.closeThread(p)
-      }
-      return false
-    }
     if let u = composeIfMade?.unsent(task: p.taskId) { DispatchQueue.main.async { self.askUnsent(p, u) }; return false }
     p.endEditing(true)
     composeIfMade?.text.resignFirstResponder()
@@ -213,6 +205,11 @@ extension Main {
   // pages no longer in iPhone's navigation (swiped away): the app lets go of them as when they close
   func taskPagesGone(stack: [UIViewController]) {
     let kept = Set(stack.compactMap { ($0 as? TaskVC).map { ObjectIdentifier($0.page) } })
+    // (a reply page gone — ‹ or the swipe back: its task page goes on without it)
+    let replies = Set(stack.compactMap { ($0 as? ReplyVC).map { ObjectIdentifier($0.feed) } })
+    for p in taskPages where kept.contains(ObjectIdentifier(p)) {
+      if let t = p.threadFeed, !replies.contains(ObjectIdentifier(t)) { threadGone(p) }
+    }
     for p in taskPages.reversed() where !kept.contains(ObjectIdentifier(p)) { closeTaskPage(p, animated: false) }
   }
   // where a page's comment box and its other pieces go: the page's own view controller (iPhone's navigation), or the app
@@ -601,7 +598,7 @@ extension Main {
       p.bringSubviewToFront(p.commentsHost); p.bringSubviewToFront(p.barBoxView)
       let c = compose
       c.switchTo(task: p.taskId, parent: p.threadFeed?.thread)
-      placeCompose(c, above: p)
+      placeCompose(c, above: (APPLE_NAV ? p.threadFeed : nil) ?? p)   // (a reply page open: the box stays on it)
       c.transform = .identity   // (never left moved aside by a swipe back)
       if c.isHidden { c.alpha = 0; c.isHidden = false; UIView.animate(withDuration: 0.12) { c.alpha = 1 } }
       showFeed(p, focus: focus)
@@ -635,7 +632,7 @@ extension Main {
     }
     f.frame = p.commentsHost.bounds
     f.isHidden = false
-    p.edgeScroll(p.threadFeed?.scroll ?? f.scroll)
+    p.edgeScroll((APPLE_NAV ? nil : p.threadFeed?.scroll) ?? f.scroll)
     p.commentsHost.bringSubviewToFront(f)
     if let t = p.threadFeed { p.commentsHost.bringSubviewToFront(t) }
     f.load { [weak self, weak p, weak f] in
@@ -716,6 +713,7 @@ extension Main {
   }
   // a thread on a page of its own, sliding in from the right; the comments screen behind opens it too (for replying)
   func openThread(_ p: TaskPage, _ cid: String, pulse: String?) {
+    if APPLE_NAV, let nav = navigationController { openReplyPage(p, cid, pulse: pulse, nav: nav); return }
     p.threadFeed?.removeFromSuperview()
     let t = makeFeed(p, thread: cid)
     p.threadFeed = t
@@ -729,12 +727,48 @@ extension Main {
   }
   func closeThread(_ p: TaskPage) {
     guard let t = p.threadFeed else { return }
+    // (iPhone's own navigation: the reply page pops — Apple's — and the rest follows once it's gone, threadGone)
+    if APPLE_NAV, let nav = navigationController, let r = nav.viewControllers.first(where: { ($0 as? ReplyVC)?.feed === t }) {
+      if nav.topViewController === r { nav.popViewController(animated: true) } else { nav.viewControllers.removeAll { $0 === r }; threadGone(p) }
+      return
+    }
     let back = t.thread
     p.threadFeed = nil
     composeIfMade?.switchTo(task: p.taskId, parent: nil)
     if let f = p.feed { p.edgeScroll(f.scroll) }
     UIView.animate(withDuration: 0.32, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.beginFromCurrentState]) { t.transform = CGAffineTransform(translationX: p.bounds.width, y: 0) } completion: { _ in t.removeFromSuperview() }
     // back on the comment the thread is for: it pulses
+    if let id = back, let f = p.feed { f.load { f.pulse(id) } }
+  }
+  // a reply thread as an Apple page of its own (ReplyVC, Haris 2026-11-07): pushed over the task, the comment box going
+  // with it (replying to that comment); ‹ or the swipe back pops it
+  private func openReplyPage(_ p: TaskPage, _ cid: String, pulse: String?, nav: UINavigationController) {
+    if let old = nav.viewControllers.first(where: { ($0 as? ReplyVC)?.page === p }) { nav.viewControllers.removeAll { $0 === old }; threadGone(p) }
+    let t = makeFeed(p, thread: cid)
+    t.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    p.threadFeed = t
+    let vc = ReplyVC(page: p, feed: t)
+    vc.loadViewIfNeeded()
+    if let c = composeIfMade {
+      c.replyTo = nil; c.switchTo(task: p.taskId, parent: cid)
+      UIView.performWithoutAnimation { placeCompose(c, above: t); c.transform = .identity; c.alpha = 1; c.isHidden = false }
+    }
+    t.load { [weak t] in if let id = pulse { t?.pulse(id) } }
+    let push = { [weak nav] in nav?.pushViewController(vc, animated: true) }
+    // (opened while the task page itself is still coming in — from the Inbox: once it's there)
+    if let tc = nav.transitionCoordinator { tc.animate(alongsideTransition: nil) { _ in push() } } else { push() }
+  }
+  // the reply page gone: the comment box back on the comments, writing to the task again; the comment it was for pulses
+  func threadGone(_ p: TaskPage) {
+    guard let t = p.threadFeed else { return }
+    let back = t.thread
+    p.threadFeed = nil
+    t.removeFromSuperview()
+    if let c = composeIfMade, c.taskId == p.taskId {
+      c.switchTo(task: p.taskId, parent: nil)
+      if p.tab == "comments" { UIView.performWithoutAnimation { placeCompose(c, above: p); c.transform = .identity } }
+    }
+    if let f = p.feed { p.edgeScroll(f.scroll) }
     if let id = back, let f = p.feed { f.load { f.pulse(id) } }
   }
   func taskHideComments() {

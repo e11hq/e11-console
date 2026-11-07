@@ -494,7 +494,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private var pagerFraction: CGFloat { bounds.width > 0 ? max(0, min(1, pager.contentOffset.x / bounds.width)) : (tab == "comments" ? 1 : 0) }
   func pagerWaits(for g: UIGestureRecognizer) { if APPLE_NAV { pager.panGestureRecognizer.require(toFail: g) } }
   private func updatePager() { if APPLE_NAV { pager.isScrollEnabled = trashId == nil && threadFeed == nil && !editingDesc } }
-  private func commentsList() -> UIScrollView { threadFeed?.scroll ?? feed?.scroll ?? scroll }
+  private func commentsList() -> UIScrollView { feed?.scroll ?? scroll }   // (a reply is its own Apple page now: ReplyVC)
   // at rest only the page showing is there (as before: hidden behind, out of taps and VoiceOver)
   private func settlePages() {
     let c = tab == "comments"
