@@ -1600,7 +1600,15 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       guard let i = content.firstIndex(where: { $0 === h }) else { return }
       let after = content[i...].first { v in v is HomeCard || !(v.tag == 7 && v.isHidden) }
       let key = after.map { v -> String in (v as? HomeCard).map { "c:" + $0.id } ?? ((v.tag == 8 ? "e:" : "h:") + (v.accessibilityIdentifier ?? "")) }
-      if let k = key, let ip = ds.indexPath(for: k) { userScrolled = true; cv.scrollToItem(at: ip, at: .top, animated: true) }
+      // (already on screen — Today's, just under the boxes: nothing to scroll to. Scrolled "to the top" it only went part of the
+      //  way into the big title's room, and Apple's bar snaps back to its big title from there — the jump: Haris 2026-11-07)
+      if let k = key, let ip = ds.indexPath(for: k) {
+        if let a = cv.layoutAttributesForItem(at: ip) {
+          let top = cv.contentOffset.y + cv.adjustedContentInset.top, bottom = cv.contentOffset.y + cv.bounds.height - cv.adjustedContentInset.bottom
+          if a.frame.minY >= top, a.frame.maxY <= bottom { return }
+        }
+        userScrolled = true; cv.scrollToItem(at: ip, at: .top, animated: true)
+      }
       return
     }
     let want = appleTop ? h.frame.minY - 12 - (safeAreaInsets.top) : h.frame.minY - (safeAreaInsets.top + 66)
