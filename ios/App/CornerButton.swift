@@ -298,6 +298,8 @@ extension Main {
   }
   private func screenSpots(_ h: HomeView) -> (CornerButton.Spot, CornerButton.Spot, CornerButton.Spot) {
     do {
+      // (Home in Apple's bar — AppleHome.swift: its 🔍 and photo are Apple's bar buttons, none of these)
+      if h.appleTop { return (CornerButton.Spot(), CornerButton.Spot(), CornerButton.Spot()) }
       let dx = -h.transform.tx
       let c = h.corner()
       let mf = corner.place(c.kind, c.text, circle: h.convert(c.frame, to: view).offsetBy(dx: dx, dy: 0))
@@ -354,7 +356,7 @@ extension Main {
       // (a screen made later went on top of it — My Tasks or the Inbox the first time: only then is it moved back up)
       view.bringSubviewToFront(corner); view.bringSubviewToFront(tabBar)
     }
-    if lockView != nil { corner.alpha = 0; fabFollow(); return }
+    if lockView != nil { corner.alpha = 0; fabFollow(); appleHomeBar(animated: false); return }
     corner.alpha = 1
     let t = cornerTarget()
     // (between two screens — a tab change hides one a moment before the next shows — nothing is there for an instant:
@@ -365,7 +367,7 @@ extension Main {
     corner.searchBack = Date().timeIntervalSince(shownScreen?.searchClosedAt ?? .distantPast) < 0.4
     // (not Me's first page: it has none of them on purpose and is already there — waiting kept 🔍 and your photo over Me
     //  for a moment and the + of the screen left came back to shrink away late: Haris 2026-11-06)
-    let meRoot = taskPages.isEmpty && shownScreen?.assets == "me"
+    let meRoot = taskPages.isEmpty && (shownScreen?.assets == "me" || shownScreen?.appleTop == true)
     if between && !meRoot && taskPages.isEmpty && corner.kind != "none" && !cornerWaited {
       cornerWaited = true
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.cornerWaited = false; self?.updateCornerNow(animated: animated) }
@@ -374,5 +376,6 @@ extension Main {
     corner.items = taskPages.last?.cornerItems ?? shownScreen?.menuItems ?? []
     corner.go(left: t.0, mid: t.1, corner: t.2, menu: taskPages.last?.cornerMenu, animated: animated && corner.window != nil)
     fabFollow()   // (the shared +: SharedFab.swift)
+    appleHomeBar(animated: false)
   }
 }

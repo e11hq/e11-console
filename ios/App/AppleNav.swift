@@ -18,6 +18,7 @@ final class AppleNav: UINavigationController, UINavigationControllerDelegate, UI
     // (iOS 26: the swipe back from anywhere on the page — the same rules as the edge's)
     if #available(iOS 26.0, *) { interactiveContentPopGestureRecognizer?.delegate = self }
     setNavigationBarHidden(true, animated: false)
+    navigationBar.prefersLargeTitles = APPLE_HOME   // (Home's big title — AppleHome.swift)
   }
   // the swipe back: Apple's own; a comment written and not sent on the page asks first (as ‹ does)
   func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {

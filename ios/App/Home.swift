@@ -106,6 +106,63 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }
   private var findTimer: Timer?, keyboardH: CGFloat = 0
   private let scroll = UIScrollView()
+  /* Home in iPhone's own navigation (AppleHome.swift, Haris 2026-11-07): Apple's bar has the big title, the date, 🔍 and
+     your photo, and Apple's search bar; this screen's own header, buttons and search bar stay out of it. The list,
+     cards and boxes are as they were. */
+  private(set) var appleTop = false
+  var onAppleTitle: ((String, String) -> Void)?
+  var onAppleMe: ((UIImage?) -> Void)?
+  var onAppleResign: (() -> Void)?
+  var appleScroll: UIScrollView { searching ? results : scroll }
+  func useAppleTop() {
+    guard !appleTop else { return }
+    appleTop = true
+    scroll.contentInsetAdjustmentBehavior = .automatic
+    scroll.automaticallyAdjustsScrollIndicatorInsets = true
+    scroll.contentInset.top = 6
+    results.contentInsetAdjustmentBehavior = .automatic
+    results.automaticallyAdjustsScrollIndicatorInsets = true
+    if #available(iOS 26.0, *) {
+      scroll.topEdgeEffect.style = .automatic; results.topEdgeEffect.style = .automatic
+      if let i = edgeHook as? UIScrollEdgeElementContainerInteraction { topBar.removeInteraction(i) }
+      edgeHook = nil
+    }
+    frostReach.isHidden = true
+    [topBar, blur, title, sub, smallTitle, smallSub, searchCircle, me, searchBar, closeCircle].forEach { $0.isHidden = true }
+    onAppleTitle?(title.attributedText?.string ?? "", sub.text ?? "")
+    onAppleMe?(me.image(for: .normal))
+    setNeedsLayout()
+  }
+  // (the list's top and bottom as iPhone has them — under Apple's bar — or as this screen sets them)
+  private var inTop: CGFloat { appleTop ? scroll.adjustedContentInset.top : scroll.contentInset.top }
+  private var inBottom: CGFloat { appleTop ? scroll.adjustedContentInset.bottom : scroll.contentInset.bottom }
+  private func resignSearch() { field.resignFirstResponder(); onAppleResign?() }
+  // Apple's search bar: it opened, its words changed, it closed
+  func appleSearchBegin() {
+    guard appleTop, !searching else { return }
+    if let o = openCard { setOpen(o, false) }
+    searching = true
+    showMotto()
+    results.isHidden = false
+    field.text = ""; showResults(nil)
+    setNeedsLayout(); layoutIfNeeded()
+    UIView.animate(withDuration: 0.25) { self.scroll.alpha = 0; self.results.alpha = 1; self.fab.alpha = 0 }
+  }
+  func appleSearchText(_ q: String) {
+    guard appleTop, searching, q != (field.text ?? "") else { return }
+    field.text = q; typed()
+  }
+  func appleSearchEnd() {
+    guard appleTop, searching else { return }
+    findTimer?.invalidate()
+    searching = false
+    showMotto()
+    UIView.animate(withDuration: 0.25) { self.scroll.alpha = 1; self.results.alpha = 0; self.fab.alpha = 1 } completion: { _ in
+      if self.searching { return }
+      self.results.isHidden = true
+      self.field.text = ""; self.showResults(nil)
+    }
+  }
   private let fab = UIButton(type: .system)
   // (a second, round button left of it — Client Assets' Delete while files are selected: Haris 2026-11-04)
   private let fab2 = UIButton(type: .system)
@@ -234,7 +291,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   required init?(coder: NSCoder) { fatalError() }
 
   private func send(_ ev: [String: Any]) {
-    var e = ev; e["y"] = Int((scroll.contentOffset.y + scroll.contentInset.top).rounded())
+    var e = ev; e["y"] = Int((scroll.contentOffset.y + inTop).rounded())
     onEvent?(e)
   }
 
@@ -255,6 +312,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     overrideUserInterfaceStyle = L.light ? .light : .dark
     HomeView.fadeText(sub, model["date"] as? String); sub.textColor = .secondaryLabel
     title.attributedText = NSAttributedString(string: model["title"] as? String ?? "", attributes: [.font: UIFont.systemFont(ofSize: 34, weight: .bold), .foregroundColor: UIColor.label])
+    if appleTop { onAppleTitle?(model["title"] as? String ?? "", model["date"] as? String ?? "") }
     smallTitle.text = model["title"] as? String; smallTitle.textColor = .label
     HomeView.fadeText(smallSub, model["date"] as? String); smallSub.textColor = .secondaryLabel
     blur.effect = UIBlurEffect(style: L.light ? .systemUltraThinMaterialLight : .systemUltraThinMaterialDark)
@@ -449,6 +507,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     meKey = key
     guard let img = MePhoto.shared.picture(44) else { return }
     me.setImage(img, for: .normal)
+    onAppleMe?(img)
     onCorner?()
   }
   private var meWatching = false
@@ -856,11 +915,17 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let bigH = bigHead
     // the list runs the full height, under the header; it starts below the big header
     if scroll.frame != bounds { scroll.frame = bounds }
-    if scroll.contentInset.top != bigH { let s0 = scroll.contentOffset.y + scroll.contentInset.top; scroll.contentInset.top = bigH; scroll.contentOffset.y = s0 - bigH }
+    if !appleTop, scroll.contentInset.top != bigH { let s0 = scroll.contentOffset.y + scroll.contentInset.top; scroll.contentInset.top = bigH; scroll.contentOffset.y = s0 - bigH }
     layoutHeader()
+    if appleTop {
+      // (under Apple's bar and its search bar: iPhone keeps the results clear of them, and of the keyboard)
+      if results.frame != bounds { results.frame = bounds }
+      results.contentInset.top = 12; results.contentInset.bottom = max(0, keyboardH - safeAreaInsets.bottom, bottomRoom - 60 - safeAreaInsets.bottom)
+    } else {
     results.frame = CGRect(x: 0, y: searchBar.frame.maxY + 8, width: W, height: H - searchBar.frame.maxY - 8)
     results.contentInset.bottom = max(keyboardH, bottomRoom - 60)
     results.contentInset.top = 12   // (clear of the blur under the search bar)
+    }
     layoutResults()
     // the three boxes (.ph-stats: 4 above, 6 below, 8 apart) — My Tasks: All / Done, the filters and what's on instead
     var y: CGFloat = 4
@@ -915,7 +980,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     //  screen is left under it — Haris, 2026-10-31; while scrolling the cards still pass under the + and the tab bar)
     scroll.contentSize = CGSize(width: W, height: y + endRoom)
     // (a list that got shorter — a task deleted — never leaves the view scrolled past its end, showing nothing)
-    let maxY = max(-scroll.contentInset.top, scroll.contentSize.height + scroll.contentInset.bottom - scroll.bounds.height)
+    let maxY = max(-inTop, scroll.contentSize.height + inBottom - scroll.bounds.height)
     if !scroll.isDragging && !scroll.isDecelerating && scroll.contentOffset.y > maxY + 1 { scroll.setContentOffset(CGPoint(x: 0, y: maxY), animated: true) }
     // the + button where the page has it
     // "+ New task": 44 tall like Mail's buttons, 16 from the right, 14 above the tab bar
@@ -944,21 +1009,21 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     }
     showMotto()
   }
-  func scrollToTop() { scroll.setContentOffset(CGPoint(x: 0, y: -scroll.contentInset.top), animated: true) }
+  func scrollToTop() { scroll.setContentOffset(CGPoint(x: 0, y: -inTop), animated: true) }
   // a block's row brought to about 40% down the screen (an Inbox update opening the Reviews on its request)
   func scrollToShow(_ v: UIView, animated: Bool = true) {
     layoutIfNeeded()
     let r = v.convert(v.bounds, to: scroll)
-    let y = max(-scroll.contentInset.top, min(r.midY - scroll.bounds.height * 0.4, scroll.contentSize.height + scroll.contentInset.bottom - scroll.bounds.height))
+    let y = max(-inTop, min(r.midY - scroll.bounds.height * 0.4, scroll.contentSize.height + inBottom - scroll.bounds.height))
     scroll.setContentOffset(CGPoint(x: 0, y: y), animated: animated)
   }
   func scrollViewDidScroll(_ scrollView: UIScrollView) { if scrollView === scroll { layoutHeader(); showMotto() } }
   // the list at its end (or too short to scroll), Home not searching, no toast beside the + — the motto shows
   private func showMotto() {
-    let end = max(-scroll.contentInset.top, scroll.contentSize.height + scroll.contentInset.bottom - scroll.bounds.height)
+    let end = max(-inTop, scroll.contentSize.height + inBottom - scroll.bounds.height)
     // (a list that fits on the screen — half a page, nothing to scroll for: it shows at once, not only after a
     //  scroll; Haris 2026-11-03)
-    let fits = scroll.contentSize.height + scroll.contentInset.top <= scroll.bounds.height + 1
+    let fits = scroll.contentSize.height + inTop <= scroll.bounds.height + 1
     let want = !searching && toastView == nil && (fits || scroll.contentOffset.y >= end - 2)
     guard want != mottoOn else { return }
     mottoOn = want
@@ -1095,6 +1160,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if now { dBig = tBig; dT = tT; dS = tS; dLine = tT; applyBar() } else { startBarLink() }
   }
   private func layoutHeader() {
+    if appleTop { return }   // (Apple's bar: its own title, buttons and frost)
     let W = bounds.width
     let bigH = bigHead, smallH = smallHead, top = safeAreaInsets.top
     let titleY = top + 66   // (the big title's top, as Mail's)
@@ -1288,7 +1354,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
         for c in clients {
           let row = HomeClientRow(); row.set(c, look: L); _ = PressShrink.add(to: row)
           let id = c["id"] as? String ?? ""
-          row.addAction(UIAction { [weak self] _ in self?.field.resignFirstResponder(); self?.send(["ev": "client", "id": id]) }, for: .touchUpInside)
+          row.addAction(UIAction { [weak self] _ in self?.resignSearch(); self?.send(["ev": "client", "id": id]) }, for: .touchUpInside)
           results.addSubview(row); resultViews.append(row)
         }
       }
@@ -1303,7 +1369,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
             v.onTap = { [weak self, weak v] in
               guard let self = self else { return }
               if let o = self.openCard { self.setOpen(o, false); if o === v { return } }
-              self.field.resignFirstResponder(); self.send(["ev": "open", "id": id])
+              self.resignSearch(); self.send(["ev": "open", "id": id])
             }
             // (a task card is the same card wherever it shows — Haris, 2026-11-02: swipe right Done · Due, left Copy link ·
             //  Delete, touch and hold Attach Files — in the search results too)
@@ -1370,9 +1436,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // a group's heading brought up to where the big title is (as far as the list goes)
   func showGroup(_ name: String) {
     guard let h = content.first(where: { $0.tag == 7 && $0.accessibilityIdentifier == name }) else { return }
-    let want = h.frame.minY - (safeAreaInsets.top + 66)
-    let maxY = max(-scroll.contentInset.top, scroll.contentSize.height + scroll.contentInset.bottom - scroll.bounds.height)
-    scroll.setContentOffset(CGPoint(x: 0, y: min(maxY, max(-scroll.contentInset.top, want))), animated: true)
+    let want = appleTop ? h.frame.minY - 12 - (safeAreaInsets.top) : h.frame.minY - (safeAreaInsets.top + 66)
+    let maxY = max(-inTop, scroll.contentSize.height + inBottom - scroll.bounds.height)
+    scroll.setContentOffset(CGPoint(x: 0, y: min(maxY, max(-inTop, want))), animated: true)
   }
   func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) { if scrollView === scroll { layoutHeader() } }
   func scrollViewWillBeginDragging(_ scrollView: UIScrollView) { if let o = openCard { setOpen(o, false) } }
@@ -1548,7 +1614,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   func selfPress() { if let c = firstCard { attach(c) } }
   func selfSwipeRight() { if let c = firstCard { setOpen(c, true, leading: true) } }
   func selfClose() { if let o = openCard { setOpen(o, false) } }
-  func selfScroll(_ y: CGFloat) { scroll.setContentOffset(CGPoint(x: 0, y: y - scroll.contentInset.top), animated: false); layoutHeader(); setBar(barIn, now: true) }
+  func selfScroll(_ y: CGFloat) { scroll.setContentOffset(CGPoint(x: 0, y: y - inTop), animated: false); layoutHeader(); if !appleTop { setBar(barIn, now: true) } }
   func selfFind(_ q: String) { openSearch(); field.text = q; typed() }
   func selfFindDone() { closeSearch() }
   // (the walk-through: the first task and client in the results, and a tap on one — as a finger would)

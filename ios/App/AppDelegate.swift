@@ -314,7 +314,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     view.window?.overrideUserInterfaceStyle = FOLLOW_DEVICE ? .unspecified : appStyle
     // (iPhone's own navigation: no bar over the app's own screens; a page pushed on it shows only ‹)
     navigationItem.backButtonDisplayMode = .minimal
-    navigationController?.setNavigationBarHidden(true, animated: animated)
+    // (Home: Apple's bar with its big title — AppleHome.swift; every other screen of the app's: no bar)
+    if APPLE_HOME { appleHomeBar(animated: animated) } else { navigationController?.setNavigationBarHidden(true, animated: animated) }
   }
   // the phone switched light / dark: the app follows at once (the website in it follows the phone by itself too)
   func followPhoneLook() {
@@ -352,7 +353,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   func splashGone(fast: Bool = false) {
     guard let s = splash else { return }
-    s.leave(fast: fast) { [weak self] in if self?.splash === s { self?.splash = nil } }
+    if APPLE_HOME { appleHomeBar(animated: true, splashGoing: true) }
+    s.leave(fast: fast) { [weak self] in if self?.splash === s { self?.splash = nil }; if APPLE_HOME { self?.appleHomeBar(animated: false) } }
   }
   func splashCommand(_ a: [String: Any]) -> [String: Any] {
     // (what each row said, and the fourth's name — for a quick start's own checklist next time)
@@ -1319,6 +1321,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
     guard item.tag < tabKeys.count else { return }
+    // (another tab: Home's Apple bar goes at once, before that tab's screen shows — AppleHome.swift)
+    if APPLE_HOME, tabKeys[item.tag] != "today", navigationController?.topViewController === self { navigationController?.setNavigationBarHidden(true, animated: false) }
     ProfileAskCard.current?.go()   // (another page: the birthday / city card slips away)
     UISelectionFeedbackGenerator().selectionChanged()
     // (the tab you're on, tapped again — from a page inside it: back to the tab's first screen, as iPhone's own apps;
@@ -1455,6 +1459,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     h.present = { [weak self] vc in self?.topMost().present(vc, animated: true) }
     view.insertSubview(h, belowSubview: tabBar)
     homeIfMade = h
+    appleHomeSetup(h)
     return h
   }()
   /* the top of the tab bar as it's seen: iOS 26's floating bar is a pill inside a taller UITabBar view, so the view's
