@@ -121,6 +121,7 @@ repo gets them in its CLAUDE.md from the start (Haris, 2026-11-07; project doc `
 9. Once Home is final, every page follows Home's structure, and nothing breaks. Apple's parts are set to look exactly like
    our design — never our own code made to draw that design. Every behaviour, animation and reaction is Apple's, in our
    design.
+10. Every iOS app from now on uses Apple's navigation, Apple's tab bar and Apple's top bar.
 
 **The App Store release — APPROVED (Haris, 2026-11-06):** the iPhone app 1.1.0, build 1472 (commit 9ca8c16, marked by
 the branch `approved/appstore-ios-1.1.0-build-1472` — never moved or deleted) is approved as it is for the App Store.
