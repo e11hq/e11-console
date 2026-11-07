@@ -88,6 +88,14 @@ final class HomeVC: UIViewController, UISearchResultsUpdating, UISearchControlle
     super.viewWillAppear(a)
     navigationController?.setNavigationBarHidden(false, animated: a)
   }
+  // (Home's own screen lays Home out: where the tab bar starts, for "+ New task" and the list's end — it was only ever set
+  //  by the app's old shared screen laying itself out, which doesn't happen while Home's tab is on: after the startup
+  //  screen "+ New task" sat on the tab bar until a task page came and went, Haris 2026-11-07)
+  override func viewDidLayoutSubviews() {
+    super.viewDidLayoutSubviews()
+    let m = Main.shared
+    if let h = m.homeIfMade, h.superview === view { h.tabTop = m.tabBar.isHidden ? nil : m.tabPillTop }
+  }
   // Home's own view, filling this screen (its list under Apple's bar, as Apple wants it)
   func adopt(_ h: HomeView) {
     loadViewIfNeeded()

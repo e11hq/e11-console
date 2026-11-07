@@ -14,7 +14,7 @@ let APPLE_TABS = APPLE_NAV
 final class Tabs {
   var items: [UITabBarItem]?
   var selectedItem: UITabBarItem?
-  var isHidden = true { didSet { AppleTabs.shared?.mirrorShown() } }
+  var isHidden = true { didSet { AppleTabs.shared?.mirrorShown(); HomeVC.shared?.viewIfLoaded?.setNeedsLayout() } }
   var alpha: CGFloat = 1 { didSet { AppleTabs.shared?.mirrorShown() } }
   var isUserInteractionEnabled: Bool {
     get { AppleTabs.shared?.tabBar.isUserInteractionEnabled ?? true }
