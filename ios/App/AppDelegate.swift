@@ -1328,6 +1328,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     // (the tab you're on, tapped again — from a page inside it: back to the tab's first screen, as iPhone's own apps;
     //  Haris 2026-11-03. On its first screen: back to the top, as before.)
     let again = item.tag == shownTab
+    // (Home's tab tapped while Apple's search is open on Home: the search closes, back to Home — AppleHome.swift; it did
+    //  nothing: Haris 2026-11-07)
+    if APPLE_HOME, again, tabKeys[item.tag] == "today", let s = AppleHomeBits.shared.search, s.isActive { s.isActive = false; return }
     shownTab = item.tag
     lastTabTap = (tabKeys[item.tag], Date())
     if again, tabKeys[item.tag] == "projects", clientsWanted, clientsBackToList() { return }
