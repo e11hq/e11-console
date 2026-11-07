@@ -27,7 +27,7 @@ Where iPhone's own small popup menu is used instead (file thumbnails and file ro
 it shrinks while pressed, then **Apple's own lift** with its menu (Haris 2026-11-07: "Remove it" — the 2026-11-06
 "at its own size" tweak is gone; `PressPreview.make` keeps only the rounded shape). Every new popup-menu hold does the same.
 
-**The shared top buttons, everywhere (Haris, 2026-11-03):** they always belong to exactly one screen — the one on top, or,
+⟶ *Being replaced by Don't 10 (Haris 2026-11-07): page by page, as each moves into Apple's navigation, tab bar and top bar, Apple's own does this — this rule then no longer applies there. Done: Home.* **The shared top buttons, everywhere (Haris, 2026-11-03):** they always belong to exactly one screen — the one on top, or,
 while it's going (‹, the edge swipe, a tab change), already the one it's going back to, which is shown in place before
 the slide starts. Never a moment with no screen (the buttons fade out and in) or a screen hidden under others. Each new
 native screen tells the shared buttons where its ‹ / 🔍 / photo / ••• are (`screenSpots`), and its going-back passes
@@ -37,11 +37,11 @@ them on the same way as the task page, the client's page and Client Assets do.
 (or in the middle when there's none). It shows at once when the whole list fits on the screen, and otherwise fades in
 when the list reaches its end and out on scrolling back. Every new native list screen has it.
 
-**Search and filters stick under the bar, everywhere (Haris, 2026-11-03: "that's a standard"):** on every native list
+⟶ *Being replaced by Don't 10 (Haris 2026-11-07): page by page, as each moves into Apple's navigation, tab bar and top bar, Apple's own does this — this rule then no longer applies there. Done: Home.* **Search and filters stick under the bar, everywhere (Haris, 2026-11-03: "that's a standard"):** on every native list
 screen with a search bar or filters (My Tasks, the Trash, …) they sit at the top of the list and, once they reach the bar,
 stay stuck under it with the frost behind them (`HomeView.pinHead` for a page's own; My Tasks' listHead). Every new one too.
 
-**The scroll bar, everywhere (Haris, 2026-11-03):** on every native page its track starts right under the frost bar's
+⟶ *Being replaced by Don't 10 (Haris 2026-11-07): page by page, as each moves into Apple's navigation, tab bar and top bar, Apple's own does this — this rule then no longer applies there. Done: Home.* **The scroll bar, everywhere (Haris, 2026-11-03):** on every native page its track starts right under the frost bar's
 line — under stuck search / filters too — from the very first moment, and ends just above the tab bar (or the bottom
 edge). Never iPhone's own safe-area adjusting (`automaticallyAdjustsScrollIndicatorInsets = false`). Every new page too.
 
@@ -58,15 +58,15 @@ closes the keyboard and nothing else — it never taps the row, card or button u
 The box being typed in, and the comment box's own buttons, keep working. A task's description is apart: it locks the page
 while it's edited and ends only with Done. Every new native page too.
 
-**‹ goes back the way you came, everywhere (Haris, 2026-11-03):** on every native page, ‹ and the edge swipe go back to
+⟶ *Being replaced by Don't 10 (Haris 2026-11-07): page by page, as each moves into Apple's navigation, tab bar and top bar, Apple's own does this — this rule then no longer applies there. Done: Home.* **‹ goes back the way you came, everywhere (Haris, 2026-11-03):** on every native page, ‹ and the edge swipe go back to
 where you were before (history) — not up the page's own path. A client's page opened from Home's search goes back to
 Home's search, not the Clients list (`clientFrom`, the page's `PageHistory.prev`). Tapping a tab again still goes to that
 tab's first screen. Every new native page too.
 
-**A page with its name in the middle of the bar (a client's, Client Assets, Me's pages…), everywhere (Haris, 2026-11-03):**
+⟶ *Being replaced by Don't 10 (Haris 2026-11-07): page by page, as each moves into Apple's navigation, tab bar and top bar, Apple's own does this — this rule then no longer applies there. Done: Home.* **A page with its name in the middle of the bar (a client's, Client Assets, Me's pages…), everywhere (Haris, 2026-11-03):**
 only that centred name — Home's small title never comes in over it.
 
-**The frost bar — LOCKED (Haris, 2026-11-03: "all pages get the Inbox frost bar except…"):** two kinds, on every native page
+⟶ *Being replaced by Don't 10 (Haris 2026-11-07): page by page, as each moves into Apple's navigation, tab bar and top bar, Apple's own does this — this rule then no longer applies there. Done: Home.* **The frost bar — LOCKED (Haris, 2026-11-03: "all pages get the Inbox frost bar except…"):** two kinds, on every native page
 now and later (`HomeView.applyFrost`, `Frost`, `FrostWatch` in Home.swift):
 - **The Inbox's frost** — iPhone's **firm** scroll-edge frost (`.hard`), even down to the line, **with the line** — on big-title
   pages (Home, My Tasks, Inbox, Clients, Me) and on every page with something stuck under the bar (Trash, Team members, the
