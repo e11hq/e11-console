@@ -112,6 +112,8 @@ repo gets them in its CLAUDE.md from the start (Haris, 2026-11-07; project doc `
 2. Never leave useless code on a page that doesn't belong to that page.
 3. Every app stays lightweight, efficient and super fast — now and in the future.
 4. A design change: done by setting Apple's own parts where possible — never our own code mimicking what isn't Apple's.
+5. When Haris says something is wrong: first analyse what the real problem is, then fix that problem — never cover it
+   over with code of ours that overrides it.
 
 **The App Store release — APPROVED (Haris, 2026-11-06):** the iPhone app 1.1.0, build 1472 (commit 9ca8c16, marked by
 the branch `approved/appstore-ios-1.1.0-build-1472` — never moved or deleted) is approved as it is for the App Store.
