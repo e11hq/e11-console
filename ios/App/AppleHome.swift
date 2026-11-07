@@ -20,8 +20,9 @@ final class MePhotoControl: UIControl {
     word.text = "Me"; word.font = .systemFont(ofSize: 15, weight: .semibold); word.textColor = .label; word.isUserInteractionEnabled = false
     [pic, word].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; addSubview($0) }
     NSLayoutConstraint.activate([pic.widthAnchor.constraint(equalToConstant: 30), pic.heightAnchor.constraint(equalToConstant: 30),
-                                 pic.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 5), pic.centerYAnchor.constraint(equalTo: centerYAnchor),
-                                 word.leadingAnchor.constraint(equalTo: pic.trailingAnchor, constant: 8), word.centerYAnchor.constraint(equalTo: centerYAnchor)])
+                                 // ("Me", then your photo — Haris 2026-11-07)
+                                 word.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 13), word.centerYAnchor.constraint(equalTo: centerYAnchor),
+                                 pic.leadingAnchor.constraint(equalTo: word.trailingAnchor, constant: 8), pic.centerYAnchor.constraint(equalTo: centerYAnchor)])
   }
   required init?(coder: NSCoder) { fatalError() }
   func set(_ img: UIImage?) { pic.image = img }
@@ -82,7 +83,9 @@ extension Main: UISearchResultsUpdating, UISearchControllerDelegate {
       navigationItem.searchBarPlacementAllowsToolbarIntegration = false
       // (Apple's own item for where its search button goes: 🔍, then your photo at the right end, as before — Haris
       //  2026-11-07)
-      navigationItem.rightBarButtonItems = [meItem, navigationItem.searchBarPlacementBarButtonItem]
+      // (a fixed space between them: 🔍 on its own glass, apart from the Me pill — Apple's way of splitting bar items into
+      //  their own groups; Haris 2026-11-07)
+      navigationItem.rightBarButtonItems = [meItem, .fixedSpace(0), navigationItem.searchBarPlacementBarButtonItem]
     } else {
       navigationItem.rightBarButtonItems = [meItem, find]
     }
