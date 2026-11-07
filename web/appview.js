@@ -137,6 +137,20 @@ var E11AppView = (function () {
     if (Number(rev) > copy.rev) copy.rev = Number(rev);
     return true;
   }
+  // one thing changed on the phone at once, before the server's answer (the iPhone app: a new due date moved its card
+  // straight away — Haris 2026-11-07); gives back how it was, to put back if the server says no. The server's answer
+  // (its own changes) then replaces it as usual.
+  function patch(kind, id, fields) {
+    if (!copy || !KEYED(kind) || !fields) return null;
+    const list = copy.data[kind] || [];
+    const i = list.findIndex((x) => x && x.id === id);
+    if (i < 0) return null;
+    const base = list[i];
+    const next = Object.assign(JSON.parse(JSON.stringify(base)), fields);
+    Object.keys(fields).forEach((k) => { if (fields[k] === null) delete next[k]; });
+    list[i] = next;
+    return JSON.stringify([{ kind, id, data: base }]);
+  }
   const save = () => (copy ? JSON.stringify(copy) : '');
   const ready = () => !!copy;
   const rev = () => (copy ? copy.rev : 0);
@@ -160,6 +174,6 @@ var E11AppView = (function () {
     return JSON.stringify({ model: m, rev: copy.rev });
   }
 
-  return { fileUrl, appFile, home, myTasks, inbox, clients, taskPage, commentsFeed, tabs, load, apply, save, ready, rev, screen };
+  return { fileUrl, appFile, home, myTasks, inbox, clients, taskPage, commentsFeed, tabs, load, apply, patch, save, ready, rev, screen };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = E11AppView;

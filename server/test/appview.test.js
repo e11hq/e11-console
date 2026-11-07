@@ -38,3 +38,17 @@ test('the copy: loaded, a screen worked out from it, a live change applied, save
   assert.equal(JSON.parse(W.screen('task', 't1')).model.title, 'Offer pack v2');
   assert.ok(JSON.parse(W.screen('home')).model, 'Home too');
 });
+
+// one thing changed on the phone at once (the iPhone app's new due date), and put back
+import { createRequire } from 'node:module';
+test('appview patch: changed at once, the old one given back', () => {
+  const V = createRequire(import.meta.url)('../../web/appview.js');
+  V.load({ ok: true, rev: 3, me: 'u1', data: { tasks: [{ id: 't1', title: 'A', due: '2026-11-07' }], meta: {} } });
+  const undo = V.patch('tasks', 't1', { due: '2026-11-08' });
+  assert.equal(JSON.parse(V.save()).data.tasks[0].due, '2026-11-08');
+  V.apply(JSON.parse(undo), 0);
+  assert.equal(JSON.parse(V.save()).data.tasks[0].due, '2026-11-07');
+  V.patch('tasks', 't1', { due: null });
+  assert.equal(JSON.parse(V.save()).data.tasks[0].due, undefined);
+  assert.equal(V.patch('tasks', 'nope', { due: 'x' }), null);
+});
