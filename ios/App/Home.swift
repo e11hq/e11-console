@@ -113,7 +113,16 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   var onAppleTitle: ((String, String) -> Void)?
   var onAppleMe: ((UIImage?) -> Void)?
   var onAppleResign: (() -> Void)?
-  var appleScroll: UIScrollView { searching ? results : scroll }
+  var appleScroll: UIScrollView { searching ? results : sv }
+  // Home's list as Apple's own list (Haris 2026-11-07: "I like Apple's list"): the same cards, headings and boxes, each
+  // in a cell of iPhone's list — Apple's swipe actions (Done · Due, Copy link · Delete) and Apple's animation when cards
+  // come, go or move
+  private var list: UICollectionView?
+  private var listDS: UICollectionViewDiffableDataSource<Int, String>?
+  private var listViews: [String: UIView] = [:]
+  private var listOn: Bool { list != nil }
+  private var sv: UIScrollView { list ?? scroll }
+  private let statsRow = UIView()
   func useAppleTop() {
     guard !appleTop else { return }
     appleTop = true
@@ -131,11 +140,126 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     [topBar, blur, title, sub, smallTitle, smallSub, searchCircle, me, searchBar, closeCircle].forEach { $0.isHidden = true }
     onAppleTitle?(title.attributedText?.string ?? "", sub.text ?? "")
     onAppleMe?(me.image(for: .normal))
+    if !isList && !isInbox && !isClients && !isClient && assets == nil { makeAppleList() }
     setNeedsLayout()
   }
+  private func makeAppleList() {
+    var cfg = UICollectionLayoutListConfiguration(appearance: .plain)
+    cfg.showsSeparators = false
+    cfg.backgroundColor = .clear
+    cfg.trailingSwipeActionsConfigurationProvider = { [weak self] ip in self?.swipeActions(ip, leading: false) }
+    cfg.leadingSwipeActionsConfigurationProvider = { [weak self] ip in self?.swipeActions(ip, leading: true) }
+    let layout = UICollectionViewCompositionalLayout { _, env in
+      let sec = NSCollectionLayoutSection.list(using: cfg, layoutEnvironment: env)
+      sec.interGroupSpacing = 10
+      sec.contentInsets = NSDirectionalEdgeInsets(top: 4, leading: 16, bottom: 0, trailing: 16)
+      return sec
+    }
+    let cv = UICollectionView(frame: bounds, collectionViewLayout: layout)
+    cv.backgroundColor = .clear
+    cv.alwaysBounceVertical = true
+    cv.contentInsetAdjustmentBehavior = .automatic
+    cv.allowsSelection = false
+    cv.delegate = self
+    if #available(iOS 26.0, *) { cv.topEdgeEffect.style = .automatic }
+    let reg = UICollectionView.CellRegistration<HostCell, String> { [weak self] cell, _, key in
+      guard let self = self, let v = self.listViews[key] else { cell.host(nil, height: 1); return }
+      cell.host(v, height: self.itemHeight(key, v))
+    }
+    listDS = UICollectionViewDiffableDataSource<Int, String>(collectionView: cv) { cv, ip, key in cv.dequeueConfiguredReusableCell(using: reg, for: ip, item: key) }
+    stats.forEach { statsRow.addSubview($0) }
+    insertSubview(cv, aboveSubview: scroll)
+    scroll.isHidden = true
+    list = cv
+  }
+  // each thing's height in the list (as the list had them)
+  private func itemHeight(_ key: String, _ v: UIView) -> CGFloat {
+    let w = bounds.width - 32
+    if key == "stats" { return 80 }
+    if let c = v as? HomeCard { return c.height(for: w) }
+    if v.tag == 8 { return 28 + ((v as? UILabel)?.sizeThatFits(CGSize(width: w - 8, height: 400)).height ?? 17) }
+    return 27
+  }
+  // the list as it is now: the boxes, then each group's heading, cards and "nothing due" line
+  private func applyList(animated: Bool) {
+    guard let ds = listDS else { return }
+    var views: [String: UIView] = [:], keys: [String] = []
+    if !noStats { keys.append("stats"); views["stats"] = statsRow }
+    for v in content {
+      if let c = v as? HomeCard { let k = "c:" + c.id; keys.append(k); views[k] = c; continue }
+      if v.tag == 7 && v.isHidden { continue }   // (Today's mark: no heading on screen)
+      let k = (v.tag == 8 ? "e:" : "h:") + (v.accessibilityIdentifier ?? "\(ObjectIdentifier(v).hashValue)")
+      if views[k] != nil { continue }
+      keys.append(k); views[k] = v
+    }
+    listViews = views
+    var snap = NSDiffableDataSourceSnapshot<Int, String>()
+    snap.appendSections([0]); snap.appendItems(keys, toSection: 0)
+    let had = Set(ds.snapshot().itemIdentifiers)
+    snap.reconfigureItems(keys.filter { had.contains($0) })
+    ds.apply(snap, animatingDifferences: animated)
+  }
+  // Apple's swipe actions: right — Done · Due; left — Copy link · Delete (as our round buttons did)
+  private func swipeActions(_ ip: IndexPath, leading: Bool) -> UISwipeActionsConfiguration? {
+    guard let key = listDS?.itemIdentifier(for: ip), let card = listViews[key] as? HomeCard else { return nil }
+    let d = card.info
+    var acts: [UIContextualAction] = []
+    if leading {
+      if (d["canDone"] as? Bool) == true {
+        let done = (d["done"] as? Bool) == true, hold = (d["cdHold"] as? Bool) == true
+        let a = UIContextualAction(style: .normal, title: hold ? "Review" : done ? "Not Done" : "Done") { [weak self, weak card] _, _, finish in
+          guard let self = self, let card = card else { return finish(false) }
+          let wasDone = (card.info["done"] as? Bool) == true, ready = (card.info["doneReady"] as? Bool) == true
+          if !wasDone && ready { UINotificationFeedbackGenerator().notificationOccurred(.success) } else { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
+          self.send(["ev": "done", "id": card.id, "done": !wasDone, "card": card.info]); self.findAgain()
+          finish(true)
+        }
+        a.image = UIImage(systemName: hold ? "person.badge.clock" : done ? "arrow.uturn.backward" : "checkmark")
+        a.backgroundColor = hold ? HomeActions.orange.withAlphaComponent(0.5) : done ? HomeActions.grey : HomeActions.green
+        acts.append(a)
+      }
+      if (d["canDue"] as? Bool) == true {
+        let a = UIContextualAction(style: .normal, title: "Due") { [weak self, weak card] _, _, finish in
+          guard let self = self, let card = card else { return finish(false) }
+          UIImpactFeedbackGenerator(style: .light).impactOccurred()
+          self.send(["ev": "due", "id": card.id, "card": card.info]); self.findAgain()
+          finish(true)
+        }
+        a.image = UIImage(systemName: "calendar")
+        a.backgroundColor = HomeActions.purple
+        acts.append(a)
+      }
+    } else {
+      if canDelete {
+        let a = UIContextualAction(style: .destructive, title: "Delete") { [weak self, weak card] _, _, finish in
+          guard let self = self, let card = card else { return finish(false) }
+          // (asked first: the task goes to the Trash)
+          let al = UIAlertController(title: "Delete this task?", message: card.taskTitle.isEmpty ? nil : card.taskTitle, preferredStyle: .actionSheet)
+          al.addAction(UIAlertAction(title: "Delete Task", style: .destructive) { _ in self.send(["ev": "delete", "id": card.id, "card": card.info]); self.findAgain(); finish(true) })
+          al.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in finish(false) })
+          self.present?(al)
+        }
+        a.image = UIImage(systemName: "trash")
+        acts.append(a)
+      }
+      let c = UIContextualAction(style: .normal, title: "Copy link") { [weak self, weak card] _, _, finish in
+        guard let self = self, let card = card else { return finish(false) }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        self.send(["ev": "copy", "id": card.id])
+        finish(true)
+      }
+      c.image = UIImage(systemName: "link")
+      c.backgroundColor = HomeActions.grey
+      acts.append(c)
+    }
+    if acts.isEmpty { return nil }
+    let cfg = UISwipeActionsConfiguration(actions: acts)
+    cfg.performsFirstActionWithFullSwipe = !leading || (d["cdHold"] as? Bool) != true
+    return cfg
+  }
   // (the list's top and bottom as iPhone has them — under Apple's bar — or as this screen sets them)
-  private var inTop: CGFloat { appleTop ? scroll.adjustedContentInset.top : scroll.contentInset.top }
-  private var inBottom: CGFloat { appleTop ? scroll.adjustedContentInset.bottom : scroll.contentInset.bottom }
+  private var inTop: CGFloat { appleTop ? sv.adjustedContentInset.top : scroll.contentInset.top }
+  private var inBottom: CGFloat { appleTop ? sv.adjustedContentInset.bottom : scroll.contentInset.bottom }
   private func resignSearch() { field.resignFirstResponder(); onAppleResign?() }
   // Apple's search bar: it opened, its words changed, it closed
   func appleSearchBegin() {
@@ -146,7 +270,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     results.isHidden = false
     field.text = ""; showResults(nil)
     setNeedsLayout(); layoutIfNeeded()
-    UIView.animate(withDuration: 0.25) { self.scroll.alpha = 0; self.results.alpha = 1; self.fab.alpha = 0 }
+    UIView.animate(withDuration: 0.25) { self.sv.alpha = 0; self.results.alpha = 1; self.fab.alpha = 0 }
   }
   func appleSearchText(_ q: String) {
     guard appleTop, searching, q != (field.text ?? "") else { return }
@@ -157,7 +281,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     findTimer?.invalidate()
     searching = false
     showMotto()
-    UIView.animate(withDuration: 0.25) { self.scroll.alpha = 1; self.results.alpha = 0; self.fab.alpha = 1 } completion: { _ in
+    UIView.animate(withDuration: 0.25) { self.sv.alpha = 1; self.results.alpha = 0; self.fab.alpha = 1 } completion: { _ in
       if self.searching { return }
       self.results.isHidden = true
       self.field.text = ""; self.showResults(nil)
@@ -291,7 +415,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   required init?(coder: NSCoder) { fatalError() }
 
   private func send(_ ev: [String: Any]) {
-    var e = ev; e["y"] = Int((scroll.contentOffset.y + inTop).rounded())
+    var e = ev; e["y"] = Int((sv.contentOffset.y + inTop).rounded())
     onEvent?(e)
   }
 
@@ -452,6 +576,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if isList, let f = lastFilters { setFilters(f) }
 
     setNeedsLayout(); layoutIfNeeded()
+    // (Apple's list: Apple's own animation for what came, went or moved)
+    if listOn { applyList(animated: animate); return }
     if animate { moveList(oldCenter: oldCenter, oldGroup: oldGroup, oldHeads: oldHeads, leavingHeads: leavingHeads, gone: gone) }
   }
   private var drawnKey = ""
@@ -927,6 +1053,18 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     results.contentInset.top = 12   // (clear of the blur under the search bar)
     }
     layoutResults()
+    if let cv = list {
+      // (Apple's list: its cells place the boxes, headings and cards; the room under the last card kept as before)
+      if cv.frame != bounds { cv.frame = bounds }
+      let bottom = max(0, endRoom - safeAreaInsets.bottom)
+      if cv.contentInset.bottom != bottom { cv.contentInset.bottom = bottom }
+      let bw = (W - 32 - 16) / 3, bh: CGFloat = 1 + 10 + 41 + 15 + 12 + 1
+      for (i, v) in stats.enumerated() {
+        v.frame = CGRect(x: CGFloat(i) * (bw + 8), y: 0, width: bw, height: bh)
+        v.viewWithTag(1)?.frame = CGRect(x: 13, y: 11, width: bw - 26, height: 41)
+        v.viewWithTag(2)?.frame = CGRect(x: 13, y: 11 + 41, width: bw - 26, height: 15)
+      }
+    } else {
     // the three boxes (.ph-stats: 4 above, 6 below, 8 apart) — My Tasks: All / Done, the filters and what's on instead
     var y: CGFloat = 4
     let bw = (W - 32 - 16) / 3, bh: CGFloat = 1 + 10 + 41 + 15 + 12 + 1
@@ -982,6 +1120,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // (a list that got shorter — a task deleted — never leaves the view scrolled past its end, showing nothing)
     let maxY = max(-inTop, scroll.contentSize.height + inBottom - scroll.bounds.height)
     if !scroll.isDragging && !scroll.isDecelerating && scroll.contentOffset.y > maxY + 1 { scroll.setContentOffset(CGPoint(x: 0, y: maxY), animated: true) }
+    }
     // the + button where the page has it
     // "+ New task": 44 tall like Mail's buttons, 16 from the right, 14 above the tab bar
     let fw = ceil(fab.sizeThatFits(CGSize(width: 300, height: BTN)).width)
@@ -1009,22 +1148,22 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     }
     showMotto()
   }
-  func scrollToTop() { scroll.setContentOffset(CGPoint(x: 0, y: -inTop), animated: true) }
+  func scrollToTop() { sv.setContentOffset(CGPoint(x: 0, y: -inTop), animated: true) }
   // a block's row brought to about 40% down the screen (an Inbox update opening the Reviews on its request)
   func scrollToShow(_ v: UIView, animated: Bool = true) {
     layoutIfNeeded()
-    let r = v.convert(v.bounds, to: scroll)
-    let y = max(-inTop, min(r.midY - scroll.bounds.height * 0.4, scroll.contentSize.height + inBottom - scroll.bounds.height))
-    scroll.setContentOffset(CGPoint(x: 0, y: y), animated: animated)
+    let r = v.convert(v.bounds, to: sv)
+    let y = max(-inTop, min(r.midY - sv.bounds.height * 0.4, sv.contentSize.height + inBottom - sv.bounds.height))
+    sv.setContentOffset(CGPoint(x: 0, y: y), animated: animated)
   }
-  func scrollViewDidScroll(_ scrollView: UIScrollView) { if scrollView === scroll { layoutHeader(); showMotto() } }
+  func scrollViewDidScroll(_ scrollView: UIScrollView) { if scrollView === scroll || scrollView === list { layoutHeader(); showMotto() } }
   // the list at its end (or too short to scroll), Home not searching, no toast beside the + — the motto shows
   private func showMotto() {
-    let end = max(-inTop, scroll.contentSize.height + inBottom - scroll.bounds.height)
+    let end = max(-inTop, sv.contentSize.height + inBottom - sv.bounds.height)
     // (a list that fits on the screen — half a page, nothing to scroll for: it shows at once, not only after a
     //  scroll; Haris 2026-11-03)
-    let fits = scroll.contentSize.height + inTop <= scroll.bounds.height + 1
-    let want = !searching && toastView == nil && (fits || scroll.contentOffset.y >= end - 2)
+    let fits = sv.contentSize.height + inTop + (listOn ? inBottom : 0) <= sv.bounds.height + 1
+    let want = !searching && toastView == nil && (fits || sv.contentOffset.y >= end - 2)
     guard want != mottoOn else { return }
     mottoOn = want
     UIView.animate(withDuration: 0.2, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) { self.motto.alpha = want ? 1 : 0 }
@@ -1436,6 +1575,14 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // a group's heading brought up to where the big title is (as far as the list goes)
   func showGroup(_ name: String) {
     guard let h = content.first(where: { $0.tag == 7 && $0.accessibilityIdentifier == name }) else { return }
+    if let cv = list, let ds = listDS {
+      // (Apple's list: that group's heading — Today's first card, its heading being only a mark — to the top)
+      guard let i = content.firstIndex(where: { $0 === h }) else { return }
+      let after = content[i...].first { v in v is HomeCard || !(v.tag == 7 && v.isHidden) }
+      let key = after.map { v -> String in (v as? HomeCard).map { "c:" + $0.id } ?? ((v.tag == 8 ? "e:" : "h:") + (v.accessibilityIdentifier ?? "")) }
+      if let k = key, let ip = ds.indexPath(for: k) { cv.scrollToItem(at: ip, at: .top, animated: true) }
+      return
+    }
     let want = appleTop ? h.frame.minY - 12 - (safeAreaInsets.top) : h.frame.minY - (safeAreaInsets.top + 66)
     let maxY = max(-inTop, scroll.contentSize.height + inBottom - scroll.bounds.height)
     scroll.setContentOffset(CGPoint(x: 0, y: min(maxY, max(-inTop, want))), animated: true)
@@ -1450,6 +1597,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // (My Tasks' Done tab: completed tasks are read only — no swipes, no Attach Files)
     if isList && listTab == "done" && g.view is HomeCard && (g is UIPanGestureRecognizer || g is UILongPressGestureRecognizer) { return false }
     guard let p = g as? UIPanGestureRecognizer, let card = p.view as? HomeCard else { return true }
+    if listOn && card.superview !== results { return false }   // (Apple's list: Apple's swipe actions)
     let v = p.velocity(in: self)
     return abs(v.x) > abs(v.y) * 1.2 && (v.x < 0 || card.swipeX != 0 || leadOK(card))
   }
@@ -1614,7 +1762,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   func selfPress() { if let c = firstCard { attach(c) } }
   func selfSwipeRight() { if let c = firstCard { setOpen(c, true, leading: true) } }
   func selfClose() { if let o = openCard { setOpen(o, false) } }
-  func selfScroll(_ y: CGFloat) { scroll.setContentOffset(CGPoint(x: 0, y: y - inTop), animated: false); layoutHeader(); if !appleTop { setBar(barIn, now: true) } }
+  func selfScroll(_ y: CGFloat) { sv.setContentOffset(CGPoint(x: 0, y: y - inTop), animated: false); layoutHeader(); if !appleTop { setBar(barIn, now: true) } }
   func selfFind(_ q: String) { openSearch(); field.text = q; typed() }
   func selfFindDone() { closeSearch() }
   // (the walk-through: the first task and client in the results, and a tap on one — as a finger would)
@@ -2613,5 +2761,38 @@ extension HomeView: UIContextMenuInteractionDelegate {
     pp.visiblePath = UIBezierPath(roundedRect: v.bounds, cornerRadius: v.layer.cornerRadius > 0 ? v.layer.cornerRadius : 18)
     pp.backgroundColor = .clear
     return UITargetedPreview(view: v, parameters: pp)
+  }
+}
+
+extension HomeView: UICollectionViewDelegate {}
+
+// a cell of Home's Apple list holding one of Home's own views (a card, a heading, the boxes) as it is
+final class HostCell: UICollectionViewListCell {
+  private weak var hosted: UIView?
+  private var h: CGFloat = 1
+  func host(_ v: UIView?, height: CGFloat) {
+    h = height
+    if hosted !== v { if let old = hosted, old.superview === contentView { old.removeFromSuperview() } }
+    hosted = v
+    backgroundConfiguration = .clear()
+    if let v = v, v.superview !== contentView { v.transform = .identity; v.alpha = 1; contentView.addSubview(v) }
+    // (a card: its own rounded corners; Apple's swipe buttons kept within them)
+    if let c = v as? HomeCard { layer.cornerRadius = c.layer.cornerRadius > 0 ? c.layer.cornerRadius : 18; layer.cornerCurve = .continuous; clipsToBounds = true } else { layer.cornerRadius = 0; clipsToBounds = false }
+    setNeedsLayout()
+    invalidateIntrinsicContentSize()
+  }
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    guard let v = hosted, v.superview === contentView else { return }
+    let b = contentView.bounds
+    if v is HomeCard { v.bounds = CGRect(origin: .zero, size: b.size); v.center = CGPoint(x: b.midX, y: b.midY) }
+    else if v.tag == 7 { v.frame = CGRect(x: 4, y: b.height - 15, width: b.width - 8, height: 15) }
+    else if v.tag == 8 { v.frame = CGRect(x: 4, y: 14, width: b.width - 8, height: b.height - 28) }
+    else { v.frame = b }
+  }
+  override func preferredLayoutAttributesFitting(_ a: UICollectionViewLayoutAttributes) -> UICollectionViewLayoutAttributes {
+    let r = super.preferredLayoutAttributesFitting(a)
+    r.size.height = h
+    return r
   }
 }
