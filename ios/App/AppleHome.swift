@@ -27,7 +27,9 @@ enum BarImage {
     let word = NSAttributedString(string: "Talk", attributes: [.font: UIFont.systemFont(ofSize: 15, weight: .semibold), .foregroundColor: UIColor.label.resolvedColor(with: t)])
     let ws = word.size(), b = CGSize(width: 24, height: 24), gap: CGFloat = 6
     let h = max(b.height, ceil(ws.height))
-    let size = CGSize(width: b.width + gap + ceil(ws.width), height: h)
+    // (room after "Talk" as the bubble has before it — its picture has its own margin inside: Haris 2026-11-08, the "k"
+    //  was touching the edge)
+    let size = CGSize(width: b.width + gap + ceil(ws.width) + 4, height: h)
     return UIGraphicsImageRenderer(size: size, format: UIGraphicsImageRendererFormat(for: t)).image { _ in
       bubble.draw(in: CGRect(x: 0, y: (h - b.height) / 2, width: b.width, height: b.height))
       word.draw(at: CGPoint(x: b.width + gap, y: (h - ws.height) / 2))
