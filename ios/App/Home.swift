@@ -2530,9 +2530,15 @@ extension HomeView: UIContextMenuInteractionDelegate {
     let id = card.id
     if let o = openCard { setOpen(o, false) }
     return UIContextMenuConfiguration(identifier: id as NSString, previewProvider: nil) { [weak self] _ in
-      let src = { (s: String, t: String, img: String) in UIAction(title: t, image: UIImage(systemName: img)) { _ in self?.send(["ev": "attach", "id": id, "source": s]) } }
+      // (the picker is asked for once the menu has closed — while it's still closing, iPhone shows no other screen)
+      let src = { (s: String, t: String, img: String) in UIAction(title: t, image: UIImage(systemName: img)) { _ in HomeView.afterMenu = { self?.send(["ev": "attach", "id": id, "source": s]) } } }
       return UIMenu(title: "Attach Files", children: [src("camera", "Camera", "camera"), src("photos", "Photos", "photo"), src("files", "Files", "doc.badge.arrow.up")])
     }
+  }
+  private static var afterMenu: (() -> Void)?
+  func contextMenuInteraction(_ i: UIContextMenuInteraction, willEndFor c: UIContextMenuConfiguration, animator: UIContextMenuInteractionAnimating?) {
+    let run = { let f = HomeView.afterMenu; HomeView.afterMenu = nil; f?() }
+    if let a = animator { a.addCompletion(run) } else { DispatchQueue.main.async(execute: run) }
   }
   // (the card itself lifts, with its own rounded corners)
   func contextMenuInteraction(_ i: UIContextMenuInteraction, configuration c: UIContextMenuConfiguration, highlightPreviewForItemWithIdentifier id: NSCopying) -> UITargetedPreview? {

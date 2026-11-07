@@ -1054,6 +1054,41 @@ extension Main {
 }
 
 extension Main {
+  // Attach Files from a task card (its touch-and-hold menu): iPhone's own picker over the list; what's picked uploads
+  // into that task while the list stays — a short message while it goes and when it's in (Haris 2026-11-07, B)
+  func attachFromList(_ id: String, source: String?) {
+    Picker.shared.pick(from: topMost(), single: false, source: source) { [weak self] r in
+      guard let self = self else { return }
+      let picked = ((r["files"] as? [[String: Any]]) ?? []).compactMap { f -> (URL, String)? in
+        guard let tok = f["token"] as? String, let u = Picker.shared.url(tok) else { return nil }
+        return (u, f["name"] as? String ?? "File")
+      }
+      guard !picked.isEmpty else { return }
+      let n = picked.count, word = { (k: Int) in "\(k) file\(k == 1 ? "" : "s")" }
+      self.shownScreen?.toast(["t": "Uploading \(word(n))…", "ms": 120000.0])
+      var done: [[String: Any]] = [], left = n
+      for (url, name) in picked {
+        let size = ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.int64Value ?? 0
+        Uploader.send(url, name: name, task: id, cookies: self.serverHome.cookies, progress: { _ in }) { [weak self] path in
+          guard let self = self else { return }
+          if let path = path { done.append(["name": name, "size": size, "path": path]) }
+          left -= 1
+          guard left == 0 else { return }
+          if done.isEmpty { self.shownScreen?.toast(["t": "Upload failed — try again"]); return }
+          self.serverTask.act(["act": "attach", "id": id, "files": done]) { [weak self] ok, _, err, _, messages in
+            if ok {
+              UINotificationFeedbackGenerator().notificationOccurred(.success)
+              Main.playUploaded()
+              self?.shownScreen?.toast(["t": messages.first ?? "\(word(done.count)) added"])
+            } else { self?.shownScreen?.toast(["t": err ?? "Couldn’t add the files — try again"]) }
+          }
+        }
+      }
+    }
+  }
+}
+
+extension Main {
   // a swipe right on Comments — or on a reply thread — goes to Details (Haris, 2026-11-01); from Details the edge
   // swipe then goes back to the page before
   // — back a step at a time (Haris 2026-11-04, again): from a reply thread, first back to the comments; from the comments,

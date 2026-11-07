@@ -399,9 +399,14 @@ extension Main {
     let id = ev["id"] as? String ?? ""
     switch ev["ev"] as? String ?? "" {
     case "copy": guard !id.isEmpty else { return false }; copyTaskLink(id); return true
-    case "open", "attach":
+    case "open":
       guard !pageReady, !id.isEmpty, AppData.shared.ready else { return false }
       openTaskPage(id, tab: "details", focus: ""); return true
+    // (a card's Attach Files: iPhone's picker at once, the files go into the task while the list stays — Haris
+    //  2026-11-07, B; it opened the task instead)
+    case "attach":
+      guard !pageReady, !id.isEmpty, AppData.shared.ready else { return false }
+      attachFromList(id, source: ev["source"] as? String); return true
     case "me": guard !pageReady else { return false }; selectTab("me"); return true
     // (a client in search results: its page comes in over this screen, ‹ back to the search — Haris 2026-11-05: without
     //  the website the tap did nothing)
