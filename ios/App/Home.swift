@@ -1157,6 +1157,15 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     sv.setContentOffset(CGPoint(x: 0, y: y), animated: animated)
   }
   func scrollViewDidScroll(_ scrollView: UIScrollView) { if scrollView === scroll || scrollView === list { layoutHeader(); showMotto() } }
+  // (Apple's bar coming in — after the startup screen, or back from another tab — or its big title growing: a list that
+  //  was at its top stays at its top, the big title showing; it opened scrolled under the small title — Haris 2026-11-07)
+  private var lastTopIn: CGFloat = 0
+  func scrollViewDidChangeAdjustedContentInset(_ sv: UIScrollView) {
+    guard appleTop, sv === list || sv === results else { lastTopIn = sv.adjustedContentInset.top; return }
+    let was = lastTopIn, now = sv.adjustedContentInset.top
+    lastTopIn = now
+    if !sv.isDragging && !sv.isDecelerating && sv.contentOffset.y <= -was + 1 && abs(now - was) > 0.5 { sv.contentOffset.y = -now }
+  }
   // the list at its end (or too short to scroll), Home not searching, no toast beside the + — the motto shows
   private func showMotto() {
     let end = max(-inTop, sv.contentSize.height + inBottom - sv.bounds.height)
