@@ -128,9 +128,12 @@ final class HomeVC: UIViewController, UISearchResultsUpdating, UISearchControlle
     guard d != shownDate else { return }
     shownDate = d
     if #available(iOS 26.0, *) {
-      // (the date under the title, in Apple's own style — a style of ours on Apple's big title kept Apple from moving it
-      //  with the list as a task slid in: it jumped up into the bar, Haris 2026-11-07)
       navigationItem.subtitle = d.isEmpty ? nil : d
+      // (under the big title: the date as our other pages have it — 15 regular, the secondary grey — Haris 2026-11-07)
+      if d.isEmpty { navigationItem.largeAttributedSubtitle = nil } else {
+        var a = AttributedString(d); a.uiKit.font = .systemFont(ofSize: 15); a.uiKit.foregroundColor = .secondaryLabel
+        navigationItem.largeAttributedSubtitle = a
+      }
     }
   }
   // ---------- Apple's search: it opened, its words changed, it closed ----------
