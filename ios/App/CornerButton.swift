@@ -379,5 +379,6 @@ extension Main {
     corner.go(left: t.0, mid: t.1, corner: t.2, menu: taskPages.last?.cornerMenu, animated: animated && corner.window != nil)
     fabFollow()   // (the shared +: SharedFab.swift)
     appleHomeBar(animated: false)
+    AppleTabs.shared?.mirrorShown()
   }
 }

@@ -53,6 +53,7 @@ final class AppleNav: UINavigationController, UINavigationControllerDelegate, UI
   // a page gone (popped by ‹, swiped away, or taken out): the app lets go of it as when it closes
   func navigationController(_ n: UINavigationController, didShow vc: UIViewController, animated: Bool) {
     Main.shared.taskPagesGone(stack: n.viewControllers)
+    AppleTabs.shared?.mirrorShown()   // (back on the app's screens: Apple's tab bar as Main has it)
   }
 }
 
@@ -60,7 +61,7 @@ final class AppleNav: UINavigationController, UINavigationControllerDelegate, UI
 // swipe back to the comments; the thread's list and the comment box as they were
 final class ReplyVC: UIViewController {
   let page: TaskPage, feed: CommentsFeed
-  init(page: TaskPage, feed: CommentsFeed) { self.page = page; self.feed = feed; super.init(nibName: nil, bundle: nil) }
+  init(page: TaskPage, feed: CommentsFeed) { self.page = page; self.feed = feed; super.init(nibName: nil, bundle: nil); hidesBottomBarWhenPushed = true }
   required init?(coder: NSCoder) { fatalError() }
   override var preferredStatusBarStyle: UIStatusBarStyle { Main.shared.statusStyle }
   override func loadView() {
@@ -96,7 +97,7 @@ final class ReplyVC: UIViewController {
 final class TaskVC: UIViewController {
   let page: TaskPage
   private let titleBox = UIStackView(), dot = UIView(), name = UILabel()
-  init(_ p: TaskPage) { page = p; super.init(nibName: nil, bundle: nil) }
+  init(_ p: TaskPage) { page = p; super.init(nibName: nil, bundle: nil); hidesBottomBarWhenPushed = true }
   required init?(coder: NSCoder) { fatalError() }
   override var preferredStatusBarStyle: UIStatusBarStyle { Main.shared.statusStyle }
   override func loadView() {

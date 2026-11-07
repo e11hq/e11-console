@@ -94,7 +94,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     let w = UIWindow(windowScene: ws)
     w.backgroundColor = BG
     // (iPhone's own navigation at the root — AppleNav.swift; its bar hidden over the app's own screens)
-    w.rootViewController = APPLE_NAV ? AppleNav(rootViewController: Main.shared) : Main.shared
+    w.rootViewController = APPLE_TABS ? AppleTabs(nav: AppleNav(rootViewController: Main.shared)) : APPLE_NAV ? AppleNav(rootViewController: Main.shared) : Main.shared
     w.makeKeyAndVisible()
     window = w
     if let u = connectionOptions.urlContexts.first?.url { Main.shared.openLink(u) }   // (started by a widget tap)
@@ -133,7 +133,7 @@ final class WeakHandler: NSObject, WKScriptMessageHandler {
 final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate, UITabBarDelegate, WKDownloadDelegate, UIGestureRecognizerDelegate {
   static let shared = Main()
   var web: WKWebView!
-  let tabBar = UITabBar()
+  let tabBar: UITabBar = APPLE_TABS ? MirrorTabBar() : UITabBar()   // (iPhone's own tab container: this one unseen, Apple's shows what it's told — AppleTabs.swift)
   var tabKeys: [String] = []
   var tabsHidden = true
   var pageReady = false
@@ -332,6 +332,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   /* ---------- the startup screen (22+): the app's own, over everything until the page says it's done ---------- */
   var splash: SplashView?
+  var splashLeaving = false   // (fading out: Apple's tab bar may come — AppleTabs.swift)
   var splashHeard = false
   func showSplash() {
     let m = SplashView.memo()
@@ -354,7 +355,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   func splashGone(fast: Bool = false) {
     guard let s = splash else { return }
     if APPLE_HOME { appleHomeBar(animated: true, splashGoing: true) }
-    s.leave(fast: fast) { [weak self] in if self?.splash === s { self?.splash = nil }; if APPLE_HOME { self?.appleHomeBar(animated: false) } }
+    splashLeaving = true; AppleTabs.shared?.mirrorShown()
+    s.leave(fast: fast) { [weak self] in if self?.splash === s { self?.splash = nil }; self?.splashLeaving = false; if APPLE_HOME { self?.appleHomeBar(animated: false) }; AppleTabs.shared?.mirrorShown() }
   }
   func splashCommand(_ a: [String: Any]) -> [String: Any] {
     // (what each row said, and the fourth's name — for a quick start's own checklist next time)
@@ -1060,6 +1062,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let on = tabOnline[i] ?? netUp
     item.image = roundPhoto(src, ring: nil, online: on)
     item.selectedImage = roundPhoto(src, ring: tabBar.tintColor ?? .systemBlue, online: on)
+    AppleTabs.shared?.sync(from: tabBar)
   }
   private var meWatched = false
   // ---------- the app's own tab bar (Part B step 1, Haris 2026-11-04) ----------
@@ -1204,6 +1207,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       }
       if (t["on"] as? Bool) == true { tabBar.selectedItem = item; shownTab = item.tag }
     }
+    AppleTabs.shared?.sync(from: tabBar)
     let hide = (a["hidden"] as? Bool) == true || list.isEmpty
     // (a task page of the app's own is over everything: the bar stays as the page has it, and comes back to what the
     //  website wants now when the page closes — it came and went by itself, Haris 2026-11-02)
@@ -1321,6 +1325,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
     guard item.tag < tabKeys.count else { return }
+    AppleTabs.shared?.mirrorSelected(item.tag)   // (Apple's tab bar on the same tab — AppleTabs.swift)
     // (another tab: Home's Apple bar goes at once, before that tab's screen shows — AppleHome.swift)
     if APPLE_HOME, tabKeys[item.tag] != "today", navigationController?.topViewController === self { navigationController?.setNavigationBarHidden(true, animated: false) }
     ProfileAskCard.current?.go()   // (another page: the birthday / city card slips away)
@@ -2409,7 +2414,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       }
     }
   }
-  func unlocked() { lockView?.removeFromSuperview(); lockView = nil }
+  func unlocked() { lockView?.removeFromSuperview(); lockView = nil; AppleTabs.shared?.mirrorShown() }
 
   /* ---------- commands from the page ---------- */
   func userContentController(_ c: WKUserContentController, didReceive message: WKScriptMessage) {
