@@ -273,6 +273,20 @@ final class AppData: NSObject, URLSessionDataDelegate {
   }
   // what the server said an action of ours changed: into the copy at once, every screen redrawn (step 3). Its place
   // in the history (rev) isn't moved on — the stream still brings everything in order.
+  // one thing changed on the copy at once, before the server's answer (web/appview.js patch — a newer brain from the
+  // server; an older one: nothing, the answer moves it as before) → how it was, to put back if the server says no
+  func patch(_ kind: String, _ id: String, _ fields: [String: Any]) -> String? {
+    guard copyReady, let d = try? JSONSerialization.data(withJSONObject: fields) else { return nil }
+    let raw = String(decoding: d, as: UTF8.self)
+    var undo: String?
+    q.sync { undo = self.callFn("(function(k, i, raw){ return E11AppView.patch ? E11AppView.patch(k, i, JSON.parse(raw)) : null; })", [kind, id, raw]) as? String }
+    if undo != nil { gen += 1; saveSoon(); changed() }
+    return undo
+  }
+  func putBack(_ undo: String?) {
+    guard let u = undo, let d = u.data(using: .utf8), let ch = try? JSONSerialization.jsonObject(with: d) as? [[String: Any]] else { return }
+    applyLocal(ch)
+  }
   func applyLocal(_ changes: [[String: Any]]) {
     guard copyReady, !changes.isEmpty, let d = try? JSONSerialization.data(withJSONObject: changes) else { return }
     let raw = String(decoding: d, as: UTF8.self)

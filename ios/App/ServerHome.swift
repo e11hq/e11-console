@@ -14,7 +14,7 @@ final class ServerHome {
   private var seen: [String: [String: Any]] = [:]
   private var path: String { kind == "home" ? "/api/home" : "/api/" + kind + "?" + query }   // (/api/mytasks, /api/inbox — 28+)
   // (each waiting action belongs to one server and one person: another sign-in or server never sends it)
-  struct Op: Codable { var op: String; var act: String; var id: String; var due: String?; var clientApproval: String?; var trashId: String?; var server: String?; var me: String? }
+  struct Op: Codable { var op: String; var act: String; var id: String; var due: String?; var clientApproval: String?; var trashId: String?; var server: String?; var me: String?; var undo: String? = nil }
   private var QUEUE: String { kind == "home" ? "e11HomeQueue" : "e11HomeQueue-" + kind }
 
   var cookies: (@escaping (String) -> Void) -> Void = { $0("") }
@@ -156,8 +156,9 @@ final class ServerHome {
   }
 
   // ---------- doing things ----------
-  func act(_ act: String, _ id: String, due: String? = nil, clientApproval: String? = nil, trashId: String? = nil) {
-    queue.append(Op(op: UUID().uuidString, act: act, id: id, due: due, clientApproval: clientApproval, trashId: trashId, server: serverURL(), me: me))
+  // (undo: the copy changed at once — AppData.patch — put back if the server says no)
+  func act(_ act: String, _ id: String, due: String? = nil, clientApproval: String? = nil, trashId: String? = nil, undo: String? = nil) {
+    queue.append(Op(op: UUID().uuidString, act: act, id: id, due: due, clientApproval: clientApproval, trashId: trashId, server: serverURL(), me: me, undo: undo))
     keep()
     if let m = model { onModel?(overlay(m)) }   // (shown at once)
     send()
@@ -191,6 +192,7 @@ final class ServerHome {
         } else {
           // (an answer that isn't ours: not tried again — Home as the server has it)
           if !self.queue.isEmpty { self.queue.removeFirst(); self.keep() }
+          AppData.shared.putBack(o.undo)
           self.onToast?("Couldn’t save that — try again", nil, nil)
           self.refresh(); self.send()
         }
@@ -205,6 +207,7 @@ final class ServerHome {
           if let a = ans { self.act("done", o.id, clientApproval: a) } else if let m = self.model { self.onModel?(self.overlay(m)) }
         }
       } else if !ok {
+        AppData.shared.putBack(o.undo)
         self.onToast?(j["error"] as? String ?? "That didn’t work", nil, nil)
       } else if let msgs = j["messages"] as? [String], let first = msgs.first {
         // Undo: a completed task reopened, a deleted one back from the Trash

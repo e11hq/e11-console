@@ -1703,7 +1703,10 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         if (r["cancel"] as? Bool) == true || (r["ok"] as? Bool) == false { return }
         let v = (r["clear"] as? Bool) == true ? "" : (r["date"] as? String ?? "")
         if v == due { return }
-        serverHome.act("due", id, due: v.isEmpty ? nil : v)
+        // (the card moves at once — the phone's copy changed straight away, the server's answer confirms it: Haris
+        //  2026-11-07, it waited ~2 s)
+        let undo = AppData.shared.patch("tasks", id, ["due": v.isEmpty ? NSNull() : v])
+        serverHome.act("due", id, due: v.isEmpty ? nil : v, undo: undo)
       }, animated: true)
       return true
     case "delete":
