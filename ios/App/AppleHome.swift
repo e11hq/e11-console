@@ -86,6 +86,8 @@ extension Main: UISearchResultsUpdating, UISearchControllerDelegate {
     navigationItem.searchController = s
     navigationItem.hidesSearchBarWhenScrolling = false
     if #available(iOS 16.0, *) { navigationItem.preferredSearchBarPlacement = .stacked }
+    // (at the top, under the bar — iOS 26 put it at the bottom among the toolbar's things: Haris 2026-11-07)
+    if #available(iOS 26.0, *) { navigationItem.searchBarPlacementAllowsToolbarIntegration = false }
     DispatchQueue.main.async { s.isActive = true }
   }
   func updateSearchResults(for s: UISearchController) {
