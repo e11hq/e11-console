@@ -118,6 +118,9 @@ repo gets them in its CLAUDE.md from the start (Haris, 2026-11-07; project doc `
    hidden room on the search results), the cause is ours — find it. Never hide, pad or push the symptom away.
 7. Never hide an old part that's no longer used (the old tab bar left invisible). Remove it.
 8. Never force something to behave the way it's wanted with code of ours. Find why it doesn't, and fix that.
+9. Once Home is final, every page follows Home's structure, and nothing breaks. Apple's parts are set to look exactly like
+   our design — never our own code made to draw that design. Every behaviour, animation and reaction is Apple's, in our
+   design.
 
 **The App Store release — APPROVED (Haris, 2026-11-06):** the iPhone app 1.1.0, build 1472 (commit 9ca8c16, marked by
 the branch `approved/appstore-ios-1.1.0-build-1472` — never moved or deleted) is approved as it is for the App Store.
