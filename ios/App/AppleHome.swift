@@ -75,7 +75,11 @@ final class HomeVC: UIViewController, UISearchResultsUpdating, UISearchControlle
     // (Apple's search box under the big title, as E11 Talk's lists — nothing set for where it goes: tapped, Apple folds the
     //  big title away and the results start right under the box. Apple's 🔍 bar button kept the big title's room above
     //  the results — measured on Apple's own screens, Haris 2026-11-07)
-    navigationItem.rightBarButtonItems = [meItem]
+    // E11 Talk's bubble, an Apple bar button on its own glass beside the Me pill (Haris 2026-11-07): it will open E11 Talk,
+    // or its App Store page when it isn't installed — the link comes later, with Talk's release; for now it does nothing
+    let talk = UIBarButtonItem(image: UIImage(named: "TalkBubble")?.withRenderingMode(.alwaysOriginal), primaryAction: UIAction { _ in })
+    talk.accessibilityLabel = "E11 Talk"
+    navigationItem.rightBarButtonItems = [meItem, .fixedSpace(0), talk]
     if let h = Main.shared.homeIfMade { adopt(h) }
   }
   override func viewWillAppear(_ a: Bool) {
