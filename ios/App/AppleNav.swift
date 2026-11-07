@@ -51,6 +51,8 @@ final class TaskVC: UIViewController {
     if #available(iOS 16.0, *) {
       navigationItem.backAction = UIAction { [weak self] _ in
         guard let p = self?.page else { return }
+        // (‹ as the swipes, a step at a time: a reply → the comments → Details → back — Haris 2026-11-07)
+        if p.threadFeed != nil || p.tab == "comments" { Main.shared.taskBackStep(p); return }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         Main.shared.leaveTaskPage(p)
       }
