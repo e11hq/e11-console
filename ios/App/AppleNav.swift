@@ -97,7 +97,7 @@ final class ReplyVC: UIViewController {
   }
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
-    let top = navigationController?.navigationBar.frame.maxY ?? view.safeAreaInsets.top
+    let top = view.safeAreaInsets.top   // (its own bar's bottom — the bar's frame changes during a swipe back)
     if feed.topInset != top { feed.topInset = top }
   }
 }
@@ -173,6 +173,9 @@ final class TaskVC: UIViewController {
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
     if page.superview === view { page.frame = view.bounds }
-    page.appleRow = navigationController?.navigationBar.frame.maxY
+    // (the page's own top: its safe area, which is this page's bar — not the bar's frame, which during the swipe back is
+    //  already turning into Home's taller one with its big title and search box, and the page dropped down with it:
+    //  Haris 2026-11-07)
+    page.appleRow = view.safeAreaInsets.top
   }
 }
