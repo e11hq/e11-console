@@ -279,7 +279,9 @@ extension Main {
     return (r(t.0), r(t.1), r(t.2))
   }
   private func cornerTargetRaw(skipTop: Bool) -> (CornerButton.Spot, CornerButton.Spot, CornerButton.Spot) {
-    let pages = skipTop ? Array(taskPages.dropLast()) : taskPages
+    // (iPhone's own navigation: a task page has Apple's ‹ and ••• — the shared ones never stand in for them; they showed a
+    //  moment at the top coming back to Home — Haris 2026-11-07)
+    let pages = APPLE_NAV ? [] : skipTop ? Array(taskPages.dropLast()) : taskPages
     if let p = pages.last {
       if p.cornerFrame.width == 0 { p.setNeedsLayout(); p.layoutIfNeeded() }   // (never aim at a page not laid out yet)
       let f = p.convert(p.cornerFrame, to: view).offsetBy(dx: -p.transform.tx, dy: 0)
