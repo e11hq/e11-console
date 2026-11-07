@@ -90,7 +90,6 @@ final class HomeVC: UIViewController, UISearchResultsUpdating, UISearchControlle
   //  screen "+ New task" sat on the tab bar until a task page came and went, Haris 2026-11-07)
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
-    SelfTrace.note("HomeVC.layout")
     let m = Main.shared
     if let h = m.homeIfMade, h.superview === view { h.tabTop = m.homeTabTop }
   }
@@ -120,7 +119,6 @@ final class HomeVC: UIViewController, UISearchResultsUpdating, UISearchControlle
   }
   private var shownDate: String?
   func setTitle(_ t: String, _ d: String) {
-    SelfTrace.note("setTitle")
     guard !t.isEmpty else { return }
     if navigationItem.title != t { navigationItem.title = t; UserDefaults.standard.set(t, forKey: "e11_home_title") }
     // (only when it changed: set again on every Home redraw — after a task closes, every live update — Apple's bar laid

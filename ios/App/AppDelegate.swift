@@ -2804,11 +2804,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       ("melt", pause(2500) + "return '{}'", { if let i = self.tabKeys.firstIndex(of: "today"), let item = self.tabBar.items?[i] { self.tabBar.selectedItem = item; self.tabBar(self.tabBar, didSelect: item) } }),
       ("meltOpen", pause(2500) + "return '{}'", {
         let id = ((self.serverHome.shown?["groups"] as? [[String: Any]]) ?? []).flatMap { $0["cards"] as? [[String: Any]] ?? [] }.compactMap { $0["id"] as? String }.first
-        if let id = id { SelfTrace.shared.start("open") { self.selfResult["traceOpen"] = $0 }; self.openTaskPage(id, tab: "details", focus: "") } }),
-      ("meltBack", pause(2500) + "return '{}'", { if let p = self.taskPages.last { SelfTrace.shared.start("back") { self.selfResult["traceBack"] = $0 }; self.closeTaskPage(p) } }),
-      // (TEMPORARY, measuring: the same on Apple's parts alone — plain, then with Home's date line and bar buttons)
-      ("refPlain", pause(6000) + "return '{}'", { if let h = self.sheetHost() { AppleRef.run(false, on: h) { self.selfResult["traceRefPlainOpen"] = $0; self.selfResult["traceRefPlainBack"] = $1 } } }),
-      ("refFull", pause(6000) + "return '{}'", { if let h = self.sheetHost() { AppleRef.run(true, on: h) { self.selfResult["traceRefFullOpen"] = $0; self.selfResult["traceRefFullBack"] = $1 } } }),
+        if let id = id { self.openTaskPage(id, tab: "details", focus: "") } }),
+      ("meltBack", pause(2500) + "return '{}'", { if let p = self.taskPages.last { self.closeTaskPage(p) } }),
       ("task", "window.__e11WebTask = true; const t = db.tasks.find((x) => !x.parentId && !x.done && (x.comments || []).length) || db.tasks.find((x) => !x.parentId && !x.done); openTask(t.id); " + pause(1500) + "return JSON.stringify({ taskOpen: !!ui.taskId })", nil),
       ("sheet", "const m = showMenu(document.body, [{ html: '<div class=\"react-pick\">' + REACTIONS.map((e) => '<button>' + e + '</button>').join('') + '</div>' }, { label: 'Reply', icon: 'reply', run() {} }, { label: 'Edit comment', icon: 'edit', run() {} }, { label: 'Copy text', icon: 'copy', run() {} }, '-', { label: 'Delete comment', icon: 'trash', danger: true, run() {} }]); m.classList.add('cm-sheet'); " + pause(900) + geo + " const r = m.getBoundingClientRect(); return JSON.stringify({ menuTop: r.top, menuBottom: r.bottom, geo })", nil),
       ("back", "document.querySelectorAll('.menu, #ph-menu-scrim').forEach((x) => x.remove()); closeDetail(); " + pause(800) + "return JSON.stringify({ taskOpen: !!ui.taskId })", nil),

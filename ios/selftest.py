@@ -52,7 +52,7 @@ try:
     data = sh('xcrun', 'simctl', 'get_app_container', udid, BUNDLE, 'data').stdout.strip()
     out = os.path.join(data, 'Documents', 'selftest.json')
     seen, res, t0 = set(), {}, time.time()
-    while time.time() - t0 < 560:   # (TEMPORARY 560: the measuring stages — back to 480 after)
+    while time.time() - t0 < 480:
         try: res = json.load(open(out))
         except Exception: res = {}
         st = res.get('stage')
@@ -69,8 +69,6 @@ try:
     try: print('recorder said:', open(os.path.join(TMP, 'ios-rec.log')).read()[-600:])
     except Exception: pass
     print(json.dumps(res, indent=1)[:4000])
-    for k in ('traceOpen', 'traceBack', 'traceRefPlainOpen', 'traceRefPlainBack', 'traceRefFullOpen', 'traceRefFullBack'):
-        for row in res.get(k) or []: print('TRACE', k, json.dumps(row, separators=(',', ':')))
     p = res.get('home') or {}
     # 22: the startup screen is the app's own — there at once (icon, greeting, four rows), ticked by the page, gone before Home
     sg = res.get('splashGeo') or {}; stg = res.get('splashTickedGeo') or {}
