@@ -104,7 +104,10 @@ try:
     check(tsd.get('tab') == 'details' and tsd.get('compose') is False and tsd.get('pages') == 1, f"swiped from Comments: Details, no comment box {tsd}")
     check(tp.get('pages') == 1 and tp.get('drawn') is True and tp.get('x') == 0 and tp.get('tabBar') is False and (res.get('tpage') or {}).get('webTask') is False, f"a task opens as the app's own page, drawn from the server, nothing of the website's under it {tp} {res.get('tpage')}")
     check((res.get('ibxInbox') or {}).get('corner') == 'read' and (res.get('ibxInbox') or {}).get('cornerA', 0) > 0.9 and (res.get('homeNative') or {}).get('corner') == ('none' if (res.get('homeNative') or {}).get('apple') else 'search'), f"the corner button: Search on Home, Mark all read on the Inbox {(res.get('homeNative') or {}).get('corner')} {res.get('ibxInbox')}")
-    check(tp.get('corner') == 'more' and tpb.get('corner') != 'more', f"the corner button is the task page's ••• and back again {tp.get('corner')} → {tpb.get('corner')}")
+    if (res.get('homeNative') or {}).get('apple'):
+      check(tp.get('corner') != 'more', f"a task page has Apple's own ‹ and •••, the shared ones stay out {tp.get('corner')}")
+    else:
+      check(tp.get('corner') == 'more' and tpb.get('corner') != 'more', f"the corner button is the task page's ••• and back again {tp.get('corner')} → {tpb.get('corner')}")
     check((res.get('tpageSheetNative') or {}).get('sheet') == 'NativeSheetVC', f"Assignees opens iPhone's own people sheet (changed by role again) {res.get('tpageSheetNative')}")
     check(tps.get('content', 0) > 300, f"the task page has its rows {tps}")
     check(tpc.get('feed', -1) > 0, f"the comments are the app's own (drawn from the server) {tpc}")
