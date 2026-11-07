@@ -7,6 +7,11 @@ import UIKit
    Inbox and Clients keep their own headers until they're done the same way. */
 let APPLE_HOME = APPLE_NAV
 
+final class RoundPhotoButton: UIButton {
+  override func layoutSubviews() { super.layoutSubviews(); layer.cornerRadius = min(bounds.width, bounds.height) / 2; imageView?.frame = bounds }
+  override var intrinsicContentSize: CGSize { CGSize(width: 38, height: 38) }
+}
+
 final class AppleHomeBits {
   static let shared = AppleHomeBits()
   var meButton: UIButton?
@@ -37,11 +42,15 @@ extension Main: UISearchResultsUpdating, UISearchControllerDelegate {
     }
     h.onAppleResign = { AppleHomeBits.shared.search?.searchBar.resignFirstResponder() }
     // your photo (Me) and 🔍, as Apple's bar buttons
-    let b = UIButton(type: .custom)
-    b.frame = CGRect(x: 0, y: 0, width: 34, height: 34)
-    b.widthAnchor.constraint(equalToConstant: 34).isActive = true; b.heightAnchor.constraint(equalToConstant: 34).isActive = true
-    b.layer.cornerRadius = 17; b.clipsToBounds = true
+    // (always a circle: its own size, its corners half its size whatever the bar does with it — it came out stretched,
+    //  not round: Haris 2026-11-07)
+    let b = RoundPhotoButton(type: .custom)
+    b.frame = CGRect(x: 0, y: 0, width: 38, height: 38)
+    b.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([b.widthAnchor.constraint(equalToConstant: 38), b.heightAnchor.constraint(equalToConstant: 38)])
+    b.clipsToBounds = true
     b.imageView?.contentMode = .scaleAspectFill
+    b.contentHorizontalAlignment = .fill; b.contentVerticalAlignment = .fill
     b.accessibilityLabel = "Me"
     b.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.homeIfMade?.meTap() }, for: .touchUpInside)
     AppleHomeBits.shared.meButton = b
