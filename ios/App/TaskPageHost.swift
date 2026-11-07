@@ -195,6 +195,16 @@ extension Main {
   func taskSwipeMayGo(_ p: TaskPage) -> Bool {
     // (on Comments, a swipe from the edge goes to Details — the page's own paging scroller takes it: Haris 2026-11-07)
     if p.tab == "comments" && p.threadFeed == nil { return false }
+    // (in a reply: the swipe from the edge goes back to the comments, as ‹ does — Haris 2026-11-07)
+    if p.threadFeed != nil {
+      DispatchQueue.main.async { [weak self, weak p] in
+        guard let self = self, let p = p, p.threadFeed != nil else { return }
+        self.composeIfMade?.text.resignFirstResponder()
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        self.closeThread(p)
+      }
+      return false
+    }
     if let u = composeIfMade?.unsent(task: p.taskId) { DispatchQueue.main.async { self.askUnsent(p, u) }; return false }
     p.endEditing(true)
     composeIfMade?.text.resignFirstResponder()
