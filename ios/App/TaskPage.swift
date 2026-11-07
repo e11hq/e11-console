@@ -102,7 +102,8 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }()
   // (while the description is being written, nothing else on the page answers a tap — only Done ends it: Haris,
   //  2026-11-02)
-  var editingDesc = false { didSet { if oldValue != editingDesc { holdForDesc() } } }
+  var editingDesc = false { didSet { if oldValue != editingDesc { holdForDesc(); onDescEditing?(editingDesc) } } }
+  var onDescEditing: ((Bool) -> Void)?   // (iPhone's own bar: Done in place of ••• while it's written — AppleNav)
   var descEmpty = true
   private func holdForDesc() {
     for b in blocks { b.isUserInteractionEnabled = !editingDesc || b === descBox }

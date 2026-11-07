@@ -92,6 +92,7 @@ final class TaskVC: UIViewController {
     if #available(iOS 16.0, *) {
       navigationItem.backAction = UIAction { [weak self] _ in
         guard let p = self?.page else { return }
+        if p.editingDesc { p.finishDesc() }   // (‹ while writing the description: it's kept, then back)
         // (‹ as the swipes, a step at a time: a reply → the comments → Details → back — Haris 2026-11-07)
         if p.threadFeed != nil || p.tab == "comments" { Main.shared.taskBackStep(p); return }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -106,6 +107,7 @@ final class TaskVC: UIViewController {
     navigationItem.titleView = titleBox
     page.onBarTitle = { [weak self] t, c in self?.setTitle(t, c) }
     page.onMenuMade = { [weak self] in self?.setMenu() }
+    page.onDescEditing = { [weak self] _ in self?.setMenu() }
     setMenu()
   }
   func setTitle(_ t: String, _ c: UIColor?) {
@@ -115,8 +117,15 @@ final class TaskVC: UIViewController {
   }
   // •••: the page's own menu (Copy link, Attach Files, Delete task — as it was)
   func setMenu() {
+    // (the description being written: Apple's own Done ends it, where ••• is — Haris 2026-11-07; the shared Done was
+    //  hidden behind this page)
+    if page.editingDesc {
+      let p = page
+      navigationItem.rightBarButtonItem = UIBarButtonItem(systemItem: .done, primaryAction: UIAction { _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); p.finishDesc() })
+      return
+    }
     if let m = page.cornerMenu {
-      if let b = navigationItem.rightBarButtonItem { b.menu = m }
+      if let b = navigationItem.rightBarButtonItem, b.menu != nil { b.menu = m }
       else { navigationItem.rightBarButtonItem = UIBarButtonItem(title: nil, image: UIImage(systemName: "ellipsis"), primaryAction: nil, menu: m) }
     } else { navigationItem.rightBarButtonItem = nil }
   }
