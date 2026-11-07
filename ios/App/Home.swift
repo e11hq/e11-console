@@ -113,6 +113,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   var onAppleTitle: ((String, String) -> Void)?
   var onAppleMe: ((UIImage?) -> Void)?
   var onAppleResign: (() -> Void)?
+  var onAppleScroll: (() -> Void)?
   var appleScroll: UIScrollView { searching ? results : sv }
   // Home's list as Apple's own list (Haris 2026-11-07: "I like Apple's list"): the same cards, headings and boxes, each
   // in a cell of iPhone's list — Apple's swipe actions (Done · Due, Copy link · Delete) and Apple's animation when cards
@@ -1156,7 +1157,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let y = max(-inTop, min(r.midY - sv.bounds.height * 0.4, sv.contentSize.height + inBottom - sv.bounds.height))
     sv.setContentOffset(CGPoint(x: 0, y: y), animated: animated)
   }
-  func scrollViewDidScroll(_ scrollView: UIScrollView) { if scrollView === scroll || scrollView === list { layoutHeader(); showMotto() } }
+  func scrollViewDidScroll(_ scrollView: UIScrollView) { if scrollView === scroll || scrollView === list { layoutHeader(); showMotto(); if appleTop { onAppleScroll?() } } }
   // (Apple's bar coming in — after the startup screen, or back from another tab — or its big title growing: a list that
   //  was at its top stays at its top, the big title showing; it opened scrolled under the small title — Haris 2026-11-07)
   private var lastTopIn: CGFloat = 0
