@@ -577,7 +577,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
 
     setNeedsLayout(); layoutIfNeeded()
     // (Apple's list: Apple's own animation for what came, went or moved)
-    if listOn { applyList(animated: animate); return }
+    if listOn { applyList(animated: animate); DispatchQueue.main.async { self.appleKeepTop() }; return }
     if animate { moveList(oldCenter: oldCenter, oldGroup: oldGroup, oldHeads: oldHeads, leavingHeads: leavingHeads, gone: gone) }
   }
   private var drawnKey = ""
@@ -1148,10 +1148,11 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     }
     showMotto()
   }
-  func scrollToTop() { sv.setContentOffset(CGPoint(x: 0, y: -inTop), animated: true) }
+  func scrollToTop() { sv.setContentOffset(CGPoint(x: 0, y: -inTop), animated: true); userScrolled = false }
   // a block's row brought to about 40% down the screen (an Inbox update opening the Reviews on its request)
   func scrollToShow(_ v: UIView, animated: Bool = true) {
     layoutIfNeeded()
+    userScrolled = true
     let r = v.convert(v.bounds, to: sv)
     let y = max(-inTop, min(r.midY - sv.bounds.height * 0.4, sv.contentSize.height + inBottom - sv.bounds.height))
     sv.setContentOffset(CGPoint(x: 0, y: y), animated: animated)
@@ -1159,12 +1160,18 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   func scrollViewDidScroll(_ scrollView: UIScrollView) { if scrollView === scroll || scrollView === list { layoutHeader(); showMotto() } }
   // (Apple's bar coming in — after the startup screen, or back from another tab — or its big title growing: a list that
   //  was at its top stays at its top, the big title showing; it opened scrolled under the small title — Haris 2026-11-07)
-  private var lastTopIn: CGFloat = 0
+  // (until you scroll it yourself, Home's list stays at its very top with the big title — whatever room the bars, the
+  //  tab bar or the startup screen give it; it opened scrolled under the small title, twice: Haris 2026-11-07)
+  private var userScrolled = false
   func scrollViewDidChangeAdjustedContentInset(_ sv: UIScrollView) {
-    guard appleTop, sv === list || sv === results else { lastTopIn = sv.adjustedContentInset.top; return }
-    let was = lastTopIn, now = sv.adjustedContentInset.top
-    lastTopIn = now
-    if !sv.isDragging && !sv.isDecelerating && sv.contentOffset.y <= -was + 1 && abs(now - was) > 0.5 { sv.contentOffset.y = -now }
+    guard appleTop, sv === list else { return }
+    if !userScrolled && !sv.isDragging && !sv.isDecelerating { sv.contentOffset.y = -sv.adjustedContentInset.top }
+  }
+  func appleKeepTop() {
+    guard appleTop, let cv = list, !userScrolled, !searching, !cv.isDragging, !cv.isDecelerating else { return }
+    cv.layoutIfNeeded()
+    let top = -cv.adjustedContentInset.top
+    if abs(cv.contentOffset.y - top) > 0.5 { cv.contentOffset.y = top }
   }
   // the list at its end (or too short to scroll), Home not searching, no toast beside the + — the motto shows
   private func showMotto() {
@@ -1590,7 +1597,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       guard let i = content.firstIndex(where: { $0 === h }) else { return }
       let after = content[i...].first { v in v is HomeCard || !(v.tag == 7 && v.isHidden) }
       let key = after.map { v -> String in (v as? HomeCard).map { "c:" + $0.id } ?? ((v.tag == 8 ? "e:" : "h:") + (v.accessibilityIdentifier ?? "")) }
-      if let k = key, let ip = ds.indexPath(for: k) { cv.scrollToItem(at: ip, at: .top, animated: true) }
+      if let k = key, let ip = ds.indexPath(for: k) { userScrolled = true; cv.scrollToItem(at: ip, at: .top, animated: true) }
       return
     }
     let want = appleTop ? h.frame.minY - 12 - (safeAreaInsets.top) : h.frame.minY - (safeAreaInsets.top + 66)
@@ -1598,7 +1605,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     scroll.setContentOffset(CGPoint(x: 0, y: min(maxY, max(-inTop, want))), animated: true)
   }
   func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) { if scrollView === scroll { layoutHeader() } }
-  func scrollViewWillBeginDragging(_ scrollView: UIScrollView) { if let o = openCard { setOpen(o, false) } }
+  func scrollViewWillBeginDragging(_ scrollView: UIScrollView) { if scrollView === list { userScrolled = true }; if let o = openCard { setOpen(o, false) } }
 
   // ---------- swipe left on a card: Copy link · Delete; swipe right: Done · Due (as in Mail: round buttons with their names
   // under them) ----------
@@ -1772,7 +1779,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   func selfPress() { if let c = firstCard { attach(c) } }
   func selfSwipeRight() { if let c = firstCard { setOpen(c, true, leading: true) } }
   func selfClose() { if let o = openCard { setOpen(o, false) } }
-  func selfScroll(_ y: CGFloat) { sv.setContentOffset(CGPoint(x: 0, y: y - inTop), animated: false); layoutHeader(); if !appleTop { setBar(barIn, now: true) } }
+  func selfScroll(_ y: CGFloat) { userScrolled = y > 0; sv.setContentOffset(CGPoint(x: 0, y: y - inTop), animated: false); layoutHeader(); if !appleTop { setBar(barIn, now: true) } }
   func selfFind(_ q: String) { openSearch(); field.text = q; typed() }
   func selfFindDone() { closeSearch() }
   // (the walk-through: the first task and client in the results, and a tap on one — as a finger would)

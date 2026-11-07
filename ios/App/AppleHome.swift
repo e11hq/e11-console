@@ -91,7 +91,7 @@ extension Main: UISearchResultsUpdating, UISearchControllerDelegate {
     guard APPLE_HOME, let nav = navigationController, nav.topViewController === self else { return }
     let want = homeIfMade?.appleTop == true && shownScreen === homeIfMade && lockView == nil && (splash == nil || splashGoing)
     if nav.isNavigationBarHidden == want { nav.setNavigationBarHidden(!want, animated: animated) }
-    if want, let h = homeIfMade { setContentScrollView(h.appleScroll, for: .top) }
+    if want, let h = homeIfMade { setContentScrollView(h.appleScroll, for: .top); h.appleKeepTop(); DispatchQueue.main.async { h.appleKeepTop() } }
   }
   // 🔍: Apple's search bar comes in under the bar, ready to type
   func makeHomeSearch() -> UISearchController {
