@@ -680,11 +680,11 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // (Haris, 2026-11-02: these can be changed from the phone again, each by whoever's role allows it — the server's
     //  own can… say who: the title, Status, Task Update, Assignees, Priority, Client and the description; the rest stays
     //  view only)
-    for k in ["canTags", "canRemoveTag", "canChannels", "canAddSub", "canCheck", "canAddCheck", "canDelete"] { m[k] = false }   // (Guardian and Finance: by role — Haris 2026-11-02)
+    // (ticking the checklist and subtasks: by permission again, the server's own canCheck / canTick — Haris 2026-11-07)
+    for k in ["canTags", "canRemoveTag", "canChannels", "canAddSub", "canAddCheck", "canDelete"] { m[k] = false }   // (Guardian and Finance: by role — Haris 2026-11-02)
     if var st = m["status"] as? [String: Any] { st["next"] = nil; m["status"] = st }
     if var c = m["completed"] as? [String: Any] { c["canFrom"] = false; c["canReopen"] = false; m["completed"] = c }
     if var l = m["lock"] as? [String: Any] { l["from"] = false; m["lock"] = l }
-    m["subtasks"] = ((m["subtasks"] as? [[String: Any]]) ?? []).map { var x = $0; x["canTick"] = false; return x }
     return m
   }
   private func rebuild() {
