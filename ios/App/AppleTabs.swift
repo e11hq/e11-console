@@ -74,6 +74,12 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
   required init?(coder: NSCoder) { fatalError() }
   override var childForStatusBarStyle: UIViewController? { selectedViewController }
   override var childForStatusBarHidden: UIViewController? { selectedViewController }
+  // the phone switched light / dark: the app follows at once, whichever tab is on (Main.followPhoneLook — the app's old
+  // shared screen only heard it while it was the one on show)
+  override func traitCollectionDidChange(_ previous: UITraitCollection?) {
+    super.traitCollectionDidChange(previous)
+    if previous?.userInterfaceStyle != traitCollection.userInterfaceStyle { Main.shared.followPhoneLook() }
+  }
   // Home's tab on show
   var homeShown: Bool { selectedViewController === homeNav }
   private func tabVC(_ i: Int) -> UIViewController { i == homeAt ? homeNav : slots[i] }

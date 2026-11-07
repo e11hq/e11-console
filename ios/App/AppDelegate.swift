@@ -321,9 +321,12 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if APPLE_HOME { appleHomeBar(animated: animated) } else { navigationController?.setNavigationBarHidden(true, animated: animated) }
   }
   // the phone switched light / dark: the app follows at once (the website in it follows the phone by itself too)
+  // (read from Apple's tab container, always on screen — this screen isn't while Home's tab is on, and never heard the
+  //  phone change: Home stayed in the old look until another tab was opened, Haris 2026-11-07)
   func followPhoneLook() {
-    guard FOLLOW_DEVICE, traitCollection.userInterfaceStyle != .unspecified else { return }
-    let light = traitCollection.userInterfaceStyle == .light
+    let tc = (APPLE_TABS ? AppleTabs.shared?.traitCollection : nil) ?? traitCollection
+    guard FOLLOW_DEVICE, tc.userInterfaceStyle != .unspecified else { return }
+    let light = tc.userInterfaceStyle == .light
     if (appStyle == .light) != light { run("setAppearance", ["mode": light ? "light" : "dark"]) { _ in } }
   }
   // (iPhone's own navigation: a sheet from the app goes on whatever page is on top — the app itself may be under a page)
