@@ -68,6 +68,9 @@ final class HomeVC: UIViewController, UISearchResultsUpdating, UISearchControlle
     s.searchResultsUpdater = self
     s.delegate = self
     s.searchBar.placeholder = "Search tasks, clients or people"
+    // (TRIAL — Haris 2026-11-07: the box plain, not glass — Apple's own fill colour on Apple's search field, set through its
+    //  own property — to see whether it's there from the start of a swipe back as WhatsApp's is; glass back if not)
+    s.searchBar.searchTextField.backgroundColor = .tertiarySystemFill
     s.searchBar.autocorrectionType = .no
     AppleHomeBits.shared.search = s
     navigationItem.searchController = s
