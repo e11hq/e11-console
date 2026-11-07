@@ -8,7 +8,18 @@ import UIKit
    Step 1 (this): the task page. Next: the tabs' own screens, one by one. */
 let APPLE_NAV = true
 
+// Apple's handler for a gesture, kept: everything goes to it; ours only adds a "may it start" of its own
+final class PopGuard: NSObject, UIGestureRecognizerDelegate {
+  weak var original: UIGestureRecognizerDelegate?
+  let may: (UIGestureRecognizer) -> Bool
+  init(original: UIGestureRecognizerDelegate?, may: @escaping (UIGestureRecognizer) -> Bool) { self.original = original; self.may = may }
+  func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool { (original?.gestureRecognizerShouldBegin?(g) ?? true) && may(g) }
+  override func responds(to s: Selector!) -> Bool { super.responds(to: s) || (original?.responds(to: s) ?? false) }
+  override func forwardingTarget(for s: Selector!) -> Any? { (original?.responds(to: s) ?? false) ? original : nil }
+}
+
 final class AppleNav: UINavigationController, UINavigationControllerDelegate, UIGestureRecognizerDelegate {
+  private var popGuard: PopGuard?
   override var childForStatusBarStyle: UIViewController? { topViewController }
   override var childForStatusBarHidden: UIViewController? { topViewController }
   override func viewDidLoad() {
@@ -16,13 +27,22 @@ final class AppleNav: UINavigationController, UINavigationControllerDelegate, UI
     delegate = self
     interactivePopGestureRecognizer?.delegate = self
     // (iOS 26: the swipe back from anywhere on the page — the same rules as the edge's)
-    if #available(iOS 26.0, *) { interactiveContentPopGestureRecognizer?.delegate = self }
+    // (Apple's own handler for it stays — it also lets taps through to the rows under the finger; replacing it, a
+    //  checklist's box couldn't be ticked: Haris 2026-11-07. Ours only adds: on a task's Comments it doesn't start.)
+    if #available(iOS 26.0, *), let g = interactiveContentPopGestureRecognizer {
+      let guardian = PopGuard(original: g.delegate) { [unowned self] _ in
+        guard let t = self.topViewController as? TaskVC else { return true }
+        return Main.shared.taskSwipeMayGo(t.page)
+      }
+      popGuard = guardian
+      g.delegate = guardian
+    }
     setNavigationBarHidden(true, animated: false)
     navigationBar.prefersLargeTitles = APPLE_HOME   // (Home's big title — AppleHome.swift)
   }
   // the swipe back: Apple's own; a comment written and not sent on the page asks first (as ‹ does)
   func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
-    guard g === interactivePopGestureRecognizer || g === backAnywhere, viewControllers.count > 1 else { return false }
+    guard g === interactivePopGestureRecognizer, viewControllers.count > 1 else { return false }
     if let t = topViewController as? TaskVC { return Main.shared.taskSwipeMayGo(t.page) }
     if topViewController is ReplyVC { Main.shared.composeIfMade?.text.resignFirstResponder() }
     return true
