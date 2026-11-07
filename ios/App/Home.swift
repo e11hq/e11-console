@@ -414,10 +414,13 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     addSubview(fab2)
     for i in 0..<3 {
       let v = UIView(); v.layer.cornerRadius = 18; v.layer.borderWidth = 1; let n = UILabel(), l = UILabel(); n.tag = 1; l.tag = 2; v.addSubview(n); v.addSubview(l); scroll.addSubview(v); stats.append(v)
-      // (tapped: Due today / Overdue bring their group up to where the big title is; In review opens My Tasks waiting
-      //  for the CD's review — Haris, 2026-10-31)
-      let tap = UITapGestureRecognizer(target: self, action: #selector(statTap(_:))); v.tag = 100 + i; v.addGestureRecognizer(tap)
-      v.isAccessibilityElement = true; v.accessibilityTraits = .button
+      // (tapped: Overdue brings its group up to where the big title is; In review opens My Tasks waiting for the CD's
+      //  review — Haris, 2026-10-31. Due today isn't tapped: its tasks are already first, right under it — Haris
+      //  2026-11-07)
+      v.tag = 100 + i; v.isAccessibilityElement = true
+      if i == 0 { v.accessibilityTraits = .staticText; continue }
+      let tap = UITapGestureRecognizer(target: self, action: #selector(statTap(_:))); v.addGestureRecognizer(tap)
+      v.accessibilityTraits = .button
     }
   }
   required init?(coder: NSCoder) { fatalError() }
@@ -1589,7 +1592,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     UIImpactFeedbackGenerator(style: .light).impactOccurred()
     let i = v.tag - 100
     if i == 2 { send(["ev": "review"]); return }
-    showGroup(i == 0 ? "Today" : "Overdue")
+    showGroup("Overdue")
   }
   // a group's heading brought up to where the big title is (as far as the list goes)
   func showGroup(_ name: String) {
