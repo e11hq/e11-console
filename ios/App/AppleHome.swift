@@ -122,6 +122,9 @@ extension Main: UISearchResultsUpdating, UISearchControllerDelegate {
   func willPresentSearchController(_ s: UISearchController) {
     guard s === AppleHomeBits.shared.search, let h = homeIfMade else { return }
     h.appleSearchBegin()
+    // (while searching, no big title under the search field — it showed there, cut at the left edge: Haris 2026-11-07;
+    //  as Mail, only the field and the results)
+    navigationItem.largeTitleDisplayMode = .never
     setContentScrollView(h.appleScroll, for: .top)
   }
   func didPresentSearchController(_ s: UISearchController) {
@@ -131,6 +134,7 @@ extension Main: UISearchResultsUpdating, UISearchControllerDelegate {
   func willDismissSearchController(_ s: UISearchController) {
     guard s === AppleHomeBits.shared.search else { return }
     homeIfMade?.appleSearchEnd()
+    navigationItem.largeTitleDisplayMode = .always
   }
   func didDismissSearchController(_ s: UISearchController) {
     guard s === AppleHomeBits.shared.search else { return }
