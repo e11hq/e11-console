@@ -1594,9 +1594,13 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   // the phone's own bottom edge room (the home bar) — in Apple's tab container the screen's safe area also takes in Apple's
   // tab bar; the app's screens keep its room themselves ("+ New task", the lists' ends), as before (AppleTabs.swift — "+ New
   // task" sat too high: Haris 2026-11-07)
-  var bottomSafe: CGFloat { APPLE_TABS ? (view.window?.safeAreaInsets.bottom ?? view.safeAreaInsets.bottom) : view.safeAreaInsets.bottom }
+  // (measured on the phone's own window, which every tab shares: Home is its own screen now, and with Home's tab on this
+  //  screen isn't on show — measured on itself it gave a wrong bottom, and "+ New task" went up after a task page:
+  //  Haris 2026-11-07)
+  var screenWindow: UIWindow? { AppleTabs.shared?.view.window ?? view.window }
+  var bottomSafe: CGFloat { APPLE_TABS ? (screenWindow?.safeAreaInsets.bottom ?? view.safeAreaInsets.bottom) : view.safeAreaInsets.bottom }
   var tabPillTop: CGFloat {
-    let H = view.bounds.height, safe = bottomSafe
+    let H = APPLE_TABS ? (screenWindow?.bounds.height ?? view.bounds.height) : view.bounds.height, safe = bottomSafe
     let pillBottom = H - (safe > 0 ? max(8, safe - 11) : 8)
     if #available(iOS 26.0, *) { return pillBottom - 61 }
     return tabBar.frame.minY
