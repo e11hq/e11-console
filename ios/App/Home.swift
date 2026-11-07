@@ -177,6 +177,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private func itemHeight(_ key: String, _ v: UIView) -> CGFloat {
     let w = bounds.width - 32
     if key == "stats" { return 80 }
+    if key == "search" { return 52 }
     if v === hint { return (hint.sizeThatFits(CGSize(width: w, height: 400)).height) + 28 }
     if v is HomeClientRow { return 70 }
     if let n = v as? SearchFixedNote { return n.height(for: w) }
@@ -197,6 +198,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
         keys.append(k); views[k] = v
       }
     } else {
+    // (Home's search box: on the page itself, under the date, on Apple's glass — it slides in with Home, glass and all, as
+    //  "+ New task" does; tapped, Apple's search opens: Haris 2026-11-07)
+    if onAppleSearchTap != nil { keys.append("search"); views["search"] = appleSearchBox }
     if !noStats { keys.append("stats"); views["stats"] = statsRow }
     for v in content {
       if let c = v as? HomeCard { let k = "c:" + c.id; keys.append(k); views[k] = c; continue }
@@ -1796,6 +1800,32 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   func selfScroll(_ y: CGFloat) { userScrolled = y > 0; sv.setContentOffset(CGPoint(x: 0, y: y - inTop), animated: false); layoutHeader(); if !appleTop { setBar(barIn, now: true) } }
   // (Apple's search on Home's own screen — HomeVC: the self-test types into it as a finger would)
   var onAppleFind: ((String?) -> Void)?
+  // the search box on Home's page (Apple's glass, its own magnifier and words), and what a tap on it does (HomeVC: Apple's
+  // search opens)
+  var onAppleSearchTap: (() -> Void)?
+  lazy var appleSearchBox: UIView = {
+    let holder = UIView()
+    let fx = UIVisualEffectView()
+    if #available(iOS 26.0, *) { fx.effect = UIGlassEffect(style: .regular) } else { fx.effect = UIBlurEffect(style: .systemThinMaterial) }
+    fx.layer.cornerRadius = 22; fx.layer.cornerCurve = .continuous; fx.clipsToBounds = true
+    fx.isUserInteractionEnabled = false
+    let icon = UIImageView(image: UIImage(systemName: "magnifyingglass")); icon.tintColor = .secondaryLabel
+    let words = UILabel(); words.text = "Search tasks, clients or people"; words.textColor = .secondaryLabel; words.font = .systemFont(ofSize: 17)
+    let b = UIControl()
+    b.isAccessibilityElement = true; b.accessibilityTraits = .searchField; b.accessibilityLabel = "Search tasks, clients or people"
+    b.addAction(UIAction { [weak self] _ in self?.onAppleSearchTap?() }, for: .touchUpInside)
+    [fx, b].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; holder.addSubview($0) }
+    [icon, words].forEach { $0.translatesAutoresizingMaskIntoConstraints = false; fx.contentView.addSubview($0) }
+    NSLayoutConstraint.activate([
+      fx.leadingAnchor.constraint(equalTo: holder.leadingAnchor), fx.trailingAnchor.constraint(equalTo: holder.trailingAnchor),
+      fx.centerYAnchor.constraint(equalTo: holder.centerYAnchor), fx.heightAnchor.constraint(equalToConstant: 44),
+      b.leadingAnchor.constraint(equalTo: fx.leadingAnchor), b.trailingAnchor.constraint(equalTo: fx.trailingAnchor),
+      b.topAnchor.constraint(equalTo: fx.topAnchor), b.bottomAnchor.constraint(equalTo: fx.bottomAnchor),
+      icon.leadingAnchor.constraint(equalTo: fx.contentView.leadingAnchor, constant: 14), icon.centerYAnchor.constraint(equalTo: fx.contentView.centerYAnchor),
+      words.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 8), words.centerYAnchor.constraint(equalTo: fx.contentView.centerYAnchor),
+      words.trailingAnchor.constraint(lessThanOrEqualTo: fx.contentView.trailingAnchor, constant: -14)])
+    return holder
+  }()
   func selfFind(_ q: String) { if appleTop, let f = onAppleFind { f(q); return }; openSearch(); field.text = q; typed() }
   func selfFindDone() { if appleTop, let f = onAppleFind { f(nil); return }; closeSearch() }
   // (the walk-through: the first task and client in the results, and a tap on one — as a finger would)
