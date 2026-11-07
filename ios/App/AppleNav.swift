@@ -56,8 +56,10 @@ final class AppleNav: UINavigationController, UINavigationControllerDelegate, UI
   // a page gone (popped by ‹, swiped away, or taken out): the app lets go of it as when it closes
   // (Apple's tab bar slides away as a page comes over the tabs, and back as the app's screen comes back — AppleTabs.swift)
   func navigationController(_ n: UINavigationController, willShow vc: UIViewController, animated: Bool) {
-    // (Home's navigation is its tab's own: Apple hides and shows the tab bar itself as a page is pushed and popped)
-    if n === AppleTabs.shared?.homeNav { return }
+    // (Home's navigation is its tab's own: the tab bar slides away as a page comes and back as Home does — Apple's tab bar
+    //  call, not "hide the bottom bar when pushed": that re-sized the whole screen at the slide's first moment and Apple's
+    //  bar snapped small, the big title jumping into it — Haris 2026-11-08, build 1544's test)
+    if n === AppleTabs.shared?.homeNav { AppleTabs.shared?.homeNavWillShow(vc, animated: animated); return }
     AppleTabs.shared?.mirrorShown(animated: animated, top: vc)
   }
   func navigationController(_ n: UINavigationController, didShow vc: UIViewController, animated: Bool) {
@@ -70,7 +72,7 @@ final class AppleNav: UINavigationController, UINavigationControllerDelegate, UI
 // swipe back to the comments; the thread's list and the comment box as they were
 final class ReplyVC: UIViewController {
   let page: TaskPage, feed: CommentsFeed
-  init(page: TaskPage, feed: CommentsFeed) { self.page = page; self.feed = feed; super.init(nibName: nil, bundle: nil); hidesBottomBarWhenPushed = true }
+  init(page: TaskPage, feed: CommentsFeed) { self.page = page; self.feed = feed; super.init(nibName: nil, bundle: nil) }
   required init?(coder: NSCoder) { fatalError() }
   override var preferredStatusBarStyle: UIStatusBarStyle { Main.shared.statusStyle }
   override func loadView() {
@@ -107,9 +109,8 @@ final class ReplyVC: UIViewController {
 final class TaskVC: UIViewController {
   let page: TaskPage
   private let titleBox = UIStackView(), dot = UIView(), name = UILabel()
-  // (TEST build only, Haris 2026-11-07: the tab bar left on under a task — does the big title still jump into the bar as
-  //  the task slides in? Put back after)
-  init(_ p: TaskPage) { page = p; super.init(nibName: nil, bundle: nil); hidesBottomBarWhenPushed = false }
+  // (no tab bar under a task: Apple's tab bar call hides it as the page comes — AppleNav's willShow / AppleTabs)
+  init(_ p: TaskPage) { page = p; super.init(nibName: nil, bundle: nil) }
   required init?(coder: NSCoder) { fatalError() }
   override var preferredStatusBarStyle: UIStatusBarStyle { Main.shared.statusStyle }
   override func loadView() {

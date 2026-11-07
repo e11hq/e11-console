@@ -96,6 +96,15 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
     nav.didMove(toParent: s)
     s.fit()
   }
+  // a page coming on Home's own navigation: the tab bar away for a task or a reply, back for Home — Apple's own tab bar
+  // call, with the slide; a swipe back let go of half way: as it was (Haris 2026-11-08)
+  func homeNavWillShow(_ vc: UIViewController, animated: Bool) {
+    let hide = !(vc is HomeVC)
+    hideBar(hide, animated: animated)
+    if let tc = homeNav.transitionCoordinator, tc.isInteractive {
+      tc.notifyWhenInteractionChanges { [weak self] c in if c.isCancelled { self?.hideBar(!hide, animated: true) } }
+    }
+  }
   private func hideBar(_ h: Bool, animated: Bool = false) {
     if #available(iOS 18.0, *) { if isTabBarHidden != h { setTabBarHidden(h, animated: animated) } } else if tabBar.isHidden != h { tabBar.isHidden = h }
   }
@@ -149,7 +158,7 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
     if homeShown, homeNav.transitionCoordinator != nil { return }
     // (a page pushed over the tabs — a task, a reply: no tab bar, Apple's slide away)
     let shown = top ?? (homeShown ? homeNav.topViewController : nav.topViewController)
-    // (on Home's own navigation Apple does it itself — the page hides the tab bar as it's pushed)
+    // (on Home's own navigation it's done as the page comes — homeNavWillShow)
     if shown !== main && !(shown is HomeVC) { if !homeShown { hideBar(true, animated: animated) }; return }
     let b = main.tabBar
     // (faded by the app — a New task draft tucked over it: hidden Apple's way, never its alpha set by us; Apple put it
