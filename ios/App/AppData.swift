@@ -163,11 +163,14 @@ final class AppData: NSObject, URLSessionDataDelegate {
       guard let url = URL(string: serverURL() + "/api/events?since=\(rev)&client=ios-\(me)" + mark) else { return }
       self.q.async {
         guard self.stream == nil else { return }
-        var r = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 90)
+        // (the server says something every 25 s, even with nothing new: 40 s of silence means the line has quietly died —
+        //  it's opened again at once and catches up from where it was; it waited 90 s before, and changes made meanwhile
+        //  only showed after leaving the app and coming back — Haris 2026-11-07)
+        var r = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 40)
         r.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         if !cookie.isEmpty { r.setValue(cookie, forHTTPHeaderField: "Cookie") }
         let cfg = URLSessionConfiguration.default
-        cfg.timeoutIntervalForRequest = 90; cfg.timeoutIntervalForResource = 24 * 3600
+        cfg.timeoutIntervalForRequest = 40; cfg.timeoutIntervalForResource = 24 * 3600
         let ses = URLSession(configuration: cfg, delegate: self, delegateQueue: nil)
         self.session = ses; self.buffer = ""
         let t = ses.dataTask(with: r); self.stream = t; t.resume()
@@ -196,7 +199,9 @@ final class AppData: NSObject, URLSessionDataDelegate {
       guard task === self.stream else { return }
       self.stream = nil; self.streamUp = false
       // (gone: back again in a moment — longer each time, up to half a minute)
-      let wait = self.backoff; self.backoff = min(30, self.backoff * 2)
+      // (a line gone quiet — timed out — is opened again at once; a real failure waits longer each time)
+      let quiet = (error as? URLError)?.code == .timedOut
+      let wait = quiet ? 1 : self.backoff; if !quiet { self.backoff = min(30, self.backoff * 2) }
       self.q.asyncAfter(deadline: .now() + wait) { [weak self] in if self?.inBackground == false { self?.openStream() } }
     }
   }
