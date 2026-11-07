@@ -98,11 +98,17 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
   }
   // a page coming on Home's own navigation: the tab bar away for a task or a reply, back for Home — Apple's own tab bar
   // call, with the slide; a swipe back let go of half way: as it was (Haris 2026-11-08)
+  // (going to a page: the tab bar slides away once the page has arrived — hidden as the slide began, the tab container
+  //  laid itself out again at the slide's first moment and Apple's bar snapped small, the big title jumping into it:
+  //  build 1547, Haris 2026-11-08. Back to Home: it comes as the slide begins.)
   func homeNavWillShow(_ vc: UIViewController, animated: Bool) {
     let hide = !(vc is HomeVC)
-    hideBar(hide, animated: animated)
-    if let tc = homeNav.transitionCoordinator, tc.isInteractive {
-      tc.notifyWhenInteractionChanges { [weak self] c in if c.isCancelled { self?.hideBar(!hide, animated: true) } }
+    guard let tc = homeNav.transitionCoordinator else { hideBar(hide, animated: animated); return }
+    if hide {
+      tc.animate(alongsideTransition: nil) { [weak self] c in if !c.isCancelled { self?.hideBar(true, animated: true) } }
+    } else {
+      hideBar(false, animated: animated)
+      if tc.isInteractive { tc.notifyWhenInteractionChanges { [weak self] c in if c.isCancelled { self?.hideBar(true, animated: true) } } }
     }
   }
   private func hideBar(_ h: Bool, animated: Bool = false) {
