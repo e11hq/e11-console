@@ -23,6 +23,18 @@ final class MirrorTabBar: UITabBar {
   required init?(coder: NSCoder) { fatalError() }
 }
 
+// Apple's tab bar, answering only on the glass pill it draws: iOS 26's bar is taller than its pill and took taps meant for
+// what sits just above it — the toast's Undo went to the Me tab (Haris 2026-11-07)
+final class PillTabBar: UITabBar {
+  override func point(inside p: CGPoint, with e: UIEvent?) -> Bool {
+    guard super.point(inside: p, with: e) else { return false }
+    guard #available(iOS 26.0, *) else { return true }
+    let safe = window?.safeAreaInsets.bottom ?? 0
+    let pillBottom = bounds.height - (safe > 0 ? max(8, safe - 11) : 8)
+    return p.y >= pillBottom - 61 - 2
+  }
+}
+
 // one tab: it holds the app's navigation while it's the one selected
 final class TabSlot: UIViewController {
   override var childForStatusBarStyle: UIViewController? { children.first }
@@ -48,6 +60,7 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
     self.nav = nav
     super.init(nibName: nil, bundle: nil)
     AppleTabs.shared = self
+    setValue(PillTabBar(), forKey: "tabBar")   // (Apple's own bar, its touches kept to its pill)
     delegate = self
     let s = TabSlot(); slots = [s]
     setViewControllers(slots, animated: false)
