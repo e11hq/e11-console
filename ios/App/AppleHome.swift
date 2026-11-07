@@ -11,20 +11,26 @@ let APPLE_HOME = APPLE_NAV
 // Me on the bar: a pill — your photo (a fixed 30 pt circle the bar can't stretch) and the word "Me", on Apple's own glass
 // (Haris 2026-11-07: "the word Me only in the top area, next to the profile picture, in a pill" — with it the bar's
 // right side is wide enough that iOS puts the small title on the left by its own rule)
-// your Me button in Home's bar: Apple's own bar button (its glass, its size, its press), showing "Me" and your photo
-// as one picture — Apple fits its own buttons beside the big title; our own pill view in the bar was the test's
-// suspect for the big title jumping into the bar as a task slides in (Haris 2026-11-07)
-enum MeBarImage {
-  static func make(_ photo: UIImage?, _ t: UITraitCollection) -> UIImage {
-    let word = NSAttributedString(string: "Me", attributes: [.font: UIFont.systemFont(ofSize: 15, weight: .semibold), .foregroundColor: UIColor.label.resolvedColor(with: t)])
-    let ws = word.size(), d: CGFloat = 30, gap: CGFloat = 8
-    let size = CGSize(width: ceil(ws.width) + gap + d, height: d)
-    let f = UIGraphicsImageRendererFormat(for: t)
-    return UIGraphicsImageRenderer(size: size, format: f).image { _ in
-      word.draw(at: CGPoint(x: 0, y: (d - ws.height) / 2))
-      let r = CGRect(x: size.width - d, y: 0, width: d, height: d)
+// Home's bar buttons: Apple's own bar buttons (their glass, size and press), each showing one picture of ours —
+// your photo (Haris 2026-11-08: no "Me" word), and E11 Talk's bubble with "Talk" beside it (drawn again for light / dark)
+enum BarImage {
+  static func me(_ photo: UIImage?, _ t: UITraitCollection) -> UIImage {
+    let d: CGFloat = 30
+    return UIGraphicsImageRenderer(size: CGSize(width: d, height: d), format: UIGraphicsImageRendererFormat(for: t)).image { _ in
+      let r = CGRect(x: 0, y: 0, width: d, height: d)
       UIBezierPath(ovalIn: r).addClip()
       if let p = photo { p.draw(in: r) } else { UIColor.secondarySystemFill.resolvedColor(with: t).setFill(); UIRectFill(r) }
+    }.withRenderingMode(.alwaysOriginal)
+  }
+  static func talk(_ t: UITraitCollection) -> UIImage? {
+    guard let bubble = UIImage(named: "TalkBubble") else { return nil }
+    let word = NSAttributedString(string: "Talk", attributes: [.font: UIFont.systemFont(ofSize: 15, weight: .semibold), .foregroundColor: UIColor.label.resolvedColor(with: t)])
+    let ws = word.size(), b = CGSize(width: 24, height: 24), gap: CGFloat = 6
+    let h = max(b.height, ceil(ws.height))
+    let size = CGSize(width: b.width + gap + ceil(ws.width), height: h)
+    return UIGraphicsImageRenderer(size: size, format: UIGraphicsImageRendererFormat(for: t)).image { _ in
+      bubble.draw(in: CGRect(x: 0, y: (h - b.height) / 2, width: b.width, height: b.height))
+      word.draw(at: CGPoint(x: b.width + gap, y: (h - ws.height) / 2))
     }.withRenderingMode(.alwaysOriginal)
   }
 }
@@ -32,6 +38,7 @@ enum MeBarImage {
 final class AppleHomeBits {
   static let shared = AppleHomeBits()
   var meItem: UIBarButtonItem?
+  var talkItem: UIBarButtonItem?
   var mePhoto: UIImage?
   var search: UISearchController?
 }
@@ -54,7 +61,7 @@ final class HomeVC: UIViewController, UISearchResultsUpdating, UISearchControlle
     let f = DateFormatter(); f.dateFormat = "EEEE, MMMM d"
     setTitle(d.string(forKey: "e11_home_title") ?? "E11 Day", f.string(from: Date()))
     // your Me button, as Apple's own bar button
-    let meItem = UIBarButtonItem(image: MeBarImage.make(nil, traitCollection), primaryAction: UIAction { _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); Main.shared.homeIfMade?.meTap() })
+    let meItem = UIBarButtonItem(image: BarImage.me(nil, traitCollection), primaryAction: UIAction { _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); Main.shared.homeIfMade?.meTap() })
     meItem.accessibilityLabel = "Me"
     AppleHomeBits.shared.meItem = meItem
     // (its words drawn in the phone's look: drawn again when light / dark changes)
@@ -77,7 +84,8 @@ final class HomeVC: UIViewController, UISearchResultsUpdating, UISearchControlle
     // or its App Store page when it isn't installed — the link comes later, with Talk's release; for now it does nothing
     // (in its own blue gradient, as E11 Talk's icon — the same in light and dark: Apple's original-colour image, Haris
     //  2026-11-07)
-    let talk = UIBarButtonItem(image: UIImage(named: "TalkBubble")?.withRenderingMode(.alwaysOriginal), primaryAction: UIAction { _ in })
+    let talk = UIBarButtonItem(image: BarImage.talk(traitCollection), primaryAction: UIAction { _ in })
+    AppleHomeBits.shared.talkItem = talk
     talk.accessibilityLabel = "E11 Talk"
     navigationItem.rightBarButtonItems = [meItem, .fixedSpace(0), talk]
     if let h = Main.shared.homeIfMade { adopt(h) }
@@ -114,7 +122,10 @@ final class HomeVC: UIViewController, UISearchResultsUpdating, UISearchControlle
     h.useAppleTop()
     setContentScrollView(h.appleScroll, for: .top)
   }
-  func paintMe() { AppleHomeBits.shared.meItem?.image = MeBarImage.make(AppleHomeBits.shared.mePhoto, traitCollection) }
+  func paintMe() {
+    AppleHomeBits.shared.meItem?.image = BarImage.me(AppleHomeBits.shared.mePhoto, traitCollection)
+    AppleHomeBits.shared.talkItem?.image = BarImage.talk(traitCollection)
+  }
   private var shownDate: String?
   func setTitle(_ t: String, _ d: String) {
     guard !t.isEmpty else { return }
@@ -140,7 +151,10 @@ final class HomeVC: UIViewController, UISearchResultsUpdating, UISearchControlle
   func didPresentSearchController(_ s: UISearchController) { DispatchQueue.main.async { s.searchBar.becomeFirstResponder() } }
   func willDismissSearchController(_ s: UISearchController) { Main.shared.homeIfMade?.appleSearchEnd() }
   // (closed: out of the bar again — the box on the page is the way in)
-  func didDismissSearchController(_ s: UISearchController) { if navigationItem.searchController === s { navigationItem.searchController = nil } }
+  func didDismissSearchController(_ s: UISearchController) {
+    if navigationItem.searchController === s { navigationItem.searchController = nil }
+    Main.shared.homeIfMade?.appleSearchGone()   // (Apple's search fully gone from the bar: the box on the page again)
+  }
   // the box on the page tapped: Apple's search, in the bar, open and ready to type
   func openSearch() {
     guard let s = AppleHomeBits.shared.search, !s.isActive else { return }
