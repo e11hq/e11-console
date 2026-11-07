@@ -60,7 +60,17 @@ extension Main: UISearchResultsUpdating, UISearchControllerDelegate {
       UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.appleHomeSearch()
     })
     find.accessibilityLabel = "Search"
-    navigationItem.rightBarButtonItems = [meItem, find]
+    // iOS 26: Apple's own search button in the bar — it opens into the search field there and closes back, all Apple's
+    // (Haris 2026-11-07: the search bar went to the bottom, and a second search left it gone and the page stuck)
+    if #available(iOS 26.0, *) {
+      navigationItem.rightBarButtonItems = [meItem]
+      navigationItem.searchController = makeHomeSearch()
+      navigationItem.hidesSearchBarWhenScrolling = false
+      navigationItem.preferredSearchBarPlacement = .integratedButton
+      navigationItem.searchBarPlacementAllowsToolbarIntegration = false
+    } else {
+      navigationItem.rightBarButtonItems = [meItem, find]
+    }
     h.useAppleTop()
   }
   // Apple's bar shows while Home is the screen on show (and Main is on top); hidden for every other screen of the app's
@@ -72,17 +82,20 @@ extension Main: UISearchResultsUpdating, UISearchControllerDelegate {
     if want, let h = homeIfMade { setContentScrollView(h.appleScroll, for: .top) }
   }
   // 🔍: Apple's search bar comes in under the bar, ready to type
+  func makeHomeSearch() -> UISearchController {
+    if let x = AppleHomeBits.shared.search { return x }
+    let s = UISearchController(searchResultsController: nil)
+    s.obscuresBackgroundDuringPresentation = false
+    s.searchResultsUpdater = self
+    s.delegate = self
+    s.searchBar.placeholder = "Search tasks, clients or people"
+    s.searchBar.autocorrectionType = .no
+    AppleHomeBits.shared.search = s
+    return s
+  }
+  // (before iOS 26: our 🔍 bar button brings Apple's search bar in under the bar)
   func appleHomeSearch() {
-    let s: UISearchController
-    if let x = AppleHomeBits.shared.search { s = x } else {
-      s = UISearchController(searchResultsController: nil)
-      s.obscuresBackgroundDuringPresentation = false
-      s.searchResultsUpdater = self
-      s.delegate = self
-      s.searchBar.placeholder = "Search tasks, clients or people"
-      s.searchBar.autocorrectionType = .no
-      AppleHomeBits.shared.search = s
-    }
+    let s = makeHomeSearch()
     navigationItem.searchController = s
     navigationItem.hidesSearchBarWhenScrolling = false
     if #available(iOS 16.0, *) { navigationItem.preferredSearchBarPlacement = .stacked }
@@ -109,7 +122,7 @@ extension Main: UISearchResultsUpdating, UISearchControllerDelegate {
   }
   func didDismissSearchController(_ s: UISearchController) {
     guard s === AppleHomeBits.shared.search else { return }
-    navigationItem.searchController = nil
+    if #unavailable(iOS 26.0) { navigationItem.searchController = nil }   // (iOS 26: it stays, as Apple's button)
     if let h = homeIfMade { setContentScrollView(h.appleScroll, for: .top) }
   }
 }
