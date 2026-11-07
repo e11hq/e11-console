@@ -17,3 +17,18 @@ targets:
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         TARGETED_DEVICE_FAMILY: "1"
         SWIFT_VERSION: "5.0"
+  MockUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    dependencies: [{ target: Mock }]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ae.e11.mock.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Mock
+        SWIFT_VERSION: "5.0"
+schemes:
+  Mock:
+    build: { targets: { Mock: all, MockUITests: [test] } }
+    test: { targets: [MockUITests] }

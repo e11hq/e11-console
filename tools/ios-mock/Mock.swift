@@ -1,7 +1,8 @@
 import UIKit
 
 // Scenes (launch argument -scene N): 1 My Tasks at the top · 2 scrolled · 3 the status line after sending a comment
-// (A: iOS 26's bar above the tab bar) · 4 B: compose in the top bar
+// (A: iOS 26's bar above the tab bar) · 4 B: compose in the top bar · 7 touch and hold A: Apple's context menu (held by
+// the UI test) · 8 touch and hold B: the sheet
 let SCENE = max(1, UserDefaults.standard.integer(forKey: "scene"))
 
 @main final class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -202,7 +203,37 @@ final class MyTasks: UICollectionViewController {
   override func viewDidAppear(_ a: Bool) {
     super.viewDidAppear(a)
     if (SCENE == 5 || SCENE == 6) && !pushed { pushed = true; navigationController?.pushViewController(TaskVC(page: SCENE == 6 ? 1 : 0), animated: false); return }
+    if SCENE == 8 && !pushed {
+      pushed = true
+      // (the row held: highlighted the Apple way, then the sheet)
+      collectionView.selectItem(at: IndexPath(item: 0, section: 0), animated: false, scrollPosition: [])
+      let n = UINavigationController(rootViewController: AttachSheet())
+      if let sh = n.sheetPresentationController { sh.detents = [.medium()]; sh.prefersGrabberVisible = true }
+      present(n, animated: false)
+    }
     if SCENE == 2 { collectionView.setContentOffset(CGPoint(x: 0, y: 420 - collectionView.adjustedContentInset.top), animated: false) }
+  }
+}
+extension MyTasks {
+  override func collectionView(_ cv: UICollectionView, contextMenuConfigurationForItemsAt ips: [IndexPath], point: CGPoint) -> UIContextMenuConfiguration? {
+    guard SCENE == 7 else { return nil }
+    return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in
+      UIMenu(title: "Attach Files", children: [UIAction(title: "Camera", image: UIImage(systemName: "camera")) { _ in },
+                                               UIAction(title: "Photos", image: UIImage(systemName: "photo")) { _ in },
+                                               UIAction(title: "Files", image: UIImage(systemName: "doc.badge.arrow.up")) { _ in }])
+    }
+  }
+}
+// B: the same choices in a sheet (as today's, without our own shrink)
+final class AttachSheet: UITableViewController {
+  init() { super.init(style: .insetGrouped) }
+  required init?(coder: NSCoder) { fatalError() }
+  override func viewDidLoad() { super.viewDidLoad(); title = "Attach Files"; navigationItem.rightBarButtonItem = UIBarButtonItem(systemItem: .close) }
+  override func tableView(_ t: UITableView, numberOfRowsInSection s: Int) -> Int { 3 }
+  override func tableView(_ t: UITableView, cellForRowAt ip: IndexPath) -> UITableViewCell {
+    let c = UITableViewCell(); var cfg = c.defaultContentConfiguration()
+    let r = [("Camera", "camera"), ("Photos", "photo"), ("Files", "doc.badge.arrow.up")][ip.row]
+    cfg.text = r.0; cfg.image = UIImage(systemName: r.1); c.contentConfiguration = cfg; return c
   }
 }
 extension UIFont { func withWeight(_ w: UIFont.Weight) -> UIFont { UIFont.systemFont(ofSize: pointSize, weight: w) } }

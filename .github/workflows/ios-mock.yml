@@ -34,13 +34,24 @@ jobs:
           mkdir -p "$RUNNER_TEMP/shots"
           for look in light dark; do
             xcrun simctl ui "$DEV" appearance $look
-            for s in 5 6; do
+            for s in 8; do
               xcrun simctl terminate "$DEV" ae.e11.mock 2>/dev/null
               xcrun simctl launch "$DEV" ae.e11.mock -scene $s; echo "launch $s $look $?"; sleep 6
               xcrun simctl io "$DEV" screenshot "$RUNNER_TEMP/shots/mock-$s-$look.png"
             done
           done
-          xcrun simctl terminate "$DEV" ae.e11.mock; xcrun simctl shutdown "$DEV"; true
+          xcrun simctl terminate "$DEV" ae.e11.mock
+          # (touch and hold A: the UI test holds a task and photographs Apple's context menu — light and dark)
+          for look in light dark; do
+            xcrun simctl ui "$DEV" appearance $look
+            rm -rf "$RUNNER_TEMP/hold.xcresult"
+            xcodebuild test -project tools/ios-mock/Mock.xcodeproj -scheme Mock -destination "id=$DEV" -derivedDataPath build-mock \
+              CODE_SIGNING_ALLOWED=NO -resultBundlePath "$RUNNER_TEMP/hold.xcresult" 2>&1 | tail -5
+            rm -rf "$RUNNER_TEMP/att"; mkdir -p "$RUNNER_TEMP/att"
+            xcrun xcresulttool export attachments --path "$RUNNER_TEMP/hold.xcresult" --output-path "$RUNNER_TEMP/att" 2>&1 | tail -2
+            f=$(ls "$RUNNER_TEMP"/att/*.png 2>/dev/null | head -1); [ -n "$f" ] && cp "$f" "$RUNNER_TEMP/shots/mock-7-$look.png"
+          done
+          xcrun simctl shutdown "$DEV"; true
       - name: Results for checking from Claude's workspace
         if: always()
         env:
