@@ -107,9 +107,7 @@ final class ReplyVC: UIViewController {
 final class TaskVC: UIViewController {
   let page: TaskPage
   private let titleBox = UIStackView(), dot = UIView(), name = UILabel()
-  // (TEST build only, Haris 2026-11-07: the tab bar left on under a task — does the big title still jump into the bar as
-  //  the task slides in? Put back after)
-  init(_ p: TaskPage) { page = p; super.init(nibName: nil, bundle: nil); hidesBottomBarWhenPushed = false }
+  init(_ p: TaskPage) { page = p; super.init(nibName: nil, bundle: nil); hidesBottomBarWhenPushed = true }
   required init?(coder: NSCoder) { fatalError() }
   override var preferredStatusBarStyle: UIStatusBarStyle { Main.shared.statusStyle }
   override func loadView() {
