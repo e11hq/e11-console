@@ -47,9 +47,12 @@ final class ServerTask {
     // (with the app's own copy: just what changed comes back, into the copy — the page is drawn from it: step 3)
     let copy = AppData.shared.ready
     if copy { b["copy"] = true }
+    // (done on the phone's copy at once — the same code as the server's; put back if the server says no — Haris 2026-11-07)
+    let undo = copy ? AppData.shared.localAct(b) : nil
     request("/api/home/act", body: b) { [weak self] j in
-      guard let j = j else { return done(false, nil, "No connection — try again", nil, []) }
-      if (j["off"] as? Bool) == true { return done(false, nil, "Try again in a moment", nil, []) }
+      guard let j = j else { AppData.shared.putBack(undo); return done(false, nil, "No connection — try again", nil, []) }
+      if (j["off"] as? Bool) == true { AppData.shared.putBack(undo); return done(false, nil, "Try again in a moment", nil, []) }
+      if (j["ok"] as? Bool) != true { AppData.shared.putBack(undo) }
       if copy, let ch = j["changes"] as? [[String: Any]] { AppData.shared.applyLocal(ch) }
       else if let rev = j["rev"] as? Int { self?.lastRev = max(self?.lastRev ?? 0, rev) }
       self?.lastUndo = j["undo"] as? String

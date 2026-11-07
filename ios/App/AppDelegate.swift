@@ -1705,8 +1705,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         if v == due { return }
         // (the card moves at once — the phone's copy changed straight away, the server's answer confirms it: Haris
         //  2026-11-07, it waited ~2 s)
-        let undo = AppData.shared.patch("tasks", id, ["due": v.isEmpty ? NSNull() : v])
-        serverHome.act("due", id, due: v.isEmpty ? nil : v, undo: undo)
+        serverHome.act("due", id, due: v.isEmpty ? nil : v)   // (done on the phone's copy at once — ServerHome.act)
       }, animated: true)
       return true
     case "delete":

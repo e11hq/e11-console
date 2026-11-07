@@ -283,6 +283,19 @@ final class AppData: NSObject, URLSessionDataDelegate {
     if undo != nil { gen += 1; saveSoon(); changed() }
     return undo
   }
+  // an action done on the copy at once, with the same code the server runs (web/appview.js localAct — Haris 2026-11-07:
+  // "all changes instantly, then the server") → how things were, to put back if the server says no; nil: not done here
+  // (an action only the server does, an older brain, or the rules say no — the server's answer then says why)
+  func localAct(_ body: [String: Any]) -> String? {
+    guard copyReady, JSONSerialization.isValidJSONObject(body), let d = try? JSONSerialization.data(withJSONObject: body) else { return nil }
+    let raw = String(decoding: d, as: UTF8.self)
+    var out: String?
+    q.sync { out = self.callFn("(function(raw){ return E11AppView.localAct ? E11AppView.localAct(JSON.parse(raw)) : null; })", [raw]) as? String }
+    guard let o = out, let od = o.data(using: .utf8), let r = try? JSONSerialization.jsonObject(with: od) as? [String: Any], (r["ok"] as? Bool) == true,
+          let undo = r["undo"], let ud = try? JSONSerialization.data(withJSONObject: undo) else { return nil }
+    gen += 1; saveSoon(); changed()
+    return String(decoding: ud, as: UTF8.self)
+  }
   func putBack(_ undo: String?) {
     guard let u = undo, let d = u.data(using: .utf8), let ch = try? JSONSerialization.jsonObject(with: d) as? [[String: Any]] else { return }
     applyLocal(ch)

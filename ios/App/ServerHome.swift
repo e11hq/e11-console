@@ -158,6 +158,15 @@ final class ServerHome {
   // ---------- doing things ----------
   // (undo: the copy changed at once — AppData.patch — put back if the server says no)
   func act(_ act: String, _ id: String, due: String? = nil, clientApproval: String? = nil, trashId: String? = nil, undo: String? = nil) {
+    // (done on the phone's copy at once — the same code as the server's; the server's answer confirms it)
+    var undo = undo
+    if undo == nil, kind != "clients" {
+      var b: [String: Any] = ["act": act, "id": id]
+      if act == "due" { b["due"] = due ?? NSNull() }
+      if let v = clientApproval { b["clientApproval"] = v }
+      if let v = trashId { b["trashId"] = v }
+      undo = AppData.shared.localAct(b)
+    }
     queue.append(Op(op: UUID().uuidString, act: act, id: id, due: due, clientApproval: clientApproval, trashId: trashId, server: serverURL(), me: me, undo: undo))
     keep()
     if let m = model { onModel?(overlay(m)) }   // (shown at once)
