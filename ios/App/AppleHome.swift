@@ -65,7 +65,8 @@ final class HomeVC: UIViewController, UISearchResultsUpdating, UISearchControlle
   override func loadView() { let v = UIView(); v.backgroundColor = .systemGroupedBackground; view = v }
   override func viewDidLoad() {
     super.viewDidLoad()
-    navigationItem.largeTitleDisplayMode = .always
+    // (the big title: Apple's own default — its tab asks for big titles; never ".always", which kept the big title's room
+    //  in the bar while search was open: the gap above the results, Haris 2026-11-07)
     navigationItem.backButtonDisplayMode = .minimal   // (a task over it: just ‹)
     // (the title and the date there before Home first shows — Apple sizes its bar for the big title from the start; with
     //  no title yet it came up small and stayed small)
