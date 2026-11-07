@@ -18,9 +18,18 @@ extension Main: UISearchResultsUpdating, UISearchControllerDelegate {
   func appleHomeSetup(_ h: HomeView) {
     guard APPLE_HOME else { return }
     navigationItem.largeTitleDisplayMode = .always
+    // (the big title as our other pages' — 34 bold, the label colour — Haris 2026-11-07)
+    navigationController?.navigationBar.largeTitleTextAttributes = [.font: UIFont.systemFont(ofSize: 34, weight: .bold), .foregroundColor: UIColor.label]
     h.onAppleTitle = { [weak self] t, d in
       self?.navigationItem.title = t
-      if #available(iOS 26.0, *) { self?.navigationItem.subtitle = d.isEmpty ? nil : d }
+      if #available(iOS 26.0, *) {
+        self?.navigationItem.subtitle = d.isEmpty ? nil : d
+        // (under the big title: the date as our other pages have it — 15 regular, the secondary grey — Haris 2026-11-07)
+        if d.isEmpty { self?.navigationItem.largeAttributedSubtitle = nil } else {
+          var a = AttributedString(d); a.uiKit.font = .systemFont(ofSize: 15); a.uiKit.foregroundColor = .secondaryLabel
+          self?.navigationItem.largeAttributedSubtitle = a
+        }
+      }
     }
     h.onAppleMe = { img in
       guard let img = img else { return }
