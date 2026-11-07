@@ -99,8 +99,6 @@ try:
       check((hsc.get('shrink') or 0) >= 0.99 and (hsc.get('smallTitle') or 0) > 0.9, f'scrolled, Home\'s title shrinks into the small bar {hsc}')
       check(hf.get('searching') is True and (hf.get('searchBarW') or 0) > 250 and (hf.get('results') or 0) > 0, f'Search stretches into a bar with results for "Ford" {hf}')
     check(hfd.get('searching') is False, f'the ✕ closes the search {hfd}')
-    # (measuring only: Apple's parts alone, as Home's search — AppleSample.swift)
-    for k in ('Button', 'Field'): print('apple-only sample', k, 'top:', res.get('appleSample' + k + 'Top'), ' with search:', res.get('appleSample' + k + 'Find'))
     hd = res.get('homeDateNative') or {}
     check(hd.get('sheet') == 'DateSheetVC', f'the date sheet opens (and the app is still running) {hd.get("sheet")}')
     tp, tps, tpc, tpb = res.get('tpageNative') or {}, res.get('tpageScrolledNative') or {}, res.get('tpageCommentsNative') or {}, res.get('tpageBackNative') or {}

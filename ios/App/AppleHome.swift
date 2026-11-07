@@ -3,8 +3,8 @@ import UIKit
 /* Home as its own screen in Apple's tab container (Haris 2026-11-07: "our design as it is, but opening Apple's way instead
    of altering the code"): Home's tab is its own navigation (HomeNav) with Home's own view controller (HomeVC) at its root —
    as Apple builds a tab. Apple's bar is there from the start: the big title (E11 Day) with the date under it, at the top of
-   Home's list, going small as it scrolls — all Apple's, nothing of ours moving the list; your Me pill and 🔍 as Apple's bar
-   items; Apple's search (the results are Home's own cards); a task pushed and popped by Apple. The list, the cards, the
+   Home's list, going small as it scrolls — all Apple's, nothing of ours moving the list; your Me pill as Apple's bar
+   item; Apple's search box under the big title, as E11 Talk's (the results are rows of Home's own list); a task pushed and popped by Apple. The list, the cards, the
    boxes and "+ New task" are Home's own, as they were. My Tasks, the Inbox, Clients and Me: next, one by one. */
 let APPLE_HOME = APPLE_NAV
 
@@ -72,16 +72,10 @@ final class HomeVC: UIViewController, UISearchResultsUpdating, UISearchControlle
     AppleHomeBits.shared.search = s
     navigationItem.searchController = s
     navigationItem.hidesSearchBarWhenScrolling = false
-    if #available(iOS 26.0, *) {
-      // (iOS 26: Apple's own 🔍 in the bar, opening into its search field there; on its own glass apart from the Me pill —
-      //  a fixed space splits the groups, Apple's way)
-      navigationItem.preferredSearchBarPlacement = .integratedButton
-      navigationItem.searchBarPlacementAllowsToolbarIntegration = false
-      navigationItem.rightBarButtonItems = [meItem, .fixedSpace(0), navigationItem.searchBarPlacementBarButtonItem]
-    } else {
-      if #available(iOS 16.0, *) { navigationItem.preferredSearchBarPlacement = .stacked }
-      navigationItem.rightBarButtonItems = [meItem]
-    }
+    // (Apple's search box under the big title, as E11 Talk's lists — nothing set for where it goes: tapped, Apple folds the
+    //  big title away and the results start right under the box. Apple's 🔍 bar button kept the big title's room above
+    //  the results — measured on Apple's own screens, Haris 2026-11-07)
+    navigationItem.rightBarButtonItems = [meItem]
     if let h = Main.shared.homeIfMade { adopt(h) }
   }
   override func viewWillAppear(_ a: Bool) {
@@ -107,16 +101,6 @@ final class HomeVC: UIViewController, UISearchResultsUpdating, UISearchControlle
     h.appleBarHeight = { [weak self] in
       guard let nb = self?.navigationController?.navigationBar, !nb.isHidden, nb.window != nil else { return 0 }
       return nb.frame.height
-    }
-    h.appleProbe = { [weak self] in
-      guard let self = self, let nb = self.navigationController?.navigationBar, let w = self.view.window else { return [:] }
-      let s = AppleHomeBits.shared.search
-      let rv = s?.searchResultsController?.view
-      return ["barFrameY": nb.frame.minY, "barH": nb.frame.height, "barMaxYWin": nb.convert(nb.bounds, to: w).maxY,
-              "searchActive": s?.isActive ?? false,
-              "fieldMaxYWin": s.map { $0.searchBar.convert($0.searchBar.bounds, to: w).maxY } ?? -1,
-              "resultsVCSafeTop": rv?.safeAreaInsets.top ?? -1, "resultsVCY": rv.map { $0.convert($0.bounds, to: w).minY } ?? -1,
-              "homeVCSafeTop": self.view.safeAreaInsets.top]
     }
     h.useAppleTop()
     setContentScrollView(h.appleScroll, for: .top)
