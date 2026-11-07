@@ -80,6 +80,8 @@ final class TaskVC: UIViewController {
   override func viewWillAppear(_ a: Bool) {
     super.viewWillAppear(a)
     navigationController?.setNavigationBarHidden(false, animated: a)
+    // (Details' edge swipe goes back; the paging scroller waits for it — on Comments it doesn't start, so the scroller takes it)
+    if let g = navigationController?.interactivePopGestureRecognizer { page.pagerWaits(for: g) }
   }
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()

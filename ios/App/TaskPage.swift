@@ -90,7 +90,8 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   var cornerMenu: UIMenu? { moreBtn.menu }
   var cornerItems: [CornerMenuItem] = []
   var onMenu: (() -> Void)?
-  var feed: CommentsFeed?, threadFeed: CommentsFeed?
+  var feed: CommentsFeed?
+  var threadFeed: CommentsFeed? { didSet { updatePager() } }
   // the description's editor (DescEditor.swift)
   let descView = PasteTextView()   // (a file copied in the app pastes in as its 📎, its card under the description)
   // (the description as it's read — view only — links tappable)
@@ -106,6 +107,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private func holdForDesc() {
     for b in blocks { b.isUserInteractionEnabled = !editingDesc || b === descBox }
     seg.isEnabled = !editingDesc
+    updatePager()
   }
   let mentionBox = UIStackView()
   var onCornerChange: (() -> Void)?
@@ -247,7 +249,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private let dot = UIView(), client = UILabel()
   let seg = UISegmentedControl(items: ["Details", "Comments"])
   // (a task in the Trash, opened view only: its Details — Haris 2026-11-06)
-  var trashId: String? { didSet { seg.setEnabled(trashId == nil, forSegmentAt: 1) } }
+  var trashId: String? { didSet { seg.setEnabled(trashId == nil, forSegmentAt: 1); updatePager(); setNeedsLayout() } }
   let commentsHost = UIView()                          // the comments screen goes in here
   private let fab = UIButton(type: .system)
   private let spinner = UIActivityIndicatorView(style: .medium)
@@ -263,7 +265,17 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     scroll.keyboardDismissMode = .interactive
     scroll.delegate = self
     scroll.automaticallyAdjustsScrollIndicatorInsets = false   // (the scroll bar starts under the bar from the start — the standard)
-    addSubview(scroll)
+    if APPLE_NAV {
+      // iPhone's own paging scroller (Haris 2026-11-07): Details and Comments side by side — Apple's movement
+      pager.isPagingEnabled = true
+      pager.showsHorizontalScrollIndicator = false; pager.showsVerticalScrollIndicator = false
+      pager.contentInsetAdjustmentBehavior = .never
+      pager.isDirectionalLockEnabled = true
+      pager.scrollsToTop = false
+      pager.delegate = self
+      addSubview(pager)
+      pager.addSubview(scroll)
+    } else { addSubview(scroll) }
     scroll.addSubview(content)
     // (the keyboard: the page scrolls up past it, so where you're writing in the description stays in sight — Haris
     //  2026-11-02)
@@ -272,7 +284,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     NotificationCenter.default.addObserver(forName: UIResponder.keyboardDidShowNotification, object: nil, queue: .main) { [weak self] _ in self?.caretIntoView() }
     commentsHost.isHidden = true
     commentsHost.clipsToBounds = true
-    addSubview(commentsHost)
+    if APPLE_NAV { pager.addSubview(commentsHost) } else { addSubview(commentsHost) }
     addSubview(barBox)
     if #available(iOS 26.0, *) {
       let i = UIScrollEdgeElementContainerInteraction()
@@ -298,7 +310,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     seg.addAction(UIAction { [weak self] _ in
       guard let self = self else { return }
       UISelectionFeedbackGenerator().selectionChanged()
-      self.setTab(self.seg.selectedSegmentIndex == 1 ? "comments" : "details", tell: true)
+      self.setTab(self.seg.selectedSegmentIndex == 1 ? "comments" : "details", tell: true, slide: APPLE_NAV)
     }, for: .valueChanged)
     var fc: UIButton.Configuration
     if #available(iOS 26.0, *) { fc = .glass() } else { fc = .gray(); fc.cornerStyle = .capsule }
@@ -321,7 +333,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     titleView.textContainer.lineFragmentPadding = 0
     titleView.returnKeyType = .done
     setUpDesc()
-    addTabSwipe()
+    if !APPLE_NAV { addTabSwipe() }
     applyLook()
   }
   required init?(coder: NSCoder) { fatalError() }
@@ -355,7 +367,20 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   override func layoutSubviews() {
     super.layoutSubviews()
     let W = bounds.width, top = safeTop
-    place(scroll)
+    if APPLE_NAV {
+      let H = bounds.height
+      if pager.frame != bounds { pager.frame = bounds }
+      for (v, x) in [(scroll as UIView, CGFloat(0)), (commentsHost, W)] {
+        if v.bounds.size != bounds.size { v.bounds = CGRect(origin: .zero, size: bounds.size) }
+        v.center = CGPoint(x: x + W / 2, y: H / 2)
+      }
+      let size = CGSize(width: trashId == nil ? W * 2 : W, height: H)
+      if pager.contentSize != size { pager.contentSize = size }
+      if !pager.isDragging && !pager.isDecelerating && !pagerAuto {
+        let x = tab == "comments" ? W : 0
+        if pager.contentOffset != CGPoint(x: x, y: 0) { pager.contentOffset = CGPoint(x: x, y: 0) }
+      }
+    } else { place(scroll) }
     barBox.frame = CGRect(x: 0, y: 0, width: W, height: barBottom)
     frostReach.frame = CGRect(x: 0, y: 0, width: W, height: barBottom)   // (the firm frost: no reach below the line)
     back.frame = CGRect(x: 16, y: top, width: 44, height: 44)
@@ -367,7 +392,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     dot.frame = CGRect(x: gx, y: top + 22 - 5, width: 10, height: 10)
     client.frame = CGRect(x: dot.isHidden ? gx : gx + 18, y: top, width: cw, height: 44)
     seg.frame = CGRect(x: 16, y: rowBottom + 8, width: W - 32, height: 32)
-    place(commentsHost)
+    if !APPLE_NAV { place(commentsHost) }
     let fs = fab.sizeThatFits(CGSize(width: 300, height: 48))
     let bottom = max(safeAreaInsets.bottom, window?.safeAreaInsets.bottom ?? 0)
     fab.frame = CGRect(x: W - 16 - fs.width, y: bounds.height - bottom - 8 - 48, width: fs.width, height: 48)
@@ -387,6 +412,22 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     seg.selectedSegmentIndex = t == "comments" ? 1 : 0
     let c = t == "comments"
     if c { endEditing(true) } else { edgeScroll(scroll) }
+    if APPLE_NAV {
+      let x = c ? bounds.width : 0
+      if pager.isDragging || pager.isDecelerating { }   // (the swipe itself is taking it there)
+      else if abs(pager.contentOffset.x - x) > 0.5 && slide && window != nil && bounds.width > 0 {
+        // (a tap on Details · Comments, or the app moving it: Apple's own scroll there)
+        pagerAuto = true
+        scroll.isHidden = false; commentsHost.isHidden = false
+        pager.setContentOffset(CGPoint(x: x, y: 0), animated: true)
+      } else {
+        if abs(pager.contentOffset.x - x) > 0.5 { pager.contentOffset = CGPoint(x: x, y: 0) }
+        settlePages()
+      }
+      if tell { onTab?(t) }
+      onPageMove?(pagerFraction)
+      return
+    }
     // (a swipe: the tabs slide sideways, Comments in from the right, Details back in from the left)
     if slide && was != t {
       let W = bounds.width, inV: UIView = c ? commentsHost : scroll, outV: UIView = c ? scroll : commentsHost
@@ -442,6 +483,62 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     return abs(v.x) > abs(v.y) * 1.2
   }
   func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith o: UIGestureRecognizer) -> Bool { g === tabSwipe }
+  // ---------- Details ↔ Comments in iPhone's own paging scroller (APPLE_NAV) ----------
+  // Apple moves the pages (the swipe, its speed, the bounce, a tap's scroll); Details · Comments follows. On Comments a
+  // swipe right — from the edge too — goes to Details; on Details the edge swipe goes back (Haris 2026-11-07)
+  let pager = UIScrollView()
+  private var pagerAuto = false        // (moving after a tap / by the app)
+  private var dragFrom: String?
+  var onPeek: ((String) -> Void)?      // a swipe starting on this tab: the comments made ready, the keyboard put away
+  var onPageMove: ((CGFloat) -> Void)? // 0 Details … 1 Comments, as it moves: the comment box goes with the comments
+  private var pagerFraction: CGFloat { bounds.width > 0 ? max(0, min(1, pager.contentOffset.x / bounds.width)) : (tab == "comments" ? 1 : 0) }
+  func pagerWaits(for g: UIGestureRecognizer) { if APPLE_NAV { pager.panGestureRecognizer.require(toFail: g) } }
+  private func updatePager() { if APPLE_NAV { pager.isScrollEnabled = trashId == nil && threadFeed == nil && !editingDesc } }
+  private func commentsList() -> UIScrollView { threadFeed?.scroll ?? feed?.scroll ?? scroll }
+  // at rest only the page showing is there (as before: hidden behind, out of taps and VoiceOver)
+  private func settlePages() {
+    let c = tab == "comments"
+    scroll.isHidden = c; commentsHost.isHidden = !c
+    fab.alpha = c ? 0 : 1
+    seg.selectedSegmentIndex = c ? 1 : 0
+    edgeScroll(c ? commentsList() : scroll)
+  }
+  func scrollViewDidScroll(_ sv: UIScrollView) {
+    guard APPLE_NAV, sv === pager else { return }
+    let f = pagerFraction
+    fab.alpha = 1 - f
+    onPageMove?(f)
+    if !pagerAuto {
+      let i = f > 0.5 ? 1 : 0
+      if seg.selectedSegmentIndex != i { seg.selectedSegmentIndex = i; edgeScroll(i == 1 ? commentsList() : scroll) }
+    }
+  }
+  func scrollViewWillBeginDragging(_ sv: UIScrollView) {
+    guard APPLE_NAV, sv === pager else { return }
+    pagerAuto = false
+    dragFrom = tab
+    endEditing(true)
+    scroll.isHidden = false; commentsHost.isHidden = false
+    onPeek?(tab)
+    edgeScroll(tab == "comments" ? commentsList() : scroll)
+    onPageMove?(pagerFraction)
+  }
+  func scrollViewDidEndDragging(_ sv: UIScrollView, willDecelerate d: Bool) { if APPLE_NAV, sv === pager, !d { pagerSettled() } }
+  func scrollViewDidEndDecelerating(_ sv: UIScrollView) { if APPLE_NAV, sv === pager { pagerSettled() } }
+  func scrollViewDidEndScrollingAnimation(_ sv: UIScrollView) {
+    guard APPLE_NAV, sv === pager else { return }
+    pagerAuto = false
+    settlePages()
+  }
+  private func pagerSettled() {
+    let t = pager.contentOffset.x > bounds.width / 2 ? "comments" : "details"
+    let from = dragFrom; dragFrom = nil
+    if t != tab { UISelectionFeedbackGenerator().selectionChanged(); setTab(t, tell: true) }
+    else {
+      settlePages()
+      if from == "details" { onTab?("details") }   // (looked at Comments, came back: the comment box put away again)
+    }
+  }
   func setComments(_ n: Int) { seg.setTitle(n > 0 ? "Comments \(n)" : "Comments", forSegmentAt: 1) }
 
   // ---------- drawing the model ----------

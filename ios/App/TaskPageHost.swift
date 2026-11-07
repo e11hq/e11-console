@@ -193,6 +193,8 @@ extension Main {
   }
   // iPhone's own swipe back (AppleNav): may it start? (a comment written and not sent: asked first, the page stays)
   func taskSwipeMayGo(_ p: TaskPage) -> Bool {
+    // (on Comments, a swipe from the edge goes to Details — the page's own paging scroller takes it: Haris 2026-11-07)
+    if p.tab == "comments" && p.threadFeed == nil { return false }
     if let u = composeIfMade?.unsent(task: p.taskId) { DispatchQueue.main.async { self.askUnsent(p, u) }; return false }
     p.endEditing(true)
     composeIfMade?.text.resignFirstResponder()
@@ -370,6 +372,16 @@ extension Main {
     p.onCornerChange = { [weak self] in self?.updateCornerNow() }
     // (in a reply thread, only the swipe from the edge goes back — not a swipe across the page: Haris 2026-11-04)
     p.onSwipeToDetails = { [weak self, weak p] in guard let self = self, let p = p, p.threadFeed == nil else { return }; self.toDetailsFromComments(p) }
+    // Details ↔ Comments in iPhone's paging scroller: a swipe from Details readies the comments and their box; the box
+    // moves with the comments page
+    p.onPeek = { [weak self, weak p] t in
+      guard let self = self, let p = p else { return }
+      if t == "details" { self.taskShowComments(p, focus: "") } else { self.composeIfMade?.text.resignFirstResponder() }
+    }
+    p.onPageMove = { [weak self, weak p] f in
+      guard let self = self, let p = p, let c = self.composeIfMade, c.taskId == p.taskId, c.superview === self.layerOf(p) else { return }
+      c.transform = CGAffineTransform(translationX: (1 - f) * p.bounds.width, y: 0)
+    }
     p.onOpenFiles = { [weak self] list, i in self?.openFiles(list, at: i) }
     p.onFilesShown = { [weak self] paths in self?.loadLinkStates(paths) }
     p.onFileAction = { [weak self, weak p] f, what in
