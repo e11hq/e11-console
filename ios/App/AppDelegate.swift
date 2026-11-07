@@ -1194,7 +1194,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       let b = t["badge"] as? String ?? ""
       let v = t["v"] as? String ?? ""
       item.badgeValue = nil
-      if t["photo"] == nil {
+      // (the Me tab is your photo — paintMeTab; coming back from another app the bar was drawn again and Me got its plain
+      //  icon over your photo: Haris 2026-11-07)
+      if t["photo"] == nil && v != "me" {
         let key = "\(v)|\(b)|\(tabBar.traitCollection.userInterfaceStyle.rawValue)"
         if tabBadgeKey[i] != key {
           tabBadgeKey[i] = key
