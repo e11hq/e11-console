@@ -93,7 +93,8 @@ try:
     hsc = res.get('homeScrolledNative') or {}; hf = res.get('homeFindNative') or {}; hfd = res.get('homeFindDoneNative') or {}
     if hsc.get('apple'):
       # (Apple's bar: its big title shrinks by itself; the list has scrolled)
-      check(0 < (hsc.get('appleBarH') or 0) < 70, f"scrolled, Apple's big title gone up into its small bar ({hsc.get('appleBarH')} pt)")
+      # (the bar holds Apple's search box under the title too, as E11 Talk's: scrolled, it's the big title's height less)
+      check(0 < (hsc.get('appleBarH') or 0) < (hn.get('appleBarH') or 0) - 40, f"scrolled, Apple's big title gone up into its small bar ({hn.get('appleBarH')} → {hsc.get('appleBarH')} pt)")
       check(hf.get('searching') is True and (hf.get('results') or 0) > 0, f'Search finds "Ford" {hf}')
     else:
       check((hsc.get('shrink') or 0) >= 0.99 and (hsc.get('smallTitle') or 0) > 0.9, f'scrolled, Home\'s title shrinks into the small bar {hsc}')
