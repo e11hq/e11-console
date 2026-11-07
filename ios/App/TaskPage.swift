@@ -61,7 +61,7 @@ final class ServerTask {
   }
 }
 
-final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate, UITextViewDelegate {
+final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDelegate, UITextViewDelegate {
   let taskId: String
   var model: [String: Any]?
   var people: [String: [String: Any]] = [:]
@@ -77,8 +77,23 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   var light = LAST_LIGHT { didSet { applyLook() } }
   private(set) var tab = "details"
 
-  let scroll = UIScrollView()
-  private let content = UIView()
+  // Details: Apple's list (step 2, Haris 2026-11-08) — each section, row group, note and heading a cell of iPhone's own
+  // collection list; Apple places them and animates what comes, goes and moves (our own placing and change animation
+  // taken out)
+  let scroll: UICollectionView = {
+    var cfg = UICollectionLayoutListConfiguration(appearance: .plain)
+    cfg.showsSeparators = false
+    cfg.backgroundColor = .clear
+    let layout = UICollectionViewCompositionalLayout { _, env in NSCollectionLayoutSection.list(using: cfg, layoutEnvironment: env) }
+    let cv = UICollectionView(frame: .zero, collectionViewLayout: layout)
+    cv.backgroundColor = .clear
+    cv.allowsSelection = false
+    return cv
+  }()
+  private var listDS: UICollectionViewDiffableDataSource<Int, String>?
+  private var listKeys: [String] = []
+  private var listViews: [String: UIView] = [:]
+  private var listGeo: [String: PageCell.Geo] = [:]
   private let barBox = UIView()                        // what the frost edge sits under (the buttons and the switch)
   var barBoxView: UIView { barBox }
   private var edgeHook: AnyObject?
@@ -239,12 +254,9 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }
   private func relayAnimated() { UIView.animate(withDuration: 0.4, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) { self.layoutContent() } }
   func showFiles() {
-    guard let b = filesBlock, tab == "details" else { return }
-    // (the Files block's bottom just above the bottom edge; never past the end)
-    let top = -scroll.adjustedContentInset.top
-    let end = max(top, scroll.contentSize.height + scroll.adjustedContentInset.bottom - scroll.bounds.height)
-    let want = b.convert(b.bounds, to: scroll).maxY + 20 + scroll.adjustedContentInset.bottom - scroll.bounds.height
-    scroll.setContentOffset(CGPoint(x: 0, y: min(max(want, top), end)), animated: true)
+    guard let b = filesBlock, tab == "details", let k = listViews.first(where: { $0.value === b })?.key, let ip = listDS?.indexPath(for: k) else { return }
+    // (the Files block's bottom just above the bottom edge — Apple's list scrolls it there)
+    scroll.scrollToItem(at: ip, at: .bottom, animated: true)
   }
   private let back = HomeGlass(), more = HomeGlass()
   private let moreBtn = UIButton(type: .custom)        // (over the ••• circle: iPhone's own menu)
@@ -278,7 +290,10 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       addSubview(pager)
       pager.addSubview(scroll)
     } else { addSubview(scroll) }
-    scroll.addSubview(content)
+    let reg = UICollectionView.CellRegistration<PageCell, String> { [weak self] cell, _, key in
+      cell.host(self?.listViews[key], self?.listGeo[key] ?? PageCell.Geo(x: 0, w: 0, h: 1, gap: 0))
+    }
+    listDS = UICollectionViewDiffableDataSource<Int, String>(collectionView: scroll) { cv, ip, key in cv.dequeueConfiguredReusableCell(using: reg, for: ip, item: key) }
     // (the keyboard: the page scrolls up past it, so where you're writing in the description stays in sight — Haris
     //  2026-11-02)
     NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: .main) { [weak self] n in self?.keyboardMoved(n) }
@@ -573,16 +588,17 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // (built and laid out with no animation at all — drawn while something else animates (a sheet going, the app coming
     //  back), every new row was carried along and grew from nothing: the rows sliding. Haris's reading, 2026-11-03.
     //  Then only the page's own change animation, from where things were.)
-    pendingBefore = nil
+    listHold = true
     UIView.performWithoutAnimation {
       CATransaction.begin(); CATransaction.setDisableActions(true)
       rebuild()
       setNeedsLayout(); layoutIfNeeded()
       CATransaction.commit()
     }
-    if let b = pendingBefore { pendingBefore = nil; animateFrom(b) }
+    // (then Apple's list told what came, went, moved or changed — with its own animation once the page is on screen)
+    listHold = false
+    layoutContent()
   }
-  private var pendingBefore: [String: Kept]?
   // Only the sections that changed are new (Haris 2026-11-03): each new section is matched with the one before it by
   // what it is (its key) — when it shows just the same, the one already on the page stays and the new one is dropped.
   // The ones holding the page's own pieces (the title, the description, the file rows) are always the new ones: those
@@ -597,7 +613,7 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }
   private func keepUnchanged(_ old: [UIView]) {
     var pool: [String: [UIView]] = [:]
-    for b in old where !holdsOwnPieces(b) && b.superview === content { pool[blockKey(b), default: []].append(b) }
+    for b in old where !holdsOwnPieces(b) { pool[blockKey(b), default: []].append(b) }
     var kept = Set<ObjectIdentifier>()
     for (i, b) in blocks.enumerated() where !holdsOwnPieces(b) {
       let k = blockKey(b)
@@ -697,10 +713,8 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // (on screen already: what changes comes in, goes out and moves smoothly — Haris 2026-11-02)
     // (not while it's still coming in: its first drawings — from what was kept, then the copy — are put in as they are;
     //  animating them slid the rows down as the page opened, Haris 2026-11-02)
-    let live = window != nil && drawnOnce && !isHidden && Date().timeIntervalSince(openedAt) > 0.8
-    let before = live ? pageSnapshot() : [:]
-    defer { drawnOnce = true; if live { pendingBefore = before } }
-    let keepY = scroll.contentOffset.y
+    listLive = window != nil && drawnOnce && !isHidden && Date().timeIntervalSince(openedAt) > 0.8
+    defer { drawnOnce = true }
     let typing = titleView.isFirstResponder
     // (the sections as they are now — the ones that come out the same are kept as they are, Haris 2026-11-03)
     let oldBlocks = blocks
@@ -899,11 +913,9 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       blocks.append(group(lines))
     }
     keepUnchanged(oldBlocks)
-    blocks.forEach { if $0.superview !== content { content.addSubview($0) } }
     // Mark complete: only when this person may complete it
     if let c = m["complete"] as? [String: Any], (c["show"] as? Bool) == true { fab.isHidden = false } else { fab.isHidden = true }
     layoutContent()
-    scroll.contentOffset.y = min(max(-scroll.contentInset.top, keepY), max(-scroll.contentInset.top, scroll.contentSize.height - scroll.bounds.height + scroll.contentInset.bottom))
   }
   // Turn off link, or Turn on link (blue, open lock) when it's off
   private func linkAction(_ f: [String: Any]) -> UIAction {
@@ -926,31 +938,63 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     }
     return UIMenu(title: f["name"] as? String ?? "", children: items)
   }
+  // each section's place in the list: across the page or on its edge, its height and the room after it (as the page had
+  // them); the list told only when something really changed
+  private var listLive = false, listHold = false
   private func layoutContent() {
     let W = bounds.width, M = TaskPage.M
+    guard W > 0, !listHold else { return }
     placeBands()
     holdForDesc()
-    var y: CGFloat = 4
+    var keys: [String] = [], views: [String: UIView] = [:], geo: [String: PageCell.Geo] = [:], seen: [String: Int] = [:]
     for (k, b) in blocks.enumerated() {
       // (rows and bands go right across; the files row from the page edge to the screen's; the rest on the page edge)
       let full = b is PageGroup || b is PageBand
       let x: CGFloat = full ? 0 : M, w = full ? W : (b === descStrip ? W - M : W - 2 * M)
-      let h: CGFloat
-      if b === titleView { h = ceil(titleView.sizeThatFits(CGSize(width: w, height: .greatestFiniteMagnitude)).height); y += 2 }
+      var h: CGFloat
+      if b === titleView { h = ceil(titleView.sizeThatFits(CGSize(width: w, height: .greatestFiniteMagnitude)).height) }
       else if b is PageBand { h = 8 }
-      else { b.frame.size.width = w; b.setNeedsLayout(); b.layoutIfNeeded(); h = b.systemLayoutSizeFitting(CGSize(width: w, height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height }
-      b.frame = CGRect(x: x, y: y, width: w, height: h)
-      // (its insides laid out again at its real height: a new block had been laid out at no height — read at that moment,
-      //  the Files row looked lower than it is, so it was "moved" up and slid back down, a jump at every change —
-      //  Haris's film 2026-11-02 21:56)
-      if !(b === titleView) && !(b is PageBand) { b.setNeedsLayout(); b.layoutIfNeeded() }
+      else {
+        if b.bounds.width != w { b.bounds.size.width = w }
+        b.setNeedsLayout(); b.layoutIfNeeded()
+        h = b.systemLayoutSizeFitting(CGSize(width: w, height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height
+      }
+      h = ceil(h)
       let next = k + 1 < blocks.count ? blocks[k + 1] : nil
-      y += h + (b is PageBand || next is PageBand ? (b is PageBand ? 10 : 6) : b.tag == 7 ? 4 : b is PageGroup ? 4 : 10)
+      let gap: CGFloat = (b is PageBand || next is PageBand ? (b is PageBand ? 10 : 6) : b.tag == 7 ? 4 : b is PageGroup ? 4 : 10)
+      let base = listKey(b, next: next)
+      let n = seen[base, default: 0]; seen[base] = n + 1
+      let key = n == 0 ? base : base + "#\(n)"
+      keys.append(key); views[key] = b
+      geo[key] = PageCell.Geo(x: x, w: w, h: h, gap: gap, top: b === titleView ? 2 : 0)
     }
     let bottom = max(safeAreaInsets.bottom, 20) + (fab.isHidden ? 16 : 72)
-    content.frame = CGRect(x: 0, y: 0, width: W, height: y)
-    scroll.contentSize = CGSize(width: W, height: y)
-    scroll.contentInset.bottom = max(bottom, coverNow() + 16)
+    let inset = max(bottom, coverNow() + 16)
+    if scroll.contentInset.bottom != inset { scroll.contentInset.bottom = inset }
+    // (what changed: the order, a section put in place of another under the same key, or a height)
+    let changed = keys.filter { k in listViews[k] !== views[k] || listGeo[k] != geo[k] }
+    let same = keys == listKeys && changed.isEmpty
+    listViews = views; listGeo = geo
+    if same { return }
+    let order = keys != listKeys
+    listKeys = keys
+    guard let ds = listDS else { return }
+    var snap = NSDiffableDataSourceSnapshot<Int, String>()
+    snap.appendSections([0]); snap.appendItems(keys, toSection: 0)
+    let had = Set(ds.snapshot().itemIdentifiers)
+    snap.reconfigureItems(changed.filter { had.contains($0) })
+    // (inside an animation of its own — the description growing — Apple's list goes along with it)
+    let animated = order ? listLive : (listLive || UIView.inheritedAnimationDuration > 0)
+    ds.apply(snap, animatingDifferences: animated && window != nil)
+  }
+  // a section's key: what it is (the title, the description, a heading's words, a row group by its first row…); a band by
+  // what comes after it, so it goes with it
+  private func listKey(_ b: UIView, next: UIView?) -> String {
+    if b === titleView { return "title" }
+    if b is DescBox { return "desc" }
+    if b === descStrip { return "dstrip" }
+    if b is PageBand { return "band>" + (next.map { listKey($0, next: nil) } ?? "end") }
+    return blockKey(b)
   }
   var kbCover: CGFloat = 0
   private func keyboardMoved(_ n: Notification) {
@@ -996,7 +1040,6 @@ final class TaskPage: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       if heading || isDesc, let prev = out.last, !(prev is PageBand), prev !== titleView {
         if used == bands.count { bands.append(PageBand()) }
         let band = bands[used]; used += 1
-        if band.superview !== content { content.addSubview(band) }
         out.append(band)
       }
       out.append(b)
@@ -1732,6 +1775,35 @@ final class PaddedLabel: UILabel {
 }
 
 // the task page's pieces: a set of rows right across the page, and the grey band between sections
+// one section of a task's Details in Apple's list: the section, placed across the page or on its edge, with the room
+// after it as the page had it
+final class PageCell: UICollectionViewListCell {
+  struct Geo: Equatable { var x: CGFloat, w: CGFloat, h: CGFloat, gap: CGFloat, top: CGFloat = 0 }
+  private weak var hosted: UIView?
+  private var geo = Geo(x: 0, w: 0, h: 1, gap: 0)
+  func host(_ v: UIView?, _ g: Geo) {
+    geo = g
+    backgroundConfiguration = .clear()
+    if hosted !== v, let old = hosted, old.superview === contentView { old.removeFromSuperview() }
+    hosted = v
+    // (put in place at once, with no animation: drawn inside the list's own animation it grew from nothing)
+    if let v = v, v.superview !== contentView {
+      UIView.performWithoutAnimation { v.transform = .identity; contentView.addSubview(v); v.frame = CGRect(x: g.x, y: g.top, width: g.w, height: g.h) }
+    }
+    setNeedsLayout()
+  }
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    guard let v = hosted, v.superview === contentView else { return }
+    let f = CGRect(x: geo.x, y: geo.top, width: geo.w, height: geo.h)
+    if v.frame != f { v.frame = f }
+  }
+  override func preferredLayoutAttributesFitting(_ a: UICollectionViewLayoutAttributes) -> UICollectionViewLayoutAttributes {
+    let r = super.preferredLayoutAttributesFitting(a)
+    r.size.height = geo.top + geo.h + geo.gap
+    return r
+  }
+}
 final class PageGroup: UIStackView {}
 final class PageHeading: UIStackView {}
 final class PageBand: UIView {
@@ -1796,39 +1868,8 @@ final class DescBox: UIView {
 }
 
 
-// ---------- changes on the page, smooth (Haris, 2026-11-02: "everything added by another person while the page is open
-//  comes in or goes out smoothly") ----------
-// Every row, heading, note and the rest has a key (layer.name "k:…": the row's name, a subtask's or checklist item's
-// id, a heading's words…). Before the page is drawn again each one's place and look is kept; after, one that's new
-// fades in once the others have made room, one that's gone fades out where it was, one that moved slides there, and one
-// whose words or colours changed cross-fades to the new look. Your own taps get the same.
+// ---------- changes on the page, smooth (Haris, 2026-11-02 — now Apple's own: Details is Apple's list, 2026-11-08) ----
 extension TaskPage {
-  struct Kept { let frame: CGRect; let sig: String; let snap: UIView? }
-  private static let moveOnly: Set<String> = ["fstrip", "dstrip", "row:Assignees"]   // (these animate their own insides)
-  // the keyed views now (the outermost ones: a key's insides are its own)
-  func keyedViews() -> [(String, UIView)] {
-    var out: [(String, UIView)] = [], seen: [String: Int] = [:]
-    func give(_ v: UIView, _ k: String) -> String { let n = seen[k, default: 0]; seen[k] = n + 1; return n == 0 ? k : k + "#\(n)" }
-    func walk(_ v: UIView) {
-      if v.isHidden && !(v is UIStackView) { return }
-      var key: String?
-      if let n = v.layer.name, n.hasPrefix("k:") { key = String(n.dropFirst(2)) }
-      else if v === titleView { key = "title" } else if v is DescBox { key = "desc" }
-      else if v is FileStrip { key = v.superview is PageGroup || v.superview?.superview is PageGroup ? "fstrip" : "dstrip" }
-      else if v is PageHeading { key = "hdr:" + (TaskPage.firstText(v) ?? "").components(separatedBy: " · ")[0] }
-      else if v is TaskRow { key = "row:" + (TaskPage.firstText(v) ?? "") }
-      else if v is PageBand { key = "band" }
-      if let k = key { out.append((give(v, k), v)); return }
-      v.subviews.forEach(walk)
-    }
-    content.subviews.forEach(walk)
-    // (a separator line or band: keyed by what comes after it, so it moves with it)
-    var fixed: [(String, UIView)] = []
-    for (i, kv) in out.enumerated() {
-      if kv.0.hasPrefix("band") || kv.0.hasPrefix("sep") { fixed.append((kv.0.components(separatedBy: "#")[0] + ">" + (i + 1 < out.count ? out[i + 1].0 : "end"), kv.1)) } else { fixed.append(kv) }
-    }
-    return fixed
-  }
   static func firstText(_ v: UIView) -> String? {
     if let l = v as? UILabel, let t = l.text, !t.isEmpty { return t }
     for s in v.subviews { if let t = firstText(s) { return t } }
@@ -1872,72 +1913,6 @@ extension TaskPage {
     }
     walk(v)
     return out
-  }
-  func pageSnapshot() -> [String: Kept] {
-    var out: [String: Kept] = [:]
-    let seen = scroll.bounds.insetBy(dx: 0, dy: -200)
-    for (k, v) in keyedViews() {
-      let f = v.convert(v.bounds, to: content)
-      // (only what's in sight, or nearly: pictures of the rest aren't needed)
-      out[k] = Kept(frame: f, sig: TaskPage.sig(v), snap: f.intersects(seen) ? v.snapshotView(afterScreenUpdates: false) : nil)
-    }
-    return out
-  }
-  func animateFrom(_ before: [String: Kept]) {
-    guard !before.isEmpty else { return }
-    layoutIfNeeded()
-    let now = keyedViews()
-    let seen = scroll.bounds.insetBy(dx: 0, dy: -200)
-    var made = false
-    var keys = Set<String>()
-    // (only when something really came, went or changed its height do the others slide: the same rows at the same sizes
-    //  are drawn where they are — read part way through being laid out, a row looked moved and slid up and back, a jump
-    //  at every change and on coming back to the app, Haris 2026-11-02 22:54)
-    let nowKeys = Set(now.map { $0.0 })
-    let structural = nowKeys != Set(before.keys) || now.contains { k, v in
-      guard let o = before[k] else { return true }
-      return abs(o.frame.height - v.bounds.height) > 0.5
-    }
-    for (k, v) in now {
-      keys.insert(k)
-      let nf = v.convert(v.bounds, to: content)
-      guard let o = before[k] else {
-        // new: once the others have made room, it fades in
-        guard nf.intersects(seen) else { continue }
-        made = true
-        v.alpha = 0
-        UIView.animate(withDuration: 0.3, delay: 0.22, options: [.curveEaseOut, .allowUserInteraction]) { v.alpha = 1 }
-        continue
-      }
-      let dy = o.frame.minY - nf.minY
-      let moved = structural && abs(dy) > 0.5 && (nf.intersects(seen) || o.frame.intersects(seen))
-      let base = k.components(separatedBy: "#")[0]
-      let changed = o.sig != TaskPage.sig(v) && !TaskPage.moveOnly.contains(base) && !base.hasPrefix("band") && !base.hasPrefix("sep")
-      if moved {
-        made = true
-        v.transform = CGAffineTransform(translationX: 0, y: dy)
-        UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) { v.transform = .identity }
-      }
-      if changed, let snap = o.snap, nf.intersects(seen) {
-        made = true
-        // (the old look over the new, fading away, moving with it)
-        snap.frame = CGRect(x: nf.minX, y: o.frame.minY, width: o.frame.width, height: o.frame.height)
-        snap.isUserInteractionEnabled = false
-        content.addSubview(snap)
-        v.alpha = 0
-        UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) { snap.frame.origin.y = nf.minY }
-        UIView.animate(withDuration: 0.25, delay: 0, options: [.curveEaseInOut, .allowUserInteraction], animations: { snap.alpha = 0; v.alpha = 1 }) { _ in snap.removeFromSuperview() }
-      }
-    }
-    // gone: fades out where it was
-    for (k, o) in before where !keys.contains(k) {
-      guard let snap = o.snap, o.frame.intersects(seen) else { continue }
-      made = true
-      snap.frame = o.frame; snap.isUserInteractionEnabled = false
-      content.addSubview(snap)
-      UIView.animate(withDuration: 0.25, delay: 0, options: [.curveEaseIn, .allowUserInteraction], animations: { snap.alpha = 0 }) { _ in snap.removeFromSuperview() }
-    }
-    _ = made
   }
 }
 
