@@ -130,7 +130,9 @@ follows it (Don't 9); don't change any of it without Haris. Project doc `claude/
   it (our 34 bold / 15 grey, set on Apple's bar), shrinking to the small title as the list scrolls — all Apple's.
 - Search: Apple's own search bar under the big title, always in the bar (UISearchController, results in Home's own list),
   stuck under the bar as it scrolls. No box of ours, no 🔍 button.
-- Bar buttons: Apple's own bar buttons with a picture of ours — your photo; E11 Talk's bubble + "Talk".
+- Bar buttons: Apple's own bar buttons with a picture of ours — your photo; E11 Talk's bubble + "Talk" in the bar's ink
+  (white in dark, black in light — no blue), the same room left and right of the two as above and below (commit e3f7099,
+  after build 1550 — part of the lock, Haris 2026-11-08).
 - The list: our cards in Apple's list (UICollectionView list), Apple's swipe actions; Apple's own frost.
 - Opening a page from it: Apple's push; **the tab bar is hidden with Apple's tab bar call once the page has arrived**,
   and comes back as the slide back begins — never "hide the bottom bar when pushed", and nothing told to the tab bar at
