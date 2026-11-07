@@ -161,7 +161,10 @@ final class TaskVC: UIViewController {
   }
   override func viewWillAppear(_ a: Bool) {
     super.viewWillAppear(a)
-    navigationController?.setNavigationBarHidden(false, animated: a)
+    // (Apple's bar shown over the task — only where it was hidden, the app's own navigation; Home's has it always and
+    //  isn't told again: told during the slide back it drew its search box anew, the box's glass coming in at the end —
+    //  Haris 2026-11-07, E11 Talk never does it)
+    if navigationController?.isNavigationBarHidden == true { navigationController?.setNavigationBarHidden(false, animated: a) }
     // (Details' edge swipe goes back; the paging scroller waits for it — on Comments it doesn't start, so the scroller takes it)
     // (and on Details the swipe back from anywhere too, as before the paging — Haris 2026-11-07)
     if let g = navigationController?.interactivePopGestureRecognizer { page.pagerWaits(for: g) }

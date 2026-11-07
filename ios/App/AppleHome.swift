@@ -84,10 +84,6 @@ final class HomeVC: UIViewController, UISearchResultsUpdating, UISearchControlle
     navigationItem.rightBarButtonItems = [meItem, .fixedSpace(0), talk]
     if let h = Main.shared.homeIfMade { adopt(h) }
   }
-  override func viewWillAppear(_ a: Bool) {
-    super.viewWillAppear(a)
-    navigationController?.setNavigationBarHidden(false, animated: a)
-  }
   // (Home's own screen lays Home out: where the tab bar starts, for "+ New task" and the list's end — it was only ever set
   //  by the app's old shared screen laying itself out, which doesn't happen while Home's tab is on: after the startup
   //  screen "+ New task" sat on the tab bar until a task page came and went, Haris 2026-11-07)
