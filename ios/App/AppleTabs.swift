@@ -62,7 +62,6 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
     // (Home's own navigation: Apple's bar with its big title, from the start — set here, as the navigation is made: made
     //  with its first screen, it may load before that screen is in it)
     homeNav.navigationBar.prefersLargeTitles = APPLE_HOME
-    homeNav.navigationBar.largeTitleTextAttributes = [.font: UIFont.systemFont(ofSize: 34, weight: .bold), .foregroundColor: UIColor.label]
     homeNav.setNavigationBarHidden(false, animated: false)
     super.init(nibName: nil, bundle: nil)
     AppleTabs.shared = self
