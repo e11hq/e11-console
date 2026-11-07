@@ -2728,8 +2728,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       ("homeFind", "return '{}'", { self.homeIfMade?.selfScroll(0); self.homeIfMade?.selfFind("Ford") }),
       ("homeFindDone", "return '{}'", { self.homeIfMade?.selfFindDone() }),
       // (Apple's parts alone, measured as Home's search is — AppleSample.swift; the self-test only)
-      ("appleSample", pause(3500) + "return '{}'", { self.appleSampleOpen() }),
-      ("appleSampleDone", "return '{}'", { self.presentedViewController?.dismiss(animated: false) }),
+      ("appleSample", pause(8000) + "return '{}'", { self.appleSampleOpen() }),
       // (the date sheet, as Home's Due opens it — it once crashed on iOS 27 while sizing itself)
       ("homeDate", "return '{}'", { if let host = self.sheetHost() { host.present(DateSheetVC(["value": "2026-11-23", "min": "", "max": "", "clearable": true, "md": false], dark: true) { _ in }, animated: false) } }),
       ("homeDateDone", "return '{}'", { self.presentedViewController?.dismiss(animated: false) }),
