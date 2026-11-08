@@ -701,7 +701,14 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
         self.onAct?(["act": "needsCD", "id": self.taskId, "value": sw.isOn])
       }, for: .valueChanged)
       let who = rv["who"] as? String ?? ""   // (the CD's name — or the Acting CD's — on and off: Haris 2026-11-06)
-      r.append(row(sym: "checkmark.shield", key: "Needs CD review", sub: who.isEmpty ? nil : who, value: sw))
+      let cdRow = row(sym: "checkmark.shield", key: "Needs CD review", sub: who.isEmpty ? nil : who, value: sw)
+      // (the CD's name in the same blue as a person's name on the Priority rows — only while the switch is on; grey when
+      //  it's off — Haris 2026-11-08; it turns as the switch is flicked)
+      if !who.isEmpty, let l = findKey(cdRow, who) {
+        l.textColor = sw.isOn ? .systemBlue : .secondaryLabel
+        sw.addAction(UIAction { [weak sw, weak l] _ in guard let sw = sw, let l = l else { return }; UIView.transition(with: l, duration: 0.2, options: .transitionCrossDissolve) { l.textColor = sw.isOn ? .systemBlue : .secondaryLabel } }, for: .valueChanged)
+      }
+      r.append(cdRow)
     }
     if let ca = m["clientApproval"] as? [String: Any] { r.append(clientApprovalRow(ca)) }
     if (m["sub"] as? Bool) != true && !TaskPage.viewOnly { r.append(updateRow(m["update"] as? [String: Any], all: (m["updates"] as? [String]) ?? [], can: (m["canFields"] as? Bool) == true)) }
