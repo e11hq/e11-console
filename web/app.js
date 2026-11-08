@@ -1880,7 +1880,11 @@ const roMsg = () => (ui.taskId && doneLocked(task(ui.taskId)) ? DONE_LOCK_MSG : 
 // The clients shown in an Account Manager's sidebar: the ones they look after (all of them until they're given one)
 // (the Clients list — the sidebar, the phone's list: an AM only the clients they look after; one given none yet, none —
 //  Haris 2026-11-08: "their list will be empty")
-const clientListOk = (p, u = me()) => amSidebarOk(p, u) && (!u || u.role !== 'am' || isAdm(u) || isCD(u.id) || (p.ams || []).some((a) => a.id === u.id && !a.onLeave));
+const mentionedIn = (t, id = currentUserId) => !!t && (mentionsIn(t.notesHtml).has(id) || (t.comments || []).some((c) => mentionsIn(c.html).has(id)));
+const mentionedOn = (t, id = currentUserId) => mentionedIn(t, id) || db.tasks.some((x) => x.parentId === t.id && mentionedIn(x, id));
+// (and, for everyone, a client where they're @mentioned on a task — its page then has that task: Haris 2026-11-08)
+const clientListOk = (p, u = me()) => (amSidebarOk(p, u) && (!u || u.role !== 'am' || isAdm(u) || isCD(u.id) || (p.ams || []).some((a) => a.id === u.id && !a.onLeave)))
+  || (!!u && db.tasks.some((t) => t.projectId === p.id && !t.parentId && mentionedOn(t, u.id)));
 const amSidebarOk = (p, u = me()) => searchClientOk(p, u) && (!u || u.role !== 'am' || isAdm(u) || isCD(u.id) || !db.projects.some((x) => (x.ams || []).some((a) => a.id === u.id)) || (p.ams || []).some((a) => a.id === u.id && !a.onLeave));
 // The clients an AM may move a task into, or start one in
 const amClientOk = (p, u = me()) => amScope({ projectId: p.id, createdBy: null }, u);
@@ -2058,7 +2062,12 @@ const Work = (() => {
   function seen() {
     if (seenMemo) return seenMemo;
     if (seesAll()) seenMemo = { all: true, has: () => true };
-    else { const ids = new Set((lead() ? leadSet([currentUserId]) : topTasks().filter(onMyList)).map((t) => t.id)); seenMemo = { all: false, has: (id) => ids.has(id) }; }
+    else {
+      // (and the tasks they're @mentioned in — its description or comments, or a subtask's: Haris 2026-11-08)
+      const ids = new Set((lead() ? leadSet([currentUserId]) : topTasks().filter(onMyList)).map((t) => t.id));
+      topTasks().forEach((t) => { if (!ids.has(t.id) && mentionedOn(t)) ids.add(t.id); });
+      seenMemo = { all: false, has: (id) => ids.has(id) };
+    }
     Promise.resolve().then(() => { seenMemo = null; });
     return seenMemo;
   }

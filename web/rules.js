@@ -1195,7 +1195,9 @@ var E11Rules = (() => {
       if (!u) return false;
       if (ownSearchOnly(u) && !tasks.some((t) => t.projectId === p.id && partOfTask(t, u.id, false)) && !(u.role === 'freelancer' && (u.projectIds || []).includes(p.id))) return false;
       // (an AM: only the clients they look after — one given none yet, none: Haris 2026-11-08 "their list will be empty")
-      return u.role !== 'am' || isAdm(u) || isCD(u.id) || (p.ams || []).some((a) => a.id === u.id && !a.onLeave);
+      // (and a client where they're @mentioned on a task — its page then has that task: Haris 2026-11-08)
+      return u.role !== 'am' || isAdm(u) || isCD(u.id) || (p.ams || []).some((a) => a.id === u.id && !a.onLeave)
+        || tasks.some((t) => t.projectId === p.id && !t.parentId && mentionedOn(t, u.id));
     };
     const byOrderP = (a, b) => (a.order || 0) - (b.order || 0);
     const clientRec = (p) => (p && p.clientId ? (db.clients || []).find((c) => c.id === p.clientId) || null : null);
@@ -1203,11 +1205,14 @@ var E11Rules = (() => {
     // a client's tasks as each role's own lists have them (Haris 2026-11-08: "as their home / my tasks page"): Admins and
     // the CD everything (their E11 Day is the whole team's); an Account Manager what their Home has (every task of the
     // clients they look after, and the ones they created); Production, Freelancers and Socials the tasks on their lists
+    // — and for everyone, the tasks they're @mentioned in (its description or comments, or a subtask's): Haris 2026-11-08
     let seenSet;
+    const mentionedIn = (t, id = meId) => !!t && (mentionsIn(t.notesHtml).has(id) || (t.comments || []).some((c) => mentionsIn(c.html).has(id)));
+    const mentionedOn = (t, id = meId) => mentionedIn(t, id) || tasks.some((x) => x.parentId === t.id && mentionedIn(x, id));
     const seenTask = (t) => {
       if (seesAll()) return true;
       if (!seenSet) seenSet = new Set((lead() ? leadSet([meId]) : topTasks().filter(onMyList)).map((x) => x.id));
-      return seenSet.has(t.id);
+      return seenSet.has(t.id) || mentionedOn(t);
     };
     function clientRow(p) {
       const open = tasks.filter((t) => t.projectId === p.id && !t.parentId && !t.done && seenTask(t));

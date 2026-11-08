@@ -112,6 +112,14 @@ test('the Clients list: an AM\'s own clients, none when they have none; Producti
   assert.deepEqual(rows('u-am'), ['p2']);
   assert.deepEqual(rows('u-am0'), [], 'an AM given no clients yet: none');
   assert.deepEqual(rows('u-y'), [], 'Production with nothing on a client: not listed');
+  // @mentioned on a task: that client listed, and its page has that task — for every role
+  const m = JSON.parse(JSON.stringify(data));
+  m.tasks.find((t) => t.id === 'other').comments = [{ id: 'c1', html: '<span class="mention" data-user="u-y">@Yousef</span> <span class="mention" data-user="u-am0">@Nour</span>', text: '@Yousef @Nour', authorId: 'u-a', at: now }];
+  for (const who of ['u-y', 'u-am0']) {
+    const { E11AppView: V } = engine(); V.load(JSON.stringify({ rev: 1, me: who, data: m }));
+    assert.deepEqual([...screen(V, 'clients').rows.map((r) => r.id)], ['p1'], who + ': the client they\'re mentioned on');
+    assert.deepEqual(ids(screen(V, 'clients', JSON.stringify({ view: 'client', id: 'p1', done: true }))), ['other'], who + ': the task they\'re mentioned in');
+  }
   assert.deepEqual(rows('u-p'), ['p1', 'p2']);
   assert.deepEqual(rows('u-a'), ['p1', 'p2']);
 });
