@@ -133,29 +133,27 @@ class AssetTile: UIControl {
   //  task cards". Set once; other tiles — Me's rows — keep theirs)
   var contextMenu: (() -> UIMenu?)? {
     didSet {
-      guard contextMenu != nil, !interactions.contains(where: { $0 is UIContextMenuInteraction }) else { return }
+      guard contextMenu != nil, !isContextMenuInteractionEnabled else { return }
       shrink?.isEnabled = false; shrink.map { removeGestureRecognizer($0) }; shrink = nil
       gestureRecognizers?.filter { $0 is UILongPressGestureRecognizer }.forEach { removeGestureRecognizer($0) }
-      addInteraction(UIContextMenuInteraction(delegate: self))
+      isContextMenuInteractionEnabled = true
     }
   }
-  // (its size and place set without touching its shrink — setting the frame of a card shrunk while held re-laid its
-  //  insides: they moved, as the comment cards' once did)
-  func place(_ r: CGRect) { bounds = CGRect(origin: .zero, size: r.size); center = CGPoint(x: r.midX, y: r.midY) }
-}
-
-extension AssetTile: UIContextMenuInteractionDelegate {
-  func contextMenuInteraction(_ i: UIContextMenuInteraction, configurationForMenuAtLocation p: CGPoint) -> UIContextMenuConfiguration? {
+  // (UIControl's own: iPhone's menu for it — the tile itself lifts, with its own rounded corners, as Home's cards)
+  override func contextMenuInteraction(_ i: UIContextMenuInteraction, configurationForMenuAtLocation p: CGPoint) -> UIContextMenuConfiguration? {
     guard let m = contextMenu?() else { return nil }
     return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in m }
   }
-  // (the tile itself lifts, with its own rounded corners — as Home's cards)
-  func contextMenuInteraction(_ i: UIContextMenuInteraction, configuration c: UIContextMenuConfiguration, highlightPreviewForItemWithIdentifier id: NSCopying) -> UITargetedPreview? {
+  override func contextMenuInteraction(_ i: UIContextMenuInteraction, configuration c: UIContextMenuConfiguration, highlightPreviewForItemWithIdentifier id: NSCopying) -> UITargetedPreview? {
+    guard contextMenu != nil else { return super.contextMenuInteraction(i, configuration: c, highlightPreviewForItemWithIdentifier: id) }
     let pp = UIPreviewParameters()
     pp.visiblePath = UIBezierPath(roundedRect: bounds, cornerRadius: layer.cornerRadius > 0 ? layer.cornerRadius : 18)
     pp.backgroundColor = backgroundColor ?? .clear
     return UITargetedPreview(view: self, parameters: pp)
   }
+  // (its size and place set without touching its shrink — setting the frame of a card shrunk while held re-laid its
+  //  insides: they moved, as the comment cards' once did)
+  func place(_ r: CGRect) { bounds = CGRect(origin: .zero, size: r.size); center = CGPoint(x: r.midX, y: r.midY) }
 }
 
 // the clients: two columns of cards — a big logo area (its logo, or its colour with initials), name, "6 folders · 48 files"
