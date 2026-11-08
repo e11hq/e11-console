@@ -3095,8 +3095,7 @@ extension HomeView {
       let x = c.info
       var cf = UIListContentConfiguration.subtitleCell()
       cf.text = x.name; cf.textProperties.font = .systemFont(ofSize: 21, weight: .semibold); cf.textProperties.color = L.title
-      cf.secondaryText = [x.role, x.email].filter { !$0.isEmpty }.joined(separator: "
-")
+      cf.secondaryText = [x.role, x.email].filter { !$0.isEmpty }.joined(separator: "\n")
       cf.secondaryTextProperties.font = .systemFont(ofSize: 14); cf.secondaryTextProperties.color = .secondaryLabel; cf.secondaryTextProperties.numberOfLines = 2
       cf.textToSecondaryTextVerticalPadding = 3
       cf.image = c.photo.map { roundPic($0, initials: nil, color: nil, size: 62) }
