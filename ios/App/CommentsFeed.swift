@@ -89,7 +89,7 @@ final class FeedLoader {
   }
 }
 
-final class CommentsFeed: UIView, UIScrollViewDelegate {
+final class CommentsFeed: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate {
   let taskId: String
   let thread: String?
   var onAct: (([String: Any]) -> Void)?             // react / deleteComment (the server's)
@@ -128,12 +128,17 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
     backgroundColor = .systemGroupedBackground
     scroll.alwaysBounceVertical = true
     scroll.contentInsetAdjustmentBehavior = .never
-    scroll.keyboardDismissMode = .none   // (the list scrolls with the keyboard up; only a tap away puts it down — Haris 2026-11-08)
+    scroll.keyboardDismissMode = .interactive   // (dragging down takes the keyboard with the finger — rule 5)
     scroll.delegate = self
     scroll.automaticallyAdjustsScrollIndicatorInsets = false   // (the scroll bar starts under the bar from the start — the standard)
-    // (a tap on the comments while the keyboard is up closes it, as Messages does — what was tapped still works)
-    let tapAway = UITapGestureRecognizer(target: self, action: #selector(tappedList)); tapAway.cancelsTouchesInView = false
+    // (a tap on the comments while the keyboard is up only puts it down — the card or button under the finger isn't
+    //  tapped too; scrolling the list still scrolls it, and dragging down takes the keyboard with the finger: Apple's tap
+    //  recognizer, which a scroll never sets off — Haris 2026-11-08: the page's cover took every touch, a scroll too)
+    let tapAway = UITapGestureRecognizer(target: self, action: #selector(tappedList)); tapAway.cancelsTouchesInView = true
+    tapAway.delegate = self
     scroll.addGestureRecognizer(tapAway)
+    NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillShowNotification, object: nil, queue: .main) { [weak self] _ in self?.keyboardUp = true }
+    NotificationCenter.default.addObserver(forName: UIResponder.keyboardDidHideNotification, object: nil, queue: .main) { [weak self] _ in self?.keyboardUp = false }
     addSubview(scroll); scroll.addSubview(content)
     // (Apple's own frost under the bar and Details · Comments — its scroll edge as it comes, Haris 2026-11-07)
     // the ↓ button / "N new comments" pill: glass, just above the comment box
@@ -385,6 +390,15 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
   }
   func has(_ id: String) -> Bool { cells[id] != nil }
   @objc private func tappedList() { window?.endEditing(true) }
+  private var keyboardUp = false
+  // (only while the keyboard is up; then the cards' own taps wait for it, so a tap puts the keyboard down and nothing else)
+  override func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
+    if g.view === scroll, g is UITapGestureRecognizer, g.delegate === self { return keyboardUp }
+    return super.gestureRecognizerShouldBegin(g)
+  }
+  func gestureRecognizer(_ g: UIGestureRecognizer, shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
+    keyboardUp && other is UITapGestureRecognizer && other !== g
+  }
   // Reply (rule 7): the list stays where it is; the replied comment is kept in view above the box
   // (above the ↓ button too, so all of it shows — and again once the keyboard is up: Haris, 2026-11-02)
   private var keepId: String?

@@ -994,6 +994,10 @@ final class KeyboardShield: UIView {
     if let h = p as? HomeView, h.searching { return nil }
     // (the box being typed in — and its clear button — still works)
     if f.convert(f.bounds, to: self).insetBy(dx: -6, dy: -6).contains(pt) { return nil }
+    // (the comments and replies list puts the keyboard down itself on a tap, and still scrolls — the cover took a scroll
+    //  as a tap there: Haris 2026-11-08)
+    isHidden = true; let under = p.hitTest(convert(pt, to: p), with: e); isHidden = false
+    var v = under; while let x = v { if x is CommentsFeed { return nil }; v = x.superview }
     return self
   }
   override func touchesBegan(_ t: Set<UITouch>, with e: UIEvent?) { if let w = page?.window { w.endEditing(true) } else { page?.endEditing(true) }; isHidden = true }
