@@ -484,7 +484,7 @@ extension Main {
     if !defaults.bool(forKey: "e11_feed_off") {
       // the comments and the box, both the app's own: nothing of the website's behind them
       taskComments = focus.isEmpty ? p.taskId : focus
-      p.bringSubviewToFront(p.commentsHost); p.bringSubviewToFront(p.barBoxView)
+      p.bringSubviewToFront(p.commentsHost)
       let c = compose
       c.switchTo(task: p.taskId, parent: p.threadFeed?.thread)
       placeCompose(c, above: (APPLE_NAV ? p.threadFeed : nil) ?? p)   // (a reply page open: the box stays on it)
@@ -497,7 +497,7 @@ extension Main {
     taskComments = focus.isEmpty ? p.taskId : focus
     // (the comments screen goes inside the page, below its bar; the box and its jump spot above the page)
     if cbox.superview !== p.commentsHost { p.commentsHost.addSubview(cbox) }
-    p.bringSubviewToFront(p.commentsHost); p.bringSubviewToFront(p.barBoxView)
+    p.bringSubviewToFront(p.commentsHost)
     if let b = cbarIfMade { layerOf(p).insertSubview(b, aboveSubview: p) }
     cbarTask = taskComments
     cbarShow = true; cbarOnComments = true
@@ -521,7 +521,7 @@ extension Main {
     }
     f.frame = p.commentsHost.bounds
     f.isHidden = false
-    p.edgeScroll((APPLE_NAV ? nil : p.threadFeed?.scroll) ?? f.scroll)
+    p.edgeScroll(f.scroll)
     p.commentsHost.bringSubviewToFront(f)
     if let t = p.threadFeed { p.commentsHost.bringSubviewToFront(t) }
     f.load { [weak self, weak p, weak f] in
@@ -541,7 +541,7 @@ extension Main {
     p.feed = f
     p.commentsHost.addSubview(f)
     f.frame = p.commentsHost.bounds
-    p.bringSubviewToFront(p.commentsHost); p.bringSubviewToFront(p.barBoxView)
+    p.bringSubviewToFront(p.commentsHost)
     p.edgeScroll(f.scroll)   // (the bar's frost asks this list at once, not once the page has arrived)
     f.load()
   }

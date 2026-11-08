@@ -108,7 +108,6 @@ final class ReplyVC: UIViewController {
 // one task page, pushed: the page (TaskPage, its look as it is) fills it; Apple's bar on top
 final class TaskVC: UIViewController {
   let page: TaskPage
-  private let titleBox = UIStackView(), dot = UIView(), name = UILabel()
   // (no tab bar under a task: Apple's tab bar call hides it as the page comes — AppleNav's willShow / AppleTabs)
   init(_ p: TaskPage) { page = p; super.init(nibName: nil, bundle: nil) }
   required init?(coder: NSCoder) { fatalError() }
@@ -133,21 +132,20 @@ final class TaskVC: UIViewController {
         Main.shared.leaveTaskPage(p)
       }
     }
-    // the client's dot and name in the middle of the bar, as the page had them
-    dot.layer.cornerRadius = 4; dot.widthAnchor.constraint(equalToConstant: 8).isActive = true; dot.heightAnchor.constraint(equalToConstant: 8).isActive = true
-    name.font = .systemFont(ofSize: 17, weight: .semibold); name.lineBreakMode = .byTruncatingTail
-    titleBox.axis = .horizontal; titleBox.alignment = .center; titleBox.spacing = 8
-    titleBox.addArrangedSubview(dot); titleBox.addArrangedSubview(name)
-    navigationItem.titleView = titleBox
-    page.onBarTitle = { [weak self] t, c in self?.setTitle(t, c) }
+    // Details · Comments in the middle of Apple's bar — Apple's own control in Apple's bar, its glass look, the bar's frost
+    // never breaking under it (Haris 2026-11-08: the switch in a strip of ours lost the frost while held); the client's
+    // dot and name are at the top of Details now
+    let seg = page.seg
+    seg.translatesAutoresizingMaskIntoConstraints = false
+    seg.widthAnchor.constraint(equalToConstant: 236).isActive = true
+    navigationItem.titleView = seg
+    page.onBarTitle = { [weak self] t, _ in self?.navigationItem.title = t }   // (not shown: the name for ‹'s history menu)
+    // (the bar's frost follows the list showing — Details, the comments, a reply)
+    page.onEdgeScroll = { [weak self] sv in self?.setContentScrollView(sv, for: .top) }
+    page.edgeScroll(page.scroll)
     page.onMenuMade = { [weak self] in self?.setMenu() }
     page.onDescEditing = { [weak self] _ in self?.setMenu() }
     setMenu()
-  }
-  func setTitle(_ t: String, _ c: UIColor?) {
-    name.text = t
-    dot.isHidden = c == nil; dot.backgroundColor = c
-    titleBox.sizeToFit()
   }
   // •••: the page's own menu (Copy link, Attach Files, Delete task — as it was)
   func setMenu() {

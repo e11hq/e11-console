@@ -89,11 +89,14 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   private var listKeys: [String] = []
   private var listViews: [String: UIView] = [:]
   private var listGeo: [String: PageCell.Geo] = [:]
-  private let barBox = UIView()                        // what the frost edge sits under (the buttons and the switch)
-  var barBoxView: UIView { barBox }
-  private var edgeHook: AnyObject?
   // the frost under the bar follows whichever list is showing (Details, the comments, a thread)
-  func edgeScroll(_ sv: UIScrollView) { if #available(iOS 26.0, *) { (edgeHook as? UIScrollEdgeElementContainerInteraction)?.scrollView = sv } }
+  // (Details · Comments is in Apple's own bar now — Haris 2026-11-08: the bar's frost and its line follow the list that's
+  //  showing, Apple's firm frost as every Apple page)
+  var onEdgeScroll: ((UIScrollView) -> Void)?
+  func edgeScroll(_ sv: UIScrollView) {
+    if #available(iOS 26.0, *), sv.topEdgeEffect.style != .hard { sv.topEdgeEffect.style = .hard }
+    onEdgeScroll?(sv)
+  }
   // the page's ••• menu, for Apple's bar (TaskVC)
   private(set) var cornerMenu: UIMenu?
   var feed: CommentsFeed?
@@ -294,16 +297,8 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     commentsHost.isHidden = true
     commentsHost.clipsToBounds = true
     pager.addSubview(commentsHost)
-    addSubview(barBox)
-    if #available(iOS 26.0, *) {
-      let i = UIScrollEdgeElementContainerInteraction()
-      i.scrollView = scroll; i.edge = .top
-      barBox.addInteraction(i)
-      edgeHook = i
-      // (Apple's own frost behind Details · Comments and the bar, from the list under them — Apple's scroll edge, as it
-      //  comes: our firmer frost and the code watching the list for it removed, Haris 2026-11-07)
-    }
-    barBox.addSubview(seg)
+    // (Details · Comments: in the middle of Apple's bar, put there by the page's view controller — TaskVC — with Apple's
+    //  glass look, Haris 2026-11-08; no strip of ours under the bar)
     seg.selectedSegmentIndex = 0
     seg.addAction(UIAction { [weak self] _ in
       guard let self = self else { return }
@@ -351,7 +346,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   var onBarTitle: ((String, UIColor?) -> Void)?
   var onMenuMade: (() -> Void)?
   private var rowBottom: CGFloat { appleRow ?? safeTop + 54 }
-  var barBottom: CGFloat { rowBottom + 8 + 32 + 10 }
+  var barBottom: CGFloat { rowBottom }   // (Apple's bar's bottom: nothing of ours under it now)
   override func layoutSubviews() {
     super.layoutSubviews()
     let W = bounds.width
@@ -369,8 +364,6 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
         if pager.contentOffset != CGPoint(x: x, y: 0) { pager.contentOffset = CGPoint(x: x, y: 0) }
       }
     }
-    barBox.frame = CGRect(x: 0, y: 0, width: W, height: barBottom)
-    seg.frame = CGRect(x: 16, y: rowBottom + 8, width: W - 32, height: 32)
     let fs = fab.sizeThatFits(CGSize(width: 300, height: 48))
     let bottom = max(safeAreaInsets.bottom, window?.safeAreaInsets.bottom ?? 0)
     fab.frame = CGRect(x: W - 16 - fs.width, y: bounds.height - bottom - 8 - 48, width: fs.width, height: 48)
@@ -634,6 +627,17 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     blocks = []
     let ro = (m["readOnly"] as? Bool) == true
     // the head: subtask of… / the title (edited in place, looks the same)
+    // (the client's dot and name, at the top of Details — the middle of Apple's bar has Details · Comments: Haris
+    //  2026-11-08)
+    if let c = m["client"] as? [String: Any], let cn = c["name"] as? String, !cn.isEmpty {
+      let d = UIView(); d.backgroundColor = TaskPage.rgb(c["rgb"]); d.layer.cornerRadius = 4
+      d.translatesAutoresizingMaskIntoConstraints = false
+      NSLayoutConstraint.activate([d.widthAnchor.constraint(equalToConstant: 8), d.heightAnchor.constraint(equalToConstant: 8)])
+      let l = label(cn, size: 15, color: .secondaryLabel, weight: .medium)
+      let line = UIStackView(arrangedSubviews: [d, l, UIView()]); line.axis = .horizontal; line.alignment = .center; line.spacing = 7
+      line.layer.name = "k:client"; line.tag = 7
+      blocks.append(line)
+    }
     if let p = m["parent"] as? [String: Any], let pid = p["id"] as? String {
       blocks.append(linkLine("Subtask of " + (p["title"] as? String ?? ""), sym: "arrow.turn.left.up") { [weak self] in self?.onOpen?(pid) })
     }
