@@ -133,9 +133,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     results.contentInsetAdjustmentBehavior = .automatic
     results.automaticallyAdjustsScrollIndicatorInsets = true
     if #available(iOS 26.0, *) {
-      // (Apple's firm frost with its own line under the bar, as the Inbox's — Haris 2026-11-08, locked with Home: every
-      //  Apple page the same)
-      scroll.topEdgeEffect.style = .hard; results.topEdgeEffect.style = .hard
+      scroll.topEdgeEffect.style = .automatic; results.topEdgeEffect.style = .automatic
       if let i = edgeHook as? UIScrollEdgeElementContainerInteraction { topBar.removeInteraction(i) }
       edgeHook = nil
     }
@@ -164,7 +162,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     cv.contentInsetAdjustmentBehavior = .automatic
     cv.allowsSelection = false
     cv.delegate = self
-    if #available(iOS 26.0, *) { cv.topEdgeEffect.style = .hard }   // (Apple's firm frost and its line — Haris 2026-11-08)
+    if #available(iOS 26.0, *) { cv.topEdgeEffect.style = .automatic }
     let reg = UICollectionView.CellRegistration<HostCell, String> { [weak self] cell, _, key in
       guard let self = self, let v = self.listViews[key] else { cell.host(nil, height: 1); return }
       cell.host(v, height: self.itemHeight(key, v))
