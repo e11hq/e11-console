@@ -2743,6 +2743,22 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if let p = presentedViewController { p.dismiss(animated: false) { show() } } else { show() }
   }
   func pause(_ ms: Int) -> String { "await new Promise((r) => setTimeout(r, \(ms)));" }
+  // (the slide back check: a tab as if tapped; a task to open — Home's first card; ‹ back, the screen's "+ New task"
+  //  looked at a moment into the slide and once it's over)
+  func selfSelect(_ key: String) {
+    if let i = tabKeys.firstIndex(of: key), let item = tabBar.items?[i] { tabBar.selectedItem = item; tabBar(tabBar, didSelect: item) }
+  }
+  func selfSlideTask() -> String? {
+    ((serverHome.shown?["groups"] as? [[String: Any]]) ?? []).flatMap { $0["cards"] as? [[String: Any]] ?? [] }.compactMap { $0["id"] as? String }.first
+  }
+  func selfSlideBack(_ h: HomeView?, _ k: String) {
+    let seen = { () -> Bool in guard let h = h, h.window != nil else { return false }; return h.fabNow.shown && !h.fabVeiled }
+    selfResult["slide_\(k)_open"] = !taskPages.isEmpty
+    guard let p = taskPages.last else { return }
+    closeTaskPage(p)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in self?.selfResult["slide_\(k)_mid"] = seen() }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.selfResult["slide_\(k)_end"] = seen() }
+  }
   // the comments list as the page sees it: where it's scrolled, whether the latest comment shows, the room kept
   let feedJS = "const f = document.querySelector('#detail .tm-feed'); if (!f) return JSON.stringify({ error: 'no list' }); const last = f.lastElementChild; return JSON.stringify({ on: document.documentElement.classList.contains('ph-cb-on'), st: f.scrollTop, sh: f.scrollHeight, ch: f.clientHeight, toEnd: f.scrollHeight - f.scrollTop - f.clientHeight, lastBottom: last ? last.getBoundingClientRect().bottom : null, top: f.getBoundingClientRect().top, kbpad: getComputedStyle(document.documentElement).getPropertyValue('--ph-kbpad').trim(), transform: f.style.transform, n: f.children.length })"
   func fakeKeyboard(_ h: CGFloat) {
@@ -2790,6 +2806,18 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       ("ibxUnread", pause(2000) + "return '{}'", { self.inboxIfMade?.selfInboxTab("unread") }),
       ("ibxMentions", pause(2000) + "return '{}'", { self.inboxIfMade?.selfInboxTab("mentions") }),
       ("ibxAll", pause(2000) + "return '{}'", { self.inboxIfMade?.selfInboxTab("all") }),
+      // (each tab with its own Apple screen as Home, locked: a task opened from it and ‹ back — its "+ New task" there all
+      //  the way through the slide back, as at rest; the Inbox's and My Tasks' were blanked by the old shared button's
+      //  move and popped in after the slide, a Home fix that never reached them: Haris 2026-11-08)
+      ("slideIbxOpen", pause(1500) + "return '{}'", { if let id = self.selfSlideTask() { self.openTaskPage(id, tab: "details", focus: "") } }),
+      ("slideIbxBack", pause(2500) + "return '{}'", { self.selfSlideBack(self.inboxIfMade, "ibx") }),
+      ("slideMt", pause(2000) + "return '{}'", { self.selfSelect("mytasks") }),
+      ("slideMtOpen", pause(2000) + "return '{}'", { if let id = self.selfSlideTask() { self.openTaskPage(id, tab: "details", focus: "") } }),
+      ("slideMtBack", pause(2500) + "return '{}'", { self.selfSlideBack(self.myTasksIfMade, "mt") }),
+      ("slideHome", pause(2000) + "return '{}'", { self.selfSelect("today") }),
+      ("slideHomeOpen", pause(2000) + "return '{}'", { if let id = self.selfSlideTask() { self.openTaskPage(id, tab: "details", focus: "") } }),
+      ("slideHomeBack", pause(2500) + "return '{}'", { self.selfSlideBack(self.homeIfMade, "home") }),
+      ("slideDone", pause(1500) + "return '{}'", nil),
       // 29: the morning round-up as iPhone's own sheet (the page's own sections, as the Inbox's round-up opens it)
       ("daily", pause(1500) + "return '{}'", { _ = self.dailyNative() }),   // (the app's own round-up — step 8)
       ("dailyDone", "return '{}'", { self.presentedViewController?.dismiss(animated: false) }),

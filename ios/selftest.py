@@ -109,6 +109,11 @@ try:
     tp, tps, tpc, tpb = res.get('tpageNative') or {}, res.get('tpageScrolledNative') or {}, res.get('tpageCommentsNative') or {}, res.get('tpageBackNative') or {}
     # (the rule "only what changed changes": to another app and back redraws nothing, and the task page keeps its bands)
     check(res.get('redrawsBefore') is not None and res.get('redrawsAfter') == res.get('redrawsBefore'), f"to another app and back: no screen drawn again {res.get('redrawsBefore')} → {res.get('redrawsAfter')}")
+    # (a tab with its own Apple screen follows Home, locked: from a task, ‹ back — "+ New task" there through the slide, as
+    #  at rest, on Home, My Tasks and the Inbox alike: Haris 2026-11-08)
+    for k, name in (('home', 'Home'), ('mt', 'My Tasks'), ('ibx', 'the Inbox')):
+      o, mid, end = res.get(f'slide_{k}_open'), res.get(f'slide_{k}_mid'), res.get(f'slide_{k}_end')
+      check(o is True and mid is not None and mid == end, f'{name}: a task opened and ‹ back — "+ New task" as at rest all through the slide (open {o}, in the slide {mid}, after {end})')
     check((res.get('awayBands') or 0) > 0, f"the task page's grey bands still there after coming back {res.get('awayBands')}")
     check(tp.get('copy') is True and tp.get('copyTask') and tp.get('copyTask') == tp.get('title'), f"the app's own copy of the data is ready and gives the task page the server gives {({k: tp.get(k) for k in ('copy', 'copyTask', 'title')})}")
     tsd = res.get('tpageSwipeDetailsNative') or {}
