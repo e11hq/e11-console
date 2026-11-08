@@ -1144,6 +1144,11 @@ final class MeCtl {
     let q = (ev["q"] as? String ?? "").trimmingCharacters(in: .whitespaces)
     switch ev["ev"] as? String ?? "" {
     case "plFind": return AppData.shared.meModel("plans", "plansFind", [q, ev["month"] as? String ?? ""])
+    // (a plan's post, from the app's own copy — without the website nothing answered and it never opened: Haris 2026-11-08)
+    case "plPost":
+      guard AppData.shared.tabsOn else { return nil }
+      if let p = AppData.shared.meModel("plans", "plansPost", [ev["plan"] as? String ?? "", ev["post"] as? String ?? ""]) { return ["ok": true, "post": p] }
+      return ["ok": false, "error": "This post is no longer here"]
     case "ovFind":
       guard let all = (AppData.shared.meModel("assets", "assets", [NSNull()])?["files"] as? [[String: Any]]) else { return nil }
       let fd = Find.filter(all, q) { "\($0["name"] ?? "") \($0["where"] ?? "")" }
