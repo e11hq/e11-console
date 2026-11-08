@@ -409,7 +409,8 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
   //     { to: 'task', id, tab: 'details' | 'comments', focus: commentId | '', thread?: the comment's thread, desc?: true }
   //        (desc: an @mention in the description — the website opens it; the page's native task page shows Details)
   //     { to: 'review', id: reviewId | null, tab: 'active' | 'reviewed' | null }   (the CD; null tab: as it was)
-  //     { to: 'plan', id } · { to: 'assets', client, folder | null } · { to: 'daily' } · { to: 'birthday' }
+  //     { to: 'plan', id } · { to: 'assets', client, folder | null } · { to: 'daily' } · { to: 'birthday', person, title }
+  //        (person: { id, name, ini, color, photo } — whose birthday; title: "<first name>’s birthday")
   //     { to: 'schedCancel', id: schedId }
   //     { to: 'claim', page: 'fin-reimb' | 'claims', claimId | null, month? }   (Claims.openNotif; on the phone the page
   //        itself only says "Claims are on the computer")
@@ -483,7 +484,11 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
     const marked = [];
     const mark = (x) => { if (!x.read && !marked.includes(x.id)) marked.push(x.id); };
     const out = (go) => ({ read: marked, go });
-    if (n.kind === 'birthday') { mark(n); return out({ to: 'birthday' }); }
+    if (n.kind === 'birthday') {
+      mark(n);
+      const b = W.userById(n.from), name = W.fullName(b);
+      return out({ to: 'birthday', title: `${name.split(' ')[0]}’s birthday`, person: { id: n.from, name, ini: initials(name), color: avColor(n.from || 'x'), photo: b && b.avatar ? '/__file/' + String(b.avatar).split('/').map(encodeURIComponent).join('/') : null } });
+    }
     if (n.kind === 'daily') { mark(n); return out({ to: 'daily' }); }
     if (n.kind === 'sched-cancel') { mark(n); return out({ to: 'schedCancel', id: n.schedId || null }); }
     if (/^claim/.test(n.kind)) { O.myNotifs().forEach((x) => { if (x.claimId && x.claimId === n.claimId) mark(x); }); return out(O.claim(n)); }

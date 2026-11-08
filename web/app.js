@@ -340,14 +340,19 @@ const OccasionHello = (() => {
       return show(null, { title: `Happy birthday, ${firstName(u.id)}`, sub: 'Wishing you a wonderful year · from all of us at E11', tile: ['#b3a6fb', '#5b44d4'], colors: ['#f0b93a', '#3fcf98', '#ffffff', '#ff8fb8', '#8b78ef'], img: avatarHTML(u.id, 110) });
     } catch (e) { return Promise.resolve(); }
   }
+  // a colleague's birthday, opened from its notification (Haris 2026-11-08): the same greeting — their photo or initials,
+  // "Today is" small and grey over "<name>’s birthday"
+  function theirs(id) {
+    return show(null, { who: id, pre: 'Today is', title: `${firstName(id)}’s birthday`, sub: 'Wish them a happy birthday', tile: ['#b3a6fb', '#5b44d4'], colors: ['#f0b93a', '#3fcf98', '#ffffff', '#ff8fb8', '#8b78ef'], img: avatarHTML(id, 110) });
+  }
   // sid: a season; or opts for another greeting (birthday). Resolves when it closes.
   function show(sid, opts) {
     const S0 = sid && window.E11_SEASONS && E11_SEASONS[sid];
     if (!S0 && !opts) return Promise.resolve();
     // (the iPhone app: its own greeting — your photo in a ring, or the occasion's picture)
     if (NativePop.on) {
-      const u = opts ? me() : null;
-      return NativePop.show(opts ? { kind: 'greet', title: opts.title, sub: opts.sub, person: NativePop.person(u.id) }
+      const u = opts ? (opts.who ? { id: opts.who } : me()) : null;
+      return NativePop.show(opts ? { kind: 'greet', pre: opts.pre || '', title: opts.title, sub: opts.sub, person: NativePop.person(u.id) }
         : { kind: 'greet', title: GREET[sid] || S0.name, sub: S0.name + ' · from all of us at E11', pic: `icons/seasonal/${sid}.png`, tile: S0.tile }).then(() => {});
     }
     const S = S0 || { name: '', tile: opts.tile, left: opts.colors[0], right: opts.colors[1], check: opts.colors[4] };
@@ -358,7 +363,7 @@ const OccasionHello = (() => {
     el.innerHTML = `<canvas class="hello-confetti" aria-hidden="true"></canvas>
       <div class="hello-card ${opts ? 'hello-own' : ''}" role="dialog" aria-label="${esc(opts ? opts.title : GREET[sid] || S.name)}" style="--oh-a:${S.tile[0]};--oh-b:${S.tile[1]}">
         ${opts ? `<div class="hello-av">${opts.img}</div>` : `<img src="icons/seasonal/${sid}.png" alt="">`}
-        <h2>${esc(opts ? opts.title : GREET[sid] || S.name)}</h2>
+        ${opts && opts.pre ? `<span class="hello-pre">${esc(opts.pre)}</span>` : ''}<h2>${esc(opts ? opts.title : GREET[sid] || S.name)}</h2>
         <p>${esc(opts ? opts.sub : S.name + ' · from all of us at E11')}</p>
         <small>Click anywhere to continue</small>
       </div>`;
@@ -397,7 +402,7 @@ const OccasionHello = (() => {
     raf = requestAnimationFrame(step);
     return closedP;
   }
-  return { maybe, show, today, birthday };
+  return { maybe, show, today, birthday, theirs };
 })();
 
 /* ================= One-time nudge to add your birthday and where you're based ================= */
@@ -8510,8 +8515,8 @@ const ibTarget = (items) => items.find((x) => IB_ACTION.has(x.kind) && !x.read) 
 function openNotif(id) {
   const n = db.notifications.find((x) => x.id === id);
   if (!n) return;
-  // a birthday: just marked as read
-  if (n.kind === 'birthday') { n.read = true; persist(); renderSidebar(); if (ui.view === 'inbox') renderContent(); return; }
+  // a birthday: marked as read, and their greeting (Haris 2026-11-08)
+  if (n.kind === 'birthday') { n.read = true; persist(); renderSidebar(); if (ui.view === 'inbox') renderContent(); return OccasionHello.theirs(n.from); }
   // the morning round-up: its card, with today's latest numbers
   if (n.kind === 'daily') { n.read = true; persist(); renderSidebar(); if (ui.view === 'inbox') renderContent(); return Daily.show(); }
   // a scheduled comment that wasn't sent: back into a draft, or (task deleted) the Trash or its text and files

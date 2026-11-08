@@ -228,7 +228,7 @@ async def main():
                     lbl = f"{role}: {('link ' + c['link']) if c.get('link') else ('tapped early ' + json.dumps(c['hint'])) if c.get('hint') else c['nid']}"
                     app = r['app'] or {}
                     want_go = app.get('go')
-                    if want_go and want_go.get('to') == 'birthday': want_go = None   # (the page: just read)
+                    if want_go and want_go.get('to') == 'birthday': want_go = None   # (the page: read, and its greeting — not a page it goes to)
                     if want_go and want_go.get('peek'): want_go = {'toast': want_go['toast']}   # (no peek for a task that isn't anywhere)
                     if want_go and want_go.get('to') == 'daily' and c.get('hint'): want_go = None   # (the app shows the round-up at once — step 8; the page waited for the update)
                     same(want_go, r['page']['go'], lbl + ': where it goes')
