@@ -104,7 +104,9 @@ any new app): the same rule.**
 
 **Every build only on Haris's yes — check builds too (Haris, 2026-11-08: "ask me everytime you run build"):** ask before
 any build runs, the simulator check build included. A push to an `ios-*` branch starts a check build by itself, so
-changes stay as local commits and are pushed only once Haris says yes to building.
+changes stay as local commits and are pushed only once Haris says yes to building. **Since 2026-11-08 a push starts no build
+at all**, and there's no separate check build: one TestFlight build (`gh workflow run ios.yml --ref ios-nav -f send=yes
+-f walk=no`) runs the self-test and **signs and sends nothing if any self-test step fails**.
 
 **TestFlight only on Haris's yes (Haris, 2026-11-03):** "publish, publish app build" builds, self-tests and signs the
 iPhone app, then keeps it on his Mac (ios.yml `send: ask`, the default). When a build has finished, ask Haris; only on

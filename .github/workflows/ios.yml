@@ -12,8 +12,7 @@ on:
       walk:
         description: "Run the walk-through for every role before signing (yes / no)"
         default: "yes"
-  push:
-    branches: ['ios-*']
+  # (no build on a push any more: every build only on Haris's word — Haris 2026-11-08; one build, straight to TestFlight)
 permissions:
   contents: write
 jobs:
@@ -39,8 +38,9 @@ jobs:
           test -d build/Build/Products/Debug-iphonesimulator/E11Console.app
           test -d build/Build/Products/Debug-iphonesimulator/E11Console.app/PlugIns/E11ConsoleWidget.appex && echo "widget: yes" || { echo "widget: MISSING"; exit 1; }
       - name: Self-test in the simulator
-        # (its results are read from the release below; a failed check doesn't hold back the TestFlight build, which
-        #  Haris tests on his phone anyway)
+        # (its results are read from the release below; a failed check stops the build before signing: nothing goes to
+        #  TestFlight — so no separate check build first, Haris 2026-11-08)
+        id: selftest
         continue-on-error: true
         run: python3 ios/selftest.py build/Build/Products/Debug-iphonesimulator/E11Console.app 2>&1 | tee "$RUNNER_TEMP/ios-selftest.log"; exit ${PIPESTATUS[0]}
       - name: Walk-through for every role, without the website
@@ -56,8 +56,11 @@ jobs:
         run: |
           gh release view ios-selftest >/dev/null 2>&1 || gh release create ios-selftest --prerelease --title "iPhone app self-test" --notes "Latest iPhone app self-test results." --target "$GITHUB_SHA"
           for f in ios-splash.png ios-splashTicked.png ios-home.png ios-homeSwipe.png ios-homeLead.png ios-homePress.png ios-homeScrolled.png ios-homeFind.png ios-homeDate.png ios-mytasks.png ios-mytasksDone.png ios-mytasksScrolled.png ios-ibx.png ios-ibxSwipe.png ios-ibxUnread.png ios-daily.png ios-inbox.png ios-me.png ios-meProfile.png ios-meTrash.png ios-client.png ios-tpage.png ios-tpageScrolled.png ios-tpageSheet.png ios-tpageComments.png ios-tpageBack.png ios-task.png ios-sheet.png ios-back.png ios-nsheet.png ios-nsheetEnd.png ios-nsheetChannel.png ios-nsheetTitled.png ios-form.png ios-formTuck.png ios-cbar.png ios-cbarMention.png ios-cbarAttach.png ios-cfeed.png ios-cfeedKb.png ios-cfeedDown.png ios-cweb.png ios-cwebKb.png ios-cwebDown.png ios-preview.png ios-signin.png ios-done.png ios-build.log ios-selftest.log ios-server.log ios-crash.txt ios-run.mp4 ios-walk.json ios-walk.txt ios-walk.log ios-walk-shots.zip; do if [ -s "$RUNNER_TEMP/$f" ]; then gh release upload ios-selftest "$RUNNER_TEMP/$f" --clobber || echo "upload failed: $f"; fi; done; true
+      - name: Self-test failed — nothing sent
+        if: steps.selftest.outcome != 'success'
+        run: echo "The self-test failed (see ios-selftest.log on the release); nothing is signed or sent."; exit 1
       - name: Sign and send to TestFlight
-        if: github.ref_name == 'main' || github.event_name == 'workflow_dispatch'
+        if: (github.ref_name == 'main' || github.event_name == 'workflow_dispatch') && steps.selftest.outcome == 'success'
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
