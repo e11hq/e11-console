@@ -1010,6 +1010,10 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     if lock { s.addArrangedSubview(symbol("lock.fill", 10, .secondaryLabel)) }
     s.addArrangedSubview(UIView())
     s.isLayoutMarginsRelativeArrangement = true
+    // (its own 4 pt on top and nothing else: by default iPhone adds the screen's safe area to a view's margins, so a
+    //  heading near the bottom edge (the home bar's area) grew by it — measured there it left a gap above its group, and
+    //  scrolling past the edge it moved and was cut off — Haris 2026-11-08)
+    s.insetsLayoutMarginsFromSafeArea = false
     s.layoutMargins = UIEdgeInsets(top: 4, left: 0, bottom: 0, right: 0)
     s.tag = 7   // (closer to its group)
     return s
