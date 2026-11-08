@@ -100,6 +100,12 @@ final class MePageVC: ClientsPushedVC {
     super.viewDidDisappear(a)
     if isMovingFromParent || navigationController == nil { onGone?(); onGone = nil }
   }
+  // (a page without a name of its own in the bar — Content plans: its big title's name instead, never an empty name with
+  //  a grey square)
+  override func setBar(_ t: String, _ sub: String, _ col: UIColor, _ logo: String?, _ ini: String?, _ showLogo: Bool) {
+    if t.isEmpty { return }
+    super.setBar(t, sub, col, logo, ini, false)
+  }
 }
 
 // the Clients list opened from Me (Me › Work › Clients — the CD's, who has no Clients tab): pushed on Me, as Me's pages
@@ -110,6 +116,7 @@ final class ClientsFromMeVC: ClientsPushedVC {
     navigationItem.title = "Clients"
     navigationItem.rightBarButtonItem = nil
   }
+  override func setBar(_ t: String, _ sub: String, _ col: UIColor, _ logo: String?, _ ini: String?, _ showLogo: Bool) {}   // ("Clients" only)
   override func viewDidDisappear(_ a: Bool) {
     super.viewDidDisappear(a)
     if isMovingFromParent || navigationController == nil { onGone?(); onGone = nil }

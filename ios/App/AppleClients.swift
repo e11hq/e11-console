@@ -242,6 +242,12 @@ final class AssetsVC: ClientsPushedVC, UISearchResultsUpdating, UISearchControll
     }
   }
   func placeholder(_ p: String) { search?.searchBar.placeholder = p }
+  // (All Client Assets: "Client Assets" and its line come from its title — no client name or logo square in the bar's
+  //  middle: an empty name with a grey square stood over it, the title never showing — Haris 2026-11-08 video)
+  override func setBar(_ t: String, _ sub: String, _ col: UIColor, _ logo: String?, _ ini: String?, _ showLogo: Bool) {
+    if h.assets == "all" { return }
+    super.setBar(t, sub, col, logo, ini, showLogo)
+  }
   override func menuItems() -> [CornerMenuItem] { h.assetsMenu?() ?? [] }
   func updateSearchResults(for s: UISearchController) { if h.assets == "all" { h.appleSearchText(s.searchBar.text ?? "") } else { onSearch?(s.searchBar.text ?? "") } }
   func willPresentSearchController(_ s: UISearchController) { if h.assets == "all" { h.appleSearchBegin() } }
