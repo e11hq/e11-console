@@ -88,8 +88,8 @@ final class MePageVC: ClientsPushedVC {
     // (a page whose name is its big title on the old page — Content plans opened from Me: its name and line in the bar)
     h.onAppleTitle = { [weak self] t, d in
       guard let self = self, !t.isEmpty else { return }
-      self.navigationItem.title = t
-      if #available(iOS 26.0, *) { self.navigationItem.subtitle = d.isEmpty ? nil : d }
+      if self.navigationItem.title != t { self.navigationItem.title = t }   // (only when it changes — Apple's bar not laid out again mid-slide)
+      if #available(iOS 26.0, *) { let sub: String? = d.isEmpty ? nil : d; if self.navigationItem.subtitle != sub { self.navigationItem.subtitle = sub } }
     }
   }
   required init?(coder: NSCoder) { fatalError() }

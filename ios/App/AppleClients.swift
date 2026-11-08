@@ -208,9 +208,12 @@ final class AssetsVC: ClientsPushedVC, UISearchResultsUpdating, UISearchControll
     super.init(h)
     // (All Client Assets: "Client Assets" and its line, "13 clients · 32 files", in the bar's middle)
     if h.assets == "all" {
+      // (set only when it changes: set again on every redraw — the page drawn again as it arrives or comes back — Apple's bar
+      //  laid itself out again mid-slide and its search box came in late: Haris 2026-11-08)
       h.onAppleTitle = { [weak self] t, d in
-        self?.navigationItem.title = t
-        if #available(iOS 26.0, *) { self?.navigationItem.subtitle = d.isEmpty ? nil : d }
+        guard let self = self else { return }
+        if self.navigationItem.title != t { self.navigationItem.title = t }
+        if #available(iOS 26.0, *) { let sub: String? = d.isEmpty ? nil : d; if self.navigationItem.subtitle != sub { self.navigationItem.subtitle = sub } }
       }
     }
   }
@@ -241,7 +244,7 @@ final class AssetsVC: ClientsPushedVC, UISearchResultsUpdating, UISearchControll
       if #available(iOS 16.0, *) { navigationItem.preferredSearchBarPlacement = .stacked }
     }
   }
-  func placeholder(_ p: String) { search?.searchBar.placeholder = p }
+  func placeholder(_ p: String) { if search?.searchBar.placeholder != p { search?.searchBar.placeholder = p } }   // (only when it changes — as the title)
   // (All Client Assets: "Client Assets" and its line come from its title — no client name or logo square in the bar's
   //  middle: an empty name with a grey square stood over it, the title never showing — Haris 2026-11-08 video)
   override func setBar(_ t: String, _ sub: String, _ col: UIColor, _ logo: String?, _ ini: String?, _ showLogo: Bool) {
