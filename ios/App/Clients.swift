@@ -150,7 +150,12 @@ final class ClientRow: UIControl {
     isAccessibilityElement = true; accessibilityTraits = .button
   }
   required init?(coder: NSCoder) { fatalError() }
+  private var drawnSig = ""
   func set(_ r: [String: Any], look L: HomeLook, inactive: Bool) {
+    // (the same as it shows: left as it is — only what changed changes, Haris 2026-11-08)
+    let sig = drawSig(r) + "|\(inactive)|\(L.light)|\(L.title)"
+    if sig == drawnSig { return }
+    drawnSig = sig
     let rgb = NativeSheetVC.color(r["rgb"]) ?? .systemGray
     name.text = r["name"] as? String; name.textColor = inactive ? .secondaryLabel : L.title
     ini.text = r["ini"] as? String

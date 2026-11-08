@@ -448,9 +448,30 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
       self.flushOutbox()
     }
   }
+  // (each file's tile kept while it shows the same — an upload's progress makes only its own tile again, at each whole
+  //  percent; the others stay: only what changed changes, Haris 2026-11-08)
+  private var tileMade: [String: (view: UIView, sig: String)] = [:]
   private func paintTiles() {
-    tiles.arrangedSubviews.forEach { $0.removeFromSuperview() }
+    var views: [UIView] = []
+    var keep = tileMade; tileMade = [:]
     for f in files {
+      let sig = "\(Int(f.progress * 100))|\(f.failed)|\(f.thumb != nil)|\(f.name)"
+      if let k = keep.removeValue(forKey: f.uid) {
+        if k.sig == sig { tileMade[f.uid] = k; views.append(k.view); continue }
+        k.view.removeFromSuperview()
+      }
+      let t = makeTile(f)
+      tileMade[f.uid] = (t, sig); views.append(t)
+    }
+    keep.values.forEach { $0.view.removeFromSuperview() }
+    for v in tiles.arrangedSubviews where !views.contains(where: { $0 === v }) { v.removeFromSuperview() }
+    for (i, v) in views.enumerated() where i >= tiles.arrangedSubviews.count || tiles.arrangedSubviews[i] !== v { tiles.insertArrangedSubview(v, at: i) }
+    let want: CGFloat = files.isEmpty ? 0 : 60
+    if tilesH.constant != want { tilesH.constant = want; superview?.layoutIfNeeded() }
+    paintSend()
+  }
+  private func makeTile(_ f: DraftFile) -> UIView {
+    do {
       let uid = f.uid
       let t = UIView(); t.backgroundColor = .tertiarySystemFill; t.layer.cornerRadius = 12
       t.translatesAutoresizingMaskIntoConstraints = false
@@ -475,11 +496,8 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
       x.frame = CGRect(x: 31, y: 3, width: 22, height: 22)   // (inside the tile's corner: nothing of it or its shadow cut off)
       x.addAction(UIAction { [weak self] _ in self?.files.removeAll { $0.uid == uid }; self?.paintTiles() }, for: .touchUpInside)
       t.addSubview(x)
-      tiles.addArrangedSubview(t)
+      return t
     }
-    let want: CGFloat = files.isEmpty ? 0 : 60
-    if tilesH.constant != want { tilesH.constant = want; superview?.layoutIfNeeded() }
-    paintSend()
   }
 
   // ---------- send ----------

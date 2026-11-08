@@ -17,6 +17,7 @@ final class MyTasksVC: UIViewController, UISearchResultsUpdating, UISearchContro
   override func loadView() { let v = UIView(); v.backgroundColor = .systemGroupedBackground; view = v }
   private var meItem: UIBarButtonItem?
   private var filterItem: UIBarButtonItem?
+  private var filterSym = ""
   private var mePhoto: UIImage?
   private var search: UISearchController?
   // what the list says (how many open) and what's filtered (the page's buttons and chips)
@@ -102,7 +103,9 @@ final class MyTasksVC: UIViewController, UISearchResultsUpdating, UISearchContro
     let scope = (filters["tab"] as? String) == "done" ? 1 : 0
     if let b = search?.searchBar, b.selectedScopeButtonIndex != scope { b.selectedScopeButtonIndex = scope }
     // the filter button: Apple's filled symbol while a filter is on (as Mail's)
-    filterItem?.image = UIImage(systemName: c.isEmpty ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill")
+    // (set only when it changes — only what changed changes, Haris 2026-11-08)
+    let fsym = c.isEmpty ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill"
+    if fsym != filterSym { filterSym = fsym; filterItem?.image = UIImage(systemName: fsym) }
     guard line != shownLine else { return }
     shownLine = line
     if #available(iOS 26.0, *) {

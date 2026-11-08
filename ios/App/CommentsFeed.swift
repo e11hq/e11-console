@@ -297,9 +297,19 @@ final class CommentsFeed: UIView, UIScrollViewDelegate, UIGestureRecognizerDeleg
       if animate && !id.hasPrefix("pending-") { going.append(c) } else { c.removeFromSuperview() }
     }
     // your scheduled comments, last (dashed: "Scheduled · 4:00 PM")
-    schedViews.forEach { $0.removeFromSuperview() }
-    schedViews = ((m["scheduled"] as? [[String: Any]]) ?? []).map { ScheduledCard($0) }
-    schedViews.forEach { content.addSubview($0) }
+    // (each kept while it shows the same — only what changed is made again, Haris 2026-11-08)
+    let schedNow = (m["scheduled"] as? [[String: Any]]) ?? []
+    var keepSched: [String: ScheduledCard] = [:]
+    for (k, v) in zip(schedKeys, schedViews) { keepSched[k] = v }
+    var nextKeys: [String] = []
+    schedViews = schedNow.map { x in
+      var k = drawSig(x); while nextKeys.contains(k) { k += "+" }
+      nextKeys.append(k)
+      if let v = keepSched.removeValue(forKey: k) { return v }
+      let v = ScheduledCard(x); content.addSubview(v); return v
+    }
+    keepSched.values.forEach { $0.removeFromSuperview() }
+    schedKeys = nextKeys
     let newOnes = next.filter { !seenIds.contains($0) }
     order = next
     layoutCells()
@@ -323,6 +333,7 @@ final class CommentsFeed: UIView, UIScrollViewDelegate, UIGestureRecognizerDeleg
   private var pendingNew = 0
   var wantEnd = false   // (the next drawing goes down to the latest)
   private var schedViews: [ScheduledCard] = []
+  private var schedKeys: [String] = []
 
   // ---------- layout ----------
   override func layoutSubviews() {

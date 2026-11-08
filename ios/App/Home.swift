@@ -134,6 +134,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   fileprivate var mePics: [String: UIImage] = [:]
   fileprivate var mePicAsked = Set<String>()
   fileprivate var meDrawn: [String: String] = [:]
+  private var listDrawn: [String: String] = [:]
+  // (the groups' headings and "nothing due" lines kept by their group in Apple's list — made new on every draw before)
+  private var heads: [String: UILabel] = [:], empties: [String: UILabel] = [:]
   private var listOn: Bool { list != nil }
   private var sv: UIScrollView { list ?? scroll }
   private let statsRow = UIView()
@@ -272,8 +275,14 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     blockWraps = blockWraps.filter { e in views.values.contains { $0 === e.value } }
     var snap = NSDiffableDataSourceSnapshot<Int, String>()
     snap.appendSections([0]); snap.appendItems(keys, toSection: 0)
+    // (a cell set again only when what it holds or its height changed — the card itself draws its own changes; every cell
+    //  set afresh on each draw broke the rule "only what changed changes": Haris 2026-11-08)
     let had = Set(ds.snapshot().itemIdentifiers)
-    snap.reconfigureItems(keys.filter { had.contains($0) })
+    var sigs: [String: String] = [:]
+    for k in keys { if let v = views[k] { sigs[k] = "\(ObjectIdentifier(v).hashValue)|\(itemHeight(k, v))" } }
+    let changed = keys.filter { had.contains($0) && listDrawn[$0] != sigs[$0] }
+    listDrawn = sigs
+    if !changed.isEmpty { snap.reconfigureItems(changed) }
     ds.apply(snap, animatingDifferences: animated)
   }
   // Apple's swipe actions: right — Done · Due; left — Copy link · Delete (as our round buttons did)
@@ -576,7 +585,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       for v in content where !(v is HomeCard) { if let k = v.accessibilityIdentifier { oldHeads[k] = v } }
     }
     let leavingHeads = content.filter { !($0 is HomeCard) }
-    if !animate { leavingHeads.forEach { if !($0 is HomeBlock) { $0.removeFromSuperview() } } }
+    if !animate && !listOn { leavingHeads.forEach { if !($0 is HomeBlock) { $0.removeFromSuperview() } } }
+    var headsUsed = Set<String>()
     content = []
     groupOf = [:]
     if isClient {
@@ -599,7 +609,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       let gname = g["name"] as? String ?? ""
       runs[gname, default: 0] += 1
       let gkey = gname + "#" + String(runs[gname]!)
-      let h = UILabel()
+      let h: UILabel = listOn ? (heads[gkey] ?? { let x = UILabel(); heads[gkey] = x; return x }()) : UILabel()
+      headsUsed.insert(gkey)
       let name = (g["name"] as? String ?? "").uppercased()
       let s = NSMutableAttributedString()
       // (a client's run under Today: its colour dot first, as on the cards)
@@ -613,10 +624,13 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
         s.append(NSAttributedString(string: " ", attributes: [.font: UIFont.systemFont(ofSize: 12), .kern: 3.6]))
         s.append(NSAttributedString(string: "\(n)", attributes: [.font: UIFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: L.gh.withAlphaComponent(0.8)]))
       }
-      h.attributedText = s; h.tag = 7; h.accessibilityIdentifier = gkey
+      if h.attributedText?.isEqual(to: s) != true { h.attributedText = s }
+      h.tag = 7; h.accessibilityIdentifier = gkey
       // (Today: no heading on screen — only the mark the Due today box scrolls to)
-      if (g["anchor"] as? Bool) == true { h.isHidden = true }
-      scroll.addSubview(h); content.append(h)
+      let anchor = (g["anchor"] as? Bool) == true
+      if h.isHidden != anchor { h.isHidden = anchor }
+      if !listOn || h.superview == nil { scroll.addSubview(h) }   // (kept in its cell of Apple's list)
+      content.append(h)
       for c in g["cards"] as? [[String: Any]] ?? [] {
         guard let id = c["id"] as? String else { continue }
         seen.insert(id)
@@ -646,9 +660,17 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
         groupOf[id] = gkey
       }
       if let e = g["empty"] as? String, !e.isEmpty {
-        let l = UILabel(); l.text = e; l.font = .systemFont(ofSize: 14); l.textColor = L.empty; l.tag = 8; l.numberOfLines = 0; l.accessibilityIdentifier = "empty|" + gkey
-        scroll.addSubview(l); content.append(l)
+        let l: UILabel = listOn ? (empties[gkey] ?? { let x = UILabel(); empties[gkey] = x; return x }()) : UILabel()
+        if l.text != e { l.text = e }
+        l.font = .systemFont(ofSize: 14); if l.textColor != L.empty { l.textColor = L.empty }; l.tag = 8; l.numberOfLines = 0; l.accessibilityIdentifier = "empty|" + gkey
+        if !listOn || l.superview == nil { scroll.addSubview(l) }
+        content.append(l)
       }
+    }
+    // (headings and lines of groups no longer there: gone)
+    if listOn {
+      for (k, v) in heads where !headsUsed.contains(k) { v.removeFromSuperview(); heads[k] = nil }
+      for (k, v) in empties where !headsUsed.contains(k) || !content.contains(where: { $0 === v }) { v.removeFromSuperview(); empties[k] = nil }
     }
     var gone: [UIView] = []
     for (id, v) in cards where !seen.contains(id) {
@@ -1129,7 +1151,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
         scroll.addSubview(v); inboxRows[id] = v
       }
       let p = people[r["from"] as? String ?? ""]
-      v.set(r, photo: roundPic(NativeSheetVC.photo(p), initials: p?["initials"] as? String, color: NativeSheetVC.color(p?["color"]), size: 44))
+      let sig = drawSig(r) + "|\((p?["photo"] as? String)?.hashValue ?? 0)|\(p?["initials"] as? String ?? "")|\(String(describing: p?["color"]))|\(InboxRow.label(r["at"] as? String ?? ""))"
+      if v.drawnSig != sig { v.drawnSig = sig; v.set(r, photo: roundPic(NativeSheetVC.photo(p), initials: p?["initials"] as? String, color: NativeSheetVC.color(p?["color"]), size: 44)) }
       content.append(v)
     }
     let rowsNow = content.compactMap { $0 as? InboxRow }
@@ -2045,8 +2068,13 @@ final class HomeCard: UIControl {
   required init?(coder: NSCoder) { fatalError() }
   // (.pc:active: pressed in a little)
 
+  private var drawnSig = ""
   func set(_ d: [String: Any], look: HomeLook) {
+    // (the same as it shows: left as it is — its faces, words and icon not made again: Haris 2026-11-08)
+    let sig = drawSig(d) + "|\(look.light)|\(look.card)|\(look.title)|\(look.meta)|\(look.late)"
     c = d; L = look
+    if sig == drawnSig { return }
+    drawnSig = sig
     let late = (d["late"] as? Bool) == true, done = (d["done"] as? Bool) == true
     backgroundColor = L.card
     layer.borderColor = (late ? L.lateLine : L.cardLine).cgColor
@@ -2526,6 +2554,7 @@ final class InboxRow: UIControl, UIGestureRecognizerDelegate {
   }
   required init?(coder: NSCoder) { fatalError() }
   override var isHighlighted: Bool { didSet { if !isOpen { body.backgroundColor = isHighlighted ? .systemGray5 : .clear } } }
+  var drawnSig = ""   // (what it showed last — HomeView sets it again only when it changed)
   func set(_ r: [String: Any], photo: UIImage?) {
     id = r["id"] as? String ?? ""
     read = (r["read"] as? Bool) == true
@@ -2963,6 +2992,12 @@ extension HomeView: UIContextMenuInteractionDelegate {
     pp.backgroundColor = .clear
     return UITargetedPreview(view: v, parameters: pp)
   }
+}
+
+// what a model shows, as words — to tell whether it changed (keys in order; anything that can't be written: always new)
+func drawSig(_ d: Any) -> String {
+  guard JSONSerialization.isValidJSONObject(d), let data = try? JSONSerialization.data(withJSONObject: d, options: [.sortedKeys]) else { return UUID().uuidString }
+  return String(decoding: data, as: UTF8.self)
 }
 
 extension HomeView: UICollectionViewDelegate {

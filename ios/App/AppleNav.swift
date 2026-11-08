@@ -141,7 +141,7 @@ final class TaskVC: UIViewController {
     seg.translatesAutoresizingMaskIntoConstraints = false
     seg.widthAnchor.constraint(equalToConstant: 236).isActive = true
     navigationItem.titleView = seg
-    page.onBarTitle = { [weak self] t, _ in self?.navigationItem.title = t }   // (not shown: the name for ‹'s history menu)
+    page.onBarTitle = { [weak self] t, _ in if self?.navigationItem.title != t { self?.navigationItem.title = t } }   // (only when it changes)   // (not shown: the name for ‹'s history menu)
     // (the bar's frost follows the list showing — Details, the comments, a reply)
     page.onEdgeScroll = { [weak self] sv in self?.setContentScrollView(sv, for: .top) }
     page.edgeScroll(page.scroll)

@@ -455,7 +455,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
       if from == "details" { onTab?("details") }   // (looked at Comments, came back: the comment box put away again)
     }
   }
-  func setComments(_ n: Int) { seg.setTitle(n > 0 ? "Comments \(n)" : "Comments", forSegmentAt: 1) }
+  func setComments(_ n: Int) { let t = n > 0 ? "Comments \(n)" : "Comments"; if seg.titleForSegment(at: 1) != t { seg.setTitle(t, forSegmentAt: 1) } }   // (only when it changes)
 
   // ---------- drawing the model ----------
   func loading() { if model == nil { spinner.startAnimating() } }
@@ -553,8 +553,13 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     built = ""; if let m = model { draw(m) }
   }
 
+  private var menuKey = ""
   private func makeMenu() {
     guard let m = model else { return }
+    // (made again only when what's in it changes — only what changed changes, Haris 2026-11-08)
+    let key = "\((m["readOnly"] as? Bool) == true)|\((m["canDelete"] as? Bool) == true && !TaskPage.viewOnly)"
+    if key == menuKey, cornerMenu != nil { return }
+    menuKey = key
     var items: [UIMenuElement] = []
     items.append(UIAction(title: "Copy link", image: UIImage(systemName: "link")) { [weak self] _ in guard let self = self else { return }; self.onEvent?(["ev": "copy", "id": self.taskId]) })
     if (m["readOnly"] as? Bool) != true {   // (attaching stays on the phone — Haris, 2026-11-01)

@@ -310,8 +310,9 @@ final class FileRows: UIView, HomeBlock {
       return r
     }
     keep.values.forEach { $0.0.removeFromSuperview() }
-    lines.forEach { $0.removeFromSuperview() }
-    lines = rows.dropFirst().map { _ in let l = UIView(); l.backgroundColor = .separator; box.addSubview(l); return l }
+    // (the lines between the rows: as many as needed, the ones there kept — not all made again each time)
+    while lines.count > max(0, rows.count - 1) { lines.removeLast().removeFromSuperview() }
+    while lines.count < max(0, rows.count - 1) { let l = UIView(); l.backgroundColor = .separator; box.addSubview(l); lines.append(l) }
     setNeedsLayout()
   }
   func blockHeight(_ W: CGFloat) -> CGFloat { rows.isEmpty ? 0 : CGFloat(rows.count) * FileRows.H + 6 }
