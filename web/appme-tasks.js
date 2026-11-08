@@ -307,7 +307,7 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
     });
     return {
       q, total: found.length,
-      clients: projs.map((p) => ({ id: p.id, name: p.name, ini: initials(p.name), rgb: R.rgbOf(p.color), open: W.tasks.filter((t) => t.projectId === p.id && !t.parentId && !t.done).length })),
+      clients: projs.map((p) => ({ id: p.id, name: p.name, ini: initials(p.name), rgb: R.rgbOf(p.color), open: W.tasks.filter((t) => t.projectId === p.id && !t.parentId && !t.done && (!r.seenTask || r.seenTask(t))).length })),   // (as this person's lists have them)
       tasks: found.slice(0, 80).map((h) => Object.assign(r.cardOf(h.t), whyOf(h) ? { found: whyOf(h) } : {})),
       fixed, marks: [...new Set(terms.concat(fixed.map((f) => f.to)))].slice(0, 12),   // (what was typed, and what a typo was read as — few, so marking stays quick)
     };

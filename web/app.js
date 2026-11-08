@@ -2046,7 +2046,20 @@ const Work = (() => {
   }
   const dayTitle = () => (seesAll() ? 'E11 Day' : 'My Day');
   const active = () => { const F = f(); return !!(F.created || F.due || F.finished || F.cd || F.people.length || F.ams.length || F.team || F.assigned); };
-  return { f, lead, personal, openOf, doneAtOf, list, home, homeOpen, homeDoneAt, day, dayTitle, inCreated, active, leadSet, hasClients };
+  // a client's tasks as each role's own lists have them (Haris 2026-11-08: "the client page task list will be as per the
+  // role for everyone, as their home / my tasks page"): Admins and the CD everything (their E11 Day is the whole team's);
+  // an Account Manager what their Home has (every task of the clients they look after, and the ones they created);
+  // Production, Freelancers and Socials the tasks on their own lists. { all: true } or the set of task ids
+  // (worked out once per drawing — kept until the code running now has finished)
+  let seenMemo = null;
+  function seen() {
+    if (seenMemo) return seenMemo;
+    if (seesAll()) seenMemo = { all: true, has: () => true };
+    else { const ids = new Set((lead() ? leadSet([currentUserId]) : topTasks().filter(onMyList)).map((t) => t.id)); seenMemo = { all: false, has: (id) => ids.has(id) }; }
+    Promise.resolve().then(() => { seenMemo = null; });
+    return seenMemo;
+  }
+  return { f, lead, personal, openOf, doneAtOf, list, home, homeOpen, homeDoneAt, day, dayTitle, inCreated, active, leadSet, hasClients, seen };
 })();
 const CREATED_L = { today: 'Today', week: 'This week', month: 'This month' };
 // Due date filter (same groups as the Home page): late = past due, today, week = today to Sunday
@@ -2990,8 +3003,9 @@ function renderSidebar() {
   if (typeof Phone !== 'undefined') Phone.chrome();
   $('.create-btn').style.display = can('createTask') ? '' : 'none';
   const list = db.projects.filter((x) => !x.inactive && amSidebarOk(x)).sort(byOrder);   // inactive clients leave the sidebar; an AM sees their own
+  const SEEN = Work.seen();   // (the open counts: the tasks this person's lists have — Haris 2026-11-08)
   $('#project-list').innerHTML = list.length ? list.map((p) => {
-    const open = db.tasks.filter((t) => t.projectId === p.id && !t.parentId && !t.done).length;
+    const open = db.tasks.filter((t) => t.projectId === p.id && !t.parentId && !t.done && SEEN.has(t.id)).length;
     const active = !ui.search && ui.view === 'project' && ui.projectId === p.id;
     return `<a class="nav-item ${active ? 'active' : ''}" data-project="${p.id}" title="${esc(p.name)}">
       ${clientOfProject(p) && clientOfProject(p).logo ? `<span class="nav-clogo">${clientLogoHTML(clientOfProject(p), 16)}</span>` : `<span class="dot" style="background:${p.color}"></span>`}<span class="name">${esc(p.name)}</span>
@@ -3187,9 +3201,10 @@ function prioFlag(p, compact) {
 
 /* ---------- List view ---------- */
 function viewList(p) {
+  const SEEN = Work.seen();   // (a client's tasks as this person's lists have them — Haris 2026-11-08)
   const showDone = !!ui.showDone[p.id];
   const sections = p.sections.map((s) => {
-    const all = db.tasks.filter((t) => t.projectId === p.id && t.sectionId === s.id && !t.parentId).sort((a, b) => urgentFirst(a, b) || byOrder(a, b));
+    const all = db.tasks.filter((t) => t.projectId === p.id && t.sectionId === s.id && !t.parentId && SEEN.has(t.id)).sort((a, b) => urgentFirst(a, b) || byOrder(a, b));
     const tasks = showDone ? all : all.filter((t) => !t.done);
     const collapsed = ui.collapsed[s.id];
     return `<div class="section ${collapsed ? 'collapsed' : ''}" data-section="${s.id}">
@@ -3205,7 +3220,7 @@ function viewList(p) {
       </div>
     </div>`;
   }).join('');
-  const total = db.tasks.filter((t) => t.projectId === p.id && !t.parentId);
+  const total = db.tasks.filter((t) => t.projectId === p.id && !t.parentId && SEEN.has(t.id));
   const doneN = total.filter((t) => t.done).length;
   return `<div class="list-wrap">
     <div class="list-toolbar">
@@ -3230,9 +3245,10 @@ function card(t) {
 }
 
 function viewBoard(p) {
+  const SEEN = Work.seen();
   const showDone = !!ui.showDone[p.id];
   const cols = p.sections.map((s) => {
- const all = db.tasks.filter((t) => t.projectId === p.id && t.sectionId === s.id && !t.parentId).sort((a, b) => urgentFirst(a, b) || byOrder(a, b));
+ const all = db.tasks.filter((t) => t.projectId === p.id && t.sectionId === s.id && !t.parentId && SEEN.has(t.id)).sort((a, b) => urgentFirst(a, b) || byOrder(a, b));
     const tasks = showDone ? all : all.filter((t) => !t.done);
     return `<div class="col" data-col="${s.id}" style="--col:${s.color}">
       <div class="col-head">
@@ -3587,7 +3603,7 @@ function searchFixedNote(r) {
 
 function viewSearch() {
   const r = taskSearch(ui.search);
-  const projects = r.projects.length ? `<div class="sr-projects">${r.projects.map((p) => `<button class="sr-proj" data-action="go-project" data-id="${p.id}"><span class="page-icon sm" style="background:${p.color}">${esc(initials(p.name))}</span><span><b>${sMark(p.name, r)}</b><small>${db.tasks.filter((t) => t.projectId === p.id && !t.parentId && !t.done).length} open tasks${clientOfProject(p) ? ' · ' + esc(clientOfProject(p).name) : ''}</small></span>${icon('chev-right')}</button>`).join('')}</div>` : '';
+  const projects = r.projects.length ? `<div class="sr-projects">${r.projects.map((p) => `<button class="sr-proj" data-action="go-project" data-id="${p.id}"><span class="page-icon sm" style="background:${p.color}">${esc(initials(p.name))}</span><span><b>${sMark(p.name, r)}</b><small>${(() => { const S = Work.seen(); return db.tasks.filter((t) => t.projectId === p.id && !t.parentId && !t.done && S.has(t.id)).length; })()} open tasks${clientOfProject(p) ? ' · ' + esc(clientOfProject(p).name) : ''}</small></span>${icon('chev-right')}</button>`).join('')}</div>` : '';
   const rows = r.tasks.map((h) => {
     const why = searchWhy(h, r);
     return `<div class="sr-hit">${taskRow(h.t, { showProject: true, showParent: true, mark: r })}${why ? `<div class="sr-why-row">${why}</div>` : ''}</div>`;

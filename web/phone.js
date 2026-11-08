@@ -371,7 +371,7 @@ const Phone = (() => {
     return `<div class="ph-page">
       ${head('Clients', plural(list.length, 'client'))}
       <div class="ph-list">${list.map((p) => {
-        const open = db.tasks.filter((t) => t.projectId === p.id && !t.parentId && !t.done).length;
+        const open = db.tasks.filter((t) => t.projectId === p.id && !t.parentId && !t.done && Work.seen().has(t.id)).length;
         return `<div class="pc pj" data-ph="open-project" data-id="${p.id}"><span class="ph-pj-ic" style="background:${p.color}">${esc(initials(p.name))}</span>
           <span class="pc-body"><span class="pc-title">${esc(p.name)}</span><span class="pc-meta">${plural(open, 'open task')}</span></span>${icon('chev-right')}</div>`;
       }).join('') || '<div class="ph-empty big">No clients yet</div>'}</div>
@@ -382,7 +382,7 @@ const Phone = (() => {
     if (!p) { ui.view = 'projects'; return projects(); }
     const showDone = !!ui.showDone[p.id];
     const body = p.sections.map((s) => {
-      const all = db.tasks.filter((t) => t.projectId === p.id && t.sectionId === s.id && !t.parentId).sort((a, b) => urgentFirst(a, b) || byOrder(a, b));
+      const all = db.tasks.filter((t) => t.projectId === p.id && t.sectionId === s.id && !t.parentId && Work.seen().has(t.id)).sort((a, b) => urgentFirst(a, b) || byOrder(a, b));
       const ts = showDone ? all : all.filter((t) => !t.done);
       if (!ts.length) return '';
       return `<div class="ph-gh"><i class="ph-dot" style="background:${s.color}"></i>${esc(s.name)}<span>${ts.length}</span></div>${ts.map((t) => card(t, { status: false })).join('')}`;
@@ -438,7 +438,7 @@ const Phone = (() => {
     if (!q) return '<div class="ph-empty">Search titles, clients, people, tags, descriptions and comments. Try “overdue”, “urgent” or “mine” too.</div>';
     const r = taskSearch(q, { limit: 80 });
     const projects = r.projects.map((p) => `<div class="pc pj" data-ph="open-project" data-id="${p.id}"><span class="ph-pj-ic" style="background:${p.color}">${esc(initials(p.name))}</span>
-      <span class="pc-body"><span class="pc-title">${sMark(p.name, r)}</span><span class="pc-meta">Client · ${plural(db.tasks.filter((t) => t.projectId === p.id && !t.parentId && !t.done).length, 'open task')}</span></span>${icon('chev-right')}</div>`).join('');
+      <span class="pc-body"><span class="pc-title">${sMark(p.name, r)}</span><span class="pc-meta">Client · ${plural(db.tasks.filter((t) => t.projectId === p.id && !t.parentId && !t.done && Work.seen().has(t.id)).length, 'open task')}</span></span>${icon('chev-right')}</div>`).join('');
     const tasks = r.tasks.map((h) => { const why = searchWhy(h, r); return card(h.t, { mark: r }) + (why ? `<div class="ph-why">${why}</div>` : ''); }).join('');
     return (r.fixed.length ? searchFixedNote(r) : '')
       + (projects ? `<div class="ph-gh">Clients<span>${r.projects.length}</span></div>${projects}` : '')
@@ -2561,7 +2561,7 @@ const NativeHome = (() => {
         const r = taskSearch(q, { limit: 80 });
         res = {
           q: ev.q, total: r.total,
-          clients: r.projects.map((p) => ({ id: p.id, name: p.name, ini: initials(p.name), rgb: rgbOfCss(p.color), open: db.tasks.filter((t) => t.projectId === p.id && !t.parentId && !t.done).length })),
+          clients: r.projects.map((p) => ({ id: p.id, name: p.name, ini: initials(p.name), rgb: rgbOfCss(p.color), open: db.tasks.filter((t) => t.projectId === p.id && !t.parentId && !t.done && Work.seen().has(t.id)).length })),
           tasks: r.tasks.map((h) => cardOf(h.t)),
         };
       }

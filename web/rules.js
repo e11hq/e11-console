@@ -1199,8 +1199,17 @@ var E11Rules = (() => {
     const byOrderP = (a, b) => (a.order || 0) - (b.order || 0);
     const clientRec = (p) => (p && p.clientId ? (db.clients || []).find((c) => c.id === p.clientId) || null : null);
     const peopleOf = (ids) => Object.fromEntries([...ids].map((id) => { const p = userById(id); return [id, { initials: initials(fullName(p)), color: rgbOf(avColor(id || 'x')), photo: p && p.avatar ? p.avatar : null }]; }));
+    // a client's tasks as each role's own lists have them (Haris 2026-11-08: "as their home / my tasks page"): Admins and
+    // the CD everything (their E11 Day is the whole team's); an Account Manager what their Home has (every task of the
+    // clients they look after, and the ones they created); Production, Freelancers and Socials the tasks on their lists
+    let seenSet;
+    const seenTask = (t) => {
+      if (seesAll()) return true;
+      if (!seenSet) seenSet = new Set((lead() ? leadSet([meId]) : topTasks().filter(onMyList)).map((x) => x.id));
+      return seenSet.has(t.id);
+    };
     function clientRow(p) {
-      const open = tasks.filter((t) => t.projectId === p.id && !t.parentId && !t.done);
+      const open = tasks.filter((t) => t.projectId === p.id && !t.parentId && !t.done && seenTask(t));
       const late = open.filter((t) => t.due && dayDiff(t.due) < 0).length;
       const c = clientRec(p);
       const ams = (p.ams || []).filter((a) => !a.onLeave).map((a) => a.id).filter((id) => userById(id)).slice(0, 3);
@@ -1238,7 +1247,7 @@ var E11Rules = (() => {
       const folders = fl.filter((f) => !f.parentId).map((f, i) => ({ id: f.id, name: f.name || 'Folder', files: count(f, fl), rgb: rgbOf(FOLDER_RGB[i % FOLDER_RGB.length]) }));
       let open = 0;
       const groups = (p.sections || []).map((s) => {
-        const all = tasks.filter((t) => t.projectId === p.id && t.sectionId === s.id && !t.parentId).sort((a, b) => (isUrgent(b) ? 1 : 0) - (isUrgent(a) ? 1 : 0) || byOrderP(a, b));
+        const all = tasks.filter((t) => t.projectId === p.id && t.sectionId === s.id && !t.parentId && seenTask(t)).sort((a, b) => (isUrgent(b) ? 1 : 0) - (isUrgent(a) ? 1 : 0) || byOrderP(a, b));
         const ts = showDone ? all : all.filter((t) => !t.done);
         open += all.filter((t) => !t.done).length;
         return ts.length ? { name: s.name, dot: rgbOf(s.color), n: ts.length, empty: '', cards: ts.map((t) => cardOf(t, { status: false })) } : null;
@@ -1252,7 +1261,7 @@ var E11Rules = (() => {
       };
     }
 
-    return { peopleLocked, home, myTasks, myTasksFilters, inbox, inboxRow, clientsList, clientPage, setFinance, canFinance, myDayData, cardOf, can, amReadOnly, canComplete, completeBlocked, dayTitle, statusInfo, sectionOf,
+    return { peopleLocked, home, myTasks, myTasksFilters, inbox, inboxRow, clientsList, clientPage, seenTask, setFinance, canFinance, myDayData, cardOf, can, amReadOnly, canComplete, completeBlocked, dayTitle, statusInfo, sectionOf,
       notifGroups: NOTIF_GROUPS, doneLocked, canReopen, finish, finishBlocked, canFinish, moveToStatus, logActivity, logChange, pushNotif, notifyWatchers, checkPrioConflict, setDone, setDue, setClientApproval, asksClientApproval, deleteTask, watchersOf, creatorOf, clientAmsOf, fmtDue,
       taskPage, setTitle, setStart, setStatus, setMyPart, setPrio, prioTaken, toggleCheck, setNeedsCD, setUpdate, idLocked,
       setAssignee, setGuardian, addTag, removeTag, setChannels, addCheck, addSubtask, setClient, commentsFeed, toggleReaction, deleteComment, removeAttachment, setDesc, submitReview, withdrawReview, postComment, editComment, mentionable, attachFilesTo,

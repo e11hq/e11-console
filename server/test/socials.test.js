@@ -12,7 +12,7 @@ const src = ['rules.js', 'appview.js', 'appme-tasks.js'].map((f) => fs.readFileS
 const engine = () => vm.runInNewContext(`${src}; ({ E11Rules, E11AppView, E11AppMe })`, { Date, Math, Number, String, Object, Array, JSON, Map, Set, parseInt, isNaN, encodeURIComponent, RegExp });
 
 const now = new Date().toISOString(), today = now.slice(0, 10);
-const T = (id, o) => ({ id, title: id, projectId: 'p1', assignees: [], comments: [], attachments: [], checklist: [], activity: [], createdAt: now, updatedAt: now, due: today, ...o });
+const T = (id, o) => ({ id, title: id, projectId: 'p1', sectionId: 's1', assignees: [], comments: [], attachments: [], checklist: [], activity: [], createdAt: now, updatedAt: now, due: today, ...o });
 const data = {
   users: [
     { id: 'u-a', name: 'Haris Admin', email: 'a@x.test', role: 'admin', active: true },
@@ -21,7 +21,7 @@ const data = {
     { id: 'u-sm', name: 'Mona Manager', email: 'sm@x.test', role: 'social', active: true },
     { id: 'u-p', name: 'Ali Designer', email: 'p@x.test', role: 'production', active: true },
   ],
-  projects: [{ id: 'p1', name: 'Northline', color: '#3366ff', socials: ['u-se'] }, { id: 'p2', name: 'Orbit', color: '#ff3366', socials: ['u-se2'] }],
+  projects: [{ id: 'p1', name: 'Northline', color: '#3366ff', socials: ['u-se'], sections: [{ id: 's1', name: 'To do' }] }, { id: 'p2', name: 'Orbit', color: '#ff3366', socials: ['u-se2'], sections: [{ id: 's1', name: 'To do' }] }],
   statuses: [], meta: { socialMgrIds: ['u-sm'] },
   plans: [{ id: 'pl1', projectId: 'p1', month: today.slice(0, 7), posts: [] }, { id: 'pl2', projectId: 'p2', month: today.slice(0, 7), posts: [] }],
   tasks: [
@@ -87,4 +87,17 @@ test('everyone else as before: an Admin\'s search finds every client and task', 
   const s = M.search(R, data, 'u-a', Date.now(), 'Northline');
   assert.ok(s.clients.length >= 1);
   assert.ok(s.tasks.length >= 6);
+});
+
+// a client's page and the Clients list's counts, as each role's lists have them (Haris 2026-11-08): Admins and the CD
+// everything; Production / Socials their own lists'
+test('a client\'s page: everything for an Admin, each one\'s own tasks for the rest', () => {
+  const page = (me) => { const { V } = as(me); return screen(V, 'clients', JSON.stringify({ view: 'client', id: 'p1', done: true })); };
+  assert.deepEqual(ids(page('u-a')), ['done-plan-se', 'mine-se', 'other', 'plan-admin', 'plan-se', 'plan-sm']);
+  assert.deepEqual(ids(page('u-se')), ['done-plan-se', 'mine-se', 'plan-se']);
+  assert.deepEqual(ids(page('u-sm')), ['done-plan-se', 'plan-admin', 'plan-se', 'plan-sm']);
+  assert.deepEqual(ids(page('u-p')), ['done-plan-se', 'other', 'plan-admin', 'plan-se', 'plan-sm']);
+  const { V } = as('u-se');
+  const row = screen(V, 'clients').rows.find((r) => r.id === 'p1');
+  assert.equal(row.open, 2, 'the list\'s count: the same open tasks as the page');
 });
