@@ -12,12 +12,16 @@ on:
       walk:
         description: "Run the walk-through for every role before signing (yes / no)"
         default: "yes"
+      mac:
+        description: "Which Mac builds it: own (Haris's Mac, the runner on it) or github (GitHub's Mac, when his is off)"
+        default: own
   # (no build on a push any more: every build only on Haris's word — Haris 2026-11-08; one build, straight to TestFlight)
 permissions:
   contents: write
 jobs:
   ios:
-    runs-on: [self-hosted, macOS, ARM64]   # (Haris's own Mac, the GitHub runner on it; GitHub's Mac: macos-26)
+    # (Haris's own Mac, the GitHub runner on it — or GitHub's Mac when his is off: mac=github, Haris 2026-11-08)
+    runs-on: ${{ inputs.mac == 'github' && fromJSON('["macos-26"]') || fromJSON('["self-hosted","macOS","ARM64"]') }}
     timeout-minutes: 100
     steps:
       - uses: actions/checkout@v4
