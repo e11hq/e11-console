@@ -1608,6 +1608,12 @@ final class MeCtl {
     main.updateCorner()
   }
   // (Me's navigation settled — the tab tapped again pops them all at once, and only the top one hears it)
+  // (Me's first screen made as its tab first comes up — in it from the start, filled as its model comes: the tab never
+  //  comes up empty, and Apple's bar has its list before the first look — Haris 2026-11-08)
+  func prepareRoot() {
+    guard apple, stack.isEmpty else { return }
+    push(screen(rootKind, nil), animated: false)
+  }
   func reconcile(_ vcs: [UIViewController]) {
     guard apple else { return }
     // (a page still on its way in — pushed just after another went back — isn't gone)

@@ -57,7 +57,8 @@ final class MyTasksVC: UIViewController, UISearchResultsUpdating, UISearchContro
     navigationItem.searchController = s
     navigationItem.hidesSearchBarWhenScrolling = false
     showLine()
-    if let h = Main.shared.myTasksIfMade { adopt(h) }
+    // (its screen in it from the start, as the Inbox's — Haris 2026-11-08)
+    if APPLE_MYTASKS { adopt(Main.shared.myTasksView) } else if let h = Main.shared.myTasksIfMade { adopt(h) }
   }
   // (where the tab bar starts, for "+ New task" and the list's end — as Home's screen does)
   override func viewDidLayoutSubviews() {

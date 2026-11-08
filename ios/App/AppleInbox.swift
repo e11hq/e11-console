@@ -42,7 +42,9 @@ final class InboxVC: UIViewController, TabRoot {
     markItem = mark
     navigationItem.rightBarButtonItems = [me]
     if #available(iOS 17.0, *) { registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (vc: InboxVC, _: UITraitCollection) in vc.paintMe() } }
-    if let h = Main.shared.inboxIfMade { adopt(h) }
+    // (its screen in it from the start — made now if it wasn't: the tab never comes up empty, and Apple's bar has its list
+    //  before the first look — Haris 2026-11-08: a black flash, the big title cut, on each tab's first open)
+    if APPLE_INBOX { adopt(Main.shared.inboxView) } else if let h = Main.shared.inboxIfMade { adopt(h) }
   }
   // (where the tab bar starts, for "+ New task" and the list's end — as Home's screen does)
   override func viewDidLayoutSubviews() {

@@ -1420,7 +1420,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     //  and the page brings it up to date)
     if let h = homeIfMade {
       if tabKeys[item.tag] == "today" {
-        if !h.isHidden { h.scrollToTop() } else if homeHadModel { h.isHidden = false }
+        if !h.isHidden { if again { h.scrollToTop() } }   // (up to the top only when the tab is tapped again — its page kept in its tab now, coming to it isn't that: Haris 2026-11-08)
+        else if homeHadModel { h.isHidden = false }
       } else if !h.isHidden, !APPLE_HOME {   // (Home its own Apple screen in its own tab: kept as it is — hidden, it came back blank, its big title cut: Haris 2026-11-08)
         h.endEditing(true)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
@@ -1432,7 +1433,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     // (the Inbox, 28+: the same)
     if let h = inboxIfMade {
       if tabKeys[item.tag] == "inbox" {
-        if !h.isHidden { h.scrollToTop() } else if inboxHadModel, serverInbox.on, (serverInbox.shown?["me"] as? String) == inboxPageMe { h.isHidden = false }
+        if !h.isHidden { if again { h.scrollToTop() } }   // (up to the top only when the tab is tapped again — its page kept in its tab now, coming to it isn't that: Haris 2026-11-08)
+        else if inboxHadModel, serverInbox.on, (serverInbox.shown?["me"] as? String) == inboxPageMe { h.isHidden = false }
       } else if !h.isHidden, !APPLE_INBOX {   // (its own Apple screen: kept — Haris 2026-11-08)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
           guard let self = self, let sel = self.tabBar.selectedItem, sel.tag < self.tabKeys.count, self.tabKeys[sel.tag] != "inbox" else { return }
@@ -1443,7 +1445,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     // (My Tasks, 26+: the same — kept until the page has drawn the other tab; again while on it: back to the top)
     if let h = myTasksIfMade {
       if tabKeys[item.tag] == "mytasks" {
-        if !h.isHidden { h.scrollToTop() } else if myTasksHadModel, serverMyTasks.on, (serverMyTasks.shown?["me"] as? String) == myTasksPageMe { h.isHidden = false }
+        if !h.isHidden { if again { h.scrollToTop() } }   // (up to the top only when the tab is tapped again — its page kept in its tab now, coming to it isn't that: Haris 2026-11-08)
+        else if myTasksHadModel, serverMyTasks.on, (serverMyTasks.shown?["me"] as? String) == myTasksPageMe { h.isHidden = false }
       } else if !h.isHidden, !APPLE_MYTASKS {   // (its own Apple screen: kept — Haris 2026-11-08)
         h.endEditing(true)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
@@ -1806,7 +1809,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let h = HomeView(frame: view.bounds)
     h.isList = true
     h.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-    h.isHidden = true
+    // (its own Apple screen: in its tab from the start, shown, filled as its list comes — hidden, the tab came up empty
+    //  (black, just the title) and Apple's bar, given the list late, left the big title cut: Haris 2026-11-08)
+    h.isHidden = !APPLE_MYTASKS
     h.onEvent = { [weak self] ev in
       guard let self = self else { return }
       if self.eventOnServer(ev, self.serverMyTasks, pageMe: self.myTasksPageMe) { return }
@@ -1873,7 +1878,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     // (no list yet for this tab and these filters: the page's own shows until the server's comes — never the old one
     //  under the new filters)
     if s.on, let m = s.shown { drawServerMyTasks(m) } else {
-      h.isHidden = true
+      if !APPLE_MYTASKS { h.isHidden = true }   // (its own Apple screen stays, with what it shows, until the list comes)
       // (no list in a moment — no signal, or switched off: the page's own)
       let q = s.query
       DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
@@ -1896,7 +1901,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let h = HomeView(frame: view.bounds)
     h.isInbox = true
     h.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-    h.isHidden = true
+    h.isHidden = !APPLE_INBOX   // (in its own tab from the start, shown — as My Tasks')
     h.onEvent = { [weak self] ev in
       guard let self = self else { return }
       let s = self.serverInbox
@@ -1966,7 +1971,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     inboxLight = (a["light"] as? Bool) ?? (appStyle == .light)
     let s = serverInbox
     if s.on, let m = s.shown { drawServerInbox(m) } else {
-      h.isHidden = true
+      if !APPLE_INBOX { h.isHidden = true }   // (its own Apple screen stays until the list comes)
       DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
         guard let self = self, self.inboxWanted, self.inboxIfMade?.isHidden == true else { return }
         self.inboxOwn(true)
@@ -2065,7 +2070,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let h = HomeView(frame: view.bounds)
     if page { h.isClient = true } else { h.isClients = true }
     h.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-    h.isHidden = true
+    h.isHidden = !(clientsApple && !page && !clientsFromMeApple)   // (the Clients tab's own Apple screen: in its tab from the start, shown)
     h.onEvent = { [weak self] ev in
       guard let self = self else { return }
       // (Done / Due / Delete on a card: as Home's, straight to the server)
@@ -2106,6 +2111,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   // the Clients list over Me (Me › Work › Clients — the CD has Reviews in its place in the tab bar; Haris 2026-11-05: the
   // app's own list, sliding in over Me, ‹ and the edge swipe back to Me)
+  // (the Clients tab's list, made as its tab first loads — AppleClients.swift)
+  func clientsListMade() -> HomeView { clientsScreen(false) }
   func openClientsFromMe() {
     guard let me = AppData.shared.me ?? homePageMe else { return }
     // (Me in its own Apple navigation: the list pushed on it, Apple's way — ‹ and the swipe back to Me; a client's page

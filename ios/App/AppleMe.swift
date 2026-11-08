@@ -44,6 +44,11 @@ final class MeVC: UIViewController, TabRoot {
     super.viewDidLayoutSubviews()
     if let h = h, h.superview === view { h.tabTop = Main.shared.homeTabTop }
   }
+  // (its screen in it before it first shows — never an empty tab: Haris 2026-11-08)
+  override func viewWillAppear(_ a: Bool) {
+    super.viewWillAppear(a)
+    if h == nil { Main.shared.meCtl.prepareRoot() }
+  }
   func adopt(_ v: HomeView) {
     loadViewIfNeeded()
     if let old = h, old !== v, old.superview === view { old.removeFromSuperview() }

@@ -61,7 +61,8 @@ final class ClientsVC: UIViewController, TabRoot, UISearchResultsUpdating, UISea
     search = s
     navigationItem.searchController = s
     navigationItem.hidesSearchBarWhenScrolling = false
-    if let h = Main.shared.clientsListIfMade, Main.shared.clientsApple { adopt(h) }
+    // (its list in it from the start, as the Inbox's — Haris 2026-11-08)
+    if Main.shared.clientsApple { adopt(Main.shared.clientsListMade()) }
   }
   // (where the tab bar starts, for "+ Add client" and the list's end — as Home's screen does)
   override func viewDidLayoutSubviews() {
