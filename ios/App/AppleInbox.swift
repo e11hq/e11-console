@@ -69,6 +69,7 @@ final class InboxVC: UIViewController, TabRoot {
     showMark(h.corner())
   }
   func paintMe() { meItem?.image = BarImage.me(mePhoto, traitCollection) }
+  var markShown: String { markKind }   // (for the self-test: "read", "unread" or "" — the bar button showing)
   // Mark all read (unread ones in the list) or Mark all unread (none unread, rows in the list) — or neither
   private func showMark(_ c: (kind: String, text: String, frame: CGRect)?) {
     let kind = c.map { $0.kind == "read" || $0.kind == "unread" ? $0.kind : "" } ?? ""

@@ -2903,6 +2903,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
             var g: [String: Any] = ["made": self.inboxIfMade != nil, "shown": self.inboxIfMade?.isHidden == false, "server": self.serverInboxIfMade?.on ?? false, "query": self.serverInboxIfMade?.query ?? ""]
             if let h = self.inboxIfMade { g.merge(h.inboxGeo()) { a, _ in a } }
             g["corner"] = self.corner.kind; g["cornerW"] = self.corner.frame.width; g["cornerA"] = self.corner.alpha
+            g["appleMark"] = InboxVC.shared?.markShown ?? ""
             // (who the server's Inbox is for, who the page says is signed in, and what the server sent — for the empty-Inbox runs)
             g["me"] = self.serverInboxIfMade?.me ?? ""; g["pageMe"] = self.inboxPageMe ?? ""
             g["modelRows"] = (self.serverInboxIfMade?.shown?["rows"] as? [Any])?.count ?? -1; g["modelMe"] = self.serverInboxIfMade?.shown?["me"] as? String ?? ""
