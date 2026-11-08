@@ -204,7 +204,23 @@ no Talk; Apple's filter button with Apple's own menu (Due ticks; People and AMs 
 or "first + N more" — both opening the people sheet with search and ticks; Assigned to me for the CD; Waiting for CD review
 when on; Clear filters), Apple's filled filter symbol while a filter is on; All / Done as Apple's segmented control at the
 top of Apple's list; the cards in Apple's list with Apple's swipes; tasks open with Apple's push; the app opened afresh
-starts it with no filters, on All.
+starts it with no filters, on All. (Since 1576 the latest: its "+ New task" slides back with the page as Home's — 5eeb050.)
+
+**iPhone Inbox — APPROVED and LOCKED (Haris, 2026-11-08 16:39: "Home, Task, My Tasks, Inbox is locked"):** build **1576**,
+commit 5eeb050, branch `locked/ios-inbox-1576` (never moved or deleted). Nothing touches it — look, behaviour or code, or a
+shared piece it uses (HomeView, AppleTabs, AppleNav, AppleInbox, SharedFab) — without telling Haris first and his yes. It
+follows Home: its own Apple navigation in Apple's tab bar; Apple's big title "Inbox" with its line (how many unread); "Mark all
+read" / "Mark all unread" and your photo as Apple's bar buttons, no Talk, no search; All / Unread / Mentions as Mail's
+buttons at the top of Apple's list, scrolling away with it; opens on Unread (the unread ones at the start stay until another
+list is picked); the rows in Apple's list edge to edge as Mail's, with Apple's own swipe (Read / Unread — its button where
+Apple puts it, left as it is: Haris 16:15); a birthday opens their greeting; "+ New task" as Home's.
+
+**NO DIFFERENCES — every new page (Haris, 2026-11-08 16:39: "there will be no differences in the new pages from these"):**
+Home, the task page, My Tasks and the Inbox are locked, and every new page is the same as the locked page of its category —
+look, behaviour, animation, and every fix the locked page has had (a Home fix that never reached My Tasks and the Inbox let
+their "+ New task" pop in after the slide back: Haris 16:32 "follow the locked page rules strictly"). Before a new page is
+built, go through the locked page's behaviours and fixes one by one and match each; the self-test checks the slide back on
+every tab with its own Apple screen (`slide_*`).
 
 **Before the next App Store review — remember (Haris, 2026-11-08):** do **light ↔ dark switching smoothly, Apple's way**
 first (task page plan step 5, project doc `claude/ios-task-page-apple.md`): our screens' colours as Apple's dynamic
