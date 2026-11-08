@@ -85,6 +85,12 @@ final class ServerHome {
   }
   private var lastNoAnswer = false
   private var copyGen = -1, copyQuery = ""
+  private var copyDay = ""   // (the day it was worked out for — Dubai's, as the rules' today)
+  static func dubaiDay() -> String {
+    let f = DateFormatter(); f.calendar = Calendar(identifier: .gregorian); f.locale = Locale(identifier: "en_US_POSIX")
+    f.timeZone = TimeZone(secondsFromGMT: 4 * 3600); f.dateFormat = "yyyy-MM-dd"
+    return f.string(from: Date())
+  }
   // a fresh Home (when the app opens or comes back, and whenever the page hears of a change)
   func refresh() {
     checkServer()
@@ -92,14 +98,15 @@ final class ServerHome {
     // the copy has caught up with the server's last answer here (an action's), so nothing just done comes back
     if AppData.shared.ready, !off, AppData.shared.rev >= lastRev {
       // (nothing changed in the copy since this screen was last worked out from it: as it was, no work at all)
-      if AppData.shared.gen == copyGen, query == copyQuery, model != nil { if !queue.isEmpty { send() }; return }
+      // (and the same day — after midnight it's worked out again: Sunday's "This week" stayed on Monday, Haris 2026-11-09)
+      if AppData.shared.gen == copyGen, query == copyQuery, ServerHome.dubaiDay() == copyDay, model != nil { if !queue.isEmpty { send() }; return }
       let c: (ready: Bool, model: [String: Any]?)
       if kind == "home" { c = AppData.shared.screen("home") }
       else if kind == "inbox" { c = AppData.shared.screen("inbox", ServerHome.param(query, "tab") ?? "all") }
       else if kind == "clients" { c = AppData.shared.screen("clients", ServerHome.clientsJSON(query)) }   // (Part B: the Clients tab)
       else { c = AppData.shared.screen("mytasks", ServerHome.filtersJSON(query)) }
       if c.ready, let h = c.model {
-        copyGen = AppData.shared.gen; copyQuery = query
+        copyGen = AppData.shared.gen; copyQuery = query; copyDay = ServerHome.dubaiDay()
         confirmedMe = h["me"] as? String ?? confirmedMe
         take(h, rev: lastRev)
         if !queue.isEmpty { send() }
