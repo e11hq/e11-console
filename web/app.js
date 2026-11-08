@@ -1881,7 +1881,8 @@ const roMsg = () => (ui.taskId && doneLocked(task(ui.taskId)) ? DONE_LOCK_MSG : 
 // (the Clients list — the sidebar, the phone's list: an AM only the clients they look after; one given none yet, none —
 //  Haris 2026-11-08: "their list will be empty")
 const mentionedIn = (t, id = currentUserId) => !!t && (mentionsIn(t.notesHtml).has(id) || (t.comments || []).some((c) => mentionsIn(c.html).has(id)));
-const mentionedOn = (t, id = currentUserId) => mentionedIn(t, id) || db.tasks.some((x) => x.parentId === t.id && mentionedIn(x, id));
+// (or its Guardian — Haris 2026-11-08)
+const mentionedOn = (t, id = currentUserId) => t.guardian === id || mentionedIn(t, id) || db.tasks.some((x) => x.parentId === t.id && (x.guardian === id || mentionedIn(x, id)));
 // (and, for everyone, a client where they're @mentioned on a task — its page then has that task: Haris 2026-11-08)
 const clientListOk = (p, u = me()) => (amSidebarOk(p, u) && (!u || u.role !== 'am' || isAdm(u) || isCD(u.id) || (p.ams || []).some((a) => a.id === u.id && !a.onLeave)))
   || (!!u && db.tasks.some((t) => t.projectId === p.id && !t.parentId && mentionedOn(t, u.id)));

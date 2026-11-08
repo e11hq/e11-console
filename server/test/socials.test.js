@@ -120,6 +120,12 @@ test('the Clients list: an AM\'s own clients, none when they have none; Producti
     assert.deepEqual([...screen(V, 'clients').rows.map((r) => r.id)], ['p1'], who + ': the client they\'re mentioned on');
     assert.deepEqual(ids(screen(V, 'clients', JSON.stringify({ view: 'client', id: 'p1', done: true }))), ['other'], who + ': the task they\'re mentioned in');
   }
+  // the Guardian of a task: the same
+  const g = JSON.parse(JSON.stringify(data));
+  g.tasks.find((t) => t.id === 'other').guardian = 'u-am0';
+  { const { E11AppView: V } = engine(); V.load(JSON.stringify({ rev: 1, me: 'u-am0', data: g }));
+    assert.deepEqual([...screen(V, 'clients').rows.map((r) => r.id)], ['p1'], 'the client they\'re Guardian on');
+    assert.deepEqual(ids(screen(V, 'clients', JSON.stringify({ view: 'client', id: 'p1', done: true }))), ['other'], 'the task they\'re Guardian of'); }
   assert.deepEqual(rows('u-p'), ['p1', 'p2']);
   assert.deepEqual(rows('u-a'), ['p1', 'p2']);
 });

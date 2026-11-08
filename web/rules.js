@@ -1208,7 +1208,8 @@ var E11Rules = (() => {
     // — and for everyone, the tasks they're @mentioned in (its description or comments, or a subtask's): Haris 2026-11-08
     let seenSet;
     const mentionedIn = (t, id = meId) => !!t && (mentionsIn(t.notesHtml).has(id) || (t.comments || []).some((c) => mentionsIn(c.html).has(id)));
-    const mentionedOn = (t, id = meId) => mentionedIn(t, id) || tasks.some((x) => x.parentId === t.id && mentionedIn(x, id));
+    // (or its Guardian — Haris 2026-11-08: "even if someone is the guardian on any task")
+    const mentionedOn = (t, id = meId) => t.guardian === id || mentionedIn(t, id) || tasks.some((x) => x.parentId === t.id && (x.guardian === id || mentionedIn(x, id)));
     const seenTask = (t) => {
       if (seesAll()) return true;
       if (!seenSet) seenSet = new Set((lead() ? leadSet([meId]) : topTasks().filter(onMyList)).map((x) => x.id));
