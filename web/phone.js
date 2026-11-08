@@ -792,7 +792,7 @@ const Phone = (() => {
     const items = [
       { label: 'Attach files', icon: 'clip', run: () => attachFiles('task') },
       ...(t.projectId ? [{ label: 'Open client', icon: 'folder', run: () => { closeDetail(); go('project', t.projectId); } }] : []),
-      ...(can('deleteTask') ? ['-', { label: 'Delete task', icon: 'trash', danger: true, run: () => deleteTaskFlow(t.id) }] : []),
+      ...(can('deleteTask') ? ['-', { label: 'Trash task', icon: 'trash', danger: true, run: () => deleteTaskFlow(t.id) }] : []),
     ];
     showMenu(document.body, items, { native: true });
   }
@@ -1626,7 +1626,7 @@ const SheetMotion = (() => {
     if (!isReply && ui.thread !== id) items.push({ label: 'Reply', icon: 'reply', run: () => { const b = document.querySelector(`.cm[data-comment="${id}"] [data-action="reply"]`); if (b) b.click(); } });
     if (mine) items.push(...editCommentItem(t, c));
     items.push({ label: 'Copy text', icon: 'copy', run: () => { try { navigator.clipboard.writeText(c.text || ''); toast('Copied'); } catch (e) { toast('Could not copy'); } } });
-    if (mine) items.push('-', { label: 'Delete comment', icon: 'trash', danger: true, run: () => deleteComment(id) });
+    if (mine) items.push('-', { label: 'Trash comment', icon: 'trash', danger: true, run: () => deleteComment(id) });
     const m = showMenu(document.body, items, { native: 12 });
     m.classList.add('cm-sheet');
     m._onSwatch = (emoji) => toggleReaction(id, emoji);
@@ -1735,7 +1735,7 @@ const SheetMotion = (() => {
 (() => {
   const HOLD = 450, SEL = '.ca-tile[data-id], .cf-card[data-id]:not(.add), #detail .tile[data-id]';
   // a task's attachments: the sheet is made from the tile's own buttons
-  const NAMES = { 'copy-att': ['Copy link', 'link', 'Paste it in a comment, or send it to anyone'], quicklook: ['Preview', 'search'], 'reveal-att': ['Download', 'download'], 'remove-att': ['Remove', 'trash'] };
+  const NAMES = { 'copy-att': ['Copy link', 'link', 'Paste it in a comment, or send it to anyone'], quicklook: ['Preview', 'search'], 'reveal-att': ['Download', 'download'], 'remove-att': ['Trash', 'trash'] };
   function tileSheet(card) {
     const btns = [...card.querySelectorAll('.tile-actions [data-action]')].filter((b) => NAMES[b.dataset.action]);
     if (!btns.length) return false;

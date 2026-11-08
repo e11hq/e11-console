@@ -66,7 +66,7 @@ const Viewer = (() => {
       } }];
       const closeThen = (f) => { set({ close: true }); setTimeout(f, 350); };
       if (a.path && isAdm(me())) items.push({ label: 'Turn off link', icon: 'lock', danger: true, run: () => closeThen(() => FileLinks.toggle(a)) });
-      if (client && canDelAsset(a)) items.push('-', { label: 'Delete', icon: 'trash', danger: true, run: () => closeThen(() => removeClientFile(a.id)) });
+      if (client && canDelAsset(a)) items.push('-', { label: 'Trash', icon: 'trash', danger: true, run: () => closeThen(() => removeClientFile(a.id)) });
       if (onTask) items.push('-', { label: 'Remove from task', icon: 'trash', danger: true, run: () => closeThen(() => act('remove-att', a.id)) });
       showMenu(document.body, items, { native: true });
     }
@@ -267,7 +267,7 @@ const Viewer = (() => {
     const onTask = !client && t && (t.attachments || []).some((x) => x.id === a.id);
     const items = [{ label: 'Info', icon: 'info', run: () => (client ? caInfo('file', a.id) : info(a)) }];
     if (a.path && isAdm(me())) items.push({ label: 'Turn off link', icon: 'lock', danger: true, run: () => FileLinks.toggle(a) });
-    if (client && canDelAsset(a)) items.push('-', { label: 'Delete', icon: 'trash', danger: true, run: async () => { const was = list.length; await removeClientFile(a.id); if (!clientFileById(a.id)) afterGone(a, was); } });
+    if (client && canDelAsset(a)) items.push('-', { label: 'Trash', icon: 'trash', danger: true, run: async () => { const was = list.length; await removeClientFile(a.id); if (!clientFileById(a.id)) afterGone(a, was); } });
     if (onTask) items.push('-', { label: 'Remove from task', icon: 'trash', danger: true, run: () => act('remove-att', a.id, () => { if (!(task(ui.taskId).attachments || []).some((x) => x.id === a.id)) afterGone(a); }) });
     const m = showMenu(anchor, items, { native: true });
     if (m) m.classList.add('fpv-menu');

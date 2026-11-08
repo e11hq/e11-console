@@ -3148,7 +3148,7 @@ function highlight(text) {
 function taskRow(t, o = {}) {
   const parent = o.showParent && t.parentId ? task(t.parentId) : null;
   const st = statusInfo(t);
-  const nameCell = `<div class="cell name"><span class="grip">${o.drag ? icon('grip') : ''}</span>${statusIcon(t)}${parent ? `<span class="parent-ref">${esc(parent.title || 'Untitled')} ›</span>` : ''}<span class="title">${t.title ? (o.mark ? sMark(t.title, o.mark) : highlight(t.title)) : '<span class="ph">Untitled task</span>'}</span>${taskMetaIcons(t)}${t.cdStatus && !t.done ? cdChip(t) : ''}<span class="row-actions">${checkbox(t)}${can('deleteTask') ? `<button class="icon-btn sm row-del" data-action="delete-task" data-id="${t.id}" title="Delete task">${icon('trash')}</button>` : ''}</span>${avatarStack(t.assignees, 20, 3, t)}</div>`;
+  const nameCell = `<div class="cell name"><span class="grip">${o.drag ? icon('grip') : ''}</span>${statusIcon(t)}${parent ? `<span class="parent-ref">${esc(parent.title || 'Untitled')} ›</span>` : ''}<span class="title">${t.title ? (o.mark ? sMark(t.title, o.mark) : highlight(t.title)) : '<span class="ph">Untitled task</span>'}</span>${taskMetaIcons(t)}${t.cdStatus && !t.done ? cdChip(t) : ''}<span class="row-actions">${checkbox(t)}${can('deleteTask') ? `<button class="icon-btn sm row-del" data-action="delete-task" data-id="${t.id}" title="Trash task">${icon('trash')}</button>` : ''}</span>${avatarStack(t.assignees, 20, 3, t)}</div>`;
   const due = `<div class="cell"><span class="due ${dueClass(t)}">${fmtDue(t.due)}</span></div>`;
   const prio = `<div class="cell">${prioFlag(prioOf(t), true)}</div>`;
   const cells = o.showProject
@@ -3267,7 +3267,7 @@ function mwRow(t) {
     <span class="mw-loc">• ${p ? `<i style="background:${p.color}"></i>` : ''}${esc(loc)}</span>
     ${t.cdStatus && !t.done ? cdChip(t) : ''}
     <span class="spacer"></span>
-    <span class="row-actions">${checkbox(t)}${can('deleteTask') ? `<button class="icon-btn sm row-del" data-action="delete-task" data-id="${t.id}" title="Delete task">${icon('trash')}</button>` : ''}</span>
+    <span class="row-actions">${checkbox(t)}${can('deleteTask') ? `<button class="icon-btn sm row-del" data-action="delete-task" data-id="${t.id}" title="Trash task">${icon('trash')}</button>` : ''}</span>
     ${prioFlag(prioOf(t), true)}
     ${avatarStack(t.assignees, 20, 3, t)}
     <span class="mw-due due ${myOpen(t) ? dueClass(t) : ''}">${myDoneAt(t) ? (t.done ? '' : 'My part · ') + esc(fmtDay(ymd(new Date(myDoneAt(t))))) : esc(mwDue(t))}</span>
@@ -3844,7 +3844,7 @@ function renderDetail() {
         <span class="tm-divider"></span>
         ${phone ? '' : `<button class="icon-btn" data-action="share-task" data-id="${t.id}" title="Copy link to this task">${icon('link')}</button>`}
         <button class="icon-btn" data-action="attach" title="Attach files">${icon('clip')}</button>
-        ${can('deleteTask') ? `<button class="icon-btn" data-action="delete-task" data-id="${t.id}" title="Delete task">${icon('trash')}</button>` : ''}
+        ${can('deleteTask') ? `<button class="icon-btn" data-action="delete-task" data-id="${t.id}" title="Trash task">${icon('trash')}</button>` : ''}
         <div class="disp-wrap">
           <button class="icon-btn" data-action="disp-toggle" title="Switch layout">${icon(side ? 'panel' : mode === 'full' ? 'layout' : 'modal')}</button>
           <div class="disp-menu lay-menu">
@@ -3907,7 +3907,7 @@ function renderDetail() {
               ${avatarStack(x.assignees, 18)}
               ${statusPill(x)}
               ${x.due ? `<span class="due ${dueClass(x)}">${fmtDue(x.due)}</span>` : ''}
-              <span class="sub-actions"><button class="icon-btn sm" data-action="open-task" data-id="${x.id}" title="Open subtask">${icon('open')}</button>${can('deleteTask') ? `<button class="icon-btn sm" data-action="delete-sub" data-id="${x.id}" title="Delete subtask">${icon('trash')}</button>` : ''}</span>
+              <span class="sub-actions"><button class="icon-btn sm" data-action="open-task" data-id="${x.id}" title="Open subtask">${icon('open')}</button>${can('deleteTask') ? `<button class="icon-btn sm" data-action="delete-sub" data-id="${x.id}" title="Trash subtask">${icon('trash')}</button>` : ''}</span>
             </div>`).join('')}
           </div>
           ${can('createTask') ? `<div class="sub-add">${icon('plus')}<input id="d-sub-add" placeholder="Add subtask"></div>` : ''}
@@ -4202,7 +4202,7 @@ function attTile(a) {
       <button class="icon-btn sm" data-action="copy-att" data-id="${a.id}" title="Copy link — paste it in a comment, or send it to anyone">${icon('link')}</button>
       <button class="icon-btn sm" data-action="quicklook" data-id="${a.id}" title="Preview">${icon('search')}</button>
       <button class="icon-btn sm" data-action="reveal-att" data-id="${a.id}" title="${FINDER_LABEL}">${icon(Host.isServer ? 'download' : 'folder')}</button>
-      <button class="icon-btn sm" data-action="remove-att" data-id="${a.id}" title="Remove">${icon('trash')}</button>
+      <button class="icon-btn sm" data-action="remove-att" data-id="${a.id}" title="Trash">${icon('trash')}</button>
     </div>
   </div>`;
 }
@@ -4299,7 +4299,7 @@ function attPreview(a, scope) {
       <button class="icon-btn sm" data-action="copy-att" data-id="${a.id}" title="Copy link — paste it in a comment, or send it to anyone">${icon('link')}</button>
       <button class="icon-btn sm" data-action="quicklook" data-id="${a.id}" title="Preview">${icon('search')}</button>
       <button class="icon-btn sm" data-action="reveal-att" data-id="${a.id}" title="${FINDER_LABEL}">${icon(Host.isServer ? 'download' : 'folder')}</button>
-      ${scope === 'task' ? `<button class="icon-btn sm" data-action="remove-att" data-id="${a.id}" title="Remove">${icon('trash')}</button>` : ''}
+      ${scope === 'task' ? `<button class="icon-btn sm" data-action="remove-att" data-id="${a.id}" title="Trash">${icon('trash')}</button>` : ''}
     </div>
   </div>`;
 }
@@ -4355,7 +4355,7 @@ function attRow(a, scope) {
     <div class="fname"><div>${esc(a.name)}</div><small>${fmtSize(a.size)}${a.addedAt ? ' · added ' + timeAgo(a.addedAt) : ''}</small></div>
     <button class="icon-btn sm" data-action="copy-att" data-id="${a.id}" title="Copy link — paste it in a comment, or send it to anyone">${icon('link')}</button>
     <button class="icon-btn sm" data-action="reveal-att" data-id="${a.id}" data-scope="${scope}" title="${FINDER_LABEL}">${icon(Host.isServer ? 'download' : 'folder')}</button>
-    ${scope === 'task' ? `<button class="icon-btn sm" data-action="remove-att" data-id="${a.id}" title="Remove">${icon('trash')}</button>` : ''}
+    ${scope === 'task' ? `<button class="icon-btn sm" data-action="remove-att" data-id="${a.id}" title="Trash">${icon('trash')}</button>` : ''}
   </div>`;
 }
 function findAttachment(t, id) {
@@ -5739,7 +5739,7 @@ function projectMenu(anchor, id) {
     { label: 'Add section', icon: 'plus', run: () => { go('project', id); setTimeout(() => { const a = $('[data-action="add-section"]'); if (a) a.click(); }, 30); } },
     ...(isAdmin() ? [{ label: clientOfProject(p) ? `Client Assets: ${clientOfProject(p).name}` : 'Link to Client Assets…', icon: 'assets', run: () => setTimeout(() => projectClientMenu(anchor, p), 0) }] : []),
     '-',
-    ...(isAdmin() ? [{ label: 'Delete client', icon: 'trash', danger: true, run: () => deleteProjectFlow(id) }] : []),
+    ...(isAdmin() ? [{ label: 'Trash client', icon: 'trash', danger: true, run: () => deleteProjectFlow(id) }] : []),
   ], { native: 12 });
   m._onSwatch = (c) => { p.color = c; commit(); };
 }
@@ -5755,7 +5755,7 @@ async function deleteProjectFlow(id) {
   const p = proj(id);
   if (p && p.inactive) { toast('Make the client active first'); return; }
   const n = db.tasks.filter((t) => t.projectId === id).length;
-  const ok = await dialog({ title: `Delete “${p.name}”?`, body: `The client and its ${n} task${n === 1 ? '' : 's'} move to the Trash. An Admin can restore them within ${TRASH_DAYS} days. Its Client Assets folder stays.`, okText: 'Move to Trash', danger: true });
+  const ok = await dialog({ title: `Move “${p.name}” to the Trash?`, body: `The client and its ${n} task${n === 1 ? '' : 's'} move to the Trash. An Admin can restore them within ${TRASH_DAYS} days. Its Client Assets folder stays.`, okText: 'Move to Trash', danger: true });
   if (!ok) return;
   db.projects = db.projects.filter((x) => x.id !== id);
   const removed = removeTasks(db.tasks.filter((t) => t.projectId === id).map((t) => t.id));
@@ -6133,7 +6133,7 @@ function commentMenu(anchor, cid) {
     ...editCommentItem(t, c),
     { label: 'Copy text', icon: 'open', run: () => { try { navigator.clipboard.writeText(c.text); toast('Copied'); } catch (e) { toast('Could not copy'); } } },
     '-',
-    { label: 'Delete comment', icon: 'trash', danger: true, run: () => deleteComment(cid) },
+    { label: 'Trash comment', icon: 'trash', danger: true, run: () => deleteComment(cid) },
   ]);
 }
 
@@ -6147,14 +6147,14 @@ async function deleteComment(cid) {
     if (replies) parts.push(`its ${replies} repl${replies === 1 ? 'y' : 'ies'}`);
     if (files.length) parts.push(`${files.length} attached file${files.length === 1 ? '' : 's'}`);
     const back = isManager() ? `You can restore it from the Trash within ${TRASH_DAYS} days.` : `An Account Manager can bring it back within ${TRASH_DAYS} days if needed.`;
-    const ok = await dialog({ title: 'Delete comment?', body: `${parts.length ? `This also removes ${parts.join(' and ')}. ` : ''}${back}`, okText: 'Delete', danger: true });
+    const ok = await dialog({ title: 'Move comment to the Trash?', body: `${parts.length ? `This also removes ${parts.join(' and ')}. ` : ''}${back}`, okText: 'Trash', danger: true });
     if (!ok) return;
   }
   const ids = new Set(group.map((x) => x.id));
   t.comments = t.comments.filter((x) => !ids.has(x.id));
   const it = toTrash('comment', { taskId: t.id, comments: group }, { key: 'tasks:' + t.id, taskTitle: t.title });
   commit();
-  toast(isManager() ? 'Comment moved to the Trash' : 'Comment deleted — ask an Account Manager if you need it back', {
+  toast(isManager() ? 'Comment moved to the Trash' : 'Comment moved to the Trash — ask an Account Manager if you need it back', {
     label: 'Undo', run: () => { db.trash = trashList().filter((x) => x.id !== it.id); group.forEach((c) => { if (!t.comments.some((x) => x.id === c.id)) t.comments.push(c); }); t.comments.sort((a, b) => a.at.localeCompare(b.at)); commit(); },
   }, 10000);
 }
@@ -6319,14 +6319,14 @@ document.addEventListener('click', async (e) => {
         e.stopPropagation();
         const t = task(ui.taskId);
         const a = t.attachments.find((x) => x.id === id);
-        const ok = await dialog({ title: `Remove “${a.name}”?`, body: isManager() ? `It moves to the Trash, where it can be restored within ${TRASH_DAYS} days.` : `An Account Manager can bring it back within ${TRASH_DAYS} days if needed.`, okText: 'Remove', danger: true });
+        const ok = await dialog({ title: `Move “${a.name}” to the Trash?`, body: isManager() ? `It moves to the Trash, where it can be restored within ${TRASH_DAYS} days.` : `An Account Manager can bring it back within ${TRASH_DAYS} days if needed.`, okText: 'Trash', danger: true });
         if (!ok) return;
         t.attachments = t.attachments.filter((x) => x.id !== id);
         logActivity(t, `removed attachment ${struck(a.name)}`);
         t.updatedAt = nowISO();
         const it = toTrash('attachment', { taskId: t.id, att: a }, { key: 'tasks:' + t.id, taskTitle: t.title });
         commit();
-        toast(isManager() ? `“${a.name}” moved to the Trash` : `Removed “${a.name}” — ask an Account Manager if you need it back`, {
+        toast(isManager() ? `“${a.name}” moved to the Trash` : `“${a.name}” moved to the Trash — ask an Account Manager if you need it back`, {
           label: 'Undo', run: () => { db.trash = trashList().filter((x) => x.id !== it.id); if (!t.attachments.some((x) => x.id === a.id)) t.attachments.push(a); commit(); },
         }, 10000);
         return;
@@ -6559,7 +6559,7 @@ document.addEventListener('click', async (e) => {
           { label: 'Download', icon: 'download', run: tap('[data-action="ca-download"]') },
           { label: 'Info', icon: 'info', run: tap('[data-action="ca-info"]') },
           ...(isAdm(me()) ? [{ label: 'Turn off link', icon: 'lock', danger: true, run: () => FileLinks.toggle(clientFileById(id)) }] : []),
-          ...(has('[data-action="ca-remove"]') ? ['-', { label: 'Delete', icon: 'trash', danger: true, run: tap('[data-action="ca-remove"]') }] : []),
+          ...(has('[data-action="ca-remove"]') ? ['-', { label: 'Trash', icon: 'trash', danger: true, run: tap('[data-action="ca-remove"]') }] : []),
         ], { native: true });
         return;
       }
@@ -7185,7 +7185,7 @@ function caTile(f, a, loc = null) {
       <button class="icon-btn sm" data-action="ca-download" data-id="${a.id}" title="Download to your Downloads folder">${icon('download')}</button>
       <button class="icon-btn sm" data-action="ca-info" data-id="${a.id}" title="Info">${icon('info')}</button>
       ${Host.isServer ? '' : `<button class="icon-btn sm" data-action="reveal-att" data-id="${a.id}" title="${FINDER_LABEL}">${icon('folder')}</button>`}
-      ${canDelAsset(a) && !loc ? `<button class="icon-btn sm" data-action="ca-remove" data-id="${a.id}" title="Delete">${icon('trash')}</button>` : ''}
+      ${canDelAsset(a) && !loc ? `<button class="icon-btn sm" data-action="ca-remove" data-id="${a.id}" title="Trash">${icon('trash')}</button>` : ''}
     </div>
   </div>`;
 }
@@ -7459,10 +7459,10 @@ function folderMenu(anchor, c, f, lead = []) {
       if (v) { f.name = v.name; persist(0); render(); }
     } }]),
     ...(f.parentId ? [] : [{ label: 'Move left', icon: 'chev-left', run: () => swap(-1) }, { label: 'Move right', icon: 'chev-right', run: () => swap(1) }]),
-    ...(canDelFolder(c, f) ? ['-', { label: 'Delete folder', icon: 'trash', danger: true, run: async () => {
+    ...(canDelFolder(c, f) ? ['-', { label: 'Trash folder', icon: 'trash', danger: true, run: async () => {
       const nIn = folderTree(c, f).length, nF = folderFileCount(c, f);
       const what = [nIn ? `${nIn} folder${nIn === 1 ? '' : 's'}` : '', nF ? `${nF} file${nF === 1 ? '' : 's'}` : ''].filter(Boolean).join(' and ');
-      const ok = await dialog({ title: `Delete “${f.name}”?`, body: `The folder${what ? ` and everything in it (${what})` : ''} move${what ? '' : 's'} to the Trash, where ${what ? 'it can all' : 'it can'} be restored in one go within ${TRASH_DAYS} days. Copies already pasted into tasks stay.`, okText: 'Delete folder', danger: true });
+      const ok = await dialog({ title: `Move “${f.name}” to the Trash?`, body: `The folder${what ? ` and everything in it (${what})` : ''} move${what ? '' : 's'} to the Trash, where ${what ? 'it can all' : 'it can'} be restored in one go within ${TRASH_DAYS} days. Copies already pasted into tasks stay.`, okText: 'Trash folder', danger: true });
       if (!ok) return;
       const inner = folderTree(c, f);
       c.folders = c.folders.filter((x) => x !== f && !inner.includes(x));
@@ -7601,7 +7601,7 @@ async function removeClientFile(id) {
   const { f } = curFolder();
   const a = f && f.files.find((x) => x.id === id);
   if (!a || !canDelAsset(a)) return;
-  const ok = await dialog({ title: `Delete “${a.name}”?`, body: `It moves to the Trash, where it can be restored within ${TRASH_DAYS} days. Copies already pasted into tasks stay.`, okText: 'Delete', danger: true });
+  const ok = await dialog({ title: `Move “${a.name}” to the Trash?`, body: `It can be restored within ${TRASH_DAYS} days. Copies already pasted into tasks stay.`, okText: 'Trash', danger: true });
   if (!ok) return;
   const { c } = curFolder();
   f.files = f.files.filter((x) => x.id !== id);
