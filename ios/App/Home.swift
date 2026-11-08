@@ -116,8 +116,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   var onAppleResign: (() -> Void)?
   var onAppleFilters: (([String: Any]) -> Void)?
   var onAppleCorner: (() -> Void)?   // (the Inbox: Mark all read / unread changed — its own screen's bar button follows)   // (My Tasks: its tab, filter buttons and chips — its own screen's bar shows them)
-  // (My Tasks under Apple's bar: All / Done as the first row of Apple's list)
-  private let segWrap = UIView()
   private let catsWrap = UIView()   // (the Inbox under Apple's bar: Mail's buttons as the first row of Apple's list)
   func menuEvent(_ e: [String: Any]) { send(e) }
   var appleScroll: UIScrollView { listOn ? sv : searching ? results : sv }
@@ -149,7 +147,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     onAppleMe?(me.image(for: .normal))
     if !isClients && !isClient && assets == nil { makeAppleList() }
     // (My Tasks: its filter rows and chips are in Apple's bar's menu now — taken out; All / Done goes into the list)
-    if isList && !isInbox { listHead.removeFromSuperview(); segWrap.addSubview(seg); if let f = lastFilters { onAppleFilters?(f) } }
+    // (My Tasks: its filters are in Apple's bar's menu, All / Done in Apple's search bar's scope bar — the rows taken out)
+    if isList && !isInbox { listHead.removeFromSuperview(); if let f = lastFilters { onAppleFilters?(f) } }
     // (the Inbox: Mail's buttons go into the list, Mark all read into Apple's bar — HomeView's own taken out)
     if isInbox { listHead.removeFromSuperview(); markAll.removeFromSuperview(); inboxRows.values.forEach { $0.swipes = false }; catsWrap.addSubview(catsView); if !content.isEmpty { applyList(animated: false) }; onAppleCorner?() }
     setNeedsLayout()
@@ -189,7 +188,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private func itemHeight(_ key: String, _ v: UIView) -> CGFloat {
     let w = bounds.width - 32
     if key == "stats" { return 80 }
-    if key == "seg" { return 40 }
     if key == "cats" { return MailCats.H + 10 }
     if v is InboxRow { return InboxRow.H }
     if v === hint { return (hint.sizeThatFits(CGSize(width: w, height: 400)).height) + 28 }
@@ -213,7 +211,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       }
     } else {
     if !noStats { keys.append("stats"); views["stats"] = statsRow }
-    if isList && !isInbox && seg.superview === segWrap { keys.append("seg"); views["seg"] = segWrap }
     if isInbox && catsView.superview === catsWrap { keys.append("cats"); views["cats"] = catsWrap }
     for v in content {
       if let r = v as? InboxRow { let k = "r:" + r.id; keys.append(k); views[k] = r; continue }
@@ -791,7 +788,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }
   func selfTab(_ t: String) { seg.selectedSegmentIndex = t == "done" ? 1 : 0; seg.sendActions(for: .valueChanged) }
   func listGeo() -> [String: Any] {
-    ["tab": listTab, "pinned": pinned, "apple": appleTop, "segInList": seg.superview === segWrap, "listOn": listOn, "headTop": listHead.frame.minY, "barBottom": smallHead, "filters": filterBtns.map { $0.accessibilityIdentifier ?? "" }, "chips": chipBtns.count, "cards": cards.count,
+    ["tab": listTab, "pinned": pinned, "apple": appleTop, "listOn": listOn, "headTop": listHead.frame.minY, "barBottom": smallHead, "filters": filterBtns.map { $0.accessibilityIdentifier ?? "" }, "chips": chipBtns.count, "cards": cards.count,
      "groups": content.compactMap { ($0 as? UILabel)?.tag == 7 ? $0.accessibilityIdentifier : nil }]
   }
 
@@ -1120,7 +1117,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       if cv.frame != bounds { cv.frame = bounds }
       let bottom = max(0, endRoom - safeAreaInsets.bottom)
       if cv.contentInset.bottom != bottom { cv.contentInset.bottom = bottom }
-      if seg.superview === segWrap { seg.frame = CGRect(x: 0, y: 0, width: W - 32, height: 32) }
       if catsView.superview === catsWrap { catsView.frame = CGRect(x: 0, y: 0, width: W, height: MailCats.H) }
       let bw = (W - 32 - 16) / 3, bh: CGFloat = 1 + 10 + 41 + 15 + 12 + 1
       for (i, v) in stats.enumerated() {

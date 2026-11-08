@@ -9,7 +9,7 @@ import UIKit
    style sheet for am's too"). */
 let APPLE_MYTASKS = APPLE_NAV
 
-final class MyTasksVC: UIViewController, UISearchResultsUpdating, UISearchControllerDelegate {
+final class MyTasksVC: UIViewController, UISearchResultsUpdating, UISearchControllerDelegate, UISearchBarDelegate {
   static weak var shared: MyTasksVC?
   override init(nibName: String?, bundle: Bundle?) { super.init(nibName: nil, bundle: nil); MyTasksVC.shared = self }
   required init?(coder: NSCoder) { fatalError() }
@@ -45,6 +45,12 @@ final class MyTasksVC: UIViewController, UISearchResultsUpdating, UISearchContro
     s.delegate = self
     s.searchBar.placeholder = "Search tasks, clients or people"
     s.searchBar.autocorrectionType = .no
+    // All / Done: Apple's own scope bar under the search field, in Apple's bar — it stays under the bar as the list
+    // scrolls (Haris 2026-11-08: "can the segmented tabs stick in my tasks" — yes)
+    s.searchBar.scopeButtonTitles = ["All", "Done"]
+    s.searchBar.showsScopeBar = true
+    if #available(iOS 16.0, *) { s.scopeBarActivation = .manual }
+    s.searchBar.delegate = self
     search = s
     navigationItem.searchController = s
     navigationItem.hidesSearchBarWhenScrolling = false
@@ -92,6 +98,8 @@ final class MyTasksVC: UIViewController, UISearchResultsUpdating, UISearchContro
     let c = chips
     let what = c.count == 1 ? chipName(c[0]) : c.count > 1 ? "\(c.count) filters" : ""
     let line = [open, what].filter { !$0.isEmpty }.joined(separator: " · ")
+    let scope = (filters["tab"] as? String) == "done" ? 1 : 0
+    if let b = search?.searchBar, b.selectedScopeButtonIndex != scope { b.selectedScopeButtonIndex = scope }
     // the filter button: Apple's filled symbol while a filter is on (as Mail's)
     filterItem?.image = UIImage(systemName: c.isEmpty ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill")
     guard line != shownLine else { return }
@@ -156,6 +164,12 @@ final class MyTasksVC: UIViewController, UISearchResultsUpdating, UISearchContro
     return out
   }
 
+  var scopeShown: Bool { search?.searchBar.showsScopeBar == true }
+  // All / Done picked in Apple's scope bar
+  func searchBar(_ b: UISearchBar, selectedScopeButtonIndexDidChange i: Int) {
+    UISelectionFeedbackGenerator().selectionChanged()
+    Main.shared.myTasksIfMade?.menuEvent(["ev": "tab", "tab": i == 1 ? "done" : "all"])
+  }
   // ---------- Apple's search: it opened, its words changed, it closed (as Home's) ----------
   func updateSearchResults(for s: UISearchController) { Main.shared.myTasksIfMade?.appleSearchText(s.searchBar.text ?? "") }
   func willPresentSearchController(_ s: UISearchController) { Main.shared.myTasksIfMade?.appleSearchBegin() }

@@ -2911,6 +2911,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
           if name.hasPrefix("mytasks") || name == "inbox" {
             var g: [String: Any] = ["made": self.myTasksIfMade != nil, "shown": self.myTasksIfMade?.isHidden == false, "server": self.serverMyTasksIfMade?.on ?? false, "query": self.serverMyTasksIfMade?.query ?? ""]
             if let h = self.myTasksIfMade { g.merge(h.listGeo()) { a, _ in a }; g["title"] = h.geo()["title"] }
+            g["scope"] = MyTasksVC.shared?.scopeShown ?? false
             g["me"] = self.serverMyTasksIfMade?.me ?? ""; g["pageMe"] = self.myTasksPageMe ?? ""; g["modelMe"] = self.serverMyTasksIfMade?.shown?["me"] as? String ?? ""
             g["modelCards"] = ((self.serverMyTasksIfMade?.shown?["groups"] as? [[String: Any]]) ?? []).reduce(0) { $0 + (($1["cards"] as? [Any])?.count ?? 0) }
             self.selfResult[name + "MyTasks"] = g
