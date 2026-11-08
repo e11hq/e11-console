@@ -882,8 +882,9 @@ final class TrashRow: AssetTile, UIGestureRecognizerDelegate {
       shift = x
     default:
       let v = g.velocity(in: self).x
-      // (no long swipe in the Trash — it only opens to its button, Restore or Delete forever, which is then tapped:
-      //  Haris 2026-11-08)
+      // (a long swipe left — more than half the row — deletes forever, as Mail's full swipe; Restore is never a long swipe,
+      //  it only opens to its button, which is then tapped: Haris 2026-11-08)
+      if shift < -bounds.width * 0.55 && canF { act("trForever"); return }
       let to: CGFloat = shift > 44 || (shift > 10 && v > 400) ? 96 : shift < -44 || (shift < -10 && v < -400) ? -110 : 0
       if to != 0 && abs(start) < 1 { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
       SwipeSpring.run(from: shift, to: to, velocity: v) { self.shift = to }
