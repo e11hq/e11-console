@@ -177,6 +177,7 @@ try:
     mtr = res.get('meTrashNative') or {}
     check(mtr.get('kind') == 'trash' and (mtr.get('parts') or 0) >= 3 and (str(mtr.get('corner')).startswith('back,') or mtr.get('apple') is True), f"Trash: the app's own, its search and categories, ‹ at the top {mtr}")
     check(mb.get('kind') == 'me' and mb.get('screens') == 1, f"‹ back to Me {mb}")
+    check(res.get('meRowsBefore') is not None and res.get('meRowsAfter') == res.get('meRowsBefore'), f"Me opened again: no row drawn again {res.get('meRowsBefore')} → {res.get('meRowsAfter')}")
     check((res.get('client') or {}).get('wide') is False, f"Client Assets folder fits the screen {res.get('client')}")
     ca = res.get('clientAssets') or {}
     # (opened from the page — a link, an Inbox update, a client's page — just that folder, so ‹ goes back where you came from:

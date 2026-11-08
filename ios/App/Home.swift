@@ -3084,7 +3084,7 @@ extension HomeView {
     for k in snap.itemIdentifiers { sigs[k] = meSig(k) }
     let changed = snap.itemIdentifiers.filter { had.contains($0) && meDrawn[$0] != sigs[$0] }
     meDrawn = sigs
-    if !changed.isEmpty { snap.reconfigureItems(changed) }
+    if !changed.isEmpty { snap.reconfigureItems(changed); Main.meRows += changed.count }
     // (nothing came, went or changed: nothing applied at all)
     if changed.isEmpty, snap.sectionIdentifiers == ds.snapshot().sectionIdentifiers, snap.itemIdentifiers == ds.snapshot().itemIdentifiers { return }
     ds.apply(snap, animatingDifferences: animated)

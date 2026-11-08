@@ -1470,6 +1470,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   // (how many times the screens were drawn again for a look change — the self-test checks going to another app and
   //  back draws nothing again: only what changed changes, Haris 2026-11-08)
   static var lookRedraws = 0
+  // (Me's rows set again — HomeView.applyMeList: the self-test checks opening Me again sets none)
+  static var meRows = 0
   func relight(_ light: Bool) {
     Main.lookRedraws += 1
     if let l = homeLook as? [String: Any], (l["light"] as? Bool) != light { homeLook = nil }
@@ -2905,6 +2907,11 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       ("meProfile", pause(2500) + "return '{}'", { self.meCtl.pop(animated: false); self.meCtl.selfOpen("profile") }),
       ("meTrash", pause(2500) + "return '{}'", { self.meCtl.pop(animated: false); self.meCtl.selfOpen("trash") }),
       ("meBack", pause(1200) + "return '{}'", { self.meCtl.pop(animated: true) }),
+      // (Me left for another tab and opened again: nothing on it drawn again — only what changed changes, Haris 2026-11-08
+      //  "Is the me page drawing on every open?")
+      ("meAway", pause(1500) + "return '{}'", { self.selfResult["meRowsBefore"] = Main.meRows; self.selfSelect("today") }),
+      ("meAgain", pause(1500) + "return '{}'", { self.selfSelect("me") }),
+      ("meAgainDone", pause(2500) + "return '{}'", { self.selfResult["meRowsAfter"] = Main.meRows }),
       ("client", "try { let c = db.clients.find((x) => (x.folders || []).some((f) => (f.files || []).length > 1)) || db.clients[0]; if (!c) { c = createClient('Sample client'); c.folders[0].files = [{ id: 'st-a1', name: 'Logo primary.png', size: 48000, at: nowISO() }, { id: 'st-a2', name: 'Brand guidelines.pdf', size: 2400000, at: nowISO() }, { id: 'st-a3', name: 'Logo lockup.ai', size: 4800000, at: nowISO() }] } const f = (c.folders || []).find((x) => (x.files || []).length > 1) || (c.folders || [])[0]; if (!f) return JSON.stringify({ error: 'no folder' }); openClient(c.id, f.id); " + pause(1200) + "return JSON.stringify({ wide: document.getElementById('content').scrollWidth > innerWidth + 1 }) } catch (e) { return JSON.stringify({ error: String(e && e.message || e) }) }", nil),
       // 30: the app's own task page — pushed in, scrolled, its Comments, back (then the website's task page for the
       // stages after it)
