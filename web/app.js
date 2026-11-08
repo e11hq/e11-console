@@ -7160,9 +7160,39 @@ function openClient(id, folderId = null) {
   ui.clientId = id; ui.folderId = folderId;
   go('client');
 }
+// a client's logo on its own background (Haris 2026-11-08 — styles.css "Client logos"): a logo with a solid background
+// gives its tile that colour; a transparent one by its ink — light on dark, dark on white. Worked out once per logo.
+const LogoLook = (() => {
+  const memo = new Map();
+  function tone(img) {
+    const n = 32, cv = document.createElement('canvas'); cv.width = n; cv.height = n;
+    const x = cv.getContext('2d', { willReadFrequently: true }); x.drawImage(img, 0, 0, n, n);
+    const d = x.getImageData(0, 0, n, n).data;
+    let er = 0, eg = 0, eb = 0, ea = 0, en = 0;
+    for (let y = 0; y < n; y++) for (let i = 0; i < n; i++) {
+      if (!(i === 0 || y === 0 || i === n - 1 || y === n - 1)) continue;
+      const k = (y * n + i) * 4, a = d[k + 3] / 255; ea += a; en++;
+      er += d[k] * a; eg += d[k + 1] * a; eb += d[k + 2] * a;
+    }
+    if (en && ea / en > 0.92) return `rgb(${Math.round(er / ea)}, ${Math.round(eg / ea)}, ${Math.round(eb / ea)})`;
+    let lum = 0, w = 0;
+    for (let k = 0; k < d.length; k += 4) { const a = d[k + 3] / 255; if (a <= 0.5) continue; lum += (0.2126 * d[k] + 0.7152 * d[k + 1] + 0.0722 * d[k + 2]) / 255 * a; w += a; }
+    return w && lum / w > 0.62 ? '#1c1c1e' : '#fff';
+  }
+  function apply(img) {
+    const span = img.closest('.cl-logo'); if (!span || span.classList.contains('mono')) return;
+    let c = memo.get(img.src);
+    if (!c) { try { c = tone(img); } catch (e) { c = '#fff'; } memo.set(img.src, c); }
+    span.style.setProperty('--lg-bg', c);
+  }
+  const known = (src) => memo.get(new URL(src, location.href).href) || '';
+  // (every logo as it loads — or already loaded, from the browser's copy)
+  document.addEventListener('load', (e) => { const t = e.target; if (t && t.tagName === 'IMG' && t.closest && t.closest('.cl-logo')) apply(t); }, true);
+  return { apply, known };
+})();
 function clientLogoHTML(c, size) {
   return c.logo
-    ? `<span class="cl-logo ${isSquareLogo(c.logo) ? 'sq' : ''}" style="--s:${size}px"><img src="${'/__file/' + c.logo.split('/').map(encodeURIComponent).join('/')}" alt=""></span>`
+    ? (() => { const src = '/__file/' + c.logo.split('/').map(encodeURIComponent).join('/'), bg = LogoLook.known(src); return `<span class="cl-logo ${isSquareLogo(c.logo) ? 'sq' : ''}" style="--s:${size}px${bg ? `;--lg-bg:${bg}` : ''}"><img src="${src}" alt=""></span>`; })()
     : `<span class="cl-logo mono" style="--s:${size}px;--c:${avColor(c.id)}">${esc(initials(c.name))}</span>`;
 }
 
