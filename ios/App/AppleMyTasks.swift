@@ -147,7 +147,7 @@ final class MyTasksVC: UIViewController, UISearchResultsUpdating, UISearchContro
     }
     if ks.contains("ams") {
       let team = chips.contains { ($0["act"] as? String) == "team" }
-      let a = UIAction(title: "AMs", subtitle: team ? "All Account Managers & Admins" : names("am"), image: UIImage(systemName: "person.crop.circle")) { _ in ev(["ev": "filter", "k": "ams"]) }
+      let a = UIAction(title: "AMs", subtitle: team ? "All AMs & Admins" : names("am"), image: UIImage(systemName: "person.crop.circle")) { _ in ev(["ev": "filter", "k": "ams"]) }
       who.append(a)
     }
     if ks.contains("assigned") {

@@ -1078,15 +1078,26 @@ extension Main {
   }
   private var ownCopy: Bool { AppData.shared.tabsOn && AppData.shared.ready && AppData.shared.isStarted }
   // a sheet from the brain ({ sheet, acts }); a row picked → its act
-  func brainSheet(_ m: [String: Any], multi: Bool = false, _ run: @escaping ([String: Any]) -> Void) {
+  // (again: the sheet's model as it is after a tick — every row's tick follows it, when one tick changes others too)
+  func brainSheet(_ m: [String: Any], multi: Bool = false, again: (() -> [String: Any]?)? = nil, _ run: @escaping ([String: Any]) -> Void) {
     guard let sheet = m["sheet"] as? [String: Any], let acts = m["acts"] as? [[String: Any]] else { return }
     withPhotos(sheet) { [weak self] a0 in
       guard let self = self else { return }
       var a = a0; if multi { a["multi"] = true }
-      let one: (Int) -> Void = { i in guard i >= 0, i < acts.count else { return }; run(acts[i]) }
+      weak var shown: NativeSheetVC?
+      let one: (Int) -> Void = { i in
+        guard i >= 0, i < acts.count else { return }
+        run(acts[i])
+        if let m2 = again?(), let s2 = m2["sheet"] as? [String: Any] {
+          var c: [Int: Bool] = [:]
+          for sec in (s2["sections"] as? [[String: Any]]) ?? [] { for r in (sec["rows"] as? [[String: Any]]) ?? [] { if let k = (r["i"] as? NSNumber)?.intValue { c[k] = (r["checked"] as? Bool) == true } } }
+          shown?.setChecks(c)
+        }
+      }
       // (in a sheet with ticks, a tick is told at once; a plain row in it — "Nobody yet" — when it's tapped)
       let ticks = Set(((a["sections"] as? [[String: Any]]) ?? []).flatMap { ($0["rows"] as? [[String: Any]]) ?? [] }.filter { ($0["multi"] as? Bool) == true }.compactMap { ($0["i"] as? NSNumber)?.intValue })
       let vc = NativeSheetVC(a, dark: self.statusStyle != .darkContent, pick: multi ? one : nil) { i, _ in if !multi || !ticks.contains(i) { one(i) } }
+      shown = vc
       self.topMost().present(vc, animated: true)
     }
   }
@@ -1221,7 +1232,7 @@ extension Main {
       guard ["due", "people", "ams"].contains(k), let m = AppData.shared.meModel("tasks", "myTasksFilterMenu", [k, myTasksF]) else { return false }
       let base = myTasksF
       let multi = (((m["sheet"] as? [String: Any])?["sections"] as? [[String: Any]]) ?? []).contains { (($0["rows"] as? [[String: Any]]) ?? []).contains { ($0["multi"] as? Bool) == true } }
-      brainSheet(m, multi: multi) { [weak self] act in
+      brainSheet(m, multi: multi, again: { [weak self] in self.flatMap { AppData.shared.meModel("tasks", "myTasksFilterMenu", [k, $0.myTasksF]) } }) { [weak self] act in
         guard let self = self, let to = act["set"] as? [String: Any] else { return }
         // (several ticks in one sheet: each tick's own change, on the filters as they are now)
         var now = self.myTasksF

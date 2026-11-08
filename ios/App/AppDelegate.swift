@@ -3485,6 +3485,17 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     return cell
   }
   func tableView(_ tableView: UITableView, shouldHighlightRowAt ip: IndexPath) -> Bool { let r = sections[ip.section].rows[ip.row]; return r.chips == nil && !r.disabled && (r.i >= 0 || r.i == -2) }
+  // the ticks as they are now, after a tick changed others too ("All Account Managers & Admins" ↔ each AM — Haris
+  // 2026-11-08): each row's tick set to what it says, on the rows on screen at once
+  func setChecks(_ c: [Int: Bool]) {
+    for (s, sec) in sections.enumerated() {
+      for (k, row) in sec.rows.enumerated() {
+        guard let on = c[row.i], (ticks[row.i] ?? row.checked) != on else { continue }
+        ticks[row.i] = on
+        table.cellForRow(at: IndexPath(row: k, section: s))?.accessoryType = on ? .checkmark : .none
+      }
+    }
+  }
   func tableView(_ tableView: UITableView, didSelectRowAt ip: IndexPath) {
     let r = sections[ip.section].rows[ip.row]
     if r.i == -2 { searchBar?.resignFirstResponder(); choose(-2, searchBar?.text?.trimmingCharacters(in: .whitespaces)); return }   // (the typed entry)
