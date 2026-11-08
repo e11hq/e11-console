@@ -30,6 +30,7 @@ final class InboxVC: UIViewController, TabRoot {
     navigationItem.title = "Inbox"
     let me = UIBarButtonItem(image: BarImage.me(nil, traitCollection), primaryAction: UIAction { _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); Main.shared.inboxIfMade?.meTap() })
     me.accessibilityLabel = "Me"
+    BarImage.bare(me)
     meItem = me
     // "Mark all read" / "Mark all unread": Apple's own bar button with its words
     let mark = UIBarButtonItem(title: "Mark all read", primaryAction: UIAction { [weak self] _ in

@@ -14,8 +14,11 @@ let APPLE_HOME = APPLE_NAV
 // Home's bar buttons: Apple's own bar buttons (their glass, size and press), each showing one picture of ours —
 // your photo (Haris 2026-11-08: no "Me" word), and E11 Talk's bubble with "Talk" beside it (drawn again for light / dark)
 enum BarImage {
+  // (Haris 2026-11-08: "less space around my profile picture" — the photo is the button itself, without Apple's glass
+  //  around it (bare), as Apple shows your account photo in its own apps: the whole circle the glass took, 44 pt)
+  static func bare(_ b: UIBarButtonItem) { if #available(iOS 26.0, *) { b.hidesSharedBackground = true } }
   static func me(_ photo: UIImage?, _ t: UITraitCollection) -> UIImage {
-    let d: CGFloat = 30
+    let d: CGFloat = 44
     return UIGraphicsImageRenderer(size: CGSize(width: d, height: d), format: UIGraphicsImageRendererFormat(for: t)).image { _ in
       let r = CGRect(x: 0, y: 0, width: d, height: d)
       UIBezierPath(ovalIn: r).addClip()
@@ -70,6 +73,7 @@ final class HomeVC: UIViewController, UISearchResultsUpdating, UISearchControlle
     // your Me button, as Apple's own bar button
     let meItem = UIBarButtonItem(image: BarImage.me(nil, traitCollection), primaryAction: UIAction { _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); Main.shared.homeIfMade?.meTap() })
     meItem.accessibilityLabel = "Me"
+    BarImage.bare(meItem)
     AppleHomeBits.shared.meItem = meItem
     // (its words drawn in the phone's look: drawn again when light / dark changes)
     if #available(iOS 17.0, *) { registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (vc: HomeVC, _: UITraitCollection) in vc.paintMe() } }

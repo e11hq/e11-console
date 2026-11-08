@@ -30,6 +30,7 @@ final class MyTasksVC: UIViewController, UISearchResultsUpdating, UISearchContro
     // your photo, Apple's own bar button (as Home's)
     let me = UIBarButtonItem(image: BarImage.me(nil, traitCollection), primaryAction: UIAction { _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); Main.shared.myTasksIfMade?.meTap() })
     me.accessibilityLabel = "Me"
+    BarImage.bare(me)
     meItem = me
     // the filter button: Apple's bar button with Apple's own menu, made each time it opens (what's on now)
     let f = UIBarButtonItem(image: UIImage(systemName: "line.3.horizontal.decrease"), menu: UIMenu(children: [UIDeferredMenuElement.uncached { [weak self] done in done(self?.menuItems() ?? []) }]))

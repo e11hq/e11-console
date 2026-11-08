@@ -43,6 +43,7 @@ final class ClientsVC: UIViewController, TabRoot, UISearchResultsUpdating, UISea
     // your photo and E11 Talk's button, Apple's own bar buttons — exactly as Home's (Haris 2026-11-08)
     let me = UIBarButtonItem(image: BarImage.me(nil, traitCollection), primaryAction: UIAction { _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); Main.shared.clientsListIfMade?.meTap() })
     me.accessibilityLabel = "Me"
+    BarImage.bare(me)
     meItem = me
     let talk = UIBarButtonItem(image: BarImage.talk(traitCollection), primaryAction: UIAction { _ in })
     talk.tintColor = .label
