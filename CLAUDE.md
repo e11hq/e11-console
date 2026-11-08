@@ -215,6 +215,19 @@ buttons at the top of Apple's list, scrolling away with it; opens on Unread (the
 list is picked); the rows in Apple's list edge to edge as Mail's, with Apple's own swipe (Read / Unread — its button where
 Apple puts it, left as it is: Haris 16:15); a birthday opens their greeting; "+ New task" as Home's.
 
+**iPhone Home, My Tasks, the task page, the Clients list, a client's page, a client's Client Assets and a folder —
+LOCKED at the latest (Haris, 2026-11-08 19:19):** commit 0cf8dd7, branches `locked/ios-home-0cf8dd7`,
+`locked/ios-mytasks-0cf8dd7`, `locked/ios-task-0cf8dd7`, `locked/ios-clients-0cf8dd7` (never moved or deleted; the earlier
+lock branches stay as history). Built in 1579 plus, not built yet: your photo filling its circle without glass (Home, My
+Tasks, Inbox, Clients), My Tasks' All / Done going while searching, client logos whole on their own background
+(LogoLook), the Clients tab's pages keeping the tab bar. Nothing touches them — look, behaviour or code, or a shared piece
+they use (HomeView, AppleTabs, AppleNav, AppleClients, AppleMyTasks, AssetsCtl, SharedFab, LogoLook…) — without telling
+Haris first and his yes. The Clients pages: the list follows Home (big title "Clients" and its line, Apple's search, Talk
+and your photo, the clients in Apple's list, + Add client); a client's page, a client's Client Assets and a folder are
+Apple's pushed pages (‹ · the name and its line · ••• as Apple's own menu, the tab bar staying, each block its own cell of
+Apple's list, the firm frost with its line, Apple's search for a client's files, the folders row on top of a client's page
+as before).
+
 **NO DIFFERENCES — every new page (Haris, 2026-11-08 16:39: "there will be no differences in the new pages from these"):**
 Home, the task page, My Tasks and the Inbox are locked, and every new page is the same as the locked page of its category —
 look, behaviour, animation, and every fix the locked page has had (a Home fix that never reached My Tasks and the Inbox let
