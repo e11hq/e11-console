@@ -887,7 +887,7 @@ var E11Rules = (() => {
       const item = { id: 'tr-' + newId(), type: 'comment', deletedAt: nowISO(), deletedBy: meId, key: 'tasks:' + t.id, taskTitle: t.title, data: { taskId: t.id, comments: group } };
       db.trash.push(item);
       t.updatedAt = nowISO();
-      return { messages: ['Comment deleted'], undo: item.id };
+      return { messages: ['Comment moved to the Trash'], undo: item.id };
     }
     // a task's own file removed on the phone (app.js remove-att): to the Trash, Undo for a few seconds — Haris 2026-11-06
     function removeAttachment(t, aid) {
@@ -899,7 +899,7 @@ var E11Rules = (() => {
       const item = { id: 'tr-' + newId(), type: 'attachment', deletedAt: nowISO(), deletedBy: meId, key: 'tasks:' + t.id, taskTitle: t.title, data: { taskId: t.id, att: a } };
       db.trash.push(item);
       t.updatedAt = nowISO();
-      return { messages: ['File removed'], undo: item.id };
+      return { messages: ['File moved to the Trash'], undo: item.id };
     }
     function toggleReaction(t, cid, emoji) {
       const c = (t.comments || []).find((x) => x.id === cid);
