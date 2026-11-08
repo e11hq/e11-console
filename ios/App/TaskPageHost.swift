@@ -535,7 +535,9 @@ extension Main {
         done(ok)
         if let m = m { p.draw(m) }
         // (sent: down to the latest, where it is — Haris, 2026-11-02)
-        if ok { p.feed?.wantEnd = true; p.threadFeed?.wantEnd = true }
+        // (a reply sent from the comments list stays where it is there — it goes in its thread, not at the end of the
+        //  list: Haris 2026-11-08; a reply page's own list, and a new comment, go down to the latest)
+        if ok { if body["parentId"] == nil { p.feed?.wantEnd = true }; p.threadFeed?.wantEnd = true }
         p.feed?.load(); p.threadFeed?.load()
       }
     }
