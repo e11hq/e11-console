@@ -1202,11 +1202,21 @@ final class AssetsCtl {
   private func downloadMany(_ h: HomeView, _ files: [[String: Any]], name: String) {
     let paths = files.compactMap { $0["file"] as? String }
     guard !paths.isEmpty else { return }
-    if files.count == 1 { main.downloadFile(files[0], from: main.topMost()) { [weak h] t in h?.assetsToast(t) }; return }
-    h.assetsToast("Getting \(paths.count) files ready…")
-    main.serverTask.request("/api/host/exportFiles", body: ["folder": name, "paths": paths], timeout: 120) { [weak self, weak h] j in
-      guard let self = self, let url = j?["url"] as? String else { h?.assetsToast("Couldn’t download — try again"); return }
-      self.main.downloadFile(["url": url, "name": name + ".zip"], from: self.main.topMost()) { t in h?.assetsToast(t) }
+    // (an ✕ on its progress: stuck or too long, it's stopped — Haris 2026-11-08; nothing said after that but "cancelled")
+    var cancelled = false
+    var task: URLSessionDownloadTask?
+    let stop: () -> Void = { [weak h] in cancelled = true; task?.cancel(); UIImpactFeedbackGenerator(style: .light).impactOccurred(); h?.assetsToast("Download cancelled", cancel: nil) }
+    let say = { [weak h] (t: String) in
+      guard !cancelled else { return }
+      let going = t.hasPrefix("Downloading") || t.hasPrefix("Getting")
+      h?.assetsToast(t, cancel: going ? stop : nil)
+    }
+    if files.count == 1 { main.downloadFile(files[0], from: main.topMost(), started: { task = $0 }, say); return }
+    say("Getting \(paths.count) files ready…")
+    main.serverTask.request("/api/host/exportFiles", body: ["folder": name, "paths": paths], timeout: 120) { [weak self] j in
+      guard let self = self, !cancelled else { return }
+      guard let url = j?["url"] as? String else { say("Couldn’t download — try again"); return }
+      self.main.downloadFile(["url": url, "name": name + ".zip"], from: self.main.topMost(), started: { task = $0 }, say)
     }
   }
 

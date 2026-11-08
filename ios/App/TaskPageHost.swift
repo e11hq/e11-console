@@ -832,7 +832,7 @@ extension Main {
     }
   }
   // Download: fetched with its progress shown, then iPhone's own Save / Share sheet (Save Image, Save to Files…)
-  func downloadFile(_ f: [String: Any], from vc: UIViewController, _ toast: @escaping (String) -> Void) {
+  func downloadFile(_ f: [String: Any], from vc: UIViewController, started: ((URLSessionDownloadTask) -> Void)? = nil, _ toast: @escaping (String) -> Void) {
     guard let path = f["url"] as? String, let url = URL(string: serverURL() + path.replacingOccurrences(of: "?view=1", with: "")) else { return toast("This file isn’t available") }
     PreviewLoad.refreshCookies(web.configuration.websiteDataStore.httpCookieStore) {
       var r = URLRequest(url: url); r.allHTTPHeaderFields = PreviewLoad.headers(url)
@@ -859,6 +859,7 @@ extension Main {
         if n / 10 != last / 10 { last = n; DispatchQueue.main.async { toast(n >= 100 ? "Downloaded" : "Downloading… \(n)%") } }
       }
       toast("Downloading…")
+      started?(task)   // (Client Assets' downloads: their ✕ stops it — Haris 2026-11-08)
       task.resume()
     }
   }

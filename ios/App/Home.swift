@@ -906,6 +906,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   var look: HomeLook { L }
   var model: [String: Any] { m }
   func assetsToast(_ t: String) { toast(["t": t]) }
+  // (a Client Assets folder download: the toast's round button an ✕ in the +'s place, cancelling it — Haris 2026-11-08)
+  var onToastAct: (() -> Void)?
+  func assetsToast(_ t: String, cancel: (() -> Void)?) { onToastAct = cancel; toast(cancel == nil ? ["t": t] : ["t": t, "x": true, "ms": 60000.0]) }
   var assetsMenu: (() -> [CornerMenuItem])?
   private lazy var clientsGroup: ClientsGroup = {
     let g = ClientsGroup(); g.onOpen = { [weak self] id in self?.send(["ev": "client", "id": id]) }
@@ -1851,7 +1854,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   func toast(_ t: [String: Any]) {
     let text = t["t"] as? String ?? "", act = t["a"] as? String ?? ""
     let ms = (t["ms"] as? Double) ?? 3000
-    if let c = toastCap, c.out { c.say(text, act); c.hold(ms); return }
+    let x = t["x"] as? Bool ?? false
+    if let c = toastCap, c.out { c.say(text, act); c.cross(x); c.hold(ms); return }
     toastCap?.removeFromSuperview(); toastCap = nil
     layoutIfNeeded()
     let W = bounds.width
@@ -1860,9 +1864,12 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let from = withFab ? fab.frame : CGRect(x: W - R - BTN, y: bottom - BTN, width: BTN, height: BTN)
     let to = CGRect(x: 16, y: from.minY, width: from.maxX - 16, height: from.height)
     let c = ToastCapsule(light: L.light, title: withFab ? (fab.accessibilityLabel ?? "New task") : nil, sym: withFab ? fabSym : nil, plus: withFab)
-    c.say(text, act)
+    c.say(text, act); c.cross(x)
     c.onUndo = { [weak self, weak c] in c?.close(); self?.onEvent?(["ev": "toast"]) }
-    c.onPlus = { [weak self] in UIImpactFeedbackGenerator(style: .light).impactOccurred(); if let a = self?.fabRun { a() } else { self?.send(["ev": "add"]) } }
+    c.onPlus = { [weak self, weak c] in
+      if c?.crossed == true { UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.onToastAct?(); return }
+      UIImpactFeedbackGenerator(style: .light).impactOccurred(); if let a = self?.fabRun { a() } else { self?.send(["ev": "add"]) }
+    }
     c.onGone = { [weak self, weak c] in
       guard let self = self, let c = c else { return }
       c.removeFromSuperview(); if self.toastCap === c { self.toastCap = nil; self.toastView = nil }
@@ -2656,6 +2663,19 @@ final class ToastCapsule: UIView {
   private(set) var out = false
   private let start = UIButton(type: .custom), tick = UIImageView(), msg = UILabel(), undo = UIButton(type: .system), plusB = UIButton(type: .system)
   private let hasPlus: Bool
+  // (✕ in the +'s place while a Client Assets download runs — tapping it cancels; Haris 2026-11-08)
+  private(set) var crossed = false
+  private var roundOn: Bool { hasPlus || crossed }
+  func cross(_ on: Bool) {
+    guard on != crossed else { return }
+    crossed = on
+    UIView.performWithoutAnimation {
+      plusB.setImage(UIImage(systemName: on ? "xmark" : "plus", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)), for: .normal)
+      plusB.accessibilityLabel = on ? "Cancel download" : nil
+      plusB.isHidden = !roundOn
+    }
+    setNeedsLayout()
+  }
   private var timer: Timer?, touching = false, closing = false
   // (iOS 26: iPhone's own glass in a glass container — the button's glass and the toast's are one liquid piece, so the
   //  toast squashes and stretches out of "+ New task" and back into it, as the top buttons do; Haris 2026-11-03)
@@ -2735,11 +2755,11 @@ final class ToastCapsule: UIView {
     }
     // (laid out for its stretched size; the start words over the right end, where the button was)
     start.frame = CGRect(x: W - from.width, y: 0, width: from.width, height: H)
-    let p: CGFloat = hasPlus ? 34 : 0
+    let p: CGFloat = roundOn ? 34 : 0
     plusB.frame = CGRect(x: W - 5 - p, y: (H - 34) / 2, width: p, height: 34); plusB.layer.cornerRadius = 17
     tick.frame = CGRect(x: 10, y: 0, width: 26, height: H)
     let uw = undo.isHidden ? 0 : ceil(undo.sizeThatFits(CGSize(width: 120, height: H)).width) + 12
-    let right = (hasPlus ? plusB.frame.minX : W - 8) - 4
+    let right = (roundOn ? plusB.frame.minX : W - 8) - 4
     undo.frame = CGRect(x: right - uw, y: 0, width: uw, height: H)
     msg.frame = CGRect(x: 42, y: 0, width: max(0, undo.frame.minX - 42 - 4), height: H)
   }
