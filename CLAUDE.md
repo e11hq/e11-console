@@ -63,6 +63,11 @@ type (comments, Team members' search, My profile…), a tap anywhere else while 
 closes the keyboard and nothing else — it never taps the row, card or button under the finger (`KeyboardShield.attach`).
 The box being typed in, and the comment box's own buttons, keep working. A task's description is apart: it locks the page
 while it's edited and ends only with Done. Every new native page too.
+**And the page still scrolls while typing (Haris, 2026-11-08: "throughout, except task description"):** a list under the
+finger scrolls as usual, dragging down takes the keyboard down with the finger (`.interactive`), and only a tap puts it
+down — tapping nothing else (`KeyTap` on the list: Apple's tap recognizer, which a scroll never sets off; the list's own
+taps wait for it). A button or switch under the finger: the cover takes it, a tap there only puts the keyboard down.
+Comments and replies do the same with their own tap (`CommentsFeed`).
 
 ⟶ *Being replaced by Don't 10 (Haris 2026-11-07): page by page, as each moves into Apple's navigation, tab bar and top bar, Apple's own does this — this rule then no longer applies there. Done: Home.* **‹ goes back the way you came, everywhere (Haris, 2026-11-03):** on every native page, ‹ and the edge swipe go back to
 where you were before (history) — not up the page's own path. A client's page opened from Home's search goes back to

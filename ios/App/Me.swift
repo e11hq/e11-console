@@ -984,9 +984,11 @@ final class KeyboardShield: UIView {
   }
   @objc private func up() {
     guard let p = page, typing(p) != nil else { return }
-    frame = p.bounds; p.bringSubviewToFront(self); isHidden = false
+    frame = p.bounds; p.bringSubviewToFront(self); isHidden = false; KeyboardShield.current = self
   }
-  @objc private func down() { isHidden = true }
+  @objc private func down() { isHidden = true; if KeyboardShield.current === self { KeyboardShield.current = nil } }
+  // (the shield that's up now — a list's KeyTap only puts the keyboard down while there is one)
+  static weak var current: KeyboardShield?
   override func hitTest(_ pt: CGPoint, with e: UIEvent?) -> UIView? {
     guard !isHidden, let p = page, !p.isHidden else { return nil }
     guard let f = typing(p) else { isHidden = true; return nil }
@@ -998,9 +1000,35 @@ final class KeyboardShield: UIView {
     //  as a tap there: Haris 2026-11-08)
     isHidden = true; let under = p.hitTest(convert(pt, to: p), with: e); isHidden = false
     var v = under; while let x = v { if x is CommentsFeed { return nil }; v = x.superview }
+    // (a list under the finger, everywhere — Haris 2026-11-08: the page still scrolls while typing, dragging down takes
+    //  the keyboard with the finger, and a tap only puts it down (its KeyTap). A button or switch under the finger: the
+    //  cover takes it, so it only puts the keyboard down)
+    v = under
+    while let x = v {
+      if x is UIControl && !(x is UITextField) { return self }
+      if let sv = x as? UIScrollView, !(sv is UITextView) { KeyTap.add(to: sv); return nil }
+      v = x.superview
+    }
     return self
   }
   override func touchesBegan(_ t: Set<UITouch>, with e: UIEvent?) { if let w = page?.window { w.endEditing(true) } else { page?.endEditing(true) }; isHidden = true }
+}
+
+// a tap on a list while the keyboard is up (KeyboardShield): it only puts the keyboard down — the list's own taps (a card,
+// a row) wait for it, and Apple's tap recognizer never takes a scroll (Haris 2026-11-08)
+final class KeyTap: UITapGestureRecognizer, UIGestureRecognizerDelegate {
+  static func add(to sv: UIScrollView) {
+    if sv.keyboardDismissMode == .none { sv.keyboardDismissMode = .interactive }
+    guard !(sv.gestureRecognizers ?? []).contains(where: { $0 is KeyTap }) else { return }
+    let t = KeyTap(target: nil, action: nil); t.addTarget(t, action: #selector(fire))
+    t.cancelsTouchesInView = true; t.delegate = t
+    sv.addGestureRecognizer(t)
+  }
+  @objc private func fire() { view?.window?.endEditing(true) }
+  func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool { KeyboardShield.current?.isHidden == false }
+  func gestureRecognizer(_ g: UIGestureRecognizer, shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
+    KeyboardShield.current?.isHidden == false && other is UITapGestureRecognizer && !(other is KeyTap)
+  }
 }
 
 final class MeCtl {
