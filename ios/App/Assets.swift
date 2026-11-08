@@ -133,27 +133,36 @@ class AssetTile: UIControl {
   //  task cards". Set once; other tiles — Me's rows — keep theirs)
   var contextMenu: (() -> UIMenu?)? {
     didSet {
-      guard contextMenu != nil, !isContextMenuInteractionEnabled else { return }
+      guard contextMenu != nil, menuHost == nil else { return }
       shrink?.isEnabled = false; shrink.map { removeGestureRecognizer($0) }; shrink = nil
       gestureRecognizers?.filter { $0 is UILongPressGestureRecognizer }.forEach { removeGestureRecognizer($0) }
-      isContextMenuInteractionEnabled = true
+      // (iPhone's own menu interaction on the tile, as on Home's cards — its delegate apart from the tile: UIControl's own
+      //  built-in menu opens as a button's menu, with no shrink and no lift — Haris 2026-11-08)
+      let m = TileMenu(); m.tile = self; menuHost = m
+      addInteraction(UIContextMenuInteraction(delegate: m))
     }
   }
-  // (UIControl's own: iPhone's menu for it — the tile itself lifts, with its own rounded corners, as Home's cards)
-  override func contextMenuInteraction(_ i: UIContextMenuInteraction, configurationForMenuAtLocation p: CGPoint) -> UIContextMenuConfiguration? {
-    guard let m = contextMenu?() else { return nil }
-    return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in m }
-  }
-  override func contextMenuInteraction(_ i: UIContextMenuInteraction, configuration c: UIContextMenuConfiguration, highlightPreviewForItemWithIdentifier id: NSCopying) -> UITargetedPreview? {
-    guard contextMenu != nil else { return super.contextMenuInteraction(i, configuration: c, highlightPreviewForItemWithIdentifier: id) }
-    let pp = UIPreviewParameters()
-    pp.visiblePath = UIBezierPath(roundedRect: bounds, cornerRadius: layer.cornerRadius > 0 ? layer.cornerRadius : 18)
-    pp.backgroundColor = backgroundColor ?? .clear
-    return UITargetedPreview(view: self, parameters: pp)
-  }
+  private var menuHost: TileMenu?
   // (its size and place set without touching its shrink — setting the frame of a card shrunk while held re-laid its
   //  insides: they moved, as the comment cards' once did)
   func place(_ r: CGRect) { bounds = CGRect(origin: .zero, size: r.size); center = CGPoint(x: r.midX, y: r.midY) }
+}
+
+// a Client Assets tile's touch and hold: iPhone's own shrink, lift and menu beside it, as Home's task cards
+final class TileMenu: NSObject, UIContextMenuInteractionDelegate {
+  weak var tile: AssetTile?
+  func contextMenuInteraction(_ i: UIContextMenuInteraction, configurationForMenuAtLocation p: CGPoint) -> UIContextMenuConfiguration? {
+    guard let m = tile?.contextMenu?() else { return nil }
+    return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in m }
+  }
+  // (the tile itself lifts, with its own rounded corners)
+  func contextMenuInteraction(_ i: UIContextMenuInteraction, configuration c: UIContextMenuConfiguration, highlightPreviewForItemWithIdentifier id: NSCopying) -> UITargetedPreview? {
+    guard let v = tile else { return nil }
+    let pp = UIPreviewParameters()
+    pp.visiblePath = UIBezierPath(roundedRect: v.bounds, cornerRadius: v.layer.cornerRadius > 0 ? v.layer.cornerRadius : 18)
+    pp.backgroundColor = v.backgroundColor ?? .clear
+    return UITargetedPreview(view: v, parameters: pp)
+  }
 }
 
 // the clients: two columns of cards — a big logo area (its logo, or its colour with initials), name, "6 folders · 48 files"
