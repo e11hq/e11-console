@@ -142,6 +142,11 @@ class ClientsPushedVC: UIViewController {
     navigationItem.rightBarButtonItem = more
   }
   func menuItems() -> [CornerMenuItem] { h.menuItems }
+  override func viewWillAppear(_ a: Bool) {
+    super.viewWillAppear(a)
+    // (over the app's own navigation — Client Assets opened from Me: Apple's bar shown, as over a task)
+    if navigationController?.isNavigationBarHidden == true { navigationController?.setNavigationBarHidden(false, animated: a) }
+  }
   // (the tab bar stays under these pages — Haris 2026-11-08: "+ New task" / "↑ Upload" above it, as on the tab's first page)
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
@@ -195,12 +200,35 @@ final class ClientVC: ClientsPushedVC {
 }
 
 // a client's Client Assets, or a folder (AssetsCtl's screens)
-final class AssetsVC: ClientsPushedVC, UISearchResultsUpdating {
+final class AssetsVC: ClientsPushedVC, UISearchResultsUpdating, UISearchControllerDelegate {
   var onGone: (() -> Void)?
   var onSearch: ((String) -> Void)?
   private var search: UISearchController?
+  override init(_ h: HomeView) {
+    super.init(h)
+    // (All Client Assets: "Client Assets" and its line, "13 clients · 32 files", in the bar's middle)
+    if h.assets == "all" {
+      h.onAppleTitle = { [weak self] t, d in
+        self?.navigationItem.title = t
+        if #available(iOS 26.0, *) { self?.navigationItem.subtitle = d.isEmpty ? nil : d }
+      }
+    }
+  }
+  required init?(coder: NSCoder) { fatalError() }
   override func viewDidLoad() {
     super.viewDidLoad()
+    if h.assets == "all" {
+      navigationItem.rightBarButtonItem = nil
+      let s = UISearchController(searchResultsController: nil)
+      s.obscuresBackgroundDuringPresentation = false
+      s.searchResultsUpdater = self; s.delegate = self
+      s.searchBar.placeholder = "Search every client’s files"; s.searchBar.autocorrectionType = .no
+      search = s
+      navigationItem.searchController = s
+      navigationItem.hidesSearchBarWhenScrolling = false
+      if #available(iOS 16.0, *) { navigationItem.preferredSearchBarPlacement = .stacked }
+      return
+    }
     // (a client's Client Assets: Apple's search for its files, under the bar — instead of the box of ours)
     if h.assets == "client" {
       let s = UISearchController(searchResultsController: nil)
@@ -215,11 +243,92 @@ final class AssetsVC: ClientsPushedVC, UISearchResultsUpdating {
   }
   func placeholder(_ p: String) { search?.searchBar.placeholder = p }
   override func menuItems() -> [CornerMenuItem] { h.assetsMenu?() ?? [] }
-  func updateSearchResults(for s: UISearchController) { onSearch?(s.searchBar.text ?? "") }
+  func updateSearchResults(for s: UISearchController) { if h.assets == "all" { h.appleSearchText(s.searchBar.text ?? "") } else { onSearch?(s.searchBar.text ?? "") } }
+  func willPresentSearchController(_ s: UISearchController) { if h.assets == "all" { h.appleSearchBegin() } }
+  func didPresentSearchController(_ s: UISearchController) { DispatchQueue.main.async { s.searchBar.becomeFirstResponder() } }
+  func willDismissSearchController(_ s: UISearchController) { if h.assets == "all" { h.appleSearchEnd() } }
   override func viewDidDisappear(_ a: Bool) {
     super.viewDidDisappear(a)
     if isMovingFromParent || navigationController == nil { onGone?(); onGone = nil }
   }
+}
+
+// Client Assets as a tab (the Office Admin's — Haris 2026-11-08, mock-up assets-main-mockup.png): its first screen, as
+// Home — Apple's big title "Client Assets" with its line, Apple's search (every client's files), Talk and your photo, the
+// clients' cards in Apple's list, + Add client; a client's Client Assets and a folder pushed on it
+final class AssetsTabVC: UIViewController, TabRoot, UISearchResultsUpdating, UISearchControllerDelegate {
+  static weak var shared: AssetsTabVC?
+  override init(nibName: String?, bundle: Bundle?) { super.init(nibName: nil, bundle: nil); AssetsTabVC.shared = self }
+  required init?(coder: NSCoder) { fatalError() }
+  override var preferredStatusBarStyle: UIStatusBarStyle { Main.shared.statusStyle }
+  override func loadView() { let v = UIView(); v.backgroundColor = .systemGroupedBackground; view = v }
+  private(set) weak var h: HomeView?
+  private var meItem: UIBarButtonItem?, talkItem: UIBarButtonItem?
+  private var mePhoto: UIImage?
+  private var search: UISearchController?
+  override func viewDidLoad() {
+    super.viewDidLoad()
+    navigationItem.backButtonDisplayMode = .minimal
+    navigationItem.title = "Client Assets"
+    let me = UIBarButtonItem(image: BarImage.me(nil, traitCollection), primaryAction: UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.h?.meTap() })
+    me.accessibilityLabel = "Me"
+    BarImage.bare(me)
+    meItem = me
+    let talk = UIBarButtonItem(image: BarImage.talk(traitCollection), primaryAction: UIAction { _ in })
+    talk.tintColor = .label; talk.accessibilityLabel = "E11 Talk"
+    talkItem = talk
+    navigationItem.rightBarButtonItems = [me, .fixedSpace(0), talk]
+    if #available(iOS 17.0, *) { registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (vc: AssetsTabVC, _: UITraitCollection) in vc.paintBar() } }
+    let s = UISearchController(searchResultsController: nil)
+    s.obscuresBackgroundDuringPresentation = false
+    s.searchResultsUpdater = self; s.delegate = self
+    s.searchBar.placeholder = "Search every client’s files"; s.searchBar.autocorrectionType = .no
+    search = s
+    navigationItem.searchController = s
+    navigationItem.hidesSearchBarWhenScrolling = false
+  }
+  override func viewDidLayoutSubviews() {
+    super.viewDidLayoutSubviews()
+    if let h = h, h.superview === view { h.tabTop = Main.shared.homeTabTop }
+  }
+  func adopt(_ v: HomeView) {
+    loadViewIfNeeded()
+    if let old = h, old !== v, old.superview === view { old.removeFromSuperview() }
+    h = v
+    if v.superview !== view {
+      v.removeFromSuperview()
+      v.frame = view.bounds; v.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+      view.insertSubview(v, at: 0)
+    }
+    v.isHidden = false; v.transform = .identity
+    view.backgroundColor = v.backgroundColor ?? view.backgroundColor
+    v.onAppleTitle = { [weak self] _, d in self?.setLine(d) }
+    v.onAppleMe = { [weak self] img in if let img = img { self?.mePhoto = img; self?.paintBar() } }
+    v.onAppleResign = { [weak self] in self?.search?.searchBar.resignFirstResponder() }
+    v.appleBarHeight = { [weak self] in
+      guard let nb = self?.navigationController?.navigationBar, !nb.isHidden, nb.window != nil else { return 0 }
+      return nb.frame.height
+    }
+    v.useAppleTop()
+    setContentScrollView(v.appleScroll, for: .top)
+  }
+  func paintBar() { meItem?.image = BarImage.me(mePhoto, traitCollection); talkItem?.image = BarImage.talk(traitCollection) }
+  private var shownLine: String?
+  private func setLine(_ d: String) {
+    guard d != shownLine else { return }
+    shownLine = d
+    if #available(iOS 26.0, *) {
+      navigationItem.subtitle = d.isEmpty ? nil : d
+      if d.isEmpty { navigationItem.largeAttributedSubtitle = nil } else {
+        var a = AttributedString(d); a.uiKit.font = .systemFont(ofSize: 15); a.uiKit.foregroundColor = .secondaryLabel
+        navigationItem.largeAttributedSubtitle = a
+      }
+    }
+  }
+  func updateSearchResults(for s: UISearchController) { h?.appleSearchText(s.searchBar.text ?? "") }
+  func willPresentSearchController(_ s: UISearchController) { h?.appleSearchBegin() }
+  func didPresentSearchController(_ s: UISearchController) { DispatchQueue.main.async { s.searchBar.becomeFirstResponder() } }
+  func willDismissSearchController(_ s: UISearchController) { h?.appleSearchEnd() }
 }
 
 // a list block (the clients' group, Client Assets' folders, files…) in a cell of Apple's list: drawn the whole width, as on

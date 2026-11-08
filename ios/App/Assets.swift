@@ -412,9 +412,16 @@ final class AssetsCtl {
   //  bar, swipe back; elsewhere — Me, Client Assets as a tab — as before)
   private(set) var appleNav: UINavigationController?
   private func pickHost() {
-    let t = AppleTabs.shared
-    appleNav = main.clientsApple && t != nil && t?.ownNav === t?.clientsNav ? t?.clientsNav : nil
+    guard APPLE_CLIENTS, let t = AppleTabs.shared else { appleNav = nil; return }
+    // (the Clients tab; Client Assets as the Office Admin's tab; anywhere else — Me's — the app's own navigation, Apple's
+    //  push over Me: Haris 2026-11-08, mock-up assets-main-mockup.png)
+    if t.ownNav === t.clientsNav { appleNav = main.clientsApple ? t.clientsNav : nil }
+    else if t.ownNav === t.assetsNav { appleNav = t.assetsNav }
+    else if t.ownNav == nil { appleNav = main.navigationController }
+    else { appleNav = nil }
   }
+  // (All Client Assets as the Office Admin's tab: its tab's first screen, not pushed)
+  private var tabRoot: HomeView? { appleNav != nil && appleNav === AppleTabs.shared?.assetsNav ? AssetsTabVC.shared?.h : nil }
   private weak var pushingVC: AssetsVC?
   private func appleVC(_ h: HomeView) -> AssetsVC? {
     if let p = pushingVC, p.h === h { return p }
@@ -424,7 +431,7 @@ final class AssetsCtl {
   //  longer there taken off too)
   func reconcile(_ vcs: [UIViewController]) {
     guard appleNav != nil else { return }
-    for s in stack where !vcs.contains(where: { ($0 as? AssetsVC)?.h === s.h }) { navGone(s.h) }
+    for s in stack where s.h !== tabRoot && !vcs.contains(where: { ($0 as? AssetsVC)?.h === s.h }) { navGone(s.h) }
   }
   private weak var base: UIView?   // (what the first one was opened over — a client's page, the list; hidden under it meanwhile)
   var light = true
@@ -570,7 +577,7 @@ final class AssetsCtl {
     open(client: client, folder: folder, animated: true, direct: true)   // (‹ back to the client's page, the way you came)
   }
   func openAll(animated: Bool) {
-    if stack.isEmpty { appleNav = nil }   // (All Client Assets: Me's, as before)
+    if stack.isEmpty { pickHost() }
     push(screen("all", nil, nil), animated: animated)
     ask(["ev": "want"]) { [weak self] r in if (r["ok"] as? Bool) != true { self?.top?.assetsToast(r["error"] as? String ?? "Not available") } }
   }
@@ -648,6 +655,10 @@ final class AssetsCtl {
       watchCopyLive()
       stack.append(s)
       draw(s)
+      // (the Office Admin's tab: All Client Assets is its first screen)
+      if s.kind == "all", stack.count == 1, n === AppleTabs.shared?.assetsNav, let vc = AssetsTabVC.shared {
+        vc.adopt(s.h); blocks(s.h); main.updateCorner(); return
+      }
       let vc = AssetsVC(s.h)
       vc.onGone = { [weak self, weak h = s.h] in if let h = h { self?.navGone(h) } }
       vc.onSearch = { [weak self, weak h = s.h] q in

@@ -146,7 +146,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     [topBar, blur, title, sub, smallTitle, smallSub, searchCircle, me, searchBar, closeCircle].forEach { $0.isHidden = true }
     onAppleTitle?(title.attributedText?.string ?? "", sub.text ?? "")
     onAppleMe?(me.image(for: .normal))
-    if assets == nil || assets == "client" || assets == "folder" { makeAppleList() }   // (the Clients tab's pages and Client Assets' too — AppleClients.swift)
+    if assets == nil || assets == "client" || assets == "folder" || assets == "all" { makeAppleList() }   // (the Clients tab's pages and Client Assets' too — AppleClients.swift)
     // (My Tasks: its filter rows and chips are in Apple's bar's menu now — taken out; All / Done goes into the list)
     // (My Tasks: its filters are in Apple's bar's menu, All / Done in Apple's search bar's scope bar — the rows taken out)
     if isList && !isInbox { listHead.removeFromSuperview(); if let f = lastFilters { onAppleFilters?(f) } }
@@ -211,6 +211,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       for v in resultViews {
         let k = (v as? HomeCard).map { "c:" + $0.id } ?? "r:\(ObjectIdentifier(v).hashValue)"
         if views[k] != nil { continue }
+        // (Client Assets' found files — a block: the whole width, as the list's — AppleClients.swift)
+        if let b = v as? HomeBlock { let w = blockWraps[ObjectIdentifier(b)] ?? BlockWrap(b); blockWraps[ObjectIdentifier(b)] = w; keys.append(k); views[k] = w; continue }
         keys.append(k); views[k] = v
       }
     } else {
@@ -1638,8 +1640,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   func showFound(_ views: [UIView], hint t: String?) {
     resultViews.forEach { $0.removeFromSuperview() }
     resultViews = views
-    views.forEach { results.addSubview($0) }
     hint.text = t; hint.textColor = L.empty
+    if listOn { applyList(animated: false); return }   // (Apple's list: the results are its rows — Client Assets' search)
+    views.forEach { results.addSubview($0) }
     setNeedsLayout()
   }
   var findText: String { field.text ?? "" }
