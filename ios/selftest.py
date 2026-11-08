@@ -142,12 +142,14 @@ try:
         print('diag server: inbox rows', len(si.get('rows') or []), 'me', si.get('me'), '· done cards', sum(len(g.get('cards') or []) for g in sd.get('groups') or []), 'me', sd.get('me'))
     except Exception as e: print('diag server: failed', e)
     ib = res.get('ibxInbox') or {}; ibs = res.get('ibxSwipeInbox') or {}; ibu = res.get('ibxUnreadInbox') or {}; ibm = res.get('ibxMentionsInbox') or {}
-    check(ib.get('shown') is True and ib.get('server') is True and ib.get('tab') == 'all' and (ib.get('rows') or 0) > 0 and len(ib.get('cats') or []) == 3, f"the Inbox is the app's own, from the server, a row for each notification {ib}")
+    iba = res.get('ibxAllInbox') or {}
+    check(ib.get('shown') is True and ib.get('server') is True and ib.get('tab') == 'unread' and len(ib.get('cats') or []) == 3, f"the Inbox is the app's own, from the server, opening on Unread {ib}")
+    check((iba.get('rows') or 0) > 0 and iba.get('tab') == 'all', f"All: a row for each notification {iba}")
     check((res.get('ibx') or {}).get('blank') is True, f"the page draws nothing under the app's Inbox {res.get('ibx')}")
     check(ibs.get('open') is True, f"a row swiped right shows Read / Unread (Apple's own swipe in Apple's list) {ibs}")
     check(ib.get('apple') is True and ib.get('listOn') is True, f"the Inbox in Apple's navigation, its rows in Apple's list {ib}")
-    check(ibu.get('tab') == 'unread' and (ibu.get('unreadRows') or 0) == (ibu.get('rows') or 0) and (ibu.get('rows') or 0) <= (ib.get('rows') or 0), f"Unread: only the unread ones, at once {ibu}")
-    check(ibm.get('tab') == 'mentions' and (ibm.get('rows') or 0) <= (ib.get('rows') or 0), f"Mentions {ibm}")
+    check(ibu.get('tab') == 'unread' and (ibu.get('unreadRows') or 0) == (ibu.get('rows') or 0) and (ibu.get('rows') or 0) <= (iba.get('rows') or 0), f"Unread: only the unread ones, at once {ibu}")
+    check(ibm.get('tab') == 'mentions' and (ibm.get('rows') or 0) <= (iba.get('rows') or 0), f"Mentions {ibm}")
     cw = ibu.get('cats') or []
     check(len(cw) == 3 and cw[0] == 49 and cw[1] > 49 and cw[2] == 49, f"the chosen button widens to its name, the others 49 wide {cw}")
     check((res.get('inboxMyTasks') or {}).get('shown') is not True, f"My Tasks isn't over the Inbox {res.get('inboxMyTasks')}")

@@ -972,7 +972,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     .init(key: "unread", sym: "envelope", name: "Unread", fill: MailCats.blue),
     .init(key: "mentions", sym: "at", name: "Mentions", fill: MailCats.purple)])
   private let markAll = UIButton(type: .system)
-  private(set) var inboxTab = "all"
+  // (the Inbox opens on Unread — Haris 2026-11-08: "Make the inbox open on unread"; All and Mentions a tap away)
+  private(set) var inboxTab = "unread"
+  private var keepSet = false
   private var inboxRows: [String: InboxRow] = [:]
   private var openRow: InboxRow?
   private var keep = Set<String>()     // (rows that were in the list when it was picked stay until it's left — read or not)
@@ -988,6 +990,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     markAll.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.send(["ev": "readAll"]) }, for: .touchUpInside)
     addSubview(markAll)
     catsView.onPick = { [weak self] i in guard let self = self else { return }; self.pickTab(["all", "unread", "mentions"][i]) }
+    catsView.choose(1, animated: false)
     listHead.addSubview(catsView)
     insertSubview(listHead, belowSubview: topBar)
   }
@@ -1009,7 +1012,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     inboxTab = k
     openRow?.close(animated: false); openRow = nil
     catsView.choose(["all", "unread", "mentions"].firstIndex(of: k) ?? 0, animated: true)
-    keep = Set((m["rows"] as? [[String: Any]] ?? []).filter { ($0["read"] as? Bool) != true }.compactMap { $0["id"] as? String })
+    keep = Set((m["rows"] as? [[String: Any]] ?? []).filter { ($0["read"] as? Bool) != true }.compactMap { $0["id"] as? String }); keepSet = true
     switching = true
     drawInbox(m)
     switching = false
@@ -1022,6 +1025,10 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     markAll.alpha = cornerShared ? 0 : 1
     defer { onCorner?() }
     catsView.light = L.light
+    // (opened on Unread: the unread ones at the start stay in it until another list is picked — read or not, as Mail)
+    if !keepSet, (model["rows"] as? [[String: Any]]) != nil {
+      keep = Set((model["rows"] as? [[String: Any]] ?? []).filter { ($0["read"] as? Bool) != true }.compactMap { $0["id"] as? String }); keepSet = true
+    }
     // where each row is now (to move it from there), and which go
     var was: [String: CGPoint] = [:]
     for v in content { if let r = v as? InboxRow { was[r.id] = r.center } }

@@ -2784,7 +2784,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       // 28: the Inbox, the app's own: All, a row swiped right (Read / Unread), Unread, Mentions
       ("ibx", pause(2500) + "return JSON.stringify({ view: ui.view, blank: !!document.querySelector('#content .ph-under-app') })", {
         if let i = self.tabKeys.firstIndex(of: "inbox"), let item = self.tabBar.items?[i] { self.tabBar.selectedItem = item; self.tabBar(self.tabBar, didSelect: item) } }),
-      ("ibxSwipe", "return '{}'", { self.inboxIfMade?.selfSwipeRow() }),
+      ("ibxSwipe", "return '{}'", { self.inboxIfMade?.selfInboxTab("all"); self.inboxIfMade?.selfSwipeRow() }),
       ("ibxUnread", pause(2000) + "return '{}'", { self.inboxIfMade?.selfInboxTab("unread") }),
       ("ibxMentions", pause(2000) + "return '{}'", { self.inboxIfMade?.selfInboxTab("mentions") }),
       ("ibxAll", pause(2000) + "return '{}'", { self.inboxIfMade?.selfInboxTab("all") }),
