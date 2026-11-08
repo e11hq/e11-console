@@ -285,7 +285,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     //  2026-11-02)
     // (where the keyboard is: Apple's keyboard guide — a mark held to its top, so the page is laid out again, inside Apple's
     //  own keyboard animation, as the keyboard comes, goes or is dragged down; no keyboard: nothing — Haris 2026-11-08)
-    keyboardLayoutGuide.usesBottomSafeArea = false
+    if #available(iOS 17.0, *) { keyboardLayoutGuide.usesBottomSafeArea = false }
     kbMark.isUserInteractionEnabled = false; kbMark.isHidden = true
     kbMark.translatesAutoresizingMaskIntoConstraints = false
     addSubview(kbMark)
@@ -939,7 +939,12 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   }
   // how much of the page the keyboard covers (Apple's keyboard guide)
   private let kbMark = UIView()
-  var kbCover: CGFloat { kbMark.frame.minY > 0 ? max(0, bounds.height - kbMark.frame.minY) : 0 }
+  var kbCover: CGFloat {
+    guard kbMark.frame.minY > 0 else { return 0 }
+    var c = bounds.height - kbMark.frame.minY
+    if #unavailable(iOS 17.0) { c -= safeAreaInsets.bottom }   // (before iOS 17 the guide also holds the bottom safe area)
+    return max(0, c)
+  }
   // the description's cursor in sight, above the keyboard and its format bar
   func caretIntoView() {
     guard descView.isFirstResponder, let r = descView.selectedTextRange else { return }
