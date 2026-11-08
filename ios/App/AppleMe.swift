@@ -81,6 +81,8 @@ final class MeVC: UIViewController, TabRoot {
 // a page of Me pushed on its tab: as the Clients tab's pages (tab bar staying, Apple's firm frost, Apple's bar)
 final class MePageVC: ClientsPushedVC {
   var onGone: (() -> Void)?
+  private(set) var appeared = false
+  override func viewDidAppear(_ a: Bool) { super.viewDidAppear(a); appeared = true }
   override init(_ h: HomeView) {
     super.init(h)
     // (a page whose name is its big title on the old page — Content plans opened from Me: its name and line in the bar)

@@ -1583,7 +1583,7 @@ final class MeCtl {
       n.viewControllers.forEach { ($0 as? MePageVC)?.onGone = nil }
       n.popToRootViewController(animated: false)
     }
-    stack.forEach { $0.h.removeFromSuperview() }; stack = []
+    stack.forEach { $0.h.removeFromSuperview() }; stack = []; pageVCs = [:]
   }
   // (a page no longer there: what the page is told as it goes)
   private func left(_ s: Screen) {
@@ -1597,6 +1597,7 @@ final class MeCtl {
   private func navGone(_ h: HomeView) {
     guard let i = stack.firstIndex(where: { $0.h === h }), i > 0 else { return }
     let s = stack.remove(at: i)
+    pageVCs[ObjectIdentifier(h)] = nil
     left(s)
     if let t = stack.last { draw(t) }
     main.updateCorner()
@@ -1604,8 +1605,13 @@ final class MeCtl {
   // (Me's navigation settled — the tab tapped again pops them all at once, and only the top one hears it)
   func reconcile(_ vcs: [UIViewController]) {
     guard apple else { return }
-    for s in stack.dropFirst() where !vcs.contains(where: { ($0 as? MePageVC)?.h === s.h }) { navGone(s.h) }
+    // (a page still on its way in — pushed just after another went back — isn't gone)
+    for s in stack.dropFirst() where !vcs.contains(where: { ($0 as? MePageVC)?.h === s.h }) {
+      if let vc = pageVCs[ObjectIdentifier(s.h)], !vc.appeared { continue }
+      navGone(s.h)
+    }
   }
+  private var pageVCs: [ObjectIdentifier: MePageVC] = [:]
   private var model: [String: Any] = [:]
   private var about: [String: Any] = [:]
   var light = true
@@ -1888,6 +1894,7 @@ final class MeCtl {
       if stack.count == 1, let vc = MeVC.shared { vc.adopt(s.h); draw(s); main.updateCorner(); return }
       draw(s)
       let vc = MePageVC(s.h)
+      pageVCs[ObjectIdentifier(s.h)] = vc
       vc.onGone = { [weak self, weak h = s.h] in if let h = h { self?.navGone(h) } }
       vc.loadViewIfNeeded()
       draw(s)   // (in Apple's list now)
