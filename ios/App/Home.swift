@@ -959,8 +959,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let rgb = NativeSheetVC.color(model["rgb"]) ?? .systemGray
     let lp = model["logo"] as? String
     if lp != barLogoPath {
-      barLogoPath = lp; barLogo.image = nil; barLogo.backgroundColor = rgb; barIni.isHidden = false
-      if let p = lp { FeedLoader.shared.image(p) { [weak self] img in guard let self = self, self.barLogoPath == p, let img = img else { return }; self.barLogo.image = img; self.barLogo.backgroundColor = .white; self.barIni.isHidden = true } }
+      barLogoPath = lp; barLogo.image = nil; barLogo.backgroundColor = rgb; barLogo.contentMode = .scaleAspectFill; barIni.isHidden = false
+      if let p = lp { FeedLoader.shared.image(p) { [weak self] img in guard let self = self, self.barLogoPath == p, let img = img else { return }; LogoLook.put(img, key: p, in: self.barLogo); self.barIni.isHidden = true } }
     } else if barLogo.image == nil { barLogo.backgroundColor = rgb }
     [title, sub, smallTitle, smallSub].forEach { $0.isHidden = true }
     if isClient { tellApplePage() }

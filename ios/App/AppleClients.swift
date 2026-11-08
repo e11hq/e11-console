@@ -171,11 +171,11 @@ class ClientsPushedVC: UIViewController {
     iniLabel.font = .systemFont(ofSize: 9, weight: .bold); iniLabel.textColor = .white; iniLabel.textAlignment = .center; iniLabel.text = ini
     if iniLabel.superview !== logoView { logoView.addSubview(iniLabel) }
     iniLabel.frame = CGRect(x: 0, y: 0, width: 22, height: 22)
-    if logo != logoShown { logoShown = logo; logoView.image = nil }
+    if logo != logoShown { logoShown = logo; logoView.image = nil; logoView.contentMode = .scaleAspectFill }
     if logoView.image == nil { logoView.backgroundColor = col; iniLabel.isHidden = false }
     if let p = logo, logoView.image == nil {
       FeedLoader.shared.image(p) { [weak self] img in
-        DispatchQueue.main.async { guard let self = self, self.logoShown == p, let img = img else { return }; self.logoView.image = img; self.logoView.backgroundColor = .white; self.iniLabel.isHidden = true }
+        DispatchQueue.main.async { guard let self = self, self.logoShown == p, let img = img else { return }; LogoLook.put(img, key: p, in: self.logoView); self.iniLabel.isHidden = true }
       }
     }
     let s = UIStackView(arrangedSubviews: [logoView, name]); s.spacing = 8; s.alignment = .center

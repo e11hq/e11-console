@@ -163,8 +163,8 @@ final class ClientRow: UIControl {
     // (its logo where it has one — fetched with the app's sign-in, kept on the phone — else its colour and initials)
     let lp = r["logo"] as? String
     if lp != logoPath {
-      logoPath = lp; logo.image = nil; logo.backgroundColor = rgb; ini.isHidden = false
-      if let p = lp { FeedLoader.shared.image(p) { [weak self] img in guard let self = self, self.logoPath == p, let img = img else { return }; self.logo.image = img; self.logo.backgroundColor = .white; self.ini.isHidden = true } }
+      logoPath = lp; logo.image = nil; logo.backgroundColor = rgb; logo.contentMode = .scaleAspectFill; ini.isHidden = false
+      if let p = lp { FeedLoader.shared.image(p) { [weak self] img in guard let self = self, self.logoPath == p, let img = img else { return }; LogoLook.put(img, key: p, in: self.logo); self.ini.isHidden = true } }
     } else if logo.image == nil { logo.backgroundColor = rgb }
     alpha = inactive ? 0.75 : 1
     setNeedsLayout()
@@ -368,7 +368,7 @@ final class ClientSheetVC: UITableViewController, UITextFieldDelegate {
     let v = UIImageView(); v.backgroundColor = rgb(); v.layer.cornerRadius = size * 0.27; v.layer.cornerCurve = .continuous; v.clipsToBounds = true; v.contentMode = .scaleAspectFill
     let l = UILabel(); l.text = row["ini"] as? String; l.font = .systemFont(ofSize: size * 0.34, weight: .heavy); l.textColor = .white; l.textAlignment = .center
     l.frame = CGRect(x: 0, y: 0, width: size, height: size); v.addSubview(l)
-    if let p = row["logo"] as? String { FeedLoader.shared.image(p) { img in if let img = img { v.image = img; v.backgroundColor = .white; l.isHidden = true } } }
+    if let p = row["logo"] as? String { FeedLoader.shared.image(p) { img in if let img = img { LogoLook.put(img, key: p, in: v); l.isHidden = true } } }
     v.frame = CGRect(x: 0, y: 0, width: size, height: size)
     return v
   }

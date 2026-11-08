@@ -148,14 +148,14 @@ final class ClientCards: UIView, HomeBlock {
         k.0.removeFromSuperview()
       }
       let t = AssetTile(); t.backgroundColor = L.card; t.layer.cornerRadius = 24; t.layer.cornerCurve = .continuous
-      let logo = UIImageView(); logo.layer.cornerRadius = 16; logo.layer.cornerCurve = .continuous; logo.clipsToBounds = true; logo.contentMode = .scaleAspectFill   // (the logo filling its whole tile, edge to edge — Haris 2026-11-04)
+      let logo = UIImageView(); logo.layer.cornerRadius = 16; logo.layer.cornerCurve = .continuous; logo.clipsToBounds = true; logo.contentMode = .scaleAspectFill   // (the colour with its initials filling the tile; a logo: whole, with a small margin, on its own background — LogoLook, Haris 2026-11-08)
       logo.backgroundColor = NativeSheetVC.color(c["rgb"]) ?? .systemBlue; logo.tag = 1
       let ini = UILabel(); ini.text = c["ini"] as? String; ini.font = .systemFont(ofSize: 34, weight: .heavy); ini.textColor = .white; ini.textAlignment = .center; ini.tag = 2
       logo.addSubview(ini)
       let n = UILabel(); n.text = c["name"] as? String; n.font = .systemFont(ofSize: 16, weight: .semibold); n.textColor = L.title; n.lineBreakMode = .byTruncatingTail; n.tag = 3
       let s = UILabel(); s.text = c["sub"] as? String; s.font = .systemFont(ofSize: 13); s.textColor = .secondaryLabel; s.tag = 4
       [logo, n, s].forEach { $0.isUserInteractionEnabled = false; t.addSubview($0) }
-      if let p = c["logo"] as? String { FeedLoader.shared.image(p) { [weak logo, weak ini] i in guard let i = i else { return }; logo?.image = i; logo?.backgroundColor = .white; ini?.isHidden = true } }
+      if let p = c["logo"] as? String { FeedLoader.shared.image(p) { [weak logo, weak ini] i in guard let i = i, let logo = logo else { return }; LogoLook.put(i, key: p, in: logo); ini?.isHidden = true } }
       t.onTap = { [weak self] in self?.onOpen?(id) }
       t.accessibilityLabel = "\(c["name"] as? String ?? ""), \(c["sub"] as? String ?? "")"
       addSubview(t)
