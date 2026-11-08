@@ -160,7 +160,14 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
       tc.animate(alongsideTransition: nil) { [weak self] c in if !c.isCancelled { self?.hideBar(true, animated: true) } }
     } else {
       hideBar(false, animated: animated)
-      if tc.isInteractive { tc.notifyWhenInteractionChanges { [weak self] c in if c.isCancelled { self?.hideBar(true, animated: true) } } }
+      // (a swipe back let go of half way: as the page that stays has it — hidden only for a page that hides it (a task, a
+      //  reply); a page that keeps it (Me's, the Clients tab's) kept it — hidden there, it went and came back: Haris
+      //  2026-11-08, a plan's page)
+      if tc.isInteractive { tc.notifyWhenInteractionChanges { [weak self] c in
+        guard c.isCancelled else { return }
+        let stays = c.viewController(forKey: .from)
+        if !(stays is TabRoot || stays is ClientsPushedVC) { self?.hideBar(true, animated: true) }
+      } }
     }
   }
   private func hideBar(_ h: Bool, animated: Bool = false) {
