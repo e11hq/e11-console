@@ -174,7 +174,9 @@ final class MyTasksVC: UIViewController, UISearchResultsUpdating, UISearchContro
   }
   // ---------- Apple's search: it opened, its words changed, it closed (as Home's) ----------
   func updateSearchResults(for s: UISearchController) { Main.shared.myTasksIfMade?.appleSearchText(s.searchBar.text ?? "") }
-  func willPresentSearchController(_ s: UISearchController) { Main.shared.myTasksIfMade?.appleSearchBegin() }
+  // (All / Done away while searching — the search finds everything, so it would switch the list hidden behind the results
+  //  and nothing would change: Haris 2026-11-08 17:11 "fix, Apple's way"; Apple's own show / hide of its scope bar)
+  func willPresentSearchController(_ s: UISearchController) { s.searchBar.setShowsScope(false, animated: true); Main.shared.myTasksIfMade?.appleSearchBegin() }
   func didPresentSearchController(_ s: UISearchController) { DispatchQueue.main.async { s.searchBar.becomeFirstResponder() } }
-  func willDismissSearchController(_ s: UISearchController) { Main.shared.myTasksIfMade?.appleSearchEnd() }
+  func willDismissSearchController(_ s: UISearchController) { s.searchBar.setShowsScope(true, animated: true); Main.shared.myTasksIfMade?.appleSearchEnd() }
 }
