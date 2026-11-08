@@ -62,6 +62,11 @@ final class MyTasksVC: UIViewController, UISearchResultsUpdating, UISearchContro
     if APPLE_MYTASKS { adopt(Main.shared.myTasksView) } else if let h = Main.shared.myTasksIfMade { adopt(h) }
   }
   // (where the tab bar starts, for "+ New task" and the list's end — as Home's screen does)
+  // (its list drawn from what the phone kept before it first shows — never an empty tab: Haris 2026-11-08)
+  override func viewWillAppear(_ a: Bool) {
+    super.viewWillAppear(a)
+    Main.shared.drawBeforeShow("mytasks")
+  }
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
     let m = Main.shared

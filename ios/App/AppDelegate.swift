@@ -1492,6 +1492,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     ViewAsBar.current?.look(dark: !light)
   }
   var homeHadModel = false
+  var drawnBeforeShow = Set<String>()   // (the tabs drawn before their first show — drawBeforeShow, Boot.swift)
   lazy var homeView: HomeView = {
     let h = HomeView(frame: view.bounds)
     h.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -1602,6 +1603,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   // View as… switched: the screens on show belong to the person before — all put away (the page starts again and sends
   // the new person's tabs and first page)
   func putAwayForSwitch() {
+    drawnBeforeShow = []   // (the next person's tabs drawn again before they show)
     for p in taskPages { closeTaskPage(p, animated: false) }
     if assetsCtl.isOpen { assetsCtl.close(animated: false) }
     meCtl.hide()

@@ -66,6 +66,11 @@ final class ClientsVC: UIViewController, TabRoot, UISearchResultsUpdating, UISea
     if Main.shared.clientsApple { adopt(Main.shared.clientsListMade()) }
   }
   // (where the tab bar starts, for "+ Add client" and the list's end — as Home's screen does)
+  // (its list drawn from what the phone kept before it first shows — never an empty tab: Haris 2026-11-08)
+  override func viewWillAppear(_ a: Bool) {
+    super.viewWillAppear(a)
+    Main.shared.drawBeforeShow("projects")
+  }
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
     let m = Main.shared

@@ -1066,6 +1066,7 @@ final class MeCtl {
   // can't say (the device's own state: notifications, Face ID, theme, the sync line…) — each group on its own server
   // switch (kv app-me-<group>); until the copy is this person's, the page's as before ----------
   private var pageModel: [String: Any] = [:]
+  var hasModel: Bool { !pageModel.isEmpty }   // (Me given its rows yet — drawBeforeShow)
   private var copyWatch: UUID?
   private var trQv = "", trCatv = "all"
   private func own(_ p: [String: Any]) -> [String: Any] {

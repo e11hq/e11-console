@@ -280,6 +280,22 @@ extension Main {
     }
     return true
   }
+  // A tab's own Apple screen, about to show for the first time (Apple's viewWillAppear — before iPhone draws it): its list
+  // drawn now from what the phone kept, as Home is at the start — the same call the tab's own signal makes a moment later
+  // (that one then finds it already drawn and changes only what's new). Asked only after the tap, the tab came up empty —
+  // the black flash on each tab's first open (Haris 2026-11-08).
+  func drawBeforeShow(_ key: String) {
+    guard !drawnBeforeShow.contains(key), AppData.shared.ready, let me = AppData.shared.me else { return }
+    drawnBeforeShow.insert(key)
+    let light = appStyle == .light
+    switch key {
+    case "mytasks": if !myTasksHadModel { myTasksCommand(["show": true, "me": me, "light": light]) }
+    case "inbox": if !inboxHadModel { inboxCommand(["show": true, "me": me, "light": light]) }
+    case "projects": clientsCommand(["show": true, "view": "list", "me": me, "light": light])
+    case "me": if !meCtl.hasModel { meCtl.command(["show": true, "me": me, "tab": "me", "light": light, "model": ["env": ["shell": SHELL_VERSION]]]) }
+    default: break
+    }
+  }
   // everything again from the start — after Start fresh, Owner view switched (the page reloaded itself for these): this
   // person's screens put away, asked again who's signed in, the copy and the screens drawn again from it
   func restartApp() {

@@ -48,6 +48,7 @@ final class MeVC: UIViewController, TabRoot {
   // (its screen in it before it first shows — never an empty tab: Haris 2026-11-08)
   override func viewWillAppear(_ a: Bool) {
     super.viewWillAppear(a)
+    Main.shared.drawBeforeShow("me")   // (its rows from the phone's copy before it first shows)
     if h == nil { Main.shared.meCtl.prepareRoot() }
   }
   func adopt(_ v: HomeView) {
