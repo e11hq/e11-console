@@ -133,6 +133,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   fileprivate var meHolds: [String: MeHold] = [:]
   fileprivate var mePics: [String: UIImage] = [:]
   fileprivate var mePicAsked = Set<String>()
+  fileprivate var meDrawn: [String: String] = [:]
   private var listOn: Bool { list != nil }
   private var sv: UIScrollView { list ?? scroll }
   private let statsRow = UIView()
@@ -3056,7 +3057,7 @@ extension HomeView {
       // your card: Apple's cell, as Settings' account row
       if let c = v as? MeCardBlock {
         close(); info = MeSec(grouped: true); cur = ["me:card"]; views["me:card"] = c
-        c.onPhoto = { [weak self] in self?.reconfigureMe("me:card") }
+        c.onPhoto = { [weak self] in guard let self = self, self.meDrawn["me:card"] != self.meSig("me:card") else { return }; self.meDrawn["me:card"] = self.meSig("me:card"); self.reconfigureMe("me:card") }
         close(); i += 1; continue
       }
       // anything else: as before, the whole width in a cell of Apple's list
@@ -3076,9 +3077,25 @@ extension HomeView {
     close()
     listViews = views; meItems = items; meSecs = secs
     blockWraps = blockWraps.filter { e in views.values.contains { $0 === e.value } }
+    // (only what changed is drawn again — a row showing the same is left as it is: the standard, Haris 2026-11-03; Me drawn
+    //  again on every open set every row afresh — Haris 2026-11-08 "Is the me page drawing on every open?")
     let had = Set(ds.snapshot().itemIdentifiers)
-    snap.reconfigureItems(snap.itemIdentifiers.filter { had.contains($0) })
+    var sigs: [String: String] = [:]
+    for k in snap.itemIdentifiers { sigs[k] = meSig(k) }
+    let changed = snap.itemIdentifiers.filter { had.contains($0) && meDrawn[$0] != sigs[$0] }
+    meDrawn = sigs
+    if !changed.isEmpty { snap.reconfigureItems(changed) }
+    // (nothing came, went or changed: nothing applied at all)
+    if changed.isEmpty, snap.sectionIdentifiers == ds.snapshot().sectionIdentifiers, snap.itemIdentifiers == ds.snapshot().itemIdentifiers { return }
     ds.apply(snap, animatingDifferences: animated)
+  }
+  // what a row shows, to tell whether it changed: a settings row by its item, your card by its words and photo, a block of
+  // the page's own always (it draws itself, keeping what's the same)
+  func meSig(_ key: String) -> String {
+    if key == "me:card", let c = listViews[key] as? MeCardBlock { let x = c.info; return "\(x.name)|\(x.role)|\(x.email)|\(MePhoto.shared.image.map { "\(ObjectIdentifier($0).hashValue)" } ?? "-")\(MePhoto.shared.initials ?? "")|\(look.light)" }
+    if let it = meItems[key] { return it.sig + "|\(it.toggle.map { $0 ? "1" : "0" } ?? "")|\(look.light)" }
+    if let v = listViews[key] { return "b|\(itemHeight(key, v))" }   // (a block's own height changed — its cell sized again)
+    return "b"
   }
   func reconfigureMe(_ key: String) {
     guard let ds = listDS else { return }
