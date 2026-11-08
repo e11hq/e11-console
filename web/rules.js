@@ -187,10 +187,14 @@ var E11Rules = (() => {
       if (t.createdBy === u.id) return true;
       return socialMgrIds().includes(u.id);   // (a Social Manager: every task made from a plan, whoever made it — Haris 2026-11-08 18:22)
     };
-    const myOpen = (t) => (socialPlanTask(t) ? !t.done : !t.done && !partDone(t));
-    const myDoneAt = (t) => (socialPlanTask(t) ? (t.done ? t.completedAt || null : null) : t.done ? t.completedAt : (t.partsDone || {})[meId] || null);
+    // a task's Guardian (Production, Social, Freelancers) has it on their Home, My Tasks and search too — open until the
+    // whole task is done (Haris 2026-11-08)
+    const guardianOf = (t) => !!t && !t.parentId && t.guardian === meId;
+    const wholeTask = (t) => socialPlanTask(t) || (guardianOf(t) && !isMine(t));
+    const myOpen = (t) => (wholeTask(t) ? !t.done : !t.done && !partDone(t));
+    const myDoneAt = (t) => (wholeTask(t) ? (t.done ? t.completedAt || null : null) : t.done ? t.completedAt : (t.partsDone || {})[meId] || null);
     const needsOwner = (t) => !t.parentId && !t.done && !(t.assignees || []).length && t.createdBy === meId;
-    const onMyList = (t) => isMine(t) || needsOwner(t) || socialPlanTask(t);
+    const onMyList = (t) => isMine(t) || needsOwner(t) || socialPlanTask(t) || guardianOf(t);
     const amClients = (id) => projects.filter((p) => (p.ams || []).some((a) => a.id === id && !a.onLeave)).map((p) => p.id);
     const hasClients = (id) => projects.some((p) => (p.ams || []).some((a) => a.id === id));
     const createdBy = (ids) => { const set = new Set(ids); return topTasks().filter((t) => set.has(t.createdBy)); };
@@ -208,7 +212,7 @@ var E11Rules = (() => {
       return [...set.values()];
     }
     function day() {
-      if (!lead()) return { tasks: tasks.filter(onMyList), open: myOpen, doneAt: myDoneAt, doneTasks: tasks.filter((t) => isMine(t) || socialPlanTask(t)) };
+      if (!lead()) return { tasks: tasks.filter(onMyList), open: myOpen, doneAt: myDoneAt, doneTasks: tasks.filter((t) => isMine(t) || socialPlanTask(t) || guardianOf(t)) };
       const who = seesAll() ? users.filter((x) => x.role === 'am' || isAdm(x)).map((x) => x.id) : [meId];
       const ts = leadSet(who);
       return { tasks: ts, open: (t) => !t.done, doneAt: (t) => (t.done ? t.completedAt || null : null), doneTasks: ts };

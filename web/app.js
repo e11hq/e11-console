@@ -1903,11 +1903,15 @@ const socialPlanTask = (t, u = me()) => {
   if (t.createdBy === u.id) return true;
   return socialMgrIds().includes(u.id);   // (a Social Manager: every task made from a plan, whoever made it — Haris 2026-11-08 18:22)
 };
-const myOpen = (t) => (socialPlanTask(t) ? !t.done : !t.done && !partDone(t));
-const myDoneAt = (t) => (socialPlanTask(t) ? (t.done ? t.completedAt || null : null) : t.done ? t.completedAt : (t.partsDone || {})[currentUserId] || null);
+// a task's Guardian (Production, Social, Freelancers) has it on their My Day, My Tasks and search too — open until the
+// whole task is done (Haris 2026-11-08)
+const guardianOf = (t) => !!t && !t.parentId && t.guardian === currentUserId;
+const wholeTask = (t) => socialPlanTask(t) || (guardianOf(t) && !isMine(t));
+const myOpen = (t) => (wholeTask(t) ? !t.done : !t.done && !partDone(t));
+const myDoneAt = (t) => (wholeTask(t) ? (t.done ? t.completedAt || null : null) : t.done ? t.completedAt : (t.partsDone || {})[currentUserId] || null);
 // A task you created but haven't given to anyone yet stays on your own lists until it has an assignee
 const needsOwner = (t) => !t.parentId && !t.done && !(t.assignees || []).length && t.createdBy === currentUserId;
-const onMyList = (t) => isMine(t) || needsOwner(t) || socialPlanTask(t);
+const onMyList = (t) => isMine(t) || needsOwner(t) || socialPlanTask(t) || guardianOf(t);
 const myTop = () => topTasks().filter(onMyList);
 /* ---------- Task fields (under the description) ----------
    Task Update: what's happening now — everyone sees it, changes are logged and sent to everyone on the task.
@@ -2046,7 +2050,7 @@ const Work = (() => {
   // My Day pool
   function day() {
     const u = me();
-    if (!lead()) return { tasks: db.tasks.filter(onMyList), open: myOpen, doneAt: myDoneAt, doneTasks: db.tasks.filter((t) => isMine(t) || socialPlanTask(t)) };
+    if (!lead()) return { tasks: db.tasks.filter(onMyList), open: myOpen, doneAt: myDoneAt, doneTasks: db.tasks.filter((t) => isMine(t) || socialPlanTask(t) || guardianOf(t)) };
     const who = seesAll() ? db.users.filter((x) => x.role === 'am' || isAdm(x)).map((x) => x.id) : [u.id];
     const ts = leadSet(who);
     const dAt = (t) => (t.done ? t.completedAt || null : null);
@@ -3536,7 +3540,7 @@ const searchClientOk = (p, u = me()) => !ownSearchOnly(u) || db.tasks.some((t) =
 const searchOwnOk = (t, u = me()) => {
   if (!u) return true;
   // (Socials: the tasks they're assigned to and their content-plan tasks — Haris 2026-11-08)
-  if (isSocialU(u)) return (t.assignees || []).includes(u.id) || socialPlanTask(t, u);
+  if (isSocialU(u)) return (t.assignees || []).includes(u.id) || socialPlanTask(t, u) || t.guardian === u.id;
   return !['production', 'freelancer'].includes(u.role) || isAdm(u) || isCD(u.id) || partOfTask(t, u.id);
 };
 // (search's clients for Socials: a Social Executive the clients they're on; a Social Manager every Social Executive's —

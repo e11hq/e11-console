@@ -129,3 +129,19 @@ test('the Clients list: an AM\'s own clients, none when they have none; Producti
   assert.deepEqual(rows('u-p'), ['p1', 'p2']);
   assert.deepEqual(rows('u-a'), ['p1', 'p2']);
 });
+
+// a task's Guardian (Production, Social, Freelancers): on their Home, My Tasks All / Done and search too (Haris 2026-11-08)
+test('a Guardian: the task on Home, My Tasks All and Done, and in search', () => {
+  const g = JSON.parse(JSON.stringify(data));
+  g.tasks.find((t) => t.id === 'other').guardian = 'u-y';
+  g.tasks.push(T('done-guard', { createdBy: 'u-a', assignees: ['u-p'], guardian: 'u-y', done: true, completedAt: now }));
+  g.tasks.push(T('guard-se', { createdBy: 'u-a', assignees: ['u-p'], guardian: 'u-se', title: 'Zebra launch' }));
+  let { E11AppView: V, E11Rules: R, E11AppMe: M } = engine(); V.load(JSON.stringify({ rev: 1, me: 'u-y', data: g }));
+  assert.deepEqual(ids(screen(V, 'home')), ['other']);
+  assert.deepEqual(ids(screen(V, 'mytasks', JSON.stringify({ tab: 'all' }))), ['other']);
+  assert.deepEqual(ids(screen(V, 'mytasks', JSON.stringify({ tab: 'done' }))), ['done-guard']);
+  assert.deepEqual([...M.search(R, g, 'u-y', Date.now(), 'other').tasks.map((t) => t.id)], ['other']);
+  ({ E11AppView: V, E11Rules: R, E11AppMe: M } = engine()); V.load(JSON.stringify({ rev: 1, me: 'u-se', data: g }));
+  assert.ok(ids(screen(V, 'home')).includes('guard-se'), 'a Social Executive who is Guardian: on Home');
+  assert.deepEqual([...M.search(R, g, 'u-se', Date.now(), 'Zebra').tasks.map((t) => t.id)], ['guard-se'], 'and in search');
+});
