@@ -2967,6 +2967,7 @@ final class MeCtl {
     return ["state": st, "busy": pushBusy, "label": label, "sub": sub]
   }
   // (asked of iPhone again at most every 2 s — coming back from Settings changes it; drawn again only when it changed)
+  func warm() { pushCheck() }
   private func pushCheck() {
     if let t = pushAsked, Date().timeIntervalSince(t) < 2 { return }
     pushAsked = Date()

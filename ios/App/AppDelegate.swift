@@ -1181,6 +1181,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       meWatched = true
       MePhoto.shared.fetch = { [weak self] u, done in self?.fetchPhoto(u, done) }
       MePhoto.shared.watch { [weak self] in self?.paintMeTab() }
+      // (this phone's notifications asked of iPhone now, as the app starts — known before Me is first drawn: its
+      //  Notifications row came a moment later and pushed Face ID lock down — Haris 2026-11-08)
+      meCtl.warm()
     }
     // (the bar in the app's own look before anything is drawn: without the website nobody said it at the start, so the
     //  bar kept iPhone's blue and its badged icons were baked in the phone's look — dark on dark after coming back from
