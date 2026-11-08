@@ -14,7 +14,7 @@ let APPLE_TABS = APPLE_NAV
 final class Tabs {
   var items: [UITabBarItem]?
   var selectedItem: UITabBarItem?
-  var isHidden = true { didSet { AppleTabs.shared?.mirrorShown(); HomeVC.shared?.viewIfLoaded?.setNeedsLayout(); MyTasksVC.shared?.viewIfLoaded?.setNeedsLayout(); InboxVC.shared?.viewIfLoaded?.setNeedsLayout(); ClientsVC.shared?.viewIfLoaded?.setNeedsLayout(); AssetsTabVC.shared?.viewIfLoaded?.setNeedsLayout() } }
+  var isHidden = true { didSet { AppleTabs.shared?.mirrorShown(); HomeVC.shared?.viewIfLoaded?.setNeedsLayout(); MyTasksVC.shared?.viewIfLoaded?.setNeedsLayout(); InboxVC.shared?.viewIfLoaded?.setNeedsLayout(); ClientsVC.shared?.viewIfLoaded?.setNeedsLayout(); AssetsTabVC.shared?.viewIfLoaded?.setNeedsLayout(); MeVC.shared?.viewIfLoaded?.setNeedsLayout() } }
   var alpha: CGFloat = 1 { didSet { AppleTabs.shared?.mirrorShown() } }
   var isUserInteractionEnabled: Bool {
     get { AppleTabs.shared?.tabBar.isUserInteractionEnabled ?? true }
@@ -61,8 +61,10 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
   let clientsNav: AppleNav
   // Client Assets as a tab (the Office Admin's), the same way (AppleClients.swift)
   let assetsNav: AppleNav
+  // Me's own, the same way (AppleMe.swift — Haris 2026-11-08)
+  let meNav: AppleNav
   private var slots: [TabSlot] = []
-  private var homeAt: Int?, myTasksAt: Int?, inboxAt: Int?, clientsAt: Int?, assetsAt: Int?
+  private var homeAt: Int?, myTasksAt: Int?, inboxAt: Int?, clientsAt: Int?, assetsAt: Int?, meAt: Int?
   private var selecting = false
   init(nav: UINavigationController) {
     self.nav = nav
@@ -88,6 +90,10 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
     assetsNav.navigationBar.prefersLargeTitles = APPLE_CLIENTS
     assetsNav.navigationBar.largeTitleTextAttributes = homeNav.navigationBar.largeTitleTextAttributes
     assetsNav.setNavigationBarHidden(false, animated: false)
+    meNav = AppleNav(rootViewController: MeVC())
+    meNav.navigationBar.prefersLargeTitles = APPLE_ME
+    meNav.navigationBar.largeTitleTextAttributes = homeNav.navigationBar.largeTitleTextAttributes
+    meNav.setNavigationBarHidden(false, animated: false)
     super.init(nibName: nil, bundle: nil)
     AppleTabs.shared = self
     delegate = self
@@ -108,10 +114,10 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
   // Home's tab on show
   var homeShown: Bool { selectedViewController === homeNav }
   // the tab on show is one with its own navigation (Home, My Tasks) — and that navigation
-  var ownNav: AppleNav? { [homeNav, myTasksNav, inboxNav, clientsNav, assetsNav].first { $0 === selectedViewController } }
+  var ownNav: AppleNav? { [homeNav, myTasksNav, inboxNav, clientsNav, assetsNav, meNav].first { $0 === selectedViewController } }
   var ownShown: Bool { ownNav != nil }
-  private func own(_ i: Int) -> Bool { i == homeAt || i == myTasksAt || i == inboxAt || i == clientsAt || i == assetsAt }
-  private func tabVC(_ i: Int) -> UIViewController { i == homeAt ? homeNav : i == myTasksAt ? myTasksNav : i == inboxAt ? inboxNav : i == clientsAt ? clientsNav : i == assetsAt ? assetsNav : slots[i] }
+  private func own(_ i: Int) -> Bool { i == homeAt || i == myTasksAt || i == inboxAt || i == clientsAt || i == assetsAt || i == meAt }
+  private func tabVC(_ i: Int) -> UIViewController { i == homeAt ? homeNav : i == myTasksAt ? myTasksNav : i == inboxAt ? inboxNav : i == clientsAt ? clientsNav : i == assetsAt ? assetsNav : i == meAt ? meNav : slots[i] }
 
   private func host(in s: TabSlot) {
     guard nav.parent !== s else { return }
@@ -153,7 +159,8 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
     let ib = APPLE_INBOX ? Main.shared.tabKeys.firstIndex(of: "inbox") : nil
     let cl = APPLE_CLIENTS ? Main.shared.tabKeys.firstIndex(of: "projects") : nil
     let ca = APPLE_CLIENTS ? Main.shared.tabKeys.firstIndex(of: "clients") : nil
-    if slots.count != items.count || home != homeAt || mt != myTasksAt || ib != inboxAt || cl != clientsAt || ca != assetsAt {
+    let me = APPLE_ME ? Main.shared.tabKeys.firstIndex(of: "me") : nil
+    if slots.count != items.count || home != homeAt || mt != myTasksAt || ib != inboxAt || cl != clientsAt || ca != assetsAt || me != meAt {
       while slots.count < items.count { slots.append(TabSlot()) }
       if slots.count > items.count { slots = Array(slots.prefix(items.count)) }
       homeAt = home.flatMap { $0 < items.count ? $0 : nil }
@@ -161,6 +168,7 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
       inboxAt = ib.flatMap { $0 < items.count ? $0 : nil }
       clientsAt = cl.flatMap { $0 < items.count ? $0 : nil }
       assetsAt = ca.flatMap { $0 < items.count ? $0 : nil }
+      meAt = me.flatMap { $0 < items.count ? $0 : nil }
       let keep = nav.parent as? TabSlot
       setViewControllers(items.indices.map { tabVC($0) }, animated: false)
       if let k = keep, !slots.enumerated().contains(where: { $0.element === k && !own($0.offset) }) { if let j = slots.indices.first(where: { !own($0) }) { host(in: slots[j]) } }

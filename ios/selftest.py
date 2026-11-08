@@ -170,12 +170,12 @@ try:
     mn, mt, ma, mb = res.get('meNative') or {}, res.get('meTeamNative') or {}, res.get('meAboutNative') or {}, res.get('meBackNative') or {}
     check(me.get('native') is True and me.get('blank') is True and me.get('lockRows') == 0, f"Me is the app's own, nothing drawn under it {me}")
     check(mn.get('open') is True and mn.get('kind') == 'me' and mn.get('card') is True and (mn.get('rows') or 0) >= 2 and mn.get('corner') == 'none,none,none', f"the app's Me: your card and its groups, no top buttons {mn}")
-    check(mt.get('kind') == 'team' and mt.get('screens') == 2 and (mt.get('people') or 0) >= 1 and str(mt.get('corner')).startswith('back,'), f"Team members slides in over Me, the people in it, ‹ at the top {mt}")
+    check(mt.get('kind') == 'team' and mt.get('screens') == 2 and (mt.get('people') or 0) >= 1 and (str(mt.get('corner')).startswith('back,') or mt.get('apple') is True), f"Team members slides in over Me, the people in it, ‹ at the top {mt}")
     check(ma.get('kind') == 'about' and (ma.get('parts') or 0) >= 2, f"About: its cards and What's new {ma}")
     mp = res.get('meProfileNative') or {}
-    check(mp.get('kind') == 'profile' and mp.get('profile') is True and (mp.get('rows') or 0) >= 4 and str(mp.get('corner')).startswith('back,'), f"My profile: the app's own, its groups, ‹ at the top {mp}")
+    check(mp.get('kind') == 'profile' and mp.get('profile') is True and (mp.get('rows') or 0) >= 4 and (str(mp.get('corner')).startswith('back,') or mp.get('apple') is True), f"My profile: the app's own, its groups, ‹ at the top {mp}")
     mtr = res.get('meTrashNative') or {}
-    check(mtr.get('kind') == 'trash' and (mtr.get('parts') or 0) >= 3 and str(mtr.get('corner')).startswith('back,'), f"Trash: the app's own, its search and categories, ‹ at the top {mtr}")
+    check(mtr.get('kind') == 'trash' and (mtr.get('parts') or 0) >= 3 and (str(mtr.get('corner')).startswith('back,') or mtr.get('apple') is True), f"Trash: the app's own, its search and categories, ‹ at the top {mtr}")
     check(mb.get('kind') == 'me' and mb.get('screens') == 1, f"‹ back to Me {mb}")
     check((res.get('client') or {}).get('wide') is False, f"Client Assets folder fits the screen {res.get('client')}")
     ca = res.get('clientAssets') or {}

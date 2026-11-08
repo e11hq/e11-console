@@ -1367,6 +1367,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if APPLE_HOME, again, tabKeys[item.tag] == "today", let s = AppleHomeBits.shared.search, s.isActive { s.isActive = false; return }
     shownTab = item.tag
     lastTabTap = (tabKeys[item.tag], Date())
+    // (Me in its own Apple navigation — AppleMe.swift: again, Apple has taken it back to Me; on Me already, up to the top)
+    if again, tabKeys[item.tag] == "me", meApple { meCtl.backToRoot(); return }
     if again, tabKeys[item.tag] == "projects", clientsWanted, clientsBackToList() { return }
     // (the Clients list over Me: Me again — back to Me; another tab — it goes, as Me's pages do)
     if clientsListIfMade?.backFromMe == true {
@@ -1974,6 +1976,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
      cards) pushed in over it from the right; both from the app's own copy (/api/clients as the fallback). The page says
      which is on screen (NativeClients in phone.js) and does what's tapped. ---------- */
   var clientsListIfMade: HomeView?, clientPageIfMade: HomeView?
+  // (the CD's Clients list opened from Me, in Me's own Apple navigation — AppleMe.swift: its pages pushed on Me's)
+  var clientsFromMeApple = false
+  var clientsNavNow: UINavigationController? { tabKeys.contains("projects") ? AppleTabs.shared?.clientsNav : clientsFromMeApple ? AppleTabs.shared?.meNav : nil }
   var shownTab: Int?
   // back to a page tab's first screen as iPhone goes back: a picture of what's on screen slides away to the right while
   // the first screen (drawn by the page under it) comes in from the left
@@ -2022,7 +2027,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     guard let l = clientsListIfMade else { return false }
     // (Clients in Apple's navigation: the tab tapped again goes back to the list Apple's way — on the list already: up to
     //  the top, as Home's)
-    if clientsApple, let n = AppleTabs.shared?.clientsNav {
+    if clientsApple, let n = clientsNavNow {
       if n.transitionCoordinator != nil { return true }
       if n.viewControllers.count > 1 { n.popToRootViewController(animated: true) } else if !l.isHidden { l.scrollToTop() }
       return true
@@ -2091,7 +2096,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     h.present = { [weak self] vc in self?.topMost().present(vc, animated: true) }
     if page { clientPageIfMade = h } else { clientsListIfMade = h }
     // (Clients in Apple's navigation — AppleClients.swift: the list is its tab's first screen; a client's page comes pushed)
-    if clientsApple { if !page, let vc = ClientsVC.shared { vc.adopt(h) }; return h }
+    if clientsApple { if !page, !clientsFromMeApple, let vc = ClientsVC.shared { vc.adopt(h) }; return h }
     if page, let l = clientsListIfMade { view.insertSubview(h, aboveSubview: l) } else { view.insertSubview(h, belowSubview: tabsMark) }
     return h
   }
@@ -2099,6 +2104,24 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   // app's own list, sliding in over Me, ‹ and the edge swipe back to Me)
   func openClientsFromMe() {
     guard let me = AppData.shared.me ?? homePageMe else { return }
+    // (Me in its own Apple navigation: the list pushed on it, Apple's way — ‹ and the swipe back to Me; a client's page
+    //  pushed on it in turn)
+    if meApple, let n = AppleTabs.shared?.meNav {
+      clientsFromMeApple = true
+      let l = clientsScreen(false)
+      l.backFromMe = true
+      let vc = ClientsFromMeVC(l)
+      vc.onGone = { [weak self, weak l] in
+        guard let self = self else { return }
+        l?.backFromMe = false
+        self.clientsCommand(["show": false])
+        self.clientsFromMeApple = false
+      }
+      vc.loadViewIfNeeded()
+      clientsCommand(["show": true, "view": "list", "me": me, "light": appStyle == .light])
+      n.pushViewController(vc, animated: n.view.window != nil)
+      return
+    }
     let l = clientsScreen(false)
     let under = meCtl.top
     l.backFromMe = true
@@ -2126,7 +2149,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   // a client's page going (‹, or the list asked for): it slides back out to the right, the list coming back under it
   func clientPageOut() {
-    if clientsApple, let n = AppleTabs.shared?.clientsNav {
+    if clientsApple, let n = clientsNavNow {
       if let i = n.viewControllers.firstIndex(where: { $0 is ClientVC }), i > 0 { n.popToViewController(n.viewControllers[i - 1], animated: n.view.window != nil) }
       return
     }
@@ -2281,7 +2304,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   // shown: the list in place; a client's page pushed in from the right over the list (as iPhone's own pages)
   private func reveal(_ h: HomeView, page: Bool) {
-    if clientsApple, let n = AppleTabs.shared?.clientsNav {
+    if clientsApple, let n = clientsNavNow {
       if page {
         // (Apple's push on the Clients tab — once: a page already there is drawn again in place)
         if !n.viewControllers.contains(where: { ($0 as? ClientVC)?.h === h }) {
@@ -2289,7 +2312,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
           n.pushViewController(vc, animated: n.view.window != nil && AppleTabs.shared?.ownNav === n)
         } else { h.isHidden = false }
       } else {
-        if h.superview == nil, let vc = ClientsVC.shared { vc.adopt(h) }
+        if h.superview == nil, !clientsFromMeApple, let vc = ClientsVC.shared { vc.adopt(h) }
         h.isHidden = false
       }
       return
@@ -2329,7 +2352,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if !show {
       clientsWanted = false
       // (Clients in Apple's navigation, left for another tab: back to its list, as the pages went before — out of sight)
-      if clientsApple, let n = AppleTabs.shared?.clientsNav {
+      if clientsApple, let n = clientsNavNow {
         assetsCtl.closeIfFromClients()
         if n.viewControllers.count > 1 { n.popToRootViewController(animated: false) }
         ClientVC.pushed = false; clientPageIfMade?.isHidden = true; clientsListIfMade?.isHidden = true

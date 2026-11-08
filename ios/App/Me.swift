@@ -221,7 +221,10 @@ final class SetGroup: UIView, HomeBlock {
   private var rows: [SetRow] = [], lines: [UIView] = [], made: [String: (SetRow, String)] = [:]
   override init(frame: CGRect) { super.init(frame: frame); box.layer.cornerRadius = 26; box.layer.cornerCurve = .continuous; box.clipsToBounds = true; addSubview(box) }
   required init?(coder: NSCoder) { fatalError() }
+  // (what it shows — Me in Apple's list draws these as iPhone Settings' own cells: HomeView.applyMeList)
+  private(set) var items: [SetItem] = []
   func set(_ items: [SetItem], look L: HomeLook) {
+    self.items = items
     box.backgroundColor = L.card
     var keep = made; made = [:]
     var fresh: [SetRow] = []
@@ -294,7 +297,10 @@ final class MeCardBlock: AssetTile, HomeBlock {
     paintPic()
     accessibilityLabel = "\(name.text ?? ""), \(role.text ?? ""), My profile"
   }
-  private func paintPic() { pic.image = MePhoto.shared.picture(62) ?? roundPic(nil, initials: ini, color: rgb, size: 62) }
+  private func paintPic() { pic.image = MePhoto.shared.picture(62) ?? roundPic(nil, initials: ini, color: rgb, size: 62); onPhoto?() }
+  // (what it shows — Me in Apple's list draws it as an Apple cell, as Settings' account row: HomeView.applyMeList)
+  var onPhoto: (() -> Void)?
+  var info: (name: String, role: String, email: String) { (name.text ?? "", role.text ?? "", mail.text ?? "") }
   func blockHeight(_ W: CGFloat) -> CGFloat { 96 }
   override func layoutSubviews() {
     super.layoutSubviews()
@@ -1566,6 +1572,40 @@ final class MeCtl {
   }
   private struct Screen { let h: HomeView; let kind: String; let id: String? }
   private var stack: [Screen] = []
+  // (Me in its own Apple navigation — AppleMe.swift: Me its tab's first screen, its pages pushed on it Apple's way; the
+  //  role tabs this also serves — Content plans, Overview, Team, Claims, Expenses, Reviews — as before, for now)
+  private var appleNav: UINavigationController? { main.meApple && tab == "me" ? AppleTabs.shared?.meNav : nil }
+  var apple: Bool { appleNav != nil }
+  private func appleVC(_ h: HomeView) -> MePageVC? { appleNav?.viewControllers.first { ($0 as? MePageVC)?.h === h } as? MePageVC }
+  // (everything taken off — someone else now, another tab's pages: Me's navigation back to Me too)
+  private func clearStack() {
+    if let n = appleNav, n.viewControllers.count > 1 {
+      n.viewControllers.forEach { ($0 as? MePageVC)?.onGone = nil }
+      n.popToRootViewController(animated: false)
+    }
+    stack.forEach { $0.h.removeFromSuperview() }; stack = []
+  }
+  // (a page no longer there: what the page is told as it goes)
+  private func left(_ s: Screen) {
+    if s.kind == "team", !stack.contains(where: { $0.kind == "team" }) { send(["ev": "team", "on": false]) }
+    if s.kind == "profile" { send(["ev": "pf", "on": false]) }
+    if s.kind == "plans" { send(["ev": "pl", "on": false]) }
+    if s.kind == "plan" { send(["ev": "plOpen", "pid": ""]) }
+    if s.kind == "trash" { send(["ev": "tr", "on": false]) }
+  }
+  // a page pushed in Me's navigation gone (‹, the swipe back, popped): off the stack, the one under it drawn again
+  private func navGone(_ h: HomeView) {
+    guard let i = stack.firstIndex(where: { $0.h === h }), i > 0 else { return }
+    let s = stack.remove(at: i)
+    left(s)
+    if let t = stack.last { draw(t) }
+    main.updateCorner()
+  }
+  // (Me's navigation settled — the tab tapped again pops them all at once, and only the top one hears it)
+  func reconcile(_ vcs: [UIViewController]) {
+    guard apple else { return }
+    for s in stack.dropFirst() where !vcs.contains(where: { ($0 as? MePageVC)?.h === s.h }) { navGone(s.h) }
+  }
   private var model: [String: Any] = [:]
   private var about: [String: Any] = [:]
   var light = true
@@ -1607,7 +1647,7 @@ final class MeCtl {
         // (as the page opened it: in this look, for this person — it showed in the wrong look and without its top buttons;
         //  then Me goes once it has slid in over it, and comes back when Client Assets is left — Haris 2026-11-05)
         main.assetsCtl.command(["show": true, "me": me ?? "", "light": light, "start": [String: Any]()])
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in if self?.main.assetsCtl.isOpen == true { self?.hide() } }
+        if !apple { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in if self?.main.assetsCtl.isOpen == true { self?.hide() } } }
       case "calendar": say("The content calendar is on the computer")
       case "projects": say("Every client’s tasks are on the computer for now")
       default: break
@@ -1682,7 +1722,7 @@ final class MeCtl {
     light = (a["light"] as? Bool) ?? light
     if let m = a["me"] as? String {
       // (someone else now — View as…, signed in again: Me from the start)
-      if let was = me, was != m { stack.forEach { $0.h.removeFromSuperview() }; stack = [] }
+      if let was = me, was != m { clearStack() }
       me = m
     }
     if let m = a["model"] as? [String: Any] { pageModel = m; model = own(m) }
@@ -1691,7 +1731,7 @@ final class MeCtl {
     let want = ["plans", "today", "team", "fin-reimb", "fin-expenses", "reviews"].contains(a["tab"] as? String ?? "") ? (a["tab"] as! String) : "me"
     if want != tab {
       if stack.contains(where: { $0.kind == "plans" }) { send(["ev": "pl", "on": false]) }
-      stack.forEach { $0.h.removeFromSuperview() }; stack = []; tab = want
+      clearStack(); tab = want
     }
     if stack.isEmpty {
       if rootKind == "plans" { plMonth = plMonth ?? ""; send(["ev": "pl", "on": true, "month": plMonth ?? ""]) }
@@ -1710,6 +1750,9 @@ final class MeCtl {
   private var reveals = 0
   func hide() {
     guard !stack.isEmpty, !hidden else { return }
+    // (in Apple's navigation: another tab is Apple's to show — Me stays as it is in its own tab)
+    // (and only when Me's tab isn't the one on — Client Assets pushed over Me keeps Me as it is, under it)
+    if apple { coverWait = nil; if main.selectedTabKey == "me" { return }; hidden = true; borrowTimer?.invalidate(); stack.forEach { _ = $0.h.endEditing(true) }; main.edgePanOn(); main.updateCorner(); return }
     if let w = coverWait, Date().timeIntervalSince(w) < 2 {
       coverWait = nil; let t = reveals
       // (and not when Client Assets has already gone again — back to Me quickly, before this: Me went for a moment, a
@@ -1726,6 +1769,7 @@ final class MeCtl {
     guard let s = stack.last else { return }
     reveals += 1
     hidden = false; borrowTimer?.invalidate()
+    if apple { main.edgePanOn(); main.updateCorner(); return }
     if s.h.isHidden || s.h.transform != .identity { s.h.transform = .identity; s.h.isHidden = false }
     front()
     main.edgePanOn(); main.updateCorner()
@@ -1743,7 +1787,7 @@ final class MeCtl {
   // out of sight again
   private var borrowTimer: Timer?
   func borrow() -> UIView? {
-    guard let s = stack.last, main.selectedTabKey == tab else { return nil }
+    guard let s = stack.last, main.selectedTabKey == tab, !apple else { return nil }
     s.h.isHidden = false
     borrowTimer?.invalidate()
     borrowTimer = Timer.scheduledTimer(withTimeInterval: 1.2, repeats: false) { [weak self] _ in guard let self = self, self.hidden else { return }; self.stack.forEach { $0.h.isHidden = true } }
@@ -1784,7 +1828,7 @@ final class MeCtl {
         self.slideLists(h, dir: dir) { self.draw(s) }
       }
     }
-    main.view.insertSubview(h, belowSubview: main.tabsMark)
+    if appleNav == nil { main.view.insertSubview(h, belowSubview: main.tabsMark) }
     return Screen(h: h, kind: kind, id: id)
   }
   // the two lists swapped with the task page's Details ↔ Comments slide: what's under the switch goes off to one side,
@@ -1837,6 +1881,20 @@ final class MeCtl {
     push(screen(kind, id), animated: true)
   }
   private func push(_ s: Screen, animated: Bool) {
+    if let n = appleNav {
+      stack.append(s); watchTouches()
+      if !pageModel.isEmpty { model = own(pageModel) }
+      // (Me: its tab's first screen)
+      if stack.count == 1, let vc = MeVC.shared { vc.adopt(s.h); draw(s); main.updateCorner(); return }
+      draw(s)
+      let vc = MePageVC(s.h)
+      vc.onGone = { [weak self, weak h = s.h] in if let h = h { self?.navGone(h) } }
+      vc.loadViewIfNeeded()
+      draw(s)   // (in Apple's list now)
+      n.pushViewController(vc, animated: animated && n.view.window != nil)
+      main.updateCorner()
+      return
+    }
     let W = main.view.bounds.width
     let u = stack.last?.h
     stack.append(s); watchTouches()
@@ -1855,6 +1913,11 @@ final class MeCtl {
   }
   func pop(animated: Bool = true) {
     guard stack.count > 1, let s = stack.last, !leaving else { return }
+    if let n = appleNav {
+      // (Apple's pop — what follows is done as the page goes: navGone)
+      if let vc = appleVC(s.h), n.topViewController === vc { n.popViewController(animated: animated && n.view.window != nil) } else { navGone(s.h) }
+      return
+    }
     let W = main.view.bounds.width
     let u = stack[stack.count - 2].h
     u.isHidden = false; u.transform = CGAffineTransform(translationX: -W * 0.3, y: 0)
@@ -1864,11 +1927,7 @@ final class MeCtl {
       s.h.removeFromSuperview()
       if let i = self.stack.firstIndex(where: { $0.h === s.h }) { self.stack.remove(at: i) }
       self.leaving = false
-      if s.kind == "team", !self.stack.contains(where: { $0.kind == "team" }) { self.send(["ev": "team", "on": false]) }
-      if s.kind == "profile" { self.send(["ev": "pf", "on": false]) }
-      if s.kind == "plans" { self.send(["ev": "pl", "on": false]) }
-      if s.kind == "plan" { self.send(["ev": "plOpen", "pid": ""]) }
-      if s.kind == "trash" { self.send(["ev": "tr", "on": false]) }
+      self.left(s)
       if let t = self.stack.last { self.draw(t) }
       self.main.edgePanOn(); self.main.updateCorner()
     }
@@ -1880,6 +1939,12 @@ final class MeCtl {
   }
   // Me tapped again from a page under it: what's on top slides away to the right, Me comes back under it
   func backToRoot() {
+    if let n = appleNav {
+      // (Apple's own: back to Me — on Me already: up to the top)
+      if n.transitionCoordinator != nil { return }
+      if n.viewControllers.count > 1 { n.popToRootViewController(animated: n.view.window != nil) } else { stack.first?.h.scrollToTop() }
+      return
+    }
     guard stack.count > 1, let topS = stack.last, !leaving else { stack.first?.h.scrollToTop(); return }
     let W = main.view.bounds.width
     let snap = topS.h.snapshotView(afterScreenUpdates: false)
@@ -1900,6 +1965,7 @@ final class MeCtl {
   }
   // the root on screen at once, the rest gone (a page deeper than Me — My profile — going back with the tab's slide)
   func rootUnder() -> UIView? {
+    if apple { backToRoot(); return nil }
     guard let root = stack.first else { return nil }
     if stack.dropFirst().contains(where: { $0.kind == "team" }) { send(["ev": "team", "on": false]) }
     if stack.dropFirst().contains(where: { $0.kind == "profile" }) { send(["ev": "pf", "on": false]) }
@@ -1912,7 +1978,7 @@ final class MeCtl {
   // the edge swipe: the top one follows the finger, the one under it coming back, the top buttons between them
   private var panFrom: ((CornerButton.Spot, CornerButton.Spot, CornerButton.Spot), (CornerButton.Spot, CornerButton.Spot, CornerButton.Spot))?
   func edgePan(_ g: UIScreenEdgePanGestureRecognizer) {
-    guard stack.count > 1, let s = stack.last, !leaving else { return }
+    guard stack.count > 1, let s = stack.last, !leaving, !apple else { return }
     let W = main.view.bounds.width
     let x = max(0, g.translation(in: main.view).x)
     let u = stack[stack.count - 2].h
@@ -1956,7 +2022,8 @@ final class MeCtl {
     let parts: Int = h?.assetsParts.count ?? 0
     let card: Bool = model["card"] != nil
     let profile: Bool = model["profile"] is [String: Any]
-    return ["open": isOpen, "screens": stack.count, "kind": kind, "parts": parts, "shown": shown != nil, "corner": corner, "people": people, "rows": rows, "card": card, "profile": profile]
+    // (apple: Me in its own Apple navigation — its pages have Apple's ‹, not the shared one)
+    return ["open": isOpen, "screens": stack.count, "kind": kind, "parts": parts, "shown": shown != nil, "corner": corner, "people": people, "rows": rows, "card": card, "profile": profile, "apple": apple]
   }
   func refresh() { if isOpen { main.pageJS("window.__e11MeResend && window.__e11MeResend()"); if stack.contains(where: { $0.kind == "about" }) { loadAbout(false) } } }
 

@@ -443,6 +443,7 @@ final class AssetsCtl {
     //  push over Me: Haris 2026-11-08, mock-up assets-main-mockup.png)
     if t.ownNav === t.clientsNav { appleNav = main.clientsApple ? t.clientsNav : nil }
     else if t.ownNav === t.assetsNav { appleNav = t.assetsNav }
+    else if t.ownNav === t.meNav { appleNav = t.meNav }   // (Me in its own Apple navigation — AppleMe.swift: pushed on Me)
     else if t.ownNav == nil { appleNav = main.navigationController }
     else { appleNav = nil }
   }

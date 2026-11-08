@@ -233,6 +233,15 @@ Apple's pushed pages (‹ · the name and its line · ••• as Apple's own m
 Apple's list, the firm frost with its line, Apple's search for a client's files, the folders row on top of a client's page
 as before).
 
+**iPhone Me and its pages — in Apple's navigation, as iPhone's Settings (Haris 2026-11-08 20:07: "start the me page …
+me page and its inner pages"; bar: "Nothing"; "No search"):** Me is its tab's own Apple screen (AppleMe.swift, AppleTabs'
+`meNav`); its pages pushed on it (MePageVC — the tab bar staying, Apple's firm frost). Rows are Apple's own: grouped
+sections, Apple's headers / footers, Apple's list cells set by Apple's configurations, ›, value, Apple's switch, Apple's
+highlight (`HomeView.applyMeList` — a path only Me's pages use; Haris: "Yes, go ahead"). Ours, shown by Apple's cells: the
+icons and pictures, and the pages' own blocks (Appearance's phones, About's cards, a member's header, a plan's posts).
+**Every new page from now on: Apple's own cells set to our design — never our own views drawing a row (Don't 9; Haris
+2026-11-08: "all this time i was thinking we are going apple way").** Say plainly, before it's approved, anything of ours.
+
 **NO DIFFERENCES — every new page (Haris, 2026-11-08 16:39: "there will be no differences in the new pages from these"):**
 Home, the task page, My Tasks and the Inbox are locked, and every new page is the same as the locked page of its category —
 look, behaviour, animation, and every fix the locked page has had (a Home fix that never reached My Tasks and the Inbox let

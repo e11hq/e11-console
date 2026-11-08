@@ -174,7 +174,7 @@ extension Main {
   // the navigation on show: Home's own when Home's tab is on, else the app's
   var stageNav: UINavigationController? { AppleTabs.shared?.ownNav ?? navigationController }
   // every navigation the app has (Home's and the app's), for what's open in any of them
-  var allNavs: [UINavigationController] { [AppleTabs.shared?.homeNav, AppleTabs.shared?.myTasksNav, AppleTabs.shared?.inboxNav, AppleTabs.shared?.clientsNav, AppleTabs.shared?.assetsNav, navigationController].compactMap { $0 } }
+  var allNavs: [UINavigationController] { [AppleTabs.shared?.homeNav, AppleTabs.shared?.myTasksNav, AppleTabs.shared?.inboxNav, AppleTabs.shared?.clientsNav, AppleTabs.shared?.assetsNav, AppleTabs.shared?.meNav, navigationController].compactMap { $0 } }
   // (a card over the tab bar, View as…: the window — over every tab)
   var stage: UIView { AppleTabs.shared?.view.window ?? view.window ?? view }
 }

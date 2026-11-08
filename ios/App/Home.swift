@@ -126,6 +126,13 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private var listDS: UICollectionViewDiffableDataSource<Int, String>?
   private var listViews: [String: UIView] = [:]
   private var blockWraps: [ObjectIdentifier: BlockWrap] = [:]
+  // (Me's pages in Apple's list — AppleMe.swift: their rows, sections, switches, held rows and pictures)
+  fileprivate var meItems: [String: SetItem] = [:]
+  fileprivate var meSecs: [Int: MeSec] = [:]
+  fileprivate var meSwitches: [String: UISwitch] = [:]
+  fileprivate var meHolds: [String: MeHold] = [:]
+  fileprivate var mePics: [String: UIImage] = [:]
+  fileprivate var mePicAsked = Set<String>()
   private var listOn: Bool { list != nil }
   private var sv: UIScrollView { list ?? scroll }
   private let statsRow = UIView()
@@ -146,7 +153,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     [topBar, blur, title, sub, smallTitle, smallSub, searchCircle, me, searchBar, closeCircle].forEach { $0.isHidden = true }
     onAppleTitle?(title.attributedText?.string ?? "", sub.text ?? "")
     onAppleMe?(me.image(for: .normal))
-    if assets == nil || assets == "client" || assets == "folder" || assets == "all" { makeAppleList() }   // (the Clients tab's pages and Client Assets' too — AppleClients.swift)
+    if assets == nil || assets == "client" || assets == "folder" || assets == "all" || isMeList { makeAppleList() }   // (Me and its pages too — AppleMe.swift)   // (the Clients tab's pages and Client Assets' too — AppleClients.swift)
     // (My Tasks: its filter rows and chips are in Apple's bar's menu now — taken out; All / Done goes into the list)
     // (My Tasks: its filters are in Apple's bar's menu, All / Done in Apple's search bar's scope bar — the rows taken out)
     if isList && !isInbox { listHead.removeFromSuperview(); if let f = lastFilters { onAppleFilters?(f) } }
@@ -162,7 +169,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     cfg.backgroundColor = .clear
     cfg.trailingSwipeActionsConfigurationProvider = { [weak self] ip in self?.swipeActions(ip, leading: false) }
     cfg.leadingSwipeActionsConfigurationProvider = { [weak self] ip in self?.swipeActions(ip, leading: true) }
-    let layout = UICollectionViewCompositionalLayout { [weak self] _, env in
+    let layout = UICollectionViewCompositionalLayout { [weak self] i, env in
+      // (Me and its pages: iPhone Settings' own grouped sections — AppleMe.swift)
+      if let self = self, self.isMeList, let g = self.meSection(i), g.grouped { return self.meGrouped(g, env) }
       let sec = NSCollectionLayoutSection.list(using: cfg, layoutEnvironment: env)
       // (the Inbox's rows edge to edge, one under the other, as Mail's)
       let inbox = self?.isInbox == true
@@ -181,7 +190,27 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       guard let self = self, let v = self.listViews[key] else { cell.host(nil, height: 1); return }
       cell.host(v, height: self.itemHeight(key, v))
     }
-    listDS = UICollectionViewDiffableDataSource<Int, String>(collectionView: cv) { cv, ip, key in cv.dequeueConfiguredReusableCell(using: reg, for: ip, item: key) }
+    // (Me's rows: Apple's own list cells, set by Apple's configurations — iPhone Settings')
+    let setReg = UICollectionView.CellRegistration<UICollectionViewListCell, String> { [weak self] cell, _, key in self?.paintMe(cell, key) }
+    let isMe = isMeList
+    listDS = UICollectionViewDiffableDataSource<Int, String>(collectionView: cv) { cv, ip, key in
+      if isMe && (key.hasPrefix("s:") || key == "me:card") { return cv.dequeueConfiguredReusableCell(using: setReg, for: ip, item: key) }
+      return cv.dequeueConfiguredReusableCell(using: reg, for: ip, item: key)
+    }
+    if isMe {
+      cv.allowsSelection = true
+      let head = UICollectionView.SupplementaryRegistration<UICollectionViewListCell>(elementKind: UICollectionView.elementKindSectionHeader) { [weak self] v, _, ip in
+        var c = UIListContentConfiguration.groupedHeader(); c.text = self?.meSection(ip.section)?.head; v.contentConfiguration = c
+      }
+      let foot = UICollectionView.SupplementaryRegistration<UICollectionViewListCell>(elementKind: UICollectionView.elementKindSectionFooter) { [weak self] v, _, ip in
+        var c = UIListContentConfiguration.groupedFooter()
+        if let f = self?.meSection(ip.section)?.foot { c.attributedText = f; c.textProperties.alignment = (self?.meSection(ip.section)?.footCentred ?? false) ? .center : .natural }
+        v.contentConfiguration = c
+      }
+      listDS?.supplementaryViewProvider = { cv, kind, ip in
+        kind == UICollectionView.elementKindSectionHeader ? cv.dequeueConfiguredReusableSupplementary(using: head, for: ip) : cv.dequeueConfiguredReusableSupplementary(using: foot, for: ip)
+      }
+    }
     stats.forEach { statsRow.addSubview($0) }
     insertSubview(cv, aboveSubview: scroll)
     scroll.isHidden = true
@@ -204,6 +233,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // the list as it is now: the boxes, then each group's heading, cards and "nothing due" line
   private func applyList(animated: Bool) {
     guard let ds = listDS else { return }
+    if isMeList && !searching { applyMeList(animated: animated); return }   // (Me's pages: iPhone Settings' own sections)
     var views: [String: UIView] = [:], keys: [String] = []
     if searching {
       // (searching: the results are the list's rows — the hint, the groups' headings, clients, task cards)
@@ -2931,7 +2961,244 @@ extension HomeView: UIContextMenuInteractionDelegate {
   }
 }
 
-extension HomeView: UICollectionViewDelegate {}
+extension HomeView: UICollectionViewDelegate {
+  // (Me's rows only — every other list here has no selection: allowsSelection is off)
+  func collectionView(_ cv: UICollectionView, shouldHighlightItemAt ip: IndexPath) -> Bool {
+    guard isMeList else { return true }
+    guard let key = listDS?.itemIdentifier(for: ip) else { return false }
+    if key == "me:card" { return true }
+    guard let it = meItems[key] else { return false }
+    return it.tap != nil && it.toggle == nil
+  }
+  func collectionView(_ cv: UICollectionView, didSelectItemAt ip: IndexPath) {
+    cv.deselectItem(at: ip, animated: true)
+    guard isMeList, let key = listDS?.itemIdentifier(for: ip) else { return }
+    if key == "me:card" { (listViews[key] as? MeCardBlock)?.onTap?(); return }
+    meItems[key]?.tap?()
+  }
+}
+
+// ---------- Me and its pages as iPhone's Settings (Haris 2026-11-08: "start the me page … me page and its inner pages") ----------
+// Each group of rows is one of Apple's grouped sections, its title Apple's header and the words under it Apple's footer;
+// each row Apple's list cell, set by Apple's own configurations — the text, the line under it, Apple's ›, the value at the
+// right, Apple's switch, Apple's highlight. Ours: the coloured icons and pictures the cells show, and the page's own
+// blocks (Appearance's phones, About's cards…), each in a cell of Apple's list as before.
+struct MeSec { var grouped = false; var head = ""; var foot: NSAttributedString? = nil; var footCentred = false }
+final class MeHold: NSObject, UIContextMenuInteractionDelegate {
+  var run: (() -> Void)?
+  func contextMenuInteraction(_ i: UIContextMenuInteraction, configurationForMenuAtLocation p: CGPoint) -> UIContextMenuConfiguration? {
+    guard let r = run else { return nil }
+    return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in
+      UIMenu(children: [UIAction(title: "Role, rights and access", image: UIImage(systemName: "slider.horizontal.3")) { _ in r() }])
+    }
+  }
+}
+extension HomeView {
+  var isMeList: Bool { isMe || assets == "plansPage" }
+  func meSection(_ i: Int) -> MeSec? {
+    guard let ds = listDS else { return nil }
+    let ids = ds.snapshot().sectionIdentifiers
+    guard i >= 0, i < ids.count else { return nil }
+    return meSecs[ids[i]]
+  }
+  func meGrouped(_ g: MeSec, _ env: NSCollectionLayoutEnvironment) -> NSCollectionLayoutSection {
+    var c = UICollectionLayoutListConfiguration(appearance: .insetGrouped)
+    c.backgroundColor = .clear
+    c.headerMode = g.head.isEmpty ? .none : .supplementary
+    c.footerMode = g.foot == nil ? .none : .supplementary
+    let sec = NSCollectionLayoutSection.list(using: c, layoutEnvironment: env)
+    // (the page's sides, as its other blocks: 16 pt)
+    sec.contentInsetsReference = .none
+    var ins = sec.contentInsets; ins.leading = 16; ins.trailing = 16; sec.contentInsets = ins
+    return sec
+  }
+  // the page as Apple's sections: a title and the group under it — one section; the words under a group — its footer;
+  // anything else of the page's — in its own section, as before
+  func applyMeList(animated: Bool) {
+    guard let ds = listDS else { return }
+    var snap = NSDiffableDataSourceSnapshot<Int, String>()
+    var views: [String: UIView] = [:], items: [String: SetItem] = [:], secs: [Int: MeSec] = [:]
+    var n = 0, cur: [String] = [], info = MeSec()
+    func close() {
+      if !cur.isEmpty { snap.appendSections([n]); snap.appendItems(cur, toSection: n); secs[n] = info; n += 1 }
+      cur = []; info = MeSec()
+    }
+    let vs = content
+    var i = 0
+    while i < vs.count {
+      let v = vs[i]
+      var head: String? = nil
+      var g = v as? SetGroup
+      if let hd = v as? SetHead, i + 1 < vs.count, let gg = vs[i + 1] as? SetGroup { head = hd.label.text ?? ""; g = gg; i += 1 }
+      if let g = g {
+        i += 1
+        guard !g.isEmpty else { continue }
+        close()
+        info = MeSec(grouped: true, head: head ?? "")
+        let gid = ObjectIdentifier(g).hashValue
+        var seen = Set<String>()
+        for it in g.items {
+          var k = "s:\(gid):\(it.key)"; var j = 1
+          while seen.contains(k) { k = "s:\(gid):\(it.key)#\(j)"; j += 1 }
+          seen.insert(k); cur.append(k); items[k] = it
+        }
+        if i < vs.count, let f = vs[i] as? SetFoot, !(f.label.text ?? "").isEmpty {
+          info.foot = f.label.attributedText ?? NSAttributedString(string: f.label.text ?? ""); info.footCentred = f.center_; i += 1
+        }
+        close()
+        continue
+      }
+      // your card: Apple's cell, as Settings' account row
+      if let c = v as? MeCardBlock {
+        close(); info = MeSec(grouped: true); cur = ["me:card"]; views["me:card"] = c
+        c.onPhoto = { [weak self] in self?.reconfigureMe("me:card") }
+        close(); i += 1; continue
+      }
+      // anything else: as before, the whole width in a cell of Apple's list
+      if info.grouped { close() }
+      if let b = v as? HomeBlock {
+        let k = "b:" + (b.accessibilityIdentifier ?? "\(ObjectIdentifier(b).hashValue)")
+        if views[k] == nil {
+          let w = blockWraps[ObjectIdentifier(b)] ?? BlockWrap(b); blockWraps[ObjectIdentifier(b)] = w
+          cur.append(k); views[k] = w
+        }
+      } else {
+        let k = "e:\(ObjectIdentifier(v).hashValue)"
+        if views[k] == nil { cur.append(k); views[k] = v }
+      }
+      i += 1
+    }
+    close()
+    listViews = views; meItems = items; meSecs = secs
+    blockWraps = blockWraps.filter { e in views.values.contains { $0 === e.value } }
+    let had = Set(ds.snapshot().itemIdentifiers)
+    snap.reconfigureItems(snap.itemIdentifiers.filter { had.contains($0) })
+    ds.apply(snap, animatingDifferences: animated)
+  }
+  func reconfigureMe(_ key: String) {
+    guard let ds = listDS else { return }
+    var s = ds.snapshot()
+    guard s.indexOfItem(key) != nil else { return }
+    s.reconfigureItems([key]); ds.apply(s, animatingDifferences: false)
+  }
+  // one row, iPhone Settings' own cell
+  func paintMe(_ cell: UICollectionViewListCell, _ key: String) {
+    let L = look
+    let card = L.card
+    cell.configurationUpdateHandler = { cell, state in
+      var b = UIBackgroundConfiguration.listGroupedCell().updated(for: state)
+      if !(state.isHighlighted || state.isSelected) { b.backgroundColor = card }
+      cell.backgroundConfiguration = b
+    }
+    cell.interactions.filter { $0 is UIContextMenuInteraction }.forEach { cell.removeInteraction($0) }
+    if key == "me:card", let c = listViews[key] as? MeCardBlock {
+      let x = c.info
+      var cf = UIListContentConfiguration.subtitleCell()
+      cf.text = x.name; cf.textProperties.font = .systemFont(ofSize: 21, weight: .semibold); cf.textProperties.color = L.title
+      cf.secondaryText = [x.role, x.email].filter { !$0.isEmpty }.joined(separator: "
+")
+      cf.secondaryTextProperties.font = .systemFont(ofSize: 14); cf.secondaryTextProperties.color = .secondaryLabel; cf.secondaryTextProperties.numberOfLines = 2
+      cf.textToSecondaryTextVerticalPadding = 3
+      cf.image = c.photo.map { roundPic($0, initials: nil, color: nil, size: 62) }
+      cf.imageProperties.maximumSize = CGSize(width: 62, height: 62); cf.imageProperties.reservedLayoutWidth = 62; cf.imageProperties.cornerRadius = 31
+      cf.imageToTextPadding = 14
+      cf.directionalLayoutMargins.top = 14; cf.directionalLayoutMargins.bottom = 14
+      cell.contentConfiguration = cf
+      cell.accessories = [.disclosureIndicator()]
+      cell.accessibilityLabel = "\(x.name), \(x.role), My profile"
+      return
+    }
+    guard let it = meItems[key] else { return }
+    var cf = (it.sub.isEmpty && it.pills.isEmpty) ? UIListContentConfiguration.cell() : UIListContentConfiguration.subtitleCell()
+    cf.text = it.title
+    cf.textProperties.font = .systemFont(ofSize: 17); cf.textProperties.color = it.danger ? .systemRed : L.title
+    if !it.sub.isEmpty || !it.pills.isEmpty {
+      let a = NSMutableAttributedString(string: it.sub, attributes: [.foregroundColor: it.warn ? UIColor.systemOrange : UIColor.secondaryLabel])
+      for (j, p) in it.pills.enumerated() { a.append(NSAttributedString(string: (j == 0 && it.sub.isEmpty ? "" : "  ") + p.0, attributes: [.foregroundColor: p.1, .font: UIFont.systemFont(ofSize: 12, weight: .semibold)])) }
+      cf.secondaryAttributedText = a
+      cf.secondaryTextProperties.font = .systemFont(ofSize: 13); cf.secondaryTextProperties.numberOfLines = 2
+      cf.textToSecondaryTextVerticalPadding = 2
+    }
+    if let p = it.person {
+      cf.image = mePic(p.photo, p.ini, p.rgb, key)
+      cf.imageProperties.maximumSize = CGSize(width: 36, height: 36); cf.imageProperties.reservedLayoutWidth = 36; cf.imageProperties.cornerRadius = 18
+      cf.imageToTextPadding = 12
+    } else if let s = it.sym {
+      cf.image = HomeView.settingsIcon(s, it.col ?? .systemGray)
+      cf.imageProperties.maximumSize = CGSize(width: 30, height: 30); cf.imageProperties.reservedLayoutWidth = 30
+      cf.imageToTextPadding = 12
+    }
+    cell.contentConfiguration = cf
+    var acc: [UICellAccessory] = []
+    if let b = it.badge { acc.append(.customView(configuration: .init(customView: HomeView.meBadge(b, .systemBlue), placement: .trailing()))) }
+    if it.count > 0 { acc.append(.customView(configuration: .init(customView: HomeView.meBadge(it.count > 99 ? "99+" : "\(it.count)", .systemRed), placement: .trailing()))) }
+    if let p = it.pill { acc.append(.label(text: p, options: .init(font: .monospacedSystemFont(ofSize: 13, weight: .semibold)))) }
+    if !it.value.isEmpty { acc.append(.label(text: it.value)) }
+    if let on = it.toggle {
+      let sw = meSwitch(key)
+      if sw.isOn != on { sw.setOn(on, animated: cell.window != nil) }
+      acc.append(.customView(configuration: .init(customView: sw, placement: .trailing())))
+    } else if it.chevron && it.tap != nil { acc.append(.disclosureIndicator()) }
+    cell.accessories = acc
+    cell.contentView.alpha = it.dim ? 0.6 : 1
+    // (touch and hold — a team member: Apple's own lift and its menu)
+    if let hold = it.hold {
+      let d = MeHold(); d.run = hold; meHolds[key] = d
+      cell.addInteraction(UIContextMenuInteraction(delegate: d))
+    }
+    cell.accessibilityLabel = [it.title, it.sub, it.value].filter { !$0.isEmpty }.joined(separator: ", ")
+  }
+  // (a switch kept for its row — the same one each time, so it moves as Apple's do)
+  private func meSwitch(_ key: String) -> UISwitch {
+    if let s = meSwitches[key] { return s }
+    let s = UISwitch()
+    s.addAction(UIAction { [weak self, weak s] _ in
+      guard let self = self, let s = s else { return }
+      UISelectionFeedbackGenerator().selectionChanged()
+      self.meItems[key]?.flip?(s.isOn)
+    }, for: .valueChanged)
+    meSwitches[key] = s
+    return s
+  }
+  // a person's picture: their photo once it's in (the row drawn again then), else their initials
+  private func mePic(_ path: String?, _ ini: String, _ rgb: UIColor, _ key: String) -> UIImage {
+    if let p = path, let img = mePics[p] { return img }
+    if let p = path, !mePicAsked.contains(p) {
+      mePicAsked.insert(p)
+      FeedLoader.shared.image(p) { [weak self] img in
+        guard let self = self, let img = img else { return }
+        DispatchQueue.main.async { self.mePics[p] = roundPic(img, initials: nil, color: nil, size: 36); self.reconfigureMe(key) }
+      }
+    }
+    return roundPic(nil, initials: ini, color: rgb, size: 36)
+  }
+  // the coloured rounded square with its white symbol, as iPhone's Settings has them (shown by Apple's cell)
+  private static var icons: [String: UIImage] = [:]
+  static func settingsIcon(_ sym: String, _ col: UIColor) -> UIImage {
+    let k = sym + "|" + col.description
+    if let i = icons[k] { return i }
+    let side: CGFloat = 30
+    let img = UIGraphicsImageRenderer(size: CGSize(width: side, height: side)).image { _ in
+      let r = CGRect(x: 0, y: 0, width: side, height: side)
+      col.setFill(); UIBezierPath(roundedRect: r, cornerRadius: side * 0.27).fill()
+      if let s = UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold))?.withTintColor(.white, renderingMode: .alwaysOriginal) {
+        s.draw(in: CGRect(x: (side - s.size.width) / 2, y: (side - s.size.height) / 2, width: s.size.width, height: s.size.height))
+      }
+    }
+    icons[k] = img
+    return img
+  }
+  // a small round pill — "New", a count waiting for you
+  static func meBadge(_ t: String, _ c: UIColor) -> UIView {
+    let l = UILabel(); l.text = t; l.font = .systemFont(ofSize: c == .systemRed ? 15 : 11, weight: c == .systemRed ? .regular : .bold); l.textColor = .white; l.textAlignment = .center
+    l.backgroundColor = c; l.clipsToBounds = true
+    let h: CGFloat = c == .systemRed ? 24 : 18
+    let w = max(h, ceil(l.sizeThatFits(CGSize(width: 80, height: h)).width) + (c == .systemRed ? 14 : 12))
+    l.frame = CGRect(x: 0, y: 0, width: w, height: h); l.layer.cornerRadius = h / 2
+    l.widthAnchor.constraint(equalToConstant: w).isActive = true; l.heightAnchor.constraint(equalToConstant: h).isActive = true
+    return l
+  }
+}
 
 // a cell of Home's Apple list holding one of Home's own views (a card, a heading, the boxes) as it is
 final class HostCell: UICollectionViewListCell {

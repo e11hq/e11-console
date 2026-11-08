@@ -59,12 +59,13 @@ final class AppleNav: UINavigationController, UINavigationControllerDelegate, UI
     // (Home's navigation is its tab's own: the tab bar slides away as a page comes and back as Home does — Apple's tab bar
     //  call, not "hide the bottom bar when pushed": that re-sized the whole screen at the slide's first moment and Apple's
     //  bar snapped small, the big title jumping into it — Haris 2026-11-08, build 1544's test)
-    if n === AppleTabs.shared?.homeNav || n === AppleTabs.shared?.myTasksNav || n === AppleTabs.shared?.inboxNav || n === AppleTabs.shared?.clientsNav || n === AppleTabs.shared?.assetsNav { AppleTabs.shared?.homeNavWillShow(vc, animated: animated, nav: n); return }
+    if n === AppleTabs.shared?.homeNav || n === AppleTabs.shared?.myTasksNav || n === AppleTabs.shared?.inboxNav || n === AppleTabs.shared?.clientsNav || n === AppleTabs.shared?.assetsNav || n === AppleTabs.shared?.meNav { AppleTabs.shared?.homeNavWillShow(vc, animated: animated, nav: n); return }
     AppleTabs.shared?.mirrorShown(animated: animated, top: vc)
   }
   func navigationController(_ n: UINavigationController, didShow vc: UIViewController, animated: Bool) {
     Main.shared.taskPagesGone(stack: Main.shared.allNavs.flatMap { $0.viewControllers })
     Main.shared.clientsNavShown(n)   // (the Clients tab's pages — AppleClients.swift)
+    Main.shared.meNavShown(n)   // (Me's pages — AppleMe.swift)
     AppleTabs.shared?.mirrorShown()   // (back on the app's screens: Apple's tab bar as Main has it)
   }
 }
