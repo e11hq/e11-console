@@ -43,7 +43,8 @@ final class ClientsGroup: UIView, HomeBlock {
       UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
         self.chev.transform = opening ? CGAffineTransform(rotationAngle: .pi / 2) : .identity
       }
-      (self.superview?.superview as? HomeView)?.relayout()
+      // (its screen — over it on the page, or a cell of Apple's list in between: AppleClients.swift)
+      var up = self.superview; while let u = up, !(u is HomeView) { up = u.superview }; (up as? HomeView)?.relayout()
       UIView.animate(withDuration: 0.25, delay: opening ? 0.1 : 0, options: [.curveEaseOut, .allowUserInteraction]) {
         self.offRows.forEach { $0.alpha = opening ? 0.75 : 0 }
       }

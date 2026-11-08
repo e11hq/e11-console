@@ -408,6 +408,24 @@ final class AssetsCtl {
   private var stack: [Screen] = []
   private var models: [String: [String: Any]] = [:]   // (a client's, by its id; "" — all of them)
   private var fromPage = false, rootTab = false
+  // (opened on the Clients tab in Apple's navigation — AppleClients.swift: each screen a page pushed there, Apple's push,
+  //  bar, swipe back; elsewhere — Me, Client Assets as a tab — as before)
+  private(set) var appleNav: UINavigationController?
+  private func pickHost() {
+    let t = AppleTabs.shared
+    appleNav = main.clientsApple && t != nil && t?.ownNav === t?.clientsNav ? t?.clientsNav : nil
+  }
+  private weak var pushingVC: AssetsVC?
+  private func appleVC(_ h: HomeView) -> AssetsVC? {
+    if let p = pushingVC, p.h === h { return p }
+    return appleNav?.viewControllers.first { ($0 as? AssetsVC)?.h === h } as? AssetsVC
+  }
+  // (Apple's navigation changed — the tab tapped again pops them all at once, and only the top one hears it: the ones no
+  //  longer there taken off too)
+  func reconcile(_ vcs: [UIViewController]) {
+    guard appleNav != nil else { return }
+    for s in stack where !vcs.contains(where: { ($0 as? AssetsVC)?.h === s.h }) { navGone(s.h) }
+  }
   private weak var base: UIView?   // (what the first one was opened over — a client's page, the list; hidden under it meanwhile)
   var light = true
   // (who's signed in: as the page or Me said, else the app's own copy's — opened from a client's page without the
@@ -500,6 +518,11 @@ final class AssetsCtl {
       if let m = a["model"] as? [String: Any] { take(m); return }
       if (a["gone"] as? Bool) == true, let id = a["key"] as? String, !id.isEmpty {
         models[id] = nil
+        if appleNav != nil, stack.contains(where: { $0.client == id }) {
+          close(animated: true)
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in self?.main.shownScreen?.assetsToast("That client has been removed") }
+          return
+        }
         if let i = stack.firstIndex(where: { $0.client == id }) {
           let h = i > 0 ? stack[i - 1].h : nil
           while stack.count > i + 1 { stack.removeLast().h.removeFromSuperview() }
@@ -518,6 +541,7 @@ final class AssetsCtl {
     // (already showing it — the page saying so again)
     if fromPage, let s = stack.last, s.client == client, s.folder == folder, s.kind == (client == nil ? "all" : folder == nil ? "client" : "folder") { return }
     close(animated: false)
+    pickHost()
     fromPage = true; rootTab = (a["root"] as? Bool) == true
     // (from Me › Client Assets: it slides in over Me, as Me's other pages — Haris 2026-11-04)
     let slide = main.selectedTabKey == "me"
@@ -541,10 +565,12 @@ final class AssetsCtl {
   func openFromClients(client: String, folder: String?) {
     if !stack.isEmpty, fromPage { close(animated: false) }
     fromPage = false; rootTab = false
+    if stack.isEmpty { pickHost() }
     light = main.clientsLight
     open(client: client, folder: folder, animated: true, direct: true)   // (‹ back to the client's page, the way you came)
   }
   func openAll(animated: Bool) {
+    if stack.isEmpty { appleNav = nil }   // (All Client Assets: Me's, as before)
     push(screen("all", nil, nil), animated: animated)
     ask(["ev": "want"]) { [weak self] r in if (r["ok"] as? Bool) != true { self?.top?.assetsToast(r["error"] as? String ?? "Not available") } }
   }
@@ -567,7 +593,7 @@ final class AssetsCtl {
       guard let self = self else { return }
       if (r["ok"] as? Bool) != true { self.top?.assetsToast(r["error"] as? String ?? "Not available"); return }
       // (a folder asked for straight away: its folders above it, now that they're known)
-      if let f = folder, chain.count == 1, let m = self.models[client], let p = self.folderInfo(m, f)?["parent"] as? String, let i = self.stack.firstIndex(where: { $0.folder == f }) {
+      if self.appleNav == nil, let f = folder, chain.count == 1, let m = self.models[client], let p = self.folderInfo(m, f)?["parent"] as? String, let i = self.stack.firstIndex(where: { $0.folder == f }) {
         var ups: [String] = []; var cur: String? = p
         while let id = cur, ups.count < 8 { ups.insert(id, at: 0); cur = self.folderInfo(m, id)?["parent"] as? String }
         for (k, id) in ups.enumerated() { let s = self.screen("folder", client, id); s.h.isHidden = true; self.stack.insert(s, at: i + k); self.draw(s) }
@@ -588,7 +614,7 @@ final class AssetsCtl {
     h.assetsMenu = { [weak self, weak h] in guard let self = self, let h = h else { return [] }; return self.menuItems(h) }
     h.cornerShared = true
     h.onCorner = { [weak self] in self?.main.updateCorner() }
-    main.view.insertSubview(h, belowSubview: main.tabsMark)
+    if appleNav == nil { main.view.insertSubview(h, belowSubview: main.tabsMark) }
     let s = Screen(h: h, kind: kind, client: client, folder: folder)
     draw(s)
     return s
@@ -618,6 +644,24 @@ final class AssetsCtl {
     }
   }
   private func push(_ s: Screen, animated: Bool) {
+    if let n = appleNav {
+      watchCopyLive()
+      stack.append(s)
+      draw(s)
+      let vc = AssetsVC(s.h)
+      vc.onGone = { [weak self, weak h = s.h] in if let h = h { self?.navGone(h) } }
+      vc.onSearch = { [weak self, weak h = s.h] q in
+        guard let self = self, let h = h, let i = self.stack.firstIndex(where: { $0.h === h }), self.stack[i].q != q else { return }
+        self.stack[i].q = q; self.blocks(h)
+      }
+      pushingVC = vc
+      vc.loadViewIfNeeded()
+      blocks(s.h)   // (in Apple's list now — Apple's search instead of the box)
+      pushingVC = nil
+      n.pushViewController(vc, animated: animated && n.view.window != nil)
+      main.updateCorner()
+      return
+    }
     let W = main.view.bounds.width
     let u = under(stack.count)
     watchCopyLive()
@@ -639,6 +683,11 @@ final class AssetsCtl {
   // ‹ / the swipe: the top one goes, the one under it comes back
   func pop(animated: Bool = true) {
     guard let s = stack.last, !leaving else { return }
+    if let n = appleNav {
+      // (Apple's pop — what follows is done as the page goes: navGone)
+      if let vc = appleVC(s.h) { if n.topViewController === vc { n.popViewController(animated: animated && n.view.window != nil) } else { navGone(s.h) } } else { navGone(s.h) }
+      return
+    }
     let W = main.view.bounds.width
     let u = under(stack.count - 1)
     if let u = u { u.isHidden = false; u.transform = CGAffineTransform(translationX: -W * 0.3, y: 0) }
@@ -665,10 +714,31 @@ final class AssetsCtl {
       } completion: { _ in finish() }
     } else { u?.transform = .identity; finish() }
   }
+  // a page pushed in Apple's navigation gone (‹, the swipe back, popped): off the stack, the one under it brought up to date
+  private func navGone(_ h: HomeView) {
+    guard let i = stack.firstIndex(where: { $0.h === h }) else { return }
+    stack.remove(at: i)
+    if stack.isEmpty {
+      base = nil; appleNav = nil
+      if fromPage { fromPage = false; main.pageJS("window.__e11Assets && window.__e11Assets({ev:'back'})") }
+    } else if let t = stack.last { refreshScreen(t) }
+    main.updateCorner()
+  }
   // (the Clients tab going away: the ones opened from it go with it)
   func closeIfFromClients() { if !fromPage && !stack.isEmpty { close(animated: false) } }
   // all of them gone (another tab, the page moved on)
   func close(animated: Bool) {
+    // (in Apple's navigation: back to the page they were opened over)
+    if let n = appleNav {
+      let hs = Set(stack.map { ObjectIdentifier($0.h) })
+      stack = []; leaving = false; fromPage = false; base = nil; appleNav = nil
+      if let i = n.viewControllers.firstIndex(where: { ($0 as? AssetsVC).map { hs.contains(ObjectIdentifier($0.h)) } ?? false }), i > 0 {
+        n.viewControllers.forEach { ($0 as? AssetsVC)?.onGone = nil }
+        n.popToViewController(n.viewControllers[i - 1], animated: animated && n.view.window != nil)
+      }
+      main.updateCorner()
+      return
+    }
     stack.forEach { $0.h.removeFromSuperview() }
     stack = []; leaving = false; fromPage = false; base = nil
     main.edgePanOn(); main.updateCorner()
@@ -676,7 +746,7 @@ final class AssetsCtl {
   // the edge swipe on the top one: it follows the finger, the one under it coming back, the top buttons between them
   private var panFrom: ((CornerButton.Spot, CornerButton.Spot, CornerButton.Spot), (CornerButton.Spot, CornerButton.Spot, CornerButton.Spot))?
   func edgePan(_ g: UIScreenEdgePanGestureRecognizer) {
-    guard let s = stack.last, !leaving else { return }
+    guard let s = stack.last, !leaving, appleNav == nil else { return }
     let W = main.view.bounds.width
     let x = max(0, g.translation(in: main.view).x)
     let u = under(stack.count - 1)
@@ -727,7 +797,7 @@ final class AssetsCtl {
       mm["title"] = "Client Assets"; mm["date"] = m?["sub"] as? String ?? ""
     }
     s.h.bottomRoom = (main.tabBar.isHidden ? 40 : main.view.bounds.height - main.tabBar.frame.minY) + 96
-    s.h.tabTop = main.tabBar.isHidden ? nil : main.tabPillTop
+    if !s.h.appleTop { s.h.tabTop = main.tabBar.isHidden ? nil : main.tabPillTop }   // (in Apple's navigation: its page's own — ClientsPushedVC)
     s.h.people = main.homePagePeople
     s.h.update(mm)
   }
@@ -753,10 +823,13 @@ final class AssetsCtl {
       guard let cid = s.client else { break }
       let m = models[cid] ?? [:]
       h.drawAssetsBar(name: m["name"] as? String ?? main.clientPageIfMade?.model["title"] as? String ?? "Client Assets", sub: m["sub"] as? String ?? "", logo: m["logo"] as? String, rgb: m["rgb"], ini: m["ini"] as? String, showLogo: false)   // (just the name — no colour box or logo: Haris 2026-11-04)
-      let find = part(h, "find") { AssetsFind() }
-      find.field.placeholder = "Search \(m["name"] as? String ?? "this client")’s files"
-      find.onChange = { [weak self, weak h] q in guard let self = self, let h = h, let i = self.stack.firstIndex(where: { $0.h === h }) else { return }; self.stack[i].q = q; self.blocks(h); h.setNeedsLayout() }
-      out.append(find)
+      let ph = "Search \(m["name"] as? String ?? "this client")’s files"
+      if h.appleTop { appleVC(h)?.placeholder(ph) } else {
+        let find = part(h, "find") { AssetsFind() }
+        find.field.placeholder = ph
+        find.onChange = { [weak self, weak h] q in guard let self = self, let h = h, let i = self.stack.firstIndex(where: { $0.h === h }) else { return }; self.stack[i].q = q; self.blocks(h); h.setNeedsLayout() }
+        out.append(find)
+      }
       let all = (m["files"] as? [[String: Any]]) ?? []
       let q = s.q.trimmingCharacters(in: .whitespaces)
       if !q.isEmpty {

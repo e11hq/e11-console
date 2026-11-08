@@ -26,7 +26,9 @@ extension Main {
     //  as a task opened and only came back, in a snap, once the task page had gone — Haris 2026-11-07)
     // (My Tasks and the Inbox too, now their own Apple screens — the Inbox's + New task was veiled and gone when a Client
     //  Assets notification opened the app's old shared screen: Haris 2026-11-08)
+    // (the Clients tab's pages and Client Assets' in Apple's navigation too — their buttons move with them: AppleClients.swift)
     let own: [HomeView] = [APPLE_HOME ? homeIfMade : nil, APPLE_MYTASKS ? myTasksIfMade : nil, APPLE_INBOX ? inboxIfMade : nil].compactMap { $0 }
+      + [clientsListIfMade, clientPageIfMade].compactMap { $0 }.filter { $0.appleTop } + assetsCtl.screens.filter { $0.appleTop }
     for h in own { if h.fabVeiled { h.fabVeiled = false }; if m.veilA === h { m.veilA = nil }; if m.veilB === h { m.veilB = nil } }
     var to: HomeView? = taskPages.isEmpty && lockView == nil ? shownScreen : nil
     if let t = to, own.contains(where: { $0 === t }) { to = nil }

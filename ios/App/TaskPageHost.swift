@@ -207,7 +207,8 @@ extension Main {
       view.addGestureRecognizer(g)
       taskPan = g
     }
-    taskPan?.isEnabled = clientPageIfMade?.isHidden == false || (clientsListIfMade?.backFromMe == true && clientsListIfMade?.isHidden == false) || (assetsCtl.isOpen && assetsCtl.top?.backable == true) || (meCtl.isOpen && meCtl.depth > 1)
+    // (the Clients tab's pages and Client Assets' in Apple's navigation: Apple's own swipe back, not this one — AppleClients.swift)
+    taskPan?.isEnabled = (clientPageIfMade?.isHidden == false && !clientsApple) || (clientsListIfMade?.backFromMe == true && clientsListIfMade?.isHidden == false) || (assetsCtl.isOpen && assetsCtl.top?.backable == true && assetsCtl.appleNav == nil) || (meCtl.isOpen && meCtl.depth > 1)
   }
   private func clientsListPan(_ g: UIScreenEdgePanGestureRecognizer, _ l: HomeView) {
     let W = view.bounds.width, x = max(0, g.translation(in: view).x)

@@ -2020,6 +2020,13 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   // comes back under it; everything between goes at once (false: already on the list)
   func clientsBackToList() -> Bool {
     guard let l = clientsListIfMade else { return false }
+    // (Clients in Apple's navigation: the tab tapped again goes back to the list Apple's way — on the list already: up to
+    //  the top, as Home's)
+    if clientsApple, let n = AppleTabs.shared?.clientsNav {
+      if n.transitionCoordinator != nil { return true }
+      if n.viewControllers.count > 1 { n.popToRootViewController(animated: true) } else if !l.isHidden { l.scrollToTop() }
+      return true
+    }
     let page = clientPageIfMade.flatMap { $0.isHidden ? nil : $0 }
     guard let top: UIView = assetsCtl.top ?? page else { if !l.isHidden { l.scrollToTop() }; return true }
     let W = view.bounds.width
@@ -2082,8 +2089,10 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       self.pageJS("window.__e11Clients && window.__e11Clients(\(jsonString(ev)))")
     }
     h.present = { [weak self] vc in self?.topMost().present(vc, animated: true) }
-    if page, let l = clientsListIfMade { view.insertSubview(h, aboveSubview: l) } else { view.insertSubview(h, belowSubview: tabsMark) }
     if page { clientPageIfMade = h } else { clientsListIfMade = h }
+    // (Clients in Apple's navigation — AppleClients.swift: the list is its tab's first screen; a client's page comes pushed)
+    if clientsApple { if !page, let vc = ClientsVC.shared { vc.adopt(h) }; return h }
+    if page, let l = clientsListIfMade { view.insertSubview(h, aboveSubview: l) } else { view.insertSubview(h, belowSubview: tabsMark) }
     return h
   }
   // the Clients list over Me (Me › Work › Clients — the CD has Reviews in its place in the tab bar; Haris 2026-11-05: the
@@ -2117,6 +2126,10 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   // a client's page going (‹, or the list asked for): it slides back out to the right, the list coming back under it
   func clientPageOut() {
+    if clientsApple, let n = AppleTabs.shared?.clientsNav {
+      if let i = n.viewControllers.firstIndex(where: { $0 is ClientVC }), i > 0 { n.popToViewController(n.viewControllers[i - 1], animated: n.view.window != nil) }
+      return
+    }
     guard let p = clientPageIfMade, !p.isHidden, !clientLeaving else { return }
     clientLeaving = true
     let W = view.bounds.width
@@ -2131,6 +2144,17 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     updateCorner()
   }
   var clientLeaving = false
+  // a client's page gone from the Clients tab's Apple navigation (‹, the swipe back, the tab tapped again, another tab):
+  // the app's own state as when ‹ was tapped before — the list asked for again, the website told
+  func clientPageGone() {
+    ClientVC.pushed = false
+    clientPageIfMade?.isHidden = true
+    guard clientsOn == "client" else { updateCorner(); return }
+    clientsOn = "list"; serverClients.query = "view=list"; clientFrom = nil
+    if pageReady { pageJS("window.__e11Clients && window.__e11Clients({ev:'back'})") }
+    else if clientsWanted { DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in guard let self = self, self.clientsOn == "list" else { return }; self.serverClients.refresh() } }
+    updateCorner()
+  }
   // (without the website — step 9: what the page said after a client's page went back: the list, or the screen it came
   //  from with Clients no longer showing)
   func clientBackPageless() {
@@ -2251,12 +2275,25 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     }
     mm["people"] = nil
     h.bottomRoom = (tabBar.isHidden ? 40 : view.bounds.height - tabBar.frame.minY) + 96
-    h.tabTop = tabBar.isHidden ? nil : tabPillTop
+    if !(clientsApple && page) { h.tabTop = tabBar.isHidden ? nil : tabPillTop }   // (a page pushed in Apple's navigation: its own, at the bottom — ClientsPushedVC)
     h.drawFor(mm)   // (another person's list in it — after View as…: drawn afresh, never animated from theirs)
     if clientsWanted && h.isHidden { reveal(h, page: page); clientsOwn(false) }
   }
   // shown: the list in place; a client's page pushed in from the right over the list (as iPhone's own pages)
   private func reveal(_ h: HomeView, page: Bool) {
+    if clientsApple, let n = AppleTabs.shared?.clientsNav {
+      if page {
+        // (Apple's push on the Clients tab — once: a page already there is drawn again in place)
+        if !n.viewControllers.contains(where: { ($0 as? ClientVC)?.h === h }) {
+          let vc = ClientVC(h)
+          n.pushViewController(vc, animated: n.view.window != nil && AppleTabs.shared?.ownNav === n)
+        } else { h.isHidden = false }
+      } else {
+        if h.superview == nil, let vc = ClientsVC.shared { vc.adopt(h) }
+        h.isHidden = false
+      }
+      return
+    }
     let W = view.bounds.width
     // (over the list — or over the screen it was opened from, Home's search…: slid in like a task's page, not just
     //  there — Haris 2026-11-06)
@@ -2282,14 +2319,24 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     // (a client's page asked for while Home's own screen is on — from Home's search: it opens on the Clients tab, where
     //  the app draws clients' pages; Home is its own screen now — AppleHome.swift)
     // (and from My Tasks' search, the same — Haris 2026-11-08)
-    if APPLE_HOME, (a["show"] as? Bool) == true, (a["view"] as? String) == "client", AppleTabs.shared?.ownShown == true {
+    if APPLE_HOME, (a["show"] as? Bool) == true, (a["view"] as? String) == "client", AppleTabs.shared?.ownShown == true, selectedTabKey != "projects" {
       if (AppleHomeBits.shared.search?.isActive ?? false) { AppleHomeBits.shared.search?.isActive = false }
       MyTasksVC.shared?.closeSearch()
       a["from"] = ""
       selectTab("projects")
     }
     guard let show = a["show"] as? Bool else { return }
-    if !show { clientsWanted = false; clientsListIfMade?.backFromMe = false; clientsListIfMade?.isHidden = true; if !clientLeaving { clientPageIfMade?.isHidden = true }; assetsCtl.closeIfFromClients(); edgePanOn(); return }
+    if !show {
+      clientsWanted = false
+      // (Clients in Apple's navigation, left for another tab: back to its list, as the pages went before — out of sight)
+      if clientsApple, let n = AppleTabs.shared?.clientsNav {
+        assetsCtl.closeIfFromClients()
+        if n.viewControllers.count > 1 { n.popToRootViewController(animated: false) }
+        ClientVC.pushed = false; clientPageIfMade?.isHidden = true; clientsListIfMade?.isHidden = true
+        return
+      }
+      clientsListIfMade?.backFromMe = false; clientsListIfMade?.isHidden = true; if !clientLeaving { clientPageIfMade?.isHidden = true }; assetsCtl.closeIfFromClients(); edgePanOn(); return
+    }
     if !clientsWanted { clientsListIfMade?.clientsFresh() }   // (the tab coming back: Inactive clients closed again)
     clientsWanted = true
     clientsPageMe = a["me"] as? String
@@ -2817,6 +2864,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       ("slideHome", pause(2000) + "return '{}'", { self.selfSelect("today") }),
       ("slideHomeOpen", pause(2000) + "return '{}'", { if let id = self.selfSlideTask() { self.openTaskPage(id, tab: "details", focus: "") } }),
       ("slideHomeBack", pause(2500) + "return '{}'", { self.selfSlideBack(self.homeIfMade, "home") }),
+      ("slideCl", pause(2000) + "return '{}'", { self.selfSelect("projects") }),
+      ("slideClOpen", pause(2500) + "return '{}'", { if let id = self.selfSlideTask() { self.openTaskPage(id, tab: "details", focus: "") } }),
+      ("slideClBack", pause(2500) + "return '{}'", { self.selfSlideBack(self.clientsListIfMade, "cl") }),
       ("slideDone", pause(1500) + "return '{}'", nil),
       // 29: the morning round-up as iPhone's own sheet (the page's own sections, as the Inbox's round-up opens it)
       ("daily", pause(1500) + "return '{}'", { _ = self.dailyNative() }),   // (the app's own round-up — step 8)

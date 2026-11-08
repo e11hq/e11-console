@@ -125,6 +125,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private var list: UICollectionView?
   private var listDS: UICollectionViewDiffableDataSource<Int, String>?
   private var listViews: [String: UIView] = [:]
+  private var blockWraps: [ObjectIdentifier: BlockWrap] = [:]
   private var listOn: Bool { list != nil }
   private var sv: UIScrollView { list ?? scroll }
   private let statsRow = UIView()
@@ -145,12 +146,14 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     [topBar, blur, title, sub, smallTitle, smallSub, searchCircle, me, searchBar, closeCircle].forEach { $0.isHidden = true }
     onAppleTitle?(title.attributedText?.string ?? "", sub.text ?? "")
     onAppleMe?(me.image(for: .normal))
-    if !isClients && !isClient && assets == nil { makeAppleList() }
+    if assets == nil || assets == "client" || assets == "folder" { makeAppleList() }   // (the Clients tab's pages and Client Assets' too — AppleClients.swift)
     // (My Tasks: its filter rows and chips are in Apple's bar's menu now — taken out; All / Done goes into the list)
     // (My Tasks: its filters are in Apple's bar's menu, All / Done in Apple's search bar's scope bar — the rows taken out)
     if isList && !isInbox { listHead.removeFromSuperview(); if let f = lastFilters { onAppleFilters?(f) } }
     // (the Inbox: Mail's buttons go into the list, Mark all read into Apple's bar — HomeView's own taken out)
     if isInbox { listHead.removeFromSuperview(); markAll.removeFromSuperview(); inboxRows.values.forEach { $0.swipes = false }; catsWrap.addSubview(catsView); if !content.isEmpty { applyList(animated: false) }; onAppleCorner?() }
+    // (the Clients tab's pages and Client Assets': what's drawn already goes into Apple's list)
+    if (isClients || isClient || assets != nil), listOn, !content.isEmpty { applyList(animated: false) }
     setNeedsLayout()
   }
   private func makeAppleList() {
@@ -187,6 +190,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // each thing's height in the list (as the list had them)
   private func itemHeight(_ key: String, _ v: UIView) -> CGFloat {
     let w = bounds.width - 32
+    if let b = v as? BlockWrap { return b.block.blockHeight(bounds.width) }
     if key == "stats" { return 80 }
     if key == "cats" { return MailCats.H + 10 }
     if v is InboxRow { return InboxRow.H }
@@ -215,6 +219,13 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     for v in content {
       if let r = v as? InboxRow { let k = "r:" + r.id; keys.append(k); views[k] = r; continue }
       if let c = v as? HomeCard { let k = "c:" + c.id; keys.append(k); views[k] = c; continue }
+      // (the Clients tab's and Client Assets' blocks — the clients' group, folders, files: each a cell, the whole width)
+      if let b = v as? HomeBlock {
+        let k = "b:" + (b.accessibilityIdentifier ?? "\(ObjectIdentifier(b).hashValue)")
+        if views[k] != nil { continue }
+        let w = blockWraps[ObjectIdentifier(b)] ?? BlockWrap(b); blockWraps[ObjectIdentifier(b)] = w
+        keys.append(k); views[k] = w; continue
+      }
       if v.tag == 7 && v.isHidden { continue }   // (Today's mark: no heading on screen)
       let k = (v.tag == 8 ? "e:" : "h:") + (v.accessibilityIdentifier ?? "\(ObjectIdentifier(v).hashValue)")
       if views[k] != nil { continue }
@@ -222,6 +233,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     }
     }
     listViews = views
+    blockWraps = blockWraps.filter { e in views.values.contains { $0 === e.value } }
     var snap = NSDiffableDataSourceSnapshot<Int, String>()
     snap.appendSections([0]); snap.appendItems(keys, toSection: 0)
     let had = Set(ds.snapshot().itemIdentifiers)
@@ -538,11 +550,11 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
         assetsStrip.set((a["folders"] as? [[String: Any]]) ?? [], look: L)
         let cid = model["id"] as? String ?? ""
         if cid != stripClient || isHidden { stripClient = cid; assetsStrip.toStart() }
-        if assetsStrip.superview !== scroll { scroll.addSubview(assetsStrip) }
+        if !listOn, assetsStrip.superview !== scroll { scroll.addSubview(assetsStrip) }
         content.append(assetsStrip)
       } else { assetsStrip.removeFromSuperview() }
       tasksHead.set(open: model["open"] as? Int ?? 0, showDone: (model["showDone"] as? Bool) == true)
-      if tasksHead.superview !== scroll { scroll.addSubview(tasksHead) }
+      if !listOn, tasksHead.superview !== scroll { scroll.addSubview(tasksHead) }
       content.append(tasksHead)
     }
     var seen = Set<String>()
@@ -883,6 +895,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     setNeedsLayout()
   }
   func setContent(_ views: [UIView]) {
+    // (Apple's list: its cells hold them)
+    if listOn { content = views; applyList(animated: window != nil && !isHidden); return }
     for v in content where !views.contains(where: { $0 === v }) { v.removeFromSuperview() }
     for v in views where v.superview !== scroll { scroll.addSubview(v) }
     content = views
@@ -929,6 +943,13 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     HomeView.fadeText(barSub, sub); barSub.isHidden = sub.isEmpty; barSub.textColor = .secondaryLabel
     barName.font = .systemFont(ofSize: sub.isEmpty ? 17 : 16, weight: .semibold)
     setNeedsLayout()
+    tellApplePage()
+  }
+  // (a page pushed on the Clients tab — AppleClients.swift: its name, the line under it and its colour or logo, for
+  //  Apple's bar)
+  var onApplePage: ((String, String, UIColor, String?, String?, Bool) -> Void)?
+  func tellApplePage() {
+    onApplePage?(barName.text ?? "", barSub.isHidden ? "" : (barSub.text ?? ""), NativeSheetVC.color(m["rgb"]) ?? barLogo.backgroundColor ?? .systemGray, barLogoPath, barIni.text, !barLogo.isHidden)
   }
   private var barLogoPath: String?
   private func drawBarTitle(_ model: [String: Any]) {
@@ -942,6 +963,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       if let p = lp { FeedLoader.shared.image(p) { [weak self] img in guard let self = self, self.barLogoPath == p, let img = img else { return }; self.barLogo.image = img; self.barLogo.backgroundColor = .white; self.barIni.isHidden = true } }
     } else if barLogo.image == nil { barLogo.backgroundColor = rgb }
     [title, sub, smallTitle, smallSub].forEach { $0.isHidden = true }
+    if isClient { tellApplePage() }
   }
   // its ••• (the shared corner button's menu): Client Assets, Show / Hide completed, New task
   var menuItems: [CornerMenuItem] {
@@ -956,16 +978,17 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }
   var backFrame: CGRect { CGRect(x: 16, y: safeAreaInsets.top + 22 - BTN / 2, width: BTN, height: BTN) }
   func backTap() { send(["ev": "back"]) }
-  func relayout() { UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) { self.setNeedsLayout(); self.layoutIfNeeded() } }
+  func relayout() { if listOn { applyList(animated: true); return }; UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) { self.setNeedsLayout(); self.layoutIfNeeded() } }
   func clientsFresh() { clientsGroup.closeInactive(); setNeedsLayout() }
   private func drawClients(_ model: [String: Any]) {
     content.filter { $0 !== clientsGroup }.forEach { $0.removeFromSuperview() }
     clientsGroup.people = people
     clientsGroup.set((model["rows"] as? [[String: Any]]) ?? [], (model["inactive"] as? [[String: Any]]) ?? [], look: L)
-    if clientsGroup.superview !== scroll { scroll.addSubview(clientsGroup) }
+    if !listOn, clientsGroup.superview !== scroll { scroll.addSubview(clientsGroup) }
     content = [clientsGroup]
     // (+ Add client for Admins — Haris 2026-11-03; the app's own New client sheet)
     if (model["canEdit"] as? Bool) == true { setFab("Add client", "plus") { [weak self] in self?.send(["ev": "addClient"]) } } else { fab.isHidden = true }
+    if listOn { applyList(animated: window != nil && !isHidden) }
   }
   private let catsView = MailCats(items: [
     .init(key: "all", sym: "tray", name: "All", fill: MailCats.neutral),
