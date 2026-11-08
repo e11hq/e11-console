@@ -823,13 +823,13 @@ final class AssetsCtl {
         // (and Delete, when you may delete every file picked — Haris 2026-11-04)
         let pk = grid.pickedFiles
         let canDel = !pk.isEmpty && pk.allSatisfy { ($0["canDel"] as? Bool) == true }
-        h.setFab2("Delete \(n)", canDel ? { [weak self, weak h, weak grid] in
+        h.setFab2("Trash \(n)", canDel ? { [weak self, weak h, weak grid] in
           guard let self = self, let h = h, let g = grid else { return }
           let list = g.pickedFiles; let ids = list.compactMap { $0["id"] as? String }
           let one = list.count == 1 ? "“\(list[0]["name"] as? String ?? "this file")”" : "\(list.count) files"
-          self.confirm(h, "Delete \(one)?", "\(list.count == 1 ? "It moves" : "They move") to the Trash, where \(list.count == 1 ? "it" : "they") can be restored within 30 days. Copies already pasted into tasks stay.", "Delete") { [weak self, weak h, weak g] in
+          self.confirm(h, "Move \(one) to the Trash?", "\(list.count == 1 ? "It moves" : "They move") to the Trash, where \(list.count == 1 ? "it" : "they") can be restored within 30 days. Copies already pasted into tasks stay.", "Delete") { [weak self, weak h, weak g] in
             guard let self = self, let h = h else { return }
-            self.change(h, ["ev": "deleteFiles", "client": cid, "folder": fid, "files": ids], done: list.count == 1 ? "Deleted" : "\(list.count) files deleted") { [weak self, weak h] _ in
+            self.change(h, ["ev": "deleteFiles", "client": cid, "folder": fid, "files": ids], done: list.count == 1 ? "Moved to the Trash" : "\(list.count) files moved to the Trash") { [weak self, weak h] _ in
               g?.selecting = false; if let h = h { self?.blocks(h) }
             }
           }
@@ -936,10 +936,10 @@ final class AssetsCtl {
     let flipFile: () -> Void = { [weak self, weak h] in self?.main.fileLinkToggle(f) { t in h?.assetsToast(t) } }
     if Main.isAdmin { if Main.linksOff.contains(f["file"] as? String ?? "") { items.append(("Turn on link", "unlock", false, flipFile)) } else { items.append(("Turn off link", "lock", false, flipFile)) } }
     if (f["canDel"] as? Bool) == true, let fid = f["folder"] as? String {
-      items.append(("Delete", "trash", true, { [weak self, weak h] in
+      items.append(("Trash", "trash", true, { [weak self, weak h] in
         guard let self = self, let h = h else { return }
-        self.confirm(h, "Delete “\(f["name"] as? String ?? "this file")”?", "It moves to the Trash, where it can be restored within 30 days. Copies already pasted into tasks stay.", "Delete") {
-          self.change(h, ["ev": "deleteFile", "client": client, "folder": fid, "file": f["id"] as? String ?? ""], done: "Deleted")
+        self.confirm(h, "Move “\(f["name"] as? String ?? "this file")” to the Trash?", "It can be restored within 30 days. Copies already pasted into tasks stay.", "Trash") {
+          self.change(h, ["ev": "deleteFile", "client": client, "folder": fid, "file": f["id"] as? String ?? ""], done: "Moved to the Trash")
         }
       }))
     }
@@ -957,7 +957,7 @@ final class AssetsCtl {
       if Main.isAdmin { if Main.linksOff.contains("d:\(client)/\(id)") { items.append(("Turn on link", "unlock", false, flip)) } else { items.append(("Turn off link", "lock", false, flip)) } }
     }
     if (f["canRename"] as? Bool) == true { items.append(("Rename folder", "edit", false, { [weak self, weak h] in if let h = h { self?.renameFolder(h, f, client: client) } })) }
-    if (f["canDel"] as? Bool) == true { items.append(("Delete folder", "trash", true, { [weak self, weak h] in if let h = h { self?.deleteFolder(h, f, client: client) } })) }
+    if (f["canDel"] as? Bool) == true { items.append(("Trash folder", "trash", true, { [weak self, weak h] in if let h = h { self?.deleteFolder(h, f, client: client) } })) }
     sheet(f["name"] as? String ?? "Folder", items)
   }
   // the ••• at the top
@@ -990,7 +990,7 @@ final class AssetsCtl {
       out.append(CornerMenuItem(title: "Info", symbol: "info.circle", run: { [weak self] in self?.folderInfoSheet(f, client: cid) }))
       var edit: [CornerMenuItem] = []
       if (f["canRename"] as? Bool) == true { edit.append(CornerMenuItem(title: "Rename folder", symbol: "pencil", run: { [weak self, weak h] in if let h = h { self?.renameFolder(h, f, client: cid) } })) }
-      if (f["canDel"] as? Bool) == true { edit.append(CornerMenuItem(title: "Delete folder", symbol: "trash", destructive: true, run: { [weak self, weak h] in if let h = h { self?.deleteFolder(h, f, client: cid) } })) }
+      if (f["canDel"] as? Bool) == true { edit.append(CornerMenuItem(title: "Trash folder", symbol: "trash", destructive: true, run: { [weak self, weak h] in if let h = h { self?.deleteFolder(h, f, client: cid) } })) }
       if !edit.isEmpty { out.append(CornerMenuItem(title: "", inline: true, children: edit)) }
     }
     return out
@@ -1047,10 +1047,10 @@ final class AssetsCtl {
   private func deleteFolder(_ h: HomeView, _ f: [String: Any], client: String) {
     let subs = f["subs"] as? Int ?? 0, n = f["total"] as? Int ?? 0
     let what = [subs > 0 ? "\(subs) folder\(subs == 1 ? "" : "s")" : "", n > 0 ? "\(n) file\(n == 1 ? "" : "s")" : ""].filter { !$0.isEmpty }.joined(separator: " and ")
-    confirm(h, "Delete “\(f["name"] as? String ?? "this folder")”?", "The folder\(what.isEmpty ? "" : " and everything in it (\(what))") moves to the Trash, where it can be restored within 30 days. Copies already pasted into tasks stay.", "Delete folder") { [weak self, weak h] in
+    confirm(h, "Move “\(f["name"] as? String ?? "this folder")” to the Trash?", "The folder\(what.isEmpty ? "" : " and everything in it (\(what))") moves to the Trash, where it can be restored within 30 days. Copies already pasted into tasks stay.", "Delete folder") { [weak self, weak h] in
       guard let self = self, let h = h else { return }
       let id = f["id"] as? String ?? ""
-      self.change(h, ["ev": "deleteFolder", "client": client, "folder": id], done: "Deleted") { [weak self] _ in
+      self.change(h, ["ev": "deleteFolder", "client": client, "folder": id], done: "Moved to the Trash") { [weak self] _ in
         // (that folder's own screen, if it's open: gone)
         guard let self = self else { return }
         if let i = self.stack.firstIndex(where: { $0.folder == id }) { while self.stack.count > i + 1 { self.stack.removeLast().h.removeFromSuperview() }; self.pop() }

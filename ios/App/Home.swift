@@ -270,11 +270,11 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       }
     } else {
       if canDelete {
-        let a = UIContextualAction(style: .destructive, title: "Delete") { [weak self, weak card] _, _, finish in
+        let a = UIContextualAction(style: .destructive, title: "Trash") { [weak self, weak card] _, _, finish in
           guard let self = self, let card = card else { return finish(false) }
           // (asked first: the task goes to the Trash)
-          let al = UIAlertController(title: "Delete this task?", message: card.taskTitle.isEmpty ? nil : card.taskTitle, preferredStyle: .actionSheet)
-          al.addAction(UIAlertAction(title: "Delete Task", style: .destructive) { _ in self.send(["ev": "delete", "id": card.id, "card": card.info]); self.findAgain(); finish(true) })
+          let al = UIAlertController(title: "Move this task to the Trash?", message: card.taskTitle.isEmpty ? nil : card.taskTitle, preferredStyle: .actionSheet)
+          al.addAction(UIAlertAction(title: "Trash Task", style: .destructive) { _ in self.send(["ev": "delete", "id": card.id, "card": card.info]); self.findAgain(); finish(true) })
           al.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in finish(false) })
           self.present?(al)
         }
@@ -1719,8 +1719,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     a.onDelete = { [weak self, weak card] in
       guard let self = self, let card = card else { return }
       // (asked first: the task goes to the Trash)
-      let al = UIAlertController(title: "Delete this task?", message: card.taskTitle.isEmpty ? nil : card.taskTitle, preferredStyle: .actionSheet)
-      al.addAction(UIAlertAction(title: "Delete Task", style: .destructive) { _ in self.send(["ev": "delete", "id": card.id, "card": card.info]); self.setOpen(card, false); self.findAgain() })
+      let al = UIAlertController(title: "Move this task to the Trash?", message: card.taskTitle.isEmpty ? nil : card.taskTitle, preferredStyle: .actionSheet)
+      al.addAction(UIAlertAction(title: "Trash Task", style: .destructive) { _ in self.send(["ev": "delete", "id": card.id, "card": card.info]); self.setOpen(card, false); self.findAgain() })
       al.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in self.setOpen(card, false) })
       al.overrideUserInterfaceStyle = self.L.light ? .light : .dark
       self.present?(al)
@@ -2196,7 +2196,7 @@ final class HomeActions: UIView {
     leading = false
     super.init(frame: .zero)
     items.append(item("Copy link", HomeActions.grey, sym: "link", { [weak self] in self?.onCopy?() }).0)
-    if delete { items.append(item("Delete", SplashView.hex(0xe5484d), sym: "trash", { [weak self] in self?.onDelete?() }).0) }
+    if delete { items.append(item("Trash", SplashView.hex(0xe5484d), sym: "trash", { [weak self] in self?.onDelete?() }).0) }
     items.forEach { addSubview($0) }
     progress = 0
   }

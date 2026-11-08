@@ -437,7 +437,7 @@ final class CommentsFeed: UIView, UIScrollViewDelegate, UIGestureRecognizerDeleg
     if (it["canEdit"] as? Bool) == true { rows.append(["i": 4, "label": "Edit comment", "icon": "edit"]) }
     rows.append(["i": 2, "label": "Copy text", "icon": "copy"])
     var secs: [[String: Any]] = [["rows": rows]]
-    if (it["canDelete"] as? Bool) == true { secs.append(["rows": [["i": 3, "label": "Delete comment", "icon": "trash", "danger": true]]]) }
+    if (it["canDelete"] as? Bool) == true { secs.append(["rows": [["i": 3, "label": "Trash comment", "icon": "trash", "danger": true]]]) }
     onSheet?(["sections": secs]) { [weak self] i, swatch in
       guard let self = self else { return }
       if let e = swatch, emojis.contains(e) { self.onAct?(["act": "react", "id": self.taskId, "key": id, "value": e]); return }
@@ -458,9 +458,9 @@ final class CommentsFeed: UIView, UIScrollViewDelegate, UIGestureRecognizerDeleg
     }
   }
   private func confirmDelete(_ id: String, replies: Int) {
-    let a = UIAlertController(title: "Delete comment?", message: replies > 0 ? "This also removes its \(replies) repl\(replies == 1 ? "y" : "ies")." : nil, preferredStyle: .alert)
+    let a = UIAlertController(title: "Move comment to the Trash?", message: replies > 0 ? "This also removes its \(replies) repl\(replies == 1 ? "y" : "ies")." : nil, preferredStyle: .alert)
     a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-    a.addAction(UIAlertAction(title: "Delete", style: .destructive) { [weak self] _ in guard let self = self else { return }; self.onAct?(["act": "deleteComment", "id": self.taskId, "value": id]) })
+    a.addAction(UIAlertAction(title: "Trash", style: .destructive) { [weak self] _ in guard let self = self else { return }; self.onAct?(["act": "deleteComment", "id": self.taskId, "value": id]) })
     var top = window?.rootViewController; while let p = top?.presentedViewController { top = p }
     top?.present(a, animated: true)
   }

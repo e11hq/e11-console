@@ -565,7 +565,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
       ]))
     }
     if (m["canDelete"] as? Bool) == true && !TaskPage.viewOnly {
-      items.append(UIMenu(options: .displayInline, children: [UIAction(title: "Delete task", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in self?.confirmDelete() }]))
+      items.append(UIMenu(options: .displayInline, children: [UIAction(title: "Trash task", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in self?.confirmDelete() }]))
     }
     cornerMenu = UIMenu(children: items)
     onMenuMade?()
@@ -573,15 +573,15 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   private var ownFileIds = Set<String>()
   private func confirmRemove(_ f: [String: Any]) {
     guard let fid = f["id"] as? String else { return }
-    let a = UIAlertController(title: "Remove “\(f["name"] as? String ?? "this file")”?", message: "It goes to the Trash.", preferredStyle: .alert)
+    let a = UIAlertController(title: "Move “\(f["name"] as? String ?? "this file")” to the Trash?", message: "It can be restored within 30 days.", preferredStyle: .alert)
     a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-    a.addAction(UIAlertAction(title: "Remove", style: .destructive) { [weak self] _ in guard let self = self else { return }; self.onAct?(["act": "removeFile", "id": self.taskId, "value": fid]) })
+    a.addAction(UIAlertAction(title: "Trash", style: .destructive) { [weak self] _ in guard let self = self else { return }; self.onAct?(["act": "removeFile", "id": self.taskId, "value": fid]) })
     present(a)
   }
   private func confirmDelete() {
-    let a = UIAlertController(title: "Delete this task?", message: "It goes to the Trash.", preferredStyle: .alert)
+    let a = UIAlertController(title: "Move this task to the Trash?", message: "It can be restored within 30 days.", preferredStyle: .alert)
     a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-    a.addAction(UIAlertAction(title: "Delete", style: .destructive) { [weak self] _ in guard let self = self else { return }; self.onAct?(["act": "delete", "id": self.taskId]) })
+    a.addAction(UIAlertAction(title: "Trash", style: .destructive) { [weak self] _ in guard let self = self else { return }; self.onAct?(["act": "delete", "id": self.taskId]) })
     present(a)
   }
   func present(_ vc: UIViewController) {
@@ -862,7 +862,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     if Main.isAdmin { items.append(linkAction(f)) }   // (Admins turn links off and on)
     // (the task's own files: Remove — to the Trash, with Undo; a comment's files go with their comment — Haris 2026-11-06)
     if let fid = f["id"] as? String, ownFileIds.contains(fid) {
-      items.append(UIMenu(options: .displayInline, children: [UIAction(title: "Remove", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in self?.confirmRemove(f) }]))
+      items.append(UIMenu(options: .displayInline, children: [UIAction(title: "Trash", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in self?.confirmRemove(f) }]))
     }
     return UIMenu(title: f["name"] as? String ?? "", children: items)
   }
