@@ -221,6 +221,10 @@ look, behaviour, animation, and every fix the locked page has had (a Home fix th
 their "+ New task" pop in after the slide back: Haris 16:32 "follow the locked page rules strictly"). Before a new page is
 built, go through the locked page's behaviours and fixes one by one and match each; the self-test checks the slide back on
 every tab with its own Apple screen (`slide_*`).
+**No rule missed, no mistakes (Haris, 2026-11-08 16:40: "you will not miss any rule, and no mistakes or miss on those"):**
+every rule in this file and the Don'ts is followed on every change — none skipped, none half-done. Before any change: read
+the rules that apply (locks, categories, standards, Don'ts, builds, commits) and check the change against each; after it,
+check again that nothing was missed — on the change itself and on every page that follows a locked one.
 
 **Before the next App Store review — remember (Haris, 2026-11-08):** do **light ↔ dark switching smoothly, Apple's way**
 first (task page plan step 5, project doc `claude/ios-task-page-apple.md`): our screens' colours as Apple's dynamic
