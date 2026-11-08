@@ -148,6 +148,11 @@ follows it (Don't 9); don't change any of it without Haris. Project doc `claude/
   and comes back as the slide back begins — never "hide the bottom bar when pushed", and nothing told to the tab bar at
   the slide's first moment: either makes Apple's bar snap small and the big title jump into it.
 
+**Before the next App Store review — to do then, not now (Haris, 2026-11-08):** light ↔ dark switching smoothly, Apple's
+way (task page step 5 — project doc `claude/ios-task-page-apple.md`): our screens' colours as Apple's dynamic colours so
+iOS fades the whole app itself; the tab bar follows the phone. About 110 places, every native screen. Remind Haris
+before anything is sent for review.
+
 **The App Store release — APPROVED (Haris, 2026-11-06):** the iPhone app 1.1.0, build 1472 (commit 9ca8c16, marked by
 the branch `approved/appstore-ios-1.1.0-build-1472` — never moved or deleted) is approved as it is for the App Store.
 From now on:
