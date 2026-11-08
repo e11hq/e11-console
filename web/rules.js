@@ -1189,12 +1189,13 @@ var E11Rules = (() => {
     }
 
     // ---------- the app's Clients tab (iPhone, Part B — Haris 2026-11-02): the list, and a client's page ----------
-    // who sees which client: as the website's phone list (amSidebarOk): Production / Freelancers the clients they work on,
-    // an Account Manager theirs (while not on leave), everyone else all; inactive ones apart
+    // who sees which client: as the website's list (clientListOk): Production / Freelancers the clients they work on,
+    // an Account Manager theirs (while not on leave — none given yet: none), everyone else all; inactive ones apart
     const clientSeen = (p, u = me()) => {
       if (!u) return false;
       if (ownSearchOnly(u) && !tasks.some((t) => t.projectId === p.id && partOfTask(t, u.id, false)) && !(u.role === 'freelancer' && (u.projectIds || []).includes(p.id))) return false;
-      return u.role !== 'am' || isAdm(u) || isCD(u.id) || !projects.some((x) => (x.ams || []).some((a) => a.id === u.id)) || (p.ams || []).some((a) => a.id === u.id && !a.onLeave);
+      // (an AM: only the clients they look after — one given none yet, none: Haris 2026-11-08 "their list will be empty")
+      return u.role !== 'am' || isAdm(u) || isCD(u.id) || (p.ams || []).some((a) => a.id === u.id && !a.onLeave);
     };
     const byOrderP = (a, b) => (a.order || 0) - (b.order || 0);
     const clientRec = (p) => (p && p.clientId ? (db.clients || []).find((c) => c.id === p.clientId) || null : null);

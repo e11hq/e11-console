@@ -1878,6 +1878,9 @@ const RO_AM = 'View only — this task is in a client you’re not Account Manag
 const RO_PEEK = 'View only — you’re not on this task';
 const roMsg = () => (ui.taskId && doneLocked(task(ui.taskId)) ? DONE_LOCK_MSG : ui.taskId && peekOnly(task(ui.taskId)) ? RO_PEEK : RO_AM);
 // The clients shown in an Account Manager's sidebar: the ones they look after (all of them until they're given one)
+// (the Clients list — the sidebar, the phone's list: an AM only the clients they look after; one given none yet, none —
+//  Haris 2026-11-08: "their list will be empty")
+const clientListOk = (p, u = me()) => amSidebarOk(p, u) && (!u || u.role !== 'am' || isAdm(u) || isCD(u.id) || (p.ams || []).some((a) => a.id === u.id && !a.onLeave));
 const amSidebarOk = (p, u = me()) => searchClientOk(p, u) && (!u || u.role !== 'am' || isAdm(u) || isCD(u.id) || !db.projects.some((x) => (x.ams || []).some((a) => a.id === u.id)) || (p.ams || []).some((a) => a.id === u.id && !a.onLeave));
 // The clients an AM may move a task into, or start one in
 const amClientOk = (p, u = me()) => amScope({ projectId: p.id, createdBy: null }, u);
@@ -3002,7 +3005,7 @@ function renderSidebar() {
   renderMeChip();
   if (typeof Phone !== 'undefined') Phone.chrome();
   $('.create-btn').style.display = can('createTask') ? '' : 'none';
-  const list = db.projects.filter((x) => !x.inactive && amSidebarOk(x)).sort(byOrder);   // inactive clients leave the sidebar; an AM sees their own
+  const list = db.projects.filter((x) => !x.inactive && clientListOk(x)).sort(byOrder);   // inactive clients leave the sidebar; an AM sees their own
   const SEEN = Work.seen();   // (the open counts: the tasks this person's lists have — Haris 2026-11-08)
   $('#project-list').innerHTML = list.length ? list.map((p) => {
     const open = db.tasks.filter((t) => t.projectId === p.id && !t.parentId && !t.done && SEEN.has(t.id)).length;

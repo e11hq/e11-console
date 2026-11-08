@@ -20,8 +20,11 @@ const data = {
     { id: 'u-se2', name: 'Omar Exec', email: 'se2@x.test', role: 'social', active: true },
     { id: 'u-sm', name: 'Mona Manager', email: 'sm@x.test', role: 'social', active: true },
     { id: 'u-p', name: 'Ali Designer', email: 'p@x.test', role: 'production', active: true },
+    { id: 'u-am', name: 'Areej AM', email: 'am@x.test', role: 'am', active: true },
+    { id: 'u-am0', name: 'Nour AM', email: 'am0@x.test', role: 'am', active: true },
+    { id: 'u-y', name: 'Yousef Prod', email: 'y@x.test', role: 'production', active: true },
   ],
-  projects: [{ id: 'p1', name: 'Northline', color: '#3366ff', socials: ['u-se'], sections: [{ id: 's1', name: 'To do' }] }, { id: 'p2', name: 'Orbit', color: '#ff3366', socials: ['u-se2'], sections: [{ id: 's1', name: 'To do' }] }],
+  projects: [{ id: 'p1', name: 'Northline', color: '#3366ff', socials: ['u-se'], sections: [{ id: 's1', name: 'To do' }] }, { id: 'p2', name: 'Orbit', color: '#ff3366', socials: ['u-se2'], ams: [{ id: 'u-am' }], sections: [{ id: 's1', name: 'To do' }] }],
   statuses: [], meta: { socialMgrIds: ['u-sm'] },
   plans: [{ id: 'pl1', projectId: 'p1', month: today.slice(0, 7), posts: [] }, { id: 'pl2', projectId: 'p2', month: today.slice(0, 7), posts: [] }],
   tasks: [
@@ -100,4 +103,15 @@ test('a client\'s page: everything for an Admin, each one\'s own tasks for the r
   const { V } = as('u-se');
   const row = screen(V, 'clients').rows.find((r) => r.id === 'p1');
   assert.equal(row.open, 2, 'the list\'s count: the same open tasks as the page');
+});
+
+// the Clients list (Haris 2026-11-08): an AM only the clients they look after — none given yet, none; Production only the
+// clients they work on
+test('the Clients list: an AM\'s own clients, none when they have none; Production only where they work', () => {
+  const rows = (me) => { const { V } = as(me); return [...screen(V, 'clients').rows.map((r) => r.id)].sort(); };
+  assert.deepEqual(rows('u-am'), ['p2']);
+  assert.deepEqual(rows('u-am0'), [], 'an AM given no clients yet: none');
+  assert.deepEqual(rows('u-y'), [], 'Production with nothing on a client: not listed');
+  assert.deepEqual(rows('u-p'), ['p1', 'p2']);
+  assert.deepEqual(rows('u-a'), ['p1', 'p2']);
 });
