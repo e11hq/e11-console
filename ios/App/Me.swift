@@ -2725,6 +2725,7 @@ final class MeCtl {
     guard let rows = m["rows"] as? [[String: Any]] else { let n = part(h, "wait") { AssetsNote() }; n.label.text = "Loading…"; out.append(n); return }
     let month = m["month"] as? String ?? ""
     let mb = part(h, "month") { PlanMonthChips() }
+    if let n = pageVCs[ObjectIdentifier(h)]?.navigationController as? AppleNav ?? (appleNav as? AppleNav), pageVCs[ObjectIdentifier(h)] != nil, let g = n.backAnywhere { mb.backWaits(for: g) }
     mb.light = h.look.light
     mb.set(month: month, first: m["first"] as? String ?? month, last: m["last"] as? String ?? month)
     mb.onPick = { [weak self] to in guard let self = self else { return }; UISelectionFeedbackGenerator().selectionChanged(); self.plMonth = to; self.send(["ev": "pl", "on": true, "month": to]) }
@@ -3249,7 +3250,17 @@ final class PlanMonthChips: UIView, HomeBlock {
     clipsToBounds = false
     for d in [UISwipeGestureRecognizer.Direction.left, .right] {
       let sw = UISwipeGestureRecognizer(target: self, action: #selector(swiped(_:))); sw.direction = d; addGestureRecognizer(sw)
+      if d == .right { rightSwipe = sw }
     }
+  }
+  // (on a page pushed in Apple's navigation: Apple's swipe back from anywhere waits for the months' own swipe — a swipe on
+  //  the months changes the month, anywhere else goes back; Apple's way for two gestures, as the task page's pager —
+  //  Haris 2026-11-08: the swipe on the months went back a page)
+  private var rightSwipe: UISwipeGestureRecognizer?
+  private weak var waiting: UIGestureRecognizer?
+  func backWaits(for g: UIGestureRecognizer) {
+    guard waiting !== g, let r = rightSwipe else { return }
+    waiting = g; g.require(toFail: r)
   }
   required init?(coder: NSCoder) { fatalError() }
   func set(month: String, first f: String, last l: String) {
