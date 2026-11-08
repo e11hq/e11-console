@@ -24,6 +24,9 @@ that stays (the task page's grey bands vanished on a redraw). The self-test chec
 app goes to another app and back (`away` → `awayBack`) and no screen may be drawn again (`Main.lookRedraws` unchanged), the
 bands still on the page. (The redraw came from iPhone's app-switcher pictures, taken in light and dark, read as the phone
 changing its look — `followPhoneLook` ignores look changes while the app is in the background.)
+**Me too (Haris, 2026-11-08: "Is the me page drawing on every open?"):** Me and its pages set a row again only when what it
+shows changed (`HomeView.applyMeList` — each row, the card and each block with a fingerprint); the self-test leaves Me for
+another tab and opens it again (`meAway` → `meAgain`) and no row may be set again (`Main.meRows` unchanged).
 
 **Touch and hold, everywhere (Haris, 2026-11-03):** as the comment cards — the whole card shrinks as one (the shared
 `PressShrink`) from the moment the finger is down, nothing inside it moves (cards are placed with bounds + center, never
