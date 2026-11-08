@@ -78,7 +78,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   func meTap() { send(["ev": "me"]) }
   var onCorner: (() -> Void)?
   // (shown or hidden — a tab changed: the corner button goes to this screen's, or away)
-  override var isHidden: Bool { didSet { if oldValue != isHidden { onCorner?(); if !isHidden { onShown?() } } } }
+  override var isHidden: Bool { didSet { if oldValue != isHidden { onCorner?(); onAppleCorner?(); if !isHidden { onShown?() } } } }
   var onShown: (() -> Void)?   // (shown again: what changed while it was hidden is drawn — Main's Home)
   // what the corner is here: "search", "read", "unread" or "none", and where (its right edge left of your photo)
   func corner() -> (kind: String, text: String, frame: CGRect) {
@@ -114,9 +114,11 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   var onAppleTitle: ((String, String) -> Void)?
   var onAppleMe: ((UIImage?) -> Void)?
   var onAppleResign: (() -> Void)?
-  var onAppleFilters: (([String: Any]) -> Void)?   // (My Tasks: its tab, filter buttons and chips — its own screen's bar shows them)
+  var onAppleFilters: (([String: Any]) -> Void)?
+  var onAppleCorner: (() -> Void)?   // (the Inbox: Mark all read / unread changed — its own screen's bar button follows)   // (My Tasks: its tab, filter buttons and chips — its own screen's bar shows them)
   // (My Tasks under Apple's bar: All / Done as the first row of Apple's list)
   private let segWrap = UIView()
+  private let catsWrap = UIView()   // (the Inbox under Apple's bar: Mail's buttons as the first row of Apple's list)
   func menuEvent(_ e: [String: Any]) { send(e) }
   var appleScroll: UIScrollView { listOn ? sv : searching ? results : sv }
   // Home's list as Apple's own list (Haris 2026-11-07: "I like Apple's list"): the same cards, headings and boxes, each
@@ -145,9 +147,11 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     [topBar, blur, title, sub, smallTitle, smallSub, searchCircle, me, searchBar, closeCircle].forEach { $0.isHidden = true }
     onAppleTitle?(title.attributedText?.string ?? "", sub.text ?? "")
     onAppleMe?(me.image(for: .normal))
-    if !isInbox && !isClients && !isClient && assets == nil { makeAppleList() }
+    if !isClients && !isClient && assets == nil { makeAppleList() }
     // (My Tasks: its filter rows and chips are in Apple's bar's menu now — taken out; All / Done goes into the list)
     if isList && !isInbox { listHead.removeFromSuperview(); segWrap.addSubview(seg); if let f = lastFilters { onAppleFilters?(f) } }
+    // (the Inbox: Mail's buttons go into the list, Mark all read into Apple's bar — HomeView's own taken out)
+    if isInbox { listHead.removeFromSuperview(); markAll.removeFromSuperview(); inboxRows.values.forEach { $0.swipes = false }; catsWrap.addSubview(catsView); if !content.isEmpty { applyList(animated: false) }; onAppleCorner?() }
     setNeedsLayout()
   }
   private func makeAppleList() {
@@ -156,10 +160,12 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     cfg.backgroundColor = .clear
     cfg.trailingSwipeActionsConfigurationProvider = { [weak self] ip in self?.swipeActions(ip, leading: false) }
     cfg.leadingSwipeActionsConfigurationProvider = { [weak self] ip in self?.swipeActions(ip, leading: true) }
-    let layout = UICollectionViewCompositionalLayout { _, env in
+    let layout = UICollectionViewCompositionalLayout { [weak self] _, env in
       let sec = NSCollectionLayoutSection.list(using: cfg, layoutEnvironment: env)
-      sec.interGroupSpacing = 10
-      sec.contentInsets = NSDirectionalEdgeInsets(top: 4, leading: 16, bottom: 0, trailing: 16)
+      // (the Inbox's rows edge to edge, one under the other, as Mail's)
+      let inbox = self?.isInbox == true
+      sec.interGroupSpacing = inbox ? 0 : 10
+      sec.contentInsets = inbox ? NSDirectionalEdgeInsets(top: 4, leading: 0, bottom: 0, trailing: 0) : NSDirectionalEdgeInsets(top: 4, leading: 16, bottom: 0, trailing: 16)
       return sec
     }
     let cv = UICollectionView(frame: bounds, collectionViewLayout: layout)
@@ -184,6 +190,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let w = bounds.width - 32
     if key == "stats" { return 80 }
     if key == "seg" { return 40 }
+    if key == "cats" { return MailCats.H + 10 }
+    if v is InboxRow { return InboxRow.H }
     if v === hint { return (hint.sizeThatFits(CGSize(width: w, height: 400)).height) + 28 }
     if v is HomeClientRow { return 70 }
     if let n = v as? SearchFixedNote { return n.height(for: w) }
@@ -206,7 +214,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     } else {
     if !noStats { keys.append("stats"); views["stats"] = statsRow }
     if isList && !isInbox && seg.superview === segWrap { keys.append("seg"); views["seg"] = segWrap }
+    if isInbox && catsView.superview === catsWrap { keys.append("cats"); views["cats"] = catsWrap }
     for v in content {
+      if let r = v as? InboxRow { let k = "r:" + r.id; keys.append(k); views[k] = r; continue }
       if let c = v as? HomeCard { let k = "c:" + c.id; keys.append(k); views[k] = c; continue }
       if v.tag == 7 && v.isHidden { continue }   // (Today's mark: no heading on screen)
       let k = (v.tag == 8 ? "e:" : "h:") + (v.accessibilityIdentifier ?? "\(ObjectIdentifier(v).hashValue)")
@@ -223,6 +233,16 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }
   // Apple's swipe actions: right — Done · Due; left — Copy link · Delete (as our round buttons did)
   private func swipeActions(_ ip: IndexPath, leading: Bool) -> UISwipeActionsConfiguration? {
+    if let key = listDS?.itemIdentifier(for: ip), let row = listViews[key] as? InboxRow {
+      guard leading else { return nil }
+      let a = UIContextualAction(style: .normal, title: row.read ? "Unread" : "Read") { [weak row] _, _, finish in
+        UIImpactFeedbackGenerator(style: .light).impactOccurred(); row?.onToggle?(); finish(true)
+      }
+      a.image = UIImage(systemName: row.read ? "envelope.fill" : "envelope.open.fill")
+      a.backgroundColor = .systemBlue
+      let cfg = UISwipeActionsConfiguration(actions: [a]); cfg.performsFirstActionWithFullSwipe = true
+      return cfg
+    }
     guard let key = listDS?.itemIdentifier(for: ip), let card = listViews[key] as? HomeCard else { return nil }
     let d = card.info
     var acts: [UIContextualAction] = []
@@ -996,7 +1016,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     switching = true
     drawInbox(m)
     switching = false
-    if #available(iOS 26.0, *) { DispatchQueue.main.async { [weak self] in guard let self = self else { return }; Frost.nudge(self.scroll); self.applyFrost() } }
+    if #available(iOS 26.0, *), !appleTop { DispatchQueue.main.async { [weak self] in guard let self = self else { return }; Frost.nudge(self.scroll); self.applyFrost() } }
     send(["ev": "tab", "tab": k])
   }
   private func drawInbox(_ model: [String: Any]) {
@@ -1020,6 +1040,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
         v.onTap = { [weak self] in self?.send(["ev": "open", "id": id]) }
         v.onToggle = { [weak self, weak v] in guard let v = v else { return }; self?.send(["ev": v.read ? "unread" : "read", "id": id]) }
         v.onOpen = { [weak self] row in if let o = self?.openRow, o !== row { o.close() }; self?.openRow = row }
+        v.swipes = !listOn   // (in Apple's list: Apple's own swipe)
         scroll.addSubview(v); inboxRows[id] = v
       }
       let p = people[r["from"] as? String ?? ""]
@@ -1028,6 +1049,19 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     }
     let rowsNow = content.compactMap { $0 as? InboxRow }
     rowsNow.forEach { $0.last = $0 === rowsNow.last }
+    // (Apple's list: it moves, brings in and takes away the rows itself)
+    if listOn {
+      for (id, v) in inboxRows where !seen.contains(id) { inboxRows[id] = nil; if v === openRow { openRow = nil } }
+      if content.isEmpty {
+        let e = inboxTab == "unread" ? "Inbox zero 🎉" : inboxTab == "mentions" ? "No mentions yet" : "Nothing here yet"
+        let l = UILabel(); l.text = e; l.font = .systemFont(ofSize: 15); l.textColor = .secondaryLabel; l.tag = 8; l.numberOfLines = 0; l.textAlignment = .center
+        l.accessibilityIdentifier = "inbox-empty-" + inboxTab
+        content.append(l)
+      }
+      applyList(animated: true)
+      onAppleCorner?()
+      return
+    }
     // the rows that don't belong any more: faded out where they are, then gone
     for (id, v) in inboxRows where !seen.contains(id) {
       if v === openRow { openRow = nil }
@@ -1051,10 +1085,15 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     }
   }
   func selfInboxTab(_ k: String) { pickTab(k) }
-  func selfSwipeRow() { if let r = content.first as? InboxRow { r.selfOpen(); openRow = r } }
+  func selfSwipeRow() {
+    // (Apple's list: the first row offers Apple's own Read / Unread swipe)
+    if listOn, let r = content.first as? InboxRow, let ip = listDS?.indexPath(for: "r:" + r.id) { appleSwipeOK = swipeActions(ip, leading: true) != nil; return }
+    if let r = content.first as? InboxRow { r.selfOpen(); openRow = r }
+  }
+  private var appleSwipeOK = false
   func inboxGeo() -> [String: Any] {
     ["tab": inboxTab, "rows": content.filter { $0 is InboxRow }.count, "unreadRows": content.compactMap { $0 as? InboxRow }.filter { !$0.read }.count,
-     "cats": catsView.widths, "markAll": !markAll.isHidden, "open": openRow?.isOpen ?? false, "pinned": pinned]
+     "cats": catsView.widths, "markAll": !markAll.isHidden, "open": listOn ? appleSwipeOK : (openRow?.isOpen ?? false), "pinned": pinned, "apple": appleTop, "listOn": listOn]
   }
 
   // ---------- where things go ----------
@@ -1082,6 +1121,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       let bottom = max(0, endRoom - safeAreaInsets.bottom)
       if cv.contentInset.bottom != bottom { cv.contentInset.bottom = bottom }
       if seg.superview === segWrap { seg.frame = CGRect(x: 0, y: 0, width: W - 32, height: 32) }
+      if catsView.superview === catsWrap { catsView.frame = CGRect(x: 0, y: 0, width: W, height: MailCats.H) }
       let bw = (W - 32 - 16) / 3, bh: CGFloat = 1 + 10 + 41 + 15 + 12 + 1
       for (i, v) in stats.enumerated() {
         v.frame = CGRect(x: CGFloat(i) * (bw + 8), y: 0, width: bw, height: bh)
@@ -2364,6 +2404,9 @@ final class InboxRow: UIControl, UIGestureRecognizerDelegate {
     body.layer.cornerRadius = 18 * k
   } }
   var isOpen: Bool { shift > 1 }
+  // (in Apple's list the row's swipe is Apple's own — this row's own pan off)
+  private weak var panG: UIPanGestureRecognizer?
+  var swipes = true { didSet { panG?.isEnabled = swipes } }
   override init(frame: CGRect) {
     super.init(frame: frame)
     clipsToBounds = true
@@ -2388,7 +2431,7 @@ final class InboxRow: UIControl, UIGestureRecognizerDelegate {
     body.isUserInteractionEnabled = false
     body.layer.cornerCurve = .continuous
     addSubview(body)
-    let pan = UIPanGestureRecognizer(target: self, action: #selector(pan(_:))); pan.delegate = self; addGestureRecognizer(pan)
+    let pan = UIPanGestureRecognizer(target: self, action: #selector(pan(_:))); pan.delegate = self; addGestureRecognizer(pan); panG = pan
     addAction(UIAction { [weak self] _ in guard let self = self else { return }; if self.isOpen { self.close() } else { self.onTap?() } }, for: .touchUpInside)
     isAccessibilityElement = true; accessibilityTraits = .button
   }

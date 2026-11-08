@@ -39,7 +39,7 @@ final class AppleNav: UINavigationController, UINavigationControllerDelegate, UI
     }
     // (Home's own navigation: Apple's bar there from the start, with its big title — AppleHome.swift; the app's: no bar
     //  over its own screens)
-    let home = viewControllers.first is HomeVC || viewControllers.first is MyTasksVC
+    let home = viewControllers.first is TabRoot
     setNavigationBarHidden(!home, animated: false)
     navigationBar.prefersLargeTitles = home
   }
@@ -59,7 +59,7 @@ final class AppleNav: UINavigationController, UINavigationControllerDelegate, UI
     // (Home's navigation is its tab's own: the tab bar slides away as a page comes and back as Home does — Apple's tab bar
     //  call, not "hide the bottom bar when pushed": that re-sized the whole screen at the slide's first moment and Apple's
     //  bar snapped small, the big title jumping into it — Haris 2026-11-08, build 1544's test)
-    if n === AppleTabs.shared?.homeNav || n === AppleTabs.shared?.myTasksNav { AppleTabs.shared?.homeNavWillShow(vc, animated: animated, nav: n); return }
+    if n === AppleTabs.shared?.homeNav || n === AppleTabs.shared?.myTasksNav || n === AppleTabs.shared?.inboxNav { AppleTabs.shared?.homeNavWillShow(vc, animated: animated, nav: n); return }
     AppleTabs.shared?.mirrorShown(animated: animated, top: vc)
   }
   func navigationController(_ n: UINavigationController, didShow vc: UIViewController, animated: Bool) {

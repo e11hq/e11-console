@@ -144,7 +144,8 @@ try:
     ib = res.get('ibxInbox') or {}; ibs = res.get('ibxSwipeInbox') or {}; ibu = res.get('ibxUnreadInbox') or {}; ibm = res.get('ibxMentionsInbox') or {}
     check(ib.get('shown') is True and ib.get('server') is True and ib.get('tab') == 'all' and (ib.get('rows') or 0) > 0 and len(ib.get('cats') or []) == 3, f"the Inbox is the app's own, from the server, a row for each notification {ib}")
     check((res.get('ibx') or {}).get('blank') is True, f"the page draws nothing under the app's Inbox {res.get('ibx')}")
-    check(ibs.get('open') is True, f"a row swiped right shows Read / Unread {ibs}")
+    check(ibs.get('open') is True, f"a row swiped right shows Read / Unread (Apple's own swipe in Apple's list) {ibs}")
+    check(ib.get('apple') is True and ib.get('listOn') is True, f"the Inbox in Apple's navigation, its rows in Apple's list {ib}")
     check(ibu.get('tab') == 'unread' and (ibu.get('unreadRows') or 0) == (ibu.get('rows') or 0) and (ibu.get('rows') or 0) <= (ib.get('rows') or 0), f"Unread: only the unread ones, at once {ibu}")
     check(ibm.get('tab') == 'mentions' and (ibm.get('rows') or 0) <= (ib.get('rows') or 0), f"Mentions {ibm}")
     cw = ibu.get('cats') or []

@@ -1921,8 +1921,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       }
     }
     h.present = { [weak self] vc in self?.topMost().present(vc, animated: true) }
-    view.insertSubview(h, belowSubview: tabsMark)
     inboxIfMade = h
+    // (the Inbox's own screen in its own tab — AppleInbox.swift: it goes there, under Apple's bar, as Home's)
+    if APPLE_INBOX, let vc = InboxVC.shared { vc.adopt(h) } else { view.insertSubview(h, belowSubview: tabsMark) }
     return h
   }()
   func drawServerInbox(_ m: [String: Any]) {
