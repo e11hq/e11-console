@@ -633,7 +633,6 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   var taskPages: [TaskPage] = []
   lazy var serverTask: ServerTask = { let s = ServerTask(); s.cookies = serverHome.cookies; return s }()
   var taskPan: UIScreenEdgePanGestureRecognizer?
-  var taskPanSpent = false
   var cornerWaited = false
   var copyWatch: UUID?
   var prefetchedAt: [String: Date] = [:]

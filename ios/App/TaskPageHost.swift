@@ -65,14 +65,6 @@ extension Main {
     //  first: before that its ‹ and ••• places are nothing, at the top-left corner, and the buttons flew off there)
     p.setNeedsLayout(); p.layoutIfNeeded()
     updateCornerNow()
-    // the edge swipe: one, on the app's screen, for whichever page is on top
-    if taskPan == nil {
-      let g = UIScreenEdgePanGestureRecognizer(target: self, action: #selector(taskEdgePan(_:)))
-      g.edges = .left
-      view.addGestureRecognizer(g)
-      taskPan = g
-    }
-    taskPan?.isEnabled = true
     // (opened straight on Comments — a comment's notification or Inbox row: the comments drawn now, from the app's copy,
     //  so they slide in with the page — they came only once it had arrived, a black page meanwhile: Haris 2026-11-05)
     // (and the comment box with them: it slides in with the page, ready at once — it only came once the page had
@@ -98,46 +90,24 @@ extension Main {
       return
     }
   }
-  // what's under a page: the page before it, or the app's screen (the page and its own screens)
-  func underViews(below p: TaskPage, under: UIView?) -> [UIView] {
-    if let u = under { return [u] }
-    let W = view.bounds.width
-    return view.subviews.filter { v in
-      // (the app's comment box belongs to the page above, not to the screen under it: it never moves aside)
-      // (nor do the shared top buttons: they change in place — 🔍 melting into your photo, ••• — not slide off with the screen)
-      // (nor the startup screen: a task opened from a link while it shows — it fades out where it is, never slides half off:
-      //  Haris 2026-11-05)
-      if v === p || v === tabsMark || v === cbarIfMade || v === cbox || (composeIfMade != nil && v === composeIfMade) || v is CornerButton || v is SplashView || v.isHidden || v.frame.width < W - 1 { return false }
-      if jumpHitMade && v === jumpHit { return false }
-      return !taskPages.contains { $0 === v }
-    }
-  }
-
   func closeTaskPage(_ p: TaskPage, animated: Bool = true) {
     guard let i = taskPages.firstIndex(where: { $0 === p }) else { return }
     p.endEditing(true)
     if p.tab == "comments" { taskHideComments() }
     taskPages.remove(at: i)
-    let under: UIView? = taskPages.last
-    let back = underViews(below: p, under: under)
     let last = taskPages.isEmpty
     // (the screen under it laid out as it will be first — the buttons aimed at a place it then changed, and jumped)
     if last { tabBar.isHidden = tabsHidden; edgePanOn(); view.setNeedsLayout(); view.layoutIfNeeded() }   // (the swipe back for what's under it — a review request, a Me page, Client Assets: it was off until the app came back from the background, Haris 2026-11-04)
-    back.forEach { $0.layoutIfNeeded() }
     updateCornerNow()
     let finish = {
       p.removeFromSuperview()
-      back.forEach { $0.transform = .identity }
-      // (the last page gone: whatever was moved aside when it came in is back in place — a screen hidden or shown
-      //  meanwhile too; one left aside showed a blank page, Haris 2026-11-01)
-      if last { self.view.subviews.forEach { v in if v !== self.tabsMark && !(v is TaskPage) && v.transform.tx != 0 { v.transform = .identity } } }
       // (and the screen under it drawn again as it is now: the page says what's showing — Home, My Tasks, the Inbox)
       if last { self.pageJS("window.__e11HomeResend && __e11HomeResend(); window.__e11MyTasksResend && __e11MyTasksResend(); window.__e11InboxResend && __e11InboxResend(); window.__e11ClientsResend && __e11ClientsResend()"); self.updateCorner() }
       if last { self.pageJS("window.__e11Task && window.__e11Task({ev:'closed'})") }
       else if let top = self.taskPages.last, top.tab == "comments" { self.taskShowComments(top, focus: "") }
     }
     let barTo: CGFloat = tabsHidden || formTucked ? 0 : 1
-    if APPLE_NAV, let nav = allNavs.first(where: { n in n.viewControllers.contains { ($0 as? TaskVC)?.page === p } }) ?? stageNav {
+    if let nav = allNavs.first(where: { n in n.viewControllers.contains { ($0 as? TaskVC)?.page === p } }) ?? stageNav {
       if last { tabBar.alpha = barTo }
       if let vc = nav.viewControllers.first(where: { ($0 as? TaskVC)?.page === p }) {
         // (its reply page, if one is open over it, goes with it)
@@ -222,57 +192,10 @@ extension Main {
     top.present(a, animated: true)
   }
 
-  // iPhone's swipe back from the left edge: the page follows the finger; let go, it goes the way it was going
+  // the app's own edge swipe for its screens not yet on Apple's navigation (a client's page, Client Assets, Me's pages);
+  // a task page is Apple's own page with Apple's swipe back (AppleNav)
   @objc func taskEdgePan(_ g: UIScreenEdgePanGestureRecognizer) {
-    // (no task page: a client's page goes back to the list the same way — Haris 2026-11-02)
-    guard let p = taskPages.last else { if clientsListIfMade?.backFromMe == true, clientsListIfMade?.isHidden == false, clientPageIfMade?.isHidden != false { clientEdgePan(g) } else if assetsCtl.isOpen { if assetsCtl.top?.backable == true { assetsCtl.edgePan(g) } } else if meCtl.isOpen { if meCtl.depth > 1 { meCtl.edgePan(g) } } else { clientEdgePan(g) }; return }
-    let W = view.bounds.width
-    let x = max(0, g.translation(in: view).x)
-    let under: UIView? = taskPages.count > 1 ? taskPages[taskPages.count - 2] : nil
-    let back = underViews(below: p, under: under)
-    // on Comments the swipe from the edge goes back a step — a thread to the comments, the comments to Details — not back
-    // to the list — and the
-    // rest of that swipe is used up: its "cancelled" (the page now on Details) mustn't run the slide back below,
-    // which moved the comment box aside and left it cut off (Haris, 2026-11-01)
-    if g.state == .began { taskPanSpent = false }
-    if taskPanSpent { return }
-    if p.tab == "comments" {
-      if g.state == .began {
-        taskPanSpent = true
-        composeIfMade?.text.resignFirstResponder()
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        toDetailsFromComments(p)
-        g.isEnabled = false; g.isEnabled = true   // (this swipe is used up)
-      }
-      return
-    }
-    switch g.state {
-    case .began:
-      p.endEditing(true)
-    case .changed:
-      p.transform = CGAffineTransform(translationX: x, y: 0)
-      back.forEach { $0.transform = CGAffineTransform(translationX: -W * 0.3 * (1 - x / W), y: 0) }
-      if taskPages.count == 1 && !tabsHidden { tabBar.isHidden = false; tabBar.alpha = x / W }
-      corner.between(cornerTarget(), cornerTarget(skipTop: true), x / W)
-    case .ended, .cancelled, .failed:
-      let v = g.velocity(in: view).x
-      let go = g.state == .ended && (v > 300 || (x > W * 0.4 && v > -200))
-      // (a comment written here and not sent: the page comes back and asks first)
-      let ask = go ? composeIfMade?.unsent(task: p.taskId) : nil
-      if go && ask == nil {
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        closeTaskPage(p)
-      } else {
-        if let u = ask { DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { self.askUnsent(p, u) } }
-        UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState]) {
-          p.transform = .identity
-          back.forEach { $0.transform = CGAffineTransform(translationX: -W * 0.3, y: 0) }
-          if self.taskPages.count == 1 { self.tabBar.alpha = 0 }
-        } completion: { _ in if !self.taskPages.isEmpty { self.tabBar.isHidden = true } }
-        updateCorner()
-      }
-    default: break
-    }
+    if clientsListIfMade?.backFromMe == true, clientsListIfMade?.isHidden == false, clientPageIfMade?.isHidden != false { clientEdgePan(g) } else if assetsCtl.isOpen { if assetsCtl.top?.backable == true { assetsCtl.edgePan(g) } } else if meCtl.isOpen { if meCtl.depth > 1 { meCtl.edgePan(g) } } else { clientEdgePan(g) }
   }
 
   // the edge swipe on a client's page: it follows the finger, the list coming back under it, the top buttons between
@@ -284,7 +207,7 @@ extension Main {
       view.addGestureRecognizer(g)
       taskPan = g
     }
-    taskPan?.isEnabled = (!APPLE_NAV && !taskPages.isEmpty) || clientPageIfMade?.isHidden == false || (clientsListIfMade?.backFromMe == true && clientsListIfMade?.isHidden == false) || (assetsCtl.isOpen && assetsCtl.top?.backable == true) || (meCtl.isOpen && meCtl.depth > 1)
+    taskPan?.isEnabled = clientPageIfMade?.isHidden == false || (clientsListIfMade?.backFromMe == true && clientsListIfMade?.isHidden == false) || (assetsCtl.isOpen && assetsCtl.top?.backable == true) || (meCtl.isOpen && meCtl.depth > 1)
   }
   private func clientsListPan(_ g: UIScreenEdgePanGestureRecognizer, _ l: HomeView) {
     let W = view.bounds.width, x = max(0, g.translation(in: view).x)

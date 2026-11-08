@@ -283,8 +283,13 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     listDS = UICollectionViewDiffableDataSource<Int, String>(collectionView: scroll) { cv, ip, key in cv.dequeueConfiguredReusableCell(using: reg, for: ip, item: key) }
     // (the keyboard: the page scrolls up past it, so where you're writing in the description stays in sight — Haris
     //  2026-11-02)
-    NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: .main) { [weak self] n in self?.keyboardMoved(n) }
-    NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { [weak self] _ in self?.kbCover = 0; self?.setNeedsLayout() }
+    // (where the keyboard is: Apple's keyboard guide — a mark held to its top, so the page is laid out again, inside Apple's
+    //  own keyboard animation, as the keyboard comes, goes or is dragged down; no keyboard: nothing — Haris 2026-11-08)
+    keyboardLayoutGuide.usesBottomSafeArea = false
+    kbMark.isUserInteractionEnabled = false; kbMark.isHidden = true
+    kbMark.translatesAutoresizingMaskIntoConstraints = false
+    addSubview(kbMark)
+    NSLayoutConstraint.activate([kbMark.leadingAnchor.constraint(equalTo: leadingAnchor), kbMark.widthAnchor.constraint(equalToConstant: 1), kbMark.heightAnchor.constraint(equalToConstant: 0), kbMark.topAnchor.constraint(equalTo: keyboardLayoutGuide.topAnchor)])
     NotificationCenter.default.addObserver(forName: UIResponder.keyboardDidShowNotification, object: nil, queue: .main) { [weak self] _ in self?.caretIntoView() }
     commentsHost.isHidden = true
     commentsHost.clipsToBounds = true
@@ -513,6 +518,21 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     let own: [UIView] = [titleView, descBox, descView, descRead, filesStrip, descStrip, mentionBox]
     return own.contains { $0 === b || $0.isDescendant(of: b) }
   }
+  // each row its own cell of Apple's list (Haris 2026-11-08): a group's rows and the thin lines between them come out of
+  // the group as rows of the page, each knowing its group (for its width and the room after the group) — a row that
+  // changes, comes or goes is only that row. (A group holding the page's own pieces — the description, the files row —
+  // stays one.)
+  private var groupOf: [ObjectIdentifier: Int] = [:]
+  private func flattenGroups() {
+    var out: [UIView] = [], gid = 0
+    groupOf = [:]
+    for b in blocks {
+      guard let g = b as? PageGroup, !holdsOwnPieces(g) else { out.append(b); continue }
+      gid += 1
+      for v in g.arrangedSubviews { g.removeArrangedSubview(v); v.removeFromSuperview(); groupOf[ObjectIdentifier(v)] = gid; out.append(v) }
+    }
+    blocks = out
+  }
   private func keepUnchanged(_ old: [UIView]) {
     var pool: [String: [UIView]] = [:]
     for b in old where !holdsOwnPieces(b) && !(b is PageBand) { pool[blockKey(b), default: []].append(b) }
@@ -522,6 +542,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
       guard var list = pool[k], let j = list.firstIndex(where: { type(of: $0) == type(of: b) && TaskPage.sig($0) == TaskPage.sig(b) && $0.tag == b.tag }) else { continue }
       let o = list.remove(at: j); pool[k] = list
       blocks[i] = o; kept.insert(ObjectIdentifier(o))
+      groupOf[ObjectIdentifier(o)] = groupOf[ObjectIdentifier(b)]   // (the kept row takes the new one's place in its group)
     }
     // (the bands aren't sections of their own: placed again after this — placeBands)
     for b in old where b !== titleView && !(b is PageBand) && !kept.contains(ObjectIdentifier(b)) && !blocks.contains(where: { $0 === b }) { b.removeFromSuperview() }
@@ -811,6 +832,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
       }
       blocks.append(group(lines))
     }
+    flattenGroups()
     keepUnchanged(oldBlocks)
     // Mark complete: only when this person may complete it
     if let c = m["complete"] as? [String: Any], (c["show"] as? Bool) == true { fab.isHidden = false } else { fab.isHidden = true }
@@ -848,7 +870,8 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     var keys: [String] = [], views: [String: UIView] = [:], geo: [String: PageCell.Geo] = [:], seen: [String: Int] = [:]
     for (k, b) in blocks.enumerated() {
       // (rows and bands go right across; the files row from the page edge to the screen's; the rest on the page edge)
-      let full = b is PageGroup || b is PageBand
+      let member = groupOf[ObjectIdentifier(b)]
+      let full = member != nil || b is PageGroup || b is PageBand
       let x: CGFloat = full ? 0 : M, w = full ? W : (b === descStrip ? W - M : W - 2 * M)
       var h: CGFloat
       if b === titleView { h = ceil(titleView.sizeThatFits(CGSize(width: w, height: .greatestFiniteMagnitude)).height) }
@@ -860,7 +883,8 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
       }
       h = ceil(h)
       let next = k + 1 < blocks.count ? blocks[k + 1] : nil
-      let gap: CGFloat = (b is PageBand || next is PageBand ? (b is PageBand ? 10 : 6) : b.tag == 7 ? 4 : b is PageGroup ? 4 : 10)
+      let sameGroup = member != nil && next.map { groupOf[ObjectIdentifier($0)] } == member
+      let gap: CGFloat = sameGroup ? 0 : (b is PageBand || next is PageBand ? (b is PageBand ? 10 : 6) : b.tag == 7 ? 4 : (b is PageGroup || member != nil) ? 4 : 10)
       let base = listKey(b, next: next)
       let n = seen[base, default: 0]; seen[base] = n + 1
       let key = n == 0 ? base : base + "#\(n)"
@@ -910,15 +934,12 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     if b is DescBox { return "desc" }
     if b === descStrip { return "dstrip" }
     if b is PageBand { return "band>" + (next.map { listKey($0, next: nil) } ?? "end") }
+    if b.layer.name == "k:sep" { return "sep>" + (next.map { listKey($0, next: nil) } ?? "end") }
     return blockKey(b)
   }
-  var kbCover: CGFloat = 0
-  private func keyboardMoved(_ n: Notification) {
-    guard let f = (n.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue, window != nil else { return }
-    let mine = convert(bounds, to: nil)
-    kbCover = max(0, mine.maxY - f.minY)
-    setNeedsLayout()
-  }
+  // how much of the page the keyboard covers (Apple's keyboard guide)
+  private let kbMark = UIView()
+  var kbCover: CGFloat { kbMark.frame.minY > 0 ? max(0, bounds.height - kbMark.frame.minY) : 0 }
   // the description's cursor in sight, above the keyboard and its format bar
   func caretIntoView() {
     guard descView.isFirstResponder, let r = descView.selectedTextRange else { return }
