@@ -6749,7 +6749,8 @@ function postComment(t, replyTo, text, html, files) {
   // thread participants also hear about replies
   const skip = [...mentioned];
   if (replyTo) {
-    const people = new Set(t.comments.filter((c) => c.id === replyTo || c.parentId === replyTo).map((c) => c.authorId));
+    // (who wrote in it (and anyone @mentioned in that thread — Haris 2026-11-08))
+    const people = new Set(); t.comments.filter((c) => c.id === replyTo || c.parentId === replyTo).forEach((c) => { people.add(c.authorId); mentionsIn(c.html).forEach((x) => people.add(x)); });
     people.forEach((u) => { if (!mentioned.has(u) && !watchersOf(t).includes(u)) pushNotif(u, t, 'comment', 'replied in a thread on', { snippet: trunc(text, 160), commentId: cid }); });
   }
   notifyWatchers(t, 'comment', replyTo ? 'replied to a comment on' : 'commented on', { snippet: trunc(text || `${files.length} file${files.length === 1 ? '' : 's'}`, 160), skip, commentId: cid });

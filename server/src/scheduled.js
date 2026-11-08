@@ -38,6 +38,9 @@ export function createScheduled({ store, access, webPush, notifMessage, deliver,
   const clientAmsOf = (t) => { const p = proj(rootOf(t).projectId); return p ? (p.ams || []).filter((a) => !a.onLeave).map((a) => a.id) : []; };
   function watchersOf(t) {
     const set = new Set((t.assignees || []).concat(creatorOf(t) ? [creatorOf(t)] : []));
+    // (its Guardian, and anyone @mentioned in its description, hear about it too — Haris 2026-11-08)
+    if (t.guardian) set.add(t.guardian);
+    mentionsIn(t.notesHtml).forEach((x) => set.add(x));
     if (t.parentId) { const p = task(t.parentId); if (p) watchersOf(p).forEach((x) => set.add(x)); }
     return [...set];
   }
@@ -70,7 +73,8 @@ export function createScheduled({ store, access, webPush, notifMessage, deliver,
     const mentioned = mentionsIn(comment.html);
     mentioned.forEach((to) => notify(to, 'mention', `mentioned you in a ${reply ? 'reply' : 'comment'} on`));
     if (reply) {
-      const people = new Set((t.comments || []).filter((c) => c.id === comment.parentId || c.parentId === comment.parentId).map((c) => c.authorId));
+      // (who wrote in the thread (and anyone @mentioned in that thread — Haris 2026-11-08))
+      const people = new Set(); (t.comments || []).filter((c) => c.id === comment.parentId || c.parentId === comment.parentId).forEach((c) => { people.add(c.authorId); mentionsIn(c.html).forEach((x) => people.add(x)); });
       const w = new Set(watchersOf(t));
       people.forEach((to) => { if (!w.has(to)) notify(to, 'comment', 'replied in a thread on'); });
     }

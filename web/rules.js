@@ -452,6 +452,9 @@ var E11Rules = (() => {
     }
     function watchersOf(t) {
       const set = new Set((t.assignees || []).concat(creatorOf(t) ? [creatorOf(t)] : []));
+      // (its Guardian, and anyone @mentioned in its description, hear about it too — Haris 2026-11-08)
+      if (t.guardian) set.add(t.guardian);
+      mentionsIn(t.notesHtml).forEach((x) => set.add(x));
       if (t.parentId) { const p = task(t.parentId); if (p) watchersOf(p).forEach((x) => set.add(x)); }
       return [...set];
     }
@@ -1024,7 +1027,8 @@ var E11Rules = (() => {
       const mentioned = mentionsIn(clean);
       mentioned.forEach((x) => pushNotif(x, t, 'mention', `mentioned you in a ${parentId ? 'reply' : 'comment'} on`, { snippet: trunc(plain, 160), commentId: cid }));
       if (parentId) {
-        const ppl = new Set(t.comments.filter((c) => c.id === parentId || c.parentId === parentId).map((c) => c.authorId));
+        // the thread's people: who wrote in it (and anyone @mentioned in that thread — Haris 2026-11-08)
+        const ppl = new Set(); t.comments.filter((c) => c.id === parentId || c.parentId === parentId).forEach((c) => { ppl.add(c.authorId); mentionsIn(c.html).forEach((x) => ppl.add(x)); });
         ppl.forEach((x) => { if (!mentioned.has(x) && !watchersOf(t).includes(x)) pushNotif(x, t, 'comment', 'replied in a thread on', { snippet: trunc(plain, 160), commentId: cid }); });
       }
       const voice = list.some((f) => f.voice);

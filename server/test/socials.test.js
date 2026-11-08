@@ -145,3 +145,23 @@ test('a Guardian: the task on Home, My Tasks All and Done, and in search', () =>
   assert.ok(ids(screen(V, 'home')).includes('guard-se'), 'a Social Executive who is Guardian: on Home');
   assert.deepEqual([...M.search(R, g, 'u-se', Date.now(), 'Zebra').tasks.map((t) => t.id)], ['guard-se'], 'and in search');
 });
+
+// notifications (Haris 2026-11-08): a task's Guardian and anyone @mentioned in its description hear about it as its
+// assignees do; someone @mentioned in a comment hears the replies in that thread
+test('notifications: the Guardian, the description\'s mentions, and a thread\'s mentions', () => {
+  const n = JSON.parse(JSON.stringify(data));
+  const t = n.tasks.find((x) => x.id === 'other');
+  t.guardian = 'u-y';
+  t.notesHtml = 'Brief for <span class="mention" data-user="u-am0">@Nour</span>';
+  t.comments = [{ id: 'c1', html: 'Can <span class="mention" data-user="u-se2">@Omar</span> check?', text: 'Can @Omar check?', authorId: 'u-a', at: now, parentId: null, attachments: [], reactions: {} }];
+  const { E11Rules: R, E11AppView: V } = engine();
+  const env = { nowISO: () => new Date().toISOString(), nowMs: () => Date.now() };
+  const to = (body) => {
+    const r = V.homeAct(R, n, n.users.find((u) => u.id === 'u-p'), body, env, null);
+    return [...new Set((r.changes || []).filter((c) => c.kind === 'notifications').map((c) => c.data.to))].sort();
+  };
+  // a comment on the task: its creator (the Admin), the Guardian and the description's mention — not the thread's Omar
+  assert.deepEqual(to({ act: 'comment', id: 'other', html: 'Done the first cut', text: 'Done the first cut' }), ['u-a', 'u-am0', 'u-y']);
+  // a reply in the thread: Omar, mentioned in it, hears it too
+  assert.ok(to({ act: 'comment', id: 'other', parentId: 'c1', html: 'Yes', text: 'Yes' }).includes('u-se2'));
+});
