@@ -2281,8 +2281,10 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     var a = a0
     // (a client's page asked for while Home's own screen is on — from Home's search: it opens on the Clients tab, where
     //  the app draws clients' pages; Home is its own screen now — AppleHome.swift)
-    if APPLE_HOME, (a["show"] as? Bool) == true, (a["view"] as? String) == "client", AppleTabs.shared?.homeShown == true {
+    // (and from My Tasks' search, the same — Haris 2026-11-08)
+    if APPLE_HOME, (a["show"] as? Bool) == true, (a["view"] as? String) == "client", AppleTabs.shared?.ownShown == true {
       if (AppleHomeBits.shared.search?.isActive ?? false) { AppleHomeBits.shared.search?.isActive = false }
+      MyTasksVC.shared?.closeSearch()
       a["from"] = ""
       selectTab("projects")
     }

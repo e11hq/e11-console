@@ -166,6 +166,7 @@ final class MyTasksVC: UIViewController, UISearchResultsUpdating, UISearchContro
   }
 
   var scopeShown: Bool { search?.searchBar.showsScopeBar == true }
+  func closeSearch() { if search?.isActive == true { search?.isActive = false } }
   // All / Done picked in Apple's scope bar
   func searchBar(_ b: UISearchBar, selectedScopeButtonIndexDidChange i: Int) {
     UISelectionFeedbackGenerator().selectionChanged()

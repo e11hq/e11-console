@@ -1342,6 +1342,9 @@ extension Main {
       selectTab("reviews")
     case "assets":
       guard let c = go["client"] as? String else { return false }
+      // (Client Assets is drawn on the Clients tab: from a tab with its own Apple screen — the Inbox, My Tasks, Home —
+      //  it opened unseen behind it; it goes to the Clients tab first: Haris 2026-11-08)
+      if AppleTabs.shared?.ownShown == true, tabKeys.contains("projects") { selectTab("projects") }
       assetsCtl.openFromClients(client: c, folder: go["folder"] as? String)
     case "birthday": break
     case "daily": if !dailyNative() { return false }
