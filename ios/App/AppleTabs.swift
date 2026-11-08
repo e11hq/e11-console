@@ -124,7 +124,8 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
   //  laid itself out again at the slide's first moment and Apple's bar snapped small, the big title jumping into it:
   //  build 1547, Haris 2026-11-08. Back to Home: it comes as the slide begins.)
   func homeNavWillShow(_ vc: UIViewController, animated: Bool, nav: UINavigationController? = nil) {
-    let hide = !(vc is TabRoot)
+    // (the Clients tab's pages — a client's page, Client Assets, a folder — keep the tab bar: Haris 2026-11-08 "all will have navbar")
+    let hide = !(vc is TabRoot || vc is ClientsPushedVC)
     guard let tc = (nav ?? homeNav).transitionCoordinator else { hideBar(hide, animated: animated); return }
     if hide {
       tc.animate(alongsideTransition: nil) { [weak self] c in if !c.isCancelled { self?.hideBar(true, animated: true) } }

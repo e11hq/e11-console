@@ -7,7 +7,7 @@ import UIKit
      buttons (Haris: "Talk button on top same as home"), the clients in Apple's list, "+ Add client" as Home's button, Apple's
      own frost untouched;
    · a client's page, a client's Client Assets and a folder are pushed pages, as the task page: Apple's push, Apple's bar
-     (‹ · the name in the middle · •••, Apple's own menu), the tab bar hidden once the page has arrived (AppleTabs), each
+     (‹ · the name in the middle · •••, Apple's own menu), the tab bar staying under them (Haris 2026-11-08 — only a task or a reply hides it), each
      thing its own cell of Apple's list, Apple's firm frost with its line.
    The screens' contents are HomeView's, as they were; only where they live and who draws the bar changed. */
 let APPLE_CLIENTS = APPLE_NAV
@@ -142,12 +142,10 @@ class ClientsPushedVC: UIViewController {
     navigationItem.rightBarButtonItem = more
   }
   func menuItems() -> [CornerMenuItem] { h.menuItems }
-  // (no tab bar here once the page has arrived: "+ New task" / "↑ Upload" at the bottom, as the task page's button)
+  // (the tab bar stays under these pages — Haris 2026-11-08: "+ New task" / "↑ Upload" above it, as on the tab's first page)
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
-    if h.superview === view {
-      h.tabTop = view.bounds.height - max(view.window?.safeAreaInsets.bottom ?? view.safeAreaInsets.bottom, 20) + 6
-    }
+    if h.superview === view { h.tabTop = Main.shared.homeTabTop }
   }
   // the bar's middle: the name (a client's: its colour or logo beside it), and the line under it (Client Assets)
   private var shownBar = ""
