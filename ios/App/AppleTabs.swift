@@ -116,12 +116,29 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
   // the tab on show is one with its own navigation (Home, My Tasks) — and that navigation
   var ownNav: AppleNav? { [homeNav, myTasksNav, inboxNav, clientsNav, assetsNav, meNav].first { $0 === selectedViewController } }
   var ownShown: Bool { ownNav != nil }
+  // (no tab of the app's own screen left — every tab its own Apple screen)
+  private var noSlot: Bool { !slots.isEmpty && !slots.indices.contains { !own($0) } }
+  private let spare = TabSlot()
+  // the app's own screen kept out of sight inside Me's (or Home's) screen: still in the app, so what it presents opens
+  private func stash() {
+    guard let holder: UIViewController = (meAt != nil ? MeVC.shared as UIViewController? : nil) ?? homeNav.viewControllers.first else { return }
+    guard nav.parent !== holder else { return }
+    if nav.parent != nil { nav.willMove(toParent: nil); nav.view.removeFromSuperview(); nav.removeFromParent() }
+    holder.loadViewIfNeeded()
+    holder.addChild(nav)
+    nav.view.frame = holder.view.bounds
+    nav.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    nav.view.isHidden = true; nav.view.isUserInteractionEnabled = false
+    holder.view.insertSubview(nav.view, at: 0)
+    nav.didMove(toParent: holder)
+  }
   private func own(_ i: Int) -> Bool { i == homeAt || i == myTasksAt || i == inboxAt || i == clientsAt || i == assetsAt || i == meAt }
   private func tabVC(_ i: Int) -> UIViewController { i == homeAt ? homeNav : i == myTasksAt ? myTasksNav : i == inboxAt ? inboxNav : i == clientsAt ? clientsNav : i == assetsAt ? assetsNav : i == meAt ? meNav : slots[i] }
 
   private func host(in s: TabSlot) {
     guard nav.parent !== s else { return }
     if nav.parent != nil { nav.willMove(toParent: nil); nav.view.removeFromSuperview(); nav.removeFromParent() }
+    nav.view.isHidden = false; nav.view.isUserInteractionEnabled = true
     s.loadViewIfNeeded()
     s.addChild(nav)
     nav.view.frame = s.view.bounds
@@ -172,6 +189,7 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
       let keep = nav.parent as? TabSlot
       setViewControllers(items.indices.map { tabVC($0) }, animated: false)
       if let k = keep, !slots.enumerated().contains(where: { $0.element === k && !own($0.offset) }) { if let j = slots.indices.first(where: { !own($0) }) { host(in: slots[j]) } }
+      if noSlot { stash() }
     }
     for (i, it) in items.enumerated() {
       let t = tabVC(i).tabBarItem!
@@ -199,6 +217,20 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
   // (a task) hides it Apple's way
   func mirrorShown(animated: Bool = false, top: UIViewController? = nil) {
     let main = Main.shared
+    // (every tab its own Apple screen — Me's too, AppleMe.swift: no tab holds the app's own screen any more. With no tabs
+    //  — the sign-in page, the website's own screens — it goes into a tab of its own, out of sight with the tab bar;
+    //  with tabs, it's kept out of sight in Me's screen, still part of the app, so sheets can open from it)
+    if noSlot {
+      if main.tabsHidden {
+        if !(viewControllers ?? []).contains(spare) { setViewControllers((viewControllers ?? []) + [spare], animated: false) }
+        host(in: spare)
+        if selectedViewController !== spare { selectedViewController = spare }
+      } else if (viewControllers ?? []).contains(spare) {
+        setViewControllers((viewControllers ?? []).filter { $0 !== spare }, animated: false)
+        stash()
+        if let sel = main.tabBar.selectedItem?.tag { select(sel) }
+      } else if nav.parent == nil || (nav.parent is TabSlot && !(viewControllers ?? []).contains(nav.parent!)) { stash() }
+    }
     // (no tabs — the sign-in page, the website's own screens: the app's own navigation on show, not Home's)
     if main.tabsHidden && ownShown, let j = slots.indices.first(where: { !own($0) }), selectedIndex != j {
       host(in: slots[j]); selectedIndex = j

@@ -1891,7 +1891,9 @@ final class MeCtl {
       vc.onGone = { [weak self, weak h = s.h] in if let h = h { self?.navGone(h) } }
       vc.loadViewIfNeeded()
       draw(s)   // (in Apple's list now)
-      n.pushViewController(vc, animated: animated && n.view.window != nil)
+      // (Apple's navigation still moving — a page going back: pushed once it has settled, else Apple drops the push)
+      let go = { [weak n] in guard let n = n else { return }; n.pushViewController(vc, animated: animated && n.view.window != nil) }
+      if let tc = n.transitionCoordinator { tc.animate(alongsideTransition: nil) { _ in DispatchQueue.main.async { go() } } } else { go() }
       main.updateCorner()
       return
     }
