@@ -73,7 +73,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   var onComplete: (() -> Void)?
   // iPhone's own sheet (NativeSheetVC): its args, a tick (several), the answer (a row, or -2 with what was typed)
   var onSheet: (([String: Any], @escaping (Int) -> Void, @escaping (Int, String?) -> Void) -> Void)?
-  var light = LAST_LIGHT { didSet { applyLook() } }
+  var light = LAST_LIGHT { didSet { if light != oldValue { applyLook() } } }   // (only a real change of look draws the page again)
   private(set) var tab = "details"
 
   // Details: Apple's list (step 2, Haris 2026-11-08) — each section, row group, note and heading a cell of iPhone's own

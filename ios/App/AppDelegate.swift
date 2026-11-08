@@ -326,6 +326,10 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   func followPhoneLook() {
     let tc = (APPLE_TABS ? AppleTabs.shared?.traitCollection : nil) ?? traitCollection
     guard FOLLOW_DEVICE, tc.userInterfaceStyle != .unspecified else { return }
+    // (going to another app, iPhone takes the app's picture in light and in dark for its app switcher, telling the app each
+    //  look for a moment — not the phone changing: the app switched its whole look there and back, every screen drawn
+    //  again, Haris 2026-11-08. Only a change while the app is in front counts; coming back it's read again.)
+    guard UIApplication.shared.applicationState != .background else { return }
     let light = tc.userInterfaceStyle == .light
     if (appStyle == .light) != light { run("setAppearance", ["mode": light ? "light" : "dark"]) { _ in } }
   }
@@ -1116,7 +1120,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   func ownAppearanceWatch() {
     guard lookTimer == nil else { return }
     lookTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.ownAppearanceTick() }
-    NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in self?.ownAppearanceTick() }
+    NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in self?.ownAppearanceTick(); self?.followPhoneLook() }   // (and the phone's look, changed while away)
   }
   func ownAppearanceTick() {
     if FOLLOW_DEVICE { return }
