@@ -234,7 +234,7 @@ Apple's list, the firm frost with its line, Apple's search for a client's files,
 as before).
 
 **iPhone Me and its pages — in Apple's navigation, as iPhone's Settings (Haris 2026-11-08 20:07: "start the me page …
-me page and its inner pages"; bar: "Nothing"; "No search"):** Me is its tab's own Apple screen (AppleMe.swift, AppleTabs'
+me page and its inner pages"; bar: "Nothing"; "No search"):** Me is its tab's own Apple screen, its big title "Settings" (the tab stays "Me") (AppleMe.swift, AppleTabs'
 `meNav`); its pages pushed on it (MePageVC — the tab bar staying, Apple's firm frost). Rows are Apple's own: grouped
 sections, Apple's headers / footers, Apple's list cells set by Apple's configurations, ›, value, Apple's switch, Apple's
 highlight (`HomeView.applyMeList` — a path only Me's pages use; Haris: "Yes, go ahead"). Ours, shown by Apple's cells: the

@@ -2042,7 +2042,7 @@ final class MeCtl {
   private func draw(_ s: Screen) {
     var mm: [String: Any] = ["show": true, "me": me ?? "", "look": ["light": light]]
     if let l = main.homeLook as? [String: Any], (l["light"] as? Bool) == light { mm["look"] = l }
-    if s.kind == "me" { mm["title"] = "Me"; mm["date"] = "E11 Console App" }
+    if s.kind == "me" { mm["title"] = apple ? "Settings" : "Me"; mm["date"] = "E11 Console App" }   // (in Apple's navigation: "Settings" — Haris 2026-11-08; the tab stays "Me")
     if s.h.assets == "overviewTab" { mm["title"] = "Overview"; mm["date"] = Date().formatted(.dateTime.weekday(.wide).month(.wide).day()) }
     if s.h.assets == "claimsTab" { mm["title"] = "Claims"; mm["date"] = "Reimbursements" }
     if s.h.assets == "reviewsTab" { let n = ((model["reviews"] as? [String: Any])?["waiting"] as? [Any])?.count ?? 0; mm["title"] = "Reviews"; mm["date"] = model["reviews"] == nil ? "" : n == 0 ? "Nothing waiting" : n == 1 ? "1 request waiting" : "\(n) requests waiting" }

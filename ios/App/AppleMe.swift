@@ -38,7 +38,7 @@ final class MeVC: UIViewController, TabRoot {
   override func viewDidLoad() {
     super.viewDidLoad()
     navigationItem.backButtonDisplayMode = .minimal
-    navigationItem.title = "Me"
+    navigationItem.title = "Settings"   // (the page says Settings — Haris 2026-11-08; the tab stays "Me")
   }
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
