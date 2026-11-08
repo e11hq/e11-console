@@ -120,7 +120,20 @@ final class CommentsFeed: UIView, UIScrollViewDelegate, UIGestureRecognizerDeleg
     guard let b = box, !b.isHidden, let host = b.superview, isDescendant(of: host) else { return }
     let room = max(0, convert(bounds, to: host).maxY - b.frame.minY) + 6
     if abs(room - bottomRoom) > 0.5 { bottomRoom = room }
+    // (Apple's soft blur fading the comments as they go under the comment box, as the Claude app's — Haris 2026-11-08:
+    //  the list's own bottom edge, told that the box is over it; the box is shared by the comments and a reply's page,
+    //  so it points at whichever list it's over now)
+    if #available(iOS 26.0, *) {
+      if scroll.bottomEdgeEffect.style != .soft { scroll.bottomEdgeEffect.style = .soft }
+      let mine = edgeHook as? UIScrollEdgeElementContainerInteraction
+      if mine?.view !== b {
+        for i in b.interactions where i is UIScrollEdgeElementContainerInteraction { b.removeInteraction(i) }
+        let i = UIScrollEdgeElementContainerInteraction(); i.scrollView = scroll; i.edge = .bottom
+        b.addInteraction(i); edgeHook = i
+      }
+    }
   }
+  private var edgeHook: AnyObject?
 
   init(task: String, thread: String?) {
     taskId = task; self.thread = thread
