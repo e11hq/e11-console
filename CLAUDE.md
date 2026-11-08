@@ -178,13 +178,17 @@ stays too). **Nothing may touch either page — its look, behaviour or code — 
 including a change made for another page or a shared piece they use (the frost, the floating button, the keyboard rule,
 CommentsFeed, PageCell, AppleTabs, AppleNav…). Project doc `claude/ios-apple-structure.md`.
 - **Every other page follows the locked page of its category** (Don't 9):
-  - **Big-title pages** (My Tasks, Inbox, Clients, Me) follow **Home**: Apple's navigation in Apple's tab bar, Apple's big
+  - **Big-title pages** — every tab's first screen: My Tasks, Inbox, Clients, Me, and the role tabs: Content plans (Social),
+    Reviews (the CD), Overview / Team / Claims / Expenses (Office Admin) — follow **Home**: Apple's navigation in Apple's tab bar, Apple's big
     title and line, Apple's search in the bar, Apple's bar buttons, our cards in Apple's list with Apple's swipes, **Apple's
     own frost untouched** (as Home), the floating button as Home's.
-  - **Pushed pages** (a client's page, Client Assets and its folders, a team member, Me's pages, a reply…) follow **the task
-    page**: Apple's push, Apple's bar with ‹ / name or control in the middle / •••, the tab bar hidden once the page has
+  - **Pushed pages** — anything opened from a tab: a client's page, Client Assets and its folders, a team member, Me's pages,
+    a reply, a content plan (and Content plans opened from Me), a CD's review request, a claim or an expense — follow **the
+    task page**: Apple's push, Apple's bar with ‹ / name or control in the middle / •••, the tab bar hidden once the page has
     arrived (Apple's call), each row its own cell of Apple's list (frame placing), **Apple's firm frost with its line**, the
     keyboard rule (lists scroll while typing, drag down, a tap only puts it down).
+- Sheets (New task, Add claim / expense, Request amendments, a plan's post, the date and people sheets) are neither: they
+  stay iPhone's own sheets as they are.
 - What 1571 holds beyond the 1550 lock: Home's frost Apple's own (`.automatic`); "+ New task" not greyed behind a sheet;
   the task page: Details · Comments in Apple's bar, the client line, every row its own cell, the keyboard guide; comments:
   smooth scroll to a highlighted comment, scrolling while typing, Apple's soft blur under the comment box.
