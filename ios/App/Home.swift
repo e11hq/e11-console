@@ -1664,7 +1664,10 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     showResults(r)
   }
   private func showResults(_ r: [String: Any]?) {
-    resultViews.forEach { $0.removeFromSuperview() }
+    // (Apple's list: the results live in its cells — never taken out of them here; a card still found stays in its cell.
+    //  Taken out, a card that didn't change wasn't put back (its cell isn't set again), and the tasks found went blank:
+    //  Haris 2026-11-08)
+    if !listOn { resultViews.forEach { $0.removeFromSuperview() } }
     resultViews = []
     var seen = Set<String>()
     let q = (field.text ?? "").trimmingCharacters(in: .whitespaces)
@@ -1673,14 +1676,14 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       let clients = (r["clients"] as? [[String: Any]] ?? []).map { var x = $0; x["marks"] = marks; return x }, tasks = (r["tasks"] as? [[String: Any]] ?? []).map { var x = $0; x["marks"] = marks; return x }
       walkFirst = (tasks.first?["id"] as? String, clients.first?["id"] as? String)
       // (a word that only matched as a typo: "Showing results for ford (you typed “frod”)" — app.js searchFixedNote)
-      if let fx = r["fixed"] as? [[String: Any]], !fx.isEmpty { let n = SearchFixedNote(); n.set(fx, light: L.light); results.addSubview(n); resultViews.append(n) }
+      if let fx = r["fixed"] as? [[String: Any]], !fx.isEmpty { let n = SearchFixedNote(); n.set(fx, light: L.light); if !listOn { results.addSubview(n) }; resultViews.append(n) }
       if !clients.isEmpty {
         resultViews.append(groupHead("Clients", clients.count))
         for c in clients {
           let row = HomeClientRow(); row.set(c, look: L); _ = PressShrink.add(to: row)
           let id = c["id"] as? String ?? ""
           row.addAction(UIAction { [weak self] _ in self?.resignSearch(); self?.send(["ev": "client", "id": id]) }, for: .touchUpInside)
-          results.addSubview(row); resultViews.append(row)
+          if !listOn { results.addSubview(row) }; resultViews.append(row)
         }
       }
       if !tasks.isEmpty {
@@ -1706,7 +1709,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
             resultCards[id] = v
           }
           v.people = people; v.set(c, look: L)
-          results.addSubview(v); resultViews.append(v)
+          if !listOn { results.addSubview(v) }; resultViews.append(v)
         }
       }
       hint.text = clients.isEmpty && tasks.isEmpty ? "No tasks found. Try a client or person’s name." : nil
@@ -1717,7 +1720,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }
   // what Client Assets found (its rows, as blocks), or what to say
   func showFound(_ views: [UIView], hint t: String?) {
-    resultViews.forEach { $0.removeFromSuperview() }
+    if !listOn { resultViews.forEach { $0.removeFromSuperview() } }   // (Apple's list: they live in its cells — as showResults)
     resultViews = views
     hint.text = t; hint.textColor = L.empty
     if listOn { applyList(animated: false); return }   // (Apple's list: the results are its rows — Client Assets' search)
