@@ -148,11 +148,6 @@ follows it (Don't 9); don't change any of it without Haris. Project doc `claude/
   and comes back as the slide back begins — never "hide the bottom bar when pushed", and nothing told to the tab bar at
   the slide's first moment: either makes Apple's bar snap small and the big title jump into it.
 
-**Before the next App Store review — to do then, not now (Haris, 2026-11-08):** light ↔ dark switching smoothly, Apple's
-way (task page step 5 — project doc `claude/ios-task-page-apple.md`): our screens' colours as Apple's dynamic colours so
-iOS fades the whole app itself; the tab bar follows the phone. About 110 places, every native screen. Remind Haris
-before anything is sent for review.
-
 **Before the next App Store review — remember (Haris, 2026-11-08):** do **light ↔ dark switching smoothly, Apple's way**
 first (task page plan step 5, project doc `claude/ios-task-page-apple.md`): our screens' colours as Apple's dynamic
 colours so iOS fades the look itself, the tab bar following the phone. Not now — only before sending the iPhone app to
