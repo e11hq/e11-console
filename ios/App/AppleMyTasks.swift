@@ -123,7 +123,8 @@ final class MyTasksVC: UIViewController, UISearchResultsUpdating, UISearchContro
   private func names(_ act: String) -> String? {
     let n = chips.filter { ($0["act"] as? String) == act }.map(chipName)
     if n.isEmpty { return nil }
-    return n.count <= 2 ? n.joined(separator: ", ") : "\(n[0]) + \(n.count - 1) more"
+    // (one name; more: the first and how many more — "Ali Raza + 1 more", Haris 2026-11-08)
+    return n.count == 1 ? n[0] : "\(n[0]) + \(n.count - 1) more"
   }
 
   // ---------- Apple's menu: what's on, and changing it (each person sees only the filters their role has) ----------
