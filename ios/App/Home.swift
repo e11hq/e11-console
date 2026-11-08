@@ -1162,7 +1162,11 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     }
     showMotto()
   }
-  func scrollToTop() { sv.setContentOffset(CGPoint(x: 0, y: -inTop), animated: true); userScrolled = false }
+  func scrollToTop() { sv.setContentOffset(CGPoint(x: 0, y: -(appleTop ? max(appleOpenTop, inTop) : inTop)), animated: true); userScrolled = false }
+  // (under Apple's bar: the list's top with the big title open — the room above the list is measured from the bar as it is
+  //  now, so scrolled with the small title showing, "the top" stopped where the small title forms and Apple's bar never
+  //  opened the big title again: Haris 2026-11-08. Remembered while the big title is open: the most room it has given.)
+  private var appleOpenTop: CGFloat = 0
   // a block's row brought to about 40% down the screen (an Inbox update opening the Reviews on its request)
   func scrollToShow(_ v: UIView, animated: Bool = true) {
     layoutIfNeeded()
@@ -1171,7 +1175,10 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let y = max(-inTop, min(r.midY - sv.bounds.height * 0.4, sv.contentSize.height + inBottom - sv.bounds.height))
     sv.setContentOffset(CGPoint(x: 0, y: y), animated: animated)
   }
-  func scrollViewDidScroll(_ scrollView: UIScrollView) { if scrollView === scroll || scrollView === list { layoutHeader(); showMotto() } }
+  func scrollViewDidScroll(_ scrollView: UIScrollView) {
+    if scrollView === scroll || scrollView === list { layoutHeader(); showMotto() }
+    if appleTop, !searching, scrollView === sv, sv.adjustedContentInset.top > appleOpenTop { appleOpenTop = sv.adjustedContentInset.top }
+  }
   // (Apple's bar coming in — after the startup screen, or back from another tab — or its big title growing: a list that
   //  was at its top stays at its top, the big title showing; it opened scrolled under the small title — Haris 2026-11-07)
   // (until you scroll it yourself, Home's list stays at its very top with the big title — whatever room the bars, the
