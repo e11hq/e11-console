@@ -200,7 +200,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if isMe {
       cv.allowsSelection = true
       let head = UICollectionView.SupplementaryRegistration<UICollectionViewListCell>(elementKind: UICollectionView.elementKindSectionHeader) { [weak self] v, _, ip in
-        var c = UIListContentConfiguration.groupedHeader(); c.text = self?.meSection(ip.section)?.head; v.contentConfiguration = c
+        var c = UIListContentConfiguration.groupedHeader(); c.text = self?.meSection(ip.section)?.head; c.textProperties.font = .systemFont(ofSize: 13); c.textProperties.color = .secondaryLabel; v.contentConfiguration = c   // (Apple's header at the size Me had: 13 grey — Haris 2026-11-08)
       }
       let foot = UICollectionView.SupplementaryRegistration<UICollectionViewListCell>(elementKind: UICollectionView.elementKindSectionFooter) { [weak self] v, _, ip in
         var c = UIListContentConfiguration.groupedFooter()
