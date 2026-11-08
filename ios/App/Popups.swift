@@ -327,7 +327,7 @@ final class ViewAsSheet: UIViewController, UITableViewDataSource, UITableViewDel
 final class GreetingView: UIView {
   private let blur = UIVisualEffectView(effect: nil), card = UIVisualEffectView(effect: nil), confetti = CAEmitterLayer()
   private let stack = UIStackView()
-  init(dark: Bool, top: UIView, title: String, sub: String) {
+  init(dark: Bool, top: UIView, pre: String = "", title: String, sub: String) {
     super.init(frame: .zero)
     overrideUserInterfaceStyle = dark ? .dark : .light
     addSubview(blur)
@@ -337,6 +337,8 @@ final class GreetingView: UIView {
     addSubview(card)
     stack.axis = .vertical; stack.alignment = .center; stack.spacing = 8
     stack.addArrangedSubview(top); stack.setCustomSpacing(18, after: top)
+    // (a colleague's birthday: "Today is" small and grey over the title — Haris 2026-11-08)
+    if !pre.isEmpty { let p = Pop.label(pre, 16, .regular, .secondaryLabel, center: true); stack.addArrangedSubview(p); stack.setCustomSpacing(2, after: p) }
     stack.addArrangedSubview(Pop.label(title, 28, .bold, center: true))
     stack.addArrangedSubview(Pop.label(sub, 16, .regular, .secondaryLabel, center: true))
     let tap = Pop.label("Tap anywhere to continue", 13, .regular, .tertiaryLabel, center: true)

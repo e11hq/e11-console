@@ -1531,7 +1531,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     case "greet":
       let show: (UIView) -> Void = { [weak self] top in
         guard let self = self else { return reply(["ok": false]) }
-        let g = GreetingView(dark: dark, top: top, title: a["title"] as? String ?? "", sub: a["sub"] as? String ?? "")
+        let g = GreetingView(dark: dark, top: top, pre: a["pre"] as? String ?? "", title: a["title"] as? String ?? "", sub: a["sub"] as? String ?? "")
         g.onGone = { reply(["ok": true]) }
         g.show(in: self.view.window ?? self.view)
       }

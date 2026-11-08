@@ -1346,7 +1346,10 @@ extension Main {
       //  it opened unseen behind it; it goes to the Clients tab first: Haris 2026-11-08)
       if AppleTabs.shared?.ownShown == true, tabKeys.contains("projects") { selectTab("projects") }
       assetsCtl.openFromClients(client: c, folder: go["folder"] as? String)
-    case "birthday": break
+    case "birthday":
+      // (their greeting, as the occasion's: their photo or initials, "Today is" over "<name>’s birthday" — Haris 2026-11-08)
+      guard let who = go["person"] as? [String: Any] else { break }
+      popCommand(["kind": "greet", "pre": "Today is", "title": go["title"] as? String ?? "", "sub": "Wish them a happy birthday", "person": who]) { _ in }
     case "daily": if !dailyNative() { return false }
     case "plan":
       guard let pid = go["id"] as? String else { return false }
