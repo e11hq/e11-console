@@ -1791,32 +1791,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private var firstCard: HomeCard? { content.compactMap { $0 as? HomeCard }.first }
   func selfSwipe() { if let c = firstCard { setOpen(c, true) } }
   func selfPress() { if let c = firstCard { attach(c) } }
-  // TEMPORARY measuring (the "+ New task" snap, Haris 2026-11-08): pressed and let go as a finger does, the New task
-  // sheet opened and closed — the button's state every frame; taken out once the cause is found
-  func selfFabTrace(close: @escaping () -> Void, _ out: @escaping ([[String: Any]]) -> Void) {
-    var rows: [[String: Any]] = []; let t0 = CACurrentMediaTime(); var closed = false
-    func keys(_ l: CALayer, _ d: Int) -> [String] {
-      var k = (l.animationKeys() ?? []).map { "\(type(of: l)):\($0)" }
-      if d < 8 { for c in l.sublayers ?? [] { k += keys(c, d + 1) } }
-      return k
-    }
-    fab.isHighlighted = true
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
-      guard let self else { return }
-      self.fab.isHighlighted = false; self.fab.sendActions(for: .touchUpInside)
-    }
-    let link = CADisplayLinkBox { [weak self] stop in
-      guard let self else { return stop() }
-      let t = CACurrentMediaTime() - t0
-      if t > 1.9, !closed { closed = true; close() }
-      let tl = self.fab.titleLabel, iv = self.fab.imageView
-      rows.append(["t": (t * 1000).rounded(), "hl": self.fab.isHighlighted, "tint": self.fab.tintAdjustmentMode.rawValue,
-                   "titleA": Double(tl?.layer.presentation()?.opacity ?? -1), "titleC": tl?.textColor.description ?? "", "imgA": Double(iv?.layer.presentation()?.opacity ?? -1),
-                   "fabA": Double(self.fab.layer.presentation()?.opacity ?? -1), "win": self.fab.window != nil, "keys": keys(self.fab.layer, 0)])
-      if t > 3.8 { stop(); out(rows) }
-    }
-    _ = link
-  }
   func selfSwipeRight() { if let c = firstCard { setOpen(c, true, leading: true) } }
   func selfClose() { if let o = openCard { setOpen(o, false) } }
   func selfScroll(_ y: CGFloat) { userScrolled = y > 0; sv.setContentOffset(CGPoint(x: 0, y: y - inTop), animated: false); layoutHeader(); if !appleTop { setBar(barIn, now: true) } }
@@ -2855,14 +2829,4 @@ final class HostCell: UICollectionViewListCell {
     r.size.height = h
     return r
   }
-}
-
-// TEMPORARY measuring (see selfFabTrace) — a display link that calls back each frame until stopped
-final class CADisplayLinkBox: NSObject {
-  private var link: CADisplayLink?; private let tick: (@escaping () -> Void) -> Void
-  init(_ tick: @escaping (@escaping () -> Void) -> Void) {
-    self.tick = tick; super.init()
-    let l = CADisplayLink(target: self, selector: #selector(step)); l.add(to: .main, forMode: .common); link = l
-  }
-  @objc private func step() { tick { [weak self] in self?.link?.invalidate(); self?.link = nil } }
 }
