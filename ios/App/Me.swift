@@ -1820,7 +1820,7 @@ final class MeCtl {
     KeyboardShield.attach(h)
     // (Team members, Expenses, Reviews: a swipe across the middle switches the two lists, as the task page's Details ·
     //  Comments — Haris 2026-11-04; the edge is left to the swipe back)
-    if ["team", "expenses", "reviews"].contains(kind) {
+    if ["team", "expenses", "reviews"].contains(kind), !(appleNav != nil && kind == "team") {   // (Team members in Apple's navigation: Apple's scope bar, no swipe of ours)
       SegSwipe.attach(h) { [weak self, weak h] dir in
         guard let self = self, let h = h, let s = self.screenOf(h) else { return }
         let to = dir < 0 ? 1 : 0
@@ -1892,9 +1892,10 @@ final class MeCtl {
       if !pageModel.isEmpty { model = own(pageModel) }
       // (Me: its tab's first screen)
       if stack.count == 1, let vc = MeVC.shared { vc.adopt(s.h); draw(s); main.updateCorner(); return }
-      draw(s)
+      // (its Apple page made first: what it draws knows it's in Apple's navigation — Team members' search in Apple's bar)
       let vc = MePageVC(s.h)
       pageVCs[ObjectIdentifier(s.h)] = vc
+      draw(s)
       vc.onGone = { [weak self, weak h = s.h] in if let h = h { self?.navGone(h) } }
       vc.loadViewIfNeeded()
       draw(s)   // (in Apple's list now)
@@ -2533,6 +2534,13 @@ final class MeCtl {
     let admin = (t["admin"] as? Bool) == true
     if h.assets != "teamTab" { h.drawAssetsBar(name: "Team members", sub: t.isEmpty ? "" : "\(t["active"] as? Int ?? 0) active · \(t["pastN"] as? Int ?? 0) past", logo: nil, rgb: nil, ini: nil, showLogo: false) }
     if t.isEmpty { let n = part(h, "wait") { AssetsNote() }; n.label.text = "Loading…"; out.append(n); return }
+    // (in Apple's navigation: Apple's own search bar in Apple's bar, Active / Past as its scope bar under it — as My Tasks'
+    //  All / Done; nothing of ours over Apple's bar — Haris 2026-11-08 "Team members page top area")
+    if let vc = pageVCs[ObjectIdentifier(h)] {
+      vc.useSearch("Search people", scopes: ["Active · \(t["active"] as? Int ?? 0)", "Past · \(t["pastN"] as? Int ?? 0)"], selected: teamTab)
+      vc.onSearch = { [weak self, weak h] q in guard let self = self, let h = h, self.teamQ != q else { return }; self.teamQ = q; self.blocks(h) }
+      vc.onScope = { [weak self, weak h] i in guard let self = self, let h = h, self.teamTab != i else { return }; self.teamTab = i; self.blocks(h) }
+    } else {
     let seg = part(h, "seg") { SegBlock() }
     seg.set("Active · \(t["active"] as? Int ?? 0)", "Past · \(t["pastN"] as? Int ?? 0)", teamTab)
     // (Active ↔ Past: the other list there at once, as iPhone's own segmented lists — nothing slides into place;
@@ -2545,6 +2553,7 @@ final class MeCtl {
     let stack = part(h, "pin") { PinStack() }
     stack.set([seg, find])
     if h.pinHead !== stack { h.pinHead = stack }
+    }
     let norm = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
     let q = norm(teamQ.trimmingCharacters(in: .whitespaces))
     // (typos forgiven, the words marked — every search alike: Haris 2026-11-06)

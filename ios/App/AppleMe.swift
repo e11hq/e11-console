@@ -79,8 +79,32 @@ final class MeVC: UIViewController, TabRoot {
 }
 
 // a page of Me pushed on its tab: as the Clients tab's pages (tab bar staying, Apple's firm frost, Apple's bar)
-final class MePageVC: ClientsPushedVC {
+final class MePageVC: ClientsPushedVC, UISearchResultsUpdating, UISearchBarDelegate {
   var onGone: (() -> Void)?
+  // (a page with a search — Team members: Apple's own search bar in Apple's bar, its lists as Apple's scope bar under it)
+  private var search: UISearchController?
+  var onSearch: ((String) -> Void)?, onScope: ((Int) -> Void)?
+  func useSearch(_ placeholder: String, scopes: [String], selected: Int) {
+    if search == nil {
+      let s = UISearchController(searchResultsController: nil)
+      s.obscuresBackgroundDuringPresentation = false
+      s.searchResultsUpdater = self
+      s.searchBar.autocorrectionType = .no
+      s.searchBar.delegate = self
+      if !scopes.isEmpty { s.searchBar.scopeButtonTitles = scopes; s.searchBar.showsScopeBar = true; if #available(iOS 16.0, *) { s.scopeBarActivation = .manual } }
+      search = s
+      navigationItem.searchController = s
+      navigationItem.hidesSearchBarWhenScrolling = false
+      if #available(iOS 16.0, *) { navigationItem.preferredSearchBarPlacement = .stacked }
+    }
+    // (each only when it changes — set again on every redraw, Apple's bar laid itself out again)
+    guard let b = search?.searchBar else { return }
+    if b.placeholder != placeholder { b.placeholder = placeholder }
+    if !scopes.isEmpty, (b.scopeButtonTitles ?? []) != scopes { b.scopeButtonTitles = scopes }
+    if !scopes.isEmpty, b.selectedScopeButtonIndex != selected { b.selectedScopeButtonIndex = selected }
+  }
+  func updateSearchResults(for s: UISearchController) { onSearch?(s.searchBar.text ?? "") }
+  func searchBar(_ b: UISearchBar, selectedScopeButtonIndexDidChange i: Int) { UISelectionFeedbackGenerator().selectionChanged(); onScope?(i) }
   private(set) var appeared = false
   override func viewDidAppear(_ a: Bool) { super.viewDidAppear(a); appeared = true }
   override init(_ h: HomeView) {
