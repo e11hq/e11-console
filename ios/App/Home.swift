@@ -114,6 +114,10 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   var onAppleTitle: ((String, String) -> Void)?
   var onAppleMe: ((UIImage?) -> Void)?
   var onAppleResign: (() -> Void)?
+  var onAppleFilters: (([String: Any]) -> Void)?   // (My Tasks: its tab, filter buttons and chips — its own screen's bar shows them)
+  // (My Tasks under Apple's bar: All / Done as the first row of Apple's list)
+  private let segWrap = UIView()
+  func menuEvent(_ e: [String: Any]) { send(e) }
   var appleScroll: UIScrollView { listOn ? sv : searching ? results : sv }
   // Home's list as Apple's own list (Haris 2026-11-07: "I like Apple's list"): the same cards, headings and boxes, each
   // in a cell of iPhone's list — Apple's swipe actions (Done · Due, Copy link · Delete) and Apple's animation when cards
@@ -141,7 +145,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     [topBar, blur, title, sub, smallTitle, smallSub, searchCircle, me, searchBar, closeCircle].forEach { $0.isHidden = true }
     onAppleTitle?(title.attributedText?.string ?? "", sub.text ?? "")
     onAppleMe?(me.image(for: .normal))
-    if !isList && !isInbox && !isClients && !isClient && assets == nil { makeAppleList() }
+    if !isInbox && !isClients && !isClient && assets == nil { makeAppleList() }
+    // (My Tasks: its filter rows and chips are in Apple's bar's menu now — taken out; All / Done goes into the list)
+    if isList && !isInbox { listHead.removeFromSuperview(); segWrap.addSubview(seg); if let f = lastFilters { onAppleFilters?(f) } }
     setNeedsLayout()
   }
   private func makeAppleList() {
@@ -177,6 +183,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private func itemHeight(_ key: String, _ v: UIView) -> CGFloat {
     let w = bounds.width - 32
     if key == "stats" { return 80 }
+    if key == "seg" { return 40 }
     if v === hint { return (hint.sizeThatFits(CGSize(width: w, height: 400)).height) + 28 }
     if v is HomeClientRow { return 70 }
     if let n = v as? SearchFixedNote { return n.height(for: w) }
@@ -198,6 +205,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       }
     } else {
     if !noStats { keys.append("stats"); views["stats"] = statsRow }
+    if isList && !isInbox && seg.superview === segWrap { keys.append("seg"); views["seg"] = segWrap }
     for v in content {
       if let c = v as? HomeCard { let k = "c:" + c.id; keys.append(k); views[k] = c; continue }
       if v.tag == 7 && v.isHidden { continue }   // (Today's mark: no heading on screen)
@@ -707,6 +715,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   func setFilters(_ a: [String: Any]) {
     if !isList { isList = true }
     lastFilters = a
+    if appleTop { onAppleFilters?(a) }
     let tab = (a["tab"] as? String) == "done" ? "done" : "all"
     if tab != listTab { listTab = tab; if let o = openCard { setOpen(o, false) } }
     seg.selectedSegmentIndex = listTab == "done" ? 1 : 0
@@ -762,7 +771,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }
   func selfTab(_ t: String) { seg.selectedSegmentIndex = t == "done" ? 1 : 0; seg.sendActions(for: .valueChanged) }
   func listGeo() -> [String: Any] {
-    ["tab": listTab, "pinned": pinned, "headTop": listHead.frame.minY, "barBottom": smallHead, "filters": filterBtns.map { $0.accessibilityIdentifier ?? "" }, "chips": chipBtns.count, "cards": cards.count,
+    ["tab": listTab, "pinned": pinned, "apple": appleTop, "segInList": seg.superview === segWrap, "listOn": listOn, "headTop": listHead.frame.minY, "barBottom": smallHead, "filters": filterBtns.map { $0.accessibilityIdentifier ?? "" }, "chips": chipBtns.count, "cards": cards.count,
      "groups": content.compactMap { ($0 as? UILabel)?.tag == 7 ? $0.accessibilityIdentifier : nil }]
   }
 
@@ -1072,6 +1081,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       if cv.frame != bounds { cv.frame = bounds }
       let bottom = max(0, endRoom - safeAreaInsets.bottom)
       if cv.contentInset.bottom != bottom { cv.contentInset.bottom = bottom }
+      if seg.superview === segWrap { seg.frame = CGRect(x: 0, y: 0, width: W - 32, height: 32) }
       let bw = (W - 32 - 16) / 3, bh: CGFloat = 1 + 10 + 41 + 15 + 12 + 1
       for (i, v) in stats.enumerated() {
         v.frame = CGRect(x: CGFloat(i) * (bw + 8), y: 0, width: bw, height: bh)

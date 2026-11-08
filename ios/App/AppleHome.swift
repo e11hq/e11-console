@@ -168,9 +168,9 @@ extension Main {
     nav.setNavigationBarHidden(true, animated: animated)
   }
   // the navigation on show: Home's own when Home's tab is on, else the app's
-  var stageNav: UINavigationController? { (AppleTabs.shared?.homeShown == true ? AppleTabs.shared?.homeNav : nil) ?? navigationController }
+  var stageNav: UINavigationController? { AppleTabs.shared?.ownNav ?? navigationController }
   // every navigation the app has (Home's and the app's), for what's open in any of them
-  var allNavs: [UINavigationController] { [AppleTabs.shared?.homeNav, navigationController].compactMap { $0 } }
+  var allNavs: [UINavigationController] { [AppleTabs.shared?.homeNav, AppleTabs.shared?.myTasksNav, navigationController].compactMap { $0 } }
   // (a card over the tab bar, View as…: the window — over every tab)
   var stage: UIView { AppleTabs.shared?.view.window ?? view.window ?? view }
 }

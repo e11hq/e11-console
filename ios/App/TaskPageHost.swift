@@ -1203,6 +1203,11 @@ extension Main {
     guard let a = myTasksPageSignal, myTasksOwnSignal(me: a["me"] as? String) != nil else { return false }
     switch ev["ev"] as? String ?? "" {
     case "tab": myTasksTab = (ev["tab"] as? String) == "done" ? "done" : "all"; myTasksAgain(); return true
+    // (Apple's filter menu: a Due choice tapped — on, or off when it was the one on)
+    case "dueSet":
+      let k = ev["k"] as? String ?? ""
+      var f = myTasksF; f["due"] = (f["due"] as? String) == k ? NSNull() : k
+      myTasksF = f; myTasksAgain(); return true
     case "reset", "chip":
       let op: [String: Any] = (ev["ev"] as? String) == "reset" ? ["reset": true] : ["chip": ["act": ev["act"] ?? "", "id": ev["id"] ?? NSNull()]]
       if let f = AppData.shared.meModel("tasks", "myTasksFilters", [myTasksF, op])?["filters"] as? [String: Any] { myTasksF = f; myTasksAgain() }

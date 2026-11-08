@@ -130,7 +130,8 @@ try:
     check(mtd.get('shown') is True and mtd.get('tab') == 'done' and 'tab=done' in (mtd.get('query') or ''), f"My Tasks' Done tab asks the server for completed tasks {mtd}")
     check(mta.get('tab') == 'all' and 'tab=all' in (mta.get('query') or ''), f"back to All {mta}")
     ms = res.get('mytasksScrolledMyTasks') or {}
-    check(ms.get('pinned') is True and abs((ms.get('headTop') or 0) - (ms.get('barBottom') or 0) - 8) < 1, f"scrolled, All / Done and the filters stay under the frost bar {ms}")
+    # (My Tasks under Apple's bar since 2026-11-08: All / Done is the first row of Apple's list, the filters in Apple's menu)
+    check(ms.get('apple') is True and ms.get('segInList') is True and ms.get('listOn') is True, f"My Tasks in Apple's navigation: All / Done in Apple's list {ms}")
     check((res.get('mytasksScrolled') or {}).get('blank') is True, f"the page draws nothing under the app's My Tasks {res.get('mytasksScrolled')}")
     check((res.get('mytasksTopMyTasks') or {}).get('pinned') is False, f"back at the top they're with the list again {res.get('mytasksTopMyTasks')}")
     # (the empty-Inbox / empty-Done runs: what the server itself has for this person now, and who's who)

@@ -175,6 +175,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   override func viewDidLoad() {
     super.viewDidLoad()
     _ = netWatch   // (the phone's connection, for the Me tab's dot)
+    // (the app opened afresh — closed before: My Tasks starts fresh, no filters, All — Haris 2026-11-08; going to another
+    //  app and back keeps them)
+    for k in defaults.dictionaryRepresentation().keys where k.hasPrefix("e11_mytasks_") { defaults.removeObject(forKey: k) }
     let config = WKWebViewConfiguration()
     config.websiteDataStore = .default()             // stay signed in between launches
     config.allowsInlineMediaPlayback = true
@@ -1807,8 +1810,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       self.pageJS("window.__e11MyTasks && window.__e11MyTasks(\(jsonString(ev)))")
     }
     h.present = { [weak self] vc in self?.topMost().present(vc, animated: true) }
-    view.insertSubview(h, belowSubview: tabsMark)
     myTasksIfMade = h
+    // (My Tasks' own screen in its own tab — AppleMyTasks.swift: it goes there, under Apple's bar, as Home's)
+    if APPLE_MYTASKS, let vc = MyTasksVC.shared { vc.adopt(h) } else { view.insertSubview(h, belowSubview: tabsMark) }
     return h
   }()
   func drawServerMyTasks(_ m: [String: Any]) {
