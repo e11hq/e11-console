@@ -1886,15 +1886,14 @@ const isMine = (t) => (t.assignees || []).includes(currentUserId);
 // Each assignee can finish their own part of a shared task: t.partsDone = { userId: isoTime }
 const partDone = (t, u = currentUserId) => !!(t.partsDone || {})[u];
 // Socials' content-plan tasks (Haris 2026-11-08 — as rules.js): a Social Executive's own — the tasks they created from a
-// content plan; a Social Manager's — those made from a plan by them or by any Social Executive. On their My Day and My
+// content plan; a Social Manager's — every task made from a plan, whoever made it. On their My Day and My
 // Tasks with the tasks they're assigned to, open until the whole task is done, and with those the only tasks their search
 // finds
 const isSocialU = (u) => !!u && u.role === 'social' && !isAdm(u) && !isCD(u.id);
 const socialPlanTask = (t, u = me()) => {
   if (!t || t.parentId || !t.planId || !isSocialU(u)) return false;
   if (t.createdBy === u.id) return true;
-  const c = userById(t.createdBy);
-  return socialMgrIds().includes(u.id) && !!c && c.role === 'social';
+  return socialMgrIds().includes(u.id);   // (a Social Manager: every task made from a plan, whoever made it — Haris 2026-11-08 18:22)
 };
 const myOpen = (t) => (socialPlanTask(t) ? !t.done : !t.done && !partDone(t));
 const myDoneAt = (t) => (socialPlanTask(t) ? (t.done ? t.completedAt || null : null) : t.done ? t.completedAt : (t.partsDone || {})[currentUserId] || null);

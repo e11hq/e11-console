@@ -49,7 +49,7 @@ test('a Social Executive: their tasks and the plan tasks they made — Home, My 
 
 test('a Social Manager: their tasks and every plan task by them or a Social Executive', () => {
   const { V } = as('u-sm');
-  assert.deepEqual(ids(screen(V, 'home')), ['plan-se', 'plan-se2', 'plan-sm']);
+  assert.deepEqual(ids(screen(V, 'home')), ['plan-admin', 'plan-se', 'plan-se2', 'plan-sm']);   // (any plan task, an Admin's too)
   assert.deepEqual(ids(screen(V, 'mytasks', JSON.stringify({ tab: 'done' }))), ['done-plan-se']);
 });
 
@@ -79,7 +79,7 @@ test('search: a Social Executive finds their clients and tasks; a Social Manager
   s = M.search(R, data, 'u-sm', Date.now(), 'Northline');
   assert.ok(s.clients.some((c) => c.name === 'Northline'), 'a Social Executive\'s client, for the Social Manager');
   assert.ok(M.search(R, data, 'u-sm', Date.now(), 'Orbit').clients.some((c) => c.name === 'Orbit'), 'every Social Executive\'s');
-  assert.deepEqual([...s.tasks.map((t) => t.id)].sort(), ['done-plan-se', 'plan-se', 'plan-sm']);
+  assert.deepEqual([...s.tasks.map((t) => t.id)].sort(), ['done-plan-se', 'plan-admin', 'plan-se', 'plan-sm']);
 });
 
 test('everyone else as before: an Admin\'s search finds every client and task', () => {
