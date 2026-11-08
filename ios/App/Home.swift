@@ -2628,7 +2628,7 @@ final class ToastCapsule: UIView {
   var onUndo: (() -> Void)?, onPlus: (() -> Void)?, onGone: (() -> Void)?
   var from = CGRect.zero, to = CGRect.zero
   private(set) var out = false
-  private let start = UILabel(), tick = UIImageView(), msg = UILabel(), undo = UIButton(type: .system), plusB = UIButton(type: .system)
+  private let start = UIButton(type: .custom), tick = UIImageView(), msg = UILabel(), undo = UIButton(type: .system), plusB = UIButton(type: .system)
   private let hasPlus: Bool
   private var timer: Timer?, touching = false, closing = false
   // (iOS 26: iPhone's own glass in a glass container — the button's glass and the toast's are one liquid piece, so the
@@ -2667,14 +2667,16 @@ final class ToastCapsule: UIView {
       layer.borderWidth = 1; layer.borderColor = ToastCapsule.line(light).cgColor
       layer.shadowColor = UIColor.black.cgColor; layer.shadowOpacity = light ? 0.08 : 0; layer.shadowRadius = 10; layer.shadowOffset = CGSize(width: 0, height: 3)
     }
-    // ("+ New task" as the button has it — fading away as it stretches, back as it shrinks)
-    let a = NSMutableAttributedString()
-    if let s = sym, let img = UIImage(systemName: s, withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold))?.withTintColor(ink, renderingMode: .alwaysOriginal) {
-      let at = NSTextAttachment(); at.image = img; at.bounds = CGRect(x: 0, y: -2, width: img.size.width, height: img.size.height)
-      a.append(NSAttributedString(attachment: at)); a.append(NSAttributedString(string: "  "))
-    }
-    if let t = title { a.append(NSAttributedString(string: t, attributes: [.font: UIFont.systemFont(ofSize: 17, weight: .semibold), .foregroundColor: ink])) }
-    start.attributedText = a; start.textAlignment = .center
+    // ("+ New task" as the button has it — fading away as it stretches, back as it shrinks; drawn by Apple's button with
+    //  the button's own settings, so its + is the same size — drawn as text it was smaller and snapped to the button's
+    //  size as the toast went: Haris 2026-11-08)
+    var sc = UIButton.Configuration.plain()
+    if let s = sym { sc.image = UIImage(systemName: s, withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)) }
+    sc.imagePadding = 6
+    if let t = title { sc.attributedTitle = AttributedString(t, attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 17, weight: .semibold)])) }
+    sc.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 18)
+    sc.baseForegroundColor = ink
+    start.configuration = sc
     tick.image = UIImage(systemName: "checkmark.circle.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .regular))
     tick.tintColor = .systemGreen; tick.contentMode = .center
     msg.font = .systemFont(ofSize: 15); msg.textColor = ink; msg.lineBreakMode = .byTruncatingTail; msg.adjustsFontSizeToFitWidth = true; msg.minimumScaleFactor = 0.82   // (a message a little too long shrinks a touch rather than being cut)
