@@ -190,7 +190,8 @@ export async function claimSheetFor(c, u, meta, { resolve, webDir, now = Date.no
   const fmtDay = (s) => { if (!s) return ''; const [y, m, d] = s.split('-').map(Number); return `${MON[m - 1]} ${d}${String(y) !== thisYear ? `, ${y}` : ''}`; };
   const dayOf = (iso) => (iso ? dubaiDay(Date.parse(iso)) : '');
   const fullName = (x) => (x ? x.name || String(x.email || '').split('@')[0] : c.personName || 'Someone');
-  const initials = (n) => String(n).trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+  // (a middle "Al" is skipped: Yousef Al Hwij → YH, Lana Al Ramli → LR, Al-Ramli too — Haris 2026-11-08)
+  const initials = (n) => { const w = String(n || '').trim().split(/\s+/).filter(Boolean); if (w.length > 2 && /^al$/i.test(w[1])) w.splice(1, 1); const two = w.slice(0, 2).map((x, i) => (i > 0 ? x.replace(/^al-(?=.)/i, '') : x)[0] || ''); return two.join('').toUpperCase(); };
   const cdId = meta && meta.cdUserId;
   const roleOf = (x) => (!x ? '' : x.id === cdId ? (meta.cdActing ? 'Acting CD' : 'Creative Director') : (meta.socialMgrIds || []).includes(x.id) && x.role === 'social' ? 'Social Manager' : ROLES[x.role] || x.role || '');
   const rows = [], rcpt = [];

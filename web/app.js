@@ -2175,7 +2175,8 @@ function tagColor(name) {
 }
 const tagChip = (name) => { const [bg, fg] = tagColor(name); return `<span class="tag" style="background:${bg};color:${fg}">${esc(name)}</span>`; };
 const prioPill = (p) => (p && p !== 'none' ? `<span class="prio ${p}">${p[0].toUpperCase() + p.slice(1)}</span>` : '');
-const initials = (name) => name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?';
+// (a middle "Al" is skipped: Yousef Al Hwij → YH, Lana Al Ramli → LR, Al-Ramli too — Haris 2026-11-08)
+const initials = (name) => { const w = String(name || '').trim().split(/\s+/).filter(Boolean); if (w.length > 2 && /^al$/i.test(w[1])) w.splice(1, 1); const two = w.slice(0, 2).map((x, i) => (i > 0 ? x.replace(/^al-(?=.)/i, '') : x)[0] || ''); return two.join('').toUpperCase() || '?'; };
 
 const STATUS_COLORS = ['#87909e', '#4c9aff', '#a875ff', '#f9be33', '#e5484d', '#3ddc97', '#ff8fc7', '#4fd1c5'];
 function defaultSectionColor(name, i) {

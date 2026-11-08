@@ -63,7 +63,8 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
   const isImage = (a) => IMG_EXT.includes(fileExt(a.name));
   const fileKind = (a) => { const e = fileExt(a.name); return IMG_EXT.includes(e) ? 'image' : VID_EXT.includes(e) ? 'video' : AUD_EXT.includes(e) ? 'audio' : e === 'pdf' ? 'pdf' : TXT_EXT.includes(e) ? 'text' : 'other'; };
   const fileUrl = (a) => '/__file/' + String(a.path).split('/').map(encodeURIComponent).join('/');
-  const initials = (name) => name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?';
+  // (a middle "Al" is skipped: Yousef Al Hwij → YH, Lana Al Ramli → LR, Al-Ramli too — Haris 2026-11-08)
+  const initials = (name) => { const w = String(name || '').trim().split(/\s+/).filter(Boolean); if (w.length > 2 && /^al$/i.test(w[1])) w.splice(1, 1); const two = w.slice(0, 2).map((x, i) => (i > 0 ? x.replace(/^al-(?=.)/i, '') : x)[0] || ''); return two.join('').toUpperCase() || '?'; };
   const avColor = (id) => { let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return AV_COLORS[h % AV_COLORS.length]; };
   const fmtMD = (md) => { const m = /^(\d{2})-(\d{2})$/.exec(String(md || '')); return m ? `${Number(m[2])} ${MONTH_NAMES[Number(m[1]) - 1]}` : ''; };
   const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
