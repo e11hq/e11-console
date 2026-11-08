@@ -3099,7 +3099,7 @@ extension HomeView {
       cf.secondaryTextProperties.font = .systemFont(ofSize: 14); cf.secondaryTextProperties.color = .secondaryLabel; cf.secondaryTextProperties.numberOfLines = 2
       cf.textToSecondaryTextVerticalPadding = 3
       cf.image = c.photo.map { roundPic($0, initials: nil, color: nil, size: 62) }
-      cf.imageProperties.maximumSize = CGSize(width: 62, height: 62); cf.imageProperties.reservedLayoutWidth = 62; cf.imageProperties.cornerRadius = 31
+      cf.imageProperties.maximumSize = CGSize(width: 62, height: 62); cf.imageProperties.reservedLayoutSize = CGSize(width: 62, height: 0); cf.imageProperties.cornerRadius = 31
       cf.imageToTextPadding = 14
       cf.directionalLayoutMargins.top = 14; cf.directionalLayoutMargins.bottom = 14
       cell.contentConfiguration = cf
@@ -3120,11 +3120,11 @@ extension HomeView {
     }
     if let p = it.person {
       cf.image = mePic(p.photo, p.ini, p.rgb, key)
-      cf.imageProperties.maximumSize = CGSize(width: 36, height: 36); cf.imageProperties.reservedLayoutWidth = 36; cf.imageProperties.cornerRadius = 18
+      cf.imageProperties.maximumSize = CGSize(width: 36, height: 36); cf.imageProperties.reservedLayoutSize = CGSize(width: 36, height: 0); cf.imageProperties.cornerRadius = 18
       cf.imageToTextPadding = 12
     } else if let s = it.sym {
       cf.image = HomeView.settingsIcon(s, it.col ?? .systemGray)
-      cf.imageProperties.maximumSize = CGSize(width: 30, height: 30); cf.imageProperties.reservedLayoutWidth = 30
+      cf.imageProperties.maximumSize = CGSize(width: 30, height: 30); cf.imageProperties.reservedLayoutSize = CGSize(width: 30, height: 0)
       cf.imageToTextPadding = 12
     }
     cell.contentConfiguration = cf
