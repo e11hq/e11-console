@@ -73,6 +73,7 @@ try:
     try: print('recorder said:', open(os.path.join(TMP, 'ios-rec.log')).read()[-600:])
     except Exception: pass
     print(json.dumps(res, indent=1)[:4000])
+    for row in res.get('fabTrace') or []: print('TRACE fab', json.dumps(row, separators=(',', ':')))  # TEMPORARY measuring
     p = res.get('home') or {}
     # 22: the startup screen is the app's own — there at once (icon, greeting, four rows), ticked by the page, gone before Home
     sg = res.get('splashGeo') or {}; stg = res.get('splashTickedGeo') or {}
