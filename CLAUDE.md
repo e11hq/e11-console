@@ -171,6 +171,24 @@ follows it (Don't 9); don't change any of it without Haris. Project doc `claude/
   and comes back as the slide back begins — never "hide the bottom bar when pushed", and nothing told to the tab bar at
   the slide's first moment: either makes Apple's bar snap small and the big title jump into it.
 
+**iPhone Home and the task page — COMPLETED and LOCKED (Haris, 2026-11-08 13:21: "the home page and task page is
+completed, and they need to be locked, no changes will touch these pages now without me knowing"):** build **1571**, commit
+e52c4d7, marked by the branches `locked/ios-home-1571` and `locked/ios-task-1571` (never moved or deleted; 1550's branch
+stays too). **Nothing may touch either page — its look, behaviour or code — without telling Haris first and his yes**,
+including a change made for another page or a shared piece they use (the frost, the floating button, the keyboard rule,
+CommentsFeed, PageCell, AppleTabs, AppleNav…). Project doc `claude/ios-apple-structure.md`.
+- **Every other page follows the locked page of its category** (Don't 9):
+  - **Big-title pages** (My Tasks, Inbox, Clients, Me) follow **Home**: Apple's navigation in Apple's tab bar, Apple's big
+    title and line, Apple's search in the bar, Apple's bar buttons, our cards in Apple's list with Apple's swipes, **Apple's
+    own frost untouched** (as Home), the floating button as Home's.
+  - **Pushed pages** (a client's page, Client Assets and its folders, a team member, Me's pages, a reply…) follow **the task
+    page**: Apple's push, Apple's bar with ‹ / name or control in the middle / •••, the tab bar hidden once the page has
+    arrived (Apple's call), each row its own cell of Apple's list (frame placing), **Apple's firm frost with its line**, the
+    keyboard rule (lists scroll while typing, drag down, a tap only puts it down).
+- What 1571 holds beyond the 1550 lock: Home's frost Apple's own (`.automatic`); "+ New task" not greyed behind a sheet;
+  the task page: Details · Comments in Apple's bar, the client line, every row its own cell, the keyboard guide; comments:
+  smooth scroll to a highlighted comment, scrolling while typing, Apple's soft blur under the comment box.
+
 **Before the next App Store review — remember (Haris, 2026-11-08):** do **light ↔ dark switching smoothly, Apple's way**
 first (task page plan step 5, project doc `claude/ios-task-page-apple.md`): our screens' colours as Apple's dynamic
 colours so iOS fades the look itself, the tab bar following the phone. Not now — only before sending the iPhone app to
