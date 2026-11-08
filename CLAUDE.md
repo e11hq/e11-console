@@ -158,9 +158,10 @@ follows it (Don't 9); don't change any of it without Haris. Project doc `claude/
   (white in dark, black in light — no blue), the same room left and right of the two as above and below (commit e3f7099,
   after build 1550 — part of the lock, Haris 2026-11-08).
 - The list: our cards in Apple's list (UICollectionView list), Apple's swipe actions.
-- **The frost: Apple's firm frost with its own line under the bar** (the list's and the search results' `topEdgeEffect.style
-  = .hard` — Apple's own, nothing of ours drawing it), coming in once something is under the bar (Haris 2026-11-08: part
-  of the lock). **Every Apple page from now on — big-title and pushed — has the same firm frost with the line.**
+- **The frost: Apple's own, untouched — exactly as in build 1550** (the list's and the search results' `topEdgeEffect.style
+  = .automatic`, nothing of ours setting or drawing it). Haris 2026-11-08 11:29: "back how it was, apple's own, on the
+  previous locked home" — the firm frost with its line (builds 1562 / 1566) taken off Home. Which frost other Apple pages
+  get (the task page has the firm frost with its line since 1566): ask Haris.
 - Opening a page from it: Apple's push; **the tab bar is hidden with Apple's tab bar call once the page has arrived**,
   and comes back as the slide back begins — never "hide the bottom bar when pushed", and nothing told to the tab bar at
   the slide's first moment: either makes Apple's bar snap small and the big title jump into it.

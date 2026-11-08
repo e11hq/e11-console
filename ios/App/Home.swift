@@ -133,9 +133,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     results.contentInsetAdjustmentBehavior = .automatic
     results.automaticallyAdjustsScrollIndicatorInsets = true
     if #available(iOS 26.0, *) {
-      // (Apple's firm frost with its own line under the bar, as the Inbox's — Haris 2026-11-08, locked with Home: every
-      //  Apple page the same)
-      scroll.topEdgeEffect.style = .hard; results.topEdgeEffect.style = .hard; results.topEdgeEffect.isHidden = true
+      scroll.topEdgeEffect.style = .automatic; results.topEdgeEffect.style = .automatic
       if let i = edgeHook as? UIScrollEdgeElementContainerInteraction { topBar.removeInteraction(i) }
       edgeHook = nil
     }
@@ -164,7 +162,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     cv.contentInsetAdjustmentBehavior = .automatic
     cv.allowsSelection = false
     cv.delegate = self
-    if #available(iOS 26.0, *) { cv.topEdgeEffect.style = .hard; cv.topEdgeEffect.isHidden = true }   // (Apple's firm frost and its line, not at the top — Haris 2026-11-08)
+    if #available(iOS 26.0, *) { cv.topEdgeEffect.style = .automatic }
     let reg = UICollectionView.CellRegistration<HostCell, String> { [weak self] cell, _, key in
       guard let self = self, let v = self.listViews[key] else { cell.host(nil, height: 1); return }
       cell.host(v, height: self.itemHeight(key, v))
@@ -1170,17 +1168,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let y = max(-inTop, min(r.midY - sv.bounds.height * 0.4, sv.contentSize.height + inBottom - sv.bounds.height))
     sv.setContentOffset(CGPoint(x: 0, y: y), animated: animated)
   }
-  func scrollViewDidScroll(_ scrollView: UIScrollView) {
-    if scrollView === scroll || scrollView === list { layoutHeader(); showMotto() }
-    if appleTop, scrollView === list || scrollView === results { appleFrost(scrollView) }
-  }
-  // Home's frost, as the Inbox's (the locked frost of 2026-11-03): nothing while the page is at its top — the big title
-  // showing — and Apple's firm frost with its line once something has gone under the bar (Haris 2026-11-08: in 1562 the
-  // firm frost was there from the start, over the big title)
-  private func appleFrost(_ sv: UIScrollView) {
-    guard #available(iOS 26.0, *) else { return }
-    Frost.show(sv, sv.contentOffset.y > -sv.adjustedContentInset.top + 0.5)
-  }
+  func scrollViewDidScroll(_ scrollView: UIScrollView) { if scrollView === scroll || scrollView === list { layoutHeader(); showMotto() } }
   // (Apple's bar coming in — after the startup screen, or back from another tab — or its big title growing: a list that
   //  was at its top stays at its top, the big title showing; it opened scrolled under the small title — Haris 2026-11-07)
   // (until you scroll it yourself, Home's list stays at its very top with the big title — whatever room the bars, the
