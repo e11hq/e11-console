@@ -102,6 +102,10 @@ Store, the shared sign-in goes into both apps and both are sent for review toget
 `initials` in web/ and server/claimsheet.js). **Remember when other apps start or resume (E11 Talk's `Talk.initials`,
 any new app): the same rule.**
 
+**Never start a build until Haris says "build" in so many words (Haris, 2026-11-08 10:48: "never send anything to build
+untill i say"):** agreeing to a change, a mock-up or "build it this way" is not a build order. Make the change, keep it
+local, and wait for him to say to build.
+
 **Every build only on Haris's yes — check builds too (Haris, 2026-11-08: "ask me everytime you run build"):** ask before
 any build runs, the simulator check build included. A push to an `ios-*` branch starts a check build by itself, so
 changes stay as local commits and are pushed only once Haris says yes to building. **Since 2026-11-08 a push starts no build
