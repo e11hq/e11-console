@@ -100,6 +100,9 @@ var E11Rules = (() => {
       if (isAdm(u) || isCD(u.id)) return true;
       if (u.role === 'am') return amScope(t || null) || !LIMITED.has(perm);
       if (u.role === 'social' && t && t.planId && socialManages(t)) return true;
+      // (and the creator's on the content-plan tasks on their lists — theirs; a Social Manager's, every Social Executive's
+      //  too: Haris 2026-11-08)
+      if (u.role === 'social' && t && t.planId && !t.parentId && (t.createdBy === u.id || (socialMgrIds().includes(u.id) && (userById(t.createdBy) || {}).role === 'social'))) return true;
       if ((ROLE_DENY[u.role] || []).includes(perm)) return false;
       if ((ROLE_ALLOW[u.role] || []).includes(perm)) return true;
       return !LIMITED.has(perm);
@@ -174,10 +177,21 @@ var E11Rules = (() => {
 
     // ---------- whose tasks (Work.day in app.js) ----------
     const isMine = (t) => (t.assignees || []).includes(meId);
-    const myOpen = (t) => !t.done && !partDone(t);
-    const myDoneAt = (t) => (t.done ? t.completedAt : (t.partsDone || {})[meId] || null);
+    // Socials' content-plan tasks (Haris 2026-11-08): a Social Executive's own — the tasks they created from a content
+    // plan; a Social Manager's — those made from a plan by them or by any Social Executive. On their Home and My Tasks with
+    // the tasks they're assigned to, open until the whole task is done (the creator's), and the only tasks (with those
+    // assigned) their search finds
+    const isSocialU = (u) => !!u && u.role === 'social' && !isAdm(u) && !isCD(u.id);
+    const socialPlanTask = (t, u = me()) => {
+      if (!t || t.parentId || !t.planId || !isSocialU(u)) return false;
+      if (t.createdBy === u.id) return true;
+      const c = userById(t.createdBy);
+      return socialMgrIds().includes(u.id) && !!c && c.role === 'social';
+    };
+    const myOpen = (t) => (socialPlanTask(t) ? !t.done : !t.done && !partDone(t));
+    const myDoneAt = (t) => (socialPlanTask(t) ? (t.done ? t.completedAt || null : null) : t.done ? t.completedAt : (t.partsDone || {})[meId] || null);
     const needsOwner = (t) => !t.parentId && !t.done && !(t.assignees || []).length && t.createdBy === meId;
-    const onMyList = (t) => isMine(t) || needsOwner(t);
+    const onMyList = (t) => isMine(t) || needsOwner(t) || socialPlanTask(t);
     const amClients = (id) => projects.filter((p) => (p.ams || []).some((a) => a.id === id && !a.onLeave)).map((p) => p.id);
     const hasClients = (id) => projects.some((p) => (p.ams || []).some((a) => a.id === id));
     const createdBy = (ids) => { const set = new Set(ids); return topTasks().filter((t) => set.has(t.createdBy)); };
@@ -195,7 +209,7 @@ var E11Rules = (() => {
       return [...set.values()];
     }
     function day() {
-      if (!lead()) return { tasks: tasks.filter(onMyList), open: myOpen, doneAt: myDoneAt, doneTasks: tasks.filter(isMine) };
+      if (!lead()) return { tasks: tasks.filter(onMyList), open: myOpen, doneAt: myDoneAt, doneTasks: tasks.filter((t) => isMine(t) || socialPlanTask(t)) };
       const who = seesAll() ? users.filter((x) => x.role === 'am' || isAdm(x)).map((x) => x.id) : [meId];
       const ts = leadSet(who);
       return { tasks: ts, open: (t) => !t.done, doneAt: (t) => (t.done ? t.completedAt || null : null), doneTasks: ts };

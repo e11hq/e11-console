@@ -1885,11 +1885,22 @@ function denied() { toast('Your role can’t do this'); }
 const isMine = (t) => (t.assignees || []).includes(currentUserId);
 // Each assignee can finish their own part of a shared task: t.partsDone = { userId: isoTime }
 const partDone = (t, u = currentUserId) => !!(t.partsDone || {})[u];
-const myOpen = (t) => !t.done && !partDone(t);
-const myDoneAt = (t) => (t.done ? t.completedAt : (t.partsDone || {})[currentUserId] || null);
+// Socials' content-plan tasks (Haris 2026-11-08 — as rules.js): a Social Executive's own — the tasks they created from a
+// content plan; a Social Manager's — those made from a plan by them or by any Social Executive. On their My Day and My
+// Tasks with the tasks they're assigned to, open until the whole task is done, and with those the only tasks their search
+// finds
+const isSocialU = (u) => !!u && u.role === 'social' && !isAdm(u) && !isCD(u.id);
+const socialPlanTask = (t, u = me()) => {
+  if (!t || t.parentId || !t.planId || !isSocialU(u)) return false;
+  if (t.createdBy === u.id) return true;
+  const c = userById(t.createdBy);
+  return socialMgrIds().includes(u.id) && !!c && c.role === 'social';
+};
+const myOpen = (t) => (socialPlanTask(t) ? !t.done : !t.done && !partDone(t));
+const myDoneAt = (t) => (socialPlanTask(t) ? (t.done ? t.completedAt || null : null) : t.done ? t.completedAt : (t.partsDone || {})[currentUserId] || null);
 // A task you created but haven't given to anyone yet stays on your own lists until it has an assignee
 const needsOwner = (t) => !t.parentId && !t.done && !(t.assignees || []).length && t.createdBy === currentUserId;
-const onMyList = (t) => isMine(t) || needsOwner(t);
+const onMyList = (t) => isMine(t) || needsOwner(t) || socialPlanTask(t);
 const myTop = () => topTasks().filter(onMyList);
 /* ---------- Task fields (under the description) ----------
    Task Update: what's happening now — everyone sees it, changes are logged and sent to everyone on the task.
@@ -2028,7 +2039,7 @@ const Work = (() => {
   // My Day pool
   function day() {
     const u = me();
-    if (!lead()) return { tasks: db.tasks.filter(onMyList), open: myOpen, doneAt: myDoneAt, doneTasks: db.tasks.filter(isMine) };
+    if (!lead()) return { tasks: db.tasks.filter(onMyList), open: myOpen, doneAt: myDoneAt, doneTasks: db.tasks.filter((t) => isMine(t) || socialPlanTask(t)) };
     const who = seesAll() ? db.users.filter((x) => x.role === 'am' || isAdm(x)).map((x) => x.id) : [u.id];
     const ts = leadSet(who);
     const dAt = (t) => (t.done ? t.completedAt || null : null);
@@ -3494,7 +3505,14 @@ function partOfTask(t, id = currentUserId, deep = true) {
 const ownSearchOnly = (u = me()) => !!u && ['production', 'freelancer'].includes(u.role) && !isAdm(u) && !isCD(u.id);
 // ...and only the clients where they're part of at least one task
 const searchClientOk = (p, u = me()) => !ownSearchOnly(u) || db.tasks.some((t) => t.projectId === p.id && partOfTask(t, u.id, false)) || (u.role === 'freelancer' && (u.projectIds || []).includes(p.id));
-const searchOwnOk = (t, u = me()) => !u || !['production', 'freelancer'].includes(u.role) || isAdm(u) || isCD(u.id) || partOfTask(t, u.id);
+const searchOwnOk = (t, u = me()) => {
+  if (!u) return true;
+  // (Socials: the tasks they're assigned to and their content-plan tasks — Haris 2026-11-08)
+  if (isSocialU(u)) return (t.assignees || []).includes(u.id) || socialPlanTask(t, u);
+  return !['production', 'freelancer'].includes(u.role) || isAdm(u) || isCD(u.id) || partOfTask(t, u.id);
+};
+// (search's clients for Socials: a Social Executive the clients they're on, a Social Manager none — Haris 2026-11-08)
+const socialSearchClientOk = (p, u = me()) => !isSocialU(u) || (!socialMgrIds().includes(u.id) && (p.socials || []).includes(u.id));
 
 function taskSearch(query, { limit = 200 } = {}) {
   const terms = sWords(query);
@@ -3532,7 +3550,7 @@ function taskSearch(query, { limit = 200 } = {}) {
   });
   tasks.sort((a, b) => b.score - a.score || (a.t.done - b.t.done) || b.t.updatedAt.localeCompare(a.t.updatedAt));
   // projects whose name (or client) matches every word
-  const projects = db.projects.filter((p) => !p.inactive && amSidebarOk(p)).filter((p) => {
+  const projects = db.projects.filter((p) => !p.inactive && amSidebarOk(p) && socialSearchClientOk(p)).filter((p) => {
     const ws = new Set(sWords(`${p.name} ${(clientOfProject(p) || {}).name || ''}`));
     return per.every((pt) => [...pt.words.keys()].some((w) => ws.has(w)));
   });
