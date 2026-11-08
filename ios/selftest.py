@@ -52,7 +52,7 @@ try:
     data = sh('xcrun', 'simctl', 'get_app_container', udid, BUNDLE, 'data').stdout.strip()
     out = os.path.join(data, 'Documents', 'selftest.json')
     seen, res, t0 = set(), {}, time.time()
-    while time.time() - t0 < 540:
+    while time.time() - t0 < 720:   # (540 until 2026-11-08 — the slide-back checks made it longer, and the last stages were cut off)
         try: res = json.load(open(out))
         except Exception: res = {}
         st = res.get('stage')
