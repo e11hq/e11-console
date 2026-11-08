@@ -2770,7 +2770,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       ("homeDateDone", "return '{}'", { self.presentedViewController?.dismiss(animated: false) }),
       // TEMPORARY measuring (the "+ New task" snap): pressed, let go, the sheet opened and closed — every frame
       ("fabTrace", pause(4500) + "return '{}'", {
-        self.homeIfMade?.selfFabTrace(close: { FormSheetVC.current?.finish("cancel") }) { rows in self.selfResult["fabTrace"] = rows } }),
+        self.homeIfMade?.selfFabTrace(close: { FormSheetVC.current?.finish("cancel") }) { rows in self.selfResult["fabRows"] = rows } }),
       // 26: My Tasks, the app's own (from the server): All, then the Done tab (read only), then All again
       ("mytasks", pause(2500) + "return JSON.stringify({ view: ui.view })", {
         if let i = self.tabKeys.firstIndex(of: "mytasks"), let item = self.tabBar.items?[i] { self.tabBar.selectedItem = item; self.tabBar(self.tabBar, didSelect: item) } }),
