@@ -1421,7 +1421,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if let h = homeIfMade {
       if tabKeys[item.tag] == "today" {
         if !h.isHidden { h.scrollToTop() } else if homeHadModel { h.isHidden = false }
-      } else if !h.isHidden {
+      } else if !h.isHidden, !APPLE_HOME {   // (Home its own Apple screen in its own tab: kept as it is — hidden, it came back blank, its big title cut: Haris 2026-11-08)
         h.endEditing(true)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
           guard let self = self, self.pageReady, let sel = self.tabBar.selectedItem, sel.tag < self.tabKeys.count, self.tabKeys[sel.tag] != "today" else { return }
@@ -1433,7 +1433,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if let h = inboxIfMade {
       if tabKeys[item.tag] == "inbox" {
         if !h.isHidden { h.scrollToTop() } else if inboxHadModel, serverInbox.on, (serverInbox.shown?["me"] as? String) == inboxPageMe { h.isHidden = false }
-      } else if !h.isHidden {
+      } else if !h.isHidden, !APPLE_INBOX {   // (its own Apple screen: kept — Haris 2026-11-08)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
           guard let self = self, let sel = self.tabBar.selectedItem, sel.tag < self.tabKeys.count, self.tabKeys[sel.tag] != "inbox" else { return }
           self.inboxIfMade?.isHidden = true
@@ -1444,7 +1444,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if let h = myTasksIfMade {
       if tabKeys[item.tag] == "mytasks" {
         if !h.isHidden { h.scrollToTop() } else if myTasksHadModel, serverMyTasks.on, (serverMyTasks.shown?["me"] as? String) == myTasksPageMe { h.isHidden = false }
-      } else if !h.isHidden {
+      } else if !h.isHidden, !APPLE_MYTASKS {   // (its own Apple screen: kept — Haris 2026-11-08)
         h.endEditing(true)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
           guard let self = self, let sel = self.tabBar.selectedItem, sel.tag < self.tabKeys.count, self.tabKeys[sel.tag] != "mytasks" else { return }
@@ -1636,7 +1636,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   func homeGeo() -> [String: Any] {
     guard let h = homeIfMade else { return ["shown": false, "made": false] }
-    if h.isHidden { return ["shown": false, "made": true] }
+    if screenOf("home") == nil { return ["shown": false, "made": true] }   // (on show: in its tab while its tab is on — Haris 2026-11-08)
     var g = h.geo(); g["shown"] = true; g["server"] = serverHome.on
     return g
   }
@@ -1647,9 +1647,11 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   lazy var serverMyTasks: ServerHome = { let s = self.makeServer("mytasks"); self.serverMyTasksIfMade = s; return s }()
   // the screen a server's things show on (Home's or My Tasks'), when it's up
   func screenOf(_ kind: String) -> HomeView? {
-    if kind == "clients" { return screenOf("client") ?? (clientsListIfMade?.isHidden == false ? clientsListIfMade : nil) }
-    if kind == "client" { return clientPageIfMade?.isHidden == false && !clientLeaving ? clientPageIfMade : nil }   // (going: the buttons are already the list's)
-    let h = kind == "home" ? homeIfMade : kind == "inbox" ? inboxIfMade : myTasksIfMade; return h?.isHidden == false ? h : nil
+    // (a tab's own Apple screen stays in its tab when another tab is on — it's on show only while its tab is: in the window)
+    let on = { (h: HomeView?) -> Bool in guard let h = h, !h.isHidden else { return false }; return !h.appleTop || h.window != nil }
+    if kind == "clients" { return screenOf("client") ?? (on(clientsListIfMade) ? clientsListIfMade : nil) }
+    if kind == "client" { return on(clientPageIfMade) && !clientLeaving ? clientPageIfMade : nil }   // (going: the buttons are already the list's)
+    let h = kind == "home" ? homeIfMade : kind == "inbox" ? inboxIfMade : myTasksIfMade; return on(h) ? h : nil
   }
   var shownScreen: HomeView? { (meCtl.isOpen ? meCtl.shown : nil) ?? (assetsCtl.isOpen ? assetsCtl.shown : nil) ?? screenOf("clients") ?? screenOf("inbox") ?? screenOf("mytasks") ?? screenOf("home") }
   func makeServer(_ kind: String) -> ServerHome {
@@ -1774,7 +1776,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if let t = a["toast"] as? [String: Any] { homeToastRun = nil; shownScreen?.toast(t); return }   // (its button is the page's)
     if let r = a["search"] as? [String: Any] { (shownScreen ?? homeIfMade)?.searchResults(r); return }
     guard let show = a["show"] as? Bool else { return }
-    if !show { homeIfMade?.endEditing(true); homeIfMade?.isHidden = true; return }
+    if !show { homeIfMade?.endEditing(true); if !APPLE_HOME { homeIfMade?.isHidden = true }; return }   // (its own Apple tab keeps it — Haris 2026-11-08)
     let h = homeView
     h.bottomRoom = (tabBar.isHidden ? 40 : view.bounds.height - tabBar.frame.minY) + 96
     h.tabTop = tabBar.isHidden ? nil : tabPillTop
@@ -1855,7 +1857,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     //  says when My Tasks shows)
     var a = a0
     if show, let sig = myTasksOwnSignal(me: a0["me"] as? String) { for k in ["tab", "q", "buttons", "chips"] { a[k] = sig[k] } }
-    if !show { myTasksWanted = false; myTasksIfMade?.endEditing(true); myTasksIfMade?.isHidden = true; return }
+    if !show { myTasksWanted = false; myTasksIfMade?.endEditing(true); if !APPLE_MYTASKS { myTasksIfMade?.isHidden = true }; return }   // (its own Apple tab keeps it — Haris 2026-11-08)
     let h = myTasksView
     myTasksWanted = true
     h.bottomRoom = (tabBar.isHidden ? 40 : view.bounds.height - tabBar.frame.minY) + 96
@@ -1952,7 +1954,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   func inboxCommand(_ a: [String: Any]) {
     defer { updateCorner() }
     guard let show = a["show"] as? Bool else { return }
-    if !show { inboxWanted = false; inboxIfMade?.isHidden = true; return }
+    if !show { inboxWanted = false; if !APPLE_INBOX { inboxIfMade?.isHidden = true }; return }   // (its own Apple tab keeps it — Haris 2026-11-08)
     let h = inboxView
     inboxWanted = true
     h.bottomRoom = (tabBar.isHidden ? 40 : view.bounds.height - tabBar.frame.minY) + 96
@@ -2355,7 +2357,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       if clientsApple, let n = clientsNavNow {
         assetsCtl.closeIfFromClients()
         if n.viewControllers.count > 1 { n.popToRootViewController(animated: false) }
-        ClientVC.pushed = false; clientPageIfMade?.isHidden = true; clientsListIfMade?.isHidden = true
+        ClientVC.pushed = false; clientPageIfMade?.isHidden = true   // (the list stays in its own tab — hidden, it came back blank, its big title cut: Haris 2026-11-08)
         return
       }
       clientsListIfMade?.backFromMe = false; clientsListIfMade?.isHidden = true; if !clientLeaving { clientPageIfMade?.isHidden = true }; assetsCtl.closeIfFromClients(); edgePanOn(); return
@@ -3003,7 +3005,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
           // (Client Assets, the app's own — shell 32: the page's folder opened as the app's screens)
           if name == "client" { self.selfResult["clientAssets"] = ["open": self.assetsCtl.isOpen, "screens": self.assetsCtl.screens.count, "kind": self.assetsCtl.top?.assets ?? "", "parts": self.assetsCtl.top?.assetsParts.count ?? 0, "shown": self.assetsCtl.shown != nil, "corner": self.corner.kind, "web": (self.web?.isHidden ?? true) ? "hidden" : "under"] as [String: Any] }
           if name.hasPrefix("ibx") {
-            var g: [String: Any] = ["made": self.inboxIfMade != nil, "shown": self.inboxIfMade?.isHidden == false, "server": self.serverInboxIfMade?.on ?? false, "query": self.serverInboxIfMade?.query ?? ""]
+            var g: [String: Any] = ["made": self.inboxIfMade != nil, "shown": self.screenOf("inbox") != nil, "server": self.serverInboxIfMade?.on ?? false, "query": self.serverInboxIfMade?.query ?? ""]
             if let h = self.inboxIfMade { g.merge(h.inboxGeo()) { a, _ in a } }
             g["corner"] = self.corner.kind; g["cornerW"] = self.corner.frame.width; g["cornerA"] = self.corner.alpha
             g["appleMark"] = InboxVC.shared?.markShown ?? ""
@@ -3013,7 +3015,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
             self.selfResult[name + "Inbox"] = g
           }
           if name.hasPrefix("mytasks") || name == "inbox" {
-            var g: [String: Any] = ["made": self.myTasksIfMade != nil, "shown": self.myTasksIfMade?.isHidden == false, "server": self.serverMyTasksIfMade?.on ?? false, "query": self.serverMyTasksIfMade?.query ?? ""]
+            var g: [String: Any] = ["made": self.myTasksIfMade != nil, "shown": self.screenOf("mytasks") != nil, "server": self.serverMyTasksIfMade?.on ?? false, "query": self.serverMyTasksIfMade?.query ?? ""]
             if let h = self.myTasksIfMade { g.merge(h.listGeo()) { a, _ in a }; g["title"] = h.geo()["title"] }
             g["scope"] = MyTasksVC.shared?.scopeShown ?? false
             g["me"] = self.serverMyTasksIfMade?.me ?? ""; g["pageMe"] = self.myTasksPageMe ?? ""; g["modelMe"] = self.serverMyTasksIfMade?.shown?["me"] as? String ?? ""
