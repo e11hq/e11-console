@@ -372,12 +372,14 @@ final class CommentsFeed: UIView, UIScrollViewDelegate {
     guard let c = cells[id] else { return }
     layoutIfNeeded()
     let y = max(-scroll.contentInset.top, min(c.frame.midY - scroll.bounds.height * 0.4, scroll.contentSize.height + scroll.contentInset.bottom - scroll.bounds.height))
-    scroll.setContentOffset(CGPoint(x: 0, y: y), animated: false)
+    // (Apple's own smooth scroll there — it jumped, Haris 2026-11-08; the card lights up as it arrives)
+    let moves = abs(scroll.contentOffset.y - y) > 1
+    if moves { scroll.setContentOffset(CGPoint(x: 0, y: y), animated: true) }
     // (on the comment's own card, its rounded shape — not a band across the whole row: Haris, 2026-11-02)
     let band = c.highlightView()
     band.backgroundColor = traitCollection.userInterfaceStyle == .dark ? UIColor.white.withAlphaComponent(0.13) : UIColor.black.withAlphaComponent(0.08)
     band.alpha = 0; band.isUserInteractionEnabled = false
-    UIView.animate(withDuration: 0.2, delay: 0.15, options: [.curveEaseOut]) { band.alpha = 1 } completion: { _ in
+    UIView.animate(withDuration: 0.2, delay: moves ? 0.35 : 0.15, options: [.curveEaseOut]) { band.alpha = 1 } completion: { _ in
       UIView.animate(withDuration: 0.6, delay: 0.5, options: [.curveEaseInOut]) { band.alpha = 0 } completion: { _ in band.removeFromSuperview() }
     }
   }
