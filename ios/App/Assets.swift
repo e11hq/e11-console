@@ -1051,8 +1051,8 @@ final class AssetsCtl {
     var out: [CornerMenuItem] = []
     if s.kind == "client" {
       if (m["canNewTop"] as? Bool) == true { out.append(CornerMenuItem(title: "New folder", symbol: "folder.badge.plus", run: { [weak self, weak h] in if let h = h { self?.newFolder(h, client: cid, parent: nil) } })) }
-      let all = (m["files"] as? [[String: Any]]) ?? []
-      if !all.isEmpty { out.append(CornerMenuItem(title: "Download all", symbol: "arrow.down.circle", run: { [weak self, weak h] in if let h = h { self?.downloadMany(h, all, name: m["name"] as? String ?? "Client Assets") } })) }
+      // (no Download all for a whole client — every folder at once is too much for the server; a folder's own files only:
+      //  Haris 2026-11-08)
       out.append(CornerMenuItem(title: "Info", symbol: "info.circle", run: { [weak self] in self?.clientInfo(m) }))
       var edit: [CornerMenuItem] = []
       if (m["canRename"] as? Bool) == true { edit.append(CornerMenuItem(title: "Rename client", symbol: "pencil", run: { [weak self, weak h] in if let h = h { self?.renameClient(h, m) } })) }
