@@ -176,7 +176,10 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       // (the Inbox's rows edge to edge, one under the other, as Mail's)
       let inbox = self?.isInbox == true
       sec.interGroupSpacing = inbox ? 0 : 10
-      sec.contentInsets = inbox ? NSDirectionalEdgeInsets(top: 4, leading: 0, bottom: 0, trailing: 0) : NSDirectionalEdgeInsets(top: 4, leading: 16, bottom: 0, trailing: 16)
+      // (a pushed page — a client's, Client Assets, a folder, Me's pages: its first thing clear of Apple's bar and its frost,
+      //  as the task page — 4 pt put it under the frost's reach, so the frost and its line showed at rest: Haris 2026-11-08)
+      let top: CGFloat = (i == 0 && self?.pushedList == true) ? 18 : 4
+      sec.contentInsets = inbox ? NSDirectionalEdgeInsets(top: 4, leading: 0, bottom: 0, trailing: 0) : NSDirectionalEdgeInsets(top: top, leading: 16, bottom: 0, trailing: 16)
       return sec
     }
     let cv = UICollectionView(frame: bounds, collectionViewLayout: layout)
@@ -2995,6 +2998,8 @@ final class MeHold: NSObject, UIContextMenuInteractionDelegate {
 }
 extension HomeView {
   var isMeList: Bool { isMe || assets == "plansPage" }
+  // (a page pushed on a tab, not a tab's first screen)
+  var pushedList: Bool { pageBar || (assets == "all" && assetsBack) || assets == "plansPage" }
   func meSection(_ i: Int) -> MeSec? {
     guard let ds = listDS else { return nil }
     let ids = ds.snapshot().sectionIdentifiers
