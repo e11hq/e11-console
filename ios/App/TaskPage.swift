@@ -522,7 +522,10 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     for b in blocks {
       guard let g = b as? PageGroup, !holdsOwnPieces(g) else { out.append(b); continue }
       gid += 1
-      for v in g.arrangedSubviews { g.removeArrangedSubview(v); v.removeFromSuperview(); groupOf[ObjectIdentifier(v)] = gid; out.append(v) }
+      // (a row out of its group is placed by its frame in its cell, so it goes back to frame placing — the group had turned
+      //  that off, and with nothing holding it iPhone shrank it to its contents and moved it left: names cut off, icons
+      //  gone, values not on the right; Haris 2026-11-08)
+      for v in g.arrangedSubviews { g.removeArrangedSubview(v); v.removeFromSuperview(); v.translatesAutoresizingMaskIntoConstraints = true; groupOf[ObjectIdentifier(v)] = gid; out.append(v) }
     }
     blocks = out
   }

@@ -444,7 +444,7 @@ extension Main {
   // a task's link on the clipboard (app.js TaskLink.url: files.e11hq.com/t/… on the office's sites)
   func copyTaskLink(_ id: String) {
     let host = URL(string: serverURL())?.host ?? ""
-    let enc = id.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? id
+    let enc = id.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-._~"))) ?? id   // (as the website's: "-" stays "-", not %2D — Haris 2026-11-08)
     let link = host == "console.e11hq.com" ? "https://files.e11hq.com/t/\(enc)" : host == "test.e11hq.com" ? "https://files-test.e11hq.com/t/\(enc)" : serverURL() + "/?task=" + enc
     UIPasteboard.general.string = link
     UINotificationFeedbackGenerator().notificationOccurred(.success)
