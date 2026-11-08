@@ -143,6 +143,9 @@ repo gets them in its CLAUDE.md from the start (Haris, 2026-11-07; project doc `
    our design — never our own code made to draw that design. Every behaviour, animation and reaction is Apple's, in our
    design.
 10. Every iOS app from now on uses Apple's navigation, Apple's tab bar and Apple's top bar.
+11. Never make a change that changes the look of an area that's already approved or locked (Haris, 2026-11-08: Home's
+    frost, locked, changed by a later setting and broken). A change elsewhere must leave every approved area looking exactly
+    as approved — if it would touch one, stop and ask first.
 
 **iPhone Home — LOCKED, the template for every page (Haris, 2026-11-08 01:13: "All fixed and approved, lock it"):** build
 **1550**, commit 81ec9dd, marked by the branch `locked/ios-home-1550` (never moved or deleted). Every big-title page
