@@ -58,6 +58,7 @@ final class MyTasksVC: UIViewController, UISearchResultsUpdating, UISearchContro
     navigationItem.hidesSearchBarWhenScrolling = false
     showLine()
     // (its screen in it from the start, as the Inbox's — Haris 2026-11-08)
+    BigLine.prime(self, "mytasks")
     if APPLE_MYTASKS { adopt(Main.shared.myTasksView) } else if let h = Main.shared.myTasksIfMade { adopt(h) }
   }
   // (where the tab bar starts, for "+ New task" and the list's end — as Home's screen does)
@@ -109,13 +110,7 @@ final class MyTasksVC: UIViewController, UISearchResultsUpdating, UISearchContro
     if fsym != filterSym { filterSym = fsym; filterItem?.image = UIImage(systemName: fsym) }
     guard line != shownLine else { return }
     shownLine = line
-    if #available(iOS 26.0, *) {
-      navigationItem.subtitle = line.isEmpty ? nil : line
-      if line.isEmpty { navigationItem.largeAttributedSubtitle = nil } else {
-        var a = AttributedString(line); a.uiKit.font = .systemFont(ofSize: 15); a.uiKit.foregroundColor = .secondaryLabel
-        navigationItem.largeAttributedSubtitle = a
-      }
-    }
+    BigLine.set(self, line, "mytasks")
   }
   // a filter's own name in the line ("Due: This week" → "This week", "Leila Haddad’s tasks" → "Leila Haddad")
   private func chipName(_ c: [String: Any]) -> String {

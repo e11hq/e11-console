@@ -39,6 +39,7 @@ final class MeVC: UIViewController, TabRoot {
     super.viewDidLoad()
     navigationItem.backButtonDisplayMode = .minimal
     navigationItem.title = "Settings"   // (the page says Settings — Haris 2026-11-08; the tab stays "Me")
+    BigLine.prime(self, "me")
   }
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
@@ -73,13 +74,7 @@ final class MeVC: UIViewController, TabRoot {
     if !t.isEmpty, navigationItem.title != t { navigationItem.title = t }
     guard d != shownLine else { return }
     shownLine = d
-    if #available(iOS 26.0, *) {
-      navigationItem.subtitle = d.isEmpty ? nil : d
-      if d.isEmpty { navigationItem.largeAttributedSubtitle = nil } else {
-        var a = AttributedString(d); a.uiKit.font = .systemFont(ofSize: 15); a.uiKit.foregroundColor = .secondaryLabel
-        navigationItem.largeAttributedSubtitle = a
-      }
-    }
+    BigLine.set(self, d, "me")
   }
 }
 
@@ -151,5 +146,24 @@ final class ClientsFromMeVC: ClientsPushedVC {
   override func viewDidDisappear(_ a: Bool) {
     super.viewDidDisappear(a)
     if isMovingFromParent || navigationController == nil { onGone?(); onGone = nil }
+  }
+}
+
+// The line under a tab's big title, set the way Home sets its date (AppleHome.swift: "the title and the date there before
+// Home first shows — Apple sizes its bar for the big title from the start"): there from the first layout — the last one
+// shown, kept on the phone — and never taken away, only its words changed; given late (its list's numbers came after the
+// page first showed), Apple's bar grew under a list already placed and the big title was cut — every tab but Home, which
+// already does this (Haris 2026-11-08: "not the home page but every other page")
+enum BigLine {
+  static func prime(_ vc: UIViewController, _ key: String) {
+    set(vc, UserDefaults.standard.string(forKey: "e11_line_" + key) ?? "", key, save: false)
+  }
+  static func set(_ vc: UIViewController, _ d: String, _ key: String, save: Bool = true) {
+    guard #available(iOS 26.0, *) else { return }
+    if save, !d.isEmpty { UserDefaults.standard.set(d, forKey: "e11_line_" + key) }
+    let words = d.isEmpty ? " " : d   // (never removed: its room stays, as Apple measured it)
+    if vc.navigationItem.subtitle != words { vc.navigationItem.subtitle = words }
+    var a = AttributedString(words); a.uiKit.font = .systemFont(ofSize: 15); a.uiKit.foregroundColor = .secondaryLabel
+    vc.navigationItem.largeAttributedSubtitle = a
   }
 }

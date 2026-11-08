@@ -62,6 +62,7 @@ final class ClientsVC: UIViewController, TabRoot, UISearchResultsUpdating, UISea
     navigationItem.searchController = s
     navigationItem.hidesSearchBarWhenScrolling = false
     // (its list in it from the start, as the Inbox's — Haris 2026-11-08)
+    BigLine.prime(self, "clients")
     if Main.shared.clientsApple { adopt(Main.shared.clientsListMade()) }
   }
   // (where the tab bar starts, for "+ Add client" and the list's end — as Home's screen does)
@@ -98,13 +99,7 @@ final class ClientsVC: UIViewController, TabRoot, UISearchResultsUpdating, UISea
   private func setLine(_ d: String) {
     guard d != shownLine else { return }
     shownLine = d
-    if #available(iOS 26.0, *) {
-      navigationItem.subtitle = d.isEmpty ? nil : d
-      if d.isEmpty { navigationItem.largeAttributedSubtitle = nil } else {
-        var a = AttributedString(d); a.uiKit.font = .systemFont(ofSize: 15); a.uiKit.foregroundColor = .secondaryLabel
-        navigationItem.largeAttributedSubtitle = a
-      }
-    }
+    BigLine.set(self, d, "clients")
   }
   // ---------- Apple's search: it opened, its words changed, it closed (as Home's) ----------
   func updateSearchResults(for s: UISearchController) { Main.shared.clientsListIfMade?.appleSearchText(s.searchBar.text ?? "") }
@@ -280,6 +275,7 @@ final class AssetsTabVC: UIViewController, TabRoot, UISearchResultsUpdating, UIS
     super.viewDidLoad()
     navigationItem.backButtonDisplayMode = .minimal
     navigationItem.title = "Client Assets"
+    BigLine.prime(self, "assetsTab")
     let me = UIBarButtonItem(image: BarImage.me(nil, traitCollection), primaryAction: UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.h?.meTap() })
     me.accessibilityLabel = "Me"
     BarImage.bare(me)
@@ -327,13 +323,7 @@ final class AssetsTabVC: UIViewController, TabRoot, UISearchResultsUpdating, UIS
   private func setLine(_ d: String) {
     guard d != shownLine else { return }
     shownLine = d
-    if #available(iOS 26.0, *) {
-      navigationItem.subtitle = d.isEmpty ? nil : d
-      if d.isEmpty { navigationItem.largeAttributedSubtitle = nil } else {
-        var a = AttributedString(d); a.uiKit.font = .systemFont(ofSize: 15); a.uiKit.foregroundColor = .secondaryLabel
-        navigationItem.largeAttributedSubtitle = a
-      }
-    }
+    BigLine.set(self, d, "assetsTab")
   }
   func updateSearchResults(for s: UISearchController) { h?.appleSearchText(s.searchBar.text ?? "") }
   func willPresentSearchController(_ s: UISearchController) { h?.appleSearchBegin() }

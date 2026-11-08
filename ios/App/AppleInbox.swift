@@ -44,6 +44,7 @@ final class InboxVC: UIViewController, TabRoot {
     if #available(iOS 17.0, *) { registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (vc: InboxVC, _: UITraitCollection) in vc.paintMe() } }
     // (its screen in it from the start — made now if it wasn't: the tab never comes up empty, and Apple's bar has its list
     //  before the first look — Haris 2026-11-08: a black flash, the big title cut, on each tab's first open)
+    BigLine.prime(self, "inbox")   // (its line there before it first shows, as Home's date)
     if APPLE_INBOX { adopt(Main.shared.inboxView) } else if let h = Main.shared.inboxIfMade { adopt(h) }
   }
   // (where the tab bar starts, for "+ New task" and the list's end — as Home's screen does)
@@ -88,12 +89,6 @@ final class InboxVC: UIViewController, TabRoot {
   private func setLine(_ d: String) {
     guard d != shownLine else { return }
     shownLine = d
-    if #available(iOS 26.0, *) {
-      navigationItem.subtitle = d.isEmpty ? nil : d
-      if d.isEmpty { navigationItem.largeAttributedSubtitle = nil } else {
-        var a = AttributedString(d); a.uiKit.font = .systemFont(ofSize: 15); a.uiKit.foregroundColor = .secondaryLabel
-        navigationItem.largeAttributedSubtitle = a
-      }
-    }
+    BigLine.set(self, d, "inbox")
   }
 }
