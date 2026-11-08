@@ -52,7 +52,7 @@ try:
     data = sh('xcrun', 'simctl', 'get_app_container', udid, BUNDLE, 'data').stdout.strip()
     out = os.path.join(data, 'Documents', 'selftest.json')
     seen, res, t0 = set(), {}, time.time()
-    while time.time() - t0 < 480:
+    while time.time() - t0 < 540:
         try: res = json.load(open(out))
         except Exception: res = {}
         st = res.get('stage')
@@ -60,6 +60,10 @@ try:
             seen.add(st); time.sleep(0.5)
             sh('xcrun', 'simctl', 'io', udid, 'screenshot', os.path.join(TMP, f'ios-{st}.png'))
             print('stage', st, f'at {time.time() - rec_t0:.1f}s')
+            # (to another app and back, as a person does: Settings opened, then the app again)
+            if st == 'away':
+                sh('xcrun', 'simctl', 'launch', udid, 'com.apple.Preferences'); time.sleep(4)
+                sh('xcrun', 'simctl', 'launch', udid, BUNDLE); time.sleep(1)
         if st == 'done': break
         time.sleep(0.5)
     try: os.killpg(rec.pid, signal.SIGINT); rec.wait(timeout=60)
@@ -103,6 +107,9 @@ try:
     hd = res.get('homeDateNative') or {}
     check(hd.get('sheet') == 'DateSheetVC', f'the date sheet opens (and the app is still running) {hd.get("sheet")}')
     tp, tps, tpc, tpb = res.get('tpageNative') or {}, res.get('tpageScrolledNative') or {}, res.get('tpageCommentsNative') or {}, res.get('tpageBackNative') or {}
+    # (the rule "only what changed changes": to another app and back redraws nothing, and the task page keeps its bands)
+    check(res.get('redrawsBefore') is not None and res.get('redrawsAfter') == res.get('redrawsBefore'), f"to another app and back: no screen drawn again {res.get('redrawsBefore')} → {res.get('redrawsAfter')}")
+    check((res.get('awayBands') or 0) > 0, f"the task page's grey bands still there after coming back {res.get('awayBands')}")
     check(tp.get('copy') is True and tp.get('copyTask') and tp.get('copyTask') == tp.get('title'), f"the app's own copy of the data is ready and gives the task page the server gives {({k: tp.get(k) for k in ('copy', 'copyTask', 'title')})}")
     tsd = res.get('tpageSwipeDetailsNative') or {}
     check(tsd.get('tab') == 'details' and tsd.get('compose') is False and tsd.get('pages') == 1, f"swiped from Comments: Details, no comment box {tsd}")

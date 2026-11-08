@@ -1463,7 +1463,11 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   // (light / dark changed while the app is open — View as… someone with another look, Me › Appearance: every native
   //  screen drawn again in it at once, the hidden ones too, so none waits for the page or a restart — Haris 2026-11-04)
+  // (how many times the screens were drawn again for a look change — the self-test checks going to another app and
+  //  back draws nothing again: only what changed changes, Haris 2026-11-08)
+  static var lookRedraws = 0
   func relight(_ light: Bool) {
+    Main.lookRedraws += 1
     if let l = homeLook as? [String: Any], (l["light"] as? Bool) != light { homeLook = nil }
     let look: Any = homeLook ?? ["light": light]
     myTasksLight = light; inboxLight = light; clientsLight = light
@@ -2799,6 +2803,11 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       //  and a task that isn't locked for CD review: its Assignees lock then, 32)
       ("tpage", "if (ui.view === 'client' || ui.view === 'clients') go('today'); const free = (x) => !x.parentId && !x.done && !x.lockedAt && !(x.reviews || []).length; const t = db.tasks.find((x) => free(x) && (x.comments || []).length && (x.checklist || []).length) || db.tasks.find((x) => free(x) && (x.comments || []).length) || db.tasks.find(free) || db.tasks.find((x) => !x.parentId && !x.done); openTask(t.id); " + pause(3000) + "return JSON.stringify({ webTask: !!ui.taskId, id: t.id })", { self.presentedViewController?.dismiss(animated: false) }),
       ("tpageScrolled", pause(900) + "return '{}'", { self.taskPages.last?.scroll.setContentOffset(CGPoint(x: 0, y: 380), animated: false) }),
+      // (to another app and back with a task open — the build machine opens Settings and comes back while "awayWait"
+      //  waits: nothing may be drawn again for it, the rule "only what changed changes", Haris 2026-11-08)
+      ("away", "return '{}'", { self.selfResult["redrawsBefore"] = Main.lookRedraws }),
+      ("awayWait", pause(9000) + "return '{}'", nil),
+      ("awayBack", "return '{}'", { self.selfResult["redrawsAfter"] = Main.lookRedraws; self.selfResult["awayBands"] = self.taskPages.last.map { $0.bandsShown } ?? -1 }),
       ("tpageSheet", pause(1500) + "return '{}'", { self.taskPages.last?.pickPeople() }),
       ("tpageComments", pause(5000) + "return '{}'", { self.presentedViewController?.dismiss(animated: false); self.taskPages.last?.setTab("comments", tell: true) }),
       // (Comments → Details as the swipe does it — for the film: nothing of Comments may show on Details on the way)

@@ -335,7 +335,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     backgroundColor = .systemBackground
     commentsHost.backgroundColor = .systemGroupedBackground
     // (the description's file chips are pictures: drawn again in the new look)
-    if drawnOnce, !editingDesc, let m = model { built = ""; draw(m) }
+    if drawnOnce, !editingDesc, let m = model { Main.lookRedraws += 1; built = ""; draw(m) }
   }
 
   // ---------- layout ----------
@@ -942,6 +942,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   // (each band kept by what comes after it — the same band stays with its section; Haris 2026-11-08: bands handed round by
   //  position were taken off the page on a redraw, coming back from another app, and didn't come back)
   private var bands: [String: PageBand] = [:]
+  var bandsShown: Int { bands.values.filter { $0.window != nil }.count }   // (the self-test: the bands still on the page)
   private func placeBands() {
     blocks.removeAll { $0 is PageBand }
     var out: [UIView] = [], used = Set<String>()

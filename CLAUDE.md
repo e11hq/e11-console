@@ -18,6 +18,12 @@ gone — never rebuild a whole list or page for one change. Build new views with
 (`UIView.performWithoutAnimation`), then run only the screen's own change animation (new fades in, gone fades out,
 others slide only when something really came, went or changed height). Every new native screen is built this way.
 (Details: project doc `claude/ios-native-polish.md`.)
+**Never skipped, and checked (Haris, 2026-11-08: "This rule should not be ignored and checked"):** every change to a
+native screen is checked against it before it's built — nothing drawn again that didn't change, nothing taken off a screen
+that stays (the task page's grey bands vanished on a redraw). The self-test checks it on every build: with a task open the
+app goes to another app and back (`away` → `awayBack`) and no screen may be drawn again (`Main.lookRedraws` unchanged), the
+bands still on the page. (The redraw came from iPhone's app-switcher pictures, taken in light and dark, read as the phone
+changing its look — `followPhoneLook` ignores look changes while the app is in the background.)
 
 **Touch and hold, everywhere (Haris, 2026-11-03):** as the comment cards — the whole card shrinks as one (the shared
 `PressShrink`) from the moment the finger is down, nothing inside it moves (cards are placed with bounds + center, never
