@@ -80,11 +80,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   // collection list; Apple places them and animates what comes, goes and moves (our own placing and change animation
   // taken out)
   let scroll: UICollectionView = {
-    var cfg = UICollectionLayoutListConfiguration(appearance: .plain)
-    cfg.showsSeparators = false
-    cfg.backgroundColor = .clear
-    let layout = UICollectionViewCompositionalLayout { _, env in NSCollectionLayoutSection.list(using: cfg, layoutEnvironment: env) }
-    let cv = UICollectionView(frame: .zero, collectionViewLayout: layout)
+    let cv = UICollectionView(frame: .zero, collectionViewLayout: UICollectionViewFlowLayout())
     cv.backgroundColor = .clear
     cv.allowsSelection = false
     return cv
@@ -280,6 +276,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
       addSubview(pager)
       pager.addSubview(scroll)
     }
+    scroll.setCollectionViewLayout(makeListLayout(), animated: false)
     let reg = UICollectionView.CellRegistration<PageCell, String> { [weak self] cell, _, key in
       cell.host(self?.listViews[key], self?.listGeo[key] ?? PageCell.Geo(x: 0, w: 0, h: 1, gap: 0))
     }
@@ -518,7 +515,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   }
   private func keepUnchanged(_ old: [UIView]) {
     var pool: [String: [UIView]] = [:]
-    for b in old where !holdsOwnPieces(b) { pool[blockKey(b), default: []].append(b) }
+    for b in old where !holdsOwnPieces(b) && !(b is PageBand) { pool[blockKey(b), default: []].append(b) }
     var kept = Set<ObjectIdentifier>()
     for (i, b) in blocks.enumerated() where !holdsOwnPieces(b) {
       let k = blockKey(b)
@@ -526,7 +523,8 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
       let o = list.remove(at: j); pool[k] = list
       blocks[i] = o; kept.insert(ObjectIdentifier(o))
     }
-    for b in old where b !== titleView && !kept.contains(ObjectIdentifier(b)) && !blocks.contains(where: { $0 === b }) { b.removeFromSuperview() }
+    // (the bands aren't sections of their own: placed again after this — placeBands)
+    for b in old where b !== titleView && !(b is PageBand) && !kept.contains(ObjectIdentifier(b)) && !blocks.contains(where: { $0 === b }) { b.removeFromSuperview() }
   }
   // (only drawn again when someone's picture or name really changed — photos arriving again and again redrew the whole
   //  page each time, the Files row and the lock note jumping by themselves; Haris 2026-11-02)
@@ -873,6 +871,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     let order = keys != listKeys
     listKeys = keys
     guard let ds = listDS else { return }
+    scroll.collectionViewLayout.invalidateLayout()   // (the places as they are now)
     var snap = NSDiffableDataSourceSnapshot<Int, String>()
     snap.appendSections([0]); snap.appendItems(keys, toSection: 0)
     let had = Set(ds.snapshot().itemIdentifiers)
@@ -880,6 +879,22 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     // (inside an animation of its own — the description growing — Apple's list goes along with it)
     let animated = order ? listLive : (listLive || UIView.inheritedAnimationDuration > 0)
     ds.apply(snap, animatingDifferences: animated && window != nil)
+  }
+  // Apple's list laid out with each section's exact place — its height known, nothing guessed and corrected as it comes
+  // into sight (Haris 2026-11-08: a section reaching the bottom edge came in squeezed and then grew, as the long sheets'
+  // last row once did)
+  private func makeListLayout() -> UICollectionViewLayout {
+    UICollectionViewCompositionalLayout { [weak self] _, env in
+      let W = env.container.contentSize.width
+      var frames: [NSCollectionLayoutGroupCustomItem] = [], y: CGFloat = 0
+      for k in self?.listKeys ?? [] {
+        let h = self?.listGeo[k].map { $0.top + $0.h + $0.gap } ?? 1
+        frames.append(NSCollectionLayoutGroupCustomItem(frame: CGRect(x: 0, y: y, width: W, height: h)))
+        y += h
+      }
+      let group = NSCollectionLayoutGroup.custom(layoutSize: NSCollectionLayoutSize(widthDimension: .fractionalWidth(1), heightDimension: .absolute(max(y, 1)))) { _ in frames }
+      return NSCollectionLayoutSection(group: group)
+    }
   }
   // a section's key: what it is (the title, the description, a heading's words, a row group by its first row…); a band by
   // what comes after it, so it goes with it
@@ -924,21 +939,25 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   }
 
   // a thin grey band before each section (a heading), and before the description — none at the top, never two together
-  private var bands: [PageBand] = []
+  // (each band kept by what comes after it — the same band stays with its section; Haris 2026-11-08: bands handed round by
+  //  position were taken off the page on a redraw, coming back from another app, and didn't come back)
+  private var bands: [String: PageBand] = [:]
   private func placeBands() {
     blocks.removeAll { $0 is PageBand }
-    var out: [UIView] = [], used = 0
+    var out: [UIView] = [], used = Set<String>()
     for b in blocks {
       let isDesc = b is DescBox
       let heading = b is PageHeading
       if heading || isDesc, let prev = out.last, !(prev is PageBand), prev !== titleView {
-        if used == bands.count { bands.append(PageBand()) }
-        let band = bands[used]; used += 1
+        var k = listKey(b, next: nil), n = 1
+        while used.contains(k) { k = listKey(b, next: nil) + "#\(n)"; n += 1 }
+        used.insert(k)
+        let band = bands[k] ?? PageBand(); bands[k] = band
         out.append(band)
       }
       out.append(b)
     }
-    for b in bands[used...] { b.removeFromSuperview() }
+    for (k, b) in bands where !used.contains(k) { b.removeFromSuperview(); bands[k] = nil }
     blocks = out
   }
 
@@ -1671,7 +1690,7 @@ final class PaddedLabel: UILabel {
 // the task page's pieces: a set of rows right across the page, and the grey band between sections
 // one section of a task's Details in Apple's list: the section, placed across the page or on its edge, with the room
 // after it as the page had it
-final class PageCell: UICollectionViewListCell {
+final class PageCell: UICollectionViewCell {
   struct Geo: Equatable { var x: CGFloat, w: CGFloat, h: CGFloat, gap: CGFloat, top: CGFloat = 0 }
   private weak var hosted: UIView?
   private var geo = Geo(x: 0, w: 0, h: 1, gap: 0)
@@ -1691,11 +1710,6 @@ final class PageCell: UICollectionViewListCell {
     guard let v = hosted, v.superview === contentView else { return }
     let f = CGRect(x: geo.x, y: geo.top, width: geo.w, height: geo.h)
     if v.frame != f { v.frame = f }
-  }
-  override func preferredLayoutAttributesFitting(_ a: UICollectionViewLayoutAttributes) -> UICollectionViewLayoutAttributes {
-    let r = super.preferredLayoutAttributesFitting(a)
-    r.size.height = geo.top + geo.h + geo.gap
-    return r
   }
 }
 final class PageGroup: UIStackView {}
