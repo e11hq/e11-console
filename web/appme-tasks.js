@@ -33,7 +33,8 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
   M.MY_TASKS_DEFAULT = DEFAULT;
 
   const msOf = (nowMs) => (typeof nowMs === 'function' ? nowMs() : nowMs == null ? Date.now() : Number(nowMs));
-  const initials = (name) => String(name).trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?';
+  // (a middle "Al" is skipped: Yousef Al Hwij → YH, Lana Al Ramli → LR, Al-Ramli too — Haris 2026-11-08)
+  const initials = (name) => { const w = String(name || '').trim().split(/\s+/).filter(Boolean); if (w.length > 2 && /^al$/i.test(w[1])) w.splice(1, 1); const two = w.slice(0, 2).map((x, i) => (i > 0 ? x.replace(/^al-(?=.)/i, '') : x)[0] || ''); return two.join('').toUpperCase() || '?'; };
   const avColor = (id) => { let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return AV_COLORS[h % AV_COLORS.length]; };
   const normPrio = (p) => { if (p === 'urgent' || p === 'high') return 'urgent'; const n = Number(p); return Number.isInteger(n) && n >= 1 && n <= 10 ? n : 'none'; };
   const prioRank = (p) => { p = normPrio(p); return p === 'urgent' ? 0 : p === 'none' ? 99 : p; };

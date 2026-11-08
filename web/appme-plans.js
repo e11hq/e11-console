@@ -63,7 +63,8 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
   const pathUrl = (p) => '/__file/' + String(p).split('/').map(encodeURIComponent).join('/');
   const fileUrl = (a) => pathUrl(a.path);
   const imgUrl = (a, w) => fileUrl(a) + (!/\.svg$/i.test(String(a.path)) ? '?w=' + w : '');   // (the app is always on the server)
-  const initials = (name) => name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?';
+  // (a middle "Al" is skipped: Yousef Al Hwij → YH, Lana Al Ramli → LR, Al-Ramli too — Haris 2026-11-08)
+  const initials = (name) => { const w = String(name || '').trim().split(/\s+/).filter(Boolean); if (w.length > 2 && /^al$/i.test(w[1])) w.splice(1, 1); const two = w.slice(0, 2).map((x, i) => (i > 0 ? x.replace(/^al-(?=.)/i, '') : x)[0] || ''); return two.join('').toUpperCase() || '?'; };
   const avColor = (id) => { let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return AV_COLORS[h % AV_COLORS.length]; };
   const mentionsIn = (html) => { const out = new Set(); String(html || '').replace(/data-user="([^"]+)"/g, (_, id) => { out.add(id); return ''; }); return out; };
   // (letters added, dropped, changed — two swapped count as one: app.js editDist)

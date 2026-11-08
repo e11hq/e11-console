@@ -22,7 +22,8 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
   const aedOf = (n) => (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const ordN = (n) => n + (n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th');
   const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
-  const initials = (name) => String(name).trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?';
+  // (a middle "Al" is skipped: Yousef Al Hwij → YH, Lana Al Ramli → LR, Al-Ramli too — Haris 2026-11-08)
+  const initials = (name) => { const w = String(name || '').trim().split(/\s+/).filter(Boolean); if (w.length > 2 && /^al$/i.test(w[1])) w.splice(1, 1); const two = w.slice(0, 2).map((x, i) => (i > 0 ? x.replace(/^al-(?=.)/i, '') : x)[0] || ''); return two.join('').toUpperCase() || '?'; };
   const fullName = (u) => (u ? (u.name || u.email.split('@')[0]) : 'Former member');
   const fileExt = (name) => (String(name).split('.').pop() || '').toLowerCase();
   const isImage = (a) => IMG_EXT.includes(fileExt(a.name));

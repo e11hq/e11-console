@@ -97,6 +97,11 @@ Chat section of E11 Console (not on the website — Haris, 2026-11-05). (Plan: p
 E11 Talk is built on the **test server** first (talk-test.e11hq.com), with its own sign-in for now; **before the App
 Store, the shared sign-in goes into both apps and both are sent for review together** (Haris, 2026-11-06).
 
+**Initials skip a middle "Al" (Haris, 2026-11-08):** a picture's initials use the first name and the name after a middle
+"Al" — Yousef Al Hwij → YH, Lana Al Ramli (or Al-Ramli) → LR. Done in E11 Console (website, Mac and iPhone — every
+`initials` in web/ and server/claimsheet.js). **Remember when other apps start or resume (E11 Talk's `Talk.initials`,
+any new app): the same rule.**
+
 **Every build only on Haris's yes — check builds too (Haris, 2026-11-08: "ask me everytime you run build"):** ask before
 any build runs, the simulator check build included. A push to an `ios-*` branch starts a check build by itself, so
 changes stay as local commits and are pushed only once Haris says yes to building.
