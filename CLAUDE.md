@@ -174,7 +174,9 @@ follows it (Don't 9); don't change any of it without Haris. Project doc `claude/
 **iPhone Home and the task page — COMPLETED and LOCKED (Haris, 2026-11-08 13:21: "the home page and task page is
 completed, and they need to be locked, no changes will touch these pages now without me knowing"):** build **1571**, commit
 e52c4d7, marked by the branches `locked/ios-home-1571` and `locked/ios-task-1571` (never moved or deleted; 1550's branch
-stays too). **Nothing may touch either page — its look, behaviour or code — without telling Haris first and his yes**,
+stays too).
+**Home's lock updated to the latest (Haris, 2026-11-08 13:43): commit 6545ee0, branch `locked/ios-home-6545ee0`** — 1571
+plus tapping Home's tab again scrolling all the way up, the big title opening again (not built yet; the next build carries it). **Nothing may touch either page — its look, behaviour or code — without telling Haris first and his yes**,
 including a change made for another page or a shared piece they use (the frost, the floating button, the keyboard rule,
 CommentsFeed, PageCell, AppleTabs, AppleNav…). Project doc `claude/ios-apple-structure.md`.
 - **Every other page follows the locked page of its category** (Don't 9):
