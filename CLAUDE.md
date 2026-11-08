@@ -195,6 +195,17 @@ CommentsFeed, PageCell, AppleTabs, AppleNav…). Project doc `claude/ios-apple-s
   the task page: Details · Comments in Apple's bar, the client line, every row its own cell, the keyboard guide; comments:
   smooth scroll to a highlighted comment, scrolling while typing, Apple's soft blur under the comment box.
 
+**iPhone My Tasks — APPROVED and LOCKED (Haris, 2026-11-08 14:43: "My tasks approved, lock it"):** build **1572**, commit
+d592905, branch `locked/ios-mytasks-1572` (never moved or deleted). Nothing touches it — look, behaviour or code, or a shared
+piece it uses (HomeView, AppleTabs, AppleNav, AppleMyTasks) — without telling Haris first and his yes. It follows Home: its
+own Apple navigation in Apple's tab bar; Apple's big title "My Tasks" with the line under it (how many open; one filter's
+name or "N filters"); Apple's search bar (Search tasks, clients or people — it searches everything, as Home's); your photo,
+no Talk; Apple's filter button with Apple's own menu (Due ticks; People and AMs with the picked names under them — one, two,
+or "first + N more" — both opening the people sheet with search and ticks; Assigned to me for the CD; Waiting for CD review
+when on; Clear filters), Apple's filled filter symbol while a filter is on; All / Done as Apple's segmented control at the
+top of Apple's list; the cards in Apple's list with Apple's swipes; tasks open with Apple's push; the app opened afresh
+starts it with no filters, on All.
+
 **Before the next App Store review — remember (Haris, 2026-11-08):** do **light ↔ dark switching smoothly, Apple's way**
 first (task page plan step 5, project doc `claude/ios-task-page-apple.md`): our screens' colours as Apple's dynamic
 colours so iOS fades the look itself, the tab bar following the phone. Not now — only before sending the iPhone app to
