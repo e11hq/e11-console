@@ -874,7 +874,6 @@ final class TrashRow: AssetTile, UIGestureRecognizerDelegate {
   }
   private var start: CGFloat = 0
   @objc private func pan(_ g: UIPanGestureRecognizer) {
-    let W = bounds.width
     switch g.state {
     case .began: start = shift; cancelTracking(with: nil)
     case .changed:
@@ -883,9 +882,8 @@ final class TrashRow: AssetTile, UIGestureRecognizerDelegate {
       shift = x
     default:
       let v = g.velocity(in: self).x
-      // (far enough — more than half the row — it does it, as Mail's full swipe; else it opens to its button or closes)
-      if shift > W * 0.55 && canR { act("trRestore"); return }
-      if shift < -W * 0.55 && canF { act("trForever"); return }
+      // (no long swipe in the Trash — it only opens to its button, Restore or Delete forever, which is then tapped:
+      //  Haris 2026-11-08)
       let to: CGFloat = shift > 44 || (shift > 10 && v > 400) ? 96 : shift < -44 || (shift < -10 && v < -400) ? -110 : 0
       if to != 0 && abs(start) < 1 { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
       SwipeSpring.run(from: shift, to: to, velocity: v) { self.shift = to }
