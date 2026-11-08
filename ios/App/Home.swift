@@ -402,6 +402,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     fc.baseForegroundColor = .label
     fab.configuration = fc
     fab.accessibilityLabel = "New task"
+    // (not greyed by iPhone behind an open sheet — its words greyed while the "+" didn't, and came back with a snap as
+    //  the sheet left: Apple's own setting for it, Haris 2026-11-08)
+    fab.tintAdjustmentMode = .normal
     fab.isHidden = true   // (until the screen's model says this person may add — it showed for a freelancer, who can't: the walk-through)
     fab.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); if let a = self?.fabRun { a() } else { self?.send(["ev": "add"]) } }, for: .touchUpInside)
     addSubview(fab)
