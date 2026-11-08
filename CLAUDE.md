@@ -153,6 +153,11 @@ way (task page step 5 — project doc `claude/ios-task-page-apple.md`): our scre
 iOS fades the whole app itself; the tab bar follows the phone. About 110 places, every native screen. Remind Haris
 before anything is sent for review.
 
+**Before the next App Store review — remember (Haris, 2026-11-08):** do **light ↔ dark switching smoothly, Apple's way**
+first (task page plan step 5, project doc `claude/ios-task-page-apple.md`): our screens' colours as Apple's dynamic
+colours so iOS fades the look itself, the tab bar following the phone. Not now — only before sending the iPhone app to
+App Store review; remind Haris then.
+
 **The App Store release — APPROVED (Haris, 2026-11-06):** the iPhone app 1.1.0, build 1472 (commit 9ca8c16, marked by
 the branch `approved/appstore-ios-1.1.0-build-1472` — never moved or deleted) is approved as it is for the App Store.
 From now on:
