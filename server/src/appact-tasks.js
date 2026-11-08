@@ -130,6 +130,7 @@ export function createTaskActs({ store, now = () => Date.now(), webDir, access }
       channels: (src.channels || []).slice(), basedOn: src.id, ...(src.guardian ? { guardian: src.guardian } : {}),
     };
     t.activity.push({ id: uid(), at, text: 'created this task', actor: u.id });
+    if (t.needsCD && t.assignees.length === 1 && t.assignees[0] === db.meta.cdUserId) t.needsCD = false;   // (the CD alone on it: no CD review — Haris 2026-11-08)
     rules.logActivity(t, `started this from <b>${esc(src.title || 'Untitled task')}</b>`);
     t.sectionId = p ? (p.sections && p.sections[0] ? p.sections[0].id : null) : db.statuses[0].id;
     const sibs = db.tasks.filter((x) => !x.parentId && x.projectId === t.projectId && x.sectionId === t.sectionId);

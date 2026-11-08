@@ -525,7 +525,16 @@ export function createAccess(store, opts = {}) {
     const rv = list.findIndex((x) => /^(internal )?review$/i.test(String(x.name).trim()));
     return rv >= 0 && to > rv;
   }
+  // (CD review's round, Haris 2026-11-08: once this round's first files are sent, CD review isn't switched off until the
+  //  CD has approved them all — nobody is exempt; web/rules.js reviewLocked)
+  function roundLocked(t, cd) {
+    if (!t || t.parentId || !t.needsCD || t.cdStatus === 'approved') return false;
+    const rv = (t.assignees || []).filter((id) => id !== cd), ep = t.reviewEpoch || 0;
+    if (!rv.length) return false;
+    return (t.reviews || []).some((r) => (r.epoch || 0) === ep && rv.includes(r.by));
+  }
   function cdGateOk(current, next) {
+    if (current && !next.needsCD && roundLocked(current, (store.get('meta', 'main') || {}).cdUserId || null)) return false;
     if (next.parentId || !next.needsCD || next.cdStatus === 'approved') return true;
     const cd = (store.get('meta', 'main') || {}).cdUserId || null;
     const people = next.assignees || [];

@@ -33,6 +33,8 @@ before(async () => {
       { id: 't3', projectId: 'p1', sectionId: 's4', title: 'At the client', assignees: ['u-prod'], createdBy: 'u-am', comments: [], activity: [] },
       { id: 't4', projectId: 'p1', sectionId: 's5', title: 'Finished', assignees: ['u-prod'], createdBy: 'u-am', done: true, completedAt: '2026-10-28T08:00:00Z', comments: [], activity: [] },
       { id: 't5', projectId: 'p1', sectionId: 's2', title: 'Sub', parentId: 't1', assignees: [], comments: [], activity: [] },
+      { id: 't6', projectId: 'p1', sectionId: 's2', title: 'Amending', assignees: ['u-prod'], createdBy: 'u-am', needsCD: true, cdRule: 2, reviews: [{ id: 'rv1', by: 'u-prod', state: 'amend', epoch: 0, at: '2026-10-28T08:00:00Z' }], comments: [], activity: [] },
+      { id: 't7', projectId: 'p1', sectionId: 's1', title: 'Fresh', assignees: [], createdBy: 'u-am', needsCD: true, cdRule: 2, reviews: [], comments: [], activity: [] },
     ],
   }, 'test');
 });
@@ -276,4 +278,26 @@ test('a task gone for CD review: its Assignees and Guardian lock too (Haris 2026
     r = await act('am@e11-digital.com', { act: 'guardian', id: 't1', value: 'u-prod' });
     assert.equal(r.ok, false);
   } finally { app.store.apply([{ kind: 'tasks', id: 't1', data: orig }], 'u-am'); }
+});
+
+test('CD review\'s round (Haris 2026-11-08): amendments keep the status at In progress and CD review on — nobody exempt', async () => {
+  let r = await act('adm@e11-digital.com', { act: 'status', id: 't6', value: 's1' });
+  assert.match(r.error || '', /stays In progress/);
+  assert.equal(T('t6').sectionId, 's2');
+  r = await act('adm@e11-digital.com', { act: 'needsCD', id: 't6', value: false });
+  assert.match(r.error || '', /stays on/);
+  assert.equal(T('t6').needsCD, true);
+  const m = (await page('adm@e11-digital.com', 't6')).task;
+  assert.equal(m.status.canSet, false); assert.match(m.status.why, /stays In progress/); assert.equal(m.review.canSet, false);
+});
+
+test('the CD alone on a task: CD review switches itself off, can\'t be turned on; with someone else it can', async () => {
+  let r = await act('am@e11-digital.com', { act: 'assign', id: 't7', key: 'u-cd', value: true });
+  assert.ok(!r.error, r.error); assert.equal(T('t7').needsCD, false);
+  r = await act('am@e11-digital.com', { act: 'needsCD', id: 't7', value: true });
+  assert.match(r.error || '', /only one/);
+  r = await act('am@e11-digital.com', { act: 'assign', id: 't7', key: 'u-prod', value: true });
+  assert.equal(T('t7').needsCD, false, 'stays off');
+  r = await act('am@e11-digital.com', { act: 'needsCD', id: 't7', value: true });
+  assert.ok(!r.error, r.error); assert.equal(T('t7').needsCD, true, 'the CD and someone else: on again');
 });

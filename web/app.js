@@ -5897,7 +5897,6 @@ function setAssignee(t, userId, on) {
   if (peopleLocked(t)) { toast('Locked during CD review'); return; }
   if (!can('assign')) return denied();
   if (on && !assignable(userById(userId))) { toast('This person can’t be assigned'); return; }
-  if (on && userId === cdUserId() && t.cdRule && needsCD(t)) { toast('Turn off CD review first'); return; }
   const has = (t.assignees || []).includes(userId);
   if (on === has) return;
   if (on) {
@@ -5918,6 +5917,8 @@ function setAssignee(t, userId, on) {
     logActivity(t, `unassigned ${struck(fullName(userById(userId)))}`);
     pushNotif(userId, t, 'unassigned', 'removed you from');
   }
+  // (the CD alone on it: no CD review — switched off by itself; taken off again later, it stays off — Haris 2026-11-08)
+  if (t.needsCD && cdAlone(t) && !roundStarted(t)) { t.needsCD = false; logActivity(t, 'turned off <b>CD review</b> — the CD is the only one on it'); }
   syncCD(t);
   t.updatedAt = nowISO();
   commit();
@@ -7697,8 +7698,10 @@ function lastReview(t, u) {
 // none | pending | approved | amend | reopened
 const reviewState = (t, u = currentUserId) => { const r = lastReview(t, u); return r ? r.state : 'none'; };
 const reviewPending = (t) => needsCD(t) && reviewersOf(t).some((u) => reviewState(t, u) === 'pending');
-const statusLocked = (t) => reviewPending(t);
-const LOCK_MSG = 'The status is locked while files are with the CD for review';
+const statusLocked = (t) => reviewPending(t) || reviewLocked(t);
+const LOCK_MSG_CD = 'The status is locked while files are with the CD for review';
+const LOCK_MSG_AMEND = 'The status stays In progress until the files go to the CD again';
+const lockMsg = (t) => (reviewPending(t) ? LOCK_MSG_CD : LOCK_MSG_AMEND);
 const iReview = (t) => needsCD(t) && isMine(t) && !isCD();
 // Files can be submitted once the task has left To Do
 const canSubmitNow = (t) => !t.done && !cdLocked(t);
@@ -7706,6 +7709,12 @@ const soloReview = (t) => (t.assignees || []).length === 1 && reviewersOf(t).len
 // CD review on: nothing moves past Review or completes until the CD approves — also with nobody assigned yet (switch CD
 // review off if it really isn't needed). Only a task done by the CD alone needs no approval (their own work).
 const cdOK = (t) => !needsCD(t) || t.cdStatus === 'approved' || ((t.assignees || []).length > 0 && reviewersOf(t).length === 0);
+// CD review's round (Haris 2026-11-08): once the first files of this round are sent, CD review stays on and the status is
+// locked until the CD has approved everyone's files — while they're with the CD, and while amendments are being made
+// (In progress, until the fixed files are sent). Nobody is exempt. The CD alone on a task: no CD review (cdAlone).
+const roundStarted = (t) => needsCD(t) && (t.reviews || []).some((r) => (r.epoch || 0) === epochOf(t) && reviewersOf(t).includes(r.by));
+const reviewLocked = (t) => roundStarted(t) && !cdOK(t);
+const cdAlone = (t) => !!t.cdRule && !!cdUserId() && (t.assignees || []).length === 1 && t.assignees[0] === cdUserId();
 const CD_WAIT_MSG = (t) => ((t.assignees || []).length ? 'Waiting for the Creative Director’s approval — the status can’t go past Review yet' : 'Assign someone and get the Creative Director’s approval, or turn off CD review');
 // a status past Review (CTR, Done or anything after Review in the list)
 function pastReview(t, sectionId) {
@@ -7914,7 +7923,7 @@ function choiceDialog({ title, body = '', choices }) {
 async function changeStatus(t, sectionId, targetId = null, after = false) {
   if (!t) return false;
   if (amReadOnly(t) || doneLocked(t)) { toast(roMsg()); return false; }
-  if (t.sectionId !== sectionId && statusLocked(t)) { toast(LOCK_MSG); return false; }
+  if (t.sectionId !== sectionId && statusLocked(t)) { toast(lockMsg(t)); return false; }
   if (t.sectionId !== sectionId && !t.parentId && needsCD(t) && !cdOK(t) && pastReview(t, sectionId)) { toast(CD_WAIT_MSG(t)); render({ keepDetail: true }); return false; }
   const list = statusList(t);
   const from = list.findIndex((x) => x.id === t.sectionId), to = list.findIndex((x) => x.id === sectionId);
@@ -7923,7 +7932,7 @@ async function changeStatus(t, sectionId, targetId = null, after = false) {
   if (backFromClient) {
     const allowed = (me() && (isAdm(me()) || me().role === 'am')) || t.createdBy === currentUserId;
     if (!allowed) { toast('You can’t send this back'); return false; }
-    const cdOnIt = (t.cdRule && cdUserId() && (t.assignees || []).includes(cdUserId())) || !cdUserId();   // (the CD works on it, or there's no CD: no CD review)
+    const cdOnIt = cdAlone(t) || !cdUserId();   // (the CD alone on it, or there's no CD: no CD review)
     const ans = cdOnIt ? 'no' : await choiceDialog({
       title: 'Does this need CD review again?',
       body: 'The task is going back for changes. Choose whether the updated work goes to the Creative Director before it returns to the client.',
@@ -7950,7 +7959,8 @@ async function changeStatus(t, sectionId, targetId = null, after = false) {
 function setNeedsCD(t, on) {
   if (!(me() && (isAdm(me()) || me().role === 'am' || isCD()))) return denied();
   if (on && !cdUserId()) { toast('No CD set'); renderDetail(); return; }   // (Haris 2026-11-06)
-  if (on && t.cdRule && cdUserId() && (t.assignees || []).includes(cdUserId())) { toast('The CD is on it — no review'); renderDetail(); return; }
+  if (on && cdAlone(t)) { toast('The CD is the only one on it — no review'); renderDetail(); return; }
+  if (!on && reviewLocked(t)) { toast('CD review stays on until the CD approves the files'); renderDetail(); return; }
   if (reviewPending(t)) { toast('Wait for the CD’s review'); return; }
   if (!!t.needsCD === !!on) return;
   t.needsCD = !!on;
@@ -8062,7 +8072,7 @@ async function askClientApproval(t) {
 }
 function cdReviewRow(t) {
   if (t.parentId || t.done) return '';
-  const canSet = me() && (isAdm(me()) || me().role === 'am' || isCD());
+  const canSet = me() && (isAdm(me()) || me().role === 'am' || isCD()) && !reviewLocked(t);
   const cd = cdUserId();
   const who = cd ? `${esc(fullName(userById(cd)))}${cdActing() ? ' (Acting CD)' : ''}` : 'No Creative Director set';
   return `<div class="prop prop-cdreq"><label>${icon('shield')}CD review</label><div class="pv">

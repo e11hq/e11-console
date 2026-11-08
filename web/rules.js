@@ -132,6 +132,11 @@ var E11Rules = (() => {
     const reviewState = (t, u) => { const r = lastReview(t, u); return r ? r.state : 'none'; };
     const reviewPending = (t) => needsCD(t) && reviewersOf(t).some((u) => reviewState(t, u) === 'pending');
     const cdOK = (t) => !needsCD(t) || t.cdStatus === 'approved' || ((t.assignees || []).length > 0 && reviewersOf(t).length === 0);
+    // (app.js: the round's lock — CD review on and the status locked from the first files sent until the CD approves all;
+    //  the CD alone on a task: no CD review — Haris 2026-11-08)
+    const roundStarted = (t) => needsCD(t) && (t.reviews || []).some((r) => (r.epoch || 0) === epochOf(t) && reviewersOf(t).includes(r.by));
+    const reviewLocked = (t) => roundStarted(t) && !cdOK(t);
+    const cdAlone = (t) => !!t.cdRule && !!cdUserId() && (t.assignees || []).length === 1 && t.assignees[0] === cdUserId();
     const canComplete = (t) => !!t.parentId || (!!sectionOf(t) && isDoneName(sectionOf(t).name) && cdOK(t));
     // a completed task is locked (read only, comments too) for its 30 days — its subtasks with it; only Admins reopen it,
     // and whoever completed it may undo that for a few seconds (Haris, 2026-11-01)
@@ -579,7 +584,8 @@ var E11Rules = (() => {
     const peopleLocked = (t) => !!t && !t.parentId && idLocked(t);   // (Assignees and Guardian too — Haris 2026-11-02)
     const lockedSince = (t) => { const r = lockRoot(t); return (r && (r.lockedAt || (r.reviews || []).map((x) => x.at).filter(Boolean).sort()[0])) || null; };
     const iReview = (t) => needsCD(t) && isMine(t) && !isCD(meId);
-    const statusLocked = (t) => reviewPending(t);
+    const statusLocked = (t) => reviewPending(t) || reviewLocked(t);
+    const lockMsg = (t) => (reviewPending(t) ? 'The status is locked while files are with the CD for review' : 'The status stays In progress until the files go to the CD again');
     function pastReview(t, sectionId) {
       const list = statusList(t) || [], to = list.findIndex((x) => x.id === sectionId), s = list[to];
       if (!s) return false;
@@ -611,7 +617,7 @@ var E11Rules = (() => {
         basedOn: t.basedOn && task(t.basedOn) ? { id: t.basedOn, title: task(t.basedOn).title || 'Untitled task' } : null,
         kids: db.tasks.filter((x) => x.basedOn === t.id).map((x) => ({ id: x.id, title: x.title || 'Untitled task' })),
         completed: t.done ? { at: t.completedAt ? dayOf(t.completedAt) : '', label: t.completedAt ? fmtDay(dayOf(t.completedAt)) : '', left: t.completedAt ? Math.max(0, 30 - Math.floor((nowMs() - Date.parse(t.completedAt)) / 86400000)) : null, canReopen: canReopen(t), canFrom: !t.parentId && can('createTask', t) } : null,
-        status: { name: s.name, rgb: rgbOf(s.color), canSet: !ro && !t.done && !statusLocked(t), why: statusLocked(t) ? 'The status is locked while files are with the CD for review' : '',
+        status: { name: s.name, rgb: rgbOf(s.color), canSet: !ro && !t.done && !statusLocked(t), why: statusLocked(t) ? lockMsg(t) : '',
           next: !ro && !t.done && !statusLocked(t) && at < list.length - 1 && !(cdWait && pastReview(t, (list[Math.max(0, at) + 1] || {}).id)) ? (list[Math.max(0, at) + 1] || {}).id || null : null,
           options: list.map((x) => ({ id: x.id, name: x.name, rgb: rgbOf(x.color || '#87909e'), on: !t.done && x.id === t.sectionId, locked: cdWait && x.id !== t.sectionId && pastReview(t, x.id) })) },
         cd: !t.parentId && (needsCD(t) || t.cdStatus) && t.cdStatus && CD[t.cdStatus] ? { label: t.cdStatus === 'approved' ? 'CD Approved' : 'CD · Review', rgb: rgbOf(CD[t.cdStatus].color), check: t.cdStatus === 'approved' } : null,
@@ -639,7 +645,7 @@ var E11Rules = (() => {
         financeOpts: !t.parentId && canFinance(t) && !ro ? Object.keys(FINANCE).map((k) => ({ t: k, rgb: rgbOf(FINANCE[k]) })) : [], canFinance: !t.parentId && canFinance(t) && !ro,
         update: t.update ? { t: t.update, rgb: updateRgb(t.update) } : null, updates: UPDATES, updateRgbs: UPDATES.map(updateRgb),
         canFields: !ro && !t.parentId,
-        review: !t.parentId && !t.done ? { on: !!t.needsCD, noCD: !cdUserId(), canSet: !ro && !!u && (isAdm(u) || u.role === 'am' || isCD(meId)) && !reviewPending(t), who: cdUserId() ? fullName(userById(cdUserId())) + (db.meta && db.meta.cdActing ? ' (Acting CD)' : '') : 'No Creative Director set' } : null,
+        review: !t.parentId && !t.done ? { on: !!t.needsCD, noCD: !cdUserId(), canSet: !ro && !!u && (isAdm(u) || u.role === 'am' || isCD(meId)) && !reviewPending(t) && !reviewLocked(t), who: cdUserId() ? fullName(userById(cdUserId())) + (db.meta && db.meta.cdActing ? ' (Acting CD)' : '') : 'No Creative Director set' } : null,
         clientApproval: cdApprovedNow(t) ? (() => { const ca = t.clientApproval, fresh = clientApprovalFresh(t);
           return { state: ca && fresh ? (ca.none ? 'none' : 'yes') : ca ? 'old' : 'missing', text: ca && fresh ? (ca.none ? 'Not needed' : `Approved · ${firstName(ca.by)} · ${fmtDay(dayOf(ca.at))}`) : ca ? 'Out of date' : 'Missing', canSet: !ro && !t.done && !!u && (isAdm(u) || u.role === 'am' || t.createdBy === meId) }; })() : null,
         desc: t.notesHtml ? plainOfHtml(t.notesHtml) : String(t.notes || '').trim(), descRuns: runsOf({ html: t.notesHtml || '', text: t.notes || '' }, true), descFiles: fileRefsOf(t.notesHtml), canDesc: !ro && can('editDesc', t) && !lockedId, mentionable: !ro && can('editDesc', t) && !lockedId ? mentionable() : [],
@@ -681,7 +687,6 @@ var E11Rules = (() => {
     function setAssignee(t, uid, on) {
       const x = userById(uid);
       if (on && !assignable(x)) return { error: 'Only Production, Social, Freelancers and the CD can be assigned' };
-      if (on && uid === cdUserId() && t.cdRule && needsCD(t)) return { error: 'Turn off “Needs CD review” to assign the CD' };
       const has = (t.assignees || []).includes(uid);
       if (!!on === has) return [];
       if (on) {
@@ -698,6 +703,7 @@ var E11Rules = (() => {
         logActivity(t, `unassigned ${struck(fullName(x))}`);
         pushNotif(uid, t, 'unassigned', 'removed you from');
       }
+      if (t.needsCD && cdAlone(t) && !roundStarted(t)) { t.needsCD = false; logActivity(t, 'turned off <b>CD review</b> — the CD is the only one on it'); }
       syncCDOf(t);
       t.updatedAt = nowISO();
       return [];
@@ -1057,7 +1063,7 @@ var E11Rules = (() => {
       const list = statusList(t) || [];
       if (!list.some((x) => x.id === sectionId)) return { error: 'That status is no longer here' };
       if (t.sectionId === sectionId && !t.done) return { messages: [] };
-      if (statusLocked(t)) return { error: 'The status is locked while files are with the CD for review' };
+      if (statusLocked(t)) return { error: lockMsg(t) };
       if (!t.parentId && needsCD(t) && !cdOK(t) && pastReview(t, sectionId)) return { error: 'Waiting for CD approval' };
       const from = list.findIndex((x) => x.id === t.sectionId), to = list.findIndex((x) => x.id === sectionId);
       const fromS = list[from], toS = list[to];
@@ -1065,7 +1071,7 @@ var E11Rules = (() => {
       if (back) {
         const u = me();
         if (!((u && (isAdm(u) || u.role === 'am')) || t.createdBy === meId)) return { error: 'Only an Account Manager or the task’s creator can send it back' };
-        const cdOnIt = (t.cdRule && cdUserId() && (t.assignees || []).includes(cdUserId())) || !cdUserId();   // (no CD set: no CD review)
+        const cdOnIt = cdAlone(t) || !cdUserId();   // (the CD alone on it, or no CD set: no CD review)
         const ans = cdOnIt ? 'no' : cdAgain;
         if (ans !== 'yes' && ans !== 'no') return { need: 'cdAgain' };
         t.partsDone = {};
@@ -1130,7 +1136,8 @@ var E11Rules = (() => {
       const u = me();
       if (!(u && (isAdm(u) || u.role === 'am' || isCD(meId)))) return { error: 'Your role doesn’t allow this' };
       if (on && !cdUserId()) return { error: 'No CD set' };   // (Haris 2026-11-06: no CD, no CD review — it could never be approved)
-      if (on && t.cdRule && cdUserId() && (t.assignees || []).includes(cdUserId())) return { error: 'The CD is assigned, so no CD review is needed' };
+      if (on && cdAlone(t)) return { error: 'The CD is the only one on this task, so no CD review is needed' };
+      if (!on && reviewLocked(t)) return { error: 'CD review stays on until the CD approves the files' };
       if (reviewPending(t)) return { error: 'Files are with the CD — change this after they decide' };
       if (!!t.needsCD === !!on) return [];
       t.needsCD = !!on;

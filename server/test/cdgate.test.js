@@ -23,6 +23,8 @@ before(async () => {
       { id: 't-one', projectId: 'p1', sectionId: 's-rev', title: 'Ali', needsCD: true, assignees: ['u-p'] },
       { id: 't-cd', projectId: 'p1', sectionId: 's-prog', title: 'CD alone', needsCD: true, assignees: ['u-cd'] },
       { id: 't-off', projectId: 'p1', sectionId: 's-prog', title: 'No review', needsCD: false, assignees: [] },
+      { id: 't-amend', projectId: 'p1', sectionId: 's-prog', title: 'Amendments', needsCD: true, assignees: ['u-p'], reviews: [{ id: 'r1', by: 'u-p', state: 'amend', epoch: 0 }] },
+      { id: 't-sent', projectId: 'p1', sectionId: 's-rev', title: 'Not sent yet', needsCD: true, assignees: ['u-p'], reviews: [] },
     ],
   }, 'test');
   push = async (id, change) => {
@@ -49,4 +51,11 @@ test('approved, done by the CD alone, or CD review off: free to move and complet
   assert.equal(await push('t-off', { sectionId: 's-done', done: true }), false, 'no CD review');
   assert.equal(await push('t-none', { needsCD: false }), false, 'switching it off');
   assert.equal(await push('t-none', { sectionId: 's-ctr' }), false, '...then it moves');
+});
+
+test('once the round\'s first files are sent, CD review is not switched off until the CD approves (Haris 2026-11-08)', async () => {
+  assert.equal(await push('t-amend', { needsCD: false }), true, 'during amendments: refused');
+  assert.equal(await push('t-sent', { needsCD: false }), false, 'before any files are sent: allowed');
+  assert.equal(await push('t-amend', { cdStatus: 'approved' }), false);
+  assert.equal(await push('t-amend', { needsCD: false }), false, 'approved: allowed');
 });
