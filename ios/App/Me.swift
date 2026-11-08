@@ -2660,6 +2660,17 @@ final class MeCtl {
     h.drawAssetsBar(name: "Trash", sub: t.isEmpty ? "" : n == 0 ? "Empty" : "\(n) item\(n == 1 ? "" : "s") · restore within 30 days", logo: nil, rgb: nil, ini: nil, showLogo: false)
     h.assetsMenu = (t["empty"] as? Bool) == true ? { [weak self] in [CornerMenuItem(title: "Empty Trash", symbol: "trash", destructive: true, run: { self?.trEmpty() })] } : { [] }
     if t.isEmpty { let w = part(h, "wait") { AssetsNote() }; w.label.text = "Loading…"; out.append(w); return }
+    // (in Apple's navigation: Apple's own search bar in Apple's bar; the kinds as Mail's buttons at the top of Apple's list,
+    //  scrolling away with it, as the Inbox's — nothing of ours over Apple's bar: Haris 2026-11-08)
+    if let vc = pageVCs[ObjectIdentifier(h)] {
+      vc.useSearch("Search the Trash", scopes: [], selected: 0)
+      vc.onSearch = { [weak self] q in guard let self = self, self.trQv != q else { return }; self.trQv = q; self.send(["ev": "trQ", "q": q]) }
+      let cats = part(h, "cats") { CatsBlock(items: MeCtl.trashCats.map { c in MailCats.Item(key: c.0, sym: c.1, name: c.2, fill: c.0 == "all" ? MailCats.neutral : c.0 == "mine" ? MailCats.purple : MailCats.blue) }) }
+      cats.cats.light = h.look.light
+      cats.choose((MeCtl.trashCats.firstIndex { $0.0 == (t["cat"] as? String ?? "all") }) ?? 0)
+      cats.onPick = { [weak self] i in self?.trCatv = MeCtl.trashCats[i].0; self?.send(["ev": "trCat", "k": MeCtl.trashCats[i].0]) }
+      out.append(cats)
+    } else {
     let find = part(h, "find") { AssetsFind() }
     find.field.placeholder = "Search the Trash"
     if !find.field.isFirstResponder, (find.field.text ?? "") != (t["q"] as? String ?? "") { find.field.text = t["q"] as? String }
@@ -2671,6 +2682,7 @@ final class MeCtl {
     let stack = part(h, "pin") { PinStack() }
     stack.set([find, cats])
     if h.pinHead !== stack { h.pinHead = stack }
+    }
     let groups = (t["groups"] as? [[String: Any]]) ?? []
     for g in groups {
       let items = (g["items"] as? [[String: Any]]) ?? []
