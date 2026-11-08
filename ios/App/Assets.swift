@@ -128,9 +128,34 @@ class AssetTile: UIControl {
     h()
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in self?.shrink?.release() }
   }
+  // (Client Assets' files and folders: touch and hold as Home's task cards — Apple's own lift and its popup menu beside
+  //  it, no shrink of ours, no sheet: Haris 2026-11-08 "instead of having slide sheet, make it a popup … same like on
+  //  task cards". Set once; other tiles — Me's rows — keep theirs)
+  var contextMenu: (() -> UIMenu?)? {
+    didSet {
+      guard contextMenu != nil, !interactions.contains(where: { $0 is UIContextMenuInteraction }) else { return }
+      shrink?.isEnabled = false; shrink.map { removeGestureRecognizer($0) }; shrink = nil
+      gestureRecognizers?.filter { $0 is UILongPressGestureRecognizer }.forEach { removeGestureRecognizer($0) }
+      addInteraction(UIContextMenuInteraction(delegate: self))
+    }
+  }
   // (its size and place set without touching its shrink — setting the frame of a card shrunk while held re-laid its
   //  insides: they moved, as the comment cards' once did)
   func place(_ r: CGRect) { bounds = CGRect(origin: .zero, size: r.size); center = CGPoint(x: r.midX, y: r.midY) }
+}
+
+extension AssetTile: UIContextMenuInteractionDelegate {
+  func contextMenuInteraction(_ i: UIContextMenuInteraction, configurationForMenuAtLocation p: CGPoint) -> UIContextMenuConfiguration? {
+    guard let m = contextMenu?() else { return nil }
+    return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in m }
+  }
+  // (the tile itself lifts, with its own rounded corners — as Home's cards)
+  func contextMenuInteraction(_ i: UIContextMenuInteraction, configuration c: UIContextMenuConfiguration, highlightPreviewForItemWithIdentifier id: NSCopying) -> UITargetedPreview? {
+    let pp = UIPreviewParameters()
+    pp.visiblePath = UIBezierPath(roundedRect: bounds, cornerRadius: layer.cornerRadius > 0 ? layer.cornerRadius : 18)
+    pp.backgroundColor = backgroundColor ?? .clear
+    return UITargetedPreview(view: self, parameters: pp)
+  }
 }
 
 // the clients: two columns of cards — a big logo area (its logo, or its colour with initials), name, "6 folders · 48 files"
@@ -185,7 +210,7 @@ final class ClientCards: UIView, HomeBlock {
 // folders: two columns of tiles — the folder in its colour, its name, "14 files" (held: its menu)
 final class FolderTiles: UIView, HomeBlock {
   var onOpen: ((String) -> Void)?
-  var menu: (([String: Any]) -> Void)?   // (held: its sheet)
+  var menu: (([String: Any]) -> UIMenu?)?   // (held: Apple's popup menu)
   private var tiles: [AssetTile] = [], made: [String: (AssetTile, String)] = [:]
   static func meta(_ f: [String: Any]) -> String {
     let s = f["subs"] as? Int ?? 0, n = f["files"] as? Int ?? 0
@@ -199,7 +224,7 @@ final class FolderTiles: UIView, HomeBlock {
       let id = f["id"] as? String ?? ""
       let sig = "\(f["name"] ?? "")|\(FolderTiles.meta(f))|\(f["final"] ?? "")|\(f["rgb"] ?? "")|\(L.light)"
       if let k = keep.removeValue(forKey: id) {
-        if k.1 == sig { made[id] = k; k.0.onHold = { [weak self] in self?.menu?(f) }; return k.0 }
+        if k.1 == sig { made[id] = k; k.0.contextMenu = { [weak self] in self?.menu?(f) }; return k.0 }
         k.0.removeFromSuperview()
       }
       let t = AssetTile(); t.backgroundColor = L.card; t.layer.cornerRadius = 20; t.layer.cornerCurve = .continuous
@@ -210,7 +235,7 @@ final class FolderTiles: UIView, HomeBlock {
       let s = UILabel(); s.text = (fin ? "Final · " : "") + FolderTiles.meta(f); s.font = .systemFont(ofSize: 13); s.textColor = .secondaryLabel; s.tag = 3
       [ic, n, s].forEach { $0.isUserInteractionEnabled = false; t.addSubview($0) }
       t.onTap = { [weak self] in self?.onOpen?(id) }
-      t.onHold = { [weak self] in self?.menu?(f) }
+      t.contextMenu = { [weak self] in self?.menu?(f) }
       t.accessibilityLabel = "\(f["name"] as? String ?? "Folder"), \(s.text ?? "")"
       addSubview(t)
       made[id] = (t, sig)
@@ -235,7 +260,7 @@ final class FolderTiles: UIView, HomeBlock {
 // files in one inset group, a row each: thumbnail, name, "PNG · 48 KB" (or where it is, when found), •••
 final class FileRows: UIView, HomeBlock {
   var onOpen: (([String: Any]) -> Void)?
-  var menu: (([String: Any]) -> Void)?   // (held: its sheet)
+  var menu: (([String: Any]) -> UIMenu?)?   // (held, or •••: Apple's popup menu)
   private let box = UIView()
   private var rows: [AssetTile] = [], lines: [UIView] = [], made: [String: (AssetTile, String)] = [:]
   static let H: CGFloat = 64
@@ -249,7 +274,7 @@ final class FileRows: UIView, HomeBlock {
       let id = f["id"] as? String ?? ""
       let sig = "\(f["name"] ?? "")|\(f["size"] ?? "")|\(f["thumbUrl"] ?? "")|\(f["where"] ?? "")|\(f["canDel"] ?? "")|\(showWhere)|\(L.light)"
       if let k = keep.removeValue(forKey: id) {
-        if k.1 == sig { made[id] = k; k.0.onTap = { [weak self] in self?.onOpen?(f) }; k.0.onHold = { [weak self] in self?.menu?(f) }; return k.0 }
+        if k.1 == sig { made[id] = k; k.0.onTap = { [weak self] in self?.onOpen?(f) }; k.0.contextMenu = { [weak self] in self?.menu?(f) }; return k.0 }
         k.0.removeFromSuperview()
       }
       let r = AssetTile()
@@ -264,13 +289,14 @@ final class FileRows: UIView, HomeBlock {
       mc.baseForegroundColor = .tertiaryLabel; mc.contentInsets = .zero
       let more = UIButton(configuration: mc); more.tag = 4
       more.automaticallyUpdatesConfiguration = false
-      // (its sheet, as holding the row — the same as the comments' •••)
-      more.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.menu?(f) }, for: .touchUpInside)
+      // (the same menu as holding the row — Apple's popup from the •••, made fresh each time it opens)
+      more.menu = UIMenu(children: [UIDeferredMenuElement.uncached { [weak self] done in done(self?.menu?(f)?.children ?? []) }])
+      more.showsMenuAsPrimaryAction = true
       more.accessibilityLabel = "More"
       [th, n, s].forEach { $0.isUserInteractionEnabled = false; r.addSubview($0) }
       r.addSubview(more)
       r.onTap = { [weak self] in self?.onOpen?(f) }
-      r.onHold = { [weak self] in self?.menu?(f) }
+      r.contextMenu = { [weak self] in self?.menu?(f) }
       r.accessibilityLabel = "\(f["name"] as? String ?? "File"), \(s.text ?? "")"
       box.addSubview(r)
       made[id] = (r, sig)
@@ -302,7 +328,7 @@ final class FileRows: UIView, HomeBlock {
 // a folder's files: three columns of square thumbnails, the name and size under each; Select ticks several
 final class FileTiles: UIView, HomeBlock {
   var onOpen: (([String: Any]) -> Void)?
-  var menu: (([String: Any]) -> Void)?   // (held: its sheet)
+  var menu: (([String: Any]) -> UIMenu?)?   // (held: Apple's popup menu)
   var onPick: (() -> Void)?
   var selecting = false { didSet { if oldValue != selecting { if !selecting { picked = [] }; paintPicks() } } }
   private(set) var picked = Set<String>()
@@ -330,7 +356,7 @@ final class FileTiles: UIView, HomeBlock {
         if self.selecting { if self.picked.contains(id) { self.picked.remove(id) } else { self.picked.insert(id) }; self.paintPicks(); self.onPick?() }
         else { self.onOpen?(f) }
       }
-      t.onHold = { [weak self] in if self?.selecting != true { self?.menu?(f) } }
+      t.contextMenu = { [weak self] in self?.selecting == true ? nil : self?.menu?(f) }
       t.accessibilityLabel = "\(f["name"] as? String ?? "File"), \(s.text ?? "")"
       addSubview(t)
       made[id] = (t, sig)
@@ -848,7 +874,7 @@ final class AssetsCtl {
         let head = part(h, "foundHead") { AssetsHead() }; head.set(found.isEmpty ? "No files found" : "\(found.count) file\(found.count == 1 ? "" : "s") found" + (AssetsCtl.lastLoose ? " — close matches" : "")); out.append(head)
         let rows = part(h, "found") { FileRows() }
         rows.onOpen = { [weak self] f in self?.preview(f, among: found) }
-        rows.menu = { [weak self, weak h] f in if let h = h { self?.fileMenu(h, f, client: cid) } }
+        rows.menu = { [weak self, weak h] f in h.flatMap { self?.fileMenu($0, f, client: cid) } }
         rows.set(found, look: L, showWhere: true); out.append(rows)
         Find.mark([rows], Find.filter(found, q) { "\($0["name"] ?? "") \($0["where"] ?? "")" }.marks, light: L.light)
       } else {
@@ -856,7 +882,7 @@ final class AssetsCtl {
         let head = part(h, "foldersHead") { AssetsHead() }; head.set("Folders"); out.append(head)
         let tiles = part(h, "folders") { FolderTiles() }
         tiles.onOpen = { [weak self] id in guard let self = self else { return }; self.push(self.screen("folder", cid, id), animated: true) }
-        tiles.menu = { [weak self, weak h] f in if let h = h { self?.folderMenu(h, f, client: cid) } }
+        tiles.menu = { [weak self, weak h] f in h.flatMap { self?.folderMenu($0, f, client: cid) } }
         tiles.set(tops, look: L); out.append(tiles)
         if m.isEmpty { let n = part(h, "wait") { AssetsNote() }; n.label.text = "Loading…"; out.append(n) }
         let recent = ((m["recent"] as? [String]) ?? []).compactMap { id in all.first { ($0["id"] as? String) == id } }
@@ -864,7 +890,7 @@ final class AssetsCtl {
           let rh = part(h, "recentHead") { AssetsHead() }; rh.set("Recently added"); out.append(rh)
           let rows = part(h, "recent") { FileRows() }
           rows.onOpen = { [weak self] f in self?.preview(f, among: recent) }
-          rows.menu = { [weak self, weak h] f in if let h = h { self?.fileMenu(h, f, client: cid) } }
+          rows.menu = { [weak self, weak h] f in h.flatMap { self?.fileMenu($0, f, client: cid) } }
           rows.set(recent, look: L); out.append(rows)
         }
       }
@@ -879,7 +905,7 @@ final class AssetsCtl {
         let head = part(h, "foldersHead") { AssetsHead() }; head.set("Folders"); out.append(head)
         let tiles = part(h, "folders") { FolderTiles() }
         tiles.onOpen = { [weak self] id in guard let self = self else { return }; self.push(self.screen("folder", cid, id), animated: true) }
-        tiles.menu = { [weak self, weak h] x in if let h = h { self?.folderMenu(h, x, client: cid) } }
+        tiles.menu = { [weak self, weak h] x in h.flatMap { self?.folderMenu($0, x, client: cid) } }
         tiles.set(subs, look: L); out.append(tiles)
       }
       let files = filesIn(m, fid)
@@ -889,7 +915,7 @@ final class AssetsCtl {
       head.onButton = { [weak self, weak h, weak grid] in guard let h = h, let g = grid else { return }; g.selecting.toggle(); self?.blocks(h); h.setNeedsLayout() }
       if !files.isEmpty || f == nil || subs.isEmpty { out.append(head) }
       grid.onOpen = { [weak self] x in self?.preview(x, among: files) }
-      grid.menu = { [weak self, weak h] x in if let h = h { self?.fileMenu(h, x, client: cid) } }
+      grid.menu = { [weak self, weak h] x in h.flatMap { self?.fileMenu($0, x, client: cid) } }
       grid.onPick = { [weak self, weak h] in if let h = h { self?.blocks(h) } }
       grid.set(files, look: L)
       if !files.isEmpty { out.append(grid) }
@@ -981,7 +1007,7 @@ final class AssetsCtl {
       let found = AssetsCtl.find(all, q)
       let rows = FileRows()
       rows.onOpen = { [weak self] f in self?.preview(f, among: found) }
-      rows.menu = { [weak self, weak h] f in if let h = h { self?.fileMenu(h, f, client: f["client"] as? String ?? "") } }
+      rows.menu = { [weak self, weak h] f in h.flatMap { self?.fileMenu($0, f, client: f["client"] as? String ?? "") } }
       rows.set(found, look: h.look, showWhere: true)
       h.showFound(found.isEmpty ? [] : [rows], hint: found.isEmpty ? "No files found." : AssetsCtl.lastLoose ? "Nothing matched exactly — close matches:" : nil)
       Find.mark([rows], Find.filter(found, q) { "\($0["name"] ?? "") \($0["where"] ?? "")" }.marks, light: h.look.light)
@@ -994,24 +1020,19 @@ final class AssetsCtl {
   }
   private func toast(_ h: HomeView?, _ t: String) { (h ?? top)?.assetsToast(t) }
 
-  // ---------- a file's and a folder's sheet (held, or •••): iPhone's own sheet, as the comments' ----------
-  private func sheet(_ title: String, _ items: [(String, String, Bool, () -> Void)]) {
-    var main: [[String: Any]] = [], danger: [[String: Any]] = []
-    for (i, it) in items.enumerated() {
-      var row: [String: Any] = ["i": i, "label": it.0, "icon": it.1, "danger": it.2]
-      if it.1 == "unlock" { row["accent"] = true }   // (Turn on link: blue)
-      if it.0 == "Turn off link" { row["red"] = true }   // (Turn off link: red — Haris 2026-11-03)
-      if it.2 { danger.append(row) } else { main.append(row) }
+  // ---------- a file's and a folder's menu (held, or •••): Apple's popup menu, as Home's task cards (Haris 2026-11-08) ----------
+  private static let symbols = ["link": "link", "download": "arrow.down.circle", "info": "info.circle", "unlock": "lock.open",
+                                "lock": "lock", "trash": "trash", "folder": "folder", "edit": "pencil"]
+  private func popup(_ title: String, _ items: [(String, String, Bool, () -> Void)]) -> UIMenu {
+    let act = { (it: (String, String, Bool, () -> Void)) -> UIAction in
+      let run = it.3
+      // (Turn off link: red, as the sheet had it — Haris 2026-11-03)
+      return UIAction(title: it.0, image: AssetsCtl.symbols[it.1].flatMap { UIImage(systemName: $0) }, attributes: it.2 || it.0 == "Turn off link" ? .destructive : []) { _ in run() }
     }
-    var secs: [[String: Any]] = [["header": title, "rows": main]]
-    if !danger.isEmpty { secs.append(["rows": danger]) }
-    let vc = NativeSheetVC(["sections": secs], dark: !light, pick: nil) { i, _ in
-      guard i >= 0, i < items.count else { return }
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { items[i].3() }   // (once the sheet has gone)
-    }
-    self.main.topMost().present(vc, animated: true)
+    let main = items.filter { !$0.2 }.map(act), danger = items.filter { $0.2 }.map(act)
+    return UIMenu(title: title, children: [UIMenu(options: .displayInline, children: main)] + (danger.isEmpty ? [] : [UIMenu(options: .displayInline, children: danger)]))
   }
-  func fileMenu(_ h: HomeView, _ f: [String: Any], client: String) {
+  func fileMenu(_ h: HomeView, _ f: [String: Any], client: String) -> UIMenu {
     var items: [(String, String, Bool, () -> Void)] = [
       ("Copy link", "link", false, { [weak self, weak h] in self?.main.copyFile(f) { t in h?.assetsToast(t) } }),
       ("Download", "download", false, { [weak self, weak h] in guard let self = self else { return }; self.main.downloadFile(f, from: self.main.topMost()) { t in h?.assetsToast(t) } }),
@@ -1027,9 +1048,9 @@ final class AssetsCtl {
         }
       }))
     }
-    sheet(f["name"] as? String ?? "File", items)
+    return popup(f["name"] as? String ?? "File", items)
   }
-  func folderMenu(_ h: HomeView, _ f: [String: Any], client: String) {
+  func folderMenu(_ h: HomeView, _ f: [String: Any], client: String) -> UIMenu {
     let id = f["id"] as? String ?? ""
     var items: [(String, String, Bool, () -> Void)] = [
       ("Open", "folder", false, { [weak self] in guard let self = self else { return }; self.push(self.screen("folder", client, id), animated: true) }),
@@ -1042,7 +1063,7 @@ final class AssetsCtl {
     }
     if (f["canRename"] as? Bool) == true { items.append(("Rename folder", "edit", false, { [weak self, weak h] in if let h = h { self?.renameFolder(h, f, client: client) } })) }
     if (f["canDel"] as? Bool) == true { items.append(("Trash folder", "trash", true, { [weak self, weak h] in if let h = h { self?.deleteFolder(h, f, client: client) } })) }
-    sheet(f["name"] as? String ?? "Folder", items)
+    return popup(f["name"] as? String ?? "Folder", items)
   }
   // the ••• at the top
   private func menuItems(_ h: HomeView) -> [CornerMenuItem] {
