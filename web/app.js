@@ -3511,8 +3511,9 @@ const searchOwnOk = (t, u = me()) => {
   if (isSocialU(u)) return (t.assignees || []).includes(u.id) || socialPlanTask(t, u);
   return !['production', 'freelancer'].includes(u.role) || isAdm(u) || isCD(u.id) || partOfTask(t, u.id);
 };
-// (search's clients for Socials: a Social Executive the clients they're on, a Social Manager none — Haris 2026-11-08)
-const socialSearchClientOk = (p, u = me()) => !isSocialU(u) || (!socialMgrIds().includes(u.id) && (p.socials || []).includes(u.id));
+// (search's clients for Socials: a Social Executive the clients they're on; a Social Manager every Social Executive's —
+//  Haris 2026-11-08)
+const socialSearchClientOk = (p, u = me()) => !isSocialU(u) || (socialMgrIds().includes(u.id) ? (p.socials || []).some((id) => { const x = userById(id); return !!x && x.active !== false && x.role === 'social'; }) : (p.socials || []).includes(u.id));
 
 function taskSearch(query, { limit = 200 } = {}) {
   const terms = sWords(query);

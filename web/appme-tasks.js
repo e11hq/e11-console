@@ -250,12 +250,12 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
     }
     const ownSearchOnly = (x) => !!x && ['production', 'freelancer'].includes(x.role) && !W.isAdm(x) && !W.isCD(x.id);
     // (Socials: the tasks they're assigned to and their content-plan tasks — a Social Executive's own, a Social Manager's and
-    //  every Social Executive's; clients: a Social Executive's own, a Social Manager none — Haris 2026-11-08; as app.js)
+    //  every Social Executive's; clients: a Social Executive's own, a Social Manager every Social Executive's — Haris 2026-11-08; as app.js)
     const isSocialU = (x) => !!x && x.role === 'social' && !W.isAdm(x) && !W.isCD(x.id);
     const smIds = ((W.meta && W.meta.socialMgrIds) || []).filter((id) => { const x = W.userById(id); return x && x.active !== false && x.role === 'social'; });
     const socialPlanTask = (t) => !!t && !t.parentId && !!t.planId && (t.createdBy === u.id || (smIds.includes(u.id) && (W.userById(t.createdBy) || {}).role === 'social'));
     const searchOwnOk = (t) => (isSocialU(u) ? (t.assignees || []).includes(u.id) || socialPlanTask(t) : !['production', 'freelancer'].includes(u.role) || W.isAdm(u) || W.isCD(u.id) || partOfTask(t, u.id));
-    const socialClientOk = (p) => !isSocialU(u) || (!smIds.includes(u.id) && (p.socials || []).includes(u.id));
+    const socialClientOk = (p) => !isSocialU(u) || (smIds.includes(u.id) ? (p.socials || []).some((id) => { const x = W.userById(id); return !!x && x.active !== false && x.role === 'social'; }) : (p.socials || []).includes(u.id));
     const searchClientOk = (p) => !ownSearchOnly(u) || W.tasks.some((t) => t.projectId === p.id && partOfTask(t, u.id, false)) || (u.role === 'freelancer' && (u.projectIds || []).includes(p.id));
     const amSidebarOk = (p) => searchClientOk(p) && (u.role !== 'am' || W.isAdm(u) || W.isCD(u.id) || !W.projects.some((x) => (x.ams || []).some((a) => a.id === u.id)) || (p.ams || []).some((a) => a.id === u.id && !a.onLeave));
     const people = (ids) => (ids || []).map((id) => W.fullName(W.userById(id))).join(' ');

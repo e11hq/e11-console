@@ -2,7 +2,7 @@
 // created from a content plan; a Social Manager's, the tasks they're assigned to and every task made from a plan by them
 // or by any Social Executive. On the plan tasks they have the creator's swipes (Done, Due, Trash); on the tasks they're
 // assigned to, their role's. Search: a Social Executive — their clients, their tasks and their plan tasks; a Social
-// Manager — no clients, their tasks and the plan tasks. Everyone else as before.
+// Manager — every Social Executive's clients, their tasks and the plan tasks. Everyone else as before.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -66,7 +66,7 @@ test('swipes: the creator\'s on plan tasks, their role\'s on tasks they\'re assi
   assert.equal(card(h, 'plan-se2').canDelete, true, 'a Social Executive\'s plan task: Trash for the manager');
 });
 
-test('search: a Social Executive finds their clients and tasks; a Social Manager no clients', () => {
+test('search: a Social Executive finds their clients and tasks; a Social Manager every Social Executive\'s clients', () => {
   let { R, M } = as('u-se');
   let s = M.search(R, data, 'u-se', Date.now(), 'Northline');
   assert.deepEqual([...s.tasks.map((t) => t.id)].sort(), ['done-plan-se', 'mine-se', 'plan-se']);
@@ -77,7 +77,8 @@ test('search: a Social Executive finds their clients and tasks; a Social Manager
   assert.deepEqual([...s.tasks.map((t) => t.id)].sort(), ['done-plan-se', 'plan-se']);
   ({ R, M } = as('u-sm'));
   s = M.search(R, data, 'u-sm', Date.now(), 'Northline');
-  assert.equal(s.clients.length, 0, 'no clients for a Social Manager');
+  assert.ok(s.clients.some((c) => c.name === 'Northline'), 'a Social Executive\'s client, for the Social Manager');
+  assert.ok(M.search(R, data, 'u-sm', Date.now(), 'Orbit').clients.some((c) => c.name === 'Orbit'), 'every Social Executive\'s');
   assert.deepEqual([...s.tasks.map((t) => t.id)].sort(), ['done-plan-se', 'plan-se', 'plan-sm']);
 });
 
