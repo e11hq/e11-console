@@ -297,6 +297,8 @@ var E11AppView = (function () {
       messages = rules.setDone(t, false);
     } else if (a === 'due') {
       if (!rules.can('editDates', t) || rules.amReadOnly(t)) return fail(403, 'Your role doesn’t allow changing dates');
+      // (a completed task is read only, as on the website — Haris 2026-11-08)
+      if (rules.doneLocked(t)) return fail(403, 'Completed tasks are locked — only Admins can reopen them');
       const v = body.due == null || body.due === '' ? null : String(body.due);
       if (v && !(/^\d{4}-\d{2}-\d{2}$/.test(v) && new Date(v + 'T00:00:00Z').toISOString().slice(0, 10) === v)) return fail(400, 'Not a date');
       messages = rules.setDue(t, v);

@@ -194,6 +194,9 @@ test('A completed task is locked: no changes or comments; Undo only right after;
   assert.equal(r.results[0].refused, true, 'no comments on a completed task');
   r = await push('am@e11-digital.com', { ...t, finance: 'Invoiced', financeAt: '2026-10-29T08:00:00Z', financeBy: 'u-am' });
   assert.equal(r.results[0].refused, false, 'its Finance status still moves');
+  // no due date from the phone either, Admins too (as the website — Haris 2026-11-08)
+  r = await act('adm@e11-digital.com', { act: 'due', id: 'L1', due: '2026-11-23' });
+  assert.equal(r.ok, false); assert.match(r.error, /locked/); assert.notEqual(T('L1').due, '2026-11-23');
   // an Admin may reopen it
   r = await act('adm@e11-digital.com', { act: 'reopen', id: 'L1' });
   assert.equal(r.ok, true, JSON.stringify(r)); assert.equal(T('L1').done, false);

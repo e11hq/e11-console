@@ -262,7 +262,7 @@ var E11Rules = (() => {
         due: t.due || '', canDone: !t.parentId && !amReadOnly(t) && (!t.done || canReopen(t)), doneReady: !!t.done || canFinish(t), why: t.done ? '' : finishBlocked(t),
         // (held by the CD's review: the app shows a faded orange CD · Review instead of Done)
         cdHold: !t.done && !canComplete(t) && (reviewPending(t) || !cdOK(t)),
-        canDue: can('editDates', t) && !amReadOnly(t), canDelete: can('deleteTask', t) && !amReadOnly(t),
+        canDue: can('editDates', t) && !amReadOnly(t) && !doneLocked(t), canDelete: can('deleteTask', t) && !amReadOnly(t),
       };
     }
     // ---------- My Tasks (the iPhone app's, 2026-11-01): All (open) · Done (the last 30 days) ----------
