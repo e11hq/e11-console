@@ -962,6 +962,9 @@ final class FileStrip: UIView, UIScrollViewDelegate {
     super.init(frame: .zero)
     scroll.showsHorizontalScrollIndicator = false; scroll.alwaysBounceHorizontal = false; scroll.clipsToBounds = false
     scroll.delegate = self
+    // (a strip inside a list's row never moves its insets for the bar's room: passing under Apple's bar, it shifted as the row
+    //  scrolled — the files on the task page, Haris 2026-11-09)
+    scroll.contentInsetAdjustmentBehavior = .never
     row.spacing = 8; row.alignment = .fill
     row.translatesAutoresizingMaskIntoConstraints = false; scroll.translatesAutoresizingMaskIntoConstraints = false
     scroll.addSubview(row); addSubview(scroll)
