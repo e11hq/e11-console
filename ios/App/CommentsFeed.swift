@@ -17,7 +17,11 @@ final class FeedLoader {
   // the real card shows it at once
   private var locals: [String: UIImage] = [:]
   func setLocal(_ key: String, _ img: UIImage) { locals[key] = img }
-  func seed(_ path: String, _ img: UIImage) { cache.setObject(img, forKey: path as NSString) }
+  // (the phone's own picture of a file just uploaded, shown at once for the server's — only until the server's own, clearer
+  //  one has come: filed as the server's, it was never asked for and stayed blurry — Haris 2026-11-10)
+  private var standIns: [String: UIImage] = [:]
+  func seed(_ path: String, _ img: UIImage) { standIns[path] = img }
+  func standIn(_ path: String) -> UIImage? { cache.object(forKey: path as NSString) == nil ? standIns[path] : nil }
   private var links: [String: [String: Any]] = [:]
   // pictures are kept on the phone too (Haris, 2026-11-02: coming back to the app, the pictures flashed as if it had
   // reloaded — iPhone empties the memory of an app that's away, or closes it): from the phone's copy they're there at
@@ -45,6 +49,7 @@ final class FeedLoader {
         }
         let img = d.flatMap { UIImage(data: $0) }
         if let img = img { self.cache.setObject(img, forKey: path as NSString) }
+        if img != nil { DispatchQueue.main.async { self.standIns[path] = nil } }
         if img != nil, let d = d, ok { DiskPics.put(path, d) }
         DispatchQueue.main.async { done(img) }
       }.resume()
@@ -1035,6 +1040,8 @@ final class CommentCell: UIView {
     play.tintColor = .white; play.contentMode = .center; play.backgroundColor = UIColor.black.withAlphaComponent(0.45); play.layer.cornerRadius = 15
     if video { pin(play, nil, nil, nil, nil); play.widthAnchor.constraint(equalToConstant: 30).isActive = true; play.heightAnchor.constraint(equalToConstant: 30).isActive = true; play.centerXAnchor.constraint(equalTo: v.centerXAnchor).isActive = true; play.centerYAnchor.constraint(equalTo: v.centerYAnchor, constant: inner ? -6 : 0).isActive = true }
     if let p = picURL {
+      // (a file just uploaded: the phone's own picture at once, the server's clearer one crossfading over it when it comes)
+      if let s = FeedLoader.shared.standIn(p) { v.image = s; shimmer.removeFromSuperview(); typeL.isHidden = true; if !pic && inner { shadeView.isHidden = false; name.textColor = .white } }
       var now = true   // (there at once — kept: no fade; arriving later: it fades in over the shimmer)
       FeedLoader.shared.image(p) { [weak v, weak shimmer, weak typeL, weak name, weak shadeView] img in
         guard let img = img, let v = v else { shimmer?.removeFromSuperview(); return }
