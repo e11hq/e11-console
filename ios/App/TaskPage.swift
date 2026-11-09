@@ -614,7 +614,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
       NSLayoutConstraint.activate([d.widthAnchor.constraint(equalToConstant: 8), d.heightAnchor.constraint(equalToConstant: 8)])
       let l = label(cn, size: 15, color: .secondaryLabel, weight: .medium)
       let line = UIStackView(arrangedSubviews: [d, l, UIView()]); line.axis = .horizontal; line.alignment = .center; line.spacing = 7
-      head.append(hosted("client", line, pad: UIEdgeInsets(top: 0, left: -1, bottom: 4, right: -1)))
+      head.append(hosted("clientLine", line, pad: UIEdgeInsets(top: 0, left: -1, bottom: 4, right: -1)))
     }
     if let p = m["parent"] as? [String: Any], let pid = p["id"] as? String {
       head.append(hosted("parent", linkLine("Subtask of " + (p["title"] as? String ?? ""), sym: "arrow.turn.left.up") { [weak self] in self?.onOpen?(pid) }, pad: UIEdgeInsets(top: 0, left: -1, bottom: 6, right: -1)))
