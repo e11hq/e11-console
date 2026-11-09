@@ -82,7 +82,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     cv.backgroundColor = .clear
     return cv
   }()
-  // (Haris 2026-11-09, "Task page Details — fully Apple": Apple's inset-grouped list — each row Apple's own list cell set
+  // (Haris 2026-11-09, "Task page Details — fully Apple": Apple's grouped list, full width — each row Apple's own list cell set
   //  by Apple's configuration in Apple's boxes, Apple's headers, the creator as Apple's footer; ours, held in Apple's
   //  cells, only what Apple has no part for — the client line, the title, the notes, the description, the files)
   private var listDS: UICollectionViewDiffableDataSource<String, String>?
@@ -614,31 +614,31 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
       NSLayoutConstraint.activate([d.widthAnchor.constraint(equalToConstant: 8), d.heightAnchor.constraint(equalToConstant: 8)])
       let l = label(cn, size: 15, color: .secondaryLabel, weight: .medium)
       let line = UIStackView(arrangedSubviews: [d, l, UIView()]); line.axis = .horizontal; line.alignment = .center; line.spacing = 7
-      head.append(hosted("client", line, pad: UIEdgeInsets(top: 0, left: 0, bottom: 4, right: 0)))
+      head.append(hosted("client", line, pad: UIEdgeInsets(top: 0, left: -1, bottom: 4, right: -1)))
     }
     if let p = m["parent"] as? [String: Any], let pid = p["id"] as? String {
-      head.append(hosted("parent", linkLine("Subtask of " + (p["title"] as? String ?? ""), sym: "arrow.turn.left.up") { [weak self] in self?.onOpen?(pid) }, pad: UIEdgeInsets(top: 0, left: 0, bottom: 6, right: 0)))
+      head.append(hosted("parent", linkLine("Subtask of " + (p["title"] as? String ?? ""), sym: "arrow.turn.left.up") { [weak self] in self?.onOpen?(pid) }, pad: UIEdgeInsets(top: 0, left: -1, bottom: 6, right: -1)))
     }
     if !typing { titleView.text = m["title"] as? String ?? "" }
     titleView.isEditable = (m["canTitle"] as? Bool) == true
     titleView.textColor = (m["done"] as? Bool) == true ? .secondaryLabel : .label
-    head.append(hosted("title", titleView, pad: UIEdgeInsets(top: 0, left: 0, bottom: 4, right: 0), sig: "\(titleView.text ?? "")|\(titleView.isEditable)|\((m["done"] as? Bool) == true)"))
+    head.append(hosted("title", titleView, pad: UIEdgeInsets(top: 0, left: -1, bottom: 4, right: -1), sig: "\(titleView.text ?? "")|\(titleView.isEditable)|\((m["done"] as? Bool) == true)"))
     if let c = m["completed"] as? [String: Any] {
       var t = "Completed" + ((c["label"] as? String).map { $0.isEmpty ? "" : " on " + $0 } ?? "") + " — read only."
       if let left = c["left"] as? Int { t += " Goes to the Trash in \(left) day\(left == 1 ? "" : "s")." }
       var btns: [(String, () -> Void)] = []
       if (c["canFrom"] as? Bool) == true { btns.append(("New task from this", { [weak self] in guard let self = self else { return }; self.onEvent?(["ev": "from", "id": self.taskId]) })) }
       if (c["canReopen"] as? Bool) == true { btns.append(("Reopen", { [weak self] in guard let self = self else { return }; self.onAct?(["act": "reopen", "id": self.taskId]) })) }
-      head.append(hosted("done", note(sym: "checkmark.circle.fill", tint: .systemGreen, text: t, buttons: btns), pad: UIEdgeInsets(top: 8, left: 0, bottom: 2, right: 0)))
+      head.append(hosted("done", note(sym: "checkmark.circle.fill", tint: .systemGreen, text: t, buttons: btns), pad: UIEdgeInsets(top: 8, left: -1, bottom: 2, right: -1)))
     }
-    if let tn = m["trashNote"] as? String { head.append(hosted("trash", note(sym: "trash", tint: .systemRed, text: tn, buttons: []), pad: UIEdgeInsets(top: 8, left: 0, bottom: 2, right: 0))) }
+    if let tn = m["trashNote"] as? String { head.append(hosted("trash", note(sym: "trash", tint: .systemRed, text: tn, buttons: []), pad: UIEdgeInsets(top: 8, left: -1, bottom: 2, right: -1))) }
     if let l = m["lock"] as? [String: Any] {
       var btns: [(String, () -> Void)] = []
       if (l["from"] as? Bool) == true { btns.append(("New task from this", { [weak self] in guard let self = self else { return }; self.onEvent?(["ev": "from", "id": self.taskId]) })) }
-      head.append(hosted("lock", note(sym: "lock.fill", tint: .systemOrange, text: l["text"] as? String ?? "", buttons: btns), pad: UIEdgeInsets(top: 8, left: 0, bottom: 2, right: 0)))
+      head.append(hosted("lock", note(sym: "lock.fill", tint: .systemOrange, text: l["text"] as? String ?? "", buttons: btns), pad: UIEdgeInsets(top: 8, left: -1, bottom: 2, right: -1)))
     }
     if let b = m["basedOn"] as? [String: Any], let bid = b["id"] as? String {
-      head.append(hosted("based", linkLine("New task from " + (b["title"] as? String ?? ""), sym: "link") { [weak self] in self?.onOpen?(bid) }, pad: UIEdgeInsets(top: 6, left: 0, bottom: 0, right: 0)))
+      head.append(hosted("based", linkLine("New task from " + (b["title"] as? String ?? ""), sym: "link") { [weak self] in self?.onOpen?(bid) }, pad: UIEdgeInsets(top: 6, left: -1, bottom: 0, right: -1)))
     }
     add("head", head)
     // ---- three boxes, in today's order (Haris 2026-11-09): Status · Task Update · CD status / Assignees · Dates ·
@@ -839,11 +839,12 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
       }
     }
   }
-  // Apple's inset-grouped list: Apple's boxes, headers and footer; the head (the title and its line) without a box
+  // Apple's grouped list: Apple's groups, headers and footer; the head (the title and its line) and the description without one
   private func makeListLayout() -> UICollectionViewLayout {
     UICollectionViewCompositionalLayout { [weak self] i, env in
       let s = self?.dSec(i)
-      var c = UICollectionLayoutListConfiguration(appearance: .insetGrouped)
+      // (full width, edge to edge — Apple's grouped list: Haris 2026-11-09)
+      var c = UICollectionLayoutListConfiguration(appearance: .grouped)
       c.backgroundColor = .clear
       c.headerMode = s?.head != nil ? .supplementary : .none
       c.footerMode = s?.foot != nil ? .supplementary : .none
