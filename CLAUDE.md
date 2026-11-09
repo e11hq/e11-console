@@ -174,7 +174,8 @@ follows it (Don't 9); don't change any of it without Haris. Project doc `claude/
 - **The frost: Apple's own, untouched — exactly as in build 1550** (the list's and the search results' `topEdgeEffect.style
   = .automatic`, nothing of ours setting or drawing it). Haris 2026-11-08 11:29: "back how it was, apple's own, on the
   previous locked home" — the firm frost with its line (builds 1562 / 1566) taken off Home. Which frost other Apple pages
-  get (the task page has the firm frost with its line since 1566): ask Haris.
+  get (the task page had the firm frost with its line since 1566): **since 2026-11-09 every Apple page has Apple's own
+  frost untouched, as Home** (Haris: "Automatic, as Home" — the firm one showed at the top under a search bar).
 - Opening a page from it: Apple's push; **the tab bar is hidden with Apple's tab bar call once the page has arrived**,
   and comes back as the slide back begins — never "hide the bottom bar when pushed", and nothing told to the tab bar at
   the slide's first moment: either makes Apple's bar snap small and the big title jump into it.
@@ -195,7 +196,7 @@ CommentsFeed, PageCell, AppleTabs, AppleNav…). Project doc `claude/ios-apple-s
   - **Pushed pages** — anything opened from a tab: a client's page, Client Assets and its folders, a team member, Me's pages,
     a reply, a content plan (and Content plans opened from Me), a CD's review request, a claim or an expense — follow **the
     task page**: Apple's push, Apple's bar with ‹ / name or control in the middle / •••, the tab bar hidden once the page has
-    arrived (Apple's call), each row its own cell of Apple's list (frame placing), **Apple's firm frost with its line**, the
+    arrived (Apple's call), each row its own cell of Apple's list (frame placing), **Apple's own frost, untouched, as Home** (Haris 2026-11-09), the
     keyboard rule (lists scroll while typing, drag down, a tap only puts it down).
 - Sheets (New task, Add claim / expense, Request amendments, a plan's post, the date and people sheets) are neither: they
   stay iPhone's own sheets as they are.
@@ -233,12 +234,12 @@ they use (HomeView, AppleTabs, AppleNav, AppleClients, AppleMyTasks, AssetsCtl, 
 Haris first and his yes. The Clients pages: the list follows Home (big title "Clients" and its line, Apple's search, Talk
 and your photo, the clients in Apple's list, + Add client); a client's page, a client's Client Assets and a folder are
 Apple's pushed pages (‹ · the name and its line · ••• as Apple's own menu, the tab bar staying, each block its own cell of
-Apple's list, the firm frost with its line, Apple's search for a client's files, the folders row on top of a client's page
+Apple's list, Apple's own frost as Home (2026-11-09), Apple's search for a client's files, the folders row on top of a client's page
 as before).
 
 **iPhone Me and its pages — in Apple's navigation, as iPhone's Settings (Haris 2026-11-08 20:07: "start the me page …
 me page and its inner pages"; bar: "Nothing"; "No search"):** Me is its tab's own Apple screen, its big title "Settings" (the tab stays "Me") (AppleMe.swift, AppleTabs'
-`meNav`); its pages pushed on it (MePageVC — the tab bar staying, Apple's firm frost). Rows are Apple's own: grouped
+`meNav`); its pages pushed on it (MePageVC — the tab bar staying, Apple's own frost as Home). Rows are Apple's own: grouped
 sections, Apple's headers / footers, Apple's list cells set by Apple's configurations, ›, value, Apple's switch, Apple's
 highlight (`HomeView.applyMeList` — a path only Me's pages use; Haris: "Yes, go ahead"). Ours, shown by Apple's cells: the
 icons and pictures, and the pages' own blocks (Appearance's phones, About's cards, a member's header, a plan's posts).

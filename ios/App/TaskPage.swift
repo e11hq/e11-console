@@ -94,8 +94,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   //  showing, Apple's firm frost as every Apple page)
   var onEdgeScroll: ((UIScrollView) -> Void)?
   func edgeScroll(_ sv: UIScrollView) {
-    if #available(iOS 26.0, *), sv.topEdgeEffect.style != .hard { sv.topEdgeEffect.style = .hard }
-    onEdgeScroll?(sv)
+    onEdgeScroll?(sv)   // (Apple's own frost, untouched — as Home: Haris 2026-11-09)
   }
   // the page's ••• menu, for Apple's bar (TaskVC)
   private(set) var cornerMenu: UIMenu?

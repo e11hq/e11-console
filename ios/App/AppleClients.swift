@@ -134,8 +134,8 @@ class ClientsPushedVC: UIViewController {
     h.onApplePage = { [weak self] t, sub, col, logo, ini, showLogo in self?.setBar(t, sub, col, logo, ini, showLogo) }
     h.tellApplePage()   // (what it shows already — drawn before this page was made)
     h.useAppleTop()
-    // (as the task page: Apple's firm frost with its line)
-    if #available(iOS 26.0, *), h.appleScroll.topEdgeEffect.style != .hard { h.appleScroll.topEdgeEffect.style = .hard }
+    // (Apple's own frost, untouched — as Home: clear at the top, in as the list goes under the bar; the firm one showed at
+    //  the top under a search bar — Haris 2026-11-09 "Automatic, as Home")
     setContentScrollView(h.appleScroll, for: .top)
     // •••: Apple's own menu, made each time it opens (what the page has now)
     let more = UIBarButtonItem(image: UIImage(systemName: "ellipsis"), menu: UIMenu(children: [UIDeferredMenuElement.uncached { [weak self] done in done(UIMenu.items(self?.menuItems() ?? [])) }]))
