@@ -991,7 +991,7 @@ final class PickList: UITableView, UITableViewDataSource, UITableViewDelegate {
     isScrollEnabled = false
     backgroundColor = HomeLook(Main.shared.lookBoth).card
     layer.cornerRadius = 16; layer.cornerCurve = .continuous
-    separatorInset = UIEdgeInsets(top: 0, left: 58, bottom: 0, right: 0)
+    separatorInset = UIEdgeInsets(top: 0, left: 58, bottom: 0, right: 0); separatorColor = HomeLook.line
     insetsContentViewsToSafeArea = false; contentInsetAdjustmentBehavior = .never
     sectionHeaderTopPadding = 0
     register(UITableViewCell.self, forCellReuseIdentifier: "r")

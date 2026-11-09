@@ -892,6 +892,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
       // (full width, edge to edge — Apple's grouped list: Haris 2026-11-09)
       var c = UICollectionLayoutListConfiguration(appearance: .grouped)
       c.backgroundColor = .clear
+      c.separatorConfiguration.color = HomeLook.line   // (Apple's line, a little softer — every Apple page)
       c.headerMode = s?.head != nil ? .supplementary : .none
       c.footerMode = s?.foot != nil ? .supplementary : .none
       c.showsSeparators = !(s?.plain ?? false)

@@ -179,6 +179,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       if let self = self, !self.isMeList || self.searching, i < self.listSecs.count, self.listSecs[i].rows {
         var gc = UICollectionLayoutListConfiguration(appearance: .insetGrouped)
         gc.backgroundColor = .clear
+        gc.separatorConfiguration.color = HomeLook.line   // (Apple's line, a little softer — every Apple page)
         gc.headerMode = self.listSecs[i].head != nil ? .supplementary : .none
         gc.trailingSwipeActionsConfigurationProvider = { [weak self] ip in self?.swipeActions(ip, leading: false) }
         gc.leadingSwipeActionsConfigurationProvider = { [weak self] ip in self?.swipeActions(ip, leading: true) }
@@ -1931,6 +1932,18 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
 
 // the colours the page's own Home uses (phone.css), read from it; dark / light defaults when a piece isn't on it
 struct HomeLook {
+  // the line between rows in Apple's lists, every Apple page (Haris 2026-11-10: Apple's own, "softer"): Apple's separator,
+  // a little fainter — light and dark, as Apple switches it; worked out once per look
+  private static var lineMade: [Int: UIColor] = [:]
+  static let line: UIColor = UIColor { t in
+    let k = t.userInterfaceStyle.rawValue
+    if let c = HomeLook.lineMade[k] { return c }
+    let s = UIColor.separator.resolvedColor(with: t)
+    var a: CGFloat = 0; s.getWhite(nil, alpha: &a)
+    let c = s.withAlphaComponent(a * 0.7)
+    HomeLook.lineMade[k] = c
+    return c
+  }
   // every colour holds both looks (Look.c): the website's measured colours for each look when it has sent them (Main
   // keeps the last of each — Main.lookBoth), else the app's own — so iPhone switches them itself
   let bg, headBg, sub, h1, round, roundIc, statLabel, statG, statR, statA, gh, empty: UIColor
@@ -2881,6 +2894,7 @@ extension HomeView {
   func meGrouped(_ g: MeSec, _ env: NSCollectionLayoutEnvironment) -> NSCollectionLayoutSection {
     var c = UICollectionLayoutListConfiguration(appearance: .insetGrouped)
     c.backgroundColor = .clear
+    c.separatorConfiguration.color = HomeLook.line   // (Apple's line, a little softer — every Apple page)
     c.headerMode = g.head.isEmpty ? .none : .supplementary
     c.footerMode = g.foot == nil ? .none : .supplementary
     let sec = NSCollectionLayoutSection.list(using: c, layoutEnvironment: env)
