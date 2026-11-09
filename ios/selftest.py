@@ -66,8 +66,8 @@ try:
             print('stage', st, f'at {time.time() - rec_t0:.1f}s')
             # (to another app and back, as a person does: Settings opened, then the app again)
             # (light / dark: the phone switched with the app open — the app must follow it by itself)
-            if st == 'lookFlip': sh('xcrun', 'simctl', 'ui', udid, 'appearance', 'light')
-            if st == 'lookLight': sh('xcrun', 'simctl', 'ui', udid, 'appearance', 'dark')
+            if st in ('lookFlip', 'tlookFlip'): sh('xcrun', 'simctl', 'ui', udid, 'appearance', 'light')
+            if st in ('lookLight', 'tlookLight'): sh('xcrun', 'simctl', 'ui', udid, 'appearance', 'dark')
             if st in ('away', 'titlesAway', 'titlesAway2'):
                 sh('xcrun', 'simctl', 'launch', udid, 'com.apple.Preferences'); time.sleep(4)
                 sh('xcrun', 'simctl', 'launch', udid, BUNDLE); time.sleep(1)
@@ -132,6 +132,8 @@ try:
     moved = {k: (ha.get(k), hs.get(k), ht.get(k)) for k in set(ha) | set(hs) | set(ht) if len({round(x) for x in (ha.get(k), hs.get(k), ht.get(k)) if x is not None}) > 1}
     print('measure rowHeights', json.dumps({'arrived': ha, 'scrolled': hs, 'top': ht}))
     check(len(ha) >= 4 and len(ht) >= 4 and not moved, f"the task page's rows keep their heights — arrived, scrolled, back at the top (changed: {moved})")
+    tl, td = res.get('tlookAtLight') or {}, res.get('tlookAtDark') or {}
+    check(tl.get('style') == 1 and tl.get('forced') == 0 and (tl.get('bg') or 0) > 0.5 and td.get('style') == 2 and td.get('forced') == 0 and (td.get('bg') or 1) < 0.5, f"the task page follows the phone light / dark, nothing forcing it (light {tl}, dark {td})", need=('tlook',))
     check((res.get('awayCells') or 0) > 0, f"the task page's Details still on the page after coming back {res.get('awayCells')}")
     # (Haris 2026-11-09, "Task page Details — fully Apple": Apple's own list cells in Apple's boxes, the creator as Apple's
     #  grey footer at the very end)

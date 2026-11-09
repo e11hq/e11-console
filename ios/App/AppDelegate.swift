@@ -3077,6 +3077,13 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       ("tpageScrolled", pause(900) + "return '{}'", { self.taskPages.last?.scroll.setContentOffset(CGPoint(x: 0, y: 380), animated: false) }),
       ("tpageHoldScroll", pause(1200) + "return '{}'", { self.selfResult["holdScrolled"] = self.taskPages.last?.detailsHeights() ?? [:]; if let p = self.taskPages.last { p.scroll.setContentOffset(CGPoint(x: 0, y: -p.scroll.adjustedContentInset.top), animated: true) } }),
       ("tpageHoldTop", pause(1200) + "return '{}'", { self.selfResult["holdTop"] = self.taskPages.last?.detailsHeights() ?? [:] }),
+      // (light / dark with a task open — the build machine switches the simulator as these steps come: the task page in the
+      //  phone's look, nothing forcing one — Haris 2026-11-09)
+      ("tlookFlip", pause(1500) + "return '{}'", nil),
+      ("tlookWait", pause(3000) + "return '{}'", nil),
+      ("tlookLight", pause(1500) + "return '{}'", { self.selfResult["tlookAtLight"] = self.taskPages.last?.lookNow() ?? [:] }),
+      ("tlookWait2", pause(3000) + "return '{}'", nil),
+      ("tlookDark", pause(1500) + "return '{}'", { self.selfResult["tlookAtDark"] = self.taskPages.last?.lookNow() ?? [:] }),
       // (to another app and back with a task open — the build machine opens Settings and comes back while "awayWait"
       //  waits: nothing may be drawn again for it, the rule "only what changed changes", Haris 2026-11-08)
       ("away", "return '{}'", { self.selfResult["redrawsBefore"] = Main.lookRedraws }),
