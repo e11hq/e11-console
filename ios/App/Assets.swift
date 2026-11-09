@@ -615,6 +615,12 @@ final class AssetsCtl {
     light = main.clientsLight
     open(client: client, folder: folder, animated: true, direct: true)   // (‹ back to the client's page, the way you came)
   }
+  // (the self-test: the first client opened from All Client Assets, as tapping its card)
+  func selfOpenClient() -> Bool {
+    guard let id = ((models[""]?["clients"] as? [[String: Any]]) ?? []).first?["id"] as? String, stack.last?.kind == "all" else { return false }
+    push(screen("client", id, nil), animated: true); ask(["ev": "want", "client": id]) { _ in }
+    return true
+  }
   func openAll(animated: Bool) {
     if stack.isEmpty { pickHost() }
     push(screen("all", nil, nil), animated: animated)

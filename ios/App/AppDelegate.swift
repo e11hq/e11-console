@@ -2813,6 +2813,48 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in self?.selfResult["slide_\(k)_mid"] = seen() }
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.selfResult["slide_\(k)_end"] = seen() }
   }
+  // (measurement, Haris 2026-11-09: where Apple's bar, every search bar in it and the page's list are — as drawn on screen
+  //  this frame (the presentation layers) — for the search bar that pops in going back to Client Assets, and the frost
+  //  showing on pushed pages already at the top)
+  func selfBar(_ n: UINavigationController?) -> [String: Any] {
+    guard let n = n, let w = n.view.window else { return ["nav": false] }
+    let wl = w.layer.presentation() ?? w.layer
+    func fr(_ v: UIView) -> [String: Any] {
+      let l = v.layer.presentation() ?? v.layer
+      let r = l.convert(l.bounds, to: wl)
+      var a: CGFloat = 1; var u: UIView? = v
+      while let x = u, x !== w { a *= CGFloat((x.layer.presentation() ?? x.layer).opacity) * (x.isHidden ? 0 : 1); u = x.superview }
+      return ["y": Double(r.minY), "h": Double(r.height), "x": Double(r.minX), "a": Double(a)]
+    }
+    var bars: [[String: Any]] = []
+    func walk(_ v: UIView) { if let b = v as? UISearchBar { var d = fr(b); d["ph"] = b.placeholder ?? ""; bars.append(d) } else { v.subviews.forEach(walk) } }
+    walk(n.view)
+    var out: [String: Any] = ["t": CACurrentMediaTime(), "bar": fr(n.navigationBar), "search": bars, "vcs": n.viewControllers.count]
+    if let vc = n.topViewController {
+      out["top"] = String(describing: type(of: vc)) + ":" + (vc.navigationItem.title ?? "")
+      if let sv = vc.contentScrollView(for: .top) {
+        var d: [String: Any] = ["off": Double(sv.contentOffset.y), "adj": Double(sv.adjustedContentInset.top), "ins": Double(sv.contentInset.top)]
+        if let cv = sv as? UICollectionView { d["firstCell"] = cv.visibleCells.map { Double($0.convert($0.bounds, to: nil).minY) }.min() ?? -1 }
+        if #available(iOS 26.0, *) { d["edgeHidden"] = sv.topEdgeEffect.isHidden; d["edgeStyle"] = String(describing: sv.topEdgeEffect.style) }
+        out["list"] = d
+      }
+    }
+    return out
+  }
+  // every frame for a while: what selfBar sees (a slide, frame by frame)
+  final class SelfFrames: NSObject {
+    private var link: CADisplayLink?, end: CFTimeInterval = 0, frames: [[String: Any]] = [], sample: () -> [String: Any] = { [:] }, done: ([[String: Any]]) -> Void = { _ in }
+    private static var running: [SelfFrames] = []
+    static func run(_ secs: Double, _ sample: @escaping () -> [String: Any], done: @escaping ([[String: Any]]) -> Void) {
+      let f = SelfFrames(); f.sample = sample; f.done = done; f.end = CACurrentMediaTime() + secs
+      f.link = CADisplayLink(target: f, selector: #selector(tick)); f.link?.add(to: .main, forMode: .common)
+      running.append(f)
+    }
+    @objc private func tick() {
+      frames.append(sample())
+      if CACurrentMediaTime() > end { link?.invalidate(); link = nil; done(frames); SelfFrames.running.removeAll { $0 === self } }
+    }
+  }
   // the comments list as the page sees it: where it's scrolled, whether the latest comment shows, the room kept
   let feedJS = "const f = document.querySelector('#detail .tm-feed'); if (!f) return JSON.stringify({ error: 'no list' }); const last = f.lastElementChild; return JSON.stringify({ on: document.documentElement.classList.contains('ph-cb-on'), st: f.scrollTop, sh: f.scrollHeight, ch: f.clientHeight, toEnd: f.scrollHeight - f.scrollTop - f.clientHeight, lastBottom: last ? last.getBoundingClientRect().bottom : null, top: f.getBoundingClientRect().top, kbpad: getComputedStyle(document.documentElement).getPropertyValue('--ph-kbpad').trim(), transform: f.style.transform, n: f.children.length })"
   func fakeKeyboard(_ h: CGFloat) {
@@ -2883,7 +2925,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       // (33: Me is the app's own — the page draws nothing under it; its Team members page pushed in, then back)
       ("me", "go('me'); " + pause(1200) + "for (let i = 0; i < 3; i++) { await Push.refresh(); " + pause(300) + " } return JSON.stringify({ native: typeof NativeMe !== 'undefined' && NativeMe.shown, blank: !!document.querySelector('#content .ph-under-app'), lockRows: document.querySelectorAll('#ph-lock, [data-ph-lock]').length, pushRows: document.querySelectorAll('#ph-push').length })", nil),
       ("meTeam", pause(2500) + "return '{}'", { self.meCtl.selfOpen("team") }),
-      ("meAbout", pause(2500) + "return '{}'", { self.meCtl.pop(animated: false); self.meCtl.selfOpen("about") }),
+      ("meAbout", pause(2500) + "return '{}'", { self.selfResult["frost_team"] = self.selfBar(AppleTabs.shared?.meNav); self.meCtl.pop(animated: false); self.meCtl.selfOpen("about") }),
       ("meProfile", pause(2500) + "return '{}'", { self.meCtl.pop(animated: false); self.meCtl.selfOpen("profile") }),
       ("meTrash", pause(2500) + "return '{}'", { self.meCtl.pop(animated: false); self.meCtl.selfOpen("trash") }),
       ("meBack", pause(1200) + "return '{}'", { self.meCtl.pop(animated: true) }),
@@ -2892,6 +2934,18 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       ("meAway", pause(1500) + "return '{}'", { self.selfResult["meRowsBefore"] = Main.meRows; self.selfSelect("today") }),
       ("meAgain", pause(1500) + "return '{}'", { self.selfSelect("me") }),
       ("meAgainDone", pause(2500) + "return '{}'", { self.selfResult["meRowsAfter"] = Main.meRows }),
+      // (measurement — Haris 2026-11-09: Me › Client Assets › a client, then ‹ back: the search bar popped in at the end of
+      //  the slide; and the frost on pushed pages at their top — each page at rest, then the slide back frame by frame)
+      ("snapAll", pause(3000) + "return '{}'", {
+        self.assetsCtl.command(["show": true, "me": AppData.shared.me ?? "", "light": self.appStyle == .light, "start": [String: Any]()])
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { self.selfResult["frost_assetsAll"] = self.selfBar(AppleTabs.shared?.meNav) } }),
+      ("snapClient", pause(3000) + "return '{}'", {
+        self.selfResult["snapOpened"] = self.assetsCtl.selfOpenClient()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { self.selfResult["frost_assetsClient"] = self.selfBar(AppleTabs.shared?.meNav) } }),
+      ("snapBack", pause(2500) + "return '{}'", {
+        SelfFrames.run(1.2, { self.selfBar(AppleTabs.shared?.meNav) }) { f in self.selfResult["snap_back"] = f }
+        self.assetsCtl.pop(animated: true) }),
+      ("snapDone", pause(1500) + "return '{}'", { AppleTabs.shared?.meNav.popToRootViewController(animated: false) }),
       ("client", "try { let c = db.clients.find((x) => (x.folders || []).some((f) => (f.files || []).length > 1)) || db.clients[0]; if (!c) { c = createClient('Sample client'); c.folders[0].files = [{ id: 'st-a1', name: 'Logo primary.png', size: 48000, at: nowISO() }, { id: 'st-a2', name: 'Brand guidelines.pdf', size: 2400000, at: nowISO() }, { id: 'st-a3', name: 'Logo lockup.ai', size: 4800000, at: nowISO() }] } const f = (c.folders || []).find((x) => (x.files || []).length > 1) || (c.folders || [])[0]; if (!f) return JSON.stringify({ error: 'no folder' }); openClient(c.id, f.id); " + pause(1200) + "return JSON.stringify({ wide: document.getElementById('content').scrollWidth > innerWidth + 1 }) } catch (e) { return JSON.stringify({ error: String(e && e.message || e) }) }", nil),
       // 30: the app's own task page — pushed in, scrolled, its Comments, back (then the website's task page for the
       // stages after it)

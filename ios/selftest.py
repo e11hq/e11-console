@@ -176,6 +176,17 @@ try:
     mtr = res.get('meTrashNative') or {}
     check(mtr.get('kind') == 'trash' and (mtr.get('parts') or 0) >= 3 and (str(mtr.get('corner')).startswith('back,') or mtr.get('apple') is True), f"Trash: the app's own, its search and categories, ‹ at the top {mtr}")
     check(mb.get('kind') == 'me' and mb.get('screens') == 1, f"‹ back to Me {mb}")
+    # (measurement only — Haris 2026-11-09: the frost on pushed pages at their top; the search bar going back to Client Assets)
+    def barLine(b):
+      if not isinstance(b, dict) or not b.get('bar'): return str(b)
+      bar = b['bar']; l = b.get('list') or {}
+      ss = ' '.join(f"[{x.get('ph','')[:18]} y{x.get('y',0):.0f} h{x.get('h',0):.0f} a{x.get('a',0):.2f}]" for x in (b.get('search') or []))
+      return f"{b.get('top','')} bar y{bar.get('y',0):.0f}+{bar.get('h',0):.0f} list off{l.get('off','-')} adj{l.get('adj','-')} ins{l.get('ins','-')} cell{l.get('firstCell','-')} edge {l.get('edgeStyle','-')} hidden{l.get('edgeHidden','-')} {ss}"
+    for k in ('frost_team', 'frost_assetsAll', 'frost_assetsClient'): print('measure', k, barLine(res.get(k)))
+    print('measure snapOpened', res.get('snapOpened'))
+    fr = res.get('snap_back') or []
+    t0 = fr[0].get('t', 0) if fr else 0
+    for f in fr: print('measure snap_back', f"{(f.get('t',0) - t0) * 1000:5.0f}ms", barLine(f))
     check(res.get('meRowsBefore') is not None and res.get('meRowsAfter') == res.get('meRowsBefore'), f"Me opened again: no row drawn again {res.get('meRowsBefore')} → {res.get('meRowsAfter')}")
     check((res.get('client') or {}).get('wide') is False, f"Client Assets folder fits the screen {res.get('client')}")
     ca = res.get('clientAssets') or {}
