@@ -499,6 +499,19 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
     }
   }
   func has(_ id: String) -> Bool { cells[id] != nil }
+  // (times move on while you look — "now" becomes "1m": a clock every 20 seconds while the comments are on a screen, the
+  //  times' words only, nothing else drawn again — Haris 2026-11-10)
+  private var clock: Timer?
+  override func didMoveToWindow() {
+    super.didMoveToWindow()
+    clock?.invalidate(); clock = nil
+    guard window != nil else { return }
+    cells.values.forEach { $0.refreshTimes(fade: false) }
+    clock = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in
+      guard let self = self, UIApplication.shared.applicationState == .active else { return }
+      self.cells.values.forEach { $0.refreshTimes(fade: true) }
+    }
+  }
   // (these comments in front of you: the app open, this list on the screen — not Details beside it, not under a thread)
   private var onScreen: Bool {
     guard let w = window, UIApplication.shared.applicationState == .active else { return false }
@@ -775,6 +788,16 @@ final class FeedRow: UITableViewCell {
 // one comment: avatar · name · time, the words, files, link cards, reactions, Seen by, "N replies"
 final class CommentCell: UIView {
   var sig = ""
+  // its times ("now", "5m", "Last reply 2m", "Seen … · 1h"): set again as the minutes pass — only the words, crossfading
+  private var times: [(label: UILabel, at: String, before: String, after: String)] = []
+  func refreshTimes(fade: Bool) {
+    for t in times {
+      let w = t.before + TaskPage.when(t.at) + t.after
+      guard t.label.text != w else { continue }
+      if fade { UIView.transition(with: t.label, duration: 0.25, options: [.transitionCrossDissolve, .allowUserInteraction], animations: { t.label.text = w }) }
+      else { t.label.text = w }
+    }
+  }
   var onReplies: (() -> Void)?
   var onReact: ((String) -> Void)?
   var onOpen: (([[String: Any]], Int) -> Void)?
@@ -794,7 +817,8 @@ final class CommentCell: UIView {
     let av = CommentCell.avatar(p, 32)
     let name = UILabel(); name.font = .systemFont(ofSize: 15, weight: .semibold); name.text = who == me ? "You" : (p["name"] as? String ?? "Someone")
     name.lineBreakMode = .byTruncatingTail
-    let when = UILabel(); when.font = .systemFont(ofSize: 13); when.textColor = .secondaryLabel; when.text = TaskPage.when(it["at"] as? String ?? "") + ((it["edited"] as? Bool) == true ? " · edited" : "")
+    let when = UILabel(); when.font = .systemFont(ofSize: 13); when.textColor = .secondaryLabel
+    times.append((when, it["at"] as? String ?? "", "", (it["edited"] as? Bool) == true ? " · edited" : ""))
     let meta = UIStackView(arrangedSubviews: [name, when]); meta.spacing = 6; meta.alignment = .firstBaseline
     name.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
     stack.axis = .vertical; stack.spacing = 6; stack.alignment = .fill
@@ -849,10 +873,8 @@ final class CommentCell: UIView {
     if it["seen"] == nil, let c = creator { let s = UIStackView(arrangedSubviews: [c, UIView()]); stack.addArrangedSubview(s) }
     if let sn = it["seen"] as? [String: Any] {
       let l = UILabel(); l.font = .systemFont(ofSize: 12.5); l.textColor = .secondaryLabel
-      var t = sn["label"] as? String ?? ""
-      if let at = sn["at"] as? String { t += " · " + TaskPage.when(at) }
+      if let at = sn["at"] as? String { times.append((l, at, (sn["label"] as? String ?? "") + " · ", "")) } else { l.text = sn["label"] as? String ?? "" }
       let eye = UIImageView(image: UIImage(systemName: (sn["on"] as? Bool) == true ? "eye" : "eye.slash", withConfiguration: UIImage.SymbolConfiguration(pointSize: 11))); eye.tintColor = .secondaryLabel
-      l.text = t
       let s = UIStackView(arrangedSubviews: [eye, l]); s.spacing = 5; s.alignment = .center
       if let c = creator { s.setCustomSpacing(8, after: l); s.addArrangedSubview(c) }
       s.addArrangedSubview(UIView())
@@ -864,7 +886,8 @@ final class CommentCell: UIView {
       let avs = UIStackView(); avs.spacing = -5
       for id in ((r["people"] as? [String]) ?? []).prefix(3) { avs.addArrangedSubview(CommentCell.avatar(people[id] ?? [:], 20)) }
       let l = UILabel(); l.font = .systemFont(ofSize: 14.5, weight: .semibold); l.textColor = .systemBlue; l.text = "\(n) repl\(n == 1 ? "y" : "ies")"
-      let last = UILabel(); last.font = .systemFont(ofSize: 13); last.textColor = .secondaryLabel; last.text = "Last reply " + TaskPage.when(r["last"] as? String ?? "")
+      let last = UILabel(); last.font = .systemFont(ofSize: 13); last.textColor = .secondaryLabel
+      times.append((last, r["last"] as? String ?? "", "Last reply ", ""))
       let chev = UIImageView(image: UIImage(systemName: "chevron.right", withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .semibold))); chev.tintColor = .tertiaryLabel
       let h = UIStackView(arrangedSubviews: [avs, l, last, UIView(), chev]); h.spacing = 7; h.alignment = .center
       h.translatesAutoresizingMaskIntoConstraints = false; b.addSubview(h)
@@ -876,6 +899,7 @@ final class CommentCell: UIView {
     let row = UIStackView(arrangedSubviews: [av, right]); row.spacing = 10; row.alignment = .top
     row.translatesAutoresizingMaskIntoConstraints = false
     card.addSubview(row)
+    refreshTimes(fade: false)
     let pad: CGFloat = hasReplies || root || thread ? 12 : 4
     NSLayoutConstraint.activate([row.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: pad), row.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -pad), row.topAnchor.constraint(equalTo: card.topAnchor, constant: pad), row.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -pad)])
   }
