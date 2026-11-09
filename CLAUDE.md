@@ -289,6 +289,11 @@ new rows fading in and gone ones out, the rest sliding only when something reall
 self-test checks it on every build: each row's height once a page has arrived, after scrolling, and back at the top — the
 same row the same height (`holdArrived` / `holdScrolled` / `holdTop`). Every new page too.
 
+**What you do shows at once, every Apple page — now and later (Haris, 2026-11-09 20:11):** anything you remove, add, tick or
+change on a page (a file trashed, a checklist item ticked, a status set…) shows on the page at once — the gone one fades
+out and the rest slide in, Apple's own list animation — never waiting for the server's answer. The server's answer then
+draws the page as it really is (a failure brings it back). Every new page too.
+
 **The list's end, every native list page — now and later (Haris, 2026-11-09 18:57):** scrolled to the end, the last card
 stops as far above "+ New task" as the button sits above the tab bar (about 19 — `HomeView.endRoom`), the same on E11 Day,
 My Tasks, the Inbox, Clients and every new list page; with no button, as far above the tab bar (or the bottom edge).
