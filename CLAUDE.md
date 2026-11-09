@@ -198,6 +198,16 @@ The same cell on My Tasks, a client's page and search. Nothing touches it — lo
 uses (HomeView, HomeCard, HomeClientRow, AppleTabs, AppleNav, SharedFab, ToastCapsule…) — without telling Haris first and his
 yes.
 
+**iPhone Home, the task page and My Tasks — LOCKED at build 1629 (Haris, 2026-11-09 22:53: "Home page, Task page, My tasks — Lock"):**
+commit 37ac6d4, branches `locked/ios-home-1629`, `locked/ios-task-1629`, `locked/ios-mytasks-1629` (never moved or deleted; the
+earlier lock branches stay as history). Holds everything since 1607: the task page's Details fully Apple (Apple's grouped list,
+our chips centred, no lines on the boxes' edges, the task cards' colour, Home's background, the grey lock on what you can't
+change, Show More, steady heights — no cell, header or footer taking the safe area, the crash found and fixed), a trashed
+file going at once, the upload bar with Cancel, My Tasks' strike-through fix and its title exception, E11 Day's three boxes in
+the card colour, the list's end gap. Nothing touches them — look, behaviour or code, or a shared piece they use — without
+telling Haris first and his yes. (The TestFlight crash recorder, LoopProbe, is still in; it comes out once a few days pass
+with no crash notes.)
+
 **iPhone Home and the task page — COMPLETED and LOCKED (Haris, 2026-11-08 13:21: "the home page and task page is
 completed, and they need to be locked, no changes will touch these pages now without me knowing"):** build **1571**, commit
 e52c4d7, marked by the branches `locked/ios-home-1571` and `locked/ios-task-1571` (never moved or deleted; 1550's branch
