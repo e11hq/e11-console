@@ -728,7 +728,10 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
   }
   private func showRecording() {
     recView.subviews.forEach { $0.removeFromSuperview() }
-    recView.backgroundColor = .secondarySystemGroupedBackground; recView.layer.cornerRadius = 30; recView.clipsToBounds = true
+    // (as the mock-up, Haris 2026-11-10: on the box's own glass — the red dot, the time, the wave in grey; "‹ Slide to
+    //  cancel" in the buttons' row; the mic grown and red under the finger; the lock above it)
+    recView.backgroundColor = .clear; recView.layer.cornerRadius = 30; recView.clipsToBounds = true
+    UIView.animate(withDuration: 0.18) { self.plus.alpha = 0 }
     recView.frame = box.bounds; box.addSubview(recView)
     recDot.backgroundColor = .systemRed; recDot.layer.cornerRadius = 5; recDot.frame = CGRect(x: 18, y: 22, width: 10, height: 10)
     recTime.font = .monospacedDigitSystemFont(ofSize: 16, weight: .medium); recTime.frame = CGRect(x: 36, y: 12, width: 50, height: 30); recTime.text = "0:00"
@@ -739,13 +742,37 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     UIView.animate(withDuration: 0.6, delay: 0, options: [.repeat, .autoreverse]) { self.recDot.alpha = 0.25 }
     recTimer = Timer.scheduledTimer(withTimeInterval: 0.08, repeats: true) { [weak self] _ in self?.meter() }
     box.bringSubviewToFront(right)
+    UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.7, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
+      self.right.transform = CGAffineTransform(scaleX: 1.35, y: 1.35); self.right.backgroundColor = .systemRed; self.right.tintColor = .white
+    }
+    // the lock: slide up to it to let go and keep recording
+    lockHint.subviews.forEach { $0.removeFromSuperview() }
+    if #available(iOS 26.0, *) { lockHint.effect = UIGlassEffect(style: .regular) } else { lockHint.effect = UIBlurEffect(style: .systemThinMaterial) }
+    lockHint.clipsToBounds = true; lockHint.layer.cornerRadius = 20; lockHint.layer.cornerCurve = .continuous
+    let lk = UIImageView(image: UIImage(systemName: "lock.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .semibold)))
+    let up = UIImageView(image: UIImage(systemName: "chevron.up", withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .semibold)))
+    [lk, up].forEach { $0.tintColor = .secondaryLabel; $0.contentMode = .center }
+    let col = UIStackView(arrangedSubviews: [lk, up]); col.axis = .vertical; col.distribution = .fillEqually
+    col.frame = CGRect(x: 0, y: 6, width: 40, height: 64); lockHint.contentView.addSubview(col)
+    let r = right.convert(right.bounds, to: self)
+    lockHint.frame = CGRect(x: r.midX - 20, y: r.minY - 96, width: 40, height: 76)
+    lockHint.alpha = 0; addSubview(lockHint)
+    UIView.animate(withDuration: 0.25, delay: 0.1) { self.lockHint.alpha = 1 }
+  }
+  private let lockHint = UIVisualEffectView(effect: nil)
+  // (the mic back to itself, the + back — recording over or locked)
+  private func micBack() {
+    UIView.animate(withDuration: 0.22) {
+      self.right.transform = .identity; self.lockHint.alpha = 0
+      self.right.backgroundColor = self.showingSend == true ? .label : .tertiarySystemFill; self.right.tintColor = self.showingSend == true ? .systemBackground : .label
+    } completion: { _ in if self.recorder == nil || self.locked { self.lockHint.removeFromSuperview() } }
   }
   private func meter() {
     guard let r = recorder else { return }
     r.updateMeters()
     let s = Int(Date().timeIntervalSince(recStart)); recTime.text = String(format: "%d:%02d", s / 60, s % 60)
     let lvl = CGFloat(max(0, min(1, (r.averagePower(forChannel: 0) + 50) / 50)))
-    let bar = UIView(); bar.backgroundColor = .systemBlue; bar.layer.cornerRadius = 1.5
+    let bar = UIView(); bar.backgroundColor = .secondaryLabel; bar.layer.cornerRadius = 1.5
     bar.translatesAutoresizingMaskIntoConstraints = false
     bar.widthAnchor.constraint(equalToConstant: 3).isActive = true; bar.heightAnchor.constraint(equalToConstant: 4 + lvl * 24).isActive = true
     recWave.addArrangedSubview(bar)
@@ -757,13 +784,14 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     locked = true
     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     recHint.isHidden = true
+    micBack()
     // locked: 🗑 on the left, ↑ on the right (the finger can go)
     lockTrash.setImage(UIImage(systemName: "trash", withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold)), for: .normal)
     lockTrash.tintColor = .label; lockTrash.backgroundColor = .tertiarySystemFill; lockTrash.layer.cornerRadius = 18
     lockTrash.frame = plus.frame
     lockTrash.addAction(UIAction { [weak self] _ in self?.stopRecording(send: false) }, for: .touchUpInside)
     lockSend.setImage(UIImage(systemName: "arrow.up", withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .bold)), for: .normal)
-    lockSend.tintColor = .white; lockSend.backgroundColor = .systemBlue; lockSend.layer.cornerRadius = 18
+    lockSend.tintColor = .systemBackground; lockSend.backgroundColor = .label; lockSend.layer.cornerRadius = 18   // (as the box's ↑)
     lockSend.frame = right.frame
     lockSend.addAction(UIAction { [weak self] _ in self?.lockedSend() }, for: .touchUpInside)
     recView.addSubview(lockTrash); recView.addSubview(lockSend)
@@ -778,6 +806,8 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     defer { DispatchQueue.main.async { [weak self] in self?.paintShape() } }
     recDot.layer.removeAllAnimations()
     recView.removeFromSuperview(); lockTrash.removeFromSuperview(); lockSend.removeFromSuperview(); recHint.isHidden = false
+    micBack()
+    UIView.animate(withDuration: 0.18) { self.plus.alpha = 1 }
     try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     guard send, dur >= 0.8 else { if send { onToast?("Hold to record, let go to send") }; try? FileManager.default.removeItem(at: url); return }
     // straight up, then sent as its own comment (a reply where the box is replying)
