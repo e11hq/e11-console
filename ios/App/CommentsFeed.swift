@@ -89,7 +89,7 @@ final class FeedLoader {
   }
 }
 
-final class CommentsFeed: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate {
+final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelegate {
   let taskId: String
   let thread: String?
   var onAct: (([String: Any]) -> Void)?             // react / deleteComment (the server's)
@@ -99,10 +99,16 @@ final class CommentsFeed: UIView, UIScrollViewDelegate, UIGestureRecognizerDeleg
   var onToast: ((String) -> Void)?
   var onLoaded: (([String: Any]) -> Void)?
   var onOpenFile: (([[String: Any]], Int) -> Void)?
-  var onSheet: (([String: Any], @escaping (Int, String?) -> Void) -> Void)?
-  let scroll = UIScrollView()
-  private let content = UIView()
-  private var cells: [String: CommentCell] = [:]
+  var onCount: ((Int) -> Void)?                      // how many comments it shows (a thread's line: "N replies")
+  /* The comments in Apple's list (Haris 2026-11-09, mock-up "Task Comments — fully Apple", approved 23:14): Apple's table,
+     each comment its own row with its exact height given (worked out once for the list's width — nothing estimated, so
+     a list that starts at the bottom never jumps and no row grows); Apple's own row animations as comments come and go;
+     touch and hold: Apple's lift and menu (the reactions as Apple's palette on top); swipe right: Apple's Reply. Our
+     comment drawing (CommentCell) inside Apple's row. */
+  let scroll = UITableView(frame: .zero, style: .plain)
+  private var source: FeedSource!
+  private var cells: [String: CommentCell] = [:]      // ours, kept per comment while it shows the same
+  private var itemsById: [String: [String: Any]] = [:]
   private var order: [String] = []
   private(set) var model: [String: Any]?
   var people: [String: [String: Any]] = [:]
@@ -120,9 +126,9 @@ final class CommentsFeed: UIView, UIScrollViewDelegate, UIGestureRecognizerDeleg
     guard let b = box, !b.isHidden, let host = b.superview, isDescendant(of: host) else { return }
     let room = max(0, convert(bounds, to: host).maxY - b.frame.minY) + 6
     if abs(room - bottomRoom) > 0.5 { bottomRoom = room }
-    // (Apple's soft blur fading the comments as they go under the comment box, as the Claude app's — Haris 2026-11-08:
-    //  the list's own bottom edge, told that the box is over it; the box is shared by the comments and a reply's page,
-    //  so it points at whichever list it's over now)
+    // (Apple's soft blur fading the comments as they go under the comment box, down to the bottom edge, as the Claude
+    //  app's — Haris 2026-11-08 / 11-09: the list's own bottom edge, told that the box is over it; the box is shared by
+    //  the comments and a reply's page, so it points at whichever list it's over now)
     if #available(iOS 26.0, *) {
       if scroll.bottomEdgeEffect.style != .soft { scroll.bottomEdgeEffect.style = .soft }
       let mine = edgeHook as? UIScrollEdgeElementContainerInteraction
@@ -139,11 +145,31 @@ final class CommentsFeed: UIView, UIScrollViewDelegate, UIGestureRecognizerDeleg
     taskId = task; self.thread = thread
     super.init(frame: .zero)
     backgroundColor = HomeLook(Main.shared.lookBoth).bg   // (Home's background — every page, Haris 2026-11-09 19:00)
+    scroll.backgroundColor = .clear
+    scroll.separatorStyle = .none
+    scroll.allowsSelection = false                       // (a comment isn't picked; its own buttons, files and replies keep their taps)
+    scroll.estimatedRowHeight = 0                         // (every row's exact height asked — never estimated)
+    scroll.estimatedSectionHeaderHeight = 0; scroll.estimatedSectionFooterHeight = 0
+    scroll.sectionHeaderTopPadding = 0
+    scroll.insetsContentViewsToSafeArea = false
+    scroll.cellLayoutMarginsFollowReadableWidth = false
     scroll.alwaysBounceVertical = true
     scroll.contentInsetAdjustmentBehavior = .never
     scroll.keyboardDismissMode = .interactive   // (dragging down takes the keyboard with the finger — rule 5)
-    scroll.delegate = self
     scroll.automaticallyAdjustsScrollIndicatorInsets = false   // (the scroll bar starts under the bar from the start — the standard)
+    scroll.tableHeaderView = UIView(frame: CGRect(x: 0, y: 0, width: 1, height: 4))
+    scroll.tableFooterView = UIView(frame: CGRect(x: 0, y: 0, width: 1, height: 8))
+    scroll.register(FeedRow.self, forCellReuseIdentifier: "c")
+    scroll.delegate = self
+    source = FeedSource(tableView: scroll) { [weak self] t, ip, id in
+      let row = t.dequeueReusableCell(withIdentifier: "c", for: ip) as! FeedRow
+      guard let self = self, t.bounds.width > 0 else { return row }
+      let W = t.bounds.width
+      if let c = self.cells[id] { row.host(c, height: c.height(for: W)) }
+      else if let v = self.schedById[id] { row.host(v, height: v.height(for: W)) }
+      return row
+    }
+    source.defaultRowAnimation = .fade
     // (a tap on the comments while the keyboard is up only puts it down — the card or button under the finger isn't
     //  tapped too; scrolling the list still scrolls it, and dragging down takes the keyboard with the finger: Apple's tap
     //  recognizer, which a scroll never sets off — Haris 2026-11-08: the page's cover took every touch, a scroll too)
@@ -152,7 +178,7 @@ final class CommentsFeed: UIView, UIScrollViewDelegate, UIGestureRecognizerDeleg
     scroll.addGestureRecognizer(tapAway)
     NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillShowNotification, object: nil, queue: .main) { [weak self] _ in self?.keyboardUp = true }
     NotificationCenter.default.addObserver(forName: UIResponder.keyboardDidHideNotification, object: nil, queue: .main) { [weak self] _ in self?.keyboardUp = false }
-    addSubview(scroll); scroll.addSubview(content)
+    addSubview(scroll)
     // (Apple's own frost under the bar and Details · Comments — its scroll edge as it comes, Haris 2026-11-07)
     // the ↓ button / "N new comments" pill: glass, just above the comment box
     jumpFx.isUserInteractionEnabled = false; jumpFx.clipsToBounds = true
@@ -253,78 +279,74 @@ final class CommentsFeed: UIView, UIScrollViewDelegate, UIGestureRecognizerDeleg
     guard let i = pending.firstIndex(where: { $0.id == id }) else { return }
     if ok { pending[i].done = true } else { pending.remove(at: i); if let m = model { draw(m) } }
   }
-  private func draw(_ m: [String: Any], mine: Bool = false) {
-    dropArrived(m)
+  private func draw(_ real: [String: Any], mine: Bool = false) {
+    dropArrived(real)
+    model = real
+    let m = withOverlays(real)
     if let c = m["creator"] as? String { CommentCell.creator = c }
-    model = m
     onLoaded?(m)
     if let pp = m["people"] as? [String: [String: Any]] { people.merge(pp) { _, b in b } }
     let items = ((m["items"] as? [[String: Any]]) ?? []) + pending.map { $0.item }
     let atEnd = mine || wantEnd || isAtEnd()   // (your own voice message, or a comment you've just sent: down to it)
     if wantEnd { keepId = nil }   // (sent: the latest from now on, not the comment it replied to)
     wantEnd = false
-    let keepTopId = order.first { (cells[$0]?.frame.maxY ?? 0) > scroll.contentOffset.y + scroll.contentInset.top }
-    let keepTopY = keepTopId.flatMap { cells[$0] }.map { $0.frame.minY - scroll.contentOffset.y }
-    // (Haris, 2026-11-02: a comment arriving while you're here — anyone's, with files or not — gets its room first, then
-    //  fades in; one going fades out while the others close up. Not on the first drawing.)
+    let keepTopId = order.first { (frameOf($0)?.maxY ?? 0) > scroll.contentOffset.y + scroll.contentInset.top }
+    let keepTopY = keepTopId.flatMap { frameOf($0) }.map { $0.minY - scroll.contentOffset.y }
+    // (Haris, 2026-11-02: a comment arriving while you're here fades in, one going fades out while the others close up —
+    //  Apple's own row animations now. Not on the first drawing.)
     let animate = !first && window != nil
-    let before = Set(cells.keys)
-    var oldFrames: [String: CGRect] = [:]
-    if animate { for (id, c) in cells { oldFrames[id] = c.frame } }
-    var fresh: [CommentCell] = [], settled: [CommentCell] = []
+    var changed: [String] = []
     var next: [String] = [], seen = Set<String>()
+    var byId: [String: [String: Any]] = [:]
     for (k, it) in items.enumerated() {
-      guard let id = it["id"] as? String else { continue }
-      seen.insert(id); next.append(id)
+      guard let id = it["id"] as? String, !seen.contains(id) else { continue }
+      seen.insert(id); next.append(id); byId[id] = it
+      // (only what changed is made again — each comment kept by its id with a signature of what it shows)
       let sig = (try? JSONSerialization.data(withJSONObject: it, options: [.sortedKeys])).map { String(decoding: $0, as: UTF8.self) } ?? ""
       let isRoot = thread != nil && k == 0
       if let c = cells[id], c.sig == sig { continue }
-      cells[id]?.removeFromSuperview()
-      let c = CommentCell(it, people: people, me: m["me"] as? String ?? "", thread: thread != nil, root: isRoot)
+      let was = cells[id] != nil
+      var made: CommentCell!
+      UIView.performWithoutAnimation {
+        made = CommentCell(it, people: people, me: m["me"] as? String ?? "", thread: thread != nil, root: isRoot)
+      }
+      let c = made!
       c.sig = sig
-      c.onHold = { [weak self] in self?.hold(it) }
       c.onReplies = { [weak self] in self?.onThread?(id) }
       c.onOpen = { [weak self] list, i in self?.onOpenFile?(list, i) }
-      c.onReact = { [weak self] e in guard let self = self else { return }; self.onAct?(["act": "react", "id": self.taskId, "key": id, "value": e]) }
-      if arriving.remove(id) != nil { c.voiceArrived(); settled.append(c) }
-      else if animate && !before.contains(id) { fresh.append(c) }
-      content.addSubview(c); cells[id] = c
+      c.onReact = { [weak self] e in self?.react(id, e) }
+      if arriving.remove(id) != nil { c.voiceArrived() }
+      cells[id] = c
+      if was { changed.append(id) }
     }
-    var going: [CommentCell] = []
-    for (id, c) in cells where !seen.contains(id) {
-      cells[id] = nil
-      // (your own on its way, replaced by the real one: it just goes — the real one is where it was)
-      if animate && !id.hasPrefix("pending-") { going.append(c) } else { c.removeFromSuperview() }
-    }
+    for id in Array(cells.keys) where !seen.contains(id) { cells[id] = nil }
+    itemsById = byId
     // your scheduled comments, last (dashed: "Scheduled · 4:00 PM")
     // (each kept while it shows the same — only what changed is made again, Haris 2026-11-08)
     let schedNow = (m["scheduled"] as? [[String: Any]]) ?? []
-    var keepSched: [String: ScheduledCard] = [:]
-    for (k, v) in zip(schedKeys, schedViews) { keepSched[k] = v }
-    var nextKeys: [String] = []
-    schedViews = schedNow.map { x in
-      var k = drawSig(x); while nextKeys.contains(k) { k += "+" }
-      nextKeys.append(k)
-      if let v = keepSched.removeValue(forKey: k) { return v }
-      let v = ScheduledCard(x); content.addSubview(v); return v
+    var nextSched: [String: ScheduledCard] = [:], schedOrder: [String] = []
+    for x in schedNow {
+      var k = "sched:" + drawSig(x); while nextSched[k] != nil { k += "+" }
+      nextSched[k] = schedById[k] ?? ScheduledCard(x); schedOrder.append(k)
     }
-    keepSched.values.forEach { $0.removeFromSuperview() }
-    schedKeys = nextKeys
+    schedById = nextSched
     let newOnes = next.filter { !seenIds.contains($0) }
+    if next.count != order.count || first { onCount?(next.count) }
     order = next
-    layoutCells()
-    if animate {
-      // staying ones slide from where they were (the gap closing or opening); new ones fade in once it's open
-      for id in order { if let c = cells[id], let f = oldFrames[id], f.minY != c.frame.minY { let to = c.frame; c.frame = f
-        UIView.animate(withDuration: 0.44, delay: going.isEmpty ? 0 : 0.06, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState]) { c.frame = to } } }
-      for c in going { UIView.animate(withDuration: 0.2, animations: { c.alpha = 0 }) { _ in c.removeFromSuperview() } }
-      for c in fresh { c.alpha = 0; UIView.animate(withDuration: 0.3, delay: 0.26, options: [.allowUserInteraction, .curveEaseOut]) { c.alpha = 1 } }
-      for c in settled where !c.isVoice { c.alpha = 0.75; UIView.animate(withDuration: 0.35, delay: 0.1, options: [.allowUserInteraction, .curveEaseOut]) { c.alpha = 1 } }
-    }
-    if first { first = false; seenIds = Set(next); toEnd(animated: false); tellSeen(); return }
+    var snap = NSDiffableDataSourceSnapshot<Int, String>()
+    snap.appendSections([0]); snap.appendItems(next + schedOrder)
+    let had = Set(source.snapshot().itemIdentifiers)
+    let again = changed.filter { had.contains($0) }
+    if !again.isEmpty { snap.reconfigureItems(again) }
+    // (your own on its way, replaced by the real one: no fade — the real one is just where it was)
+    let before = source.snapshot().itemIdentifiers, now = Set(next + schedOrder)
+    let gone = before.filter { !now.contains($0) }, came = (next + schedOrder).filter { !had.contains($0) }
+    let swap = !gone.isEmpty && gone.allSatisfy { $0.hasPrefix("pending-") } && came.count == gone.count
+    source.apply(snap, animatingDifferences: animate && !swap)
+    if first { first = false; seenIds = Set(next); endOnLayout = true; toEnd(animated: false); tellSeen(); return }
     // at the latest: new comments stay in view (rule 3); higher up nothing moves — the pill counts them
     if atEnd { seenIds = Set(next); toEnd(animated: true) }
-    else if let id = keepTopId, let c = cells[id], let y = keepTopY { scroll.contentOffset.y = c.frame.minY - y }
+    else if let id = keepTopId, let f = frameOf(id), let y = keepTopY { scroll.contentOffset.y = f.minY - y }
     let mineNew = newOnes.filter { id in (items.first { ($0["id"] as? String) == id }?["mine"] as? Bool) != true }
     paintJump(newCount: atEnd ? 0 : mineNew.count + pendingNew)
     if !atEnd { pendingNew += mineNew.count; seenIds.formUnion(newOnes) }
@@ -332,33 +354,36 @@ final class CommentsFeed: UIView, UIScrollViewDelegate, UIGestureRecognizerDeleg
   }
   private var pendingNew = 0
   var wantEnd = false   // (the next drawing goes down to the latest)
-  private var schedViews: [ScheduledCard] = []
-  private var schedKeys: [String] = []
+  private var schedById: [String: ScheduledCard] = [:]
+
+  // ---------- Apple's list: each row its exact height ----------
+  func tableView(_ t: UITableView, heightForRowAt ip: IndexPath) -> CGFloat {
+    guard t.bounds.width > 0, let id = source.itemIdentifier(for: ip) else { return 1 }
+    if let c = cells[id] { return c.height(for: t.bounds.width) }
+    if let v = schedById[id] { return v.height(for: t.bounds.width) }
+    return 1
+  }
+  private func frameOf(_ id: String) -> CGRect? {
+    guard let ip = source.indexPath(for: id) else { return nil }
+    return scroll.rectForRow(at: ip)
+  }
 
   // ---------- layout ----------
+  private var laidW: CGFloat = 0
+  private var endOnLayout = false
   override func layoutSubviews() {
     super.layoutSubviews()
-    scroll.frame = bounds
+    if scroll.frame != bounds { scroll.frame = bounds }
     let top = topInset + 6
     if scroll.contentInset.top != top { scroll.contentInset.top = top; scroll.verticalScrollIndicatorInsets.top = top }
-    layoutCells()
-    placeJump()
-  }
-  private func layoutCells() {
-    let W = bounds.width
-    guard W > 0 else { return }
-    var y: CGFloat = 4
-    for id in order {
-      guard let c = cells[id] else { continue }
-      let h = c.height(for: W)
-      c.frame = CGRect(x: 0, y: y, width: W, height: h)
-      y += h
+    if scroll.contentInset.bottom != bottomRoom { scroll.contentInset.bottom = bottomRoom; scroll.verticalScrollIndicatorInsets.bottom = bottomRoom }
+    // (its width known, or a new one — the phone turned: every row's height asked again, once; drawn before it had its
+    //  width, it opens at the latest)
+    if bounds.width > 0 && laidW != bounds.width {
+      laidW = bounds.width; scroll.reloadData()
+      if endOnLayout { endOnLayout = false; toEnd(animated: false) }
     }
-    for v in schedViews { let h = v.height(for: W); v.frame = CGRect(x: 0, y: y, width: W, height: h); y += h }
-    content.frame = CGRect(x: 0, y: 0, width: W, height: y + 8)
-    scroll.contentSize = content.frame.size
-    scroll.contentInset.bottom = bottomRoom
-    scroll.verticalScrollIndicatorInsets.bottom = bottomRoom
+    placeJump()
   }
   // the box grew or the keyboard came: at the latest it stays at the latest
   private func roomChanged(_ old: CGFloat) {
@@ -372,7 +397,7 @@ final class CommentsFeed: UIView, UIScrollViewDelegate, UIGestureRecognizerDeleg
   }
   func isAtEnd() -> Bool { scroll.contentOffset.y + scroll.bounds.height >= scroll.contentSize.height + scroll.contentInset.bottom - 80 }
   func toEnd(animated: Bool) {
-    layoutIfNeeded()
+    layoutIfNeeded(); scroll.layoutIfNeeded()
     let end = max(-scroll.contentInset.top, scroll.contentSize.height + scroll.contentInset.bottom - scroll.bounds.height)
     scroll.setContentOffset(CGPoint(x: 0, y: end), animated: animated)
   }
@@ -400,7 +425,8 @@ final class CommentsFeed: UIView, UIScrollViewDelegate, UIGestureRecognizerDeleg
   func pulse(_ id: String) {
     guard let c = cells[id] else { return }
     layoutIfNeeded()
-    let y = max(-scroll.contentInset.top, min(c.frame.midY - scroll.bounds.height * 0.4, scroll.contentSize.height + scroll.contentInset.bottom - scroll.bounds.height))
+    guard let f = frameOf(id) else { return }
+    let y = max(-scroll.contentInset.top, min(f.midY - scroll.bounds.height * 0.4, scroll.contentSize.height + scroll.contentInset.bottom - scroll.bounds.height))
     // (Apple's own smooth scroll there — it jumped, Haris 2026-11-08; the card lights up as it arrives)
     let moves = abs(scroll.contentOffset.y - y) > 1
     if moves { scroll.setContentOffset(CGPoint(x: 0, y: y), animated: true) }
@@ -413,6 +439,20 @@ final class CommentsFeed: UIView, UIScrollViewDelegate, UIGestureRecognizerDeleg
     }
   }
   func has(_ id: String) -> Bool { cells[id] != nil }
+  // (for the self-test: each row's height, a swipe on a comment and beside it, the hold menu's parts)
+  func selfCheck() -> [String: Any] {
+    var rows: [String: Int] = [:]
+    for id in order { if let f = frameOf(id) { rows[id] = Int(f.height.rounded()) } }
+    var on: Any = NSNull(), beside: Any = NSNull()
+    let shown = scroll.bounds
+    if let id = order.first(where: { id in itemsById[id].map { canReply($0) } == true && (frameOf(id).map { shown.intersects($0) } ?? false) }), let f = frameOf(id) {
+      on = ownsSwipe(at: CGPoint(x: f.midX, y: f.midY), in: scroll)
+      beside = ownsSwipe(at: CGPoint(x: 6, y: f.midY), in: scroll)
+    }
+    let parts = order.first.flatMap { itemsById[$0] }.flatMap { menu($0) }?.children.count ?? -1
+    return ["rows": rows, "swipeOn": on, "swipeBeside": beside, "menu": parts, "count": order.count, "list": String(describing: type(of: scroll))]
+  }
+  var shownCount: Int { order.count }
   @objc private func tappedList() { window?.endEditing(true) }
   private var keyboardUp = false
   // (only while the keyboard is up; then the cards' own taps wait for it, so a tap puts the keyboard down and nothing else)
@@ -427,51 +467,139 @@ final class CommentsFeed: UIView, UIScrollViewDelegate, UIGestureRecognizerDeleg
   // (above the ↓ button too, so all of it shows — and again once the keyboard is up: Haris, 2026-11-02)
   private var keepId: String?
   func keepInView(_ id: String) {
-    guard let c = cells[id] else { return }
+    guard let f = frameOf(id) else { return }
     keepId = id
     let jumpRoom: CGFloat = 44 + 14 + 10
     let visibleBottom = scroll.contentOffset.y + scroll.bounds.height - bottomRoom - jumpRoom
-    if c.frame.maxY > visibleBottom { scroll.setContentOffset(CGPoint(x: 0, y: c.frame.maxY - scroll.bounds.height + bottomRoom + jumpRoom), animated: true) }
-    else if c.frame.minY < scroll.contentOffset.y + scroll.contentInset.top { scroll.setContentOffset(CGPoint(x: 0, y: c.frame.minY - scroll.contentInset.top - 8), animated: true) }
+    if f.maxY > visibleBottom { scroll.setContentOffset(CGPoint(x: 0, y: f.maxY - scroll.bounds.height + bottomRoom + jumpRoom), animated: true) }
+    else if f.minY < scroll.contentOffset.y + scroll.contentInset.top { scroll.setContentOffset(CGPoint(x: 0, y: f.minY - scroll.contentInset.top - 8), animated: true) }
   }
 
-  // ---------- touch and hold: reactions, Reply, Copy, Delete (as today's sheet) ----------
-  private func hold(_ it: [String: Any]) {
-    guard let id = it["id"] as? String else { return }
-    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-    let ro = (model?["readOnly"] as? Bool) == true
-    var rows: [[String: Any]] = []
-    let emojis = ["👍", "✅", "🎉", "❤️", "👀", "🙏"]
-    if !ro { rows.append(["i": -1, "label": "", "kind": "emoji", "chips": emojis.enumerated().map { ["i": 100 + $0.offset, "swatch": $0.element, "label": $0.element] }]) }
-    if (it["canReply"] as? Bool) == true && thread == nil { rows.append(["i": 1, "label": "Reply", "icon": "reply"]) }
-    if thread != nil && !ro { rows.append(["i": 1, "label": "Reply", "icon": "reply"]) }
-    if (it["canEdit"] as? Bool) == true { rows.append(["i": 4, "label": "Edit comment", "icon": "edit"]) }
-    rows.append(["i": 2, "label": "Copy text", "icon": "copy"])
-    var secs: [[String: Any]] = [["rows": rows]]
-    if (it["canDelete"] as? Bool) == true { secs.append(["rows": [["i": 3, "label": "Trash comment", "icon": "trash", "danger": true]]]) }
-    onSheet?(["sections": secs]) { [weak self] i, swatch in
-      guard let self = self else { return }
-      if let e = swatch, emojis.contains(e) { self.onAct?(["act": "react", "id": self.taskId, "key": id, "value": e]); return }
-      switch i {
-      case 1:
-        let who = it["who"] as? String ?? ""
-        self.onReply?(self.thread ?? id, (self.people[who]?["first"] as? String) ?? "them", self.people[who])
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { self.keepInView(id) }
-      case 4: self.onEdit?(id, (it["runs"] as? [[String: Any]]) ?? [])
-      case 2:
-        UIPasteboard.general.string = it["text"] as? String ?? ""
-        // (its mentions and chips too, for pasting into a comment or description — Haris 2026-11-02)
-        RichClip.put(DescEditor.attributed((it["runs"] as? [[String: Any]]) ?? [], done: false))
-        self.onToast?("Copied")
-      case 3: self.confirmDelete(id, replies: ((it["replies"] as? [String: Any])?["n"] as? Int) ?? 0)
-      default: break
-      }
-    }
+  // ---------- what each comment allows ----------
+  private var readOnly: Bool { (model?["readOnly"] as? Bool) == true }
+  private func canReply(_ it: [String: Any]) -> Bool {
+    thread == nil ? (it["canReply"] as? Bool) == true : !readOnly
   }
+  private func reply(_ it: [String: Any]) {
+    guard let id = it["id"] as? String else { return }
+    let who = it["who"] as? String ?? ""
+    onReply?(thread ?? id, (people[who]?["first"] as? String) ?? "them", people[who])
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in self?.keepInView(id) }
+  }
+  // a swipe that starts on a comment that can be replied to is the comment's (Apple's Reply); the Details · Comments
+  // pages wait for it — a swipe on the room between comments still goes to Details (Haris 2026-11-09)
+  func ownsSwipe(at p: CGPoint, in v: UIView) -> Bool {
+    let q = v.convert(p, to: scroll)
+    guard scroll.bounds.contains(q), let ip = scroll.indexPathForRow(at: q), let id = source.itemIdentifier(for: ip),
+          let it = itemsById[id], canReply(it), let c = cells[id] else { return false }
+    return c.cardFrame.contains(c.convert(q, from: scroll))
+  }
+
+  // ---------- what you do shows at once (Haris 2026-11-09 20:11): the page drawn with it straight away — Apple's own row
+  // animation — then the server's answer draws it as it really is (a failure brings it back) ----------
+  // (each kept on the page until the copy shows it — never flickering back while the copy catches up — or gone at once
+  //  when the server says no)
+  private var overlays: [(change: (inout [[String: Any]]) -> Void, shown: ([[String: Any]]) -> Bool, until: Date)] = []
+  private func local(_ change: @escaping (inout [[String: Any]]) -> Void, shown: @escaping ([[String: Any]]) -> Bool) {
+    overlays.append((change, shown, Date().addingTimeInterval(10)))
+    if let m = model { draw(m) }
+  }
+  private func withOverlays(_ m: [String: Any]) -> [String: Any] {
+    let real = (m["items"] as? [[String: Any]]) ?? []
+    overlays.removeAll { $0.shown(real) || $0.until < Date() }
+    guard !overlays.isEmpty else { return m }
+    var items = real
+    for o in overlays { o.change(&items) }
+    var out = m; out["items"] = items; return out
+  }
+  // the server said no: what was shown at once goes back
+  func dropLocal() { guard !overlays.isEmpty else { return }; overlays = []; if let m = model { draw(m) } }
+  // a reaction is on or off, as on the website: tapped again it goes
+  private func react(_ id: String, _ e: String) {
+    UISelectionFeedbackGenerator().selectionChanged()
+    let has: ([[String: Any]]) -> Bool? = { items in
+      guard let it = items.first(where: { ($0["id"] as? String) == id }) else { return nil }
+      return ((it["reactions"] as? [[String: Any]]) ?? []).contains { ($0["e"] as? String) == e }
+    }
+    guard let on = has(((withOverlays(model ?? [:])["items"]) as? [[String: Any]]) ?? []) else { return }
+    local({ items in
+      guard let i = items.firstIndex(where: { ($0["id"] as? String) == id }) else { return }
+      var rx = (items[i]["reactions"] as? [[String: Any]]) ?? []
+      rx.removeAll { ($0["e"] as? String) == e }
+      if !on { rx.append(["e": e, "n": 1]) }
+      items[i]["reactions"] = rx
+    }, shown: { has($0) == !on })
+    onAct?(["act": "react", "id": taskId, "key": id, "value": e])
+  }
+
+  // ---------- swipe right: Apple's Reply ----------
+  func tableView(_ t: UITableView, leadingSwipeActionsConfigurationForRowAt ip: IndexPath) -> UISwipeActionsConfiguration? {
+    guard let id = source.itemIdentifier(for: ip), let it = itemsById[id], canReply(it) else { return nil }
+    let a = UIContextualAction(style: .normal, title: "Reply") { [weak self] _, _, done in
+      UIImpactFeedbackGenerator(style: .light).impactOccurred()
+      self?.reply(it); done(true)
+    }
+    a.image = UIImage(systemName: "arrowshape.turn.up.left.fill")
+    a.backgroundColor = .systemBlue
+    let c = UISwipeActionsConfiguration(actions: [a]); c.performsFirstActionWithFullSwipe = true
+    return c
+  }
+  func tableView(_ t: UITableView, trailingSwipeActionsConfigurationForRowAt ip: IndexPath) -> UISwipeActionsConfiguration? {
+    UISwipeActionsConfiguration(actions: [])
+  }
+
+  // ---------- touch and hold: Apple's lift and menu — the reactions on top as Apple's palette, then Reply · Edit
+  // Comment · Copy Text, and Trash Comment (Haris 2026-11-09) ----------
+  func tableView(_ t: UITableView, contextMenuConfigurationForRowAt ip: IndexPath, point: CGPoint) -> UIContextMenuConfiguration? {
+    guard let id = source.itemIdentifier(for: ip), let it = itemsById[id] else { return nil }
+    return UIContextMenuConfiguration(identifier: id as NSString, previewProvider: nil) { [weak self] _ in self?.menu(it) }
+  }
+  private func menu(_ it: [String: Any]) -> UIMenu? {
+    guard let id = it["id"] as? String else { return nil }
+    var parts: [UIMenuElement] = []
+    if !readOnly {
+      let rx = ["👍", "✅", "🎉", "❤️", "👀", "🙏"].map { e in
+        UIAction(title: e, image: ReactionSym.image(e, size: 20)) { [weak self] _ in self?.react(id, e) }
+      }
+      parts.append(UIMenu(title: "", options: [.displayInline, .displayAsPalette], children: rx))
+    }
+    var main: [UIMenuElement] = []
+    if canReply(it) { main.append(UIAction(title: "Reply", image: UIImage(systemName: "arrowshape.turn.up.left")) { [weak self] _ in self?.reply(it) }) }
+    if (it["canEdit"] as? Bool) == true {
+      main.append(UIAction(title: "Edit Comment", image: UIImage(systemName: "pencil")) { [weak self] _ in self?.onEdit?(id, (it["runs"] as? [[String: Any]]) ?? []) })
+    }
+    main.append(UIAction(title: "Copy Text", image: UIImage(systemName: "doc.on.doc")) { [weak self] _ in
+      UIPasteboard.general.string = it["text"] as? String ?? ""
+      // (its mentions and chips too, for pasting into a comment or description — Haris 2026-11-02)
+      RichClip.put(DescEditor.attributed((it["runs"] as? [[String: Any]]) ?? [], done: false))
+      self?.onToast?("Copied")
+    })
+    parts.append(UIMenu(title: "", options: .displayInline, children: main))
+    if (it["canDelete"] as? Bool) == true {
+      parts.append(UIMenu(title: "", options: .displayInline, children: [UIAction(title: "Trash Comment", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in
+        self?.confirmDelete(id, replies: ((it["replies"] as? [String: Any])?["n"] as? Int) ?? 0)
+      }]))
+    }
+    return UIMenu(title: "", children: parts)
+  }
+  // (Apple's lift of the comment's own rounded card, on the card colour — a comment without a card lifts on one too)
+  private func preview(_ c: UIContextMenuConfiguration) -> UITargetedPreview? {
+    guard let id = c.identifier as? String, let cell = cells[id], cell.window != nil else { return nil }
+    let p = UIPreviewParameters()
+    p.visiblePath = UIBezierPath(roundedRect: cell.cardFrame, cornerRadius: 18)
+    p.backgroundColor = HomeLook(Main.shared.lookBoth).card
+    return UITargetedPreview(view: cell, parameters: p)
+  }
+  func tableView(_ t: UITableView, previewForHighlightingContextMenuWithConfiguration c: UIContextMenuConfiguration) -> UITargetedPreview? { preview(c) }
+  func tableView(_ t: UITableView, previewForDismissingContextMenuWithConfiguration c: UIContextMenuConfiguration) -> UITargetedPreview? { preview(c) }
   private func confirmDelete(_ id: String, replies: Int) {
     let a = UIAlertController(title: "Move comment to the Trash?", message: replies > 0 ? "This also removes its \(replies) repl\(replies == 1 ? "y" : "ies")." : nil, preferredStyle: .alert)
     a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-    a.addAction(UIAlertAction(title: "Trash", style: .destructive) { [weak self] _ in guard let self = self else { return }; self.onAct?(["act": "deleteComment", "id": self.taskId, "value": id]) })
+    a.addAction(UIAlertAction(title: "Trash", style: .destructive) { [weak self] _ in
+      guard let self = self else { return }
+      self.local({ $0.removeAll { ($0["id"] as? String) == id } }, shown: { !$0.contains { ($0["id"] as? String) == id } })
+      self.onAct?(["act": "deleteComment", "id": self.taskId, "value": id])
+    })
     var top = window?.rootViewController; while let p = top?.presentedViewController { top = p }
     top?.present(a, animated: true)
   }
@@ -484,17 +612,55 @@ final class CommentsFeed: UIView, UIScrollViewDelegate, UIGestureRecognizerDeleg
     let top = scroll.contentOffset.y, bottom = top + scroll.bounds.height - bottomRoom
     var ids: [String] = []
     for it in items where (it["mentionsMe"] as? Bool) == true && (it["mine"] as? Bool) != true {
-      guard let id = it["id"] as? String, !told.contains(id), let c = cells[id], c.frame.maxY > top, c.frame.minY < bottom else { continue }
+      guard let id = it["id"] as? String, !told.contains(id), let f = frameOf(id), f.maxY > top, f.minY < bottom else { continue }
       ids.append(id); told.insert(id)
     }
     if !ids.isEmpty { FeedLoader.shared.post("/api/seen", ["taskId": taskId, "ids": ids]) }
   }
 }
 
+// Apple's diffable list, told that its rows can be swiped (Apple's Reply) — a diffable list says no by default
+final class FeedSource: UITableViewDiffableDataSource<Int, String> {
+  override func tableView(_ tableView: UITableView, canEditRowAt indexPath: IndexPath) -> Bool { true }
+}
+
+// one row of Apple's list holding a comment (or a scheduled one): its exact height given, nothing of the safe area,
+// no background of its own — the page's shows through, the comment's card is its own
+final class FeedRow: UITableViewCell {
+  override var insetsLayoutMarginsFromSafeArea: Bool { get { false } set {} }
+  override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
+    super.init(style: style, reuseIdentifier: reuseIdentifier)
+    backgroundColor = .clear; contentView.backgroundColor = .clear
+    selectionStyle = .none
+    preservesSuperviewLayoutMargins = false; contentView.preservesSuperviewLayoutMargins = false
+    contentView.insetsLayoutMarginsFromSafeArea = false
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  private weak var hosted: UIView?
+  private var h: CGFloat = 1
+  func host(_ v: UIView, height: CGFloat) {
+    h = height
+    if hosted !== v, let old = hosted, old.superview === contentView { old.removeFromSuperview() }
+    hosted = v
+    // (put in place at once, with no animation: drawn inside the list's own animation it grew from nothing)
+    UIView.performWithoutAnimation {
+      v.transform = .identity
+      if v.superview !== contentView { contentView.addSubview(v) }
+      v.frame = CGRect(x: 0, y: 0, width: contentView.bounds.width, height: h)
+      v.layoutIfNeeded()
+    }
+  }
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    guard let v = hosted, v.superview === contentView else { return }
+    let f = CGRect(x: 0, y: 0, width: contentView.bounds.width, height: h)
+    if v.frame != f { v.frame = f }
+  }
+}
+
 // one comment: avatar · name · time, the words, files, link cards, reactions, Seen by, "N replies"
 final class CommentCell: UIView {
   var sig = ""
-  var onHold: (() -> Void)?
   var onReplies: (() -> Void)?
   var onReact: ((String) -> Void)?
   var onOpen: (([[String: Any]], Int) -> Void)?
@@ -506,9 +672,9 @@ final class CommentCell: UIView {
     let who = it["who"] as? String ?? ""
     let p = people[who] ?? [:]
     let hasReplies = it["replies"] != nil && !thread
-    // a comment with replies is a card of its own (as on the website); the task owner's comments have an orange bar
-    // (in a thread every reply is a card too, as the first — Haris 2026-11-06)
-    card.backgroundColor = hasReplies || root || thread ? .secondarySystemGroupedBackground : .clear
+    // a comment with replies is a card of its own (as on the website), in the task cards' colour (one card colour,
+    // Haris 2026-11-09); in a thread every reply is a card too, as the first — Haris 2026-11-06
+    card.backgroundColor = hasReplies || root || thread ? HomeLook(Main.shared.lookBoth).card : .clear
     card.layer.cornerRadius = 18; card.layer.cornerCurve = .continuous
     addSubview(card)
     let av = CommentCell.avatar(p, 32)
@@ -589,9 +755,6 @@ final class CommentCell: UIView {
     card.addSubview(row)
     let pad: CGFloat = hasReplies || root || thread ? 12 : 4
     NSLayoutConstraint.activate([row.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: pad), row.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -pad), row.topAnchor.constraint(equalTo: card.topAnchor, constant: pad), row.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -pad)])
-    let lp = UILongPressGestureRecognizer(target: self, action: #selector(held(_:))); lp.minimumPressDuration = 0.45
-    addGestureRecognizer(lp)
-    pressShrink = PressShrink.add(to: card)
   }
   required init?(coder: NSCoder) { fatalError() }
   // your voice message, just sent: its pill goes on from the pulsing one (••• then ▶)
@@ -606,16 +769,8 @@ final class CommentCell: UIView {
     card.insertSubview(v, at: 0)
     return v
   }
-  var isVoice: Bool {
-    func find(_ v: UIView) -> Bool { v is VoiceBubble || v.subviews.contains { find($0) } }
-    return find(card)
-  }
-  // touch and hold: the shared PressShrink (shrinks from the moment the finger is down); held long enough — the
-  // haptic, the menu, and it springs back
-  private var pressShrink: PressShrink?
-  @objc private func held(_ g: UILongPressGestureRecognizer) {
-    if g.state == .began { onHold?(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in self?.pressShrink?.release() } }
-  }
+  // the card's place in the comment (touch and hold lifts it, Apple's own; a swipe on it is its Reply)
+  var cardFrame: CGRect { CGRect(x: 16, y: 6, width: max(1, bounds.width - 32), height: max(1, bounds.height - 12)) }
   func height(for W: CGFloat) -> CGFloat {
     if let m = measured, m.0 == W { return m.1 }
     card.bounds = CGRect(x: 0, y: 0, width: W - 32, height: 10)
@@ -623,8 +778,6 @@ final class CommentCell: UIView {
     measured = (W, h + 12)
     return h + 12
   }
-  // (its size and place set without touching its shrink: setting the frame of a card that's shrunk while held re-laid
-  //  its insides — the text moved; now the whole card shrinks as one picture, Haris 2026-11-01)
   override func layoutSubviews() {
     super.layoutSubviews()
     let size = CGSize(width: bounds.width - 32, height: bounds.height - 12)

@@ -32,6 +32,12 @@ another tab and opens it again (`meAway` → `meAgain`) and no row may be set ag
 `PressShrink`) from the moment the finger is down, nothing inside it moves (cards are placed with bounds + center, never
 `frame`, so a shrunk card isn't re-laid out); held long enough: a medium haptic, iPhone's own sheet slides up, and the
 card springs back. No grey highlight, no iOS context menu with a lifted preview.
+**Comments, fully Apple (Haris 2026-11-09 23:14, mock-up "Task Comments — fully Apple" approved, 23:15 "Yes" to the code):**
+a comment held gets Apple's own lift and menu — the reactions as Apple's palette on top, then Reply · Edit Comment · Copy
+Text, and Trash Comment — not the shrink and sheet above; swipe right on a comment is Apple's Reply and never moves Details ·
+Comments (from the left edge or beside a comment it still goes to Details); the comments are rows of Apple's list (a table,
+each row's exact height given); + in the comment box is Apple's menu (Camera · Photos · Files); the @ / # lists are Apple's
+rows; a reaction or a trashed comment shows at once. Plan: project doc `claude/ios-comments-apple.md`.
 Where iPhone's own small popup menu is used instead (file thumbnails and file rows, rows with a menu — Haris 2026-11-06):
 it shrinks while pressed, then **Apple's own lift** with its menu (Haris 2026-11-07: "Remove it" — the 2026-11-06
 "at its own size" tweak is gone; `PressPreview.make` keeps only the rounded shape). Every new popup-menu hold does the same.

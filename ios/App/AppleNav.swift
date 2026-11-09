@@ -91,6 +91,15 @@ final class ReplyVC: UIViewController {
     feed.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     view.addSubview(feed)
     setContentScrollView(feed.scroll, for: .top)   // (Apple's frost under its bar follows the thread's list)
+    // (under "Thread", Apple's own second line: how many replies, and the task — mock-up approved 2026-11-09)
+    feed.onCount = { [weak self] n in
+      guard let self = self else { return }
+      let r = max(0, n - 1)
+      var line = r == 0 ? "No replies yet" : "\(r) repl\(r == 1 ? "y" : "ies")"
+      if let t = self.page.model?["title"] as? String, !t.isEmpty { line += " · " + t }
+      if #available(iOS 26.0, *) { self.navigationItem.subtitle = line }
+    }
+    if feed.shownCount > 0 { feed.onCount?(feed.shownCount) }
     if #available(iOS 16.0, *) {
       navigationItem.backAction = UIAction { [weak self] _ in
         UIImpactFeedbackGenerator(style: .light).impactOccurred()

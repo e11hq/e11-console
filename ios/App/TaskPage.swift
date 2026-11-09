@@ -281,6 +281,14 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
       pager.isDirectionalLockEnabled = true
       pager.scrollsToTop = false
       pager.delegate = self
+      // (a swipe right that starts on a comment is the comment's — Apple's Reply; Details · Comments wait for it. From the
+      //  left edge, or on the room between comments, it still goes to Details — Haris 2026-11-09)
+      pager.yields = { [weak self] pan in
+        guard let self = self, let f = self.feed, self.threadFeed == nil, self.pagerFraction > 0.99 else { return false }
+        let at = pan.location(in: self)
+        guard at.x > 24, pan.velocity(in: self).x > 0 else { return false }
+        return f.ownsSwipe(at: pan.location(in: f), in: f)
+      }
       addSubview(pager)
       pager.addSubview(scroll)
     }
@@ -438,7 +446,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   // ---------- Details ↔ Comments in iPhone's own paging scroller ----------
   // Apple moves the pages (the swipe, its speed, the bounce, a tap's scroll); Details · Comments follows. On Comments a
   // swipe right — from the edge too — goes to Details; on Details the edge swipe goes back (Haris 2026-11-07)
-  let pager = UIScrollView()
+  let pager = PagerScroll()
   private var pagerAuto = false        // (moving after a tap / by the app)
   private var dragFrom: String?
   var onPeek: ((String) -> Void)?      // a swipe starting on this tab: the comments made ready, the keyboard put away
@@ -1955,5 +1963,14 @@ extension TaskPage {
     placePulses()
     setNeedsLayout(); relayAnimated()
     if descAutoFinish && !descUploading { finishDesc() }
+  }
+}
+
+// Details ↔ Comments' paging scroller, which lets a comment's own swipe (Apple's Reply) have the finger first
+final class PagerScroll: UIScrollView {
+  var yields: ((UIPanGestureRecognizer) -> Bool)?
+  override func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
+    if g === panGestureRecognizer, yields?(panGestureRecognizer) == true { return false }
+    return super.gestureRecognizerShouldBegin(g)
   }
 }

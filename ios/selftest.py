@@ -140,6 +140,14 @@ try:
     print('measure reviewRows', sorted(set(ra) | set(re_) | set(rt)))
     check(len(ra) >= 4 and len(re_) >= 2 and not rmoved, f"a task in CD review: rows keep their heights to the very end and back (changed: {rmoved})")
     check(len(ha) >= 4 and len(ht) >= 4 and not moved, f"the task page's rows keep their heights — arrived, scrolled, back at the top (changed: {moved})")
+    # (the comments in Apple's list — Haris 2026-11-09, mock-up approved: rows steady, a swipe on a comment its Reply only)
+    fa, ft = res.get('feedAt') or {}, res.get('feedTop') or {}
+    fra, frt = fa.get('rows') or {}, ft.get('rows') or {}
+    fmoved = {k: (fra.get(k), frt.get(k)) for k in set(fra) & set(frt) if fra.get(k) != frt.get(k)}
+    print('measure commentRows', json.dumps({'end': fra, 'top': frt}))
+    check(fa.get('list') == 'UITableView' and (fa.get('count') or 0) >= 1 and not fmoved, f"the comments in Apple's list, each row keeping its height at the latest and back at the top (changed: {fmoved}) {({k: fa.get(k) for k in ('list', 'count')})}")
+    check(fa.get('swipeOn') is not False and fa.get('swipeBeside') is not True, f"a swipe on a comment is its Reply, never Details; beside it, Details (on {fa.get('swipeOn')}, beside {fa.get('swipeBeside')})")
+    check((fa.get('menu') or 0) >= 2, f"holding a comment: Apple's menu with the reactions and its actions {fa.get('menu')}")
     tl, td = res.get('tlookAtLight') or {}, res.get('tlookAtDark') or {}
     check(tl.get('style') == 1 and tl.get('forced') == 0 and (tl.get('bg') or 0) > 0.5 and td.get('style') == 2 and td.get('forced') == 0 and td.get('bg', 1) < 0.5, f"the task page follows the phone light / dark, nothing forcing it (light {tl}, dark {td})", need=('tlook',))
     check((res.get('awayCells') or 0) > 0, f"the task page's Details still on the page after coming back {res.get('awayCells')}")

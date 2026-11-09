@@ -450,10 +450,6 @@ extension Main {
     NSLayoutConstraint.activate([c.leadingAnchor.constraint(equalTo: view.leadingAnchor), c.trailingAnchor.constraint(equalTo: view.trailingAnchor), c.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor)])
     c.cookies = serverHome.cookies
     c.onToast = { [weak self] t in self?.taskPages.last?.toast(t) }
-    c.onAttach = { [weak self] pick in
-      guard let self = self, let host = self.sheetHost() else { return }
-      host.present(AttachSheetVC() { src in pick(src) }, animated: true)
-    }
     c.onSend = { [weak self] body, done in
       guard let self = self, let p = self.taskPages.last else { return done(false) }
       self.serverTask.act(body.merging(["page": p.taskId]) { a, _ in a }) { ok, m, err, _, _ in
@@ -555,7 +551,7 @@ extension Main {
     f.onAct = { [weak self, weak p, weak f] body in
       guard let self = self, let p = p else { return }
       self.serverTask.act(body.merging(["page": p.taskId]) { a, _ in a }) { ok, m, err, _, messages in
-        if !ok { p.toast(err ?? "That didn’t work — try again") }
+        if !ok { p.toast(err ?? "That didn’t work — try again"); f?.dropLocal() }
         else if (body["act"] as? String) == "deleteComment", let u = self.serverTask.lastUndo {
           // Undo for 8 seconds: the comment and its replies back
           p.toast("Comment deleted", action: ("Undo", { [weak self, weak p, weak f] in
@@ -576,10 +572,6 @@ extension Main {
     }
     f.onOpenFile = { [weak self] list, i in self?.openFiles(list, at: i) }
     f.onToast = { [weak p] t in p?.toast(t) }
-    f.onSheet = { [weak self] args, answer in
-      guard let self = self, let host = self.sheetHost() else { return }
-      host.present(NativeSheetVC(args, pick: nil, answer: answer), animated: true)
-    }
     // Reply: the comments screen behind sets the reply (its box line says "Replying to …"); the keyboard comes up
     f.onReply = { [weak self] cid, name, person in
       guard let self = self else { return }

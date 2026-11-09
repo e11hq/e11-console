@@ -3,7 +3,7 @@ import AVFoundation
 import UniformTypeIdentifiers
 
 /* The comment box, the app's own (step 3, Haris 2026-10-31 / 2026-11-01): the Claude app's box — rounded, 16 from
-   each side, + on the left (the one Attach Files sheet), the mic on the right turning into ↑ once something is typed.
+   each side, + on the left (Apple's menu: Camera · Photos · Files), the mic on the right turning into ↑ once something is typed.
    Replying-to line above it, @ people listed above it, waiting files as tiles inside it with their upload bar.
    Voice messages WhatsApp's way: hold the mic to record (red dot, timer, live waveform), slide left to cancel, slide up
    to lock and let go (then 🗑 or ↑). Sent straight to the server (/api/home/act comment / editComment); files and
@@ -69,7 +69,6 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
   var filesFor: (() -> [[String: Any]])?   // the task's files, for # (Haris 2026-11-02: picked, a card on the comment)
   var cookies: (@escaping (String) -> Void) -> Void = { $0("") }
   var onSend: (([String: Any], @escaping (Bool) -> Void) -> Void)?   // the act body → sent?
-  var onAttach: ((@escaping (String) -> Void) -> Void)?             // the Attach Files sheet → camera / photos / files
   var present: ((UIViewController) -> Void)?
   var onToast: ((String) -> Void)?
   var onPending: ((String, String?, Double) -> Void)?   // a voice message on its way: (its id, the thread it's in, its length)
@@ -81,7 +80,7 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
   private let plus = UIButton(type: .system), right = UIButton(type: .system)
   private let replyLine = UIStackView(), replyLabel = UILabel()
   private let tiles = UIStackView()
-  private let mentions = UIStackView()
+  private let mentions = PickList()
   private var files: [DraftFile] = []
   // uploads finished or failed (by their id) — kept even once the box is cleared, for comments sent before they were up
   private var upDone: [String: String] = [:], upFailed = Set<String>()
@@ -112,7 +111,12 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
       b.setImage(UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold)), for: .normal)
       b.tintColor = .label; b.backgroundColor = .tertiarySystemFill; b.layer.cornerRadius = 18
     }
-    plus.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.attach() }, for: .touchUpInside)
+    // (+ opens Apple's own menu — Camera · Photos · Files — then Apple's camera, photo picker and Files: Haris 2026-11-09)
+    let src: (String, String, String) -> UIAction = { key, title, sym in
+      UIAction(title: title, image: UIImage(systemName: sym)) { [weak self] _ in self?.attach(key) }
+    }
+    plus.menu = UIMenu(children: [src("camera", "Camera", "camera"), src("photos", "Photos", "photo.on.rectangle"), src("files", "Files", "folder")])
+    plus.showsMenuAsPrimaryAction = true
     right.addAction(UIAction { [weak self] _ in self?.sendTapped() }, for: .touchUpInside)
     let hold = UILongPressGestureRecognizer(target: self, action: #selector(holdMic(_:))); hold.minimumPressDuration = 0.18
     right.addGestureRecognizer(hold); holdG = hold
@@ -130,7 +134,7 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     rg.translatesAutoresizingMaskIntoConstraints = false; rg.isUserInteractionEnabled = false
     replyLine.insertSubview(rg, at: 0)
     NSLayoutConstraint.activate([rg.leadingAnchor.constraint(equalTo: replyLine.leadingAnchor), rg.trailingAnchor.constraint(equalTo: replyLine.trailingAnchor), rg.topAnchor.constraint(equalTo: replyLine.topAnchor), rg.bottomAnchor.constraint(equalTo: replyLine.bottomAnchor)])
-    mentions.axis = .vertical; mentions.backgroundColor = .secondarySystemGroupedBackground; mentions.layer.cornerRadius = 16; mentions.clipsToBounds = true; mentions.isHidden = true
+    mentions.isHidden = true
     let tilesScroll = UIScrollView(); tilesScroll.showsHorizontalScrollIndicator = false
     tilesScroll.addSubview(tiles); tiles.translatesAutoresizingMaskIntoConstraints = false
     let v = UIStackView(arrangedSubviews: [mentions, box]); v.axis = .vertical; v.spacing = 8
@@ -298,27 +302,28 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     if let m = before.range(of: "(^|\\s)#([^\\s#@]*)$", options: .regularExpression) {
       let typed = String(before[m]).trimmingCharacters(in: .whitespacesAndNewlines)
       let hits = DescEditor.fileHits(filesFor?() ?? [], String(typed.dropFirst()).lowercased())
-      mentions.arrangedSubviews.forEach { $0.removeFromSuperview() }
       guard !hits.isEmpty else { mentions.isHidden = true; return }
       let at = (before as NSString).length - (typed as NSString).length
-      for f in hits { mentions.addArrangedSubview(DescEditor.fileRow(f) { [weak self] in self?.pickFile(f, at: at) }) }
+      mentions.rows = hits.map { f in
+        let n = f["name"] as? String ?? "File"
+        let (sym, col) = DescEditor.kind(n)
+        let pic = (f["thumbUrl"] as? String) ?? (CommentCell.isPic(n) ? f["url"] as? String : nil)
+        return PickList.Row(key: "f:" + (f["file"] as? String ?? n), title: n, sub: TaskPage.size(f["size"] as? Int ?? 0),
+                            image: UIImage(systemName: sym)?.withTintColor(col, renderingMode: .alwaysOriginal), path: pic, round: false) { [weak self] in self?.pickFile(f, at: at) }
+      }
       mentions.isHidden = false
       return
     }
     guard let m = before.range(of: "@([A-Za-z]*)$", options: .regularExpression) else { mentions.isHidden = true; return }
     let q = String(before[m].dropFirst()).lowercased()
     let hits = mentionable.filter { q.isEmpty || ($0["name"] as? String ?? "").lowercased().split(separator: " ").contains { $0.hasPrefix(q) } }.prefix(4)
-    mentions.arrangedSubviews.forEach { $0.removeFromSuperview() }
     guard !hits.isEmpty else { mentions.isHidden = true; return }
     let at = (before as NSString).length - q.count - 1
-    for p in hits {
-      let row = TaskRow()
-      let l = UILabel(); l.text = p["name"] as? String; l.font = .systemFont(ofSize: 16, weight: .medium)
-      let h = UIStackView(arrangedSubviews: [CommentCell.avatar(p, 28), l]); h.spacing = 10; h.alignment = .center
-      h.translatesAutoresizingMaskIntoConstraints = false; row.addSubview(h)
-      NSLayoutConstraint.activate([h.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 14), h.topAnchor.constraint(equalTo: row.topAnchor, constant: 8), h.bottomAnchor.constraint(equalTo: row.bottomAnchor, constant: -8), h.trailingAnchor.constraint(lessThanOrEqualTo: row.trailingAnchor)])
-      row.onTap = { [weak self] in self?.insertMention(p, at: at) }
-      mentions.addArrangedSubview(row)
+    mentions.rows = hits.map { p in
+      let id = p["id"] as? String ?? ""
+      let ph = p["photo"] as? String
+      return PickList.Row(key: "p:" + id, title: p["name"] as? String ?? "", sub: id == CommentCell.creator ? "Creator" : nil,
+                          image: PickList.initials(p), path: (ph?.hasPrefix("/") == true) ? ph : nil, round: true) { [weak self] in self?.insertMention(p, at: at) }
     }
     mentions.isHidden = false
   }
@@ -360,19 +365,17 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
   }
 
   // ---------- files ----------
-  private func attach() {
+  private func attach(_ source: String) {
     UIImpactFeedbackGenerator(style: .light).impactOccurred()
-    onAttach?({ [weak self] source in
-      guard let self = self, let vc = self.window?.rootViewController else { return }
-      var top = vc; while let p = top.presentedViewController { top = p }
-      Picker.shared.pick(from: top, single: false, source: source) { [weak self] r in
-        for f in (r["files"] as? [[String: Any]]) ?? [] {
-          guard let self = self, let tok = f["token"] as? String, let url = Picker.shared.url(tok) else { continue }
-          self.addFile(url, name: f["name"] as? String ?? "File", voice: nil)
-        }
-        self?.text.becomeFirstResponder()
+    guard let vc = window?.rootViewController else { return }
+    var top = vc; while let p = top.presentedViewController { top = p }
+    Picker.shared.pick(from: top, single: false, source: source) { [weak self] r in
+      for f in (r["files"] as? [[String: Any]]) ?? [] {
+        guard let self = self, let tok = f["token"] as? String, let url = Picker.shared.url(tok) else { continue }
+        self.addFile(url, name: f["name"] as? String ?? "File", voice: nil)
       }
-    })
+      self?.text.becomeFirstResponder()
+    }
   }
   // copied words with mentions or chips: the words and mentions where the cursor is; each chip's file added to the
   // comment, as # does here (Haris 2026-11-02 — a file from another task: the same file, nothing uploaded)
@@ -927,5 +930,74 @@ final class PasteTextView: UITextView {
     if let h = onPasteRich, let runs = RichClip.runs(), h(runs) { return }
     if hasFiles, onPasteFiles?() == true { return }
     super.paste(sender)
+  }
+}
+
+// the @ people / # files above the comment box: Apple's own list rows (picture, name, the line under it) in a small
+// Apple list in the task cards' colour — up to four, narrowing as you type; tapped, Apple's highlight (Haris 2026-11-09)
+final class PickList: UITableView, UITableViewDataSource, UITableViewDelegate {
+  struct Row { let key: String; let title: String; let sub: String?; let image: UIImage?; let path: String?; let round: Bool; let pick: () -> Void }
+  static let rowH: CGFloat = 52
+  var rows: [Row] = [] {
+    didSet {
+      // (only what changed is set again — the same people / files keep their rows)
+      if rows.map({ $0.key }) != oldValue.map({ $0.key }) { reloadData(); invalidateIntrinsicContentSize() }
+    }
+  }
+  private var pics: [String: UIImage] = [:]
+  init() {
+    super.init(frame: .zero, style: .plain)
+    dataSource = self; delegate = self
+    rowHeight = PickList.rowH; estimatedRowHeight = 0
+    isScrollEnabled = false
+    backgroundColor = HomeLook(Main.shared.lookBoth).card
+    layer.cornerRadius = 16; layer.cornerCurve = .continuous
+    separatorInset = UIEdgeInsets(top: 0, left: 58, bottom: 0, right: 0)
+    insetsContentViewsToSafeArea = false; contentInsetAdjustmentBehavior = .never
+    sectionHeaderTopPadding = 0
+    register(UITableViewCell.self, forCellReuseIdentifier: "r")
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  override var intrinsicContentSize: CGSize { CGSize(width: UIView.noIntrinsicMetric, height: CGFloat(min(rows.count, 4)) * PickList.rowH) }
+  func tableView(_ t: UITableView, numberOfRowsInSection s: Int) -> Int { min(rows.count, 4) }
+  func tableView(_ t: UITableView, cellForRowAt ip: IndexPath) -> UITableViewCell {
+    let cell = t.dequeueReusableCell(withIdentifier: "r", for: ip)
+    let r = rows[ip.row]
+    var c = cell.defaultContentConfiguration()
+    c.text = r.title
+    c.textProperties.font = .systemFont(ofSize: 16, weight: .medium)
+    c.textProperties.numberOfLines = 1; c.textProperties.lineBreakMode = .byTruncatingMiddle
+    c.secondaryText = r.sub
+    c.secondaryTextProperties.color = r.sub == "Creator" ? .systemOrange : .secondaryLabel
+    c.image = r.path.flatMap { pics[$0] } ?? r.image
+    c.imageProperties.maximumSize = CGSize(width: 32, height: 32)
+    c.imageProperties.reservedLayoutSize = CGSize(width: 32, height: 32)
+    c.imageProperties.cornerRadius = r.round ? 16 : 6
+    cell.contentConfiguration = c
+    cell.backgroundColor = .clear
+    if let p = r.path, pics[p] == nil {
+      FeedLoader.shared.image(p) { [weak self] img in
+        guard let self = self, let img = img else { return }
+        self.pics[p] = img
+        if let i = self.rows.firstIndex(where: { $0.path == p }), i < 4 { self.reconfigureRows(at: [IndexPath(row: i, section: 0)]) }
+      }
+    }
+    return cell
+  }
+  func tableView(_ t: UITableView, didSelectRowAt ip: IndexPath) {
+    t.deselectRow(at: ip, animated: true)
+    rows[ip.row].pick()
+  }
+  // a person's initials on their colour, as their picture is drawn everywhere (Al skipped — the server's initials)
+  static func initials(_ p: [String: Any]) -> UIImage {
+    let side: CGFloat = 32
+    return UIGraphicsImageRenderer(size: CGSize(width: side, height: side)).image { _ in
+      TaskPage.rgb(p["color"]).setFill()
+      UIBezierPath(ovalIn: CGRect(x: 0, y: 0, width: side, height: side)).fill()
+      let t = (p["initials"] as? String ?? "?") as NSString
+      let a: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: side * 0.38, weight: .semibold), .foregroundColor: UIColor.white]
+      let sz = t.size(withAttributes: a)
+      t.draw(at: CGPoint(x: (side - sz.width) / 2, y: (side - sz.height) / 2), withAttributes: a)
+    }
   }
 }
