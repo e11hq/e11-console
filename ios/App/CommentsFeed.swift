@@ -1,6 +1,7 @@
 import UIKit
 import AVFoundation
 import CryptoKit
+import AudioToolbox
 
 /* A task's Comments, the app's own (step 2, Haris 2026-11-01): drawn from the server (/api/comments), newest at the
    bottom. Pictures and link cards keep their size from the start (a loading shimmer inside), so nothing moves while
@@ -350,6 +351,8 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
     if atEnd { seenIds = Set(next); toEnd(animated: true) }
     else if let id = keepTopId, let f = frameOf(id), let y = keepTopY { scroll.contentOffset.y = f.minY - y }
     let mineNew = newOnes.filter { id in (items.first { ($0["id"] as? String) == id }?["mine"] as? Bool) != true }
+    // (someone else's comment arriving while you're looking at these comments: the arrive sound)
+    if !mineNew.isEmpty && onScreen { CommentSound.arrive() }
     paintJump(newCount: atEnd ? 0 : mineNew.count + pendingNew)
     if !atEnd { pendingNew += mineNew.count; seenIds.formUnion(newOnes) }
     tellSeen()
@@ -442,6 +445,12 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
     }
   }
   func has(_ id: String) -> Bool { cells[id] != nil }
+  // (these comments in front of you: the app open, this list on the screen — not Details beside it, not under a thread)
+  private var onScreen: Bool {
+    guard let w = window, UIApplication.shared.applicationState == .active else { return false }
+    let r = convert(bounds, to: w).intersection(w.bounds)
+    return !r.isNull && r.width > w.bounds.width * 0.6
+  }
   // (for the self-test: each row's height, a swipe on a comment and beside it, the hold menu's parts)
   func selfCheck() -> [String: Any] {
     var rows: [String: Int] = [:]
@@ -1283,5 +1292,25 @@ enum ReactionSym {
     }
     guard let img = UIImage(systemName: name, withConfiguration: cfg)?.withTintColor(c, renderingMode: .alwaysOriginal) else { return nil }
     return UIGraphicsImageRenderer(size: img.size).image { _ in img.draw(at: .zero) }.withRenderingMode(.alwaysOriginal)
+  }
+}
+
+/* The comments' two sounds (Haris 2026-11-09: "a sound when a comment appears, and a comment send sound" — soft and subtle,
+   send a gentle rising swoop, arrive a soft bubble pop): iPhone's own system sound service, as the upload sound — silent
+   with the ring switch off, never stopping music or a video. Several comments arriving together: one sound. */
+enum CommentSound {
+  private static var ids: [String: SystemSoundID] = [:]
+  private static var lastArrive = Date.distantPast
+  private static func play(_ name: String) {
+    if ids[name] == nil, let url = Bundle.main.url(forResource: name, withExtension: "wav") {
+      var id: SystemSoundID = 0
+      AudioServicesCreateSystemSoundID(url as CFURL, &id); ids[name] = id
+    }
+    if let id = ids[name], id != 0 { AudioServicesPlaySystemSound(id) }
+  }
+  static func send() { play("comment-send") }
+  static func arrive() {
+    guard Date().timeIntervalSince(lastArrive) > 1.2 else { return }
+    lastArrive = Date(); play("comment-arrive")
   }
 }

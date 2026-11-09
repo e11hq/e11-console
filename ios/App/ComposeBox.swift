@@ -524,6 +524,7 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
   // ---------- send ----------
   private func sendTapped() {
     guard hasSomething else { return }
+    if editing == nil { CommentSound.send() }   // (a new comment, not an edit: the send sound — Haris 2026-11-09)
     if editing == nil, files.contains(where: { $0.path == nil && !$0.failed }) { sendEarly(); return }
     let a = text.attributedText ?? NSAttributedString()
     let html = DescEditor.html(a), plain = (text.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -782,6 +783,7 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     let pendingId = "pending-" + UUID().uuidString
     let thread = parentId ?? replyTo?.id   // (a reply shows in its thread, not in the list)
     onPending?(pendingId, thread, dur)
+    CommentSound.send()
     Uploader.send(url, name: name, task: taskId, cookies: cookies, progress: { _ in }) { [weak self] path in
       guard let self = self else { return }
       try? FileManager.default.removeItem(at: url)
