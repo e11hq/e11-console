@@ -613,10 +613,12 @@ final class AssetsCtl {
     open(client: client, folder: folder, animated: true, direct: true)   // (‹ back to the client's page, the way you came)
   }
   // (the self-test: the first client opened from All Client Assets, as tapping its card)
-  func selfOpenClient() -> Bool {
-    guard let id = ((models[""]?["clients"] as? [[String: Any]]) ?? []).first?["id"] as? String, stack.last?.kind == "all" else { return false }
+  func selfOpenClient() -> String {
+    let list = (models[""]?["clients"] as? [[String: Any]]) ?? []
+    guard let id = list.first?["id"] as? String else { return "no clients (\(models[""] == nil ? "no model" : "empty"))" }
+    guard stack.last?.kind == "all" else { return "top is \(stack.last?.kind ?? "nothing") of \(stack.count)" }
     push(screen("client", id, nil), animated: true); ask(["ev": "want", "client": id]) { _ in }
-    return true
+    return "opened"
   }
   func openAll(animated: Bool) {
     if stack.isEmpty { pickHost() }
