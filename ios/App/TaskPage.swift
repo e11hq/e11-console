@@ -283,7 +283,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
       cell.accessories = it.accessories
       cell.isUserInteractionEnabled = !self.editingDesc
     }
-    let hostReg = UICollectionView.CellRegistration<HostCell, String> { [weak self] cell, _, key in
+    let hostReg = UICollectionView.CellRegistration<DetailCell, String> { [weak self] cell, _, key in
       guard let self = self, let it = self.dItems[key] else { return }
       cell.host(it.host, pad: it.pad, plain: it.plain)
       cell.isUserInteractionEnabled = !self.editingDesc || it.host === self.descBox
@@ -859,13 +859,13 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   // a piece of ours that changed height in its Apple cell (the title being typed, the description opened or written):
   // Apple's own self-sizing told, and the list follows
   private func fitHosts() {
-    for case let c as HostCell in scroll.visibleCells where c.needsFit { c.invalidateIntrinsicContentSize() }
+    for case let c as DetailCell in scroll.visibleCells where c.needsFit { c.invalidateIntrinsicContentSize() }
   }
   // the self-test: Details as Apple's list — its headers, Apple's cells, the creator's footer
   func detailsGeo() -> [String: Any] {
     ["sections": dSecs.count, "heads": dSecs.compactMap { $0.head }, "appleRows": dItems.values.filter { $0.host == nil }.count,
      "hosted": dItems.values.filter { $0.host != nil }.count, "foot": dSecs.last?.foot ?? "", "hasCreator": model?["creator"] is [String: Any],
-     "cells": scroll.visibleCells.count, "listCells": scroll.visibleCells.filter { !($0 is HostCell) }.count]
+     "cells": scroll.visibleCells.count, "listCells": scroll.visibleCells.filter { !($0 is DetailCell) }.count]
   }
   func collectionView(_ cv: UICollectionView, shouldHighlightItemAt ip: IndexPath) -> Bool {
     guard cv === scroll, !editingDesc, let k = listDS?.itemIdentifier(for: ip) else { return false }
@@ -1554,7 +1554,7 @@ final class DItem {
   init(_ key: String) { self.key = key }
 }
 // a piece of ours in Apple's list cell: placed inside the cell's margins, its height measured for Apple's own self-sizing
-final class HostCell: UICollectionViewListCell {
+final class DetailCell: UICollectionViewListCell {
   private weak var hosted: UIView?
   private var pad = UIEdgeInsets.zero
   func host(_ v: UIView?, pad p: UIEdgeInsets, plain: Bool) {
