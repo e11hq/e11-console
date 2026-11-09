@@ -62,6 +62,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationC
   func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
     UNUserNotificationCenter.current().delegate = self
     Dirham.setup()
+    LoopProbe.report()   // (TestFlight, for a while: the task page's sizes before a stop — copied for Haris)
     return true
   }
   func application(_ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession, options: UIScene.ConnectionOptions) -> UISceneConfiguration {

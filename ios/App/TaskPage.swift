@@ -304,11 +304,11 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
       if self?.dItems[key]?.host != nil { return cv.dequeueConfiguredReusableCell(using: hostReg, for: ip, item: key) }
       return cv.dequeueConfiguredReusableCell(using: rowReg, for: ip, item: key)
     }
-    let head = UICollectionView.SupplementaryRegistration<UICollectionViewListCell>(elementKind: UICollectionView.elementKindSectionHeader) { [weak self] v, _, ip in
+    let head = UICollectionView.SupplementaryRegistration<SuppCell>(elementKind: UICollectionView.elementKindSectionHeader) { [weak self] v, _, ip in
       TaskPage.noSafeArea(v)
       var c = UIListContentConfiguration.groupedHeader(); c.text = self?.dSec(ip.section)?.head; v.contentConfiguration = c
     }
-    let foot = UICollectionView.SupplementaryRegistration<UICollectionViewListCell>(elementKind: UICollectionView.elementKindSectionFooter) { [weak self] v, _, ip in
+    let foot = UICollectionView.SupplementaryRegistration<SuppCell>(elementKind: UICollectionView.elementKindSectionFooter) { [weak self] v, _, ip in
       TaskPage.noSafeArea(v)
       var c = UIListContentConfiguration.groupedFooter(); c.text = self?.dSec(ip.section)?.foot; v.contentConfiguration = c
     }
@@ -1629,13 +1629,59 @@ extension TaskPage {
 // room under Apple's bar. A cell passing under the bar took the bar's safe area into its margins and grew (Priority 54 →
 // 170, the checklist 170, Needs CD review 104), and growing moved it out from under the bar, so it shrank again — the rows
 // changing height as they scrolled and as the tab bar went, and the layout loop that stopped the app (Haris 2026-11-09)
+// TestFlight only, for a while (Haris 2026-11-09 20:23: the task page stops — scrolled down, then on the way up): each time
+// Apple asks a row, header or footer its size, one line kept on the phone (which, how tall, where the list is); the page
+// left normally clears it. Opened again after a stop: the lines copied for Haris to paste, a toast saying so. Taken out
+// once the looping row is found and fixed.
+enum LoopProbe {
+  static let on = Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt"
+  private static var lines: [String] = []
+  private static var url: URL { FileManager.default.temporaryDirectory.appendingPathComponent("e11-loop.txt") }
+  static func start() { guard on else { return }; lines = []; try? FileManager.default.removeItem(at: url) }
+  static func end() { guard on else { return }; lines = []; try? FileManager.default.removeItem(at: url) }
+  static func note(_ s: String) {
+    guard on else { return }
+    lines.append(s); if lines.count > 120 { lines.removeFirst(lines.count - 120) }
+    try? lines.joined(separator: "\n").write(to: url, atomically: false, encoding: .utf8)
+  }
+  static func report() {
+    guard on, let t = try? String(contentsOf: url, encoding: .utf8), !t.isEmpty else { return }
+    try? FileManager.default.removeItem(at: url)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+      UIPasteboard.general.string = "iOS \(UIDevice.current.systemVersion)\n" + t
+      Main.shared.homeIfMade?.toast(["t": "Crash notes copied", "ms": 3000.0])
+    }
+  }
+  static func size(_ kind: String, _ c: UIView, _ a: UICollectionViewLayoutAttributes, _ what: String) {
+    guard on else { return }
+    var y: CGFloat = 0; var x: UIView? = c.superview; while let v = x, !(v is UIScrollView) { x = v.superview }; y = (x as? UIScrollView)?.contentOffset.y ?? 0
+    note("\(kind) \(a.indexPath.section).\(a.indexPath.item) \(Int(a.size.width))x\(Int(a.size.height)) at \(Int(a.frame.minY)) off \(Int(y)) \(what.prefix(18))")
+  }
+}
 final class RowCell: UICollectionViewListCell {
   override init(frame: CGRect) { super.init(frame: frame); TaskPage.noSafeArea(self) }
+  override func preferredLayoutAttributesFitting(_ a: UICollectionViewLayoutAttributes) -> UICollectionViewLayoutAttributes {
+    let r = super.preferredLayoutAttributesFitting(a)
+    LoopProbe.size("row", self, r, (contentConfiguration as? UIListContentConfiguration).flatMap { $0.text ?? $0.attributedText?.string } ?? "")
+    return r
+  }
   required init?(coder: NSCoder) { fatalError() }
   override func updateConfiguration(using state: UICellConfigurationState) { super.updateConfiguration(using: state); TaskPage.cardBack(self, state); TaskPage.noSafeArea(self) }
 }
+final class SuppCell: UICollectionViewListCell {
+  override func preferredLayoutAttributesFitting(_ a: UICollectionViewLayoutAttributes) -> UICollectionViewLayoutAttributes {
+    let r = super.preferredLayoutAttributesFitting(a)
+    LoopProbe.size(a.representedElementKind == UICollectionView.elementKindSectionHeader ? "head" : "foot", self, r, (contentConfiguration as? UIListContentConfiguration)?.text ?? "")
+    return r
+  }
+}
 final class DetailCell: UICollectionViewListCell {
   override init(frame: CGRect) { super.init(frame: frame); TaskPage.noSafeArea(self) }
+  override func preferredLayoutAttributesFitting(_ a: UICollectionViewLayoutAttributes) -> UICollectionViewLayoutAttributes {
+    let r = super.preferredLayoutAttributesFitting(a)
+    LoopProbe.size("ours", self, r, hosted.map { String(describing: type(of: $0)) } ?? "-")
+    return r
+  }
   required init?(coder: NSCoder) { fatalError() }
   private weak var hosted: UIView?
   private var pins: [NSLayoutConstraint] = []
@@ -1702,9 +1748,11 @@ final class DescBox: UIView {
     if text !== tv {
       text?.removeFromSuperview()
       tv.removeFromSuperview(); tv.translatesAutoresizingMaskIntoConstraints = false; addSubview(tv)
-      // (its own full height; the box as tall as the words, up to its cap)
-      let fill = tv.bottomAnchor.constraint(equalTo: bottomAnchor); fill.priority = .defaultHigh
-      NSLayoutConstraint.activate([tv.topAnchor.constraint(equalTo: topAnchor), tv.leadingAnchor.constraint(equalTo: leadingAnchor), tv.trailingAnchor.constraint(equalTo: trailingAnchor), fill])
+      // (the words at their own full height, never squeezed to the box — the box is given its height by its cell (all of it,
+      //  or 204 for a long one not opened) and the rest is under the fade with Show More. Held to the box's bottom too, a
+      //  long one was squeezed to 204 and Show More never showed: Haris 2026-11-09)
+      tv.setContentCompressionResistancePriority(.required, for: .vertical)
+      NSLayoutConstraint.activate([tv.topAnchor.constraint(equalTo: topAnchor), tv.leadingAnchor.constraint(equalTo: leadingAnchor), tv.trailingAnchor.constraint(equalTo: trailingAnchor)])
       text = tv
     }
     layer.addSublayer(fade); addSubview(button)
