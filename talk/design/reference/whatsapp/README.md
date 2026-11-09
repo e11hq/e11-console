@@ -2,12 +2,13 @@
 
 Haris's screenshots, 2026-11-09 (dark mode, WhatsApp for iPhone, Liquid Glass). A reference for how a chat app feels and
 behaves — never to copy pixel for pixel: E11 Talk is Apple's own parts set to our design (the Don'ts, page by page).
+**No calls in E11 Talk** (Haris 2026-11-09): no call or video buttons, no Calls tab — whatever WhatsApp shows for calls is left out.
 Real chats: nothing here goes into a screenshot, a listing or a mock-up — those use made-up data. (The App Store Connect
 key that showed in one screenshot was cropped out.)
 
 | File | What it shows | What to take for E11 Talk |
 |---|---|---|
-| 01-chat-file-bubble.jpg | Chat top bar; a document bubble (type badge, name, size · type), forward button beside it | Top bar: ‹ in a glass circle, the picture + name + line, a glass capsule of two actions on the right. Files as a bubble with type badge, name, size; a round forward button beside media / files |
+| 01-chat-file-bubble.jpg | Chat top bar; a document bubble (type badge, name, size · type), forward button beside it | Top bar: ‹ in a glass circle, the picture + name + line, a glass capsule of actions on the right (never a call — E11 Talk has no calls, Haris 2026-11-09). Files as a bubble with type badge, name, size; a round forward button beside media / files |
 | 02-chat-bubbles-reactions.jpg | Sent (green) and received (grey) bubbles, time + ticks inside, grouped runs with one tail, a day pill, a reaction under a bubble | Bubbles grouped by sender with the tail only on the last; time and read ticks inside the bubble's corner; day pills ("Today", "Sat, 31 Oct") floating centred; reactions as a small pill overlapping the bubble's bottom edge |
 | 03-search-recent-and-media.jpg | Search: field with ✕ in a glass circle, "Recent searches" with round pictures, "Clear all" capsule, Media types as rows | Search opens over the chats: recent people as a row of pictures, then search by kind (Photos, Links, Videos, Documents) — Apple's list rows with symbols |
 | 04-chat-list-hold-preview-menu.jpg | Holding a chat in the list: the chat lifts as a preview card, Apple's menu under it (Mark as unread, Archive, Mute, Lock chat, Add to Favorites, Add to list); the glass tab bar behind | Apple's context menu with its preview (the chat itself) on hold — Apple's own lift; Apple's floating glass tab bar with a badge |
