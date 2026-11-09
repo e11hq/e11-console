@@ -885,6 +885,13 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
       return sec
     }
   }
+  // the self-test: each row on screen and its height — the same row must keep its height as the page settles, scrolls and
+  // comes back (Haris 2026-11-09: rows changed height as the tab bar went and grew as they scrolled in)
+  func detailsHeights() -> [String: Double] {
+    var out: [String: Double] = [:]
+    for c in scroll.visibleCells { if let ip = scroll.indexPath(for: c), let k = listDS?.itemIdentifier(for: ip) { out[k] = Double(c.bounds.height) } }
+    return out
+  }
   // the self-test: Details as Apple's list — its headers, Apple's cells, the creator's footer
   func detailsGeo() -> [String: Any] {
     ["sections": dSecs.count, "heads": dSecs.compactMap { $0.head }, "appleRows": dItems.values.filter { $0.host == nil }.count,

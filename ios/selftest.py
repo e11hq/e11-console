@@ -127,6 +127,11 @@ try:
     for k, name in (('home', 'Home'), ('mt', 'My Tasks'), ('ibx', 'the Inbox'), ('cl', 'Clients')):
       o, mid, end = res.get(f'slide_{k}_open'), res.get(f'slide_{k}_mid'), res.get(f'slide_{k}_end')
       check(o is True and mid is not None and mid == end, f'{name}: a task opened and ‹ back — "+ New task" as at rest all through the slide (open {o}, in the slide {mid}, after {end})', need=('slide',))
+    # (Haris 2026-11-09: rows changing height as the tab bar went, growing as they scrolled in — each row keeps its height)
+    ha, hs, ht = res.get('holdArrived') or {}, res.get('holdScrolled') or {}, res.get('holdTop') or {}
+    moved = {k: (ha.get(k), hs.get(k), ht.get(k)) for k in set(ha) | set(hs) | set(ht) if len({round(x) for x in (ha.get(k), hs.get(k), ht.get(k)) if x is not None}) > 1}
+    print('measure rowHeights', json.dumps({'arrived': ha, 'scrolled': hs, 'top': ht}))
+    check(len(ha) >= 4 and len(ht) >= 4 and not moved, f"the task page's rows keep their heights — arrived, scrolled, back at the top (changed: {moved})")
     check((res.get('awayCells') or 0) > 0, f"the task page's Details still on the page after coming back {res.get('awayCells')}")
     # (Haris 2026-11-09, "Task page Details — fully Apple": Apple's own list cells in Apple's boxes, the creator as Apple's
     #  grey footer at the very end)

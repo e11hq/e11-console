@@ -3071,7 +3071,12 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       // (from Home — the Client Assets stage before leaves the page on a client's folder, the app's own screens over it —
       //  and a task that isn't locked for CD review: its Assignees lock then, 32)
       ("tpage", "if (ui.view === 'client' || ui.view === 'clients') go('today'); const free = (x) => !x.parentId && !x.done && !x.lockedAt && !(x.reviews || []).length; const t = db.tasks.find((x) => free(x) && (x.comments || []).length && (x.checklist || []).length) || db.tasks.find((x) => free(x) && (x.comments || []).length) || db.tasks.find(free) || db.tasks.find((x) => !x.parentId && !x.done); openTask(t.id); " + pause(3000) + "return JSON.stringify({ webTask: !!ui.taskId, id: t.id })", { self.presentedViewController?.dismiss(animated: false) }),
+      // (each row's height once the page has arrived and the tab bar has gone, then scrolled, then back at the top: the
+      //  same row the same height — Haris 2026-11-09)
+      ("tpageHold", pause(1500) + "return '{}'", { self.selfResult["holdArrived"] = self.taskPages.last?.detailsHeights() ?? [:] }),
       ("tpageScrolled", pause(900) + "return '{}'", { self.taskPages.last?.scroll.setContentOffset(CGPoint(x: 0, y: 380), animated: false) }),
+      ("tpageHoldScroll", pause(1200) + "return '{}'", { self.selfResult["holdScrolled"] = self.taskPages.last?.detailsHeights() ?? [:]; if let p = self.taskPages.last { p.scroll.setContentOffset(CGPoint(x: 0, y: -p.scroll.adjustedContentInset.top), animated: true) } }),
+      ("tpageHoldTop", pause(1200) + "return '{}'", { self.selfResult["holdTop"] = self.taskPages.last?.detailsHeights() ?? [:] }),
       // (to another app and back with a task open — the build machine opens Settings and comes back while "awayWait"
       //  waits: nothing may be drawn again for it, the rule "only what changed changes", Haris 2026-11-08)
       ("away", "return '{}'", { self.selfResult["redrawsBefore"] = Main.lookRedraws }),
