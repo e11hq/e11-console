@@ -52,7 +52,7 @@ try:
     data = sh('xcrun', 'simctl', 'get_app_container', udid, BUNDLE, 'data').stdout.strip()
     out = os.path.join(data, 'Documents', 'selftest.json')
     seen, res, t0 = set(), {}, time.time()
-    while time.time() - t0 < 900:   # (540 until 2026-11-08, 720 until 2026-11-09 — the light / dark and measurement steps made it longer: 1600 was cut off before its last stages)
+    while time.time() - t0 < 1200:   # (540 until 2026-11-08, 720 then 900 until 2026-11-09 — GitHub's slower Mac needs more; — the light / dark and measurement steps made it longer: 1600 was cut off before its last stages)
         try: res = json.load(open(out))
         except Exception: res = {}
         st = res.get('stage')
