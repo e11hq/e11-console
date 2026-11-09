@@ -866,7 +866,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
         let want = kind == UICollectionView.elementKindSectionHeader ? dSec(ip.section)?.head : dSec(ip.section)?.foot
         guard c.text != want else { continue }
         if listLive, window != nil, c.text != nil, want != nil { let t = CATransition(); t.type = .fade; t.duration = 0.22; v.layer.add(t, forKey: "text") }   // (its words crossfade — the standard)
-        c.text = want; v.contentConfiguration = c
+        c.text = want; v.contentConfiguration = c; TaskPage.noSafeArea(v)
       }
     }
   }
@@ -1589,9 +1589,14 @@ extension TaskPage {
   static var cardNow: UIColor?   // (worked out once per drawing of the page — rebuild() clears it)
   static var page: UIColor { HomeLook(Main.shared.lookBoth).bg }   // (Home's background — every page, Haris 2026-11-09 19:00)
   static var card: UIColor { if let c = cardNow { return c }; let c = HomeLook(Main.shared.lookBoth).card; cardNow = c; return c }
+  // (the cell, its content view and Apple's list content view inside it — the words' own margins took the bar's room too:
+  //  1623 still had Priority 54 → 170 with only the cell and its content view set; set again after each configuration,
+  //  as Apple's content view is made anew)
   static func noSafeArea(_ v: UICollectionReusableView) {
     v.insetsLayoutMarginsFromSafeArea = false
-    (v as? UICollectionViewCell)?.contentView.insetsLayoutMarginsFromSafeArea = false
+    let inner = (v as? UICollectionViewCell)?.contentView ?? v
+    inner.insetsLayoutMarginsFromSafeArea = false
+    inner.subviews.forEach { $0.insetsLayoutMarginsFromSafeArea = false }
   }
   static func cardBack(_ c: UICollectionViewListCell, _ state: UICellConfigurationState? = nil) {
     var bg = UIBackgroundConfiguration.listGroupedCell()
@@ -1607,7 +1612,7 @@ extension TaskPage {
 final class RowCell: UICollectionViewListCell {
   override init(frame: CGRect) { super.init(frame: frame); TaskPage.noSafeArea(self) }
   required init?(coder: NSCoder) { fatalError() }
-  override func updateConfiguration(using state: UICellConfigurationState) { super.updateConfiguration(using: state); TaskPage.cardBack(self, state) }
+  override func updateConfiguration(using state: UICellConfigurationState) { super.updateConfiguration(using: state); TaskPage.cardBack(self, state); TaskPage.noSafeArea(self) }
 }
 final class DetailCell: UICollectionViewListCell {
   override init(frame: CGRect) { super.init(frame: frame); TaskPage.noSafeArea(self) }
