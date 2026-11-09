@@ -150,9 +150,11 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
       text.topAnchor.constraint(equalTo: tilesScroll.bottomAnchor, constant: 4), text.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 14), text.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -14), textH,
       plus.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 8), plus.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -8), plus.widthAnchor.constraint(equalToConstant: 36), plus.heightAnchor.constraint(equalToConstant: 36),
       right.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -8), right.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -8), right.widthAnchor.constraint(equalToConstant: 36), right.heightAnchor.constraint(equalToConstant: 36),
-      // "Replying to Carine (picture)": a grey pill in the buttons' row, where the Claude app has its model's
+      // "(picture) Replying to Sara ✕": a grey pill filling the buttons' row between + and ↑ (mock-up "Task Comments — fully
+      // Apple", approved 2026-11-09)
       replyPill.leadingAnchor.constraint(equalTo: plus.trailingAnchor, constant: 8), replyPill.centerYAnchor.constraint(equalTo: plus.centerYAnchor),
       replyPill.heightAnchor.constraint(equalToConstant: 36), replyPill.trailingAnchor.constraint(lessThanOrEqualTo: right.leadingAnchor, constant: -8),
+      { let f = self.replyPill.trailingAnchor.constraint(equalTo: self.right.leadingAnchor, constant: -8); f.priority = .defaultHigh; return f }(),
     ])
     // the two shapes (Haris 2026-11-04): compact — one pill, + · "Comment or hold to talk" · mic — unless the keyboard is up,
     // something is typed, files are attached or a voice message is recording; then the full box, as before
@@ -222,7 +224,7 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     return true
   }
   // Coming in (Haris, 2026-11-02): her picture fades in in a small round pill by the +, then the pill stretches to the
-  // right, her picture riding its right end, and the words fade in — iPhone's spring. Cancelled: the same, backwards.
+  // right, and the words fade in — iPhone's spring. Cancelled: the same, backwards.
   private lazy var pillNarrow = replyPill.widthAnchor.constraint(equalToConstant: 36)
   private var pillShownFor: String?
   private func paintReply() {
@@ -248,20 +250,22 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     replyPill.subviews.forEach { $0.removeFromSuperview() }
     replyPill.isHidden = false
     do {
-      // two lines (Haris, 2026-11-02): "Replying to Carine" a little smaller, and under it, smaller and grey, "Tap to cancel"
+      // one line, as the mock-up (Haris 2026-11-09): their picture, "Replying to Sara", and ✕ at the end — the pill tapped
+      // stops replying
       let l = UILabel(); l.isUserInteractionEnabled = false
-      let a = NSMutableAttributedString(string: "Replying to ", attributes: [.font: UIFont.systemFont(ofSize: 13), .foregroundColor: UIColor.secondaryLabel])
-      a.append(NSAttributedString(string: r.name, attributes: [.font: UIFont.systemFont(ofSize: 13, weight: .semibold), .foregroundColor: UIColor.label]))
+      let a = NSMutableAttributedString(string: "Replying to ", attributes: [.font: UIFont.systemFont(ofSize: 14), .foregroundColor: UIColor.label])
+      a.append(NSAttributedString(string: r.name, attributes: [.font: UIFont.systemFont(ofSize: 14, weight: .semibold), .foregroundColor: UIColor.label]))
       l.attributedText = a; l.lineBreakMode = .byTruncatingTail
-      l.setContentCompressionResistancePriority(UILayoutPriority(760), for: .horizontal)   // (narrow, it slides past the left edge rather than squeezing)
-      let hint = UILabel(); hint.text = "Tap to cancel"; hint.font = .systemFont(ofSize: 11); hint.textColor = .secondaryLabel; hint.isUserInteractionEnabled = false
-      let words = UIStackView(arrangedSubviews: [l, hint]); words.axis = .vertical; words.spacing = 0; words.alignment = .leading; words.isUserInteractionEnabled = false; words.tag = 51
-      let av = CommentCell.avatar(replyPerson ?? ["initials": String(r.name.prefix(1)).uppercased()], 22); av.isUserInteractionEnabled = false
-      let row = UIStackView(arrangedSubviews: [words, av]); row.spacing = 8; row.alignment = .center; row.isUserInteractionEnabled = false
+      l.setContentCompressionResistancePriority(UILayoutPriority(740), for: .horizontal)
+      let x = UIImageView(image: UIImage(systemName: "xmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: 11, weight: .semibold)))
+      x.tintColor = .secondaryLabel; x.isUserInteractionEnabled = false; x.setContentHuggingPriority(.required, for: .horizontal)
+      let words = UIStackView(arrangedSubviews: [l, UIView(), x]); words.spacing = 6; words.alignment = .center; words.isUserInteractionEnabled = false; words.tag = 51
+      let av = CommentCell.avatar(replyPerson ?? ["initials": String(r.name.prefix(1)).uppercased()], 26); av.isUserInteractionEnabled = false
+      let row = UIStackView(arrangedSubviews: [av, words]); row.spacing = 7; row.alignment = .center; row.isUserInteractionEnabled = false
       row.translatesAutoresizingMaskIntoConstraints = false; replyPill.addSubview(row)
-      // (its left edge gives way while it's a small circle: the picture stays at the right end, the words hidden past the left)
-      let lead = row.leadingAnchor.constraint(equalTo: replyPill.leadingAnchor, constant: 14); lead.priority = .defaultHigh
-      NSLayoutConstraint.activate([lead, row.trailingAnchor.constraint(equalTo: replyPill.trailingAnchor, constant: -7), row.centerYAnchor.constraint(equalTo: replyPill.centerYAnchor)])
+      // (while it's a small circle, only the picture shows — the words past its right edge, as it stretches out)
+      let trail = row.trailingAnchor.constraint(equalTo: replyPill.trailingAnchor, constant: -12); trail.priority = .defaultHigh
+      NSLayoutConstraint.activate([row.leadingAnchor.constraint(equalTo: replyPill.leadingAnchor, constant: 5), trail, row.centerYAnchor.constraint(equalTo: replyPill.centerYAnchor)])
       replyPill.accessibilityLabel = "Replying to \(r.name). Tap to stop replying"
       if coming {
         pillNarrow.isActive = true
