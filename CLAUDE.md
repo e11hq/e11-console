@@ -98,10 +98,11 @@ label changes while it shows (+ Add subscription ↔ + Add office expense, as a 
 its new width with the words crossfading (`HomeView.setFab` → `squashFab`); the grey line under a title, or under a page's
 centred name, crossfades to its new words instead of jumping (`HomeView.fadeText`). Every new native button and title
 line does the same.
-**Between tabs: no squash and stretch (removed, Haris 2026-11-09 15:43: "Remove tab squash"):** the 2026-11-08 exception
-(the corner button squashing and stretching from one tab's into the next) broke something — the big title of My Tasks and
-the Inbox gone on the second visit to the tab, its room left — so, as agreed then, it's removed. A tab change is Apple's own,
-with nothing of ours run on it.
+**Between tabs too — Haris's own exception to Don'ts 4 / 9 (Haris, 2026-11-08 20:07: "add the squash and stretch on +
+buttons, if it'll break anything we'll remove"):** as a tab changes and both tabs' first screens have a button in the corner
+with different words (+ New task ↔ + Add client), the new one squashes and stretches out of the old one's size, the words
+crossfading (`AppleTabs` → `HomeView.fabArrive`). It is OUR animation, not Apple's — Apple's tab switch itself is untouched
+and has none. Kept only while it breaks nothing; if anything breaks, it's removed.
 
 **E11 Talk (the chat app, named 2026-11-05 20:11 — was "E11 Chat") is never part of the E11 Console iPhone app (Haris, 2026-11-05: "Remember that"):** on the iPhone, chat is only
 ever its own app, E11 Talk — no chat screen, tab or section in E11 Console's iPhone app. On the Mac app it's a separate

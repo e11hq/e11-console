@@ -2962,6 +2962,13 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       ("titlesBack2", pause(1500) + "return '{}'", { self.selfTapTab("inbox") }),
       ("titlesIbx2", pause(1500) + "return '{}'", { self.selfResult["titleIbxAway2"] = self.selfBigTitle("Inbox"); self.selfTapTab("mytasks") }),
       ("titlesMt2", "return '{}'", { self.selfResult["titleMtAway2"] = self.selfBigTitle("My Tasks") }),
+      // (the line under My Tasks' title changed as the tab is changed to — as the list arriving on a visit does — and
+      //  changed while another tab is on, then the tab tapped: My Tasks' big title read after each)
+      ("titlesLineHome", pause(1500) + "return '{}'", { self.selfTapTab("today") }),
+      ("titlesLineBack", pause(1500) + "return '{}'", { self.selfResult["lineWas"] = MyTasksVC.shared?.navigationItem.subtitle ?? ""; self.selfTapTab("mytasks"); if let vc = MyTasksVC.shared { BigLine.set(vc, "3 open", "mytasks", save: false) } }),
+      ("titlesLineRead", pause(500) + "return '{}'", { self.selfResult["titleMtLineSet"] = self.selfBigTitle("My Tasks"); self.selfTapTab("today"); if let vc = MyTasksVC.shared { BigLine.set(vc, "9 open", "mytasks", save: false) } }),
+      ("titlesLineAwayBack", pause(1500) + "return '{}'", { self.selfTapTab("mytasks") }),
+      ("titlesLineAwayRead", "return '{}'", { self.selfResult["titleMtLineHidden"] = self.selfBigTitle("My Tasks"); if let vc = MyTasksVC.shared { BigLine.set(vc, self.selfResult["lineWas"] as? String ?? "", "mytasks", save: false) }; self.selfResult["lineSets"] = BigLine.sets }),
       // 28: the Inbox, the app's own: All, a row swiped right (Read / Unread), Unread, Mentions
       ("ibx", pause(2500) + "return JSON.stringify({ view: ui.view, blank: !!document.querySelector('#content .ph-under-app') })", {
         if let i = self.tabKeys.firstIndex(of: "inbox"), let item = self.tabBar.items?[i] { self.tabBar.selectedItem = item; self.tabBar(self.tabBar, didSelect: item) } }),

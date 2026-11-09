@@ -164,6 +164,10 @@ try:
     check(bigOn('mytasksTabBackMyTasks'), f"My Tasks: to Home, the Inbox and back by the tab bar, its big title still there {(res.get('mytasksTabBackMyTasks') or {}).get('bigTitle')}")
     # (Haris 2026-11-09 14:52: back from another app — My Tasks' and the Inbox's big titles still there, with My Tasks on
     #  while away and with Home on)
+    # (measurement — the line under My Tasks' title changed as its tab is tapped, and while another tab is on: is that what
+    #  takes the big title away on the second visit? Haris 2026-11-09 16:17)
+    for k in ('titleMtLineSet', 'titleMtLineHidden'): print('measure bigTitle', k, json.dumps(res.get(k)))
+    for x in (res.get('lineSets') or [])[-30:]: print('measure lineSet', json.dumps(x))
     for k, name in (('titleMtAway', 'My Tasks, back from another app'), ('titleIbxAway', 'the Inbox after that'), ('titleIbxAway2', 'the Inbox, Home on while away'), ('titleMtAway2', 'My Tasks after that')):
       print('measure bigTitle', k, json.dumps(res.get(k)))
       check(((res.get(k) or {}).get('alpha') or 0) > 0.9, f"{name}: its big title on screen {res.get(k)}")

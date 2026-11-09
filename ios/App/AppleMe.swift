@@ -166,5 +166,9 @@ enum BigLine {
     if vc.navigationItem.subtitle != words { vc.navigationItem.subtitle = words }
     var a = AttributedString(words); a.uiKit.font = .systemFont(ofSize: 15); a.uiKit.foregroundColor = .secondaryLabel
     vc.navigationItem.largeAttributedSubtitle = a
+    // (the self-test: each line set — which tab, its words, on screen or not, in the middle of a change — Haris 2026-11-09:
+    //  the big title gone on the second visit to My Tasks and the Inbox, never on Clients' or Home's)
+    if !SELFTEST.isEmpty { sets.append(["key": key, "words": words, "t": CACurrentMediaTime(), "shown": vc.viewIfLoaded?.window != nil, "moving": vc.transitionCoordinator != nil]); if sets.count > 60 { sets.removeFirst() } }
   }
+  static var sets: [[String: Any]] = []
 }

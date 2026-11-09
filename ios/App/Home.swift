@@ -1005,6 +1005,25 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     k.timingFunction = CAMediaTimingFunction(name: .easeOut)
     fab.layer.add(k, forKey: "squash")
   }
+  // ---- a tab changed: the button the last tab showed in this corner squashes and stretches into this one's, the words
+  //      crossfading — + New task ↔ + Add client (Haris 2026-11-08: "then do it"; our button only, Apple's tab switch untouched)
+  var fabInWindow: (frame: CGRect, config: UIButton.Configuration?, label: String)? {
+    let n = fabNow
+    guard n.shown, window != nil, let w = fab.superview else { return nil }
+    return (w.convert(fab.frame, to: nil), n.config, n.label)
+  }
+  func fabArrive(from old: (frame: CGRect, config: UIButton.Configuration?, label: String)) {
+    layoutIfNeeded()
+    let n = fabNow
+    guard n.shown, n.label != old.label, let w = fab.superview, let newCfg = fab.configuration else { return }
+    let was = w.convert(old.frame, from: nil)
+    // (the same corner only — a button elsewhere isn't the same button)
+    guard abs(was.maxX - n.frame.maxX) < 2, abs(was.maxY - n.frame.maxY) < 2 else { return }
+    UIView.performWithoutAnimation { fab.configuration = old.config; fab.layoutIfNeeded() }
+    let t = CATransition(); t.type = .fade; t.duration = 0.22; fab.layer.add(t, forKey: "label")
+    fab.configuration = newCfg
+    squashFab(from: was)
+  }
   // a line's words changing while it shows (the grey line under a title — Subscriptions ↔ Office expenses): a short
   // crossfade, not a jump; first shown or emptied: at once (the standard, Haris 2026-11-05)
   static func fadeText(_ l: UILabel, _ text: String?) {
