@@ -142,6 +142,14 @@ try:
     check(tpb.get('pages') == 0 and tpb.get('tabBar') is True and (res.get('tpageBack') or {}).get('webTask') is False, f"back: the page goes, the tab bar is back {tpb}")
     check((res.get('dailyNative') or {}).get('sheet') == 'DailySheetVC', f"the morning round-up opens as iPhone's own sheet {res.get('dailyNative')}")
     mt = res.get('mytasksMyTasks') or {}; mtd = res.get('mytasksDoneMyTasks') or {}; mta = res.get('mytasksAllMyTasks') or {}
+    # (Haris 2026-11-09, My Tasks fully Apple: Apple's unavailable view exactly when there's nothing to show; Home the same)
+    for k in ('mytasksMyTasks', 'mytasksDoneMyTasks', 'mytasksAllMyTasks'):
+      g = res.get(k) or {}
+      if g.get('shown'): check(g.get('unavailable') is ((g.get('modelCards') or 0) == 0), f"{k}: Apple's 'No Tasks' view only when there are no tasks ({g.get('modelCards')} tasks, view {g.get('unavailable')})")
+    check((res.get('homeNative') or {}).get('unavailable') is not True, f"Home with tasks: no 'No Tasks' view {(res.get('homeNative') or {}).get('unavailable')}")
+    # (measurement — the big title as on screen at each My Tasks step: Haris's 12:53 screenshot had its room empty)
+    for k in ('mytasksMyTasks', 'mytasksDoneMyTasks', 'mytasksScrolledMyTasks', 'mytasksTopMyTasks', 'mytasksAllMyTasks', 'slideMtBackMyTasks'):
+      print('measure bigTitle', k, json.dumps((res.get(k) or {}).get('bigTitle')))
     check(mt.get('shown') is True and mt.get('server') is True and mt.get('tab') == 'all' and 'filter-due' in (mt.get('filters') or []), f"My Tasks is the app's own, from the server, with All and its filter buttons {mt}")
     check(mtd.get('shown') is True and mtd.get('tab') == 'done' and 'tab=done' in (mtd.get('query') or ''), f"My Tasks' Done tab asks the server for completed tasks {mtd}")
     check(mta.get('tab') == 'all' and 'tab=all' in (mta.get('query') or ''), f"back to All {mta}")

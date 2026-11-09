@@ -314,6 +314,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     }
     }
     listViews = views
+    list?.backgroundView?.isHidden = searching
     blockWraps = blockWraps.filter { e in views.values.contains { $0 === e.value } }
     // (the groups, Apple's way — Haris 2026-11-09: a heading over tasks, or over clients found, and its rows are one of
     //  Apple's inset groups, the heading its header; Today's own run has no heading. Everything else — the boxes, a client's
@@ -695,7 +696,15 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     }
     var seen = Set<String>()
     var runs: [String: Int] = [:]
-    for g in model["groups"] as? [[String: Any]] ?? [] {
+    // (My Tasks or Home with nothing to show — a filter with no tasks, an empty Done, a Home with no tasks at all: Apple's own
+    //  unavailable view behind the list, not our grey line — Haris 2026-11-09, the fully-Apple My Tasks: "Make the same
+    //  empty for home page when there are no tasks". A client's page keeps its line.)
+    let mtGroups = model["groups"] as? [[String: Any]] ?? []
+    let mtEmpty: String? = (isList || !isClient) && listOn && (model["plain"] as? Bool) != true && mtGroups.allSatisfy({ (($0["cards"] as? [Any]) ?? []).isEmpty })
+      ? (mtGroups.compactMap { $0["empty"] as? String }.first { !$0.isEmpty } ?? "No open tasks here.") : nil
+    var unavailable = false
+    if #available(iOS 17.0, *) { unavailable = mtEmpty != nil }
+    for g in mtGroups {
       let gname = g["name"] as? String ?? ""
       runs[gname, default: 0] += 1
       let gkey = gname + "#" + String(runs[gname]!)
@@ -736,7 +745,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
         v.set(c, look: L)
         content.append(v)
       }
-      if let e = g["empty"] as? String, !e.isEmpty {
+      if let e = g["empty"] as? String, !e.isEmpty, !unavailable {
         let l: UILabel = listOn ? (empties[gkey] ?? { let x = UILabel(); empties[gkey] = x; return x }()) : UILabel()
         if l.text != e { l.text = e }
         l.font = .systemFont(ofSize: 14); if l.textColor != L.empty { l.textColor = L.empty }; l.tag = 8; l.numberOfLines = 0; l.accessibilityIdentifier = "empty|" + gkey
@@ -759,6 +768,32 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     setNeedsLayout(); layoutIfNeeded()
     // (Apple's list: Apple's own animation for what came, went or moved)
     if listOn { applyList(animated: animate) }
+    if isList || !isClient { showUnavailable(unavailable ? mtEmpty : nil) }
+  }
+  // Apple's unavailable view behind My Tasks' or Home's list (iOS 17+): a symbol, "No Tasks", why — and Clear Filters while a filter is
+  // on. Set again only when what it says changes.
+  private var unavailableShown: String?
+  private func showUnavailable(_ why: String?) {
+    guard #available(iOS 17.0, *), let cv = list else { return }
+    let filtered = ((lastFilters?["chips"] as? [Any]) ?? []).isEmpty == false
+    let key = why.map { $0 + "|\(filtered)" }
+    if key == unavailableShown { return }
+    unavailableShown = key
+    guard let why = why else { cv.backgroundView = nil; return }
+    var c = UIContentUnavailableConfiguration.empty()
+    c.image = UIImage(systemName: "checkmark.circle")
+    c.text = "No Tasks"
+    c.secondaryText = why
+    if filtered {
+      var b = UIButton.Configuration.gray(); b.title = "Clear Filters"; b.cornerStyle = .capsule
+      c.button = b
+      c.buttonProperties.primaryAction = UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.send(["ev": "reset"]) }
+    }
+    // (in the room between Apple's bar and "+ New task")
+    c.directionalLayoutMargins = NSDirectionalEdgeInsets(top: cv.adjustedContentInset.top, leading: 30, bottom: cv.adjustedContentInset.bottom + 70, trailing: 30)
+    let v = UIContentUnavailableView(configuration: c)
+    v.isHidden = searching
+    cv.backgroundView = v
   }
   private var drawnKey = ""
   // (your photo only made again when it really changed — a new picture each drawing made the top button's photo blink a
@@ -1861,6 +1896,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   var onAppleFind: ((String?) -> Void)?
   func selfFind(_ q: String) { if appleTop, let f = onAppleFind { f(q); return }; openSearch(); field.text = q; typed() }
   // (the self-test: the first task's first word, to search for; and whether its title on screen carries search's wash)
+  var selfUnavailable: Bool { if let v = list?.backgroundView { return !v.isHidden } else { return false } }
   func selfFirstWord() -> String { ((content.compactMap { $0 as? HomeCard }.first?.taskTitle ?? "").split(separator: " ").first).map(String.init) ?? "" }
   func selfWash() -> [String: Any] {
     guard let cv = list, let card = content.compactMap({ $0 as? HomeCard }).first, let ip = listDS?.indexPath(for: "c:" + card.id) else { return ["row": false] }
@@ -1883,7 +1919,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // (the walk-through: the floating button tapped, when there is one)
   func selfFab() -> Bool { guard !fab.isHidden else { return false }; if let a = fabRun { a() } else { send(["ev": "add"]) }; return true }
   func geo() -> [String: Any] {
-    ["row": selfRow, "sections": listSecs.count, "groupsApple": listSecs.filter { $0.rows }.count,
+    ["row": selfRow, "sections": listSecs.count, "groupsApple": listSecs.filter { $0.rows }.count, "unavailable": selfUnavailable,
      "title": title.text ?? "", "date": sub.text ?? "", "stats": stats.map { ($0.viewWithTag(1) as? UILabel)?.text ?? "" },
      "groups": content.filter { $0.tag == 7 }.map { ($0 as? UILabel)?.text ?? "" }, "cards": cards.count, "fab": !fab.isHidden,
      "headH": blur.frame.height, "shrink": shrink, "bar": blur.alpha, "smallTitle": smallTitle.alpha, "searching": searching,
