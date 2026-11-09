@@ -2614,7 +2614,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       case "success": UINotificationFeedbackGenerator().notificationOccurred(.success)
       case "warning": UINotificationFeedbackGenerator().notificationOccurred(.warning)
       case "error": UINotificationFeedbackGenerator().notificationOccurred(.error)
-      // an upload finished: the success tap and a soft two-note sound (uploaded.wav; silent with the ring switch off)
+      // an upload finished: the success tap and a soft double swoop, the comment sounds' family (uploaded.wav, Haris 2026-11-09; silent with the ring switch off)
       case "uploaded":
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         Main.playUploaded()
