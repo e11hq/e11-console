@@ -232,7 +232,11 @@ enum TitleProbe {
       var chain: [String] = []; var x = big?.superview; while let y = x, chain.count < 3 { chain.append(kind(y)); x = y.superview }
       let inList = big.map { $0.isDescendant(of: want) } ?? false
       guard follows !== want || !inList else { return }
-      let line = "\(name) · iOS \(UIDevice.current.systemVersion) · follows \(kind(follows)) · big title in \(chain.joined(separator: " < ")) a\(String(format: "%.1f", big?.alpha ?? -1)) · bar \(Int(nb.frame.height)) · list off \(Int(want.contentOffset.y)) adj \(Int(want.adjustedContentInset.top)) h \(Int(want.contentSize.height))/\(Int(want.bounds.height))"
+      // (which list Apple's bar follows instead — where it sits and how big: Haris's 1617 report, 2026-11-09 18:18, "follows
+      //  UICollectionView", not the page's own)
+      var fchain: [String] = []; var fx = follows?.superview; while let y = fx, fchain.count < 5 { fchain.append(String(describing: type(of: y)) + (y === vc.view ? "=page" : "")); fx = y.superview }
+      let fsize = follows.map { " \(Int($0.bounds.width))x\(Int($0.bounds.height)) items \(($0 as? UICollectionView)?.numberOfSections ?? -1)" } ?? ""
+      let line = "\(name) · iOS \(UIDevice.current.systemVersion) · follows \(kind(follows))\(fsize) in \(fchain.joined(separator: " < ")) · big title in \(chain.joined(separator: " < ")) a\(String(format: "%.1f", big?.alpha ?? -1)) · bar \(Int(nb.frame.height)) · list off \(Int(want.contentOffset.y)) adj \(Int(want.adjustedContentInset.top)) h \(Int(want.contentSize.height))/\(Int(want.bounds.height))"
       if !SELFTEST.isEmpty { Main.shared.selfResult["titleProbe_" + name] = line }
       if testFlight, !told.contains(name) { told.insert(name); UIPasteboard.general.string = line; h.toast(["t": "Title report copied", "ms": 3000.0]) }
       vc.setContentScrollView(want, for: .top)   // (Apple told the page's list again — does the big title come back?)
