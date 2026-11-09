@@ -140,6 +140,11 @@ final class TaskVC: UIViewController {
     let seg = page.seg
     seg.translatesAutoresizingMaskIntoConstraints = false
     seg.widthAnchor.constraint(equalToConstant: 236).isActive = true
+    // (its own height given, and its size from the start: with only a width, Apple's bar sized it from the room it had
+    //  while the page slid in from a big-title page, and its top was cut until the page landed — Haris 2026-11-09)
+    let segH = seg.intrinsicContentSize.height
+    seg.heightAnchor.constraint(equalToConstant: segH).isActive = true
+    seg.frame = CGRect(x: 0, y: 0, width: 236, height: segH)
     navigationItem.titleView = seg
     page.onBarTitle = { [weak self] t, _ in if self?.navigationItem.title != t { self?.navigationItem.title = t } }   // (only when it changes)   // (not shown: the name for ‹'s history menu)
     // (the bar's frost follows the list showing — Details, the comments, a reply)
