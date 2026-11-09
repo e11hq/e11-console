@@ -493,8 +493,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   var bottomRoom: CGFloat = 120 { didSet { if oldValue != bottomRoom { setNeedsLayout() } } }
   // the top of the app's tab bar: the + sits 14 above it, 18 from the right (phone.css .ph-fab), so it's in place from
   // the first frame — not where the page had it a moment before the tab bar came (it jumped up, Haris 2026-10-31)
-  // (the room under the list's last card: up to 12 above "+ New task", which sits 14 above the tab bar)
-  private var endRoom: CGFloat { tabTop.map { bounds.height - ($0 - 14 - BTN) + 12 } ?? bottomRoom }
+  // (the room under the list's last card: the list ends as far above "+ New task" as the button sits above the tab bar —
+  //  it ended about 39 above it, the button about 19 above the tab bar: Haris 2026-11-09 18:46, the same gap)
+  private var endRoom: CGFloat { tabTop.map { bounds.height - ($0 - 14 - BTN) - 8 } ?? bottomRoom }
   var tabTop: CGFloat? { didSet { if oldValue != tabTop { setNeedsLayout() } } }
 
   override init(frame: CGRect) {
