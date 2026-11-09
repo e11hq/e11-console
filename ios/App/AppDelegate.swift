@@ -2921,7 +2921,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let wait = "for (let i = 0; i < 120 && !((typeof db !== 'undefined' && db) && typeof currentUserId !== 'undefined' && currentUserId && document.getElementById('ph-tabs')); i++) await new Promise((r) => setTimeout(r, 250));"
     let geo = "const cs = getComputedStyle(document.documentElement); const geo = { innerH: innerHeight, vvH: visualViewport ? visualViewport.height : null, shift: cs.getPropertyValue('--ph-shift'), tabsH: cs.getPropertyValue('--ios-tabs-h'), kb: cs.getPropertyValue('--ph-kb') };"
     // (name, script run in the page, what to do in the app first)
-    let steps: [(String, String, (() -> Void)?)] = [
+    let allSteps: [(String, String, (() -> Void)?)] = [
       ("home", wait + pause(1500) + """
         const info = await NativeMac.call('appInfo');
         \(geo)
@@ -3141,6 +3141,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         self.previewVC = nil
         self.web.load(URLRequest(url: URL(string: "https://e11hq.cloudflareaccess.com/")!)) }),
     ]
+    // (a quick build — Haris 2026-11-09: the build machine names the groups of steps left out; their checks are left out too)
+    let skip = (procEnv["E11_SELFTEST_SKIP"] ?? "").split(separator: ",").map(String.init).filter { !$0.isEmpty }
+    let steps = skip.isEmpty ? allSteps : allSteps.filter { st in !skip.contains { st.0.hasPrefix($0) } }
     func run(_ i: Int) {
       if i >= steps.count { selfResult["frame"] = ["web": web.frame.height, "screen": view.bounds.height, "inset": web.scrollView.contentInsetAdjustmentBehavior == .never ? "never" : "auto", "insetTop": web.scrollView.adjustedContentInset.top, "host": web.url?.host ?? "", "reviewLink": !reviewLink.isHidden, "privacy": Bundle.main.url(forResource: "PrivacyInfo", withExtension: "xcprivacy") != nil] as [String: Any]; return writeSelf("done") }
       let (name, js, before) = steps[i]

@@ -15,6 +15,9 @@ on:
       mac:
         description: "Which Mac builds it: own (Haris's Mac, the runner on it) or github (GitHub's Mac, when his is off)"
         default: own
+      quick:
+        description: "A quicker self-test (yes): Me, light / dark, sheets, the web comments, the slide-backs and the title readings left out (ios/selftest.py QUICK) — every other check still stops the build"
+        default: "no"
   # (no build on a push any more: every build only on Haris's word — Haris 2026-11-08; one build, straight to TestFlight)
 permissions:
   contents: write
@@ -46,6 +49,8 @@ jobs:
         #  TestFlight — so no separate check build first, Haris 2026-11-08)
         id: selftest
         continue-on-error: true
+        env:
+          E11_QUICK: ${{ inputs.quick }}
         run: python3 ios/selftest.py build/Build/Products/Debug-iphonesimulator/E11Console.app 2>&1 | tee "$RUNNER_TEMP/ios-selftest.log"; exit ${PIPESTATUS[0]}
       - name: Walk-through for every role, without the website
         # (ios/walktest.py — Haris 2026-11-05: every button, every role; read from the release below)

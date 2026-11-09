@@ -11,7 +11,11 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 APP = sys.argv[1]
 BUNDLE = 'ae.e11.console.ios'
 fails = []
-def check(ok, what):
+# (a quick build — Haris 2026-11-09: these groups of the app's steps are left out, and the checks that need them)
+QUICK = ['me', 'look', 'form', 'nsheet', 'cweb', 'cfeed', 'cbar', 'daily', 'snap', 'storage', 'slide', 'titles', 'first', 'client']
+SKIP = QUICK if os.environ.get('E11_QUICK') == 'yes' else []
+def check(ok, what, need=()):
+    if any(n.startswith(g) for n in need for g in SKIP): print('skip ' + what); return
     print(('ok   ' if ok else 'FAIL ') + what); (None if ok else fails.append(what))
 def sh(*a, **k): return subprocess.run(list(a), capture_output=True, text=True, **k)
 
@@ -38,7 +42,7 @@ try:
     r = sh('xcrun', 'simctl', 'install', udid, APP); check(r.returncode == 0, 'installed ' + r.stderr[-300:])
     try: os.remove(os.path.join(sh('xcrun', 'simctl', 'get_app_container', udid, BUNDLE, 'data').stdout.strip(), 'Documents', 'selftest.json'))
     except Exception: pass
-    lenv = dict(os.environ, SIMCTL_CHILD_E11_SERVER=BASE, SIMCTL_CHILD_E11_SELFTEST='1', SIMCTL_CHILD_E11_SELFTEST_EMAIL=EMAIL)
+    lenv = dict(os.environ, SIMCTL_CHILD_E11_SERVER=BASE, SIMCTL_CHILD_E11_SELFTEST='1', SIMCTL_CHILD_E11_SELFTEST_SKIP=','.join(SKIP), SIMCTL_CHILD_E11_SELFTEST_EMAIL=EMAIL)
     # a film of the whole run (ios-run.mp4), so the moving parts — the shared top buttons, search, a page sliding in —
     # can be watched frame by frame from Claude's workspace; each stage's time in it is printed ('at 12.3s')
     # (simctl itself, in its own process group: Ctrl-C to the whole group lets it finish the file — sent to xcrun alone
@@ -122,7 +126,7 @@ try:
     #  at rest, on Home, My Tasks and the Inbox alike: Haris 2026-11-08)
     for k, name in (('home', 'Home'), ('mt', 'My Tasks'), ('ibx', 'the Inbox'), ('cl', 'Clients')):
       o, mid, end = res.get(f'slide_{k}_open'), res.get(f'slide_{k}_mid'), res.get(f'slide_{k}_end')
-      check(o is True and mid is not None and mid == end, f'{name}: a task opened and ‹ back — "+ New task" as at rest all through the slide (open {o}, in the slide {mid}, after {end})')
+      check(o is True and mid is not None and mid == end, f'{name}: a task opened and ‹ back — "+ New task" as at rest all through the slide (open {o}, in the slide {mid}, after {end})', need=('slide',))
     check((res.get('awayCells') or 0) > 0, f"the task page's Details still on the page after coming back {res.get('awayCells')}")
     # (Haris 2026-11-09, "Task page Details — fully Apple": Apple's own list cells in Apple's boxes, the creator as Apple's
     #  grey footer at the very end)
@@ -145,7 +149,7 @@ try:
     check(tpc.get('feed', -1) > 0, f"the comments are the app's own (drawn from the server) {tpc}")
     check(tpc.get('tab') == 'comments' and tpc.get('compose') is True and tpc.get('box') is False, f"its Comments tab has the app's own comment box (not the old one) {tpc}")
     check(tpb.get('pages') == 0 and tpb.get('tabBar') is True and (res.get('tpageBack') or {}).get('webTask') is False, f"back: the page goes, the tab bar is back {tpb}")
-    check((res.get('dailyNative') or {}).get('sheet') == 'DailySheetVC', f"the morning round-up opens as iPhone's own sheet {res.get('dailyNative')}")
+    check((res.get('dailyNative') or {}).get('sheet') == 'DailySheetVC', f"the morning round-up opens as iPhone's own sheet {res.get('dailyNative')}", need=('daily',))
     mt = res.get('mytasksMyTasks') or {}; mtd = res.get('mytasksDoneMyTasks') or {}; mta = res.get('mytasksAllMyTasks') or {}
     # (Haris 2026-11-09, My Tasks fully Apple: Apple's unavailable view exactly when there's nothing to show; Home the same)
     for k in ('mytasksMyTasks', 'mytasksDoneMyTasks', 'mytasksAllMyTasks'):
@@ -171,11 +175,11 @@ try:
     # (Haris 2026-11-09 16:56: from the start, E11 Day → My Tasks → another tab → My Tasks — the title gone for good)
     for k, name in (('titleFirstMt', 'My Tasks, first visit'), ('titleFirstIbx', 'the Inbox, first visit'), ('titleSecondMt', 'My Tasks, second visit'), ('titleSecondIbx', 'the Inbox, second visit')):
       print('measure bigTitle', k, json.dumps(res.get(k)))
-      check(((res.get(k) or {}).get('alpha') or 0) > 0.9 and not (res.get(k) or {}).get('over'), f"{name}: its big title on screen, nothing over it {res.get(k)}")
+      check(((res.get(k) or {}).get('alpha') or 0) > 0.9 and not (res.get(k) or {}).get('over'), f"{name}: its big title on screen, nothing over it {res.get(k)}", need=('first',))
     for x in (res.get('lineSets') or [])[-30:]: print('measure lineSet', json.dumps(x))
     for k, name in (('titleMtAway', 'My Tasks, back from another app'), ('titleIbxAway', 'the Inbox after that'), ('titleIbxAway2', 'the Inbox, Home on while away'), ('titleMtAway2', 'My Tasks after that')):
       print('measure bigTitle', k, json.dumps(res.get(k)))
-      check(((res.get(k) or {}).get('alpha') or 0) > 0.9, f"{name}: its big title on screen {res.get(k)}")
+      check(((res.get(k) or {}).get('alpha') or 0) > 0.9, f"{name}: its big title on screen {res.get(k)}", need=('titles',))
     # (measurement — the big title as on screen at each My Tasks step: Haris's 12:53 screenshot had its room empty)
     for k in ('mytasksMyTasks', 'mytasksDoneMyTasks', 'mytasksScrolledMyTasks', 'mytasksTopMyTasks', 'mytasksAllMyTasks', 'mytasksFindMyTasks', 'mytasksFindDoneMyTasks', 'mytasksTabHomeMyTasks', 'mytasksTabInboxMyTasks', 'mytasksTabBackMyTasks', 'slideMtBackMyTasks'):
       print('measure bigTitle', k, json.dumps((res.get(k) or {}).get('bigTitle')))
@@ -208,30 +212,30 @@ try:
     check((res.get('inboxMyTasks') or {}).get('shown') is not True, f"My Tasks isn't over the Inbox {res.get('inboxMyTasks')}")
     check((res.get('inboxNative') or {}).get('shown') is False, f"the app's Home goes on another tab {res.get('inboxNative')}")
     check(res.get('splashGone') is True, f"the startup screen went before Home {res.get('splashGone')}")
-    check(set(seen) >= {'home', 'inbox', 'me', 'meTeam', 'meAbout', 'meProfile', 'meTrash', 'meBack', 'client', 'task', 'sheet', 'back', 'nsheet', 'nsheetEnd', 'nsheetChannel', 'nsheetTitled'}, f'all stages ran {sorted(seen)}')
+    check(set(seen) >= {x for x in {'home', 'inbox', 'me', 'meTeam', 'meAbout', 'meProfile', 'meTrash', 'meBack', 'client', 'task', 'sheet', 'back', 'nsheet', 'nsheetEnd', 'nsheetChannel', 'nsheetTitled'} if not any(x.startswith(g) for g in SKIP)}, f'all stages ran {sorted(seen)}')
     hf = res.get('homeFrame') or {}
     check(hf.get('web') == hf.get('screen') and hf.get('tabBar') is True, f'the page fills the screen under the floating tab bar {hf}')
     check(int(float(str((p.get('geo') or {}).get('tabsH') or '0').replace('px','') or 0)) > 40, f"the page knows the tab bar's height {p.get('geo')}")
     me = res.get('me') or {}
     mn, mt, ma, mb = res.get('meNative') or {}, res.get('meTeamNative') or {}, res.get('meAboutNative') or {}, res.get('meBackNative') or {}
-    check(me.get('native') is True and me.get('blank') is True and me.get('lockRows') == 0, f"Me is the app's own, nothing drawn under it {me}")
-    check(mn.get('open') is True and mn.get('kind') == 'me' and mn.get('card') is True and (mn.get('rows') or 0) >= 2 and mn.get('corner') == 'none,none,none', f"the app's Me: your card and its groups, no top buttons {mn}")
-    check(mt.get('kind') == 'team' and mt.get('screens') == 2 and (mt.get('people') or 0) >= 1 and (str(mt.get('corner')).startswith('back,') or mt.get('apple') is True), f"Team members slides in over Me, the people in it, ‹ at the top {mt}")
-    check(ma.get('kind') == 'about' and (ma.get('parts') or 0) >= 2, f"About: its cards and What's new {ma}")
+    check(me.get('native') is True and me.get('blank') is True and me.get('lockRows') == 0, f"Me is the app's own, nothing drawn under it {me}", need=('me',))
+    check(mn.get('open') is True and mn.get('kind') == 'me' and mn.get('card') is True and (mn.get('rows') or 0) >= 2 and mn.get('corner') == 'none,none,none', f"the app's Me: your card and its groups, no top buttons {mn}", need=('me',))
+    check(mt.get('kind') == 'team' and mt.get('screens') == 2 and (mt.get('people') or 0) >= 1 and (str(mt.get('corner')).startswith('back,') or mt.get('apple') is True), f"Team members slides in over Me, the people in it, ‹ at the top {mt}", need=('me',))
+    check(ma.get('kind') == 'about' and (ma.get('parts') or 0) >= 2, f"About: its cards and What's new {ma}", need=('me',))
     mp = res.get('meProfileNative') or {}
-    check(mp.get('kind') == 'profile' and mp.get('profile') is True and (mp.get('rows') or 0) >= 4 and (str(mp.get('corner')).startswith('back,') or mp.get('apple') is True), f"My profile: the app's own, its groups, ‹ at the top {mp}")
+    check(mp.get('kind') == 'profile' and mp.get('profile') is True and (mp.get('rows') or 0) >= 4 and (str(mp.get('corner')).startswith('back,') or mp.get('apple') is True), f"My profile: the app's own, its groups, ‹ at the top {mp}", need=('me',))
     mtr = res.get('meTrashNative') or {}
-    check(mtr.get('kind') == 'trash' and (mtr.get('parts') or 0) >= 3 and (str(mtr.get('corner')).startswith('back,') or mtr.get('apple') is True), f"Trash: the app's own, its search and categories, ‹ at the top {mtr}")
-    check(mb.get('kind') == 'me' and mb.get('screens') == 1, f"‹ back to Me {mb}")
+    check(mtr.get('kind') == 'trash' and (mtr.get('parts') or 0) >= 3 and (str(mtr.get('corner')).startswith('back,') or mtr.get('apple') is True), f"Trash: the app's own, its search and categories, ‹ at the top {mtr}", need=('me',))
+    check(mb.get('kind') == 'me' and mb.get('screens') == 1, f"‹ back to Me {mb}", need=('me',))
     # light / dark the Apple way (Haris 2026-11-09): every tab's screen follows the phone, none forced, nothing drawn again
     def lookOk(d, style, bright):
       if not isinstance(d, dict) or not d: return False
       scr = [d[k] for k in ('home', 'mytasks', 'inbox', 'clients', 'me') if isinstance(d.get(k), dict)]
       on = [x for x in scr if x.get('shown')]   # (a tab not on show hears the look when it shows again — iPhone's own way)
       return len(scr) >= 3 and len(on) >= 1 and all(x.get('forced') == 0 for x in scr) and all(x.get('style') == style and ((x.get('bg') or 0) > 0.5) == bright for x in on) and d.get('tabBar') == 0
-    check(lookOk(res.get('lookAtLight'), 1, True), f"phone to light, app open: every tab's screen light, nothing forced {res.get('lookAtLight')}")
-    check(lookOk(res.get('lookAtDark'), 2, False), f"phone back to dark: every tab's screen dark {res.get('lookAtDark')}")
-    check(res.get('lookRedrawsAfter') is not None and res.get('lookRedrawsAfter') == res.get('lookRedrawsBefore'), f"the look switched by iPhone itself: no screen drawn again {res.get('lookRedrawsBefore')} → {res.get('lookRedrawsAfter')}")
+    check(lookOk(res.get('lookAtLight'), 1, True), f"phone to light, app open: every tab's screen light, nothing forced {res.get('lookAtLight')}", need=('look',))
+    check(lookOk(res.get('lookAtDark'), 2, False), f"phone back to dark: every tab's screen dark {res.get('lookAtDark')}", need=('look',))
+    check(res.get('lookRedrawsAfter') is not None and res.get('lookRedrawsAfter') == res.get('lookRedrawsBefore'), f"the look switched by iPhone itself: no screen drawn again {res.get('lookRedrawsBefore')} → {res.get('lookRedrawsAfter')}", need=('look',))
     # (measurement only — Haris 2026-11-09: the frost on pushed pages at their top; the search bar going back to Client Assets)
     def barLine(b):
       if not isinstance(b, dict) or not b.get('bar'): return str(b)
@@ -253,12 +257,12 @@ try:
     fr = res.get('snap_back') or []
     t0 = fr[0].get('t', 0) if fr else 0
     for f in fr: print('measure snap_back', f"{(f.get('t',0) - t0) * 1000:5.0f}ms", barLine(f))
-    check(res.get('meRowsBefore') is not None and res.get('meRowsAfter') == res.get('meRowsBefore'), f"Me opened again: no row drawn again {res.get('meRowsBefore')} → {res.get('meRowsAfter')}")
-    check((res.get('client') or {}).get('wide') is False, f"Client Assets folder fits the screen {res.get('client')}")
+    check(res.get('meRowsBefore') is not None and res.get('meRowsAfter') == res.get('meRowsBefore'), f"Me opened again: no row drawn again {res.get('meRowsBefore')} → {res.get('meRowsAfter')}", need=('me',))
+    check((res.get('client') or {}).get('wide') is False, f"Client Assets folder fits the screen {res.get('client')}", need=('client',))
     ca = res.get('clientAssets') or {}
     # (opened from the page — a link, an Inbox update, a client's page — just that folder, so ‹ goes back where you came from:
     #  Haris 2026-11-04; it was the client's screen, then the folder, before)
-    check(ca.get('open') is True and ca.get('kind') == 'folder' and (ca.get('screens') or 0) >= 1 and (ca.get('parts') or 0) >= 1 and ca.get('shown') is True, f"a Client Assets folder opens as the app's own screen, just the folder {ca}")
+    check(ca.get('open') is True and ca.get('kind') == 'folder' and (ca.get('screens') or 0) >= 1 and (ca.get('parts') or 0) >= 1 and ca.get('shown') is True, f"a Client Assets folder opens as the app's own screen, just the folder {ca}", need=('client',))
     sh_ = res.get('sheet') or {}; g = sh_.get('geo') or {}
     check(sh_.get('menuBottom') is not None and sh_['menuBottom'] <= (g.get('innerH') or 0) + 1 and sh_['menuBottom'] - sh_.get('menuTop', 0) > 300, f'the comment sheet is fully on screen, all of it showing {sh_}')
     # native sheets: the same room above (TOP, 30) and below (as on the Channel sheet) everywhere; a long list's last
@@ -266,25 +270,25 @@ try:
     ch_ = res.get('nsheetChannelGeo') or {}; gap = ch_.get('endGap')
     for k in ('nsheet', 'nsheetEnd', 'nsheetChannel', 'nsheetTitled'):
         g_ = res.get(k + 'Geo') or {}
-        check(abs((g_.get('topGap') or 0) - 30) <= 1, f'native sheet {k}: first thing 30 under the top edge {g_}')
+        check(abs((g_.get('topGap') or 0) - 30) <= 1, f'native sheet {k}: first thing 30 under the top edge {g_}', need=('nsheet',))
     for k in ('nsheetEnd', 'nsheetTitled'):
         g_ = res.get(k + 'Geo') or {}
-        check(gap is not None and g_.get('endGap') is not None and abs(g_['endGap'] - gap) <= 2, f'native sheet {k}: gap under the last option {g_.get("endGap")} = Channel\'s {gap}')
-    check((res.get('nsheetGeo') or {}).get('scrolls') is True, 'the long native sheet scrolls')
+        check(gap is not None and g_.get('endGap') is not None and abs(g_['endGap'] - gap) <= 2, f'native sheet {k}: gap under the last option {g_.get("endGap")} = Channel\'s {gap}', need=('nsheet',))
+    check((res.get('nsheetGeo') or {}).get('scrolls') is True, 'the long native sheet scrolls', need=('nsheet',))
     # 20: the task's Comments on their own screen, scrolled by iOS: shown over the task, at the latest comment; with the
     # keyboard up still at the latest (the room under it the keyboard's and the box's); down again, at the latest
     w0, w1, w2 = res.get('cwebGeo') or {}, res.get('cwebKbGeo') or {}, res.get('cwebDownGeo') or {}
-    check(w0.get('made') and w0.get('loaded') and w0.get('shown') and w0.get('atEnd'), f'the comments screen shows the task, at the latest comment {w0}')
-    check(w1.get('shown') and w1.get('atEnd') and (w1.get('ty') or 0) < -300 and abs((w1.get('height') or 0) - (w0.get('height') or 0)) < 2, f'keyboard up: comments still at the latest, slid up above the keyboard, same size {w1}')
-    check(w2.get('shown') and w2.get('atEnd') and abs(w2.get('ty') or 0) < 1, f'keyboard down: at the latest, back in place {w2}')
+    check(w0.get('made') and w0.get('loaded') and w0.get('shown') and w0.get('atEnd'), f'the comments screen shows the task, at the latest comment {w0}', need=('cweb',))
+    check(w1.get('shown') and w1.get('atEnd') and (w1.get('ty') or 0) < -300 and abs((w1.get('height') or 0) - (w0.get('height') or 0)) < 2, f'keyboard up: comments still at the latest, slid up above the keyboard, same size {w1}', need=('cweb',))
+    check(w2.get('shown') and w2.get('atEnd') and abs(w2.get('ty') or 0) < 1, f'keyboard down: at the latest, back in place {w2}', need=('cweb',))
     # 19: Comments with the keyboard (a pretend one): iOS moves the list itself, it stays at the latest comment, and once
     # the keyboard is up the page keeps the room (same picture); down again, the room goes and it's still at the latest
     f0, f1, f2 = res.get('cfeed') or {}, res.get('cfeedKb') or {}, res.get('cfeedDown') or {}
     g1 = res.get('cfeedKbGeo') or {}
-    check(f0.get('on') is True and (f0.get('toEnd') or 0) <= 60, f'a task opened on Comments, at the latest comment {f0}')
-    check(g1.get('found') is True, f'iOS found the comments list to move with the keyboard {g1}')
-    check(f1.get('kbpad') == f"{round(g1.get('T') or 0)}px" and not f1.get('transform') and abs(f1.get('toEnd', 99)) <= 4 and (g1.get('inset') == 0), f'keyboard up: still at the latest comment, the page keeps the room {f1} {g1}')
-    check(f2.get('kbpad') in ('0px', '') and abs(f2.get('toEnd', 99)) <= 4, f'keyboard down: room gone, still at the latest comment {f2} {res.get("cfeedDownGeo")}')
+    check(f0.get('on') is True and (f0.get('toEnd') or 0) <= 60, f'a task opened on Comments, at the latest comment {f0}', need=('cfeed',))
+    check(g1.get('found') is True, f'iOS found the comments list to move with the keyboard {g1}', need=('cfeed',))
+    check(f1.get('kbpad') == f"{round(g1.get('T') or 0)}px" and not f1.get('transform') and abs(f1.get('toEnd', 99)) <= 4 and (g1.get('inset') == 0), f'keyboard up: still at the latest comment, the page keeps the room {f1} {g1}', need=('cfeed',))
+    check(f2.get('kbpad') in ('0px', '') and abs(f2.get('toEnd', 99)) <= 4, f'keyboard down: room gone, still at the latest comment {f2} {res.get("cfeedDownGeo")}', need=('cfeed',))
     fr = res.get('frame') or {}
     print('note ' + ('ok' if (fr.get('insetTop') or 0) >= 20 else 'CHECK SCREENSHOT') + f" the sign-in page clears the status bar {fr} {res.get('signin')}")   # (needs the internet: not a blocker)
     print('note ' + ('ok' if fr.get('reviewLink') is True or 'cloudflareaccess' not in str(fr.get('host')) else 'CHECK SCREENSHOT') + f" the App Review sign-in link shows under the sign-in page {fr.get('host')} {fr.get('reviewLink')}")   # (needs the internet)
