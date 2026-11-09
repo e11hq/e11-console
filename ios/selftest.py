@@ -152,10 +152,13 @@ try:
     def bigOn(k):
       t = ((res.get(k) or {}).get('bigTitle') or {}).get('titles') or []
       return any((x.get('alpha') or 0) > 0.9 and (x.get('size') or 0) >= 28 for x in t)
-    if bigOn('mytasksMyTasks'):
-      check(bigOn('mytasksFindDoneMyTasks'), f"My Tasks: search opened and closed, its big title still there {(res.get('mytasksFindDoneMyTasks') or {}).get('bigTitle')}")
+    # (the reading now finds it wherever Apple draws it — in 1608 it never found the big title, so this check never ran)
+    check(bigOn('mytasksMyTasks'), f"My Tasks opens with its big title on screen {(res.get('mytasksMyTasks') or {}).get('bigTitle')}")
+    check(bigOn('mytasksFindDoneMyTasks'), f"My Tasks: search opened and closed, its big title still there {(res.get('mytasksFindDoneMyTasks') or {}).get('bigTitle')}")
+    # (Haris 2026-11-09 14:45: My Tasks, Home, the Inbox, back to My Tasks — the big title gone, its room left)
+    check(bigOn('mytasksTabBackMyTasks'), f"My Tasks: to Home, the Inbox and back by the tab bar, its big title still there {(res.get('mytasksTabBackMyTasks') or {}).get('bigTitle')}")
     # (measurement — the big title as on screen at each My Tasks step: Haris's 12:53 screenshot had its room empty)
-    for k in ('mytasksMyTasks', 'mytasksDoneMyTasks', 'mytasksScrolledMyTasks', 'mytasksTopMyTasks', 'mytasksAllMyTasks', 'mytasksFindMyTasks', 'mytasksFindDoneMyTasks', 'slideMtBackMyTasks'):
+    for k in ('mytasksMyTasks', 'mytasksDoneMyTasks', 'mytasksScrolledMyTasks', 'mytasksTopMyTasks', 'mytasksAllMyTasks', 'mytasksFindMyTasks', 'mytasksFindDoneMyTasks', 'mytasksTabHomeMyTasks', 'mytasksTabInboxMyTasks', 'mytasksTabBackMyTasks', 'slideMtBackMyTasks'):
       print('measure bigTitle', k, json.dumps((res.get(k) or {}).get('bigTitle')))
     check(mt.get('shown') is True and mt.get('server') is True and mt.get('tab') == 'all' and 'filter-due' in (mt.get('filters') or []), f"My Tasks is the app's own, from the server, with All and its filter buttons {mt}")
     check(mtd.get('shown') is True and mtd.get('tab') == 'done' and 'tab=done' in (mtd.get('query') or ''), f"My Tasks' Done tab asks the server for completed tasks {mtd}")

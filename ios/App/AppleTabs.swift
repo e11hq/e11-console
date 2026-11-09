@@ -215,6 +215,13 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
     if selectedIndex != i { selectedIndex = i }
   }
   // Main put another tab on (the page moved it, a tab "as if tapped")
+  // (the self-test: a tab tapped on Apple's bar, as a finger does it — Apple's own selection with this delegate's calls)
+  func selfTap(_ i: Int) {
+    let vc = tabVC(i)
+    guard tabBarController(self, shouldSelect: vc) else { return }
+    selectedViewController = vc
+    tabBarController(self, didSelect: vc)
+  }
   func mirrorSelected(_ tag: Int?) { guard !selecting, let t = tag else { return }; select(t) }
   // Main's bar shown / hidden / faded → Apple's; not over the startup screen or the lock; a page pushed over the tabs
   // (a task) hides it Apple's way

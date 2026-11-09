@@ -2758,6 +2758,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   func pause(_ ms: Int) -> String { "await new Promise((r) => setTimeout(r, \(ms)));" }
   // (the slide back check: a tab as if tapped; a task to open — Home's first card; ‹ back, the screen's "+ New task"
   //  looked at a moment into the slide and once it's over)
+  func selfTapTab(_ key: String) { if let i = tabKeys.firstIndex(of: key) { AppleTabs.shared?.selfTap(i) } }
   func selfSelect(_ key: String) {
     if let i = tabKeys.firstIndex(of: key), let item = tabBar.items?[i] { tabBar.selectedItem = item; tabBar(tabBar, didSelect: item) }
   }
@@ -2929,6 +2930,11 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       //  title read as on screen after)
       ("mytasksFind", pause(1500) + "return '{}'", { self.myTasksIfMade?.selfFind("a") }),
       ("mytasksFindDone", pause(2000) + "return '{}'", { self.myTasksIfMade?.selfFindDone() }),
+      // (Haris 2026-11-09 14:45, his recording: My Tasks, Home, the Inbox, back to My Tasks with Apple's tab bar — the big
+      //  title gone, its room left; the tabs tapped as a finger does, the title read on screen at each)
+      ("mytasksTabHome", pause(1500) + "return '{}'", { self.selfTapTab("today") }),
+      ("mytasksTabInbox", pause(1500) + "return '{}'", { self.selfTapTab("inbox") }),
+      ("mytasksTabBack", pause(1500) + "return '{}'", { self.selfTapTab("mytasks") }),
       // 28: the Inbox, the app's own: All, a row swiped right (Read / Unread), Unread, Mentions
       ("ibx", pause(2500) + "return JSON.stringify({ view: ui.view, blank: !!document.querySelector('#content .ph-under-app') })", {
         if let i = self.tabKeys.firstIndex(of: "inbox"), let item = self.tabBar.items?[i] { self.tabBar.selectedItem = item; self.tabBar(self.tabBar, didSelect: item) } }),

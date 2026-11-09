@@ -97,13 +97,17 @@ final class MyTasksVC: UIViewController, UISearchResultsUpdating, UISearchContro
   }
   func paintMe() { meItem?.image = BarImage.me(mePhoto, traitCollection) }
   // (the self-test: the big title as on screen — its words, how visible, where; Haris's 12:53 screenshot had its room empty)
+  // (the whole window is read, not only Apple's bar: the 1608 reading found only the small title in the bar — the big
+  //  one wasn't where it looked, so its check never ran; Haris 2026-11-09 14:45, the title gone coming back to the tab)
   func selfTitle() -> [String: Any] {
-    guard let nb = navigationController?.navigationBar else { return ["bar": false] }
-    func labels(_ v: UIView) -> [UILabel] { (v as? UILabel).map { [$0] } ?? v.subviews.flatMap(labels) }
-    func seen(_ v: UIView) -> CGFloat { var a: CGFloat = 1; var x: UIView? = v; while let y = x, y !== nb.superview { if y.isHidden { return 0 }; a *= y.alpha; x = y.superview }; return a }
-    let t = labels(nb).filter { ($0.attributedText?.string ?? $0.text ?? "") == "My Tasks" }.map { l -> [String: Any] in
-      let f = l.convert(l.bounds, to: nb); return ["alpha": seen(l), "y": f.minY, "h": f.height, "size": l.font.pointSize] }
-    return ["bar": true, "barH": nb.frame.height, "titles": t, "offset": Main.shared.myTasksIfMade?.appleScroll.contentOffset.y ?? 0]
+    guard let nb = navigationController?.navigationBar, let w = view.window else { return ["bar": false] }
+    func labels(_ v: UIView) -> [UILabel] { ((v as? UILabel).map { [$0] } ?? []) + v.subviews.flatMap(labels) }
+    func seen(_ v: UIView) -> CGFloat { var a: CGFloat = 1; var x: UIView? = v; while let y = x { if y.isHidden { return 0 }; a *= CGFloat((y.layer.presentation() ?? y.layer).opacity); x = y.superview }; return a }
+    func path(_ v: UIView) -> String { var out: [String] = []; var x: UIView? = v.superview; while let y = x, out.count < 4 { out.append(String(describing: type(of: y))); x = y.superview }; return out.joined(separator: "<") }
+    let t = labels(w).filter { ($0.attributedText?.string ?? $0.text ?? "") == "My Tasks" }.map { l -> [String: Any] in
+      let f = l.convert(l.bounds, to: w); return ["alpha": seen(l), "y": f.minY, "h": f.height, "size": l.font.pointSize, "in": path(l)] }
+    return ["bar": true, "barH": nb.frame.height, "titles": t, "offset": Main.shared.myTasksIfMade?.appleScroll.contentOffset.y ?? 0,
+            "adj": Main.shared.myTasksIfMade?.appleScroll.adjustedContentInset.top ?? 0, "large": navigationItem.largeTitleDisplayMode.rawValue]
   }
 
   // ---------- the line under the title: how many open, and what's filtered (one short line, always) ----------
