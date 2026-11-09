@@ -277,9 +277,10 @@ check again that nothing was missed — on the change itself and on every page t
 
 **Steady heights and smooth, every native page — now and later (Haris, 2026-11-09: "Add the height and smoothness to rules
 also"):** a row never changes height unless what it shows changed — not as the tab bar goes, not as it scrolls in or out, not
-coming back to the page. Each row's height is worked out once for the list's width and given to its cell (our pieces: their
-exact height, `DetailCell`; Apple's rows: Apple's own cell measured once, `RowCell` — Haris's exception 2026-11-09 18:48,
-"we will lose time finding the cause"), and worked out again only when the row changes or the width does. Everything comes
+coming back to the page. Our pieces get their exact height, worked out once for the list's width (`DetailCell`); Apple's
+rows keep Apple's own height. No cell takes the bar's safe area into its margins (`TaskPage.noSafeArea` — cells and
+headers / footers: `insetsLayoutMarginsFromSafeArea = false`): a row passing under Apple's bar took the bar's room into its
+height and grew (the rows growing as they scrolled, and the layout loop that stopped the app — found 2026-11-09). Everything comes
 in smoothly: no empty flash, nothing growing from nothing, a change crossfading in place (the words, headers and footers),
 new rows fading in and gone ones out, the rest sliding only when something really came, went or changed height. The
 self-test checks it on every build: each row's height once a page has arrived, after scrolling, and back at the top — the
