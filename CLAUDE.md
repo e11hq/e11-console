@@ -289,6 +289,10 @@ same row the same height (`holdArrived` / `holdScrolled` / `holdTop`). Every new
 stops as far above "+ New task" as the button sits above the tab bar (about 19 — `HomeView.endRoom`), the same on E11 Day,
 My Tasks, the Inbox, Clients and every new list page; with no button, as far above the tab bar (or the bottom edge).
 
+**One card colour, every native page — now and later (Haris, 2026-11-09 18:59):** every card, box and list row (an inset
+group's rows, the task page's Details boxes, E11 Day's three boxes…) has the task cards' own colour (`HomeLook.card`, light
+and dark), with no border. Apple's highlight stays Apple's. Every new page too.
+
 **Light and dark, Apple's way — every native screen, now and later (Haris, 2026-11-09: "Yes, start"):** the iPhone app
 follows the phone's look and nothing of ours forces one — never `overrideUserInterfaceStyle` on a view, sheet, alert,
 nav or the tab bar. Our colours are Apple's dynamic colours (`Look.c(dark, light)`, the system colours, `HomeLook`'s —

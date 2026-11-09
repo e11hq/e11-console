@@ -605,6 +605,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     return m
   }
   private func rebuild() {
+    TaskPage.cardNow = nil
     guard let m = model.map({ TaskPage.basic($0) }) else { return }
     DescEditor.dark = !light   // (the description's file chips drawn in the page's look)
     // (on screen already: what changes comes in, goes out and moves smoothly — Haris 2026-11-02)
@@ -1598,9 +1599,22 @@ final class DItem {
 // a piece of ours in Apple's list cell: held by constraints inside the cell (its margins, or the pad given), so Apple's
 // own self-sizing measures it — nothing of ours measuring heights (build 1612 crashed: our own measuring and Apple's
 // disagreed and the list re-laid itself out in a loop until iPhone stopped the app, Haris 2026-11-09)
+// a box's row in the task cards' own colour, light and dark, no border (Haris 2026-11-09 18:59: every card or list the
+// same as the task cards) — Apple's grouped cell, its highlight Apple's
+extension TaskPage {
+  static var cardNow: UIColor?   // (worked out once per drawing of the page — rebuild() clears it)
+  static var card: UIColor { if let c = cardNow { return c }; let c = HomeLook(Main.shared.lookBoth).card; cardNow = c; return c }
+  static func cardBack(_ c: UICollectionViewListCell, _ state: UICellConfigurationState? = nil) {
+    var bg = UIBackgroundConfiguration.listGroupedCell()
+    if let s = state { bg = bg.updated(for: s) }
+    if !(state?.isHighlighted ?? false) && !(state?.isSelected ?? false) { bg.backgroundColor = card }
+    c.backgroundConfiguration = bg
+  }
+}
 // an Apple row on the task page: Apple's cell with its height given (worked out once for the list's width) — Apple's
 // self-sizing never asked to guess it again as it scrolls in (Haris 2026-11-09, the exception)
 final class RowCell: UICollectionViewListCell {
+  override func updateConfiguration(using state: UICellConfigurationState) { super.updateConfiguration(using: state); TaskPage.cardBack(self, state) }
   var fixed: CGFloat = 0
   override func preferredLayoutAttributesFitting(_ a: UICollectionViewLayoutAttributes) -> UICollectionViewLayoutAttributes {
     guard fixed > 0 else { return super.preferredLayoutAttributesFitting(a) }
@@ -1617,7 +1631,7 @@ final class DetailCell: UICollectionViewListCell {
   //  never settled: rows jumping as the tab bar went, growing as they scrolled in, and the layout loop that stopped the
   //  app — Haris 2026-11-09)
   func host(_ v: UIView?, pad p: UIEdgeInsets, plain: Bool, height: CGFloat) {
-    backgroundConfiguration = plain ? .clear() : .listGroupedCell()
+    if plain { backgroundConfiguration = .clear() } else { TaskPage.cardBack(self) }
     if hosted !== v, let old = hosted, old.superview === contentView { old.removeFromSuperview() }
     hosted = v
     NSLayoutConstraint.deactivate(pins); pins = []; tall = nil
