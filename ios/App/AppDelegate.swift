@@ -2772,7 +2772,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       let r = l.convert(l.bounds, to: w)
       if let i = order.firstIndex(where: { $0 === l }) {
         out["over"] = order[(i + 1)...].filter { v in
-          guard !v.isDescendant(of: l), seen(v) > 0.05, v.convert(v.bounds, to: w).intersects(r) else { return false }
+          // (Apple's own line under the title, in the same title view, doesn't count — build 1615 counted it)
+          guard !v.isDescendant(of: l), l.superview.map({ !v.isDescendant(of: $0) }) ?? true, seen(v) > 0.05, v.convert(v.bounds, to: w).intersects(r) else { return false }
           var a: CGFloat = 0; v.backgroundColor?.getRed(nil, green: nil, blue: nil, alpha: &a)
           return a > 0.05 || v is UIVisualEffectView || v is UILabel || v is UIImageView
         }.prefix(8).map { v -> String in let f = v.convert(v.bounds, to: w); return String(describing: type(of: v)) + "@\(Int(f.minY))+\(Int(f.height))<" + (v.superview.map { String(describing: type(of: $0)) } ?? "") }
