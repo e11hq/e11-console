@@ -260,7 +260,7 @@ function autoSeason(day) {
   } catch (e) { return null; }
 }
 
-/* ================= Occasion greeting, right after startup, once per device ================= */
+/* ================= Occasion greeting, right after startup, once per person (website and Mac; not the iPhone app) ================= */
 // Automatic: on the occasion's day itself. When Haris picks an icon himself, that replaces it: a seasonal one brings its
 // own greeting (once, the next time each device starts); Everyday or his own picture brings none.
 // Confetti in the season's colours and the greeting over the app, then back to work (click, a key, or 5 s).
@@ -298,7 +298,6 @@ const OccasionHello = (() => {
     'national-day': 'Happy Eid Al Etihad', christmas: 'Merry Christmas', ramadan: 'Ramadan Kareem', 'eid-al-fitr': 'Eid Mubarak',
     'eid-al-adha': 'Eid Al Adha Mubarak', 'islamic-new-year': 'Happy Hijri New Year', diwali: 'Happy Diwali',
   };
-  const KEY = 'e11-hello';
   // the season whose day is today (Ramadan: its first day)
   function today() {
     const day = todayStr(), y = Number(day.slice(0, 4));
@@ -315,11 +314,14 @@ const OccasionHello = (() => {
     if (i.auto) { const sid = today(); return sid ? [sid, todayStr() + ':' + sid] : null; }
     return i.preset && window.E11_SEASONS && E11_SEASONS[i.preset] ? [i.preset, 'pick:' + i.v] : null;
   }
+  // (Haris 2026-11-09: none in the iPhone app; on the website and the Mac once per person — remembered on the person
+  //  (u.prefs.helloSeen), not on each device; the startup screen's greeting stays as it is)
   function maybe() {
     try {
-      const d = due(); if (!d) return Promise.resolve();
-      if (localStorage.getItem(KEY) === d[1]) return Promise.resolve();
-      localStorage.setItem(KEY, d[1]);
+      if (Host.isIOSApp) return Promise.resolve();
+      const d = due(), u = me(); if (!d || !u) return Promise.resolve();
+      if ((u.prefs || {}).helloSeen === d[1]) return Promise.resolve();
+      u.prefs = { ...(u.prefs || {}), helloSeen: d[1] }; persist(0);
       return show(d[0]);
     } catch (e) { return Promise.resolve(); }
   }
