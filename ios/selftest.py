@@ -133,7 +133,7 @@ try:
     print('measure rowHeights', json.dumps({'arrived': ha, 'scrolled': hs, 'top': ht}))
     check(len(ha) >= 4 and len(ht) >= 4 and not moved, f"the task page's rows keep their heights — arrived, scrolled, back at the top (changed: {moved})")
     tl, td = res.get('tlookAtLight') or {}, res.get('tlookAtDark') or {}
-    check(tl.get('style') == 1 and tl.get('forced') == 0 and (tl.get('bg') or 0) > 0.5 and td.get('style') == 2 and td.get('forced') == 0 and (td.get('bg') or 1) < 0.5, f"the task page follows the phone light / dark, nothing forcing it (light {tl}, dark {td})", need=('tlook',))
+    check(tl.get('style') == 1 and tl.get('forced') == 0 and (tl.get('bg') or 0) > 0.5 and td.get('style') == 2 and td.get('forced') == 0 and td.get('bg', 1) < 0.5, f"the task page follows the phone light / dark, nothing forcing it (light {tl}, dark {td})", need=('tlook',))
     check((res.get('awayCells') or 0) > 0, f"the task page's Details still on the page after coming back {res.get('awayCells')}")
     # (Haris 2026-11-09, "Task page Details — fully Apple": Apple's own list cells in Apple's boxes, the creator as Apple's
     #  grey footer at the very end)

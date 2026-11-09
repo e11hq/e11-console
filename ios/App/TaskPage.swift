@@ -976,7 +976,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     } else if v == nil, let t = text { c.secondaryText = t }
     let it = DItem(id)
     it.content = c
-    if let v = v { it.accessories.append(.customView(configuration: .init(customView: v, placement: .trailing(), reservedLayoutWidth: .actual))) }
+    if let v = v { it.accessories.append(.customView(configuration: TaskPage.side(v, .trailing()))) }
     if chevron { it.accessories.append(.disclosureIndicator()) }
     it.tap = tap
     it.sig = [sym, key, keyText?.string ?? "", sub ?? "", TaskPage.cs(subColor, traitCollection), text ?? "", "\(chevron)", "\(tap != nil)", extra, v.map { TaskPage.sig($0) } ?? ""].joined(separator: "|")
@@ -1007,6 +1007,20 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     if let d = v as? DescBox { return d.height(for: w) }
     if let tv = v as? UITextView { return ceil(tv.sizeThatFits(CGSize(width: w, height: .greatestFiniteMagnitude)).height) }
     return ceil(v.systemLayoutSizeFitting(CGSize(width: w, height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height)
+  }
+  // a row's own piece beside Apple's words (a chip, the faces, a switch, the dates' buttons, a tick): its own size worked out
+  // once and kept — Apple's cell places it at that size (maintainsFixedSize) and never sizes it again from the row's height
+  // as it is at that moment; left to Apple it was re-sized as the cell was, and the rows grew as they scrolled in and
+  // changed as the tab bar went (1619's self-test: Priority 54 → 170, Needs CD review 104 → 70 — Haris 2026-11-09)
+  static func side(_ v: UIView, _ at: UICellAccessory.Placement) -> UICellAccessory.CustomViewConfiguration {
+    let fit: CGSize
+    if v is UILabel || v is UIControl { fit = v.sizeThatFits(CGSize(width: 1000, height: 1000)) }
+    else { fit = v.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize) }
+    v.translatesAutoresizingMaskIntoConstraints = true
+    v.frame = CGRect(origin: v.frame.origin, size: CGSize(width: ceil(fit.width), height: ceil(fit.height)))
+    var c = UICellAccessory.CustomViewConfiguration(customView: v, placement: at, reservedLayoutWidth: .actual)
+    c.maintainsFixedSize = true
+    return c
   }
   private func pill(_ t: String, fg: UIColor, bg: UIColor) -> UIView {
     let l = PaddedLabel(); l.text = t; l.font = .systemFont(ofSize: 14, weight: .semibold); l.textColor = fg; l.backgroundColor = bg
@@ -1258,11 +1272,11 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     c.textProperties.numberOfLines = 1
     let it = DItem("sub:" + id)
     it.content = c
-    it.accessories.append(.customView(configuration: .init(customView: tick, placement: .leading(), reservedLayoutWidth: .actual)))
+    it.accessories.append(.customView(configuration: TaskPage.side(tick, .leading())))
     let side = UIStackView(); side.spacing = 8; side.alignment = .center
     if let av = s["av"] as? String { side.addArrangedSubview(avatar(av, 22)) }
     if let due = s["due"] as? String, !due.isEmpty { side.addArrangedSubview(label(due, size: 15, color: (s["late"] as? Bool) == true ? .systemRed : .secondaryLabel)) }
-    if !side.arrangedSubviews.isEmpty { it.accessories.append(.customView(configuration: .init(customView: side, placement: .trailing(), reservedLayoutWidth: .actual))) }
+    if !side.arrangedSubviews.isEmpty { it.accessories.append(.customView(configuration: TaskPage.side(side, .trailing()))) }
     it.accessories.append(.disclosureIndicator())
     it.tap = { [weak self] in self?.onOpen?(id) }
     it.sig = "\(title)|\(done)|\(tick.isEnabled)|" + TaskPage.sig(side)
