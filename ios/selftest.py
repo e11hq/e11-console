@@ -74,10 +74,9 @@ try:
     except Exception: pass
     print(json.dumps(res, indent=1)[:4000])
     p = res.get('home') or {}
-    # 22: the startup screen is the app's own — there at once (icon, greeting, four rows), ticked by the page, gone before Home
-    sg = res.get('splashGeo') or {}; stg = res.get('splashTickedGeo') or {}
-    check('splash' in seen and sg.get('greet') and len(sg.get('rows') or []) == 4 and sg.get('iconLayers') == 14, f'the startup screen shows at once: icon, greeting, four rows {sg}')
-    check(stg.get('ticked') == 4 and stg.get('n') == '4/4' and all(v not in ('', '…') for v in (stg.get('values') or [''])), f'all four rows ticked with real numbers (by the app from its copy — step 8 — or the page) {stg}')
+    # 22: the startup screen is the app's own — there at once, the icon alone (Haris 2026-11-09: "Logo only, then go"), gone before Home
+    sg = res.get('splashGeo') or {}
+    check('splash' in seen and sg.get('logoOnly') is True and sg.get('iconLayers') == 14 and sg.get('subviews') == 1, f'the startup screen shows at once: the icon alone {sg}')
     hn = res.get('homeNative') or {}
     if hn.get('apple'):
       # (Haris 2026-11-07: Home opened under the small title — it must open with Apple's bar at its big title)

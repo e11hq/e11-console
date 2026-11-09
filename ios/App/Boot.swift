@@ -80,15 +80,10 @@ extension Main {
     if JSONSerialization.isValidJSONObject(keep), let d = try? JSONSerialization.data(withJSONObject: keep) { defaults.set(d, forKey: "e11_start") }
     // the startup screen's memo for next time (the look is this phone's own)
     var memo = SplashView.memo()
-    for k in ["name", "cd", "days"] { if let v = j[k] { memo[k] = v } }
+    for k in ["days"] { if let v = j[k] { memo[k] = v } }   // (sunrise / sunset for the Automatic look)
     if let tm = defaults.string(forKey: "e11_theme_mode") { memo["themeMode"] = tm }
     SplashView.save(memo)
-    if let l4 = j["label4"] as? String {
-      var last = (defaults.data(forKey: "e11_splash_last").flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }) ?? [:]
-      last["label4"] = l4
-      if let d = try? JSONSerialization.data(withJSONObject: last) { defaults.set(d, forKey: "e11_splash_last") }
-    }
-    if let s = splash, !s.leaving { s.command(["status": ""]); s.command(["greet": SplashView.greeting(memo)]) }
+    if let s = splash, !s.leaving { s.command(["status": ""]) }
     saveQuick(["me": me])
     if first { pagelessFlush() }
     if first && quickBooted { ownAfterStart() }   // (What's new, the View as… bar — without the website: step 9)
