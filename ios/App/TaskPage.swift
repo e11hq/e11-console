@@ -915,6 +915,14 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   func detailsHeights() -> [String: Double] {
     var out: [String: Double] = [:]
     for c in scroll.visibleCells { if let ip = scroll.indexPath(for: c), let k = listDS?.itemIdentifier(for: ip) { out[k] = Double(c.bounds.height) } }
+    // (and every header and footer on screen — DESCRIPTION, REVIEW, FILES jumped at the bottom edge: Haris 2026-11-09)
+    for kind in [UICollectionView.elementKindSectionHeader, UICollectionView.elementKindSectionFooter] {
+      for ip in scroll.indexPathsForVisibleSupplementaryElements(ofKind: kind) {
+        guard let v = scroll.supplementaryView(forElementKind: kind, at: ip) as? UICollectionViewListCell else { continue }
+        let t = (v.contentConfiguration as? UIListContentConfiguration)?.text ?? "\(ip.section)"
+        out[(kind == UICollectionView.elementKindSectionHeader ? "head:" : "foot:") + (t.components(separatedBy: " ·").first ?? t)] = Double(v.bounds.height)
+      }
+    }
     return out
   }
   // the self-test: Details as Apple's list — its headers, Apple's cells, the creator's footer
