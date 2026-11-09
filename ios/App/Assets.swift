@@ -1219,7 +1219,7 @@ final class AssetsCtl {
             self.upBusy = false
             guard !sent.isEmpty else { h?.assetsToast("Couldn’t upload — try again"); return }
             self.ask(["ev": "uploaded", "client": client, "folder": folder, "files": sent]) { [weak h] r in
-              if (r["ok"] as? Bool) == true { UINotificationFeedbackGenerator().notificationOccurred(.success); h?.assetsToast("Added \(sent.count) file\(sent.count == 1 ? "" : "s") to \(f["name"] as? String ?? "the folder")" + (sent.count < total ? " — \(total - sent.count) didn’t upload" : "")) }
+              if (r["ok"] as? Bool) == true { UINotificationFeedbackGenerator().notificationOccurred(.success); Main.playUploaded(); h?.assetsToast("Added \(sent.count) file\(sent.count == 1 ? "" : "s") to \(f["name"] as? String ?? "the folder")" + (sent.count < total ? " — \(total - sent.count) didn’t upload" : "")) }
               else { h?.assetsToast(r["error"] as? String ?? "That didn’t work — try again") }
             }
             return
