@@ -437,7 +437,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     cfg.performsFirstActionWithFullSwipe = !leading || (d["cdHold"] as? Bool) != true
     return cfg
   }
-  // (asked first: the task goes to the Trash — from its swipe or its menu)
+  // (asked first: the task goes to the Trash — from its swipe)
   private func askTrash(_ card: HomeCard, finish: ((Bool) -> Void)?) {
     let al = UIAlertController(title: "Move this task to the Trash?", message: card.taskTitle.isEmpty ? nil : card.taskTitle, preferredStyle: .actionSheet)
     al.addAction(UIAlertAction(title: "Trash Task", style: .destructive) { [weak self] _ in self?.send(["ev": "delete", "id": card.id, "card": card.info]); self?.findAgain(); finish?(true) })
@@ -2776,20 +2776,15 @@ extension HomeView: UICollectionViewDelegate {
     if key == "me:card" { (listViews[key] as? MeCardBlock)?.onTap?(); return }
     meItems[key]?.tap?()
   }
-  // touch and hold a task: Apple's own lift of its cell and Apple's menu (Haris 2026-11-09) — Attach Files (Camera · Photos ·
-  // Files), Copy link, Trash; My Tasks' Done tab is read only
+  // touch and hold a task: Apple's own lift of its cell and Apple's menu — Attach Files (Camera · Photos · Files); Copy link
+  // and Trash are on its swipe (Haris 2026-11-09 12:36: "no need for them to be in the menu"). My Tasks' Done tab: read only
   func collectionView(_ cv: UICollectionView, contextMenuConfigurationForItemsAt ips: [IndexPath], point: CGPoint) -> UIContextMenuConfiguration? {
     guard ips.count == 1, let key = listDS?.itemIdentifier(for: ips[0]), let card = listViews[key] as? HomeCard, !(isList && listTab == "done") else { return nil }
     let id = card.id
-    return UIContextMenuConfiguration(identifier: key as NSString, previewProvider: nil) { [weak self, weak card] _ in
+    return UIContextMenuConfiguration(identifier: key as NSString, previewProvider: nil) { [weak self] _ in
       // (the picker is asked for once the menu has closed — while it's still closing, iPhone shows no other screen)
       let src = { (s: String, t: String, img: String) in UIAction(title: t, image: UIImage(systemName: img)) { _ in HomeView.afterMenu = { self?.send(["ev": "attach", "id": id, "source": s]) } } }
-      var more: [UIMenuElement] = [UIAction(title: "Copy link", image: UIImage(systemName: "link")) { _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.send(["ev": "copy", "id": id]) }]
-      if self?.canDelete == true {
-        more.append(UIAction(title: "Trash", image: UIImage(systemName: "trash"), attributes: .destructive) { _ in HomeView.afterMenu = { if let self = self, let card = card { self.askTrash(card, finish: nil) } } })
-      }
-      return UIMenu(children: [UIMenu(title: "Attach Files", options: .displayInline, children: [src("camera", "Camera", "camera"), src("photos", "Photos", "photo"), src("files", "Files", "doc.badge.arrow.up")]),
-                               UIMenu(options: .displayInline, children: more)])
+      return UIMenu(title: "Attach Files", children: [src("camera", "Camera", "camera"), src("photos", "Photos", "photo"), src("files", "Files", "doc.badge.arrow.up")])
     }
   }
   private static var afterMenu: (() -> Void)?

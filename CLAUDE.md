@@ -175,8 +175,8 @@ follows it (Don't 9); don't change any of it without Haris. Project doc `claude/
   list cell (HomeCard gives its UIListContentConfiguration: Apple's status symbol in the status colour, title, the line with
   our CD chip, search's "found in" as a third line) in Apple's inset groups with Apple's headers (Today's run by client, then
   Overdue — the order kept); ours inside it only the Urgent / P1 tag and the faces (a green ring when their part is done,
-  +N); a client found by search is Apple's cell too. Tap: Apple's selection; hold: Apple's menu with its lift (Attach Files,
-  Copy link, Trash); swipes: Apple's. Our own card drawing, swipe buttons, press sheet and move animation removed.**
+  +N); a client found by search is Apple's cell too. Tap: Apple's selection; hold: Apple's menu with its lift (Attach Files —
+  Camera, Photos, Files; Copy link and Trash are on the swipe); swipes: Apple's. Our own card drawing, swipe buttons, press sheet and move animation removed.**
 - **The frost: Apple's own, untouched — exactly as in build 1550** (the list's and the search results' `topEdgeEffect.style
   = .automatic`, nothing of ours setting or drawing it). Haris 2026-11-08 11:29: "back how it was, apple's own, on the
   previous locked home" — the firm frost with its line (builds 1562 / 1566) taken off Home. Which frost other Apple pages
