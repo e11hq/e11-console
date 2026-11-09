@@ -365,7 +365,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if r.rowHasAccessory { acc.append(.customView(configuration: .init(customView: r, placement: .trailing(), reservedLayoutWidth: .actual, maintainsFixedSize: true))) }
     acc.append(.disclosureIndicator())
     cell.accessories = acc
-    let card = L.card
+    let card = HomeCard.rowColor(L.card, late: r.rowLate)
     cell.configurationUpdateHandler = { c, state in
       var bg = UIBackgroundConfiguration.listGroupedCell().updated(for: state)
       if !state.isHighlighted && !state.isSelected { bg.backgroundColor = card }
@@ -1878,7 +1878,7 @@ struct HomeLook {
   // every colour holds both looks (Look.c): the website's measured colours for each look when it has sent them (Main
   // keeps the last of each — Main.lookBoth), else the app's own — so iPhone switches them itself
   let bg, headBg, sub, h1, round, roundIc, statBg, statLine, statLabel, statG, statR, statA, gh, empty: UIColor
-  let card, cardLine, lateLine, title, meta, sep, late, today, doneTitle, tag, tagBg, urgent, urgentBg, more, moreBg, fabBg, fabLine: UIColor
+  let card, title, meta, sep, late, today, doneTitle, tag, tagBg, urgent, urgentBg, more, moreBg, fabBg, fabLine: UIColor
   let headH: CGFloat?, fabRect: CGRect?
   // (which colours these are — the same for the same website colours: a drawing's signature, never the colour objects,
   //  which are new each time)
@@ -1906,8 +1906,7 @@ struct HomeLook {
     statLabel = grey
     statG = c("statG", SplashView.hex(0x3ddc97), SplashView.hex(0x1a9e63)); statR = c("statR", SplashView.hex(0xff7a7a), SplashView.hex(0xd9363e)); statA = c("statA", SplashView.hex(0xf9be33), SplashView.hex(0xb57d00))
     gh = grey; empty = grey
-    card = c("card", SplashView.hex(0x121317), w); cardLine = c("cardLine", SplashView.hex(0x1d1f24), .clear)
-    lateLine = c("lateLine", UIColor(red: 229 / 255, green: 72 / 255, blue: 77 / 255, alpha: 0.45), UIColor(red: 229 / 255, green: 72 / 255, blue: 77 / 255, alpha: 0.45))
+    card = c("card", SplashView.hex(0x121317), w)
     title = c("title", SplashView.hex(0xe9eaee), SplashView.hex(0x17181b)); meta = grey
     sep = grey; late = c("late", SplashView.hex(0xff8a8a), SplashView.hex(0xd9363e)); today = c("today", SplashView.hex(0x8fbcff), SplashView.hex(0x2f6fd6))
     doneTitle = grey
@@ -1934,6 +1933,7 @@ protocol AppleRow: UIView {
   var rowSig: String { get }
   var rowHasAccessory: Bool { get }
   var rowLeading: Bool { get }
+  var rowLate: Bool { get }
   func rowTapped()
 }
 final class HomeCard: UIView, AppleRow {
@@ -1952,7 +1952,19 @@ final class HomeCard: UIView, AppleRow {
   var rowSig: String { drawnSig + "|\(peopleSig)" }
   var rowHasAccessory: Bool { stackW > 0 || !badge.isHidden }
   var rowLeading: Bool { false }
+  // (overdue: a faint red tint on its row — Haris 2026-11-09 12:35, approved on the mock-up)
+  var rowLate: Bool { (c["late"] as? Bool) == true }
   func rowTapped() { onTap?() }
+  // the row's colour: the card's, with a faint red blended in when it's overdue (both looks: 10% in dark, 6% in light)
+  static func rowColor(_ card: UIColor, late: Bool) -> UIColor {
+    guard late else { return card }
+    return UIColor { tc in
+      let dark = tc.userInterfaceStyle != .light, a: CGFloat = dark ? 0.10 : 0.06
+      var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, al: CGFloat = 0
+      card.resolvedColor(with: tc).getRed(&r, green: &g, blue: &b, alpha: &al)
+      return UIColor(red: r * (1 - a) + 229 / 255 * a, green: g * (1 - a) + 72 / 255 * a, blue: b * (1 - a) + 77 / 255 * a, alpha: 1)
+    }
+  }
   override init(frame: CGRect) {
     super.init(frame: frame)
     isUserInteractionEnabled = false   // (a tap anywhere on the row is the cell's own)
@@ -2064,7 +2076,7 @@ final class HomeCard: UIView, AppleRow {
     let list = c["av"] as? [[String: Any]] ?? []
     var x: CGFloat = 0
     func ringed(_ img: UIImage, done: Bool) -> UIView {
-      let r = UIView(frame: CGRect(x: x - 2, y: -2, width: 26, height: 26)); r.backgroundColor = done ? SplashView.green : L.card; r.layer.cornerRadius = 13
+      let r = UIView(frame: CGRect(x: x - 2, y: -2, width: 26, height: 26)); r.backgroundColor = done ? SplashView.green : HomeCard.rowColor(L.card, late: rowLate); r.layer.cornerRadius = 13
       let iv = UIImageView(image: img); iv.frame = CGRect(x: 2, y: 2, width: 22, height: 22); r.addSubview(iv)
       return r
     }
@@ -2075,7 +2087,7 @@ final class HomeCard: UIView, AppleRow {
       x += 16
     }
     if let n = c["more"] as? Int, n > 0 {
-      let r = UIView(frame: CGRect(x: x - 2, y: -2, width: 26, height: 26)); r.backgroundColor = L.card; r.layer.cornerRadius = 13
+      let r = UIView(frame: CGRect(x: x - 2, y: -2, width: 26, height: 26)); r.backgroundColor = HomeCard.rowColor(L.card, late: rowLate); r.layer.cornerRadius = 13
       let l = UILabel(frame: CGRect(x: 2, y: 2, width: 22, height: 22)); l.text = "+\(n)"; l.font = .systemFont(ofSize: 9.5, weight: .semibold); l.textColor = L.more
       l.backgroundColor = L.moreBg; l.layer.cornerRadius = 11; l.clipsToBounds = true; l.textAlignment = .center
       r.addSubview(l); avs.addSubview(r); x += 16
@@ -2245,6 +2257,7 @@ final class HomeClientRow: UIView, AppleRow {
   private(set) var rowSig = ""
   var rowHasAccessory: Bool { false }
   var rowLeading: Bool { false }
+  var rowLate: Bool { false }
   func rowTapped() { onTap?() }
   func set(_ c: [String: Any], look L: HomeLook) {
     let sig = drawSig(c) + "|" + L.key
