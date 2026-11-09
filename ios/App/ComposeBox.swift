@@ -326,7 +326,7 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     mentions.rows = hits.map { p in
       let id = p["id"] as? String ?? ""
       let ph = p["photo"] as? String
-      return PickList.Row(key: "p:" + id, title: p["name"] as? String ?? "", sub: id == CommentCell.creator ? "Creator" : nil,
+      return PickList.Row(key: "p:" + id, title: p["name"] as? String ?? "", sub: id == CommentCell.creator ? "Creator" : (p["role"] as? String).flatMap { $0.isEmpty ? nil : $0 },
                           image: PickList.initials(p), path: (ph?.hasPrefix("/") == true) ? ph : nil, round: true) { [weak self] in self?.insertMention(p, at: at) }
     }
     mentions.isHidden = false
