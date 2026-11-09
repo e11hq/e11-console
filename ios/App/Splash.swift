@@ -29,6 +29,7 @@ final class SplashView: UIView {
   // (styles.css #splash / #splash.light)
   static let dark = Look(bg: hex(0x0c0d0f))
   static let lightLook = Look(bg: hex(0xffffff))
+  static let green = hex(0x3ddc97)   // (the green tick — used elsewhere too)
 
   let light: Bool
   let L: Look
