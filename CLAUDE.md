@@ -307,6 +307,15 @@ new rows fading in and gone ones out, the rest sliding only when something reall
 self-test checks it on every build: each row's height once a page has arrived, after scrolling, and back at the top — the
 same row the same height (`holdArrived` / `holdScrolled` / `holdTop`). Every new page too.
 
+**Smooth, everything — every native page, now and later (Haris, 2026-11-09 23:27: "Smoothness add as a rule"):** nothing on
+a page ever snaps, blinks, jumps or pops. Every change moves: a new row fades in, a gone one fades out, the others slide
+only when something really came, went or changed height (Apple's own list animations); a row that changes in place (a
+reaction, an edit, a status) crossfades to its new look; words that change crossfade; a page opens where it should without
+jumping (exact heights known up front); scrolling to something is Apple's smooth scroll; what you do shows at once and
+animated, and the server's answer takes its place with no blink (a pending one replaced by the real one: no fade, it's
+just there). Apple's own animations wherever Apple has one — ours only where Apple has none, and never fighting Apple's.
+Before any change is called done, check each moment of it for a snap, blink or jump. Every new page too.
+
 **What you do shows at once, every Apple page — now and later (Haris, 2026-11-09 20:11):** anything you remove, add, tick or
 change on a page (a file trashed, a checklist item ticked, a status set…) shows on the page at once — the gone one fades
 out and the rest slide in, Apple's own list animation — never waiting for the server's answer. The server's answer then
