@@ -2045,7 +2045,9 @@ final class HomeCard: UIView, AppleRow {
     let ps = NSMutableParagraphStyle(); ps.minimumLineHeight = 20.15; ps.maximumLineHeight = 20.15
     var ta: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 15.5, weight: t.isEmpty ? .medium : .semibold), .foregroundColor: done || t.isEmpty ? L.doneTitle : L.title, .paragraphStyle: ps, .baselineOffset: 1.5]
     if t.isEmpty { ta[.font] = UIFont.italicSystemFont(ofSize: 15.5) }
-    if done { ta[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
+    // (said either way, never left out: Apple's label reused from a done task kept its line through the words when the
+    //  next title simply had none — My Tasks' Done then All struck every title, Haris 2026-11-09)
+    ta[.strikethroughStyle] = done ? NSUnderlineStyle.single.rawValue : 0
     let marks = (d["marks"] as? [String]) ?? []
     cfg.attributedText = t.isEmpty || marks.isEmpty ? NSAttributedString(string: t.isEmpty ? "Untitled task" : t, attributes: ta)
       : HomeCard.marked(t, marks, base: ta, mark: [.backgroundColor: Find.wash])
