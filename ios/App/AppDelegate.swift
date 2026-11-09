@@ -2765,6 +2765,20 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     func seen(_ v: UIView) -> CGFloat { var a: CGFloat = 1; var x: UIView? = v; while let y = x { if y.isHidden { return 0 }; a *= CGFloat((y.layer.presentation() ?? y.layer).opacity); x = y.superview }; return a }
     let big = labels(w).filter { ($0.attributedText?.string ?? $0.text ?? "") == t && $0.font.pointSize >= 28 }
     var out: [String: Any] = ["found": big.count, "alpha": Double(big.map(seen).max() ?? 0)]
+    // (what lies over the title as drawn: every view drawn after it, on screen, covering its spot — a cover of ours would
+    //  hide it with the label itself still "visible")
+    if let l = big.max(by: { seen($0) < seen($1) }) {
+      var order: [UIView] = []; func walk(_ v: UIView) { order.append(v); v.subviews.forEach(walk) }; walk(w)
+      let r = l.convert(l.bounds, to: w)
+      if let i = order.firstIndex(where: { $0 === l }) {
+        out["over"] = order[(i + 1)...].filter { v in
+          guard !v.isDescendant(of: l), seen(v) > 0.05, v.convert(v.bounds, to: w).intersects(r) else { return false }
+          var a: CGFloat = 0; v.backgroundColor?.getRed(nil, green: nil, blue: nil, alpha: &a)
+          return a > 0.05 || v is UIVisualEffectView || v is UILabel || v is UIImageView
+        }.prefix(8).map { v -> String in let f = v.convert(v.bounds, to: w); return String(describing: type(of: v)) + "@\(Int(f.minY))+\(Int(f.height))<" + (v.superview.map { String(describing: type(of: $0)) } ?? "") }
+        out["ty"] = Double(r.minY); out["th"] = Double(r.height)
+      }
+    }
     if let l = big.first {
       let f = l.convert(l.bounds, to: w); out["y"] = Double(f.minY); out["h"] = Double(f.height)
       var chain: [String] = []; var x: UIView? = l
@@ -2914,6 +2928,15 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
           webTabsShown: getComputedStyle(document.getElementById('ph-tabs')).display !== 'none', view: ui.view, appInfo: info, geo,
           top: getComputedStyle(document.documentElement).getPropertyValue('--ph-top'), unknown: await NativeMac.call('nope').then(() => 'answered').catch((e) => e.message) });
         """, nil),
+      // (Haris 2026-11-09 16:56, exactly: the app opened on E11 Day, My Tasks, another tab, My Tasks again — its big title
+      //  gone for good, until the app is opened again; the tabs tapped as a finger does, from the very start, the title
+      //  read each time with whatever lies over it)
+      ("firstMt", pause(1500) + "return '{}'", { self.selfTapTab("mytasks") }),
+      ("firstHome", pause(1500) + "return '{}'", { self.selfResult["titleFirstMt"] = self.selfBigTitle("My Tasks"); self.selfTapTab("today") }),
+      ("firstIbx", pause(1500) + "return '{}'", { self.selfTapTab("inbox") }),
+      ("firstMtAgain", pause(1500) + "return '{}'", { self.selfResult["titleFirstIbx"] = self.selfBigTitle("Inbox"); self.selfTapTab("mytasks") }),
+      ("firstIbxAgain", pause(1500) + "return '{}'", { self.selfResult["titleSecondMt"] = self.selfBigTitle("My Tasks"); self.selfTapTab("inbox") }),
+      ("firstBack", "return '{}'", { self.selfResult["titleSecondIbx"] = self.selfBigTitle("Inbox"); self.selfTapTab("today") }),
       // 23: Home's card swiped left (Copy link · Delete), then held (Attach Files: Camera · Photos · Files)
       ("homeSwipe", "return '{}'", { self.homeIfMade?.selfSwipe() }),
       ("homeLead", "return '{}'", { self.homeIfMade?.selfClose(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.homeIfMade?.selfSwipeRight() } }),
