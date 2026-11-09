@@ -1660,6 +1660,7 @@ enum LoopProbe {
   }
 }
 final class RowCell: UICollectionViewListCell {
+  override var insetsLayoutMarginsFromSafeArea: Bool { get { false } set {} }
   override init(frame: CGRect) { super.init(frame: frame); TaskPage.noSafeArea(self) }
   override func preferredLayoutAttributesFitting(_ a: UICollectionViewLayoutAttributes) -> UICollectionViewLayoutAttributes {
     let r = super.preferredLayoutAttributesFitting(a)
@@ -1670,6 +1671,11 @@ final class RowCell: UICollectionViewListCell {
   override func updateConfiguration(using state: UICellConfigurationState) { super.updateConfiguration(using: state); TaskPage.cardBack(self, state); TaskPage.noSafeArea(self) }
 }
 final class SuppCell: UICollectionViewListCell {
+  // (a header at the screen's bottom edge took the home indicator's room into its margins, a point more or less each time
+  //  Apple measured it — DESCRIPTION 66 → 75 → 41: the layout loop that stopped the app, Haris's crash notes 2026-11-09
+  //  20:49. Never from the safe area, whatever is set on it, and set again on every configuration as the rows')
+  override var insetsLayoutMarginsFromSafeArea: Bool { get { false } set {} }
+  override func updateConfiguration(using state: UICellConfigurationState) { super.updateConfiguration(using: state); TaskPage.noSafeArea(self) }
   override func preferredLayoutAttributesFitting(_ a: UICollectionViewLayoutAttributes) -> UICollectionViewLayoutAttributes {
     let r = super.preferredLayoutAttributesFitting(a)
     LoopProbe.size(a.representedElementKind == UICollectionView.elementKindSectionHeader ? "head" : "foot", self, r, (contentConfiguration as? UIListContentConfiguration)?.text ?? "")
@@ -1677,6 +1683,7 @@ final class SuppCell: UICollectionViewListCell {
   }
 }
 final class DetailCell: UICollectionViewListCell {
+  override var insetsLayoutMarginsFromSafeArea: Bool { get { false } set {} }
   override init(frame: CGRect) { super.init(frame: frame); TaskPage.noSafeArea(self) }
   override func preferredLayoutAttributesFitting(_ a: UICollectionViewLayoutAttributes) -> UICollectionViewLayoutAttributes {
     let r = super.preferredLayoutAttributesFitting(a)
