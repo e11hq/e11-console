@@ -847,7 +847,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
       item("Reload", #selector(reloadPage(_:)), "r", .command, self),
       item("Go to Home", #selector(goHome(_:)), "h", [.command, .shift], self),
       item("Toggle Sidebar", #selector(toggleSidebar(_:)), "s", [.command, .control], self), .separator(),
-      item("Actual Size", #selector(zoomReset(_:)), "0", .command, self),
+      item("Actual Size", #selector(zoomReset(_:)), "0", [.command, .option], self),   // (⌥⌘0: ⌘0 is the main window's, in the Window menu — both on ⌘0, View's came first and ⌘0 never brought the window back, Haris 2026-11-09)
       item("Zoom In", #selector(zoomIn(_:)), "+", .command, self),
       item("Zoom Out", #selector(zoomOut(_:)), "-", .command, self), .separator(),
       item("Open in Browser", #selector(openInBrowser(_:)), "", .command, self),
