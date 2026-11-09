@@ -848,7 +848,11 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
       c.headerMode = s?.head != nil ? .supplementary : .none
       c.footerMode = s?.foot != nil ? .supplementary : .none
       c.showsSeparators = !(s?.plain ?? false)
-      return NSCollectionLayoutSection.list(using: c, layoutEnvironment: env)
+      let sec = NSCollectionLayoutSection.list(using: c, layoutEnvironment: env)
+      // (the gaps between the boxes half of Apple's own — set on Apple's section, Haris 2026-11-09: "Half")
+      sec.contentInsets.top = (sec.contentInsets.top / 2).rounded()
+      sec.contentInsets.bottom = (sec.contentInsets.bottom / 2).rounded()
+      return sec
     }
   }
   // a piece of ours that changed height in its Apple cell (the title being typed, the description opened or written):
