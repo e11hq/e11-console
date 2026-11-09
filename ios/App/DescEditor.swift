@@ -55,22 +55,6 @@ enum DescEditor {
     }
     return Array(out.prefix(5))
   }
-  // a row in the # list: its kind's coloured icon, its name, its size
-  static func fileRow(_ f: [String: Any], tap: @escaping () -> Void) -> UIView {
-    let row = TaskRow()
-    let name = f["name"] as? String ?? "File"
-    let (sym, col) = kind(name)
-    let ic = UIImageView(image: UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold))); ic.tintColor = col
-    ic.contentMode = .center; ic.widthAnchor.constraint(equalToConstant: 28).isActive = true
-    let l = UILabel(); l.text = name; l.font = .systemFont(ofSize: 16, weight: .medium); l.lineBreakMode = .byTruncatingMiddle
-    let sz = UILabel(); sz.text = TaskPage.size(f["size"] as? Int ?? 0); sz.font = .systemFont(ofSize: 13); sz.textColor = .secondaryLabel
-    sz.setContentCompressionResistancePriority(.required, for: .horizontal)
-    let h = UIStackView(arrangedSubviews: [ic, l, sz]); h.spacing = 10; h.alignment = .center
-    h.translatesAutoresizingMaskIntoConstraints = false; row.addSubview(h)
-    NSLayoutConstraint.activate([h.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 14), h.topAnchor.constraint(equalTo: row.topAnchor, constant: 8), h.bottomAnchor.constraint(equalTo: row.bottomAnchor, constant: -8), h.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -14)])
-    row.onTap = tap
-    return row
-  }
   // the words as plain text (each chip as "📎 name", as the website keeps it)
   static func plain(_ a: NSAttributedString) -> String {
     var out = ""
@@ -167,9 +151,6 @@ extension TaskPage {
       return true
     }
     descView.inputAccessoryView = descBar()
-    mentionBox.axis = .vertical
-    mentionBox.backgroundColor = .secondarySystemGroupedBackground
-    mentionBox.layer.cornerRadius = 16; mentionBox.layer.cornerCurve = .continuous; mentionBox.clipsToBounds = true
     mentionBox.isHidden = true
   }
   // the format buttons above the keyboard: iPhone's own toolbar, so iPhone draws it its own way over the keyboard
@@ -323,10 +304,9 @@ extension TaskPage {
       let q = String(typed.dropFirst()).lowercased()
       let hits = DescEditor.fileHits(taskFilesForPick, q)
       if hits.isEmpty { hideMentions(); return }
-      mentionBox.arrangedSubviews.forEach { $0.removeFromSuperview() }
       let at = (before as NSString).length - (typed as NSString).length
-      for f in hits { mentionBox.addArrangedSubview(DescEditor.fileRow(f) { [weak self] in self?.insertFileChip(f, from: at) }) }
-      showMentionBox(hits.count)
+      mentionBox.rows = hits.map { f in PickList.file(f) { [weak self] in self?.insertFileChip(f, from: at) } }
+      showMentionBox(min(hits.count, 4))
       return
     }
     guard let m = before.range(of: "@([A-Za-z]*)$", options: .regularExpression) else { hideMentions(); return }
@@ -334,16 +314,8 @@ extension TaskPage {
     let all = (model?["mentionable"] as? [[String: Any]]) ?? []
     let hits = all.filter { q.isEmpty || ($0["name"] as? String ?? "").lowercased().split(separator: " ").contains { $0.hasPrefix(q) } }.prefix(4)
     if hits.isEmpty { hideMentions(); return }
-    mentionBox.arrangedSubviews.forEach { $0.removeFromSuperview() }
     let at = (before as NSString).length - q.count - 1
-    for p in hits {
-      let row = TaskRow()
-      let h = UIStackView(arrangedSubviews: [CommentCell.avatar(p, 28), { let l = UILabel(); l.text = p["name"] as? String; l.font = .systemFont(ofSize: 16, weight: .medium); return l }()])
-      h.spacing = 10; h.alignment = .center; h.translatesAutoresizingMaskIntoConstraints = false; row.addSubview(h)
-      NSLayoutConstraint.activate([h.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 14), h.topAnchor.constraint(equalTo: row.topAnchor, constant: 8), h.bottomAnchor.constraint(equalTo: row.bottomAnchor, constant: -8), h.trailingAnchor.constraint(lessThanOrEqualTo: row.trailingAnchor)])
-      row.onTap = { [weak self] in self?.insertMention(p, from: at) }
-      mentionBox.addArrangedSubview(row)
-    }
+    mentionBox.rows = hits.map { p in PickList.person(p) { [weak self] in self?.insertMention(p, from: at) } }
     showMentionBox(hits.count)
   }
   private func showMentionBox(_ n: Int) {
@@ -351,7 +323,7 @@ extension TaskPage {
     if mentionBox.superview == nil { addSubview(mentionBox) }
     // just under the line being written
     let caret = tv.convert(tv.caretRect(for: tv.selectedTextRange?.end ?? tv.endOfDocument), to: self)
-    let h = CGFloat(n) * 46
+    let h = CGFloat(n) * PickList.rowH
     // (under the line being written — or above it when that would run under the keyboard's format bar: the @ and #
     //  lists sat over B · I · U, Haris 2026-11-02)
     let room = bounds.height - (kbCover > 0 ? kbCover + 8 : safeAreaInsets.bottom + 16)   // (the keyboard's frame holds its format bar)

@@ -308,13 +308,7 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
       let hits = DescEditor.fileHits(filesFor?() ?? [], String(typed.dropFirst()).lowercased())
       guard !hits.isEmpty else { mentions.isHidden = true; return }
       let at = (before as NSString).length - (typed as NSString).length
-      mentions.rows = hits.map { f in
-        let n = f["name"] as? String ?? "File"
-        let (sym, col) = DescEditor.kind(n)
-        let pic = (f["thumbUrl"] as? String) ?? (CommentCell.isPic(n) ? f["url"] as? String : nil)
-        return PickList.Row(key: "f:" + (f["file"] as? String ?? n), title: n, sub: TaskPage.size(f["size"] as? Int ?? 0),
-                            image: UIImage(systemName: sym)?.withTintColor(col, renderingMode: .alwaysOriginal), path: pic, round: false) { [weak self] in self?.pickFile(f, at: at) }
-      }
+      mentions.rows = hits.map { f in PickList.file(f) { [weak self] in self?.pickFile(f, at: at) } }
       mentions.isHidden = false
       return
     }
@@ -323,12 +317,7 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     let hits = mentionable.filter { q.isEmpty || ($0["name"] as? String ?? "").lowercased().split(separator: " ").contains { $0.hasPrefix(q) } }.prefix(4)
     guard !hits.isEmpty else { mentions.isHidden = true; return }
     let at = (before as NSString).length - q.count - 1
-    mentions.rows = hits.map { p in
-      let id = p["id"] as? String ?? ""
-      let ph = p["photo"] as? String
-      return PickList.Row(key: "p:" + id, title: p["name"] as? String ?? "", sub: id == CommentCell.creator ? "Creator" : (p["role"] as? String).flatMap { $0.isEmpty ? nil : $0 },
-                          image: PickList.initials(p), path: (ph?.hasPrefix("/") == true) ? ph : nil, round: true) { [weak self] in self?.insertMention(p, at: at) }
-    }
+    mentions.rows = hits.map { p in PickList.person(p) { [weak self] in self?.insertMention(p, at: at) } }
     mentions.isHidden = false
   }
   private func insertMention(_ p: [String: Any], at: Int) {
@@ -1008,6 +997,20 @@ final class PickList: UITableView, UITableViewDataSource, UITableViewDelegate {
     register(UITableViewCell.self, forCellReuseIdentifier: "r")
   }
   required init?(coder: NSCoder) { fatalError() }
+  // (one way to make the rows, for the comment box and the description alike)
+  static func person(_ p: [String: Any], pick: @escaping () -> Void) -> Row {
+    let id = p["id"] as? String ?? ""
+    let ph = p["photo"] as? String
+    return Row(key: "p:" + id, title: p["name"] as? String ?? "", sub: id == CommentCell.creator ? "Creator" : (p["role"] as? String).flatMap { $0.isEmpty ? nil : $0 },
+               image: initials(p), path: (ph?.hasPrefix("/") == true) ? ph : nil, round: true, pick: pick)
+  }
+  static func file(_ f: [String: Any], pick: @escaping () -> Void) -> Row {
+    let n = f["name"] as? String ?? "File"
+    let (sym, col) = DescEditor.kind(n)
+    let pic = (f["thumbUrl"] as? String) ?? (CommentCell.isPic(n) ? f["url"] as? String : nil)
+    return Row(key: "f:" + (f["file"] as? String ?? n), title: n, sub: TaskPage.size(f["size"] as? Int ?? 0),
+               image: UIImage(systemName: sym)?.withTintColor(col, renderingMode: .alwaysOriginal), path: pic, round: false, pick: pick)
+  }
   override var intrinsicContentSize: CGSize { CGSize(width: UIView.noIntrinsicMetric, height: CGFloat(min(rows.count, 4)) * PickList.rowH) }
   func tableView(_ t: UITableView, numberOfRowsInSection s: Int) -> Int { min(rows.count, 4) }
   func tableView(_ t: UITableView, cellForRowAt ip: IndexPath) -> UITableViewCell {
