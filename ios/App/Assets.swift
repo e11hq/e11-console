@@ -268,6 +268,7 @@ final class FolderTiles: UIView, HomeBlock {
 final class FileRows: UIView, HomeBlock {
   var onOpen: (([String: Any]) -> Void)?
   var menu: (([String: Any]) -> UIMenu?)?   // (held, or •••: Apple's popup menu)
+  var more = true   // (a ••• on each row — none on Recently added, its menu by holding the row: Haris 2026-11-09)
   private let box = UIView()
   private var rows: [AssetTile] = [], lines: [UIView] = [], made: [String: (AssetTile, String)] = [:]
   static let H: CGFloat = 64
@@ -279,7 +280,7 @@ final class FileRows: UIView, HomeBlock {
     var keep = made; made = [:]
     rows = list.map { f in
       let id = f["id"] as? String ?? ""
-      let sig = "\(f["name"] ?? "")|\(f["size"] ?? "")|\(f["thumbUrl"] ?? "")|\(f["where"] ?? "")|\(f["canDel"] ?? "")|\(showWhere)|\(L.light)"
+      let sig = "\(f["name"] ?? "")|\(f["size"] ?? "")|\(f["thumbUrl"] ?? "")|\(f["where"] ?? "")|\(f["canDel"] ?? "")|\(showWhere)|\(more)|\(L.light)"
       if let k = keep.removeValue(forKey: id) {
         if k.1 == sig { made[id] = k; k.0.onTap = { [weak self] in self?.onOpen?(f) }; k.0.contextMenu = { [weak self] in self?.menu?(f) }; return k.0 }
         k.0.removeFromSuperview()
@@ -294,14 +295,16 @@ final class FileRows: UIView, HomeBlock {
       var mc = UIButton.Configuration.plain()
       mc.image = UIImage(systemName: "ellipsis", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold))
       mc.baseForegroundColor = .tertiaryLabel; mc.contentInsets = .zero
-      let more = UIButton(configuration: mc); more.tag = 4
-      more.automaticallyUpdatesConfiguration = false
-      // (the same menu as holding the row — Apple's popup from the •••, made fresh each time it opens)
-      more.menu = UIMenu(children: [UIDeferredMenuElement.uncached { [weak self] done in done(self?.menu?(f)?.children ?? []) }])
-      more.showsMenuAsPrimaryAction = true
-      more.accessibilityLabel = "More"
       [th, n, s].forEach { $0.isUserInteractionEnabled = false; r.addSubview($0) }
-      r.addSubview(more)
+      if self.more {
+        let more = UIButton(configuration: mc); more.tag = 4
+        more.automaticallyUpdatesConfiguration = false
+        // (the same menu as holding the row — Apple's popup from the •••, made fresh each time it opens)
+        more.menu = UIMenu(children: [UIDeferredMenuElement.uncached { [weak self] done in done(self?.menu?(f)?.children ?? []) }])
+        more.showsMenuAsPrimaryAction = true
+        more.accessibilityLabel = "More"
+        r.addSubview(more)
+      }
       r.onTap = { [weak self] in self?.onOpen?(f) }
       r.contextMenu = { [weak self] in self?.menu?(f) }
       r.accessibilityLabel = "\(f["name"] as? String ?? "File"), \(s.text ?? "")"
@@ -325,8 +328,9 @@ final class FileRows: UIView, HomeBlock {
       r.place(CGRect(x: 0, y: CGFloat(i) * H, width: bw, height: H))
       r.viewWithTag(1)?.frame = CGRect(x: 14, y: (H - 44) / 2, width: 44, height: 44)
       r.viewWithTag(4)?.frame = CGRect(x: bw - 50, y: 0, width: 44, height: H)
-      r.viewWithTag(2)?.frame = CGRect(x: 70, y: H / 2 - 21, width: bw - 70 - 54, height: 22)
-      r.viewWithTag(3)?.frame = CGRect(x: 70, y: H / 2 + 2, width: bw - 70 - 54, height: 18)
+      let tw = bw - 70 - (more ? 54 : 16)
+      r.viewWithTag(2)?.frame = CGRect(x: 70, y: H / 2 - 21, width: tw, height: 22)
+      r.viewWithTag(3)?.frame = CGRect(x: 70, y: H / 2 + 2, width: tw, height: 18)
     }
     let px = 1 / max(1, traitCollection.displayScale)
     for (i, l) in lines.enumerated() { l.frame = CGRect(x: 70, y: CGFloat(i + 1) * H - px / 2, width: bw - 70, height: px) }
@@ -897,7 +901,7 @@ final class AssetsCtl {
         let recent = ((m["recent"] as? [String]) ?? []).compactMap { id in all.first { ($0["id"] as? String) == id } }
         if !recent.isEmpty {
           let rh = part(h, "recentHead") { AssetsHead() }; rh.set("Recently added"); out.append(rh)
-          let rows = part(h, "recent") { FileRows() }
+          let rows = part(h, "recent") { let r = FileRows(); r.more = false; return r }
           rows.onOpen = { [weak self] f in self?.preview(f, among: recent) }
           rows.menu = { [weak self, weak h] f in h.flatMap { self?.fileMenu($0, f, client: cid) } }
           rows.set(recent, look: L); out.append(rows)
