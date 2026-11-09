@@ -79,7 +79,7 @@ final class ReplyVC: UIViewController {
   override var preferredStatusBarStyle: UIStatusBarStyle { Main.shared.statusStyle }
   override func loadView() {
     let v = UIView(frame: UIScreen.main.bounds)
-    v.backgroundColor = .systemGroupedBackground
+    v.backgroundColor = HomeLook(Main.shared.lookBoth).bg
     view = v
   }
   override func viewDidLoad() {
@@ -116,7 +116,7 @@ final class TaskVC: UIViewController {
   override var preferredStatusBarStyle: UIStatusBarStyle { Main.shared.statusStyle }
   override func loadView() {
     let v = UIView(frame: UIScreen.main.bounds)
-    v.backgroundColor = .systemBackground
+    v.backgroundColor = HomeLook(Main.shared.lookBoth).bg
     view = v
   }
   override func viewDidLoad() {

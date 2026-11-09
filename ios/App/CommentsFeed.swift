@@ -138,7 +138,7 @@ final class CommentsFeed: UIView, UIScrollViewDelegate, UIGestureRecognizerDeleg
   init(task: String, thread: String?) {
     taskId = task; self.thread = thread
     super.init(frame: .zero)
-    backgroundColor = .systemGroupedBackground
+    backgroundColor = HomeLook(Main.shared.lookBoth).bg   // (Home's background — every page, Haris 2026-11-09 19:00)
     scroll.alwaysBounceVertical = true
     scroll.contentInsetAdjustmentBehavior = .never
     scroll.keyboardDismissMode = .interactive   // (dragging down takes the keyboard with the finger — rule 5)

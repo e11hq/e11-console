@@ -365,8 +365,8 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
 
   private func applyLook() {
     // (the window already takes the app's own light / dark: everything here follows it)
-    backgroundColor = .systemGroupedBackground   // (Details in Apple's boxes: Apple's grouped background — Haris 2026-11-09)
-    commentsHost.backgroundColor = .systemGroupedBackground
+    backgroundColor = TaskPage.page   // (Home's own background, light and dark — every page: Haris 2026-11-09 19:00)
+    commentsHost.backgroundColor = TaskPage.page
     // (the description's file chips are pictures: drawn again in the new look)
     if drawnOnce, !editingDesc, let m = model { Main.lookRedraws += 1; built = ""; draw(m) }
   }
@@ -1603,6 +1603,7 @@ final class DItem {
 // same as the task cards) — Apple's grouped cell, its highlight Apple's
 extension TaskPage {
   static var cardNow: UIColor?   // (worked out once per drawing of the page — rebuild() clears it)
+  static var page: UIColor { HomeLook(Main.shared.lookBoth).bg }   // (Home's background — every page, Haris 2026-11-09 19:00)
   static var card: UIColor { if let c = cardNow { return c }; let c = HomeLook(Main.shared.lookBoth).card; cardNow = c; return c }
   static func cardBack(_ c: UICollectionViewListCell, _ state: UICellConfigurationState? = nil) {
     var bg = UIBackgroundConfiguration.listGroupedCell()
@@ -1712,7 +1713,7 @@ final class DescBox: UIView {
     fade.isHidden = !short; button.isHidden = !short
     // (the words fade out above 168, the rest covered in the page's colour; Show More under them)
     CATransaction.begin(); CATransaction.setDisableActions(true)
-    let bg = UIColor.systemGroupedBackground.resolvedColor(with: traitCollection)
+    let bg = TaskPage.page.resolvedColor(with: traitCollection)
     fade.frame = CGRect(x: 0, y: 108, width: w, height: max(60, bounds.height - 108))
     fade.colors = [bg.withAlphaComponent(0).cgColor, bg.cgColor, bg.cgColor]
     fade.locations = [0, NSNumber(value: Double(60 / max(60, bounds.height - 108))), 1]

@@ -33,7 +33,7 @@ final class MeVC: UIViewController, TabRoot {
   override init(nibName: String?, bundle: Bundle?) { super.init(nibName: nil, bundle: nil); MeVC.shared = self }
   required init?(coder: NSCoder) { fatalError() }
   override var preferredStatusBarStyle: UIStatusBarStyle { Main.shared.statusStyle }
-  override func loadView() { let v = UIView(); v.backgroundColor = .systemGroupedBackground; view = v }
+  override func loadView() { let v = UIView(); v.backgroundColor = HomeLook(Main.shared.lookBoth).bg; view = v }
   private(set) weak var h: HomeView?
   override func viewDidLoad() {
     super.viewDidLoad()

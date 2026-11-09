@@ -292,6 +292,9 @@ My Tasks, the Inbox, Clients and every new list page; with no button, as far abo
 **One card colour, every native page — now and later (Haris, 2026-11-09 18:59):** every card, box and list row (an inset
 group's rows, the task page's Details boxes, E11 Day's three boxes…) has the task cards' own colour (`HomeLook.card`, light
 and dark), with no border. Apple's highlight stays Apple's. Every new page too.
+**One page background, every native page — now and later (Haris, 2026-11-09 19:00):** every page — tabs, pushed pages,
+the task page and its comments — has Home's own background (`HomeLook.bg`, light and dark), never Apple's grouped or plain
+system background. iPhone's own sheets stay as they are. Every new page too.
 
 **Light and dark, Apple's way — every native screen, now and later (Haris, 2026-11-09: "Yes, start"):** the iPhone app
 follows the phone's look and nothing of ours forces one — never `overrideUserInterfaceStyle` on a view, sheet, alert,

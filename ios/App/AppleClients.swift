@@ -31,7 +31,7 @@ final class ClientsVC: UIViewController, TabRoot, UISearchResultsUpdating, UISea
   override init(nibName: String?, bundle: Bundle?) { super.init(nibName: nil, bundle: nil); ClientsVC.shared = self }
   required init?(coder: NSCoder) { fatalError() }
   override var preferredStatusBarStyle: UIStatusBarStyle { Main.shared.statusStyle }
-  override func loadView() { let v = UIView(); v.backgroundColor = .systemGroupedBackground; view = v }
+  override func loadView() { let v = UIView(); v.backgroundColor = HomeLook(Main.shared.lookBoth).bg; view = v }
   private var meItem: UIBarButtonItem?, talkItem: UIBarButtonItem?
   private var mePhoto: UIImage?
   private(set) var search: UISearchController?
@@ -119,7 +119,7 @@ class ClientsPushedVC: UIViewController {
   init(_ h: HomeView) { self.h = h; super.init(nibName: nil, bundle: nil) }
   required init?(coder: NSCoder) { fatalError() }
   override var preferredStatusBarStyle: UIStatusBarStyle { Main.shared.statusStyle }
-  override func loadView() { let v = UIView(frame: UIScreen.main.bounds); v.backgroundColor = .systemGroupedBackground; view = v }
+  override func loadView() { let v = UIView(frame: UIScreen.main.bounds); v.backgroundColor = HomeLook(Main.shared.lookBoth).bg; view = v }
   override func viewDidLoad() {
     super.viewDidLoad()
     navigationItem.largeTitleDisplayMode = .never
@@ -271,7 +271,7 @@ final class AssetsTabVC: UIViewController, TabRoot, UISearchResultsUpdating, UIS
   override init(nibName: String?, bundle: Bundle?) { super.init(nibName: nil, bundle: nil); AssetsTabVC.shared = self }
   required init?(coder: NSCoder) { fatalError() }
   override var preferredStatusBarStyle: UIStatusBarStyle { Main.shared.statusStyle }
-  override func loadView() { let v = UIView(); v.backgroundColor = .systemGroupedBackground; view = v }
+  override func loadView() { let v = UIView(); v.backgroundColor = HomeLook(Main.shared.lookBoth).bg; view = v }
   private(set) weak var h: HomeView?
   private var meItem: UIBarButtonItem?, talkItem: UIBarButtonItem?
   private var mePhoto: UIImage?
