@@ -165,7 +165,7 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
       let row = t.dequeueReusableCell(withIdentifier: "c", for: ip) as! FeedRow
       guard let self = self, t.bounds.width > 0 else { return row }
       let W = t.bounds.width
-      if let c = self.cells[id] { row.host(c, height: c.height(for: W)) }
+      if let c = self.cells[id] { row.host(c, height: c.height(for: W), fade: self.fading.contains(id)) }
       else if let v = self.schedById[id] { row.host(v, height: v.height(for: W)) }
       return row
     }
@@ -338,11 +338,13 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
     let had = Set(source.snapshot().itemIdentifiers)
     let again = changed.filter { had.contains($0) }
     if !again.isEmpty { snap.reconfigureItems(again) }
+    fading = animate ? Set(again) : []   // (a comment that changed in place — a reaction, an edit: its new look crossfades in)
     // (your own on its way, replaced by the real one: no fade — the real one is just where it was)
     let before = source.snapshot().itemIdentifiers, now = Set(next + schedOrder)
     let gone = before.filter { !now.contains($0) }, came = (next + schedOrder).filter { !had.contains($0) }
     let swap = !gone.isEmpty && gone.allSatisfy { $0.hasPrefix("pending-") } && came.count == gone.count
     source.apply(snap, animatingDifferences: animate && !swap)
+    fading = []
     if first { first = false; seenIds = Set(next); endOnLayout = true; toEnd(animated: false); tellSeen(); return }
     // at the latest: new comments stay in view (rule 3); higher up nothing moves — the pill counts them
     if atEnd { seenIds = Set(next); toEnd(animated: true) }
@@ -355,6 +357,7 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
   private var pendingNew = 0
   var wantEnd = false   // (the next drawing goes down to the latest)
   private var schedById: [String: ScheduledCard] = [:]
+  private var fading = Set<String>()
 
   // ---------- Apple's list: each row its exact height ----------
   func tableView(_ t: UITableView, heightForRowAt ip: IndexPath) -> CGFloat {
@@ -638,8 +641,13 @@ final class FeedRow: UITableViewCell {
   required init?(coder: NSCoder) { fatalError() }
   private weak var hosted: UIView?
   private var h: CGFloat = 1
-  func host(_ v: UIView, height: CGFloat) {
+  func host(_ v: UIView, height: CGFloat, fade: Bool = false) {
     h = height
+    // (the same comment changed in place: the new one crossfades over the old — Apple's own crossfade; a row reused for
+    //  another comment as the list scrolls just shows it)
+    if fade, hosted !== v, hosted?.superview === contentView, window != nil {
+      UIView.transition(with: contentView, duration: 0.25, options: [.transitionCrossDissolve, .allowUserInteraction], animations: {})
+    }
     if hosted !== v, let old = hosted, old.superview === contentView { old.removeFromSuperview() }
     hosted = v
     // (put in place at once, with no animation: drawn inside the list's own animation it grew from nothing)
