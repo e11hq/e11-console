@@ -78,12 +78,9 @@ extension Main {
     // (kept for Me's own rows — the owner, the Test site rows, the version — also offline: step 9)
     var keep = j; keep["days"] = nil
     if JSONSerialization.isValidJSONObject(keep), let d = try? JSONSerialization.data(withJSONObject: keep) { defaults.set(d, forKey: "e11_start") }
-    // the startup screen's memo for next time (the look is this phone's own)
-    var memo = SplashView.memo()
-    for k in ["days"] { if let v = j[k] { memo[k] = v } }   // (sunrise / sunset for the Automatic look)
-    if let tm = defaults.string(forKey: "e11_theme_mode") { memo["themeMode"] = tm }
-    SplashView.save(memo)
-    if let s = splash, !s.leaving { s.command(["status": ""]) }
+    // (the startup screen: reached — and nothing of this person on the phone yet: setting up, until their copy is in)
+    splashHeard = true
+    if let s = splash, !s.leaving { s.offline(false); if !quickBooted && !AppData.shared.hasSaved(me) { s.setup(true) } }
     saveQuick(["me": me])
     if first { pagelessFlush() }
     if first && quickBooted { ownAfterStart() }   // (What's new, the View as… bar — without the website: step 9)
@@ -104,8 +101,11 @@ extension Main {
   private func bootWhenReady(_ me: String, _ n: Int) {
     guard bootState.me == me, !quickBooted else { return }
     guard AppData.shared.ready, AppData.shared.me == me, let tabs = ownTabsNow() else {
-      if n < 100 { DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.bootWhenReady(me, n + 1) } }
-      else { bootState.owned = false; splashGone() }   // (the copy never came: the page's way, as before)
+      // (with the website behind — the self-test: after 20 s the page's way, as before. Without it: still waiting —
+      //  the copy tries again by itself; every 20 s without it, Can't reach with Try again over the startup screen)
+      if !Main.noPage && n >= 100 { bootState.owned = false; splashGone(); return }
+      if Main.noPage && n > 0 && n % 100 == 0, let s = splash, !s.leaving { s.offline(true) }
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.bootWhenReady(me, n + 1) }
       return
     }
     quickBooted = true
@@ -173,19 +173,20 @@ extension Main {
     // (a first start: said on the startup screen, which stays — the page would have taken it away)
     if !quickBooted, let s = splash, !s.leaving {
       splashHeard = true
-      s.command(["status": "Can’t reach E11 Console — check your internet connection", "retry": true])
+      s.offline(true)
     }
     let w = DispatchWorkItem { [weak self] in self?.bootCheck() }
     b.retry = w
     DispatchQueue.main.asyncAfter(deadline: .now() + (quickBooted ? 15 : 5), execute: w)
   }
 
-  // Try again on the startup screen: asked again at once, and the page loaded again if it couldn't be
+  // Try again on the startup screen: asked again at once, and the copy too (the page loaded again only when there is one
+  // behind — the self-test)
   func bootRetry() {
-    splash?.command(["status": "Connecting…", "retry": false])
+    splash?.trying()
     bootCheck()
-    if !pageReady { retrying = false; loadHome() }
-    pageJS("window.__e11SplashRetry && window.__e11SplashRetry()")
+    AppData.shared.tryNow()
+    if !Main.noPage && !pageReady { retrying = false; loadHome() }
   }
 
   // Sign out (Me › Sign out — the page's signOut): this person's screens and copy put away, then Cloudflare's sign-out
@@ -193,6 +194,7 @@ extension Main {
   func signOutNative() {
     bootState.state = .signedOut; bootState.me = nil; bootState.owned = false
     putAwayForSwitch()
+    AppData.shared.forgetCopies(except: nil)   // (signing out: nothing of theirs left on the phone)
     quickBooted = false
     tabBar.isHidden = true; tabsHidden = true; view.setNeedsLayout()
     var q = (defaults.data(forKey: "e11_quick").flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }) ?? [:]

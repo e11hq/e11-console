@@ -79,7 +79,13 @@ try:
     p = res.get('home') or {}
     # 22: the startup screen is the app's own — there at once, the icon alone (Haris 2026-11-09: "Logo only, then go"), gone before Home
     sg = res.get('splashGeo') or {}
-    check('splash' in seen and sg.get('logoOnly') is True and sg.get('iconLayers') == 14 and sg.get('subviews') == 1, f'the startup screen shows at once: the icon alone {sg}')
+    check('splash' in seen and sg.get('logoOnly') is True and sg.get('iconLayers') == 14 and not sg.get('offline') and sg.get('files') == 5, f'the startup screen shows at once: the icon alone {sg}')
+    # the startup screen in the phone's look, nothing forced (Haris 2026-11-09: page 1, fully Apple)
+    check(sg.get('forced') == 0 and sg.get('style') in (1, 2) and ((sg.get('bg') or 0) > 0.5) == (sg.get('style') == 1), f"the startup screen in the phone's look, not forced {sg}")
+    # the first start (a fresh install — nothing on the phone): once the logo has assembled and the copy isn't in yet,
+    # Apple's spinner and "Setting up your account" under it
+    se = res.get('splashEnd') or {}
+    check(bool(se) and (se.get('setupSeen') is True or (se.get('age') or 0) < 2.6), f"a first start: setting up shown under the logo while it waited {se}")
     hn = res.get('homeNative') or {}
     if hn.get('apple'):
       # (Haris 2026-11-07: Home opened under the small title — it must open with Apple's bar at its big title)
@@ -197,6 +203,10 @@ try:
     for k in ('frost_team', 'frost_assetsAll', 'frost_assetsClient'): print('measure', k, barLine(res.get(k)))
     print('measure snapOpened', res.get('snapOpened'))
     print('measure formNotes', json.dumps(res.get('formNotes')))
+    st = res.get('storageAt') or {}
+    print('measure storage', f"total {st.get('total',0)/1e6:.2f} MB in {st.get('files')} files; copies {st.get('copies')} ({st.get('copyBytes',0)/1e6:.2f} MB)")
+    for k, b in sorted((st.get('parts') or {}).items(), key=lambda x: -x[1]): print('measure storage part', f"{b/1e6:8.2f} MB  {k}")
+    for x in st.get('top') or []: print('measure storage file', f"{x.get('b',0)/1e6:8.2f} MB  {x.get('f')}")
     tf = res.get('task_open') or []
     t1 = tf[0].get('t', 0) if tf else 0
     for f in tf:

@@ -1,77 +1,66 @@
 import UIKit
 
 /* ================= The startup screen, drawn by the app itself (22+, Haris 2026-10-31) =================
-   It shows the moment the app opens — before the page has loaded behind it — in the same design as the page's own
-   (web/index.html #splash, styles.css .sp-*): the E11 icon assembling (its pieces rendered from the page's picture by
-   ios/tools/splash-layers.js, moved here as the page moves them) — only the icon, then it goes (Haris 2026-11-09:
-   "Logo only, then go" — the greeting, the date, "Getting your day ready" with its four rows, the bar and "Tap to skip"
-   taken away on the iPhone; the website and the Mac keep theirs). A tap still skips it. The page's "splash" command:
-   hello / memo / status / out. The look (and sunrise / sunset for Automatic) the page leaves for the next start (memo,
-   kept in UserDefaults). Not here (only on the page): the seasonal looks. */
+   Every start: after iPhone's own launch screen (LaunchBackground, both looks), the E11 icon assembling (its pieces
+   rendered from the page's picture by ios/tools/splash-layers.js) — only the icon, then it goes (Haris 2026-11-09: "Logo
+   only, then go"; the animated logo stays, Haris 2026-11-09). A tap skips it once the app's screens are there.
+   Fully the app's (Haris 2026-11-09, the startup screen as page 1): no website driving it; the phone's light / dark, never
+   chosen by itself — its colour holds both looks and the files' pictures follow (Look.swift). The first start only (no
+   copy on the phone yet): Apple's spinner and "Setting up your account" under the logo until the copy is in. No
+   connection then: Apple's own unavailable view, "Can't reach E11", with Try again. */
 final class SplashView: UIView {
-  static let KEY = "e11Splash"
-  static func memo() -> [String: Any] {
-    guard let d = defaults.data(forKey: KEY), let m = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { return [:] }
-    return m
-  }
-  static func save(_ m: [String: Any]) {
-    if let d = try? JSONSerialization.data(withJSONObject: m) { defaults.set(d, forKey: KEY) }
-  }
-  static func dayKey(_ d: Date = Date()) -> String {
-    let f = DateFormatter(); f.calendar = Calendar(identifier: .gregorian); f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "yyyy-MM-dd"
-    return f.string(from: d)
-  }
-
-  struct Shade { let bg: UIColor }
   static func hex(_ v: UInt32, _ a: CGFloat = 1) -> UIColor {
     UIColor(red: CGFloat((v >> 16) & 0xff) / 255, green: CGFloat((v >> 8) & 0xff) / 255, blue: CGFloat(v & 0xff) / 255, alpha: a)
   }
-  // (styles.css #splash / #splash.light)
-  static let dark = Shade(bg: hex(0x0c0d0f))
-  static let lightLook = Shade(bg: hex(0xffffff))
+  // (styles.css #splash / #splash.light — one colour holding both looks, as iPhone's own launch screen behind it:
+  //  LaunchBackground has the same two)
+  static let bg = Look.c(hex(0x0c0d0f), .white)
   static let green = hex(0x3ddc97)   // (the green tick — used elsewhere too)
 
-  let light: Bool
-  let L: Shade
   let t0 = CACurrentMediaTime()
   var onSkip: (() -> Void)?
   var onRetry: (() -> Void)?
   private(set) var leaving = false
   private let reduce = UIAccessibility.isReduceMotionEnabled
+  private var iconTime: Double { reduce ? 0.3 : 2.15 }   // (as AppDelegate.quickSplash: the logo on its own until then)
   private let icon = CALayer()
-  private let warn = UIView(), warnL = UILabel(), retry = UIButton(type: .system)
+  private var files: [CALayer] = []
+  // the first start only (no copy on the phone yet): Apple's spinner and "Setting up your account" under the logo, once it
+  // has assembled (Haris 2026-11-09)
+  private let setupRow = UIStackView(), spinner = UIActivityIndicatorView(style: .medium), setupL = UILabel()
+  private(set) var setupAsked = false, setupSeen = false
+  // no connection on a first start: Apple's own "unavailable" view (iOS 17+), with Try again
+  private var offlineView: UIView?
 
-  init(memo m: [String: Any]) {
-    let today = (m["days"] as? [String: Any])?[SplashView.dayKey()] as? [String: Any]
-    let mode = FOLLOW_DEVICE ? (DEVICE_LIGHT ? "light" : "dark") : m["themeMode"] as? String ?? "dark"
-    if mode == "light" { light = true }
-    else if mode == "auto" {
-      // (the page's Automatic look: light from sunrise to sunset in Dubai; 6 to 18 when it hasn't said)
-      let c = Calendar.current.dateComponents([.hour, .minute], from: Date())
-      let now = (c.hour ?? 0) * 60 + (c.minute ?? 0)
-      let mins = { (s: String?, dflt: Int) -> Int in
-        guard let s = s, let i = s.firstIndex(of: ":"), let h = Int(s[..<i]), let mm = Int(s[s.index(after: i)...]) else { return dflt }
-        return h * 60 + mm
-      }
-      light = now >= mins(today?["rise"] as? String, 360) && now < mins(today?["set"] as? String, 1080)
-    } else { light = false }
-    L = light ? SplashView.lightLook : SplashView.dark
+  init() {
     super.init(frame: .zero)
-    backgroundColor = L.bg
-    warnL.font = .systemFont(ofSize: 13); warnL.textColor = SplashView.hex(0xf2a33a); warnL.numberOfLines = 2; warnL.textAlignment = .center
-    var rc = UIButton.Configuration.filled()
-    rc.cornerStyle = .capsule; rc.baseBackgroundColor = SplashView.hex(0x5b4bd6); rc.baseForegroundColor = .white
-    rc.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 14, bottom: 6, trailing: 14)
-    rc.attributedTitle = AttributedString("Try again", attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 13, weight: .semibold)]))
-    retry.configuration = rc
-    retry.addAction(UIAction { [weak self] _ in self?.onRetry?() }, for: .touchUpInside)
-    warn.addSubview(warnL); warn.addSubview(retry); warn.isHidden = true
-    addSubview(warn)
+    backgroundColor = SplashView.bg
+    setupL.text = "Setting up your account"
+    setupL.font = .preferredFont(forTextStyle: .footnote); setupL.adjustsFontForContentSizeCategory = true
+    setupL.textColor = .secondaryLabel
+    setupRow.axis = .vertical; setupRow.alignment = .center; setupRow.spacing = 12
+    setupRow.addArrangedSubview(spinner); setupRow.addArrangedSubview(setupL)
+    setupRow.alpha = 0; setupRow.isHidden = true
+    addSubview(setupRow)
     buildIcon()
     layer.addSublayer(icon)
     accessibilityLabel = "E11 Console is opening"
   }
   required init?(coder: NSCoder) { fatalError() }
+
+  // the five files' pictures are drawn for each look: set in the phone's look, and again when it changes (Apple can't
+  // switch a layer's picture by itself — Look.swift)
+  override func didMoveToWindow() {
+    super.didMoveToWindow()
+    guard window != nil else { return }
+    followLook("files") { [weak self] tc in
+      guard let self = self else { return }
+      let light = tc.userInterfaceStyle == .light
+      CATransaction.begin(); CATransaction.setDisableActions(true)
+      for (i, f) in self.files.enumerated() { f.contents = UIImage(named: "SplFile\(i + 1)\(light ? "Light" : "Dark")")?.cgImage }
+      CATransaction.commit()
+    }
+  }
 
   // ---------- where things go (styles.css .sp-center: one column, centred on the screen) ----------
   private let unit: CGFloat = 132.0 / 824.0          // the icon's picture: 824 units across = 132 pt
@@ -84,16 +73,87 @@ final class SplashView: UIView {
     icon.bounds = CGRect(x: 0, y: 0, width: canvas, height: canvas)
     icon.position = CGPoint(x: W / 2, y: (H / 2).rounded())
     CATransaction.commit()
-    let hb = H - 22 - safeAreaInsets.bottom
-    // the connection message and Try again, side by side (one under the other when it doesn't fit)
-    let rs = retry.sizeThatFits(CGSize(width: 200, height: 40))
-    let maxL = W - 40 - rs.width - 10
-    let ls = warnL.sizeThatFits(CGSize(width: maxL, height: 100))
-    let rowW = ls.width + 10 + rs.width
-    let wh = max(ls.height, rs.height)
-    warn.frame = CGRect(x: (W - rowW) / 2, y: hb - wh, width: rowW, height: wh)
-    warnL.frame = CGRect(x: 0, y: (wh - ls.height) / 2, width: ls.width, height: ls.height)
-    retry.frame = CGRect(x: ls.width + 10, y: (wh - rs.height) / 2, width: rs.width, height: rs.height)
+    // (the spinner and its words under the logo: the icon's picture is 132 pt high)
+    let rs = setupRow.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
+    setupRow.frame = CGRect(x: 20, y: (H / 2).rounded() + 66 + 28, width: W - 40, height: rs.height)
+    offlineView?.frame = bounds
+  }
+
+  // ---------- the first start: setting up ----------
+  func setup(_ on: Bool) {
+    if on == setupAsked { return }
+    setupAsked = on
+    if !on { spinner.stopAnimating(); setupRow.isHidden = true; setupRow.alpha = 0; return }
+    // (once the logo has assembled — it's on its own until then)
+    let wait = max(0, iconTime - (CACurrentMediaTime() - t0))
+    DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in
+      guard let self = self, self.setupAsked, !self.leaving else { return }
+      self.setupSeen = true
+      self.spinner.startAnimating(); self.setupRow.isHidden = false
+      self.setNeedsLayout(); self.layoutIfNeeded()
+      UIView.animate(withDuration: 0.3) { self.setupRow.alpha = 1 }
+    }
+  }
+
+  // ---------- no connection on a first start ----------
+  func offline(_ on: Bool) {
+    if !on {
+      guard let v = offlineView else { return }
+      offlineView = nil
+      UIView.animate(withDuration: 0.25, animations: { v.alpha = 0 }) { _ in v.removeFromSuperview() }
+      return
+    }
+    if let v = offlineView { setOffline(v, trying: false); return }
+    let v = makeOffline()
+    v.frame = bounds; v.alpha = 0
+    addSubview(v); offlineView = v
+    UIView.animate(withDuration: 0.25) { v.alpha = 1 }
+  }
+  // Try again tapped: Apple's spinner in the button until the answer
+  func trying() { if let v = offlineView { setOffline(v, trying: true) } }
+  private var offTitle: String { "Can’t reach E11" }
+  private var offText: String { "Your account sets up the first time you open the app. Check your connection and try again." }
+  private func makeOffline() -> UIView {
+    if #available(iOS 17.0, *) {
+      let v = UIContentUnavailableView(configuration: offlineConfig(trying: false))
+      return v
+    }
+    // (iOS 16: Apple's own parts laid out as the unavailable view does)
+    let v = UIView(); v.backgroundColor = SplashView.bg
+    let st = UIStackView(); st.axis = .vertical; st.alignment = .center; st.spacing = 8
+    let img = UIImageView(image: UIImage(systemName: "wifi.slash", withConfiguration: UIImage.SymbolConfiguration(pointSize: 44)))
+    img.tintColor = .secondaryLabel
+    let t = UILabel(); t.text = offTitle; let tf = UIFont.preferredFont(forTextStyle: .title2); t.font = tf.fontDescriptor.withSymbolicTraits(.traitBold).map { UIFont(descriptor: $0, size: 0) } ?? tf; t.textAlignment = .center
+    let d = UILabel(); d.text = offText; d.font = .preferredFont(forTextStyle: .body); d.textColor = .secondaryLabel; d.numberOfLines = 0; d.textAlignment = .center
+    let b = UIButton(configuration: retryConfig(trying: false), primaryAction: UIAction { [weak self] _ in self?.onRetry?() })
+    b.tag = 17
+    [img, t, d, b].forEach { st.addArrangedSubview($0) }
+    st.setCustomSpacing(16, after: img); st.setCustomSpacing(20, after: d)
+    st.translatesAutoresizingMaskIntoConstraints = false
+    v.addSubview(st)
+    NSLayoutConstraint.activate([st.centerYAnchor.constraint(equalTo: v.centerYAnchor), st.leadingAnchor.constraint(equalTo: v.leadingAnchor, constant: 40), st.trailingAnchor.constraint(equalTo: v.trailingAnchor, constant: -40)])
+    return v
+  }
+  private func retryConfig(trying: Bool) -> UIButton.Configuration {
+    var b = UIButton.Configuration.gray()
+    b.title = "Try again"; b.cornerStyle = .capsule
+    b.showsActivityIndicator = trying
+    return b
+  }
+  @available(iOS 17.0, *)
+  private func offlineConfig(trying: Bool) -> UIContentUnavailableConfiguration {
+    var c = UIContentUnavailableConfiguration.empty()
+    c.image = UIImage(systemName: "wifi.slash")
+    c.text = offTitle
+    c.secondaryText = offText
+    c.button = retryConfig(trying: trying)
+    c.buttonProperties.primaryAction = UIAction { [weak self] _ in self?.onRetry?() }
+    c.background.backgroundColor = SplashView.bg
+    return c
+  }
+  private func setOffline(_ v: UIView, trying: Bool) {
+    if #available(iOS 17.0, *), let u = v as? UIContentUnavailableView { u.configuration = offlineConfig(trying: trying); return }
+    if let b = v.viewWithTag(17) as? UIButton { b.configuration = retryConfig(trying: trying); b.isEnabled = !trying }
   }
 
   // ---------- the icon assembling (styles.css spFile / spCardG / spCardY / spFront / spTile / spE11 / spLine / spCheck) ----------
@@ -101,7 +161,7 @@ final class SplashView: UIView {
   private let spring = CAMediaTimingFunction(controlPoints: 0.3, 1.5, 0.5, 1)
   private func piece(_ name: String, anchor: CGPoint = CGPoint(x: 512, y: 512)) -> CALayer {
     let l = CALayer()
-    l.contents = UIImage(named: name)?.cgImage
+    if !name.isEmpty { l.contents = UIImage(named: name)?.cgImage }
     l.contentsScale = 3; l.contentsGravity = .resize
     l.bounds = CGRect(x: 0, y: 0, width: canvas, height: canvas)
     l.anchorPoint = CGPoint(x: anchor.x / 1024, y: anchor.y / 1024)
@@ -118,8 +178,7 @@ final class SplashView: UIView {
     [tile, green, yellow, front].forEach { icon.addSublayer($0) }
     // the five files flying in (PNG, MP4, PDF, DOCX, AI): from off the screen, shrinking into the middle
     let fly: [(CGFloat, CGFloat, CGFloat, CGFloat, CGFloat)] = [(-1824, -1032, -28, -326, -230), (1992, -912, 24, 230, -213), (-2064, 600, 18, -241, 8), (1872, 1032, -20, 333, 70), (144, -1968, 10, -39, -367)]
-    var files: [CALayer] = []
-    for i in 1...5 { let f = piece("SplFile\(i)\(light ? "Light" : "Dark")", anchor: CGPoint(x: 512, y: 505)); f.opacity = 0; icon.addSublayer(f); files.append(f) }
+    for _ in 1...5 { let f = piece("", anchor: CGPoint(x: 512, y: 505)); f.opacity = 0; icon.addSublayer(f); files.append(f) }
     if reduce { return }
     let deg = CGFloat.pi / 180
     for (i, f) in files.enumerated() {
@@ -159,17 +218,7 @@ final class SplashView: UIView {
     for (k, v) in keys where k == "opacity" { l.opacity = Float(v.last ?? 1) }
     l.add(g, forKey: "sp")
   }
-  // ---------- what the page says ----------
-  func command(_ a: [String: Any]) {
-    if let st = a["status"] as? String {
-      // the connection message under the icon (with Try again while it's waiting)
-      warnL.text = st
-      warn.isHidden = st.isEmpty
-      retry.isHidden = !((a["retry"] as? Bool) ?? false)
-      setNeedsLayout()
-    }
-  }
-  // tapping anywhere: skip (Try again is a button of its own)
+  // tapping anywhere: skip, once the app's screens are there to show (Try again is a button of its own)
   override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) { if !leaving { onSkip?() } }
   func leave(fast: Bool = false, then: @escaping () -> Void) {
     if leaving { return }
@@ -181,7 +230,10 @@ final class SplashView: UIView {
   }
   // (for the self-test)
   func geo() -> [String: Any] {
-    ["light": light, "logoOnly": true, "iconLayers": (icon.sublayers?.count ?? 0) + ((icon.sublayers?[3].sublayers?.count) ?? 0),
-     "iconMid": icon.position.y, "warn": warn.isHidden ? "" : (warnL.text ?? ""), "subviews": subviews.count, "width": bounds.width, "height": bounds.height]
+    var w: CGFloat = 0; SplashView.bg.resolvedColor(with: traitCollection).getWhite(&w, alpha: nil)
+    return ["style": traitCollection.userInterfaceStyle == .light ? 1 : 2, "bg": w, "forced": overrideUserInterfaceStyle == .unspecified ? 0 : 1,
+     "files": files.filter { $0.contents != nil }.count, "logoOnly": true, "iconLayers": (icon.sublayers?.count ?? 0) + ((icon.sublayers?[3].sublayers?.count) ?? 0),
+     "iconMid": icon.position.y, "offline": offlineView != nil, "setupAsked": setupAsked, "setupSeen": setupSeen, "age": CACurrentMediaTime() - t0,
+     "width": bounds.width, "height": bounds.height]
   }
 }

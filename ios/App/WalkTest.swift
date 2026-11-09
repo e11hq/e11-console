@@ -13,7 +13,7 @@ extension Main {
   // ---- taps that went to the website while there's none ----
   static var lost: [String] = []
   static func noteLost(_ js: String) {
-    let benign = ["--ios-tabs-h", "\"ev\":\"back\"", "\"ev\":\"list\"", "__e11Kb", "__e11FeedKb", "KbStep", "Resend", "Own &&", "Theme.setMode", "__e11SplashSkip", "ev:'closed'", "__e11Tab", "ev:'list'", "ev:'back'", "__e11SplashRetry", "__e11ApnsToken"]
+    let benign = ["--ios-tabs-h", "\"ev\":\"back\"", "\"ev\":\"list\"", "__e11Kb", "__e11FeedKb", "KbStep", "Resend", "Own &&", "Theme.setMode", "ev:'closed'", "__e11Tab", "ev:'list'", "ev:'back'", "__e11ApnsToken"]
     if benign.contains(where: { js.contains($0) }) { return }
     let s = String(js.prefix(140))
     if !lost.contains(s) { lost.append(s); if lost.count > 60 { lost.removeFirst() } }

@@ -51,6 +51,7 @@ final class AppData: NSObject, URLSessionDataDelegate {
     if started && self.me == me { return }
     let switching = self.me != nil && self.me != me
     self.me = me; started = true
+    forgetCopies(except: me)
     if switching { if Thread.isMainThread { copyReady = false } else { DispatchQueue.main.async { self.copyReady = false } }; stopStream() }
     // (the saved copy at once — step 3: the app opens on it, before any answer from the server; switched off on the
     //  server, it's put away again)
@@ -145,6 +146,8 @@ final class AppData: NSObject, URLSessionDataDelegate {
       }
     }
   }
+  // Try again on the startup screen: the first download at once, not at the next 20 s
+  func tryNow() { guard !copyReady else { return }; q.async { if self.started { self.download() } } }   // (main thread)
   private func retryLater() { q.asyncAfter(deadline: .now() + 20) { [weak self] in if self?.started == true { self?.download() } } }
   private func markReady() { DispatchQueue.main.async { let was = self.copyReady; self.copyReady = true; if !was { self.changed() } } }
 
@@ -267,6 +270,18 @@ final class AppData: NSObject, URLSessionDataDelegate {
   @discardableResult func listen(_ f: @escaping () -> Void) -> UUID { let id = UUID(); listeners[id] = f; return id }
   func stopListening(_ id: UUID) { listeners[id] = nil }
   private var changePending = false
+  // only one person's copy on the phone (Haris 2026-11-09: old data discarded): another person's goes as soon as someone
+  // else starts here, and every copy when signing out (Me › Sign out). Signed out by the sign-in running out, the same
+  // person's stays for when they're back.
+  func forgetCopies(except keep: String?) {
+    q.async {
+      let fm = FileManager.default
+      guard let list = try? fm.contentsOfDirectory(atPath: self.dir.path) else { return }
+      for f in list where f.hasPrefix("copy-") && f.hasSuffix(".json") && f != keep.map({ "copy-\($0).json" }) {
+        try? fm.removeItem(at: self.dir.appendingPathComponent(f))
+      }
+    }
+  }
   // a copy saved on this phone for this person (step 3: then the app can open on its own screens at once)
   func hasSaved(_ me: String) -> Bool {
     FileManager.default.fileExists(atPath: dir.appendingPathComponent("copy-\(me).json").path) && FileManager.default.fileExists(atPath: dir.appendingPathComponent("appview.js").path)

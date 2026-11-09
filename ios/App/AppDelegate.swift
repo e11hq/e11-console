@@ -333,47 +333,41 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   var splashLeaving = false   // (fading out: Apple's tab bar may come — AppleTabs.swift)
   var splashHeard = false
   func showSplash() {
-    let m = SplashView.memo()
-    if (m["native"] as? Bool) == false { return }   // (the website switched it off: the page's own startup screen)
-    let s = SplashView(memo: m)
+    defaults.removeObject(forKey: "e11Splash")   // (the page's old memo for it — its look and sunrise: not kept any more)
+    let s = SplashView()
     // (over every tab from the start — Apple's tab container's own view, which never changes; it was moved there from
     //  this screen once the tabs came, and the move cut its animation off half way: Haris 2026-11-07)
     let host: UIView = APPLE_TABS ? (AppleTabs.shared?.view ?? view) : view
     s.frame = host.bounds; s.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-    s.onSkip = { [weak self] in self?.pageJS("window.__e11SplashSkip && window.__e11SplashSkip()") }
     s.onRetry = { [weak self] in self?.bootRetry() }
     host.addSubview(s)
     splash = s
     setNeedsStatusBarAppearanceUpdate()
-    // (the page never took it over — it couldn't load, or it's the sign-in page: it goes, whatever is under it shows)
-    DispatchQueue.main.asyncAfter(deadline: .now() + 15) { [weak self] in if self?.splashHeard == false { self?.splashGone() } }
+    // (with the website behind — the self-test: the page never took it over — it couldn't load, or it's the sign-in page:
+    //  it goes, whatever is under it shows. Without it the app's own start always answers: signed in, signed out, or
+    //  can't reach)
+    if !Main.noPage { DispatchQueue.main.asyncAfter(deadline: .now() + 15) { [weak self] in if self?.splashHeard == false { self?.splashGone() } } }
     if !SELFTEST.isEmpty { DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { [weak self] in
       guard let self = self, let s = self.splash else { return }
       self.selfResult["splashGeo"] = s.geo(); self.writeSelf("splash") } }
   }
   func splashGone(fast: Bool = false) {
     guard let s = splash else { return }
+    if !SELFTEST.isEmpty, selfResult["splashEnd"] == nil { selfResult["splashEnd"] = s.geo() }
     if APPLE_HOME { appleHomeBar(animated: true, splashGoing: true) }
     splashLeaving = true; AppleTabs.shared?.mirrorShown()
     s.leave(fast: fast) { [weak self] in if self?.splash === s { self?.splash = nil }; self?.splashLeaving = false; if APPLE_HOME { self?.appleHomeBar(animated: false) }; AppleTabs.shared?.mirrorShown() }
   }
+  // the page (the self-test's, the website behind): the startup screen is the app's own — the page only hears it's up, so
+  // it puts up none of its own, and says when its own start is done (only when the app isn't running it itself)
   func splashCommand(_ a: [String: Any]) -> [String: Any] {
-    // (the page's checklist — its greeting, ticks and fourth row: none on the iPhone's startup screen, the icon alone)
-    if a["tick"] != nil || a["label4"] != nil || a["greet"] != nil { return ["ok": true, "shown": splash != nil] }
     if a["hello"] != nil {
       splashHeard = true
-      // (a quick start: the app's own startup screen is, or was, up — the page doesn't put up its own behind Home)
       guard let s = splash, !s.leaving else { return ["ok": true, "shown": quickBooted || Main.boot.owned, "age": quickBooted ? 60000 : 0] }
       return ["ok": true, "shown": true, "age": Int((CACurrentMediaTime() - s.t0) * 1000)]
     }
-    if let m = a["memo"] as? [String: Any] {
-      SplashView.save(m)
-      if (m["native"] as? Bool) == false { splashGone(fast: true) }
-    }
     guard let s = splash, !s.leaving else { return ["ok": true, "shown": false] }
-    splashHeard = true
-    if a["out"] != nil { if !quickBooted && !Main.boot.owned { splashGone() }; return ["ok": true] }   // (a quick start: it goes when its own run ends)
-    s.command(a)
+    if a["out"] != nil { splashHeard = true; if !quickBooted && !Main.boot.owned { splashGone() } }
     return ["ok": true, "shown": true]
   }
   /* The comment box on a task's Comments (17+): iPhone's own, pinned to the keyboard (the keyboard layout guide moves
@@ -923,7 +917,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   func showOffline() {
     // (the startup screen up: it says so itself, with Try again — Part B step 8; the page underneath tries again)
-    if let s = splash, !s.leaving, !quickBooted { splashHeard = true; s.command(["status": "Can’t reach E11 Console — check your internet connection", "retry": true]) }
+    if let s = splash, !s.leaving, !quickBooted { splashHeard = true; s.offline(true) }
     else if !quickBooted { splashGone(fast: true) }
     if retrying { return }
     retrying = true
@@ -2818,6 +2812,28 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     out["tabBar"] = AppleTabs.shared?.tabBar.overrideUserInterfaceStyle.rawValue ?? -1
     return out
   }
+  // what the app keeps on the phone (its own container): each part's size, the biggest files, the people's copies
+  func selfStorage() -> [String: Any] {
+    let fm = FileManager.default, keys: [URLResourceKey] = [.totalFileAllocatedSizeKey, .isRegularFileKey]
+    let home = URL(fileURLWithPath: NSHomeDirectory()).resolvingSymlinksInPath()
+    var files: [(String, Int)] = []
+    if let e = fm.enumerator(at: home, includingPropertiesForKeys: keys) {
+      for case let f as URL in e {
+        guard let v = try? f.resourceValues(forKeys: Set(keys)), v.isRegularFile == true else { continue }
+        files.append((f.resolvingSymlinksInPath().path.replacingOccurrences(of: home.path + "/", with: ""), v.totalFileAllocatedSize ?? 0))
+      }
+    }
+    var parts: [String: Int] = [:]
+    for (f, b) in files {
+      let c = f.split(separator: "/").map(String.init)
+      let k = c.first == "Library" && c.count > 2 ? c[0] + "/" + c[1] : (c.count > 1 ? c[0] : "(top)")
+      parts[k, default: 0] += b
+    }
+    files.sort { $0.1 > $1.1 }
+    let copies = files.filter { $0.0.contains("e11-copy/copy-") }
+    return ["total": files.reduce(0) { $0 + $1.1 }, "files": files.count, "parts": parts, "top": files.prefix(12).map { ["f": $0.0, "b": $0.1] as [String: Any] },
+            "copies": copies.count, "copyBytes": copies.reduce(0) { $0 + $1.1 }]
+  }
   // (a form sheet: its table's width and each note under a field — where its words are and how many lines)
   func selfForm() -> [String: Any] {
     guard let n = topMost() as? UINavigationController, let tv = (n.topViewController as? UITableViewController)?.tableView else { return ["form": false] }
@@ -3040,6 +3056,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         self.presentedViewController?.dismiss(animated: false)
         self.commentBar(["show": false])
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.run("preview", PreviewVC.selfArgs()) { _ in } } }),
+      // (measurement — Haris 2026-11-09: what the app keeps on the phone, every build; the step's own name is taken by
+      //  the page's answer, so it's kept as storageAt)
+      ("storage", pause(2000) + "return '{}'", { self.selfResult["storageAt"] = self.selfStorage() }),
       ("signin", pause(4000) + "return JSON.stringify({ host: location.host, top: (document.querySelector('h1, h2, img, form') || document.body).getBoundingClientRect().top })", {
         self.presentedViewController?.dismiss(animated: false)
         self.commentBar(["show": false])
