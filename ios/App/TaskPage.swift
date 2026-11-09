@@ -693,7 +693,6 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
       let v = UIStackView(); v.axis = .horizontal; v.spacing = 6; v.alignment = .center
       if let cl = cl { let d = UIView(); d.backgroundColor = TaskPage.rgb(cl["rgb"]); d.layer.cornerRadius = 4; d.widthAnchor.constraint(equalToConstant: 8).isActive = true; d.heightAnchor.constraint(equalToConstant: 8).isActive = true; v.addArrangedSubview(d) }
       v.addArrangedSubview(label(cl?["name"] as? String ?? "No client", size: 17, color: .secondaryLabel))
-      if m["lock"] is [String: Any] { v.addArrangedSubview(symbol("lock.fill", 12, .secondaryLabel)) }
       let canCl = (m["canClient"] as? Bool) == true
       owner.append(row("client", sym: "square.grid.2x2", key: "Client", value: v, chevron: canCl, locked: !canCl, tap: canCl ? { [weak self] in self?.pickClient() } : nil))
     }
@@ -718,7 +717,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
       // (the CD's name — or the Acting CD's — as the cell's second line: blue while the switch is on, grey when it's off,
       //  turning as it's flicked — Haris 2026-11-06 / 11-08)
       let who = rv["who"] as? String ?? ""
-      add("review", head: "REVIEW", [row("needsCD", sym: "checkmark.shield", key: "Needs CD review", sub: who.isEmpty ? nil : who, subColor: sw.isOn ? .systemBlue : .secondaryLabel, value: sw, extra: "\(noCD)")])
+      add("review", head: "REVIEW", [row("needsCD", sym: "checkmark.shield", key: "Needs CD review", sub: who.isEmpty ? nil : who, subColor: sw.isOn ? .systemBlue : .secondaryLabel, value: sw, locked: !sw.isEnabled, extra: "\(noCD)")])
     }
     // ---- Description: Apple's box with its header; the words in it ours (written right in it — DescEditor.swift) ----
     let desc = m["desc"] as? String ?? ""
@@ -981,8 +980,9 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     it.content = c
     if let v = v { it.accessories.append(.customView(configuration: TaskPage.side(v, .trailing()))) }
     if chevron { it.accessories.append(.disclosureIndicator()) }
-    // (one you can't change: a grey lock where the › would be, as the client picker shows a locked client — Haris 2026-11-09)
-    else if locked, let lk = UIImage(systemName: "lock.fill") { let i = UIImageView(image: lk); i.tintColor = .tertiaryLabel; it.accessories.append(.customView(configuration: TaskPage.side(i, .trailing()))) }
+    // (one you can't change: the Client row's own small lock, where the › would be — beside a switch or the dates too —
+    //  Haris 2026-11-09)
+    if locked && !chevron { it.accessories.append(.customView(configuration: TaskPage.side(symbol("lock.fill", 12, .secondaryLabel), .trailing()))) }
     it.tap = tap
     it.sig = [sym, key, keyText?.string ?? "", sub ?? "", TaskPage.cs(subColor, traitCollection), text ?? "", "\(chevron)", "\(locked)", "\(tap != nil)", extra, v.map { TaskPage.sig($0) } ?? ""].joined(separator: "|")
     return it
@@ -1190,7 +1190,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     let dueColor: UIColor = (d["late"] as? Bool) == true ? .systemRed : (d["today"] as? Bool) == true ? .systemBlue : .secondaryLabel
     let s = UIStackView(arrangedSubviews: [btn(start, empty: "Start", color: .secondaryLabel, which: "start", value: d["start"] as? String ?? ""), symbol("arrow.right", 12, .tertiaryLabel), btn(due, empty: "Due", color: dueColor, which: "due", value: d["due"] as? String ?? "")])
     s.spacing = 6; s.alignment = .center
-    return row("dates", sym: "calendar", key: "Dates", value: s, extra: "\(can)|\(d["start"] as? String ?? "")|\(d["due"] as? String ?? "")")
+    return row("dates", sym: "calendar", key: "Dates", value: s, locked: !can, extra: "\(can)|\(d["start"] as? String ?? "")|\(d["due"] as? String ?? "")")
   }
   private func prioRows(_ list: [[String: Any]], can: Bool) -> [DItem] {
     list.map { p in
