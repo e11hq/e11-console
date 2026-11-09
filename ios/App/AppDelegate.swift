@@ -2965,7 +2965,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       // (the line under My Tasks' title changed as the tab is changed to — as the list arriving on a visit does — and
       //  changed while another tab is on, then the tab tapped: My Tasks' big title read after each)
       ("titlesLineHome", pause(1500) + "return '{}'", { self.selfTapTab("today") }),
-      ("titlesLineBack", pause(1500) + "return '{}'", { self.selfResult["lineWas"] = MyTasksVC.shared?.navigationItem.subtitle ?? ""; self.selfTapTab("mytasks"); if let vc = MyTasksVC.shared { BigLine.set(vc, "3 open", "mytasks", save: false) } }),
+      ("titlesLineBack", pause(1500) + "return '{}'", { if #available(iOS 26.0, *) { self.selfResult["lineWas"] = MyTasksVC.shared?.navigationItem.subtitle ?? "" }; self.selfTapTab("mytasks"); if let vc = MyTasksVC.shared { BigLine.set(vc, "3 open", "mytasks", save: false) } }),
       ("titlesLineRead", pause(500) + "return '{}'", { self.selfResult["titleMtLineSet"] = self.selfBigTitle("My Tasks"); self.selfTapTab("today"); if let vc = MyTasksVC.shared { BigLine.set(vc, "9 open", "mytasks", save: false) } }),
       ("titlesLineAwayBack", pause(1500) + "return '{}'", { self.selfTapTab("mytasks") }),
       ("titlesLineAwayRead", "return '{}'", { self.selfResult["titleMtLineHidden"] = self.selfBigTitle("My Tasks"); if let vc = MyTasksVC.shared { BigLine.set(vc, self.selfResult["lineWas"] as? String ?? "", "mytasks", save: false) }; self.selfResult["lineSets"] = BigLine.sets }),
