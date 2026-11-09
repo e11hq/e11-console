@@ -197,6 +197,11 @@ try:
     for k in ('frost_team', 'frost_assetsAll', 'frost_assetsClient'): print('measure', k, barLine(res.get(k)))
     print('measure snapOpened', res.get('snapOpened'))
     print('measure formNotes', json.dumps(res.get('formNotes')))
+    tf = res.get('task_open') or []
+    t1 = tf[0].get('t', 0) if tf else 0
+    for f in tf:
+      sg, ss, nb, tb = f.get('seg') or {}, f.get('segSuper') or {}, f.get('navBar') or {}, f.get('tabBar') or {}
+      print('measure task_open', f"{(f.get('t',0) - t1) * 1000:5.0f}ms seg x{sg.get('x',0):.1f} y{sg.get('y',0):.1f} w{sg.get('w',0):.1f} h{sg.get('h',0):.1f} a{sg.get('a',0):.2f} | holder y{ss.get('y',0):.1f} h{ss.get('h',0):.1f} | bar y{nb.get('y',0):.1f} h{nb.get('h',0):.1f} | tabs hidden{f.get('tabHidden')} y{tb.get('y',0):.0f} a{tb.get('a',0):.2f} | safeB{f.get('safeBottom')} list off{f.get('listOff')} adj{f.get('listAdj')}")
     fr = res.get('snap_back') or []
     t0 = fr[0].get('t', 0) if fr else 0
     for f in fr: print('measure snap_back', f"{(f.get('t',0) - t0) * 1000:5.0f}ms", barLine(f))

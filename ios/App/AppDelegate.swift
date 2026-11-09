@@ -2833,6 +2833,20 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let tw = tv.convert(tv.bounds, to: nil)
     return ["tableW": Double(tv.bounds.width), "tableX": Double(tw.minX), "sheetW": Double(n.view.bounds.width), "margin": Double(tv.layoutMargins.left), "notes": notes]
   }
+  // (the task page's top as drawn this frame: Apple's bar, Details · Comments, the tab bar, the list under them)
+  func selfTaskTop() -> [String: Any] {
+    guard let p = taskPages.last, let w = p.window else { return ["t": CACurrentMediaTime(), "page": false] }
+    let wl = w.layer.presentation() ?? w.layer
+    func fr(_ v: UIView) -> [String: Double] { let l = v.layer.presentation() ?? v.layer; let r = l.convert(l.bounds, to: wl); return ["x": Double(r.minX), "y": Double(r.minY), "w": Double(r.width), "h": Double(r.height), "a": Double(l.opacity)] }
+    var out: [String: Any] = ["t": CACurrentMediaTime(), "seg": fr(p.seg), "segSuper": p.seg.superview.map { fr($0) } ?? [:]]
+    if let tc = AppleTabs.shared {
+      if #available(iOS 18.0, *) { out["tabHidden"] = tc.isTabBarHidden } else { out["tabHidden"] = tc.tabBar.isHidden }
+      out["tabBar"] = fr(tc.tabBar)
+    }
+    if let n = p.seg.window.flatMap({ _ in AppleTabs.shared?.selectedViewController as? UINavigationController }) { out["navBar"] = fr(n.navigationBar); out["vcView"] = n.topViewController.map { fr($0.view) } ?? [:]; out["safeBottom"] = Double(n.topViewController?.view.safeAreaInsets.bottom ?? -1) }
+    out["listOff"] = Double(p.scroll.contentOffset.y); out["listAdj"] = Double(p.scroll.adjustedContentInset.top)
+    return out
+  }
   // every frame for a while: what selfBar sees (a slide, frame by frame)
   final class SelfFrames: NSObject {
     private var link: CADisplayLink?, end: CFTimeInterval = 0, frames: [[String: Any]] = [], sample: () -> [String: Any] = { [:] }, done: ([[String: Any]]) -> Void = { _ in }
@@ -2903,7 +2917,11 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       ("slideMtOpen", pause(2000) + "return '{}'", { if let id = self.selfSlideTask() { self.openTaskPage(id, tab: "details", focus: "") } }),
       ("slideMtBack", pause(2500) + "return '{}'", { self.selfSlideBack(self.myTasksIfMade, "mt") }),
       ("slideHome", pause(2000) + "return '{}'", { self.selfSelect("today") }),
-      ("slideHomeOpen", pause(2000) + "return '{}'", { if let id = self.selfSlideTask() { self.openTaskPage(id, tab: "details", focus: "") } }),
+      ("slideHomeOpen", pause(2000) + "return '{}'", { if let id = self.selfSlideTask() {
+        // (measurement — Haris 2026-11-09: as the tab bar goes, the top edge of Details · Comments changed: the switch, Apple's
+        //  bar and the page under it, frame by frame from the tap until well after the tab bar has gone)
+        SelfFrames.run(2.2, { self.selfTaskTop() }) { f in self.selfResult["task_open"] = f }
+        self.openTaskPage(id, tab: "details", focus: "") } }),
       ("slideHomeBack", pause(2500) + "return '{}'", { self.selfSlideBack(self.homeIfMade, "home") }),
       ("slideCl", pause(2000) + "return '{}'", { self.selfSelect("projects") }),
       ("slideClOpen", pause(2500) + "return '{}'", { if let id = self.selfSlideTask() { self.openTaskPage(id, tab: "details", focus: "") } }),
