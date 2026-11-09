@@ -715,7 +715,16 @@ final class CommentCell: UIView {
     }
     let rest = files.filter { ($0["voice"] as? Bool) != true }
     // (tapped: the preview, with all of this comment's files to swipe through)
-    if !rest.isEmpty { stack.addArrangedSubview(CommentCell.tiles(rest, open: { [weak self] i in self?.onOpen?(rest, i) })) }
+    // (as the mock-up, Haris 2026-11-09: photos and videos as tiles with their name under, other files as rows — a type
+    //  badge, the name, the size; tapped, the preview with all of this comment's files to swipe through)
+    let media = rest.indices.filter { CommentCell.isPic(rest[$0]["name"] as? String ?? "") || CommentCell.isVideo(rest[$0]["name"] as? String ?? "") }
+    if !media.isEmpty { stack.addArrangedSubview(CommentCell.mediaTiles(media.map { rest[$0] }, open: { [weak self] k in self?.onOpen?(rest, media[k]) })) }
+    for i in rest.indices where !media.contains(i) {
+      let r = CommentCell.fileRow(rest[i], open: { [weak self] in self?.onOpen?(rest, i) })
+      if (rest[i]["pending"] as? Bool) == true { CommentCell.uploading(r) }
+      r.widthAnchor.constraint(lessThanOrEqualToConstant: 280).isActive = true
+      let w = UIStackView(arrangedSubviews: [r, UIView()]); stack.addArrangedSubview(w)
+    }
     for u in ((it["urls"] as? [String]) ?? []).prefix(3) { stack.addArrangedSubview(LinkCard(u)) }
     let rx = (it["reactions"] as? [[String: Any]]) ?? []
     if !rx.isEmpty {
@@ -870,21 +879,34 @@ final class CommentCell: UIView {
   // every file the same card (Haris, 2026-11-01): squares, three a row, a third of the width each — a picture shows
   // itself, a video its frame with ▶, a PDF / Office file its first page, anything else its type; the name under
   // all but pictures. A grey shimmer until the picture arrives (the room kept from the start, so nothing jumps).
-  static func tiles(_ files: [[String: Any]], open: @escaping (Int) -> Void = { _ in }, menu: ((Int) -> UIMenu?)? = nil) -> UIView {
-    let grid = UIStackView(); grid.axis = .vertical; grid.spacing = 6
+  // a comment's photos and videos: three to a row, each its tile with the name under it (Haris 2026-11-09, the mock-up)
+  static func mediaTiles(_ files: [[String: Any]], open: @escaping (Int) -> Void) -> UIView {
+    let grid = UIStackView(); grid.axis = .vertical; grid.spacing = 8
     var i = 0
     while i < files.count {
-      let row = UIStackView(); row.spacing = 6; row.distribution = .fillEqually
+      let row = UIStackView(); row.spacing = 8; row.distribution = .fillEqually; row.alignment = .top
       for k in i..<(i + 3) {
         guard k < files.count else { row.addArrangedSubview(UIView()); continue }   // (an empty place keeps the size)
-        row.addArrangedSubview(tile(files[k], open: { open(k) }, menu: menu.map { m in { () -> UIMenu? in m(k) } }))
+        let t = tile(files[k], open: { open(k) }, menu: nil, inner: false)
+        let name = UILabel(); name.text = files[k]["name"] as? String ?? "File"; name.font = .systemFont(ofSize: 12); name.textColor = .secondaryLabel
+        name.lineBreakMode = .byTruncatingMiddle
+        let cell = UIStackView(arrangedSubviews: [t, name]); cell.axis = .vertical; cell.spacing = 4
+        row.addArrangedSubview(cell)
       }
       grid.addArrangedSubview(row)
       i += 3
     }
     return grid
   }
-  static func tile(_ f: [String: Any], open: @escaping () -> Void, menu: (() -> UIMenu?)?) -> UIView {
+  // a file on its way (yours): it pulses softly and can't be opened yet
+  static func uploading(_ v: UIView) {
+    v.isUserInteractionEnabled = false
+    let a = CABasicAnimation(keyPath: "opacity"); a.fromValue = 1; a.toValue = 0.55; a.duration = 0.75
+    a.autoreverses = true; a.repeatCount = .infinity; a.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+    v.layer.add(a, forKey: "uploading")
+  }
+  // (inner: the type and the name drawn inside the tile — the task page's Files; a comment's tiles have the name under)
+  static func tile(_ f: [String: Any], open: @escaping () -> Void, menu: (() -> UIMenu?)?, inner: Bool = true) -> UIView {
     let n = f["name"] as? String ?? "File"
     let pic = isPic(n), video = isVideo(n)
     let v = TapImage(); v.contentMode = .scaleAspectFill; v.clipsToBounds = true; v.layer.cornerRadius = 12; v.layer.cornerCurve = .continuous
@@ -903,7 +925,7 @@ final class CommentCell: UIView {
     let ext = (n as NSString).pathExtension.uppercased()
     // the type, in the middle until a picture covers it
     let typeL = UILabel(); typeL.text = ext.isEmpty ? "FILE" : String(ext.prefix(4)); typeL.font = .systemFont(ofSize: 15, weight: .bold); typeL.textColor = .secondaryLabel; typeL.textAlignment = .center
-    if !pic { pin(typeL, 0, 0, 0, 28) }
+    if !pic && inner { pin(typeL, 0, 0, 0, 28) }
     // (a photo: the server's smaller copy, quicker to come — the card is a third of the screen wide)
     let picURL = CommentCell.picURL(f)
     let shimmer = Shimmer()
@@ -912,15 +934,21 @@ final class CommentCell: UIView {
     let shade = CAGradientLayer(); shade.colors = [UIColor.clear.cgColor, UIColor.black.withAlphaComponent(0.55).cgColor]
     let name = UILabel(); name.text = n; name.font = .systemFont(ofSize: 11.5, weight: .medium); name.textColor = .label; name.lineBreakMode = .byTruncatingMiddle; name.textAlignment = .center
     let shadeView = ShadeView(shade); shadeView.isHidden = true
-    if !pic { pin(shadeView, 0, nil, 0, 0); shadeView.heightAnchor.constraint(equalToConstant: 34).isActive = true; pin(name, 6, nil, 6, 8) }
+    if !pic && inner { pin(shadeView, 0, nil, 0, 0); shadeView.heightAnchor.constraint(equalToConstant: 34).isActive = true; pin(name, 6, nil, 6, 8) }
+    // (a comment's video: its length in the corner, when the file has it)
+    if video && !inner, let d = f["dur"] as? Int, d > 0 {
+      let len = UILabel(); len.text = String(format: "%d:%02d", d / 60, d % 60); len.font = .systemFont(ofSize: 11, weight: .semibold); len.textColor = .white
+      len.layer.shadowColor = UIColor.black.cgColor; len.layer.shadowOpacity = 0.5; len.layer.shadowRadius = 2; len.layer.shadowOffset = .zero
+      pin(len, nil, nil, 6, 5)
+    }
     let play = UIImageView(image: UIImage(systemName: "play.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .bold)))
     play.tintColor = .white; play.contentMode = .center; play.backgroundColor = UIColor.black.withAlphaComponent(0.45); play.layer.cornerRadius = 15
-    if video { pin(play, nil, nil, nil, nil); play.widthAnchor.constraint(equalToConstant: 30).isActive = true; play.heightAnchor.constraint(equalToConstant: 30).isActive = true; play.centerXAnchor.constraint(equalTo: v.centerXAnchor).isActive = true; play.centerYAnchor.constraint(equalTo: v.centerYAnchor, constant: -6).isActive = true }
+    if video { pin(play, nil, nil, nil, nil); play.widthAnchor.constraint(equalToConstant: 30).isActive = true; play.heightAnchor.constraint(equalToConstant: 30).isActive = true; play.centerXAnchor.constraint(equalTo: v.centerXAnchor).isActive = true; play.centerYAnchor.constraint(equalTo: v.centerYAnchor, constant: inner ? -6 : 0).isActive = true }
     if let p = picURL {
       var now = true   // (there at once — kept: no fade; arriving later: it fades in over the shimmer)
       FeedLoader.shared.image(p) { [weak v, weak shimmer, weak typeL, weak name, weak shadeView] img in
         guard let img = img, let v = v else { shimmer?.removeFromSuperview(); return }
-        let show = { v.image = img; typeL?.isHidden = true; if !pic { shadeView?.isHidden = false; name?.textColor = .white } }
+        let show = { v.image = img; typeL?.isHidden = true; if !pic && inner { shadeView?.isHidden = false; name?.textColor = .white } }
         if now { shimmer?.removeFromSuperview(); show() }
         else { UIView.transition(with: v, duration: 0.3, options: [.transitionCrossDissolve, .allowUserInteraction], animations: show) { _ in shimmer?.removeFromSuperview() } }
       }
