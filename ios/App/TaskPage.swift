@@ -942,7 +942,6 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   private func label(_ t: String, size: CGFloat, color: UIColor, weight: UIFont.Weight = .regular) -> UILabel {
     let l = UILabel(); l.text = t; l.font = .systemFont(ofSize: size, weight: weight); l.textColor = color; return l
   }
-  private func greyText(_ t: String) -> UILabel { label(t, size: TaskPage.T, color: .secondaryLabel) }
   private func symbol(_ s: String, _ size: CGFloat, _ c: UIColor, weight: UIImage.SymbolWeight = .regular) -> UIImageView {
     let i = UIImageView(image: UIImage(systemName: s, withConfiguration: UIImage.SymbolConfiguration(pointSize: size, weight: weight)))
     i.tintColor = c; i.contentMode = .center; i.setContentHuggingPriority(.required, for: .horizontal); return i
@@ -1193,15 +1192,6 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
       guard let self = self else { return }
       if i == 1 { self.setPrio(key, "urgent") } else if i == 2 { self.setPrio(key, "none") } else if i > 100 && i <= 110 { self.setPrio(key, String(i - 100)) }
     }, { _, _ in })
-  }
-  private func prioItems(_ key: String, cur: String) -> [UIMenuElement] {
-    var out: [UIMenuElement] = []
-    out.append(UIAction(title: "Urgent", subtitle: "Always on top", image: UIImage(systemName: "flag.fill")?.withTintColor(.systemRed, renderingMode: .alwaysOriginal), state: cur == "urgent" ? .on : .off) { [weak self] _ in self?.setPrio(key, "urgent") })
-    var nums: [UIMenuElement] = []
-    for n in 1...10 { nums.append(UIAction(title: "\(n)", state: cur == "\(n)" ? .on : .off) { [weak self] _ in self?.setPrio(key, "\(n)") }) }
-    out.append(UIMenu(title: "Number (one per day)", options: .displayInline, children: nums))
-    out.append(UIMenu(options: .displayInline, children: [UIAction(title: "No priority", state: cur.isEmpty ? .on : .off) { [weak self] _ in self?.setPrio(key, "none") }]))
-    return out
   }
   private func setPrio(_ key: String, _ v: String) {
     local { m in
@@ -1696,11 +1686,6 @@ final class DescBox: UIView {
 
 // ---------- changes on the page, smooth (Haris, 2026-11-02 — now Apple's own: Details is Apple's list, 2026-11-08) ----
 extension TaskPage {
-  static func firstText(_ v: UIView) -> String? {
-    if let l = v as? UILabel, let t = l.text, !t.isEmpty { return t }
-    for s in v.subviews { if let t = firstText(s) { return t } }
-    return nil
-  }
   // what a view shows, in words: its texts, pictures and colours (changed → cross-faded)
   // (a colour by its values and a picture by what it is — their descriptions carry a memory address, new at every drawing,
   //  so an unchanged card looked changed and flashed: the CD lock card, the Files block — Haris 2026-11-02)
