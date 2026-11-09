@@ -257,6 +257,10 @@ read" / "Mark all unread" and your photo as Apple's bar buttons, no Talk, no sea
 buttons at the top of Apple's list, scrolling away with it; opens on Unread (the unread ones at the start stay until another
 list is picked); the rows in Apple's list edge to edge as Mail's, with Apple's own swipe (Read / Unread — its button where
 Apple puts it, left as it is: Haris 16:15); a birthday opens their greeting; "+ New task" as Home's.
+**When the Inbox's page-by-page turn comes (Haris 2026-11-09):** its rows as Apple's cells, edge to edge (mock-up "Inbox —
+with the rules", B, approved), **and holding a row shows Apple's peek** (Haris 23:42: "I like this"): the comment or change
+it's about, in full, above Apple's menu — without opening the task or marking it read, as peeking a mail in Mail; the
+preview tapped opens it. Drawn from the phone's copy (works offline). Mock-up first.
 **My Tasks' and the Inbox's big title — Haris's exception (2026-11-09 19:15):** each time the page shows, Apple's bar is told
 its list again (`setContentScrollView` in viewDidAppear). On his phone (iOS 27.2) the bar was left following another, empty
 list in the page and the big title stuck; the cause wasn't found, and he chose this over more builds hunting it.
