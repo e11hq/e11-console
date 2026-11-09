@@ -257,6 +257,8 @@ and your photo, the clients in Apple's list, + Add client); a client's page, a c
 Apple's pushed pages (‹ · the name and its line · ••• as Apple's own menu, the tab bar staying, each block its own cell of
 Apple's list, Apple's own frost as Home (2026-11-09), Apple's search for a client's files, the folders row on top of a client's page
 as before).
+**Remind Haris when the Clients pages' page-by-page work starts (Haris 2026-11-09 21:12):** background uploads and downloads
+go in with them — plan in project doc `claude/ios-background-transfers-plan.md`.
 
 **iPhone Me and its pages — in Apple's navigation, as iPhone's Settings (Haris 2026-11-08 20:07: "start the me page …
 me page and its inner pages"; bar: "Nothing"; "No search"):** Me is its tab's own Apple screen, its big title "Settings" (the tab stays "Me") (AppleMe.swift, AppleTabs'
