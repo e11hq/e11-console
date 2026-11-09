@@ -907,7 +907,7 @@ final class AssetsCtl {
         let recent = ((m["recent"] as? [String]) ?? []).compactMap { id in all.first { ($0["id"] as? String) == id } }
         if !recent.isEmpty {
           let rh = part(h, "recentHead") { AssetsHead() }; rh.set("Recently added"); out.append(rh)
-          let rows = part(h, "recent") { let r = FileRows(); r.more = false; return r }
+          let rows = part(h, "recent") { () -> FileRows in let r = FileRows(); r.more = false; return r }
           rows.onOpen = { [weak self] f in self?.preview(f, among: recent) }
           rows.menu = { [weak self, weak h] f in h.flatMap { self?.fileMenu($0, f, client: cid) } }
           rows.set(recent, look: L); out.append(rows)
