@@ -186,6 +186,18 @@ follows it (Don't 9); don't change any of it without Haris. Project doc `claude/
   and comes back as the slide back begins — never "hide the bottom bar when pushed", and nothing told to the tab bar at
   the slide's first moment: either makes Apple's bar snap small and the big title jump into it.
 
+**iPhone Home, fully Apple — APPROVED and LOCKED (Haris, 2026-11-09 14:04: "Homepage is approved. Lock it."):** build
+**1607**, commit 40b3f95, branch `locked/ios-home-1607` (never moved or deleted; the earlier Home lock branches stay as
+history). Page 2 of the page-by-page way, from the mock-up "E11 Day — fully Apple": every task Apple's own list cell in
+Apple's inset groups (Today's run by client, then Overdue), Apple's status symbol, the line with our CD chip, our Urgent / P1
+tag and faces (green ring, +N) as the cell's accessory, an overdue row's faint red tint (10% dark, 6% light), Apple's tap,
+Apple's hold menu (Attach Files only), Apple's swipes (Done · Due / Copy link · Trash — rounded while swiped, Apple's own:
+left as it is), the counts' jump on Apple's own scroll (left as it is); search: Apple's cells (clients too), "found in" as
+Apple's third line, its rows with their own identity (f:) and their own cells; toasts a full pill from their first frame.
+The same cell on My Tasks, a client's page and search. Nothing touches it — look, behaviour or code, or a shared piece it
+uses (HomeView, HomeCard, HomeClientRow, AppleTabs, AppleNav, SharedFab, ToastCapsule…) — without telling Haris first and his
+yes.
+
 **iPhone Home and the task page — COMPLETED and LOCKED (Haris, 2026-11-08 13:21: "the home page and task page is
 completed, and they need to be locked, no changes will touch these pages now without me knowing"):** build **1571**, commit
 e52c4d7, marked by the branches `locked/ios-home-1571` and `locked/ios-task-1571` (never moved or deleted; 1550's branch
