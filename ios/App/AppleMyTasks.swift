@@ -190,7 +190,16 @@ final class MyTasksVC: UIViewController, UISearchResultsUpdating, UISearchContro
   func updateSearchResults(for s: UISearchController) { Main.shared.myTasksIfMade?.appleSearchText(s.searchBar.text ?? "") }
   // (All / Done away while searching — the search finds everything, so it would switch the list hidden behind the results
   //  and nothing would change: Haris 2026-11-08 17:11 "fix, Apple's way"; Apple's own show / hide of its scope bar)
-  func willPresentSearchController(_ s: UISearchController) { s.searchBar.setShowsScope(false, animated: true); Main.shared.myTasksIfMade?.appleSearchBegin() }
+  // All / Done goes while searching and comes back after (locked, Haris 2026-11-08) — changed alongside Apple's own search
+  // transition, as Apple's transition coordinator does it: shown again by an animation of its own in the middle of Apple's
+  // closing, the bar resized under it and the big title wasn't brought back (Haris 2026-11-09: "I open search and close
+  // it, title disappears")
+  private func scope(_ s: UISearchController, _ on: Bool) {
+    if let tc = s.transitionCoordinator ?? transitionCoordinator {
+      tc.animate(alongsideTransition: { _ in s.searchBar.setShowsScope(on, animated: false) })
+    } else { s.searchBar.setShowsScope(on, animated: false) }
+  }
+  func willPresentSearchController(_ s: UISearchController) { scope(s, false); Main.shared.myTasksIfMade?.appleSearchBegin() }
   func didPresentSearchController(_ s: UISearchController) { DispatchQueue.main.async { s.searchBar.becomeFirstResponder() } }
-  func willDismissSearchController(_ s: UISearchController) { s.searchBar.setShowsScope(true, animated: true); Main.shared.myTasksIfMade?.appleSearchEnd() }
+  func willDismissSearchController(_ s: UISearchController) { scope(s, true); Main.shared.myTasksIfMade?.appleSearchEnd() }
 }

@@ -2925,6 +2925,10 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       ("mytasksScrolled", "return JSON.stringify({ blank: !!document.querySelector('#content .ph-under-app') })", { self.myTasksIfMade?.selfScroll(400) }),
       ("mytasksTop", "return '{}'", { self.myTasksIfMade?.selfScroll(0) }),
       ("mytasksAll", pause(2000) + "return JSON.stringify({ tab: ui.myTasksTab })", { self.myTasksIfMade?.selfTab("all") }),
+      // (Haris 2026-11-09: "I open search and close it, title disappears" — search opened and closed on My Tasks; its big
+      //  title read as on screen after)
+      ("mytasksFind", pause(1500) + "return '{}'", { self.myTasksIfMade?.selfFind("a") }),
+      ("mytasksFindDone", pause(2000) + "return '{}'", { self.myTasksIfMade?.selfFindDone() }),
       // 28: the Inbox, the app's own: All, a row swiped right (Read / Unread), Unread, Mentions
       ("ibx", pause(2500) + "return JSON.stringify({ view: ui.view, blank: !!document.querySelector('#content .ph-under-app') })", {
         if let i = self.tabKeys.firstIndex(of: "inbox"), let item = self.tabBar.items?[i] { self.tabBar.selectedItem = item; self.tabBar(self.tabBar, didSelect: item) } }),
