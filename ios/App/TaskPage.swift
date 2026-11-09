@@ -241,7 +241,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     tv.becomeFirstResponder()
     if let pos = tv.closestPosition(to: p), !descEmpty { tv.selectedTextRange = tv.textRange(from: pos, to: pos) }
   }
-  private func relayAnimated() { UIView.animate(withDuration: 0.4, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) { self.fitHosts(); self.scroll.layoutIfNeeded() } }
+  private func relayAnimated() { UIView.animate(withDuration: 0.4, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) { self.descBox.invalidateIntrinsicContentSize(); self.scroll.layoutIfNeeded() } }
   func showFiles() {
     guard tab == "details", let ip = listDS?.indexPath(for: "files") ?? listDS?.indexPath(for: "attach") else { return }
     // (the Files box's bottom just above the bottom edge — Apple's list scrolls it there)
@@ -277,6 +277,8 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
       pager.addSubview(scroll)
     }
     scroll.setCollectionViewLayout(makeListLayout(), animated: false)
+    // (a piece of ours growing — the title typed, the description written or opened: Apple re-sizes its cell itself)
+    scroll.selfSizingInvalidation = .enabledIncludingConstraints
     let rowReg = UICollectionView.CellRegistration<UICollectionViewListCell, String> { [weak self] cell, _, key in
       guard let self = self, let it = self.dItems[key] else { return }
       if let c = it.content { cell.contentConfiguration = c }
@@ -391,7 +393,6 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     // (room under the list for Mark complete, and the keyboard or the description's format bar)
     let inset = max(max(safeAreaInsets.bottom, 20) + (fab.isHidden ? 16 : 72), coverNow() + 16)
     if scroll.contentInset.bottom != inset { scroll.contentInset.bottom = inset }
-    fitHosts()
   }
 
   // ---------- the tabs ----------
@@ -855,11 +856,6 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
       sec.contentInsets.bottom = (sec.contentInsets.bottom / 2).rounded()
       return sec
     }
-  }
-  // a piece of ours that changed height in its Apple cell (the title being typed, the description opened or written):
-  // Apple's own self-sizing told, and the list follows
-  private func fitHosts() {
-    for case let c as DetailCell in scroll.visibleCells where c.needsFit { c.invalidateIntrinsicContentSize() }
   }
   // the self-test: Details as Apple's list — its headers, Apple's cells, the creator's footer
   func detailsGeo() -> [String: Any] {
@@ -1421,7 +1417,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   // (writing in the description opens it all, as Expand does)
   func textViewDidBeginEditing(_ tv: UITextView) { if tv === descView { descBox.expand(); beginDesc() } }
   func textViewDidChangeSelection(_ tv: UITextView) { if tv === descView, tv.isFirstResponder, kbCover > 0 { DispatchQueue.main.async { self.caretIntoView() } } }
-  func textViewDidChange(_ tv: UITextView) { setNeedsLayout(); if tv === descView { descChanged(); DispatchQueue.main.async { self.caretIntoView(); if !self.pulses.isEmpty || self.descUploading { self.placePulses() } } } }
+  func textViewDidChange(_ tv: UITextView) { setNeedsLayout(); if tv === descView || tv === descRead { descBox.invalidateIntrinsicContentSize() }; if tv === descView { descChanged(); DispatchQueue.main.async { self.caretIntoView(); if !self.pulses.isEmpty || self.descUploading { self.placePulses() } } } }
   func textViewDidEndEditing(_ tv: UITextView) {
     if tv === descView { return }
     let v = tv.text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1553,48 +1549,33 @@ final class DItem {
   var plain = false
   init(_ key: String) { self.key = key }
 }
-// a piece of ours in Apple's list cell: placed inside the cell's margins, its height measured for Apple's own self-sizing
+// a piece of ours in Apple's list cell: held by constraints inside the cell (its margins, or the pad given), so Apple's
+// own self-sizing measures it — nothing of ours measuring heights (build 1612 crashed: our own measuring and Apple's
+// disagreed and the list re-laid itself out in a loop until iPhone stopped the app, Haris 2026-11-09)
 final class DetailCell: UICollectionViewListCell {
   private weak var hosted: UIView?
-  private var pad = UIEdgeInsets.zero
+  private var pins: [NSLayoutConstraint] = []
   func host(_ v: UIView?, pad p: UIEdgeInsets, plain: Bool) {
-    pad = p
     backgroundConfiguration = plain ? .clear() : .listGroupedCell()
     if hosted !== v, let old = hosted, old.superview === contentView { old.removeFromSuperview() }
     hosted = v
+    NSLayoutConstraint.deactivate(pins); pins = []
+    guard let v = v else { return }
     // (put in place at once, with no animation: drawn inside the list's own animation it grew from nothing)
-    if let v = v, v.superview !== contentView {
-      UIView.performWithoutAnimation { v.transform = .identity; v.translatesAutoresizingMaskIntoConstraints = true; contentView.addSubview(v) }
+    UIView.performWithoutAnimation {
+      v.transform = .identity
+      if v.superview !== contentView { contentView.addSubview(v) }
+      v.translatesAutoresizingMaskIntoConstraints = false
+      let g = contentView.layoutMarginsGuide
+      let bottom = v.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -p.bottom)
+      bottom.priority = .required - 1   // (Apple's first guess at the height never fights it)
+      pins = [
+        p.left < 0 ? v.leadingAnchor.constraint(equalTo: g.leadingAnchor) : v.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: p.left),
+        p.right < 0 ? v.trailingAnchor.constraint(equalTo: g.trailingAnchor) : v.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -p.right),
+        v.topAnchor.constraint(equalTo: contentView.topAnchor, constant: p.top), bottom,
+      ]
+      NSLayoutConstraint.activate(pins)
     }
-    setNeedsLayout()
-  }
-  private var box: UIEdgeInsets {
-    let m = contentView.layoutMargins
-    return UIEdgeInsets(top: pad.top, left: pad.left < 0 ? m.left : pad.left, bottom: pad.bottom, right: pad.right < 0 ? m.right : pad.right)
-  }
-  func measure(_ W: CGFloat) -> CGFloat {
-    guard let v = hosted else { return 1 }
-    let b = box, w = max(1, W - b.left - b.right)
-    var h: CGFloat
-    if let tv = v as? UITextView { h = tv.sizeThatFits(CGSize(width: w, height: .greatestFiniteMagnitude)).height }
-    else {
-      if v.bounds.width != w { v.bounds.size.width = w }
-      v.setNeedsLayout(); v.layoutIfNeeded()
-      h = v.systemLayoutSizeFitting(CGSize(width: w, height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height
-    }
-    return ceil(h) + b.top + b.bottom
-  }
-  var needsFit: Bool { hosted != nil && abs(bounds.height - measure(bounds.width)) > 0.5 }
-  override func preferredLayoutAttributesFitting(_ a: UICollectionViewLayoutAttributes) -> UICollectionViewLayoutAttributes {
-    let r = super.preferredLayoutAttributesFitting(a)
-    r.size.height = measure(a.size.width)
-    return r
-  }
-  override func layoutSubviews() {
-    super.layoutSubviews()
-    guard let v = hosted, v.superview === contentView else { return }
-    let f = contentView.bounds.inset(by: box)
-    if v.frame != f { v.frame = f }
   }
 }
 
@@ -1628,8 +1609,9 @@ final class DescBox: UIView {
       text = tv
     }
     layer.addSublayer(fade); addSubview(button)
+    invalidateIntrinsicContentSize()   // (its words may have changed: its height again)
   }
-  func expand() { guard !expanded else { return }; expanded = true; onExpand?() }
+  func expand() { guard !expanded else { return }; expanded = true; invalidateIntrinsicContentSize(); onExpand?() }
   // (a long one, not opened yet: the cap, the fade and the button; the box is measured after this)
   override func layoutSubviews() {
     let w = bounds.width
@@ -1647,15 +1629,18 @@ final class DescBox: UIView {
     CATransaction.commit()
     let s = button.sizeThatFits(CGSize(width: 200, height: 40))
     button.frame = CGRect(x: 0, y: 170, width: s.width, height: s.height)
+    if bounds.width != lastW { lastW = bounds.width; invalidateIntrinsicContentSize() }   // (its width known: its height again)
     bringSubviewToFront(button)
   }
-  // (the size the page gives it: capped while it's a long one not opened)
-  override func systemLayoutSizeFitting(_ t: CGSize, withHorizontalFittingPriority h: UILayoutPriority, verticalFittingPriority v: UILayoutPriority) -> CGSize {
-    let full = text.map { $0.sizeThatFits(CGSize(width: t.width, height: .greatestFiniteMagnitude)).height } ?? 0
-    if text?.isFirstResponder == true { expanded = true }
-    let short = !expanded && full > 168 + 40
-    return CGSize(width: t.width, height: ceil(short ? 168 + 36 : full))
+  // (its height for its width — capped while it's a long one not opened; Apple's self-sizing reads it)
+  private var lastW: CGFloat = 0
+  override var intrinsicContentSize: CGSize {
+    let w = bounds.width > 0 ? bounds.width : 300
+    let full = text.map { $0.sizeThatFits(CGSize(width: w, height: .greatestFiniteMagnitude)).height } ?? 0
+    let short = !expanded && text?.isFirstResponder != true && full > 168 + 40
+    return CGSize(width: UIView.noIntrinsicMetric, height: ceil(short ? 168 + 36 : full))
   }
+
 }
 
 
