@@ -241,7 +241,13 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     tv.becomeFirstResponder()
     if let pos = tv.closestPosition(to: p), !descEmpty { tv.selectedTextRange = tv.textRange(from: pos, to: pos) }
   }
-  private func relayAnimated() { UIView.animate(withDuration: 0.4, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) { self.scroll.layoutIfNeeded() } }
+  private func relayAnimated() { UIView.animate(withDuration: 0.4, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) { self.resize(self.descBox); self.resize(self.titleView); self.scroll.layoutIfNeeded() } }
+  // (the cell holding a piece of ours measured again — Apple's own self-sizing, told)
+  private func resize(_ v: UIView) {
+    var x = v.superview
+    while let y = x, !(y is DetailCell) { x = y.superview }
+    (x as? DetailCell)?.invalidateIntrinsicContentSize()
+  }
   func showFiles() {
     guard tab == "details", let ip = listDS?.indexPath(for: "files") ?? listDS?.indexPath(for: "attach") else { return }
     // (the Files box's bottom just above the bottom edge — Apple's list scrolls it there)
@@ -277,8 +283,10 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
       pager.addSubview(scroll)
     }
     scroll.setCollectionViewLayout(makeListLayout(), animated: false)
-    // (a piece of ours growing — the title typed, the description written or opened: Apple re-sizes its cell itself)
-    scroll.selfSizingInvalidation = .enabledIncludingConstraints
+    // (Apple's default self-sizing: a cell is measured again only when told — the title typed, the description written or
+    //  opened: resize(). Re-measured on every constraint change inside it — .enabledIncludingConstraints — a text view
+    //  settling its own size during Apple's layout set the list measuring again and again: build 1616 crashed, Haris
+    //  2026-11-09)
     let rowReg = UICollectionView.CellRegistration<UICollectionViewListCell, String> { [weak self] cell, _, key in
       guard let self = self, let it = self.dItems[key] else { return }
       if let c = it.content { cell.contentConfiguration = c }
@@ -1431,7 +1439,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   // (writing in the description opens it all, as Expand does)
   func textViewDidBeginEditing(_ tv: UITextView) { if tv === descView { descBox.expand(); beginDesc() } }
   func textViewDidChangeSelection(_ tv: UITextView) { if tv === descView, tv.isFirstResponder, kbCover > 0 { DispatchQueue.main.async { self.caretIntoView() } } }
-  func textViewDidChange(_ tv: UITextView) { setNeedsLayout(); if tv === descView { descChanged(); DispatchQueue.main.async { self.caretIntoView(); if !self.pulses.isEmpty || self.descUploading { self.placePulses() } } } }
+  func textViewDidChange(_ tv: UITextView) { setNeedsLayout(); resize(tv === titleView ? titleView : descBox); if tv === descView { descChanged(); DispatchQueue.main.async { self.caretIntoView(); if !self.pulses.isEmpty || self.descUploading { self.placePulses() } } } }
   func textViewDidEndEditing(_ tv: UITextView) {
     if tv === descView { return }
     let v = tv.text.trimmingCharacters(in: .whitespacesAndNewlines)
