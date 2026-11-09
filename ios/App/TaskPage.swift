@@ -880,6 +880,15 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
       c.headerMode = s?.head != nil ? .supplementary : .none
       c.footerMode = s?.foot != nil ? .supplementary : .none
       c.showsSeparators = !(s?.plain ?? false)
+      // (no line along a box's top and bottom — only Apple's lines between its rows: Haris 2026-11-09, "still border on top
+      //  and bottom of the list group")
+      let n = s?.items.count ?? 0
+      c.itemSeparatorHandler = { ip, sep in
+        var x = sep
+        if ip.item == 0 { x.topSeparatorVisibility = .hidden }
+        if ip.item == n - 1 { x.bottomSeparatorVisibility = .hidden }
+        return x
+      }
       let sec = NSCollectionLayoutSection.list(using: c, layoutEnvironment: env)
       // (the gaps between the boxes half of Apple's own — set on Apple's section, Haris 2026-11-09: "Half")
       sec.contentInsets.top = (sec.contentInsets.top / 2).rounded()
@@ -1022,8 +1031,13 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     if v is UILabel || v is UIControl { fit = v.sizeThatFits(CGSize(width: 1000, height: 1000)) }
     else { fit = v.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize) }
     v.translatesAutoresizingMaskIntoConstraints = true
-    v.frame = CGRect(origin: v.frame.origin, size: CGSize(width: ceil(fit.width), height: ceil(fit.height)))
-    var c = UICellAccessory.CustomViewConfiguration(customView: v, placement: at, reservedLayoutWidth: .actual)
+    let size = CGSize(width: ceil(fit.width), height: ceil(fit.height))
+    v.frame = CGRect(origin: .zero, size: size)
+    // (a chip — a label — held in a plain view: Apple's cell lines a label up by its words' baseline with the row's name,
+    //  which set the chips about 3 pt high; a plain view is centred in the row as the lock is — Haris 2026-11-09)
+    var held = v
+    if v is UILabel { let box = UIView(frame: v.frame); box.addSubview(v); held = box }
+    var c = UICellAccessory.CustomViewConfiguration(customView: held, placement: at, reservedLayoutWidth: .actual)
     c.maintainsFixedSize = true
     return c
   }

@@ -142,7 +142,7 @@ final class TaskVC: UIViewController {
     seg.widthAnchor.constraint(equalToConstant: 236).isActive = true
     // (its own height given, and its size from the start: with only a width, Apple's bar sized it from the room it had
     //  while the page slid in from a big-title page, and its top was cut until the page landed — Haris 2026-11-09)
-    let segH = seg.intrinsicContentSize.height
+    let segH: CGFloat = 44   // (as tall as ‹ and ••• beside it — its own small height made it thin: Haris 2026-11-09)
     seg.heightAnchor.constraint(equalToConstant: segH).isActive = true
     seg.frame = CGRect(x: 0, y: 0, width: 236, height: segH)
     navigationItem.titleView = seg
