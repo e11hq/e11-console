@@ -3094,6 +3094,15 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       // (Comments → Details as the swipe does it — for the film: nothing of Comments may show on Details on the way)
       ("tpageSwipeDetails", pause(1500) + "return '{}'", { if let p = self.taskPages.last { self.toDetailsFromComments(p) } }),
       ("tpageBack", pause(1500) + "return JSON.stringify({ webTask: !!ui.taskId })", { if let p = self.taskPages.last { p.setTab("details", tell: true); self.closeTaskPage(p, animated: false) } }),
+      // (a task in CD review — its lock note, the review switch on with the CD's name, the review files: the task page crashed
+      //  on Haris's phone with these, never opened by the self-test before — 1624, Haris 2026-11-09 19:53). Opened, scrolled
+      //  to the very end (the description, the files, Created by) and back to the top: every row the same height, no loop.
+      ("rpage", pause(1200) + "const t = db.tasks.find((x) => !x.parentId && !x.done && (x.reviews || []).some((r) => r.state === 'pending')); if (t) openTask(t.id); " + pause(3000) + "return JSON.stringify({ id: t ? t.id : '' })", nil),
+      ("rpageHold", pause(1500) + "return '{}'", { self.selfResult["rHoldArrived"] = self.taskPages.last?.detailsHeights() ?? [:] }),
+      ("rpageEnd", pause(600) + "return '{}'", { if let p = self.taskPages.last { let sv = p.scroll; sv.setContentOffset(CGPoint(x: 0, y: max(-sv.adjustedContentInset.top, sv.contentSize.height - sv.bounds.height + sv.adjustedContentInset.bottom)), animated: true) } }),
+      ("rpageHoldEnd", pause(2000) + "return '{}'", { self.selfResult["rHoldEnd"] = self.taskPages.last?.detailsHeights() ?? [:]; if let p = self.taskPages.last { p.scroll.setContentOffset(CGPoint(x: 0, y: -p.scroll.adjustedContentInset.top), animated: true) } }),
+      ("rpageHoldTop", pause(2000) + "return '{}'", { self.selfResult["rHoldTop"] = self.taskPages.last?.detailsHeights() ?? [:] }),
+      ("rpageBack", pause(800) + "return '{}'", { if let p = self.taskPages.last { self.closeTaskPage(p, animated: false) } }),
       // (for the film: from Home into a task and back — 🔍 and your photo melting into •••, ‹ growing in, and back)
       ("melt", pause(2500) + "return '{}'", { if let i = self.tabKeys.firstIndex(of: "today"), let item = self.tabBar.items?[i] { self.tabBar.selectedItem = item; self.tabBar(self.tabBar, didSelect: item) } }),
       ("meltOpen", pause(2500) + "return '{}'", {

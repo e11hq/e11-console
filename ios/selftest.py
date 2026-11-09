@@ -52,7 +52,7 @@ try:
     subprocess.run(['pkill', '-INT', '-f', 'recordVideo'], capture_output=True); time.sleep(1)
     rec = subprocess.Popen([simctl, 'io', udid, 'recordVideo', '--codec=h264', '--force', os.path.join(TMP, 'ios-run.mp4')], stdout=subprocess.DEVNULL, stderr=open(os.path.join(TMP, 'ios-rec.log'), 'w'), start_new_session=True)
     rec_t0 = time.time()
-    r = subprocess.run(['xcrun', 'simctl', 'launch', udid, BUNDLE], env=lenv, capture_output=True, text=True); check(r.returncode == 0, 'launched ' + r.stdout + r.stderr[-300:])
+    r = subprocess.run(['xcrun', 'simctl', 'launch', '--stderr=/tmp/e11-app-stderr.txt', udid, BUNDLE], env=lenv, capture_output=True, text=True); check(r.returncode == 0, 'launched ' + r.stdout + r.stderr[-300:])
     data = sh('xcrun', 'simctl', 'get_app_container', udid, BUNDLE, 'data').stdout.strip()
     out = os.path.join(data, 'Documents', 'selftest.json')
     seen, res, t0 = set(), {}, time.time()
@@ -134,6 +134,10 @@ try:
     # (and none taller than its words need: 1621's checklist rows came out 170 tall, steady but wrong — Haris 2026-11-09)
     tall = {k: v for r in (ha, hs, ht) for k, v in r.items() if v and v > 110 and k not in ('desc', 'title', 'files', 'done', 'trash', 'lock', 'parent', 'based')}
     check(not tall, f"the task page's rows are no taller than their words — none over 110 but the description, title and files (too tall: {tall})")
+    ra, re_, rt = res.get('rHoldArrived') or {}, res.get('rHoldEnd') or {}, res.get('rHoldTop') or {}
+    rmoved = {k: (ra.get(k), re_.get(k), rt.get(k)) for k in set(ra) | set(re_) | set(rt) if len({round(x) for x in (ra.get(k), re_.get(k), rt.get(k)) if x is not None}) > 1}
+    print('measure reviewRowHeights', json.dumps({'arrived': ra, 'end': re_, 'top': rt}))
+    check(len(ra) >= 4 and len(re_) >= 2 and not rmoved, f"a task in CD review: rows keep their heights to the very end and back (changed: {rmoved})")
     check(len(ha) >= 4 and len(ht) >= 4 and not moved, f"the task page's rows keep their heights — arrived, scrolled, back at the top (changed: {moved})")
     tl, td = res.get('tlookAtLight') or {}, res.get('tlookAtDark') or {}
     check(tl.get('style') == 1 and tl.get('forced') == 0 and (tl.get('bg') or 0) > 0.5 and td.get('style') == 2 and td.get('forced') == 0 and td.get('bg', 1) < 0.5, f"the task page follows the phone light / dark, nothing forcing it (light {tl}, dark {td})", need=('tlook',))
@@ -324,5 +328,12 @@ finally:
     if os.environ.get('RUNNER_ENVIRONMENT') == 'self-hosted':
         try: subprocess.run(['xcrun', 'simctl', 'shutdown', 'all'], capture_output=True, timeout=60)
         except Exception: pass
+# (Apple's layout-loop records, printed by UIKit before it stops the app — what loops, cell by cell)
+try:
+    err = open('/tmp/e11-app-stderr.txt', errors='replace').read()
+    i = err.find('feedback loop'); i = i if i >= 0 else err.find('FeedbackLoop')
+    if i >= 0: print('LOOP RECORDS', err[max(0, i - 2000):i + 6000])
+except Exception:
+    pass
 print('FAILS', len(fails), fails)
 sys.exit(1 if fails else 0)
