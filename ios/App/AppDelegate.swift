@@ -1591,6 +1591,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if #available(iOS 26.0, *) { return pillBottom - 61 }
     return tabBar.frame.minY
   }
+  var selfWashWord: String { get { (selfResult["_washWord"] as? String) ?? "" } set { selfResult["_washWord"] = newValue } }
   func homeGeo() -> [String: Any] {
     guard let h = homeIfMade else { return ["shown": false, "made": false] }
     if screenOf("home") == nil { return ["shown": false, "made": true] }   // (on show: in its tab while its tab is on — Haris 2026-11-08)
@@ -2906,6 +2907,13 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       ("homeScrolled", "return '{}'", { self.homeIfMade?.selfScroll(400) }),
       ("homeFind", "return '{}'", { self.homeIfMade?.selfScroll(0); self.homeIfMade?.selfFind("Ford") }),
       ("homeFindDone", "return '{}'", { self.homeIfMade?.selfFindDone() }),
+      // (Haris 2026-11-09: search, cleared with the x inside the bar, searched again, cleared, closed — Home's first task's
+      //  title, as on screen, without search's wash)
+      ("washFind", "return '{}'", { self.selfWashWord = self.homeIfMade?.selfFirstWord() ?? ""; self.homeIfMade?.selfFind(self.selfWashWord) }),
+      ("washClear", "return '{}'", { self.homeIfMade?.selfFind("") }),
+      ("washFind2", "return '{}'", { self.homeIfMade?.selfFind(self.selfWashWord) }),
+      ("washClear2", "return '{}'", { self.homeIfMade?.selfFind("") }),
+      ("washDone", "return '{}'", { self.homeIfMade?.selfFindDone(); DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { self.selfResult["washAt"] = self.homeIfMade?.selfWash() ?? [:]; self.selfResult["washWord"] = self.selfWashWord } }),
       // (the date sheet, as Home's Due opens it — it once crashed on iOS 27 while sizing itself)
       ("homeDate", "return '{}'", { if let host = self.sheetHost() { host.present(DateSheetVC(["value": "2026-11-23", "min": "", "max": "", "clearable": true, "md": false]) { _ in }, animated: false) } }),
       ("homeDateDone", "return '{}'", { self.presentedViewController?.dismiss(animated: false) }),

@@ -213,6 +213,13 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       guard let self = self, let r = self.listViews[key] as? AppleRow else { return }
       self.paintRow(cell, r)
     }
+    // (search's rows — a task or a client found — their own cells, never handed to a list's row: a cell that had shown a
+    //  task found, its title washed where the words matched, kept that wash when given to Home's row of the same task —
+    //  the same words, only the wash different: Haris 2026-11-09, closing search with the x inside the bar)
+    let foundReg = UICollectionView.CellRegistration<UICollectionViewListCell, String> { [weak self] cell, _, key in
+      guard let self = self, let r = self.listViews[key] as? AppleRow else { return }
+      self.paintRow(cell, r)
+    }
     let emptyReg = UICollectionView.CellRegistration<UICollectionViewListCell, String> { [weak self] cell, _, key in
       guard let self = self else { return }
       var c = UIListContentConfiguration.cell()
@@ -226,7 +233,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     listDS = UICollectionViewDiffableDataSource<Int, String>(collectionView: cv) { [weak self] cv, ip, key in
       if isMe && (key.hasPrefix("s:") || key == "me:card") { return cv.dequeueConfiguredReusableCell(using: setReg, for: ip, item: key) }
       if let v = self?.listViews[key] {
-        if v is AppleRow { return cv.dequeueConfiguredReusableCell(using: rowReg, for: ip, item: key) }
+        if v is AppleRow { return cv.dequeueConfiguredReusableCell(using: key.hasPrefix("f:") || v is HomeClientRow ? foundReg : rowReg, for: ip, item: key) }
         if key.hasPrefix("e:") && v.tag == 8 { return cv.dequeueConfiguredReusableCell(using: emptyReg, for: ip, item: key) }
       }
       return cv.dequeueConfiguredReusableCell(using: reg, for: ip, item: key)
@@ -1853,6 +1860,18 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // (Apple's search on Home's own screen — HomeVC: the self-test types into it as a finger would)
   var onAppleFind: ((String?) -> Void)?
   func selfFind(_ q: String) { if appleTop, let f = onAppleFind { f(q); return }; openSearch(); field.text = q; typed() }
+  // (the self-test: the first task's first word, to search for; and whether its title on screen carries search's wash)
+  func selfFirstWord() -> String { ((content.compactMap { $0 as? HomeCard }.first?.taskTitle ?? "").split(separator: " ").first).map(String.init) ?? "" }
+  func selfWash() -> [String: Any] {
+    guard let cv = list, let card = content.compactMap({ $0 as? HomeCard }).first, let ip = listDS?.indexPath(for: "c:" + card.id) else { return ["row": false] }
+    cv.layoutIfNeeded()
+    guard let cell = cv.cellForItem(at: ip) else { return ["row": true, "cell": false] }
+    func labels(_ v: UIView) -> [UILabel] { (v as? UILabel).map { [$0] } ?? v.subviews.flatMap(labels) }
+    guard let l = labels(cell.contentView).first(where: { $0.attributedText?.string == card.taskTitle }), let a = l.attributedText else { return ["row": true, "cell": true, "title": false] }
+    var washed = false
+    a.enumerateAttribute(.backgroundColor, in: NSRange(location: 0, length: a.length)) { v, _, _ in if v != nil { washed = true } }
+    return ["row": true, "cell": true, "title": true, "washed": washed]
+  }
   func selfFindDone() { if appleTop, let f = onAppleFind { f(nil); return }; closeSearch() }
   // (the walk-through: the first task and client in the results, and a tap on one — as a finger would)
   var walkFirst: (task: String?, client: String?) = (nil, nil)
