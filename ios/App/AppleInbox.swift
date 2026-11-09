@@ -53,6 +53,10 @@ final class InboxVC: UIViewController, TabRoot {
     super.viewWillAppear(a)
     Main.shared.drawBeforeShow("inbox")
   }
+  override func viewDidAppear(_ a: Bool) {
+    super.viewDidAppear(a)
+    if let h = Main.shared.inboxIfMade { TitleProbe.check(self, h, "Inbox") }
+  }
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
     let m = Main.shared
