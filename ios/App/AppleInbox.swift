@@ -55,7 +55,9 @@ final class InboxVC: UIViewController, TabRoot {
   }
   override func viewDidAppear(_ a: Bool) {
     super.viewDidAppear(a)
-    if let h = Main.shared.inboxIfMade { TitleProbe.check(self, h, "Inbox") }
+    // (Apple's bar told this page's list again each time it shows — on the phone the bar was left following another, empty
+    //  list in the page and the big title stuck; the cause not found: Haris's exception, 2026-11-09 19:15)
+    if let h = Main.shared.inboxIfMade { setContentScrollView(h.appleScroll, for: .top) }
   }
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()

@@ -181,7 +181,6 @@ try:
     # (measurement — the line under My Tasks' title changed as its tab is tapped, and while another tab is on: is that what
     #  takes the big title away on the second visit? Haris 2026-11-09 16:17)
     for k in ('titleMtLineSet', 'titleMtLineHidden'): print('measure bigTitle', k, json.dumps(res.get(k)))
-    for k in sorted(x for x in res if x.startswith('titleProbe_')): print('measure', k, res.get(k))
     # (Haris 2026-11-09 16:56: from the start, E11 Day → My Tasks → another tab → My Tasks — the title gone for good)
     for k, name in (('titleFirstMt', 'My Tasks, first visit'), ('titleFirstIbx', 'the Inbox, first visit'), ('titleSecondMt', 'My Tasks, second visit'), ('titleSecondIbx', 'the Inbox, second visit')):
       print('measure bigTitle', k, json.dumps(res.get(k)))

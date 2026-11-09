@@ -241,6 +241,9 @@ read" / "Mark all unread" and your photo as Apple's bar buttons, no Talk, no sea
 buttons at the top of Apple's list, scrolling away with it; opens on Unread (the unread ones at the start stay until another
 list is picked); the rows in Apple's list edge to edge as Mail's, with Apple's own swipe (Read / Unread — its button where
 Apple puts it, left as it is: Haris 16:15); a birthday opens their greeting; "+ New task" as Home's.
+**My Tasks' and the Inbox's big title — Haris's exception (2026-11-09 19:15):** each time the page shows, Apple's bar is told
+its list again (`setContentScrollView` in viewDidAppear). On his phone (iOS 27.2) the bar was left following another, empty
+list in the page and the big title stuck; the cause wasn't found, and he chose this over more builds hunting it.
 
 **iPhone Home, My Tasks, the task page, the Clients list, a client's page, a client's Client Assets and a folder —
 LOCKED at the latest (Haris, 2026-11-08 19:19):** commit 0cf8dd7, branches `locked/ios-home-0cf8dd7`,

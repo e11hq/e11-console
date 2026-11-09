@@ -69,7 +69,9 @@ final class MyTasksVC: UIViewController, UISearchResultsUpdating, UISearchContro
   }
   override func viewDidAppear(_ a: Bool) {
     super.viewDidAppear(a)
-    if let h = Main.shared.myTasksIfMade { TitleProbe.check(self, h, "My Tasks") }
+    // (Apple's bar told this page's list again each time it shows — on the phone the bar was left following another, empty
+    //  list in the page and the big title stuck; the cause not found: Haris's exception, 2026-11-09 19:15)
+    if let h = Main.shared.myTasksIfMade { setContentScrollView(h.appleScroll, for: .top) }
   }
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
@@ -213,33 +215,3 @@ final class MyTasksVC: UIViewController, UISearchResultsUpdating, UISearchContro
 }
 
 
-// TestFlight only, for a while (Haris 2026-11-09, his recordings: My Tasks' and the Inbox's big title never folding as
-// the list scrolls, then gone for good on a later visit — the search bar and All / Done stuck): once the page has come,
-// is Apple's bar following this page's list? If not, one line on what it follows instead and where the big title is,
-// copied for Haris to paste, a toast saying so — and Apple told the page's list again (Apple's own call). Taken out once
-// the cause is fixed.
-enum TitleProbe {
-  private static var told = Set<String>()
-  static var testFlight: Bool { Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt" }
-  static func check(_ vc: UIViewController, _ h: HomeView, _ name: String) {
-    guard testFlight || !SELFTEST.isEmpty else { return }
-    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak vc, weak h] in
-      guard let vc = vc, let h = h, vc.viewIfLoaded?.window != nil, let w = vc.view.window, let nb = vc.navigationController?.navigationBar else { return }
-      let want = h.appleScroll
-      let follows = vc.contentScrollView(for: .top)
-      func kind(_ v: UIView?) -> String { guard let v = v else { return "none" }; return String(describing: type(of: v)) + (v === want ? "=list" : "") + (v.isHidden ? "(hidden)" : "") + (v.window == nil ? "(off)" : "") }
-      var big: UIView?; func walk(_ v: UIView) { if big != nil { return }; if String(describing: type(of: v)).contains("LargeTitleView") { big = v; return }; v.subviews.forEach(walk) }; walk(w)
-      var chain: [String] = []; var x = big?.superview; while let y = x, chain.count < 3 { chain.append(kind(y)); x = y.superview }
-      let inList = big.map { $0.isDescendant(of: want) } ?? false
-      guard follows !== want || !inList else { return }
-      // (which list Apple's bar follows instead — where it sits and how big: Haris's 1617 report, 2026-11-09 18:18, "follows
-      //  UICollectionView", not the page's own)
-      var fchain: [String] = []; var fx = follows?.superview; while let y = fx, fchain.count < 5 { fchain.append(String(describing: type(of: y)) + (y === vc.view ? "=page" : "")); fx = y.superview }
-      let fsize = follows.map { " \(Int($0.bounds.width))x\(Int($0.bounds.height)) items \(($0 as? UICollectionView)?.numberOfSections ?? -1)" } ?? ""
-      let line = "\(name) · iOS \(UIDevice.current.systemVersion) · follows \(kind(follows))\(fsize) in \(fchain.joined(separator: " < ")) · big title in \(chain.joined(separator: " < ")) a\(String(format: "%.1f", big?.alpha ?? -1)) · bar \(Int(nb.frame.height)) · list off \(Int(want.contentOffset.y)) adj \(Int(want.adjustedContentInset.top)) h \(Int(want.contentSize.height))/\(Int(want.bounds.height))"
-      if !SELFTEST.isEmpty { Main.shared.selfResult["titleProbe_" + name] = line }
-      if testFlight, !told.contains(name) { told.insert(name); UIPasteboard.general.string = line; h.toast(["t": "Title report copied", "ms": 3000.0]) }
-      vc.setContentScrollView(want, for: .top)   // (Apple told the page's list again — does the big title come back?)
-    }
-  }
-}
