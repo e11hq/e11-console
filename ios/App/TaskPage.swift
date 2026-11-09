@@ -672,7 +672,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     var who3: [DItem] = []
     let asg = (m["assignees"] as? [[String: Any]]) ?? []
     let canAsg = (m["canAssign"] as? Bool) == true
-    who3.append(row("assignees", sym: "person", key: "Assignees", text: asg.isEmpty ? (canAsg ? "Add" : "Nobody yet") : nil, value: asg.isEmpty ? nil : avatars(asg), chevron: canAsg, tap: canAsg ? { [weak self] in self?.pickPeople() } : nil))
+    who3.append(row("assignees", sym: "person", key: "Assignees", text: asg.isEmpty ? (canAsg ? "Add" : "Nobody yet") : nil, value: asg.isEmpty ? nil : avatars(asg), chevron: canAsg, locked: !canAsg, tap: canAsg ? { [weak self] in self?.pickPeople() } : nil))
     if let d = m["dates"] as? [String: Any] { who3.append(datesRow(d)) }
     if let pr = m["prio"] as? [[String: Any]] { who3.append(contentsOf: prioRows(pr, can: (m["canPrio"] as? Bool) == true)) }
     add("people", who3)
@@ -681,12 +681,12 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     let canGd = (m["canGuardian"] as? Bool) == true
     if let gd = m["guardian"] as? String {
       let who = gd == (m["me"] as? String) ? "You" : ((people[gd]?["name"] as? String) ?? name(gd))
-      owner.append(row("guardian", sym: "star", key: "Guardian", text: who, chevron: canGd, tap: canGd ? { [weak self] in self?.pickGuardian() } : nil))
+      owner.append(row("guardian", sym: "star", key: "Guardian", text: who, chevron: canGd, locked: !canGd, tap: canGd ? { [weak self] in self?.pickGuardian() } : nil))
     } else if canGd { owner.append(row("guardian", sym: "star", key: "Guardian", text: "None", chevron: true, tap: { [weak self] in self?.pickGuardian() })) }
     if let fin = m["finance"] as? [String: Any] {
       let cur = fin["v"] as? String ?? ""
       let canFin = (m["canFinance"] as? Bool) == true
-      owner.append(row("finance", sym: "dollarsign.circle", key: "Finance", text: cur.isEmpty ? (canFin ? "None" : "–") : nil, value: cur.isEmpty ? nil : pill(cur, fg: TaskPage.rgb(fin["rgb"]), bg: TaskPage.rgb(fin["rgb"]).withAlphaComponent(0.16)), chevron: canFin, tap: canFin ? { [weak self] in self?.pickFinance(cur) } : nil))
+      owner.append(row("finance", sym: "dollarsign.circle", key: "Finance", text: cur.isEmpty ? (canFin ? "None" : "–") : nil, value: cur.isEmpty ? nil : pill(cur, fg: TaskPage.rgb(fin["rgb"]), bg: TaskPage.rgb(fin["rgb"]).withAlphaComponent(0.16)), chevron: canFin, locked: !canFin, tap: canFin ? { [weak self] in self?.pickFinance(cur) } : nil))
     }
     if (m["sub"] as? Bool) != true {
       let cl = m["client"] as? [String: Any]
@@ -695,7 +695,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
       v.addArrangedSubview(label(cl?["name"] as? String ?? "No client", size: 17, color: .secondaryLabel))
       if m["lock"] is [String: Any] { v.addArrangedSubview(symbol("lock.fill", 12, .secondaryLabel)) }
       let canCl = (m["canClient"] as? Bool) == true
-      owner.append(row("client", sym: "square.grid.2x2", key: "Client", value: v, chevron: canCl, tap: canCl ? { [weak self] in self?.pickClient() } : nil))
+      owner.append(row("client", sym: "square.grid.2x2", key: "Client", value: v, chevron: canCl, locked: !canCl, tap: canCl ? { [weak self] in self?.pickClient() } : nil))
     }
     add("owner", owner)
     // ---- Review ----
@@ -967,7 +967,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   // ---------- Details' rows: Apple's own list cells, set by Apple's configuration ----------
   // icon · name (· a small line under it) · value · › — the value Apple's text, or ours where Apple has no part (a chip,
   // the faces, the dates' two buttons, a switch), shown by Apple's cell as its accessory
-  private func row(_ id: String, sym: String, key: String, keyText: NSAttributedString? = nil, sub: String? = nil, subColor: UIColor = .secondaryLabel, text: String? = nil, value: UIView? = nil, chevron: Bool = false, extra: String = "", tap: (() -> Void)? = nil) -> DItem {
+  private func row(_ id: String, sym: String, key: String, keyText: NSAttributedString? = nil, sub: String? = nil, subColor: UIColor = .secondaryLabel, text: String? = nil, value: UIView? = nil, chevron: Bool = false, locked: Bool = false, extra: String = "", tap: (() -> Void)? = nil) -> DItem {
     var c: UIListContentConfiguration = sub != nil ? .subtitleCell() : (text != nil && value == nil ? .valueCell() : .cell())
     c.image = UIImage(systemName: sym)
     c.imageProperties.tintColor = .secondaryLabel
@@ -981,8 +981,10 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     it.content = c
     if let v = v { it.accessories.append(.customView(configuration: TaskPage.side(v, .trailing()))) }
     if chevron { it.accessories.append(.disclosureIndicator()) }
+    // (one you can't change: a grey lock where the › would be, as the client picker shows a locked client — Haris 2026-11-09)
+    else if locked, let lk = UIImage(systemName: "lock.fill") { let i = UIImageView(image: lk); i.tintColor = .tertiaryLabel; it.accessories.append(.customView(configuration: TaskPage.side(i, .trailing()))) }
     it.tap = tap
-    it.sig = [sym, key, keyText?.string ?? "", sub ?? "", TaskPage.cs(subColor, traitCollection), text ?? "", "\(chevron)", "\(tap != nil)", extra, v.map { TaskPage.sig($0) } ?? ""].joined(separator: "|")
+    it.sig = [sym, key, keyText?.string ?? "", sub ?? "", TaskPage.cs(subColor, traitCollection), text ?? "", "\(chevron)", "\(locked)", "\(tap != nil)", extra, v.map { TaskPage.sig($0) } ?? ""].joined(separator: "|")
     return it
   }
   // a row in the tint, as Apple's own "Add…" rows: Add Subtask, Add Item, Attach Files
@@ -1122,7 +1124,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     let can = (s["canSet"] as? Bool) == true
     let v = pill(s["name"] as? String ?? "", fg: .white, bg: TaskPage.rgb(s["rgb"]))
     let why = s["why"] as? String ?? ""
-    return row("status", sym: "circle.lefthalf.filled", key: "Status", sub: why.isEmpty ? nil : why, value: v, chevron: can, tap: can ? { [weak self] in self?.pickStatus(s) } : nil)
+    return row("status", sym: "circle.lefthalf.filled", key: "Status", sub: why.isEmpty ? nil : why, value: v, chevron: can, locked: !can, tap: can ? { [weak self] in self?.pickStatus(s) } : nil)
   }
   private func pickStatus(_ s: [String: Any]) {
     let opts = (s["options"] as? [[String: Any]]) ?? []
@@ -1204,7 +1206,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
         a.append(NSAttributedString(string: who, attributes: [.font: f, .foregroundColor: UIColor.systemBlue]))
         kt = a
       }
-      return row("prio:" + key, sym: "flag", key: "Priority", keyText: kt, text: lab.isEmpty ? (can ? "None" : "–") : nil, value: v, chevron: can, tap: can ? { [weak self] in self?.pickPrio(p) } : nil)
+      return row("prio:" + key, sym: "flag", key: "Priority", keyText: kt, text: lab.isEmpty ? (can ? "None" : "–") : nil, value: v, chevron: can, locked: !can, tap: can ? { [weak self] in self?.pickPrio(p) } : nil)
     }
   }
   // Priority, as the website's sheet: whose it is, Urgent (always on top), the numbers for that day (one each per
@@ -1238,7 +1240,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   private func updateRow(_ u: [String: Any]?, all: [String], can: Bool) -> DItem {
     let cur = u?["t"] as? String ?? ""
     let v: UIView? = cur.isEmpty ? nil : pill(cur, fg: TaskPage.rgb(u?["rgb"]), bg: TaskPage.rgb(u?["rgb"]).withAlphaComponent(0.16))
-    return row("update", sym: "arrow.triangle.2.circlepath", key: "Task Update", text: cur.isEmpty ? (can ? "None" : "–") : nil, value: v, chevron: can, extra: all.joined(separator: ","), tap: can ? { [weak self] in self?.pickUpdate(all, cur: cur) } : nil)
+    return row("update", sym: "arrow.triangle.2.circlepath", key: "Task Update", text: cur.isEmpty ? (can ? "None" : "–") : nil, value: v, chevron: can, locked: !can, extra: all.joined(separator: ","), tap: can ? { [weak self] in self?.pickUpdate(all, cur: cur) } : nil)
   }
   // Task Update: the website's list, the one on it ticked; Clear at the end when there is one
   private func pickUpdate(_ all: [String], cur: String) {
