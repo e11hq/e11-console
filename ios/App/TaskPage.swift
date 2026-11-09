@@ -567,7 +567,13 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     guard let fid = f["id"] as? String else { return }
     let a = UIAlertController(title: "Move “\(f["name"] as? String ?? "this file")” to the Trash?", message: "It can be restored within 30 days.", preferredStyle: .alert)
     a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-    a.addAction(UIAlertAction(title: "Trash", style: .destructive) { [weak self] _ in guard let self = self else { return }; self.onAct?(["act": "removeFile", "id": self.taskId, "value": fid]) })
+    a.addAction(UIAlertAction(title: "Trash", style: .destructive) { [weak self] _ in
+      guard let self = self else { return }
+      // (gone from the row at once — its card fades out and the rest slide in, as a ticked checklist item; it waited for the
+      //  server's answer and then went: Haris 2026-11-09, "deleting a file" not smooth. The server's answer draws it as it is)
+      self.local { m in m["files"] = ((m["files"] as? [[String: Any]]) ?? []).filter { ($0["id"] as? String) != fid } }
+      self.onAct?(["act": "removeFile", "id": self.taskId, "value": fid])
+    })
     present(a)
   }
   private func confirmDelete() {
