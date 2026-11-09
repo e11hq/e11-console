@@ -268,6 +268,25 @@ no longer decides the app's look (`setAppearance` keeps only Automatic's setting
 (`lookFlip` → `lookLight` → `lookDark`): every tab's screen on show in the phone's look, none forced, nothing drawn again
 (`Main.lookRedraws`). Look.swift; project doc `claude/ios-task-page-apple.md` step 5.
 
+**Page by page, fully Apple — every native page from now on (Haris, 2026-11-09: "we will do each page with all
+capabilities before we move to next"):** one page at a time, each finished before the next. Before starting a page, read
+every rule in this file and the Don'ts again and check the page against each (Haris 2026-11-09: "read all the rules …
+before starting. nothing should be missed"). Each page:
+1. Mock-up first (Apple's parts in our design); everything decided with Haris before any code.
+2. Fully Apple — only what Apple has no part for is ours, drawn inside Apple's parts; said plainly before it's approved.
+3. Light / dark follows the phone (the rule above), nothing drawn again.
+4. Only changes update — live, smoothly (the redraw and Live rules above).
+5. No website behind it: its data from the copy on the phone; it works offline.
+6. Super fast and lightweight; no empty flash; no leftover code (Don'ts 2, 3, 7).
+7. Every other rule here (locks, Don't 11, builds, commits).
+8. The self-test checks it.
+9. The phone keeps only what's needed: the copy updated as data changes and old data discarded — deleted items gone, saved
+   screens and pictures / files capped and cleaned, another person's copy removed on a switch or sign-out; what the phone
+   keeps is measured (first measured with the startup screen).
+10. The first start with no copy on the phone: the startup screen shows Apple's spinner and "Setting up your account"
+    under the logo until the copy is in (only then; never again on that phone).
+Order: 1 the startup screen (our animated logo stays — Haris 2026-11-09), then Home per its fully-Apple mock-up, then the rest.
+
 **The App Store release — APPROVED (Haris, 2026-11-06):** the iPhone app 1.1.0, build 1472 (commit 9ca8c16, marked by
 the branch `approved/appstore-ios-1.1.0-build-1472` — never moved or deleted) is approved as it is for the App Store.
 From now on:
