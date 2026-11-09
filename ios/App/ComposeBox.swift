@@ -491,7 +491,7 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     keep.values.forEach { $0.view.removeFromSuperview() }
     for v in tiles.arrangedSubviews where !views.contains(where: { $0 === v }) { v.removeFromSuperview() }
     for (i, v) in views.enumerated() where i >= tiles.arrangedSubviews.count || tiles.arrangedSubviews[i] !== v { tiles.insertArrangedSubview(v, at: i) }
-    let want: CGFloat = files.isEmpty ? 0 : 60
+    let want: CGFloat = files.isEmpty ? 0 : 68   // (the 64 tiles, a little room under)
     if tilesH.constant != want { tilesH.constant = want; superview?.layoutIfNeeded() }
     paintSend()
   }
@@ -500,17 +500,31 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
       let uid = f.uid
       let t = UIView(); t.backgroundColor = .tertiarySystemFill; t.layer.cornerRadius = 12
       t.translatesAutoresizingMaskIntoConstraints = false
-      t.widthAnchor.constraint(equalToConstant: 56).isActive = true; t.heightAnchor.constraint(equalToConstant: 56).isActive = true
+      // (64, as the mock-up — Haris 2026-11-10: a picture itself; any other file its type badge with its name under it)
+      let S: CGFloat = 64
+      t.widthAnchor.constraint(equalToConstant: S).isActive = true; t.heightAnchor.constraint(equalToConstant: S).isActive = true
       let ext = (f.name as NSString).pathExtension.uppercased()
-      let l = UILabel(); l.text = ext.isEmpty ? "FILE" : String(ext.prefix(4)); l.font = .systemFont(ofSize: 11, weight: .bold); l.textColor = .secondaryLabel; l.textAlignment = .center
-      l.frame = CGRect(x: 0, y: 0, width: 56, height: 56)
+      let l = UILabel(); l.text = ""; l.font = .systemFont(ofSize: 11, weight: .bold); l.textColor = .secondaryLabel; l.textAlignment = .center
+      l.frame = CGRect(x: 0, y: 0, width: S, height: S)
+      if f.thumb == nil {
+        let badge = PaddedLabel(); badge.text = ext.isEmpty ? "FILE" : String(ext.prefix(4)); badge.font = .systemFont(ofSize: 8.5, weight: .bold); badge.textColor = .white
+        badge.backgroundColor = ext == "PDF" ? .systemRed : ext == "AI" ? .systemOrange : .systemGray; badge.layer.cornerRadius = 4; badge.clipsToBounds = true
+        badge.textAlignment = .center; badge.frame = CGRect(x: (S - 26) / 2, y: 9, width: 26, height: 30)
+        let nm = UILabel(); nm.text = f.name; nm.font = .systemFont(ofSize: 10); nm.textColor = .secondaryLabel; nm.textAlignment = .center; nm.lineBreakMode = .byTruncatingMiddle
+        nm.frame = CGRect(x: 4, y: 42, width: S - 8, height: 14)
+        t.addSubview(badge); t.addSubview(nm)
+      }
       if let th = f.thumb {
         let iv = UIImageView(image: th); iv.contentMode = .scaleAspectFill; iv.clipsToBounds = true; iv.layer.cornerRadius = 12; iv.frame = l.frame; t.addSubview(iv)
         if f.progress < 1 && !f.failed { let dim = UIView(frame: l.frame); dim.backgroundColor = UIColor.black.withAlphaComponent(0.35); dim.layer.cornerRadius = 12; t.addSubview(dim); l.textColor = .white } else { l.isHidden = true }
       }
       t.addSubview(l)
-      if f.progress < 1 && !f.failed { l.text = "\(Int(f.progress * 100))%"; if f.thumb == nil { l.textColor = .label }; let bar = UIProgressView(progressViewStyle: .bar); bar.progress = Float(f.progress); bar.frame = CGRect(x: 8, y: 46, width: 40, height: 3); t.addSubview(bar) }
-      if f.failed { l.textColor = .systemRed }
+      if f.progress < 1 && !f.failed {
+        if f.thumb != nil { l.text = "\(Int(f.progress * 100))%" }
+        let bar = UIProgressView(progressViewStyle: .bar); bar.progress = Float(f.progress); bar.frame = CGRect(x: 7, y: S - 9, width: S - 14, height: 3)
+        bar.layer.cornerRadius = 1.5; bar.clipsToBounds = true; t.addSubview(bar)
+      }
+      if f.failed { l.text = "!"; l.font = .systemFont(ofSize: 20, weight: .bold); l.textColor = .systemRed }
       // the ✕: a dark circle with a thin white edge and a white ✕ — clear on any picture, dark or light (as Photos' and
       // Messages' own remove buttons; Haris, 2026-11-02)
       let x = UIButton(type: .custom)
@@ -518,7 +532,7 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
       x.backgroundColor = UIColor.black.withAlphaComponent(0.62); x.layer.cornerRadius = 11
       x.layer.borderWidth = 1.5; x.layer.borderColor = UIColor.white.withAlphaComponent(0.9).cgColor
       x.layer.shadowColor = UIColor.black.cgColor; x.layer.shadowOpacity = 0.25; x.layer.shadowRadius = 2; x.layer.shadowOffset = .zero
-      x.frame = CGRect(x: 31, y: 3, width: 22, height: 22)   // (inside the tile's corner: nothing of it or its shadow cut off)
+      x.frame = CGRect(x: S - 25, y: 3, width: 22, height: 22)   // (inside the tile's corner: nothing of it or its shadow cut off)
       x.addAction(UIAction { [weak self] _ in self?.files.removeAll { $0.uid == uid }; self?.paintTiles() }, for: .touchUpInside)
       t.addSubview(x)
       return t
