@@ -256,10 +256,16 @@ every rule in this file and the Don'ts is followed on every change — none skip
 the rules that apply (locks, categories, standards, Don'ts, builds, commits) and check the change against each; after it,
 check again that nothing was missed — on the change itself and on every page that follows a locked one.
 
-**Before the next App Store review — remember (Haris, 2026-11-08):** do **light ↔ dark switching smoothly, Apple's way**
-first (task page plan step 5, project doc `claude/ios-task-page-apple.md`): our screens' colours as Apple's dynamic
-colours so iOS fades the look itself, the tab bar following the phone. Not now — only before sending the iPhone app to
-App Store review; remind Haris then.
+**Light and dark, Apple's way — every native screen, now and later (Haris, 2026-11-09: "Yes, start"):** the iPhone app
+follows the phone's look and nothing of ours forces one — never `overrideUserInterfaceStyle` on a view, sheet, alert,
+nav or the tab bar. Our colours are Apple's dynamic colours (`Look.c(dark, light)`, the system colours, `HomeLook`'s —
+each holds both looks), so iPhone switches every screen itself, in its own fade, with nothing drawn again. Only what
+Apple can't switch by itself — a layer's border / shadow colour, a gradient — is set again on the change
+(`view.followLook`); pictures (the tab bar's icons, the task page's file chips) are drawn again. The website in the app
+no longer decides the app's look (`setAppearance` keeps only Automatic's setting). A drawing's signature uses
+`HomeLook.key`, never a colour object. The self-test switches the simulator light ↔ dark with the app open
+(`lookFlip` → `lookLight` → `lookDark`): every tab's screen on show in the phone's look, none forced, nothing drawn again
+(`Main.lookRedraws`). Look.swift; project doc `claude/ios-task-page-apple.md` step 5.
 
 **The App Store release — APPROVED (Haris, 2026-11-06):** the iPhone app 1.1.0, build 1472 (commit 9ca8c16, marked by
 the branch `approved/appstore-ios-1.1.0-build-1472` — never moved or deleted) is approved as it is for the App Store.
