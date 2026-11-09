@@ -1211,7 +1211,10 @@ final class AssetsCtl {
         self.upBusy = true
         var sent: [[String: Any]] = []
         let total = picked.count
+        let cancels = UploadCenter.shared.cancels
         func next(_ i: Int) {
+          // (Cancel on the uploads' bar: nothing more goes up and nothing is filed)
+          if UploadCenter.shared.cancels != cancels { self.upBusy = false; h?.assetsToast("Upload cancelled"); return }
           guard i < total else {
             self.upBusy = false
             guard !sent.isEmpty else { h?.assetsToast("Couldn’t upload — try again"); return }
@@ -1223,14 +1226,12 @@ final class AssetsCtl {
           }
           let (url, name) = picked[i]
           let size = ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.intValue ?? 0
-          Uploader.send(url, name: name, task: "", dest: dir, cookies: self.main.serverHome.cookies, progress: { p in
-            h?.assetsToast("Uploading \(total > 1 ? "\(i + 1) of \(total)" : name)… \(Int(p * 100))%")
-          }) { path in
+          // (its progress on the uploads' bar at the bottom, with Cancel — as a download's)
+          Uploader.send(url, name: name, task: "", dest: dir, cookies: self.main.serverHome.cookies, progress: { _ in }) { path in
             if let p = path { sent.append(["name": name, "path": p, "size": size]) }
             next(i + 1)
           }
         }
-        h?.assetsToast("Uploading…")
         next(0)
       }
     }, animated: true)

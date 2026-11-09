@@ -155,6 +155,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   var downloadWatch: [ObjectIdentifier: NSKeyValueObservation] = [:]
   var downloadNames: [ObjectIdentifier: String] = [:]
   var hud: DownloadHUD?
+  var upHud: DownloadHUD?   // (uploads: the same bar as the downloads, with Cancel — UploadCenter)
   var retrying = false
   var launchLock = true          // ask for Face ID when the app starts (not every time it comes back to the front)
   var authing = false            // Face ID is on screen (it makes the app inactive and active again: never a new lock)
@@ -675,6 +676,21 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     lockView?.frame = b
     reviewLink.frame = CGRect(x: 0, y: b.height - bottomSafe - 44, width: b.width, height: 44)
     hud?.place(in: b, above: tabBar.isHidden ? bottomSafe : h)
+    upHud?.place(in: b, above: (tabBar.isHidden ? bottomSafe : h) + (hud == nil ? 0 : 82))
+  }
+  // the uploads' bar: "Uploading <name>" (or "N files"), how much of how much, its bar, Cancel — gone when nothing's going up
+  func paintUploadHUD() {
+    let jobs = UploadCenter.shared.jobs.values.filter { !$0.cancelled }
+    if jobs.isEmpty { upHud?.removeFromSuperview(); upHud = nil; return }
+    if upHud == nil {
+      let u = DownloadHUD(); u.onCancel = { UIImpactFeedbackGenerator(style: .light).impactOccurred(); UploadCenter.shared.cancelAll() }
+      view.addSubview(u); upHud = u; view.setNeedsLayout(); view.layoutIfNeeded()
+    }
+    if let u = upHud { view.bringSubviewToFront(u) }
+    let sent = jobs.reduce(Int64(0)) { $0 + $1.sent }, total = jobs.reduce(Int64(0)) { $0 + $1.size }
+    let mb = { (b: Int64) in String(format: "%.1f MB", Double(b) / 1_048_576) }
+    let name = jobs.count == 1 ? jobs[0].name : "\(jobs.count) files"
+    upHud?.show(title: "Uploading \(name)", detail: total > 0 ? "\(mb(sent)) of \(mb(total))" : "Starting…", progress: total > 0 ? Float(sent) / Float(total) : -1)
   }
   func loadHome(_ path: String = "/") {
     guard let u = URL(string: serverURL() + path) else { return }

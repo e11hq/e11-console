@@ -8,12 +8,29 @@ import UniformTypeIdentifiers
    Voice messages WhatsApp's way: hold the mic to record (red dot, timer, live waveform), slide left to cancel, slide up
    to lock and let go (then 🗑 or ↑). Sent straight to the server (/api/home/act comment / editComment); files and
    voice uploaded by the app itself. */
+// every upload in the app, as the downloads: one bar at the bottom — what's going up, how much of how much, and Cancel
+// (Haris 2026-11-09: "upload progress … and cancel same as download, to all uploads")
+final class UploadCenter {
+  static let shared = UploadCenter()
+  struct Job { var name: String; var size: Int64; var sent: Int64; var cancelled: Bool }
+  private(set) var jobs: [UUID: Job] = [:]
+  func begin(_ name: String, _ size: Int64) -> UUID { let id = UUID(); jobs[id] = Job(name: name, size: size, sent: 0, cancelled: false); Main.shared.paintUploadHUD(); return id }
+  func step(_ id: UUID, _ sent: Int64) { guard jobs[id] != nil else { return }; jobs[id]?.sent = sent; Main.shared.paintUploadHUD() }
+  func end(_ id: UUID) { jobs[id] = nil; Main.shared.paintUploadHUD() }
+  func cancelled(_ id: UUID) -> Bool { jobs[id]?.cancelled ?? true }
+  private(set) var cancels = 0   // (how many times Cancel was tapped — a run of uploads stops when it changes)
+  func cancelAll() { cancels += 1; for k in jobs.keys { jobs[k]?.cancelled = true }; Main.shared.paintUploadHUD() }
+}
 enum Uploader {
-  // a file on the phone → the server (2 MB at a time) → its path there
+  // a file on the phone → the server (2 MB at a time) → its path there. Cancel (the bar at the bottom): it stops before
+  // the next piece and says it didn't go (done(nil)), as a failed upload
   static func send(_ url: URL, name: String, task: String, dest: String? = nil, cookies: @escaping (@escaping (String) -> Void) -> Void, progress: @escaping (Double) -> Void, done: @escaping (String?) -> Void) {
     let size = ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.int64Value ?? 0
+    let job = UploadCenter.shared.begin(name, size)
+    let finish: (String?) -> Void = { p in UploadCenter.shared.end(job); done(p) }
     func piece(_ offset: Int64, _ path: String?) {
-      guard let fh = try? FileHandle(forReadingFrom: url) else { return done(nil) }
+      if UploadCenter.shared.cancelled(job) { return finish(nil) }
+      guard let fh = try? FileHandle(forReadingFrom: url) else { return finish(nil) }
       try? fh.seek(toOffset: UInt64(offset))
       let data = (try? fh.read(upToCount: 2 * 1024 * 1024)) ?? Data()
       try? fh.close()
@@ -28,10 +45,11 @@ enum Uploader {
         URLSession.shared.dataTask(with: r) { d, resp, _ in
           let j = d.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
           DispatchQueue.main.async {
-            guard ((resp as? HTTPURLResponse)?.statusCode ?? 0) == 200, let p = j?["path"] as? String else { return done(nil) }
+            guard ((resp as? HTTPURLResponse)?.statusCode ?? 0) == 200, let p = j?["path"] as? String else { return finish(nil) }
             let next = offset + Int64(data.count)
+            UploadCenter.shared.step(job, next)
             progress(size > 0 ? Double(next) / Double(size) : 1)
-            if next < size && !data.isEmpty { piece(next, p) } else { done(p) }
+            if next < size && !data.isEmpty { piece(next, p) } else { finish(p) }
           }
         }.resume()
       }
