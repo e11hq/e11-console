@@ -942,6 +942,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   private func label(_ t: String, size: CGFloat, color: UIColor, weight: UIFont.Weight = .regular) -> UILabel {
     let l = UILabel(); l.text = t; l.font = .systemFont(ofSize: size, weight: weight); l.textColor = color; return l
   }
+  private func greyText(_ t: String) -> UILabel { label(t, size: TaskPage.T, color: .secondaryLabel) }
   private func symbol(_ s: String, _ size: CGFloat, _ c: UIColor, weight: UIImage.SymbolWeight = .regular) -> UIImageView {
     let i = UIImageView(image: UIImage(systemName: s, withConfiguration: UIImage.SymbolConfiguration(pointSize: size, weight: weight)))
     i.tintColor = c; i.contentMode = .center; i.setContentHuggingPriority(.required, for: .horizontal); return i
