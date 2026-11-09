@@ -109,7 +109,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   }()
   // (while the description is being written, nothing else on the page answers a tap — only Done ends it: Haris,
   //  2026-11-02)
-  var editingDesc = false { didSet { if oldValue != editingDesc { holdForDesc(); onDescEditing?(editingDesc) } } }
+  var editingDesc = false { didSet { if oldValue != editingDesc { if editingDesc { descBox.expand() }; holdForDesc(); onDescEditing?(editingDesc) } } }
   var onDescEditing: ((Bool) -> Void)?   // (iPhone's own bar: Done in place of ••• while it's written — AppleNav)
   var descEmpty = true
   private func holdForDesc() {
@@ -241,7 +241,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     tv.becomeFirstResponder()
     if let pos = tv.closestPosition(to: p), !descEmpty { tv.selectedTextRange = tv.textRange(from: pos, to: pos) }
   }
-  private func relayAnimated() { UIView.animate(withDuration: 0.4, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) { self.descBox.invalidateIntrinsicContentSize(); self.scroll.layoutIfNeeded() } }
+  private func relayAnimated() { UIView.animate(withDuration: 0.4, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) { self.scroll.layoutIfNeeded() } }
   func showFiles() {
     guard tab == "details", let ip = listDS?.indexPath(for: "files") ?? listDS?.indexPath(for: "attach") else { return }
     // (the Files box's bottom just above the bottom edge — Apple's list scrolls it there)
@@ -1431,7 +1431,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   // (writing in the description opens it all, as Expand does)
   func textViewDidBeginEditing(_ tv: UITextView) { if tv === descView { descBox.expand(); beginDesc() } }
   func textViewDidChangeSelection(_ tv: UITextView) { if tv === descView, tv.isFirstResponder, kbCover > 0 { DispatchQueue.main.async { self.caretIntoView() } } }
-  func textViewDidChange(_ tv: UITextView) { setNeedsLayout(); if tv === descView || tv === descRead { descBox.invalidateIntrinsicContentSize() }; if tv === descView { descChanged(); DispatchQueue.main.async { self.caretIntoView(); if !self.pulses.isEmpty || self.descUploading { self.placePulses() } } } }
+  func textViewDidChange(_ tv: UITextView) { setNeedsLayout(); if tv === descView { descChanged(); DispatchQueue.main.async { self.caretIntoView(); if !self.pulses.isEmpty || self.descUploading { self.placePulses() } } } }
   func textViewDidEndEditing(_ tv: UITextView) {
     if tv === descView { return }
     let v = tv.text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1600,6 +1600,9 @@ final class DescBox: UIView {
   var onExpand: (() -> Void)?
   private weak var text: UITextView?
   private let fade = CAGradientLayer(), button = UIButton(type: .system)
+  // (its height by constraints only — Apple's own sizing: the words' full height, held to 204 while a long one isn't
+  //  opened; no height worked out by code of ours — build 1614 still crashed in Apple's layout loop, Haris 2026-11-09)
+  private var cap: NSLayoutConstraint?
   override init(frame: CGRect) {
     super.init(frame: frame)
     clipsToBounds = true
@@ -1612,27 +1615,28 @@ final class DescBox: UIView {
     button.configuration = c
     button.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.expand() }, for: .touchUpInside)
     followLook("fade") { [weak self] _ in self?.setNeedsLayout() }   // (a layer's colour: set again on the look's change)
+    let k = heightAnchor.constraint(lessThanOrEqualToConstant: 204)
+    k.isActive = true; cap = k
   }
   required init?(coder: NSCoder) { fatalError() }
   func hold(_ tv: UITextView) {
     if text !== tv {
       text?.removeFromSuperview()
       tv.removeFromSuperview(); tv.translatesAutoresizingMaskIntoConstraints = false; addSubview(tv)
-      // (its own full height; the box shows as much of it as it's given)
-      NSLayoutConstraint.activate([tv.topAnchor.constraint(equalTo: topAnchor), tv.leadingAnchor.constraint(equalTo: leadingAnchor), tv.trailingAnchor.constraint(equalTo: trailingAnchor)])
+      // (its own full height; the box as tall as the words, up to its cap)
+      let fill = tv.bottomAnchor.constraint(equalTo: bottomAnchor); fill.priority = .defaultHigh
+      NSLayoutConstraint.activate([tv.topAnchor.constraint(equalTo: topAnchor), tv.leadingAnchor.constraint(equalTo: leadingAnchor), tv.trailingAnchor.constraint(equalTo: trailingAnchor), fill])
       text = tv
     }
     layer.addSublayer(fade); addSubview(button)
-    invalidateIntrinsicContentSize()   // (its words may have changed: its height again)
   }
-  func expand() { guard !expanded else { return }; expanded = true; invalidateIntrinsicContentSize(); onExpand?() }
-  // (a long one, not opened yet: the cap, the fade and the button; the box is measured after this)
+  // (opened, or being written: all of it, from then on)
+  func expand() { guard !expanded else { return }; expanded = true; cap?.isActive = false; onExpand?() }
+  // (a long one, not opened yet: the fade and Show More over its last lines — drawing only, its size isn't touched)
   override func layoutSubviews() {
-    let w = bounds.width
-    let full = text.map { $0.sizeThatFits(CGSize(width: w > 0 ? w : 300, height: .greatestFiniteMagnitude)).height } ?? 0
-    if text?.isFirstResponder == true { expanded = true }
-    let short = !expanded && full > 168 + 40
     super.layoutSubviews()
+    let w = bounds.width
+    let short = !expanded && (text?.frame.height ?? 0) > bounds.height + 1
     fade.isHidden = !short; button.isHidden = !short
     // (the words fade out above 168, the rest covered in the page's colour; Show More under them)
     CATransaction.begin(); CATransaction.setDisableActions(true)
@@ -1642,19 +1646,9 @@ final class DescBox: UIView {
     fade.locations = [0, NSNumber(value: Double(60 / max(60, bounds.height - 108))), 1]
     CATransaction.commit()
     let s = button.sizeThatFits(CGSize(width: 200, height: 40))
-    button.frame = CGRect(x: 0, y: 170, width: s.width, height: s.height)
-    if bounds.width != lastW { lastW = bounds.width; invalidateIntrinsicContentSize() }   // (its width known: its height again)
+    button.frame = CGRect(x: 0, y: bounds.height - s.height, width: s.width, height: s.height)
     bringSubviewToFront(button)
   }
-  // (its height for its width — capped while it's a long one not opened; Apple's self-sizing reads it)
-  private var lastW: CGFloat = 0
-  override var intrinsicContentSize: CGSize {
-    let w = bounds.width > 0 ? bounds.width : 300
-    let full = text.map { $0.sizeThatFits(CGSize(width: w, height: .greatestFiniteMagnitude)).height } ?? 0
-    let short = !expanded && text?.isFirstResponder != true && full > 168 + 40
-    return CGSize(width: UIView.noIntrinsicMetric, height: ceil(short ? 168 + 36 : full))
-  }
-
 }
 
 
