@@ -139,9 +139,7 @@ extension Main {
       // a task: every picker, attach, comments, its menu, Copy link, back
       ("task", { self.openTaskPage(task, tab: "details", focus: "") }),
       ("taskPeople", { p()?.pickPeople() }),
-      ("taskTags", { self.shut(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { p()?.pickTags() } }),
       ("taskClient", { self.shut(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { p()?.pickClient() } }),
-      ("taskChannels", { self.shut(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { p()?.pickChannels() } }),
       ("taskGuardian", { self.shut(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { p()?.pickGuardian() } }),
       ("taskAttach", { self.shut(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { p()?.attachSheet() } }),
       ("taskComments", { self.shut(); p()?.setTab("comments", tell: true) }),

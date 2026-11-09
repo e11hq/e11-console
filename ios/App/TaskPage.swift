@@ -887,6 +887,13 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   }
   // the self-test: each row on screen and its height — the same row must keep its height as the page settles, scrolls and
   // comes back (Haris 2026-11-09: rows changed height as the tab bar went and grew as they scrolled in)
+  // the self-test: the page in the phone's look — its style, nothing of ours forcing one, its colour light or dark
+  func lookNow() -> [String: Any] {
+    var forced = 0; var x: UIView? = self
+    while let v = x { if v.overrideUserInterfaceStyle != .unspecified { forced += 1 }; x = v.superview }
+    var b: CGFloat = 0; _ = (backgroundColor ?? .clear).resolvedColor(with: traitCollection).getWhite(&b, alpha: nil)
+    return ["style": traitCollection.userInterfaceStyle.rawValue, "forced": forced, "bg": Double(b)]
+  }
   func detailsHeights() -> [String: Double] {
     var out: [String: Double] = [:]
     for c in scroll.visibleCells { if let ip = scroll.indexPath(for: c), let k = listDS?.itemIdentifier(for: ip) { out[k] = Double(c.bounds.height) } }
@@ -1377,28 +1384,6 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
       self.onAct?(["act": "finance", "id": self.taskId, "value": t])
     }, { _, _ in })
   }
-  // Tags: this task's (ticked — untick to remove), then the ones used most; type to add a new one
-  func pickTags() {
-    guard let m = model else { return }
-    let mine = ((m["tags"] as? [[String: Any]]) ?? []).compactMap { $0["t"] as? String }
-    let others = ((m["allTags"] as? [String]) ?? []).filter { t in !mine.contains { $0.lowercased() == t.lowercased() } }
-    let list = mine + others
-    var on = list.map { mine.contains($0) }
-    let canRemove = (m["canRemoveTag"] as? Bool) == true
-    let row = { (i: Int, t: String) -> [String: Any] in ["i": i, "label": t, "checked": on[i], "multi": true, "icon": "tag", "disabled": on[i] && !canRemove] }
-    var secs: [[String: Any]] = []
-    if !mine.isEmpty { secs.append(["header": "On this task", "rows": mine.enumerated().map { row($0.offset, $0.element) }]) }
-    if !others.isEmpty { secs.append(["header": "Used most", "rows": others.enumerated().map { row(mine.count + $0.offset, $0.element) }]) }
-    onSheet?(["sections": secs, "multi": true, "search": "Search or add a tag", "custom": "Add “%@”"], { [weak self] i in
-      guard let self = self, i >= 0, i < list.count else { return }
-      on[i].toggle()
-      UISelectionFeedbackGenerator().selectionChanged()
-      self.onAct?(["act": on[i] ? "addTag" : "removeTag", "id": self.taskId, "value": list[i]])
-    }, { [weak self] i, typed in
-      guard let self = self, i == -2, let v = typed?.trimmingCharacters(in: .whitespacesAndNewlines), !v.isEmpty else { return }
-      self.onAct?(["act": "addTag", "id": self.taskId, "value": v])
-    })
-  }
   func pickClient() {
     guard let list = model?["clients"] as? [[String: Any]], !list.isEmpty else { return }
     let rows: [[String: Any]] = list.enumerated().map { i, c in ["i": i, "label": c["name"] as? String ?? "", "dot": c["rgb"] ?? [128, 128, 128], "checked": (c["on"] as? Bool) == true, "find": c["name"] as? String ?? ""] }
@@ -1411,18 +1396,6 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
       self.onAct?(["act": "client", "id": self.taskId, "value": id])
     }, { _, _ in })
   }
-  func pickChannels() {
-    guard let m = model, let all = m["allChannels"] as? [[String: Any]] else { return }
-    var keys = (m["channelKeys"] as? [String]) ?? []
-    let rows: [[String: Any]] = all.enumerated().map { i, c in ["i": i, "label": c["n"] as? String ?? "", "checked": keys.contains(c["k"] as? String ?? ""), "multi": true, "icon": "send"] }
-    onSheet?(["sections": [["header": "Channels", "rows": rows]], "multi": true], { [weak self] i in
-      guard let self = self, i >= 0, i < all.count, let k = all[i]["k"] as? String else { return }
-      if let j = keys.firstIndex(of: k) { keys.remove(at: j) } else { keys.append(k) }
-      UISelectionFeedbackGenerator().selectionChanged()
-      self.onAct?(["act": "channels", "id": self.taskId, "value": keys])
-    }, { _, _ in })
-  }
-
   // ---------- the title, edited in place ----------
   func textView(_ tv: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
     if tv === descView {
