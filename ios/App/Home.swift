@@ -14,8 +14,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   var onEvent: (([String: Any]) -> Void)?
   var present: ((UIViewController) -> Void)?
   private var canDelete = false
-  private weak var openCard: HomeCard?
-  private var actions: HomeActions?
   private var toastView: UIView?
   /* The header (Haris, 2026-10-31, as Mail): at the top the big title with the date over it; as the list scrolls it
      shrinks as it rises into a small bar — the small title with the date under it — and the cards pass under it
@@ -164,7 +162,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // (the Inbox: Mail's buttons go into the list, Mark all read into Apple's bar — HomeView's own taken out)
     if isInbox { listHead.removeFromSuperview(); markAll.removeFromSuperview(); inboxRows.values.forEach { $0.swipes = false }; catsWrap.addSubview(catsView); if !content.isEmpty { applyList(animated: false) }; onAppleCorner?() }
     // (the Clients tab's pages and Client Assets': what's drawn already goes into Apple's list)
-    if (isClients || isClient || assets != nil), listOn, !content.isEmpty { applyList(animated: false) }
+    if (isClients || isClient || assets != nil || !cards.isEmpty), listOn, !content.isEmpty { applyList(animated: false) }
     setNeedsLayout()
   }
   private func makeAppleList() {
@@ -176,6 +174,16 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let layout = UICollectionViewCompositionalLayout { [weak self] i, env in
       // (Me and its pages: iPhone Settings' own grouped sections — AppleMe.swift)
       if let self = self, self.isMeList, let g = self.meSection(i), g.grouped { return self.meGrouped(g, env) }
+      // (a group of tasks — or of clients found — is one of Apple's inset groups, its heading Apple's header: Haris
+      //  2026-11-09, Home fully Apple)
+      if let self = self, !self.isMeList || self.searching, i < self.listSecs.count, self.listSecs[i].rows {
+        var gc = UICollectionLayoutListConfiguration(appearance: .insetGrouped)
+        gc.backgroundColor = .clear
+        gc.headerMode = self.listSecs[i].head != nil ? .supplementary : .none
+        gc.trailingSwipeActionsConfigurationProvider = { [weak self] ip in self?.swipeActions(ip, leading: false) }
+        gc.leadingSwipeActionsConfigurationProvider = { [weak self] ip in self?.swipeActions(ip, leading: true) }
+        return NSCollectionLayoutSection.list(using: gc, layoutEnvironment: env)
+      }
       let sec = NSCollectionLayoutSection.list(using: cfg, layoutEnvironment: env)
       // (the Inbox's rows edge to edge, one under the other, as Mail's)
       let inbox = self?.isInbox == true
@@ -190,7 +198,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     cv.backgroundColor = .clear
     cv.alwaysBounceVertical = true
     cv.contentInsetAdjustmentBehavior = .automatic
-    cv.allowsSelection = false
+    cv.allowsSelection = true   // (a task's or a client's row: Apple's selection opens it; nothing else highlights)
     cv.delegate = self
     if #available(iOS 26.0, *) { cv.topEdgeEffect.style = .automatic }
     let reg = UICollectionView.CellRegistration<HostCell, String> { [weak self] cell, _, key in
@@ -199,13 +207,40 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     }
     // (Me's rows: Apple's own list cells, set by Apple's configurations — iPhone Settings')
     let setReg = UICollectionView.CellRegistration<UICollectionViewListCell, String> { [weak self] cell, _, key in self?.paintMe(cell, key) }
+    // (a task or a client found: Apple's own cell — HomeCard / HomeClientRow give its content; a group's "nothing due" line:
+    //  Apple's cell with its words)
+    let rowReg = UICollectionView.CellRegistration<UICollectionViewListCell, String> { [weak self] cell, _, key in
+      guard let self = self, let r = self.listViews[key] as? AppleRow else { return }
+      self.paintRow(cell, r)
+    }
+    let emptyReg = UICollectionView.CellRegistration<UICollectionViewListCell, String> { [weak self] cell, _, key in
+      guard let self = self else { return }
+      var c = UIListContentConfiguration.cell()
+      c.text = (self.listViews[key] as? UILabel)?.text
+      c.textProperties.font = .systemFont(ofSize: 14); c.textProperties.color = self.L.empty
+      cell.contentConfiguration = c
+      cell.accessories = []
+      var bg = UIBackgroundConfiguration.listGroupedCell(); bg.backgroundColor = self.L.card; cell.backgroundConfiguration = bg
+    }
     let isMe = isMeList
-    listDS = UICollectionViewDiffableDataSource<Int, String>(collectionView: cv) { cv, ip, key in
+    listDS = UICollectionViewDiffableDataSource<Int, String>(collectionView: cv) { [weak self] cv, ip, key in
       if isMe && (key.hasPrefix("s:") || key == "me:card") { return cv.dequeueConfiguredReusableCell(using: setReg, for: ip, item: key) }
+      if let v = self?.listViews[key] {
+        if v is AppleRow { return cv.dequeueConfiguredReusableCell(using: rowReg, for: ip, item: key) }
+        if key.hasPrefix("e:") && v.tag == 8 { return cv.dequeueConfiguredReusableCell(using: emptyReg, for: ip, item: key) }
+      }
       return cv.dequeueConfiguredReusableCell(using: reg, for: ip, item: key)
     }
+    if !isMe {
+      // (a group's heading: Apple's header over its inset group — our words, its client's dot)
+      let head = UICollectionView.SupplementaryRegistration<UICollectionViewListCell>(elementKind: UICollectionView.elementKindSectionHeader) { [weak self] v, _, ip in
+        var c = UIListContentConfiguration.groupedHeader()
+        if let self = self, ip.section < self.listSecs.count { c.attributedText = self.listSecs[ip.section].head }
+        v.contentConfiguration = c
+      }
+      listDS?.supplementaryViewProvider = { cv, _, ip in cv.dequeueConfiguredReusableSupplementary(using: head, for: ip) }
+    }
     if isMe {
-      cv.allowsSelection = true
       let head = UICollectionView.SupplementaryRegistration<UICollectionViewListCell>(elementKind: UICollectionView.elementKindSectionHeader) { [weak self] v, _, ip in
         var c = UIListContentConfiguration.groupedHeader(); c.text = self?.meSection(ip.section)?.head; c.textProperties.font = .systemFont(ofSize: 13); c.textProperties.color = .secondaryLabel; v.contentConfiguration = c   // (Apple's header at the size Me had: 13 grey — Haris 2026-11-08)
       }
@@ -231,9 +266,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if key == "cats" { return MailCats.H + 10 }
     if v is InboxRow { return InboxRow.H }
     if v === hint { return (hint.sizeThatFits(CGSize(width: w, height: 400)).height) + 28 }
-    if v is HomeClientRow { return 70 }
     if let n = v as? SearchFixedNote { return n.height(for: w) }
-    if let c = v as? HomeCard { return c.height(for: w) }
     if v.tag == 8 { return 28 + ((v as? UILabel)?.sizeThatFits(CGSize(width: w - 8, height: 400)).height ?? 17) }
     return 27
   }
@@ -273,17 +306,69 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     }
     listViews = views
     blockWraps = blockWraps.filter { e in views.values.contains { $0 === e.value } }
+    // (the groups, Apple's way — Haris 2026-11-09: a heading over tasks, or over clients found, and its rows are one of
+    //  Apple's inset groups, the heading its header; Today's own run has no heading. Everything else — the boxes, a client's
+    //  folders, the Inbox's rows, Client Assets' blocks — in plain sections as before)
+    func isRow(_ k: String) -> Bool { let v = views[k]; return v is AppleRow || (k.hasPrefix("e:") && v?.tag == 8) }
+    var secs: [[String]] = [], meta: [ListSec] = []
+    for (n, k) in keys.enumerated() {
+      if k.hasPrefix("h:"), let nx = keys[(n + 1)...].first(where: { !$0.hasPrefix("h:") }), isRow(nx) {
+        secs.append([]); meta.append(ListSec(rows: true, head: (views[k] as? UILabel)?.attributedText)); continue
+      }
+      let r = isRow(k)
+      if meta.last?.rows != r { secs.append([]); meta.append(ListSec(rows: r, head: nil)) }
+      secs[secs.count - 1].append(k)
+    }
     var snap = NSDiffableDataSourceSnapshot<Int, String>()
-    snap.appendSections([0]); snap.appendItems(keys, toSection: 0)
-    // (a cell set again only when what it holds or its height changed — the card itself draws its own changes; every cell
-    //  set afresh on each draw broke the rule "only what changed changes": Haris 2026-11-08)
+    for (i, x) in secs.enumerated() { snap.appendSections([i]); snap.appendItems(x, toSection: i) }
+    // (a cell set again only when what it shows or its height changed — every cell set afresh on each draw broke the rule
+    //  "only what changed changes": Haris 2026-11-08)
     let had = Set(ds.snapshot().itemIdentifiers)
     var sigs: [String: String] = [:]
-    for k in keys { if let v = views[k] { sigs[k] = "\(ObjectIdentifier(v).hashValue)|\(itemHeight(k, v))" } }
-    let changed = keys.filter { had.contains($0) && listDrawn[$0] != sigs[$0] }
+    for k in secs.joined() {
+      guard let v = views[k] else { continue }
+      if let r = v as? AppleRow { sigs[k] = r.rowSig }
+      else if k.hasPrefix("e:") && v.tag == 8 { sigs[k] = ((v as? UILabel)?.text ?? "") + "|" + L.key }
+      else { sigs[k] = "\(ObjectIdentifier(v).hashValue)|\(itemHeight(k, v))" }
+    }
+    let changed = secs.joined().filter { had.contains($0) && listDrawn[$0] != sigs[$0] }
     listDrawn = sigs
     if !changed.isEmpty { snap.reconfigureItems(changed) }
-    ds.apply(snap, animatingDifferences: animated)
+    // (a section that became a group, or stopped being one: its layout asked again)
+    let kindsChanged = listSecs.map { $0.rows } != meta.map { $0.rows }
+    listSecs = meta
+    if kindsChanged { list?.collectionViewLayout.invalidateLayout() }
+    ds.apply(snap, animatingDifferences: animated) { [weak self] in self?.refreshHeads() }
+  }
+  // a group: rows (Apple's inset group) or not, and its heading (Apple's header)
+  struct ListSec { let rows: Bool; let head: NSAttributedString? }
+  private var listSecs: [ListSec] = []
+  // the headers on screen with new words (a count changed) set again — only those
+  private func refreshHeads() {
+    guard let cv = list, !isMeList || searching else { return }
+    let kind = UICollectionView.elementKindSectionHeader
+    for ip in cv.indexPathsForVisibleSupplementaryElements(ofKind: kind) {
+      guard ip.section < listSecs.count, let v = cv.supplementaryView(forElementKind: kind, at: ip) as? UICollectionViewListCell,
+            var c = v.contentConfiguration as? UIListContentConfiguration else { continue }
+      let want = listSecs[ip.section].head
+      if (c.attributedText == nil && want == nil) || (want != nil && c.attributedText?.isEqual(to: want!) == true) { continue }
+      c.attributedText = want; v.contentConfiguration = c
+    }
+  }
+  // a task's or a client's row: Apple's cell set by its content, our tag and faces at its right, Apple's ›; the cell in
+  // the card's colour, Apple's highlight when it's tapped
+  private func paintRow(_ cell: UICollectionViewListCell, _ r: AppleRow) {
+    cell.contentConfiguration = r.rowContent
+    var acc: [UICellAccessory] = []
+    if r.rowHasAccessory { acc.append(.customView(configuration: .init(customView: r, placement: .trailing(), reservedLayoutWidth: .actual, maintainsFixedSize: true))) }
+    acc.append(.disclosureIndicator())
+    cell.accessories = acc
+    let card = L.card
+    cell.configurationUpdateHandler = { c, state in
+      var bg = UIBackgroundConfiguration.listGroupedCell().updated(for: state)
+      if !state.isHighlighted && !state.isSelected { bg.backgroundColor = card }
+      c.backgroundConfiguration = bg
+    }
   }
   // Apple's swipe actions: right — Done · Due; left — Copy link · Delete (as our round buttons did)
   private func swipeActions(_ ip: IndexPath, leading: Bool) -> UISwipeActionsConfiguration? {
@@ -297,7 +382,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       let cfg = UISwipeActionsConfiguration(actions: [a]); cfg.performsFirstActionWithFullSwipe = true
       return cfg
     }
-    guard let key = listDS?.itemIdentifier(for: ip), let card = listViews[key] as? HomeCard else { return nil }
+    // (My Tasks' Done tab: completed tasks are read only — no swipes, as no hold)
+    guard let key = listDS?.itemIdentifier(for: ip), let card = listViews[key] as? HomeCard, !(isList && listTab == "done") else { return nil }
     let d = card.info
     var acts: [UIContextualAction] = []
     if leading {
@@ -311,7 +397,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
           finish(true)
         }
         a.image = UIImage(systemName: hold ? "person.badge.clock" : done ? "arrow.uturn.backward" : "checkmark")
-        a.backgroundColor = hold ? HomeActions.orange.withAlphaComponent(0.5) : done ? HomeActions.grey : HomeActions.green
+        a.backgroundColor = hold ? TaskSwipe.orange.withAlphaComponent(0.5) : done ? TaskSwipe.grey : TaskSwipe.green
         acts.append(a)
       }
       if (d["canDue"] as? Bool) == true {
@@ -322,18 +408,14 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
           finish(true)
         }
         a.image = UIImage(systemName: "calendar")
-        a.backgroundColor = HomeActions.purple
+        a.backgroundColor = TaskSwipe.purple
         acts.append(a)
       }
     } else {
       if canDelete {
         let a = UIContextualAction(style: .destructive, title: "Trash") { [weak self, weak card] _, _, finish in
           guard let self = self, let card = card else { return finish(false) }
-          // (asked first: the task goes to the Trash)
-          let al = UIAlertController(title: "Move this task to the Trash?", message: card.taskTitle.isEmpty ? nil : card.taskTitle, preferredStyle: .actionSheet)
-          al.addAction(UIAlertAction(title: "Trash Task", style: .destructive) { _ in self.send(["ev": "delete", "id": card.id, "card": card.info]); self.findAgain(); finish(true) })
-          al.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in finish(false) })
-          self.present?(al)
+          self.askTrash(card, finish: finish)
         }
         a.image = UIImage(systemName: "trash")
         acts.append(a)
@@ -345,13 +427,20 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
         finish(true)
       }
       c.image = UIImage(systemName: "link")
-      c.backgroundColor = HomeActions.grey
+      c.backgroundColor = TaskSwipe.grey
       acts.append(c)
     }
     if acts.isEmpty { return nil }
     let cfg = UISwipeActionsConfiguration(actions: acts)
     cfg.performsFirstActionWithFullSwipe = !leading || (d["cdHold"] as? Bool) != true
     return cfg
+  }
+  // (asked first: the task goes to the Trash — from its swipe or its menu)
+  private func askTrash(_ card: HomeCard, finish: ((Bool) -> Void)?) {
+    let al = UIAlertController(title: "Move this task to the Trash?", message: card.taskTitle.isEmpty ? nil : card.taskTitle, preferredStyle: .actionSheet)
+    al.addAction(UIAlertAction(title: "Trash Task", style: .destructive) { [weak self] _ in self?.send(["ev": "delete", "id": card.id, "card": card.info]); self?.findAgain(); finish?(true) })
+    al.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in finish?(false) })
+    present?(al)
   }
   // (the list's top and bottom as iPhone has them — under Apple's bar — or as this screen sets them)
   private var inTop: CGFloat { appleTop ? sv.adjustedContentInset.top : scroll.contentInset.top }
@@ -361,7 +450,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // E11 Talk's lists: one list, Apple's bar following it; a second results page kept the big title's room above them)
   func appleSearchBegin() {
     guard appleTop, !searching else { return }
-    if let o = openCard { setOpen(o, false) }
     searching = true
     showMotto()
     field.text = ""; showResults(nil)
@@ -575,20 +663,13 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // 2026-11-02): what goes fades out where it is while the gap closes; what comes — a task moving from Overdue to
     // Today, one completed elsewhere arriving on Done — gets its gap opened, then fades in. Nothing jumps.
     let key = "\(isList)|\(listTab)|\(filtersKey)|\(model["id"] as? String ?? "")"   // (another client's page: drawn afresh)
+    // (Apple's list moves what came, went or moved itself — the cards' own move animation is gone with the cards: Haris
+    //  2026-11-09, Home fully Apple)
     let animate = window != nil && !isHidden && key == drawnKey && !content.isEmpty && !searching
     drawnKey = key
-    var oldCenter: [String: CGPoint] = [:]
-    let oldGroup = groupOf
-    var oldHeads: [String: UIView] = [:]
-    if animate {
-      for (id, v) in cards { oldCenter[id] = v.center }
-      for v in content where !(v is HomeCard) { if let k = v.accessibilityIdentifier { oldHeads[k] = v } }
-    }
-    let leavingHeads = content.filter { !($0 is HomeCard) }
-    if !animate && !listOn { leavingHeads.forEach { if !($0 is HomeBlock) { $0.removeFromSuperview() } } }
+    if !listOn { content.forEach { if !($0 is HomeBlock) && !($0 is HomeCard) { $0.removeFromSuperview() } } }
     var headsUsed = Set<String>()
     content = []
-    groupOf = [:]
     if isClient {
       drawBarTitle(model)
       // (its Client Assets folders on top, then "Tasks · N open" with Show completed — kept, not made again)
@@ -614,9 +695,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       let name = (g["name"] as? String ?? "").uppercased()
       let s = NSMutableAttributedString()
       // (a client's run under Today: its colour dot first, as on the cards)
-      if let dot = NativeSheetVC.color(g["dot"]) {
-        let img = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { _ in dot.setFill(); UIBezierPath(roundedRect: CGRect(x: 0, y: 0, width: 8, height: 8), cornerRadius: 2).fill() }
-        let a = NSTextAttachment(); a.image = img; a.bounds = CGRect(x: 0, y: 0.5, width: 8, height: 8)
+      // (Apple's circle in the client's colour — Haris 2026-11-09)
+      if let dot = NativeSheetVC.color(g["dot"]), let img = UIImage(systemName: "circle.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 8))?.withTintColor(dot, renderingMode: .alwaysOriginal) {
+        let a = NSTextAttachment(); a.image = img; a.bounds = CGRect(x: 0, y: 0, width: img.size.width, height: img.size.height)
         s.append(NSAttributedString(attachment: a)); s.append(NSAttributedString(string: " ", attributes: [.font: UIFont.systemFont(ofSize: 12), .kern: 2]))
       }
       s.append(NSAttributedString(string: name, attributes: [.font: UIFont.systemFont(ofSize: 12, weight: .bold), .kern: 0.72, .foregroundColor: L.gh]))
@@ -629,41 +710,28 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       // (Today: no heading on screen — only the mark the Due today box scrolls to)
       let anchor = (g["anchor"] as? Bool) == true
       if h.isHidden != anchor { h.isHidden = anchor }
-      if !listOn || h.superview == nil { scroll.addSubview(h) }   // (kept in its cell of Apple's list)
+      if !listOn { scroll.addSubview(h) }   // (Apple's list: its words are its group's header, or a cell's)
       content.append(h)
       for c in g["cards"] as? [[String: Any]] ?? [] {
         guard let id = c["id"] as? String else { continue }
         seen.insert(id)
+        // (the task: Apple's cell in the list, this its content and accessory — tapped: Apple's selection; held: Apple's menu;
+        //  swiped: Apple's swipe actions — HomeView's list)
         let v: HomeCard
         if let old = cards[id] { v = old } else {
           v = HomeCard(); v.id = id
-          v.onTap = { [weak self, weak v] in
-            guard let self = self else { return }
-            // (a card swiped open: a tap closes it, as in Mail)
-            if let o = self.openCard { self.setOpen(o, false); if o === v { return } }
-            self.send(["ev": "open", "id": id])
-          }
-          let pan = UIPanGestureRecognizer(target: self, action: #selector(self.swipe(_:))); pan.delegate = self; v.addGestureRecognizer(pan)
-          if APPLE_NAV {
-            // (iPhone's own touch and hold, as E11 Talk: the card shrinks as it's held, lifts, and Apple's menu comes
-            //  beside it — the same choices the sheet had: Haris 2026-11-07)
-            v.addInteraction(UIContextMenuInteraction(delegate: self))
-          } else {
-            let lp = UILongPressGestureRecognizer(target: self, action: #selector(self.press(_:))); lp.minimumPressDuration = 0.45; v.addGestureRecognizer(lp)
-            _ = PressShrink.add(to: v)   // (touch and hold, app-wide: it shrinks from the moment the finger is down)
-          }
-          self.scroll.addSubview(v); self.cards[id] = v
+          v.onTap = { [weak self] in self?.send(["ev": "open", "id": id]) }
+          cards[id] = v
         }
         v.people = people
         v.set(c, look: L)
         content.append(v)
-        groupOf[id] = gkey
       }
       if let e = g["empty"] as? String, !e.isEmpty {
         let l: UILabel = listOn ? (empties[gkey] ?? { let x = UILabel(); empties[gkey] = x; return x }()) : UILabel()
         if l.text != e { l.text = e }
         l.font = .systemFont(ofSize: 14); if l.textColor != L.empty { l.textColor = L.empty }; l.tag = 8; l.numberOfLines = 0; l.accessibilityIdentifier = "empty|" + gkey
-        if !listOn || l.superview == nil { scroll.addSubview(l) }
+        if !listOn { scroll.addSubview(l) }   // (Apple's list: its words in an Apple cell of the group)
         content.append(l)
       }
     }
@@ -672,12 +740,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       for (k, v) in heads where !headsUsed.contains(k) { v.removeFromSuperview(); heads[k] = nil }
       for (k, v) in empties where !headsUsed.contains(k) || !content.contains(where: { $0 === v }) { v.removeFromSuperview(); empties[k] = nil }
     }
-    var gone: [UIView] = []
-    for (id, v) in cards where !seen.contains(id) {
-      if v === openCard { actions?.removeFromSuperview(); actions = nil; openCard = nil }
-      if animate { gone.append(v) } else { v.removeFromSuperview() }
-      cards[id] = nil
-    }
+    for id in cards.keys where !seen.contains(id) { cards[id] = nil }
     canDelete = (model["canDelete"] as? Bool) == true
     if let t = model["toast"] as? [String: Any] { toast(t) }
     fab.isHidden = (model["add"] as? Bool) != true
@@ -686,47 +749,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
 
     setNeedsLayout(); layoutIfNeeded()
     // (Apple's list: Apple's own animation for what came, went or moved)
-    if listOn { applyList(animated: animate); return }
-    if animate { moveList(oldCenter: oldCenter, oldGroup: oldGroup, oldHeads: oldHeads, leavingHeads: leavingHeads, gone: gone) }
+    if listOn { applyList(animated: animate) }
   }
   private var drawnKey = ""
-  private var groupOf: [String: String] = [:]
-  // the list from how it was to how it is now: going — fades out where it is; staying — slides to its place (the gap
-  // closing or opening, Mail's spring); coming (or moved to another group) — fades in once its gap has opened
-  private func moveList(oldCenter: [String: CGPoint], oldGroup: [String: String], oldHeads: [String: UIView], leavingHeads: [UIView], gone: [UIView]) {
-    let fadeOut = 0.2, settle = 0.44
-    func fade(_ v: UIView) {
-      scroll.bringSubviewToFront(v)
-      UIView.animate(withDuration: fadeOut, delay: 0, options: [.curveEaseOut, .allowUserInteraction]) { v.alpha = 0 } completion: { _ in v.removeFromSuperview() }
-    }
-    // going: the removed cards, and the old headings that aren't there any more (the rest are swapped for the new ones)
-    gone.forEach(fade)
-    var arrivals: [UIView] = [], moves: [(UIView, CGPoint)] = []
-    for v in content {
-      if let c = v as? HomeCard {
-        guard let was = oldCenter[c.id] else { arrivals.append(c); continue }
-        if oldGroup[c.id] != groupOf[c.id] {
-          // (moved to another group — Overdue → Today: a copy fades out where it was, the card fades in at its new place)
-          if let ghost = c.snapshotView(afterScreenUpdates: false) { ghost.center = was; scroll.addSubview(ghost); fade(ghost) }
-          arrivals.append(c)
-        } else if abs(was.y - c.center.y) > 0.5 { moves.append((c, c.center)); c.center = was }
-      } else if let k = v.accessibilityIdentifier, let old = oldHeads[k] {
-        let now = v.center
-        if abs(old.center.y - now.y) > 0.5 { v.center = old.center; moves.append((v, now)) }
-      } else { arrivals.append(v) }
-    }
-    for h in leavingHeads {
-      if content.contains(where: { $0 === h }) { continue }   // (the client page's folders and tasks line: kept, not swapped)
-      if let k = h.accessibilityIdentifier, content.contains(where: { $0.accessibilityIdentifier == k }) { h.removeFromSuperview() } else { fade(h) }
-    }
-    arrivals.forEach { $0.alpha = 0 }
-    // the gaps close and open together (Mail's spring: about 0.44 s, no bounce), a moment after the fading starts
-    let run = { for (v, to) in moves { v.center = to } }
-    if #available(iOS 17.0, *) { UIView.animate(springDuration: settle, bounce: 0, initialSpringVelocity: 0, delay: 0.06, options: [.allowUserInteraction, .beginFromCurrentState], animations: run) }
-    else { UIView.animate(withDuration: settle, delay: 0.06, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState], animations: run) }
-    // coming: once its gap is there
-    UIView.animate(withDuration: 0.22, delay: 0.26, options: [.curveEaseOut, .allowUserInteraction]) { arrivals.forEach { $0.alpha = 1 } }
-  }
   // (your photo only made again when it really changed — a new picture each drawing made the top button's photo blink a
   //  moment after it settled, and on coming back to the app: Haris 2026-11-02. A photo that's there isn't swapped for
   //  your initials while it's being fetched again.)
@@ -772,7 +797,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       guard let self = self else { return }
       UISelectionFeedbackGenerator().selectionChanged()
       self.listTab = self.seg.selectedSegmentIndex == 1 ? "done" : "all"
-      if let o = self.openCard { self.setOpen(o, false) }
       self.send(["ev": "tab", "tab": self.listTab])
     }, for: .valueChanged)
     [filterRow, chipRow].forEach { $0.showsHorizontalScrollIndicator = false; $0.alwaysBounceHorizontal = true; $0.clipsToBounds = false; $0.contentInset = UIEdgeInsets(top: 0, left: 16, bottom: 0, right: 16) }
@@ -804,7 +828,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     lastFilters = a
     if appleTop { onAppleFilters?(a) }
     let tab = (a["tab"] as? String) == "done" ? "done" : "all"
-    if tab != listTab { listTab = tab; if let o = openCard { setOpen(o, false) } }
+    if tab != listTab { listTab = tab }
     seg.selectedSegmentIndex = listTab == "done" ? 1 : 0
     let key = String(describing: a["buttons"] ?? "") + "|" + String(describing: a["chips"] ?? "") 
     if key == filtersKey { return }
@@ -1276,12 +1300,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
         let h = (v as? UILabel)?.sizeThatFits(CGSize(width: lw - 8, height: 400)).height ?? 17
         v.frame = CGRect(x: 20, y: y + 14, width: lw - 8, height: h)
         y += 14 + h + 14
-      } else if let c = v as? HomeCard {
-        let h = c.height(for: lw)
-        // (bounds and centre: a card swiped open keeps its sideways shift)
-        c.bounds = CGRect(x: 0, y: 0, width: lw, height: h); c.center = CGPoint(x: 16 + lw / 2, y: y + h / 2)
-        if c === openCard, let a = actions { a.frame = CGRect(x: a.leading ? 16 : 16 + lw - a.frame.width, y: y, width: a.frame.width, height: h) }
-        y += h
       }
     }
     // (the list ends with its last card 12 above "+ New task", so nothing is hidden behind it and no empty third of the
@@ -1584,7 +1602,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // ---------- search: the glass circle stretches into a search bar, your photo becomes a glass ✕ ----------
   func openSearch() {
     if searching { field.becomeFirstResponder(); return }
-    if let o = openCard { setOpen(o, false) }
     let start = searchHome, meF = me.frame
     searching = true
     onCorner?()
@@ -1679,10 +1696,10 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       if !clients.isEmpty {
         resultViews.append(groupHead("Clients", clients.count))
         for c in clients {
-          let row = HomeClientRow(); row.set(c, look: L); _ = PressShrink.add(to: row)
+          let row = HomeClientRow(); row.set(c, look: L)
           let id = c["id"] as? String ?? ""
-          row.addAction(UIAction { [weak self] _ in self?.resignSearch(); self?.send(["ev": "client", "id": id]) }, for: .touchUpInside)
-          if !listOn { results.addSubview(row) }; resultViews.append(row)
+          row.onTap = { [weak self] in self?.resignSearch(); self?.send(["ev": "client", "id": id]) }
+          resultViews.append(row)
         }
       }
       if !tasks.isEmpty {
@@ -1690,30 +1707,20 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
         for c in tasks {
           guard let id = c["id"] as? String else { continue }
           seen.insert(id)
+          // (a task is the same row wherever it shows — Apple's cell, its swipes and hold — in the search results too)
           let v: HomeCard
           if let old = resultCards[id] { v = old } else {
             v = HomeCard(); v.id = id
-            v.onTap = { [weak self, weak v] in
-              guard let self = self else { return }
-              if let o = self.openCard { self.setOpen(o, false); if o === v { return } }
-              self.resignSearch(); self.send(["ev": "open", "id": id])
-            }
-            // (a task card is the same card wherever it shows — Haris, 2026-11-02: swipe right Done · Due, left Copy link ·
-            //  Delete, touch and hold Attach Files — in the search results too)
-            if !self.listOn {   // (Apple's list: its own swipe and hold, as Home's cards)
-              let pan = UIPanGestureRecognizer(target: self, action: #selector(self.swipe(_:))); pan.delegate = self; v.addGestureRecognizer(pan)
-              let lp = UILongPressGestureRecognizer(target: self, action: #selector(self.press(_:))); lp.minimumPressDuration = 0.45; v.addGestureRecognizer(lp)
-            }
-            _ = PressShrink.add(to: v)
+            v.onTap = { [weak self] in self?.resignSearch(); self?.send(["ev": "open", "id": id]) }
             resultCards[id] = v
           }
           v.people = people; v.set(c, look: L)
-          if !listOn { results.addSubview(v) }; resultViews.append(v)
+          resultViews.append(v)
         }
       }
       hint.text = clients.isEmpty && tasks.isEmpty ? "No tasks found. Try a client or person’s name." : nil
     } else { hint.text = q.isEmpty ? "Search tasks, clients or people." : nil }
-    for (id, v) in resultCards where !seen.contains(id) { v.removeFromSuperview(); resultCards[id] = nil }
+    for id in resultCards.keys where !seen.contains(id) { resultCards[id] = nil }
     setNeedsLayout()
     if listOn { applyList(animated: false) }   // (Apple's list: the results are its rows while searching)
   }
@@ -1737,7 +1744,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     s.append(NSAttributedString(string: " ", attributes: [.font: UIFont.systemFont(ofSize: 12), .kern: 3.6]))
     s.append(NSAttributedString(string: "\(n)", attributes: [.font: UIFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: L.gh.withAlphaComponent(0.8)]))
     h.attributedText = s
-    results.addSubview(h)
+    if !listOn { results.addSubview(h) }   // (Apple's list: its words are the group's header)
     return h
   }
   private func layoutResults() {
@@ -1748,7 +1755,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     for (i, v) in resultViews.enumerated() {
       if i > 0 { y += 10 }
       if v.tag == 7 { y += i > 0 ? 12 : 4; v.frame = CGRect(x: 20, y: y, width: lw - 8, height: 15); y += 15 }
-      else if let c = v as? HomeCard { let h = c.height(for: lw); c.bounds = CGRect(x: 0, y: 0, width: lw, height: h); c.center = CGPoint(x: 16 + lw / 2, y: y + h / 2); y += h }
       else if let b = v as? HomeBlock { let h = b.blockHeight(W); b.frame = CGRect(x: 0, y: y, width: W, height: h); y += h }
       else if let n = v as? SearchFixedNote { let h = n.height(for: lw); n.frame = CGRect(x: 16, y: y, width: lw, height: h); y += h }
       else { v.frame = CGRect(x: 16, y: y, width: lw, height: 70); y += 70 }
@@ -1757,7 +1763,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }
   @objc private func statTap(_ g: UITapGestureRecognizer) {
     guard let v = g.view, !searching else { return }
-    if let o = openCard { setOpen(o, false) }
     UIView.animate(withDuration: 0.08, animations: { v.transform = CGAffineTransform(scaleX: 0.96, y: 0.96) }) { _ in UIView.animate(withDuration: 0.15) { v.transform = .identity } }
     UIImpactFeedbackGenerator(style: .light).impactOccurred()
     let i = v.tag - 100
@@ -1771,17 +1776,20 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if let cv = list, let ds = listDS {
       // (Apple's list: that group's heading — Today's first card, its heading being only a mark — to the top)
       guard let i = content.firstIndex(where: { $0 === h }) else { return }
-      let after = content[i...].first { v in v is HomeCard || !(v.tag == 7 && v.isHidden) }
-      let key = after.map { v -> String in (v as? HomeCard).map { "c:" + $0.id } ?? ((v.tag == 8 ? "e:" : "h:") + (v.accessibilityIdentifier ?? "")) }
+      // (the group's first row — its heading is Apple's header over it, since Home is fully Apple: Haris 2026-11-09)
+      let after = content[(i + 1)...].first { v in v is HomeCard || v.tag == 8 }
+      let key = after.map { v -> String in (v as? HomeCard).map { "c:" + $0.id } ?? ("e:" + (v.accessibilityIdentifier ?? "")) }
+      guard let k = key, let ip = ds.indexPath(for: k), let row = cv.layoutAttributesForItem(at: ip) else { return }
+      // (its header, when it has one, comes into sight with it)
+      let head = cv.layoutAttributesForSupplementaryElement(ofKind: UICollectionView.elementKindSectionHeader, at: IndexPath(item: 0, section: ip.section))
+      let goal = head.map { $0.frame.height > 0 ? $0.frame.union(row.frame) : row.frame } ?? row.frame
       // (already on screen — Today's, just under the boxes: nothing to scroll to. Scrolled "to the top" it only went part of the
       //  way into the big title's room, and Apple's bar snaps back to its big title from there — the jump: Haris 2026-11-07)
-      if let k = key, let ip = ds.indexPath(for: k) {
-        if let a = cv.layoutAttributesForItem(at: ip) {
-          let top = cv.contentOffset.y + cv.adjustedContentInset.top, bottom = cv.contentOffset.y + cv.bounds.height - cv.adjustedContentInset.bottom
-          if a.frame.minY >= top, a.frame.maxY <= bottom { return }
-        }
-        userScrolled = true; cv.scrollToItem(at: ip, at: .top, animated: true)
-      }
+      let top = cv.contentOffset.y + cv.adjustedContentInset.top, bottom = cv.contentOffset.y + cv.bounds.height - cv.adjustedContentInset.bottom
+      if goal.minY >= top, row.frame.maxY <= bottom { return }
+      let maxY = max(-cv.adjustedContentInset.top, cv.contentSize.height + cv.adjustedContentInset.bottom - cv.bounds.height)
+      userScrolled = true
+      cv.setContentOffset(CGPoint(x: 0, y: min(maxY, goal.minY - cv.adjustedContentInset.top)), animated: true)
       return
     }
     let want = appleTop ? h.frame.minY - 12 - (safeAreaInsets.top) : h.frame.minY - (safeAreaInsets.top + 66)
@@ -1789,139 +1797,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     scroll.setContentOffset(CGPoint(x: 0, y: min(maxY, max(-inTop, want))), animated: true)
   }
   func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) { if scrollView === scroll { layoutHeader() } }
-  func scrollViewWillBeginDragging(_ scrollView: UIScrollView) { if scrollView === list { userScrolled = true }; if let o = openCard { setOpen(o, false) } }
-
-  // ---------- swipe left on a card: Copy link · Delete; swipe right: Done · Due (as in Mail: round buttons with their names
-  // under them) ----------
-  private func leadOK(_ card: HomeCard) -> Bool { (card.info["canDone"] as? Bool) == true || (card.info["canDue"] as? Bool) == true }
-  override func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
-    // (My Tasks' Done tab: completed tasks are read only — no swipes, no Attach Files)
-    if isList && listTab == "done" && g.view is HomeCard && (g is UIPanGestureRecognizer || g is UILongPressGestureRecognizer) { return false }
-    guard let p = g as? UIPanGestureRecognizer, let card = p.view as? HomeCard else { return true }
-    if listOn && card.superview !== results { return false }   // (Apple's list: Apple's swipe actions)
-    let v = p.velocity(in: self)
-    return abs(v.x) > abs(v.y) * 1.2 && (v.x < 0 || card.swipeX != 0 || leadOK(card))
-  }
-  private func reveal(_ leading: Bool) -> CGFloat {
-    let n = leading ? max(1, actions?.leading == true ? actions!.count : 2) : (canDelete ? 2 : 1)
-    return 20 + CGFloat(n) * 64
-  }
-  // (+1: the card slid right, Done · Due on its left; -1: slid left, Copy link · Delete on its right)
-  private var openSide: CGFloat { (openCard?.swipeX ?? 0) > 0 ? 1 : -1 }
-  private func actionsFor(_ card: HomeCard, leading: Bool) -> HomeActions {
-    if let a = actions, openCard === card, a.leading == leading { return a }
-    actions?.removeFromSuperview()
-    let a: HomeActions
-    if leading {
-      let d = card.info
-      a = HomeActions(done: (d["done"] as? Bool) == true, showDone: (d["canDone"] as? Bool) == true, due: d["due"] as? String, showDue: (d["canDue"] as? Bool) == true, cdHold: (d["cdHold"] as? Bool) == true)
-    } else { a = HomeActions(delete: canDelete) }
-    let w = 20 + CGFloat(a.count) * 64
-    a.frame = CGRect(x: leading ? card.center.x - card.bounds.width / 2 : card.center.x + card.bounds.width / 2 - w, y: card.center.y - card.bounds.height / 2, width: w, height: card.bounds.height)
-    a.onCopy = { [weak self, weak card] in
-      guard let self = self, let card = card else { return }
-      UIImpactFeedbackGenerator(style: .light).impactOccurred()
-      self.send(["ev": "copy", "id": card.id]); self.setOpen(card, false)
-    }
-    a.onDelete = { [weak self, weak card] in
-      guard let self = self, let card = card else { return }
-      // (asked first: the task goes to the Trash)
-      let al = UIAlertController(title: "Move this task to the Trash?", message: card.taskTitle.isEmpty ? nil : card.taskTitle, preferredStyle: .actionSheet)
-      al.addAction(UIAlertAction(title: "Trash Task", style: .destructive) { _ in self.send(["ev": "delete", "id": card.id, "card": card.info]); self.setOpen(card, false); self.findAgain() })
-      al.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in self.setOpen(card, false) })
-      self.present?(al)
-    }
-    // Done: green at once (grey again when a done task is reopened), then the card closes and the page does the rest — as
-    // its own tick: a task not ready to complete only shows why (the circle stays grey), Undo on the toast
-    a.onDone = { [weak self, weak card, weak a] in
-      guard let self = self, let card = card else { return }
-      let wasDone = (card.info["done"] as? Bool) == true, ready = (card.info["doneReady"] as? Bool) == true
-      if wasDone || ready {
-        a?.markDone(!wasDone)
-        if !wasDone { UINotificationFeedbackGenerator().notificationOccurred(.success) } else { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
-      }
-      DispatchQueue.main.asyncAfter(deadline: .now() + (wasDone || ready ? 0.35 : 0)) {
-        self.send(["ev": "done", "id": card.id, "done": !wasDone, "card": card.info]); self.setOpen(card, false); self.findAgain()
-      }
-    }
-    // Due: the card closes and the page opens the date sheet the task page uses
-    a.onDue = { [weak self, weak card] in
-      guard let self = self, let card = card else { return }
-      UIImpactFeedbackGenerator(style: .light).impactOccurred()
-      self.send(["ev": "due", "id": card.id, "card": card.info]); self.setOpen(card, false); self.findAgain()
-    }
-    (card.superview as? UIScrollView ?? scroll).insertSubview(a, belowSubview: card)   // (Home's list, or the search results)
-    actions = a; openCard = card
-    return a
-  }
-  private var swipeLead = false
-  private var lastSwipeV: CGFloat = 0   // (the finger's speed as it let go: the spring carries it on)
-  @objc private func swipe(_ g: UIPanGestureRecognizer) {
-    guard let card = g.view as? HomeCard else { return }
-    switch g.state {
-    case .began:
-      if let o = openCard, o !== card { setOpen(o, false) }
-      card.swipeStart = card.swipeX
-      swipeLead = card.swipeX != 0 ? card.swipeX > 0 : g.velocity(in: self).x > 0
-      if swipeLead && !leadOK(card) { swipeLead = false }
-      _ = actionsFor(card, leading: swipeLead)
-    case .changed:
-      var x = card.swipeStart + g.translation(in: self).x
-      let r = reveal(swipeLead)
-      if swipeLead {
-        if x < 0 { x = 0 }
-        if x > r { x = r + (x - r) / 3 }   // (past the buttons: held back)
-      } else {
-        if x > 0 { x = 0 }
-        if x < -r { x = -r + (x + r) / 3 }
-      }
-      card.swipeX = x
-      actions?.progress = min(1, abs(x) / r)
-    case .ended, .cancelled, .failed:
-      let v = g.velocity(in: self).x, r = reveal(swipeLead)
-      lastSwipeV = v
-      if swipeLead { setOpen(card, v > 350 || (card.swipeX > r / 2 && v > -300), leading: true) }
-      else { setOpen(card, v < -350 || (card.swipeX < -r / 2 && v < 300), leading: false) }
-    default: break
-    }
-  }
-  func setOpen(_ card: HomeCard, _ open: Bool, leading: Bool? = nil) {
-    let lead = leading ?? (openCard === card ? openSide > 0 : false)
-    if open { _ = actionsFor(card, leading: lead) }
-    let a = actions, r = reveal(lead)
-    let fingerV = lastSwipeV; lastSwipeV = 0
-    SwipeSpring.run(from: card.swipeX, to: open ? (lead ? r : -r) : 0, velocity: fingerV) {
-      card.swipeX = open ? (lead ? r : -r) : 0
-      a?.progress = open ? 1 : 0
-    } completion: {
-      if !open && card.swipeX == 0 && self.openCard === card { a?.removeFromSuperview(); if self.actions === a { self.actions = nil }; self.openCard = nil }
-    }
-  }
-
-  // ---------- long press a card: Attach Files (Camera · Photos · Files), the card lifted over the dimmed screen ----------
-  @objc private func press(_ g: UILongPressGestureRecognizer) {
-    guard g.state == .began, let card = g.view as? HomeCard, !(isList && listTab == "done") else { return }   // (Done tab: read only)
-    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-    attach(card)
-  }
-  private func attach(_ card: HomeCard) {
-    if let o = openCard { setOpen(o, false) }
-    card.isHighlighted = false
-    let id = card.id
-    let sheet = AttachSheetVC(title: "Attach Files") { [weak self] src in self?.send(["ev": "attach", "id": id, "source": src]) }
-    // (the lifted picture is the card at its full size, and the card itself is hidden under it while the sheet is up —
-    //  the shrunk card showed its border round the picture: a double border, Haris 2026-11-02)
-    (card.gestureRecognizers?.first { $0 is PressShrink } as? PressShrink)?.release()
-    card.layer.removeAllAnimations(); card.transform = CGAffineTransform(translationX: card.swipeX, y: 0)
-    if let snap = card.snapshotView(afterScreenUpdates: true) {
-      sheet.lifted = snap; sheet.liftedFrame = card.convert(card.bounds, to: nil)
-      card.alpha = 0
-      sheet.onLiftedGone = { [weak card] in card?.alpha = 1 }
-    }
-    present?(sheet)
-    // (never left hidden if the sheet didn't come up)
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak card, weak sheet] in if sheet?.view.window == nil { card?.alpha = 1 } }
-  }
+  func scrollViewWillBeginDragging(_ scrollView: UIScrollView) { if scrollView === list { userScrolled = true } }
 
   // ---------- a toast over Home (the page's own would be under it): "Link copied", "2 files added to …", Undo ----------
   // a toast (Haris 2026-11-03, option C): "+ New task" stretches into it — "New task" fades, the capsule stretches to
@@ -1960,12 +1836,17 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }
   private var toastCap: ToastCapsule?
   private var fabSym = "plus"
-  // (for the self-test: the first card swiped open, held, closed)
-  private var firstCard: HomeCard? { content.compactMap { $0 as? HomeCard }.first }
-  func selfSwipe() { if let c = firstCard { setOpen(c, true) } }
-  func selfPress() { if let c = firstCard { attach(c) } }
-  func selfSwipeRight() { if let c = firstCard { setOpen(c, true, leading: true) } }
-  func selfClose() { if let o = openCard { setOpen(o, false) } }
+  // (for the self-test: the first task's row — Apple's swipe actions on each side, Apple's hold menu)
+  private var firstCardIP: IndexPath? { content.compactMap { $0 as? HomeCard }.first.flatMap { listDS?.indexPath(for: "c:" + $0.id) } }
+  private var selfRow: [String: Any] = [:]
+  func selfSwipe() { selfRow["trailing"] = firstCardIP.flatMap { swipeActions($0, leading: false) }?.actions.map { $0.title ?? "" } ?? [] }
+  func selfSwipeRight() { selfRow["leading"] = firstCardIP.flatMap { swipeActions($0, leading: true) }?.actions.map { $0.title ?? "" } ?? [] }
+  func selfPress() {
+    guard let cv = list, let ip = firstCardIP, let m = collectionView(cv, contextMenuConfigurationForItemsAt: [ip], point: .zero) else { selfRow["menu"] = false; return }
+    selfRow["menu"] = String(describing: m.identifier)
+    selfRow["cell"] = (cv.cellForItem(at: ip) as? UICollectionViewListCell)?.contentConfiguration is UIListContentConfiguration
+  }
+  func selfClose() {}
   func selfScroll(_ y: CGFloat) { userScrolled = y > 0; sv.setContentOffset(CGPoint(x: 0, y: y - inTop), animated: false); layoutHeader(); if !appleTop { setBar(barIn, now: true) } }
   // (Apple's search on Home's own screen — HomeVC: the self-test types into it as a finger would)
   var onAppleFind: ((String?) -> Void)?
@@ -1981,7 +1862,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // (the walk-through: the floating button tapped, when there is one)
   func selfFab() -> Bool { guard !fab.isHidden else { return false }; if let a = fabRun { a() } else { send(["ev": "add"]) }; return true }
   func geo() -> [String: Any] {
-    ["open": openCard != nil, "openShift": openCard?.swipeX ?? 0, "actions": actions?.subviews.count ?? 0, "lead": actions?.leading ?? false,
+    ["row": selfRow, "sections": listSecs.count, "groupsApple": listSecs.filter { $0.rows }.count,
      "title": title.text ?? "", "date": sub.text ?? "", "stats": stats.map { ($0.viewWithTag(1) as? UILabel)?.text ?? "" },
      "groups": content.filter { $0.tag == 7 }.map { ($0 as? UILabel)?.text ?? "" }, "cards": cards.count, "fab": !fab.isHidden,
      "headH": blur.frame.height, "shrink": shrink, "bar": blur.alpha, "smallTitle": smallTitle.alpha, "searching": searching,
@@ -2039,73 +1920,69 @@ struct HomeLook {
   }
 }
 
-// one task card (phone.js card(), phone.css .pc)
-final class HomeCard: UIControl {
+// A task in a list — Home, My Tasks, a client's page, search (Haris 2026-11-09, Home fully Apple: mock-up "E11 Day — fully
+// Apple"). Apple's own list cell shows it, set by Apple's content configuration (`content`): the status symbol in the
+// status colour, the title, the line under it — the client, status, due date, comments, with our CD chip in it (room
+// above it when it wraps: Haris 11:26) — and, in search, where it was found as one more line (Haris 11:35: Apple's third
+// line, no box). This view is only what Apple has no part for, the cell's accessory at its right: our Urgent / P1 tag and
+// the faces (a green ring for one whose part is done, "+N" for more). The cell's tap, hold (Apple's menu with its own lift)
+// and swipes are the list's own (HomeView).
+protocol AppleRow: UIView {
+  var rowContent: UIListContentConfiguration { get }
+  var rowSig: String { get }
+  var rowHasAccessory: Bool { get }
+  var rowLeading: Bool { get }
+  func rowTapped()
+}
+final class HomeCard: UIView, AppleRow {
   var onTap: (() -> Void)?
   var id = ""
   var taskTitle: String { c["title"] as? String ?? "" }
   var info: [String: Any] { c }
   private var inline = false   // (a Today card: one line, comments and the CD chip on it)
-  var swipeStart: CGFloat = 0
-  // (sideways when swiped open. Pressed: only the shared PressShrink shrinks it — its own small press-in as well made
-  //  the card shrink twice, Haris 2026-11-02)
-  var swipeX: CGFloat = 0 { didSet { applyTransform() } }
-  private func applyTransform() {
-    let s = sqrt(transform.a * transform.a + transform.c * transform.c)   // (keeps a press-shrink in progress)
-    transform = CGAffineTransform(translationX: swipeX, y: 0).scaledBy(x: s, y: s)
-  }
   var people: [String: [String: Any]] = [:] { didSet { if picsKey(oldValue) != picsKey(people) { drawPeople() } } }
-  private let icon = UIImageView(), titleL = UILabel(), metaL = UILabel(), chip = UIView(), chipL = UILabel(), badge = UILabel(), avs = UIView()
-  // (a search result found by something other than its title: where, with the words in blue — app.js searchWhy, Haris
-  //  2026-11-06)
-  private let foundBox = UIView(), foundL = UILabel()
+  private let badge = UILabel(), avs = UIView()
   private var c: [String: Any] = [:]
   private var L = HomeLook(nil)
   private var stackW: CGFloat = 0
+  private(set) var rowContent = UIListContentConfiguration.subtitleCell()
+  private var drawnSig = "", peopleSig = 0
+  var rowSig: String { drawnSig + "|\(peopleSig)" }
+  var rowHasAccessory: Bool { stackW > 0 || !badge.isHidden }
+  var rowLeading: Bool { false }
+  func rowTapped() { onTap?() }
   override init(frame: CGRect) {
     super.init(frame: frame)
-    layer.cornerRadius = 20; layer.borderWidth = 1
-    titleL.numberOfLines = 0; metaL.numberOfLines = 0
-    chip.layer.cornerRadius = 4; chip.addSubview(chipL)
-    badge.layer.cornerRadius = 6; badge.clipsToBounds = true; badge.textAlignment = .center
-    [icon, titleL, metaL, chip, badge, avs].forEach { $0.isUserInteractionEnabled = false; addSubview($0) }
-    foundL.numberOfLines = 3; foundBox.layer.cornerRadius = 12; foundBox.layer.cornerCurve = .continuous; foundBox.isUserInteractionEnabled = false
-    foundBox.addSubview(foundL); foundBox.isHidden = true; addSubview(foundBox)
-    addAction(UIAction { [weak self] _ in self?.onTap?() }, for: .touchUpInside)
+    isUserInteractionEnabled = false   // (a tap anywhere on the row is the cell's own)
+    badge.layer.cornerRadius = 6; badge.clipsToBounds = true; badge.textAlignment = .center; badge.isHidden = true
+    [badge, avs].forEach { addSubview($0) }
   }
   required init?(coder: NSCoder) { fatalError() }
-  // (.pc:active: pressed in a little)
 
-  private var drawnSig = ""
   func set(_ d: [String: Any], look: HomeLook) {
     // (the same as it shows: left as it is — its faces, words and icon not made again: Haris 2026-11-08)
     let sig = drawSig(d) + "|" + look.key
     c = d; L = look
     if sig == drawnSig { return }
     drawnSig = sig
-    let late = (d["late"] as? Bool) == true, done = (d["done"] as? Bool) == true
-    backgroundColor = L.card
-    let line = late ? L.lateLine : L.cardLine
-    followLook("border") { [weak self] tc in self?.layer.setBorder(line, tc) }
-    layer.shadowOpacity = 0
+    let done = (d["done"] as? Bool) == true
+    var cfg = UIListContentConfiguration.subtitleCell()
+    // the status symbol (Apple's, in the status colour)
+    cfg.image = HomeCard.statusIcon(d["icon"] as? [String: Any])
+    cfg.imageProperties.reservedLayoutSize = CGSize(width: 22, height: 22)
+    cfg.imageToTextPadding = 12
+    // the title (the words searched for washed yellow)
     let t = d["title"] as? String ?? ""
     let ps = NSMutableParagraphStyle(); ps.minimumLineHeight = 20.15; ps.maximumLineHeight = 20.15
     var ta: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 15.5, weight: t.isEmpty ? .medium : .semibold), .foregroundColor: done || t.isEmpty ? L.doneTitle : L.title, .paragraphStyle: ps, .baselineOffset: 1.5]
     if t.isEmpty { ta[.font] = UIFont.italicSystemFont(ofSize: 15.5) }
     if done { ta[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
     let marks = (d["marks"] as? [String]) ?? []
-    titleL.attributedText = t.isEmpty || marks.isEmpty ? NSAttributedString(string: t.isEmpty ? "Untitled task" : t, attributes: ta)
+    cfg.attributedText = t.isEmpty || marks.isEmpty ? NSAttributedString(string: t.isEmpty ? "Untitled task" : t, attributes: ta)
       : HomeCard.marked(t, marks, base: ta, mark: [.backgroundColor: Find.wash])
-    if let f = d["found"] as? [String: Any] {
-      foundBox.isHidden = false
-      foundBox.backgroundColor = Look.c(UIColor(white: 0.14, alpha: 1), UIColor(white: 0.965, alpha: 1))
-      let base: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 13), .foregroundColor: L.meta]
-      let s = NSMutableAttributedString(string: (f["label"] as? String ?? "") + ": ", attributes: [.font: UIFont.systemFont(ofSize: 13, weight: .semibold), .foregroundColor: L.title])
-      s.append(HomeCard.marked(f["text"] as? String ?? "", marks, base: base, mark: [.foregroundColor: UIColor.systemBlue, .font: UIFont.systemFont(ofSize: 13, weight: .semibold)]))
-      foundL.attributedText = s
-    } else { foundBox.isHidden = true; foundL.attributedText = nil }
-    // the CD chip (CD Review / ✓ CD Approved) at the end of the line under the title, on its last line when it fits
-    // (Haris, 2026-10-31: "1 comment" and the chip together)
+    cfg.textProperties.numberOfLines = 0
+    // the line under it, with the CD chip (CD Review / ✓ CD Approved) at its end — after the comments, on its last line
+    // when it fits (Haris, 2026-10-31: "1 comment" and the chip together)
     inline = (d["inline"] as? Bool) == true
     let ml = NSMutableAttributedString(attributedString: meta(d["meta"] as? [[String: Any]] ?? []))
     if let cd = d["cd"] as? [String: Any] {
@@ -2113,16 +1990,24 @@ final class HomeCard: UIControl {
       let a = NSTextAttachment(); a.image = img
       let f = UIFont.systemFont(ofSize: 12.5)
       a.bounds = CGRect(x: 0, y: ((f.capHeight - img.size.height) / 2).rounded(), width: img.size.width, height: img.size.height)
-      // (after the comments on the second line; with no comments, the second line is the chip's own)
-      // (a Today card is one line: status · comments · CD chip)
-      let hasCm = (d["inline"] as? Bool) == true || (d["meta"] as? [[String: Any]] ?? []).contains(where: HomeCard.isComments)
+      let hasCm = inline || (d["meta"] as? [[String: Any]] ?? []).contains(where: HomeCard.isComments)
       if ml.length > 0 { ml.append(NSAttributedString(string: hasCm ? " " : "\n", attributes: hasCm ? [.font: f, .kern: 4.9] : [.font: f])) }
       ml.append(NSAttributedString(attachment: a))
     }
-    metaL.attributedText = ml
-    icon.image = HomeCard.statusIcon(d["icon"] as? [String: Any])
-    chip.isHidden = true
-    // Urgent, or the priority number
+    // (search: where it was found, when not by its title — one more line, the words in blue: Haris 11:35)
+    if let fd = d["found"] as? [String: Any] {
+      if ml.length > 0 { ml.append(NSAttributedString(string: "\n", attributes: [.font: UIFont.systemFont(ofSize: 12.5)])) }
+      ml.append(NSAttributedString(string: (fd["label"] as? String ?? "") + ": ", attributes: [.font: UIFont.systemFont(ofSize: 12.5, weight: .semibold), .foregroundColor: L.title]))
+      ml.append(HomeCard.marked(fd["text"] as? String ?? "", marks, base: [.font: UIFont.systemFont(ofSize: 12.5), .foregroundColor: L.meta], mark: [.foregroundColor: UIColor.systemBlue, .font: UIFont.systemFont(ofSize: 12.5, weight: .semibold)]))
+    }
+    // (the chip room above it when the line wraps — it touched the words over it: Haris 11:26)
+    let lp = NSMutableParagraphStyle(); lp.lineSpacing = 5
+    ml.addAttribute(.paragraphStyle, value: lp, range: NSRange(location: 0, length: ml.length))
+    cfg.secondaryAttributedText = ml.length > 0 ? ml : nil
+    cfg.secondaryTextProperties.numberOfLines = 0
+    cfg.textToSecondaryTextVerticalPadding = 5
+    rowContent = cfg
+    // Urgent, or the priority number: our tag, over the faces
     if let b = d["badge"] as? [String: Any] {
       let u = (b["urgent"] as? Bool) == true
       badge.isHidden = false
@@ -2130,7 +2015,6 @@ final class HomeCard: UIControl {
       badge.backgroundColor = u ? L.urgentBg : L.tagBg
     } else { badge.isHidden = true }
     drawPeople()
-    setNeedsLayout()
   }
   // the words searched for, marked wherever they start a word (accents and case don't matter)
   static func marked(_ text: String, _ words: [String], base: [NSAttributedString.Key: Any], mark: [NSAttributedString.Key: Any]) -> NSAttributedString {
@@ -2144,7 +2028,7 @@ final class HomeCard: UIControl {
     let t = (it["t"] as? String ?? "").replacingOccurrences(of: "\u{00A0}", with: " ")
     return t.hasSuffix(" comment") || t.hasSuffix(" comments")
   }
-  // the line under the title: client (with its colour), status, due date, comments — 6 apart, "·" between
+  // the line under the title: client (with its colour), status, due date, comments — "·" between
   private func meta(_ items: [[String: Any]]) -> NSAttributedString {
     let f = UIFont.systemFont(ofSize: 12.5)
     let s = NSMutableAttributedString()
@@ -2157,9 +2041,9 @@ final class HomeCard: UIControl {
       let own = (it["line"] as? Bool) == true
       if i > 0 && (cm || own) { s.append(NSAttributedString(string: "\n", attributes: [.font: f])) }
       else if i > 0 { s.append(gap(false)); s.append(NSAttributedString(string: "·", attributes: [.font: f, .foregroundColor: L.sep])); s.append(gap(true)) }
-      if let dot = NativeSheetVC.color(it["dot"]) {
-        let img = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { _ in dot.setFill(); UIBezierPath(roundedRect: CGRect(x: 0, y: 0, width: 8, height: 8), cornerRadius: 2).fill() }
-        let a = NSTextAttachment(); a.image = img; a.bounds = CGRect(x: 0, y: 0, width: 8, height: 8)
+      // (the client's colour: Apple's circle — Haris 2026-11-09)
+      if let dot = NativeSheetVC.color(it["dot"]), let img = UIImage(systemName: "circle.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 7))?.withTintColor(dot, renderingMode: .alwaysOriginal) {
+        let a = NSTextAttachment(); a.image = img; a.bounds = CGRect(x: 0, y: 0.5, width: img.size.width, height: img.size.height)
         s.append(NSAttributedString(attachment: a)); s.append(gap(false))
       }
       let b = it["b"] as? String
@@ -2170,33 +2054,22 @@ final class HomeCard: UIControl {
       }
       s.append(NSAttributedString(string: (it["t"] as? String ?? "").replacingOccurrences(of: " ", with: "\u{00A0}"), attributes: [.font: b != nil ? UIFont.systemFont(ofSize: 12.5, weight: .semibold) : f, .foregroundColor: col]))
     }
-    let ps = NSMutableParagraphStyle(); ps.lineSpacing = 1
-    s.addAttribute(.paragraphStyle, value: ps, range: NSRange(location: 0, length: s.length))
     return s
   }
-  // the assignees' pictures (two, overlapping, ringed in the card's colour; a green tick when their part is done) and "+N"
+  // the assignees' pictures (two, overlapping; a green ring when their part is done — Haris 11:30) and "+N"
   private func drawPeople() {
     avs.subviews.forEach { $0.removeFromSuperview() }
     let list = c["av"] as? [[String: Any]] ?? []
     var x: CGFloat = 0
-    func ringed(_ img: UIImage) -> UIView {
-      let r = UIView(frame: CGRect(x: x - 2, y: -2, width: 26, height: 26)); r.backgroundColor = L.card; r.layer.cornerRadius = 13
+    func ringed(_ img: UIImage, done: Bool) -> UIView {
+      let r = UIView(frame: CGRect(x: x - 2, y: -2, width: 26, height: 26)); r.backgroundColor = done ? SplashView.green : L.card; r.layer.cornerRadius = 13
       let iv = UIImageView(image: img); iv.frame = CGRect(x: 2, y: 2, width: 22, height: 22); r.addSubview(iv)
       return r
     }
     for a in list {
       let id = a["id"] as? String ?? ""
       let p = people[id]
-      let v = ringed(roundPic(NativeSheetVC.photo(p), initials: p?["initials"] as? String, color: NativeSheetVC.color(p?["color"]), size: 22))
-      if (a["done"] as? Bool) == true {
-        let t = UIView(frame: CGRect(x: 13, y: 13, width: 16, height: 16))
-        t.backgroundColor = L.card; t.layer.cornerRadius = 8
-        let g = UIView(frame: CGRect(x: 2, y: 2, width: 12, height: 12)); g.backgroundColor = SplashView.green; g.layer.cornerRadius = 6
-        let ck = UIImageView(image: UIImage(systemName: "checkmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: 7, weight: .black)))
-        ck.tintColor = SplashView.hex(0x0b1d14); ck.frame = CGRect(x: 2, y: 2, width: 8, height: 8); ck.contentMode = .center
-        g.addSubview(ck); t.addSubview(g); v.addSubview(t)
-      }
-      avs.addSubview(v)
+      avs.addSubview(ringed(roundPic(NativeSheetVC.photo(p), initials: p?["initials"] as? String, color: NativeSheetVC.color(p?["color"]), size: 22), done: (a["done"] as? Bool) == true))
       x += 16
     }
     if let n = c["more"] as? Int, n > 0 {
@@ -2207,58 +2080,26 @@ final class HomeCard: UIControl {
     }
     // (22 for the first, 16 more for each next one: they overlap by 6)
     stackW = x > 0 ? x + 6 : 0
-    avs.frame.size = CGSize(width: stackW, height: 22)
-    setNeedsLayout()
+    peopleSig += 1
+    let s = sideSize()
+    frame.size = s
+    invalidateIntrinsicContentSize(); setNeedsLayout()
   }
-  // (.pc: 14 inside, the icon 22 on the left, 12 to the text, the badge and pictures on the right)
+  // (the tag over the faces, at the cell's right)
   private func sideSize() -> CGSize {
     var w: CGFloat = 0, h: CGFloat = 0
     if !badge.isHidden { let s = badge.attributedText?.size() ?? .zero; w = ceil(s.width) + 14; h = ceil(s.height) + 6 }
     if stackW > 0 { w = max(w, stackW); h += (h > 0 ? 6 : 0) + 22 }
     return CGSize(width: w, height: h)
   }
-  private func bodyHeight(_ bw: CGFloat) -> (CGFloat, CGFloat, CGFloat) {
-    let th = ceil(titleL.sizeThatFits(CGSize(width: bw, height: 1000)).height)
-    let mh = ceil(metaL.sizeThatFits(CGSize(width: bw, height: 1000)).height)
-    return (th, mh, 0)
-  }
-  func height(for w: CGFloat) -> CGFloat {
-    let side = sideSize()
-    let bw = w - 1 - 14 - 22 - 12 - (side.width > 0 ? side.width + 12 : 0) - 14 - 1
-    let (th, mh, ch) = bodyHeight(bw)
-    let body = th + 5 + mh + (ch > 0 ? 5 + ch : 0)
-    return 1 + 14 + max(23, body, side.height) + foundH(w) + 14 + 1
-  }
+  override var intrinsicContentSize: CGSize { sideSize() }
+  override func sizeThatFits(_ size: CGSize) -> CGSize { sideSize() }
   override func layoutSubviews() {
     super.layoutSubviews()
     let w = bounds.width
-    icon.frame = CGRect(x: 15, y: 16, width: 22, height: 22)
-    let side = sideSize()
-    let bx: CGFloat = 15 + 22 + 12
-    let bw = w - bx - (side.width > 0 ? side.width + 12 : 0) - 15
-    let (th, mh, ch) = bodyHeight(bw)
-    titleL.frame = CGRect(x: bx, y: 15, width: bw, height: th)
-    metaL.frame = CGRect(x: bx, y: 15 + th + 5, width: bw, height: mh)
-    if ch > 0 {
-      let cs = chipL.attributedText?.size() ?? .zero
-      chip.frame = CGRect(x: bx + 8, y: metaL.frame.maxY + 5, width: ceil(cs.width) + 12, height: ch)
-      chipL.frame = CGRect(x: 6, y: 0, width: ceil(cs.width) + 2, height: ch)
-    }
-    var y: CGFloat = 15
-    if !badge.isHidden { let s = badge.attributedText?.size() ?? .zero; badge.frame = CGRect(x: w - 15 - ceil(s.width) - 14, y: y, width: ceil(s.width) + 14, height: ceil(s.height) + 6); y = badge.frame.maxY + 6 }
-    if stackW > 0 { avs.frame = CGRect(x: w - 15 - stackW, y: y, width: stackW, height: 22) }
-    if !foundBox.isHidden {
-      let top = 15 + max(23, th + 5 + mh, side.height) + 10
-      let fw = w - bx - 15
-      foundBox.frame = CGRect(x: bx, y: top, width: fw, height: foundH(w) - 10)
-      foundL.frame = foundBox.bounds.insetBy(dx: 11, dy: 9)
-    }
-  }
-  // (the found box's room: its words at the body's width, 9 above and below, 10 above it)
-  private func foundH(_ w: CGFloat) -> CGFloat {
-    guard !foundBox.isHidden else { return 0 }
-    let fw = w - (15 + 22 + 12) - 15 - 22
-    return 10 + ceil(foundL.sizeThatFits(CGSize(width: fw, height: 200)).height) + 18
+    var y: CGFloat = 0
+    if !badge.isHidden { let s = badge.attributedText?.size() ?? .zero; badge.frame = CGRect(x: w - ceil(s.width) - 14, y: y, width: ceil(s.width) + 14, height: ceil(s.height) + 6); y = badge.frame.maxY + 6 }
+    if stackW > 0 { avs.frame = CGRect(x: w - stackW, y: y, width: stackW, height: 22) }
   }
   // the CD chip (app.css .cd-chip): 10.5 bold in the CD colour on a 16% wash, 4 round, a tick before "CD Approved" —
   // the tick and the words on one centre line
@@ -2287,94 +2128,13 @@ final class HomeCard: UIControl {
     let sym = UIImage(systemName: name, withConfiguration: cfg)?.withTintColor(col, renderingMode: .alwaysOriginal) ?? UIImage()
     return UIGraphicsImageRenderer(size: CGSize(width: 22, height: 22)).image { _ in
       sym.draw(in: CGRect(x: (22 - sym.size.width) / 2, y: (22 - sym.size.height) / 2, width: sym.size.width, height: sym.size.height))
-    }
+    }.withRenderingMode(.alwaysOriginal)
   }
 }
 
-// the buttons a swiped card shows: Copy link (grey) and Delete (red, for those who may), round with their names under
-final class HomeActions: UIView {
-  var onCopy: (() -> Void)?, onDelete: (() -> Void)?, onDone: (() -> Void)?, onDue: (() -> Void)?
-  let leading: Bool
-  private var items: [UIView] = []
-  private(set) var doneBtn: UIButton?
-  var progress: CGFloat = 0 { didSet { items.forEach { $0.alpha = progress; $0.transform = CGAffineTransform(scaleX: 0.6 + 0.4 * progress, y: 0.6 + 0.4 * progress) } } }
+// the colours of Apple's swipe actions on a task (Done green, Due purple, Copy link grey; Review orange)
+enum TaskSwipe {
   static let grey = SplashView.hex(0x8a8d96), green = SplashView.hex(0x30d158), purple = SplashView.hex(0x7a6ff0), orange = SplashView.hex(0xff9f0a)
-  private func item(_ name: String, _ col: UIColor, sym: String? = nil, inner: UIView? = nil, _ act: @escaping () -> Void) -> (UIView, UIButton) {
-    let v = UIView()
-    let b = UIButton(type: .custom)
-    b.backgroundColor = col; b.layer.cornerRadius = 26; b.tintColor = .white
-    if let sym = sym { b.setImage(UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .semibold)), for: .normal) }
-    b.frame = CGRect(x: 0, y: 0, width: 52, height: 52)
-    if let inner = inner { inner.isUserInteractionEnabled = false; inner.frame = b.bounds; b.addSubview(inner) }
-    b.addAction(UIAction { _ in act() }, for: .touchUpInside)
-    b.accessibilityLabel = name
-    let l = UILabel(); l.text = name; l.font = .systemFont(ofSize: 12); l.textColor = .secondaryLabel; l.textAlignment = .center
-    l.frame = CGRect(x: -14, y: 58, width: 80, height: 15)
-    v.addSubview(b); v.addSubview(l)
-    v.bounds = CGRect(x: 0, y: 0, width: 52, height: 73)
-    return (v, b)
-  }
-  // swiped left (trailing): Copy link · Delete
-  init(delete: Bool) {
-    leading = false
-    super.init(frame: .zero)
-    items.append(item("Copy link", HomeActions.grey, sym: "link", { [weak self] in self?.onCopy?() }).0)
-    if delete { items.append(item("Trash", SplashView.hex(0xe5484d), sym: "trash", { [weak self] in self?.onDelete?() }).0) }
-    items.forEach { addSubview($0) }
-    progress = 0
-  }
-  // swiped right (leading), as Mail's Unread · Remind Me: Done (grey, green once done) · Due (the day big, the month under
-  // it; SET with a calendar when there's none) — Haris, 2026-10-31
-  init(done: Bool, showDone: Bool, due: String?, showDue: Bool, cdHold: Bool = false) {
-    leading = true
-    super.init(frame: .zero)
-    if showDone && cdHold {
-      // held by the CD's review: a faded orange "CD" · Review — a tap says why (Haris, 2026-10-31)
-      let cd = UILabel(); cd.text = "CD"; cd.font = .systemFont(ofSize: 16, weight: .bold); cd.textColor = .white; cd.textAlignment = .center
-      let (v, b) = item("Review", HomeActions.orange, inner: cd, { [weak self] in self?.onDone?() })
-      b.alpha = 0.42
-      (v.subviews.compactMap { $0 as? UILabel }.first)?.textColor = .tertiaryLabel
-      items.append(v)
-    } else if showDone {
-      let (v, b) = item("Done", done ? HomeActions.green : HomeActions.grey, sym: "checkmark", { [weak self] in self?.onDone?() })
-      doneBtn = b; items.append(v)
-    }
-    if showDue {
-      let inner = UIView()
-      let top = UILabel(), bot = UILabel()
-      top.textColor = .white; bot.textColor = .white; top.textAlignment = .center; bot.textAlignment = .center
-      if let d = due, d.count >= 10, let day = Int(d.dropFirst(8).prefix(2)), let mon = Int(d.dropFirst(5).prefix(2)), (1...12).contains(mon) {
-        top.text = "\(day)"; top.font = .systemFont(ofSize: 21, weight: .bold)
-        bot.text = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"][mon - 1]; bot.font = .systemFont(ofSize: 10, weight: .semibold)
-        top.frame = CGRect(x: 0, y: 8, width: 52, height: 24); bot.frame = CGRect(x: 0, y: 31, width: 52, height: 12)
-        inner.addSubview(top)
-      } else {
-        let cal = UIImageView(image: UIImage(systemName: "calendar", withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold)))
-        cal.tintColor = .white; cal.contentMode = .center; cal.frame = CGRect(x: 0, y: 9, width: 52, height: 22)
-        bot.text = "SET"; bot.font = .systemFont(ofSize: 10, weight: .semibold); bot.frame = CGRect(x: 0, y: 31, width: 52, height: 12)
-        inner.addSubview(cal)
-      }
-      inner.addSubview(bot)
-      items.append(item("Due", HomeActions.purple, inner: inner, { [weak self] in self?.onDue?() }).0)
-    }
-    items.forEach { addSubview($0) }
-    progress = 0
-  }
-  var count: Int { items.count }
-  // (Done tapped: the circle turns green — or grey again, reopened — with a little pop)
-  func markDone(_ on: Bool) {
-    guard let b = doneBtn else { return }
-    UIView.animate(withDuration: 0.12, animations: { b.transform = CGAffineTransform(scaleX: 1.12, y: 1.12); b.backgroundColor = on ? HomeActions.green : HomeActions.grey }) { _ in
-      UIView.animate(withDuration: 0.18, delay: 0, usingSpringWithDamping: 0.6, initialSpringVelocity: 0) { b.transform = .identity }
-    }
-  }
-  required init?(coder: NSCoder) { fatalError() }
-  override func layoutSubviews() {
-    super.layoutSubviews()
-    // (16 in from the side they're on, 12 between)
-    if leading { var x: CGFloat = 16; for v in items { v.center = CGPoint(x: x + 26, y: bounds.height / 2); x += 52 + 12 } }
-    else { var x = bounds.width - 16; for v in items.reversed() { v.center = CGPoint(x: x - 26, y: bounds.height / 2); x -= 52 + 12 } }
-  }
 }
 
 // a label going or coming through a blur that builds up / clears frame by frame (Mail's bar titles): its copies at a few
@@ -2475,31 +2235,37 @@ final class HomeGlass: UIView {
 }
 
 // a client in the search results (phone.js search(): the coloured square with its initials, the name, its open tasks)
-final class HomeClientRow: UIControl {
-  private let sq = UILabel(), name = UILabel(), meta = UILabel()
-  override init(frame: CGRect) {
-    super.init(frame: frame)
-    layer.cornerRadius = 20; layer.borderWidth = 1
-    sq.layer.cornerRadius = 11; sq.clipsToBounds = true; sq.textAlignment = .center; sq.font = .systemFont(ofSize: 14, weight: .heavy); sq.textColor = .white
-    name.font = .systemFont(ofSize: 15.5, weight: .semibold); meta.font = .systemFont(ofSize: 12.5)
-    [sq, name, meta].forEach { $0.isUserInteractionEnabled = false; addSubview($0) }
-  }
-  required init?(coder: NSCoder) { fatalError() }
-  // (pressed: the shared PressShrink, as every card — added where it's made)
+// a client found by search: Apple's own list cell (Haris 2026-11-09: "yes") — its coloured square in the cell's image spot,
+// the name (the words searched for washed yellow) and "Client · N open tasks", Apple's ›. Not drawn itself: its cell is.
+final class HomeClientRow: UIView, AppleRow {
+  var onTap: (() -> Void)?
+  private(set) var rowContent = UIListContentConfiguration.subtitleCell()
+  private(set) var rowSig = ""
+  var rowHasAccessory: Bool { false }
+  var rowLeading: Bool { false }
+  func rowTapped() { onTap?() }
   func set(_ c: [String: Any], look L: HomeLook) {
-    backgroundColor = L.card; let line = L.cardLine; followLook("border") { [weak self] tc in self?.layer.setBorder(line, tc) }
-    sq.text = c["ini"] as? String; sq.backgroundColor = NativeSheetVC.color(c["rgb"]) ?? .systemIndigo
-    name.text = c["name"] as? String; name.textColor = L.title
-    if let mk = c["marks"] as? [String], !mk.isEmpty { name.attributedText = HomeCard.marked(name.text ?? "", mk, base: [.font: name.font!, .foregroundColor: L.title], mark: [.backgroundColor: Find.wash]) }
+    let sig = drawSig(c) + "|" + L.key
+    if sig == rowSig { return }
+    rowSig = sig
+    var cfg = UIListContentConfiguration.subtitleCell()
+    let ini = c["ini"] as? String ?? "", col = NativeSheetVC.color(c["rgb"]) ?? .systemIndigo
+    cfg.image = UIGraphicsImageRenderer(size: CGSize(width: 40, height: 40)).image { _ in
+      col.setFill(); UIBezierPath(roundedRect: CGRect(x: 0, y: 0, width: 40, height: 40), cornerRadius: 11).fill()
+      let f = UIFont.systemFont(ofSize: 14, weight: .heavy), s = (ini as NSString).size(withAttributes: [.font: f])
+      (ini as NSString).draw(at: CGPoint(x: (40 - s.width) / 2, y: (40 - s.height) / 2), withAttributes: [.font: f, .foregroundColor: UIColor.white])
+    }.withRenderingMode(.alwaysOriginal)
+    cfg.imageProperties.reservedLayoutSize = CGSize(width: 40, height: 40)
+    cfg.imageToTextPadding = 12
+    let name = c["name"] as? String ?? ""
+    let base: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 15.5, weight: .semibold), .foregroundColor: L.title]
+    let mk = (c["marks"] as? [String]) ?? []
+    cfg.attributedText = mk.isEmpty ? NSAttributedString(string: name, attributes: base) : HomeCard.marked(name, mk, base: base, mark: [.backgroundColor: Find.wash])
     let n = c["open"] as? Int ?? 0
-    meta.text = "Client · \(n) open task\(n == 1 ? "" : "s")"; meta.textColor = L.meta
-    accessibilityLabel = name.text
-  }
-  override func layoutSubviews() {
-    super.layoutSubviews()
-    sq.frame = CGRect(x: 15, y: (bounds.height - 40) / 2, width: 40, height: 40)
-    name.frame = CGRect(x: 67, y: bounds.height / 2 - 20, width: bounds.width - 82, height: 21)
-    meta.frame = CGRect(x: 67, y: bounds.height / 2 + 3, width: bounds.width - 82, height: 17)
+    cfg.secondaryAttributedText = NSAttributedString(string: "Client · \(n) open task\(n == 1 ? "" : "s")", attributes: [.font: UIFont.systemFont(ofSize: 12.5), .foregroundColor: L.meta])
+    cfg.textToSecondaryTextVerticalPadding = 3
+    rowContent = cfg
+    accessibilityLabel = name
   }
 }
 
@@ -2971,33 +2737,6 @@ final class SearchFixedNote: UIView {
 }
 
 
-// ---------- iPhone's own touch and hold on a task card (AppleNav.swift — Haris 2026-11-07: as in E11 Talk) ----------
-extension HomeView: UIContextMenuInteractionDelegate {
-  func contextMenuInteraction(_ i: UIContextMenuInteraction, configurationForMenuAtLocation p: CGPoint) -> UIContextMenuConfiguration? {
-    guard let card = i.view as? HomeCard, !(isList && listTab == "done") else { return nil }   // (Done tab: read only)
-    let id = card.id
-    if let o = openCard { setOpen(o, false) }
-    return UIContextMenuConfiguration(identifier: id as NSString, previewProvider: nil) { [weak self] _ in
-      // (the picker is asked for once the menu has closed — while it's still closing, iPhone shows no other screen)
-      let src = { (s: String, t: String, img: String) in UIAction(title: t, image: UIImage(systemName: img)) { _ in HomeView.afterMenu = { self?.send(["ev": "attach", "id": id, "source": s]) } } }
-      return UIMenu(title: "Attach Files", children: [src("camera", "Camera", "camera"), src("photos", "Photos", "photo"), src("files", "Files", "doc.badge.arrow.up")])
-    }
-  }
-  private static var afterMenu: (() -> Void)?
-  func contextMenuInteraction(_ i: UIContextMenuInteraction, willEndFor c: UIContextMenuConfiguration, animator: UIContextMenuInteractionAnimating?) {
-    let run = { let f = HomeView.afterMenu; HomeView.afterMenu = nil; f?() }
-    if let a = animator { a.addCompletion(run) } else { DispatchQueue.main.async(execute: run) }
-  }
-  // (the card itself lifts, with its own rounded corners)
-  func contextMenuInteraction(_ i: UIContextMenuInteraction, configuration c: UIContextMenuConfiguration, highlightPreviewForItemWithIdentifier id: NSCopying) -> UITargetedPreview? {
-    guard let v = i.view else { return nil }
-    let pp = UIPreviewParameters()
-    pp.visiblePath = UIBezierPath(roundedRect: v.bounds, cornerRadius: v.layer.cornerRadius > 0 ? v.layer.cornerRadius : 18)
-    pp.backgroundColor = .clear
-    return UITargetedPreview(view: v, parameters: pp)
-  }
-}
-
 // what a model shows, as words — to tell whether it changed (keys in order; anything that can't be written: always new)
 func drawSig(_ d: Any) -> String {
   guard JSONSerialization.isValidJSONObject(d), let data = try? JSONSerialization.data(withJSONObject: d, options: [.sortedKeys]) else { return UUID().uuidString }
@@ -3005,19 +2744,43 @@ func drawSig(_ d: Any) -> String {
 }
 
 extension HomeView: UICollectionViewDelegate {
-  // (Me's rows only — every other list here has no selection: allowsSelection is off)
+  // (a task's or a client's row: Apple's highlight and selection open it; Me's rows as iPhone Settings'; nothing else)
   func collectionView(_ cv: UICollectionView, shouldHighlightItemAt ip: IndexPath) -> Bool {
-    guard isMeList else { return true }
     guard let key = listDS?.itemIdentifier(for: ip) else { return false }
+    if listViews[key] is AppleRow { return true }
+    guard isMeList else { return false }
     if key == "me:card" { return true }
     guard let it = meItems[key] else { return false }
     return it.tap != nil && it.toggle == nil
   }
   func collectionView(_ cv: UICollectionView, didSelectItemAt ip: IndexPath) {
     cv.deselectItem(at: ip, animated: true)
-    guard isMeList, let key = listDS?.itemIdentifier(for: ip) else { return }
+    guard let key = listDS?.itemIdentifier(for: ip) else { return }
+    if let r = listViews[key] as? AppleRow { r.rowTapped(); return }
+    guard isMeList else { return }
     if key == "me:card" { (listViews[key] as? MeCardBlock)?.onTap?(); return }
     meItems[key]?.tap?()
+  }
+  // touch and hold a task: Apple's own lift of its cell and Apple's menu (Haris 2026-11-09) — Attach Files (Camera · Photos ·
+  // Files), Copy link, Trash; My Tasks' Done tab is read only
+  func collectionView(_ cv: UICollectionView, contextMenuConfigurationForItemsAt ips: [IndexPath], point: CGPoint) -> UIContextMenuConfiguration? {
+    guard ips.count == 1, let key = listDS?.itemIdentifier(for: ips[0]), let card = listViews[key] as? HomeCard, !(isList && listTab == "done") else { return nil }
+    let id = card.id
+    return UIContextMenuConfiguration(identifier: key as NSString, previewProvider: nil) { [weak self, weak card] _ in
+      // (the picker is asked for once the menu has closed — while it's still closing, iPhone shows no other screen)
+      let src = { (s: String, t: String, img: String) in UIAction(title: t, image: UIImage(systemName: img)) { _ in HomeView.afterMenu = { self?.send(["ev": "attach", "id": id, "source": s]) } } }
+      var more: [UIMenuElement] = [UIAction(title: "Copy link", image: UIImage(systemName: "link")) { _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.send(["ev": "copy", "id": id]) }]
+      if self?.canDelete == true {
+        more.append(UIAction(title: "Trash", image: UIImage(systemName: "trash"), attributes: .destructive) { _ in HomeView.afterMenu = { if let self = self, let card = card { self.askTrash(card, finish: nil) } } })
+      }
+      return UIMenu(children: [UIMenu(title: "Attach Files", options: .displayInline, children: [src("camera", "Camera", "camera"), src("photos", "Photos", "photo"), src("files", "Files", "doc.badge.arrow.up")]),
+                               UIMenu(options: .displayInline, children: more)])
+    }
+  }
+  private static var afterMenu: (() -> Void)?
+  func collectionView(_ cv: UICollectionView, willEndContextMenuInteraction c: UIContextMenuConfiguration, animator: UIContextMenuInteractionAnimating?) {
+    let run = { let f = HomeView.afterMenu; HomeView.afterMenu = nil; f?() }
+    if let a = animator { a.addCompletion(run) } else { DispatchQueue.main.async(execute: run) }
   }
 }
 
@@ -3270,8 +3033,6 @@ final class HostCell: UICollectionViewListCell {
     hosted = v
     backgroundConfiguration = .clear()
     if let v = v, v.superview !== contentView { v.transform = .identity; v.alpha = 1; contentView.addSubview(v) }
-    // (a card: its own rounded corners; Apple's swipe buttons kept within them)
-    if let c = v as? HomeCard { layer.cornerRadius = c.layer.cornerRadius > 0 ? c.layer.cornerRadius : 18; layer.cornerCurve = .continuous; clipsToBounds = true } else { layer.cornerRadius = 0; clipsToBounds = false }
     setNeedsLayout()
     invalidateIntrinsicContentSize()
   }
@@ -3279,8 +3040,7 @@ final class HostCell: UICollectionViewListCell {
     super.layoutSubviews()
     guard let v = hosted, v.superview === contentView else { return }
     let b = contentView.bounds
-    if v is HomeCard { v.bounds = CGRect(origin: .zero, size: b.size); v.center = CGPoint(x: b.midX, y: b.midY) }
-    else if v.tag == 7 { v.frame = CGRect(x: 4, y: b.height - 15, width: b.width - 8, height: 15) }
+    if v.tag == 7 { v.frame = CGRect(x: 4, y: b.height - 15, width: b.width - 8, height: 15) }
     else if v.tag == 8 { v.frame = CGRect(x: 4, y: 14, width: b.width - 8, height: b.height - 28) }
     else { v.frame = b }
   }

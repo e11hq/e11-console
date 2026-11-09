@@ -93,15 +93,14 @@ try:
     check(hn.get('shown') is True and (hn.get('cards') or 0) > 0 and len(hn.get('stats') or []) == 3 and hn.get('title') in ('E11 Day', 'My Day'), f'Home is the app\'s own, with its boxes and task cards {hn}')
     hsc0 = res.get('homeScrolledNative') or {}
     check(hsc0.get('server') is True, f'Home comes straight from the server (/api/home) {hsc0.get("server")}')
-    hs = res.get('homeSwipeNative') or {}; hp = res.get('homePressNative') or {}
-    hl = res.get('homeLeadNative') or {}
-    # (Home in Apple's list — ios-nav: its swipe actions are Apple's, not driven from here; the cards are in Apple's cells)
-    if hn.get('appleList'):
-      check((hn.get('listCells') or 0) > 0, f"Home's cards are in Apple's list {hn.get('listCells')}")
-    else:
-      check(hs.get('open') is True and (hs.get('openShift') or 0) < -80 and (hs.get('actions') or 0) >= 1, f'a Home card swiped left shows Copy link / Delete {hs}')
-      check(hl.get('open') is True and hl.get('lead') is True and (hl.get('openShift') or 0) > 80 and (hl.get('actions') or 0) >= 1, f'a Home card swiped right shows Done / Due {hl}')
-    check(hp.get('sheet') == 'AttachSheetVC' and hp.get('open') is False, f'a Home card held opens Attach Files {hp}')
+    hp = res.get('homePressNative') or {}
+    # (Home fully Apple — Haris 2026-11-09: each task Apple's own cell in Apple's inset groups; its swipes Apple's actions —
+    #  Copy link (and Trash) on the left, Done / Due on the right; held: Apple's menu with its lift)
+    check((hn.get('listCells') or 0) > 0 and (hn.get('groupsApple') or 0) >= 1, f"Home's tasks are Apple's cells in Apple's inset groups {hn.get('listCells')} cells, {hn.get('groupsApple')} groups")
+    row = (hp.get('row') or {})
+    check('Copy link' in (row.get('trailing') or []), f"a Home task swiped left: Apple's Copy link {row.get('trailing')}")
+    check(any(t in (row.get('leading') or []) for t in ('Done', 'Not Done', 'Review', 'Due')), f"a Home task swiped right: Apple's Done / Due {row.get('leading')}")
+    check(bool(row.get('menu')) and row.get('cell') is True, f"a Home task held: Apple's menu; the row is Apple's own cell {row}")
     hsc = res.get('homeScrolledNative') or {}; hf = res.get('homeFindNative') or {}; hfd = res.get('homeFindDoneNative') or {}
     if hsc.get('apple'):
       # (Apple's bar: its big title shrinks by itself; the list has scrolled)

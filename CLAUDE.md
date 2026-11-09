@@ -170,7 +170,13 @@ follows it (Don't 9); don't change any of it without Haris. Project doc `claude/
 - Bar buttons: Apple's own bar buttons with a picture of ours — your photo; E11 Talk's bubble + "Talk" in the bar's ink
   (white in dark, black in light — no blue), the same room left and right of the two as above and below (commit e3f7099,
   after build 1550 — part of the lock, Haris 2026-11-08).
-- The list: our cards in Apple's list (UICollectionView list), Apple's swipe actions.
+- The list: our cards in Apple's list (UICollectionView list), Apple's swipe actions. **Since 2026-11-09 (Haris: "yes" to
+  the fully-Apple mock-up "E11 Day — fully Apple"): every task — Home, My Tasks, a client's page, search — is Apple's own
+  list cell (HomeCard gives its UIListContentConfiguration: Apple's status symbol in the status colour, title, the line with
+  our CD chip, search's "found in" as a third line) in Apple's inset groups with Apple's headers (Today's run by client, then
+  Overdue — the order kept); ours inside it only the Urgent / P1 tag and the faces (a green ring when their part is done,
+  +N); a client found by search is Apple's cell too. Tap: Apple's selection; hold: Apple's menu with its lift (Attach Files,
+  Copy link, Trash); swipes: Apple's. Our own card drawing, swipe buttons, press sheet and move animation removed.**
 - **The frost: Apple's own, untouched — exactly as in build 1550** (the list's and the search results' `topEdgeEffect.style
   = .automatic`, nothing of ours setting or drawing it). Haris 2026-11-08 11:29: "back how it was, apple's own, on the
   previous locked home" — the firm frost with its line (builds 1562 / 1566) taken off Home. Which frost other Apple pages

@@ -498,9 +498,6 @@ final class AttachSheetVC: UIViewController, UISheetPresentationControllerDelega
   private let pick: (String) -> Void
   private let heading: String?
   var onCancel: (() -> Void)?
-  // (23+, Home's long press: the card it's for, lifted over the dimmed screen while the sheet is up)
-  var lifted: UIView?, liftedFrame: CGRect = .zero
-  var onLiftedGone: (() -> Void)?   // (the card it pictures, shown again)
   // (every attach sheet is the same: "Attach Files", a glass ✕, Camera · Photos · Files — Haris, 2026-10-31)
   init(title: String? = "Attach Files", pick: @escaping (String) -> Void) {
     self.pick = pick
@@ -566,27 +563,6 @@ final class AttachSheetVC: UIViewController, UISheetPresentationControllerDelega
       row.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
       row.heightAnchor.constraint(equalToConstant: 100),
     ])
-  }
-  override func viewWillAppear(_ animated: Bool) {
-    super.viewWillAppear(animated)
-    guard let v = lifted, let pc = presentationController, let cv = pc.containerView else { return }
-    v.layer.shadowOpacity = 0   // (no drop shadow under the held card — Haris, 2026-10-31)
-    v.alpha = 0
-    // (over the dimming, under the sheet: under the sheet's own outermost view in the container)
-    var top: UIView = pc.presentedView ?? view
-    while let sup = top.superview, sup !== cv { top = sup }
-    if top.superview === cv { cv.insertSubview(v, belowSubview: top) } else { cv.addSubview(v) }
-    // (placed once the container is on screen — before, its position wasn't known and the card showed at the top)
-    let place = { UIView.performWithoutAnimation { v.transform = .identity; v.frame = cv.window != nil ? cv.convert(self.liftedFrame, from: nil) : self.liftedFrame; v.alpha = 1 } }
-    if let tc = transitionCoordinator {
-      tc.animate(alongsideTransition: { _ in place(); v.transform = CGAffineTransform(scaleX: 1.02, y: 1.02) })
-    } else { place() }
-  }
-  override func viewWillDisappear(_ animated: Bool) {
-    super.viewWillDisappear(animated)
-    // (gone at once as the sheet goes: the card itself is under it, in its place — no picture left floating)
-    lifted?.removeFromSuperview()
-    onLiftedGone?(); onLiftedGone = nil
   }
 }
 
