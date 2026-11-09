@@ -596,7 +596,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     fab2.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.fab2Run?() }, for: .touchUpInside)
     addSubview(fab2)
     for i in 0..<3 {
-      let v = UIView(); v.layer.cornerRadius = 18; v.layer.borderWidth = 1; let n = UILabel(), l = UILabel(); n.tag = 1; l.tag = 2; v.addSubview(n); v.addSubview(l); scroll.addSubview(v); stats.append(v)
+      let v = UIView(); v.layer.cornerRadius = 18; v.layer.cornerCurve = .continuous; let n = UILabel(), l = UILabel(); n.tag = 1; l.tag = 2; v.addSubview(n); v.addSubview(l); scroll.addSubview(v); stats.append(v)
       // (tapped: Overdue brings its group up to where the big title is; In review opens My Tasks waiting for the CD's
       //  review — Haris, 2026-10-31. Due today isn't tapped: its tasks are already first, right under it — Haris
       //  2026-11-07)
@@ -659,7 +659,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let st = model["stats"] as? [Int] ?? [0, 0, 0]
     let names = ["Due today", "Overdue", "In review"], cols = [L.statG, L.statR, L.statA]
     for (i, v) in stats.enumerated() {
-      v.backgroundColor = L.statBg; let line = L.statLine; v.followLook("border") { [weak v] tc in v?.layer.setBorder(line, tc) }
+      v.backgroundColor = L.card   // (the task cards' own colour, light and dark, no border — Haris 2026-11-09)
       v.layer.shadowOpacity = 0   // (no drop shadows on boxes or cards — Haris, 2026-10-31)
       let n = v.viewWithTag(1) as? UILabel, l = v.viewWithTag(2) as? UILabel
       n?.text = "\(st.indices.contains(i) ? st[i] : 0)"; n?.font = .systemFont(ofSize: 34, weight: .bold); n?.textColor = cols[i]   // (as Mail's big title)
@@ -1932,7 +1932,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
 struct HomeLook {
   // every colour holds both looks (Look.c): the website's measured colours for each look when it has sent them (Main
   // keeps the last of each — Main.lookBoth), else the app's own — so iPhone switches them itself
-  let bg, headBg, sub, h1, round, roundIc, statBg, statLine, statLabel, statG, statR, statA, gh, empty: UIColor
+  let bg, headBg, sub, h1, round, roundIc, statLabel, statG, statR, statA, gh, empty: UIColor
   let card, title, meta, sep, late, today, doneTitle, tag, tagBg, urgent, urgentBg, more, moreBg, fabBg, fabLine: UIColor
   let headH: CGFloat?, fabRect: CGRect?
   // (which colours these are — the same for the same website colours: a drawing's signature, never the colour objects,
@@ -1957,7 +1957,6 @@ struct HomeLook {
     sub = grey; h1 = c("h1", h1D, h1L)
     round = c("round", w.withAlphaComponent(0.08), k.withAlphaComponent(0.05))
     roundIc = Look.c(rgb(dk, "roundIc") ?? rgb(dk, "h1") ?? h1D, rgb(lt, "roundIc") ?? rgb(lt, "h1") ?? h1L)
-    statBg = c("statBg", w.withAlphaComponent(0.06), w.withAlphaComponent(0.7)); statLine = c("statLine", w.withAlphaComponent(0.12), w)
     statLabel = grey
     statG = c("statG", SplashView.hex(0x3ddc97), SplashView.hex(0x1a9e63)); statR = c("statR", SplashView.hex(0xff7a7a), SplashView.hex(0xd9363e)); statA = c("statA", SplashView.hex(0xf9be33), SplashView.hex(0xb57d00))
     gh = grey; empty = grey
