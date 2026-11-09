@@ -266,28 +266,14 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
     guard let i = (0..<slots.count).first(where: { tabVC($0) === vc }) else { return false }
     let main = Main.shared
     guard let item = main.tabBar.items?.first(where: { $0.tag == i }) else { return false }
-    // (the button in the corner as the tab left showed it — the next tab's squashes and stretches out of it)
-    fabLeft = vc === selectedViewController ? nil : AppleTabs.cornerScreen(selectedViewController)?.fabInWindow
     if !own(i) { host(in: slots[i]) }
     if main.tabBar.selectedItem !== item { selecting = true; main.tabBar.selectedItem = item; selecting = false }
     return true
-  }
-  // ---- + New task ↔ + Add client as the tab changes: our button only (Haris 2026-11-08) ----
-  private var fabLeft: (frame: CGRect, config: UIButton.Configuration?, label: String)?
-  // the screen on show in a tab with its own button (the tab's top page)
-  static func cornerScreen(_ vc: UIViewController?) -> HomeView? {
-    let top = (vc as? UINavigationController)?.topViewController ?? vc
-    // (a tab's own Apple first screen only — Home, My Tasks, the Inbox, Clients, Client Assets; never the app's old shared screen)
-    guard top is TabRoot, let v = top?.viewIfLoaded, v.window != nil else { return nil }
-    var q: [UIView] = [v]
-    while !q.isEmpty { let x = q.removeFirst(); if let h = x as? HomeView, !h.isHidden { return h }; q += x.subviews }
-    return nil
   }
   func tabBarController(_ c: UITabBarController, didSelect vc: UIViewController) {
     guard let i = (0..<slots.count).first(where: { tabVC($0) === vc }) else { return }
     let main = Main.shared
     guard let item = main.tabBar.items?.first(where: { $0.tag == i }) else { return }
     main.tabBar(main.tabBar, didSelect: item)
-    if let old = fabLeft { fabLeft = nil; AppleTabs.cornerScreen(vc)?.fabArrive(from: old) }
   }
 }
