@@ -185,8 +185,8 @@ try:
       scr = [d[k] for k in ('home', 'mytasks', 'inbox', 'clients', 'me') if isinstance(d.get(k), dict)]
       on = [x for x in scr if x.get('shown')]   # (a tab not on show hears the look when it shows again — iPhone's own way)
       return len(scr) >= 3 and len(on) >= 1 and all(x.get('forced') == 0 for x in scr) and all(x.get('style') == style and ((x.get('bg') or 0) > 0.5) == bright for x in on) and d.get('tabBar') == 0
-    check(lookOk(res.get('lookLight'), 1, True), f"phone to light, app open: every tab's screen light, nothing forced {res.get('lookLight')}")
-    check(lookOk(res.get('lookDark'), 2, False), f"phone back to dark: every tab's screen dark {res.get('lookDark')}")
+    check(lookOk(res.get('lookAtLight'), 1, True), f"phone to light, app open: every tab's screen light, nothing forced {res.get('lookAtLight')}")
+    check(lookOk(res.get('lookAtDark'), 2, False), f"phone back to dark: every tab's screen dark {res.get('lookAtDark')}")
     check(res.get('lookRedrawsAfter') is not None and res.get('lookRedrawsAfter') == res.get('lookRedrawsBefore'), f"the look switched by iPhone itself: no screen drawn again {res.get('lookRedrawsBefore')} → {res.get('lookRedrawsAfter')}")
     # (measurement only — Haris 2026-11-09: the frost on pushed pages at their top; the search bar going back to Client Assets)
     def barLine(b):

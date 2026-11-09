@@ -2946,9 +2946,13 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       ("meAgainDone", pause(2500) + "return '{}'", { self.selfResult["meRowsAfter"] = Main.meRows }),
       // (light / dark the Apple way — Haris 2026-11-09: the simulator switched to light with the app open, then back to dark:
       //  every tab's screen in the phone's look, nothing forcing one, nothing drawn again)
-      ("lookFlip", pause(1500) + "return '{}'", { self.selfResult["lookBefore"] = self.selfLook(); self.selfResult["lookRedrawsBefore"] = Main.lookRedraws }),
-      ("lookLight", pause(3000) + "return '{}'", { self.selfResult["lookLight"] = self.selfLook() }),
-      ("lookDark", pause(3000) + "return '{}'", { self.selfResult["lookDark"] = self.selfLook(); self.selfResult["lookRedrawsAfter"] = Main.lookRedraws }),
+      // (each look read a step after the build machine switched the simulator — its switch comes as the step before ends;
+      //  kept under their own names: a step's own name holds what its page script answered)
+      ("lookFlip", pause(1500) + "return '{}'", { self.selfResult["lookAtStart"] = self.selfLook(); self.selfResult["lookRedrawsBefore"] = Main.lookRedraws }),
+      ("lookWait", pause(3000) + "return '{}'", nil),
+      ("lookLight", pause(1500) + "return '{}'", { self.selfResult["lookAtLight"] = self.selfLook() }),
+      ("lookWait2", pause(3000) + "return '{}'", nil),
+      ("lookDark", pause(1500) + "return '{}'", { self.selfResult["lookAtDark"] = self.selfLook(); self.selfResult["lookRedrawsAfter"] = Main.lookRedraws }),
       // (measurement — Haris 2026-11-09: a form sheet's notes under its fields ran off the sheet in one line: Add team member)
       ("formOpen", pause(2500) + "return '{}'", { self.meCtl.ask(["kind": "form", "title": "Add team member", "okText": "Add member",
         "intro": "They sign in at test.e11hq.com with this email — a one-time code is emailed to them. No password needed.",

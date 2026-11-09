@@ -3127,7 +3127,18 @@ final class MeFormVC: UITableViewController, UITextFieldDelegate {
   override func numberOfSections(in tableView: UITableView) -> Int { fields.count }
   override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { 1 }
   override func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? { fields[section]["label"] as? String }
-  override func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
+  // (a field's note under it: Apple's own grouped footer, set with its lines wrapping — given as a title, iPhone drew it in
+  //  one line wider than the sheet (measured in 1599: 570 and 698 pt in a 402 pt table, 1 line), and it ran off the
+  //  sheet: Haris 2026-11-09)
+  override func tableView(_ tableView: UITableView, viewForFooterInSection section: Int) -> UIView? {
+    guard let t = footerText(section) else { return nil }
+    let v = UITableViewHeaderFooterView(reuseIdentifier: nil)
+    var c = UIListContentConfiguration.groupedFooter()
+    c.text = t; c.textProperties.numberOfLines = 0
+    v.contentConfiguration = c
+    return v
+  }
+  private func footerText(_ section: Int) -> String? {
     var parts: [String] = []
     if section == 0, let intro = a["intro"] as? String, !intro.isEmpty { parts.append(intro) }
     if let h = fields[section]["hint"] as? String, !h.isEmpty { parts.append(h) }
