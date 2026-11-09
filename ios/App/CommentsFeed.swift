@@ -573,7 +573,9 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
       let rx = ["👍", "✅", "🎉", "❤️", "👀", "🙏"].map { e in
         UIAction(title: e, image: ReactionSym.image(e, size: 20)) { [weak self] _ in self?.react(id, e) }
       }
-      parts.append(UIMenu(title: "", options: [.displayInline, .displayAsPalette], children: rx))
+      // (Apple's palette — the six in a row on top; iOS 17 and later, the app still opening on 16: a plain group there)
+      if #available(iOS 17.0, *) { parts.append(UIMenu(title: "", options: [.displayInline, .displayAsPalette], children: rx)) }
+      else { parts.append(UIMenu(title: "", options: .displayInline, children: rx)) }
     }
     var main: [UIMenuElement] = []
     if canReply(it) { main.append(UIAction(title: "Reply", image: UIImage(systemName: "arrowshape.turn.up.left")) { [weak self] _ in self?.reply(it) }) }
