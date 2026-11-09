@@ -131,6 +131,9 @@ try:
     ha, hs, ht = res.get('holdArrived') or {}, res.get('holdScrolled') or {}, res.get('holdTop') or {}
     moved = {k: (ha.get(k), hs.get(k), ht.get(k)) for k in set(ha) | set(hs) | set(ht) if len({round(x) for x in (ha.get(k), hs.get(k), ht.get(k)) if x is not None}) > 1}
     print('measure rowHeights', json.dumps({'arrived': ha, 'scrolled': hs, 'top': ht}))
+    # (and none taller than its words need: 1621's checklist rows came out 170 tall, steady but wrong — Haris 2026-11-09)
+    tall = {k: v for r in (ha, hs, ht) for k, v in r.items() if v and v > 110 and k not in ('desc', 'title', 'files', 'done', 'trash', 'lock', 'parent', 'based')}
+    check(not tall, f"the task page's rows are no taller than their words — none over 110 but the description, title and files (too tall: {tall})")
     check(len(ha) >= 4 and len(ht) >= 4 and not moved, f"the task page's rows keep their heights — arrived, scrolled, back at the top (changed: {moved})")
     tl, td = res.get('tlookAtLight') or {}, res.get('tlookAtDark') or {}
     check(tl.get('style') == 1 and tl.get('forced') == 0 and (tl.get('bg') or 0) > 0.5 and td.get('style') == 2 and td.get('forced') == 0 and td.get('bg', 1) < 0.5, f"the task page follows the phone light / dark, nothing forcing it (light {tl}, dark {td})", need=('tlook',))
