@@ -734,7 +734,9 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     // (as the mock-up, Haris 2026-11-10: on the box's own glass — the red dot, the time, the wave in grey; "‹ Slide to
     //  cancel" in the buttons' row; the mic grown and red under the finger; the lock above it)
     recView.backgroundColor = .clear; recView.layer.cornerRadius = 30; recView.clipsToBounds = true
-    UIView.animate(withDuration: 0.18) { self.plus.alpha = 0 }
+    // (the box's own words and pieces go while it records — on the glass they showed through: Haris 2026-11-10)
+    underWas = under.map { $0.alpha }
+    UIView.animate(withDuration: 0.18) { self.under.forEach { $0.alpha = 0 } }
     recView.frame = box.bounds; box.addSubview(recView)
     recDot.backgroundColor = .systemRed; recDot.layer.cornerRadius = 5; recDot.frame = CGRect(x: 18, y: 22, width: 10, height: 10)
     recTime.font = .monospacedDigitSystemFont(ofSize: 16, weight: .medium); recTime.frame = CGRect(x: 36, y: 12, width: 50, height: 30); recTime.text = "0:00"
@@ -763,6 +765,9 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     UIView.animate(withDuration: 0.25, delay: 0.1) { self.lockHint.alpha = 1 }
   }
   private let lockHint = UIVisualEffectView(effect: nil)
+  // (what's under the recording in the box: the +, the words, the placeholder, the files, the reply line)
+  private var underWas: [CGFloat] = []   // (as they were, put back after)
+  private var under: [UIView] { [plus, text, placeholder, replyPill] + (tilesScroll.map { [$0] } ?? []) }
   // (the mic back to itself, the + back — recording over or locked)
   private func micBack() {
     UIView.animate(withDuration: 0.22) {
@@ -810,7 +815,8 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     recDot.layer.removeAllAnimations()
     recView.removeFromSuperview(); lockTrash.removeFromSuperview(); lockSend.removeFromSuperview(); recHint.isHidden = false
     micBack()
-    UIView.animate(withDuration: 0.18) { self.plus.alpha = 1 }
+    let was = underWas; underWas = []
+    UIView.animate(withDuration: 0.18) { for (v, a) in zip(self.under, was) { v.alpha = a } }
     try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     guard send, dur >= 0.8 else { if send { onToast?("Hold to record, let go to send") }; try? FileManager.default.removeItem(at: url); return }
     // straight up, then sent as its own comment (a reply where the box is replying)
