@@ -1039,6 +1039,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
 
   /* ---------- the native tab bar (the page's own tabs; tapping one taps the page's button) ---------- */
+  // the selected tab's icon: Apple's filled symbol, as iPhone's own apps — or the outline where Apple has no filled one
+  // (Haris 2026-11-09 23:52)
+  func filled(_ name: String) -> String { UIImage(systemName: name + ".fill") != nil ? name + ".fill" : name }
   func symbol(_ v: String) -> String {
     switch v {
     case "today": return "sun.max"
@@ -1180,7 +1183,10 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       meTabKey = ""   // (new tabs: your photo drawn on the new Me tab)
       tabBar.items = list.enumerated().map { i, t in
         // (an Office Admin's first tab is Overview: a grid — Haris 2026-11-04)
-        UITabBarItem(title: t["label"] as? String ?? "", image: UIImage(systemName: (t["label"] as? String) == "Overview" ? "square.grid.2x2" : (t["label"] as? String) == "Client Assets" ? "folder" : symbol(t["v"] as? String ?? "")), tag: i)
+        let name = (t["label"] as? String) == "Overview" ? "square.grid.2x2" : (t["label"] as? String) == "Client Assets" ? "folder" : symbol(t["v"] as? String ?? "")
+        let item = UITabBarItem(title: t["label"] as? String ?? "", image: UIImage(systemName: name), selectedImage: UIImage(systemName: filled(name)))
+        item.tag = i
+        return item
       }
     } else {
       for (i, t) in list.enumerated() { tabBar.items?[i].title = t["label"] as? String ?? "" }
@@ -1209,10 +1215,10 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         let key = "\(v)|\(b)|\(tabBar.traitCollection.userInterfaceStyle.rawValue)"
         if tabBadgeKey[i] != key {
           tabBadgeKey[i] = key
-          if b.isEmpty { item.image = UIImage(systemName: symbol(v)); item.selectedImage = nil }
+          if b.isEmpty { item.image = UIImage(systemName: symbol(v)); item.selectedImage = UIImage(systemName: filled(symbol(v))) }
           else {
             item.image = badged(symbol(v), b, color: tabBar.unselectedItemTintColor ?? Look.ink)
-            item.selectedImage = badged(symbol(v), b, color: tabBar.tintColor ?? .systemBlue)
+            item.selectedImage = badged(filled(symbol(v)), b, color: tabBar.tintColor ?? .systemBlue)
           }
         }
       }
