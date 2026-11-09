@@ -528,32 +528,32 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     m = model
     L = HomeLook(model["look"] as? [String: Any])
     backgroundColor = L.bg
-    // (the system's own text colours, as Mail: label for the titles, secondary label for the lines under them)
-    overrideUserInterfaceStyle = L.light ? .light : .dark
+    // (the system's own text colours, as Mail: label for the titles, secondary label for the lines under them; the look
+    //  is the phone's — nothing forced, every colour switches itself: Look.swift)
     HomeView.fadeText(sub, model["date"] as? String); sub.textColor = .secondaryLabel
     title.attributedText = NSAttributedString(string: model["title"] as? String ?? "", attributes: [.font: UIFont.systemFont(ofSize: 34, weight: .bold), .foregroundColor: UIColor.label])
     if appleTop { onAppleTitle?(model["title"] as? String ?? "", model["date"] as? String ?? "") }
     smallTitle.text = model["title"] as? String; smallTitle.textColor = .label
     HomeView.fadeText(smallSub, model["date"] as? String); smallSub.textColor = .secondaryLabel
-    blur.effect = UIBlurEffect(style: L.light ? .systemUltraThinMaterialLight : .systemUltraThinMaterialDark)
-    hairline.backgroundColor = L.light ? UIColor.black.withAlphaComponent(0.08) : UIColor.white.withAlphaComponent(0.08)
-    topLine.backgroundColor = L.light ? UIColor.black.withAlphaComponent(0.12) : UIColor.white.withAlphaComponent(0.12)
-    [searchCircle, closeCircle, searchBar].forEach { $0.setLook(light: L.light, tint: L.roundIc) }
+    if blur.effect == nil { blur.effect = UIBlurEffect(style: .systemUltraThinMaterial) }
+    hairline.backgroundColor = Look.c(UIColor.white.withAlphaComponent(0.08), UIColor.black.withAlphaComponent(0.08))
+    topLine.backgroundColor = Look.c(UIColor.white.withAlphaComponent(0.12), UIColor.black.withAlphaComponent(0.12))
+    [searchCircle, closeCircle, searchBar].forEach { $0.setLook(tint: L.roundIc) }
     lens.tintColor = L.sub; field.textColor = L.h1; field.tintColor = L.tag
     field.attributedPlaceholder = NSAttributedString(string: assets == "plansTab" || assets == "plansPage" || assets == "me.plan" ? "Search plans — a client or a post" : assets == "reviewsTab" ? "Search requests" : assets == "claimsTab" ? "Search claims" : assets == "expensesTab" ? "Search expenses" : assets != nil ? "Search every client’s files" : "Search tasks, clients, people", attributes: [.foregroundColor: L.sub])
-    field.keyboardAppearance = L.light ? .light : .dark
     hint.textColor = L.empty
     meId = model["me"] as? String ?? ""; watchMe(); meChanged()
     if var fc = fab.configuration {
-      if #available(iOS 26.0, *) { fab.overrideUserInterfaceStyle = L.light ? .light : .dark; fab.layer.shadowOpacity = 0 } else {
-        fc.background.backgroundColor = ToastCapsule.fill(L.light); fc.background.strokeColor = ToastCapsule.line(L.light); fc.background.strokeWidth = 1
-        fab.layer.shadowColor = UIColor.black.cgColor; fab.layer.shadowOpacity = L.light ? 0.08 : 0; fab.layer.shadowRadius = 10; fab.layer.shadowOffset = CGSize(width: 0, height: 3)
+      if #available(iOS 26.0, *) { fab.layer.shadowOpacity = 0 } else {
+        fc.background.backgroundColor = ToastCapsule.fill; fc.background.strokeColor = ToastCapsule.line; fc.background.strokeWidth = 1
+        fab.layer.shadowColor = UIColor.black.cgColor; fab.layer.shadowRadius = 10; fab.layer.shadowOffset = CGSize(width: 0, height: 3)
+        fab.followLook("shadow") { [weak fab] tc in fab?.layer.shadowOpacity = tc.userInterfaceStyle == .light ? 0.08 : 0 }
       }
-      fc.baseForegroundColor = L.light ? .black : .white; fab.configuration = fc
+      fc.baseForegroundColor = Look.ink; fab.configuration = fc
     }
     if var f2 = fab2.configuration {
-      if #available(iOS 26.0, *) { fab2.overrideUserInterfaceStyle = L.light ? .light : .dark } else {
-        f2.background.backgroundColor = ToastCapsule.fill(L.light); f2.background.strokeColor = ToastCapsule.line(L.light); f2.background.strokeWidth = 1
+      if #available(iOS 26.0, *) {} else {
+        f2.background.backgroundColor = ToastCapsule.fill; f2.background.strokeColor = ToastCapsule.line; f2.background.strokeWidth = 1
       }
       fab2.configuration = f2
     }
@@ -561,7 +561,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let st = model["stats"] as? [Int] ?? [0, 0, 0]
     let names = ["Due today", "Overdue", "In review"], cols = [L.statG, L.statR, L.statA]
     for (i, v) in stats.enumerated() {
-      v.backgroundColor = L.statBg; v.layer.borderColor = L.statLine.cgColor
+      v.backgroundColor = L.statBg; let line = L.statLine; v.followLook("border") { [weak v] tc in v?.layer.setBorder(line, tc) }
       v.layer.shadowOpacity = 0   // (no drop shadows on boxes or cards — Haris, 2026-10-31)
       let n = v.viewWithTag(1) as? UILabel, l = v.viewWithTag(2) as? UILabel
       n?.text = "\(st.indices.contains(i) ? st[i] : 0)"; n?.font = .systemFont(ofSize: 34, weight: .bold); n?.textColor = cols[i]   // (as Mail's big title)
@@ -787,8 +787,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // (a filter that's on: filled — black with white in light, white with black in dark, as Mail's "All Mail"; fixed
     //  colours, not the system's: the glass worked its own text colour out and it came out white on white in dark — Haris,
     //  2026-11-01)
-    let ink: UIColor = on ? (L.light ? .white : .black) : (L.light ? .black : .white)
-    if on { c.baseBackgroundColor = L.light ? .black : .white }
+    let ink: UIColor = on ? Look.inkInverse : Look.ink
+    if on { c.baseBackgroundColor = Look.ink }
     c.baseForegroundColor = ink
     let f = UIFont.systemFont(ofSize: small ? 13 : 15, weight: on ? .semibold : .regular)
     c.attributedTitle = AttributedString(t, attributes: AttributeContainer([.font: f, .foregroundColor: ink]))
@@ -806,7 +806,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let tab = (a["tab"] as? String) == "done" ? "done" : "all"
     if tab != listTab { listTab = tab; if let o = openCard { setOpen(o, false) } }
     seg.selectedSegmentIndex = listTab == "done" ? 1 : 0
-    let key = String(describing: a["buttons"] ?? "") + "|" + String(describing: a["chips"] ?? "") + "|" + (L.light ? "l" : "d")
+    let key = String(describing: a["buttons"] ?? "") + "|" + String(describing: a["chips"] ?? "") 
     if key == filtersKey { return }
     filtersKey = key
     filterBtns.forEach { $0.removeFromSuperview() }; chipBtns.forEach { $0.removeFromSuperview() }
@@ -911,9 +911,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }
   // ---- the shared + (SharedFab.swift): the + as it shows now, and its drawing veiled while the shared one moves ----
   // (a screen just hidden by a tab change still says what it showed — that's where the shared + comes from)
-  var fabNow: (shown: Bool, frame: CGRect, config: UIButton.Configuration?, light: Bool, label: String) {
+  var fabNow: (shown: Bool, frame: CGRect, config: UIButton.Configuration?, label: String) {
     let a = CGFloat(fab.layer.presentation()?.opacity ?? fab.layer.opacity)
-    return (!fab.isHidden && fab.superview != nil && a > 0.01 && fab.bounds.width > 0, fab.frame, fab.configuration, L.light, fab.accessibilityLabel ?? "")
+    return (!fab.isHidden && fab.superview != nil && a > 0.01 && fab.bounds.width > 0, fab.frame, fab.configuration, fab.accessibilityLabel ?? "")
   }
   var fabVeiled = false { didSet { if fabVeiled != oldValue { fab.layer.mask = fabVeiled ? CALayer() : nil } } }   // (taps still reach it)
   private var fabBefore: (label: String?, frame: CGRect)?
@@ -1127,7 +1127,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     markAll.isHidden = ((model["unread"] as? Int) ?? 0) == 0
     markAll.alpha = cornerShared ? 0 : 1
     defer { onCorner?() }
-    catsView.light = L.light
     // (opened on Unread: the unread ones at the start stay in it until another list is picked — read or not, as Mail)
     if !keepSet, (model["rows"] as? [[String: Any]]) != nil {
       keep = Set((model["rows"] as? [[String: Any]] ?? []).filter { ($0["read"] as? Bool) != true }.compactMap { $0["id"] as? String }); keepSet = true
@@ -1676,7 +1675,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       let clients = (r["clients"] as? [[String: Any]] ?? []).map { var x = $0; x["marks"] = marks; return x }, tasks = (r["tasks"] as? [[String: Any]] ?? []).map { var x = $0; x["marks"] = marks; return x }
       walkFirst = (tasks.first?["id"] as? String, clients.first?["id"] as? String)
       // (a word that only matched as a typo: "Showing results for ford (you typed “frod”)" — app.js searchFixedNote)
-      if let fx = r["fixed"] as? [[String: Any]], !fx.isEmpty { let n = SearchFixedNote(); n.set(fx, light: L.light); if !listOn { results.addSubview(n) }; resultViews.append(n) }
+      if let fx = r["fixed"] as? [[String: Any]], !fx.isEmpty { let n = SearchFixedNote(); n.set(fx); if !listOn { results.addSubview(n) }; resultViews.append(n) }
       if !clients.isEmpty {
         resultViews.append(groupHead("Clients", clients.count))
         for c in clients {
@@ -1816,7 +1815,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if leading {
       let d = card.info
       a = HomeActions(done: (d["done"] as? Bool) == true, showDone: (d["canDone"] as? Bool) == true, due: d["due"] as? String, showDue: (d["canDue"] as? Bool) == true, cdHold: (d["cdHold"] as? Bool) == true)
-    } else { a = HomeActions(delete: canDelete, light: L.light) }
+    } else { a = HomeActions(delete: canDelete) }
     let w = 20 + CGFloat(a.count) * 64
     a.frame = CGRect(x: leading ? card.center.x - card.bounds.width / 2 : card.center.x + card.bounds.width / 2 - w, y: card.center.y - card.bounds.height / 2, width: w, height: card.bounds.height)
     a.onCopy = { [weak self, weak card] in
@@ -1830,7 +1829,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       let al = UIAlertController(title: "Move this task to the Trash?", message: card.taskTitle.isEmpty ? nil : card.taskTitle, preferredStyle: .actionSheet)
       al.addAction(UIAlertAction(title: "Trash Task", style: .destructive) { _ in self.send(["ev": "delete", "id": card.id, "card": card.info]); self.setOpen(card, false); self.findAgain() })
       al.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in self.setOpen(card, false) })
-      al.overrideUserInterfaceStyle = self.L.light ? .light : .dark
       self.present?(al)
     }
     // Done: green at once (grey again when a done task is reopened), then the card closes and the page does the rest — as
@@ -1910,7 +1908,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if let o = openCard { setOpen(o, false) }
     card.isHighlighted = false
     let id = card.id
-    let sheet = AttachSheetVC(light: L.light, title: "Attach Files") { [weak self] src in self?.send(["ev": "attach", "id": id, "source": src]) }
+    let sheet = AttachSheetVC(title: "Attach Files") { [weak self] src in self?.send(["ev": "attach", "id": id, "source": src]) }
     // (the lifted picture is the card at its full size, and the card itself is hidden under it while the sheet is up —
     //  the shrunk card showed its border round the picture: a double border, Haris 2026-11-02)
     (card.gestureRecognizers?.first { $0 is PressShrink } as? PressShrink)?.release()
@@ -1942,7 +1940,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let bottom = withFab ? fab.frame.maxY : (tabTop ?? bounds.height - 40) - 12
     let from = withFab ? fab.frame : CGRect(x: W - R - BTN, y: bottom - BTN, width: BTN, height: BTN)
     let to = CGRect(x: 16, y: from.minY, width: from.maxX - 16, height: from.height)
-    let c = ToastCapsule(light: L.light, title: withFab ? (fab.accessibilityLabel ?? "New task") : nil, sym: withFab ? fabSym : nil, plus: withFab)
+    let c = ToastCapsule(title: withFab ? (fab.accessibilityLabel ?? "New task") : nil, sym: withFab ? fabSym : nil, plus: withFab)
     c.say(text, act); c.cross(x)
     c.onUndo = { [weak self, weak c] in c?.close(); self?.onEvent?(["ev": "toast"]) }
     c.onPlus = { [weak self, weak c] in
@@ -1987,30 +1985,40 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
      "title": title.text ?? "", "date": sub.text ?? "", "stats": stats.map { ($0.viewWithTag(1) as? UILabel)?.text ?? "" },
      "groups": content.filter { $0.tag == 7 }.map { ($0 as? UILabel)?.text ?? "" }, "cards": cards.count, "fab": !fab.isHidden,
      "headH": blur.frame.height, "shrink": shrink, "bar": blur.alpha, "smallTitle": smallTitle.alpha, "searching": searching,
-     "searchBarW": searchBar.isHidden ? 0 : searchBar.frame.width, "results": resultViews.count, "light": L.light,
+     "searchBarW": searchBar.isHidden ? 0 : searchBar.frame.width, "results": resultViews.count,
      "apple": appleTop, "appleList": listOn, "appleBarH": appleBarHeight?() ?? 0, "listCells": list?.visibleCells.count ?? 0, "scrolledY": sv.contentOffset.y + inTop]
   }
 }
 
 // the colours the page's own Home uses (phone.css), read from it; dark / light defaults when a piece isn't on it
 struct HomeLook {
-  let light: Bool
+  // every colour holds both looks (Look.c): the website's measured colours for each look when it has sent them (Main
+  // keeps the last of each — Main.lookBoth), else the app's own — so iPhone switches them itself
   let bg, headBg, sub, h1, round, roundIc, statBg, statLine, statLabel, statG, statR, statA, gh, empty: UIColor
   let card, cardLine, lateLine, title, meta, sep, late, today, doneTitle, tag, tagBg, urgent, urgentBg, more, moreBg, fabBg, fabLine: UIColor
   let headH: CGFloat?, fabRect: CGRect?
+  // (which colours these are — the same for the same website colours: a drawing's signature, never the colour objects,
+  //  which are new each time)
+  let key: String
+  // d: { dark: {…}?, light: {…}? } — or one look's colours as the website sends them ({ light: Bool, bg: […], … })
   init(_ d: [String: Any]?) {
-    let lt = (d?["light"] as? Bool) ?? false
-    light = lt
-    func c(_ k: String, _ dark: UIColor, _ lightC: UIColor) -> UIColor {
-      guard let a = d?[k] as? [NSNumber], a.count >= 3 else { return lt ? lightC : dark }
+    var dk = d?["dark"] as? [String: Any], lt = d?["light"] as? [String: Any]
+    if dk == nil, lt == nil, let one = d, one["light"] is Bool { if (one["light"] as? Bool) == true { lt = one } else { dk = one } }
+    key = drawSig(dk ?? [:]) + "§" + drawSig(lt ?? [:])
+    func rgb(_ x: [String: Any]?, _ k: String) -> UIColor? {
+      guard let a = x?[k] as? [NSNumber], a.count >= 3 else { return nil }
       return UIColor(red: CGFloat(a[0].doubleValue) / 255, green: CGFloat(a[1].doubleValue) / 255, blue: CGFloat(a[2].doubleValue) / 255, alpha: a.count > 3 ? CGFloat(a[3].doubleValue) : 1)
     }
+    func c(_ k: String, _ dark: UIColor, _ light: UIColor) -> UIColor { Look.c(rgb(dk, k) ?? dark, rgb(lt, k) ?? light) }
     let w = UIColor.white, k = UIColor.black
-    bg = c("bg", SplashView.hex(0x0c0d0f), SplashView.hex(0xf4f4f7)); headBg = c("headBg", bg, bg)
+    let bgD = SplashView.hex(0x0c0d0f), bgL = SplashView.hex(0xf4f4f7)
+    bg = c("bg", bgD, bgL); headBg = Look.c(rgb(dk, "headBg") ?? rgb(dk, "bg") ?? bgD, rgb(lt, "headBg") ?? rgb(lt, "bg") ?? bgL)
     // (every grey on the app's own screens is the date's grey: iPhone's secondary label — Haris, 2026-10-31)
     let grey = UIColor.secondaryLabel
-    sub = grey; h1 = c("h1", SplashView.hex(0xe9eaee), SplashView.hex(0x17181b))
-    round = c("round", w.withAlphaComponent(0.08), k.withAlphaComponent(0.05)); roundIc = c("roundIc", h1, h1)
+    let h1D = SplashView.hex(0xe9eaee), h1L = SplashView.hex(0x17181b)
+    sub = grey; h1 = c("h1", h1D, h1L)
+    round = c("round", w.withAlphaComponent(0.08), k.withAlphaComponent(0.05))
+    roundIc = Look.c(rgb(dk, "roundIc") ?? rgb(dk, "h1") ?? h1D, rgb(lt, "roundIc") ?? rgb(lt, "h1") ?? h1L)
     statBg = c("statBg", w.withAlphaComponent(0.06), w.withAlphaComponent(0.7)); statLine = c("statLine", w.withAlphaComponent(0.12), w)
     statLabel = grey
     statG = c("statG", SplashView.hex(0x3ddc97), SplashView.hex(0x1a9e63)); statR = c("statR", SplashView.hex(0xff7a7a), SplashView.hex(0xd9363e)); statA = c("statA", SplashView.hex(0xf9be33), SplashView.hex(0xb57d00))
@@ -2023,14 +2031,11 @@ struct HomeLook {
     tag = c("tag", SplashView.hex(0xc9c0ff), SplashView.hex(0x5b4bd6)); tagBg = c("tagBg", UIColor(red: 123 / 255, green: 104 / 255, blue: 238 / 255, alpha: 0.18), UIColor(red: 123 / 255, green: 104 / 255, blue: 238 / 255, alpha: 0.14))
     urgent = c("urgent", SplashView.hex(0xff9494), SplashView.hex(0xd9363e)); urgentBg = c("urgentBg", UIColor(red: 229 / 255, green: 72 / 255, blue: 77 / 255, alpha: 0.16), UIColor(red: 229 / 255, green: 72 / 255, blue: 77 / 255, alpha: 0.12))
     more = grey; moreBg = c("moreBg", w.withAlphaComponent(0.08), k.withAlphaComponent(0.06))
-    let f = d?["fab"] as? [String: Any]
-    func fc(_ k: String, _ dflt: UIColor) -> UIColor {
-      guard let a = f?[k] as? [NSNumber], a.count >= 3 else { return dflt }
-      return UIColor(red: CGFloat(a[0].doubleValue) / 255, green: CGFloat(a[1].doubleValue) / 255, blue: CGFloat(a[2].doubleValue) / 255, alpha: a.count > 3 ? CGFloat(a[3].doubleValue) : 1)
-    }
-    fabBg = fc("bg", SplashView.hex(0x5b4bd6)); fabLine = fc("line", .clear)
+    let fd = dk?["fab"] as? [String: Any], fl = lt?["fab"] as? [String: Any]
+    fabBg = Look.c(rgb(fd, "bg") ?? SplashView.hex(0x5b4bd6), rgb(fl, "bg") ?? SplashView.hex(0x5b4bd6)); fabLine = Look.c(rgb(fd, "line") ?? .clear, rgb(fl, "line") ?? .clear)
+    let f = fd ?? fl
     if let r = f?["rect"] as? [NSNumber], r.count == 4, r[2].doubleValue > 0 { fabRect = CGRect(x: r[0].doubleValue, y: r[1].doubleValue, width: r[2].doubleValue, height: r[3].doubleValue) } else { fabRect = nil }
-    headH = (d?["headH"] as? NSNumber).map { CGFloat($0.doubleValue) }
+    headH = ((dk ?? lt)?["headH"] as? NSNumber).map { CGFloat($0.doubleValue) }
   }
 }
 
@@ -2074,13 +2079,14 @@ final class HomeCard: UIControl {
   private var drawnSig = ""
   func set(_ d: [String: Any], look: HomeLook) {
     // (the same as it shows: left as it is — its faces, words and icon not made again: Haris 2026-11-08)
-    let sig = drawSig(d) + "|\(look.light)|\(look.card)|\(look.title)|\(look.meta)|\(look.late)"
+    let sig = drawSig(d) + "|" + look.key
     c = d; L = look
     if sig == drawnSig { return }
     drawnSig = sig
     let late = (d["late"] as? Bool) == true, done = (d["done"] as? Bool) == true
     backgroundColor = L.card
-    layer.borderColor = (late ? L.lateLine : L.cardLine).cgColor
+    let line = late ? L.lateLine : L.cardLine
+    followLook("border") { [weak self] tc in self?.layer.setBorder(line, tc) }
     layer.shadowOpacity = 0
     let t = d["title"] as? String ?? ""
     let ps = NSMutableParagraphStyle(); ps.minimumLineHeight = 20.15; ps.maximumLineHeight = 20.15
@@ -2089,10 +2095,10 @@ final class HomeCard: UIControl {
     if done { ta[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
     let marks = (d["marks"] as? [String]) ?? []
     titleL.attributedText = t.isEmpty || marks.isEmpty ? NSAttributedString(string: t.isEmpty ? "Untitled task" : t, attributes: ta)
-      : HomeCard.marked(t, marks, base: ta, mark: [.backgroundColor: UIColor.systemBlue.withAlphaComponent(L.light ? 0.16 : 0.3)])
+      : HomeCard.marked(t, marks, base: ta, mark: [.backgroundColor: Find.wash])
     if let f = d["found"] as? [String: Any] {
       foundBox.isHidden = false
-      foundBox.backgroundColor = L.light ? UIColor(white: 0.965, alpha: 1) : UIColor(white: 0.14, alpha: 1)
+      foundBox.backgroundColor = Look.c(UIColor(white: 0.14, alpha: 1), UIColor(white: 0.965, alpha: 1))
       let base: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 13), .foregroundColor: L.meta]
       let s = NSMutableAttributedString(string: (f["label"] as? String ?? "") + ": ", attributes: [.font: UIFont.systemFont(ofSize: 13, weight: .semibold), .foregroundColor: L.title])
       s.append(HomeCard.marked(f["text"] as? String ?? "", marks, base: base, mark: [.foregroundColor: UIColor.systemBlue, .font: UIFont.systemFont(ofSize: 13, weight: .semibold)]))
@@ -2309,7 +2315,7 @@ final class HomeActions: UIView {
     return (v, b)
   }
   // swiped left (trailing): Copy link · Delete
-  init(delete: Bool, light: Bool) {
+  init(delete: Bool) {
     leading = false
     super.init(frame: .zero)
     items.append(item("Copy link", HomeActions.grey, sym: "link", { [weak self] in self?.onCopy?() }).0)
@@ -2449,12 +2455,11 @@ final class HomeGlass: UIView {
   @objc private func tap() { onTap?() }
   override func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool { g is UITapGestureRecognizer ? onTap != nil : true }
   func setIcon(_ sym: String, _ size: CGFloat) { icon.image = UIImage(systemName: sym, withConfiguration: UIImage.SymbolConfiguration(pointSize: size, weight: .medium)) }
-  func setLook(light: Bool, tint: UIColor) {
+  func setLook(tint: UIColor) {
     icon.tintColor = tint
-    overrideUserInterfaceStyle = light ? .light : .dark
     if #available(iOS 26.0, *) { return }
-    fx.effect = UIBlurEffect(style: light ? .systemUltraThinMaterialLight : .systemUltraThinMaterialDark)
-    fx.layer.borderWidth = 1; fx.layer.borderColor = UIColor.white.withAlphaComponent(light ? 0.6 : 0.18).cgColor
+    fx.effect = UIBlurEffect(style: .systemUltraThinMaterial)
+    fx.layer.borderWidth = 1; fx.followLook("border") { [weak fx] tc in fx?.layer.setBorder(Look.c(UIColor.white.withAlphaComponent(0.18), UIColor.white.withAlphaComponent(0.6)), tc) }
   }
   override func layoutSubviews() {
     super.layoutSubviews()
@@ -2482,10 +2487,10 @@ final class HomeClientRow: UIControl {
   required init?(coder: NSCoder) { fatalError() }
   // (pressed: the shared PressShrink, as every card — added where it's made)
   func set(_ c: [String: Any], look L: HomeLook) {
-    backgroundColor = L.card; layer.borderColor = L.cardLine.cgColor
+    backgroundColor = L.card; let line = L.cardLine; followLook("border") { [weak self] tc in self?.layer.setBorder(line, tc) }
     sq.text = c["ini"] as? String; sq.backgroundColor = NativeSheetVC.color(c["rgb"]) ?? .systemIndigo
     name.text = c["name"] as? String; name.textColor = L.title
-    if let mk = c["marks"] as? [String], !mk.isEmpty { name.attributedText = HomeCard.marked(name.text ?? "", mk, base: [.font: name.font!, .foregroundColor: L.title], mark: [.backgroundColor: UIColor.systemBlue.withAlphaComponent(L.light ? 0.16 : 0.3)]) }
+    if let mk = c["marks"] as? [String], !mk.isEmpty { name.attributedText = HomeCard.marked(name.text ?? "", mk, base: [.font: name.font!, .foregroundColor: L.title], mark: [.backgroundColor: Find.wash]) }
     let n = c["open"] as? Int ?? 0
     meta.text = "Client · \(n) open task\(n == 1 ? "" : "s")"; meta.textColor = L.meta
     accessibilityLabel = name.text
@@ -2657,7 +2662,6 @@ final class MailCats: UIView {
   let items: [Item]
   private(set) var selected = 0
   var onPick: ((Int) -> Void)?
-  var light = true { didSet { if oldValue != light { paint() } } }
   private var pills: [(bg: UIView, icon: UIImageView, label: UILabel)] = []
   var widths: [CGFloat] { pills.map { $0.bg.frame.width } }
   init(items: [Item]) {
@@ -2694,13 +2698,13 @@ final class MailCats: UIView {
     }
   }
   private func paint() {
-    let idle = light ? UIColor(red: 234 / 255, green: 234 / 255, blue: 236 / 255, alpha: 1) : UIColor(red: 39 / 255, green: 39 / 255, blue: 41 / 255, alpha: 1)
-    let idleInk = light ? UIColor(red: 134 / 255, green: 134 / 255, blue: 137 / 255, alpha: 1) : UIColor(red: 157 / 255, green: 156 / 255, blue: 164 / 255, alpha: 1)
+    let idle = Look.c(UIColor(red: 39 / 255, green: 39 / 255, blue: 41 / 255, alpha: 1), UIColor(red: 234 / 255, green: 234 / 255, blue: 236 / 255, alpha: 1))
+    let idleInk = Look.c(UIColor(red: 157 / 255, green: 156 / 255, blue: 164 / 255, alpha: 1), UIColor(red: 134 / 255, green: 134 / 255, blue: 137 / 255, alpha: 1))
     for (i, p) in pills.enumerated() {
       let on = i == selected
       // (the neutral one in dark: light grey with black, as the others' white on colour)
-      let ink: UIColor = on ? (items[i].key == "all" && !light ? .black : .white) : idleInk
-      p.bg.backgroundColor = on ? items[i].fill(light) : idle
+      let ink: UIColor = on ? (items[i].key == "all" ? Look.c(.black, .white) : .white) : idleInk
+      p.bg.backgroundColor = on ? Look.c(items[i].fill(false), items[i].fill(true)) : idle
       p.icon.tintColor = ink; p.label.textColor = ink
       p.label.alpha = on ? 1 : 0
       p.bg.accessibilityTraits = on ? [.button, .selected] : .button
@@ -2741,8 +2745,8 @@ enum SwipeSpring {
 
 // the toast capsule "+ New task" stretches into (HomeView.toast)
 final class ToastCapsule: UIView {
-  static func fill(_ light: Bool) -> UIColor { light ? .white : SplashView.hex(0x2b2c31) }
-  static func line(_ light: Bool) -> UIColor { light ? UIColor.black.withAlphaComponent(0.08) : UIColor.white.withAlphaComponent(0.1) }
+  static let fill = Look.c(SplashView.hex(0x2b2c31), .white)
+  static let line = Look.c(UIColor.white.withAlphaComponent(0.1), UIColor.black.withAlphaComponent(0.08))
   var onUndo: (() -> Void)?, onPlus: (() -> Void)?, onGone: (() -> Void)?
   var from = CGRect.zero, to = CGRect.zero
   private(set) var out = false
@@ -2768,7 +2772,6 @@ final class ToastCapsule: UIView {
   private var glassy: Bool { if #available(iOS 26.0, *) { return true }; return false }
   // (as the pill forms into the toast: its glass tinted 60 % — light on light, dark on dark; back to clear glass as it goes:
   //  Haris 2026-11-03)
-  private var isLight = true
   // (its corners: always a full pill, as the button — Haris 2026-11-03)
   private func shape(_ toast: Bool) {
     let H = body.bounds.height > 0 ? body.bounds.height : bounds.height
@@ -2777,15 +2780,13 @@ final class ToastCapsule: UIView {
   private func glass(tinted: Bool) -> UIVisualEffect? {
     guard #available(iOS 26.0, *) else { return nil }
     let g = UIGlassEffect(style: .regular)
-    if tinted { g.tintColor = isLight ? UIColor.white.withAlphaComponent(0.6) : UIColor(red: 28 / 255, green: 28 / 255, blue: 30 / 255, alpha: 0.6) }
+    if tinted { g.tintColor = Look.c(UIColor(red: 28 / 255, green: 28 / 255, blue: 30 / 255, alpha: 0.6), UIColor.white.withAlphaComponent(0.6)) }
     return g
   }
-  init(light: Bool, title: String?, sym: String?, plus: Bool) {
+  init(title: String?, sym: String?, plus: Bool) {
     hasPlus = plus
     super.init(frame: .zero)
-    overrideUserInterfaceStyle = light ? .light : .dark
-    isLight = light
-    let ink: UIColor = light ? .black : .white   // (its words: black on light, white on dark — Haris 2026-11-03)
+    let ink: UIColor = Look.ink   // (its words: black on light, white on dark — Haris 2026-11-03)
     if #available(iOS 26.0, *) {
       // (iPhone's own Liquid Glass, as "+ New task" it stretches out of)
       let ce = UIGlassContainerEffect(); ce.spacing = 24; bed.effect = ce
@@ -2794,9 +2795,9 @@ final class ToastCapsule: UIView {
       shape(false)
       bed.isUserInteractionEnabled = false; addSubview(bed)
     } else {
-      backgroundColor = ToastCapsule.fill(light)
-      layer.borderWidth = 1; layer.borderColor = ToastCapsule.line(light).cgColor
-      layer.shadowColor = UIColor.black.cgColor; layer.shadowOpacity = light ? 0.08 : 0; layer.shadowRadius = 10; layer.shadowOffset = CGSize(width: 0, height: 3)
+      backgroundColor = ToastCapsule.fill
+      layer.borderWidth = 1; layer.shadowColor = UIColor.black.cgColor; layer.shadowRadius = 10; layer.shadowOffset = CGSize(width: 0, height: 3)
+      followLook("layer") { [weak self] tc in self?.layer.setBorder(ToastCapsule.line, tc); self?.layer.shadowOpacity = tc.userInterfaceStyle == .light ? 0.08 : 0 }
     }
     // ("+ New task" as the button has it — fading away as it stretches, back as it shrinks; drawn by Apple's button with
     //  the button's own settings, so its + is the same size — drawn as text it was smaller and snapped to the button's
@@ -2951,9 +2952,9 @@ final class SearchFixedNote: UIView {
   private let l = UILabel()
   override init(frame: CGRect) { super.init(frame: frame); layer.cornerRadius = 14; layer.cornerCurve = .continuous; l.numberOfLines = 0; addSubview(l) }
   required init?(coder: NSCoder) { fatalError() }
-  func set(_ fx: [[String: Any]], light: Bool) {
-    backgroundColor = light ? UIColor(red: 0.91, green: 0.93, blue: 0.98, alpha: 1) : UIColor(red: 0.09, green: 0.14, blue: 0.23, alpha: 1)
-    let ink = light ? UIColor(red: 0.17, green: 0.29, blue: 0.54, alpha: 1) : UIColor(red: 0.66, green: 0.76, blue: 1, alpha: 1)
+  func set(_ fx: [[String: Any]]) {
+    backgroundColor = Look.c(UIColor(red: 0.09, green: 0.14, blue: 0.23, alpha: 1), UIColor(red: 0.91, green: 0.93, blue: 0.98, alpha: 1))
+    let ink = Look.c(UIColor(red: 0.66, green: 0.76, blue: 1, alpha: 1), UIColor(red: 0.17, green: 0.29, blue: 0.54, alpha: 1))
     let s = NSMutableAttributedString()
     if let img = UIImage(systemName: "magnifyingglass", withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .semibold))?.withTintColor(ink, renderingMode: .alwaysOriginal) {
       let a = NSTextAttachment(); a.image = img; a.bounds = CGRect(x: 0, y: -1, width: img.size.width, height: img.size.height); s.append(NSAttributedString(attachment: a)); s.append(NSAttributedString(string: "  "))
@@ -3130,8 +3131,8 @@ extension HomeView {
   // what a row shows, to tell whether it changed: a settings row by its item, your card by its words and photo, a block of
   // the page's own always (it draws itself, keeping what's the same)
   func meSig(_ key: String) -> String {
-    if key == "me:card", let c = listViews[key] as? MeCardBlock { let x = c.info; return "\(x.name)|\(x.role)|\(x.email)|\(MePhoto.shared.image.map { "\(ObjectIdentifier($0).hashValue)" } ?? "-")\(MePhoto.shared.initials ?? "")|\(look.light)" }
-    if let it = meItems[key] { return it.sig + "|\(it.toggle.map { $0 ? "1" : "0" } ?? "")|\(look.light)" }
+    if key == "me:card", let c = listViews[key] as? MeCardBlock { let x = c.info; return "\(x.name)|\(x.role)|\(x.email)|\(MePhoto.shared.image.map { "\(ObjectIdentifier($0).hashValue)" } ?? "-")\(MePhoto.shared.initials ?? "")|\(look.key)" }
+    if let it = meItems[key] { return it.sig + "|\(it.toggle.map { $0 ? "1" : "0" } ?? "")|\(look.key)" }
     if let v = listViews[key] { return "b|\(itemHeight(key, v))" }   // (a block's own height changed — its cell sized again)
     return "b"
   }

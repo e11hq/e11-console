@@ -64,8 +64,9 @@ enum Find {
   }
   // (the last search's marks taken off first — rows kept from one search to the next kept them)
   private static let markKey = NSAttributedString.Key("e11FindMark")
-  static func mark(_ views: [UIView], _ marks: [String], light: Bool) {
-    let wash = UIColor.systemBlue.withAlphaComponent(light ? 0.16 : 0.3)
+  // (the found words' wash — the same in every search; it switches with the look by itself)
+  static let wash = Look.c(UIColor.systemBlue.withAlphaComponent(0.3), UIColor.systemBlue.withAlphaComponent(0.16))
+  static func mark(_ views: [UIView], _ marks: [String]) {
     func walk(_ v: UIView) {
       if let l = v as? UILabel, let t = l.attributedText, t.length > 0 {
         let s = NSMutableAttributedString(attributedString: t)

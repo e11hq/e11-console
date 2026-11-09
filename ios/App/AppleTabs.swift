@@ -22,10 +22,7 @@ final class Tabs {
   }
   var tintColor: UIColor?
   var unselectedItemTintColor: UIColor?
-  var overrideUserInterfaceStyle: UIUserInterfaceStyle = .unspecified
-  var traitCollection: UITraitCollection {
-    overrideUserInterfaceStyle == .unspecified ? Main.shared.traitCollection : UITraitCollection(userInterfaceStyle: overrideUserInterfaceStyle)
-  }
+  var traitCollection: UITraitCollection { AppleTabs.shared?.traitCollection ?? Main.shared.traitCollection }
   // (where Apple's bar is, as the app's screens measure it — Main's layout)
   var frame: CGRect = .zero
   func sizeThatFits(_ s: CGSize) -> CGSize { AppleTabs.shared?.tabBar.sizeThatFits(s) ?? CGSize(width: s.width, height: 49) }
@@ -209,7 +206,6 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
     }
     if tabBar.tintColor != bar.tintColor { tabBar.tintColor = bar.tintColor }
     if tabBar.unselectedItemTintColor != bar.unselectedItemTintColor { tabBar.unselectedItemTintColor = bar.unselectedItemTintColor }
-    if tabBar.overrideUserInterfaceStyle != bar.overrideUserInterfaceStyle { tabBar.overrideUserInterfaceStyle = bar.overrideUserInterfaceStyle }
     if let sel = bar.selectedItem?.tag { select(sel) }
     mirrorShown()
   }

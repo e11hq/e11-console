@@ -61,6 +61,9 @@ try:
             sh('xcrun', 'simctl', 'io', udid, 'screenshot', os.path.join(TMP, f'ios-{st}.png'))
             print('stage', st, f'at {time.time() - rec_t0:.1f}s')
             # (to another app and back, as a person does: Settings opened, then the app again)
+            # (light / dark: the phone switched with the app open — the app must follow it by itself)
+            if st == 'lookFlip': sh('xcrun', 'simctl', 'ui', udid, 'appearance', 'light')
+            if st == 'lookLight': sh('xcrun', 'simctl', 'ui', udid, 'appearance', 'dark')
             if st == 'away':
                 sh('xcrun', 'simctl', 'launch', udid, 'com.apple.Preferences'); time.sleep(4)
                 sh('xcrun', 'simctl', 'launch', udid, BUNDLE); time.sleep(1)
@@ -176,6 +179,15 @@ try:
     mtr = res.get('meTrashNative') or {}
     check(mtr.get('kind') == 'trash' and (mtr.get('parts') or 0) >= 3 and (str(mtr.get('corner')).startswith('back,') or mtr.get('apple') is True), f"Trash: the app's own, its search and categories, ‹ at the top {mtr}")
     check(mb.get('kind') == 'me' and mb.get('screens') == 1, f"‹ back to Me {mb}")
+    # light / dark the Apple way (Haris 2026-11-09): every tab's screen follows the phone, none forced, nothing drawn again
+    def lookOk(d, style, bright):
+      if not isinstance(d, dict) or not d: return False
+      scr = [d[k] for k in ('home', 'mytasks', 'inbox', 'clients', 'me') if isinstance(d.get(k), dict)]
+      on = [x for x in scr if x.get('shown')]   # (a tab not on show hears the look when it shows again — iPhone's own way)
+      return len(scr) >= 3 and len(on) >= 1 and all(x.get('forced') == 0 for x in scr) and all(x.get('style') == style and ((x.get('bg') or 0) > 0.5) == bright for x in on) and d.get('tabBar') == 0
+    check(lookOk(res.get('lookLight'), 1, True), f"phone to light, app open: every tab's screen light, nothing forced {res.get('lookLight')}")
+    check(lookOk(res.get('lookDark'), 2, False), f"phone back to dark: every tab's screen dark {res.get('lookDark')}")
+    check(res.get('lookRedrawsAfter') is not None and res.get('lookRedrawsAfter') == res.get('lookRedrawsBefore'), f"the look switched by iPhone itself: no screen drawn again {res.get('lookRedrawsBefore')} → {res.get('lookRedrawsAfter')}")
     # (measurement only — Haris 2026-11-09: the frost on pushed pages at their top; the search bar going back to Client Assets)
     def barLine(b):
       if not isinstance(b, dict) or not b.get('bar'): return str(b)

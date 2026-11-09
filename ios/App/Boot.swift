@@ -254,7 +254,6 @@ extension Main {
     let office = tabKeys.contains("fin-reimb") || tabKeys.contains("team")
     let meMade = ["me", "plans", "team", "fin-reimb", "fin-expenses", "reviews"].contains(key) || (key == "today" && office)
     guard meMade || ["today", "mytasks", "inbox", "projects", "clients"].contains(key) else { return false }
-    let light = appStyle == .light
     if key != "today" || office { homeIfMade?.isHidden = true }
     if key != "mytasks" { myTasksCommand(["show": false]) }
     if key != "inbox" { inboxCommand(["show": false]) }
@@ -263,15 +262,15 @@ extension Main {
     if !meMade { meCtl.hide() }
     if meMade {
       // (Me's own rows from the app's copy and this phone; the rest — the server's — from the last start)
-      meCtl.command(["show": true, "me": me, "tab": key, "light": light, "model": ["env": ["shell": SHELL_VERSION]]])
+      meCtl.command(["show": true, "me": me, "tab": key, "model": ["env": ["shell": SHELL_VERSION]]])
       return true
     }
     switch key {
     case "today": if homeHadModel { homeIfMade?.isHidden = false }; serverHome.refresh()
-    case "mytasks": myTasksCommand(["show": true, "me": me, "light": light])
-    case "inbox": inboxCommand(["show": true, "me": me, "light": light])
-    case "clients": assetsCtl.command(["show": true, "root": true, "me": me, "light": light, "start": [String: Any]()])
-    default: clientsCommand(["show": true, "view": "list", "me": me, "light": light])
+    case "mytasks": myTasksCommand(["show": true, "me": me])
+    case "inbox": inboxCommand(["show": true, "me": me])
+    case "clients": assetsCtl.command(["show": true, "root": true, "me": me, "start": [String: Any]()])
+    default: clientsCommand(["show": true, "view": "list", "me": me])
     }
     return true
   }
@@ -282,12 +281,11 @@ extension Main {
   func drawBeforeShow(_ key: String) {
     guard !drawnBeforeShow.contains(key), AppData.shared.ready, let me = AppData.shared.me else { return }
     drawnBeforeShow.insert(key)
-    let light = appStyle == .light
     switch key {
-    case "mytasks": if !myTasksHadModel { myTasksCommand(["show": true, "me": me, "light": light]) }
-    case "inbox": if !inboxHadModel { inboxCommand(["show": true, "me": me, "light": light]) }
-    case "projects": clientsCommand(["show": true, "view": "list", "me": me, "light": light])
-    case "me": if !meCtl.hasModel { meCtl.command(["show": true, "me": me, "tab": "me", "light": light, "model": ["env": ["shell": SHELL_VERSION]]]) }
+    case "mytasks": if !myTasksHadModel { myTasksCommand(["show": true, "me": me]) }
+    case "inbox": if !inboxHadModel { inboxCommand(["show": true, "me": me]) }
+    case "projects": clientsCommand(["show": true, "view": "list", "me": me])
+    case "me": if !meCtl.hasModel { meCtl.command(["show": true, "me": me, "tab": "me", "model": ["env": ["shell": SHELL_VERSION]]]) }
     default: break
     }
   }
@@ -424,7 +422,7 @@ extension Main {
     case "client":
       guard !pageReady, !id.isEmpty, AppData.shared.ready, let me = AppData.shared.me else { return false }
       let k = selectedTabKey
-      clientsCommand(["show": true, "view": "client", "id": id, "me": me, "light": appStyle == .light, "from": k == "today" ? "home" : k == "projects" ? "" : k])
+      clientsCommand(["show": true, "view": "client", "id": id, "me": me, "from": k == "today" ? "home" : k == "projects" ? "" : k])
       return true
     case "review":
       // (Home's In review box: My Tasks, waiting for the CD's review — the whole team's for those who see everyone's)

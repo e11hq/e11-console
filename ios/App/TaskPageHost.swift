@@ -30,7 +30,7 @@ extension Main {
     //  a standard; the description locks the page itself and ends with Done)
     KeyboardShield.attach(p)
     p.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-    p.light = statusStyle == .darkContent
+    p.light = appStyle == .light
     // (Home / My Tasks hid itself as the task was tapped — for the website's page, which slid over the page's own
     //  Home; the app's page slides over the screen itself, so it stays: no black under it, none on the way back)
     if let h = hiddenForOpen, Date().timeIntervalSince(h.1) < 3, let v = h.0 { v.isHidden = false }
@@ -309,7 +309,7 @@ extension Main {
     p.onDescUpload = { [weak self, weak p] picked in guard let self = self, let p = p else { return }; self.uploadToTask(p, picked, toDesc: true) }
     p.onAttachFiles = { [weak self, weak p] in
       guard let self = self, let p = p, let host = self.sheetHost() else { return }
-      host.present(AttachSheetVC(light: self.statusStyle == .darkContent) { [weak self, weak p] src in
+      host.present(AttachSheetVC() { [weak self, weak p] src in
         guard let self = self, let p = p else { return }
         Picker.shared.pick(from: self.topMost(), single: false, source: src) { [weak self, weak p] r in
           guard let self = self, let p = p else { return }
@@ -323,7 +323,7 @@ extension Main {
     }
     p.onSubmitFiles = { [weak self, weak p] cd in
       guard let self = self, let p = p, let host = self.sheetHost() else { return }
-      let vc = SubmitSheetVC(task: p.taskId, cd: cd, light: self.statusStyle == .darkContent) { [weak self, weak p] files in
+      let vc = SubmitSheetVC(task: p.taskId, cd: cd) { [weak self, weak p] files in
         guard let self = self, let p = p else { return }
         self.taskAct(p, ["act": "submitReview", "id": p.taskId, "files": files])
       }
@@ -345,11 +345,11 @@ extension Main {
     }
     p.onSheet = { [weak self] args, pick, answer in
       guard let self = self, let host = self.sheetHost() else { return }
-      host.present(NativeSheetVC(args, dark: self.statusStyle != .darkContent, pick: pick, answer: answer), animated: true)
+      host.present(NativeSheetVC(args, pick: pick, answer: answer), animated: true)
     }
     p.onDate = { [weak self] which, value, answer in
       guard let self = self, let host = self.sheetHost() else { return }
-      host.present(DateSheetVC(["value": value, "min": "", "max": "", "clearable": !value.isEmpty, "md": false], dark: self.statusStyle != .darkContent) { r in
+      host.present(DateSheetVC(["value": value, "min": "", "max": "", "clearable": !value.isEmpty, "md": false]) { r in
         if (r["cancel"] as? Bool) == true || (r["ok"] as? Bool) == false { return answer(nil) }
         let v = (r["clear"] as? Bool) == true ? "" : (r["date"] as? String ?? "")
         answer(v == value ? nil : v)
@@ -450,7 +450,7 @@ extension Main {
     c.onToast = { [weak self] t in self?.taskPages.last?.toast(t) }
     c.onAttach = { [weak self] pick in
       guard let self = self, let host = self.sheetHost() else { return }
-      host.present(AttachSheetVC(light: self.statusStyle == .darkContent) { src in pick(src) }, animated: true)
+      host.present(AttachSheetVC() { src in pick(src) }, animated: true)
     }
     c.onSend = { [weak self] body, done in
       guard let self = self, let p = self.taskPages.last else { return done(false) }
@@ -576,7 +576,7 @@ extension Main {
     f.onToast = { [weak p] t in p?.toast(t) }
     f.onSheet = { [weak self] args, answer in
       guard let self = self, let host = self.sheetHost() else { return }
-      host.present(NativeSheetVC(args, dark: self.statusStyle != .darkContent, pick: nil, answer: answer), animated: true)
+      host.present(NativeSheetVC(args, pick: nil, answer: answer), animated: true)
     }
     // Reply: the comments screen behind sets the reply (its box line says "Replying to …"); the keyboard comes up
     f.onReply = { [weak self] cid, name, person in
@@ -746,7 +746,7 @@ extension Main {
     PreviewLoad.refreshCookies(web.configuration.websiteDataStore.httpCookieStore) { [weak self] in
       guard let self = self, let host = self.sheetHost() else { return }
       self.composeIfMade?.text.resignFirstResponder()
-      let vc = PreviewVC(["files": files.map { Main.previewItem($0) }, "at": i], dark: self.statusStyle != .darkContent) { [weak self] ev in self?.previewEvent(ev, files) }
+      let vc = PreviewVC(["files": files.map { Main.previewItem($0) }, "at": i]) { [weak self] ev in self?.previewEvent(ev, files) }
       self.previewVC = vc
       host.present(vc, animated: true)
     }
@@ -798,7 +798,6 @@ extension Main {
       guard (j?["ok"] as? Bool) == true else { return toast(j?["error"] as? String ?? "No connection — try again") }
       let off = (j?["off"] as? Bool) != true
       let ac = UIAlertController(title: off ? "Turn off this folder’s link?" : "This folder’s link is off", message: off ? "Anyone who has the link won’t be able to open the folder or its files. The files’ own links stay as they are. You can turn it on again — the link stays the same." : "Turn it on again? The same link shows the folder again.", preferredStyle: .alert)
-      ac.overrideUserInterfaceStyle = self.statusStyle == .darkContent ? .light : .dark
       ac.addAction(UIAlertAction(title: "Cancel", style: .cancel))
       let ok = UIAlertAction(title: off ? "Turn off" : "Turn on", style: off ? .destructive : .default) { _ in
         self.serverTask.request("/api/flink", body: ["client": client, "folder": folder, "off": off]) { r in
@@ -819,7 +818,6 @@ extension Main {
       guard (j?["ok"] as? Bool) == true else { return toast(j?["error"] as? String ?? "No connection — try again") }
       let off = (j?["off"] as? Bool) != true
       let ac = UIAlertController(title: off ? "Turn off this file’s link?" : "This link is off", message: off ? "Anyone who has the link won’t be able to open or download the file. You can turn it on again — the link stays the same." : "Turn it on again? The same link opens the file again.", preferredStyle: .alert)
-      ac.overrideUserInterfaceStyle = self.statusStyle == .darkContent ? .light : .dark
       ac.addAction(UIAlertAction(title: "Cancel", style: .cancel))
       let ok = UIAlertAction(title: off ? "Turn off" : "Turn on", style: off ? .destructive : .default) { _ in
         self.serverTask.request("/api/flink", body: ["path": path, "off": off]) { r in
@@ -1098,7 +1096,7 @@ extension Main {
       }
       // (in a sheet with ticks, a tick is told at once; a plain row in it — "Nobody yet" — when it's tapped)
       let ticks = Set(((a["sections"] as? [[String: Any]]) ?? []).flatMap { ($0["rows"] as? [[String: Any]]) ?? [] }.filter { ($0["multi"] as? Bool) == true }.compactMap { ($0["i"] as? NSNumber)?.intValue })
-      let vc = NativeSheetVC(a, dark: self.statusStyle != .darkContent, pick: multi ? one : nil) { i, _ in if !multi || !ticks.contains(i) { one(i) } }
+      let vc = NativeSheetVC(a, pick: multi ? one : nil) { i, _ in if !multi || !ticks.contains(i) { one(i) } }
       shown = vc
       self.topMost().present(vc, animated: true)
     }
@@ -1118,7 +1116,7 @@ extension Main {
     let state = NewTaskState(st)
     withPhotos(args) { [weak self] a in
       guard let self = self, let host = self.sheetHost() else { return }
-      let vc = FormSheetVC(a, dark: self.statusStyle != .darkContent, event: { [weak self] ev in self?.newTaskEvent(ev, key, state) }) { [weak self] r in
+      let vc = FormSheetVC(a, event: { [weak self] ev in self?.newTaskEvent(ev, key, state) }) { [weak self] r in
         if (r["closed"] as? String) == "discard" { self?.shownScreen?.toast(["t": "New task discarded"]) }
       }
       vc.onTuck = { [weak self] t in
@@ -1399,7 +1397,7 @@ extension Main {
 extension Main {
   @discardableResult func dailyNative() -> Bool {
     guard AppData.shared.tabsOn, AppData.shared.ready, AppData.shared.isStarted, var m = AppData.shared.meModel("tasks", "daily"), let host = sheetHost() else { return false }
-    m["light"] = statusStyle == .darkContent
+    m["light"] = appStyle == .light
     host.present(DailySheetVC(m) { [weak self] ev in self?.dailyTap(ev) }, animated: true)
     return true
   }

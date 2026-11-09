@@ -53,7 +53,7 @@ let DARK_BG = UIColor(red: 0.047, green: 0.051, blue: 0.059, alpha: 1)
 let FOLLOW_DEVICE = true
 var DEVICE_LIGHT: Bool { UIScreen.main.traitCollection.userInterfaceStyle != .dark }
 var LAST_LIGHT: Bool { FOLLOW_DEVICE ? DEVICE_LIGHT : defaults.string(forKey: "e11_look") == "light" }
-var BG: UIColor { LAST_LIGHT ? UIColor(red: 0.957, green: 0.957, blue: 0.969, alpha: 1) : DARK_BG }
+let BG = Look.c(DARK_BG, UIColor(red: 0.957, green: 0.957, blue: 0.969, alpha: 1))   // (both looks: iPhone switches it)
 
 @main
 final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate {
@@ -148,7 +148,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   var lockView: UIView?
   var awayAt: Date?
   var started = false
-  var statusStyle: UIStatusBarStyle = LAST_LIGHT ? .darkContent : .lightContent
+  var statusStyle: UIStatusBarStyle = .default   // (the status bar in the phone's look, as iPhone sets it)
   var downloads: [ObjectIdentifier: URL] = [:]
   var downloadFrom: [ObjectIdentifier: String] = [:]      // what each download is fetching (one at a time per file)
   var downloadWatch: [ObjectIdentifier: NSKeyValueObservation] = [:]
@@ -260,9 +260,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       AppData.shared.start(me: me, cookies: serverHome.cookies); watchCopy(); quickSplash(); ownPopsWatch(); return
     }
     view.layoutIfNeeded()
-    // (the look kept from last time only when it's the same light / dark as now — Automatic may have turned it since:
-    //  a morning start kept last night's dark Home, Haris 2026-11-06)
-    if let l = q["look"] as? [String: Any], (l["light"] as? Bool) == (appStyle == .light) { homeLook = l } else { homeLook = nil }
+    // (the website's colours kept from last time, for each look — iPhone picks the one it's in)
+    if let l = q["looks"] as? [String: [String: Any]] { looks = l }
     homePageMe = me
     let h = homeView
     if h.superview == nil { return }
@@ -288,11 +287,11 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   }
   // for the website behind: now, or as soon as it's there (a quick start's early taps)
   func pageJSSoon(_ js: String) { if pageReady || !quickBooted { pageJS(js) } else { if Main.noPage { Main.noteLost(js) }; earlyJS.append(js) } }
-  // the app's own light / dark (from the page; at launch the last one, or the startup screen's)
+  // the phone's light / dark, as the app last heard it (Apple's trait change — followPhoneLook): nothing is forced with
+  // it; only what Apple can't switch by itself reads it (the tab bar's drawn icons, the task page's pictures)
   var appStyle: UIUserInterfaceStyle = LAST_LIGHT ? .light : .dark
   override func viewWillAppear(_ animated: Bool) {
     super.viewWillAppear(animated)
-    view.window?.overrideUserInterfaceStyle = FOLLOW_DEVICE ? .unspecified : appStyle
     // (iPhone's own navigation: no bar over the app's own screens; a page pushed on it shows only ‹)
     navigationItem.backButtonDisplayMode = .minimal
     // (Home: Apple's bar with its big title — AppleHome.swift; every other screen of the app's: no bar)
@@ -309,7 +308,16 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     //  again, Haris 2026-11-08. Only a change while the app is in front counts; coming back it's read again.)
     guard UIApplication.shared.applicationState != .background else { return }
     let light = tc.userInterfaceStyle == .light
-    if (appStyle == .light) != light { run("setAppearance", ["mode": light ? "light" : "dark"]) { _ in } }
+    if (appStyle == .light) != light { lookTurned(light) }
+  }
+  // (the look changed: iPhone switches every screen itself — our colours hold both looks, Look.swift; only pictures are
+  //  drawn again: the tab bar's icons, the task page's file chips)
+  func lookTurned(_ light: Bool) {
+    appStyle = light ? .light : .dark
+    defaults.set(light ? "light" : "dark", forKey: "e11_look")
+    taskPages.forEach { $0.light = light }
+    tabBadgeKey = [:]; redrawTabs()
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { self.syncBackground() }
   }
   // (iPhone's own navigation: a sheet from the app goes on whatever page is on top — the app itself may be under a page)
   // (Home's own screen asks the app for the status bar too — AppleHome.swift)
@@ -328,7 +336,6 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let m = SplashView.memo()
     if (m["native"] as? Bool) == false { return }   // (the website switched it off: the page's own startup screen)
     let s = SplashView(memo: m)
-    appStyle = s.light ? .light : .dark
     // (over every tab from the start — Apple's tab container's own view, which never changes; it was moved there from
     //  this screen once the tabs came, and the move cut its animation off half way: Haris 2026-11-07)
     let host: UIView = APPLE_TABS ? (AppleTabs.shared?.view ?? view) : view
@@ -337,7 +344,6 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     s.onRetry = { [weak self] in self?.bootRetry() }
     host.addSubview(s)
     splash = s
-    statusStyle = s.light ? .darkContent : .lightContent
     setNeedsStatusBarAppearanceUpdate()
     // (the page never took it over — it couldn't load, or it's the sign-in page: it goes, whatever is under it shows)
     DispatchQueue.main.asyncAfter(deadline: .now() + 15) { [weak self] in if self?.splashHeard == false { self?.splashGone() } }
@@ -378,7 +384,6 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   lazy var cbar: CommentBar = {
     let b = CommentBar()
     b.translatesAutoresizingMaskIntoConstraints = false
-    b.setLook(light: LAST_LIGHT)
     b.isHidden = true; b.alpha = 0
     self.view.insertSubview(b, belowSubview: self.tabsMark)
     NSLayoutConstraint.activate([
@@ -1153,13 +1158,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       //  Notifications row came a moment later and pushed Face ID lock down — Haris 2026-11-08)
       meCtl.warm()
     }
-    // (the bar in the app's own look before anything is drawn: without the website nobody said it at the start, so the
-    //  bar kept iPhone's blue and its badged icons were baked in the phone's look — dark on dark after coming back from
-    //  another app, Haris 2026-11-05)
-    let ink: UIColor = appStyle == .dark ? .white : .black
-    if tabBar.overrideUserInterfaceStyle != appStyle || tabBar.tintColor != ink || tabBar.unselectedItemTintColor != ink {
-      tabBar.overrideUserInterfaceStyle = appStyle; tabBar.tintColor = ink; tabBar.unselectedItemTintColor = ink; tabBadgeKey = [:]
-    }
+    // (the bar's ink: white in dark, black in light — one colour for both, switched by iPhone; never iPhone's blue)
+    if tabBar.tintColor !== Look.ink { tabBar.tintColor = Look.ink; tabBar.unselectedItemTintColor = Look.ink; tabBadgeKey = [:] }
     let list = a["tabs"] as? [[String: Any]] ?? []
     let keys = list.map { $0["v"] as? String ?? "" }
     if keys != tabKeys || (tabBar.items?.count ?? 0) != keys.count {
@@ -1200,7 +1200,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
           tabBadgeKey[i] = key
           if b.isEmpty { item.image = UIImage(systemName: symbol(v)); item.selectedImage = nil }
           else {
-            item.image = badged(symbol(v), b, color: tabBar.unselectedItemTintColor ?? ink)
+            item.image = badged(symbol(v), b, color: tabBar.unselectedItemTintColor ?? Look.ink)
             item.selectedImage = badged(symbol(v), b, color: tabBar.tintColor ?? .systemBlue)
           }
         }
@@ -1446,19 +1446,6 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   static var lookRedraws = 0
   // (Me's rows set again — HomeView.applyMeList: the self-test checks opening Me again sets none)
   static var meRows = 0
-  func relight(_ light: Bool) {
-    Main.lookRedraws += 1
-    if let l = homeLook as? [String: Any], (l["light"] as? Bool) != light { homeLook = nil }
-    let look: Any = homeLook ?? ["light": light]
-    myTasksLight = light; inboxLight = light; clientsLight = light
-    var screens = view.subviews.compactMap({ $0 as? HomeView })
-    if let h = homeIfMade, !screens.contains(where: { $0 === h }) { screens.append(h) }   // (Home: on its own screen)
-    for h in screens where !h.model.isEmpty && !h.isAssetsScreen {
-      var mm = h.model; mm["look"] = look; h.update(mm)
-    }
-    meCtl.relight(light); assetsCtl.relight(light)
-    ViewAsBar.current?.look(dark: !light)
-  }
   var homeHadModel = false
   var drawnBeforeShow = Set<String>()   // (the tabs drawn before their first show — drawBeforeShow, Boot.swift)
   lazy var homeView: HomeView = {
@@ -1491,26 +1478,25 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   /* ---------- the pop-ups as the app's own (shell 34, Popups.swift — Haris 2026-11-03): the page says when and what
      (NativePop in app.js); the answer goes back to it ---------- */
   func popCommand(_ a: [String: Any], _ done: @escaping ([String: Any]) -> Void) {
-    let dark = statusStyle != .darkContent
     let person = a["person"] as? [String: Any] ?? a["from"] as? [String: Any] ?? [:]
     let pIni = person["ini"] as? String ?? "", pCol = UIColor(hex: person["color"] as? String ?? "") ?? .systemIndigo, pPhoto = person["photo"] as? String
     var once = false
     let reply: ([String: Any]) -> Void = { r in if !once { once = true; done(r) } }
     switch a["kind"] as? String ?? "" {
     case "announce":
-      let s = AnnouncementSheet(dark: dark, title: a["title"] as? String ?? "", body: a["body"] as? String ?? "", ask: a["ask"] as? String ?? "",
+      let s = AnnouncementSheet(title: a["title"] as? String ?? "", body: a["body"] as? String ?? "", ask: a["ask"] as? String ?? "",
                                 from: a["fromName"] as? String ?? "E11", fromIni: pIni, fromColor: pCol, when: a["when"] as? String ?? "", fromPhoto: pPhoto)
       s.onGone = { reply(["ok": true]) }
       s.show(from: topMost())
     case "claims":
-      let s = ClaimsSheet(dark: dark, month: a["month"] as? String ?? "", today: a["today"] as? Int ?? 23)
+      let s = ClaimsSheet(month: a["month"] as? String ?? "", today: a["today"] as? Int ?? 23)
       s.onAnswer = { x in reply(["a": x]) }
       s.onGone = { reply(["a": "tomorrow"]) }   // (pulled down: closed for today)
       s.show(from: topMost())
     case "greet":
       let show: (UIView) -> Void = { [weak self] top in
         guard let self = self else { return reply(["ok": false]) }
-        let g = GreetingView(dark: dark, top: top, pre: a["pre"] as? String ?? "", title: a["title"] as? String ?? "", sub: a["sub"] as? String ?? "")
+        let g = GreetingView(top: top, pre: a["pre"] as? String ?? "", title: a["title"] as? String ?? "", sub: a["sub"] as? String ?? "")
         g.onGone = { reply(["ok": true]) }
         g.show(in: self.view.window ?? self.view)
       }
@@ -1528,13 +1514,13 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { guard !shown else { return }; shown = true; show(fallback()) }
       } else { show(fallback()) }
     case "profileAsk":
-      let c = ProfileAskCard(dark: dark, missing: a["missing"] as? String ?? "both")
+      let c = ProfileAskCard(missing: a["missing"] as? String ?? "both")
       c.onProfile = { [weak self] in self?.openMePage("profile") }
       c.show(in: stage, bottom: tabBar.isHidden ? view.bounds.height - bottomSafe : tabPillTop)
       reply(["ok": true])
     case "whatsNew":
       let secs = ((a["sections"] as? [[String: Any]]) ?? []).map { ($0["h"] as? String ?? "", ($0["items"] as? [String]) ?? []) }
-      let s = WhatsNewSheet(dark: dark, version: a["version"] as? String ?? "", when: a["when"] as? String ?? "", sections: secs)
+      let s = WhatsNewSheet(version: a["version"] as? String ?? "", when: a["when"] as? String ?? "", sections: secs)
       s.onAllNotes = { [weak self] in self?.openMePage("about") }
       s.onGone = { reply(["ok": true]) }
       s.show(from: topMost())
@@ -1543,15 +1529,14 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         guard let id = p["id"] as? String else { return nil }
         return .init(id: id, name: p["name"] as? String ?? "", role: p["role"] as? String ?? "", ini: p["ini"] as? String ?? "", color: UIColor(hex: p["color"] as? String ?? "") ?? .systemGray, photo: p["photo"] as? String)
       }
-      let s = ViewAsSheet(dark: dark, people: ppl, viewing: a["viewing"] as? String)
+      let s = ViewAsSheet(people: ppl, viewing: a["viewing"] as? String)
       s.closesOnPick = true
       s.onPick = { id in reply(id.map { ["id": $0] } ?? ["me": true]) }
       s.onClose = { reply([:]) }
       s.show(from: topMost())
     case "viewAsBar":
       if (a["on"] as? Bool) != true { ViewAsBar.current?.go(); return reply(["ok": true]) }
-      let bar = ViewAsBar.current ?? ViewAsBar(dark: dark)
-      bar.look(dark: appStyle == .dark)
+      let bar = ViewAsBar.current ?? ViewAsBar()
       if let ph = a["photos"] as? [String] { ViewAsSheet.warm(ph) }
       bar.set(name: a["name"] as? String ?? "", role: a["role"] as? String ?? "")
       bar.bottomFor = { [weak self] in self?.viewAsBottom() ?? 0 }
@@ -1680,7 +1665,12 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   var homeToastRun: (() -> Void)?
   var homeMissed: [String: Any]?
   var homePageMe: String?
-  var homeLook: Any?, homePagePeople: [String: [String: Any]] = [:], homeServerPeople: [String: [String: Any]] = [:]
+  // the website's measured colours of its own Home, one for each look (it sends the look it's in): every screen gets both,
+  // as Apple's dynamic colours (HomeLook) — iPhone switches them itself
+  var looks: [String: [String: Any]] = [:]
+  var lookBoth: [String: Any] { var d: [String: Any] = [:]; if let x = looks["dark"] { d["dark"] = x }; if let x = looks["light"] { d["light"] = x }; return d }
+  func keepLook(_ l: Any?) { if let l = l as? [String: Any], let lt = l["light"] as? Bool { looks[lt ? "light" : "dark"] = l } }
+  var homePagePeople: [String: [String: Any]] = [:], homeServerPeople: [String: [String: Any]] = [:]
   // the server's Home drawn (with the page's colours), when Home is on screen
   func drawServerHome(_ m: [String: Any]) {
     defer { updateCorner() }
@@ -1691,8 +1681,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if h.isHidden { homeMissed = m; return }
     homeMissed = nil
     var mm = m; mm["show"] = true
-    if let l = homeLook as? [String: Any], (l["light"] as? Bool) != (appStyle == .light) { homeLook = nil }
-    mm["look"] = homeLook ?? ["light": appStyle == .light]
+    mm["look"] = lookBoth
     if let p = m["people"] as? [String: [String: Any]] {
       serverHome.photos(p) { [weak self] got in
         guard let self = self else { return }
@@ -1729,7 +1718,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       let due = c["due"] as? String ?? ""
       // the date sheet the task page uses (Today / Clear; closed any other way: nothing changes)
       guard let host = sheetHost() else { return true }
-      host.present(DateSheetVC(["value": due, "min": "", "max": "", "clearable": !due.isEmpty, "md": false], dark: statusStyle != .darkContent) { r in
+      host.present(DateSheetVC(["value": due, "min": "", "max": "", "clearable": !due.isEmpty, "md": false]) { r in
         if (r["cancel"] as? Bool) == true || (r["ok"] as? Bool) == false { return }
         let v = (r["clear"] as? Bool) == true ? "" : (r["date"] as? String ?? "")
         if v == due { return }
@@ -1758,10 +1747,10 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     let h = homeView
     h.bottomRoom = (tabBar.isHidden ? 40 : view.bounds.height - tabBar.frame.minY) + 96
     h.tabTop = tabBar.isHidden ? nil : tabPillTop
-    homeLook = a["look"]
+    keepLook(a["look"])
     homePageMe = a["me"] as? String
     pageIs(a["me"] as? String)
-    if let me = homePageMe { saveQuick(["me": me, "look": homeLook ?? NSNull()]) }
+    if let me = homePageMe { saveQuick(["me": me, "looks": looks]) }
     // (the server's Home when it's on — the page's model is only a sign something changed: the server asked again)
     if serverHome.on, let m = serverHome.shown, (m["me"] as? String) == (a["me"] as? String) {
       h.isHidden = false
@@ -1776,7 +1765,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
      page's filters); the page says when it's on screen, its tab and filters (NativeMyTasks in phone.js) and does the
      filter sheets; Done / Due / Delete as on Home ---------- */
   var myTasksIfMade: HomeView?
-  var myTasksHadModel = false, myTasksPageMe: String?, myTasksLight = true
+  var myTasksHadModel = false, myTasksPageMe: String?
   var myTasksServerPeople: [String: [String: Any]] = [:]
   lazy var myTasksView: HomeView = {
     let h = HomeView(frame: view.bounds)
@@ -1804,7 +1793,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     guard let h = myTasksIfMade, myTasksPageMe != nil, (m["me"] as? String) == myTasksPageMe else { return }
     var mm = m; mm["show"] = true
     // (Home's colours from the page when they're for the same light / dark)
-    if let l = homeLook as? [String: Any], (l["light"] as? Bool) == myTasksLight { mm["look"] = l } else { mm["look"] = ["light": myTasksLight] }
+    mm["look"] = lookBoth
     if let p = m["people"] as? [String: [String: Any]] {
       serverMyTasks.photos(p) { [weak self] got in
         guard let self = self else { return }
@@ -1844,7 +1833,6 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     h.tabTop = tabBar.isHidden ? nil : tabPillTop
     myTasksPageMe = a["me"] as? String
     pageIs(a["me"] as? String)
-    myTasksLight = (a["light"] as? Bool) ?? (appStyle == .light)
     let s = serverMyTasks
     s.query = "tab=" + ((a["tab"] as? String) == "done" ? "done" : "all") + ((a["q"] as? String).map { $0.isEmpty ? "" : "&" + $0 } ?? "")
     h.setFilters(a)
@@ -1866,7 +1854,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
      the page says when it's on screen (NativeInbox in phone.js) and opens what's tapped; read / unread / all read go to
      the server from here (kept on the phone until sent) ---------- */
   var inboxIfMade: HomeView?
-  var inboxHadModel = false, inboxPageMe: String?, inboxLight = true, inboxWanted = false, inboxPageOwn = false
+  var inboxHadModel = false, inboxPageMe: String?, inboxWanted = false, inboxPageOwn = false
   var serverInboxIfMade: ServerHome?
   lazy var serverInbox: ServerHome = { let s = self.makeServer("inbox"); s.query = "tab=all"; self.serverInboxIfMade = s; return s }()
   func inboxWaiting() -> ServerHome? { serverInboxIfMade ?? (defaults.data(forKey: "e11HomeQueue-inbox").map { $0.count > 2 } == true ? serverInbox : nil) }
@@ -1914,7 +1902,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     defer { updateCorner() }
     guard let h = inboxIfMade, inboxPageMe != nil, (m["me"] as? String) == inboxPageMe else { return }
     var mm = m; mm["show"] = true
-    if let l = homeLook as? [String: Any], (l["light"] as? Bool) == inboxLight { mm["look"] = l } else { mm["look"] = ["light": inboxLight] }
+    mm["look"] = lookBoth
     if let p = m["people"] as? [String: [String: Any]] {
       serverInbox.photos(p) { [weak self] got in
         guard let self = self else { return }
@@ -1941,7 +1929,6 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     h.tabTop = tabBar.isHidden ? nil : tabPillTop
     inboxPageMe = a["me"] as? String
     pageIs(a["me"] as? String)
-    inboxLight = (a["light"] as? Bool) ?? (appStyle == .light)
     let s = serverInbox
     if s.on, let m = s.shown { drawServerInbox(m) } else {
       if !APPLE_INBOX { h.isHidden = true }   // (its own Apple screen stays until the list comes)
@@ -2034,7 +2021,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   lazy var assetsCtl = AssetsCtl(self)   // (Client Assets, the app's own — Assets.swift, shell 32)
   lazy var meCtl = MeCtl(self)   // (the Me tab, the app's own — Me.swift, shell 33)
   var selectedTabKey: String { tabBar.selectedItem.map { tabKeys.indices.contains($0.tag) ? tabKeys[$0.tag] : "" } ?? "" }
-  var clientsWanted = false, clientsPageMe: String?, clientsLight = true, clientsPageOwn = false, clientsOn = "list"
+  var clientsWanted = false, clientsPageMe: String?, clientsPageOwn = false, clientsOn = "list"
   var serverClientsIfMade: ServerHome?
   lazy var serverClients: ServerHome = { let s = self.makeServer("clients"); s.query = "view=list"; self.serverClientsIfMade = s; return s }()
   private func clientsScreen(_ page: Bool) -> HomeView {
@@ -2059,7 +2046,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       // (Show completed on a client's page — without the website it went nowhere)
       if page, !self.pageReady, (ev["ev"] as? String) == "showDone", let id = self.clientsShownId, let me = AppData.shared.me {
         let done = ServerHome.param(self.serverClients.query, "done") == "1"
-        self.clientsCommand(["show": true, "view": "client", "id": id, "done": !done, "me": me, "light": self.appStyle == .light, "from": self.clientFrom ?? ""]); return
+        self.clientsCommand(["show": true, "view": "client", "id": id, "done": !done, "me": me, "from": self.clientFrom ?? ""]); return
       }
       // (a client's Client Assets — a folder, or See all: the app's own screens over its page, shell 32)
       if page, let k = ev["ev"] as? String, k == "folder" || k == "assets", let c = ev["client"] as? String {
@@ -2102,14 +2089,14 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         self.clientsFromMeApple = false
       }
       vc.loadViewIfNeeded()
-      clientsCommand(["show": true, "view": "list", "me": me, "light": appStyle == .light])
+      clientsCommand(["show": true, "view": "list", "me": me])
       n.pushViewController(vc, animated: n.view.window != nil)
       return
     }
     let l = clientsScreen(false)
     let under = meCtl.top
     l.backFromMe = true
-    clientsCommand(["show": true, "view": "list", "me": me, "light": appStyle == .light])
+    clientsCommand(["show": true, "view": "list", "me": me])
     if let u = under { view.insertSubview(l, aboveSubview: u) }
     let W = view.bounds.width
     l.isHidden = false
@@ -2195,7 +2182,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     guard let row = rows.first(where: { ($0["id"] as? String) == id }) else { return }
     let ppl = (clientsListIfMade?.people ?? [:]).merging((list["people"] as? [String: [String: Any]]) ?? [:]) { a, _ in a }
     let inactive = ((list["inactive"] as? [[String: Any]]) ?? []).contains { ($0["id"] as? String) == id }
-    let vc = ClientSheetVC(row: row, list: list, people: ppl, dark: !clientsLight, active: !inactive)
+    let vc = ClientSheetVC(row: row, list: list, people: ppl, active: !inactive)
     vc.onSave = { [weak self] body, done in
       guard let self = self else { return }
       var b = body; b["act"] = "editClient"; b["id"] = id; b["from"] = "clients"; b["copy"] = true; b["op"] = UUID().uuidString
@@ -2208,7 +2195,6 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       }
     }
     let nav = FitNav(rootViewController: vc)
-    nav.overrideUserInterfaceStyle = clientsLight ? .light : .dark
     if let sh = nav.sheetPresentationController { sh.prefersGrabberVisible = true }   // (its height: what's on it — FitNav)
     nav.prepare(width: view.bounds.width, bottom: bottomSafe)
     topMost().present(nav, animated: true)
@@ -2218,7 +2204,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   func addClientSheet() {
     guard let list = serverClients.shown, (list["kind"] as? String) == "clients", (list["canEdit"] as? Bool) == true else { return }
     let ppl = (clientsListIfMade?.people ?? [:]).merging((list["people"] as? [String: [String: Any]]) ?? [:]) { a, _ in a }
-    let vc = ClientSheetVC(row: [:], list: list, people: ppl, dark: !clientsLight, isNew: true, active: true)
+    let vc = ClientSheetVC(row: [:], list: list, people: ppl, isNew: true, active: true)
     vc.onSave = { [weak self] body, done in
       guard let self = self else { return }
       var b = body; b["act"] = "addClient"; b["from"] = "clients"; b["copy"] = true; b["op"] = UUID().uuidString
@@ -2240,7 +2226,6 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       }
     }
     let nav = FitNav(rootViewController: vc)
-    nav.overrideUserInterfaceStyle = clientsLight ? .light : .dark
     if let sh = nav.sheetPresentationController { sh.prefersGrabberVisible = true }
     nav.prepare(width: view.bounds.width, bottom: bottomSafe)
     topMost().present(nav, animated: true)
@@ -2273,7 +2258,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if page != (clientsOn == "client") { return }
     let h = clientsScreen(page)
     var mm = m; mm["show"] = true
-    if let l = homeLook as? [String: Any], (l["light"] as? Bool) == clientsLight { mm["look"] = l } else { mm["look"] = ["light": clientsLight] }
+    mm["look"] = lookBoth
     if let p = m["people"] as? [String: [String: Any]] {
       serverClients.photos(p) { [weak self, weak h] got in
         guard let self = self else { return }
@@ -2348,7 +2333,6 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     clientsWanted = true
     clientsPageMe = a["me"] as? String
     pageIs(a["me"] as? String)
-    clientsLight = (a["light"] as? Bool) ?? (appStyle == .light)
     let page = (a["view"] as? String) == "client"
     let was = clientsOn
     clientsOn = page ? "client" : "list"
@@ -2603,28 +2587,8 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       if let tm = a["themeMode"] as? String { defaults.set(tm, forKey: "e11_theme_mode") }
       if let r = a["rise"] as? String, let st = a["set"] as? String { defaults.set(r, forKey: "e11_sun_rise"); defaults.set(st, forKey: "e11_sun_set") }
       ownAppearanceWatch()
-      statusStyle = (a["mode"] as? String) == "light" ? .darkContent : .lightContent
-      defaults.set((a["mode"] as? String) == "light" ? "light" : "dark", forKey: "e11_look")
-      setNeedsStatusBarAppearanceUpdate()
-      // the tab bar follows the app's own light / dark (not only the phone's): every icon, the open page's too, white
-      // in dark and black in light — Haris 2026-10-30 (only the tab bar: the page itself keeps following the phone)
-      let style: UIUserInterfaceStyle = (a["mode"] as? String) == "light" ? .light : .dark
-      // (everything the app draws itself follows the app's own light / dark, never the phone's — Haris, 2026-10-31:
-      //  set on the whole window, so every native screen, sheet, alert, picker and keyboard takes it, now and later)
-      let turned = appStyle != style
-      appStyle = style; view.window?.overrideUserInterfaceStyle = FOLLOW_DEVICE ? .unspecified : style
-      if turned { relight(style == .light) }
-      cbarIfMade?.setLook(light: style == .light)
-      taskPages.forEach { $0.light = style == .light }
-      if tabBar.overrideUserInterfaceStyle != style || tabBar.tintColor != (style == .dark ? UIColor.white : UIColor.black) {
-        tabBar.overrideUserInterfaceStyle = style
-        let ink: UIColor = style == .dark ? .white : .black
-        tabBar.tintColor = ink
-        tabBar.unselectedItemTintColor = ink
-        tabBadgeKey = [:]
-        redrawTabs()
-      }
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { self.syncBackground() }
+      // (which look it is: the phone's own, read by the app — followPhoneLook; the website in the app says what it
+      //  shows, but decides nothing for the app's screens — Haris 2026-11-09, light / dark the Apple way)
       done(["ok": true])
     case "openURL":
       let u = a["url"] as? String ?? ""
@@ -2650,7 +2614,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       // chosen row's index, or -1 when it's closed without a choice
       guard let host = sheetHost() else { return done(["ok": false]) }
       let src = cmdSource
-      let vc = NativeSheetVC(a, dark: statusStyle != .darkContent, pick: { [weak self] i in
+      let vc = NativeSheetVC(a, pick: { [weak self] i in
         (src ?? self?.web)?.evaluateJavaScript("window.__e11SheetPick && window.__e11SheetPick(\(i))", completionHandler: nil)
       }) { i, swatch in
         if i >= 0 { FocusAfterPicker.allow() }   // (a text box the option opens still brings the keyboard)
@@ -2664,7 +2628,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       // a date from the page, picked in a native sheet with iPhone's own calendar: a day tapped → that date;
       // Today / Clear; closed any other way → nothing changes (iPhone's own date box set today when just closed)
       guard let host = sheetHost() else { return done(["ok": false]) }
-      host.present(DateSheetVC(a, dark: statusStyle != .darkContent) { r in done(r) }, animated: true)
+      host.present(DateSheetVC(a) { r in done(r) }, animated: true)
     case "formSheet":
       // New task / Request amendments as iOS's own sheet with iPhone's own fields; replies when it's closed:
       // closed = submit / cancel / discard (a tucked draft pulled away) / replaced (another form opened instead)
@@ -2675,7 +2639,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
         return
       }
       guard let host = sheetHost() else { return done(["ok": false]) }
-      let vc = FormSheetVC(a, dark: statusStyle != .darkContent, event: { [weak self] ev in
+      let vc = FormSheetVC(a, event: { [weak self] ev in
         self?.pageJS("window.__e11Form && window.__e11Form(\(jsonString(ev)))")
       }) { r in done(r) }
       vc.onTuck = { [weak self] t in
@@ -2693,7 +2657,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       PreviewLoad.refreshCookies(web.configuration.websiteDataStore.httpCookieStore) { [weak self] in
         guard let self else { return }
         if self.cbarIfMade?.text.isFirstResponder == true { self.cbarIfMade?.text.resignFirstResponder() }
-        let vc = PreviewVC(a, dark: self.statusStyle != .darkContent) { [weak self] ev in (src ?? self?.web)?.evaluateJavaScript("window.__e11Preview && window.__e11Preview(\(jsonString(ev)))", completionHandler: nil) }
+        let vc = PreviewVC(a) { [weak self] ev in (src ?? self?.web)?.evaluateJavaScript("window.__e11Preview && window.__e11Preview(\(jsonString(ev)))", completionHandler: nil) }
         self.previewVC = vc
         self.topMost().present(vc, animated: true)
         done(["ok": true])
@@ -2710,7 +2674,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     case "trashSheet":
       // a task in the Trash, to look at: replies restore / preview (a file) / closed
       guard let host = sheetHost() else { return done(["ok": false]) }
-      host.present(TrashSheetVC(a, dark: statusStyle != .darkContent) { r in done(r) }, animated: true)
+      host.present(TrashSheetVC(a) { r in done(r) }, animated: true)
     case "notify": done(["ok": true])   // (Apple's notifications come from the server)
     case "pushStatus": pushState { done(["ok": true, "state": $0]) }
     case "pushRegister":
@@ -2841,6 +2805,19 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     }
     return out
   }
+  // (each tab's screen: the look it's in, whether anything forces one, its background as drawn)
+  func selfLook() -> [String: Any] {
+    var out: [String: Any] = ["phone": AppleTabs.shared?.traitCollection.userInterfaceStyle.rawValue ?? -1, "window": view.window?.overrideUserInterfaceStyle.rawValue ?? -1]
+    let screens: [(String, HomeView?)] = [("home", homeIfMade), ("mytasks", myTasksIfMade), ("inbox", inboxIfMade), ("clients", clientsListIfMade), ("me", MeVC.shared?.h)]
+    for (k, h) in screens {
+      guard let h = h else { continue }
+      var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+      (h.backgroundColor ?? .clear).resolvedColor(with: h.traitCollection).getRed(&r, green: &g, blue: &b, alpha: &a)
+      out[k] = ["style": h.traitCollection.userInterfaceStyle.rawValue, "forced": h.overrideUserInterfaceStyle.rawValue, "bg": Double((r + g + b) / 3), "shown": h.window != nil]
+    }
+    out["tabBar"] = AppleTabs.shared?.tabBar.overrideUserInterfaceStyle.rawValue ?? -1
+    return out
+  }
   // every frame for a while: what selfBar sees (a slide, frame by frame)
   final class SelfFrames: NSObject {
     private var link: CADisplayLink?, end: CFTimeInterval = 0, frames: [[String: Any]] = [], sample: () -> [String: Any] = { [:] }, done: ([[String: Any]]) -> Void = { _ in }
@@ -2885,7 +2862,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       ("homeFind", "return '{}'", { self.homeIfMade?.selfScroll(0); self.homeIfMade?.selfFind("Ford") }),
       ("homeFindDone", "return '{}'", { self.homeIfMade?.selfFindDone() }),
       // (the date sheet, as Home's Due opens it — it once crashed on iOS 27 while sizing itself)
-      ("homeDate", "return '{}'", { if let host = self.sheetHost() { host.present(DateSheetVC(["value": "2026-11-23", "min": "", "max": "", "clearable": true, "md": false], dark: true) { _ in }, animated: false) } }),
+      ("homeDate", "return '{}'", { if let host = self.sheetHost() { host.present(DateSheetVC(["value": "2026-11-23", "min": "", "max": "", "clearable": true, "md": false]) { _ in }, animated: false) } }),
       ("homeDateDone", "return '{}'", { self.presentedViewController?.dismiss(animated: false) }),
       // 26: My Tasks, the app's own (from the server): All, then the Done tab (read only), then All again
       ("mytasks", pause(2500) + "return JSON.stringify({ view: ui.view })", {
@@ -2934,10 +2911,15 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       ("meAway", pause(1500) + "return '{}'", { self.selfResult["meRowsBefore"] = Main.meRows; self.selfSelect("today") }),
       ("meAgain", pause(1500) + "return '{}'", { self.selfSelect("me") }),
       ("meAgainDone", pause(2500) + "return '{}'", { self.selfResult["meRowsAfter"] = Main.meRows }),
+      // (light / dark the Apple way — Haris 2026-11-09: the simulator switched to light with the app open, then back to dark:
+      //  every tab's screen in the phone's look, nothing forcing one, nothing drawn again)
+      ("lookFlip", pause(1500) + "return '{}'", { self.selfResult["lookBefore"] = self.selfLook(); self.selfResult["lookRedrawsBefore"] = Main.lookRedraws }),
+      ("lookLight", pause(3000) + "return '{}'", { self.selfResult["lookLight"] = self.selfLook() }),
+      ("lookDark", pause(3000) + "return '{}'", { self.selfResult["lookDark"] = self.selfLook(); self.selfResult["lookRedrawsAfter"] = Main.lookRedraws }),
       // (measurement — Haris 2026-11-09: Me › Client Assets › a client, then ‹ back: the search bar popped in at the end of
       //  the slide; and the frost on pushed pages at their top — each page at rest, then the slide back frame by frame)
       ("snapAll", pause(3000) + "return '{}'", {
-        self.assetsCtl.command(["show": true, "me": AppData.shared.me ?? "", "light": self.appStyle == .light, "start": [String: Any]()])
+        self.assetsCtl.command(["show": true, "me": AppData.shared.me ?? "", "start": [String: Any]()])
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { self.selfResult["frost_assetsAll"] = self.selfBar(AppleTabs.shared?.meNav) } }),
       ("snapClient", pause(3000) + "return '{}'", {
         self.selfResult["snapOpened"] = self.assetsCtl.selfOpenClient()
@@ -3328,7 +3310,7 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
   ]
   private var multi = false
   private var pick: ((Int) -> Void)?
-  init(_ a: [String: Any], dark: Bool, pick: ((Int) -> Void)? = nil, answer: @escaping (Int, String?) -> Void) {
+  init(_ a: [String: Any], pick: ((Int) -> Void)? = nil, answer: @escaping (Int, String?) -> Void) {
     self.answer = answer
     self.pick = pick
     multi = (a["multi"] as? Bool) == true
@@ -3360,7 +3342,6 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
     if let hint = a["search"] as? String { searchHint = hint; searchBar = UISearchBar() }
     customLabel = a["custom"] as? String          // e.g. "Use “%@”" — a typed entry that isn't in the list
     if let e = a["empty"] as? String { emptyText = e }
-    overrideUserInterfaceStyle = dark ? .dark : .light
     modalPresentationStyle = .pageSheet
     if let sh = sheetPresentationController {
       // (at most about two-thirds of the screen, so even a long list stays the floating card; it scrolls inside)
@@ -3727,7 +3708,7 @@ final class NativeSheetVC: UIViewController, UITableViewDataSource, UITableViewD
       b.isEnabled = !ch.disabled
       if kind == "swatch" {
         b.backgroundColor = ch.color ?? .systemGray
-        if ch.on { b.layer.borderWidth = 3; b.layer.borderColor = UIColor.label.cgColor }
+        if ch.on { b.layer.borderWidth = 3; b.followLook("ring") { [weak b] tc in b?.layer.setBorder(.label, tc) } }
       } else {
         // (the reactions as SF Symbols in iPhone's colours — Haris 2026-11-04; still saved as their emoji)
         if kind == "emoji", let img = ReactionSym.image(ch.label ?? "", size: 17) { b.setImage(img, for: .normal) }
@@ -3795,7 +3776,6 @@ final class FormSheetVC: UIViewController, UITableViewDataSource, UITableViewDel
   static let FORM = UISheetPresentationController.Detent.Identifier("form")
   let key: String
   private let isTask: Bool
-  private let dark: Bool
   private let heading: String, dock: String, note: String?, button: String, need: String
   private let tint: UIColor
   private let showWho: Bool
@@ -3847,10 +3827,9 @@ final class FormSheetVC: UIViewController, UITableViewDataSource, UITableViewDel
     }
   }
 
-  init(_ a: [String: Any], dark: Bool, event: @escaping ([String: Any]) -> Void, answer: @escaping ([String: Any]) -> Void) {
+  init(_ a: [String: Any], event: @escaping ([String: Any]) -> Void, answer: @escaping ([String: Any]) -> Void) {
     key = a["key"] as? String ?? ""
     isTask = (a["kind"] as? String) == "task"
-    self.dark = dark
     heading = a["title"] as? String ?? ""
     dock = a["dock"] as? String ?? "Draft"
     note = (a["note"] as? String).flatMap { $0.isEmpty ? nil : $0 }
@@ -3870,7 +3849,6 @@ final class FormSheetVC: UIViewController, UITableViewDataSource, UITableViewDel
     cdSwitch.isOn = (a["cd"] as? Bool) == true
     titleField.placeholder = a["titleHint"] as? String
     descHint.text = a["descHint"] as? String
-    overrideUserInterfaceStyle = dark ? .dark : .light
     modalPresentationStyle = .pageSheet
     if let w = UIApplication.shared.connectedScenes.compactMap({ ($0 as? UIWindowScene)?.keyWindow }).first { strip = w.safeAreaInsets.bottom }
     if let sh = sheetPresentationController {
@@ -4136,7 +4114,7 @@ final class FormSheetVC: UIViewController, UITableViewDataSource, UITableViewDel
   }
   private func pickDue() {
     view.endEditing(true)
-    present(DateSheetVC(["value": due, "clearable": true], dark: dark) { [weak self] r in
+    present(DateSheetVC(["value": due, "clearable": true]) { [weak self] r in
       guard let self else { return }
       if (r["clear"] as? Bool) == true { self.due = "" } else if let d = r["date"] as? String { self.due = d } else { return }
       self.reloadRow("due")
@@ -4243,14 +4221,12 @@ final class FormSheetVC: UIViewController, UITableViewDataSource, UITableViewDel
    back) and comments. */
 final class TrashSheetVC: UIViewController, UISheetPresentationControllerDelegate {
   private let a: [String: Any]
-  private let dark: Bool
   private var answer: (([String: Any]) -> Void)?
   private let scroll = UIScrollView()
   private let stack = UIStackView()
-  init(_ a: [String: Any], dark: Bool, answer: @escaping ([String: Any]) -> Void) {
-    self.a = a; self.dark = dark; self.answer = answer
+  init(_ a: [String: Any], answer: @escaping ([String: Any]) -> Void) {
+    self.a = a; self.answer = answer
     super.init(nibName: nil, bundle: nil)
-    overrideUserInterfaceStyle = dark ? .dark : .light
     modalPresentationStyle = .pageSheet
     if let sh = sheetPresentationController { sh.detents = [.large()]; sh.prefersGrabberVisible = true; sh.delegate = self }
   }
@@ -4377,7 +4353,7 @@ final class TrashSheetVC: UIViewController, UISheetPresentationControllerDelegat
     stack.addArrangedSubview(padded(label(a["title"] as? String ?? "", size: 22, weight: .bold), UIEdgeInsets(top: 0, left: 4, bottom: 4, right: 4)))
     // In the Trash · who · when · days left, and Restore
     let orange = UIColor.systemOrange
-    let barL = label(a["bar"] as? String ?? "", size: 14, color: dark ? orange : UIColor(red: 0.55, green: 0.33, blue: 0, alpha: 1))
+    let barL = label(a["bar"] as? String ?? "", size: 14, color: Look.c(orange, UIColor(red: 0.55, green: 0.33, blue: 0, alpha: 1)))
     let barRow = UIStackView(arrangedSubviews: [UIImageView(image: UIImage(systemName: "trash")), barL]); barRow.spacing = 10; barRow.alignment = .center
     (barRow.arrangedSubviews[0] as? UIImageView)?.tintColor = barL.textColor
     barRow.arrangedSubviews[0].setContentHuggingPriority(.required, for: .horizontal)
@@ -4455,13 +4431,12 @@ final class DateSheetVC: UIViewController, UISheetPresentationControllerDelegate
   private let clearable: Bool
   private let md: Bool
   private var titleText: String?, subText: String?
-  init(_ a: [String: Any], dark: Bool, answer: @escaping ([String: Any]) -> Void) {
+  init(_ a: [String: Any], answer: @escaping ([String: Any]) -> Void) {
     self.answer = answer
     clearable = (a["clearable"] as? Bool) == true
     md = (a["md"] as? Bool) == true
     titleText = a["title"] as? String; subText = a["sub"] as? String
     super.init(nibName: nil, bundle: nil)
-    if !FOLLOW_DEVICE { overrideUserInterfaceStyle = dark ? .dark : .light }
     pick.datePickerMode = .date
     pick.preferredDatePickerStyle = .inline
     pick.calendar = gregorian

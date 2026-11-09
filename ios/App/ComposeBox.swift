@@ -79,7 +79,7 @@ final class ComposeBox: UIView, UITextViewDelegate, UIGestureRecognizerDelegate 
     box.layer.cornerRadius = 30; box.layer.cornerCurve = .continuous
     let glass = UIVisualEffectView(effect: nil)
     if #available(iOS 26.0, *) { let g = UIGlassEffect(style: .regular); g.isInteractive = true; glass.effect = g }
-    else { glass.effect = UIBlurEffect(style: .systemThickMaterial); box.layer.borderWidth = 1; box.layer.borderColor = UIColor.separator.withAlphaComponent(0.4).cgColor }
+    else { glass.effect = UIBlurEffect(style: .systemThickMaterial); box.layer.borderWidth = 1; box.followLook("border") { [weak box] tc in box?.layer.setBorder(UIColor.separator.withAlphaComponent(0.4), tc) } }
     glass.layer.cornerRadius = 30; glass.layer.cornerCurve = .continuous; glass.clipsToBounds = true
     glass.translatesAutoresizingMaskIntoConstraints = false
     box.addSubview(glass)

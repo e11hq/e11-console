@@ -20,7 +20,6 @@ final class DailySheetVC: UIViewController, UISheetPresentationControllerDelegat
     self.d = d; self.answer = answer
     openK = d["open"] as? String ?? ""
     super.init(nibName: nil, bundle: nil)
-    overrideUserInterfaceStyle = (d["light"] as? Bool) == false ? .dark : .light
     modalPresentationStyle = .pageSheet
     if let sh = sheetPresentationController {
       // (as tall as what's in it, up to 85 % of the screen — only past that does the inside scroll; Haris, 2026-11-01)

@@ -174,7 +174,7 @@ final class ClientCards: UIView, HomeBlock {
     var keep = made; made = [:]
     tiles = list.map { c in
       let id = c["id"] as? String ?? ""
-      let sig = "\(c["name"] ?? "")|\(c["sub"] ?? "")|\(c["logo"] ?? "")|\(c["rgb"] ?? "")|\(L.light)"
+      let sig = "\(c["name"] ?? "")|\(c["sub"] ?? "")|\(c["logo"] ?? "")|\(c["rgb"] ?? "")|\(L.key)"
       if let k = keep.removeValue(forKey: id) {
         if k.1 == sig { made[id] = k; return k.0 }
         k.0.removeFromSuperview()
@@ -229,7 +229,7 @@ final class FolderTiles: UIView, HomeBlock {
     var keep = made; made = [:]
     tiles = list.map { f in
       let id = f["id"] as? String ?? ""
-      let sig = "\(f["name"] ?? "")|\(FolderTiles.meta(f))|\(f["final"] ?? "")|\(f["rgb"] ?? "")|\(L.light)"
+      let sig = "\(f["name"] ?? "")|\(FolderTiles.meta(f))|\(f["final"] ?? "")|\(f["rgb"] ?? "")|\(L.key)"
       if let k = keep.removeValue(forKey: id) {
         if k.1 == sig { made[id] = k; k.0.contextMenu = { [weak self] in self?.menu?(f) }; return k.0 }
         k.0.removeFromSuperview()
@@ -280,7 +280,7 @@ final class FileRows: UIView, HomeBlock {
     var keep = made; made = [:]
     rows = list.map { f in
       let id = f["id"] as? String ?? ""
-      let sig = "\(f["name"] ?? "")|\(f["size"] ?? "")|\(f["thumbUrl"] ?? "")|\(f["where"] ?? "")|\(f["canDel"] ?? "")|\(showWhere)|\(more)|\(L.light)"
+      let sig = "\(f["name"] ?? "")|\(f["size"] ?? "")|\(f["thumbUrl"] ?? "")|\(f["where"] ?? "")|\(f["canDel"] ?? "")|\(showWhere)|\(more)|\(L.key)"
       if let k = keep.removeValue(forKey: id) {
         if k.1 == sig { made[id] = k; k.0.onTap = { [weak self] in self?.onOpen?(f) }; k.0.contextMenu = { [weak self] in self?.menu?(f) }; return k.0 }
         k.0.removeFromSuperview()
@@ -352,7 +352,7 @@ final class FileTiles: UIView, HomeBlock {
     var keep = made; made = [:]
     tiles = list.map { f in
       let id = f["id"] as? String ?? ""
-      let sig = "\(f["name"] ?? "")|\(f["size"] ?? "")|\(f["thumbUrl"] ?? "")|\(f["canDel"] ?? "")|\(L.light)"
+      let sig = "\(f["name"] ?? "")|\(f["size"] ?? "")|\(f["thumbUrl"] ?? "")|\(f["canDel"] ?? "")|\(L.key)"
       if let k = keep.removeValue(forKey: id) {
         if k.1 == sig { made[id] = k; return k.0 }
         k.0.removeFromSuperview()
@@ -473,7 +473,6 @@ final class AssetsCtl {
     for s in stack where s.h !== tabRoot && !vcs.contains(where: { ($0 as? AssetsVC)?.h === s.h }) { navGone(s.h) }
   }
   private weak var base: UIView?   // (what the first one was opened over — a client's page, the list; hidden under it meanwhile)
-  var light = true
   // (who's signed in: as the page or Me said, else the app's own copy's — opened from a client's page without the
   //  website, it wasn't known, so a new folder or an upload went to a page that isn't there and never showed: Haris
   //  2026-11-06)
@@ -580,7 +579,6 @@ final class AssetsCtl {
     }
     guard let show = a["show"] as? Bool else { return }
     if !show { if fromPage { close(animated: false) }; return }
-    light = (a["light"] as? Bool) ?? light
     if let m = a["me"] as? String { me = m }
     let st = (a["start"] as? [String: Any]) ?? [:]
     let client = st["client"] as? String, folder = st["folder"] as? String
@@ -612,7 +610,6 @@ final class AssetsCtl {
     if !stack.isEmpty, fromPage { close(animated: false) }
     fromPage = false; rootTab = false
     if stack.isEmpty { pickHost() }
-    light = main.clientsLight
     open(client: client, folder: folder, animated: true, direct: true)   // (‹ back to the client's page, the way you came)
   }
   // (the self-test: the first client opened from All Client Assets, as tapping its card)
@@ -844,10 +841,8 @@ final class AssetsCtl {
   private func folderInfo(_ m: [String: Any], _ id: String) -> [String: Any]? { ((m["folders"] as? [[String: Any]]) ?? []).first { ($0["id"] as? String) == id } }
   private func filesIn(_ m: [String: Any], _ fid: String) -> [[String: Any]] { ((m["files"] as? [[String: Any]]) ?? []).filter { ($0["folder"] as? String) == fid } }
   private func screenOf(_ h: HomeView) -> Screen? { stack.first { $0.h === h } }
-  func relight(_ l: Bool) { guard l != light else { return }; light = l; stack.forEach { draw($0) } }
   private func draw(_ s: Screen) {
-    var mm: [String: Any] = ["show": true, "me": me ?? main.clientsPageMe ?? "", "look": ["light": light]]
-    if let l = main.homeLook as? [String: Any], (l["light"] as? Bool) == light { mm["look"] = l }
+    var mm: [String: Any] = ["show": true, "me": me ?? main.clientsPageMe ?? "", "look": main.lookBoth]
     if s.kind == "all" {
       let m = models[""]
       mm["title"] = "Client Assets"; mm["date"] = m?["sub"] as? String ?? ""
@@ -895,7 +890,7 @@ final class AssetsCtl {
         rows.onOpen = { [weak self] f in self?.preview(f, among: found) }
         rows.menu = { [weak self, weak h] f in h.flatMap { self?.fileMenu($0, f, client: cid) } }
         rows.set(found, look: L, showWhere: true); out.append(rows)
-        Find.mark([rows], Find.filter(found, q) { "\($0["name"] ?? "") \($0["where"] ?? "")" }.marks, light: L.light)
+        Find.mark([rows], Find.filter(found, q) { "\($0["name"] ?? "") \($0["where"] ?? "")" }.marks)
       } else {
         let tops = ((m["folders"] as? [[String: Any]]) ?? []).filter { $0["parent"] == nil || $0["parent"] is NSNull }
         let head = part(h, "foldersHead") { AssetsHead() }; head.set("Folders"); out.append(head)
@@ -1029,7 +1024,7 @@ final class AssetsCtl {
       rows.menu = { [weak self, weak h] f in h.flatMap { self?.fileMenu($0, f, client: f["client"] as? String ?? "") } }
       rows.set(found, look: h.look, showWhere: true)
       h.showFound(found.isEmpty ? [] : [rows], hint: found.isEmpty ? "No files found." : AssetsCtl.lastLoose ? "Nothing matched exactly — close matches:" : nil)
-      Find.mark([rows], Find.filter(found, q) { "\($0["name"] ?? "") \($0["where"] ?? "")" }.marks, light: h.look.light)
+      Find.mark([rows], Find.filter(found, q) { "\($0["name"] ?? "") \($0["where"] ?? "")" }.marks)
     default: break
     }
   }
@@ -1202,7 +1197,7 @@ final class AssetsCtl {
   // Upload: iPhone's own Photos / Camera / Files, each file sent in pieces into the folder, then filed by the page
   private func upload(_ h: HomeView, client: String, folder: String) {
     guard !upBusy, let f = models[client].flatMap({ folderInfo($0, folder) }), let dir = f["dir"] as? String else { if upBusy { toast(h, "Still uploading — one moment") }; return }
-    main.topMost().present(AttachSheetVC(light: light, title: "Upload to \(f["name"] as? String ?? "folder")") { [weak self, weak h] src in
+    main.topMost().present(AttachSheetVC(title: "Upload to \(f["name"] as? String ?? "folder")") { [weak self, weak h] src in
       guard let self = self else { return }
       Picker.shared.pick(from: self.main.topMost(), single: false, source: src) { [weak self, weak h] r in
         guard let self = self else { return }
@@ -1271,7 +1266,6 @@ final class AssetsCtl {
     let vc = AssetsInfoVC(title: title, rows: rows.filter { !$0.1.isEmpty })
     if let t = task { vc.openTask = { [weak self] in self?.main.openTaskPage(t, tab: "details", focus: "") } }
     let nav = FitNav(rootViewController: vc)
-    nav.overrideUserInterfaceStyle = light ? .light : .dark
     nav.sheetPresentationController?.prefersGrabberVisible = true
     nav.prepare(width: main.view.bounds.width, bottom: main.bottomSafe)
     main.topMost().present(nav, animated: true)

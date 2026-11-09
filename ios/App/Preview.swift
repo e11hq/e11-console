@@ -263,7 +263,6 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
   private var files: [[String: Any]]
   private var at: Int
   private let event: ([String: Any]) -> Void
-  private let dark: Bool
   private var pages: [String: ([String], String?)] = [:]
   private let pager: UICollectionView
   private let strip: UICollectionView
@@ -276,23 +275,20 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
   private var closed = false
   private var pull: UIPanGestureRecognizer?
 
-  init(_ a: [String: Any], dark: Bool, event: @escaping ([String: Any]) -> Void) {
+  init(_ a: [String: Any], event: @escaping ([String: Any]) -> Void) {
     files = a["files"] as? [[String: Any]] ?? []
     at = max(0, min(files.count - 1, (a["at"] as? NSNumber)?.intValue ?? 0))
     self.event = event
-    self.dark = dark
     let pl = UICollectionViewFlowLayout(); pl.scrollDirection = .horizontal; pl.minimumLineSpacing = 0
     pager = UICollectionView(frame: .zero, collectionViewLayout: pl)
     let sl = UICollectionViewFlowLayout(); sl.scrollDirection = .horizontal; sl.minimumLineSpacing = 6; sl.itemSize = CGSize(width: 44, height: 44)
     strip = UICollectionView(frame: .zero, collectionViewLayout: sl)
     super.init(nibName: nil, bundle: nil)
-    overrideUserInterfaceStyle = dark ? .dark : .light
     modalPresentationStyle = .overFullScreen
     modalTransitionStyle = .crossDissolve
   }
   required init?(coder: NSCoder) { fatalError() }
   override var prefersStatusBarHidden: Bool { barsHidden }
-  override var preferredStatusBarStyle: UIStatusBarStyle { dark ? .lightContent : .darkContent }
 
   override func viewDidLoad() {
     super.viewDidLoad()
@@ -394,7 +390,7 @@ final class PreviewVC: UIViewController, UICollectionViewDataSource, UICollectio
   //  (a border right on the picture blended into dark ones — Haris, 2026-11-02)
   static func paintPick(_ c: UICollectionViewCell, _ on: Bool, animated: Bool) {
     c.contentView.layer.borderWidth = 0
-    c.layer.cornerRadius = 10; c.layer.borderColor = UIColor.label.cgColor
+    c.layer.cornerRadius = 10; c.followLook("border") { [weak c] tc in c?.layer.setBorder(.label, tc) }
     let inner = c.contentView.viewWithTag(77)
     let go = { c.layer.borderWidth = on ? 2 : 0; inner?.transform = on ? CGAffineTransform(scaleX: 0.8, y: 0.8) : .identity; inner?.layer.cornerRadius = on ? 6 : 8 }
     if animated { UIView.animate(withDuration: 0.25, delay: 0, usingSpringWithDamping: 0.8, initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState], animations: go) } else { go() }

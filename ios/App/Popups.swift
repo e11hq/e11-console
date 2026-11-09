@@ -70,11 +70,8 @@ enum Pop {
 class PopSheetVC: UIViewController {
   let stack = UIStackView()
   var onGone: (() -> Void)?
-  private let dark: Bool
-  init(dark: Bool) {
-    self.dark = dark
+  init() {
     super.init(nibName: nil, bundle: nil)
-    overrideUserInterfaceStyle = dark ? .dark : .light
   }
   required init?(coder: NSCoder) { fatalError() }
   override func viewDidLoad() {
@@ -108,8 +105,8 @@ class PopSheetVC: UIViewController {
 
 // 1 · Announcement
 final class AnnouncementSheet: PopSheetVC {
-  init(dark: Bool, title: String, body: String, ask: String, from: String, fromIni: String, fromColor: UIColor, when: String, fromPhoto: String? = nil) {
-    super.init(dark: dark)
+  init(title: String, body: String, ask: String, from: String, fromIni: String, fromColor: UIColor, when: String, fromPhoto: String? = nil) {
+    super.init()
     loadViewIfNeeded()
     let tile = Pop.tile(44, bg: .systemOrange, sym: "megaphone.fill", radius: 12)
     let head = Pop.col([Pop.label("ANNOUNCEMENT", 13, .medium, .secondaryLabel), Pop.label(title, 21, .bold)], spacing: 2)
@@ -128,10 +125,10 @@ final class AnnouncementSheet: PopSheetVC {
 // 2 · Expense claims reminder
 final class ClaimsSheet: PopSheetVC {
   var onAnswer: ((String) -> Void)?   // none · offline · tomorrow
-  init(dark: Bool, month: String, today: Int) {
-    super.init(dark: dark)
+  init(month: String, today: Int) {
+    super.init()
     loadViewIfNeeded()
-    let tile = Pop.tile(44, bg: dark ? .white : .black, text: "E11", ink: dark ? .black : .white, radius: 12)
+    let tile = Pop.tile(44, bg: Look.ink, text: "E11", ink: Look.inkInverse, radius: 12)
     let head = Pop.col([Pop.label("EXPENSE CLAIMS · \(month.uppercased())", 13, .medium, .secondaryLabel), Pop.label("Any expenses to claim this month?", 21, .bold)], spacing: 2)
     stack.addArrangedSubview(Pop.row([tile, head], spacing: 14, align: .top))
     let body = NSMutableAttributedString(string: "Submit your \(month) claim by ", attributes: [.font: UIFont.systemFont(ofSize: 17)])
@@ -171,8 +168,8 @@ final class ClaimsSheet: PopSheetVC {
 // 5 · What's new
 final class WhatsNewSheet: PopSheetVC {
   var onAllNotes: (() -> Void)?
-  init(dark: Bool, version: String, when: String, sections: [(String, [String])]) {
-    super.init(dark: dark)
+  init(version: String, when: String, sections: [(String, [String])]) {
+    super.init()
     loadViewIfNeeded()
     let cap = UILabel()
     let a = NSMutableAttributedString(attachment: NSTextAttachment(image: UIImage(systemName: "arrow.down.circle.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .bold))!.withTintColor(.systemBlue, renderingMode: .alwaysOriginal)))
@@ -237,10 +234,9 @@ final class ViewAsSheet: UIViewController, UITableViewDataSource, UITableViewDel
   var onPick: ((String?) -> Void)?   // (nil: Back to me)
   private let table = UITableView(frame: .zero, style: .plain), search = UISearchBar(), heading = UILabel(), back = UIView()
   private var backBtn: UIButton!
-  init(dark: Bool, people: [Person], viewing: String?) {
+  init(people: [Person], viewing: String?) {
     self.people = people; shown = people; self.viewing = viewing
     super.init(nibName: nil, bundle: nil)
-    overrideUserInterfaceStyle = dark ? .dark : .light
     // (the photos already on the phone straight away, so the list opens with them — not initials first: Haris 2026-11-04)
     for p in people { if let ph = p.photo { FeedLoader.shared.image(ph) { [weak self] img in if let img = img, self?.pics[p.id] == nil { self?.pics[p.id] = roundPic(img, initials: nil, color: nil, size: 40) } } } }
   }
@@ -327,9 +323,8 @@ final class ViewAsSheet: UIViewController, UITableViewDataSource, UITableViewDel
 final class GreetingView: UIView {
   private let blur = UIVisualEffectView(effect: nil), card = UIVisualEffectView(effect: nil), confetti = CAEmitterLayer()
   private let stack = UIStackView()
-  init(dark: Bool, top: UIView, pre: String = "", title: String, sub: String) {
+  init(top: UIView, pre: String = "", title: String, sub: String) {
     super.init(frame: .zero)
-    overrideUserInterfaceStyle = dark ? .dark : .light
     addSubview(blur)
     if !UIAccessibility.isReduceMotionEnabled { layer.addSublayer(confetti) }
     if #available(iOS 26.0, *) { card.effect = UIGlassEffect(style: .regular) } else { card.effect = UIBlurEffect(style: .systemThickMaterial) }
@@ -423,13 +418,13 @@ final class ProfileAskCard: UIView {
   private let glass = UIVisualEffectView(effect: nil), stack = UIStackView()
   var onProfile: (() -> Void)?
   private var timer: Timer?
-  init(dark: Bool, missing: String) {
+  init(missing: String) {
     super.init(frame: .zero)
-    overrideUserInterfaceStyle = dark ? .dark : .light
     if #available(iOS 26.0, *) { glass.effect = UIGlassEffect(style: .regular) } else { glass.effect = UIBlurEffect(style: .systemThickMaterial) }
     glass.layer.cornerRadius = 26; glass.layer.cornerCurve = .continuous; glass.clipsToBounds = true
     addSubview(glass)
-    layer.shadowColor = UIColor.black.cgColor; layer.shadowOpacity = dark ? 0 : 0.1; layer.shadowRadius = 18; layer.shadowOffset = CGSize(width: 0, height: 6)
+    followLook("shadow") { [weak self] tc in self?.layer.shadowOpacity = tc.userInterfaceStyle == .light ? 0.1 : 0 }
+    layer.shadowColor = UIColor.black.cgColor; layer.shadowRadius = 18; layer.shadowOffset = CGSize(width: 0, height: 6)
     let tile = Pop.tile(36, bg: .systemPink, sym: "gift.fill", radius: 9)
     let t = missing == "both" ? "Add your birthday and city?" : missing == "city" ? "Add your city?" : "Add your birthday?"
     let why = missing == "both" ? "The team gets a reminder to wish you on your birthday, and people see your city on your card. Both are optional."
@@ -475,7 +470,7 @@ final class ViewAsBar: UIView {
   /// where its lower edge goes, asked every frame (the page under it: tab bar, task page, comment box, keyboard)
   var bottomFor: (() -> CGFloat)?
   private var link: CADisplayLink?
-  init(dark: Bool) {
+  init() {
     super.init(frame: .zero)
     glass.layer.cornerRadius = 26; glass.layer.cornerCurve = .continuous; glass.clipsToBounds = true
     addSubview(glass)
@@ -489,7 +484,7 @@ final class ViewAsBar: UIView {
     me = Pop.capsule("Back to me", filled: true, small: true) { [weak self] in self?.onBackToMe?() }
     [icon, cap, name, sw, me].forEach { glass.contentView.addSubview($0) }
     sw.translatesAutoresizingMaskIntoConstraints = true; me.translatesAutoresizingMaskIntoConstraints = true
-    look(dark: dark)
+    look()
     // it can be dragged up or down (Haris 2026-11-04: "so I can press something underneath it") — let go, it settles at
     // the top (under the top buttons) or back at the bottom, whichever is nearer, and stays there on every page
     addGestureRecognizer(UIPanGestureRecognizer(target: self, action: #selector(dragged(_:))))
@@ -519,18 +514,12 @@ final class ViewAsBar: UIView {
       UIView.animate(withDuration: 0.4, delay: 0, usingSpringWithDamping: 0.82, initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState]) { self.frame = f }
     }
   }
-  // (the app's own light / dark, again whenever it changes — it was made in the look the app had before the person you
-  //  view as had theirs, and kept it: black text on dark, Haris 2026-11-04)
-  private var isDark: Bool?
-  func look(dark: Bool) {
-    guard dark != isDark else { return }
-    isDark = dark
-    overrideUserInterfaceStyle = dark ? .dark : .light
-    if #available(iOS 26.0, *) { let g = UIGlassEffect(style: .regular); g.tintColor = UIColor.systemOrange.withAlphaComponent(dark ? 0.22 : 0.18); glass.effect = g }
+  // (the phone's light / dark, switched by iPhone itself — Look.swift)
+  private func look() {
+    if #available(iOS 26.0, *) { let g = UIGlassEffect(style: .regular); g.tintColor = Look.c(UIColor.systemOrange.withAlphaComponent(0.22), UIColor.systemOrange.withAlphaComponent(0.18)); glass.effect = g }
     else { glass.effect = UIBlurEffect(style: .systemThickMaterial); glass.contentView.backgroundColor = UIColor.systemOrange.withAlphaComponent(0.16) }
-    layer.shadowOpacity = dark ? 0 : 0.1
-    cap.textColor = dark ? UIColor(red: 1, green: 0.70, blue: 0.25, alpha: 1) : UIColor(red: 0.69, green: 0.43, blue: 0, alpha: 1)
-    [sw, me].forEach { $0?.overrideUserInterfaceStyle = dark ? .dark : .light }
+    followLook("shadow") { [weak self] tc in self?.layer.shadowOpacity = tc.userInterfaceStyle == .light ? 0.1 : 0 }
+    cap.textColor = Look.c(UIColor(red: 1, green: 0.70, blue: 0.25, alpha: 1), UIColor(red: 0.69, green: 0.43, blue: 0, alpha: 1))
   }
   required init?(coder: NSCoder) { fatalError() }
   func set(name n: String, role: String) {

@@ -203,7 +203,7 @@ extension Main {
     }
     s += [
       ("meBack", { self.meCtl.pop(animated: false) }),
-      ("meClientAssets", { self.assetsCtl.command(["show": true, "me": AppData.shared.me ?? "", "light": self.appStyle == .light, "start": [String: Any]()]) }),
+      ("meClientAssets", { self.assetsCtl.command(["show": true, "me": AppData.shared.me ?? "", "start": [String: Any]()]) }),
       ("meClientAssetsFind", { self.assetsCtl.top?.selfFind(q4) }),
       ("meClientAssetsFindClose", { self.assetsCtl.top?.selfFindDone() }),
       ("meClientAssetsClient", { self.assetsCtl.openFromClients(client: cid, folder: nil) }),

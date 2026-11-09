@@ -9,10 +9,9 @@ final class SubmitSheetVC: UIViewController, UISheetPresentationControllerDelega
   private var items: [(name: String, size: Int64, token: String, progress: Double, path: String?, error: String?)] = []
   private let list = UIStackView(), send = UIButton(type: .system)
   var cookies: (@escaping (String) -> Void) -> Void = { $0("") }
-  init(task: String, cd: String, light: Bool, onSubmit: @escaping ([[String: Any]]) -> Void) {
+  init(task: String, cd: String, onSubmit: @escaping ([[String: Any]]) -> Void) {
     taskId = task; self.cd = cd; self.onSubmit = onSubmit
     super.init(nibName: nil, bundle: nil)
-    overrideUserInterfaceStyle = light ? .light : .dark
     modalPresentationStyle = .pageSheet
     if let sh = sheetPresentationController { sh.detents = [.medium(), .large()]; sh.prefersGrabberVisible = true; sh.delegate = self }
   }

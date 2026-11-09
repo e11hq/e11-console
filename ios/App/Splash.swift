@@ -22,17 +22,17 @@ final class SplashView: UIView {
     return f.string(from: d)
   }
 
-  struct Look { let bg: UIColor }
+  struct Shade { let bg: UIColor }
   static func hex(_ v: UInt32, _ a: CGFloat = 1) -> UIColor {
     UIColor(red: CGFloat((v >> 16) & 0xff) / 255, green: CGFloat((v >> 8) & 0xff) / 255, blue: CGFloat(v & 0xff) / 255, alpha: a)
   }
   // (styles.css #splash / #splash.light)
-  static let dark = Look(bg: hex(0x0c0d0f))
-  static let lightLook = Look(bg: hex(0xffffff))
+  static let dark = Shade(bg: hex(0x0c0d0f))
+  static let lightLook = Shade(bg: hex(0xffffff))
   static let green = hex(0x3ddc97)   // (the green tick — used elsewhere too)
 
   let light: Bool
-  let L: Look
+  let L: Shade
   let t0 = CACurrentMediaTime()
   var onSkip: (() -> Void)?
   var onRetry: (() -> Void)?

@@ -1099,7 +1099,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
       let l = UILabel(); l.text = p["initials"] as? String ?? "?"; l.font = .systemFont(ofSize: side * 0.4, weight: .semibold); l.textColor = .white; l.textAlignment = .center
       l.frame = CGRect(x: 0, y: 0, width: side, height: side); v.addSubview(l)
     }
-    if ring { v.layer.borderWidth = 2; v.layer.borderColor = UIColor.secondarySystemGroupedBackground.cgColor }
+    if ring { v.layer.borderWidth = 2; v.followLook("ring") { [weak v] tc in v?.layer.setBorder(.secondarySystemGroupedBackground, tc) } }
     return v
   }
   private func personLine(_ id: String, extra: String) -> UIView {

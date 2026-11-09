@@ -153,7 +153,7 @@ final class ClientRow: UIControl {
   private var drawnSig = ""
   func set(_ r: [String: Any], look L: HomeLook, inactive: Bool) {
     // (the same as it shows: left as it is — only what changed changes, Haris 2026-11-08)
-    let sig = drawSig(r) + "|\(inactive)|\(L.light)|\(L.title)"
+    let sig = drawSig(r) + "|\(inactive)|\(L.key)"
     if sig == drawnSig { return }
     drawnSig = sig
     let rgb = NativeSheetVC.color(r["rgb"]) ?? .systemGray
@@ -177,7 +177,7 @@ final class ClientRow: UIControl {
   private var amsSig = ""
   func paintAms(_ people: [String: [String: Any]]) {
     // (the same faces: left as they are — made again, they flew in from the corner inside the list's slide)
-    let sig = amIds.map { id in id + (people[id]?["photo"] != nil ? "+" : "") + ((people[id]?["initials"] as? String) ?? "") }.joined(separator: ",") + "|\(traitCollection.userInterfaceStyle.rawValue)|" + ((superview?.backgroundColor).map { "\($0.cgColor.components ?? [])" } ?? "")
+    let sig = amIds.map { id in id + (people[id]?["photo"] != nil ? "+" : "") + ((people[id]?["initials"] as? String) ?? "") }.joined(separator: ",")
     guard sig != amsSig else { return }
     amsSig = sig
     UIView.performWithoutAnimation { paintFaces(people); layoutIfNeeded() }
@@ -187,7 +187,9 @@ final class ClientRow: UIControl {
     for id in amIds {
       let p = people[id]
       let v = UIImageView(image: roundPic(NativeSheetVC.photo(p), initials: p?["initials"] as? String, color: NativeSheetVC.color(p?["color"]), size: 24))
-      v.layer.cornerRadius = 12; v.layer.borderWidth = 2; v.layer.borderColor = (superview?.backgroundColor ?? .systemBackground).cgColor; v.clipsToBounds = true
+      v.layer.cornerRadius = 12; v.layer.borderWidth = 2; v.clipsToBounds = true
+      let ring = superview?.backgroundColor ?? .systemBackground
+      v.followLook("ring") { [weak v] tc in v?.layer.setBorder(ring, tc) }
       v.widthAnchor.constraint(equalToConstant: 24).isActive = true; v.heightAnchor.constraint(equalToConstant: 24).isActive = true
       ams.addArrangedSubview(v)
     }
@@ -236,7 +238,7 @@ final class AssetsStrip: UIView, HomeBlock {
     var keep = made; made = [:]
     tiles = folders.map { f in
       let fid = f["id"] as? String ?? ""
-      let sig = "\(f["name"] ?? "")|\(f["files"] ?? 0)|\(f["rgb"] ?? "")|\(L.light)"
+      let sig = "\(f["name"] ?? "")|\(f["files"] ?? 0)|\(f["rgb"] ?? "")|\(L.key)"
       if let k = keep.removeValue(forKey: fid) {
         if k.1 == sig { made[fid] = k; return k.0 }
         k.0.removeFromSuperview()
@@ -326,7 +328,7 @@ final class ClientSheetVC: UITableViewController, UITextFieldDelegate {
   private var active: Bool
   var onSave: (([String: Any], @escaping (String?) -> Void) -> Void)?
   private static let COLORS = ["#0a84ff", "#30b0c7", "#34c759", "#ff9f0a", "#ff375f", "#af52de", "#5e5ce6", "#8e8e93"]
-  init(row: [String: Any], list: [String: Any], people: [String: [String: Any]], dark: Bool, isNew: Bool = false, active: Bool = true) {
+  init(row: [String: Any], list: [String: Any], people: [String: [String: Any]], isNew: Bool = false, active: Bool = true) {
     self.row = row
     self.isNew = isNew; self.active = active
     canEdit = (list["canEdit"] as? Bool) == true
@@ -343,7 +345,6 @@ final class ClientSheetVC: UITableViewController, UITextFieldDelegate {
       color = ClientSheetVC.COLORS.first { !used.contains($0.lowercased()) } ?? ClientSheetVC.COLORS[0]
     }
     super.init(style: .insetGrouped)
-    overrideUserInterfaceStyle = dark ? .dark : .light
   }
   required init?(coder: NSCoder) { fatalError() }
   override func viewDidLoad() {
@@ -437,7 +438,7 @@ final class ClientSheetVC: UITableViewController, UITextFieldDelegate {
       for hx in ClientSheetVC.COLORS {
         let b = UIButton(type: .custom); b.backgroundColor = UIColor(hex: hx); b.layer.cornerRadius = 15
         b.widthAnchor.constraint(equalToConstant: 30).isActive = true; b.heightAnchor.constraint(equalToConstant: 30).isActive = true
-        if hx.lowercased() == color.lowercased() { b.layer.borderWidth = 3; b.layer.borderColor = UIColor.label.cgColor }
+        if hx.lowercased() == color.lowercased() { b.layer.borderWidth = 3; b.followLook("ring") { [weak b] tc in b?.layer.setBorder(.label, tc) } }
         b.accessibilityLabel = "Colour"
         b.addAction(UIAction { [weak self] _ in UISelectionFeedbackGenerator().selectionChanged(); self?.color = hx; self?.tableView.reloadSections(IndexSet([0, 1]), with: .none) }, for: .touchUpInside)
         s.addArrangedSubview(b)
@@ -520,7 +521,6 @@ final class ClientSheetVC: UITableViewController, UITextFieldDelegate {
       self.navigationController?.popViewController(animated: true)
     }
     vc.title = isAm ? "Add Account Manager" : "Add Social Executive"
-    vc.overrideUserInterfaceStyle = overrideUserInterfaceStyle
     navigationController?.pushViewController(vc, animated: true)
   }
   func textFieldShouldReturn(_ f: UITextField) -> Bool { f.resignFirstResponder(); return true }

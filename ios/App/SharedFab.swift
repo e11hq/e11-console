@@ -44,9 +44,9 @@ extension Main {
     let a = fromGone ? nil : from.map { ($0, $0.fabNow) }.flatMap { $0.1.shown ? $0 : nil }
     let b = to.map { ($0, $0.fabNow) }.flatMap { $0.1.shown ? $0 : nil }
     // (one change at a time: a stand-in still moving is replaced from where it is)
-    var start: CGRect? = nil, startCfg: UIButton.Configuration? = nil, startLight = true
-    if let g = m.ghost { start = g.layer.presentation()?.frame ?? g.frame; startCfg = g.configuration; startLight = g.overrideUserInterfaceStyle != .dark; g.removeFromSuperview(); m.ghost = nil; m.unveil() }
-    if start == nil, case let (h, f)? = a { start = place(h, f.frame); startCfg = f.config; startLight = f.light }
+    var start: CGRect? = nil, startCfg: UIButton.Configuration? = nil
+    if let g = m.ghost { start = g.layer.presentation()?.frame ?? g.frame; startCfg = g.configuration; g.removeFromSuperview(); m.ghost = nil; m.unveil() }
+    if start == nil, case let (h, f)? = a { start = place(h, f.frame); startCfg = f.config }
     if start == nil && b == nil { from?.fabVeiled = false; return }
     // (the same button in the same place: nothing to show)
     if case let (ha, fa)? = a, case let (hb, fb)? = b, fa.label == fb.label, place(ha, fa.frame) == place(hb, fb.frame) { hb.fabVeiled = false; return }
@@ -62,8 +62,8 @@ extension Main {
       g.removeFromSuperview(); FabMorph.shared.ghost = nil; FabMorph.shared.unveil()
     }
     UIView.performWithoutAnimation {
-      if let s = start { g.configuration = startCfg; g.overrideUserInterfaceStyle = startLight ? .light : .dark; g.frame = s }
-      else if case let (h, f)? = b { g.configuration = f.config; g.overrideUserInterfaceStyle = f.light ? .light : .dark; g.frame = place(h, f.frame); g.transform = CGAffineTransform(scaleX: 0.4, y: 0.4); g.alpha = 0 }
+      if let s = start { g.configuration = startCfg; g.frame = s }
+      else if case let (h, f)? = b { g.configuration = f.config; g.frame = place(h, f.frame); g.transform = CGAffineTransform(scaleX: 0.4, y: 0.4); g.alpha = 0 }
       g.layoutIfNeeded()
     }
     if case let (h, f)? = b {
@@ -71,7 +71,7 @@ extension Main {
       if start != nil {
         // another button: squash and stretch into its width and place, the words crossfading
         if startCfg?.attributedTitle != f.config?.attributedTitle || startCfg?.image != f.config?.image { let t = CATransition(); t.type = .fade; t.duration = 0.22; g.layer.add(t, forKey: "label") }
-        g.configuration = f.config; g.overrideUserInterfaceStyle = f.light ? .light : .dark
+        g.configuration = f.config
         UIView.animate(withDuration: 0.5, delay: 0, usingSpringWithDamping: 0.62, initialSpringVelocity: 0.4, options: [.allowUserInteraction, .beginFromCurrentState]) { g.frame = target; g.layoutIfNeeded() } completion: { _ in done() }
         let k = CAKeyframeAnimation(keyPath: "transform.scale.y")
         k.values = [1, 0.9, 1.05, 0.98, 1]; k.keyTimes = [0, 0.25, 0.55, 0.8, 1]; k.duration = 0.45

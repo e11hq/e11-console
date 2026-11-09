@@ -111,7 +111,7 @@ final class CommentBar: UIView, UITextViewDelegate, UITableViewDataSource, UITab
     plus.addAction(UIAction { [weak self] _ in self?.openAttach() }, for: .touchUpInside)
     box.backgroundColor = .systemBackground
     box.layer.cornerRadius = 18; box.layer.cornerCurve = .continuous
-    box.layer.borderWidth = 1; box.layer.borderColor = UIColor.separator.cgColor
+    box.layer.borderWidth = 1; box.followLook("border") { [weak box] tc in box?.layer.setBorder(.separator, tc) }
     text.font = .systemFont(ofSize: CommentBar.FONT)
     text.backgroundColor = .clear
     text.textContainerInset = UIEdgeInsets(top: 8, left: 10, bottom: 8, right: 10)
@@ -175,12 +175,6 @@ final class CommentBar: UIView, UITextViewDelegate, UITableViewDataSource, UITab
   }
 
   // the app's own light / dark (not the phone's): the box and its keyboard (Haris, 2026-10-30)
-  func setLook(light: Bool) {
-    overrideUserInterfaceStyle = light ? .light : .dark
-    text.keyboardAppearance = light ? .light : .dark
-    if text.isFirstResponder { text.reloadInputViews() }
-    refresh()
-  }
   /* ---------- from the page ---------- */
   func apply(_ a: [String: Any]) {
     if let c = NativeSheetVC.color(a["accent"]) { accent = c }
@@ -329,7 +323,7 @@ final class CommentBar: UIView, UITextViewDelegate, UITableViewDataSource, UITab
     let typing = text.isFirstResponder
     attaching = true; keyboardBack = typing
     if typing { text.resignFirstResponder() }
-    let sheet = AttachSheetVC(light: overrideUserInterfaceStyle == .light) { [weak self] src in
+    let sheet = AttachSheetVC() { [weak self] src in
       guard let self else { return }
       self.onEvent?(["ev": "attach", "key": self.key, "source": src])
     }
@@ -508,11 +502,10 @@ final class AttachSheetVC: UIViewController, UISheetPresentationControllerDelega
   var lifted: UIView?, liftedFrame: CGRect = .zero
   var onLiftedGone: (() -> Void)?   // (the card it pictures, shown again)
   // (every attach sheet is the same: "Attach Files", a glass ✕, Camera · Photos · Files — Haris, 2026-10-31)
-  init(light: Bool, title: String? = "Attach Files", pick: @escaping (String) -> Void) {
+  init(title: String? = "Attach Files", pick: @escaping (String) -> Void) {
     self.pick = pick
     self.heading = title
     super.init(nibName: nil, bundle: nil)
-    overrideUserInterfaceStyle = light ? .light : .dark
     modalPresentationStyle = .pageSheet
     if let sh = sheetPresentationController {
       let h: CGFloat = title == nil ? 150 : 194
