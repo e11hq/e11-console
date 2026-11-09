@@ -161,6 +161,7 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
     scroll.tableHeaderView = UIView(frame: CGRect(x: 0, y: 0, width: 1, height: 4))
     scroll.tableFooterView = UIView(frame: CGRect(x: 0, y: 0, width: 1, height: 8))
     scroll.register(FeedRow.self, forCellReuseIdentifier: "c")
+    scroll.register(DayHead.self, forHeaderFooterViewReuseIdentifier: "h")
     scroll.delegate = self
     source = FeedSource(tableView: scroll) { [weak self] t, ip, id in
       let row = t.dequeueReusableCell(withIdentifier: "c", for: ip) as! FeedRow
@@ -332,10 +333,24 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
     }
     schedById = nextSched
     let newOnes = next.filter { !seenIds.contains($0) }
-    if next.count != order.count || first { onCount?(next.count) }
+    let countChanged = next.count != order.count
+    if countChanged || first { onCount?(next.count) }
     order = next
-    var snap = NSDiffableDataSourceSnapshot<Int, String>()
-    snap.appendSections([0]); snap.appendItems(next + schedOrder)
+    // the sections (Haris 2026-11-09, the mock-up): a day pill over each day's comments — Apple's own section headers, so
+    // the day floats at the top as the list scrolls; a thread: its first comment, then "N REPLIES"
+    var snap = NSDiffableDataSourceSnapshot<String, String>()
+    if thread != nil {
+      if let r = next.first { snap.appendSections(["root"]); snap.appendItems([r], toSection: "root") }
+      if next.count > 1 { snap.appendSections(["replies"]); snap.appendItems(Array(next.dropFirst()), toSection: "replies") }
+    } else {
+      var last = ""
+      for id in next {
+        let d = "d:" + CommentsFeed.dayKey(byId[id]?["at"] as? String ?? "")
+        if d != last { snap.appendSections([d]); last = d }
+        snap.appendItems([id], toSection: d)
+      }
+    }
+    if !schedOrder.isEmpty { snap.appendSections(["sched"]); snap.appendItems(schedOrder, toSection: "sched") }
     let had = Set(source.snapshot().itemIdentifiers)
     let again = changed.filter { had.contains($0) }
     if !again.isEmpty { snap.reconfigureItems(again) }
@@ -346,6 +361,7 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
     let swap = !gone.isEmpty && gone.allSatisfy { $0.hasPrefix("pending-") } && came.count == gone.count
     source.apply(snap, animatingDifferences: animate && !swap)
     fading = []
+    if countChanged, thread != nil, let s = source.snapshot().indexOfSection("replies"), let h = scroll.headerView(forSection: s) as? DayHead { h.show(repliesWords, pill: false, fade: true) }
     if first { first = false; seenIds = Set(next); endOnLayout = true; toEnd(animated: false); tellSeen(); return }
     // at the latest: new comments stay in view (rule 3); higher up nothing moves — the pill counts them
     if atEnd { seenIds = Set(next); toEnd(animated: true) }
@@ -369,6 +385,39 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
     if let v = schedById[id] { return v.height(for: t.bounds.width) }
     return 1
   }
+  // ---------- the day pills and a thread's "N REPLIES": Apple's section headers ----------
+  private static let iso: ISO8601DateFormatter = { let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]; return f }()
+  private static func date(_ s: String) -> Date? { iso.date(from: s) ?? ISO8601DateFormatter().date(from: s) }
+  static func dayKey(_ at: String) -> String {
+    guard let d = date(at) else { return "?" }
+    let c = Calendar.current.dateComponents([.year, .month, .day], from: d)
+    return String(format: "%04d-%02d-%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
+  }
+  // "Today", "Yesterday", a weekday this week, else "Sat, 31 Oct" (and the year when it isn't this one)
+  static func dayName(_ key: String) -> String {
+    let p = key.split(separator: "-").compactMap { Int($0) }
+    guard p.count == 3, let d = Calendar.current.date(from: DateComponents(year: p[0], month: p[1], day: p[2])) else { return "" }
+    let cal = Calendar.current
+    if cal.isDateInToday(d) { return "Today" }
+    if cal.isDateInYesterday(d) { return "Yesterday" }
+    let f = DateFormatter(); f.locale = Locale(identifier: "en_US")
+    let days = cal.dateComponents([.day], from: cal.startOfDay(for: d), to: cal.startOfDay(for: Date())).day ?? 99
+    if days < 7 { f.dateFormat = "EEEE" }
+    else { f.dateFormat = cal.component(.year, from: d) == cal.component(.year, from: Date()) ? "EEE, d MMM" : "EEE, d MMM yyyy" }
+    return f.string(from: d)
+  }
+  func tableView(_ t: UITableView, heightForHeaderInSection s: Int) -> CGFloat {
+    let k = source.sectionIdentifier(for: s) ?? ""
+    return k.hasPrefix("d:") ? 40 : k == "replies" ? 34 : 0
+  }
+  func tableView(_ t: UITableView, viewForHeaderInSection s: Int) -> UIView? {
+    let k = source.sectionIdentifier(for: s) ?? ""
+    guard k.hasPrefix("d:") || k == "replies", let h = t.dequeueReusableHeaderFooterView(withIdentifier: "h") as? DayHead else { return nil }
+    if k.hasPrefix("d:") { h.show(CommentsFeed.dayName(String(k.dropFirst(2))), pill: true) }
+    else { h.show(repliesWords, pill: false) }
+    return h
+  }
+  private var repliesWords: String { let n = max(0, order.count - 1); return "\(n) REPL\(n == 1 ? "Y" : "IES")" }
   private func frameOf(_ id: String) -> CGRect? {
     guard let ip = source.indexPath(for: id) else { return nil }
     return scroll.rectForRow(at: ip)
@@ -634,8 +683,49 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
 }
 
 // Apple's diffable list, told that its rows can be swiped (Apple's Reply) — a diffable list says no by default
-final class FeedSource: UITableViewDiffableDataSource<Int, String> {
+final class FeedSource: UITableViewDiffableDataSource<String, String> {
   override func tableView(_ tableView: UITableView, canEditRowAt indexPath: IndexPath) -> Bool { true }
+}
+
+// a day's pill over its comments (on Apple's glass, floating at the top as the list scrolls — WhatsApp's way), or a
+// thread's "N REPLIES" in Apple's grey header words; set again only when its words change
+final class DayHead: UITableViewHeaderFooterView {
+  override var insetsLayoutMarginsFromSafeArea: Bool { get { false } set {} }
+  private let pill = UIVisualEffectView(effect: nil), label = UILabel()
+  private var shown = ""
+  override init(reuseIdentifier: String?) {
+    super.init(reuseIdentifier: reuseIdentifier)
+    backgroundConfiguration = .clear()
+    if #available(iOS 26.0, *) { pill.effect = UIGlassEffect(style: .regular) } else { pill.effect = UIBlurEffect(style: .systemThinMaterial) }
+    pill.clipsToBounds = true; pill.layer.cornerCurve = .continuous
+    contentView.addSubview(pill); contentView.addSubview(label)
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  private var isPill = true
+  func show(_ text: String, pill on: Bool, fade: Bool = false) {
+    guard shown != text || isPill != on else { return }
+    shown = text; isPill = on
+    if fade { UIView.transition(with: label, duration: 0.25, options: [.transitionCrossDissolve, .allowUserInteraction], animations: {}) }
+    label.text = text
+    label.font = on ? .systemFont(ofSize: 13, weight: .semibold) : .systemFont(ofSize: 13)
+    label.textColor = on ? .label : .secondaryLabel
+    pill.isHidden = !on
+    setNeedsLayout()
+  }
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    let w = ceil(label.sizeThatFits(CGSize(width: bounds.width, height: 30)).width)
+    if isPill {
+      let pw = w + 24, ph: CGFloat = 26
+      pill.frame = CGRect(x: (bounds.width - pw) / 2, y: (bounds.height - ph) / 2, width: pw, height: ph)
+      pill.layer.cornerRadius = ph / 2
+      label.frame = pill.frame
+      label.textAlignment = .center
+    } else {
+      label.frame = CGRect(x: 32, y: bounds.height - 22, width: bounds.width - 64, height: 18)
+      label.textAlignment = .left
+    }
+  }
 }
 
 // one row of Apple's list holding a comment (or a scheduled one): its exact height given, nothing of the safe area,
