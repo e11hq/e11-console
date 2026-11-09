@@ -351,6 +351,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     addSubview(spinner)
     titleView.delegate = self
     titleView.isScrollEnabled = false
+    titleView.contentInsetAdjustmentBehavior = .never   // (never sized by the bar's room as it passes an edge — as the description)
     titleView.backgroundColor = .clear
     titleView.font = .systemFont(ofSize: 22, weight: .semibold)   // (less heavy, as ClickUp's — Haris 2026-11-02)
     titleView.textContainerInset = .zero
@@ -1752,6 +1753,10 @@ final class DescBox: UIView {
       //  or 204 for a long one not opened) and the rest is under the fade with Show More. Held to the box's bottom too, a
       //  long one was squeezed to 204 and Show More never showed: Haris 2026-11-09)
       tv.setContentCompressionResistancePriority(.required, for: .vertical)
+      // (a text view is a scroll view: left to adjust for the room under Apple's bar and the home indicator, its size changed
+      //  as the page scrolled it to an edge — the description snapping away at the bottom and the layout loop that stopped
+      //  the app, Haris's recording 2026-11-09 20:27)
+      tv.contentInsetAdjustmentBehavior = .never
       NSLayoutConstraint.activate([tv.topAnchor.constraint(equalTo: topAnchor), tv.leadingAnchor.constraint(equalTo: leadingAnchor), tv.trailingAnchor.constraint(equalTo: trailingAnchor)])
       text = tv
     }
