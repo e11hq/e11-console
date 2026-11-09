@@ -285,6 +285,10 @@ new rows fading in and gone ones out, the rest sliding only when something reall
 self-test checks it on every build: each row's height once a page has arrived, after scrolling, and back at the top — the
 same row the same height (`holdArrived` / `holdScrolled` / `holdTop`). Every new page too.
 
+**The list's end, every native list page — now and later (Haris, 2026-11-09 18:57):** scrolled to the end, the last card
+stops as far above "+ New task" as the button sits above the tab bar (about 19 — `HomeView.endRoom`), the same on E11 Day,
+My Tasks, the Inbox, Clients and every new list page; with no button, as far above the tab bar (or the bottom edge).
+
 **Light and dark, Apple's way — every native screen, now and later (Haris, 2026-11-09: "Yes, start"):** the iPhone app
 follows the phone's look and nothing of ours forces one — never `overrideUserInterfaceStyle` on a view, sheet, alert,
 nav or the tab bar. Our colours are Apple's dynamic colours (`Look.c(dark, light)`, the system colours, `HomeLook`'s —
