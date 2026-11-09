@@ -970,7 +970,9 @@ var E11Rules = (() => {
       return [];
     }
     // the people who can be @mentioned (everyone active, not Finance-only)
-    const mentionable = () => users.filter((x) => x.active !== false && !isFinUser(x)).map((x) => ({ id: x.id, name: fullName(x), initials: initials(fullName(x) || '?'), color: rgbOf(avColor(x.id)) }));
+    // (each person's role too — the iPhone's @ list shows it under the name: Haris 2026-11-10)
+    const roleWord = (x) => x.id === cdUserId() ? 'Creative Director' : ({ admin: 'Admin', office_admin: 'Office Admin', am: 'Account Manager', production: 'Production', social: 'Social', freelancer: 'Freelancer' })[x.role] || '';
+    const mentionable = () => users.filter((x) => x.active !== false && !isFinUser(x)).map((x) => ({ id: x.id, name: fullName(x), role: roleWord(x), initials: initials(fullName(x) || '?'), color: rgbOf(avColor(x.id)) }));
     // ---------- Submit for CD review / Withdraw (app.js submitReview / withdrawReview) ----------
     const secNamedOf = (t, re) => (statusList(t) || []).find((x) => re.test(String(x.name).trim()));
     function submitReview(t, files) {
