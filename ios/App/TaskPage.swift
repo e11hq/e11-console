@@ -289,8 +289,12 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     //  opened: resize(). Re-measured on every constraint change inside it — .enabledIncludingConstraints — a text view
     //  settling its own size during Apple's layout set the list measuring again and again: build 1616 crashed, Haris
     //  2026-11-09)
-    let rowReg = UICollectionView.CellRegistration<UICollectionViewListCell, String> { [weak self] cell, _, key in
+    let rowReg = UICollectionView.CellRegistration<RowCell, String> { [weak self] cell, _, key in
       guard let self = self, let it = self.dItems[key] else { return }
+      // (its height ours, worked out once for the list's width and kept — Apple's own re-measuring grew rows as they
+      //  scrolled in: Priority 54 → 170. Haris 2026-11-09 18:48: "we can do it as an exception")
+      if it.height == 0 || it.heightW != self.listW { it.height = self.rowHeight(it); it.heightW = self.listW }
+      cell.fixed = it.height
       if let c = it.content { cell.contentConfiguration = c }
       cell.accessories = it.accessories
       cell.isUserInteractionEnabled = !self.editingDesc
@@ -1002,6 +1006,21 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   // the list's width — known before it's first laid out: the window's
   private var listW: CGFloat { let b = scroll.bounds.width; return b > 0 ? b : (window?.bounds.width ?? (bounds.width > 0 ? bounds.width : 390)) }
   // a piece's exact height for a width: a text view's words measured; anything else by its own constraints
+  // an Apple row's height for the list's width: Apple's own cell, set as the row is, measured once (a cell kept for it)
+  private let sizer = UICollectionViewListCell()
+  private func rowHeight(_ it: DItem) -> CGFloat {
+    let w = listW
+    if sizer.superview == nil { sizer.isHidden = true; addSubview(sizer) }   // (in the page: the phone's text size and look)
+    if let real = scroll.visibleCells.first(where: { $0 is RowCell }) { sizer.directionalLayoutMargins = real.directionalLayoutMargins }
+    else { sizer.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20) }
+    sizer.contentConfiguration = it.content
+    sizer.accessories = it.accessories
+    sizer.frame = CGRect(x: 0, y: 0, width: w, height: 44)
+    sizer.layoutIfNeeded()
+    let h = sizer.systemLayoutSizeFitting(CGSize(width: w, height: UIView.layoutFittingCompressedSize.height), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height
+    sizer.accessories = []   // (its pieces go back to the row's own cell)
+    return max(44, ceil(h))
+  }
   private func hostHeight(_ v: UIView, _ w: CGFloat) -> CGFloat {
     let w = max(1, w)
     if let d = v as? DescBox { return d.height(for: w) }
@@ -1573,11 +1592,23 @@ final class DItem {
   var pad = UIEdgeInsets.zero
   var plain = false
   var height: CGFloat = 0   // (a piece of ours: its exact height, worked out once for the list's width)
+  var heightW: CGFloat = 0   // (an Apple row: the width its height was worked out for)
   init(_ key: String) { self.key = key }
 }
 // a piece of ours in Apple's list cell: held by constraints inside the cell (its margins, or the pad given), so Apple's
 // own self-sizing measures it — nothing of ours measuring heights (build 1612 crashed: our own measuring and Apple's
 // disagreed and the list re-laid itself out in a loop until iPhone stopped the app, Haris 2026-11-09)
+// an Apple row on the task page: Apple's cell with its height given (worked out once for the list's width) — Apple's
+// self-sizing never asked to guess it again as it scrolls in (Haris 2026-11-09, the exception)
+final class RowCell: UICollectionViewListCell {
+  var fixed: CGFloat = 0
+  override func preferredLayoutAttributesFitting(_ a: UICollectionViewLayoutAttributes) -> UICollectionViewLayoutAttributes {
+    guard fixed > 0 else { return super.preferredLayoutAttributesFitting(a) }
+    let out = a.copy() as! UICollectionViewLayoutAttributes
+    out.size.height = fixed
+    return out
+  }
+}
 final class DetailCell: UICollectionViewListCell {
   private weak var hosted: UIView?
   private var pins: [NSLayoutConstraint] = []
