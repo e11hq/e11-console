@@ -21,8 +21,8 @@ others slide only when something really came, went or changed height). Every new
 **Never skipped, and checked (Haris, 2026-11-08: "This rule should not be ignored and checked"):** every change to a
 native screen is checked against it before it's built — nothing drawn again that didn't change, nothing taken off a screen
 that stays (the task page's grey bands vanished on a redraw). The self-test checks it on every build: with a task open the
-app goes to another app and back (`away` → `awayBack`) and no screen may be drawn again (`Main.lookRedraws` unchanged), the
-bands still on the page. (The redraw came from iPhone's app-switcher pictures, taken in light and dark, read as the phone
+app goes to another app and back (`away` → `awayBack`) and no screen may be drawn again (`Main.lookRedraws` unchanged), its
+Details still on the page (`awayCells` — the grey bands went with Details fully Apple, 2026-11-09). (The redraw came from iPhone's app-switcher pictures, taken in light and dark, read as the phone
 changing its look — `followPhoneLook` ignores look changes while the app is in the background.)
 **Me too (Haris, 2026-11-08: "Is the me page drawing on every open?"):** Me and its pages set a row again only when what it
 shows changed (`HomeView.applyMeList` — each row, the card and each block with a fingerprint); the self-test leaves Me for

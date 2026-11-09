@@ -116,14 +116,19 @@ try:
     hd = res.get('homeDateNative') or {}
     check(hd.get('sheet') == 'DateSheetVC', f'the date sheet opens (and the app is still running) {hd.get("sheet")}')
     tp, tps, tpc, tpb = res.get('tpageNative') or {}, res.get('tpageScrolledNative') or {}, res.get('tpageCommentsNative') or {}, res.get('tpageBackNative') or {}
-    # (the rule "only what changed changes": to another app and back redraws nothing, and the task page keeps its bands)
+    # (the rule "only what changed changes": to another app and back redraws nothing, and the task page keeps its Details)
     check(res.get('redrawsBefore') is not None and res.get('redrawsAfter') == res.get('redrawsBefore'), f"to another app and back: no screen drawn again {res.get('redrawsBefore')} → {res.get('redrawsAfter')}")
     # (a tab with its own Apple screen follows Home, locked: from a task, ‹ back — "+ New task" there through the slide, as
     #  at rest, on Home, My Tasks and the Inbox alike: Haris 2026-11-08)
     for k, name in (('home', 'Home'), ('mt', 'My Tasks'), ('ibx', 'the Inbox'), ('cl', 'Clients')):
       o, mid, end = res.get(f'slide_{k}_open'), res.get(f'slide_{k}_mid'), res.get(f'slide_{k}_end')
       check(o is True and mid is not None and mid == end, f'{name}: a task opened and ‹ back — "+ New task" as at rest all through the slide (open {o}, in the slide {mid}, after {end})')
-    check((res.get('awayBands') or 0) > 0, f"the task page's grey bands still there after coming back {res.get('awayBands')}")
+    check((res.get('awayCells') or 0) > 0, f"the task page's Details still on the page after coming back {res.get('awayCells')}")
+    # (Haris 2026-11-09, "Task page Details — fully Apple": Apple's own list cells in Apple's boxes, the creator as Apple's
+    #  grey footer at the very end)
+    _td = tp.get('details') or {}
+    check((_td.get('appleRows') or 0) >= 3 and (_td.get('sections') or 0) >= 2 and (_td.get('listCells') or 0) >= 3, f"the task page's Details: Apple's own list cells in Apple's boxes {_td}")
+    check(not _td.get('hasCreator') or (_td.get('foot') or '').startswith('Created by'), f"the task's creator as Apple's grey footer at the end of Details {_td.get('foot')}")
     check(tp.get('copy') is True and tp.get('copyTask') and tp.get('copyTask') == tp.get('title'), f"the app's own copy of the data is ready and gives the task page the server gives {({k: tp.get(k) for k in ('copy', 'copyTask', 'title')})}")
     tsd = res.get('tpageSwipeDetailsNative') or {}
     check(tsd.get('tab') == 'details' and tsd.get('compose') is False and tsd.get('pages') == 1, f"swiped from Comments: Details, no comment box {tsd}")

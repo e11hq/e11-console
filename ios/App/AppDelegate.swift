@@ -3045,7 +3045,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       //  waits: nothing may be drawn again for it, the rule "only what changed changes", Haris 2026-11-08)
       ("away", "return '{}'", { self.selfResult["redrawsBefore"] = Main.lookRedraws }),
       ("awayWait", pause(9000) + "return '{}'", nil),
-      ("awayBack", "return '{}'", { self.selfResult["redrawsAfter"] = Main.lookRedraws; self.selfResult["awayBands"] = self.taskPages.last.map { $0.bandsShown } ?? -1 }),
+      ("awayBack", "return '{}'", { self.selfResult["redrawsAfter"] = Main.lookRedraws; self.selfResult["awayCells"] = self.taskPages.last.map { $0.scroll.visibleCells.count } ?? -1 }),
       ("tpageSheet", pause(1500) + "return '{}'", { self.taskPages.last?.pickPeople() }),
       ("tpageComments", pause(5000) + "return '{}'", { self.presentedViewController?.dismiss(animated: false); self.taskPages.last?.setTab("comments", tell: true) }),
       // (Comments → Details as the swipe does it — for the film: nothing of Comments may show on Details on the way)
@@ -3130,7 +3130,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
           if name.hasPrefix("tpage") {
             let p = self.taskPages.last
             self.selfResult[name + "Native"] = ["pages": self.taskPages.count, "title": p?.model?["title"] as? String ?? "", "tab": p?.tab ?? "", "drawn": p?.model != nil,
-              "x": p?.transform.tx ?? -1, "tabBar": !self.tabBar.isHidden, "comments": self.cwebShown, "box": self.cbarIfMade.map { !$0.isHidden } ?? false, "compose": self.composeIfMade.map { !$0.isHidden } ?? false, "content": p?.scroll.contentSize.height ?? 0, "feed": (p?.feed?.model?["items"] as? [Any])?.count ?? -1, "corner": self.corner.kind, "sheet": self.presentedViewController.map { String(describing: type(of: $0)) } ?? "", "cornerW": self.corner.frame.width, "cornerX": self.corner.frame.maxX, "copy": AppData.shared.ready, "copyTask": p.map { AppData.shared.screen("task", $0.taskId).model?["title"] as? String ?? "" } ?? ""] as [String: Any]
+              "x": p?.transform.tx ?? -1, "tabBar": !self.tabBar.isHidden, "comments": self.cwebShown, "box": self.cbarIfMade.map { !$0.isHidden } ?? false, "compose": self.composeIfMade.map { !$0.isHidden } ?? false, "content": p?.scroll.contentSize.height ?? 0, "details": p?.detailsGeo() ?? [:], "feed": (p?.feed?.model?["items"] as? [Any])?.count ?? -1, "corner": self.corner.kind, "sheet": self.presentedViewController.map { String(describing: type(of: $0)) } ?? "", "cornerW": self.corner.frame.width, "cornerX": self.corner.frame.maxX, "copy": AppData.shared.ready, "copyTask": p.map { AppData.shared.screen("task", $0.taskId).model?["title"] as? String ?? "" } ?? ""] as [String: Any]
           }
           if ["me", "meTeam", "meAbout", "meProfile", "meTrash", "meBack"].contains(name) { let t = self.cornerTarget(); self.selfResult[name + "Native"] = self.meCtl.geo(corner: "\(t.0.kind),\(t.1.kind),\(t.2.kind)") }
           if name == "daily" { self.selfResult["dailyNative"] = ["sheet": self.presentedViewController.map { String(describing: type(of: $0)) } ?? ""] }

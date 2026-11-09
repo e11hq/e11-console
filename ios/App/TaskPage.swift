@@ -76,19 +76,18 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   var light = LAST_LIGHT { didSet { if light != oldValue { applyLook() } } }   // (only a real change of look draws the page again)
   private(set) var tab = "details"
 
-  // Details: Apple's list (step 2, Haris 2026-11-08) — each section, row group, note and heading a cell of iPhone's own
-  // collection list; Apple places them and animates what comes, goes and moves (our own placing and change animation
-  // taken out)
+  // Details: Apple's list (step 2, Haris 2026-11-08) — Apple places its cells and animates what comes, goes and changes
   let scroll: UICollectionView = {
     let cv = UICollectionView(frame: .zero, collectionViewLayout: UICollectionViewFlowLayout())
     cv.backgroundColor = .clear
-    cv.allowsSelection = false
     return cv
   }()
-  private var listDS: UICollectionViewDiffableDataSource<Int, String>?
-  private var listKeys: [String] = []
-  private var listViews: [String: UIView] = [:]
-  private var listGeo: [String: PageCell.Geo] = [:]
+  // (Haris 2026-11-09, "Task page Details — fully Apple": Apple's inset-grouped list — each row Apple's own list cell set
+  //  by Apple's configuration in Apple's boxes, Apple's headers, the creator as Apple's footer; ours, held in Apple's
+  //  cells, only what Apple has no part for — the client line, the title, the notes, the description, the files)
+  private var listDS: UICollectionViewDiffableDataSource<String, String>?
+  private var dSecs: [DSec] = []
+  private var dItems: [String: DItem] = [:]
   // the frost under the bar follows whichever list is showing (Details, the comments, a thread)
   // (Details · Comments is in Apple's own bar now — Haris 2026-11-08: the bar's frost and its line follow the list that's
   //  showing, Apple's firm frost as every Apple page)
@@ -114,7 +113,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   var onDescEditing: ((Bool) -> Void)?   // (iPhone's own bar: Done in place of ••• while it's written — AppleNav)
   var descEmpty = true
   private func holdForDesc() {
-    for b in blocks { b.isUserInteractionEnabled = !editingDesc || b === descBox }
+    for c in scroll.visibleCells { c.isUserInteractionEnabled = !editingDesc || descBox.isDescendant(of: c) }
     seg.isEnabled = !editingDesc
     updatePager()
   }
@@ -124,7 +123,6 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
   var onAttachFiles: (() -> Void)?
   var onAttachFrom: ((String) -> Void)?
   var onFileAction: (([String: Any], String) -> Void)?   // a file's "open" / "copy" / "download" (its touch-and-hold menu)   // (••• → Attach Files → Camera / Photos / Files)
-  private var filesBlock: UIView?
   // files uploading from the phone (Haris, 2026-11-02): cards in the Files row straight away, pulsing with their rings
   // ({ id, name, pending, thumbUrl: "local:…", sent }); each gives its place to the real one once the server has it
   private(set) var uploads: [[String: Any]] = []
@@ -243,10 +241,10 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     tv.becomeFirstResponder()
     if let pos = tv.closestPosition(to: p), !descEmpty { tv.selectedTextRange = tv.textRange(from: pos, to: pos) }
   }
-  private func relayAnimated() { UIView.animate(withDuration: 0.4, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) { self.layoutContent() } }
+  private func relayAnimated() { UIView.animate(withDuration: 0.4, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) { self.fitHosts(); self.scroll.layoutIfNeeded() } }
   func showFiles() {
-    guard let b = filesBlock, tab == "details", let k = listViews.first(where: { $0.value === b })?.key, let ip = listDS?.indexPath(for: k) else { return }
-    // (the Files block's bottom just above the bottom edge — Apple's list scrolls it there)
+    guard tab == "details", let ip = listDS?.indexPath(for: "files") ?? listDS?.indexPath(for: "attach") else { return }
+    // (the Files box's bottom just above the bottom edge — Apple's list scrolls it there)
     scroll.scrollToItem(at: ip, at: .bottom, animated: true)
   }
   let seg = UISegmentedControl(items: ["Details", "Comments"])
@@ -279,10 +277,30 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
       pager.addSubview(scroll)
     }
     scroll.setCollectionViewLayout(makeListLayout(), animated: false)
-    let reg = UICollectionView.CellRegistration<PageCell, String> { [weak self] cell, _, key in
-      cell.host(self?.listViews[key], self?.listGeo[key] ?? PageCell.Geo(x: 0, w: 0, h: 1, gap: 0))
+    let rowReg = UICollectionView.CellRegistration<UICollectionViewListCell, String> { [weak self] cell, _, key in
+      guard let self = self, let it = self.dItems[key] else { return }
+      if let c = it.content { cell.contentConfiguration = c }
+      cell.accessories = it.accessories
+      cell.isUserInteractionEnabled = !self.editingDesc
     }
-    listDS = UICollectionViewDiffableDataSource<Int, String>(collectionView: scroll) { cv, ip, key in cv.dequeueConfiguredReusableCell(using: reg, for: ip, item: key) }
+    let hostReg = UICollectionView.CellRegistration<HostCell, String> { [weak self] cell, _, key in
+      guard let self = self, let it = self.dItems[key] else { return }
+      cell.host(it.host, pad: it.pad, plain: it.plain)
+      cell.isUserInteractionEnabled = !self.editingDesc || it.host === self.descBox
+    }
+    listDS = UICollectionViewDiffableDataSource<String, String>(collectionView: scroll) { [weak self] cv, ip, key -> UICollectionViewCell? in
+      if self?.dItems[key]?.host != nil { return cv.dequeueConfiguredReusableCell(using: hostReg, for: ip, item: key) }
+      return cv.dequeueConfiguredReusableCell(using: rowReg, for: ip, item: key)
+    }
+    let head = UICollectionView.SupplementaryRegistration<UICollectionViewListCell>(elementKind: UICollectionView.elementKindSectionHeader) { [weak self] v, _, ip in
+      var c = UIListContentConfiguration.groupedHeader(); c.text = self?.dSec(ip.section)?.head; v.contentConfiguration = c
+    }
+    let foot = UICollectionView.SupplementaryRegistration<UICollectionViewListCell>(elementKind: UICollectionView.elementKindSectionFooter) { [weak self] v, _, ip in
+      var c = UIListContentConfiguration.groupedFooter(); c.text = self?.dSec(ip.section)?.foot; v.contentConfiguration = c
+    }
+    listDS?.supplementaryViewProvider = { cv, kind, ip in
+      kind == UICollectionView.elementKindSectionHeader ? cv.dequeueConfiguredReusableSupplementary(using: head, for: ip) : cv.dequeueConfiguredReusableSupplementary(using: foot, for: ip)
+    }
     // (the keyboard: the page scrolls up past it, so where you're writing in the description stays in sight — Haris
     //  2026-11-02)
     // (where the keyboard is: Apple's keyboard guide — a mark held to its top, so the page is laid out again, inside Apple's
@@ -331,7 +349,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
 
   private func applyLook() {
     // (the window already takes the app's own light / dark: everything here follows it)
-    backgroundColor = .systemBackground
+    backgroundColor = .systemGroupedBackground   // (Details in Apple's boxes: Apple's grouped background — Haris 2026-11-09)
     commentsHost.backgroundColor = .systemGroupedBackground
     // (the description's file chips are pictures: drawn again in the new look)
     if drawnOnce, !editingDesc, let m = model { Main.lookRedraws += 1; built = ""; draw(m) }
@@ -370,7 +388,10 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     if scroll.contentInset.top != barBottom { scroll.contentInset.top = barBottom; scroll.verticalScrollIndicatorInsets.top = barBottom; scroll.contentOffset.y = -barBottom }
     if scroll.verticalScrollIndicatorInsets.top != barBottom { scroll.verticalScrollIndicatorInsets.top = barBottom }
     scroll.verticalScrollIndicatorInsets.bottom = bottom + 8   // (down to just above the bottom edge)
-    layoutContent()
+    // (room under the list for Mark complete, and the keyboard or the description's format bar)
+    let inset = max(max(safeAreaInsets.bottom, 20) + (fab.isHidden ? 16 : 72), coverNow() + 16)
+    if scroll.contentInset.bottom != inset { scroll.contentInset.bottom = inset }
+    fitHosts()
   }
 
   // ---------- the tabs ----------
@@ -487,60 +508,12 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     // (built and laid out with no animation at all — drawn while something else animates (a sheet going, the app coming
     //  back), every new row was carried along and grew from nothing: the rows sliding. Haris's reading, 2026-11-03.
     //  Then only the page's own change animation, from where things were.)
-    listHold = true
+    // (then Apple's list told what came, went or changed — with its own animation once the page is on screen: applyList)
     UIView.performWithoutAnimation {
       CATransaction.begin(); CATransaction.setDisableActions(true)
       rebuild()
-      setNeedsLayout(); layoutIfNeeded()
       CATransaction.commit()
     }
-    // (then Apple's list told what came, went, moved or changed — with its own animation once the page is on screen)
-    listHold = false
-    layoutContent()
-  }
-  // Only the sections that changed are new (Haris 2026-11-03): each new section is matched with the one before it by
-  // what it is (its key) — when it shows just the same, the one already on the page stays and the new one is dropped.
-  // The ones holding the page's own pieces (the title, the description, the file rows) are always the new ones: those
-  // pieces move into them as they're built.
-  private func blockKey(_ b: UIView) -> String {
-    if let n = b.layer.name, n.hasPrefix("k:") { return n }
-    return String(describing: type(of: b)) + ":" + (TaskPage.firstText(b) ?? "")
-  }
-  private func holdsOwnPieces(_ b: UIView) -> Bool {
-    let own: [UIView] = [titleView, descBox, descView, descRead, filesStrip, descStrip, mentionBox]
-    return own.contains { $0 === b || $0.isDescendant(of: b) }
-  }
-  // each row its own cell of Apple's list (Haris 2026-11-08): a group's rows and the thin lines between them come out of
-  // the group as rows of the page, each knowing its group (for its width and the room after the group) — a row that
-  // changes, comes or goes is only that row. (A group holding the page's own pieces — the description, the files row —
-  // stays one.)
-  private var groupOf: [ObjectIdentifier: Int] = [:]
-  private func flattenGroups() {
-    var out: [UIView] = [], gid = 0
-    groupOf = [:]
-    for b in blocks {
-      guard let g = b as? PageGroup, !holdsOwnPieces(g) else { out.append(b); continue }
-      gid += 1
-      // (a row out of its group is placed by its frame in its cell, so it goes back to frame placing — the group had turned
-      //  that off, and with nothing holding it iPhone shrank it to its contents and moved it left: names cut off, icons
-      //  gone, values not on the right; Haris 2026-11-08)
-      for v in g.arrangedSubviews { g.removeArrangedSubview(v); v.removeFromSuperview(); v.translatesAutoresizingMaskIntoConstraints = true; groupOf[ObjectIdentifier(v)] = gid; out.append(v) }
-    }
-    blocks = out
-  }
-  private func keepUnchanged(_ old: [UIView]) {
-    var pool: [String: [UIView]] = [:]
-    for b in old where !holdsOwnPieces(b) && !(b is PageBand) { pool[blockKey(b), default: []].append(b) }
-    var kept = Set<ObjectIdentifier>()
-    for (i, b) in blocks.enumerated() where !holdsOwnPieces(b) {
-      let k = blockKey(b)
-      guard var list = pool[k], let j = list.firstIndex(where: { type(of: $0) == type(of: b) && TaskPage.sig($0) == TaskPage.sig(b) && $0.tag == b.tag }) else { continue }
-      let o = list.remove(at: j); pool[k] = list
-      blocks[i] = o; kept.insert(ObjectIdentifier(o))
-      groupOf[ObjectIdentifier(o)] = groupOf[ObjectIdentifier(b)]   // (the kept row takes the new one's place in its group)
-    }
-    // (the bands aren't sections of their own: placed again after this — placeBands)
-    for b in old where b !== titleView && !(b is PageBand) && !kept.contains(ObjectIdentifier(b)) && !blocks.contains(where: { $0 === b }) { b.removeFromSuperview() }
   }
   // (only drawn again when someone's picture or name really changed — photos arriving again and again redrew the whole
   //  page each time, the Files row and the lock note jumping by themselves; Haris 2026-11-02)
@@ -594,22 +567,16 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     top?.present(vc, animated: true)
   }
 
-  // the rows: built as views, laid out top to bottom
-  private var blocks: [UIView] = []
-  private var heights: [CGFloat] = []
   /* View only for everyone, the basics (Haris, 2026-11-01: "no one uses an iOS app to do the full process" — the
      Comments stay complete): title, notes, status / CD status, assignees with their ticks, dates, priority, client,
      description, checklist, subtasks, files (open to look at). Nothing on Details is changed from the phone. */
   static let viewOnly = true
-  // Full screen, no cards (Haris, 2026-11-02, from ClickUp's page): everything on one line 20 from the screen's edge —
-  // the title, the rows' icons, the section headings, the description, the files; sections split by a thin grey band
-  static let M: CGFloat = 20
   // the text: 16, as ClickUp's (rows, values, the description, section headings) — Haris 2026-11-02, side by side
   static let T: CGFloat = 16
   static func basic(_ m0: [String: Any]) -> [String: Any] {
     guard viewOnly else { return m0 }
     var m = m0
-    for k in ["creator", "parts", "tags", "channels", "clientApproval", "activity", "complete", "review2", "kids"] { m[k] = nil }   // (Guardian and Task Update show — Haris; and Needs CD review, switched by whoever's role allows it — Haris 2026-11-06)
+    for k in ["parts", "tags", "channels", "clientApproval", "activity", "complete", "review2", "kids"] { m[k] = nil }   // (Guardian and Task Update show — Haris; and Needs CD review, switched by whoever's role allows it — Haris 2026-11-06)
     // (Haris, 2026-11-02: these can be changed from the phone again, each by whoever's role allows it — the server's
     //  own can… say who: the title, Status, Task Update, Assignees, Priority, Client and the description; the rest stays
     //  view only)
@@ -629,11 +596,16 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     listLive = window != nil && drawnOnce && !isHidden && Date().timeIntervalSince(openedAt) > 0.8
     defer { drawnOnce = true }
     let typing = titleView.isFirstResponder
-    // (the sections as they are now — the ones that come out the same are kept as they are, Haris 2026-11-03)
-    let oldBlocks = blocks
-    blocks = []
-    let ro = (m["readOnly"] as? Bool) == true
-    // the head: subtask of… / the title (edited in place, looks the same)
+    // Details, fully Apple (Haris 2026-11-09, mock-up "Task page Details — fully Apple"): Apple's boxes with Apple's
+    // headers, each row Apple's own cell; the sections as they are now — only the ones whose drawing changed are set again
+    var secs: [DSec] = [], items: [String: DItem] = [:]
+    func add(_ key: String, head: String? = nil, _ list: [DItem]) {
+      guard !list.isEmpty else { return }
+      for it in list { items[it.key] = it }
+      secs.append(DSec(key: key, head: head, foot: nil, plain: list.allSatisfy { $0.plain }, items: list.map { $0.key }))
+    }
+    // ---- the head, ours on the page (no box): the client's dot and name, subtask of…, the title, the notes ----
+    var head: [DItem] = []
     // (the client's dot and name, at the top of Details — the middle of Apple's bar has Details · Comments: Haris
     //  2026-11-08)
     if let c = m["client"] as? [String: Any], let cn = c["name"] as? String, !cn.isEmpty {
@@ -642,81 +614,74 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
       NSLayoutConstraint.activate([d.widthAnchor.constraint(equalToConstant: 8), d.heightAnchor.constraint(equalToConstant: 8)])
       let l = label(cn, size: 15, color: .secondaryLabel, weight: .medium)
       let line = UIStackView(arrangedSubviews: [d, l, UIView()]); line.axis = .horizontal; line.alignment = .center; line.spacing = 7
-      line.layer.name = "k:client"; line.tag = 7
-      blocks.append(line)
+      head.append(hosted("client", line, pad: UIEdgeInsets(top: 0, left: 0, bottom: 4, right: 0)))
     }
     if let p = m["parent"] as? [String: Any], let pid = p["id"] as? String {
-      blocks.append(linkLine("Subtask of " + (p["title"] as? String ?? ""), sym: "arrow.turn.left.up") { [weak self] in self?.onOpen?(pid) })
+      head.append(hosted("parent", linkLine("Subtask of " + (p["title"] as? String ?? ""), sym: "arrow.turn.left.up") { [weak self] in self?.onOpen?(pid) }, pad: UIEdgeInsets(top: 0, left: 0, bottom: 6, right: 0)))
     }
     if !typing { titleView.text = m["title"] as? String ?? "" }
     titleView.isEditable = (m["canTitle"] as? Bool) == true
     titleView.textColor = (m["done"] as? Bool) == true ? .secondaryLabel : .label
-    blocks.append(titleView)
+    head.append(hosted("title", titleView, pad: UIEdgeInsets(top: 0, left: 0, bottom: 4, right: 0), sig: "\(titleView.text ?? "")|\(titleView.isEditable)|\((m["done"] as? Bool) == true)"))
     if let c = m["completed"] as? [String: Any] {
       var t = "Completed" + ((c["label"] as? String).map { $0.isEmpty ? "" : " on " + $0 } ?? "") + " — read only."
       if let left = c["left"] as? Int { t += " Goes to the Trash in \(left) day\(left == 1 ? "" : "s")." }
       var btns: [(String, () -> Void)] = []
       if (c["canFrom"] as? Bool) == true { btns.append(("New task from this", { [weak self] in guard let self = self else { return }; self.onEvent?(["ev": "from", "id": self.taskId]) })) }
       if (c["canReopen"] as? Bool) == true { btns.append(("Reopen", { [weak self] in guard let self = self else { return }; self.onAct?(["act": "reopen", "id": self.taskId]) })) }
-      blocks.append(note(sym: "checkmark.circle.fill", tint: .systemGreen, text: t, buttons: btns))
+      head.append(hosted("done", note(sym: "checkmark.circle.fill", tint: .systemGreen, text: t, buttons: btns), pad: UIEdgeInsets(top: 8, left: 0, bottom: 2, right: 0)))
     }
-    if let tn = m["trashNote"] as? String { blocks.append(note(sym: "trash", tint: .systemRed, text: tn, buttons: [])) }
+    if let tn = m["trashNote"] as? String { head.append(hosted("trash", note(sym: "trash", tint: .systemRed, text: tn, buttons: []), pad: UIEdgeInsets(top: 8, left: 0, bottom: 2, right: 0))) }
     if let l = m["lock"] as? [String: Any] {
       var btns: [(String, () -> Void)] = []
       if (l["from"] as? Bool) == true { btns.append(("New task from this", { [weak self] in guard let self = self else { return }; self.onEvent?(["ev": "from", "id": self.taskId]) })) }
-      blocks.append(note(sym: "lock.fill", tint: .systemOrange, text: l["text"] as? String ?? "", buttons: btns))
+      head.append(hosted("lock", note(sym: "lock.fill", tint: .systemOrange, text: l["text"] as? String ?? "", buttons: btns), pad: UIEdgeInsets(top: 8, left: 0, bottom: 2, right: 0)))
     }
     if let b = m["basedOn"] as? [String: Any], let bid = b["id"] as? String {
-      blocks.append(linkLine("New task from " + (b["title"] as? String ?? ""), sym: "link") { [weak self] in self?.onOpen?(bid) })
+      head.append(hosted("based", linkLine("New task from " + (b["title"] as? String ?? ""), sym: "link") { [weak self] in self?.onOpen?(bid) }, pad: UIEdgeInsets(top: 6, left: 0, bottom: 0, right: 0)))
     }
-    for k in (m["kids"] as? [[String: Any]]) ?? [] { if let kid = k["id"] as? String { blocks.append(linkLine("New task from this: " + (k["title"] as? String ?? ""), sym: "arrow.turn.down.right") { [weak self] in self?.onOpen?(kid) }) } }
-    // ---- the main group ----
-    var g: [UIView] = []
-    if let s = m["status"] as? [String: Any] { g.append(statusRow(s)) }
+    add("head", head)
+    // ---- three boxes, in today's order (Haris 2026-11-09): Status · Task Update · CD status / Assignees · Dates ·
+    //      Priority / Guardian · Finance · Client ----
+    var state: [DItem] = []
+    if let s = m["status"] as? [String: Any] { state.append(statusRow(s)) }
+    let canUp = (m["canFields"] as? Bool) == true
+    if (m["sub"] as? Bool) != true, m["update"] is [String: Any] || canUp { state.append(updateRow(m["update"] as? [String: Any], all: (m["updates"] as? [String]) ?? [], can: canUp)) }
     if let cd = m["cd"] as? [String: Any] {
       let chip = pill((cd["check"] as? Bool) == true ? "✓ " + (cd["label"] as? String ?? "") : cd["label"] as? String ?? "", fg: .white, bg: TaskPage.rgb(cd["rgb"]))
-      g.append(row(sym: "checkmark.shield", key: "CD status", value: chip))
+      state.append(row("cd", sym: "checkmark.shield", key: "CD status", value: chip))
     }
-    if let c = m["creator"] as? [String: Any], let cid = c["id"] as? String {
-      g.append(row(sym: "pencil", key: "Created by", value: personLine(cid, extra: (c["when"] as? String).map { " · " + $0 } ?? "")))
-    }
+    add("state", state)
+    var who3: [DItem] = []
     let asg = (m["assignees"] as? [[String: Any]]) ?? []
     let canAsg = (m["canAssign"] as? Bool) == true
-    g.append(row(sym: "person", key: "Assignees", value: asg.isEmpty ? greyText(canAsg ? "Add" : "Nobody yet") as UIView : avatars(asg), chevron: canAsg, tap: canAsg ? { [weak self] in self?.pickPeople() } : nil))
-    if let p = m["parts"] as? [String: Any] { g.append(partsRow(p)) }
-    if let d = m["dates"] as? [String: Any] { g.append(datesRow(d)) }
-    if let pr = m["prio"] as? [[String: Any]] { g.append(contentsOf: prioRows(pr, can: (m["canPrio"] as? Bool) == true)) }
+    who3.append(row("assignees", sym: "person", key: "Assignees", text: asg.isEmpty ? (canAsg ? "Add" : "Nobody yet") : nil, value: asg.isEmpty ? nil : avatars(asg), chevron: canAsg, tap: canAsg ? { [weak self] in self?.pickPeople() } : nil))
+    if let d = m["dates"] as? [String: Any] { who3.append(datesRow(d)) }
+    if let pr = m["prio"] as? [[String: Any]] { who3.append(contentsOf: prioRows(pr, can: (m["canPrio"] as? Bool) == true)) }
+    add("people", who3)
+    var owner: [DItem] = []
     // Guardian and Finance, above Client (Haris 2026-11-02): each changed by whoever's role allows it
     let canGd = (m["canGuardian"] as? Bool) == true
-    if let gd = m["guardian"] as? String { g.append(row(sym: "star", key: "Guardian", value: personLine(gd, extra: ""), chevron: canGd, tap: canGd ? { [weak self] in self?.pickGuardian() } : nil)) }
-    else if canGd { g.append(row(sym: "star", key: "Guardian", value: greyText("None"), chevron: true, tap: { [weak self] in self?.pickGuardian() })) }
+    if let gd = m["guardian"] as? String {
+      let who = gd == (m["me"] as? String) ? "You" : ((people[gd]?["name"] as? String) ?? name(gd))
+      owner.append(row("guardian", sym: "star", key: "Guardian", text: who, chevron: canGd, tap: canGd ? { [weak self] in self?.pickGuardian() } : nil))
+    } else if canGd { owner.append(row("guardian", sym: "star", key: "Guardian", text: "None", chevron: true, tap: { [weak self] in self?.pickGuardian() })) }
     if let fin = m["finance"] as? [String: Any] {
       let cur = fin["v"] as? String ?? ""
       let canFin = (m["canFinance"] as? Bool) == true
-      let v: UIView = cur.isEmpty ? greyText(canFin ? "None" : "–") : pill(cur, fg: TaskPage.rgb(fin["rgb"]), bg: TaskPage.rgb(fin["rgb"]).withAlphaComponent(0.16))
-      g.append(row(sym: "dollarsign.circle", key: "Finance", value: v, chevron: canFin, tap: canFin ? { [weak self] in self?.pickFinance(cur) } : nil))
+      owner.append(row("finance", sym: "dollarsign.circle", key: "Finance", text: cur.isEmpty ? (canFin ? "None" : "–") : nil, value: cur.isEmpty ? nil : pill(cur, fg: TaskPage.rgb(fin["rgb"]), bg: TaskPage.rgb(fin["rgb"]).withAlphaComponent(0.16)), chevron: canFin, tap: canFin ? { [weak self] in self?.pickFinance(cur) } : nil))
     }
     if (m["sub"] as? Bool) != true {
-      let c = m["client"] as? [String: Any]
+      let cl = m["client"] as? [String: Any]
       let v = UIStackView(); v.axis = .horizontal; v.spacing = 6; v.alignment = .center
-      if let c = c { let d = UIView(); d.backgroundColor = TaskPage.rgb(c["rgb"]); d.layer.cornerRadius = 4; d.widthAnchor.constraint(equalToConstant: 9).isActive = true; d.heightAnchor.constraint(equalToConstant: 9).isActive = true; v.addArrangedSubview(d) }
-      v.addArrangedSubview(label(c?["name"] as? String ?? "No client", size: TaskPage.T, color: .secondaryLabel))
+      if let cl = cl { let d = UIView(); d.backgroundColor = TaskPage.rgb(cl["rgb"]); d.layer.cornerRadius = 4; d.widthAnchor.constraint(equalToConstant: 8).isActive = true; d.heightAnchor.constraint(equalToConstant: 8).isActive = true; v.addArrangedSubview(d) }
+      v.addArrangedSubview(label(cl?["name"] as? String ?? "No client", size: 17, color: .secondaryLabel))
       if m["lock"] is [String: Any] { v.addArrangedSubview(symbol("lock.fill", 12, .secondaryLabel)) }
       let canCl = (m["canClient"] as? Bool) == true
-      g.append(row(sym: "square.grid.2x2", key: "Client", value: v, chevron: canCl, tap: canCl ? { [weak self] in self?.pickClient() } : nil))
+      owner.append(row("client", sym: "square.grid.2x2", key: "Client", value: v, chevron: canCl, tap: canCl ? { [weak self] in self?.pickClient() } : nil))
     }
-    let tags = (m["tags"] as? [[String: Any]]) ?? []
-    let canTags = (m["canTags"] as? Bool) == true
-    if !tags.isEmpty || canTags { g.append(row(sym: "tag", key: "Tags", value: tags.isEmpty ? greyText("Add") as UIView : chips(tags.map { ($0["t"] as? String ?? "", TaskPage.rgb($0["rgb"])) }), chevron: canTags, tap: canTags ? { [weak self] in self?.pickTags() } : nil)) }
-    let ch = (m["channels"] as? [String]) ?? []
-    let canCh = (m["canChannels"] as? Bool) == true
-    if !ch.isEmpty || canCh { g.append(row(sym: "paperplane", key: "Channels", value: label(ch.isEmpty ? "None" : ch.joined(separator: " · "), size: TaskPage.T, color: .secondaryLabel), chevron: canCh, tap: canCh ? { [weak self] in self?.pickChannels() } : nil)) }
-    // (view only: the Task Update under Status)
-    let canUp = (m["canFields"] as? Bool) == true
-    if TaskPage.viewOnly, (m["sub"] as? Bool) != true, m["update"] is [String: Any] || canUp { g.insert(updateRow(m["update"] as? [String: Any], all: (m["updates"] as? [String]) ?? [], can: canUp), at: min(g.count, 1)) }
-    blocks.append(group(g))
+    add("owner", owner)
     // ---- Review ----
-    var r: [UIView] = []
     if let rv = m["review"] as? [String: Any] {
       let sw = UISwitch(); sw.isOn = (rv["on"] as? Bool) == true; sw.isEnabled = (rv["canSet"] as? Bool) == true
       let noCD = (rv["noCD"] as? Bool) == true
@@ -730,79 +695,60 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
           self.toast("No CD set")
           return
         }
+        self.tintCDName(sw.isOn)
         self.onAct?(["act": "needsCD", "id": self.taskId, "value": sw.isOn])
       }, for: .valueChanged)
-      let who = rv["who"] as? String ?? ""   // (the CD's name — or the Acting CD's — on and off: Haris 2026-11-06)
-      let cdRow = row(sym: "checkmark.shield", key: "Needs CD review", sub: who.isEmpty ? nil : who, value: sw)
-      // (the CD's name in the same blue as a person's name on the Priority rows — only while the switch is on; grey when
-      //  it's off — Haris 2026-11-08; it turns as the switch is flicked)
-      if !who.isEmpty, let l = findKey(cdRow, who) {
-        l.textColor = sw.isOn ? .systemBlue : .secondaryLabel
-        sw.addAction(UIAction { [weak sw, weak l] _ in guard let sw = sw, let l = l else { return }; UIView.transition(with: l, duration: 0.2, options: .transitionCrossDissolve) { l.textColor = sw.isOn ? .systemBlue : .secondaryLabel } }, for: .valueChanged)
-      }
-      r.append(cdRow)
+      // (the CD's name — or the Acting CD's — as the cell's second line: blue while the switch is on, grey when it's off,
+      //  turning as it's flicked — Haris 2026-11-06 / 11-08)
+      let who = rv["who"] as? String ?? ""
+      add("review", head: "REVIEW", [row("needsCD", sym: "checkmark.shield", key: "Needs CD review", sub: who.isEmpty ? nil : who, subColor: sw.isOn ? .systemBlue : .secondaryLabel, value: sw, extra: "\(noCD)")])
     }
-    if let ca = m["clientApproval"] as? [String: Any] { r.append(clientApprovalRow(ca)) }
-    if (m["sub"] as? Bool) != true && !TaskPage.viewOnly { r.append(updateRow(m["update"] as? [String: Any], all: (m["updates"] as? [String]) ?? [], can: (m["canFields"] as? Bool) == true)) }
-    if !r.isEmpty { blocks.append(header("Review")); blocks.append(group(r)) }
-    // ---- Description ----
+    // ---- Description: Apple's box with its header; the words in it ours (written right in it — DescEditor.swift) ----
     let desc = m["desc"] as? String ?? ""
     let canDesc = (m["canDesc"] as? Bool) == true
-    // (no description, view only: "Add description…" for whoever may write one — tapped, written right there — and
-    //  "No description" in grey for everyone else; Haris 2026-11-02)
-    // (and whoever may change it writes right in it — tapped, the keyboard; a long one shows its first lines with an
-    //  Expand button, once: expanded, it stays so — Haris 2026-11-02)
+    // (no description: "Add description…" for whoever may write one — tapped, written right there — and "No description"
+    //  in grey for everyone else; a long one shows its first lines with Show More, once — Haris 2026-11-02)
     let noDesc = desc.isEmpty && ((m["descFiles"] as? [[String: Any]]) ?? []).isEmpty
     let rich: NSAttributedString = {
       let r = DescEditor.attributed((m["descRuns"] as? [[String: Any]]) ?? [], done: (m["done"] as? Bool) == true, size: TaskPage.T, creator: ((model?["creator"] as? [String: Any])?["id"] as? String))
       return r.length > 0 || !noDesc && desc.isEmpty ? r : NSAttributedString(string: desc, attributes: [.font: UIFont.systemFont(ofSize: TaskPage.T), .foregroundColor: UIColor.label])
     }()
-    if TaskPage.viewOnly && (canDesc || editingDesc) {
+    var descSig: String?
+    if canDesc || editingDesc {
       let tv = descView
       if !editingDesc { tv.attributedText = desc.isEmpty ? NSAttributedString(string: "Add description…", attributes: [.font: UIFont.systemFont(ofSize: TaskPage.T), .foregroundColor: UIColor.tertiaryLabel]) : rich }
       descEmpty = desc.isEmpty
       tv.isEditable = true
-      descBox.hold(tv); blocks.append(descBox); descStripAfter(m)
-    } else if TaskPage.viewOnly && noDesc {
+      descBox.hold(tv); descSig = "write|" + tv.attributedText.string
+    } else if noDesc {
       descRead.attributedText = NSAttributedString(string: "No description", attributes: [.font: UIFont.systemFont(ofSize: TaskPage.T), .foregroundColor: UIColor.tertiaryLabel])
-      descBox.hold(descRead); blocks.append(descBox)
-    } else if TaskPage.viewOnly && rich.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+      descBox.hold(descRead); descSig = "none"
+    } else if !rich.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
       descRead.attributedText = rich
-      descBox.hold(descRead); blocks.append(descBox); descStripAfter(m)
+      descBox.hold(descRead); descSig = "read|" + rich.string
     }
-    if !TaskPage.viewOnly && (!desc.isEmpty || canDesc || editingDesc) {
-      blocks.append(header("Description", lock: m["lock"] is [String: Any]))
-      // (edited right where it is, looking the same — DescEditor.swift)
-      let tv = descView
-      if !editingDesc { tv.attributedText = desc.isEmpty ? NSAttributedString(string: "Add a description… Type @ to mention someone", attributes: [.font: UIFont.systemFont(ofSize: TaskPage.T), .foregroundColor: UIColor.tertiaryLabel]) : DescEditor.attributed((m["descRuns"] as? [[String: Any]]) ?? [], done: (m["done"] as? Bool) == true, size: TaskPage.T, creator: ((model?["creator"] as? [String: Any])?["id"] as? String)) }
-      descEmpty = desc.isEmpty
-      tv.isEditable = canDesc
-      blocks.append(group([pad(tv)]))
+    if let s = descSig {
+      descStripAfter(m)
+      add("desc", head: "DESCRIPTION", [hosted("desc", descBox, pad: UIEdgeInsets(top: 11, left: -1, bottom: 11, right: -1), plain: false, sig: s)])
     }
     // ---- Subtasks ----
     let subs = (m["subtasks"] as? [[String: Any]]) ?? []
     let canAddSub = (m["canAddSub"] as? Bool) == true
     if !subs.isEmpty || canAddSub {
-      blocks.append(header(subs.isEmpty ? "Subtasks" : "Subtasks · \(subs.filter { ($0["done"] as? Bool) == true }.count)/\(subs.count)"))
-      var rows = subs.map { subRow($0, ro: ro) }
-      if canAddSub { rows.append(addRow("Add subtask") { [weak self] in self?.askText("Add subtask", placeholder: "Subtask name") { v in guard let self = self else { return }; self.onAct?(["act": "addSub", "id": self.taskId, "value": v]) } }) }
-      blocks.append(group(rows))
+      var rows = subs.map { subRow($0) }
+      if canAddSub { rows.append(addRow("addSub", "Add Subtask") { [weak self] in self?.askText("Add subtask", placeholder: "Subtask name") { v in guard let self = self else { return }; self.onAct?(["act": "addSub", "id": self.taskId, "value": v]) } }) }
+      add("subs", head: subs.isEmpty ? "SUBTASKS" : "SUBTASKS · \(subs.filter { ($0["done"] as? Bool) == true }.count)/\(subs.count)", rows)
     }
     // ---- Checklist ----
     let cl = (m["checklist"] as? [[String: Any]]) ?? []
     let canAddCheck = (m["canAddCheck"] as? Bool) == true
     if !cl.isEmpty || canAddCheck {
-      blocks.append(header(cl.isEmpty ? "Checklist" : "Checklist · \(cl.filter { ($0["done"] as? Bool) == true }.count)/\(cl.count)"))
       var rows = cl.map { checkRow($0, can: (m["canCheck"] as? Bool) == true) }
-      if canAddCheck { rows.append(addRow("Add checklist item") { [weak self] in self?.askText("Add checklist item", placeholder: "Item") { v in guard let self = self else { return }; self.onAct?(["act": "addCheck", "id": self.taskId, "value": v]) } }) }
-      blocks.append(group(rows))
+      if canAddCheck { rows.append(addRow("addCheck", "Add Item") { [weak self] in self?.askText("Add checklist item", placeholder: "Item") { v in guard let self = self else { return }; self.onAct?(["act": "addCheck", "id": self.taskId, "value": v]) } }) }
+      add("checks", head: cl.isEmpty ? "CHECKLIST" : "CHECKLIST · \(cl.filter { ($0["done"] as? Bool) == true }.count)/\(cl.count)", rows)
     }
-    // ---- the description, view only: straight on the page like the title, in the body size, above Files — no box,
-    //      no heading (Haris, 2026-11-01) ----
-    // (shown above, in its box)
-    // (files pasted into the description: the same cards as comments' — tapped, the preview with them)
-    // (now straight under the description — Haris 2026-11-02 — set up there)
-    // ---- Files ---- the task's and the comments' together, one row of cards that scrolls sideways (Haris, 2026-11-02)
+    // ---- Files ---- the task's and the comments' together, one row of cards that scrolls sideways (Haris, 2026-11-02),
+    //      in Apple's box; Attach Files as Apple's cell under them
     //      Yours uploading: in the row at once (after the task's own), then the real one in its place, no jump.
     let own = (m["files"] as? [[String: Any]]) ?? [], fromComments = (m["commentFiles"] as? [[String: Any]]) ?? []
     var settle = Set<String>()
@@ -818,36 +764,25 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     let shown = own + uploads + fromComments
     let canAttach = (m["readOnly"] as? Bool) != true
     if !files.isEmpty || canAttach || !uploads.isEmpty {
-      blocks.append(header(files.isEmpty ? "Files" : "Files · \(files.count)", sym: UIImage(systemName: "photo.stack") != nil ? "photo.stack" : "photo.on.rectangle"))   // (Haris chose photo.stack, 2026-11-02)
-      var fr: [UIView] = []
+      var fr: [DItem] = []
       let real = shown.filter { ($0["pending"] as? Bool) != true }
       let at: (Int) -> Int = { i in real.firstIndex { ($0["id"] as? String) == (shown[i]["id"] as? String) } ?? 0 }
       ownFileIds = canAttach ? Set(own.compactMap { $0["id"] as? String }) : []
       filesStrip.set(shown, settle: settle, open: { [weak self] i in self?.onOpenFiles?(real, at(i)) }, menu: { [weak self] i in self?.fileMenu(real, at(i)) })
-      if !shown.isEmpty { fr.append(pad(filesStrip, right: 0)) }
-      if canAttach { fr.append(addRow("Attach Files") { [weak self] in self?.attachSheet() }) }
-      let fg = group(fr); filesBlock = fg
-      blocks.append(fg)
+      // (the strip keeps itself up to date; its cell is set again only when it comes or goes)
+      if !shown.isEmpty { fr.append(hosted("files", filesStrip, pad: UIEdgeInsets(top: 12, left: -1, bottom: 12, right: 0), plain: false, sig: "strip")) }
+      if canAttach { fr.append(addRow("attach", "Attach Files", sym: "paperclip") { [weak self] in self?.attachSheet() }) }
+      add("files", head: files.isEmpty ? "FILES" : "FILES · \(files.count)", fr)
     }
-    // ---- Activity ----
-    let act = (m["activity"] as? [[String: Any]]) ?? []
-    if !act.isEmpty {
-      blocks.append(header("Activity"))
-      let lines = act.prefix(12).map { a -> UIView in
-        let who = (a["who"] as? String).map { name($0) } ?? "Someone"
-        let s = NSMutableAttributedString(string: who, attributes: [.font: UIFont.systemFont(ofSize: 14, weight: .semibold), .foregroundColor: UIColor.label])
-        s.append(NSAttributedString(string: " " + (a["text"] as? String ?? ""), attributes: [.font: UIFont.systemFont(ofSize: 14), .foregroundColor: UIColor.secondaryLabel]))
-        s.append(NSAttributedString(string: " · " + TaskPage.when(a["at"] as? String ?? ""), attributes: [.font: UIFont.systemFont(ofSize: 14), .foregroundColor: UIColor.tertiaryLabel]))
-        let l = UILabel(); l.attributedText = s; l.numberOfLines = 0
-        return pad(l, v: 9)
-      }
-      blocks.append(group(lines))
+    // ---- who made the task: Apple's grey footer at the very end, small and out of the way (Haris 2026-11-09: "Bottom") ----
+    if let cr = m["creator"] as? [String: Any], let cid = cr["id"] as? String, !secs.isEmpty {
+      let who = cid == (m["me"] as? String) ? "you" : ((people[cid]?["name"] as? String) ?? name(cid))
+      let when = cr["when"] as? String ?? ""
+      secs[secs.count - 1].foot = "Created by " + who + (when.isEmpty ? "" : " · " + when)
     }
-    flattenGroups()
-    keepUnchanged(oldBlocks)
     // Mark complete: only when this person may complete it
     if let c = m["complete"] as? [String: Any], (c["show"] as? Bool) == true { fab.isHidden = false } else { fab.isHidden = true }
-    layoutContent()
+    applyList(secs, items)
   }
   // Turn off link, or Turn on link (blue, open lock) when it's off
   private func linkAction(_ f: [String: Any]) -> UIAction {
@@ -870,83 +805,75 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     }
     return UIMenu(title: f["name"] as? String ?? "", children: items)
   }
-  // each section's place in the list: across the page or on its edge, its height and the room after it (as the page had
-  // them); the list told only when something really changed
-  private var listLive = false, listHold = false
-  private func layoutContent() {
-    let W = bounds.width, M = TaskPage.M
-    guard W > 0, !listHold else { return }
-    placeBands()
-    holdForDesc()
-    var keys: [String] = [], views: [String: UIView] = [:], geo: [String: PageCell.Geo] = [:], seen: [String: Int] = [:]
-    for (k, b) in blocks.enumerated() {
-      // (rows and bands go right across; the files row from the page edge to the screen's; the rest on the page edge)
-      let member = groupOf[ObjectIdentifier(b)]
-      let full = member != nil || b is PageGroup || b is PageBand
-      let x: CGFloat = full ? 0 : M, w = full ? W : (b === descStrip ? W - M : W - 2 * M)
-      var h: CGFloat
-      if b === titleView { h = ceil(titleView.sizeThatFits(CGSize(width: w, height: .greatestFiniteMagnitude)).height) }
-      else if b is PageBand { h = 8 }
-      else {
-        if b.bounds.width != w { b.bounds.size.width = w }
-        b.setNeedsLayout(); b.layoutIfNeeded()
-        h = b.systemLayoutSizeFitting(CGSize(width: w, height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height
-      }
-      h = ceil(h)
-      let next = k + 1 < blocks.count ? blocks[k + 1] : nil
-      let sameGroup = member != nil && next.map { groupOf[ObjectIdentifier($0)] } == member
-      let gap: CGFloat = sameGroup ? 0 : (b is PageBand || next is PageBand ? (b is PageBand ? 10 : 6) : b.tag == 7 ? 4 : (b is PageGroup || member != nil) ? 4 : 10)
-      let base = listKey(b, next: next)
-      let n = seen[base, default: 0]; seen[base] = n + 1
-      let key = n == 0 ? base : base + "#\(n)"
-      keys.append(key); views[key] = b
-      geo[key] = PageCell.Geo(x: x, w: w, h: h, gap: gap, top: b === titleView ? 2 : 0)
+  // Details in Apple's list: the sections and their items as they are now; Apple told only what changed — new items
+  // and gone ones (Apple's own animation once the page is on screen), and the items whose drawing changed set again
+  private var listLive = false
+  private func dSec(_ i: Int) -> DSec? { i >= 0 && i < dSecs.count ? dSecs[i] : nil }
+  private func applyList(_ secs: [DSec], _ items: [String: DItem]) {
+    var changed: [String] = []
+    for (k, it) in items {
+      guard let old = dItems[k] else { continue }
+      // (a piece of ours showing just the same: the one already in its cell stays)
+      if old.sig == it.sig { if it.host != nil, let h = old.host { it.host = h } } else { changed.append(k) }
     }
-    let bottom = max(safeAreaInsets.bottom, 20) + (fab.isHidden ? 16 : 72)
-    let inset = max(bottom, coverNow() + 16)
-    if scroll.contentInset.bottom != inset { scroll.contentInset.bottom = inset }
-    // (what changed: the order, a section put in place of another under the same key, or a height)
-    let changed = keys.filter { k in listViews[k] !== views[k] || listGeo[k] != geo[k] }
-    let same = keys == listKeys && changed.isEmpty
-    listViews = views; listGeo = geo
-    if same { return }
-    let order = keys != listKeys
-    listKeys = keys
+    let shape = { (s: [DSec]) in s.map { "\($0.key)|\($0.head != nil)|\($0.foot != nil)|\($0.plain)" } }
+    let reshaped = shape(secs) != shape(dSecs)
+    dItems = items; dSecs = secs
     guard let ds = listDS else { return }
-    scroll.collectionViewLayout.invalidateLayout()   // (the places as they are now)
-    var snap = NSDiffableDataSourceSnapshot<Int, String>()
-    snap.appendSections([0]); snap.appendItems(keys, toSection: 0)
+    if reshaped { scroll.collectionViewLayout.invalidateLayout() }   // (a header or footer come or gone)
+    var snap = NSDiffableDataSourceSnapshot<String, String>()
+    for s in secs { snap.appendSections([s.key]); snap.appendItems(s.items, toSection: s.key) }
     let had = Set(ds.snapshot().itemIdentifiers)
-    snap.reconfigureItems(changed.filter { had.contains($0) })
-    // (inside an animation of its own — the description growing — Apple's list goes along with it)
-    let animated = order ? listLive : (listLive || UIView.inheritedAnimationDuration > 0)
-    ds.apply(snap, animatingDifferences: animated && window != nil)
+    let again = changed.filter { had.contains($0) }
+    if !again.isEmpty { snap.reconfigureItems(again) }
+    ds.apply(snap, animatingDifferences: listLive && window != nil)
+    refreshSupp()
   }
-  // Apple's list laid out with each section's exact place — its height known, nothing guessed and corrected as it comes
-  // into sight (Haris 2026-11-08: a section reaching the bottom edge came in squeezed and then grew, as the long sheets'
-  // last row once did)
-  private func makeListLayout() -> UICollectionViewLayout {
-    UICollectionViewCompositionalLayout { [weak self] _, env in
-      let W = env.container.contentSize.width
-      var frames: [NSCollectionLayoutGroupCustomItem] = [], y: CGFloat = 0
-      for k in self?.listKeys ?? [] {
-        let h = self?.listGeo[k].map { $0.top + $0.h + $0.gap } ?? 1
-        frames.append(NSCollectionLayoutGroupCustomItem(frame: CGRect(x: 0, y: y, width: W, height: h)))
-        y += h
+  // a header's or the footer's words changed (Subtasks · 1/3 → 2/3): set again where they show
+  private func refreshSupp() {
+    for kind in [UICollectionView.elementKindSectionHeader, UICollectionView.elementKindSectionFooter] {
+      for ip in scroll.indexPathsForVisibleSupplementaryElements(ofKind: kind) {
+        guard let v = scroll.supplementaryView(forElementKind: kind, at: ip) as? UICollectionViewListCell, var c = v.contentConfiguration as? UIListContentConfiguration else { continue }
+        let want = kind == UICollectionView.elementKindSectionHeader ? dSec(ip.section)?.head : dSec(ip.section)?.foot
+        if c.text != want { c.text = want; v.contentConfiguration = c }
       }
-      let group = NSCollectionLayoutGroup.custom(layoutSize: NSCollectionLayoutSize(widthDimension: .fractionalWidth(1), heightDimension: .absolute(max(y, 1)))) { _ in frames }
-      return NSCollectionLayoutSection(group: group)
     }
   }
-  // a section's key: what it is (the title, the description, a heading's words, a row group by its first row…); a band by
-  // what comes after it, so it goes with it
-  private func listKey(_ b: UIView, next: UIView?) -> String {
-    if b === titleView { return "title" }
-    if b is DescBox { return "desc" }
-    if b === descStrip { return "dstrip" }
-    if b is PageBand { return "band>" + (next.map { listKey($0, next: nil) } ?? "end") }
-    if b.layer.name == "k:sep" { return "sep>" + (next.map { listKey($0, next: nil) } ?? "end") }
-    return blockKey(b)
+  // Apple's inset-grouped list: Apple's boxes, headers and footer; the head (the title and its line) without a box
+  private func makeListLayout() -> UICollectionViewLayout {
+    UICollectionViewCompositionalLayout { [weak self] i, env in
+      let s = self?.dSec(i)
+      var c = UICollectionLayoutListConfiguration(appearance: .insetGrouped)
+      c.backgroundColor = .clear
+      c.headerMode = s?.head != nil ? .supplementary : .none
+      c.footerMode = s?.foot != nil ? .supplementary : .none
+      c.showsSeparators = !(s?.plain ?? false)
+      return NSCollectionLayoutSection.list(using: c, layoutEnvironment: env)
+    }
+  }
+  // a piece of ours that changed height in its Apple cell (the title being typed, the description opened or written):
+  // Apple's own self-sizing told, and the list follows
+  private func fitHosts() {
+    for case let c as HostCell in scroll.visibleCells where c.needsFit { c.invalidateIntrinsicContentSize() }
+  }
+  // the self-test: Details as Apple's list — its headers, Apple's cells, the creator's footer
+  func detailsGeo() -> [String: Any] {
+    ["sections": dSecs.count, "heads": dSecs.compactMap { $0.head }, "appleRows": dItems.values.filter { $0.host == nil }.count,
+     "hosted": dItems.values.filter { $0.host != nil }.count, "foot": dSecs.last?.foot ?? "", "hasCreator": model?["creator"] is [String: Any],
+     "cells": scroll.visibleCells.count, "listCells": scroll.visibleCells.filter { !($0 is HostCell) }.count]
+  }
+  func collectionView(_ cv: UICollectionView, shouldHighlightItemAt ip: IndexPath) -> Bool {
+    guard cv === scroll, !editingDesc, let k = listDS?.itemIdentifier(for: ip) else { return false }
+    return dItems[k]?.tap != nil
+  }
+  func collectionView(_ cv: UICollectionView, shouldSelectItemAt ip: IndexPath) -> Bool {
+    guard cv === scroll, !editingDesc, let k = listDS?.itemIdentifier(for: ip) else { return false }
+    return dItems[k]?.tap != nil
+  }
+  func collectionView(_ cv: UICollectionView, didSelectItemAt ip: IndexPath) {
+    guard cv === scroll, let k = listDS?.itemIdentifier(for: ip) else { return }
+    cv.deselectItem(at: ip, animated: true)
+    dItems[k]?.tap?()
   }
   // how much of the page the keyboard covers (Apple's keyboard guide)
   private let kbMark = UIView()
@@ -982,30 +909,6 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     return c
   }
 
-  // a thin grey band before each section (a heading), and before the description — none at the top, never two together
-  // (each band kept by what comes after it — the same band stays with its section; Haris 2026-11-08: bands handed round by
-  //  position were taken off the page on a redraw, coming back from another app, and didn't come back)
-  private var bands: [String: PageBand] = [:]
-  var bandsShown: Int { bands.values.filter { $0.window != nil }.count }   // (the self-test: the bands still on the page)
-  private func placeBands() {
-    blocks.removeAll { $0 is PageBand }
-    var out: [UIView] = [], used = Set<String>()
-    for b in blocks {
-      let isDesc = b is DescBox
-      let heading = b is PageHeading
-      if heading || isDesc, let prev = out.last, !(prev is PageBand), prev !== titleView {
-        var k = listKey(b, next: nil), n = 1
-        while used.contains(k) { k = listKey(b, next: nil) + "#\(n)"; n += 1 }
-        used.insert(k)
-        let band = bands[k] ?? PageBand(); bands[k] = band
-        out.append(band)
-      }
-      out.append(b)
-    }
-    for (k, b) in bands where !used.contains(k) { b.removeFromSuperview(); bands[k] = nil }
-    blocks = out
-  }
-
   // ---------- row pieces ----------
   private func label(_ t: String, size: CGFloat, color: UIColor, weight: UIFont.Weight = .regular) -> UILabel {
     let l = UILabel(); l.text = t; l.font = .systemFont(ofSize: size, weight: weight); l.textColor = color; return l
@@ -1015,78 +918,48 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     let i = UIImageView(image: UIImage(systemName: s, withConfiguration: UIImage.SymbolConfiguration(pointSize: size, weight: weight)))
     i.tintColor = c; i.contentMode = .center; i.setContentHuggingPriority(.required, for: .horizontal); return i
   }
-  private func header(_ t: String, lock: Bool = false, sym: String? = nil) -> UIView {
-    let l = label(t, size: TaskPage.T, color: .secondaryLabel)
-    let s = PageHeading(arrangedSubviews: sym.map { [symbol($0, 14, .secondaryLabel), l] } ?? [l]); s.spacing = 5; s.alignment = .center
-    if lock { s.addArrangedSubview(symbol("lock.fill", 10, .secondaryLabel)) }
-    s.addArrangedSubview(UIView())
-    s.isLayoutMarginsRelativeArrangement = true
-    // (its own 4 pt on top and nothing else: by default iPhone adds the screen's safe area to a view's margins, so a
-    //  heading near the bottom edge (the home bar's area) grew by it — measured there it left a gap above its group, and
-    //  scrolling past the edge it moved and was cut off — Haris 2026-11-08)
-    s.insetsLayoutMarginsFromSafeArea = false
-    s.layoutMargins = UIEdgeInsets(top: 4, left: 0, bottom: 0, right: 0)
-    s.tag = 7   // (closer to its group)
-    return s
+  // ---------- Details' rows: Apple's own list cells, set by Apple's configuration ----------
+  // icon · name (· a small line under it) · value · › — the value Apple's text, or ours where Apple has no part (a chip,
+  // the faces, the dates' two buttons, a switch), shown by Apple's cell as its accessory
+  private func row(_ id: String, sym: String, key: String, keyText: NSAttributedString? = nil, sub: String? = nil, subColor: UIColor = .secondaryLabel, text: String? = nil, value: UIView? = nil, chevron: Bool = false, extra: String = "", tap: (() -> Void)? = nil) -> DItem {
+    var c: UIListContentConfiguration = sub != nil ? .subtitleCell() : (text != nil && value == nil ? .valueCell() : .cell())
+    c.image = UIImage(systemName: sym)
+    c.imageProperties.tintColor = .secondaryLabel
+    if let k = keyText { c.attributedText = k } else { c.text = key }
+    var v = value
+    if let s = sub {
+      c.secondaryText = s; c.secondaryTextProperties.color = subColor; c.secondaryTextProperties.font = .preferredFont(forTextStyle: .footnote)
+      if v == nil, let t = text { v = label(t, size: 17, color: .secondaryLabel) }   // (a line under the name and a value: the value on the right)
+    } else if v == nil, let t = text { c.secondaryText = t }
+    let it = DItem(id)
+    it.content = c
+    if let v = v { it.accessories.append(.customView(configuration: .init(customView: v, placement: .trailing(), reservedLayoutWidth: .actual))) }
+    if chevron { it.accessories.append(.disclosureIndicator()) }
+    it.tap = tap
+    it.sig = [sym, key, keyText?.string ?? "", sub ?? "", TaskPage.cs(subColor, traitCollection), text ?? "", "\(chevron)", "\(tap != nil)", extra, v.map { TaskPage.sig($0) } ?? ""].joined(separator: "|")
+    return it
   }
-  private func pad(_ v: UIView, v vv: CGFloat = 12, right: CGFloat = TaskPage.M) -> UIView {
-    let b = UIView(); v.translatesAutoresizingMaskIntoConstraints = false; b.addSubview(v)
-    NSLayoutConstraint.activate([v.leadingAnchor.constraint(equalTo: b.leadingAnchor, constant: TaskPage.M), v.trailingAnchor.constraint(equalTo: b.trailingAnchor, constant: -right), v.topAnchor.constraint(equalTo: b.topAnchor, constant: vv), v.bottomAnchor.constraint(equalTo: b.bottomAnchor, constant: -vv)])
-    return b
+  // a row in the tint, as Apple's own "Add…" rows: Add Subtask, Add Item, Attach Files
+  private func addRow(_ id: String, _ t: String, sym: String = "plus", tap: @escaping () -> Void) -> DItem {
+    var c = UIListContentConfiguration.cell()
+    c.text = t; c.textProperties.color = .tintColor
+    c.image = UIImage(systemName: sym); c.imageProperties.tintColor = .tintColor
+    let it = DItem(id); it.content = c; it.tap = tap; it.sig = sym + "|" + t
+    return it
   }
-  // a rounded group of rows with thin lines between them (as iPhone's Settings)
-  private func group(_ rows: [UIView]) -> UIView {
-    let g = PageGroup(); g.axis = .vertical   // (full width, on the page itself — no card)
-    for (i, r) in rows.enumerated() {
-      if i > 0 {
-        let line = UIView(); line.backgroundColor = .separator
-        let wrap = UIView(); wrap.addSubview(line); line.translatesAutoresizingMaskIntoConstraints = false; wrap.layer.name = "k:sep"
-        NSLayoutConstraint.activate([line.leadingAnchor.constraint(equalTo: wrap.leadingAnchor, constant: TaskPage.M + 36), line.trailingAnchor.constraint(equalTo: wrap.trailingAnchor), line.topAnchor.constraint(equalTo: wrap.topAnchor), line.heightAnchor.constraint(equalToConstant: 1 / UIScreen.main.scale), wrap.heightAnchor.constraint(equalToConstant: 1 / UIScreen.main.scale)])
-        g.addArrangedSubview(wrap)
-      }
-      g.addArrangedSubview(r)
-    }
-    return g
-  }
-  // icon · name (· a small line under it) · value · › (only when it can be changed)
-  private func row(sym: String, key: String, sub: String? = nil, value: UIView?, chevron: Bool = false, keyLines: Int = 1, tap: (() -> Void)? = nil, menu: UIMenu? = nil) -> UIView {
-    let r = TaskRow()
-    let ic = symbol(sym, 16, .secondaryLabel)
-    ic.translatesAutoresizingMaskIntoConstraints = false
-    let k = label(key, size: TaskPage.T, color: .secondaryLabel); k.numberOfLines = keyLines   // (the names in their icons' grey — Haris, 2026-11-02)
-    k.setContentCompressionResistancePriority(.defaultHigh + 1, for: .horizontal)
-    let left = UIStackView(arrangedSubviews: [k]); left.axis = .vertical; left.spacing = 2
-    if let sub = sub { let s = label(sub, size: 13, color: .secondaryLabel); s.numberOfLines = 2; left.addArrangedSubview(s) }
-    let h = UIStackView(); h.axis = .horizontal; h.alignment = .center; h.spacing = 10
-    h.addArrangedSubview(left)
-    let spacer = UIView(); spacer.setContentHuggingPriority(.defaultLow - 1, for: .horizontal); h.addArrangedSubview(spacer)
-    if let v = value { v.setContentHuggingPriority(.required, for: .horizontal); h.addArrangedSubview(v) }
-    if chevron { h.addArrangedSubview(symbol("chevron.right", 13, .tertiaryLabel, weight: .semibold)) }
-    h.translatesAutoresizingMaskIntoConstraints = false
-    r.addSubview(ic); r.addSubview(h)
-    NSLayoutConstraint.activate([
-      ic.leadingAnchor.constraint(equalTo: r.leadingAnchor, constant: TaskPage.M), ic.widthAnchor.constraint(equalToConstant: 24), ic.centerYAnchor.constraint(equalTo: r.centerYAnchor),
-      h.leadingAnchor.constraint(equalTo: r.leadingAnchor, constant: TaskPage.M + 36), h.trailingAnchor.constraint(equalTo: r.trailingAnchor, constant: -TaskPage.M),
-      h.topAnchor.constraint(equalTo: r.topAnchor, constant: 11), h.bottomAnchor.constraint(equalTo: r.bottomAnchor, constant: -11),
-      r.heightAnchor.constraint(greaterThanOrEqualToConstant: 52),
-    ])
-    r.onTap = tap
-    if let menu = menu { r.attachMenu(menu) }
-    return r
+  // a piece of ours, held in Apple's cell (pad: top / bottom as given; left / right -1 = Apple's cell margin)
+  private func hosted(_ id: String, _ v: UIView, pad: UIEdgeInsets, plain: Bool = true, sig: String? = nil) -> DItem {
+    let it = DItem(id); it.host = v; it.pad = pad; it.plain = plain
+    it.sig = sig ?? TaskPage.sig(v)
+    return it
   }
   private func pill(_ t: String, fg: UIColor, bg: UIColor) -> UIView {
     let l = PaddedLabel(); l.text = t; l.font = .systemFont(ofSize: 14, weight: .semibold); l.textColor = fg; l.backgroundColor = bg
     l.layer.cornerRadius = 9; l.layer.cornerCurve = .continuous; l.clipsToBounds = true; l.insets = UIEdgeInsets(top: 4, left: 10, bottom: 4, right: 10)
     return l
   }
-  private func chips(_ list: [(String, UIColor)]) -> UIView {
-    let s = UIStackView(); s.spacing = 6; s.alignment = .center
-    for (t, c) in list.prefix(3) { s.addArrangedSubview(pill(t, fg: c, bg: c.withAlphaComponent(0.16))) }
-    if list.count > 3 { s.addArrangedSubview(greyText("+\(list.count - 3)")) }
-    return s
-  }
   func name(_ id: String) -> String { (people[id]?["first"] as? String) ?? "Someone" }
-  private func avatar(_ id: String, _ side: CGFloat, ring: Bool = false) -> UIView {
+  private func avatar(_ id: String, _ side: CGFloat, ring: Bool = false, done: Bool = false) -> UIView {
     let p = people[id] ?? [:]
     let v = UIView(); v.layer.cornerRadius = side / 2; v.clipsToBounds = true
     v.backgroundColor = TaskPage.rgb(p["color"])
@@ -1098,13 +971,9 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
       let l = UILabel(); l.text = p["initials"] as? String ?? "?"; l.font = .systemFont(ofSize: side * 0.4, weight: .semibold); l.textColor = .white; l.textAlignment = .center
       l.frame = CGRect(x: 0, y: 0, width: side, height: side); v.addSubview(l)
     }
-    if ring { v.layer.borderWidth = 2; v.followLook("ring") { [weak v] tc in v?.layer.setBorder(.secondarySystemGroupedBackground, tc) } }
+    // (their part done: a green ring, as on Home — Haris 2026-11-09)
+    if ring { v.layer.borderWidth = 2; let rc: UIColor = done ? .systemGreen : .secondarySystemGroupedBackground; v.followLook("ring") { [weak v] tc in v?.layer.setBorder(rc, tc) } }
     return v
-  }
-  private func personLine(_ id: String, extra: String) -> UIView {
-    let s = UIStackView(arrangedSubviews: [avatar(id, 24), greyText(((people[id]?["name"] as? String).map { id == (model?["me"] as? String) ? "You" : $0 } ?? name(id)) + extra)])
-    s.spacing = 7; s.alignment = .center
-    return s
   }
   // (someone added: their picture springs in; someone taken off: it shrinks away and the others close up — Haris,
   //  2026-11-02)
@@ -1119,7 +988,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     if live, let b = before { for (k, id) in b.enumerated() where !ids.contains(id) { going.append(id); rows.insert(["id": id], at: min(k, rows.count)) } }
     for a in rows {
       guard let id = a["id"] as? String else { continue }
-      let v = avatar(id, 30, ring: true)
+      let v = avatar(id, 30, ring: true, done: (a["done"] as? Bool) == true)
       let isNew = live && !(before ?? []).contains(id), isGoing = going.contains(id)
       if isNew || isGoing {
         let cell = v
@@ -1134,15 +1003,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
           else { UIView.animate(withDuration: 0.3, delay: 0, options: [.curveEaseIn, .allowUserInteraction], animations: { cell.alpha = 0; cell.transform = CGAffineTransform(scaleX: 0.4, y: 0.4) }) { _ in UIView.animate(withDuration: 0.25) { cell.isHidden = true; s.layoutIfNeeded() } } }
         }
       }
-      if (a["done"] as? Bool) == true {
-        let tick = symbol("checkmark.circle.fill", 13, .systemGreen, weight: .bold)
-        tick.backgroundColor = .secondarySystemGroupedBackground; tick.layer.cornerRadius = 7; tick.clipsToBounds = true
-        let w = UIView(); w.translatesAutoresizingMaskIntoConstraints = false
-        w.widthAnchor.constraint(equalToConstant: 30).isActive = true; w.heightAnchor.constraint(equalToConstant: 30).isActive = true
-        w.addSubview(v); v.leadingAnchor.constraint(equalTo: w.leadingAnchor).isActive = true; v.topAnchor.constraint(equalTo: w.topAnchor).isActive = true
-        tick.frame = CGRect(x: 18, y: 18, width: 14, height: 14); w.addSubview(tick)
-        s.addArrangedSubview(w)
-      } else { s.addArrangedSubview(v) }
+      s.addArrangedSubview(v)
     }
     if list.count > 5 { s.setCustomSpacing(6, after: s.arrangedSubviews.last ?? s); s.addArrangedSubview(greyText("+\(list.count - 5)")) }
     return s
@@ -1185,11 +1046,11 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
 
   // ---------- the rows that change things ----------
   // the sheets are iPhone's own, the same as the phone website's (Haris, 2026-11-02): a tap on the row opens it
-  private func statusRow(_ s: [String: Any]) -> UIView {
+  private func statusRow(_ s: [String: Any]) -> DItem {
     let can = (s["canSet"] as? Bool) == true
     let v = pill(s["name"] as? String ?? "", fg: .white, bg: TaskPage.rgb(s["rgb"]))
     let why = s["why"] as? String ?? ""
-    return row(sym: "circle.lefthalf.filled", key: "Status", sub: why.isEmpty ? nil : why, value: v, chevron: can, tap: can ? { [weak self] in self?.pickStatus(s) } : nil)
+    return row("status", sym: "circle.lefthalf.filled", key: "Status", sub: why.isEmpty ? nil : why, value: v, chevron: can, tap: can ? { [weak self] in self?.pickStatus(s) } : nil)
   }
   private func pickStatus(_ s: [String: Any]) {
     let opts = (s["options"] as? [[String: Any]]) ?? []
@@ -1221,63 +1082,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
     present(a)
   }
-  private func partsRow(_ p: [String: Any]) -> UIView {
-    let chipsV = UIStackView(); chipsV.spacing = 6; chipsV.alignment = .center
-    for c in ((p["chips"] as? [[String: Any]]) ?? []).prefix(3) {
-      let done = (c["done"] as? Bool) == true, pend = (c["pending"] as? Bool) == true
-      let col: UIColor = done ? .systemGreen : pend ? .systemOrange : .secondaryLabel
-      chipsV.addArrangedSubview(pill((c["name"] as? String ?? "") + (done ? " ✓" : pend ? " · review" : ""), fg: col, bg: col.withAlphaComponent(0.14)))
-    }
-    let n = p["n"] as? Int ?? 0, of = p["of"] as? Int ?? 0
-    let r = row(sym: "circle.dotted.circle", key: "Parts", sub: "\(n)/\(of) done", value: chipsV)
-    // files for the CD (an assignee on a task that needs CD review): Submit / Withdraw (dm-mock 2, 3)
-    if let rv = model?["review2"] as? [String: Any], let st = rv["state"] as? String, st != "approved" {
-      let wrap = UIStackView(arrangedSubviews: [r]); wrap.axis = .vertical
-      let pending = st == "pending"
-      var c: UIButton.Configuration = pending ? .tinted() : .filled()
-      c.cornerStyle = .capsule; c.baseBackgroundColor = pending ? .systemRed : .systemBlue; c.baseForegroundColor = pending ? .systemRed : .white
-      if !pending { c.image = UIImage(systemName: "arrow.up.circle.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .semibold)); c.imagePadding = 6 }
-      c.attributedTitle = AttributedString(pending ? "Withdraw" : "Submit files for CD review", attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 16, weight: .semibold)]))
-      c.contentInsets = NSDirectionalEdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16)
-      let b = UIButton(configuration: c)
-      b.addAction(UIAction { [weak self] _ in
-        guard let self = self else { return }
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        if pending {
-          let a = UIAlertController(title: "Withdraw your submission?", message: "The files you sent will be removed so you can upload the right ones.", preferredStyle: .alert)
-          a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-          a.addAction(UIAlertAction(title: "Withdraw", style: .destructive) { _ in self.onAct?(["act": "withdrawReview", "id": self.taskId]) })
-          self.present(a)
-        } else if (rv["canSubmit"] as? Bool) != true { self.toast("Set it to In Progress first") }
-        else { self.onSubmitFiles?(rv["cd"] as? String ?? "") }
-      }, for: .touchUpInside)
-      let bw = UIView(); b.translatesAutoresizingMaskIntoConstraints = false; bw.addSubview(b)
-      NSLayoutConstraint.activate([b.leadingAnchor.constraint(equalTo: bw.leadingAnchor, constant: TaskPage.M + 36), b.topAnchor.constraint(equalTo: bw.topAnchor), b.bottomAnchor.constraint(equalTo: bw.bottomAnchor, constant: -12), b.trailingAnchor.constraint(lessThanOrEqualTo: bw.trailingAnchor, constant: -TaskPage.M)])
-      wrap.addArrangedSubview(bw)
-      return wrap
-    }
-    guard let mine = p["mine"] as? String, mine == "open" || mine == "done" else { return r }
-    // Mark my part done / Undo
-    let wrap = UIStackView(arrangedSubviews: [r]); wrap.axis = .vertical
-    var c: UIButton.Configuration = mine == "done" ? .tinted() : .filled()
-    c.cornerStyle = .capsule
-    c.baseBackgroundColor = .systemGreen
-    c.baseForegroundColor = mine == "done" ? .systemGreen : .white
-    c.image = UIImage(systemName: mine == "done" ? "checkmark.circle.fill" : "checkmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .semibold)); c.imagePadding = 6
-    c.attributedTitle = AttributedString(mine == "done" ? "My part is done · Undo" : "Mark my part done", attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 16, weight: .semibold)]))
-    c.contentInsets = NSDirectionalEdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16)
-    let b = UIButton(configuration: c)
-    b.addAction(UIAction { [weak self] _ in
-      guard let self = self else { return }
-      if mine == "open" { UINotificationFeedbackGenerator().notificationOccurred(.success) } else { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
-      self.onAct?(["act": "myPart", "id": self.taskId, "value": mine == "open"])
-    }, for: .touchUpInside)
-    let bw = UIView(); b.translatesAutoresizingMaskIntoConstraints = false; bw.addSubview(b)
-    NSLayoutConstraint.activate([b.leadingAnchor.constraint(equalTo: bw.leadingAnchor, constant: TaskPage.M + 36), b.topAnchor.constraint(equalTo: bw.topAnchor), b.bottomAnchor.constraint(equalTo: bw.bottomAnchor, constant: -12), b.trailingAnchor.constraint(lessThanOrEqualTo: bw.trailingAnchor, constant: -TaskPage.M)])
-    wrap.addArrangedSubview(bw)
-    return wrap
-  }
-  private func datesRow(_ d: [String: Any]) -> UIView {
+  private func datesRow(_ d: [String: Any]) -> DItem {
     let can = (d["canEdit"] as? Bool) == true
     let start = d["startLabel"] as? String ?? "", due = d["dueLabel"] as? String ?? ""
     func btn(_ t: String, empty: String, color: UIColor, which: String, value: String) -> UIView {
@@ -1311,22 +1116,23 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     let dueColor: UIColor = (d["late"] as? Bool) == true ? .systemRed : (d["today"] as? Bool) == true ? .systemBlue : .secondaryLabel
     let s = UIStackView(arrangedSubviews: [btn(start, empty: "Start", color: .secondaryLabel, which: "start", value: d["start"] as? String ?? ""), symbol("arrow.right", 12, .tertiaryLabel), btn(due, empty: "Due", color: dueColor, which: "due", value: d["due"] as? String ?? "")])
     s.spacing = 6; s.alignment = .center
-    return row(sym: "calendar", key: "Dates", value: s)
+    return row("dates", sym: "calendar", key: "Dates", value: s, extra: "\(can)|\(d["start"] as? String ?? "")|\(d["due"] as? String ?? "")")
   }
-  private func prioRows(_ list: [[String: Any]], can: Bool) -> [UIView] {
+  private func prioRows(_ list: [[String: Any]], can: Bool) -> [DItem] {
     list.map { p in
       let key = p["key"] as? String ?? "_", lab = p["label"] as? String ?? ""
-      let v: UIView = lab.isEmpty ? greyText(can ? "None" : "–") : lab == "Urgent" ? pill("Urgent", fg: .systemRed, bg: UIColor.systemRed.withAlphaComponent(0.15)) : pill(lab, fg: .label, bg: .tertiarySystemFill)
+      let v: UIView? = lab.isEmpty ? nil : lab == "Urgent" ? pill("Urgent", fg: .systemRed, bg: UIColor.systemRed.withAlphaComponent(0.15)) : pill(lab, fg: .label, bg: .tertiarySystemFill)
       let who = p["name"] as? String ?? ""
       let plain = who.isEmpty || list.count == 1 && key == (model?["me"] as? String)
-      let r = row(sym: "flag", key: plain ? "Priority" : "Priority · " + who, value: v, chevron: can, tap: can ? { [weak self] in self?.pickPrio(p) } : nil)
       // (whose priority it is in blue, as the date — Haris, 2026-11-02)
-      if !plain, let k = findKey(r, "Priority · " + who) {
-        let a = NSMutableAttributedString(string: "Priority · ", attributes: [.font: UIFont.systemFont(ofSize: TaskPage.T), .foregroundColor: UIColor.secondaryLabel])
-        a.append(NSAttributedString(string: who, attributes: [.font: UIFont.systemFont(ofSize: TaskPage.T), .foregroundColor: UIColor.systemBlue]))
-        k.attributedText = a
+      var kt: NSAttributedString?
+      if !plain {
+        let f = UIFont.preferredFont(forTextStyle: .body)
+        let a = NSMutableAttributedString(string: "Priority · ", attributes: [.font: f, .foregroundColor: UIColor.label])
+        a.append(NSAttributedString(string: who, attributes: [.font: f, .foregroundColor: UIColor.systemBlue]))
+        kt = a
       }
-      return r
+      return row("prio:" + key, sym: "flag", key: "Priority", keyText: kt, text: lab.isEmpty ? (can ? "None" : "–") : nil, value: v, chevron: can, tap: can ? { [weak self] in self?.pickPrio(p) } : nil)
     }
   }
   // Priority, as the website's sheet: whose it is, Urgent (always on top), the numbers for that day (one each per
@@ -1356,11 +1162,6 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     out.append(UIMenu(options: .displayInline, children: [UIAction(title: "No priority", state: cur.isEmpty ? .on : .off) { [weak self] _ in self?.setPrio(key, "none") }]))
     return out
   }
-  private func findKey(_ v: UIView, _ t: String) -> UILabel? {
-    if let l = v as? UILabel, l.text == t { return l }
-    for s in v.subviews { if let l = findKey(s, t) { return l } }
-    return nil
-  }
   private func setPrio(_ key: String, _ v: String) {
     local { m in
       m["prio"] = ((m["prio"] as? [[String: Any]]) ?? []).map { p in
@@ -1371,25 +1172,10 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     let value: Any = Int(v).map { $0 as Any } ?? v
     onAct?(["act": "prio", "id": taskId, "key": key, "value": value])
   }
-  private func clientApprovalRow(_ ca: [String: Any]) -> UIView {
-    let state = ca["state"] as? String ?? "missing", text = ca["text"] as? String ?? ""
-    let col: UIColor = state == "yes" ? .systemGreen : state == "none" ? .secondaryLabel : .systemOrange
-    let v: UIView = state == "none" ? greyText(text) : pill(text, fg: col, bg: col.withAlphaComponent(0.15))
-    var menu: UIMenu?
-    if (ca["canSet"] as? Bool) == true {
-      var items: [UIMenuElement] = [
-        UIAction(title: "Client approved", image: UIImage(systemName: "checkmark.circle"), state: state == "yes" ? .on : .off) { [weak self] _ in guard let self = self else { return }; self.onAct?(["act": "clientApproval", "id": self.taskId, "value": "yes"]) },
-        UIAction(title: "Not needed", state: state == "none" ? .on : .off) { [weak self] _ in guard let self = self else { return }; self.onAct?(["act": "clientApproval", "id": self.taskId, "value": "none"]) },
-      ]
-      if state == "yes" || state == "none" { items.append(UIMenu(options: .displayInline, children: [UIAction(title: "Clear", attributes: .destructive) { [weak self] _ in guard let self = self else { return }; self.onAct?(["act": "clientApproval", "id": self.taskId, "value": "clear"]) }])) }
-      menu = UIMenu(title: "Client approval", children: items)
-    }
-    return row(sym: "person.2", key: "Client approval", sub: "After the CD’s approval, before Done", value: v, chevron: menu != nil, menu: menu)
-  }
-  private func updateRow(_ u: [String: Any]?, all: [String], can: Bool) -> UIView {
+  private func updateRow(_ u: [String: Any]?, all: [String], can: Bool) -> DItem {
     let cur = u?["t"] as? String ?? ""
-    let v: UIView = cur.isEmpty ? greyText(can ? "None" : "–") : pill(cur, fg: TaskPage.rgb(u?["rgb"]), bg: TaskPage.rgb(u?["rgb"]).withAlphaComponent(0.16))
-    return row(sym: "arrow.triangle.2.circlepath", key: "Task Update", value: v, chevron: can, tap: can ? { [weak self] in self?.pickUpdate(all, cur: cur) } : nil)
+    let v: UIView? = cur.isEmpty ? nil : pill(cur, fg: TaskPage.rgb(u?["rgb"]), bg: TaskPage.rgb(u?["rgb"]).withAlphaComponent(0.16))
+    return row("update", sym: "arrow.triangle.2.circlepath", key: "Task Update", text: cur.isEmpty ? (can ? "None" : "–") : nil, value: v, chevron: can, extra: all.joined(separator: ","), tap: can ? { [weak self] in self?.pickUpdate(all, cur: cur) } : nil)
   }
   // Task Update: the website's list, the one on it ticked; Clear at the end when there is one
   private func pickUpdate(_ all: [String], cur: String) {
@@ -1408,65 +1194,69 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
       self.onAct?(["act": "update", "id": self.taskId, "value": all[i]])
     }, { _, _ in })
   }
-  private func subRow(_ s: [String: Any], ro: Bool) -> UIView {
+  // a subtask: Apple's cell — its tick (ours, a button: ticked by permission), its name, who and when, › opens it
+  private func subRow(_ s: [String: Any]) -> DItem {
     let id = s["id"] as? String ?? "", done = (s["done"] as? Bool) == true
-    let r = TaskRow(); r.layer.name = "k:sub:" + id
     let tick = UIButton(type: .custom)
     tick.setImage(UIImage(systemName: done ? "checkmark.circle.fill" : "circle", withConfiguration: UIImage.SymbolConfiguration(pointSize: 21, weight: .regular)), for: .normal)
-    tick.tintColor = done ? .systemGreen : .tertiaryLabel
+    tick.tintColor = done ? .tintColor : .tertiaryLabel
     tick.isEnabled = (s["canTick"] as? Bool) == true
     tick.addAction(UIAction { [weak self] _ in
       guard let self = self else { return }
       if !done { UINotificationFeedbackGenerator().notificationOccurred(.success) } else { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
       self.onAct?(["act": done ? "reopen" : "done", "id": id, "page": self.taskId])
     }, for: .touchUpInside)
-    let t = label(s["title"] as? String ?? "", size: TaskPage.T, color: done ? .secondaryLabel : .label)
-    if done { t.attributedText = NSAttributedString(string: t.text ?? "", attributes: [.strikethroughStyle: NSUnderlineStyle.single.rawValue, .foregroundColor: UIColor.secondaryLabel, .font: UIFont.systemFont(ofSize: TaskPage.T)]) }
-    t.lineBreakMode = .byTruncatingTail
-    let h = UIStackView(arrangedSubviews: [tick, t]); h.spacing = 12; h.alignment = .center
-    // (the name starts right after the circle and takes the room; the circle, picture, date and › keep their size)
-    tick.setContentHuggingPriority(.required, for: .horizontal); tick.widthAnchor.constraint(equalToConstant: 26).isActive = true
-    t.textAlignment = .natural
-    t.setContentHuggingPriority(.defaultLow - 1, for: .horizontal)
-    t.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-    if let av = s["av"] as? String { h.addArrangedSubview(avatar(av, 22)) }
-    if let due = s["due"] as? String, !due.isEmpty { h.addArrangedSubview(label(due, size: 15, color: (s["late"] as? Bool) == true ? .systemRed : .secondaryLabel)) }
-    h.addArrangedSubview(symbol("chevron.right", 13, .tertiaryLabel, weight: .semibold))
-    h.translatesAutoresizingMaskIntoConstraints = false; r.addSubview(h)
-    NSLayoutConstraint.activate([h.leadingAnchor.constraint(equalTo: r.leadingAnchor, constant: TaskPage.M - 2), h.trailingAnchor.constraint(equalTo: r.trailingAnchor, constant: -TaskPage.M), h.topAnchor.constraint(equalTo: r.topAnchor, constant: 9), h.bottomAnchor.constraint(equalTo: r.bottomAnchor, constant: -9), r.heightAnchor.constraint(greaterThanOrEqualToConstant: 50)])
-    r.onTap = { [weak self] in self?.onOpen?(id) }
-    return r
+    let title = s["title"] as? String ?? ""
+    var c = UIListContentConfiguration.cell()
+    c.attributedText = TaskPage.itemText(title, done: done)
+    c.textProperties.numberOfLines = 1
+    let it = DItem("sub:" + id)
+    it.content = c
+    it.accessories.append(.customView(configuration: .init(customView: tick, placement: .leading(), reservedLayoutWidth: .actual)))
+    let side = UIStackView(); side.spacing = 8; side.alignment = .center
+    if let av = s["av"] as? String { side.addArrangedSubview(avatar(av, 22)) }
+    if let due = s["due"] as? String, !due.isEmpty { side.addArrangedSubview(label(due, size: 15, color: (s["late"] as? Bool) == true ? .systemRed : .secondaryLabel)) }
+    if !side.arrangedSubviews.isEmpty { it.accessories.append(.customView(configuration: .init(customView: side, placement: .trailing(), reservedLayoutWidth: .actual))) }
+    it.accessories.append(.disclosureIndicator())
+    it.tap = { [weak self] in self?.onOpen?(id) }
+    it.sig = "\(title)|\(done)|\(tick.isEnabled)|" + TaskPage.sig(side)
+    return it
   }
-  private func checkRow(_ c: [String: Any], can: Bool) -> UIView {
-    let id = c["id"] as? String ?? "", done = (c["done"] as? Bool) == true
-    let r = TaskRow(); r.layer.name = "k:chk:" + id
-    let box = symbol(done ? "checkmark.square.fill" : "square", 20, done ? .systemBlue : .tertiaryLabel)
-    let t = label(c["text"] as? String ?? "", size: TaskPage.T, color: done ? .secondaryLabel : .label); t.numberOfLines = 0
-    if done { t.attributedText = NSAttributedString(string: t.text ?? "", attributes: [.strikethroughStyle: NSUnderlineStyle.single.rawValue, .foregroundColor: UIColor.secondaryLabel, .font: UIFont.systemFont(ofSize: TaskPage.T)]) }
-    let h = UIStackView(arrangedSubviews: [box, t]); h.spacing = 12; h.alignment = .center
-    h.translatesAutoresizingMaskIntoConstraints = false; r.addSubview(h)
-    NSLayoutConstraint.activate([h.leadingAnchor.constraint(equalTo: r.leadingAnchor, constant: TaskPage.M), h.trailingAnchor.constraint(equalTo: r.trailingAnchor, constant: -TaskPage.M), h.topAnchor.constraint(equalTo: r.topAnchor, constant: 13), h.bottomAnchor.constraint(equalTo: r.bottomAnchor, constant: -13)])
+  // a checklist item: Apple's cell with Apple's circle / filled tick (as Reminders) — tapped, ticked at once, by permission
+  private func checkRow(_ ck: [String: Any], can: Bool) -> DItem {
+    let id = ck["id"] as? String ?? "", done = (ck["done"] as? Bool) == true
+    let text = ck["text"] as? String ?? ""
+    var c = UIListContentConfiguration.cell()
+    c.image = UIImage(systemName: done ? "checkmark.circle.fill" : "circle")
+    c.imageProperties.tintColor = done ? .tintColor : .tertiaryLabel
+    c.attributedText = TaskPage.itemText(text, done: done)
+    let it = DItem("chk:" + id)
+    it.content = c
+    it.sig = "\(text)|\(done)|\(can)"
     if can {
-      r.onTap = { [weak self, weak box] in
+      it.tap = { [weak self] in
         guard let self = self else { return }
         UISelectionFeedbackGenerator().selectionChanged()
-        // (ticked at once; the server's answer redraws it)
-        box?.image = UIImage(systemName: done ? "square" : "checkmark.square.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20)); box?.tintColor = done ? .tertiaryLabel : .systemBlue
+        // (ticked at once; the server's answer draws it as it is)
+        self.local { m in m["checklist"] = ((m["checklist"] as? [[String: Any]]) ?? []).map { x in var x = x; if (x["id"] as? String) == id { x["done"] = !done }; return x } }
         self.onAct?(["act": "check", "id": self.taskId, "value": id])
       }
     }
-    return r
+    return it
+  }
+  static func itemText(_ t: String, done: Bool) -> NSAttributedString {
+    var a: [NSAttributedString.Key: Any] = [.font: UIFont.preferredFont(forTextStyle: .body), .foregroundColor: done ? UIColor.secondaryLabel : UIColor.label]
+    if done { a[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
+    return NSAttributedString(string: t, attributes: a)
+  }
+  // the CD's name under Needs CD review: blue while on, grey when off — turning as the switch is flicked
+  private func tintCDName(_ on: Bool) {
+    guard let ip = listDS?.indexPath(for: "needsCD"), let cell = scroll.cellForItem(at: ip) as? UICollectionViewListCell, var c = cell.contentConfiguration as? UIListContentConfiguration, c.secondaryText != nil else { return }
+    c.secondaryTextProperties.color = on ? .systemBlue : .secondaryLabel
+    UIView.transition(with: cell.contentView, duration: 0.2, options: [.transitionCrossDissolve, .allowUserInteraction]) { cell.contentConfiguration = c }
   }
 
   // ---------- the sheets: people, tags, channels; a line of text ----------
-  private func addRow(_ t: String, tap: @escaping () -> Void) -> UIView {
-    let r = TaskRow()
-    let h = UIStackView(arrangedSubviews: [symbol("plus.circle.fill", 20, .systemBlue), label(t, size: TaskPage.T, color: .systemBlue)]); h.spacing = 12; h.alignment = .center
-    h.translatesAutoresizingMaskIntoConstraints = false; r.addSubview(h)
-    NSLayoutConstraint.activate([h.leadingAnchor.constraint(equalTo: r.leadingAnchor, constant: TaskPage.M - 1), h.trailingAnchor.constraint(lessThanOrEqualTo: r.trailingAnchor, constant: -TaskPage.M), h.topAnchor.constraint(equalTo: r.topAnchor, constant: 13), h.bottomAnchor.constraint(equalTo: r.bottomAnchor, constant: -13)])
-    r.onTap = tap
-    return r
-  }
   // the one Attach Files sheet (Camera · Photos · Files); the app uploads them itself, with their bars
   func attachSheet() { UIImpactFeedbackGenerator(style: .light).impactOccurred(); onAttachFiles?() }   // (a tap felt, as every button — Haris, 2026-11-01)
   func askText(_ title: String, placeholder: String, value: String = "", _ done: @escaping (String) -> Void) {
@@ -1736,36 +1526,71 @@ final class PaddedLabel: UILabel {
   override func sizeThatFits(_ size: CGSize) -> CGSize { let s = super.sizeThatFits(size); return CGSize(width: s.width + insets.left + insets.right, height: s.height + insets.top + insets.bottom) }
 }
 
-// the task page's pieces: a set of rows right across the page, and the grey band between sections
-// one section of a task's Details in Apple's list: the section, placed across the page or on its edge, with the room
-// after it as the page had it
-final class PageCell: UICollectionViewCell {
-  struct Geo: Equatable { var x: CGFloat, w: CGFloat, h: CGFloat, gap: CGFloat, top: CGFloat = 0 }
+// Details in Apple's list (Haris 2026-11-09, "Task page Details — fully Apple"): a section — Apple's box with its header
+// (the creator as Apple's footer on the last), or the head without a box — and its items
+struct DSec {
+  var key: String
+  var head: String?
+  var foot: String?
+  var plain: Bool
+  var items: [String]
+}
+// one item: Apple's own list cell, set by Apple's configuration — or a piece of ours Apple has no part for, held in Apple's
+// cell (the client line, the title, a note, the description, the files); sig: what it shows, so only a change sets it again
+final class DItem {
+  let key: String
+  var sig = ""
+  var content: UIListContentConfiguration?
+  var accessories: [UICellAccessory] = []
+  var tap: (() -> Void)?
+  var host: UIView?
+  var pad = UIEdgeInsets.zero
+  var plain = false
+  init(_ key: String) { self.key = key }
+}
+// a piece of ours in Apple's list cell: placed inside the cell's margins, its height measured for Apple's own self-sizing
+final class HostCell: UICollectionViewListCell {
   private weak var hosted: UIView?
-  private var geo = Geo(x: 0, w: 0, h: 1, gap: 0)
-  func host(_ v: UIView?, _ g: Geo) {
-    geo = g
-    backgroundConfiguration = .clear()
+  private var pad = UIEdgeInsets.zero
+  func host(_ v: UIView?, pad p: UIEdgeInsets, plain: Bool) {
+    pad = p
+    backgroundConfiguration = plain ? .clear() : .listGroupedCell()
     if hosted !== v, let old = hosted, old.superview === contentView { old.removeFromSuperview() }
     hosted = v
     // (put in place at once, with no animation: drawn inside the list's own animation it grew from nothing)
     if let v = v, v.superview !== contentView {
-      UIView.performWithoutAnimation { v.transform = .identity; contentView.addSubview(v); v.frame = CGRect(x: g.x, y: g.top, width: g.w, height: g.h) }
+      UIView.performWithoutAnimation { v.transform = .identity; v.translatesAutoresizingMaskIntoConstraints = true; contentView.addSubview(v) }
     }
     setNeedsLayout()
+  }
+  private var box: UIEdgeInsets {
+    let m = contentView.layoutMargins
+    return UIEdgeInsets(top: pad.top, left: pad.left < 0 ? m.left : pad.left, bottom: pad.bottom, right: pad.right < 0 ? m.right : pad.right)
+  }
+  func measure(_ W: CGFloat) -> CGFloat {
+    guard let v = hosted else { return 1 }
+    let b = box, w = max(1, W - b.left - b.right)
+    var h: CGFloat
+    if let tv = v as? UITextView { h = tv.sizeThatFits(CGSize(width: w, height: .greatestFiniteMagnitude)).height }
+    else {
+      if v.bounds.width != w { v.bounds.size.width = w }
+      v.setNeedsLayout(); v.layoutIfNeeded()
+      h = v.systemLayoutSizeFitting(CGSize(width: w, height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height
+    }
+    return ceil(h) + b.top + b.bottom
+  }
+  var needsFit: Bool { hosted != nil && abs(bounds.height - measure(bounds.width)) > 0.5 }
+  override func preferredLayoutAttributesFitting(_ a: UICollectionViewLayoutAttributes) -> UICollectionViewLayoutAttributes {
+    let r = super.preferredLayoutAttributesFitting(a)
+    r.size.height = measure(a.size.width)
+    return r
   }
   override func layoutSubviews() {
     super.layoutSubviews()
     guard let v = hosted, v.superview === contentView else { return }
-    let f = CGRect(x: geo.x, y: geo.top, width: geo.w, height: geo.h)
+    let f = contentView.bounds.inset(by: box)
     if v.frame != f { v.frame = f }
   }
-}
-final class PageGroup: UIStackView {}
-final class PageHeading: UIStackView {}
-final class PageBand: UIView {
-  override init(frame: CGRect) { super.init(frame: frame); backgroundColor = .secondarySystemBackground; isUserInteractionEnabled = false }
-  required init?(coder: NSCoder) { fatalError() }
 }
 
 // the description on the page: all of it, or — a long one, until Expand is tapped (once) — its first lines fading out
@@ -1778,14 +1603,15 @@ final class DescBox: UIView {
   override init(frame: CGRect) {
     super.init(frame: frame)
     clipsToBounds = true
-    fade.colors = [UIColor.systemBackground.withAlphaComponent(0).cgColor, UIColor.systemBackground.cgColor]
-    var c = UIButton.Configuration.plain(); c.cornerStyle = .capsule
-    c.attributedTitle = AttributedString("Expand", attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 15, weight: .medium)]))
-    c.baseForegroundColor = .label; c.background.backgroundColor = .systemBackground
-    c.background.strokeColor = .separator; c.background.strokeWidth = 1
-    c.contentInsets = NSDirectionalEdgeInsets(top: 7, leading: 16, bottom: 7, trailing: 16)
+    // (in Apple's box now: it fades into the cell's own colour, and Apple's "Show More" in the tint under it — Haris
+    //  2026-11-09, mock-up "Task page Details — fully Apple")
+    var c = UIButton.Configuration.plain()
+    c.attributedTitle = AttributedString("Show More", attributes: AttributeContainer([.font: UIFont.preferredFont(forTextStyle: .body)]))
+    c.baseForegroundColor = .tintColor
+    c.contentInsets = NSDirectionalEdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 8)
     button.configuration = c
     button.addAction(UIAction { [weak self] _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); self?.expand() }, for: .touchUpInside)
+    followLook("fade") { [weak self] _ in self?.setNeedsLayout() }   // (a layer's colour: set again on the look's change)
   }
   required init?(coder: NSCoder) { fatalError() }
   func hold(_ tv: UITextView) {
@@ -1807,12 +1633,15 @@ final class DescBox: UIView {
     let short = !expanded && full > 168 + 40
     super.layoutSubviews()
     fade.isHidden = !short; button.isHidden = !short
+    // (the words fade out above 168, the rest covered in the cell's colour; Show More under them)
     CATransaction.begin(); CATransaction.setDisableActions(true)
-    fade.frame = CGRect(x: 0, y: bounds.height - 72, width: w, height: 72)
-    fade.colors = [UIColor.systemBackground.withAlphaComponent(0).cgColor, UIColor.systemBackground.cgColor]
+    let bg = UIColor.secondarySystemGroupedBackground.resolvedColor(with: traitCollection)
+    fade.frame = CGRect(x: 0, y: 108, width: w, height: max(60, bounds.height - 108))
+    fade.colors = [bg.withAlphaComponent(0).cgColor, bg.cgColor, bg.cgColor]
+    fade.locations = [0, NSNumber(value: Double(60 / max(60, bounds.height - 108))), 1]
     CATransaction.commit()
     let s = button.sizeThatFits(CGSize(width: 200, height: 40))
-    button.frame = CGRect(x: (w - s.width) / 2, y: bounds.height - s.height - 6, width: s.width, height: s.height)
+    button.frame = CGRect(x: 0, y: 170, width: s.width, height: s.height)
     bringSubviewToFront(button)
   }
   // (the size the page gives it: capped while it's a long one not opened)
@@ -1820,7 +1649,7 @@ final class DescBox: UIView {
     let full = text.map { $0.sizeThatFits(CGSize(width: t.width, height: .greatestFiniteMagnitude)).height } ?? 0
     if text?.isFirstResponder == true { expanded = true }
     let short = !expanded && full > 168 + 40
-    return CGSize(width: t.width, height: ceil(short ? 168 : full))
+    return CGSize(width: t.width, height: ceil(short ? 168 + 36 : full))
   }
 }
 
