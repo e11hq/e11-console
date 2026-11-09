@@ -882,6 +882,7 @@ extension Main {
       return c
     })
     var done: [[String: Any]] = [], sent = Set<String>(), left = picked.count
+    let cancels = UploadCenter.shared.cancels
     for (i, (url, name)) in picked.enumerated() {
       let id = ids[i]
       let size = ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.int64Value ?? 0
@@ -892,7 +893,7 @@ extension Main {
         if toDesc { p.descUploaded(id, path: path, size: Int(size)) }
         left -= 1
         if left == 0 {
-          if done.isEmpty { p.toast("Upload failed — try again"); return }
+          if done.isEmpty { p.toast(UploadCenter.shared.cancels != cancels ? "Upload cancelled" : "Upload failed — try again"); return }
           UINotificationFeedbackGenerator().notificationOccurred(.success)
           Main.playUploaded()
           p.uploadsSent(sent)
