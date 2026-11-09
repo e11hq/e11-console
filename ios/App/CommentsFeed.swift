@@ -550,7 +550,10 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
     keepId = id
     let jumpRoom: CGFloat = 44 + 14 + 10
     let visibleBottom = scroll.contentOffset.y + scroll.bounds.height - bottomRoom - jumpRoom
-    if f.maxY > visibleBottom { scroll.setContentOffset(CGPoint(x: 0, y: f.maxY - scroll.bounds.height + bottomRoom + jumpRoom), animated: true) }
+    // (never past the list's end: the last comment replied to left an empty gap above the box — the room kept for the ↓
+    //  button, which doesn't show at the end — Haris 2026-11-10)
+    let end = max(-scroll.contentInset.top, scroll.contentSize.height + scroll.contentInset.bottom - scroll.bounds.height)
+    if f.maxY > visibleBottom { scroll.setContentOffset(CGPoint(x: 0, y: min(end, f.maxY - scroll.bounds.height + bottomRoom + jumpRoom)), animated: true) }
     else if f.minY < scroll.contentOffset.y + scroll.contentInset.top { scroll.setContentOffset(CGPoint(x: 0, y: f.minY - scroll.contentInset.top - 8), animated: true) }
   }
 
