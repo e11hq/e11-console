@@ -2573,7 +2573,6 @@ final class ToastCapsule: UIView {
       let ce = UIGlassContainerEffect(); ce.spacing = 24; bed.effect = ce
       body.effect = UIGlassEffect(style: .regular); nub.effect = UIGlassEffect(style: .regular)
       [body, nub].forEach { $0.clipsToBounds = true; $0.layer.cornerCurve = .continuous; bed.contentView.addSubview($0) }
-      shape(false)
       bed.isUserInteractionEnabled = false; addSubview(bed)
     } else {
       backgroundColor = ToastCapsule.fill
@@ -2642,6 +2641,9 @@ final class ToastCapsule: UIView {
         frame = to; layoutIfNeeded()
         let n = CGRect(x: bounds.width - from.width, y: 0, width: from.width, height: bounds.height)
         bed.frame = bounds; nub.frame = n; body.frame = n
+        // (a full pill from its first frame — made at no size, its corners were 0 and the spring rounded them as it
+        //  stretched: square corners for a moment, Haris 2026-11-09)
+        shape(true); nub.layer.cornerRadius = bounds.height / 2
       }
       UIView.animate(withDuration: 0.5, delay: 0.03, usingSpringWithDamping: 0.78, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
         self.body.frame = self.bounds; self.plusB.alpha = 1
