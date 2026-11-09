@@ -2818,6 +2818,21 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     out["tabBar"] = AppleTabs.shared?.tabBar.overrideUserInterfaceStyle.rawValue ?? -1
     return out
   }
+  // (a form sheet: its table's width and each note under a field — where its words are and how many lines)
+  func selfForm() -> [String: Any] {
+    guard let n = topMost() as? UINavigationController, let tv = (n.topViewController as? UITableViewController)?.tableView else { return ["form": false] }
+    var notes: [[String: Any]] = []
+    for sec in 0..<tv.numberOfSections {
+      guard let f = tv.footerView(forSection: sec) else { continue }
+      var labels: [[String: Any]] = []
+      func walk(_ v: UIView) { if let l = v as? UILabel, let t = l.text, !t.isEmpty { let r = l.convert(l.bounds, to: tv); labels.append(["t": String(t.prefix(24)), "x": Double(r.minX), "w": Double(r.width), "h": Double(r.height), "lines": l.numberOfLines]) }; v.subviews.forEach(walk) }
+      walk(f)
+      let fr = f.frame
+      notes.append(["sec": sec, "x": Double(fr.minX), "w": Double(fr.width), "h": Double(fr.height), "labels": labels, "cls": String(describing: type(of: f))])
+    }
+    let tw = tv.convert(tv.bounds, to: nil)
+    return ["tableW": Double(tv.bounds.width), "tableX": Double(tw.minX), "sheetW": Double(n.view.bounds.width), "margin": Double(tv.layoutMargins.left), "notes": notes]
+  }
   // every frame for a while: what selfBar sees (a slide, frame by frame)
   final class SelfFrames: NSObject {
     private var link: CADisplayLink?, end: CFTimeInterval = 0, frames: [[String: Any]] = [], sample: () -> [String: Any] = { [:] }, done: ([[String: Any]]) -> Void = { _ in }
@@ -2916,6 +2931,14 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       ("lookFlip", pause(1500) + "return '{}'", { self.selfResult["lookBefore"] = self.selfLook(); self.selfResult["lookRedrawsBefore"] = Main.lookRedraws }),
       ("lookLight", pause(3000) + "return '{}'", { self.selfResult["lookLight"] = self.selfLook() }),
       ("lookDark", pause(3000) + "return '{}'", { self.selfResult["lookDark"] = self.selfLook(); self.selfResult["lookRedrawsAfter"] = Main.lookRedraws }),
+      // (measurement — Haris 2026-11-09: a form sheet's notes under its fields ran off the sheet in one line: Add team member)
+      ("formOpen", pause(2500) + "return '{}'", { self.meCtl.ask(["kind": "form", "title": "Add team member", "okText": "Add member",
+        "intro": "They sign in at test.e11hq.com with this email — a one-time code is emailed to them. No password needed.",
+        "fields": [["key": "name", "label": "Full name (optional — they can set it themselves)", "placeholder": "e.g. Sara Khan"],
+                   ["key": "email", "label": "Email", "type": "email", "placeholder": "name@e11-digital.com"],
+                   ["key": "fin", "label": "Finance access", "type": "select", "value": "", "options": [["", "No Finance access"], ["admin", "Finance Admin"]] as [[String]],
+                    "hint": "Finance Admin adds subscriptions, reimbursements and expenses; Finance Viewer only looks. Finance-only people already have it."]] as [[String: Any]]] as [String: Any]) { _ in } }),
+      ("formMeasure", pause(2000) + "return '{}'", { self.selfResult["formNotes"] = self.selfForm(); self.topMost().dismiss(animated: false) }),
       // (measurement — Haris 2026-11-09: Me › Client Assets › a client, then ‹ back: the search bar popped in at the end of
       //  the slide; and the frost on pushed pages at their top — each page at rest, then the slide back frame by frame)
       ("snapAll", pause(3000) + "return '{}'", {

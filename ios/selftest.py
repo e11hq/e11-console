@@ -196,6 +196,7 @@ try:
       return f"{b.get('top','')} bar y{bar.get('y',0):.0f}+{bar.get('h',0):.0f} list off{l.get('off','-')} adj{l.get('adj','-')} ins{l.get('ins','-')} cell{l.get('firstCell','-')} edge {l.get('edgeStyle','-')} hidden{l.get('edgeHidden','-')} {ss}"
     for k in ('frost_team', 'frost_assetsAll', 'frost_assetsClient'): print('measure', k, barLine(res.get(k)))
     print('measure snapOpened', res.get('snapOpened'))
+    print('measure formNotes', json.dumps(res.get('formNotes')))
     fr = res.get('snap_back') or []
     t0 = fr[0].get('t', 0) if fr else 0
     for f in fr: print('measure snap_back', f"{(f.get('t',0) - t0) * 1000:5.0f}ms", barLine(f))
