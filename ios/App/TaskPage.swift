@@ -827,7 +827,19 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     let had = Set(ds.snapshot().itemIdentifiers)
     let again = changed.filter { had.contains($0) }
     if !again.isEmpty { snap.reconfigureItems(again) }
-    ds.apply(snap, animatingDifferences: listLive && window != nil)
+    let live = listLive && window != nil
+    // (a row on screen whose words or chips changed — a status set, a picture arrived, someone added: its new look fades
+    //  in over the old, as every line that changes on a showing screen does (the standard, Haris 2026-11-05); new rows
+    //  come in, gone ones go and the rest move with Apple's own list animation — Haris 2026-11-09: "all things in task
+    //  details page comes in smoothly")
+    if live {
+      for k in again {
+        guard let ip = ds.indexPath(for: k), let cell = scroll.cellForItem(at: ip) else { continue }
+        let t = CATransition(); t.type = .fade; t.duration = 0.22; t.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        cell.layer.add(t, forKey: "change")
+      }
+    }
+    ds.apply(snap, animatingDifferences: live)
     refreshSupp()
   }
   // a header's or the footer's words changed (Subtasks · 1/3 → 2/3): set again where they show
@@ -836,7 +848,9 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
       for ip in scroll.indexPathsForVisibleSupplementaryElements(ofKind: kind) {
         guard let v = scroll.supplementaryView(forElementKind: kind, at: ip) as? UICollectionViewListCell, var c = v.contentConfiguration as? UIListContentConfiguration else { continue }
         let want = kind == UICollectionView.elementKindSectionHeader ? dSec(ip.section)?.head : dSec(ip.section)?.foot
-        if c.text != want { c.text = want; v.contentConfiguration = c }
+        guard c.text != want else { continue }
+        if listLive, window != nil, c.text != nil, want != nil { let t = CATransition(); t.type = .fade; t.duration = 0.22; v.layer.add(t, forKey: "text") }   // (its words crossfade — the standard)
+        c.text = want; v.contentConfiguration = c
       }
     }
   }
