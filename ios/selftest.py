@@ -137,6 +137,7 @@ try:
     ra, re_, rt = res.get('rHoldArrived') or {}, res.get('rHoldEnd') or {}, res.get('rHoldTop') or {}
     rmoved = {k: (ra.get(k), re_.get(k), rt.get(k)) for k in set(ra) | set(re_) | set(rt) if len({round(x) for x in (ra.get(k), re_.get(k), rt.get(k)) if x is not None}) > 1}
     print('measure reviewRowHeights', json.dumps({'arrived': ra, 'end': re_, 'top': rt}))
+    print('measure reviewRows', sorted(set(ra) | set(re_) | set(rt)))
     check(len(ra) >= 4 and len(re_) >= 2 and not rmoved, f"a task in CD review: rows keep their heights to the very end and back (changed: {rmoved})")
     check(len(ha) >= 4 and len(ht) >= 4 and not moved, f"the task page's rows keep their heights — arrived, scrolled, back at the top (changed: {moved})")
     tl, td = res.get('tlookAtLight') or {}, res.get('tlookAtDark') or {}
