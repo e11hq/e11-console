@@ -729,7 +729,7 @@ final class TaskPage: UIView, UICollectionViewDelegate, UIGestureRecognizerDeleg
     }
     if let s = descSig {
       descStripAfter(m)
-      add("desc", head: "DESCRIPTION", [hosted("desc", descBox, pad: UIEdgeInsets(top: 11, left: -1, bottom: 11, right: -1), plain: false, sig: s)])
+      add("desc", head: "DESCRIPTION", [hosted("desc", descBox, pad: UIEdgeInsets(top: 2, left: -1, bottom: 0, right: -1), sig: s)])   // (no box: the words on the page under the header — Haris 2026-11-09)
     }
     // ---- Subtasks ----
     let subs = (m["subtasks"] as? [[String: Any]]) ?? []
@@ -1603,8 +1603,8 @@ final class DescBox: UIView {
   override init(frame: CGRect) {
     super.init(frame: frame)
     clipsToBounds = true
-    // (in Apple's box now: it fades into the cell's own colour, and Apple's "Show More" in the tint under it — Haris
-    //  2026-11-09, mock-up "Task page Details — fully Apple")
+    // (under its header on the page itself — no box, Haris 2026-11-09: it fades into the page's colour, and Apple's
+    //  "Show More" in the tint under it — mock-up "Task page Details — fully Apple")
     var c = UIButton.Configuration.plain()
     c.attributedTitle = AttributedString("Show More", attributes: AttributeContainer([.font: UIFont.preferredFont(forTextStyle: .body)]))
     c.baseForegroundColor = .tintColor
@@ -1633,9 +1633,9 @@ final class DescBox: UIView {
     let short = !expanded && full > 168 + 40
     super.layoutSubviews()
     fade.isHidden = !short; button.isHidden = !short
-    // (the words fade out above 168, the rest covered in the cell's colour; Show More under them)
+    // (the words fade out above 168, the rest covered in the page's colour; Show More under them)
     CATransaction.begin(); CATransaction.setDisableActions(true)
-    let bg = UIColor.secondarySystemGroupedBackground.resolvedColor(with: traitCollection)
+    let bg = UIColor.systemGroupedBackground.resolvedColor(with: traitCollection)
     fade.frame = CGRect(x: 0, y: 108, width: w, height: max(60, bounds.height - 108))
     fade.colors = [bg.withAlphaComponent(0).cgColor, bg.cgColor, bg.cgColor]
     fade.locations = [0, NSNumber(value: Double(60 / max(60, bounds.height - 108))), 1]
