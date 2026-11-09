@@ -64,7 +64,7 @@ try:
             # (light / dark: the phone switched with the app open — the app must follow it by itself)
             if st == 'lookFlip': sh('xcrun', 'simctl', 'ui', udid, 'appearance', 'light')
             if st == 'lookLight': sh('xcrun', 'simctl', 'ui', udid, 'appearance', 'dark')
-            if st == 'away':
+            if st in ('away', 'titlesAway', 'titlesAway2'):
                 sh('xcrun', 'simctl', 'launch', udid, 'com.apple.Preferences'); time.sleep(4)
                 sh('xcrun', 'simctl', 'launch', udid, BUNDLE); time.sleep(1)
         if st == 'done': break
@@ -157,6 +157,11 @@ try:
     check(bigOn('mytasksFindDoneMyTasks'), f"My Tasks: search opened and closed, its big title still there {(res.get('mytasksFindDoneMyTasks') or {}).get('bigTitle')}")
     # (Haris 2026-11-09 14:45: My Tasks, Home, the Inbox, back to My Tasks — the big title gone, its room left)
     check(bigOn('mytasksTabBackMyTasks'), f"My Tasks: to Home, the Inbox and back by the tab bar, its big title still there {(res.get('mytasksTabBackMyTasks') or {}).get('bigTitle')}")
+    # (Haris 2026-11-09 14:52: back from another app — My Tasks' and the Inbox's big titles still there, with My Tasks on
+    #  while away and with Home on)
+    for k, name in (('titleMtAway', 'My Tasks, back from another app'), ('titleIbxAway', 'the Inbox after that'), ('titleIbxAway2', 'the Inbox, Home on while away'), ('titleMtAway2', 'My Tasks after that')):
+      print('measure bigTitle', k, json.dumps(res.get(k)))
+      check(((res.get(k) or {}).get('alpha') or 0) > 0.9, f"{name}: its big title on screen {res.get(k)}")
     # (measurement — the big title as on screen at each My Tasks step: Haris's 12:53 screenshot had its room empty)
     for k in ('mytasksMyTasks', 'mytasksDoneMyTasks', 'mytasksScrolledMyTasks', 'mytasksTopMyTasks', 'mytasksAllMyTasks', 'mytasksFindMyTasks', 'mytasksFindDoneMyTasks', 'mytasksTabHomeMyTasks', 'mytasksTabInboxMyTasks', 'mytasksTabBackMyTasks', 'slideMtBackMyTasks'):
       print('measure bigTitle', k, json.dumps((res.get(k) or {}).get('bigTitle')))

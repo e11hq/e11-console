@@ -2758,6 +2758,21 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   func pause(_ ms: Int) -> String { "await new Promise((r) => setTimeout(r, \(ms)));" }
   // (the slide back check: a tab as if tapped; a task to open — Home's first card; ‹ back, the screen's "+ New task"
   //  looked at a moment into the slide and once it's over)
+  // (a tab's big title as drawn on screen — Apple's large title view, wherever Apple puts it: in iOS 26 inside the page's list)
+  func selfBigTitle(_ t: String) -> [String: Any] {
+    guard let w = AppleTabs.shared?.view.window else { return ["found": 0] }
+    func labels(_ v: UIView) -> [UILabel] { ((v as? UILabel).map { [$0] } ?? []) + v.subviews.flatMap(labels) }
+    func seen(_ v: UIView) -> CGFloat { var a: CGFloat = 1; var x: UIView? = v; while let y = x { if y.isHidden { return 0 }; a *= CGFloat((y.layer.presentation() ?? y.layer).opacity); x = y.superview }; return a }
+    let big = labels(w).filter { ($0.attributedText?.string ?? $0.text ?? "") == t && $0.font.pointSize >= 28 }
+    var out: [String: Any] = ["found": big.count, "alpha": Double(big.map(seen).max() ?? 0)]
+    if let l = big.first {
+      let f = l.convert(l.bounds, to: w); out["y"] = Double(f.minY); out["h"] = Double(f.height)
+      var chain: [String] = []; var x: UIView? = l
+      while let y = x, chain.count < 6 { chain.append(String(describing: type(of: y)) + (y.isHidden ? "(hidden)" : "") + (y.alpha < 1 ? "(a\(String(format: "%.2f", y.alpha)))" : "")); x = y.superview }
+      out["chain"] = chain.joined(separator: "<")
+    }
+    return out
+  }
   func selfTapTab(_ key: String) { if let i = tabKeys.firstIndex(of: key) { AppleTabs.shared?.selfTap(i) } }
   func selfSelect(_ key: String) {
     if let i = tabKeys.firstIndex(of: key), let item = tabBar.items?[i] { tabBar.selectedItem = item; tabBar(tabBar, didSelect: item) }
@@ -2935,6 +2950,18 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       ("mytasksTabHome", pause(1500) + "return '{}'", { self.selfTapTab("today") }),
       ("mytasksTabInbox", pause(1500) + "return '{}'", { self.selfTapTab("inbox") }),
       ("mytasksTabBack", pause(1500) + "return '{}'", { self.selfTapTab("mytasks") }),
+      // (Haris 2026-11-09 14:52: "I came back from another app, title of inbox is gone too" — and in his recording the app
+      //  had been away just before; the build machine opens Settings and comes back, with My Tasks on and then with Home
+      //  on; each tab's big title read after, as on screen)
+      ("titlesAway", "return '{}'", nil),
+      ("titlesAwayWait", pause(9000) + "return '{}'", nil),
+      ("titlesBackMt", pause(1500) + "return '{}'", { self.selfResult["titleMtAway"] = self.selfBigTitle("My Tasks"); self.selfTapTab("inbox") }),
+      ("titlesIbx", pause(1500) + "return '{}'", { self.selfResult["titleIbxAway"] = self.selfBigTitle("Inbox"); self.selfTapTab("today") }),
+      ("titlesAway2", "return '{}'", nil),
+      ("titlesAwayWait2", pause(9000) + "return '{}'", nil),
+      ("titlesBack2", pause(1500) + "return '{}'", { self.selfTapTab("inbox") }),
+      ("titlesIbx2", pause(1500) + "return '{}'", { self.selfResult["titleIbxAway2"] = self.selfBigTitle("Inbox"); self.selfTapTab("mytasks") }),
+      ("titlesMt2", "return '{}'", { self.selfResult["titleMtAway2"] = self.selfBigTitle("My Tasks") }),
       // 28: the Inbox, the app's own: All, a row swiped right (Read / Unread), Unread, Mentions
       ("ibx", pause(2500) + "return JSON.stringify({ view: ui.view, blank: !!document.querySelector('#content .ph-under-app') })", {
         if let i = self.tabKeys.firstIndex(of: "inbox"), let item = self.tabBar.items?[i] { self.tabBar.selectedItem = item; self.tabBar(self.tabBar, didSelect: item) } }),
