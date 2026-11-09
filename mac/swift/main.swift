@@ -119,6 +119,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     if web?.url?.host == URL(string: SERVER)?.host { shareSignIn() }
     #endif
   }
+  @objc func showMainWindow(_ s: Any?) { showWindow() }
   func showWindow() {
     if window.isMiniaturized { window.deminiaturize(nil) }
     window.makeKeyAndOrderFront(nil)
@@ -855,6 +856,9 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
       item("Minimize", #selector(NSWindow.performMiniaturize(_:)), "m"),
       item("Zoom", #selector(NSWindow.performZoom(_:))),
       item("Enter Full Screen", #selector(NSWindow.toggleFullScreen(_:)), "f", [.command, .control]), .separator(),
+      // (the main window, always — closed, it's no longer in the window list macOS keeps here; as Mail's "Message Viewer"
+      //  and Messages' "Messages" ⌘0: App Review 2026-11-09, guideline 4)
+      item(APP_NAME, #selector(showMainWindow(_:)), "0", .command, self), .separator(),
       item("Close Window", #selector(NSWindow.performClose(_:)), "w"),
     ])
     NSApp.mainMenu = main
@@ -988,6 +992,11 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
       self.selftest["closedVisible"] = self.window.isVisible
       _ = self.applicationShouldHandleReopen(NSApp, hasVisibleWindows: false)
       self.selftest["reopenedVisible"] = self.window.isVisible
+      // (closed again: the Window menu's own item brings it back — App Review 2026-11-09, guideline 4)
+      _ = self.windowShouldClose(self.window)
+      let mi = NSApp.windowsMenu?.items.first { $0.keyEquivalent == "0" && $0.title == APP_NAME }
+      if let mi = mi, let act = mi.action { NSApp.sendAction(act, to: mi.target, from: mi) }
+      self.selftest["menuReopen"] = ["item": mi != nil, "visible": self.window.isVisible]
       self.selftest["loginOn"] = self.setAtLogin(true) && ((try? String(contentsOfFile: LOGIN_AGENT)) ?? "").contains(Bundle.main.bundlePath)
       self.selftest["loginOff"] = self.setAtLogin(false) && !self.atLogin()
       try? Data(jsonString(self.selftest).utf8).write(to: URL(fileURLWithPath: SELFTEST))
