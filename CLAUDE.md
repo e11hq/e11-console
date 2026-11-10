@@ -11,6 +11,12 @@ If you are any other Claude session:
 (Why: on 2026-10-30 two chats worked on the app at once — separate branches, mixed TestFlight builds and a revert
 that never reached main.)
 
+**The server — LOCKED at 1.9.27 (Haris, 2026-11-10 11:51: "lock the server states to latest"):** commit 12191cb, branch
+`locked/server-1.9.27` (never moved or deleted). Its rules and screens (web/rules.js, web/appview.js, server/src) as they are
+in 1.9.27 — which notifications go to whom and which reach the phone (`onPhone`), the occasion reminders' recipients, the
+held notification's preview (/api/notif-peek), categories and threads — and the iPhone app at build 1643 (`locked/ios-*-1643`).
+Nothing touches any of it — behaviour or code — without telling Haris first and his yes.
+
 ## Rule for every native screen of the iPhone app (Haris, 2026-11-03)
 When a screen is drawn again, **only what changed changes**: keep each row / card / tile / section by its id or key
 with a signature of what it shows, reuse it when it shows the same, make new only what differs, remove only what's
