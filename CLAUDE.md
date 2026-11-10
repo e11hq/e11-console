@@ -329,6 +329,8 @@ the Apple pages (about 60 `pageReady` branches — dead on the phone, which runs
 self-test's checks into the no-website run (`walktest.py --apple`) page by page first; and the smoothness check — the
 self-test filming each moment (open, back, tab switch, a row coming or going, words changing) and flagging a frame that
 jumps, as a report first, stopping builds once tuned.
+**Remind Haris when the Review Requests page's page-by-page work starts (Haris 2026-11-10 20:25):** content skeletons
+waiting for the CD are not shown in Review Requests today — decide with him in its mock-up whether they come in there.
 **Remind Haris when the Clients pages' page-by-page work starts (Haris 2026-11-09 21:12):** background uploads and downloads
 go in with them — plan in project doc `claude/ios-background-transfers-plan.md`.
 
