@@ -3404,6 +3404,13 @@ extension HomeView {
     }
     cell.accessibilityLabel = [it.title, it.sub, it.value].filter { !$0.isEmpty }.joined(separator: ", ")
   }
+  // a switch whose change was called off (its question answered Cancel, or tapped away from): back to what its row
+  // shows — the row itself didn't change, so it isn't set again (Haris 2026-11-10: the CD switch stayed on)
+  func meSwitchBack(_ itemKey: String) {
+    for (k, s) in meSwitches where k.hasSuffix(":" + itemKey) { if let on = meItems[k]?.toggle, s.isOn != on { s.setOn(on, animated: true) } }
+  }
+  // the switch on show for a row (a question about it comes from it)
+  func meSwitchView(_ itemKey: String) -> UIView? { meSwitches.first { $0.key.hasSuffix(":" + itemKey) && $0.value.window != nil }?.value }
   // (a switch kept for its row — the same one each time, so it moves as Apple's do)
   private func meSwitch(_ key: String) -> UISwitch {
     if let s = meSwitches[key] { return s }

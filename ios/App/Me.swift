@@ -1356,7 +1356,11 @@ final class MeCtl {
     guard let m = brain("team", "clientsMenu", [id]), m["sheet"] != nil else { return }
     sheet(m, multi: true) { [weak self] act in var b = act; b["ev"] = "member"; b["id"] = id; self?.direct(b, or: nil) }
   }
-  private func cdFlow(_ id: String) {
+  // (from the member page's switch: Apple's question comes from the switch, and a Cancel — or a tap away — puts the switch
+  //  back: Haris 2026-11-10)
+  private func cdFlow(_ id: String, _ h: HomeView? = nil) {
+    let from = h?.meSwitchView("cd")
+    let back: () -> Void = { [weak self, weak h] in h?.meSwitchBack("cd"); self?.redraw() }
     guard let q = brain("team", "cdAsk", [id]) else { send(["ev": "cd", "id": id]); return }
     let send2: ([String: Any]) -> Void = { [weak self] extra in
       var b: [String: Any] = ["ev": "cd", "id": id]; for (k, v) in extra { b[k] = v }
@@ -1366,16 +1370,16 @@ final class MeCtl {
         let choices = (a["choices"] as? [[String: Any]]) ?? []
         var c2: [[String: Any]] = choices.map { ["label": $0["label"] as? String ?? "", "primary": ($0["primary"] as? Bool) == true] }
         c2.append(["label": "Cancel", "cancel": true])
-        self?.ask(["kind": "choice", "title": a["title"] ?? "", "body": a["body"] ?? "", "choices": c2]) { r in
-          guard (r["ok"] as? Bool) == true, let i = r["index"] as? Int, i < choices.count, let v = choices[i]["value"] as? String else { self?.redraw(); return }
+        self?.ask(["kind": "choice", "title": a["title"] ?? "", "body": a["body"] ?? "", "choices": c2], from: from) { r in
+          guard (r["ok"] as? Bool) == true, let i = r["index"] as? Int, i < choices.count, let v = choices[i]["value"] as? String else { back(); return }
           self?.direct(["ev": "cd", "id": id, "choice": v], or: nil)
         }
       }
     }
     if (q["choice"] as? Bool) == true { send2([:]); return }
-    if q["title"] == nil { redraw(); return }
+    if q["title"] == nil { back(); return }
     var a = q; a["kind"] = "alert"; a["cancelText"] = "Cancel"
-    ask(a) { [weak self] r in if (r["ok"] as? Bool) == true { send2([:]) } else { self?.redraw() } }
+    ask(a) { r in if (r["ok"] as? Bool) == true { send2([:]) } else { back() } }
   }
   private func addMember() {
     guard let form = brain("team", "addMemberForm", [envNow]), form["fields"] != nil else { send(["ev": "addMember"]); return }
@@ -3073,7 +3077,7 @@ final class MeCtl {
       if let a = o.admin { manage.append(SetItem(key: "admin", title: "Super Admin Rights", toggle: a.on, flip: { [weak self, weak h] _ in a.run(); if let h = h { self?.settle(h) } })) }
       if !o.fin.isEmpty { var it = SetItem(key: "fin", title: "Finance Access", value: o.finNow, chevron: false); it.popup = { UIMenu(children: o.fin) }; manage.append(it) }
       if let cd = p["cd"] as? [String: Any] {
-        manage.append(SetItem(key: "cd", title: "Creative Director", sub: "Reviews every file sent for CD review", toggle: (cd["on"] as? Bool) == true, flip: { [weak self, weak h] _ in self?.cdFlow(id); if let h = h { self?.settle(h) } }))
+        manage.append(SetItem(key: "cd", title: "Creative Director", sub: "Reviews every file sent for CD review", toggle: (cd["on"] as? Bool) == true, flip: { [weak self, weak h] _ in self?.cdFlow(id, h); if let h = h { self?.settle(h) } }))
       }
       if let c = o.clients { manage.append(SetItem(key: "clients", title: "Clients They Can See", tap: c)) }
     }
@@ -3098,7 +3102,7 @@ final class MeCtl {
   }
 
   // ---------- the page's questions, as iPhone's own (dialog, choiceDialog, formDialog over the app's Me) ----------
-  func ask(_ a: [String: Any], _ done: @escaping ([String: Any]) -> Void) {
+  func ask(_ a: [String: Any], from: UIView? = nil, _ done: @escaping ([String: Any]) -> Void) {
     let kind = a["kind"] as? String ?? "alert"
     if kind == "form" {
       let vc = MeFormVC(a, done: done); let nav = UINavigationController(rootViewController: vc)
@@ -3117,7 +3121,10 @@ final class MeCtl {
         if cancel { hadCancel = true }
         ac.addAction(UIAlertAction(title: c["label"] as? String ?? "", style: cancel ? .cancel : (c["danger"] as? Bool) == true ? .destructive : .default) { _ in done(["ok": !cancel, "index": i]) })
       }
-      if let pop = ac.popoverPresentationController { pop.sourceView = main.view; pop.sourceRect = askAnchor(); pop.permittedArrowDirections = [.down, .up] }
+      if let pop = ac.popoverPresentationController {
+        if let v = from { pop.sourceView = v; pop.sourceRect = v.bounds } else { pop.sourceView = main.view; pop.sourceRect = askAnchor() }
+        pop.permittedArrowDirections = [.down, .up]
+      }
     } else {
       if let inp = a["input"] as? [String: Any] { ac.addTextField { t in t.text = inp["value"] as? String; t.placeholder = inp["placeholder"] as? String; t.clearButtonMode = .whileEditing } }
       if let c = a["cancelText"] as? String, !c.isEmpty { ac.addAction(UIAlertAction(title: c, style: .cancel) { _ in done(["ok": false]) }) }
