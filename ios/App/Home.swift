@@ -287,7 +287,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
           let key = all.2
           b.addAction(UIAction { [weak self] _ in UISelectionFeedbackGenerator().selectionChanged(); self?.tileSeeAll[key]?.1() }, for: .touchUpInside); b.sizeToFit()
           v.accessories = [.customView(configuration: .init(customView: b, placement: .trailing(), reservedLayoutWidth: .actual))]
-        } else if !v.accessories.isEmpty { v.accessories = [] }   // (never set when it has none: set, even empty, Apple's header took a cell's height and every group's heading stood apart from its rows — Haris 2026-11-10 13:56)
+        } else if !v.accessories.isEmpty { v.accessories = [] }   // (only taken off a header that had one)
       }
       listDS?.supplementaryViewProvider = { cv, _, ip in cv.dequeueConfiguredReusableSupplementary(using: head, for: ip) }
     }
@@ -385,7 +385,10 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
         secs.append([]); meta.append(ListSec(rows: !t, head: (views[k] as? UILabel)?.attributedText, tiles: t ? kindOf(nx) : .none, seeAll: t ? tileSeeAll[k].map { ($0.0, $0.1, k) } : nil)); continue
       }
       let r = isRow(k), t = tiles(k)
-      if meta.last?.rows != r || (meta.last?.tiles != .none) != t { secs.append([]); meta.append(ListSec(rows: r, head: nil, tiles: t ? kindOf(k) : .none)) }
+      // (whether the group before holds tiles — read on the group itself: `meta.last?.tiles != .none` compared the optional
+      //  with nil, so every row started a group of its own and each heading stood apart from its rows: Haris 2026-11-10 13:56)
+      let lastTiles = meta.last.map { $0.tiles != ListSec.Tiles.none } ?? false
+      if meta.last?.rows != r || lastTiles != t { secs.append([]); meta.append(ListSec(rows: r, head: nil, tiles: t ? kindOf(k) : .none)) }
       secs[secs.count - 1].append(k)
     }
     var snap = NSDiffableDataSourceSnapshot<Int, String>()
