@@ -257,7 +257,7 @@ commit 5eeb050, branch `locked/ios-inbox-1576` (never moved or deleted). Nothing
 shared piece it uses (HomeView, AppleTabs, AppleNav, AppleInbox, SharedFab) — without telling Haris first and his yes. It
 follows Home: its own Apple navigation in Apple's tab bar; Apple's big title "Inbox" with its line (how many unread); "Mark all
 read" / "Mark all unread" and your photo as Apple's bar buttons, no Talk, no search; All / Unread / Mentions as Mail's
-buttons at the top of Apple's list, scrolling away with it; opens on Unread (the unread ones at the start stay until another
+buttons at the top of Apple's list, scrolling away with it; opens on Unread — on All when nothing is unread (Haris 2026-11-10) — (the unread ones at the start stay until another
 list is picked); the rows in Apple's list edge to edge as Mail's, with Apple's own swipe (Read / Unread — its button where
 Apple puts it, left as it is: Haris 16:15); a birthday opens their greeting; "+ New task" as Home's.
 **When the Inbox's page-by-page turn comes (Haris 2026-11-09):** its rows as Apple's cells, edge to edge (mock-up "Inbox —

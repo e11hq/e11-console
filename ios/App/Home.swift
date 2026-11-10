@@ -1212,6 +1212,10 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     markAll.alpha = cornerShared ? 0 : 1
     defer { onCorner?() }
     // (opened on Unread: the unread ones at the start stay in it until another list is picked — read or not, as Mail)
+    // (nothing unread when it first opens: it opens on All instead — Haris 2026-11-10)
+    if !keepSet, (model["rows"] as? [[String: Any]]) != nil, inboxTab == "unread", ((model["unread"] as? Int) ?? 0) == 0 {
+      inboxTab = "all"; catsView.choose(0, animated: false)
+    }
     if !keepSet, (model["rows"] as? [[String: Any]]) != nil {
       keep = Set((model["rows"] as? [[String: Any]] ?? []).filter { ($0["read"] as? Bool) != true }.compactMap { $0["id"] as? String }); keepSet = true
     }
@@ -1262,7 +1266,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private var inboxCells = 0
   private var peekSeen: [String: Any] = [:]
   func inboxGeo() -> [String: Any] {
-    ["tab": inboxTab, "rows": content.filter { $0 is InboxRow }.count, "unreadRows": content.compactMap { $0 as? InboxRow }.filter { !$0.read }.count,
+    ["tab": inboxTab, "unread": (m["unread"] as? Int) ?? 0, "rows": content.filter { $0 is InboxRow }.count, "unreadRows": content.compactMap { $0 as? InboxRow }.filter { !$0.read }.count,
      "cats": catsView.widths, "markAll": !markAll.isHidden, "open": appleSwipeOK, "cells": inboxCells, "peek": peekSeen, "pinned": pinned, "apple": appleTop, "listOn": listOn]
   }
 

@@ -225,7 +225,7 @@ try:
     except Exception as e: print('diag server: failed', e)
     ib = res.get('ibxInbox') or {}; ibs = res.get('ibxSwipeInbox') or {}; ibu = res.get('ibxUnreadInbox') or {}; ibm = res.get('ibxMentionsInbox') or {}
     iba = res.get('ibxAllInbox') or {}
-    check(ib.get('shown') is True and ib.get('server') is True and ib.get('tab') == 'unread' and len(ib.get('cats') or []) == 3, f"the Inbox is the app's own, from the server, opening on Unread {ib}")
+    check(ib.get('shown') is True and ib.get('server') is True and (ib.get('tab') == 'unread' if (ib.get('unread') or 0) > 0 else ib.get('tab') == 'all') and len(ib.get('cats') or []) == 3, f"the Inbox is the app's own, from the server, opening on Unread — on All when nothing is unread {ib}")
     check((iba.get('rows') or 0) > 0 and iba.get('tab') == 'all', f"All: a row for each notification {iba}")
     check((res.get('ibx') or {}).get('blank') is True, f"the page draws nothing under the app's Inbox {res.get('ibx')}")
     check(ibs.get('open') is True, f"a row swiped right shows Read / Unread (Apple's own swipe in Apple's list) {ibs}")
