@@ -2134,7 +2134,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     }
     return ["titles": titles, "struckOpen": struck, "done": done]
   }
-  func selfFindGeo() -> [String: Any] { ["searching": searching, "results": resultViews.count, "tasks": resultCards.count, "files": resultFiles.count, "hint": hint.text ?? ""] }
+  func selfFindGeo() -> [String: Any] { ["searching": searching, "results": resultViews.count, "tasks": resultCards.count, "files": resultFiles.count, "hint": hint.text ?? "",
+                                          "clients": resultViews.filter { $0 is HomeClientRow }.count] }
   func selfFindDone() { if appleTop, let f = onAppleFind { f(nil); return }; closeSearch() }
   // (the walk-through: the first task and client in the results, and a tap on one — as a finger would)
   var walkFirst: (task: String?, client: String?) = (nil, nil)
