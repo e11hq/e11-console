@@ -28,7 +28,7 @@ final class FileTile: UIView {
     let b = pic.bounds
     guard isFolder else { return UIBezierPath(roundedRect: b, cornerRadius: liftRadius) }
     let path = UIBezierPath(roundedRect: CGRect(x: 0, y: b.height * 0.14, width: b.width, height: b.height * 0.86), cornerRadius: b.width * 0.08)
-    path.append(UIBezierPath(roundedRect: CGRect(x: 0, y: 0, width: b.width * 0.42, height: b.height * 0.3), cornerRadius: b.width * 0.06))
+    path.append(UIBezierPath(roundedRect: CGRect(x: 0, y: 0, width: b.width * 0.5, height: b.height * 0.3), cornerRadius: b.width * 0.06))
     return path
   }
   // (Apple's folder symbol with the room Apple leaves around it taken off — so the folder itself fills its 84 × 70, as the
