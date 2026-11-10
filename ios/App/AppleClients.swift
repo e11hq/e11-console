@@ -204,10 +204,12 @@ final class ClientVC: ClientsPushedVC, UISearchResultsUpdating, UISearchControll
     s.searchBar.placeholder = "Search tasks and files"
     s.searchBar.autocorrectionType = .no
     search = s
-    navigationItem.searchController = s
+    // (where it goes, told before it's given — told after, Apple's bar placed it again as the page slid in and its box's
+    //  glass came in late: Haris 2026-11-10 18:00, the Files app's doesn't)
     // (shown at the top as the approved mock-up's board 2 — under the bar, as Client Assets')
     navigationItem.hidesSearchBarWhenScrolling = false
     if #available(iOS 16.0, *) { navigationItem.preferredSearchBarPlacement = .stacked }
+    navigationItem.searchController = s
     h.onAppleResign = { [weak self] in self?.search?.searchBar.resignFirstResponder() }
     h.onAppleFind = { [weak self] q in
       guard let self = self, let s = self.search else { return }
@@ -258,9 +260,9 @@ final class AssetsVC: ClientsPushedVC, UISearchResultsUpdating, UISearchControll
       s.searchResultsUpdater = self; s.delegate = self
       s.searchBar.placeholder = "Search every client’s files"; s.searchBar.autocorrectionType = .no
       search = s
-      navigationItem.searchController = s
       navigationItem.hidesSearchBarWhenScrolling = false
       if #available(iOS 16.0, *) { navigationItem.preferredSearchBarPlacement = .stacked }
+      navigationItem.searchController = s   // (given once where it goes is told — ClientVC)
       return
     }
     // (a client's Client Assets, and a folder — "Search in Brand": Apple's search for its files, under the bar, as the mock-up)
@@ -270,9 +272,9 @@ final class AssetsVC: ClientsPushedVC, UISearchResultsUpdating, UISearchControll
       s.searchResultsUpdater = self
       s.searchBar.autocorrectionType = .no
       search = s
-      navigationItem.searchController = s
       navigationItem.hidesSearchBarWhenScrolling = false
       if #available(iOS 16.0, *) { navigationItem.preferredSearchBarPlacement = .stacked }
+      navigationItem.searchController = s   // (given once where it goes is told — ClientVC)
     }
   }
   func placeholder(_ p: String) { if search?.searchBar.placeholder != p { search?.searchBar.placeholder = p } }   // (only when it changes — as the title)

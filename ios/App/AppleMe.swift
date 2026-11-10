@@ -94,9 +94,9 @@ final class MePageVC: ClientsPushedVC, UISearchResultsUpdating, UISearchBarDeleg
       s.searchBar.delegate = self
       if !scopes.isEmpty { s.searchBar.scopeButtonTitles = scopes; s.searchBar.showsScopeBar = true; if #available(iOS 16.0, *) { s.scopeBarActivation = .manual } }
       search = s
-      navigationItem.searchController = s
       navigationItem.hidesSearchBarWhenScrolling = false
       if #available(iOS 16.0, *) { navigationItem.preferredSearchBarPlacement = .stacked }
+      navigationItem.searchController = s   // (given once where it goes is told — ClientVC)
     }
     // (each only when it changes — set again on every redraw, Apple's bar laid itself out again)
     guard let b = search?.searchBar else { return }
