@@ -188,11 +188,40 @@ class ClientsPushedVC: UIViewController {
 }
 
 // a client's page
-final class ClientVC: ClientsPushedVC {
+final class ClientVC: ClientsPushedVC, UISearchResultsUpdating, UISearchControllerDelegate {
   static weak var shared: ClientVC?
   static var pushed = false   // (one is in the Clients tab's navigation — set as it's pushed, cleared as it goes)
   override init(_ h: HomeView) { super.init(h); ClientVC.shared = self; ClientVC.pushed = true }
   required init?(coder: NSCoder) { fatalError() }
+  private var search: UISearchController?
+  // Apple's search, pulled down from under the bar (Haris 2026-11-10, approved): its tasks — open and done — and its files;
+  // the results in the page's own list, as Home's
+  override func viewDidLoad() {
+    super.viewDidLoad()
+    let s = UISearchController(searchResultsController: nil)
+    s.obscuresBackgroundDuringPresentation = false
+    s.searchResultsUpdater = self; s.delegate = self
+    s.searchBar.placeholder = "Search tasks and files"
+    s.searchBar.autocorrectionType = .no
+    search = s
+    navigationItem.searchController = s
+    navigationItem.hidesSearchBarWhenScrolling = true
+    if #available(iOS 16.0, *) { navigationItem.preferredSearchBarPlacement = .stacked }
+    h.onAppleResign = { [weak self] in self?.search?.searchBar.resignFirstResponder() }
+    h.onAppleFind = { [weak self] q in
+      guard let self = self, let s = self.search else { return }
+      if let q = q { s.isActive = true; s.searchBar.text = q; self.h.appleSearchText(q) } else { s.isActive = false }
+    }
+  }
+  func updateSearchResults(for s: UISearchController) { h.appleSearchText(s.searchBar.text ?? "") }
+  func willPresentSearchController(_ s: UISearchController) { h.appleSearchBegin() }
+  func didPresentSearchController(_ s: UISearchController) { DispatchQueue.main.async { s.searchBar.becomeFirstResponder() } }
+  func willDismissSearchController(_ s: UISearchController) { h.appleSearchEnd() }
+  override func viewWillDisappear(_ a: Bool) {
+    super.viewWillDisappear(a)
+    // (going back with the search open: the page's list as it is, not its results — the same page is used for the next client)
+    if isMovingFromParent || navigationController == nil, search?.isActive == true { h.appleSearchEnd() }
+  }
   override func viewDidDisappear(_ a: Bool) {
     super.viewDidDisappear(a)
     // (‹, the swipe back, the tab tapped again: gone — the app's own state follows)

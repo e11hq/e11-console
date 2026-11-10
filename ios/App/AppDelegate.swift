@@ -2062,6 +2062,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       if !page, (ev["ev"] as? String) == "addClient" { self.addClientSheet(); return }
       // (the list's search: the app's own, as Home's — without the website it found nothing, Haris 2026-11-05)
       if !page, (ev["ev"] as? String) == "find", self.searchNative(ev["q"] as? String ?? "") { return }
+      if page, (ev["ev"] as? String) == "find", self.clientSearch(ev["q"] as? String ?? "") { return }
       if !page, (ev["ev"] as? String) == "back", self.clientsListIfMade?.backFromMe == true { self.clientsBackToMe(); return }
       if page, (ev["ev"] as? String) == "back" { self.clientPageOut(); self.clientBackPageless() }
       // (Show completed on a client's page — without the website it went nowhere)

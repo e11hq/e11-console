@@ -127,3 +127,96 @@ final class TileCell: UICollectionViewCell {
     if let t = tile, t.superview === contentView { t.frame = contentView.bounds }
   }
 }
+
+/* A file as a row of Apple's list (Haris 2026-11-10, approved mock-up): Recently added, and what search found — on a
+   client's Client Assets, All Client Assets and a client's page. Apple's own subtitle cell: the file's picture (or its
+   type's badge in its colour), its name, the line under it (where it is, or its type and size). The words searched for
+   carry search's wash; a found row has its own identity (`found`) so a wash never stays on a row after search. */
+final class FileListRow: UIView, AppleRow {
+  var id = ""
+  var found = false
+  var onTap: (() -> Void)?
+  var menu: (() -> UIMenu?)?
+  var onLook: (() -> Void)?   // (its picture came after it was drawn: its cell set again)
+  private(set) var info: [String: Any] = [:]
+  private(set) var rowContent = UIListContentConfiguration.subtitleCell()
+  private(set) var rowSig = ""
+  var rowHasAccessory: Bool { false }
+  var rowChevron: Bool { false }
+  var rowLeading: Bool { false }
+  var rowLate: Bool { false }
+  func rowTapped() { UIImpactFeedbackGenerator(style: .light).impactOccurred(); onTap?() }
+  private var picPath: String?, pic: UIImage?, line = "", marks: [String] = []
+  override init(frame: CGRect) { super.init(frame: frame); isUserInteractionEnabled = false }
+  required init?(coder: NSCoder) { fatalError() }
+  // line: what's under the name; marks: the words searched for (none — no wash)
+  func set(_ f: [String: Any], line: String, marks: [String], look L: HomeLook) {
+    info = f; id = f["id"] as? String ?? ""; self.line = line; self.marks = marks
+    let p = CommentCell.picURL(f)
+    if p != picPath {
+      picPath = p; pic = nil
+      if let p = p {
+        var now = true
+        FeedLoader.shared.image(p) { [weak self] img in
+          guard let self = self, self.picPath == p, let img = img else { return }
+          self.pic = FileListRow.thumb(img)
+          if !now { self.paint(L); self.onLook?() }
+        }
+        now = false
+      }
+    }
+    paint(L)
+  }
+  private func paint(_ L: HomeLook) {
+    let nm = info["name"] as? String ?? "File"
+    let sig = "\(nm)|\(line)|\(marks.joined(separator: ","))|\(pic != nil)|\(picPath ?? "")|\(L.key)"
+    guard sig != rowSig else { return }
+    rowSig = sig
+    var cfg = UIListContentConfiguration.subtitleCell()
+    let ext = (nm as NSString).pathExtension.uppercased()
+    cfg.image = pic ?? FileListRow.badge(ext)
+    cfg.imageProperties.reservedLayoutSize = CGSize(width: 40, height: 40)
+    cfg.imageProperties.maximumSize = CGSize(width: 40, height: 40)
+    cfg.imageToTextPadding = 13
+    cfg.attributedText = FileListRow.marked(nm, marks, font: .systemFont(ofSize: 16), color: L.title)
+    cfg.textProperties.numberOfLines = 1; cfg.textProperties.lineBreakMode = .byTruncatingMiddle
+    cfg.secondaryAttributedText = FileListRow.marked(line, marks, font: .systemFont(ofSize: 13), color: .secondaryLabel)
+    cfg.secondaryTextProperties.numberOfLines = 1
+    cfg.textToSecondaryTextVerticalPadding = 2
+    cfg.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16)
+    rowContent = cfg
+    accessibilityLabel = "\(nm), \(line)"
+  }
+  // the words searched for, washed as everywhere in search (Find's wash)
+  static func marked(_ s: String, _ marks: [String], font: UIFont, color: UIColor) -> NSAttributedString {
+    let a = NSMutableAttributedString(string: s, attributes: [.font: font, .foregroundColor: color])
+    let ns = s as NSString
+    for w in marks { for r in Find.ranges(w, ns) { a.addAttribute(.backgroundColor, value: Find.wash, range: r) } }
+    return a
+  }
+  // (its picture, square with Apple's rounded corners)
+  static func thumb(_ img: UIImage) -> UIImage {
+    UIGraphicsImageRenderer(size: CGSize(width: 40, height: 40)).image { _ in
+      UIBezierPath(roundedRect: CGRect(x: 0, y: 0, width: 40, height: 40), cornerRadius: 8).addClip()
+      let s = img.size, k = max(40 / max(1, s.width), 40 / max(1, s.height))
+      img.draw(in: CGRect(x: (40 - s.width * k) / 2, y: (40 - s.height * k) / 2, width: s.width * k, height: s.height * k))
+    }.withRenderingMode(.alwaysOriginal)
+  }
+  // (no picture: its type's badge in its colour — the same colours as the grid's tiles; dynamic, so light / dark switch)
+  static func badge(_ ext: String) -> UIImage {
+    let (bg, fg) = FileTile.colours(ext)
+    let t = ext.isEmpty ? "FILE" : String(ext.prefix(4))
+    let draw = { (tc: UITraitCollection) -> UIImage in
+      UIGraphicsImageRenderer(size: CGSize(width: 40, height: 40)).image { _ in
+        bg.resolvedColor(with: tc).setFill(); UIBezierPath(roundedRect: CGRect(x: 0, y: 0, width: 40, height: 40), cornerRadius: 8).fill()
+        let f = UIFont.systemFont(ofSize: t.count > 3 ? 10 : 12, weight: .bold), sz = (t as NSString).size(withAttributes: [.font: f])
+        (t as NSString).draw(at: CGPoint(x: (40 - sz.width) / 2, y: (40 - sz.height) / 2), withAttributes: [.font: f, .foregroundColor: fg.resolvedColor(with: tc)])
+      }
+    }
+    let light = draw(UITraitCollection(userInterfaceStyle: .light)), dark = draw(UITraitCollection(userInterfaceStyle: .dark))
+    // (both looks in one picture — iPhone shows the right one by itself, as an asset catalogue's)
+    let a = UIImageAsset()
+    a.register(light, with: UITraitCollection(userInterfaceStyle: .light)); a.register(dark, with: UITraitCollection(userInterfaceStyle: .dark))
+    return a.image(with: UITraitCollection.current)
+  }
+}

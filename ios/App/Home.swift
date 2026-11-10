@@ -61,7 +61,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private let searchCircle = HomeGlass(), me = UIButton(type: .custom), closeCircle = HomeGlass()
   private let searchBar = HomeGlass(), field = UITextField(), lens = UIImageView()
   private let results = UIScrollView(), hint = UILabel()
-  private var resultViews: [UIView] = [], resultCards: [String: HomeCard] = [:]
+  private var resultViews: [UIView] = [], resultCards: [String: HomeCard] = [:], resultFiles: [String: FileListRow] = [:]
   private(set) var searching = false
   private(set) var closingSearch = false        // (✕ tapped: the bar shrinking back into 🔍 — your photo is already coming back)
   private(set) var searchClosedAt: Date?
@@ -322,7 +322,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       for v in resultViews {
         // (a task found is its own row, not Home's row of the same task: one identity for both, Apple kept the found
         //  row's cell — the search's wash on its title — when search closed: Haris 2026-11-09)
-        let k = (v as? HomeCard).map { "f:" + $0.id } ?? "r:\(ObjectIdentifier(v).hashValue)"
+        let k = (v as? HomeCard).map { "f:" + $0.id } ?? (v as? FileListRow).map { "fs:" + $0.id } ?? "r:\(ObjectIdentifier(v).hashValue)"
         if views[k] != nil { continue }
         // (Client Assets' found files — a block: the whole width, as the list's — AppleClients.swift)
         if let b = v as? HomeBlock { let w = blockWraps[ObjectIdentifier(b)] ?? BlockWrap(b); blockWraps[ObjectIdentifier(b)] = w; keys.append(k); views[k] = w; continue }
@@ -336,6 +336,8 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       if let c = v as? HomeCard { let k = "c:" + c.id; keys.append(k); views[k] = c; continue }
       if let c = v as? ClientListRow { let k = "k:" + c.id; keys.append(k); views[k] = c; continue }
       if v is ClientsMoreRow { keys.append("k:inactive"); views["k:inactive"] = v; continue }
+      // (a file's row: Recently added's, or one search found — its own identity, so a wash never stays: Haris 2026-11-10)
+      if let r = v as? FileListRow { let k = (r.found ? "fs:" : "fr:") + r.id; if views[k] != nil { continue }; keys.append(k); views[k] = r; continue }
       if let t = v as? FileTile { let k = (t.info["files"] != nil && t.info["size"] == nil ? "fd:" : "ff:") + t.id; keys.append(k); views[k] = t; continue }
       // (the Clients tab's and Client Assets' blocks — the clients' group, folders, files: each a cell, the whole width)
       if let b = v as? HomeBlock {
@@ -1825,7 +1827,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     //  Haris 2026-11-08)
     if !listOn { resultViews.forEach { $0.removeFromSuperview() } }
     resultViews = []
-    var seen = Set<String>()
+    var seen = Set<String>(), seenFiles = Set<String>()
     let q = (field.text ?? "").trimmingCharacters(in: .whitespaces)
     if let r = r {
       let marks = (r["marks"] as? [String]) ?? []
@@ -1858,9 +1860,30 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
           resultViews.append(v)
         }
       }
-      hint.text = clients.isEmpty && tasks.isEmpty ? "No tasks found. Try a client or person’s name." : nil
-    } else { hint.text = q.isEmpty ? "Search tasks, clients or people." : nil }
+      // (a client's page: its files found too — Apple's rows, each with its own identity, the words washed: Haris 2026-11-10)
+      let files = (r["files"] as? [[String: Any]]) ?? []
+      if !files.isEmpty {
+        let fm = (r["fileMarks"] as? [String]) ?? marks
+        let cid = (m["assets"] as? [String: Any])?["id"] as? String ?? ""
+        let cname = (m["assets"] as? [String: Any])?["name"] as? String ?? ""
+        resultViews.append(groupHead("Files", files.count))
+        for (i, f) in files.enumerated() {
+          let id = f["id"] as? String ?? ""
+          seenFiles.insert(id)
+          let v = resultFiles[id] ?? { let x = FileListRow(); x.found = true; resultFiles[id] = x; return x }()
+          var at = f["where"] as? String ?? ""
+          if !cname.isEmpty, at.hasPrefix(cname + " › ") { at = String(at.dropFirst(cname.count + 3)) }
+          v.set(f, line: [at, TaskPage.size(f["size"] as? Int ?? 0)].filter { !$0.isEmpty }.joined(separator: " · "), marks: fm, look: L)
+          v.onTap = { Main.shared.openFiles(files, at: i) }
+          v.menu = { [weak self] in self.map { Main.shared.assetsCtl.fileMenu($0, f, client: cid) } }
+          v.onLook = { [weak self] in self?.applyList(animated: false) }
+          resultViews.append(v)
+        }
+      }
+      hint.text = clients.isEmpty && tasks.isEmpty && files.isEmpty ? (r["empty"] as? String ?? "No tasks found. Try a client or person’s name.") : nil
+    } else { hint.text = q.isEmpty ? (isClient ? "Search this client’s tasks and files." : "Search tasks, clients or people.") : nil }
     for id in resultCards.keys where !seen.contains(id) { resultCards[id] = nil }
+    for id in resultFiles.keys where !seenFiles.contains(id) { resultFiles[id] = nil }
     setNeedsLayout()
     if listOn { applyList(animated: false) }   // (Apple's list: the results are its rows while searching)
   }
@@ -2942,6 +2965,9 @@ extension HomeView: UICollectionViewDelegate {
     if ips.count == 1, let key = listDS?.itemIdentifier(for: ips[0]), let row = listViews[key] as? InboxRow { return inboxMenu(row, key) }
     // (a folder or a file held: Apple's menu with its lift — Assets.swift's menus)
     if ips.count == 1, let key = listDS?.itemIdentifier(for: ips[0]), let t = listViews[key] as? FileTile, let menu = t.menu {
+      return UIContextMenuConfiguration(identifier: key as NSString, previewProvider: nil) { _ in menu() }
+    }
+    if ips.count == 1, let key = listDS?.itemIdentifier(for: ips[0]), let r = listViews[key] as? FileListRow, let menu = r.menu {
       return UIContextMenuConfiguration(identifier: key as NSString, previewProvider: nil) { _ in menu() }
     }
     // (a client held: Apple's menu with its lift — Open · Client Details; its sheet once the menu has closed)

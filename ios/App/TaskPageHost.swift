@@ -1179,6 +1179,26 @@ extension Main {
     return true
   }
   static var searchSeq = 0
+  // a client's page's search (Haris 2026-11-10, approved): its tasks — open and done — and its files, found on the phone
+  // (Home's search, kept to this client's tasks; its Client Assets' files as Client Assets finds them)
+  func clientSearch(_ q: String) -> Bool {
+    guard ownCopy, AppData.shared.tabsOn, AppData.shared.meOn("tasks"), let pid = clientsShownId, let page = clientPageIfMade else { return false }
+    Main.searchSeq += 1
+    let my = Main.searchSeq
+    let cid = (page.model["assets"] as? [String: Any])?["id"] as? String
+    DispatchQueue.global(qos: .userInteractive).async {
+      let m = AppData.shared.meModel("tasks", "search", [q])
+      let mine = AppData.shared.screen("clients", ServerHome.clientsJSON("view=client&id=\(pid)&done=1")).model
+      let files = (cid.flatMap { AppData.shared.meModel("assets", "assets", [$0]) }?["files"] as? [[String: Any]]) ?? []
+      let ids = Set(((mine?["groups"] as? [[String: Any]]) ?? []).flatMap { ($0["cards"] as? [[String: Any]]) ?? [] }.compactMap { $0["id"] as? String })
+      let tasks = ((m?["tasks"] as? [[String: Any]]) ?? []).filter { ids.contains($0["id"] as? String ?? "") }
+      let f = Find.filter(files, q) { "\($0["name"] ?? "") \($0["where"] ?? "")" }
+      let r: [String: Any] = ["q": q, "clients": [[String: Any]](), "tasks": tasks, "total": tasks.count, "marks": (m?["marks"] as? [String]) ?? Find.terms(q),
+                              "files": Array(f.items.prefix(80)), "fileMarks": f.marks, "empty": "No tasks or files found."]
+      DispatchQueue.main.async { guard my == Main.searchSeq else { return }; page.searchResults(r) }
+    }
+    return true
+  }
 }
 extension Main {
   // (the client whose page shows on the Clients tab — New task there starts in it)
