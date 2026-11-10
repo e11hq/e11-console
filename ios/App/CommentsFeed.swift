@@ -500,7 +500,11 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
     if laidW == 0 || bounds.width == 0 { pulseWaiting = id; endOnLayout = false; return }
     layoutIfNeeded()
     guard let f = frameOf(id) else { return }
-    let y = max(-scroll.contentInset.top, min(f.midY - scroll.bounds.height * 0.4, scroll.contentSize.height + scroll.contentInset.bottom - scroll.bounds.height))
+    // (a comment taller than the room it has — a long one: its top brought in just under the bar, not its middle, which left
+    //  its start above the screen — Haris 2026-11-10 14:40; a short one as before, a little above the middle)
+    let room = scroll.bounds.height - scroll.contentInset.top - scroll.contentInset.bottom
+    let want = f.height > room * 0.8 ? f.minY - scroll.contentInset.top - 12 : f.midY - scroll.bounds.height * 0.4
+    let y = max(-scroll.contentInset.top, min(want, scroll.contentSize.height + scroll.contentInset.bottom - scroll.bounds.height))
     // (Apple's own smooth scroll there — it jumped, Haris 2026-11-08; the card lights up as it arrives)
     let moves = abs(scroll.contentOffset.y - y) > 1
     if moves { scroll.setContentOffset(CGPoint(x: 0, y: y), animated: true) }
