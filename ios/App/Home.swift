@@ -2036,6 +2036,40 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     a.enumerateAttribute(.backgroundColor, in: NSRange(location: 0, length: a.length)) { v, _, _ in if v != nil { washed = true } }
     return ["row": true, "cell": true, "title": true, "washed": washed]
   }
+  // (the self-test, the Clients pages fully Apple — Haris 2026-11-10: what each list holds, as Apple's cells)
+  func selfClientsGeo() -> [String: Any] {
+    let ks = Array(listViews.keys)
+    var g: [String: Any] = ["rows": ks.filter { $0.hasPrefix("k:") }.count, "folders": ks.filter { $0.hasPrefix("fd:") }.count, "cards": ks.filter { $0.hasPrefix("c:") }.count,
+                            "openDone": ks.contains("b:client-open-done"), "strip": listSecs.contains { $0.tiles == .strip }, "seeAll": listSecs.contains { $0.seeAll != nil }]
+    if let cv = list, let ds = listDS, let k = ks.first(where: { $0.hasPrefix("k:") || $0.hasPrefix("c:") }), let ip = ds.indexPath(for: k) {
+      cv.layoutIfNeeded()
+      g["appleCell"] = (cv.cellForItem(at: ip) as? UICollectionViewListCell)?.contentConfiguration is UIListContentConfiguration
+    }
+    return g
+  }
+  func selfOpenFirstClient() -> String {
+    guard let r = content.first(where: { $0 is ClientListRow }) as? ClientListRow else { return "no client" }
+    r.rowTapped(); return r.id
+  }
+  func selfDoneSwitch(_ i: Int) { doneSwitch.seg.selectedSegmentIndex = i; doneSwitch.onPick?(i) }
+  // (every task's title on screen: none struck through — Done, then Open again)
+  func selfStrike() -> [String: Any] {
+    guard let cv = list else { return ["list": false] }
+    cv.layoutIfNeeded()
+    var titles = 0, struck = 0, done = 0
+    for case let cell as UICollectionViewListCell in cv.visibleCells {
+      guard let ip = cv.indexPath(for: cell), let k = listDS?.itemIdentifier(for: ip), let card = listViews[k] as? HomeCard else { continue }
+      titles += 1
+      if (card.info["done"] as? Bool) == true { done += 1 }
+      if let a = (cell.contentConfiguration as? UIListContentConfiguration)?.attributedText, a.length > 0 {
+        var hit = false
+        a.enumerateAttribute(.strikethroughStyle, in: NSRange(location: 0, length: a.length)) { v, _, _ in if (v as? Int ?? 0) != 0 { hit = true } }
+        if hit && (card.info["done"] as? Bool) != true { struck += 1 }
+      }
+    }
+    return ["titles": titles, "struckOpen": struck, "done": done]
+  }
+  func selfFindGeo() -> [String: Any] { ["searching": searching, "results": resultViews.count, "tasks": resultCards.count, "files": resultFiles.count, "hint": hint.text ?? ""] }
   func selfFindDone() { if appleTop, let f = onAppleFind { f(nil); return }; closeSearch() }
   // (the walk-through: the first task and client in the results, and a tap on one — as a finger would)
   var walkFirst: (task: String?, client: String?) = (nil, nil)
