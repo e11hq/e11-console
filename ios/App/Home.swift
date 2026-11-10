@@ -3136,7 +3136,7 @@ extension HomeView: UICollectionViewDelegate {
     guard let key = listDS?.itemIdentifier(for: ip), let t = listViews[key] as? FileTile, t.window != nil else { return nil }
     let v = t.liftView
     let p = UIPreviewParameters(); p.backgroundColor = .clear
-    p.visiblePath = UIBezierPath(roundedRect: v.bounds, cornerRadius: t.liftRadius)
+    p.visiblePath = t.liftPath; p.shadowPath = t.liftPath
     return UITargetedPreview(view: v, parameters: p)
   }
   func collectionView(_ cv: UICollectionView, contextMenuConfiguration c: UIContextMenuConfiguration, highlightPreviewForItemAt ip: IndexPath) -> UITargetedPreview? { tileLift(ip) }

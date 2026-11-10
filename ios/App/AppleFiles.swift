@@ -22,6 +22,15 @@ final class FileTile: UIView {
   //  Haris 2026-11-10 15:32)
   var liftView: UIView { pic }
   var liftRadius: CGFloat { isFolder ? 4 : max(6, pic.layer.cornerRadius) }
+  // (held: the lift's outline — a folder in its own shape, its tab and its body, so Apple's lift shadow follows the folder,
+  //  not a box around it: a grey box showed behind a lifted folder, Haris 2026-11-10 17:08; a file: its picture's rounded shape)
+  var liftPath: UIBezierPath {
+    let b = pic.bounds
+    guard isFolder else { return UIBezierPath(roundedRect: b, cornerRadius: liftRadius) }
+    let path = UIBezierPath(roundedRect: CGRect(x: 0, y: b.height * 0.14, width: b.width, height: b.height * 0.86), cornerRadius: b.width * 0.08)
+    path.append(UIBezierPath(roundedRect: CGRect(x: 0, y: 0, width: b.width * 0.42, height: b.height * 0.3), cornerRadius: b.width * 0.06))
+    return path
+  }
   // (Apple's folder symbol with the room Apple leaves around it taken off — so the folder itself fills its 84 × 70, as the
   //  mock-up; with that room it came out about a fifth smaller than its name called for: Haris 2026-11-10 15:21)
   static let folderImage: UIImage = {
