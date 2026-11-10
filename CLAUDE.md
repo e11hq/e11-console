@@ -188,6 +188,9 @@ follows it (Don't 9); don't change any of it without Haris. Project doc `claude/
   previous locked home" — the firm frost with its line (builds 1562 / 1566) taken off Home. Which frost other Apple pages
   get (the task page had the firm frost with its line since 1566): **since 2026-11-09 every Apple page has Apple's own
   frost untouched, as Home** (Haris: "Automatic, as Home" — the firm one showed at the top under a search bar).
+  **The exception: the task's comments (and a thread) — Apple's soft frost, as Details shows** (Haris 2026-11-10: "the
+  same soft blur on comments tab as in details"); on automatic Apple picks its firm frost with a line there, because the
+  day pills are floating headers.
 - Opening a page from it: Apple's push; **the tab bar is hidden with Apple's tab bar call once the page has arrived**,
   and comes back as the slide back begins — never "hide the bottom bar when pushed", and nothing told to the tab bar at
   the slide's first moment: either makes Apple's bar snap small and the big title jump into it.

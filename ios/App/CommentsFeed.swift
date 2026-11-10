@@ -165,6 +165,9 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
     scroll.automaticallyAdjustsScrollIndicatorInsets = false   // (the scroll bar starts under the bar from the start — the standard)
     scroll.tableHeaderView = UIView(frame: CGRect(x: 0, y: 0, width: 1, height: 4))
     scroll.tableFooterView = UIView(frame: CGRect(x: 0, y: 0, width: 1, height: 8))
+    // (Apple's soft frost under the bar, as Details has — on automatic, Apple picks its firm frost with a line for a list
+    //  with floating headers, the day pills: Haris 2026-11-10 "the same soft blur on comments tab as in details")
+    if #available(iOS 26.0, *) { scroll.topEdgeEffect.style = .soft }
     scroll.register(FeedRow.self, forCellReuseIdentifier: "c")
     scroll.register(DayHead.self, forHeaderFooterViewReuseIdentifier: "h")
     scroll.delegate = self
