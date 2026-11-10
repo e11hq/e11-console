@@ -508,14 +508,22 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
     focusId = id; focusInbox = fromInbox; endOnLayout = false
     // (Apple's own smooth scroll there — it jumped, Haris 2026-11-08; the card lights up as it arrives)
     let moves = abs(scroll.contentOffset.y - y) > 1
-    if moves { scroll.setContentOffset(CGPoint(x: 0, y: y), animated: true) }
+    // (from the Inbox or a notification the comments are only just showing: they open right there, no scroll from the
+    //  latest — scrolled the whole way up, the list went black on the way: Haris 2026-11-10 17:51 "a black flash")
+    if moves { scroll.setContentOffset(CGPoint(x: 0, y: y), animated: !fromInbox); if fromInbox { scroll.layoutIfNeeded() } }
     // (on the comment's own card, its rounded shape — not a band across the whole row: Haris, 2026-11-02)
-    let band = c.highlightView()
-    band.backgroundColor = Look.c(UIColor.white.withAlphaComponent(0.13), UIColor.black.withAlphaComponent(0.08))
-    band.alpha = 0; band.isUserInteractionEnabled = false
-    UIView.animate(withDuration: 0.2, delay: moves ? 0.35 : 0.15, options: [.curveEaseOut]) { band.alpha = 1 } completion: { _ in
-      UIView.animate(withDuration: 0.6, delay: 0.5, options: [.curveEaseInOut]) { band.alpha = 0 } completion: { _ in band.removeFromSuperview() }
+    // (opened from the Inbox: lit once the page has slid in and settled, on its own turn of the run loop — lit while the
+    //  page slid in, or inside a no-animation drawing, it was over before it could be seen: Haris 2026-11-10 17:51)
+    let light = { [weak self] (delay: Double) in
+      let cell = self?.cells[id] ?? c
+      let band = cell.highlightView()
+      band.backgroundColor = Look.c(UIColor.white.withAlphaComponent(0.13), UIColor.black.withAlphaComponent(0.08))
+      band.alpha = 0; band.isUserInteractionEnabled = false
+      UIView.animate(withDuration: 0.25, delay: delay, options: [.curveEaseOut, .allowUserInteraction]) { band.alpha = 1 } completion: { _ in
+        UIView.animate(withDuration: 0.6, delay: 0.6, options: [.curveEaseInOut, .allowUserInteraction]) { band.alpha = 0 } completion: { _ in band.removeFromSuperview() }
+      }
     }
+    if fromInbox { DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { light(0) } } else { light(moves ? 0.35 : 0.15) }
   }
   func has(_ id: String) -> Bool { cells[id] != nil }
   // (the self-test: the comment opened to, still in view once everything has come — Haris 2026-11-10 17:03)
@@ -539,7 +547,8 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
     guard let id = focusId, !scroll.isTracking, !scroll.isDragging, !scroll.isDecelerating else { return }
     scroll.layoutIfNeeded()
     guard let y = focusY(id, inbox: focusInbox), abs(scroll.contentOffset.y - y) > 1 else { return }
-    scroll.setContentOffset(CGPoint(x: 0, y: y), animated: true)
+    // (a small move: Apple's smooth scroll; a long one, opened from the Inbox — straight there, never through a black list)
+    scroll.setContentOffset(CGPoint(x: 0, y: y), animated: !focusInbox || abs(scroll.contentOffset.y - y) < 300)
   }
   // (times move on while you look — "now" becomes "1m": a clock every 20 seconds while the comments are on a screen, the
   //  times' words only, nothing else drawn again — Haris 2026-11-10)
