@@ -416,7 +416,17 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
     }
     // skeletons waiting for this person (the Plans tab's count, Plans.waiting)
     const waiting = () => (canSee() ? W.plans.filter((pl) => proj(pl.projectId) && !proj(pl.projectId).inactive && ((pl.status === 'review' && canApprove(pl)) || (pl.status === 'changes' && isEditor(pl) && me() && me().role === 'social' && (pl.createdBy === me().id || socialsOf(proj(pl.projectId)).includes(me().id))))).length : 0);
-    return { list, plan, post, search, waiting, byId: planById };
+    // the skeletons waiting for this person's approval, every month, oldest sent first (the CD's Review Requests: their own
+    // group "Content plans" on top of Waiting — Haris 2026-11-10, the mock-up "Review Requests — fully Apple", A2)
+    const waitingList = () => (canSee() ? W.plans.filter((pl) => proj(pl.projectId) && !proj(pl.projectId).inactive && pl.status === 'review' && canApprove(pl))
+      .sort((a, b) => String((a.review && a.review.at) || '').localeCompare(String((b.review && b.review.at) || '')))
+      .map((pl) => {
+        const p = proj(pl.projectId);
+        return { id: pl.id, pid: p.id, month: pl.month, name: p.name || 'Client', ini: initials(p.name || 'C'), rgb: rgb(W.colorOf(p)),
+          title: `${p.name || 'Client'} · ${monthLabel(pl.month)}`,
+          sub: pl.review && pl.review.by ? `Content skeleton · ${who(pl.review.by)} sent it · ${W.timeAgo(pl.review.at)}` : 'Content skeleton' };
+      }) : []);
+    return { list, plan, post, search, waiting, waitingList, byId: planById };
   }
 
   // ---------- Client Assets (web/phone.js NativeAssets, app.js's Client Assets rules) ----------
@@ -529,6 +539,7 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
   //  it; null when it's gone or not this person's to see — Haris 2026-11-10)
   X.planRef = (R, data, me, nowMs, id) => { const P = plansOf(world(R, data, me, nowMs)), pl = P.byId(String(id || '')); return pl && P.plan(pl.projectId, pl.month) ? { pid: pl.projectId, month: pl.month } : null; };
   X.plansWaiting = (R, data, me, nowMs) => plansOf(world(R, data, me, nowMs)).waiting();
+  X.plansForMe = (R, data, me, nowMs) => ({ rows: plansOf(world(R, data, me, nowMs)).waitingList() });
   X.plansShift = (m, n) => shiftMonth(m, n);
   X.assets = (R, data, me, nowMs, clientId) => assetsOf(world(R, data, me, nowMs)).modelFor(clientId || null);
 })(E11AppMe);
