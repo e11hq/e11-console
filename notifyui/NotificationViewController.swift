@@ -75,6 +75,14 @@ final class NotificationViewController: UIViewController, UNNotificationContentE
         let clip = UIView(); clip.clipsToBounds = true
         clip.addSubview(prev); prev.frame = CGRect(x: 0, y: 0, width: W, height: full)
         clip.heightAnchor.constraint(equalToConstant: h).isActive = true
+        // (cut short: it fades away at its foot — no sharp edge, as the Inbox's peek: Haris 2026-11-10)
+        if full > h {
+          let m = CAGradientLayer()
+          m.colors = [UIColor.black.cgColor, UIColor.black.cgColor, UIColor.clear.cgColor]
+          m.locations = [0, NSNumber(value: Double(max(0, (h - 44) / h))), 1]
+          m.frame = CGRect(x: 0, y: 0, width: W, height: h)
+          clip.layer.mask = m
+        }
         parts.append(clip)
       }
       parts.append(focus)

@@ -169,13 +169,24 @@ final class InboxPeekVC: UIViewController {
       let room = maxH - headH - 16 - focusH
       stack.addArrangedSubview(gap(8))
       if shown.count > 1, room >= 70 {
-        let prev = CommentCell(shown[0], people: people, me: me, thread: false, root: false)
-        prev.isUserInteractionEnabled = false; prev.alpha = 0.6
+        // (cut short: its card keeps its rounded bottom and its words fade into the card — no sharp edge: Haris 2026-11-10)
+        let prev = CommentCell(shown[0], people: people, me: me, thread: false, root: true)
+        prev.isUserInteractionEnabled = false
         let full = prev.height(for: W), h = min(full, room, 130)
-        let clip = UIView(); clip.clipsToBounds = true
-        clip.addSubview(prev); prev.frame = CGRect(x: 0, y: 0, width: W, height: full)
-        clip.heightAnchor.constraint(equalToConstant: h).isActive = true
-        stack.addArrangedSubview(clip)
+        let wrap = UIView(); wrap.alpha = 0.6
+        let shape = UIView(frame: CGRect(x: 16, y: 6, width: W - 32, height: h - 12))
+        shape.layer.cornerRadius = 18; shape.layer.cornerCurve = .continuous; shape.clipsToBounds = true
+        wrap.addSubview(shape)
+        shape.addSubview(prev); prev.frame = CGRect(x: -16, y: -6, width: W, height: full)
+        if full > h {
+          let card = HomeLook(Main.shared.lookBoth).card.resolvedColor(with: traitCollection)
+          let fade = CAGradientLayer()
+          fade.colors = [card.withAlphaComponent(0).cgColor, card.cgColor]
+          fade.frame = CGRect(x: 0, y: max(0, shape.bounds.height - 44), width: shape.bounds.width, height: min(44, shape.bounds.height))
+          shape.layer.addSublayer(fade)
+        }
+        wrap.heightAnchor.constraint(equalToConstant: h).isActive = true
+        stack.addArrangedSubview(wrap)
       }
       let c = CommentCell(shown[shown.count - 1], people: people, me: me, thread: false, root: false)
       c.isUserInteractionEnabled = false
