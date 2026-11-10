@@ -18,6 +18,10 @@ final class FileTile: UIView {
   private(set) var isFolder = true, isClient = false
   var key: String { (isClient ? "fc:" : isFolder ? "fd:" : "ff:") + id }   // (its identity in the list)
   static let stripW: CGFloat = 92
+  // (held: Apple's lift on the picture itself — the folder or the file — as the Files app and Photos, not the tile's box;
+  //  Haris 2026-11-10 15:32)
+  var liftView: UIView { pic }
+  var liftRadius: CGFloat { isFolder ? 4 : max(6, pic.layer.cornerRadius) }
   // (Apple's folder symbol with the room Apple leaves around it taken off — so the folder itself fills its 84 × 70, as the
   //  mock-up; with that room it came out about a fifth smaller than its name called for: Haris 2026-11-10 15:21)
   static let folderImage: UIImage = {

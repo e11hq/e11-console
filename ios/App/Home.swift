@@ -3105,6 +3105,16 @@ extension HomeView: UICollectionViewDelegate {
   }
   // touch and hold a task: Apple's own lift of its cell and Apple's menu — Attach Files (Camera · Photos · Files); Copy link
   // and Trash are on its swipe (Haris 2026-11-09 12:36: "no need for them to be in the menu"). My Tasks' Done tab: read only
+  // (a folder's or file's tile held: Apple's lift on its picture alone, on nothing — as the Files app; every other row: Apple's own)
+  private func tileLift(_ ip: IndexPath) -> UITargetedPreview? {
+    guard let key = listDS?.itemIdentifier(for: ip), let t = listViews[key] as? FileTile, t.window != nil else { return nil }
+    let v = t.liftView
+    let p = UIPreviewParameters(); p.backgroundColor = .clear
+    p.visiblePath = UIBezierPath(roundedRect: v.bounds, cornerRadius: t.liftRadius)
+    return UITargetedPreview(view: v, parameters: p)
+  }
+  func collectionView(_ cv: UICollectionView, contextMenuConfiguration c: UIContextMenuConfiguration, highlightPreviewForItemAt ip: IndexPath) -> UITargetedPreview? { tileLift(ip) }
+  func collectionView(_ cv: UICollectionView, contextMenuConfiguration c: UIContextMenuConfiguration, dismissalPreviewForItemAt ip: IndexPath) -> UITargetedPreview? { tileLift(ip) }
   func collectionView(_ cv: UICollectionView, contextMenuConfigurationForItemsAt ips: [IndexPath], point: CGPoint) -> UIContextMenuConfiguration? {
     if ips.count == 1, let key = listDS?.itemIdentifier(for: ips[0]), let row = listViews[key] as? InboxRow { return inboxMenu(row, key) }
     // (a folder or a file held: Apple's menu with its lift — Assets.swift's menus)
