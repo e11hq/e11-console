@@ -199,15 +199,12 @@ extension Main {
       // (the test, Haris 2026-11-10 19:58 "Yes": a plain Apple page with only a search bar pushed on the same navigation, then
       //  our page's pieces added one at a time — the one that makes the box's fill come late is the cause)
       ("aBarBackA", { AppleTabs.shared?.clientsNav.popToRootViewController(animated: false) }),
-      ("aBarV0", { self.barVariant(0) }), ("aBarV0w", {}),
-      ("aBarV1", { self.barVariant(1) }), ("aBarV1w", {}),
-      ("aBarV2", { self.barVariant(2) }), ("aBarV2w", {}),
-      ("aBarV3", { self.barVariant(3) }), ("aBarV3w", {}),
-      ("aBarV4", { self.barVariant(4) }), ("aBarV4w", {}),
-      ("aBarV5", { self.barVariant(5) }), ("aBarV5w", {}),
-      ("aBarV6", { self.barVariant(6) }), ("aBarV6w", {}),
-      ("aBarV7", { self.barVariant(7) }), ("aBarV7w", {}),
-      ("aBarV8", { self.barVariant(8) }), ("aBarV8w", {}),
+      ("aBarV0", { self.barVariant(0) }), ("aBarV0w", {}), ("aBarV0x", {}),
+      ("aBarV8", { self.barVariant(8) }), ("aBarV8w", {}), ("aBarV8x", {}),
+      ("aBarV9", { self.barVariant(9) }), ("aBarV9w", {}), ("aBarV9x", {}),
+      ("aBarV10", { self.barVariant(10) }), ("aBarV10w", {}), ("aBarV10x", {}),
+      ("aBarV11", { self.barVariant(11) }), ("aBarV11w", {}), ("aBarV11x", {}),
+      ("aBarV12", { self.barVariant(12) }), ("aBarV12w", {}), ("aBarV12x", {}),
       ("aBarBack", { self.tab("projects"); AppleTabs.shared?.clientsNav.popToRootViewController(animated: false) }),
       // a long-ago comment opened as from the Inbox: in view once everything has come
       ("aFocus", { if let b = best { self.openTaskPage(b.0, tab: "comments", focus: "\(b.0)~\(b.1)") } }),
@@ -218,37 +215,25 @@ extension Main {
       }),
     ]
   }
-  // one variant pushed on the Clients tab's navigation, filmed until its search box gets Apple's fill, then taken off
-  //  0 plain: a title and a stacked search bar · 1 + our pushed page's bar settings (no big title, ‹ only)
-  //  2 + a list given to Apple's bar (setContentScrollView) · 3 + our title view (logo square and name)
-  //  4 + our page itself in it (a HomeView as the client's page has) · 5 plain, Apple's own placement (none set)
+  // one variant pushed on the Clients tab's navigation, filmed for 3 s: when its search box gets Apple's fill, and
+  // whether it has it at the end (1659 found: plain fills at once; with no big title (.never) or .inline it's late)
+  //  0 plain: a title and a stacked search bar · 8 only no big title (.never)
+  //  9 .never, Apple's own search placement (none set) · 10 .never, the search bar hiding on scroll (Apple's default)
+  // 11 .never, the page laid out before it's pushed · 12 .never, the search controller given once the view is loaded
   private func barVariant(_ k: Int) {
     guard let nav = AppleTabs.shared?.clientsNav else { return }
     let vc = UIViewController(); vc.view.backgroundColor = HomeLook(lookBoth).bg
     vc.navigationItem.title = "Variant \(k)"
-    //  6 the small title the newer way (.inline) · 7 only the ‹ without words · 8 only no big title (.never)
-    if k >= 1 && k <= 4 { vc.navigationItem.largeTitleDisplayMode = .never; vc.navigationItem.backButtonDisplayMode = .minimal }
-    if k == 6, #available(iOS 17.0, *) { vc.navigationItem.largeTitleDisplayMode = .inline; vc.navigationItem.backButtonDisplayMode = .minimal }
-    if k == 7 { vc.navigationItem.backButtonDisplayMode = .minimal }
-    if k == 8 { vc.navigationItem.largeTitleDisplayMode = .never }
+    if k >= 8 { vc.navigationItem.largeTitleDisplayMode = .never }
     let sc = UISearchController(searchResultsController: nil); sc.obscuresBackgroundDuringPresentation = false
     sc.searchBar.placeholder = "Variant \(k)"
-    vc.navigationItem.hidesSearchBarWhenScrolling = false
-    if k != 5, #available(iOS 16.0, *) { vc.navigationItem.preferredSearchBarPlacement = .stacked }
-    vc.navigationItem.searchController = sc
-    if k >= 2 && k <= 4 {
-      let list = UICollectionView(frame: vc.view.bounds, collectionViewLayout: UICollectionViewCompositionalLayout.list(using: .init(appearance: .insetGrouped)))
-      list.autoresizingMask = [.flexibleWidth, .flexibleHeight]; vc.view.addSubview(list); vc.setContentScrollView(list, for: .top)
-    }
-    if k >= 3 && k <= 4 {
-      let sq = UIView(); sq.backgroundColor = .systemBlue; sq.layer.cornerRadius = 7
-      sq.translatesAutoresizingMaskIntoConstraints = false; sq.widthAnchor.constraint(equalToConstant: 22).isActive = true; sq.heightAnchor.constraint(equalToConstant: 22).isActive = true
-      let l = UILabel(); l.text = "Variant \(k)"; l.font = .systemFont(ofSize: 17, weight: .semibold)
-      let st = UIStackView(arrangedSubviews: [sq, l]); st.spacing = 8; st.alignment = .center; vc.navigationItem.titleView = st
-    }
-    if k == 4 { let h = HomeView(frame: vc.view.bounds); h.autoresizingMask = [.flexibleWidth, .flexibleHeight]; vc.view.insertSubview(h, at: 0); h.useAppleTop(); vc.setContentScrollView(h.appleScroll, for: .top) }
+    vc.navigationItem.hidesSearchBarWhenScrolling = k == 10
+    if k != 9, #available(iOS 16.0, *) { vc.navigationItem.preferredSearchBarPlacement = .stacked }
+    if k != 12 { vc.navigationItem.searchController = sc }
+    if k == 11 { vc.view.frame = nav.view.bounds; vc.view.layoutIfNeeded() }
+    if k == 12 { vc.loadViewIfNeeded(); vc.navigationItem.searchController = sc }
     let t0 = CACurrentMediaTime()
-    SelfFrames.run(1.4, {
+    SelfFrames.run(3.0, {
       let t = Int((CACurrentMediaTime() - t0) * 1000)
       var q: [UIView] = [nav.navigationBar]; var got = "none"
       while !q.isEmpty { let v = q.removeFirst(); q += v.subviews
@@ -258,7 +243,8 @@ extension Main {
       let first = frames.first { ($0["f"] as? String) == "fill" }?["t"] as? Int ?? -1
       let seen = frames.first { ($0["f"] as? String) != "none" }?["t"] as? Int ?? -1
       var a = (self.selfResult["apple"] as? [String: Any]) ?? [:]; var v = (a["barVariants"] as? [String: Any]) ?? [:]
-      v["v\(k)"] = ["boxSeen": seen, "fillAt": first]; a["barVariants"] = v; self.selfResult["apple"] = a
+      let last = frames.last?["f"] as? String ?? "?"
+      v["v\(k)"] = ["boxSeen": seen, "fillAt": first, "atEnd": last]; a["barVariants"] = v; self.selfResult["apple"] = a
       nav.popToRootViewController(animated: false)
     }
     nav.pushViewController(vc, animated: true)
