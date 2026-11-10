@@ -43,8 +43,8 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
     { k: 'review-wd', l: 'Withdrawn submissions', d: 'Someone withdraws files they sent for review', cd: true },
     { k: 'daily', l: 'Morning round-up', d: '9:00, Monday to Friday (not on UAE public holidays): overdue, due today, waiting for CD and more in one update', lead: true },
   ];
-  const TRASH_TYPE = { task: 'Task', project: 'Client', comment: 'Comment', attachment: 'File', cafile: 'Client file', cafolder: 'Client folder' };
-  const TR_SYM = { task: ['checkmark.circle.fill', [10, 132, 255]], project: ['folder.fill', [255, 149, 0]], comment: ['quote.bubble.fill', [175, 82, 222]], attachment: ['paperclip', [48, 176, 199]], cafile: ['doc.fill', [48, 176, 199]], cafolder: ['folder.fill', [48, 176, 199]] };
+  const TRASH_TYPE = { task: 'Task', project: 'Client', comment: 'Comment', attachment: 'File', cafile: 'Client file', cafolder: 'Client folder', plan: 'Content skeleton' };
+  const TR_SYM = { task: ['checkmark.circle.fill', [10, 132, 255]], project: ['folder.fill', [255, 149, 0]], comment: ['quote.bubble.fill', [175, 82, 222]], attachment: ['paperclip', [48, 176, 199]], cafile: ['doc.fill', [48, 176, 199]], cafolder: ['folder.fill', [48, 176, 199]], plan: ['calendar', [255, 45, 85]] };
   const GROUPS = [['admin', 'Super Admins'], ['office_admin', 'Office Admins'], ['am', 'Account Managers'], ['production', 'Production'], ['social', 'Social'], ['freelancer', 'Freelancers'], ['finance', 'Finance only']];
 
   // ---------- text, dates, files (app.js's own, on the clock given) ----------
@@ -193,6 +193,7 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
       if (it.type === 'attachment') return d.att ? [d.att] : [];
       if (it.type === 'cafile') return d.file ? [d.file] : [];
       if (it.type === 'cafolder') return [d.folder, ...(d.inner || [])].filter(Boolean).flatMap((x) => x.files || []);
+      if (it.type === 'plan') return ((d.plan && d.plan.posts) || []).flatMap((x) => (x.refs || []).filter((r) => r && r.path));   // (a content skeleton — Trash Skeleton, Haris 2026-11-10)
       return [];
     }
     function trashWhere(it) {
@@ -202,6 +203,7 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
       if (it.type === 'comment' || it.type === 'attachment') { const t = task(d.taskId); return t ? t.title || 'Untitled task' : it.taskTitle || 'a deleted task'; }
       if (it.type === 'cafile') { const c = clientById(d.clientId); const f = c && c.folders.find((x) => x.id === d.folderId); return c ? `${c.name}${f ? ' › ' + f.name : ''}` : it.where || 'Client Assets'; }
       if (it.type === 'cafolder') { const c = clientById(d.clientId); return c ? c.name : it.where || 'Client Assets'; }
+      if (it.type === 'plan') return 'Content plans';
       return '';
     }
     function trashTitle(it) {
@@ -212,6 +214,7 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
       if (it.type === 'attachment') return d.att ? d.att.name : 'File';
       if (it.type === 'cafile') return d.file ? d.file.name : 'File';
       if (it.type === 'cafolder') return d.folder ? d.folder.name : 'Folder';
+      if (it.type === 'plan') { const trMonth = (m) => { const [y, mm] = String(m || '').split('-').map(Number); return mm ? `${['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][mm - 1]} ${y}` : ''; }; const p = d.plan ? proj(d.plan.projectId) : null; return `${p ? p.name : it.projectName || 'A client'} · ${trMonth(d.plan && d.plan.month)}`; }
       return 'Item';
     }
     function trashSearch(q, list) {

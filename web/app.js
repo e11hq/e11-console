@@ -5485,6 +5485,7 @@ function trashFiles(it) {
   if (it.type === 'attachment') return d.att ? [d.att] : [];
   if (it.type === 'cafile') return d.file ? [d.file] : [];
   if (it.type === 'cafolder') return [d.folder, ...(d.inner || [])].filter(Boolean).flatMap((x) => x.files || []);
+  if (it.type === 'plan') return ((d.plan && d.plan.posts) || []).flatMap((x) => (x.refs || []).filter((r) => r && r.path));   // (a content skeleton — Trash Skeleton, Haris 2026-11-10)
   return [];
 }
 function trashPaths(it) {
@@ -5492,6 +5493,7 @@ function trashPaths(it) {
   trashFiles(it).forEach((a) => { if (!a.linked) paths.push(a.path, '.thumbs/' + a.id); });
   if (it.type === 'task' || it.type === 'project') (it.data.tasks || []).forEach((t) => paths.push('attachments/' + t.id));
   if (it.type === 'cafolder' && it.data.folder && it.data.folder.dir) paths.push(it.data.folder.dir);
+  if (it.type === 'plan' && it.data.plan && it.data.plan.id) paths.push('attachments/' + it.data.plan.id);
   return paths;
 }
 // Delete for good: the item and its files
@@ -5518,10 +5520,11 @@ function trashWhere(it) {
   if (it.type === 'comment' || it.type === 'attachment') { const t = task(d.taskId); return t ? t.title || 'Untitled task' : it.taskTitle || 'a deleted task'; }
   if (it.type === 'cafile') { const c = clientById(d.clientId); const f = c && c.folders.find((x) => x.id === d.folderId); return c ? `${c.name}${f ? ' › ' + f.name : ''}` : it.where || 'Client Assets'; }
   if (it.type === 'cafolder') { const c = clientById(d.clientId); return c ? c.name : it.where || 'Client Assets'; }
+  if (it.type === 'plan') return 'Content plans';
   return '';
 }
-const TRASH_TYPE = { task: 'Task', project: 'Client', comment: 'Comment', attachment: 'File', cafile: 'Client file', cafolder: 'Client folder' };
-const TRASH_ICON = { task: 'check-circle', project: 'folder', comment: 'chat', attachment: 'clip', cafile: 'assets', cafolder: 'folder' };
+const TRASH_TYPE = { task: 'Task', project: 'Client', comment: 'Comment', attachment: 'File', cafile: 'Client file', cafolder: 'Client folder', plan: 'Content skeleton' };
+const TRASH_ICON = { task: 'check-circle', project: 'folder', comment: 'chat', attachment: 'clip', cafile: 'assets', cafolder: 'folder', plan: 'calendar' };
 
 /* ---- Putting things back ---- */
 function restoreTrash(id) {
@@ -5581,6 +5584,14 @@ function restoreTrash(id) {
       (d.inner || []).forEach((x) => { if (!c.folders.some((y) => y.id === x.id)) c.folders.push({ ...x }); });   // everything that was inside it
     }
     msg = `Restored the folder “${f.name}”${(d.inner || []).length ? ` and the ${(d.inner || []).length} folder${(d.inner || []).length === 1 ? '' : 's'} in it` : ''} to ${c.name}`;
+  } else if (it.type === 'plan') {
+    // a content skeleton (Trash Skeleton — Haris 2026-11-10): back as it was, unless its client has another for that month
+    const pl = d.plan, p = pl && proj(pl.projectId);
+    if (!pl || !p) { toast('Its client is gone'); return; }
+    db.plans = db.plans || [];
+    if (db.plans.some((x) => x.id !== pl.id && x.projectId === pl.projectId && x.month === pl.month)) { toast(`${p.name} already has a skeleton for that month`); return; }
+    if (!db.plans.some((x) => x.id === pl.id)) db.plans.push(pl);
+    msg = `Restored ${trashTitle(it)}`;
   }
   dropTrash(id);
   commit({ delay: 0 });
@@ -5608,6 +5619,7 @@ function trashTitle(it) {
   if (it.type === 'attachment') return d.att ? d.att.name : 'File';
   if (it.type === 'cafile') return d.file ? d.file.name : 'File';
   if (it.type === 'cafolder') return d.folder ? d.folder.name : 'Folder';
+  if (it.type === 'plan') { const trMonth = (m) => { const [y, mm] = String(m || '').split('-').map(Number); return mm ? `${['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][mm - 1]} ${y}` : ''; }; const p = d.plan ? proj(d.plan.projectId) : null; return `${p ? p.name : it.projectName || 'A client'} · ${trMonth(d.plan && d.plan.month)}`; }
   return 'Item';
 }
 

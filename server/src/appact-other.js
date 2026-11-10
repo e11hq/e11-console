@@ -127,6 +127,19 @@ export function createOtherActs({ store, now = () => Date.now(), webDir, ownerEm
     return done(out, ['Sent back to Social']);
   }
 
+  // Trash Skeleton (Haris 2026-11-10): only its maker and the Social Manager, only before any task is made from it; it
+  // waits in the Trash for 30 days (Admins and Account Managers put it back), as the website's
+  const canTrashPlan = (pl, u) => !!pl && !!u && u.active !== false && (pl.createdBy === u.id || isMgr(u)) && !(pl.posts || []).some((x) => x && x.taskId) && !pl.tasksAt;
+  function plTrash(u, body) {
+    const pl = store.get('plans', String(body.plan || ''));
+    if (!pl) return fail(404, 'This skeleton is no longer here');
+    if ((pl.posts || []).some((x) => x && x.taskId) || pl.tasksAt) return fail(409, 'Tasks have been made from it — it can’t go to the Trash');
+    if (!canTrashPlan(pl, u)) return fail(403, 'Only the one who made it and the Social Manager can do this');
+    const p = store.get('projects', String(pl.projectId));
+    const item = { id: 'tr-' + uid(), type: 'plan', deletedAt: nowISO(), deletedBy: u.id, key: 'plans:' + pl.id, projectId: pl.projectId, projectName: p ? p.name : '', data: { plan: clone(pl) } };
+    return done([{ kind: 'plans', id: String(pl.id), del: true }, { kind: 'trash', id: item.id, data: item }], ['Moved to the Trash']);
+  }
+
   /* ================= The Trash (web/app.js) ================= */
   // (who sees it: Admins and Account Managers; Office Admins only Client Assets items — access.js canSee)
   const trashSeen = (u, it) => !!it && (isOffice(u) ? ['cafile', 'cafolder'].includes(it.type) : isAdm(u) || u.role === 'am');
@@ -139,6 +152,7 @@ export function createOtherActs({ store, now = () => Date.now(), webDir, ownerEm
     if (it.type === 'attachment') return d.att ? [d.att] : [];
     if (it.type === 'cafile') return d.file ? [d.file] : [];
     if (it.type === 'cafolder') return [d.folder, ...(d.inner || [])].filter(Boolean).flatMap((x) => x.files || []);
+    if (it.type === 'plan') return ((d.plan && d.plan.posts) || []).flatMap((x) => (x.refs || []).filter((r) => r && r.path));
     return [];
   }
   function trashPaths(it) {
@@ -146,6 +160,7 @@ export function createOtherActs({ store, now = () => Date.now(), webDir, ownerEm
     trashFiles(it).forEach((a) => { if (!a.linked) paths.push(a.path, '.thumbs/' + a.id); });
     if (it.type === 'task' || it.type === 'project') (it.data.tasks || []).forEach((t) => paths.push('attachments/' + t.id));
     if (it.type === 'cafolder' && it.data.folder && it.data.folder.dir) paths.push(it.data.folder.dir);
+    if (it.type === 'plan' && it.data.plan && it.data.plan.id) paths.push('attachments/' + it.data.plan.id);
     return paths;
   }
   // every file still in use (the website's usedPaths: tasks, comments, descriptions, scheduled comments, the rest of the
@@ -159,6 +174,7 @@ export function createOtherActs({ store, now = () => Date.now(), webDir, ownerEm
       fileRefsIn(t.notesHtml).forEach((p) => s.add(p));
     });
     store.list('scheduled').forEach((x) => { if (x.state !== 'sent') (x.attachments || []).forEach(add); });
+    store.list('plans').forEach((pl) => (pl.posts || []).forEach((x) => (x.refs || []).forEach(add)));
     store.list('trash').filter((x) => !goneIds.has(x.id)).forEach((it) => trashFiles(it).forEach(add));
     store.list('clients').forEach((c) => { if (c.logo) s.add(c.logo); (c.folders || []).forEach((f) => (f.files || []).forEach(add)); });
     return [...s];
@@ -267,6 +283,15 @@ export function createOtherActs({ store, now = () => Date.now(), webDir, ownerEm
       }
       if (!same(base, c)) out.push(changed('clients', base, c));
       msg = `Restored the folder “${f.name}”${(d.inner || []).length ? ` and the ${(d.inner || []).length} folder${(d.inner || []).length === 1 ? '' : 's'} in it` : ''} to ${c.name}`;
+    } else if (it.type === 'plan') {
+      // a content skeleton (Trash Skeleton — Haris 2026-11-10): back as it was, unless its client has another for that month
+      const pl = d.plan;
+      if (!pl || !pl.id) return fail(400, 'This can’t be restored');
+      const p = store.get('projects', String(pl.projectId));
+      if (!p) return fail(409, 'Its client is gone');
+      if (store.list('plans').some((x) => x.id !== pl.id && x.projectId === pl.projectId && x.month === pl.month)) return fail(409, `${p.name} already has a skeleton for ${monthLabel(pl.month)}`);
+      if (!store.get('plans', String(pl.id))) out.push({ kind: 'plans', id: String(pl.id), data: clone(pl) });
+      msg = `Restored ${p.name}’s ${monthLabel(pl.month)} skeleton`;
     } else return fail(400, 'This can’t be restored');
     out.push({ kind: 'trash', id: String(it.id), del: true });
     return done(out, [msg], open ? { open } : {});
@@ -453,5 +478,5 @@ export function createOtherActs({ store, now = () => Date.now(), webDir, ownerEm
     return done([ch], [`Added ${v.email} as ${ROLES[v.role]}`], { id: x.id, ...(v.role === 'freelancer' ? { clients: true } : {}) });
   }
 
-  return { plReview, plApprove, plBack, trRestore, trForever, trEmpty, cd, member, addMember };
+  return { plReview, plApprove, plBack, plTrash, trRestore, trForever, trEmpty, cd, member, addMember };
 }

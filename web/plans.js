@@ -261,8 +261,9 @@ const Plans = (() => {
     // (posts with changes asked: Approve faded — a tap still says why; Haris 2026-11-04)
     const chgAsked = (pl.posts || []).some((x) => x.check && x.check.state === 'changes');
     if (pl.status === 'review' && appr) out.push(`<button class="btn sm" data-pl="send-back">${icon('edit')}<span class="l-long">Send back for changes</span><span class="l-short">Send back</span></button>`, `<button class="btn primary sm"${chgAsked ? ' style="opacity:.45" aria-disabled="true"' : ''} data-pl="approve">${icon('check')}<span class="l-long">Approve skeleton</span><span class="l-short">Approve</span></button>`);
-    if (editor || appr) out.push(`<button class="icon-btn" data-pl="plan-menu" title="Skeleton options">${icon('more')}</button>`);
-    return out.length ? out.join('') : '<span class="pl-ro">View only</span>';
+    const ro = !out.length;
+    out.push(`<button class="icon-btn" data-pl="plan-menu" title="Skeleton options">${icon('more')}</button>`);   // (Copy link for everyone who sees it — Haris 2026-11-10)
+    return (ro ? '<span class="pl-ro">View only</span>' : '') + out.join('');
   }
   function banner(pl) {
     const who = (id) => (id === currentUserId ? 'You' : userById(id) ? fullName(userById(id)) : 'Someone');
@@ -813,15 +814,27 @@ const Plans = (() => {
     const acts = { sent: 'sent it for approval', 'client-sent': 'sent it to the client', approved: 'approved it', changes: 'asked for changes', withdrawn: 'took it back', reopened: 'reopened it', tasks: 'created tasks', export: 'exported it for the client', client: 'saved the client’s reply', 'client-approved': 'recorded the client’s approval' };
     (pl.log || []).slice(-6).reverse().forEach((x) => items.push({ html: `<div class="mi pl-hist">${avatarHTML(x.by, 18)}<span>${esc(firstName(x.by))} ${acts[x.act] || x.act}<small>${esc(timeAgo(x.at))}</small></span></div>` }));
     if (!(pl.log || []).length) items.push({ html: '<div class="mi-note">Not sent yet</div>' });
-    if (isEditor(pl) && editable(pl)) items.push('-', { label: 'Delete this skeleton', icon: 'trash', danger: true, run: () => delPlan(pl) });
+    items.push('-', { label: 'Copy link', icon: 'link', run: () => copyLink(pl) });
+    if (canTrash(pl)) items.push({ label: 'Move to Trash', icon: 'trash', danger: true, run: () => trashPlan(pl) });
     showMenu(anchor, items, { native: 14 });   // (iPhone app 14+: iOS's own sheet; the history with people's photos)
   }
-  async function delPlan(pl) {
+  // Trash Skeleton (Haris 2026-11-10): only its maker and the Social Manager, only before any task is made from it; it
+  // waits in the Trash for 30 days, where Admins and Account Managers can put it back (server: access.js, plTrash)
+  const canTrash = (pl) => !!pl && !!me() && (pl.createdBy === currentUserId || isMgr()) && !hasTasks(pl) && !pl.tasksAt;
+  async function trashPlan(pl) {
+    if (!canTrash(pl)) return;
     const n = (pl.posts || []).length, name = proj(pl.projectId).name;
-    const ok = await dialog({ title: 'Delete this content skeleton?', body: `${name}’s ${monthLabel(pl.month)} skeleton${n ? ` and its ${n} post${n === 1 ? '' : 's'}` : ''} will be deleted.`, okText: 'Delete', danger: true });
+    const ok = await dialog({ title: 'Move this content skeleton to the Trash?', body: `${name}’s ${monthLabel(pl.month)} skeleton${n ? ` and its ${n} post${n === 1 ? '' : 's'}` : ''} go to the Trash for 30 days.`, okText: 'Move to Trash', danger: true });
     if (!ok) return;
+    toTrash('plan', JSON.parse(JSON.stringify({ plan: pl })), { key: 'plans:' + pl.id, projectId: pl.projectId, projectName: name });
     db.plans = list().filter((x) => x.id !== pl.id);
-    persist(0); go('plans'); toast('Deleted');
+    persist(0); go('plans'); toast('Moved to the Trash');
+  }
+  // its link: files…/p/<id> on the office's sites (the apps open it), the website's ?plan= elsewhere
+  async function copyLink(pl) {
+    const h = location.hostname, f = h === 'console.e11hq.com' ? 'https://files.e11hq.com' : h === 'test.e11hq.com' ? 'https://files-test.e11hq.com' : null;
+    const link = f ? `${f}/p/${encodeURIComponent(pl.id)}` : `${location.origin}/?plan=${encodeURIComponent(pl.id)}`;
+    try { await navigator.clipboard.writeText(link); toast('Link copied'); } catch (e) { toast('Could not copy the link'); }
   }
 
   /* ---------- a post: the pop-up ---------- */

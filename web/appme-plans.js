@@ -373,7 +373,9 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
       const days = [...new Set(posts.map((x) => x.day))].map((d) => ({ d, label: dayLong(d), occ: Occ.on(d).map((o) => o.name).join(' · '),
         posts: posts.filter((x) => x.day === d).map((x) => postRow(pl, x)) }));
       const flagged = (pl.posts || []).filter((x) => x.check && x.check.state === 'changes').length;
-      return { ...head, id: pl.id, banner, occs, days, approve: pl.status === 'review' && canApprove(pl) ? { flagged } : null,
+      // (••• Trash Skeleton: its maker and the Social Manager, before any task is made from it — Haris 2026-11-10)
+      const trash = !!me() && (pl.createdBy === meId || isMgr()) && !hasTasks(pl) && !pl.tasksAt;
+      return { ...head, id: pl.id, banner, occs, days, trash, approve: pl.status === 'review' && canApprove(pl) ? { flagged } : null,
         foot: pl.status === 'changes' && isEditor(pl) ? 'Change it on the computer, then send it again.' : pl.status === 'approved' ? 'Each post’s progress, from its task. The client export is on the computer.' : '' };
     }
     function post(planId, postId) {
@@ -414,7 +416,7 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
     }
     // skeletons waiting for this person (the Plans tab's count, Plans.waiting)
     const waiting = () => (canSee() ? W.plans.filter((pl) => proj(pl.projectId) && !proj(pl.projectId).inactive && ((pl.status === 'review' && canApprove(pl)) || (pl.status === 'changes' && isEditor(pl) && me() && me().role === 'social' && (pl.createdBy === me().id || socialsOf(proj(pl.projectId)).includes(me().id))))).length : 0);
-    return { list, plan, post, search, waiting };
+    return { list, plan, post, search, waiting, byId: planById };
   }
 
   // ---------- Client Assets (web/phone.js NativeAssets, app.js's Client Assets rules) ----------
@@ -523,6 +525,9 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
   X.plansPost = (R, data, me, nowMs, planId, postId) => plansOf(world(R, data, me, nowMs)).post(String(planId || ''), String(postId || ''));
   X.plansSearch = (R, data, me, nowMs, q, cur) => plansOf(world(R, data, me, nowMs)).search(q, cur);
   X.plansFind = (R, data, me, nowMs, q, cur) => { const f = plansOf(world(R, data, me, nowMs)).search(String(q || ''), String(cur || '')); return { ok: true, q, found: f, loose: !!f.loose }; };   // (the app without the website — Haris 2026-11-06)
+  // (a skeleton by its own id — a notification about it, its link files…/p/<id>: its client and month, as the app opens
+  //  it; null when it's gone or not this person's to see — Haris 2026-11-10)
+  X.planRef = (R, data, me, nowMs, id) => { const P = plansOf(world(R, data, me, nowMs)), pl = P.byId(String(id || '')); return pl && P.plan(pl.projectId, pl.month) ? { pid: pl.projectId, month: pl.month } : null; };
   X.plansWaiting = (R, data, me, nowMs) => plansOf(world(R, data, me, nowMs)).waiting();
   X.plansShift = (m, n) => shiftMonth(m, n);
   X.assets = (R, data, me, nowMs, clientId) => assetsOf(world(R, data, me, nowMs)).modelFor(clientId || null);

@@ -1066,6 +1066,13 @@ const Push = (() => {
   const q = new URLSearchParams(location.search);
   if (q.get('task') || q.get('n')) { openFrom(q.get('task'), q.get('n'), { kind: q.get('k'), clientId: q.get('c'), folderId: q.get('f'), planId: q.get('pl') }); history.replaceState(null, '', '/'); }   // (an update without a task, e.g. Client Assets, has only n)
   else if (q.get('view')) { openView(q.get('view')); history.replaceState(null, '', '/'); }
+  // a content skeleton's link (files…/p/<id> → ?plan=<id>; ••• Copy link — Haris 2026-11-10)
+  else if (q.get('plan')) {
+    const id = q.get('plan'); history.replaceState(null, '', '/');
+    const run = () => { if (typeof Plans !== 'undefined' && Plans.planById(id)) Plans.open(id); else toast('That content skeleton isn’t available'); };
+    if (typeof db !== 'undefined' && db && currentUserId) run();
+    else { const iv = setInterval(() => { if (typeof db !== 'undefined' && db && currentUserId) { clearInterval(iv); setTimeout(run, 300); } }, 250); setTimeout(() => clearInterval(iv), 30000); }
+  }
   if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.type === 'open-task') openFrom(e.data.taskId, e.data.nid, e.data.hint || {}); if (e.data && e.data.type === 'open-view') openView(e.data.view); });
 
   // Send test (My profile): to every device, and the iPhone app hears what Apple said for this phone
@@ -3199,7 +3206,7 @@ const NativeMe = (() => {
   }
   // Trash (the app's own, 2026-11-03 — the mockup): the website's Trash — search, its categories, Today / This week /
   // Earlier, each item's kind, where, who deleted it, when, its files' pictures, the days left; Restore / Delete forever
-  const TR_SYM = { task: ['checkmark.circle.fill', [10, 132, 255]], project: ['folder.fill', [255, 149, 0]], comment: ['quote.bubble.fill', [175, 82, 222]], attachment: ['paperclip', [48, 176, 199]], cafile: ['doc.fill', [48, 176, 199]], cafolder: ['folder.fill', [48, 176, 199]] };
+  const TR_SYM = { task: ['checkmark.circle.fill', [10, 132, 255]], project: ['folder.fill', [255, 149, 0]], comment: ['quote.bubble.fill', [175, 82, 222]], attachment: ['paperclip', [48, 176, 199]], cafile: ['doc.fill', [48, 176, 199]], cafolder: ['folder.fill', [48, 176, 199]], plan: ['calendar', [255, 45, 85]] };
   function trashModel() {
     const r = trashSearch(ui.trashQ || '', trashFiltered()), all = trashList();
     const groups = [];

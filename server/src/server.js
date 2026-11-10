@@ -628,6 +628,12 @@ export function createServer(cfg) {
       res.writeHead(302, { Location: `${testCopy ? 'https://test.e11hq.com' : 'https://console.e11hq.com'}/?task=${encodeURIComponent(id)}`, 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' });
       return res.end();
     }
+    // Content skeleton links (Haris 2026-11-10): files…/p/<plan> — the apps open it; anywhere else the website's ?plan=
+    if (filesHost && /^\/p\/[A-Za-z0-9_-]{1,80}\/?$/.test(p) && (req.method === 'GET' || req.method === 'HEAD') && String(req.headers['x-forwarded-host'] || req.headers.host || '') === filesHost) {
+      const id = p.slice(3).replace(/\/$/, '');
+      res.writeHead(302, { Location: `${testCopy ? 'https://test.e11hq.com' : 'https://console.e11hq.com'}/?plan=${encodeURIComponent(id)}`, 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' });
+      return res.end();
+    }
     if ((p.startsWith('/f/') || p.startsWith('/d/') || p.endsWith('apple-app-site-association') || (p === '/robots.txt' && filesHost && String(req.headers['x-forwarded-host'] || req.headers.host || '') === filesHost)) && (req.method === 'GET' || req.method === 'HEAD')) {
       if (await fileLinks.serve(req, res, p)) return;
     }

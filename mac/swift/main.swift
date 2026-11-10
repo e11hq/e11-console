@@ -206,8 +206,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
     NSApp.activate(ignoringOtherApps: true)
   }
   func loadHome() {
-    let path = pendingTask.map { "/?task=" + $0 } ?? "/"
-    pendingTask = nil
+    let path = pendingTask.map { "/?task=" + $0 } ?? pendingPlan.map { "/?plan=" + ($0.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? $0) } ?? "/"
+    pendingTask = nil; pendingPlan = nil
     if let u = URL(string: SERVER + path) { web.load(URLRequest(url: u)) }
   }
   // The page draws its own 48px top strip; the close / minimise / full-screen buttons are centred in it
@@ -336,6 +336,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   /* ---------- file links: files.e11hq.com/f/<token> (Haris 2026-11-03) — tapped anywhere on this Mac, the App Store
      app opens (universal links) and the page opens the file where it is ---------- */
   var pendingFileLink: String?
+  var pendingPlan: String?   // (a skeleton's link: the page opened at ?plan= — Haris 2026-11-10)
   func application(_ application: NSApplication, continue userActivity: NSUserActivity, restorationHandler: @escaping ([NSUserActivityRestoring]) -> Void) -> Bool {
     guard userActivity.activityType == NSUserActivityTypeBrowsingWeb, let u = userActivity.webpageURL else { return false }
     // a task link (files…/t/<id>, Haris 2026-11-04): the task, as e11console://task/<id> opens it
@@ -346,6 +347,14 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
       if !ready { pendingTask = id; loadHome(); showWindow(); return true }
       pageJS("window.__e11OpenTask ? window.__e11OpenTask(\(jsString(id))) : (location.href = '/?task=' + \(jsString(id)))")
       showWindow(); return true
+    }
+    // a content skeleton's link (files…/p/<id>, Haris 2026-11-10): the website's ?plan= in the app's own window
+    if u.path.range(of: "^/p/[A-Za-z0-9_-]{1,80}/?$", options: .regularExpression) != nil {
+      let id = u.path.dropFirst(3).replacingOccurrences(of: "/", with: "")
+      pendingPlan = id
+      if web != nil { loadHome() }
+      if window != nil { showWindow() }
+      return true
     }
     guard let r = u.path.range(of: "^/[fd]/[A-Za-z0-9]{6,16}", options: .regularExpression) else { return false }
     let tok = String(String(u.path[r]).dropFirst(3))

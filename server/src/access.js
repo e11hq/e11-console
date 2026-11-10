@@ -400,6 +400,9 @@ export function createAccess(store, opts = {}) {
         // approvers: the Creative Director, and the Social Manager for a skeleton they didn't make
         const approver = u.id === cdId() || (isSocialMgr(u) && pl.createdBy !== u.id);
         const editable = (st) => !st || st === 'draft' || st === 'changes';
+        // (a skeleton put back from the Trash — by an Admin or Account Manager, as the Trash's other items: Haris 2026-11-10)
+        const fromTrash = !current && !!next && (isAdm(u) || u.role === 'am') && store.list('trash').some((x) => x.type === 'plan' && x.key === 'plans:' + String(ch.id));
+        if (fromTrash) return !store.list('plans').some((x) => x.id !== String(ch.id) && x.projectId === pid && x.month === next.month);
         if (!current) {
           if (!editor || !next || !pid || !/^\d{4}-\d{2}$/.test(String(next.month || '')) || next.createdBy !== u.id || !editable(next.status)) return false;
           if (String(next.month) < new Date(Date.now() + 4 * 3600000).toISOString().slice(0, 7)) return false;   // (never for a month that's over: Dubai's month)
@@ -409,7 +412,8 @@ export function createAccess(store, opts = {}) {
           if (!(Array.isArray(next.posts) || next.posts == null) || (next.posts || []).some((y) => !y || y.taskId || y.client || y.check)) return false;
           return !store.list('plans').some((x) => x.id !== String(ch.id) && x.projectId === pid && x.month === next.month);   // one plan per client per month
         }
-        if (ch.del) return editor && editable(current.status);
+        // Trash Skeleton (Haris 2026-11-10): only its maker and the Social Manager, only before any task is made from it
+        if (ch.del) return (current.createdBy === u.id || isSocialMgr(u)) && !(current.posts || []).some((y) => y && y.taskId) && !current.tasksAt;
         // tasks are made from an approved skeleton by Social, the CD, the client's Account Managers or Admins
         const maker = planMaker(u, pl);
         if (!editor && !approver && !maker) return false;
