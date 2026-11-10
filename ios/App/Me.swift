@@ -2098,7 +2098,7 @@ final class MeCtl {
         card.set(c, look: L)
         card.onTap = { [weak self] in self?.open("profile") }   // (the app's own My profile, 2026-11-03)
         out.append(card)
-      } else { let n = part(h, "wait") { AssetsNote() }; n.label.text = "Loading…"; out.append(n) }
+      } else { let n = part(h, "wait") { AppleEmpty() }; n.setLoading(); out.append(n) }
       let work = ((model["work"] as? [[String: Any]]) ?? []).map { w -> SetItem in
         let k = w["k"] as? String ?? ""
         var it = SetItem(key: k, title: w["t"] as? String ?? "", sub: w["s"] as? String ?? "", sym: w["sym"] as? String, col: NativeSheetVC.color(w["col"]),
@@ -2272,7 +2272,7 @@ final class MeCtl {
   // an Office Admin's Overview (Haris 2026-11-04): with Finance — the three cards, then the latest 3 in Client Assets, the 3
   // claims waiting for HR approval and the latest 3 office expenses; without — the latest 10 in Client Assets
   private func overviewBlocks(_ h: HomeView, _ out: inout [UIView]) {
-    guard let o = model["overview"] as? [String: Any] else { let n = part(h, "wait") { AssetsNote() }; n.label.text = "Loading…"; out.append(n); return }
+    guard let o = model["overview"] as? [String: Any] else { let n = part(h, "wait") { AppleEmpty() }; n.setLoading(); out.append(n); return }
     if let cards = o["cards"] as? [[String: Any]] { let c = part(h, "cards") { OvCards() }; c.set(cards, look: h.look); out.append(c) }
     let sec = { (k: String, t: String, to: String?) -> SetHead in
       let v = self.head(h, k, t); v.link(to == nil ? nil : "All"); v.onLink = { [weak self] in if let to = to { self?.ovGo(to) } }; return v }
@@ -2308,7 +2308,7 @@ final class MeCtl {
   }
   // ---------- the CD's Reviews (Haris 2026-11-04) ----------
   private func reviewsBlocks(_ h: HomeView, _ out: inout [UIView]) {
-    guard let m = model["reviews"] as? [String: Any] else { let n = part(h, "wait") { AssetsNote() }; n.label.text = "Loading…"; out.append(n); return }
+    guard let m = model["reviews"] as? [String: Any] else { let n = part(h, "wait") { AppleEmpty() }; n.setLoading(); out.append(n); return }
     let wait = (m["waiting"] as? [[String: Any]]) ?? [], done = (m["reviewed"] as? [[String: Any]]) ?? []
     // (an Inbox update about a request: Waiting or Reviewed, scrolled to it, and it pulses — Haris 2026-11-04)
     var focus: String? = nil
@@ -2345,7 +2345,7 @@ final class MeCtl {
   private func reviewBlocks(_ h: HomeView, _ id: String, _ out: inout [UIView]) {
     guard let it = reviewItem(id) else {
       h.drawAssetsBar(name: "Review request", sub: "", logo: nil, rgb: nil, ini: nil, showLogo: false)
-      let w = part(h, "wait") { AssetsNote() }; w.label.text = model["reviews"] == nil ? "Loading…" : "This request isn’t waiting any more."; out.append(w); return
+      let w = part(h, "wait") { AppleEmpty() }; if model["reviews"] == nil { w.setLoading() } else { w.set("checkmark.circle", "Not Waiting", "This request isn’t waiting any more.") }; out.append(w); return
     }
     let (x, decided, n, of) = it
     h.drawAssetsBar(name: decided ? "Review request" : "Review request · \(n) of \(of)", sub: x["task"] as? String ?? "", logo: nil, rgb: nil, ini: nil, showLogo: false)
@@ -2407,7 +2407,7 @@ final class MeCtl {
   }
   // ---------- an Office Admin's Claims (Haris 2026-11-04) ----------
   private func claimsBlocks(_ h: HomeView, _ out: inout [UIView]) {
-    guard let m = model["claims"] as? [String: Any] else { let n = part(h, "wait") { AssetsNote() }; n.label.text = "Loading…"; out.append(n); return }
+    guard let m = model["claims"] as? [String: Any] else { let n = part(h, "wait") { AppleEmpty() }; n.setLoading(); out.append(n); return }
     let need = (m["need"] as? [[String: Any]]) ?? [], all = (m["all"] as? [[String: Any]]) ?? []
     let admin = (m["admin"] as? Bool) == true
     // (a claim from the Inbox: its list picked — Need approval if it waits there, else All — scrolled to, pulsing)
@@ -2457,7 +2457,7 @@ final class MeCtl {
   }
   // ---------- an Office Admin's Expenses ----------
   private func expensesBlocks(_ h: HomeView, _ out: inout [UIView]) {
-    guard let m = model["expenses"] as? [String: Any] else { let n = part(h, "wait") { AssetsNote() }; n.label.text = "Loading…"; out.append(n); return }
+    guard let m = model["expenses"] as? [String: Any] else { let n = part(h, "wait") { AppleEmpty() }; n.setLoading(); out.append(n); return }
     let subs = (m["subs"] as? [[String: Any]]) ?? [], office = (m["office"] as? [[String: Any]]) ?? []
     let admin = (m["admin"] as? Bool) == true
     let seg = part(h, "seg") { SegBlock() }
@@ -2560,7 +2560,7 @@ final class MeCtl {
     let t = team
     let admin = (t["admin"] as? Bool) == true
     if h.assets != "teamTab" { h.drawAssetsBar(name: "Team members", sub: t.isEmpty ? "" : "\(t["active"] as? Int ?? 0) active · \(t["pastN"] as? Int ?? 0) past", logo: nil, rgb: nil, ini: nil, showLogo: false) }
-    if t.isEmpty { let n = part(h, "wait") { AssetsNote() }; n.label.text = "Loading…"; out.append(n); return }
+    if t.isEmpty { let n = part(h, "wait") { AppleEmpty() }; n.setLoading(); out.append(n); return }
     // (in Apple's navigation: Apple's own search bar in Apple's bar, Active / Past as its scope bar under it — as My Tasks'
     //  All / Done; nothing of ours over Apple's bar — Haris 2026-11-08 "Team members page top area")
     if let vc = pageVCs[ObjectIdentifier(h)] {
@@ -2607,8 +2607,10 @@ final class MeCtl {
       if !list.isEmpty { any = true; out.append(head(h, "t.past", "Past members · \(list.count)")); let gv = group(h, "t.past", people(list, hold: admin)); Find.mark([gv], teamMarks); out.append(gv) }
     }
     if !any {
-      let n = part(h, "none") { AssetsNote() }
-      n.label.text = !q.isEmpty ? "No one matches “\(teamQ.trimmingCharacters(in: .whitespaces))”" : teamTab == 1 ? "No past members — people you remove from the team show here, and you can restore their access." : "No one yet."
+      let n = part(h, "none") { AppleEmpty() }
+      if !q.isEmpty { n.set("magnifyingglass", "No Results", "Check the spelling or try a new search.") }
+      else if teamTab == 1 { n.set("person.crop.circle.badge.clock", "No Past Members", "People you remove from the team show here, and you can restore their access.") }
+      else { n.set("person.2", "No One Yet") }
       out.append(n)
     }
     out.append(foot(h, "note", t["note"] as? String ?? ""))
@@ -2621,7 +2623,7 @@ final class MeCtl {
   // CD's own, Owner view (the owner, live site). Everything is saved as it changes — no Save button.
   private func profileBlocks(_ h: HomeView, _ out: inout [UIView]) {
     h.drawAssetsBar(name: "My profile", sub: "", logo: nil, rgb: nil, ini: nil, showLogo: false)
-    guard let p = model["profile"] as? [String: Any] else { let n = part(h, "wait") { AssetsNote() }; n.label.text = "Loading…"; out.append(n); return }
+    guard let p = model["profile"] as? [String: Any] else { let n = part(h, "wait") { AppleEmpty() }; n.setLoading(); out.append(n); return }
     let top = part(h, "photo") { ProfileHead() }
     top.set(p, look: h.look)
     top.onChange = { [weak self] in
@@ -2686,7 +2688,7 @@ final class MeCtl {
     let n = t["n"] as? Int ?? 0
     h.drawAssetsBar(name: "Trash", sub: t.isEmpty ? "" : n == 0 ? "Empty" : "\(n) item\(n == 1 ? "" : "s") · restore within 30 days", logo: nil, rgb: nil, ini: nil, showLogo: false)
     h.assetsMenu = (t["empty"] as? Bool) == true ? { [weak self] in [CornerMenuItem(title: "Empty Trash", symbol: "trash", destructive: true, run: { self?.trEmpty() })] } : { [] }
-    if t.isEmpty { let w = part(h, "wait") { AssetsNote() }; w.label.text = "Loading…"; out.append(w); return }
+    if t.isEmpty { let w = part(h, "wait") { AppleEmpty() }; w.setLoading(); out.append(w); return }
     // (in Apple's navigation: Apple's own search bar in Apple's bar; the kinds as Mail's buttons at the top of Apple's list,
     //  scrolling away with it, as the Inbox's — nothing of ours over Apple's bar: Haris 2026-11-08)
     if let vc = pageVCs[ObjectIdentifier(h)] {
@@ -2728,7 +2730,11 @@ final class MeCtl {
       Find.mark([tg], tq.isEmpty ? [] : Find.filter(items, tq) { "\($0["t"] ?? "") \($0["s"] ?? "")" }.marks)
       out.append(tg)
     }
-    if let none = t["none"] as? String, !none.isEmpty { let w = part(h, "none") { AssetsNote() }; w.label.text = none; out.append(w) }
+    if let none = t["none"] as? String, !none.isEmpty { let w = part(h, "none") { AppleEmpty() }
+      // (Apple's own: a search with nothing found — No Results; the Trash empty — its title, the server's words under it)
+      if !(t["q"] as? String ?? "").isEmpty { w.set("magnifyingglass", "No Results", "Check the spelling or try a new search.") }
+      else { let parts = none.components(separatedBy: " — "); let rest = parts.dropFirst().joined(separator: " — "); w.set("trash", parts.count > 1 ? "Trash Is Empty" : none, rest.isEmpty ? nil : rest.prefix(1).uppercased() + rest.dropFirst()) }
+      out.append(w) }
     out.append(foot(h, "trnote", t["note"] as? String ?? ""))
   }
   private func person(_ id: String) -> [String: Any]? {
@@ -2747,7 +2753,7 @@ final class MeCtl {
   private func plansBlocks(_ h: HomeView, _ out: inout [UIView]) {
     let m = (model["plans"] as? [String: Any]) ?? [:]
     if h.assets != "plansTab" && h.assets != "plansPage" { h.drawAssetsBar(name: "Content plans", sub: m["label"] as? String ?? "", logo: nil, rgb: nil, ini: nil, showLogo: false) }
-    guard let rows = m["rows"] as? [[String: Any]] else { let n = part(h, "wait") { AssetsNote() }; n.label.text = "Loading…"; out.append(n); return }
+    guard let rows = m["rows"] as? [[String: Any]] else { let n = part(h, "wait") { AppleEmpty() }; n.setLoading(); out.append(n); return }
     let month = m["month"] as? String ?? ""
     let mb = part(h, "month") { PlanMonthChips() }
     if let n = pageVCs[ObjectIdentifier(h)]?.navigationController as? AppleNav ?? (appleNav as? AppleNav), pageVCs[ObjectIdentifier(h)] != nil, let g = n.backAnywhere { mb.backWaits(for: g) }
@@ -2762,7 +2768,7 @@ final class MeCtl {
       it.pills = [(st["t"] as? String ?? "", MeCtl.stCol(st["k"] as? String ?? ""))]
       return it
     }
-    if items.isEmpty { let n = part(h, "none") { AssetsNote() }; n.label.text = "No clients to show."; out.append(n) }
+    if items.isEmpty { let n = part(h, "none") { AppleEmpty() }; n.set("person.2", "No Clients"); out.append(n) }
     else { out.append(head(h, "pl", "")); out.append(group(h, "pl", items)) }
     out.append(foot(h, "plfoot", m["foot"] as? String ?? "", centered: true))
   }
@@ -2771,7 +2777,7 @@ final class MeCtl {
     let pid = parts.first ?? "", month = parts.count > 1 ? parts[1] : ""
     guard let m = model["plan"] as? [String: Any], (m["pid"] as? String) == pid, month.isEmpty || (m["month"] as? String) == month else {
       h.drawAssetsBar(name: "Content plan", sub: "", logo: nil, rgb: nil, ini: nil, showLogo: false)
-      let n = part(h, "wait") { AssetsNote() }; n.label.text = model["plan"] is NSNull ? "This plan is no longer here." : "Loading…"; out.append(n); return
+      let n = part(h, "wait") { AppleEmpty() }; if model["plan"] is NSNull { n.set("calendar", "No Longer Here", "This plan is no longer here.") } else { n.setLoading() }; out.append(n); return
     }
     h.drawAssetsBar(name: m["name"] as? String ?? "", sub: m["sub"] as? String ?? "", logo: nil, rgb: nil, ini: nil, showLogo: false)
     let st = m["st"] as? [String: Any] ?? [:]
@@ -2894,7 +2900,7 @@ final class MeCtl {
     let admin = (team["admin"] as? Bool) == true
     guard let p = person(id) else {
       h.drawAssetsBar(name: "Team member", sub: "", logo: nil, rgb: nil, ini: nil, showLogo: false)
-      let n = part(h, "gone") { AssetsNote() }; n.label.text = team.isEmpty ? "Loading…" : "No longer on the team list."; out.append(n); return
+      let n = part(h, "gone") { AppleEmpty() }; if team.isEmpty { n.setLoading() } else { n.set("person.crop.circle.badge.xmark", "Not on the Team", "No longer on the team list.") }; out.append(n); return
     }
     h.drawAssetsBar(name: p["name"] as? String ?? "", sub: p["role"] as? String ?? "", logo: nil, rgb: nil, ini: nil, showLogo: false)
     let top = part(h, "head") { MemberHead() }

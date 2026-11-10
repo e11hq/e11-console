@@ -408,14 +408,17 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     }
     let changed = secs.joined().filter { had.contains($0) && listDrawn[$0] != sigs[$0] }
     listDrawn = sigs
-    if !changed.isEmpty { snap.reconfigureItems(changed) }
+    if !changed.isEmpty { snap.reconfigureItems(changed); rowsSet += changed.count }
     // (a section that became a group, or stopped being one: its layout asked again)
     let kindsChanged = listSecs.map { "\($0.rows)\($0.tiles)\($0.folders)" } != meta.map { "\($0.rows)\($0.tiles)\($0.folders)" }
     listSecs = meta
     if kindsChanged { list?.collectionViewLayout.invalidateLayout() }
     // (the list's length changed: the motto asked again — an empty list switched to a full one left it over the rows:
     //  Haris 2026-11-10)
-    ds.apply(snap, animatingDifferences: animated) { [weak self] in self?.refreshHeads(); self?.showMotto() }
+    ds.apply(snap, animatingDifferences: animated) { [weak self] in
+      self?.refreshHeads(); self?.showMotto()
+      if let self = self, let k = self.stripStart, let ip = ds.indexPath(for: k) { self.stripStart = nil; self.list?.scrollToItem(at: ip, at: .left, animated: false) }
+    }
   }
   // (a row's picture came after it was drawn: the list set again — only that row changes, by its signature)
   func listAgain() { if listOn { applyList(animated: false) } }
@@ -820,6 +823,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
             content.append(v)
           }
           for k in stripTiles.keys where !keep.contains(k) { stripTiles[k] = nil }
+          // (another client's page: its folders' row starts at its first folder, not where the last client's was left —
+          //  the same page is used for each client; Apple's own scroll to its first item once the list has it, Haris 2026-11-10)
+          if stripClient != cid { stripClient = cid; stripStart = (folders.first?["id"] as? String).map { "fd:" + $0 } }
         }
       }
       let done = (model["showDone"] as? Bool) == true, open = model["open"] as? Int ?? 0
@@ -1237,6 +1243,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private lazy var clientsGap: UILabel = { let l = UILabel(); l.accessibilityIdentifier = "clients-gap"; return l }()
   // a client's page (fully Apple, Haris 2026-11-10): its folders' tiles (kept by folder), their heading, Open · Done
   private var stripTiles: [String: FileTile] = [:]
+  private var stripClient: String?, stripStart: String?
   private lazy var searchEmpty: AppleEmpty = { let e = AppleEmpty(); e.accessibilityIdentifier = "search-empty"; return e }()
   // a group's heading on the Clients pages, as the mock-up: capitals, 13 grey, a little spacing (Apple's grouped header)
   static func groupHeading(_ t: String) -> NSAttributedString {
@@ -2157,6 +2164,25 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   }
   func selfFindGeo() -> [String: Any] { ["searching": searching, "results": resultViews.count, "tasks": resultCards.count, "files": resultFiles.count, "hint": hint.text ?? "",
                                           "clients": resultViews.filter { $0 is HomeClientRow }.count] }
+  // (the self-test — the Clients pages as the task page and Me, Haris 2026-11-10: each row's height arrived / scrolled / back
+  //  at the top, and how many rows were set again — none for going away and coming back)
+  private(set) var rowsSet = 0
+  func selfHeights() -> [String: Double] {
+    guard let cv = list, let ds = listDS else { return [:] }
+    cv.layoutIfNeeded()
+    var out: [String: Double] = [:]
+    for c in cv.visibleCells { if let ip = cv.indexPath(for: c), let k = ds.itemIdentifier(for: ip) { out[k] = Double(c.bounds.height) } }
+    for ip in cv.indexPathsForVisibleSupplementaryElements(ofKind: UICollectionView.elementKindSectionHeader) {
+      if let v = cv.supplementaryView(forElementKind: UICollectionView.elementKindSectionHeader, at: ip) { out["head:\(ip.section)"] = Double(v.bounds.height) }
+    }
+    return out
+  }
+  func selfScroll(_ y: CGFloat?) {
+    guard let cv = list else { return }
+    let top = -cv.adjustedContentInset.top
+    if let y = y { cv.setContentOffset(CGPoint(x: 0, y: max(top, min(top + y, cv.contentSize.height + cv.adjustedContentInset.bottom - cv.bounds.height))), animated: false) }
+    else { cv.setContentOffset(CGPoint(x: 0, y: top), animated: true) }
+  }
   func selfFindDone() { if appleTop, let f = onAppleFind { f(nil); return }; closeSearch() }
   // (the walk-through: the first task and client in the results, and a tap on one — as a finger would)
   var walkFirst: (task: String?, client: String?) = (nil, nil)
@@ -3289,6 +3315,7 @@ extension HomeView {
   // the page's own always (it draws itself, keeping what's the same)
   func meSig(_ key: String) -> String {
     if key == "me:card", let c = listViews[key] as? MeCardBlock { let x = c.info; return "\(x.name)|\(x.role)|\(x.email)|\(MePhoto.shared.image.map { "\(ObjectIdentifier($0).hashValue)" } ?? "-")\(MePhoto.shared.initials ?? "")|\(look.key)" }
+    if let e = listViews[key] as? AppleEmpty { return "u|" + e.sig + "|\(look.key)" }   // (Apple's empty state: by its words)
     if let it = meItems[key] { return it.sig + "|\(it.toggle.map { $0 ? "1" : "0" } ?? "")|\(look.key)" }
     if let v = listViews[key] { return "b|\(itemHeight(key, v))" }   // (a block's own height changed — its cell sized again)
     return "b"

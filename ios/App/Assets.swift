@@ -14,19 +14,6 @@ import UIKit
 
 // ---------- pieces ----------
 
-// a line of words in the list (nothing here yet, a folder's note)
-final class AssetsNote: UIView, HomeBlock {
-  let label = UILabel()
-  override init(frame: CGRect) {
-    super.init(frame: frame)
-    label.font = .systemFont(ofSize: 15); label.textColor = .secondaryLabel; label.numberOfLines = 0; label.textAlignment = .center
-    addSubview(label)
-  }
-  required init?(coder: NSCoder) { fatalError() }
-  func blockHeight(_ W: CGFloat) -> CGFloat { ceil(label.sizeThatFits(CGSize(width: W - 64, height: 400)).height) + 36 }
-  override func layoutSubviews() { super.layoutSubviews(); label.frame = bounds.insetBy(dx: 32, dy: 18) }
-}
-
 // the search bar for a client's files (as iPhone's own: a grey capsule with the lens)
 final class AssetsFind: UIView, HomeBlock, UITextFieldDelegate {
   let field = UISearchTextField()

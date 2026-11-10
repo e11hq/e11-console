@@ -125,6 +125,11 @@ try:
     check(cp.get('openDone') is True and (cp.get('cards') or 0) > 0 and cp.get('appleCell') is True, f"a client's page ({res.get('clOpened')}): Apple's Open · Done, its tasks Apple's cells {cp}")
     check((cp.get('folders') or 0) == 0 or (cp.get('strip') is True and cp.get('seeAll') is True), f"a client's page: its folders in Apple's sideways row with See All {cp}")
     check((cs.get('titles') or 0) > 0 and cs.get('struckOpen') == 0, f"a client's page, Done then Open again: no open task struck through {cs} (Done showed {res.get('clDoneShown')})")
+    ca, cs2, ct = res.get('clHoldArrived') or {}, res.get('clHoldScrolled') or {}, res.get('clHoldTop') or {}
+    cmoved = {k: (ca.get(k), cs2.get(k), ct.get(k)) for k in set(ca) | set(cs2) | set(ct) if len({round(x) for x in (ca.get(k), cs2.get(k), ct.get(k)) if x is not None}) > 1}
+    print('measure clientRowHeights', json.dumps({'arrived': ca, 'scrolled': cs2, 'top': ct}))
+    check(bool(ca) and not cmoved, f"a client's page: each row keeps its height — arrived, scrolled, back at the top (moved: {cmoved})")
+    check(res.get('clRowsBefore') is not None and res.get('clRowsAfter') == res.get('clRowsBefore'), f"the Clients tab left and opened again: no row set again {res.get('clRowsBefore')} → {res.get('clRowsAfter')}")
     check(cf.get('searching') is True and (cf.get('tasks') or 0) > 0 and cf.get('clients') == 0, f"a client's page searched for \"{res.get('clFindWord')}\": its tasks found {cf}")
     check(cw.get('title') is True and cw.get('washed') is False, f"a client's page, search closed: its task title without search's wash {cw}")
     hd = res.get('homeDateNative') or {}

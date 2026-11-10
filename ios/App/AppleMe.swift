@@ -163,9 +163,18 @@ enum BigLine {
     guard #available(iOS 26.0, *) else { return }
     if save, !d.isEmpty { UserDefaults.standard.set(d, forKey: "e11_line_" + key) }
     let words = d.isEmpty ? " " : d   // (never removed: its room stays, as Apple measured it)
-    if vc.navigationItem.subtitle != words { vc.navigationItem.subtitle = words }
+    // (set only when its words change — Haris 2026-11-10: the rule "only what changed changes")
+    guard vc.navigationItem.subtitle != words || vc.navigationItem.largeAttributedSubtitle == nil else { return }
     var a = AttributedString(words); a.uiKit.font = .systemFont(ofSize: 15); a.uiKit.foregroundColor = .secondaryLabel
-    vc.navigationItem.largeAttributedSubtitle = a
+    let put = { vc.navigationItem.subtitle = words; vc.navigationItem.largeAttributedSubtitle = a }
+    // (on screen, its words crossfade to the new ones — the standard "words that change on a showing screen", Haris
+    //  2026-11-05 / 2026-11-10 — with Apple's own crossfade on Apple's bar; not while the page is coming or going (Apple's
+    //  slide carries the bar), nor while typing in its search)
+    let searchOn = vc.navigationItem.searchController?.isActive == true
+    if let bar = vc.navigationController?.navigationBar, vc.viewIfLoaded?.window != nil, vc.transitionCoordinator == nil,
+       vc.navigationController?.topViewController === vc, !searchOn, vc.navigationItem.subtitle != nil {
+      UIView.transition(with: bar, duration: 0.25, options: [.transitionCrossDissolve, .allowUserInteraction, .beginFromCurrentState], animations: put)
+    } else { put() }
     // (the self-test: each line set — which tab, its words, on screen or not, in the middle of a change — Haris 2026-11-09:
     //  the big title gone on the second visit to My Tasks and the Inbox, never on Clients' or Home's)
     if !SELFTEST.isEmpty { sets.append(["key": key, "words": words, "t": CACurrentMediaTime(), "shown": vc.viewIfLoaded?.window != nil, "moving": vc.transitionCoordinator != nil]); if sets.count > 60 { sets.removeFirst() } }

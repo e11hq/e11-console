@@ -2987,9 +2987,16 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       ("clOpen", pause(2000) + "return '{}'", { self.selfResult["clList"] = self.clientsListIfMade?.selfClientsGeo() ?? [:]; self.selfResult["clOpened"] = self.clientsListIfMade?.selfOpenFirstClient() ?? "no list" }),
       ("clDone", pause(2500) + "return '{}'", { self.selfResult["clPage"] = self.clientPageIfMade?.selfClientsGeo() ?? [:]; self.clientPageIfMade?.selfDoneSwitch(1) }),
       ("clOpenAgain", pause(2000) + "return '{}'", { self.selfResult["clDoneShown"] = self.clientPageIfMade?.selfStrike() ?? [:]; self.clientPageIfMade?.selfDoneSwitch(0) }),
+      // (each row's height once arrived, scrolled, back at the top — the same row the same height, Haris 2026-11-10)
+      ("clHold", pause(2000) + "return '{}'", { self.selfResult["clHoldArrived"] = self.clientPageIfMade?.selfHeights() ?? [:]; self.clientPageIfMade?.selfScroll(200) }),
+      ("clHoldScroll", pause(1200) + "return '{}'", { self.selfResult["clHoldScrolled"] = self.clientPageIfMade?.selfHeights() ?? [:]; self.clientPageIfMade?.selfScroll(nil) }),
+      ("clHoldTop", pause(1200) + "return '{}'", { self.selfResult["clHoldTop"] = self.clientPageIfMade?.selfHeights() ?? [:] }),
       ("clStrike", pause(2000) + "return '{}'", { self.selfResult["clStrikeAt"] = self.clientPageIfMade?.selfStrike() ?? [:]; self.selfWashWord = self.clientPageIfMade?.selfFirstWord() ?? ""; self.clientPageIfMade?.selfFind(self.selfWashWord) }),
       ("clFindRead", pause(1500) + "return '{}'", { self.selfResult["clFind"] = self.clientPageIfMade?.selfFindGeo() ?? [:]; self.selfResult["clFindWord"] = self.selfWashWord; self.clientPageIfMade?.selfFindDone() }),
-      ("clWash", pause(1500) + "return '{}'", { self.selfResult["clWashAt"] = self.clientPageIfMade?.selfWash() ?? [:]; self.selfTapTab("today") }),
+      ("clWash", pause(1500) + "return '{}'", { self.selfResult["clWashAt"] = self.clientPageIfMade?.selfWash() ?? [:]; self.selfResult["clRowsBefore"] = (self.clientPageIfMade?.rowsSet ?? 0) + (self.clientsListIfMade?.rowsSet ?? 0); self.selfTapTab("today") }),
+      // (away to Home and back to the client's page: no row set again — "only what changed changes", Haris 2026-11-10)
+      ("clAgain", pause(1500) + "return '{}'", { self.selfTapTab("projects") }),
+      ("clAgainRead", pause(2000) + "return '{}'", { self.selfResult["clRowsAfter"] = (self.clientPageIfMade?.rowsSet ?? 0) + (self.clientsListIfMade?.rowsSet ?? 0); self.selfTapTab("today") }),
       // 26: My Tasks, the app's own (from the server): All, then the Done tab (read only), then All again
       ("mytasks", pause(2500) + "return JSON.stringify({ view: ui.view })", {
         if let i = self.tabKeys.firstIndex(of: "mytasks"), let item = self.tabBar.items?[i] { self.tabBar.selectedItem = item; self.tabBar(self.tabBar, didSelect: item) } }),
