@@ -329,8 +329,11 @@ the Apple pages (about 60 `pageReady` branches — dead on the phone, which runs
 self-test's checks into the no-website run (`walktest.py --apple`) page by page first; and the smoothness check — the
 self-test filming each moment (open, back, tab switch, a row coming or going, words changing) and flagging a frame that
 jumps, as a report first, stopping builds once tuned.
-**Remind Haris when the Review Requests page's page-by-page work starts (Haris 2026-11-10 20:25):** content skeletons
-waiting for the CD are not shown in Review Requests today — decide with him in its mock-up whether they come in there.
+**iPhone Review Requests — mock-up "Review Requests — fully Apple" (Haris 2026-11-10):** content skeletons sent to the CD
+come into Review Requests — their own group "Content plans" at the top of Waiting, a tap opening the skeleton (the approved
+Content plans page, pushed on the Reviews tab, ‹ back to Reviews) — **A2, Haris 21:09** (asked to be reminded 20:25). The
+files sent: a grid of previews (photo / video picture with ▶ and length, a PDF's first page, other files their kind), a tap
+opening Apple's Quick Look (Haris 21:04). B–G still to decide.
 **Remind Haris when the Clients pages' page-by-page work starts (Haris 2026-11-09 21:12):** background uploads and downloads
 go in with them — plan in project doc `claude/ios-background-transfers-plan.md`.
 
