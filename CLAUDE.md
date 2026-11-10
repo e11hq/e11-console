@@ -310,6 +310,9 @@ Good; files in Quick Look, links in Safari. Ask for changes: Apple's sheet. Not 
 **Remind Haris before any Mac app work starts (Haris 2026-11-10 18:34):** the Mac App Store app needs a build for
 content skeleton links (files…/p/<id> — the handler is in mac/swift/main.swift on main, commit 4815aab; the server
 1.9.30 already tells Apple /p/ is the apps'): until it's out, a skeleton link on a Mac with the app may not open there.
+**The Terminal-installed Mac app — put aside (Haris 2026-11-10 18:38: "discard the terminal app for now"):** releases don't
+build it (release.yml's mac job off, commit d10cfe1); the installer keeps its last stored build. Its build was failing since
+2026-11-09 (pendingFileLink declared only in the App Store app's part). Back only when Haris says.
 **Remind Haris once every page is done page by page (Haris 2026-11-10 17:39):** (B) take out the leftover website code from
 the Apple pages (about 60 `pageReady` branches — dead on the phone, which runs without the website), moving the main
 self-test's checks into the no-website run (`walktest.py --apple`) page by page first; and the smoothness check — the
