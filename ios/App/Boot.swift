@@ -428,7 +428,9 @@ extension Main {
       return true
     case "review":
       // (Home's In review box: My Tasks, waiting for the CD's review — the whole team's for those who see everyone's)
-      guard !pageReady else { return false }
+      // (My Tasks' filters are the app's own whenever its copy is on — the website being there too took the tap, set its own
+      //  filters, and My Tasks showed the app's, without "Waiting for CD review": Haris 2026-11-10 16:50)
+      guard AppData.shared.tabsOn, AppData.shared.ready, AppData.shared.isStarted else { return false }
       var to = (AppData.shared.meModel("tasks", "myTasksDefault")?["filters"] as? [String: Any]) ?? [:]
       to["cd"] = true
       if (AppData.shared.screen("home").model?["title"] as? String) == "E11 Day" { to["team"] = true }
