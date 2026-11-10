@@ -329,7 +329,11 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       for v in resultViews {
         // (a task found is its own row, not Home's row of the same task: one identity for both, Apple kept the found
         //  row's cell — the search's wash on its title — when search closed: Haris 2026-11-09)
-        let k = (v as? HomeCard).map { "f:" + $0.id } ?? (v as? FileListRow).map { "fs:" + $0.id } ?? (v as? AppleEmpty).map { "u:" + ($0.accessibilityIdentifier ?? "") } ?? "r:\(ObjectIdentifier(v).hashValue)"
+        let k: String
+        if let c = v as? HomeCard { k = "f:" + c.id }
+        else if let f = v as? FileListRow { k = "fs:" + f.id }
+        else if let e = v as? AppleEmpty { k = "u:" + (e.accessibilityIdentifier ?? "") }
+        else { k = "r:\(ObjectIdentifier(v).hashValue)" }
         if views[k] != nil { continue }
         // (Client Assets' found files — a block: the whole width, as the list's — AppleClients.swift)
         if let b = v as? HomeBlock { let w = blockWraps[ObjectIdentifier(b)] ?? BlockWrap(b); blockWraps[ObjectIdentifier(b)] = w; keys.append(k); views[k] = w; continue }
