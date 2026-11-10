@@ -160,7 +160,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // (My Tasks: its filters are in Apple's bar's menu, All / Done in Apple's search bar's scope bar — the rows taken out)
     if isList && !isInbox { listHead.removeFromSuperview(); if let f = lastFilters { onAppleFilters?(f) } }
     // (the Inbox: Mail's buttons go into the list, Mark all read into Apple's bar — HomeView's own taken out)
-    if isInbox { listHead.removeFromSuperview(); markAll.removeFromSuperview(); inboxRows.values.forEach { $0.swipes = false }; catsWrap.addSubview(catsView); if !content.isEmpty { applyList(animated: false) }; onAppleCorner?() }
+    if isInbox { listHead.removeFromSuperview(); markAll.removeFromSuperview(); catsWrap.addSubview(catsView); if !content.isEmpty { applyList(animated: false) }; onAppleCorner?() }
     // (the Clients tab's pages and Client Assets': what's drawn already goes into Apple's list)
     if (isClients || isClient || assets != nil || !cards.isEmpty), listOn, !content.isEmpty { applyList(animated: false) }
     setNeedsLayout()
@@ -185,9 +185,22 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
         gc.leadingSwipeActionsConfigurationProvider = { [weak self] ip in self?.swipeActions(ip, leading: true) }
         return NSCollectionLayoutSection.list(using: gc, layoutEnvironment: env)
       }
-      let sec = NSCollectionLayoutSection.list(using: cfg, layoutEnvironment: env)
-      // (the Inbox's rows edge to edge, one under the other, as Mail's)
+      // (the Inbox's rows: Apple's plain list, edge to edge as Mail's, Apple's line between them — none under Mail's
+      //  buttons or the last row; the Inbox's lines stay Apple's own colour: Haris 2026-11-10)
       let inbox = self?.isInbox == true
+      var ic = cfg
+      if inbox {
+        ic.showsSeparators = true
+        ic.itemSeparatorHandler = { [weak self] ip, sc in
+          var c = sc
+          guard let self = self, let ds = self.listDS, let key = ds.itemIdentifier(for: ip) else { return c }
+          let items = ds.snapshot().itemIdentifiers(inSection: ds.snapshot().sectionIdentifiers[ip.section])
+          if !(self.listViews[key] is InboxRow) || key == items.last { c.bottomSeparatorVisibility = .hidden }
+          c.topSeparatorVisibility = .hidden
+          return c
+        }
+      }
+      let sec = NSCollectionLayoutSection.list(using: inbox ? ic : cfg, layoutEnvironment: env)
       sec.interGroupSpacing = inbox ? 0 : 10
       // (a pushed page — a client's, Client Assets, a folder, Me's pages: its first thing clear of Apple's bar and its frost,
       //  as the task page — 4 pt put it under the frost's reach, so the frost and its line showed at rest: Haris 2026-11-08)
@@ -221,6 +234,11 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       guard let self = self, let r = self.listViews[key] as? AppleRow else { return }
       self.paintRow(cell, r)
     }
+    // (an Inbox row: Apple's own cell — InboxRow gives its content, its dot and its time)
+    let inboxReg = UICollectionView.CellRegistration<InboxCell, String> { [weak self] cell, _, key in
+      guard let r = self?.listViews[key] as? InboxRow else { return }
+      cell.show(r)
+    }
     let emptyReg = UICollectionView.CellRegistration<UICollectionViewListCell, String> { [weak self] cell, _, key in
       guard let self = self else { return }
       var c = UIListContentConfiguration.cell()
@@ -235,6 +253,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       if isMe && (key.hasPrefix("s:") || key == "me:card") { return cv.dequeueConfiguredReusableCell(using: setReg, for: ip, item: key) }
       if let v = self?.listViews[key] {
         if v is AppleRow { return cv.dequeueConfiguredReusableCell(using: key.hasPrefix("f:") || v is HomeClientRow ? foundReg : rowReg, for: ip, item: key) }
+        if v is InboxRow { return cv.dequeueConfiguredReusableCell(using: inboxReg, for: ip, item: key) }
         if key.hasPrefix("e:") && v.tag == 8 { return cv.dequeueConfiguredReusableCell(using: emptyReg, for: ip, item: key) }
       }
       return cv.dequeueConfiguredReusableCell(using: reg, for: ip, item: key)
@@ -272,7 +291,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if let b = v as? BlockWrap { return b.block.blockHeight(bounds.width) }
     if key == "stats" { return 80 }
     if key == "cats" { return MailCats.H + 10 }
-    if v is InboxRow { return InboxRow.H }
     if v === hint { return (hint.sizeThatFits(CGSize(width: w, height: 400)).height) + 28 }
     if let n = v as? SearchFixedNote { return n.height(for: w) }
     if v.tag == 8 { return 28 + ((v as? UILabel)?.sizeThatFits(CGSize(width: w - 8, height: 400)).height ?? 17) }
@@ -339,6 +357,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     for k in secs.joined() {
       guard let v = views[k] else { continue }
       if let r = v as? AppleRow { sigs[k] = r.rowSig }
+      else if let r = v as? InboxRow { sigs[k] = r.rowSig }
       else if k.hasPrefix("e:") && v.tag == 8 { sigs[k] = ((v as? UILabel)?.text ?? "") + "|" + L.key }
       else { sigs[k] = "\(ObjectIdentifier(v).hashValue)|\(itemHeight(k, v))" }
     }
@@ -775,17 +794,17 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   // Apple's unavailable view behind My Tasks' or Home's list (iOS 17+): a symbol, "No Tasks", why — and Clear Filters while a filter is
   // on. Set again only when what it says changes.
   private var unavailableShown: String?
-  private func showUnavailable(_ why: String?) {
+  private func showUnavailable(_ why: String?, title: String = "No Tasks", symbol: String = "checkmark.circle") {
     guard #available(iOS 17.0, *), let cv = list else { return }
-    let filtered = ((lastFilters?["chips"] as? [Any]) ?? []).isEmpty == false
-    let key = why.map { $0 + "|\(filtered)" }
+    let filtered = !isInbox && ((lastFilters?["chips"] as? [Any]) ?? []).isEmpty == false
+    let key = why.map { $0 + "|\(filtered)|" + title + "|" + symbol }
     if key == unavailableShown { return }
     unavailableShown = key
     guard let why = why else { cv.backgroundView = nil; return }
     var c = UIContentUnavailableConfiguration.empty()
-    c.image = UIImage(systemName: "checkmark.circle")
-    c.text = "No Tasks"
-    c.secondaryText = why
+    c.image = UIImage(systemName: symbol)
+    c.text = title
+    c.secondaryText = why.isEmpty ? nil : why
     if filtered {
       var b = UIButton.Configuration.gray(); b.title = "Clear Filters"; b.cornerStyle = .capsule
       c.button = b
@@ -1149,9 +1168,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private(set) var inboxTab = "unread"
   private var keepSet = false
   private var inboxRows: [String: InboxRow] = [:]
-  private var openRow: InboxRow?
   private var keep = Set<String>()     // (rows that were in the list when it was picked stay until it's left — read or not)
-  private var switching = false
   private func makeInbox() {
     var c: UIButton.Configuration
     if #available(iOS 26.0, *) { c = .glass() } else { c = .gray(); c.cornerStyle = .capsule }
@@ -1183,12 +1200,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     guard k != inboxTab else { scrollToTop(); return }
     UISelectionFeedbackGenerator().selectionChanged()
     inboxTab = k
-    openRow?.close(animated: false); openRow = nil
     catsView.choose(["all", "unread", "mentions"].firstIndex(of: k) ?? 0, animated: true)
     keep = Set((m["rows"] as? [[String: Any]] ?? []).filter { ($0["read"] as? Bool) != true }.compactMap { $0["id"] as? String }); keepSet = true
-    switching = true
     drawInbox(m)
-    switching = false
     if #available(iOS 26.0, *), !appleTop { DispatchQueue.main.async { [weak self] in guard let self = self else { return }; Frost.nudge(self.scroll); self.applyFrost() } }
     send(["ev": "tab", "tab": k])
   }
@@ -1201,9 +1215,6 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     if !keepSet, (model["rows"] as? [[String: Any]]) != nil {
       keep = Set((model["rows"] as? [[String: Any]] ?? []).filter { ($0["read"] as? Bool) != true }.compactMap { $0["id"] as? String }); keepSet = true
     }
-    // where each row is now (to move it from there), and which go
-    var was: [String: CGPoint] = [:]
-    for v in content { if let r = v as? InboxRow { was[r.id] = r.center } }
     content.forEach { if !($0 is InboxRow) { $0.removeFromSuperview() } }
     content = []
     var seen = Set<String>()
@@ -1215,62 +1226,44 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
         v = InboxRow(); v.id = id
         v.onTap = { [weak self] in self?.send(["ev": "open", "id": id]) }
         v.onToggle = { [weak self, weak v] in guard let v = v else { return }; self?.send(["ev": v.read ? "unread" : "read", "id": id]) }
-        v.onOpen = { [weak self] row in if let o = self?.openRow, o !== row { o.close() }; self?.openRow = row }
-        v.swipes = !listOn   // (in Apple's list: Apple's own swipe)
-        scroll.addSubview(v); inboxRows[id] = v
+        inboxRows[id] = v
       }
       let p = people[r["from"] as? String ?? ""]
       let sig = drawSig(r) + "|\((p?["photo"] as? String)?.hashValue ?? 0)|\(p?["initials"] as? String ?? "")|\(String(describing: p?["color"]))|\(InboxRow.label(r["at"] as? String ?? ""))"
-      if v.drawnSig != sig { v.drawnSig = sig; v.set(r, photo: roundPic(NativeSheetVC.photo(p), initials: p?["initials"] as? String, color: NativeSheetVC.color(p?["color"]), size: 44)) }
+      if v.rowSig != sig { v.rowSig = sig; v.set(r, photo: roundPic(NativeSheetVC.photo(p), initials: p?["initials"] as? String, color: NativeSheetVC.color(p?["color"]), size: 44)) }
       content.append(v)
     }
-    let rowsNow = content.compactMap { $0 as? InboxRow }
-    rowsNow.forEach { $0.last = $0 === rowsNow.last }
-    // (Apple's list: it moves, brings in and takes away the rows itself)
-    if listOn {
-      for (id, v) in inboxRows where !seen.contains(id) { inboxRows[id] = nil; if v === openRow { openRow = nil } }
-      if content.isEmpty {
-        let e = inboxTab == "unread" ? "Inbox zero 🎉" : inboxTab == "mentions" ? "No mentions yet" : "Nothing here yet"
-        let l = UILabel(); l.text = e; l.font = .systemFont(ofSize: 15); l.textColor = .secondaryLabel; l.tag = 8; l.numberOfLines = 0; l.textAlignment = .center
-        l.accessibilityIdentifier = "inbox-empty-" + inboxTab
-        content.append(l)
-      }
-      applyList(animated: true)
-      onAppleCorner?()
-      return
-    }
-    // the rows that don't belong any more: faded out where they are, then gone
-    for (id, v) in inboxRows where !seen.contains(id) {
-      if v === openRow { openRow = nil }
-      inboxRows[id] = nil
-      UIView.animate(withDuration: 0.25, delay: 0, options: [.curveEaseInOut, .beginFromCurrentState]) { v.alpha = 0 } completion: { _ in v.removeFromSuperview() }
-    }
-    if content.isEmpty {
-      let e = inboxTab == "unread" ? "Inbox zero 🎉" : inboxTab == "mentions" ? "No mentions yet" : "Nothing here yet"
+    for id in inboxRows.keys where !seen.contains(id) { inboxRows[id] = nil }
+    // (nothing in the list: Apple's own unavailable view behind it — iOS 16, a line of words)
+    let e = (model["empty"] as? String) ?? (inboxTab == "unread" ? "Inbox zero 🎉" : inboxTab == "mentions" ? "No mentions yet" : "Nothing here yet")
+    let none = content.isEmpty
+    if #available(iOS 17.0, *) {
+      showUnavailable(none ? "" : nil, title: e, symbol: inboxTab == "unread" ? "checkmark.circle" : inboxTab == "mentions" ? "at" : "tray")
+    } else if none {
       let l = UILabel(); l.text = e; l.font = .systemFont(ofSize: 15); l.textColor = .secondaryLabel; l.tag = 8; l.numberOfLines = 0; l.textAlignment = .center
-      scroll.addSubview(l); content.append(l)
+      l.accessibilityIdentifier = "inbox-empty-" + inboxTab
+      content.append(l)
     }
-    // the others close up (or open up for the ones coming back, which fade in where they belong) — smoothly, no bounce
-    setNeedsLayout(); layoutIfNeeded()
-    let moved = content.compactMap { $0 as? InboxRow }
-    for r in moved {
-      if let from = was[r.id] { r.center = from; r.alpha = 1 } else { r.alpha = switching ? 0 : 1 }
-    }
-    UIView.animate(withDuration: switching ? 0.35 : 0, delay: 0, options: [.curveEaseInOut, .allowUserInteraction]) {
-      self.setNeedsLayout(); self.layoutIfNeeded()
-      moved.forEach { $0.alpha = 1 }
-    }
+    // (Apple's list: it moves, brings in and takes away the rows itself — only what changed set again)
+    if listOn { applyList(animated: window != nil && !isHidden); onAppleCorner?() }
   }
   func selfInboxTab(_ k: String) { pickTab(k) }
   func selfSwipeRow() {
     // (Apple's list: the first row offers Apple's own Read / Unread swipe)
-    if listOn, let r = content.first as? InboxRow, let ip = listDS?.indexPath(for: "r:" + r.id) { appleSwipeOK = swipeActions(ip, leading: true) != nil; return }
-    if let r = content.first as? InboxRow { r.selfOpen(); openRow = r }
+    if let r = content.first as? InboxRow, let ip = listDS?.indexPath(for: "r:" + r.id) { appleSwipeOK = swipeActions(ip, leading: true) != nil }
+    // (the rows Apple's own cells; holding one: Apple's menu, and the peek of a task's update — drawn from the copy)
+    inboxCells = list?.visibleCells.filter { $0 is InboxCell }.count ?? 0
+    if let r = content.first(where: { ($0 as? InboxRow).map { InboxPeekVC.make($0.id) != nil } == true }) as? InboxRow {
+      let p = InboxPeekVC.make(r.id); p?.loadViewIfNeeded()
+      peekSeen = ["h": Int(p?.preferredContentSize.height ?? 0), "comment": p?.commentText != nil, "menu": inboxMenuItems(r, p).count]
+    }
   }
   private var appleSwipeOK = false
+  private var inboxCells = 0
+  private var peekSeen: [String: Any] = [:]
   func inboxGeo() -> [String: Any] {
     ["tab": inboxTab, "rows": content.filter { $0 is InboxRow }.count, "unreadRows": content.compactMap { $0 as? InboxRow }.filter { !$0.read }.count,
-     "cats": catsView.widths, "markAll": !markAll.isHidden, "open": listOn ? appleSwipeOK : (openRow?.isOpen ?? false), "pinned": pinned, "apple": appleTop, "listOn": listOn]
+     "cats": catsView.widths, "markAll": !markAll.isHidden, "open": appleSwipeOK, "cells": inboxCells, "peek": peekSeen, "pinned": pinned, "apple": appleTop, "listOn": listOn]
   }
 
   // ---------- where things go ----------
@@ -1327,12 +1320,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
         y += h
         continue
       }
-      if let r = v as? InboxRow {
-        // (Inbox rows: edge to edge, one under the other, as Mail's)
-        r.bounds = CGRect(x: 0, y: 0, width: W, height: InboxRow.H); r.center = CGPoint(x: W / 2, y: y + InboxRow.H / 2)
-        y += InboxRow.H
-        continue
-      }
+      if v is InboxRow { continue }   // (the Inbox's rows: only in Apple's list)
       if i > 0 { y += 10 }
       if v.tag == 7 && v.isHidden {
         // (Today's mark: no room taken — the first client's heading starts where Today's used to)
@@ -2359,75 +2347,83 @@ final class HomePassThrough: UIView {
   override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? { let v = super.hitTest(point, with: event); return v === self ? nil : v }
 }
 
-// ---------- the Inbox (28+): a notification as Mail's message row ----------
-// blue dot (unread) · picture · who did what (bold) and when · the task · one line of what — swiped right: the row goes
-// grey and a round blue envelope (Read / Unread) shows on its left (Haris, 2026-11-01)
-final class InboxRow: UIControl, UIGestureRecognizerDelegate {
-  var onTap: (() -> Void)?, onToggle: (() -> Void)?, onOpen: ((InboxRow) -> Void)?
+// ---------- the Inbox: a notification as Apple's own list cell (Haris 2026-11-09/10, mock-up "Inbox — with the rules", B) ----------
+// Apple's cell, set by Apple's configuration: the person's picture, who did what (bold while unread), the task and one line
+// of what. Apple's highlight, Apple's swipe (Read / Unread), Apple's hold with its peek, Apple's line between rows. Ours,
+// inside Apple's cell (said plainly, approved 2026-11-10 09:09): the unread dot, and the time on the first line as Mail's —
+// Apple's cell has neither. This view is that: it lies over the cell, takes no touches, and holds the row's data.
+final class InboxRow: UIView {
+  var onTap: (() -> Void)?, onToggle: (() -> Void)?
   var id = ""
   private(set) var read = false
-  var last = false { didSet { sep.isHidden = last } }   // (the list's last row: no separator under it — Haris, 2026-11-01)
-  static let H: CGFloat = 82.8   // (Mail's)
-  private let body = UIView(), dot = UIView(), av = UIImageView(), head = UILabel(), when = UILabel(), chev = UIImageView(), titleL = UILabel(), descL = UILabel(), sep = UIView()
-  private let act = UIView(), actCircle = UIView(), actIcon = UIImageView(), actLabel = UILabel()
-  // (the button grows from / shrinks to its own middle, as on the task cards; the grey row rounds its corners as it slides,
-  //  as Mail's — Haris, 2026-11-01)
-  private var shift: CGFloat = 0 { didSet {
-    body.transform = CGAffineTransform(translationX: shift, y: 0)
-    let k = min(1, shift / 86)
-    act.alpha = k; act.transform = CGAffineTransform(scaleX: 0.6 + 0.4 * k, y: 0.6 + 0.4 * k)
-    body.backgroundColor = shift > 0.5 ? UIColor.systemGray5 : .clear
-    body.layer.cornerRadius = 18 * k
-  } }
-  var isOpen: Bool { shift > 1 }
-  // (in Apple's list the row's swipe is Apple's own — this row's own pan off)
-  private weak var panG: UIPanGestureRecognizer?
-  var swipes = true { didSet { panG?.isEnabled = swipes } }
+  private(set) var info: [String: Any] = [:]
+  private(set) var photo: UIImage?
+  var rowSig = ""   // (what the cell shows — set again only when it changed)
+  private let dot = UIView(), when = UILabel()
+  // Mail's measures (from Haris's screenshots, 2026-11-01): the picture 44 at 34, the words from 88, 18 from the right
+  static let headFont = UIFont.systemFont(ofSize: 16.5, weight: .semibold), headFontRead = UIFont.systemFont(ofSize: 16.5)
+  static let lineFont = UIFont.systemFont(ofSize: 14)
+  static let top: CGFloat = 11, lead: CGFloat = 34, trail: CGFloat = 18, pic: CGFloat = 44, gap: CGFloat = 10
   override init(frame: CGRect) {
     super.init(frame: frame)
-    clipsToBounds = true
-    act.alpha = 0
-    actCircle.backgroundColor = .systemBlue; actCircle.layer.cornerRadius = 27
-    actIcon.tintColor = .white; actIcon.contentMode = .center
-    actLabel.font = .systemFont(ofSize: 12, weight: .medium); actLabel.textColor = .secondaryLabel; actLabel.textAlignment = .center
-    actCircle.addSubview(actIcon); act.addSubview(actCircle); act.addSubview(actLabel); addSubview(act)
-    act.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(toggle)))
-    dot.backgroundColor = .systemBlue; dot.layer.cornerRadius = 5
-    av.clipsToBounds = true; av.layer.cornerRadius = 20
-    // (Mail's sizes, from the height of the capitals in Haris's screenshots side by side, 2026-11-01: ours at 17 / 15 / 15
-    //  read bigger — Mail's are ~16.5 / 14 / 14)
-    head.font = .systemFont(ofSize: 16.5, weight: .semibold); head.textColor = .label
-    when.font = .systemFont(ofSize: 14); when.textColor = .secondaryLabel; when.textAlignment = .right
-    chev.image = UIImage(systemName: "chevron.right", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .semibold)); chev.tintColor = .tertiaryLabel; chev.contentMode = .bottom
-    titleL.font = .systemFont(ofSize: 14); titleL.textColor = .label
-    descL.font = .systemFont(ofSize: 14); descL.textColor = .secondaryLabel
-    [head, titleL, descL].forEach { $0.lineBreakMode = .byTruncatingTail; $0.numberOfLines = 1 }
-    sep.backgroundColor = .separator
-    [dot, av, head, when, chev, titleL, descL, sep].forEach { body.addSubview($0) }
-    body.isUserInteractionEnabled = false
-    body.layer.cornerCurve = .continuous
-    addSubview(body)
-    let pan = UIPanGestureRecognizer(target: self, action: #selector(pan(_:))); pan.delegate = self; addGestureRecognizer(pan); panG = pan
-    addAction(UIAction { [weak self] _ in guard let self = self else { return }; if self.isOpen { self.close() } else { self.onTap?() } }, for: .touchUpInside)
-    isAccessibilityElement = true; accessibilityTraits = .button
+    isUserInteractionEnabled = false
+    dot.backgroundColor = .systemBlue; dot.layer.cornerRadius = 3.9
+    when.font = InboxRow.lineFont; when.textColor = .secondaryLabel; when.textAlignment = .right
+    addSubview(dot); addSubview(when)
   }
   required init?(coder: NSCoder) { fatalError() }
-  override var isHighlighted: Bool { didSet { if !isOpen { body.backgroundColor = isHighlighted ? .systemGray5 : .clear } } }
-  var drawnSig = ""   // (what it showed last — HomeView sets it again only when it changed)
   func set(_ r: [String: Any], photo: UIImage?) {
+    info = r
     id = r["id"] as? String ?? ""
     read = (r["read"] as? Bool) == true
+    self.photo = photo
     dot.isHidden = read
-    head.text = r["head"] as? String
-    titleL.text = r["title"] as? String
-    let d = (r["desc"] as? String ?? "")
-    descL.text = d.isEmpty ? " " : d
     when.text = InboxRow.label(r["at"] as? String ?? "")
-    av.image = photo
-    actIcon.image = UIImage(systemName: read ? "envelope.fill" : "envelope.open.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 21, weight: .semibold))
-    actLabel.text = read ? "Unread" : "Read"
-    accessibilityLabel = [read ? nil : "Unread", head.text, titleL.text, d, when.text].compactMap { $0 }.joined(separator: ", ")
     setNeedsLayout()
+  }
+  var head: String { info["head"] as? String ?? "" }
+  // Apple's content: the first line kept clear of the time (it's cut with … before it, as Mail's)
+  func content(width W: CGFloat) -> UIListContentConfiguration {
+    var c = UIListContentConfiguration.subtitleCell()
+    c.directionalLayoutMargins = NSDirectionalEdgeInsets(top: InboxRow.top, leading: InboxRow.lead, bottom: InboxRow.top, trailing: InboxRow.trail)
+    c.image = photo
+    c.imageProperties.maximumSize = CGSize(width: InboxRow.pic, height: InboxRow.pic)
+    c.imageProperties.reservedLayoutSize = CGSize(width: InboxRow.pic, height: InboxRow.pic)
+    c.imageProperties.cornerRadius = InboxRow.pic / 2
+    c.imageToTextPadding = InboxRow.gap
+    c.textToSecondaryTextVerticalPadding = 3
+    let font = read ? InboxRow.headFontRead : InboxRow.headFont
+    c.text = InboxRow.fit(head, font: font, width: W - InboxRow.lead - InboxRow.pic - InboxRow.gap - InboxRow.trail - whenWidth - 8)
+    c.textProperties.font = font; c.textProperties.color = .label; c.textProperties.numberOfLines = 1
+    // the task, then one line of what — each its own line, cut with … (Apple's second text, two lines)
+    let ps = NSMutableParagraphStyle(); ps.lineBreakMode = .byTruncatingTail
+    let task = (info["title"] as? String) ?? "", what = (info["desc"] as? String) ?? ""
+    let t = NSMutableAttributedString(string: task.isEmpty ? " " : task, attributes: [.font: InboxRow.lineFont, .foregroundColor: UIColor.label, .paragraphStyle: ps])
+    t.append(NSAttributedString(string: "\n" + (what.isEmpty ? " " : what), attributes: [.font: InboxRow.lineFont, .foregroundColor: UIColor.secondaryLabel, .paragraphStyle: ps]))
+    c.secondaryAttributedText = t
+    c.secondaryTextProperties.numberOfLines = 2
+    return c
+  }
+  var whenWidth: CGFloat { ceil(when.sizeThatFits(CGSize(width: 200, height: 22)).width) }
+  // the words cut to the room, with … (only when they don't fit)
+  static func fit(_ s: String, font: UIFont, width: CGFloat) -> String {
+    let w = { (x: String) in ceil((x as NSString).size(withAttributes: [.font: font]).width) }
+    guard width > 20, w(s) > width else { return s }
+    var lo = 0, hi = s.count
+    while lo < hi { let mid = (lo + hi + 1) / 2; if w(String(s.prefix(mid)).trimmingCharacters(in: .whitespaces) + "…") <= width { lo = mid } else { hi = mid - 1 } }
+    return String(s.prefix(lo)).trimmingCharacters(in: .whitespaces) + "…"
+  }
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    let W = bounds.width, H = bounds.height
+    // the dot centred on the picture, at 20.7 from the edge; the time on the first line's baseline, 18 from the right
+    dot.frame = CGRect(x: 20.7 - 3.9, y: H / 2 - 3.9, width: 7.8, height: 7.8)
+    let ww = whenWidth
+    let base = InboxRow.top + InboxRow.headFont.ascender
+    when.frame = CGRect(x: W - InboxRow.trail - ww, y: base - when.font.ascender, width: ww, height: ceil(when.font.lineHeight))
+  }
+  var accessibilityText: String {
+    [read ? nil : "Unread", head, info["title"] as? String, info["desc"] as? String, when.text].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", ")
   }
   // when, as Mail: 12:30 PM · Yesterday · Friday · Oct 29 · Oct 29, 2025
   static func label(_ iso: String) -> String {
@@ -2441,62 +2437,40 @@ final class InboxRow: UIControl, UIGestureRecognizerDelegate {
     f.dateFormat = cal.component(.year, from: d) == cal.component(.year, from: Date()) ? "MMM d" : "MMM d, yyyy"
     return f.string(from: d)
   }
+}
+// Apple's list cell for an Inbox row: Apple's content, Apple's highlight on the page's own background, the row's dot and time
+// over it; the first line set again only if the cell's width changed what fits
+final class InboxCell: UICollectionViewListCell {
+  private(set) weak var row: InboxRow?
+  private var fitW: CGFloat = 0
+  private var shownSig = ""
+  func show(_ r: InboxRow) {
+    // (the same row with something new — read, unread, a new line: it crossfades in place, never snaps — the smoothness rule)
+    let fade = row === r && shownSig != r.rowSig && window != nil
+    if row !== r { if let old = row, old.superview === contentView { old.removeFromSuperview() }; row = r }
+    shownSig = r.rowSig
+    fitW = bounds.width
+    let w = fitW > 0 ? fitW : (window?.bounds.width ?? UIScreen.main.bounds.width)
+    if fade { UIView.transition(with: contentView, duration: 0.25, options: [.transitionCrossDissolve, .allowUserInteraction], animations: { self.contentConfiguration = r.content(width: w) }) }
+    else { contentConfiguration = r.content(width: w) }
+    // (inside the cell's content: Apple's swipe moves it with the words)
+    if r.superview !== contentView { contentView.addSubview(r) }
+    isAccessibilityElement = true; accessibilityLabel = r.accessibilityText; accessibilityTraits = .button
+    accessibilityIdentifier = "inbox-row"
+    setNeedsLayout()
+  }
+  override func updateConfiguration(using state: UICellConfigurationState) {
+    var bg = UIBackgroundConfiguration.listPlainCell().updated(for: state)
+    if !state.isHighlighted && !state.isSelected { bg.backgroundColor = .clear }
+    backgroundConfiguration = bg
+  }
   override func layoutSubviews() {
     super.layoutSubviews()
-    let W = bounds.width, H = bounds.height
-    // (bounds and centre, not frame: the row slid right keeps its shift through a new layout)
-    body.bounds = CGRect(origin: .zero, size: bounds.size); body.center = CGPoint(x: W / 2, y: H / 2)
-    // Mail's row, measured from Haris's screenshot (2026-11-01): 82.8 tall; the dot 7.8 at 20.7 from the edge and the
-    // picture 43.5 at 34.3, both centred 36.3 down; text from 88; the three lines' capitals' tops 15.9 / 37.3 / 56.3
-    // down; the time on the first line's baseline with the › 18 from the right; the separator from 86 to 17 short of the edge
-    let midY: CGFloat = 36.3
-    dot.frame = CGRect(x: 20.7 - 3.9, y: midY - 3.9, width: 7.8, height: 7.8); dot.layer.cornerRadius = 3.9
-    av.frame = CGRect(x: 34.3, y: midY - 21.75, width: 43.5, height: 43.5); av.layer.cornerRadius = 21.75
-    let x: CGFloat = 88, R: CGFloat = 18
-    func top(_ l: UILabel, capTop: CGFloat) -> CGFloat { capTop - (l.font.ascender - l.font.capHeight) }
-    let base1 = 15.9 + head.font.capHeight
-    chev.frame = CGRect(x: W - R - 9, y: base1 - 11, width: 9, height: 13)
-    let ww = ceil(when.sizeThatFits(CGSize(width: 200, height: 22)).width)
-    when.frame = CGRect(x: chev.frame.minX - 7 - ww, y: base1 - when.font.ascender, width: ww, height: ceil(when.font.lineHeight))
-    head.frame = CGRect(x: x, y: top(head, capTop: 15.9), width: max(0, when.frame.minX - 8 - x), height: ceil(head.font.lineHeight))
-    titleL.frame = CGRect(x: x, y: top(titleL, capTop: 37.3), width: W - R - x, height: ceil(titleL.font.lineHeight))
-    descL.frame = CGRect(x: x, y: top(descL, capTop: 56.3), width: W - R - x, height: ceil(descL.font.lineHeight))
-    let px = 1 / max(1, traitCollection.displayScale)
-    sep.frame = CGRect(x: 86, y: H - px, width: W - 86 - 17, height: px)
-    // (the button and its name as one, placed by bounds and centre so its shrinking stays on its own middle)
-    act.bounds = CGRect(x: 0, y: 0, width: 70, height: 54 + 3 + 15); act.center = CGPoint(x: 16 + 29, y: H / 2)
-    actCircle.frame = CGRect(x: 8, y: 0, width: 54, height: 54)
-    actIcon.frame = actCircle.bounds
-    actLabel.frame = CGRect(x: 0, y: 57, width: 70, height: 15)
-  }
-  // swiped right only (as Mail's leading swipe); left does nothing
-  override func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
-    // (only the row's own swipe: iOS asks this for the list's scrolling too — answering no to that stopped the Inbox
-    //  from scrolling, Haris 2026-11-01)
-    guard g.view === self, let p = g as? UIPanGestureRecognizer else { return true }
-    let v = p.velocity(in: self)
-    return abs(v.x) > abs(v.y) * 1.2 && (v.x > 0 || isOpen)
-  }
-  private var start: CGFloat = 0
-  @objc private func pan(_ g: UIPanGestureRecognizer) {
-    switch g.state {
-    case .began: start = shift; onOpen?(self)
-    case .changed:
-      let x = start + g.translation(in: self).x
-      shift = x < 0 ? 0 : x > 86 ? 86 + (x - 86) * 0.25 : x
-    default:
-      let open = shift > 44 || g.velocity(in: self).x > 400
-      if open && shift < 44 { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
-      let to: CGFloat = open && g.velocity(in: self).x > -300 ? 86 : 0
-      SwipeSpring.run(from: shift, to: to, velocity: g.velocity(in: self).x) { self.shift = to }
+    if bounds.width > 0 && abs(bounds.width - fitW) > 0.5, let r = row { fitW = bounds.width; contentConfiguration = r.content(width: fitW) }
+    if let r = row {
+      if r.superview !== contentView { contentView.addSubview(r) }   // (the content set again: the row kept on top of it)
+      r.frame = contentView.bounds; contentView.bringSubviewToFront(r)
     }
-  }
-  func close(animated: Bool = true) { if animated { SwipeSpring.run(from: shift, to: 0, velocity: 0) { self.shift = 0 } } else { shift = 0 } }
-  func selfOpen() { shift = 86 }
-  @objc private func toggle() {
-    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-    onToggle?()
-    close()
   }
 }
 
@@ -2834,7 +2808,7 @@ extension HomeView: UICollectionViewDelegate {
   // (a task's or a client's row: Apple's highlight and selection open it; Me's rows as iPhone Settings'; nothing else)
   func collectionView(_ cv: UICollectionView, shouldHighlightItemAt ip: IndexPath) -> Bool {
     guard let key = listDS?.itemIdentifier(for: ip) else { return false }
-    if listViews[key] is AppleRow { return true }
+    if listViews[key] is AppleRow || listViews[key] is InboxRow { return true }
     guard isMeList else { return false }
     if key == "me:card" { return true }
     guard let it = meItems[key] else { return false }
@@ -2844,6 +2818,7 @@ extension HomeView: UICollectionViewDelegate {
     cv.deselectItem(at: ip, animated: true)
     guard let key = listDS?.itemIdentifier(for: ip) else { return }
     if let r = listViews[key] as? AppleRow { r.rowTapped(); return }
+    if let r = listViews[key] as? InboxRow { r.onTap?(); return }
     guard isMeList else { return }
     if key == "me:card" { (listViews[key] as? MeCardBlock)?.onTap?(); return }
     meItems[key]?.tap?()
@@ -2851,6 +2826,7 @@ extension HomeView: UICollectionViewDelegate {
   // touch and hold a task: Apple's own lift of its cell and Apple's menu — Attach Files (Camera · Photos · Files); Copy link
   // and Trash are on its swipe (Haris 2026-11-09 12:36: "no need for them to be in the menu"). My Tasks' Done tab: read only
   func collectionView(_ cv: UICollectionView, contextMenuConfigurationForItemsAt ips: [IndexPath], point: CGPoint) -> UIContextMenuConfiguration? {
+    if ips.count == 1, let key = listDS?.itemIdentifier(for: ips[0]), let row = listViews[key] as? InboxRow { return inboxMenu(row, key) }
     guard ips.count == 1, let key = listDS?.itemIdentifier(for: ips[0]), let card = listViews[key] as? HomeCard, !(isList && listTab == "done") else { return nil }
     let id = card.id
     return UIContextMenuConfiguration(identifier: key as NSString, previewProvider: nil) { [weak self] _ in
@@ -2858,6 +2834,34 @@ extension HomeView: UICollectionViewDelegate {
       let src = { (s: String, t: String, img: String) in UIAction(title: t, image: UIImage(systemName: img)) { _ in HomeView.afterMenu = { self?.send(["ev": "attach", "id": id, "source": s]) } } }
       return UIMenu(title: "Attach Files", children: [src("camera", "Camera", "camera"), src("photos", "Photos", "photo"), src("files", "Files", "doc.badge.arrow.up")])
     }
+  }
+  // hold an Inbox row: Apple's peek of it (InboxPeekVC — the task, the comment in full or the task's facts, from the phone's
+  // copy) with Apple's menu: Open Task · Mark as Read / Unread · Copy Text (a comment) or Copy Link. Peeking doesn't open it
+  // or mark it read; the preview tapped opens it, as the row's tap (Haris 2026-11-09, mock-up "Inbox — with the rules")
+  private func inboxMenu(_ row: InboxRow, _ key: String) -> UIContextMenuConfiguration {
+    let peek = InboxPeekVC.make(row.id)
+    let preview: UIContextMenuContentPreviewProvider? = peek.map { p in { () -> UIViewController? in p } }
+    return UIContextMenuConfiguration(identifier: key as NSString, previewProvider: preview) { [weak self, weak row] _ in
+      guard let self = self, let row = row else { return nil }
+      return UIMenu(children: self.inboxMenuItems(row, peek))
+    }
+  }
+  func inboxMenuItems(_ row: InboxRow, _ peek: InboxPeekVC?) -> [UIMenuElement] {
+    var acts: [UIMenuElement] = [
+      UIAction(title: peek != nil ? "Open Task" : "Open", image: UIImage(systemName: "arrow.up.right.square")) { [weak row] _ in HomeView.afterMenu = { row?.onTap?() } },
+      UIAction(title: row.read ? "Mark as Unread" : "Mark as Read", image: UIImage(systemName: row.read ? "envelope.badge" : "envelope.open")) { [weak row] _ in row?.onToggle?() },
+    ]
+    if let p = peek {
+      if let t = p.commentText, !t.isEmpty { acts.append(UIAction(title: "Copy Text", image: UIImage(systemName: "doc.on.doc")) { _ in UIPasteboard.general.string = t }) }
+      else { let id = p.taskId; acts.append(UIAction(title: "Copy Link", image: UIImage(systemName: "link")) { _ in Main.shared.copyTaskLink(id) }) }
+    }
+    return acts
+  }
+  // the peek tapped: the task opens, as the row's tap — once Apple's preview has gone into it
+  func collectionView(_ cv: UICollectionView, willPerformPreviewActionForMenuWith c: UIContextMenuConfiguration, animator: UIContextMenuInteractionCommitAnimating) {
+    guard let key = c.identifier as? String, let row = listViews[key] as? InboxRow else { return }
+    animator.preferredCommitStyle = .pop
+    animator.addCompletion { [weak row] in row?.onTap?() }
   }
   private static var afterMenu: (() -> Void)?
   func collectionView(_ cv: UICollectionView, willEndContextMenuInteraction c: UIContextMenuConfiguration, animator: UIContextMenuInteractionAnimating?) {

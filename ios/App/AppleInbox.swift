@@ -4,8 +4,8 @@ import UIKit
    own navigation with this screen at its root. Apple's bar from the start: the big title "Inbox" with its line under it
    (how many unread), "Mark all read" (or "Mark all unread", asked first) and your photo as Apple's own bar buttons. No
    search (Haris). All / Unread / Mentions stay as Mail's buttons, at the top of Apple's list, scrolling away with it as
-   Mail's do (Haris: "Same as mail"); the rows in Apple's list, edge to edge as Mail's, with Apple's own swipe (Read /
-   Unread). "+ New task" as before. */
+   Mail's do (Haris: "Same as mail"); the rows Apple's own list cells (InboxCell, Home.swift), edge to edge as Mail's, with
+   Apple's own swipe (Read / Unread) and Apple's peek on a hold (InboxPeekVC, below). "+ New task" as before. */
 let APPLE_INBOX = APPLE_NAV
 
 // a tab's first screen with its own Apple navigation (Home, My Tasks, the Inbox)
@@ -102,4 +102,162 @@ final class InboxVC: UIViewController, TabRoot {
     shownLine = d
     BigLine.set(self, d, "inbox")
   }
+}
+
+/* Hold a row in the Inbox: Apple's own peek (Haris 2026-11-09 23:42 "I like this"; mock-up "Inbox — with the rules", Peek).
+   Apple lifts it, blurs the list and puts its menu under it; the preview inside is ours, drawn from the phone's copy — at
+   once, offline too. Peeking neither opens the task nor marks it read; tapping the preview opens it, as the row's tap.
+   - A comment (or a reply, a mention, amendments): the task's client, name and status at the top, the comment in full
+     (pictures too) as the comments page draws it, the one before it faded for its context.
+   - Anything else about a task (assigned, status, due…): the task's key facts as Apple's rows and the start of its
+     description.
+   Not about a task (a birthday, the round-up, Client Assets…): no peek — Apple's own lift of the row. */
+final class InboxPeekVC: UIViewController {
+  let taskId: String
+  private(set) var commentText: String?
+  private let task: [String: Any]
+  private let shown: [[String: Any]]   // (the comment and the one before it — empty for a change)
+  private let people: [String: [String: Any]]
+  private let me: String
+  // what the notification is about, from the phone's copy (nil: not a task, or not in the copy)
+  static func make(_ nid: String) -> InboxPeekVC? {
+    guard let res = AppData.shared.meModel("tasks", "notifOpen", [nid, [String: Any]()]), let go = res["go"] as? [String: Any],
+          (go["to"] as? String) == "task", let id = go["id"] as? String, !id.isEmpty,
+          let t = AppData.shared.screen("task", id).model else { return nil }
+    var focus = go["focus"] as? String ?? ""
+    if let r = focus.range(of: "~") { focus = String(focus[r.upperBound...]) }
+    var shown: [[String: Any]] = [], people: [String: [String: Any]] = [:], me = t["me"] as? String ?? ""
+    if !focus.isEmpty {
+      // the comment where it is — among the task's comments, or in its thread
+      let thread = go["thread"] as? String
+      for th in [thread, nil] as [String?] where shown.isEmpty {
+        guard let f = AppData.shared.screen("comments", id, th).model else { continue }
+        let items = (f["items"] as? [[String: Any]]) ?? []
+        if let i = items.firstIndex(where: { ($0["id"] as? String) == focus }) {
+          shown = (i > 0 ? [items[i - 1]] : []) + [items[i]]
+          people = (f["people"] as? [String: [String: Any]]) ?? [:]; me = f["me"] as? String ?? me
+        }
+      }
+    }
+    return InboxPeekVC(task: t, id: id, shown: shown, people: people, me: me)
+  }
+  private init(task: [String: Any], id: String, shown: [[String: Any]], people: [String: [String: Any]], me: String) {
+    self.task = task; self.taskId = id; self.shown = shown; self.people = people; self.me = me
+    commentText = shown.last?["text"] as? String
+    super.init(nibName: nil, bundle: nil)
+  }
+  required init?(coder: NSCoder) { fatalError() }
+  private let stack = UIStackView()
+  override func viewDidLoad() {
+    super.viewDidLoad()
+    view.backgroundColor = HomeLook(Main.shared.lookBoth).bg
+    stack.axis = .vertical; stack.spacing = 0; stack.alignment = .fill
+    view.addSubview(stack)
+    stack.addArrangedSubview(headBlock())
+    stack.addArrangedSubview(line())
+    if shown.isEmpty { stack.addArrangedSubview(factsBlock()) } else { commentsBlock().forEach { stack.addArrangedSubview($0) } }
+    let W = UIScreen.main.bounds.width - 32
+    stack.frame = CGRect(x: 0, y: 0, width: W, height: 10)
+    let h = stack.systemLayoutSizeFitting(CGSize(width: W, height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height
+    // (no taller than about two thirds of the screen — Apple's menu needs its room under it)
+    preferredContentSize = CGSize(width: W, height: min(ceil(h), UIScreen.main.bounds.height * 0.62))
+  }
+  override func viewDidLayoutSubviews() {
+    super.viewDidLayoutSubviews()
+    stack.frame = CGRect(x: 0, y: 0, width: view.bounds.width, height: max(view.bounds.height, stack.frame.height))
+  }
+  // the client, the task's name, its status (and due, priority) as chips
+  private func headBlock() -> UIView {
+    let v = UIStackView(); v.axis = .vertical; v.spacing = 4; v.isLayoutMarginsRelativeArrangement = true
+    v.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 16, leading: 16, bottom: 12, trailing: 16)
+    if let c = task["client"] as? [String: Any] {
+      let dot = UIView(); dot.backgroundColor = TaskPage.rgb(c["rgb"]); dot.layer.cornerRadius = 4.5
+      dot.widthAnchor.constraint(equalToConstant: 9).isActive = true; dot.heightAnchor.constraint(equalToConstant: 9).isActive = true
+      let n = UILabel(); n.text = c["name"] as? String; n.font = .systemFont(ofSize: 13); n.textColor = .secondaryLabel
+      let r = UIStackView(arrangedSubviews: [dot, n, UIView()]); r.spacing = 8; r.alignment = .center
+      v.addArrangedSubview(r)
+    }
+    let t = UILabel(); t.text = (task["title"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Untitled task"
+    t.font = .systemFont(ofSize: 19, weight: .bold); t.numberOfLines = 2
+    v.addArrangedSubview(t)
+    var chips: [UIView] = []
+    if let s = task["status"] as? [String: Any], let name = s["name"] as? String, !name.isEmpty {
+      let col = TaskPage.rgb(s["rgb"]); chips.append(chip((task["done"] as? Bool) == true ? "Done" : name, col.withAlphaComponent(0.18), col))
+    }
+    if let d = task["dates"] as? [String: Any], let due = d["dueLabel"] as? String, !due.isEmpty, (task["done"] as? Bool) != true {
+      let late = (d["late"] as? Bool) == true, today = (d["today"] as? Bool) == true
+      let col: UIColor = late ? .systemRed : today ? .systemOrange : .secondaryLabel
+      chips.append(chip("Due " + due, (late || today ? col : UIColor.systemGray).withAlphaComponent(0.16), col))
+    }
+    if !chips.isEmpty {
+      let r = UIStackView(arrangedSubviews: chips + [UIView()]); r.spacing = 6; r.alignment = .center
+      v.setCustomSpacing(6, after: t)
+      v.addArrangedSubview(r)
+    }
+    return v
+  }
+  private func chip(_ s: String, _ bg: UIColor, _ fg: UIColor) -> UIView {
+    let c = PaddedLabel(); c.text = s; c.font = .systemFont(ofSize: 13, weight: .semibold); c.textColor = fg
+    c.backgroundColor = bg; c.layer.cornerRadius = 10; c.layer.cornerCurve = .continuous; c.clipsToBounds = true
+    c.insets = UIEdgeInsets(top: 3, left: 9, bottom: 3, right: 9)
+    return c
+  }
+  private func line() -> UIView {
+    let l = UIView(); l.backgroundColor = .separator
+    l.heightAnchor.constraint(equalToConstant: 1 / max(1, UIScreen.main.scale)).isActive = true
+    return l
+  }
+  // the comment in full, as the comments page draws it — the one before it faded, for its context
+  private func commentsBlock() -> [UIView] {
+    let W = UIScreen.main.bounds.width - 32
+    var out: [UIView] = []
+    for (i, it) in shown.enumerated() {
+      let c = CommentCell(it, people: people, me: me, thread: false, root: false)
+      c.isUserInteractionEnabled = false
+      c.alpha = i < shown.count - 1 ? 0.6 : 1
+      c.heightAnchor.constraint(equalToConstant: c.height(for: W)).isActive = true
+      out.append(c)
+    }
+    let pad = UIView(); pad.heightAnchor.constraint(equalToConstant: 8).isActive = true
+    return [pad] + out + [{ let p = UIView(); p.heightAnchor.constraint(equalToConstant: 8).isActive = true; return p }()]
+  }
+  // a change: the task's key facts as Apple's rows, then the start of its description
+  private func factsBlock() -> UIView {
+    let v = UIStackView(); v.axis = .vertical; v.spacing = 0
+    let name = { (id: String) -> String in id == (self.task["me"] as? String) ? "You" : (self.people[id]?["name"] as? String) ?? (self.taskPeople[id]?["name"] as? String) ?? "Someone" }
+    var facts: [(String, String, UIColor)] = []
+    if let c = task["creator"] as? [String: Any], let id = c["id"] as? String { facts.append(("Created by", name(id), .label)) }
+    let who = ((task["assignees"] as? [[String: Any]]) ?? []).compactMap { $0["id"] as? String }.map(name)
+    if !who.isEmpty { facts.append((who.count == 1 ? "Assignee" : "Assignees", ListFormatter.localizedString(byJoining: who), .label)) }
+    if let d = task["dates"] as? [String: Any], let due = d["dueLabel"] as? String, !due.isEmpty {
+      facts.append(("Due", due, (d["late"] as? Bool) == true ? .systemRed : (d["today"] as? Bool) == true ? .systemOrange : .label))
+    }
+    // (the priority: yours if you're on it, else the task's first)
+    let prios = (task["prio"] as? [[String: Any]]) ?? []
+    let mine = prios.first { ($0["key"] as? String) == (task["me"] as? String) } ?? prios.first { !(($0["label"] as? String) ?? "").isEmpty }
+    if let p = mine?["label"] as? String, !p.isEmpty {
+      facts.append(("Priority", p == "Urgent" ? "Urgent" : "Priority \(p)", p == "Urgent" || p == "1" ? .systemRed : .label))
+    }
+    for (i, f) in facts.enumerated() {
+      var c = UIListContentConfiguration.valueCell()
+      c.text = f.0; c.textProperties.color = .secondaryLabel
+      c.secondaryText = f.1; c.secondaryTextProperties.color = f.2; c.secondaryTextProperties.font = .systemFont(ofSize: 17, weight: .medium)
+      c.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 11, leading: 16, bottom: 11, trailing: 16)
+      let row = UIListContentView(configuration: c)
+      v.addArrangedSubview(row)
+      if i < facts.count - 1 { let l = line(); let w = UIView(); w.addSubview(l); l.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([l.leadingAnchor.constraint(equalTo: w.leadingAnchor, constant: 16), l.trailingAnchor.constraint(equalTo: w.trailingAnchor), l.topAnchor.constraint(equalTo: w.topAnchor), l.bottomAnchor.constraint(equalTo: w.bottomAnchor)])
+        v.addArrangedSubview(w) }
+    }
+    if let d = task["desc"] as? String, !d.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      let l = UILabel(); l.text = d; l.numberOfLines = 4; l.font = .systemFont(ofSize: 15); l.textColor = .secondaryLabel
+      let w = UIStackView(arrangedSubviews: [l]); w.isLayoutMarginsRelativeArrangement = true
+      w.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 10, leading: 16, bottom: 14, trailing: 16)
+      v.addArrangedSubview(w)
+    } else {
+      let p = UIView(); p.heightAnchor.constraint(equalToConstant: 6).isActive = true; v.addArrangedSubview(p)
+    }
+    return v
+  }
+  private var taskPeople: [String: [String: Any]] { (task["people"] as? [String: [String: Any]]) ?? [:] }
 }

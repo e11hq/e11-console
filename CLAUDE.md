@@ -264,6 +264,11 @@ Apple puts it, left as it is: Haris 16:15); a birthday opens their greeting; "+ 
 with the rules", B, approved), **and holding a row shows Apple's peek** (Haris 23:42: "I like this"): the comment or change
 it's about, in full, above Apple's menu — without opening the task or marking it read, as peeking a mail in Mail; the
 preview tapped opens it. Drawn from the phone's copy (works offline). Mock-up first.
+**Started 2026-11-10 09:09 (Haris: "Start inbox apple page"):** each row Apple's own list cell (`InboxCell`, Apple's
+subtitle configuration: picture, who did what — bold while unread — the task, one line of what), Apple's highlight, swipe,
+hold with the peek (`InboxPeekVC`, from the copy: `notifOpen` → the task's and comments' screens) and Apple's line between
+rows; ours inside Apple's cell, as Haris picked: the unread dot and **the time on the first line** (A2), and **Mail's
+buttons** stay ours (B1). Empty: Apple's unavailable view (iOS 16: a line). Not approved yet.
 **My Tasks' and the Inbox's big title — Haris's exception (2026-11-09 19:15):** each time the page shows, Apple's bar is told
 its list again (`setContentScrollView` in viewDidAppear). On his phone (iOS 27.2) the bar was left following another, empty
 list in the page and the big title stuck; the cause wasn't found, and he chose this over more builds hunting it.
