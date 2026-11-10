@@ -119,6 +119,7 @@ try:
       check((hsc.get('shrink') or 0) >= 0.99 and (hsc.get('smallTitle') or 0) > 0.9, f'scrolled, Home\'s title shrinks into the small bar {hsc}')
       check(hf.get('searching') is True and (hf.get('searchBarW') or 0) > 250 and (hf.get('results') or 0) > 0, f'Search stretches into a bar with results for "Ford" {hf}')
     check(hfd.get('searching') is False, f'the ✕ closes the search {hfd}')
+    check(res.get('reviewCd') is True and res.get('reviewTab') == 'mytasks', f"Home's In review box: My Tasks with Waiting for CD review on (cd {res.get('reviewCd')}, tab {res.get('reviewTab')})")
     # (the Clients pages fully Apple — Haris 2026-11-10)
     cl, cp, cs, cf, cw = res.get('clList') or {}, res.get('clPage') or {}, res.get('clStrikeAt') or {}, res.get('clFind') or {}, res.get('clWashAt') or {}
     check((cl.get('rows') or 0) > 0 and cl.get('appleCell') is True, f"the Clients list: each client Apple's own cell {cl}")
