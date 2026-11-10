@@ -134,11 +134,19 @@ export function createLauncher(opts = {}) {
       log(`downloaded ${rel.version}`);
     } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
   }
+  // (is a newer than b — "1.9.28" > "1.9.27"; an "available" that isn't newer than what runs is never offered: Haris
+  //  2026-11-10, 1.9.27 offered while 1.9.28 ran after Update now)
+  const newer = (a, b) => {
+    if (!b) return true;
+    const pa = String(a).split(/[.+-]/).map((x) => parseInt(x, 10) || 0), pb = String(b).split(/[.+-]/).map((x) => parseInt(x, 10) || 0);
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) { if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0); }
+    return false;
+  };
   async function check() {
     state.lastCheck = new Date().toISOString();
     try {
       const rel = await latestRelease();
-      state.available = rel && rel.version !== state.current ? { version: rel.version, name: rel.name, notes: rel.notes, publishedAt: rel.publishedAt } : null;
+      state.available = rel && newer(rel.version, state.current) ? { version: rel.version, name: rel.name, notes: rel.notes, publishedAt: rel.publishedAt } : null;
       state.lastError = null;
       saveState();
       return rel;
@@ -165,7 +173,8 @@ export function createLauncher(opts = {}) {
     if (await healthy(v)) {
       if (from !== v) { state.previous = from; state.current = v; }
       state.history = [{ version: v, at: new Date().toISOString(), reason, backup }, ...(state.history || [])].slice(0, 30);
-      if (state.available && state.available.version === v) state.available = null;
+      // (what was offered is now running, or older than it: nothing left to offer)
+      if (state.available && !newer(state.available.version, v)) state.available = null;
       state.lastError = null;
       saveState();
       pruneVersions();
@@ -210,7 +219,7 @@ export function createLauncher(opts = {}) {
   const updateNow = (reason = 'update') => exclusive(async () => {
     const rel = await latestRelease().catch((e) => { state.lastError = e.message; saveState(); return null; });
     if (!rel) return { ok: false, error: state.lastError || 'No release found' };
-    if (rel.version === state.current && child) return { ok: true, version: rel.version, upToDate: true };
+    if (rel.version === state.current && child) { if (state.available && !newer(state.available.version, state.current)) { state.available = null; saveState(); } return { ok: true, version: rel.version, upToDate: true }; }
     await download(rel);
     return switchTo(rel.version, reason);
   });
@@ -262,7 +271,7 @@ export function createLauncher(opts = {}) {
   function status() {
     let notes = null;
     try { notes = JSON.parse(fs.readFileSync(path.join(versionDir(state.current || ''), 'RELEASE.json'), 'utf8')); } catch { /* none */ }
-    return { ok: true, channel: CHANNEL, running: childVersion, lastResult, current: state.current, previous: state.previous, available: state.available, lastCheck: state.lastCheck, lastError: state.lastError, busy, updateHour: NOW ? 'now' : UPDATE_HOUR, history: (state.history || []).slice(0, 10), currentNotes: notes, tokenSet: !!TOKEN };
+    return { ok: true, channel: CHANNEL, running: childVersion, lastResult, current: state.current, previous: state.previous, available: state.available && newer(state.available.version, state.current) ? state.available : null, lastCheck: state.lastCheck, lastError: state.lastError, busy, updateHour: NOW ? 'now' : UPDATE_HOUR, history: (state.history || []).slice(0, 10), currentNotes: notes, tokenSet: !!TOKEN };
   }
 
   async function start() {
