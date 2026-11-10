@@ -405,8 +405,8 @@ var E11Rules = (() => {
     function inbox(tab = 'all') {
       const u = me();
       if (!u || u.active === false) return null;
-      // (expense claims are on the computer: not in the app's Inbox, nor its counts — Haris, 2026-11-01)
-      const mine = (db.notifications || []).filter((n) => n.to === meId && !/^claim/.test(n.kind || ''));
+      // (expense claims: on the phone only as onPhone says — Haris 2026-11-10)
+      const mine = (db.notifications || []).filter((n) => n.to === meId && onPhone(n, u));
       const unread = mine.filter((n) => !n.read).length;
       // (All: the newest 200 — and every unread one and every mention as well, so the app's Unread and Mentions, picked
       //  from these, miss none)
@@ -1286,8 +1286,17 @@ var E11Rules = (() => {
       day, leadSet, hasClients, needsCD, reviewersOf, reviewState, reviewPending, clientApprovalFresh, fmtDay, trunc };
   }
 
+  // what of the Inbox reaches the iPhone (its Inbox, its counts, its notifications): everything but expense claims, and of
+  // those (Haris 2026-11-10) everyone's own claim approved / paid / added by hand, and the team's claims submitted or
+  // updated only to an Office Admin with finance access (their phone has the Claims tab)
+  const onPhone = (n, u) => {
+    const k = String((n && n.kind) || '');
+    if (!/^claim/.test(k)) return true;
+    if (k === 'claim-ok' || k === 'claim-paid' || k === 'claim-hand') return true;
+    return k === 'claim' && !!u && u.role === 'office_admin' && (u.fin === 'admin' || u.fin === 'viewer');
+  };
   // (the clock and new ids for the actions: the website's own, or the server's)
   const withEnv = (env, db, meId, today) => { make.env = env; try { return make(db, meId, today); } finally { make.env = null; } };
-  return { make, withEnv, NOTIF_GROUPS_OF: (db) => make(db || {}, null, '2000-01-01').notifGroups, home: (db, meId, today) => make(db, meId, today).home(), dubaiDay, rgbOf };
+  return { make, withEnv, onPhone, NOTIF_GROUPS_OF: (db) => make(db || {}, null, '2000-01-01').notifGroups, home: (db, meId, today) => make(db, meId, today).home(), dubaiDay, rgbOf };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = E11Rules;

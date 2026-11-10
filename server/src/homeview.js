@@ -23,6 +23,8 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
     }
   }
   function load() { loadBoth(); return rules; }
+  // (what of the Inbox reaches the iPhone — rules.js onPhone, the same as the app's Inbox)
+  function onPhone(n, u) { return load().onPhone(n, u); }
   function V() { loadBoth(); return view; }
   // data: what this person's own app downloads (visibleSnapshot in server.js) — the screens are web/appview.js's
   function home(u, data) { return V().home(load(), data, u.id, now); }
@@ -49,5 +51,5 @@ export function createHomeView({ webDir, now = () => Date.now() }) {
   function taskPage(u, data, id) { return V().taskPage(load(), data, u.id, now, id); }
   // the app's native Comments (GET /api/comments?id=&thread=)
   function commentsFeed(u, data, id, thread) { return V().commentsFeed(load(), data, u.id, now, id, thread); }
-  return { home, myTasks, inbox, clients, act, taskPage, commentsFeed };
+  return { home, myTasks, inbox, clients, act, taskPage, commentsFeed, onPhone };
 }
