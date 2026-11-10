@@ -12,14 +12,18 @@ import UIKit
      About's cards, a member's header, a plan's posts) in a cell of Apple's list.
    MeCtl keeps the pages' contents and actions, as before; only where they live and who draws them changed. */
 let APPLE_ME = APPLE_NAV
+// Social's Plans tab in its own Apple navigation (Haris 2026-11-10 18:13, the mock-up "Content plans — fully Apple" approved)
+let APPLE_PLANS = APPLE_NAV
 
 extension Main {
   // (Me in its own Apple navigation — for everyone with a Me tab)
   var meApple: Bool { APPLE_ME && tabKeys.contains("me") }
+  // (Social's Plans tab its own Apple screen)
+  var plansApple: Bool { APPLE_PLANS && tabKeys.contains("plans") }
   // Me's navigation has settled (a push, a pop, the tab tapped again popping everything): the pages no longer in it are
   // gone for the app too — Me's, Client Assets', the Clients list opened from Me
   func meNavShown(_ n: UINavigationController) {
-    guard meApple, n === AppleTabs.shared?.meNav else { return }
+    guard (meApple && n === AppleTabs.shared?.meNav) || (plansApple && n === AppleTabs.shared?.plansNav) else { return }
     let vcs = n.viewControllers
     meCtl.reconcile(vcs)
     if assetsCtl.appleNav === n { assetsCtl.reconcile(vcs) }   // (Client Assets opened over Me)
@@ -49,7 +53,7 @@ final class MeVC: UIViewController, TabRoot {
   override func viewWillAppear(_ a: Bool) {
     super.viewWillAppear(a)
     Main.shared.drawBeforeShow("me")   // (its rows from the phone's copy before it first shows)
-    if h == nil { Main.shared.meCtl.prepareRoot() }
+    if Main.shared.tabKeys.contains("plans") { Main.shared.meCtl.willShowTab("me") } else if h == nil { Main.shared.meCtl.prepareRoot() }   // (Social: the Plans tab given back)
   }
   func adopt(_ v: HomeView) {
     loadViewIfNeeded()
@@ -77,6 +81,86 @@ final class MeVC: UIViewController, TabRoot {
     shownLine = d
     BigLine.set(self, d, "me")
   }
+}
+
+// Social's Plans tab: its first screen, as Home (Haris 2026-11-10, the approved mock-up): Apple's big title "Content plans" and
+// its line (the month · how many waiting), Apple's search for clients and posts in every month, your photo — no Talk, no
+// "+ New task"; the month tabs and the clients in Apple's list (MeCtl's Content plans page, HomeView.applyMeList); a skeleton
+// pushed on it (MePageVC) with the tab bar going once it has arrived, as a task
+final class PlansVC: UIViewController, TabRoot, UISearchResultsUpdating, UISearchControllerDelegate {
+  static weak var shared: PlansVC?
+  override init(nibName: String?, bundle: Bundle?) { super.init(nibName: nil, bundle: nil); PlansVC.shared = self }
+  required init?(coder: NSCoder) { fatalError() }
+  override var preferredStatusBarStyle: UIStatusBarStyle { Main.shared.statusStyle }
+  override func loadView() { let v = UIView(); v.backgroundColor = HomeLook(Main.shared.lookBoth).bg; view = v }
+  private(set) weak var h: HomeView?
+  private var search: UISearchController?
+  private var meItem: UIBarButtonItem?
+  private var mePhoto: UIImage?
+  override func viewDidLoad() {
+    super.viewDidLoad()
+    navigationItem.backButtonDisplayMode = .minimal
+    navigationItem.title = "Content plans"
+    let me = UIBarButtonItem(image: BarImage.me(nil, traitCollection), primaryAction: UIAction { _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); Main.shared.selectTab("me") })
+    me.accessibilityLabel = "Me"
+    BarImage.bare(me)
+    meItem = me
+    navigationItem.rightBarButtonItem = me
+    if #available(iOS 17.0, *) { registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (vc: PlansVC, _: UITraitCollection) in vc.paintMe() } }
+    let s = UISearchController(searchResultsController: nil)
+    s.obscuresBackgroundDuringPresentation = false
+    s.searchResultsUpdater = self; s.delegate = self
+    s.searchBar.placeholder = "Search clients and posts"
+    s.searchBar.autocorrectionType = .no
+    search = s
+    navigationItem.hidesSearchBarWhenScrolling = false
+    navigationItem.searchController = s
+    BigLine.prime(self, "plans")
+  }
+  func paintMe() { meItem?.image = BarImage.me(mePhoto ?? MePhoto.shared.image, traitCollection) }
+  override func viewWillAppear(_ a: Bool) {
+    super.viewWillAppear(a)
+    paintMe()
+    Main.shared.meCtl.willShowTab("plans")
+  }
+  override func viewDidLayoutSubviews() {
+    super.viewDidLayoutSubviews()
+    if let h = h, h.superview === view { h.tabTop = Main.shared.homeTabTop }
+  }
+  func adopt(_ v: HomeView) {
+    loadViewIfNeeded()
+    if let old = h, old !== v, old.superview === view { old.removeFromSuperview() }
+    h = v
+    if v.superview !== view {
+      v.removeFromSuperview()
+      v.frame = view.bounds; v.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+      view.insertSubview(v, at: 0)
+    }
+    v.isHidden = false; v.transform = .identity
+    view.backgroundColor = v.backgroundColor ?? view.backgroundColor
+    v.onAppleTitle = { [weak self] _, d in self?.setLine(d) }
+    v.onAppleResign = { [weak self] in self?.search?.searchBar.resignFirstResponder() }
+    v.onAppleFind = { [weak self] q in
+      guard let self = self, let s = self.search else { return }
+      if let q = q { s.isActive = true; s.searchBar.text = q; self.h?.appleSearchText(q) } else { s.isActive = false }
+    }
+    v.appleBarHeight = { [weak self] in
+      guard let nb = self?.navigationController?.navigationBar, !nb.isHidden, nb.window != nil else { return 0 }
+      return nb.frame.height
+    }
+    v.useAppleTop()
+    setContentScrollView(v.appleScroll, for: .top)
+  }
+  private var shownLine: String?
+  private func setLine(_ d: String) {
+    guard d != shownLine else { return }
+    shownLine = d
+    BigLine.set(self, d, "plans")
+  }
+  func updateSearchResults(for s: UISearchController) { h?.appleSearchText(s.searchBar.text ?? "") }
+  func willPresentSearchController(_ s: UISearchController) { h?.appleSearchBegin() }
+  func didPresentSearchController(_ s: UISearchController) { DispatchQueue.main.async { s.searchBar.becomeFirstResponder() } }
+  func willDismissSearchController(_ s: UISearchController) { h?.appleSearchEnd() }
 }
 
 // a page of Me pushed on its tab: as the Clients tab's pages (tab bar staying, Apple's firm frost, Apple's bar)
@@ -108,6 +192,24 @@ final class MePageVC: ClientsPushedVC, UISearchResultsUpdating, UISearchBarDeleg
   func searchBar(_ b: UISearchBar, selectedScopeButtonIndexDidChange i: Int) { UISelectionFeedbackGenerator().selectionChanged(); onScope?(i) }
   private(set) var appeared = false
   override func viewDidAppear(_ a: Bool) { super.viewDidAppear(a); appeared = true }
+  // (a page with its own buttons on Apple's toolbar — a skeleton waiting for you: Send Back · Approve. Made again only when
+  //  what they do changes; Apple's toolbar shown with the page and gone with it)
+  private var toolsKey = ""
+  func setTools(_ key: String, _ make: (() -> [UIBarButtonItem])?) {
+    guard key != toolsKey else { return }
+    toolsKey = key
+    let items = make?() ?? []
+    setToolbarItems(items.isEmpty ? nil : items, animated: appeared)
+    if navigationController?.topViewController === self { navigationController?.setToolbarHidden(items.isEmpty, animated: appeared) }
+  }
+  override func viewWillAppear(_ a: Bool) {
+    super.viewWillAppear(a)
+    navigationController?.setToolbarHidden(toolbarItems?.isEmpty ?? true, animated: a)
+  }
+  override func viewWillDisappear(_ a: Bool) {
+    super.viewWillDisappear(a)
+    if isMovingFromParent, toolbarItems?.isEmpty == false { navigationController?.setToolbarHidden(true, animated: a) }
+  }
   override init(_ h: HomeView) {
     super.init(h)
     // (a page whose name is its big title on the old page — Content plans opened from Me: its name and line in the bar)

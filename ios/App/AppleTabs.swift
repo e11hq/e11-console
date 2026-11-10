@@ -60,8 +60,10 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
   let assetsNav: AppleNav
   // Me's own, the same way (AppleMe.swift — Haris 2026-11-08)
   let meNav: AppleNav
+  // Social's Plans tab, the same way (AppleMe.swift's PlansVC — Haris 2026-11-10, the approved mock-up "Content plans — fully Apple")
+  let plansNav: AppleNav
   private var slots: [TabSlot] = []
-  private var homeAt: Int?, myTasksAt: Int?, inboxAt: Int?, clientsAt: Int?, assetsAt: Int?, meAt: Int?
+  private var homeAt: Int?, myTasksAt: Int?, inboxAt: Int?, clientsAt: Int?, assetsAt: Int?, meAt: Int?, plansAt: Int?
   private var selecting = false
   init(nav: UINavigationController) {
     self.nav = nav
@@ -91,6 +93,10 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
     meNav.navigationBar.prefersLargeTitles = APPLE_ME
     meNav.navigationBar.largeTitleTextAttributes = homeNav.navigationBar.largeTitleTextAttributes
     meNav.setNavigationBarHidden(false, animated: false)
+    plansNav = AppleNav(rootViewController: PlansVC())
+    plansNav.navigationBar.prefersLargeTitles = APPLE_PLANS
+    plansNav.navigationBar.largeTitleTextAttributes = homeNav.navigationBar.largeTitleTextAttributes
+    plansNav.setNavigationBarHidden(false, animated: false)
     super.init(nibName: nil, bundle: nil)
     AppleTabs.shared = self
     delegate = self
@@ -111,7 +117,7 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
   // Home's tab on show
   var homeShown: Bool { selectedViewController === homeNav }
   // the tab on show is one with its own navigation (Home, My Tasks) — and that navigation
-  var ownNav: AppleNav? { [homeNav, myTasksNav, inboxNav, clientsNav, assetsNav, meNav].first { $0 === selectedViewController } }
+  var ownNav: AppleNav? { [homeNav, myTasksNav, inboxNav, clientsNav, assetsNav, meNav, plansNav].first { $0 === selectedViewController } }
   var ownShown: Bool { ownNav != nil }
   // (no tab of the app's own screen left — every tab its own Apple screen)
   private var noSlot: Bool { !slots.isEmpty && !slots.indices.contains { !own($0) } }
@@ -129,8 +135,8 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
     holder.view.insertSubview(nav.view, at: 0)
     nav.didMove(toParent: holder)
   }
-  private func own(_ i: Int) -> Bool { i == homeAt || i == myTasksAt || i == inboxAt || i == clientsAt || i == assetsAt || i == meAt }
-  private func tabVC(_ i: Int) -> UIViewController { i == homeAt ? homeNav : i == myTasksAt ? myTasksNav : i == inboxAt ? inboxNav : i == clientsAt ? clientsNav : i == assetsAt ? assetsNav : i == meAt ? meNav : slots[i] }
+  private func own(_ i: Int) -> Bool { i == homeAt || i == myTasksAt || i == inboxAt || i == clientsAt || i == assetsAt || i == meAt || i == plansAt }
+  private func tabVC(_ i: Int) -> UIViewController { i == homeAt ? homeNav : i == myTasksAt ? myTasksNav : i == inboxAt ? inboxNav : i == clientsAt ? clientsNav : i == assetsAt ? assetsNav : i == meAt ? meNav : i == plansAt ? plansNav : slots[i] }
 
   private func host(in s: TabSlot) {
     guard nav.parent !== s else { return }
@@ -151,7 +157,9 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
   //  build 1547, Haris 2026-11-08. Back to Home: it comes as the slide begins.)
   func homeNavWillShow(_ vc: UIViewController, animated: Bool, nav: UINavigationController? = nil) {
     // (the Clients tab's pages — a client's page, Client Assets, a folder — keep the tab bar: Haris 2026-11-08 "all will have navbar")
-    let hide = !(vc is TabRoot || vc is ClientsPushedVC)
+    // (a skeleton pushed on Social's Plans tab: the tab bar goes once it has arrived, as a task — Send Back · Approve on
+    //  Apple's toolbar there; Haris 2026-11-10, the mock-up's A)
+    let hide = !(vc is TabRoot || vc is ClientsPushedVC) || (nav === plansNav && vc is MePageVC)
     guard let tc = (nav ?? homeNav).transitionCoordinator else { hideBar(hide, animated: animated); return }
     if hide {
       tc.animate(alongsideTransition: nil) { [weak self] c in if !c.isCancelled { self?.hideBar(true, animated: true) } }
@@ -181,7 +189,8 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
     let cl = APPLE_CLIENTS ? Main.shared.tabKeys.firstIndex(of: "projects") : nil
     let ca = APPLE_CLIENTS ? Main.shared.tabKeys.firstIndex(of: "clients") : nil
     let me = APPLE_ME ? Main.shared.tabKeys.firstIndex(of: "me") : nil
-    if slots.count != items.count || home != homeAt || mt != myTasksAt || ib != inboxAt || cl != clientsAt || ca != assetsAt || me != meAt {
+    let pl = APPLE_PLANS ? Main.shared.tabKeys.firstIndex(of: "plans") : nil
+    if slots.count != items.count || home != homeAt || mt != myTasksAt || ib != inboxAt || cl != clientsAt || ca != assetsAt || me != meAt || pl != plansAt {
       while slots.count < items.count { slots.append(TabSlot()) }
       if slots.count > items.count { slots = Array(slots.prefix(items.count)) }
       homeAt = home.flatMap { $0 < items.count ? $0 : nil }
@@ -190,6 +199,7 @@ final class AppleTabs: UITabBarController, UITabBarControllerDelegate {
       clientsAt = cl.flatMap { $0 < items.count ? $0 : nil }
       assetsAt = ca.flatMap { $0 < items.count ? $0 : nil }
       meAt = me.flatMap { $0 < items.count ? $0 : nil }
+      plansAt = pl.flatMap { $0 < items.count ? $0 : nil }
       let keep = nav.parent as? TabSlot
       setViewControllers(items.indices.map { tabVC($0) }, animated: false)
       if let k = keep, !slots.enumerated().contains(where: { $0.element === k && !own($0.offset) }) { if let j = slots.indices.first(where: { !own($0) }) { host(in: slots[j]) } }
