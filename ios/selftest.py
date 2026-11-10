@@ -147,6 +147,8 @@ try:
     print('measure commentRows', json.dumps({'end': fra, 'top': frt}))
     check(fa.get('list') == 'UITableView' and (fa.get('count') or 0) >= 1 and not fmoved, f"the comments in Apple's list, each row keeping its height at the latest and back at the top (changed: {fmoved}) {({k: fa.get(k) for k in ('list', 'count')})}")
     check(fa.get('swipeOn') is not False and fa.get('swipeBeside') is not True, f"a swipe on a comment is its Reply, never Details; beside it, Details (on {fa.get('swipeOn')}, beside {fa.get('swipeBeside')})")
+    fd = res.get('feedDays') or {}
+    check(fd.get('sections') == 4 and fd.get('items') == 4, f"comments out of date order drawn without stopping the app — each day its own section (Haris 2026-11-10's crash) {fd}")
     check((fa.get('menu') or 0) >= 2, f"holding a comment: Apple's menu with the reactions and its actions {fa.get('menu')}")
     tl, td = res.get('tlookAtLight') or {}, res.get('tlookAtDark') or {}
     check(tl.get('style') == 1 and tl.get('forced') == 0 and (tl.get('bg') or 0) > 0.5 and td.get('style') == 2 and td.get('forced') == 0 and td.get('bg', 1) < 0.5, f"the task page follows the phone light / dark, nothing forcing it (light {tl}, dark {td})", need=('tlook',))

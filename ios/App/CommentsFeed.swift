@@ -450,7 +450,8 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
     //  width, it opens at the latest)
     if bounds.width > 0 && laidW != bounds.width {
       laidW = bounds.width; scroll.reloadData()
-      if endOnLayout { endOnLayout = false; toEnd(animated: false) }
+      if let id = pulseWaiting { pulseWaiting = nil; endOnLayout = false; scroll.layoutIfNeeded(); DispatchQueue.main.async { [weak self] in self?.pulse(id) } }
+      else if endOnLayout { endOnLayout = false; toEnd(animated: false) }
     }
     placeJump()
   }
@@ -491,8 +492,12 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
   }
 
   // ---------- the WhatsApp pulse: the whole row, a see-through grey, once ----------
+  private var pulseWaiting: String?
   func pulse(_ id: String) {
     guard let c = cells[id] else { return }
+    // (asked before the list knows its width — opened from a notification: shown once it does, instead of the latest —
+    //  Haris 2026-11-10: "the notification from inbox is not scrolling to view")
+    if laidW == 0 || bounds.width == 0 { pulseWaiting = id; endOnLayout = false; return }
     layoutIfNeeded()
     guard let f = frameOf(id) else { return }
     let y = max(-scroll.contentInset.top, min(f.midY - scroll.bounds.height * 0.4, scroll.contentSize.height + scroll.contentInset.bottom - scroll.bounds.height))
@@ -526,6 +531,16 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
     guard let w = window, UIApplication.shared.applicationState == .active else { return false }
     let r = convert(bounds, to: w).intersection(w.bounds)
     return !r.isNull && r.width > w.bounds.width * 0.6
+  }
+  // (for the self-test: comments out of date order — a day coming round again — drawn without stopping the app, each day
+  //  its own section; Haris 2026-11-10's crash)
+  static func selfTestDays() -> [String: Any] {
+    let f = CommentsFeed(task: "selftest-days", thread: nil)
+    f.frame = CGRect(x: 0, y: 0, width: 390, height: 600); f.layoutIfNeeded()
+    let it: (String, String) -> [String: Any] = { id, at in ["id": id, "who": "x", "at": at, "runs": [["t": "hello"]], "replies": NSNull(), "files": [[String: Any]]()] }
+    f.draw(["me": "y", "items": [it("a", "2026-11-08T09:00:00Z"), it("b", "2026-11-09T09:00:00Z"), it("c", "2026-11-08T10:00:00Z"), it("d", "nonsense")]])
+    let snap = f.source.snapshot()
+    return ["sections": snap.numberOfSections, "items": snap.numberOfItems]
   }
   // (for the self-test: each row's height, a swipe on a comment and beside it, the hold menu's parts)
   func selfCheck() -> [String: Any] {
