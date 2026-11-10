@@ -1269,7 +1269,7 @@ var E11Rules = (() => {
         open += all.filter((t) => !t.done).length;
         return ts.length ? { name: s.name, dot: rgbOf(s.color), n: ts.length, empty: '', cards: ts.map((t) => cardOf(t, { status: false })) } : null;
       }).filter(Boolean);
-      if (!groups.length) groups.push({ name: 'Tasks', n: 0, empty: showDone ? 'No tasks yet.' : 'No open tasks — tap Show completed to see the done ones.', cards: [] });
+      if (!groups.length) groups.push({ name: 'Tasks', n: 0, empty: showDone ? 'No tasks yet.' : 'No open tasks.', cards: [] });
       peopleOn.add(meId);
       return {
         show: true, kind: 'client', id: p.id, title: p.name || 'Client', date: `${open} open task${open === 1 ? '' : 's'}`, me: meId, rgb: rgbOf(p.color), ini: initials(p.name),

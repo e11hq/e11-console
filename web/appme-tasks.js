@@ -209,8 +209,9 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
 
   // ---------- Home's search (NativeHome 'find': app.js taskSearch(q, { limit: 80 })) ----------
   // → { q, total, clients: [{ id, name, ini, rgb, open }], tasks: [cards as Home's (rules.js cardOf)] }
+  // only: a client's id — its page's search (the iPhone app, Haris 2026-11-10): only its tasks, open and done, and no clients
   const FIELD_LABEL = { project: 'Client', client: 'Client Assets', tag: 'Tag', people: 'Assigned to', status: 'Status', creator: 'Created by', desc: 'Description', check: 'Checklist', sub: 'Subtask', parent: 'Part of' };
-  M.search = function (R, data, meId, nowMs, q) {
+  M.search = function (R, data, meId, nowMs, q, only) {
     const W = world(R, data, meId, nowMs), u = W.me();
     if (!u) return null;
     const qs = String(q || '').trim();
@@ -272,7 +273,7 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
       return f;
     }
     // (each word's best field kept too: why a task was found — app.js searchWhy; Haris 2026-11-06)
-    const docs = W.tasks.filter((t) => !r.amReadOnly(t) && searchOwnOk(t)).map((t) => {
+    const docs = W.tasks.filter((t) => (!only || t.projectId === only) && !r.amReadOnly(t) && searchOwnOk(t)).map((t) => {
       const words = new Map(), fields = taskFields(t), at = new Map();
       fields.forEach((fl, i) => sWords(fl.text).forEach((w) => { if (!words.has(w) || words.get(w) < fl.w) { words.set(w, fl.w); at.set(w, i); } }));
       Object.keys(FLAGS).forEach((k) => { if (FLAGS[k](t)) { words.set('#' + k, 4); at.set('#' + k, -1); } });
@@ -301,7 +302,7 @@ var E11AppMe = (typeof E11AppMe !== 'undefined' && E11AppMe) || {};
       found.push({ t: d.t, score, hits, fields: d.fields });
     });
     found.sort((a, b) => b.score - a.score || (a.t.done - b.t.done) || String(b.t.updatedAt || '').localeCompare(String(a.t.updatedAt || '')));
-    const projs = W.projects.filter((p) => !p.inactive && amSidebarOk(p) && socialClientOk(p)).filter((p) => {
+    const projs = only ? [] : W.projects.filter((p) => !p.inactive && amSidebarOk(p) && socialClientOk(p)).filter((p) => {
       const ws = new Set(sWords(`${p.name} ${(clientOfProject(p) || {}).name || ''}`));
       return per.every((pt) => [...pt.words.keys()].some((w) => ws.has(w)));
     });
