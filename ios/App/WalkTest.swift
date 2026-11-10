@@ -139,6 +139,13 @@ extension Main {
       ("aPlansRead", { self.apple("plans", self.meCtl.selfPlans()); _ = self.meCtl.selfOpenPlan() }),
       ("aPlanWait", {}),
       ("aPlanRead", { self.apple("plan", self.meCtl.selfPlans()); self.meCtl.backToRoot(); self.tab(self.tabKeys.first ?? "today") }),
+      // Team members (Me › Team members for the Super Admin — the approved mock-up "Team members — fully Apple"): the people
+      // with their roles, a person's Apple menu, and their page's Role / Finance Access menus and switches
+      ("aTeam", { self.tab(self.tabKeys.first ?? "today"); self.selectTab("me"); DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { self.meCtl.selfOpen("team") } }),
+      ("aTeamWait", {}),
+      ("aTeamRead", { let o = self.meCtl.selfTeam(); self.apple("team", o); if let id = o["other"] as? String { self.meCtl.selfOpenMember(id) } }),
+      ("aTeamMemberWait", {}),
+      ("aTeamMemberRead", { self.apple("teamMember", self.meCtl.selfTeam()); self.meCtl.backToRoot(); self.tab(self.tabKeys.first ?? "today") }),
       // Social's own Plans tab (its first screen in Apple's navigation): a skeleton opened from it — the tab bar gone once it
       // has arrived, as a task; back — the tab bar there again and the list as it was (Haris 2026-11-10, the mock-up's A)
       ("aPlTab", { if self.tabKeys.contains("plans") { self.selfTapTab("plans") } }),

@@ -126,6 +126,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   private var blockWraps: [ObjectIdentifier: BlockWrap] = [:]
   // (Me's pages in Apple's list — AppleMe.swift: their rows, sections, switches, held rows and pictures)
   fileprivate var meItems: [String: SetItem] = [:]
+  var meKeys: [String] { meItems.values.map { $0.title + ($0.popup != nil ? " ⌄" : $0.toggle != nil ? " ⏻" : "") }.sorted() }   // (the self-test)
   fileprivate var meSecs: [Int: MeSec] = [:]
   fileprivate var meSwitches: [String: UISwitch] = [:]
   fileprivate var meHolds: [String: MeHold] = [:]
@@ -3213,7 +3214,9 @@ extension HomeView: UICollectionViewDelegate {
 struct MeSec { var grouped = false; var head = ""; var foot: NSAttributedString? = nil; var footCentred = false }
 final class MeHold: NSObject, UIContextMenuInteractionDelegate {
   var run: (() -> Void)?
+  var menu: (() -> UIMenu?)?   // (Apple's own menu with the row's actions in it — a team member, Haris 2026-11-10)
   func contextMenuInteraction(_ i: UIContextMenuInteraction, configurationForMenuAtLocation p: CGPoint) -> UIContextMenuConfiguration? {
+    if let m = menu { guard let built = m() else { return nil }; return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in built } }
     guard let r = run else { return nil }
     return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in
       UIMenu(children: [UIAction(title: "Role, rights and access", image: UIImage(systemName: "slider.horizontal.3")) { _ in r() }])
@@ -3379,7 +3382,14 @@ extension HomeView {
     if let b = it.badge { acc.append(.customView(configuration: .init(customView: HomeView.meBadge(b, .systemBlue), placement: .trailing()))) }
     if it.count > 0 { acc.append(.customView(configuration: .init(customView: HomeView.meBadge(it.count > 99 ? "99+" : "\(it.count)", .systemRed), placement: .trailing()))) }
     if let p = it.pill { acc.append(.label(text: p, options: .init(font: .monospacedSystemFont(ofSize: 13, weight: .semibold)))) }
-    if !it.value.isEmpty { acc.append(.label(text: it.value)) }
+    // (the value as Apple's pull-down menu — a member's Role and Finance Access: Apple's pop-up button, its menu on a tap)
+    if let pop = it.popup {
+      var bc = UIButton.Configuration.plain()
+      bc.title = it.value; bc.image = UIImage(systemName: "chevron.up.chevron.down", withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .semibold))
+      bc.imagePlacement = .trailing; bc.imagePadding = 5; bc.baseForegroundColor = .secondaryLabel; bc.contentInsets = .zero
+      let b = UIButton(configuration: bc); b.menu = pop(); b.showsMenuAsPrimaryAction = true
+      acc.append(.customView(configuration: .init(customView: b, placement: .trailing())))
+    } else if !it.value.isEmpty { acc.append(.label(text: it.value)) }
     if let on = it.toggle {
       let sw = meSwitch(key)
       if sw.isOn != on { sw.setOn(on, animated: cell.window != nil) }
@@ -3388,8 +3398,8 @@ extension HomeView {
     cell.accessories = acc
     cell.contentView.alpha = it.dim ? 0.6 : 1
     // (touch and hold — a team member: Apple's own lift and its menu)
-    if let hold = it.hold {
-      let d = MeHold(); d.run = hold; meHolds[key] = d
+    if it.hold != nil || it.menu != nil {
+      let d = MeHold(); d.run = it.hold; d.menu = it.menu; meHolds[key] = d
       cell.addInteraction(UIContextMenuInteraction(delegate: d))
     }
     cell.accessibilityLabel = [it.title, it.sub, it.value].filter { !$0.isEmpty }.joined(separator: ", ")

@@ -144,6 +144,12 @@ if APPLE:
     pl, pp = a.get('plans') or {}, a.get('plan') or {}
     check(pl.get('kind') == 'plans' and pl.get('apple') is True and not pl.get('loading') and isinstance(pl.get('rows'), int) and pl.get('rows', -1) >= 0 and (pl.get('rows', 0) > 0 or pl.get('empty') == 'No Clients'), f"Content plans: the list from the phone's copy, in Apple's navigation {pl}")
     check(pl.get('rows', 0) == 0 or (pp.get('kind') == 'plan' and not pp.get('loading') and (pp.get('status') is True or pp.get('empty') == 'Not Started Yet')), f"Content plans: a client's month — its status cell or Apple's Not Started Yet {pp}")
+    tm, tmm = a.get('team') or {}, a.get('teamMember') or {}
+    menu = tm.get('menu') or []
+    check(tm.get('kind') == 'team' and tm.get('people', 0) > 0 and all(not r.endswith(': ') for r in tm.get('roles') or []), f"Team members: each person with their role, from the phone's copy {tm.get('roles')}")
+    check(not tm.get('admin') or ('Change Role ›' in menu and 'Remove from Team' in menu and 'Social Manager' in (tm.get('roleMenu') or [])), f"Team members: a person held — Apple's menu with Change Role (Social Manager in it) and Remove from Team {menu} {tm.get('roleMenu')}")
+    rows = tmm.get('rows') or []
+    check(tmm.get('kind') == 'member' and (not tm.get('admin') or ('Role ⌄' in rows and 'Finance Access ⌄' in rows)), f"Team members: a member's page — Role and Finance Access as Apple's pull-down menus {rows}")
     so = (out.get('Social') or {}).get('apple') or {}
     t0, t1, t2 = so.get('plansTab') or {}, so.get('plansTabPlan') or {}, so.get('plansTabBack') or {}
     print('measure apple social', json.dumps(so))

@@ -124,8 +124,10 @@ struct SetItem {
   var bold = false                 // (a title in semibold, its lines under it in full — a skeleton's status cell)
   var tap: (() -> Void)? = nil
   var hold: (() -> Void)? = nil
+  var menu: (() -> UIMenu?)? = nil   // (touch and hold: Apple's own menu straight away — a team member, Haris 2026-11-10)
+  var popup: (() -> UIMenu)? = nil   // (the value as Apple's pull-down menu — a member's Role and Finance Access)
   var flip: ((Bool) -> Void)? = nil
-  var sig: String { "\(title)|\(sub)|\(value)|\(sym ?? "")|\(col?.description ?? "")|\(chevron)|\(toggle != nil)|\(danger)|\(pill ?? "")|\(badge ?? "")|\(count)|\(pills.map { $0.0 }.joined(separator: ","))|\(person?.photo ?? "")|\(person?.ini ?? "")|\(warn)|\(dim)|\(bold)|\(tap != nil)|\(hold != nil)" }
+  var sig: String { "\(title)|\(sub)|\(value)|\(sym ?? "")|\(col?.description ?? "")|\(chevron)|\(toggle != nil)|\(danger)|\(pill ?? "")|\(badge ?? "")|\(count)|\(pills.map { $0.0 }.joined(separator: ","))|\(person?.photo ?? "")|\(person?.ini ?? "")|\(warn)|\(dim)|\(bold)|\(tap != nil)|\(hold != nil)|\(menu != nil)|\(popup != nil)" }
 }
 
 final class SetRow: AssetTile {
@@ -578,114 +580,6 @@ final class SegBlock: UIView, HomeBlock {
   }
   func blockHeight(_ W: CGFloat) -> CGFloat { 48 }
   override func layoutSubviews() { super.layoutSubviews(); seg.frame = CGRect(x: 16, y: 6, width: bounds.width - 32, height: 34) }
-}
-
-// About roles: the heading with the turning chevron (closed at first, as Inactive clients), the role guide under it
-final class RoleGuide: UIView, HomeBlock {
-  private let more = UIButton(type: .system), chev = UIImageView(), box = UIView()
-  private var rows: [UIView] = []
-  private var open = false
-  private var sig = ""
-  override init(frame: CGRect) {
-    super.init(frame: frame)
-    box.layer.cornerRadius = 26; box.layer.cornerCurve = .continuous; box.clipsToBounds = true; box.alpha = 0
-    more.contentHorizontalAlignment = .leading
-    more.setAttributedTitle(NSAttributedString(string: "About roles", attributes: [.font: UIFont.systemFont(ofSize: 15), .foregroundColor: UIColor.secondaryLabel]), for: .normal)
-    chev.image = UIImage(systemName: "chevron.right", withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .semibold)); chev.tintColor = .secondaryLabel; chev.contentMode = .center; chev.isUserInteractionEnabled = false
-    more.addAction(UIAction { [weak self] _ in
-      guard let self = self else { return }
-      UISelectionFeedbackGenerator().selectionChanged()
-      self.open.toggle()
-      let o = self.open
-      UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) { self.chev.transform = o ? CGAffineTransform(rotationAngle: .pi / 2) : .identity }
-      (self.superview?.superview as? HomeView)?.relayout()
-      UIView.animate(withDuration: 0.25, delay: o ? 0.1 : 0, options: [.curveEaseOut, .allowUserInteraction]) { self.box.alpha = o ? 1 : 0 }
-    }, for: .touchUpInside)
-    addSubview(box); addSubview(more); addSubview(chev)
-  }
-  required init?(coder: NSCoder) { fatalError() }
-  func set(_ guide: [[Any]], look L: HomeLook) {
-    box.backgroundColor = L.card
-    let s = guide.map { "\($0.first ?? "")|\($0.last ?? "")" }.joined(separator: "§") + "|\(L.key)"
-    guard s != sig else { return }
-    sig = s
-    UIView.performWithoutAnimation {
-      rows.forEach { $0.removeFromSuperview() }
-      rows = guide.map { g in
-        let v = UIView()
-        let pill = UILabel(), t = UILabel()
-        let col = NativeSheetVC.color(g.count > 1 ? g[1] : nil) ?? .systemGray
-        pill.text = g.first as? String; pill.font = .systemFont(ofSize: 12, weight: .semibold); pill.textColor = col; pill.backgroundColor = col.withAlphaComponent(0.14)
-        pill.textAlignment = .center; pill.layer.cornerRadius = 9; pill.clipsToBounds = true; pill.tag = 1
-        t.text = g.last as? String; t.font = .systemFont(ofSize: 14); t.textColor = L.title; t.numberOfLines = 0; t.tag = 2
-        v.addSubview(pill); v.addSubview(t); box.addSubview(v); return v
-      }
-    }
-    setNeedsLayout()
-  }
-  private func rowH(_ v: UIView, _ w: CGFloat) -> CGFloat { 22 + 6 + ceil((v.viewWithTag(2) as? UILabel)?.sizeThatFits(CGSize(width: w, height: 600)).height ?? 0) + 14 }
-  private var boxH: CGFloat { let w = bounds.width - 64; return rows.reduce(12) { $0 + rowH($1, w) } }
-  func blockHeight(_ W: CGFloat) -> CGFloat { let w = W - 64; return 50 + (open ? rows.reduce(12) { $0 + rowH($1, w) } + 6 : 0) }
-  override func layoutSubviews() {
-    super.layoutSubviews()
-    let W = bounds.width, w = W - 64
-    more.frame = CGRect(x: 36, y: 6, width: W - 72, height: 44)
-    let tw = ceil(more.attributedTitle(for: .normal)?.size().width ?? 0)
-    chev.bounds = CGRect(x: 0, y: 0, width: 16, height: 16); chev.center = CGPoint(x: more.frame.minX + tw + 12, y: more.frame.midY)
-    box.frame = CGRect(x: 16, y: 50, width: W - 32, height: open ? boxH : 0)
-    var y: CGFloat = 12
-    for v in rows {
-      let h = rowH(v, w)
-      v.frame = CGRect(x: 16, y: y, width: w, height: h)
-      if let p = v.viewWithTag(1) as? UILabel { let pw = ceil(p.sizeThatFits(CGSize(width: w, height: 22)).width) + 16; p.frame = CGRect(x: 0, y: 0, width: min(pw, w), height: 22) }
-      v.viewWithTag(2)?.frame = CGRect(x: 0, y: 28, width: w, height: h - 28 - 14)
-      y += h
-    }
-  }
-}
-
-// a member's page: their picture, name, role and the extras
-final class MemberHead: UIView, HomeBlock {
-  private let pic = UIImageView(), name = UILabel(), role = UILabel()
-  private var pills: [UILabel] = []
-  private var photoPath: String?
-  override init(frame: CGRect) {
-    super.init(frame: frame)
-    pic.layer.cornerRadius = 46; pic.clipsToBounds = true
-    name.font = .systemFont(ofSize: 24, weight: .bold); name.textAlignment = .center
-    role.font = .systemFont(ofSize: 15); role.textColor = .secondaryLabel; role.textAlignment = .center
-    [pic, name, role].forEach { addSubview($0) }
-  }
-  required init?(coder: NSCoder) { fatalError() }
-  func set(_ p: [String: Any], look L: HomeLook) {
-    name.text = p["name"] as? String; name.textColor = L.title
-    role.text = p["designation"] as? String
-    let ini = p["ini"] as? String ?? "", rgb = NativeSheetVC.color(p["rgb"]) ?? .systemGray
-    let ph = p["photo"] as? String
-    if ph != photoPath || pic.image == nil {
-      photoPath = ph
-      pic.image = roundPic(nil, initials: ini, color: rgb, size: 92)
-      if let path = ph { FeedLoader.shared.image(path) { [weak self] img in guard let self = self, self.photoPath == path, let img = img else { return }; self.pic.image = roundPic(img, initials: nil, color: nil, size: 92) } }
-    }
-    pills.forEach { $0.removeFromSuperview() }
-    pills = ((p["pills"] as? [[String: Any]]) ?? []).map { x in
-      let c = NativeSheetVC.color(x["c"]) ?? .systemGray
-      let l = UILabel(); l.text = x["t"] as? String; l.font = .systemFont(ofSize: 12, weight: .semibold); l.textColor = c; l.backgroundColor = c.withAlphaComponent(0.14)
-      l.textAlignment = .center; l.layer.cornerRadius = 10; l.clipsToBounds = true; addSubview(l); return l
-    }
-    setNeedsLayout()
-  }
-  func blockHeight(_ W: CGFloat) -> CGFloat { 92 + 12 + 30 + 20 + (pills.isEmpty ? 0 : 30) + 10 }
-  override func layoutSubviews() {
-    super.layoutSubviews()
-    let W = bounds.width
-    pic.frame = CGRect(x: (W - 92) / 2, y: 0, width: 92, height: 92)
-    name.frame = CGRect(x: 16, y: 104, width: W - 32, height: 30)
-    role.frame = CGRect(x: 16, y: 134, width: W - 32, height: 20)
-    let ws = pills.map { ceil($0.sizeThatFits(CGSize(width: 220, height: 20)).width) + 16 }
-    var x = (W - (ws.reduce(0, +) + CGFloat(max(0, ws.count - 1)) * 6)) / 2
-    for (i, l) in pills.enumerated() { l.frame = CGRect(x: x, y: 162, width: ws[i], height: 20); x += ws[i] + 6 }
-  }
 }
 
 // a page's search and filters as one, stuck under the bar once they reach it (HomeView.pinHead)
@@ -1364,14 +1258,97 @@ final class MeCtl {
   }
   // Team members: someone's menu (role, rights, Finance access, clients, Social Manager, restore / remove), the
   // Creative Director switch, Add member
-  private func memberMenu(_ id: String) {
-    guard let m = brain("team", "memberMenu", [id, envNow]), m["sheet"] != nil else { send(["ev": "member", "id": id]); return }
-    sheet(m) { [weak self] act in self?.memberAct(id, act) }
+  // A team member's actions, from the shared brain (appme-people.js memberMenu — every rule of who may change what: the
+  // owner's account locked, your own row only your Finance access, the last Super Admin), as Apple's own menus — the
+  // approved mock-up "Team members — fully Apple" (Haris 2026-11-10): Social Manager one of the roles, as the website shows
+  // it (underneath: a Social person picked as Social Manager); Make Creative Director in it too (F1)
+  private struct MemberParts {
+    var locked: String?, roles: [UIMenuElement] = [], roleNow = "", fin: [UIMenuElement] = [], finNow = ""
+    var admin: (on: Bool, run: () -> Void)?, clients: (() -> Void)?, restore: (() -> Void)?, remove: (() -> Void)?
   }
-  private func memberAct(_ id: String, _ act: [String: Any]) {
+  private func memberParts(_ id: String) -> MemberParts? {
+    guard let m = brain("team", "memberMenu", [id, envNow]), let secs = (m["sheet"] as? [String: Any])?["sections"] as? [[String: Any]] else { return nil }
+    let acts = (m["acts"] as? [[String: Any]]) ?? []
+    let act = { (i: Int) -> [String: Any]? in i >= 0 && i < acts.count ? acts[i] : nil }
+    let p = person(id) ?? [:]
+    var o = MemberParts()
+    o.roleNow = p["role"] as? String ?? ""
+    let isSM = o.roleNow == "Social Manager"
+    let smAct = acts.first { ($0["act"] as? String) == "socialMgr" }
+    for sec in secs {
+      let header = sec["header"] as? String ?? ""
+      let rows = (sec["rows"] as? [[String: Any]]) ?? []
+      if header.hasPrefix("Only the owner") { o.locked = header; continue }
+      if header == "Change role" || header.hasPrefix("Your role") {
+        for r in rows {
+          let label = r["label"] as? String ?? "", a = act(r["i"] as? Int ?? -1), on = (r["checked"] as? Bool) == true
+          o.roles.append(UIAction(title: label, state: on && !(label == "Social" && isSM) ? .on : .off) { [weak self] _ in
+            guard let self = self else { return }
+            if label == "Social", isSM, let sm = smAct { self.memberAct(id, sm); return }   // (Social Manager → Social)
+            if on { return }
+            if isSM, let sm = smAct, let a = a { self.memberAct(id, sm) { self.memberAct(id, a) }; return }   // (no longer SM, then the role)
+            if let a = a { self.memberAct(id, a) }
+          })
+          // (Social Manager, after Social — a Social person picked as it; anyone else made Social first)
+          if label == "Social", header == "Change role", smAct != nil || !on {
+            o.roles.append(UIAction(title: "Social Manager", state: isSM ? .on : .off) { [weak self] _ in
+              guard let self = self, !isSM else { return }
+              if on, let sm = smAct { self.memberAct(id, sm) }
+              else if let a = a { self.memberAct(id, a) { [weak self] in
+                guard let self = self, let sm = (self.brain("team", "memberMenu", [id, self.envNow])?["acts"] as? [[String: Any]])?.first(where: { ($0["act"] as? String) == "socialMgr" }) else { return }
+                self.memberAct(id, sm) } }
+            })
+          }
+        }
+        continue
+      }
+      for r in rows {
+        let label = r["label"] as? String ?? "", a = act(r["i"] as? Int ?? -1), on = (r["checked"] as? Bool) == true
+        switch r["icon"] as? String ?? "" {
+        case "coin":
+          if on { o.finNow = label }
+          o.fin.append(UIAction(title: label, state: on ? .on : .off) { [weak self] _ in if !on, let a = a { self?.memberAct(id, a) } })
+        case "shield": if let a = a { o.admin = (on, { [weak self] in self?.memberAct(id, a) }) }
+        case "folder": if let a = a { o.clients = { [weak self] in self?.memberAct(id, a) } }
+        case "user": if let a = a { o.restore = { [weak self] in self?.memberAct(id, a) } }
+        case "trash": if let a = a, (r["danger"] as? Bool) == true { o.remove = { [weak self] in self?.memberAct(id, a) } }
+        default: break   // (Social Manager: one of the roles now)
+        }
+      }
+    }
+    return o
+  }
+  private func memberUIMenu(_ id: String) -> UIMenu? {
+    guard let o = memberParts(id) else { return nil }
+    if let l = o.locked { return UIMenu(title: l, children: [UIAction(title: "Change Role", image: UIImage(systemName: "lock.fill"), attributes: .disabled) { _ in }]) }
+    var main: [UIMenuElement] = []
+    if !o.roles.isEmpty { main.append(UIMenu(title: "Change Role", subtitle: o.roleNow, image: UIImage(systemName: "person.crop.circle"), children: o.roles)) }
+    if let a = o.admin { main.append(UIAction(title: "Super Admin Rights", image: UIImage(systemName: "shield"), state: a.on ? .on : .off) { _ in a.run() }) }
+    if !o.fin.isEmpty { main.append(UIMenu(title: "Finance Access", subtitle: o.finNow, image: UIImage(systemName: "dollarsign.circle"), children: o.fin)) }
+    if let c = o.clients { main.append(UIAction(title: "Clients They Can See…", image: UIImage(systemName: "folder")) { _ in c() }) }
+    if let cd = person(id)?["cd"] as? [String: Any] {
+      let isCD = (cd["on"] as? Bool) == true
+      main.append(UIAction(title: isCD ? cd["label"] as? String ?? "Creative Director" : "Make Creative Director", image: UIImage(systemName: "star"), state: isCD ? .on : .off) { [weak self] _ in self?.cdFlow(id) })
+    }
+    var last: [UIMenuElement] = []
+    if let r = o.restore { last.append(UIAction(title: "Restore Access", image: UIImage(systemName: "person.badge.plus")) { _ in r() }) }
+    if let r = o.remove { last.append(UIAction(title: "Remove from Team", image: UIImage(systemName: "trash"), attributes: .destructive) { _ in r() }) }
+    return UIMenu(children: [UIMenu(options: .displayInline, children: main), UIMenu(options: .displayInline, children: last)])
+  }
+  private func memberAct(_ id: String, _ act: [String: Any], then next: (() -> Void)? = nil) {
     if (act["open"] as? String) == "clients" { clientsMenu(id); return }
     var b = act; b["ev"] = "member"; b["id"] = id; b.removeValue(forKey: "ask")
-    let go: () -> Void = { [weak self] in self?.direct(b, or: ["ev": "member", "id": id]) { j in if (j["clients"] as? Bool) == true { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self?.clientsMenu(id) } } } }
+    let go: () -> Void = { [weak self] in
+      // (what you do shows at once: a role or Finance access set on the phone's copy, put back if the server says no)
+      var undo: String?
+      if (b["act"] as? String) == "role", let r = b["role"] as? String { undo = AppData.shared.patch("users", id, ["role": r]) }
+      if (b["act"] as? String) == "fin" { let f = b["fin"] as? String ?? ""; undo = AppData.shared.patch("users", id, ["fin": f.isEmpty ? NSNull() : f]) }
+      self?.direct(b, or: ["ev": "member", "id": id]) { j in
+        if (j["ok"] as? Bool) != true { AppData.shared.putBack(undo); return }
+        if (j["clients"] as? Bool) == true { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self?.clientsMenu(id) } }
+        next?()
+      }
+    }
     if let q = act["ask"] as? [String: Any] { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.confirm(q, go) } } else { go() }
   }
   // the clients a freelancer can see: each tick saved at once (the sheet stays open)
@@ -1851,12 +1828,11 @@ final class MeCtl {
     KeyboardShield.attach(h)
     // (Team members, Expenses, Reviews: a swipe across the middle switches the two lists, as the task page's Details ·
     //  Comments — Haris 2026-11-04; the edge is left to the swipe back)
-    if ["team", "expenses", "reviews"].contains(kind), !(appleNav != nil && kind == "team") {   // (Team members in Apple's navigation: Apple's scope bar, no swipe of ours)
+    if ["expenses", "reviews"].contains(kind) {   // (Team members: Apple's scope bar in Apple's navigation, no swipe of ours)
       SegSwipe.attach(h) { [weak self, weak h] dir in
         guard let self = self, let h = h, let s = self.screenOf(h) else { return }
         let to = dir < 0 ? 1 : 0
         switch s.kind {
-        case "team": guard self.teamTab != to else { return }; self.teamTab = to
         case "expenses": guard self.exSeg != to else { return }; self.exSeg = to
         case "reviews": guard self.rvSeg != to else { return }; self.rvSeg = to
         default: return
@@ -2054,6 +2030,23 @@ final class MeCtl {
   }
   // (for the self-test)
   func selfOpen(_ kind: String) { open(kind) }
+  // Team members, as the phone shows them (the no-website self-test — Haris 2026-11-10, the approved mock-up): the list's
+  // people with their role, a person's Apple menu, and their page's rows
+  func selfTeam() -> [String: Any] {
+    let t = team
+    let people = ((t["groups"] as? [[String: Any]]) ?? []).flatMap { ($0["people"] as? [[String: Any]]) ?? [] }
+    let other = people.first { ($0["you"] as? Bool) != true && ($0["locked"] as? Bool) != true }
+    var o: [String: Any] = ["kind": stack.last?.kind ?? "", "people": people.count, "roles": people.prefix(6).map { "\($0["name"] ?? ""): \($0["role"] ?? "")" }, "admin": (t["admin"] as? Bool) == true]
+    if let id = other?["id"] as? String, let m = memberUIMenu(id) {
+      let flat = m.children.flatMap { ($0 as? UIMenu)?.children ?? [$0] }
+      o["menu"] = flat.map { e -> String in (e as? UIMenu).map { "\($0.title) ›" } ?? (e as? UIAction)?.title ?? "?" }
+      o["roleMenu"] = ((flat.first { ($0 as? UIMenu)?.title == "Change Role" } as? UIMenu)?.children ?? []).compactMap { ($0 as? UIAction)?.title }
+      o["other"] = id
+    }
+    if let s = stack.last, s.kind == "member" { o["rows"] = s.h.meKeys }
+    return o
+  }
+  func selfOpenMember(_ id: String) { open("member", id) }
   // Content plans, as the phone shows them (the no-website self-test — Haris 2026-11-10): the list, and a client's month
   func selfOpenPlan() -> String? {
     guard let r = ((model["plans"] as? [String: Any])?["rows"] as? [[String: Any]])?.first, let pid = r["pid"] as? String else { return nil }
@@ -2269,6 +2262,8 @@ final class MeCtl {
       expensesBlocks(h, &out)
     case "member":
       memberBlocks(h, s.id ?? "", &out)
+    case "roles":
+      rolesBlocks(h, &out)
     case "plans":
       plansBlocks(h, &out)
     case "plan":
@@ -2283,17 +2278,36 @@ final class MeCtl {
   private func settle(_ h: HomeView) { DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self, weak h] in if let h = h { self?.blocks(h); h.setNeedsLayout() } } }
 
   private var team: [String: Any] { (model["team"] as? [String: Any]) ?? [:] }
+  // each person's role as the website's Role column shows it (Creative Director and Social Manager are roles there —
+  // Haris 2026-11-10), its colour as the website's role pill, then the extras (+ Admin, + Finance Admin, N clients)
+  static func roleCol(_ r: String) -> UIColor {
+    switch r {
+    case "Super Admin", "Office Admin": return .systemIndigo
+    case "Account Manager": return .systemBlue
+    case "Production": return .systemOrange
+    case "Social", "Social Manager", "Creative Director", "Acting CD", "Acting Creative Director": return .systemPink
+    case "Freelancer": return .systemTeal
+    default: return r.hasPrefix("Finance") ? .systemGreen : .systemGray
+    }
+  }
   private func people(_ list: [[String: Any]], hold: Bool) -> [SetItem] {
     list.map { p in
       let id = p["id"] as? String ?? ""
-      let pills: [(String, UIColor)] = ((p["pills"] as? [[String: Any]]) ?? []).map { x -> (String, UIColor) in (x["t"] as? String ?? "", NativeSheetVC.color(x["c"]) ?? .systemGray) }
+      let role = p["role"] as? String ?? ""
+      let extras: [(String, UIColor)] = ((p["pills"] as? [[String: Any]]) ?? []).compactMap { x -> (String, UIColor)? in
+        let t = x["t"] as? String ?? ""
+        return t == role || t == "Creative Director" || t == "Acting CD" || t == "Social Manager" ? nil : (t, NativeSheetVC.color(x["c"]) ?? .systemGray)
+      }
+      let pills: [(String, UIColor)] = (role.isEmpty ? [] : [(role, MeCtl.roleCol(role))]) + extras
       let pending: Bool = (p["pending"] as? Bool) == true
       let sub: String = pending ? "Hasn’t signed in yet" : (p["email"] as? String ?? "")
       let title: String = (p["name"] as? String ?? "") + ((p["you"] as? Bool) == true ? " (you)" : "")
       let pic: (photo: String?, ini: String, rgb: UIColor) = (p["photo"] as? String, p["ini"] as? String ?? "", NativeSheetVC.color(p["rgb"]) ?? .systemGray)
       let past: Bool = (p["past"] as? Bool) == true
-      let held: (() -> Void)? = hold ? { [weak self] in self?.memberMenu(id) } : nil
-      return SetItem(key: id, title: title, sub: sub, pills: pills, person: pic, warn: pending, dim: past, tap: { [weak self] in self?.open("member", id) }, hold: held)
+      var it = SetItem(key: id, title: title, sub: sub, pills: pills, person: pic, warn: pending, dim: past, tap: { [weak self] in self?.open("member", id) })
+      // (touch and hold, Admins: Apple's own lift and Apple's own menu with every action in it — the mock-up's A1)
+      if hold { it.menu = { [weak self] in self?.memberUIMenu(id) } }
+      return it
     }
   }
   // an Office Admin's Overview (Haris 2026-11-04): with Finance — the three cards, then the latest 3 in Client Assets, the 3
@@ -2586,27 +2600,23 @@ final class MeCtl {
   private func teamBlocks(_ h: HomeView, _ out: inout [UIView]) {
     let t = team
     let admin = (t["admin"] as? Bool) == true
-    if h.assets != "teamTab" { h.drawAssetsBar(name: "Team members", sub: t.isEmpty ? "" : "\(t["active"] as? Int ?? 0) active · \(t["pastN"] as? Int ?? 0) past", logo: nil, rgb: nil, ini: nil, showLogo: false) }
+    let line = t.isEmpty ? "" : "\(t["active"] as? Int ?? 0) active · \(t["pastN"] as? Int ?? 0) past"
+    if h.assets != "teamTab" { h.drawAssetsBar(name: "Team members", sub: line, logo: nil, rgb: nil, ini: nil, showLogo: false) }
     if t.isEmpty { let n = part(h, "wait") { AppleEmpty() }; n.setLoading(); out.append(n); return }
-    // (in Apple's navigation: Apple's own search bar in Apple's bar, Active / Past as its scope bar under it — as My Tasks'
-    //  All / Done; nothing of ours over Apple's bar — Haris 2026-11-08 "Team members page top area")
+    // (Apple's own search in Apple's bar, Active · Past as its scope bar — Me › Team members pushed, or an Office Admin's own
+    //  Team tab; Add member: Apple's + in the bar on the pushed page, "+ Add member" as Home's + New task on the tab — the
+    //  approved mock-up "Team members — fully Apple", Haris 2026-11-10)
+    let scopes = ["Active · \(t["active"] as? Int ?? 0)", "Past · \(t["pastN"] as? Int ?? 0)"]
+    let onSearch: (String) -> Void = { [weak self, weak h] q in guard let self = self, let h = h, self.teamQ != q else { return }; self.teamQ = q; self.blocks(h) }
+    let onScope: (Int) -> Void = { [weak self, weak h] i in guard let self = self, let h = h, self.teamTab != i else { return }; self.teamTab = i; self.blocks(h) }
     if let vc = pageVCs[ObjectIdentifier(h)] {
-      vc.useSearch("Search people", scopes: ["Active · \(t["active"] as? Int ?? 0)", "Past · \(t["pastN"] as? Int ?? 0)"], selected: teamTab)
-      vc.onSearch = { [weak self, weak h] q in guard let self = self, let h = h, self.teamQ != q else { return }; self.teamQ = q; self.blocks(h) }
-      vc.onScope = { [weak self, weak h] i in guard let self = self, let h = h, self.teamTab != i else { return }; self.teamTab = i; self.blocks(h) }
-    } else {
-    let seg = part(h, "seg") { SegBlock() }
-    seg.set("Active · \(t["active"] as? Int ?? 0)", "Past · \(t["pastN"] as? Int ?? 0)", teamTab)
-    // (Active ↔ Past: the other list there at once, as iPhone's own segmented lists — nothing slides into place;
-    //  the note under it slid down, Haris 2026-11-03)
-    seg.onPick = { [weak self, weak h] i in guard let self = self, let h = h else { return }; self.teamTab = i; UIView.performWithoutAnimation { self.blocks(h); h.setNeedsLayout(); h.layoutIfNeeded() } }
-    let find = part(h, "find") { AssetsFind() }
-    find.field.placeholder = "Search people"
-    find.onChange = { [weak self, weak h] q in guard let self = self, let h = h else { return }; self.teamQ = q; self.blocks(h); h.setNeedsLayout() }
-    // (Active / Past and the search stuck under the bar once they reach it — the standard)
-    let stack = part(h, "pin") { PinStack() }
-    stack.set([seg, find])
-    if h.pinHead !== stack { h.pinHead = stack }
+      vc.useSearch("Search people", scopes: scopes, selected: teamTab)
+      vc.onSearch = onSearch; vc.onScope = onScope
+      vc.usePlus(admin ? { [weak self] in self?.addMember() } : nil)
+    } else if h.assets == "teamTab", let vc = MeTabVC.byKey["team"] {
+      vc.useScopes(scopes, selected: teamTab)
+      vc.onSearch = onSearch; vc.onScope = onScope
+      if admin { h.setFab("Add member", "plus", { [weak self] in self?.addMember() }) }
     }
     let norm = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
     let q = norm(teamQ.trimmingCharacters(in: .whitespaces))
@@ -2617,14 +2627,12 @@ final class MeCtl {
     teamMarks = q.isEmpty ? [] : tf.marks
     let fits = { (p: [String: Any]) -> Bool in q.isEmpty || keep.contains(p["id"] as? String ?? "") }
     var any = false
-    var shownKeys = Set<String>()
     if teamTab == 0 {
       for g in (t["groups"] as? [[String: Any]]) ?? [] {
         let list = ((g["people"] as? [[String: Any]]) ?? []).filter(fits)
         guard !list.isEmpty else { continue }
         any = true
         let k = g["k"] as? String ?? ""
-        shownKeys.insert(k)
         out.append(head(h, "t." + k, "\(g["name"] as? String ?? "") · \(list.count)"))
         let gv = group(h, "t." + k, people(list, hold: admin)); Find.mark([gv], teamMarks)
         out.append(gv)
@@ -2632,6 +2640,7 @@ final class MeCtl {
     } else {
       let list = ((t["past"] as? [[String: Any]]) ?? []).filter(fits)
       if !list.isEmpty { any = true; out.append(head(h, "t.past", "Past members · \(list.count)")); let gv = group(h, "t.past", people(list, hold: admin)); Find.mark([gv], teamMarks); out.append(gv) }
+      if !list.isEmpty, admin { out.append(foot(h, "pastnote", "Touch and hold someone to restore their access.")) }
     }
     if !any {
       let n = part(h, "none") { AppleEmpty() }
@@ -2640,11 +2649,22 @@ final class MeCtl {
       else { n.set("person.2", "No One Yet") }
       out.append(n)
     }
+    // (what each role can do: its own page — the mock-up's B1)
+    out.append(head(h, "guide", ""))
+    out.append(group(h, "guide", [SetItem(key: "guide", title: "What Each Role Can Do", sym: "info", col: .systemBlue, tap: { [weak self] in self?.open("roles") })]))
     out.append(foot(h, "note", t["note"] as? String ?? ""))
-    let guide = part(h, "guide") { RoleGuide() }
-    guide.set((t["guide"] as? [[Any]]) ?? [], look: h.look)
-    out.append(guide)
-    if admin { h.setFab("Add member", "plus", { [weak self] in self?.addMember() }) }
+  }
+  // What Each Role Can Do (the mock-up's B1): each role and what it can do, as Apple's cells
+  private func rolesBlocks(_ h: HomeView, _ out: inout [UIView]) {
+    h.drawAssetsBar(name: "What Each Role Can Do", sub: "", logo: nil, rgb: nil, ini: nil, showLogo: false)
+    let guide = (team["guide"] as? [[Any]]) ?? []
+    if guide.isEmpty { let n = part(h, "wait") { AppleEmpty() }; n.setLoading(); out.append(n); return }
+    let items = guide.enumerated().map { i, g -> SetItem in
+      var it = SetItem(key: "r.\(i)", title: g.first as? String ?? "", sub: g.count > 2 ? g[2] as? String ?? "" : "", sym: "person.fill", col: NativeSheetVC.color(g.count > 1 ? Optional(g[1]) : nil) ?? .systemGray, chevron: false)
+      it.bold = true
+      return it
+    }
+    out.append(head(h, "roles", "")); out.append(group(h, "roles", items))
   }
   // My profile (the locked mockup, Haris 2026-11-03): the photo, ABOUT YOU, ROLE, NOTIFICATIONS, NOTIFY ME ABOUT, the
   // CD's own, Owner view (the owner, live site). Everything is saved as it changes — no Save button.
@@ -3027,29 +3047,39 @@ final class MeCtl {
       h.drawAssetsBar(name: "Team member", sub: "", logo: nil, rgb: nil, ini: nil, showLogo: false)
       let n = part(h, "gone") { AppleEmpty() }; if team.isEmpty { n.setLoading() } else { n.set("person.crop.circle.badge.xmark", "Not on the Team", "No longer on the team list.") }; out.append(n); return
     }
-    h.drawAssetsBar(name: p["name"] as? String ?? "", sub: p["role"] as? String ?? "", logo: nil, rgb: nil, ini: nil, showLogo: false)
-    let top = part(h, "head") { MemberHead() }
-    top.set(p, look: h.look)
-    out.append(top)
+    let role = p["role"] as? String ?? ""
+    h.drawAssetsBar(name: p["name"] as? String ?? "", sub: role, logo: nil, rgb: nil, ini: nil, showLogo: false)
+    // (the person as Apple's cell on top — their picture, name, role and designation; the approved mock-up)
+    var top = SetItem(key: "who", title: p["name"] as? String ?? "", sub: [role, (p["designation"] as? String).flatMap { $0 == role ? nil : $0 } ?? ""].filter { !$0.isEmpty }.joined(separator: " · "), chevron: false)
+    top.person = (photo: p["photo"] as? String, ini: p["ini"] as? String ?? "", rgb: NativeSheetVC.color(p["rgb"]) ?? .systemGray)
+    top.bold = true
+    out.append(head(h, "who", "")); out.append(group(h, "who", [top]))
     var info: [SetItem] = [SetItem(key: "mail", title: "Email", value: "", chevron: false)]
     info[0].sub = p["email"] as? String ?? ""
-    if let pl = p["place"] as? String, !pl.isEmpty { info.append(SetItem(key: "place", title: "Where", sub: pl, chevron: false)) }
+    if let pl = p["place"] as? String, !pl.isEmpty { info.append(SetItem(key: "place", title: "Where", value: pl, chevron: false)) }
     info.append(SetItem(key: "status", title: "Status", value: (p["past"] as? Bool) == true ? "Removed" : (p["pending"] as? Bool) == true ? "Hasn’t signed in yet" : "Active", chevron: false))
     if let n = p["open"] as? Int { info.append(SetItem(key: "open", title: "Open tasks", value: "\(n)", chevron: false)) }
     let email = p["email"] as? String ?? ""
     info[0].tap = { [weak self, weak h] in UIPasteboard.general.string = email; h?.toast(["t": "Email copied"]); _ = self }
     out.append(head(h, "info", "")); out.append(group(h, "info", info))
-    if admin {
-      var manage: [SetItem] = []
-      if (p["locked"] as? Bool) == true { manage.append(SetItem(key: "locked", title: "Only the owner can change this account", sym: "lock.fill", col: .systemGray, chevron: false)) }
-      else {
-        manage.append(SetItem(key: "manage", title: "Role, rights and access", sub: "Change role, Super Admin rights, Finance access…", sym: "slider.horizontal.3", col: .systemBlue, tap: { [weak self] in self?.memberMenu(id) }))
-        if let cd = p["cd"] as? [String: Any] {
-          manage.append(SetItem(key: "cd", title: "Creative Director", sub: cd["label"] as? String ?? "", sym: "star.fill", col: .systemPurple, toggle: (cd["on"] as? Bool) == true, flip: { [weak self, weak h] _ in self?.cdFlow(id); if let h = h { self?.settle(h) } }))
-        }
+    out.append(foot(h, "infonote", "Tap the email to copy it."))
+    // ROLE AND ACCESS (Admins): Role and Finance Access as Apple's pull-down menus, Super Admin Rights and Creative Director
+    // as Apple's switches, a Freelancer's clients — the approved mock-up's D1; Remove from Team only in the hold menu (E2)
+    guard admin, let o = memberParts(id) else { return }
+    var manage: [SetItem] = []
+    if let l = o.locked { manage.append(SetItem(key: "locked", title: l, sym: "lock.fill", col: .systemGray, chevron: false)) }
+    else {
+      if !o.roles.isEmpty { var it = SetItem(key: "role", title: "Role", value: o.roleNow, chevron: false); it.popup = { UIMenu(children: o.roles) }; manage.append(it) }
+      if let a = o.admin { manage.append(SetItem(key: "admin", title: "Super Admin Rights", toggle: a.on, flip: { [weak self, weak h] _ in a.run(); if let h = h { self?.settle(h) } })) }
+      if !o.fin.isEmpty { var it = SetItem(key: "fin", title: "Finance Access", value: o.finNow, chevron: false); it.popup = { UIMenu(children: o.fin) }; manage.append(it) }
+      if let cd = p["cd"] as? [String: Any] {
+        manage.append(SetItem(key: "cd", title: "Creative Director", sub: "Reviews every file sent for CD review", toggle: (cd["on"] as? Bool) == true, flip: { [weak self, weak h] _ in self?.cdFlow(id); if let h = h { self?.settle(h) } }))
       }
-      out.append(head(h, "manage", "Admin")); out.append(group(h, "manage", manage))
+      if let c = o.clients { manage.append(SetItem(key: "clients", title: "Clients They Can See", tap: c)) }
     }
+    guard !manage.isEmpty else { return }
+    out.append(head(h, "manage", "Role and access")); out.append(group(h, "manage", manage))
+    if p["cd"] != nil { out.append(foot(h, "cdnote", "Creative Director: one person at a time — switching it on while someone else is CD asks whether they take over, or act for them while away.")) }
   }
 
   // ---------- taps ----------
