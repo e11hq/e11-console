@@ -307,6 +307,16 @@ status pills ours. A skeleton: status cell, occasions, posts by day; Send Back �
 while a post is marked); ••• Copy Link and **Trash Skeleton — only its maker (the SE) and the Social Manager, only before any
 task is made from it, 30 days in the Trash** (new: website and server too). A post: Apple's sheet, Ask for Changes · Looks
 Good; files in Quick Look, links in Safari. Ask for changes: Apple's sheet. Not started: Apple's empty state.
+**iPhone Team members — mock-up decisions (Haris 2026-11-10 19:50: "A1, B1, C2, D1, E2, F1, G1"):** canvas "Team members —
+fully Apple". Me › Team members (pushed) and an Office Admin's Team tab (big title), Apple's search with Active · Past as its
+scope bar, people as Apple's cells in groups by role, role tags ours. Hold (Admins): Apple's lift and Apple's menu with every
+action straight in it — Change Role (Social Manager a role in it — underneath still a Social person in socialMgrIds; the
+website's menu and Add member the same), Super Admin Rights, Finance Access, Clients They Can See (Freelancers), Make Creative
+Director, Restore Access / Remove from Team (only here); your own row only your Finance access; the owner's account locked.
+The role guide its own pushed page "What Each Role Can Do". Add member: Apple's + in the bar (beside your photo on the tab).
+A member's page: Apple's grouped list — the person as Apple's cell, Email / Where / Status / Open tasks, Role and Finance Access
+as Apple's pull-down menus, Super Admin Rights and Creative Director as Apple's switches. Add Team Member: Apple's sheet.
+Approval of the whole mock-up still to come before any code.
 **Remind Haris before any Mac app work starts (Haris 2026-11-10 18:34):** the Mac App Store app needs a build for
 content skeleton links (files…/p/<id> — the handler is in mac/swift/main.swift on main, commit 4815aab; the server
 1.9.30 already tells Apple /p/ is the apps'): until it's out, a skeleton link on a Mac with the app may not open there.
