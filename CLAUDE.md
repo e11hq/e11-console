@@ -268,10 +268,24 @@ preview tapped opens it. Drawn from the phone's copy (works offline). Mock-up fi
 subtitle configuration: picture, who did what — bold while unread — the task, one line of what), Apple's highlight, swipe,
 hold with the peek (`InboxPeekVC`, from the copy: `notifOpen` → the task's and comments' screens) and Apple's line between
 rows; ours inside Apple's cell, as Haris picked: the unread dot and **the time on the first line** (A2), and **Mail's
-buttons** stay ours (B1). Empty: Apple's unavailable view (iOS 16: a line). Not approved yet.
+buttons** stay ours (B1). Empty: Apple's unavailable view (iOS 16: a line). **Locked at build 1643 (Haris 2026-11-10 11:51).**
 **My Tasks' and the Inbox's big title — Haris's exception (2026-11-09 19:15):** each time the page shows, Apple's bar is told
 its list again (`setContentScrollView` in viewDidAppear). On his phone (iOS 27.2) the bar was left following another, empty
 list in the page and the big title stuck; the cause wasn't found, and he chose this over more builds hunting it.
+
+**EVERYTHING LOCKED at the latest — every Apple page, notifications, the server (Haris, 2026-11-10 11:51: "lock the server
+states to latest. lock all the apple pages, notification as on the latest state and what ever we have done up till the
+latest state"):** iPhone build **1643**, commit 39227d9 — branches `locked/ios-home-1643`, `locked/ios-task-1643`,
+`locked/ios-mytasks-1643`, `locked/ios-inbox-1643`, `locked/ios-clients-1643`, `locked/ios-me-1643`,
+`locked/ios-comments-1643`, `locked/ios-notifications-1643`; the server **1.9.27**, commit 12191cb — branch
+`locked/server-1.9.27` (never moved or deleted; every earlier lock branch stays as history). Locked as they are now:
+E11 Day, My Tasks, the task page (Details and comments, fully Apple), the Inbox (fully Apple — Apple's cells, the dot and
+time on the first line, ›, Mail's buttons, the peek with the faded comment before, opening on All when nothing is unread),
+the Clients pages, Me and its pages, the Claims tab's highlight; notifications — the held preview (notifyui: the task and
+the comment as cards, the faded one before), Reply · Mark as Read · Open Task (NotifActions), the categories and thread
+from the server, the test notification, which notifications reach the phone (rules.js `onPhone`), the occasion reminders'
+recipients, the role in the @ lists; the server's rules and screens at 1.9.27. **Nothing touches any of it — look,
+behaviour or code, or a shared piece it uses — without telling Haris first and his yes.**
 
 **iPhone Home, My Tasks, the task page, the Clients list, a client's page, a client's Client Assets and a folder —
 LOCKED at the latest (Haris, 2026-11-08 19:19):** commit 0cf8dd7, branches `locked/ios-home-0cf8dd7`,
