@@ -227,6 +227,11 @@ extension Main {
       ("aBarV10", { self.barVariant(10) }), ("aBarV10w", {}), ("aBarV10x", {}),
       ("aBarV11", { self.barVariant(11) }), ("aBarV11w", {}), ("aBarV11x", {}),
       ("aBarV12", { self.barVariant(12) }), ("aBarV12w", {}), ("aBarV12x", {}),
+      // (measurement, Haris 2026-11-10 21:34: "Active · 18" doubled in Team members' scope bar while going back to it — a page
+      //  with Apple's search and scope bar, another page pushed over it, then back, filmed: how many "Active · 18" words show
+      //  in Apple's bar each frame and where; 0 plain, 1 no big title (.never), as our pushed pages have)
+      ("aScV0", { self.scopeBase(0) }), ("aScV0w", {}), ("aScV0p", { self.scopeOver() }), ("aScV0pw", {}), ("aScV0b", { self.scopeBack(0) }), ("aScV0bw", {}), ("aScV0x", {}),
+      ("aScV1", { self.scopeBase(1) }), ("aScV1w", {}), ("aScV1p", { self.scopeOver() }), ("aScV1pw", {}), ("aScV1b", { self.scopeBack(1) }), ("aScV1bw", {}), ("aScV1x", {}),
       ("aBarBack", { self.tab("projects"); AppleTabs.shared?.clientsNav.popToRootViewController(animated: false) }),
       // a long-ago comment opened as from the Inbox: in view once everything has come
       ("aFocus", { if let b = best { self.openTaskPage(b.0, tab: "comments", focus: "\(b.0)~\(b.1)") } }),
@@ -270,6 +275,43 @@ extension Main {
       nav.popToRootViewController(animated: false)
     }
     nav.pushViewController(vc, animated: true)
+  }
+  private func scopeBase(_ k: Int) {
+    guard let nav = AppleTabs.shared?.clientsNav else { return }
+    nav.popToRootViewController(animated: false)
+    let vc = UIViewController(); vc.view.backgroundColor = HomeLook(lookBoth).bg
+    vc.navigationItem.title = "Scope \(k)"
+    if k == 1 { vc.navigationItem.largeTitleDisplayMode = .never; vc.navigationItem.backButtonDisplayMode = .minimal }
+    let sc = UISearchController(searchResultsController: nil); sc.obscuresBackgroundDuringPresentation = false
+    sc.searchBar.placeholder = "Search people"; sc.searchBar.scopeButtonTitles = ["Active · 18", "Past · 0"]; sc.searchBar.showsScopeBar = true
+    if #available(iOS 16.0, *) { sc.scopeBarActivation = .manual; vc.navigationItem.preferredSearchBarPlacement = .stacked }
+    vc.navigationItem.hidesSearchBarWhenScrolling = false
+    vc.navigationItem.searchController = sc
+    nav.pushViewController(vc, animated: false)
+  }
+  private func scopeOver() {
+    guard let nav = AppleTabs.shared?.clientsNav else { return }
+    let top = UIViewController(); top.view.backgroundColor = HomeLook(lookBoth).bg; top.navigationItem.title = "Over"
+    top.navigationItem.largeTitleDisplayMode = .never
+    nav.pushViewController(top, animated: true)
+  }
+  private func scopeBack(_ k: Int) {
+    guard let nav = AppleTabs.shared?.clientsNav else { return }
+    let t0 = CACurrentMediaTime()
+    SelfFrames.run(0.9, {
+      var q: [UIView] = [nav.view]; var seen: [String] = []
+      while !q.isEmpty { let v = q.removeFirst(); q += v.subviews
+        if let l = v as? UILabel, l.text == "Active · 18", l.window != nil, !l.isHidden, l.alpha > 0.05 {
+          let f = l.convert(l.bounds, to: nil); seen.append("\(Int(f.minX)),\(Int(f.minY))") } }
+      return ["t": Int((CACurrentMediaTime() - t0) * 1000), "n": seen.count, "at": seen.joined(separator: " ")]
+    }) { frames in
+      let most = frames.map { $0["n"] as? Int ?? 0 }.max() ?? 0
+      var a = (self.selfResult["apple"] as? [String: Any]) ?? [:]; var v = (a["scopeBack"] as? [String: Any]) ?? [:]
+      v["v\(k)"] = ["most": most, "after": frames.last?["n"] ?? -1, "frames": frames.enumerated().filter { $0.offset % 4 == 0 }.map { "\($0.element["t"] ?? 0)ms \($0.element["n"] ?? 0) [\($0.element["at"] ?? "")]" }]
+      a["scopeBack"] = v; self.selfResult["apple"] = a
+      nav.popToRootViewController(animated: false)
+    }
+    nav.popViewController(animated: true)
   }
   private func walkSteps() -> [(String, () -> Void)] {
     // what to walk through, from the app's own copy
