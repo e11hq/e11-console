@@ -680,18 +680,33 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     if cover != tabCover { tabCover = cover; pageJS("document.documentElement.style.setProperty('--ios-tabs-h','\(cover)px')") }
     lockView?.frame = b
     reviewLink.frame = CGRect(x: 0, y: b.height - bottomSafe - 44, width: b.width, height: 44)
-    hud?.place(in: b, above: tabBar.isHidden ? bottomSafe : h)
-    upHud?.place(in: b, above: (tabBar.isHidden ? bottomSafe : h) + (hud == nil ? 0 : 82))
+    if AppleTabs.shared == nil {
+      hud?.place(in: b, above: tabBar.isHidden ? bottomSafe : h)
+      upHud?.place(in: b, above: (tabBar.isHidden ? bottomSafe : h) + (hud == nil ? 0 : 82))
+    } else { placeHUDs() }
+  }
+  // the downloads' and uploads' bars live over every tab, on Apple's tab bar's own screen — not on the app's old screen,
+  // which is kept out of sight inside Me's or Home's (Haris 2026-11-10: neither bar showed on Client Assets)
+  private var hudHost: UIView { AppleTabs.shared?.view ?? view }
+  func placeHUDs() {
+    guard AppleTabs.shared != nil else { view.setNeedsLayout(); return }
+    let host = hudHost, b = host.bounds
+    var bottom = host.safeAreaInsets.bottom
+    if let t = AppleTabs.shared, !t.barHiddenNow, t.tabBar.window != nil { bottom = max(bottom, b.height - t.tabBar.frame.minY) }
+    hud?.place(in: b, above: bottom)
+    upHud?.place(in: b, above: bottom + (hud == nil ? 0 : 82))
+    if let x = hud { host.bringSubviewToFront(x) }
+    if let x = upHud { host.bringSubviewToFront(x) }
   }
   // the uploads' bar: "Uploading <name>" (or "N files"), how much of how much, its bar, Cancel — gone when nothing's going up
   func paintUploadHUD() {
     let jobs = UploadCenter.shared.jobs.values.filter { !$0.cancelled }
-    if jobs.isEmpty { upHud?.removeFromSuperview(); upHud = nil; return }
+    if jobs.isEmpty { upHud?.removeFromSuperview(); upHud = nil; placeHUDs(); return }
     if upHud == nil {
       let u = DownloadHUD(); u.onCancel = { UIImpactFeedbackGenerator(style: .light).impactOccurred(); UploadCenter.shared.cancelAll() }
-      view.addSubview(u); upHud = u; view.setNeedsLayout(); view.layoutIfNeeded()
+      hudHost.addSubview(u); upHud = u; view.setNeedsLayout(); view.layoutIfNeeded()
     }
-    if let u = upHud { view.bringSubviewToFront(u) }
+    placeHUDs()
     let sent = jobs.reduce(Int64(0)) { $0 + $1.sent }, total = jobs.reduce(Int64(0)) { $0 + $1.size }
     let mb = { (b: Int64) in String(format: "%.1f MB", Double(b) / 1_048_576) }
     let name = jobs.count == 1 ? jobs[0].name : "\(jobs.count) files"
@@ -1008,8 +1023,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
   struct Dl { let task: URLSessionDownloadTask; let name: String; let from: String; var done: Int64 = 0; var total: Int64 = -1; var cancelled = false }
   var dl: [Int: Dl] = [:]
   func paintHUD() {
-    if dl.isEmpty { hud?.removeFromSuperview(); hud = nil; return }
-    if hud == nil { let h = DownloadHUD(); h.onCancel = { [weak self] in self?.cancelDownloads() }; view.addSubview(h); hud = h; view.setNeedsLayout(); view.layoutIfNeeded() }
+    if dl.isEmpty { hud?.removeFromSuperview(); hud = nil; placeHUDs(); return }
+    if hud == nil { let h = DownloadHUD(); h.onCancel = { [weak self] in self?.cancelDownloads() }; hudHost.addSubview(h); hud = h; view.setNeedsLayout(); view.layoutIfNeeded() }
+    placeHUDs()
     let all = Array(dl.values)
     let done = all.reduce(Int64(0)) { $0 + $1.done }, known = all.allSatisfy { $0.total > 0 }
     let total = known ? all.reduce(Int64(0)) { $0 + $1.total } : 0

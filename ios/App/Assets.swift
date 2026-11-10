@@ -835,7 +835,8 @@ final class AssetsCtl {
   func fileMenu(_ h: HomeView, _ f: [String: Any], client: String) -> UIMenu {
     var items: [(String, String, Bool, () -> Void)] = [
       ("Copy link", "link", false, { [weak self, weak h] in self?.main.copyFile(f) { t in h?.assetsToast(t) } }),
-      ("Download", "download", false, { [weak self, weak h] in guard let self = self else { return }; self.main.downloadFile(f, from: self.main.topMost()) { t in h?.assetsToast(t) } }),
+      // (its progress with the ✕ that stops it, as a folder's download — Haris 2026-11-10: a file's own had none)
+      ("Download", "download", false, { [weak self, weak h] in guard let self = self, let h = h else { return }; self.downloadMany(h, [f], name: f["name"] as? String ?? "File") }),
       ("Info", "info", false, { [weak self] in self?.fileInfo(f) }),
     ]
     let flipFile: () -> Void = { [weak self, weak h] in self?.main.fileLinkToggle(f) { t in h?.assetsToast(t) } }
