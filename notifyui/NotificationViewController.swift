@@ -65,32 +65,43 @@ final class NotificationViewController: UIViewController, UNNotificationContentE
     let maxH = UIScreen.main.bounds.height * 0.6
     if comments.isEmpty { parts.append(facts(p, people, me)) }
     else {
-      let focus = comment(comments[comments.count - 1], people, me)
+      let focus = card(comment(comments[comments.count - 1], people, me))
       let room = maxH - fit(parts[0]) - 16 - fit(focus)
       parts.append(gap(8))
       if comments.count > 1, room >= 70 {
-        // the one before it: only its start, faded — the notified one always whole (as the Inbox's peek)
-        let prev = comment(comments[0], people, me); prev.alpha = 0.55
-        let full = fit(prev), h = min(full, room, 120)
-        let clip = UIView(); clip.clipsToBounds = true
-        clip.addSubview(prev); prev.frame = CGRect(x: 0, y: 0, width: W, height: full)
-        clip.heightAnchor.constraint(equalToConstant: h).isActive = true
-        // (cut short: it fades away at its foot — no sharp edge, as the Inbox's peek: Haris 2026-11-10)
-        if full > h {
+        // the one before it: only its start, faded — the notified one always whole (as the Inbox's peek); cut short, its
+        // card keeps its rounded bottom and its words fade into it — no sharp edge (Haris 2026-11-10)
+        let inner = comment(comments[0], people, me)
+        let cw = W - 28, full = fit(inner, cw), ch = min(full, room - 12, 108)
+        let wrap = UIView(); wrap.alpha = 0.55
+        let box = UIView(frame: CGRect(x: 14, y: 6, width: cw, height: ch))
+        box.backgroundColor = Self.cardColor; box.layer.cornerRadius = 18; box.layer.cornerCurve = .continuous; box.clipsToBounds = true
+        box.addSubview(inner); inner.frame = CGRect(x: 0, y: 0, width: cw, height: full)
+        if full > ch {
           let m = CAGradientLayer()
           m.colors = [UIColor.black.cgColor, UIColor.black.cgColor, UIColor.clear.cgColor]
-          m.locations = [0, NSNumber(value: Double(max(0, (h - 44) / h))), 1]
-          m.frame = CGRect(x: 0, y: 0, width: W, height: h)
-          clip.layer.mask = m
+          m.locations = [0, NSNumber(value: Double(max(0, (ch - 44) / full))), NSNumber(value: Double(ch / full))]
+          m.frame = CGRect(x: 0, y: 0, width: cw, height: full)
+          inner.layer.mask = m
         }
-        parts.append(clip)
+        wrap.addSubview(box)
+        wrap.heightAnchor.constraint(equalToConstant: ch + 12).isActive = true
+        parts.append(wrap)
       }
       parts.append(focus)
       parts.append(gap(8))
     }
     show(parts, fade: true)
   }
-  private func fit(_ v: UIView) -> CGFloat { ceil(v.systemLayoutSizeFitting(CGSize(width: W, height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height) }
+  private func fit(_ v: UIView, _ w: CGFloat? = nil) -> CGFloat { ceil(v.systemLayoutSizeFitting(CGSize(width: w ?? W, height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height) }
+  // a comment's card, as the comments page and the Inbox's peek draw it: the task cards' colour, rounded, no border
+  static let cardColor = UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0x12 / 255, green: 0x13 / 255, blue: 0x17 / 255, alpha: 1) : .white }
+  private func card(_ inner: UIView) -> UIView {
+    let box = UIView(); box.backgroundColor = Self.cardColor; box.layer.cornerRadius = 18; box.layer.cornerCurve = .continuous; box.clipsToBounds = true
+    box.addSubview(inner); inner.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([inner.leadingAnchor.constraint(equalTo: box.leadingAnchor), inner.trailingAnchor.constraint(equalTo: box.trailingAnchor), inner.topAnchor.constraint(equalTo: box.topAnchor), inner.bottomAnchor.constraint(equalTo: box.bottomAnchor)])
+    return pad(box, 14, v: 6)
+  }
   private func head(_ p: [String: Any]) -> UIView {
     var rows: [UIView] = []
     if let c = p["client"] as? [String: Any] {
@@ -146,7 +157,7 @@ final class NotificationViewController: UIViewController, UNNotificationContentE
     }
     let right = vstack(col, 5)
     let row = UIStackView(arrangedSubviews: [av, right]); row.spacing = 10; row.alignment = .top
-    return pad(row, 14, v: 6)
+    return pad(row, 14, v: 12)
   }
   private func facts(_ p: [String: Any], _ people: [String: [String: Any]], _ me: String) -> UIView {
     let name = { (id: String) -> String in id == me ? "You" : (people[id]?["name"] as? String) ?? "Someone" }
