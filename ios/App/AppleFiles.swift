@@ -156,7 +156,10 @@ final class FileTile: UIView {
     }
   }
   // the tile's height for its width: the picture as wide as the tile (a folder a little less), then its words
-  static func box(_ w: CGFloat) -> CGFloat { min(w * 0.82, 84) }   // (the picture's square: 84 at most — the mock-up)
+  // (the picture's square — in the grid, as wide as its column (Haris 2026-11-10 17:21: the folders sat apart, 84 wide in a
+  //  116 column — now only the grid's 10 between them, the page's 16 at its edges, as the search bar and the lists); in a
+  //  client's sideways row, as before: 84 at most)
+  static func box(_ w: CGFloat) -> CGFloat { w > stripW ? w - 4 : min(w * 0.82, 84) }
   // (a folder's picture is the folder's own shape, 84 × 70 — its name 6 under it, as the mock-up; a file's the square)
   static func picH(_ w: CGFloat, folder: Bool) -> CGFloat {
     guard folder else { return box(w) }
