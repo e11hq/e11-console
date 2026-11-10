@@ -176,7 +176,11 @@ final class FileTile: UIView {
       pic.frame = CGRect(x: (W - w) / 2, y: (box - h), width: w, height: h)
     }
     badge.frame = pic.bounds
-    name.frame = CGRect(x: 0, y: ph + 6, width: W, height: CGFloat(lines) * 16)
+    // (the name as tall as its words, up to its lines — the line under it right below, as the client page's row; the tile
+    //  keeps its room for two lines, so its height never changes: Haris 2026-11-10 16:48, a one-line name sat in the
+    //  middle of a two-line box and left a gap above "1 file")
+    let nh = min(CGFloat(lines) * 16, max(16, ceil(name.sizeThatFits(CGSize(width: W, height: .greatestFiniteMagnitude)).height)))
+    name.frame = CGRect(x: 0, y: ph + 6, width: W, height: nh)
     sub.frame = CGRect(x: 0, y: name.frame.maxY, width: W, height: 15)
     tick.frame = CGRect(x: pic.frame.maxX - 26, y: pic.frame.maxY - 26, width: 24, height: 24)
   }
