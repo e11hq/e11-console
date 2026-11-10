@@ -176,6 +176,9 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       if let self = self, self.isMeList, let g = self.meSection(i), g.grouped { return self.meGrouped(g, env) }
       // (a group of tasks — or of clients found — is one of Apple's inset groups, its heading Apple's header: Haris
       //  2026-11-09, Home fully Apple)
+      // (folders and files as the Files app's grid — Apple's own sections: a sideways-scrolling row on a client's page,
+      //  three across in Client Assets; Haris 2026-11-10)
+      if let self = self, i < self.listSecs.count, self.listSecs[i].tiles != .none { return self.tileSection(self.listSecs[i], env) }
       if let self = self, !self.isMeList || self.searching, i < self.listSecs.count, self.listSecs[i].rows {
         var gc = UICollectionLayoutListConfiguration(appearance: .insetGrouped)
         gc.backgroundColor = .clear
@@ -234,6 +237,11 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       guard let self = self, let r = self.listViews[key] as? AppleRow else { return }
       self.paintRow(cell, r)
     }
+    // (a folder or a file: its tile in a cell of Apple's grid)
+    let tileReg = UICollectionView.CellRegistration<TileCell, String> { [weak self] cell, _, key in
+      guard let t = self?.listViews[key] as? FileTile else { return }
+      cell.show(t)
+    }
     // (an Inbox row: Apple's own cell — InboxRow gives its content, its dot and its time)
     let inboxReg = UICollectionView.CellRegistration<InboxCell, String> { [weak self] cell, _, key in
       guard let r = self?.listViews[key] as? InboxRow else { return }
@@ -254,6 +262,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       if let v = self?.listViews[key] {
         if v is AppleRow { return cv.dequeueConfiguredReusableCell(using: key.hasPrefix("f:") || v is HomeClientRow ? foundReg : rowReg, for: ip, item: key) }
         if v is InboxRow { return cv.dequeueConfiguredReusableCell(using: inboxReg, for: ip, item: key) }
+        if v is FileTile { return cv.dequeueConfiguredReusableCell(using: tileReg, for: ip, item: key) }
         if key.hasPrefix("e:") && v.tag == 8 { return cv.dequeueConfiguredReusableCell(using: emptyReg, for: ip, item: key) }
       }
       return cv.dequeueConfiguredReusableCell(using: reg, for: ip, item: key)
@@ -264,6 +273,12 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
         var c = UIListContentConfiguration.groupedHeader()
         if let self = self, ip.section < self.listSecs.count { c.attributedText = self.listSecs[ip.section].head }
         v.contentConfiguration = c
+        // (a client's folders: See All at the header's right — Apple's button, as the App Store's rows)
+        if let self = self, ip.section < self.listSecs.count, let all = self.listSecs[ip.section].seeAll {
+          let b = UIButton(type: .system); b.setTitle("See All", for: .normal); b.titleLabel?.font = .systemFont(ofSize: 15)
+          b.addAction(UIAction { _ in all() }, for: .touchUpInside); b.sizeToFit()
+          v.accessories = [.customView(configuration: .init(customView: b, placement: .trailing(), reservedLayoutWidth: .actual))]
+        } else { v.accessories = [] }
       }
       listDS?.supplementaryViewProvider = { cv, _, ip in cv.dequeueConfiguredReusableSupplementary(using: head, for: ip) }
     }
@@ -321,6 +336,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       if let c = v as? HomeCard { let k = "c:" + c.id; keys.append(k); views[k] = c; continue }
       if let c = v as? ClientListRow { let k = "k:" + c.id; keys.append(k); views[k] = c; continue }
       if v is ClientsMoreRow { keys.append("k:inactive"); views["k:inactive"] = v; continue }
+      if let t = v as? FileTile { let k = (t.info["files"] != nil && t.info["size"] == nil ? "fd:" : "ff:") + t.id; keys.append(k); views[k] = t; continue }
       // (the Clients tab's and Client Assets' blocks — the clients' group, folders, files: each a cell, the whole width)
       if let b = v as? HomeBlock {
         let k = "b:" + (b.accessibilityIdentifier ?? "\(ObjectIdentifier(b).hashValue)")
@@ -341,13 +357,17 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     //  Apple's inset groups, the heading its header; Today's own run has no heading. Everything else — the boxes, a client's
     //  folders, the Inbox's rows, Client Assets' blocks — in plain sections as before)
     func isRow(_ k: String) -> Bool { let v = views[k]; return v is AppleRow || (k.hasPrefix("e:") && v?.tag == 8) }
+    // (tiles: a client's folders in a sideways row, Client Assets' three across — their heading the section's header)
+    let tileKind: ListSec.Tiles = isClient ? .strip : .grid
+    func tiles(_ k: String) -> Bool { views[k] is FileTile }
     var secs: [[String]] = [], meta: [ListSec] = []
     for (n, k) in keys.enumerated() {
-      if k.hasPrefix("h:"), let nx = keys[(n + 1)...].first(where: { !$0.hasPrefix("h:") }), isRow(nx) {
-        secs.append([]); meta.append(ListSec(rows: true, head: (views[k] as? UILabel)?.attributedText)); continue
+      if k.hasPrefix("h:"), let nx = keys[(n + 1)...].first(where: { !$0.hasPrefix("h:") }), isRow(nx) || tiles(nx) {
+        let t = tiles(nx)
+        secs.append([]); meta.append(ListSec(rows: !t, head: (views[k] as? UILabel)?.attributedText, tiles: t ? tileKind : .none, seeAll: t ? tileSeeAll[k] : nil)); continue
       }
-      let r = isRow(k)
-      if meta.last?.rows != r { secs.append([]); meta.append(ListSec(rows: r, head: nil)) }
+      let r = isRow(k), t = tiles(k)
+      if meta.last?.rows != r || (meta.last?.tiles != .none) != t { secs.append([]); meta.append(ListSec(rows: r, head: nil, tiles: t ? tileKind : .none)) }
       secs[secs.count - 1].append(k)
     }
     var snap = NSDiffableDataSourceSnapshot<Int, String>()
@@ -359,6 +379,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     for k in secs.joined() {
       guard let v = views[k] else { continue }
       if let r = v as? AppleRow { sigs[k] = r.rowSig }
+      else if let t = v as? FileTile { sigs[k] = t.sig }
       else if let r = v as? InboxRow { sigs[k] = r.rowSig }
       else if k.hasPrefix("e:") && v.tag == 8 { sigs[k] = ((v as? UILabel)?.text ?? "") + "|" + L.key }
       else { sigs[k] = "\(ObjectIdentifier(v).hashValue)|\(itemHeight(k, v))" }
@@ -367,7 +388,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     listDrawn = sigs
     if !changed.isEmpty { snap.reconfigureItems(changed) }
     // (a section that became a group, or stopped being one: its layout asked again)
-    let kindsChanged = listSecs.map { $0.rows } != meta.map { $0.rows }
+    let kindsChanged = listSecs.map { "\($0.rows)\($0.tiles)" } != meta.map { "\($0.rows)\($0.tiles)" }
     listSecs = meta
     if kindsChanged { list?.collectionViewLayout.invalidateLayout() }
     // (the list's length changed: the motto asked again — an empty list switched to a full one left it over the rows:
@@ -375,7 +396,41 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     ds.apply(snap, animatingDifferences: animated) { [weak self] in self?.refreshHeads(); self?.showMotto() }
   }
   // a group: rows (Apple's inset group) or not, and its heading (Apple's header)
-  struct ListSec { let rows: Bool; let head: NSAttributedString? }
+  struct ListSec {
+    enum Tiles { case none, strip, grid }
+    let rows: Bool; let head: NSAttributedString?
+    var tiles: Tiles = .none
+    var seeAll: (() -> Void)? = nil
+  }
+  // a heading's See All (a client's folders: Client Assets), by the heading's key
+  var tileSeeAll: [String: () -> Void] = [:]
+  // Apple's section for tiles: a sideways-scrolling row, or three across
+  func tileSection(_ s: ListSec, _ env: NSCollectionLayoutEnvironment) -> NSCollectionLayoutSection {
+    let sec: NSCollectionLayoutSection
+    if s.tiles == .strip {
+      let w = FileTile.stripW, h = FileTile.height(width: w, lines: 1)
+      let item = NSCollectionLayoutItem(layoutSize: .init(widthDimension: .absolute(w), heightDimension: .absolute(h)))
+      let g = NSCollectionLayoutGroup.horizontal(layoutSize: .init(widthDimension: .absolute(w), heightDimension: .absolute(h)), subitems: [item])
+      sec = NSCollectionLayoutSection(group: g)
+      sec.orthogonalScrollingBehavior = .continuous
+      sec.interGroupSpacing = 6
+      sec.contentInsets = NSDirectionalEdgeInsets(top: 2, leading: 16, bottom: 10, trailing: 16)
+    } else {
+      let cols: CGFloat = 3, gap: CGFloat = 10
+      let w = floor((env.container.effectiveContentSize.width - 32 - gap * (cols - 1)) / cols), h = FileTile.height(width: w, lines: 2)
+      let item = NSCollectionLayoutItem(layoutSize: .init(widthDimension: .absolute(w), heightDimension: .absolute(h)))
+      let g = NSCollectionLayoutGroup.horizontal(layoutSize: .init(widthDimension: .fractionalWidth(1), heightDimension: .absolute(h)), subitems: [item])
+      g.interItemSpacing = .fixed(gap)
+      sec = NSCollectionLayoutSection(group: g)
+      sec.interGroupSpacing = 18
+      sec.contentInsets = NSDirectionalEdgeInsets(top: 4, leading: 16, bottom: 10, trailing: 16)
+    }
+    if s.head != nil {
+      let hd = NSCollectionLayoutBoundarySupplementaryItem(layoutSize: .init(widthDimension: .fractionalWidth(1), heightDimension: .estimated(38)), elementKind: UICollectionView.elementKindSectionHeader, alignment: .top)
+      sec.boundarySupplementaryItems = [hd]
+    }
+    return sec
+  }
   private var listSecs: [ListSec] = []
   // the headers on screen with new words (a count changed) set again — only those
   private func refreshHeads() {
@@ -707,17 +762,38 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     content = []
     if isClient {
       drawBarTitle(model)
-      // (its Client Assets folders on top, then "Tasks · N open" with Show completed — kept, not made again)
-      if let a = model["assets"] as? [String: Any] {
-        assetsStrip.set((a["folders"] as? [[String: Any]]) ?? [], look: L)
-        let cid = model["id"] as? String ?? ""
-        if cid != stripClient || isHidden { stripClient = cid; assetsStrip.toStart() }
-        if !listOn, assetsStrip.superview !== scroll { scroll.addSubview(assetsStrip) }
-        content.append(assetsStrip)
-      } else { assetsStrip.removeFromSuperview() }
-      tasksHead.set(open: model["open"] as? Int ?? 0, showDone: (model["showDone"] as? Bool) == true)
-      if !listOn, tasksHead.superview !== scroll { scroll.addSubview(tasksHead) }
-      content.append(tasksHead)
+      // (Haris 2026-11-10, the approved mock-up: "Client Assets · See All" with its folders as the Files app's grid in
+      //  Apple's sideways row, then Apple's switch Open · Done, then its tasks — each kept, not made again)
+      if let a = model["assets"] as? [String: Any], let cid = a["id"] as? String {
+        let folders = (a["folders"] as? [[String: Any]]) ?? []
+        if !folders.isEmpty {
+          let h = clientAssetsHead
+          let t = NSAttributedString(string: "Client Assets", attributes: [.font: UIFont.systemFont(ofSize: 13), .foregroundColor: UIColor.secondaryLabel])
+          if h.attributedText?.isEqual(to: t) != true { h.attributedText = t }
+          tileSeeAll["h:client-assets"] = { [weak self] in self?.send(["ev": "assets", "client": cid]) }
+          content.append(h)
+          var keep = Set<String>()
+          for f in folders {
+            let fid = f["id"] as? String ?? ""; keep.insert(fid)
+            let v = stripTiles[fid] ?? { let x = FileTile(); stripTiles[fid] = x; return x }()
+            v.folder(f, lines: 1)
+            v.onTap = { [weak self] in self?.send(["ev": "folder", "client": cid, "folder": fid]) }
+            // (held: Apple's menu with its lift — Open, and Copy link: a folder's link is copied by holding it, Haris 2026-11-10)
+            v.menu = { [weak self] in
+              var a: [UIMenuElement] = [UIAction(title: "Open", image: UIImage(systemName: "folder")) { _ in self?.send(["ev": "folder", "client": cid, "folder": fid]) }]
+              if (f["canLink"] as? Bool) != false {
+                a.append(UIAction(title: "Copy Link", image: UIImage(systemName: "link")) { _ in Main.shared.copyFolderLink(client: cid, folder: fid) { t in self?.assetsToast(t) } })
+              }
+              return UIMenu(children: a)
+            }
+            content.append(v)
+          }
+          for k in stripTiles.keys where !keep.contains(k) { stripTiles[k] = nil }
+        }
+      }
+      let done = (model["showDone"] as? Bool) == true, open = model["open"] as? Int ?? 0
+      doneSwitch.set("Open · \(open)", "Done", done ? 1 : 0)
+      content.append(doneSwitch)
     }
     var seen = Set<String>()
     var runs: [String: Int] = [:]
@@ -1087,15 +1163,15 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     return r
   }()
   private lazy var clientsGap: UILabel = { let l = UILabel(); l.accessibilityIdentifier = "clients-gap"; return l }()
-  private var stripClient = ""
-  private lazy var assetsStrip: AssetsStrip = {
-    let a = AssetsStrip()
-    a.onFolder = { [weak self] f in guard let self = self, let c = (self.m["assets"] as? [String: Any])?["id"] as? String else { return }; self.send(["ev": "folder", "client": c, "folder": f]) }
-    a.onAll = { [weak self] in guard let self = self, let c = (self.m["assets"] as? [String: Any])?["id"] as? String else { return }; self.send(["ev": "assets", "client": c]) }
-    return a
+  // a client's page (fully Apple, Haris 2026-11-10): its folders' tiles (kept by folder), their heading, Open · Done
+  private var stripTiles: [String: FileTile] = [:]
+  private lazy var clientAssetsHead: UILabel = { let l = UILabel(); l.accessibilityIdentifier = "client-assets"; return l }()
+  // (Apple's switch: "showDone" — its own name: "done" is a card's tick, which the app does itself)
+  private lazy var doneSwitch: SegBlock = {
+    let b = SegBlock(); b.accessibilityIdentifier = "client-open-done"
+    b.onPick = { [weak self] i in guard let self = self else { return }; if (i == 1) != ((self.m["showDone"] as? Bool) == true) { self.send(["ev": "showDone"]) } }
+    return b
   }()
-  // (its own name: "done" is a card's tick, which the app does itself — the toggle went nowhere, Haris 2026-11-02)
-  private lazy var tasksHead: TasksHead = { let t = TasksHead(); t.onToggle = { [weak self] in self?.send(["ev": "showDone"]) }; return t }()
   // ‹ on a client's page: where it is (the shared top buttons' row, at the page's left edge) and its tap
   var backable: Bool { isClient || (assets != nil && assetsBack) || (isClients && backFromMe) }
   var backFromMe = false   // (the Clients list opened from Me › Work — the CD's: ‹ back to Me, Haris 2026-11-05)
@@ -1143,14 +1219,13 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     [title, sub, smallTitle, smallSub].forEach { $0.isHidden = true }
     if isClient { tellApplePage() }
   }
-  // its ••• (the shared corner button's menu): Client Assets, Show / Hide completed, New task
+  // its ••• (the shared corner button's menu): Client Assets, New task
   var menuItems: [CornerMenuItem] {
     if assets != nil { return assetsMenu?() ?? [] }
     guard isClient, !m.isEmpty else { return [] }
     var out: [CornerMenuItem] = []
-    if m["assets"] is [String: Any] { out.append(CornerMenuItem(title: "Client Assets", symbol: "folder", run: { [weak self] in self?.assetsStrip.onAll?() })) }
-    let done = (m["showDone"] as? Bool) == true
-    out.append(CornerMenuItem(title: done ? "Hide completed" : "Show completed", symbol: done ? "checkmark.circle.badge.xmark" : "checkmark.circle", run: { [weak self] in self?.send(["ev": "showDone"]) }))
+    if let cid = (m["assets"] as? [String: Any])?["id"] as? String { out.append(CornerMenuItem(title: "Client Assets", symbol: "folder", run: { [weak self] in self?.send(["ev": "assets", "client": cid]) })) }
+    // (Open · Done is Apple's switch on the page itself now — Haris 2026-11-10)
     if (m["add"] as? Bool) == true { out.append(CornerMenuItem(title: "New task", symbol: "plus", run: { [weak self] in self?.send(["ev": "add"]) })) }
     return out
   }
@@ -2845,7 +2920,7 @@ extension HomeView: UICollectionViewDelegate {
   // (a task's or a client's row: Apple's highlight and selection open it; Me's rows as iPhone Settings'; nothing else)
   func collectionView(_ cv: UICollectionView, shouldHighlightItemAt ip: IndexPath) -> Bool {
     guard let key = listDS?.itemIdentifier(for: ip) else { return false }
-    if listViews[key] is AppleRow || listViews[key] is InboxRow { return true }
+    if listViews[key] is AppleRow || listViews[key] is InboxRow || listViews[key] is FileTile { return true }
     guard isMeList else { return false }
     if key == "me:card" { return true }
     guard let it = meItems[key] else { return false }
@@ -2856,6 +2931,7 @@ extension HomeView: UICollectionViewDelegate {
     guard let key = listDS?.itemIdentifier(for: ip) else { return }
     if let r = listViews[key] as? AppleRow { r.rowTapped(); return }
     if let r = listViews[key] as? InboxRow { r.onTap?(); return }
+    if let t = listViews[key] as? FileTile { t.onTap?(); return }
     guard isMeList else { return }
     if key == "me:card" { (listViews[key] as? MeCardBlock)?.onTap?(); return }
     meItems[key]?.tap?()
@@ -2864,6 +2940,10 @@ extension HomeView: UICollectionViewDelegate {
   // and Trash are on its swipe (Haris 2026-11-09 12:36: "no need for them to be in the menu"). My Tasks' Done tab: read only
   func collectionView(_ cv: UICollectionView, contextMenuConfigurationForItemsAt ips: [IndexPath], point: CGPoint) -> UIContextMenuConfiguration? {
     if ips.count == 1, let key = listDS?.itemIdentifier(for: ips[0]), let row = listViews[key] as? InboxRow { return inboxMenu(row, key) }
+    // (a folder or a file held: Apple's menu with its lift — Assets.swift's menus)
+    if ips.count == 1, let key = listDS?.itemIdentifier(for: ips[0]), let t = listViews[key] as? FileTile, let menu = t.menu {
+      return UIContextMenuConfiguration(identifier: key as NSString, previewProvider: nil) { _ in menu() }
+    }
     // (a client held: Apple's menu with its lift — Open · Client Details; its sheet once the menu has closed)
     if ips.count == 1, let key = listDS?.itemIdentifier(for: ips[0]), let row = listViews[key] as? ClientListRow {
       let id = row.id
