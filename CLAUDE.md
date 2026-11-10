@@ -337,7 +337,8 @@ opening Apple's Quick Look (Haris 21:04). **Decided 21:15: A2 · B1 · C1 · D2 
 Apple's toolbar (B1); hold: Approve · Request Amendments… · Open Task (C1); the files large and swipeable on the page with a
 strip, as now (D2); no download on the iPhone (G2). **21:18: E2 · F2** — Waiting · Reviewed at the
 top of the list, scrolling away with it (as My Tasks' All · Done); after a decision, back to the list, the decided one
-fading out of Waiting. D2's files swipe left / right between that request's files; a tap opens Quick Look.
+fading out of Waiting. D2's files swipe left / right between that request's files; a tap opens Quick Look. **Mock-up APPROVED (Haris 21:20: "approved, make it
+locally, dont build it yet").**
 **Remind Haris when the Clients pages' page-by-page work starts (Haris 2026-11-09 21:12):** background uploads and downloads
 go in with them — plan in project doc `claude/ios-background-transfers-plan.md`.
 
