@@ -145,6 +145,7 @@ try:
     # (Haris 2026-11-09: rows changing height as the tab bar went, growing as they scrolled in — each row keeps its height)
     ha, hs, ht = res.get('holdArrived') or {}, res.get('holdScrolled') or {}, res.get('holdTop') or {}
     moved = {k: (ha.get(k), hs.get(k), ht.get(k)) for k in set(ha) | set(hs) | set(ht) if len({round(x) for x in (ha.get(k), hs.get(k), ht.get(k)) if x is not None}) > 1}
+    print('measure atRoles', json.dumps(res.get('atRoles')))
     print('measure rowHeights', json.dumps({'arrived': ha, 'scrolled': hs, 'top': ht}))
     # (and none taller than its words need: 1621's checklist rows came out 170 tall, steady but wrong — Haris 2026-11-09)
     tall = {k: v for r in (ha, hs, ht) for k, v in r.items() if v and v > 110 and k not in ('desc', 'title', 'files', 'done', 'trash', 'lock', 'parent', 'based')}

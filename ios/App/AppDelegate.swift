@@ -3119,6 +3119,14 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       ("tpageScrolled", pause(900) + "return '{}'", { self.taskPages.last?.scroll.setContentOffset(CGPoint(x: 0, y: 380), animated: false) }),
       ("tpageHoldScroll", pause(1200) + "return '{}'", { self.selfResult["holdScrolled"] = self.taskPages.last?.detailsHeights() ?? [:]; if let p = self.taskPages.last { p.scroll.setContentOffset(CGPoint(x: 0, y: -p.scroll.adjustedContentInset.top), animated: true) } }),
       ("tpageHoldTop", pause(1200) + "return '{}'", { self.selfResult["holdTop"] = self.taskPages.last?.detailsHeights() ?? [:] }),
+      // (the @ lists' roles — Haris 2026-11-10: none under the names in the comments' or the description's list: what the
+      //  task page's and the comments' data hold for each person, and what the list's rows are given)
+      ("tpageRoles", "return '{}'", {
+        let roles = { (l: [[String: Any]]) in l.prefix(6).map { "\($0["name"] ?? "?"): \($0["role"] ?? "<none>")" } }
+        let desc = (self.taskPages.last?.model?["mentionable"] as? [[String: Any]]) ?? []
+        let box = self.composeIfMade?.mentionable ?? []
+        self.selfResult["atRoles"] = ["desc": roles(desc), "box": roles(box), "rows": (desc.isEmpty ? box : desc).prefix(6).map { PickList.person($0) {}.sub ?? "<none>" }]
+      }),
       // (light / dark with a task open — the build machine switches the simulator as these steps come: the task page in the
       //  phone's look, nothing forcing one — Haris 2026-11-09)
       ("tlookFlip", pause(1500) + "return '{}'", nil),
