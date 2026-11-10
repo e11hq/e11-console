@@ -351,11 +351,17 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
       if let r = next.first { snap.appendSections(["root"]); snap.appendItems([r], toSection: "root") }
       if next.count > 1 { snap.appendSections(["replies"]); snap.appendItems(Array(next.dropFirst()), toSection: "replies") }
     } else {
-      var last = ""
+      // (a day that comes round again — comments not in date order — gets its own pill again: Apple's list stops the app
+      //  if a section is there twice, Haris 2026-11-10's crash on one notification)
+      var last = "", used = Set<String>()
       for id in next {
-        let d = "d:" + CommentsFeed.dayKey(byId[id]?["at"] as? String ?? "")
-        if d != last { snap.appendSections([d]); last = d }
-        snap.appendItems([id], toSection: d)
+        let base = "d:" + CommentsFeed.dayKey(byId[id]?["at"] as? String ?? "")
+        if base != last {
+          var d = base, n = 1
+          while used.contains(d) { n += 1; d = base + "#\(n)" }
+          used.insert(d); snap.appendSections([d]); last = base
+        }
+        snap.appendItems([id], toSection: snap.sectionIdentifiers.last ?? base)
       }
     }
     if !schedOrder.isEmpty { snap.appendSections(["sched"]); snap.appendItems(schedOrder, toSection: "sched") }
@@ -421,7 +427,7 @@ final class CommentsFeed: UIView, UITableViewDelegate, UIGestureRecognizerDelega
   func tableView(_ t: UITableView, viewForHeaderInSection s: Int) -> UIView? {
     let k = source.sectionIdentifier(for: s) ?? ""
     guard k.hasPrefix("d:") || k == "replies", let h = t.dequeueReusableHeaderFooterView(withIdentifier: "h") as? DayHead else { return nil }
-    if k.hasPrefix("d:") { h.show(CommentsFeed.dayName(String(k.dropFirst(2))), pill: true) }
+    if k.hasPrefix("d:") { h.show(CommentsFeed.dayName(String(k.dropFirst(2).prefix(10))), pill: true) }
     else { h.show(repliesWords, pill: false) }
     return h
   }
