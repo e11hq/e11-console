@@ -2985,7 +2985,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       //  search, then closed — no wash left on its first task)
       // (Home's In review box: My Tasks with "Waiting for CD review" on — the website loaded too took the tap: Haris 2026-11-10)
       ("homeReview", pause(1000) + "return '{}'", { self.homeView.onEvent?(["ev": "review"]) }),
-      ("homeReviewRead", pause(2000) + "return '{}'", { self.selfResult["reviewCd"] = (self.myTasksF["cd"] as? Bool) == true; self.selfResult["reviewTab"] = self.selectedTabKey; self.myTasksF = [:]; self.selfTapTab("today") }),
+      ("homeReviewRead", pause(2000) + "return '{}'", { self.selfResult["reviewCd"] = (self.myTasksF["cd"] as? Bool) == true; self.selfResult["reviewTab"] = self.selectedTabKey; self.myTasksF = (AppData.shared.meModel("tasks", "myTasksDefault")?["filters"] as? [String: Any]) ?? [:]; self.selfTapTab("today") }),
       ("clTab", "return '{}'", { self.selfTapTab("projects") }),
       ("clOpen", pause(2000) + "return '{}'", { self.selfResult["clList"] = self.clientsListIfMade?.selfClientsGeo() ?? [:]; self.selfResult["clOpened"] = self.clientsListIfMade?.selfOpenFirstClient() ?? "no list" }),
       ("clDone", pause(2500) + "return '{}'", { self.selfResult["clPage"] = self.clientPageIfMade?.selfClientsGeo() ?? [:]; self.clientPageIfMade?.selfDoneSwitch(1) }),
