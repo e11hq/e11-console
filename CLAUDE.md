@@ -335,8 +335,9 @@ Content plans page, pushed on the Reviews tab, ‹ back to Reviews) — **A2, Ha
 files sent: a grid of previews (photo / video picture with ▶ and length, a PDF's first page, other files their kind), a tap
 opening Apple's Quick Look (Haris 21:04). **Decided 21:15: A2 · B1 · C1 · D2 · G2** — Approve / Request Amendments on
 Apple's toolbar (B1); hold: Approve · Request Amendments… · Open Task (C1); the files large and swipeable on the page with a
-strip, as now (D2); no download on the iPhone (G2). E (Waiting · Reviewed: scope bar or top of list) and F (after a
-decision: the next request or back to the list) still to decide.
+strip, as now (D2); no download on the iPhone (G2). **21:18: E2 · F2** — Waiting · Reviewed at the
+top of the list, scrolling away with it (as My Tasks' All · Done); after a decision, back to the list, the decided one
+fading out of Waiting. D2's files swipe left / right between that request's files; a tap opens Quick Look.
 **Remind Haris when the Clients pages' page-by-page work starts (Haris 2026-11-09 21:12):** background uploads and downloads
 go in with them — plan in project doc `claude/ios-background-transfers-plan.md`.
 
