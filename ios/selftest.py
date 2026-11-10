@@ -118,7 +118,7 @@ try:
       check(hf.get('searching') is True and (hf.get('searchBarW') or 0) > 250 and (hf.get('results') or 0) > 0, f'Search stretches into a bar with results for "Ford" {hf}')
     check(hfd.get('searching') is False, f'the ✕ closes the search {hfd}')
     # (the Clients pages fully Apple — Haris 2026-11-10)
-    cl, cp, cs, cf, cw = res.get('clList') or {}, res.get('clPage') or {}, res.get('clStrike') or {}, res.get('clFind') or {}, res.get('clWash') or {}
+    cl, cp, cs, cf, cw = res.get('clList') or {}, res.get('clPage') or {}, res.get('clStrikeAt') or {}, res.get('clFind') or {}, res.get('clWashAt') or {}
     check((cl.get('rows') or 0) > 0 and cl.get('appleCell') is True, f"the Clients list: each client Apple's own cell {cl}")
     check(cp.get('openDone') is True and (cp.get('cards') or 0) > 0 and cp.get('appleCell') is True, f"a client's page ({res.get('clOpened')}): Apple's Open · Done, its tasks Apple's cells {cp}")
     check((cp.get('folders') or 0) == 0 or (cp.get('strip') is True and cp.get('seeAll') is True), f"a client's page: its folders in Apple's sideways row with See All {cp}")

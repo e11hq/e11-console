@@ -2985,9 +2985,9 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
       ("clOpen", pause(2000) + "return '{}'", { self.selfResult["clList"] = self.clientsListIfMade?.selfClientsGeo() ?? [:]; self.selfResult["clOpened"] = self.clientsListIfMade?.selfOpenFirstClient() ?? "no list" }),
       ("clDone", pause(2500) + "return '{}'", { self.selfResult["clPage"] = self.clientPageIfMade?.selfClientsGeo() ?? [:]; self.clientPageIfMade?.selfDoneSwitch(1) }),
       ("clOpenAgain", pause(2000) + "return '{}'", { self.selfResult["clDoneShown"] = self.clientPageIfMade?.selfStrike() ?? [:]; self.clientPageIfMade?.selfDoneSwitch(0) }),
-      ("clStrike", pause(2000) + "return '{}'", { self.selfResult["clStrike"] = self.clientPageIfMade?.selfStrike() ?? [:]; self.selfWashWord = self.clientPageIfMade?.selfFirstWord() ?? ""; self.clientPageIfMade?.selfFind(self.selfWashWord) }),
+      ("clStrike", pause(2000) + "return '{}'", { self.selfResult["clStrikeAt"] = self.clientPageIfMade?.selfStrike() ?? [:]; self.selfWashWord = self.clientPageIfMade?.selfFirstWord() ?? ""; self.clientPageIfMade?.selfFind(self.selfWashWord) }),
       ("clFindRead", pause(1500) + "return '{}'", { self.selfResult["clFind"] = self.clientPageIfMade?.selfFindGeo() ?? [:]; self.selfResult["clFindWord"] = self.selfWashWord; self.clientPageIfMade?.selfFindDone() }),
-      ("clWash", pause(1500) + "return '{}'", { self.selfResult["clWash"] = self.clientPageIfMade?.selfWash() ?? [:]; self.selfTapTab("today") }),
+      ("clWash", pause(1500) + "return '{}'", { self.selfResult["clWashAt"] = self.clientPageIfMade?.selfWash() ?? [:]; self.selfTapTab("today") }),
       // 26: My Tasks, the app's own (from the server): All, then the Done tab (read only), then All again
       ("mytasks", pause(2500) + "return JSON.stringify({ view: ui.view })", {
         if let i = self.tabKeys.firstIndex(of: "mytasks"), let item = self.tabBar.items?[i] { self.tabBar.selectedItem = item; self.tabBar(self.tabBar, didSelect: item) } }),
