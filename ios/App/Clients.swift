@@ -372,7 +372,8 @@ final class ClientSheetVC: UITableViewController, UITextFieldDelegate {
 // a sheet of lists that's as tall as what's on it (as the morning round-up), up to nearly the whole screen; a list
 // pushed onto it (Add Account Manager…) grows or shrinks it to fit too, with the sheet's own animation (Haris 2026-11-02)
 final class FitNav: UINavigationController {
-  private var fit: CGFloat = 360, measured = false
+  private var fit: CGFloat = 360, measured = false, appeared = false
+  override func viewDidAppear(_ a: Bool) { super.viewDidAppear(a); appeared = true }
   override func viewDidLoad() {
     super.viewDidLoad()
     sheetPresentationController?.detents = [.custom(identifier: .init("fitList")) { [weak self] ctx in min(ctx.maximumDetentValue, self?.fit ?? 360) }]
@@ -400,12 +401,13 @@ final class FitNav: UINavigationController {
     if !settled { settled = true; if h <= fit && fit - h < 48 { table.isScrollEnabled = false; return } }
     fit = h
     table.isScrollEnabled = h > view.window.map { $0.bounds.height * 0.9 } ?? 700
-    let first = !measured; measured = true
-    // (outside the layout pass; the first time with no animation — the sheet comes up already its size)
-    DispatchQueue.main.async { [weak self] in
-      guard let sh = self?.sheetPresentationController else { return }
-      if first { sh.invalidateDetents() } else { sh.animateChanges { sh.invalidateDetents() } }
-    }
+    measured = true
+    // (still coming up — its real size found as it lays out in the sheet: told at once, so the slide goes straight to it.
+    //  Told a moment later and animated, the sheet slid up to its guess and then grew — "jumps before settling down": Haris
+    //  2026-11-10 15:01. Once up, a real change — a row added — animates as Apple's own.)
+    guard let sh = sheetPresentationController else { return }
+    if !appeared { sh.invalidateDetents(); return }
+    DispatchQueue.main.async { sh.animateChanges { sh.invalidateDetents() } }
   }
 }
 
