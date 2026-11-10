@@ -374,14 +374,16 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     // (tiles: a client's folders in a sideways row, Client Assets' three across — their heading the section's header)
     let tileKind: ListSec.Tiles = isClient ? .strip : .grid
     func tiles(_ k: String) -> Bool { views[k] is FileTile }
+    // (All Client Assets' clients: two across — mock-up 0 B)
+    func kindOf(_ k: String) -> ListSec.Tiles { (views[k] as? FileTile)?.isClient == true ? .clients : tileKind }
     var secs: [[String]] = [], meta: [ListSec] = []
     for (n, k) in keys.enumerated() {
       if k.hasPrefix("h:"), let nx = keys[(n + 1)...].first(where: { !$0.hasPrefix("h:") }), isRow(nx) || tiles(nx) {
         let t = tiles(nx)
-        secs.append([]); meta.append(ListSec(rows: !t, head: (views[k] as? UILabel)?.attributedText, tiles: t ? tileKind : .none, seeAll: t ? tileSeeAll[k].map { ($0.0, $0.1, k) } : nil)); continue
+        secs.append([]); meta.append(ListSec(rows: !t, head: (views[k] as? UILabel)?.attributedText, tiles: t ? kindOf(nx) : .none, seeAll: t ? tileSeeAll[k].map { ($0.0, $0.1, k) } : nil)); continue
       }
       let r = isRow(k), t = tiles(k)
-      if meta.last?.rows != r || (meta.last?.tiles != .none) != t { secs.append([]); meta.append(ListSec(rows: r, head: nil, tiles: t ? tileKind : .none)) }
+      if meta.last?.rows != r || (meta.last?.tiles != .none) != t { secs.append([]); meta.append(ListSec(rows: r, head: nil, tiles: t ? kindOf(k) : .none)) }
       secs[secs.count - 1].append(k)
     }
     var snap = NSDiffableDataSourceSnapshot<Int, String>()
@@ -414,7 +416,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   func listAgain() { if listOn { applyList(animated: false) } }
   // a group: rows (Apple's inset group) or not, and its heading (Apple's header)
   struct ListSec {
-    enum Tiles { case none, strip, grid }
+    enum Tiles { case none, strip, grid, clients }
     let rows: Bool; let head: NSAttributedString?
     var tiles: Tiles = .none
     var seeAll: (String, () -> Void, String)? = nil   // (its words, what it does, its heading's key)
@@ -433,13 +435,14 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       sec.interGroupSpacing = 6
       sec.contentInsets = NSDirectionalEdgeInsets(top: 2, leading: 16, bottom: 10, trailing: 16)
     } else {
-      let cols: CGFloat = 3, gap: CGFloat = 10
-      let w = floor((env.container.effectiveContentSize.width - 32 - gap * (cols - 1)) / cols), h = FileTile.height(width: w, lines: 2)
+      let cl = s.tiles == .clients
+      let cols: CGFloat = cl ? 2 : 3, gap: CGFloat = cl ? 14 : 10
+      let w = floor((env.container.effectiveContentSize.width - 32 - gap * (cols - 1)) / cols), h = cl ? FileTile.clientHeight(width: w) : FileTile.height(width: w, lines: 2)
       let item = NSCollectionLayoutItem(layoutSize: .init(widthDimension: .absolute(w), heightDimension: .absolute(h)))
       let g = NSCollectionLayoutGroup.horizontal(layoutSize: .init(widthDimension: .fractionalWidth(1), heightDimension: .absolute(h)), subitems: [item])
       g.interItemSpacing = .fixed(gap)
       sec = NSCollectionLayoutSection(group: g)
-      sec.interGroupSpacing = 18
+      sec.interGroupSpacing = cl ? 22 : 18
       sec.contentInsets = NSDirectionalEdgeInsets(top: 4, leading: 16, bottom: 10, trailing: 16)
     }
     if s.head != nil {
@@ -3040,7 +3043,7 @@ extension HomeView: UICollectionViewDelegate {
       return UIContextMenuConfiguration(identifier: key as NSString, previewProvider: nil) { _ in menu() }
     }
     // (a client held: Apple's menu with its lift — Open · Client Details; its sheet once the menu has closed)
-    if ips.count == 1, let key = listDS?.itemIdentifier(for: ips[0]), let row = listViews[key] as? ClientListRow, row.held {
+    if ips.count == 1, let key = listDS?.itemIdentifier(for: ips[0]), let row = listViews[key] as? ClientListRow {
       let id = row.id
       return UIContextMenuConfiguration(identifier: key as NSString, previewProvider: nil) { [weak self, weak row] _ in
         UIMenu(children: [

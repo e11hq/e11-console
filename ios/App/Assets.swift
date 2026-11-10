@@ -610,14 +610,13 @@ final class AssetsCtl {
       //  "3 folders · 41 files", ›)
       let m = models[""] ?? [:]
       let list = (m["clients"] as? [[String: Any]]) ?? []
+      // (Haris 2026-11-10 13:19, mock-up 0 B: the Files app's grid, two across — each client's logo tile, no card)
       for c in list {
         let id = c["id"] as? String ?? ""
-        let r = kept(h, "k:" + id) { () -> ClientListRow in let x = ClientListRow(); x.held = false; return x }
-        r.id = id
-        r.set(c, inactive: false, look: L, people: [:])
-        r.onTap = { [weak self] in guard let self = self else { return }; self.push(self.screen("client", id, nil), animated: true); self.ask(["ev": "want", "client": id]) { _ in } }
-        r.onLook = { [weak h] in h?.listAgain() }
-        out.append(r)
+        let t = kept(h, "fc:" + id) { FileTile() }
+        t.client(c)
+        t.onTap = { [weak self] in guard let self = self else { return }; self.push(self.screen("client", id, nil), animated: true); self.ask(["ev": "want", "client": id]) { _ in } }
+        out.append(t)
       }
       sweep(h)
       if m.isEmpty { let n = empty(h, "wait"); n.setLoading(); out.append(n) }

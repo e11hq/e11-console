@@ -15,8 +15,8 @@ final class FileTile: UIView {
   private(set) var info: [String: Any] = [:]
   private let pic = UIImageView(), badge = UILabel(), name = UILabel(), sub = UILabel(), tick = UIImageView()
   private var lines = 1, picPath: String?, aspect: CGFloat = 1
-  private(set) var isFolder = true
-  var key: String { (isFolder ? "fd:" : "ff:") + id }   // (its identity in the list)
+  private(set) var isFolder = true, isClient = false
+  var key: String { (isClient ? "fc:" : isFolder ? "fd:" : "ff:") + id }   // (its identity in the list)
   static let stripW: CGFloat = 92
   override init(frame: CGRect) {
     super.init(frame: frame)
@@ -37,7 +37,7 @@ final class FileTile: UIView {
     let n = f["files"] as? Int ?? 0, subs = f["subs"] as? Int ?? 0, fin = (f["final"] as? Bool) == true
     let s = "d|\(f["name"] ?? "")|\(n)|\(subs)|\(fin)|\(String(describing: f["rgb"]))|\(lines)"
     guard s != sig else { return }
-    sig = s; info = f; isFolder = true; self.lines = lines; id = f["id"] as? String ?? ""
+    sig = s; info = f; isFolder = true; isClient = false; self.lines = lines; id = f["id"] as? String ?? ""
     pic.image = UIImage(systemName: "folder.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 52, weight: .regular))
     pic.tintColor = col; pic.backgroundColor = .clear; pic.layer.cornerRadius = 0; pic.layer.borderWidth = 0
     badge.isHidden = true; picPath = nil
@@ -52,7 +52,7 @@ final class FileTile: UIView {
   func file(_ f: [String: Any], lines: Int, sizeText: String) {
     let s = "f|\(f["id"] ?? "")|\(f["name"] ?? "")|\(sizeText)|\(CommentCell.picURL(f) ?? "")|\(lines)"
     guard s != sig else { return }
-    sig = s; info = f; isFolder = false; self.lines = lines; id = f["id"] as? String ?? ""
+    sig = s; info = f; isFolder = false; isClient = false; self.lines = lines; id = f["id"] as? String ?? ""
     let nm = f["name"] as? String ?? "File"
     let ext = (nm as NSString).pathExtension.uppercased()
     name.text = nm; name.numberOfLines = lines
@@ -79,6 +79,33 @@ final class FileTile: UIView {
     accessibilityLabel = "\(nm), \(sizeText)"
     setNeedsLayout()
   }
+  // a client in All Client Assets (Haris 2026-11-10, mock-up 0 B — the Files app's grid, two across, no card): its logo whole on
+  // its own background (LogoLook), or its colour with its name; the name and "4 folders · 1 file" centred under it
+  func client(_ c: [String: Any]) {
+    let s = "c|\(c["name"] ?? "")|\(c["sub"] ?? "")|\(c["logo"] ?? "")|\(String(describing: c["rgb"]))"
+    guard s != sig else { return }
+    sig = s; info = c; isFolder = false; isClient = true; lines = 1; id = c["id"] as? String ?? ""
+    pic.image = nil; pic.layer.cornerRadius = 16; pic.clipsToBounds = true; pic.layer.borderWidth = 0; pic.contentMode = .scaleAspectFit
+    pic.backgroundColor = NativeSheetVC.color(c["rgb"]) ?? .systemGray
+    badge.isHidden = false; badge.textColor = .white; badge.font = .systemFont(ofSize: 20, weight: .bold)
+    badge.adjustsFontSizeToFitWidth = true; badge.minimumScaleFactor = 0.5
+    badge.text = (c["name"] as? String ?? "").uppercased()
+    name.text = c["name"] as? String; name.numberOfLines = 1; name.font = .systemFont(ofSize: 15, weight: .semibold); name.lineBreakMode = .byTruncatingTail
+    sub.text = c["sub"] as? String; sub.font = .systemFont(ofSize: 13)
+    let p = c["logo"] as? String
+    picPath = p
+    if let p = p {
+      FeedLoader.shared.image(p) { [weak self] img in
+        guard let self = self, self.picPath == p, let img = img else { return }
+        UIView.transition(with: self.pic, duration: 0.2, options: [.transitionCrossDissolve, .allowUserInteraction]) {
+          LogoLook.put(img, key: p, in: self.pic); self.badge.isHidden = true
+        }
+      }
+    }
+    accessibilityLabel = "\(name.text ?? "Client"), \(sub.text ?? "")"
+    setNeedsLayout()
+  }
+  static func clientHeight(width w: CGFloat) -> CGFloat { w * 0.625 + 8 + 20 + 17 }
   var picked = false { didSet { if picked != oldValue { paintTick() } } }
   var selecting = false { didSet { if selecting != oldValue { paintTick() } } }
   private func paintTick() {
@@ -102,6 +129,14 @@ final class FileTile: UIView {
   override func layoutSubviews() {
     super.layoutSubviews()
     let W = bounds.width
+    if isClient {
+      let h = W * 0.625
+      pic.frame = CGRect(x: 0, y: 0, width: W, height: h)
+      badge.frame = pic.bounds.insetBy(dx: 12, dy: 0)
+      name.frame = CGRect(x: 0, y: h + 8, width: W, height: 20)
+      sub.frame = CGRect(x: 0, y: name.frame.maxY, width: W, height: 17)
+      return
+    }
     let box = W * 0.82
     if isFolder {
       pic.frame = CGRect(x: (W - box) / 2, y: 0, width: box, height: box)
