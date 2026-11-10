@@ -74,6 +74,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   var picked: [String: String] = [:]   // token -> picked file
   var saving: [String: String] = [:]   // token -> file being written
   var pendingTask: String?
+  var pendingPlan: String?   // (a skeleton's link: the page opened at ?plan= — Haris 2026-11-10; both Mac apps)
   var activity: NSObjectProtocol?
   var lockView: NSView?
   var lastActive = Date()
@@ -336,7 +337,6 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMess
   /* ---------- file links: files.e11hq.com/f/<token> (Haris 2026-11-03) — tapped anywhere on this Mac, the App Store
      app opens (universal links) and the page opens the file where it is ---------- */
   var pendingFileLink: String?
-  var pendingPlan: String?   // (a skeleton's link: the page opened at ?plan= — Haris 2026-11-10)
   func application(_ application: NSApplication, continue userActivity: NSUserActivity, restorationHandler: @escaping ([NSUserActivityRestoring]) -> Void) -> Bool {
     guard userActivity.activityType == NSUserActivityTypeBrowsingWeb, let u = userActivity.webpageURL else { return false }
     // a task link (files…/t/<id>, Haris 2026-11-04): the task, as e11console://task/<id> opens it
