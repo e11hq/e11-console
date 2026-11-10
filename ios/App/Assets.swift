@@ -1031,7 +1031,7 @@ final class AssetsCtl {
     let stop: () -> Void = { [weak h] in cancelled = true; task?.cancel(); UIImpactFeedbackGenerator(style: .light).impactOccurred(); h?.assetsToast("Download cancelled", cancel: nil) }
     let say = { [weak h] (t: String) in
       guard !cancelled else { return }
-      let going = t.hasPrefix("Downloading") || t.hasPrefix("Getting")
+      let going = t.hasPrefix("Getting")   // (the zip being made: its ✕; then the downloads' bar with Cancel)
       h?.assetsToast(t, cancel: going ? stop : nil)
     }
     if files.count == 1 { main.downloadFile(files[0], from: main.topMost(), started: { task = $0 }, say); return }

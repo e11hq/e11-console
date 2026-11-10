@@ -831,13 +831,17 @@ extension Main {
     PreviewLoad.refreshCookies(web.configuration.websiteDataStore.httpCookieStore) {
       var r = URLRequest(url: url); r.allHTTPHeaderFields = PreviewLoad.headers(url)
       let name = (f["name"] as? String ?? "File").replacingOccurrences(of: "/", with: "-")
-      var last = -1
-      let task = Transfers.shared.download(r, name: name, progress: { w, e in
-        guard e > 0 else { return }
-        let n = Int(Double(w) / Double(e) * 100)
-        if n / 10 != last / 10 { last = n; toast(n >= 100 ? "Downloaded" : "Downloading… \(n)%") }
-      }) { [weak vc] dest in
-        guard let dest = dest else { return toast("Couldn’t download — try again") }
+      // (its progress on the downloads' bar with Cancel, as the uploads' — not a toast that came and went at each 10%:
+      //  Haris 2026-11-10)
+      var id = -1
+      let task = Transfers.shared.download(r, name: name, progress: { [weak self] w, e in
+        guard let self = self, self.dl[id] != nil else { return }
+        self.dl[id]?.done = w; self.dl[id]?.total = e; self.paintHUD()
+      }) { [weak self, weak vc] dest in
+        guard let self = self else { return }
+        let cancelled = self.dl[id]?.cancelled == true
+        self.dl[id] = nil; self.paintHUD()
+        guard let dest = dest else { return toast(cancelled ? "Download cancelled" : "Couldn’t download — try again") }
         let item: Any = CommentCell.isPic(name) ? (UIImage(contentsOfFile: dest.path).map { $0 as Any } ?? dest) : dest
         let share = UIActivityViewController(activityItems: [item], applicationActivities: nil)
         // (shown once it's done — if the screen it came from has gone, over what's on top now)
@@ -845,8 +849,10 @@ extension Main {
         share.popoverPresentationController?.sourceView = host.view
         host.present(share, animated: true)
       }
-      toast("Downloading…")
-      started?(task)   // (Client Assets' downloads: their ✕ stops it — Haris 2026-11-08)
+      id = task.taskIdentifier
+      self.dl[id] = Dl(task: task, name: name, from: url.absoluteString)
+      self.paintHUD()
+      started?(task)
     }
   }
 }
