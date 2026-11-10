@@ -105,6 +105,7 @@ try:
     check('Copy link' in (row.get('trailing') or []), f"a Home task swiped left: Apple's Copy link {row.get('trailing')}")
     check(any(t in (row.get('leading') or []) for t in ('Done', 'Not Done', 'Review', 'Due')), f"a Home task swiped right: Apple's Done / Due {row.get('leading')}")
     check(bool(row.get('menu')) and row.get('cell') is True, f"a Home task held: Apple's menu; the row is Apple's own cell {row}")
+    check(0 <= (hn.get('headGap') or -1) <= 14, f"Home: each group's heading just over its rows, as locked (gap {hn.get('headGap')} pt)")
     wa = res.get('washAt') or {}
     check(wa.get('title') is True and wa.get('washed') is False, f"search cleared with the bar's own x, searched again, cleared, closed: Home's task title without search's wash ({res.get('washWord')}) {wa}")
     hsc = res.get('homeScrolledNative') or {}; hf = res.get('homeFindNative') or {}; hfd = res.get('homeFindDoneNative') or {}

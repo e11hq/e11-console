@@ -285,7 +285,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
           let key = all.2
           b.addAction(UIAction { [weak self] _ in UISelectionFeedbackGenerator().selectionChanged(); self?.tileSeeAll[key]?.1() }, for: .touchUpInside); b.sizeToFit()
           v.accessories = [.customView(configuration: .init(customView: b, placement: .trailing(), reservedLayoutWidth: .actual))]
-        } else { v.accessories = [] }
+        } else if !v.accessories.isEmpty { v.accessories = [] }   // (never set when it has none: set, even empty, Apple's header took a cell's height and every group's heading stood apart from its rows — Haris 2026-11-10 13:56)
       }
       listDS?.supplementaryViewProvider = { cv, _, ip in cv.dequeueConfiguredReusableSupplementary(using: head, for: ip) }
     }
@@ -2113,7 +2113,19 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
      "groups": content.filter { $0.tag == 7 }.map { ($0 as? UILabel)?.text ?? "" }, "cards": cards.count, "fab": !fab.isHidden,
      "headH": blur.frame.height, "shrink": shrink, "bar": blur.alpha, "smallTitle": smallTitle.alpha, "searching": searching,
      "searchBarW": searchBar.isHidden ? 0 : searchBar.frame.width, "results": resultViews.count,
-     "apple": appleTop, "appleList": listOn, "appleBarH": appleBarHeight?() ?? 0, "listCells": list?.visibleCells.count ?? 0, "scrolledY": sv.contentOffset.y + inTop]
+     "apple": appleTop, "appleList": listOn, "appleBarH": appleBarHeight?() ?? 0, "listCells": list?.visibleCells.count ?? 0, "scrolledY": sv.contentOffset.y + inTop,
+     "headGap": headGap()]
+  }
+  // (the room between a group's heading and its first row — Apple's header sits just over its group: Haris 2026-11-10 13:56)
+  func headGap() -> CGFloat {
+    guard let cv = list else { return -1 }
+    cv.layoutIfNeeded()
+    for i in 0..<listSecs.count where listSecs[i].head != nil && listSecs[i].rows && cv.numberOfItems(inSection: i) > 0 {
+      guard let h = cv.layoutAttributesForSupplementaryElement(ofKind: UICollectionView.elementKindSectionHeader, at: IndexPath(item: 0, section: i)),
+            let r = cv.layoutAttributesForItem(at: IndexPath(item: 0, section: i)) else { continue }
+      return r.frame.minY - h.frame.maxY
+    }
+    return -1
   }
 }
 
