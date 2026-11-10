@@ -129,7 +129,9 @@ final class FileTile: UIView {
   }
   // the tile's height for its width: the picture as wide as the tile (a folder a little less), then its words
   static func box(_ w: CGFloat) -> CGFloat { min(w * 0.82, 84) }   // (the picture's square: 84 at most — the mock-up)
-  static func height(width w: CGFloat, lines: Int) -> CGFloat { box(w) + 6 + CGFloat(lines) * 16 + 15 }
+  // (a folder's picture is the folder's own shape, 84 × 70 — its name 6 under it, as the mock-up; a file's the square)
+  static func picH(_ w: CGFloat, folder: Bool) -> CGFloat { folder ? (box(w) * 70 / 84).rounded() : box(w) }
+  static func height(width w: CGFloat, lines: Int, folder: Bool = false) -> CGFloat { picH(w, folder: folder) + 6 + CGFloat(lines) * 16 + 15 }
   override func layoutSubviews() {
     super.layoutSubviews()
     let W = bounds.width
@@ -142,15 +144,16 @@ final class FileTile: UIView {
       return
     }
     let box = FileTile.box(W)
+    let ph = FileTile.picH(W, folder: isFolder)
     if isFolder {
-      pic.frame = CGRect(x: (W - box) / 2, y: 0, width: box, height: box)
+      pic.frame = CGRect(x: (W - box) / 2, y: 0, width: box, height: ph)
     } else {
       // (in its own shape, within the square — a photo wide, a document tall)
       let w = aspect >= 1 ? box : box * aspect, h = aspect >= 1 ? box / aspect : box
       pic.frame = CGRect(x: (W - w) / 2, y: (box - h), width: w, height: h)
     }
     badge.frame = pic.bounds
-    name.frame = CGRect(x: 0, y: box + 6, width: W, height: CGFloat(lines) * 16)
+    name.frame = CGRect(x: 0, y: ph + 6, width: W, height: CGFloat(lines) * 16)
     sub.frame = CGRect(x: 0, y: name.frame.maxY, width: W, height: 15)
     tick.frame = CGRect(x: pic.frame.maxX - 26, y: pic.frame.maxY - 26, width: 24, height: 24)
   }

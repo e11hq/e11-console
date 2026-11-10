@@ -382,13 +382,13 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     for (n, k) in keys.enumerated() {
       if k.hasPrefix("h:"), let nx = keys[(n + 1)...].first(where: { !$0.hasPrefix("h:") }), isRow(nx) || tiles(nx) {
         let t = tiles(nx)
-        secs.append([]); meta.append(ListSec(rows: !t, head: (views[k] as? UILabel)?.attributedText, tiles: t ? kindOf(nx) : .none, seeAll: t ? tileSeeAll[k].map { ($0.0, $0.1, k) } : nil)); continue
+        secs.append([]); meta.append(ListSec(rows: !t, head: (views[k] as? UILabel)?.attributedText, tiles: t ? kindOf(nx) : .none, seeAll: t ? tileSeeAll[k].map { ($0.0, $0.1, k) } : nil, folders: (views[nx] as? FileTile)?.isFolder == true)); continue
       }
       let r = isRow(k), t = tiles(k)
       // (whether the group before holds tiles — read on the group itself: `meta.last?.tiles != .none` compared the optional
       //  with nil, so every row started a group of its own and each heading stood apart from its rows: Haris 2026-11-10 13:56)
       let lastTiles = meta.last.map { $0.tiles != ListSec.Tiles.none } ?? false
-      if meta.last?.rows != r || lastTiles != t { secs.append([]); meta.append(ListSec(rows: r, head: nil, tiles: t ? kindOf(k) : .none)) }
+      if meta.last?.rows != r || lastTiles != t { secs.append([]); meta.append(ListSec(rows: r, head: nil, tiles: t ? kindOf(k) : .none, folders: (views[k] as? FileTile)?.isFolder == true)) }
       secs[secs.count - 1].append(k)
     }
     var snap = NSDiffableDataSourceSnapshot<Int, String>()
@@ -410,7 +410,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     listDrawn = sigs
     if !changed.isEmpty { snap.reconfigureItems(changed) }
     // (a section that became a group, or stopped being one: its layout asked again)
-    let kindsChanged = listSecs.map { "\($0.rows)\($0.tiles)" } != meta.map { "\($0.rows)\($0.tiles)" }
+    let kindsChanged = listSecs.map { "\($0.rows)\($0.tiles)\($0.folders)" } != meta.map { "\($0.rows)\($0.tiles)\($0.folders)" }
     listSecs = meta
     if kindsChanged { list?.collectionViewLayout.invalidateLayout() }
     // (the list's length changed: the motto asked again — an empty list switched to a full one left it over the rows:
@@ -425,6 +425,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     let rows: Bool; let head: NSAttributedString?
     var tiles: Tiles = .none
     var seeAll: (String, () -> Void, String)? = nil   // (its words, what it does, its heading's key)
+    var folders = false   // (tiles of folders — their own height: the folder's shape)
   }
   // a heading's button — See All (a client's folders: Client Assets), Select / Cancel (a folder's files) — by the heading's key
   var tileSeeAll: [String: (String, () -> Void)] = [:]
@@ -432,7 +433,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
   func tileSection(_ s: ListSec, _ env: NSCollectionLayoutEnvironment) -> NSCollectionLayoutSection {
     let sec: NSCollectionLayoutSection
     if s.tiles == .strip {
-      let w = FileTile.stripW, h = FileTile.height(width: w, lines: 1)
+      let w = FileTile.stripW, h = FileTile.height(width: w, lines: 1, folder: s.folders)
       let item = NSCollectionLayoutItem(layoutSize: .init(widthDimension: .absolute(w), heightDimension: .absolute(h)))
       let g = NSCollectionLayoutGroup.horizontal(layoutSize: .init(widthDimension: .absolute(w), heightDimension: .absolute(h)), subitems: [item])
       sec = NSCollectionLayoutSection(group: g)
@@ -442,7 +443,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
     } else {
       let cl = s.tiles == .clients
       let cols: CGFloat = cl ? 2 : 3, gap: CGFloat = cl ? 14 : 10
-      let w = floor((env.container.effectiveContentSize.width - 32 - gap * (cols - 1)) / cols), h = cl ? FileTile.clientHeight(width: w) : FileTile.height(width: w, lines: 2)
+      let w = floor((env.container.effectiveContentSize.width - 32 - gap * (cols - 1)) / cols), h = cl ? FileTile.clientHeight(width: w) : FileTile.height(width: w, lines: 2, folder: s.folders)
       let item = NSCollectionLayoutItem(layoutSize: .init(widthDimension: .absolute(w), heightDimension: .absolute(h)))
       let g = NSCollectionLayoutGroup.horizontal(layoutSize: .init(widthDimension: .fractionalWidth(1), heightDimension: .absolute(h)), subitems: [item])
       g.interItemSpacing = .fixed(gap)
