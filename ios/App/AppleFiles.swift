@@ -18,6 +18,8 @@ final class FileTile: UIView {
   private(set) var isFolder = true, isClient = false
   var key: String { (isClient ? "fc:" : isFolder ? "fd:" : "ff:") + id }   // (its identity in the list)
   static let stripW: CGFloat = 92
+  // (the folders' colour: a lighter blue, closer to the Files app's — light and dark, switching by itself)
+  static let folderBlue = Look.c(UIColor(red: 0x5A / 255, green: 0xA9 / 255, blue: 0xE6 / 255, alpha: 1), UIColor(red: 0x6C / 255, green: 0xB7 / 255, blue: 0xF0 / 255, alpha: 1))
   override init(frame: CGRect) {
     super.init(frame: frame)
     isUserInteractionEnabled = false
@@ -33,8 +35,8 @@ final class FileTile: UIView {
   required init?(coder: NSCoder) { fatalError() }
   // a folder: its colour, its name, "14 files"
   func folder(_ f: [String: Any], lines: Int) {
-    // (Apple's own folder in Apple's blue, every folder the same — as the Files app: Haris 2026-11-10 14:00)
-    let col = UIColor.systemBlue
+    // (Apple's own folder, every folder the same, in the lighter folder blue — Haris 2026-11-10 14:00, 15:19)
+    let col = FileTile.folderBlue
     let n = f["files"] as? Int ?? 0, subs = f["subs"] as? Int ?? 0, fin = (f["final"] as? Bool) == true
     let s = "d|\(f["name"] ?? "")|\(n)|\(subs)|\(fin)|\(lines)"
     guard s != sig else { return }
@@ -230,7 +232,7 @@ final class FileListRow: UIView, AppleRow {
     var cfg = UIListContentConfiguration.subtitleCell()
     let ext = (nm as NSString).pathExtension.uppercased()
     if isFolder {
-      cfg.image = UIImage(systemName: "folder.fill")?.withTintColor(.systemBlue, renderingMode: .alwaysOriginal)
+      cfg.image = UIImage(systemName: "folder.fill")?.withTintColor(FileTile.folderBlue, renderingMode: .alwaysOriginal)
       cfg.imageProperties.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 30)
     } else { cfg.image = pic ?? FileListRow.badge(ext) }
     cfg.imageProperties.reservedLayoutSize = CGSize(width: 44, height: 44)
