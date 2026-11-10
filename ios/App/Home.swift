@@ -858,17 +858,21 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
       if h.isHidden != anchor { h.isHidden = anchor }
       if !listOn { scroll.addSubview(h) }   // (Apple's list: its words are its group's header, or a cell's)
       // (a client's page with nothing to show: Apple's own empty state under Open · Done — no heading over it; Haris 2026-11-10)
-      let clientEmpty = isClient && listOn && ((g["cards"] as? [Any]) ?? []).isEmpty
+      // (Open shows only the open ones, Done only the done ones — Haris 2026-11-10 14:08)
+      let showDone = (model["showDone"] as? Bool) == true
+      let gcards = ((g["cards"] as? [[String: Any]]) ?? []).filter { !isClient || ((($0["done"] as? Bool) == true) == showDone) }
+      let clientEmpty = isClient && listOn && gcards.isEmpty && !(mtGroups.contains { (($0["cards"] as? [[String: Any]]) ?? []).contains { (($0["done"] as? Bool) == true) == showDone } })
       if clientEmpty {
-        let done = (model["showDone"] as? Bool) == true
-        if done { clientEmptyView.set("checklist", "No Tasks Yet") } else { clientEmptyView.set("checkmark.circle", "No Open Tasks", "Done tasks are under Done.") }
-        content.append(clientEmptyView)
+        if !content.contains(where: { $0 === clientEmptyView }) {
+          if showDone { clientEmptyView.set("checkmark.circle", "No Done Tasks", "Tasks show here once they're done.") } else { clientEmptyView.set("checkmark.circle", "No Open Tasks", "Done tasks are under Done.") }
+          content.append(clientEmptyView)
+        }
         continue
       }
       // (a client's page: its tasks one Apple group, no status headings — the approved mock-up's board 2; each task's status on
       //  its line instead of the client's own name)
       if !isClient { content.append(h) }
-      for c in g["cards"] as? [[String: Any]] ?? [] {
+      for c in gcards {
         guard let id = c["id"] as? String else { continue }
         seen.insert(id)
         // (the task: Apple's cell in the list, this its content and accessory — tapped: Apple's selection; held: Apple's menu;
@@ -1908,6 +1912,22 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
           resultViews.append(v)
         }
       }
+      // (a client's page: its folders found — Apple's rows, ›, opening the folder — Haris 2026-11-10 14:08: "its tasks and assets")
+      let dirs = (r["folders"] as? [[String: Any]]) ?? []
+      if !dirs.isEmpty {
+        let cid = (m["assets"] as? [String: Any])?["id"] as? String ?? ""
+        resultViews.append(groupHead("Folders", dirs.count))
+        for x in dirs {
+          let id = x["id"] as? String ?? ""
+          seenFiles.insert("d:" + id)
+          let v = resultFiles["d:" + id] ?? { let y = FileListRow(); y.found = true; resultFiles["d:" + id] = y; return y }()
+          let n = x["total"] as? Int ?? x["files"] as? Int ?? 0
+          v.setFolder(x, line: [x["path"] as? String ?? "", "\(n) file\(n == 1 ? "" : "s")"].filter { !$0.isEmpty }.joined(separator: " · "), marks: (r["folderMarks"] as? [String]) ?? [], look: L)
+          v.onTap = { [weak self] in self?.resignSearch(); self?.send(["ev": "folder", "client": cid, "folder": id]) }
+          v.menu = nil
+          resultViews.append(v)
+        }
+      }
       // (a client's page: its files found too — Apple's rows, each with its own identity, the words washed: Haris 2026-11-10)
       let files = (r["files"] as? [[String: Any]]) ?? []
       if !files.isEmpty {
@@ -1928,7 +1948,7 @@ final class HomeView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate,
           resultViews.append(v)
         }
       }
-      let none = clients.isEmpty && tasks.isEmpty && files.isEmpty
+      let none = clients.isEmpty && tasks.isEmpty && files.isEmpty && dirs.isEmpty
       // (a client's page: Apple's own "No Results" — Haris 2026-11-10; Home's keeps its line, locked)
       if none && isClient && listOn { searchEmpty.set("magnifyingglass", "No Results", "Check the spelling or try a new search."); resultViews.append(searchEmpty); hint.text = nil }
       else { hint.text = none ? (r["empty"] as? String ?? "No tasks found. Try a client or person’s name.") : nil }

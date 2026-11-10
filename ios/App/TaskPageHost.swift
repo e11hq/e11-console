@@ -1183,12 +1183,15 @@ extension Main {
       // (only this client's tasks — the shared brain's `only`, 2026-11-10; an older copy without it: Home's, kept to this client's below)
       let m = AppData.shared.meModel("tasks", "search", [q, pid])
       let mine = AppData.shared.screen("clients", ServerHome.clientsJSON("view=client&id=\(pid)&done=1")).model
-      let files = (cid.flatMap { AppData.shared.meModel("assets", "assets", [$0]) }?["files"] as? [[String: Any]]) ?? []
+      let am = cid.flatMap { AppData.shared.meModel("assets", "assets", [$0]) }
+      let files = (am?["files"] as? [[String: Any]]) ?? []
+      let fr = Find.filter((am?["folders"] as? [[String: Any]]) ?? [], q) { "\($0["name"] ?? "")" }
       let ids = Set(((mine?["groups"] as? [[String: Any]]) ?? []).flatMap { ($0["cards"] as? [[String: Any]]) ?? [] }.compactMap { $0["id"] as? String })
       let tasks = ((m?["tasks"] as? [[String: Any]]) ?? []).filter { ids.contains($0["id"] as? String ?? "") }
       let f = Find.filter(files, q) { "\($0["name"] ?? "") \($0["where"] ?? "")" }
       let r: [String: Any] = ["q": q, "clients": [[String: Any]](), "tasks": tasks, "total": tasks.count, "marks": (m?["marks"] as? [String]) ?? Find.terms(q),
-                              "files": Array(f.items.prefix(80)), "fileMarks": f.marks, "empty": "No tasks or files found."]
+                              "files": Array(f.items.prefix(80)), "fileMarks": f.marks, "folders": fr.loose ? [] : Array(fr.items.prefix(20)), "folderMarks": fr.marks,
+                              "empty": "No tasks or files found."]
       DispatchQueue.main.async { guard my == Main.searchSeq else { return }; page.searchResults(r) }
     }
     return true
