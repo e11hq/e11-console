@@ -118,7 +118,18 @@ extension Main {
       ("aTaskWait", {}),
       ("aTaskRoles", {
         let desc = (p()?.model?["mentionable"] as? [[String: Any]]) ?? [], box = self.composeIfMade?.mentionable ?? []
-        self.apple("roles", ["desc": roles(desc), "box": roles(box), "rows": (desc.isEmpty ? box : desc).prefix(8).map { PickList.person($0) {}.sub ?? "<none>" }])
+        // (and drawn: Apple's list made with those rows, laid out — each role's words on screen inside its row, not squeezed
+        //  out; 1656's data had the roles and the phone still showed none)
+        let pl = PickList(); pl.frame = CGRect(x: 0, y: 0, width: 360, height: PickList.rowH * 4)
+        pl.rows = (desc.isEmpty ? box : desc).prefix(4).map { PickList.person($0) {} }
+        pl.layoutIfNeeded()
+        let shown = pl.visibleCells.map { c -> String in
+          var q: [UIView] = [c.contentView]; var got = "<none>"
+          while !q.isEmpty { let v = q.removeFirst(); q += v.subviews
+            if let l = v as? UILabel, let t = l.text, !t.isEmpty, l.font.pointSize < 15, l.bounds.height >= 10, c.contentView.bounds.contains(l.convert(l.bounds, to: c.contentView)) { got = t } }
+          return got
+        }
+        self.apple("roles", ["desc": roles(desc), "box": roles(box), "rows": (desc.isEmpty ? box : desc).prefix(8).map { PickList.person($0) {}.sub ?? "<none>" }, "drawn": shown])
         for x in self.taskPages { self.closeTaskPage(x, animated: false) }
       }),
       // Content plans without the website (Me › Content plans for the Super Admin — mock-up "Content plans — fully Apple"):

@@ -992,7 +992,8 @@ final class PickList: UITableView, UITableViewDataSource, UITableViewDelegate {
   var rows: [Row] = [] {
     didSet {
       // (only what changed is set again — the same people / files keep their rows)
-      if rows.map({ $0.key }) != oldValue.map({ $0.key }) { reloadData(); invalidateIntrinsicContentSize() }
+      // (a row's words count too: the same person with their role come since is set again — keys alone kept the old row)
+      if rows.map({ "\($0.key)|\($0.title)|\($0.sub ?? "")" }) != oldValue.map({ "\($0.key)|\($0.title)|\($0.sub ?? "")" }) { reloadData(); invalidateIntrinsicContentSize() }
     }
   }
   private var pics: [String: UIImage] = [:]
@@ -1028,9 +1029,14 @@ final class PickList: UITableView, UITableViewDataSource, UITableViewDelegate {
   func tableView(_ t: UITableView, cellForRowAt ip: IndexPath) -> UITableViewCell {
     let cell = t.dequeueReusableCell(withIdentifier: "r", for: ip)
     let r = rows[ip.row]
-    var c = cell.defaultContentConfiguration()
+    // (Apple's subtitle cell, its margins fitted to the row's 52: the plain cell's own margins left the role under the name
+    //  no room in a 52-tall row, so it never showed — Haris 2026-11-10 "doesn't have" roles in either @ list)
+    var c = r.sub == nil ? UIListContentConfiguration.cell() : UIListContentConfiguration.subtitleCell()
+    c.directionalLayoutMargins.top = 6; c.directionalLayoutMargins.bottom = 6
+    c.textToSecondaryTextVerticalPadding = 1
     c.text = r.title
     c.textProperties.font = .systemFont(ofSize: 16, weight: .medium)
+    c.secondaryTextProperties.font = .systemFont(ofSize: 13)
     c.textProperties.numberOfLines = 1; c.textProperties.lineBreakMode = .byTruncatingMiddle
     c.secondaryText = r.sub
     c.secondaryTextProperties.color = r.sub == "Creator" ? .systemOrange : .secondaryLabel
