@@ -1340,7 +1340,7 @@ final class Main: UIViewController, WKScriptMessageHandler, WKNavigationDelegate
     lastTabTap = (tabKeys[item.tag], Date())
     // (Me in its own Apple navigation — AppleMe.swift: again, Apple has taken it back to Me; on Me already, up to the top)
     if again, tabKeys[item.tag] == "me", meApple { meCtl.backToRoot(); return }
-    if again, tabKeys[item.tag] == "plans", plansApple { meCtl.backToRoot(); return }   // (Social's Plans tab, the same way — 2026-11-10)
+    if again, roleApple(tabKeys[item.tag]) { meCtl.backToRoot(); return }   // (a role's own tab — Social's Plans, an Office Admin's Team — the same way: 2026-11-10)
     if again, tabKeys[item.tag] == "projects", clientsWanted, clientsBackToList() { return }
     // (the Clients list over Me: Me again — back to Me; another tab — it goes, as Me's pages do)
     if clientsListIfMade?.backFromMe == true {

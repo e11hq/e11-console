@@ -145,14 +145,14 @@ extension Main {
       ("aPlTabWait", {}),
       ("aPlTabRead", {
         guard self.tabKeys.contains("plans") else { return }
-        var o = self.meCtl.selfPlans(); o["shown"] = PlansVC.shared?.view.window != nil; o["barHidden"] = (AppleTabs.shared?.barHiddenNow ?? false)
+        var o = self.meCtl.selfPlans(); o["shown"] = MeTabVC.byKey["plans"]?.view.window != nil; o["barHidden"] = (AppleTabs.shared?.barHiddenNow ?? false)
         self.apple("plansTab", o); _ = self.meCtl.selfOpenPlan()
       }),
       ("aPlTabPlanWait", {}),
       ("aPlTabPlanRead", {
         guard self.tabKeys.contains("plans") else { return }
         var o = self.meCtl.selfPlans(); o["barHidden"] = (AppleTabs.shared?.barHiddenNow ?? false)
-        self.apple("plansTabPlan", o); AppleTabs.shared?.plansNav.popViewController(animated: true)
+        self.apple("plansTabPlan", o); AppleTabs.shared?.roleNavs["plans"]?.popViewController(animated: true)
       }),
       ("aPlTabBackWait", {}),
       ("aPlTabBackRead", {

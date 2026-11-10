@@ -12,18 +12,19 @@ import UIKit
      About's cards, a member's header, a plan's posts) in a cell of Apple's list.
    MeCtl keeps the pages' contents and actions, as before; only where they live and who draws them changed. */
 let APPLE_ME = APPLE_NAV
-// Social's Plans tab in its own Apple navigation (Haris 2026-11-10 18:13, the mock-up "Content plans — fully Apple" approved)
-let APPLE_PLANS = APPLE_NAV
+// A role's own tab in its own Apple navigation, as Home (MeTabVC): Social's Plans (Haris 2026-11-10 18:13, the mock-up
+// "Content plans — fully Apple"), an Office Admin's Team (19:58, the mock-up "Team members — fully Apple")
+let APPLE_ROLE_TABS: [String] = APPLE_NAV ? ["plans", "team"] : []
 
 extension Main {
   // (Me in its own Apple navigation — for everyone with a Me tab)
   var meApple: Bool { APPLE_ME && tabKeys.contains("me") }
-  // (Social's Plans tab its own Apple screen)
-  var plansApple: Bool { APPLE_PLANS && tabKeys.contains("plans") }
+  // (a role's tab its own Apple screen — Social's Plans, an Office Admin's Team)
+  func roleApple(_ key: String) -> Bool { APPLE_ROLE_TABS.contains(key) && tabKeys.contains(key) }
   // Me's navigation has settled (a push, a pop, the tab tapped again popping everything): the pages no longer in it are
   // gone for the app too — Me's, Client Assets', the Clients list opened from Me
   func meNavShown(_ n: UINavigationController) {
-    guard (meApple && n === AppleTabs.shared?.meNav) || (plansApple && n === AppleTabs.shared?.plansNav) else { return }
+    guard (meApple && n === AppleTabs.shared?.meNav) || (AppleTabs.shared?.roleNavs.values.contains { $0 === n } == true) else { return }
     let vcs = n.viewControllers
     meCtl.reconcile(vcs)
     if assetsCtl.appleNav === n { assetsCtl.reconcile(vcs) }   // (Client Assets opened over Me)
@@ -53,7 +54,7 @@ final class MeVC: UIViewController, TabRoot {
   override func viewWillAppear(_ a: Bool) {
     super.viewWillAppear(a)
     Main.shared.drawBeforeShow("me")   // (its rows from the phone's copy before it first shows)
-    if Main.shared.tabKeys.contains("plans") { Main.shared.meCtl.willShowTab("me") } else if h == nil { Main.shared.meCtl.prepareRoot() }   // (Social: the Plans tab given back)
+    if APPLE_ROLE_TABS.contains(where: Main.shared.tabKeys.contains) { Main.shared.meCtl.willShowTab("me") } else if h == nil { Main.shared.meCtl.prepareRoot() }   // (a role's own tab given back — Social's Plans, an Office Admin's Team)
   }
   func adopt(_ v: HomeView) {
     loadViewIfNeeded()
@@ -83,45 +84,48 @@ final class MeVC: UIViewController, TabRoot {
   }
 }
 
-// Social's Plans tab: its first screen, as Home (Haris 2026-11-10, the approved mock-up): Apple's big title "Content plans" and
-// its line (the month · how many waiting), Apple's search for clients and posts in every month, your photo — no Talk, no
-// "+ New task"; the month tabs and the clients in Apple's list (MeCtl's Content plans page, HomeView.applyMeList); a skeleton
-// pushed on it (MePageVC) with the tab bar going once it has arrived, as a task
-final class PlansVC: UIViewController, TabRoot, UISearchResultsUpdating, UISearchControllerDelegate {
-  static weak var shared: PlansVC?
-  override init(nibName: String?, bundle: Bundle?) { super.init(nibName: nil, bundle: nil); PlansVC.shared = self }
+// A role's own tab: its first screen, as Home — Apple's big title and its line, Apple's search (with Apple's scope bar for
+// Team's Active · Past), your photo (and Team's + Add member) as Apple's bar buttons; MeCtl's page in Apple's list
+// (HomeView.applyMeList); a page pushed on it (MePageVC), the tab bar going once it has arrived, as a task.
+//  · Social's Plans (Haris 2026-11-10, the mock-up "Content plans — fully Apple"): "Content plans", clients and posts
+//  · an Office Admin's Team (Haris 2026-11-10, the mock-up "Team members — fully Apple"): "Team members", people
+final class MeTabVC: UIViewController, TabRoot, UISearchResultsUpdating, UISearchControllerDelegate, UISearchBarDelegate {
+  static var byKey: [String: MeTabVC] = [:]
+  let key: String
+  init(_ key: String) { self.key = key; super.init(nibName: nil, bundle: nil); MeTabVC.byKey[key] = self }
   required init?(coder: NSCoder) { fatalError() }
   override var preferredStatusBarStyle: UIStatusBarStyle { Main.shared.statusStyle }
   override func loadView() { let v = UIView(); v.backgroundColor = HomeLook(Main.shared.lookBoth).bg; view = v }
   private(set) weak var h: HomeView?
   private var search: UISearchController?
-  private var meItem: UIBarButtonItem?
+  private var meItem: UIBarButtonItem?, plusItem: UIBarButtonItem?
   private var mePhoto: UIImage?
+  var onSearch: ((String) -> Void)?, onScope: ((Int) -> Void)?
   override func viewDidLoad() {
     super.viewDidLoad()
     navigationItem.backButtonDisplayMode = .minimal
-    navigationItem.title = "Content plans"
+    navigationItem.title = key == "team" ? "Team members" : "Content plans"
     let me = UIBarButtonItem(image: BarImage.me(nil, traitCollection), primaryAction: UIAction { _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); Main.shared.selectTab("me") })
     me.accessibilityLabel = "Me"
     BarImage.bare(me)
     meItem = me
-    navigationItem.rightBarButtonItem = me
-    if #available(iOS 17.0, *) { registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (vc: PlansVC, _: UITraitCollection) in vc.paintMe() } }
+    navigationItem.rightBarButtonItems = [me]
+    if #available(iOS 17.0, *) { registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (vc: MeTabVC, _: UITraitCollection) in vc.paintMe() } }
     let s = UISearchController(searchResultsController: nil)
     s.obscuresBackgroundDuringPresentation = false
     s.searchResultsUpdater = self; s.delegate = self
-    s.searchBar.placeholder = "Search clients and posts"
+    s.searchBar.placeholder = key == "team" ? "Search people" : "Search clients and posts"
     s.searchBar.autocorrectionType = .no
     search = s
     navigationItem.hidesSearchBarWhenScrolling = false
     navigationItem.searchController = s
-    BigLine.prime(self, "plans")
+    BigLine.prime(self, key)
   }
   func paintMe() { meItem?.image = BarImage.me(mePhoto ?? MePhoto.shared.image, traitCollection) }
   override func viewWillAppear(_ a: Bool) {
     super.viewWillAppear(a)
     paintMe()
-    Main.shared.meCtl.willShowTab("plans")
+    Main.shared.meCtl.willShowTab(key)
   }
   override func viewDidLayoutSubviews() {
     super.viewDidLayoutSubviews()
@@ -151,16 +155,40 @@ final class PlansVC: UIViewController, TabRoot, UISearchResultsUpdating, UISearc
     v.useAppleTop()
     setContentScrollView(v.appleScroll, for: .top)
   }
+  // (Team's Active · Past: Apple's scope bar under the search, always showing — as My Tasks' All / Done; the page's own
+  //  search answers in its list, not Home's results)
+  func useScopes(_ scopes: [String], selected: Int) {
+    guard let b = search?.searchBar else { return }
+    if (b.scopeButtonTitles ?? []) != scopes {
+      b.scopeButtonTitles = scopes; b.delegate = self
+      if !b.showsScopeBar { b.showsScopeBar = true; if #available(iOS 16.0, *) { search?.scopeBarActivation = .manual } }
+    }
+    if b.selectedScopeButtonIndex != selected { b.selectedScopeButtonIndex = selected }
+  }
+  func searchBar(_ b: UISearchBar, selectedScopeButtonIndexDidChange i: Int) { UISelectionFeedbackGenerator().selectionChanged(); onScope?(i) }
+  // (+ Add member: Apple's + in the bar, beside your photo — the mock-up's C2; gone for those who can't add)
+  func usePlus(_ run: (() -> Void)?) {
+    if let run = run {
+      if plusItem == nil {
+        let p = UIBarButtonItem(systemItem: .add, primaryAction: UIAction { _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); run() })
+        p.accessibilityLabel = "Add member"; plusItem = p
+      }
+      if navigationItem.rightBarButtonItems?.count != 2, let me = meItem, let p = plusItem { navigationItem.rightBarButtonItems = [me, p] }
+    } else if plusItem != nil, let me = meItem { plusItem = nil; navigationItem.rightBarButtonItems = [me] }
+  }
   private var shownLine: String?
   private func setLine(_ d: String) {
     guard d != shownLine else { return }
     shownLine = d
-    BigLine.set(self, d, "plans")
+    BigLine.set(self, d, key)
   }
-  func updateSearchResults(for s: UISearchController) { h?.appleSearchText(s.searchBar.text ?? "") }
-  func willPresentSearchController(_ s: UISearchController) { h?.appleSearchBegin() }
+  func updateSearchResults(for s: UISearchController) {
+    if let f = onSearch { f(s.searchBar.text ?? ""); return }
+    h?.appleSearchText(s.searchBar.text ?? "")
+  }
+  func willPresentSearchController(_ s: UISearchController) { if onSearch == nil { h?.appleSearchBegin() } }
   func didPresentSearchController(_ s: UISearchController) { DispatchQueue.main.async { s.searchBar.becomeFirstResponder() } }
-  func willDismissSearchController(_ s: UISearchController) { h?.appleSearchEnd() }
+  func willDismissSearchController(_ s: UISearchController) { if onSearch == nil { h?.appleSearchEnd() } }
 }
 
 // a page of Me pushed on its tab: as the Clients tab's pages (tab bar staying, Apple's firm frost, Apple's bar)
@@ -190,6 +218,17 @@ final class MePageVC: ClientsPushedVC, UISearchResultsUpdating, UISearchBarDeleg
   }
   func updateSearchResults(for s: UISearchController) { onSearch?(s.searchBar.text ?? "") }
   func searchBar(_ b: UISearchBar, selectedScopeButtonIndexDidChange i: Int) { UISelectionFeedbackGenerator().selectionChanged(); onScope?(i) }
+  // (+ Add member: Apple's + in the bar's right corner — the mock-up's C2; none for those who can't add)
+  private var plusOn = false
+  func usePlus(_ run: (() -> Void)?) {
+    guard (run != nil) != plusOn || run != nil else { return }
+    if let run = run {
+      guard !plusOn else { return }
+      plusOn = true
+      let p = UIBarButtonItem(systemItem: .add, primaryAction: UIAction { _ in UIImpactFeedbackGenerator(style: .light).impactOccurred(); run() })
+      p.accessibilityLabel = "Add member"; navigationItem.rightBarButtonItem = p
+    } else { plusOn = false; navigationItem.rightBarButtonItem = nil }
+  }
   private(set) var appeared = false
   override func viewDidAppear(_ a: Bool) { super.viewDidAppear(a); appeared = true }
   // (a page with its own buttons on Apple's toolbar — a skeleton waiting for you: Send Back · Approve. Made again only when

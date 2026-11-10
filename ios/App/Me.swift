@@ -1592,7 +1592,7 @@ final class MeCtl {
   private var stack: [Screen] = []
   // (Me in its own Apple navigation — AppleMe.swift: Me its tab's first screen, its pages pushed on it Apple's way; the
   //  role tabs this also serves — Content plans, Overview, Team, Claims, Expenses, Reviews — as before, for now)
-  private var appleNav: UINavigationController? { main.meApple && tab == "me" ? AppleTabs.shared?.meNav : main.plansApple && tab == "plans" ? AppleTabs.shared?.plansNav : nil }
+  private var appleNav: UINavigationController? { main.meApple && tab == "me" ? AppleTabs.shared?.meNav : main.roleApple(tab) ? AppleTabs.shared?.roleNavs[tab] : nil }
   var apple: Bool { appleNav != nil }
   private func appleVC(_ h: HomeView) -> MePageVC? { appleNav?.viewControllers.first { ($0 as? MePageVC)?.h === h } as? MePageVC }
   // (everything taken off — someone else now, another tab's pages: Me's navigation back to Me too)
@@ -1922,7 +1922,7 @@ final class MeCtl {
       stack.append(s); watchTouches()
       if !pageModel.isEmpty { model = own(pageModel) }
       // (Me: its tab's first screen)
-      if stack.count == 1, tab == "plans", let vc = PlansVC.shared { vc.adopt(s.h); draw(s); main.updateCorner(); return }   // (Social's Plans tab)
+      if stack.count == 1, let vc = MeTabVC.byKey[tab], main.roleApple(tab) { vc.adopt(s.h); draw(s); main.updateCorner(); return }   // (a role's own tab — Social's Plans, an Office Admin's Team)
       if stack.count == 1, let vc = MeVC.shared { vc.adopt(s.h); draw(s); main.updateCorner(); return }
       // (its Apple page made first: what it draws knows it's in Apple's navigation — Team members' search in Apple's bar)
       let vc = MePageVC(s.h)
