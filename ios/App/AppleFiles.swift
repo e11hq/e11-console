@@ -59,8 +59,9 @@ final class FileTile: UIView {
     sig = s; info = f; isFolder = true; isClient = false; self.lines = lines; id = f["id"] as? String ?? ""
     // (its colour drawn into the picture, as a file's picture: a tint goes grey while a sheet is up over the page — Apple
     //  greys tinted controls then, and a folder is content, not a control: Haris 2026-11-10 15:25)
-    pic.image = FileTile.folderImage.withTintColor(col, renderingMode: .alwaysOriginal); pic.contentMode = .scaleToFill
-    pic.tintColor = nil; pic.backgroundColor = .clear; pic.layer.cornerRadius = 0; pic.layer.borderWidth = 0
+    pic.contentMode = .scaleToFill; pic.tintColor = nil
+    // (a picture's colour is fixed when it's made — set again for the phone's look, as Apple can't switch it by itself)
+    pic.followLook("folder") { [weak pic] tc in pic?.image = FileTile.folderImage.withTintColor(col.resolvedColor(with: tc), renderingMode: .alwaysOriginal) }; pic.backgroundColor = .clear; pic.layer.cornerRadius = 0; pic.layer.borderWidth = 0
     badge.isHidden = true; picPath = nil
     name.text = f["name"] as? String; name.numberOfLines = lines
     // ("Final · 2 folders · 14 files", "Empty" — as Client Assets had it; a client's page: its files, counted through)
@@ -257,8 +258,8 @@ final class FileListRow: UIView, AppleRow {
     var cfg = UIListContentConfiguration.subtitleCell()
     let ext = (nm as NSString).pathExtension.uppercased()
     if isFolder {
-      cfg.image = UIImage(systemName: "folder.fill")?.withTintColor(FileTile.folderBlue, renderingMode: .alwaysOriginal)
-      cfg.imageProperties.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 30)
+      cfg.image = FileTile.folderImage.withTintColor(FileTile.folderBlue.resolvedColor(with: traitCollection), renderingMode: .alwaysOriginal)
+      cfg.imageProperties.maximumSize = CGSize(width: 40, height: 32)
     } else { cfg.image = pic ?? FileListRow.badge(ext) }
     cfg.imageProperties.reservedLayoutSize = CGSize(width: 44, height: 44)
     cfg.imageProperties.maximumSize = CGSize(width: 44, height: 44)
