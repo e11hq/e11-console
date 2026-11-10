@@ -19,6 +19,17 @@ final class AppData: NSObject, URLSessionDataDelegate {
   private var started = false, loading = false
   private var copyReady = false                             // (read on the main thread: set there)
   var ready: Bool { copyReady }
+  // (for finding why the @ lists' roles don't show on Haris's phone, 2026-11-10 — a line on About for Admins, taken out once
+  //  found: the rules the phone runs, when they came, whether they know the roles, and what the last fetch got)
+  var lastFetch = "not yet"
+  var brainInfo: String {
+    let f = dir.appendingPathComponent("rules.js")
+    let t = (try? String(contentsOf: f, encoding: .utf8)) ?? ""
+    let at = ((try? FileManager.default.attributesOfItem(atPath: f.path)[.modificationDate]) as? Date).map { DateFormatter.localizedString(from: $0, dateStyle: .short, timeStyle: .short) } ?? "none"
+    // (the running engine: does it know the roles — any of its rules' source naming roleWord)
+    let live: String = q.sync { ctx?.evaluateScript("(function(){try{var R=E11Rules;for(var k in R){if(typeof R[k]==='function'&&String(R[k]).indexOf('roleWord')>=0)return 'running new';}return 'running old'}catch(e){return 'no rules'}})()")?.toString() ?? "no engine" }
+    return "rules \(at) · roles \(t.contains("roleWord") ? "yes" : "no") · \(t.count / 1000) KB · engine \(ctx == nil ? "off" : "on") · copy \(copyReady ? "on" : "off") · fetch \(lastFetch) · \(live)"
+  }
   // the app draws its own tab bar from the copy (Part B step 1) — on unless the server says off
   var tabsOn: Bool { (UserDefaults.standard.object(forKey: "app-tabs") as? Bool) ?? true }
   // Part B step 2: a page group drawn from the copy (Me, profile, team, trash, claims, expenses, overview, reviews,
@@ -114,7 +125,11 @@ final class AppData: NSObject, URLSessionDataDelegate {
     for f in AppData.files {
       group.enter()
       // (never a copy kept on the way for the hour — the hour's first one could be from before a server update: Overview kept "AED", Haris 2026-11-05)
-      raw("/\(f)?n=\(Int(Date().timeIntervalSince1970))") { s in if let s = s, s.contains("E11") { got[f] = s }; group.leave() }
+      raw("/\(f)?n=\(Int(Date().timeIntervalSince1970))") { [weak self] s in
+        if let s = s, s.contains("E11") { got[f] = s }
+        if f == "rules.js" { self?.lastFetch = s == nil ? "failed" : (s!.contains("roleWord") ? "new" : s!.hasPrefix("<") ? "a web page" : "old") }
+        group.leave()
+      }
     }
     group.notify(queue: q) { [weak self] in
       guard let self = self else { return }

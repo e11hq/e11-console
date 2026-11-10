@@ -2122,7 +2122,7 @@ final class MeCtl {
       out.append(head(h, "phone", "This iPhone")); out.append(group(h, "phone", phone))
       if (model["about"] as? Bool) == true {
         out.append(head(h, "about", "About"))
-        out.append(group(h, "about", [SetItem(key: "about", title: "About", sub: (model["canUpdate"] as? Bool) == true ? "What’s new · App updates" : "What’s new", sym: "info", col: .systemGray, tap: { [weak self] in self?.open("about") })]))
+        out.append(group(h, "about", [SetItem(key: "about", title: "About", sub: (model["canUpdate"] as? Bool) == true ? "What’s new · App updates" : "What’s new", sym: "info", col: .systemGray, tap: { [weak self] in self?.open("about") })] + (Main.isAdmin ? [SetItem(key: "diag", title: "Phone’s own data", sub: AppData.shared.brainInfo, sym: "stethoscope", col: .systemGray, chevron: false, tap: {})] : [])))
       }
       if let t = model["test"] as? [String: Any] {
         var test: [SetItem] = []
