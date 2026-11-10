@@ -18,6 +18,18 @@ final class FileTile: UIView {
   private(set) var isFolder = true, isClient = false
   var key: String { (isClient ? "fc:" : isFolder ? "fd:" : "ff:") + id }   // (its identity in the list)
   static let stripW: CGFloat = 92
+  // (Apple's folder symbol with the room Apple leaves around it taken off — so the folder itself fills its 84 × 70, as the
+  //  mock-up; with that room it came out about a fifth smaller than its name called for: Haris 2026-11-10 15:21)
+  static let folderImage: UIImage = {
+    guard let sym = UIImage(systemName: "folder.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 120, weight: .regular)) else { return UIImage() }
+    let full = UIGraphicsImageRenderer(size: sym.size).image { _ in sym.withTintColor(.black, renderingMode: .alwaysOriginal).draw(at: .zero) }
+    guard let cg = full.cgImage, let data = cg.dataProvider?.data, let px = CFDataGetBytePtr(data) else { return sym.withRenderingMode(.alwaysTemplate) }
+    let w = cg.width, h = cg.height, bpr = cg.bytesPerRow, bpp = cg.bitsPerPixel / 8
+    var minX = w, minY = h, maxX = -1, maxY = -1
+    for y in 0..<h { for x in 0..<w where px[y * bpr + x * bpp + (bpp - 1)] > 8 { minX = min(minX, x); maxX = max(maxX, x); minY = min(minY, y); maxY = max(maxY, y) } }
+    guard maxX > minX, maxY > minY, let crop = cg.cropping(to: CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1)) else { return sym.withRenderingMode(.alwaysTemplate) }
+    return UIImage(cgImage: crop, scale: full.scale, orientation: .up).withRenderingMode(.alwaysTemplate)
+  }()
   // (the folders' colour: a lighter blue, closer to the Files app's — light and dark, switching by itself)
   static let folderBlue = Look.c(UIColor(red: 0x5A / 255, green: 0xA9 / 255, blue: 0xE6 / 255, alpha: 1), UIColor(red: 0x6C / 255, green: 0xB7 / 255, blue: 0xF0 / 255, alpha: 1))
   override init(frame: CGRect) {
@@ -41,7 +53,7 @@ final class FileTile: UIView {
     let s = "d|\(f["name"] ?? "")|\(n)|\(subs)|\(fin)|\(lines)"
     guard s != sig else { return }
     sig = s; info = f; isFolder = true; isClient = false; self.lines = lines; id = f["id"] as? String ?? ""
-    pic.image = UIImage(systemName: "folder.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 52, weight: .regular))
+    pic.image = FileTile.folderImage; pic.contentMode = .scaleToFill
     pic.tintColor = col; pic.backgroundColor = .clear; pic.layer.cornerRadius = 0; pic.layer.borderWidth = 0
     badge.isHidden = true; picPath = nil
     name.text = f["name"] as? String; name.numberOfLines = lines
@@ -130,7 +142,11 @@ final class FileTile: UIView {
   // the tile's height for its width: the picture as wide as the tile (a folder a little less), then its words
   static func box(_ w: CGFloat) -> CGFloat { min(w * 0.82, 84) }   // (the picture's square: 84 at most — the mock-up)
   // (a folder's picture is the folder's own shape, 84 × 70 — its name 6 under it, as the mock-up; a file's the square)
-  static func picH(_ w: CGFloat, folder: Bool) -> CGFloat { folder ? (box(w) * 70 / 84).rounded() : box(w) }
+  static func picH(_ w: CGFloat, folder: Bool) -> CGFloat {
+    guard folder else { return box(w) }
+    let sz = folderImage.size   // (the folder's own shape — about 84 × 67)
+    return (box(w) * (sz.width > 0 ? sz.height / sz.width : 70.0 / 84)).rounded()
+  }
   static func height(width w: CGFloat, lines: Int, folder: Bool = false) -> CGFloat { picH(w, folder: folder) + 6 + CGFloat(lines) * 16 + 15 }
   override func layoutSubviews() {
     super.layoutSubviews()
