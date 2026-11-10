@@ -135,6 +135,9 @@ if APPLE:
     rows = rl.get('rows') or []
     check(bool(rows) and all(r != '<none>' for r in rows), f"the @ list: each person's role under the name {rl}")
     check(fc.get('none') is True or fc.get('inView') is True, f"a comment opened as from the Inbox stays in view once everything has come {fc}")
+    pl, pp = a.get('plans') or {}, a.get('plan') or {}
+    check(pl.get('kind') == 'plans' and pl.get('apple') is True and not pl.get('loading') and isinstance(pl.get('rows'), int) and pl.get('rows', -1) >= 0 and (pl.get('rows', 0) > 0 or pl.get('empty') == 'No Clients'), f"Content plans: the list from the phone's copy, in Apple's navigation {pl}")
+    check(pl.get('rows', 0) == 0 or (pp.get('kind') == 'plan' and not pp.get('loading') and (pp.get('status') is True or pp.get('empty') == 'Not Started Yet')), f"Content plans: a client's month — its status cell or Apple's Not Started Yet {pp}")
     check(not (out.get('Super Admin') or {}).get('stuck'), "the app ran to the end (no crash, not stuck)")
     open(os.path.join(TMP, 'ios-apple.txt'), 'w').write('\n'.join(fails) + '\n')
     sys.exit(1 if fails else 0)

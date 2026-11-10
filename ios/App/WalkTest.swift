@@ -121,6 +121,13 @@ extension Main {
         self.apple("roles", ["desc": roles(desc), "box": roles(box), "rows": (desc.isEmpty ? box : desc).prefix(8).map { PickList.person($0) {}.sub ?? "<none>" }])
         for x in self.taskPages { self.closeTaskPage(x, animated: false) }
       }),
+      // Content plans without the website (Me › Content plans for the Super Admin — mock-up "Content plans — fully Apple"):
+      // the list from the phone's copy, then a client's month (its status cell, or Apple's Not Started Yet)
+      ("aPlans", { self.tab(self.tabKeys.first ?? "today"); self.meCtl.openPlans() }),
+      ("aPlansWait", {}),
+      ("aPlansRead", { self.apple("plans", self.meCtl.selfPlans()); _ = self.meCtl.selfOpenPlan() }),
+      ("aPlanWait", {}),
+      ("aPlanRead", { self.apple("plan", self.meCtl.selfPlans()); self.meCtl.backToRoot(); self.tab(self.tabKeys.first ?? "today") }),
       // a long-ago comment opened as from the Inbox: in view once everything has come
       ("aFocus", { if let b = best { self.openTaskPage(b.0, tab: "comments", focus: "\(b.0)~\(b.1)") } }),
       ("aFocusWait", {}),

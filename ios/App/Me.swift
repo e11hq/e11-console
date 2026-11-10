@@ -2053,6 +2053,24 @@ final class MeCtl {
   }
   // (for the self-test)
   func selfOpen(_ kind: String) { open(kind) }
+  // Content plans, as the phone shows them (the no-website self-test — Haris 2026-11-10): the list, and a client's month
+  func selfOpenPlan() -> String? {
+    guard let r = ((model["plans"] as? [String: Any])?["rows"] as? [[String: Any]])?.first, let pid = r["pid"] as? String else { return nil }
+    open("plan", "\(pid)|\((model["plans"] as? [String: Any])?["month"] as? String ?? "")"); return pid
+  }
+  func selfPlans() -> [String: Any] {
+    guard let s = stack.last else { return ["open": false] }
+    let parts = s.h.assetsParts
+    var o: [String: Any] = ["open": true, "kind": s.kind, "tab": tab, "kinds": stack.map { $0.kind }, "apple": apple, "line": plansLine]
+    if let e = parts["wait"] as? AppleEmpty, e.superview != nil { o["loading"] = e.loading }
+    if let e = parts["none"] as? AppleEmpty, e.superview != nil { o["empty"] = e.title }
+    o["rows"] = ((model["plans"] as? [String: Any])?["rows"] as? [[String: Any]])?.count ?? -1
+    o["waitGroup"] = parts["g.plw"]?.superview != nil
+    o["status"] = parts["g.st"]?.superview != nil
+    if let vc = pageVCs[ObjectIdentifier(s.h)] { o["tools"] = vc.toolbarItems?.count ?? 0; o["title"] = vc.navigationItem.title ?? "" }
+    if s.kind == "plan" { o["model"] = (model["plan"] as? [String: Any]).map { ["pid": $0["pid"] ?? "", "st": ($0["st"] as? [String: Any])?["t"] ?? "", "empty": $0["empty"] != nil, "trash": $0["trash"] ?? false] } ?? "none" }
+    return o
+  }
   func geo(corner: String) -> [String: Any] {
     let h = stack.last?.h
     let groups: [[String: Any]] = ((model["team"] as? [String: Any])?["groups"] as? [[String: Any]]) ?? []
